@@ -1,6 +1,12 @@
 # 150-CY-7b -- metaclass passed as a VALUE across a cycle edge (design note, lane 150 CY2)
 
-Status: DESIGN ONLY in 150 (item BLOCKED for code: the orchestration lives in CyclePlan.pas, lane CY1's file).
+Status: IMPLEMENTED in 150 by lane CY1 (5120c2ab6), option 1, all in CyclePlan.pas (PlanMetaclassValue / MetaclassSteps).
+Deviation from 'Where the code goes': no new TCutRecipe value and no CycleEdge.pas change -- the steps are encoded as
+crRoutineInversion with ClassTypeName = TX (IsMetaclassInversion), so R1's leaf / uses / RegisterDecl / --fix paths apply
+unchanged and the renderer names the recipe 'metaclass hand-over'. Known gap: cycles --fix summary and --format json
+still name the recipe 'routine-call inversion' / 'routine-inversion'. The guard now asserts the acceptance (m2/m3) plus
+k2 (init-order) and pc1.
+History (CY2):
 Fixture + guard that pin today's (safe) behaviour: tests\fixtures\cyclefix\metaclassvalue,
 tests\autotest\run_cyclefix_metaclass_value_dcc.ps1.
 

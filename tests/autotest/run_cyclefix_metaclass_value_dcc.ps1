@@ -1,21 +1,25 @@
-# run_cyclefix_metaclass_value_dcc.ps1 -- lane 150 CY2 (150-CY-7b): a class of the cycle passed as a VALUE
-# (System.Classes.RegisterClass(TMvJob)) across the edge mvapp -> mvjob, with neither class movable. The
-# metaclass hand-over recipe is NOT built in 1.49 (design: docs\superpowers\specs\2026-11-09-cy-7b-metaclass-value.md);
-# this guard pins the SAFE behaviour until it is: the edge is refused with a reason that names the value line,
-# --fix refuses and leaves every file byte-identical. When the recipe lands, m2-m4 flip (update them then).
+# run_cyclefix_metaclass_value_dcc.ps1 -- lane 150 CY2 (150-CY-7b, design + fixture) / lane 150 CY1 (the recipe): a class
+# of the cycle passed as a VALUE (System.Classes.RegisterClass(TMvJob)) across the edge mvapp -> mvjob, neither class
+# movable. Design: docs\superpowers\specs\2026-11-09-cy-7b-metaclass-value.md. The METACLASS HAND-OVER cuts it: the leaf
+# MvJob.Untangle declares `MvJobClass: TPersistentClass` (the formal type of RegisterClass's parameter, read from the
+# platform library), MvJob's initialization assigns `MvJobClass := TMvJob;`, MvApp passes MvJobClass.
 #
 #   m0  the untouched fixture builds (real msbuild) and prints `[mv] TMvJob`      (the fixture is valid Delphi)
 #   m1  `cycles` finds the 2-unit group mvjob <-> mvapp
-#   m2  plan: no edge is cut; `mvapp -> mvjob` is refused naming `TMvJob` and MvApp.pas:20 (the value line)
-#   m3  --fix --apply: exit 1, a refusal, every source file byte-identical
-#   k1  positive control: without the value use (RegisterClass line removed) TMvApp no longer needs the cycle, the
-#       plan cuts an edge and no refusal names MvApp.pas:20 -- the m2 assertions can fail
-#
-# Usage: pwsh -File run_cyclefix_metaclass_value_dcc.ps1 [-Exe <drag-lint.exe>] [-WorkDir <dir>] [-KeepWorkDir]
+#   m2  plan: `mvapp -> mvjob` is cut by **metaclass hand-over** (MvJobClass: TPersistentClass in MvJob.Untangle)
+#   m3  --fix --apply: exit 0; MvApp passes MvJobClass; the applied copy builds; stdout byte-identical; no cycle
+#       (RED on 1.49.0-alpha base: m2 / m3 refuse -- the value use was refused base-class)
+#   k1  control (CY2): without the value use the plan cuts an edge and names no MvApp.pas:20 refusal
+#   k2  refused: the value is passed in MvApp's INITIALIZATION section (runs before MvJob's may have assigned the
+#       variable): init-order, no metaclass hand-over
+#   pc1 positive control: the applied tree with the assignment `MvJobClass := TMvJob;` removed still compiles and its
+#       stdout DIFFERS (the stdout compare has teeth)
+## Usage: pwsh -File run_cyclefix_metaclass_value_dcc.ps1 [-Exe <drag-lint.exe>] [-WorkDir <dir>] [-KeepWorkDir]
 param(
   [string]$Exe     = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
   [string]$WorkDir = "$env:TEMP\drag-lint-cyclefix-metaclassvalue-$PID",
   [string]$RsVars  = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat',
+  [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite',
   [switch]$KeepWorkDir
 )
 $ErrorActionPreference = 'Stop'
@@ -26,6 +30,7 @@ function Check($n, $ok, $d = '') {
   if ($ok) { $script:Passed++ } else { if ($d) { Write-Host "      $d" -ForegroundColor DarkGray }; $script:Failed = $true }
 }
 if (-not (Test-Path $RsVars)) { Write-Host "SKIP: no rsvars.bat ($RsVars)" -ForegroundColor Yellow; exit 0 }
+if (-not (Test-Path $LibraryDb)) { Write-Host "SKIP: no platform library DB at $LibraryDb" -ForegroundColor Yellow; exit 0 }
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 $Exe   = (Resolve-Path $Exe).Path
 $Repo  = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -82,7 +87,7 @@ function Invoke-Program($P) {
 
 New-Item -ItemType Directory -Force $WorkDir | Out-Null
 try {
-  Write-Host '== m: the value use stays refused, safely' -ForegroundColor Cyan
+  Write-Host '== m: the metaclass hand-over' -ForegroundColor Cyan
   $B = New-Proj
   $b0 = Invoke-Build $B
   Check 'm0.1 the untouched fixture builds' $b0.Ok $b0.Errors
@@ -92,20 +97,35 @@ try {
   $P = New-Proj
   $c = Invoke-Cli $P @('cycles', '--db', $P.Db)
   Check 'm1 cycles finds mvjob <-> mvapp' ($c.Out -match '\[2 units\] (mvjob <-> mvapp|mvapp <-> mvjob)') $c.Out
-  $plan = (Invoke-Cli $P @('cycles', '--plan', '--db', $P.Db)).Out
-  Check 'm2.1 the plan cuts no edge' (($plan -match 'No edge of this cycle can be cut mechanically') -and ($plan -notmatch '\*\*cut by this plan\*\*')) $plan
-  Check 'm2.2 mvapp -> mvjob is refused naming TMvJob at the value line MvApp.pas:20' ($plan -match '(?m)^- `mvapp -> mvjob`: `TMvJob` \(class\):.*`MvApp\.pas:20`') $plan
-  $h0 = Get-SrcHash $P.Root
-  $f = Invoke-Cli $P @('cycles', '--fix', '--apply', '--build-timeout', '1800', '--project', $P.Dproj, '--db', $P.Db, '--format', 'json')
-  $j = $null; try { $j = $f.Out | ConvertFrom-Json } catch { }
-  $kinds = @(); foreach ($cy in @($j.cycles)) { foreach ($x in @($cy.refusals)) { if ($x) { $kinds += $x.kind } } }; foreach ($x in @($j.refusals)) { if ($x) { $kinds += $x.kind } }
-  Check 'm3.1 --fix --apply refuses (exit 1, a refusal)' (($f.Exit -eq 1) -and ($kinds.Count -gt 0)) "exit=$($f.Exit) kinds=$($kinds -join ',') $($f.Out)"
-  Check 'm3.2 every source file is byte-identical' ((Get-SrcHash $P.Root) -eq $h0)
+  $plan = (Invoke-Cli $P @('cycles', '--plan', '--db', $P.Db, '--library-db', $LibraryDb)).Out
+  Check 'm2.1 the plan cuts mvapp -> mvjob by metaclass hand-over' (($plan -match 'Cut the edge `mvapp -> mvjob` by \*\*metaclass hand-over\*\*') -and ($plan -notmatch 'refused: edge-still-used')) $plan
+  Check 'm2.2 the leaf declares MvJobClass: TPersistentClass and uses System.Classes' (($plan -match '(?m)^  MvJobClass: TPersistentClass;') -and ($plan -match '(?s)unit MvJob\.Untangle;.*uses\s+System\.Classes;')) $plan
+  $f = Invoke-Cli $P @('cycles', '--fix', '--apply', '--no-backup', '--build-timeout', '1800', '--project', $P.Dproj, '--db', $P.Db, '--library-db', $LibraryDb)
+  Check 'm3.1 --fix --apply: exit 0 (the dcc gate passed)' ($f.Exit -eq 0) "exit=$($f.Exit) $($f.Out)"
+  $app = [IO.File]::ReadAllText((Join-Path $P.Root 'MvApp.pas'), $Ascii)
+  Check 'm3.2 MvApp passes MvJobClass and no longer uses MvJob' (($app -match 'RegisterClass\(MvJobClass\);') -and ($app -notmatch '(?m)\bMvJob;')) $app
+  $b1 = Invoke-Build $P
+  Check 'm3.3 the applied copy builds (independent msbuild)' $b1.Ok $b1.Errors
+  $out1 = Invoke-Program $P
+  Check 'm3.4 stdout byte-identical to the untouched build' (($out0 -ne '<no exe>') -and ($out1 -ceq $out0)) "before=[$out0] after=[$out1]"
+  $null = Invoke-Cli $P @('index', '--project', $P.Dproj, '--db', $P.Db, '--library-db', $LibraryDb)
+  $c1 = Invoke-Cli $P @('cycles', '--db', $P.Db)
+  Check 'm3.5 no cycle after a re-index' ($c1.Out -match 'No circular unit dependencies found\.') $c1.Out
 
-  Write-Host '== k: positive control' -ForegroundColor Cyan
+  Write-Host '== pc1: the assignment removed' -ForegroundColor Cyan
+  Edit-Text (Join-Path $P.Root 'MvJob.pas') "  MvJobClass := TMvJob;`n" ''
+  $bc = Invoke-Build $P
+  Check 'pc1a it still compiles' $bc.Ok $bc.Errors
+  $outC = Invoke-Program $P
+  Check 'pc1b its stdout DIFFERS (the compare has teeth)' (($outC -ne '<no exe>') -and ($outC -cne $out0)) "after=[$outC]"
+
+  Write-Host '== k: controls' -ForegroundColor Cyan
   $K = New-Proj { param($r) Edit-Text (Join-Path $r 'MvApp.pas') "  RegisterClass(TMvJob);`n" '' }
-  $kp = (Invoke-Cli $K @('cycles', '--plan', '--db', $K.Db)).Out
-  Check 'k1 without the value use the plan cuts an edge and names no MvApp.pas:20 refusal (m2 can fail)' (($kp -match '\*\*cut by this plan\*\*') -and ($kp -notmatch '`MvApp\.pas:20`')) $kp
+  $kp = (Invoke-Cli $K @('cycles', '--plan', '--db', $K.Db, '--library-db', $LibraryDb)).Out
+  Check 'k1 without the value use the plan cuts an edge and names no MvApp.pas:20 refusal' (($kp -match '\*\*cut by this plan\*\*') -and ($kp -notmatch '`MvApp\.pas:20`')) $kp
+  $K2 = New-Proj { param($r) Edit-Text (Join-Path $r 'MvApp.pas') "`nend." "`ninitialization`n  RegisterClass(TMvJob);`n`nend." }
+  $kp2 = (Invoke-Cli $K2 @('cycles', '--plan', '--db', $K2.Db, '--library-db', $LibraryDb)).Out
+  Check 'k2 the value passed in MvApp''s initialization: refused init-order, no metaclass hand-over' (($kp2 -match 'refused: init-order') -and ($kp2 -notmatch '\*\*metaclass hand-over\*\*')) $kp2
 } finally {
   if (-not $KeepWorkDir) {
     for ($i = 0; ($i -lt 15) -and (Test-Path -LiteralPath $WorkDir); $i++) {

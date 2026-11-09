@@ -922,6 +922,8 @@ type
       pUsed: TDictionary<string, Boolean>): Boolean;
     function BuildSwitches(var pItem: TMoveItem): Boolean;
     function FindCtor(const pItem: TMoveItem; const pName: string; out pSig, pWhy: string): Boolean;
+    function InheritedVisibility(const pItem: TMoveItem; const pName: string): string;
+    function NextAncestor(const pCur: TSymbol; var pStore: ISymbolStore; out pNext: TSymbol; out pParent: string): Boolean;
     function CtorTypeWhy(const pItem: TMoveItem; const pSig: string): string;
     function TakeCtor(var pItem: TMoveItem; const pF: TPlanFile; pLine: Integer; const pName: string): Boolean;
     function CtorSiteLine(const pItem: TMoveItem; out pFid: Int64): Integer;
@@ -990,6 +992,7 @@ type
     procedure DedupeAdds;
     procedure BuildUsesEdits;
     procedure BuildClauseEdit(const pF: TPlanFile; pSect: TSect);
+    function EntryInRegion(const pF: TPlanFile; pSect: TSect; const pStem: string): Boolean;
     function SectionEntries(const pF: TPlanFile; pSect: TSect): TArray<TUnitUse>;
     function ListOf(pDict: TObjectDictionary<string, TList<string>>; pFid: Int64; pSect: TSect): TList<string>;
     function EditList(pFid: Int64): TList<TFileEdit>;
@@ -1046,6 +1049,15 @@ type
     function ProbeInversionMoves(var pEv: TEdgeEval; out pMoved: TArray<string>; out pMoveIds: TArray<Int64>;
       out pCount: Integer): Boolean;
     procedure PlanMemberHandOver(pEvals: TList<TEdgeEval>);
+    procedure PlanMetaclassValue(pEvals: TList<TEdgeEval>);
+    function SplitSurface(const pSurface: TEdgeSurface; pRoutines: Boolean): TEdgeSurface;
+    procedure ComposeRoutines(var pSteps: TRecipeSteps; const pR1: TRecipeSteps; var pRefusal: TRecipeRefusal);
+    procedure RenderComposedRoutines(const pDecl, pConsumer: string);
+    function MetaclassSteps(const pEv: TEdgeEval; out pWhy: string): TRecipeSteps;
+    function MetaclassArgType(const pCallee: string; pIndex: Integer; const pUsed: TArray<string>): string;
+    function MetaclassTypeUnit(const pA: TPlanFile; pLine: Integer; const pFormal: string; out pWhy: string): TArray<string>;
+    function IsMetaclassInversion: Boolean;
+    procedure QualifiedClassRef(const pUnitStem: string; var pRefusal: TRecipeRefusal);
     procedure SettleIfaceName(const pSurface: TEdgeSurface; const pLeaf: TUntangleLeaf; const pUnitScopes: TArray<string>;
       var pSteps: TRecipeSteps; var pRefusal: TRecipeRefusal);
     procedure RenderMemberHandOver(pStep: Integer);
@@ -1638,6 +1650,45 @@ begin
   if Result then pSpan:= OfsSpan(OpenAt, CloseEnd + 1);
 end;
 
+{ 150 CY1 (EX2 150 row, cycles half): the 1-based file line of offset pOfs of pText, the clause text that starts on
+  file line pFirstLine (lines joined by CClauseBreak). }
+function ClauseLineOf(const pText: string; pOfs, pFirstLine: Integer): Integer;
+begin
+  Result:= pFirstLine;
+  var At:= Pos(CClauseBreak, pText);
+  while (At > 0) and (At < pOfs) do
+  begin
+    Inc(Result);
+    At:= Pos(CClauseBreak, pText, At + Length(CClauseBreak));
+  end;
+end;
+
+{ 150 CY1 (EX2 150 row, cycles half): GuardRegionOf with the region's SHAPE read from the pp_regions rows of the file
+  (pRegions, non-empty) instead of from the braces alone: the innermost branch holding the entry's line must be branch 0
+  of an IFDEF / IFNDEF / IF / IFOPT region with no ELSE / ELSEIF branch and no region nested in it, and the braces
+  GuardRegionOf finds must sit on that branch's StartLine (opener) and EndLine (closer). The table carries lines, not
+  columns, so the text still locates the braces (pSpan) and still refuses any other brace between them. False when the
+  table and the text disagree. }
+function GuardRegionByTable(const pText: string; const pOrig: TUsesClause; const pE: TUsesEntry;
+  const pRegions: TArray<TPpRegionRow>; pFirstLine: Integer; out pSpan: TOfsSpan): Boolean;
+begin
+  Result:= GuardRegionOf(pText, pOrig, pE, pSpan);
+  if not Result then Exit;
+  var Line:= ClauseLineOf(pText, pE.Start, pFirstLine);
+  var Hit := -1;
+  for var I:= 0 to High(pRegions) do
+    if (pRegions[I].StartLine <= Line) and (pRegions[I].EndLine >= Line) and
+      ((Hit < 0) or (pRegions[I].Nesting > pRegions[Hit].Nesting)) then Hit:= I;
+  Result:= (Hit >= 0) and (pRegions[Hit].Branch = 0) and
+    MatchText(pRegions[Hit].Directive, ['ifdef', 'ifndef', 'if', 'ifopt']) and
+    (ClauseLineOf(pText, pSpan.Start, pFirstLine) = pRegions[Hit].StartLine) and
+    (ClauseLineOf(pText, pSpan.Stop - 1, pFirstLine) = pRegions[Hit].EndLine);
+  for var X in pRegions do
+    if Result and (Hit >= 0) and (((X.Region = pRegions[Hit].Region) and (X.Branch > 0)) or (X.Parent = pRegions[Hit].Region)) then
+      Result:= False;
+  if not Result then pSpan:= OfsSpan(0, 0);
+end;
+
 { Lane 148 CY: deletes region pR from pText -- mid-line (`A $IFDEF X, B $ENDIF;`) with the blanks before it,
   at a line start with the blanks after it. }
 procedure DeleteRegion(var pText: string; const pR: TOfsSpan);
@@ -1678,7 +1729,7 @@ begin
 end;
 
 function DropGuardedBlocks(var pText: string; const pOrig: TUsesClause; var pDels: TArray<string>;
-  const pAdds: TArray<string>): Boolean;
+  const pAdds: TArray<string>; const pRegions: TArray<TPpRegionRow>; pFirstLine: Integer): Boolean;
 var
   Text   : string;
   Dels   : TList<string>;
@@ -1702,7 +1753,12 @@ begin
       for var A in pAdds do Removed:= Removed and not SameText(StemOfEntry(A), E.Name);
       if not Removed then Exit;  { a guarded entry that stays: the block cannot go whole }
       var Span: TOfsSpan;
-      if not GuardRegionOf(Text, pOrig, E, Span) then Exit;
+      { 150 CY1: the pp_regions rows decide the region's shape when the index has them (schema-23 DB / scan: the text) }
+      if Length(pRegions) > 0 then
+      begin
+        if not GuardRegionByTable(Text, pOrig, E, pRegions, pFirstLine, Span) then Exit;
+      end
+      else if not GuardRegionOf(Text, pOrig, E, Span) then Exit;
       if (Regions.Count > 0) and (Regions.Last.Start = Span.Start) then Continue;  { the region's next entry }
       Regions.Add(Span);
     end;
@@ -1735,7 +1791,7 @@ end;
   when nothing changes; a refusal is an ekManual edit on the line it names,
   its Refusal the kind. }
 function ClauseEdit(const pLines: TArray<string>; pUsesLine: Integer; const pSectLabel: string;
-  const pAdds, pDels: TArray<string>; const pMoved: TArray<string> = nil): TFileEdit;
+  const pAdds, pDels: TArray<string>; const pMoved: TArray<string> = nil; const pRegions: TArray<TPpRegionRow> = nil): TFileEdit;
 var
   Why   : string;           // lane 149 CYB: a named reason that replaces the generic one
   Old   : TArray<string>;
@@ -1778,7 +1834,7 @@ begin
           'region would have to move with it, or the entry would become unconditional there', [E.Name]);
       end;
   // lane 148 CY: removed entries of a single-branch $IFDEF region go with their guard
-  if Kind = '' then DropGuardedBlocks(Text, Orig, Dels, pAdds);
+  if Kind = '' then DropGuardedBlocks(Text, Orig, Dels, pAdds, pRegions, pUsesLine);
   Ops:= TList<string>.Create;
   try
     if Kind = '' then
@@ -2806,8 +2862,14 @@ begin
         call it through the class before, so the parent's declaration seen through the base changes no call
         (Loader TFolderWorker.Execute). A public / published override keeps the refusal below: the parent may
         declare it less visible (TThread.Execute is protected), which only --ctor-wide accepts. }
-      if (C.Kind in [skMethod, skFunction, skProcedure]) and SameText(Trim(C.Directives), 'override') and
-        (GCtorWide or (C.VisExplicit and MatchText(Trim(C.Modifiers), ['protected', 'private', 'strict protected', 'strict private']))) then Continue;
+      { 150-CY-10c (lane 150 CY1): a public / published override stays too when the nearest ancestor that declares
+        the method declares it public or published (project index first, then the platform library): a call through
+        the base class then compiles exactly as a call through the class did, and dispatches to the same body. }
+      var IsOverride:= (C.Kind in [skMethod, skFunction, skProcedure]) and SameText(Trim(C.Directives), 'override');
+      var Hidden    := C.VisExplicit and MatchText(Trim(C.Modifiers), ['protected', 'private', 'strict protected', 'strict private']);
+      var BothPublic:= IsOverride and C.VisExplicit and MatchText(Trim(C.Modifiers), ['public', 'published']) and
+        MatchText(InheritedVisibility(pItem, C.Name), ['public', 'published']);
+      if IsOverride and (GCtorWide or Hidden or BothPublic) then Continue;
       { a field in the published section is what a .dfm streams into: FieldAddress finds it on the class that declares it,
         at run time; pulled into the base class it would turn protected (E-CTORINV-DEFAULT-PATH: no longer --ctor-wide only) }
       if (C.Kind = skField) and (ContainsText(C.Modifiers, 'published') or not C.VisExplicit) then
@@ -2899,6 +2961,31 @@ begin
   if Result <> '' then Result:= '(' + Result + ')';
 end;
 
+{ The parent class of pCur (the first heritage name, TObject when none), found by name in pStore (the index pCur came
+  from), then in the platform library; the widest class of that name. pStore becomes the index pNext came from; pParent
+  is the parent's bare name. False when no index given declares it. Shared by FindCtor and InheritedVisibility. }
+function TCyclePlanner.NextAncestor(const pCur: TSymbol; var pStore: ISymbolStore; out pNext: TSymbol;
+  out pParent: string): Boolean;
+begin
+  var Parts:= SplitHeritage(pCur.Heritage);
+  pParent:= if Length(Parts) > 0 then Parts[0] else 'TObject';
+  pParent:= pParent.Substring(pParent.LastIndexOf('.') + 1);
+  pNext  := Default(TSymbol);
+  Result := False;
+  var From:= pStore;
+  for var Source:= 0 to 1 do
+  begin
+    var S:= if Source = 0 then From else FLibStore;
+    if (S = nil) or Result then Continue;
+    for var Cand in S.FindSymbolsByExactName(pParent) do
+      if (Cand.Kind = skClass) and ((not Result) or (Cand.EndLine - Cand.StartLine > pNext.EndLine - pNext.StartLine)) then
+      begin
+        pNext := Cand;
+        pStore:= S;
+        Result:= True;
+      end;
+  end;
+end;
 { B8: the constructor pName of the class of pItem, its own or the nearest ancestor's: pSig is its parameter
   list verbatim. False with pWhy '' when no class of the chain declares a constructor of that name (then
   `TX.pName` is no construction); False with pWhy set when it cannot be told apart or the chain cannot be read. }
@@ -2928,24 +3015,9 @@ begin
     end;
     if Hits = 1 then Exit(True);
     if SameText(Cur.Name, 'TObject') then Exit(False);
-    var Parts:= SplitHeritage(Cur.Heritage);
-    var Parent:= if Length(Parts) > 0 then Parts[0] else 'TObject';
-    Parent:= Parent.Substring(Parent.LastIndexOf('.') + 1);
-    var Found:= False;
-    var Next := Default(TSymbol);
-    for var Source:= 0 to 1 do
-    begin
-      var S:= if Source = 0 then Store else FLibStore;
-      if (S = nil) or Found then Continue;
-      for var Cand in S.FindSymbolsByExactName(Parent) do
-        if (Cand.Kind = skClass) and ((not Found) or (Cand.EndLine - Cand.StartLine > Next.EndLine - Next.StartLine)) then
-        begin
-          Next := Cand;
-          Store:= S;
-          Found:= True;
-        end;
-    end;
-    if not Found then
+    var Parent: string;
+    var Next  : TSymbol;
+    if not NextAncestor(Cur, Store, Next, Parent) then
     begin
       pWhy:= Format('the ancestor `%s` of `%s` is declared in no index given%s, so the constructor `%s` cannot be read',
         [Parent, Cur.Name, (if FLibStore = nil then ' (no platform library was read: pass --library-db)' else ''), pName]);
@@ -2954,6 +3026,31 @@ begin
     Cur:= Next;
   end;
   Result:= False;
+end;
+
+{ 150-CY-10c: the visibility (lower case, e.g. 'public', 'protected') of the method pName as the nearest ANCESTOR of
+  pItem's class declares it -- the class itself is skipped, the chain is read like FindCtor (project index first, then
+  the platform library; the widest class of a name). '' when no ancestor declares it, the chain cannot be read, or the
+  declaration has no explicit section (never guessed). }
+function TCyclePlanner.InheritedVisibility(const pItem: TMoveItem; const pName: string): string;
+const
+  CMaxDepth = 64;
+begin
+  Result:= '';
+  var Cur  := pItem.Sym;
+  var Store:= FStore;
+  for var Depth:= 1 to CMaxDepth do
+  begin
+    if Depth > 1 then
+      for var C in Store.FindAllChildSymbols(Cur.Id) do
+        if (C.Kind in [skMethod, skFunction, skProcedure]) and SameText(C.Name, pName) then
+          Exit(if C.VisExplicit then LowerCase(Trim(C.Modifiers)) else '');
+    if SameText(Cur.Name, 'TObject') then Exit;
+    var Parent: string;
+    var Next  : TSymbol;
+    if not NextAncestor(Cur, Store, Next, Parent) then Exit;
+    Cur:= Next;
+  end;
 end;
 
 { B8: '' when every parameter type of pSig can be named in the leaf: a plain name that is a System built-in or is
@@ -3102,8 +3199,9 @@ function TCyclePlanner.CtorSiteOk(const pItem: TMoveItem; const pCode: string; p
 begin
   Result:= False;
   if pItem.CtorName = '' then Exit;
-  { --ctor-wide: `L.Add(TX.Create(..))` with L a list field that switches: T of the list is the base class too }
-  var IntoList:= GCtorWide and (Length(pLists) > 0) and TRegEx.IsMatch(Copy(pCode, 1, pIndex - 1), '\b(Self\s*\.\s*)?(' +
+  { `L.Add(TX.Create(..))` with L a list field that switches: T of the list is the base class too (--ctor-wide w4; on
+    the default path since 150-CY-10b, lane 150 CY1: Loader TFolderWorker) }
+  var IntoList:= (Length(pLists) > 0) and TRegEx.IsMatch(Copy(pCode, 1, pIndex - 1), '\b(Self\s*\.\s*)?(' +
     string.Join('|', pLists) + ')\s*\.\s*Add\s*\(\s*$', [roIgnoreCase]);
   if not IntoList and ((Length(pSlots) = 0) or not TRegEx.IsMatch(Copy(pCode, 1, pIndex - 1),
     '(^|[;\s])(Self\s*\.\s*)?(' + string.Join('|', pSlots) + ')\s*:=\s*$', [roIgnoreCase])) then Exit;
@@ -3402,16 +3500,17 @@ begin
         { --ctor-wide: a field pulled into the base class is the same memory: a store through the slot is sound }
         (GCtorWide and (B.Sym.Kind = skField)) then Pulled:= Pulled + [B.Sym.Name];
   var Own: TArray<string>:= nil;
-  if GCtorWide and (pItem.CtorName <> '') then
+  if pItem.CtorName <> '' then
     for var C in FStore.FindAllChildSymbols(pItem.Sym.Id) do Own:= Own + [C.Name];
   for var R in F.Refs do
   begin
     if (R.StartLine < First) or (R.StartLine > Last) or not SameText(R.ReceiverText, pSlot.Name) then Continue;
     var IsRead:= (SameText(R.Kind, 'member-access') and MemberAccessOf(R.Id, MA) and SameText(MA.MemberMode, 'read')) or
       MatchText(R.NameText, Pulled);
-    { --ctor-wide: a member the class does not declare is what it inherits, and the base class inherits it from the
-      same parent: same object, same member. A store stays refused: its setter was never on the whitelist }
-    if GCtorWide and not IsRead and (pItem.CtorName <> '') and not MatchText(R.NameText, Own) and not TRegEx.IsMatch(CodePart(LineAt(F.Lines, R.StartLine)),
+    { a member the class does not declare is what it inherits, and the base class inherits it from the same parent:
+      same object, same member (--ctor-wide w4; on the default path since 150-CY-10b: `W.Finished` of a TThread
+      child). A store stays refused: its setter was never on the whitelist }
+    if not IsRead and (pItem.CtorName <> '') and not MatchText(R.NameText, Own) and not TRegEx.IsMatch(CodePart(LineAt(F.Lines, R.StartLine)),
       '\b' + pSlot.Name + '\s*\.\s*' + R.NameText + '\s*:=', [roIgnoreCase]) then IsRead:= True;
     if not IsRead and not SameText(R.NameText, 'Free') then
       Exit(Format('`%s:%d`: %s; `%s.%s` is not a read of a member', [ExtractFileName(F.Path), R.StartLine, What,
@@ -3483,11 +3582,11 @@ begin
     pIndex, pLen, pPulled, pSlots) then Exit(True);
   if TRegEx.IsMatch(Rest, '^\s*\.\s*(Add|Insert|Remove|IndexOf|Contains|Delete|Clear|Count|Free)\b', [roIgnoreCase]) then
     Exit(True);
-  { --ctor-wide: `var S: TX := F[..]` as a whole statement, S a slot that switches }
-  if GCtorWide and (Length(pSlots) > 0) and TRegEx.IsMatch(Copy(pCode, 1, pIndex - 1), '\bvar\s+(' + string.Join('|', pSlots) +
+  { `var S: TX := F[..]` as a whole statement, S a slot that switches (--ctor-wide w4; default since 150-CY-10b) }
+  if (Length(pSlots) > 0) and TRegEx.IsMatch(Copy(pCode, 1, pIndex - 1), '\bvar\s+(' + string.Join('|', pSlots) +
     ')\s*:\s*' + pTypeName + '\s*:=\s*(Self\s*\.\s*)?$', [roIgnoreCase]) and TRegEx.IsMatch(Rest, '^\s*\[[^;]*\]\s*(;|$)') then Exit(True);
-  { --ctor-wide: the ownership switch of the list itself names no element type }
-  if GCtorWide and TRegEx.IsMatch(Rest, '^\s*\.\s*OwnsObjects\b', [roIgnoreCase]) then Exit(True);
+  { the ownership switch of the list itself names no element type (--ctor-wide w4; default since 150-CY-10b) }
+  if TRegEx.IsMatch(Rest, '^\s*\.\s*OwnsObjects\b', [roIgnoreCase]) then Exit(True);
   if TRegEx.IsMatch(Rest, '^\s*(=|<>)\s*nil\b', [roIgnoreCase]) then Exit(True);
   var Before:= Copy(pCode, 1, pIndex - 1);
   if TRegEx.IsMatch(Before, '\b(Assigned|FreeAndNil)\s*\(\s*$', [roIgnoreCase]) and TRegEx.IsMatch(Rest, '^\s*\)') then
@@ -3538,10 +3637,11 @@ begin
         R.StartLine, Head]));
   Pulled:= nil;
   for var B in pItem.BaseMembers do Pulled:= Pulled + [B.Sym.Name];
-  { --ctor-wide: `F[..].M` with M no member of the class itself reads what the class inherits, and the base class
-    inherits it from the same parent (a name it does not have fails the dcc gate, never compiles to something else) }
+  { `F[..].M` with M no member of the class itself reads what the class inherits, and the base class inherits it from
+    the same parent (a name it does not have fails the dcc gate, never compiles to something else). A list field: on
+    the default path since 150-CY-10b (--ctor-wide w4); an array field: --ctor-wide only, as before }
   var Own: TArray<string>:= nil;
-  if GCtorWide and (pItem.CtorName <> '') then
+  if (GCtorWide or IsList) and (pItem.CtorName <> '') then
   begin
     for var C in FStore.FindAllChildSymbols(pItem.Sym.Id) do Own:= Own + [C.Name];
     for var L:= 1 to Length(F.Lines) do
@@ -3714,7 +3814,7 @@ var
   Item: TMoveItem;
 begin
   { R1: the consumer's calls of the inverted routine go through the pointer }
-  if (FInversion.Recipe = crRoutineInversion) and (pFid = FInversion.ConsumerFid) then
+  if (FInversion.Recipe in [crRoutineInversion, crMemberInterface]) and (pFid = FInversion.ConsumerFid) then  { 150-CY-11: R2 + R1 }
     for var R in FInversion.Routines do
       if pOwner.Id = R.Id then Exit(True);
   { R2: the consumer names the interface instead of the class }
@@ -4806,6 +4906,19 @@ begin
   Adds   := ListOf(FUsesAdd, pF.Fid, pSect);
   Dels   := ListOf(FUsesDel, pF.Fid, pSect);
   E      := Default(TFileEdit);
+  { found-in-150 (CY2 HANDOVER, guarded_uses n4b): an entry the OTHER section removes from a conditional region is no
+    move -- ClauseEdit refuses it there (`directive`, the guard cannot follow), so this section must not gain it
+    unconditionally. A copy: the shared list still tells the other section's ClauseEdit that the entry moves. }
+  var AddArr:= Adds.ToArray;
+  if pSect in [scIntf, scImpl] then
+  begin
+    var Other:= if pSect = scIntf then scImpl else scIntf;
+    var Kept: TArray<string>:= nil;
+    for var A in AddArr do
+      if not (ListOf(FUsesDel, pF.Fid, Other).Contains(LowerCase(StemOfEntry(A))) and
+        EntryInRegion(pF, Other, StemOfEntry(A))) then Kept:= Kept + [A];
+    AddArr:= Kept;
+  end;
   { N-06: a section whose uses entries come (partly) from an include is never
     edited -- the .inc may be shared, and its coordinates are not this file's.
     ONE manual edit at the include line names the refusal. }
@@ -4826,16 +4939,16 @@ begin
   end;
   if Length(Entries) = 0 then
   begin
-    if Adds.Count = 0 then Exit;
+    if Length(AddArr) = 0 then Exit;
     E.Kind := ekInsertAfter;
     E.First:= if pSect = scIntf then pF.IntfLine else pF.ImplLine;
     E.Last := E.First;
     if (pSect = scProg) or (E.First = 0) then
     begin
       E.Kind:= ekManual;
-      E.Note:= Format('Add a `uses` clause naming %s to the %s section.', [QuoteList(Adds.ToArray), SectLabel(pSect)]);
+      E.Note:= Format('Add a `uses` clause naming %s to the %s section.', [QuoteList(AddArr), SectLabel(pSect)]);
     end
-    else E.NewLines:= PrependBlank(FormatUses('', Adds.ToArray, nil));
+    else E.NewLines:= PrependBlank(FormatUses('', AddArr, nil));
     EditList(pF.Fid).Add(E);
     Exit;
   end;
@@ -4849,8 +4962,38 @@ begin
   var Moved: TArray<string>:= nil;
   if pSect in [scIntf, scImpl] then
     for var S in ListOf(FUsesAdd, pF.Fid, if pSect = scIntf then scImpl else scIntf) do Moved:= Moved + [StemOfEntry(S)];
-  E:= ClauseEdit(pF.Lines, UsesLine, SectLabel(pSect), Adds.ToArray, Dels.ToArray, Moved);
+  { 150 CY1 (EX2 150 row, cycles half): case 9 reads the file's pp_regions rows when the index has them; the brace scan
+    alone is the fallback (a schema-23 DB, a file indexed before the table, or DRAGLINT_CYCLES_PP=scan -- the identity
+    guard run_cyclefix_pp_regions_identity compares both). With DRAGLINT_CYCLES_PP set, stderr names the path taken. }
+  var PpMode:= GetEnvironmentVariable('DRAGLINT_CYCLES_PP');
+  var Regions: TArray<TPpRegionRow>:= nil;
+  if not SameText(PpMode, 'scan') and FStore.HasFileFacts then Regions:= FStore.GetPpRegions(pF.Fid);
+  if PpMode <> '' then
+    Writeln(ErrOutput, Format('cycles: case 9 %s uses: conditional regions from %s', [ExtractFileName(pF.Path),
+      (if Length(Regions) > 0 then 'pp_regions (table)' else 'the brace scan')]));
+  E:= ClauseEdit(pF.Lines, UsesLine, SectLabel(pSect), AddArr, Dels.ToArray, Moved, Regions);
   if E.First > 0 then EditList(pF.Fid).Add(E);
+end;
+
+{ found-in-150 (CY2 HANDOVER): whether the entry pStem of pF's pSect uses clause sits in a conditional region (the
+  clause's TUsesLexer scan puts it at Depth > 0) -- the predicate ClauseEdit refuses a moved entry by. }
+function TCyclePlanner.EntryInRegion(const pF: TPlanFile; pSect: TSect; const pStem: string): Boolean;
+var
+  Lex: TUsesLexer;
+begin
+  Result:= False;
+  var Entries:= SectionEntries(pF, pSect);
+  if Length(Entries) = 0 then Exit;
+  var UsesLine:= Entries[0].StartLine;
+  while (UsesLine > 1) and not TRegEx.IsMatch(CodePart(LineAt(pF.Lines, UsesLine)), '\buses\b', [roIgnoreCase]) do
+    Dec(UsesLine);
+  Lex:= TUsesLexer.Create(string.Join(CClauseBreak, Copy(pF.Lines, UsesLine - 1, MaxInt)));
+  try
+    for var E in ScanClause(Lex).Entries do
+      if SameText(E.Name, pStem) and (E.Depth > 0) then Exit(True);
+  finally
+    Lex.Free;
+  end;
 end;
 
 function TCyclePlanner.EditList(pFid: Int64): TList<TFileEdit>;
@@ -5444,8 +5587,13 @@ begin
         EmitFmt('%s**keep** it in the %s uses (the index saw no symbol from it there -- do not touch it).',
           [Who, SectLabel(D.Sect)]);
       uvMove:
-        EmitFmt('%sthe interface no longer needs it; the implementation still does (%s) -> **move** it ' +
-          'from the interface uses to the implementation uses.', [Who, D.Still]);
+        { found-in-150 (CY2 HANDOVER): a guarded entry is never moved by the plan (BuildClauseEdit / ClauseEdit) }
+        if EntryInRegion(GetFile(D.Fid), scIntf, UnitNameOfStem(D.PartnerStem)) then
+          EmitFmt('%sthe interface no longer needs it; the implementation still does (%s), but it sits in a ' +
+            'conditional region -> **refused**: move it by hand together with its guard.', [Who, D.Still])
+        else
+          EmitFmt('%sthe interface no longer needs it; the implementation still does (%s) -> **move** it ' +
+            'from the interface uses to the implementation uses.', [Who, D.Still]);
       uvRemove:
         EmitFmt('%snothing from it is used there any more -> **remove** it from the %s uses.',
           [Who, SectLabel(D.Sect)]);
@@ -5515,7 +5663,7 @@ begin
     System built-ins -- it needs no new uses entry }
   if IsInversionStem(pStem) and (FInversion.LeafStem <> '') then Exit(nil);
   { R2: the units that declare the member types (PlanMemberInterface), nothing else }
-  if IsInversionStem(pStem) and (FInversion.Recipe = crMemberInterface) then
+  if IsInversionStem(pStem) and ((FInversion.Recipe = crMemberInterface) or IsMetaclassInversion) then  { 150-CY-7b too }
   begin
     Result:= nil;
     if pSect = scIntf then Result:= FInversion.LeafUses;
@@ -5925,6 +6073,7 @@ begin
     PlanStage('PartB PlanInversion', W);
     PlanMemberHandOver(pEvals);
     PlanStage('PartB PlanMemberHandOver', W);
+    PlanMetaclassValue(pEvals);  { 150-CY-7b }
   finally
     Names.Free;
   end;
@@ -6244,6 +6393,7 @@ begin
       and the best by BetterCut is the one cut of this run }
     PlanInversion(Evals);
     PlanMemberHandOver(Evals);
+    PlanMetaclassValue(Evals);  { 150-CY-7b }
     PlanBaseHandOver(Evals);
     for var Ev in Evals do
       if BetterCut(Ev, FCutEdge) then FCutEdge:= Ev;
@@ -6574,6 +6724,24 @@ begin
   end;
 end;
 
+{ INT-E1b planner half (lane 150 CY1): a `class-ref` refusal of the member plan whose line names the class qualified by
+  its own unit (`X is Unit.TFoo`, `C = Unit.TFoo`) is a `qualified-ref`: dropping the uses entry breaks that spelling
+  whatever the hand-over does, and the reason must say so (run_cyclefix_r2 f8 / f8b). Reads the dotted TEXT of the
+  refused line (code only), so it holds whether or not the index carries a type_use for the dotted operand (EX3 emits
+  one for the `is` right side). Any other refusal, and a line without the qualifier, is left as it is. }
+procedure TCyclePlanner.QualifiedClassRef(const pUnitStem: string; var pRefusal: TRecipeRefusal);
+begin
+  if (pRefusal.Kind <> 'class-ref') or (pRefusal.Fid <= 0) or (pRefusal.Line <= 0) or (pUnitStem = '') then Exit;
+  var Parts:= pUnitStem.Split(['.']);
+  for var I:= 0 to High(Parts) do Parts[I]:= TRegEx.Escape(Parts[I]);
+  var Code:= CodePart(LineAt(GetFile(pRefusal.Fid).Lines, pRefusal.Line));
+  if not TRegEx.IsMatch(Code, '(?<![\w.])' + string.Join('\s*\.\s*', Parts) + '\s*\.\s*' + TRegEx.Escape(pRefusal.Symbol) + '\b',
+    [roIgnoreCase]) then Exit;
+  pRefusal.Kind  := 'qualified-ref';
+  pRefusal.Reason:= Format('line %d names `%s` qualified by its unit (`%s`); that use keeps needing the uses entry the ' +
+    'cut removes', [pRefusal.Line, pRefusal.Symbol, Trim(LineAt(GetFile(pRefusal.Fid).Lines, pRefusal.Line))]);
+end;
+
 { R2 on every edge that neither moves nor is one routine, and whose surface tests or
   casts against a class with `is` / `as`: as PlanInversion, a refusal is recorded on
   the edge, an applicable edge gets Recipe crMemberInterface, its Steps and Cost = its
@@ -6595,8 +6763,21 @@ begin
         (FStore.GetSymbolById(R.SymbolId).Kind = skClass)) then Tested:= True;
     if (Ev.Recipe <> crNone) or (Ev.Surface.RoutineName <> '') or not Tested then Continue;
     var Leaf := ResolveUntangleLeaf(FStore, Ev.Surface.ToStem, FComp, Root);
-    var Steps:= PlanMemberInterface(Self, FLibStore, Ev.Surface, Leaf.UnitName, UnitScopes, Refusal);
-    if (Refusal.Kind = '') and (Leaf.Decision = udExtend) then SettleIfaceName(Ev.Surface, Leaf, UnitScopes, Steps, Refusal);
+    { 150-CY-11 (lane 150 CY1): an edge that ALSO calls routines of B -- R1 on the routine refs, R2 on the rest, one
+      leaf, one edge-still-used check over the union (ComposeRoutines) }
+    var Surf := Ev.Surface;
+    var R1   := Default(TRecipeSteps);
+    Refusal  := Default(TRecipeRefusal);
+    if Length(Surf.RoutineIds) > 0 then
+    begin
+      R1  := PlanRoutinesInversion(Self, SplitSurface(Surf, True), nil, Refusal);
+      Surf:= SplitSurface(Surf, False);
+    end;
+    var Steps:= Default(TRecipeSteps);
+    if Refusal.Kind = '' then Steps:= PlanMemberInterface(Self, FLibStore, Surf, Leaf.UnitName, UnitScopes, Refusal);
+    if (Refusal.Kind = '') and (Leaf.Decision = udExtend) then SettleIfaceName(Surf, Leaf, UnitScopes, Steps, Refusal);
+    if (Refusal.Kind = '') and (R1.Recipe = crRoutineInversion) then ComposeRoutines(Steps, R1, Refusal);
+    QualifiedClassRef(Ev.Surface.ToStem, Refusal);
     if Refusal.Kind <> '' then
     begin
       Ev.Refusal:= Refusal.Kind;
@@ -6613,6 +6794,261 @@ begin
   end;
 end;
 
+{ 150-CY-11: the part of pSurface R1 takes (pRoutines: the refs bound to its routines, no class) or R2 takes (every
+  other ref, no routine). Flags and member lists stay with the class part. }
+function TCyclePlanner.SplitSurface(const pSurface: TEdgeSurface; pRoutines: Boolean): TEdgeSurface;
+begin
+  Result:= pSurface;
+  Result.Refs:= nil;
+  for var R in pSurface.Refs do
+  begin
+    var IsRoutine:= False;
+    for var Id in pSurface.RoutineIds do IsRoutine:= IsRoutine or (R.SymbolId = Id);
+    if IsRoutine = pRoutines then Result.Refs:= Result.Refs + [R];
+  end;
+  if pRoutines then
+  begin
+    Result.ClassNames:= nil;
+    Result.Members   := nil;
+    Result.HasWrite  := False;
+    Result.HasConstruction:= False;
+    Result.HasClassMethod := False;
+    Result.HasClassRefArg := False;
+    Result.HasDecl        := False;
+  end
+  else
+  begin
+    Result.RoutineIds:= nil;
+    Result.CallCount := 0;
+  end;
+end;
+
+{ 150-CY-11: R1's routine pointers joined into the R2 steps of the same edge (pSteps stays crMemberInterface; its
+  Routines / pointer fields are R1's). Refused (manual-edit) when both rewrite one line, when either reuses an existing
+  declaration of the leaf (ReuseDecl is one field for both), or when a routine's signature names a type that is not a
+  System built-in (the leaf's uses carry R2's member types only). }
+procedure TCyclePlanner.ComposeRoutines(var pSteps: TRecipeSteps; const pR1: TRecipeSteps; var pRefusal: TRecipeRefusal);
+begin
+  var Why:= '';
+  if pSteps.ReuseDecl or pR1.ReuseDecl or pR1.AssignExists then
+    Why:= 'the leaf already declares the interface or a pointer of this edge: R1 and R2 cannot share the reuse';
+  for var R in pR1.Routines do
+    for var M in TRegEx.Matches(R.TypeDecl, ':\s*([A-Za-z_][\w.]*)') do
+      if (Why = '') and not IsBuiltinTypeName(M.Groups[1].Value) then
+        Why:= Format('`%s` names `%s` in its signature: with R2 on the same edge the leaf carries System types only',
+          [R.Name, M.Groups[1].Value]);
+  for var E in pR1.Edits do
+    for var F in pSteps.Edits do
+      if (Why = '') and (E.Fid = F.Fid) and (E.Line = F.Line) and E.Replace and F.Replace then
+        Why:= Format('line %d is rewritten by both the routine-call inversion and the member hand-over', [E.Line]);
+  if Why <> '' then
+  begin
+    pRefusal:= Default(TRecipeRefusal);
+    pRefusal.Kind  := 'manual-edit';
+    pRefusal.Symbol:= pR1.RoutineName;
+    pRefusal.Fid   := pSteps.ConsumerFid;
+    pRefusal.Reason:= 'routine-call inversion and member hand-over on one edge: ' + Why;
+    Exit;
+  end;
+  pSteps.RoutineId   := pR1.RoutineId;
+  pSteps.RoutineName := pR1.RoutineName;
+  pSteps.PtrType     := pR1.PtrType;
+  pSteps.PtrVar      := pR1.PtrVar;
+  pSteps.TypeDecl    := pR1.TypeDecl;
+  pSteps.VarDecl     := pR1.VarDecl;
+  pSteps.Routines    := pR1.Routines;
+  pSteps.RegisterDecl:= LeavesProgramReason(pR1) <> '';
+  pSteps.Edits       := pSteps.Edits + pR1.Edits;
+end;
+{ 150-CY-7b (lane 150 CY1, design docs\superpowers\specs\2026-11-09-cy-7b-metaclass-value.md, lane CY2): an edge whose
+  only use of B is a class TX of B passed as a call ARGUMENT (`RegisterClass(TX)`) is cut R1-shaped: the leaf declares
+  `var <X>Class: <formal metaclass>`, B's initialization assigns `<X>Class := TX;`, A passes the variable. Encoded as
+  crRoutineInversion steps with ClassTypeName = TX (IsMetaclassInversion), so the leaf, uses, RegisterDecl and --fix
+  machinery of R1 apply unchanged; the renderer names it. Every unprovable case keeps the edge's earlier refusal. }
+procedure TCyclePlanner.PlanMetaclassValue(pEvals: TList<TEdgeEval>);
+begin
+  for var I:= 0 to pEvals.Count - 1 do
+  begin
+    var Ev:= pEvals[I];
+    var S := Ev.Surface;
+    var OneValue := (Ev.Recipe = crNone) and (Length(S.ClassNames) = 1) and S.HasClassRefArg;
+    var OtherUse := S.HasConstruction or S.HasClassMethod or S.HasDecl or S.HasWrite;
+    var OtherDecl:= (Length(S.Members) > 0) or (Length(S.RoutineIds) > 0);
+    if not OneValue or OtherUse or OtherDecl then Continue;
+    var Why: string;
+    var Steps:= MetaclassSteps(Ev, Why);
+    if Why <> '' then
+    begin
+      Ev.Why:= Format('`%s` (class): refused: %s', [S.ClassNames[0], Why]);
+      Ev.Refusal:= Copy(Why, 1, Pos(' -- ', Why) - 1);
+      pEvals[I]:= Ev;
+      Continue;
+    end;
+    Ev.Recipe:= crRoutineInversion;
+    Ev.Steps := Steps;
+    Ev.Cost  := Length(S.Refs);
+    pEvals[I]:= Ev;
+  end;
+end;
+
+{ 150-CY-7b: the type of the parameter at 0-based position pIndex of the parameter list pSig (`(A: T1; B, C: T2)`),
+  '' when the list has no such position or the parameter is untyped. }
+function ParamTypeAt(const pSig: string; pIndex: Integer): string;
+begin
+  Result:= '';
+  var Inner:= Trim(pSig);
+  var Open := Pos('(', Inner);
+  var Close:= LastDelimiter(')', Inner);
+  if (Open = 0) or (Close < Open) then Exit;
+  Inner:= Copy(Inner, Open + 1, Close - Open - 1);
+  var K:= 0;
+  for var Group in Inner.Split([';']) do
+  begin
+    var Colon:= Pos(':', Group);
+    var Names:= if Colon > 0 then Copy(Group, 1, Colon - 1) else Group;
+    var Count:= Length(Names.Split([',']));
+    if pIndex < K + Count then
+    begin
+      if Colon = 0 then Exit;
+      Result:= Trim(Copy(Group, Colon + 1, MaxInt));
+      var Eq:= Pos('=', Result);
+      if Eq > 0 then Result:= Trim(Copy(Result, 1, Eq - 1));
+      Exit;
+    end;
+    Inc(K, Count);
+  end;
+end;
+
+{ 150-CY-7b: the steps of the metaclass hand-over of pEv, or pWhy = '<kind> -- <reason>'. Every ref of the edge must be
+  TX as a whole argument of a call; the formal parameter type at that position (every declaration of the callee in the
+  project index and the platform library agreeing) types the variable; the call must not run in A's initialization. }
+function TCyclePlanner.MetaclassSteps(const pEv: TEdgeEval; out pWhy: string): TRecipeSteps;
+begin
+  Result:= Default(TRecipeSteps);
+  pWhy  := '';
+  var S     := pEv.Surface;
+  var TX    := S.ClassNames[0];
+  var A     := GetFile(FidOfStem(S.FromStem));
+  var B     := GetFile(FidOfStem(S.ToStem));
+  var Starts:= CodeStarts(A.Lines);
+  var Formal:= '';
+  var VarName:= (if StartsText('T', TX) and (Length(TX) > 1) then Copy(TX, 2, MaxInt) else TX) + 'Class';
+  var Edits: TArray<TRecipeEdit>:= nil;
+  var UsedUnits: TArray<string>:= nil;
+  for var Sect in [scIntf, scImpl] do
+    for var U in SectionEntries(A, Sect) do UsedUnits:= UsedUnits + [U.UnitName];
+  for var R in S.Refs do
+  begin
+    var M:= TRegEx.Match(CodePart(LineAt(A.Lines, R.Line)), '(?<![\w.])([A-Za-z_]\w*)\s*\(\s*((?:[^(),]+,\s*)*)' +
+      TRegEx.Escape(TX) + '\s*[,)]', [roIgnoreCase]);
+    var Typ:= if M.Success then MetaclassArgType(M.Groups[1].Value, M.Groups[2].Value.CountChar(','), UsedUnits) else '';
+    if not M.Success then
+      pWhy:= Format('class-ref -- line %d passes the class `%s` as a value outside a call argument (`%s`)',
+        [R.Line, TX, Trim(R.LineText)])
+    else if Typ = '' then
+      pWhy:= Format('signature-unknown -- line %d passes `%s` to `%s`, whose parameter type at that position could not ' +
+        'be read from the indexes given (no declaration, an untyped parameter, or overloads that differ there)%s',
+        [R.Line, TX, M.Groups[1].Value, (if FLibStore = nil then ' (no platform library was read: pass --library-db)' else '')])
+    else if (Formal <> '') and not SameText(Formal, Typ) then
+      pWhy:= Format('signature-unknown -- `%s` is passed where `%s` and `%s` are expected: one variable cannot carry both',
+        [TX, Formal, Typ])
+    else if InitOrderWhy(A.Lines, R, A.UnitName) <> '' then
+      pWhy:= 'init-order -- ' + InitOrderWhy(A.Lines, R, A.UnitName);
+    if pWhy <> '' then Break;
+    Formal:= Typ;
+    var Edit:= Default(TRecipeEdit);
+    Edit.Fid     := A.Fid;
+    Edit.Line    := R.Line;
+    Edit.Replace := True;
+    Edit.NewLines:= [ReplaceInCode(LineAt(A.Lines, R.Line), Starts[R.Line - 1], '(?<![\w.])' + TRegEx.Escape(TX) + '\b', VarName)];
+    var Dup:= False;
+    for var E in Edits do Dup:= Dup or ((E.Fid = Edit.Fid) and (E.Line = Edit.Line));
+    if not Dup then Edits:= Edits + [Edit];
+  end;
+  var LeafUses: TArray<string>:= nil;
+  if pWhy = '' then LeafUses:= MetaclassTypeUnit(A, S.Refs[0].Line, Formal, pWhy);
+  for var Sym in A.Syms do
+    if (pWhy = '') and SameText(Sym.Name, VarName) then
+      pWhy:= Format('duplicate-identifier -- `%s` already declares `%s` (line %d)', [A.UnitName, VarName, Sym.StartLine]);
+  var Assign: TRecipeEdit;
+  if (pWhy = '') and not AssignmentEdit(B.Lines, B.Fid, ['  ' + VarName + ' := ' + TX + ';'], Assign) then
+    pWhy:= Format('manual-edit -- `%s` has no final `end.` to put the initialization assignment before', [B.UnitName]);
+  if pWhy <> '' then Exit;
+  var Inv:= Default(TInvertedRoutine);
+  Inv.Id     := S.Refs[0].SymbolId;  { IsMovedFor: the consumer's refs of TX go through the variable }
+  Inv.Name   := TX;
+  Inv.PtrType:= Formal;
+  Inv.PtrVar := VarName;
+  Inv.VarDecl:= VarName + ': ' + Formal + ';';
+  Result.Recipe       := crRoutineInversion;
+  Result.RoutineName  := TX;
+  Result.DeclStem     := S.ToStem;
+  Result.ConsumerFid  := A.Fid;
+  Result.PtrType      := Formal;
+  Result.PtrVar       := VarName;
+  Result.VarDecl      := Inv.VarDecl;
+  Result.ClassTypeName:= TX;
+  Result.LeafUses     := LeafUses;
+  Result.Routines     := [Inv];
+  Result.Edits        := Edits + [Assign];
+  Result.RegisterDecl := LeavesProgramReason(Result) <> '';
+end;
+
+{ 150-CY-7b: the type of parameter pIndex of the routine pCallee a bare call in a unit using pUsed binds: a top-level
+  routine of one of those units (or of System), project index then platform library, every declaration agreeing.
+  '' when there is none, they disagree, or the type is no plain name. }
+function TCyclePlanner.MetaclassArgType(const pCallee: string; pIndex: Integer; const pUsed: TArray<string>): string;
+begin
+  Result:= '';
+  var Seen:= False;
+  for var Source:= 0 to 1 do
+  begin
+    var St:= if Source = 0 then FStore else FLibStore;
+    if St = nil then Continue;
+    for var C in St.FindSymbolsByExactName(pCallee) do
+    begin
+      var U:= ChangeFileExt(ExtractFileName(St.GetFilePath(C.FileId)), '');
+      if (C.Kind not in [skFunction, skProcedure]) or not (MatchText(U, pUsed) or SameText(U, 'System')) then Continue;
+      var P:= ParamTypeAt(C.Signature, pIndex);
+      if Seen and not SameText(P, Result) then Exit('');
+      Result:= P;
+      Seen  := True;
+    end;
+  end;
+  if not TRegEx.IsMatch(Result, '^[A-Za-z_]\w*$') then Result:= '';
+end;
+
+{ 150-CY-7b: the uses entry the leaf's interface needs for the formal type pFormal (none for a System built-in): the
+  project unit that declares it, else the one platform-library unit. pWhy (`<kind> -- <reason>`) when it is declared in
+  this cycle or cannot be told. }
+function TCyclePlanner.MetaclassTypeUnit(const pA: TPlanFile; pLine: Integer; const pFormal: string; out pWhy: string): TArray<string>;
+var
+  Owner: TSymbol;
+  Stem : string;
+begin
+  Result:= nil;
+  pWhy  := '';
+  if IsBuiltinTypeName(pFormal) then Exit;
+  var UnitOf:= '';
+  if BindName(pA.Fid, pLine, pFormal, Owner, Stem) then
+    UnitOf:= if FMembers.ContainsKey(Stem) then '' else UnitNameOfStem(Stem)
+  else if FLibStore <> nil then
+    for var L in FLibStore.FindSymbolsByExactName(pFormal) do
+    begin
+      var U:= ChangeFileExt(ExtractFileName(FLibStore.GetFilePath(L.FileId)), '');
+      UnitOf:= if (UnitOf <> '') and not SameText(UnitOf, U) then '?' else U;
+    end;
+  if (Stem <> '') and FMembers.ContainsKey(Stem) then
+    pWhy:= Format('signature-in-cycle -- the parameter type `%s` is declared in `%s`, a unit of this cycle', [pFormal, Stem])
+  else if (UnitOf = '') or (UnitOf = '?') then
+    pWhy:= Format('signature-unknown -- the unit that declares `%s` could not be told', [pFormal])
+  else Result:= [UnitOf];
+end;
+{ 150-CY-7b: the cut edge's steps are a metaclass hand-over (R1-shaped, see PlanMetaclassValue). }
+function TCyclePlanner.IsMetaclassInversion: Boolean;
+begin
+  Result:= (FInversion.Recipe = crRoutineInversion) and (FInversion.ClassTypeName <> '');
+end;
 { The unit that receives R1's procedural type and variable: the existing unit J2
   chose, else the catalog's `<Declaring>.Untangle` (created or extended). }
 function TCyclePlanner.InversionLeaf(const pSteps: TRecipeSteps): TUntangleLeaf;
@@ -6736,13 +7172,23 @@ begin
   end;
   L:= TList<string>.Create;
   try
+    if IsMetaclassInversion then
+    begin
+      { 150-CY-7b: no type, only the variable of the formal metaclass type }
+      L.Add('');
+      L.Add('var');
+      L.Add(Format('  /// <summary>Holds the class %s, assigned by %s in its initialization section; the units of ' +
+        'its former cycle pass it instead of naming the class.</summary>', [FInversion.ClassTypeName, UnitNameOfStem(pStem)]));
+      L.Add('  ' + FInversion.VarDecl);
+      Exit(L.ToArray);
+    end;
     L.Add('');
     if not InType then L.Add('type');
     if FInversion.Recipe = crMemberInterface then
     begin
-      { R2: the extracted interface }
+      { R2: the extracted interface; 150-CY-11: R1's pointers follow when the edge also calls routines }
       L.AddRange(FInversion.IfaceDecl);
-      Exit(L.ToArray);
+      if Length(FInversion.Routines) = 0 then Exit(L.ToArray);
     end;
     for var R in FInversion.Routines do
     begin
@@ -6797,6 +7243,27 @@ begin
   Calls:= TList<string>.Create;
   try
     var Decl:= UnitNameOfStem(FInversion.DeclStem);
+    if IsMetaclassInversion then
+    begin
+      { 150-CY-7b: the metaclass hand-over }
+      for var E in FInversion.Edits do
+        if E.Fid = FInversion.ConsumerFid then Calls.Add(IntToStr(E.Line));
+      EmitFmt('Nothing moves. Recipe: **metaclass hand-over** -- the class `%s` stays in `%s`; units outside this ' +
+        'cycle keep naming it.', [FInversion.ClassTypeName, Decl]);
+      EmitFmt('- `%s` gets the variable `%s` (the type of the parameter the class is passed to).',
+        [FLeafName[FInversion.DeclStem], FInversion.VarDecl]);
+      EmitFmt('- `%s` assigns `%s := %s;` as the first statement of its initialization section.',
+        [Decl, FInversion.PtrVar, FInversion.ClassTypeName]);
+      EmitFmt('- `%s` passes `%s` instead of `%s` (line %s). Checked: its own initialization section makes none ' +
+        'of these calls and does not name the routine that makes them. NOT checked: an initialization section of ' +
+        'another unit that reaches them through a call chain.', [ExtractFileName(PathOf(FInversion.ConsumerFid)),
+        FInversion.PtrVar, FInversion.ClassTypeName, string.Join(', ', Calls.ToArray)]);
+      if FInversion.RegisterDecl then
+        EmitFmt('- `%s` joins the program''s uses (`%s`) so it stays linked and its initialization assigns `%s`.',
+          [Decl, ExtractFileName(PathOf(FProjectFid)), FInversion.PtrVar]);
+      Emit('');
+      Exit;
+    end;
     if Length(FInversion.MoveIds) = 0 then
       EmitFmt('Nothing moves. Recipe: **routine-call inversion** -- `%s` stays in `%s`; callers outside ' +
         'this cycle keep calling it by name.', [InversionNames, Decl])
@@ -6926,6 +7393,25 @@ begin
   end;
 end;
 
+{ 150-CY-11: the R1 lines of an R2 cut that also inverts routines (ComposeRoutines); nothing for a plain R2 cut. }
+procedure TCyclePlanner.RenderComposedRoutines(const pDecl, pConsumer: string);
+begin
+  for var R in FInversion.Routines do
+  begin
+    var Calls:= '';
+    for var E in FInversion.Edits do
+      if (E.Fid = FInversion.ConsumerFid) and (Length(E.NewLines) > 0) and
+        TRegEx.IsMatch(E.NewLines[0], '(?<![\w.])' + TRegEx.Escape(R.PtrVar) + '\b', [roIgnoreCase]) then
+        Calls:= Calls + (if Calls <> '' then ', ' else '') + IntToStr(E.Line);
+    EmitFmt('- The edge also calls the routine `%s` of `%s`: **routine-call inversion** on the same edge -- `%s` gets ' +
+      'the procedural type `%s` (the routine''s signature, verbatim) and the variable `%s`; `%s` assigns `%s := %s;` ' +
+      'as the first statement of its initialization section; `%s` calls `%s` instead (line %s).',
+      [R.Name, pDecl, FLeafName[FInversion.DeclStem], R.PtrType, R.PtrVar, pDecl, R.PtrVar, R.Name, pConsumer,
+      R.PtrVar, Calls]);
+  end;
+  if (Length(FInversion.Routines) > 0) and FInversion.RegisterDecl then
+    EmitFmt('- `%s` joins the program''s uses so it stays linked and its initialization assigns the pointers.', [pDecl]);
+end;
 procedure TCyclePlanner.RenderMemberHandOver(pStep: Integer);
 begin
   EmitFmt('### Step %d: what moves where', [pStep]);
@@ -6955,6 +7441,7 @@ begin
       EmitFmt('- Exceptions: a failed `as %s` raises EIntfCastError, not EInvalidCast as `as %s` did -- a handler ' +
         'for EInvalidCast no longer catches it. Checked: `%s` handles no EInvalidCast, or each `as` follows its ' +
         '`is` guard.', [S.IfaceName, S.ClassTypeName, Consumer]);
+  RenderComposedRoutines(Decl, Consumer);  { 150-CY-11 }
   for var S in FInversion.Surfaces do
     if S.HardCastChange then  { lane 149 CYB (149-CY-8b): a stated behaviour change }
       EmitFmt('- Behaviour change: `%s` handles EInvalidCast and reads through a hard cast `%s(X).M`, which becomes ' +
@@ -6978,7 +7465,13 @@ begin
   end;
   if pPlan.CutEdge.Recipe = crRoutineInversion then
   begin
-    if (Length(FInversion.Routines) > 1) or (Length(FInversion.MoveIds) > 0) then
+    if IsMetaclassInversion then  { 150-CY-7b }
+      EmitFmt('Cut the edge `%s -> %s` by **metaclass hand-over**: `%s` takes from `%s` only the class `%s`, ' +
+        'passed as a value. `%s` passes the variable `%s` declared in `%s` instead, assigned in the initialization ' +
+        'of `%s`. No edge of this cycle can be cut by moving declarations.', [pPlan.CutEdge.FromStem, pPlan.CutEdge.ToStem,
+        pPlan.CutEdge.FromStem, pPlan.CutEdge.ToStem, FInversion.ClassTypeName, pPlan.CutEdge.FromStem, FInversion.PtrVar,
+        FLeafName[FInversion.DeclStem], pPlan.CutEdge.ToStem])
+    else if (Length(FInversion.Routines) > 1) or (Length(FInversion.MoveIds) > 0) then
       { B3: several routines, or routines and declarations that move }
       EmitFmt('Cut the edge `%s -> %s` by **routine-call inversion**: `%s` takes from `%s` the routines `%s`%s; every ' +
       'type of their signatures is declared outside this cycle or moves too. `%s` calls them through procedural ' +
@@ -7022,6 +7515,9 @@ begin
       'moving declarations or by routine-call inversion.', [pPlan.CutEdge.FromStem, pPlan.CutEdge.ToStem,
       pPlan.CutEdge.FromStem, pPlan.CutEdge.ToStem, FInversion.ClassTypeName, FInversion.ClassTypeName,
       FInversion.IfaceName, FLeafName[FInversion.DeclStem], pPlan.CutEdge.FromStem]);
+    if Length(FInversion.Routines) > 0 then  { 150-CY-11 }
+      EmitFmt('On the same edge, **routine-call inversion** of `%s`: `%s` calls it through a procedural variable ' +
+        'declared in `%s`.', [InversionNames, pPlan.CutEdge.FromStem, FLeafName[FInversion.DeclStem]]);
     var Still:= InversionStillUsed;
     if Still <> '' then
       EmitFmt('refused: edge-still-used -- %s. The steps below keep that uses entry, so the edge stays: ' +
@@ -7510,8 +8006,13 @@ begin
   try
     for var A in FComp do
       if FGraph.Adj.TryGetValue(A, Used) then
+      begin
+        { 150-CAUSES-SPEED (CY2 HANDOVER): every edge FROM A in one pass (BuildEdgeSurfaces), same surfaces, same order }
+        var Tos: TArray<string>:= nil;
         for var B in FComp do
-          if (A <> B) and Used.Contains(B) then L.Add(BuildEdgeSurface(Self, FidOfStem(A), B));
+          if (A <> B) and Used.Contains(B) then Tos:= Tos + [B];
+        L.AddRange(BuildEdgeSurfaces(Self, FidOfStem(A), Tos));
+      end;
     Result:= L.ToArray;
   finally
     L.Free;

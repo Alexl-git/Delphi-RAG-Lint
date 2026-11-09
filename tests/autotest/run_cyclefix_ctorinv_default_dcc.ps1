@@ -11,8 +11,12 @@
         whitelist refuses in code): a comment is no use of the slot
     ov  (149-CY-10, lane 149 CYA) a protected `Execute; override` (TThread) the consumer's unrelated `.Execute` dragged
         onto the surface stays in the class (Loader TFolderWorker); RED: 1.48.0-alpha refuses `carries directives (override)`
+    pu  (150-CY-10c, lane 150 CY1) a PUBLIC `ToString; override` stays in the class: the nearest ancestor that declares
+        ToString (TObject, read from the platform library) declares it public too; RED: 1.49.0-alpha refuses
+        `carries directives (override)`
   REFUSED without the flag:
-    op  the same override PUBLIC: still refused (its parent may declare it less visible; --ctor-wide only)
+    op  the same Execute override PUBLIC: still refused (TThread declares Execute protected: a call through the base
+        class would not compile; --ctor-wide only). op is pu's positive control: the library lookup decides.
     pb  a published field of the class read through the slot: PullMembers would pull it into the base class as
         PROTECTED (a .dfm streams into the published field of the class that declares it); the plan must say
         `is published`, not mechanical.
@@ -169,6 +173,17 @@ function Set-OverrideShape([string]$Dir, [string]$pVis) {
   Edit-File $ow "  FChild.Touch;" "  FAct := nil;`n  if Assigned(FAct) then FAct.Execute;`n  FChild.Touch;"
   Edit-File $ow "    FChild: TLabCtorChild;" "    FChild: TLabCtorChild;`n    FAct  : TBasicAction;"
 }
+# 150-CY-10c: the child overrides TObject.ToString in its PUBLIC section (public in TObject too: the platform library
+# says so); the owner calls `.ToString` of a TBasicAction (the name alone puts ToString on the slot's surface)
+function Set-PublicOverrideShape([string]$Dir) {
+  $ch = Join-Path $Dir 'LabCtorChild.pas'
+  Edit-File $ch "  public`n    constructor Create(pOwner: TObject);" "  public`n    function ToString: string; override;`n    constructor Create(pOwner: TObject);"
+  Edit-File $ch "  inherited Create;`n  FOwner := pOwner;`nend;" "  inherited Create;`n  FOwner := pOwner;`nend;`n`nfunction TLabCtorChild.ToString: string;`nbegin`n  Result := 'child';`nend;"
+  $ow = Join-Path $Dir $Own
+  Edit-File $ow "uses`n  LabCtorChild;" "uses`n  System.Classes,`n  LabCtorChild;"
+  Edit-File $ow "  FChild.Touch;" "  FAct := nil;`n  if Assigned(FAct) then Writeln(FAct.ToString);`n  FChild.Touch;"
+  Edit-File $ow "    FChild: TLabCtorChild;" "    FChild: TLabCtorChild;`n    FAct  : TBasicAction;"
+}
 $Cases = @(
   @{ Tag = 'uc'; Why = 'a dotted uses entry ending in the slot name'
      Prep = { param($d) Edit-File (Join-Path $d $Own) "uses`n  LabCtorChild;" "uses`n  LabCtorChild,`n  Lab.FChild;"
@@ -179,6 +194,9 @@ $Cases = @(
      Ctrl = { param($d) Edit-File (Join-Path $d $Own) "  FChild.Touch;" "  FChild.Touch;`n  Writeln(TObject(FChild).ClassName);" } },
   @{ Tag = 'ov'; Why = 'a protected `Execute; override` of TThread dragged in by an unresolved `.Execute` of another class (149-CY-10, Loader TFolderWorker)'
      Prep = { param($d) Set-OverrideShape $d 'protected' }
+     Ctrl = { param($d) Edit-File (Join-Path $d $Own) "  FChild.Touch;" "  FChild.Touch;`n  Writeln(TObject(FChild).ClassName);" } },
+  @{ Tag = 'pu'; Why = 'a PUBLIC `ToString; override` whose parent (TObject, platform library) declares it public too (150-CY-10c)'
+     Prep = { param($d) Set-PublicOverrideShape $d }
      Ctrl = { param($d) Edit-File (Join-Path $d $Own) "  FChild.Touch;" "  FChild.Touch;`n  Writeln(TObject(FChild).ClassName);" } }
 )
 
