@@ -14,6 +14,10 @@
     L1. textDocument/codeLens: 'raises 2 types' on Risky's declaration line,
         'raises 1 type, handles 2 types' on Safe's, nothing exception-shaped on Plain's;
         the caller lenses are still there.
+    C1. (wave 149 LX) draglint/callerCounts carries exceptions:[{line,title}] with the same
+        titles as the lens (the RAD Studio lens reads callerCounts); counts unchanged.
+    X1-X3. (wave 149 LX) executeCommandProvider lists draglint.exceptionFacts; the exception
+        lens runs it with [uri, line]; it answers Safe's 3 sites, [] on Plain.
     O1. `lsp --no-exception-facts`: hover still answers, no 'Raises:' line, and the ON markdown
         minus its 'Raises:' line equals the OFF markdown byte for byte; no exception lens,
         caller lenses unchanged.
@@ -112,6 +116,9 @@ $uri = 'file:///' + ($file -replace '\\', '/')
 $pRisky = PosOf '^procedure TWorker\.Risky;' 'Risky'
 $pSafe  = PosOf '^procedure TWorker\.Safe;'  'Safe'
 $pPlain = PosOf '^procedure TWorker\.Plain;' 'Plain'
+$lnRisky = LineOf '^\s*procedure Risky;'
+$lnSafe  = LineOf '^\s*procedure Safe;'
+$lnPlain = LineOf '^\s*procedure Plain;'
 
 function Session([string[]]$Extra, [string]$Tag) {
   $td = @{ uri = $uri }
@@ -122,6 +129,9 @@ function Session([string[]]$Extra, [string]$Tag) {
   $m += Frame @{ jsonrpc='2.0'; id=4; method='textDocument/hover'; params=@{ textDocument=$td; position=$pPlain } }
   $m += Frame @{ jsonrpc='2.0'; id=5; method='draglint/hoverBundle'; params=@{ textDocument=$td; position=$pRisky } }
   $m += Frame @{ jsonrpc='2.0'; id=6; method='textDocument/codeLens'; params=@{ textDocument=$td } }
+  $m += Frame @{ jsonrpc='2.0'; id=7; method='draglint/callerCounts'; params=@{ textDocument=$td } }
+  $m += Frame @{ jsonrpc='2.0'; id=8; method='workspace/executeCommand'; params=@{ command='draglint.exceptionFacts'; arguments=@($uri, $lnSafe) } }
+  $m += Frame @{ jsonrpc='2.0'; id=10; method='workspace/executeCommand'; params=@{ command='draglint.exceptionFacts'; arguments=@($uri, $lnPlain) } }
   $m += Frame @{ jsonrpc='2.0'; id=9; method='shutdown'; params=@{} }
   $inF  = Join-Path $WorkDir "in-$Tag.txt"
   $outF = Join-Path $WorkDir "out-$Tag.txt"
@@ -155,15 +165,35 @@ $bf = @(); if ($null -ne $b -and $null -ne $b.model) { $bf = @($b.model.facts) }
 Check 'H2 hoverBundle model facts carry the line (the IDE popup renders these)' (@($bf | Where-Object { $_ -eq 'Raises: EFoo (bound), EArgumentException (spelled)' }).Count -eq 1) ("facts=" + ($bf -join ' | '))
 
 $lens = @(); if ($null -ne $on[6]) { $lens = @($on[6].result) }
-$lnRisky = LineOf '^\s*procedure Risky;'
-$lnSafe  = LineOf '^\s*procedure Safe;'
-$lnPlain = LineOf '^\s*procedure Plain;'
 function LensTitles($ls, $ln) { return @($ls | Where-Object { $_.range.start.line -eq $ln } | ForEach-Object { [string]$_.command.title }) }
 $tR = LensTitles $lens $lnRisky; $tS = LensTitles $lens $lnSafe; $tP = LensTitles $lens $lnPlain
 Check 'L1 lens on Risky: raises 2 types' ($tR -contains 'raises 2 types') ($tR -join ' | ')
 Check 'L1 lens on Safe: raises 1 type, handles 2 types' ($tS -contains 'raises 1 type, handles 2 types') ($tS -join ' | ')
 Check 'L1 no exception lens on Plain' (@($tP | Where-Object { $_ -match 'raises|handles' }).Count -eq 0) ($tP -join ' | ')
 Check 'L1 caller lenses still there (Risky 1 caller)' ($tR -contains '1 caller') ($tR -join ' | ')
+
+# Wave 149 LX. C1: draglint/callerCounts (the RAD Studio lens request) carries the same titles.
+function ExcTitle($resp, $ln) {
+  if ($null -eq $resp -or $null -eq $resp.result -or $null -eq $resp.result.exceptions) { return @() }
+  return @($resp.result.exceptions | Where-Object { $_.line -eq $ln } | ForEach-Object { [string]$_.title })
+}
+$cc = $on[7]
+Check 'C1 callerCounts has an exceptions array' ($null -ne $cc -and $null -ne $cc.result -and $null -ne $cc.result.exceptions) ("raw=" + ($cc | ConvertTo-Json -Compress -Depth 6))
+Check 'C1 callerCounts exceptions: Risky line = raises 2 types' (@(ExcTitle $cc $lnRisky) -contains 'raises 2 types') ((ExcTitle $cc $lnRisky) -join ' | ')
+Check 'C1 callerCounts exceptions: Safe line = raises 1 type, handles 2 types' (@(ExcTitle $cc $lnSafe) -contains 'raises 1 type, handles 2 types')
+Check 'C1 callerCounts exceptions: nothing on Plain' (@(ExcTitle $cc $lnPlain).Count -eq 0)
+Check 'C1 callerCounts counts unchanged (Risky 1)' (@($cc.result.counts | Where-Object { $_.line -eq $lnRisky -and $_.count -eq 1 }).Count -eq 1)
+# X1-X3: the lens click (spec P1 executeCommand draglint.exceptionFacts).
+$caps = $on[1].result.capabilities
+Check 'X1 executeCommandProvider advertises draglint.exceptionFacts' (@($caps.executeCommandProvider.commands) -contains 'draglint.exceptionFacts') (@($caps.executeCommandProvider.commands) -join ',')
+$eL = @($lens | Where-Object { $_.range.start.line -eq $lnSafe -and ([string]$_.command.title) -match 'raises' })
+Check 'X1 the exception lens runs draglint.exceptionFacts with [uri, line]' ($eL.Count -eq 1 -and $eL[0].command.command -eq 'draglint.exceptionFacts' -and $eL[0].command.arguments[1] -eq $lnSafe) ($eL | ConvertTo-Json -Compress -Depth 6)
+$xs = @(); if ($null -ne $on[8] -and $null -ne $on[8].result) { $xs = @($on[8].result) }
+$lnReraise = LineOf '^\s*on E: EFoo do raise;'
+Check 'X2 exceptionFacts on Safe: 3 rows (reraise EFoo, handles EFoo, handles EConvertError)' ($xs.Count -eq 3) ($xs | ConvertTo-Json -Compress -Depth 4)
+Check 'X2 rows carry uri/line/action/type/via and point into the fixture' (@($xs | Where-Object { $_.uri -match 'uExc\.pas$' -and $_.line -eq $lnReraise -and $_.type -eq 'EFoo' }).Count -ge 1 -and @($xs | Where-Object { $_.type -eq 'EConvertError' -and $_.action -eq 'handles' }).Count -eq 1)
+$xp = $on[10]
+Check 'X3 exceptionFacts on Plain (no raise): [] (negative)' ($null -ne $xp -and $null -eq $xp.error -and @($xp.result).Count -eq 0) ($xp | ConvertTo-Json -Compress -Depth 4)
 
 # ---------------- OFF (--no-exception-facts) ----------------
 $off = Session @('--no-exception-facts') 'off'
@@ -180,6 +210,8 @@ Check 'O1 OFF: no Raises: in bundle facts' (@($ob | Where-Object { $_ -match 'Ra
 $olens = @(); if ($null -ne $off[6]) { $olens = @($off[6].result) }
 Check 'O1 OFF: no exception lens' (@($olens | Where-Object { ([string]$_.command.title) -match 'raises|handles' }).Count -eq 0)
 Check 'O1 OFF: caller lenses unchanged' ((LensTitles $olens $lnRisky) -contains '1 caller')
+Check 'O1 OFF: callerCounts exceptions = [] (counts still there)' ($null -ne $off[7].result -and @($off[7].result.exceptions).Count -eq 0 -and @($off[7].result.counts).Count -gt 0)
+Check 'O1 OFF: exceptionFacts answers []' ($null -ne $off[8] -and @($off[8].result).Count -eq 0)
 
 if ($script:Failed) { Write-Host 'run_lsp_hover_exceptions_guard: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'run_lsp_hover_exceptions_guard: PASS' -ForegroundColor Green

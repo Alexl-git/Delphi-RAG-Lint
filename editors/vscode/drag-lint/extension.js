@@ -11,7 +11,7 @@
 // advertising hover, definition, references, workspaceSymbol, completion and
 // signatureHelp.
 
-const { workspace, window, commands, languages, ConfigurationTarget, StatusBarAlignment, ThemeColor } = require('vscode');
+const { workspace, window, commands, languages, ConfigurationTarget, StatusBarAlignment, ThemeColor, Uri, Position, Range } = require('vscode');
 const { LanguageClient, TransportKind, CloseAction, ErrorAction } = require('vscode-languageclient/node');
 const fs = require('fs');
 const path = require('path');
@@ -19,6 +19,7 @@ const radcolors = require('./lib/radcolors');
 const dlctx = require('./lib/context');
 const serverargs = require('./lib/serverargs');
 const enginestale = require('./lib/enginestale');
+const exceptionfacts = require('./lib/exceptionfacts');
 
 // Set once in activate(). restartServer() and updateEngineNow() both need the
 // extension context to locate the private engine copy, and neither is called
@@ -402,7 +403,16 @@ function makeClient(exe) {
     outputChannelName: 'drag-lint',
     errorHandler: makeErrorHandler(),
     initializationOptions: dlctx.initOptions((k) => workspace.getConfiguration('dragLint').get(k)),
-    synchronize: { configurationSection: 'dragLint', fileEvents: [manifestWatcher, sourceWatcher] }
+    synchronize: { configurationSection: 'dragLint', fileEvents: [manifestWatcher, sourceWatcher] },
+    middleware: {
+      // Wave 149 LX (spec P1): the exception lens runs draglint.exceptionFacts; the server
+      // answers the routine's raise / handler sites and this shows them in a quick pick.
+      executeCommand: async (command, args, next) => {
+        const result = await next(command, args);
+        if (exceptionfacts.isExceptionFactsCommand(command)) await showExceptionFacts(result);
+        return result;
+      }
+    }
   };
 
   const c = new LanguageClient('dragLint', 'drag-lint', serverOptions, clientOptions);
@@ -412,6 +422,20 @@ function makeClient(exe) {
   return c;
 }
 
+// The exception lens click (wave 149 LX): a quick pick of the sites, then a jump to the
+// one picked. An empty answer (no sites, or lsp --no-exception-facts) says so.
+async function showExceptionFacts(rows) {
+  const items = exceptionfacts.toPickItems(rows);
+  if (items.length === 0) {
+    window.showInformationMessage(exceptionfacts.emptyMessage());
+    return;
+  }
+  const pick = await window.showQuickPick(items, { placeHolder: 'drag-lint: raise and handler sites', matchOnDescription: true, matchOnDetail: true });
+  if (!pick) return;
+  const t = exceptionfacts.targetOf(pick);
+  const pos = new Position(t.line, t.character);
+  await window.showTextDocument(Uri.parse(t.uri), { selection: new Range(pos, pos) });
+}
 // "Refresh Problems": re-lints, from disk, every file that currently carries a drag-lint
 // diagnostic. The cheap way back from stale Problems entries (no server restart, no window
 // reload). Sends the custom notification draglint/refreshDiagnostics; the server bounds it.

@@ -188,6 +188,19 @@ type
     /// <param name="APath">The local path.</param>
     /// <returns>A new array the caller frees.</returns>
     function ExceptionLenses(const APath: string): TJSONArray;
+    /// <summary>Wave 149 LX (spec P1, executeCommand draglint.exceptionFacts): the raise and
+    /// handler sites of the routine whose declaration starts on ALine0 -- the line an exception
+    /// code lens sits on -- for a client quick pick that jumps to a site.</summary>
+    /// <param name="APath">The local path.</param>
+    /// <param name="ALine0">0-based line of the routine's declaration (the lens line).</param>
+    /// <returns>A new array the caller frees: [{uri, line, character, action, type, via,
+    /// routine}] with 0-based positions, in the reader's order (routine, line, column);
+    /// [] when lsp --no-exception-facts is set, the file is not indexed or no routine on
+    /// that line raises or handles.</returns>
+    /// <remarks>Same reader as the lens and the exception-facts verb
+    /// (DRagLint.Query.ExceptionFacts.ExceptionFactsOfFile), so the pick lists exactly the
+    /// sites the lens title counts.</remarks>
+    function ExceptionFactsAt(const APath: string; ALine0: Integer): TJSONArray;
     /// <summary>The markdown `textDocument/hover` shows for a position.</summary>
     /// <param name="APath">The local path.</param>
     /// <param name="ALine0">0-based line.</param>

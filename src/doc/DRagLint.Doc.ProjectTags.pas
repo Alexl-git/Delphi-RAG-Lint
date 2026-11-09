@@ -67,6 +67,14 @@ const
   /// <remarks>'Used in:' (wave 147, E-USE-EDGES-PHASE2): a property/field's resolved
   /// uses, entries 'Routine (file.pas) [r|w|rw]'; inbound like 'Used by:', which it replaces.</remarks>
   INBOUND_LABELS: array[0..4] of string = ('Called from:', 'Used by:', 'Used in units:', 'Covered by:', 'Used in:');
+  /// <summary>Wave 149 LX: the fixed prefix of the accessor echo label (wave 148 UP)
+  /// 'Used in (via property X):' -- a getter / setter's line per property it serves. The
+  /// property name and VIA_PROPERTY_LABEL_END follow, so the label is VARIABLE and cannot sit
+  /// in INBOUND_LABELS (every reader there matches a fixed string); FindInboundLabel matches it
+  /// whole, and each property's line is its own inbound key.</summary>
+  VIA_PROPERTY_LABEL_PREFIX = 'Used in (via property ';
+  /// <summary>Wave 149 LX: what closes an accessor echo label after the property name.</summary>
+  VIA_PROPERTY_LABEL_END    = '):';
 
 type
   /// <summary>What one `doc-forget` pass does to the project tags on inbound
@@ -296,6 +304,24 @@ function ForgetTags(const AText: string; const AOptions: TDocForgetOptions;
 /// </remarks>
 function ListTags(const AText: string): TArray<string>;
 
+/// <summary>Wave 149 LX: the earliest INBOUND fact label in AText at or after AFrom -- one of
+/// INBOUND_LABELS, or an accessor echo label 'Used in (via property X):' taken WHOLE (prefix,
+/// property name, '):').</summary>
+/// <param name="AText">The text searched.</param>
+/// <param name="AFrom">1-based start position.</param>
+/// <param name="ALabel">Receives the label exactly as it appears; '' when there is none.</param>
+/// <returns>The 1-based position of the label; 0 when AText holds none at or after AFrom.</returns>
+/// <remarks>A via prefix not followed by a name (letters, digits, '_', '.') and '):' is not a
+/// label and is passed over. 'Used in:' and the via prefix differ at their 9th character, so no
+/// two labels start at one position.</remarks>
+function FindInboundLabel(const AText: string; AFrom: Integer; out ALabel: string): Integer;
+
+/// <summary>Wave 149 LX: True for an accessor echo label 'Used in (via property X):'.</summary>
+/// <param name="ALabel">A label as FindInboundLabel returns it.</param>
+/// <returns>True when ALabel starts with VIA_PROPERTY_LABEL_PREFIX and ends with
+/// VIA_PROPERTY_LABEL_END.</returns>
+function IsViaPropertyLabel(const ALabel: string): Boolean;
+
 implementation
 
 uses
@@ -475,6 +501,52 @@ begin
     Length(Marker) - Length(MORE_OPEN) - Length(MORE_CLOSE) + 1), ACount) and (ACount >= 0);
 end;
 
+{ The first well-formed 'Used in (via property X):' at or after AFrom; ALabel is all of it. }
+function ViaLabelAt(const AText: string; AFrom: Integer; out ALabel: string): Integer;
+begin
+  ALabel:= '';
+  Result:= PosEx(VIA_PROPERTY_LABEL_PREFIX, AText, AFrom);
+  while Result > 0 do
+  begin
+    var NameAt: Integer:= Result + Length(VIA_PROPERTY_LABEL_PREFIX);
+    var N: Integer:= NameAt;
+    while (N <= Length(AText)) and CharInSet(AText[N], ['A'..'Z', 'a'..'z', '0'..'9', '_', '.']) do Inc(N);
+    if (N > NameAt) and (Copy(AText, N, Length(VIA_PROPERTY_LABEL_END)) = VIA_PROPERTY_LABEL_END) then
+    begin
+      ALabel:= Copy(AText, Result, N + Length(VIA_PROPERTY_LABEL_END) - Result);
+      Exit;
+    end;
+    Result:= PosEx(VIA_PROPERTY_LABEL_PREFIX, AText, Result + 1);
+  end;
+end;
+
+function FindInboundLabel(const AText: string; AFrom: Integer; out ALabel: string): Integer;
+begin
+  Result:= 0;
+  ALabel:= '';
+  for var Lab: string in INBOUND_LABELS do
+  begin
+    var P: Integer:= PosEx(Lab, AText, AFrom);
+    if (P > 0) and ((Result = 0) or (P < Result)) then
+    begin
+      Result:= P;
+      ALabel:= Lab;
+    end;
+  end;
+  var ViaLab: string;
+  var ViaAt: Integer:= ViaLabelAt(AText, AFrom, ViaLab);
+  if (ViaAt > 0) and ((Result = 0) or (ViaAt < Result)) then
+  begin
+    Result:= ViaAt;
+    ALabel:= ViaLab;
+  end;
+end;
+
+function IsViaPropertyLabel(const ALabel: string): Boolean;
+begin
+  Result:= StartsStr(VIA_PROPERTY_LABEL_PREFIX, ALabel) and EndsStr(VIA_PROPERTY_LABEL_END, ALabel);
+end;
+
 { Takes one source line apart if it is an inbound fact line: AHead is everything
   up to and including the label, AEntries its entries, and the three tails --
   a `(+N more)` marker, a closing </para>, a CR -- are held aside so a rewrite
@@ -493,10 +565,10 @@ begin
   AMore   := '';
   ATail   := '';
   ACR     := '';
-  for Lab in INBOUND_LABELS do
+  { 149 LX: FindInboundLabel, so an accessor echo line ('Used in (via property X):') is one too. }
+  P:= FindInboundLabel(ALine, 1, Lab);
+  if P > 0 then
   begin
-    P:= Pos(Lab, ALine);
-    if P = 0 then Continue;
     AHead:= Copy(ALine, 1, P + Length(Lab) - 1);
     Rest := Copy(ALine, P + Length(Lab), MaxInt);
     if EndsStr(#13, Rest) then

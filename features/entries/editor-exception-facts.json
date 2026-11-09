@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "1.48.0-alpha",
   "summary": "Hover, code lens and an MCP tool show which exception types a routine raises and handles",
-  "intro": "Read this when you want to see, without leaving the editor, which exceptions a routine raises and which it catches. Hovering a routine adds one Raises: line (each type once, with how it is known: bound, handler, local, name, spelled or unknown); a code lens on the routine header says raises N types, handles M types; the MCP tool get_exception_facts returns the same rows as exception-facts --json. ON by default; lsp --no-exception-facts switches the hover line and the lens off.",
+  "intro": "Read this when you want to see, without leaving the editor, which exceptions a routine raises and which it catches. Hovering a routine adds one Raises: line (each type once, with how it is known: bound, handler, local, name, spelled or unknown); a code lens on the routine header says raises N types, handles M types (in VS Code a click lists the sites in a quick pick, executeCommand draglint.exceptionFacts; the Delphi IDE lens reads the same titles from draglint/callerCounts); the MCP tool get_exception_facts returns the same rows as exception-facts --json. ON by default; lsp --no-exception-facts switches the hover line and the lens off.",
   "wikiPage": "editor-exception-facts",
   "surfaces": [
     {
@@ -33,6 +33,14 @@
       "method": "textDocument/codeLens"
     },
     {
+      "type": "lsp",
+      "method": "draglint/callerCounts"
+    },
+    {
+      "type": "lsp",
+      "method": "workspace/executeCommand"
+    },
+    {
       "type": "mcp",
       "tool": "get_exception_facts"
     }
@@ -42,6 +50,10 @@
     {
       "ask": "Which exceptions can this routine raise, seen from the editor?",
       "command": "drag-lint lsp --db <file.sqlite>  (hover the routine: the Raises: line)"
+    },
+    {
+      "ask": "Where exactly does this routine raise or handle, from the exception lens?",
+      "command": "drag-lint lsp --db <file.sqlite>  (click the raises/handles lens: workspace/executeCommand draglint.exceptionFacts [uri, line] -> the sites)"
     },
     {
       "ask": "How do I turn off the Raises: hover line and the exception code lens?",

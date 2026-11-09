@@ -62,6 +62,9 @@ type
     HasSymbol: Boolean     ;
     Sel      : TSymbol     ;
     Store    : ISymbolStore;
+    /// <summary>Wave 149 LX: the document the hover was asked for, so hoverBundle can name the
+    /// file's extra stores (HoverExtraStores) the same way the markdown did.</summary>
+    Path     : string      ;
     /// <summary>Set when the cursor was on a compiler intrinsic. There is no
     /// indexed symbol behind one, so HasSymbol stays False -- but the name and
     /// signature ARE known, and a client that got only markdown had nothing to
@@ -527,11 +530,11 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.FileContext (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: ChangeFileExt, Default, DRagLint.LSP.Server.DprojDeclaredPlatform, DRagLint.LSP.Server.TLSPServer.Defaults, DRagLint.LSP.Server.TLSPServer.FindListingProject, DRagLint.LSP.Server.TLSPServer.OtherOwningStores, DRagLint.LSP.Server.TLSPServer.StartupLibraryPlatformOf, DRagLint.Project.ContextFile.ContextFileFor, DRagLint.Project.ContextFile.FindProjectContextForUnit, DRagLint.Project.DefineProfile.ReadDelphiLspDefines, DRagLint.Project.DefineProfile.ReadDprojActiveSelection, DRagLint.Project.DefineProfile.TProjectProfileCache.BuildForFile, ExpandFileName, ExtractFileExt, SameText</para>
+      /// <para>Calls: ChangeFileExt, Default, DRagLint.LSP.Server.MarkerlessDprojPlatform, DRagLint.LSP.Server.TLSPServer.Defaults, DRagLint.LSP.Server.TLSPServer.FindListingProject, DRagLint.LSP.Server.TLSPServer.OtherOwningStores, DRagLint.LSP.Server.TLSPServer.StartupLibraryPlatformOf, DRagLint.Project.ContextFile.ContextFileFor, DRagLint.Project.ContextFile.FindProjectContextForUnit, DRagLint.Project.DefineProfile.ReadDelphiLspDefines, DRagLint.Project.DefineProfile.ReadDprojActiveSelection, DRagLint.Project.DefineProfile.TProjectProfileCache.BuildForFile, ExpandFileName, ExtractFileExt, SameText</para>
       /// <para>Complexity: 41 (cyclomatic, outer body), 114 lines (full implementation)</para>
       /// <para>Reads: FStartProject, FClientProject, FHaveClientCtx, FClientCtx, FStartPlatform, FClientPlatform, FClientConfig, FClientTarget</para>
       /// <para>Touches: file system</para>
-      /// <seealso cref="DRagLint.LSP.Server.DprojDeclaredPlatform"/>
+      /// <seealso cref="DRagLint.LSP.Server.MarkerlessDprojPlatform"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.Defaults"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.FindListingProject"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.OtherOwningStores"/>
@@ -1444,6 +1447,10 @@ type
       /// <param name="AId"><!-- drag-lint:auto type -->const TJSONValue</param>
       /// <param name="AParams">`{textDocument:{uri}}`.</param>
       /// <remarks>
+      /// Reply: {counts:[{line,count}], implementors:[{line,count}], exceptions:[{line,title}]},
+      /// every line 0-based; `exceptions` (wave 149 LX) carries the exception lens title
+      /// ('raises 2 types, handles 1 type') per routine declaration line, [] under
+      /// lsp --no-exception-facts -- the RAD Studio lens reads this reply, not textDocument/codeLens.
       /// Replaces one engine SPAWN PER METHOD in the plugin's code-lens
       /// cache. Measured on DataCopy's uMainZeissCopy: 77 methods x 165 ms =
       /// 12.7 s of serial process starts to label one file. Every store consulted
@@ -2195,6 +2202,27 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ComputeExceptionLenses(const APath: string): TJSONArray;
+      /// <summary>Wave 149 LX: the sites behind one exception lens, for workspace/executeCommand
+      /// draglint.exceptionFacts (ILspServerContext.ExceptionFactsAt).</summary>
+      /// <param name="APath">Local path of the document.</param>
+      /// <param name="ALine0">0-based declaration line of the routine (the lens line).</param>
+      /// <returns>A new array the caller frees: [{uri, line, character, action, type, via,
+      /// routine}], 0-based; [] when ExceptionFacts is off, the file is not indexed or nothing on
+      /// that routine line raises or handles.</returns>
+      /// <remarks>One read of ExceptionFactsOfFile, filtered on TExceptionFact.RoutineLine -- the
+      /// same rows ComputeExceptionLenses titles, so the pick and the lens count agree.</remarks>
+      function ComputeExceptionFactsAt(const APath: string; ALine0: Integer): TJSONArray;
+      /// <summary>Wave 149 LX (UP 149): the extra stores a hover's facts read, so the card's
+      /// 'Used in:' / 'Used in (via property X):' carry a use that lives only in another project's
+      /// DB -- as `document --db A --db B` writes the doc block.</summary>
+      /// <param name="APath">Local path of the hovered document.</param>
+      /// <param name="AHit">The store the symbol came from (never in the result).</param>
+      /// <returns>The non-library stores that own APath -- the file's context set plus every
+      /// startup project store holding it (a shared unit) -- minus AHit and the ephemeral
+      /// single-unit store, each once; nil when there is none.</returns>
+      /// <remarks>A library is never an extra: its name fan-out is the 2026-08-13 junk-facts
+      /// channel and its size is paid on every hover.</remarks>
+      function HoverExtraStores(const APath: string; const AHit: ISymbolStore): TArray<ISymbolStore>;
       /// <summary>The 'Raises:' hover line of ASym as a one-element array, or [] (switch off,
       /// not a routine, a store with no path, nothing raised).</summary>
       /// <param name="AStore">The store ASym came from.</param>
@@ -2355,6 +2383,7 @@ type
     function References(const APath: string; ALine0, ACol0: Integer; AIncludeDecl: Boolean): TJSONArray;
     function CallerCounts(const APath: string): TJSONArray;
     function ExceptionLenses(const APath: string): TJSONArray;
+    function ExceptionFactsAt(const APath: string; ALine0: Integer): TJSONArray;
     function HoverMarkdown(const APath: string; ALine0, ACol0: Integer): string;
     function Linter: TLinter;
     procedure Reply(const AId: TJSONValue; AResult: TJSONValue); virtual;
@@ -2428,6 +2457,11 @@ end;
 function TLspServerContextAdapter.ExceptionLenses(const APath: string): TJSONArray;
 begin
   Result:= FServer.ComputeExceptionLenses(APath);
+end;
+
+function TLspServerContextAdapter.ExceptionFactsAt(const APath: string; ALine0: Integer): TJSONArray;
+begin
+  Result:= FServer.ComputeExceptionFactsAt(APath, ALine0);
 end;
 
 function TLspServerContextAdapter.HoverMarkdown(const APath: string; ALine0, ACol0: Integer): string;
@@ -3730,44 +3764,22 @@ begin
   Result:= Entry.Ctx;
 end;
 
-{ 1.44 lspctx: the platform a .dproj DECLARES when it carries no active selection
-  (no $(Platform) marker, no delphilsp.json): of the platforms it targets, Win64 if
-  targeted, else Win32, else the first. BorlandProject's <Platform value=..>True first,
-  then the TargetedPlatforms mask (bit 1 Win32, bit 2 Win64), then a plain <Platform>.
-  '' = it declares none. Never raises: a project file we cannot read declares nothing. }
-function DprojDeclaredPlatform(const ADproj: string): string;
+{ Wave 149 LX (a3 display, aligned to EffectiveIndexPlatform since b76a5e20): the platform of a
+  .dproj that carries no active selection (no $(Platform) marker, no delphilsp.json): the
+  manifest's defaultPlatform, else Win32 (owner ruling a3). It used to be the platform the
+  project DECLARES (Win64 if targeted): neither the index nor the per-file lint reads that set,
+  so the status said Win64 over a parse that was Win32. Never raises. }
+function MarkerlessDprojPlatform: string;
 const
-  MASK_WIN32 = 1;
-  MASK_WIN64 = 2;
-var
-  Text : string;
-  Mask : Integer;
-  First: string;
+  NO_PLATFORM_DEFAULT = 'Win32'; // ruling a3: no platform named anywhere -> Win32
 begin
   Result:= '';
   try
-    Text:= TFile.ReadAllText(ADproj); // dl:ok taint-path-traversal@59be -- REVIEWED 2026-11-05: read only, for a project file the user's own context file or manifest names; a regex takes one platform name from it
-    First:= '';
-    for var M: TMatch in TRegEx.Matches(Text, '<Platform\s+value="([^"]+)"\s*>\s*True\s*</Platform>', [roIgnoreCase]) do
-    begin
-      var Name: string:= M.Groups[1].Value;
-      if SameText(Name, 'Win64') then Exit('Win64');
-      if SameText(Name, 'Win32') then Result:= 'Win32';
-      if First = '' then First:= Name;
-    end;
-    if Result <> '' then Exit;
-    if First <> '' then Exit(First);
-    var T: TMatch:= TRegEx.Match(Text, '<TargetedPlatforms>\s*(\d+)\s*</TargetedPlatforms>', [roIgnoreCase]);
-    if T.Success and TryStrToInt(T.Groups[1].Value, Mask) then
-    begin
-      if (Mask and MASK_WIN64) <> 0 then Exit('Win64');
-      if (Mask and MASK_WIN32) <> 0 then Exit('Win32');
-    end;
-    var Plain: TMatch:= TRegEx.Match(Text, '<Platform>\s*([^<$\s]+)\s*</Platform>', [roIgnoreCase]);
-    if Plain.Success then Result:= Plain.Groups[1].Value;
+    Result:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir).Settings.DefaultPlatform;
   except
-    on E: Exception do Result:= ''; // fail-open: the caller falls back to the notice
+    on E: Exception do Result:= ''; // fail-open: an unreadable manifest names no default
   end;
+  if Result = '' then Result:= NO_PLATFORM_DEFAULT;
 end;
 
 { A folder FindListingProject never looks inside: index, build and VCS output. }
@@ -4030,11 +4042,12 @@ begin
     C:= '';
   end;
   if (P = '') and SameText(ExtractFileExt(PlatSrc), '.dproj') and not ReadDelphiLspDefines(PlatSrc, P, LspDefs, LspNum, LspSw) then P:= '';
-  if (P = '') and SameText(ExtractFileExt(PlatSrc), '.dproj') then P:= DprojDeclaredPlatform(PlatSrc);
+  if (P = '') and SameText(ExtractFileExt(PlatSrc), '.dproj') then P:= MarkerlessDprojPlatform; { 149 LX: = EffectiveIndexPlatform order (manifest default, else a3 Win32) }
   if (P = '') and (Result.Project = '') then P:= StartupLibraryPlatformOf(APath);
 
-  { Platform: startup > client > context file > the project's active platform > the
-    platform it declares > central defaults > placeholder. }
+  { Platform: startup > client > context file > the project's active platform > (a .dproj with
+    none) the manifest default, else Win32 -- EffectiveIndexPlatform's order > central defaults >
+    placeholder. }
   if FStartPlatform <> '' then Result.Platform:= FStartPlatform
   else if FClientPlatform <> '' then Result.Platform:= FClientPlatform
   else if HaveCtx and (Ctx.PlatformName <> '') then Result.Platform:= Ctx.PlatformName
@@ -5021,7 +5034,7 @@ begin
     // docs.complexity_min threshold `document` uses. AIncludeSeeAlso/
     // AIncludeSince stay False (no --seealso/--since opt-in here),
     // mirroring a default `document` run.
-    var HovFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Sel, LoadDocHandlesOptions); { gap 3: the SAME 'Catches:' knob document writes with }
+    var HovFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Sel, LoadDocHandlesOptions, False, False, '', HoverExtraStores(APath, HitStore)); { gap 3: the SAME 'Catches:' knob document writes with; 149 LX: + the file's other project stores }
     var HovFactLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(HovFacts, LoadDocComplexityMin);
     { E-USE-EDGES-PHASE2: the property/field 'Used in:' line, same formatter as the doc block. }
     HovFactLines:= TDocRegions.FormatUsedInLines(HovFacts) + HovFactLines;
@@ -5145,7 +5158,7 @@ begin
         the popup describes exactly ONE symbol (several overloads would misattribute). }
       if Length(Filtered) = 1 then
       begin
-        var NdFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Filtered[0], LoadDocHandlesOptions);
+        var NdFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Filtered[0], LoadDocHandlesOptions, False, False, '', HoverExtraStores(APath, HitStore)); { 149 LX: cross-DB uses }
         var NdLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(NdFacts, LoadDocComplexityMin);
         NdLines:= TDocRegions.FormatUsedInLines(NdFacts) + NdLines; { E-USE-EDGES-PHASE2 }
         NdLines:= NdLines + ExceptionFactLines(HitStore, Filtered[0]); { D1: Raises: }
@@ -5175,6 +5188,7 @@ begin
   if HaveOwnerFloor then AOut.Sel:= OwnerFloorType
   else                   AOut.Sel:= Sel;
   AOut.Store    := HitStore;
+  AOut.Path     := APath   ;
   AOut.HasSymbol:= True    ;
   Result:= True;
 end; // function
@@ -5286,6 +5300,9 @@ begin
     Res.AddPair('counts', ComputeCallerCounts(FileFromUri(Uri)));
     { 1.40 ifrpt: the "N implementors" lens of interfaces and interface methods (0-based lines). }
     Res.AddPair('implementors', ImplementorCountsForFile(StoresForFile(FileFromUri(Uri)), FileFromUri(Uri)));
+    { Wave 149 LX (D1P-149 i): the exception lens titles, one (line, title) object per routine, 0-based on the
+      routine's declaration line -- the RAD Studio lens reads callerCounts, not codeLens. }
+    Res.AddPair('exceptions', ComputeExceptionLenses(FileFromUri(Uri)));
   except  // dl:ok bare-except@56ea -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
     Res.Free;
     raise;
@@ -5344,6 +5361,61 @@ begin
     end;
   finally
     ByRoutine.Free;
+  end;
+end;
+
+function TLSPServer.HoverExtraStores(const APath: string; const AHit: ISymbolStore): TArray<ISymbolStore>;
+begin
+  Result:= nil;
+  if APath = '' then Exit;
+  { The file's context set, plus every startup project store that also owns the file (a
+    shared unit: OtherOwningStores' set). LSP-1 CORE keeps those out of the ANSWER; here they
+    only add inbound facts, exactly as document's extra stores do. }
+  var Cands: TArray<ISymbolStore>:= StoresForFile(APath);
+  for var I:= 0 to High(FStores) do
+    if (I <= High(FStorePaths)) and not IsLibraryPath(FStorePaths[I]) then Cands:= Cands + [FStores[I]];
+  for var St: ISymbolStore in Cands do
+  begin
+    if (St = nil) or (St = AHit) or (St = FEphemStore) or IsLibraryPath(StorePathOf(St)) then Continue;
+    var Dup: Boolean:= False;
+    for var Have: ISymbolStore in Result do
+      if Have = St then Dup:= True;
+    if (not Dup) and (St.FindFileIdByPath(APath) > 0) then Result:= Result + [St];
+  end;
+end;
+
+function TLSPServer.ComputeExceptionFactsAt(const APath: string; ALine0: Integer): TJSONArray;
+begin
+  Result:= TJSONArray.Create;
+  if (not FExceptionFacts) or (APath = '') or (ALine0 < 0) then Exit;
+  var DbPath: string:= '';
+  var FilePath: string:= '';
+  for var St: ISymbolStore in StoresForFile(APath) do
+  begin
+    var Fid: Int64:= St.FindFileIdByPath(APath);
+    if Fid <= 0 then Continue;
+    DbPath:= StorePathOf(St);
+    FilePath:= St.GetFilePath(Fid);
+    if DbPath <> '' then Break;
+  end;
+  if (DbPath = '') or (FilePath = '') then Exit;
+  try
+    for var F: TExceptionFact in ExceptionFactsOfFile(DbPath, FilePath) do
+    begin
+      if F.RoutineLine <> ALine0 + 1 then Continue;
+      var O: TJSONObject:= TJSONObject.Create;
+      Result.AddElement(O);
+      O.AddPair('uri'      , FileToUri(if F.FilePath <> '' then F.FilePath else FilePath));
+      O.AddPair('line'     , TJSONNumber.Create(if F.Line > 0 then F.Line - 1 else 0));
+      O.AddPair('character', TJSONNumber.Create(if F.Col > 0 then F.Col - 1 else 0));
+      O.AddPair('action'   , F.Action);
+      O.AddPair('type'     , F.TypeName);
+      O.AddPair('via'      , F.Via);
+      O.AddPair('routine'  , F.Routine);
+    end;
+  except  // dl:ok bare-except@149lx -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
+    Result.Free;
+    raise;
   end;
 end;
 
@@ -5887,7 +5959,7 @@ begin
     { The model, assembled by the same shared code `hover --format json` calls,
       then re-parsed into the reply. Re-parsing costs a few microseconds and
       buys the guarantee that the two surfaces cannot format differently. }
-    var Asm_     : THoverAssembly:= AssembleHover(Comp.Store, Comp.Sel);
+    var Asm_     : THoverAssembly:= AssembleHover(Comp.Store, Comp.Sel, True, HoverExtraStores(Comp.Path, Comp.Store)); { 149 LX: cross-DB uses }
     FactLines:= Asm_.FactLines + ExceptionFactLines(Comp.Store, Comp.Sel); { D1: the popup's Raises: line }
     var ModelJson: string:= DRagLint.Hover.Renderer.RenderHoverJson(Asm_.Model, FactLines);
     var ModelVal : TJSONValue := nil;

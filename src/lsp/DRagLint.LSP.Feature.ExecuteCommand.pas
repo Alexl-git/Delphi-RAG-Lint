@@ -1,12 +1,13 @@
 unit DRagLint.LSP.Feature.ExecuteCommand;
 
 { `workspace/executeCommand` (B6) -- the server side of the commands the
-  server's own replies carry. Today one: `draglint.showCallers`, which the
+  server's own replies carry: `draglint.showCallers`, which the
   codeLens of DRagLint.LSP.Feature.CodeLens runs with [uri, line]. It answers
   the call sites behind that lens's count: the same index query and the same
   (file, line) dedup as TLSPServer.ComputeCallerCounts, so the number of rows
   equals the number in the lens title. Registered through the S0 feature
-  registry exactly as DRagLint.LSP.Feature.CodeLens is. }
+  registry exactly as DRagLint.LSP.Feature.CodeLens is. Wave 149 LX adds
+  `draglint.exceptionFacts` (the exception lens click): the sites behind that lens. }
 
 interface
 
@@ -17,7 +18,7 @@ uses
 
 type
   /// <summary>Answers `workspace/executeCommand` and advertises
-  /// executeCommandProvider = {commands: ['draglint.showCallers']}.</summary>
+  /// executeCommandProvider = {commands: ['draglint.showCallers', 'draglint.exceptionFacts']}.</summary>
   /// <remarks>
   /// Stateless; registered from this unit's initialization. Lines and
   /// characters are 0-based.
@@ -41,7 +42,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Methods: TArray<string>; override;
-    /// <summary>Adds `executeCommandProvider: {commands: ['draglint.showCallers']}`.</summary>
+    /// <summary>Adds `executeCommandProvider: {commands: ['draglint.showCallers', 'draglint.exceptionFacts']}`.</summary>
     /// <param name="ACaps">initialize.result.capabilities under construction.</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -56,7 +57,11 @@ type
     /// [uri, line0] replies [{uri, line, character}] -- every distinct
     /// (file, line) call site, across every configured store, of the
     /// routine(s) the index declares on that line of that file, ordered by
-    /// file then line; a line with no routine answers [].</summary>
+    /// file then line; a line with no routine answers []. `draglint.exceptionFacts` with the
+    /// same arguments (wave 149 LX, the exception lens click) replies the routine's raise and
+    /// handler sites [{uri, line, character, action, type, via, routine}] through
+    /// ILspServerContext.ExceptionFactsAt; [] under lsp --no-exception-facts (the command is
+    /// advertised regardless: capabilities are class-level, before any switch is known).</summary>
     /// <param name="ACtx">The server surface; its store list is copied, never
     /// changed.</param>
     /// <param name="AMethod">Always `workspace/executeCommand`.</param>
@@ -94,6 +99,7 @@ uses
 const
   EXEC_METHOD      = 'workspace/executeCommand';
   CMD_SHOW_CALLERS = 'draglint.showCallers';
+  CMD_EXCEPTION_FACTS = 'draglint.exceptionFacts'; { wave 149 LX: the exception lens click }
   ERR_METHOD_NOT_FOUND = -32601;
   ERR_INVALID_PARAMS   = -32602;
   SHOW_CALLERS_ARGS    = 2; // [uri, line0]
@@ -171,6 +177,7 @@ class procedure TLspExecuteCommandFeature.AddCapabilities(ACaps: TJSONObject);
 begin
   var Cmds: TJSONArray:= TJSONArray.Create;
   Cmds.Add(CMD_SHOW_CALLERS);
+  Cmds.Add(CMD_EXCEPTION_FACTS);
   var Prov: TJSONObject:= TJSONObject.Create;
   Prov.AddPair('commands', Cmds);
   ACaps.AddPair('executeCommandProvider', Prov);
@@ -186,7 +193,7 @@ begin
     ACtx.ReplyError(AId, ERR_INVALID_PARAMS, 'executeCommand: missing command');
     Exit;
   end;
-  if Cmd <> CMD_SHOW_CALLERS then
+  if (Cmd <> CMD_SHOW_CALLERS) and (Cmd <> CMD_EXCEPTION_FACTS) then
   begin
     ACtx.ReplyError(AId, ERR_METHOD_NOT_FOUND, 'unknown command: ' + Cmd);
     Exit;
@@ -195,11 +202,12 @@ begin
   if AParams.GetValue('arguments') is TJSONArray then Args:= TJSONArray(AParams.GetValue('arguments'));
   if (Args = nil) or (Args.Count < SHOW_CALLERS_ARGS) or not (Args.Items[0] is TJSONString) or not (Args.Items[1] is TJSONNumber) then
   begin
-    ACtx.ReplyError(AId, ERR_INVALID_PARAMS, CMD_SHOW_CALLERS + ': arguments must be [uri, line]');
+    ACtx.ReplyError(AId, ERR_INVALID_PARAMS, Cmd + ': arguments must be [uri, line]');
     Exit;
   end;
   var Path: string:= ACtx.FileFromUri(Args.Items[0].Value);
-  ACtx.Reply(AId, ShowCallers(ACtx, Path, TJSONNumber(Args.Items[1]).AsInt));
+  if Cmd = CMD_EXCEPTION_FACTS then ACtx.Reply(AId, ACtx.ExceptionFactsAt(Path, TJSONNumber(Args.Items[1]).AsInt))
+  else ACtx.Reply(AId, ShowCallers(ACtx, Path, TJSONNumber(Args.Items[1]).AsInt));
 end;
 
 initialization

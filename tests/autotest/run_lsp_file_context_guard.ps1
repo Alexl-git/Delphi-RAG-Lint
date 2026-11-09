@@ -13,7 +13,9 @@
     MEMB  repo\app\App.dproj lists ..\shared\uMember.pas, no index holds it  -> App.dproj + Win32
     NEAR  a .dproj elsewhere in the repo does NOT list the unit              -> not picked
     STOP  a .dproj above the repository root is never searched               -> unknown
-    DPLAT a .dproj with no marker: Win64 if targeted, else the declared one  -> no notice
+    DPLAT a .dproj with no marker: EffectiveIndexPlatform's order (149 LX, a3 + b76a5e20): the
+          manifest defaultPlatform (the exe's drag-lint.json), else Win32 -- whatever it targets;
+          the marker still decides (Marked32 / Marked64 controls)       -> no notice
     DPR   a manifest section's bare .dpr + its .dlcontext.json / sibling .dproj -> their platform
     MANY  two indexes hold the file -> the first in order, and the message says which
     UNK   two files of one folder, truly unknown -> one message per folder, type 3, what to do
@@ -80,6 +82,7 @@ PlatProj 'Both'   @('  <ProjectExtensions><BorlandProject><Platforms><Platform v
 PlatProj 'Only32' @('  <ProjectExtensions><BorlandProject><Platforms><Platform value="Win32">True</Platform><Platform value="Win64">False</Platform></Platforms></BorlandProject></ProjectExtensions>')
 PlatProj 'Tp3'    @('  <PropertyGroup><TargetedPlatforms>3</TargetedPlatforms></PropertyGroup>')
 PlatProj 'Tp1'    @('  <PropertyGroup><TargetedPlatforms>1</TargetedPlatforms></PropertyGroup>')
+PlatProj 'Marked64' @(($Marker32 -replace 'Win32', 'Win64'), '  <ProjectExtensions><BorlandProject><Platforms><Platform value="Win32">True</Platform></Platforms></BorlandProject></ProjectExtensions>')
 PlatProj 'Marked' @($Marker32, '  <ProjectExtensions><BorlandProject><Platforms><Platform value="Win64">True</Platform></Platforms></BorlandProject></ProjectExtensions>')
 
 # UNK: two files in one folder, one in another; nothing owns them. .git stops the search.
@@ -168,7 +171,12 @@ $s = Session @($f) @($dbApp, $dbLib)
 Check 'PC: DB membership owner App.dproj, Win32' ($s.Ctx[$f].project -like '*\app\App.dproj' -and $s.Ctx[$f].platform -eq 'Win32') ($s.Ctx[$f] | ConvertTo-Json -Compress)
 
 Write-Host 'DPLAT: a .dproj without the $(Platform) marker' -ForegroundColor Cyan
-foreach ($t in @(@('Both', 'Win64'), @('Only32', 'Win32'), @('Tp3', 'Win64'), @('Tp1', 'Win32'), @('Marked', 'Win32'))) {
+# 149 LX: a marker-less project is what the index makes of it (manifest default, else a3 Win32),
+# not 'Win64 if targeted'. Read the default the engine will read, so the expectation follows it.
+$ManDef = ''
+try { $ManDef = [string]((Get-Content (Join-Path (Split-Path $Exe) 'drag-lint.json') -Raw | ConvertFrom-Json).settings.defaultPlatform) } catch { }
+$A3 = if ($ManDef) { $ManDef } else { 'Win32' }
+foreach ($t in @(@('Both', $A3), @('Only32', $A3), @('Tp3', $A3), @('Tp1', $A3), @('Marked', 'Win32'), @('Marked64', 'Win64'))) {
   $f = "$WorkDir\plat\$($t[0])\u$($t[0]).pas"
   $s = Session @($f) @($dbLib)
   Check "DPLAT $($t[0]): platform $($t[1]), no notice about it" ($s.Ctx[$f].platform -eq $t[1] -and (NoPlatformMsg $s)) (($s.Ctx[$f] | ConvertTo-Json -Compress) + ' ' + (Texts $s))
