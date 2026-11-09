@@ -285,6 +285,7 @@ uses
   DRagLint.Refactor.Unwith in '..\refactor\DRagLint.Refactor.Unwith.pas',
   DRagLint.CLI.Unwith in 'DRagLint.CLI.Unwith.pas',
   DRagLint.CLI.Bookmarks in 'DRagLint.CLI.Bookmarks.pas',
+  DRagLint.CLI.UsesRecover in 'DRagLint.CLI.UsesRecover.pas',
   DRagLint.Refactor.NamingFix in '..\refactor\DRagLint.Refactor.NamingFix.pas',
   DRagLint.Refactor.MultiProjectRename in '..\refactor\DRagLint.Refactor.MultiProjectRename.pas',
   DRagLint.Convert.Apply in '..\report\DRagLint.Convert.Apply.pas',
