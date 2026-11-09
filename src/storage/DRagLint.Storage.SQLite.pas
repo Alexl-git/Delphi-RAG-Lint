@@ -216,7 +216,8 @@ type
       FHasDataFlows          : Integer      ; { taint T0: -1 unprobed, 0 absent, 1 present -- see HasDataFlows }
       FQPutDataFlows         : TFDQuery     ; { taint T0: data_flows writer, prepared on first use }
       FHasFileFacts          : Integer      ; { 149 EX2: -1 unprobed, 0 absent, 1 present -- see HasFileFacts }
-      FQFileFacts            : array[0..5] of TFDQuery; { 149 EX2: 3 deletes + 3 inserts, prepared on first use (FF_* in PutFileFacts) }  // dl:ok referenced-never-set@1db5 -- FP: the array ELEMENTS are assigned in PutFileFacts.Prepared (FQFileFacts[AIdx]:= Result)
+      FHasPpDirectives       : Integer      ; { 150 PP: -1 unprobed, 0 absent, 1 present -- see HasPpDirectives }
+      FQFileFacts            : array[0..7] of TFDQuery; { 149 EX2: 3 deletes + 3 inserts (150 PP: + pp_directives delete / insert), prepared on first use (FF_* in PutFileFacts) }  // dl:ok referenced-never-set@1db5 -- FP: the array ELEMENTS are assigned in PutFileFacts.Prepared (FQFileFacts[AIdx]:= Result)
       FQDeleteFileSymbols    : TFDQuery     ;
       FQDeleteFileRefs       : TFDQuery     ;
       FQUpsertDiBinding          : TFDQuery     ;
@@ -3052,7 +3053,14 @@ type
       /// </remarks>
       procedure PutFileFacts(const AToken: TFileTxToken; const AIncludes: TArray<TFileIncludeRow>;
         const ADfmObjects: TArray<TDfmObjectRow>; const APpRegions: TArray<TPpRegionRow>;
-        const ASymbolIds: TDictionary<Integer, Int64>);
+        const APpDirectives: TArray<TPpDirectiveRow>; const ASymbolIds: TDictionary<Integer, Int64>);
+      /// <summary>150 PP: implements ISymbolStore.HasPpDirectives.</summary>
+      /// <returns>True when the pp_directives table exists (probed once).</returns>
+      function HasPpDirectives: Boolean;
+      /// <summary>150 PP: implements ISymbolStore.GetPpDirectives.</summary>
+      /// <param name="AFileId">files.id of the file.</param>
+      /// <returns>The file's rows in source order; empty when none or the table is absent.</returns>
+      function GetPpDirectives(AFileId: Int64): TArray<TPpDirectiveRow>;
       /// <summary>149 EX2: implements ISymbolStore.HasFileFacts.</summary>
       /// <returns>True when all three file-fact tables exist (probed once).</returns>
       /// <remarks>
@@ -4971,6 +4979,7 @@ begin
   FHasUseOriginCols := -1; { N-06: probed lazily -- see HasUseOriginCols }
   FHasDataFlows     := -1; { taint T0: probed lazily -- see HasDataFlows }
   FHasFileFacts     := -1; { 149 EX2: probed lazily -- see HasFileFacts }
+  FHasPpDirectives  := -1; { 150 PP: probed lazily -- see HasPpDirectives }
   FLateAncCache  := TDictionary<string, TSymbol>.Create;
   FAnchorCache   := TDictionary<Int64, string>.Create; // Task 3c; see FrameworkAnchorForFile
   FFlowOracles   := TFlowOracleCache.Create;           // C1b; see FlowOracles
@@ -5110,7 +5119,9 @@ const
   FF_INS_INC   = 3;
   FF_INS_DFM   = 4;
   FF_INS_PP    = 5;
-  FF_SQL: array[0..5] of string = (
+  FF_DEL_PPD   = 6; { 150 PP: pp_directives, only when HasPpDirectives }
+  FF_INS_PPD   = 7;
+  FF_SQL: array[0..7] of string = (
     'DELETE FROM file_includes WHERE file_id = :fid',
     'DELETE FROM dfm_objects WHERE file_id = :fid',
     'DELETE FROM pp_regions WHERE file_id = :fid',
@@ -5119,9 +5130,12 @@ const
     'INSERT INTO dfm_objects(file_id, ordinal, symbol_id, name, class_name, parent_name, obj_kind, depth, ' +
       'start_line, start_col, end_line, end_col) VALUES (:fid, :ord, :sid, :nm, :cls, :par, :knd, :dep, :sl, :sc, :el, :ec)',
     'INSERT INTO pp_regions(file_id, region, branch, parent, nesting, directive, condition, start_line, end_line, active) ' +
-      'VALUES (:fid, :reg, :br, :prn, :nest, :dir, :cond, :sl, :el, :act)');
+      'VALUES (:fid, :reg, :br, :prn, :nest, :dir, :cond, :sl, :el, :act)',
+    'DELETE FROM pp_directives WHERE file_id = :fid',
+    'INSERT INTO pp_directives(file_id, ordinal, directive, args, symbol, line, col, src_offset, region, branch) ' +
+      'VALUES (:fid, :ord, :dir, :args, :sym, :ln, :col, :off, :reg, :br)');
   { Parameters bound as text; every other FF_SQL parameter is an integer. }
-  FF_TEXT_PARAMS: array[0..7] of string = ('path', 'sec', 'nm', 'cls', 'par', 'knd', 'dir', 'cond');
+  FF_TEXT_PARAMS: array[0..9] of string = ('path', 'sec', 'nm', 'cls', 'par', 'knd', 'dir', 'cond', 'args', 'sym');
 
 function TSQLiteSymbolStore.HasFileFacts: Boolean;
 begin
@@ -5130,9 +5144,16 @@ begin
   Result:= FHasFileFacts = 1;
 end;
 
+function TSQLiteSymbolStore.HasPpDirectives: Boolean;
+begin
+  if FHasPpDirectives < 0 then
+    FHasPpDirectives:= if TableExists('pp_directives') then 1 else 0;
+  Result:= FHasPpDirectives = 1;
+end;
+
 procedure TSQLiteSymbolStore.PutFileFacts(const AToken: TFileTxToken; const AIncludes: TArray<TFileIncludeRow>;
   const ADfmObjects: TArray<TDfmObjectRow>; const APpRegions: TArray<TPpRegionRow>;
-  const ASymbolIds: TDictionary<Integer, Int64>);
+  const APpDirectives: TArray<TPpDirectiveRow>; const ASymbolIds: TDictionary<Integer, Int64>);
 
   function Prepared(AIdx: Integer): TFDQuery;
   var
@@ -5218,6 +5239,26 @@ begin
     Q.ParamByName('sl'  ).AsLargeInt  := APpRegions[I].StartLine;
     Q.ParamByName('el'  ).AsLargeInt  := APpRegions[I].EndLine;
     Q.ParamByName('act' ).AsLargeInt  := Ord(APpRegions[I].Active);
+    Q.ExecSQL;
+  end;
+  // 150 PP: pp_directives is its own probe -- a 149-built v24 DB has the three tables above only.
+  if not HasPpDirectives then Exit;
+  Q:= Prepared(FF_DEL_PPD);
+  Q.ParamByName('fid').AsLargeInt:= AToken.FileId;
+  Q.ExecSQL;
+  Q:= Prepared(FF_INS_PPD);
+  for I:= 0 to High(APpDirectives) do
+  begin
+    Q.ParamByName('fid' ).AsLargeInt  := AToken.FileId;
+    Q.ParamByName('ord' ).AsLargeInt  := APpDirectives[I].Ordinal;
+    Q.ParamByName('dir' ).AsWideString:= APpDirectives[I].Directive;
+    Q.ParamByName('args').AsWideString:= APpDirectives[I].Args;
+    Q.ParamByName('sym' ).AsWideString:= APpDirectives[I].Symbol;
+    Q.ParamByName('ln'  ).AsLargeInt  := APpDirectives[I].Line;
+    Q.ParamByName('col' ).AsLargeInt  := APpDirectives[I].Col;
+    Q.ParamByName('off' ).AsLargeInt  := APpDirectives[I].Offset;
+    Q.ParamByName('reg' ).AsLargeInt  := APpDirectives[I].Region;
+    Q.ParamByName('br'  ).AsLargeInt  := APpDirectives[I].Branch;
     Q.ExecSQL;
   end;
 end;
@@ -5324,6 +5365,44 @@ begin
       R.StartLine:= Q.FieldByName('start_line').AsInteger;
       R.EndLine  := Q.FieldByName('end_line'  ).AsInteger;
       R.Active   := Q.FieldByName('active'    ).AsInteger <> 0;
+      L.Add(R);
+      Q.Next;
+    end;
+    Result:= L.ToArray;
+  finally
+    Q.Free;
+    L.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetPpDirectives(AFileId: Int64): TArray<TPpDirectiveRow>;  // dl:ok duplicate-code -- same per-table reader shape as the three 149 EX2 fact readers (columns differ)
+var
+  Q: TFDQuery;
+  L: TList<TPpDirectiveRow>;
+  R: TPpDirectiveRow;
+begin
+  Result:= nil;
+  if not HasPpDirectives then Exit;
+  L:= TList<TPpDirectiveRow>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT ordinal, directive, args, symbol, line, col, src_offset, region, branch ' +
+                   'FROM pp_directives WHERE file_id = :fid ORDER BY ordinal';
+    Q.ParamByName('fid').AsLargeInt:= AFileId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      R:= Default(TPpDirectiveRow);
+      R.Ordinal  := Q.Fields[0].AsInteger;
+      R.Directive:= Q.Fields[1].AsString;
+      R.Args     := Q.Fields[2].AsString;
+      R.Symbol   := Q.Fields[3].AsString;
+      R.Line     := Q.Fields[4].AsInteger;
+      R.Col      := Q.Fields[5].AsInteger;
+      R.Offset   := Q.Fields[6].AsInteger;
+      R.Region   := Q.Fields[7].AsInteger;
+      R.Branch   := Q.Fields[8].AsInteger;
       L.Add(R);
       Q.Next;
     end;
@@ -6525,6 +6604,22 @@ begin
           '  end_line   INTEGER NOT NULL,' +
           '  active     INTEGER NOT NULL)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_pp_regions_file ON pp_regions(file_id, region, branch)');
+  { 150 PP (schema v24, additive): every define / undef / test / include directive of a file's own
+    text (TPpDirectiveRow). Its own table, not pp_regions columns, so a 149-built v24 DB simply
+    lacks it (HasPpDirectives False) instead of failing an INSERT. }
+  TryExec('CREATE TABLE IF NOT EXISTS pp_directives (' +
+          '  file_id   INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,' +
+          '  ordinal   INTEGER NOT NULL,' +
+          '  directive TEXT    NOT NULL,' +
+          '  args      TEXT    NOT NULL,' +
+          '  symbol    TEXT    NOT NULL,' +
+          '  line      INTEGER NOT NULL,' +
+          '  col       INTEGER NOT NULL,' +
+          '  src_offset INTEGER NOT NULL,' +
+          '  region    INTEGER NOT NULL,' +
+          '  branch    INTEGER NOT NULL)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_pp_directives_file ON pp_directives(file_id, ordinal)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_pp_directives_symbol ON pp_directives(symbol COLLATE NOCASE)');
   { v0.85 PERF -- the three FK child columns that had no index.
 
     `PRAGMA foreign_keys = ON` is set on the write connection, so deleting a

@@ -643,8 +643,97 @@ uses
   , DRagLint.Index.IncludeUses     { N-06: uses clauses written inside a depth-0 include }
   , DRagLint.Index.DataFlowFacts   { taint T1: the per-routine data_flows rows, written beside symbol_facts }
   , DRagLint.Core.ControlChannel   { 1.40 heartbeat: BeatProgress per indexed file }
+  , DRagLint.Preprocess.Lexer      { 150 PP: LexDirectives for the pp_directives rows }
   ;
 
+const
+  { 150 PP: the directive words a pp_directives row is written for -- exactly the
+    ones DRagLint.Lint.IfdefUndefined.ScanSource acts on. }
+  PP_DIRECTIVE_WORDS: array[0..7] of string =
+    ('define', 'undef', 'ifdef', 'ifndef', 'if', 'elseif', 'i', 'include');
+  { 150 PP: the source extensions whose directives are recorded. }
+  PP_DIRECTIVE_EXTS: array[0..3] of string = ('.pas', '.dpr', '.dpk', '.inc');
+  { The line-feed byte a directive's column is counted back to (lint DirectiveCol). }
+  PP_LF_BYTE = 10;
+
+/// <summary>150 PP: the pp_directives rows of one file -- its define / undef /
+/// test / include directives, every branch, in source order.</summary>
+/// <param name="ASource">The file's raw bytes as read from disk.</param>
+/// <param name="ARegions">The preprocess report's branches (may be empty).</param>
+/// <returns>Empty when the text has none of these directives or cannot be decoded.</returns>
+/// <remarks>Identity contract with DRagLint.Lint.IfdefUndefined.ScanSource: the
+/// text is decoded exactly as TFile.ReadAllText decodes it (BOM, else the
+/// default code page), lexed by the same LexDirectives, and Line / Col are
+/// computed by the same rules (Line + 1; bytes since the last LF of the
+/// UTF-8 re-encoding). The lint table path rebuilds its scan from these rows
+/// and must give the scan's answer byte for byte (run_pp_directives.ps1).</remarks>
+function BuildPpDirectiveRows(const ASource: TBytes; const ARegions: TArray<TPPRegion>): TArray<TPpDirectiveRow>;
+var
+  Enc   : TEncoding;
+  Bom   : Integer;
+  Text  : string;
+  Bytes : TBytes;
+  Chunks: TArray<TPPChunk>;
+  Ch    : TPPChunk;
+  Row   : TPpDirectiveRow;
+  L     : TList<TPpDirectiveRow>;
+  P     : Integer;
+  Best  : Integer;
+  I     : Integer;
+  Len   : Integer;
+begin
+  Result:= nil;
+  try
+    Enc:= nil;
+    Bom:= TEncoding.GetBufferEncoding(ASource, Enc);
+    Text:= Enc.GetString(ASource, Bom, Length(ASource) - Bom);
+  except
+    on E: EEncodingError do Exit;
+  end;
+  Chunks:= LexDirectives(Text);
+  Bytes:= TEncoding.UTF8.GetBytes(Text);
+  L:= TList<TPpDirectiveRow>.Create;
+  try
+    for Ch in Chunks do
+    begin
+      if (Ch.Kind <> ckDirective) or not MatchStr(Ch.Dir, PP_DIRECTIVE_WORDS) then Continue;
+      Row:= Default(TPpDirectiveRow);
+      Row.Ordinal  := L.Count;
+      Row.Directive:= Ch.Dir;
+      Row.Args     := Ch.Args;
+      Row.Line     := Ch.Line + 1;
+      Row.Offset   := Ch.SrcStart;
+      P:= Ch.SrcStart - 1;
+      while (P >= 0) and (P < Length(Bytes)) and (Bytes[P] <> PP_LF_BYTE) do Dec(P);
+      Row.Col:= Ch.SrcStart - P;
+      if MatchStr(Ch.Dir, ['define', 'undef', 'ifdef', 'ifndef']) and (Ch.Args <> '')
+        and CharInSet(Ch.Args[1], ['A'..'Z', 'a'..'z', '_']) then
+      begin
+        Len:= 1;
+        while (Len < Length(Ch.Args)) and CharInSet(Ch.Args[Len + 1], ['A'..'Z', 'a'..'z', '0'..'9', '_']) do Inc(Len);
+        Row.Symbol:= Copy(Ch.Args, 1, Len);
+      end;
+      // The innermost branch holding the line; on a shared boundary line the later branch.
+      Row.Region:= -1;
+      Row.Branch:= -1;
+      Best:= -1;
+      for I:= 0 to High(ARegions) do
+        if (ARegions[I].StartLine <= Row.Line) and (Row.Line <= ARegions[I].EndLine)
+          and ((Best < 0) or (ARegions[I].Nesting > ARegions[Best].Nesting)
+            or ((ARegions[I].Nesting = ARegions[Best].Nesting) and (ARegions[I].StartLine >= ARegions[Best].StartLine))) then
+          Best:= I;
+      if Best >= 0 then
+      begin
+        Row.Region:= ARegions[Best].Region;
+        Row.Branch:= ARegions[Best].Branch;
+      end;
+      L.Add(Row);
+    end;
+    Result:= L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
 constructor TIndexer.Create(const AStore: ISymbolStore; const AParsers: TArray<IParser>; const ADocConfig: TDocConfig);
 var
   P: IParser;
@@ -1554,7 +1643,9 @@ begin
     ParseRes.PpRegions[I].EndLine  := PpRegions[I].EndLine;
     ParseRes.PpRegions[I].Active   := PpRegions[I].Active;
   end;
-  // N-06: a uses clause inside a depth-0 include becomes host rows carrying
+  // 150 PP: the define / undef / test / include directives of the file's own text (pp_directives).
+  if (not IsBinaryDfm) and MatchText(ExtractFileExt(AFilePath), PP_DIRECTIVE_EXTS) then
+    ParseRes.PpDirectives:= BuildPpDirectiveRows(Source, PpRegions);  // N-06: a uses clause inside a depth-0 include becomes host rows carrying
   // OriginPath / IncludeLine (coordinates inside the .inc). Only for a Delphi
   // host (.pas/.dpr/.dpk): a DFM has no uses, and an .inc indexed on its own is
   // never a host. No sites at all under --no-preprocess.
@@ -1691,7 +1782,7 @@ begin
         FStore.DeleteUnitUsesForFile(Token.FileId);
         for I:= 0 to High(ParseRes.UsesEntries) do FStore.UpsertUnitUse(Token, ParseRes.UsesEntries[I]);
         // 149 EX2 (schema v24): file_includes / dfm_objects / pp_regions, replaced every parse.
-        FStore.PutFileFacts(Token, ParseRes.Includes, ParseRes.DfmObjects, ParseRes.PpRegions, IdxToId);
+        FStore.PutFileFacts(Token, ParseRes.Includes, ParseRes.DfmObjects, ParseRes.PpRegions, ParseRes.PpDirectives, IdxToId);
         // v10: text-content index. Resolve each literal's enclosing symbol by line,
         // then persist. Per-file delete keeps re-index idempotent (FTS cascades via triggers).
         Inc(GProfUses, ProfNow - TProf);

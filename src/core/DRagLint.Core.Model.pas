@@ -1365,6 +1365,35 @@ type
     Active   : Boolean;
   end;
 
+  /// <summary>150 PP (schema v24): one conditional-compilation DIRECTIVE of a
+  /// file -- a $DEFINE / $UNDEF, an IFDEF / IFNDEF / IF / ELSEIF test or an
+  /// $I / $INCLUDE -- as the directive lexer sees the file's own text, every
+  /// branch included. A row of the pp_directives table.</summary>
+  /// <remarks>
+  /// The rows are the lint scan's input (DRagLint.Lint.IfdefUndefined):
+  /// Directive is the lexer's directive word as written lowercase
+  /// ('define', 'undef', 'ifdef', 'ifndef', 'if', 'elseif', 'i', 'include'),
+  /// Args its argument text, Symbol the leading identifier of Args for
+  /// define / undef / ifdef / ifndef ('' otherwise). Line and Col are
+  /// 1-based (Col counted in UTF-8 bytes from the line start, the lint's
+  /// DirectiveCol); Offset is the 0-based character offset of the opening
+  /// brace in the decoded text. Region / Branch name the innermost
+  /// pp_regions branch the directive sits in (-1 / -1 at top level, or when
+  /// the file was indexed without the preprocessor). Ordinal is source order.
+  /// A file whose text has none of these directives has no rows.
+  /// </remarks>
+  TPpDirectiveRow = record
+    Ordinal  : Integer;
+    Directive: string ;
+    Args     : string ;
+    Symbol   : string ;
+    Line     : Integer;
+    Col      : Integer;
+    Offset   : Integer;
+    Region   : Integer;
+    Branch   : Integer;
+  end;
+
   /// <summary>v(ADP3 T14): one ORM dataset link -- a Delphi symbol tied by the
   /// orm-link pass to a Firebird relation, with that relation's leading columns
   /// in declaration order. Backs the doc/hover 'Dataset: qryFolders -&gt;
