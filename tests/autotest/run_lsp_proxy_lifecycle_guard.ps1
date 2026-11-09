@@ -41,7 +41,7 @@
 
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1"),
   [string]$Stub    = "$PSScriptRoot\fixtures\lspproxy\Win64\Debug\LspStubServer.exe",
   [string]$WorkDir = "$env:TEMP\draglint_lspproxy_lifecycle_$PID"
 )

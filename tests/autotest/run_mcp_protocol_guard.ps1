@@ -35,7 +35,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1"),
   [string]$Source  = "$PSScriptRoot\..\..\src\mcp\DRagLint.MCP.Server.pas",
   [string]$Model   = "$PSScriptRoot\..\..\src\core\DRagLint.Core.Model.pas",
   # NOT $Db: CmdletBinding aliases -Debug to 'db', and the collision is a
