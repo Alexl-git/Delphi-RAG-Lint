@@ -530,11 +530,11 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.FileContext (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: ChangeFileExt, Default, DRagLint.LSP.Server.DprojDeclaredPlatform, DRagLint.LSP.Server.TLSPServer.Defaults, DRagLint.LSP.Server.TLSPServer.FindListingProject, DRagLint.LSP.Server.TLSPServer.OtherOwningStores, DRagLint.LSP.Server.TLSPServer.StartupLibraryPlatformOf, DRagLint.Project.ContextFile.ContextFileFor, DRagLint.Project.ContextFile.FindProjectContextForUnit, DRagLint.Project.DefineProfile.ReadDelphiLspDefines, DRagLint.Project.DefineProfile.ReadDprojActiveSelection, DRagLint.Project.DefineProfile.TProjectProfileCache.BuildForFile, ExpandFileName, ExtractFileExt, SameText</para>
+      /// <para>Calls: ChangeFileExt, Default, DRagLint.LSP.Server.MarkerlessDprojPlatform, DRagLint.LSP.Server.TLSPServer.Defaults, DRagLint.LSP.Server.TLSPServer.FindListingProject, DRagLint.LSP.Server.TLSPServer.OtherOwningStores, DRagLint.LSP.Server.TLSPServer.StartupLibraryPlatformOf, DRagLint.Project.ContextFile.ContextFileFor, DRagLint.Project.ContextFile.FindProjectContextForUnit, DRagLint.Project.DefineProfile.ReadDelphiLspDefines, DRagLint.Project.DefineProfile.ReadDprojActiveSelection, DRagLint.Project.DefineProfile.TProjectProfileCache.BuildForFile, ExpandFileName, ExtractFileExt, SameText</para>
       /// <para>Complexity: 41 (cyclomatic, outer body), 114 lines (full implementation)</para>
       /// <para>Reads: FStartProject, FClientProject, FHaveClientCtx, FClientCtx, FStartPlatform, FClientPlatform, FClientConfig, FClientTarget</para>
       /// <para>Touches: file system</para>
-      /// <seealso cref="DRagLint.LSP.Server.DprojDeclaredPlatform"/>
+      /// <seealso cref="DRagLint.LSP.Server.MarkerlessDprojPlatform"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.Defaults"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.FindListingProject"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.OtherOwningStores"/>
@@ -3764,44 +3764,22 @@ begin
   Result:= Entry.Ctx;
 end;
 
-{ 1.44 lspctx: the platform a .dproj DECLARES when it carries no active selection
-  (no $(Platform) marker, no delphilsp.json): of the platforms it targets, Win64 if
-  targeted, else Win32, else the first. BorlandProject's <Platform value=..>True first,
-  then the TargetedPlatforms mask (bit 1 Win32, bit 2 Win64), then a plain <Platform>.
-  '' = it declares none. Never raises: a project file we cannot read declares nothing. }
-function DprojDeclaredPlatform(const ADproj: string): string;
+{ Wave 149 LX (a3 display, aligned to EffectiveIndexPlatform since b76a5e20): the platform of a
+  .dproj that carries no active selection (no $(Platform) marker, no delphilsp.json): the
+  manifest's defaultPlatform, else Win32 (owner ruling a3). It used to be the platform the
+  project DECLARES (Win64 if targeted): neither the index nor the per-file lint reads that set,
+  so the status said Win64 over a parse that was Win32. Never raises. }
+function MarkerlessDprojPlatform: string;
 const
-  MASK_WIN32 = 1;
-  MASK_WIN64 = 2;
-var
-  Text : string;
-  Mask : Integer;
-  First: string;
+  NO_PLATFORM_DEFAULT = 'Win32'; // ruling a3: no platform named anywhere -> Win32
 begin
   Result:= '';
   try
-    Text:= TFile.ReadAllText(ADproj); // dl:ok taint-path-traversal@59be -- REVIEWED 2026-11-05: read only, for a project file the user's own context file or manifest names; a regex takes one platform name from it
-    First:= '';
-    for var M: TMatch in TRegEx.Matches(Text, '<Platform\s+value="([^"]+)"\s*>\s*True\s*</Platform>', [roIgnoreCase]) do
-    begin
-      var Name: string:= M.Groups[1].Value;
-      if SameText(Name, 'Win64') then Exit('Win64');
-      if SameText(Name, 'Win32') then Result:= 'Win32';
-      if First = '' then First:= Name;
-    end;
-    if Result <> '' then Exit;
-    if First <> '' then Exit(First);
-    var T: TMatch:= TRegEx.Match(Text, '<TargetedPlatforms>\s*(\d+)\s*</TargetedPlatforms>', [roIgnoreCase]);
-    if T.Success and TryStrToInt(T.Groups[1].Value, Mask) then
-    begin
-      if (Mask and MASK_WIN64) <> 0 then Exit('Win64');
-      if (Mask and MASK_WIN32) <> 0 then Exit('Win32');
-    end;
-    var Plain: TMatch:= TRegEx.Match(Text, '<Platform>\s*([^<$\s]+)\s*</Platform>', [roIgnoreCase]);
-    if Plain.Success then Result:= Plain.Groups[1].Value;
+    Result:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir).Settings.DefaultPlatform;
   except
-    on E: Exception do Result:= ''; // fail-open: the caller falls back to the notice
+    on E: Exception do Result:= ''; // fail-open: an unreadable manifest names no default
   end;
+  if Result = '' then Result:= NO_PLATFORM_DEFAULT;
 end;
 
 { A folder FindListingProject never looks inside: index, build and VCS output. }
@@ -4064,11 +4042,12 @@ begin
     C:= '';
   end;
   if (P = '') and SameText(ExtractFileExt(PlatSrc), '.dproj') and not ReadDelphiLspDefines(PlatSrc, P, LspDefs, LspNum, LspSw) then P:= '';
-  if (P = '') and SameText(ExtractFileExt(PlatSrc), '.dproj') then P:= DprojDeclaredPlatform(PlatSrc);
+  if (P = '') and SameText(ExtractFileExt(PlatSrc), '.dproj') then P:= MarkerlessDprojPlatform; { 149 LX: = EffectiveIndexPlatform order (manifest default, else a3 Win32) }
   if (P = '') and (Result.Project = '') then P:= StartupLibraryPlatformOf(APath);
 
-  { Platform: startup > client > context file > the project's active platform > the
-    platform it declares > central defaults > placeholder. }
+  { Platform: startup > client > context file > the project's active platform > (a .dproj with
+    none) the manifest default, else Win32 -- EffectiveIndexPlatform's order > central defaults >
+    placeholder. }
   if FStartPlatform <> '' then Result.Platform:= FStartPlatform
   else if FClientPlatform <> '' then Result.Platform:= FClientPlatform
   else if HaveCtx and (Ctx.PlatformName <> '') then Result.Platform:= Ctx.PlatformName
