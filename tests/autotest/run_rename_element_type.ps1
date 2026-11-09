@@ -7,7 +7,7 @@
   unit that wrote it. What is still unbound gets a row in ref_element_types, read by rename's proof.
 
   POSITIVE CONTROLS: p1 (the element is the DECLARING unit's TTok, not the TTok the site sees), p2 (TList<T> inside TBox<T>
-  never binds to the record spelled T, so its rename refuses), p3 (an untypable subscript still refuses by name), each sound
+  never binds to the record spelled T, so its rename refuses), p3 (a subscript on a call: typed since resolver 1.23, renamed through the gate), each sound
   case proved three ways (plan, --apply through the gate, stdout byte-identical to the untouched build).
   RED on lane/145-int 1efa0c35: 0 bound, no table, every rename refused.
   Needs RAD Studio; SKIPs (exit 0) without it. Works under %TEMP%.
@@ -180,7 +180,12 @@ Sound 'c3 TThing.Length' 'ElemTypes.TThing.Length' 'Span' 2 {
 }
 Refused 'p2 record T.Tally' 'ElemGeneric.T.Tally' 'Tally2' 'receiver-untyped'
 Refused 'p2 TThing.Tally' 'ElemTypes.TThing.Tally' 'Tally2' 'receiver-untyped'
-Refused 'p3 a subscript on a call: TTok.Hard' 'ElemTypes.TTok.Hard' 'Hard2' 'receiver-untyped'
+# 149 INT: resolver 1.23 (lane RB1, selector-chain call heads) types `GetList()[0]`, so p3 is now a SOUND
+# rename through the compile gate (stdout identical) instead of a receiver-untyped refusal.
+Sound 'p3 a subscript on a call: TTok.Hard' 'ElemTypes.TTok.Hard' 'Hard2' 3 {
+  param($p)
+  Check 'p3 the call-subscript read is rewritten' ((Text-Of $p.Use).Contains('GetList()[0].Hard2'))
+}
 
 if (-not $KeepWorkDir) { try { [IO.Directory]::Delete($WorkDir, $true) } catch { } }
 Write-Host ("rename-element-type: {0} passed, {1} failed" -f $script:Passed, $script:FailCount)
