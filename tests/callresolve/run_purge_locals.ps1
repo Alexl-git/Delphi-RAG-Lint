@@ -114,7 +114,11 @@ try {
   $mdb = Join-Path $scratch 'mutant_2p.sqlite'
   Copy-Item $db $mdb -Force
   $fs = [IO.File]::Open($mdb, 'Append', 'Write')
-  try { $fs.Write((New-Object byte[] 8192), 0, 8192) } finally { $fs.Dispose() }
+  # 150 INT: grow to sizeBefore + 2 pages, not sizeAfter + 2 -- when the purge itself frees a page
+  # (schema 24 fixture: after = before - 4096) after+2 pages = before+1 page sits INSIDE the slack and the
+  # mutation could not fail.
+  $grow = [Math]::Max(8192, $sizeBefore + 8192 - (Get-Item $mdb).Length)
+  try { $fs.Write((New-Object byte[] $grow), 0, $grow) } finally { $fs.Dispose() }
   $mSize = (Get-Item $mdb).Length
   Check ("MUTATION: purged DB + 2 pages must FAIL the slack check (sizeAfter {0}, mutant {1}, sizeBefore {2})" -f $sizeAfter, $mSize, $sizeBefore) (-not (SizeWithinSlack $sizeBefore $mSize))
   # --- Idempotent second run: nothing left to delete. ---
