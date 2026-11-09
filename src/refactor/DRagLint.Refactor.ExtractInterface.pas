@@ -65,14 +65,13 @@ uses
   System.Classes, System.IOUtils, System.JSON, System.StrUtils, System.RegularExpressions, System.Hash,
   System.Generics.Collections, Winapi.Windows,
   FireDAC.Comp.Client,
-  DRagLint.Project.OwnRoots, DRagLint.Report.CyclePlan, DRagLint.Refactor.CompileGate, DRagLint.Refactor.ScratchGate,  // dl:ok uses-global-census@2c28 -- the CompileGate globals travel with the gated refactor verbs by design (R3 / G3P compile gate)
+  DRagLint.Project.OwnRoots, DRagLint.Report.CyclePlan, DRagLint.Refactor.CompileGate, DRagLint.Refactor.VerbShape,  // dl:ok uses-global-census@2c28 -- the CompileGate globals travel with the gated refactor verbs by design (R3 / G3P compile gate)
   DRagLint.Refactor.RedundantCast, DRagLint.Storage.SQLite;
 
 const
   CExitOk      = 0;
   CExitRefused = 1;
   CExitError   = 2;
-  CMsPerSec    = 1000;
   CMaxChain    = 64;
   CVerb        = 'extract-interface';
   CSchema      = 'extract-interface/1';
@@ -1004,20 +1003,7 @@ function RunExtractInterface(const pStore: ISymbolStore; const pLibraries: TArra
 
   function Fail(const pMessage: string): Integer;
   begin
-    Result:= CExitError;
-    if pOpts.Json then
-    begin
-      var J:= TJSONObject.Create;
-      try
-        J.AddPair('schema', CSchema);
-        J.AddPair('error', pMessage);
-        J.AddPair('exit_code', TJSONNumber.Create(CExitError));
-        Writeln(J.Format(2));
-      finally
-        J.Free;
-      end;
-    end
-    else Writeln('ERROR: ', pMessage);
+    Result:= ReportVerbError(pOpts.Json, CSchema, pMessage);
   end;
 
 begin
@@ -1041,28 +1027,17 @@ begin
     if Plan.RefusalKind <> '' then Result:= CExitRefused
     else
     begin
-      var Secs:= StrToIntDef(pOpts.BuildTimeout, 0);
-      GBuildTimeoutMs:= if Secs <= 0 then INFINITE else Cardinal(Secs) * CMsPerSec;
-      var Req:= Default(TGateRequest);
-      Req.Project := ExpandFileName(pOpts.Project);
-      Req.Platform:= pOpts.Platform;
-      Req.Verb    := CVerb;
-      Req.RsVars  := if pOpts.RsVars <> '' then ExpandFileName(pOpts.RsVars) else '';
-      Req.NoBackup:= pOpts.NoBackup;
-      Req.Header  := Format('[%s] %s --apply: %s on %s', [FormatDateTime('yyyy-mm-dd hh:nn:ss', Now), CVerb, Plan.IfaceName, Plan.ClassQName]);
-      Req.LogDir  := FreshScratchName('_build');
-      var F: TGateFile;
-      F.Path := Plan.FilePath;
-      F.Bytes:= EncodeSource(Plan.NewText, Plan.Enc);
-      Req.Files:= [F];
-      Gate:= ApplyThroughScratch((pStore as TSQLiteSymbolStore).GetConnection, Req);
+      var Args:= Default(TOneFileApplyArgs);
+      Args.Verb:= CVerb;
+      Args.HeaderTail:= Format('%s on %s', [Plan.IfaceName, Plan.ClassQName]);
+      Args.Project:= pOpts.Project;
+      Args.Platform:= pOpts.Platform;
+      Args.RsVars:= pOpts.RsVars;
+      Args.BuildTimeout:= pOpts.BuildTimeout;
+      Args.NoBackup:= pOpts.NoBackup;
+      Args.FilePath:= Plan.FilePath;
+      Gate:= ApplyOneFileThroughScratch((pStore as TSQLiteSymbolStore).GetConnection, Args, EncodeSource(Plan.NewText, Plan.Enc));
       Ran:= True;
-      if not GScratchCited and TDirectory.Exists(Req.LogDir) then
-      try
-        TDirectory.Delete(Req.LogDir, True);  // dl:ok taint-path-traversal@ff48 -- the path is the run's own fresh scratch name under C:\TEMP or the operator's --project: local input, no privilege crossed
-      except
-        on EInOutError do Writeln(ErrOutput, 'drag-lint: note: scratch not deleted: ', Req.LogDir); // best effort: a locked log must not change the result
-      end;
       if not Gate.Applied then Result:= if Gate.RollbackFailed then CExitError else CExitRefused;
     end;
   if pOpts.Json then PrintJson(Plan, Ran, Gate) else PrintText(Plan, pOpts.Apply, Ran, Gate);

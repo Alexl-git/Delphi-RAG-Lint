@@ -238,6 +238,7 @@
         <DCCReference Include="..\refactor\DRagLint.Refactor.RedundantCast.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Refactor.NarrowParam.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Refactor.ScratchGate.pas"/>
+        <DCCReference Include="..\refactor\DRagLint.Refactor.VerbShape.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Refactor.ExtractInterface.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Refactor.LazyInit.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Refactor.DocStub.pas"/>
