@@ -2222,10 +2222,14 @@ begin
   try
     var MM: TMatch:= TRegEx.Match(AMergedBody, CALLS_PATTERN);
     if MM.Success then
-      for E in MM.Groups[1].Value.Split([',']) do Kept.AddOrSetValue(LowerCase(Trim(E)), 0);
+      for E in MM.Groups[1].Value.Split([',']) do
+        Kept.AddOrSetValue(LowerCase(Trim(TRegEx.Replace(Trim(E), '\s*\(\+\d+ more\)$', ''))), 0);
     for E in M.Groups[1].Value.Split([',']) do
     begin
-      var T: string:= Trim(E);
+      { 148 DX: a CAPPED list glues its tail count to the last entry (`X.Y (+70 more)`);
+        UnitVouchable would read that as a `(file.pas)` part naming no unit, and REFUSE a
+        block whose units this index holds (146 int: 16 blocks, 147 int: 24). Judge the entry. }
+      var T: string:= Trim(TRegEx.Replace(Trim(E), '\s*\(\+\d+ more\)$', ''));
       if (T = '') or (not T.Contains('.')) or StartsStr(UNSEEN_MORE, T) then Continue;
       if Kept.ContainsKey(LowerCase(T)) then Continue;
       if UnitVouchable(AStore, T) then Continue;
