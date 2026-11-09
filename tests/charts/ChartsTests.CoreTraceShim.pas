@@ -44,9 +44,9 @@ uses
   System.SysUtils, System.IOUtils, DRagLint.Charts.Source, DRagLint.Charts.Trace.Shim;
 
 const
-  VM_PAS = 'C:\Projects\DB\ORM3\CLIENT\Blueprint4.ViewModel.pas';  // dl:ok hardcoded-absolute-path@2e6b -- REVIEWED 2026-10-17: the live ORM3 source the indexed clones were built from; the test passes vacuously when the tree is absent, so the path is the fixture, not configuration
-  GT_PAS = 'C:\Projects\DB\ORM3\SERVER\uGenericTableRoute.pas';  // dl:ok hardcoded-absolute-path@3ad1 -- REVIEWED 2026-10-17: the live ORM3 source the indexed clones were built from; the test passes vacuously when the tree is absent, so the path is the fixture, not configuration
-  PS_PAS = 'C:\Projects\DB\ORM3\SERVER\uPipeSessionBuilder.pas';  // dl:ok hardcoded-absolute-path@0a16 -- REVIEWED 2026-10-17: the live ORM3 source the indexed clones were built from; the test passes vacuously when the tree is absent, so the path is the fixture, not configuration
+  VM_PAS = 'tests\charts\fixtures\orm3\Blueprint4.ViewModel.pas';  // frozen hg-revision copy (114 / 39 / 41), read relative to the repo root
+  GT_PAS = 'tests\charts\fixtures\orm3\uGenericTableRoute.pas';  // frozen hg-revision copy (114 / 39 / 41), read relative to the repo root
+  PS_PAS = 'tests\charts\fixtures\orm3\uPipeSessionBuilder.pas';  // frozen hg-revision copy (114 / 39 / 41), read relative to the repo root
   SKIP = '*';
   { guard row columns }
   C_ID = 0;
