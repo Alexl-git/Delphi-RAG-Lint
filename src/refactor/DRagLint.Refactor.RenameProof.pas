@@ -352,6 +352,7 @@ type
     procedure BuildScope;
     procedure CheckScopeIncludes(pFileId: Int64; const pPath: string; pLines: TStringList);
     function ChainMemberExists(pClass: Int64; const pName: string): Boolean;
+    procedure AddDelegates(const pIface: TSymRow; pWork: TQueue<TSymRow>);
     procedure BuildGroup;
     procedure BuildFamily;
     procedure CheckNewNameDeclarations;
@@ -1185,6 +1186,66 @@ end;
 // The group and the family
 // ---------------------------------------------------------------------------
 
+{ 150 RF: `property P: TImpl read FImpl implements IFoo` -- TImpl need not list IFoo, the compiler answers IFoo's members with
+  TImpl's by NAME, so the member of the class chain that the delegate answers with belongs to the group of IFoo's method.
+  An interface-typed delegate needs nothing (its implementors carry their own edges); a delegate type that is not one
+  project class cannot be renamed whole. }
+procedure TProver.AddDelegates(const pIface: TSymRow; pWork: TQueue<TSymRow>);
+const
+  CMaxChain = 64;
+begin
+  var Props:= TList<TPair<TSymRow, string>>.Create;
+  var Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'WITH RECURSIVE sub(id) AS (SELECT :i UNION SELECT a.symbol_id FROM type_ancestors a JOIN sub ON a.ancestor_symbol_id = sub.id) ' +
+                 'SELECT e.impl_symbol_id, p.signature FROM dispatch_edges e JOIN symbols p ON p.id = e.impl_symbol_id ' +
+                 'WHERE e.kind = ''delegates'' AND e.base_symbol_id IN (SELECT id FROM sub)';
+    Q.ParamByName('i').AsLargeInt:= pIface.Id;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      Props.Add(TPair<TSymRow, string>.Create(SymRow(Q.Fields[0].AsLargeInt), Trim(Q.Fields[1].AsString)));
+      Q.Next;
+    end;
+    for var P in Props do
+    begin
+      var Types:= ReadSyms('name = :n COLLATE NOCASE AND kind IN (' + CTypeKinds + ')', P.Value);
+      if (Length(Types) = 1) and SameText(Types[0].Kind, CKindInterface) then Continue;
+      var Found:= False;
+      if (Length(Types) = 1) and MatchText(Types[0].Kind, [CKindClass, CKindForm]) then
+      begin
+        var Cur:= Types[0].Id;
+        for var Step:= 1 to CMaxChain do
+        begin
+          for var M in Members(Cur, FOld) do
+            if SameText(M.Kind, CKindMethod) then
+            begin
+              Found:= True;
+              if not FGroup.ContainsKey(M.Id) then
+              begin
+                FGroup.Add(M.Id, M);
+                pWork.Enqueue(M);
+              end;
+            end;
+          if Found then Break;
+          Q.Close;
+          Q.SQL.Text:= 'SELECT ancestor_symbol_id FROM type_ancestors WHERE symbol_id = :i ORDER BY ordinal LIMIT 1';
+          Q.ParamByName('i').AsLargeInt:= Cur;
+          Q.Open;
+          Cur:= if Q.Eof then 0 else Q.Fields[0].AsLargeInt;
+          if Cur <= 0 then Break;
+        end;
+      end;
+      if not Found then
+        Refuse(CRefuseImplementsUnindexed, FStore.GetFilePath(P.Key.FileId), P.Key.Line, 0,
+          Format('%s delegates %s to "%s", which is not one project class declaring "%s"', [P.Key.QName, pIface.Name, P.Value, FOld]));
+    end;
+  finally
+    Q.Free;
+    Props.Free;
+  end;
+end;
 procedure TProver.BuildGroup;
 begin
   var Work:= TQueue<TSymRow>.Create;
@@ -1223,6 +1284,7 @@ begin
         end;
         Q.Next;
       end;
+      if SameText(SymRow(S.ParentId).Kind, CKindInterface) then AddDelegates(SymRow(S.ParentId), Work);
       if HasWord(S.Directives, CDirOverride) and not HasBase then
         Refuse(CRefuseOverrideOfLibrary, FStore.GetFilePath(S.FileId), S.Line, 0,
           Format('%s overrides a method the index does not hold; its base cannot be renamed', [S.QName]));
