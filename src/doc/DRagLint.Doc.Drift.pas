@@ -821,9 +821,12 @@ end;
   The fail-safe stays one-directional: only a POSITIVELY mined raise (or the
   contract of a bodyless callee) suppresses. A run with no library, a callee the
   library does not hold, or an unreadable library source leave the finding as it
-  was. A virtual reached through its base reads the base body only, unless the
-  base is abstract: then the descendants' overrides are the only bodies there are.
-  Pinned by tests\autotest\run_doc_exception_rtl_callee.ps1. }
+  was. A member reached through its base also reads the descendants' overrides
+  when it is abstract (they are the only bodies there are) or virtual and not
+  final (148 DX: each override is a dispatch target). A bare call is answered
+  only by a free routine of a unit the calling file uses (148 DX).
+  Pinned by tests\autotest\run_doc_exception_rtl_callee.ps1 and
+  run_doc_exception_rtl_callee_scope.ps1. }
 const
   { Free routines of one name the library may hold before the bare-call lookup
     gives up; overrides of one abstract method it will mine. Both are fan-out
@@ -878,7 +881,8 @@ begin
       if not IsLibTypeKind(Ty.Kind) then Continue;
       for var Cand in ALib.FindSymbolsByQualifiedName(Ty.QualifiedName + '.' + AAbstract.Name) do
       begin
-        if Cand.ImplStartLine <= 0 then Continue;
+        { a static member of the same name HIDES the base one: no dispatch reaches it }
+        if (Cand.ImplStartLine <= 0) or not Cand.IsVirtual then Continue;
         if Mined >= LIB_OVERRIDES_MAX then Exit(False); { bounded: report }
         Inc(Mined);
         if LibraryRoutineRaises(ALib, Cand, ATypeName) then Exit(True);
@@ -892,7 +896,9 @@ begin
   for var C in ACands do
   begin
     if LibraryRoutineRaises(ALib, C, ATypeName) then Exit(True);
-    if (C.ImplStartLine <= 0) and LibraryOverrideRaises(ALib, C, ATypeName) then Exit(True);
+    var Dispatched: Boolean:= (C.ImplStartLine <= 0)
+      or (C.IsVirtual and not MatchText('final', C.Directives.Split([' '])));
+    if Dispatched and LibraryOverrideRaises(ALib, C, ATypeName) then Exit(True);
   end;
   Result:= False;
 end;
@@ -918,17 +924,33 @@ begin
   Result:= False;
 end;
 
-{ A bare call: a free routine of that name. The library cannot say which unit the
-  caller meant, so any of them raising counts: the cref then reads as plausible,
-  and this rule only ever reports what is provably absent. }
-function LibraryFreeRoutineRaises(const ALib: ISymbolStore; const AName, ATypeName: string): Boolean;
+{ True when library unit AUnitName is one the calling file can see: System and
+  SysInit always, else a name in AUses, whole or as the unit-scope short form
+  (`SysUtils` for System.SysUtils). AUses = nil means the uses list is unknown
+  (no file id): every unit counts, the pre-148 answer. }
+function UnitVisible(const AUnitName: string; const AUses: TArray<string>): Boolean;
+begin
+  if (AUses = nil) or SameText(AUnitName, 'System') or SameText(AUnitName, 'SysInit') then Exit(True);
+  for var U in AUses do
+    if SameText(AUnitName, U) or EndsText('.' + U, AUnitName) then Exit(True);
+  Result:= False;
+end;
+
+{ A bare call: a free routine of that name in a unit the calling file uses (148 DX:
+  before, ANY library unit, so a same-named routine in an unrelated unit silenced a
+  finding). Delphi binds to one of them; which one is not modelled, so any visible
+  candidate raising counts: the cref then reads as plausible, and this rule only
+  ever reports what is provably absent. }
+function LibraryFreeRoutineRaises(const ALib: ISymbolStore; const AName, ATypeName: string;
+  const AUses: TArray<string>): Boolean;
 begin
   var Cands: TArray<TSymbol>:= nil;
   for var S in ALib.FindSymbolsByExactName(AName) do
     if S.Kind in [skFunction, skProcedure] then
     begin
       if Length(Cands) >= LIB_BARE_MAX then Exit(False); { bounded: report }
-      if ALib.GetSymbolById(S.ParentId).Kind = skUnit then Cands:= Cands + [S];
+      var Owner: TSymbol:= ALib.GetSymbolById(S.ParentId);
+      if (Owner.Kind = skUnit) and UnitVisible(Owner.Name, AUses) then Cands:= Cands + [S];
     end;
   { A bare bodyless routine is an `external` import, not an abstract method. }
   for var C in Cands do
@@ -940,7 +962,7 @@ end;
   with a library; receiver_type_text always is, so both shapes are read. A dot in
   the type text is a pending chain (see TCallEdge.ReceiverTypeText): not a type. }
 function LibraryCallRaises(const ALib: ISymbolStore; const ARef: TReference;
-  const ATypeName: string): Boolean;
+  const ATypeName: string; const AUses: TArray<string>): Boolean;
 begin
   if (ARef.ExternalTarget <> '')
      and LibraryCandidatesRaise(ALib, ALib.FindSymbolsByQualifiedName(ARef.ExternalTarget), ATypeName) then
@@ -948,7 +970,7 @@ begin
   var TypeLeaf: string:= ARef.ReceiverTypeText;
   if TypeLeaf = '' then
   begin
-    if ARef.ReceiverText = '' then Exit(LibraryFreeRoutineRaises(ALib, ARef.NameText, ATypeName));
+    if ARef.ReceiverText = '' then Exit(LibraryFreeRoutineRaises(ALib, ARef.NameText, ATypeName, AUses));
     TypeLeaf:= ARef.ReceiverText; { TIniFile.Create: the receiver IS the type }
   end;
   Result:= (not TypeLeaf.Contains('.')) and LibraryMemberRaises(ALib, TypeLeaf, ARef.NameText, ATypeName);
@@ -966,6 +988,7 @@ begin
   if (Lib = nil) or (not DeclaresType(Lib, ATypeName)) then Exit;
   var Visited: TDictionary<Int64, Boolean>:= TDictionary<Int64, Boolean>.Create;
   var Asked: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+  var UsesOf: TDictionary<Int64, TArray<string>>:= TDictionary<Int64, TArray<string>>.Create;
   try
     Visited.Add(ASym.Id, True);
     var Frontier: TArray<Int64>:= [ASym.Id];
@@ -976,10 +999,18 @@ begin
       begin
         for var R in AStore.GetUnresolvedCallsFromSymbol(Id) do
         begin
-          var Key: string:= LowerCase(R.ExternalTarget + '|' + R.ReceiverTypeText + '|' + R.ReceiverText + '|' + R.NameText);
+          var Key: string:= LowerCase(IntToStr(R.FileId) + '|' + R.ExternalTarget + '|' + R.ReceiverTypeText + '|' + R.ReceiverText + '|' + R.NameText);
           if Asked.ContainsKey(Key) then Continue;
           Asked.Add(Key, True);
-          if LibraryCallRaises(Lib, R, ATypeName) then Exit(True);
+          var FileUses: TArray<string>:= nil;
+          if (R.FileId > 0) and not UsesOf.TryGetValue(R.FileId, FileUses) then
+          begin
+            { never nil for a known file: an empty clause still sees System }
+            FileUses:= ['System'];
+            for var UU in AStore.GetUnitUsesForFile(R.FileId) do FileUses:= FileUses + [UU.UnitName];
+            UsesOf.Add(R.FileId, FileUses);
+          end;
+          if LibraryCallRaises(Lib, R, ATypeName, FileUses) then Exit(True);
         end;
         for var E in AStore.GetCallEdgesFromSymbol(Id) do
           if (E.TargetSymbolId > 0) and not Visited.ContainsKey(E.TargetSymbolId) then
@@ -992,6 +1023,7 @@ begin
       Frontier:= Next;
     end;
   finally
+    UsesOf.Free;
     Asked.Free;
     Visited.Free;
   end;
