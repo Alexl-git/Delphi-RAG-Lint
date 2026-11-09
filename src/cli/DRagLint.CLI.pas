@@ -13248,11 +13248,16 @@ function IsClosureDependentMarkerRule(const ARule: string): Boolean; forward;
 
   A marker on a line the preprocessor blanked is not reported unused either: no
   rule saw that line, so the run has no evidence about it (YADF FP #6). Pinned by
-  run_marker_unused_inactive_line.ps1. }
+  run_marker_unused_inactive_line.ps1.
+
+  ARulesDir is the --rules-dir value ('' = rules beside the exe): the rule ids a dl:ok may name are read from the
+  same catalogue the linter runs, so review-marker-malformed never calls a loaded external rule "not a rule id".
+  Pinned by run_marker_rules_dir.ps1. }
 function ApplyLineMarkers(const AFindings: TArray<TLintFinding>;
   const AScannedFiles: TArray<string> = nil;
   AReviewMaxAgeDays: Integer = REVIEW_STAMP_DEFAULT_MAX_AGE_DAYS;
-  const AUnjudgedRules: TArray<string> = nil; AUnion: TMarkerUnion = nil): TArray<TLintFinding>;
+  const AUnjudgedRules: TArray<string> = nil; AUnion: TMarkerUnion = nil;
+  const ARulesDir: string = ''): TArray<TLintFinding>;
 const
   { Rules that count a comment as content, so the marker itself stops them
     firing. Measured, not assumed -- see the note at the unused-marker scan. }
@@ -13678,7 +13683,7 @@ begin
         begin
           if not KnownBuilt then
           begin
-            for var RI: TRuleInfo in DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog('', '', {AWithLabels=}False) do
+            for var RI: TRuleInfo in DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog(ARulesDir, '', {AWithLabels=}False) do
               Known.AddOrSetValue(LowerCase(RI.Id), True);
             KnownBuilt:= True;
           end;
@@ -15369,7 +15374,8 @@ begin
     unreviewed's age limit; the filter that USES the config stays at step 1. }
   Cfg:= LoadLintConfig(AArgs);
   AFindings:= ApplyLineMarkers(AFindings, ScopedScan,
-    Cfg.ThresholdFor('review-marker-reason-unreviewed', REVIEW_STAMP_DEFAULT_MAX_AGE_DAYS), AUnjudgedRules, AMarkerUnion);
+    Cfg.ThresholdFor('review-marker-reason-unreviewed', REVIEW_STAMP_DEFAULT_MAX_AGE_DAYS), AUnjudgedRules, AMarkerUnion,
+    AArgs.RulesDir);
 
   { 1: config -- severity remap + enable/disable filter.
 
