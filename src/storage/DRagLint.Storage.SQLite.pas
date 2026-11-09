@@ -1062,6 +1062,26 @@ type
       /// </remarks>
       procedure ResolveRefReceivers(const AScopeWhere, AStaleWhere: string;
         out ACandidates, ABound: Int64);
+      /// <summary>149 IC round 3: the scope of the two derived streams of a SCOPED calls
+      /// pass (ResolveRefTypes, ResolveRefReceivers), wider than the calls scope so they
+      /// write what the whole-DB pass writes.</summary>
+      /// <param name="AScopeWhere">The scoped pass's `refs` predicate; '' on a whole-database
+      /// run, which leaves both outputs ''.</param>
+      /// <param name="ATypesWhere">Out: the ref_types / ref_element_types scope -- every ref
+      /// AScopeWhere selects, plus every ref whose row lost its type id (type_symbol_id NULL by
+      /// the FK's ON DELETE SET NULL) to a type whose qualified name is declared again in this
+      /// index: the re-emit of an edited unit moves its class ids under the rows of UNEDITED
+      /// files, which the name scope never selects.</param>
+      /// <param name="AReceiversWhere">Out: the ref_receivers scope -- EVERY ref of every file
+      /// holding an ATypesWhere ref. The receiver join is positional inside one file and
+      /// prefers a typed ref, so a file is rewritten whole or not at all; a ref-level scope
+      /// dropped the row of `Obj.Bump` when Bump was in the name scope and Obj was not.</param>
+      /// <remarks>Materializes temp.dl_scope_rt / temp.dl_scope_rt_files on FConn; call inside
+      /// the pass's transaction, after the binding streams and before ResolveRefTypes (the
+      /// lost-id rows are read before ResolveRefTypes rewrites them). Measured 2026-11-09 on a
+      /// drag-lint.dproj copy: ref-level scoping left 23 ref_types + 2 ref_element_types ids
+      /// NULL and 15928 ref_receivers rows unwritten against a whole re-resolve.</remarks>
+      procedure WidenDerivedScope(const AScopeWhere: string; out ATypesWhere, AReceiversWhere: string);
       /// <summary><!-- drag-lint:auto sum -->Back to the constructor's state. -1 on the
       /// two size fields re-reads the corpus at the next write, so the next pass's share
       /// is measured against the database as it is THEN, not as it was before the first
@@ -16272,6 +16292,27 @@ begin
   end;
 end;
 
+procedure TSQLiteSymbolStore.WidenDerivedScope(const AScopeWhere: string;
+  out ATypesWhere, AReceiversWhere: string);
+const
+  DS_UNIVERSE = 'refs.kind IN (''read'', ''write'', ''member-access'', ''call'')';
+  DS_LOST_ID  = ' WHERE type_symbol_id IS NULL AND type_qname IN (SELECT qualified_name FROM symbols)';
+begin
+  ATypesWhere    := '';
+  AReceiversWhere:= '';
+  if AScopeWhere = '' then Exit;
+  FConn.ExecSQL('DROP TABLE IF EXISTS temp.dl_scope_rt');
+  FConn.ExecSQL('DROP TABLE IF EXISTS temp.dl_scope_rt_files');
+  FConn.ExecSQL('CREATE TEMP TABLE dl_scope_rt (r INTEGER PRIMARY KEY)');
+  FConn.ExecSQL('CREATE TEMP TABLE dl_scope_rt_files (f INTEGER PRIMARY KEY)');
+  FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_scope_rt(r) SELECT refs.id FROM refs WHERE ' + DS_UNIVERSE + ' AND (' + AScopeWhere + ')');  // dl:ok sql-injection-concat -- AScopeWhere is SQL this pass BUILT (MaterializeResolveScope), never user text
+  FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_scope_rt(r) SELECT ref_id FROM ref_types' + DS_LOST_ID);
+  FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_scope_rt(r) SELECT ref_id FROM ref_element_types' + DS_LOST_ID);
+  FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_scope_rt_files(f) SELECT DISTINCT refs.file_id FROM refs JOIN temp.dl_scope_rt s ON s.r = refs.id');
+  ATypesWhere    := 'refs.id IN (SELECT r FROM temp.dl_scope_rt)';
+  AReceiversWhere:= 'refs.file_id IN (SELECT f FROM temp.dl_scope_rt_files)';
+end;
+
 procedure TSQLiteSymbolStore.ResolveRefTypes(AResolver: TCallResolver;
   const AScopeWhere, AStaleWhere: string; out ACandidates, ABound: Int64);
 const
@@ -17129,10 +17170,13 @@ begin
       TWrites:= (TStopwatch.GetTimeStamp - TMark) / TStopwatch.Frequency;
       { B9 F1: the LAST stream, it reads what all the others wrote. }
       TMark:= TStopwatch.GetTimeStamp;
-      ResolveRefTypes(Resolver, ScopeWhere, StaleWhere, RefTypeCandidates, RefTypeBound);
+      { 149 IC round 3: the derived streams get a WIDER scope than the binding streams. }
+      var TypesWhere, ReceiversWhere: string;
+      WidenDerivedScope(ScopeWhere, TypesWhere, ReceiversWhere);
+      ResolveRefTypes(Resolver, TypesWhere, StaleWhere, RefTypeCandidates, RefTypeBound);
       TRefTypes:= (TStopwatch.GetTimeStamp - TMark) / TStopwatch.Frequency;
       { lane 144 item 3: after ref_types, the typed receiver wins a position two refs share. }
-      ResolveRefReceivers(ScopeWhere, StaleWhere, RcvCandidates, RcvBound);
+      ResolveRefReceivers(ReceiversWhere, StaleWhere, RcvCandidates, RcvBound);
       FConn.Commit;
     except
       on E: Exception do

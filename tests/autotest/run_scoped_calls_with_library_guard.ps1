@@ -81,9 +81,19 @@ unit uEdit;
 
 interface
 
+type
+  TEditThing = class
+  public
+    procedure Bump;
+  end;
+
 procedure Touch;
 
 implementation
+
+procedure TEditThing.Bump;
+begin
+end;
 
 procedure Touch;
 begin
@@ -92,6 +102,35 @@ end;
 end.
 '@
 Write-Ascii (Join-Path $src 'uEdit.pas') $editText
+# uUser is NEVER edited: its refs are typed through uEdit's class (whose symbol id moves on
+# every re-emit) and its Bump calls are in the scoped NAME set while their receiver Thing is not.
+Write-Ascii (Join-Path $src 'uUser.pas') @'
+unit uUser;
+
+interface
+
+uses
+  uEdit;
+
+procedure UseIt;
+
+implementation
+
+procedure UseIt;
+var
+  Thing : TEditThing;
+  Things: array of TEditThing;
+begin
+  Thing := TEditThing.Create;
+  Thing.Bump;
+  SetLength(Things, 1);
+  Things[0] := Thing;
+  Things[0].Bump;
+  Thing.Free;
+end;
+
+end.
+'@
 foreach ($n in 1..5) {
   Write-Ascii (Join-Path $src "uFill$n.pas") @"
 unit uFill$n;
@@ -140,6 +179,38 @@ function Lane-Dump([string]$Db) {
   $o = $j.Substring($j.IndexOf('{')) | ConvertFrom-Json
   return (@($o.rows | ForEach-Object { [string]$_[0] }) -join "`n") -replace [regex]::Escape($scratch), '<S>'
 }
+# The three derived tables the calls pass rewrites per ref (round 3: the scoped pass left
+# ref_types / ref_element_types ids NULL and dropped ref_receivers rows outside the edited file).
+$derivedSql = @'
+SELECT 'RT|' || f.path || '|' || r.start_line || '|' || r.start_col || '|' || r.name_text || '|' ||
+       COALESCE(ts.qualified_name,'<null>') || '|' || t.type_qname || '|' || t.via
+FROM ref_types t JOIN refs r ON r.id = t.ref_id JOIN files f ON f.id = r.file_id
+LEFT JOIN symbols ts ON ts.id = t.type_symbol_id
+UNION ALL
+SELECT 'ET|' || f.path || '|' || r.start_line || '|' || r.start_col || '|' || r.name_text || '|' ||
+       COALESCE(ts.qualified_name,'<null>') || '|' || t.type_qname
+FROM ref_element_types t JOIN refs r ON r.id = t.ref_id JOIN files f ON f.id = r.file_id
+LEFT JOIN symbols ts ON ts.id = t.type_symbol_id
+UNION ALL
+SELECT 'RR|' || f.path || '|' || r.start_line || '|' || r.start_col || '|' || r.name_text || '|' ||
+       q.start_line || '|' || q.start_col || '|' || q.name_text
+FROM ref_receivers x JOIN refs r ON r.id = x.ref_id JOIN refs q ON q.id = x.receiver_ref_id
+JOIN files f ON f.id = r.file_id
+ORDER BY 1
+'@
+function Lane-DumpDerived([string]$Db) {
+  $j = & $exePath sql --query $derivedSql --db $Db --json --limit 1000000 2>$null | Out-String
+  $o = $j.Substring($j.IndexOf('{')) | ConvertFrom-Json
+  return (@($o.rows | ForEach-Object { [string]$_[0] }) -join "`n") -replace [regex]::Escape($scratch), '<S>'
+}
+function Lane-CompareDerived([string]$Tag, [string]$Scoped, [string]$Whole) {
+  Check "${Tag}: scoped ref_types / ref_element_types / ref_receivers IDENTICAL to the whole-DB rows" ($Scoped -ceq $Whole) ''
+  if ($Scoped -cne $Whole) {
+    $a = $Scoped -split "`n"; $b = $Whole -split "`n"
+    $b | Where-Object { $a -notcontains $_ } | Select-Object -First 8 | ForEach-Object { Write-Host "      whole-only: $_" }
+    $a | Where-Object { $b -notcontains $_ } | Select-Object -First 8 | ForEach-Object { Write-Host "      scoped-only: $_" }
+  }
+}
 function Lane-Index([string]$Db, [bool]$WithLib, [bool]$Whole) {
   [Environment]::SetEnvironmentVariable('DRAGLINT_NO_SCOPED_RESOLVE', $(if ($Whole) { '1' } else { $null }))
   try {
@@ -174,6 +245,25 @@ try {
     $b | Where-Object { $a -notcontains $_ } | Select-Object -First 8 | ForEach-Object { Write-Host "      whole-only: $_" }
     $a | Where-Object { $b -notcontains $_ } | Select-Object -First 8 | ForEach-Object { Write-Host "      scoped-only: $_" }
   }
+  $xS1 = Lane-DumpDerived $s1; $xW1 = Lane-DumpDerived $w1
+  $xW1Lines = $xW1 -split "`n"
+  Check 'S1 POSITIVE CONTROL: the whole-DB ref_types type uUser.Thing by the LIVE TEditThing id' `
+        ([bool]($xW1Lines | Where-Object { $_ -match '^RT\|<S>\\src\\uUser\.pas\|\d+\|\d+\|Thing\|uEdit\.TEditThing\|' })) `
+        (($xW1Lines | Where-Object { $_ -match 'uUser' }) -join "`n")
+  Check 'S1 POSITIVE CONTROL: the whole-DB ref_receivers join uUser Bump to its receiver Thing' `
+        ([bool]($xW1Lines | Where-Object { $_ -match '^RR\|<S>\\src\\uUser\.pas\|\d+\|\d+\|Bump\|\d+\|\d+\|Thing$' })) ''
+  Lane-CompareDerived 'S1' $xS1 $xW1
+
+  # ---- S5: the same identity WITHOUT a library (the scoped no-store pass, pre-149 behaviour) ----
+  $b5 = Join-Path $scratch 'b5.sqlite'
+  $null = Lane-Index $b5 $false $false
+  $s5 = Join-Path $scratch 's5.sqlite'; $w5 = Join-Path $scratch 'w5.sqlite'
+  Copy-Item $b5 $s5; Copy-Item $b5 $w5
+  Lane-Touch 's5'
+  $oS5 = Lane-Index $s5 $false $false
+  $null = Lane-Index $w5 $false $true
+  Check 'S5 CONTROL: the no-library run took the SCOPED pass' ($oS5 -match 'starting SCOPED pass') (($oS5 -split "`n" | Select-String 'calls +(starting|\.\.\. whole)') -join "`n")
+  Lane-CompareDerived 'S5' (Lane-DumpDerived $s5) (Lane-DumpDerived $w5)
 
   # ---- S2: the library is re-indexed -> WHOLE (positive control of the identity test) ----
   $s2 = Join-Path $scratch 's2.sqlite'; Copy-Item $s1 $s2
