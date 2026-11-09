@@ -13,7 +13,7 @@
       "type": "ide-context",
       "host": "Structure form",
       "caption": "Show in Call Graph",
-      "steps": ["Open the Structure form (drag-lint > Show Structure)", "Right-click a node in the tree and choose Show in Call Graph", "The call graph rooted at that symbol opens"]
+      "steps": ["Open the Structure form (drag-lint > Show Structure)", "Right-click a node in the tree and choose Show in Call Graph", "The Call Graph (Butterfly) tab opens with that symbol as its root"]
     },
     {
       "type": "cli",
