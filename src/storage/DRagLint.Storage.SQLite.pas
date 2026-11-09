@@ -8667,6 +8667,25 @@ begin
       Q.Next;
     end;
     Q.Close;
+    { 150-RS2 (6): the OTHER ON DELETE SET NULL channel. A row anywhere whose receiver type
+      (call_edges, member_accesses) or accessor (member_accesses) is a symbol of this file loses
+      that id when the file is re-emitted, and its ref's NAME need not be one this file declares
+      (`Thing.Run` reaches TBase.Run through TEditThing): put the names of those refs in scope so
+      the scoped pass rewrites them as the whole pass does. Indexed lookups (idx_call_edges_receiver,
+      idx_member_accesses_receiver / _accessor). }
+    Q.SQL.Text:= 'SELECT r.name_text FROM refs r JOIN call_edges ce ON ce.ref_id = r.id ' +
+                 'WHERE ce.receiver_type_symbol_id IN (SELECT id FROM symbols WHERE file_id = :f) ' +
+                 'UNION SELECT r.name_text FROM refs r JOIN member_accesses ma ON ma.ref_id = r.id ' +
+                 'WHERE ma.receiver_type_symbol_id IN (SELECT id FROM symbols WHERE file_id = :f) ' +
+                 '   OR ma.accessor_symbol_id IN (SELECT id FROM symbols WHERE file_id = :f)';
+    Q.ParamByName('f').AsLargeInt:= AFileId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      if Q.Fields[0].AsString <> '' then FScopeNames.AddOrSetValue(LowerCase(Q.Fields[0].AsString), True);
+      Q.Next;
+    end;
+    Q.Close;
     { THE ONE MOMENT THE HERITAGE STILL EXISTS. A withdrawn type takes its
       symbols row -- and, by CASCADE, its type_ancestors rows -- with it, so by
       the time WidenScopeThroughRemovedTypes runs there is nothing left to ask
@@ -17203,6 +17222,11 @@ begin
     Exit('extra stores are attached and the library changed since this database''s edges were bound ' +
          '(external_stores differs)');
   Result:= ScopedResolveDeclineReason;
+  { 150-RS2 (5): `index --library-db` forces the pass even when no file was written; with the
+    library unchanged (tested above) and a complete edge set there is nothing to re-derive, so the
+    pass is scoped over zero files like any write run -- not the whole database "because this run
+    recorded no file writes". Guard run_scoped_calls_all_tables_guard N1-N3. }
+  if (Result = RESOLVE_REASON_NO_WRITES) and not CallEdgesNeedRebuild then Result:= '';
   if Result <> '' then Exit;
   { Type-name SET equality, not the additions/removals widenings: those walk LOCAL
     declarations only, and a local type added or withdrawn can shadow or un-shadow a library
