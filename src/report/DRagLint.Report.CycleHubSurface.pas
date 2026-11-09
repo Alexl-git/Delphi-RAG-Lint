@@ -109,7 +109,7 @@ type
   { code mask: True where a character is code (not a comment, a string or a directive) }
   TCodeMask = TArray<Boolean>;
 
-  THubSurfacePlanner = class
+  THubSurfacePlanner = class  // dl:ok high-response@c76f -- implementation-private; one planner per run holding the per-group state its short steps share
   private
     FStore    : ISymbolStore;
     FGraph    : TCycleGraph;
@@ -479,8 +479,14 @@ begin
   var P:= M.Index + M.Length;
   var Q:= P;
   while (Q <= Length(pHubText)) and not ((pHubText[Q] = ';') and Mask[Q]) do Inc(Q);
-  var Code:= '';
-  for var K:= P to Q - 1 do Code:= Code + (if Mask[K] then pHubText[K] else ' ');
+  var Code: string;
+  var CodeSB:= TStringBuilder.Create;
+  try
+    for var K:= P to Q - 1 do CodeSB.Append(if Mask[K] then pHubText[K] else ' ');
+    Code:= CodeSB.ToString;
+  finally
+    CodeSB.Free;
+  end;
   Keep:= TList<string>.Create;
   try
     for var Entry in Code.Split([',']) do
@@ -633,7 +639,7 @@ end;
 procedure THubSurfacePlanner.RewriteReceivers(const pPlan: THubGroupPlan; var pSpoke: THubSpoke; const pText: string);
 var
   Mask: TCodeMask;
-  Out_: TStringBuilder;
+  Emit: TStringBuilder;
   Last, I: Integer;
   procedure Refuse(const pKind, pWhy: string; pAt: Integer);
   begin
@@ -674,7 +680,7 @@ var
     if Trim(Copy(pText, pMemEnd, (if Comma > 0 then Comma else Close) - pMemEnd)) <> '' then Exit;
     var Step:= if Comma > 0 then '(' + Trim(Copy(pText, Comma + 1, Close - Comma - 1)) + ')' else '1';
     var Target:= pPlan.VarName + '.' + pMember.Name;
-    Out_.Append(pText, Last - 1, Start - Last).Append(Format('%s:= %0:s %s %s', [Target, if SameText(Op, 'Inc') then '+' else '-', Step]));
+    Emit.Append(pText, Last - 1, Start - Last).Append(Format('%s:= %0:s %s %s', [Target, if SameText(Op, 'Inc') then '+' else '-', Step]));
     Last:= Close + 1;
     I   := Close + 1;
     Inc(pSpoke.Receivers);
@@ -682,7 +688,7 @@ var
   end;
 begin
   Mask:= CodeMaskOf(pText);
-  Out_:= TStringBuilder.Create;
+  Emit:= TStringBuilder.Create;
   try
     Last:= 1;
     I:= 1;
@@ -716,7 +722,7 @@ begin
           if TryIncDec(I, MemPos + Length(Mem), Member) then Continue;
           Refuse('member-write', Format('`%s.%s` is a var parameter', [Id, Mem]), I);
         end;
-        Out_.Append(pText, Last - 1, I - Last).Append(pPlan.VarName);
+        Emit.Append(pText, Last - 1, I - Last).Append(pPlan.VarName);
         Last:= I + Length(Id);
         Inc(pSpoke.Receivers);
       end
@@ -724,10 +730,10 @@ begin
       else Refuse('bare-use', Format('`%s` used as a value (phase P4: AsForm)', [Id]), I);
       Inc(I, Length(Id));
     end;
-    Out_.Append(pText, Last - 1, Length(pText) - Last + 1);
-    pSpoke.NewText:= Out_.ToString;
+    Emit.Append(pText, Last - 1, Length(pText) - Last + 1);
+    pSpoke.NewText:= Emit.ToString;
   finally
-    Out_.Free;
+    Emit.Free;
   end;
 end;
 
@@ -800,6 +806,7 @@ var
   InDeg: TDictionary<string, Integer>;
   Queue: TQueue<string>;
   L    : TList<string>;
+  D    : Integer;
 begin
   Cut  := TDictionary<string, Boolean>.Create;
   InDeg:= TDictionary<string, Integer>.Create;
@@ -812,9 +819,9 @@ begin
     for var U in FGroup do
       if FGraph.Adj.TryGetValue(U, L) then
         for var V in L do
-          if (V <> U) and InDeg.ContainsKey(V) and not ((V = pPlan.HubStem) and Cut.ContainsKey(U)) then
+          if (V <> U) and InDeg.TryGetValue(V, D) and not ((V = pPlan.HubStem) and Cut.ContainsKey(U)) then
           begin
-            InDeg[V]:= InDeg[V] + 1;
+            InDeg[V]:= D + 1;
             if V = pPlan.HubStem then Inc(pPlan.EdgesLeft);
           end;
     for var P in InDeg do
@@ -826,10 +833,10 @@ begin
       Inc(Seen);
       if FGraph.Adj.TryGetValue(U, L) then
         for var V in L do
-          if (V <> U) and InDeg.ContainsKey(V) and not ((V = pPlan.HubStem) and Cut.ContainsKey(U)) then
+          if (V <> U) and InDeg.TryGetValue(V, D) and not ((V = pPlan.HubStem) and Cut.ContainsKey(U)) then
           begin
-            InDeg[V]:= InDeg[V] - 1;
-            if InDeg[V] = 0 then Queue.Enqueue(V);
+            InDeg[V]:= D - 1;
+            if D = 1 then Queue.Enqueue(V);
           end;
     end;
     pPlan.Breaks:= Seen = InDeg.Count;
@@ -952,7 +959,10 @@ procedure RenderMembers(const pPlan: THubGroupPlan; const pOut: TStrings);
 var
   RO, RW, Meth, Bad: Integer;
 begin
-  RO:= 0; RW:= 0; Meth:= 0; Bad:= 0;
+  RO  := 0;
+  RW  := 0;
+  Meth:= 0;
+  Bad := 0;
   for var M in pPlan.Members do
     if M.Refusal <> '' then Inc(Bad)
     else case M.Shape of
@@ -972,7 +982,11 @@ var
   Keep: TDictionary<string, Integer>;
   Named: Integer;
 begin
-  Done:= 0; Refused:= 0; Rec:= 0; Cut:= 0; Named:= 0;
+  Done   := 0;
+  Refused:= 0;
+  Rec    := 0;
+  Cut    := 0;
+  Named  := 0;
   Keep:= TDictionary<string, Integer>.Create;
   try
     for var S in pPlan.Spokes do
@@ -997,15 +1011,21 @@ begin
         Inc(Named);
       end;
     if Refused > Named then pOut.Add(Format('  - (+%d more refused spokes)', [Refused - Named]));
-    var KeepText:= '';
-    var Pairs:= Keep.ToArray;
-    TArray.Sort<TPair<string, Integer>>(Pairs, TComparer<TPair<string, Integer>>.Construct(
-      function(const A, B: TPair<string, Integer>): Integer
-      begin
-        Result:= B.Value - A.Value;
-        if Result = 0 then Result:= CompareText(A.Key, B.Key);
-      end));
-    for var K:= 0 to Min(High(Pairs), CMaxNamedKeepers - 1) do KeepText:= KeepText + Format('%s`%s` %d', [if K > 0 then ', ' else '', Pairs[K].Key, Pairs[K].Value]);
+    var KeepText: string;
+    var KeepList:= TList<string>.Create;
+    try
+      var Pairs:= Keep.ToArray;
+      TArray.Sort<TPair<string, Integer>>(Pairs, TComparer<TPair<string, Integer>>.Construct(
+        function(const A, B: TPair<string, Integer>): Integer
+        begin
+          Result:= B.Value - A.Value;
+          if Result = 0 then Result:= CompareText(A.Key, B.Key);
+        end));
+      for var K:= 0 to Min(High(Pairs), CMaxNamedKeepers - 1) do KeepList.Add(Format('`%s` %d', [Pairs[K].Key, Pairs[K].Value]));
+      KeepText:= string.Join(', ', KeepList.ToArray);
+    finally
+      KeepList.Free;
+    end;
     pOut.Add(Format('- uses: %d spokes drop `%s` (edge cut); %d keep it for other hub symbols%s', [Cut, pPlan.HubUnit, Done - Cut,
       if KeepText = '' then '' else ': ' + KeepText + ' (phase P3 moves the hub routines)']));
   finally
