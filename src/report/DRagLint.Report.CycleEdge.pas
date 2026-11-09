@@ -235,6 +235,29 @@ type
     function MemberAccessOf(pRefId: Int64; out pAccess: TCallEdge): Boolean;
   end;
 
+  /// <summary>Optional read cache an IEdgeSurfaceSource may also implement (lane 148 HP2B): BuildEdgeSurface
+  /// then reads a file's refs, a symbol by id and a child symbol by name through it instead of asking the
+  /// store again for every edge of the same consumer.</summary>
+  /// <remarks>Each method must return exactly what the store returns for the same arguments (a memo of
+  /// ISymbolStore.GetReferencesFromFile / GetSymbolById / FindChildSymbolByName over an index that does not
+  /// change while the cache lives), so the surface is the same with or without it. Not thread-safe.</remarks>
+  IEdgeSurfaceCache = interface
+    ['{5B0E2D7A-3C41-4F8E-9A6B-1D2C7E40B913}']
+    /// <summary>The refs recorded in a file, as ISymbolStore.GetReferencesFromFile returns them.</summary>
+    /// <param name="pFid">File id; greater than 0.</param>
+    /// <returns>The refs, in the store's order.</returns>
+    function CachedRefsFromFile(pFid: Int64): TArray<TReference>;
+    /// <summary>A symbol by id, as ISymbolStore.GetSymbolById returns it.</summary>
+    /// <param name="pId">Symbol id.</param>
+    /// <returns>The symbol; Id = 0 when there is none.</returns>
+    function CachedSymbolById(pId: Int64): TSymbol;
+    /// <summary>A child symbol by name, as ISymbolStore.FindChildSymbolByName returns it.</summary>
+    /// <param name="pParentId">Parent symbol id.</param>
+    /// <param name="pName">Child name, passed to the store as given.</param>
+    /// <returns>The child; Id = 0 when there is none.</returns>
+    function CachedChildByName(pParentId: Int64; const pName: string): TSymbol;
+  end;
+
   /// <summary>The recipe that cuts one edge of a circular group.</summary>
   /// <remarks>
   /// crMoveGlobals = move the declarations into a leaf unit (the playbook's
@@ -709,6 +732,16 @@ function AncestorImplementingIInterface(const pProject, pLibrary: ISymbolStore; 
 function IsClassChainMember(const pProject, pLibrary: ISymbolStore; pEnclosingId: Int64;
   const pName: string): Boolean;
 
+/// <summary>The symbol IsClassChainMember starts its member search from: pEnclosingId itself when it is a
+/// class, record, unit, program or package (or has no parent), else its nearest such ancestor.</summary>
+/// <param name="pProject">Project index; must not be nil.</param>
+/// <param name="pEnclosingId">refs.enclosing_symbol_id of the bare name.</param>
+/// <returns>That symbol; Id = 0 when an id on the way is unknown. Calling IsClassChainMember with the
+/// returned class or record id gives the same answer as with pEnclosingId (lane 148 HP2B: the planner
+/// memoizes by the type, not by every routine of it).</returns>
+/// <remarks>Reads the index only.</remarks>
+function EnclosingTypeOf(const pProject: ISymbolStore; pEnclosingId: Int64): TSymbol;
+
 /// <summary>Recipe R2, member hand-over through an extracted interface: the edge A -&gt; B is
 /// `is` / `as` tests against ONE class of B plus reads of its fields and properties; the
 /// class implements a new interface carrying read-only properties for those members,
@@ -1106,6 +1139,7 @@ type
   private
     FSource   : IEdgeSurfaceSource;
     FStore    : ISymbolStore;
+    FCache    : IEdgeSurfaceCache;  // HP2B: the source's read cache, nil when it has none
     FFromFid  : Int64;
     FToFid    : Int64;
     FLines    : TArray<string>;
@@ -1118,6 +1152,7 @@ type
     FClassUses: TList<TReference>;
     FSurface  : TEdgeSurface;
     function Sym(pId: Int64): TSymbol;
+    function Child(pParentId: Int64; const pName: string): TSymbol;
     function TopLevel(const pSym: TSymbol): TSymbol;
     function IsLocal(const pR: TReference): Boolean;
     function LineText(pLine: Integer): string;
@@ -1143,6 +1178,7 @@ begin
   inherited Create;
   FSource := pSource;
   FStore  := pSource.Store;
+  if not Supports(pSource, IEdgeSurfaceCache, FCache) then FCache:= nil;
   FFromFid:= pFromFid;
   FToFid  := pSource.FidOfStem(pToStem);
   FSurface := Default(TEdgeSurface);
@@ -1172,8 +1208,15 @@ end;
 function TSurfaceBuilder.Sym(pId: Int64): TSymbol;
 begin
   if FSyms.TryGetValue(pId, Result) then Exit;
-  Result:= FStore.GetSymbolById(pId);
+  Result:= if FCache <> nil then FCache.CachedSymbolById(pId) else FStore.GetSymbolById(pId);
   FSyms.Add(pId, Result);
+end;
+
+{ ISymbolStore.FindChildSymbolByName, through the source's cache when it has one. }
+function TSurfaceBuilder.Child(pParentId: Int64; const pName: string): TSymbol;
+begin
+  Result:= if FCache <> nil then FCache.CachedChildByName(pParentId, pName)
+    else FStore.FindChildSymbolByName(pParentId, pName);
 end;
 
 function TSurfaceBuilder.TopLevel(const pSym: TSymbol): TSymbol;
@@ -1192,7 +1235,7 @@ var
   Local: TSymbol;
 begin
   if pR.EnclosingSymbolId <= 0 then Exit(False);
-  Local:= FStore.FindChildSymbolByName(pR.EnclosingSymbolId, pR.NameText);
+  Local:= Child(pR.EnclosingSymbolId, pR.NameText);
   Result:= (Local.Id > 0) and (Local.Kind in [skLocalVar, skParam]);
 end;
 
@@ -1267,7 +1310,7 @@ begin
     (Cls.Kind = skClass) then
   begin
     var Ctor:= if pR.SymbolId > 0 then Sym(pR.SymbolId).Kind = skConstructor
-      else SameText(pR.NameText, 'Create') or (FStore.FindChildSymbolByName(Cls.Id, pR.NameText).Kind = skConstructor);
+      else SameText(pR.NameText, 'Create') or (Child(Cls.Id, pR.NameText).Kind = skConstructor);
     if Ctor then FSurface.HasConstruction:= True
     else FSurface.HasClassMethod:= True;
     Inc(FSurface.CallCount);
@@ -1297,7 +1340,7 @@ begin
     (Cls.Kind = skClass) and SameText(Cls.Name, Rcv)) then Exit;
   var Key:= Format('%d:%s', [pR.StartLine, LowerCase(Cls.Name)]);
   if FRcvLines.ContainsKey(Key) then Exit;
-  if SameText(pR.NameText, 'Create') or (FStore.FindChildSymbolByName(Cls.Id, pR.NameText).Kind = skConstructor) then
+  if SameText(pR.NameText, 'Create') or (Child(Cls.Id, pR.NameText).Kind = skConstructor) then
     FSurface.HasConstruction:= True
   else FSurface.HasClassMethod:= True;
   FClasses.Add(Cls.Name);
@@ -1351,19 +1394,19 @@ begin
   for var M in TRegEx.Matches(PlainCode(LineText(pR.StartLine)),
     '(?<![\w.])' + C + '\s*\(\s*[A-Za-z_]\w*\s*\)\s*\.\s*([A-Za-z_]\w*)(\s*:=)?', [roIgnoreCase]) do
   begin
-    var Child:= FStore.FindChildSymbolByName(pCls.Id, M.Groups[1].Value);
-    if (Child.Id <= 0) or not (Child.Kind in [skField, skProperty]) then Continue;
+    var Member:= Child(pCls.Id, M.Groups[1].Value);
+    if (Member.Id <= 0) or not (Member.Kind in [skField, skProperty]) then Continue;
     R:= pR;
-    R.NameText:= Child.Name;
+    R.NameText:= Member.Name;
     if (M.Groups.Count > 2) and (M.Groups[2].Value <> '') then
     begin
       FSurface.HasWrite:= True;
-      AddRef(R, erMemberWrite, Child.Id);
+      AddRef(R, erMemberWrite, Member.Id);
     end
     else
     begin
-      FMembers.Add(Child.Name);
-      AddRef(R, erMemberRead, Child.Id);
+      FMembers.Add(Member.Name);
+      AddRef(R, erMemberRead, Member.Id);
     end;
   end;
 end;
@@ -1408,7 +1451,8 @@ end;
 procedure TSurfaceBuilder.Collect;
 begin
   FLines:= FSource.FileLines(FFromFid);
-  for var R in FStore.GetReferencesFromFile(FFromFid) do
+  var Refs:= if FCache <> nil then FCache.CachedRefsFromFile(FFromFid) else FStore.GetReferencesFromFile(FFromFid);
+  for var R in Refs do
   begin
     if TakeMemberAccess(R) then Continue;
     if SameText(R.Kind, 'member-access') then
@@ -2804,6 +2848,16 @@ begin
   Result:= pType <> '';
 end;
 
+function EnclosingTypeOf(const pProject: ISymbolStore; pEnclosingId: Int64): TSymbol;
+begin
+  Result:= pProject.GetSymbolById(pEnclosingId);
+  for var Up:= 1 to CMaxAncestorHops do
+  begin
+    if (Result.Id <= 0) or (Result.Kind in [skClass, skRecord, skUnit, skProgram, skPackage]) or (Result.ParentId <= 0) then Break;
+    Result:= pProject.GetSymbolById(Result.ParentId);
+  end;
+end;
+
 { C3: whether pName is a member (not a parameter or local) of the class or record that
   encloses symbol pEnclosingId, or of one of its ancestors in the project or the library --
   a bare name the consumer resolves to its own (inherited) member, not to a cycle unit. }
@@ -2816,12 +2870,7 @@ var
 begin
   Result:= False;
   if (pProject = nil) or (pEnclosingId <= 0) or (pName = '') then Exit;
-  var S:= pProject.GetSymbolById(pEnclosingId);
-  for var Up:= 1 to CMaxAncestorHops do
-  begin
-    if (S.Id <= 0) or (S.Kind in [skClass, skRecord, skUnit, skProgram, skPackage]) or (S.ParentId <= 0) then Break;
-    S:= pProject.GetSymbolById(S.ParentId);
-  end;
+  var S:= EnclosingTypeOf(pProject, pEnclosingId);
   if (S.Id <= 0) or not (S.Kind in [skClass, skRecord]) then Exit;
   Idx.Project:= pProject;
   Idx.Lib    := pLibrary;
