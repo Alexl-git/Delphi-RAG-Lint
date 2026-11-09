@@ -8455,6 +8455,14 @@ begin
     begin
       AText.Text   := CurText;
       AText.Pending:= if StopIx <= High(Segs) then string.Join('.', Segs, StopIx, Length(Segs) - StopIx) else '';
+      if StopIx = 1 then
+      begin
+        { found-in-150 (RS1 item 5): nothing was stepped, so CurText IS the head's declared text --
+          its generic args and declaration ride along (`BBitmap.Canvas.Lock`). }
+        AText.Args    := HeadText.Args;
+        AText.DeclFile:= HeadText.DeclFile;
+        AText.DeclLine:= HeadText.DeclLine;
+      end;
     end
     else if HeadText.Head <> '' then
       AText.Head:= AReceiverExpr;

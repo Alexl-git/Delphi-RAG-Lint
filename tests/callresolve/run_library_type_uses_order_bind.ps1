@@ -16,6 +16,7 @@
   CASES (markers in the fixtures; lines are read from them)
     B1 uA  uses .., Winapi.Windows, Vcl.Graphics; local BBitmap: TBitmap; BBitmap.Free   -> System.TObject.Free (Vcl.Graphics class)
     B5 uA  BBitmap.Canvas                                                                 -> Vcl.Graphics.TBitmap.Canvas
+    B6 uA  BBitmap.Canvas.Lock (a CHAIN: the head's declaration rides with the pending step, found-in-150) -> Vcl.Graphics.TCustomCanvas.Lock
     G3 uA  uses System.Classes, System.Generics.Collections; FPlain: TList; FPlain.Add   -> System.Classes.TList.Add
     B2 uB  uses Vcl.Graphics, Winapi.Windows; local B: TBitmap; B.bmWidth                 -> Winapi.Windows.tagBITMAP.bmWidth
     B3 uC  interface uses Vcl.Graphics; implementation uses Winapi.Windows;
@@ -179,6 +180,7 @@ function Expect([string]$Label, [string]$AFile, [string]$Marker, [string]$AName,
 
 Expect 'B1  uA (Windows, Graphics) BBitmap.Free: System.TObject.Free'          'uA.pas' 'B1' 'Free'    'System.TObject.Free'
 Expect 'B5  uA BBitmap.Canvas: Vcl.Graphics.TBitmap.Canvas'                     'uA.pas' 'B5' 'Canvas'  'Vcl.Graphics.TBitmap.Canvas'
+Expect 'B6  uA BBitmap.Canvas.Lock (chain head, pending step): Vcl.Graphics.TCustomCanvas.Lock' 'uA.pas' 'B5' 'Lock' 'Vcl.Graphics.TCustomCanvas.Lock'
 Expect 'G3  uA FPlain: TList (no generic args): System.Classes.TList.Add'       'uA.pas' 'G3' 'Add'     'System.Classes.TList.Add'
 Expect 'B2  uB (Graphics, Windows) B.bmWidth: Winapi.Windows.tagBITMAP.bmWidth' 'uB.pas' 'B2' 'bmWidth' 'Winapi.Windows.tagBITMAP.bmWidth'
 Expect 'B3  uC interface field FBmp (impl uses not visible): System.TObject.Free' 'uC.pas' 'B3' 'Free'   'System.TObject.Free'
