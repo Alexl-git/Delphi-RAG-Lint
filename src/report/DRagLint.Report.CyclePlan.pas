@@ -1050,6 +1050,9 @@ type
       out pCount: Integer): Boolean;
     procedure PlanMemberHandOver(pEvals: TList<TEdgeEval>);
     procedure PlanMetaclassValue(pEvals: TList<TEdgeEval>);
+    function SplitSurface(const pSurface: TEdgeSurface; pRoutines: Boolean): TEdgeSurface;
+    procedure ComposeRoutines(var pSteps: TRecipeSteps; const pR1: TRecipeSteps; var pRefusal: TRecipeRefusal);
+    procedure RenderComposedRoutines(const pDecl, pConsumer: string);
     function MetaclassSteps(const pEv: TEdgeEval; out pWhy: string): TRecipeSteps;
     function MetaclassArgType(const pCallee: string; pIndex: Integer; const pUsed: TArray<string>): string;
     function MetaclassTypeUnit(const pA: TPlanFile; pLine: Integer; const pFormal: string; out pWhy: string): TArray<string>;
@@ -3811,7 +3814,7 @@ var
   Item: TMoveItem;
 begin
   { R1: the consumer's calls of the inverted routine go through the pointer }
-  if (FInversion.Recipe = crRoutineInversion) and (pFid = FInversion.ConsumerFid) then
+  if (FInversion.Recipe in [crRoutineInversion, crMemberInterface]) and (pFid = FInversion.ConsumerFid) then  { 150-CY-11: R2 + R1 }
     for var R in FInversion.Routines do
       if pOwner.Id = R.Id then Exit(True);
   { R2: the consumer names the interface instead of the class }
@@ -6760,8 +6763,20 @@ begin
         (FStore.GetSymbolById(R.SymbolId).Kind = skClass)) then Tested:= True;
     if (Ev.Recipe <> crNone) or (Ev.Surface.RoutineName <> '') or not Tested then Continue;
     var Leaf := ResolveUntangleLeaf(FStore, Ev.Surface.ToStem, FComp, Root);
-    var Steps:= PlanMemberInterface(Self, FLibStore, Ev.Surface, Leaf.UnitName, UnitScopes, Refusal);
-    if (Refusal.Kind = '') and (Leaf.Decision = udExtend) then SettleIfaceName(Ev.Surface, Leaf, UnitScopes, Steps, Refusal);
+    { 150-CY-11 (lane 150 CY1): an edge that ALSO calls routines of B -- R1 on the routine refs, R2 on the rest, one
+      leaf, one edge-still-used check over the union (ComposeRoutines) }
+    var Surf := Ev.Surface;
+    var R1   := Default(TRecipeSteps);
+    Refusal  := Default(TRecipeRefusal);
+    if Length(Surf.RoutineIds) > 0 then
+    begin
+      R1  := PlanRoutinesInversion(Self, SplitSurface(Surf, True), nil, Refusal);
+      Surf:= SplitSurface(Surf, False);
+    end;
+    var Steps:= Default(TRecipeSteps);
+    if Refusal.Kind = '' then Steps:= PlanMemberInterface(Self, FLibStore, Surf, Leaf.UnitName, UnitScopes, Refusal);
+    if (Refusal.Kind = '') and (Leaf.Decision = udExtend) then SettleIfaceName(Surf, Leaf, UnitScopes, Steps, Refusal);
+    if (Refusal.Kind = '') and (R1.Recipe = crRoutineInversion) then ComposeRoutines(Steps, R1, Refusal);
     QualifiedClassRef(Ev.Surface.ToStem, Refusal);
     if Refusal.Kind <> '' then
     begin
@@ -6779,8 +6794,72 @@ begin
   end;
 end;
 
-{ The unit that receives R1's procedural type and variable: the existing unit J2
-  chose, else the catalog's `<Declaring>.Untangle` (created or extended). }
+{ 150-CY-11: the part of pSurface R1 takes (pRoutines: the refs bound to its routines, no class) or R2 takes (every
+  other ref, no routine). Flags and member lists stay with the class part. }
+function TCyclePlanner.SplitSurface(const pSurface: TEdgeSurface; pRoutines: Boolean): TEdgeSurface;
+begin
+  Result:= pSurface;
+  Result.Refs:= nil;
+  for var R in pSurface.Refs do
+  begin
+    var IsRoutine:= False;
+    for var Id in pSurface.RoutineIds do IsRoutine:= IsRoutine or (R.SymbolId = Id);
+    if IsRoutine = pRoutines then Result.Refs:= Result.Refs + [R];
+  end;
+  if pRoutines then
+  begin
+    Result.ClassNames:= nil;
+    Result.Members   := nil;
+    Result.HasWrite  := False;
+    Result.HasConstruction:= False;
+    Result.HasClassMethod := False;
+    Result.HasClassRefArg := False;
+    Result.HasDecl        := False;
+  end
+  else
+  begin
+    Result.RoutineIds:= nil;
+    Result.CallCount := 0;
+  end;
+end;
+
+{ 150-CY-11: R1's routine pointers joined into the R2 steps of the same edge (pSteps stays crMemberInterface; its
+  Routines / pointer fields are R1's). Refused (manual-edit) when both rewrite one line, when either reuses an existing
+  declaration of the leaf (ReuseDecl is one field for both), or when a routine's signature names a type that is not a
+  System built-in (the leaf's uses carry R2's member types only). }
+procedure TCyclePlanner.ComposeRoutines(var pSteps: TRecipeSteps; const pR1: TRecipeSteps; var pRefusal: TRecipeRefusal);
+begin
+  var Why:= '';
+  if pSteps.ReuseDecl or pR1.ReuseDecl or pR1.AssignExists then
+    Why:= 'the leaf already declares the interface or a pointer of this edge: R1 and R2 cannot share the reuse';
+  for var R in pR1.Routines do
+    for var M in TRegEx.Matches(R.TypeDecl, ':\s*([A-Za-z_][\w.]*)') do
+      if (Why = '') and not IsBuiltinTypeName(M.Groups[1].Value) then
+        Why:= Format('`%s` names `%s` in its signature: with R2 on the same edge the leaf carries System types only',
+          [R.Name, M.Groups[1].Value]);
+  for var E in pR1.Edits do
+    for var F in pSteps.Edits do
+      if (Why = '') and (E.Fid = F.Fid) and (E.Line = F.Line) and E.Replace and F.Replace then
+        Why:= Format('line %d is rewritten by both the routine-call inversion and the member hand-over', [E.Line]);
+  if Why <> '' then
+  begin
+    pRefusal:= Default(TRecipeRefusal);
+    pRefusal.Kind  := 'manual-edit';
+    pRefusal.Symbol:= pR1.RoutineName;
+    pRefusal.Fid   := pSteps.ConsumerFid;
+    pRefusal.Reason:= 'routine-call inversion and member hand-over on one edge: ' + Why;
+    Exit;
+  end;
+  pSteps.RoutineId   := pR1.RoutineId;
+  pSteps.RoutineName := pR1.RoutineName;
+  pSteps.PtrType     := pR1.PtrType;
+  pSteps.PtrVar      := pR1.PtrVar;
+  pSteps.TypeDecl    := pR1.TypeDecl;
+  pSteps.VarDecl     := pR1.VarDecl;
+  pSteps.Routines    := pR1.Routines;
+  pSteps.RegisterDecl:= LeavesProgramReason(pR1) <> '';
+  pSteps.Edits       := pSteps.Edits + pR1.Edits;
+end;
 { 150-CY-7b (lane 150 CY1, design docs\superpowers\specs\2026-11-09-cy-7b-metaclass-value.md, lane CY2): an edge whose
   only use of B is a class TX of B passed as a call ARGUMENT (`RegisterClass(TX)`) is cut R1-shaped: the leaf declares
   `var <X>Class: <formal metaclass>`, B's initialization assigns `<X>Class := TX;`, A passes the variable. Encoded as
@@ -6970,6 +7049,8 @@ function TCyclePlanner.IsMetaclassInversion: Boolean;
 begin
   Result:= (FInversion.Recipe = crRoutineInversion) and (FInversion.ClassTypeName <> '');
 end;
+{ The unit that receives R1's procedural type and variable: the existing unit J2
+  chose, else the catalog's `<Declaring>.Untangle` (created or extended). }
 function TCyclePlanner.InversionLeaf(const pSteps: TRecipeSteps): TUntangleLeaf;
 begin
   if pSteps.LeafStem = '' then
@@ -7105,9 +7186,9 @@ begin
     if not InType then L.Add('type');
     if FInversion.Recipe = crMemberInterface then
     begin
-      { R2: the extracted interface }
+      { R2: the extracted interface; 150-CY-11: R1's pointers follow when the edge also calls routines }
       L.AddRange(FInversion.IfaceDecl);
-      Exit(L.ToArray);
+      if Length(FInversion.Routines) = 0 then Exit(L.ToArray);
     end;
     for var R in FInversion.Routines do
     begin
@@ -7312,6 +7393,25 @@ begin
   end;
 end;
 
+{ 150-CY-11: the R1 lines of an R2 cut that also inverts routines (ComposeRoutines); nothing for a plain R2 cut. }
+procedure TCyclePlanner.RenderComposedRoutines(const pDecl, pConsumer: string);
+begin
+  for var R in FInversion.Routines do
+  begin
+    var Calls:= '';
+    for var E in FInversion.Edits do
+      if (E.Fid = FInversion.ConsumerFid) and (Length(E.NewLines) > 0) and
+        TRegEx.IsMatch(E.NewLines[0], '(?<![\w.])' + TRegEx.Escape(R.PtrVar) + '\b', [roIgnoreCase]) then
+        Calls:= Calls + (if Calls <> '' then ', ' else '') + IntToStr(E.Line);
+    EmitFmt('- The edge also calls the routine `%s` of `%s`: **routine-call inversion** on the same edge -- `%s` gets ' +
+      'the procedural type `%s` (the routine''s signature, verbatim) and the variable `%s`; `%s` assigns `%s := %s;` ' +
+      'as the first statement of its initialization section; `%s` calls `%s` instead (line %s).',
+      [R.Name, pDecl, FLeafName[FInversion.DeclStem], R.PtrType, R.PtrVar, pDecl, R.PtrVar, R.Name, pConsumer,
+      R.PtrVar, Calls]);
+  end;
+  if (Length(FInversion.Routines) > 0) and FInversion.RegisterDecl then
+    EmitFmt('- `%s` joins the program''s uses so it stays linked and its initialization assigns the pointers.', [pDecl]);
+end;
 procedure TCyclePlanner.RenderMemberHandOver(pStep: Integer);
 begin
   EmitFmt('### Step %d: what moves where', [pStep]);
@@ -7341,6 +7441,7 @@ begin
       EmitFmt('- Exceptions: a failed `as %s` raises EIntfCastError, not EInvalidCast as `as %s` did -- a handler ' +
         'for EInvalidCast no longer catches it. Checked: `%s` handles no EInvalidCast, or each `as` follows its ' +
         '`is` guard.', [S.IfaceName, S.ClassTypeName, Consumer]);
+  RenderComposedRoutines(Decl, Consumer);  { 150-CY-11 }
   for var S in FInversion.Surfaces do
     if S.HardCastChange then  { lane 149 CYB (149-CY-8b): a stated behaviour change }
       EmitFmt('- Behaviour change: `%s` handles EInvalidCast and reads through a hard cast `%s(X).M`, which becomes ' +
@@ -7414,6 +7515,9 @@ begin
       'moving declarations or by routine-call inversion.', [pPlan.CutEdge.FromStem, pPlan.CutEdge.ToStem,
       pPlan.CutEdge.FromStem, pPlan.CutEdge.ToStem, FInversion.ClassTypeName, FInversion.ClassTypeName,
       FInversion.IfaceName, FLeafName[FInversion.DeclStem], pPlan.CutEdge.FromStem]);
+    if Length(FInversion.Routines) > 0 then  { 150-CY-11 }
+      EmitFmt('On the same edge, **routine-call inversion** of `%s`: `%s` calls it through a procedural variable ' +
+        'declared in `%s`.', [InversionNames, pPlan.CutEdge.FromStem, FLeafName[FInversion.DeclStem]]);
     var Still:= InversionStillUsed;
     if Still <> '' then
       EmitFmt('refused: edge-still-used -- %s. The steps below keep that uses entry, so the edge stays: ' +
