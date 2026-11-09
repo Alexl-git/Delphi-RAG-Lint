@@ -231,6 +231,7 @@ type
     function RoutineStartLine(pEnclosing: Int64): Integer;
     function CastColsOf(pFileId: Int64; pLine: Integer): TList<Integer>;
     function DeclIsConditional(const pSym: TSymRow): Boolean;
+    function IdentityByName(const pName: string): Boolean;
     procedure Decide(pFileId: Int64; const pPath: string; pLine, pCol: Integer; const pName: string;
       pTypeId, pEnclosing: Int64);
     procedure ReadCastRows;
@@ -780,6 +781,22 @@ begin
   FRefused.Add(S);
 end;
 
+// True when a cast to pName the project does not declare is still an identity by name alone: the scalar `string`,
+// or a class/record/interface that the libraries declare under exactly ONE distinct qualified name (the library keeps
+// a forward stub beside the body: same qualified name, one type) and that no project symbol shadows or generics.
+function TCastPlanner.IdentityByName(const pName: string): Boolean;
+begin
+  if SameText(pName, 'string') then Exit(True);
+  var One:= '';
+  for var R in NamesOf(pName) do
+  begin
+    if (R.GenericParams <> '') or not MatchText(R.Kind, ['class', 'record', 'interface']) then Exit(False);
+    if One = '' then One:= R.QName
+    else if not SameText(One, R.QName) then Exit(False);
+  end;
+  Result:= One <> '';
+end;
+
 procedure TCastPlanner.Decide(pFileId: Int64; const pPath: string; pLine, pCol: Integer; const pName: string;  // dl:ok cyclomatic-complexity@7f59, too-many-exit-points@6420 -- one branch per named refusal, documented on the public function
   pTypeId, pEnclosing: Int64);
 const
@@ -892,7 +909,11 @@ begin
     Refuse(Site, 'operand-untyped', Format('the index has no static type for %s', [OperandName]));
     Exit;
   end;
-  if OperandType <= 0 then
+  var ByName:= False;
+  { a target the project does not declare: identity by NAME when it is the scalar `string` or a library class
+    that the platform libraries hold exactly once (the operand row already carries that very name) }
+  if (OperandType <= 0) and (pTypeId <= 0) then ByName:= IdentityByName(pName);
+  if (OperandType <= 0) and not ByName then
   begin
     { a name the project does not declare: `Integer(N)` has no cast row at all, so this is its only proof }
     if pTypeId <= 0 then Refuse(Site, 'type-not-indexed', Format('%s is not a type this index holds', [pName]))
@@ -905,14 +926,14 @@ begin
     else Refuse(Site, 'operand-type-unresolved', Format('the type of %s is the bare text %s', [OperandName, OperandQName]));
     Exit;
   end;
-  if pTypeId <= 0 then
+  if (pTypeId <= 0) and not ByName then
   begin
     if not SameText(OperandQName.Substring(OperandQName.LastIndexOf('.') + 1), pName) then Exit;
     Refuse(Site, 'type-not-indexed', Format('%s is not a type this index holds', [pName]));
     Exit;
   end;
-  var TypeSym:= SymOf(pTypeId);
-  if OperandType <> pTypeId then
+  var TypeSym:= if ByName then Default(TSymRow) else SymOf(pTypeId);
+  if not ByName and (OperandType <> pTypeId) then
   begin
     var OperandTypeSym:= SymOf(OperandType);
     if SameText(TypeSym.Kind, 'type') or SameText(OperandTypeSym.Kind, 'type') then
@@ -920,14 +941,15 @@ begin
     else CountConversion(Site, TypeSym, OperandTypeSym.QName.Substring(OperandTypeSym.QName.LastIndexOf('.') + 1));
     Exit;
   end;
-  var Rows:= NamesOf(pName);
+  var Rows: TArray<TNameRow>;
+  if not ByName then Rows:= NamesOf(pName);
   for var R in Rows do
     if R.GenericParams <> '' then
     begin
       Refuse(Site, 'generic-type', Format('%s has a generic form; the symbol id does not carry the type arguments', [pName]));
       Exit;
     end;
-  if TypeSym.QName.Contains('<') then
+  if not ByName and TypeSym.QName.Contains('<') then
   begin
     Refuse(Site, 'generic-type', Format('%s has a generic form; the symbol id does not carry the type arguments', [pName]));
     Exit;
@@ -938,7 +960,7 @@ begin
       Refuse(Site, 'ambiguous-type-name', Format('%s also names %s (%s): the call cannot be proved a cast', [pName, R.QName, R.Kind]));
       Exit;
     end;
-  if SameText(TypeSym.Kind, 'type') and ((TypeSym.Signature = '') or
+  if not ByName and SameText(TypeSym.Kind, 'type') and ((TypeSym.Signature = '') or
     TRegEx.IsMatch(TypeSym.Signature, '^\s*(procedure|function|reference)\b', [roIgnoreCase])) then
   begin
     Refuse(Site, 'procedural-type', 'a procedural value without its cast may be called instead of read');
@@ -950,7 +972,7 @@ begin
     Refuse(Site, 'overloaded-operand', Format('%s is overloaded: the index picks an overload by heuristics', [OperandName]));
     Exit;
   end;
-  if DeclIsConditional(TypeSym) or DeclIsConditional(OpSym) then
+  if (not ByName and DeclIsConditional(TypeSym)) or DeclIsConditional(OpSym) then
   begin
     Refuse(Site, 'conditional-decl', 'the type or the operand is declared under a conditional: another configuration may differ');
     Exit;
