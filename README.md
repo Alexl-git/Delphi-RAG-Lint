@@ -476,6 +476,16 @@ the hub, whether cutting one side alone breaks the group, what the spokes take f
 (globals with the member names read through them, routines), what the hub takes from the
 spokes, and the dead `uses` inside the group. Read-only; it never runs the planner.
 
+`cycles --plan --hub-surface [--cycle <n> | --unit <stem>] [--apply] [--no-backup]` plans recipe R3
+for a group with exactly one hub that the spokes read through ONE global instance (a main form):
+a new leaf unit `<Hub>.Hub` with an interface that has one property per field and one method per
+method the spokes read through the global, the hub class implementing it (heritage, accessors, a
+hand-over in AfterConstruction / BeforeDestruction) and a receiver-only rewrite in every spoke
+(`frmMain.edtX.Text` becomes `MainHub.edtX.Text`); a spoke that names nothing else of the hub drops
+it from its uses. A bare use, a write to the global or to a designer field, a var-parameter use or
+an ancestor's member refuses that spoke only. OFF by default; the dry run writes nothing, `--apply`
+writes one group and runs no compile gate yet: build the project after it.
+
 Each cycle lists its `A uses B [interface|implementation]` edges, marks the
 **interface** edges as move-to-implementation candidates, and flags layering
 inversions (e.g. a COMMON unit reaching into CLIENT). Add **`--causes`** to
