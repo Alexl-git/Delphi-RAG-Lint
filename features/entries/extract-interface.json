@@ -13,7 +13,7 @@
       "type": "cli",
       "verb": "extract-interface",
       "example": "drag-lint extract-interface --class <name> --plan --db <db>",
-      "usage": "drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]",
+      "usage": "drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced[=norefcount]] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]",
       "flags": [
         {
           "name": "--class",
@@ -28,7 +28,7 @@
           "arg": "<IFoo>"
         },
         {
-          "name": "--reparent-interfaced"
+          "name": "--reparent-interfaced[=norefcount]"
         },
         {
           "name": "--plan"
@@ -71,14 +71,14 @@
           "arg": "json"
         }
       ],
-      "help": ["  drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]   - declare an interface from the members of a class the project uses and add it to the class: plan by default, every refusal named, --apply through a scratch build and the compile gate"]
+      "help": ["  drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced[=norefcount]] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]   - declare an interface from the members of a class the project uses and add it to the class: plan by default, every refusal named, --apply through a scratch build and the compile gate"]
     }
   ],
   "audience": "both",
   "verified": {
-    "date": "2026-11-08",
+    "date": "2026-11-09",
     "by": "ENGINE",
-    "build": "1.47.0-alpha",
-    "surfaceHash": "7f36a5ad2615cfa9ae3027b2503c1ba1b633d2de66cecdd40a8da6afd1c8d5d8"
+    "build": "1.48.0-alpha",
+    "surfaceHash": "411f26d39af139267eb99ec2135457bf5a31438824d63b812e7b2a331f03c5b2"
   }
 }
