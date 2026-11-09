@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70006
 since: 0.43.0-alpha
 status: shipped
-updated: 1.47.0-alpha
+updated: 1.48.0-alpha
 ---
 
 # Circular Uses Report (cycles + fix plan)
@@ -27,6 +27,7 @@ Full flag list: [cycles in the CLI reference](../cli.md#cycles).
 | `--db` | `<file.sqlite>` |  |  |
 | `--edges` |  |  |  |
 | `--causes` |  |  |  |
+| `--hub` |  |  |  |
 | `--plan` |  |  |  |
 | `--project` | `<X.dproj>` |  |  |
 | `--f2047` |  |  |  |
@@ -82,9 +83,14 @@ follow the `--plan` playbook (measured below), but that is optional.
 5. A refused group: `drag-lint cycles --db <db> --plan > cycle-plan.md` prints the by-hand playbook.
 ### Running it from the CLI
 ```text
-drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--format json|text]
+drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--hub] [--plan [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--format json|text]
 ```
-`--edges` and `--causes` add detail to the cycle report; `--plan` produces the
+`--edges` and `--causes` add detail to the cycle report; `--hub` tells a star from a
+tangle: per group the hub units (a unit whose removal leaves the rest acyclic), the uses
+edges and reference weights on each side, whether cutting one side alone breaks the group,
+what the spokes take from the hub (globals with the member names read through them,
+routines), what the hub takes from the spokes, and the dead `uses` inside the group
+(read-only, no planner; JSON adds `hubs[]` and `zero_ref_edges` per group); `--plan` produces the
 refactoring playbook; `--f2047` narrows the report to the interface-only cycles
 the compiler rejects with F2047 (`--unit <stem>` limits it to one unit's cycle);
 `--format` selects `json` or `text` output. `--fix` makes the edits
@@ -242,12 +248,12 @@ The engine never guesses; every kind it can give:
   indented `type` / `var` / `const` header and the same-line form `var GX: T = v;` are recognised),
   `directive` (a conditional compiler directive inside an edited region; `{$REGION}`,
   `{$ENDREGION}`, `{$WARN}`, `{$HINTS}` and `{$MESSAGE}` inside a uses clause are kept byte for
-  byte), `unresolved-edge` (the index could not resolve what one unit of the group uses from
+  byte; since 1.47 a single-branch `{$IFDEF X} ... {$ENDIF}` region whose entries are all removed goes whole, guard included -- an `{$ELSE}` branch, a nested or second directive, or an entry of the region that stays still refuses), `unresolved-edge` (the index could not resolve what one unit of the group uses from
   another; an INTERFACE uses entry the interface uses for nothing is moved to the
   implementation uses, or removed when nothing uses it, and the refusal stays only when a
   lexical hit names an identifier and line), `edge-still-used` (after
   an R1 / R2 cut the consumer still uses the declaring unit for another name, so the uses
-  entry -- and the edge -- would stay), `coupling-remains` (since 1.43: the moved declarations of two units need each other and cannot share one new unit, see below, or the plan's own prediction still shows the interface coupling; before 1.43 such a plan printed `mechanical`), `manual-edit` (the default for any edit the planner
+  entry -- and the edge -- would stay), `coupling-remains` (since 1.43: the moved declarations of two units need each other and cannot share one new unit, see below, or the plan's own prediction still shows the interface coupling; before 1.43 such a plan printed `mechanical`; since 1.47 also a line that moves and names another unit of the cycle qualified, as `DUnit.Foo(2)` in a method body that moves with its class, which the compile gate used to catch), `manual-edit` (the default for any edit the planner
   cannot make mechanically).
 * **R1 (routine-call inversion):** `not-a-routine`, `signature-in-cycle`,
   `overloaded-routine`, `signature-unknown`, `qualified-ref` (a name qualified by the declaring unit that the plan can neither redirect nor move: another routine of that unit, or the inverted routine in a shape it cannot rewrite, such as `@Unit.Foo`; `Unit.Foo(2)` of the inverted routine itself becomes `FooPtr(2)`, a comment or a string is not a use, and a global moves and is rewritten, see below), `name-shadowed` (since 1.44: a line to rewrite also holds `Foo` bound to something else, a nested routine, a method or a parameter, as in `Foo(1); Unit.Foo(2);`, or `Unit` there is a local of the consumer; the rewrite works on the text of the line, so it would call the pointer instead; on separate lines the plan is sound and goes ahead), `routine-not-called` (`@F`, a parameterless function as an argument, an argument on a line of its own; a routine passed as a whole argument is redirected, see below),
@@ -279,7 +285,7 @@ The engine never guesses; every kind it can give:
   leaf declares `I<Class>Surface` differently with every suffix taken; an identical interface is
   reused, a different one gets the lowest free suffix), `no-iinterface`, `ref-counted`, `receiver-unknown`, `cast-unseen`
   (no IInterface ancestor outside the cycle; the walk continues past one declared inside it),
-  `exception-semantics`, `ancestry-unknown`, `with-member`, `unresolved-qualified-type`,
+  `exception-semantics` (since 1.47 only when the name of the helper below is taken: a consumer that handles EInvalidCast and casts with an unguarded `as` gets `function As<Surface>(const pX: TObject): I<Surface>` before the routine that casts -- nil for nil, else the interface, else `raise EInvalidCast.CreateRes(@SInvalidCast)`, the class and message the failed class cast raised; every `X as TX` of that consumer goes through it), `ancestry-unknown`, `with-member`, `unresolved-qualified-type`,
   `type-unresolved`, `leaf-uses-cycle`.
 
 #### Four shapes that are cut since 1.43

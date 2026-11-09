@@ -7,7 +7,7 @@ group: refactoring
 order: 50009
 since: 1.44.1-alpha
 status: shipped
-updated: 1.47.0-alpha
+updated: 1.48.0-alpha
 ---
 
 # Narrow parameter types (compile-gated)
@@ -87,7 +87,8 @@ not the proof. An `override` counts as a declaration, so v1 stops at the overrid
 | `routine-as-value` | a method pointer's type names the old parameter type |
 | `by-reference`, `grouped-param`, `shadowed` | `var`/`out` needs the exact type; `a, p: T` is not split in v1; another `p` inside |
 | `unresolved-ancestor`, `generic-type`, `ambiguous-type-name` | the chain, or the name, is not one known thing |
-| `with-body`, `other-use`, `member-write`, `no-member-use` | not only `p.m` reads and calls and nil tests. Stored, passed on, cast, `is`, `@`: refused. Member writes bind the same, v1 leaves them out |
+| `generic-ancestor` | the narrow type would be a generic ancestor (`TBase<T>`): its bare name does not compile and the type arguments are not carried (1.47) |
+| `with-body`, `other-use`, `no-member-use` | not only `p.m` reads, writes and calls and nil tests. Stored, passed on, cast, `is`, `@`: refused. A member write `p.m:= v` binds like a read and counts as a use of m (1.47; `member-write` is no longer a refusal) |
 | `member-not-in-chain`, `overloaded-member`, `binding-mismatch` | the walk cannot name one declaring class |
 | `uses-cycle` | the narrow type's unit cannot be added without risking a cycle |
 

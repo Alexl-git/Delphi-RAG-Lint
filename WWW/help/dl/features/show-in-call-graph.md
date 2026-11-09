@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70020
 since: 0.96.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.48.0-alpha
 ---
 
 # Show in Call Graph
@@ -36,7 +36,7 @@ Full flag list: [reverse-calltree in the CLI reference](../cli.md#reverse-calltr
 * Right-click in the Structure form: **Show in Call Graph**
    1. Open the Structure form (drag-lint > Show Structure)
    2. Right-click a node in the tree and choose Show in Call Graph
-   3. The call graph rooted at that symbol opens
+   3. The Call Graph (Butterfly) tab opens with that symbol as its root
 
 **Needs:** index
 

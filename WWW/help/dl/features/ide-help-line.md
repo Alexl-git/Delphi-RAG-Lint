@@ -4,10 +4,10 @@ title: Help line (DL page)
 summary: Type part of a feature name on the DL page, pick a match (with its menu path) and open that feature's help page at the configured help root
 product: DL
 group: editor-integration
-order: 110007
+order: 110008
 since: 1.33.0-alpha
 status: shipped
-updated: 1.39.2-alpha
+updated: 1.48.0-alpha
 ---
 
 # Help line (DL page)

@@ -4,10 +4,10 @@ title: lsp
 summary: Starts the LSP (Language Server Protocol) stdio server
 product: DL
 group: editor-integration
-order: 110012
+order: 110013
 since: 0.6.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.48.0-alpha
 ---
 
 # lsp
@@ -179,6 +179,13 @@ How the diagnostics merge behaves:
 - With `--trace`, the trace records the frame actually forwarded (the merged
   one).
 
+#### Exception facts on hover and code lens: `--no-exception-facts` (ON by default)
+
+Since 1.47 hovering a routine adds `Raises: EFoo (bound), EBar (spelled)` and the code lens
+adds `raises N types, handles M types` on its declaration line (see [editor-exception-facts](editor-exception-facts.md)).
+Both read the reader `exception-facts` uses. `drag-lint lsp --db <db> --no-exception-facts`
+switches both off; hover is then byte-identical to 1.46.
+
 ### Which defines the LSP preprocesses with
 
 Every file the LSP lints is preprocessed with the define profile of ITS OWN project's active
@@ -189,7 +196,7 @@ build, so `{$IFDEF DEBUG}` and project-define branches match what the developer 
 |---|---|
 | Which project owns the file | an explicit `--project X.dproj` wins; else the project of the `--db` whose index contains the file (manifest section, or `<dir>\_D-RAG\<base>.sqlite` next to `<base>.dproj`); else the ONE `.dproj` in the file's own folder (two or none: no project). A library index owns nothing. |
 | Which defines | the `.dproj` FIRST: its `<Config Condition="'$(Config)'==''">` marker picks the config and `ProfileFromDproj` the defines; `<base>.delphilsp.json` (the IDE's `-D` set) only when the `.dproj` is unreadable or carries no Config marker; platform built-ins always. |
-| Which platform | explicit `--platform`, else the `.dproj` Platform marker, else the JSON `dllname`, else Win64. |
+| Which platform | explicit `--platform`, else the `.dproj` Platform marker, else the JSON `dllname`, else Win32 (ruling a3, the platform `index` takes for the same project; Win64 before 1.48). |
 | An explicit `--project X.dproj` | X's ACTIVE build (Config/Platform markers), for every file of the run -- a member or a file no `--db` contains alike. **Changed in C10:** before, `--project` always meant Release (and Win64 unless `--platform`). |
 | A file no project owns | the platform built-ins, exactly as before. |
 
@@ -276,7 +283,7 @@ First hit wins, per field:
 2. the client: `initializationOptions` `{project, platform, config}`, `workspace/didChangeConfiguration` section `dragLint` (same keys), `workspace/executeCommand` `draglint.setContext` with `arguments: [{project, platform, config}]`, or -- in `--proxy` mode -- the `<Project>.delphilsp.json` the IDE names (`settingsFile`). `project` may also name a `*.dlcontext.json`;
 3. the owning `.dproj`: the index that holds the file's path (manifest order; several: the first, and an info message says which), else the sole `.dproj` in its folder. Platform: its active selection, else `<Project>.delphilsp.json`, else what it declares (`Win64` if targeted, else `Win32`, else the first). A section's bare `.dpr` takes the `.dproj` of its name, then its own `.dlcontext.json`;
 4. the nearest `<Base>.dlcontext.json`, only when no `.dproj` exists (a stale one, whose `.dproj` changed, is bypassed);
-   then, for a unit no index holds (a worktree, a unit not indexed yet, an index mid-rebuild), the project file that LISTS that exact path (`DCCReference`, `.dpr` `in '...'`), searched from the unit's folder up to the repository root, in each folder and its immediate sub-folders. The project is named; another checkout's index is not borrowed, and an info message gives the `index --project` command. Read once per folder and project file, not per request;
+   then, for a unit no index holds (a worktree, a unit not indexed yet, an index mid-rebuild), the project file that LISTS that exact path (`DCCReference`, `.dpr` `in '...'`), searched from the unit's folder up to the repository root, in each folder and its immediate sub-folders. The project is named; another checkout's index is not borrowed, and an info message gives the `index --project` command. Read once per folder and project file, not per request; a folder is listed again when its write time (or a listed sub-folder's) changes, and a file with no project re-checks those folders at most every 2 s, so a project file created while the server runs is found without a restart (1.48);
 5. `%LOCALAPPDATA%\drag-lint\context-defaults.json` (read only; `DRAGLINT_CONTEXT_DEFAULTS` overrides the path);
 6. the placeholder `Win64`.
 

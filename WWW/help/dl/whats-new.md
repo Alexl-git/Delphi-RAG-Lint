@@ -9,6 +9,11 @@ product: DL
 
 drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.com](https://www.htrmicronite.com)), our quality and production-control software.
 
+## 1.48.0-alpha
+
+* [Exception facts in the editor](features/editor-exception-facts.md) -- Hover, code lens and an MCP tool show which exception types a routine raises and handles.
+* [uses-recover](features/uses-recover.md) -- Recovers the uses edges of units that ship without source, from the vendor's .hpp headers and a dcc map; read-only, never reads a .dcu.
+
 ## 1.47.0-alpha
 
 * [arch-diagram](features/arch-diagram.md) -- Draws one self-contained HTML layer diagram of a project's units by folder, with the layers measured from the uses clauses.
@@ -35,7 +40,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 * [Initialization reaching a unit that initializes later (lint rule)](features/init-order-hazard.md) -- Project lint rule: an initialization section reaches a global that a unit initializing later in the computed order sets in its own initialization.
 * [Narrow parameter types (compile-gated)](features/narrow-param.md) -- Retypes a class-typed parameter to the deepest ancestor that declares every member the routine uses, when a static proof holds, through the compile gate.
 * [Remove redundant casts (compile-gated)](features/redundant-cast-fix.md) -- Removes hard casts whose operand already has exactly the target type, proved from the index's static types and written through the compile gate.
-* [Lint rules on the static type of a reference](features/ref-type-rules.md) -- Lint rules on ref_types: is-always-true, is-never-true, argument-narrows, UI access from a thread; sharper redundant-cast and unsafe casts.
+* [Lint rules on the static type of a reference](features/ref-type-rules.md) -- Lint rules on ref_types: is-always-true, is-never-true, argument-narrows, UI access from a thread, quit from a thread; sharper redundant-cast and unsafe casts.
 * [unwith](features/unwith.md) -- Removes with blocks, proving every name binds to what it bound before.
 
 ## 1.42.0-alpha
@@ -489,7 +494,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 0.4.0-alpha
 
-* [MCP server](features/mcp-server.md) -- Exposes the index to MCP clients as 17 tools.
+* [MCP server](features/mcp-server.md) -- Exposes the index to MCP clients as 18 tools.
 * [serve](features/serve.md) -- Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index.
 
 ## 0.2.0-alpha

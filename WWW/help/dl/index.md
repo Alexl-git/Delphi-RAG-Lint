@@ -68,6 +68,7 @@ Find symbols, callers, callees, text and types in the index.
 | [syntax-count](features/syntax-count.md) | Counts modern syntax in the parse of every unit, uncapped: Delphi 13 if-expressions, is not, not in; inline var/const; anonymous methods; multiline strings | 1.42.0-alpha |
 | [Type at Cursor](features/type-at-cursor.md) | Resolves the static type of the expression under the editor caret | 0.19.0-alpha |
 | [usages](features/usages.md) | Finds usage sites of a named symbol, with a choice of report width | 0.33.0-alpha |
+| [uses-recover](features/uses-recover.md) | Recovers the uses edges of units that ship without source, from the vendor's .hpp headers and a dcc map; read-only, never reads a .dcu | 1.48.0-alpha |
 | [wiki](features/wiki.md) | Looks up the dl:wiki concept topics a team has written into their own doc comments, and routes a human phrase to the code that implements it | 1.7.0-alpha |
 
 ## Linting
@@ -108,7 +109,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Opaque to analysis (lint rule)](features/opaque-to-analysis.md) | Project-wide lint rule (info, off by default): a routine whose non-library calls are mostly unresolvable, so impact and call trees are blind inside it | 1.42.0-alpha |
 | [Parameter type too wide (lint rule)](features/parameter-type-too-wide.md) | Project lint rule, OFF by default: a class-typed parameter that an ancestor type could carry, proved by the narrow-param plan | 1.46.0-alpha |
 | [Read but never assigned (lint rule)](features/read-never-assigned.md) | Project-wide lint rule: a field or global that is read but that nothing in the project assigns or creates | 1.40.0-alpha |
-| [Lint rules on the static type of a reference](features/ref-type-rules.md) | Lint rules on ref_types: is-always-true, is-never-true, argument-narrows, UI access from a thread; sharper redundant-cast and unsafe casts | 1.44.1-alpha |
+| [Lint rules on the static type of a reference](features/ref-type-rules.md) | Lint rules on ref_types: is-always-true, is-never-true, argument-narrows, UI access from a thread, quit from a thread; sharper redundant-cast and unsafe casts | 1.44.1-alpha |
 | [Rescan this unit](features/rescan-this-unit.md) | Re-indexes the active project and re-lints the current unit on demand, so the Diagnostics panel drops findings already fixed | 1.28.3-alpha |
 | [Run AST Checks](features/run-ast-checks.md) | Runs drag-lint's AST-level checks against a file | 0.31.0-alpha |
 | [Run Diagnostics (didSave)](features/run-diagnostics-didsave.md) | Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification | 0.22.0-alpha |
@@ -280,6 +281,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [drag-lint Graph (dockable)](features/drag-lint-graph-dockable.md) | Opens the drag-lint graph viewer as a dockable window inside the IDE, so it can sit beside Structure | 0.43.0-alpha |
 | [drag-lint Options](features/drag-lint-options.md) | The plugin's settings dialog for drag-lint: lets you browse and toggle the lint rule catalog | 0.95.0-alpha |
 | [drag-lint Panel (dockable)](features/drag-lint-panel-dockable.md) | Opens the main drag-lint dockable tool window inside the IDE | 0.42.0-alpha |
+| [Exception facts in the editor](features/editor-exception-facts.md) | Hover, code lens and an MCP tool show which exception types a routine raises and handles | 1.48.0-alpha |
 | [Engine heartbeat: the IDE tells a busy engine from a stuck one](features/engine-heartbeat.md) | A running engine reports what it is doing, so the IDE kills only an engine whose status stopped moving | 1.40.0-alpha |
 | [Help line (DL page)](features/ide-help-line.md) | Type part of a feature name on the DL page, pick a match (with its menu path) and open that feature's help page at the configured help root | 1.33.0-alpha |
 | [IDE Menu Reference](features/ide-menu-reference.md) | What every item in the drag-lint menu does | 1.4.0-alpha |
@@ -293,7 +295,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [Switch VS Code Delphi MCP entry](features/lsp-switch-vscode.md) | Turns the VS Code Delphi MCP entry off and on with a backup | 1.33.0-alpha |
 | [Register the MCP server (Claude Code, VS Code, Cursor)](features/mcp-config-writer.md) | Adds drag-lint serve to Claude Code, VS Code and Cursor MCP config: merged, backed up, idempotent, removable | 1.26.1-alpha |
 | [MCP get_neighbors](features/mcp-get-neighbors.md) | MCP tool: the call-graph neighbourhood of a symbol within 1..3 hops | 1.46.0-alpha |
-| [MCP server](features/mcp-server.md) | Exposes the index to MCP clients as 17 tools | 0.4.0-alpha |
+| [MCP server](features/mcp-server.md) | Exposes the index to MCP clients as 18 tools | 0.4.0-alpha |
 | [Output encoding (--output-encoding)](features/output-encoding.md) | Chooses the bytes verbs write to stdout, stderr and --output files: ASCII with \uXXXX escapes (default), UTF-8 or UTF-16LE, never a BOM; lossy ascii warns once | 1.35.0-alpha |
 | [project-context](features/project-context.md) | Writes or checks the `.dlcontext.json` file beside a project: platform, config and define set, with the .dproj SHA-1 for staleness | 1.38.0-alpha |
 | [serve](features/serve.md) | Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index | 0.4.0-alpha |

@@ -4,10 +4,10 @@ title: MCP get_neighbors
 summary: "MCP tool: the call-graph neighbourhood of a symbol within 1..3 hops"
 product: DL
 group: editor-integration
-order: 110018
+order: 110019
 since: 1.46.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.48.0-alpha
 ---
 
 # MCP get_neighbors

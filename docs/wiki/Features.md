@@ -127,13 +127,14 @@ Find symbols, callers, callees, text and types in the index.
 | [syntax-count](syntax-count) | `syntax-count` |  |
 | [Type at Cursor](Type-at-Cursor) | drag-lint > Inspect Symbol > Type at Cursor; `typeat` |  |
 | [usages](usages) | `usages`; drag-lint > Find Usages... |  |
+| [uses-recover](uses-recover) | `uses-recover` |  |
 | [wiki](wiki) | `wiki` |  |
 
 ## Linting
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**314 rules. 110 have an auto-fix. 262 are on by default.** 220 are built-in checks; 94 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**315 rules. 110 have an auto-fix. 262 are on by default.** 221 are built-in checks; 94 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
@@ -149,13 +150,13 @@ Rules, autofix, suppression markers and project-wide checks.
 | other | 12 | 3 |
 | platform | 10 | 4 |
 | policy | 3 | - |
-| project-wide | 48 | 6 |
+| project-wide | 49 | 6 |
 | refactoring | 20 | 8 |
 | resource-lifetime | 16 | 7 |
 | review-markers | 5 | 2 |
 | security | 22 | 2 |
 | structure | 12 | 6 |
-| **Total** | **314** | **110** |
+| **Total** | **315** | **110** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -186,7 +187,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Interfaced object set to nil (lint rule)](interfaced-object-nil-leak) | `lint-all` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
 | [Lint rules on the static type of a reference](ref-type-rules) | `lint-all` |  |
-| [Lint rules](rules) | 314 rules, 110 fixable; `rules` |  |
+| [Lint rules](rules) | 315 rules, 110 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
 | [Opaque to analysis (lint rule)](opaque-to-analysis) | `lint-all` |  |
@@ -367,6 +368,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [drag-lint Panel (dockable)](drag-lint-Panel-dockable) | drag-lint > drag-lint Panel (dockable) |  |
 | [drag-lint](drag-lint) | View > Tool Windows > drag-lint |  |
 | [Engine heartbeat: the IDE tells a busy engine from a stuck one](heartbeat) | procedure: `docs\wiki\heartbeat.md` |  |
+| [Exception facts in the editor](editor-exception-facts) | `lsp`; `lsp textDocument/hover`; `lsp textDocument/codeLens`; `mcp get_exception_facts` |  |
 | [Help line (DL page)](ide-help-line) | View > Tool Windows > drag-lint; drag-lint > Help > Help on a feature...; drag-lint > Help > All features (web) |  |
 | [IDE Menu Reference](IDE-Menu-Reference) | procedure: `docs\wiki\IDE-Menu-Reference.md`; drag-lint > Help > IDE Menu Reference |  |
 | [ide-release](ide-release) | `ide-release` |  |

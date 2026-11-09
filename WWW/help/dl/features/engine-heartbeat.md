@@ -4,10 +4,10 @@ title: "Engine heartbeat: the IDE tells a busy engine from a stuck one"
 summary: A running engine reports what it is doing, so the IDE kills only an engine whose status stopped moving
 product: DL
 group: editor-integration
-order: 110006
+order: 110007
 since: 1.40.0-alpha
 status: shipped
-updated: 1.42.0-alpha
+updated: 1.48.0-alpha
 ---
 
 # Engine heartbeat: the IDE tells a busy engine from a stuck one

@@ -153,7 +153,7 @@
   "verified": {
     "date": "2026-11-08",
     "by": "ENGINE",
-    "build": "1.47.0-alpha",
-    "surfaceHash": "e1d15dc205d2aa895f42b1ad0b35b5d8138854208f606eb4e4654d7fdae3c257"
+    "build": "1.48.0-alpha",
+    "surfaceHash": "b768f3174f2b85898abe4c20fcb30566ba02eeb0a9c23923209b4bf425874498"
   }
 }

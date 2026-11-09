@@ -118,7 +118,7 @@
   "verified": {
     "date": "2026-11-08",
     "by": "ENGINE",
-    "build": "1.47.0-alpha",
-    "surfaceHash": "982036e74b3e8f808942fa4a18efb0630e303463661f69138a1a55a5f6f3b611"
+    "build": "1.48.0-alpha",
+    "surfaceHash": "3e9fdd0f1b0dca91a62ab30815f90793df88526aa391f6fcccc2a2d949763f43"
   }
 }

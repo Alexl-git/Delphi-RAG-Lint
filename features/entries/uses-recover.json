@@ -49,5 +49,11 @@
       "command": "drag-lint uses-recover --db <db> --library-db <library.sqlite> --hpp-dir <dir> --map <App.map>"
     }
   ],
-  "access": "cli-only"
+  "access": "cli-only",
+  "verified": {
+    "date": "2026-11-08",
+    "by": "ENGINE",
+    "build": "1.48.0-alpha",
+    "surfaceHash": "4c1a590d577158d254447a7a97d3fbd4c0daeebe1c419e11ad18c170b688817d"
+  }
 }
