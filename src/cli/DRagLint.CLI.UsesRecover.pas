@@ -4,20 +4,27 @@ unit DRagLint.CLI.UsesRecover;
   Recovers the uses edges of units that have NO source in an index, from the C++Builder .hpp
   headers a vendor ships and, optionally, a dcc map file. Owner ruling x2: no .dcu is read.
   Parses its own flags (like syntax-count): the CLI dispatches here before ParseArgs, so the
-  verb adds no field to TArgs. Every DB is opened READ-ONLY; nothing is written. }
+  verb adds no field to TArgs. Every DB is opened READ-ONLY unless --apply (lane 149-HW): then
+  --db alone is reopened writable and the recovered headers are stored
+  (DRagLint.Index.UsesRecoverWrite). }
 
 interface
 
 /// <summary>Runs `drag-lint uses-recover` from the process command line (ParamStr(2) onwards).</summary>
-/// <returns>0 = report printed (zero sourceless units included); 2 = no --db or no --hpp-dir, or a
-/// DB, header directory or map that is missing or unreadable; 3 = an unknown flag
+/// <returns>0 = report printed (zero sourceless units included), and with --apply the rows
+/// written; 2 = no --db or no --hpp-dir, or a DB, header directory, map or --project file that is
+/// missing or unreadable, or (--apply) a DB whose schema is not current; 3 = an unknown flag
 /// (error[unknown-flag] on stderr).</returns>
 /// <remarks>
 /// A unit is sourceless when a unit_uses row of --db names it and no .pas/.dpr/.dpk of --db or of
 /// any --library-db has its name (file base name, case-insensitive; Delphi's default unit scopes
 /// are tried for a bare name). Its header's #include lines are its interface uses; sourceless
 /// targets with a header are followed breadth-first. --map adds in_map per unit and map_only (the
-/// linked units no header reaches). Not thread-safe; writes stdout / stderr only.
+/// linked units no header reaches). --project reads the .dproj's DCC_UnitAlias (plus the Delphi
+/// targets' default aliases) and classifies a used alias by its target (`aliases`). --apply
+/// stores one files row per recovered header (language 'hpp') with its includes as interface
+/// unit_uses rows and re-runs the unit-uses resolve pass, so the project's rows bind to the
+/// headers; a run without --apply writes nothing. Not thread-safe.
 /// </remarks>
 function RunUsesRecoverVerb: Integer;
 
@@ -26,7 +33,7 @@ implementation
 uses
   System.SysUtils, System.Classes, System.IOUtils, System.JSON, System.Generics.Collections,
   System.Generics.Defaults, System.RegularExpressions, FireDAC.Comp.Client,
-  DRagLint.Core.CliError, DRagLint.Storage.SQLite, DRagLint.CLI.HelpText; // dl:unit DRagLint.Core.CliError accepted -- the verb reports an unknown flag with the shared cli_err_unknown_flag text every verb uses; the other CliError consts are other verbs' errors
+  DRagLint.Core.CliError, DRagLint.Storage.SQLite, DRagLint.CLI.HelpText, DRagLint.Index.UsesRecoverWrite; // dl:unit DRagLint.Core.CliError accepted -- the verb reports an unknown flag with the shared cli_err_unknown_flag text every verb uses; the other CliError consts are other verbs' errors
 
 const
   CVerb = 'uses-recover';
@@ -47,15 +54,21 @@ const
 
 type
   /// <summary>The flags uses-recover accepts.</summary>
-  TUsesRecoverFlag = (urfDb, urfHppDir, urfLibraryDb, urfMap, urfJson, urfHelp, urfOutputEncoding);
+  TUsesRecoverFlag = (urfDb, urfHppDir, urfLibraryDb, urfMap, urfJson, urfHelp, urfOutputEncoding, urfApply,
+    urfProject);
 
 const
   /// <summary>The spelling of each flag. tests\autotest\run_docs_sync_guard.ps1 reads this
   /// table as the verb's accepted-flag set (as it reads SYNTAX_COUNT_FLAG_NAMES): rename it there too.</summary>
   USES_RECOVER_FLAG_NAMES: array[TUsesRecoverFlag] of string = ('--db', '--hpp-dir', '--library-db',
-    '--map', '--json', '--help', '--output-encoding');
+    '--map', '--json', '--help', '--output-encoding', '--apply', '--project');
   /// <summary>The flags that take the next token as their value.</summary>
-  USES_RECOVER_VALUE_FLAGS = [urfDb, urfHppDir, urfLibraryDb, urfMap, urfOutputEncoding];
+  USES_RECOVER_VALUE_FLAGS = [urfDb, urfHppDir, urfLibraryDb, urfMap, urfOutputEncoding, urfProject];
+  /// <summary>The unit aliases the Delphi targets add on Windows (CodeGear.Common.Targets,
+  /// Studio 37.0 UnitAliases), after a project's own DCC_UnitAlias.</summary>
+  DEFAULT_UNIT_ALIASES = 'Generics.Collections=System.Generics.Collections;' +
+    'Generics.Defaults=System.Generics.Defaults;WinTypes=Winapi.Windows;WinProcs=Winapi.Windows;' +
+    'DbiTypes=BDE;DbiProcs=BDE;DbiErrs=BDE';
 
 type
   /// <summary>The parsed flags of one uses-recover run.</summary>
@@ -66,6 +79,15 @@ type
     MapPath   : string;
     AsJson    : Boolean;
     ShowHelp  : Boolean;
+    Apply     : Boolean;
+    Project   : string;
+  end;
+
+  /// <summary>One used unit alias (--project) and what its target is.</summary>
+  TAliasUse = record
+    UnitName: string;
+    Target  : string;
+    Status  : string;
   end;
 
   /// <summary>One recovered edge: a unit a header includes, and what the indexes know of it.</summary>
@@ -107,6 +129,8 @@ type
     FUnits   : TObjectList<TRecoveredUnit>;
     FNoHeader: TObjectList<TRecoveredUnit>;
     FMapOnly : TArray<string>;
+    FAliases : TDictionary<string, string>;
+    FAliasUses: TArray<TAliasUse>;
     function InSet(const pSet: TDictionary<string, Boolean>; const pName: string): Boolean;
     function Classify(const pName: string): string;
     function FindHeader(const pName: string; out pCanonical: string): string;
@@ -122,6 +146,7 @@ type
     property Units: TObjectList<TRecoveredUnit> read FUnits;
     property NoHeader: TObjectList<TRecoveredUnit> read FNoHeader;
     property MapOnly: TArray<string> read FMapOnly;
+    property AliasUses: TArray<TAliasUse> read FAliasUses;
   end;
 
 /// <summary>The unit names a C++Builder header includes, in file order.</summary>
@@ -130,12 +155,11 @@ type
 /// other includes are skipped. No #if evaluation.</returns>
 function ParseHppIncludes(const pText: string): TArray<string>;
 var
-  LMatch: TMatch;
+  LInc: THppInclude;
 begin
   Result:= nil;
-  for LMatch in TRegEx.Matches(pText, '^[ \t]*#include[ \t]*[<"]([^<>"]+)\.hpp[>"]',
-    [roMultiLine, roIgnoreCase]) do
-    Result:= Result + [LMatch.Groups[1].Value];
+  for LInc in ParseHppIncludeLines(pText) do // the write path's parser: one #include grammar
+    Result:= Result + [LInc.UnitName];
 end;
 
 /// <summary>The unit names of a dcc map file's segment rows, first occurrence order, no repeats.</summary>
@@ -164,10 +188,6 @@ begin
   end;
 end;
 
-function IsImplicitUnit(const pName: string): Boolean;
-begin
-  Result:= SameText(pName, 'System') or SameText(pName, 'SysInit');
-end;
 
 function IsSourcePath(const pPath: string): Boolean;
 var
@@ -215,10 +235,12 @@ begin
   FSeen:= TDictionary<string, TRecoveredUnit>.Create;
   FUnits:= TObjectList<TRecoveredUnit>.Create(True);
   FNoHeader:= TObjectList<TRecoveredUnit>.Create(True);
+  FAliases:= TDictionary<string, string>.Create;
 end;
 
 destructor TUsesRecoverRun.Destroy;
 begin
+  FAliases.Free;
   FNoHeader.Free;
   FUnits.Free;
   FSeen.Free;
@@ -278,7 +300,13 @@ end;
 
 const
   SQL_SOURCE_FILES = 'select path from files';
-  SQL_UNRESOLVED_USES = 'select u.unit_name, f.path from unit_uses u join files f on f.id = u.file_id where u.target_file_id is null';
+  { 149 HW: a row bound to a header row (language 'hpp', written by --apply) is still a use of a
+    sourceless unit, and a header row's own uses are not the project's: the report is the same
+    before and after --apply. }
+  SQL_UNRESOLVED_USES = 'select u.unit_name, f.path from unit_uses u join files f on f.id = u.file_id ' +
+    'left join files t on t.id = u.target_file_id ' +
+    'where (u.target_file_id is null or t.language = ''hpp'') and f.language <> ''hpp''';
+  CDprojAliasPattern = '<DCC_UnitAlias[^>]*>([^<]*)</DCC_UnitAlias>';
 
 { The lower-cased base name of every .pas/.dpr/.dpk row of pQuery's connection, into pSet. }
 procedure ReadSourceNames(const pQuery: TFDQuery; const pSet: TDictionary<string, Boolean>);
@@ -362,11 +390,43 @@ begin
   end;
 end;
 
+{ Adds every `Alias=Target` of a ';' list to pAliases (lower-cased alias key); the first spelling
+  of an alias wins, `$(...)` macros and malformed items are skipped. }
+procedure AddAliases(const pList: string; const pAliases: TDictionary<string, string>);
+var
+  LItem, LKey, LTarget: string;
+  LEq: Integer;
+begin
+  for LItem in pList.Split([';']) do
+  begin
+    LEq:= Pos('=', LItem);
+    if (LEq <= 1) or LItem.Contains('$(') then
+      Continue;
+    LKey:= LowerCase(Trim(Copy(LItem, 1, LEq - 1)));
+    LTarget:= Trim(Copy(LItem, LEq + 1, MaxInt));
+    if (LTarget <> '') and not pAliases.ContainsKey(LKey) then
+      pAliases.Add(LKey, LTarget);
+  end;
+end;
+
 function TUsesRecoverRun.Load(out pError: string): Boolean;
 var
   LDir, LFile, LLib, LName: string;
+  LMatch: TMatch;
 begin
   pError:= '';
+  if Opts.Project <> '' then
+  begin
+    if not FileExists(Opts.Project) then
+    begin
+      pError:= 'project file not found: ' + Opts.Project;
+      Exit(False);
+    end;
+    { Every DCC_UnitAlias of the .dproj, conditions ignored (the union), then the targets' defaults. }
+    for LMatch in TRegEx.Matches(TFile.ReadAllText(Opts.Project), CDprojAliasPattern, [roIgnoreCase]) do
+      AddAliases(LMatch.Groups[1].Value, FAliases);
+    AddAliases(DEFAULT_UNIT_ALIASES, FAliases);
+  end;
   for LDir in Opts.HppDirs do
   begin
     if not TDirectory.Exists(LDir) then
@@ -400,9 +460,10 @@ procedure TUsesRecoverRun.Recover(const pDirect: TDictionary<string, TList<strin
 var
   LQueue: TQueue<TRecoveredUnit>;
   LNames: TArray<string>;
-  LName, LCanon, LHeader, LUser, LInc: string;
+  LName, LCanon, LHeader, LUser, LInc, LUsed: string;
   LUnit, LOther: TRecoveredUnit;
   LEdge: TRecoveredEdge;
+  LAlias: TAliasUse;
 
   { Records pName (reached from pUser) as a unit to follow, or as having no header. }
   procedure Reach(const pName, pReach, pUser: string);
@@ -431,9 +492,20 @@ begin
     LNames:= pDirect.Keys.ToArray;
     TArray.Sort<string>(LNames, TStringComparer.Ordinal);
     for LName in LNames do
-      if Classify(LName) = CStatusSourceless then
+    begin
+      LUsed:= LName;
+      if FAliases.TryGetValue(LowerCase(LName), LAlias.Target) then
+      begin
+        { --project: a used alias is classified, and followed, by its target. }
+        LAlias.UnitName:= LName;
+        LAlias.Status:= Classify(LAlias.Target);
+        FAliasUses:= FAliasUses + [LAlias];
+        LUsed:= LAlias.Target;
+      end;
+      if Classify(LUsed) = CStatusSourceless then
         for LUser in pDirect[LName] do
-          Reach(LName, CReachDirect, LUser);
+          Reach(LUsed, CReachDirect, LUser);
+    end;
     while LQueue.Count > 0 do
     begin
       LUnit:= LQueue.Dequeue;
@@ -511,6 +583,8 @@ begin
       urfJson     : pOpts.AsJson:= True;
       urfHelp     : pOpts.ShowHelp:= True;
       urfOutputEncoding: ; { consumed by Run before the dispatch; accepted so it is not "unknown" }
+      urfApply    : pOpts.Apply:= True;
+      urfProject  : pOpts.Project:= ExpandFileName(LValue);
     end;
     Inc(I);
   end;
@@ -552,11 +626,21 @@ begin
   end;
 end;
 
-procedure WriteJson(const pRun: TUsesRecoverRun);
+type
+  /// <summary>What --apply wrote; Done is False on a read-only run.</summary>
+  TApplyResult = record
+    Done     : Boolean;
+    Files    : Integer;
+    UsesRows : Integer;
+    BoundRows: Integer;
+  end;
+
+procedure WriteJson(const pRun: TUsesRecoverRun; const pApplied: TApplyResult);
 var
   LRoot: TJSONObject;
   LArr: TJSONArray;
   LUnit: TRecoveredUnit;
+  LAlias: TAliasUse;
 begin
   LRoot:= TJSONObject.Create;
   try
@@ -577,17 +661,27 @@ begin
       LArr.AddElement(UnitJson(pRun, LUnit));
     LRoot.AddPair('no_header', LArr);
     LRoot.AddPair('map_only', StrArray(pRun.MapOnly));
+    LArr:= TJSONArray.Create;
+    for LAlias in pRun.AliasUses do
+      LArr.AddElement(TJSONObject.Create.AddPair('unit', LAlias.UnitName).AddPair('to', LAlias.Target)
+        .AddPair('status', LAlias.Status));
+    LRoot.AddPair('aliases', LArr);
+    if pApplied.Done then
+      LRoot.AddPair('applied', TJSONObject.Create.AddPair('files', TJSONNumber.Create(pApplied.Files))
+        .AddPair('uses', TJSONNumber.Create(pApplied.UsesRows))
+        .AddPair('bound', TJSONNumber.Create(pApplied.BoundRows)));
     Writeln(LRoot.ToJSON);
   finally
     LRoot.Free;
   end;
 end;
 
-procedure WriteText(const pRun: TUsesRecoverRun);
+procedure WriteText(const pRun: TUsesRecoverRun; const pApplied: TApplyResult);
 var
   LUnit: TRecoveredUnit;
   LEdge: TRecoveredEdge;
   LMap: string;
+  LAlias: TAliasUse;
 begin
   Writeln(Format('uses-recover: %d sourceless unit(s) recovered, %d with no header; %d header(s) in %d dir(s)',
     [pRun.Units.Count, pRun.NoHeader.Count, pRun.HeaderCount, Length(pRun.Opts.HppDirs)]));
@@ -605,14 +699,67 @@ begin
   if pRun.HasMap then
     Writeln(Format('map: linked but reached by no header (implementation uses?): %s',
       [if Length(pRun.MapOnly) = 0 then '(none)' else string.Join(', ', pRun.MapOnly)]));
+  for LAlias in pRun.AliasUses do
+    Writeln(Format('  alias: %s -> %s  %s', [LAlias.UnitName, LAlias.Target, LAlias.Status]));
+  if pApplied.Done then
+    Writeln(Format('applied: %d header file row(s), %d uses row(s) written to %s; %d uses row(s) bound to a header',
+      [pApplied.Files, pApplied.UsesRows, pRun.Opts.DbPath, pApplied.BoundRows]));
 end;
 
 function Usage(const pWhy: string; pAsJson: Boolean): Integer;
 begin
   Writeln(ErrOutput, CVerb + ': ' + pWhy);
   if not pAsJson then
-    Writeln(ErrOutput, 'usage: drag-lint uses-recover --db <db> --hpp-dir <dir>... [--library-db <db>...] [--map <file.map>] [--json]');
+    Writeln(ErrOutput, 'usage: drag-lint uses-recover --db <db> --hpp-dir <dir>... [--library-db <db>...] [--map <file.map>] [--project <x.dproj>] [--apply] [--json]');
   Result:= CExitUsage;
+end;
+
+const
+  SQL_BOUND_TO_HEADER = 'select count(*) from unit_uses u join files t on t.id = u.target_file_id ' +
+    'where t.language = ''hpp''';
+
+{ --apply: stores pRun's recovered headers in --db (writable open). False with pError set when the
+  schema is not current or the write fails. }
+function ApplyRecovered(const pRun: TUsesRecoverRun; out pApplied: TApplyResult; out pError: string): Boolean;
+var
+  LStore: TSQLiteSymbolStore;
+  LHeaders: TArray<TRecoveredHeader>;
+  LHeader: TRecoveredHeader;
+  LUnit: TRecoveredUnit;
+  LFound, LExpected: Integer;
+begin
+  pApplied:= Default(TApplyResult);
+  pError:= '';
+  LHeaders:= nil;
+  for LUnit in pRun.Units do
+  begin
+    LHeader.UnitName:= LUnit.Name;
+    LHeader.HeaderPath:= LUnit.Header;
+    LHeaders:= LHeaders + [LHeader];
+  end;
+  try
+    LStore:= TSQLiteSymbolStore.Create(pRun.Opts.DbPath, {AReadOnly=}False);
+    try
+      if not LStore.IsSchemaCurrent(LFound, LExpected) then
+      begin
+        pError:= Format('--apply needs a current index schema (found %d, expected %d): re-index %s first',
+          [LFound, LExpected, pRun.Opts.DbPath]);
+        Exit(False);
+      end;
+      pApplied.Files:= WriteRecoveredHeaders(LStore, LHeaders, pApplied.UsesRows);
+      pApplied.BoundRows:= LStore.GetConnection.ExecSQLScalar(SQL_BOUND_TO_HEADER);
+      pApplied.Done:= True;
+    finally
+      LStore.Free;
+    end;
+    Result:= True;
+  except
+    on E: Exception do
+    begin
+      pError:= 'cannot write index ' + pRun.Opts.DbPath + ': ' + E.Message;
+      Result:= False;
+    end;
+  end;
 end;
 
 function Execute(const pOpts: TUsesRecoverOptions): Integer;
@@ -621,7 +768,9 @@ var
   LDirect: TObjectDictionary<string, TList<string>>;
   LIndexed: TDictionary<string, Boolean>;
   LError: string;
+  LApplied: TApplyResult;
 begin
+  LApplied:= Default(TApplyResult);
   LRun:= TUsesRecoverRun.Create(pOpts);
   LDirect:= TObjectDictionary<string, TList<string>>.Create([doOwnsValues]);
   try
@@ -631,10 +780,12 @@ begin
     if not LoadSourceNames(pOpts.DbPath, LIndexed, LDirect, LError) then
       Exit(Usage(LError, pOpts.AsJson));
     LRun.Recover(LDirect);
+    if pOpts.Apply and not ApplyRecovered(LRun, LApplied, LError) then
+      Exit(Usage(LError, pOpts.AsJson));
     if pOpts.AsJson then
-      WriteJson(LRun)
+      WriteJson(LRun, LApplied)
     else
-      WriteText(LRun);
+      WriteText(LRun, LApplied);
     Result:= CExitOk;
   finally
     LDirect.Free;

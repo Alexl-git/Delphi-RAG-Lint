@@ -174,6 +174,18 @@ type
   /// </remarks>
   TRefBindFn = function(const ARef: TReference; out AReason: string): Int64 of object;
 
+  { ---- 149 HW: uses-recover header rows (type) ---- }
+  /// <summary>One unit recovered from a vendor C++Builder header by `uses-recover --apply`: the
+  /// synthetic files row (language 'hpp') and the interface uses its #include lines name.</summary>
+  /// <remarks>Written only by TSQLiteSymbolStore.ReplaceHeaderUnits. Uses rows carry Section
+  /// usInterface and OriginPath = Path (coordinates are inside the header).</remarks>
+  THeaderUnitRow = record
+    Path  : string;           // absolute .hpp path, as found
+    MTime : Int64;            // FileMTimeUnix of the header
+    Sha256: string;           // THashSHA2 of the header text
+    Entries: TArray<TUnitUse>; // one per #include, System/SysInit and the unit itself dropped
+  end;
+
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: DRagLint.CLI.AddLibraryPendingNotes (DRagLint.CLI.pas), DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas), DRagLint.CLI.AnyDbSchemaCurrent (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas) (+109 more)</para>
@@ -3416,6 +3428,17 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ResolveUnitUseTargets;
+      { ---- 149 HW: uses-recover header rows (declaration) ---- }
+      /// <summary>Replaces the whole set of header-recovered units (files rows with language
+      /// 'hpp') by AUnits, in one transaction: rows whose path is not in AUnits are deleted (with
+      /// their unit_uses), each unit's files row is inserted or refreshed and its unit_uses rows are
+      /// rewritten. Does NOT bind target_file_id: call ResolveUnitUseTargets afterwards.</summary>
+      /// <param name="AUnits">The recovered units; an empty array removes every header row.</param>
+      /// <returns>The number of unit_uses rows written.</returns>
+      /// <exception cref="Exception">Any SQLite error; the transaction is rolled back first.</exception>
+      /// <remarks>Idempotent: the same AUnits give the same rows. Not thread-safe; needs a
+      /// writable store. Only `uses-recover --apply` writes language 'hpp' rows.</remarks>
+      function ReplaceHeaderUnits(const AUnits: TArray<THeaderUnitRow>): Integer;
       // v11 (M1): type & hierarchy resolution (see ISymbolStore).
       /// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.Core.Model.TSymbolKindHelper.FromText: Unknown symbol kind: "%s"</exception>
       /// <remarks>
@@ -14791,6 +14814,10 @@ end; // function
 // with a real one. Its presence makes rule B below decline that segment.
 const
   CStemAmbiguous = '?';
+  { 149 HW: the files.language and extension of a header row `uses-recover --apply` writes
+    (ReplaceHeaderUnits); ResolveUnitUseTargets binds to such a row only by rule C. }
+  CHeaderLanguage = 'hpp';
+  CHeaderExt = '.hpp';
 
 procedure TSQLiteSymbolStore.ResolveUnitUseTargets;
 { Drives target_file_id resolution in Pascal rather than SQL because the
@@ -14912,9 +14939,13 @@ var
   Fid         : Int64                      ;
   T0          : Int64                      ; { see ResolveLog -- silence read as a hang }
   Hits        : Integer                    ; { distinct used-unit names that resolved }
+  HeaderStems : TDictionary<string, Int64> ; { 149 HW: stem of a recovered header -> its files id }
+  HeaderHits  : Integer                    ; { 149 HW: names bound by rule C }
 begin
   T0  := TStopwatch.GetTimeStamp;
   Hits:= 0;
+  HeaderHits:= 0;
+  HeaderStems:= TDictionary<string, Int64>.Create;
   StemToFileId:= TDictionary<string, Int64> .Create;
   SegToStem   := TDictionary<string, string>.Create;
   UsedNorms   := TList<string>.Create;
@@ -14929,7 +14960,7 @@ begin
     FConn.StartTransaction;
     try
     QFiles.Connection:= FConn;
-    QFiles.SQL.Text:= 'SELECT id, path FROM files';
+    QFiles.SQL.Text:= 'SELECT id, path, language FROM files';
     QFiles.Open;
     while not QFiles.Eof do
     begin
@@ -14943,6 +14974,10 @@ begin
       Ext:= LowerCase(ExtractFileExt(Path));
       if Ext <> '.pas' then
       begin
+        // 149 HW: a header row `uses-recover --apply` wrote is a FALLBACK candidate (rule C).
+        if (Ext = CHeaderExt) and SameText(QFiles.FieldByName('language').AsString, CHeaderLanguage) then
+          HeaderStems.AddOrSetValue(LowerCase(ChangeFileExt(ExtractFileName(Path), '')),
+            QFiles.FieldByName('id').AsLargeInt);
         QFiles.Next;
         Continue;
       end;
@@ -15049,6 +15084,29 @@ begin
         QUpdate.ExecSQL;
         Inc(Hits);
       end;
+      { 149 HW, RULE C (uses-recover write path, spec 2026-11-08-uses-recover.md): a name rules
+        A/B left unbound binds to a header row `uses-recover --apply` stored, by EXACT stem only.
+        A fallback, never a competitor: the UPDATE touches only rows still NULL, so a .pas that
+        is indexed later wins on the next pass. No header rows (every DB but an applied one) =
+        no statement, no log line. The reader already chose the header's canonical name (scope
+        prefix included) when it wrote the row, so no inference is repeated here. }
+      if HeaderStems.Count > 0 then
+      begin
+        QUpdate.SQL.Text:= 'UPDATE unit_uses SET target_file_id = :tid ' +
+                           'WHERE target_file_id IS NULL AND unit_name_norm = :un AND LOWER(unit_name) = :full';
+        QUpdate.Params.ParamByName('tid' ).DataType:= ftLargeint;
+        QUpdate.Params.ParamByName('un'  ).DataType:= ftString;
+        QUpdate.Params.ParamByName('full').DataType:= ftString;
+        for i:= 0 to UsedFulls.Count - 1 do
+          if HeaderStems.TryGetValue(UsedFulls[i], Fid) then
+          begin
+            QUpdate.ParamByName('tid' ).AsLargeInt  := Fid;
+            QUpdate.ParamByName('un'  ).AsWideString:= UsedNorms[i];
+            QUpdate.ParamByName('full').AsWideString:= UsedFulls[i];
+            QUpdate.ExecSQL;
+            if QUpdate.RowsAffected > 0 then Inc(HeaderHits);
+          end;
+      end;
       FConn.Commit;
     except
       FConn.Rollback;
@@ -15056,7 +15114,11 @@ begin
     end;
     ResolveLog(Format('unit-uses  %d/%d distinct used-unit name(s) bound, %d .pas stem(s)  [%.1fs]',
       [Hits, UsedFulls.Count, StemToFileId.Count, ResolveSecs(T0)]));
+    if HeaderStems.Count > 0 then
+      ResolveLog(Format('unit-uses  %d used-unit name(s) bound to %d recovered header(s) (uses-recover rule C)',
+        [HeaderHits, HeaderStems.Count]));
   finally
+    HeaderStems.Free;
     QUpdate    .Free;
     QNames     .Free;
     QFiles     .Free;
@@ -15066,6 +15128,96 @@ begin
     StemToFileId.Free;
   end; // try
 end; // procedure
+
+{ ---- 149 HW: uses-recover header rows (implementation) ---- }
+function TSQLiteSymbolStore.ReplaceHeaderUnits(const AUnits: TArray<THeaderUnitRow>): Integer;
+{ The ONE writer of language 'hpp' rows. Collect-then-write like PruneMissingFiles: the stale
+  header ids are read first and deleted through DeleteFilesByIds (the shared cascade + FTS order,
+  its own transaction), then each unit is upserted by its UNIQUE path and its unit_uses rows are
+  rewritten in ONE transaction, so a failed write leaves the previous rows of every unit. }
+var
+  Q     : TFDQuery;
+  Keep  : TDictionary<string, Boolean>;
+  Stale : TList<Int64>;
+  U     : THeaderUnitRow;
+  Use   : TUnitUse;
+  Fid   : Int64;
+  Stored: string;
+begin
+  Result:= 0;
+  Q    := TFDQuery.Create(nil);
+  Keep := TDictionary<string, Boolean>.Create;
+  Stale:= TList<Int64>.Create;
+  try
+    Q.Connection:= FConn;
+    for U in AUnits do
+      Keep.AddOrSetValue(LowerCase(NormalizeStoredPath(U.Path)), True);
+    Q.Open('SELECT id, path FROM files WHERE language = ''' + CHeaderLanguage + '''');
+    while not Q.Eof do
+    begin
+      if not Keep.ContainsKey(LowerCase(Q.Fields[1].AsString)) then
+        Stale.Add(Q.Fields[0].AsLargeInt);
+      Q.Next;
+    end;
+    Q.Close;
+    { DeleteFilesByIds owns its transaction (it cannot nest in ours): the stale rows go first. }
+    if Stale.Count > 0 then
+      DeleteFilesByIds(Stale);
+    FConn.StartTransaction;
+    try
+      for U in AUnits do
+      begin
+        Stored:= NormalizeStoredPath(U.Path);
+        { SELECT-then-INSERT/UPDATE, not ON CONFLICT: the Win32 FireDAC sqlite predates upsert. }
+        Q.Open('SELECT id FROM files WHERE path = :p', [Stored]);
+        Fid:= if Q.Eof then 0 else Q.Fields[0].AsLargeInt;
+        Q.Close;
+        Q.SQL.Text:= if Fid = 0 then
+          'INSERT INTO files (path, mtime_unix, sha256, parsed_at, language) VALUES (:p, :m, :s, :t, :l)'
+        else
+          'UPDATE files SET mtime_unix = :m, sha256 = :s, parsed_at = :t, language = :l WHERE path = :p';
+        Q.ParamByName('p').AsWideString:= Stored;
+        Q.ParamByName('m').AsLargeInt  := U.MTime;
+        Q.ParamByName('s').AsWideString:= U.Sha256;
+        Q.ParamByName('t').AsLargeInt  := NowUnixUtc;
+        Q.ParamByName('l').AsWideString:= CHeaderLanguage;
+        Q.ExecSQL;
+        if Fid = 0 then
+        begin
+          Q.Open('SELECT id FROM files WHERE path = :p', [Stored]);
+          Fid:= Q.Fields[0].AsLargeInt;
+          Q.Close;
+        end;
+        Q.ExecSQL('DELETE FROM unit_uses WHERE file_id = :f', [Fid]);
+        for Use in U.Entries do
+        begin
+          Q.SQL.Text:= 'INSERT INTO unit_uses (file_id, unit_name, unit_name_norm, section, ' +
+                       'start_line, start_col, end_line, end_col, origin_path, include_line) ' +
+                       'VALUES (:f, :un, :unn, :sec, :sl, :sc, :el, :ec, :op, 0)';
+          Q.ParamByName('f'  ).AsLargeInt  := Fid;
+          Q.ParamByName('un' ).AsWideString:= Use.UnitName;
+          Q.ParamByName('unn').AsWideString:= UnitNameNorm(Use.UnitName);
+          Q.ParamByName('sec').AsWideString:= UnitUseSectionToStr(Use.Section);
+          Q.ParamByName('sl' ).AsInteger   := Use.StartLine;
+          Q.ParamByName('sc' ).AsInteger   := Use.StartCol;
+          Q.ParamByName('el' ).AsInteger   := Use.EndLine;
+          Q.ParamByName('ec' ).AsInteger   := Use.EndCol;
+          Q.ParamByName('op' ).AsWideString:= Stored;
+          Q.ExecSQL;
+          Inc(Result);
+        end;
+      end;
+      FConn.Commit;
+    except
+      FConn.Rollback;
+      raise;
+    end;
+  finally
+    Stale.Free;
+    Keep .Free;
+    Q    .Free;
+  end;
+end;
 
 // v11 (M1): normalize one raw heritage ancestor token to a name comparable to
 // symbols.name: trim, drop a generic argument list (TList<TFoo> -> TList) and
