@@ -32769,7 +32769,7 @@ begin
   begin
     ARx.Status:= 'failed';
     ARx.Reason:= Format('%s -- the child was terminated; run: drag-lint index --project "%s" --db "%s"',
-      [if WaitRes = WAIT_TIMEOUT then Format('index did not finish within %d s', [REINDEX_TIMEOUT_MS div MS_PER_SECOND])
+      [if WaitRes = WAIT_TIMEOUT then Format('index did not finish within %d s', [ARx.Ms div MS_PER_SECOND])
        else 'waiting for the index failed (' + WaitErr + ')', ARx.Project, ARx.Db]);
   end
   else if ExitCode = 0 then ARx.Status:= 'done'
