@@ -11,6 +11,10 @@ drag-lint > Convert Components
   components' types. The editor works out which ones.
 * **Open Conversion Editor...** -- the editor on the current unit with no request. The unit stays open.
 
+The first two are also on the form designer's right-click menu, as **drag-lint: Convert Selected
+Component(s)...** and **drag-lint: Convert All of This Type on the Form...**; they do exactly what
+the main-menu items do.
+
 ## What happens
 1. The selection is read; the form itself never counts. With nothing selected you are told so.
 2. `ConvRulesEditor.exe` must be beside the engine. On the first click of an IDE session it is
@@ -27,8 +31,10 @@ drag-lint > Convert Components
 One editor at a time: while one lives, another launch names the unit it is open for.
 
 ## What it needs
-An index of the active project. Saving another unit during a conversion can still start a
-reindex that collides with the editor's own; the run then reports it and you retry.
+An index of the active project. While the editor lives, drag-lint holds its own reindex and
+lint-all jobs on that project's index (they wait in the queue and run when the editor exits),
+so saving another unit during a conversion does not collide with the editor's reindex. Jobs on
+other projects' indexes run as usual.
 
 ## Related
 [ConvRulesEditor](convrules-editor)

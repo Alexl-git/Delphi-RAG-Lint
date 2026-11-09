@@ -54,7 +54,7 @@ try {
   $projOn = Join-Path $out 'projon.sqlite'; $libDb = Join-Path $out 'library-Win64.sqlite'
   Push-Location C:\TEMP
   try {
-    & $exe index $lib --db $libDb 2>&1 | Out-Null
+    & $exe index $lib --db $libDb --platform Win64 2>&1 | Out-Null
     Check 'library index built' (Test-Path $libDb)
     $txt = (& $exe index --all --config $cfg --only ProjOn 2>&1 | Out-String)
     Check 'project DB built' (Test-Path $projOn) $txt

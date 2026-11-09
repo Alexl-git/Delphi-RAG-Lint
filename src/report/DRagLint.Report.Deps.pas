@@ -392,7 +392,7 @@ begin
       QFiles:= TFDQuery.Create(nil);
       try
         QFiles.Connection:= SQLiteStore.GetConnection;
-        QFiles.Sql.Text:= 'SELECT id, path FROM files WHERE language NOT IN (''dfm'', ''json'', ''text'')';
+        QFiles.Sql.Text:= 'SELECT id, path FROM files WHERE language NOT IN (''dfm'', ''json'', ''text'', ''markdown'')';  // dl:ok duplicate-code@5477 -- sibling verb plumbing (lazy-init / extract-interface / deps share the refactor-verb shape); a shared helper is a 148 row (147 INT sweep)
         QFiles.Open;
         while not QFiles.Eof do
         begin

@@ -4,10 +4,10 @@ title: Remove redundant casts (compile-gated)
 summary: Removes hard casts whose operand already has exactly the target type, proved from the index's static types and written through the compile gate
 product: DL
 group: refactoring
-order: 50011
+order: 50014
 since: 1.44.1-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.47.0-alpha
 ---
 
 # Remove redundant casts (compile-gated)

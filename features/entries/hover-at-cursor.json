@@ -48,12 +48,16 @@
     {
       "ask": "What type does a re-published property (property Text;) have, and which ancestor declares it?",
       "command": "drag-lint hover --qname <Unit.TDerived.Text> --format json   (fields type + declared_in; the type itself is stored by index, prop-types stage)"
+    },
+    {
+      "ask": "Which routines read or write this property or field?",
+      "command": "drag-lint hover --qname <Unit.TFoo.Prop> --format md   (fact line Used in: Routine (file.pas) [r|w|rw], from the resolved member accesses)"
     }
   ],
   "verified": {
-    "date": "2026-11-05",
+    "date": "2026-11-08",
     "by": "ENGINE",
-    "build": "1.44.0-alpha",
+    "build": "1.47.0-alpha",
     "surfaceHash": "c69cb05880f5f5bd5b68dbddc39404b274f23a964817fca00b6e6466cae29b4b"
   }
 }

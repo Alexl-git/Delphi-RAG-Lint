@@ -4,10 +4,10 @@ title: deps-report
 summary: "Produces a third-party dependency rollup from an index: which external units/libraries an indexed codebase depends on"
 product: DL
 group: graphs-reports
-order: 70007
+order: 70008
 since: 0.95.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # deps-report

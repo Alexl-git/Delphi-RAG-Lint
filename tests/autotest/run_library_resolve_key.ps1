@@ -59,7 +59,7 @@ try {
   Push-Location C:\TEMP
   try {
     $libDb = Join-Path $out 'library-Win64.sqlite'
-    & $exe index $lib --db $libDb 2>&1 | Out-Null
+    & $exe index $lib --db $libDb --platform Win64 2>&1 | Out-Null
     Check 'library index built at the manifest library path' ((Test-Path $libDb) -and ($LASTEXITCODE -eq 0))
 
     # 1. default OFF

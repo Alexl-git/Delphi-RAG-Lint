@@ -325,7 +325,7 @@ function DecodeSource(const pBytes: TBytes; out pEncoding: TEncoding): string;
 /// <returns>The bytes, with the UTF-8 BOM first when the encoding is UTF-8.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.TRepairFile.Save (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.NarrowParam.BuildGateFiles (DRagLint.Refactor.NarrowParam.pas), DRagLint.Refactor.RedundantCast.BuildGateFiles (DRagLint.Refactor.RedundantCast.pas)</para>
+/// <para>Called from: DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.TRepairFile.Save (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.ExtractInterface.RunExtractInterface (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.LazyInit.RunLazyInit (DRagLint.Refactor.LazyInit.pas), DRagLint.Refactor.NarrowParam.BuildGateFiles (DRagLint.Refactor.NarrowParam.pas) (+1 more)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function EncodeSource(const pText: string; pEncoding: TEncoding): TBytes;
@@ -563,6 +563,29 @@ function ComputeSccs(const pStore: ISymbolStore): TList<TArray<string>>; overloa
 /// </remarks>
 function ComputeInterfaceSccs(const pGraph: TCycleGraph): TList<TArray<string>>;
 
+/// <summary>Switches on the wider whitelist of the constructor inversion (`cycles --plan` / `--fix` `--ctor-wide`).</summary>
+/// <param name="pOn">True: a store to a field pulled into the base class, `L.Add(TX.Create(..))` on a list that
+/// switches and a dotted unit name in a uses clause beside a slot of the same name are planned, and an `override` stays
+/// in the class (the base class inherits the same virtual). False, the default: exactly the 1.44 whitelist.</param>
+/// <remarks>
+/// Process-wide; the CLI sets it once while it parses its arguments, before any planner exists.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ParseArgs (DRagLint.CLI.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+procedure SetCycleCtorWide(pOn: Boolean);
+
+/// <summary>Whether SetCycleCtorWide switched the wider whitelist on.</summary>
+/// <returns>True when `--ctor-wide` was given; a `--part all` iteration forwards it to its child.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.AllIterationCmd (DRagLint.CLI.CycleFix.pas)</para>
+/// <para>Returns: GCtorWide</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function CycleCtorWide: Boolean;
+
 implementation
 
 uses
@@ -571,6 +594,18 @@ uses
   DRagLint.Core.Model, DRagLint.Convert.UnitRules, DRagLint.Report.CycleEdge,
   DRagLint.Report.UntangleCatalog;
 
+var
+  GCtorWide: Boolean = False; { --ctor-wide; see SetCycleCtorWide }
+
+procedure SetCycleCtorWide(pOn: Boolean);
+begin
+  GCtorWide:= pOn;
+end;
+
+function CycleCtorWide: Boolean;
+begin
+  Result:= GCtorWide;
+end;
 const
   CLeafSuffix    = CUntangleSuffix;
   CBaseSuffix    = 'Base';
@@ -851,7 +886,8 @@ type
     function CtorTypeWhy(const pItem: TMoveItem; const pSig: string): string;
     function TakeCtor(var pItem: TMoveItem; const pF: TPlanFile; pLine: Integer; const pName: string): Boolean;
     function CtorSiteLine(const pItem: TMoveItem; out pFid: Int64): Integer;
-    function CtorSiteOk(const pItem: TMoveItem; const pCode: string; pIndex, pLen: Integer; const pSlots: TArray<string>): Boolean;
+    function CtorSiteOk(const pItem: TMoveItem; const pCode: string; pIndex, pLen: Integer; const pSlots: TArray<string>;
+      const pLists: TArray<string>): Boolean;
     procedure RefuseCtor(var pItem: TMoveItem; pFid: Int64; pLine: Integer; const pWhy: string);
     procedure AddCtorEdits;
     function BaseSiteRefusal(const pItem: TMoveItem): string;
@@ -2534,6 +2570,16 @@ begin
     begin
       if not pUsed.ContainsKey(LowerCase(C.Name)) then Continue;
       if (C.Kind = skProperty) and not PullAccessors(C) then Break;
+      { --ctor-wide: an `override` stays in the class: the base class inherits the same virtual from the same
+        parent, so a call through the base class dispatches to the class's own body }
+      if GCtorWide and (C.Kind in [skMethod, skFunction, skProcedure]) and SameText(Trim(C.Directives), 'override') then Continue;
+      { a field in the published section is what a .dfm streams into: FieldAddress finds it on the class that declares it,
+        at run time; pulled into the base class it would turn protected (E-CTORINV-DEFAULT-PATH: no longer --ctor-wide only) }
+      if (C.Kind = skField) and (ContainsText(C.Modifiers, 'published') or not C.VisExplicit) then
+      begin
+        Why:= Format('field `%s` is published (or in an unlabelled section): a .dfm streams into it, it cannot move to a base class', [C.Name]);
+        Break;
+      end;
       if (C.Kind in [skMethod, skFunction, skProcedure]) and (C.Directives <> '') then
       begin
         Why:= Format('method `%s` already carries directives (%s)', [C.Name, C.Directives]);
@@ -2817,12 +2863,15 @@ end;
 { B8: the occurrence (pIndex, pLen) of the class name in pCode is `S := TX.<constructor>[(args)]` as a whole
   statement, S a slot that switches: the result lands where the base class type stands. }
 function TCyclePlanner.CtorSiteOk(const pItem: TMoveItem; const pCode: string; pIndex, pLen: Integer;
-  const pSlots: TArray<string>): Boolean;
+  const pSlots: TArray<string>; const pLists: TArray<string>): Boolean;
 begin
   Result:= False;
-  if (pItem.CtorName = '') or (Length(pSlots) = 0) then Exit;
-  if not TRegEx.IsMatch(Copy(pCode, 1, pIndex - 1), '(^|[;\s])(Self\s*\.\s*)?(' + string.Join('|', pSlots) + ')\s*:=\s*$',
-    [roIgnoreCase]) then Exit;
+  if pItem.CtorName = '' then Exit;
+  { --ctor-wide: `L.Add(TX.Create(..))` with L a list field that switches: T of the list is the base class too }
+  var IntoList:= GCtorWide and (Length(pLists) > 0) and TRegEx.IsMatch(Copy(pCode, 1, pIndex - 1), '\b(Self\s*\.\s*)?(' +
+    string.Join('|', pLists) + ')\s*\.\s*Add\s*\(\s*$', [roIgnoreCase]);
+  if not IntoList and ((Length(pSlots) = 0) or not TRegEx.IsMatch(Copy(pCode, 1, pIndex - 1),
+    '(^|[;\s])(Self\s*\.\s*)?(' + string.Join('|', pSlots) + ')\s*:=\s*$', [roIgnoreCase])) then Exit;
   var Rest:= Copy(pCode, pIndex + pLen, MaxInt);
   var Head:= TRegEx.Match(Rest, '^\s*\.\s*' + pItem.CtorName + '\b', [roIgnoreCase]);
   if not Head.Success then Exit;
@@ -2845,7 +2894,23 @@ begin
     if Close = 0 then Exit;
     Rest:= Copy(Rest, Close + 1, MaxInt);
   end;
-  Result:= TRegEx.IsMatch(Rest, '^\s*(;|$|end\b|else\b)', [roIgnoreCase]);
+  Result:= TRegEx.IsMatch(Rest, (if IntoList then '^\s*\)\s*(;|$|end\b|else\b)' else '^\s*(;|$|end\b|else\b)'), [roIgnoreCase]);
+end;
+
+{ The occurrence at pCol of line pLine is a dotted unit name in a uses clause: the slot of the same
+  name is not meant (`Loader2025.FolderProcessor` beside a field `FolderProcessor`). }
+function InUsesClause(const pLines: TArray<string>; pLine, pCol: Integer): Boolean;
+begin
+  var Code:= CodePart(LineAt(pLines, pLine));
+  if not TRegEx.IsMatch(Copy(Code, 1, pCol - 1), '\w\.$') then Exit(False);
+  for var L:= pLine downto 1 do
+  begin
+    var Text:= CodePart(LineAt(pLines, L));
+    if TRegEx.IsMatch(Text, '^\s*uses\b', [roIgnoreCase]) then Exit(True);
+    if (L < pLine) and Text.Contains(';') then Exit(False);
+    if (L = pLine) and Copy(Text, 1, pCol - 1).Contains(';') then Exit(False);
+  end;
+  Result:= False;
 end;
 
 { B4: the routine whose implementation (header to `end`) holds line pLine of pF, else the routine whose
@@ -2987,7 +3052,7 @@ begin
             else if (Field = '') and IsListCreation(CodeOf(LineAt(F.Lines, S.Line), csCode), pItem.Sym.Name, Fields) then Continue
             else if (Field = '') and ClassTestSiteOk(CodeOf(LineAt(F.Lines, S.Line), csCode), M.Index, M.Length, pItem) then Continue
             else if (Field = '') and CtorSiteOk(pItem, CodeOf(LineAt(F.Lines, S.Line), csCode), M.Index, M.Length,
-              SlotNames(Slots, RoutineAt(F, S.Line).Id)) then Continue
+              SlotNames(Slots, RoutineAt(F, S.Line).Id), Fields) then Continue
             else if Field = '' then
               Exit(Format('%s: `%s` is used here as something other than a parameter type (a field, ' +
                 'variable, cast or type argument)', [Site, pItem.Sym.Name]));
@@ -3081,13 +3146,15 @@ begin
     First:= BodyAt;
     Last := R.ImplEndLine;
   end;
+  var Starts:= CodeStarts(F.Lines);  { a multi-line comment naming the slot is no use of it }
   for var L:= First to Last do
   begin
     if L = pSlot.Line then Continue;
-    var Code:= CodePart(LineAt(F.Lines, L));
+    var Code:= CodeOf(LineAt(F.Lines, L), Starts[L - 1]);
     var Names:= SlotNames(pSlots, if pSlot.IsField then RoutineAt(F, L).Id else pSlot.RoutineId);
     for var U in TRegEx.Matches(Code, '\b' + pSlot.Name + '\b', [roIgnoreCase]) do
-      if not IsSlotUse(Code, U.Index, U.Length, Names, pFields) and not ((pItem.CtorName <> '') and
+      if InUsesClause(F.Lines, L, U.Index) then Continue
+      else if not IsSlotUse(Code, U.Index, U.Length, Names, pFields) and not ((pItem.CtorName <> '') and
         TRegEx.IsMatch(Copy(Code, U.Index + U.Length, MaxInt), '^\s*:=\s*' + pItem.Sym.Name + '\s*\.\s*' + pItem.CtorName + '\b',
           [roIgnoreCase])) then
         Exit(Format('`%s:%d`: %s', [ExtractFileName(F.Path), L, What]));
@@ -3096,12 +3163,21 @@ begin
   var Pulled: TArray<string>:= nil;
   if pItem.CtorName <> '' then
     for var B in pItem.BaseMembers do
-      if B.Sym.Kind in [skMethod, skFunction, skProcedure] then Pulled:= Pulled + [B.Sym.Name];
+      if (B.Sym.Kind in [skMethod, skFunction, skProcedure]) or
+        { --ctor-wide: a field pulled into the base class is the same memory: a store through the slot is sound }
+        (GCtorWide and (B.Sym.Kind = skField)) then Pulled:= Pulled + [B.Sym.Name];
+  var Own: TArray<string>:= nil;
+  if GCtorWide and (pItem.CtorName <> '') then
+    for var C in FStore.FindAllChildSymbols(pItem.Sym.Id) do Own:= Own + [C.Name];
   for var R in F.Refs do
   begin
     if (R.StartLine < First) or (R.StartLine > Last) or not SameText(R.ReceiverText, pSlot.Name) then Continue;
     var IsRead:= (SameText(R.Kind, 'member-access') and MemberAccessOf(R.Id, MA) and SameText(MA.MemberMode, 'read')) or
       MatchText(R.NameText, Pulled);
+    { --ctor-wide: a member the class does not declare is what it inherits, and the base class inherits it from the
+      same parent: same object, same member. A store stays refused: its setter was never on the whitelist }
+    if GCtorWide and not IsRead and (pItem.CtorName <> '') and not MatchText(R.NameText, Own) and not TRegEx.IsMatch(CodePart(LineAt(F.Lines, R.StartLine)),
+      '\b' + pSlot.Name + '\s*\.\s*' + R.NameText + '\s*:=', [roIgnoreCase]) then IsRead:= True;
     if not IsRead and not SameText(R.NameText, 'Free') then
       Exit(Format('`%s:%d`: %s; `%s.%s` is not a read of a member', [ExtractFileName(F.Path), R.StartLine, What,
         pSlot.Name, R.NameText]));
@@ -3172,6 +3248,11 @@ begin
     pIndex, pLen, pPulled, pSlots) then Exit(True);
   if TRegEx.IsMatch(Rest, '^\s*\.\s*(Add|Insert|Remove|IndexOf|Contains|Delete|Clear|Count|Free)\b', [roIgnoreCase]) then
     Exit(True);
+  { --ctor-wide: `var S: TX := F[..]` as a whole statement, S a slot that switches }
+  if GCtorWide and (Length(pSlots) > 0) and TRegEx.IsMatch(Copy(pCode, 1, pIndex - 1), '\bvar\s+(' + string.Join('|', pSlots) +
+    ')\s*:\s*' + pTypeName + '\s*:=\s*(Self\s*\.\s*)?$', [roIgnoreCase]) and TRegEx.IsMatch(Rest, '^\s*\[[^;]*\]\s*(;|$)') then Exit(True);
+  { --ctor-wide: the ownership switch of the list itself names no element type }
+  if GCtorWide and TRegEx.IsMatch(Rest, '^\s*\.\s*OwnsObjects\b', [roIgnoreCase]) then Exit(True);
   if TRegEx.IsMatch(Rest, '^\s*(=|<>)\s*nil\b', [roIgnoreCase]) then Exit(True);
   var Before:= Copy(pCode, 1, pIndex - 1);
   if TRegEx.IsMatch(Before, '\b(Assigned|FreeAndNil)\s*\(\s*$', [roIgnoreCase]) and TRegEx.IsMatch(Rest, '^\s*\)') then
@@ -3222,10 +3303,22 @@ begin
         R.StartLine, Head]));
   Pulled:= nil;
   for var B in pItem.BaseMembers do Pulled:= Pulled + [B.Sym.Name];
+  { --ctor-wide: `F[..].M` with M no member of the class itself reads what the class inherits, and the base class
+    inherits it from the same parent (a name it does not have fails the dcc gate, never compiles to something else) }
+  var Own: TArray<string>:= nil;
+  if GCtorWide and (pItem.CtorName <> '') then
+  begin
+    for var C in FStore.FindAllChildSymbols(pItem.Sym.Id) do Own:= Own + [C.Name];
+    for var L:= 1 to Length(F.Lines) do
+      for var E in TRegEx.Matches(CodePart(LineAt(F.Lines, L)), '\b' + Fld.Name + '\s*\[[^\]]*\]\s*\.\s*([A-Za-z_]\w*)', [roIgnoreCase]) do
+        if not MatchText(E.Groups[1].Value, Own) then Pulled:= Pulled + [E.Groups[1].Value];
+  end;
+  { a multi-line comment naming the field is no use of it }
+  var Starts:= CodeStarts(F.Lines);
   for var L:= 1 to Length(F.Lines) do
   begin
     if L = pLine then Continue;
-    var Code:= CodePart(LineAt(F.Lines, L));
+    var Code:= CodeOf(LineAt(F.Lines, L), Starts[L - 1]);
     for var U in TRegEx.Matches(Code, '\b' + Fld.Name + '\b', [roIgnoreCase]) do
       if not (if IsList then IsListFieldUse(Code, U.Index, U.Length, pItem.Sym.Name, Pulled, pSlots)
         else IsSwitchableFieldUse(Code, U.Index, U.Length, Pulled, pSlots)) then
@@ -4179,10 +4272,32 @@ begin
   if D.Verdict = uvMove then AddUses(F.Fid, scImpl, EntryText(F, U));
 end;
 
+{ E-DPROJ-LEAF-LINEBREAK: the .dproj edit that lists pInclude after the DCCReference on line pAt (0-based) of
+  pDproj. A self-closing anchor is copied with its Include swapped. A form or data module is listed with children
+  (`<Form>`, `<DesignClass>`, up to `</DCCReference>`): the new line is a self-closing DCCReference at the anchor's
+  indent and goes after the element's close, or the .dproj no longer parses (msbuild refuses it and the dcc gate
+  rolls the fix back). Was --ctor-wide only (lane 146 r4); RegisterLeaves and RegisterDeclUnit both use it. }
+function DprojRefAfter(const pDproj: TArray<string>; pAt: Integer; const pInclude: string): TFileEdit;
+begin
+  Result:= Default(TFileEdit);
+  Result.Kind:= ekInsertAfter;
+  var Line:= pDproj[pAt];
+  var At  := pAt;
+  if Trim(Line).EndsWith('/>') then
+    Line:= TRegEx.Replace(Line, 'Include="[^"]*"', 'Include="' + pInclude + '"')
+  else
+  begin
+    while (At < High(pDproj)) and not ContainsText(pDproj[At], '</DCCReference>') do Inc(At);
+    Line:= Copy(Line, 1, Length(Line) - Length(TrimLeft(Line))) + '<DCCReference Include="' + pInclude + '"/>';
+  end;
+  Result.First   := At + 1;
+  Result.Last    := At + 1;
+  Result.NewLines:= [Line];
+end;
+
 procedure TCyclePlanner.RegisterLeaves;
 var
   Dproj: TArray<string>;
-  E    : TFileEdit;
 begin
   if FProjectFid = 0 then Exit;
   var Prj:= GetFile(FProjectFid);
@@ -4198,12 +4313,7 @@ begin
     for var I:= 0 to High(Dproj) do
       if ContainsText(Dproj[I], 'Include="' + U.InPath + '"') then
       begin
-        E:= Default(TFileEdit);
-        E.Kind    := ekInsertAfter;
-        E.First   := I + 1;
-        E.Last    := I + 1;
-        E.NewLines:= [StringReplace(Dproj[I], U.InPath, ExtractFilePath(U.InPath) + FLeafName[Stem] + '.pas', [rfIgnoreCase])];
-        FDprojEdits.Add(E);
+        FDprojEdits.Add(DprojRefAfter(Dproj, I, ExtractFilePath(U.InPath) + FLeafName[Stem] + '.pas'));
         Break;
       end;
   end;
@@ -5075,7 +5185,8 @@ begin
       Header:= False;
       for var M in pItem.BaseMembers do
       begin
-        var MVis:= if M.Sym.Kind = skField then 'protected' else LowerCase(Trim(M.Sym.Modifiers));
+        { --ctor-wide: a public field the consumer stores through the slot stays public }
+        var MVis:= if (M.Sym.Kind = skField) and not (GCtorWide and ContainsText(M.Sym.Modifiers, 'public')) then 'protected' else LowerCase(Trim(M.Sym.Modifiers));
         if not MatchText(MVis, ['public', 'published']) then MVis:= 'protected';
         if MVis <> Vis then Continue;
         if not Header then L.Add(Ind + Vis);
@@ -6237,8 +6348,6 @@ end;
 { A2: the declaring unit joins the program's uses (`Name in 'path'`, the path relative to the .dpr) and,
   when the .dproj has no DCCReference for it, gains one after the last DCCReference. }
 procedure TCyclePlanner.RegisterDeclUnit;
-var
-  E: TFileEdit;
 begin
   if (FProjectFid = 0) or not FInversion.RegisterDecl then Exit;
   var Rel:= ExtractRelativePath(PathOf(FProjectFid), PathOf(FidOfStem(FInversion.DeclStem)));
@@ -6250,12 +6359,7 @@ begin
     if ContainsText(Dproj[I], 'Include="' + Rel + '"') then Exit
     else if ContainsText(Dproj[I], '<DCCReference') then Last:= I;
   if Last < 0 then Exit;
-  E:= Default(TFileEdit);
-  E.Kind    := ekInsertAfter;
-  E.First   := Last + 1;
-  E.Last    := Last + 1;
-  E.NewLines:= [StringReplace(Dproj[Last], TRegEx.Match(Dproj[Last], 'Include="([^"]*)"').Groups[1].Value, Rel, [rfIgnoreCase])];
-  FDprojEdits.Add(E);
+  FDprojEdits.Add(DprojRefAfter(Dproj, Last, Rel));
 end;
 
 function TCyclePlanner.IsInversionStem(const pStem: string): Boolean;

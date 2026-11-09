@@ -4,7 +4,7 @@ title: extract-method
 summary: Pulls a run of statements out of a routine into a new method
 product: DL
 group: refactoring
-order: 50005
+order: 50006
 since: 0.85.0-alpha
 status: shipped
 updated: 1.46.0-alpha

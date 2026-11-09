@@ -426,8 +426,13 @@ $r = CallAt 'R8N' 'Bar'
 Check 'R8N TFac.Create is a class FUNCTION: X is a TInner, never a TFac' `
   (($r.Count -eq 1) -and ($null -eq $r[0].tq) -and ($r[0].rtt -eq 'TInner')) ("rows=$($r.Count) tq=$($r[0].tq) rtt=$($r[0].rtt)")
 
+# N1: two used units declare TAmb. Since 1.47 (B5, E-RENAME-RESIDUE) Delphi's tie-break decides: the LAST
+# unit in the uses clause (uAmb2) wins, so this is the compiler's answer, not a guess.
+$r = CallAt 'N1' 'Bar'
+Check 'N1 two used units declare TAmb: the last-used unit wins (Delphi tie-break) -> uAmb2.TAmb.Bar' `
+  (($r.Count -eq 1) -and ($r[0].tq -eq 'uAmb2.TAmb.Bar')) ("rows=$($r.Count) tq=$($r[0].tq)")
+
 $negs = @(
-  @{ M = 'N1';  N = 'Bar'; Why = 'two used units declare TAmb -- absence beats a guess' },
   @{ M = 'N3';  N = 'Bar'; Why = 'a call around the constructor' },
   @{ M = 'N4';  N = 'Bar'; Why = 'a for-in var is the element type, not an initializer' },
   @{ M = 'N5';  N = 'Bar'; Why = 'a self reference is not a type' },

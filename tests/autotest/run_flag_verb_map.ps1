@@ -163,7 +163,11 @@ function Get-AliasTokenRx([string]$Alias) {
 # 104/24 on 2026-10-27 (fix/help-out-json): the three remaining --json / --output cells whose code reads them
 # are now named -- lint-project --output, check-ast --json, serve --json (error-format switch). 107 -> 104.
 # 103 on 2026-10-27 (fix/help-compare-out-root): compare --out-root is now named on its --help line. 104 -> 103.
-$BaselineCells = 102
+# 104/23 on 2026-11-08 (wave 147 INT, controller ruling, owner may reverse): R3's --compile-gate reaches lint-all /
+# lint-project / check-ast through the shared lint parse; those verbs now REFUSE it without --fix (exit 2,
+# run_lintfix_compilegate f) and it is not advertised in their blocks -- 3 cells of real surface. manifest
+# --dry-run and bookmarks-* --format were documented instead (3 verbs left the table).
+$BaselineCells = 104
 # 103/23 on 2026-10-29 (fix/help-out-json-138, replay of 909fc131): re-measured on main 0b8fcc65; cells unchanged, one verb left the table (24 -> 23).
 $BaselineVerbs = 23
 

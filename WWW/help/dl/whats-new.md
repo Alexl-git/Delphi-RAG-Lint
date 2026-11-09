@@ -9,9 +9,18 @@ product: DL
 
 drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.com](https://www.htrmicronite.com)), our quality and production-control software.
 
+## 1.47.0-alpha
+
+* [arch-diagram](features/arch-diagram.md) -- Draws one self-contained HTML layer diagram of a project's units by folder, with the layers measured from the uses clauses.
+* [Bookmarks (IDE)](features/bookmarks-ide.md) -- Lists, finds, strips and restores the // dl:bk comment anchors of the current unit from the IDE.
+* [Extract an interface from the members used (scratch + compile gate)](features/extract-interface.md) -- Declares an interface from the members of a class the project uses and adds it to the class; --apply through a scratch build and the compile gate.
+* [manifest where / migrate (installed layout v2)](features/installed-layout-v2.md) -- Shows which drag-lint.json this engine reads and why; moves the exe-side one to %APPDATA% once (renamed, never deleted). Installed layout v2, off by default.
+* [Prepare heavy initialization for lazy loading (first phase)](features/lazy-init.md) -- Names what an initialization section does; --apply moves its body verbatim into a run-once routine, through a scratch build and the compile gate.
+* [Lint --fix through the compile gate](features/lint-fix-compile-gate.md) -- lint --fix --apply --project X.dproj --compile-gate writes the fixes only if the project still builds; a fix that breaks the compile is refused and rolled back.
+
 ## 1.46.0-alpha
 
-* [bookmarks](features/bookmarks.md) -- Lists or finds the dl:bk comment-anchor bookmarks in a unit or a folder.
+* [bookmarks](features/bookmarks.md) -- Lists or finds the dl:bk comment-anchor bookmarks in a unit or a folder, and strips / restores them on request.
 * [Convert Components](features/convert-components.md) -- Opens ConvRulesEditor on the components selected in the form designer.
 * [exception-facts](features/exception-facts.md) -- Lists which routine raises and handles which exception type, by routine or by type.
 * [Data-flow rules that know a parameter's mode](features/flow-out-arg-rules.md) -- Three OFF rules: a local that only receives out arguments, a store overwritten by an out argument, a local passed by value to a method before it is assigned.
@@ -469,7 +478,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 * [context](features/context.md) -- Returns a compact context bundle for a symbol -- its doc comment, class surface (signatures), the target's own body, and a capped list of callers.
 * [Export Enums (Delphi const)](features/export-enums-delphi-const.md) -- Uses export enums with --format delphi-const to dump indexed enum types as Delphi const declarations.
-* [Export Graph (DOT)](features/export-graph-dot.md) -- Uses graph to export the indexed call/reference graph in DOT format, either whole or rooted at a name substring.
+* [Export Graph (DOT)](features/export-graph-dot.md) -- Uses graph to export the indexed call/reference graph in DOT format, whole or rooted at a name substring; json and html add the Markdown text nodes.
 * [Export to Obsidian](features/export-to-obsidian.md) -- Uses export obsidian to write the indexed project out as a set of Obsidian vault markdown pages.
 * [lsp](features/lsp.md) -- Starts the LSP (Language Server Protocol) stdio server.
 * [shutdown](features/shutdown.md) -- Ask running engines (lsp, cycles --fix, index, lint-all) to stand down cleanly, so an index can be rebuilt or an engine replaced.

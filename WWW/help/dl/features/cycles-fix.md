@@ -4,10 +4,10 @@ title: Cycles fix (mechanical, compile-gated)
 summary: Plans, compile-gates and (with --apply) writes the mechanical fix of one circular uses group, verified against the predicted cycles output
 product: DL
 group: graphs-reports
-order: 70006
+order: 70007
 since: 1.33.0-alpha
 status: shipped
-updated: 1.44.0-alpha
+updated: 1.47.0-alpha
 ---
 
 # Cycles fix (mechanical, compile-gated)
@@ -164,8 +164,9 @@ prints the verdict. No source file of the project is written -- but the dry run 
 project by default** (the baseline gate), and that build writes what any build writes (dcu,
 exe). `--no-compile` skips it. Exit 0 mechanical, 1 refused, 2 error (bad flags, no such group).
 
-**Builds.** Every build is `msbuild /p:Config=Debug` of the project for `--platform` (default
-`win64`; the IDE passes its active platform). The Release configuration is never built.
+**Builds.** Every build is `msbuild /p:Config=Debug` of the project for `--platform` (default:
+the project's active platform from its `.dproj`, else `win32` -- a Delphi 7 `.dpr` or a
+Delphi 2007..XE `.dproj` names none; the IDE passes its active platform). The Release configuration is never built.
 
 **Scratch.** The default shadow tree and the gate's `C:\TEMP\draglint_cyclefix_<pid>_build\`
 (build logs, `reindex.log`, `all-iteration-<n>.json`) are **deleted at exit** -- the text dry run
@@ -356,6 +357,19 @@ a property of the class type, the slot passed as an argument, a property written
 (`blocked-symbol` as before), a class reference as a value (`Application.CreateForm(TX, V)`), an `override` the base
 class would have to carry, `var` / `out` of type TX. T is always the base class: a library ancestor would need no new
 class when it covers every use, but the base class is sound in every case the whitelist admits.
+
+#### The wider whitelist: `--ctor-wide` (off by default)
+
+`cycles --plan --ctor-wide` and `cycles --fix --ctor-wide` also plan these, each a shape that keeps the program's behaviour:
+
+* a store to a field pulled into the base class (`S.F := x`: the same memory; a public field stays public in the base);
+* `L.Add(TX.Create(..))`, `L[i].M` with M inherited (not declared by TX) and `L.OwnsObjects` on a list field that switches;
+* an `override` stays in the class and is not pulled: the base inherits the same virtual, a call through it reaches the class's body;
+* a dotted unit name in `uses` or a multi-line comment that spells a slot's name is no use of the slot.
+
+With the flag a field in the published section, or an unlabelled one, is refused when the consumer would pull it: a `.dfm` streams into it. A library property written through the slot, a temporary, `L.Extract` and `L.First` stay refused.
+
+A lifted site is not a cut cycle. On a hub-shaped group (N units read the hub form's global, the hub creates them all) the interface `uses` edges go and the implementation cycle stays, so count sites planned, sites applied and compiled, and cycles cut separately. A data module gets a new ancestor without a `.dfm`: it loads at run time (the guard runs it); opening it in the form designer is not proved. Design and measurements: `docs\superpowers\specs\2026-11-06-ctorinv-loader.md`.
 
 #### A library member through a `with` body or a cast (R2, since 1.43)
 

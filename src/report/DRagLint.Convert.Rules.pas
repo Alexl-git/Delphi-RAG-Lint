@@ -125,7 +125,7 @@ type
   /// old identifier after the last such prefix. This preserves the receiver
   /// intent without over-modelling it in Batch 1 (validation ignores Scope).
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Convert.Apply.PlanMigrateSites (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitBlock.EvaluateMapping (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.Rules.ParseConversionRules (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ParseConversionRules.ParseCheckRefDirective (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ParseConversionRules.ParseMappingDirective (DRagLint.Convert.Rules.pas) (+71 more)</para>
+  /// <para>Used by: DRagLint.Convert.Apply.PlanMigrateSites (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitBlock.EvaluateMapping (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.Rules.ParseConversionRules (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ParseConversionRules.ParseCheckRefDirective (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ParseConversionRules.ParseMappingDirective (DRagLint.Convert.Rules.pas) (+72 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules, DRagLint.Convert.UnitRules, DRagLint.Convert.UsesReconcile</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -516,6 +516,8 @@ function DistinctUnreachable(const AUnreachable: TArray<TUnreachablePath>): TArr
 /// follow the glyph warning. Their Message starts 'chain:' / 'duplicate From',
 /// so the printed line starts 'line N: warning: chain' / 'line N: warning:
 /// duplicate From' and the ConvRulesEditor can recognise it.
+/// E-VALIDATE-RAW-ARROW: each raw 'A -> B' line (rkPcre) adds a warning 'raw find/replace
+/// line is not executed by convert-apply ...' after the chain warnings.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas)</para>
 /// <para>Calls: Default, DRagLint.Convert.GlyphExpr.IsGlyphCountPropName, DRagLint.Convert.Rules.BookChainWarnings, DRagLint.Convert.Rules.ConvertBlocks, DRagLint.Convert.Rules.IsGlyphImageLink, Format</para>
@@ -1761,6 +1763,17 @@ begin
       Break;
     end;
   end;
+  { E-VALIDATE-RAW-ARROW: a raw 'A -> B' line is valid grammar (escape hatch) but
+    convert-apply executes no rkPcre rule -- say so instead of passing silently }
+  for R in ARules.Rules do
+    if R.Kind = rkPcre then
+    begin
+      W:= Default(TRuleError);
+      W.LineNo := R.LineNo;
+      W.Message:= 'raw find/replace line is not executed by convert-apply (only # directives are); ' +
+        'write it as a #convert or #migrate line';
+      Result:= Result + [W];
+    end;
   Result:= Result + BookChainWarnings(ARules);
 end;
 

@@ -1,0 +1,72 @@
+{
+  "id": "installed-layout-v2",
+  "title": "manifest where / migrate (installed layout v2)",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.47.0-alpha",
+  "summary": "Shows which drag-lint.json this engine reads and why; moves the exe-side one to %APPDATA% once (renamed, never deleted). Installed layout v2, off by default",
+  "intro": "Read this when you need to know which manifest an engine would read. manifest where is read-only. The new layout is off unless DRAGLINT_LAYOUT=v2; an explicit manifest (DRAGLINT_MANIFEST or --manifest) wins in both layouts, and a missing explicit file never falls through to another manifest.",
+  "wikiPage": "installed-layout-v2",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "manifest",
+      "sub": "where",
+      "usage": "drag-lint manifest where [--manifest <path>] [--json] (read-only: which drag-lint.json, log folder and library folder this engine resolves, and each lookup rung. Order: explicit DRAGLINT_MANIFEST / --manifest, then with DRAGLINT_LAYOUT=v2 the file in %APPDATA%\\drag-lint, then beside the exe. Creates, moves and renames nothing)",
+      "flags": [
+        {
+          "name": "--manifest",
+          "arg": "path"
+        },
+        {
+          "name": "--json"
+        }
+      ],
+      "helpOrder": 104,
+      "help": ["  drag-lint manifest where [--manifest <path>] [--json]   (read-only: which drag-lint.json, log folder and library folder this engine resolves, and each lookup rung. Order: explicit DRAGLINT_MANIFEST / --manifest, then with DRAGLINT_LAYOUT=v2 the file in %APPDATA%\\drag-lint, then beside the exe. Creates, moves and renames nothing)"]
+    },
+    {
+      "type": "cli",
+      "verb": "manifest",
+      "sub": "migrate",
+      "usage": "drag-lint manifest migrate [--apply] [--dry-run] [--json] (one-time, installed layout v2 phase 2: without --apply (or with --dry-run, which overrides --apply) plans and touches nothing; with --apply and DRAGLINT_LAYOUT=v2 writes %APPDATA%\\drag-lint\\drag-lint.json with outDir and relative includes made absolute, so every DB stays put, then RENAMES the exe-side file to drag-lint.json.migrated-<date>. Never deletes, never overwrites. Exit 0 done / would / nothing to do, 2 refused, 1 failed)",
+      "flags": [
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--json"
+        }
+      ],
+      "helpOrder": 105,
+      "help": ["  drag-lint manifest migrate [--apply] [--dry-run] [--json]   (one-time, installed layout v2 phase 2: without --apply (or with --dry-run, which overrides --apply) plans and touches nothing; with --apply and DRAGLINT_LAYOUT=v2 writes %APPDATA%\\drag-lint\\drag-lint.json with outDir and relative includes made absolute, so every DB stays put, then RENAMES the exe-side file to drag-lint.json.migrated-<date>. Never deletes, never overwrites. Exit 0 done / would / nothing to do, 2 refused, 1 failed)"]
+    }
+  ],
+  "audience": "both",
+  "questions": [
+    {
+      "ask": "Which drag-lint.json does this engine read?",
+      "command": "drag-lint manifest where"
+    },
+    {
+      "ask": "How do I move my drag-lint.json out of the program folder?",
+      "command": "drag-lint manifest migrate"
+    },
+    {
+      "ask": "How do I keep a test away from the real manifest?",
+      "command": "drag-lint manifest where --manifest C:\\scratch\\drag-lint.json"
+    }
+  ],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-11-06",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-11-08",
+    "by": "ENGINE",
+    "build": "1.47.0-alpha",
+    "surfaceHash": "756076580f926aa5c715f8148b5efd8b83a46b7e11f44991632223fe91231cbe"
+  }
+}

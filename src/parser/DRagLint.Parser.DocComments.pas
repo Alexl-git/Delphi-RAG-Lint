@@ -44,7 +44,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Regions.NormalizeContainerBody (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor (DRagLint.Doc.Regions.pas) (+3 more)</para>
+  /// <para>Used by: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Regions.NormalizeContainerBody (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocBlockScanner.BuildStandaloneFor (DRagLint.Doc.Regions.pas) (+3 more)</para>
   /// <para>Used in units: DRagLint.Core.Indexer, DRagLint.Doc.Document, DRagLint.Doc.Regions, DRagLint.Doc.Wiki</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -54,7 +54,7 @@ type
       /// <returns><!-- drag-lint:auto type -->TParsedDoc</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Parser.DocComments.TDocCommentParser.Dispatch (DRagLint.Parser.DocComments.pas)</para>
+      /// <para>Called from: DRagLint.Doc.Regions.TDocBlockScanner.BuildStandaloneFor (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocCommentMerger.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Parser.DocComments.TDocCommentParser.Dispatch (DRagLint.Parser.DocComments.pas)</para>
       /// <para>Calls: Copy, DRagLint.Parser.DocComments.EnsureParserRegexes, DRagLint.Parser.DocComments.TDocCommentParser.BuildCleaned, DRagLint.Parser.DocComments.TDocCommentParser.CollapseWhitespace, FillChar, Pos, StartsText, Trim</para>
       /// <para>Complexity: 22 (cyclomatic, outer body), 180 lines (full implementation)</para>
       /// <para>Pure</para>
@@ -73,7 +73,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Parser.DocComments.TDocCommentParser.Dispatch (DRagLint.Parser.DocComments.pas)</para>
       /// <para>Calls: Copy, DRagLint.Parser.DocComments.TDocCommentParser.CollapseWhitespace, DRagLint.Parser.DocComments.TDocCommentParser.ParsePasDoc.FlushTag, FillChar, LowerCase, Pos, Trim, TrimLeft</para>
-      /// <para>Complexity: 16 (cyclomatic, outer body), 177 lines (full implementation)</para>
+      /// <para>Complexity: 17 (cyclomatic, outer body), 177 lines (full implementation)</para>
       /// <para>Pure</para>
       /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.CollapseWhitespace"/>
@@ -169,7 +169,7 @@ type
       /// would silently read the wrong characters. ONE definition, matching the
       /// same reasoning as EnsureParserRegexes' single set of patterns.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.StandaloneBodyOf (DRagLint.Doc.Regions.pas), DRagLint.Doc.Wiki.TWikiParser.Walk (DRagLint.Doc.Wiki.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParseXmlDoc (DRagLint.Parser.DocComments.pas)</para>
+      /// <para>Called from: DRagLint.Doc.Regions.TDocBlockScanner.StandaloneBodyOf (DRagLint.Doc.Regions.pas), DRagLint.Doc.Wiki.TWikiParser.Walk (DRagLint.Doc.Wiki.pas), DRagLint.Parser.DocComments.TDocCommentParser.ParseXmlDoc (DRagLint.Parser.DocComments.pas)</para>
       /// <para>Calls: DRagLint.Parser.DocComments.TDocCommentParser.StripXmlDocPrefix</para>
       /// <para>Pure</para>
       /// <para>Directives: static</para>

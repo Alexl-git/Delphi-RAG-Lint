@@ -197,13 +197,186 @@ const
   AUTO_SUM   = '<!-- drag-lint:auto sum -->';
 
 type
+  /// <summary>The ownership-marker predicates of the provenance contract (AUTO_MARK,
+  /// AUTO_SUM, the legacy sentinel) and the display strip. Split out of TDocRegions
+  /// (E-TDOCREGIONS-RFC, wave 147); TDocRegions delegates here.</summary>
   /// <remarks>
+  /// Pure class functions; thread-safe.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Context.Bundler.TContextBundler.RenderMarkdown (DRagLint.Context.Bundler.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Regions.IsManagedDesc (DRagLint.Doc.Regions.pas), DRagLint.Hover.Renderer.HasAnyParamDescription (DRagLint.Hover.Renderer.pas) (+9 more)</para>
-  /// <para>Used in units: DRagLint.Context.Bundler, DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.Doc.Regions, DRagLint.Hover.Renderer, DRagLint.LSP.Completion, DRagLint.LSP.Server, DRagLint.MCP.Server, DRagLint.Query.HoverModel, DRagLint.Resolver.TypeAt</para>
+  /// <para>Used by: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.ClassifyParamAction (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.EmitEngineParam (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.IsBlankBody (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.IsEngineOwnedRegardlessOfContent (DRagLint.Doc.Regions.pas) (+6 more)</para>
+  /// <para>Used in units: DRagLint.Doc.Regions</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TDocRegions = class // dl:ok high-response@81ea -- response set 90 is the managed-block parser's helper surface; splitting it into a scanner class is a deferred refactor (1.37 backlog #28)
+  TDocMarkers = class
+  public
+    /// <summary>True when S is engine-emitted (managed) tag content: its text
+    /// begins with AUTO_MARK. This is the ONLY managed test as of v(ADP3 T1) --
+    /// ownership is marker-keyed, never content-keyed, so a human whose prose
+    /// happens to start with 'Observed:' or read 'TODO: describe.' is no longer
+    /// silently adopted.</summary>
+    /// <param name="S"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: StartsStr(AUTO_MARK,
+    /// TrimLeft(S)) or StartsStr(AUTO_TYPE, TrimLeft(S)).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.ClassifyParamAction (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocMarkers.IsEngineOwnedTagText (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocMarkers.IsManagedDesc (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.IsManagedText (DRagLint.Doc.Regions.pas)</para>
+    /// <para>Calls: StartsStr, TrimLeft</para>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsEngineOwnedTagText"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsEngineSummaryBody"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsManagedDesc"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.StripForDisplay"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.StripMark"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    class function IsManagedText(const S: string): Boolean;  // dl:ok compiler-magic-comments@e170 -- the doc comment quotes the legacy 'TODO: describe.' sentinel this routine detects; it is not a TODO
+    /// <summary>True when S is engine-owned tag text WITHOUT regard to
+    /// emptiness: it carries AUTO_MARK (IsManagedText), or it is the legacy
+    /// 'TODO: describe.' sentinel. This is the ownership test for
+    /// &lt;summary&gt; and &lt;returns&gt; ONLY -- marked there means engine-owned,
+    /// full stop, whatever follows the marker.</summary>
+    /// <param name="S"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: IsManagedText(S) or
+    /// SameText(Trim(S), 'TODO: describe.').</returns>
+    /// <remarks>
+    /// Deliberately NOT IsManagedDesc: that one also answers True for
+    /// EMPTY text, which is right for a &lt;param&gt; slot and wrong here -- a
+    /// human's blank, unmarked &lt;summary&gt;&lt;/summary&gt; is hand-written and
+    /// must be preserved verbatim, not adopted.
+    /// v(ADP3 T9): PROMOTED from a nested function inside MergeComment to a
+    /// class function, for the same reason IsManagedDesc was promoted in
+    /// v(ADP3 T1) -- the Task 9 harvest-drift check in DRagLint.Doc.Drift needs
+    /// this EXACT test, and hand-expanding its two arms a second time is how
+    /// that unit silently drifted out of sync with MergeComment once already.
+    /// One executable home; both callers read it.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.IsEngineOwnedRegardlessOfContent (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText (DRagLint.Doc.Regions.pas)</para>
+    /// <para>Calls: DRagLint.Doc.Regions.TDocMarkers.IsManagedText, SameText, Trim</para>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsManagedText"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsEngineSummaryBody"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsManagedDesc"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.StripForDisplay"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.StripMark"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    class function IsEngineOwnedTagText(const S: string): Boolean;  // dl:ok compiler-magic-comments@4482 -- the doc comment quotes the legacy 'TODO: describe.' sentinel this routine detects; it is not a TODO
+
+    /// <summary>True when S is the engine's own HARVESTED &lt;summary&gt; prose
+    /// -- i.e. it carries AUTO_SUM.</summary>
+    /// <param name="S"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: StartsStr(AUTO_SUM,
+    /// TrimLeft(S)).</returns>
+    /// <remarks>
+    /// Decided LEXICALLY by the marker, for the reason AUTO_SUM's header gives
+    /// at length: a bare AUTO_MARK could not tell the engine's harvested prose
+    /// apart from words a human typed into an engine stub, and each misreading
+    /// destroyed something real.
+    /// A CLASS FUNCTION RATHER THAN A NESTED ONE, deliberately, and this file
+    /// has the scar that says why: Doc.Drift needs the SAME test MergeComment
+    /// uses to predict whether an apply will REMOVE a summary, and
+    /// hand-expanding such a test in that unit is exactly how it silently
+    /// desynced from MergeComment once already (see IsEngineOwnedTagText, which
+    /// was promoted for the same reason, and check 9's own comment in Drift).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody (DRagLint.Doc.Regions.pas)</para>
+    /// <para>Calls: StartsStr, TrimLeft</para>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsEngineOwnedTagText"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsManagedDesc"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsManagedText"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.StripForDisplay"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.StripMark"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    class function IsEngineSummaryBody(const S: string): Boolean;
+    /// <summary>Removes a leading AUTO_MARK, if present, from S -- and, either
+    /// way, also removes any leading whitespace: the TrimLeft this performs is
+    /// UNCONDITIONAL, not gated on the marker being found, so S is NOT
+    /// returned byte-for-byte unchanged when it carries no marker (only its
+    /// leading whitespace changes). Used to recover the previously-emitted
+    /// text for a drift comparison.</summary>
+    /// <param name="S"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->string</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.ClassifyParamAction (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.EmitEngineParam (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.IsBlankBody (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocMarkers.StripForDisplay (DRagLint.Doc.Regions.pas) (+1 more)</para>
+    /// <para>Calls: Copy, StartsStr, TrimLeft</para>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsEngineOwnedTagText"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsEngineSummaryBody"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsManagedDesc"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsManagedText"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.StripForDisplay"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    class function StripMark(const S: string): string;
+    /// <summary>True when S is MANAGED (auto-generated/regenerable) content,
+    /// as opposed to hand-typed prose: S begins with AUTO_MARK (IsManagedText),
+    /// or S is empty, or S is exactly the legacy 'TODO: describe.' sentinel.
+    /// The two legacy arms exist ONLY so a file written by a pre-v(ADP3) build
+    /// self-heals on its next run; new output always carries AUTO_MARK. This
+    /// is the SAME three-way test MergeComment's own IncludeReturns condition
+    /// uses -- exposed publicly (v(ADP3 T1) review fix) so every OTHER
+    /// consumer that needs this exact test (the doc-drift ddFactsBlockStale
+    /// comparison today; the Task 9 drift compare next) calls this ONE
+    /// implementation instead of hand-expanding the three arms again, which is
+    /// how 'TODO: describe.' ends up with two homes and drifts out of
+    /// sync.</summary>
+    /// <param name="S"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: IsManagedText(S) or (Trim(S)
+    /// = '').</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.IsManagedDesc (DRagLint.Doc.Regions.pas)</para>
+    /// <para>Calls: DRagLint.Doc.Regions.TDocMarkers.IsManagedText, SameText, Trim</para>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsManagedText"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsEngineOwnedTagText"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsEngineSummaryBody"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.StripForDisplay"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.StripMark"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    class function IsManagedDesc(const S: string): Boolean;  // dl:ok compiler-magic-comments@e01e -- the doc comment quotes the legacy 'TODO: describe.' sentinel this routine detects; it is not a TODO
+    /// <summary>Strips human-invisible engine bookkeeping from S for DISPLAY
+    /// ONLY: a leading AUTO_MARK (via StripMark) plus any AUTO_BEGIN/AUTO_END
+    /// facts-fence marker text found anywhere in S -- the facts LINES between
+    /// a fence pair are left untouched, only the two fence marker strings
+    /// themselves are removed. Trims the result, so a field that was ONLY the
+    /// marker (or the fence with no facts) becomes '', letting a caller's
+    /// existing `if X &lt;&gt; '' then` guard keep suppressing the line exactly as
+    /// it did before the marker existed. v(ADP3 T1) review fix: every surface
+    /// that renders Summary/ReturnsText/a &lt;param&gt; desc/Remarks to a HUMAN
+    /// (hover's CLI/LSP/JSON renderers, the context bundle, MCP's doc JSON, LSP
+    /// completion/signature-help, TypeAt's plain-text render) must call THIS,
+    /// and only this, to clean the text -- never open-code a second
+    /// Replace('&lt;!-- drag-lint:auto --&gt;', ''). The READ path (MergeComment,
+    /// IsManagedDesc, the doc-drift comparison) must NEVER call this: it needs
+    /// the raw marker to know what the engine owns.</summary>
+    /// <param name="S"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->string</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.StripForDisplay (DRagLint.Doc.Regions.pas)</para>
+    /// <para>Calls: DRagLint.Doc.Regions.TDocMarkers.StripMark, StringReplace, Trim</para>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.StripMark"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsEngineOwnedTagText"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsEngineSummaryBody"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsManagedDesc"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsManagedText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    class function StripForDisplay(const S: string): string;
+  end;
+
+  /// <summary>The managed-block scanner: strips the fenced block and the preserved
+  /// containers, re-parses a block per tag and partitions its residual lines. Split
+  /// out of TDocRegions (E-TDOCREGIONS-RFC, wave 147); TDocCommentMerger is its caller.</summary>
+  /// <remarks>
+  /// Pure class functions. Private, so visible in this unit only, as they were
+  /// in TDocRegions.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment (DRagLint.Doc.Regions.pas)</para>
+  /// <para>Used in units: DRagLint.Doc.Regions</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TDocBlockScanner = class
   private
     /// <summary>Removes any managed fenced block from S: everything from the
     /// first AUTO_BEGIN occurrence through the end of the line containing the
@@ -214,13 +387,12 @@ type
     /// 1).TrimRight([#13, #10, ' ', '/']); Head + sLineBreak + Tail; Head + Tail.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas)</para>
+    /// <para>Called from: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment (DRagLint.Doc.Regions.pas)</para>
     /// <para>Calls: Copy, Pos, PosEx</para>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedDesc"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocBlockScanner.BuildStandaloneFor"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocBlockScanner.SplitResidualLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocBlockScanner.StandaloneBodyOf"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocBlockScanner.StripElement"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function StripManagedBlock(const S: string): string;
@@ -241,13 +413,13 @@ type
     /// standalone sibling tag and duplicated on re-emit -- see MergeComment's
     /// own remarks for the full defect this closes.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor (DRagLint.Doc.Regions.pas)</para>
+    /// <para>Called from: DRagLint.Doc.Regions.TDocBlockScanner.BuildStandaloneFor (DRagLint.Doc.Regions.pas)</para>
     /// <para>Calls: DRagLint.Doc.Regions.ContainerLoosePattern</para>
     /// <seealso cref="DRagLint.Doc.Regions.ContainerLoosePattern"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocBlockScanner.BuildStandaloneFor"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocBlockScanner.SplitResidualLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocBlockScanner.StandaloneBodyOf"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocBlockScanner.StripManagedBlock"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function StripElement(const S, ATagName: string): string;
@@ -279,13 +451,13 @@ type
     /// erased before it can be read back. MergeComment therefore calls this
     /// once per field, each time excluding that field's own container.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas)</para>
-    /// <para>Calls: DRagLint.Doc.Regions.TDocRegions.StripElement, DRagLint.Parser.DocComments.TDocCommentParser.ParseXmlDoc, SameText</para>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripElement"/>
+    /// <para>Called from: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment (DRagLint.Doc.Regions.pas)</para>
+    /// <para>Calls: DRagLint.Doc.Regions.TDocBlockScanner.StripElement, DRagLint.Parser.DocComments.TDocCommentParser.ParseXmlDoc, SameText</para>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocBlockScanner.StripElement"/>
     /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.ParseXmlDoc"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocBlockScanner.SplitResidualLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocBlockScanner.StandaloneBodyOf"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocBlockScanner.StripManagedBlock"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function BuildStandaloneFor(const ARawBlock, AOwnTagName: string): TParsedDoc;
@@ -332,7 +504,7 @@ type
     /// T3b round 3 disclosed and deliberately did not widen (it would put nine
     /// extra parses on every plainly-documented symbol).
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas)</para>
+    /// <para>Called from: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment (DRagLint.Doc.Regions.pas)</para>
     /// <para>Calls: Copy, DRagLint.Doc.Regions.ContainerIndexOf, DRagLint.Doc.Regions.EnsureResidualRegexes, DRagLint.Doc.Regions.IsSingularMatchContainer, DRagLint.Doc.Regions.MaskMatches, DRagLint.Doc.Regions.NormalizeContainerBody, DRagLint.Parser.DocComments.TDocCommentParser.BuildCleaned, SameText</para>
     /// <para>Returns: AFallback; Body</para>
     /// <para>Pure</para>
@@ -412,20 +584,32 @@ type
     /// built from the residual flags, so a blocked line is still handed to the
     /// parser and its tag is still emitted.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas)</para>
-    /// <para>Calls: Copy, DRagLint.Doc.Regions.EnsureResidualRegexes, DRagLint.Doc.Regions.IsRetractableSurplusContainer, DRagLint.Doc.Regions.TDocRegions.SplitResidualLines.AddMatches, DRagLint.Doc.Regions.TDocRegions.SplitResidualLines.AddSpan, DRagLint.Doc.Regions.TDocRegions.SplitResidualLines.NestedInOtherContainer, Pos, SameText, Trim, TrimRight</para>
+    /// <para>Called from: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment (DRagLint.Doc.Regions.pas)</para>
+    /// <para>Calls: Copy, DRagLint.Doc.Regions.EnsureResidualRegexes, DRagLint.Doc.Regions.IsRetractableSurplusContainer, DRagLint.Doc.Regions.TDocBlockScanner.SplitResidualLines.AddMatches, DRagLint.Doc.Regions.TDocBlockScanner.SplitResidualLines.AddSpan, DRagLint.Doc.Regions.TDocBlockScanner.SplitResidualLines.NestedInOtherContainer, Pos, SameText, Trim, TrimRight</para>
     /// <para>Complexity: 57 (cyclomatic, outer body), 387 lines (full implementation)</para>
     /// <para>Mutates: AAccountedRaw (out), AResidualLines (out)</para>
     /// <seealso cref="DRagLint.Doc.Regions.EnsureResidualRegexes"/>
     /// <seealso cref="DRagLint.Doc.Regions.IsRetractableSurplusContainer"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.SplitResidualLines.AddMatches"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.SplitResidualLines.AddSpan"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.SplitResidualLines.NestedInOtherContainer"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocBlockScanner.SplitResidualLines.AddMatches"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocBlockScanner.SplitResidualLines.AddSpan"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocBlockScanner.SplitResidualLines.NestedInOtherContainer"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function SplitResidualLines(const ARawBlock: string;
       AEngineEmitsOwnRemarks: Boolean;
       out AAccountedRaw: string; out AResidualLines: TArray<string>): Boolean;
+  end;
+
+  /// <summary>Renders the fenced facts block and the Phase-2 fact lines. Split out of
+  /// TDocRegions (E-TDOCREGIONS-RFC, wave 147); TDocRegions delegates here.</summary>
+  /// <remarks>
+  /// Pure class functions; thread-safe.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.FormatUsedInLines (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock (DRagLint.Doc.Regions.pas)</para>
+  /// <para>Used in units: DRagLint.Doc.Regions</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TDocFactsRenderer = class
   public
     /// <summary>Renders the fenced facts-block body lines (each prefixed
     /// APrefix), from AFacts. Sections: Called from (or Used by, see below) /
@@ -509,14 +693,14 @@ type
     /// #10]).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas)</para>
-    /// <para>Calls: DRagLint.Core.Model.CanBeCallTarget, DRagLint.Doc.Regions.EscXml, DRagLint.Doc.Regions.EscXmlAttr, DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines, DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.AppendFact, DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.JoinEsc, DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.JoinRefs, DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.MoreSuffix, Format, IsCertain, SameText, WrapFactLine</para>
-    /// <para>Complexity: 21 (cyclomatic, outer body), 325 lines (full implementation)</para>
+    /// <para>Called from: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock (DRagLint.Doc.Regions.pas)</para>
+    /// <para>Calls: DRagLint.Core.Model.CanBeCallTarget, DRagLint.Doc.Regions.EscXml, DRagLint.Doc.Regions.EscXmlAttr, DRagLint.Doc.Regions.TDocFactsRenderer.FormatPhase2FactLines, DRagLint.Doc.Regions.TDocFactsRenderer.FormatUsedInLines, DRagLint.Doc.Regions.TDocFactsRenderer.RenderFactsBlock.AppendFact, DRagLint.Doc.Regions.TDocFactsRenderer.RenderFactsBlock.JoinEsc, DRagLint.Doc.Regions.TDocFactsRenderer.RenderFactsBlock.JoinRefs, DRagLint.Doc.Regions.TDocFactsRenderer.RenderFactsBlock.MoreSuffix, Format, IsCertain, SameText, WrapFactLine</para>
+    /// <para>Complexity: 22 (cyclomatic, outer body), 331 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Core.Model.CanBeCallTarget"/>
     /// <seealso cref="DRagLint.Doc.Regions.EscXml"/>
     /// <seealso cref="DRagLint.Doc.Regions.EscXmlAttr"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.AppendFact"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocFactsRenderer.FormatPhase2FactLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocFactsRenderer.FormatUsedInLines"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RenderFactsBlock(const AFacts: TDocFacts; const APrefix: string;
@@ -575,19 +759,60 @@ type
     /// carries none of the six.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock (DRagLint.Doc.Regions.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
-    /// <para>Calls: Copy, DRagLint.Doc.Regions.EscXml, DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines.JoinEscP2, DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines.MoreSuffixP2, Format, StartsStr, StringReplace</para>
+    /// <para>Called from: DRagLint.Doc.Regions.TDocFactsRenderer.RenderFactsBlock (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines (DRagLint.Doc.Regions.pas)</para>
+    /// <para>Calls: Copy, DRagLint.Doc.Regions.EscXml, DRagLint.Doc.Regions.TDocFactsRenderer.FormatPhase2FactLines.JoinEscP2, DRagLint.Doc.Regions.TDocFactsRenderer.FormatPhase2FactLines.MoreSuffixP2, Format, StartsStr, StringReplace</para>
     /// <para>Returns: Lines.ToStringArray</para>
     /// <para>Complexity: 39 (cyclomatic, outer body), 283 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Doc.Regions.EscXml"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines.JoinEscP2"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines.MoreSuffixP2"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocFactsRenderer.FormatPhase2FactLines.JoinEscP2"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocFactsRenderer.FormatPhase2FactLines.MoreSuffixP2"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocFactsRenderer.FormatUsedInLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocFactsRenderer.RenderFactsBlock"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function FormatPhase2FactLines(const AFacts: TDocFacts; AComplexityMin: Integer = 10;
       AHasOtherContent: Boolean = True): TArray<string>;
+    /// <summary>The 'Used in:' fact line of a property or field (zero or one
+    /// line): its resolved uses, 'Routine (file.pas) [r|w|rw]' per entry,
+    /// XML-escaped.</summary>
+    /// <param name="AFacts">Facts from TDocFactsBuilder.Build; only UsedIn and
+    /// UsedInSitesTotal are read.</param>
+    /// <returns>One line 'Used in: ...' (with '(+N more)' past the cap), or an
+    /// empty array when AFacts.UsedIn is empty -- the FormatPhase2FactLines
+    /// shape, so a caller prepends or appends it the same way.</returns>
+    /// <remarks>
+    /// E-USE-EDGES-PHASE2 (owner ruling 2026-11-08: default ON). ONE
+    /// formatter for every surface: RenderFactsBlock writes it in place of
+    /// 'Used by:', and the hover assembly (CLI md/json, LSP hover and
+    /// hoverBundle) appends it to its fact lines -- so the doc block and the
+    /// popup cannot disagree. Entries are sorted with
+    /// TSharedFacts.CompareInboundEntries, after the cap, like every inbound
+    /// list. Guard: tests\autotest\run_used_in_render.ps1.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Regions.TDocFactsRenderer.RenderFactsBlock (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.FormatUsedInLines (DRagLint.Doc.Regions.pas)</para>
+    /// <para>Calls: DRagLint.Doc.Regions.EscXml, DRagLint.Doc.SharedFacts.TSharedFacts.CompareInboundEntries, Format</para>
+    /// <para>Returns: nil; Lines.ToArray</para>
+    /// <seealso cref="DRagLint.Doc.Regions.EscXml"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.CompareInboundEntries"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocFactsRenderer.FormatPhase2FactLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocFactsRenderer.RenderFactsBlock"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    class function FormatUsedInLines(const AFacts: TDocFacts): TArray<string>;
+  end;
+
+  /// <summary>Merges an existing doc comment with the regenerated facts, under the
+  /// provenance contract at the head of this unit. Split out of TDocRegions
+  /// (E-TDOCREGIONS-RFC, wave 147); TDocRegions delegates here.</summary>
+  /// <remarks>
+  /// Pure class function; thread-safe.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas)</para>
+  /// <para>Used in units: DRagLint.Doc.Regions</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TDocCommentMerger = class
+  public
     /// <summary>Produces the full merged DocInsight comment text (///-prefixed
     /// lines joined by CRLF): preserved hand-written prose + a regenerated
     /// managed facts block (fenced inside remarks) + managed param/summary/
@@ -659,155 +884,198 @@ type
       const ASigParams: TArray<string>; const AFacts: TDocFacts;
       AHasReturn: Boolean; const APrefix: string; AComplexityMin: Integer = 10;
       AExistingHasAnyTag: Boolean = False): string;
-    /// <summary>True when S is engine-emitted (managed) tag content: its text
-    /// begins with AUTO_MARK. This is the ONLY managed test as of v(ADP3 T1) --
-    /// ownership is marker-keyed, never content-keyed, so a human whose prose
-    /// happens to start with 'Observed:' or read 'TODO: describe.' is no longer
-    /// silently adopted.</summary>
-    /// <param name="S"><!-- drag-lint:auto type -->const string</param>
-    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: StartsStr(AUTO_MARK,
-    /// TrimLeft(S)) or StartsStr(AUTO_TYPE, TrimLeft(S)).</returns>
+  end;
+
+  /// <summary>The public face of the doc-region engine. Every method delegates, with
+  /// the same contract, to TDocMarkers, TDocFactsRenderer or TDocCommentMerger: the
+  /// E-TDOCREGIONS-RFC split (wave 147) took the response set from 93 to under 50 per
+  /// class without touching a caller.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Context.Bundler.TContextBundler.RenderMarkdown (DRagLint.Context.Bundler.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Regions.IsManagedDesc (DRagLint.Doc.Regions.pas), DRagLint.Hover.Renderer.HasAnyParamDescription (DRagLint.Hover.Renderer.pas) (+9 more)</para>
+  /// <para>Used in units: DRagLint.Context.Bundler, DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.Doc.Regions, DRagLint.Hover.Renderer, DRagLint.LSP.Completion, DRagLint.LSP.Server, DRagLint.MCP.Server, DRagLint.Query.HoverModel, DRagLint.Resolver.TypeAt</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TDocRegions = class
+  public
+    /// <summary>Facade: TDocFactsRenderer.RenderFactsBlock, same contract.</summary>
+    /// <param name="AFacts"><!-- drag-lint:auto type -->const TDocFacts</param>
+    /// <param name="APrefix"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AIncludeReturns"><!-- drag-lint:auto type -->Boolean = False</param>
+    /// <param name="AComplexityMin"><!-- drag-lint:auto type -->Integer = 10</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed:
+    /// TDocFactsRenderer.RenderFactsBlock(AFacts, APrefix, AIncludeReturns,
+    /// AComplexityMin).</returns>
+    /// <seealso cref="TDocFactsRenderer.RenderFactsBlock"/>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.IsManagedDesc (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment.ClassifyParamAction (DRagLint.Doc.Regions.pas) ?</para>
-    /// <para>Calls: StartsStr, TrimLeft</para>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
+    /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas)</para>
+    /// <para>Calls: DRagLint.Doc.Regions.TDocFactsRenderer.RenderFactsBlock</para>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocFactsRenderer.RenderFactsBlock"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatUsedInLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    class function RenderFactsBlock(const AFacts: TDocFacts; const APrefix: string;
+      AIncludeReturns: Boolean = False; AComplexityMin: Integer = 10): string;
+    /// <summary>Facade: TDocFactsRenderer.FormatPhase2FactLines, same contract.</summary>
+    /// <param name="AFacts"><!-- drag-lint:auto type -->const TDocFacts</param>
+    /// <param name="AComplexityMin"><!-- drag-lint:auto type -->Integer = 10</param>
+    /// <param name="AHasOtherContent"><!-- drag-lint:auto type -->Boolean = True</param>
+    /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed:
+    /// TDocFactsRenderer.FormatPhase2FactLines(AFacts, AComplexityMin, AHasOtherContent).</returns>
+    /// <seealso cref="TDocFactsRenderer.FormatPhase2FactLines"/>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
+    /// <para>Calls: DRagLint.Doc.Regions.TDocFactsRenderer.FormatPhase2FactLines</para>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocFactsRenderer.FormatPhase2FactLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatUsedInLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedDesc"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    class function FormatPhase2FactLines(const AFacts: TDocFacts; AComplexityMin: Integer = 10;
+      AHasOtherContent: Boolean = True): TArray<string>;
+    /// <summary>Facade: TDocFactsRenderer.FormatUsedInLines, same contract.</summary>
+    /// <param name="AFacts"><!-- drag-lint:auto type -->const TDocFacts</param>
+    /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed:
+    /// TDocFactsRenderer.FormatUsedInLines(AFacts).</returns>
+    /// <seealso cref="TDocFactsRenderer.FormatUsedInLines"/>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
+    /// <para>Calls: DRagLint.Doc.Regions.TDocFactsRenderer.FormatUsedInLines</para>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocFactsRenderer.FormatUsedInLines"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedDesc"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    class function IsManagedText(const S: string): Boolean;
-    /// <summary>True when S is engine-owned tag text WITHOUT regard to
-    /// emptiness: it carries AUTO_MARK (IsManagedText), or it is the legacy
-    /// 'TODO: describe.' sentinel. This is the ownership test for
-    /// &lt;summary&gt; and &lt;returns&gt; ONLY -- marked there means engine-owned,
-    /// full stop, whatever follows the marker.</summary>
-    /// <param name="S"><!-- drag-lint:auto type -->const string</param>
-    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: IsManagedText(S) or
-    /// SameText(Trim(S), 'TODO: describe.').</returns>
+    class function FormatUsedInLines(const AFacts: TDocFacts): TArray<string>;
+    /// <summary>Facade: TDocCommentMerger.MergeComment, same contract.</summary>
+    /// <param name="AExisting"><!-- drag-lint:auto type -->const TParsedDoc</param>
+    /// <param name="ASigParams"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
+    /// <param name="AFacts"><!-- drag-lint:auto type -->const TDocFacts</param>
+    /// <param name="AHasReturn"><!-- drag-lint:auto type -->Boolean</param>
+    /// <param name="APrefix"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AComplexityMin"><!-- drag-lint:auto type -->Integer = 10</param>
+    /// <param name="AExistingHasAnyTag"><!-- drag-lint:auto type -->Boolean = False</param>
+    /// <returns><!-- drag-lint:auto type -->string</returns>
+    /// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.Doc.Regions.TDocCommentMerger.MergeComment: TDocRegions.MergeComment: SeeAlso/SeeAlsoIsInline length mismatch (%d vs %d) --</exception>
+    /// <seealso cref="TDocCommentMerger.MergeComment"/>
     /// <remarks>
-    /// Deliberately NOT IsManagedDesc: that one also answers True for
-    /// EMPTY text, which is right for a &lt;param&gt; slot and wrong here -- a
-    /// human's blank, unmarked &lt;summary&gt;&lt;/summary&gt; is hand-written and
-    /// must be preserved verbatim, not adopted.
-    /// v(ADP3 T9): PROMOTED from a nested function inside MergeComment to a
-    /// class function, for the same reason IsManagedDesc was promoted in
-    /// v(ADP3 T1) -- the Task 9 harvest-drift check in DRagLint.Doc.Drift needs
-    /// this EXACT test, and hand-expanding its two arms a second time is how
-    /// that unit silently drifted out of sync with MergeComment once already.
-    /// One executable home; both callers read it.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment.IsEngineOwnedRegardlessOfContent (DRagLint.Doc.Regions.pas) ?</para>
-    /// <para>Calls: DRagLint.Doc.Regions.TDocRegions.IsManagedText, SameText, Trim</para>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedText"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
+    /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas)</para>
+    /// <para>Calls: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment</para>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocCommentMerger.MergeComment"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatUsedInLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    class function MergeComment(const AExisting: TParsedDoc;
+      const ASigParams: TArray<string>; const AFacts: TDocFacts;
+      AHasReturn: Boolean; const APrefix: string; AComplexityMin: Integer = 10;
+      AExistingHasAnyTag: Boolean = False): string;
+    /// <summary>Facade: TDocMarkers.IsManagedText, same contract.</summary>
+    /// <param name="S"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: TDocMarkers.IsManagedText(S).</returns>
+    /// <seealso cref="TDocMarkers.IsManagedText"/>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DRagLint.Doc.Regions.TDocMarkers.IsManagedText</para>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsManagedText"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatUsedInLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    class function IsManagedText(const S: string): Boolean;
+    /// <summary>Facade: TDocMarkers.IsEngineOwnedTagText, same contract.</summary>
+    /// <param name="S"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed:
+    /// TDocMarkers.IsEngineOwnedTagText(S).</returns>
+    /// <seealso cref="TDocMarkers.IsEngineOwnedTagText"/>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas)</para>
+    /// <para>Calls: DRagLint.Doc.Regions.TDocMarkers.IsEngineOwnedTagText</para>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsEngineOwnedTagText"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatUsedInLines"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedDesc"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function IsEngineOwnedTagText(const S: string): Boolean;
-
-    /// <summary>True when S is the engine's own HARVESTED &lt;summary&gt; prose
-    /// -- i.e. it carries AUTO_SUM.</summary>
+    /// <summary>Facade: TDocMarkers.IsEngineSummaryBody, same contract.</summary>
     /// <param name="S"><!-- drag-lint:auto type -->const string</param>
-    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: StartsStr(AUTO_SUM,
-    /// TrimLeft(S)).</returns>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed:
+    /// TDocMarkers.IsEngineSummaryBody(S).</returns>
+    /// <seealso cref="TDocMarkers.IsEngineSummaryBody"/>
     /// <remarks>
-    /// Decided LEXICALLY by the marker, for the reason AUTO_SUM's header gives
-    /// at length: a bare AUTO_MARK could not tell the engine's harvested prose
-    /// apart from words a human typed into an engine stub, and each misreading
-    /// destroyed something real.
-    /// A CLASS FUNCTION RATHER THAN A NESTED ONE, deliberately, and this file
-    /// has the scar that says why: Doc.Drift needs the SAME test MergeComment
-    /// uses to predict whether an apply will REMOVE a summary, and
-    /// hand-expanding such a test in that unit is exactly how it silently
-    /// desynced from MergeComment once already (see IsEngineOwnedTagText, which
-    /// was promoted for the same reason, and check 9's own comment in Drift).
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas)</para>
-    /// <para>Calls: StartsStr, TrimLeft</para>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
+    /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas)</para>
+    /// <para>Calls: DRagLint.Doc.Regions.TDocMarkers.IsEngineSummaryBody</para>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsEngineSummaryBody"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatUsedInLines"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedDesc"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedText"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function IsEngineSummaryBody(const S: string): Boolean;
-    /// <summary>Removes a leading AUTO_MARK, if present, from S -- and, either
-    /// way, also removes any leading whitespace: the TrimLeft this performs is
-    /// UNCONDITIONAL, not gated on the marker being found, so S is NOT
-    /// returned byte-for-byte unchanged when it carries no marker (only its
-    /// leading whitespace changes). Used to recover the previously-emitted
-    /// text for a drift comparison.</summary>
+    /// <summary>Facade: TDocMarkers.StripMark, same contract.</summary>
     /// <param name="S"><!-- drag-lint:auto type -->const string</param>
-    /// <returns><!-- drag-lint:auto type -->string</returns>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: TDocMarkers.StripMark(S).</returns>
+    /// <seealso cref="TDocMarkers.StripMark"/>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment.EmitEngineParam (DRagLint.Doc.Regions.pas) ?, DRagLint.Doc.Regions.TDocRegions.MergeComment.IsBlankBody (DRagLint.Doc.Regions.pas) ?, DRagLint.Doc.Regions.TDocRegions.StripForDisplay (DRagLint.Doc.Regions.pas) (+1 more)</para>
-    /// <para>Calls: Copy, StartsStr, TrimLeft</para>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
+    /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas)</para>
+    /// <para>Calls: DRagLint.Doc.Regions.TDocMarkers.StripMark</para>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.StripMark"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatUsedInLines"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedDesc"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function StripMark(const S: string): string;
-    /// <summary>True when S is MANAGED (auto-generated/regenerable) content,
-    /// as opposed to hand-typed prose: S begins with AUTO_MARK (IsManagedText),
-    /// or S is empty, or S is exactly the legacy 'TODO: describe.' sentinel.
-    /// The two legacy arms exist ONLY so a file written by a pre-v(ADP3) build
-    /// self-heals on its next run; new output always carries AUTO_MARK. This
-    /// is the SAME three-way test MergeComment's own IncludeReturns condition
-    /// uses -- exposed publicly (v(ADP3 T1) review fix) so every OTHER
-    /// consumer that needs this exact test (the doc-drift ddFactsBlockStale
-    /// comparison today; the Task 9 drift compare next) calls this ONE
-    /// implementation instead of hand-expanding the three arms again, which is
-    /// how 'TODO: describe.' ends up with two homes and drifts out of
-    /// sync.</summary>
+    /// <summary>Facade: TDocMarkers.IsManagedDesc, same contract.</summary>
     /// <param name="S"><!-- drag-lint:auto type -->const string</param>
-    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: IsManagedText(S) or (Trim(S)
-    /// = '').</returns>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: TDocMarkers.IsManagedDesc(S).</returns>
+    /// <seealso cref="TDocMarkers.IsManagedDesc"/>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Regions.IsManagedDesc (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas)</para>
-    /// <para>Calls: DRagLint.Doc.Regions.TDocRegions.IsManagedText, SameText, Trim</para>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedText"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
+    /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Regions.IsManagedDesc (DRagLint.Doc.Regions.pas)</para>
+    /// <para>Calls: DRagLint.Doc.Regions.TDocMarkers.IsManagedDesc</para>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsManagedDesc"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatUsedInLines"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function IsManagedDesc(const S: string): Boolean;
-    /// <summary>Strips human-invisible engine bookkeeping from S for DISPLAY
-    /// ONLY: a leading AUTO_MARK (via StripMark) plus any AUTO_BEGIN/AUTO_END
-    /// facts-fence marker text found anywhere in S -- the facts LINES between
-    /// a fence pair are left untouched, only the two fence marker strings
-    /// themselves are removed. Trims the result, so a field that was ONLY the
-    /// marker (or the fence with no facts) becomes '', letting a caller's
-    /// existing `if X &lt;&gt; '' then` guard keep suppressing the line exactly as
-    /// it did before the marker existed. v(ADP3 T1) review fix: every surface
-    /// that renders Summary/ReturnsText/a &lt;param&gt; desc/Remarks to a HUMAN
-    /// (hover's CLI/LSP/JSON renderers, the context bundle, MCP's doc JSON, LSP
-    /// completion/signature-help, TypeAt's plain-text render) must call THIS,
-    /// and only this, to clean the text -- never open-code a second
-    /// Replace('&lt;!-- drag-lint:auto --&gt;', ''). The READ path (MergeComment,
-    /// IsManagedDesc, the doc-drift comparison) must NEVER call this: it needs
-    /// the raw marker to know what the engine owns.</summary>
+    /// <summary>Facade: TDocMarkers.StripForDisplay, same contract.</summary>
     /// <param name="S"><!-- drag-lint:auto type -->const string</param>
-    /// <returns><!-- drag-lint:auto type -->string</returns>
+    /// <returns><!-- drag-lint:auto -->string -- Observed:
+    /// TDocMarkers.StripForDisplay(S).</returns>
+    /// <seealso cref="TDocMarkers.StripForDisplay"/>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Context.Bundler.TContextBundler.RenderMarkdown (DRagLint.Context.Bundler.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Hover.Renderer.HasAnyParamDescription (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverJson/2 (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverMarkdown (DRagLint.Hover.Renderer.pas) (+5 more)</para>
-    /// <para>Calls: DRagLint.Doc.Regions.TDocRegions.StripMark, StringReplace, Trim</para>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripMark"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
+    /// <para>Calls: DRagLint.Doc.Regions.TDocMarkers.StripForDisplay</para>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.StripForDisplay"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatUsedInLines"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
     /// <!-- drag-lint:auto END -->
@@ -837,7 +1105,7 @@ type
 /// single token longer than the budget is therefore never split and never
 /// loops. Inverse: FoldFactLine.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Doc.ProjectTags.AddWrappedFact (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.Regions.SelfTestFactWrap (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.AppendFact (DRagLint.Doc.Regions.pas), DRagLint.Doc.SharedFacts.InsertFactLines (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.ReplaceFactLines (DRagLint.Doc.SharedFacts.pas) (+1 more)</para>
+/// <para>Called from: DRagLint.Doc.ProjectTags.AddWrappedFact (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.Regions.SelfTestFactWrap (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocFactsRenderer.RenderFactsBlock.AppendFact (DRagLint.Doc.Regions.pas), DRagLint.Doc.SharedFacts.InsertFactLines (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.ReplaceFactLines (DRagLint.Doc.SharedFacts.pas) (+1 more)</para>
 /// <para>Calls: Copy, DRagLint.Doc.Regions.LastBreakBlank</para>
 /// <para>Returns: [APrefix + AText]; L.ToArray</para>
 /// <seealso cref="DRagLint.Doc.Regions.LastBreakBlank"/>
@@ -943,7 +1211,7 @@ function SelfTestFactWrap(out AFailure: string): Boolean;
 /// dependency cycle this unit's interface would otherwise close
 /// (Regions -&gt; Facts -&gt; Harvest -&gt; Regions) never forms.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Doc.Harvest.HarvestText (DRagLint.Doc.Harvest.pas), DRagLint.Doc.Regions.EscXmlAttr (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.ObservedSuffix (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines.JoinEscP2 (DRagLint.Doc.Regions.pas) (+7 more)</para>
+/// <para>Called from: DRagLint.Doc.Harvest.HarvestText (DRagLint.Doc.Harvest.pas), DRagLint.Doc.Regions.EscXmlAttr (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.ObservedSuffix (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.EmitEngineException (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.EmitEngineReturns (DRagLint.Doc.Regions.pas) (+8 more)</para>
 /// <para>Calls: StringReplace</para>
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
@@ -1216,7 +1484,7 @@ begin
   Result:= TDocRegions.IsManagedDesc(S);
 end;
 
-class function TDocRegions.StripManagedBlock(const S: string): string;
+class function TDocBlockScanner.StripManagedBlock(const S: string): string;
 var
   BeginPos: Integer;
   EndPos  : Integer;
@@ -1269,7 +1537,7 @@ begin
   Result:= '<' + ATagName + '(?:\s[^>]*)?>[\s\S]*?</' + ATagName + '>';
 end;
 
-class function TDocRegions.StripElement(const S, ATagName: string): string;
+class function TDocBlockScanner.StripElement(const S, ATagName: string): string;
 var
   Re: TRegEx;
 begin
@@ -1305,7 +1573,7 @@ const
     'exception', 'example', 'deprecated', 'since'
   );
 
-class function TDocRegions.BuildStandaloneFor(const ARawBlock, AOwnTagName: string): TParsedDoc;
+class function TDocBlockScanner.BuildStandaloneFor(const ARawBlock, AOwnTagName: string): TParsedDoc;
 var
   Text: string;
   Tag : string;
@@ -1497,7 +1765,7 @@ begin
       if (Result[J] <> #13) and (Result[J] <> #10) then Result[J]:= ' ';
 end;
 
-class function TDocRegions.StandaloneBodyOf(const ARawBlock, ATagName, AFallback: string): string;
+class function TDocBlockScanner.StandaloneBodyOf(const ARawBlock, ATagName, AFallback: string): string;
 var
   Cleaned : string ;
   Masked  : string ;
@@ -1623,7 +1891,7 @@ begin
   end;
 end;
 
-class function TDocRegions.SplitResidualLines(const ARawBlock: string;
+class function TDocBlockScanner.SplitResidualLines(const ARawBlock: string;  // dl:ok method-too-long@53ac, cognitive-complexity@dc12, deep-nesting@a2ef, cyclomatic-complexity@8b8c -- moved verbatim by the E-TDOCREGIONS-RFC split (147 G2/B1 merge); pre-existing size, splitting it is a 148 row
   AEngineEmitsOwnRemarks: Boolean;
   out AAccountedRaw: string; out AResidualLines: TArray<string>): Boolean;
 type
@@ -2012,7 +2280,7 @@ begin
   Result:= True;
 end;
 
-class function TDocRegions.IsManagedText(const S: string): Boolean;
+class function TDocMarkers.IsManagedText(const S: string): Boolean;
 begin
   { AUTO_TYPE counts: it is engine-generated content by definition (see the
     constant), so every consumer that asks "did we write this?" must say yes.
@@ -2035,17 +2303,17 @@ end;
 // (exact equality survives neither whitespace normalization nor legitimate
 // drift, where a prefix match would have survived both) -- see MergeComment's
 // own remarks for the reproduced breakage.
-class function TDocRegions.IsEngineOwnedTagText(const S: string): Boolean;
+class function TDocMarkers.IsEngineOwnedTagText(const S: string): Boolean;
 begin
   Result:= IsManagedText(S) or SameText(Trim(S), 'TODO: describe.');
 end;
 
-class function TDocRegions.IsEngineSummaryBody(const S: string): Boolean;
+class function TDocMarkers.IsEngineSummaryBody(const S: string): Boolean;
 begin
   Result:= StartsStr(AUTO_SUM, TrimLeft(S));
 end;
 
-class function TDocRegions.StripMark(const S: string): string;
+class function TDocMarkers.StripMark(const S: string): string;
 begin
   Result:= TrimLeft(S);
   if StartsStr(AUTO_MARK, Result) then
@@ -2058,7 +2326,7 @@ begin
     Result:= Copy(Result, Length(AUTO_SUM) + 1, MaxInt);
 end;
 
-class function TDocRegions.IsManagedDesc(const S: string): Boolean;
+class function TDocMarkers.IsManagedDesc(const S: string): Boolean;
 begin
   Result:= IsManagedText(S) or (Trim(S) = '')
         or SameText(Trim(S), 'TODO: describe.');
@@ -2077,7 +2345,7 @@ end;
 // HasManagedBlock) operates on the RAW read-path value, never on this
 // function's output, so stripping the fence here for display cannot break
 // any of them.
-class function TDocRegions.StripForDisplay(const S: string): string;
+class function TDocMarkers.StripForDisplay(const S: string): string;
 begin
   Result:= StripMark(S);
   Result:= StringReplace(Result, AUTO_MARK,  '', [rfReplaceAll]);
@@ -2352,7 +2620,7 @@ end;
 // literal spaces for Reads/Writes, semicolon-space for SQL), same order.
 // Lines are UNPREFIXED -- callers (RenderFactsBlock, hover) each apply
 // whatever leading text their own surface needs.
-class function TDocRegions.FormatPhase2FactLines(const AFacts: TDocFacts; AComplexityMin: Integer = 10;
+class function TDocFactsRenderer.FormatPhase2FactLines(const AFacts: TDocFacts; AComplexityMin: Integer = 10;  // dl:ok method-too-long@9ae9, cyclomatic-complexity@4f78 -- moved verbatim by the E-TDOCREGIONS-RFC split (147 G2/B1 merge); pre-existing size, splitting it is a 148 row
   AHasOtherContent: Boolean = True): TArray<string>;
 var
   Lines: TStringList;
@@ -2637,7 +2905,34 @@ begin
   end;
 end;
 
-class function TDocRegions.RenderFactsBlock(const AFacts: TDocFacts; const APrefix: string;
+class function TDocFactsRenderer.FormatUsedInLines(const AFacts: TDocFacts): TArray<string>;
+var
+  Rendered: TArray<string>;
+  Lines   : TList<string>;
+begin
+  Result:= nil;
+  if Length(AFacts.UsedIn) = 0 then Exit;
+  SetLength(Rendered, Length(AFacts.UsedIn));
+  for var I:= 0 to High(AFacts.UsedIn) do
+    Rendered[I]:= EscXml(AFacts.UsedIn[I].Display) + ' (' + EscXml(AFacts.UsedIn[I].Location) + ') [' +
+                  AFacts.UsedIn[I].Mode + ']';
+  TArray.Sort<string>(Rendered, TComparer<string>.Construct(
+    function(const X, Y: string): Integer
+    begin
+      Result:= TSharedFacts.CompareInboundEntries(X, Y);
+    end));
+  Lines:= TList<string>.Create;
+  try
+    Lines.Add('Used in: ' + string.Join(', ', Rendered) +
+              (if AFacts.UsedInSitesTotal > Length(AFacts.UsedIn)
+                 then Format(' (+%d more)', [AFacts.UsedInSitesTotal - Length(AFacts.UsedIn)]) else ''));
+    Result:= Lines.ToArray;
+  finally
+    Lines.Free;
+  end;
+end;
+
+class function TDocFactsRenderer.RenderFactsBlock(const AFacts: TDocFacts; const APrefix: string;
   AIncludeReturns: Boolean = False; AComplexityMin: Integer = 10): string;
 var
   Sb: TStringBuilder;
@@ -2818,8 +3113,14 @@ begin
       var RefVerb: string;
       if CanBeCallTarget(AFacts.SymbolKind) then RefVerb:= 'Called from: '
       else RefVerb:= 'Used by: ';
-      AppendFact(RefVerb + JoinRefs(AFacts.CalledFrom) + MoreSuffix(Length(AFacts.CalledFrom), AFacts.CalledFromTotal));
+      // E-USE-EDGES-PHASE2: a property/field with RESOLVED uses says so with
+      // modes, and the name-matched list is not rendered beside it (a resolved
+      // list must not be diluted with guesses -- spec 2026-09-14 sec 8.1).
+      if Length(AFacts.UsedIn) = 0 then
+        AppendFact(RefVerb + JoinRefs(AFacts.CalledFrom) + MoreSuffix(Length(AFacts.CalledFrom), AFacts.CalledFromTotal));
     end;
+    for var UsedInLine in FormatUsedInLines(AFacts) do
+      AppendFact(UsedInLine);
     if Length(AFacts.Calls) > 0 then
       AppendFact('Calls: ' + JoinEsc(AFacts.Calls) + MoreSuffix(Length(AFacts.Calls), AFacts.CallsTotal));
     // Mined Result:=/Exit() return cases as a FACT line -- emitted ONLY when the
@@ -3106,7 +3407,7 @@ begin
   end;
 end;
 
-class function TDocRegions.MergeComment(const AExisting: TParsedDoc;
+class function TDocCommentMerger.MergeComment(const AExisting: TParsedDoc;  // dl:ok method-too-long@49c2, cognitive-complexity@038e, cyclomatic-complexity@c8c3 -- moved verbatim by the E-TDOCREGIONS-RFC split (147 G2/B1 merge); pre-existing size, splitting it is a 148 row
   const ASigParams: TArray<string>; const AFacts: TDocFacts;
   AHasReturn: Boolean; const APrefix: string; AComplexityMin: Integer;
   AExistingHasAnyTag: Boolean): string;
@@ -3195,7 +3496,7 @@ var
   // that cite them read unchanged.
   function IsEngineOwnedRegardlessOfContent(const S: string): Boolean;
   begin
-    Result:= IsEngineOwnedTagText(S);
+    Result:= TDocMarkers.IsEngineOwnedTagText(S);
   end;
   // E-DOC-ORPHAN-PARAM: a hand tag whose name is not ONE bare parameter name --
   // a list (`S, WordDelims`) or a modifier-prefixed one (`var Pos`). ParamTagCovers
@@ -3276,7 +3577,7 @@ var
     // empty AUTO_MARK tag -- the structure is D-3's, and the linter still names
     // it, which is the one case doc-param-no-description is left reporting.
     var Body: string:= ParamNoteFor(AName);
-    if Trim(StripMark(Body)) <> '' then
+    if Trim(TDocMarkers.StripMark(Body)) <> '' then
       Exit(EmitTagged('<param name="' + AName + '">' + AUTO_MARK, Body, '</param>'));
     Body:= ParamTypeFor(AName);
     if Body = '' then
@@ -3293,7 +3594,7 @@ var
   // survived every regeneration precisely because the merge was protecting them.
   function IsBlankBody(const AText: string): Boolean;
   begin
-    Result:= Trim(StripMark(AText)) = '';
+    Result:= Trim(TDocMarkers.StripMark(AText)) = '';
   end;
   // The engine's own declared-type baseline is regenerable, not a human's
   // meaning -- decided LEXICALLY by its marker. See AUTO_TYPE for why this is a
@@ -3489,10 +3790,9 @@ var
   //   - unmarked, no tag at all -> taEngineOwned (nothing to preserve).
   function ClassifyParamAction(const S: string; AHasTag: Boolean): TTagAction;
   begin
-    if IsManagedText(S) then
+    if TDocMarkers.IsManagedText(S) then
     begin
-      if Trim(StripMark(S)) = '' then Result:= taEngineOwned
-      else Result:= taPreserveStripped;
+      Result:= if Trim(TDocMarkers.StripMark(S)) = '' then taEngineOwned else taPreserveStripped;
     end
     else if SameText(Trim(S), 'TODO: describe.') then Result:= taEngineOwned
     else if AHasTag then Result:= taPreserveVerbatim
@@ -3584,8 +3884,8 @@ begin
       // anyway; so the added work is one more render on a path that already
       // does far more than that, not a new order of cost.
       var EngineEmitsOwnRemarks: Boolean:=
-        RenderFactsBlock(AFacts, APrefix, True, AComplexityMin) <> '';
-      if SplitResidualLines(AExisting.RawBlock, EngineEmitsOwnRemarks, AccountedRaw, Residual) then
+        TDocFactsRenderer.RenderFactsBlock(AFacts, APrefix, True, AComplexityMin) <> '';
+      if TDocBlockScanner.SplitResidualLines(AExisting.RawBlock, EngineEmitsOwnRemarks, AccountedRaw, Residual) then
         Eff:= TDocCommentParser.ParseXmlDoc(AccountedRaw);
     end;
     // Residual lines are re-emitted with the comment marker ONLY -- never
@@ -3720,24 +4020,24 @@ begin
       // verbatim line the sole emitter of that tag (see the Eff computation at
       // the top of this function). Eff.RawBlock IS AExisting.RawBlock whenever
       // nothing is residual.
-      StandaloneExc     := BuildStandaloneFor(Eff.RawBlock, 'exception');
-      StandaloneExample := BuildStandaloneFor(Eff.RawBlock, 'example');
-      StandaloneDep     := BuildStandaloneFor(Eff.RawBlock, 'deprecated');
+      StandaloneExc     := TDocBlockScanner.BuildStandaloneFor(Eff.RawBlock, 'exception');
+      StandaloneExample := TDocBlockScanner.BuildStandaloneFor(Eff.RawBlock, 'example');
+      StandaloneDep     := TDocBlockScanner.BuildStandaloneFor(Eff.RawBlock, 'deprecated');
       // seealso/see never need self-exclusion (StripElement can never match
       // their always-self-closing form -- see PRESERVED_VERBATIM_CONTAINERS'
       // own comment), so '' (strip everything) is correct and simplest.
-      StandaloneSee     := BuildStandaloneFor(Eff.RawBlock, '');
-      StandaloneSince   := BuildStandaloneFor(Eff.RawBlock, 'since');
-      StandaloneSummary := BuildStandaloneFor(Eff.RawBlock, 'summary');
-      StandaloneParam   := BuildStandaloneFor(Eff.RawBlock, 'param');
-      StandaloneReturns := BuildStandaloneFor(Eff.RawBlock, 'returns');
-      StandaloneRemarks := BuildStandaloneFor(Eff.RawBlock, 'remarks');
-      BodySummary       := StandaloneBodyOf(Eff.RawBlock, 'summary'   , Eff.Summary       );
-      BodyReturns       := StandaloneBodyOf(Eff.RawBlock, 'returns'   , Eff.ReturnsText   );
-      BodyRemarks       := StandaloneBodyOf(Eff.RawBlock, 'remarks'   , Eff.Remarks       );
-      BodySince         := StandaloneBodyOf(Eff.RawBlock, 'since'     , Eff.SinceText     );
-      BodyDep           := StandaloneBodyOf(Eff.RawBlock, 'deprecated', Eff.DeprecatedText);
-      BodyExample       := StandaloneBodyOf(Eff.RawBlock, 'example'   , Eff.ExampleText   );
+      StandaloneSee     := TDocBlockScanner.BuildStandaloneFor(Eff.RawBlock, '');
+      StandaloneSince   := TDocBlockScanner.BuildStandaloneFor(Eff.RawBlock, 'since');
+      StandaloneSummary := TDocBlockScanner.BuildStandaloneFor(Eff.RawBlock, 'summary');
+      StandaloneParam   := TDocBlockScanner.BuildStandaloneFor(Eff.RawBlock, 'param');
+      StandaloneReturns := TDocBlockScanner.BuildStandaloneFor(Eff.RawBlock, 'returns');
+      StandaloneRemarks := TDocBlockScanner.BuildStandaloneFor(Eff.RawBlock, 'remarks');
+      BodySummary       := TDocBlockScanner.StandaloneBodyOf(Eff.RawBlock, 'summary'   , Eff.Summary       );
+      BodyReturns       := TDocBlockScanner.StandaloneBodyOf(Eff.RawBlock, 'returns'   , Eff.ReturnsText   );
+      BodyRemarks       := TDocBlockScanner.StandaloneBodyOf(Eff.RawBlock, 'remarks'   , Eff.Remarks       );
+      BodySince         := TDocBlockScanner.StandaloneBodyOf(Eff.RawBlock, 'since'     , Eff.SinceText     );
+      BodyDep           := TDocBlockScanner.StandaloneBodyOf(Eff.RawBlock, 'deprecated', Eff.DeprecatedText);
+      BodyExample       := TDocBlockScanner.StandaloneBodyOf(Eff.RawBlock, 'example'   , Eff.ExampleText   );
     end
     else
     begin
@@ -3802,7 +4102,7 @@ begin
       and (not IsEngineOwnedRegardlessOfContent(BodyReturns));
     var IncludeReturns: Boolean:=
       ReturnsHandWritten and AHasReturn and (Length(AFacts.ReturnCases) > 0);
-    Facts:= RenderFactsBlock(AFacts, APrefix, IncludeReturns, AComplexityMin);
+    Facts:= TDocFactsRenderer.RenderFactsBlock(AFacts, APrefix, IncludeReturns, AComplexityMin);
     // v(ADP3 T3 review round 2, Finding 4): AExistingHasAnyTag is a SEPARATE
     // signal from AExisting.HasContent, computed by the caller (BuildForSymbol)
     // from HasSummaryTag/HasReturnsTag/Params/AExisting.HasContent itself/an
@@ -3954,10 +4254,10 @@ begin
     // transfers once, and visibly in the diff. Emitting without a marker also
     // routes past EmitTagged's WrapEngineProse call, so a human's own line
     // breaks are not reflowed to the engine's column budget.
-    else if StandaloneSummary.HasSummaryTag and IsManagedText(SummaryRaw)
-       and (not IsEngineSummaryBody(SummaryRaw))
+    else if StandaloneSummary.HasSummaryTag and TDocMarkers.IsManagedText(SummaryRaw)
+       and (not TDocMarkers.IsEngineSummaryBody(SummaryRaw))
        and (not IsBlankBody(SummaryRaw)) then
-      Sb.AppendLine(EmitTagged('<summary>', Trim(StripMark(SummaryRaw)), '</summary>'));
+      Sb.AppendLine(EmitTagged('<summary>', Trim(TDocMarkers.StripMark(SummaryRaw)), '</summary>'));
     // else: engine-owned-and-EMPTY, or genuinely absent, and nothing
     // harvested -- omit the tag entirely (v(ADP3 T3), narrowed above from
     // "engine-owned" to "engine-owned and holding no authored words").
@@ -4077,8 +4377,8 @@ begin
             // D-4 says leave that meaning alone, so it falls through to the
             // preserve arm exactly as before.
             var MinedNow: string:= Trim(ParamNoteFor(P));
-            if (MinedNow <> '') and IsManagedDesc(EP.Desc)
-               and SameText(Trim(StripMark(EP.Desc)), MinedNow) then
+            if (MinedNow <> '') and TDocMarkers.IsManagedDesc(EP.Desc)
+               and SameText(Trim(TDocMarkers.StripMark(EP.Desc)), MinedNow) then
             begin
               Sb.AppendLine(EmitEngineParam(P));
               ParamEmitted:= True;
@@ -4101,7 +4401,11 @@ begin
               // RULING D-4, the meaning half: a body a human wrote is never
               // overwritten -- including one typed INSIDE the engine's own tag
               // without removing the marker (taPreserveStripped).
-              taPreserveStripped: begin Sb.AppendLine(EmitTagged('<param name="' + P + '">', StripMark(EP.Desc), '</param>')); ParamEmitted:= True; end;
+              taPreserveStripped:
+                begin
+                  Sb.AppendLine(EmitTagged('<param name="' + P + '">', TDocMarkers.StripMark(EP.Desc), '</param>'));
+                  ParamEmitted:= True;
+                end;
               taPreserveVerbatim: begin Sb.AppendLine(EmitPreserved(Eff.RawBlock, LinePrefix, 'param', '<param name="' + P + '">', EP.Desc, '</param>')); ParamEmitted:= True; end;
               taEngineOwned: ;  // engine-owned and empty: fall through and REGENERATE
             end;
@@ -4136,7 +4440,7 @@ begin
         if SameText(SP.Name, EP.Name) then begin IsStandaloneParam:= True; Break; end;
       // E-DOC-ORPHAN-PARAM: the orphan keeps its own bytes (blanks inside the
       // tag); only the trailing marker is appended to its last line.
-      if (not StillThere) and (not IsManagedDesc(EP.Desc)) and IsStandaloneParam then
+      if (not StillThere) and (not TDocMarkers.IsManagedDesc(EP.Desc)) and IsStandaloneParam then
         Sb.AppendLine(EmitPreserved(StringReplace(Eff.RawBlock, ' <!-- drag-lint: param no longer exists -->', '', [rfReplaceAll]),
             LinePrefix, 'param', '<param name="' + EP.Name + '">', EP.Desc, '</param>')
           + ' <!-- drag-lint: param no longer exists -->');
@@ -4225,10 +4529,10 @@ begin
             exact breakage D-4's emptiness test causes once the engine writes
             prose of its own. Checked BEFORE the blank test because a mined
             message is never blank. }
-          if IsManagedDesc(OrigExc.Desc) and StartsStr(AUTO_EXC, TrimLeft(OrigExc.Desc)) then Break;
-          if IsManagedDesc(OrigExc.Desc) and IsBlankBody(OrigExc.Desc) then Break;
-          if IsManagedDesc(OrigExc.Desc) then
-            Sb.AppendLine(EmitTagged('<exception cref="' + OrigExc.TypeName + '">', StripMark(OrigExc.Desc), '</exception>'))
+          if TDocMarkers.IsManagedDesc(OrigExc.Desc) and StartsStr(AUTO_EXC, TrimLeft(OrigExc.Desc)) then Break;
+          if TDocMarkers.IsManagedDesc(OrigExc.Desc) and IsBlankBody(OrigExc.Desc) then Break;
+          if TDocMarkers.IsManagedDesc(OrigExc.Desc) then
+            Sb.AppendLine(EmitTagged('<exception cref="' + OrigExc.TypeName + '">', TDocMarkers.StripMark(OrigExc.Desc), '</exception>'))
           else
             Sb.AppendLine(EmitPreserved(Eff.RawBlock, LinePrefix, 'exception', '<exception cref="' + OrigExc.TypeName + '">', OrigExc.Desc, '</exception>'));
           PreservedCrefs:= PreservedCrefs + [OrigExc.TypeName];
@@ -4435,7 +4739,7 @@ begin
     // fence, unmarked, where --strip left it forever.
     var Prose: string:= '';
     if StandaloneRemarks.HasRemarksTag then
-      Prose:= StripManagedBlock(BodyRemarks);
+      Prose:= TDocBlockScanner.StripManagedBlock(BodyRemarks);
     var NormProse: string:= StringReplace(Trim(Prose), #13#10, #10, [rfReplaceAll]);
     NormProse:= StringReplace(NormProse, #13, #10, [rfReplaceAll]);
     // v(ADP3 T7): DROP AUTO_MARK-carrying lines from the preserved-prose slot.
@@ -4573,6 +4877,65 @@ begin
   finally
     Sb.Free;
   end;
+end;
+
+{ ---- TDocRegions: the facade (E-TDOCREGIONS-RFC, wave 147). The defaults stay on the
+  interface declarations; every body forwards every argument unchanged. ---- }
+
+class function TDocRegions.RenderFactsBlock(const AFacts: TDocFacts; const APrefix: string;
+  AIncludeReturns: Boolean; AComplexityMin: Integer): string;
+begin
+  Result:= TDocFactsRenderer.RenderFactsBlock(AFacts, APrefix, AIncludeReturns, AComplexityMin);
+end;
+
+class function TDocRegions.FormatPhase2FactLines(const AFacts: TDocFacts; AComplexityMin: Integer;
+  AHasOtherContent: Boolean): TArray<string>;
+begin
+  Result:= TDocFactsRenderer.FormatPhase2FactLines(AFacts, AComplexityMin, AHasOtherContent);
+end;
+
+class function TDocRegions.FormatUsedInLines(const AFacts: TDocFacts): TArray<string>;
+begin
+  Result:= TDocFactsRenderer.FormatUsedInLines(AFacts);
+end;
+
+class function TDocRegions.MergeComment(const AExisting: TParsedDoc;
+  const ASigParams: TArray<string>; const AFacts: TDocFacts;
+  AHasReturn: Boolean; const APrefix: string; AComplexityMin: Integer;
+  AExistingHasAnyTag: Boolean): string;
+begin
+  Result:= TDocCommentMerger.MergeComment(AExisting, ASigParams, AFacts, AHasReturn, APrefix,
+    AComplexityMin, AExistingHasAnyTag);
+end;
+
+class function TDocRegions.IsManagedText(const S: string): Boolean;
+begin
+  Result:= TDocMarkers.IsManagedText(S);
+end;
+
+class function TDocRegions.IsEngineOwnedTagText(const S: string): Boolean;
+begin
+  Result:= TDocMarkers.IsEngineOwnedTagText(S);
+end;
+
+class function TDocRegions.IsEngineSummaryBody(const S: string): Boolean;
+begin
+  Result:= TDocMarkers.IsEngineSummaryBody(S);
+end;
+
+class function TDocRegions.StripMark(const S: string): string;
+begin
+  Result:= TDocMarkers.StripMark(S);
+end;
+
+class function TDocRegions.IsManagedDesc(const S: string): Boolean;
+begin
+  Result:= TDocMarkers.IsManagedDesc(S);
+end;
+
+class function TDocRegions.StripForDisplay(const S: string): string;
+begin
+  Result:= TDocMarkers.StripForDisplay(S);
 end;
 
 end.

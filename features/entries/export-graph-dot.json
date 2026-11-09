@@ -5,7 +5,7 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "0.6.0-alpha",
-  "summary": "Uses graph to export the indexed call/reference graph in DOT format, either whole or rooted at a name substring",
+  "summary": "Uses graph to export the indexed call/reference graph in DOT format, whole or rooted at a name substring; json and html add the Markdown text nodes",
   "intro": "Read this when you want a picture of the indexed call/reference graph in Graphviz or Mermaid. drag-lint graph writes DOT (or Mermaid) for the whole index or rooted at a name substring; also on the IDE Generate & Export menu.",
   "wikiPage": "Export-Graph-DOT",
   "surfaces": [
@@ -47,14 +47,18 @@
       "command": "drag-lint graph --db <db> --format dot --output <file>"
     },
     {
+      "ask": "Which units does the project's Markdown documentation mention?",
+      "command": "drag-lint graph --db <db> --format json --output <file>"
+    },
+    {
       "ask": "How do I root the graph at one name?",
       "command": "drag-lint graph --db <db> --name <root-substr>"
     }
   ],
   "verified": {
-    "date": "2026-11-07",
+    "date": "2026-11-08",
     "by": "ENGINE",
-    "build": "1.46.0-alpha",
+    "build": "1.47.0-alpha",
     "surfaceHash": "cfa73ef402d259c06d66a408e41bc3e536fb01f52d4e68cd46eaaa3cc36117c1"
   }
 }

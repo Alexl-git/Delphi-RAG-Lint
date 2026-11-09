@@ -101,7 +101,7 @@ try {
     Check 'c: readers wrote nothing (size + mtime unchanged)' ((Stamp $projOn) -eq $before)
 
     # d. library becomes ready; a plain writer run re-resolves with no file changed
-    & $exe index $lib --db $libDb 2>&1 | Out-Null
+    & $exe index $lib --db $libDb --platform Win64 2>&1 | Out-Null
     Check 'd: library index built' (Test-Path $libDb)
     $txt = (& $exe index --project (Join-Path $app 'App.dpr') 2>&1 | Out-String)
     Check 'd: the calls pass RAN although no file changed' ($txt -notmatch 'stage: calls -- skipped') $txt

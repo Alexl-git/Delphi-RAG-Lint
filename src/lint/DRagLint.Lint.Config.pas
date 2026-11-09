@@ -97,7 +97,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TNamingConfig</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas) ?, DRagLint.CLI.ParseArgs (DRagLint.CLI.pas) ?, DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas) ?, DRagLint.CLI.TStageHeartbeat.CheckStall (DRagLint.CLI.pas) ?, DRagLint.Lint.Config.TLintConfig.Load (DRagLint.Lint.Config.pas) (+173 more)</para>
+    /// <para>Called from: DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas) ?, DRagLint.CLI.ParseArgs (DRagLint.CLI.pas) ?, DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas) ?, DRagLint.CLI.TStageHeartbeat.CheckStall (DRagLint.CLI.pas) ?, DRagLint.Lint.Config.TLintConfig.Load (DRagLint.Lint.Config.pas) (+176 more)</para>
     /// <para>Effect-free (proven)</para>
     /// <para>Directives: static</para>
     /// <!-- drag-lint:auto END -->

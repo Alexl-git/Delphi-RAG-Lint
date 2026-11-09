@@ -7,7 +7,7 @@ group: component-conversion
 order: 60003
 since: 1.46.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.47.0-alpha
 ---
 
 # Convert Components
@@ -32,6 +32,14 @@ Read this when you want to convert components from the form designer. Select the
    1. Open the unit
    2. Choose drag-lint > Convert Components > Open Conversion Editor...
    3. ConvRulesEditor opens with the unit loaded and no scope; the unit stays open
+* Right-click in the Form Designer: **drag-lint: Convert Selected Component(s)...**
+   1. Select the component(s) on the form
+   2. Right-click one of them and choose drag-lint: Convert Selected Component(s)...
+   3. The same hand-off as drag-lint > Convert Components > Convert Selected Component(s)... follows
+* Right-click in the Form Designer: **drag-lint: Convert All of This Type on the Form...**
+   1. Select a component of each type to convert
+   2. Right-click one of them and choose drag-lint: Convert All of This Type on the Form...
+   3. The same hand-off as drag-lint > Convert Components > Convert All of This Type on the Form... follows
 
 ## Details
 
@@ -54,8 +62,10 @@ shows the scope and the matching books; it never starts the run by itself.
 One editor at a time: while one lives, another launch names the unit it is open for.
 
 ### What it needs
-An index of the active project. Saving another unit during a conversion can still start a
-reindex that collides with the editor's own; the run then reports it and you retry.
+An index of the active project. While the editor lives, drag-lint holds its own reindex and
+lint-all jobs on that project's index (they wait in the queue and run when the editor exits),
+so saving another unit during a conversion does not collide with the editor's reindex. Jobs on
+other projects' indexes run as usual.
 
 ### Related
 [ConvRulesEditor](convrules-editor.md)

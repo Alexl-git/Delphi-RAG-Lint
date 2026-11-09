@@ -923,7 +923,8 @@ Declines 'NF6'  'Bar' 'a multi-dimensional array'
 Declines 'NF7'  'Bar' 'array of const'
 Declines 'NF8'  'Bar' 'a with target declares the collection''s name'
 Declines 'NF9'  'Bar' 'a self reference, which must also terminate'
-Declines 'NF10' 'Bar' 'the element name is ambiguous'
+# NF10 / NA5: two used units declare TAmb; since 1.47 (B5) Delphi's tie-break binds the last-used unit's type.
+Binds 'NF10' 'Bar' 'uAmb2.TAmb.Bar'
 Declines 'NF11' 'Bar' 'the element name means another type at the loop than at the alias'
 Declines 'NF12' 'Bar' 'a library ancestor may declare the name'
 Declines 'NF13' 'Bar' 'a local const shadows the unit var'
@@ -984,7 +985,7 @@ Declines 'NA1' 'Bar' 'an operator before the cast: `as` binds to its right opera
 Declines 'NA2' 'Bar' 'two casts'
 Declines 'NA3' 'Bar' 'a member after the parenthesised cast'
 Declines 'NA4' 'Bar' 'a cast to the class''s generic T (uGen.T exists)'
-Declines 'NA5' 'Bar' 'the cast''s type is ambiguous'
+Binds 'NA5' 'Bar' 'uAmb2.TAmb.Bar'
 Declines 'NA6' 'Bar' '`is` is no cast'
 Declines 'NA7' 'Bar' 'a `not` before the cast'
 

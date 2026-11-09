@@ -163,7 +163,7 @@ function OutputEncodingOnCommandLine(out pEncoding: TOutputEncoding; out pValue:
 /// and characters were lost so far in this run, a "lossy_output":N member is added
 /// as its first member.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoButterfly (DRagLint.CLI.pas), DRagLint.CLI.DoConvertScaffold (DRagLint.CLI.pas), DRagLint.CLI.DoDepsReport (DRagLint.CLI.pas), DRagLint.CLI.DoExportEnums (DRagLint.CLI.pas), DRagLint.CLI.DoExportObsidian (DRagLint.CLI.pas) (+11 more)</para>
+/// <para>Called from: DRagLint.CLI.DoArchDiagram (DRagLint.CLI.pas), DRagLint.CLI.DoButterfly (DRagLint.CLI.pas), DRagLint.CLI.DoConvertScaffold (DRagLint.CLI.pas), DRagLint.CLI.DoDepsReport (DRagLint.CLI.pas), DRagLint.CLI.DoExportEnums (DRagLint.CLI.pas) (+12 more)</para>
 /// <para>Calls: Copy, DRagLint.Core.OutputEncoding.EncodeForOutput, IntToStr</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Core.OutputEncoding.EncodeForOutput"/>

@@ -54,7 +54,7 @@ type
   /// only where the source states it. Nothing in this record is ever
   /// invented.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment.ParamNoteFor (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment.ParamTypeFor (DRagLint.Doc.Regions.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.ParamNoteFor (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.ParamTypeFor (DRagLint.Doc.Regions.pas)</para>
   /// <para>Used in units: DRagLint.Doc.Facts, DRagLint.Doc.Regions</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -65,7 +65,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build.AddDistinct (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build.ToFactRef (DRagLint.Doc.Facts.pas), DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.IsCertain (DRagLint.Doc.Regions.pas) ? (+1 more)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build.AddDistinct (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build.ToFactRef (DRagLint.Doc.Facts.pas), DRagLint.Doc.Regions.TDocFactsRenderer.RenderFactsBlock.IsCertain (DRagLint.Doc.Regions.pas) ? (+1 more)</para>
   /// <para>Used in units: DRagLint.Doc.Facts, DRagLint.Doc.Regions</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -80,6 +80,10 @@ type
     // usage ref (read/write/type_use/member-access) is not one, see
     // REF_KIND_CALL in DRagLint.Core.Model.
     Confidence: string;
+    /// <summary>The access mode of a 'Used in:' entry: 'r', 'w' or 'rw' (every
+    /// site of the member in that routine folded together); '' on every other
+    /// list.</summary>
+    Mode      : string;
   end;
 
   /// <summary>One mined `raise` with the message literal it was constructed
@@ -165,7 +169,7 @@ type
   /// fields carry the true count so the renderer can add '(+N more)'.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas) ?, DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas) ?, DRagLint.Doc.Facts.DemoteForeignSummary (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas) (+9 more)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas) ?, DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas) ?, DRagLint.Doc.Facts.DemoteForeignSummary (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas) (+14 more)</para>
   /// <para>Used in units: DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.Doc.Facts, DRagLint.Doc.Regions, DRagLint.LSP.Server, DRagLint.Query.HoverModel</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -213,6 +217,16 @@ type
     SkippedCallers : TArray<string>     ;
     CallsTotal     : Integer            ;
     UsedInTotal    : Integer            ;
+    /// <summary>E-USE-EDGES-PHASE2 (wave 147): the RESOLVED uses of a property
+    /// or field, one entry per enclosing routine, Mode 'r' / 'w' / 'rw'.</summary>
+    /// <remarks>Filled only for skProperty / skField, only from the moded rows
+    /// of FindResolvedCallers (member_accesses, bound usages) -- never from the
+    /// name-match bucket. Capped like CalledFrom (docs.max_callers; whole on a
+    /// dl:shared unit); UsedInSitesTotal is the distinct count before the cap.
+    /// When non-empty the renderer emits 'Used in:' INSTEAD of 'Used by:'
+    /// (spec 2026-09-14-use-edges-design.md sec 8.1).</remarks>
+    UsedIn          : TArray<TDocFactRef>;
+    UsedInSitesTotal: Integer            ;
     // v(ADF T3): ground-truth from the Pascal 'deprecated' DIRECTIVE on the decl
     // (NOT the <deprecated/> doc-comment TAG -- see DRagLint.Parser.DocComments'
     // TParsedDoc.Deprecated for that unrelated concept). Neither Signature nor
@@ -731,7 +745,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
     /// <para>Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNamesOfKind, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName (+48 more)</para>
-    /// <para>Complexity: 85 (cyclomatic, outer body), 1134 lines (full implementation)</para>
+    /// <para>Complexity: 92 (cyclomatic, outer body), 1173 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
@@ -4269,6 +4283,45 @@ begin
     begin
       FR:= ToFactRef(AStore, RC); { primary store's rows -> primary store's ids }
       AddDistinct(FR);
+    end;
+    { E-USE-EDGES-PHASE2: the 'Used in:' list of a property / field, from the
+      SAME resolved rows -- only the moded ones (a member access or a bound
+      usage), folded per routine so a routine that reads and writes the member
+      is one '[rw]' entry. Same cap rule as CalledFrom below. }
+    if ASym.Kind in [skProperty, skField] then
+    begin
+      var UseList: TList<TDocFactRef>:= TList<TDocFactRef>.Create;
+      var UseAt: TDictionary<string, Integer>:= TDictionary<string, Integer>.Create;
+      try
+        for RC in ResCallers do
+        begin
+          if RC.Mode = '' then Continue;
+          FR:= ToFactRef(AStore, RC);
+          var M: string:= if SameText(RC.Mode, 'write') then 'w' else 'r';
+          var UK: string:= FR.Display + '|' + FR.Location;
+          var At: Integer;
+          if UseAt.TryGetValue(UK, At) then
+          begin
+            var Old: TDocFactRef:= UseList[At];
+            if not Old.Mode.Contains(M) then Old.Mode:= 'rw';
+            UseList[At]:= Old;
+          end
+          else
+          begin
+            FR.Mode:= M;
+            UseAt.Add(UK, UseList.Count);
+            UseList.Add(FR);
+          end;
+        end;
+        Result.UsedInSitesTotal:= UseList.Count;
+        var UShown: Integer:= Min(UseList.Count, AMaxCallers);
+        if AWholeInboundLists or UnitIsShared(AStore.GetFilePath(ASym.FileId)) then UShown:= UseList.Count;
+        if UShown < 0 then UShown:= 0;
+        Result.UsedIn:= Copy(UseList.ToArray, 0, UShown);
+      finally
+        UseAt.Free;
+        UseList.Free;
+      end;
     end;
     Inc(GBResolved, BTick - TB0);
     TB0:= BTick;

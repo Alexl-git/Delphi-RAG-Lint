@@ -11,6 +11,11 @@ The drag-lint menu tree in the RAD Studio IDE. Each item links to the feature it
 
 * drag-lint
   * [About](features/about-and-status.md)
+  * Bookmarks
+    * [Go to Bookmark...](features/bookmarks-ide.md)
+    * [List Bookmarks in This Unit...](features/bookmarks-ide.md)
+    * [Restore Bookmarks...](features/bookmarks-ide.md)
+    * [Strip Bookmarks from This Unit...](features/bookmarks-ide.md)
   * Code Quality
     * [Allow a Finding on This Line...](features/allow.md)
     * [Compiler Hints...](features/compiler-hints.md)

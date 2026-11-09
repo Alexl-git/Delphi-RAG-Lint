@@ -4,10 +4,10 @@ title: Circular Dependency Report (worked example)
 summary: "A worked example: a real four-unit uses cycle, and the report drag-lint produces for it"
 product: DL
 group: graphs-reports
-order: 70004
+order: 70005
 since: 1.4.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # Circular Dependency Report (worked example)

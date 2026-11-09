@@ -1,0 +1,50 @@
+{
+  "id": "bookmarks-ide",
+  "title": "Bookmarks (IDE)",
+  "group": "documentation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.47.0-alpha",
+  "summary": "Lists, finds, strips and restores the // dl:bk comment anchors of the current unit from the IDE",
+  "intro": "Read this when you marked code with // dl:bk3 or // dl:bk:A7K3QX comments and want to jump to one from the IDE, or take them all out of a unit before a commit and put them back later. drag-lint > Bookmarks runs the bookmarks, bookmarks-strip and bookmarks-restore verbs; Strip and Restore show a dry run first and write only after you say Yes.",
+  "wikiPage": "Bookmarks-IDE",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Bookmarks > List Bookmarks in This Unit...",
+      "steps": ["Open the unit", "Choose drag-lint > Bookmarks > List Bookmarks in This Unit...", "Pick a bookmark; the editor jumps to its line"]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Bookmarks > Go to Bookmark...",
+      "steps": ["Open the unit", "Choose drag-lint > Bookmarks > Go to Bookmark...", "Type the number (3) or the CODE (A7K3QX); the editor jumps to it"]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Bookmarks > Strip Bookmarks from This Unit...",
+      "steps": ["Save the unit", "Choose drag-lint > Bookmarks > Strip Bookmarks from This Unit...", "Read the count and the sidecar path, answer Yes", "The anchors are removed and the unit reloads; the sidecar under %LOCALAPPDATA%\\drag-lint\\bookmarks keeps them"]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Bookmarks > Restore Bookmarks...",
+      "steps": ["Save the units the sidecar names", "Choose drag-lint > Bookmarks > Restore Bookmarks... and pick the sidecar", "Read how many will be restored and how many cannot be placed, answer Yes", "The units reload with their anchors back"]
+    }
+  ],
+  "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I jump to a dl:bk bookmark in the IDE?",
+      "command": "drag-lint > Bookmarks > Go to Bookmark..."
+    },
+    {
+      "ask": "How do I take my bookmarks out of a unit before a commit and put them back?",
+      "command": "drag-lint > Bookmarks > Strip Bookmarks from This Unit..., later drag-lint > Bookmarks > Restore Bookmarks..."
+    }
+  ],
+  "verified": {
+    "date": "2026-11-08",
+    "by": "ENGINE",
+    "build": "1.47.0-alpha",
+    "surfaceHash": "e2d2fadc800e8cef1a3eee5da4a9b69ceb2e2fc2ab7bcfb102799c1dfbeb28e1"
+  }
+}

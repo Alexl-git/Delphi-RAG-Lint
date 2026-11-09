@@ -56,7 +56,7 @@ try {
   $projDb = Join-Path $out 'projon.sqlite'
   Push-Location C:\TEMP
   try {
-    & $exe index $lib --db (Join-Path $out 'library-Win64.sqlite') 2>&1 | Out-Null
+    & $exe index $lib --db (Join-Path $out 'library-Win64.sqlite') --platform win64 2>&1 | Out-Null   # ruling a3: no --platform = Win32
     & $exe index $lib --db (Join-Path $out 'library-Win32.sqlite') --platform win32 2>&1 | Out-Null
     Check 'both library fixtures indexed' ((Test-Path (Join-Path $out 'library-Win64.sqlite')) -and (Test-Path (Join-Path $out 'library-Win32.sqlite')))
 

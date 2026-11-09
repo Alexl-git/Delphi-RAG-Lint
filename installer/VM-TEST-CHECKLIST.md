@@ -92,6 +92,37 @@ Uninstall silently: `"%LOCALAPPDATA%\Programs\drag-lint\unins000.exe" /VERYSILEN
 Install version N, then run the setup for version N+1 over it: no second entry
 in Apps, `bin\drag-lint.json` unchanged, `--version` reports N+1.
 
+## Section L -- installed layout v2 (setup built with `Build-Installer.ps1 -LayoutV2`)
+
+Owed before the engine default flips (spec `docs\superpowers\specs\2026-11-06-installed-layout-v2.md`,
+phases 4-5). Passes A-D above use the DEFAULT setup and must still show the flat v1 layout. Build the
+v2 setup only after the plugin lookups (phase 3) are merged. Revert the snapshot before each pass.
+
+L1. **Fresh, Just for me.** After setup: `%APPDATA%\drag-lint\drag-lint.json` exists with
+    `"outDir": "%LOCALAPPDATA%\\drag-lint\\library"`; there is **no** `bin\drag-lint.json`;
+    `HKCU\Environment\DRAGLINT_LAYOUT` = `v2`. In a NEW PowerShell window:
+    `drag-lint manifest where` says layout v2, origin appdata, exists yes;
+    `drag-lint register-project C:\sample\App.dproj --apply` then `index --all --only App` puts the
+    DB under `%LOCALAPPDATA%\drag-lint\library`.
+L2. **Fresh, All users, `{app}` not writable.** Install as admin, then as a STANDARD user: indexing
+    works without write access to `C:\Program Files\drag-lint`. Note whose `%APPDATA%` got the
+    starter (setup runs as the admin; `{userappdata}` is the admin's profile) -- a finding either way.
+L3. **Second Windows user on the all-users install:** starts with no manifest;
+    `drag-lint manifest where` and `drag-lint resolve-dbs --platform Win64` exit 0;
+    `register-project --apply` creates that user's `%APPDATA%\drag-lint\drag-lint.json`.
+L4. **Upgrade from a flat v1 install** (install the default setup, register a project, index it,
+    then run the v2 setup over it): `bin\drag-lint.json` is gone and
+    `bin\drag-lint.json.migrated-<yyyy-mm-dd>` holds the old text byte for byte;
+    `%APPDATA%\drag-lint\drag-lint.json` lists the same sections with absolute paths;
+    `drag-lint index --all --dry-run --json` names the SAME DB paths as before the upgrade (the DBs
+    did not move); no starter file overwrote the migrated one.
+L5. **Fatal log:** `drag-lint query --no-such-flag` writes `%LOCALAPPDATA%\drag-lint\logs\drag-lint-fatal.log`,
+    nothing beside the exe.
+L6. **Way back:** `setx DRAGLINT_LAYOUT v1`, new window: `manifest where` says v1 and reads beside
+    the exe (no file there after L4: copy the `.migrated-` file back by hand to restore v1).
+L7. **Uninstall** keeps `%APPDATA%\drag-lint` and `%LOCALAPPDATA%\drag-lint` and removes
+    `HKCU\Environment\DRAGLINT_LAYOUT`.
+
 ## Not covered on this VM (needs RAD Studio 13)
 
 On a machine with RAD Studio 13: plugin lines are enabled, `Known Packages`

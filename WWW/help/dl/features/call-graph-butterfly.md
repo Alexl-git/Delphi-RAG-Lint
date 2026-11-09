@@ -4,10 +4,10 @@ title: Call Graph (Butterfly)
 summary: "Shows callers and callees of one symbol together in a single \"butterfly\" view"
 product: DL
 group: graphs-reports
-order: 70002
+order: 70003
 since: 0.96.0-alpha
 status: shipped
-updated: 1.38.0-alpha
+updated: 1.46.0-alpha
 ---
 
 # Call Graph (Butterfly)

@@ -153,7 +153,7 @@ function ChooseLibraryPlatform(const APlatformArg, AProjectFingerprint, ADproj, 
 /// <returns>The canonical spelling of a KnownPlatforms token (Win32, Win64, Linux64, OSX64, OSXARM64, Android, ...), or '' (no file, no element, unknown token). A non-Windows token is returned as is, so such a project no longer falls to the Win32 manifest default (L-C20).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.LibraryReady.ChooseLibraryPlatform (DRagLint.CLI.LibraryReady.pas), DRagLint.CLI.ResolveReadDbsForFileWith (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.CycleFix.CycleFixPlatform (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.EffectiveIndexPlatform (DRagLint.CLI.pas), DRagLint.CLI.LibraryReady.ChooseLibraryPlatform (DRagLint.CLI.LibraryReady.pas), DRagLint.CLI.ResolveReadDbsForFileWith (DRagLint.CLI.pas)</para>
 /// <para>Calls: ChangeFileExt, Copy, DRagLint.CLI.LibraryReady.CanonicalPlatform, ExtractFileExt, Pos, SameText, Trim</para>
 /// <para>Returns: ''</para>
 /// <para>Catches: Exception (swallowed)</para>

@@ -4,10 +4,10 @@ title: unwith
 summary: Removes with blocks, proving every name binds to what it bound before
 product: DL
 group: refactoring
-order: 50015
+order: 50018
 since: 1.44.1-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.47.0-alpha
 ---
 
 # unwith

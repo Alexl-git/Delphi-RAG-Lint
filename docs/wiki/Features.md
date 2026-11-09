@@ -133,7 +133,7 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**314 rules. 110 have an auto-fix. 261 are on by default.** 220 are built-in checks; 94 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**314 rules. 110 have an auto-fix. 262 are on by default.** 220 are built-in checks; 94 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
@@ -210,7 +210,8 @@ DocInsight comments generated from the index, and drift detection.
 
 | Feature | Surfaces | Status |
 |---|---|---|
-| [bookmarks](bookmarks) | `bookmarks` |  |
+| [Bookmarks (IDE)](Bookmarks-IDE) | drag-lint > Bookmarks > List Bookmarks in This Unit...; drag-lint > Bookmarks > Go to Bookmark...; drag-lint > Bookmarks > Strip Bookmarks from This Unit...; drag-lint > Bookmarks > Restore Bookmarks... |  |
+| [bookmarks](bookmarks) | `bookmarks`; `bookmarks-strip`; `bookmarks-restore` |  |
 | [dl:wiki concept blocks](Wiki-Blocks-Authoring) | `wiki`; procedure: `docs\wiki\Wiki-Blocks-Authoring.md` |  |
 | [Doc Comment Stub (symbol)](Doc-Comment-Stub-symbol) | drag-lint > Generate & Export > Doc Comment Stub (symbol)...; `generate-docs` |  |
 | [doc-drift](doc-drift) | `doc-drift` |  |
@@ -232,8 +233,11 @@ Rename, extract, safe delete, uses cleanup and code stubs.
 | [allow](allow) | drag-lint > Code Quality > Allow a Finding on This Line...; `allow` |  |
 | [Create helper class](Create-helper-class) | Structure form: Create helper class; `create-enum-helper` |  |
 | [create-enum-helper](create-enum-helper) | `create-enum-helper`; drag-lint > Generate & Export > Enum Record Helper (symbol)... |  |
+| [Extract an interface from the members used (scratch + compile gate)](extract-interface) | `extract-interface` |  |
 | [extract-method](extract-method) | `extract-method`; drag-lint > Extract Method (selection)... (Ctrl+Alt+M) |  |
+| [Lint --fix through the compile gate](lint-fix-compile-gate) | `lint` |  |
 | [Narrow parameter types (compile-gated)](narrow-param) | `narrow-param` |  |
+| [Prepare heavy initialization for lazy loading (first phase)](lazy-init) | `lazy-init` |  |
 | [Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor](Quick-Fix-Add-Unit-for-Inline-Hint-H2443-at-Cursor) | drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor |  |
 | [Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)](Quick-Fix-Add-Unit-for-Undeclared-at-Cursor-Ctrl-Alt-U) | drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U) |  |
 | [Quick-Fix: Convert Public Field to Property at Cursor](Quick-Fix-Convert-Public-Field-to-Property-at-Cursor) | drag-lint > Convert Public Field to Property at Cursor |  |
@@ -255,7 +259,7 @@ Rule-driven migration of legacy component types.
 |---|---|---|
 | [BDE and Data.DB rule books](convrules-book-split) | `tests/autotest/run_convert_book_split.ps1`; `ConvRulesEditor.exe` (Convert tab > rule book list) |  |
 | [Conditional #mapping authoring](convrules-editor-mappings) | `ConvRulesEditor.exe` (Mapping > Mappings...) |  |
-| [Convert Components](Convert-Components) | drag-lint > Convert Components > Convert Selected Component(s)...; drag-lint > Convert Components > Convert All of This Type on the Form...; drag-lint > Convert Components > Open Conversion Editor... |  |
+| [Convert Components](Convert-Components) | drag-lint > Convert Components > Convert Selected Component(s)...; drag-lint > Convert Components > Convert All of This Type on the Form...; drag-lint > Convert Components > Open Conversion Editor...; Form Designer: drag-lint: Convert Selected Component(s)...; Form Designer: drag-lint: Convert All of This Type on the Form... |  |
 | [Convert progress](convrules-editor-convert-progress) | `ConvRulesEditor.exe` (Convert tab progress line) |  |
 | [convert-apply #migrate (member, type and enum rename / DL_NONE)](convert-apply-migrate) | `convert-apply` |  |
 | [convert-apply](convert-apply) | `convert-apply` |  |
@@ -285,6 +289,7 @@ Call graphs, dependency reports, dead code, tester spreadsheets.
 
 | Feature | Surfaces | Status |
 |---|---|---|
+| [arch-diagram](arch-diagram) | `arch-diagram` |  |
 | [butterfly](butterfly) | `butterfly`; drag-lint > Uses & Dependencies > Call Graph (Butterfly)... |  |
 | [Call Graph (Butterfly)](Call-Graph-Butterfly) | drag-lint > Uses & Dependencies > Call Graph (Butterfly)...; `reverse-calltree` |  |
 | [callgraph](callgraph) | `callgraph`; drag-lint > Uses & Dependencies > Call Tree (callers or callees, N-deep)... |  |
@@ -406,6 +411,7 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [info](info) | `info` |  |
 | [Library Drift Check](Library-Drift-Check) | drag-lint > Index & Maintenance > Library Drift Check...; `library-drift` |  |
 | [Maintenance](Maintenance) | procedure: `docs\wiki\Maintenance.md` |  |
+| [manifest where / migrate (installed layout v2)](installed-layout-v2) | `manifest where`; `manifest migrate` |  |
 | [Open Plugin Log](Open-Plugin-Log) | About window: Open Plugin Log |  |
 | [resolve-uses](Maintenance) | `resolve-uses` | internal |
 | [selftest](Maintenance) | `selftest` | internal |

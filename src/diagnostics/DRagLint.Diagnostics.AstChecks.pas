@@ -2676,9 +2676,14 @@ var
       condition keyed on a node type the grammar never produces reads as
       coverage that does not exist. (Same family as the kAt/kVar/exprIf
       "keywords are NAMED nodes" bugs already fixed in this tree.)
-      See docs\INBOX-deep-nesting-silent-on-trailing-else-call.md. }
+      See docs\INBOX-deep-nesting-silent-on-trailing-else-call.md.
+      GRAMMAR v1.4.4 (PR #2, wave 147): a STATEMENT if-with-else now parses as
+      ifElse (prec.dynamic), exprIf is left to the if-EXPRESSION. Both count,
+      so trees from either grammar measure the same; run_deep_nesting_else_forms
+      went RED on the v1.4.4 DLL with exprIf alone. }
     Inc1:= 0;
-    if (N.NodeType = 'if') or (N.NodeType = 'exprIf') or (N.NodeType = 'while') or (N.NodeType = 'for') or (N.NodeType = 'repeat') or (N.NodeType = 'case') or
+    if (N.NodeType = 'if') or (N.NodeType = 'exprIf') or (N.NodeType = 'ifElse') or (N.NodeType = 'while') or
+      (N.NodeType = 'for') or (N.NodeType = 'repeat') or (N.NodeType = 'case') or
       (N.NodeType = 'with') or (N.NodeType = 'try') then Inc1:= 1;
 
     { The else BRANCH is the child immediately after the kElse keyword --
@@ -2700,7 +2705,7 @@ var
         the rule is asking for, and counting it would make any long dispatch
         chain look pathological. }
       if (I = ElseIdx) and (not C.IsNull) and
-         ((C.NodeType = 'if') or (C.NodeType = 'exprIf')) then
+         ((C.NodeType = 'if') or (C.NodeType = 'exprIf') or (C.NodeType = 'ifElse')) then
         ChildDepth:= ADepth;   { chain continuation -- same logical level }
       D:= MaxNest(C, ChildDepth);
       if D > M then M:= D;
@@ -5577,7 +5582,7 @@ var
 
     { The type a with-entity denotes, or '' for silence. Deliberately narrow: a
       routine local or parameter, a field of the enclosing class, an `as` cast,
-      or a constructor call. Anything else is not worth a guess -- and the
+      a constructor call, or a unit-level function with ONE indexed declaration. Anything else is not worth a guess -- and the
       per-ROUTINE decl map matters, not a file-wide one: a same-named local in
       another routine must not decide this routine's type. }
     function EntityType(const E: TTSNode): string;
@@ -5597,6 +5602,25 @@ var
               if (M.Kind = skField) and SameText(M.Name, NodeStr(E)) then
                 Exit(BareTypeName(M.Signature));
           end;
+        { A unit-level FUNCTION named by the entity (`with GetObj do`): its declared
+          return type, when exactly ONE function of that name is indexed and no
+          local shadows it. The resolver leaves such a with-target untyped and
+          binds a same-named bare read to the enum value -- the residual this rule
+          still reports after the 1.47 same-named-type tie-break (B5). Two
+          candidates = silence. }
+        if (AStore <> nil) and not LocalNames.ContainsKey(Nm) then
+        begin
+          var FnType: string:= '';
+          var FnCount: Integer:= 0;
+          for var Sy: TSymbol in AStore.FindSymbolsByExactName(NodeStr(E)) do
+            if Sy.Kind = skFunction then
+            begin
+              Inc(FnCount);
+              var Colon: Integer:= Sy.Signature.LastDelimiter(':');
+              FnType:= if Colon >= 0 then BareTypeName(Sy.Signature.Substring(Colon + 1)) else '';
+            end;
+          if FnCount = 1 then Exit(FnType);
+        end;
         Exit('');
       end;
       if E.NodeType = 'exprBinary' then

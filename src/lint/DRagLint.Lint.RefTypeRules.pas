@@ -85,7 +85,7 @@ const
   UI_ACCESS_IN_THREAD_TYPED_RULE = 'ui-access-in-thread-typed';
   REF_TYPE_RULES: array[0..8] of string = (IS_ALWAYS_TRUE_RULE, IS_NEVER_TRUE_RULE, UPCAST_THEN_DOWNCAST_RULE, WITH_ON_TEMPORARY_RULE, INTERFACE_HOLDER_RULE, ARGUMENT_NARROWS_RULE, REDUNDANT_CAST_RULE, UNSAFE_TYPECAST_RULE, UI_ACCESS_IN_THREAD_TYPED_RULE);
   /// <summary>The ones that ship OFF; each names why in the catalog.</summary>
-  REF_TYPE_RULES_OFF: array of string = [UNSAFE_TYPECAST_RULE, UI_ACCESS_IN_THREAD_TYPED_RULE, IS_NEVER_TRUE_RULE];
+  REF_TYPE_RULES_OFF: array of string = [UNSAFE_TYPECAST_RULE, IS_NEVER_TRUE_RULE];
 
 /// <summary>True when the rule ships OFF by default (see the catalog).</summary>
 /// <param name="ARuleId">One of REF_TYPE_RULES.</param>
@@ -285,6 +285,8 @@ const
   MAX_THREAD_HOPS  = 5;
   { How much of an expression a message quotes. }
   MAX_QUOTED_EXPR  = 60;
+  { Appended to a finding whose thread class nothing in the project constructs (1.47 U1). }
+  NEVER_BUILT_LABEL = ' (class never constructed)';
 
 type
   /// <summary>The ref_types row of one reference, as read for one file.</summary>
@@ -384,7 +386,10 @@ type
       FUiOwners: TDictionary<string, TArray<string>>;
       FOwnRoots: TDictionary<string, Boolean>;
       FEmitted : TDictionary<Int64, Boolean>;
+      { True while the Execute being checked belongs to a class nothing constructs (1.47 U1). }
+      FNeverBuilt: Boolean;
       function ProjectOwnsName(const ALeaf: string): Boolean;
+      function ClassNeverConstructed(const ALeaf: string): Boolean;
       function UiRootOf(const AFacts: TTypeFacts): string;
       function SourceNames(const APattern: string): Boolean;
       function UiGlobalRoot(const ANode: TTSNode): string;
@@ -1200,6 +1205,25 @@ begin
   FOwnRoots.Add(ALeaf, Result);
 end;
 
+{ True when no reference in the project names the class except the headers of its own method
+  implementations (`procedure TExit.Execute`). Any other mention -- `TExit.Create`, a variable
+  of the type, a descendant's heritage, a `class of` -- counts as a possible construction, as
+  does a by-name reference the resolver left unbound, so the answer errs towards False. }
+function TRefTypeScan.ClassNeverConstructed(const ALeaf: string): Boolean;
+begin
+  FQuery.SQL.Text:= 'SELECT 1 FROM refs r LEFT JOIN symbols m ON m.id = r.enclosing_symbol_id ' +
+                    'LEFT JOIN symbols c ON c.id = m.parent_id ' +
+                    'WHERE r.name_text = :n COLLATE NOCASE AND NOT COALESCE(c.name = :n COLLATE NOCASE ' +
+                    'AND r.file_id = m.file_id AND r.start_line = m.impl_start_line, 0) LIMIT 1';
+  FQuery.ParamByName('n').AsString:= ALeaf;
+  FQuery.Open;
+  try
+    Result:= FQuery.Eof;
+  finally
+    FQuery.Close;
+  end;
+end;
+
 function TRefTypeScan.UiRootOf(const AFacts: TTypeFacts): string;
 begin
   Result:= '';
@@ -1554,8 +1578,9 @@ begin
   FEmitted.Add(Key, True);
   var F: TLintFinding:= Default(TLintFinding);
   F.RuleId   := UI_ACCESS_IN_THREAD_TYPED_RULE;
-  F.Severity := SEV_WARNING;
-  F.Message  := AMessage;
+  { A class nothing constructs never runs its Execute: still reported, labelled and down-ranked. }
+  F.Severity := if FNeverBuilt then SEV_HINT else SEV_WARNING;
+  F.Message  := if FNeverBuilt then AMessage + NEVER_BUILT_LABEL else AMessage;
   F.FileId   := FFileId;
   F.FilePath := FPath;
   F.StartLine:= ATouch.StartLine;
@@ -1595,7 +1620,12 @@ begin
   if Name.IsNull or (not SameText(Text(Name.ChildByField(FIELD_RHS)), EXECUTE_NAME)) then Exit;
   var Cls: string:= Text(Name.ChildByField(FIELD_LHS));
   if (not FactsOfName(Cls).HasAncestor(THREAD_ROOT)) or ProjectOwnsName(THREAD_ROOT) then Exit;
-  CheckThreadBody(ANode.ChildByField(FIELD_BODY), LeafOf(Cls) + DOT_SEP + EXECUTE_NAME);
+  FNeverBuilt:= ClassNeverConstructed(LeafOf(Cls));
+  try
+    CheckThreadBody(ANode.ChildByField(FIELD_BODY), LeafOf(Cls) + DOT_SEP + EXECUTE_NAME);
+  finally
+    FNeverBuilt:= False;
+  end;
 end;
 
 procedure TRefTypeScan.CheckThreadStart(const ANode: TTSNode);

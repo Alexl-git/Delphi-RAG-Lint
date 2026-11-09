@@ -896,7 +896,7 @@ function CodeOnly(const pLine: string; var pInBrace, pInParen: Boolean): string;
 /// <returns>One TCodeStart per line.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Report.CycleEdge.PlanRoutineInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutinesInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TMemberPlan.StartOf (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.BuildSwitches (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.CtorSiteLine (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Called from: DRagLint.Report.CycleEdge.PlanRoutineInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutinesInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TMemberPlan.StartOf (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.BuildSwitches (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.CtorSiteLine (DRagLint.Report.CyclePlan.pas) (+2 more)</para>
 /// <para>Calls: DRagLint.Report.CycleEdge.CodeOnly</para>
 /// <seealso cref="DRagLint.Report.CycleEdge.CodeOnly"/>
 /// <!-- drag-lint:auto END -->
@@ -915,7 +915,7 @@ const
 /// <returns>The code of the line, column-faithful to pLine.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Report.CycleEdge.ReplaceInCode (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TMemberPlan.RewriteLine (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.BaseSiteRefusal (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.BuildSwitches (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.CtorSiteLine (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Called from: DRagLint.Report.CycleEdge.ReplaceInCode (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TMemberPlan.RewriteLine (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.BaseSiteRefusal (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.BuildSwitches (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.CtorSiteLine (DRagLint.Report.CyclePlan.pas) (+2 more)</para>
 /// <para>Calls: DRagLint.Report.CycleEdge.CodeOnly</para>
 /// <para>Returns: CodeOnly(pLine, InBrace, InParen)</para>
 /// <seealso cref="DRagLint.Report.CycleEdge.CodeOnly"/>

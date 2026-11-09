@@ -12,6 +12,9 @@
   Nothing is installed and nothing is deployed; the only output is the setup exe.
 
   -DryRun prints the defines and the checks without running ISCC.
+  -LayoutV2 builds the installed-layout-v2 setup (phase 4; manifest in %APPDATA%). OFF by
+  default: without it the setup installs the flat v1 layout. Not for release before the
+  plugin lookups (phase 3) and the VM test (VM-TEST-CHECKLIST.md section L).
 #>
 param(
   [string] $EngineDir   = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64',
@@ -20,7 +23,8 @@ param(
   [string] $GraphvizBin = 'C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin',
   [string] $OutDir      = (Join-Path $PSScriptRoot 'Output'),
   [string] $Iscc        = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe',
-  [switch] $DryRun
+  [switch] $DryRun,
+  [switch] $LayoutV2
 )
 $ErrorActionPreference = 'Stop'
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -47,7 +51,7 @@ $need = @(
   "$GraphvizBin\dot.exe", "$GraphvizBin\config8",
   "$YadfDir\Win64\Release\EXE\YADF.exe", "$YadfDir\Win64\Release\EXE\YADFSetup.exe",
   "$YadfDir\Win32\Release\EXE\YADFOT.bpl", "$YadfDir\Win64\Release\EXE\YADFOT.bpl", "$YadfDir\LICENSE",
-  "$repo\installer\drag-lint.starter.json", "$repo\charts\report-pairs.example.json",
+  "$repo\installer\drag-lint.starter.json", "$repo\installer\drag-lint.starter-v2.json", "$repo\charts\report-pairs.example.json",
   "$EngineDir\drag-lint-open.exe",
   "$repo\installer\licenses\drag-lint-LICENSE.txt", "$repo\installer\licenses\graphviz-EPL-2.0.txt"
 )
@@ -75,6 +79,7 @@ $defines = [ordered]@{
   AppVersion = $version; NumericVersion = $numericVersion; EngineDir = $EngineDir; Plugin32Dir = $Plugin32Dir; YadfDir = $YadfDir
   GraphvizBin = $GraphvizBin; RepoRoot = $repo; OutDir = $OutDir
 }
+if ($LayoutV2) { $defines['LayoutV2'] = '1' }
 "drag-lint installer $version"
 $defines.GetEnumerator() | ForEach-Object { "  /D{0}={1}" -f $_.Key, $_.Value }
 if ($DryRun) { 'dry run: all sources present, ISCC not run'; return }

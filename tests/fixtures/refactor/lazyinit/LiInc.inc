@@ -1,0 +1,1 @@
+Writeln('LiInc init');

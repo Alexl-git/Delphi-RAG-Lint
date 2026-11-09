@@ -1,7 +1,7 @@
 {
-  "product": "1.46.0-alpha",
-  "extractor": "1.33.0-alpha",
-  "resolver": "1.21.0-alpha",
+  "product": "1.47.0-alpha",
+  "extractor": "1.34.0-alpha",
+  "resolver": "1.22.0-alpha",
   "schema": 23,
   "groups": [
     {
@@ -1637,12 +1637,16 @@
         {
           "ask": "What type does a re-published property (property Text;) have, and which ancestor declares it?",
           "command": "drag-lint hover --qname <Unit.TDerived.Text> --format json   (fields type + declared_in; the type itself is stored by index, prop-types stage)"
+        },
+        {
+          "ask": "Which routines read or write this property or field?",
+          "command": "drag-lint hover --qname <Unit.TFoo.Prop> --format md   (fact line Used in: Routine (file.pas) [r|w|rw], from the resolved member accesses)"
         }
       ],
       "verified": {
-        "date": "2026-11-05",
+        "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.44.0-alpha",
+        "build": "1.47.0-alpha",
         "surfaceHash": "c69cb05880f5f5bd5b68dbddc39404b274f23a964817fca00b6e6466cae29b4b"
       }
     },
@@ -1812,7 +1816,7 @@
             }
           ],
           "helpOrder": 2,
-          "help": ["  drag-lint query              --name  <symbol-name>  [--db ...] [--json] [--case-sensitive] [--exact]", "  drag-lint query              --qname <qualified>    [--db ...] [--json] [--case-sensitive]", "                               --name/--qname match CASE-INSENSITIVELY (Delphi identifiers are);", "                               --case-sensitive restores byte-exact matching.", "                               --name also accepts a QUALIFIED name (falls back to --qname on a dotted value).", "                               --exact suppresses the fuzzy fallback, so 0 rows means \"no such symbol\".", "                               JSON rows carry \"match_kind\": \"exact\" | \"fuzzy\" | \"substring\" (--name-like) -- reject \"fuzzy\" unless", "                               you want suggestions; a fuzzy row does NOT carry the name you asked for.", "                               --quiet suppresses the \"(loaded defaults from ...)\" stderr banner.", "  drag-lint query              --text \"<phrase>\" [--any-order|--substring] [--source pas|dfm|sql] [--kind <k>] [--limit N] [--db ...] [--json]", "       ^ searches STRING LITERALS, DFM/SQL text AND COMMENT PROSE (// { } (* *) ///).", "         --kind literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception", "         narrows it; --kind literal reproduces the pre-comment behaviour exactly.", "                               searches STRING LITERALS ONLY -- string constants, resourcestrings,", "                               DFM captions, SQL exception messages. NOT source text: identifiers,", "                               property assignments and type names are not in this corpus, so 0", "                               matches for those is correct, not a missing index. COMMENTS: doc", "                               comments ARE searchable -- `query find --doc-contains \"<phrase>\"`.", "                               Only BODY-INLINE comments need grep. (INBOX 2.7; the old line here", "                               sent people to grep for prose the index already had.)"]
+          "help": ["  drag-lint query              --name  <symbol-name>  [--db ...] [--json] [--case-sensitive] [--exact]", "  drag-lint query              --qname <qualified>    [--db ...] [--json] [--case-sensitive]", "                               --name/--qname match CASE-INSENSITIVELY (Delphi identifiers are);", "                               --case-sensitive restores byte-exact matching.", "                               --name also accepts a QUALIFIED name (falls back to --qname on a dotted value).", "                               --exact suppresses the fuzzy fallback, so 0 rows means \"no such symbol\".", "                               JSON rows carry \"match_kind\": \"exact\" | \"fuzzy\" | \"substring\" (--name-like) -- reject \"fuzzy\" unless", "                               you want suggestions; a fuzzy row does NOT carry the name you asked for.", "                               --quiet suppresses the \"(loaded defaults from ...)\" stderr banner.", "  drag-lint query              --text \"<phrase>\" [--any-order|--substring] [--source pas|dfm|sql|md] [--kind <k>] [--limit N] [--db ...] [--json]", "       ^ searches STRING LITERALS, DFM/SQL text AND COMMENT PROSE (// { } (* *) ///).", "         --source md: Markdown text nodes (headings, paragraphs, list items of the .md files beside a project file).", "         --kind literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception", "         narrows it; --kind literal reproduces the pre-comment behaviour exactly.", "                               searches STRING LITERALS ONLY -- string constants, resourcestrings,", "                               DFM captions, SQL exception messages. NOT source text: identifiers,", "                               property assignments and type names are not in this corpus, so 0", "                               matches for those is correct, not a missing index. COMMENTS: doc", "                               comments ARE searchable -- `query find --doc-contains \"<phrase>\"`.", "                               Only BODY-INLINE comments need grep. (INBOX 2.7; the old line here", "                               sent people to grep for prose the index already had.)"]
         }
       ],
       "audience": "both",
@@ -1833,10 +1837,10 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
-        "surfaceHash": "a122f7ec700783a420926549b93400971bb5f4f4b0f7c87d9014d5467b5aa622"
+        "build": "1.47.0-alpha",
+        "surfaceHash": "887c7fc73b88057ad6e63babcad3ef2022a549275592a888098565725c9878de"
       }
     },
     {
@@ -5033,14 +5037,64 @@
       }
     },
     {
+      "id": "bookmarks-ide",
+      "title": "Bookmarks (IDE)",
+      "group": "documentation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.47.0-alpha",
+      "summary": "Lists, finds, strips and restores the // dl:bk comment anchors of the current unit from the IDE",
+      "intro": "Read this when you marked code with // dl:bk3 or // dl:bk:A7K3QX comments and want to jump to one from the IDE, or take them all out of a unit before a commit and put them back later. drag-lint > Bookmarks runs the bookmarks, bookmarks-strip and bookmarks-restore verbs; Strip and Restore show a dry run first and write only after you say Yes.",
+      "wikiPage": "Bookmarks-IDE",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Bookmarks > List Bookmarks in This Unit...",
+          "steps": ["Open the unit", "Choose drag-lint > Bookmarks > List Bookmarks in This Unit...", "Pick a bookmark; the editor jumps to its line"]
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Bookmarks > Go to Bookmark...",
+          "steps": ["Open the unit", "Choose drag-lint > Bookmarks > Go to Bookmark...", "Type the number (3) or the CODE (A7K3QX); the editor jumps to it"]
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Bookmarks > Strip Bookmarks from This Unit...",
+          "steps": ["Save the unit", "Choose drag-lint > Bookmarks > Strip Bookmarks from This Unit...", "Read the count and the sidecar path, answer Yes", "The anchors are removed and the unit reloads; the sidecar under %LOCALAPPDATA%\\drag-lint\\bookmarks keeps them"]
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Bookmarks > Restore Bookmarks...",
+          "steps": ["Save the units the sidecar names", "Choose drag-lint > Bookmarks > Restore Bookmarks... and pick the sidecar", "Read how many will be restored and how many cannot be placed, answer Yes", "The units reload with their anchors back"]
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "How do I jump to a dl:bk bookmark in the IDE?",
+          "command": "drag-lint > Bookmarks > Go to Bookmark..."
+        },
+        {
+          "ask": "How do I take my bookmarks out of a unit before a commit and put them back?",
+          "command": "drag-lint > Bookmarks > Strip Bookmarks from This Unit..., later drag-lint > Bookmarks > Restore Bookmarks..."
+        }
+      ],
+      "verified": {
+        "date": "2026-11-08",
+        "by": "ENGINE",
+        "build": "1.47.0-alpha",
+        "surfaceHash": "e2d2fadc800e8cef1a3eee5da4a9b69ceb2e2fc2ab7bcfb102799c1dfbeb28e1"
+      }
+    },
+    {
       "id": "bookmarks",
       "title": "bookmarks",
       "group": "documentation",
       "owner": "ENGINE",
       "status": "shipped",
       "since": "1.46.0-alpha",
-      "summary": "Lists or finds the dl:bk comment-anchor bookmarks in a unit or a folder",
-      "intro": "Read this when you marked code with // dl:bk3 or // dl:bk:A7K3QX comments and want them listed, or one found by its code: bookmarks prints file:line for each anchor and never writes.",
+      "summary": "Lists or finds the dl:bk comment-anchor bookmarks in a unit or a folder, and strips / restores them on request",
+      "intro": "Read this when you marked code with // dl:bk3 or // dl:bk:A7K3QX comments and want them listed, or one found by its code (bookmarks, read-only), or taken out of a file and put back later (bookmarks-strip / bookmarks-restore, user-invoked, dry run without --apply).",
       "wikiPage": "bookmarks",
       "surfaces": [
         {
@@ -5061,14 +5115,58 @@
               "name": "--json"
             }
           ]
+        },
+        {
+          "type": "cli",
+          "verb": "bookmarks-strip",
+          "example": "drag-lint bookmarks-strip --in <file.pas|dir> --output <sidecar.json> [--name <code>] [--apply] [--json|--format json]",
+          "usage": "drag-lint bookmarks-strip --in <file.pas|dir> --output <sidecar.json> [--name <code>] [--apply] [--json|--format json] (removes the dl:bk comment anchors and records them in a sidecar for bookmarks-restore; dry run without --apply; never overwrites a sidecar; exit 3 = none)",
+          "flags": [
+            {
+              "name": "--in",
+              "arg": "<file.pas|dir>"
+            },
+            {
+              "name": "--output",
+              "arg": "<sidecar.json>"
+            },
+            {
+              "name": "--name",
+              "arg": "<code>"
+            },
+            {
+              "name": "--apply"
+            },
+            {
+              "name": "--json"
+            }
+          ]
+        },
+        {
+          "type": "cli",
+          "verb": "bookmarks-restore",
+          "example": "drag-lint bookmarks-restore --from <sidecar.json> [--apply] [--json|--format json]",
+          "usage": "drag-lint bookmarks-restore --from <sidecar.json> [--apply] [--json|--format json] (puts the anchors a bookmarks-strip removed back, byte-identical when the file is unchanged; a file with an anchor it cannot place is left untouched; dry run without --apply; exit 4 = some unplaced)",
+          "flags": [
+            {
+              "name": "--from",
+              "arg": "<sidecar.json>"
+            },
+            {
+              "name": "--apply"
+            },
+            {
+              "name": "--json"
+            }
+          ]
         }
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-07",
+        "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.46.0-alpha",
-        "surfaceHash": "12ec1cf485a59f42b29a1cf39d98e9b6edf664414ac87b8a716c6e81f18ca3c8"
+        "build": "1.47.0-alpha",
+        "surfaceHash": "4f1b33ba85621e69b7d9f26164f6e0395d83d8c0a1c339d6d283cfaf7cf855cc"
       }
     },
     {
@@ -5365,13 +5463,17 @@
         {
           "ask": "How do I add or repair a doc comment on just one declaration?",
           "command": "drag-lint document --qname <Foo.TBar.Baz> --apply"
+        },
+        {
+          "ask": "What does the managed block say about where a property or field is used?",
+          "command": "drag-lint document --qname <Unit.TFoo.Prop> --apply   (writes Used in: Routine (file.pas) [r|w|rw] in place of Used by:)"
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
-        "surfaceHash": "ce9006423b4e73d27870db7f5d6a7c21c1ce666f93b55fb6e31fdb7fd1a2994c"
+        "build": "1.47.0-alpha",
+        "surfaceHash": "ac4838ac360a28ffef7cf43933580ae9ced66a7baf8a96d658e73bf1170938d7"
       }
     },
     {
@@ -5955,6 +6057,90 @@
       }
     },
     {
+      "id": "extract-interface",
+      "title": "Extract an interface from the members used (scratch + compile gate)",
+      "group": "refactoring",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.47.0-alpha",
+      "summary": "Declares an interface from the members of a class the project uses and adds it to the class; --apply through a scratch build and the compile gate",
+      "intro": "Read this when a class needs an interface and you want it to hold what its callers actually use, not every public method. The default prints the plan, the very text it would write; --apply builds a scratch copy with the change first, then builds the project before and after and rolls back on any error. No consumer is retyped, so no lifetime changes.",
+      "wikiPage": "extract-interface",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "extract-interface",
+          "example": "drag-lint extract-interface --class <name> --plan --db <db>",
+          "usage": "drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]",
+          "flags": [
+            {
+              "name": "--class",
+              "arg": "<name>"
+            },
+            {
+              "name": "--members",
+              "arg": "<a,b>"
+            },
+            {
+              "name": "--name",
+              "arg": "<IFoo>"
+            },
+            {
+              "name": "--reparent-interfaced"
+            },
+            {
+              "name": "--plan"
+            },
+            {
+              "name": "--apply"
+            },
+            {
+              "name": "--project",
+              "arg": "<X.dproj>"
+            },
+            {
+              "name": "--db",
+              "arg": "<db>"
+            },
+            {
+              "name": "--no-backup"
+            },
+            {
+              "name": "--platform",
+              "arg": "<p>"
+            },
+            {
+              "name": "--rsvars",
+              "arg": "<bat>"
+            },
+            {
+              "name": "--build-timeout",
+              "arg": "<s>"
+            },
+            {
+              "name": "--no-compile"
+            },
+            {
+              "name": "--library-db",
+              "arg": "<db>"
+            },
+            {
+              "name": "--format",
+              "arg": "json"
+            }
+          ],
+          "help": ["  drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]   - declare an interface from the members of a class the project uses and add it to the class: plan by default, every refusal named, --apply through a scratch build and the compile gate"]
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-08",
+        "by": "ENGINE",
+        "build": "1.47.0-alpha",
+        "surfaceHash": "7f36a5ad2615cfa9ae3027b2503c1ba1b633d2de66cecdd40a8da6afd1c8d5d8"
+      }
+    },
+    {
       "id": "extract-method",
       "title": "extract-method",
       "group": "refactoring",
@@ -6041,6 +6227,94 @@
       }
     },
     {
+      "id": "lint-fix-compile-gate",
+      "title": "Lint --fix through the compile gate",
+      "group": "refactoring",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.47.0-alpha",
+      "summary": "lint --fix --apply --project X.dproj --compile-gate writes the fixes only if the project still builds; a fix that breaks the compile is refused and rolled back",
+      "intro": "Read this before letting lint --fix write into a project you cannot afford to break. With --compile-gate the project builds before and after the write and any compile error rolls every file back. Opt-in: without the flag nothing builds.",
+      "wikiPage": "lint-fix-compile-gate",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "drag-lint lint --in <f.pas> --db <db> --fix --apply --project <X.dproj> --compile-gate",
+          "usage": "drag-lint lint --in <f.pas> --db <db> --fix --apply --project <X.dproj> --compile-gate [--fix-line <L> --fix-rule <id>] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]",
+          "flags": [
+            {
+              "name": "--in",
+              "arg": "<f.pas>"
+            },
+            {
+              "name": "--db",
+              "arg": "<db>"
+            },
+            {
+              "name": "--fix"
+            },
+            {
+              "name": "--apply"
+            },
+            {
+              "name": "--project",
+              "arg": "<X.dproj>"
+            },
+            {
+              "name": "--compile-gate"
+            },
+            {
+              "name": "--fix-line",
+              "arg": "<L>"
+            },
+            {
+              "name": "--fix-rule",
+              "arg": "<id>"
+            },
+            {
+              "name": "--no-backup"
+            },
+            {
+              "name": "--platform",
+              "arg": "<p>"
+            },
+            {
+              "name": "--rsvars",
+              "arg": "<bat>"
+            },
+            {
+              "name": "--build-timeout",
+              "arg": "<s>"
+            }
+          ],
+          "help": ["  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply [--no-backup]] [--project <X.dproj> --compile-gate [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]   (AUTOFIX one file; --apply keeps a .bak beside each file it writes unless --no-backup)"]
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "How do I make lint --fix check that the project still builds?",
+          "command": "drag-lint lint --in <f.pas> --db <db> --fix --apply --project <X.dproj> --compile-gate"
+        },
+        {
+          "ask": "Why did lint --fix --apply refuse my fix?",
+          "command": "drag-lint lint --in <f.pas> --db <db> --fix --apply --project <X.dproj> --compile-gate"
+        }
+      ],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-11-07",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-11-08",
+        "by": "ENGINE",
+        "build": "1.47.0-alpha",
+        "surfaceHash": "37be64aa5bd04295c050760924189924f66b7f6f2fc42c4c7f41a46d2681e733"
+      }
+    },
+    {
       "id": "narrow-param",
       "title": "Narrow parameter types (compile-gated)",
       "group": "refactoring",
@@ -6118,6 +6392,89 @@
         "by": "ENGINE",
         "build": "1.44.1-alpha",
         "surfaceHash": "b490a52384bb1cb7fb000bf7cc26c2dcfdf39c0accb20e5489fe4195dd66e2e0"
+      }
+    },
+    {
+      "id": "lazy-init",
+      "title": "Prepare heavy initialization for lazy loading (first phase)",
+      "group": "refactoring",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.47.0-alpha",
+      "summary": "Names what an initialization section does; --apply moves its body verbatim into a run-once routine, through a scratch build and the compile gate",
+      "intro": "Read this when the heavy-initialization rule reports a unit and you want the work out of the section. This first phase changes no behaviour: the plan shows which statement is heavy and which global could go lazy, and --apply only extracts the body, so that moving the call later is a one-line change.",
+      "wikiPage": "lazy-init",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lazy-init",
+          "example": "drag-lint lazy-init --all --plan --db <db>",
+          "usage": "drag-lint lazy-init (--unit <name> | --all) (--plan | --apply --project <X.dproj>) --db <db> [--name <routine>] [--defer] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]",
+          "flags": [
+            {
+              "name": "--unit",
+              "arg": "<name>"
+            },
+            {
+              "name": "--all"
+            },
+            {
+              "name": "--name",
+              "arg": "<routine>"
+            },
+            {
+              "name": "--defer"
+            },
+            {
+              "name": "--plan"
+            },
+            {
+              "name": "--apply"
+            },
+            {
+              "name": "--project",
+              "arg": "<X.dproj>"
+            },
+            {
+              "name": "--db",
+              "arg": "<db>"
+            },
+            {
+              "name": "--no-backup"
+            },
+            {
+              "name": "--platform",
+              "arg": "<p>"
+            },
+            {
+              "name": "--rsvars",
+              "arg": "<bat>"
+            },
+            {
+              "name": "--build-timeout",
+              "arg": "<s>"
+            },
+            {
+              "name": "--no-compile"
+            },
+            {
+              "name": "--library-db",
+              "arg": "<db>"
+            },
+            {
+              "name": "--format",
+              "arg": "json"
+            }
+          ],
+          "help": ["  drag-lint lazy-init (--unit <name> | --all) (--plan | --apply --project <X.dproj>) --db <db> [--name <routine>] [--defer] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]   - name what an initialization section does and move its body verbatim into a run-once routine: plan by default, every refusal named, --apply through a scratch build and the compile gate; --defer (one --unit) moves the call to the first use"]
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-08",
+        "by": "ENGINE",
+        "build": "1.47.0-alpha",
+        "surfaceHash": "6aa57b8d947b01bf7871f6b3bbc8c7f9f9029f29b76e86d178c3e89f4a9aaac2"
       }
     },
     {
@@ -6918,6 +7275,18 @@
           "type": "ide-menu",
           "path": "drag-lint > Convert Components > Open Conversion Editor...",
           "steps": ["Open the unit", "Choose drag-lint > Convert Components > Open Conversion Editor...", "ConvRulesEditor opens with the unit loaded and no scope; the unit stays open"]
+        },
+        {
+          "type": "ide-context",
+          "host": "Form Designer",
+          "caption": "drag-lint: Convert Selected Component(s)...",
+          "steps": ["Select the component(s) on the form", "Right-click one of them and choose drag-lint: Convert Selected Component(s)...", "The same hand-off as drag-lint > Convert Components > Convert Selected Component(s)... follows"]
+        },
+        {
+          "type": "ide-context",
+          "host": "Form Designer",
+          "caption": "drag-lint: Convert All of This Type on the Form...",
+          "steps": ["Select a component of each type to convert", "Right-click one of them and choose drag-lint: Convert All of This Type on the Form...", "The same hand-off as drag-lint > Convert Components > Convert All of This Type on the Form... follows"]
         }
       ],
       "audience": "both",
@@ -6928,10 +7297,10 @@
         }
       ],
       "verified": {
-        "date": "2026-11-07",
+        "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.46.0-alpha",
-        "surfaceHash": "3ad7d4dbd4fa62932adaf79bb073d71c7ae59f666f5d4f13b36417bd0ab50cc3"
+        "build": "1.47.0-alpha",
+        "surfaceHash": "7d36039d421d52f73d5373c105c122c277767758fcee0b736376e2d3b3552ee9"
       }
     },
     {
@@ -8061,6 +8430,58 @@
       }
     },
     {
+      "id": "arch-diagram",
+      "title": "arch-diagram",
+      "group": "graphs-reports",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.47.0-alpha",
+      "summary": "Draws one self-contained HTML layer diagram of a project's units by folder, with the layers measured from the uses clauses",
+      "intro": "Read this when you want the shape of a project in one file you can open anywhere: which folder sits on which, and the uses lines behind every arrow. It needs no Graphviz and fetches nothing.",
+      "wikiPage": "arch-diagram",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "arch-diagram",
+          "usage": "drag-lint arch-diagram --db <db> [--output <file.html>] [--json]",
+          "flags": [
+            {
+              "name": "--db",
+              "arg": "<db>"
+            },
+            {
+              "name": "--output",
+              "arg": "<file.html>"
+            },
+            {
+              "name": "--json"
+            }
+          ],
+          "helpOrder": 30,
+          "help": ["  drag-lint arch-diagram       --db <db> [--output <file.html>] [--json]   (one self-contained HTML layer diagram of the units by folder; layers measured from uses; no Graphviz)"]
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"],
+      "questions": [
+        {
+          "ask": "Which folder of this project sits on which?",
+          "command": "drag-lint arch-diagram --db <db> --output <file.html>"
+        },
+        {
+          "ask": "Which uses lines make a folder depend on a folder above it?",
+          "command": "drag-lint arch-diagram --db <db> --json"
+        }
+      ],
+      "notes": "wave 146 lane x3, NOT FOR MERGE until the owner has seen the picture; spec docs\\superpowers\\specs\\2026-11-06-archify-layer-diagrams.md; guard tests\\autotest\\run_arch_diagram.ps1",
+      "verified": {
+        "date": "2026-11-08",
+        "by": "ENGINE",
+        "build": "1.47.0-alpha",
+        "surfaceHash": "ab2b5e72a961c370c9c96cdc39380451472d2aff80de376435e72e216058591a"
+      }
+    },
+    {
       "id": "butterfly",
       "title": "butterfly",
       "group": "graphs-reports",
@@ -8383,7 +8804,7 @@
             }
           ],
           "helpOrder": 68,
-          "help": ["  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--plan [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>]   (circular unit deps; --f2047 = only the interface-only cycles dcc rejects with F2047: units, each interface edge with the symbols forcing it, and the next --plan / --fix commands; --unit <stem> (the name in dcc's message) narrows it, a unit in no such cycle is exit 0 with a note; --format json = [{units[],edges[{from,to,symbols[]}],plan,fix}]; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\\TEMP\\draglint_cyclefix_<pid>\\, deleted at exit unless a message of the run cites a file in it, then kept and named on stderr; --shadow-out names another, never deleted) and builds the project (msbuild /p:Config=Debug for --platform, default win64) unless --no-compile, exit 0 mechanical / 1 refused / 2 error; --apply writes it (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 written and verified (or written with --no-reindex, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified / 2 error: a write or build failed part-way (rolled back, project not changed, or the rollback failure is named) or bad flags; a rollback restores the sources, not the DCUs the failed build wrote: rebuild after a rollback; --apply --no-compile is exit 2; --rsvars <path> = the Studio build environment the compile gate calls (default: the Studio the registry or BDS names; forwarded to every --part all iteration; a missing file is exit 2); --build-timeout <s> = whole seconds one build may take (default 0 = no limit; forwarded to every --part all iteration; anything but a whole number >= 0 is exit 2); a stand-down request (drag-lint shutdown --db <db>, or the IDE's Cancel) kills the build, rolls an --apply back and exits 1 (\"cancelled -- rolled back\"); --part all needs --apply, refuses --no-reindex; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest's library for win64; --library-db none = no library); --rules-dir is forwarded to every --part all iteration; --format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge's surface: members read, writes, construction, class methods, routine + signature types)"]
+          "help": ["  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--plan [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>]   (circular unit deps; --f2047 = only the interface-only cycles dcc rejects with F2047: units, each interface edge with the symbols forcing it, and the next --plan / --fix commands; --unit <stem> (the name in dcc's message) narrows it, a unit in no such cycle is exit 0 with a note; --format json = [{units[],edges[{from,to,symbols[]}],plan,fix}]; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\\TEMP\\draglint_cyclefix_<pid>\\, deleted at exit unless a message of the run cites a file in it, then kept and named on stderr; --shadow-out names another, never deleted) and builds the project (msbuild /p:Config=Debug for --platform, default the project's active platform, else win32) unless --no-compile, exit 0 mechanical / 1 refused / 2 error; --apply writes it (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 written and verified (or written with --no-reindex, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified / 2 error: a write or build failed part-way (rolled back, project not changed, or the rollback failure is named) or bad flags; a rollback restores the sources, not the DCUs the failed build wrote: rebuild after a rollback; --apply --no-compile is exit 2; --rsvars <path> = the Studio build environment the compile gate calls (default: the Studio the registry or BDS names; forwarded to every --part all iteration; a missing file is exit 2); --build-timeout <s> = whole seconds one build may take (default 0 = no limit; forwarded to every --part all iteration; anything but a whole number >= 0 is exit 2); a stand-down request (drag-lint shutdown --db <db>, or the IDE's Cancel) kills the build, rolls an --apply back and exits 1 (\"cancelled -- rolled back\"); --part all needs --apply, refuses --no-reindex; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest's library for win64; --library-db none = no library); --rules-dir is forwarded to every --part all iteration; --format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge's surface: members read, writes, construction, class methods, routine + signature types)"]
         }
       ],
       "audience": "both",
@@ -8403,10 +8824,10 @@
         }
       ],
       "verified": {
-        "date": "2026-11-05",
+        "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.44.0-alpha",
-        "surfaceHash": "47efe1b777ffdc1d0396f463947d8a9470832fdf8773c9c3bf43f5c8c3e865a0"
+        "build": "1.47.0-alpha",
+        "surfaceHash": "982036e74b3e8f808942fa4a18efb0630e303463661f69138a1a55a5f6f3b611"
       }
     },
     {
@@ -8528,7 +8949,7 @@
           "type": "cli",
           "verb": "cycles",
           "example": "drag-lint cycles --fix --project <X.dproj> --db <file.sqlite>",
-          "usage": "drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\\TEMP\\draglint_cyclefix_<pid>\\, deleted at exit unless a message of the run cites a file in it, then kept and named on stderr; --shadow-out names another, never deleted) and builds the project (msbuild /p:Config=Debug for --platform, default win64) unless --no-compile, exit 0 mechanical / 1 refused / 2 error; --apply writes it (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 written and verified (or written with --no-reindex, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified / 2 error: a write or build failed part-way (rolled back, project not changed, or the rollback failure is named) or bad flags; a rollback restores the sources, not the DCUs the failed build wrote: rebuild after a rollback; --apply --no-compile is exit 2; --rsvars <path> = the Studio build environment the compile gate calls (default: the Studio the registry or BDS names; forwarded to every --part all iteration; a missing file is exit 2); --build-timeout <s> = whole seconds one build may take (default 0 = no limit; forwarded to every --part all iteration; anything but a whole number >= 0 is exit 2); a stand-down request (drag-lint shutdown --db <db>, or the IDE's Cancel) kills the build, rolls an --apply back and exits 1 (\"cancelled -- rolled back\"); --part all needs --apply, refuses --no-reindex; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest's library for win64; --library-db none = no library); --rules-dir is forwarded to every --part all iteration; --format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge's surface: members read, writes, construction, class methods, routine + signature types)",
+          "usage": "drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--ctor-wide] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\\TEMP\\draglint_cyclefix_<pid>\\, deleted at exit unless a message of the run cites a file in it, then kept and named on stderr; --shadow-out names another, never deleted) and builds the project (msbuild /p:Config=Debug for --platform, default the project's active platform, else win32) unless --no-compile, exit 0 mechanical / 1 refused / 2 error; --apply writes it (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 written and verified (or written with --no-reindex, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified / 2 error: a write or build failed part-way (rolled back, project not changed, or the rollback failure is named) or bad flags; a rollback restores the sources, not the DCUs the failed build wrote: rebuild after a rollback; --apply --no-compile is exit 2; --rsvars <path> = the Studio build environment the compile gate calls (default: the Studio the registry or BDS names; forwarded to every --part all iteration; a missing file is exit 2); --build-timeout <s> = whole seconds one build may take (default 0 = no limit; forwarded to every --part all iteration; anything but a whole number >= 0 is exit 2); a stand-down request (drag-lint shutdown --db <db>, or the IDE's Cancel) kills the build, rolls an --apply back and exits 1 (\"cancelled -- rolled back\"); --part all needs --apply, refuses --no-reindex; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest's library for win64; --library-db none = no library); --rules-dir is forwarded to every --part all iteration; --format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge's surface: members read, writes, construction, class methods, routine + signature types)",
           "flags": [
             {
               "name": "--db",
@@ -8661,10 +9082,10 @@
         }
       ],
       "verified": {
-        "date": "2026-11-05",
+        "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.44.0-alpha",
-        "surfaceHash": "206891e12b498297a6652a1e022e15b43f34b12f8b08a57d9647d3f19c93d59a"
+        "build": "1.47.0-alpha",
+        "surfaceHash": "e1d15dc205d2aa895f42b1ad0b35b5d8138854208f606eb4e4654d7fdae3c257"
       }
     },
     {
@@ -8797,7 +9218,7 @@
       "owner": "ENGINE",
       "status": "shipped",
       "since": "0.6.0-alpha",
-      "summary": "Uses graph to export the indexed call/reference graph in DOT format, either whole or rooted at a name substring",
+      "summary": "Uses graph to export the indexed call/reference graph in DOT format, whole or rooted at a name substring; json and html add the Markdown text nodes",
       "intro": "Read this when you want a picture of the indexed call/reference graph in Graphviz or Mermaid. drag-lint graph writes DOT (or Mermaid) for the whole index or rooted at a name substring; also on the IDE Generate & Export menu.",
       "wikiPage": "Export-Graph-DOT",
       "surfaces": [
@@ -8839,14 +9260,18 @@
           "command": "drag-lint graph --db <db> --format dot --output <file>"
         },
         {
+          "ask": "Which units does the project's Markdown documentation mention?",
+          "command": "drag-lint graph --db <db> --format json --output <file>"
+        },
+        {
           "ask": "How do I root the graph at one name?",
           "command": "drag-lint graph --db <db> --name <root-substr>"
         }
       ],
       "verified": {
-        "date": "2026-11-07",
+        "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.46.0-alpha",
+        "build": "1.47.0-alpha",
         "surfaceHash": "cfa73ef402d259c06d66a408e41bc3e536fb01f52d4e68cd46eaaa3cc36117c1"
       }
     },
@@ -13065,6 +13490,78 @@
         "surfaceHash": "81165732911eb5f9313d41558529ff7eeba476a0802f3583b01b87bb49e44540"
       },
       "homeOrder": 30
+    },
+    {
+      "id": "installed-layout-v2",
+      "title": "manifest where / migrate (installed layout v2)",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.47.0-alpha",
+      "summary": "Shows which drag-lint.json this engine reads and why; moves the exe-side one to %APPDATA% once (renamed, never deleted). Installed layout v2, off by default",
+      "intro": "Read this when you need to know which manifest an engine would read. manifest where is read-only. The new layout is off unless DRAGLINT_LAYOUT=v2; an explicit manifest (DRAGLINT_MANIFEST or --manifest) wins in both layouts, and a missing explicit file never falls through to another manifest.",
+      "wikiPage": "installed-layout-v2",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "manifest",
+          "sub": "where",
+          "usage": "drag-lint manifest where [--manifest <path>] [--json] (read-only: which drag-lint.json, log folder and library folder this engine resolves, and each lookup rung. Order: explicit DRAGLINT_MANIFEST / --manifest, then with DRAGLINT_LAYOUT=v2 the file in %APPDATA%\\drag-lint, then beside the exe. Creates, moves and renames nothing)",
+          "flags": [
+            {
+              "name": "--manifest",
+              "arg": "path"
+            },
+            {
+              "name": "--json"
+            }
+          ],
+          "helpOrder": 104,
+          "help": ["  drag-lint manifest where [--manifest <path>] [--json]   (read-only: which drag-lint.json, log folder and library folder this engine resolves, and each lookup rung. Order: explicit DRAGLINT_MANIFEST / --manifest, then with DRAGLINT_LAYOUT=v2 the file in %APPDATA%\\drag-lint, then beside the exe. Creates, moves and renames nothing)"]
+        },
+        {
+          "type": "cli",
+          "verb": "manifest",
+          "sub": "migrate",
+          "usage": "drag-lint manifest migrate [--apply] [--dry-run] [--json] (one-time, installed layout v2 phase 2: without --apply (or with --dry-run, which overrides --apply) plans and touches nothing; with --apply and DRAGLINT_LAYOUT=v2 writes %APPDATA%\\drag-lint\\drag-lint.json with outDir and relative includes made absolute, so every DB stays put, then RENAMES the exe-side file to drag-lint.json.migrated-<date>. Never deletes, never overwrites. Exit 0 done / would / nothing to do, 2 refused, 1 failed)",
+          "flags": [
+            {
+              "name": "--apply"
+            },
+            {
+              "name": "--json"
+            }
+          ],
+          "helpOrder": 105,
+          "help": ["  drag-lint manifest migrate [--apply] [--dry-run] [--json]   (one-time, installed layout v2 phase 2: without --apply (or with --dry-run, which overrides --apply) plans and touches nothing; with --apply and DRAGLINT_LAYOUT=v2 writes %APPDATA%\\drag-lint\\drag-lint.json with outDir and relative includes made absolute, so every DB stays put, then RENAMES the exe-side file to drag-lint.json.migrated-<date>. Never deletes, never overwrites. Exit 0 done / would / nothing to do, 2 refused, 1 failed)"]
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "Which drag-lint.json does this engine read?",
+          "command": "drag-lint manifest where"
+        },
+        {
+          "ask": "How do I move my drag-lint.json out of the program folder?",
+          "command": "drag-lint manifest migrate"
+        },
+        {
+          "ask": "How do I keep a test away from the real manifest?",
+          "command": "drag-lint manifest where --manifest C:\\scratch\\drag-lint.json"
+        }
+      ],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-11-06",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-11-08",
+        "by": "ENGINE",
+        "build": "1.47.0-alpha",
+        "surfaceHash": "756076580f926aa5c715f8148b5efd8b83a46b7e11f44991632223fe91231cbe"
+      }
     },
     {
       "id": "open-plugin-log",

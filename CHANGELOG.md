@@ -3,6 +3,54 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## v1.47.0-alpha -- unreleased
+
+Wave 147, integrated on lane/147-int. ONE extractor bump over 1.46 (1.34.0-alpha: grammar v1.4.4 + v1.4.5, use edges, Markdown text nodes, indexed property facts) and ONE resolver bump (1.22.0-alpha): every index re-parses once. Grammar v1.4.5 staged.
+
+### Breaking
+- Platform default (owner ruling a3, L-C20): the project file's active platform decides; a project that names none (Delphi 7, 2007..XE .dproj, a folder index) is Win32, no longer Win64. Applies to `index --project`, `index --all` project sections and `cycles --fix` (build platform, child runs, JSON). A marker-less .dproj with a delphilsp.json takes the platform that file names. Upgrade note: Win32 / older-Delphi / folder DBs re-parse once more on the first index after upgrading (fingerprint plat=win64 -> win32). Related: DL issue #13 (older-Delphi library path).
+- Lint: `ui-access-in-thread-typed` is ON by default (owner ruling a9): the default-ON count is 262 (was 261) and lint-all counts on projects with TThread descendants rise; an Execute whose TThread class nothing in the project constructs is reported as a hint labelled '(class never constructed)'.
+- Autodoc / hover: a property or field with resolved uses is documented with 'Used in: Routine (file.pas) [r|w|rw]' (one entry per routine, read/write folded, default ON by owner ruling) instead of the name-matched 'Used by:'; hover (md, json, IDE, LSP) shows the same line. The next `document --apply` rewrites those blocks.
+
+### Added
+- `bookmarks-strip` / `bookmarks-restore` (new verbs): strip `// dl:bk` comment anchors into a sidecar and restore them byte-identical (anchor-text relocation on an edited file; dry run without --apply).
+- `lint` / `lint-all` / `lint-project` / `check-ast --fix --apply --compile-gate` (opt-in, + `--project` / `--platform` / `--rsvars` / `--build-timeout`): a build-gated, all-or-nothing write with rollback.
+- `lazy-init --defer` (phase 2): the run-once routine is called on first use from every routine that touches what the section writes; the section no longer calls it; finalization runs only if the work ran. Opt-in, one `--unit`; six new named refusals.
+- `manifest migrate [--apply] [--json]`: one-time move of the exe-side drag-lint.json to %APPDATA%\drag-lint (installed layout v2, phase 2; off by default); it renames, never deletes, and DBs stay put. Layout v2 (DRAGLINT_LAYOUT=v2): %VAR% expansion in outDir; a roaming manifest with no outDir puts DBs in %LOCALAPPDATA%\drag-lint\library; register-project creates the roaming manifest when none exists; DRAGLINT_LAYOUT=v1 is the explicit way back. Installer: Build-Installer.ps1 -LayoutV2 builds the v2 setup (not for release before phase 3 and the VM test).
+- `graph --format json|html` and `query --text --source md`: the Markdown beside a project file is indexed as text nodes (headings, paragraphs, list items) and linked by backticked names to the units that declare them (E-PARITY-GRAPHIFY).
+- From wave 146 branches merged here: `cycles --plan/--fix --ctor-wide` (wider constructor inversion, off by default, r4); new verbs `extract-interface` and `lazy-init` (first phase; plan by default, --apply through the compile gate, g3); new verb `arch-diagram` (one self-contained HTML layer diagram of the units by folder, x3); `manifest where` + `--manifest` / DRAGLINT_MANIFEST and installed layout v2 phase 1 behind DRAGLINT_LAYOUT=v2 (off, x5). Specs: FPC grammar fork (x1), receiver-undecidable calls (x4).
+- IDE: new drag-lint > Bookmarks submenu -- list, go to, strip (into a per-user sidecar) and restore the `// dl:bk` anchors of the current unit. The form designer's right-click menu has drag-lint: Convert Selected Component(s)... and drag-lint: Convert All of This Type on the Form....
+- Build: `build_draglint_win64.bat -NoStage`; `_buildgrammar*.bat` take the grammar checkout / output as parameters.
+
+### Changed
+- Grammar v1.4.4 (PR #2, pmcgee69): an if statement whose branches also read as expressions (calls, bare raise, assignment) is an ifElse statement, not an exprIf; about 13 percent of corpus files change trees, 0 new parse failures.
+- Grammar v1.4.5: seven fixes by Paul McGee (pmcgee69): quoted-character subrange bounds; several hint directives on a variable; chained calling conventions on a procedural-type field; a named constant as a code page; an optional program header; the right of `is` is a type (`is` binds tighter than `and`); a generic's `<` in an expression is its own token, so `a < b - 1` groups as `a < (b - 1)`. 0 new parse failures on the 533 / 8286 corpora; root 8286 failures 305 -> 300.
+- Grammar v1.4.5: an `asm ... end;` with no header (a routine's second body under another {$IFDEF}, System.Win.OleControls) is a definition-level recovery node (asmOrphan), both grammars; fixes the whole-unit ERROR the generic-`<` token's recovery produced there (46 -> 2 errors).
+- Resolver: a bare, Self.-qualified or with-scoped write of a property or field records its use (member_accesses mode write, plus the setter call edge), so `find-callers --name SetX --resolved` lists `X := v` inside the class and in with bodies.
+- Resolver: a project class helper on a library type binds its methods (`LIni.ReadBoolean` -> TMemIniFileHelper.ReadBoolean); helper target names compare case-insensitively. Methods of a library helper on a built-in type bind (`S.Split` -> TStringHelper.Split, `B.ToString`, `S.Trim.LastIndexOf`). Dotted calls in a program's main block (`Application.Run` in the .dpr) reach the library. A generic project alias (`TAccountList = TList<TAccountInfo>`) binds library members through its declared type; a same-member answer over several candidates ignores units the file does not use. Micronite2027 receiver residue 884 -> 538, targets moved 0.
+- Resolver: calls through an event property or procedural field (`V.OnColumnSizeChanged(V, nil)`) bind to the property, marked indirect (refs.external_kind); find-callers on the property lists the firing sites (mode event).
+- Resolver: dynamic-array constructors (`TBytes.Create`, `TArray<Integer>.Create`) bind to the built-in `System.@intrinsic.DynArray.Create` (mode built-in; context labels it built-in).
+- Index schema: refs.external_kind (indirect | intrinsic), additive (Migrate ALTER on open, no schema bump; older engines ignore it).
+- Rename: A[i] through a default or indexed property, and through a TObjectList<T> descendant, binds to the element type's member, so rename moves those reads; an indexed property records 'indexed' / 'indexed default' in symbols.directives; with two same-named types in scope Delphi's tie-break decides (unit qualifier, own unit, last used unit; split uses sections still decline); a member read on a library-typed receiver (e.g. TStringList) no longer refuses the plan.
+- `cycles --fix --unit` accepts a dotted unit name (Wide.Worker); `--part all` no longer fails on a group whose first unit is dotted. A new unit next to a form/data module listed with children in the .dproj is a self-closing DCCReference after the element, so the compile gate no longer rolls it back. Constructor inversion (default path) refuses to pull a published field into the base class; a dotted uses entry or a multi-line comment naming the slot no longer refuses.
+- `convert-apply`: the trailing units of a '#convert A -> B, U1, U2' line are added to the unit's uses clause (they were parsed and ignored). `convert-validate`: a raw 'A -> B' line draws a warning that convert-apply does not execute it (exit code unchanged).
+- Lint: the taint note on an empty data_flows table names both possible causes instead of one wrong one; LSP completion percent-encodes the file:/// URIs it builds (space, #); LSP.Server still builds two raw URIs (row for 148).
+- IDE: while the conversion editor is open, the plugin's own reindex and lint-all jobs on that project's index wait in the queue and run when it closes. Rename Symbol's Preview leaves Apply disabled when occurrences are not proved, and says how many.
+- Internal: TDocRegions split into four classes behind a facade (no output change, proved byte-equal on 3 projects).
+
+### Fixed (integration)
+- lint: deep-nesting counts grammar v1.4.4's statement `ifElse` node (PR #2 moved a statement if-with-else off `exprIf`); without it a trailing else scored the nest ZERO again (run_deep_nesting_else_forms).
+- IDE plugin: version literals read v1.47.0-alpha (Editor PLUGIN_VERSION, Usages form).
+- lint: enum-read-inside-with reports a with-target that is a unit-level function result (`with GetObj do`), the residual the resolver still binds to the enum value after the same-named-type tie-break.
+- index: a project that names no platform takes the manifest's explicit `defaultPlatform` before the Win32 fallback (preprocessing and the library pick agree).
+- lint-all, lint-project and check-ast refuse `--compile-gate` without `--fix` (exit 2) instead of ignoring it; `manifest migrate --dry-run` and `bookmarks-strip / bookmarks-restore --format json` are documented.
+
+### Measured, no change
+- The raise/handle exception type fact (1.46) costs no measurable parse time (-0.1 percent CPU, 570 files x 4 passes) and 0.1 s of resolve on Micronite2027; the 1.46 '+19 percent rebuild' was machine load (B3).
+- local-only-out-arg / dead-store-before-out-arg / by-value-arg-before-assignment stay OFF (CLIENT copy: 24 / 0 / 0 findings; T1).
+- perf: lint-all and lint <file> no longer run the OFF out-arg / by-value data-flow passes (local-only-out-arg, dead-store-before-out-arg, by-value-arg-before-assignment) unless one of them is enabled; about 60 s off a 164 MB lint-all. The larger 1.46 regression (unit-missing-from-uses bound-ref path, +100 s) is named and left for 1.48.
+- Docs: editor-integration programme re-scoped after the exception fact (spec 2026-11-07-editor-programme.md).
+
 ## v1.46.0-alpha -- 2026-11-07
 
 Wave 146, integrated on lane/146-int. ONE extractor bump over 1.45 (1.33.0-alpha) and ONE resolver bump (1.21.0-alpha): every index re-parses once. Grammar b12b539 staged.
@@ -1298,7 +1346,7 @@ Extractor 1.22.0-alpha (one re-parse for all three fixes).
 
 ### Merged from main (since v1.28.3)
 
-- **Installer R2 + installed layout v2.** The IDE plugin's logs always go to
+- **Installer R2 (CHARTS part only; installed layout v2 NOT shipped -- `manifest migrate` is a proposal, see `docs/superpowers/specs/2026-10-13-installer-layout-v2-proposal.md`).** The IDE plugin's logs always go to
   `%LOCALAPPDATA%\drag-lint\logs` (folder resolved once at load; no log root means no log write,
   never the drive root); Ask-Report also looks in `{app}\charts`; chart resolvers and
   `report-pairs.json` follow the v2 layout. The installer ships the YADF Demo `Sample.pas` only

@@ -4,10 +4,10 @@ title: Show in Call Graph
 summary: Opens the call graph rooted at the symbol represented by a Structure-tree node
 product: DL
 group: graphs-reports
-order: 70019
+order: 70020
 since: 0.96.0-alpha
 status: shipped
-updated: 1.39.2-alpha
+updated: 1.46.0-alpha
 ---
 
 # Show in Call Graph

@@ -4,10 +4,10 @@ title: Find Dead Code
 summary: Scans the index for code with no references -- candidates to delete
 product: DL
 group: graphs-reports
-order: 70011
+order: 70012
 since: 0.25.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # Find Dead Code

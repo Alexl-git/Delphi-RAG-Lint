@@ -53,8 +53,9 @@ try {
     $noLib = Get-Sites $off; $withLib = Get-Sites $on
     Check 'shape: rows came back keyed by site/name' ($withLib.ContainsKey('SiteWrite/OwnProp') -and $noLib.ContainsKey('SiteWrite/OwnProp')) ("rows=" + $withLib.Count)
 
+    # Since 1.47 (B1, E-USE-EDGES-PHASE2) a property WRITE binds its setter, as a read binds its getter.
     $binds = [ordered]@{
-      'SiteCall/OwnCall' = 'TMyForm.OwnCall'; 'SiteWrite/OwnProp' = 'TMyForm.OwnProp'; 'SiteRead/OwnProp' = 'TMyForm.GetOwnProp'
+      'SiteCall/OwnCall' = 'TMyForm.OwnCall'; 'SiteWrite/OwnProp' = 'TMyForm.SetOwnProp'; 'SiteRead/OwnProp' = 'TMyForm.GetOwnProp'
       'SiteField/FOwnField' = 'TMyForm.FOwnField'; 'SiteReceiver/Go' = 'TGoer.Go'; 'SiteLayer/CompleteProp' = 'TCompleteTarget.CompleteProp'
     }
     foreach ($k in $binds.Keys) {
@@ -62,7 +63,7 @@ try {
       Check "library: $k binds $($binds[$k])" ($withLib[$k] -like "*$($binds[$k])") "[$($withLib[$k])]"
     }
     $controls = [ordered]@{
-      'SiteDone/OwnProp' = 'TMyForm.OwnProp'; 'SiteSelf/OwnProp' = 'TMyForm.OwnProp'; 'SiteTarget/TargetProp' = 'TOpenTarget.TargetProp'
+      'SiteDone/OwnProp' = 'TMyForm.SetOwnProp'; 'SiteSelf/OwnProp' = 'TMyForm.SetOwnProp'; 'SiteTarget/TargetProp' = 'TOpenTarget.TargetProp'
     }
     foreach ($k in $controls.Keys) {
       Check "control, no library: $k binds" ($noLib[$k] -like "*$($controls[$k])") "[$($noLib[$k])]"

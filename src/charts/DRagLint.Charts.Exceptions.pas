@@ -515,6 +515,7 @@ type
     /// <para>Called from: DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.SelectFocus (DRagLint.Charts.Q.ExceptionPaths.pas)</para>
     /// <para>Calls: Default, DRagLint.Charts.Exceptions.ExceptionFactKindsSql, DRagLint.Charts.Exceptions.ExceptionNameSql, DRagLint.Charts.Exceptions.ExceptionRefClass, DRagLint.Charts.Exceptions.TExceptionIndex.FactIndexStats, DRagLint.Charts.Exceptions.TExceptionIndex.HasRaiseHandleFacts, DRagLint.Charts.Exceptions.TExceptionIndex.IsExceptionTypeName, DRagLint.Charts.Index.TChartsIndex.AllRows, DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Source.TSourceReader.SourceContext, DRagLint.Charts.Source.TSourceReader.SourceFresh</para>
     /// <para>Returns: FactIndexStats; Default(TExceptionStats)</para>
+    /// <para>Complexity: 11 (cyclomatic, outer body), 50 lines (full implementation)</para>
     /// <para>Reads: FIndex, FReader</para>
     /// <para>SQL: reads FILES, REFS</para>
     /// <seealso cref="DRagLint.Charts.Exceptions.ExceptionFactKindsSql"/>

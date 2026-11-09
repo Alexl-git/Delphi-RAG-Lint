@@ -1,0 +1,83 @@
+{
+  "id": "lazy-init",
+  "title": "Prepare heavy initialization for lazy loading (first phase)",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.47.0-alpha",
+  "summary": "Names what an initialization section does; --apply moves its body verbatim into a run-once routine, through a scratch build and the compile gate",
+  "intro": "Read this when the heavy-initialization rule reports a unit and you want the work out of the section. This first phase changes no behaviour: the plan shows which statement is heavy and which global could go lazy, and --apply only extracts the body, so that moving the call later is a one-line change.",
+  "wikiPage": "lazy-init",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lazy-init",
+      "example": "drag-lint lazy-init --all --plan --db <db>",
+      "usage": "drag-lint lazy-init (--unit <name> | --all) (--plan | --apply --project <X.dproj>) --db <db> [--name <routine>] [--defer] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]",
+      "flags": [
+        {
+          "name": "--unit",
+          "arg": "<name>"
+        },
+        {
+          "name": "--all"
+        },
+        {
+          "name": "--name",
+          "arg": "<routine>"
+        },
+        {
+          "name": "--defer"
+        },
+        {
+          "name": "--plan"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--project",
+          "arg": "<X.dproj>"
+        },
+        {
+          "name": "--db",
+          "arg": "<db>"
+        },
+        {
+          "name": "--no-backup"
+        },
+        {
+          "name": "--platform",
+          "arg": "<p>"
+        },
+        {
+          "name": "--rsvars",
+          "arg": "<bat>"
+        },
+        {
+          "name": "--build-timeout",
+          "arg": "<s>"
+        },
+        {
+          "name": "--no-compile"
+        },
+        {
+          "name": "--library-db",
+          "arg": "<db>"
+        },
+        {
+          "name": "--format",
+          "arg": "json"
+        }
+      ],
+      "help": ["  drag-lint lazy-init (--unit <name> | --all) (--plan | --apply --project <X.dproj>) --db <db> [--name <routine>] [--defer] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]   - name what an initialization section does and move its body verbatim into a run-once routine: plan by default, every refusal named, --apply through a scratch build and the compile gate; --defer (one --unit) moves the call to the first use"]
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-08",
+    "by": "ENGINE",
+    "build": "1.47.0-alpha",
+    "surfaceHash": "6aa57b8d947b01bf7871f6b3bbc8c7f9f9029f29b76e86d178c3e89f4a9aaac2"
+  }
+}

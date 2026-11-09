@@ -447,7 +447,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.RefreshFileFromDisk (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ReindexFinished (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.RepublishRetargeted (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.Lint.TargetCompiler.TTargetRuleGate.Drops, DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4, DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics, DRagLint.LSP.Completion.TLspCompletion.DiagnosticsFromLintJson, DRagLint.LSP.Server.TLSPServer.AnyStoreOwns, DRagLint.LSP.Server.TLSPServer.EnsureLinter, DRagLint.LSP.Server.TLSPServer.FileContext, DRagLint.LSP.Server.TLSPServer.RunFullRulesLint, DRagLint.LSP.Server.TLSPServer.SendRawNotification, DRagLint.LSP.Server.TLSPServer.StoresForFile, DRagLint.LSP.Server.TLSPServer.TargetGateFor, Format, LowerCase, SameText, Writeln</para>
-      /// <para>Complexity: 14 (cyclomatic, outer body), 75 lines (full implementation)</para>
+      /// <para>Complexity: 15 (cyclomatic, outer body), 75 lines (full implementation)</para>
       /// <para>Reads: FPublishedTarget, FStore, FFullRules, FFullRulesSuperseded</para>
       /// <seealso cref="DRagLint.Lint.TargetCompiler.TTargetRuleGate.Drops"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
@@ -492,6 +492,7 @@ type
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeFileContext (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.DbSetFor (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: Default, DRagLint.LSP.Server.LibrariesVisibleToThisEngine, DRagLint.Project.ContextFile.TryLoadContextDefaults</para>
       /// <para>Reads: FDefaultsRead, FDefaults   Writes: FDefaultsRead, FDefaults</para>
+      /// <para>Owns returned: borrowed</para>
       /// <seealso cref="DRagLint.LSP.Server.LibrariesVisibleToThisEngine"/>
       /// <seealso cref="DRagLint.Project.ContextFile.TryLoadContextDefaults"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
@@ -764,7 +765,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ContextNotice (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue, DRagLint.LSP.Server.JsonStrOf, ExpandFileName, GetEnvironmentVariable, LowerCase, SameText, TJSONObject, Trim</para>
-      /// <para>Complexity: 15 (cyclomatic, outer body), 43 lines (full implementation)</para>
+      /// <para>Complexity: 16 (cyclomatic, outer body), 43 lines (full implementation)</para>
       /// <para>Reads: FReindex, FStorePaths, FStores, FSets</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue"/>
@@ -1637,6 +1638,7 @@ type
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: BoolToStr, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.LSP.Server.TLSPServer.RunFullRulesLint, DRagLint.LSP.UsesOnSave.TUsesOnSave.ComputeDropGate, DRagLint.LSP.UsesOnSave.TUsesOnSave.DiagnosticOfFinding, DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedEntries, DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedImportAction, DRagLint.LSP.UsesOnSave.TUsesOnSave.TextChangeEdit, DRagLint.LSP.UsesOnSave.TUsesOnSave.UnusedFindingsFromLintJson, DRagLint.LSP.UsesOnSave.TUsesOnSave.UsesClauseHasDirectiveAt, Format, SameText, StringReplace, Writeln</para>
       /// <para>Returns: nil; TUsesOnSave.RemoveUnusedImportAction(Diags, Edit, Gate)</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 39 lines (full implementation)</para>
       /// <para>Reads: FStores</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.RunFullRulesLint"/>
@@ -4900,6 +4902,8 @@ begin
     // mirroring a default `document` run.
     var HovFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Sel, LoadDocHandlesOptions); { gap 3: the SAME 'Catches:' knob document writes with }
     var HovFactLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(HovFacts, LoadDocComplexityMin);
+    { E-USE-EDGES-PHASE2: the property/field 'Used in:' line, same formatter as the doc block. }
+    HovFactLines:= TDocRegions.FormatUsedInLines(HovFacts) + HovFactLines;
     MdValue:= DRagLint.Hover.Renderer.RenderHoverMarkdown(Sel, Doc, HovRhs, HovFactLines,
       FormatDeclaredType(DescribeDeclaredType(Sel, HitStore)));
   end
@@ -5021,6 +5025,7 @@ begin
       begin
         var NdFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Filtered[0], LoadDocHandlesOptions);
         var NdLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(NdFacts, LoadDocComplexityMin);
+        NdLines:= TDocRegions.FormatUsedInLines(NdFacts) + NdLines; { E-USE-EDGES-PHASE2 }
         if Length(NdLines) > 0 then
         begin
           Sb.AppendLine('');

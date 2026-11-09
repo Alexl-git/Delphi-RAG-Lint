@@ -1,0 +1,88 @@
+{
+  "id": "lint-fix-compile-gate",
+  "title": "Lint --fix through the compile gate",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.47.0-alpha",
+  "summary": "lint --fix --apply --project X.dproj --compile-gate writes the fixes only if the project still builds; a fix that breaks the compile is refused and rolled back",
+  "intro": "Read this before letting lint --fix write into a project you cannot afford to break. With --compile-gate the project builds before and after the write and any compile error rolls every file back. Opt-in: without the flag nothing builds.",
+  "wikiPage": "lint-fix-compile-gate",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "drag-lint lint --in <f.pas> --db <db> --fix --apply --project <X.dproj> --compile-gate",
+      "usage": "drag-lint lint --in <f.pas> --db <db> --fix --apply --project <X.dproj> --compile-gate [--fix-line <L> --fix-rule <id>] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]",
+      "flags": [
+        {
+          "name": "--in",
+          "arg": "<f.pas>"
+        },
+        {
+          "name": "--db",
+          "arg": "<db>"
+        },
+        {
+          "name": "--fix"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--project",
+          "arg": "<X.dproj>"
+        },
+        {
+          "name": "--compile-gate"
+        },
+        {
+          "name": "--fix-line",
+          "arg": "<L>"
+        },
+        {
+          "name": "--fix-rule",
+          "arg": "<id>"
+        },
+        {
+          "name": "--no-backup"
+        },
+        {
+          "name": "--platform",
+          "arg": "<p>"
+        },
+        {
+          "name": "--rsvars",
+          "arg": "<bat>"
+        },
+        {
+          "name": "--build-timeout",
+          "arg": "<s>"
+        }
+      ],
+      "help": ["  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply [--no-backup]] [--project <X.dproj> --compile-gate [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]   (AUTOFIX one file; --apply keeps a .bak beside each file it writes unless --no-backup)"]
+    }
+  ],
+  "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I make lint --fix check that the project still builds?",
+      "command": "drag-lint lint --in <f.pas> --db <db> --fix --apply --project <X.dproj> --compile-gate"
+    },
+    {
+      "ask": "Why did lint --fix --apply refuse my fix?",
+      "command": "drag-lint lint --in <f.pas> --db <db> --fix --apply --project <X.dproj> --compile-gate"
+    }
+  ],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-11-07",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-11-08",
+    "by": "ENGINE",
+    "build": "1.47.0-alpha",
+    "surfaceHash": "37be64aa5bd04295c050760924189924f66b7f6f2fc42c4c7f41a46d2681e733"
+  }
+}

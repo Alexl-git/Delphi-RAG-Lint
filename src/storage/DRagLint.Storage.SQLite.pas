@@ -176,8 +176,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.AddLibraryPendingNotes (DRagLint.CLI.pas), DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas), DRagLint.CLI.AnyDbSchemaCurrent (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas) (+105 more)</para>
-  /// <para>Used in units: DRagLint.Charts.AskVerb, DRagLint.Charts.Compare, DRagLint.Charts.Index, DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Cycles, DRagLint.Charts.Q.Hierarchy, DRagLint.Charts.Q.Implementors, DRagLint.Charts.Q.MemberAccess (+27 more)</para>
+  /// <para>Used by: DRagLint.CLI.AddLibraryPendingNotes (DRagLint.CLI.pas), DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas), DRagLint.CLI.AnyDbSchemaCurrent (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas) (+108 more)</para>
+  /// <para>Used in units: DRagLint.Charts.AskVerb, DRagLint.Charts.Compare, DRagLint.Charts.Index, DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Cycles, DRagLint.Charts.Q.Hierarchy, DRagLint.Charts.Q.Implementors, DRagLint.Charts.Q.MemberAccess (+29 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSQLiteSymbolStore = class(TInterfacedObject, ISymbolStore)
@@ -434,7 +434,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ScopedResolveIsSound (DRagLint.Storage.SQLite.pas)</para>
       /// <para>Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch, DRagLint.Storage.SQLite.TSQLiteSymbolStore.CallEdgesNeedRebuild, DRagLint.Storage.SQLite.TSQLiteSymbolStore.CountFiles, DRagLint.Storage.SQLite.TSQLiteSymbolStore.RemovalsHatch, Format, GetEnvironmentVariable</para>
-      /// <para>Complexity: 15 (cyclomatic, outer body), 86 lines (full implementation)</para>
+      /// <para>Complexity: 16 (cyclomatic, outer body), 86 lines (full implementation)</para>
       /// <para>Reads: FScopeWhole, FScopeWholeByShare, FScopeCorpusBefore, FScopeNewWrites, FScopeRemovals, FScopeWrites, FScopeMaxFiles, FScopeWholeWhy (+3 more)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
@@ -711,7 +711,7 @@ type
       /// member-read stream, so both write the identical three facts. A FIELD
       /// accessor earns no edge: the member_accesses row IS that use.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveMemberReadRefs (DRagLint.Storage.SQLite.pas)</para>
+      /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveMemberReadRefs (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveWriteRefs (DRagLint.Storage.SQLite.pas)</para>
       /// <para>Calls: SameText</para>
       /// <para>Reads: FQSetRefSymbol, FQInsertMemberAccess, FQInsertCallEdge</para>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
@@ -735,9 +735,14 @@ type
       /// <param name="ACandidates">Out: write rows offered to the resolver.</param>
       /// <param name="ABound">Out: rows whose symbol_id was set.</param>
       /// <remarks>
-      /// IDENTITY ONLY: no call_edges row and no member_accesses row -- a bare
-      /// write is not a call, and member_accesses stays the record of DOTTED
-      /// accesses that who-writes / find-callers already read. Runs inside
+      /// A PROPERTY or FIELD target (E-USE-EDGES-PHASE2, 2026-11-07) also gets
+      /// its use edge, exactly as a dotted write and a bare read do: a
+      /// member_accesses row, mode 'write', with the property's write accessor,
+      /// and a call_edges row when that accessor is a method (the setter IS
+      /// called). Every other target (local, parameter, var, const, class var)
+      /// stays IDENTITY ONLY: refs.symbol_id, no row in either table. The rows
+      /// are cleared by ResolveCallTargets' scoped/stale/whole DELETE that runs
+      /// before every stream. ABound counts both shapes. Runs inside
       /// ResolveCallTargets' transaction. NULLs refs.symbol_id over the write
       /// rows in scope before rebuilding, for the reason ResolveEnumValueRefs
       /// gives: on a SCOPED run a write that now declines would otherwise keep a
@@ -745,15 +750,15 @@ type
       /// ref, so the NULL can never erase another stream's answer.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas)</para>
-      /// <para>Calls: Default, DRagLint.Core.ControlChannel.BeatProgress, DRagLint.Index.CallResolver.TCallResolver.ResolveWriteRef, DRagLint.Storage.SQLite.BeatStreamOpen</para>
+      /// <para>Calls: Default, DRagLint.Core.ControlChannel.BeatProgress, DRagLint.Index.CallResolver.TCallResolver.ResolveWriteEdge, DRagLint.Storage.SQLite.BeatStreamOpen, DRagLint.Storage.SQLite.TSQLiteSymbolStore.WriteMemberAccess</para>
       /// <para>Reads: FConn, FQSetRefSymbol</para>
       /// <para>SQL: reads REFS; writes REFS</para>
       /// <para>Mutates: ACandidates (out), ABound (out)</para>
       /// <seealso cref="DRagLint.Core.ControlChannel.BeatProgress"/>
-      /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ResolveWriteRef"/>
+      /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ResolveWriteEdge"/>
       /// <seealso cref="DRagLint.Storage.SQLite.BeatStreamOpen"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.WriteMemberAccess"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginDeferredTextIndex"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ResolveWriteRefs(AResolver: TCallResolver;
@@ -1393,7 +1398,7 @@ type
       /// <para>Called from: DRagLint.CLI.DoFbSnapshot (DRagLint.CLI.pas), DRagLint.FormsMap.GenerateFormsCsvCore (DRagLint.FormsMap.pas), DRagLint.Sql.OrmLinker.TOrmLinker.Run (DRagLint.Sql.OrmLinker.pas)</para>
       /// <para>Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.CanonicalizeFilePaths, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ConfigureUnitUseStatements, DRagLint.Storage.SQLite.TSQLiteSymbolStore.FinishDeferredTextIndex, DRagLint.Storage.SQLite.TSQLiteSymbolStore.IsSchemaCurrent, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.DropStringLiteralTriggers, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.DropTriggerVerbose, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.PrintTriggerCount, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.ProbeFts5, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.ProbeTrigram, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.SqliteVersion (+10 more)</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.Migrate</para>
-      /// <para>Complexity: 16 (cyclomatic, outer body), 642 lines (full implementation)</para>
+      /// <para>Complexity: 16 (cyclomatic, outer body), 648 lines (full implementation)</para>
       /// <para>Reads: FConn, FFts5Available, FTrigramAvailable, FQGetSymbolFacts   Writes: FFts5Available, FTrigramAvailable, FHasEffectCols, FHasUseOriginCols</para>
       /// <para>Catches: Exception (empty); Exception (re-raise); Exception (swallowed)</para>
       /// <para>SQL: reads SQLITE_MASTER; writes SCHEMA_META, STRING_FTS_TRI</para>
@@ -1765,7 +1770,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: DRagLint.Core.FileTime.NowUnixUtc, DRagLint.Storage.SQLite.NormalizeStoredPath, DRagLint.Storage.SQLite.RollFileBatch, DRagLint.Storage.SQLite.StringLiteralsEmpty, DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginDeferredTextIndex, DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginTargetedTextIndex, DRagLint.Storage.SQLite.TSQLiteSymbolStore.CountFiles, DRagLint.Storage.SQLite.TSQLiteSymbolStore.NoteScopeRemoval, GFileTxGate</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.OpenFileTx</para>
-      /// <para>Complexity: 10 (cyclomatic, outer body), 84 lines (full implementation)</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 84 lines (full implementation)</para>
       /// <para>Reads: FBatchOpen, FFtsDeferChecked, FFts5Available, FReadOnly, FConn, FBatchFiles, FBatchStamp, FScopeCorpusBefore (+5 more)   Writes: FFtsDeferChecked, FScopeCorpusBefore, FScopeNewWrites, FScopeWrites</para>
       /// <para>Catches: Exception (re-raise)</para>
       /// <para>SQL: reads FILES</para>
@@ -2113,6 +2118,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Calls: Default</para>
     /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.GetUnresolvedCallsFromSymbol</para>
+    /// <para>Complexity: 10 (cyclomatic, outer body), 56 lines (full implementation)</para>
     /// <para>Reads: FConn</para>
     /// <para>SQL: reads REFS</para>
     /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
@@ -2597,7 +2603,7 @@ type
       /// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas) ?, DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindCallersByNameWithContext (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindEventHandlersForForm (DRagLint.Storage.SQLite.pas)</para>
       /// <para>Calls: Default, DRagLint.Storage.SQLite.TSQLiteSymbolStore.HasMemberAccesses, SameText</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName</para>
-      /// <para>Complexity: 15 (cyclomatic, outer body), 83 lines (full implementation)</para>
+      /// <para>Complexity: 17 (cyclomatic, outer body), 88 lines (full implementation)</para>
       /// <para>Reads: FConn</para>
       /// <para>SQL: reads CALL_EDGES, MEMBER_ACCESSES, REFS</para>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.HasMemberAccesses"/>
@@ -3569,6 +3575,11 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function IsDescendantOf(const AClassName, AAncestorName: string; AFileId: Int64): Boolean;
+      /// <summary><!-- drag-lint:auto sum -->Deliberately shares TypeCandidateIds with
+      /// IsDescendantOf. The two are asked about the SAME class name in the same breath
+      /// at every call site, and a candidate set that differed between them would make
+      /// the bridge fire for a type the descendant test never considered -- a divergence
+      /// with no symptom until it suppressed a real leak.</summary>
       /// <param name="AClassName"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
       /// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
@@ -3750,7 +3761,7 @@ type
       /// <returns><!-- drag-lint:auto -->TFDConnection -- Observed: FConn.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Charts.Index.TChartsIndex.Query (DRagLint.Charts.Index.pas), DRagLint.CLI.DoSchema (DRagLint.CLI.pas), DRagLint.CLI.DoSql (DRagLint.CLI.pas), DRagLint.CLI.DoUsesReport.LoadFilesAndEdges (DRagLint.CLI.pas), DRagLint.CLI.ReadRefTypeFact (DRagLint.CLI.pas) (+37 more)</para>
+      /// <para>Called from: DRagLint.Charts.Index.TChartsIndex.Query (DRagLint.Charts.Index.pas), DRagLint.CLI.DoSchema (DRagLint.CLI.pas), DRagLint.CLI.DoSql (DRagLint.CLI.pas), DRagLint.CLI.DoUsesReport.LoadFilesAndEdges (DRagLint.CLI.pas), DRagLint.CLI.ReadRefTypeFact (DRagLint.CLI.pas) (+40 more)</para>
       /// <para>Reads: FConn</para>
       /// <para>Owns returned: borrowed</para>
       /// <para>Effect-free (proven)</para>
@@ -5865,6 +5876,12 @@ begin
     NULL = never resolved by a 1.16 engine; '' = bare/untypable; additive, no
     SCHEMA_VERSION bump (dispatch_edges / data_flows precedent). }
   TryExec('ALTER TABLE refs ADD COLUMN receiver_type_text TEXT');
+  { wave 147 (owner ruling 2026-11-08, E-RECV-UNDECIDABLE D08/D10): refs.external_kind --
+    what external_target names when it is NOT a routine: 'indirect' (an event property /
+    procedural field, the routine is chosen at run time) or 'intrinsic' (a compiler
+    intrinsic, a synthetic name). NULL = a routine, or no external target. Additive, no
+    SCHEMA_VERSION bump (receiver_type_text precedent); written by the resolve pass only. }
+  TryExec('ALTER TABLE refs ADD COLUMN external_kind TEXT');
   // N-06: unit_uses rows extracted from an include directive carry the absolute
   // .inc path and the host line of the directive (NULL = the unit's own text).
   // The partial index serves editors and the .inc host-invalidation lookup.
@@ -8764,6 +8781,7 @@ begin
     { item 4: both columns are additive (Migrate); a DB older than the engine reads '' }
     var RtyF  : TField:= Q.FindField('receiver_type_text');
     var ExtF  : TField:= Q.FindField('external_target');
+    var XkF   : TField:= Q.FindField('external_kind');
     while not Q.Eof do
     begin
       R:= Default(TReference);
@@ -8779,6 +8797,7 @@ begin
       if (RcvF <> nil) and not RcvF.IsNull then R.ReceiverText:= RcvF.AsString;
       if (RtyF <> nil) and not RtyF.IsNull then R.ReceiverTypeText:= RtyF.AsString;
       if (ExtF <> nil) and not ExtF.IsNull then R.ExternalTarget:= ExtF.AsString;
+      if (XkF <> nil) and not XkF.IsNull then R.ExternalKind:= XkF.AsString;
       List.Add(R);
       Q.Next;
     end;
@@ -10956,7 +10975,12 @@ begin
       var ExtF : TField:= Q.FindField('external_target');
       if (EdgeF <> nil) and not EdgeF.IsNull then
         R.Resolution:= (if SameText(EdgeF.AsString, 'ambiguous') then RESOLUTION_AMBIGUOUS else RESOLUTION_EXACT)
-      else if (ExtF <> nil) and not ExtF.IsNull and (ExtF.AsString <> '') then R.Resolution:= RESOLUTION_EXTERNAL
+      else if (ExtF <> nil) and not ExtF.IsNull and (ExtF.AsString <> '') then
+      begin
+        R.Resolution:= RESOLUTION_EXTERNAL;
+        var XkF: TField:= Q.FindField('external_kind'); // D08 / D10: what the external name is
+        if (XkF <> nil) and not XkF.IsNull then R.ExternalKind:= XkF.AsString;
+      end
       else if R.SymbolId <> 0 then R.Resolution:= RESOLUTION_EXACT
       else R.Resolution:= RESOLUTION_NAME_ONLY;
       List.Add(R);
@@ -15844,7 +15868,7 @@ var
   Q      : TFDQuery  ;
   Ref    : TReference;
   Reason : string    ;
-  Id     : Int64     ;
+  Edge   : TCallEdge ;
   FldId  : TField    ;
   FldFile: TField    ;
   FldName: TField    ;
@@ -15882,10 +15906,18 @@ begin
       Ref.StartCol := FldCol .AsInteger;
       { Every decline is counted by reason inside the resolver (WriteStats) and
         printed on the stage's log line -- a decline writes nothing. }
-      Id:= AResolver.ResolveWriteRef(Ref, Reason);
-      if Id > 0 then
+      { E-USE-EDGES-PHASE2: a property/field target also records its use --
+        member_accesses mode 'write' (+ the setter's call edge), the row a
+        dotted write already owns; anything else stays identity only. }
+      Edge:= AResolver.ResolveWriteEdge(Ref, Reason);
+      if Edge.MemberMode <> '' then
       begin
-        FQSetRefSymbol.ParamByName('sid').AsLargeInt:= Id;
+        WriteMemberAccess(Ref.Id, Edge);
+        Inc(ABound);
+      end
+      else if Edge.TargetSymbolId > 0 then
+      begin
+        FQSetRefSymbol.ParamByName('sid').AsLargeInt:= Edge.TargetSymbolId;
         FQSetRefSymbol.ParamByName('rid').AsLargeInt:= Ref.Id;
         FQSetRefSymbol.ExecSQL;
         Inc(ABound);
@@ -16379,7 +16411,7 @@ begin
   SetMetaValue(KEY, '[' + string.Join(',', Parts) + ']');
 end;
 
-procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);  // dl:ok method-too-long@32f2, deep-nesting@6ffc, cyclomatic-complexity@04ec, cognitive-complexity@61bd -- one transaction over one resolver with shared maps; a split is its own change with its own re-resolve measurement, and lane facts (1.44) added only two calls, three counters and two log lines here
+procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);  // dl:ok method-too-long@4a54, deep-nesting@6ffc, cyclomatic-complexity@3b05, cognitive-complexity@54d8 -- one transaction over one resolver with shared maps; a split is its own change with its own re-resolve measurement, and lane facts (1.44) added only two calls, three counters and two log lines here
 { v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
   (wipe the table, resolve in memory, batch-write in one transaction). Builds one
   TCallResolver (its name/scope maps cost O(symbols) to build ONCE), then streams
@@ -16589,7 +16621,8 @@ begin
       and for the same reason: this runs inside the one big transaction below,
       where a fresh statement per row would dominate the pass. }
     UpdRcv.Connection:= FConn;
-    UpdRcv.SQL.Text  := 'UPDATE refs SET receiver_text = :r, external_target = :x, receiver_type_text = :t WHERE id = :id';
+    UpdRcv.SQL.Text  := 'UPDATE refs SET receiver_text = :r, external_target = :x, receiver_type_text = :t, ' +
+                        'external_kind = :k WHERE id = :id';
     { DataType MUST be set before Prepare. FireDAC cannot infer a parameter's
       type from the SQL alone and fails at execute with "Parameter [R] data type
       is unknown" -- which surfaces as a FATAL that aborts the whole index run,
@@ -16597,6 +16630,7 @@ begin
     UpdRcv.ParamByName('r' ).DataType:= ftString;
     UpdRcv.ParamByName('x' ).DataType:= ftString;
     UpdRcv.ParamByName('t' ).DataType:= ftString;
+    UpdRcv.ParamByName('k' ).DataType:= ftString;
     UpdRcv.ParamByName('id').DataType:= ftLargeint;
     UpdRcv.Prepare;
 
@@ -16824,6 +16858,9 @@ begin
         else UpdRcv.ParamByName('x').Clear;
         { item 4: '' is a value (bare / untypable); NULL only if never computed. }
         UpdRcv.ParamByName('t').AsWideString := Edge.ReceiverTypeText;
+        { D08 / D10: NULL for a routine target or none, so every existing row keeps its meaning. }
+        if (Edge.ExternalTarget <> '') and (Edge.ExternalKind <> '') then UpdRcv.ParamByName('k').AsWideString:= Edge.ExternalKind
+        else UpdRcv.ParamByName('k').Clear;
         UpdRcv.ParamByName('id').AsLargeInt := Ref.Id;
         UpdRcv.ExecSQL;
         end
@@ -17028,10 +17065,12 @@ begin
       project indexed WITHOUT a library shows: every one of those sites had a type
       (or a head, or a bare name) to offer and no store to offer it to. }
     ResolveLog(Format('calls      receivers: typed-local %d, typed-by-name-only %d, untyped %d; ' +
-      'external-bound %d, external-declined ambiguous-type %d, no-member %d, no-type %d, no-store %d',
+      'external-bound %d, external-declined ambiguous-type %d, no-member %d, no-type %d, no-store %d, ' +
+      'intrinsic %d, late-bound %d',
       [Resolver.ReceiverStats.TypedLocal, Resolver.ReceiverStats.TypedByNameOnly, Resolver.ReceiverStats.Untyped,
        Resolver.OracleStats.Bound, Resolver.OracleStats.AmbiguousType, Resolver.OracleStats.NoMember,
-       Resolver.OracleStats.NoType, Resolver.OracleStats.NoStore]));
+       Resolver.OracleStats.NoType, Resolver.OracleStats.NoStore,
+       Resolver.OracleStats.Intrinsic, Resolver.OracleStats.LateBound]));
     WriteExternalStores(AExtraStores, Scoped);
     { 2026-09-23 (enum-value-ref-binding). EVERY DECLINE IS PRINTED BY REASON,
       and that is the point of the line rather than a nicety: the pass answers
@@ -17723,7 +17762,7 @@ begin
     Q.Connection:= FConn;
     Q.SQL.Text:= 'SELECT th.*, s.kind FROM type_helpers th ' +
                  'JOIN symbols s ON s.id = th.helper_symbol_id ' +
-                 'WHERE th.target_name = :target_name';
+                 'WHERE th.target_name = :target_name COLLATE NOCASE'; // Delphi names: TMemINIFile is TMemIniFile
     Q.ParamByName('target_name').AsWideString:= ATargetName;
     Q.Open;
     ReadHelperEdges(Q, List);

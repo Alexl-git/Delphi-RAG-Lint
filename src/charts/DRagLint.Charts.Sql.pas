@@ -323,7 +323,7 @@ type
     /// <returns>The table; not owned by the caller.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.Chain.TBindingBuild.Outcome (DRagLint.Charts.Chain.pas), DRagLint.Charts.Columns.ColumnsNotHeld (DRagLint.Charts.Columns.pas), DRagLint.Charts.Columns.SqlColumnState (DRagLint.Charts.Columns.pas), DRagLint.Charts.Sql.SqlVerbTables (DRagLint.Charts.Sql.pas), DRagLint.Charts.Sql.TSqlTableSet.HideExtractedColumns (DRagLint.Charts.Sql.pas) (+10 more)</para>
+    /// <para>Called from: DRagLint.Charts.Chain.TBindingBuild.Outcome (DRagLint.Charts.Chain.pas), DRagLint.Charts.Columns.ColumnsNotHeld (DRagLint.Charts.Columns.pas), DRagLint.Charts.Columns.SqlColumnState (DRagLint.Charts.Columns.pas), DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.ReadColumn (DRagLint.Charts.Q.LandsWhere.pas), DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.SelectField (DRagLint.Charts.Q.LandsWhere.pas) (+12 more)</para>
     /// <para>Returns: nil</para>
     /// <para>Reads: FTables</para>
     /// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.Create"/>

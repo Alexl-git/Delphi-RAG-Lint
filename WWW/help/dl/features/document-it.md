@@ -4,10 +4,10 @@ title: Document it
 summary: Generates or repairs a managed DocInsight comment on the single symbol represented by a Structure-tree node
 product: DL
 group: documentation
-order: 40006
+order: 40007
 since: 0.90.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.47.0-alpha
 ---
 
 # Document it
@@ -54,6 +54,11 @@ drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup] [--db PAT
 ```
 
 Generates/repairs a managed DocInsight comment for that one qualified name.
+
+On a property or field with resolved uses the managed block says where it is
+used, with the access mode: `Used in: uCons.TConsumer.Go (uCons.pas) [rw]`. That
+line replaces the name-matched `Used by:` (wave 147, on by default); with no
+resolved use the `Used by:` line is written as before.
 
 ### What it needs
 

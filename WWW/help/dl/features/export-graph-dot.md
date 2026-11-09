@@ -1,18 +1,18 @@
 ---
 id: export-graph-dot
 title: Export Graph (DOT)
-summary: Uses graph to export the indexed call/reference graph in DOT format, either whole or rooted at a name substring
+summary: Uses graph to export the indexed call/reference graph in DOT format, whole or rooted at a name substring; json and html add the Markdown text nodes
 product: DL
 group: graphs-reports
-order: 70009
+order: 70010
 since: 0.6.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.47.0-alpha
 ---
 
 # Export Graph (DOT)
 
-Uses graph to export the indexed call/reference graph in DOT format, either whole or rooted at a name substring.
+Uses graph to export the indexed call/reference graph in DOT format, whole or rooted at a name substring; json and html add the Markdown text nodes.
 
 Read this when you want a picture of the indexed call/reference graph in Graphviz or Mermaid. drag-lint graph writes DOT (or Mermaid) for the whole index or rooted at a name substring; also on the IDE Generate & Export menu.
 
@@ -48,7 +48,7 @@ dependency structure with Graphviz.
 ```text
 drag-lint graph --db <file.sqlite> [--format dot|mermaid|json|html] [--name <root-substr>] [--output <file>]
 ```
-`--format` selects `dot`, `mermaid`, `json` (`drag-lint.graph/1`: an edges list of from/to/weight) or `html` (one self-contained page); `--name` roots the graph at a
+`--format` selects `dot`, `mermaid`, `json` (`drag-lint.graph/1`: an edges list of from/to/weight) or `html` (one self-contained page). `json` and `html` also carry the **Markdown text nodes** of the index: `text_nodes` (one per heading, paragraph or list item of the `.md` files beside the project file: `id`, `file`, `path`, `line`, `kind` md-heading|md-text, `section`, `text`) and `text_edges` (`from` a node `to` the unit declaring a `` `backticked` `` name it mentions, with that `name`; a name declared in more than one file, or in none, makes no edge). `--name` roots the graph at a
 substring match; `--output` writes to a file instead of stdout.
 
 ### What it needs

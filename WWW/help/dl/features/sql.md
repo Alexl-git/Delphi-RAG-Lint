@@ -4,10 +4,10 @@ title: sql
 summary: Runs one read-only SQL statement against an index database and prints the result set
 product: DL
 group: maintenance
-order: 120013
+order: 120014
 since: 0.40.5-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # sql

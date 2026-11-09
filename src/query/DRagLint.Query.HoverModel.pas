@@ -303,6 +303,9 @@ begin
   begin
     var Facts: TDocFacts:= TDocFactsBuilder.Build(AStore, ASym, LoadDocHandlesOptions); { gap 3: the SAME 'Catches:' knob document writes with }
     Result.FactLines:= TDocRegions.FormatPhase2FactLines(Facts, LoadDocComplexityMin);
+    { E-USE-EDGES-PHASE2: the property/field 'Used in:' line, from the SAME
+      formatter the doc block writes with (md, json, LSP hoverBundle). }
+    Result.FactLines:= TDocRegions.FormatUsedInLines(Facts) + Result.FactLines;
     { Purity v2: the SAME verdict the fact line above was rendered from, handed
       to the JSON consumer structured. BuildHoverModel left these at -1/''/'';
       they are overwritten only here, inside the AWithFacts branch, because

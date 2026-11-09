@@ -1672,7 +1672,7 @@ procedure AppendDescendantReport(const AUses: TArray<TDescendantUse>; const ADfm
 /// <para>Called from: DRagLint.CLI.DoConvertApply.RunUnit (DRagLint.CLI.pas)</para>
 /// <para>Calls: BookChosenUnits, BookHasUnitRules, BoundAccessSites, BuildToTypeAdd, CharColumn, Choose, CompareText, Copy, DanglingPasUses, Default (+76 more)</para>
 /// <para>Returns: if Length(Picked) = 1 then Spelling; Default(TApplyResult); TApplyResult.Refusal(UsesPlan.Error)</para>
-/// <para>Complexity: 36 (cyclomatic, outer body), 1552 lines (full implementation)</para>
+/// <para>Complexity: 36 (cyclomatic, outer body), 1565 lines (full implementation)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Convert.Apply.BareTypeTail"/>
 /// <seealso cref="DRagLint.Convert.Apply.BookNothingToDoReason"/>
@@ -7899,6 +7899,19 @@ var
         end;
         for E in UseEdits do Pending.Add(E);
       end;
+      { E-CONVERT-TAIL-UNIT: '#convert A -> B, U1, U2' -- the tail units of a rule whose To type
+        this unit's conversion produced are added too (CONVERSION-RULES: ADD = every #convert
+        trailing unit); the uses planner writes them, so it must run }
+      for var Rule: TConversionRule in ABook.Rules.Rules do
+        if Rule.Kind = rkConvert then
+          for var Seen: string in ToTypesSeen do
+            if SameText(BareTypeTail(Rule.ToType), BareTypeTail(Seen)) then
+              for var TailUnit: string in Rule.UnitsAdd do
+                if not MatchText(TailUnit, ConvertAdds.ToArray) then
+                begin
+                  ConvertAdds.Add(TailUnit);
+                  TiePlanned:= True;
+                end;
       AUses:= Default(TUsesPlan);
       AUses.Ok:= True;
       { the caller adds AUses.Edits after R26 -- a skipped removal (C13 N4)
@@ -7930,7 +7943,7 @@ var
         if not Rec.UsePlanner then
           for E in Pending do Edits.Add(E);
       end
-      else if UnitRules or MoveNeeded then
+      else if UnitRules or MoveNeeded or TiePlanned then
         AUses:= PlanUnitRules(AUnitPas, ReadUnitText(AUnitPas), ABook.Rules,
           AAdds, AIntfAdds)
       else

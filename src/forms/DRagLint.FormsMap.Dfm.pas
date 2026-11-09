@@ -286,7 +286,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.FormsMap.Dfm.TFormDfmTree.BarPrefixes (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.LinkedWays (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.SurfacePrefixes (DRagLint.FormsMap.Dfm.pas)</para>
     /// <para>Calls: ContainsText, DRagLint.FormsMap.Dfm.StripAccel, DRagLint.FormsMap.Dfm.TFormDfmNode.Prop, DRagLint.FormsMap.Dfm.TFormDfmTree.BarPrefixes, SameText</para>
-    /// <para>Complexity: 16 (cyclomatic, outer body), 48 lines (full implementation)</para>
+    /// <para>Complexity: 17 (cyclomatic, outer body), 48 lines (full implementation)</para>
     /// <para>Reads: FBarTabs, FLinkOwners, FBackstage</para>
     /// <para>Recursive</para>
     /// <seealso cref="DRagLint.FormsMap.Dfm.StripAccel"/>

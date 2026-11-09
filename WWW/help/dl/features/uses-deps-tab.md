@@ -4,10 +4,10 @@ title: Uses & Deps Tab
 summary: Open the Uses & Deps tab to review uses-clause fixes and apply them
 product: DL
 group: refactoring
-order: 50018
+order: 50021
 since: 1.12.0-alpha
 status: shipped
-updated: 1.44.1-alpha
+updated: 1.47.0-alpha
 ---
 
 # Uses & Deps Tab

@@ -4,10 +4,10 @@ title: Export Enums (Delphi const)
 summary: Uses export enums with --format delphi-const to dump indexed enum types as Delphi const declarations
 product: DL
 group: graphs-reports
-order: 70008
+order: 70009
 since: 0.6.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # Export Enums (Delphi const)

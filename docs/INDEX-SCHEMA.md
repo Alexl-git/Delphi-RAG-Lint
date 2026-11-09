@@ -505,8 +505,11 @@ Join: `type_helpers.helper_symbol_id -> symbols.id`;
 ### 2.8 `member_accesses`
 
 One row per `member-access` ref that names a PROPERTY or FIELD (2026-09-16,
-resolver 1.3.0-alpha). Written by the calls resolve pass beside
-`refs.symbol_id` (which points at the member) and cleared with `call_edges`.
+resolver 1.3.0-alpha), per bare / `Self.` `read` bound to one (DEC-19), and
+per bare / `Self.` / `with`-scoped `write` bound to one (E-USE-EDGES-PHASE2,
+wave 147: before it a bound bare write carried `refs.symbol_id` only). Written
+by the calls resolve pass beside `refs.symbol_id` (which points at the member)
+and cleared with `call_edges`.
 The owner's ruling it encodes: a property READ is also a call to its read
 accessor, a WRITE a call to its write accessor; a FIELD-backed accessor is a
 read/write use of that field.

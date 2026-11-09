@@ -1082,6 +1082,7 @@ const
     '\bCaption:\s*''([^'']+)''',
     '\brtk\w+\s*:\s*Result\s*:=\s*''([^'']+)''');
 var
+  lHasDesigner: Boolean;
   lHelp: TLiveHelp;
   lCli, lMenu, lRx, lS, lRt, lElse, lCore, lSchemaPas, lPack, lChart, lBlock, lF: string;
   lList, lSeen: TList<string>;
@@ -1157,7 +1158,13 @@ begin
   AboutButtons := SortUniqueText(AboutButtons);
   // context menus, per ide-context host
   ContextCaptions.Clear;
-  ContextHosts := ['Structure form', 'Project Manager'];
+  // 'Form Designer' joins only when its source exists: the frozen golden repo predates it (wave 147 P1 N7).
+  // Not fail-open: every entry with an ide-context:Form Designer surface fails check B/C when no caption is harvested.
+  lHasDesigner := TFile.Exists(TPath.Combine(pRepo, 'src\delphi-plugin\DragLint.Plugin.ConvertSelectionEditor.pas'));
+  if lHasDesigner then
+    ContextHosts := ['Structure form', 'Project Manager', 'Form Designer']
+  else
+    ContextHosts := ['Structure form', 'Project Manager'];
   lList := TList<string>.Create;
   try
     for lS in Matches1(ReadText(TPath.Combine(pRepo, 'src\delphi-plugin\DragLint.Plugin.StructureForm.pas')), 'AddPopupItem\(\s*\w+\s*,\s*''([^'']+)''') do
@@ -1168,6 +1175,14 @@ begin
     for lS in Matches1(ReadText(TPath.Combine(pRepo, 'src\delphi-plugin\DragLint.Plugin.ProjectMenu.pas')), 'MENU_CAPTION\s*=\s*''([^'']+)''') do
       lList.Add(DropAccelerator(lS));
     ContextCaptions.Add('Project Manager', lList.ToArray);
+    lList.Clear;
+    // the form designer's right-click verbs (TConvertSelectionEditor.GetVerb, wave 147 P1 N7)
+    if lHasDesigner then
+    begin
+      for lS in Matches1(ReadText(TPath.Combine(pRepo, 'src\delphi-plugin\DragLint.Plugin.ConvertSelectionEditor.pas')), 'CONVERT_VERB_\w+\s*=\s*''([^'']+)''') do
+        lList.Add(DropAccelerator(lS));
+      ContextCaptions.Add('Form Designer', SortUniqueText(lList.ToArray));
+    end;
   finally
     lList.Free;
   end;

@@ -252,7 +252,7 @@ const
   UTF8_BOM: array[0..2] of Byte = ($EF, $BB, $BF);
   CHILD_ONLY_KEYS: array[0..3] of string = ('parent', 'subgroup', 'emitter', 'wikiAnchor');
   LAST_VERIFIED_KEYS: array[0..2] of string = ('date', 'by', 'build');
-  CONTEXT_HOSTS: array[0..2] of string = ('Structure form', 'Project Manager', 'Editor');
+  CONTEXT_HOSTS: array[0..3] of string = ('Structure form', 'Project Manager', 'Editor', 'Form Designer');
   FAMILY_IMPORTERS: array[0..1] of string = ('lint-rules', 'chart-questions');
   SCHEMA_PREFIX = 'The JSON is not valid with the schema: ';
 

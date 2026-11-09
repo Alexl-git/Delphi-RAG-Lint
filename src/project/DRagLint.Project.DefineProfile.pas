@@ -96,7 +96,7 @@ function ReadDprojActiveSelection(const ADproj: string; out APlatform, AConfig: 
 /// <remarks>
 /// Never raises.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeFileContext (DRagLint.LSP.Server.pas), DRagLint.Project.DefineProfile.ResolveActiveBuild (DRagLint.Project.DefineProfile.pas)</para>
+/// <para>Called from: DRagLint.CLI.EffectiveIndexPlatform (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeFileContext (DRagLint.LSP.Server.pas), DRagLint.Project.DefineProfile.ResolveActiveBuild (DRagLint.Project.DefineProfile.pas)</para>
 /// <para>Calls: ChangeFileExt, CharInSet, Copy, DRagLint.Preprocess.Profile.SplitDefineToken, DRagLint.Project.DefineProfile.ReadTextSafe, DRagLint.Project.DefineProfile.SplitOptions, ExtractFileName, LowerCase, TryStrToInt</para>
 /// <para>Returns: False; True</para>
 /// <para>Complexity: 15 (cyclomatic, outer body), 71 lines (full implementation)</para>

@@ -1189,4 +1189,8 @@
 #   Superseded: 1.32.0-alpha|98344205d1fe4e8398019b41613a5183c3bd54c2cea24f0aaaa4879d79630266
 # 2026-11-07 1.46 int: ONE bump for wave 146 (see Core.Model).
 #   Superseded: 1.32.0-alpha|528aeb7cc87b8ed1806b7259887e331f00b00b98a8228dfb4c66d06637543db7
-1.33.0-alpha|5c05d332cf1e502943a0298bb03536aa2ee298d6e6721b51736c079701c33a37
+# 2026-11-07 lane 147-PRE: hash re-pinned WITHOUT a version bump after merging 146-x5 (E-INSTALLER-R2) -- src\index\Manifest + ManifestWrite gain TInstalledLayout (which manifest FILE is read and rewritten; off by default); no parse, symbol, ref or call edge changes.
+#   Superseded: 1.33.0-alpha|5c05d332cf1e502943a0298bb03536aa2ee298d6e6721b51736c079701c33a37
+# 2026-11-08 lane 147-X5P (E-INSTALLER-R2-REST phase 2): hash re-pinned WITHOUT a version bump -- src\index\Manifest + ManifestWrite gain manifest migrate, %VAR% expansion of outDir and the roaming library default (where a manifest and its DBs LIVE, all OFF unless DRAGLINT_LAYOUT=v2); no parse, symbol, ref or call edge changes.
+#   Superseded: 1.33.0-alpha|b442941d11f971de0ce881054db103e4cc1d08e1e72469d4089dfe226fe1f81f
+1.34.0-alpha|8f4e29f35451bbe6eef1d3dfc6a46b8b47a1cbfe291edd40a5b482586a167d2c
