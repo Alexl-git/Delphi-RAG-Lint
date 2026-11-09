@@ -7,7 +7,12 @@
 #       3 spokes rewritten, 3 edges cut, the group breaks; dry run writes nothing   (RED on 1.46.0: unknown flag)
 #   h2  --apply: exit 0; HubMain.Hub.pas written; builds; stdout byte-identical; comment + string literal untouched
 #   h3  no cycle after a re-index
-#   n1  a bare use (Assigned(HubMainForm)) refuses that spoke: bare-use; the group stays
+#   n1  `with HubMainForm do` refuses that spoke: with-member; the group stays (149 CYB: Assigned() is no longer refused, a1)
+#   n1b FreeAndNil(HubMainForm) refuses member-write (by reference)
+#   a0  control: no bare use -> no AsForm on the surface
+#   a1  P4 (149 CYB): Assigned(HubMainForm) -> Assigned(HubMainHub); the spoke is rewritten, the group breaks
+#   a2  P4: the global passed as a value / compared with nil -> HubMainHubAsForm (AsForm: TComponent, nil-safe);
+#       --apply builds, stdout identical, no cycle after a re-index
 #   n2  a write to a designer field refuses member-write
 #   n3  Inc on a Char plain field refuses member-write (var parameter); Inc / Dec on an Integer one is rewritten (h2.8)
 #   p1  a spoke that also calls a hub routine: R1 inverts it (HubStampPtr in HubMain.Hub), the edge is cut (phase P3, 149 CYA)
@@ -116,6 +121,7 @@ try {
   Check 'h1.6 3 edges cut' (Has $o '- uses: 3 spokes drop `HubMain` (edge cut); 0 keep it') $o
   Check 'h1.7 prediction: the group breaks' (Has $o '- prediction: the group breaks') $o
   Check 'h1.8 the interface text: property Log read-only, Counter read/write, Note with its default' ((Has $o 'property Log: TStringList read HubGetLog;') -and (Has $o 'property Counter: Integer read HubGetCounter write HubSetCounter;') -and (Has $o 'procedure Note(const pText: string; pLevel: Integer = 0);') -and (Has $o 'function Ready: Boolean;')) $o
+  Check 'a0 control: no bare use -> no AsForm on the surface, no P4 line' (($o -notmatch 'AsForm') -and ($o -notmatch 'bare uses \(phase P4\)')) $o
   Check 'h1.9 dry run: nothing written' ((Has $o 'dry run: nothing written') -and ((Get-SrcHash $P0.Root) -eq $h0) -and -not (Test-Path (Join-Path $P0.Root 'HubMain.Hub.pas'))) $o
 
   $B = New-Proj 'hubsurface' 'HubSurface'
@@ -144,7 +150,30 @@ try {
   Write-Host '== n: what is refused, and only where it is' -ForegroundColor Cyan
   $E = New-Proj 'hubsurface' 'HubSurface' { param($r) Edit-Text (Join-Path $r 'HubSpokeC.pas') "  hubMainForm.log.Add(" "  if Assigned(HubMainForm) then`n  hubMainForm.log.Add(" }
   $o = (Get-HubPlan $E).Out
-  Check 'n1 a bare use refuses that spoke (bare-use), 2 others rewritten, the group stays' ((Has $o '- refused `HubSpokeC.pas`: bare-use') -and ($o -match 'spokes: 2 rewritten') -and (Has $o 'the group stays -- 1 spoke->hub edges remain')) $o
+  Check 'a1 P4: Assigned(HubMainForm) -> Assigned(HubMainHub), 3 rewritten, the group breaks   (RED on 1.48.0: bare-use)' ((Has $o '- bare uses (phase P4): 1 `Assigned(HubMainForm)` -> `Assigned(HubMainHub)`; 0 passed as a value') -and ($o -match 'spokes: 3 rewritten .*, 0 refused') -and (Has $o '- prediction: the group breaks') -and ($o -notmatch 'AsForm:')) $o
+  $E = New-Proj 'hubsurface' 'HubSurface' { param($r) Edit-Text (Join-Path $r 'HubSpokeC.pas') "  hubMainForm.log.Add(" "  with HubMainForm do`n    Note('w');`n  hubMainForm.log.Add(" }
+  $o = (Get-HubPlan $E).Out
+  Check 'n1 with HubMainForm do refuses that spoke (with-member), 2 others rewritten, the group stays' ((Has $o '- refused `HubSpokeC.pas`: with-member') -and ($o -match 'spokes: 2 rewritten') -and (Has $o 'the group stays -- 1 spoke->hub edges remain')) $o
+  $E = New-Proj 'hubsurface' 'HubSurface' { param($r) Edit-Text (Join-Path $r 'HubSpokeC.pas') "  hubMainForm.log.Add(" "  hubMainForm.log.Add('x');`n  FreeAndNil(HubMainForm);`n  hubMainForm.log.Add(" }
+  $o = (Get-HubPlan $E).Out
+  Check 'n1b FreeAndNil(HubMainForm): member-write, passed by reference' (Has $o '- refused `HubSpokeC.pas`: member-write -- line 16: `HubMainForm` is passed to FreeAndNil by reference') $o
+  $Bare = { param($r) Edit-Text (Join-Path $r 'HubSpokeC.pas') "procedure SpokeC;`nbegin`n" "procedure ShowOwner(pOwner: TObject);`nbegin`n  Writeln('owner ', pOwner.ClassName);`nend;`n`nprocedure SpokeC;`nbegin`n  if Assigned(HubMainForm) and (HubMainForm <> nil) then ShowOwner(HubMainForm);`n" }
+  $E = New-Proj 'hubsurface' 'HubSurface' $Bare
+  $o = (Get-HubPlan $E).Out
+  Check 'a2.1 P4: 2 bare values through HubMainHubAsForm, AsForm: TComponent on the surface, the group breaks   (RED on 1.48.0: bare-use)' ((Has $o '- bare uses (phase P4): 1 `Assigned(HubMainForm)` -> `Assigned(HubMainHub)`; 2 passed as a value through `HubMainHubAsForm: TComponent`') -and (Has $o 'property AsForm: TComponent read HubGetAsForm;') -and (Has $o 'function HubMainHubAsForm: TComponent;') -and (Has $o '  if HubMainHub = nil then Result:= nil else Result:= HubMainHub.AsForm;') -and ($o -match 'spokes: 3 rewritten .*, 0 refused') -and (Has $o '- prediction: the group breaks')) $o
+  $B = New-Proj 'hubsurface' 'HubSurface' $Bare
+  $b0 = Invoke-Build $B
+  $out0 = Invoke-Program $B
+  $P = New-Proj 'hubsurface' 'HubSurface' $Bare
+  $a = Get-HubPlan $P @('--apply')
+  $b1 = Invoke-Build $P
+  $out1 = Invoke-Program $P
+  Check 'a2.2 --apply with the bare uses: both copies build, stdout byte-identical (owner THubMain)' (($a.Exit -eq 0) -and $b0.Ok -and $b1.Ok -and ($out0 -match 'owner THubMain') -and ($out1 -ceq $out0)) "exit=$($a.Exit) base=[$($b0.Errors)] applied=[$($b1.Errors)] before=[$out0] after=[$out1]"
+  $sc = [IO.File]::ReadAllText((Join-Path $P.Root 'HubSpokeC.pas'), $Ascii)
+  $hm = [IO.File]::ReadAllText((Join-Path $P.Root 'HubMain.pas'), $Ascii)
+  Check 'a2.3 spoke C: Assigned(HubMainHub), HubMainHubAsForm twice, uses HubMain.Hub only; HubMain implements HubGetAsForm' ((Has $sc 'if Assigned(HubMainHub) and (HubMainHubAsForm <> nil) then ShowOwner(HubMainHubAsForm);') -and ($sc -notmatch '(?m)^\s+HubMain;') -and (Has $hm 'function THubMain.HubGetAsForm: TComponent;')) "$sc`n$hm"
+  $left = Get-Cycles $P
+  Check 'a2.4 no cycle after a re-index' ($left -match 'No circular unit dependencies found\.') $left
   $E = New-Proj 'hubsurface' 'HubSurface' { param($r) Edit-Text (Join-Path $r 'HubSpokeB.pas') "  if HubMainForm.Ready" "  HubMainForm.Log:= HubMainForm.Log;`n  if HubMainForm.Ready" }
   $o = (Get-HubPlan $E).Out
   Check 'n2 a write to a designer field: member-write' ($o -match '- refused `HubSpokeB\.pas`: member-write -- line \d+: `HubMainForm\.Log :=` writes a component field') $o
