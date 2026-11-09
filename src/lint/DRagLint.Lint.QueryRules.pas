@@ -1266,6 +1266,91 @@ begin
   end; // try
 end;
 
+{ The text of ANode with any `<...>` generic argument list removed and whitespace dropped, so
+  `TFoo<T>` and `TFoo` compare equal. }
+function BareTypeName(const ANode: TTSNode; const ASource: TBytes): string;
+begin
+  Result:= TRegEx.Replace(NodeText(ANode, ASource), '<[^>]*>|\s', '');
+end;
+
+{ True when ADecl (a declProc) carries a `virtual` or `override` directive. }
+function DeclIsVirtual(const ADecl: TTSNode): Boolean;
+var
+  Kid: TTSNode;
+begin
+  Result:= False;
+  for Kid in NamedChildrenOf(ADecl) do
+    if (Kid.NodeType = 'kVirtual') or (Kid.NodeType = 'kOverride') or DeclIsVirtual(Kid) then Exit(True);
+end;
+
+{ True when ANode (a declProc in a class body) declares AMethod inside the class named AClass. }
+function DeclMatchesMethod(const ANode: TTSNode; const ASource: TBytes; const AClass, AMethod: string): Boolean;
+var
+  Cur: TTSNode;
+begin
+  Result:= False;
+  if not SameText(BareTypeName(ANode.ChildByField('name'), ASource), AMethod) then Exit;
+  Cur:= ANode.Parent;
+  while not Cur.IsNull do
+  begin
+    if Cur.NodeType = 'declType' then
+      Exit(SameText(BareTypeName(Cur.ChildByField('name'), ASource), AClass));
+    if Cur.NodeType = 'defProc' then Exit;
+    Cur:= Cur.Parent;
+  end;
+end;
+
+{ True when the routine defining AMethod of AClass has a virtual / override declaration anywhere
+  under ANode. Overloads share a name: ONE virtual overload exempts them all (a stub is the
+  conservative kind of finding to lose). }
+function TreeDeclaresVirtual(const ANode: TTSNode; const ASource: TBytes; const AClass, AMethod: string): Boolean;
+var
+  Kid: TTSNode;
+begin
+  Result:= False;
+  if ANode.NodeType = 'declProc' then
+    Exit(DeclMatchesMethod(ANode, ASource, AClass, AMethod) and DeclIsVirtual(ANode));
+  if ANode.NodeType = 'defProc' then Exit;
+  for Kid in NamedChildrenOf(ANode) do
+    if TreeDeclaresVirtual(Kid, ASource, AClass, AMethod) then Exit(True);
+end;
+
+{ True when ANode sits in the body of a method (`TFoo.Bar`) whose class-body declaration is
+  `virtual` or `override`. The .scm sees only the defProc, never the declaration, so
+  (#not-in-virtual-method? @warn) is how compiler-magic-comments exempts the `raise
+  ENotImplemented` abstract-stub idiom. Same-file lookup only: a Delphi class is declared in the
+  unit that implements it. }
+function InVirtualMethod(const ANode: TTSNode; const ASource: TBytes): Boolean;
+var
+  Cur  : TTSNode;
+  Qual : string  ;
+  Dot  : Integer ;
+begin
+  Result:= False;
+  if ANode.IsNull then Exit;
+  Cur:= ANode.Parent;
+  while not Cur.IsNull and (Cur.NodeType <> 'defProc') do Cur:= Cur.Parent;
+  if Cur.IsNull then Exit;
+  Qual:= BareTypeName(Cur.ChildByField('header').ChildByField('name'), ASource);
+  Dot:= LastDelimiter('.', Qual);
+  if Dot < 2 then Exit;
+  while not Cur.Parent.IsNull do Cur:= Cur.Parent;
+  Result:= TreeDeclaresVirtual(Cur, ASource, Copy(Qual, 1, Dot - 1), Copy(Qual, Dot + 1, MaxInt));
+end;
+
+{ (#in-virtual-method? @x) / (#not-in-virtual-method? @x) -- see InVirtualMethod. Malformed
+  arguments pass, like every predicate here. }
+function EvalVirtualMethod(const AMatch: TTSQueryMatch; const ASource: TBytes;
+  const AArgs: TArray<TPredicateArg>; ANegated: Boolean): Boolean;
+const
+  OP_AND_CAPTURE = 2;
+  CAP_ARG        = 1;
+begin
+  if (Length(AArgs) <> OP_AND_CAPTURE) or not AArgs[CAP_ARG].IsCapture then Exit(True);
+  Result:= InVirtualMethod(ResolveCaptureNode(AMatch, AArgs[CAP_ARG].CaptureIndex), ASource);
+  if ANegated then Result:= not Result;
+end;
+
 { The numeric type an inline `var X := <numeric literal>` declares (`Integer` for `0`, `Double`
   for `0.0` / `1e3`; a leading unary minus is looked through), or '' when ADef is not that shape.
   A numeric literal initialiser fixes the variable's type as a number, so a loop sum on it is
@@ -2136,6 +2221,8 @@ begin
 
   if (Op = 'declared-numeric?') or (Op = 'not-declared-numeric?') then
     Exit(EvalDeclaredNumeric(AMatch, ASource, AArgs, Op = 'not-declared-numeric?'));
+  if (Op = 'in-virtual-method?') or (Op = 'not-in-virtual-method?') then
+    Exit(EvalVirtualMethod(AMatch, ASource, AArgs, Op = 'not-in-virtual-method?'));
   if Op = 'declared-type?' then
     Exit(EvalDeclaredType(AMatch, ASource, AArgs, ACache));
   if (Op = 'oracle-via?') or (Op = 'not-oracle-via?') then

@@ -83,7 +83,7 @@ end.
 '@
   $h, $o = Hits $f 'for-bound-modified-in-body'
   Check '1a with-body that never names the loop var: no finding (line 8)' ($h -notcontains 8) "hits=$($h -join ',')"
-  Check '1b POSITIVE CONTROL: assignment to the loop var inside a with still fires (line 20)' ($h -contains 20) "hits=$($h -join ',')"
+  Check '1b POSITIVE CONTROL: assignment to the loop var inside a with still fires (line 19)' ($h -contains 20) "hits=$($h -join ',')"
 
   # ---- 2. concat-in-loop -----------------------------------------------------
   Write-Host '2. concat-in-loop'
@@ -132,6 +132,46 @@ end.
   $h, $o = Hits $f 'compiler-magic-comments'
   Check '4a POSITIVE CONTROL: raise ENotImplemented (line 6) and TODO comment (line 10) both fire' (($h -contains 6) -and ($h -contains 10)) "hits=$($h -join ',')"
   Check '4b message names the raise form, not only a comment' ($o -match 'raise ENotImplemented') ''
+
+  # 4c-4f (RT-7, wave 150): a `raise ENotImplemented` that is the body of a VIRTUAL / OVERRIDE
+  # method is the abstract-stub idiom (the subclass must override), not an unfinished marker.
+  # The declaration (with its directive) lives in the class body, the rule sees only the body.
+  $f = Put 'magic2.pas' @'
+unit magic2;
+interface
+type
+  TBase = class
+    procedure NonVirt;
+    procedure Virt; virtual;
+    function Ovr: Integer; virtual;
+  end;
+  TDer = class(TBase)
+    function Ovr: Integer; override;
+  end;
+implementation
+procedure TBase.NonVirt;
+begin
+  raise ENotImplemented.Create('nonvirt');
+end;
+procedure TBase.Virt;
+begin
+  raise ENotImplemented.Create('virt');
+end;
+function TBase.Ovr: Integer;
+begin
+  raise ENotImplemented.Create('ovr');
+end;
+function TDer.Ovr: Integer;
+begin
+  raise ENotImplemented.Create('ovr2');
+end;
+end.
+'@
+  $h, $o = Hits $f 'compiler-magic-comments'
+  Check '4c POSITIVE CONTROL: raise ENotImplemented in a NON-virtual method (line 15) still fires' ($h -contains 15) "hits=$($h -join ',')"
+  Check '4d raise ENotImplemented in a virtual method (line 19) is exempt' ($h -notcontains 19) "hits=$($h -join ',')"
+  Check '4e raise ENotImplemented in a virtual method with a result (line 23) is exempt' ($h -notcontains 23) "hits=$($h -join ',')"
+  Check '4f raise ENotImplemented in an override method (line 27) is exempt' ($h -notcontains 27) "hits=$($h -join ',')"
 
   # ---- 5. shared-marker-legacy-shape --------------------------------------------
   Write-Host '5. shared-marker-legacy-shape'
