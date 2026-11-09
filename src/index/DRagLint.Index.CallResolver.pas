@@ -1478,7 +1478,8 @@ type
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddVisibleUnitRoutines"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    function FileUsesUnits(AFileId: Int64): TArray<string>;    /// <summary>Direct children of AParentId (cached). Empty when none / 0.</summary>
+    function FileUsesUnits(AFileId: Int64): TArray<string>;
+    /// <summary>Direct children of AParentId (cached). Empty when none / 0.</summary>
     /// <param name="AParentId"><!-- drag-lint:auto type -->Int64</param>
     /// <returns><!-- drag-lint:auto -->TList&lt;TSymbol&gt; -- Observed:
     /// TList&lt;TSymbol&gt;.Create.</returns>
@@ -2558,7 +2559,8 @@ type
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.LocalTypeText"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    function TypeOfOrdinaryName(const ARef: TReference; const AName: string; out ATypeText: string): Int64; overload;    /// <summary>X2 (resolver 1.14.0-alpha): the declared RETURN type of the
+    function TypeOfOrdinaryName(const ARef: TReference; const AName: string; out ATypeText: string): Int64; overload;
+    /// <summary>X2 (resolver 1.14.0-alpha): the declared RETURN type of the
     /// function a receiver names -- `GetCopy.M`, `MakeCopy.M`,
     /// `MakeCopy().M`.</summary>
     /// <param name="ARef">The call or member ref; supplies the file and the
@@ -2597,7 +2599,8 @@ type
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddMethodsOnTypeChain"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    function TypeOfFunctionResult(const ARef: TReference; const AName: string; out ARetText: string): Int64; overload;    /// <summary>X2: True when ancestor AAncestor is an INTERFACE named in the
+    function TypeOfFunctionResult(const ARef: TReference; const AName: string; out ARetText: string): Int64; overload;
+    /// <summary>X2: True when ancestor AAncestor is an INTERFACE named in the
     /// heritage of AOwnerId and AOwnerId is not itself an interface.</summary>
     /// <param name="AOwnerId">The type whose ancestors are walked.</param>
     /// <param name="AAncestor">A resolved ancestor row of AOwnerId.</param>
