@@ -1132,9 +1132,8 @@ begin
           if Depth = 0 then Break;
         end;
       ',': if Depth = 1 then Inc(Result);
-      ' ': ;
     else
-      Empty:= False;
+      Empty:= Empty and (ATypeText[I] = ' ');
     end;
   end;
   Result:= if Empty then 0 else Result + 1;

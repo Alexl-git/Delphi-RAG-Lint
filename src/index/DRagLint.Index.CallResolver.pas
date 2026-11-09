@@ -11136,7 +11136,7 @@ begin
   var Text: string;
   try
     Text:= TFile.ReadAllText(ADproj);
-  except
+  except  // dl:ok try-except-swallowed@7e54 -- 150-RS1: an unreadable .dproj means no scope names are known (the documented [] answer); the resolve pass must not abort on a side file
     on EInOutError do Exit;
     on EFileStreamError do Exit;
   end;
