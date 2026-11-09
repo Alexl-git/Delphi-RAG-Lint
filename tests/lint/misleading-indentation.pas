@@ -47,4 +47,18 @@ begin
   {$IFDEF DEBUG}R:= 4;{$ENDIF}
 end;
 
+procedure IfElseTail(X: Integer; var R: Integer);
+begin
+  if X > 0 then
+    R:= 1
+  else
+    R:= 2;
+    R:= 3;
+  if X > 1 then
+    R:= 4
+  else
+    R:= 5;
+  R:= 6;
+end;
+
 end.

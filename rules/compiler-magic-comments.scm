@@ -18,4 +18,8 @@
 ; is an unfinished-work marker just like a TODO comment. Matches the raise of
 ; ENotImplemented.Create(..) or a bare ENotImplemented.
 ((raise (exprCall entity: (exprDot lhs: (identifier) @exc)) ) @warn
-  (#eq? @exc "ENotImplemented"))
+  (#eq? @exc "ENotImplemented")
+  ; `raise ENotImplemented` as the body of a virtual / override method is the abstract-stub
+  ; idiom (the subclass must override), not unfinished work. The declaration is in the class
+  ; body, outside this pattern: see EvalVirtualMethod (QueryRules.pas), same-file lookup.
+  (#not-in-virtual-method? @warn))

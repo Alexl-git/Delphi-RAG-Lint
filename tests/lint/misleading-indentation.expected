@@ -20,3 +20,6 @@ misleading-indentation 36
 # FP shape (found in ORM3): a statement wrapped in {$IFDEF}..{$ENDIF} on its own line. The preprocessor blanks the directive to spaces, so the statement LOOKS indented; the raw line starts with the directive. Lines 45/47 must stay silent.
 !misleading-indentation 45
 !misleading-indentation 47
+# if..else: the dangling statement after the ELSE branch indented as if controlled (line 56) fires; aligned one (61) is silent.
+misleading-indentation 56
+!misleading-indentation 61

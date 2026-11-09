@@ -28,6 +28,8 @@ var
   LT: TLibTwin;
   S: string;
   N: Integer;
+  P: PChar;
+  U: UInt64;
 begin
   LC:= TLibCls(LC); // FIX
   LT:= TLibTwin(LT); // REFUSE type-not-indexed
@@ -35,6 +37,8 @@ begin
   S:= string(OwnArg(N)); // FIX
   S:= string(N); // NONE
   N:= Integer(N); // REFUSE type-not-indexed
+  P:= PChar(P); // REFUSE type-not-indexed
+  U:= UInt64(U); // REFUSE type-not-indexed
 end;
 
 end.

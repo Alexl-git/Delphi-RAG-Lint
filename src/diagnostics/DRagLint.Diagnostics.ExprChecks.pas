@@ -68,6 +68,7 @@ implementation
 
 uses
   System.SysUtils
+  , System.StrUtils
   , System.Classes
   , System.Generics.Collections
   , System.RegularExpressions
@@ -497,8 +498,11 @@ var
     begin
       Stmt:= AParent.NamedChild(I);
       T:= Stmt.NodeType;
-      if (T <> 'if') and (T <> 'while') and (T <> 'for') and (T <> 'foreach') and (T <> 'with') then Continue;
-      if T = 'if' then Body:= Stmt.ChildByField('then') else Body:= Stmt.ChildByField('body');
+      if not MatchText(T, ['if', 'ifElse', 'while', 'for', 'foreach', 'with']) then Continue;
+      { if..else: the controlled single statement a reader tends to extend is the ELSE branch }
+      Body:= if T = 'if' then Stmt.ChildByField('then')
+        else if T = 'ifElse' then Stmt.ChildByField('else')
+        else Stmt.ChildByField('body');
       if Body.IsNull or (Pos(Body.NodeType + ';', SIMPLE_BODY_BLOCKERS) > 0) then Continue;
       Nxt:= Default(TTSNode);
       for J:= I + 1 to AParent.NamedChildCount - 1 do
@@ -515,7 +519,7 @@ var
       if IndentDeeper(Indent, IKind, NextIndent, NKind) then
         EmitAt(Nxt, 'misleading-indentation',
           Format('Statement is indented as if controlled by the %s at line %d, but it is not',
-            [T, Integer(Stmt.StartPoint.Row) + 1]), 'warning');
+            [if T = 'ifElse' then 'if' else T, Integer(Stmt.StartPoint.Row) + 1]), 'warning');
     end;
   end;
 
