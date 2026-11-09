@@ -17240,7 +17240,7 @@ begin
   AStored    := 0;
   var Filter: string:= '';
   if AScopeWhere <> '' then
-    Filter:= Filter + ' AND refs.file_id IN (SELECT DISTINCT refs.file_id FROM refs WHERE ' + AScopeWhere + ')';  // dl:ok sql-injection-concat@a2ea -- AScopeWhere is SQL this pass BUILT (MaterializeResolveScope), never user text
+    Filter:= Filter + ' AND refs.file_id IN (SELECT DISTINCT refs.file_id FROM refs WHERE ' + AScopeWhere + ')';
   if AStaleWhere <> '' then Filter:= Filter + ' AND (' + AStaleWhere + ')';
   Q    := TFDQuery.Create(nil);
   QTgt := TFDQuery.Create(nil);
@@ -17262,12 +17262,18 @@ begin
     Q.SQL.Text  := 'SELECT ma.ref_id, ma.accessor_kind, refs.file_id, refs.start_line, refs.start_col, f.path ' +
                    'FROM member_accesses ma JOIN refs ON refs.id = ma.ref_id JOIN files f ON f.id = refs.file_id ' +
                    'WHERE ma.mode = ''read'' AND ma.accessor_symbol_id IS NULL ' +
-                   'AND (ma.accessor_kind IS NULL OR ma.accessor_kind IN (''var-arg'', ''out-arg''))' + Filter;  // dl:ok sql-injection-concat@a2ea -- Filter is built from this pass's own predicates above
+                   'AND (ma.accessor_kind IS NULL OR ma.accessor_kind IN (''var-arg'', ''out-arg''))' + Filter;
     Q.Open;
+    var FRef : TField:= Q.FieldByName('ref_id');
+    var FKind: TField:= Q.FieldByName('accessor_kind');
+    var FFile: TField:= Q.FieldByName('file_id');
+    var FLine: TField:= Q.FieldByName('start_line');
+    var FCol : TField:= Q.FieldByName('start_col');
+    var FPath: TField:= Q.FieldByName('path');
     while not Q.Eof do
     begin
       Inc(ACandidates);
-      var Path: string:= Q.FieldByName('path').AsString;
+      var Path: string:= FPath.AsString;
       var Src : TArray<string>;
       if not Lines.TryGetValue(Path, Src) then
       begin
@@ -17281,12 +17287,12 @@ begin
         Lines.Add(Path, Src);
       end;
       var Kind: string:= '';
-      if (Length(Src) > 0) and LocateArgument(Src, Q.FieldByName('start_line').AsInteger, Q.FieldByName('start_col').AsInteger,
+      if (Length(Src) > 0) and LocateArgument(Src, FLine.AsInteger, FCol.AsInteger,
            Callee, CL, CC, Idx)
          and not ((Idx = 0) and (SameText(Callee, 'Inc') or SameText(Callee, 'Dec'))) then
       begin
         var Target: Int64:= 0;
-        QTgt.ParamByName('f').AsLargeInt := Q.FieldByName('file_id').AsLargeInt;
+        QTgt.ParamByName('f').AsLargeInt := FFile.AsLargeInt;
         QTgt.ParamByName('l').AsInteger  := CL;
         QTgt.ParamByName('c').AsInteger  := CC;
         QTgt.ParamByName('n').AsWideString:= Callee;
@@ -17308,11 +17314,11 @@ begin
           else if Mode = 'out' then Kind:= 'out-arg';
         end;
       end;
-      var Have: string:= if Q.FieldByName('accessor_kind').IsNull then '' else Q.FieldByName('accessor_kind').AsString;
+      var Have: string:= if FKind.IsNull then '' else FKind.AsString;
       if Kind <> Have then
       begin
         if Kind = '' then Upd.ParamByName('k').Clear else Upd.ParamByName('k').AsWideString:= Kind;
-        Upd.ParamByName('r').AsLargeInt:= Q.FieldByName('ref_id').AsLargeInt;
+        Upd.ParamByName('r').AsLargeInt:= FRef.AsLargeInt;
         Upd.ExecSQL;
       end;
       if Kind <> '' then Inc(AStored);
