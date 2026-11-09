@@ -1,4 +1,4 @@
-# Index DB Schema (schema 24)
+# Index DB Schema (schema 23)
 
 Reference for the SQLite file drag-lint builds: `<project folder>\_D-RAG\<base>.sqlite`
 (project DB) and `library-Win32|Win64.sqlite` (platform library). Everything here was
@@ -13,7 +13,7 @@ Never open a real DB with a writer to "look": copy it first, or use the read-onl
 
 ## 1. Overview
 
-* **Schema version** `schema_meta.schema_version` = `24` (v24, wave 149: `file_includes`, `dfm_objects`, `pp_regions`). It is stamped LAST by `Migrate`
+* **Schema version** `schema_meta.schema_version` = `23` (wave 149 / extractor 1.35 added `file_includes`, `dfm_objects`, `pp_regions` additively, no bump). It is stamped LAST by `Migrate`
   (the commit point of a migration), so an interrupted upgrade keeps the old number and
   the next writable open heals it.
 * **Two kinds of change.** A change that alters what the indexer WRITES bumps
@@ -31,7 +31,7 @@ Never open a real DB with a writer to "look": copy it first, or use the read-onl
     `type_ancestors`, `type_helpers`
   * usage and calls: `refs`, `call_edges`, `member_accesses`, `dispatch_edges`,
     `classref_args`, `data_flows`
-  * structure: `unit_uses`, `di_bindings`, `file_includes`, `dfm_objects`, `pp_regions` (v24)
+  * structure: `unit_uses`, `di_bindings`, `file_includes`, `dfm_objects`, `pp_regions` (1.35)
   * text: `string_literals` (+ FTS5)
   * external feeds: `compiler_findings`, `fb_relations`, `fb_columns`, `fb_field_info`,
     `fb_datasets`, `fb_enum_values`, `orm_links`
@@ -78,7 +78,7 @@ erDiagram
 
 | Pass | Verb / stage | Writes |
 |---|---|---|
-| **index** (per file, one transaction) | `index`, `index --project` | `files` (incl. `indexed_at_fingerprint`, stamped in the same tx), `symbols`, `refs` (raw: `symbol_id` NULL for most), `unit_uses`, `string_literals` (+FTS via triggers), `di_bindings`, `data_flows`, `file_includes`, `dfm_objects`, `pp_regions` (v24), `symbol_trigrams` |
+| **index** (per file, one transaction) | `index`, `index --project` | `files` (incl. `indexed_at_fingerprint`, stamped in the same tx), `symbols`, `refs` (raw: `symbol_id` NULL for most), `unit_uses`, `string_literals` (+FTS via triggers), `di_bindings`, `data_flows`, `file_includes`, `dfm_objects`, `pp_regions` (1.35), `symbol_trigrams` |
 | **resolve** (whole DB, after files) | end of `index` | `refs.symbol_id`, `refs.receiver_text`, `refs.receiver_type_text`, `refs.external_target`, `call_edges`, `member_accesses`, `type_ancestors` (rebuilt each run), `type_helpers`, `dispatch_edges` (wiped and rebuilt), `classref_args`, `unit_uses.target_file_id` |
 | **doc / facts** | index-time doc extraction and ADP analysis | `symbol_docs`, `symbol_facts` (`effect_*` columns come from the purity stage) |
 | **external feeds** | `import-log`, `fb-snapshot`, ORM link pass | `compiler_findings`, `fb_*`, `orm_links` |
@@ -236,7 +236,7 @@ trailing segment: `System.SysUtils` -> `sysutils`), `section TEXT` (`interface` 
 (entry came from an `{$I}` include: the `.inc` path and the host directive line; NULL for the
 unit's own text).
 
-### file_includes (v24)
+### file_includes (1.35)
 One row per include directive the preprocessor RESOLVED and followed while indexing the file
 (inactive and unresolvable includes have none); written inside the file transaction and
 replaced on every re-parse. Column image of `TFileIncludeRow`. Indexes
@@ -252,7 +252,7 @@ replaced on every re-parse. Column image of `TFileIncludeRow`. Indexes
 | section | TEXT | host section of a depth-0 directive (`interface` / `implementation` / `program` / `package`); '' when nested |
 | in_uses | INTEGER | 1 = a depth-0 directive standing in a uses list (`uses` + include as the entry list): its entries reach `unit_uses` with `origin_path` set |
 
-### dfm_objects (v24)
+### dfm_objects (1.35)
 One row per `object` / `inherited` / `inline` block of a text `.dfm`; written inside the
 file transaction. `name` / `class_name` are the strings the block's `form` / `component`
 symbol carries, so `name` joins `symbols.name` exactly. Indexes `(file_id, ordinal)`,
@@ -269,7 +269,7 @@ symbol carries, so `name` joins `symbols.name` exactly. Indexes `(file_id, ordin
 | depth | INTEGER | 0 for the root |
 | start_line, start_col, end_line, end_col | INTEGER | block span, 1-based (columns in UTF-8 bytes) |
 
-### pp_regions (v24)
+### pp_regions (1.35)
 One row per BRANCH of a conditional-compilation block (`IFDEF` / `IFNDEF` / `IF` / `IFOPT`
 ... `ENDIF` / `IFEND`) of the file itself, never inside an include, with its state under the
 index's define profile. Written inside the file transaction. Column image of `TPpRegionRow`.
@@ -378,7 +378,7 @@ variable passed at position `src_index` of an earlier call).
 
 All three live in `schema_meta` and drive "is this index current".
 
-* **schema** `schema_version` (= `SCHEMA_VERSION`, 24): structural generation of the file.
+* **schema** `schema_version` (= `SCHEMA_VERSION`, 23): structural generation of the file.
 * **indexer** `indexer_fingerprint`, e.g. `v=1.25.0-alpha;schema=23;pp=1;plat=win64;cfg=debug;defs=42819f5f`:
   product/extractor version, schema, preprocessing on, platform, config, hash of the defines.
   A mismatch means rows were produced by a different extractor: re-parse. The extractor

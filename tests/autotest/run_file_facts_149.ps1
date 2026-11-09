@@ -64,8 +64,9 @@ Write-Host "run_file_facts_149: engine $Exe" -ForegroundColor Cyan
 & $Exe index (Join-Path $fx 'facts')   --db $dbFacts *> (Join-Path $work 'index-facts.log')
 & $Exe index (Join-Path $fx 'control') --db $dbCtl   *> (Join-Path $work 'index-control.log')
 
-$ver = @(Lane-Sql $dbFacts "SELECT value FROM schema_meta WHERE key = 'schema_version'")
-Check 'schema_version is 24' (($ver.Count -eq 1) -and ($ver[0].value -eq '24')) "($($ver | ForEach-Object value))"
+# 149 INT: the tables are ADDITIVE (created by Migrate, probed by HasFileFacts); SCHEMA_VERSION stays 23.
+$tabs = @(Lane-Sql $dbFacts "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('file_includes', 'dfm_objects', 'pp_regions')")
+Check 'the three file-fact tables exist' ($tabs.Count -eq 3) "($($tabs | ForEach-Object name))"
 
 # ---- F4 ---------------------------------------------------------------------
 $usesA = @(Lane-Sql $dbFacts "SELECT u.unit_name, u.section, u.origin_path FROM unit_uses u JOIN files f ON f.id = u.file_id WHERE f.path LIKE '%\FfIncA.pas' ORDER BY u.start_line")

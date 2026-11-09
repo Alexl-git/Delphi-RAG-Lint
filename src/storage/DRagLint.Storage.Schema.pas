@@ -25,15 +25,18 @@ const
     by ResolveAncestry on every index run so its column fills on the next run.
     A pre-v23 symbols row reads generic_params NULL -> '' and its name still
     carries '<...>' until re-parsed -- which the extractor bump forces. }
-  { 23 -> 24 (2026-11-09, wave 149 lane EX2): three file-fact tables written by
+  { 149 INT (2026-11-09): stays 23. Lane EX2 bumped 23 -> 24 for three file-fact tables written by
     the indexer per file (ISymbolStore.PutFileFacts) -- file_includes (F4: the
     resolved include directives of a file, with the host section and whether
     the directive stands in a uses list), dfm_objects (F5: every object block of
     a text .dfm, linked to its symbol) and pp_regions (F6: every conditional
     branch with its state under the index's profile). Created by Migrate(), not
     SCHEMA_DDL, so SCHEMA_DDL_FTS5_FIRST does not move. The bump rides extractor
-    1.35, whose re-parse fills them; a DB below v24 reads as stale. }
-  SCHEMA_VERSION = 24;
+    1.35, whose re-parse fills them. INT reverted the bump: the tables are ADDITIVE and probed
+    (HasFileFacts), the data_flows / ref_types precedent, and a bump made every library index
+    unusable (skipped as stale) until its re-parse -- the 149 battery and every post-deploy
+    index run would have bound without the library. }
+  SCHEMA_VERSION = 23;
 
   // First index in SCHEMA_DDL that requires the SQLite FTS5 module.
   // Statements before this index are plain DDL safe on any SQLite build.

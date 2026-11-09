@@ -6,11 +6,11 @@ uses-clauses, type ancestry, DI bindings, and more). It is written for anyone
 building a tool OTHER than drag-lint itself that wants to read this database
 directly.
 
-Current schema version at time of writing: **24** (`SCHEMA_VERSION` in
+Current schema version at time of writing: **23** (`SCHEMA_VERSION` in
 `src/storage/DRagLint.Storage.Schema.pas`, verified 2026-11-09 against the
 constant AND against the guard fixture index `run_file_facts_149.ps1` builds).
 Recent additive changes:
-**v24 added three file-fact tables** -- `file_includes` (the include
+**Extractor 1.35 (wave 149) added three file-fact tables, additive and probed, no schema bump** -- `file_includes` (the include
 directives a file resolved, with host section and whether one stands in a uses
 list), `dfm_objects` (every object block of a text `.dfm`) and `pp_regions`
 (every conditional-compilation branch with its state under the index's
@@ -49,7 +49,7 @@ Schema history, one line per step:
   member's section). Riding the same extractor bump: the DFM extractor now emits
   a `dfm-prop` row for EVERY value kind, not only string-valued properties, so
   colours, sets, numbers and booleans became text-searchable.
-- `23 -> 24` (2026-11-09, wave 149): new tables `file_includes`, `dfm_objects`,
+- no bump (2026-11-09, wave 149, extractor 1.35; stays 23): new additive tables `file_includes`, `dfm_objects`,
   `pp_regions` (see 2.17), written per file by the indexer. Riding extractor
   1.35: a uses list written as an include (the entries and the closing semicolon
   in the `.inc`) now yields its `unit_uses` rows (`origin_path` set) and no
@@ -214,9 +214,9 @@ Limits -- where the triple stops identifying, stated so a consumer can guard:
 | `fb_datasets` | 0 (sample) | Live Firebird dataset (`TFIBDataSet`-style) SQL snapshot |
 | `fb_enum_values` | 0 (sample) | Live Firebird enum-domain value snapshot |
 | `orm_links` | 0 (sample) | Cross-DB Delphi-symbol <-> SQL-symbol ORM link candidates |
-| `file_includes` | (v24) | Resolved include directives per file: path, host line, depth, section, in a uses list -- see 2.17 |
-| `dfm_objects` | (v24) | Every object / inherited / inline block of a text `.dfm`, linked to its symbol -- see 2.17 |
-| `pp_regions` | (v24) | Every conditional-compilation branch of a file with its active state -- see 2.17 |
+| `file_includes` | (1.35) | Resolved include directives per file: path, host line, depth, section, in a uses list -- see 2.17 |
+| `dfm_objects` | (1.35) | Every object / inherited / inline block of a text `.dfm`, linked to its symbol -- see 2.17 |
+| `pp_regions` | (1.35) | Every conditional-compilation branch of a file with its active state -- see 2.17 |
 
 Row counts marked "0 (sample)" are populated by optional ingest steps (compiler
 log import, live Firebird connection snapshot, ORM link resolution) that were
@@ -830,7 +830,7 @@ interface, record, type, enum, method, function, procedure, constructor,
 destructor, property, field, const, var, component, form (not param,
 local_var, enum_value, initialization, finalization). See wiki page
 `concept-search`.
-### 2.17 `file_includes`, `dfm_objects`, `pp_regions` (v24)
+### 2.17 `file_includes`, `dfm_objects`, `pp_regions` (extractor 1.35)
 
 Written by the indexer inside each file's transaction and replaced on every
 re-parse of the file; `file_id` cascades. Full column tables:
