@@ -11125,6 +11125,29 @@ begin
     if A.Resolved and (A.SymbolId > 0) and (FindChildOfKind(A.SymbolId, AName, AnyMember).Id > 0) then Exit(True);
 end;
 
+{ 150-RS1 (4): the unit scope names (DCC_Namespace) the project file ADproj declares, every
+  configuration's, lower-cased, first occurrence kept; `$(..)` references dropped. [] when the
+  file is missing or unreadable. Read from the .dproj text until EX3's stored project fact
+  (project_settings 'DCC_Namespace', GetProjectSettings) is merged -- then this reads that. }
+function DprojNamespaces(const ADproj: string): TArray<string>;
+begin
+  Result:= [];
+  if not TFile.Exists(ADproj) then Exit;
+  var Text: string;
+  try
+    Text:= TFile.ReadAllText(ADproj);
+  except
+    on EInOutError do Exit;
+    on EFileStreamError do Exit;
+  end;
+  for var M: TMatch in TRegEx.Matches(Text, '<DCC_Namespace>([^<]*)</DCC_Namespace>', [roIgnoreCase]) do
+    for var Part: string in M.Groups[1].Value.Split([';']) do
+    begin
+      var Ns: string:= LowerCase(Trim(Part));
+      if (Ns <> '') and not Ns.StartsWith('$(') and (IndexStr(Ns, Result) < 0) then Result:= Result + [Ns];
+    end;
+end;
+
 function TCallResolver.FileOwnUses(AFileId: Int64): TArray<string>;
 begin
   var AllUses: TArray<string>:= FileUsesUnits(AFileId); // loads FDprUses first
@@ -11139,7 +11162,10 @@ begin
     FDprLoaded:= True;
     for var Id: Int64 in FStore.GetAllFileIds do
       if SameText(ExtractFileExt(FStore.GetFilePath(Id)), '.dpr') then
+      begin
         for var U: TUnitUse in FStore.GetUnitUsesForFile(Id) do FDprUses:= FDprUses + [LowerCase(U.UnitName)];
+        FOracle.Namespaces:= FOracle.Namespaces + DprojNamespaces(ChangeFileExt(FStore.GetFilePath(Id), '.dproj'));
+      end;
   end;
   Result:= FDprUses;
   for var U: TUnitUse in FStore.GetUnitUsesForFile(AFileId) do Result:= Result + [LowerCase(U.UnitName)];

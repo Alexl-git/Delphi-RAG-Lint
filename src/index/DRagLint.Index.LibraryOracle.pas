@@ -112,6 +112,7 @@ type
     FAliases      : TDictionary<string, TArray<TLibCand>>;
     FOwnUses      : TArray<string>;
     FDeclUses     : TArray<string>;
+    FNamespaces   : TArray<string>;
     FLastKind     : string;
     /// <param name="ATypeText"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AUses"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
@@ -764,7 +765,18 @@ type
     /// WITHOUT generic arguments names only a non-generic declaration (`TList` is never
     /// TList&lt;T&gt;). Not thread-safe: one resolver thread owns the oracle.</remarks>
     property DeclUses: TArray<string> read FDeclUses write FDeclUses;
-  end;
+    /// <summary>150-RS1 (4): the project's unit scope names (DCC_Namespace, lower-cased), set once
+    /// by the resolver; nil = not known.</summary>
+    /// <remarks>A bare uses entry (`Forms`) names `scope.Forms` only for a listed scope: a library
+    /// candidate reached through such an entry under any OTHER prefix (FMX.Forms in a VCL project)
+    /// is not visible, and Pick does not count it.</remarks>
+    property Namespaces: TArray<string> read FNamespaces write FNamespaces;
+    /// <summary>150-RS1 (4): False when AStem is reached from AUses ONLY through a bare entry
+    /// under a prefix Namespaces does not list; True otherwise (and always when Namespaces is nil).</summary>
+    /// <param name="AStem">A candidate's lower-cased declaring unit.</param>
+    /// <param name="AUses">The lower-cased uses the candidate is looked up in.</param>
+    /// <returns>Whether the compiler can reach AStem from AUses.</returns>
+    function ScopeVisible(const AStem: string; const AUses: TArray<string>): Boolean;  end;
 
 /// <summary>A declared type text reduced to the name the oracle and refs.receiver_type_text
 /// carry: generic arguments and unit qualifier stripped, a leading '^' kept.</summary>
@@ -1039,7 +1051,7 @@ begin
   end;
   Hits:= 0;
   for var C: TLibCand in ACands do
-    if InUses(C.UnitStem, AUses) then
+    if InUses(C.UnitStem, AUses) and ScopeVisible(C.UnitStem, AUses) then
     begin
       Inc(Hits);
       ACand:= C;
@@ -1082,6 +1094,23 @@ begin
     AReason:= R_AMBIGUOUS;
     ACand  := Default(TLibCand);
   end;
+end;
+
+function TLibraryOracle.ScopeVisible(const AStem: string; const AUses: TArray<string>): Boolean;
+begin
+  if FNamespaces = nil then Exit(True);
+  for var U: string in AUses do
+  begin
+    if U = AStem then Exit(True);
+    if AStem.EndsWith('.' + U) then
+    begin
+      var Prefix: string:= Copy(AStem, 1, Length(AStem) - Length(U) - 1);
+      if U.Contains('.') then Exit(True);
+      for var N: string in FNamespaces do
+        if N = Prefix then Exit(True);
+    end;
+  end;
+  Result:= False;
 end;
 
 { 150-RS1 (2): the number of top-level generic arguments of the first `<..>` group in ATypeText --
