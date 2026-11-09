@@ -429,7 +429,7 @@ end;
 { the hub global (the P1 spoke->hub var), its class and the class members, from the index }
 function THubSurfacePlanner.FindHubSymbols(var pPlan: THubGroupPlan): Boolean;
 begin
-  FHubSyms:= FStore.FindSymbolsByFile(pPlan.HubPath);
+  FHubSyms:= CycleSymbolsByFile(FGraph, FStore, pPlan.HubPath);
   FHubIds.Clear;
   FGlobal:= Default(TSymbol);
   FClass := Default(TSymbol);
@@ -453,7 +453,7 @@ end;
 function THubSurfacePlanner.TypeDeclaredInGroup(const pType: string): Boolean;
 begin
   Result:= False;
-  for var S in FStore.FindSymbolsByExactName(pType) do
+  for var S in CycleSymbolsByExactName(FGraph, FStore, pType) do
     for var U in FGroup do
     begin
       var Fid: Int64;
@@ -630,7 +630,7 @@ begin
   for var N in TArray<string>.Create(pPlan.IntfName, pPlan.VarName, 'AfterConstruction', 'BeforeDestruction') do
   begin
     var Hit:= False;
-    if (N = pPlan.IntfName) or (N = pPlan.VarName) then Hit:= Length(FStore.FindSymbolsByExactName(N)) > 0
+    if (N = pPlan.IntfName) or (N = pPlan.VarName) then Hit:= Length(CycleSymbolsByExactName(FGraph, FStore, N)) > 0
     else
       for var S in FHubSyms do
         if (S.ParentId = FClass.Id) and SameText(S.Name, N) then Hit:= True;
@@ -678,7 +678,7 @@ begin
       pPlan.FormWhy:= Format('`%s` has %d library class ancestors (AsForm needs exactly one: %s)', [FClass.Name, Roots.Count, string.Join(', ', Roots.ToArray)]);
       Exit;
     end;
-    if Length(FStore.FindSymbolsByExactName(pPlan.FormFunc)) > 0 then
+    if Length(CycleSymbolsByExactName(FGraph, FStore, pPlan.FormFunc)) > 0 then
     begin
       pPlan.FormWhy:= Format('`%s` already exists (the index declares it)', [pPlan.FormFunc]);
       Exit;
@@ -841,9 +841,12 @@ begin
       Exit;
     end;
     var BodyIdx:= -1;
+    { lane 150 CY3: both patterns compiled once, not once per line }
+    var SectRx:= TRegEx.Create('(?i)^\s*(initialization|finalization)\b');
+    var EndRx := TRegEx.Create('(?i)^\s*end\s*\.');
     for var K:= Lines.Count - 1 downto EndIdx + 1 do
-      if TRegEx.IsMatch(Lines[K], '(?i)^\s*(initialization|finalization)\b') then BodyIdx:= K
-      else if (BodyIdx < 0) and TRegEx.IsMatch(Lines[K], '(?i)^\s*end\s*\.') then BodyIdx:= K;
+      if SectRx.IsMatch(Lines[K]) then BodyIdx:= K
+      else if (BodyIdx < 0) and EndRx.IsMatch(Lines[K]) then BodyIdx:= K;
     var HeadIdx:= FClass.StartLine - 1;
     var Head:= TRegEx.Match(Lines[HeadIdx], '(?i)=\s*class\s*\(([^)]*)\)');
     if (BodyIdx < 0) or not Head.Success then
@@ -1032,7 +1035,7 @@ begin
   Seen:= TDictionary<string, Integer>.Create;
   Keys:= TList<string>.Create;
   try
-    for var R in FStore.GetReferencesFromFile(Fid) do
+    for var R in CycleRefsFromFile(FGraph, FStore, Fid) do
     begin
       var S: TSymbol;
       if not FHubIds.TryGetValue(R.SymbolId, S) then Continue;
@@ -1059,7 +1062,7 @@ begin
     Result.Why    := 'no source file';
     Exit;
   end;
-  for var S in FStore.FindSymbolsByFile(Result.Path) do
+  for var S in CycleSymbolsByFile(FGraph, FStore, Result.Path) do
     if SameText(S.Name, pPlan.GlobalName) or SameText(S.Name, pPlan.VarName) then
     begin
       Result.Refusal:= 'name-shadowed';
@@ -1129,8 +1132,8 @@ begin
           Result.Refusal:= 'signature-in-cycle';
           Result.Why    := Format('its signature names `%s`, declared in a unit of the cycle', [M.Groups[1].Value]);
         end;
-    if (Result.Refusal = '') and ((Length(FStore.FindSymbolsByExactName(Result.PtrVar)) > 0) or
-      (Length(FStore.FindSymbolsByExactName('T' + Result.PtrVar)) > 0)) then
+    if (Result.Refusal = '') and ((Length(CycleSymbolsByExactName(FGraph, FStore, Result.PtrVar)) > 0) or
+      (Length(CycleSymbolsByExactName(FGraph, FStore, 'T' + Result.PtrVar)) > 0)) then
     begin
       Result.Refusal:= 'duplicate-identifier';
       Result.Why    := Format('`%s` or `T%0:s` already exists', [Result.PtrVar]);
@@ -1177,7 +1180,7 @@ begin
   if pSpoke.Refusal <> '' then Exit;
   var Qual:= '';
   for var Seg in pPlan.HubUnit.Split(['.']) do Qual:= Qual + TRegEx.Escape(Seg) + '\s*\.\s*';
-  var Own:= FStore.FindSymbolsByFile(pSpoke.Path);
+  var Own:= CycleSymbolsByFile(FGraph, FStore, pSpoke.Path);
   Left:= TList<string>.Create;
   try
     for var K in pSpoke.Keepers do
@@ -1242,10 +1245,14 @@ begin
     var InitIdx:= -1;
     var FinIdx := -1;
     var EndIdx := -1;
+    { lane 150 CY3: the three patterns compiled once, not once per line (the class IsMatch builds its regex on every call) }
+    var InitRx:= TRegEx.Create('(?i)^initialization\b');
+    var FinRx := TRegEx.Create('(?i)^finalization\b');
+    var EndRx := TRegEx.Create('(?i)^end\s*\.');
     for var K:= Lines.Count - 1 downto 0 do
-      if TRegEx.IsMatch(Lines[K], '(?i)^initialization\b') then InitIdx:= K
-      else if TRegEx.IsMatch(Lines[K], '(?i)^finalization\b') then FinIdx:= K
-      else if (EndIdx < 0) and TRegEx.IsMatch(Lines[K], '(?i)^end\s*\.') then EndIdx:= K;
+      if InitRx.IsMatch(Lines[K]) then InitIdx:= K
+      else if FinRx.IsMatch(Lines[K]) then FinIdx:= K
+      else if (EndIdx < 0) and EndRx.IsMatch(Lines[K]) then EndIdx:= K;
     if InitIdx >= 0 then Lines.InsertRange(InitIdx + 1, Assigns)
     else if (FinIdx >= 0) or (EndIdx >= 0) then
     begin

@@ -23,7 +23,7 @@ interface
 
 uses
   System.Classes, System.SysUtils, System.Generics.Collections, System.JSON,
-  DRagLint.Core.Interfaces;
+  DRagLint.Core.Interfaces, DRagLint.Core.Model;
 
 const
   /// <summary>Tag `cycles` prints after a group that has interface coupling.
@@ -43,6 +43,32 @@ const
   CCycleGroupFmt = '  [%d units] %s   %s';
 
 type
+  /// <summary>A read-through memo of the three store reads the `cycles` planners repeat per unit: the
+  /// symbols of a file, the references from a file and the symbols of an exact name.</summary>
+  /// <remarks>
+  /// Lane 150 CY3 (150-CAUSES-SPEED): `cycles --causes --format json` runs three planners over one group
+  /// (the edge surfaces, the fix hints, the hub-surface hook) and each asked the store again for the same
+  /// files (Loader's 78-unit group: 3 loads of every unit). Built over ONE store -- the project index the
+  /// planners read -- for ONE run: the index does not change during it. Every answer is the array that
+  /// store returned the first time, SHARED with every later caller: callers read it and never write into
+  /// it. Not thread-safe. NewCycleReadMemo makes one; TCycleGraph.Reads carries it.
+  /// </remarks>
+  ICycleReadMemo = interface
+    ['{6E2B4C1A-3F57-4D8E-9A21-7C0B5D3E8F14}']
+    /// <summary>ISymbolStore.FindSymbolsByFile, memoised by the path text.</summary>
+    /// <param name="pPath">The file path, as the caller would pass it to the store.</param>
+    /// <returns>The store's rows (shared; read only).</returns>
+    function SymbolsByFile(const pPath: string): TArray<TSymbol>;
+    /// <summary>ISymbolStore.GetReferencesFromFile, memoised by file id.</summary>
+    /// <param name="pFid">The file id.</param>
+    /// <returns>The store's rows (shared; read only).</returns>
+    function RefsFromFile(pFid: Int64): TArray<TReference>;
+    /// <summary>ISymbolStore.FindSymbolsByExactName, memoised by the name text (case kept: the store's
+    /// exact pass is case-sensitive).</summary>
+    /// <param name="pName">The name, as the caller would pass it to the store.</param>
+    /// <returns>The store's rows (shared; read only).</returns>
+    function SymbolsByExactName(const pName: string): TArray<TSymbol>;
+  end;
   /// <summary>The unit-uses graph DoCycles already built, handed to the
   /// playbook renderer.</summary>
   /// <remarks>
@@ -63,8 +89,11 @@ type
     UnitFile: TDictionary<string, string>;
     /// <summary>Unit stem -> file id in the index.</summary>
     UnitFid: TDictionary<string, Int64>;
+    /// <summary>Optional read memo the planners of one run share (NewCycleReadMemo over the same store
+    /// they read); nil -- the default of every graph BuildCycleGraph returns -- sends every read to the
+    /// store. Reference-counted: FreeCycleGraph leaves it to the record's lifetime.</summary>
+    Reads: ICycleReadMemo;
   end;
-
   /// <summary>One reason a cycle's plan cannot be applied mechanically.</summary>
   /// <remarks>
   /// Kind is one of the strings of the 2026-10-10 contract 4.4:
@@ -519,6 +548,31 @@ procedure AddCycleEdgeSurfaces(const pStore: ISymbolStore; const pSccs: TList<TA
 /// </remarks>
 function BuildCycleGraph(const pStore: ISymbolStore): TCycleGraph;
 
+/// <summary>A new, empty read memo over one store (ICycleReadMemo).</summary>
+/// <param name="pStore">The project index the planners read; must stay open while the memo lives.</param>
+/// <returns>The memo; set it on TCycleGraph.Reads for one run.</returns>
+function NewCycleReadMemo(const pStore: ISymbolStore): ICycleReadMemo;
+
+/// <summary>pStore.FindSymbolsByFile(pPath), through pGraph.Reads when the graph carries a memo.</summary>
+/// <param name="pGraph">The cycle graph; its Reads may be nil.</param>
+/// <param name="pStore">The store the memo was built over.</param>
+/// <param name="pPath">The file path.</param>
+/// <returns>The rows the store returns; read only when they come from the memo.</returns>
+function CycleSymbolsByFile(const pGraph: TCycleGraph; const pStore: ISymbolStore; const pPath: string): TArray<TSymbol>;
+
+/// <summary>pStore.GetReferencesFromFile(pFid), through pGraph.Reads when the graph carries a memo.</summary>
+/// <param name="pGraph">The cycle graph; its Reads may be nil.</param>
+/// <param name="pStore">The store the memo was built over.</param>
+/// <param name="pFid">The file id.</param>
+/// <returns>The rows the store returns; read only when they come from the memo.</returns>
+function CycleRefsFromFile(const pGraph: TCycleGraph; const pStore: ISymbolStore; pFid: Int64): TArray<TReference>;
+
+/// <summary>pStore.FindSymbolsByExactName(pName), through pGraph.Reads when the graph carries a memo.</summary>
+/// <param name="pGraph">The cycle graph; its Reads may be nil.</param>
+/// <param name="pStore">The store the memo was built over.</param>
+/// <param name="pName">The name.</param>
+/// <returns>The rows the store returns; read only when they come from the memo.</returns>
+function CycleSymbolsByExactName(const pGraph: TCycleGraph; const pStore: ISymbolStore; const pName: string): TArray<TSymbol>;
 /// <summary>Frees the four dictionaries (and the adjacency lists) of a graph from BuildCycleGraph
 /// and sets them to nil.</summary>
 /// <param name="pGraph">The graph; safe to call twice.</param>
@@ -610,7 +664,7 @@ implementation
 uses
   System.IOUtils, System.StrUtils, System.RegularExpressions, System.Math, System.TypInfo,
   System.Generics.Defaults, System.Diagnostics,
-  DRagLint.Core.Model, DRagLint.Convert.UnitRules, DRagLint.Report.CycleEdge,
+  DRagLint.Convert.UnitRules, DRagLint.Report.CycleEdge,
   DRagLint.Report.UntangleCatalog;
 
 var
@@ -630,6 +684,79 @@ begin
   pWatch:= TStopwatch.StartNew;
 end;
 
+type
+  { lane 150 CY3: see ICycleReadMemo }
+  TCycleReadMemo = class(TInterfacedObject, ICycleReadMemo)
+  private
+    FStore : ISymbolStore;
+    FByFile: TDictionary<string, TArray<TSymbol>>;
+    FRefs  : TDictionary<Int64, TArray<TReference>>;
+    FByName: TDictionary<string, TArray<TSymbol>>;
+  public
+    constructor Create(const pStore: ISymbolStore);
+    destructor Destroy; override;
+    function SymbolsByFile(const pPath: string): TArray<TSymbol>;
+    function RefsFromFile(pFid: Int64): TArray<TReference>;
+    function SymbolsByExactName(const pName: string): TArray<TSymbol>;
+  end;
+
+constructor TCycleReadMemo.Create(const pStore: ISymbolStore);
+begin
+  inherited Create;
+  FStore := pStore;
+  FByFile:= TDictionary<string, TArray<TSymbol>>.Create;
+  FRefs  := TDictionary<Int64, TArray<TReference>>.Create;
+  FByName:= TDictionary<string, TArray<TSymbol>>.Create;
+end;
+
+destructor TCycleReadMemo.Destroy;
+begin
+  FByName.Free;
+  FRefs.Free;
+  FByFile.Free;
+  inherited Destroy;
+end;
+
+function TCycleReadMemo.SymbolsByFile(const pPath: string): TArray<TSymbol>;
+begin
+  if FByFile.TryGetValue(pPath, Result) then Exit;
+  Result:= FStore.FindSymbolsByFile(pPath);
+  FByFile.Add(pPath, Result);
+end;
+
+function TCycleReadMemo.RefsFromFile(pFid: Int64): TArray<TReference>;
+begin
+  if FRefs.TryGetValue(pFid, Result) then Exit;
+  Result:= FStore.GetReferencesFromFile(pFid);
+  FRefs.Add(pFid, Result);
+end;
+
+function TCycleReadMemo.SymbolsByExactName(const pName: string): TArray<TSymbol>;
+begin
+  if FByName.TryGetValue(pName, Result) then Exit;
+  Result:= FStore.FindSymbolsByExactName(pName);
+  FByName.Add(pName, Result);
+end;
+
+function NewCycleReadMemo(const pStore: ISymbolStore): ICycleReadMemo;
+begin
+  Result:= TCycleReadMemo.Create(pStore);
+end;
+
+function CycleSymbolsByFile(const pGraph: TCycleGraph; const pStore: ISymbolStore; const pPath: string): TArray<TSymbol>;
+begin
+  Result:= if pGraph.Reads <> nil then pGraph.Reads.SymbolsByFile(pPath) else pStore.FindSymbolsByFile(pPath);
+end;
+
+function CycleRefsFromFile(const pGraph: TCycleGraph; const pStore: ISymbolStore; pFid: Int64): TArray<TReference>;
+begin
+  Result:= if pGraph.Reads <> nil then pGraph.Reads.RefsFromFile(pFid) else pStore.GetReferencesFromFile(pFid);
+end;
+
+function CycleSymbolsByExactName(const pGraph: TCycleGraph; const pStore: ISymbolStore; const pName: string): TArray<TSymbol>;
+begin
+  Result:= if pGraph.Reads <> nil then pGraph.Reads.SymbolsByExactName(pName) else pStore.FindSymbolsByExactName(pName);
+end;
 procedure SetCycleCtorWide(pOn: Boolean);
 begin
   GCtorWide:= pOn;
@@ -841,6 +968,8 @@ type
   private
     FAccess     : TDictionary<Int64, TCallEdge>;  // ref id -> member_accesses row, loaded on first use
     FChildMemo  : TDictionary<string, TSymbol>;   // HP2B: '<parent id>:<name>' -> FindChildSymbolByName, on first use
+    FStemFids   : TObjectDictionary<string, TList<Int64>>;                 // lane 150 CY3: stem -> every file id of that stem, on first use
+    FStemNames  : TObjectDictionary<string, TDictionary<string, Boolean>>;  // lane 150 CY3: CachedNamesOfStem, per stem
     FNeedsTo    : TObjectDictionary<Int64, TDictionary<string, TArray<TNeed>>>;  // HP2B: fid -> owner stem -> NeedsOf rows, in order
     FBodyMemo   : TDictionary<Int64, TArray<TLineRange>>;  // HP2B: symbol id -> BodyRanges, on first use
     FChainMemo  : TDictionary<string, Boolean>;   // HP2B: '<type id>:<name>' -> IsClassChainMember, on first use
@@ -1097,6 +1226,7 @@ type
     function CachedRefsFromFile(pFid: Int64): TArray<TReference>;
     function CachedSymbolById(pId: Int64): TSymbol;
     function CachedChildByName(pParentId: Int64; const pName: string): TSymbol;
+    function CachedNamesOfStem(const pStem: string): TDictionary<string, Boolean>;
     function NeedsToStem(pFid: Int64; const pStem: string): TArray<TNeed>;
     function ClassChainMember(pEnclosingId: Int64; const pName: string): Boolean;
   public
@@ -2173,6 +2303,8 @@ begin
   FFiles.Free;
   FAccess.Free;
   FChildMemo.Free;
+  FStemNames.Free;
+  FStemFids.Free;
   FNeedsTo.Free;
   FBodyMemo.Free;
   FChainMemo.Free;
@@ -2244,10 +2376,13 @@ begin
   if TFile.Exists(Result.Path) then Result.Lines:= ReadSourceLines(Result.Path);
   Result.IntfLine:= FindKeywordLine(Result.Lines, 'interface');
   Result.ImplLine:= FindKeywordLine(Result.Lines, 'implementation');
-  Result.Syms    := FStore.FindSymbolsByFile(Result.Path);
-  Result.Refs    := FStore.GetReferencesFromFile(pFid);
+  Result.Syms    := CycleSymbolsByFile(FGraph, FStore, Result.Path);
+  Result.Refs    := CycleRefsFromFile(FGraph, FStore, pFid);
   Result.UsesList:= FStore.GetUnitUsesForFile(pFid);
   FFiles.Add(pFid, Result);
+  { lane 150 CY3: the file's rows ARE GetSymbolById's rows (one SELECT *, one row mapper) -- seed the
+    symbol memo so a reference into a loaded file costs no query (Loader: 5726 -> 354 GetSymbolById) }
+  for var S in Result.Syms do FSyms.TryAdd(S.Id, S);
 end;
 
 function TCyclePlanner.GetSym(pId: Int64): TSymbol;
@@ -2278,7 +2413,7 @@ begin
   C:= Default(TCandidate);
   L:= TList<TCandidate>.Create;
   try
-    for var S in FStore.FindSymbolsByExactName(pName) do
+    for var S in CycleSymbolsByExactName(FGraph, FStore, pName) do
     begin
       if not OwnerOf(S, C.Owner) then Continue;
       C.Actual:= S;
@@ -7954,6 +8089,36 @@ end;
 function TCyclePlanner.CachedSymbolById(pId: Int64): TSymbol;
 begin
   Result:= GetSym(pId);
+end;
+
+{ Lane 150 CY3: the names behind BindName's stems -- CandidatesFor reports StemOfFid(owner's file), the
+  owner sits in the declaring symbol's file (an enum value's type too), so the set covers every file of
+  the stem (any extension, as StemOfFid does), read through GetFile like the rest of the planner. }
+function TCyclePlanner.CachedNamesOfStem(const pStem: string): TDictionary<string, Boolean>;
+var
+  Fids: TList<Int64>;
+begin
+  if FStemNames = nil then
+  begin
+    FStemNames:= TObjectDictionary<string, TDictionary<string, Boolean>>.Create([doOwnsValues]);
+    FStemFids := TObjectDictionary<string, TList<Int64>>.Create([doOwnsValues]);
+    for var Fid in FStore.GetAllFileIds do
+    begin
+      var Stem:= StemOfFid(Fid);
+      if not FStemFids.TryGetValue(Stem, Fids) then
+      begin
+        Fids:= TList<Int64>.Create;
+        FStemFids.Add(Stem, Fids);
+      end;
+      Fids.Add(Fid);
+    end;
+  end;
+  if FStemNames.TryGetValue(pStem, Result) then Exit;
+  Result:= TDictionary<string, Boolean>.Create;
+  FStemNames.Add(pStem, Result);
+  if FStemFids.TryGetValue(pStem, Fids) then
+    for var Fid in Fids do
+      for var S in GetFile(Fid).Syms do Result.AddOrSetValue(LowerCase(S.Name), True);
 end;
 
 function TCyclePlanner.CachedChildByName(pParentId: Int64; const pName: string): TSymbol;

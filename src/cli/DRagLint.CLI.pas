@@ -27904,6 +27904,7 @@ begin
           EdgeGraph.IntfEdges:= IntfEdges;
           EdgeGraph.UnitFile := UnitFile;
           EdgeGraph.UnitFid  := UnitFid;
+          EdgeGraph.Reads    := NewCycleReadMemo(Store);  { lane 150 CY3: the three planners below share the store reads }
           AddCycleEdgeSurfaces(Store, Sccs, EdgeGraph, JArr);
           { E18 T13: the fix object per group -- the planner's verdict, edges and the exact commands }
           { a library that cannot be opened must not change the rest of the --causes output: the fix

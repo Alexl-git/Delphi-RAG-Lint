@@ -331,14 +331,14 @@ begin
   for var U in FGroup do
   begin
     if FGraph.UnitFile.TryGetValue(U, Path) then
-      for var S in pStore.FindSymbolsByFile(Path) do
+      for var S in CycleSymbolsByFile(FGraph, pStore, Path) do
       begin
         FSymUnit.AddOrSetValue(S.Id, U);
         FSymKind.AddOrSetValue(S.Id, S.Kind);
         FSymName.AddOrSetValue(S.Id, S.Name);
         FSymMember.AddOrSetValue(S.Id, S.ParentId > 0);
       end;
-    if FGraph.UnitFid.TryGetValue(U, Fid) then FRefsOf.AddOrSetValue(U, pStore.GetReferencesFromFile(Fid))
+    if FGraph.UnitFid.TryGetValue(U, Fid) then FRefsOf.AddOrSetValue(U, CycleRefsFromFile(FGraph, pStore, Fid))
     else FRefsOf.AddOrSetValue(U, nil);
   end;
 end;
