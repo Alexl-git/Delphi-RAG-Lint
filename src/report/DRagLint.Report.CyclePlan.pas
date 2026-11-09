@@ -1049,6 +1049,9 @@ type
     function ProbeInversionMoves(var pEv: TEdgeEval; out pMoved: TArray<string>; out pMoveIds: TArray<Int64>;
       out pCount: Integer): Boolean;
     procedure PlanMemberHandOver(pEvals: TList<TEdgeEval>);
+    procedure PlanMetaclassValue(pEvals: TList<TEdgeEval>);
+    function MetaclassSteps(const pEv: TEdgeEval; out pWhy: string): TRecipeSteps;
+    function IsMetaclassInversion: Boolean;
     procedure QualifiedClassRef(const pUnitStem: string; var pRefusal: TRecipeRefusal);
     procedure SettleIfaceName(const pSurface: TEdgeSurface; const pLeaf: TUntangleLeaf; const pUnitScopes: TArray<string>;
       var pSteps: TRecipeSteps; var pRefusal: TRecipeRefusal);
@@ -5655,7 +5658,7 @@ begin
     System built-ins -- it needs no new uses entry }
   if IsInversionStem(pStem) and (FInversion.LeafStem <> '') then Exit(nil);
   { R2: the units that declare the member types (PlanMemberInterface), nothing else }
-  if IsInversionStem(pStem) and (FInversion.Recipe = crMemberInterface) then
+  if IsInversionStem(pStem) and ((FInversion.Recipe = crMemberInterface) or IsMetaclassInversion) then  { 150-CY-7b too }
   begin
     Result:= nil;
     if pSect = scIntf then Result:= FInversion.LeafUses;
@@ -6065,6 +6068,7 @@ begin
     PlanStage('PartB PlanInversion', W);
     PlanMemberHandOver(pEvals);
     PlanStage('PartB PlanMemberHandOver', W);
+    PlanMetaclassValue(pEvals);  { 150-CY-7b }
   finally
     Names.Free;
   end;
@@ -6384,6 +6388,7 @@ begin
       and the best by BetterCut is the one cut of this run }
     PlanInversion(Evals);
     PlanMemberHandOver(Evals);
+    PlanMetaclassValue(Evals);  { 150-CY-7b }
     PlanBaseHandOver(Evals);
     for var Ev in Evals do
       if BetterCut(Ev, FCutEdge) then FCutEdge:= Ev;
@@ -6774,6 +6779,207 @@ end;
 
 { The unit that receives R1's procedural type and variable: the existing unit J2
   chose, else the catalog's `<Declaring>.Untangle` (created or extended). }
+{ 150-CY-7b (lane 150 CY1, design docs\superpowers\specs\2026-11-09-cy-7b-metaclass-value.md, lane CY2): an edge whose
+  only use of B is a class TX of B passed as a call ARGUMENT (`RegisterClass(TX)`) is cut R1-shaped: the leaf declares
+  `var <X>Class: <formal metaclass>`, B's initialization assigns `<X>Class := TX;`, A passes the variable. Encoded as
+  crRoutineInversion steps with ClassTypeName = TX (IsMetaclassInversion), so the leaf, uses, RegisterDecl and --fix
+  machinery of R1 apply unchanged; the renderer names it. Every unprovable case keeps the edge's earlier refusal. }
+procedure TCyclePlanner.PlanMetaclassValue(pEvals: TList<TEdgeEval>);
+begin
+  for var I:= 0 to pEvals.Count - 1 do
+  begin
+    var Ev:= pEvals[I];
+    var S := Ev.Surface;
+    if (Ev.Recipe <> crNone) or (Length(S.ClassNames) <> 1) or not S.HasClassRefArg or S.HasConstruction or
+      S.HasClassMethod or S.HasDecl or S.HasWrite or (Length(S.Members) > 0) or (Length(S.RoutineIds) > 0) then Continue;
+    var Why: string;
+    var Steps:= MetaclassSteps(Ev, Why);
+    if Why <> '' then
+    begin
+      Ev.Why:= Format('`%s` (class): refused: %s', [S.ClassNames[0], Why]);
+      Ev.Refusal:= Copy(Why, 1, Pos(' -- ', Why) - 1);
+      pEvals[I]:= Ev;
+      Continue;
+    end;
+    Ev.Recipe:= crRoutineInversion;
+    Ev.Steps := Steps;
+    Ev.Cost  := Length(S.Refs);
+    pEvals[I]:= Ev;
+  end;
+end;
+
+{ 150-CY-7b: the type of the parameter at 0-based position pIndex of the parameter list pSig (`(A: T1; B, C: T2)`),
+  '' when the list has no such position or the parameter is untyped. }
+function ParamTypeAt(const pSig: string; pIndex: Integer): string;
+begin
+  Result:= '';
+  var Inner:= Trim(pSig);
+  var Open := Pos('(', Inner);
+  var Close:= LastDelimiter(')', Inner);
+  if (Open = 0) or (Close < Open) then Exit;
+  Inner:= Copy(Inner, Open + 1, Close - Open - 1);
+  var K:= 0;
+  for var Group in Inner.Split([';']) do
+  begin
+    var Colon:= Pos(':', Group);
+    var Names:= if Colon > 0 then Copy(Group, 1, Colon - 1) else Group;
+    var Count:= Length(Names.Split([',']));
+    if pIndex < K + Count then
+    begin
+      if Colon = 0 then Exit;
+      Result:= Trim(Copy(Group, Colon + 1, MaxInt));
+      var Eq:= Pos('=', Result);
+      if Eq > 0 then Result:= Trim(Copy(Result, 1, Eq - 1));
+      Exit;
+    end;
+    Inc(K, Count);
+  end;
+end;
+
+{ 150-CY-7b: the steps of the metaclass hand-over of pEv, or pWhy = '<kind> -- <reason>'. Every ref of the edge must be
+  TX as a whole argument of a call; the formal parameter type at that position (every declaration of the callee in the
+  project index and the platform library agreeing) types the variable; the call must not run in A's initialization. }
+function TCyclePlanner.MetaclassSteps(const pEv: TEdgeEval; out pWhy: string): TRecipeSteps;
+var
+  Owner: TSymbol;
+  Stem : string;
+begin
+  Result:= Default(TRecipeSteps);
+  pWhy  := '';
+  var S     := pEv.Surface;
+  var TX    := S.ClassNames[0];
+  var A     := GetFile(FidOfStem(S.FromStem));
+  var B     := GetFile(FidOfStem(S.ToStem));
+  var Starts:= CodeStarts(A.Lines);
+  var Formal:= '';
+  var VarName:= (if StartsText('T', TX) and (Length(TX) > 1) then Copy(TX, 2, MaxInt) else TX) + 'Class';
+  var Edits: TArray<TRecipeEdit>:= nil;
+  var UsedUnits: TArray<string>:= nil;
+  for var Sect in [scIntf, scImpl] do
+    for var U in SectionEntries(A, Sect) do UsedUnits:= UsedUnits + [U.UnitName];
+  for var R in S.Refs do
+  begin
+    var Code:= CodePart(LineAt(A.Lines, R.Line));
+    var M:= TRegEx.Match(Code, '(?<![\w.])([A-Za-z_]\w*)\s*\(\s*((?:[^(),]+,\s*)*)' + TRegEx.Escape(TX) + '\s*[,)]',
+      [roIgnoreCase]);
+    if not M.Success then
+    begin
+      pWhy:= Format('class-ref -- line %d passes the class `%s` as a value outside a call argument (`%s`)',
+        [R.Line, TX, Trim(R.LineText)]);
+      Exit;
+    end;
+    { the formal parameter type at that position, every declaration of the callee agreeing }
+    var Callee:= M.Groups[1].Value;
+    var Index := M.Groups[2].Value.CountChar(',');
+    var Typ   := '';
+    var Seen  := False;
+    for var Source:= 0 to 1 do
+    begin
+      var St:= if Source = 0 then FStore else FLibStore;
+      if St = nil then Continue;
+      for var C in St.FindSymbolsByExactName(Callee) do
+        { a bare call binds a top-level routine of a unit A uses (or of System); a method of another class never }
+        if (C.Kind in [skFunction, skProcedure]) and (MatchText(ChangeFileExt(ExtractFileName(St.GetFilePath(C.FileId)), ''),
+          UsedUnits) or SameText(ChangeFileExt(ExtractFileName(St.GetFilePath(C.FileId)), ''), 'System')) then
+        begin
+          var P:= ParamTypeAt(C.Signature, Index);
+          if Seen and not SameText(P, Typ) then Typ:= '?' else if not Seen then Typ:= P;
+          Seen:= True;
+        end;
+    end;
+    if (Typ = '') or (Typ = '?') or not TRegEx.IsMatch(Typ, '^[A-Za-z_]\w*$') then
+    begin
+      pWhy:= Format('signature-unknown -- line %d passes `%s` to `%s`, whose parameter type at that position could not ' +
+        'be read from the indexes given (no declaration, an untyped parameter, or overloads that differ there)%s',
+        [R.Line, TX, Callee, (if FLibStore = nil then ' (no platform library was read: pass --library-db)' else '')]);
+      Exit;
+    end;
+    if (Formal <> '') and not SameText(Formal, Typ) then
+    begin
+      pWhy:= Format('signature-unknown -- `%s` is passed where `%s` and `%s` are expected: one variable cannot carry both',
+        [TX, Formal, Typ]);
+      Exit;
+    end;
+    Formal:= Typ;
+    var InitWhy:= InitOrderWhy(A.Lines, R, A.UnitName);
+    if InitWhy <> '' then
+    begin
+      pWhy:= 'init-order -- ' + InitWhy;
+      Exit;
+    end;
+    var Edit:= Default(TRecipeEdit);
+    Edit.Fid     := A.Fid;
+    Edit.Line    := R.Line;
+    Edit.Replace := True;
+    Edit.NewLines:= [ReplaceInCode(LineAt(A.Lines, R.Line), Starts[R.Line - 1], '(?<![\w.])' + TRegEx.Escape(TX) + '\b', VarName)];
+    var Dup:= False;
+    for var E in Edits do Dup:= Dup or ((E.Fid = Edit.Fid) and (E.Line = Edit.Line));
+    if not Dup then Edits:= Edits + [Edit];
+  end;
+  { the unit that declares the formal type: the leaf's interface names it }
+  var LeafUses: TArray<string>:= nil;
+  if not IsBuiltinTypeName(Formal) then
+  begin
+    var UnitOf:= '';
+    if BindName(A.Fid, S.Refs[0].Line, Formal, Owner, Stem) then
+    begin
+      if FMembers.ContainsKey(Stem) then
+      begin
+        pWhy:= Format('signature-in-cycle -- the parameter type `%s` is declared in `%s`, a unit of this cycle', [Formal, Stem]);
+        Exit;
+      end;
+      UnitOf:= UnitNameOfStem(Stem);
+    end
+    else if FLibStore <> nil then
+      for var L in FLibStore.FindSymbolsByExactName(Formal) do
+      begin
+        var U:= ChangeFileExt(ExtractFileName(FLibStore.GetFilePath(L.FileId)), '');
+        if (UnitOf <> '') and not SameText(UnitOf, U) then UnitOf:= '?' else if UnitOf = '' then UnitOf:= U;
+      end;
+    if (UnitOf = '') or (UnitOf = '?') then
+    begin
+      pWhy:= Format('signature-unknown -- the unit that declares `%s` could not be told', [Formal]);
+      Exit;
+    end;
+    LeafUses:= [UnitOf];
+  end;
+  for var Sym in A.Syms do
+    if SameText(Sym.Name, VarName) then
+    begin
+      pWhy:= Format('duplicate-identifier -- `%s` already declares `%s` (line %d)', [A.UnitName, VarName, Sym.StartLine]);
+      Exit;
+    end;
+  var Assign: TRecipeEdit;
+  if not AssignmentEdit(B.Lines, B.Fid, ['  ' + VarName + ' := ' + TX + ';'], Assign) then
+  begin
+    pWhy:= Format('manual-edit -- `%s` has no final `end.` to put the initialization assignment before', [B.UnitName]);
+    Exit;
+  end;
+  var Inv:= Default(TInvertedRoutine);
+  Inv.Id     := S.Refs[0].SymbolId;  { IsMovedFor: the consumer's refs of TX go through the variable }
+  Inv.Name   := TX;
+  Inv.PtrType:= Formal;
+  Inv.PtrVar := VarName;
+  Inv.VarDecl:= VarName + ': ' + Formal + ';';
+  Result.Recipe       := crRoutineInversion;
+  Result.RoutineName  := TX;
+  Result.DeclStem     := S.ToStem;
+  Result.ConsumerFid  := A.Fid;
+  Result.PtrType      := Formal;
+  Result.PtrVar       := VarName;
+  Result.VarDecl      := Inv.VarDecl;
+  Result.ClassTypeName:= TX;
+  Result.LeafUses     := LeafUses;
+  Result.Routines     := [Inv];
+  Result.Edits        := Edits + [Assign];
+  Result.RegisterDecl := LeavesProgramReason(Result) <> '';
+end;
+
+{ 150-CY-7b: the cut edge's steps are a metaclass hand-over (R1-shaped, see PlanMetaclassValue). }
+function TCyclePlanner.IsMetaclassInversion: Boolean;
+begin
+  Result:= (FInversion.Recipe = crRoutineInversion) and (FInversion.ClassTypeName <> '');
+end;
 function TCyclePlanner.InversionLeaf(const pSteps: TRecipeSteps): TUntangleLeaf;
 begin
   if pSteps.LeafStem = '' then
@@ -6895,6 +7101,16 @@ begin
   end;
   L:= TList<string>.Create;
   try
+    if IsMetaclassInversion then
+    begin
+      { 150-CY-7b: no type, only the variable of the formal metaclass type }
+      L.Add('');
+      L.Add('var');
+      L.Add(Format('  /// <summary>Holds the class %s, assigned by %s in its initialization section; the units of ' +
+        'its former cycle pass it instead of naming the class.</summary>', [FInversion.ClassTypeName, UnitNameOfStem(pStem)]));
+      L.Add('  ' + FInversion.VarDecl);
+      Exit(L.ToArray);
+    end;
     L.Add('');
     if not InType then L.Add('type');
     if FInversion.Recipe = crMemberInterface then
@@ -6956,6 +7172,27 @@ begin
   Calls:= TList<string>.Create;
   try
     var Decl:= UnitNameOfStem(FInversion.DeclStem);
+    if IsMetaclassInversion then
+    begin
+      { 150-CY-7b: the metaclass hand-over }
+      for var E in FInversion.Edits do
+        if E.Fid = FInversion.ConsumerFid then Calls.Add(IntToStr(E.Line));
+      EmitFmt('Nothing moves. Recipe: **metaclass hand-over** -- the class `%s` stays in `%s`; units outside this ' +
+        'cycle keep naming it.', [FInversion.ClassTypeName, Decl]);
+      EmitFmt('- `%s` gets the variable `%s` (the type of the parameter the class is passed to).',
+        [FLeafName[FInversion.DeclStem], FInversion.VarDecl]);
+      EmitFmt('- `%s` assigns `%s := %s;` as the first statement of its initialization section.',
+        [Decl, FInversion.PtrVar, FInversion.ClassTypeName]);
+      EmitFmt('- `%s` passes `%s` instead of `%s` (line %s). Checked: its own initialization section makes none ' +
+        'of these calls and does not name the routine that makes them. NOT checked: an initialization section of ' +
+        'another unit that reaches them through a call chain.', [ExtractFileName(PathOf(FInversion.ConsumerFid)),
+        FInversion.PtrVar, FInversion.ClassTypeName, string.Join(', ', Calls.ToArray)]);
+      if FInversion.RegisterDecl then
+        EmitFmt('- `%s` joins the program''s uses (`%s`) so it stays linked and its initialization assigns `%s`.',
+          [Decl, ExtractFileName(PathOf(FProjectFid)), FInversion.PtrVar]);
+      Emit('');
+      Exit;
+    end;
     if Length(FInversion.MoveIds) = 0 then
       EmitFmt('Nothing moves. Recipe: **routine-call inversion** -- `%s` stays in `%s`; callers outside ' +
         'this cycle keep calling it by name.', [InversionNames, Decl])
@@ -7137,7 +7374,13 @@ begin
   end;
   if pPlan.CutEdge.Recipe = crRoutineInversion then
   begin
-    if (Length(FInversion.Routines) > 1) or (Length(FInversion.MoveIds) > 0) then
+    if IsMetaclassInversion then  { 150-CY-7b }
+      EmitFmt('Cut the edge `%s -> %s` by **metaclass hand-over**: `%s` takes from `%s` only the class `%s`, ' +
+        'passed as a value. `%s` passes the variable `%s` declared in `%s` instead, assigned in the initialization ' +
+        'of `%s`. No edge of this cycle can be cut by moving declarations.', [pPlan.CutEdge.FromStem, pPlan.CutEdge.ToStem,
+        pPlan.CutEdge.FromStem, pPlan.CutEdge.ToStem, FInversion.ClassTypeName, pPlan.CutEdge.FromStem, FInversion.PtrVar,
+        FLeafName[FInversion.DeclStem], pPlan.CutEdge.ToStem])
+    else if (Length(FInversion.Routines) > 1) or (Length(FInversion.MoveIds) > 0) then
       { B3: several routines, or routines and declarations that move }
       EmitFmt('Cut the edge `%s -> %s` by **routine-call inversion**: `%s` takes from `%s` the routines `%s`%s; every ' +
       'type of their signatures is declared outside this cycle or moves too. `%s` calls them through procedural ' +
