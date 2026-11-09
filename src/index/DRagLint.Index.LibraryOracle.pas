@@ -111,6 +111,7 @@ type
     FHelperTypes  : TDictionary<string, TArray<TLibCand>>;
     FAliases      : TDictionary<string, TArray<TLibCand>>;
     FOwnUses      : TArray<string>;
+    FDeclUses     : TArray<string>;
     FLastKind     : string;
     /// <param name="ATypeText"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AUses"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
@@ -359,8 +360,10 @@ type
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BindBare"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
+    /// <param name="ADeclUses">150-RS1 (5): the uses visible at the declaration that wrote the type text (see
+    /// DeclUses); nil = not known.</param>
     function Pick(const ACands: TArray<TLibCand>; const AUses: TArray<string>; out ACand: TLibCand;
-      out AReason: string): Boolean;
+      out AReason: string; const ADeclUses: TArray<string> = nil): Boolean;
     /// <param name="ATypeText"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AUses"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
     /// <param name="ACand"><!-- drag-lint:auto type -->out TLibCand</param>
@@ -750,7 +753,18 @@ type
     /// SysInit: a unit sees what its own uses clauses name, not what the program file uses
     /// (the ORM3 .dpr's EurekaLog units). It never overrides a single visible answer, and an
     /// own-uses tie stays ambiguous. Not thread-safe: one resolver thread owns the oracle.</remarks>
-    property OwnUses: TArray<string> read FOwnUses write FOwnUses;  end;
+    property OwnUses: TArray<string> read FOwnUses write FOwnUses;
+    /// <summary>150-RS1 (5): the uses VISIBLE at the declaration whose type text is being picked
+    /// (lower-cased, interface before implementation, source order; implementation entries only
+    /// when the declaration follows them), set by the resolver around one by-name binding and
+    /// cleared after it; nil = not known.</summary>
+    /// <remarks>When set, Pick decides an own-uses tie the way the compiler does: the candidate
+    /// whose unit comes LAST in this list wins (a later uses entry shadows an earlier one; System
+    /// and SysInit come first), a candidate in none of them is not visible there; and a type text
+    /// WITHOUT generic arguments names only a non-generic declaration (`TList` is never
+    /// TList&lt;T&gt;). Not thread-safe: one resolver thread owns the oracle.</remarks>
+    property DeclUses: TArray<string> read FDeclUses write FDeclUses;
+  end;
 
 /// <summary>A declared type text reduced to the name the oracle and refs.receiver_type_text
 /// carry: generic arguments and unit qualifier stripped, a leading '^' kept.</summary>
@@ -1006,7 +1020,7 @@ begin
 end;
 
 function TLibraryOracle.Pick(const ACands: TArray<TLibCand>; const AUses: TArray<string>;
-  out ACand: TLibCand; out AReason: string): Boolean;
+  out ACand: TLibCand; out AReason: string; const ADeclUses: TArray<string>): Boolean;
 var
   Hits: Integer;
 begin
@@ -1041,6 +1055,26 @@ begin
         ACand:= C;
       end;
     if Hits = 0 then Hits:= 2; // none of the tie is in the own uses: stays ambiguous
+  end;
+  { 150-RS1 (5): a tie left is decided at the declaration -- the unit used LAST wins. }
+  if (Hits > 1) and (ADeclUses <> nil) then
+  begin
+    var Best: Integer:= -1;
+    Hits:= 0;
+    for var C: TLibCand in ACands do
+      for var U:= High(ADeclUses) downto 0 do
+        if InUses(C.UnitStem, [ADeclUses[U]]) then
+        begin
+          if U > Best then
+          begin
+            Best := U;
+            Hits := 1;
+            ACand:= C;
+          end
+          else if U = Best then Inc(Hits);
+          Break;
+        end;
+    if Hits = 0 then Hits:= 2;
   end;
   Result:= Hits = 1;
   if not Result then
@@ -1090,8 +1124,19 @@ begin
   var Cands: TArray<TLibCand>:= Cached(FTypes, Leaf, TYPE_KINDS, True);
   { 150-RS1 (2): a text WITH generic arguments (`TList<TBinder>`) names only a generic declaration of
     that arity -- System.Classes' plain TList is not a candidate. No declaration of the arity: unchanged. }
+  { 150-RS1 (5): DeclUses describes the receiver's OWN declaration, so it is consumed by this first pick --
+    a pending member step after it reads a library declaration's text, not the project's. }
+  var Decl: TArray<string>:= FDeclUses;
+  FDeclUses:= nil;
   var Arity: Integer:= GenericArity(ATypeText);
-  if Arity > 0 then
+  if (Arity = 0) and (Decl <> nil) then
+  begin
+    var Plain: TArray<TLibCand>:= [];
+    for var C: TLibCand in Cands do
+      if FStores[C.Store].GetSymbolById(C.Ids[0]).GenericParams = '' then Plain:= Plain + [C];
+    if Length(Plain) > 0 then Cands:= Plain;
+  end
+  else if Arity > 0 then
   begin
     var Generic: TArray<TLibCand>:= [];
     for var C: TLibCand in Cands do
@@ -1099,7 +1144,7 @@ begin
         Generic:= Generic + [C];
     if Length(Generic) > 0 then Cands:= Generic;
   end;
-  Result:= Pick(Cands, AUses, ACand, AReason);
+  Result:= Pick(Cands, AUses, ACand, AReason, Decl);
 end;
 
 { E-RECV-UNDECIDABLE D08: True when ATypeText names a dynamic array type: `TArray<X>` (the

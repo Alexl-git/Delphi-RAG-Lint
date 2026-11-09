@@ -418,6 +418,11 @@ type
     /// (`&lt;TBinder&gt;` of `TList&lt;TBinder&gt;`), set only when the project could not type it;
     /// handed to the library oracle with Text, never written to refs.receiver_type_text.</summary>
     Args   : string;
+    /// <summary>150-RS1 (5): the file and line of the field / local whose declared type Text is
+    /// (0 = unknown): a library type name is looked up in the uses visible there.</summary>
+    DeclFile: Int64;
+    /// <summary>See DeclFile.</summary>
+    DeclLine: Integer;
   end;
 
   /// <summary>B9 F1 (resolver 1.20.0-alpha): the static type of one reference, one
@@ -8257,8 +8262,10 @@ var
   RetType : string ;
 
   { 150-RS1 (2): AId when the project typed the declared text ADecl; otherwise 0, and the text's
-    generic argument group (`<TBinder>`) rides to the library oracle in AText.Args. }
-  function KeepArgs(AId: Int64; const ADecl: string): Int64;
+    generic argument group (`<TBinder>`) rides to the library oracle in AText.Args. (5): the
+    declaration ASym that wrote ADecl (a field / local; Id 0 = unknown) is where the library type
+    name is looked up -- AText.DeclFile / DeclLine. }
+  function KeepArgs(AId: Int64; const ADecl: string; const ASym: TSymbol): Int64;
   begin
     Result:= AId;
     if AId <> 0 then Exit;
@@ -8266,6 +8273,11 @@ var
     var Gt: Integer:= ADecl.LastIndexOf('>') + 1;
     if (Lt > 1) and (Gt > Lt) and not Trim(ADecl).StartsWith('^') then
       AText.Args:= Copy(ADecl, Lt, Gt - Lt + 1);
+    if ASym.Id > 0 then
+    begin
+      AText.DeclFile:= ASym.FileId;
+      AText.DeclLine:= ASym.StartLine;
+    end;
   end;
 
 begin
@@ -8470,7 +8482,7 @@ begin
   begin
     var LocalType: string:= LocalTypeText(Member);
     AText.Text:= NormalizeTypeLeaf(LocalType);
-    Exit(KeepArgs(ResolveTypeNameToSymbol(LocalType, ACallRef.FileId), LocalType));
+    Exit(KeepArgs(ResolveTypeNameToSymbol(LocalType, ACallRef.FileId), LocalType, Member));
   end;
   if Declared then
     Exit; // a local/param of that name exists but none covers the site -> 0
@@ -8501,7 +8513,7 @@ begin
     if Member.Id > 0 then
     begin
       AText.Text:= NormalizeTypeLeaf(Member.Signature);
-      Exit(KeepArgs(ResolveTypeNameToSymbol(Member.Signature, ACallRef.FileId), Member.Signature));
+      Exit(KeepArgs(ResolveTypeNameToSymbol(Member.Signature, ACallRef.FileId), Member.Signature, Member));
     end;
   end;
 
@@ -8537,7 +8549,7 @@ begin
   //     rung is still the last word when no value of the name is in scope. Pinned by
   //     tests\callresolve\run_unit_var_receiver_bind.ps1.
   var OrdText: string;
-  Result:= KeepArgs(TypeOfOrdinaryName(ACallRef, AReceiverExpr, OrdText), OrdText);
+  Result:= KeepArgs(TypeOfOrdinaryName(ACallRef, AReceiverExpr, OrdText), OrdText, Default(TSymbol));
   AText.Text:= NormalizeTypeLeaf(OrdText);
   if Result > 0 then Exit;
 
@@ -11212,7 +11224,26 @@ begin
     Exit(FOracle.Bind(Anc, AText.Pending, ACallRef.NameText, Kind, FileUsesUnits(ACallRef.FileId), Reason));
   end;
   if AText.Text <> '' then
-    Exit(FOracle.Bind(AText.Text + AText.Args, AText.Pending, ACallRef.NameText, Kind, FileUsesUnits(ACallRef.FileId), Reason));
+  begin
+    { 150-RS1 (5): the type text is a name looked up where it was DECLARED -- System, SysInit, the
+      interface uses, then the implementation uses written before the declaration, in source order. }
+    var DeclUses: TArray<string>:= [];
+    if AText.DeclFile > 0 then
+    begin
+      var Impl: TArray<string>:= [];
+      DeclUses:= ['system', 'sysinit'];
+      for var U: TUnitUse in FStore.GetUnitUsesForFile(AText.DeclFile) do
+        if U.Section <> uusImplementation then DeclUses:= DeclUses + [LowerCase(U.UnitName)]
+        else if (U.OriginPath = '') and (U.StartLine < AText.DeclLine) then Impl:= Impl + [LowerCase(U.UnitName)];
+      DeclUses:= DeclUses + Impl;
+    end;
+    FOracle.DeclUses:= DeclUses;
+    try
+      Exit(FOracle.Bind(AText.Text + AText.Args, AText.Pending, ACallRef.NameText, Kind, FileUsesUnits(ACallRef.FileId), Reason));
+    finally
+      FOracle.DeclUses:= nil;
+    end;
+  end;
   if AText.Head = '' then
   begin
     { E-RECV-UNDECIDABLE D08: `TArray<Integer>.Create(1)` has no head text (generic
