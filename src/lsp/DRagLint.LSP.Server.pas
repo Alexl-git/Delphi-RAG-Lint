@@ -20,6 +20,7 @@ uses
   , DRagLint.Core    .Encoding
   , DRagLint.Core    .LintBudget { C13: LintChildTimeoutMs -- the --full-rules child budget, shared with the IDE plugin }
   , DRagLint.Storage .SQLite
+  , DRagLint.Storage .Schema { 150 SC: IsSchemaReadable, the read gate of the store opener }
   , DRagLint.Parser  .Delphi13
   , DRagLint.Core    .Indexer  { INBOX-lsp-hover-unindexed-file: TIndexer.IndexFile builds the ephemeral single-unit index }
   , DRagLint.Hover   .Renderer
@@ -2570,8 +2571,10 @@ begin
       side that brings the index forward. Pinned by run_lsp_reader_guard.ps1. }
     S:= TSQLiteSymbolStore.Create(APath, {AReadOnly=}True);
     var Found, Expected: Integer;
-    if not S.IsSchemaCurrent(Found, Expected) then
+    S.IsSchemaCurrent(Found, Expected);
+    if not IsSchemaReadable(Found) then // 150 SC: the schema read gate (>= SCHEMA_READ_MIN)
     begin
+      Expected:= SCHEMA_READ_MIN;
       Writeln(ErrOutput, Format('drag-lint LSP: index schema v%d < v%d, refusing %s -- a reader does not migrate; '
         + 'to migrate, run "drag-lint index --project <file.dproj> --db <db>" for a project index, '
         + 'or "drag-lint index <dir> --db <db>" for a library index', [Found, Expected, APath]));

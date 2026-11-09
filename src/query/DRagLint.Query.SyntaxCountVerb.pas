@@ -34,7 +34,7 @@ implementation
 uses
   System.SysUtils, System.JSON,
   DRagLint.Core.CliError, DRagLint.Core.Interfaces, DRagLint.Core.Model,  // dl:ok uses-global-census@6918 -- REVIEWED 2026-11-04: CLI_ERR_UNKNOWN_FLAG is the shared exit vocabulary of every verb
-  DRagLint.Storage.SQLite, DRagLint.CLI.HelpText, DRagLint.Query.SyntaxCount;
+  DRagLint.Storage.SQLite, DRagLint.Storage.Schema, DRagLint.CLI.HelpText, DRagLint.Query.SyntaxCount;
 
 const
   CVerb = 'syntax-count';
@@ -155,9 +155,10 @@ begin
     Exit(False);
   end;
   LStore:= TSQLiteSymbolStore.Create(pDbPath, {AReadOnly=}True);
-  if not LStore.IsSchemaCurrent(LFound, LExpected) then
+  LStore.IsSchemaCurrent(LFound, LExpected);
+  if not IsSchemaReadable(LFound) then // 150 SC: the schema read gate
   begin
-    pError:= Format('index schema v%d < v%d: re-index %s first', [LFound, LExpected, pDbPath]);
+    pError:= Format('index schema v%d < v%d: re-index %s first', [LFound, SCHEMA_READ_MIN, pDbPath]);
     Exit(False);
   end;
   for LStamp in LStore.GetAllFileStamps do

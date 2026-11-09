@@ -108,12 +108,19 @@ end.
 import sqlite3, sys
 c = sqlite3.connect(sys.argv[1])
 v = int(c.execute("SELECT value FROM schema_meta WHERE key = 'schema_version'").fetchone()[0])
-c.execute("UPDATE schema_meta SET value = ? WHERE key = 'schema_version'", (str(v - 1),))
+t = int(sys.argv[2]) if len(sys.argv) > 2 else v - 1
+c.execute("UPDATE schema_meta SET value = ? WHERE key = 'schema_version'", (str(t),))
 c.commit()
 c.close()
-print(v - 1)
+print(t)
 '@)
-  $old = & $py -I $stamp $lib
+  # 150 SC: 'stale' = below the engine's READ range (engine_schema_read_min - 1), not 'one version old':
+  # an index in [READ_MIN, SCHEMA_VERSION] is READ, not skipped (run_schema_read_compat.ps1). A pre-150
+  # exe has no key -> one version old, as before.
+  $sj = (& $exePath schema --db $lib --format json 2>&1 | Out-String)
+  $sj = $sj.Substring($sj.IndexOf('{')) | ConvertFrom-Json
+  $target = if ($null -ne $sj.engine_schema_read_min) { [int]$sj.engine_schema_read_min - 1 } else { [int]$sj.schema_version - 1 }
+  $old = & $py -I $stamp $lib "$target"
   Write-Host "library stamped schema v$old"
 
   $outS = & $exePath index --project (Join-Path $appDir 'App.dpr') --db (Join-Path $tmp 's1.sqlite') --library-db $lib 2>&1 | Out-String

@@ -38,6 +38,15 @@ const
     index run would have bound without the library. }
   SCHEMA_VERSION = 23;
 
+  /// <summary>The oldest stored schema_version this engine READS without migrating
+  /// (150 SC, docs\superpowers\specs\2026-11-09-schema-read-compat.md).</summary>
+  /// <remarks>Every table or column added after SCHEMA_READ_MIN must be ADDITIVE
+  /// and PROBED by its readers (HasFileFacts, HasDataFlows, TableExists ...), so a
+  /// read-only open of an index in [SCHEMA_READ_MIN, SCHEMA_VERSION] is fully
+  /// functional. A change that cannot be additive raises SCHEMA_READ_MIN to the new
+  /// SCHEMA_VERSION in the same commit. Writers still upgrade through Migrate.</remarks>
+  SCHEMA_READ_MIN = 23;
+
   // First index in SCHEMA_DDL that requires the SQLite FTS5 module.
   // Statements before this index are plain DDL safe on any SQLite build.
   // v14 (D5): call_edges (base SQLite, no FTS5) was inserted at indices
@@ -408,6 +417,57 @@ const
     '''unit'',''class'',''interface'',''record'',''type'',''enum'',''method'',''function'',' +
     '''procedure'',''constructor'',''destructor'',''property'',''field'',''const'',''var'',' +
     '''component'',''form''';
+
+/// <summary>True when an index whose stored schema_version is AFound can be opened
+/// for READING by this engine: AFound >= SCHEMA_READ_MIN (150 SC).</summary>
+/// <param name="AFound">The stored schema_version (ISymbolStore.IsSchemaCurrent's
+/// AFound; 0 = no schema_meta, i.e. not a drag-lint index).</param>
+/// <returns>True for [SCHEMA_READ_MIN, SCHEMA_VERSION] and for a NEWER index
+/// (readable as before; writers refuse it separately).</returns>
+/// <remarks>The read gate. IsSchemaCurrent (AFound >= SCHEMA_VERSION) stays the
+/// "no migration pending" test for writers. Pure; thread-safe.</remarks>
+function IsSchemaReadable(AFound: Integer): Boolean;
+
+/// <summary>The one refusal text for an index this engine will not read.</summary>
+/// <param name="AFound">The stored schema_version (0 = not a drag-lint index).</param>
+/// <returns>'index schema vN is older than this engine reads (vMIN..vCUR); re-index it'
+/// -- the same words at every opener, so a guard can match them.</returns>
+function SchemaUnreadableReason(AFound: Integer): string;
+
+/// <summary>One line for the `schema` verb: the engine's schema, the range it
+/// reads and what that means for an index at AFound.</summary>
+/// <param name="AFound">The index's stored schema_version.</param>
+/// <returns>'engine schema vCUR reads vMIN..vCUR: ' + current / 'vN readable by vCUR;
+/// re-index to write' / NEWER / the SchemaUnreadableReason text.</returns>
+function SchemaCompatLine(AFound: Integer): string;
+
 implementation
+
+uses
+  System.SysUtils;
+
+function IsSchemaReadable(AFound: Integer): Boolean;
+begin
+  Result:= AFound >= SCHEMA_READ_MIN;
+end;
+
+function SchemaUnreadableReason(AFound: Integer): string;
+begin
+  Result:= Format('index schema v%d is older than this engine reads (v%d..v%d); re-index it',
+    [AFound, SCHEMA_READ_MIN, SCHEMA_VERSION]);
+end;
+
+function SchemaCompatLine(AFound: Integer): string;
+begin
+  Result:= Format('engine schema v%d reads v%d..v%d: ', [SCHEMA_VERSION, SCHEMA_READ_MIN, SCHEMA_VERSION]);
+  if AFound > SCHEMA_VERSION then
+    Result:= Result + Format('this index is NEWER (v%d) -- readable, never written by this engine', [AFound])
+  else if AFound = SCHEMA_VERSION then
+    Result:= Result + 'current'
+  else if IsSchemaReadable(AFound) then
+    Result:= Result + Format('v%d readable by v%d; re-index to write', [AFound, SCHEMA_VERSION])
+  else
+    Result:= Result + SchemaUnreadableReason(AFound);
+end;
 
 end.

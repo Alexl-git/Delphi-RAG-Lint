@@ -11,6 +11,7 @@ uses
   , DRagLint.Core       .Model
   , DRagLint.Core       .Interfaces
   , DRagLint.Storage    .SQLite
+  , DRagLint.Storage    .Schema { 150 SC: IsSchemaReadable, the read gate of OpenStore }
   , DRagLint.Lint       .Linter
   , DRagLint.Context    .Bundler
   , DRagLint.Resolver   .TypeAt
@@ -1002,11 +1003,12 @@ begin
     Exit;
   end;
   Result:= TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}True);
-  if not Result.IsSchemaCurrent(Found, Expected) then
+  Result.IsSchemaCurrent(Found, Expected);
+  if not IsSchemaReadable(Found) then // 150 SC: the schema read gate
   begin
     AError:= Format('index schema v%d < v%d in %s -- nothing was answered. Rebuild it: ' +
       '"drag-lint index --project <file.dproj> --db <db>" for a project index, or ' +
-      '"drag-lint index <dir> --db <db>" for a library index', [Found, Expected, ADbPath]);
+      '"drag-lint index <dir> --db <db>" for a library index', [Found, SCHEMA_READ_MIN, ADbPath]);
     Result:= nil;
   end;
 end;

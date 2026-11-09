@@ -33,7 +33,7 @@ implementation
 uses
   System.SysUtils, System.Classes, System.IOUtils, System.JSON, System.Generics.Collections,
   System.Generics.Defaults, System.RegularExpressions, FireDAC.Comp.Client,
-  DRagLint.Core.CliError, DRagLint.Storage.SQLite, DRagLint.CLI.HelpText, DRagLint.Index.UsesRecoverWrite; // dl:unit DRagLint.Core.CliError accepted -- the verb reports an unknown flag with the shared cli_err_unknown_flag text every verb uses; the other CliError consts are other verbs' errors
+  DRagLint.Core.CliError, DRagLint.Storage.SQLite, DRagLint.Storage.Schema, DRagLint.CLI.HelpText, DRagLint.Index.UsesRecoverWrite; // dl:unit DRagLint.Core.CliError accepted -- the verb reports an unknown flag with the shared cli_err_unknown_flag text every verb uses; the other CliError consts are other verbs' errors
 
 const
   CVerb = 'uses-recover';
@@ -368,6 +368,14 @@ begin
   try
     LStore:= TSQLiteSymbolStore.Create(pDbPath, {AReadOnly=}True);
     try
+      { 150 SC: the schema read gate, the same predicate and words as every other opener }
+      var LFound, LExpected: Integer;
+      LStore.IsSchemaCurrent(LFound, LExpected);
+      if not IsSchemaReadable(LFound) then
+      begin
+        pError:= 'cannot read index ' + pDbPath + ': ' + SchemaUnreadableReason(LFound);
+        Exit(False);
+      end;
       LQuery:= TFDQuery.Create(nil);
       try
         LQuery.Connection:= LStore.GetConnection;

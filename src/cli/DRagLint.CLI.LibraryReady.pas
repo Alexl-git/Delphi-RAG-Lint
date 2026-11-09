@@ -174,6 +174,7 @@ uses
   , DRagLint.Core.Versions
   , DRagLint.Index.Freshness
   , DRagLint.Storage.SQLite
+  , DRagLint.Storage.Schema { 150 SC: IsSchemaReadable -- a readable library is ready to read }
   , DRagLint.Preprocess.Profile
   ;
 
@@ -252,9 +253,10 @@ begin
   end;
   try
     Store:= TSQLiteSymbolStore.Create(ALibDb, {AReadOnly=}True);
-    if not Store.IsSchemaCurrent(Found, Need) then
+    Store.IsSchemaCurrent(Found, Need);
+    if not IsSchemaReadable(Found) then // 150 SC: readable (>= SCHEMA_READ_MIN) is ready to READ
     begin
-      AWhy:= Format('schema v%d, this engine needs v%d', [Found, Need]);
+      AWhy:= Format('schema v%d, this engine needs v%d', [Found, SCHEMA_READ_MIN]);
       Exit(lrSchemaOld);
     end;
     AStampFp:= Store.GetMetaValue(INDEXER_FINGERPRINT_META_KEY);
