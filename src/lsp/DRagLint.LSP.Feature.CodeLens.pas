@@ -57,8 +57,9 @@ type
     /// arguments [uri, line]. Above every interface and interface method with at least
     /// one implementor, a second lens titled '<n> implementors' runs
     /// draglint.showImplementors with [uri, line] (1.40). On a routine that raises or handles,
-    /// a lens titled 'raises N types, handles M types' (ILspServerContext.ExceptionLenses; a
-    /// label: command '', ON by default, off with lsp --no-exception-facts; wave 148 D1).
+    /// a lens titled 'raises N types, handles M types' (ILspServerContext.ExceptionLenses; ON by
+    /// default, off with lsp --no-exception-facts; wave 148 D1) whose command is
+    /// draglint.exceptionFacts with [uri, line] (wave 149 LX: the sites, for a quick pick).
     /// A file no store knows answers [].</summary>
     /// <param name="ACtx">The server surface.</param>
     /// <param name="AMethod">Always `textDocument/codeLens`.</param>
@@ -91,8 +92,9 @@ const
   CODELENS_METHOD  = 'textDocument/codeLens';
   CODELENS_COMMAND = 'draglint.showCallers';
   IMPL_COMMAND     = 'draglint.showImplementors';
-  { D1: an exception lens is a label (no client command implements a click yet). }
-  EXC_COMMAND      = '';
+  { Wave 149 LX (spec P1): a click on an exception lens asks the server for its sites
+    (workspace/executeCommand, arguments [uri, line]); VS Code shows them in a quick pick. }
+  EXC_COMMAND      = 'draglint.exceptionFacts';
 
 function Position(ALine0: Integer): TJSONObject;
 begin

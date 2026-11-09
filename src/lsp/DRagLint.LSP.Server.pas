@@ -1444,6 +1444,10 @@ type
       /// <param name="AId"><!-- drag-lint:auto type -->const TJSONValue</param>
       /// <param name="AParams">`{textDocument:{uri}}`.</param>
       /// <remarks>
+      /// Reply: {counts:[{line,count}], implementors:[{line,count}], exceptions:[{line,title}]},
+      /// every line 0-based; `exceptions` (wave 149 LX) carries the exception lens title
+      /// ('raises 2 types, handles 1 type') per routine declaration line, [] under
+      /// lsp --no-exception-facts -- the RAD Studio lens reads this reply, not textDocument/codeLens.
       /// Replaces one engine SPAWN PER METHOD in the plugin's code-lens
       /// cache. Measured on DataCopy's uMainZeissCopy: 77 methods x 165 ms =
       /// 12.7 s of serial process starts to label one file. Every store consulted
@@ -2195,6 +2199,16 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ComputeExceptionLenses(const APath: string): TJSONArray;
+      /// <summary>Wave 149 LX: the sites behind one exception lens, for workspace/executeCommand
+      /// draglint.exceptionFacts (ILspServerContext.ExceptionFactsAt).</summary>
+      /// <param name="APath">Local path of the document.</param>
+      /// <param name="ALine0">0-based declaration line of the routine (the lens line).</param>
+      /// <returns>A new array the caller frees: [{uri, line, character, action, type, via,
+      /// routine}], 0-based; [] when ExceptionFacts is off, the file is not indexed or nothing on
+      /// that routine line raises or handles.</returns>
+      /// <remarks>One read of ExceptionFactsOfFile, filtered on TExceptionFact.RoutineLine -- the
+      /// same rows ComputeExceptionLenses titles, so the pick and the lens count agree.</remarks>
+      function ComputeExceptionFactsAt(const APath: string; ALine0: Integer): TJSONArray;
       /// <summary>The 'Raises:' hover line of ASym as a one-element array, or [] (switch off,
       /// not a routine, a store with no path, nothing raised).</summary>
       /// <param name="AStore">The store ASym came from.</param>
@@ -2355,6 +2369,7 @@ type
     function References(const APath: string; ALine0, ACol0: Integer; AIncludeDecl: Boolean): TJSONArray;
     function CallerCounts(const APath: string): TJSONArray;
     function ExceptionLenses(const APath: string): TJSONArray;
+    function ExceptionFactsAt(const APath: string; ALine0: Integer): TJSONArray;
     function HoverMarkdown(const APath: string; ALine0, ACol0: Integer): string;
     function Linter: TLinter;
     procedure Reply(const AId: TJSONValue; AResult: TJSONValue); virtual;
@@ -2428,6 +2443,11 @@ end;
 function TLspServerContextAdapter.ExceptionLenses(const APath: string): TJSONArray;
 begin
   Result:= FServer.ComputeExceptionLenses(APath);
+end;
+
+function TLspServerContextAdapter.ExceptionFactsAt(const APath: string; ALine0: Integer): TJSONArray;
+begin
+  Result:= FServer.ComputeExceptionFactsAt(APath, ALine0);
 end;
 
 function TLspServerContextAdapter.HoverMarkdown(const APath: string; ALine0, ACol0: Integer): string;
@@ -5286,6 +5306,9 @@ begin
     Res.AddPair('counts', ComputeCallerCounts(FileFromUri(Uri)));
     { 1.40 ifrpt: the "N implementors" lens of interfaces and interface methods (0-based lines). }
     Res.AddPair('implementors', ImplementorCountsForFile(StoresForFile(FileFromUri(Uri)), FileFromUri(Uri)));
+    { Wave 149 LX (D1P-149 i): the exception lens titles, one (line, title) object per routine, 0-based on the
+      routine's declaration line -- the RAD Studio lens reads callerCounts, not codeLens. }
+    Res.AddPair('exceptions', ComputeExceptionLenses(FileFromUri(Uri)));
   except  // dl:ok bare-except@56ea -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
     Res.Free;
     raise;
@@ -5344,6 +5367,41 @@ begin
     end;
   finally
     ByRoutine.Free;
+  end;
+end;
+
+function TLSPServer.ComputeExceptionFactsAt(const APath: string; ALine0: Integer): TJSONArray;
+begin
+  Result:= TJSONArray.Create;
+  if (not FExceptionFacts) or (APath = '') or (ALine0 < 0) then Exit;
+  var DbPath: string:= '';
+  var FilePath: string:= '';
+  for var St: ISymbolStore in StoresForFile(APath) do
+  begin
+    var Fid: Int64:= St.FindFileIdByPath(APath);
+    if Fid <= 0 then Continue;
+    DbPath:= StorePathOf(St);
+    FilePath:= St.GetFilePath(Fid);
+    if DbPath <> '' then Break;
+  end;
+  if (DbPath = '') or (FilePath = '') then Exit;
+  try
+    for var F: TExceptionFact in ExceptionFactsOfFile(DbPath, FilePath) do
+    begin
+      if F.RoutineLine <> ALine0 + 1 then Continue;
+      var O: TJSONObject:= TJSONObject.Create;
+      Result.AddElement(O);
+      O.AddPair('uri'      , FileToUri(if F.FilePath <> '' then F.FilePath else FilePath));
+      O.AddPair('line'     , TJSONNumber.Create(if F.Line > 0 then F.Line - 1 else 0));
+      O.AddPair('character', TJSONNumber.Create(if F.Col > 0 then F.Col - 1 else 0));
+      O.AddPair('action'   , F.Action);
+      O.AddPair('type'     , F.TypeName);
+      O.AddPair('via'      , F.Via);
+      O.AddPair('routine'  , F.Routine);
+    end;
+  except  // dl:ok bare-except@149lx -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
+    Result.Free;
+    raise;
   end;
 end;
 
