@@ -1,0 +1,9 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- uses-recover fixture (lane 149-HW): only the unit-alias property is read. -->
+  <PropertyGroup Condition="'$(Base)'!=''">
+    <DCC_UnitAlias>OldName=FixRtl;$(DCC_UnitAlias)</DCC_UnitAlias>
+  </PropertyGroup>
+  <ItemGroup>
+    <DelphiCompile Include="Probe3.dpr"/>
+  </ItemGroup>
+</Project>

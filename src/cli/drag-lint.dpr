@@ -239,6 +239,7 @@ uses
   DRagLint.Index.IgnoreFiles in '..\index\DRagLint.Index.IgnoreFiles.pas',
   DRagLint.Index.Closure in '..\index\DRagLint.Index.Closure.pas',
   DRagLint.Index.IncludeUses in '..\index\DRagLint.Index.IncludeUses.pas',
+  DRagLint.Index.UsesRecoverWrite in '..\index\DRagLint.Index.UsesRecoverWrite.pas',
   DRagLint.Index.Reconcile in '..\index\DRagLint.Index.Reconcile.pas',
   DRagLint.Index.Plan in '..\index\DRagLint.Index.Plan.pas',
   DRagLint.Index.DbSelect in '..\index\DRagLint.Index.DbSelect.pas',

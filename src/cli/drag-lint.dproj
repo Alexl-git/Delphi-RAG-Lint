@@ -300,6 +300,7 @@
         <DCCReference Include="..\index\DRagLint.Index.IgnoreFiles.pas"/>
         <DCCReference Include="..\index\DRagLint.Index.Closure.pas"/>
         <DCCReference Include="..\index\DRagLint.Index.IncludeUses.pas"/>
+        <DCCReference Include="..\index\DRagLint.Index.UsesRecoverWrite.pas"/>
         <DCCReference Include="..\index\DRagLint.Index.Reconcile.pas"/>
         <DCCReference Include="..\index\DRagLint.Index.Plan.pas"/>
         <DCCReference Include="..\index\DRagLint.Index.DbSelect.pas"/>

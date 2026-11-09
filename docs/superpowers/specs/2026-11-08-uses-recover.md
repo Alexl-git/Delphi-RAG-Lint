@@ -60,7 +60,7 @@ Phase 1 (this lane): a READ-ONLY verb
    header dir or map; 3 = unknown flag (the shared `error[unknown-flag]` exit every self-parsing
    verb uses). Nothing is written: both DBs open read-only.
 
-## The write path (NOT built: resolver surface = bump)
+## The write path (designed in 148; BUILT in 149 HW -- see "149 HW: as built")
 
 Writing recovered edges changes what the index holds and what the resolver reads, so it is a
 `DRAGLINT_EXTRACTOR_VERSION` + resolver review and a re-parse. Design for the bump wave:
@@ -75,6 +75,40 @@ Writing recovered edges changes what the index holds and what the resolver reads
   `DRagLint.Storage.SQLite.pas` (rows), `CallResolver.pas` only if `target_file_id` feeds
   resolution (it does for unit-scoped lookups: treat as resolver surface).
 - Ledger: `NEXT-BUMP HP uses-recover write path ...` (148 LEDGER, 2026-11-08).
+
+## 149 HW: as built (lane 149-HW, 2026-11-09)
+
+`uses-recover --apply` (OFF unless given). Deviations from the design above, each reversible:
+
+- **No `files.origin` column.** The schema is EX2's alone in 149; `files.language = 'hpp'` is the
+  marker (no indexer writes that language). `unit_uses.origin_path` = the header, `include_line`
+  0, `section` 'interface', coordinates = the `#include` line inside the header.
+- **The binding lives in the uses resolve pass, not in the writer.** `ResolveUnitUseTargets`
+  clears and recomputes `target_file_id` on every index run, so a value written once by the verb
+  would be wiped by the next re-index. New RULE C there: after rules A/B, a name still NULL binds
+  to a header row of the same stem (exact, lower-cased; the reader already chose the canonical
+  scoped name when it wrote the row). NULL rows only, so an indexed `.pas` always wins. A DB
+  without header rows runs no extra statement and prints no extra log line.
+- **One writer:** `TSQLiteSymbolStore.ReplaceHeaderUnits` replaces the whole header set (a header
+  no longer recovered is deleted through `DeleteFilesByIds`), then upserts by path and rewrites
+  each header's uses in one transaction. The verb then runs `ResolveUnitUseTargets`.
+- **The read report is invariant under --apply:** rows bound to a header row still count as uses
+  of a sourceless unit, and a header row's own rows are not the project's.
+- **CallResolver.pas is not edited.** Its unit-scope map reads `GetUnitScopeEdges` (direct
+  `file_id -> target_file_id` pairs), which now includes header targets with no code change;
+  header rows carry no symbols, so no candidate set changes. Measured: CLIENT A/B (REPORT).
+- **Map facts are not stored** (no `unit_facts` row): nothing reads them yet.
+- **Unit aliases (read side):** `--project <x.dproj>` reads every `DCC_UnitAlias` (conditions
+  ignored: the union) and then the Windows defaults of `CodeGear.Common.Targets` (Studio 37.0:
+  `Generics.Collections/Defaults`, `WinTypes`/`WinProcs` = `Winapi.Windows`, `DbiTypes`/`DbiProcs`/
+  `DbiErrs` = `BDE`); first spelling wins. Applied to the project's own uses names only (headers
+  name real units). Not written: a `uses WinProcs` row stays unbound.
+- **Eviction:** header rows live outside every sweep root unless a `--hpp-dir` sits under a project
+  scope root; then a later `index --project` is expected to evict them as out-of-scope (read from
+  `EvictOutOfScopeFiles`, not measured; re-run `--apply`).
+- Fingerprint units: `src\index\DRagLint.Index.UsesRecoverWrite.pas` (new),
+  `src\storage\DRagLint.Storage.SQLite.pas` (ReplaceHeaderUnits + rule C). Guard:
+  `tests\autotest\run_uses_recover_write_guard.ps1`.
 
 ## Assumptions the owner can reverse
 
