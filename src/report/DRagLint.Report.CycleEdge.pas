@@ -334,8 +334,8 @@ type
   /// <summary>R2: one class of the edge and the interface extracted for it.</summary>
   /// <remarks>
   /// An edge through one class has one entry, which repeats the singular R2 fields of
-  /// TRecipeSteps; an edge through several has one per class that is an `is` / `as` operand, sorted
-  /// by class name.
+  /// TRecipeSteps; an edge through several has one per class that is an `is` / `as` operand or a hard-cast
+  /// `TX(X).M` target (lane 149 CYB), sorted by class name.
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.Report.CycleEdge.pas), declaration (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CycleEdge.MemberSurfaceDecls (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.RenderMemberSurface (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.SettleIfaceName (DRagLint.Report.CyclePlan.pas)</para>
   /// <para>Used in units: DRagLint.Report.CycleEdge, DRagLint.Report.CyclePlan</para>
@@ -367,6 +367,14 @@ type
     /// handles EInvalidCast and casts with `as` unguarded: every `X as TX` becomes `As..(X)`, which raises
     /// EInvalidCast (SInvalidCast) as the class cast did; '' when no helper is needed.</summary>
     AsHelper: string;
+    /// <summary>Lane 149 CYB: True when the consumer names EInvalidCast (a handler may rely on what a failed
+    /// cast raises); False with an AsHelper means the helper serves an `as` whose receiver's static type is
+    /// unknown (149-CY-8b).</summary>
+    HandlesInvalidCast: Boolean;
+    /// <summary>Lane 149 CYB (149-CY-8b): True when the consumer names EInvalidCast and a hard cast
+    /// `TX(X).M` became `(X as I).M` -- a wrong X now raises EIntfCastError where it read through the wrong
+    /// object; the plan states it.</summary>
+    HardCastChange: Boolean;
     /// <summary>True when the leaf already declares IfaceDecl with exactly this code text (comments
     /// aside); it is reused, nothing is inserted for it.</summary>
     Reused: Boolean;
@@ -763,8 +771,9 @@ function EnclosingTypeOf(const pProject: ISymbolStore; pEnclosingId: Int64): TSy
 /// erMemberRead -- else `member-write`, `construction`, `class-method` (a method called
 /// through the class or an instance, e.g. in a `with` body), `class-ref`, `type-decl`,
 /// `type-cast`, `other-ref` (a routine or variable of B); then `qualified-ref` (`B.X` anywhere in A).</para>
-/// <para>Several classes (1.42 cyc2): each class that is an `is` / `as` operand of the edge gets its own
-/// interface, and every check below runs per class, in class-name order. The refs are shared out: a test,
+/// <para>Several classes (1.42 cyc2): each class that is an `is` / `as` operand of the edge -- or, lane 149 CYB
+/// (149-CY-12), that the edge hard-casts as `TX(X).M` (the C7 path) -- gets its own interface; an edge that only
+/// hard-casts one class is planned for it the same way; and every check below runs per class, in class-name order. The refs are shared out: a test,
 /// cast or type declaration goes to its class; a member goes to EVERY such class that declares or inherits
 /// it (a class that only inherits it gets its own getter too, so a member shared by two classes is on both
 /// interfaces, and a member of TA is also carried by a descendant TB of TA on the edge, even when only TA's
@@ -788,7 +797,9 @@ function EnclosingTypeOf(const pProject: ISymbolStore; pEnclosingId: Int64): TSy
 /// <para>Consumer: `X is TClass` -&gt; `Supports(X, ISurface)`; `X as TClass` -&gt; `X as
 /// ISurface` when X's static type implements IInterface, else `TAnc(X) as ISurface` (TAnc =
 /// AncestorImplementingIInterface). X must be `Self`, a parameter or local of the enclosing
-/// routine, or a field / property of the enclosing class or its ancestors (`receiver-unknown`);
+/// routine, or a field / property of the enclosing class or its ancestors, else an `as` goes through the
+/// As&lt;Surface&gt; helper below (lane 149 CYB, 149-CY-8b; `receiver-unknown` when its name is taken, and for a
+/// hard cast `TX(X).M` on such a receiver);
 /// a project TAnc must not be declared in B (`cast-unseen`). A `with` head may span lines. A
 /// public or published non-indexed field or property of the class chain, a library ancestor included, named bare in a
 /// `with X as TClass do` body goes on the interface too (read, or a plain write through a setter; 1.43 CYC-C;
@@ -801,7 +812,9 @@ function EnclosingTypeOf(const pProject: ISymbolStore; pEnclosingId: Int64): TSy
 /// `ancestry-unknown`. The same member read or written as `(X as TClass).M` or `TClass(X).M` is carried the same
 /// way; there a library method refuses `class-method` and any other uncarriable one `member-unsupported`. A failed `as ISurface` raises EIntfCastError, not EInvalidCast: when
 /// A names EInvalidCast, an `as` without an earlier `is` guard on the same receiver in its
-/// routine refuses `exception-semantics`.</para>
+/// routine goes through `As&lt;Surface&gt;(X)` (TObject parameter: nil for nil, else the interface, else raise
+/// EInvalidCast) -- `exception-semantics` only when that name is taken (lane 148 CY); a hard cast `TX(X).M` there
+/// becomes `(X as I).M` and TMemberSurface.HardCastChange makes the plan state the change (149-CY-8b).</para>
 /// <para>Leaf: the units declaring the member types -- a project unit as bound from B, else
 /// the library unit B's interface uses names (`type-unresolved`); never a unit of the
 /// group (`leaf-uses-cycle`). The dotted prefixes are walked longest to shortest; the first that names a unit wins (a
@@ -3166,6 +3179,8 @@ type
     FCastUsed: Boolean;
     FCastAnc : string;
     FAsHelper: string;  // lane 148 CY: the raise-preserving cast helper, '' when not needed
+    FHandles : Boolean;  // lane 149 CYB: the consumer names EInvalidCast
+    FHardCastChange: Boolean;  // lane 149 CYB: a hard cast was rewritten while FHandles
     FRefusal : TRecipeRefusal;
     FMethods : TList<TSymbol>;  // B2: instance methods carried as interface methods
     FMethodDecls: TList<string>;  // B2: their interface declarations
@@ -3222,6 +3237,7 @@ type
     function AddLeafUse(const pM: TSymbol; const pTypeName, pShown: string): Boolean;
     function AddNestedLeafUse(const pM: TSymbol; const pOuter, pShown: string): Boolean;
     function CheckCastExceptions: Boolean;
+    function AsHelperName: string;
     function AsHelperLines: TArray<string>;
     function AsHelperAnchor: Integer;
     function CollectLeafUses: Boolean;
@@ -3411,6 +3427,13 @@ begin
   Best:= Default(TEdgeRef);
   for var R in FSurface.Refs do
     if (FCls.Id = 0) and (R.Kind in [erTypeIs, erTypeAs]) and (R.SymbolId > 0) then FCls:= FStore.GetSymbolById(R.SymbolId);
+  { lane 149 CYB (149-CY-12): a class the edge only hard-casts (`TX(X).M`, the C7 path) is the class too }
+  for var R in FSurface.Refs do
+    if (FCls.Id = 0) and (R.Kind = erTypeCast) and (R.SymbolId > 0) then
+    begin
+      var S:= FStore.GetSymbolById(R.SymbolId);
+      if S.Kind = skClass then FCls:= S;
+    end;
   { the first offending line; on one line, what is done through the class (a call, a
     construction) names it rather than the plain read of the class name it comes with }
   for var R in FSurface.Refs do
@@ -4017,11 +4040,18 @@ begin
     if not M.Success then Break;
     var X:= M.Groups[1].Value;
     var Known:= ReceiverType(X, pEnclosing, Ty);
-    { C1: an `X is TX` guard earlier in the same routine proves X a TX there -- the ancestor cast is safe }
-    if not Known and ((FCastAnc = '') or not GuardedBefore(X, pEnclosing, pLine)) then
-      Exit(Refuse('receiver-unknown', X, FFromFid, pLine, Format('line %d: the static type of `%s` in `%s as %s` ' +
-        'is not that of Self, a parameter, a local, or a field or property of the class, and no `%s is %s` guards ' +
-        'it earlier in the same routine', [pLine, X, X, FCls.Name, X, FCls.Name])));
+    { C1: an `X is TX` guard earlier in the same routine proves X a TX there -- the ancestor cast is safe.
+      Lane 149 CYB (149-CY-8b): otherwise the raise-preserving helper takes any object (a TObject
+      parameter), so an unknown static type no longer refuses; only a helper name taken does }
+    if not Known and ((FCastAnc = '') or not GuardedBefore(X, pEnclosing, pLine)) and (FAsHelper = '') then
+    begin
+      if Length(FStore.FindSymbolsByExactName(AsHelperName)) > 0 then
+        Exit(Refuse('receiver-unknown', X, FFromFid, pLine, Format('line %d: the static type of `%s` in `%s as %s` ' +
+          'is not that of Self, a parameter, a local, or a field or property of the class, no `%s is %s` guards ' +
+          'it earlier in the same routine, and the helper that takes any object, `%s`, names something that exists ' +
+          'already', [pLine, X, X, FCls.Name, X, FCls.Name, AsHelperName])));
+      FAsHelper:= AsHelperName;
+    end;
     var Repl:= X + ' as ' + FIface;
     if FAsHelper <> '' then Repl:= Format('%s(%s)', [FAsHelper, X])  { lane 148 CY: raises EInvalidCast as before }
     else if not Known or not ImplementsIInterface(FIdx, Ty) then
@@ -4049,6 +4079,7 @@ begin
       Repl     := Format('(%s(%s) as %s)', [FCastAnc, X, FIface]);
       FCastUsed:= True;
     end;
+    if FHandles then FHardCastChange:= True;  { lane 149 CYB (149-CY-8b): stated in the plan }
     pText:= Copy(pText, 1, M.Index - 1) + Repl + Copy(pText, M.Index + M.Length, MaxInt);
   end;
   if TRegEx.IsMatch(CodeOf(pText, St), '\b' + C + '\b', [roIgnoreCase]) then
@@ -4176,10 +4207,10 @@ function TMemberPlan.CheckCastExceptions: Boolean;
 begin
   Result:= True;
   FAsHelper:= '';
-  var Handles:= False;
+  FHandles := False;
   for var L in FLines do
-    if TRegEx.IsMatch(PlainCode(L), '\bEInvalidCast\b', [roIgnoreCase]) then Handles:= True;
-  if not Handles then Exit;
+    if TRegEx.IsMatch(PlainCode(L), '\bEInvalidCast\b', [roIgnoreCase]) then FHandles:= True;
+  if not FHandles then Exit;
   var C:= TRegEx.Escape(FCls.Name);
   for var R in FSurface.Refs do
   begin
@@ -4195,7 +4226,7 @@ begin
       end;
       if not Guarded then
       begin
-        var Helper:= 'As' + (if (Length(FIface) > 1) and (UpCase(FIface[1]) = 'I') then Copy(FIface, 2, MaxInt) else FIface);
+        var Helper:= AsHelperName;
         if Length(FStore.FindSymbolsByExactName(Helper)) > 0 then
           Exit(Refuse('exception-semantics', FCls.Name, FFromFid, R.Line, Format('line %d casts with `as %s` without ' +
             'an `is` guard, and `%s` handles EInvalidCast: a failed `as %s` raises EIntfCastError instead, and the ' +
@@ -4206,6 +4237,12 @@ begin
       end;
     end;
   end;
+end;
+
+{ `As<Surface without its I>`: the name of the raise-preserving cast helper. }
+function TMemberPlan.AsHelperName: string;
+begin
+  Result:= 'As' + (if (Length(FIface) > 1) and (UpCase(FIface[1]) = 'I') then Copy(FIface, 2, MaxInt) else FIface);
 end;
 
 { Lane 148 CY: the helper CheckCastExceptions chose, as lines for the consumer's implementation section. }
@@ -4875,6 +4912,8 @@ begin
   Result.Surfaces[0].CastAncestor := Result.CastAncestor;
   Result.Surfaces[0].KeptGetters  := Result.KeptGetters;
   Result.Surfaces[0].AsHelper     := FAsHelper;
+  Result.Surfaces[0].HandlesInvalidCast:= FHandles;
+  Result.Surfaces[0].HardCastChange    := FHardCastChange;
 end;
 
 type
@@ -4931,8 +4970,8 @@ begin
   Result  := False;
 end;
 
-{ The classes of the edge that are an `is` / `as` operand, sorted by name; any other operand of the
-  edge (an interface, a type alias) refuses: no class plan would rewrite it. }
+{ The classes of the edge that are an `is` / `as` operand or (lane 149 CYB) a hard-cast target, sorted by name;
+  any other `is` / `as` operand of the edge (an interface, a type alias) refuses: no class plan would rewrite it. }
 function TEdgeComposer.CollectClasses: Boolean;
 var
   Found: TList<TSymbol>;
@@ -4951,9 +4990,21 @@ begin
         if C.Id = S.Id then Known:= True;
       if not Known then Found.Add(S);
     end;
+    { lane 149 CYB (149-CY-12): a class of the edge it only hard-casts (`TX(X).M`) gets its own plan too --
+      the per-class C7 path; a cast to anything else (an enum, a record) is left to the class plans }
+    for var R in FSurface.Refs do
+    begin
+      if (R.Kind <> erTypeCast) or (R.SymbolId <= 0) then Continue;
+      var S:= FStore.GetSymbolById(R.SymbolId);
+      if (S.Kind <> skClass) or (S.FileId <> FToFid) then Continue;
+      var Known:= False;
+      for var C in Found do
+        if C.Id = S.Id then Known:= True;
+      if not Known then Found.Add(S);
+    end;
     if Found.Count = 0 then
       Exit(Refuse('multiple-classes', string.Join(', ', FSurface.ClassNames), 0, Format('the edge names %d classes ' +
-        '(%s) and tests none of them with `is` / `as`', [Length(FSurface.ClassNames),
+        '(%s) and neither tests nor casts any of them (`is` / `as` / `TX(X).M`)', [Length(FSurface.ClassNames),
         string.Join(', ', FSurface.ClassNames)])));
     Found.Sort(TComparer<TSymbol>.Construct(
       function(const pLeft, pRight: TSymbol): Integer

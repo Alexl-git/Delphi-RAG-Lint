@@ -51,8 +51,13 @@ type
 /// planned (every reason is in pOut); 2 = a file could not be written or a bad group choice.</returns>
 /// <remarks>Planned only for a group with exactly one hub, one hub global and a hub class declared
 /// in the hub unit; members a spoke reads that are not plain fields or methods of that class, a
-/// bare use, a write to the global or a designer field, or a var-parameter use refuse that spoke,
-/// never the group; Inc / Dec of an integer plain field is rewritten to an assignment. A hub routine
+/// `with &lt;global&gt; do`, a write to the global or a designer field, or a var-parameter use (also
+/// `FreeAndNil` / `CreateForm` / `@` of the global) refuse that spoke, never the group; Inc / Dec of an
+/// integer plain field is rewritten to an assignment. Phase P4 (lane 149 CYB): `Assigned(&lt;global&gt;)`
+/// becomes `Assigned(&lt;var&gt;)`; any other bare use (the global passed as a value, compared with nil, cast)
+/// becomes `&lt;var&gt;AsForm`, a nil-safe function in the surface unit over the interface's
+/// `AsForm` property, typed with the hub class's one library class ancestor (refused bare-use when
+/// there is not exactly one). A hub routine
 /// is refused (overloaded, unsupported-directive, signature-in-cycle, duplicate-identifier) as a whole;
 /// one a spoke names from its initialization / finalization, by address or under a shadowing
 /// declaration stays named in that spoke only (init-order, address-of, name-shadowed), which keeps
@@ -122,6 +127,8 @@ type
     Why      : string;
     Keepers  : TArray<string>;  { other hub symbols the spoke still names: the edge stays }
     Kept     : TArray<string>;  { P3: why a planned hub routine stays named here (`Name`: kind -- why) }
+    Values   : Integer;  { P4: bare uses passed as a value through the AsForm function }
+    Assigns  : Integer;  { P4: `Assigned(<global>)` rewritten to `Assigned(<var>)` }
     NewText  : string;
   end;
 
@@ -156,6 +163,10 @@ type
     Members    : TArray<THubMember>;
     Spokes     : TArray<THubSpoke>;
     Routines   : TArray<THubRoutine>;  { P3 }
+    FormType   : string;   { P4: the library class the hub class descends from (AsForm's type); '' = bare uses refused }
+    FormWhy    : string;   { P4: why FormType is '' }
+    FormFunc   : string;   { P4: <VarName>AsForm, the nil-safe function the spokes pass instead of the global }
+    AsForm     : Boolean;  { P4: a spoke passes the global as a value: AsForm is on the surface }
     EdgesLeft  : Integer;
     Breaks     : Boolean;
   end;
@@ -184,6 +195,7 @@ type
     procedure PlanMembers(var pPlan: THubGroupPlan; const pNames: TArray<string>);
     function TypeDeclaredInGroup(const pType: string): Boolean;
     function NamesClash(var pPlan: THubGroupPlan): Boolean;
+    procedure PlanFormType(var pPlan: THubGroupPlan);
     function SurfaceUsesList(const pHubText: string): string;
     function BuildSurfaceText(const pPlan: THubGroupPlan; const pUses: string): string;
     function BuildHubText(var pPlan: THubGroupPlan; const pHubText: string): Boolean;
@@ -304,6 +316,44 @@ function OpenParenBefore(const pText: string; pPos: Integer): Integer;
 begin
   Result:= pPos - 1;
   while (Result > 1) and (pText[Result] <> '(') do Dec(Result);
+end;
+
+{ P4: the name of the call whose open argument list holds pPos (`Foo` of `Foo(a, <pPos>)`), searched
+  back to the statement's `;`; '' when pPos is in no call }
+function EnclosingCall(const pText: string; const pMask: TCodeMask; pPos: Integer): string;
+var
+  Depth: Integer;
+begin
+  Result:= '';
+  Depth := 0;
+  for var K:= pPos - 1 downto 1 do
+    if pMask[K] then
+      case pText[K] of
+        ';': Exit;
+        ')', ']': Inc(Depth);
+        '[': Dec(Depth);
+        '(':
+          if Depth = 0 then Exit(IdentBefore(pText, K))
+          else Dec(Depth);
+      end;
+end;
+
+{ P4: True when pPos sits in the head of a `with ... do` (a `with` since the statement's `;` and no `do` after it) }
+function InWithHead(const pText: string; const pMask: TCodeMask; pPos: Integer): Boolean;
+var
+  Seg: TStringBuilder;
+  Start: Integer;
+begin
+  Start:= pPos - 1;
+  while (Start >= 1) and not (pMask[Start] and (pText[Start] = ';')) do Dec(Start);
+  Seg:= TStringBuilder.Create;
+  try
+    for var K:= Start + 1 to pPos - 1 do Seg.Append(if pMask[K] then pText[K] else ' ');
+    var Words:= TRegEx.Matches(Seg.ToString, '(?i)\b(with|do)\b');
+    Result:= (Words.Count > 0) and SameText(Words[Words.Count - 1].Value, 'with');
+  finally
+    Seg.Free;
+  end;
 end;
 
 { the [start, end) span of the uses clause that holds pUnit as an entry, in code; False when none }
@@ -608,6 +658,43 @@ begin
   Result:= False;
 end;
 
+{ P4: the type of AsForm -- the one library class (a heritage name the project does not declare,
+  `T`-named: an interface ancestor is `I`-named) the hub class descends from, so a spoke
+  that passes the global where a TForm / TdxRibbonForm / TComponent is expected still compiles; the
+  hub's interface uses (the surface unit's uses) already name its unit. '' with FormWhy when there is
+  none, more than one, or AsForm's names clash. }
+procedure THubSurfacePlanner.PlanFormType(var pPlan: THubGroupPlan);
+var
+  Roots: TList<string>;
+begin
+  pPlan.FormType:= '';
+  pPlan.FormFunc:= pPlan.VarName + 'AsForm';
+  Roots:= TList<string>.Create;
+  try
+    for var N in FStore.UnresolvedAncestorNames(FClass.Name, FClass.FileId) do
+      if N.StartsWith('T', True) and not Roots.Contains(N) then Roots.Add(N);
+    if Roots.Count <> 1 then
+    begin
+      pPlan.FormWhy:= Format('`%s` has %d library class ancestors (AsForm needs exactly one: %s)', [FClass.Name, Roots.Count, string.Join(', ', Roots.ToArray)]);
+      Exit;
+    end;
+    if Length(FStore.FindSymbolsByExactName(pPlan.FormFunc)) > 0 then
+    begin
+      pPlan.FormWhy:= Format('`%s` already exists (the index declares it)', [pPlan.FormFunc]);
+      Exit;
+    end;
+    for var S in FHubSyms do
+      if (S.ParentId = FClass.Id) and MatchText(S.Name, ['AsForm', 'HubGetAsForm']) then
+      begin
+        pPlan.FormWhy:= Format('`%s` already declares `%s`', [FClass.Name, S.Name]);
+        Exit;
+      end;
+    pPlan.FormType:= Roots[0];
+  finally
+    Roots.Free;
+  end;
+end;
+
 { the hub's interface uses entries that are not units of the cycle: the surface unit's uses (a leaf:
   a unit the hub's interface uses and that is not in the group cannot reach the hub) }
 function THubSurfacePlanner.SurfaceUsesList(const pHubText: string): string;
@@ -685,6 +772,11 @@ begin
           end;
       end;
     end;
+    if pPlan.AsForm then
+    begin
+      L.Add(Format('    function HubGetAsForm: %s;', [pPlan.FormType]));
+      L.Add(Format('    property AsForm: %s read HubGetAsForm;', [pPlan.FormType]));
+    end;
     L.Add('  end;');
     L.Add('');
     for var R in pPlan.Routines do
@@ -704,8 +796,18 @@ begin
         L.Add(Format('  %s: T%0:s;', [R.PtrVar]));
       end;
     L.Add('');
+    if pPlan.AsForm then
+    begin
+      L.Add(Format('/// <summary>%s as a %s for the units that passed %s as a value; nil while %0:s is nil.</summary>',
+        [pPlan.VarName, pPlan.FormType, pPlan.GlobalName]));
+      L.Add(Format('function %s: %s;', [pPlan.FormFunc, pPlan.FormType]));
+      L.Add('');
+    end;
     L.Add('implementation');
     L.Add('');
+    if pPlan.AsForm then
+      L.AddRange([Format('function %s: %s;', [pPlan.FormFunc, pPlan.FormType]), 'begin',
+        Format('  if %s = nil then Result:= nil else Result:= %0:s.AsForm;', [pPlan.VarName]), 'end;', '']);
     L.Add('end.');
     Result:= JoinCrLf(L.ToArray) + #13#10;
   finally
@@ -760,6 +862,11 @@ begin
         Decls.Add(Format('      procedure HubSet%s(const pValue: %s);', [M.Name, M.TypeText]));
         Bodies.AddRange([Format('procedure %s.HubSet%s(const pValue: %s);', [FClass.Name, M.Name, M.TypeText]), 'begin', '  ' + M.Name + ':= pValue;', 'end;', '']);
       end;
+    end;
+    if pPlan.AsForm then
+    begin
+      Decls.Add(Format('      function HubGetAsForm: %s;', [pPlan.FormType]));
+      Bodies.AddRange([Format('function %s.HubGetAsForm: %s;', [FClass.Name, pPlan.FormType]), 'begin', '  Result:= Self;', 'end;', '']);
     end;
     Decls.AddRange(['    public', '      procedure AfterConstruction; override;', '      procedure BeforeDestruction; override;']);
     Bodies.AddRange([Format('procedure %s.AfterConstruction;', [FClass.Name]), 'begin',
@@ -884,7 +991,27 @@ begin
         Inc(pSpoke.Receivers);
       end
       else if Copy(pText, Dot, 2) = ':=' then Refuse('member-write', Format('`%s :=` writes the global', [Id]), I)
-      else Refuse('bare-use', Format('`%s` used as a value (phase P4: AsForm)', [Id]), I);
+      else if InWithHead(pText, Mask, I) then Refuse('with-member', Format('`with %s do`: a with block needs restructuring', [Id]), I)
+      else if CharBefore(pText, I) = '@' then Refuse('member-write', Format('`@%s` takes the global''s address', [Id]), I)
+      else
+      begin
+        { P4: `Assigned(<global>)` asks the surface global; any other bare use passes <var>AsForm }
+        var Call:= EnclosingCall(pText, Mask, I);
+        if MatchText(Call, ['FreeAndNil', 'CreateForm']) then Refuse('member-write', Format('`%s` is passed to %s by reference', [Id, Call]), I)
+        else if SameText(Call, 'Assigned') and (CharBefore(pText, I) = '(') and (Dot <= Length(pText)) and (pText[Dot] = ')') then
+        begin
+          Emit.Append(pText, Last - 1, I - Last).Append(pPlan.VarName);
+          Last:= I + Length(Id);
+          Inc(pSpoke.Assigns);
+        end
+        else if pPlan.FormType = '' then Refuse('bare-use', Format('`%s` used as a value: %s', [Id, pPlan.FormWhy]), I)
+        else
+        begin
+          Emit.Append(pText, Last - 1, I - Last).Append(pPlan.FormFunc);
+          Last:= I + Length(Id);
+          Inc(pSpoke.Values);
+        end;
+      end;
       Inc(I, Length(Id));
     end;
     Emit.Append(pText, Last - 1, Length(pText) - Last + 1);
@@ -1236,7 +1363,8 @@ begin
     Result.SurfaceUnit:= Result.HubUnit + '.Hub';
     Result.SurfacePath:= TPath.Combine(ExtractFilePath(Result.HubPath), Result.SurfaceUnit + '.pas');
     PlanMembers(Result, Names);
-    if NamesClash(Result) or not BuildHubText(Result, HubText) then Exit;
+    if NamesClash(Result) then Exit;
+    PlanFormType(Result);
     Spokes:= TList<THubSpoke>.Create;
     try
       for var U in pGroup do
@@ -1245,6 +1373,9 @@ begin
     finally
       Spokes.Free;
     end;
+    { P4: AsForm joins the surface (and the hub's accessors) only when a rewritten spoke passes the global }
+    for var S in Result.Spokes do
+      if (S.Refusal = '') and (S.Values > 0) then Result.AsForm:= True;
     { P3: the hub's free routines the rewritten spokes still call go through R1 pointers in the surface unit }
     PlanRoutines(Result);
     for var I:= 0 to High(Result.Spokes) do
@@ -1253,7 +1384,7 @@ begin
       FinishSpoke(Result, Result.Spokes[I]);
     end;
     for var I:= 0 to High(Result.Routines) do Result.Routines[I]:= FRoutines[LowerCase(Result.Routines[I].Name)];
-    if not AddRoutineAssigns(Result) then Exit;
+    if not BuildHubText(Result, HubText) or not AddRoutineAssigns(Result) then Exit;
     Result.SurfaceText:= BuildSurfaceText(Result, SurfaceUsesList(HubText));
   finally
     Globals.Free;
@@ -1410,6 +1541,27 @@ begin
   if Named > CMaxNamedSpokes then pOut.Add(Format('  - (+%d more spokes keep a routine)', [Named - CMaxNamedSpokes]));
 end;
 
+{ P4: the bare uses of the global the rewritten spokes carry }
+procedure RenderBareUses(const pPlan: THubGroupPlan; const pOut: TStrings);
+var
+  Values, Assigns: Integer;
+begin
+  Values := 0;
+  Assigns:= 0;
+  for var S in pPlan.Spokes do
+    if S.Refusal = '' then
+    begin
+      Inc(Values, S.Values);
+      Inc(Assigns, S.Assigns);
+    end;
+  if Values + Assigns = 0 then Exit;
+  if Values = 0 then
+    pOut.Add(Format('- bare uses (phase P4): %d `Assigned(%s)` -> `Assigned(%s)`; 0 passed as a value', [Assigns, pPlan.GlobalName, pPlan.VarName]))
+  else
+    pOut.Add(Format('- bare uses (phase P4): %d `Assigned(%s)` -> `Assigned(%s)`; %d passed as a value through `%s: %s` (`%2:s.AsForm`, nil while `%2:s` is nil)',
+      [Assigns, pPlan.GlobalName, pPlan.VarName, Values, pPlan.FormFunc, pPlan.FormType]));
+end;
+
 procedure RenderGroup(const pPlan: THubGroupPlan; const pOut: TStrings);
 begin
   pOut.Add(Format('## Group %d (%d units): hub-surface recipe R3', [pPlan.Index, pPlan.Size]));
@@ -1424,6 +1576,7 @@ begin
   RenderMembers(pPlan, pOut);
   RenderRoutines(pPlan, pOut);
   RenderSpokes(pPlan, pOut);
+  RenderBareUses(pPlan, pOut);
   pOut.Add(Format('- hub edits (`%s`): interface uses + `%s`; heritage + `%s`; accessors; hand-over `%s:= Self` in AfterConstruction (before inherited), `%3:s:= nil` in BeforeDestruction',
     [ExtractFileName(pPlan.HubPath), pPlan.SurfaceUnit, pPlan.IntfName, pPlan.VarName]));
   if pPlan.Breaks then pOut.Add(Format('- prediction: the group breaks -- no cycle left among these %d units', [pPlan.Size]))

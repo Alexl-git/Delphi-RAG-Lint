@@ -368,7 +368,9 @@ try {
     @('f12', 'manual-edit', 'the heritage of `TDemoGagePort` is not on its declaration line', $cleanDir, @(, @($G, '  TDemoGagePort = class(TComponent)', "  TDemoGagePort = class(TComponent,`n    IUnknown"))),
     @('f13', 'no-iinterface', 'no ancestor of `TDemoGagePort` implements IInterface', $cleanDir, @(, @($G, '  TDemoGagePort = class(TComponent)', '  TDemoGagePort = class(TObject)'))),
     @('f14', 'ref-counted', 'descends from `TInterfacedObject`, which counts references', $cleanDir, @(, @($G, '  TDemoGagePort = class(TComponent)', '  TDemoGagePort = class(TInterfacedObject)'))),
-    @('f15', 'receiver-unknown', 'the static type of `GetOwner`', $cleanDir, @(, @($U, '  with Owner as TDemoGagePort do', '  with GetOwner as TDemoGagePort do'))),
+    # lane 149 CYB (149-CY-8b): an unguarded `as` on an unknown receiver now goes through the As<Surface> helper; it
+    # still refuses receiver-unknown when the helper's name is taken
+    @('f15', 'receiver-unknown', 'the static type of `GetOwner`', $cleanDir, @(@($U, '  with Owner as TDemoGagePort do', '  with GetOwner as TDemoGagePort do'), @($U, "`nend.", "`nprocedure AsDemoGagePortSurface;`nbegin`nend;`n`nend."))),
     # f16 (cast-unseen on an IInterface ancestor declared in the cycle) became mechanical in W6 C1: see f16c1 below
     @('f17', 'with-member', '`Free` is a method of the library ancestor `TObject`', $cleanDir, @(, @($U, "    Log.Add('data ' + InBuf);", "    Log.Add('data ' + InBuf);`n    Free;"))),
     @('f18', 'ancestry-unknown', 'the ancestry of `TDemoGagePort` stops at `TComponent`', $cleanDir, @(@($U, "  if not (Owner is TDemoGagePort) then`n    Exit;`n  with Owner as TDemoGagePort do`n    Log.Add(Format('ui connected (last gage %d)', [LastGage]));`n", ''), @($U, 'Sender: TObject', 'Sender: TComponent')), 'stub'),
