@@ -2348,7 +2348,9 @@ type
       /// </remarks>
       function GetEnumValueSymbols: TArray<TEnumValueDecl>;
       /// <summary>Implements ISymbolStore.GetUnitLevelValueDecls -- every const
-      /// and var parented directly by a unit symbol.</summary>
+      /// and var parented directly by a unit or program symbol, plus a
+      /// parentless const/var declared in a .dpr (a program's top level on an
+      /// index whose extractor wrote no program symbol).</summary>
       /// <returns>Empty when the index holds none; otherwise one TSymbol per
       /// row with Id, FileId, ParentId, Kind, Name, Signature, Section set.</returns>
       /// <exception cref="Exception">via TSymbolKindHelper.FromText when a kind
@@ -4856,6 +4858,7 @@ uses
   , DRagLint.Core.Versions { REBUILD_IN_PROGRESS_META_KEY: ClearAllFiles stamps it (B-23) }
   , DRagLint.Query  .Fuzzy
   , DRagLint.Query.IdentWords { SplitIdentifierWords: concept-search tokens (BuildSymbolSearch) }
+  , DRagLint.Query.Callers { 150-RS2 (2): LocateArgument + ParamModeAt for PersistArgUses }
   { DRagLint.Index.CallResolver (v14, D5: the receiver-typing engine for
     ResolveCallTargets) moved to the INTERFACE uses on 2026-09-23 -- see the
     note there. Listing it in both sections is a duplicate-uses error. }
@@ -8713,6 +8716,25 @@ begin
       Q.Next;
     end;
     Q.Close;
+    { 150-RS2 (6): the OTHER ON DELETE SET NULL channel. A row anywhere whose receiver type
+      (call_edges, member_accesses) or accessor (member_accesses) is a symbol of this file loses
+      that id when the file is re-emitted, and its ref's NAME need not be one this file declares
+      (`Thing.Run` reaches TBase.Run through TEditThing): put the names of those refs in scope so
+      the scoped pass rewrites them as the whole pass does. Indexed lookups (idx_call_edges_receiver,
+      idx_member_accesses_receiver / _accessor). }
+    Q.SQL.Text:= 'SELECT r.name_text FROM refs r JOIN call_edges ce ON ce.ref_id = r.id ' +
+                 'WHERE ce.receiver_type_symbol_id IN (SELECT id FROM symbols WHERE file_id = :f) ' +
+                 'UNION SELECT r.name_text FROM refs r JOIN member_accesses ma ON ma.ref_id = r.id ' +
+                 'WHERE ma.receiver_type_symbol_id IN (SELECT id FROM symbols WHERE file_id = :f) ' +
+                 '   OR ma.accessor_symbol_id IN (SELECT id FROM symbols WHERE file_id = :f)';
+    Q.ParamByName('f').AsLargeInt:= AFileId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      if Q.Fields[0].AsString <> '' then FScopeNames.AddOrSetValue(LowerCase(Q.Fields[0].AsString), True);
+      Q.Next;
+    end;
+    Q.Close;
     { THE ONE MOMENT THE HERITAGE STILL EXISTS. A withdrawn type takes its
       symbols row -- and, by CASCADE, its type_ancestors rows -- with it, so by
       the time WidenScopeThroughRemovedTypes runs there is nothing left to ask
@@ -8772,7 +8794,9 @@ begin
     if HasMemberAccesses then
       MemberArm:=
         'UNION ALL ' +
-        'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, r.start_col, ''certain'' AS confidence, ma.mode ' +
+        'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, r.start_col, ''certain'' AS confidence, ma.mode, ' +
+        { 150-RS2 (2): the persisted var / out ARGUMENT use (accessor_kind on an accessor-less row). }
+        'CASE WHEN ma.accessor_symbol_id IS NULL AND ma.accessor_kind IN (''var-arg'', ''out-arg'') THEN ma.accessor_kind ELSE '''' END AS arg_use ' +
         'FROM member_accesses ma ' +
         'JOIN refs r ON r.id = ma.ref_id ' +
         'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
@@ -8823,7 +8847,7 @@ begin
     ValueArm:=
       'UNION ALL ' +
       'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, r.start_col, ''certain'' AS confidence, ' +
-      'CASE r.kind WHEN ''write'' THEN ''write'' ELSE ''read'' END AS mode ' +
+      'CASE r.kind WHEN ''write'' THEN ''write'' ELSE ''read'' END AS mode, '''' AS arg_use ' +
       'FROM refs r ' +
       'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
       'JOIN files f ON f.id = r.file_id ' +
@@ -8835,7 +8859,7 @@ begin
       { Wrapped in a subquery: a compound SELECT may only ORDER BY a result
         column, and the confidence CASE below is an expression. }
       'SELECT * FROM (' +
-      'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, r.start_col, ce.confidence, '''' AS mode ' +
+      'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, r.start_col, ce.confidence, '''' AS mode, '''' AS arg_use ' +
       'FROM call_edges ce ' +
       'JOIN refs r ON r.id = ce.ref_id ' +
       'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
@@ -8878,6 +8902,8 @@ begin
       R.Confidence:= Q.FieldByName('confidence').AsString;
       var ModeF: TField:= Q.FindField('mode');
       if (ModeF <> nil) and not ModeF.IsNull then R.Mode:= ModeF.AsString else R.Mode:= '';
+      var ArgF: TField:= Q.FindField('arg_use');
+      if (ArgF <> nil) and not ArgF.IsNull then R.ArgUse:= ArgF.AsString;
       List.Add(R);
       Q.Next;
     end; // while
@@ -9851,8 +9877,14 @@ begin
     Q.SQL.Text  := 'SELECT s.id, s.file_id, s.parent_id, s.kind, s.name, ' +
                    '       s.signature, s.section ' +
                    'FROM symbols s ' +
-                   'JOIN symbols p ON p.id = s.parent_id AND p.kind = ''unit'' ' +
-                   'WHERE s.kind IN (''const'',''var'')';
+                   'LEFT JOIN symbols p ON p.id = s.parent_id ' +
+                   'WHERE s.kind IN (''const'',''var'') ' +
+                   { 150-RS2 (4): a PROGRAM's top-level const/var is unit-level
+                     too -- parented by the program symbol (EX3), or parentless
+                     in a .dpr on an index written before that (P1 COne, P2 GRun). }
+                   '  AND (p.kind IN (''unit'',''program'') ' +
+                   '       OR (s.parent_id IS NULL AND EXISTS (SELECT 1 FROM files f ' +
+                   '           WHERE f.id = s.file_id AND LOWER(f.path) LIKE ''%.dpr'')))';
     Q.Open;
     { Bound ONCE after Open -- see GetEnumValueSymbols for why. }
     ColId     := Q.FieldByName('id'       );
@@ -17136,10 +17168,25 @@ begin
         var Found: Boolean:= False;
         if Text.EndsWith(')') then
         begin
-          var Open: Integer:= Pos('(', Text);
+          { 150-RS2 (1) / 149-RB1 2c: the call that ENDS the receiver is the one whose '(' matches the
+            last ')' (`A.GetB(Twice(3))`, `MakeA().GetB(2)`), and its name starts after the head's last
+            dot -- not at the start of the whole text, which is the call only for a bare head. }
+          var Open : Integer:= Length(Text);
+          var Depth: Integer:= 0;
+          while Open > 0 do
+          begin
+            if Text[Open] = ')' then Inc(Depth)
+            else if Text[Open] = '(' then
+            begin
+              Dec(Depth);
+              if Depth = 0 then Break;
+            end;
+            Dec(Open);
+          end;
           var Head: string := Copy(Text, 1, Open - 1);
-          if (Open > 1) and StartAt.TryGetValue(Format(POS_KEY, [Line, Col - 1 - Length(Text)]), Cand) then
-            Found:= SameText(Cand.Name, Head.Substring(Head.LastIndexOf('.') + 1));
+          var Dot : Integer:= Head.LastIndexOf('.');
+          if (Open > 1) and StartAt.TryGetValue(Format(POS_KEY, [Line, Col - 1 - Length(Text) + Dot + 1]), Cand) then
+            Found:= SameText(Cand.Name, Head.Substring(Dot + 1));
         end
         else if EndAt.TryGetValue(Format(POS_KEY, [Line, Col - 1]), Cand) then
           Found:= SameText(Cand.Name, Text.Substring(Text.LastIndexOf('.') + 1));
@@ -17216,6 +17263,125 @@ begin
   Result:= '[' + string.Join(',', Parts) + ']';
 end;
 
+{ 150-RS2 (2) / 150-RB2-a: persist the var / out ARGUMENT use of a member access. A
+  member_accesses 'read' row with no accessor (a field, a unit / class var) that is the WHOLE
+  argument of a var (read + write) or out (write) parameter of a resolved call gets
+  accessor_kind 'var-arg' / 'out-arg' (mode stays 'read'; spec
+  docs\superpowers\specs\2026-11-09-persist-arg-mode.md, option B). The classifier is
+  Query.Callers' own (LocateArgument + ParamModeAt), and the target is found the way its
+  TArgClassifier.TargetOf finds it (the ref at the callee position: refs.symbol_id, else its
+  certain call edge), so `usages --rw` reads back what it would have derived. Runs after every
+  edge writer, in the pass's transaction. Scoped: every row of a file that holds an in-scope ref
+  (the call that decides the mode is such a ref). Inc / Dec stays read-time (text only). }
+procedure PersistArgUses(AConn: TFDConnection; const AScopeWhere, AStaleWhere: string;
+  out ACandidates, AStored: Int64);
+var
+  Q    : TFDQuery;
+  QTgt : TFDQuery;
+  QSig : TFDQuery;
+  Upd  : TFDQuery;
+  Lines: TDictionary<string, TArray<string>>;
+  Callee: string;
+  CL, CC, Idx: Integer;
+begin
+  ACandidates:= 0;
+  AStored    := 0;
+  var Filter: string:= '';
+  if AScopeWhere <> '' then
+    Filter:= Filter + ' AND refs.file_id IN (SELECT DISTINCT refs.file_id FROM refs WHERE ' + AScopeWhere + ')';
+  if AStaleWhere <> '' then Filter:= Filter + ' AND (' + AStaleWhere + ')';
+  Q    := TFDQuery.Create(nil);
+  QTgt := TFDQuery.Create(nil);
+  QSig := TFDQuery.Create(nil);
+  Upd  := TFDQuery.Create(nil);
+  Lines:= TDictionary<string, TArray<string>>.Create;
+  try
+    QTgt.Connection:= AConn;
+    QTgt.SQL.Text  := 'SELECT refs.symbol_id, (SELECT ce.target_symbol_id FROM call_edges ce WHERE ce.ref_id = refs.id ' +
+                      'AND ce.confidence = ''certain'') AS tgt FROM refs WHERE refs.file_id = :f AND refs.start_line = :l ' +
+                      'AND refs.start_col = :c AND refs.name_text = :n COLLATE NOCASE ORDER BY refs.id';
+    QSig.Connection:= AConn;
+    QSig.SQL.Text  := 'SELECT signature FROM symbols WHERE id = :id';
+    Upd.Connection := AConn;
+    Upd.SQL.Text   := 'UPDATE member_accesses SET accessor_kind = :k WHERE ref_id = :r';
+    Upd.ParamByName('k').DataType:= ftWideString;
+    Upd.ParamByName('r').DataType:= ftLargeint;
+    Q.Connection:= AConn;
+    Q.SQL.Text  := 'SELECT ma.ref_id, ma.accessor_kind, refs.file_id, refs.start_line, refs.start_col, f.path ' +
+                   'FROM member_accesses ma JOIN refs ON refs.id = ma.ref_id JOIN files f ON f.id = refs.file_id ' +
+                   'WHERE ma.mode = ''read'' AND ma.accessor_symbol_id IS NULL ' +
+                   'AND (ma.accessor_kind IS NULL OR ma.accessor_kind IN (''var-arg'', ''out-arg''))' + Filter;
+    Q.Open;
+    var FRef : TField:= Q.FieldByName('ref_id');
+    var FKind: TField:= Q.FieldByName('accessor_kind');
+    var FFile: TField:= Q.FieldByName('file_id');
+    var FLine: TField:= Q.FieldByName('start_line');
+    var FCol : TField:= Q.FieldByName('start_col');
+    var FPath: TField:= Q.FieldByName('path');
+    while not Q.Eof do
+    begin
+      Inc(ACandidates);
+      var Path: string:= FPath.AsString;
+      var Src : TArray<string>;
+      if not Lines.TryGetValue(Path, Src) then
+      begin
+        Src:= nil;
+        try
+          if TFile.Exists(Path) then Src:= TFile.ReadAllLines(Path);
+        except
+          on E: EInOutError do Src:= nil;
+          on E: EEncodingError do Src:= nil;
+        end;
+        Lines.Add(Path, Src);
+      end;
+      var Kind: string:= '';
+      if (Length(Src) > 0) and LocateArgument(Src, FLine.AsInteger, FCol.AsInteger,
+           Callee, CL, CC, Idx)
+         and not ((Idx = 0) and (SameText(Callee, 'Inc') or SameText(Callee, 'Dec'))) then
+      begin
+        var Target: Int64:= 0;
+        QTgt.ParamByName('f').AsLargeInt := FFile.AsLargeInt;
+        QTgt.ParamByName('l').AsInteger  := CL;
+        QTgt.ParamByName('c').AsInteger  := CC;
+        QTgt.ParamByName('n').AsWideString:= Callee;
+        QTgt.Open;
+        while (Target = 0) and not QTgt.Eof do
+        begin
+          if (not QTgt.Fields[0].IsNull) and (QTgt.Fields[0].AsLargeInt > 0) then Target:= QTgt.Fields[0].AsLargeInt
+          else if not QTgt.Fields[1].IsNull then Target:= QTgt.Fields[1].AsLargeInt;
+          QTgt.Next;
+        end;
+        QTgt.Close;
+        if Target > 0 then
+        begin
+          QSig.ParamByName('id').AsLargeInt:= Target;
+          QSig.Open;
+          var Mode: string:= if QSig.Eof then '' else ParamModeAt(QSig.Fields[0].AsString, Idx);
+          QSig.Close;
+          if Mode = 'var' then Kind:= 'var-arg'
+          else if Mode = 'out' then Kind:= 'out-arg';
+        end;
+      end;
+      var Have: string:= if FKind.IsNull then '' else FKind.AsString;
+      if Kind <> Have then
+      begin
+        if Kind = '' then Upd.ParamByName('k').Clear else Upd.ParamByName('k').AsWideString:= Kind;
+        Upd.ParamByName('r').AsLargeInt:= FRef.AsLargeInt;
+        Upd.ExecSQL;
+      end;
+      if Kind <> '' then Inc(AStored);
+      Q.Next;
+    end;
+    Q.Close;
+  finally
+    Lines.Free;
+    Upd.Free;
+    QSig.Free;
+    QTgt.Free;
+    Q.Free;
+  end;
+end;
+
 function TSQLiteSymbolStore.ExtraStoresDeclineReason(const AExtraStores: TArray<ISymbolStore>): string;
 begin
   { Order: the two library tests first, so the scoping predicate's own queries are not run
@@ -17228,6 +17394,11 @@ begin
     Exit('extra stores are attached and the library changed since this database''s edges were bound ' +
          '(external_stores differs)');
   Result:= ScopedResolveDeclineReason;
+  { 150-RS2 (5): `index --library-db` forces the pass even when no file was written; with the
+    library unchanged (tested above) and a complete edge set there is nothing to re-derive, so the
+    pass is scoped over zero files like any write run -- not the whole database "because this run
+    recorded no file writes". Guard run_scoped_calls_all_tables_guard N1-N3. }
+  if (Result = RESOLVE_REASON_NO_WRITES) and not CallEdgesNeedRebuild then Result:= '';
   if Result <> '' then Exit;
   { Type-name SET equality, not the additions/removals widenings: those walk LOCAL
     declarations only, and a local type added or withdrawn can shadow or un-shadow a library
@@ -17286,6 +17457,8 @@ var
     and its reconciliation keep meaning what their labels say. }
   WrittenUnitValues: Int64  ; { rung 3d -- unit-qualified vars/consts bound by the main stream }
   UnitValuesBefore : Int64  ; { Resolver.UnitValueBound before this ref's ResolveOne       }
+  EnumBefore       : Int64  ; { found-in-150: Resolver.EnumStats.Bound before ResolveOne   }
+  WrittenOtherValues: Int64 ; { found-in-150: rung 3c answers that are NOT enum values      }
   EnumCandidates: Int64     ; { Shape A -- bare `read` rows examined by the enum stream   }
   EnumBound     : Int64     ; { Shape A -- of those, the rows that bound                  }
   EnumShadowDecls: Int64    ; { size of the R3(c) unit-level const/var shadow set         }
@@ -17414,6 +17587,7 @@ begin
   Written := 0;
   WrittenValues  := 0;
   WrittenUnitValues:= 0;
+  WrittenOtherValues:= 0;
   EnumCandidates := 0;
   EnumBound      := 0;
   EnumShadowDecls:= 0;
@@ -17666,6 +17840,7 @@ begin
         if BeatRefs mod RESOLVE_BEAT_EVERY = 0 then BeatProgress(BeatRefs); { 1.40 heartbeat: the 37-minute pass is not silent }
         if Profiled then TMark:= TStopwatch.GetTimeStamp;
         UnitValuesBefore:= Resolver.UnitValueBound;
+        EnumBefore      := Resolver.EnumStats.Bound;
         Edge:= Resolver.ResolveOne(Ref);
         if Profiled then Inc(AccRes, TStopwatch.GetTimeStamp - TMark);
         { v20: persist the receiver for EVERY call ref, resolved or not. The
@@ -17723,6 +17898,8 @@ begin
             that moves UnitValueBound, so it is counted on the unit-values line,
             not into Written (reported as edge(s), which it earns none of). }
           if Resolver.UnitValueBound > UnitValuesBefore then Inc(WrittenUnitValues)
+          else if Edge.ValueOnly and (Resolver.EnumStats.Bound > EnumBefore) then Inc(WrittenValues) // 150-RS2 (3): rung 3c's use edge, not a call edge
+          else if Edge.ValueOnly then Inc(WrittenOtherValues)
           else Inc(Written);
         end
         { 2026-09-23 (enum-value-ref-binding): a QUALIFIED enum value --
@@ -17739,7 +17916,8 @@ begin
           FQSetRefSymbol.ParamByName('sid').AsLargeInt:= Edge.TargetSymbolId;
           FQSetRefSymbol.ParamByName('rid').AsLargeInt:= Ref.Id;
           FQSetRefSymbol.ExecSQL;
-          Inc(WrittenValues);
+          { found-in-150: a record-field initializer / class const bound by rung 3c is not an enum value }
+          if Resolver.EnumStats.Bound > EnumBefore then Inc(WrittenValues) else Inc(WrittenOtherValues);
         end
         else if Edge.TargetSymbolId > 0 then
         begin
@@ -17817,6 +17995,10 @@ begin
       TMark:= TStopwatch.GetTimeStamp;
       ResolveWriteRefs(Resolver, ScopeWhere, StaleWhere, WriteCandidates, WriteBound);
       TWrites:= (TStopwatch.GetTimeStamp - TMark) / TStopwatch.Frequency;
+      { 150-RS2 (2): after every member_accesses writer, before the derived streams. }
+      var ArgCandidates, ArgStored: Int64;
+      PersistArgUses(FConn, ScopeWhere, StaleWhere, ArgCandidates, ArgStored);
+      ResolveLog(Format('calls      arg-uses: %d of %d accessor-less member read(s) stored as a var / out argument', [ArgStored, ArgCandidates]));
       { B9 F1: the LAST stream, it reads what all the others wrote. }
       TMark:= TStopwatch.GetTimeStamp;
       { 149 IC round 3: the derived streams get a WIDER scope than the binding streams. }
@@ -17971,6 +18153,10 @@ begin
       ResolveLog(Format('calls      unit-values: WARNING -- the resolver counted %d unit-qualified ' +
         'var/const binding(s) but the store wrote %d. A resolved value did not reach refs.symbol_id; ' +
         'the write path is the place to look.', [Resolver.UnitValueBound, WrittenUnitValues]));
+    { found-in-150 (RS2): rung 3c's NON-enum answers -- a record-field name in a typed-const initializer
+      `(Alpha: 1)`, a class const -- on their own line; counted as Shape B they made the enum line print a
+      false WARNING on every index holding a typed record const. }
+    ResolveLog(Format('calls      other-values: %d qualified non-enum value ref(s) bound (record-field initializers, class consts)', [WrittenOtherValues]));
     { 2026-09-23 (parenless-call binding). Every decline by reason, for the same
       reason as the enum line above: a declined read writes nothing, so these
       numbers are the only trace of what the stream refused. The edges it wrote

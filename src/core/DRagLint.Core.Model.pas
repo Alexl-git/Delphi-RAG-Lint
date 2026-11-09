@@ -1141,6 +1141,11 @@ type
     /// -- a call_edges row IS the proof, so those callers are verified whatever
     /// this holds.</remarks>
     ReceiverText     : string;
+    /// <summary>150-RS2 (2): the persisted ARGUMENT use of a member_accesses 'read' row --
+    /// 'var-arg' (the whole argument of a var parameter of a resolved call) or 'out-arg' (of an
+    /// out parameter), stored by the calls pass in member_accesses.accessor_kind; '' otherwise.
+    /// Filled by FindResolvedCallers' member_accesses arm only.</summary>
+    ArgUse           : string;
   end;
 
   /// <summary>One property access that ran a METHOD accessor (getter or

@@ -4647,7 +4647,7 @@ var
     candidate is a forward when it has no heritage and no members and a LATER candidate of the same kind in
     the same file completes it. Answers the one candidate left after dropping forwards, or 0 (still ambiguous,
     or nothing was a forward). AInScopeOnly: consider only candidates the declaring file can see. }
-  function FullDeclOverForward(ACands: TList<TSymbol>; AFile: Int64; AInScopeOnly: Boolean): Int64;
+  function FullDeclOverForward(ACands: TList<TSymbol>; AFile: Int64; AInScopeOnly, ASiteGeneric: Boolean): Int64;
   var
     Seen: TList<TSymbol>;
     Left: Integer;
@@ -4657,7 +4657,9 @@ var
     Seen  := TList<TSymbol>.Create;
     try
       for var C: TSymbol in ACands do
-        if (not AInScopeOnly) or CandInScope(AFile, C.FileId) then Seen.Add(SymbolById(C.Id));
+        if ((not AInScopeOnly) or CandInScope(AFile, C.FileId))
+           and ((Trim(SymbolById(C.Id).GenericParams) <> '') = ASiteGeneric) then // 150-RS2 (7): not the generic twin
+          Seen.Add(SymbolById(C.Id));
       for var C: TSymbol in Seen do
       begin
         var IsForward: Boolean:= False;
@@ -4706,10 +4708,10 @@ begin
   else if (InScopeCount = 0) and (Cands.Count = 1) then
     Result:= Cands[0].Id
   else if InScopeCount = 0 then
-    Result:= FullDeclOverForward(Cands, ADeclFileId, False) // 149-RB1: one global def plus its forward
+    Result:= FullDeclOverForward(Cands, ADeclFileId, False, LtPos > 0) // 149-RB1: one global def plus its forward
   else
   begin
-    Result:= FullDeclOverForward(Cands, ADeclFileId, True); // 149-RB1: a forward is not a second type
+    Result:= FullDeclOverForward(Cands, ADeclFileId, True, LtPos > 0); // 149-RB1: a forward is not a second type
     if Result = 0 then Result:= PickShadowingType(Cands, ADeclFileId, Qual);
   end;
 end;
@@ -10342,6 +10344,46 @@ var
   Full : TSymbol         ;
   Count: Integer         ;
   Anc  : TTypeAncestor   ;
+
+  { 150-RS2 (7) / 150-RB2-d: ORM3 IuMicObject.pas declares `IDataService = interface;`, `IDataService<I> =
+    interface;` and both full declarations -- four candidates of one name, so every use declined (443 of the
+    444 ambiguous type_use refs on CLIENT). Drops (a) a one-line forward (no heritage, no members, start line =
+    end line) that a LATER same-kind candidate of the same file completes, and (b) the generic twin the site
+    cannot name: a site followed by `<` names a generic declaration, a bare site a non-generic one. Arity
+    beyond generic-or-not is not split (a `<A>` / `<A,B>` pair stays a tie). Answers ACands unchanged when
+    the site text cannot be read or the filter would leave nothing. }
+  function DropForwardsAndTwins(const ACands: TArray<Int64>; const ASite: TReference;
+    ASiteLines: TStringList): TArray<Int64>;
+  begin
+    Result:= [];
+    var SiteGeneric: Integer:= -1; // -1 unknown, 0 bare, 1 generic
+    if (ASiteLines <> nil) and (ASite.StartLine >= 1) and (ASite.StartLine <= ASiteLines.Count) then
+    begin
+      var L: string:= ASiteLines[ASite.StartLine - 1];
+      if SameText(Copy(L, ASite.StartCol, Length(ASite.NameText)), ASite.NameText) then
+      begin
+        var P: Integer:= ASite.StartCol + Length(ASite.NameText);
+        while (P <= Length(L)) and (L[P] = ' ') do Inc(P);
+        SiteGeneric:= if (P <= Length(L)) and (L[P] = '<') then 1 else 0;
+      end;
+    end;
+    for var Id: Int64 in ACands do
+    begin
+      var C: TSymbol:= SymbolById(Id);
+      if (SiteGeneric >= 0) and ((Trim(C.GenericParams) <> '') <> (SiteGeneric = 1)) then Continue;
+      var IsForward: Boolean:= False;
+      if (Trim(C.Heritage) = '') and (C.StartLine = C.EndLine) and (ChildrenOf(C.Id).Count = 0) then
+        for var Other: Int64 in ACands do
+        begin
+          var D: TSymbol:= SymbolById(Other);
+          if (D.Id <> C.Id) and (D.FileId = C.FileId) and (D.Kind = C.Kind) and (D.StartLine > C.StartLine) then
+            IsForward:= True;
+        end;
+      if not IsForward then Result:= Result + [Id];
+    end;
+    if Length(Result) = 0 then Result:= ACands;
+  end;
+
 begin
   Result := 0;
   AReason:= BareReadSite(ARef, Lines, Rcv);
@@ -10399,6 +10441,8 @@ begin
           if SameText(Full.Section, 'interface') and (Full.ParentId > 0)
              and (SymbolById(Full.ParentId).ParentId <= 0) then Ids:= Ids + [S.Id];
         end;
+      Ids:= DropForwardsAndTwins(Ids, ARef, Lines);
+      if Length(Ids) = 1 then Exit(Ids[0]);
       Result:= UsesOrderPick(Ids, ARef.FileId, ARef.StartLine);
       if Result = 0 then AReason:= 'ambiguous';
     end;
@@ -10853,7 +10897,16 @@ begin
         if Result.MemberMode = '' then Result.MemberMode:= 'read';
       end
       else
-        Result.ValueOnly:= True;
+      begin
+        { 150-RS2 (3) / 150-RB2-b: rung 3c (`TCmd.cmdLoad`) gets the use edge its bare form gets from
+          ResolveEnumValueRefs -- a member_accesses row with the mode, receiver = the declaring enum /
+          class / record. ValueOnly stays set: the store counts it on the values line, not as an edge. }
+        var Mode: string:= MemberAccessMode(ACallRef);
+        var Use: TCallEdge:= ValueUseEdge(ACallRef, Target, if Mode = '' then 'read' else Mode);
+        Result.MemberMode:= Use.MemberMode; // '' (identity only) for a routine-local value
+        if Use.ReceiverTypeSymbolId > 0 then Result.ReceiverTypeSymbolId:= Use.ReceiverTypeSymbolId;
+        Result.ValueOnly := True;
+      end;
       Exit;
     end;
   end;

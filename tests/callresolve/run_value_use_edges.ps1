@@ -17,6 +17,9 @@
   CONTROLS (green on both engines): A6 LOCAL_C (routine-local const) read is bound but has NO
   row; A7 L (local var) write has NO row; A8 every pinned site is still bound (refs.symbol_id).
   POSITIVE CONTROL: on 1.48.0-alpha A1-A5 are RED (no rows), A6-A8 green.
+  150-RS2 (3): A9 qualified enum value TValKind.vkOne (rung 3c) -> read row, receiver TValKind;
+  A10 CONTROL the store's enum-values line agrees with the resolver (green on both; red if 3c is counted as an edge).
+  A9 RED on 1.49.0-alpha (identity only).
   Run from any CWD, pwsh 7. Pass -Exe with the engine under test.
 #>
 [CmdletBinding()]
@@ -77,6 +80,7 @@ begin
   K:= vkTwo; // A4
   L:= LOCAL_C; // A6
   L:= 5; // A7
+  K:= TValKind.vkOne; // A9
   if K = vkOne then L:= L + 1;
 end;
 end.
@@ -92,9 +96,9 @@ end.
 
 $db = Join-Path $WorkDir 'app.sqlite'
 Push-Location C:\TEMP
-& $exePath index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | Out-Null
+$idxOut = & $exePath index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | Out-String
 Check 'V index built' (Test-Path $db) $db
-$raw = & $exePath sql --db $db --json --limit 500 --query "SELECT f.path, r.start_line, r.kind, r.name_text, CASE WHEN r.symbol_id IS NULL THEN 0 ELSE 1 END, coalesce(m.mode,''), coalesce(t.qualified_name,'') FROM refs r JOIN files f ON f.id = r.file_id LEFT JOIN member_accesses m ON m.ref_id = r.id LEFT JOIN symbols t ON t.id = m.receiver_type_symbol_id WHERE r.kind IN ('read','write') ORDER BY f.path, r.start_line" | Out-String
+$raw = & $exePath sql --db $db --json --limit 500 --query "SELECT f.path, r.start_line, r.kind, r.name_text, CASE WHEN r.symbol_id IS NULL THEN 0 ELSE 1 END, coalesce(m.mode,''), coalesce(t.qualified_name,'') FROM refs r JOIN files f ON f.id = r.file_id LEFT JOIN member_accesses m ON m.ref_id = r.id LEFT JOIN symbols t ON t.id = m.receiver_type_symbol_id WHERE r.kind IN ('read','write','member-access') ORDER BY f.path, r.start_line" | Out-String
 Pop-Location
 $rows = foreach ($r in ($raw | ConvertFrom-Json).rows) { [pscustomobject]@{ File=[IO.Path]::GetFileNameWithoutExtension([string]$r[0]); Line=[int]$r[1]; Kind=[string]$r[2]; Name=[string]$r[3]; Bound=[int]$r[4]; Mode=[string]$r[5]; Rcv=[string]$r[6] } }
 Check "V read/write refs were read ($(@($rows).Count))" (@($rows).Count -ge 7) $raw
@@ -111,6 +115,11 @@ $s = Site 'uUser' 'A6' 'LOCAL_C' 'read'; Check "A6 CONTROL routine-local const r
 $s = Site 'uUser' 'A7' 'L' 'write';      Check "A7 CONTROL local var write has NO row ($(Desc $s))" ($null -ne $s -and $s.Mode -eq '')
 $all = @(foreach ($p in @(@('uUser','A1','GCount','read'),@('uUser','A2','GCount','write'),@('uUser','A3','MAX_N','read'),@('uUser','A4','vkTwo','read'),@('uVals','A5','Shared','write'))) { Site $p[0] $p[1] $p[2] $p[3] })
 Check "A8 CONTROL the five pinned sites are bound (refs.symbol_id)" ((@($all | Where-Object { $_ -and $_.Bound -eq 1 })).Count -eq 5) (($all | ForEach-Object { Desc $_ }) -join '; ')
+# 150-RS2 (3) / 150-RB2-b: the QUALIFIED enum value (rung 3c) gets the same use edge as A4's bare form,
+# and the store counts it on the enum-values line (resolver and store agree), not as a call edge.
+$s = Site 'uUser' 'A9' 'vkOne' 'member-access'; Check "A9 TValKind.vkOne (qualified, rung 3c) -> read, receiver uVals.TValKind ($(Desc $s))" ($null -ne $s -and $s.Bound -eq 1 -and $s.Mode -eq 'read' -and $s.Rcv -ceq 'uVals.TValKind')
+$ev = @($idxOut -split "`r?`n" | Where-Object { $_ -match 'enum-values' })
+Check 'A10 CONTROL enum-values: resolver and store agree (3c counted as a value, not an edge)' ((@($ev | Where-Object { $_ -match 'resolver and store agree' }).Count -eq 1) -and (@($ev | Where-Object { $_ -match 'WARNING' }).Count -eq 0)) ($ev -join ' | ')
 
 Write-Host ''
 if ($script:fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }

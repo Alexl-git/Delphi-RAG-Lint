@@ -313,3 +313,11 @@ EXCLUDE resolvetypeat
 # it must move PROP_TYPES_FORMAT, never the resolver stamp. Matched the
 # vocabulary only through "Candidates". Classified 2026-10-30 (fix/1391).
 EXCLUDE findpropertyfillcandidates
+# 150-RS2: what the scoped pass re-derives (NoteScopeRemoval: the SET NULL receiver/accessor names;
+# ExtraStoresDeclineReason: no-write library runs scope) and the var/out argument post-pass with the two
+# Query.Callers text helpers it calls -- each decides rows the calls pass WRITES.
+src/storage/DRagLint.Storage.SQLite.pas::NoteScopeRemoval
+src/storage/DRagLint.Storage.SQLite.pas::ExtraStoresDeclineReason
+src/storage/DRagLint.Storage.SQLite.pas::PersistArgUses
+src/query/DRagLint.Query.Callers.pas::LocateArgument
+src/query/DRagLint.Query.Callers.pas::ParamModeAt
