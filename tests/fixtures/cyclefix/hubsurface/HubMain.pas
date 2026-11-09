@@ -10,6 +10,7 @@ type
     Log: TStringList;
   public
     Counter: Integer;
+    Mark: Char;
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure Note(const pText: string; pLevel: Integer = 0);

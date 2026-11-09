@@ -44,7 +44,8 @@ type
 /// planned (every reason is in pOut); 2 = a file could not be written or a bad group choice.</returns>
 /// <remarks>Planned only for a group with exactly one hub, one hub global and a hub class declared
 /// in the hub unit; members a spoke reads that are not plain fields or methods of that class, a
-/// bare use, a write or a var-parameter use of the global refuse that spoke, never the group.</remarks>
+/// bare use, a write to the global or a designer field, or a var-parameter use refuse that spoke,
+/// never the group; Inc / Dec of an integer plain field is rewritten to an assignment.</remarks>
 function RunHubSurface(const pStore: ISymbolStore; const pSccs: TList<TArray<string>>;
   const pGraph: TCycleGraph; const pOptions: THubSurfaceOptions; const pOut: TStrings): Integer;
 
@@ -245,21 +246,25 @@ end;
 
 { the [start, end) span of the uses clause that holds pUnit as an entry, in code; False when none }
 function FindUsesEntry(const pText: string; const pMask: TCodeMask; const pUnit: string;
-  out pEntryPos: Integer): Boolean;
+  out pEntryPos, pEntryLen: Integer): Boolean;
 var
   M: TMatch;
 begin
   pEntryPos:= 0;
+  pEntryLen:= 0;
+  var Pattern:= '';
+  for var Seg in pUnit.Split(['.']) do Pattern:= Pattern + (if Pattern = '' then '' else '\s*\.\s*') + TRegEx.Escape(Seg);
   for M in TRegEx.Matches(pText, '(?i)\buses\b') do
   begin
     if not pMask[M.Index] then Continue;
     var EndPos:= M.Index + M.Length;
     while (EndPos <= Length(pText)) and not ((pText[EndPos] = ';') and pMask[EndPos]) do Inc(EndPos);
     var Clause:= Copy(pText, M.Index, EndPos - M.Index);
-    for var E in TRegEx.Matches(Clause, '(?i)(?<![\w.])' + TRegEx.Escape(pUnit) + '(?![\w.])') do
+    for var E in TRegEx.Matches(Clause, '(?i)(?<![\w.])' + Pattern + '(?![\w.]|\s+\.)') do
       if pMask[M.Index + E.Index - 1] then
       begin
         pEntryPos:= M.Index + E.Index - 1;
+        pEntryLen:= E.Length;
         Exit(True);
       end;
   end;
@@ -480,9 +485,8 @@ begin
   try
     for var Entry in Code.Split([',']) do
     begin
-      var Name:= Trim(Entry);
-      var Sp:= Name.IndexOfAny([' ', #9, #13, #10]);
-      if Sp > 0 then Name:= Name.Substring(0, Sp);
+      { `Name in 'x.pas'` (its string masked out) and `FireDAC.Comp .Client` (blanks before a dot) }
+      var Name:= TRegEx.Replace(TRegEx.Replace(Trim(Entry), '\s+in\s*$', ''), '\s', '');
       if (Name <> '') and not InGroup(LowerCase(Name)) then Keep.Add(Name);
     end;
     Result:= string.Join(', ', Keep.ToArray);
@@ -637,6 +641,45 @@ var
     pSpoke.Refusal:= pKind;
     pSpoke.Why    := Format('line %d: %s', [LineOfPos(pText, pAt), pWhy]);
   end;
+  { `Inc(<global>.<field>[, N])` on an integer plain field becomes `<var>.<field>:= <var>.<field> + N`
+    (a property cannot be a var parameter); False leaves it to the refusal }
+  function TryIncDec(pAt, pMemEnd: Integer; const pMember: THubMember): Boolean;
+  var
+    Open, Start, Close, Depth, Comma: Integer;
+  begin
+    Result:= False;
+    if (pMember.Shape <> msReadWrite) or not MatchText(pMember.TypeText, ['Integer', 'Int64', 'Cardinal', 'NativeInt',
+      'NativeUInt', 'Word', 'Byte', 'SmallInt', 'ShortInt', 'LongInt', 'LongWord', 'UInt64']) then Exit;
+    Open := OpenParenBefore(pText, pAt);
+    var Op:= IdentBefore(pText, Open);
+    Start:= Open - 1;
+    while (Start >= 1) and CharInSet(pText[Start], [' ', #9]) do Dec(Start);
+    Start:= Start - Length(Op) + 1;
+    if Start < Last then Exit;
+    Close:= pMemEnd;
+    Depth:= 1;
+    Comma:= 0;
+    while (Close <= Length(pText)) and (Depth > 0) do
+    begin
+      if Mask[Close] then
+        case pText[Close] of
+          '(', '[': Inc(Depth);
+          ')', ']': Dec(Depth);
+          ',': if (Depth = 1) and (Comma = 0) then Comma:= Close;
+          ';': Exit;
+        end;
+      if Depth > 0 then Inc(Close);
+    end;
+    if Depth > 0 then Exit;
+    if Trim(Copy(pText, pMemEnd, (if Comma > 0 then Comma else Close) - pMemEnd)) <> '' then Exit;
+    var Step:= if Comma > 0 then '(' + Trim(Copy(pText, Comma + 1, Close - Comma - 1)) + ')' else '1';
+    var Target:= pPlan.VarName + '.' + pMember.Name;
+    Out_.Append(pText, Last - 1, Start - Last).Append(Format('%s:= %0:s %s %s', [Target, if SameText(Op, 'Inc') then '+' else '-', Step]));
+    Last:= Close + 1;
+    I   := Close + 1;
+    Inc(pSpoke.Receivers);
+    Result:= True;
+  end;
 begin
   Mask:= CodeMaskOf(pText);
   Out_:= TStringBuilder.Create;
@@ -669,7 +712,10 @@ begin
         else if Member.Refusal <> '' then Refuse(Member.Refusal, Format('reads `%s`: %s', [Mem, Member.Why]), I)
         else if (Member.Shape = msReadOnly) and (Copy(pText, After, 2) = ':=') then Refuse('member-write', Format('`%s.%s :=` writes a component field', [Id, Mem]), I)
         else if (CharBefore(pText, I) = '(') and MatchText(IdentBefore(pText, OpenParenBefore(pText, I)), ['Inc', 'Dec']) then
+        begin
+          if TryIncDec(I, MemPos + Length(Mem), Member) then Continue;
           Refuse('member-write', Format('`%s.%s` is a var parameter', [Id, Mem]), I);
+        end;
         Out_.Append(pText, Last - 1, I - Last).Append(pPlan.VarName);
         Last:= I + Length(Id);
         Inc(pSpoke.Receivers);
@@ -714,7 +760,7 @@ end;
 
 function THubSurfacePlanner.PlanSpoke(const pPlan: THubGroupPlan; const pStem: string): THubSpoke;
 var
-  Entry: Integer;
+  Entry, EntryLen: Integer;
 begin
   Result:= Default(THubSpoke);
   Result.Stem:= pStem;
@@ -737,14 +783,14 @@ begin
   if Result.Refusal <> '' then Exit;
   CollectKeepers(Result);
   var NewText:= Result.NewText;
-  if not FindUsesEntry(NewText, CodeMaskOf(NewText), pPlan.HubUnit, Entry) then
+  if not FindUsesEntry(NewText, CodeMaskOf(NewText), pPlan.HubUnit, Entry, EntryLen) then
   begin
     Result.Refusal:= 'manual-edit';
     Result.Why    := Format('no uses entry `%s` found', [pPlan.HubUnit]);
     Exit;
   end;
   var Repl:= if Length(Result.Keepers) > 0 then pPlan.HubUnit + ', ' + pPlan.SurfaceUnit else pPlan.SurfaceUnit;
-  Result.NewText:= Copy(NewText, 1, Entry - 1) + Repl + Copy(NewText, Entry + Length(pPlan.HubUnit), MaxInt);
+  Result.NewText:= Copy(NewText, 1, Entry - 1) + Repl + Copy(NewText, Entry + EntryLen, MaxInt);
 end;
 
 { the group after the plan: the cut spoke->hub edges removed, is it acyclic? (Kahn) }

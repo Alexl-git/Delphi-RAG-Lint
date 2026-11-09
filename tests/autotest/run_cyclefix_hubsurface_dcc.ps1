@@ -9,7 +9,7 @@
 #   h3  no cycle after a re-index
 #   n1  a bare use (Assigned(HubMainForm)) refuses that spoke: bare-use; the group stays
 #   n2  a write to a designer field refuses member-write
-#   n3  Inc(HubMainForm.Counter) refuses member-write (var parameter)
+#   n3  Inc on a Char plain field refuses member-write (var parameter); Inc / Dec on an Integer one is rewritten (h2.8)
 #   n4  a spoke that also calls a hub routine keeps the uses edge (HubStamp, phase P3); the group stays
 #   n5  an ancestor's member (Tag) is refused member-unsupported, and only its spoke
 #   n6  a two-unit knot has two hubs: not-hub-shaped, exit 1; --apply on it writes nothing
@@ -125,6 +125,8 @@ try {
   Check 'h2.4 HubSpokeB: receivers rewritten, comment and string literal untouched, uses HubMain.Hub only' ((Has $sb "HubMainHub.Note('B says HubMainForm.Log', 1);") -and (Has $sb '// HubMainForm.Note in a comment stays') -and ($sb -match '(?m)^\s+HubMain\.Hub;') -and ($sb -notmatch '(?m)^\s+HubMain;')) $sb
   $sc = [IO.File]::ReadAllText((Join-Path $P.Root 'HubSpokeC.pas'), $Ascii)
   Check 'h2.5 HubSpokeC: a lower-case receiver is rewritten too' ((Has $sc "HubMainHub.log.Add('C ' + BoolToStr(HubMainHub.Ready, True));")) $sc
+  $sa = [IO.File]::ReadAllText((Join-Path $P.Root 'HubSpokeA.pas'), $Ascii)
+  Check 'h2.8 HubSpokeA: Inc / Dec on an Integer field become assignments through the surface' ((Has $sa 'HubMainHub.Counter:= HubMainHub.Counter + (2);') -and (Has $sa 'HubMainHub.Counter:= HubMainHub.Counter - 1;') -and ($sa -notmatch 'Inc\(|Dec\(')) $sa
   $hm = [IO.File]::ReadAllText((Join-Path $P.Root 'HubMain.pas'), $Ascii)
   Check 'h2.6 HubMain: heritage, interface uses, hand-over' ((Has $hm 'class(TComponent, IHubMainHub)') -and (Has $hm 'System.Classes, System.SysUtils, HubMain.Hub;') -and (Has $hm 'HubMainHub:= Self;') -and (Has $hm 'HubMainHub:= nil;')) $hm
   Check 'h2.7 backups written' ((Test-Path (Join-Path $P.Root 'HubMain.pas.BCK1')) -and (Test-Path (Join-Path $P.Root 'HubSpokeA.pas.BCK1')))
@@ -138,9 +140,10 @@ try {
   $E = New-Proj 'hubsurface' 'HubSurface' { param($r) Edit-Text (Join-Path $r 'HubSpokeB.pas') "  if HubMainForm.Ready" "  HubMainForm.Log:= HubMainForm.Log;`n  if HubMainForm.Ready" }
   $o = (Get-HubPlan $E).Out
   Check 'n2 a write to a designer field: member-write' ($o -match '- refused `HubSpokeB\.pas`: member-write -- line \d+: `HubMainForm\.Log :=` writes a component field') $o
-  $E = New-Proj 'hubsurface' 'HubSurface' { param($r) Edit-Text (Join-Path $r 'HubSpokeA.pas') "  HubMainForm.Counter:= HubMainForm.Counter + 1;" "  Inc(HubMainForm.Counter);" }
+  $E = New-Proj 'hubsurface' 'HubSurface' { param($r) Edit-Text (Join-Path $r 'HubSpokeA.pas') "  HubMainForm.Counter:= HubMainForm.Counter + 1;" "  Inc(HubMainForm.Mark);
+  HubMainForm.Counter:= HubMainForm.Counter + 1;" }
   $o = (Get-HubPlan $E).Out
-  Check 'n3 Inc(HubMainForm.Counter): member-write, var parameter' ((Has $o '- refused `HubSpokeA.pas`: member-write') -and (Has $o 'is a var parameter')) $o
+  Check 'n3 Inc(HubMainForm.Mark) on a Char: member-write, var parameter' ((Has $o '- refused `HubSpokeA.pas`: member-write') -and (Has $o 'is a var parameter')) $o
   $E = New-Proj 'hubsurface' 'HubSurface' { param($r) Edit-Text (Join-Path $r 'HubSpokeC.pas') "  hubMainForm.log.Add(" "  HubStamp('c');`n  hubMainForm.log.Add(" }
   $o = (Get-HubPlan $E).Out
   Check 'n4 a hub routine keeps the edge (P3): 2 cut, 1 kept by HubStamp, the group stays' ((Has $o '- uses: 2 spokes drop `HubMain` (edge cut); 1 keep it for other hub symbols: `HubStamp` 1') -and (Has $o 'the group stays -- 1 spoke->hub edges remain')) $o

@@ -482,7 +482,7 @@ a new leaf unit `<Hub>.Hub` with an interface that has one property per field an
 method the spokes read through the global, the hub class implementing it (heritage, accessors, a
 hand-over in AfterConstruction / BeforeDestruction) and a receiver-only rewrite in every spoke
 (`frmMain.edtX.Text` becomes `MainHub.edtX.Text`); a spoke that names nothing else of the hub drops
-it from its uses. A bare use, a write to the global or to a designer field, a var-parameter use or
+it from its uses; `Inc` / `Dec` of an integer field becomes an assignment. A bare use, a write to the global or to a designer field, another var-parameter use or
 an ancestor's member refuses that spoke only. OFF by default; the dry run writes nothing, `--apply`
 writes one group and runs no compile gate yet: build the project after it.
 
