@@ -2042,6 +2042,11 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindResolvedCallers(ATargetSymbolId: Int64): TArray<TResolvedCaller>;
+      /// <summary>Implements ISymbolStore.FindAccessorEchoUses (same contract).</summary>
+      /// <param name="AAccessorSymbolId">The getter/setter routine's symbols.id.</param>
+      /// <returns>One TAccessorEchoUse per member_accesses row with that METHOD
+      /// accessor; empty without the table.</returns>
+      function FindAccessorEchoUses(AAccessorSymbolId: Int64): TArray<TAccessorEchoUse>;
       { v(ADP3 T3i review round 2): the '= True' default is declared ONCE, on
         ISymbolStore. Delphi binds a default from the STATIC type of the
         expression, so repeating it here would be two declarations of one
@@ -8329,6 +8334,63 @@ begin
     List.Free;
   end; // try
 end; // function
+
+function TSQLiteSymbolStore.FindAccessorEchoUses(AAccessorSymbolId: Int64): TArray<TAccessorEchoUse>;
+var
+  Q   : TFDQuery               ;
+  List: TList<TAccessorEchoUse>;
+  E   : TAccessorEchoUse       ;
+begin
+  Result:= nil;
+  if not HasMemberAccesses then Exit;
+  List:= TList<TAccessorEchoUse>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    { Same joins as FindResolvedCallers' member arm, so encl_qname / file_path
+      -- and hence Doc.Facts' Display|Location fold key -- agree with it. }
+    Q.SQL.Text:=
+      'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, r.start_col, ' +
+      'ma.mode, ma.member_symbol_id, m.name AS member_name ' +
+      'FROM member_accesses ma ' +
+      'JOIN refs r ON r.id = ma.ref_id ' +
+      'JOIN symbols m ON m.id = ma.member_symbol_id ' +
+      'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
+      'JOIN files f ON f.id = r.file_id ' +
+      'WHERE ma.accessor_symbol_id = :x AND ma.accessor_kind = ''method'' ' +
+      'ORDER BY m.name, encl_qname';
+    Q.ParamByName('x').AsLargeInt:= AAccessorSymbolId;
+    Q.Open;
+    var FMember: TField:= Q.FieldByName('member_symbol_id'   );
+    var FName  : TField:= Q.FieldByName('member_name'        );
+    var FEncl  : TField:= Q.FieldByName('enclosing_symbol_id');
+    var FQName : TField:= Q.FieldByName('encl_qname'         );
+    var FPath  : TField:= Q.FieldByName('file_path'          );
+    var FLine  : TField:= Q.FieldByName('start_line'         );
+    var FCol   : TField:= Q.FieldByName('start_col'          );
+    var FMode  : TField:= Q.FieldByName('mode'               );
+    while not Q.Eof do
+    begin
+      E:= Default(TAccessorEchoUse);
+      E.MemberSymbolId:= FMember.AsLargeInt;
+      E.MemberName    := FName.AsString;
+      E.Caller.EnclosingSymbolId:= if FEncl.IsNull then 0 else FEncl.AsLargeInt;
+      E.Caller.EnclosingQName:= FQName.AsString;
+      E.Caller.FullPath      := FPath.AsString;
+      E.Caller.Location      := ExtractFileName(E.Caller.FullPath);
+      E.Caller.CallSiteLine  := if FLine.IsNull then 0 else FLine.AsInteger;
+      E.Caller.CallSiteCol   := if FCol.IsNull then 0 else FCol.AsInteger;
+      E.Caller.Confidence    := 'certain';
+      E.Caller.Mode          := FMode.AsString;
+      List.Add(E);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end;
+end;
 
 /// <summary>v14 (D5): the AutoDocument '?' bucket -- name-matching CALL-SITE
 /// refs with NO call_edges row (untypable receiver). Ordered by file path then

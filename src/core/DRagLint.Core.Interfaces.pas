@@ -2360,6 +2360,19 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FindResolvedCallers(ATargetSymbolId: Int64): TArray<TResolvedCaller>;
+    /// <summary>The property accesses that ran the METHOD accessor
+    /// AAccessorSymbolId: every member_accesses row whose accessor_symbol_id is
+    /// it and whose accessor_kind is 'method', ordered by property name then
+    /// enclosing routine. Backs the 'Used in (via property X):' doc/hover line
+    /// of a getter or setter (wave 148 UP, spec 2026-09-14 sec 8.1).</summary>
+    /// <param name="AAccessorSymbolId">The getter/setter routine's symbols.id in
+    /// THIS store.</param>
+    /// <returns>One row per access site; empty when nothing reaches the routine
+    /// through a property, or on a DB without member_accesses.</returns>
+    /// <remarks>Read-only display reader; nothing in the resolve pass calls it.
+    /// A FIELD accessor is not an echo (FindResolvedCallers already lists those
+    /// accesses on the field itself).</remarks>
+    function FindAccessorEchoUses(AAccessorSymbolId: Int64): TArray<TAccessorEchoUse>;
     /// <summary>v14 (D5): the AutoDocument '?' bucket -- every CALL-SITE ref
     /// (kind = REF_KIND_CALL) whose name_text = AName AND that has NO call_edges
     /// row (its receiver could not be typed, so the resolver emitted no edge).

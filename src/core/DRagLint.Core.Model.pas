@@ -1128,6 +1128,23 @@ type
     ReceiverText     : string;
   end;
 
+  /// <summary>One property access that ran a METHOD accessor (getter or
+  /// setter): the echo row of a member_accesses row whose accessor is that
+  /// routine (spec 2026-09-14-use-edges-design.md sec 8.1 bullet 2).</summary>
+  /// <remarks>Filled by ISymbolStore.FindAccessorEchoUses only. Caller is the
+  /// accessing site exactly as FindResolvedCallers reports it (Mode 'read' |
+  /// 'write', Confidence 'certain'), so Doc.Facts folds it with the same
+  /// Display|Location key. The ids are meaningful only in the store that
+  /// produced the row.</remarks>
+  TAccessorEchoUse = record
+    /// <summary>symbols.id of the property that was accessed.</summary>
+    MemberSymbolId: Int64          ;
+    /// <summary>The property's own name (last segment), e.g. 'Value'.</summary>
+    MemberName    : string         ;
+    /// <summary>The accessing site.</summary>
+    Caller        : TResolvedCaller;
+  end;
+
 const
   /// <summary>Prefix of TResolvedCaller.Confidence on a name-bucket candidate
   /// whose refs.receiver_type_text names a project class or record unrelated to
