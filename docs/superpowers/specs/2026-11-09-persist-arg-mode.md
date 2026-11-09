@@ -21,13 +21,13 @@ Post-pass in Storage ResolveCallTargets after call edges + member accesses are w
 transaction): every member_accesses row mode 'read', accessor_symbol_id NULL, whose file holds an
 in-scope ref (whole pass: all) -> Query.Callers LocateArgument (exported) -> the call ref at the
 callee position (refs.symbol_id, else its certain call edge) -> ParamModeAt (exported) on the
-target's signature -> accessor_kind var-arg / out-arg / NULL (only rows whose accessor_kind is NULL or\r
+target's signature -> accessor_kind var-arg / out-arg / NULL (only rows whose accessor_kind is NULL or
 already an argument kind are touched).
 
 ## Read path
 FindResolvedCallers carries the stored value (TResolvedCaller.ArgUse). TArgClassifier: ArgUse set
 -> that; else the read-time path as before (Inc/Dec by text; var/out by target) -- kept as the
-fallback because identity-only rows (a local or parameter passed as var) have no member_accesses\r
+fallback because identity-only rows (a local or parameter passed as var) have no member_accesses
 row to store in, and a DB resolved before this build has none stored. No marker: the answer is the
 same either way, the stored value is read first. Acceptance: `usages --rw` output byte-identical on the fixture between the
 1.49 base (read-time) and this build (stored), plus SQL rows showing the stored kinds.
