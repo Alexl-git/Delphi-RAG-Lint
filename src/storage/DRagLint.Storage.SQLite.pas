@@ -3501,6 +3501,19 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure WriteExternalStores(const AExtraStores: TArray<ISymbolStore>; AScoped: Boolean);
+      /// <summary>149 IC: the external_stores value WriteExternalStores writes for these stores --
+      /// the ONE builder, so the scoping gate compares exactly what the last pass recorded.</summary>
+      /// <param name="AExtraStores">The stores the pass consults; nil entries are skipped.</param>
+      /// <returns>JSON array text of {path, indexer_fingerprint, resolver_fingerprint, indexed_at_unix}.</returns>
+      function ExternalStoresJson(const AExtraStores: TArray<ISymbolStore>): string;
+      /// <summary>149 IC: why a pass with extra stores attached may NOT be scoped ('' = it may).
+      /// Spec docs\superpowers\specs\2026-11-09-scoped-calls-with-library.md, option C.</summary>
+      /// <param name="AExtraStores">The attached stores; must be non-empty.</param>
+      /// <returns>'' only when the stored external_stores equals ExternalStoresJson(AExtraStores)
+      /// (the library did not change since this DB's edges were bound), ScopedResolveDeclineReason
+      /// is '', and this run neither added nor withdrew a declared type name (a library type can
+      /// be shadowed or un-shadowed, which no local widening sees).</returns>
+      function ExtraStoresDeclineReason(const AExtraStores: TArray<ISymbolStore>): string;
       /// <summary>Implements ISymbolStore.ResolveDispatch: runs TDispatchResolver,
       /// then wipes and rewrites dispatch_edges and classref_args in one
       /// transaction.</summary>
@@ -16467,7 +16480,28 @@ end;
 
 procedure TSQLiteSymbolStore.WriteExternalStores(const AExtraStores: TArray<ISymbolStore>; AScoped: Boolean);
 const
-  KEY = 'external_stores';
+  KEY     = 'external_stores';
+  PARTIAL = '"partial":true';
+begin
+  if Length(AExtraStores) = 0 then
+  begin
+    if not AScoped then FConn.ExecSQL('DELETE FROM schema_meta WHERE key = ''external_stores''')
+    else
+    begin
+      { 149 IC, the history hole: a scoped pass WITHOUT stores re-resolved some refs with no
+        library, so the key no longer describes every row. Mark it partial (readers that only
+        test it for non-empty are unaffected); ExtraStoresDeclineReason then never matches it
+        and the next library run goes whole and rewrites a clean key. }
+      var Stored: string:= GetMetaValue(KEY);
+      if (Stored <> '') and not Stored.Contains(PARTIAL) then
+        SetMetaValue(KEY, Stored.Replace('{"path":', '{' + PARTIAL + ',"path":'));
+    end;
+    Exit;
+  end;
+  SetMetaValue(KEY, ExternalStoresJson(AExtraStores));
+end;
+
+function TSQLiteSymbolStore.ExternalStoresJson(const AExtraStores: TArray<ISymbolStore>): string;
 
   function J(const S: string): string;
   begin
@@ -16477,11 +16511,6 @@ const
 var
   Parts: TArray<string>;
 begin
-  if Length(AExtraStores) = 0 then
-  begin
-    if not AScoped then FConn.ExecSQL('DELETE FROM schema_meta WHERE key = ''external_stores''');
-    Exit;
-  end;
   Parts:= [];
   for var S: ISymbolStore in AExtraStores do
   begin
@@ -16494,7 +16523,37 @@ begin
       ',"resolver_fingerprint":' + J(S.GetMetaValue('resolver_fingerprint')) +
       ',"indexed_at_unix":' + J(S.GetMetaValue('indexed_at_unix')) + '}'];
   end;
-  SetMetaValue(KEY, '[' + string.Join(',', Parts) + ']');
+  Result:= '[' + string.Join(',', Parts) + ']';
+end;
+
+function TSQLiteSymbolStore.ExtraStoresDeclineReason(const AExtraStores: TArray<ISymbolStore>): string;
+begin
+  { Order: the two library tests first, so the scoping predicate's own queries are not run
+    when the library alone decides (the order the boolean this replaced had). }
+  var Stored: string:= GetMetaValue('external_stores');
+  if Stored = '' then
+    Exit('extra stores are attached and this database has no record of the library its edges ' +
+         'were bound against (no external_stores)');
+  if Stored <> ExternalStoresJson(AExtraStores) then
+    Exit('extra stores are attached and the library changed since this database''s edges were bound ' +
+         '(external_stores differs)');
+  Result:= ScopedResolveDeclineReason;
+  if Result <> '' then Exit;
+  { Type-name SET equality, not the additions/removals widenings: those walk LOCAL
+    declarations only, and a local type added or withdrawn can shadow or un-shadow a library
+    type of that name (spec, "What a ref's answer depends on", (c)). }
+  var Same: Boolean:= FScopeTypesBefore.Count = FScopeTypesAfter.Count;
+  if Same then
+    for var N: string in FScopeTypesBefore.Keys do
+      if not FScopeTypesAfter.ContainsKey(N) then
+      begin
+        Same:= False;
+        Break;
+      end;
+  if not Same then
+    Exit(Format('extra stores are attached and this run changed the set of declared type names ' +
+                '(%d before, %d after); a library type can be shadowed or un-shadowed',
+                [FScopeTypesBefore.Count, FScopeTypesAfter.Count]));
 end;
 
 procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);  // dl:ok method-too-long@4a54, deep-nesting@6ffc, cyclomatic-complexity@3b05, cognitive-complexity@54d8 -- one transaction over one resolver with shared maps; a split is its own change with its own re-resolve measurement, and lane facts (1.44) added only two calls, three counters and two log lines here
@@ -16594,13 +16653,15 @@ begin
   AccRes  := 0; AccRcv := 0; AccGuard:= 0; AccEdge:= 0;
   { SCOPED OR WHOLE-DATABASE -- decided once, here, and reported on the pass's
     own line so an operator can see which shape ran. ScopedResolveIsSound carries
-    the argument; AExtraStores forces the whole database because a library index
-    consulted by ResolveExternally is outside everything this instance recorded. }
+    the argument; with AExtraStores attached ExtraStoresDeclineReason adds the library's
+    half (149 IC: an unchanged library and an unchanged type-name set). }
   { Order preserved from the boolean this replaced: the extra-store test came
     first and short-circuited, so the scoping predicate's own queries (CountFiles,
     CallEdgesNeedRebuild) are still not run when extra stores decide it. }
+  { 149 IC: extra stores no longer force the whole database -- ExtraStoresDeclineReason scopes
+    them when the library is the one this DB was bound against and no type name moved. }
   var DeclineWhy: string:=
-    if Length(AExtraStores) > 0 then 'extra stores are attached, and a library index consulted by ResolveExternally is outside everything this instance recorded'
+    if Length(AExtraStores) > 0 then ExtraStoresDeclineReason(AExtraStores)
     else ScopedResolveDeclineReason;
   { A clear forces the whole database, but only names itself when nothing more
     specific applies: a new database also clears, and says so in its own reason. }
