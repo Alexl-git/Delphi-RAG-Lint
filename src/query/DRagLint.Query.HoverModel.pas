@@ -68,6 +68,10 @@ type
 /// facts build entirely. Only the surfaces that render facts should pay for it
 /// -- `hover --format plain` never has, because the covered-by BFS inside it is
 /// the expensive part of assembling a hover.</param>
+/// <param name="AExtraStores">Wave 149 LX: other project DBs handed to TDocFactsBuilder.Build
+/// as extra stores, so 'Used in:' / 'Used in (via property X):' carry a use that lives only in
+/// another DB (as `document --db A --db B` writes it). nil = the owning store only (the old
+/// answer). Never pass a platform library: the callers filter it out.</param>
 /// <returns>A populated assembly; a zeroed one when AStore is nil.</returns>
 /// <remarks>
 /// Reads the symbol's implementation span through TLiveDocuments, so
@@ -87,7 +91,7 @@ type
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function AssembleHover(const AStore: ISymbolStore; const ASym: TSymbol;
-  AWithFacts: Boolean = True): THoverAssembly;
+  AWithFacts: Boolean = True; const AExtraStores: TArray<ISymbolStore> = nil): THoverAssembly;
 
 implementation
 
@@ -159,7 +163,7 @@ begin
 end;
 
 function AssembleHover(const AStore: ISymbolStore; const ASym: TSymbol;
-  AWithFacts: Boolean): THoverAssembly;
+  AWithFacts: Boolean; const AExtraStores: TArray<ISymbolStore>): THoverAssembly;
 var
   Doc     : TParsedDoc      ;
   Rhs     : TArray<string>  ;
@@ -301,7 +305,7 @@ begin
     documentation does not. }
   if AWithFacts then
   begin
-    var Facts: TDocFacts:= TDocFactsBuilder.Build(AStore, ASym, LoadDocHandlesOptions); { gap 3: the SAME 'Catches:' knob document writes with }
+    var Facts: TDocFacts:= TDocFactsBuilder.Build(AStore, ASym, LoadDocHandlesOptions, False, False, '', AExtraStores); { gap 3: the SAME 'Catches:' knob document writes with; 149 LX: + extra stores }
     Result.FactLines:= TDocRegions.FormatPhase2FactLines(Facts, LoadDocComplexityMin);
     { E-USE-EDGES-PHASE2: the property/field 'Used in:' line, from the SAME
       formatter the doc block writes with (md, json, LSP hoverBundle). }

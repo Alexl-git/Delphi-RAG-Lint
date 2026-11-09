@@ -62,6 +62,9 @@ type
     HasSymbol: Boolean     ;
     Sel      : TSymbol     ;
     Store    : ISymbolStore;
+    /// <summary>Wave 149 LX: the document the hover was asked for, so hoverBundle can name the
+    /// file's extra stores (HoverExtraStores) the same way the markdown did.</summary>
+    Path     : string      ;
     /// <summary>Set when the cursor was on a compiler intrinsic. There is no
     /// indexed symbol behind one, so HasSymbol stays False -- but the name and
     /// signature ARE known, and a client that got only markdown had nothing to
@@ -2209,6 +2212,17 @@ type
       /// <remarks>One read of ExceptionFactsOfFile, filtered on TExceptionFact.RoutineLine -- the
       /// same rows ComputeExceptionLenses titles, so the pick and the lens count agree.</remarks>
       function ComputeExceptionFactsAt(const APath: string; ALine0: Integer): TJSONArray;
+      /// <summary>Wave 149 LX (UP 149): the extra stores a hover's facts read, so the card's
+      /// 'Used in:' / 'Used in (via property X):' carry a use that lives only in another project's
+      /// DB -- as `document --db A --db B` writes the doc block.</summary>
+      /// <param name="APath">Local path of the hovered document.</param>
+      /// <param name="AHit">The store the symbol came from (never in the result).</param>
+      /// <returns>The non-library stores that own APath -- the file's context set plus every
+      /// startup project store holding it (a shared unit) -- minus AHit and the ephemeral
+      /// single-unit store, each once; nil when there is none.</returns>
+      /// <remarks>A library is never an extra: its name fan-out is the 2026-08-13 junk-facts
+      /// channel and its size is paid on every hover.</remarks>
+      function HoverExtraStores(const APath: string; const AHit: ISymbolStore): TArray<ISymbolStore>;
       /// <summary>The 'Raises:' hover line of ASym as a one-element array, or [] (switch off,
       /// not a routine, a store with no path, nothing raised).</summary>
       /// <param name="AStore">The store ASym came from.</param>
@@ -5041,7 +5055,7 @@ begin
     // docs.complexity_min threshold `document` uses. AIncludeSeeAlso/
     // AIncludeSince stay False (no --seealso/--since opt-in here),
     // mirroring a default `document` run.
-    var HovFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Sel, LoadDocHandlesOptions); { gap 3: the SAME 'Catches:' knob document writes with }
+    var HovFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Sel, LoadDocHandlesOptions, False, False, '', HoverExtraStores(APath, HitStore)); { gap 3: the SAME 'Catches:' knob document writes with; 149 LX: + the file's other project stores }
     var HovFactLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(HovFacts, LoadDocComplexityMin);
     { E-USE-EDGES-PHASE2: the property/field 'Used in:' line, same formatter as the doc block. }
     HovFactLines:= TDocRegions.FormatUsedInLines(HovFacts) + HovFactLines;
@@ -5165,7 +5179,7 @@ begin
         the popup describes exactly ONE symbol (several overloads would misattribute). }
       if Length(Filtered) = 1 then
       begin
-        var NdFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Filtered[0], LoadDocHandlesOptions);
+        var NdFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Filtered[0], LoadDocHandlesOptions, False, False, '', HoverExtraStores(APath, HitStore)); { 149 LX: cross-DB uses }
         var NdLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(NdFacts, LoadDocComplexityMin);
         NdLines:= TDocRegions.FormatUsedInLines(NdFacts) + NdLines; { E-USE-EDGES-PHASE2 }
         NdLines:= NdLines + ExceptionFactLines(HitStore, Filtered[0]); { D1: Raises: }
@@ -5195,6 +5209,7 @@ begin
   if HaveOwnerFloor then AOut.Sel:= OwnerFloorType
   else                   AOut.Sel:= Sel;
   AOut.Store    := HitStore;
+  AOut.Path     := APath   ;
   AOut.HasSymbol:= True    ;
   Result:= True;
 end; // function
@@ -5367,6 +5382,26 @@ begin
     end;
   finally
     ByRoutine.Free;
+  end;
+end;
+
+function TLSPServer.HoverExtraStores(const APath: string; const AHit: ISymbolStore): TArray<ISymbolStore>;
+begin
+  Result:= nil;
+  if APath = '' then Exit;
+  { The file's context set, plus every startup project store that also owns the file (a
+    shared unit: OtherOwningStores' set). LSP-1 CORE keeps those out of the ANSWER; here they
+    only add inbound facts, exactly as document's extra stores do. }
+  var Cands: TArray<ISymbolStore>:= StoresForFile(APath);
+  for var I:= 0 to High(FStores) do
+    if (I <= High(FStorePaths)) and not IsLibraryPath(FStorePaths[I]) then Cands:= Cands + [FStores[I]];
+  for var St: ISymbolStore in Cands do
+  begin
+    if (St = nil) or (St = AHit) or (St = FEphemStore) or IsLibraryPath(StorePathOf(St)) then Continue;
+    var Dup: Boolean:= False;
+    for var Have: ISymbolStore in Result do
+      if Have = St then Dup:= True;
+    if (not Dup) and (St.FindFileIdByPath(APath) > 0) then Result:= Result + [St];
   end;
 end;
 
@@ -5945,7 +5980,7 @@ begin
     { The model, assembled by the same shared code `hover --format json` calls,
       then re-parsed into the reply. Re-parsing costs a few microseconds and
       buys the guarantee that the two surfaces cannot format differently. }
-    var Asm_     : THoverAssembly:= AssembleHover(Comp.Store, Comp.Sel);
+    var Asm_     : THoverAssembly:= AssembleHover(Comp.Store, Comp.Sel, True, HoverExtraStores(Comp.Path, Comp.Store)); { 149 LX: cross-DB uses }
     FactLines:= Asm_.FactLines + ExceptionFactLines(Comp.Store, Comp.Sel); { D1: the popup's Raises: line }
     var ModelJson: string:= DRagLint.Hover.Renderer.RenderHoverJson(Asm_.Model, FactLines);
     var ModelVal : TJSONValue := nil;

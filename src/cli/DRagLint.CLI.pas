@@ -11659,7 +11659,20 @@ begin
   Fmt:= LowerCase(AArgs.Format);
   if Fmt = '' then Fmt:= 'plain';
 
-  var Asm_ : THoverAssembly:= AssembleHover(Store, Syms[0], (Fmt = 'json') or (Fmt = 'md'));
+  { Wave 149 LX (UP 149): the other --db stores are extra stores for the facts, so the card's
+    'Used in:' names a use that lives only in another project's DB, as `document --db A --db B`
+    writes it. Only for the formats that render facts; a platform library (library-*.sqlite) is
+    never an extra (its name fan-out is the 2026-08-13 junk-facts channel, paid per hover). }
+  var HovExtra: TArray<ISymbolStore>:= nil;
+  if (Fmt = 'json') or (Fmt = 'md') then
+    for var ExDb: string in Dbs do
+    begin
+      if SameText(ExDb, UsedDb) or (not TFile.Exists(ExDb)) or LowerCase(ExtractFileName(ExDb)).StartsWith('library-') then Continue;
+      var ExOk: Boolean;
+      var ExSt: ISymbolStore:= OpenReadOnlyStore(ExDb, ExOk);
+      if ExOk and (ExSt <> nil) then HovExtra:= HovExtra + [ExSt];
+    end;
+  var Asm_ : THoverAssembly:= AssembleHover(Store, Syms[0], (Fmt = 'json') or (Fmt = 'md'), HovExtra);
   var Rhs  : TArray<string>:= Asm_.ReturnRhs;
   var Model: THoverModel   := Asm_.Model    ;
 
