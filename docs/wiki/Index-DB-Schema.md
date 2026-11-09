@@ -370,7 +370,12 @@ emitted so receivers can be typed), then `field` and `method`.
 `attribute call di-resolve di-unresolved event-binding handle handle-all member-access property-spec raise
 raise-expr read record-field reraise sql_table_ref type_use write`. Notes: a dotted call emits BOTH a
 `call` and a co-located `member-access` ref at the same span; only `call` is resolved to
-`call_edges`. `raise`/`raise-expr`/`reraise`/`handle`/`handle-all` are exception facts
+`call_edges`. This is BY DESIGN (150 EX3 item 5, measured): the `call` row is the call stream (binding, call edges,
+callers) and the `member-access` row the member stream (`member_accesses`, `usages --rw`); the twin's `symbol_id`
+stays NULL while the `call` carries the binding. On drag-lint's own index 34,516 of 102,802 call spans (33.6%) have
+the twin. Readers that count calls read the `call` row only, so nothing double-counts: `usages` (`calls:`),
+`query find-callers` and `context` give 3 for `ISymbolStore.PutSymbolFacts` (3 `call` + 3 `member-access` rows).
+A new reader that counts refs at a span must filter by kind. `raise`/`raise-expr`/`reraise`/`handle`/`handle-all` are exception facts
 (deep parse only; never resolved); `event-binding` is a DFM event hookup (name = handler).
 `property-spec` is a name a property's `read`/`write`/`stored` gives (receiver_text = the owner's qualified name), `record-field` a field name in a record constant
 (receiver_text = the path from the constant's type: `TBox.Pts[]`); both bind `refs.symbol_id` only (or `external_target`): no call edge, no `member_accesses` row.

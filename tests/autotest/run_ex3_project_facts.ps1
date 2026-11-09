@@ -14,6 +14,7 @@
         dotted type use: name_text TEx3Runner at its own span, the unit qualifier the text left of it.
         Binding is the resolver's: a dotted type_use stays symbol_id NULL today for a var type too
         (ar V: uEx3Types.TEx3Runner), so it is not asserted here. RED on base: no type_use at that span.
+    E5  the call + member-access twin at one span is pinned (by design) and usages counts it once.
   POSITIVE CONTROLS: the unit symbols keep parent NULL and kind unit; the headerless program has no
   .dproj and so no project_settings row; the bare is-rhs keeps its bare name (a regression that
   qualified every is-rhs would fail it).
@@ -96,6 +97,12 @@ Check 'E7a `is uEx3Types.TEx3Runner` emits ONE type_use TEx3Runner at col 31, qu
 $b = Rows ("SELECT r.name_text FROM refs r JOIN files f ON f.id=r.file_id WHERE " + (FileLike 'uEx3Local.pas') + " AND r.kind='type_use' AND r.start_line=24")
 Check 'E7c control: bare `is TEx3Base` keeps its bare name_text' (($b.Count -eq 1) -and ($b[0][0] -ceq 'TEx3Base')) "rows=$($b | ConvertTo-Json -Compress)"
 
+# E5: a dotted method call writes a `call` AND a co-located `member-access` row (by design, Index-DB-Schema.md
+# section 4); the readers that count calls must count it ONCE. Pinned so a de-dup or a double count both show.
+$tw = Rows ("SELECT r.kind FROM refs r JOIN files f ON f.id=r.file_id WHERE " + (FileLike 'Ex3App.dpr') + " AND r.start_line=18 AND r.start_col=8 ORDER BY r.kind")
+Check 'E5a GRun.Go span holds one call + one member-access row (the documented twin)' ((($tw | ForEach-Object { $_[0] }) -join ',') -eq 'call,member-access') "rows=$($tw | ConvertTo-Json -Compress)"
+$us = (& $Exe usages --name Go --db $Db 2>$null) -join "`n"
+Check 'E5b usages counts the twinned calls once (calls: 2 for 2 call sites)' ($us -match 'calls:\s*2\b') "out=$us"
 Write-Host ("== {0} passed, {1} failed" -f $script:Passed, $script:Failed)
 try { [IO.Directory]::Delete($WorkDir, $true) } catch { Write-Host "  (left $WorkDir)" }
 exit ([int]($script:Failed -gt 0))
