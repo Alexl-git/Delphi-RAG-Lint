@@ -1050,6 +1050,33 @@ begin
   end;
 end;
 
+{ 150-RS1 (2): the number of top-level generic arguments of the first `<..>` group in ATypeText --
+  `TList<TBinder>` 1, `TDictionary<string, TList<X>>` 2, `TList` and `<>` 0. }
+function GenericArity(const ATypeText: string): Integer;
+begin
+  Result:= 0;
+  var Lt: Integer:= Pos('<', ATypeText);
+  if Lt = 0 then Exit;
+  var Depth: Integer:= 0;
+  var Empty: Boolean:= True;
+  for var I: Integer:= Lt to Length(ATypeText) do
+  begin
+    case ATypeText[I] of
+      '<': Inc(Depth);
+      '>':
+        begin
+          Dec(Depth);
+          if Depth = 0 then Break;
+        end;
+      ',': if Depth = 1 then Inc(Result);
+      ' ': ;
+    else
+      Empty:= False;
+    end;
+  end;
+  Result:= if Empty then 0 else Result + 1;
+end;
+
 function TLibraryOracle.PickType(const ATypeText: string; const AUses: TArray<string>;
   out ACand: TLibCand; out AReason: string): Boolean;
 begin
@@ -1060,7 +1087,19 @@ begin
     AReason:= R_NO_TYPE;
     Exit(False);
   end;
-  Result:= Pick(Cached(FTypes, Leaf, TYPE_KINDS, True), AUses, ACand, AReason);
+  var Cands: TArray<TLibCand>:= Cached(FTypes, Leaf, TYPE_KINDS, True);
+  { 150-RS1 (2): a text WITH generic arguments (`TList<TBinder>`) names only a generic declaration of
+    that arity -- System.Classes' plain TList is not a candidate. No declaration of the arity: unchanged. }
+  var Arity: Integer:= GenericArity(ATypeText);
+  if Arity > 0 then
+  begin
+    var Generic: TArray<TLibCand>:= [];
+    for var C: TLibCand in Cands do
+      if GenericArity('<' + FStores[C.Store].GetSymbolById(C.Ids[0]).GenericParams + '>') = Arity then
+        Generic:= Generic + [C];
+    if Length(Generic) > 0 then Cands:= Generic;
+  end;
+  Result:= Pick(Cands, AUses, ACand, AReason);
 end;
 
 { E-RECV-UNDECIDABLE D08: True when ATypeText names a dynamic array type: `TArray<X>` (the

@@ -414,6 +414,10 @@ type
     Pending: string;
     /// <summary>An identifier-chain receiver whose head no project rung typed; ''.</summary>
     Head   : string;
+    /// <summary>150-RS1 (2): the generic argument group of the declared type Text came from
+    /// (`&lt;TBinder&gt;` of `TList&lt;TBinder&gt;`), set only when the project could not type it;
+    /// handed to the library oracle with Text, never written to refs.receiver_type_text.</summary>
+    Args   : string;
   end;
 
   /// <summary>B9 F1 (resolver 1.20.0-alpha): the static type of one reference, one
@@ -8251,6 +8255,19 @@ var
   Member  : TSymbol;
   CastType: string ;
   RetType : string ;
+
+  { 150-RS1 (2): AId when the project typed the declared text ADecl; otherwise 0, and the text's
+    generic argument group (`<TBinder>`) rides to the library oracle in AText.Args. }
+  function KeepArgs(AId: Int64; const ADecl: string): Int64;
+  begin
+    Result:= AId;
+    if AId <> 0 then Exit;
+    var Lt: Integer:= Pos('<', ADecl);
+    var Gt: Integer:= ADecl.LastIndexOf('>') + 1;
+    if (Lt > 1) and (Gt > Lt) and not Trim(ADecl).StartsWith('^') then
+      AText.Args:= Copy(ADecl, Lt, Gt - Lt + 1);
+  end;
+
 begin
   Result:= 0;
   AText := Default(TRcvTypeText); { item 4: '' for bare / Self / with-typed / untyped }
@@ -8453,7 +8470,7 @@ begin
   begin
     var LocalType: string:= LocalTypeText(Member);
     AText.Text:= NormalizeTypeLeaf(LocalType);
-    Exit(ResolveTypeNameToSymbol(LocalType, ACallRef.FileId));
+    Exit(KeepArgs(ResolveTypeNameToSymbol(LocalType, ACallRef.FileId), LocalType));
   end;
   if Declared then
     Exit; // a local/param of that name exists but none covers the site -> 0
@@ -8484,7 +8501,7 @@ begin
     if Member.Id > 0 then
     begin
       AText.Text:= NormalizeTypeLeaf(Member.Signature);
-      Exit(ResolveTypeNameToSymbol(Member.Signature, ACallRef.FileId));
+      Exit(KeepArgs(ResolveTypeNameToSymbol(Member.Signature, ACallRef.FileId), Member.Signature));
     end;
   end;
 
@@ -8520,7 +8537,7 @@ begin
   //     rung is still the last word when no value of the name is in scope. Pinned by
   //     tests\callresolve\run_unit_var_receiver_bind.ps1.
   var OrdText: string;
-  Result:= TypeOfOrdinaryName(ACallRef, AReceiverExpr, OrdText);
+  Result:= KeepArgs(TypeOfOrdinaryName(ACallRef, AReceiverExpr, OrdText), OrdText);
   AText.Text:= NormalizeTypeLeaf(OrdText);
   if Result > 0 then Exit;
 
@@ -11195,7 +11212,7 @@ begin
     Exit(FOracle.Bind(Anc, AText.Pending, ACallRef.NameText, Kind, FileUsesUnits(ACallRef.FileId), Reason));
   end;
   if AText.Text <> '' then
-    Exit(FOracle.Bind(AText.Text, AText.Pending, ACallRef.NameText, Kind, FileUsesUnits(ACallRef.FileId), Reason));
+    Exit(FOracle.Bind(AText.Text + AText.Args, AText.Pending, ACallRef.NameText, Kind, FileUsesUnits(ACallRef.FileId), Reason));
   if AText.Head = '' then
   begin
     { E-RECV-UNDECIDABLE D08: `TArray<Integer>.Create(1)` has no head text (generic
