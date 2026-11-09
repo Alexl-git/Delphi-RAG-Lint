@@ -1917,9 +1917,8 @@ procedure ExpandOnlyTypes(const ADfmText: string; const ARules: TConversionRuleS
 /// UTF-16 BOM is stripped and its encoding honoured, a BOM-less file is read as
 /// the machine ANSI page (wave 148 CV, 146 c2: the CLI's own --only / --only-type
 /// .dfm reads were ANSI, so a UTF-8 .dfm's non-ASCII instance name never matched).</summary>
-/// <param name="APath">The file to read; must exist.</param>
-/// <returns>The decoded text.</returns>
-/// <exception cref="EFileNotFoundException">Raised when APath does not exist.</exception>
+/// <param name="APath">The file to read; a missing file reads as empty text (TTextFileFormat.ReadFile checks TFile.Exists).</param>
+/// <returns>The decoded text; empty when APath does not exist.</returns>
 /// <remarks>Not for a binary (TPF0) .dfm: the text is garbage, no object header matches.</remarks>
 function ReadUnitText(const APath: string): string;
 /// <summary>The stable wire name of an item kind, e.g. 'creator-verify'.</summary>

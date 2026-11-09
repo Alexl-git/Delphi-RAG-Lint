@@ -1438,7 +1438,7 @@ begin
   if ParamCount > 0 then Result.Command:= ParamStr(1); { LoadConfigDefaults keys on the verb }
   { `ask`, `protocol` and `mcp-config` parse their own flags (DRagLint.Charts.AskVerb, DRagLint.Core.ProtocolReg,
     DRagLint.MCP.ClientConfig) and print nothing else: no defaults note on stderr }
-  if (Result.Command = 'ask') or (Result.Command = 'protocol') or (Result.Command = 'mcp-config') or (Result.Command = 'init') or (Result.Command = 'syntax-count') or (Result.Command = 'uses-recover') then Exit;
+  if MatchStr(Result.Command, ['ask', 'protocol', 'mcp-config', 'init', 'syntax-count', 'uses-recover']) then Exit;
   LoadConfigDefaults(Result);
   if ParamCount = 0 then begin Result.ShowHelp:= True; Exit; end;
   Result.Command:= ParamStr(1);

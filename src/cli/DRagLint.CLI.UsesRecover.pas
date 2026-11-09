@@ -26,7 +26,7 @@ implementation
 uses
   System.SysUtils, System.Classes, System.IOUtils, System.JSON, System.Generics.Collections,
   System.Generics.Defaults, System.RegularExpressions, FireDAC.Comp.Client,
-  DRagLint.Core.CliError, DRagLint.Storage.SQLite, DRagLint.CLI.HelpText;
+  DRagLint.Core.CliError, DRagLint.Storage.SQLite, DRagLint.CLI.HelpText; // dl:unit DRagLint.Core.CliError accepted -- the verb reports an unknown flag with the shared cli_err_unknown_flag text every verb uses; the other CliError consts are other verbs' errors
 
 const
   CVerb = 'uses-recover';
