@@ -116,8 +116,9 @@ function ManifestReadDbs(const AActiveProjectFile, AEditorFile: string): TArray<
 /// directory, so this is the win32 copy, not the one beside the engine exe. Naming it in
 /// the failure message is what makes a manifest desync self-evident instead of
 /// mysterious.</summary>
-/// <returns><!-- drag-lint:auto -->string -- Observed:
-/// ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.json'.</returns>
+/// <returns>The file TInstalledLayout.ManifestLocation answers for the BPL folder (layout v2
+/// phase 3): DRAGLINT_MANIFEST, else under DRAGLINT_LAYOUT=v2 the roaming file when it exists,
+/// else drag-lint.json in the BPL folder (the only answer before phase 3).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.DbResolver.ManifestLibraryDbFor (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.DbResolver.TryLoadManifest (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.Diagnose.DiagConfiguration (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Editor.InvokeReindexProject (DragLint.Plugin.Editor.pas)</para>
@@ -389,6 +390,7 @@ implementation
 uses
   DragLint.Plugin.IndexJob
   , DRagLint.Core.ContextDefaults
+  , DragLint.Plugin.ManifestPaths { layout v2 phase 3: every manifest lookup }
   ;
 
 function ActiveProjectWriteDb(out AProjectFile, AWhy: string): string;
@@ -405,7 +407,7 @@ begin
 end; // function
 function ManifestPathBesideEngine: string;
 begin
-  Result:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.json';
+  Result:= PluginManifestIn(ExtractFilePath(GetModuleName(HInstance))).Path;
 end;
 
 { Loads + parses the manifest beside the BPL. Returns False when it is absent or
@@ -417,10 +419,12 @@ function TryLoadManifest(out AManifest: TIndexManifest): Boolean;
 var
   MPath  : string;
   Content: string;
+  Located: TManifestLocation;
 begin
   Result   := False;
   AManifest:= Default(TIndexManifest);
-  MPath:= ManifestPathBesideEngine;
+  Located  := PluginManifestIn(ExtractFilePath(GetModuleName(HInstance)));
+  MPath    := Located.Path;
   if not TFile.Exists(MPath) then
   begin
     DLT('dbresolve', 'NO MANIFEST at ' + MPath);
@@ -428,7 +432,7 @@ begin
   end;
   try
     Content  := TFile.ReadAllText(MPath);
-    AManifest:= TManifestIO.ParseText(Content, ExtractFilePath(MPath));
+    AManifest:= TManifestIO.ParseText(Content, Located.RootDir);
     Result   := True;
   except
     on E: Exception do
@@ -720,10 +724,7 @@ begin
 
   { The engine's manifest first (it is the one that actually builds the indexes),
     then the BPL's. Duplicates are harmless -- the loop stops at the first hit. }
-  Manifests:= nil;
-  if ASettings.ExePath <> '' then
-    Manifests:= Manifests + [TPath.Combine(ExtractFilePath(ASettings.ExePath), 'drag-lint.json')];
-  Manifests:= Manifests + [ManifestPathBesideEngine];
+  Manifests:= PluginManifestCandidates(ASettings.ExePath, ExtractFilePath(GetModuleName(HInstance)));
 
   for MPath in Manifests do
   begin
@@ -750,6 +751,7 @@ begin
         RootVal.Free;
       end; // try
 
+      OutDir:= PluginLibraryOutDir(OutDir, MPath);
       if OutDir = '' then
       begin
         Decline('manifest ' + MPath + ' has no indexes.outDir');

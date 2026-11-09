@@ -82,6 +82,15 @@ foreach ($s in $sites) {
 $synth = "ExePath:= DLExe64;`r`n  { Spawn detached: drag-lint lint"
 if ($synth -match $sites[1][2]) { Write-Host '  [FAIL] positive control: anchor matched a site with no refusal'; $rc = 1 }
 else { Write-Host '  [PASS] positive control: anchor rejects a site with no refusal' }
+# 148 XP3 item 4b (146 p1 tail): EnsureLspClient fails closed like every other spawn site. It kept its
+# own chain down to a bare 'drag-lint.exe' after the shared resolver answered '' (PATH decides, and
+# PATH has served a stale build before). RED on base 6fac00822: both checks below failed.
+$ed = [IO.File]::ReadAllText((Join-Path $SrcDir 'DragLint.Plugin.Editor.pas'))
+$lsp = @([regex]::Matches($ed, '(?s)\nfunction EnsureLspClient: TDragLintLspClient;.*?\nend;'))[-1].Value   # the last header is the implementation; the first is the declaration
+$okLsp = ($lsp -match "(?s)ExePath:= EngineExeOrEmpty;.{0,1200}?ReportEngineMissing;.{0,300}?Exit\(nil\);") -and ($lsp -notmatch "ExePath:= 'drag-lint\.exe';")
+Write-Host ("  [{0}] source anchor: EnsureLspClient refuses an empty exe, no bare-name fallback" -f $(if ($okLsp) { 'PASS' } else { 'FAIL' }))
+if (-not $okLsp) { $rc = 1 }
+if ($lsp.Length -lt 2000) { Write-Host '  [FAIL] EnsureLspClient body not found (the anchor would pass vacuously)'; $rc = 1 }
 # Every CreateProcess in the plugin is on this list, so a new direct spawn has to be looked at here.
 # ConvertLaunch starts ConvRulesEditor, whose path was proven by FileExists first (FindEditor).
 $known = 'ConvertLaunch=1 Editor=2 GraphWindow=1 LiveDiagnostics=1 LspClient=1 ProcRun=1 ProjectNotifier=2 StructureCache=1'

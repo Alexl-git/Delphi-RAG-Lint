@@ -36,6 +36,19 @@ function UsagesFromReply(pReply: TJSONValue; out pJson: string): Boolean;
 /// list rows from those.</remarks>
 function ServerCoversDbs(const pDbs, pServerDbs: TArray<string>): Boolean;
 
+/// <summary>Tells whether a draglint/usages request in flight can no longer be answered.</summary>
+/// <param name="pId">The request id; 0 means nothing is in flight.</param>
+/// <param name="pAsked">The client the request was sent on. Compared only, never called: it
+/// may have been freed.</param>
+/// <param name="pCurrent">The client running now (CurrentLspClient), or nil.</param>
+/// <param name="pCurrentAlive">pCurrent's IsAlive; read only by the caller, and only when
+/// pCurrent = pAsked.</param>
+/// <returns>True when pId is non-zero and the asked client is not the running one, or is dead.</returns>
+/// <remarks>A stopped client runs no callback (LspClient CancelAllAsync), so without this check
+/// the form showed "(searching...)" until Refresh. Pure; a reused address for a new client is
+/// not detected (it then waits for that client's own budget notice).</remarks>
+function UsagesRequestOrphaned(pId: Integer; const pAsked, pCurrent: TObject; pCurrentAlive: Boolean): Boolean;
+
 implementation
 
 uses
@@ -89,6 +102,11 @@ begin
     if not Held(D) then Exit(False);
     Result:= True;
   end;
+end;
+
+function UsagesRequestOrphaned(pId: Integer; const pAsked, pCurrent: TObject; pCurrentAlive: Boolean): Boolean;
+begin
+  Result:= (pId <> 0) and ((pAsked <> pCurrent) or not pCurrentAlive);
 end;
 
 end.
