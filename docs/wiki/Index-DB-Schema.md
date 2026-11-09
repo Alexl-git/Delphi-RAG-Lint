@@ -23,6 +23,17 @@ Never open a real DB with a writer to "look": copy it first, or use the read-onl
   `files.indexed_at_fingerprint`) is created by `Migrate` on every WRITABLE open with no
   version bump and is probed for by every reader. A read-only open never migrates, so an
   older DB simply lacks those tables/columns until the next `index`.
+* **Read-compat range (150 SC).** An engine READS an index whose stored schema is in
+  [`SCHEMA_READ_MIN`, `SCHEMA_VERSION`] with full function (23 readable by 24; re-index to
+  write): the read-only open prepares its statements, every library opener attaches it, every
+  read verb answers. Below `SCHEMA_READ_MIN` every opener refuses with one reason --
+  `index schema vN is older than this engine reads (vMIN..vCUR); re-index it` -- never an
+  access violation. Writers (`index`, `uses-recover --apply`, proptree write-back) still
+  upgrade through `Migrate`. `schema --db <db>` prints the range (text line, JSON keys
+  `engine_schema_version`, `engine_schema_read_min`, `schema_readable`). Invariant: every
+  table or column added after `SCHEMA_READ_MIN` is additive and probed; a change that cannot
+  be raises `SCHEMA_READ_MIN`. Spec `docs\superpowers\specs\2026-11-09-schema-read-compat.md`,
+  guard `tests\autotest\run_schema_read_compat.ps1`.
 * **Table count.** 27 ordinary tables + 2 FTS5 virtual tables (`string_fts`,
   `string_fts_tri`, each with its own shadow tables `*_data`, `*_idx`, `*_docsize`,
   `*_config`, ignored below). Tables by group:
