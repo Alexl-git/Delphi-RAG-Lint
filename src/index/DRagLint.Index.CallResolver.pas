@@ -3471,9 +3471,10 @@ type
     /// the write accessor of a property (AccessorSymbolId / AccessorKind
     /// 'method' or 'field'; none for a field or a property without a write
     /// clause the resolver can find) and ReceiverTypeSymbolId (the `with`
-    /// target's type, else the enclosing class). Any other target (local,
-    /// parameter, unit var, class var, const) leaves MemberMode '' --
-    /// identity only, exactly as before.</returns>
+    /// target's type, else the enclosing class). A unit-level or class-level
+    /// var / typed const target (149 RB2 item 4) gets ValueUseEdge's 'write'.
+    /// Any other target (local, parameter, routine-local const) leaves MemberMode
+    /// '' -- identity only, exactly as before.</returns>
     /// <remarks>
     /// The caller writes a member_accesses row (and the call edge
     /// of a method setter) when MemberMode is set, else refs.symbol_id only.
@@ -3491,6 +3492,22 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function ResolveWriteEdge(const ARef: TReference; out AReason: string): TCallEdge;
+    /// <summary>149 RB2 item 4 (147 B1 leftover): the use edge of a bound VALUE -- a unit-level
+    /// or class-level var, a const, or an enum value -- as a member_accesses row, the row a
+    /// property or field use already gets.</summary>
+    /// <param name="ARef">The read or write ref; only its Id is used.</param>
+    /// <param name="ATargetId">The declaration the ref is bound to (refs.symbol_id).</param>
+    /// <param name="AMode">'read' or 'write'.</param>
+    /// <returns>TargetSymbolId = ATargetId always. MemberMode = AMode, Confidence 'certain' and
+    /// ReceiverTypeSymbolId = the declaring class / record / enum (0 for a unit-level value)
+    /// when the target is a skVarDecl / skConstDecl / skEnumValue whose parent is a unit or a
+    /// type; MemberMode '' (identity only) for anything else -- a routine-local const, a local,
+    /// a parameter, a routine.</returns>
+    /// <remarks>No accessor: a value has none. The caller (Storage ResolveValueReadRefs,
+    /// ResolveEnumReadRefs, ResolveWriteRefs) writes the member_accesses row when MemberMode is
+    /// set, else refs.symbol_id only. A var / out argument stays 'read' here: its write half
+    /// is classified at read time by usages --rw (Query.Callers TMemberUserRow.Arg).</remarks>
+    function ValueUseEdge(const ARef: TReference; ATargetId: Int64; const AMode: string): TCallEdge;
 
     /// <summary>Per-run counters of the write-ref pass. Read by the calls stage
     /// for its ResolveLog line.</summary>
@@ -9071,6 +9088,20 @@ begin
   TallyWrite(AReason);
 end;
 
+function TCallResolver.ValueUseEdge(const ARef: TReference; ATargetId: Int64; const AMode: string): TCallEdge;
+begin
+  Result               := Default(TCallEdge);
+  Result.RefId         := ARef.Id;
+  Result.TargetSymbolId:= ATargetId;
+  if ATargetId <= 0 then Exit;
+  var V: TSymbol:= SymbolById(ATargetId);
+  if V.Kind not in [skVarDecl, skConstDecl, skEnumValue] then Exit;
+  var P: TSymbol:= if V.ParentId > 0 then SymbolById(V.ParentId) else Default(TSymbol);
+  if (P.Id > 0) and (P.Kind not in [skUnit, skProgram, skClass, skRecord, skEnum]) then Exit; // routine-local
+  Result.Confidence:= 'certain';
+  Result.MemberMode:= AMode;
+  if P.Kind in [skClass, skRecord, skEnum] then Result.ReceiverTypeSymbolId:= P.Id;
+end;
 function TCallResolver.ResolveWriteEdge(const ARef: TReference; out AReason: string): TCallEdge;
 var
   M      : TSymbol;
@@ -9082,6 +9113,7 @@ begin
   Result.TargetSymbolId:= ResolveWriteRef(ARef, AReason);
   if Result.TargetSymbolId <= 0 then Exit;
   M:= SymbolById(Result.TargetSymbolId);
+  if M.Kind in [skVarDecl, skConstDecl] then Exit(ValueUseEdge(ARef, Result.TargetSymbolId, 'write'));
   if M.Kind not in [skProperty, skField] then Exit;
   Result.Confidence := 'certain';
   Result.MemberMode := 'write';

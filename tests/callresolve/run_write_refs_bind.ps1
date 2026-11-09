@@ -138,9 +138,10 @@ try {
   # --- check 3: identity only, except a property/field use (E-USE-EDGES-PHASE2) ----
   # Wave 147: a write bound to a PROPERTY or FIELD owns its member_accesses row
   # (mode 'write', member = the bound symbol) and, for a method setter only, the
-  # call edge to that setter. Every other write stays identity only.
+  # call edge to that setter. 149 RB2 item 4: a unit- / class-level var or const write also owns
+  # a mode-write row (no accessor). Every other write stays identity only.
   $extra = @(Sql ("SELECT r.id FROM refs r LEFT JOIN symbols s ON s.id = r.symbol_id WHERE r.kind = 'write' AND (" +
-                  "(COALESCE(s.kind, '') NOT IN ('property', 'field') AND (EXISTS (SELECT 1 FROM call_edges ce WHERE ce.ref_id = r.id) " +
+                  "(COALESCE(s.kind, '') NOT IN ('property', 'field', 'var', 'const') AND (EXISTS (SELECT 1 FROM call_edges ce WHERE ce.ref_id = r.id) " +
                   "OR EXISTS (SELECT 1 FROM member_accesses ma WHERE ma.ref_id = r.id))) " +
                   "OR EXISTS (SELECT 1 FROM member_accesses ma WHERE ma.ref_id = r.id AND (ma.mode <> 'write' OR ma.member_symbol_id <> r.symbol_id)) " +
                   "OR EXISTS (SELECT 1 FROM call_edges ce WHERE ce.ref_id = r.id AND NOT EXISTS (SELECT 1 FROM member_accesses ma " +

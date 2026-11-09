@@ -171,11 +171,16 @@ Check 'NEG-FIELD FTotal is the member stream''s (bound to the field)' (($r.Count
 $r = @(ReadAt 'NEG-ROUTINE' 'GetIt')
 Check 'NEG-ROUTINE GetIt is never bound to a value' (($r.Count -eq 1) -and ($r[0].tk -notin @('local_var', 'param', 'const', 'var'))) "tk=$(if ($r.Count) { $r[0].tk })"
 
-# check 3 -- identity only: no edge, no member access for a value-read binding
+# check 3 -- no call edge for a value-read binding; since 149 RB2 item 4 a unit- / class-level
+# const or var owns a member_accesses row (mode read, no accessor), a local / param never does
 $extra = Sql ("SELECT COUNT(*) AS n FROM refs r JOIN symbols t ON t.id = r.symbol_id WHERE r.kind = 'read' " +
               "AND t.kind IN ('local_var','param','const','var') AND (r.id IN (SELECT ref_id FROM call_edges) " +
-              "OR r.id IN (SELECT ref_id FROM member_accesses))")
-Check 'no value-read binding owns a call_edges / member_accesses row' ([int]$extra[0].n -eq 0) "n=$($extra[0].n)"
+              "OR (t.kind IN ('local_var','param') AND r.id IN (SELECT ref_id FROM member_accesses)) " +
+              "OR r.id IN (SELECT ref_id FROM member_accesses WHERE mode <> 'read' OR accessor_symbol_id IS NOT NULL))")
+Check 'no value-read binding owns a call edge; a local/param owns no member_accesses row; value rows are read, no accessor' ([int]$extra[0].n -eq 0) "n=$($extra[0].n)"
+$vrows = Sql ("SELECT COUNT(*) AS n FROM refs r JOIN symbols t ON t.id = r.symbol_id JOIN member_accesses ma ON ma.ref_id = r.id " +
+              "WHERE r.kind = 'read' AND t.kind IN ('const','var')")
+Check 'unit-level const/var reads DO own a member_accesses row (149 RB2 item 4)' ([int]$vrows[0].n -gt 0) "n=$($vrows[0].n)"
 
 # check 4 -- the log line
 $line = @($log | Where-Object { "$_" -match 'value-reads: (\d+) of (\d+)' })

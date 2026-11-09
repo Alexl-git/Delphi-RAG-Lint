@@ -154,9 +154,9 @@
       and the `enum-values:` line must still be PRESENT -- that log line does
       not exist on 1.5.1-alpha, it lands in task 4, and its absence is what
       keeps check 13 red on the engine this file was committed against.
-    * **Check 7 is the invariant fence.** `call_edges` stays ROUTINE-ONLY and
-      `member_accesses` stays property/field-only; an enum binding is
-      `refs.symbol_id` and NOTHING else (spec U3).
+    * **Check 7 is the invariant fence.** `call_edges` stays ROUTINE-ONLY; since 149 RB2
+      item 4 an enum binding is `refs.symbol_id` + a member_accesses row (mode read, no
+      accessor) and nothing else (spec U3 as amended by the 149 row).
 
   EXECUTION ORDER -- **owner ruling R2, 2026-09-23, binding on this file.**
   The 1-13 numbering above is a LISTING order, not an execution order. This
@@ -538,8 +538,14 @@ Write-Host ''
 Write-Host '== check 7: INVARIANTS -- call_edges stays routine-only, member_accesses property/field-only ==' -ForegroundColor Cyan
 $ceEnum = Sql $dbA "SELECT COUNT(*) AS n FROM call_edges ce JOIN symbols s ON s.id = ce.target_symbol_id WHERE s.kind = 'enum_value'"
 CheckN 7 '0 enum values in call_edges.target_symbol_id' (@($ceEnum).Count -eq 1 -and [int]$ceEnum[0].n -eq 0) ($ceEnum | ConvertTo-Json -Compress)
-$maEnum = Sql $dbA "SELECT COUNT(*) AS n FROM member_accesses ma JOIN symbols s ON s.id = ma.member_symbol_id WHERE s.kind = 'enum_value'"
-CheckN 7 '0 enum values in member_accesses.member_symbol_id' (@($maEnum).Count -eq 1 -and [int]$maEnum[0].n -eq 0) ($maEnum | ConvertTo-Json -Compress)
+# 149 RB2 item 4 (147 B1 leftover, owner row): a bound enum value IS a use edge now -- a
+# member_accesses row, mode 'read', on refs.symbol_id, with NO accessor and NO call edge. The
+# fence moves from "no row" to "no row of any other shape"; the positive half is that rows exist.
+$maEnum = Sql $dbA ("SELECT COUNT(*) AS n FROM member_accesses ma JOIN symbols s ON s.id = ma.member_symbol_id JOIN refs r ON r.id = ma.ref_id " +
+                    "WHERE s.kind = 'enum_value' AND (ma.mode <> 'read' OR ma.accessor_symbol_id IS NOT NULL OR r.symbol_id <> ma.member_symbol_id)")
+CheckN 7 'enum values in member_accesses are mode read, no accessor, on refs.symbol_id' (@($maEnum).Count -eq 1 -and [int]$maEnum[0].n -eq 0) ($maEnum | ConvertTo-Json -Compress)
+$maEnumN = Sql $dbA "SELECT COUNT(*) AS n FROM member_accesses ma JOIN symbols s ON s.id = ma.member_symbol_id WHERE s.kind = 'enum_value'"
+CheckN 7 'bound enum values DO own a member_accesses row (149 RB2 item 4)' (@($maEnumN).Count -eq 1 -and [int]$maEnumN[0].n -gt 0) ($maEnumN | ConvertTo-Json -Compress)
 
 Write-Host ''
 Write-Host '== check 8: E1 fence -- the unresolved-call COMPLEMENT universe is untouched ==' -ForegroundColor Cyan
