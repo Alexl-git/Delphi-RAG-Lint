@@ -598,6 +598,25 @@ function SplitHeritage(const pText: string): TArray<string>;
 function BuildEdgeSurface(const pSource: IEdgeSurfaceSource; const pFromFid: Int64;
   const pToStem: string): TEdgeSurface;
 
+/// <summary>Collects what unit pFromFid takes from each unit of pToStems: the same surfaces
+/// BuildEdgeSurface returns one call per stem, read in ONE pass over pFromFid's refs.</summary>
+/// <param name="pSource">Index access; must not be nil (as BuildEdgeSurface).</param>
+/// <param name="pFromFid">File id of the citing unit A.</param>
+/// <param name="pToStems">Lower-case stems of the used units, in the order wanted.</param>
+/// <returns>One surface per stem, in pToStems order; element I equals
+/// BuildEdgeSurface(pSource, pFromFid, pToStems[I]) field for field.</returns>
+/// <remarks>
+/// Lane 150 CY2 (150-CAUSES-SPEED): `cycles --causes --format json` built every edge of A
+/// from scratch, binding each of A's refs once per edge (Loader: 239 edges x ~2250 refs).
+/// Which unit a ref can touch does not depend on the edge, so each ref is classified once
+/// (its candidate target file and stem) and each edge then runs the unchanged per-ref steps
+/// over the refs that can touch it, in the store's order. A skipped ref is one the per-edge
+/// steps would leave without effect, so the result is byte-identical (identity proven on the
+/// Loader and cyclefix fixture sets). Reads the index only; not thread-safe.
+/// </remarks>
+function BuildEdgeSurfaces(const pSource: IEdgeSurfaceSource; const pFromFid: Int64;
+  const pToStems: TArray<string>): TArray<TEdgeSurface>;
+
 /// <summary>The JSON `cycles --causes` prints for one edge.</summary>
 /// <param name="pS">The surface.</param>
 /// <returns>A new object {from, to, surface:{members, classes, has_write,
@@ -1213,6 +1232,8 @@ type
     procedure TakeCastMembers(const pR: TReference; const pCls: TSymbol);
     procedure Finish;
     procedure Collect;
+    procedure CollectRefs(const pRefs: TArray<TReference>);
+    procedure TargetKeys(const pR: TReference; const pKeys: TList<string>);
   public
     constructor Create(const pSource: IEdgeSurfaceSource; pFromFid: Int64; const pToStem: string);
     destructor Destroy; override;
@@ -1498,9 +1519,44 @@ end;
 
 procedure TSurfaceBuilder.Collect;
 begin
+  CollectRefs(if FCache <> nil then FCache.CachedRefsFromFile(FFromFid) else FStore.GetReferencesFromFile(FFromFid));
+end;
+
+{ Lane 150 CY2: the keys of the edges a ref can touch, mirroring Collect's dispatch step for step --
+  'file#<fid>' where a step compares a symbol's file with FToFid, 'stem#<stem>' where it compares a bound
+  stem with the edge's ToStem. A key too many only costs time; a missing key would change a surface. }
+procedure TSurfaceBuilder.TargetKeys(const pR: TReference; const pKeys: TList<string>);
+var
+  MA  : TCallEdge;
+  Cls : TSymbol;
+  Stem: string;
+begin
+  if FSource.MemberAccessOf(pR.Id, MA) then
+  begin
+    if MA.TargetSymbolId > 0 then pKeys.Add('file#' + IntToStr(Sym(MA.TargetSymbolId).FileId));
+    Exit;
+  end;
+  if pR.ReceiverText <> '' then
+  begin
+    { TakeClassMemberAccess and TakeReceiverRef: a receiver bound to a class of the edge's unit }
+    if not (SameText(pR.Kind, 'member-access') or SameText(pR.Kind, 'call')) then Exit;
+    var Rcv:= pR.ReceiverText.Substring(pR.ReceiverText.LastIndexOf('.') + 1);
+    if FSource.BindName(FFromFid, pR.StartLine, Rcv, Cls, Stem) then pKeys.Add('stem#' + Stem);
+    { TakeReceiverRef's second arm: a call bound to a routine of the edge's unit }
+    if SameText(pR.Kind, 'call') and (pR.SymbolId > 0) then pKeys.Add('file#' + IntToStr(Sym(pR.SymbolId).FileId));
+    Exit;
+  end;
+  { TakeBareRef -> BindBare; IsLocal is left to the edge: a local binds to its own unit (never an edge
+    target) or not at all, and the DB lookup behind IsLocal cost more than the bind (Loader: 2 of 6 s) }
+  if SameText(pR.Kind, 'member-access') then Exit;
+  if pR.SymbolId > 0 then pKeys.Add('file#' + IntToStr(TopLevel(Sym(pR.SymbolId)).FileId))
+  else if FSource.BindName(FFromFid, pR.StartLine, pR.NameText, Cls, Stem) then pKeys.Add('stem#' + Stem);
+end;
+
+procedure TSurfaceBuilder.CollectRefs(const pRefs: TArray<TReference>);
+begin
   FLines:= FSource.FileLines(FFromFid);
-  var Refs:= if FCache <> nil then FCache.CachedRefsFromFile(FFromFid) else FStore.GetReferencesFromFile(FFromFid);
-  for var R in Refs do
+  for var R in pRefs do
   begin
     if TakeMemberAccess(R) then Continue;
     if SameText(R.Kind, 'member-access') then
@@ -1526,6 +1582,85 @@ begin
     Result:= B.Run;
   finally
     B.Free;
+  end;
+end;
+
+{ The refs at the given indices, in ascending index order (= the store's order), each once. Sorts pIdx. }
+function RefsAt(const pRefs: TArray<TReference>; const pIdx: TList<Integer>): TArray<TReference>;
+var
+  N: Integer;
+begin
+  pIdx.Sort;
+  SetLength(Result, pIdx.Count);
+  N:= 0;
+  for var P:= 0 to pIdx.Count - 1 do
+    if (P = 0) or (pIdx[P] <> pIdx[P - 1]) then
+    begin
+      Result[N]:= pRefs[pIdx[P]];
+      Inc(N);
+    end;
+  SetLength(Result, N);
+end;
+
+function BuildEdgeSurfaces(const pSource: IEdgeSurfaceSource; const pFromFid: Int64;
+  const pToStems: TArray<string>): TArray<TEdgeSurface>;
+var
+  Probe : TSurfaceBuilder;
+  B     : TSurfaceBuilder;
+  Refs  : TArray<TReference>;
+  ByKey : TObjectDictionary<string, TList<Integer>>;
+  Keys  : TList<string>;
+  Idx   : TList<Integer>;
+  Picked: TList<Integer>;
+begin
+  SetLength(Result, Length(pToStems));
+  if (pFromFid <= 0) or (Length(pToStems) < 2) then
+  begin
+    for var I:= 0 to High(pToStems) do Result[I]:= BuildEdgeSurface(pSource, pFromFid, pToStems[I]);
+    Exit;
+  end;
+  ByKey := TObjectDictionary<string, TList<Integer>>.Create([doOwnsValues]);
+  Keys  := TList<string>.Create;
+  Picked:= TList<Integer>.Create;
+  Probe := TSurfaceBuilder.Create(pSource, pFromFid, '');
+  try
+    Refs:= if Probe.FCache <> nil then Probe.FCache.CachedRefsFromFile(pFromFid)
+      else Probe.FStore.GetReferencesFromFile(pFromFid);
+    for var I:= 0 to High(Refs) do
+    begin
+      Keys.Clear;
+      Probe.TargetKeys(Refs[I], Keys);
+      for var K in Keys do
+      begin
+        if not ByKey.TryGetValue(K, Idx) then
+        begin
+          Idx:= TList<Integer>.Create;
+          ByKey.Add(K, Idx);
+        end;
+        if (Idx.Count = 0) or (Idx.Last <> I) then Idx.Add(I);
+      end;
+    end;
+    for var T:= 0 to High(pToStems) do
+    begin
+      B:= TSurfaceBuilder.Create(pSource, pFromFid, pToStems[T]);
+      try
+        if B.FToFid > 0 then
+        begin
+          Picked.Clear;
+          if ByKey.TryGetValue('stem#' + pToStems[T], Idx) then Picked.AddRange(Idx);
+          if ByKey.TryGetValue('file#' + IntToStr(B.FToFid), Idx) then Picked.AddRange(Idx);
+          B.CollectRefs(RefsAt(Refs, Picked));
+        end;
+        Result[T]:= B.FSurface;
+      finally
+        B.Free;
+      end;
+    end;
+  finally
+    Probe.Free;
+    Picked.Free;
+    Keys.Free;
+    ByKey.Free;
   end;
 end;
 
