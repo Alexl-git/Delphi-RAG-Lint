@@ -65,6 +65,8 @@ table or column added after READ_MIN checks for it (`HasFileFacts`, `HasDataFlow
 | file_includes (F4) | PutFileFacts | GetFileIncludes -> `if not HasFileFacts then Exit` |
 | dfm_objects (F5) | PutFileFacts | GetDfmObjects -> `if not HasFileFacts then Exit` |
 | pp_regions (F6) | PutFileFacts | GetPpRegions -> `if not HasFileFacts then Exit` |
+| project_settings (150 EX3, ledger 12:51:42 `EX3 HANDOVER SC SCHEMA-ADD`): `file_id` FK files(id) ON DELETE CASCADE, `setting`, `ordinal`, `value` + idx_project_settings_file(file_id, setting, ordinal); rows: the .dpr/.dpk, setting='DCC_Namespace', one per scope in .dproj order | EX3 emit region, created beside file_includes (TryExec, additive) | readers MUST probe the table (absent on a schema-23 DB) -- EX3 / RS1 consumers; INT checks the probe before the 24 flip |
+| (W2 comment facts, if built) | W2 | must follow this invariant: additive + probed, row added here by W2's ledger line |
 
 (`PutFileFacts` itself also checks `HasFileFacts`.) Any 150 lane that adds schema to 24
 (EX3 project fact, W2 comment facts) MUST add a probe and a row here; a non-probed reader is
