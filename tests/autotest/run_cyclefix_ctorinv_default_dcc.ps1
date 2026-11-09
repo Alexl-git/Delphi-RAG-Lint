@@ -9,7 +9,10 @@
         entry is no use of the slot (Loader2025.FolderProcessor; was a false refusal)
     mc  a multi-line `{ .. }` comment in the consumer spells `Writeln(TObject(FChild).ClassName)` (a cast, which the
         whitelist refuses in code): a comment is no use of the slot
+    ov  (149-CY-10, lane 149 CYA) a protected `Execute; override` (TThread) the consumer's unrelated `.Execute` dragged
+        onto the surface stays in the class (Loader TFolderWorker); RED: 1.48.0-alpha refuses `carries directives (override)`
   REFUSED without the flag:
+    op  the same override PUBLIC: still refused (its parent may declare it less visible; --ctor-wide only)
     pb  a published field of the class read through the slot: PullMembers would pull it into the base class as
         PROTECTED (a .dfm streams into the published field of the class that declares it); the plan must say
         `is published`, not mechanical.
@@ -154,6 +157,18 @@ function Invoke-Apply([string]$Dproj, [string]$Tag) {
 function Get-Refusal([string]$Plan) { (([regex]::Match($Plan, '(?m)^.*refused:.*$').Value) -replace '^(.{0,260}).*$', '$1') }
 
 $Own = 'LabCtorOwner.pas'
+# 149-CY-10: the child becomes a suspended TThread whose Execute overrides the library's (pVis = its section); the owner
+# calls `.Execute` of a TBasicAction (a different class: the name alone put Execute on the slot's surface)
+function Set-OverrideShape([string]$Dir, [string]$pVis) {
+  $ch = Join-Path $Dir 'LabCtorChild.pas'
+  Edit-File $ch "interface`n`ntype`n  TLabCtorChild = class`n" "interface`n`nuses`n  System.Classes;`n`ntype`n  TLabCtorChild = class(TThread)`n"
+  Edit-File $ch "  public`n    constructor Create(pOwner: TObject);" "  $pVis`n    procedure Execute; override;`n  public`n    constructor Create(pOwner: TObject);"
+  Edit-File $ch "  inherited Create;`n  FOwner := pOwner;`nend;" "  inherited Create(True);`n  FOwner := pOwner;`nend;`n`nprocedure TLabCtorChild.Execute;`nbegin`n  if not Terminated then Writeln('[ov] ran');`nend;"
+  $ow = Join-Path $Dir $Own
+  Edit-File $ow "uses`n  LabCtorChild;" "uses`n  System.Classes,`n  LabCtorChild;"
+  Edit-File $ow "  FChild.Touch;" "  FAct := nil;`n  if Assigned(FAct) then FAct.Execute;`n  FChild.Touch;"
+  Edit-File $ow "    FChild: TLabCtorChild;" "    FChild: TLabCtorChild;`n    FAct  : TBasicAction;"
+}
 $Cases = @(
   @{ Tag = 'uc'; Why = 'a dotted uses entry ending in the slot name'
      Prep = { param($d) Edit-File (Join-Path $d $Own) "uses`n  LabCtorChild;" "uses`n  LabCtorChild,`n  Lab.FChild;"
@@ -161,6 +176,9 @@ $Cases = @(
      Ctrl = { param($d) Edit-File (Join-Path $d $Own) "  FChild.Touch;" "  FChild.Touch;`n  Writeln(TObject(FChild).ClassName);" } },
   @{ Tag = 'mc'; Why = 'a multi-line comment spelling a cast of the slot'
      Prep = { param($d) Edit-File (Join-Path $d $Own) "  FChild.Touch;" "  { the old way:`n      Writeln(TObject(FChild).ClassName);`n    is gone }`n  FChild.Touch;" }
+     Ctrl = { param($d) Edit-File (Join-Path $d $Own) "  FChild.Touch;" "  FChild.Touch;`n  Writeln(TObject(FChild).ClassName);" } },
+  @{ Tag = 'ov'; Why = 'a protected `Execute; override` of TThread dragged in by an unresolved `.Execute` of another class (149-CY-10, Loader TFolderWorker)'
+     Prep = { param($d) Set-OverrideShape $d 'protected' }
      Ctrl = { param($d) Edit-File (Join-Path $d $Own) "  FChild.Touch;" "  FChild.Touch;`n  Writeln(TObject(FChild).ClassName);" } }
 )
 
@@ -210,6 +228,11 @@ try {
   $pt = Get-Plan (Join-Path $d 'CtorLab.dproj') 'pb'
   Check 'pb1 the plan is not mechanical' ($pt.Contains('Fix it: not available')) ''
   Check 'pb2 it refuses because the field is published' ($pt -match 'field `Src` is published') (Get-Refusal $pt)
+
+  Write-Host '== refused without the flag: a PUBLIC override (149-CY-10 control: the parent may declare it less visible)' -ForegroundColor Cyan
+  $d = Join-Path $WorkDir 'op-edit'; New-Tree $d; Set-OverrideShape $d 'public'
+  $pt = Get-Plan (Join-Path $d 'CtorLab.dproj') 'op'
+  Check 'op1 a public `Execute; override` still refuses: carries directives (override)' ($pt.Contains('Fix it: not available') -and ($pt -match 'method `Execute` already carries directives \(override\)')) (Get-Refusal $pt)
 } finally {
   if ((-not $KeepWorkDir) -and (Test-Path -LiteralPath $WorkDir)) { [IO.Directory]::Delete($WorkDir, $true) }
 }

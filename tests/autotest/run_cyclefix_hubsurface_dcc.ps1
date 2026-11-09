@@ -10,9 +10,17 @@
 #   n1  a bare use (Assigned(HubMainForm)) refuses that spoke: bare-use; the group stays
 #   n2  a write to a designer field refuses member-write
 #   n3  Inc on a Char plain field refuses member-write (var parameter); Inc / Dec on an Integer one is rewritten (h2.8)
-#   n4  a spoke that also calls a hub routine keeps the uses edge (HubStamp, phase P3); the group stays
-#   n5  an ancestor's member (Tag) is refused member-unsupported, and only its spoke
+#   p1  a spoke that also calls a hub routine: R1 inverts it (HubStampPtr in HubMain.Hub), the edge is cut (phase P3, 149 CYA)
+#   p2  --apply with that routine builds, stdout identical, no cycle after a re-index
+#   p3  control: a call from the spoke's initialization keeps the edge (init-order)
+#   p4  control: a routine whose signature names a type of the cycle is refused (signature-in-cycle)
+#   n5  an ancestor's member (Tag) WITHOUT a library is refused member-unsupported, and only its spoke
+#   p5  with the platform library: TComponent.Tag (rw property) and HasParent (method) are on the surface (149 CYA)
+#   p6  --apply with them builds, stdout identical
 #   n6  a two-unit knot has two hubs: not-hub-shaped, exit 1; --apply on it writes nothing
+#   q1  P6 prep: --plan --hub-surface = the playbook with R3 (and the P1 hub block) in place of Part A for the hub group
+#   q2  control: a group R3 refuses gets a note and the planner's plan
+#   q3  --causes --format json --hub-surface: R3's fix object, no planner; q4 control: default fix object unchanged; q5 bad combo exit 2
 #
 # Usage: pwsh -File run_cyclefix_hubsurface_dcc.ps1 [-Exe <drag-lint.exe>] [-WorkDir <dir>] [-KeepWorkDir]
 param(
@@ -57,8 +65,8 @@ function New-Proj([string]$Fix, [string]$Name, [scriptblock]$Patch = $null) {
   try { $null | & $Exe index --project (Join-Path $root "$Name.dproj") --db $db --library-db none *> "$db.log" } finally { Pop-Location }
   return @{ Root = $root; Dproj = (Join-Path $root "$Name.dproj"); Db = $db; Name = $Name }
 }
-function Get-HubPlan($P, [string[]]$Extra = @()) {
-  $a = @('cycles', '--plan', '--hub-surface', '--db', $P.Db, '--library-db', 'none') + $Extra
+function Get-HubPlan($P, [string[]]$Extra = @(), [string]$Lib = 'none') {
+  $a = @('cycles', '--plan', '--hub-surface', '--db', $P.Db, '--library-db', $Lib) + $Extra
   Push-Location $WorkDir
   try { $out = ($null | & $Exe @a 2>&1 | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
   return @{ Exit = $code; Out = $out }
@@ -144,17 +152,74 @@ try {
   HubMainForm.Counter:= HubMainForm.Counter + 1;" }
   $o = (Get-HubPlan $E).Out
   Check 'n3 Inc(HubMainForm.Mark) on a Char: member-write, var parameter' ((Has $o '- refused `HubSpokeA.pas`: member-write') -and (Has $o 'is a var parameter')) $o
-  $E = New-Proj 'hubsurface' 'HubSurface' { param($r) Edit-Text (Join-Path $r 'HubSpokeC.pas') "  hubMainForm.log.Add(" "  HubStamp('c');`n  hubMainForm.log.Add(" }
+  Write-Host '== p: hub free routines through R1 pointers in the surface unit (phase P3, lane 149 CYA)' -ForegroundColor Cyan
+  $StampC = { param($r) Edit-Text (Join-Path $r 'HubSpokeC.pas') "  hubMainForm.log.Add(" "  HubStamp('c');`n  hubMainForm.log.Add(" }
+  $E = New-Proj 'hubsurface' 'HubSurface' $StampC
   $o = (Get-HubPlan $E).Out
-  Check 'n4 a hub routine keeps the edge (P3): 2 cut, 1 kept by HubStamp, the group stays' ((Has $o '- uses: 2 spokes drop `HubMain` (edge cut); 1 keep it for other hub symbols: `HubStamp` 1') -and (Has $o 'the group stays -- 1 spoke->hub edges remain')) $o
+  Check 'p1 a spoke calling a hub routine: HubStamp inverted (R1), 3 cut, the group breaks   (RED on 1.48.0: kept by HubStamp)' ((Has $o '- hub routines (R1, phase P3): 1 of 1 inverted through pointers in `HubMain.Hub`: `HubStamp` -> `HubStampPtr` (1 spokes)') -and (Has $o '- uses: 3 spokes drop `HubMain` (edge cut); 0 keep it') -and (Has $o '- prediction: the group breaks') -and (Has $o 'THubStampPtr = procedure(const pTag: string);') -and (Has $o 'HubStampPtr: THubStampPtr;')) $o
+  $B = New-Proj 'hubsurface' 'HubSurface' $StampC
+  $b0 = Invoke-Build $B
+  $out0 = Invoke-Program $B
+  $P = New-Proj 'hubsurface' 'HubSurface' $StampC
+  $a = Get-HubPlan $P @('--apply')
+  $b1 = Invoke-Build $P
+  $out1 = Invoke-Program $P
+  Check 'p2.1 --apply with the routine: exit 0, untouched + applied copies build' (($a.Exit -eq 0) -and $b0.Ok -and $b1.Ok) "exit=$($a.Exit) base=[$($b0.Errors)] applied=[$($b1.Errors)] $($a.Out)"
+  Check 'p2.2 stdout byte-identical, the stamp still printed through the pointer' (($out0 -ne '<no exe>') -and ($out1 -ceq $out0) -and ($out0 -match 'stamp c')) "before=[$out0] after=[$out1]"
+  $sc = [IO.File]::ReadAllText((Join-Path $P.Root 'HubSpokeC.pas'), $Ascii)
+  $hm = [IO.File]::ReadAllText((Join-Path $P.Root 'HubMain.pas'), $Ascii)
+  Check 'p2.3 spoke C calls the pointer and uses HubMain.Hub only; HubMain assigns it in initialization' ((Has $sc "HubStampPtr('c');") -and ($sc -notmatch '(?m)^\s+HubMain;') -and ($hm -match '(?s)\ninitialization\r\n  HubStampPtr := HubStamp;')) "$sc`n$hm"
+  $left = Get-Cycles $P
+  Check 'p2.4 no cycle after a re-index' ($left -match 'No circular unit dependencies found\.') $left
+  $E = New-Proj 'hubsurface' 'HubSurface' { param($r) Edit-Text (Join-Path $r 'HubSpokeC.pas') "end;`n`nend." "end;`n`ninitialization`n  HubStamp('init');`n`nend." }
+  $o = (Get-HubPlan $E).Out
+  Check 'p3 control: a call from the spoke''s initialization keeps the edge (init-order), the group stays' ((Has $o '- `HubSpokeC.pas` keeps `HubStamp`: init-order') -and (Has $o '- uses: 2 spokes drop `HubMain` (edge cut); 1 keep it for other hub symbols: `HubStamp` 1') -and (Has $o 'the group stays -- 1 spoke->hub edges remain')) $o
+  $E = New-Proj 'hubsurface' 'HubSurface' { param($r)
+    Edit-Text (Join-Path $r 'HubMain.pas') "procedure Run;`n`nimplementation" "procedure Run;`nfunction HubSelf: THubMain;`n`nimplementation"
+    Edit-Text (Join-Path $r 'HubMain.pas') "procedure Run;`nbegin" "function HubSelf: THubMain;`nbegin`n  Result:= HubMainForm;`nend;`n`nprocedure Run;`nbegin"
+    Edit-Text (Join-Path $r 'HubSpokeC.pas') "  hubMainForm.log.Add(" "  if HubSelf <> nil then`n  hubMainForm.log.Add(" }
+  $o = (Get-HubPlan $E).Out
+  Check 'p4 control: a routine whose signature names a class of the cycle is refused signature-in-cycle and keeps its spoke''s edge' ((Has $o '- refused routine `HubSelf`: signature-in-cycle') -and (Has $o '1 keep it for other hub symbols: `HubSelf` 1') -and (Has $o 'the group stays')) $o
   $E = New-Proj 'hubsurface' 'HubSurface' { param($r) Edit-Text (Join-Path $r 'HubSpokeA.pas') "  HubMainForm.Counter:= HubMainForm.Counter + 1;" "  HubMainForm.Counter:= HubMainForm.Tag + 1;" }
   $o = (Get-HubPlan $E).Out
   Check 'n5 an ancestor member (Tag): refused member-unsupported, only spoke A refused' ((Has $o '- refused member `Tag`: member-unsupported') -and (Has $o '- refused `HubSpokeA.pas`: member-unsupported') -and ($o -match 'spokes: 2 rewritten')) $o
+  $LibDb = 'C:\Projects\.drag-lint\library-Win64.sqlite'
+  if (Test-Path -LiteralPath $LibDb) {
+    $Anc = { param($r)
+      Edit-Text (Join-Path $r 'HubSpokeA.pas') "  HubMainForm.Counter:= HubMainForm.Counter + 1;" "  HubMainForm.Counter:= HubMainForm.Tag + 1;"
+      Edit-Text (Join-Path $r 'HubSpokeB.pas') "  if HubMainForm.Ready" "  if HubMainForm.HasParent then HubMainForm.Note('never', 3);`n  if HubMainForm.Ready" }
+    $E = New-Proj 'hubsurface' 'HubSurface' $Anc
+    $o = (Get-HubPlan $E @() $LibDb).Out
+    Check 'p5 with the library: TComponent.Tag (property, rw) and HasParent (method) are on the surface, 0 refused   (RED on 1.48.0: member-unsupported)' ((Has $o '- surface: 6 of 6 members -- 1 read-only (designer fields), 2 read/write (plain fields), 3 methods') -and (Has $o 'property Tag: NativeInt read HubGetTag write HubSetTag;') -and (Has $o 'function HasParent: Boolean;') -and ($o -match 'spokes: 3 rewritten .*, 0 refused') -and (Has $o '- prediction: the group breaks')) $o
+    $B = New-Proj 'hubsurface' 'HubSurface' $Anc
+    $b0 = Invoke-Build $B
+    $out0 = Invoke-Program $B
+    $P = New-Proj 'hubsurface' 'HubSurface' $Anc
+    $a = Get-HubPlan $P @('--apply') $LibDb
+    $b1 = Invoke-Build $P
+    $out1 = Invoke-Program $P
+    Check 'p6 --apply with the ancestor members: both copies build, stdout byte-identical' (($a.Exit -eq 0) -and $b0.Ok -and $b1.Ok -and ($out0 -ne '<no exe>') -and ($out1 -ceq $out0)) "exit=$($a.Exit) base=[$($b0.Errors)] applied=[$($b1.Errors)] before=[$out0] after=[$out1]"
+  } else { Write-Host "  [SKIP] p5/p6: no $LibDb" -ForegroundColor Yellow }
   $K = New-Proj 'guardeduses' 'GuardedUses'
   $k0 = Get-SrcHash $K.Root
   $r = Get-HubPlan $K @('--apply')
   Check 'n6 a two-unit knot: not-hub-shaped (2 hubs), exit 1, nothing written' (($r.Exit -eq 1) -and (Has $r.Out 'refused: not-hub-shaped -- 2 hubs') -and ((Get-SrcHash $K.Root) -eq $k0)) "exit=$($r.Exit) $($r.Out)"
-} finally {
+  Write-Host '== q: P6 prep -- the planner asks R3 first under --hub-surface (lane 149 CYA)' -ForegroundColor Cyan
+  $o = (Get-HubPlan $P0).Out
+  Check 'q1 --plan --hub-surface: the playbook header, the P1 hub block and R3 for the hub group, no Part A for it   (RED on 1.48.0: R3 only, no playbook)' ((Has $o '# Cycle refactoring playbook') -and (Has $o '## Group 1 (4 units): hub-shaped -- recipe R3 in place of Part A / Part B (--hub-surface)') -and ($o -match 'hub hubmain: in 3 edges') -and (Has $o '## Group 1 (4 units): hub-surface recipe R3') -and ($o -notmatch '## Cycle 1:') -and ($o -notmatch 'Untangle')) $o
+  $o = (Get-HubPlan $K).Out
+  Check 'q2 control: a knot R3 refuses gets the note and the planner''s own plan' ((Has $o '- group 1: hub-surface recipe R3 refused: not-hub-shaped') -and ($o -match '## Cycle 1:')) $o
+  Push-Location $WorkDir
+  try {
+    $js = ($null | & $Exe cycles --causes --format json --hub-surface --db $P0.Db --library-db none 2>$null | Out-String); $jsCode = $LASTEXITCODE
+    $jd = ($null | & $Exe cycles --causes --format json --db $P0.Db --library-db none 2>$null | Out-String)
+    $null | & $Exe cycles --format json --hub-surface --db $P0.Db --library-db none *> $null; $badCode = $LASTEXITCODE
+  } finally { Pop-Location }
+  $fx = $null; try { $fx = ($js | ConvertFrom-Json)[0].fix } catch { }
+  Check 'q3 --causes --format json --hub-surface: the fix object is R3''s (part r3, available, 3 cut edges, its commands)   (RED on 1.48.0: exit 2)' (($jsCode -eq 0) -and ($null -ne $fx) -and ($fx.part -eq 'r3') -and ($fx.recipe -eq 'hub-surface') -and ($fx.available -eq $true) -and (@($fx.edges).Count -eq 3) -and ($fx.apply -match '--hub-surface .*--cycle 1 --apply$')) "exit=$jsCode $js"
+  $fd = $null; try { $fd = ($jd | ConvertFrom-Json)[0].fix } catch { }
+  Check 'q4 control: without --hub-surface the fix object is the planner''s (default unchanged)' (($null -ne $fd) -and ($fd.part -ne 'r3') -and ($fd.dry_run -match '--fix')) $jd
+  Check 'q5 --format json --hub-surface without --causes: exit 2' ($badCode -eq 2) "exit=$badCode"} finally {
   if (-not $KeepWorkDir) {
     for ($i = 0; ($i -lt 15) -and (Test-Path -LiteralPath $WorkDir); $i++) {
       try { [IO.Directory]::Delete($WorkDir, $true) } catch { Start-Sleep -Seconds 2 }

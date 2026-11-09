@@ -482,7 +482,12 @@ a new leaf unit `<Hub>.Hub` with an interface that has one property per field an
 method the spokes read through the global, the hub class implementing it (heritage, accessors, a
 hand-over in AfterConstruction / BeforeDestruction) and a receiver-only rewrite in every spoke
 (`frmMain.edtX.Text` becomes `MainHub.edtX.Text`); a spoke that names nothing else of the hub drops
-it from its uses; `Inc` / `Dec` of an integer field becomes an assignment. A bare use, a write to the global or to a designer field, another var-parameter use or
+it from its uses; `Inc` / `Dec` of an integer field becomes an assignment.
+Since 1.49 (hub-SCC P3) a free routine of the hub that a spoke still calls goes through an R1 pointer in
+`<Hub>.Hub` (`T<Name>Ptr` / `<Name>Ptr`, assigned in the hub's initialization), and with a platform library an
+ancestor's public member (`frmMain.Invalidate`) is on the surface. P6 prep: the dry run is the normal playbook with R3
+(and the `--hub` block) in place of Part A for a hub-shaped group, and `cycles --causes --format json --hub-surface`
+gives R3's `fix` object (`part: r3`) for such a group without running the planner. A bare use, a write to the global or to a designer field, another var-parameter use or
 an ancestor's member refuses that spoke only. OFF by default; the dry run writes nothing, `--apply`
 writes one group and runs no compile gate yet: build the project after it.
 
