@@ -15641,8 +15641,16 @@ const
   seconds against the minutes its rows take. }
 procedure BeatStreamOpen(AConn: TFDConnection; AQ: TFDQuery; const AStep: string);
 var
-  Total: Int64;
+  Total  : Int64;
+  DelayMs: Integer;
 begin
+  { 148 IX: name the step BEFORE the count. The count can take minutes on a big index, and until BeatStep
+    the record still named the stream before (OM: "enum-values 4096 of 4434, 0/s" for 1-4 minutes).
+    Guard: tests\autotest\run_stage_stream_count_step_guard.ps1. }
+  BeatStep(AStep + ' (counting rows)');
+  { TEST SEAM (148 IX): holds the count, so a guard can see which step the status record names meanwhile. }
+  DelayMs:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_STREAM_COUNT_DELAY_MS'), 0);
+  if DelayMs > 0 then Sleep(DelayMs);  // dl:ok sleep-in-vcl@31b4 -- REVIEWED 2026-11-08: test seam in the console engine's resolve pass, no VCL message loop
   Total:= AConn.ExecSQLScalar('SELECT count(*) FROM (' + AQ.SQL.Text + ')');  // dl:ok taint-sql-injection@c459 -- REVIEWED 2026-11-04: AQ.SQL.Text is this store's own literal stream query; the reported source is the DB path, which never reaches SQL text
   BeatStep(AStep, Total);
   AQ.Open;  // dl:ok dataset-open-without-close@07d8 -- REVIEWED 2026-11-04: an opener by design; each stream closes and frees its own query

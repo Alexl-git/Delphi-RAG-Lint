@@ -3642,6 +3642,9 @@ type
     /// proves only that its own thread is alive. A stage whose counter moves is never stopped, however
     /// slow and however short memory is. Off by default: without the flag it only prints.</remarks>
     procedure CheckStall;
+    /// <summary>Reports one beat that raised, and swallows anything the report itself raises.</summary>
+    /// <param name="E">The exception the beat body raised; owned by the except block that passes it.</param>
+    procedure BeatFailed(E: Exception);
   protected
     procedure Execute; override;
   public
@@ -3673,6 +3676,7 @@ const
   STAGE_STALL_WARN_ENV        = 'DRAGLINT_STAGE_STALL_WARN_MS';   { test seam, as above }
   STAGE_STALL_EXIT_ENV        = 'DRAGLINT_STAGE_STALL_EXIT_MS';   { test seam: --stall-exit-min in ms }
   STAGE_AVAIL_PHYS_ENV        = 'DRAGLINT_TEST_AVAIL_PHYS_MB';    { test seam: pretend free RAM }
+  STAGE_BEAT_RAISE_ENV        = 'DRAGLINT_TEST_BEAT_RAISE_ONCE';  { test seam: '1' = the first beat raises }
   STAGE_CRITICAL_FREE_MB      = 512;
   { Short of memory, a standing counter is given a quarter of the armed limit. }
   STAGE_LOWMEM_LIMIT_DIVISOR  = 4;
@@ -3722,7 +3726,9 @@ begin
   B   := BeatSnapshot;
   Tick:= GetTickCount64;
   Result:= '';
-  if (B.Step <> '') and ((B.N > 0) or (B.Total > 0)) then
+  { 148 IX: a step other than the stage's own label is named even before it counts anything, so a
+    stream counting its rows says "<step> (counting rows) 0" instead of nothing. }
+  if (B.Step <> '') and ((B.N > 0) or (B.Total > 0) or not SameStr(B.Step, FLabel)) then
   begin
     Result:= ', ' + B.Step + ' ' + IntToStr(B.N);
     if B.Total > 0 then Result:= Result + ' of ' + IntToStr(B.Total);
@@ -3797,22 +3803,48 @@ end;
 
 procedure TStageHeartbeat.Execute;
 var
-  Elapsed: Double;
+  Elapsed  : Double;
+  RaiseOnce: Boolean;
 begin
   FMovedAt:= GetTickCount64;
+  RaiseOnce:= GetEnvironmentVariable(STAGE_BEAT_RAISE_ENV) = '1';
   { WaitFor, not Sleep: a stage that finishes in 3 s must not keep the process
     alive for the rest of the minute waiting to say so. }
   while FStop.WaitFor(StageHeartbeatMs) = wrTimeout do
   begin
-    Elapsed:= (Now - FT0) * SecsPerDay;
-    { %.2d, NOT %02d. Delphi's Format reads the 0 as part of the WIDTH and pads
-      with spaces, so %02d yields '0m 0s'; zero-padding is the PRECISION form.
-      Caught by the runner asserting the rendered shape rather than merely that
-      a beat occurred. }
-    Writeln(Format('%sstage: %s -- still running, %dm%.2ds elapsed%s',
-      [FIndent, FLabel, Trunc(Elapsed) div SecsPerMin, Trunc(Elapsed) mod SecsPerMin, ProgressSuffix]));
+    { 148 IX (wave-147 B5: one LOW MEMORY line, then 2 h 43 m of silence): an exception here --
+      EOutOfMemory in Format / Writeln -- used to end the thread silently (TThread keeps it in
+      FatalException), so "no beat" could mean "dead beat". Catch, say so, keep beating.
+      Guard: tests\autotest\run_stage_beat_survives_guard.ps1. }
+    try
+      if RaiseOnce then
+      begin
+        RaiseOnce:= False;
+        raise EInvalidOpException.Create('test seam ' + STAGE_BEAT_RAISE_ENV);
+      end;
+      Elapsed:= (Now - FT0) * SecsPerDay;
+      { %.2d, NOT %02d. Delphi's Format reads the 0 as part of the WIDTH and pads
+        with spaces, so %02d yields '0m 0s'; zero-padding is the PRECISION form.
+        Caught by the runner asserting the rendered shape rather than merely that
+        a beat occurred. }
+      Writeln(Format('%sstage: %s -- still running, %dm%.2ds elapsed%s',
+        [FIndent, FLabel, Trunc(Elapsed) div SecsPerMin, Trunc(Elapsed) mod SecsPerMin, ProgressSuffix]));
+      Flush(Output);
+      CheckStall;
+    except  // dl:ok try-except-swallowed@3447 -- REVIEWED 2026-11-08: BeatFailed prints it; the beat must outlive its own failure
+      on E: Exception do BeatFailed(E);
+    end;
+  end;
+end;
+
+procedure TStageHeartbeat.BeatFailed(E: Exception);
+begin
+  try
+    Writeln(FIndent + 'stage: ' + FLabel + ' -- heartbeat line failed (' + E.ClassName + ': ' + E.Message +
+      '); the beat continues');
     Flush(Output);
-    CheckStall;
+  except
+    { Nothing left to report with: the next beat tries again. }
   end;
 end;
 
@@ -25282,13 +25314,15 @@ begin
     FreeAndNil(ScopeSet);
   end;
 
-  { Resolve output path: --output, or lint-report-YYYYMMDD.txt beside the DB }
+  { Resolve output path: --output, or lint-report-YYYYMMDD.txt beside --project, else in the current
+    directory. 148 IX (144 qsmall): the old "beside the DB" default wrote into a shared _D-RAG folder,
+    where every caller's run of the day overwrote the last. Guard: run_output_encoding_written_files.ps1. }
   OutPath:= AArgs.Output;
   if OutPath = '' then
   begin
     var BaseDir: string;
     if AArgs.ProjectPath <> '' then BaseDir:= ExtractFilePath(AArgs.ProjectPath)
-    else BaseDir:= ExtractFilePath(ProjectDb);
+    else BaseDir:= GetCurrentDir;
     OutPath:= TPath.Combine(BaseDir, 'lint-report-' + FormatDateTime('YYYYMMDD', NowLocal) + '.txt');
   end;
 
@@ -32638,7 +32672,8 @@ begin
   end;
   ExitCode:= 0;
   try
-    WaitRes:= WaitForSingleObject(PI.hProcess, REINDEX_TIMEOUT_MS);
+    { TEST SEAM (148 IX): DRAGLINT_TEST_REINDEX_TIMEOUT_MS shortens the wait, so a guard can time a child out. }
+    WaitRes:= WaitForSingleObject(PI.hProcess, Cardinal(StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_REINDEX_TIMEOUT_MS'), REINDEX_TIMEOUT_MS)));
     WaitErr:= if WaitRes = WAIT_FAILED then SysErrorMessage(GetLastError) else '';
     if WaitRes = WAIT_OBJECT_0 then
       GetExitCodeProcess(PI.hProcess, ExitCode)
@@ -35414,8 +35449,14 @@ begin
     Writeln(ErrOutput, Format('NOTE: the index of %s did not exist; building it now at %s (first use; pass --no-create to skip): drag-lint index --project "%s" --db "%s"',
       [AArgs.ProjectPath, AProjDb, AArgs.ProjectPath, AProjDb]));
     Flush(ErrOutput);
-    if (not ReindexOwnerProject(AArgs.ProjectPath, AProjDb)) and (not TFile.Exists(AProjDb)) then
-      Writeln(ErrOutput, 'NOTE: building it failed; the run continues without the project index.');
+    { 148 IX: a build stopped after the parse wrote the file (the 10-minute child timeout on a large project)
+      leaves a HALF index. Say so, or this run and every later one read it as complete.
+      Guard: run_autocreate_project_db.ps1 arm M. }
+    if not ReindexOwnerProject(AArgs.ProjectPath, AProjDb) then
+      if TFile.Exists(AProjDb) then
+        Writeln(ErrOutput, Format('NOTE: building it did not finish; %s is INCOMPLETE and answers short until ' +
+          'this completes it: drag-lint index --project "%s" --db "%s"', [AProjDb, AArgs.ProjectPath, AProjDb]))
+      else Writeln(ErrOutput, 'NOTE: building it failed; the run continues without the project index.');
   finally
     Lock.Free;
     TFile.Delete(LockPath);
