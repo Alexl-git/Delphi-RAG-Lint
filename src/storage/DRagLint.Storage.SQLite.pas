@@ -217,7 +217,7 @@ type
       FQPutDataFlows         : TFDQuery     ; { taint T0: data_flows writer, prepared on first use }
       FHasFileFacts          : Integer      ; { 149 EX2: -1 unprobed, 0 absent, 1 present -- see HasFileFacts }
       FHasPpDirectives       : Integer      ; { 150 PP: -1 unprobed, 0 absent, 1 present -- see HasPpDirectives }
-      FQFileFacts            : array[0..7] of TFDQuery; { 149 EX2: 3 deletes + 3 inserts (150 PP: + pp_directives delete / insert), prepared on first use (FF_* in PutFileFacts) }  // dl:ok referenced-never-set@1db5 -- FP: the array ELEMENTS are assigned in PutFileFacts.Prepared (FQFileFacts[AIdx]:= Result)
+      FQFileFacts            : array[0..7] of TFDQuery; { 149 EX2: 3 deletes + 3 inserts (150 PP: + pp_directives delete / insert), prepared on first use (FF_* in PutFileFacts) }  // dl:ok referenced-never-set@4c97 -- FP: the array ELEMENTS are assigned in PutFileFacts.Prepared (FQFileFacts[AIdx]:= Result)
       FQDeleteFileSymbols    : TFDQuery     ;
       FQDeleteFileRefs       : TFDQuery     ;
       FQUpsertDiBinding          : TFDQuery     ;
@@ -5375,7 +5375,7 @@ begin
   end;
 end;
 
-function TSQLiteSymbolStore.GetPpDirectives(AFileId: Int64): TArray<TPpDirectiveRow>;  // dl:ok duplicate-code -- same per-table reader shape as the three 149 EX2 fact readers (columns differ)
+function TSQLiteSymbolStore.GetPpDirectives(AFileId: Int64): TArray<TPpDirectiveRow>;  // dl:ok duplicate-code@1534 -- same per-table reader shape as the three 149 EX2 fact readers (columns differ)
 var
   Q: TFDQuery;
   L: TList<TPpDirectiveRow>;
@@ -5391,18 +5391,27 @@ begin
                    'FROM pp_directives WHERE file_id = :fid ORDER BY ordinal';
     Q.ParamByName('fid').AsLargeInt:= AFileId;
     Q.Open;
+    var FOrd: TField:= Q.FieldByName('ordinal');
+    var FDir: TField:= Q.FieldByName('directive');
+    var FArg: TField:= Q.FieldByName('args');
+    var FSym: TField:= Q.FieldByName('symbol');
+    var FLin: TField:= Q.FieldByName('line');
+    var FCol: TField:= Q.FieldByName('col');
+    var FOff: TField:= Q.FieldByName('src_offset');
+    var FReg: TField:= Q.FieldByName('region');
+    var FBr : TField:= Q.FieldByName('branch');
     while not Q.Eof do
     begin
       R:= Default(TPpDirectiveRow);
-      R.Ordinal  := Q.Fields[0].AsInteger;
-      R.Directive:= Q.Fields[1].AsString;
-      R.Args     := Q.Fields[2].AsString;
-      R.Symbol   := Q.Fields[3].AsString;
-      R.Line     := Q.Fields[4].AsInteger;
-      R.Col      := Q.Fields[5].AsInteger;
-      R.Offset   := Q.Fields[6].AsInteger;
-      R.Region   := Q.Fields[7].AsInteger;
-      R.Branch   := Q.Fields[8].AsInteger;
+      R.Ordinal  := FOrd.AsInteger;
+      R.Directive:= FDir.AsString;
+      R.Args     := FArg.AsString;
+      R.Symbol   := FSym.AsString;
+      R.Line     := FLin.AsInteger;
+      R.Col      := FCol.AsInteger;
+      R.Offset   := FOff.AsInteger;
+      R.Region   := FReg.AsInteger;
+      R.Branch   := FBr.AsInteger;
       L.Add(R);
       Q.Next;
     end;

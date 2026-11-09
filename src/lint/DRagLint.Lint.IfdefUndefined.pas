@@ -533,11 +533,11 @@ begin
   end;
 end;
 
-procedure AddDirectiveTests(const ACh: TPPChunk; const ABytes: TBytes;
-  ATests: TList<TConditionalTest>);
-begin
-  AddDirectiveTestsAt(ACh.Dir, ACh.Args, ACh.Line + 1, DirectiveCol(ABytes, ACh.SrcStart), ATests);
-end;
+// 150 PP: forward -- ScanSource hands its lexed directives to ScanRows, which
+// recurses into ScanSource for an {$I} file.
+function ScanRows(const ARows: TArray<TPpDirectiveRow>; const AOwnDir: string;
+  const ASearchDirs: TArray<string>; const ASets: TScanSets;
+  ATests: TList<TConditionalTest>; ADepth: Integer): Boolean; forward;
 
 // Collects the $DEFINEs of AText (and, transitively, of its includes) into
 // ASets.Defined, its $UNDEFs into ASets.Undefs when that is not nil, and --
@@ -546,47 +546,42 @@ end;
 function ScanSource(const AText, AOwnDir: string; const ASearchDirs: TArray<string>;
   const ASets: TScanSets; ATests: TList<TConditionalTest>; ADepth: Integer): Boolean;
 var
-  Chunks : TArray<TPPChunk>;
-  Ch     : TPPChunk;
-  IncPath: string;
-  IncText: string;
-  Bytes  : TBytes;
+  Chunks: TArray<TPPChunk>;
+  Ch    : TPPChunk;
+  Bytes : TBytes;
+  Rows  : TList<TPpDirectiveRow>;
+  Row   : TPpDirectiveRow;
 begin
-  Result:= True;
   Chunks:= LexDirectives(AText);
   Bytes:= TEncoding.UTF8.GetBytes(AText);
-  for Ch in Chunks do
-  begin
-    if Ch.Kind <> ckDirective then Continue;
-    if Ch.Dir = 'define' then
-      AddDirectiveSymbol(Ch.Args, ASets.Defined)
-    else if Ch.Dir = 'undef' then
-      AddDirectiveSymbol(Ch.Args, ASets.Undefs)
-    else if (Ch.Dir = 'i') or (Ch.Dir = 'include') then
+  // 150 PP: the lexed directives in the pp_directives row shape, then the one
+  // loop both paths share (ScanRows).
+  Rows:= TList<TPpDirectiveRow>.Create;
+  try
+    for Ch in Chunks do
     begin
-      // {$I+} / {$I-} is the I/O-checking switch, not an include.
-      if (Ch.Args = '') or CharInSet(Ch.Args[1], ['+', '-']) then Continue;
-      IncPath:= ResolveInclude(Ch.Args, AOwnDir, ASearchDirs);
-      if (IncPath = '') or (ADepth >= MAX_INCLUDE_DEPTH) then Exit(False);
-      if ASets.Visited.ContainsKey(LowerCase(IncPath)) then Continue;
-      ASets.Visited.Add(LowerCase(IncPath), 0);
-      if not TryReadSource(IncPath, IncText) then Exit(False);
-      // Tests inside an include are the include's own business: only its
-      // DEFINEs (and UNDEFs) are collected here.
-      if not ScanSource(IncText, ExtractFilePath(IncPath), ASearchDirs, ASets, nil,
-        ADepth + 1) then Exit(False);
-    end
-    else if ATests <> nil then
-      AddDirectiveTests(Ch, Bytes, ATests);
+      if Ch.Kind <> ckDirective then Continue;
+      Row:= Default(TPpDirectiveRow);
+      Row.Directive:= Ch.Dir;
+      Row.Args     := Ch.Args;
+      Row.Line     := Ch.Line + 1;
+      Row.Col      := DirectiveCol(Bytes, Ch.SrcStart);
+      Rows.Add(Row);
+    end;
+    Result:= ScanRows(Rows.ToArray, AOwnDir, ASearchDirs, ASets, ATests, ADepth);
+  finally
+    Rows.Free;
   end;
 end;
 
-// 150 PP: ScanSource's loop over the file's pp_directives rows instead of its
-// lexed text -- same order, same sets, same tests; an {$I} row still resolves
-// and scans the include's text from disk.
+// The directive loop of ScanSource, over rows: a lexed text's or -- 150 PP --
+// a file's pp_directives rows (same order, same sets, same tests). An {$I}
+// row resolves and scans the include's text from disk; tests inside an
+// include are the include's own business, only its DEFINEs (and UNDEFs) are
+// collected.
 function ScanRows(const ARows: TArray<TPpDirectiveRow>; const AOwnDir: string;
   const ASearchDirs: TArray<string>; const ASets: TScanSets;
-  ATests: TList<TConditionalTest>): Boolean;
+  ATests: TList<TConditionalTest>; ADepth: Integer): Boolean;
 var
   Row    : TPpDirectiveRow;
   IncPath: string;
@@ -601,13 +596,15 @@ begin
       AddDirectiveSymbol(Row.Args, ASets.Undefs)
     else if (Row.Directive = 'i') or (Row.Directive = 'include') then
     begin
+      // {$I+} / {$I-} is the I/O-checking switch, not an include.
       if (Row.Args = '') or CharInSet(Row.Args[1], ['+', '-']) then Continue;
       IncPath:= ResolveInclude(Row.Args, AOwnDir, ASearchDirs);
-      if IncPath = '' then Exit(False);
+      if (IncPath = '') or (ADepth >= MAX_INCLUDE_DEPTH) then Exit(False);
       if ASets.Visited.ContainsKey(LowerCase(IncPath)) then Continue;
       ASets.Visited.Add(LowerCase(IncPath), 0);
       if not TryReadSource(IncPath, IncText) then Exit(False);
-      if not ScanSource(IncText, ExtractFilePath(IncPath), ASearchDirs, ASets, nil, 1) then Exit(False);
+      if not ScanSource(IncText, ExtractFilePath(IncPath), ASearchDirs, ASets, nil,
+        ADepth + 1) then Exit(False);
     end
     else if ATests <> nil then
       AddDirectiveTestsAt(Row.Directive, Row.Args, Row.Line, Row.Col, ATests);
@@ -646,7 +643,7 @@ begin
     Writeln(ErrOutput, Format('pp-directives: %s %s rows=%d',
       [if Length(Rows) > 0 then 'table' else 'scan', AFilePath, Length(Rows)]));
   if Length(Rows) > 0 then
-    Exit(ScanRows(Rows, ExtractFilePath(ExpandFileName(AFilePath)), ASearchDirs, ASets, ATests));
+    Exit(ScanRows(Rows, ExtractFilePath(ExpandFileName(AFilePath)), ASearchDirs, ASets, ATests, 0));
   if not TryReadSource(AFilePath, Text) then Exit(False);
   Result:= ScanSource(Text, ExtractFilePath(ExpandFileName(AFilePath)), ASearchDirs, ASets, ATests, 0);
 end;

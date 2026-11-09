@@ -644,6 +644,7 @@ uses
   , DRagLint.Index.DataFlowFacts   { taint T1: the per-routine data_flows rows, written beside symbol_facts }
   , DRagLint.Core.ControlChannel   { 1.40 heartbeat: BeatProgress per indexed file }
   , DRagLint.Preprocess.Lexer      { 150 PP: LexDirectives for the pp_directives rows }
+  , System.Math                    { 150 PP: InRange }
   ;
 
 const
@@ -655,6 +656,17 @@ const
   PP_DIRECTIVE_EXTS: array[0..3] of string = ('.pas', '.dpr', '.dpk', '.inc');
   { The line-feed byte a directive's column is counted back to (lint DirectiveCol). }
   PP_LF_BYTE = 10;
+
+// 150 PP: True when branch ACand is a better home than ABest (-1 = none yet) for
+// a directive: deeper nesting wins; at equal nesting the later branch (a line
+// shared by two branches belongs to the one it opens).
+function IsInnerBranch(const ARegions: TArray<TPPRegion>; ACand, ABest: Integer): Boolean;
+begin
+  if ABest < 0 then Exit(True);
+  if ARegions[ACand].Nesting <> ARegions[ABest].Nesting then
+    Exit(ARegions[ACand].Nesting > ARegions[ABest].Nesting);
+  Result:= ARegions[ACand].StartLine >= ARegions[ABest].StartLine;
+end;
 
 /// <summary>150 PP: the pp_directives rows of one file -- its define / undef /
 /// test / include directives, every branch, in source order.</summary>
@@ -687,7 +699,7 @@ begin
     Enc:= nil;
     Bom:= TEncoding.GetBufferEncoding(ASource, Enc);
     Text:= Enc.GetString(ASource, Bom, Length(ASource) - Bom);
-  except
+  except  // dl:ok try-except-swallowed@517c -- undecodable text: no rows, which every reader takes as "not recorded" and answers by scanning the file itself (the lint's TryReadSource fails the same way)
     on E: EEncodingError do Exit;
   end;
   Chunks:= LexDirectives(Text);
@@ -718,9 +730,7 @@ begin
       Row.Branch:= -1;
       Best:= -1;
       for I:= 0 to High(ARegions) do
-        if (ARegions[I].StartLine <= Row.Line) and (Row.Line <= ARegions[I].EndLine)
-          and ((Best < 0) or (ARegions[I].Nesting > ARegions[Best].Nesting)
-            or ((ARegions[I].Nesting = ARegions[Best].Nesting) and (ARegions[I].StartLine >= ARegions[Best].StartLine))) then
+        if InRange(Row.Line, ARegions[I].StartLine, ARegions[I].EndLine) and IsInnerBranch(ARegions, I, Best) then
           Best:= I;
       if Best >= 0 then
       begin
