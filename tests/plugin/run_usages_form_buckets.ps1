@@ -18,8 +18,8 @@
 #>
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory)][string]$Exe,
-  [Parameter(Mandatory)][string]$IndexDb,
+  [string]$Exe     = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
+  [string]$IndexDb = '',   # empty (the battery): a one-unit fixture that raises and handles EFix is indexed into a temp DB
   [string]$Name   = 'Exception',
   [string]$SrcDir = "$PSScriptRoot\..\..\src\delphi-plugin"
 )
@@ -30,6 +30,15 @@ function Check($n, $ok, $d = '') {
   if (-not $ok) { $script:Failed = $true }
 }
 
+if (-not $IndexDb) {
+  # 148 INT: the battery runs every runner without arguments; Mandatory -Exe / -IndexDb made this a FAIL there.
+  $fx = Join-Path $env:TEMP "dl-usages-buckets-$PID"
+  [void][IO.Directory]::CreateDirectory($fx)
+  [IO.File]::WriteAllText((Join-Path $fx 'uFix.pas'), "unit uFix;`r`ninterface`r`nuses System.SysUtils;`r`ntype`r`n  EFix = class(Exception);`r`nprocedure Run;`r`nimplementation`r`nprocedure Run;`r`nbegin`r`n  try`r`n    raise EFix.Create('x');`r`n  except`r`n    on E: EFix do ;`r`n  end;`r`nend;`r`nend.`r`n")
+  $IndexDb = Join-Path $fx 'fix.sqlite'
+  & $Exe index $fx --db $IndexDb --library-db none *> $null
+  if ($Name -eq 'Exception') { $Name = 'EFix' }
+}
 $raw = & $Exe usages --name $Name --json --db $IndexDb 2>$null | Out-String
 $doc = $raw | ConvertFrom-Json
 $buckets = @($doc.PSObject.Properties | Where-Object { $_.Value -is [System.Array] } | ForEach-Object { $_.Name })

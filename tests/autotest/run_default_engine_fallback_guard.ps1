@@ -53,7 +53,7 @@ try {
     $onlyBuilt = & $sb $psr
     Set-Stub $built $false; Set-Stub $deployed $true
     $onlyDeployed = & $sb $psr
-    $ok = ($onlyBuilt -like '*src\cli\Win64\Debug\drag-lint.exe') -and ($onlyDeployed -like '*third_party\dll-win64\drag-lint.exe') -and ($none -like '*drag-lint.exe')
+    $ok = ($onlyBuilt -like '*src\cli\Win64\Debug\drag-lint.exe') -and ($onlyDeployed -like '*third_party\dll-win64\drag-lint.exe') -and ($none -like '*drag-lint.exe')  # exe-freshness: absent (wildcard patterns matched against stub paths, not exe references)
     if (-not $ok) { $bad += $s.Name }
   }
   Check 'A cyclefix -Exe defaults fall back both ways' (($bad.Count -eq 0) -and ($scripts.Count -ge 40)) "($($scripts.Count) scripts, bad: $($bad -join ','))"
