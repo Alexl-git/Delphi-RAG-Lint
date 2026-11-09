@@ -159,6 +159,11 @@ one edge. Indexes: `idx_call_edges_target`, `_ref`, `_receiver`.
 (cascade)`, `confidence TEXT` (`certain` | `ambiguous`: several overloads/receivers
 matched), `receiver_type_symbol_id INTEGER FK symbols (set null)` (static receiver type).
 Only `refs.kind = 'call'` is ever resolved here.
+Interface dispatch (RB-5, owner ruling 2026-09-16): a call through an interface-typed receiver
+has ONE edge, to the interface method, never one per implementor. The dispatch kind is not a
+column; derive it: the target's parent symbol has `kind = 'interface'`. The implementors are a
+query on `dispatch_edges` (`base_symbol_id` = the interface method, `kind = 'implements'`).
+Guard: `tests\callresolve\run_interface_dispatch_attribution.ps1`.
 
 ### member_accesses
 Property/field accesses. `ref_id INTEGER PK FK refs (cascade)`, `member_symbol_id INTEGER
