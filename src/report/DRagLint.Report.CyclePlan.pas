@@ -1051,6 +1051,8 @@ type
     procedure PlanMemberHandOver(pEvals: TList<TEdgeEval>);
     procedure PlanMetaclassValue(pEvals: TList<TEdgeEval>);
     function MetaclassSteps(const pEv: TEdgeEval; out pWhy: string): TRecipeSteps;
+    function MetaclassArgType(const pCallee: string; pIndex: Integer; const pUsed: TArray<string>): string;
+    function MetaclassTypeUnit(const pA: TPlanFile; pLine: Integer; const pFormal: string; out pWhy: string): TArray<string>;
     function IsMetaclassInversion: Boolean;
     procedure QualifiedClassRef(const pUnitStem: string; var pRefusal: TRecipeRefusal);
     procedure SettleIfaceName(const pSurface: TEdgeSurface; const pLeaf: TUntangleLeaf; const pUnitScopes: TArray<string>;
@@ -6790,8 +6792,10 @@ begin
   begin
     var Ev:= pEvals[I];
     var S := Ev.Surface;
-    if (Ev.Recipe <> crNone) or (Length(S.ClassNames) <> 1) or not S.HasClassRefArg or S.HasConstruction or
-      S.HasClassMethod or S.HasDecl or S.HasWrite or (Length(S.Members) > 0) or (Length(S.RoutineIds) > 0) then Continue;
+    var OneValue := (Ev.Recipe = crNone) and (Length(S.ClassNames) = 1) and S.HasClassRefArg;
+    var OtherUse := S.HasConstruction or S.HasClassMethod or S.HasDecl or S.HasWrite;
+    var OtherDecl:= (Length(S.Members) > 0) or (Length(S.RoutineIds) > 0);
+    if not OneValue or OtherUse or OtherDecl then Continue;
     var Why: string;
     var Steps:= MetaclassSteps(Ev, Why);
     if Why <> '' then
@@ -6840,9 +6844,6 @@ end;
   TX as a whole argument of a call; the formal parameter type at that position (every declaration of the callee in the
   project index and the platform library agreeing) types the variable; the call must not run in A's initialization. }
 function TCyclePlanner.MetaclassSteps(const pEv: TEdgeEval; out pWhy: string): TRecipeSteps;
-var
-  Owner: TSymbol;
-  Stem : string;
 begin
   Result:= Default(TRecipeSteps);
   pWhy  := '';
@@ -6859,54 +6860,23 @@ begin
     for var U in SectionEntries(A, Sect) do UsedUnits:= UsedUnits + [U.UnitName];
   for var R in S.Refs do
   begin
-    var Code:= CodePart(LineAt(A.Lines, R.Line));
-    var M:= TRegEx.Match(Code, '(?<![\w.])([A-Za-z_]\w*)\s*\(\s*((?:[^(),]+,\s*)*)' + TRegEx.Escape(TX) + '\s*[,)]',
-      [roIgnoreCase]);
+    var M:= TRegEx.Match(CodePart(LineAt(A.Lines, R.Line)), '(?<![\w.])([A-Za-z_]\w*)\s*\(\s*((?:[^(),]+,\s*)*)' +
+      TRegEx.Escape(TX) + '\s*[,)]', [roIgnoreCase]);
+    var Typ:= if M.Success then MetaclassArgType(M.Groups[1].Value, M.Groups[2].Value.CountChar(','), UsedUnits) else '';
     if not M.Success then
-    begin
       pWhy:= Format('class-ref -- line %d passes the class `%s` as a value outside a call argument (`%s`)',
-        [R.Line, TX, Trim(R.LineText)]);
-      Exit;
-    end;
-    { the formal parameter type at that position, every declaration of the callee agreeing }
-    var Callee:= M.Groups[1].Value;
-    var Index := M.Groups[2].Value.CountChar(',');
-    var Typ   := '';
-    var Seen  := False;
-    for var Source:= 0 to 1 do
-    begin
-      var St:= if Source = 0 then FStore else FLibStore;
-      if St = nil then Continue;
-      for var C in St.FindSymbolsByExactName(Callee) do
-        { a bare call binds a top-level routine of a unit A uses (or of System); a method of another class never }
-        if (C.Kind in [skFunction, skProcedure]) and (MatchText(ChangeFileExt(ExtractFileName(St.GetFilePath(C.FileId)), ''),
-          UsedUnits) or SameText(ChangeFileExt(ExtractFileName(St.GetFilePath(C.FileId)), ''), 'System')) then
-        begin
-          var P:= ParamTypeAt(C.Signature, Index);
-          if Seen and not SameText(P, Typ) then Typ:= '?' else if not Seen then Typ:= P;
-          Seen:= True;
-        end;
-    end;
-    if (Typ = '') or (Typ = '?') or not TRegEx.IsMatch(Typ, '^[A-Za-z_]\w*$') then
-    begin
+        [R.Line, TX, Trim(R.LineText)])
+    else if Typ = '' then
       pWhy:= Format('signature-unknown -- line %d passes `%s` to `%s`, whose parameter type at that position could not ' +
         'be read from the indexes given (no declaration, an untyped parameter, or overloads that differ there)%s',
-        [R.Line, TX, Callee, (if FLibStore = nil then ' (no platform library was read: pass --library-db)' else '')]);
-      Exit;
-    end;
-    if (Formal <> '') and not SameText(Formal, Typ) then
-    begin
+        [R.Line, TX, M.Groups[1].Value, (if FLibStore = nil then ' (no platform library was read: pass --library-db)' else '')])
+    else if (Formal <> '') and not SameText(Formal, Typ) then
       pWhy:= Format('signature-unknown -- `%s` is passed where `%s` and `%s` are expected: one variable cannot carry both',
-        [TX, Formal, Typ]);
-      Exit;
-    end;
+        [TX, Formal, Typ])
+    else if InitOrderWhy(A.Lines, R, A.UnitName) <> '' then
+      pWhy:= 'init-order -- ' + InitOrderWhy(A.Lines, R, A.UnitName);
+    if pWhy <> '' then Break;
     Formal:= Typ;
-    var InitWhy:= InitOrderWhy(A.Lines, R, A.UnitName);
-    if InitWhy <> '' then
-    begin
-      pWhy:= 'init-order -- ' + InitWhy;
-      Exit;
-    end;
     var Edit:= Default(TRecipeEdit);
     Edit.Fid     := A.Fid;
     Edit.Line    := R.Line;
@@ -6916,45 +6886,15 @@ begin
     for var E in Edits do Dup:= Dup or ((E.Fid = Edit.Fid) and (E.Line = Edit.Line));
     if not Dup then Edits:= Edits + [Edit];
   end;
-  { the unit that declares the formal type: the leaf's interface names it }
   var LeafUses: TArray<string>:= nil;
-  if not IsBuiltinTypeName(Formal) then
-  begin
-    var UnitOf:= '';
-    if BindName(A.Fid, S.Refs[0].Line, Formal, Owner, Stem) then
-    begin
-      if FMembers.ContainsKey(Stem) then
-      begin
-        pWhy:= Format('signature-in-cycle -- the parameter type `%s` is declared in `%s`, a unit of this cycle', [Formal, Stem]);
-        Exit;
-      end;
-      UnitOf:= UnitNameOfStem(Stem);
-    end
-    else if FLibStore <> nil then
-      for var L in FLibStore.FindSymbolsByExactName(Formal) do
-      begin
-        var U:= ChangeFileExt(ExtractFileName(FLibStore.GetFilePath(L.FileId)), '');
-        if (UnitOf <> '') and not SameText(UnitOf, U) then UnitOf:= '?' else if UnitOf = '' then UnitOf:= U;
-      end;
-    if (UnitOf = '') or (UnitOf = '?') then
-    begin
-      pWhy:= Format('signature-unknown -- the unit that declares `%s` could not be told', [Formal]);
-      Exit;
-    end;
-    LeafUses:= [UnitOf];
-  end;
+  if pWhy = '' then LeafUses:= MetaclassTypeUnit(A, S.Refs[0].Line, Formal, pWhy);
   for var Sym in A.Syms do
-    if SameText(Sym.Name, VarName) then
-    begin
+    if (pWhy = '') and SameText(Sym.Name, VarName) then
       pWhy:= Format('duplicate-identifier -- `%s` already declares `%s` (line %d)', [A.UnitName, VarName, Sym.StartLine]);
-      Exit;
-    end;
   var Assign: TRecipeEdit;
-  if not AssignmentEdit(B.Lines, B.Fid, ['  ' + VarName + ' := ' + TX + ';'], Assign) then
-  begin
+  if (pWhy = '') and not AssignmentEdit(B.Lines, B.Fid, ['  ' + VarName + ' := ' + TX + ';'], Assign) then
     pWhy:= Format('manual-edit -- `%s` has no final `end.` to put the initialization assignment before', [B.UnitName]);
-    Exit;
-  end;
+  if pWhy <> '' then Exit;
   var Inv:= Default(TInvertedRoutine);
   Inv.Id     := S.Refs[0].SymbolId;  { IsMovedFor: the consumer's refs of TX go through the variable }
   Inv.Name   := TX;
@@ -6975,6 +6915,56 @@ begin
   Result.RegisterDecl := LeavesProgramReason(Result) <> '';
 end;
 
+{ 150-CY-7b: the type of parameter pIndex of the routine pCallee a bare call in a unit using pUsed binds: a top-level
+  routine of one of those units (or of System), project index then platform library, every declaration agreeing.
+  '' when there is none, they disagree, or the type is no plain name. }
+function TCyclePlanner.MetaclassArgType(const pCallee: string; pIndex: Integer; const pUsed: TArray<string>): string;
+begin
+  Result:= '';
+  var Seen:= False;
+  for var Source:= 0 to 1 do
+  begin
+    var St:= if Source = 0 then FStore else FLibStore;
+    if St = nil then Continue;
+    for var C in St.FindSymbolsByExactName(pCallee) do
+    begin
+      var U:= ChangeFileExt(ExtractFileName(St.GetFilePath(C.FileId)), '');
+      if (C.Kind not in [skFunction, skProcedure]) or not (MatchText(U, pUsed) or SameText(U, 'System')) then Continue;
+      var P:= ParamTypeAt(C.Signature, pIndex);
+      if Seen and not SameText(P, Result) then Exit('');
+      Result:= P;
+      Seen  := True;
+    end;
+  end;
+  if not TRegEx.IsMatch(Result, '^[A-Za-z_]\w*$') then Result:= '';
+end;
+
+{ 150-CY-7b: the uses entry the leaf's interface needs for the formal type pFormal (none for a System built-in): the
+  project unit that declares it, else the one platform-library unit. pWhy (`<kind> -- <reason>`) when it is declared in
+  this cycle or cannot be told. }
+function TCyclePlanner.MetaclassTypeUnit(const pA: TPlanFile; pLine: Integer; const pFormal: string; out pWhy: string): TArray<string>;
+var
+  Owner: TSymbol;
+  Stem : string;
+begin
+  Result:= nil;
+  pWhy  := '';
+  if IsBuiltinTypeName(pFormal) then Exit;
+  var UnitOf:= '';
+  if BindName(pA.Fid, pLine, pFormal, Owner, Stem) then
+    UnitOf:= if FMembers.ContainsKey(Stem) then '' else UnitNameOfStem(Stem)
+  else if FLibStore <> nil then
+    for var L in FLibStore.FindSymbolsByExactName(pFormal) do
+    begin
+      var U:= ChangeFileExt(ExtractFileName(FLibStore.GetFilePath(L.FileId)), '');
+      UnitOf:= if (UnitOf <> '') and not SameText(UnitOf, U) then '?' else U;
+    end;
+  if (Stem <> '') and FMembers.ContainsKey(Stem) then
+    pWhy:= Format('signature-in-cycle -- the parameter type `%s` is declared in `%s`, a unit of this cycle', [pFormal, Stem])
+  else if (UnitOf = '') or (UnitOf = '?') then
+    pWhy:= Format('signature-unknown -- the unit that declares `%s` could not be told', [pFormal])
+  else Result:= [UnitOf];
+end;
 { 150-CY-7b: the cut edge's steps are a metaclass hand-over (R1-shaped, see PlanMetaclassValue). }
 function TCyclePlanner.IsMetaclassInversion: Boolean;
 begin
