@@ -15,6 +15,12 @@ needs `--fix` and an existing `--project <X.dproj>`.
 Without `--compile-gate` nothing changes: no build, and `--project` stays what it was, a filter on which units are fixed.
 The flag is separate from `--project` for that reason.
 
+One exception (1.47, wave 148): a **naming rename** (the casing and prefix fixes, which rewrite a declaration and every
+use) is always written through the gate when `--project` names an existing `.dproj`, with or without `--compile-gate`;
+stderr says `naming renames are written through the compile gate of <X.dproj>`. Every other edit of the same run goes
+through the same all-or-nothing write. Without `--project` a naming rename writes as before, proved but not built.
+Guard: `tests\autotest\run_naming_fix_gate.ps1`.
+
 ## Example
 
 A rule fixes `Take(AWalk as TObject)` to `Take(AWalk)`. When `AWalk` is an interface that removes the only way to its

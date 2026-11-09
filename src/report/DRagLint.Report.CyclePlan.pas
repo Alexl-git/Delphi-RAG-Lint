@@ -590,12 +590,26 @@ implementation
 
 uses
   System.IOUtils, System.StrUtils, System.RegularExpressions, System.Math, System.TypInfo,
-  System.Generics.Defaults,
+  System.Generics.Defaults, System.Diagnostics,
   DRagLint.Core.Model, DRagLint.Convert.UnitRules, DRagLint.Report.CycleEdge,
   DRagLint.Report.UntangleCatalog;
 
 var
   GCtorWide: Boolean = False; { --ctor-wide; see SetCycleCtorWide }
+  GPlanTiming: Integer = -1;  { lane 148 CY: 1 when DRAGLINT_CYCLE_TIMING=1; -1 = not read yet }
+
+{ Lane 148 CY (146 r4 #5, "plan ~6 min on Loader, not profiled"): an opt-in profile of the planner. With
+  DRAGLINT_CYCLE_TIMING=1 in a console process, one stderr line `cycles plan timing: <stage> <ms> ms` per stage
+  (the time since the previous stage); otherwise nothing. Restarts pWatch. Never on stdout. }
+procedure PlanStage(const pName: string; var pWatch: TStopwatch);
+const
+  CTimingVar = 'DRAGLINT_CYCLE_TIMING';
+begin
+  if GPlanTiming < 0 then GPlanTiming:= Ord(GetEnvironmentVariable(CTimingVar) = '1');
+  if (GPlanTiming = 1) and IsConsole then
+    Writeln(ErrOutput, Format('cycles plan timing: %s %d ms', [pName, pWatch.ElapsedMilliseconds]));
+  pWatch:= TStopwatch.StartNew;
+end;
 
 procedure SetCycleCtorWide(pOn: Boolean);
 begin
@@ -932,6 +946,7 @@ type
     procedure CollectConsumers;
     procedure AddConsumer(const pItem: TMoveItem; pFid: Int64; pSect: TSect; pLine: Integer);
     procedure CollectLeafDeps;
+    function MovedSccQualifier(const pItem: TMoveItem): string;
     procedure DecideUses;
     procedure DecideOne(const pA: TPlanFile; const pU: TUnitUse);
     procedure DecideUnseenIntfEntries;
@@ -1382,6 +1397,8 @@ end;
   `;`, which moves to the entry before (T17b D3). An entry in a
   conditional region, or a directive inside the span a removal deletes,
   refuses with `directive`; a directive elsewhere in the clause does not.
+  Lane 148 CY: a single-branch region whose entries are ALL removed goes whole,
+  guard included (DropGuardedBlocks).
   --------------------------------------------------------------------------- }
 type
   TOfsSpan = record
@@ -1556,6 +1573,129 @@ begin
   Result:= -1;
 end;
 
+{ Lane 148 CY (fabcyc case 9): a removed entry inside a SINGLE-BRANCH conditional region
+  `$IFDEF X ... $ENDIF` (also IFNDEF / IF / IFOPT, closed by ENDIF or IFEND; no ELSE or ELSEIF,
+  no nesting, no other directive inside) goes as a block WITH its guard when every entry of the region
+  is removed too. Sound: in the configuration the index parsed (the build's), the region is active (its
+  entries are edges) and the build proves the result; in the other one the region was never compiled,
+  before or after. Deletes the regions from pText (last first), takes their stems out of pDels and
+  rescans: the clause must still parse, holding exactly the other entries in order; otherwise pText and
+  pDels are left as they were (the caller then refuses `directive` as before). Returns True when one or
+  more regions went. }
+{ Lane 148 CY: the single-branch region around entry pE of pOrig in pText -- the directive before the entry
+  opens it (IFDEF / IFNDEF / IF / IFOPT), the next one after it closes it (ENDIF / IFEND), inside the clause,
+  with no other brace (an ELSE, a nested IF, a comment) between the two. pSpan = from the opening brace to
+  just past the closing one. False when the shape is anything else. }
+function GuardRegionOf(const pText: string; const pOrig: TUsesClause; const pE: TUsesEntry; out pSpan: TOfsSpan): Boolean;
+const
+  COpenRx  = '^\{\$(IFDEF|IFNDEF|IF|IFOPT)\b[^}]*\}$';
+  CCloseRx = '^\{\$(ENDIF|IFEND)\b[^}]*\}$';
+begin
+  pSpan:= OfsSpan(0, 0);
+  var OpenAt := LastDelimiter('{', Copy(pText, 1, pE.Start - 1));
+  var CloseAt:= Pos('{$', pText, pE.Stop);
+  var OpenEnd := if OpenAt > 0 then Pos('}', pText, OpenAt) else 0;
+  var CloseEnd:= if CloseAt > 0 then Pos('}', pText, CloseAt) else 0;
+  var InClause:= (OpenAt > pOrig.UsesTok.Stop) and (CloseAt > 0) and (CloseAt < pOrig.Semi.Start);
+  var Closed  := (OpenEnd > 0) and (CloseEnd > 0);
+  Result:= InClause and Closed;
+  Result:= Result and TRegEx.IsMatch(Copy(pText, OpenAt, OpenEnd - OpenAt + 1), COpenRx, [roIgnoreCase]);
+  Result:= Result and TRegEx.IsMatch(Copy(pText, CloseAt, CloseEnd - CloseAt + 1), CCloseRx, [roIgnoreCase]);
+  Result:= Result and not Copy(pText, OpenEnd + 1, CloseAt - OpenEnd - 1).Contains('{');
+  if Result then pSpan:= OfsSpan(OpenAt, CloseEnd + 1);
+end;
+
+{ Lane 148 CY: deletes region pR from pText -- mid-line (`A $IFDEF X, B $ENDIF;`) with the blanks before it,
+  at a line start with the blanks after it. }
+procedure DeleteRegion(var pText: string; const pR: TOfsSpan);
+begin
+  var Start:= pR.Start;
+  var Stop := pR.Stop;
+  while (Start > 1) and CharInSet(pText[Start - 1], [' ', #9]) do Dec(Start);
+  if (Start = 1) or CharInSet(pText[Start - 1], [#10, #13]) then
+  begin
+    Start:= pR.Start;
+    while (Stop <= Length(pText)) and CharInSet(pText[Stop], [' ', #9]) do Inc(Stop);
+  end;
+  Delete(pText, Start, Stop - Start);
+end;
+
+{ Lane 148 CY: True when the first uses clause of pText still parses (its `;` outside any conditional) and holds
+  exactly the entries of pOrig whose lower-cased names are not in pGone, in their order. }
+function ClauseKeepsOthers(const pText: string; const pOrig: TUsesClause; pGone: TList<string>): Boolean;
+var
+  Lex: TUsesLexer;
+  Cur: TUsesClause;
+begin
+  Lex:= TUsesLexer.Create(pText);
+  try
+    Cur:= ScanClause(Lex);
+  finally
+    Lex.Free;
+  end;
+  Result:= Cur.Present and (Cur.Semi.Depth = 0);
+  var K:= 0;
+  for var E in pOrig.Entries do
+    if Result and not pGone.Contains(LowerCase(E.Name)) then
+    begin
+      Result:= (K <= High(Cur.Entries)) and SameText(Cur.Entries[K].Name, E.Name);
+      Inc(K);
+    end;
+  Result:= Result and (K = Length(Cur.Entries));
+end;
+
+function DropGuardedBlocks(var pText: string; const pOrig: TUsesClause; var pDels: TArray<string>;
+  const pAdds: TArray<string>): Boolean;
+var
+  Text   : string;
+  Dels   : TList<string>;
+  Gone   : TList<string>;
+  Regions: TList<TOfsSpan>;
+begin
+  Result:= False;
+  if not pOrig.Present or (pOrig.Semi.Depth > 0) then Exit;
+  Text   := pText;
+  Dels   := TList<string>.Create;
+  Gone   := TList<string>.Create;
+  Regions:= TList<TOfsSpan>.Create;
+  try
+    Dels.AddRange(pDels);
+    for var I:= 0 to High(pOrig.Entries) do
+    begin
+      var E:= pOrig.Entries[I];
+      if (E.Depth <> 1) or (IndexOfEntry(pOrig, E.Name) <> I) then Continue;
+      var Removed:= False;
+      for var D in Dels do Removed:= Removed or SameText(D, E.Name);
+      for var A in pAdds do Removed:= Removed and not SameText(StemOfEntry(A), E.Name);
+      if not Removed then Exit;  { a guarded entry that stays: the block cannot go whole }
+      var Span: TOfsSpan;
+      if not GuardRegionOf(Text, pOrig, E, Span) then Exit;
+      if (Regions.Count > 0) and (Regions.Last.Start = Span.Start) then Continue;  { the region's next entry }
+      Regions.Add(Span);
+    end;
+    { every entry inside a region is removed, and named once }
+    var Bad:= Regions.Count = 0;
+    for var E in pOrig.Entries do
+      for var R in Regions do
+        if (E.Start >= R.Start) and (E.Stop <= R.Stop) then
+        begin
+          Bad:= Bad or (E.Depth <> 1) or Gone.Contains(LowerCase(E.Name));
+          Gone.Add(LowerCase(E.Name));
+        end;
+    for var I:= Regions.Count - 1 downto 0 do DeleteRegion(Text, Regions[I]);
+    if Bad or not ClauseKeepsOthers(Text, pOrig, Gone) then Exit;
+    for var I:= Dels.Count - 1 downto 0 do
+      if Gone.Contains(LowerCase(Dels[I])) then Dels.Delete(I);
+    pText:= Text;
+    pDels:= Dels.ToArray;
+    Result:= True;
+  finally
+    Regions.Free;
+    Gone.Free;
+    Dels.Free;
+  end;
+end;
+
 { The ONE minimal edit applying pAdds (entry texts) and pDels (stems) to the
   existing uses clause whose `uses` keyword is on line pUsesLine. Adds go
   first, so a removal never empties a clause that gains an entry. First = 0
@@ -1590,6 +1730,9 @@ begin
   end;
   BadOfs:= if Orig.Present then Orig.UsesTok.Start else 1;
   if not Orig.Present then Kind:= CRefManual;
+  var Dels:= Copy(pDels);
+  // lane 148 CY: removed entries of a single-branch $IFDEF region go with their guard
+  if Kind = '' then DropGuardedBlocks(Text, Orig, Dels, pAdds);
   Ops:= TList<string>.Create;
   try
     if Kind = '' then
@@ -1600,7 +1743,7 @@ begin
         if I < 0 then Ops.Add('+' + S);
       end;
       { a stem both removed and added again stays where it is }
-      for var S in pDels do
+      for var S in Dels do
         if IndexOfEntry(Orig, S) >= 0 then
         begin
           var Readded:= False;
@@ -3490,19 +3633,29 @@ end;
 
 procedure TCyclePlanner.Materialize;
 begin
+  var W:= TStopwatch.StartNew;
   AssignLeafNames;
+  PlanStage('AssignLeafNames', W);
   MergeLeafCycles;
+  PlanStage('MergeLeafCycles', W);
   MarkItemLines;
   DeleteEmptyHeaders;
+  PlanStage('MarkItemLines+DeleteEmptyHeaders', W);
   CollectConsumers;
+  PlanStage('CollectConsumers', W);
   RewriteQualifiedMoved;
+  PlanStage('RewriteQualifiedMoved', W);
   CollectLeafDeps;
+  PlanStage('CollectLeafDeps', W);
   DecideUses;
   DecideUnseenIntfEntries;
+  PlanStage('DecideUses+DecideUnseenIntfEntries', W);
   RegisterLeaves;
   ExtendLeaves;
   BuildUsesEdits;
+  PlanStage('RegisterLeaves+ExtendLeaves+BuildUsesEdits', W);
   Predict;
+  PlanStage('Predict', W);
 end;
 
 procedure TCyclePlanner.AssignLeafNames;
@@ -4047,6 +4200,38 @@ begin
       if FItems.TryGetValue(N.Owner.Id, Other) then AddUnique(Deps, FLeafName[Other.Stem])
       else if not FMembers.ContainsKey(N.OwnerStem) then AddUnique(Deps, UnitNameOfStem(N.OwnerStem));
     end;
+    if FLeafCycleWhy = '' then FLeafCycleWhy:= MovedSccQualifier(Item);
+  end;
+end;
+
+{ Lane 148 CY (144 cycq q10b): a moved line naming another unit of the cycle qualified -- `DUnit.Foo(2)` in a
+  method body that moves with its class -- needs that unit in the leaf, so the leaf would be in the cycle; the
+  index may not even resolve the name (then no need records it and the leaf's uses lose it: E2003 at the gate).
+  Refused up front (coupling-remains) instead of at the compile gate. A qualified name of a declaration the plan
+  moves too is not counted (RewriteQualifiedMoved points it at the leaf). Code only: comments and strings are
+  stripped per line. Returns the reason, or ''. }
+function TCyclePlanner.MovedSccQualifier(const pItem: TMoveItem): string;
+begin
+  Result:= '';
+  var F:= GetFile(pItem.Sym.FileId);
+  for var Stem in FComp do
+  begin
+    if Stem = pItem.Stem then Continue;
+    var Parts:= UnitNameOfStem(Stem).Split(['.']);
+    for var I:= 0 to High(Parts) do Parts[I]:= TRegEx.Escape(Parts[I]);
+    var Rx:= '(?<![\w.@])' + string.Join('\s*\.\s*', Parts) + '\s*\.\s*([A-Za-z_]\w*)';
+    for var R in MovedRanges(pItem) do
+      for var L:= R.First to R.Last do
+        for var M in TRegEx.Matches(CodePart(LineAt(F.Lines, L)), Rx, [roIgnoreCase]) do
+        begin
+          var Moved:= False;
+          for var Id in FOrder do
+            Moved:= Moved or ((FItems[Id].Stem = Stem) and SameText(FItems[Id].Sym.Name, M.Groups[1].Value));
+          if not Moved then
+            Exit(Format('line %d of `%s` names `%s` qualified by its unit, a unit of the cycle; the line moves to `%s`, ' +
+              'which would then use `%s`', [L, ExtractFileName(F.Path), Trim(M.Value), FLeafName[pItem.Stem],
+              UnitNameOfStem(Stem)]));
+        end;
   end;
 end;
 
@@ -5799,6 +5984,7 @@ var
   Cut  : TObjectDictionary<Int64, TList<Int64>>;
   Why  : string;
 begin
+  var W:= TStopwatch.StartNew;
   Seeds:= TList<TNeed>.Create;
   Cut  := TObjectDictionary<Int64, TList<Int64>>.Create([doOwnsValues]);
   try
@@ -5819,6 +6005,7 @@ begin
           if not Cut[N.Owner.Id].Contains(FidOfStem(A)) then Cut[N.Owner.Id].Add(FidOfStem(A));
         end;
       end;
+    PlanStage('PlanIntfCycle seeds', W);
     for var N in Seeds do
     begin
       var Snap:= FOrder.Count;
@@ -5835,6 +6022,7 @@ begin
       end;
       FManual.Add(M);
     end;
+    PlanStage(Format('PlanIntfCycle TryAdd/Classify (%d seeds)', [Seeds.Count]), W);
   finally
     Cut.Free;
     Seeds.Free;
@@ -5877,12 +6065,16 @@ begin
     'implementation-only cycle that may remain.');
   Emit('');
   RenderDone(True);
+  var W:= TStopwatch.StartNew;  { lane 148 CY: DRAGLINT_CYCLE_TIMING sub-stages of the render }
   RenderMoves(CStepMoves);
   RenderDecisions(CStepUses);
   RenderLeafUnits(CStepCreate);
   RenderEdits(CStepEdit);
+  PlanStage('RenderIntfCycle moves/decisions/leaves/edits', W);
   RenderChecklist(pPlan.CycleIndex - 1);
+  PlanStage('RenderIntfCycle checklist', W);
   RenderPartB;
+  PlanStage('RenderIntfCycle RenderPartB', W);
 end;
 
 { E18 T7 R3: every edge of the cycle with the recipe that applies to it, or the
@@ -6629,9 +6821,15 @@ begin
   Emit('- Checked: no name inside a `with` body changes what it binds to; the members carried are fields and ' +
     'properties of the class itself, read only.');
   for var S in FInversion.Surfaces do
-    EmitFmt('- Exceptions: a failed `as %s` raises EIntfCastError, not EInvalidCast as `as %s` did -- a handler ' +
-      'for EInvalidCast no longer catches it. Checked: `%s` handles no EInvalidCast, or each `as` follows its ' +
-      '`is` guard.', [S.IfaceName, S.ClassTypeName, Consumer]);
+    if S.AsHelper <> '' then  { lane 148 CY (fabcyc case 8) }
+      EmitFmt('- Exceptions: `%s` handles EInvalidCast and casts with `as %s` unguarded, so every such `as` goes ' +
+        'through `%s(X)`, a helper the plan adds to `%s`: nil for nil, else the interface, else ' +
+        '`raise EInvalidCast.CreateRes(@SInvalidCast)` -- the class and message the failed class cast raised; ' +
+        'only the raise address differs.', [Consumer, S.ClassTypeName, S.AsHelper, Consumer])
+    else
+      EmitFmt('- Exceptions: a failed `as %s` raises EIntfCastError, not EInvalidCast as `as %s` did -- a handler ' +
+        'for EInvalidCast no longer catches it. Checked: `%s` handles no EInvalidCast, or each `as` follows its ' +
+        '`is` guard.', [S.IfaceName, S.ClassTypeName, Consumer]);
   Emit('');
 end;
 
@@ -7056,10 +7254,13 @@ begin
   end;
   for var I:= 1 to FSccs.Count do
   begin
+    var W:= TStopwatch.StartNew;
     var Plan:= BuildPlan(I);
+    PlanStage(Format('cycle %d BuildPlan total', [I]), W);
     try
       DumpPlanForTests(Plan);
       RenderPlan(Plan);
+      PlanStage(Format('cycle %d RenderPlan', [I]), W);
     finally
       Plan.Release;
     end;

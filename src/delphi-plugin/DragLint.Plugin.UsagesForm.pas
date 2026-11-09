@@ -83,7 +83,8 @@ var
   /// <remarks>With a connected client whose databases cover the query, Find Usages asks
   /// `draglint/usages` and spawns nothing. Otherwise, and when the server is late (10 s) or
   /// answers an error, it runs `drag-lint usages`. Both give the same document. A client
-  /// stopped mid-question leaves "(searching...)" until Refresh. Main thread only.</remarks>
+  /// stopped or replaced mid-question is noticed within LSP_WATCH_MS and the CLI answers.
+  /// Main thread only.</remarks>
   GUsagesLspClient: TFunc<TDragLintLspClient> = nil;
 
 implementation
@@ -115,8 +116,8 @@ var
   Age    : TDateTime;
 begin
   ModName:= GetModuleName(HInstance);
-  Result:= if (ModName <> '') and FileAge(ModName, Age) then 'v1.47.0-alpha (BPL built ' + FormatDateTime('yyyy-mm-dd hh:nn:ss', Age) + ')'
-    else 'v1.47.0-alpha';
+  Result:= if (ModName <> '') and FileAge(ModName, Age) then 'v1.48.0-alpha (BPL built ' + FormatDateTime('yyyy-mm-dd hh:nn:ss', Age) + ')'
+    else 'v1.48.0-alpha';
 end;
 
 { ---- TUsageNodeData: stores file + line in tree node.Data ---- }
@@ -126,6 +127,8 @@ const
   { A server still silent after this has its question dropped and the CLI answers: a
     wide query on a large index can outlast it, and the CLI then has its own budget. }
   USAGES_LSP_BUDGET_MS = 10000;
+  { How often a question in flight checks that the client it asked is still the running one. }
+  LSP_WATCH_MS = 1000;
 
 type
   TUsageNodeData = class
@@ -152,6 +155,7 @@ type
       FRun           : TCliRunSlot   ; { the query in flight; a newer one supersedes it }
       FLspId         : Integer       ; { the server request in flight, 0 for none }
       FLspClient     : TDragLintLspClient; { who FLspId belongs to; compared, never called unchecked }
+      FLspWatch      : TTimer        ; { while FLspId <> 0: notices a stopped / replaced client (148 XP3) }
       procedure BtnRefreshClick(Sender: TObject);
       procedure BtnCloseClick  (Sender: TObject);
       procedure TreeDblClick   (Sender: TObject);
@@ -164,6 +168,7 @@ type
       function TryLspQuery: Boolean;
       procedure CancelLspQuery;
       procedure LspAnswered(AId: Integer; AStatus: TDLLspReplyStatus; AReply: TJSONValue);
+      procedure LspWatchTick(Sender: TObject);
       procedure ShowResult(AExitCode: Integer; const AOutput: string);
       procedure ParseUsagesGrouped(const AOutput: string; out AParsed: Boolean);
       procedure NavigateToNode(ANode: TTreeNode);
@@ -242,6 +247,10 @@ begin
   FLastCallerNode:= nil;
   FWidth:= 'narrow';
   FRun:= TCliRunSlot.Create;
+  FLspWatch:= TTimer.Create(Self);
+  FLspWatch.Enabled := False;
+  FLspWatch.Interval:= LSP_WATCH_MS;
+  FLspWatch.OnTimer := LspWatchTick;
 end; // constructor
 
 procedure TDragLintUsagesForm.FormClose(Sender: TObject; var Action: TCloseAction);
@@ -403,7 +412,7 @@ end;
 procedure TDragLintUsagesForm.ParseUsagesGrouped(const AOutput: string; out AParsed: Boolean);
 { v0.42: render the grouped JSON from `drag-lint usages`. Top-level keys:
   declarations (kind/qname/file/line), reads/writes/calls/types/attributes/
-  events (each file/line/col), and impact (depth/callers/units). Each category
+  events/raises/handles (each file/line/col), and impact (depth/callers/units). Each category
   becomes a root tree node with navigable child rows. }
 var
   Root: TJSONValue ;
@@ -508,6 +517,8 @@ begin
     AddRefGroup('types'     , 'Type uses'     );
     AddRefGroup('attributes', 'Attributes'    );
     AddRefGroup('events'    , 'Event handlers');
+    AddRefGroup('raises'    , 'Raised at'     ); { exception classes: raise sites (146 p1 tail) }
+    AddRefGroup('handles'   , 'Handled at'    ); { ... and the except clauses that catch them }
     AddImpactGroup;
   finally
     Root.Free;
@@ -626,6 +637,7 @@ begin
     FLspClient.CancelRequest(FLspId);
   FLspId    := 0;
   FLspClient:= nil;
+  FLspWatch.Enabled:= False;
 end;
 
 function TDragLintUsagesForm.TryLspQuery: Boolean;
@@ -649,7 +661,26 @@ begin
   end;
   if FLspId = 0 then Exit;
   FLspClient:= Client;
+  FLspWatch.Enabled:= True;
   Result:= True;
+end;
+
+procedure TDragLintUsagesForm.LspWatchTick(Sender: TObject);
+var
+  Cur: TDragLintLspClient;
+begin
+  { A stopped client runs no callback, so a request on it would leave "(searching...)" until
+    Refresh. Cur is called only when it IS the asked client (then it is live, not freed). }
+  Cur:= if Assigned(GUsagesLspClient) then GUsagesLspClient() else nil;
+  if not UsagesRequestOrphaned(FLspId, FLspClient, Cur, (Cur <> nil) and (Cur = FLspClient) and Cur.IsAlive) then
+  begin
+    if FLspId = 0 then FLspWatch.Enabled:= False;
+    Exit;
+  end;
+  FLspWatch.Enabled:= False;
+  FLspId           := 0;
+  FLspClient       := nil;
+  RunCliQuery; { the server that was asked is gone: the CLI answers }
 end;
 
 procedure TDragLintUsagesForm.LspAnswered(AId: Integer; AStatus: TDLLspReplyStatus; AReply: TJSONValue);

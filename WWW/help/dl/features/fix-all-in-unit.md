@@ -7,7 +7,7 @@ group: linting
 order: 30013
 since: 0.1.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.48.0-alpha
 ---
 
 # Fix all in unit
@@ -111,7 +111,7 @@ Without `--apply` the command is a DRY RUN: it reports what it would fix
 and writes no source file and no index. With `--apply`, naming fixes may
 first reindex stale owning project indexes. Always dry-run first.
 
-Only rules marked fixable are applied; 110 of the 314 rules are fixable
+Only rules marked fixable are applied; 110 of the 315 rules are fixable
 (`drag-lint rules --json` reports a `fixable` field per rule).
 
 ### What it needs

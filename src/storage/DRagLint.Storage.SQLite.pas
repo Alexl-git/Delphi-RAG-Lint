@@ -176,8 +176,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.AddLibraryPendingNotes (DRagLint.CLI.pas), DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas), DRagLint.CLI.AnyDbSchemaCurrent (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas) (+108 more)</para>
-  /// <para>Used in units: DRagLint.Charts.AskVerb, DRagLint.Charts.Compare, DRagLint.Charts.Index, DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Cycles, DRagLint.Charts.Q.Hierarchy, DRagLint.Charts.Q.Implementors, DRagLint.Charts.Q.MemberAccess (+29 more)</para>
+  /// <para>Used by: DRagLint.CLI.AddLibraryPendingNotes (DRagLint.CLI.pas), DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas), DRagLint.CLI.AnyDbSchemaCurrent (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas) (+109 more)</para>
+  /// <para>Used in units: DRagLint.Charts.AskVerb, DRagLint.Charts.Compare, DRagLint.Charts.Index, DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Cycles, DRagLint.Charts.Q.Hierarchy, DRagLint.Charts.Q.Implementors, DRagLint.Charts.Q.MemberAccess (+30 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSQLiteSymbolStore = class(TInterfacedObject, ISymbolStore)
@@ -1243,7 +1243,7 @@ type
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: FHasMemberAccesses = 1.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ClearCallEdges (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.DumpAllMemberAccesses (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindCallersByName (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindReferencesTo (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindResolvedCallers (DRagLint.Storage.SQLite.pas) (+1 more)</para>
+      /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ClearCallEdges (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.DumpAllMemberAccesses (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindAccessorEchoUses (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindCallersByName (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindReferencesTo (DRagLint.Storage.SQLite.pas) (+2 more)</para>
       /// <para>Reads: FHasMemberAccesses, FConn   Writes: FHasMemberAccesses</para>
       /// <para>SQL: reads SQLITE_MASTER</para>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
@@ -1364,7 +1364,7 @@ type
       /// the actionable stale-schema message rather than run a query against a
       /// pre-current schema. Not thread-safe; single owning thread only.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.AddLibraryPendingNotes (DRagLint.CLI.pas), DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas), DRagLint.CLI.AnyDbSchemaCurrent (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas) (+50 more)</para>
+      /// <para>Called from: DRagLint.CLI.AddLibraryPendingNotes (DRagLint.CLI.pas), DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas), DRagLint.CLI.AnyDbSchemaCurrent (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas) (+51 more)</para>
       /// <para>Calls: DRagLint.Core.Interfaces.TFlowOracleCache.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Connect, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Fts5TableExists, DRagLint.Storage.SQLite.TSQLiteSymbolStore.IsSchemaCurrent, DRagLint.Storage.SQLite.TSQLiteSymbolStore.PrepareStatements, DRagLint.Storage.SQLite.TSQLiteSymbolStore.TableExists</para>
       /// <para>constructor</para>
       /// <para>Reads: FReadOnly, FFts5Available   Writes: FReadOnly, FHasMemberAccesses, FHasEffectCols, FHasUseOriginCols, FHasDataFlows, FLateAncCache, FAnchorCache, FFlowOracles (+16 more)</para>
@@ -2042,6 +2042,25 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindResolvedCallers(ATargetSymbolId: Int64): TArray<TResolvedCaller>;
+      /// <summary>Implements ISymbolStore.FindAccessorEchoUses (same contract).</summary>
+      /// <param name="AAccessorSymbolId">The getter/setter routine's symbols.id.</param>
+      /// <returns>One TAccessorEchoUse per member_accesses row with that METHOD
+      /// accessor; empty without the table.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: Default, DRagLint.Storage.SQLite.TSQLiteSymbolStore.HasMemberAccesses, ExtractFileName</para>
+      /// <para>Returns: nil; List.ToArray</para>
+      /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.FindAccessorEchoUses</para>
+      /// <para>Reads: FConn</para>
+      /// <para>SQL: reads FILES, MEMBER_ACCESSES, REFS, SYMBOLS</para>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.HasMemberAccesses"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginDeferredTextIndex"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginFileBatch"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginTargetedTextIndex"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      function FindAccessorEchoUses(AAccessorSymbolId: Int64): TArray<TAccessorEchoUse>;
       { v(ADP3 T3i review round 2): the '= True' default is declared ONCE, on
         ISymbolStore. Delphi binds a default from the STATIC type of the
         expression, so repeating it here would be two declarations of one
@@ -3440,19 +3459,20 @@ type
       procedure ResolveHelpers;
       // v14 (D5): whole-DB call-resolution pass (see ISymbolStore).
       /// <param name="AExtraStores"><!-- drag-lint:auto type -->const TArray&lt;ISymbolStore&gt;</param>
+      /// <param name="AClearFirst"><!-- drag-lint:auto type -->Boolean</param>
       /// <exception cref="EArgumentException"><!-- drag-lint:auto exc -->via DRagLint.Core.Model.CallSiteRefKindSql: CallSiteRefKindSql: ARefAlias must name a table or alias</exception>
       /// <remarks>
       /// <!-- drag-lint:auto -->v14 (D5): whole-DB call-resolution pass (see ISymbolStore).
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: Default, DRagLint.Core.ControlChannel.BeatProgress, DRagLint.Core.ControlChannel.BeatStep, DRagLint.Core.Model.CallSiteRefKindSql, DRagLint.Index.CallResolver.TCallResolver.Create, DRagLint.Index.CallResolver.TCallResolver.FileIsStaleProbe, DRagLint.Index.CallResolver.TCallResolver.OracleStats, DRagLint.Index.CallResolver.TCallResolver.ResolveOne, DRagLint.Storage.SQLite.ReadDataVersion, DRagLint.Storage.SQLite.ResolveLog (+25 more)</para>
+      /// <para>Calls: Default, DRagLint.Core.ControlChannel.BeatProgress, DRagLint.Core.ControlChannel.BeatTestHold, DRagLint.Core.Model.CallSiteRefKindSql, DRagLint.Index.CallResolver.TCallResolver.Create, DRagLint.Index.CallResolver.TCallResolver.FileIsStaleProbe, DRagLint.Index.CallResolver.TCallResolver.OracleStats, DRagLint.Index.CallResolver.TCallResolver.ResolveOne, DRagLint.Storage.SQLite.BeatStreamOpen, DRagLint.Storage.SQLite.ReadDataVersion (+30 more)</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.ResolveCallTargets</para>
-      /// <para>Complexity: 52 (cyclomatic, outer body), 770 lines (full implementation)</para>
+      /// <para>Complexity: 60 (cyclomatic, outer body), 821 lines (full implementation)</para>
       /// <para>Reads: FScopeFiles, FConn, FQSetRefSymbol</para>
       /// <para>Catches: Exception (re-raise); Exception (swallowed)</para>
       /// <para>SQL: reads REFS, SYMBOLS; writes CALL_EDGES, MEMBER_ACCESSES, REFS</para>
       /// <para>Transaction: starts, commits, rolls back</para>
       /// <seealso cref="DRagLint.Core.ControlChannel.BeatProgress"/>
-      /// <seealso cref="DRagLint.Core.ControlChannel.BeatStep"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.BeatTestHold"/>
       /// <seealso cref="DRagLint.Core.Model.CallSiteRefKindSql"/>
       /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.Create"/>
       /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.FileIsStaleProbe"/>
@@ -3761,7 +3781,7 @@ type
       /// <returns><!-- drag-lint:auto -->TFDConnection -- Observed: FConn.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Charts.Index.TChartsIndex.Query (DRagLint.Charts.Index.pas), DRagLint.CLI.DoSchema (DRagLint.CLI.pas), DRagLint.CLI.DoSql (DRagLint.CLI.pas), DRagLint.CLI.DoUsesReport.LoadFilesAndEdges (DRagLint.CLI.pas), DRagLint.CLI.ReadRefTypeFact (DRagLint.CLI.pas) (+40 more)</para>
+      /// <para>Called from: DRagLint.CLI.DoSchema (DRagLint.CLI.pas), DRagLint.CLI.DoSql (DRagLint.CLI.pas), DRagLint.CLI.DoUsesReport.LoadFilesAndEdges (DRagLint.CLI.pas), DRagLint.CLI.ReadRefTypeFact (DRagLint.CLI.pas), DRagLint.CLI.UsesRecover.LoadSourceNames (DRagLint.CLI.UsesRecover.pas) (+41 more)</para>
       /// <para>Reads: FConn</para>
       /// <para>Owns returned: borrowed</para>
       /// <para>Effect-free (proven)</para>
@@ -4507,7 +4527,8 @@ type
       /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
       /// <param name="ADepth"><!-- drag-lint:auto type -->Integer</param>
       /// <returns><!-- drag-lint:auto -->TTypeCategory -- Observed: tcUnknown;
-      /// IntrinsicCategory(N); tcClass; tcInterface; tcEnum; tcRecord.</returns>
+      /// IntrinsicCategory(N); tcClass; tcInterface; tcEnum; tcRecord;
+      /// ResolveTypeCategoryDepth(Best.Signature, AFileId, ADepth + 1).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveTypeCategory (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveTypeCategoryDepth (DRagLint.Storage.SQLite.pas)</para>
@@ -8329,6 +8350,63 @@ begin
     List.Free;
   end; // try
 end; // function
+
+function TSQLiteSymbolStore.FindAccessorEchoUses(AAccessorSymbolId: Int64): TArray<TAccessorEchoUse>;
+var
+  Q   : TFDQuery               ;
+  List: TList<TAccessorEchoUse>;
+  E   : TAccessorEchoUse       ;
+begin
+  Result:= nil;
+  if not HasMemberAccesses then Exit;
+  List:= TList<TAccessorEchoUse>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    { Same joins as FindResolvedCallers' member arm, so encl_qname / file_path
+      -- and hence Doc.Facts' Display|Location fold key -- agree with it. }
+    Q.SQL.Text:=
+      'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, r.start_col, ' +
+      'ma.mode, ma.member_symbol_id, m.name AS member_name ' +
+      'FROM member_accesses ma ' +
+      'JOIN refs r ON r.id = ma.ref_id ' +
+      'JOIN symbols m ON m.id = ma.member_symbol_id ' +
+      'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
+      'JOIN files f ON f.id = r.file_id ' +
+      'WHERE ma.accessor_symbol_id = :x AND ma.accessor_kind = ''method'' ' +
+      'ORDER BY m.name, encl_qname';
+    Q.ParamByName('x').AsLargeInt:= AAccessorSymbolId;
+    Q.Open;
+    var FMember: TField:= Q.FieldByName('member_symbol_id'   );
+    var FName  : TField:= Q.FieldByName('member_name'        );
+    var FEncl  : TField:= Q.FieldByName('enclosing_symbol_id');
+    var FQName : TField:= Q.FieldByName('encl_qname'         );
+    var FPath  : TField:= Q.FieldByName('file_path'          );
+    var FLine  : TField:= Q.FieldByName('start_line'         );
+    var FCol   : TField:= Q.FieldByName('start_col'          );
+    var FMode  : TField:= Q.FieldByName('mode'               );
+    while not Q.Eof do
+    begin
+      E:= Default(TAccessorEchoUse);
+      E.MemberSymbolId:= FMember.AsLargeInt;
+      E.MemberName    := FName.AsString;
+      E.Caller.EnclosingSymbolId:= if FEncl.IsNull then 0 else FEncl.AsLargeInt;
+      E.Caller.EnclosingQName:= FQName.AsString;
+      E.Caller.FullPath      := FPath.AsString;
+      E.Caller.Location      := ExtractFileName(E.Caller.FullPath);
+      E.Caller.CallSiteLine  := if FLine.IsNull then 0 else FLine.AsInteger;
+      E.Caller.CallSiteCol   := if FCol.IsNull then 0 else FCol.AsInteger;
+      E.Caller.Confidence    := 'certain';
+      E.Caller.Mode          := FMode.AsString;
+      List.Add(E);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end;
+end;
 
 /// <summary>v14 (D5): the AutoDocument '?' bucket -- name-matching CALL-SITE
 /// refs with NO call_edges row (untypable receiver). Ordered by file path then
@@ -15579,8 +15657,16 @@ const
   seconds against the minutes its rows take. }
 procedure BeatStreamOpen(AConn: TFDConnection; AQ: TFDQuery; const AStep: string);
 var
-  Total: Int64;
+  Total  : Int64;
+  DelayMs: Integer;
 begin
+  { 148 IX: name the step BEFORE the count. The count can take minutes on a big index, and until BeatStep
+    the record still named the stream before (OM: "enum-values 4096 of 4434, 0/s" for 1-4 minutes).
+    Guard: tests\autotest\run_stage_stream_count_step_guard.ps1. }
+  BeatStep(AStep + ' (counting rows)');
+  { TEST SEAM (148 IX): holds the count, so a guard can see which step the status record names meanwhile. }
+  DelayMs:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_STREAM_COUNT_DELAY_MS'), 0);
+  if DelayMs > 0 then Sleep(DelayMs);  // dl:ok sleep-in-vcl@31b4 -- REVIEWED 2026-11-08: test seam in the console engine's resolve pass, no VCL message loop
   Total:= AConn.ExecSQLScalar('SELECT count(*) FROM (' + AQ.SQL.Text + ')');  // dl:ok taint-sql-injection@c459 -- REVIEWED 2026-11-04: AQ.SQL.Text is this store's own literal stream query; the reported source is the DB path, which never reaches SQL text
   BeatStep(AStep, Total);
   AQ.Open;  // dl:ok dataset-open-without-close@07d8 -- REVIEWED 2026-11-04: an opener by design; each stream closes and frees its own query

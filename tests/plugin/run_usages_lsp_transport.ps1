@@ -130,6 +130,9 @@ try {
   Check 'closing cancels the request' ($form -match '(?s)procedure TDragLintUsagesForm\.FormClose.*?CancelLspQuery;')
   Check 'the destructor cancels the request' ($form -match '(?s)procedure TDragLintUsagesForm\.FormDestroy.*?CancelLspQuery;')
   Check 'the form never spawns a server' ($form -notmatch 'EnsureLspClient')
+  # 148 XP3 item 4c: a request on a stopped or replaced client falls back to the CLI (no callback ever comes).
+  Check 'a sent request arms the watchdog' ($form -match '(?s)FLspClient:= Client;\s+FLspWatch\.Enabled:= True;')
+  Check 'an orphaned request falls back to the CLI' ($form -match '(?s)procedure TDragLintUsagesForm\.LspWatchTick.*?UsagesRequestOrphaned\(FLspId, FLspClient, Cur,.*?RunCliQuery;')
   $ed = [IO.File]::ReadAllText((Join-Path $SrcDir 'DragLint.Plugin.Editor.pas'))
   Check 'the Editor hands over the existing client, no spawn' ($ed -match 'GUsagesLspClient:= CurrentLspClient;')
 } finally {

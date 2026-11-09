@@ -1202,6 +1202,14 @@ $scFlags = @($(if ($scSpan -and $scSpan.Success) { [regex]::Matches($scSpan.Grou
 Check 'check 9: the syntax-count verb''s own flag table was read' ($scFlags.Count -ge 6) `
   "only $($scFlags.Count) flag(s) read from SYNTAX_COUNT_FLAG_NAMES in $scSrcPath -- was the table renamed or moved?"
 foreach ($sf in $scFlags) { [void]$accepted.Add($sf) }
+# `uses-recover` likewise, from USES_RECOVER_FLAG_NAMES of DRagLint.CLI.UsesRecover (148 HP); same control.
+$urSrcPath = Join-Path $Repo 'src\cli\DRagLint.CLI.UsesRecover.pas'
+$urSpan = $(if (Test-Path -LiteralPath $urSrcPath) {
+  [regex]::Match([IO.File]::ReadAllText($urSrcPath), "(?s)USES_RECOVER_FLAG_NAMES\s*:\s*array\[TUsesRecoverFlag\]\s*of\s*string\s*=\s*\((.*?)\);") })
+$urFlags = @($(if ($urSpan -and $urSpan.Success) { [regex]::Matches($urSpan.Groups[1].Value, "'($FlagRx)'") | ForEach-Object { $_.Groups[1].Value } }))
+Check 'check 9: the uses-recover verb''s own flag table was read' ($urFlags.Count -ge 6) `
+  "only $($urFlags.Count) flag(s) read from USES_RECOVER_FLAG_NAMES in $urSrcPath -- was the table renamed or moved?"
+foreach ($uf in $urFlags) { [void]$accepted.Add($uf) }
 
 $helpSet = Get-FlagSet $helpText $FlagRx
 
@@ -1251,7 +1259,7 @@ $CrossCuttingFlags = [ordered]@{
   '--help'            = 'every verb; the banner says so once'
   '--output-encoding' = 'every verb; documented in the global section of --help (entry output-encoding)'
 }
-$selfParsing = [ordered]@{ 'ask' = $askFlags; 'protocol' = $protoFlags; 'mcp-config' = $mcpCfgFlags; 'syntax-count' = $scFlags }
+$selfParsing = [ordered]@{ 'ask' = $askFlags; 'protocol' = $protoFlags; 'mcp-config' = $mcpCfgFlags; 'syntax-count' = $scFlags; 'uses-recover' = $urFlags }
 $f1v = New-Object System.Collections.Generic.List[string]
 foreach ($sv in $selfParsing.Keys) {
   $svBlock = New-Object System.Text.StringBuilder

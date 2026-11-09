@@ -69,19 +69,23 @@ const
   VERSION = DRAGLINT_VERSION;
 
 /// <returns><!-- drag-lint:auto -->Integer -- Observed: 0; 2; DoIndexAll(Args);
-/// DoIndex(Args); DoWarmRuleCache(Args); DoQuery (Args).</returns>
+/// DoIndex(Args); DoWarmRuleCache(Args); DoQuery (Args); DoRules (Args); DoLint (Args);
+/// DoAllow (Args); DoExport (Args); DoTop (Args); DoGain (Args); RunOverview
+/// (Args.DbPath, Args.MaxRows, Args.AsJson); DoImportLog (Args); DoGraph (Args);
+/// DoArchDiagram (Args); DoTodos (Args); DoHover (Args); DoContrastSelfTest; if
+/// Args.AllProjects then DoImpactAllProjects(Args).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas) ?, main block (drag-lint.dpr)</para>
-/// <para>Calls: AssignFile, Default, DRagLint.Charts.AskVerb.RunAskVerbFromCommandLine, DRagLint.CLI.ApplyPreprocessCompilerVersion, DRagLint.CLI.ConfigureLspLint, DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph (+146 more)</para>
-/// <para>Complexity: 151 (cyclomatic, outer body), 477 lines (full implementation)</para>
+/// <para>Calls: AssignFile, Default, DRagLint.Charts.AskVerb.RunAskVerbFromCommandLine, DRagLint.CLI.ApplyManifestSwitch, DRagLint.CLI.ApplyPreprocessCompilerVersion, DRagLint.CLI.Bookmarks.RunBookmarksRestore, DRagLint.CLI.Bookmarks.RunBookmarksStrip, DRagLint.CLI.ConfigureLspLint, DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls (+162 more)</para>
+/// <para>Complexity: 170 (cyclomatic, outer body), 509 lines (full implementation)</para>
 /// <para>Catches: Exception (empty); Exception (swallowed)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Charts.AskVerb.RunAskVerbFromCommandLine"/>
+/// <seealso cref="DRagLint.CLI.ApplyManifestSwitch"/>
 /// <seealso cref="DRagLint.CLI.ApplyPreprocessCompilerVersion"/>
-/// <seealso cref="DRagLint.CLI.ConfigureLspLint"/>
-/// <seealso cref="DRagLint.CLI.DoAllow"/>
-/// <seealso cref="DRagLint.CLI.DoAmbiguousCalls"/>
+/// <seealso cref="DRagLint.CLI.Bookmarks.RunBookmarksRestore"/>
+/// <seealso cref="DRagLint.CLI.Bookmarks.RunBookmarksStrip"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function Run: Integer;
@@ -97,6 +101,7 @@ uses
   , DRagLint.Query.Implementors { implementors verb (interface report, 1.40) }
   , DRagLint.Query.CrossImpact { impact --all-projects (1.43) }
   , DRagLint.Query.SyntaxCountVerb { syntax-count verb (GAP-SYNTAXQ, 1.42) }
+  , DRagLint.CLI.UsesRecover { uses-recover verb (148 HP): own flags, read-only }
   , DRagLint.Query.IdentWords { SelfTestIdentWords -- selftest ident-words (concept search, XERJ item 5) }
   , DRagLint.Core.OutputEncoding { --output-encoding / "outputEncoding": stdout + stderr bytes (2026-10-26) }  // dl:unit DRagLint.Core.OutputEncoding accepted -- the flag name, config key and value list are the CLI surface of that unit; ParseArgs and the config reader use all three
   , Winapi.ShellAPI
@@ -277,6 +282,8 @@ uses
   , DRagLint.Report    .Deps
   , DRagLint.Report    .RCallTree
   , DRagLint.Report    .Overview
+  , DRagLint.Report    .CycleHub  // cycles --hub (spec 2026-11-08-hub-scc-phased P1)
+  , DRagLint.Report    .CycleHubSurface // cycles --plan --hub-surface (spec 2026-11-08-hub-scc-phased P2)
   , DRagLint.Report    .CyclePlan // dl:unit DRagLint.Report.CyclePlan accepted -- the report's line formats travel with the playbook that predicts them, so the predicted output cannot drift from what cycles prints
   , DRagLint.CLI       .CycleFix
   , DRagLint.Convert   .PropTree
@@ -378,6 +385,7 @@ type
       Rule holds one id, so the earlier one used to be dropped in silence; Run
       refuses the command line instead (exit 2). '' otherwise. }
     RuleConflict    : string        ;
+    RuleList        : string        ; // --rule a,b: the ids the report is limited to; Rule is '' then
     ProjectPath     : string        ;
     RulesDir        : string        ; // --rules-dir <path>: external .scm rules location (default <exe-dir>\rules)
     RuleCategory    : string        ; // --category <name>: filter `rules` output
@@ -517,6 +525,8 @@ type
     Causes         : Boolean; // --causes (cycles: pinpoint the symbols forcing each interface edge)
     Plan           : Boolean; // --plan (cycles: emit a followable markdown refactoring playbook)
     F2047          : Boolean; // --f2047 (cycles: only the interface-only cycles dcc rejects, N-09)
+    Hub            : Boolean; // --hub (cycles: hub analysis per group, spec 2026-11-08-hub-scc-phased P1)
+    HubSurface     : Boolean; // --hub-surface (cycles --plan: recipe R3, spec 2026-11-08-hub-scc-phased P2; OFF by default)
     FixCycle       : Integer; // --cycle <n> (cycles --fix: the 1-based group to plan)
     FixCycleGiven  : Boolean; // --cycle was on the command line (so 0 / junk is an error, not 'absent')
     FixPart        : string ; // --part a|b|all (cycles --fix)
@@ -586,6 +596,7 @@ type
     // comma-split parsing, just a different meaning per-command (documented at
     // the call site).
     OnlySections: TArray<string>; // --only <Sec1,Sec2,...>  restrict sections to build | convert-apply instance allow-list
+    OnlyTypes   : TArray<string>; // --only-type <T1,T2,...>  convert-apply: every instance of these bare #convert From types (exclusive with --only)
     // v0.45: index manifest (Task 8)
     Jobs: Integer; // --jobs <n>  parallel worker processes (0 = manifest/auto)
     // v0.45: index manifest (Task 9) -- DB selection + size guard
@@ -623,6 +634,7 @@ type
     LspMergeDefinition : Boolean; // --merge-definition (merge plan A5; OFF by default)
     LspMergeNavigation : Boolean; // --merge-navigation (hierarchy, typeDefinition, highlight, folding; OFF by default)
     LspFullRules       : Boolean; // --full-rules (C1; OFF by default)
+    LspNoExceptionFacts: Boolean; // --no-exception-facts (D1, wave 148: the Raises: hover line + exception lens are ON by default)
     LspMergeBudgetMs   : Integer; // --merge-budget-ms <n>
     LspMergeBudgetSet  : Boolean; // False = LSP_MERGE_BUDGET_DEFAULT_MS
     ResolveOnly : Boolean; // index --resolve-only: re-derive edges, skip the walk
@@ -1428,7 +1440,7 @@ begin
   if ParamCount > 0 then Result.Command:= ParamStr(1); { LoadConfigDefaults keys on the verb }
   { `ask`, `protocol` and `mcp-config` parse their own flags (DRagLint.Charts.AskVerb, DRagLint.Core.ProtocolReg,
     DRagLint.MCP.ClientConfig) and print nothing else: no defaults note on stderr }
-  if (Result.Command = 'ask') or (Result.Command = 'protocol') or (Result.Command = 'mcp-config') or (Result.Command = 'init') or (Result.Command = 'syntax-count') then Exit;
+  if MatchStr(Result.Command, ['ask', 'protocol', 'mcp-config', 'init', 'syntax-count', 'uses-recover']) then Exit;
   LoadConfigDefaults(Result);
   if ParamCount = 0 then begin Result.ShowHelp:= True; Exit; end;
   Result.Command:= ParamStr(1);
@@ -1666,6 +1678,15 @@ begin
     else if A = '--all'              then Result.IndexAll       := True
     else if A = '--prune'            then Result.Prune          := True
     else if A = '--no-prune'         then Result.NoPrune        := True
+    else if (A = '--only-type') and (i < ParamCount) then
+    begin
+      Inc(i);
+      for var TP in ParamStr(i).Split([',']) do
+      begin
+        var TT:= Trim(TP);
+        if TT <> '' then Result.OnlyTypes:= Result.OnlyTypes + [TT];
+      end;
+    end
     else if (A = '--only') and (i < ParamCount) then
     begin
       Inc(i);
@@ -1902,6 +1923,8 @@ begin
     else if A = '--causes'        then Result.Causes         := True
     else if A = '--plan'          then Result.Plan           := True
     else if A = '--f2047'         then Result.F2047          := True
+    else if A = '--hub'           then Result.Hub            := True
+    else if A = '--hub-surface'   then Result.HubSurface     := True
     else if A = '--apply'         then Result.Apply          := True
     else if A = '--fix'           then Result.Fix            := True
     else if A = '--remove-unused' then Result.RemoveUnused   := True
@@ -1956,6 +1979,7 @@ begin
     else if A = '--merge-definition' then Result.LspMergeDefinition:= True
     else if A = '--merge-navigation' then Result.LspMergeNavigation:= True
     else if A = '--full-rules' then Result.LspFullRules:= True
+    else if A = '--no-exception-facts' then Result.LspNoExceptionFacts:= True
     else if (A = '--merge-budget-ms') and (i < ParamCount) then
     begin
       Inc(i);
@@ -3630,6 +3654,9 @@ type
     /// proves only that its own thread is alive. A stage whose counter moves is never stopped, however
     /// slow and however short memory is. Off by default: without the flag it only prints.</remarks>
     procedure CheckStall;
+    /// <summary>Reports one beat that raised, and swallows anything the report itself raises.</summary>
+    /// <param name="E">The exception the beat body raised; owned by the except block that passes it.</param>
+    procedure BeatFailed(E: Exception);
   protected
     procedure Execute; override;
   public
@@ -3661,6 +3688,7 @@ const
   STAGE_STALL_WARN_ENV        = 'DRAGLINT_STAGE_STALL_WARN_MS';   { test seam, as above }
   STAGE_STALL_EXIT_ENV        = 'DRAGLINT_STAGE_STALL_EXIT_MS';   { test seam: --stall-exit-min in ms }
   STAGE_AVAIL_PHYS_ENV        = 'DRAGLINT_TEST_AVAIL_PHYS_MB';    { test seam: pretend free RAM }
+  STAGE_BEAT_RAISE_ENV        = 'DRAGLINT_TEST_BEAT_RAISE_ONCE';  { test seam: '1' = the first beat raises }
   STAGE_CRITICAL_FREE_MB      = 512;
   { Short of memory, a standing counter is given a quarter of the armed limit. }
   STAGE_LOWMEM_LIMIT_DIVISOR  = 4;
@@ -3710,7 +3738,9 @@ begin
   B   := BeatSnapshot;
   Tick:= GetTickCount64;
   Result:= '';
-  if (B.Step <> '') and ((B.N > 0) or (B.Total > 0)) then
+  { 148 IX: a step other than the stage's own label is named even before it counts anything, so a
+    stream counting its rows says "<step> (counting rows) 0" instead of nothing. }
+  if (B.Step <> '') and ((B.N > 0) or (B.Total > 0) or not SameStr(B.Step, FLabel)) then
   begin
     Result:= ', ' + B.Step + ' ' + IntToStr(B.N);
     if B.Total > 0 then Result:= Result + ' of ' + IntToStr(B.Total);
@@ -3785,22 +3815,48 @@ end;
 
 procedure TStageHeartbeat.Execute;
 var
-  Elapsed: Double;
+  Elapsed  : Double;
+  RaiseOnce: Boolean;
 begin
   FMovedAt:= GetTickCount64;
+  RaiseOnce:= GetEnvironmentVariable(STAGE_BEAT_RAISE_ENV) = '1';
   { WaitFor, not Sleep: a stage that finishes in 3 s must not keep the process
     alive for the rest of the minute waiting to say so. }
   while FStop.WaitFor(StageHeartbeatMs) = wrTimeout do
   begin
-    Elapsed:= (Now - FT0) * SecsPerDay;
-    { %.2d, NOT %02d. Delphi's Format reads the 0 as part of the WIDTH and pads
-      with spaces, so %02d yields '0m 0s'; zero-padding is the PRECISION form.
-      Caught by the runner asserting the rendered shape rather than merely that
-      a beat occurred. }
-    Writeln(Format('%sstage: %s -- still running, %dm%.2ds elapsed%s',
-      [FIndent, FLabel, Trunc(Elapsed) div SecsPerMin, Trunc(Elapsed) mod SecsPerMin, ProgressSuffix]));
+    { 148 IX (wave-147 B5: one LOW MEMORY line, then 2 h 43 m of silence): an exception here --
+      EOutOfMemory in Format / Writeln -- used to end the thread silently (TThread keeps it in
+      FatalException), so "no beat" could mean "dead beat". Catch, say so, keep beating.
+      Guard: tests\autotest\run_stage_beat_survives_guard.ps1. }
+    try
+      if RaiseOnce then
+      begin
+        RaiseOnce:= False;
+        raise EInvalidOpException.Create('test seam ' + STAGE_BEAT_RAISE_ENV);
+      end;
+      Elapsed:= (Now - FT0) * SecsPerDay;
+      { %.2d, NOT %02d. Delphi's Format reads the 0 as part of the WIDTH and pads
+        with spaces, so %02d yields '0m 0s'; zero-padding is the PRECISION form.
+        Caught by the runner asserting the rendered shape rather than merely that
+        a beat occurred. }
+      Writeln(Format('%sstage: %s -- still running, %dm%.2ds elapsed%s',
+        [FIndent, FLabel, Trunc(Elapsed) div SecsPerMin, Trunc(Elapsed) mod SecsPerMin, ProgressSuffix]));
+      Flush(Output);
+      CheckStall;
+    except  // dl:ok try-except-swallowed@3447 -- REVIEWED 2026-11-08: BeatFailed prints it; the beat must outlive its own failure
+      on E: Exception do BeatFailed(E);
+    end;
+  end;
+end;
+
+procedure TStageHeartbeat.BeatFailed(E: Exception);
+begin
+  try
+    Writeln(FIndent + 'stage: ' + FLabel + ' -- heartbeat line failed (' + E.ClassName + ': ' + E.Message +
+      '); the beat continues');
     Flush(Output);
-    CheckStall;
+  except
+    { Nothing left to report with: the next beat tries again. }
   end;
 end;
 
@@ -6901,7 +6957,14 @@ var
 begin
   if (AArgs.Path = '') and (AArgs.ProjectPath = '') and (not AArgs.ScanLibraries) then
   begin
-    Writeln('ERROR: index requires a <path>, --project <file.dproj>, ' + 'or --scan-libraries');
+    { 146 k1 / 148 LS: --resolve-only walks nothing, so "requires a <path>" read as a contradiction.
+      Say what the scope argument is FOR, and name the form that needs none (--all). }
+    if AArgs.ResolveOnly then
+      Writeln('ERROR: index --resolve-only parses nothing, but it re-derives the edges of ONE section, so it ' +
+        'still needs the scope that DB was indexed from: --project <file.dproj> (a project DB) or <path> ' +
+        '(a library / folder DB), with --db <file.sqlite>. Every manifest section at once: index --all --resolve-only')
+    else
+      Writeln('ERROR: index requires a <path>, --project <file.dproj>, ' + 'or --scan-libraries');
     Exit(2);
   end;
   if AArgs.Path <> '' then
@@ -15217,6 +15280,7 @@ begin
   Survivors:= nil;
   for F in AFindings do
   begin
+    if (AArgs.RuleList <> '') and not MatchText(F.RuleId, AArgs.RuleList.Split([','])) then Continue;
     if (AArgs.Rule <> '') and not SameText(F.RuleId, AArgs.Rule)
        and not (StartsText('review-marker-', F.RuleId) and ContainsText(F.Message, '"' + AArgs.Rule + '"')) then Continue;
     { 1.38: a modernize finding the target compiler cannot take is not advice }
@@ -15321,6 +15385,7 @@ begin
       half renamed), and a single fix's refusal. Empty for a single-project
       unit, which keeps every line below byte-identical for it. }
     var Rename: TRenameOutcome:= Default(TRenameOutcome);
+    var NamingRenames: Integer:= 0; // single-project naming renames of this run (the multi-owner ones are Rename.Applied)
 
     { ADF Task 8: doc-drift is store-backed, so its fix cannot be produced by the
       pure-text BuildAutofixEdits above -- it needs the store (facts + MergeComment).
@@ -15457,6 +15522,7 @@ begin
         begin
           Edits:= Edits + NFEdits;
           Inc(FixCount, NFCount);
+          Inc(NamingRenames, NFCount);
         end;
         { E-RENAME-OTHER-PATHS: the proof `rename --apply` runs refused these; a preview says the same as the apply. }
         if Length(NFRefused) > 0 then
@@ -15537,6 +15603,12 @@ begin
     end;
     if AArgs.Apply then GuardRenameWrites(AArgs, Rename, FixCount);
     Edits:= Edits + Rename.Edits;
+    { A naming rename edits a declaration and every use: with a --project .dproj it is written through the compile gate
+      even without --compile-gate (148 RN; 146 r2 left it proof-only). The other fixers keep R3's opt-in. }
+    var GateWrite: Boolean:= AArgs.CompileGate
+      or ((NamingRenames + Rename.Applied > 0) and SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') and TFile.Exists(AArgs.ProjectPath));
+    if GateWrite and AArgs.Apply and not AArgs.CompileGate then
+      Writeln(ErrOutput, 'drag-lint: note: naming renames are written through the compile gate of ' + ExtractFileName(AArgs.ProjectPath));
     { ONE PASS NEVER WRITES MIXED BYTES: a finding whose edits overlap an earlier
       finding's (two rules rewriting one span) is withheld WHOLE and reported
       deferred; the next --fix pass re-lints and applies it.
@@ -15602,7 +15674,7 @@ begin
         end;
         if AArgs.Apply and (FixCount > 0) then
         begin
-          if AArgs.CompileGate then
+          if GateWrite then
           begin
             var GateTouched: Integer;
             if not ApplyEditsGated(Edits, 'lint --fix', AArgs, GateTouched) then GateRefused:= True;
@@ -15696,7 +15768,7 @@ begin
         suffix rather than reporting them separately. }
       var ApplySkipped: Integer;
       var Touched: Integer;
-      if AArgs.CompileGate then
+      if GateWrite then
       begin
         ApplySkipped:= 0;
         if not ApplyEditsGated(Edits, 'lint --fix', AArgs, Touched) then Exit(1);
@@ -15942,7 +16014,7 @@ const
     'used-before-assignment', 'not-assigned-interface', 'double-free', 'function-result-not-set',
     'out-param-not-set', 'overwrite-before-read', 'write-only-local', 'split-variable',
     'loop-var-after-loop', 'object-leak', 'local-only-out-arg', 'dead-store-before-out-arg', 'by-value-arg-before-assignment');
-  LINT_GATE_PROJECT_RULES: array[0..45] of string = (
+  LINT_GATE_PROJECT_RULES: array[0..46] of string = (
     'unused-public-symbol', 'unused-private-member', 'circular-uses', 'cycle-participant-unit', 'global-only-uses-edge',
     'dfm-property-not-declared', 'dependent-project-not-recompiled', 'duplicate-global-decl',
     'uses-global-census', 'discarded-effect-free-result', 'query-name-with-effect',
@@ -15953,14 +16025,14 @@ const
     'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive',
     'effect-free-in-loop-invariant', 'ancestor-not-in-project', 'opaque-to-analysis', 'datamodule-form-global',
     'global-set-in-initialization-never-freed', 'heavy-initialization', 'finalization-after-dependency', 'init-order-hazard',
-    'is-always-true', 'is-never-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows', 'redundant-cast', 'unsafe-typecast-without-is', 'ui-access-in-thread-typed', 'parameter-type-too-wide');
+    'is-always-true', 'is-never-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows', 'redundant-cast', 'unsafe-typecast-without-is', 'ui-access-in-thread-typed', 'parameter-type-too-wide', 'quit-from-thread');
   { The project rules TProjectLintRules.Run gates on OptedIn (global-only-uses-edge,
     uses-global-census, ...). `lint <file>` hands Run NO opt-in list, so even with an
     index it never evaluates them unless --rule names one: a dl:ok for one of them
     cannot be judged unused there (LintUnjudgedMarkerRules). Pinned against the
     OptedIn('<id>') calls in DRagLint.Lint.ProjectRules.pas by
     tests\autotest\run_marker_unused_optin_gated_rules.ps1. }
-  PROJECT_RULES_OPTIN_GATED: array[0..31] of string = (
+  PROJECT_RULES_OPTIN_GATED: array[0..32] of string = (
     'global-only-uses-edge', 'uses-global-census', 'dfm-property-not-declared',
     'dependent-project-not-recompiled', 'discarded-effect-free-result', 'cycle-participant-unit',
     'query-name-with-effect', 'assert-with-side-effect', 'virtual-never-overridden',
@@ -15968,7 +16040,7 @@ const
     'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive',
     'effect-free-in-loop-invariant', 'opaque-to-analysis', 'datamodule-form-global',
     'global-set-in-initialization-never-freed', 'heavy-initialization', 'finalization-after-dependency', 'init-order-hazard',
-    'is-always-true', 'is-never-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows', 'redundant-cast', 'unsafe-typecast-without-is', 'ui-access-in-thread-typed', 'parameter-type-too-wide');
+    'is-always-true', 'is-never-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows', 'redundant-cast', 'unsafe-typecast-without-is', 'ui-access-in-thread-typed', 'parameter-type-too-wide', 'quit-from-thread');
   { The OptedIn-gated project rules that ship ON, and that `lint <file>` therefore
     opts in itself when a store CONTAINS the file (lane DIRLINT, 2026-10-27). Each
     is answered exactly for one file -- its own call sites, narrowed by AOnlyFileId
@@ -17274,7 +17346,13 @@ begin
   var Ok: Boolean;
   var Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
   if not Ok then Exit(2);
-  Result:= RunExtractInterface(Store, RefactorLibraries(AArgs), Opts);
+  { E-NARROW-CHANNEL (148 RN): an --apply run listens, so shutdown / Cancel stop its build and roll it back. }
+  if Opts.Apply then OpenGateStandDown('extract-interface', AArgs.DbPath);
+  try
+    Result:= RunExtractInterface(Store, RefactorLibraries(AArgs), Opts);
+  finally
+    CloseGateStandDown;
+  end;
 end;
 
 { lane 146 g3: lazy-init }
@@ -17298,7 +17376,13 @@ begin
   var Ok: Boolean;
   var Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
   if not Ok then Exit(2);
-  Result:= RunLazyInit(Store, Opts);
+  { E-NARROW-CHANNEL (148 RN): an --apply run listens, so shutdown / Cancel stop its build and roll it back. }
+  if Opts.Apply then OpenGateStandDown('lazy-init', AArgs.DbPath);
+  try
+    Result:= RunLazyInit(Store, Opts);
+  finally
+    CloseGateStandDown;
+  end;
 end;
 { O2 (1.45): the type oracle for the .scm rules of `lint <file>`, which run BEFORE the flow store below
   is opened. Same membership rule as that block (the --db first, then ResolveConsumerDbs, the
@@ -21481,6 +21565,9 @@ begin
         removal that would strand ONLY instances --only left out is skipped
         (apply/1 uses[] action 'skipped') instead of refusing the unit. }
       JCap.AddPair('only_skips_unit_rules', TJSONBool.Create(True));
+      { 1.48.0 (wave 148 CV, C12 N5): convert-apply --only-type T1,T2 converts every
+        instance of those bare #convert From types; exclusive with --only. }
+      JCap.AddPair('only_type', TJSONBool.Create(True));
       { 1.27.0 (C9): convert-apply reconciles uses (watch list kept by .dfm needs,
         introduced names added, ambiguity reported, apply/1 kept/moved rows,
         uses_unresolved, uses_reconcile, uses_reindex) }
@@ -24326,6 +24413,12 @@ var
 
 begin
   if RefuseCompileGateWithoutFix(AArgs, 'lint-all') then Exit(2);
+  { wave 148 RO: an unknown --rule id was a silent empty report here (lint and lint-project already refuse it). }
+  if AArgs.Rule <> '' then
+  begin
+    var RuleExit: Integer;
+    if LintRuleArgAnswered(AArgs, False, RuleExit) then Exit(RuleExit);
+  end;
   if not ApplyRunTargetCompiler(AArgs, LoadLintConfig(AArgs).TargetCompiler) then Exit(2);
   if LintAllRefusesFile(AArgs) or not ExplicitDbsExist(AArgs, 'lint-all') then Exit(2);
   for var SharedDb: string in AArgs.SharedDbs do
@@ -25240,13 +25333,15 @@ begin
     FreeAndNil(ScopeSet);
   end;
 
-  { Resolve output path: --output, or lint-report-YYYYMMDD.txt beside the DB }
+  { Resolve output path: --output, or lint-report-YYYYMMDD.txt beside --project, else in the current
+    directory. 148 IX (144 qsmall): the old "beside the DB" default wrote into a shared _D-RAG folder,
+    where every caller's run of the day overwrote the last. Guard: run_output_encoding_written_files.ps1. }
   OutPath:= AArgs.Output;
   if OutPath = '' then
   begin
     var BaseDir: string;
     if AArgs.ProjectPath <> '' then BaseDir:= ExtractFilePath(AArgs.ProjectPath)
-    else BaseDir:= ExtractFilePath(ProjectDb);
+    else BaseDir:= GetCurrentDir;
     OutPath:= TPath.Combine(BaseDir, 'lint-report-' + FormatDateTime('YYYYMMDD', NowLocal) + '.txt');
   end;
 
@@ -27253,7 +27348,8 @@ var
   end;
 
   { E18 T6: recipe R2 reads class ancestry from the platform library -- the explicit
-    --library-db, else the manifest's library section for --platform (default win64),
+    --library-db, else the manifest's library section for EffectiveIndexPlatform (--platform, else
+    the --project's active platform, else Win32 -- lane 148 CY, the platform --fix builds for),
     as `resolve-dbs --platform` lists it. Opened READ-ONLY; without one, R2 refuses
     wherever the answer needs it. `--library-db none` opens no library at all (fix
     round 1: test runners must never reach the real one through the manifest).
@@ -27284,7 +27380,9 @@ var
         var LibDbs  := LibrarySectionDbs(Manifest);
         var LibRes  := DRagLint.Project.Resolver.TProjectResolver.Create;
         try
-          for var D in TDbSelect.Resolve(Manifest, (if AArgs.CheckPlatform <> '' then AArgs.CheckPlatform else 'win64'),
+          { lane 148 CY (D4/D5): the platform the --fix build uses (K5 ruling a3: --platform, else the
+            --project's active platform, else Win32), no longer a fixed win64 }
+          for var D in TDbSelect.Resolve(Manifest, EffectiveIndexPlatform(AArgs.CheckPlatform, AArgs.ProjectPath),
             LibRes, True) do
             if IsLibrarySectionDb(LibDbs, D) and TFile.Exists(D) then
             begin
@@ -27494,6 +27592,29 @@ begin
       Exit(ReportF2047);
     end;
 
+    { --hub-surface (spec 2026-11-08-hub-scc-phased P2): recipe R3 in place of the planner, OFF by default }
+    if AArgs.HubSurface then
+    begin
+      if (not AArgs.Plan) or AArgs.Fix or SameText(AArgs.Format, 'json') then
+      begin
+        Writeln(ErrOutput, 'ERROR: cycles --hub-surface needs --plan (text; --apply writes one group) and does not combine with --fix or --format json yet');
+        Exit(2);
+      end;
+      var HubOpts:= Default(THubSurfaceOptions);
+      HubOpts.Apply     := AArgs.Apply;
+      HubOpts.NoBackup  := AArgs.NoBackup;
+      HubOpts.CycleIndex:= if AArgs.FixCycleGiven then AArgs.FixCycle else 0;
+      HubOpts.UnitStem  := LowerCase(AArgs.GhostUnit);
+      var HubLines:= TStringList.Create;
+      try
+        Result:= RunHubSurface(Store, Sccs, CycGraph, HubOpts, HubLines);
+        for var HubLine in HubLines do Writeln(HubLine);
+      finally
+        HubLines.Free;
+      end;
+      Exit;
+    end;
+
     if AArgs.Plan or AArgs.Fix then
     begin
       { mechanical markdown refactoring playbook -- DRagLint.Report.CyclePlan; --fix = its dry-run verdict }
@@ -27568,6 +27689,8 @@ begin
           JO.AddPair('units', JMembers);
           JO.AddPair('size', TJSONNumber.Create(Length(Comp)));
           JO.AddPair('interface_cycle', TJSONBool.Create(HasIntf));
+          { --hub (spec 2026-11-08-hub-scc-phased P1): the hub analysis of the group, read-only }
+          if AArgs.Hub then AddCycleHubJson(AnalyseCycleHubs(Store, Comp, CycGraph), JO);
           JArr.AddElement(JO);
         end;
         if AArgs.Causes then
@@ -27664,8 +27787,13 @@ begin
                   Writeln(Format('      * %s -> %s interface dep: no specific symbol ' + 'resolved (index gap -- inspect %s''s interface uses of %s by hand)', [A, B, A, B]));
               end; // for
           end; // if
+
+          { --hub (spec 2026-11-08-hub-scc-phased P1): the units whose removal leaves the
+            group acyclic, with the edges, weights and surfaces on each side. Read-only. }
+          if AArgs.Hub then
+            for var HubLine in CycleHubLines(AnalyseCycleHubs(Store, Comp, CycGraph)) do Writeln(HubLine);
         end; // for
-        if not (AArgs.Edges or AArgs.Causes) then Writeln(CCycleEdgesHint);
+        if not (AArgs.Edges or AArgs.Causes or AArgs.Hub) then Writeln(CCycleEdgesHint);
       end; // else
     end; // else
     Result:= if FixCode >= 0 then FixCode else 0;
@@ -32146,7 +32274,7 @@ begin
     Result:= 'skipped-no-dfm'
   else if not HasConvert then
     Result:= 'skipped-no-convert-rules'
-  else if (Length(FindConvertInstances(TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)), ARules, AOnly)) = 0) and
+  else if (Length(FindConvertInstances(ReadUnitText(ADfmPath), ARules, AOnly)) = 0) and
           not AHasRetype then
     Result:= 'skipped-no-instances';
 end;
@@ -32593,7 +32721,8 @@ begin
   end;
   ExitCode:= 0;
   try
-    WaitRes:= WaitForSingleObject(PI.hProcess, REINDEX_TIMEOUT_MS);
+    { TEST SEAM (148 IX): DRAGLINT_TEST_REINDEX_TIMEOUT_MS shortens the wait, so a guard can time a child out. }
+    WaitRes:= WaitForSingleObject(PI.hProcess, Cardinal(StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_REINDEX_TIMEOUT_MS'), REINDEX_TIMEOUT_MS)));
     WaitErr:= if WaitRes = WAIT_FAILED then SysErrorMessage(GetLastError) else '';
     if WaitRes = WAIT_OBJECT_0 then
       GetExitCodeProcess(PI.hProcess, ExitCode)
@@ -33053,6 +33182,7 @@ var
   var
     UnitStart: Integer; { Trees.ClassesBuilt when this unit started }
     ValHere  : Integer; { classes this unit's call to the book validation built (0 after the first) }
+    OnlyEff  : TArray<string>; { this unit's instance allow-list: --only, or --only-type expanded against its .dfm }
 
     { apply/1 classes_built for THIS unit: the book's validation set plus what
       this unit's own run added -- what a single-unit run of it reports }
@@ -33077,7 +33207,7 @@ var
     begin
       Matched  := nil;
       Unmatched:= nil;
-      for var N: string in AArgs.OnlySections do
+      for var N: string in OnlyEff do
       begin
         var IsCode: Boolean:= False;
         for var Inh: TInheritedInstance in JCtx.InheritedInsts do
@@ -33121,15 +33251,20 @@ var
     // Sibling .dfm: same base name + '.dfm', same folder as --unit.
     DfmPath:= TPath.ChangeExtension(UnitPas, '.dfm');
     JCtx.DfmPath:= DfmPath;
+    { wave 148 CV (C12 N5): --only-type expands to this unit's instance names }
+    OnlyEff:= AArgs.OnlySections;
+    if Length(AArgs.OnlyTypes) > 0 then
+      ExpandOnlyTypes(if TFile.Exists(DfmPath) then ReadUnitText(DfmPath) else '',
+        Rules, AArgs.OnlyTypes, OnlyEff, JCtx.OnlyMatched, JCtx.OnlyUnmatched);
     { C13 N3: which --only names name an object of a #convert From type }
     if Length(AArgs.OnlySections) > 0 then
-      SplitOnlyNames(if TFile.Exists(DfmPath) then TEncoding.ANSI.GetString(TFile.ReadAllBytes(DfmPath)) else '',
-        Rules, AArgs.OnlySections, JCtx.OnlyMatched, JCtx.OnlyUnmatched);
+      SplitOnlyNames(if TFile.Exists(DfmPath) then ReadUnitText(DfmPath) else '',
+        Rules, OnlyEff, JCtx.OnlyMatched, JCtx.OnlyUnmatched);
     { 1.25.1: a kept parent's nested From-type children convert with it
       (the --only unmatched line is printed below, once C8 N2a's code-only
       names have been matched) }
-    if (Length(AArgs.OnlySections) > 0) and TFile.Exists(DfmPath) then
-      JCtx.OnlyIncluded:= NestedOnlyInstances(TEncoding.ANSI.GetString(TFile.ReadAllBytes(DfmPath)), Rules, AArgs.OnlySections);
+    if (Length(OnlyEff) > 0) and TFile.Exists(DfmPath) then
+      JCtx.OnlyIncluded:= NestedOnlyInstances(ReadUnitText(DfmPath), Rules, OnlyEff);
     if not UseJson then
       for var NO: TNestedOnly in JCtx.OnlyIncluded do
         Writeln(Format('--only: %s converts too -- nested in %s', [NO.Instance.InstanceName, NO.Parent]));
@@ -33150,14 +33285,16 @@ var
       inherited[], a 'line N: warning:' line) -- while the unit's own
       instances, code and unit rules convert. R26 still counts them as left
       unconverted, so a #unuse that would break them refuses the unit. }
-    JCtx.InheritedInsts:= FindInheritedInstances(Trees, UnitPas, DfmPath, Rules, AArgs.OnlySections);
+    JCtx.InheritedInsts:= FindInheritedInstances(Trees, UnitPas, DfmPath, Rules, OnlyEff);
     { 1.26.0 (C8 N2a): fields a converted ancestor declares that this unit's
       code uses with no .dfm block -- inherited[] action 'code'. A --only name
       that names one counts as matched. }
     JCtx.InheritedInsts:= JCtx.InheritedInsts +
-      FindInheritedCodeUses(Trees, UnitPas, Rules, AArgs.OnlySections, JCtx.InheritedInsts);
-    if Length(JCtx.OnlyUnmatched) > 0 then MatchCodeOnlyNames;
-    if (Length(JCtx.OnlyUnmatched) > 0) and not UseJson then
+      FindInheritedCodeUses(Trees, UnitPas, Rules, OnlyEff, JCtx.InheritedInsts);
+    if (Length(JCtx.OnlyUnmatched) > 0) and (Length(AArgs.OnlyTypes) = 0) then MatchCodeOnlyNames;
+    if (Length(JCtx.OnlyUnmatched) > 0) and (Length(AArgs.OnlyTypes) > 0) and not UseJson then
+      Writeln('--only-type: no #convert instance of type ' + String.Join(', ', JCtx.OnlyUnmatched) + ' (ignored)')
+    else if (Length(JCtx.OnlyUnmatched) > 0) and not UseJson then
       Writeln('--only: no #convert instance named ' + String.Join(', ', JCtx.OnlyUnmatched) + ' (ignored)');
     { EVERY block is validated against its OWN From/To classes (1.20.6, Task 2
       and T2b) -- driven from the rules file's own #convert headers rather than
@@ -33280,7 +33417,7 @@ var
       no #convert block, or no .dfm instance a block matches; everywhere else
       BuildApplyPlan runs the whole book (its unit rules folded in). A book with
       no unit rules takes the old path unchanged, errors included. }
-    JCtx.ComponentPart:= ConvertApplyComponentPart(Rules, DfmPath, AArgs.OnlySections,
+    JCtx.ComponentPart:= ConvertApplyComponentPart(Rules, DfmPath, OnlyEff,
       Length(JCtx.InheritedInsts) > 0, HasRetype);
     if JCtx.ComponentPart = 'skipped-no-dfm' then JCtx.DfmPath:= '';
     { 1.27.0 (C15): a castlib the engine cannot execute (an unknown value
@@ -33311,9 +33448,9 @@ var
     end;
     PlanRes:= if (JCtx.ComponentPart = 'applied') or IdSites then
                 BuildApplyPlan(Trees, UnitPas, JCtx.DfmPath, Book,
-                  AArgs.OnlySections, CastLib, not AArgs.NoWarnUnlinked, JCtx.InheritedInsts)
+                  OnlyEff, CastLib, not AArgs.NoWarnUnlinked, JCtx.InheritedInsts)
               else
-                BuildUnitRulesOnlyPlan(Trees, UnitPas, JCtx.DfmPath, Rules, AArgs.OnlySections, not AArgs.NoReconcileUses);
+                BuildUnitRulesOnlyPlan(Trees, UnitPas, JCtx.DfmPath, Rules, OnlyEff, not AArgs.NoReconcileUses);
     JCtx.UsesReconcile:= if AArgs.NoReconcileUses then 'off'
                          else if PlanRes.Report.UsesReconcile <> '' then PlanRes.Report.UsesReconcile
                          else 'on';
@@ -33349,7 +33486,7 @@ var
     if JCtx.ComponentPart = 'applied' then
     begin
       JCtx.Descendants:= FindDescendantUses(Trees, UnitPas, DfmPath, Rules,
-        ConvertedInstancesOf(PlanRes.Report, DfmPath, Rules, AArgs.OnlySections));
+        ConvertedInstancesOf(PlanRes.Report, DfmPath, Rules, OnlyEff));
       AppendDescendantReport(JCtx.Descendants, DfmPath, PlanRes.Report);
     end;
     JCtx.Report   := PlanRes.Report;
@@ -33456,7 +33593,12 @@ begin
 
   if (Length(Units) = 0) or (AArgs.RulesFile = '') then
   begin
-    Writeln('Usage: drag-lint convert-apply --unit <F.pas> [--unit <G.pas> ...] --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--glyph-stitch] [--apply] [--no-backup] [--raise-encoding "<path>=utf8-bom" ...] [--no-warn-unlinked] [--no-reconcile-uses] [--no-reindex] [--progress] [--format json]');
+    Writeln('Usage: drag-lint convert-apply --unit <F.pas> [--unit <G.pas> ...] --rules <file> --db PATH [--db ...] [--only Name1,Name2,... | --only-type Type1,Type2,...] [--castlib <file>] [--glyph-stitch] [--apply] [--no-backup] [--raise-encoding "<path>=utf8-bom" ...] [--no-warn-unlinked] [--no-reconcile-uses] [--no-reindex] [--progress] [--format json]');
+    Exit(2);
+  end;
+  if (Length(AArgs.OnlyTypes) > 0) and (Length(AArgs.OnlySections) > 0) then
+  begin
+    Writeln('ERROR: --only-type and --only are mutually exclusive');
     Exit(2);
   end;
   { one unit keeps its old first check; a batch checks each unit in RunUnit }
@@ -35356,8 +35498,14 @@ begin
     Writeln(ErrOutput, Format('NOTE: the index of %s did not exist; building it now at %s (first use; pass --no-create to skip): drag-lint index --project "%s" --db "%s"',
       [AArgs.ProjectPath, AProjDb, AArgs.ProjectPath, AProjDb]));
     Flush(ErrOutput);
-    if (not ReindexOwnerProject(AArgs.ProjectPath, AProjDb)) and (not TFile.Exists(AProjDb)) then
-      Writeln(ErrOutput, 'NOTE: building it failed; the run continues without the project index.');
+    { 148 IX: a build stopped after the parse wrote the file (the 10-minute child timeout on a large project)
+      leaves a HALF index. Say so, or this run and every later one read it as complete.
+      Guard: run_autocreate_project_db.ps1 arm M. }
+    if not ReindexOwnerProject(AArgs.ProjectPath, AProjDb) then
+      if TFile.Exists(AProjDb) then
+        Writeln(ErrOutput, Format('NOTE: building it did not finish; %s is INCOMPLETE and answers short until ' +
+          'this completes it: drag-lint index --project "%s" --db "%s"', [AProjDb, AArgs.ProjectPath, AProjDb]))
+      else Writeln(ErrOutput, 'NOTE: building it failed; the run continues without the project index.');
   finally
     Lock.Free;
     TFile.Delete(LockPath);
@@ -39246,13 +39394,26 @@ begin
       Exit(2);
     end;
 
-    { --rule takes ONE rule id. A comma list ("a,b,c") matched no rule, so lint-all reported
-      0 findings and the run read as clean; refuse it as loudly as a repeated --rule. }
+    { --rule a,b,c (wave 148 RO): a comma list limits the report to those rules AND enables
+      each one (an explicit request, like --enable). Every id is validated first, so an
+      unknown id is still exit 2 and never a silent empty report. Rule is cleared: the
+      checkers are not narrowed, FinalizeAndOutput filters by RuleList. }
     if Args.Rule.Contains(',') then
     begin
-      Writeln(ErrOutput, Format('ERROR: --rule takes one rule id, not a list ("%s"). ' +
-        'Run once per rule, or drop --rule to report every enabled rule.', [Args.Rule]));
-      Exit(2);
+      var ListArgs: TArgs:= Args;
+      for var RuleId: string in Args.Rule.Split([',']) do
+      begin
+        ListArgs.Rule:= Trim(RuleId);
+        var ListExit: Integer;
+        if (ListArgs.Rule = '') or LintRuleArgAnswered(ListArgs, False, ListExit) then
+        begin
+          if ListArgs.Rule = '' then Writeln(ErrOutput, 'ERROR: --rule list has an empty id.');
+          Exit(2);
+        end;
+      end;
+      Args.RuleList:= StringReplace(Args.Rule, ' ', '', [rfReplaceAll]);
+      Args.Enable := ((Args.Enable + ',') + Args.RuleList).TrimLeft([',']);
+      Args.Rule   := '';
     end;
 
     { THE DEFAULT SCHEME: a project's own index + the platform library index.
@@ -39368,6 +39529,7 @@ begin
     else if Args.Command = 'mcp-config'        then Result:= RunMcpConfigVerbFromCommandLine
     else if Args.Command = 'init'              then Result:= RunInitVerbFromCommandLine
     else if Args.Command = 'syntax-count'      then Result:= RunSyntaxCountVerb { GAP-SYNTAXQ: own flags, DRagLint.Query.SyntaxCountVerb }
+    else if Args.Command = 'uses-recover'      then Result:= RunUsesRecoverVerb { 148 HP: own flags, DRagLint.CLI.UsesRecover }
     else if Args.Command = 'usages'            then Result:= DoUsages          (Args)
     else if Args.Command = 'exception-facts'   then Result:= DoExceptionFacts  (Args)
     else if Args.Command = 'slice'             then Result:= DoSlice           (Args)
@@ -39517,6 +39679,7 @@ begin
       ConfigureLspLint(Args, DbList);
       var LSP:= DRagLint.LSP.Server.TLSPServer.Create(DbList);
       LSP.FullRules:= Args.LspFullRules;
+      LSP.ExceptionFacts:= not Args.LspNoExceptionFacts; { D1: owner ruling, ON unless --no-exception-facts }
       if not Args.ProjectFromConfig then LSP.StartupProject:= Args.ProjectPath;
       LSP.StartupPlatform:= Args.CheckPlatform;
       LSP.StartupTargetCompiler:= Args.TargetCompiler; { 1.38: beats config + context per file }

@@ -86,6 +86,21 @@ type
     Mode      : string;
   end;
 
+  /// <summary>The 'Used in (via property X):' list of a getter or setter: the
+  /// property accesses that RAN this accessor, for ONE property (wave 148 UP,
+  /// spec 2026-09-14-use-edges-design.md sec 8.1 bullet 2).</summary>
+  /// <remarks>Entries holds one entry per enclosing routine, Mode 'r' / 'w' / 'rw',
+  /// capped like CalledFrom; EntriesTotal is the distinct count before the cap.
+  /// An accessor shared by several properties gets one record per property.</remarks>
+  TDocUsedInVia = record
+    /// <summary>The accessed property's name, e.g. 'Value'.</summary>
+    PropertyName: string             ;
+    /// <summary>The accessing routines, folded per routine.</summary>
+    Entries     : TArray<TDocFactRef>;
+    /// <summary>Distinct accessing routines before the cap.</summary>
+    EntriesTotal: Integer            ;
+  end;
+
   /// <summary>One mined `raise` with the message literal it was constructed
   /// with, when there is one.</summary>
   /// <remarks>
@@ -227,6 +242,13 @@ type
     /// (spec 2026-09-14-use-edges-design.md sec 8.1).</remarks>
     UsedIn          : TArray<TDocFactRef>;
     UsedInSitesTotal: Integer            ;
+    /// <summary>Wave 148 UP: the echo rows of a getter/setter routine -- the
+    /// property accesses that ran it -- one TDocUsedInVia per property.</summary>
+    /// <remarks>Filled for a routine only, from ISymbolStore.FindAccessorEchoUses
+    /// on the primary store and (by full qualified name, exactly one match) on
+    /// every extra store. Rendered AFTER 'Called from:', which is unchanged.
+    /// UsedIn above also takes extra-store moded rows since wave 148.</remarks>
+    UsedInVia       : TArray<TDocUsedInVia>;
     // v(ADF T3): ground-truth from the Pascal 'deprecated' DIRECTIVE on the decl
     // (NOT the <deprecated/> doc-comment TAG -- see DRagLint.Parser.DocComments'
     // TParsedDoc.Deprecated for that unrelated concept). Neither Signature nor
@@ -4082,6 +4104,45 @@ begin
   if Result.Handles.MaxHandles <= 0 then Result.Handles.MaxHandles := DOC_HANDLES_DEFAULT_CAP;
 end;
 
+{ Wave 148 UP: the per-routine fold of 'Used in' rows, shared by the property
+  list (UsedIn) and the accessor echo lists (UsedInVia). Each row carries Mode
+  'r' or 'w'; rows with the same Display|Location become ONE entry whose Mode is
+  'rw' when both occurred. First-seen order is kept (primary-store rows are added
+  before extra-store rows). ATotal = distinct entries; at most ACap are returned,
+  every one when ACap < 0. }
+function FoldUseRows(const ARows: TList<TDocFactRef>; ACap: Integer; out ATotal: Integer): TArray<TDocFactRef>;
+var
+  Folded: TList<TDocFactRef>;
+  At    : TDictionary<string, Integer>;
+  Idx   : Integer;
+begin
+  Folded:= TList<TDocFactRef>.Create;
+  At    := TDictionary<string, Integer>.Create;
+  try
+    for var Row in ARows do
+    begin
+      var Key: string:= Row.Display + '|' + Row.Location;
+      if At.TryGetValue(Key, Idx) then
+      begin
+        var Old: TDocFactRef:= Folded[Idx];
+        if not Old.Mode.Contains(Row.Mode) then Old.Mode:= 'rw';
+        Folded[Idx]:= Old;
+      end
+      else
+      begin
+        At.Add(Key, Folded.Count);
+        Folded.Add(Row);
+      end;
+    end;
+    ATotal:= Folded.Count;
+    var Shown: Integer:= if (ACap < 0) or (ACap > Folded.Count) then Folded.Count else ACap;
+    Result:= Copy(Folded.ToArray, 0, Shown);
+  finally
+    At.Free;
+    Folded.Free;
+  end;
+end;
+
 class function TDocFactsBuilder.Build(const AStore: ISymbolStore; const ASym: TSymbol;
   const AHandles: TDocHandlesOptions;
   AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string;
@@ -4097,6 +4158,9 @@ var
   Shown     : Integer                ;
   I         : Integer                ;
   Skipped   : TArray<string>         ; { C14 -- Result.SkippedCallers, see SkipForeignReceiver }
+  UseRows   : TList<TDocFactRef>     ; { wave 148 UP: 'Used in:' rows, every store }
+  EchoRows  : TObjectDictionary<string, TList<TDocFactRef>>; { property name -> echo rows }
+  EchoOrder : TList<string>          ; { EchoRows' keys, first-seen }
 
   // Map one resolved-caller row to a display ref. Display is the enclosing
   // routine's qualified name (or the same fallback the name-based path used when
@@ -4161,6 +4225,42 @@ var
     if Seen.ContainsKey(Key) then Exit;
     Seen.Add(Key, True);
     Distinct.Add(AFR);
+  end;
+
+  // Wave 148 UP: the moded rows of ARows (member accesses, bound usages) as
+  // 'Used in:' rows, Mode 'w' for a write and 'r' otherwise. AOwningStore is the
+  // store the rows came from (ToFactRef's rule).
+  procedure AddUseRows(const AOwningStore: ISymbolStore; const ARows: TArray<TResolvedCaller>);
+  var
+    URow: TDocFactRef;
+  begin
+    for var Row in ARows do
+    begin
+      if Row.Mode = '' then Continue;
+      URow:= ToFactRef(AOwningStore, Row);
+      URow.Mode:= if SameText(Row.Mode, 'write') then 'w' else 'r';
+      UseRows.Add(URow);
+    end;
+  end;
+
+  // Wave 148 UP: accessor echo rows, bucketed by the accessed property's name.
+  procedure AddEchoRows(const AOwningStore: ISymbolStore; const AEchoes: TArray<TAccessorEchoUse>);
+  var
+    Bucket: TList<TDocFactRef>;
+    ERow  : TDocFactRef;
+  begin
+    for var Echo in AEchoes do
+    begin
+      if not EchoRows.TryGetValue(Echo.MemberName, Bucket) then
+      begin
+        Bucket:= TList<TDocFactRef>.Create;
+        EchoRows.Add(Echo.MemberName, Bucket);
+        EchoOrder.Add(Echo.MemberName);
+      end;
+      ERow:= ToFactRef(AOwningStore, Echo.Caller);
+      ERow.Mode:= if SameText(Echo.Caller.Mode, 'write') then 'w' else 'r';
+      Bucket.Add(ERow);
+    end;
   end;
 
   // C14: True when ARC's receiver has a known type unrelated to ASym's class;
@@ -4276,6 +4376,13 @@ begin
   // bucket follows -- overall plain-before-'?' as the spec requires.
   Distinct:= TList<TDocFactRef>.Create;
   Seen    := TDictionary<string, Boolean>.Create;
+  { E-USE-EDGES-PHASE2 'Used in:' rows (property / field) and, wave 148 UP, the
+    accessor echo rows of a getter/setter keyed by property name. Collected from
+    the primary store here and from every extra store in the fan-out below, then
+    folded per routine (FoldUseRows) after it. }
+  UseRows  := TList<TDocFactRef>.Create;
+  EchoRows := TObjectDictionary<string, TList<TDocFactRef>>.Create([doOwnsValues]);
+  EchoOrder:= TList<string>.Create;
   try
     TB0:= BTick;
     ResCallers:= AStore.FindResolvedCallers(ASym.Id);
@@ -4286,43 +4393,13 @@ begin
     end;
     { E-USE-EDGES-PHASE2: the 'Used in:' list of a property / field, from the
       SAME resolved rows -- only the moded ones (a member access or a bound
-      usage), folded per routine so a routine that reads and writes the member
-      is one '[rw]' entry. Same cap rule as CalledFrom below. }
+      usage). A routine that reads and writes the member folds to one '[rw]'. }
     if ASym.Kind in [skProperty, skField] then
-    begin
-      var UseList: TList<TDocFactRef>:= TList<TDocFactRef>.Create;
-      var UseAt: TDictionary<string, Integer>:= TDictionary<string, Integer>.Create;
-      try
-        for RC in ResCallers do
-        begin
-          if RC.Mode = '' then Continue;
-          FR:= ToFactRef(AStore, RC);
-          var M: string:= if SameText(RC.Mode, 'write') then 'w' else 'r';
-          var UK: string:= FR.Display + '|' + FR.Location;
-          var At: Integer;
-          if UseAt.TryGetValue(UK, At) then
-          begin
-            var Old: TDocFactRef:= UseList[At];
-            if not Old.Mode.Contains(M) then Old.Mode:= 'rw';
-            UseList[At]:= Old;
-          end
-          else
-          begin
-            FR.Mode:= M;
-            UseAt.Add(UK, UseList.Count);
-            UseList.Add(FR);
-          end;
-        end;
-        Result.UsedInSitesTotal:= UseList.Count;
-        var UShown: Integer:= Min(UseList.Count, AMaxCallers);
-        if AWholeInboundLists or UnitIsShared(AStore.GetFilePath(ASym.FileId)) then UShown:= UseList.Count;
-        if UShown < 0 then UShown:= 0;
-        Result.UsedIn:= Copy(UseList.ToArray, 0, UShown);
-      finally
-        UseAt.Free;
-        UseList.Free;
-      end;
-    end;
+      AddUseRows(AStore, ResCallers);
+    { Wave 148 UP (spec sec 8.1 bullet 2): a getter/setter's echo rows -- the
+      property accesses that ran it. 'Called from:' is not changed by them. }
+    if CanBeCallTarget(ASym.Kind) then
+      AddEchoRows(AStore, AStore.FindAccessorEchoUses(ASym.Id));
     Inc(GBResolved, BTick - TB0);
     TB0:= BTick;
     // Unverified name-match bucket: CALL-SITE refs whose name matches but that
@@ -4484,6 +4561,13 @@ begin
           FR.Confidence:= 'unverified';
           AddDistinct(FR);
         end;
+        { Wave 148 UP: the same translated id feeds 'Used in:' (a property or
+          field used only in another project's DB) and the accessor echo rows.
+          Same three conditions as above, so no new guessing channel. }
+        if ASym.Kind in [skProperty, skField] then
+          AddUseRows(ExStore, ResCallers);
+        if CanBeCallTarget(ASym.Kind) then
+          AddEchoRows(ExStore, ExStore.FindAccessorEchoUses(ExSyms[0].Id));
       end;
 
       // AMBIGUITY GATE, and it matters MORE here than on the primary store: the
@@ -4528,6 +4612,19 @@ begin
     end;
     Inc(GBUnresExtra, BTick - TE0);
 
+    { Wave 148 UP: fold the 'Used in' rows of every store. Same cap rule as
+      CalledFrom below (docs.max_callers; whole on a dl:shared unit). }
+    var UseCap: Integer:= if AWholeInboundLists or UnitIsShared(AStore.GetFilePath(ASym.FileId))
+                            then -1 else Max(AMaxCallers, 0);
+    if UseRows.Count > 0 then
+      Result.UsedIn:= FoldUseRows(UseRows, UseCap, Result.UsedInSitesTotal);
+    SetLength(Result.UsedInVia, EchoOrder.Count);
+    for I:= 0 to EchoOrder.Count - 1 do
+    begin
+      Result.UsedInVia[I].PropertyName:= EchoOrder[I];
+      Result.UsedInVia[I].Entries:= FoldUseRows(EchoRows[EchoOrder[I]], UseCap, Result.UsedInVia[I].EntriesTotal);
+    end;
+
     // v(ADP1 T1): CalledFrom's display cap is the CONFIG-DRIVEN AMaxCallers
     // (manifest docs.max_callers, default 5 -- see LoadDocMaxCallers), NOT the
     // shared DocDisplayCount helper (that >15-total-\>10-shown rule still
@@ -4563,6 +4660,9 @@ begin
     SetLength(Result.CalledFrom, Shown);
     for I:= 0 to Shown - 1 do Result.CalledFrom[I]:= Distinct[I];
   finally
+    EchoOrder.Free;
+    EchoRows.Free;
+    UseRows.Free;
     Seen.Free;
     Distinct.Free;
   end;

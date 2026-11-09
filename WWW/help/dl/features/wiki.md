@@ -4,10 +4,10 @@ title: wiki
 summary: "Looks up the dl:wiki concept topics a team has written into their own doc comments, and routes a human phrase to the code that implements it"
 product: DL
 group: search-navigation
-order: 20036
+order: 20037
 since: 1.7.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.48.0-alpha
 ---
 
 # wiki

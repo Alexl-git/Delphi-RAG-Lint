@@ -4,10 +4,10 @@ title: Output encoding (--output-encoding)
 summary: "Chooses the bytes verbs write to stdout, stderr and --output files: ASCII with \\uXXXX escapes (default), UTF-8 or UTF-16LE, never a BOM; lossy ascii warns once"
 product: DL
 group: editor-integration
-order: 110020
+order: 110021
 since: 1.35.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.48.0-alpha
 ---
 
 # Output encoding (--output-encoding)

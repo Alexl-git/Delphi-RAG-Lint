@@ -652,8 +652,13 @@ const
     before it is bounded. }
   { E-USE-EDGES-PHASE2 (wave 147): 'Used in:' -- the resolved uses of a
     property / field, rendered in place of 'Used by:' (FormatUsedInLine). }
-  ALL_LABELS: array[0..32] of string = (
-    'Called from:', 'Used by:', 'Used in:', 'Calls:', 'Returns:', 'Used in units:',
+  { Wave 148 UP: 'Used in (via property ' -- a getter/setter's echo line; the
+    property name and '):' follow, so the registered label is the fixed prefix
+    (the 'Overload ' precedent). Block boundary only: it is NOT in
+    ProjectTags.INBOUND_LABELS, so a dl:shared unit does not reconcile it per
+    project (wave 149 row). }
+  ALL_LABELS: array[0..33] of string = (
+    'Called from:', 'Used by:', 'Used in:', 'Used in (via property ', 'Calls:', 'Returns:', 'Used in units:',
     'Used in classes:',
     'Complexity:', 'Owns returned:', 'Handles:', 'Catches:', 'SQL:', 'Covered by:',
     'Mutates:', 'Touches:', 'Transaction:', 'Registered as:', 'Dataset:',
@@ -2222,10 +2227,14 @@ begin
   try
     var MM: TMatch:= TRegEx.Match(AMergedBody, CALLS_PATTERN);
     if MM.Success then
-      for E in MM.Groups[1].Value.Split([',']) do Kept.AddOrSetValue(LowerCase(Trim(E)), 0);
+      for E in MM.Groups[1].Value.Split([',']) do
+        Kept.AddOrSetValue(LowerCase(Trim(TRegEx.Replace(Trim(E), '\s*\(\+\d+ more\)$', ''))), 0);
     for E in M.Groups[1].Value.Split([',']) do
     begin
-      var T: string:= Trim(E);
+      { 148 DX: a CAPPED list glues its tail count to the last entry (`X.Y (+70 more)`);
+        UnitVouchable would read that as a `(file.pas)` part naming no unit, and REFUSE a
+        block whose units this index holds (146 int: 16 blocks, 147 int: 24). Judge the entry. }
+      var T: string:= Trim(TRegEx.Replace(Trim(E), '\s*\(\+\d+ more\)$', ''));
       if (T = '') or (not T.Contains('.')) or StartsStr(UNSEEN_MORE, T) then Continue;
       if Kept.ContainsKey(LowerCase(T)) then Continue;
       if UnitVouchable(AStore, T) then Continue;

@@ -1,0 +1,551 @@
+{
+  "engine": "drag-lint 1.46.0-alpha",
+  "db": "copy of C:\\Projects\\DB\\ORM3\\CLIENT\\_D-RAG\\Micronite2027.sqlite (indexed 2026-11-07 22:46, 4 of 632 files changed since)",
+  "date": "2026-11-08",
+  "command": "drag-lint lint-all --db mic.sqlite --json --enable string-equality-comparison,exhaustive-enum-case,interface-object-mixing,mutable-global-variable,is-never-true,query-name-with-effect,criticalsection-not-released,parameter-type-too-wide,init-order-hazard,finalization-after-dependency,global-set-in-initialization-never-freed,for-bound-modified-in-body,loop-condition-invariant,unused-unit-in-uses",
+  "wall_clock_min": 14,
+  "total": 23169,
+  "zero_count_enabled_rules": "criticalsection-not-released,init-order-hazard,finalization-after-dependency,global-set-in-initialization-never-freed,interface-object-mixing,is-never-true,loop-condition-invariant",
+  "rows": [
+    {
+      "rule": "with-hides-outer-symbol",
+      "count": 8242
+    },
+    {
+      "rule": "unused-unit-in-uses",
+      "count": 3871
+    },
+    {
+      "rule": "field-name-prefix",
+      "count": 2140
+    },
+    {
+      "rule": "large-magic-number",
+      "count": 1196
+    },
+    {
+      "rule": "local-var-casing",
+      "count": 886
+    },
+    {
+      "rule": "method-pascalcase",
+      "count": 742
+    },
+    {
+      "rule": "duplicate-code",
+      "count": 736
+    },
+    {
+      "rule": "inherited-bare",
+      "count": 487
+    },
+    {
+      "rule": "with-statement",
+      "count": 375
+    },
+    {
+      "rule": "mutable-global-variable",
+      "count": 375
+    },
+    {
+      "rule": "ifthen-to-if-expression",
+      "count": 344
+    },
+    {
+      "rule": "unused-local",
+      "count": 293
+    },
+    {
+      "rule": "uses-movable-to-implementation",
+      "count": 290
+    },
+    {
+      "rule": "is-not-operator",
+      "count": 282
+    },
+    {
+      "rule": "const-casing",
+      "count": 193
+    },
+    {
+      "rule": "case-magic-numbers",
+      "count": 187
+    },
+    {
+      "rule": "property-accessor-name",
+      "count": 186
+    },
+    {
+      "rule": "doc-drift",
+      "count": 171
+    },
+    {
+      "rule": "too-many-exit-points",
+      "count": 144
+    },
+    {
+      "rule": "unused-public-symbol",
+      "count": 135
+    },
+    {
+      "rule": "compiler-magic-comments",
+      "count": 111
+    },
+    {
+      "rule": "uses-global-census",
+      "count": 98
+    },
+    {
+      "rule": "public-field",
+      "count": 96
+    },
+    {
+      "rule": "concat-in-loop",
+      "count": 76
+    },
+    {
+      "rule": "raise-bare-exception",
+      "count": 68
+    },
+    {
+      "rule": "cyclomatic-complexity",
+      "count": 63
+    },
+    {
+      "rule": "nonminimal-bool",
+      "count": 62
+    },
+    {
+      "rule": "type-name-prefix",
+      "count": 60
+    },
+    {
+      "rule": "high-response",
+      "count": 57
+    },
+    {
+      "rule": "float-equality-comparison",
+      "count": 49
+    },
+    {
+      "rule": "unused-parameter",
+      "count": 46
+    },
+    {
+      "rule": "bare-except",
+      "count": 45
+    },
+    {
+      "rule": "god-class",
+      "count": 44
+    },
+    {
+      "rule": "collapsible-if",
+      "count": 44
+    },
+    {
+      "rule": "unreadable-literal",
+      "count": 43
+    },
+    {
+      "rule": "pos-for-contains",
+      "count": 43
+    },
+    {
+      "rule": "string-equality-comparison",
+      "count": 43
+    },
+    {
+      "rule": "global-form-variable",
+      "count": 39
+    },
+    {
+      "rule": "local-field-prefix",
+      "count": 39
+    },
+    {
+      "rule": "cognitive-complexity",
+      "count": 38
+    },
+    {
+      "rule": "exhaustive-enum-case",
+      "count": 34
+    },
+    {
+      "rule": "locale-sensitive-conversion",
+      "count": 29
+    },
+    {
+      "rule": "try-except-swallowed",
+      "count": 29
+    },
+    {
+      "rule": "used-before-assignment",
+      "count": 29
+    },
+    {
+      "rule": "duplicate-global-decl",
+      "count": 27
+    },
+    {
+      "rule": "outputdebugstring",
+      "count": 26
+    },
+    {
+      "rule": "empty-procedure-body",
+      "count": 24
+    },
+    {
+      "rule": "reserved-word-casing",
+      "count": 23
+    },
+    {
+      "rule": "unit-too-large",
+      "count": 22
+    },
+    {
+      "rule": "code-after-exit",
+      "count": 22
+    },
+    {
+      "rule": "overwrite-before-read",
+      "count": 20
+    },
+    {
+      "rule": "manual-inrange",
+      "count": 20
+    },
+    {
+      "rule": "read-never-assigned",
+      "count": 19
+    },
+    {
+      "rule": "sleep-in-vcl",
+      "count": 19
+    },
+    {
+      "rule": "unused-global",
+      "count": 19
+    },
+    {
+      "rule": "too-many-parameters",
+      "count": 17
+    },
+    {
+      "rule": "global-only-uses-edge",
+      "count": 15
+    },
+    {
+      "rule": "deep-nesting",
+      "count": 15
+    },
+    {
+      "rule": "boolean-expression-complexity",
+      "count": 15
+    },
+    {
+      "rule": "writeln-in-source",
+      "count": 14
+    },
+    {
+      "rule": "length-zero-compare",
+      "count": 13
+    },
+    {
+      "rule": "unused-private-member",
+      "count": 12
+    },
+    {
+      "rule": "inline-on-large-routine",
+      "count": 12
+    },
+    {
+      "rule": "enum-ordinal-cast",
+      "count": 10
+    },
+    {
+      "rule": "write-only-local",
+      "count": 10
+    },
+    {
+      "rule": "hardcoded-absolute-path",
+      "count": 10
+    },
+    {
+      "rule": "case-same-branches",
+      "count": 9
+    },
+    {
+      "rule": "method-too-long",
+      "count": 9
+    },
+    {
+      "rule": "begin-end-pair-not-in-finally",
+      "count": 9
+    },
+    {
+      "rule": "field-by-name-in-loop",
+      "count": 9
+    },
+    {
+      "rule": "redundant-parentheses",
+      "count": 9
+    },
+    {
+      "rule": "ignored-must-use-result",
+      "count": 9
+    },
+    {
+      "rule": "dfm-property-not-declared",
+      "count": 9
+    },
+    {
+      "rule": "empty-except",
+      "count": 9
+    },
+    {
+      "rule": "nested-with",
+      "count": 8
+    },
+    {
+      "rule": "dataset-open-without-close",
+      "count": 7
+    },
+    {
+      "rule": "parameter-type-too-wide",
+      "count": 7
+    },
+    {
+      "rule": "boolean-comparison-true",
+      "count": 7
+    },
+    {
+      "rule": "too-many-locals",
+      "count": 5
+    },
+    {
+      "rule": "case-with-too-few-branches",
+      "count": 5
+    },
+    {
+      "rule": "interface-without-guid",
+      "count": 5
+    },
+    {
+      "rule": "redundant-continue-exit",
+      "count": 5
+    },
+    {
+      "rule": "needless-exit",
+      "count": 5
+    },
+    {
+      "rule": "argument-narrows",
+      "count": 5
+    },
+    {
+      "rule": "doc-param-not-in-signature",
+      "count": 5
+    },
+    {
+      "rule": "suboptimal-math",
+      "count": 4
+    },
+    {
+      "rule": "stream-read-result-ignored",
+      "count": 4
+    },
+    {
+      "rule": "out-param-not-set",
+      "count": 4
+    },
+    {
+      "rule": "exception-escapes-thread",
+      "count": 3
+    },
+    {
+      "rule": "approx-constant",
+      "count": 3
+    },
+    {
+      "rule": "discarded-effect-free-result",
+      "count": 3
+    },
+    {
+      "rule": "inline-assembly",
+      "count": 3
+    },
+    {
+      "rule": "identical-then-else",
+      "count": 3
+    },
+    {
+      "rule": "stat-gated-destructive",
+      "count": 3
+    },
+    {
+      "rule": "enum-ordinal-persisted",
+      "count": 3
+    },
+    {
+      "rule": "review-marker-unused",
+      "count": 3
+    },
+    {
+      "rule": "review-marker-stale",
+      "count": 3
+    },
+    {
+      "rule": "ifthen-both-branches",
+      "count": 3
+    },
+    {
+      "rule": "unsigned-compare-always-true",
+      "count": 3
+    },
+    {
+      "rule": "identity-op",
+      "count": 2
+    },
+    {
+      "rule": "redundant-cast",
+      "count": 2
+    },
+    {
+      "rule": "lossy-cast",
+      "count": 2
+    },
+    {
+      "rule": "loadlibrary-relative-name",
+      "count": 2
+    },
+    {
+      "rule": "halt-in-library",
+      "count": 2
+    },
+    {
+      "rule": "free-of-parameter",
+      "count": 2
+    },
+    {
+      "rule": "nil-check-after-dereference",
+      "count": 2
+    },
+    {
+      "rule": "circular-uses",
+      "count": 2
+    },
+    {
+      "rule": "useless-format",
+      "count": 1
+    },
+    {
+      "rule": "unsafe-shellexecute",
+      "count": 1
+    },
+    {
+      "rule": "unsafe-string-api",
+      "count": 1
+    },
+    {
+      "rule": "unused-enum-value",
+      "count": 1
+    },
+    {
+      "rule": "assert-call",
+      "count": 1
+    },
+    {
+      "rule": "classname-string-compare",
+      "count": 1
+    },
+    {
+      "rule": "is-always-true",
+      "count": 1
+    },
+    {
+      "rule": "empty-conditional",
+      "count": 1
+    },
+    {
+      "rule": "is-prefix-not-boolean",
+      "count": 1
+    },
+    {
+      "rule": "loop-var-after-loop",
+      "count": 1
+    },
+    {
+      "rule": "low-cohesion",
+      "count": 1
+    },
+    {
+      "rule": "message-chain",
+      "count": 1
+    },
+    {
+      "rule": "missing-inherited-ctor",
+      "count": 1
+    },
+    {
+      "rule": "missing-inherited-dtor",
+      "count": 1
+    },
+    {
+      "rule": "hardcoded-connection-string",
+      "count": 1
+    },
+    {
+      "rule": "object-leak",
+      "count": 1
+    },
+    {
+      "rule": "double-dictionary-lookup",
+      "count": 1
+    },
+    {
+      "rule": "guid-on-generic-interface",
+      "count": 1
+    },
+    {
+      "rule": "gettickcount-wraparound",
+      "count": 1
+    },
+    {
+      "rule": "function-result-not-set",
+      "count": 1
+    },
+    {
+      "rule": "query-name-with-effect",
+      "count": 1
+    },
+    {
+      "rule": "for-bound-modified-in-body",
+      "count": 1
+    },
+    {
+      "rule": "redundant-assigned-free",
+      "count": 1
+    },
+    {
+      "rule": "referenced-never-set",
+      "count": 1
+    },
+    {
+      "rule": "taint-command-injection",
+      "count": 1
+    },
+    {
+      "rule": "too-many-children",
+      "count": 1
+    },
+    {
+      "rule": "pchar-arithmetic",
+      "count": 1
+    },
+    {
+      "rule": "application-terminate-in-library",
+      "count": 1
+    }
+  ]
+}

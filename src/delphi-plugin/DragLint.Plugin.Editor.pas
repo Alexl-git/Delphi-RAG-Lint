@@ -27,7 +27,7 @@ const (* v0.40.1: hardcoded version; build stamp resolved at runtime from the
      loaded BPL's file modtime (see PluginBuildTag). Compiler intrinsics
      like the dollar-I DATE/TIME macros emit unquoted strings in Delphi 13
      and don't fit in a const expression. *)
-  PLUGIN_VERSION = 'v1.47.0-alpha';
+  PLUGIN_VERSION = 'v1.48.0-alpha';
 
   { Stamp every user-visible plugin dialog with the version + the actual
   build time of the BPL the IDE has loaded so the user can verify at a
@@ -1144,7 +1144,7 @@ begin
     { Prefer the Win64 exe in the sibling dll-win64\ folder -- a 32-bit BPL can
       spawn a 64-bit child via CreateProcess, and the Win64 build carries its own
       correct x64 tree-sitter DLLs. Fall back to an exe next to the BPL (for
-      non-standard layouts), then to PATH as last resort. }
+      non-standard layouts); with neither, no server is spawned (ENGINE_NOT_FOUND_MSG). }
     var Win64Dir: string := ExtractFilePath(ExcludeTrailingPathDelimiter(BplDir)) + 'dll-win64\';
     { CLIFIX C4: the shared resolver FIRST -- the Settings ExePath override (set + exists), then
       ..\dll-win64\drag-lint.exe, the same answer every other spawn site gets. This site used to
@@ -1165,8 +1165,14 @@ begin
     end
     else
     begin
-      ExePath:= 'drag-lint.exe';
-      DebugLog('EnsureLspClient: falling back to PATH lookup of drag-lint.exe');
+      { 148 XP3: fail closed like every other spawn site. The resolver already searched PATH and
+        found nothing, so a bare 'drag-lint.exe' could only fail or start a stray build. }
+      DebugLog('EnsureLspClient: no engine resolved -- not spawning the server');
+      FreeAndNil(GLspClient);
+      GLspRetryAfter:= Now + LSP_RETRY_SECONDS / SecsPerDay;
+      ReportEngineMissing;
+      UpdateLspStatusIndicator;
+      Exit(nil);
     end;
 
     LogPath:= GetPluginLogPath;

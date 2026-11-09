@@ -20,7 +20,10 @@ type
     procedure ViaNil(pP: TLeaf); // REFUSE no-member-use
     procedure ViaFree(pP: TLeaf); // REFUSE member-not-in-chain
     procedure ViaOver(pP: TLeaf); // REFUSE overloaded-member
-    procedure ViaWrite(pP: TLeaf); // REFUSE member-write
+    procedure ViaWrite(pP: TLeaf); // NARROW TBase
+    procedure ViaPropWrite(pP: TLeaf); // NARROW TBase
+    procedure ViaMidWrite(pP: TLeaf); // NARROW TMid
+    procedure ViaGenBase(pP: TGenLeaf); // REFUSE generic-ancestor
     procedure ViaStore(pP: TLeaf); // REFUSE other-use
     procedure ViaArgWide(pP: TLeaf); // REFUSE other-use
     procedure ViaIs(pP: TLeaf); // REFUSE other-use
@@ -107,6 +110,21 @@ end;
 procedure THost.ViaWrite(pP: TLeaf);
 begin
   pP.BaseField:= 1;
+end;
+
+procedure THost.ViaPropWrite(pP: TLeaf);
+begin
+  pP.BaseProp:= pP.BaseField + 1;
+end;
+
+procedure THost.ViaMidWrite(pP: TLeaf);
+begin
+  pP.MidField:= 2;
+end;
+
+procedure THost.ViaGenBase(pP: TGenLeaf);
+begin
+  pP.GenField:= pP.GenField + 1;
 end;
 
 procedure THost.ViaStore(pP: TLeaf);

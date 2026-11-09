@@ -85,9 +85,21 @@ try {
   Check '7e the unit edges are still there' (@($GJ.edges).Count -ge 1)
   $Html = (& $Exe graph --db $Db --format html 2>$null) -join "`n"
   Check '7f graph html lists the text nodes' (($Html -match 'Widget guide') -and ($Html -match 'text node'))
+  # Wave 148 lane TN: the html viewer DRAWS the text layer -- note boxes, dashed
+  # edges to the declaring unit, a toggle (on) and a legend. RED on B2's build
+  # (147-int 004390b38), which only listed the nodes.
+  Check '7g html draws a note box per text node (ids in the svg)' (($Html -match '<svg[^>]*id="dl-tn-svg"') -and ($Html -match 'class="dl-tn-note" data-id="README\.md:6"') -and ($Html -match 'data-id="README\.md:4"'))
+  Check '7h html draws a dashed edge README.md:6 -> uMdA' (($Html -match 'class="dl-tn-edge" data-from="README\.md:6" data-to="uMdA"') -and ($Html -match 'stroke-dasharray') -and ($Html -match 'class="dl-tn-unit" data-unit="uMdA"'))
+  Check '7i html has the text-node toggle, checked' ($Html -match '<input type="checkbox" id="dl-tn-toggle" checked>')
+  Check '7j html has the legend (note, dashed link, unit)' (($Html -match 'class="dl-tn-legend"') -and ($Html -match 'Markdown text node') -and ($Html -match 'mentions by name'))
 
+  # 7k control: an index with no Markdown gets no text layer and no toggle (the
+  # toggle is ON only when text nodes exist). Uses the directory DB below.
   $DirDb = Join-Path $Root 'dir.sqlite'
   & $Exe index $Src --db $DirDb 2>&1 | Out-Null
+  $Html0 = (& $Exe graph --db $DirDb --format html 2>$null) -join "`n"
+  Check '7k control: no text nodes -> no toggle, no text layer' (($Html0 -match 'drag-lint unit graph') -and ($Html0 -notmatch 'dl-tn-toggle') -and ($Html0 -notmatch 'dl-tn-svg'))
+
   $DF = Rows $DirDb "SELECT path FROM files"
   Check '8 control: a directory walk still admits no .md' ((@($DF | Where-Object { $_.path -like '*.md' }).Count -eq 0) -and (@($DF | Where-Object { $_.path -like '*uMdA.pas' }).Count -eq 1))
 

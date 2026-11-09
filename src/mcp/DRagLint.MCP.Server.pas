@@ -133,8 +133,8 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
-      /// <para>Calls: Default, DRagLint.Context.Bundler.TContextBundler.Build, DRagLint.Context.Bundler.TContextBundler.RenderJson, DRagLint.Core.Interfaces.ISymbolStore.FindByDocTag, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsFuzzy, DRagLint.Core.Interfaces.ISymbolStore.FindTransitiveCallers, DRagLint.Core.Interfaces.ISymbolStore.FindUndocumented, DRagLint.Core.Interfaces.ISymbolStore.GetClassSurface (+47 more)</para>
-      /// <para>Complexity: 115 (cyclomatic, outer body), 529 lines (full implementation)</para>
+      /// <para>Calls: Default, DRagLint.Context.Bundler.TContextBundler.Build, DRagLint.Context.Bundler.TContextBundler.RenderJson, DRagLint.Core.Interfaces.ISymbolStore.FindByDocTag, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsFuzzy, DRagLint.Core.Interfaces.ISymbolStore.FindTransitiveCallers, DRagLint.Core.Interfaces.ISymbolStore.FindUndocumented, DRagLint.Core.Interfaces.ISymbolStore.GetClassSurface (+56 more)</para>
+      /// <para>Complexity: 132 (cyclomatic, outer body), 581 lines (full implementation)</para>
       /// <para>Reads: FDbPaths, FStore, FLinter, FCallNote   Writes: FCallNote</para>
       /// <para>Catches: EImplementorsTarget (swallowed)</para>
       /// <para>Touches: file system</para>
@@ -506,6 +506,7 @@ uses
   , System.Generics.Defaults
   , DRagLint.Doc.Regions
   , DRagLint.Query.Implementors { get_implementors (interface report, 1.40) }
+  , DRagLint.Query.ExceptionFacts { get_exception_facts (wave 148 D1) }
   , DRagLint.Query.Callers   { Gitea #31: the CLI's resolved callers and name filters }
   , DRagLint.Index.Freshness { Gitea #34: the freshness note of the store a tool reads }
   ;
@@ -802,6 +803,16 @@ begin
       '{"type":"object","properties":{' + '"qname":{"type":"string","description":"Qualified symbol name (e.g. Unit.TClass.Method)"},'
         + '"hops":{"type":"integer","description":"Hop radius 1..3 (optional, default 1)"},'
         + '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' + '},"required":["qname"]}'));
+
+  { D1 (wave 148): the raise / handle facts, the same reader and JSON as `exception-facts --json. }
+  Tools.AddElement(ToolDescriptor(
+      'get_exception_facts', 'Which routine raises and handles which exception type: every raise, re-raise and '
+        + 'except-handler site of one routine (target) or of one type (name), each with the type, how it is known '
+        + '(bound, handler, local, name, spelled, unknown) and file:line:col. Returns the JSON of '
+        + 'drag-lint exception-facts --json. Exact type, no ancestry; no escape analysis.',
+      '{"type":"object","properties":{' + '"target":{"type":"string","description":"A routine, qualified or by its trailing part"},'
+        + '"name":{"type":"string","description":"An exception type, bare or qualified"},'
+        + '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' + '}}'));
 
   Tools.AddElement(ToolDescriptor(
       'get_implementors', 'The interface report: for an interface, the classes implementing it (directly, '
@@ -1476,6 +1487,28 @@ begin
       var NbHops:= 1;
       if Args.GetValue('hops') <> nil then NbHops:= StrToIntDef(Args.GetValue('hops').Value, 1);
       ResultText:= NeighborsText(NbStore, NbQName, Min(Max(NbHops, 1), NEIGHBOR_MAX_HOPS));
+    end // if
+    else if ToolName = 'get_exception_facts' then
+    begin
+      var ExTarget: string:= '';
+      var ExName  : string:= '';
+      if Args.GetValue('target') <> nil then ExTarget:= Args.GetValue('target').Value;
+      if Args.GetValue('name') <> nil then ExName:= Args.GetValue('name').Value;
+      if (ExTarget = '') = (ExName = '') then
+      begin
+        SendError(AId, JSONRPC_INVALID_PARAMS, 'get_exception_facts requires exactly one of target or name');
+        Exit;
+      end;
+      var ExDb: string:= '';
+      if Args.GetValue('db') <> nil then ExDb:= Args.GetValue('db').Value
+      else if Length(FDbPaths) > 0 then ExDb:= FDbPaths[0];
+      if (ExDb = '') or not FileExists(ExDb) then
+      begin
+        SendError(AId, JSONRPC_SERVER_ERROR, NoStoreMessage);
+        Exit;
+      end;
+      ResolveStore(Args); { sets FCallNote: the freshness note of the store this answer reads }
+      ResultText:= ExceptionFactsJson(ExceptionFactsOf(ExDb, ExTarget, ExName));
     end // if
     else if ToolName = 'get_implementors' then
     begin

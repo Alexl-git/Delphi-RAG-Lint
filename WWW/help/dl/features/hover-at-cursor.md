@@ -7,7 +7,7 @@ group: search-navigation
 order: 20017
 since: 0.7.0-alpha
 status: shipped
-updated: 1.47.0-alpha
+updated: 1.48.0-alpha
 ---
 
 # Hover at Cursor
@@ -101,7 +101,10 @@ A property or field with resolved uses carries the analysis fact
 `with` accesses, all bound by the resolver, never matched by name. It is the
 same line `document` writes into the managed block, in `--format md`, in the
 JSON `facts` array and in the IDE popup. Capped by `docs.max_callers` with
-`(+N more)`.
+`(+N more)`. A getter or setter shows `Used in (via property X): ...` -- the
+property accesses that ran that accessor (wave 148). Hover reads the one
+index it was given, so uses recorded only in another project's index appear in
+`document --db A --db B` but not in the card.
 
 ### When the engine is slow
 The IDE never waits for the engine. A hover (the menu command or a mouse

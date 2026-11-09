@@ -19,7 +19,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe       = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe       = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-ctorwide-$PID",
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite',
   [switch]$KeepWorkDir
@@ -166,6 +166,20 @@ try {
       '--db', ('"' + $padb + '"'), '--library-db', ('"' + $Lib + '"')) `
     -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir 'pa.err')
   Check 'pa1 --part all applies through the flag' ([IO.File]::ReadAllText((Join-Path $pa 'WideHub.pas')).Contains('NewTWideWorkerPtr(')) ("exit=$($p.ExitCode)")
+  # lane 148 CY: pa1's positive control. The same --part all run WITHOUT --ctor-wide is what a child run that
+  # never got the flag does; pa1's predicate must be false there, or pa1 could not fail when forwarding is lost.
+  $pn = Join-Path $WorkDir 'pa-noflag'; New-Tree $pn
+  foreach ($pf in Get-ChildItem $pn -File) {
+    $pt = [IO.File]::ReadAllText($pf.FullName).Replace('Wide.Sink', 'WideSink').Replace('Wide.Proc', 'WideProc').Replace('Wide.Worker', 'WideWorker')
+    [IO.File]::WriteAllText($pf.FullName, $pt, $Ascii)
+    if ($pf.Name -match '^Wide\.') { Move-Item -LiteralPath $pf.FullName (Join-Path $pn ($pf.Name.Replace('Wide.', 'Wide'))) }
+  }
+  $pndb = Invoke-Index (Join-Path $pn 'CtorWide.dproj') 'pn'
+  $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
+    -ArgumentList @('cycles', '--fix', '--apply', '--part', 'all', '--no-backup', '--project', ('"' + (Join-Path $pn 'CtorWide.dproj') + '"'),
+      '--db', ('"' + $pndb + '"'), '--library-db', ('"' + $Lib + '"')) `
+    -RedirectStandardOutput (Join-Path $WorkDir 'pn.out') -RedirectStandardError (Join-Path $WorkDir 'pn.err')
+  Check 'pa0 (pa1 control) without the flag --part all does NOT apply the wide site' (-not [IO.File]::ReadAllText((Join-Path $pn 'WideHub.pas')).Contains('NewTWideWorkerPtr(')) ("exit=$($p.ExitCode)")
   Write-Host '== hub: an implementation edge hub -> module: sites apply, the cycle stays' -ForegroundColor Cyan
   $h = Join-Path $WorkDir 'hub-edit'; New-Tree $h
   Edit-File (Join-Path $h 'WideHub.pas') "implementation`n`nuses`n  System.SysUtils;" "implementation`n`nuses`n  System.SysUtils,`n  WideDm;"

@@ -431,7 +431,7 @@ function JobQueueBusy: Boolean;
 /// <summary>The bar text a finished reindex job leaves behind.</summary>
 /// <param name="AExitCode">The engine's exit code.</param>
 /// <param name="AOutput">Its captured stdout+stderr; scanned only for the index-lock refusal.</param>
-/// <returns>'reindex: done' for 0; 'reindex: index busy, will retry' for exit 2 whose
+/// <returns>'reindex: done' for 0; 'reindex: index busy (another run), the next save retries' for exit 2 whose
 /// output is the index-lock refusal (another run owns the database -- not an error; the
 /// next save or reindex retries); 'reindex: failed' for any other exit 2; otherwise
 /// 'reindex: failed (exit N)'.</returns>
@@ -441,7 +441,7 @@ function JobQueueBusy: Boolean;
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.JobQueue.TDragLintJobQueue.RunOne (DragLint.Plugin.JobQueue.pas)</para>
 /// <para>Calls: ContainsText, Format</para>
-/// <para>Returns: 'reindex: index busy, will retry'; Format('reindex: failed (exit %d)', [AExitCode])</para>
+/// <para>Returns: 'reindex: index busy (another run), the next save retries'; Format('reindex: failed (exit %d)', [AExitCode])</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ReindexResultText(AExitCode: Integer; const AOutput: string): string;  // dl:ok unused-public-symbol@a063 -- public on purpose: tests\IndexJobTests.dpr (outside the plugin project) pins its wording
@@ -523,7 +523,7 @@ const
 begin
   if AExitCode = 0 then Exit('reindex: done');
   if (AExitCode = EXIT_USAGE_OR_LOCK) and ContainsText(AOutput, LOCK_REFUSAL_PHRASE) then
-    Exit('reindex: index busy, will retry');
+    Exit('reindex: index busy (another run), the next save retries'); { nothing re-queues it: 'will retry' promised a retry that never came (148 XP3) }
   if AExitCode = EXIT_USAGE_OR_LOCK then Exit('reindex: failed');
   Result:= Format('reindex: failed (exit %d)', [AExitCode]);
 end;

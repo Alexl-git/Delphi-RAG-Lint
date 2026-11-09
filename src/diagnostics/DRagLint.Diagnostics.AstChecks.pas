@@ -1981,7 +1981,7 @@ var
 
   { Adds the edit(s) that remove the dead code spanning source rows ARow1..ARow2
     (1-based) and ending at 0-based column AEndCol of ARow2. A trailing `// dl:`
-    comment after the code (a dl:bk<N> bookmark or a dl:ok review -- owner ruling
+    comment (line, brace or paren-star form) after the code (a dl:bk<N> bookmark or a dl:ok review -- owner ruling
     2026-09-22, DECISION-2026-10-28-comment-anchors) is NOT deleted with it: the
     code is cut out and the comment stays as an own-line comment at the same
     indentation. A plain non-dl comment is deleted with the line. }
@@ -1992,17 +1992,34 @@ var
     First : string     ;
     Last  : string     ;
     CmtAt : Integer    ;
+    CmtLen: Integer    ;
     Indent: Integer    ;
     E2    : TTextEdit  ;
+    { first position of Marker after the dead code, or 0 }
+    procedure Probe(const AMarker: string);
+    var
+      P: Integer;
+    begin
+      P:= Pos(AMarker, Last, AEndCol + 1);
+      if (P > 0) and ((CmtAt = 0) or (P < CmtAt)) then
+      begin
+        CmtAt:= P;
+        CmtLen:= Length(AMarker);
+      end;
+    end;
   begin
     First:= SrcRow(ARow1);
     Last := SrcRow(ARow2);
-    CmtAt:= Pos('//', Last, AEndCol + 1);
+    CmtAt:= 0;
+    CmtLen:= 0;
+    Probe('//');
+    Probe('{');
+    Probe('(*');
     Indent:= 0;
     while (Indent < Length(First)) and CharInSet(First[Indent + 1], [' ', #9]) do Inc(Indent);
     E2:= Default(TTextEdit);
     E2.FilePath:= AFile;
-    if (CmtAt > 0) and (Indent > 0) and Trim(Copy(Last, CmtAt + 2, MaxInt)).StartsWith(DL_PREFIX) then
+    if (CmtAt > 0) and Trim(Copy(Last, CmtAt + CmtLen, MaxInt)).StartsWith(DL_PREFIX) then
     begin
       if ARow2 > ARow1 then
       begin
@@ -2920,9 +2937,27 @@ var
   var
     S, L: string;
     C   : TTypeCategory;
+
+    { RF 2026-11-08 (146 t3): the component-library prefixes are lower-case after the T
+      (TcxGrid, TdxBarManager, TfrmMain, TdlgFoo), so `S[2] in A..Z` never saw them. A short
+      lower-case run (1..4) followed by an upper-case letter is the same shape; plain
+      lower-case words (Trim, Trunc, Time) and the Try* routines have no such capital. }
+    function LowerPrefixedClass: Boolean;
+    const
+      FIRST_PREFIX_CHAR = 2; { after the T }
+      LAST_CAPITAL_AT   = 6; { 1..4 lower-case letters, then the capital }
+      TRY_PREFIX        = 'Try';
+    var
+      I: Integer;
+    begin
+      I:= FIRST_PREFIX_CHAR;
+      while (I <= Length(S)) and CharInSet(S[I], ['a'..'z']) do Inc(I);
+      Result:= (I > FIRST_PREFIX_CHAR) and (I <= LAST_CAPITAL_AT) and (I <= Length(S)) and CharInSet(S[I], ['A'..'Z'])
+               and not SameText(Copy(S, 1, Length(TRY_PREFIX)), TRY_PREFIX);
+    end;
   begin
     S:= Trim(T);
-    Result:= (Length(S) >= 2) and (S[1] = 'T') and (S[2] >= 'A') and (S[2] <= 'Z');
+    Result:= (Length(S) >= 2) and (S[1] = 'T') and (CharInSet(S[2], ['A'..'Z']) or LowerPrefixedClass);
     if not Result then Exit;
     C:= CatOf(S);
     if C <> tcUnknown then begin Result:= (C = tcClass); Exit; end;

@@ -1,0 +1,37 @@
+﻿// CodeGear C++Builder
+// Copyright (c) 1995, 2026 by Embarcadero Technologies, Inc.
+// All rights reserved
+
+// (DO NOT EDIT: machine generated header) 'FixRtl.pas' rev: 37.00 (Windows)
+
+#ifndef FixRtlHPP
+#define FixRtlHPP
+
+#pragma delphiheader begin
+#pragma option push
+#if defined(__BORLANDC__) && !defined(__clang__)
+#pragma option -w-      // All warnings off
+#pragma option -Vx      // Zero-length empty class member 
+#endif
+#pragma pack(push,8)
+#include <System.hpp>
+#include <SysInit.hpp>
+
+//-- user supplied -----------------------------------------------------------
+
+namespace Fixrtl
+{
+//-- forward type declarations -----------------------------------------------
+//-- type declarations -------------------------------------------------------
+//-- var, const, procedure ---------------------------------------------------
+extern DELPHI_PACKAGE int __fastcall RtlAnswer();
+}	/* namespace Fixrtl */
+#if !defined(DELPHIHEADER_NO_IMPLICIT_NAMESPACE_USE) && !defined(NO_USING_NAMESPACE_FIXRTL)
+using namespace Fixrtl;
+#endif
+#pragma pack(pop)
+#pragma option pop
+
+#pragma delphiheader end.
+//-- end unit ----------------------------------------------------------------
+#endif	// FixRtlHPP

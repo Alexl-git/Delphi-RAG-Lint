@@ -4,10 +4,10 @@ title: ide-release
 summary: Asks a running drag-lint Delphi IDE plugin not to respawn its drag-lint.exe child processes for a while -- and to drop the running one on its next request
 product: DL
 group: editor-integration
-order: 110009
+order: 110010
 since: 1.13.0-alpha
 status: shipped
-updated: 1.39.2-alpha
+updated: 1.48.0-alpha
 ---
 
 # ide-release

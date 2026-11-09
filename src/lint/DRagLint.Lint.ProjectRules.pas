@@ -86,9 +86,9 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas) ?</para>
-    /// <para>Calls: AWholeGraph, ChangeFileExt, CollectFrom, CollectWholeGraphRule, CompareDottedVersions, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds (+70 more)</para>
+    /// <para>Calls: AWholeGraph, ChangeFileExt, CollectFrom, CollectWholeGraphRule, CompareDottedVersions, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds (+71 more)</para>
     /// <para>Returns: TDictionary&lt;string, Boolean&gt;.Create; Flags &lt;&gt; 0; InfoIn(AStore, Found); InfoIn(ALibraryStore, Found); nil; Findings.ToArray</para>
-    /// <para>Complexity: 134 (cyclomatic, outer body), 1039 lines (full implementation)</para>
+    /// <para>Complexity: 140 (cyclomatic, outer body), 1061 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
@@ -118,7 +118,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.ComputeRuleCacheEntry (DRagLint.CLI.pas), DRagLint.CLI.WholeGraphProvider (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.Run.WholeGraph (DRagLint.Lint.ProjectRules.pas) ?</para>
     /// <para>Calls: DRagLint.Lint.EnumOrdinalPersisted.CollectEnumOrdinalPersisted, DRagLint.Lint.ProjectRules.CollectCircularUses, DRagLint.Lint.ProjectRules.CollectDfmEventHandlerMissing, DRagLint.Lint.ProjectRules.CollectDuplicateGlobalDecls, DRagLint.Lint.ProjectRules.CollectEnumHelperSeparateUnits, DRagLint.Lint.ProjectRules.CollectRepeatedTypeSwitch, SameText</para>
-    /// <para>Returns: nil; CollectCircularUses(AStore); CollectDuplicateGlobalDecls(AStore, ALibraryStore); CollectEnumHelperSeparateUnits(AStore); CollectRepeatedTypeSwitch(AStore); CollectEnumOrdinalPersisted(AStore)</para>
+    /// <para>Returns: nil; CollectCircularUses(AStore); CollectDuplicateGlobalDecls(AStore, ALibraryStore); CollectEnumHelperSeparateUnits(AStore); CollectRepeatedTypeSwitch(AStore); CollectEnumOrdinalPersisted(AStore); CollectDfmEventHandlerMissing(AStore, ALibraryStore)</para>
     /// <seealso cref="DRagLint.Lint.EnumOrdinalPersisted.CollectEnumOrdinalPersisted"/>
     /// <seealso cref="DRagLint.Lint.ProjectRules.CollectCircularUses"/>
     /// <seealso cref="DRagLint.Lint.ProjectRules.CollectDfmEventHandlerMissing"/>
@@ -4397,6 +4397,8 @@ var
     that as DO NOT REPORT. Silence about a unit nothing can see beats guessing. }
   function ExportNamesFor(const AUnitName: string): TDictionary<string, Boolean>;
     procedure CollectFrom(const AFrom: ISymbolStore; ATo: TDictionary<string, Boolean>);
+    const
+      ACCESSOR_PREFIX_LEN = 3; { 'Get' / 'Set' }
     var
       U : TSymbol;
       Ch: TSymbol;
@@ -4426,6 +4428,21 @@ var
             if Ch.Kind = skEnum then
               for var V: TSymbol in AFrom.FindAllChildSymbols(Ch.Id) do
                 if V.Kind = skEnumValue then ATo.AddOrSetValue(LowerCase(V.Name), True);
+            { UNUSEDUNIT-INLINE-PROP (RF 2026-11-08, 145 int, H2443): A PROPERTY WHOSE
+              ACCESSOR IS inline NEEDS ITS UNIT TOO. `P.ParamByName('A').AsInteger:= 5`
+              names no symbol of FireDAC.Stan.Param (the receiver type arrives through a
+              call result, so the member-access ref stays unresolved) yet dcc expands the
+              inline TFDParam.SetAsInteger from that unit. The accessor's directives carry
+              `inline` (library-Win64: SetAsInteger / GetAsInteger), so the property name
+              joins the exports: a ref of that name keeps the unit. Conservative on
+              purpose -- a same-named property elsewhere also keeps it (fewer findings,
+              never a wrong removal). }
+            if Ch.Kind in [skClass, skRecord] then
+              for var M: TSymbol in AFrom.FindAllChildSymbols(Ch.Id) do
+                if (M.Kind in [skMethod, skProcedure, skFunction]) and (Length(M.Name) > ACCESSOR_PREFIX_LEN)
+                   and (' ' + LowerCase(M.Directives) + ' ').Contains(' inline ')
+                   and (SameText(Copy(M.Name, 1, ACCESSOR_PREFIX_LEN), 'Get') or SameText(Copy(M.Name, 1, ACCESSOR_PREFIX_LEN), 'Set')) then
+                  ATo.AddOrSetValue(LowerCase(Copy(M.Name, ACCESSOR_PREFIX_LEN + 1, MaxInt)), True);
           end;
         { BLIND SPOT 1 (T4/U1): TYPE HELPER MEMBERS ARE PART OF THE SURFACE.
 
@@ -4794,6 +4811,7 @@ begin
     if WantRule(REDUNDANT_CAST_RULE) and OptedIn('redundant-cast') then RefTypeWanted:= RefTypeWanted + [REDUNDANT_CAST_RULE];
     if WantRule(UNSAFE_TYPECAST_RULE) and OptedIn('unsafe-typecast-without-is') then RefTypeWanted:= RefTypeWanted + [UNSAFE_TYPECAST_RULE];
     if WantRule(UI_ACCESS_IN_THREAD_TYPED_RULE) and OptedIn('ui-access-in-thread-typed') then RefTypeWanted:= RefTypeWanted + [UI_ACCESS_IN_THREAD_TYPED_RULE];
+    if WantRule(QUIT_FROM_THREAD_RULE) and OptedIn('quit-from-thread') then RefTypeWanted:= RefTypeWanted + [QUIT_FROM_THREAD_RULE];
     for var Rt in CollectRefTypeRules(AStore, ALibraryStore, RefTypeWanted, AOnlyFileId) do Findings.Add(Rt);
     { gap-rules wave, lane G8. The two DFM rules and uses-movable-to-implementation are ON by
       default and walk one table each (uses-movable back ON in lane IMOV after REFTYPE: 0 FP on

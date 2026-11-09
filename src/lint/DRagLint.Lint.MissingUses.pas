@@ -105,8 +105,8 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Lint.MissingUses.TMissingUsesChecker.Check (DRagLint.Lint.MissingUses.pas), DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics (DRagLint.LSP.Completion.pas)</para>
-    /// <para>Calls: ContainsText, Copy, CyclePath, DeclaringUnit, Default, DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Core.UsesInsert.TUsesText.ImplementationLine, DRagLint.Core.UsesInsert.TUsesText.IsUnitText, DRagLint.Core.UsesInsert.TUsesText.UsesEntries (+24 more)</para>
-    /// <para>Complexity: 35 (cyclomatic, outer body), 336 lines (full implementation)</para>
+    /// <para>Calls: ContainsText, Copy, CyclePath, DeclaringUnit, Default, DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Core.UsesInsert.TUsesText.ImplementationLine, DRagLint.Core.UsesInsert.TUsesText.IsUnitText, DRagLint.Core.UsesInsert.TUsesText.UsesEntries (+25 more)</para>
+    /// <para>Complexity: 38 (cyclomatic, outer body), 355 lines (full implementation)</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile"/>
     /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines"/>

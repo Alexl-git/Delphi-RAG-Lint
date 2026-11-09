@@ -1193,4 +1193,8 @@
 #   Superseded: 1.33.0-alpha|5c05d332cf1e502943a0298bb03536aa2ee298d6e6721b51736c079701c33a37
 # 2026-11-08 lane 147-X5P (E-INSTALLER-R2-REST phase 2): hash re-pinned WITHOUT a version bump -- src\index\Manifest + ManifestWrite gain manifest migrate, %VAR% expansion of outDir and the roaming library default (where a manifest and its DBs LIVE, all OFF unless DRAGLINT_LAYOUT=v2); no parse, symbol, ref or call edge changes.
 #   Superseded: 1.33.0-alpha|b442941d11f971de0ce881054db103e4cc1d08e1e72469d4089dfe226fe1f81f
-1.34.0-alpha|8f4e29f35451bbe6eef1d3dfc6a46b8b47a1cbfe291edd40a5b482586a167d2c
+# 2026-11-08 lane 148-MF: hash re-pinned WITHOUT a version bump -- DRagLint.Index.Manifest.pas LoadDocComplexityMin loses a dead initial `Result:= 10` (H2077: both the try and the except path assign it); same value on every path, no parse, symbol, ref or call edge changes.
+#   Superseded: 1.34.0-alpha|8f4e29f35451bbe6eef1d3dfc6a46b8b47a1cbfe291edd40a5b482586a167d2c
+# 2026-11-08 148 INT: hash re-pinned WITHOUT a version bump -- document --unit --apply on 17 units (DX's doc-drift convergence) rewrote /// doc-comment blocks only (diff checked: no non-comment line changed); no parse, symbol, ref or call edge changes.
+#   Superseded: 1.34.0-alpha|d1b39fd182b3ed0418d4717bdd1294e031ef85343a8bf91c34ea6d9c6e3db972
+1.34.0-alpha|e7940dd93e2e1a7c9944aca25fbd644249ea741a829ae157f2c9add7f88b3e25

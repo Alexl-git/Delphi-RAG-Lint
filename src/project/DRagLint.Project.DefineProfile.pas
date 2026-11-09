@@ -111,7 +111,8 @@ function ReadDelphiLspDefines(const ADproj: string; out APlatform: string; out A
   out ANumeric: TArray<TPair<string, Integer>>; out ASwitches: TArray<TPair<string, Boolean>>): Boolean;
 
 /// <summary>The active build of one project. Platform = APlatformOverride, else
-/// the .dproj marker, else delphilsp.json dllname, else 'Win64'. Config =
+/// the .dproj marker, else delphilsp.json dllname, else 'Win32' (ruling a3, the same order as the
+/// index's EffectiveIndexPlatform; 'Win64' before 148). Config =
 /// AConfigOverride, else the .dproj marker, else 'Release'. Defines (D1, .dproj
 /// FIRST) = ProfileFromDproj(ADproj, platform, config) whenever the .dproj is
 /// readable and carries a Config marker; only when it is unreadable or has no
@@ -243,6 +244,8 @@ uses
 const
   DEFAULT_CONFIG   = 'Release';
   DEFAULT_PLATFORM = 'Win64';
+  { 148 LS / ruling a3 (L-C20): a .dproj that names no platform anywhere is Win32, as the index takes it }
+  NO_PLATFORM_NAMED = 'Win32';
   DIGEST_LEN       = 8;
   CONFIG_MARKER    = '<Config\s+Condition="''\$\(Config\)''==''''"\s*>\s*([^<]+?)\s*</Config>';
   PLATFORM_MARKER  = '<Platform\s+Condition="''\$\(Platform\)''==''''"\s*>\s*([^<]+?)\s*</Platform>';
@@ -476,14 +479,14 @@ begin
     HaveLsp := ReadDelphiLspDefines(ADproj, LspPlat, LspDefs, LspNums, LspSws);
     if not HaveLsp then Notes.Add('delphilsp.json absent or unreadable');
 
-    // Platform: override, else .dproj marker, else JSON dllname, else Win64 (D4 + D1).
+    // Platform: override, else .dproj marker, else JSON dllname, else Win32 (D4 + D1, ruling a3).
     if APlatformOverride <> '' then Result.Platform := NormPlatform(APlatformOverride)
     else if MarkPlat <> '' then Result.Platform := NormPlatform(MarkPlat)
     else if HaveLsp then Result.Platform := LspPlat
     else
     begin
-      Result.Platform := DEFAULT_PLATFORM;
-      Notes.Add('platform marker absent -> ' + DEFAULT_PLATFORM);
+      Result.Platform := NO_PLATFORM_NAMED;
+      Notes.Add('platform marker absent -> ' + NO_PLATFORM_NAMED);
     end;
 
     // Config: override, else .dproj marker, else Release.

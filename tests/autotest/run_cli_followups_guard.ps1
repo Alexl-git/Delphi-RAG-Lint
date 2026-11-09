@@ -127,12 +127,13 @@ $r = Run "$c\neutral" $cExe @('compile-check', "$c\nodb\Tiny.dpr", '--format', '
 Check 'C2 control: with NO default DB the warning is still printed' `
       ($r.Out -match 'no database resolved for this target') $r.Out
 
-# ---- R: --rule takes one id -----------------------------------------------------------------
-$r = Run $WorkDir $Exe @('lint-all', '--rule', 'magic-literal,missing-doc')
-Check 'R1 a comma list exits 2' ($r.Code -eq 2) "exit=$($r.Code)"
-Check 'R2 ... and says why (one rule id, not a list)' ($r.Out -match '--rule takes one rule id') $r.Out
-$r = Run $WorkDir $Exe @('lint-all', '--rule', 'magic-literal', '--db', "$WorkDir\absent.sqlite")
-Check 'R3 control: a single id is not refused by the list check' ($r.Out -notmatch '--rule takes one rule id') $r.Out
+# ---- R: --rule takes a comma list since 1.48 (wave 148 RO); every id is validated ---------------
+# (was: "--rule takes one id", refused with exit 2; reclassified 2026-11-09 by 148 INT on RO's owner row)
+$r = Run $WorkDir $Exe @('lint-all', '--rule', 'magic-literal,no-such-rule-x', '--db', "$WorkDir\absent.sqlite")
+Check 'R1 a comma list with an unknown id exits 2' ($r.Code -eq 2) "exit=$($r.Code)"
+Check 'R2 ... and names the unknown id' ($r.Out -match 'unknown rule "no-such-rule-x"') $r.Out
+$r = Run $WorkDir $Exe @('lint-all', '--rule', 'magic-literal,missing-doc', '--db', "$WorkDir\absent.sqlite")
+Check 'R3 control: a list of known ids is not refused as unknown' ($r.Out -notmatch 'unknown rule') $r.Out
 
 # ---- N: the no-owner NOTE once per run, also across a folder lint --------------------------
 $n = Join-Path $WorkDir 'n'

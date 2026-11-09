@@ -52,9 +52,9 @@
   },
   "family": "lint-rules",
   "verified": {
-    "date": "2026-10-28",
+    "date": "2026-11-08",
     "by": "ENGINE",
-    "build": "1.36.0-alpha",
+    "build": "1.48.0-alpha",
     "surfaceHash": "705db8e60b73cfa9130304fc465e5d099d54877dbc5b0294285efffb6c50d9f0"
   }
 }

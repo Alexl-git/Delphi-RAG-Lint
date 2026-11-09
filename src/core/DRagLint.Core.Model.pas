@@ -17,7 +17,7 @@ const
   /// This unit is the right home because it is the one both sides already use:
   /// DRagLint.LSP.Server uses Core.Model, and CLI uses LSP.Server, so a
   /// constant here reaches both with no new dependency and no cycle.</remarks>
-  DRAGLINT_VERSION = '1.47.0-alpha';
+  DRAGLINT_VERSION = '1.48.0-alpha';
 
   /// <summary>The identity of what this build EXTRACTS from a byte sequence.
   /// Part of the indexer fingerprint; <see cref="DRAGLINT_VERSION"/> is not.
@@ -1126,6 +1126,23 @@ type
     /// -- a call_edges row IS the proof, so those callers are verified whatever
     /// this holds.</remarks>
     ReceiverText     : string;
+  end;
+
+  /// <summary>One property access that ran a METHOD accessor (getter or
+  /// setter): the echo row of a member_accesses row whose accessor is that
+  /// routine (spec 2026-09-14-use-edges-design.md sec 8.1 bullet 2).</summary>
+  /// <remarks>Filled by ISymbolStore.FindAccessorEchoUses only. Caller is the
+  /// accessing site exactly as FindResolvedCallers reports it (Mode 'read' |
+  /// 'write', Confidence 'certain'), so Doc.Facts folds it with the same
+  /// Display|Location key. The ids are meaningful only in the store that
+  /// produced the row.</remarks>
+  TAccessorEchoUse = record
+    /// <summary>symbols.id of the property that was accessed.</summary>
+    MemberSymbolId: Int64          ;
+    /// <summary>The property's own name (last segment), e.g. 'Value'.</summary>
+    MemberName    : string         ;
+    /// <summary>The accessing site.</summary>
+    Caller        : TResolvedCaller;
   end;
 
 const

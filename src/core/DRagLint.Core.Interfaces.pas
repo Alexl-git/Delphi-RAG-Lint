@@ -195,8 +195,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.BuildFindings (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.BuildIndexSide (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.CollectUnchecked (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.NameIsAmbiguous (DRagLint.Analysis.LintTree.pas) (+783 more)</para>
-  /// <para>Used in units: DRagLint.Analysis.LintTree, DRagLint.Analysis.PurityStage, DRagLint.Analysis.SurfaceAdapters, DRagLint.Charts.AskVerb, DRagLint.Charts.Compare, DRagLint.Charts.MemberAccess, DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Cycles (+118 more)</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.BuildFindings (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.BuildIndexSide (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.CollectUnchecked (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.NameIsAmbiguous (DRagLint.Analysis.LintTree.pas) (+791 more)</para>
+  /// <para>Used in units: DRagLint.Analysis.LintTree, DRagLint.Analysis.PurityStage, DRagLint.Analysis.SurfaceAdapters, DRagLint.Charts.AskVerb, DRagLint.Charts.Compare, DRagLint.Charts.MemberAccess, DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Cycles (+119 more)</para>
   /// <para>Implemented by: TSQLiteSymbolStore</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -625,7 +625,7 @@ type
     /// guard (the unit case through `query unit-usage`, which has no
     /// qualified-name fallback of its own).
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoCycles.IntfEdgeSymbols (DRagLint.CLI.pas), DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoFindUnit (DRagLint.CLI.pas), DRagLint.CLI.DoImpact (DRagLint.CLI.pas) (+148 more)</para>
+    /// <para>Called from: DRagLint.CLI.DoCycles.IntfEdgeSymbols (DRagLint.CLI.pas), DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoFindUnit (DRagLint.CLI.pas), DRagLint.CLI.DoImpact (DRagLint.CLI.pas) (+149 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
@@ -674,7 +674,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Analysis.LintTree.BuildIndexSide (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.PurityStage.TPurityRun.ScanFiles (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.SurfaceAdapters.TryFingerprintOfIndex (DRagLint.Analysis.SurfaceAdapters.pas), DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoOutline (DRagLint.CLI.pas) (+44 more)</para>
+    /// <para>Called from: DRagLint.Analysis.LintTree.BuildIndexSide (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.PurityStage.TPurityRun.ScanFiles (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.SurfaceAdapters.TryFingerprintOfIndex (DRagLint.Analysis.SurfaceAdapters.pas), DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoOutline (DRagLint.CLI.pas) (+45 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
@@ -812,7 +812,7 @@ type
     /// <returns><!-- drag-lint:auto type -->string</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Analysis.PurityStage.TPurityRun.ReadFileLines (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.ScanFiles (DRagLint.Analysis.PurityStage.pas), DRagLint.CLI.AppendReferencesJson (DRagLint.CLI.pas), DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas) (+218 more)</para>
+    /// <para>Called from: DRagLint.Analysis.PurityStage.TPurityRun.ReadFileLines (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.ScanFiles (DRagLint.Analysis.PurityStage.pas), DRagLint.CLI.AppendReferencesJson (DRagLint.CLI.pas), DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas) (+220 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
@@ -874,7 +874,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TReference&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Analysis.LintTree.CollectNameJoinFindings (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.PurityStage.TPurityRun.ScanFiles (DRagLint.Analysis.PurityStage.pas), DRagLint.CLI.DoCycles.IntfEdgeSymbols (DRagLint.CLI.pas), DRagLint.CLI.DoDumpRefs (DRagLint.CLI.pas), DRagLint.CLI.DoQueryTypeUsage (DRagLint.CLI.pas) (+40 more)</para>
+    /// <para>Called from: DRagLint.Analysis.LintTree.CollectNameJoinFindings (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.PurityStage.TPurityRun.ScanFiles (DRagLint.Analysis.PurityStage.pas), DRagLint.CLI.DoCycles.IntfEdgeSymbols (DRagLint.CLI.pas), DRagLint.CLI.DoDumpRefs (DRagLint.CLI.pas), DRagLint.CLI.DoQueryTypeUsage (DRagLint.CLI.pas) (+41 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
@@ -1179,7 +1179,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TUnitUse&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Analysis.LintTree.BuildIndexSide (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.SurfaceAdapters.TryFingerprintOfIndex (DRagLint.Analysis.SurfaceAdapters.pas), DRagLint.CLI.CircularUsesForFile (DRagLint.CLI.pas), DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas), DRagLint.CLI.DoUsesFix (DRagLint.CLI.pas) (+44 more)</para>
+    /// <para>Called from: DRagLint.Analysis.LintTree.BuildIndexSide (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.SurfaceAdapters.TryFingerprintOfIndex (DRagLint.Analysis.SurfaceAdapters.pas), DRagLint.CLI.CircularUsesForFile (DRagLint.CLI.pas), DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas), DRagLint.CLI.DoUsesFix (DRagLint.CLI.pas) (+45 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
@@ -1835,7 +1835,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TSymbol</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Analysis.PurityStage.TPurityRun.SymbolById (DRagLint.Analysis.PurityStage.pas), DRagLint.CLI.BuildCallGraphJson (DRagLint.CLI.pas), DRagLint.CLI.DoCallPath (DRagLint.CLI.pas), DRagLint.CLI.DoDumpCallEdges (DRagLint.CLI.pas), DRagLint.CLI.DoDumpRefs (DRagLint.CLI.pas) (+132 more)</para>
+    /// <para>Called from: DRagLint.Analysis.PurityStage.TPurityRun.SymbolById (DRagLint.Analysis.PurityStage.pas), DRagLint.CLI.BuildCallGraphJson (DRagLint.CLI.pas), DRagLint.CLI.DoCallPath (DRagLint.CLI.pas), DRagLint.CLI.DoDumpCallEdges (DRagLint.CLI.pas), DRagLint.CLI.DoDumpRefs (DRagLint.CLI.pas) (+134 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
@@ -1848,7 +1848,7 @@ type
     /// <returns><!-- drag-lint:auto type -->Int64</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Analysis.LintTree.BuildIndexSide (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.RunLintTree (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.SurfaceAdapters.TryFingerprintOfIndex (DRagLint.Analysis.SurfaceAdapters.pas), DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoDumpRefs (DRagLint.CLI.pas) (+38 more)</para>
+    /// <para>Called from: DRagLint.Analysis.LintTree.BuildIndexSide (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.RunLintTree (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.SurfaceAdapters.TryFingerprintOfIndex (DRagLint.Analysis.SurfaceAdapters.pas), DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoDumpRefs (DRagLint.CLI.pas) (+39 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
@@ -1982,7 +1982,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TSymbol</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.LSP.Completion.EnclosingTypeDescendsFrom (DRagLint.LSP.Completion.pas), DRagLint.Report.CycleEdge.CallRefusal (DRagLint.Report.CycleEdge.pas), DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve/4 (DRagLint.Resolver.TypeAt.pas)</para>
+    /// <para>Called from: DRagLint.LSP.Completion.EnclosingTypeDescendsFrom (DRagLint.LSP.Completion.pas), DRagLint.Report.CycleEdge.CallRefusal (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TMemberPlan.AsHelperAnchor (DRagLint.Report.CycleEdge.pas), DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve/4 (DRagLint.Resolver.TypeAt.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
@@ -2360,6 +2360,29 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FindResolvedCallers(ATargetSymbolId: Int64): TArray<TResolvedCaller>;
+    /// <summary>The property accesses that ran the METHOD accessor
+    /// AAccessorSymbolId: every member_accesses row whose accessor_symbol_id is
+    /// it and whose accessor_kind is 'method', ordered by property name then
+    /// enclosing routine. Backs the 'Used in (via property X):' doc/hover line
+    /// of a getter or setter (wave 148 UP, spec 2026-09-14 sec 8.1).</summary>
+    /// <param name="AAccessorSymbolId">The getter/setter routine's symbols.id in
+    /// THIS store.</param>
+    /// <returns>One row per access site; empty when nothing reaches the routine
+    /// through a property, or on a DB without member_accesses.</returns>
+    /// <remarks>
+    /// Read-only display reader; nothing in the resolve pass calls it.
+    /// A FIELD accessor is not an echo (FindResolvedCallers already lists those
+    /// accesses on the field itself).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.Checkpoint"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    function FindAccessorEchoUses(AAccessorSymbolId: Int64): TArray<TAccessorEchoUse>;
     /// <summary>v14 (D5): the AutoDocument '?' bucket -- every CALL-SITE ref
     /// (kind = REF_KIND_CALL) whose name_text = AName AND that has NO call_edges
     /// row (its receiver could not be typed, so the resolver emitted no edge).

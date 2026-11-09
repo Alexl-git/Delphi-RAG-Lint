@@ -1266,6 +1266,24 @@ begin
   end; // try
 end;
 
+{ The numeric type an inline `var X := <numeric literal>` declares (`Integer` for `0`, `Double`
+  for `0.0` / `1e3`; a leading unary minus is looked through), or '' when ADef is not that shape.
+  A numeric literal initialiser fixes the variable's type as a number, so a loop sum on it is
+  arithmetic and not string concatenation. Anything else (a call, a name, a string) stays '' =
+  unknown, which keeps the finding. }
+function LiteralInitType(const ADef: TTSNode; const ASource: TBytes): string;
+var
+  P, R: TTSNode;
+begin
+  Result:= '';
+  P:= ADef.Parent;
+  if P.IsNull or (P.NodeType <> 'assignment') then Exit;
+  R:= P.ChildByField('rhs');
+  if (not R.IsNull) and (R.NodeType = 'exprUnary') and (R.NamedChildCount = 2) then R:= R.NamedChild(1);
+  if R.IsNull or (R.NodeType <> 'literalNumber') then Exit;
+  Result:= if TRegEx.IsMatch(NodeText(R, ASource), '^[0-9]+$|^\$') then 'Integer' else 'Double';
+end;
+
 { (#not-declared-numeric? @id) -- 2026-10-09, Gitea drag-lint#7.
 
   concat-in-loop matched `X := X + Y` by shape alone, and a variable operand
@@ -1329,7 +1347,7 @@ var
               T:= N.NamedChild(J);
               Break;
             end;
-        if T.IsNull then ATypes.Add('') else ATypes.Add(Trim(NodeText(T, ASource)));
+        if T.IsNull then ATypes.Add(LiteralInitType(N, ASource)) else ATypes.Add(Trim(NodeText(T, ASource)));
       end;
     end;
     { NamedChildrenOf, not NamedChild(I): O(n) on a wide block (see there). }

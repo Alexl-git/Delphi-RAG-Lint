@@ -399,11 +399,12 @@ type
     /// The field is PROJECT-scoped: if a project is open, targets that
     /// project's directory + ".drag-lint.json" (DOTTED -- matching the LOCAL
     /// override the CLI/AutoDoc walk up from the start dir to find);
-    /// otherwise falls back to the directory of the configured drag-lint.exe
-    /// + "drag-lint.json" (UNDOTTED -- the global/exe-dir manifest). This is
+    /// otherwise the GLOBAL manifest the engine reads (UNDOTTED drag-lint.json):
+    /// TInstalledLayout.WriteTarget of the engine folder -- beside drag-lint.exe, or under
+    /// DRAGLINT_LAYOUT=v2 the roaming %APPDATA%\drag-lint file (layout v2 phase 3). This is
     /// deliberately NOT the merged-effective-manifest path used by
     /// TManifestIO.Load -- writes here only ever touch ONE file in place.</summary>
-    /// <returns><!-- drag-lint:auto -->string -- Observed: ExeDir + 'drag-lint.json'.</returns>
+    /// <returns>The project's .drag-lint.json, else PluginManifestWriteTarget(engine folder).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.ReadMaxReturnCases (DragLint.Plugin.OptionsFrames.pas), DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.WriteMaxReturnCases (DragLint.Plugin.OptionsFrames.pas)</para>
@@ -593,6 +594,7 @@ uses
   , DragLint.Plugin.HelpIndex  // dl:unit DragLint.Plugin.HelpIndex accepted -- the Help group shows the default root and normalises through the same rules
   , DragLint.Plugin.Help       { DLOpenHelpUrl }
   , DRagLint.Core.JsonFile    { WriteJsonFileAtomic -- pretty, no BOM, atomic }
+  , DragLint.Plugin.ManifestPaths { PluginManifestWriteTarget -- layout v2 phase 3 }
   ;
 
 { Minimal .dfm resource for the BASE frame class (TDLPageFrame). TCustomFrame.Create
@@ -1121,7 +1123,7 @@ begin
     ResolveEngine(Exe); { path only -- the manifest is written beside the exe, nothing is spawned }
     ExeDir:= ExtractFilePath(Exe);
   end;
-  Result:= ExeDir + 'drag-lint.json';
+  Result:= PluginManifestWriteTarget(ExeDir); { layout v2 phase 3: the file the engine reads }
 end;
 
 function TDLLinterOptionsFrame.ReadMaxReturnCases: Integer;

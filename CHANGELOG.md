@@ -3,6 +3,41 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## v1.48.0-alpha -- unreleased
+
+Wave 148, integrated on lane/148-int over lane/147-int b9482d4a4. NO extractor or resolver bump (extractor 1.34.0-alpha, resolver 1.22.0-alpha unchanged): no re-parse beyond 1.47's. Bump-needing items are prepared for 149 (lane/148-PB is not merged).
+
+### Added
+- `uses-recover` (new verb): recovers the uses edges of units that ship without source from the vendor's C++Builder .hpp headers, follows sourceless targets, and with --map (dcc -GS/-GD) says which the linker pulled in and which linked units no header explains. Read-only; never reads a .dcu.
+- `cycles --hub` (read-only): names per group the hub units whose removal leaves the rest acyclic, with the uses edges, reference weights and surfaces on each side, whether cutting one side alone breaks the group, and the dead uses inside it; JSON adds hubs[] and zero_ref_edges. Spec 2026-11-08-hub-scc-phased.md (fabcyc case 18, phases P1-P6).
+- Editor exception facts, ON by default: hovering a routine shows 'Raises: EFoo (bound), EBar (spelled)' (LSP hover + the IDE popup), the LSP code lens adds 'raises N types, handles M types' on routine headers, and MCP gains get_exception_facts (18 tools); `lsp --no-exception-facts` switches the hover line and lens off. exception-facts --target is about 3x faster (indexed routine lookup).
+- `convert-apply --only-type Type1,Type2`: converts every instance of those bare #convert From types (nested and inline too); exclusive with `--only` (exit 2); unmatched types in only_unmatched[]; info capability `only_type`.
+- New rule `quit-from-thread` (OFF by default): PostQuitMessage / Application.Terminate / Halt / ExitProcess in TThread.Execute or a thread-start lambda, outside Synchronize/Queue; a class never constructed is a hint.
+- `graph --format html` draws the Markdown text layer: a note box per text node, dashed edges to the unit each backticked name resolves to, a legend and a "Show text nodes" checkbox (on; absent when the index has no Markdown).
+- Autodoc / hover: a property getter or setter keeps 'Called from:' and adds 'Used in (via property X): Routine (file.pas) [r|w|rw]' -- the property accesses that ran it; 'Used in:' on a property or field also lists the resolved uses recorded in extra --db indexes.
+- `cycles --fix / --plan`: a uses entry inside a single-branch {$IFDEF} region is removed together with its guard when every entry of the region goes (was: refused directive); a consumer that handles EInvalidCast and casts with an unguarded `as` is cut through a helper As<Surface>(X) that raises EInvalidCast as the class cast did (was: refused exception-semantics). DRAGLINT_CYCLE_TIMING=1 prints the planner's stage times on stderr.
+- IDE plugin: with DRAGLINT_LAYOUT=v2 (or DRAGLINT_MANIFEST) the plugin reads and writes the same drag-lint.json as the engine (installed layout v2, phase 3; off by default). Find Usages shows "Raised at" / "Handled at" groups for exception classes.
+- VS Code: the DL project/platform status item is hidden while a non-Delphi file is active.
+- `lint --rule` takes a comma list.
+
+### Changed
+- `cycles --plan` / `--causes --format json`: without --library-db the platform library is the one of the build platform (--platform, else the project's active platform, else Win32), no longer always win64. A moved line naming another unit of the cycle qualified refuses coupling-remains in the plan instead of failing the compile gate.
+- `lint --fix --apply`: naming renames are written through the compile gate whenever --project names a .dproj (no --compile-gate needed); stderr says so. `extract-interface` / `lazy-init --apply` listen on the control channel: shutdown --db / Cancel stop the build and roll back (exit 1).
+- `rename --kind param`: a nested routine's own same-named local, const or type is no longer renamed with the outer local. `narrow-param`: a member write p.m:= v counts as a use of m; new refusal generic-ancestor.
+- `doc-drift`: a bare call into the library is answered only by a unit the calling file uses; a virtual library member reached through its base also counts its overrides. `document --apply`: a block whose capped `Calls:` list ends "(+N more)" is no longer REFUSED as naming an unseen unit.
+- `lint-all`: without --output or --project the report file is written in the current directory, not beside the database. An unknown `--rule` id is refused (exit 2) instead of a silent empty report.
+- `convert-apply` reads the sibling .dfm at its own encoding (UTF-8 / UTF-16 BOM) for the --only name match instead of the ANSI page.
+- LSP: WorkspaceEdit URIs follow the client's drive form (VS Code c%3A); uses-on-save removal edits are percent-encoded; a project file created while the server runs is found without restart. lint / LSP: a .dproj naming no platform is preprocessed as Win32 (ruling a3), as index does. Clearer `index --resolve-only` scope error.
+- auto-create: a project index whose build did not finish (10-minute limit) is reported as INCOMPLETE with the command that finishes it. index: a heartbeat line that raises no longer ends the heartbeat; while a resolve stream counts its rows the heartbeat names that stream.
+
+### Fixed
+- Lint false positives: for-bound-modified-in-body / loop-condition-invariant (a `with` in the loop body is not a modification of the loop variable); concat-in-loop (a variable initialised from a numeric literal is numeric); unused-unit-in-uses (a unit needed only for an inline property accessor, FireDAC.Stan.Param); shared-marker-legacy-shape (prose with several words after the tag); unsafe-typecast-without-is recognises lower-case-prefixed class names (TcxFoo, TfrmFoo); compiler-magic-comments' message names the `raise ENotImplemented` form.
+- IDE plugin: Find Usages no longer sticks at "(searching...)" when the language server stops mid-question; with no engine found the language server is not spawned off PATH (one "drag-lint.exe not found" note); Rename Symbol reads the typeat answer even when the engine prints a note after the JSON; a save-reindex refused by the index lock says "the next save retries".
+- Internal: LoadDocComplexityMin dead store removed (H2077).
+- Tests / build: guards fall back to the worktree build when no engine is deployed (prepare_battery stages it into the tree's own dll-win64); the battery refuses Windows PowerShell 5 (pwsh 7); run_enum_helper builds into a per-run dir; grammar / dfm / runtime build bats deploy to dll-win64 with the three-directory rule documented; new guard run_cyclefix_r1_dcc_win32.
+
+### Measured, no change
+- by-value-arg-before-assignment stays OFF (0 hits on 7 DB copies). Index memory: full index peak working set 632 MB / 763 s, a one-file incremental 428 MB; the slowness seen was machine pressure, not the engine. ORM3 CLIENT lint-all baseline for 1.46.0-alpha (PARAM-TOO-WIDE 7, ROW16 0) and rule precision samples (docs\measurements\rule-precision-2026-11-08.md).
 ## v1.47.0-alpha -- unreleased
 
 Wave 147, integrated on lane/147-int. ONE extractor bump over 1.46 (1.34.0-alpha: grammar v1.4.4 + v1.4.5, use edges, Markdown text nodes, indexed property facts) and ONE resolver bump (1.22.0-alpha): every index re-parses once. Grammar v1.4.5 staged.

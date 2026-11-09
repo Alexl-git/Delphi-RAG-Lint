@@ -4,10 +4,10 @@ title: Switch VS Code Delphi MCP entry
 summary: Turns the VS Code Delphi MCP entry off and on with a backup
 product: DL
 group: editor-integration
-order: 110016
+order: 110017
 since: 1.33.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.48.0-alpha
 ---
 
 # Switch VS Code Delphi MCP entry

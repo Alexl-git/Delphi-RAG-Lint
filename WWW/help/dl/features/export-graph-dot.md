@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70010
 since: 0.6.0-alpha
 status: shipped
-updated: 1.47.0-alpha
+updated: 1.48.0-alpha
 ---
 
 # Export Graph (DOT)
@@ -48,7 +48,7 @@ dependency structure with Graphviz.
 ```text
 drag-lint graph --db <file.sqlite> [--format dot|mermaid|json|html] [--name <root-substr>] [--output <file>]
 ```
-`--format` selects `dot`, `mermaid`, `json` (`drag-lint.graph/1`: an edges list of from/to/weight) or `html` (one self-contained page). `json` and `html` also carry the **Markdown text nodes** of the index: `text_nodes` (one per heading, paragraph or list item of the `.md` files beside the project file: `id`, `file`, `path`, `line`, `kind` md-heading|md-text, `section`, `text`) and `text_edges` (`from` a node `to` the unit declaring a `` `backticked` `` name it mentions, with that `name`; a name declared in more than one file, or in none, makes no edge). `--name` roots the graph at a
+`--format` selects `dot`, `mermaid`, `json` (`drag-lint.graph/1`: an edges list of from/to/weight) or `html` (one self-contained page). `json` and `html` also carry the **Markdown text nodes** of the index: `text_nodes` (one per heading, paragraph or list item of the `.md` files beside the project file: `id`, `file`, `path`, `line`, `kind` md-heading|md-text, `section`, `text`) and `text_edges` (`from` a node `to` the unit declaring a `` `backticked` `` name it mentions, with that `name`; a name declared in more than one file, or in none, makes no edge). In `html` the text nodes are DRAWN as well as listed: one note box per node, a dashed line from each note to the unit box it mentions, a legend (note box = Markdown text node, dashed line = mentions by name, box = unit declaring the name) and a "Show text nodes" checkbox, on by default, that hides or shows the whole layer (pure CSS, no script). An index with no Markdown gets neither the layer nor the checkbox. `--name` roots the graph at a
 substring match; `--output` writes to a file instead of stdout.
 
 ### What it needs

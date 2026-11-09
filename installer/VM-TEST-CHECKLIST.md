@@ -96,7 +96,7 @@ in Apps, `bin\drag-lint.json` unchanged, `--version` reports N+1.
 
 Owed before the engine default flips (spec `docs\superpowers\specs\2026-11-06-installed-layout-v2.md`,
 phases 4-5). Passes A-D above use the DEFAULT setup and must still show the flat v1 layout. Build the
-v2 setup only after the plugin lookups (phase 3) are merged. Revert the snapshot before each pass.
+v2 setup only after the plugin lookups (phase 3, lane/148-XP3) are merged; L8 proves them. Revert the snapshot before each pass.
 
 L1. **Fresh, Just for me.** After setup: `%APPDATA%\drag-lint\drag-lint.json` exists with
     `"outDir": "%LOCALAPPDATA%\\drag-lint\\library"`; there is **no** `bin\drag-lint.json`;
@@ -122,6 +122,14 @@ L6. **Way back:** `setx DRAGLINT_LAYOUT v1`, new window: `manifest where` says v
     the exe (no file there after L4: copy the `.migrated-` file back by hand to restore v1).
 L7. **Uninstall** keeps `%APPDATA%\drag-lint` and `%LOCALAPPDATA%\drag-lint` and removes
     `HKCU\Environment\DRAGLINT_LAYOUT`.
+L8. **IDE plugin reads the same manifest (phase 3, lane 148-XP3; needs RAD Studio 13, so on the
+    dev box or a VM with the IDE, not the clean VM).** With `DRAGLINT_LAYOUT=v2` set user-wide and the
+    v2 setup (or `manifest migrate --apply`) done, start the IDE fresh: *drag-lint > Diagnose* shows
+    `Manifest (beside BPL)` = `%APPDATA%\drag-lint\drag-lint.json` (not the BPL folder) and the library
+    line resolves `library-Win64.sqlite` under `%LOCALAPPDATA%\drag-lint\library`; Find Usages in a
+    registered project answers from its DB; *Tools > Options > drag-lint > Linter* with no project
+    open saves `max_return_cases` into the roaming file. `setx DRAGLINT_LAYOUT v1`, restart the IDE:
+    Diagnose names the BPL-folder file again.
 
 ## Not covered on this VM (needs RAD Studio 13)
 

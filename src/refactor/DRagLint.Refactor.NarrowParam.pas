@@ -88,9 +88,9 @@ type
 /// no interface's method of its name (implements-interface), is no property's accessor (property-accessor) and is never
 /// taken as a value (routine-as-value); the parameter is by value or const (by-reference), declared alone (grouped-param),
 /// not shadowed inside (shadowed); its type has a whole chain (unresolved-ancestor), no generic form (generic-type), one
-/// meaning (ambiguous-type-name); every use is `p.m` read or called, or a nil test, with no `with` in the body (with-body,
-/// member-write, other-use, no-member-use); each m has a first declaring class in the chain (member-not-in-chain), is
-/// not overloaded (overloaded-member), and an index binding agrees with it (binding-mismatch); the narrow type is in scope
+/// meaning (ambiguous-type-name); every use is `p.m` read, written or called, or a nil test, with no `with` in the body
+/// (with-body, other-use, no-member-use); each m has a first declaring class in the chain (member-not-in-chain), is
+/// not overloaded (overloaded-member), and an index binding agrees with it (binding-mismatch); the narrow type is not generic (generic-ancestor) and is in scope
 /// or its unit can be added without a cycle (uses-cycle).</remarks>
 function PlanNarrowParams(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;  // dl:ok unused-public-symbol@a394 -- public API for the next gated rewrites (items 3 and 4) and the owed report rule
   const pOpts: TNarrowParamOptions): TNarrowPlan;
@@ -542,11 +542,9 @@ begin
         pVerdict:= Verdict('other-use', Format('line %d takes an address through it', [LineNo]));
         Exit;
       end;
-      if Member.Value.EndsWith(':=') then
-      begin
-        pVerdict:= Verdict('member-write', Format('line %d writes %s.%s; v1 narrows on reads and calls only', [LineNo, pParam.Name, MemberName]));
-        Exit;
-      end;
+      { A write `p.m:= v` binds m like a read (148 RN): the first class declaring m in the chain is the narrowest
+        target, and a descendant that redeclares m stops the narrowing there, so the written member and its type are
+        the same ones after the retype. }
       if not pMembers.Contains(MemberName) then pMembers.Add(MemberName);
       Continue;
     end;
@@ -769,6 +767,13 @@ begin
       Exit;
     end;
     var Narrow:= Chain[Deepest];
+    { the chain holds an ancestor by its bare name: `TBase<T>` written as `TBase` does not compile, and the type
+      arguments the heritage gives are not carried (148 RN; found on Micronite TmcPLANLIST -> TMicObjectBase<I>) }
+    if Narrow.GenericParams <> '' then
+    begin
+      AddRefused(pR, pParam, 'generic-ancestor', Format('%s is generic: the narrow type needs the type arguments %s''s heritage gives', [Narrow.Name, Chain[Deepest - 1].Name]));
+      Exit;
+    end;
     if Length(ClassesNamed(Narrow.Name)) > 1 then
     begin
       AddRefused(pR, pParam, 'ambiguous-type-name', Format('%s names more than one class', [Narrow.Name]));

@@ -226,6 +226,10 @@ param(
   [switch]$SkipPrepare
 )
 
+# Guards run under pwsh 7: Windows PowerShell 5 dies on the engine's stderr banner (NativeCommandError under
+# ErrorActionPreference Stop, set by ~1000 runners). Refuse up front, not a wall of false FAILs (GD 148).
+if ($PSVersionTable.PSVersion.Major -lt 7) { Write-Host ('run_battery: guards run under pwsh 7 (this is PowerShell ' + $PSVersionTable.PSVersion + '); run: pwsh -File tests\run_battery.ps1') -ForegroundColor Red; exit 2 }
+
 $ErrorActionPreference = 'Continue'
 
 # ---------------------------------------------------------------------------

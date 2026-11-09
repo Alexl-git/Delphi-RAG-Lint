@@ -106,7 +106,7 @@ function DLRenamePreviewRefusals(const AOutput: string): Integer;  // dl:ok unus
 
 /// <summary>Reads the symbol the typeat verb resolved from its JSON answer.</summary>
 /// <param name="AOutput">Captured text of `typeat ... --format json` (stderr may
-/// be merged in, so text before the first `{` is ignored).</param>
+/// be merged in, so text before the first `{` and after the last `}` is ignored).</param>
 /// <param name="AToken">Receives the bare identifier under the caret ('' when absent).</param>
 /// <returns>The `resolved` qualified name, or '' when the output is not JSON, the
 /// token did not resolve, or `resolved` is missing / empty.</returns>
@@ -372,14 +372,16 @@ end;
 
 function DLParseTypeAtResolved(const AOutput: string; out AToken: string): string;
 var
-  Start: Integer;
-  Obj  : TJSONValue;
+  Start : Integer;
+  Finish: Integer;
+  Obj   : TJSONValue;
 begin
   Result:= '';
   AToken:= '';
-  Start:= Pos('{', AOutput);
-  if Start = 0 then Exit;
-  Obj:= TJSONObject.ParseJSONValue(Copy(AOutput, Start, MaxInt)); { nil on malformed text -- does not raise }
+  Start := Pos('{', AOutput);
+  Finish:= AOutput.LastIndexOf('}') + 1; { 1-based; 0 when absent. Stderr merged AFTER the object must not reach the parser (as BookmarksCore.JsonFrom) }
+  if (Start = 0) or (Finish < Start) then Exit;
+  Obj:= TJSONObject.ParseJSONValue(Copy(AOutput, Start, Finish - Start + 1)); { nil on malformed text -- does not raise }
   if Obj = nil then Exit;
   try
     if Obj is not TJSONObject then Exit;
