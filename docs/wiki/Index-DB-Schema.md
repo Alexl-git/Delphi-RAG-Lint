@@ -78,7 +78,7 @@ erDiagram
 
 | Pass | Verb / stage | Writes |
 |---|---|---|
-| **index** (per file, one transaction) | `index`, `index --project` | `files` (incl. `indexed_at_fingerprint`, stamped in the same tx), `symbols`, `refs` (raw: `symbol_id` NULL for most), `unit_uses`, `string_literals` (+FTS via triggers), `di_bindings`, `data_flows`, `file_includes`, `dfm_objects`, `pp_regions` (1.35), `symbol_trigrams` |
+| **index** (per file, one transaction) | `index`, `index --project` | `files` (incl. `indexed_at_fingerprint`, stamped in the same tx), `symbols`, `refs` (raw: `symbol_id` NULL for most), `unit_uses`, `string_literals` (+FTS via triggers), `di_bindings`, `data_flows`, `file_includes`, `dfm_objects`, `pp_regions` (1.35), `project_settings` (150, for a `.dpr` / `.dpk`), `symbol_trigrams` |
 | **resolve** (whole DB, after files) | end of `index` | `refs.symbol_id`, `refs.receiver_text`, `refs.receiver_type_text`, `refs.external_target`, `call_edges`, `member_accesses`, `type_ancestors` (rebuilt each run), `type_helpers`, `dispatch_edges` (wiped and rebuilt), `classref_args`, `unit_uses.target_file_id` |
 | **doc / facts** | index-time doc extraction and ADP analysis | `symbol_docs`, `symbol_facts` (`effect_*` columns come from the purity stage) |
 | **external feeds** | `import-log`, `fb-snapshot`, ORM link pass | `compiler_findings`, `fb_*`, `orm_links` |
@@ -120,7 +120,7 @@ Indexes: `idx_symbols_name`, `_qname`, `_file`, `_parent`, plus `COLLATE NOCASE`
 |---|---|---|
 | id | INTEGER PK | symbol id |
 | file_id | INTEGER FK files (cascade) | declaring file |
-| parent_id | INTEGER FK symbols (cascade) | enclosing symbol; every symbol roots at its unit, so top level = parent is the unit symbol |
+| parent_id | INTEGER FK symbols (cascade) | enclosing symbol; every symbol roots at its unit, so top level = parent is the unit symbol. In a `.dpr` / `.dpk` (150) the root is a `program` / `package` symbol named by its header, or by the file name for a headerless `.dpr`; program-level const / var / routines are parented to it and qualified by it (`App.COne`). Before 150 they had parent NULL and no program symbol existed |
 | kind | TEXT | see section 4 |
 | name | TEXT | bare name (generic parameters are NOT in it since v23) |
 | qualified_name | TEXT | `Unit.TType.Member` |
@@ -286,6 +286,19 @@ Index `(file_id, region, branch)`.
 | condition | TEXT | the directive's trimmed argument; '' for `else` |
 | start_line, end_line | INTEGER | lines of the directive opening the branch and of the one closing it (next branch or `ENDIF`); the file's last line when never closed |
 | active | INTEGER | 1 = the branch's text was kept for the parse |
+
+### project_settings (150)
+Per-project settings read from the `.dproj` beside a `.dpr` / `.dpk`, written by the indexer inside that file's
+transaction and replaced on its every parse (an unchanged `.dpr` that is skipped as up to date keeps its rows;
+`--force` re-reads a changed `.dproj`). Additive: absent on a DB built before 150, so readers probe for the table.
+Index `(file_id, setting, ordinal)`.
+
+| column | type | meaning |
+|---|---|---|
+| file_id | INTEGER FK files (cascade) | the `.dpr` / `.dpk` |
+| setting | TEXT | `DCC_Namespace` (the only setting so far) |
+| ordinal | INTEGER | 0-based position in project order |
+| value | TEXT | `DCC_Namespace`: one unit scope (`Winapi`, `Vcl`...) -- every `<DCC_Namespace>` of the `.dproj` (any PropertyGroup condition) in document order, split at `;`, case-insensitively de-duplicated, the `$(DCC_Namespace)` macro dropped; no Delphi defaults added. No rows when no `.dproj` sits beside the file |
 
 ### symbol_trigrams
 `trigram TEXT`, `symbol_id INTEGER FK symbols (cascade)`; PK `(trigram, symbol_id)`,

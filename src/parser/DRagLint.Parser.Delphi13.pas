@@ -356,6 +356,9 @@ type
     CurrentSection: string;
     { N-06: 1-based line of the unit's implementation keyword; 0 = none. }
     ImplementationLine: Integer;
+    { 150 EX3: the parsed file's name without folder or extension; names the
+      program symbol of a headerless .dpr (no `program X;` line). }
+    FileStem: string;
     { v0.42: when True (deep scan), emit read/write/attribute usage references
       for identifiers in expression position, so Find-Usages works for
       variables/components/properties -- not just calls. Off = today's
@@ -3327,11 +3330,26 @@ begin
   end;
 
   // v0.40.4: .dpr and .dpk roots also carry a top-level declUses.
-  // Section is uusProgram or uusPackage respectively. We don't emit a
-  // unit symbol here (no moduleName at the .dpr/.dpk top level in our model);
-  // just harvest the uses entries.
+  // Section is uusProgram or uusPackage respectively.
+  // 150 EX3: the root also emits its own symbol (kind program / package), named by
+  // its moduleName or, for a headerless .dpr (`begin end.` is a whole program to
+  // dcc), by the file name; every top-level declaration is parented to it and
+  // qualified by it (`Ex3App.COne`), the way WalkUnit parents a unit's. Before,
+  // program-level const / var / routines had parent_id NULL and the resolver's
+  // unit-level value table (parent kind unit) never held them (RB1 P1/P2).
   if (NodeType = 'program') or (NodeType = 'package') then
   begin
+    var ProgName: string:= '';
+    var ProgQName: string:= AParentQualifiedName;
+    var ProgMod:= FindNamedChildOfType(ANode, 'moduleName');
+    if not ProgMod.IsNull then ProgName:= StripModuleNameWhitespace(NodeText(ProgMod, AState.Source));
+    if ProgName = '' then ProgName:= AState.FileStem;
+    if ProgName <> '' then
+    begin
+      AState.CurrentSection:= '';
+      AParentSymbolIdx:= AState.Emit(if NodeType = 'program' then skProgram else skPackage, ProgName, ProgName, -1, ANode);
+      ProgQName:= ProgName;
+    end;
     for i:= 0 to ANode.NamedChildCount - 1 do
     begin
       var SectChild:= ANode.NamedChild(i);
@@ -3341,7 +3359,7 @@ begin
         else WalkUsesClause(SectChild, AState, uusPackage);
       end;
     end;
-    for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
+    for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, ProgQName);
     Exit;
   end; // if
 
@@ -3876,6 +3894,11 @@ begin
   // EmitTypeExprRefs. The DOTTED form (typerefDot, `X is Unit.TFoo`) is left out on
   // purpose: it never emitted a ref, and a bare type_use there turns the cycle
   // planner's qualified-ref refusal into class-ref (run_cyclefix_r2 f8) -- 150 row.
+  // 150 EX3 (INT-E1b, parser half): the dotted form now emits too, in the SAME shape
+  // as every other dotted type use (`var X: Unit.TFoo`): name_text = the type's own
+  // name, span = that name, so the unit qualifier is the source text left of the span
+  // (char before start_col is '.'). The cycle planner's half (check qualified-ref before
+  // class-ref) is lane CY1's; until it lands run_cyclefix_r2 f8 is expected RED.
   if NodeType = 'exprBinary' then
   begin
     var OpNode:= ANode.ChildByField('operator');
@@ -3885,7 +3908,7 @@ begin
       if (not RhsNode.IsNull) and (RhsNode.NodeType = 'identifier') then
         AState.EmitRef('type_use', NodeText(RhsNode, AState.Source), RhsNode)
       else if (not RhsNode.IsNull) and (OpNode.NodeType = 'kIs') and
-        (RhsNode.NodeType = 'typerefTpl') then
+        ((RhsNode.NodeType = 'typerefTpl') or (RhsNode.NodeType = 'typerefDot')) then
         EmitTypeExprRefs(RhsNode, AState, 0);
     end;
   end;
@@ -4418,6 +4441,7 @@ begin
 
     State:= TWalkState.Create(Source);
     State.EmitUsageRefs:= EmitUsageRefs; { v0.42: deep scan }
+    State.FileStem:= ChangeFileExt(ExtractFileName(AFilePath), ''); { 150 EX3: headerless program name }
     Root:= Tree.RootNode;
     if Root.HasError then CollectParseErrors(Root, AFilePath, Result.Diagnostics, 10, 0);
     Walk(Root, State, -1, '');

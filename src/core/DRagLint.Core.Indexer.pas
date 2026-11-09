@@ -634,6 +634,26 @@ type
 /// </remarks>
 function DirPrunedByFilter(const ADir: string; const AFilter: TWalkFilter): Boolean;
 
+const
+  /// <summary>150 EX3: project_settings.setting of the unit-scope rows (the .dproj
+  /// DCC_Namespace list).</summary>
+  PROJECT_SETTING_DCC_NAMESPACE = 'DCC_Namespace';
+
+/// <summary>150 EX3: the unit scopes a .dproj names in its `&lt;DCC_Namespace&gt;`
+/// elements, as written: every PropertyGroup (any condition) in document order,
+/// split at `;`, trimmed, case-insensitively de-duplicated (first wins), the
+/// `$(DCC_Namespace)` inheritance macro dropped.</summary>
+/// <param name="ADprojPath">Path of the .dproj; a missing or unreadable file is no error.</param>
+/// <returns>The scope names (`System`, `Winapi`, `Vcl`...); empty when the file is absent,
+/// unreadable or names no scope. No Delphi defaults are added: a consumer that needs the
+/// IDE's implied scopes adds its own (the macro is the only thing that refers to them).</returns>
+/// <remarks>
+/// The fact TIndexer stores per .dpr / .dpk (project_settings, setting DCC_Namespace) so a
+/// bare `uses Forms` can be read as Vcl.Forms vs FMX.Forms by the project's own scope order.
+/// Reads the file system; thread-safe.
+/// </remarks>
+function ReadDprojUnitScopes(const ADprojPath: string): TArray<string>;
+
 implementation
 
 uses
@@ -643,7 +663,42 @@ uses
   , DRagLint.Index.IncludeUses     { N-06: uses clauses written inside a depth-0 include }
   , DRagLint.Index.DataFlowFacts   { taint T1: the per-routine data_flows rows, written beside symbol_facts }
   , DRagLint.Core.ControlChannel   { 1.40 heartbeat: BeatProgress per indexed file }
+  , System.RegularExpressions      { 150 EX3: ReadDprojUnitScopes }
   ;
+
+function ReadDprojUnitScopes(const ADprojPath: string): TArray<string>;
+var
+  Text: string;
+  Seen: TDictionary<string, Boolean>;
+  Scopes: TList<string>;
+begin
+  Result:= nil;
+  if (ADprojPath = '') or not TFile.Exists(ADprojPath) then Exit;
+  try
+    Text:= TFile.ReadAllText(ADprojPath);
+  except  // dl:ok try-except-swallowed@2e72 -- an unreadable .dproj is the documented "no scopes" answer, not an error
+    on EInOutError do Exit;
+    on EFileNotFoundException do Exit; { deleted between Exists and the read }
+    on EFOpenError do Exit;
+    on EEncodingError do Exit;
+  end;
+  Seen:= TDictionary<string, Boolean>.Create;
+  Scopes:= TList<string>.Create;
+  try
+    for var M: TMatch in TRegEx.Matches(Text, '<DCC_Namespace\b[^>]*>([^<]*)</DCC_Namespace>', [roIgnoreCase]) do
+      for var Part: string in M.Groups[1].Value.Split([';']) do
+      begin
+        var S:= Trim(Part);
+        if (S = '') or SameText(S, '$(DCC_Namespace)') or Seen.ContainsKey(LowerCase(S)) then Continue;
+        Seen.Add(LowerCase(S), True);
+        Scopes.Add(S);
+      end;
+    Result:= Scopes.ToArray;
+  finally
+    Scopes.Free;
+    Seen.Free;
+  end;
+end;
 
 constructor TIndexer.Create(const AStore: ISymbolStore; const AParsers: TArray<IParser>; const ADocConfig: TDocConfig);
 var
@@ -1692,6 +1747,10 @@ begin
         for I:= 0 to High(ParseRes.UsesEntries) do FStore.UpsertUnitUse(Token, ParseRes.UsesEntries[I]);
         // 149 EX2 (schema v24): file_includes / dfm_objects / pp_regions, replaced every parse.
         FStore.PutFileFacts(Token, ParseRes.Includes, ParseRes.DfmObjects, ParseRes.PpRegions, IdxToId);
+        { 150 EX3: a program / package root carries its project's unit scopes (the sibling
+          .dproj's DCC_Namespace), replaced every parse of the .dpr / .dpk. }
+        if MatchText(ExtractFileExt(AFilePath), ['.dpr', '.dpk']) then
+          FStore.PutProjectSettings(Token, PROJECT_SETTING_DCC_NAMESPACE, ReadDprojUnitScopes(ChangeFileExt(AFilePath, '.dproj')));
         // v10: text-content index. Resolve each literal's enclosing symbol by line,
         // then persist. Per-file delete keeps re-index idempotent (FTS cascades via triggers).
         Inc(GProfUses, ProfNow - TProf);
