@@ -335,7 +335,7 @@ procedure SetCallerCountsHook(const AHook: TCallerCountsHook);
 /// <returns>The parts in the order callers, implementors, exceptions, each in
 /// brackets and separated by one space, e.g. '[1 caller] [raises 2 types]';
 /// '' when no part applies. With AExc = '' the result is the 1.48 label.</returns>
-function CallerLensLabel(ACount, AImpls: Integer; const AExc: string): string;
+function CallerLensLabel(ACount, AImpls: Integer; const AExc: string): string;  // dl:ok unused-public-symbol@2c75 -- public as the test seam: tests\CodeLensExceptionsTests.dpr (outside the plugin project) pins the label
 
 /// <summary>Reads a draglint/callerCounts reply into the four per-line arrays a
 /// TCallerCountsDone receives.</summary>
@@ -525,7 +525,7 @@ begin
   SetLength(ACounts, 0);
   SetLength(AImpls , 0);
   SetLength(AExcs  , 0);
-  if not (AReply is TJSONObject) then Exit;
+  if AReply is not TJSONObject then Exit;
   Arr:= ReplyArray(TJSONObject(AReply), 'counts');
   if Arr = nil then Exit;
   Result:= True;
