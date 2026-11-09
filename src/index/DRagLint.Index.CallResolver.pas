@@ -1496,8 +1496,9 @@ type
     /// override without `overload` leaves the sibling overloads reachable; proved by
     /// tests\callresolve\run_bind_nearest_dcc.ps1, which asks the compiler). A deeper
     /// candidate with the parameter list of a nearer one is its overridden twin
-    /// and goes too (compared as text, so an override that renames a parameter
-    /// stays ambiguous). Candidates of ONE level are never chosen between: an
+    /// and goes too (compared as text, or by parameter modifier + type and the
+    /// result text, so an override that renames a parameter is still the twin --
+    /// 146 b4). Candidates of ONE level are never chosen between: an
     /// overload tie or an IFDEF twin stays ambiguous. When every survivor refuses
     /// the site's arity the list stands untouched: a narrowing may improve an
     /// answer, never remove one. Sibling interfaces are not a chain, so the
@@ -5053,6 +5054,18 @@ begin
   Result:= string.Join('', ASignature.Split([' ', #9, #13, #10]));
 end;
 
+// 146 b4: a signature by what the compiler matches -- each parameter's modifier
+// and type (ParamTypeKey: names and default values dropped) plus the text after
+// the parameter list (the result type). '' when there is no readable parameter
+// list, so a parameterless or unreadable signature never matches this way.
+function ParamShapeKey(const ASignature: string): string;
+var
+  Types: string;
+begin
+  Types:= ParamTypeKey(ASignature);
+  Result:= if Types = '' then '' else Types + '|' + LowerCase(ParamListKey(Copy(ASignature, LastDelimiter(')', ASignature) + 1, MaxInt)));
+end;
+
 function TCallResolver.NarrowToNearest(AMatches: TList<TSymbol>; AFrom, AArgCount: Integer;
   AArgsKnown: Boolean): Boolean;
 
@@ -5060,13 +5073,16 @@ function TCallResolver.NarrowToNearest(AMatches: TList<TSymbol>; AFrom, AArgCoun
   // the overridden (or hidden) twin, and the nearer one answers every site S could.
   function Shadowed(AKept: TList<TSymbol>; const S: TSymbol): Boolean;
   var
-    K  : TSymbol;
-    Key: string ;
+    K    : TSymbol;
+    Key  : string ;
+    Shape: string ;
   begin
     Result:= False;
     Key   := ParamListKey(S.Signature);
+    Shape := ParamShapeKey(S.Signature);
     for K in AKept do
-      if (K.ParentId <> S.ParentId) and SameText(ParamListKey(K.Signature), Key) then Exit(True);
+      if (K.ParentId <> S.ParentId) and (SameText(ParamListKey(K.Signature), Key)
+         or ((Shape <> '') and (ParamShapeKey(K.Signature) = Shape))) then Exit(True);
   end;
 
   // False only when every kept candidate provably refuses the site's arity. A
