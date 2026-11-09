@@ -14,10 +14,10 @@
     L1. textDocument/codeLens: 'raises 2 types' on Risky's declaration line,
         'raises 1 type, handles 2 types' on Safe's, nothing exception-shaped on Plain's;
         the caller lenses are still there.
-    C1. (wave 149 LX) draglint/callerCounts carries exceptions:[{line,title}] with the same\r
-        titles as the lens (the RAD Studio lens reads callerCounts); counts unchanged.\r
-    X1-X3. (wave 149 LX) executeCommandProvider lists draglint.exceptionFacts; the exception\r
-        lens runs it with [uri, line]; it answers Safe's 3 sites, [] on Plain.\r
+    C1. (wave 149 LX) draglint/callerCounts carries exceptions:[{line,title}] with the same
+        titles as the lens (the RAD Studio lens reads callerCounts); counts unchanged.
+    X1-X3. (wave 149 LX) executeCommandProvider lists draglint.exceptionFacts; the exception
+        lens runs it with [uri, line]; it answers Safe's 3 sites, [] on Plain.
     O1. `lsp --no-exception-facts`: hover still answers, no 'Raises:' line, and the ON markdown
         minus its 'Raises:' line equals the OFF markdown byte for byte; no exception lens,
         caller lenses unchanged.
