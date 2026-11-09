@@ -2356,7 +2356,9 @@ const
   { LSP-1 CORE: SPEC.md 1b -- the placeholder platform when nothing names one. }
   LSP_PLACEHOLDER_PLATFORM = 'Win64';
   LSP_CMD_SET_CONTEXT      = 'draglint.setContext';
-  LSP_NOTIFY_CONTEXT       = 'draglint/context';
+  { 150 LX2: the exception-lens command; withdrawn from executeCommandProvider under --no-exception-facts. }
+  LSP_CMD_EXCEPTION_FACTS  = 'draglint.exceptionFacts';
+  LSP_NOTIFY_CONTEXT      = 'draglint/context';
   LSP_MSG_TYPE_WARNING     = 2; // window/showMessage MessageType.Warning
   LSP_MSG_TYPE_INFO        = 3; // window/showMessage MessageType.Info
   { 1.44 lspctx: how far FindListingProject climbs when no repository root stops it. }
@@ -2986,6 +2988,15 @@ begin
       var NewProv: TJSONObject:= TJSONObject.Create;
       NewProv.AddPair('commands', Cmds);
       Caps.AddPair('executeCommandProvider', NewProv);
+    end;
+    { 150 LX2: the capability follows the switch. Under --no-exception-facts no lens runs
+      draglint.exceptionFacts and it answers [], so advertising it promised a command that
+      does nothing. The feature table cannot see the switch; the server withdraws it here. }
+    if (not FExceptionFacts) and (ExecProv is TJSONObject) and (TJSONObject(ExecProv).GetValue('commands') is TJSONArray) then
+    begin
+      var ExcCmds: TJSONArray:= TJSONArray(TJSONObject(ExecProv).GetValue('commands'));
+      for var Ci:= ExcCmds.Count - 1 downto 0 do
+        if ExcCmds.Items[Ci].Value = LSP_CMD_EXCEPTION_FACTS then ExcCmds.Remove(Ci).Free;
     end;
     { LSP-1 CORE: initializationOptions (project, platform, config), or the
       IDE's settingsFile (.delphilsp.json), is the client context. }
