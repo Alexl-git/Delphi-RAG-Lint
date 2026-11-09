@@ -88,8 +88,8 @@
     "version": "1.46.0-alpha"
   },
   "features/circular-uses-report-cycles-fix-plan.md": {
-    "hash": "ecc8dc528eee7a5f208c11b8af1488d345783a948a9d7214940728ebc2cdc658",
-    "version": "1.48.0-alpha"
+    "hash": "160b0c273d0fd77d17b17ef8906b346e43c49d0638f0f0e8aa4543d901701eeb",
+    "version": "1.49.0-alpha"
   },
   "features/class-surface.md": {
     "hash": "86a96262d1fbf96c4734259b2b732f2d52e1d52420be00d976d9b9cad81c933a",
@@ -240,8 +240,8 @@
     "version": "1.35.1-alpha"
   },
   "features/cycles-fix.md": {
-    "hash": "e9709b25fd93f9a00862f02eb283c75d865273252db9a9191f0b4ef38dd82a79",
-    "version": "1.48.0-alpha"
+    "hash": "33ebd0f0464f7d14bf69dd3aa8bb69b1fb933878805d10846d468d46aa749dec",
+    "version": "1.49.0-alpha"
   },
   "features/datamodule-form-global.md": {
     "hash": "39267cee159d59b8005b28aa3d7f6138badbae2a299133af8ad47282ea03488b",
@@ -316,8 +316,8 @@
     "version": "1.35.1-alpha"
   },
   "features/editor-exception-facts.md": {
-    "hash": "67dad481fb654d048ec27ef5e11a15372795f8426b826d190e8157cec9763fba",
-    "version": "1.48.0-alpha"
+    "hash": "76303f594374815d78c2eb44ba9b8eec1512a1d32f7ce8379e9f087794b80abc",
+    "version": "1.49.0-alpha"
   },
   "features/effect-free-in-loop-invariant.md": {
     "hash": "40a7d39df700383c81be734add3ba9a09b0853d2b02f466a8e87416e9e28d1ca",
@@ -352,8 +352,8 @@
     "version": "1.46.0-alpha"
   },
   "features/extract-interface.md": {
-    "hash": "5f290ae2a81aeadc8e98ecfe82f91304de2700eb3495970b17a3852894cc84cd",
-    "version": "1.46.0-alpha"
+    "hash": "7853095a07202fa64054cecb70828203d2f2b7fc8ddebf1c61db456512fa2e30",
+    "version": "1.49.0-alpha"
   },
   "features/extract-method.md": {
     "hash": "efaaa6a8fd86a9b19f196ef41bf2f0a6f591ff10dc5d04be4086faca70fa2a03",
@@ -504,8 +504,8 @@
     "version": "1.35.1-alpha"
   },
   "features/inc-indexing.md": {
-    "hash": "8552f7decd4a0b3c149503e96eeae9c371917679e2fb8d1f460fe521a0ae23c5",
-    "version": "1.43.0-alpha"
+    "hash": "816a5aaf1d4979396b33d8cdf56e7d7976b7e8fa9733a6beea84da2ba178cbdc",
+    "version": "1.49.0-alpha"
   },
   "features/index-build-config.md": {
     "hash": "e274f5e7a4048bb261edbe79db15b60c9a763c5f98e45f6afdab540ef27a11f2",
@@ -588,8 +588,8 @@
     "version": "1.48.0-alpha"
   },
   "features/lsp.md": {
-    "hash": "811598be65ebf4453fb70f5ec1e4b97d3c37da2cce4e6ea172814258e26c9d2b",
-    "version": "1.48.0-alpha"
+    "hash": "28a45a109a132d43a152387789c2b3e2c1ab2bdeb267c096103f07334dc3b520",
+    "version": "1.49.0-alpha"
   },
   "features/maintenance.md": {
     "hash": "33cc043464d8c690af286cdfbacf5cc319cd22df63eab2f54abc873123c7062a",
@@ -772,8 +772,8 @@
     "version": "1.46.0-alpha"
   },
   "features/run-lint-all-full-report.md": {
-    "hash": "324e3ef86782f395ce48e994505394b0401cc3a36197631989a773d5e29aef32",
-    "version": "1.48.0-alpha"
+    "hash": "ed0869242b3bd5f7bcca523d0b8fa0ed3ef809c1e5d3b95bd567c7182c5c9ecb",
+    "version": "1.49.0-alpha"
   },
   "features/safe-delete.md": {
     "hash": "206de3a35bc87cece09a694906dace50f4b16d16567ba9a6cb9006c1a21ea909",
@@ -904,8 +904,8 @@
     "version": "1.47.0-alpha"
   },
   "features/uses-recover.md": {
-    "hash": "927ba7f64a661b11d3728de724c3c1262875fa943eb217b3064f64067e07fcac",
-    "version": "1.48.0-alpha"
+    "hash": "3f6644dd7217529fb5a272125837a3d31cc1ca3a3dc09c187cf40e95d1823cd9",
+    "version": "1.49.0-alpha"
   },
   "features/uses-report-csv.md": {
     "hash": "41a5eb7edee0afa47064aa9a57808ae194aa943bdc07e6553085afa77ee79701",

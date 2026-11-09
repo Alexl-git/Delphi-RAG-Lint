@@ -7,7 +7,7 @@ group: linting
 order: 30037
 since: 0.61.0-alpha
 status: shipped
-updated: 1.48.0-alpha
+updated: 1.49.0-alpha
 ---
 
 # Run Lint All (Full Report)
@@ -87,7 +87,7 @@ doc-drift, cross-file `duplicate-code`) on a unit whose `dl:shared` marker lists
 several projects may be live only under another project's compile closure. One
 index cannot tell, so a plain `lint-all` skips the verdict on such a marker and
 says how many it left unjudged, in one note on stderr.
-`--shared-db <db>`, repeatable, names the other projects' indexes:
+`--shared-db <db>`, repeatable, names the other projects' indexes. Without it, the peers are the manifest projects named in the `dl:shared` headers of scanned units that carry a `dl:ok` marker (DBs from `--config` or the machine manifest; a name the manifest cannot resolve, or whose DB is missing, is no peer and the marker keeps the skip):
 ```text
 drag-lint lint-all --db <A.sqlite> --shared-db <B.sqlite>
 ```

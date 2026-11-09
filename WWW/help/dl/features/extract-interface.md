@@ -7,7 +7,7 @@ group: refactoring
 order: 50005
 since: 1.47.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.49.0-alpha
 ---
 
 # Extract an interface from the members used (scratch + compile gate)
@@ -19,7 +19,7 @@ Read this when a class needs an interface and you want it to hold what its calle
 ## How to run it
 
 ```text
-drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]
+drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced[=norefcount]] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]
 ```
 
 Example:
@@ -37,7 +37,7 @@ Full flag list: [extract-interface in the CLI reference](../cli.md#extract-inter
 | `--class` | `<name>` |  |  |
 | `--members` | `<a,b>` |  |  |
 | `--name` | `<IFoo>` |  |  |
-| `--reparent-interfaced` |  |  |  |
+| `--reparent-interfaced[=norefcount]` |  |  |  |
 | `--plan` |  |  |  |
 | `--apply` |  |  |  |
 | `--project` | `<X.dproj>` |  |  |
@@ -82,7 +82,7 @@ The interface stands in the same type block, directly before the class and its d
 
 `include-file`, `stale-file`, `outside-roots`, `class-helper`, `generic-class`, `nested-class`, `ifdef-in-class`, `type-on-same-line`, `name-taken`, `unresolved-ancestor`, `no-iinterface`, `no-used-members`.
 
-`no-iinterface`: nothing in the chain implements `IInterface`. `--reparent-interfaced` makes a class whose direct parent is `TObject` a `TInterfacedObject`. `Create` and `Free` behave as before until someone holds an interface reference, and from then on the reference count owns the object: decide that before you retype a consumer. A deeper chain is refused; give its base class `IInterface` first.
+`no-iinterface`: nothing in the chain implements `IInterface`. `--reparent-interfaced` makes a class whose direct parent is `TObject` a `TInterfacedObject`; `--reparent-interfaced=norefcount` makes it a `TSingletonImplementation` instead (no reference counting; the unit needs `System.Generics.Defaults`, else `base-unit-missing`). `Create` and `Free` behave as before until someone holds an interface reference, and from then on the reference count owns the object: decide that before you retype a consumer. With `--reparent-interfaced=norefcount` the parent becomes `TSingletonImplementation` (System.Generics.Defaults) instead: an `IInterface` base that never counts references, so `Free` stays your call and no consumer needs a lifetime decision; the unit must already use System.Generics.Defaults (else `base-unit-missing`). `extract-interface` still retypes no consumer. A deeper chain is refused; give its base class `IInterface` first.
 
 ### The two gates
 

@@ -665,7 +665,7 @@ Described in:
 Declares an interface from the members of a class the project uses and adds it to the class; --apply through a scratch build and the compile gate.
 
 ```text
-drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]
+drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced[=norefcount]] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -673,7 +673,7 @@ drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>
 | `--class` | `<name>` |  |  |
 | `--members` | `<a,b>` |  |  |
 | `--name` | `<IFoo>` |  |  |
-| `--reparent-interfaced` |  |  |  |
+| `--reparent-interfaced[=norefcount]` |  |  |  |
 | `--plan` |  |  |  |
 | `--apply` |  |  |  |
 | `--project` | `<X.dproj>` |  |  |
@@ -2112,10 +2112,10 @@ Described in:
 
 ### uses-recover
 
-Recovers the uses edges of units that ship without source, from the vendor's .hpp headers and a dcc map; read-only, never reads a .dcu.
+Recovers the uses edges of units that ship without source, from the vendor's .hpp headers and a dcc map; never reads a .dcu; --apply stores them in the index.
 
 ```text
-drag-lint uses-recover --db <db> --hpp-dir <dir>... [--library-db <db>...] [--map <file.map>] [--json]
+drag-lint uses-recover --db <db> --hpp-dir <dir>... [--library-db <db>...] [--map <file.map>] [--project <x.dproj>] [--apply] [--json]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -2124,6 +2124,8 @@ drag-lint uses-recover --db <db> --hpp-dir <dir>... [--library-db <db>...] [--ma
 | `--hpp-dir` | `<dir>` |  |  |
 | `--library-db` | `<db>` |  |  |
 | `--map` | `<file.map>` |  |  |
+| `--project` | `<x.dproj>` |  |  |
+| `--apply` |  |  |  |
 | `--json` |  |  |  |
 
 Described in [uses-recover](features/uses-recover.md).

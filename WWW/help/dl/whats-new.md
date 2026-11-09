@@ -12,7 +12,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 ## 1.48.0-alpha
 
 * [Exception facts in the editor](features/editor-exception-facts.md) -- Hover, code lens and an MCP tool show which exception types a routine raises and handles.
-* [uses-recover](features/uses-recover.md) -- Recovers the uses edges of units that ship without source, from the vendor's .hpp headers and a dcc map; read-only, never reads a .dcu.
+* [uses-recover](features/uses-recover.md) -- Recovers the uses edges of units that ship without source, from the vendor's .hpp headers and a dcc map; never reads a .dcu; --apply stores them in the index.
 
 ## 1.47.0-alpha
 

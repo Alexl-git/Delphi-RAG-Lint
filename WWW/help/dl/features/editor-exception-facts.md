@@ -7,14 +7,14 @@ group: editor-integration
 order: 110006
 since: 1.48.0-alpha
 status: shipped
-updated: 1.48.0-alpha
+updated: 1.49.0-alpha
 ---
 
 # Exception facts in the editor
 
 Hover, code lens and an MCP tool show which exception types a routine raises and handles.
 
-Read this when you want to see, without leaving the editor, which exceptions a routine raises and which it catches. Hovering a routine adds one Raises: line (each type once, with how it is known: bound, handler, local, name, spelled or unknown); a code lens on the routine header says raises N types, handles M types; the MCP tool get_exception_facts returns the same rows as exception-facts --json. ON by default; lsp --no-exception-facts switches the hover line and the lens off.
+Read this when you want to see, without leaving the editor, which exceptions a routine raises and which it catches. Hovering a routine adds one Raises: line (each type once, with how it is known: bound, handler, local, name, spelled or unknown); a code lens on the routine header says raises N types, handles M types (VS Code: a click lists the sites; the Delphi IDE lens reads the same titles); the MCP tool get_exception_facts returns the same rows as exception-facts --json. ON by default; lsp --no-exception-facts switches the hover line and the lens off.
 
 ## How to run it
 
@@ -74,7 +74,25 @@ raises 2 types, handles 1 type
 ```
 
 Distinct raised types and distinct handled types (a bare `except` counts as one); either half is
-left out when it is zero. The lens is a label (no click action yet).
+left out when it is zero.
+
+Since 1.49 the lens is clickable: its command is `draglint.exceptionFacts` with `[uri, line]`
+(`workspace/executeCommand`, advertised in `executeCommandProvider`). The server answers the
+routine's raise and handler sites, the same rows the title counts:
+
+```text
+[{"uri": "file:///C:/p/uExc.pas", "line": 30, "character": 10, "action": "handles",
+  "type": "EFoo", "via": "bound", "routine": "uExc.TWorker.Safe"}, ...]
+```
+
+(0-based positions; `[]` under `--no-exception-facts` or for a line with no such routine). The
+VS Code extension shows them in a quick pick (`handles EFoo` / `line 31 (bound)`); picking one
+jumps to the site.
+
+The Delphi IDE lens reads `draglint/callerCounts`, not `textDocument/codeLens`, so since 1.49
+that reply carries the same titles too: `exceptions: [{"line": L, "title": "raises 2 types"}]`
+beside `counts` and `implementors` (0-based declaration lines; `[]` when switched off; an
+older engine sends no `exceptions` key). The plugin renders it beside the caller count.
 
 ### MCP: `get_exception_facts`
 
@@ -89,7 +107,7 @@ selectors is an error.
 ### Switching it off
 
 ON by default (owner ruling, wave 148). `drag-lint lsp --no-exception-facts` removes the hover
-line and the lens; hover is then byte-identical to 1.46. The MCP tool is always available (a new
+line, the lens and the callerCounts titles (`draglint.exceptionFacts` then answers `[]`); hover is then byte-identical to 1.46. The MCP tool is always available (a new
 tool changes no existing answer).
 
 ### Cost

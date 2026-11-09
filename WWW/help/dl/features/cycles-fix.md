@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70007
 since: 1.33.0-alpha
 status: shipped
-updated: 1.48.0-alpha
+updated: 1.49.0-alpha
 ---
 
 # Cycles fix (mechanical, compile-gated)
@@ -99,7 +99,7 @@ tangle: per group the hub units (a unit whose removal leaves the rest acyclic), 
 edges and reference weights on each side, whether cutting one side alone breaks the group,
 what the spokes take from the hub (globals with the member names read through them,
 routines), what the hub takes from the spokes, and the dead `uses` inside the group
-(read-only, no planner; JSON adds `hubs[]` and `zero_ref_edges` per group); `--plan --hub-surface` plans recipe R3 for such a star with one hub read through one global: a new leaf unit `<Hub>.Hub` holding an interface with one property per field and one method per method the spokes read through the global, the hub class implementing it with an AfterConstruction / BeforeDestruction hand-over, and a receiver-only rewrite in each spoke (`frmMain.edtX` becomes `MainHub.edtX`); `Inc` / `Dec` of an integer field becomes an assignment; a bare use, a write to the global or a designer field, another var-parameter use or an ancestor's member refuses only that spoke; OFF by default, `--apply` writes one group (`.BCK<n>` backups) and runs no compile gate yet (build after it); `--plan` produces the
+(read-only, no planner; JSON adds `hubs[]` and `zero_ref_edges` per group); `--plan --hub-surface` plans recipe R3 for such a star with one hub read through one global: a new leaf unit `<Hub>.Hub` holding an interface with one property per field and one method per method the spokes read through the global, the hub class implementing it with an AfterConstruction / BeforeDestruction hand-over, and a receiver-only rewrite in each spoke (`frmMain.edtX` becomes `MainHub.edtX`); `Inc` / `Dec` of an integer field becomes an assignment; `Assigned(<global>)` becomes `Assigned(MainHub)` and any other bare use of the global (passed as a value, compared with nil, cast) becomes `MainHubAsForm`, a nil-safe function in `<Hub>.Hub` over the interface's `AsForm` property, typed with the hub class's one library class ancestor (`TForm`, `TdxRibbonForm`, `TComponent`; phase P4, 1.49); `with <global> do` (with-member), a write to the global or a designer field, `FreeAndNil` / `CreateForm` / `@` of the global or another var-parameter use, or an ancestor's member the platform library does not declare, refuses only that spoke; a free routine of the hub that a spoke still calls goes through an R1 pointer in `<Hub>.Hub` (`<Name>Ptr`, assigned in the hub's initialization; a call from the spoke's initialization keeps that spoke's edge); the dry run is the normal playbook with R3 and the `--hub` block in place of Part A for a hub-shaped group (a group R3 refuses gets one note line and the planner's plan), and `--causes --format json --hub-surface` gives R3's `fix` object (`part: r3`) for such a group without running the planner; OFF by default, `--apply` writes one group (`.BCK<n>` backups) and runs no compile gate yet (build after it); `--plan` produces the
 refactoring playbook; `--f2047` narrows the report to the interface-only cycles
 the compiler rejects with F2047 (`--unit <stem>` limits it to one unit's cycle);
 `--format` selects `json` or `text` output. `--fix` makes the edits
@@ -284,7 +284,7 @@ The engine never guesses; every kind it can give:
   `V := X as TX`, `V := nil`, `Assigned(V)`, a compare with nil or `V.M` with M a member the
   interface carries; a field, a parameter, a global, an inline `var`, `A, B: TX` and any other
   use of the local, `V.Free` or `FreeAndNil(V)` included, still refuse), `other-ref`, `multiple-classes` (since 1.42 an edge through several
-  classes is cut with one interface per class, see below), `member-unsupported` (an inherited
+  classes is cut with one interface per class, see below; since 1.49 a class the edge only hard-casts, `TX(X).M`, counts as one too), `member-unsupported` (an inherited
   member that no ancestor declared in the class's own unit declares, or one that is `strict private`
   there -- since 1.42 a member of a same-unit ancestor is carried like an own one, its getter reading
   it by name, and an ancestor that already declares `Get<M>` / `Set<M>` refuses `duplicate-identifier`;
@@ -294,7 +294,7 @@ The engine never guesses; every kind it can give:
   leaf declares `I<Class>Surface` differently with every suffix taken; an identical interface is
   reused, a different one gets the lowest free suffix), `no-iinterface`, `ref-counted`, `receiver-unknown`, `cast-unseen`
   (no IInterface ancestor outside the cycle; the walk continues past one declared inside it),
-  `exception-semantics` (since 1.47 only when the name of the helper below is taken: a consumer that handles EInvalidCast and casts with an unguarded `as` gets `function As<Surface>(const pX: TObject): I<Surface>` before the routine that casts -- nil for nil, else the interface, else `raise EInvalidCast.CreateRes(@SInvalidCast)`, the class and message the failed class cast raised; every `X as TX` of that consumer goes through it), `ancestry-unknown`, `with-member`, `unresolved-qualified-type`,
+  `exception-semantics` (since 1.47 only when the name of the helper below is taken: a consumer that handles EInvalidCast and casts with an unguarded `as` gets `function As<Surface>(const pX: TObject): I<Surface>` before the routine that casts -- nil for nil, else the interface, else `raise EInvalidCast.CreateRes(@SInvalidCast)`, the class and message the failed class cast raised; every `X as TX` of that consumer goes through it; since 1.49 an `as` whose receiver's static type is unknown -- `GetOwner as TX` -- goes through the same helper instead of refusing `receiver-unknown`, handler or not; a hard cast `TX(X).M` under an EInvalidCast handler becomes `(X as I).M` and the plan states that behaviour change), `ancestry-unknown`, `with-member`, `unresolved-qualified-type`,
   `type-unresolved`, `leaf-uses-cycle`.
 
 #### Four shapes that are cut since 1.43
@@ -446,7 +446,7 @@ These cases used to refuse and are now applied (lane CYC-C), or are predicted th
 * **Plan agrees with fix.** A routine edge whose signature names a type that Part A already moves is predicted as
   cut by routine-call inversion (not `signature-in-cycle`) when Part B is re-run,.
 
-Still manual: type declarations and type casts of the moved name, an edge that names several classes but tests none of them with `is` / `as` (`multiple-classes`; with an `is` / `as` operand several classes are cut, see above), unsupported
+Still manual: type declarations and type casts of the moved name, an edge that names several classes but neither tests nor casts any of them (`multiple-classes`; with an `is` / `as` operand or a hard cast `TX(X).M` several classes are cut, see above), unsupported
 members, unresolved types, non-ASCII text in a comment or an identifier (in a string literal it becomes a `#code`).
 #### What stays manual
 

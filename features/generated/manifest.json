@@ -1,7 +1,7 @@
 {
-  "product": "1.48.0-alpha",
-  "extractor": "1.34.0-alpha",
-  "resolver": "1.22.0-alpha",
+  "product": "1.49.0-alpha",
+  "extractor": "1.35.0-alpha",
+  "resolver": "1.23.0-alpha",
   "schema": 23,
   "groups": [
     {
@@ -254,10 +254,10 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-10-27",
+        "date": "2026-11-09",
         "by": "ENGINE",
-        "build": "1.36.0-alpha",
-        "surfaceHash": "6702d742100136b4850c54aed3a0db6b6c487c77f5a66aa5b7b0d454af9e9b58"
+        "build": "1.49.0-alpha",
+        "surfaceHash": "f2a0478a796ade4e9cce69218410755d7d887176fd05d65248876316fc7401bd"
       }
     },
     {
@@ -2734,14 +2734,14 @@
       "owner": "ENGINE",
       "status": "shipped",
       "since": "1.48.0-alpha",
-      "summary": "Recovers the uses edges of units that ship without source, from the vendor's .hpp headers and a dcc map; read-only, never reads a .dcu",
-      "intro": "Read this when a project uses a library shipped as compiled units only and you want to know what those units depend on. uses-recover lists every unit the index uses but has no source for, reads the interface uses from the C++Builder header the vendor ships beside it, follows the units those headers name, and, given a dcc map, says which of them the linker pulled in. Nothing is written and no .dcu is read.",
+      "summary": "Recovers the uses edges of units that ship without source, from the vendor's .hpp headers and a dcc map; never reads a .dcu; --apply stores them in the index",
+      "intro": "Read this when a project uses a library shipped as compiled units only and you want to know what those units depend on. uses-recover lists every unit the index uses but has no source for, reads its interface uses from the C++Builder header the vendor ships, follows the units those headers name and, given a dcc map, says which the linker pulled in. --project resolves unit aliases first; --apply stores the result so cycles, impact and the uses graph see past the library. No .dcu is read.",
       "wikiPage": "uses-recover",
       "surfaces": [
         {
           "type": "cli",
           "verb": "uses-recover",
-          "usage": "drag-lint uses-recover --db <db> --hpp-dir <dir>... [--library-db <db>...] [--map <file.map>] [--json]",
+          "usage": "drag-lint uses-recover --db <db> --hpp-dir <dir>... [--library-db <db>...] [--map <file.map>] [--project <x.dproj>] [--apply] [--json]",
           "flags": [
             {
               "name": "--db",
@@ -2760,11 +2760,18 @@
               "arg": "<file.map>"
             },
             {
+              "name": "--project",
+              "arg": "<x.dproj>"
+            },
+            {
+              "name": "--apply"
+            },
+            {
               "name": "--json"
             }
           ],
           "helpOrder": 7,
-          "help": ["  drag-lint uses-recover       --db <db> --hpp-dir <dir>... [--library-db <db>...] [--map <file.map>] [--json]", "                               uses edges of units with NO source in --db or any --library-db, from the vendor's C++Builder", "                               .hpp headers (#include lines = interface uses; System/SysInit dropped; never reads a .dcu).", "                               --hpp-dir is repeatable, not recursive, first hit wins; sourceless targets are followed.", "                               --map: a dcc -GS/-GD map; in_map per unit, map_only = linked units no header reaches.", "                               Read-only. json: units[{unit, reach direct|header, used_by, header, in_map, uses[{unit,", "                               status indexed|library|sourceless}]}], no_header[], map_only[], headers_found.", "                               Exit 0 = reported (zero included); 2 = no --db/--hpp-dir, missing DB/dir/map; 3 = unknown flag."]
+          "help": ["  drag-lint uses-recover       --db <db> --hpp-dir <dir>... [--library-db <db>...] [--map <file.map>] [--project <x.dproj>] [--apply] [--json]", "                               uses edges of units with NO source in --db or any --library-db, from the vendor's C++Builder", "                               .hpp headers (#include lines = interface uses; System/SysInit dropped; never reads a .dcu).", "                               --hpp-dir is repeatable, not recursive, first hit wins; sourceless targets are followed.", "                               --map: a dcc -GS/-GD map; in_map per unit, map_only = linked units no header reaches.", "                               --project: the .dproj's DCC_UnitAlias + the Delphi targets' defaults (WinProcs=Winapi.Windows ...);", "                               a used alias is classified by its target.", "                               --apply WRITES --db: one files row per recovered header (language hpp), its includes as interface", "                               unit_uses rows, then the uses pass binds the project's rows to them; idempotent. Without it: read-only.", "                               json: units[{unit, reach direct|header, used_by, header, in_map, uses[{unit, status", "                               indexed|library|sourceless}]}], no_header[], map_only[], aliases[{unit, to, status}], headers_found,", "                               applied{files, uses, bound} (--apply only).", "                               Exit 0 = reported (zero included); 2 = no --db/--hpp-dir, missing DB/dir/map/project, or --apply on", "                               a stale schema; 3 = unknown flag."]
         }
       ],
       "audience": "both",
@@ -2776,13 +2783,17 @@
         {
           "ask": "Which sourceless units does the linker actually pull in, and which does no header explain?",
           "command": "drag-lint uses-recover --db <db> --library-db <library.sqlite> --hpp-dir <dir> --map <App.map>"
+        },
+        {
+          "ask": "How do I make cycles, impact and the uses graph see through a compiled-only library?",
+          "command": "drag-lint uses-recover --db <db> --library-db <library.sqlite> --hpp-dir <vendor lib dir> --project <App.dproj> --apply"
         }
       ],
       "access": "cli-only",
       "verified": {
-        "date": "2026-11-08",
+        "date": "2026-11-09",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
+        "build": "1.49.0-alpha",
         "surfaceHash": "4c1a590d577158d254447a7a97d3fbd4c0daeebe1c419e11ad18c170b688817d"
       }
     },
@@ -4725,9 +4736,9 @@
         }
       ],
       "verified": {
-        "date": "2026-11-08",
+        "date": "2026-11-09",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
+        "build": "1.49.0-alpha",
         "surfaceHash": "d462abbd3e60aa8afaa21419fc796baf0b809d5cc742f6eb8a88dc77dc7f8141"
       }
     },
@@ -6130,7 +6141,7 @@
           "type": "cli",
           "verb": "extract-interface",
           "example": "drag-lint extract-interface --class <name> --plan --db <db>",
-          "usage": "drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]",
+          "usage": "drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced[=norefcount]] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]",
           "flags": [
             {
               "name": "--class",
@@ -6145,7 +6156,7 @@
               "arg": "<IFoo>"
             },
             {
-              "name": "--reparent-interfaced"
+              "name": "--reparent-interfaced[=norefcount]"
             },
             {
               "name": "--plan"
@@ -6188,15 +6199,15 @@
               "arg": "json"
             }
           ],
-          "help": ["  drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]   - declare an interface from the members of a class the project uses and add it to the class: plan by default, every refusal named, --apply through a scratch build and the compile gate"]
+          "help": ["  drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced[=norefcount]] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]   - declare an interface from the members of a class the project uses and add it to the class: plan by default, every refusal named, --apply through a scratch build and the compile gate"]
         }
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-08",
+        "date": "2026-11-09",
         "by": "ENGINE",
-        "build": "1.47.0-alpha",
-        "surfaceHash": "7f36a5ad2615cfa9ae3027b2503c1ba1b633d2de66cecdd40a8da6afd1c8d5d8"
+        "build": "1.49.0-alpha",
+        "surfaceHash": "411f26d39af139267eb99ec2135457bf5a31438824d63b812e7b2a331f03c5b2"
       }
     },
     {
@@ -6367,9 +6378,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-11-08",
+        "date": "2026-11-09",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
+        "build": "1.49.0-alpha",
         "surfaceHash": "bcc441782f9d3e58636b7d7f0826f34beb19f517dafcf8ec33a946ad56cb318b"
       }
     },
@@ -6447,9 +6458,9 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-08",
+        "date": "2026-11-09",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
+        "build": "1.49.0-alpha",
         "surfaceHash": "b490a52384bb1cb7fb000bf7cc26c2dcfdf39c0accb20e5489fe4195dd66e2e0"
       }
     },
@@ -8873,7 +8884,7 @@
             }
           ],
           "helpOrder": 68,
-          "help": ["  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--hub] [--plan [--hub-surface [--apply]] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>]   (circular unit deps; --hub = per group its hub units (removal leaves the rest acyclic): edges, ref weights and surfaces per side, dead uses; read-only, no planner; --f2047 = only the interface-only cycles dcc rejects with F2047: units, each interface edge with the symbols forcing it, and the next --plan / --fix commands; --unit <stem> (the name in dcc's message) narrows it, a unit in no such cycle is exit 0 with a note; --format json = [{units[],edges[{from,to,symbols[]}],plan,fix}]; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\\TEMP\\draglint_cyclefix_<pid>\\, deleted at exit unless a message of the run cites a file in it, then kept and named on stderr; --shadow-out names another, never deleted) and builds the project (msbuild /p:Config=Debug for --platform, default the project's active platform, else win32) unless --no-compile, exit 0 mechanical / 1 refused / 2 error; --apply writes it (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 written and verified (or written with --no-reindex, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified / 2 error: a write or build failed part-way (rolled back, project not changed, or the rollback failure is named) or bad flags; a rollback restores the sources, not the DCUs the failed build wrote: rebuild after a rollback; --apply --no-compile is exit 2; --rsvars <path> = the Studio build environment the compile gate calls (default: the Studio the registry or BDS names; forwarded to every --part all iteration; a missing file is exit 2); --build-timeout <s> = whole seconds one build may take (default 0 = no limit; forwarded to every --part all iteration; anything but a whole number >= 0 is exit 2); a stand-down request (drag-lint shutdown --db <db>, or the IDE's Cancel) kills the build, rolls an --apply back and exits 1 (\"cancelled -- rolled back\"); --part all needs --apply, refuses --no-reindex; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest's library for the build platform: --platform, else the --project's active platform, else win32; --library-db none = no library); --rules-dir is forwarded to every --part all iteration; --plan --hub-surface = recipe R3 for a group with exactly one hub read through one global (spec P2): a new leaf unit <Hub>.Hub with an interface of the members the spokes read through the global, the hub class implements it, receiver-only rewrite in the spokes; dry run writes nothing, --apply writes ONE group (.BCK<n> backups unless --no-backup) and runs no compile gate yet: build after it; --format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge's surface: members read, writes, construction, class methods, routine + signature types)"]
+          "help": ["  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--hub] [--plan [--hub-surface [--apply]] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>]   (circular unit deps; --hub = per group its hub units (removal leaves the rest acyclic): edges, ref weights and surfaces per side, dead uses; read-only, no planner; --f2047 = only the interface-only cycles dcc rejects with F2047: units, each interface edge with the symbols forcing it, and the next --plan / --fix commands; --unit <stem> (the name in dcc's message) narrows it, a unit in no such cycle is exit 0 with a note; --format json = [{units[],edges[{from,to,symbols[]}],plan,fix}]; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\\TEMP\\draglint_cyclefix_<pid>\\, deleted at exit unless a message of the run cites a file in it, then kept and named on stderr; --shadow-out names another, never deleted) and builds the project (msbuild /p:Config=Debug for --platform, default the project's active platform, else win32) unless --no-compile, exit 0 mechanical / 1 refused / 2 error; --apply writes it (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 written and verified (or written with --no-reindex, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified / 2 error: a write or build failed part-way (rolled back, project not changed, or the rollback failure is named) or bad flags; a rollback restores the sources, not the DCUs the failed build wrote: rebuild after a rollback; --apply --no-compile is exit 2; --rsvars <path> = the Studio build environment the compile gate calls (default: the Studio the registry or BDS names; forwarded to every --part all iteration; a missing file is exit 2); --build-timeout <s> = whole seconds one build may take (default 0 = no limit; forwarded to every --part all iteration; anything but a whole number >= 0 is exit 2); a stand-down request (drag-lint shutdown --db <db>, or the IDE's Cancel) kills the build, rolls an --apply back and exits 1 (\"cancelled -- rolled back\"); --part all needs --apply, refuses --no-reindex; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest's library for the build platform: --platform, else the --project's active platform, else win32; --library-db none = no library); --rules-dir is forwarded to every --part all iteration; --plan --hub-surface = recipe R3 for a group with exactly one hub read through one global (spec P2): a new leaf unit <Hub>.Hub with an interface of the members the spokes read through the global, the hub class implements it, receiver-only rewrite in the spokes, the hub's free routines through R1 pointers in <Hub>.Hub; the dry run is the playbook with R3 + the --hub block in place of Part A for such a group, --causes --format json --hub-surface gives R3's fix{part:r3} without the planner; --apply writes ONE group (.BCK<n> backups unless --no-backup) and runs no compile gate yet: build after it; --format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge's surface: members read, writes, construction, class methods, routine + signature types)"]
         }
       ],
       "audience": "both",
@@ -8895,8 +8906,8 @@
       "verified": {
         "date": "2026-11-09",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
-        "surfaceHash": "79a71da3e54197242150eb71ec4005c40ace3e5d24fa1f0803bca4fc19ca3451"
+        "build": "1.49.0-alpha",
+        "surfaceHash": "0a0ad9006cab029c6b9643bf79eaca9690afba738d48e248fd8efba554648213"
       }
     },
     {
@@ -9153,8 +9164,8 @@
       "verified": {
         "date": "2026-11-09",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
-        "surfaceHash": "fc908c8a250d6c15e672d0b1042cddf6f15a8b521828d597e63a4812641689a7"
+        "build": "1.49.0-alpha",
+        "surfaceHash": "46680e7eaa46ccd97c921a274a298fc6e6e16b12d909994c4ee1dc9c19012eb4"
       }
     },
     {
@@ -11548,7 +11559,7 @@
       "status": "shipped",
       "since": "1.48.0-alpha",
       "summary": "Hover, code lens and an MCP tool show which exception types a routine raises and handles",
-      "intro": "Read this when you want to see, without leaving the editor, which exceptions a routine raises and which it catches. Hovering a routine adds one Raises: line (each type once, with how it is known: bound, handler, local, name, spelled or unknown); a code lens on the routine header says raises N types, handles M types; the MCP tool get_exception_facts returns the same rows as exception-facts --json. ON by default; lsp --no-exception-facts switches the hover line and the lens off.",
+      "intro": "Read this when you want to see, without leaving the editor, which exceptions a routine raises and which it catches. Hovering a routine adds one Raises: line (each type once, with how it is known: bound, handler, local, name, spelled or unknown); a code lens on the routine header says raises N types, handles M types (VS Code: a click lists the sites; the Delphi IDE lens reads the same titles); the MCP tool get_exception_facts returns the same rows as exception-facts --json. ON by default; lsp --no-exception-facts switches the hover line and the lens off.",
       "wikiPage": "editor-exception-facts",
       "surfaces": [
         {
@@ -11575,6 +11586,14 @@
           "method": "textDocument/codeLens"
         },
         {
+          "type": "lsp",
+          "method": "draglint/callerCounts"
+        },
+        {
+          "type": "lsp",
+          "method": "workspace/executeCommand"
+        },
+        {
           "type": "mcp",
           "tool": "get_exception_facts"
         }
@@ -11584,6 +11603,10 @@
         {
           "ask": "Which exceptions can this routine raise, seen from the editor?",
           "command": "drag-lint lsp --db <file.sqlite>  (hover the routine: the Raises: line)"
+        },
+        {
+          "ask": "Where exactly does this routine raise or handle, from the exception lens?",
+          "command": "drag-lint lsp --db <file.sqlite>  (click the raises/handles lens: workspace/executeCommand draglint.exceptionFacts [uri, line] -> the sites)"
         },
         {
           "ask": "How do I turn off the Raises: hover line and the exception code lens?",
@@ -11596,10 +11619,10 @@
       ],
       "access": "cli-only",
       "verified": {
-        "date": "2026-11-08",
+        "date": "2026-11-09",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
-        "surfaceHash": "567f8f4a178a2732b2760ea6f9bc16de76e88bbccb76b2ca15627275b0a78277"
+        "build": "1.49.0-alpha",
+        "surfaceHash": "77e6c3a6683aa71784b573cd45fb2849c3c8fb9b4183325fd370e848a5dd0f51"
       }
     },
     {
@@ -12181,9 +12204,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-11-08",
+        "date": "2026-11-09",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
+        "build": "1.49.0-alpha",
         "surfaceHash": "10022e84258187bc2c007e3f25e7d555f66920a2b2d6cbbdc39b8d081e7164a3"
       }
     },
@@ -12315,9 +12338,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-11-08",
+        "date": "2026-11-09",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
+        "build": "1.49.0-alpha",
         "surfaceHash": "54238dbe14546a9adc7642ae77efcf4256ccccd619a32b671fa068c1022aa2c1"
       }
     },

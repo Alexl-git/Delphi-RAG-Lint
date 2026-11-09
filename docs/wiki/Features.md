@@ -368,7 +368,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [drag-lint Panel (dockable)](drag-lint-Panel-dockable) | drag-lint > drag-lint Panel (dockable) |  |
 | [drag-lint](drag-lint) | View > Tool Windows > drag-lint |  |
 | [Engine heartbeat: the IDE tells a busy engine from a stuck one](heartbeat) | procedure: `docs\wiki\heartbeat.md` |  |
-| [Exception facts in the editor](editor-exception-facts) | `lsp`; `lsp textDocument/hover`; `lsp textDocument/codeLens`; `mcp get_exception_facts` |  |
+| [Exception facts in the editor](editor-exception-facts) | `lsp`; `lsp textDocument/hover`; `lsp textDocument/codeLens`; `lsp draglint/callerCounts`; `lsp workspace/executeCommand`; `mcp get_exception_facts` |  |
 | [Help line (DL page)](ide-help-line) | View > Tool Windows > drag-lint; drag-lint > Help > Help on a feature...; drag-lint > Help > All features (web) |  |
 | [IDE Menu Reference](IDE-Menu-Reference) | procedure: `docs\wiki\IDE-Menu-Reference.md`; drag-lint > Help > IDE Menu Reference |  |
 | [ide-release](ide-release) | `ide-release` |  |
