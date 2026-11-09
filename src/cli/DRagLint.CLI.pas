@@ -283,6 +283,7 @@ uses
   , DRagLint.Report    .RCallTree
   , DRagLint.Report    .Overview
   , DRagLint.Report    .CycleHub  // cycles --hub (spec 2026-11-08-hub-scc-phased P1)
+  , DRagLint.Report    .CycleHubSurface // cycles --plan --hub-surface (spec 2026-11-08-hub-scc-phased P2)
   , DRagLint.Report    .CyclePlan // dl:unit DRagLint.Report.CyclePlan accepted -- the report's line formats travel with the playbook that predicts them, so the predicted output cannot drift from what cycles prints
   , DRagLint.CLI       .CycleFix
   , DRagLint.Convert   .PropTree
@@ -525,6 +526,7 @@ type
     Plan           : Boolean; // --plan (cycles: emit a followable markdown refactoring playbook)
     F2047          : Boolean; // --f2047 (cycles: only the interface-only cycles dcc rejects, N-09)
     Hub            : Boolean; // --hub (cycles: hub analysis per group, spec 2026-11-08-hub-scc-phased P1)
+    HubSurface     : Boolean; // --hub-surface (cycles --plan: recipe R3, spec 2026-11-08-hub-scc-phased P2; OFF by default)
     FixCycle       : Integer; // --cycle <n> (cycles --fix: the 1-based group to plan)
     FixCycleGiven  : Boolean; // --cycle was on the command line (so 0 / junk is an error, not 'absent')
     FixPart        : string ; // --part a|b|all (cycles --fix)
@@ -1922,6 +1924,7 @@ begin
     else if A = '--plan'          then Result.Plan           := True
     else if A = '--f2047'         then Result.F2047          := True
     else if A = '--hub'           then Result.Hub            := True
+    else if A = '--hub-surface'   then Result.HubSurface     := True
     else if A = '--apply'         then Result.Apply          := True
     else if A = '--fix'           then Result.Fix            := True
     else if A = '--remove-unused' then Result.RemoveUnused   := True
@@ -27587,6 +27590,29 @@ begin
         Exit(2);
       end;
       Exit(ReportF2047);
+    end;
+
+    { --hub-surface (spec 2026-11-08-hub-scc-phased P2): recipe R3 in place of the planner, OFF by default }
+    if AArgs.HubSurface then
+    begin
+      if (not AArgs.Plan) or AArgs.Fix or SameText(AArgs.Format, 'json') then
+      begin
+        Writeln(ErrOutput, 'ERROR: cycles --hub-surface needs --plan (text; --apply writes one group) and does not combine with --fix or --format json yet');
+        Exit(2);
+      end;
+      var HubOpts:= Default(THubSurfaceOptions);
+      HubOpts.Apply     := AArgs.Apply;
+      HubOpts.NoBackup  := AArgs.NoBackup;
+      HubOpts.CycleIndex:= if AArgs.FixCycleGiven then AArgs.FixCycle else 0;
+      HubOpts.UnitStem  := LowerCase(AArgs.GhostUnit);
+      var HubLines:= TStringList.Create;
+      try
+        Result:= RunHubSurface(Store, Sccs, CycGraph, HubOpts, HubLines);
+        for var HubLine in HubLines do Writeln(HubLine);
+      finally
+        HubLines.Free;
+      end;
+      Exit;
     end;
 
     if AArgs.Plan or AArgs.Fix then

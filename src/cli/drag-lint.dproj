@@ -323,6 +323,7 @@
         <DCCReference Include="..\report\DRagLint.Report.RCallTree.pas"/>
         <DCCReference Include="..\report\DRagLint.Report.CyclePlan.pas"/>
         <DCCReference Include="..\report\DRagLint.Report.CycleHub.pas"/>
+        <DCCReference Include="..\report\DRagLint.Report.CycleHubSurface.pas"/>
         <DCCReference Include="..\report\DRagLint.Report.CycleEdge.pas"/>
         <DCCReference Include="..\report\DRagLint.Report.Overview.pas"/>
         <DCCReference Include="..\report\DRagLint.Report.UntangleCatalog.pas"/>
