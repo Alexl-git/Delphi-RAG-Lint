@@ -83,9 +83,17 @@ const
   /// Synchronize or Queue is taken to marshal itself, as ui-access-in-thread-transitive does.
   /// </remarks>
   UI_ACCESS_IN_THREAD_TYPED_RULE = 'ui-access-in-thread-typed';
-  REF_TYPE_RULES: array[0..8] of string = (IS_ALWAYS_TRUE_RULE, IS_NEVER_TRUE_RULE, UPCAST_THEN_DOWNCAST_RULE, WITH_ON_TEMPORARY_RULE, INTERFACE_HOLDER_RULE, ARGUMENT_NARROWS_RULE, REDUNDANT_CAST_RULE, UNSAFE_TYPECAST_RULE, UI_ACCESS_IN_THREAD_TYPED_RULE);
+  /// <summary>Rule id: thread code ends the process or posts WM_QUIT: PostQuitMessage, Application.Terminate, Halt or ExitProcess.</summary>
+  /// <remarks>
+  /// Thread code is the same set as ui-access-in-thread-typed (Execute of a TThread descendant, a lambda passed to
+  /// TThread.CreateAnonymousThread, TTask.Run/Create/Future, TParallel.For). A quit reached over a called routine is not followed;
+  /// a quit inside the argument of Synchronize, Queue or ForceQueue is on the main thread and stays silent. A class
+  /// nothing constructs is labelled (class never constructed) and reported as a hint. Ships OFF.
+  /// </remarks>
+  QUIT_FROM_THREAD_RULE = 'quit-from-thread';
+  REF_TYPE_RULES: array[0..9] of string = (IS_ALWAYS_TRUE_RULE, IS_NEVER_TRUE_RULE, UPCAST_THEN_DOWNCAST_RULE, WITH_ON_TEMPORARY_RULE, INTERFACE_HOLDER_RULE, ARGUMENT_NARROWS_RULE, REDUNDANT_CAST_RULE, UNSAFE_TYPECAST_RULE, UI_ACCESS_IN_THREAD_TYPED_RULE, QUIT_FROM_THREAD_RULE);
   /// <summary>The ones that ship OFF; each names why in the catalog.</summary>
-  REF_TYPE_RULES_OFF: array of string = [UNSAFE_TYPECAST_RULE, IS_NEVER_TRUE_RULE];
+  REF_TYPE_RULES_OFF: array of string = [UNSAFE_TYPECAST_RULE, IS_NEVER_TRUE_RULE, QUIT_FROM_THREAD_RULE];
 
 /// <summary>True when the rule ships OFF by default (see the catalog).</summary>
 /// <param name="ARuleId">One of REF_TYPE_RULES.</param>
@@ -199,6 +207,7 @@ implementation
 
 uses
   System.Generics.Collections
+  , System.StrUtils
   , System.RegularExpressions
   , FireDAC.Comp.Client
   , FireDAC.Stan.Param  // dl:ok unused-unit-in-uses@c61d -- REVIEWED 2026-11-05: TFDParam.SetAsLargeInt is inline, and without this unit the compiler says H2443 at every parameter assignment
@@ -287,6 +296,11 @@ const
   MAX_QUOTED_EXPR  = 60;
   { Appended to a finding whose thread class nothing in the project constructs (1.47 U1). }
   NEVER_BUILT_LABEL = ' (class never constructed)';
+  { quit-from-thread: routines that end the process or post WM_QUIT (lower case); Terminate counts only on Application. }
+  QUIT_ROUTINES: array[0..2] of string = ('postquitmessage', 'halt', 'exitprocess');
+  QUIT_TERMINATE   = 'terminate';
+  QUIT_APPLICATION = 'application';
+  QUIT_QUALIFIERS: array[0..2] of string = ('windows', 'winapi.windows', 'system');
 
 type
   /// <summary>The ref_types row of one reference, as read for one file.</summary>
@@ -406,9 +420,10 @@ type
       function SwitchToFile(AFileId: Int64): Boolean;
       function RoutineFacts(AId: Int64): TRoutineThreadFacts;
       function ReachOf(ATarget: Int64; out AReach: TThreadReach): Boolean;
-      procedure EmitThreadFinding(const ATouch: TThreadTouch; const AMessage: string);
+      procedure EmitThreadFinding(const ATouch: TThreadTouch; const AMessage: string; const ARuleId: string = UI_ACCESS_IN_THREAD_TYPED_RULE);
       procedure EmitReach(const ATouch: TThreadTouch; const AEntry: string);
       procedure CheckThreadBody(const ABody: TTSNode; const AEntry: string);
+    procedure CheckQuits(const ANode: TTSNode; const AEntry: string);
       procedure CheckExecuteEntry(const ANode: TTSNode);
       procedure CheckThreadStart(const ANode: TTSNode);
       function Wants(const ARuleId: string): Boolean;
@@ -1571,13 +1586,13 @@ begin
   Result:= False;
 end;
 
-procedure TRefTypeScan.EmitThreadFinding(const ATouch: TThreadTouch; const AMessage: string);
+procedure TRefTypeScan.EmitThreadFinding(const ATouch: TThreadTouch; const AMessage: string; const ARuleId: string);
 begin
   var Key: Int64:= PosKey(ATouch.StartLine, ATouch.StartCol);
   if FEmitted.ContainsKey(Key) then Exit;
   FEmitted.Add(Key, True);
   var F: TLintFinding:= Default(TLintFinding);
-  F.RuleId   := UI_ACCESS_IN_THREAD_TYPED_RULE;
+  F.RuleId   := ARuleId;
   { A class nothing constructs never runs its Execute: still reported, labelled and down-ranked. }
   F.Severity := if FNeverBuilt then SEV_HINT else SEV_WARNING;
   F.Message  := if FNeverBuilt then AMessage + NEVER_BUILT_LABEL else AMessage;
@@ -1599,9 +1614,54 @@ begin
       '-- marshal the call through Synchronize or Queue', [AEntry, AEntry, Reach.Path, Reach.Witness]));
 end;
 
+{ quit-from-thread: a call that ends the process or posts WM_QUIT, found anywhere in the thread body outside
+  Synchronize/Queue arguments, nested routines and lambdas (those are entries of their own or not thread code). }
+procedure TRefTypeScan.CheckQuits(const ANode: TTSNode; const AEntry: string);
+var
+  Hit: string;
+begin
+  if ANode.IsNull then Exit;
+  var NT: string:= ANode.NodeType;
+  if (NT = NODE_LAMBDA) or (NT = NODE_DEFPROC) then Exit;
+  Hit:= '';
+  if NT = NODE_DOT then
+  begin
+    var Qual: string:= Text(ANode.ChildByField(FIELD_LHS)).Replace(' ', '').ToLower;
+    var Member: string:= Text(ANode.ChildByField(FIELD_RHS)).Replace(' ', '').ToLower;
+    if (Qual = QUIT_APPLICATION) and (Member = QUIT_TERMINATE) then Hit:= 'Application.Terminate'
+    else if MatchStr(Member, QUIT_ROUTINES) and MatchStr(Qual, QUIT_QUALIFIERS) then Hit:= Text(ANode);
+    if Hit = '' then CheckQuits(ANode.ChildByField(FIELD_LHS), AEntry);
+  end
+  else if (NT = TYPE_NODE_ID) and MatchStr(Text(ANode).ToLower, QUIT_ROUTINES) then Hit:= Text(ANode)
+  else if NT = NODE_CALL then
+  begin
+    var Ent: TTSNode:= ANode.ChildByField(FIELD_ENTITY);
+    var Callee: string:= '';
+    if (not Ent.IsNull) and (Ent.NodeType = TYPE_NODE_ID) then Callee:= Text(Ent)
+    else if (not Ent.IsNull) and (Ent.NodeType = NODE_DOT) then Callee:= Text(Ent.ChildByField(FIELD_RHS));
+    if MatchStr(Callee.ToLower, MARSHAL_CALLS) then Exit;
+  end;
+  if Hit <> '' then
+  begin
+    var T: TThreadTouch:= Default(TThreadTouch);
+    T.StartLine:= Integer(ANode.StartPoint.Row) + 1;
+    T.StartCol := Integer(ANode.StartPoint.Column) + 1;
+    T.EndLine  := Integer(ANode.EndPoint.Row) + 1;
+    T.EndCol   := Integer(ANode.EndPoint.Column) + 1;
+    EmitThreadFinding(T, Format('%s runs on a worker thread and calls %s -- that ends the whole process (or posts WM_QUIT to this ' +
+      'thread''s queue) from the wrong thread; signal the main thread through Synchronize or Queue instead', [AEntry, Hit]), QUIT_FROM_THREAD_RULE);
+    Exit;
+  end;
+  if NT = NODE_DOT then Exit;
+  for var I: Integer:= 0 to Integer(ANode.NamedChildCount) - 1 do
+    CheckQuits(ANode.NamedChild(I), AEntry);
+end;
+
 procedure TRefTypeScan.CheckThreadBody(const ABody: TTSNode; const AEntry: string);
 begin
-  if ABody.IsNull or BodyNames(ABody, GUARD_WORDS) then Exit;
+  if ABody.IsNull then Exit;
+  if Wants(QUIT_FROM_THREAD_RULE) then CheckQuits(ABody, AEntry);
+  if (not Wants(UI_ACCESS_IN_THREAD_TYPED_RULE)) or BodyNames(ABody, GUARD_WORDS) then Exit;
   var SavedSelf: TTypeFacts:= FSelfFacts;
   CollectBody(ABody);
   var Touches: TArray<TThreadTouch>:= FTouches.ToArray;
@@ -1686,7 +1746,7 @@ begin
   else if IsAsNode(ANode) then CheckCast(ANode)
   else if NT = NODE_BINARY then CheckIs(ANode)
   else if (NT = NODE_ASSIGN) and Wants(INTERFACE_HOLDER_RULE) then CheckAssign(ANode);
-  if Wants(UI_ACCESS_IN_THREAD_TYPED_RULE) then
+  if Wants(UI_ACCESS_IN_THREAD_TYPED_RULE) or Wants(QUIT_FROM_THREAD_RULE) then
   begin
     if NT = NODE_DEFPROC then CheckExecuteEntry(ANode)
     else if NT = NODE_CALL then CheckThreadStart(ANode);

@@ -219,6 +219,7 @@
   "public-field": {"cwe": ["CWE-1061"]},
   "public-writable-field": {"cwe": ["CWE-1061"]},
   "query-name-with-effect": {},
+  "quit-from-thread": {"cwe": ["CWE-382"]},
   "raise-bare-exception": {"cwe": ["CWE-397"]},
   "raise-in-destructor": {"cwe": ["CWE-248"], "cert": ["DCL57-CPP"], "misra": ["MISRA-CPP-2008-15-5-1"], "weak": ["CWE-248"]},
   "raise-in-finally": {"cwe": ["CWE-584"], "weak": ["CWE-584"]},

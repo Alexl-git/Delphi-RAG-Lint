@@ -4794,6 +4794,7 @@ begin
     if WantRule(REDUNDANT_CAST_RULE) and OptedIn('redundant-cast') then RefTypeWanted:= RefTypeWanted + [REDUNDANT_CAST_RULE];
     if WantRule(UNSAFE_TYPECAST_RULE) and OptedIn('unsafe-typecast-without-is') then RefTypeWanted:= RefTypeWanted + [UNSAFE_TYPECAST_RULE];
     if WantRule(UI_ACCESS_IN_THREAD_TYPED_RULE) and OptedIn('ui-access-in-thread-typed') then RefTypeWanted:= RefTypeWanted + [UI_ACCESS_IN_THREAD_TYPED_RULE];
+    if WantRule(QUIT_FROM_THREAD_RULE) and OptedIn('quit-from-thread') then RefTypeWanted:= RefTypeWanted + [QUIT_FROM_THREAD_RULE];
     for var Rt in CollectRefTypeRules(AStore, ALibraryStore, RefTypeWanted, AOnlyFileId) do Findings.Add(Rt);
     { gap-rules wave, lane G8. The two DFM rules and uses-movable-to-implementation are ON by
       default and walk one table each (uses-movable back ON in lane IMOV after REFTYPE: 0 FP on
