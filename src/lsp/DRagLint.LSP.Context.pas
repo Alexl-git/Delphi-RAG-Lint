@@ -183,6 +183,11 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function CallerCounts(const APath: string): TJSONArray;
+    /// <summary>D1 (wave 148): the exception code lenses of a file, [{line, title}] with line
+    /// 0-based on the routine's declaration; [] when lsp --no-exception-facts is set.</summary>
+    /// <param name="APath">The local path.</param>
+    /// <returns>A new array the caller frees.</returns>
+    function ExceptionLenses(const APath: string): TJSONArray;
     /// <summary>The markdown `textDocument/hover` shows for a position.</summary>
     /// <param name="APath">The local path.</param>
     /// <param name="ALine0">0-based line.</param>

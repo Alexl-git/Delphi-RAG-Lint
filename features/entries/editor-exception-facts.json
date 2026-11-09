@@ -1,0 +1,62 @@
+{
+  "id": "editor-exception-facts",
+  "title": "Exception facts in the editor",
+  "group": "editor-integration",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.47.0-alpha",
+  "summary": "Hover, code lens and an MCP tool show which exception types a routine raises and handles",
+  "intro": "Read this when you want to see, without leaving the editor, which exceptions a routine raises and which it catches. Hovering a routine adds one Raises: line (each type once, with how it is known: bound, handler, local, name, spelled or unknown); a code lens on the routine header says raises N types, handles M types; the MCP tool get_exception_facts returns the same rows as exception-facts --json. ON by default; lsp --no-exception-facts switches the hover line and the lens off.",
+  "wikiPage": "editor-exception-facts",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lsp",
+      "example": "drag-lint lsp --db <file.sqlite> --no-exception-facts",
+      "usage": "drag-lint lsp --db <file.sqlite> [--no-exception-facts]",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--no-exception-facts"
+        }
+      ]
+    },
+    {
+      "type": "lsp",
+      "method": "textDocument/hover"
+    },
+    {
+      "type": "lsp",
+      "method": "textDocument/codeLens"
+    },
+    {
+      "type": "mcp",
+      "tool": "get_exception_facts"
+    }
+  ],
+  "audience": "both",
+  "questions": [
+    {
+      "ask": "Which exceptions can this routine raise, seen from the editor?",
+      "command": "drag-lint lsp --db <file.sqlite>  (hover the routine: the Raises: line)"
+    },
+    {
+      "ask": "How do I turn off the Raises: hover line and the exception code lens?",
+      "command": "drag-lint lsp --db <file.sqlite> --no-exception-facts"
+    },
+    {
+      "ask": "How does an MCP client ask which routines raise or handle a type?",
+      "command": "drag-lint serve --db <index>  (then tools/call get_exception_facts {\"name\":\"EMyError\"})"
+    }
+  ],
+  "access": "cli-only",
+  "verified": {
+    "date": "2026-11-08",
+    "by": "ENGINE",
+    "build": "1.47.0-alpha",
+    "surfaceHash": "a63d3fa9b4b829c8d05101921b502c46608a7037ffc02574caeb41d078681b28"
+  }
+}

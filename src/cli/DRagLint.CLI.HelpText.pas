@@ -254,6 +254,7 @@ begin
   Writeln('                               --merge-budget-ms <n>: per-frame budget for a merge handler; over budget forwards DelphiLSP''s bytes untouched (default 300).');
   Writeln('                               --delphi-lsp-bits 32|64: which DelphiLSP the proxy spawns (64 = bin64\DelphiLSP.exe, the default; 32 = bin\DelphiLSP.exe); --delphi-lsp <path> wins over it.');
   Writeln('                               --full-rules: run the FULL rule set (built-ins included) out-of-process on every didSave and publish the complete finding set; OFF by default -- costs one `lint` run per save, reported on stderr.');
+  Writeln('                               --no-exception-facts: drop the routine''s Raises: hover line and the ''raises N types, handles M types'' code lens (both ON by default since 1.47; see wiki page editor-exception-facts).');
   Writeln('  drag-lint index <dir> --db <file.sqlite> --resolve-only   (re-derive call edges / ancestry / helpers / purity verdicts from the STORED parses; skips the walk entirely --');
   Writeln('                               the cheap remedy when resolver_fingerprint says the edges are stale, since no parse became wrong)');
   Writeln('                               ONLY safe if no source changed since the parse: a changed file is WITHHELD, and after the clear this pass runs it HAS NO EDGES OR MEMBER ACCESSES until a plain index');
@@ -898,6 +899,7 @@ begin
     Writeln('                               --merge-budget-ms <n>: per-frame budget for a merge handler; over budget forwards DelphiLSP''s bytes untouched (default 300).');
     Writeln('                               --delphi-lsp-bits 32|64: which DelphiLSP the proxy spawns (64 = bin64\DelphiLSP.exe, the default; 32 = bin\DelphiLSP.exe); --delphi-lsp <path> wins over it.');
     Writeln('                               --full-rules: run the FULL rule set (built-ins included) out-of-process on every didSave and publish the complete finding set; OFF by default -- costs one `lint` run per save, reported on stderr.');
+    Writeln('                               --no-exception-facts: drop the routine''s Raises: hover line and the ''raises N types, handles M types'' code lens (both ON by default since 1.47; see wiki page editor-exception-facts).');
     Writeln('  drag-lint index <dir> --db <file.sqlite> --resolve-only   (re-derive call edges / ancestry / helpers / purity verdicts from the STORED parses; skips the walk entirely --');
     Writeln('                               the cheap remedy when resolver_fingerprint says the edges are stale, since no parse became wrong)');
     Writeln('                               ONLY safe if no source changed since the parse: a changed file is WITHHELD, and after the clear this pass runs it HAS NO EDGES OR MEMBER ACCESSES until a plain index');

@@ -802,9 +802,9 @@ Or add it to your MCP config by hand (e.g. `~/.claude/claude_desktop_config.json
 }
 ```
 
-17 tools are then available to Claude: `find_symbol`, `find_callers`,
+18 tools are then available to Claude: `find_symbol`, `find_callers`,
 `get_symbol_doc`, `get_context_bundle`, `rename_symbol`, `run_compile_check`,
-and more (see [MCP tools](#mcp-tools-17) below).
+and more (see [MCP tools](#mcp-tools-18) below).
 
 ### Click-to-source links (draglint://)
 
@@ -909,6 +909,9 @@ predates it answers the standard `-32601`.
   and reports its cost in ms on stderr. A platform-library unit (an RTL/VCL file covered by a `library-*.sqlite`)
   skips the project, flow and type-aware rules, in `lint` too: findings you cannot act on, and they blew the 8 s budget;
   the LSP and the IDE plugin's live lint also give such a file a 16 s budget instead of 8 s.
+  Hovering a routine shows its `Raises:` line and the code lens says `raises N types, handles M types`
+  (ON by default since 1.47; `--no-exception-facts` switches both off; MCP clients get the same rows from
+  `get_exception_facts`).
 
 `drag-lint lsp --proxy` is a different shape of the same server: instead of
 answering alone, it spawns RAD Studio's own `bin64\DelphiLSP.exe` and relays
@@ -1264,7 +1267,7 @@ A verb's usage line names the canonical flag only. Each alias is accepted wherev
 
 <!-- dl:registry:end flag-aliases -->
 
-### MCP tools (17)
+### MCP tools (18)
 
 Verified against `src\mcp\DRagLint.MCP.Server.pas` (`HandleToolsList`) -- this
 is the complete set the server registers; it does not expose `import_log`,
@@ -1281,6 +1284,7 @@ CLI-only verbs).
 | `find_undocumented` | Symbols with no doc comment; filter by `kind` / `public_only` |
 | `get_impact` | Transitive blast radius of a symbol: callers/units affected, per depth level |
 | `get_neighbors` | Call-graph neighbourhood of a symbol within 1..3 hops (callers and callees), capped at 200 rows with the omitted count stated |
+| `get_exception_facts` | Which routine raises and handles which exception type, by routine (`target`) or by type (`name`): the JSON of `exception-facts --json` |
 | `get_implementors` | Interface report (`implementors/1`): who implements an interface, which method answers each interface method per class, and the member's call/use sites |
 | `get_wiring` | Spring4D DI edges (interface -> impl class + lifetime + resolve-sites) plus DFM event handlers for a form |
 | `get_surface` | Public interface (declaration lines) of a class/record; `include_impl` / `all_visibility` widen it |

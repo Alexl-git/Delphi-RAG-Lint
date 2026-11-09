@@ -56,7 +56,10 @@ type
     /// `draglint.showCallers` titled '<n> callers' ('1 caller' singular) with
     /// arguments [uri, line]. Above every interface and interface method with at least
     /// one implementor, a second lens titled '<n> implementors' runs
-    /// draglint.showImplementors with [uri, line] (1.40). A file no store knows answers [].</summary>
+    /// draglint.showImplementors with [uri, line] (1.40). On a routine that raises or handles,
+    /// a lens titled 'raises N types, handles M types' (ILspServerContext.ExceptionLenses; a
+    /// label: command '', ON by default, off with lsp --no-exception-facts; wave 148 D1).
+    /// A file no store knows answers [].</summary>
     /// <param name="ACtx">The server surface.</param>
     /// <param name="AMethod">Always `textDocument/codeLens`.</param>
     /// <param name="AId">The request id; a notification gets no reply.</param>
@@ -88,6 +91,8 @@ const
   CODELENS_METHOD  = 'textDocument/codeLens';
   CODELENS_COMMAND = 'draglint.showCallers';
   IMPL_COMMAND     = 'draglint.showImplementors';
+  { D1: an exception lens is a label (no client command implements a click yet). }
+  EXC_COMMAND      = '';
 
 function Position(ALine0: Integer): TJSONObject;
 begin
@@ -106,7 +111,7 @@ begin
   Result:= ACount.ToString + (if ACount = 1 then ' implementor' else ' implementors');
 end;
 
-function BuildLens(const AUri: string; ALine0, ACount: Integer; AImplementors: Boolean = False): TJSONObject;
+function BuildLens(const AUri: string; ALine0, ACount: Integer; AImplementors: Boolean = False; const ATitle: string = ''): TJSONObject;
 begin
   Result:= TJSONObject.Create;
   try
@@ -116,8 +121,8 @@ begin
     Rng.AddPair('end'  , Position(ALine0));
     var Cmd: TJSONObject:= TJSONObject.Create;
     Result.AddPair('command', Cmd);
-    Cmd.AddPair('title'  , if AImplementors then ImplTitle(ACount) else Title(ACount));
-    Cmd.AddPair('command', if AImplementors then IMPL_COMMAND else CODELENS_COMMAND);
+    Cmd.AddPair('title'  , if ATitle <> '' then ATitle else if AImplementors then ImplTitle(ACount) else Title(ACount));
+    Cmd.AddPair('command', if ATitle <> '' then EXC_COMMAND else if AImplementors then IMPL_COMMAND else CODELENS_COMMAND);
     var Args: TJSONArray:= TJSONArray.Create;
     Cmd.AddPair('arguments', Args);
     Args.Add(AUri);
@@ -169,6 +174,13 @@ begin
           Res.AddElement(BuildLens(Uri, (E as TJSONObject).GetValue<Integer>('line'), (E as TJSONObject).GetValue<Integer>('count'), True));
       finally
         Impls.Free;
+      end;
+      var Excs: TJSONArray:= ACtx.ExceptionLenses(Path); { D1 (wave 148): 'raises N types, handles M types' }
+      try
+        for var E: TJSONValue in Excs do
+          Res.AddElement(BuildLens(Uri, (E as TJSONObject).GetValue<Integer>('line'), 0, False, (E as TJSONObject).GetValue<string>('title')));
+      finally
+        Excs.Free;
       end;
     end;
   except

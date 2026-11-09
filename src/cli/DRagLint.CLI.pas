@@ -624,6 +624,7 @@ type
     LspMergeDefinition : Boolean; // --merge-definition (merge plan A5; OFF by default)
     LspMergeNavigation : Boolean; // --merge-navigation (hierarchy, typeDefinition, highlight, folding; OFF by default)
     LspFullRules       : Boolean; // --full-rules (C1; OFF by default)
+    LspNoExceptionFacts: Boolean; // --no-exception-facts (D1, wave 148: the Raises: hover line + exception lens are ON by default)
     LspMergeBudgetMs   : Integer; // --merge-budget-ms <n>
     LspMergeBudgetSet  : Boolean; // False = LSP_MERGE_BUDGET_DEFAULT_MS
     ResolveOnly : Boolean; // index --resolve-only: re-derive edges, skip the walk
@@ -1966,6 +1967,7 @@ begin
     else if A = '--merge-definition' then Result.LspMergeDefinition:= True
     else if A = '--merge-navigation' then Result.LspMergeNavigation:= True
     else if A = '--full-rules' then Result.LspFullRules:= True
+    else if A = '--no-exception-facts' then Result.LspNoExceptionFacts:= True
     else if (A = '--merge-budget-ms') and (i < ParamCount) then
     begin
       Inc(i);
@@ -39550,6 +39552,7 @@ begin
       ConfigureLspLint(Args, DbList);
       var LSP:= DRagLint.LSP.Server.TLSPServer.Create(DbList);
       LSP.FullRules:= Args.LspFullRules;
+      LSP.ExceptionFacts:= not Args.LspNoExceptionFacts; { D1: owner ruling, ON unless --no-exception-facts }
       if not Args.ProjectFromConfig then LSP.StartupProject:= Args.ProjectPath;
       LSP.StartupPlatform:= Args.CheckPlatform;
       LSP.StartupTargetCompiler:= Args.TargetCompiler; { 1.38: beats config + context per file }

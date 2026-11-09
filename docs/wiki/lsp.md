@@ -132,6 +132,13 @@ How the diagnostics merge behaves:
 - With `--trace`, the trace records the frame actually forwarded (the merged
   one).
 
+### Exception facts on hover and code lens: `--no-exception-facts` (ON by default)
+
+Since 1.47 hovering a routine adds `Raises: EFoo (bound), EBar (spelled)` and the code lens
+adds `raises N types, handles M types` on its declaration line (see [[editor-exception-facts]]).
+Both read the reader `exception-facts` uses. `drag-lint lsp --db <db> --no-exception-facts`
+switches both off; hover is then byte-identical to 1.46.
+
 ## Which defines the LSP preprocesses with
 
 Every file the LSP lints is preprocessed with the define profile of ITS OWN project's active

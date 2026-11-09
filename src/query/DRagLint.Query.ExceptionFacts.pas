@@ -21,6 +21,9 @@ type
     FilePath : string ;
     Line     : Integer;
     Col      : Integer;
+    /// <summary>The 1-based start line of the enclosing routine's symbol row (its declaration;
+    /// the code lens anchor). 0 when the site has no enclosing symbol. Not in the JSON.</summary>
+    RoutineLine: Integer;
   end;
 
 /// <summary>The exception facts of one routine, or of one type.</summary>
@@ -30,6 +33,28 @@ type
 /// `on E: Exception` is not listed under EFoo.</param>
 /// <returns>The sites, by routine, line and column.</returns>
 function ExceptionFactsOf(const pDbPath, pRoutine, pTypeName: string): TArray<TExceptionFact>;
+
+/// <summary>The exception facts of every routine in one file: the raise / handle sites whose
+/// ref row is in that file, sorted like ExceptionFactsOf.</summary>
+/// <param name="pDbPath">An existing index. Opened read-only.</param>
+/// <param name="pFilePath">The file as the index stores it; compared without case.</param>
+/// <returns>The sites; empty for a file the index does not hold.</returns>
+/// <remarks>The editor surfaces (LSP code lens) read this; same query, same type rules as
+/// ExceptionFactsOf, so the lens and `exception-facts --target cannot disagree.</remarks>
+function ExceptionFactsOfFile(const pDbPath, pFilePath: string): TArray<TExceptionFact>;
+
+/// <summary>The hover fact line of one routine: 'Raises: EFoo (bound), EBar (spelled)'.</summary>
+/// <param name="pFacts">The routine's facts (ExceptionFactsOf with a routine).</param>
+/// <returns>One line naming each raised type once (raise, raise-expr and reraise sites), in
+/// source order, each with the Via of its first site; a site whose type is not known reads
+/// 'unknown'. '' when the routine raises nothing.</returns>
+function ExceptionRaisesLine(const pFacts: TArray<TExceptionFact>): string;
+
+/// <summary>The code lens title of one routine: 'raises 2 types, handles 1 type'.</summary>
+/// <param name="pFacts">The facts of ONE routine.</param>
+/// <returns>Distinct raised types and distinct handled types (a bare except counts as one),
+/// either part omitted when zero; '' when both are zero.</returns>
+function ExceptionLensTitle(const pFacts: TArray<TExceptionFact>): string;
 
 /// <summary>The facts as JSON: {"facts":[...],"count":N}.</summary>
 /// <param name="pFacts">The rows to render.</param>
@@ -138,23 +163,19 @@ begin
   Result:= SameText(if pTypeName.Contains('.') then pFact.TypeQName else pFact.TypeName, pTypeName);
 end;
 
-function ExceptionFactsOf(const pDbPath, pRoutine, pTypeName: string): TArray<TExceptionFact>;
+{ The one query behind every surface: pWhere narrows the refs (routine or file). }
+function FactsWhere(const pDbPath, pWhere, pTypeName: string): TArray<TExceptionFact>;
 var
-  Where: string;
   Found: TList<TExceptionFact>;
   Fact : TExceptionFact;
 begin
-  Where:= '';
-  if pRoutine <> '' then
-    Where:= ' AND (e.qualified_name = ' + QuotedStr(pRoutine) + ' COLLATE NOCASE OR substr(e.qualified_name, -' +
-      IntToStr(Length(pRoutine) + 1) + ') = ' + QuotedStr('.' + pRoutine) + ' COLLATE NOCASE)';
   Found:= TList<TExceptionFact>.Create;
   var Index:= TChartsIndex.Create(pDbPath);
   try
     var Rows:= Index.Query('SELECT r.kind AS kind, r.name_text AS nm, r.receiver_text AS rt, r.start_line AS line, r.start_col AS col, ' +
-      'r.enclosing_symbol_id AS eid, e.qualified_name AS routine, f.path AS path, b.qualified_name AS bound FROM refs r ' +
+      'r.enclosing_symbol_id AS eid, e.qualified_name AS routine, e.start_line AS rline, f.path AS path, b.qualified_name AS bound FROM refs r ' +
       'JOIN files f ON f.id = r.file_id LEFT JOIN symbols e ON e.id = r.enclosing_symbol_id ' +
-      'LEFT JOIN symbols b ON b.id = r.symbol_id WHERE r.kind IN (' + ALL_KINDS + ')' + Where);
+      'LEFT JOIN symbols b ON b.id = r.symbol_id WHERE r.kind IN (' + ALL_KINDS + ')' + pWhere);
     try
       for var R in Rows do
       begin
@@ -164,6 +185,7 @@ begin
         Fact.FilePath:= R.S('path');
         Fact.Line    := R.I('line');
         Fact.Col     := R.I('col');
+        Fact.RoutineLine:= R.I('rline');
         { qualified `raise Unit.EFoo.Create`: the rows' receiver_text is the qualifier, never a
           stamp, so only a reraise / raise-expr reads it as the type. }
         FillType(Index, R.S('kind'), R.S('nm'), R.S('rt'), R.S('bound'), R.S('eid'), Fact);
@@ -183,6 +205,85 @@ begin
   finally
     Index.Free;
     Found.Free;
+  end;
+end;
+
+function ExceptionFactsOf(const pDbPath, pRoutine, pTypeName: string): TArray<TExceptionFact>;
+var
+  Where: string;
+begin
+  Where:= '';
+  { The enclosing routine, by qualified name or trailing part, found through the symbols
+    indexes first (refs has no kind index: a filter on e.qualified_name scanned every ref,
+    ~280 ms on a 520k-ref DB, too slow for a hover). symbols.name is the last segment. }
+  if pRoutine <> '' then
+    Where:= ' AND r.enclosing_symbol_id IN (SELECT s.id FROM symbols s WHERE s.qualified_name = ' + QuotedStr(pRoutine) +
+      ' COLLATE NOCASE OR (s.name = ' + QuotedStr(pRoutine.Substring(pRoutine.LastIndexOf('.') + 1)) +
+      ' COLLATE NOCASE AND substr(s.qualified_name, -' + IntToStr(Length(pRoutine) + 1) + ') = ' +
+      QuotedStr('.' + pRoutine) + ' COLLATE NOCASE))';
+  Result:= FactsWhere(pDbPath, Where, pTypeName);
+end;
+
+function ExceptionFactsOfFile(const pDbPath, pFilePath: string): TArray<TExceptionFact>;
+begin
+  Result:= FactsWhere(pDbPath, ' AND r.file_id IN (SELECT id FROM files WHERE LOWER(path) = LOWER(' + QuotedStr(pFilePath) + '))', '');
+end;
+
+function IsRaiseAction(const pAction: string): Boolean;
+begin
+  Result:= (pAction = 'raises') or (pAction = 'raises-expr') or (pAction = 'reraises');
+end;
+
+{ The key one type is counted / named under: the qualified name when known, else the spelling. }
+function TypeKey(const pFact: TExceptionFact): string;
+begin
+  Result:= LowerCase(if pFact.TypeQName <> '' then pFact.TypeQName else pFact.TypeName);
+end;
+
+function ExceptionRaisesLine(const pFacts: TArray<TExceptionFact>): string;
+var
+  Seen : TDictionary<string, Byte>;
+  Parts: TList<string>;
+begin
+  Seen := TDictionary<string, Byte>.Create;
+  Parts:= TList<string>.Create;
+  try
+    for var F in pFacts do
+    begin
+      if (not IsRaiseAction(F.Action)) or Seen.ContainsKey(TypeKey(F)) then Continue;
+      Seen.Add(TypeKey(F), 0);
+      Parts.Add(if F.TypeName = '' then VIA_UNKNOWN else F.TypeName + ' (' + F.Via + ')');
+    end;
+    Result:= if Parts.Count = 0 then '' else 'Raises: ' + string.Join(', ', Parts.ToArray);
+  finally
+    Parts.Free;
+    Seen.Free;
+  end;
+end;
+
+function ExceptionLensTitle(const pFacts: TArray<TExceptionFact>): string;
+
+  function Counted(pCount: Integer; const pVerb: string): string;
+  begin
+    Result:= Format('%s %d %s', [pVerb, pCount, if pCount = 1 then 'type' else 'types']);
+  end;
+
+var
+  Raised, Handled: TDictionary<string, Byte>;
+begin
+  Raised := TDictionary<string, Byte>.Create;
+  Handled:= TDictionary<string, Byte>.Create;
+  try
+    for var F in pFacts do
+      if IsRaiseAction(F.Action) then Raised.AddOrSetValue(TypeKey(F), 0)
+      else Handled.AddOrSetValue(if F.Action = 'handles-all' then '*' else TypeKey(F), 0);
+    Result:= '';
+    if Raised.Count > 0 then Result:= Counted(Raised.Count, 'raises');
+    if Handled.Count > 0 then
+      Result:= (if Result = '' then '' else Result + ', ') + Counted(Handled.Count, 'handles');
+  finally
+    Handled.Free;
+    Raised.Free;
   end;
 end;
 
