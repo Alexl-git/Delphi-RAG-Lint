@@ -127,11 +127,13 @@ external 'tree-sitter-dfm';
 /// only the bare handler name via the 'event-binding' reference kind, which
 /// is not enough to render 'Button1.OnClick' -- see DRagLint.Doc.SymbolFacts'
 /// DFM event-wiring fact for why a second, focused extractor is needed).</summary>
-/// <param name="ASource">Raw DFM file bytes, as read from disk. Callers that
-/// need ANSI/UTF-16 transcoding (e.g. a caption with non-ASCII text) must do
-/// it themselves before calling, exactly as TDFMParser.Parse's own callers
-/// do -- this function does not transcode, and always checks the FIRST BYTE
-/// of exactly what it is given for the binary-DFM guard below.</param>
+/// <param name="ASource">Raw DFM file bytes, as read from disk, in ANY encoding the
+/// indexer accepts: UTF-8 (with or without BOM), UTF-16 (BOM) or BOM-less ANSI
+/// (Windows-1252). The function transcodes to UTF-8 itself (EnsureUtf8Bytes, the
+/// rule the indexer applies before TDFMParser.Parse), so a non-ASCII identifier in
+/// a BOM-less ANSI .dfm is no longer truncated (150 DF2). Already-UTF-8 input is
+/// an identity passthrough. The binary-DFM guard below checks the FIRST BYTE of
+/// exactly what it is given, BEFORE any transcoding.</param>
 /// <returns>One TDfmEventBinding per On*-property bound to a bare
 /// method-name identifier, in document order. Empty for a binary DFM (first
 /// byte $FF -- the text-DFM grammar cannot parse it; mirrors TDFMParser.
@@ -152,6 +154,10 @@ external 'tree-sitter-dfm';
 function ExtractDfmEventBindings(const ASource: TBytes): TArray<TDfmEventBinding>;
 
 implementation
+
+uses
+  DRagLint.Core.Encoding { 150 DF2: EnsureUtf8Bytes in ExtractDfmEventBindings }
+  ;
 
 { v22: collapse every run of whitespace to ONE space and trim.
   A local copy rather than a use of the identically-named helper in
@@ -523,6 +529,7 @@ end; // procedure
 
 function ExtractDfmEventBindings(const ASource: TBytes): TArray<TDfmEventBinding>;
 var
+  Source: TBytes   ;
   Parser: TTSParser;
   Tree  : TTSTree  ;
   State : TDfmState;
@@ -536,6 +543,7 @@ begin
     on ASource exactly as given (no transcoding here -- see this function's
     <param> comment), so a genuine binary DFM is never misread as text. }
   if IsBinaryDfmBytes(ASource) then Exit;
+  Source:= EnsureUtf8Bytes(ASource);
 
   Parser:= TTSParser.Create;
   try
@@ -544,7 +552,7 @@ begin
       function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
       var Remaining: Integer;
       begin
-        Remaining:= Length(ASource) - Integer(AByteIndex);
+        Remaining:= Length(Source) - Integer(AByteIndex);
         if Remaining <= 0 then
         begin
           ABytesRead:= 0;
@@ -552,11 +560,11 @@ begin
           Exit;
         end;
         SetLength(Result, Remaining);
-        Move(ASource[AByteIndex], Result[0], Remaining);
+        Move(Source[AByteIndex], Result[0], Remaining);
         ABytesRead:= Remaining;
       end, TTSInputEncoding.TSInputEncodingUTF8);
     try
-      State:= TDfmState.Create(ASource);
+      State:= TDfmState.Create(Source);
       try
         Root:= Tree.RootNode;
         for i:= 0 to Root.NamedChildCount - 1 do
