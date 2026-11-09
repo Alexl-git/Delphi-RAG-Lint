@@ -41,4 +41,4 @@ in `Unit1.pas`.
 
 ## Refusals
 
-A declaration whose stored block names `Calls:` entries of a unit the chosen `--db` cannot see is left untouched: `document --apply` prints `doc: REFUSED <qname> ...` on stderr, a summary line, and the JSON `refused` count (`--qname`: `refused` text). Index that unit, or edit the block by hand. Exit code stays 0.
+A declaration whose stored block names `Calls:` entries of a unit the chosen `--db` cannot see is left untouched: `document --apply` prints `doc: REFUSED <qname> ...` on stderr, a summary line, and the JSON `refused` count (`--qname`: `refused` text). Index that unit, or edit the block by hand. Exit code stays 0. The ` (+N more)` tail of a capped list is not an entry: a capped list whose units the index holds is regenerated, not refused.

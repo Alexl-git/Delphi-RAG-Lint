@@ -25,7 +25,10 @@ to be one hop.
 A call into the RTL has no call edge, so the same question goes to the platform
 library index (`--library-db`, else the manifest's): `Ini.WriteString` satisfies
 `<exception cref="EIniFileException">` because `TIniFile.WriteString`'s body raises
-it. An abstract method counts its overrides. Only a raise actually found there
+it. An abstract method counts its overrides, and so does a virtual one that is not
+final (each override is a dispatch target); a static member of the same name in a
+descendant hides the base and is not read. A bare call (`LibRaiser(x)`) is answered
+only by a free routine of a unit the calling file uses (or System / SysInit). Only a raise actually found there
 silences the finding: with no library, or a callee the library does not hold, it
 stands. A class the project itself declares is never asked about.
 
