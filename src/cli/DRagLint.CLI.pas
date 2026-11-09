@@ -6911,7 +6911,14 @@ var
 begin
   if (AArgs.Path = '') and (AArgs.ProjectPath = '') and (not AArgs.ScanLibraries) then
   begin
-    Writeln('ERROR: index requires a <path>, --project <file.dproj>, ' + 'or --scan-libraries');
+    { 146 k1 / 148 LS: --resolve-only walks nothing, so "requires a <path>" read as a contradiction.
+      Say what the scope argument is FOR, and name the form that needs none (--all). }
+    if AArgs.ResolveOnly then
+      Writeln('ERROR: index --resolve-only parses nothing, but it re-derives the edges of ONE section, so it ' +
+        'still needs the scope that DB was indexed from: --project <file.dproj> (a project DB) or <path> ' +
+        '(a library / folder DB), with --db <file.sqlite>. Every manifest section at once: index --all --resolve-only')
+    else
+      Writeln('ERROR: index requires a <path>, --project <file.dproj>, ' + 'or --scan-libraries');
     Exit(2);
   end;
   if AArgs.Path <> '' then
