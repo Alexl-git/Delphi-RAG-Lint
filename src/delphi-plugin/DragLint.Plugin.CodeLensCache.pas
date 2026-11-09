@@ -26,6 +26,7 @@ uses
   System.SysUtils
   , System.Generics.Collections
   , System.SyncObjs
+  , System.JSON
   ;
 
 const
@@ -289,12 +290,13 @@ type
   /// <param name="ACounts">Caller count per entry of ALines; -1 = no caller label (an
   /// interface line that only carries implementors).</param>
   /// <param name="AImpls">Implementor count per entry of ALines (1.40): 0 = none.</param>
+  /// <param name="AExcs">Exception lens title per entry of ALines (wave 149): '' = none.</param>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DragLint.Plugin.CodeLensCache.pas), DragLint.Plugin.Editor.LspCallerCounts (DragLint.Plugin.Editor.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TCallerCountsDone = reference to procedure(AOk: Boolean; const ALines, ACounts, AImpls: TArray<Integer>);
+  TCallerCountsDone = reference to procedure(AOk: Boolean; const ALines, ACounts, AImpls: TArray<Integer>; const AExcs: TArray<string>);
 
   /// <summary>Asynchronous caller-count source (2026-10-29).</summary>
   /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
@@ -322,6 +324,36 @@ type
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure SetCallerCountsHook(const AHook: TCallerCountsHook);
+
+/// <summary>Builds one routine line's code-lens label from its caller count,
+/// implementor count and exception title (wave 149).</summary>
+/// <param name="ACount">Caller count; -1 = no caller part (a line that only
+/// carries implementors or an exception title).</param>
+/// <param name="AImpls">Implementor count; 0 = no implementor part.</param>
+/// <param name="AExc">The engine's ExceptionLensTitle, e.g. 'raises 2 types,
+/// handles 1 type'; '' = no exception part.</param>
+/// <returns>The parts in the order callers, implementors, exceptions, each in
+/// brackets and separated by one space, e.g. '[1 caller] [raises 2 types]';
+/// '' when no part applies. With AExc = '' the result is the 1.48 label.</returns>
+function CallerLensLabel(ACount, AImpls: Integer; const AExc: string): string;  // dl:ok unused-public-symbol@2c75 -- public as the test seam: tests\CodeLensExceptionsTests.dpr (outside the plugin project) pins the label
+
+/// <summary>Reads a draglint/callerCounts reply into the four per-line arrays a
+/// TCallerCountsDone receives.</summary>
+/// <param name="AReply">The JSON-RPC reply; 'result.counts', 'result.implementors'
+/// and 'result.exceptions' are read (a top-level 'counts' etc. is accepted too).
+/// Not owned: the caller frees it.</param>
+/// <param name="ALines">0-based routine lines, in the engine's line space.</param>
+/// <param name="ACounts">Caller count per line; -1 = no caller entry (the line came
+/// from implementors or exceptions only).</param>
+/// <param name="AImpls">Implementor count per line; 0 = none.</param>
+/// <param name="AExcs">Exception title per line; '' = none. All four arrays have the
+/// same length. An engine without 'exceptions' (&lt;= 1.48) gives all ''.</param>
+/// <returns>True when the reply carries a 'counts' array; False (all arrays empty)
+/// otherwise.</returns>
+/// <remarks>Pure: no IDE, no I/O. May raise on malformed JSON values; the LSP reply
+/// handler catches and treats that as no answer.</remarks>
+function ParseCallerCountsReply(AReply: TJSONValue; out ALines, ACounts, AImpls: TArray<Integer>;
+  out AExcs: TArray<string>): Boolean;
 
 /// <returns><!-- drag-lint:auto -->TDragLintCodeLensCache -- Observed: GCodeLensCache.</returns>
 /// <remarks>
@@ -449,6 +481,85 @@ procedure SetCallerCountsHook(const AHook: TCallerCountsHook);
 begin
   GCallerCountsHook:= AHook;
 end;
+
+function CallerLensLabel(ACount, AImpls: Integer; const AExc: string): string;
+begin
+  Result:= '';
+  if ACount = 1 then Result:= '[1 caller]'
+  else if ACount >= 0 then Result:= Format('[%d callers]', [ACount]);
+  if AImpls > 0 then
+    Result:= Result + (if Result = '' then '' else ' ') + (if AImpls = 1 then '[1 implementor]' else Format('[%d implementors]', [AImpls]));
+  if AExc <> '' then
+    Result:= Result + (if Result = '' then '' else ' ') + '[' + AExc + ']';
+end; // function
+
+{ Finds ALine in ALines; on a miss appends a line with no caller entry (count -1)
+  to all four arrays. Returns the index either way. }
+function LensLineIndex(var ALines, ACounts, AImpls: TArray<Integer>; var AExcs: TArray<string>;
+  ALine: Integer): Integer;
+begin
+  for var K:= 0 to High(ALines) do
+    if ALines[K] = ALine then Exit(K);
+  ALines := ALines  + [ALine];
+  ACounts:= ACounts + [-1];
+  AImpls := AImpls  + [0];
+  AExcs  := AExcs   + [''];
+  Result:= High(ALines);
+end; // function
+
+{ The reply's array AName under 'result.' (the JSON-RPC envelope) or at top level. }
+function ReplyArray(AObj: TJSONObject; const AName: string): TJSONArray;
+begin
+  Result:= nil;
+  if not AObj.TryGetValue<TJSONArray>('result.' + AName, Result) then
+    AObj.TryGetValue<TJSONArray>(AName, Result);
+end; // function
+
+function ParseCallerCountsReply(AReply: TJSONValue; out ALines, ACounts, AImpls: TArray<Integer>;
+  out AExcs: TArray<string>): Boolean;
+var
+  Arr: TJSONArray;
+begin
+  Result:= False;
+  SetLength(ALines , 0);
+  SetLength(ACounts, 0);
+  SetLength(AImpls , 0);
+  SetLength(AExcs  , 0);
+  if AReply is not TJSONObject then Exit;
+  Arr:= ReplyArray(TJSONObject(AReply), 'counts');
+  if Arr = nil then Exit;
+  Result:= True;
+  SetLength(ALines , Arr.Count);
+  SetLength(ACounts, Arr.Count);
+  for var I:= 0 to Arr.Count - 1 do
+    if Arr.Items[I] is TJSONObject then
+    begin
+      ALines [I]:= TJSONObject(Arr.Items[I]).GetValue<Integer>('line' , -1);
+      ACounts[I]:= TJSONObject(Arr.Items[I]).GetValue<Integer>('count', 0 );
+    end
+    else ALines[I]:= -1;
+  SetLength(AImpls, Length(ALines));
+  SetLength(AExcs , Length(ALines));
+  { 1.40 ifrpt: 'implementors' = (line, count) objects -- merged onto a caller
+    line, or a line of its own with no caller label. Wave 149: 'exceptions' =
+    (line, title) objects, merged the same way. An older engine sends neither. }
+  Arr:= ReplyArray(TJSONObject(AReply), 'implementors');
+  if Arr <> nil then
+    for var J:= 0 to Arr.Count - 1 do
+      if Arr.Items[J] is TJSONObject then
+      begin
+        var Hit:= LensLineIndex(ALines, ACounts, AImpls, AExcs, TJSONObject(Arr.Items[J]).GetValue<Integer>('line', -1));
+        AImpls[Hit]:= TJSONObject(Arr.Items[J]).GetValue<Integer>('count', 0);
+      end;
+  Arr:= ReplyArray(TJSONObject(AReply), 'exceptions');
+  if Arr <> nil then
+    for var J:= 0 to Arr.Count - 1 do
+      if Arr.Items[J] is TJSONObject then
+      begin
+        var Hit:= LensLineIndex(ALines, ACounts, AImpls, AExcs, TJSONObject(Arr.Items[J]).GetValue<Integer>('line', -1));
+        AExcs[Hit]:= TJSONObject(Arr.Items[J]).GetValue<string>('title', '');
+      end;
+end; // function
 
 { ---- parse caller count from "drag-lint query find-callers" output ---- }
 
@@ -704,7 +815,7 @@ begin
       activation -- the 13-minute callerCounts of the report would otherwise
       be re-sent each time the user returned to that tab. }
     if GCallerCountsHook(AFilePath,
-      procedure(AOk: Boolean; const HLines, HCounts, HImpls: TArray<Integer>)
+      procedure(AOk: Boolean; const HLines, HCounts, HImpls: TArray<Integer>; const HExcs: TArray<string>)
       var
         Inn: TDictionary<Integer, string>;
       begin
@@ -716,12 +827,9 @@ begin
               cache stores -- the conversion lives on the server so exactly one
               place knows about the offset. }
             if HLines[K] < 0 then Continue;
-            var Lbl:= '';
-            if HCounts[K] = 1 then Lbl:= '[1 caller]'
-            else if HCounts[K] >= 0 then Lbl:= Format('[%d callers]', [HCounts[K]]);
-            var NImpl:= if K <= High(HImpls) then HImpls[K] else 0;
-            if NImpl > 0 then
-              Lbl:= Lbl + (if Lbl = '' then '' else ' ') + (if NImpl = 1 then '[1 implementor]' else Format('[%d implementors]', [NImpl]));
+            var Lbl:= CallerLensLabel(HCounts[K],
+              if K <= High(HImpls) then HImpls[K] else 0,
+              if K <= High(HExcs) then HExcs[K] else '');
             if Lbl <> '' then Inn.AddOrSetValue(HLines[K], Lbl);
           end;
         StoreForFile(Key, Inn);

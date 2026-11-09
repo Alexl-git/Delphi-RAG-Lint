@@ -6522,10 +6522,10 @@ begin
       Id:= Cli.RequestAsync('draglint/callerCounts', Params, CALLER_COUNTS_TIMEOUT_MS,
         procedure(AId: Integer; AStatus: TDLLspReplyStatus; AReply: TJSONValue)
         var
-          Arr    : TJSONArray;
           Lines  : TArray<Integer>;
           Counts : TArray<Integer>;
           Impls  : TArray<Integer>;
+          Excs   : TArray<string> ;
           Ok     : Boolean;
         begin
           if AStatus = lrsTimeout then
@@ -6538,64 +6538,22 @@ begin
             GCallerCountsId    := 0;
             GCallerCountsClient:= nil;
           end;
-          Ok:= False;
-          SetLength(Lines , 0);
-          SetLength(Counts, 0);
-          SetLength(Impls , 0);
+          { counts / implementors (1.40) / exceptions (wave 149) -- the parse lives
+            in CodeLensCache.ParseCallerCountsReply so a console test pins it. }
           try
-            if AReply is TJSONObject then
-            begin
-              { The counts live under 'result' in the JSON-RPC envelope; a
-                top-level 'counts' is accepted too (the shape the synchronous
-                reader looked for). }
-              Arr:= nil;
-              if not (AReply as TJSONObject).TryGetValue<TJSONArray>('result.counts', Arr) then
-                (AReply as TJSONObject).TryGetValue<TJSONArray>('counts', Arr);
-              if Arr <> nil then
-              begin
-                SetLength(Lines , Arr.Count);
-                SetLength(Counts, Arr.Count);
-                Ok:= True;
-                for var I:= 0 to Arr.Count - 1 do
-                  if Arr.Items[I] is TJSONObject then
-                  begin
-                    Lines [I]:= (Arr.Items[I] as TJSONObject).GetValue<Integer>('line' , -1);
-                    Counts[I]:= (Arr.Items[I] as TJSONObject).GetValue<Integer>('count', 0 );
-                  end
-                  else Lines[I]:= -1;
-                SetLength(Impls, Length(Lines));
-                { 1.40 ifrpt: 'implementors' = an array of (line, count) objects -- merged onto a caller line, or a
-                  line of its own with no caller label (count -1). An older engine sends none. }
-                var IArr: TJSONArray:= nil;
-                if not (AReply as TJSONObject).TryGetValue<TJSONArray>('result.implementors', IArr) then
-                  (AReply as TJSONObject).TryGetValue<TJSONArray>('implementors', IArr);
-                if IArr <> nil then
-                  for var J:= 0 to IArr.Count - 1 do
-                    if IArr.Items[J] is TJSONObject then
-                    begin
-                      var ILine:= (IArr.Items[J] as TJSONObject).GetValue<Integer>('line' , -1);
-                      var ICnt := (IArr.Items[J] as TJSONObject).GetValue<Integer>('count', 0 );
-                      var Hit:= -1;
-                      for var K:= 0 to High(Lines) do
-                        if Lines[K] = ILine then Hit:= K;
-                      if Hit < 0 then
-                      begin
-                        Lines := Lines  + [ILine];
-                        Counts:= Counts + [-1];
-                        Impls := Impls  + [ICnt];
-                      end
-                      else Impls[Hit]:= ICnt;
-                    end;
-              end;
-            end;
+            Ok:= ParseCallerCountsReply(AReply, Lines, Counts, Impls, Excs);
           except
             on E: Exception do
             begin
               DLT('codelens', 'callerCounts parse raised: ' + E.Message);
               Ok:= False;
+              SetLength(Lines , 0);
+              SetLength(Counts, 0);
+              SetLength(Impls , 0);
+              SetLength(Excs  , 0);
             end;
           end;
-          ADone(Ok, Lines, Counts, Impls);
+          ADone(Ok, Lines, Counts, Impls, Excs);
           ForceGutterRepaint;
         end);
     finally
