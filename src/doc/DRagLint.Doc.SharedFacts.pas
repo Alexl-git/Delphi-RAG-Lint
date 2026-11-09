@@ -654,9 +654,9 @@ const
     property / field, rendered in place of 'Used by:' (FormatUsedInLine). }
   { Wave 148 UP: 'Used in (via property ' -- a getter/setter's echo line; the
     property name and '):' follow, so the registered label is the fixed prefix
-    (the 'Overload ' precedent). Block boundary only: it is NOT in
-    ProjectTags.INBOUND_LABELS, so a dl:shared unit does not reconcile it per
-    project (wave 149 row). }
+    (the 'Overload ' precedent). Wave 149 LX: also INBOUND -- ProjectTags.FindInboundLabel
+    matches it whole ('Used in (via property X):'), so a dl:shared unit reconciles each
+    property's line per project like 'Used in:' (run_shared_via_property_guard). }
   ALL_LABELS: array[0..33] of string = (
     'Called from:', 'Used by:', 'Used in:', 'Used in (via property ', 'Calls:', 'Returns:', 'Used in units:',
     'Used in classes:',
@@ -1126,7 +1126,7 @@ var
   Text  : string;
   Sb    : TStringBuilder;
   Pos1  : Integer;
-  I, LP : Integer;
+  LP    : Integer;
   Lab   : string;
   Stop  : Integer;
 begin
@@ -1158,17 +1158,9 @@ begin
     Pos1:= 1;
     while Pos1 <= Length(Text) do
     begin
-      LP:= 0;
-      Lab:= '';
-      for I:= Low(INBOUND_LABELS) to High(INBOUND_LABELS) do
-      begin
-        var P: Integer:= PosEx(INBOUND_LABELS[I], Text, Pos1);
-        if (P > 0) and ((LP = 0) or (P < LP)) then
-        begin
-          LP := P;
-          Lab:= INBOUND_LABELS[I];
-        end;
-      end;
+      { 149 LX: the earliest inbound label, an accessor echo 'Used in (via property X):' included
+        (keyed whole, one key per property). }
+      LP:= FindInboundLabel(Text, Pos1, Lab);
       if LP = 0 then
       begin
         Sb.Append(Copy(Text, Pos1, MaxInt));
@@ -1185,6 +1177,59 @@ begin
   end;
 end;
 
+{ Wave 149 LX: the inbound labels to walk for one or two parsed blocks -- INBOUND_LABELS in
+  their fixed order, then every accessor echo label ('Used in (via property X):') either map
+  holds, sorted, each once. The via labels are keys of their own (FindInboundLabel), one per
+  property, so they cannot be listed up front. }
+function InboundKeys(const A, B: TFactMap): TArray<string>;
+var
+  Via: TStringList;
+begin
+  Result:= nil;
+  for var L: string in INBOUND_LABELS do Result:= Result + [L];
+  Via:= TStringList.Create;
+  try
+    Via.Sorted    := True;
+    Via.Duplicates:= dupIgnore;
+    if A <> nil then
+      for var K: string in A.Keys do
+        if IsViaPropertyLabel(K) then Via.Add(K);
+    if B <> nil then
+      for var K: string in B.Keys do
+        if IsViaPropertyLabel(K) then Via.Add(K);
+    for var K: string in Via do Result:= Result + [K];
+  finally
+    Via.Free;
+  end;
+end;
+
+{ Wave 149 LX: InboundKeys over raw block TEXT (before any parse): INBOUND_LABELS, then every
+  accessor echo label found in A or B. }
+function InboundLabelsInText(const A, B: string): TArray<string>;
+var
+  Via: TStringList;
+  Lab: string;
+begin
+  Result:= nil;
+  for var L: string in INBOUND_LABELS do Result:= Result + [L];
+  Via:= TStringList.Create;
+  try
+    Via.Sorted    := True;
+    Via.Duplicates:= dupIgnore;
+    for var S: string in TArray<string>.Create(A, B) do
+    begin
+      var P: Integer:= FindInboundLabel(S, 1, Lab);
+      while P > 0 do
+      begin
+        if IsViaPropertyLabel(Lab) then Via.Add(Lab);
+        P:= FindInboundLabel(S, P + Length(Lab), Lab);
+      end;
+    end;
+    for var K: string in Via do Result:= Result + [K];
+  finally
+    Via.Free;
+  end;
+end;
 { Declared here rather than moved: UnitVouchable lives further down beside
   RegenerationDropsUnvouchable, which is where it was introduced, and the
   reconciliation below needs it. A forward declaration keeps the ordering legal
@@ -1227,7 +1272,6 @@ var
   SIn : TFactMap;
   SRes: string;
   Lab, SC, E: string;
-  I   : Integer;
 begin
   Result:= False;
   if (AStore = nil) or (ABlock = '') then Exit;
@@ -1236,9 +1280,8 @@ begin
     see is found by the entry loop below -- no whole-label special case. }
   ParseBlock(ABlock, SIn, SRes);
   try
-    for I:= Low(INBOUND_LABELS) to High(INBOUND_LABELS) do
+    for Lab in InboundKeys(SIn, nil) do
     begin
-      Lab:= INBOUND_LABELS[I];
       if not SIn.TryGetValue(Lab, SC) then Continue;
       { The window marker is not an entry. Split in as one, `X (+3 more)` read
         as naming a unit called '+3 more' that no index holds -- so every
@@ -1562,7 +1605,6 @@ var
   FreshSet      : TDictionary<string, Byte>;
   StoredSet     : TDictionary<string, Byte>;
   E             : string;
-  I             : Integer;
   StoredCmp     : string;
   FreshCmp      : string;
   IsShared      : Boolean;
@@ -1626,9 +1668,9 @@ begin
     went green against the set compare until this guard was added. That control
     exists because the surrounding forgiveness rules are easy to widen into
     "reports nothing", and it caught this on the first battery. }
-  for I:= Low(INBOUND_LABELS) to High(INBOUND_LABELS) do
-    if (ParaLabelCount(StoredCmp, INBOUND_LABELS[I]) > 1) or
-       (ParaLabelCount(FreshCmp,  INBOUND_LABELS[I]) > 1) then
+  for Lab in InboundLabelsInText(StoredCmp, FreshCmp) do
+    if (ParaLabelCount(StoredCmp, Lab) > 1) or
+       (ParaLabelCount(FreshCmp,  Lab) > 1) then
     begin
       { EXCEPT when this project renders NOTHING for the symbol and the stored
         block holds entries only another project could have written -- the
@@ -1668,9 +1710,8 @@ begin
         nothing about sharing makes a wrong Calls: or Complexity: line right. }
       if SRes <> FRes then Exit(True);
 
-      for I:= Low(INBOUND_LABELS) to High(INBOUND_LABELS) do
+      for Lab in InboundKeys(SIn, FIn) do
       begin
-        Lab:= INBOUND_LABELS[I];
         if not SIn.TryGetValue(Lab, SC) then SC:= '';
         if not FIn.TryGetValue(Lab, FC) then FC:= '';
         if (SC = '') and (FC = '') then Continue;
@@ -1755,7 +1796,6 @@ var
   Lab : string  ;
   SC  : string  ;
   E   : string  ;
-  I   : Integer ;
   Tags: TArray<string>;
   Bare: string  ;
 begin
@@ -1771,9 +1811,8 @@ begin
 
   ParseBlock(AStoredBody, SIn, SRes);
   try
-    for I:= Low(INBOUND_LABELS) to High(INBOUND_LABELS) do
+    for Lab in InboundKeys(SIn, nil) do
     begin
-      Lab:= INBOUND_LABELS[I];
       if not SIn.TryGetValue(Lab, SC) then Continue;
       if SC = '' then Continue;
       { A TRUNCATED line is deliberately treated as foreign-bearing. The window
@@ -1851,10 +1890,10 @@ var
   P      : Integer;
 begin
   Result:= '';
-  for Lab in INBOUND_LABELS do
+  { 149 LX: FindInboundLabel (an accessor echo line included); one label per fact line. }
+  P:= FindInboundLabel(ALine, 1, Lab);
+  if P > 0 then
   begin
-    P:= Pos(Lab, ALine);
-    if P = 0 then Continue;
     AHandled.AddOrSetValue(Lab, 1);
     if not ASIn.TryGetValue(Lab, SC) then Exit;
 
@@ -1932,7 +1971,6 @@ var
   SRes      : string;
   Lines     : TStringList;
   Handled   : TDictionary<string, Byte>;
-  J         : Integer;
   Body      : string;
   Lab, SC   : string;
   Prefix    : string;
@@ -1997,9 +2035,8 @@ begin
         predecessor (ReinsertAt) -- the top of the block for 'Called from:'/
         'Used by:', the first lines RenderFactsBlock emits. }
       if BeginAt >= 0 then
-        for J:= Low(INBOUND_LABELS) to High(INBOUND_LABELS) do
+        for Lab in InboundKeys(SIn, nil) do
         begin
-          Lab:= INBOUND_LABELS[J];
           if Handled.ContainsKey(Lab) then Continue;
           if not SIn.TryGetValue(Lab, SC) then Continue;
           Body:= ReconcileContent(AStore, SC, '');
@@ -2336,7 +2373,7 @@ begin
     ParseBlock(AFresh, FreshIn, FreshRes);
     Kept:= TDictionary<string, Byte>.Create;
     try
-      for Lab in INBOUND_LABELS do
+      for Lab in InboundKeys(StoredIn, FreshIn) do
       begin
         if not StoredIn.TryGetValue(Lab, SC) then Continue;
         if not FreshIn.TryGetValue(Lab, Fresh) then Fresh:= '';
@@ -2388,7 +2425,7 @@ begin
   try
     ParseBlock(AFresh, FreshIn, FreshRes);
     try
-      for Lab in INBOUND_LABELS do
+      for Lab in InboundKeys(SIn, FreshIn) do
       begin
         if not SIn.TryGetValue(Lab, SC) then Continue;
         if Trim(SC) = '' then Continue;
