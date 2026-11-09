@@ -2901,6 +2901,24 @@ type
     /// <param name="AFileId">files.id of the file.</param>
     /// <returns>Empty when the file has none or HasFileFacts is False.</returns>
     function GetPpRegions(AFileId: Int64): TArray<TPpRegionRow>;
+    /// <summary>150 EX3: replaces one setting's project_settings rows of the file in
+    /// AToken (a .dpr / .dpk) with AValues, one row per value in order (ordinal 0..).</summary>
+    /// <param name="AToken">The open file tx; supplies file_id.</param>
+    /// <param name="ASetting">The setting name, e.g. 'DCC_Namespace'.</param>
+    /// <param name="AValues">The values in project order; empty deletes the setting's rows.</param>
+    /// <remarks>
+    /// Called inside the file tx, so a rolled-back parse keeps the old rows. A no-op when
+    /// the table is absent (a DB below schema v24 opened read-only). Part of the extractor
+    /// guard's emit list.
+    /// </remarks>
+    procedure PutProjectSettings(const AToken: TFileTxToken; const ASetting: string; const AValues: TArray<string>);
+    /// <summary>150 EX3: the project_settings values of one setting, ordered by file, then
+    /// ordinal.</summary>
+    /// <param name="ASetting">The setting name, e.g. 'DCC_Namespace'.</param>
+    /// <param name="AFileId">files.id of the .dpr / .dpk; 0 = every project file of the DB
+    /// (a project DB holds one).</param>
+    /// <returns>Empty when the table is absent, the project has no .dproj or names no value.</returns>
+    function GetProjectSettings(const ASetting: string; AFileId: Int64 = 0): TArray<string>;
     /// <summary>Rows whose destination is AT one site (an 'arg' / 'write' call or
     /// member-write ref position, or a field/global/result/outparam write site).</summary>
     /// <param name="AFileId">files.id of the site.</param>

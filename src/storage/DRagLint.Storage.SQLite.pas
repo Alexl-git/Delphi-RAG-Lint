@@ -3067,6 +3067,16 @@ type
       procedure PutFileFacts(const AToken: TFileTxToken; const AIncludes: TArray<TFileIncludeRow>;
         const ADfmObjects: TArray<TDfmObjectRow>; const APpRegions: TArray<TPpRegionRow>;
         const ASymbolIds: TDictionary<Integer, Int64>);
+      /// <summary>150 EX3: implements ISymbolStore.PutProjectSettings (project_settings).</summary>
+      /// <param name="AToken">The open file tx of the .dpr / .dpk.</param>
+      /// <param name="ASetting">The setting name.</param>
+      /// <param name="AValues">The values in order; empty deletes the setting's rows.</param>
+      procedure PutProjectSettings(const AToken: TFileTxToken; const ASetting: string; const AValues: TArray<string>);
+      /// <summary>150 EX3: implements ISymbolStore.GetProjectSettings.</summary>
+      /// <param name="ASetting">The setting name.</param>
+      /// <param name="AFileId">files.id of the project file; 0 = all.</param>
+      /// <returns>The values by file, ordinal; empty when the table is absent.</returns>
+      function GetProjectSettings(const ASetting: string; AFileId: Int64 = 0): TArray<string>;
       /// <summary>149 EX2: implements ISymbolStore.HasFileFacts.</summary>
       /// <returns>True when all three file-fact tables exist (probed once).</returns>
       /// <remarks>
@@ -5355,6 +5365,64 @@ begin
   end;
 end;
 
+{ 150 EX3 (schema v24, additive): project_settings -- see ISymbolStore.PutProjectSettings.
+  One .dpr / .dpk writes a handful of rows once per parse, so plain queries, no prepared cache. }
+procedure TSQLiteSymbolStore.PutProjectSettings(const AToken: TFileTxToken; const ASetting: string;
+  const AValues: TArray<string>);
+var
+  Q: TFDQuery;
+  I: Integer;
+begin
+  if not TableExists('project_settings') then Exit;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'DELETE FROM project_settings WHERE file_id = :fid AND setting = :set';
+    Q.ParamByName('fid').AsLargeInt  := AToken.FileId;
+    Q.ParamByName('set').AsWideString:= ASetting;
+    Q.ExecSQL;
+    Q.SQL.Text:= 'INSERT INTO project_settings(file_id, setting, ordinal, value) VALUES (:fid, :set, :ord, :val)';
+    for I:= 0 to High(AValues) do
+    begin
+      Q.ParamByName('fid').AsLargeInt  := AToken.FileId;
+      Q.ParamByName('set').AsWideString:= ASetting;
+      Q.ParamByName('ord').AsLargeInt  := I;
+      Q.ParamByName('val').AsWideString:= AValues[I];
+      Q.ExecSQL;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetProjectSettings(const ASetting: string; AFileId: Int64): TArray<string>;
+var
+  Q: TFDQuery;
+  L: TList<string>;
+begin
+  Result:= nil;
+  if not TableExists('project_settings') then Exit;
+  L:= TList<string>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT value FROM project_settings WHERE setting = :set AND (:fid = 0 OR file_id = :fid) ' +
+                   'ORDER BY file_id, ordinal';
+    Q.ParamByName('set').AsWideString:= ASetting;
+    Q.ParamByName('fid').AsLargeInt  := AFileId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      L.Add(Q.Fields[0].AsString);
+      Q.Next;
+    end;
+    Result:= L.ToArray;
+  finally
+    Q.Free;
+    L.Free;
+  end;
+end;
+
 function TSQLiteSymbolStore.ReadDataFlowRows(AQ: TFDQuery): TArray<TDataFlowRow>;
 var
   L: TList<TDataFlowRow>;
@@ -6546,6 +6614,15 @@ begin
           '  end_line   INTEGER NOT NULL,' +
           '  active     INTEGER NOT NULL)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_pp_regions_file ON pp_regions(file_id, region, branch)');
+  { 150 EX3 (schema v24, additive; declared by SC): per-project settings read from the .dproj
+    beside a .dpr / .dpk, keyed by that file and replaced on its every parse (PutProjectSettings).
+    setting 'DCC_Namespace' = the unit scopes in project order (ReadDprojUnitScopes). }
+  TryExec('CREATE TABLE IF NOT EXISTS project_settings (' +
+          '  file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,' +
+          '  setting TEXT    NOT NULL,' +
+          '  ordinal INTEGER NOT NULL,' +
+          '  value   TEXT    NOT NULL)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_project_settings_file ON project_settings(file_id, setting, ordinal)');
   { v0.85 PERF -- the three FK child columns that had no index.
 
     `PRAGMA foreign_keys = ON` is set on the write connection, so deleting a

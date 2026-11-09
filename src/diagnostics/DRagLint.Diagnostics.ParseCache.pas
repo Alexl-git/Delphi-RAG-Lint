@@ -242,7 +242,8 @@ type
 implementation
 
 uses
-  System.IOUtils, DRagLint.Core.Encoding;
+  System.IOUtils, System.StrUtils, DRagLint.Core.Encoding,
+  DRagLint.Index.IncludeUses; { 150 EX3: MarkUsesListIncludes in ApplyPreprocess }
 
 { DECLARED HERE, NOT IN THE INTERFACE, and that is the point rather than a
   tidiness preference. DRagLint.Parser.Delphi13 already exports this same
@@ -359,7 +360,16 @@ begin
       AUtf8 here silently discards the line-ending normalisation above whenever
       preprocessing is enabled, which is the default. Both are the same length,
       so this is not a behaviour change for any file without a lone CR. }
-    Result:= Preprocess(Result, PpOpts);
+    var Sites: TArray<TPPIncludeSite>;
+    var Normalised:= Result;
+    Result:= Preprocess(Normalised, PpOpts, Sites);
+    { 150 EX3 (EX2 150 row): the indexer's uses-list include patch, applied to the lint / LSP
+      parse too. A uses list that is an include directive, with the entries and the `;` in the .inc leaves the host a
+      uses clause with no entries once the directive is blanked; the clause then swallows the
+      next section and every rule saw a parser-error the indexer never had. Same call, same
+      guard as TIndexer.IndexFileBody: Delphi hosts only, same-length patch (offsets kept). }
+    if (Length(Sites) > 0) and MatchText(ExtractFileExt(AFile), ['.pas', '.dpr', '.dpk']) then
+      MarkUsesListIncludes(Sites, Normalised, Result);
   except
     { FAIL-OPEN, matching the indexer (Indexer.pas:948). If preprocessing throws,
       lint the RAW bytes: findings are KEPT. The safe direction here is noise,
