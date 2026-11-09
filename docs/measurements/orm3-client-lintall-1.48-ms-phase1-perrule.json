@@ -1,0 +1,824 @@
+[
+  {
+    "rule": "application-terminate-in-library",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "approx-constant",
+    "v146": 3,
+    "v148": 3,
+    "diff": 0
+  },
+  {
+    "rule": "argument-narrows",
+    "v146": 5,
+    "v148": 5,
+    "diff": 0
+  },
+  {
+    "rule": "assert-call",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "bare-except",
+    "v146": 45,
+    "v148": 45,
+    "diff": 0
+  },
+  {
+    "rule": "begin-end-pair-not-in-finally",
+    "v146": 9,
+    "v148": 9,
+    "diff": 0
+  },
+  {
+    "rule": "boolean-comparison-true",
+    "v146": 7,
+    "v148": 7,
+    "diff": 0
+  },
+  {
+    "rule": "boolean-expression-complexity",
+    "v146": 15,
+    "v148": 15,
+    "diff": 0
+  },
+  {
+    "rule": "case-magic-numbers",
+    "v146": 187,
+    "v148": 187,
+    "diff": 0
+  },
+  {
+    "rule": "case-same-branches",
+    "v146": 9,
+    "v148": 9,
+    "diff": 0
+  },
+  {
+    "rule": "case-with-too-few-branches",
+    "v146": 5,
+    "v148": 5,
+    "diff": 0
+  },
+  {
+    "rule": "circular-uses",
+    "v146": 2,
+    "v148": 2,
+    "diff": 0
+  },
+  {
+    "rule": "classname-string-compare",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "code-after-exit",
+    "v146": 22,
+    "v148": 22,
+    "diff": 0
+  },
+  {
+    "rule": "cognitive-complexity",
+    "v146": 38,
+    "v148": 38,
+    "diff": 0
+  },
+  {
+    "rule": "collapsible-if",
+    "v146": 44,
+    "v148": 44,
+    "diff": 0
+  },
+  {
+    "rule": "compiler-magic-comments",
+    "v146": 111,
+    "v148": 111,
+    "diff": 0
+  },
+  {
+    "rule": "concat-in-loop",
+    "v146": 76,
+    "v148": 75,
+    "diff": -1
+  },
+  {
+    "rule": "const-casing",
+    "v146": 193,
+    "v148": 193,
+    "diff": 0
+  },
+  {
+    "rule": "cyclomatic-complexity",
+    "v146": 63,
+    "v148": 64,
+    "diff": 1
+  },
+  {
+    "rule": "dataset-open-without-close",
+    "v146": 7,
+    "v148": 7,
+    "diff": 0
+  },
+  {
+    "rule": "deep-nesting",
+    "v146": 15,
+    "v148": 20,
+    "diff": 5
+  },
+  {
+    "rule": "dfm-property-not-declared",
+    "v146": 9,
+    "v148": 9,
+    "diff": 0
+  },
+  {
+    "rule": "discarded-effect-free-result",
+    "v146": 3,
+    "v148": 3,
+    "diff": 0
+  },
+  {
+    "rule": "doc-drift",
+    "v146": 171,
+    "v148": 191,
+    "diff": 20
+  },
+  {
+    "rule": "doc-param-not-in-signature",
+    "v146": 5,
+    "v148": 5,
+    "diff": 0
+  },
+  {
+    "rule": "double-dictionary-lookup",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "duplicate-code",
+    "v146": 736,
+    "v148": 736,
+    "diff": 0
+  },
+  {
+    "rule": "duplicate-global-decl",
+    "v146": 27,
+    "v148": 27,
+    "diff": 0
+  },
+  {
+    "rule": "empty-conditional",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "empty-except",
+    "v146": 9,
+    "v148": 9,
+    "diff": 0
+  },
+  {
+    "rule": "empty-procedure-body",
+    "v146": 24,
+    "v148": 24,
+    "diff": 0
+  },
+  {
+    "rule": "enum-ordinal-cast",
+    "v146": 10,
+    "v148": 10,
+    "diff": 0
+  },
+  {
+    "rule": "enum-ordinal-persisted",
+    "v146": 3,
+    "v148": 5,
+    "diff": 2
+  },
+  {
+    "rule": "exception-escapes-thread",
+    "v146": 3,
+    "v148": 3,
+    "diff": 0
+  },
+  {
+    "rule": "exhaustive-enum-case",
+    "v146": 34,
+    "v148": 34,
+    "diff": 0
+  },
+  {
+    "rule": "field-by-name-in-loop",
+    "v146": 9,
+    "v148": 9,
+    "diff": 0
+  },
+  {
+    "rule": "field-name-prefix",
+    "v146": 2140,
+    "v148": 2140,
+    "diff": 0
+  },
+  {
+    "rule": "float-equality-comparison",
+    "v146": 49,
+    "v148": 49,
+    "diff": 0
+  },
+  {
+    "rule": "for-bound-modified-in-body",
+    "v146": 1,
+    "v148": 0,
+    "diff": -1
+  },
+  {
+    "rule": "free-of-parameter",
+    "v146": 2,
+    "v148": 2,
+    "diff": 0
+  },
+  {
+    "rule": "function-result-not-set",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "gettickcount-wraparound",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "global-form-variable",
+    "v146": 39,
+    "v148": 39,
+    "diff": 0
+  },
+  {
+    "rule": "global-only-uses-edge",
+    "v146": 15,
+    "v148": 15,
+    "diff": 0
+  },
+  {
+    "rule": "god-class",
+    "v146": 44,
+    "v148": 45,
+    "diff": 1
+  },
+  {
+    "rule": "guid-on-generic-interface",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "halt-in-library",
+    "v146": 2,
+    "v148": 0,
+    "diff": -2
+  },
+  {
+    "rule": "hardcoded-absolute-path",
+    "v146": 10,
+    "v148": 10,
+    "diff": 0
+  },
+  {
+    "rule": "hardcoded-connection-string",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "high-response",
+    "v146": 57,
+    "v148": 57,
+    "diff": 0
+  },
+  {
+    "rule": "identical-then-else",
+    "v146": 3,
+    "v148": 3,
+    "diff": 0
+  },
+  {
+    "rule": "identity-op",
+    "v146": 2,
+    "v148": 2,
+    "diff": 0
+  },
+  {
+    "rule": "ifthen-both-branches",
+    "v146": 3,
+    "v148": 3,
+    "diff": 0
+  },
+  {
+    "rule": "ifthen-to-if-expression",
+    "v146": 344,
+    "v148": 340,
+    "diff": -4
+  },
+  {
+    "rule": "ignored-must-use-result",
+    "v146": 9,
+    "v148": 9,
+    "diff": 0
+  },
+  {
+    "rule": "inherited-bare",
+    "v146": 487,
+    "v148": 486,
+    "diff": -1
+  },
+  {
+    "rule": "inline-assembly",
+    "v146": 3,
+    "v148": 3,
+    "diff": 0
+  },
+  {
+    "rule": "inline-on-large-routine",
+    "v146": 12,
+    "v148": 12,
+    "diff": 0
+  },
+  {
+    "rule": "interface-without-guid",
+    "v146": 5,
+    "v148": 5,
+    "diff": 0
+  },
+  {
+    "rule": "is-always-true",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "is-not-operator",
+    "v146": 282,
+    "v148": 282,
+    "diff": 0
+  },
+  {
+    "rule": "is-prefix-not-boolean",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "large-magic-number",
+    "v146": 1196,
+    "v148": 1195,
+    "diff": -1
+  },
+  {
+    "rule": "length-zero-compare",
+    "v146": 13,
+    "v148": 13,
+    "diff": 0
+  },
+  {
+    "rule": "loadlibrary-relative-name",
+    "v146": 2,
+    "v148": 2,
+    "diff": 0
+  },
+  {
+    "rule": "local-field-prefix",
+    "v146": 39,
+    "v148": 39,
+    "diff": 0
+  },
+  {
+    "rule": "local-only-out-arg",
+    "v146": 0,
+    "v148": 25,
+    "diff": 25
+  },
+  {
+    "rule": "local-var-casing",
+    "v146": 886,
+    "v148": 886,
+    "diff": 0
+  },
+  {
+    "rule": "locale-sensitive-conversion",
+    "v146": 29,
+    "v148": 29,
+    "diff": 0
+  },
+  {
+    "rule": "loop-var-after-loop",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "lossy-cast",
+    "v146": 2,
+    "v148": 2,
+    "diff": 0
+  },
+  {
+    "rule": "low-cohesion",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "manual-inrange",
+    "v146": 20,
+    "v148": 20,
+    "diff": 0
+  },
+  {
+    "rule": "message-chain",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "method-pascalcase",
+    "v146": 742,
+    "v148": 742,
+    "diff": 0
+  },
+  {
+    "rule": "method-too-long",
+    "v146": 9,
+    "v148": 9,
+    "diff": 0
+  },
+  {
+    "rule": "missing-inherited-ctor",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "missing-inherited-dtor",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "mutable-global-variable",
+    "v146": 375,
+    "v148": 376,
+    "diff": 1
+  },
+  {
+    "rule": "needless-exit",
+    "v146": 5,
+    "v148": 5,
+    "diff": 0
+  },
+  {
+    "rule": "nested-with",
+    "v146": 8,
+    "v148": 8,
+    "diff": 0
+  },
+  {
+    "rule": "nil-check-after-dereference",
+    "v146": 2,
+    "v148": 2,
+    "diff": 0
+  },
+  {
+    "rule": "nonminimal-bool",
+    "v146": 62,
+    "v148": 62,
+    "diff": 0
+  },
+  {
+    "rule": "object-leak",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "out-param-not-set",
+    "v146": 4,
+    "v148": 3,
+    "diff": -1
+  },
+  {
+    "rule": "outputdebugstring",
+    "v146": 26,
+    "v148": 26,
+    "diff": 0
+  },
+  {
+    "rule": "overwrite-before-read",
+    "v146": 20,
+    "v148": 20,
+    "diff": 0
+  },
+  {
+    "rule": "parameter-type-too-wide",
+    "v146": 7,
+    "v148": 7,
+    "diff": 0
+  },
+  {
+    "rule": "pchar-arithmetic",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "pos-for-contains",
+    "v146": 43,
+    "v148": 43,
+    "diff": 0
+  },
+  {
+    "rule": "property-accessor-name",
+    "v146": 186,
+    "v148": 186,
+    "diff": 0
+  },
+  {
+    "rule": "public-field",
+    "v146": 96,
+    "v148": 96,
+    "diff": 0
+  },
+  {
+    "rule": "query-name-with-effect",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "raise-bare-exception",
+    "v146": 68,
+    "v148": 68,
+    "diff": 0
+  },
+  {
+    "rule": "read-never-assigned",
+    "v146": 19,
+    "v148": 22,
+    "diff": 3
+  },
+  {
+    "rule": "redundant-assigned-free",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "redundant-cast",
+    "v146": 2,
+    "v148": 2,
+    "diff": 0
+  },
+  {
+    "rule": "redundant-continue-exit",
+    "v146": 5,
+    "v148": 5,
+    "diff": 0
+  },
+  {
+    "rule": "redundant-parentheses",
+    "v146": 9,
+    "v148": 9,
+    "diff": 0
+  },
+  {
+    "rule": "referenced-never-set",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "reserved-word-casing",
+    "v146": 23,
+    "v148": 23,
+    "diff": 0
+  },
+  {
+    "rule": "review-marker-stale",
+    "v146": 3,
+    "v148": 3,
+    "diff": 0
+  },
+  {
+    "rule": "review-marker-unused",
+    "v146": 3,
+    "v148": 4,
+    "diff": 1
+  },
+  {
+    "rule": "sleep-in-vcl",
+    "v146": 19,
+    "v148": 19,
+    "diff": 0
+  },
+  {
+    "rule": "stat-gated-destructive",
+    "v146": 3,
+    "v148": 3,
+    "diff": 0
+  },
+  {
+    "rule": "stream-read-result-ignored",
+    "v146": 4,
+    "v148": 4,
+    "diff": 0
+  },
+  {
+    "rule": "string-equality-comparison",
+    "v146": 43,
+    "v148": 81,
+    "diff": 38
+  },
+  {
+    "rule": "suboptimal-math",
+    "v146": 4,
+    "v148": 4,
+    "diff": 0
+  },
+  {
+    "rule": "taint-command-injection",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "too-many-children",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "too-many-exit-points",
+    "v146": 144,
+    "v148": 144,
+    "diff": 0
+  },
+  {
+    "rule": "too-many-locals",
+    "v146": 5,
+    "v148": 5,
+    "diff": 0
+  },
+  {
+    "rule": "too-many-parameters",
+    "v146": 17,
+    "v148": 17,
+    "diff": 0
+  },
+  {
+    "rule": "try-except-swallowed",
+    "v146": 29,
+    "v148": 29,
+    "diff": 0
+  },
+  {
+    "rule": "type-name-prefix",
+    "v146": 60,
+    "v148": 60,
+    "diff": 0
+  },
+  {
+    "rule": "ui-access-in-thread-typed",
+    "v146": 0,
+    "v148": 1,
+    "diff": 1
+  },
+  {
+    "rule": "unit-too-large",
+    "v146": 22,
+    "v148": 22,
+    "diff": 0
+  },
+  {
+    "rule": "unreadable-literal",
+    "v146": 43,
+    "v148": 43,
+    "diff": 0
+  },
+  {
+    "rule": "unsafe-shellexecute",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "unsafe-string-api",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "unsigned-compare-always-true",
+    "v146": 3,
+    "v148": 3,
+    "diff": 0
+  },
+  {
+    "rule": "unused-enum-value",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "unused-global",
+    "v146": 19,
+    "v148": 19,
+    "diff": 0
+  },
+  {
+    "rule": "unused-local",
+    "v146": 293,
+    "v148": 292,
+    "diff": -1
+  },
+  {
+    "rule": "unused-parameter",
+    "v146": 46,
+    "v148": 46,
+    "diff": 0
+  },
+  {
+    "rule": "unused-private-member",
+    "v146": 12,
+    "v148": 11,
+    "diff": -1
+  },
+  {
+    "rule": "unused-public-symbol",
+    "v146": 135,
+    "v148": 139,
+    "diff": 4
+  },
+  {
+    "rule": "unused-unit-in-uses",
+    "v146": 3871,
+    "v148": 3610,
+    "diff": -261
+  },
+  {
+    "rule": "used-before-assignment",
+    "v146": 29,
+    "v148": 29,
+    "diff": 0
+  },
+  {
+    "rule": "useless-format",
+    "v146": 1,
+    "v148": 1,
+    "diff": 0
+  },
+  {
+    "rule": "uses-global-census",
+    "v146": 98,
+    "v148": 98,
+    "diff": 0
+  },
+  {
+    "rule": "uses-movable-to-implementation",
+    "v146": 290,
+    "v148": 289,
+    "diff": -1
+  },
+  {
+    "rule": "with-hides-outer-symbol",
+    "v146": 8242,
+    "v148": 8242,
+    "diff": 0
+  },
+  {
+    "rule": "with-statement",
+    "v146": 375,
+    "v148": 375,
+    "diff": 0
+  },
+  {
+    "rule": "write-only-local",
+    "v146": 10,
+    "v148": 10,
+    "diff": 0
+  },
+  {
+    "rule": "writeln-in-source",
+    "v146": 14,
+    "v148": 14,
+    "diff": 0
+  }
+]
