@@ -215,7 +215,7 @@ end;
 
 function RatioOf(const ATotals: TGainTotals): Double;
 begin
-  Result:= if ATotals.TokensReturned > 0 then TokensAvoided(ATotals) / ATotals.TokensReturned else 0;
+  Result:= if ATotals.TokensReturned > 0 then TokensAvoided(ATotals) / ATotals.TokensReturned else Double(0);
 end;
 
 function TotalsToJson(const ATotals: TGainTotals; const AKeyName, AKeyValue: string): TJSONObject;

@@ -296,7 +296,7 @@ end;
 
 function AsReal(const V: TPPValue): Double;
 begin
-  Result:= if V.Kind = pvkReal then V.Real else AsInt(V);
+  Result:= if V.Kind = pvkReal then V.Real else Double(AsInt(V));
 end;
 
 // -1 / 0 / 1 comparison of two values: string vs string, else numeric.
