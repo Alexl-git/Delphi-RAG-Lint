@@ -154,6 +154,14 @@ try {
   finally { foreach ($v in 'DRAGLINT_TEST_RESOLVE_DELAY_MS', 'DRAGLINT_TEST_REINDEX_TIMEOUT_MS') { [Environment]::SetEnvironmentVariable($v, $null) } }
   Check 'M0: precondition -- the timed-out child left a DB file' (Test-Path (Db $pm)) ("stderr=" + $rm.Err.Trim())
   Check 'M1: a timed-out build says the index is INCOMPLETE and how to finish it' ($rm.Err -match 'INCOMPLETE.*drag-lint index --project') ("stderr=" + $rm.Err.Trim())
+  # O -- 149 IC (148 IX row): the auto-create caller's failure line names ITS verb, not 'rename:'.
+  Check 'O: the timed-out auto-create names its own verb, not rename:' (($rm.Err -match 'auto-create: reindex failed') -and ($rm.Err -notmatch 'rename: reindex failed')) ("stderr=" + $rm.Err.Trim())
+  # N -- 149 IC (148 IX row): every LATER reader of the half-built index is told so, not only the run
+  # that built it. N0 is the control: the complete index of arm A draws no such note.
+  $rn0 = Invoke-Q $deployed @('query', '--name', 'FooMarker', '--project', "$pa\App.dpr")
+  Check 'N0: control -- a completed index draws no INCOMPLETE note' ($rn0.Err -notmatch 'INCOMPLETE') ("stderr=" + $rn0.Err.Trim())
+  $rn = Invoke-Q $deployed @('query', '--name', 'FooMarker', '--project', "$pm\App.dpr")
+  Check 'N1: a later reader of the half-built index is told it is INCOMPLETE' ($rn.Err -match 'INCOMPLETE') ("stderr=" + $rn.Err.Trim())
 } finally {
   if (Test-Path -LiteralPath $WorkDir) { try { [IO.Directory]::Delete($WorkDir, $true) } catch { Write-Host "  (cleanup: $_)" } }
 }
