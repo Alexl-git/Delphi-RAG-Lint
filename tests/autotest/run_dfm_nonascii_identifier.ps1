@@ -28,10 +28,25 @@ param(
 )
 try {
 $ErrorActionPreference = 'Continue'
-# 149 INT: the engine is asked for --output-encoding utf8, so decode its stdout as UTF-8 too. Under the
-# battery (redirected stdout) pwsh otherwise decodes with the OEM code page and every non-ASCII name
-# compares unequal (D1a/D1b/D1d/D1f FAILED in the battery, PASSED in a console).
-[Console]::OutputEncoding = [Text.Encoding]::UTF8
+# 150 HG: the engine is asked for --output-encoding utf8, and its stdout is decoded as UTF-8 EXPLICITLY by
+# RunEngine (System.Diagnostics.Process, StandardOutputEncoding = UTF8), never through the console code page.
+# History: under the battery (redirected stdout) pwsh decoded native output with the OEM code page and every
+# non-ASCII name compared unequal (D1a/D1b/D1d/D1f FAILED in the battery, PASSED in a console); 149 INT patched
+# it by setting [Console]::OutputEncoding, which still depends on the host. Bytes are now compared as UTF-8.
+function RunEngine([string[]]$EngineArgs) {
+  $psi = New-Object Diagnostics.ProcessStartInfo
+  $psi.FileName = $Exe
+  foreach ($a in $EngineArgs) { [void]$psi.ArgumentList.Add($a) }
+  $psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+  $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+  $psi.StandardOutputEncoding = [Text.Encoding]::UTF8; $psi.StandardErrorEncoding = [Text.Encoding]::UTF8
+  $p = [Diagnostics.Process]::Start($psi)
+  $p.StandardInput.Close()
+  $errTask = $p.StandardError.ReadToEndAsync()
+  $out = $p.StandardOutput.ReadToEnd()
+  $p.WaitForExit()
+  return [pscustomobject]@{ Code = $p.ExitCode; Out = $out; Err = $errTask.Result }
+}
 $script:fail = $false
 function Check($n,$ok,$d=''){
   Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int][bool]$ok]),$n) -ForegroundColor (@('Red','Green')[[int][bool]$ok])
@@ -49,7 +64,7 @@ function Show([string]$s) { return ($s -replace [char]0x00DC,'<U>' -replace [cha
 
 # sql --json: {columns:[{name}], rows:[[positional]]} -- map rows onto the column names (lesson: $row.name is $null).
 function SqlRows([string]$Db, [string]$Query) {
-  $o = ($null | & $Exe sql --query $Query --db $Db --json --output-encoding utf8 2>&1) -join ''
+  $o = (RunEngine @('sql', '--query', $Query, '--db', $Db, '--json', '--output-encoding', 'utf8')).Out
   $a = $o.IndexOf('{'); if ($a -lt 0) { return ,@() }
   $j = $o.Substring($a) | ConvertFrom-Json
   $names = @($j.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
@@ -111,10 +126,11 @@ function NewCase([string]$Name, [Text.Encoding]$Enc) {
   return $d
 }
 function Apply([string]$Dir, [string]$Only) {
-  $o = ($null | & $Exe convert-apply --unit "$Dir\Form1.pas" --rules "$Dir\book.rules" --db "$Dir\fx.sqlite" --format json --only $Only --output-encoding utf8 2>&1) -join "`n"
+  $e = RunEngine @('convert-apply', '--unit', "$Dir\Form1.pas", '--rules', "$Dir\book.rules", '--db', "$Dir\fx.sqlite", '--format', 'json', '--only', $Only, '--output-encoding', 'utf8')
+  $o = $e.Out + "`n" + $e.Err
   $a = $o.IndexOf('{'); $b = $o.LastIndexOf('}')
   $j = $null; if ($a -ge 0 -and $b -gt $a) { try { $j = $o.Substring($a, $b - $a + 1) | ConvertFrom-Json } catch { $j = $null } }
-  return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o; Json = $j }
+  return [pscustomobject]@{ Code = $e.Code; Out = $o; Json = $j }
 }
 function Located($r, [string]$Name) {
   $j = $r.Json
