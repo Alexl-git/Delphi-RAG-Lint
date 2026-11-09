@@ -10897,7 +10897,16 @@ begin
         if Result.MemberMode = '' then Result.MemberMode:= 'read';
       end
       else
-        Result.ValueOnly:= True;
+      begin
+        { 150-RS2 (3) / 150-RB2-b: rung 3c (`TCmd.cmdLoad`) gets the use edge its bare form gets from
+          ResolveEnumValueRefs -- a member_accesses row with the mode, receiver = the declaring enum /
+          class / record. ValueOnly stays set: the store counts it on the values line, not as an edge. }
+        var Mode: string:= MemberAccessMode(ACallRef);
+        var Use: TCallEdge:= ValueUseEdge(ACallRef, Target, if Mode = '' then 'read' else Mode);
+        Result.MemberMode:= Use.MemberMode; // '' (identity only) for a routine-local value
+        if Use.ReceiverTypeSymbolId > 0 then Result.ReceiverTypeSymbolId:= Use.ReceiverTypeSymbolId;
+        Result.ValueOnly := True;
+      end;
       Exit;
     end;
   end;

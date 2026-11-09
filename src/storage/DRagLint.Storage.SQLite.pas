@@ -17683,6 +17683,7 @@ begin
             that moves UnitValueBound, so it is counted on the unit-values line,
             not into Written (reported as edge(s), which it earns none of). }
           if Resolver.UnitValueBound > UnitValuesBefore then Inc(WrittenUnitValues)
+          else if Edge.ValueOnly then Inc(WrittenValues) // 150-RS2 (3): rung 3c's use edge, not a call edge
           else Inc(Written);
         end
         { 2026-09-23 (enum-value-ref-binding): a QUALIFIED enum value --
