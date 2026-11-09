@@ -922,6 +922,7 @@ type
       pUsed: TDictionary<string, Boolean>): Boolean;
     function BuildSwitches(var pItem: TMoveItem): Boolean;
     function FindCtor(const pItem: TMoveItem; const pName: string; out pSig, pWhy: string): Boolean;
+    function InheritedVisibility(const pItem: TMoveItem; const pName: string): string;
     function CtorTypeWhy(const pItem: TMoveItem; const pSig: string): string;
     function TakeCtor(var pItem: TMoveItem; const pF: TPlanFile; pLine: Integer; const pName: string): Boolean;
     function CtorSiteLine(const pItem: TMoveItem; out pFid: Int64): Integer;
@@ -2806,8 +2807,13 @@ begin
         call it through the class before, so the parent's declaration seen through the base changes no call
         (Loader TFolderWorker.Execute). A public / published override keeps the refusal below: the parent may
         declare it less visible (TThread.Execute is protected), which only --ctor-wide accepts. }
+      { 150-CY-10c (lane 150 CY1): a public / published override stays too when the nearest ancestor that declares
+        the method declares it public or published (project index first, then the platform library): a call through
+        the base class then compiles exactly as a call through the class did, and dispatches to the same body. }
       if (C.Kind in [skMethod, skFunction, skProcedure]) and SameText(Trim(C.Directives), 'override') and
-        (GCtorWide or (C.VisExplicit and MatchText(Trim(C.Modifiers), ['protected', 'private', 'strict protected', 'strict private']))) then Continue;
+        (GCtorWide or (C.VisExplicit and MatchText(Trim(C.Modifiers), ['protected', 'private', 'strict protected', 'strict private'])) or
+        (C.VisExplicit and MatchText(Trim(C.Modifiers), ['public', 'published']) and
+        MatchText(InheritedVisibility(pItem, C.Name), ['public', 'published']))) then Continue;
       { a field in the published section is what a .dfm streams into: FieldAddress finds it on the class that declares it,
         at run time; pulled into the base class it would turn protected (E-CTORINV-DEFAULT-PATH: no longer --ctor-wide only) }
       if (C.Kind = skField) and (ContainsText(C.Modifiers, 'published') or not C.VisExplicit) then
@@ -2954,6 +2960,46 @@ begin
     Cur:= Next;
   end;
   Result:= False;
+end;
+
+{ 150-CY-10c: the visibility (lower case, e.g. 'public', 'protected') of the method pName as the nearest ANCESTOR of
+  pItem's class declares it -- the class itself is skipped, the chain is read like FindCtor (project index first, then
+  the platform library; the widest class of a name). '' when no ancestor declares it, the chain cannot be read, or the
+  declaration has no explicit section (never guessed). }
+function TCyclePlanner.InheritedVisibility(const pItem: TMoveItem; const pName: string): string;
+const
+  CMaxDepth = 64;
+begin
+  Result:= '';
+  var Cur  := pItem.Sym;
+  var Store:= FStore;
+  for var Depth:= 1 to CMaxDepth do
+  begin
+    if Depth > 1 then
+      for var C in Store.FindAllChildSymbols(Cur.Id) do
+        if (C.Kind in [skMethod, skFunction, skProcedure]) and SameText(C.Name, pName) then
+          Exit(if C.VisExplicit then LowerCase(Trim(C.Modifiers)) else '');
+    if SameText(Cur.Name, 'TObject') then Exit;
+    var Parts:= SplitHeritage(Cur.Heritage);
+    var Parent:= if Length(Parts) > 0 then Parts[0] else 'TObject';
+    Parent:= Parent.Substring(Parent.LastIndexOf('.') + 1);
+    var Found:= False;
+    var Next := Default(TSymbol);
+    for var Source:= 0 to 1 do
+    begin
+      var S:= if Source = 0 then FStore else FLibStore;
+      if (S = nil) or Found then Continue;
+      for var Cand in S.FindSymbolsByExactName(Parent) do
+        if (Cand.Kind = skClass) and ((not Found) or (Cand.EndLine - Cand.StartLine > Next.EndLine - Next.StartLine)) then
+        begin
+          Next := Cand;
+          Store:= S;
+          Found:= True;
+        end;
+    end;
+    if not Found then Exit;
+    Cur:= Next;
+  end;
 end;
 
 { B8: '' when every parameter type of pSig can be named in the leaf: a plain name that is a System built-in or is
