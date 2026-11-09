@@ -6896,11 +6896,17 @@ end;
 { v21: opens --library-db paths as read-only extra stores for cross-DB call
   resolution. Failures are SKIPPED with a warning rather than fatal: a missing or
   stale library index must degrade the answer, never break the index run -- the
-  primary index is still perfectly valid without it. }
+  primary index is still perfectly valid without it.
+  149 INT: a STALE schema is skipped too. TSQLiteSymbolStore.Create does not raise on one -- it
+  returns a store whose prepared queries are nil -- and the calls stage then died in
+  TDataSet.GetActive (FindSymbolsByExactName via TLibraryOracle) on every index run against a
+  library still at the previous SCHEMA_VERSION (23 -> 24 in 149). Same rule as
+  OpenLibraryStoreIfCurrent; guard tests\autotest\run_index_stale_library_guard.ps1. }
 function OpenLibraryStores(const AArgs: TArgs): TArray<ISymbolStore>;
 var
   P: string;
   S: ISymbolStore;
+  Found, Expected: Integer;
 begin
   Result:= nil;
   for P in AArgs.LibraryDbs do
@@ -6912,6 +6918,11 @@ begin
     end;
     try
       S:= TSQLiteSymbolStore.Create(P);
+      if not S.IsSchemaCurrent(Found, Expected) then
+      begin
+        Writeln(ErrOutput, Format('  (library-db skipped, schema v%d, this build needs v%d -- re-index it) %s', [Found, Expected, P]));
+        Continue;
+      end;
       Result:= Result + [S];
       Writeln('  + library-db ', P);
     except
