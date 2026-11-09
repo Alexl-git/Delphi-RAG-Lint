@@ -11,8 +11,9 @@
   REGRESSION CONTROLS (parse on v1.4.2 and must stay clean):
     withSemi    the same declarations WITH ';', a string library, an index and a dependency
   ASSERTS: zero parser-error / syntax-error findings over the set, every routine is a symbol.
-  POSITIVE CONTROL: `external lib` with neither ';' nor `name` stays a finding: only the name
-  form was widened, and the zero is a real zero.
+  POSITIVE CONTROL: `external lib name` with no identifier and no ';' stays a finding, so the zero
+  is a real zero. (149 INT: grammar v1.4.7, lane GR, made a bare `external lib` without ';' PARSE on
+  purpose -- the old control form -- so the control moved to a form that is still invalid.)
 
   Usage: pwsh -File tests/autotest/run_grammar_external_no_semi.ps1 [-Exe <path>]
 #>
@@ -80,15 +81,15 @@ try {
   $good = Join-Path $WorkDir 'good'; $bad = Join-Path $WorkDir 'bad'
   [void][IO.Directory]::CreateDirectory($good); [void][IO.Directory]::CreateDirectory($bad)
   foreach ($k in $cases.Keys) { Write-Unit $good $k $cases[$k][0] $cases[$k][1] }
-  # POSITIVE CONTROL: no ';' and no `name`: outside the widened form, a real syntax error.
-  Write-Unit $bad 'libOnly' ($libConst + "function A: Integer; external lib`nfunction B: Integer; external lib;") ''
+  # POSITIVE CONTROL: `name` with no identifier and no ';': still a real syntax error on v1.4.7.
+  Write-Unit $bad 'libOnly' ($libConst + "function A: Integer; external lib name`nfunction B: Integer; external lib;") ''
 
   $gdb = Join-Path $good 'g.sqlite'; $bdb = Join-Path $bad 'b.sqlite'
   Check 'index exits 0 (good)' ((Build-Db $good $gdb) -eq 0)
   Check 'index exits 0 (bad)' ((Build-Db $bad $bdb) -eq 0)
 
   $badHits = Get-ParseFindings $bad $bdb
-  Check 'CONTROL `external lib` without ; or name raises a finding' ($badHits.Count -gt 0) "count=$($badHits.Count)"
+  Check 'CONTROL `external lib name` without an identifier or ; raises a finding' ($badHits.Count -gt 0) "count=$($badHits.Count)"
 
   $hits = Get-ParseFindings $good $gdb
   Check 'ASSERT zero parser-error/syntax-error over the set' ($hits.Count -eq 0) `

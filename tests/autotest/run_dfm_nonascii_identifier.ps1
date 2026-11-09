@@ -28,6 +28,10 @@ param(
 )
 try {
 $ErrorActionPreference = 'Continue'
+# 149 INT: the engine is asked for --output-encoding utf8, so decode its stdout as UTF-8 too. Under the
+# battery (redirected stdout) pwsh otherwise decodes with the OEM code page and every non-ASCII name
+# compares unequal (D1a/D1b/D1d/D1f FAILED in the battery, PASSED in a console).
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
 $script:fail = $false
 function Check($n,$ok,$d=''){
   Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int][bool]$ok]),$n) -ForegroundColor (@('Red','Green')[[int][bool]$ok])
