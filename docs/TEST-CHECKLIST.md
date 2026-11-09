@@ -26,3 +26,14 @@ Tools > drag-lint > drag-lint Panel (dockable) (or dock it from a previous sessi
 
 - [ ] B4. Open the Blast Radius tab, type a known symbol (e.g., a public method), and verify the tab label says "Blast radius of: <symbol>".
 - [ ] B5. Results show a flat list of direct usages by category (Reads, Writes, Calls, etc.) with a unit-impact count summary; no multi-level tree (transitive drill-down is a deferred follow-up).
+
+---
+
+## Y1. YADF false positive #6 -- try-except-swallowed marker (needs the IDE index)
+
+From the retired INBOX `yadf-false-positives-2026-11-03` (#6). Not reproducible in a fixture: the case needs a ToolsAPI-backed index
+(`DECLARED(IOTACodeFormatter)`). Run it once against the real YADF project in the IDE, with the current engine.
+
+- [ ] Y1.1. Open YADF.Options.pas in the IDE with the YADF project indexed (ToolsAPI units resolved), lint the unit.
+- [ ] Y1.2. A `dl:ok` marker over a `try ... except` that swallows must NOT be reported `review-marker-unused` while the finding it suppresses still fires without the marker.
+- [ ] Y1.3. Same unit, same DB copy, engine 1.41 and the current engine: the verdict must be identical. Record both; a difference is the open defect.
