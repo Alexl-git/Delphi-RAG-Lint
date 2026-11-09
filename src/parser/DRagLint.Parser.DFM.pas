@@ -159,6 +159,11 @@ uses
   DRagLint.Core.Encoding { 150 DF2: EnsureUtf8Bytes in ExtractDfmEventBindings }
   ;
 
+const
+  MaxDfmLiteralText   = 256; { stored literal text cap (the property-value backstop in WalkProperty) }
+  MaxParseErrorDepth  = 30;  { CollectParseErrors recursion cap }
+  MaxParseDiagnostics = 10;  { diagnostics kept per file by TDFMParser.Parse }
+
 { v22: collapse every run of whitespace to ONE space and trim.
   A local copy rather than a use of the identically-named helper in
   DRagLint.Parser.Delphi13: that one is implementation-only, and widening a
@@ -436,7 +441,7 @@ begin
       plan's figure; every value kind measured above is far below it, so the cap
       is a backstop rather than a routine truncation. Truncated rather than
       dropped: a searchable prefix beats an absent row. }
-    if Length(Lit.Text) > 256 then Lit.Text:= Copy(Lit.Text, 1, 256);
+    if Length(Lit.Text) > MaxDfmLiteralText then Lit.Text:= Copy(Lit.Text, 1, MaxDfmLiteralText);
     if Lit.Text <> '' then
     begin
       Lit.StartLine:= Integer(ValueNode.StartPoint.row   ) + 1;
@@ -527,6 +532,31 @@ begin
   end;
 end; // procedure
 
+{ Parses ASource (UTF-8, already transcoded) with AParser, whose Language the
+  caller has set. The ONE copy of the tree-sitter read callback, shared by
+  ExtractDfmEventBindings and TDFMParser.Parse (150 DF2: was duplicated, lint
+  duplicate-code). Returns the tree; the caller owns and frees it. }
+function ParseDfmSource(const AParser: TTSParser; const ASource: TBytes): TTSTree;
+var
+  Source: TBytes;
+begin
+  Source:= ASource;
+  Result:= AParser.Parse(
+    function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+    var Remaining: Integer;
+    begin
+      Remaining:= Length(Source) - Integer(AByteIndex);
+      if Remaining <= 0 then
+      begin
+        ABytesRead:= 0;
+        SetLength(Result, 0);
+        Exit;
+      end;
+      SetLength(Result, Remaining);
+      Move(Source[AByteIndex], Result[0], Remaining);
+      ABytesRead:= Remaining;
+    end, TTSInputEncoding.TSInputEncodingUTF8);
+end;
 function ExtractDfmEventBindings(const ASource: TBytes): TArray<TDfmEventBinding>;
 var
   Source: TBytes   ;
@@ -548,21 +578,7 @@ begin
   Parser:= TTSParser.Create;
   try
     Parser.Language:= tree_sitter_dfm;
-    Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
-      var Remaining: Integer;
-      begin
-        Remaining:= Length(Source) - Integer(AByteIndex);
-        if Remaining <= 0 then
-        begin
-          ABytesRead:= 0;
-          SetLength(Result, 0);
-          Exit;
-        end;
-        SetLength(Result, Remaining);
-        Move(Source[AByteIndex], Result[0], Remaining);
-        ABytesRead:= Remaining;
-      end, TTSInputEncoding.TSInputEncodingUTF8);
+    Tree:= ParseDfmSource(Parser, Source);
     try
       State:= TDfmState.Create(Source);
       try
@@ -593,7 +609,7 @@ var
   Pt      : TTSPoint;
 begin
   if ARoot.IsNull then Exit;
-  if ADepth > 30 then Exit;
+  if ADepth > MaxParseErrorDepth then Exit;
   if Length(ADiags) >= AMaxErrors then Exit;
   if ARoot.IsError or ARoot.IsMissing then
   begin
@@ -647,19 +663,14 @@ begin
   end;
   Source:= ASource;
   Tree  := nil;
-  Parser:= nil;
   State := nil;
+  Parser:= TTSParser.Create;
   try
-    Parser:= TTSParser.Create;
     Parser.Language:= FLanguage;
-    Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes var Remaining: Integer; begin Remaining:= Length(Source)
-        - Integer(AByteIndex); if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end; SetLength(Result, Remaining); Move(Source[AByteIndex], Result[0],
-          Remaining); ABytesRead:= Remaining; end, TTSInputEncoding.TSInputEncodingUTF8);
-
+    Tree:= ParseDfmSource(Parser, Source);
     State:= TDfmState.Create(Source);
     Root:= Tree.RootNode;
-    if Root.HasError then CollectParseErrors(Root, AFilePath, Result.Diagnostics, 10, 0);
+    if Root.HasError then CollectParseErrors(Root, AFilePath, Result.Diagnostics, MaxParseDiagnostics, 0);
     // source_file -> [object ...]. Top-level objects are forms.
     for i:= 0 to Root.NamedChildCount - 1 do
     begin
