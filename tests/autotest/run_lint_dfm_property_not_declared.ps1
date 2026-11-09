@@ -58,7 +58,7 @@ MUTATION RESULTS, MEASURED 2026-09-10 against the finished rule:
 Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1"))
 
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$detail=''){

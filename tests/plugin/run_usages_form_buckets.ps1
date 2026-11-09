@@ -18,7 +18,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
+  [string]$Exe     = $(& "$PSScriptRoot\..\autotest\lib\DefaultEngineExe.ps1"),
   [string]$IndexDb = '',   # empty (the battery): a one-unit fixture that raises and handles EFix is indexed into a temp DB
   [string]$Name   = 'Exception',
   [string]$SrcDir = "$PSScriptRoot\..\..\src\delphi-plugin"

@@ -24,8 +24,12 @@ param(
 $ErrorActionPreference = 'Stop'
 $grammarDir = if ($Scope -eq 'source.dfm') { 'C:\Projects\tree-sitter-DFM' } else { 'C:\Projects\tree-sitter-delphi13' }
 $head  = (git -C $grammarDir rev-parse --short HEAD 2>$null)
-$dirty = @(git -C $grammarDir status --porcelain 2>$null).Count
-[Console]::Error.WriteLine("ts-parse: scope=$Scope grammar=$grammarDir HEAD=$head $(if ($dirty) { "DIRTY ($dirty path(s))" } else { 'clean' })")
+# 150 HG: DIRTY means TRACKED changes only (--untracked-files=no). The old `status --porcelain` count also counted
+# untracked build leftovers (e.g. prebuilds.old-*/ in tree-sitter-delphi13), so a clean sha was reported DIRTY. Untracked
+# paths are reported apart. git -C works the same in a linked worktree (.git file) as in a main checkout.
+$dirty = @(git -C $grammarDir status --porcelain --untracked-files=no 2>$null).Count
+$untracked = @(git -C $grammarDir status --porcelain --untracked-files=normal 2>$null | Where-Object { $_ -like '??*' }).Count
+[Console]::Error.WriteLine("ts-parse: scope=$Scope grammar=$grammarDir HEAD=$head $(if ($dirty) { "DIRTY ($dirty tracked path(s))" } else { 'clean' })$(if ($untracked) { " ($untracked untracked path(s), ignored)" })")
 $dllName = if ($Scope -eq 'source.dfm') { 'tree-sitter-dfm.dll' } else { 'tree-sitter-delphi13.dll' }
 $shipped = Join-Path (Split-Path (Resolve-Path $Engine).Path) $dllName
 $parserC = Join-Path $grammarDir 'src\parser.c'

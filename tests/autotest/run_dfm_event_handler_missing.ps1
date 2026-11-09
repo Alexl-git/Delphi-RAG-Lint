@@ -11,7 +11,7 @@
 #               missing handler must stay SILENT (negative control for the unresolved-ancestor gate).
 # Usage: pwsh -File tests/autotest/run_dfm_event_handler_missing.ps1 [-Exe <path>]
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+param([string]$Exe = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1"),
       [string]$WorkDir = "$env:TEMP\drag-lint-g8-ehm-$PID")
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\g8-common.ps1"

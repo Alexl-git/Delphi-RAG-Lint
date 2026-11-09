@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string] $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string] $Exe = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1"))
 $ErrorActionPreference = 'Stop'; $script:Failed = $false
 function Check([string]$Name,[bool]$Ok,[string]$Detail=''){
   $s = if($Ok){'PASS'}else{'FAIL'}; $c = if($Ok){'Green'}else{'Red'}

@@ -26,7 +26,7 @@
 # Usage: pwsh -File tests/autotest/run_hover_callsite.ps1 [-Exe <path>]
 [CmdletBinding()]
 param(
-    [string] $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+    [string] $Exe = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1"),
     [string] $WorkDir = "$env:TEMP\drag-lint-hover-callsite-$PID",
     [string] $Py = "C:\Python314\python.exe"
 )

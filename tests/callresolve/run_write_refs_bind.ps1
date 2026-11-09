@@ -122,7 +122,7 @@ function Check-Positives([string]$Tag, [string[]]$Skip) {
   }
 }
 
-Push-Location C:\TEMP
+Push-Location $scratch   # 150 HG: own scratch as cwd -- C:\TEMP is shared by every lane/guard (config discovery + stray files)
 try {
   $log1 = (& $exePath index $scratch --db $db *>&1) -join "`n"
 
@@ -159,7 +159,8 @@ try {
   # --- check 5: scoped re-index ---------------------------------------------------
   $lib2 = Join-Path $scratch 'uWriteLib2.pas'
   $txt  = [System.IO.File]::ReadAllText($lib2)
-  $txt  = $txt.Replace("  GClash: Integer;`r`n", "  GClash: Integer;`r`n  GShared: Integer;`r`n")
+  $txt  = [regex]::Replace($txt, '(?m)^  GClash: Integer;\r?$', "  GClash: Integer;`r`n  GShared: Integer;")   # 150 HG: line-ending agnostic (a LF checkout made Replace a silent no-op)
+  if ($txt -notmatch 'GShared: Integer') { throw 'check 5 fixture edit did not apply (uWriteLib2.pas has no GClash line)' }
   [System.IO.File]::WriteAllText($lib2, $txt, [System.Text.Encoding]::ASCII)
   [System.IO.File]::SetLastWriteTimeUtc($lib2, (Get-Date).ToUniversalTime().AddSeconds(5))
   $log2 = (& $exePath index $scratch --db $db *>&1) -join "`n"
