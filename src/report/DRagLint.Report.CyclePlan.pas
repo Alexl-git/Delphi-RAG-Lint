@@ -923,6 +923,7 @@ type
     function BuildSwitches(var pItem: TMoveItem): Boolean;
     function FindCtor(const pItem: TMoveItem; const pName: string; out pSig, pWhy: string): Boolean;
     function InheritedVisibility(const pItem: TMoveItem; const pName: string): string;
+    function NextAncestor(const pCur: TSymbol; var pStore: ISymbolStore; out pNext: TSymbol; out pParent: string): Boolean;
     function CtorTypeWhy(const pItem: TMoveItem; const pSig: string): string;
     function TakeCtor(var pItem: TMoveItem; const pF: TPlanFile; pLine: Integer; const pName: string): Boolean;
     function CtorSiteLine(const pItem: TMoveItem; out pFid: Int64): Integer;
@@ -2856,10 +2857,11 @@ begin
       { 150-CY-10c (lane 150 CY1): a public / published override stays too when the nearest ancestor that declares
         the method declares it public or published (project index first, then the platform library): a call through
         the base class then compiles exactly as a call through the class did, and dispatches to the same body. }
-      if (C.Kind in [skMethod, skFunction, skProcedure]) and SameText(Trim(C.Directives), 'override') and
-        (GCtorWide or (C.VisExplicit and MatchText(Trim(C.Modifiers), ['protected', 'private', 'strict protected', 'strict private'])) or
-        (C.VisExplicit and MatchText(Trim(C.Modifiers), ['public', 'published']) and
-        MatchText(InheritedVisibility(pItem, C.Name), ['public', 'published']))) then Continue;
+      var IsOverride:= (C.Kind in [skMethod, skFunction, skProcedure]) and SameText(Trim(C.Directives), 'override');
+      var Hidden    := C.VisExplicit and MatchText(Trim(C.Modifiers), ['protected', 'private', 'strict protected', 'strict private']);
+      var BothPublic:= IsOverride and C.VisExplicit and MatchText(Trim(C.Modifiers), ['public', 'published']) and
+        MatchText(InheritedVisibility(pItem, C.Name), ['public', 'published']);
+      if IsOverride and (GCtorWide or Hidden or BothPublic) then Continue;
       { a field in the published section is what a .dfm streams into: FieldAddress finds it on the class that declares it,
         at run time; pulled into the base class it would turn protected (E-CTORINV-DEFAULT-PATH: no longer --ctor-wide only) }
       if (C.Kind = skField) and (ContainsText(C.Modifiers, 'published') or not C.VisExplicit) then
@@ -2951,6 +2953,31 @@ begin
   if Result <> '' then Result:= '(' + Result + ')';
 end;
 
+{ The parent class of pCur (the first heritage name, TObject when none), found by name in pStore (the index pCur came
+  from), then in the platform library; the widest class of that name. pStore becomes the index pNext came from; pParent
+  is the parent's bare name. False when no index given declares it. Shared by FindCtor and InheritedVisibility. }
+function TCyclePlanner.NextAncestor(const pCur: TSymbol; var pStore: ISymbolStore; out pNext: TSymbol;
+  out pParent: string): Boolean;
+begin
+  var Parts:= SplitHeritage(pCur.Heritage);
+  pParent:= if Length(Parts) > 0 then Parts[0] else 'TObject';
+  pParent:= pParent.Substring(pParent.LastIndexOf('.') + 1);
+  pNext  := Default(TSymbol);
+  Result := False;
+  var From:= pStore;
+  for var Source:= 0 to 1 do
+  begin
+    var S:= if Source = 0 then From else FLibStore;
+    if (S = nil) or Result then Continue;
+    for var Cand in S.FindSymbolsByExactName(pParent) do
+      if (Cand.Kind = skClass) and ((not Result) or (Cand.EndLine - Cand.StartLine > pNext.EndLine - pNext.StartLine)) then
+      begin
+        pNext := Cand;
+        pStore:= S;
+        Result:= True;
+      end;
+  end;
+end;
 { B8: the constructor pName of the class of pItem, its own or the nearest ancestor's: pSig is its parameter
   list verbatim. False with pWhy '' when no class of the chain declares a constructor of that name (then
   `TX.pName` is no construction); False with pWhy set when it cannot be told apart or the chain cannot be read. }
@@ -2980,24 +3007,9 @@ begin
     end;
     if Hits = 1 then Exit(True);
     if SameText(Cur.Name, 'TObject') then Exit(False);
-    var Parts:= SplitHeritage(Cur.Heritage);
-    var Parent:= if Length(Parts) > 0 then Parts[0] else 'TObject';
-    Parent:= Parent.Substring(Parent.LastIndexOf('.') + 1);
-    var Found:= False;
-    var Next := Default(TSymbol);
-    for var Source:= 0 to 1 do
-    begin
-      var S:= if Source = 0 then Store else FLibStore;
-      if (S = nil) or Found then Continue;
-      for var Cand in S.FindSymbolsByExactName(Parent) do
-        if (Cand.Kind = skClass) and ((not Found) or (Cand.EndLine - Cand.StartLine > Next.EndLine - Next.StartLine)) then
-        begin
-          Next := Cand;
-          Store:= S;
-          Found:= True;
-        end;
-    end;
-    if not Found then
+    var Parent: string;
+    var Next  : TSymbol;
+    if not NextAncestor(Cur, Store, Next, Parent) then
     begin
       pWhy:= Format('the ancestor `%s` of `%s` is declared in no index given%s, so the constructor `%s` cannot be read',
         [Parent, Cur.Name, (if FLibStore = nil then ' (no platform library was read: pass --library-db)' else ''), pName]);
@@ -3026,24 +3038,9 @@ begin
         if (C.Kind in [skMethod, skFunction, skProcedure]) and SameText(C.Name, pName) then
           Exit(if C.VisExplicit then LowerCase(Trim(C.Modifiers)) else '');
     if SameText(Cur.Name, 'TObject') then Exit;
-    var Parts:= SplitHeritage(Cur.Heritage);
-    var Parent:= if Length(Parts) > 0 then Parts[0] else 'TObject';
-    Parent:= Parent.Substring(Parent.LastIndexOf('.') + 1);
-    var Found:= False;
-    var Next := Default(TSymbol);
-    for var Source:= 0 to 1 do
-    begin
-      var S:= if Source = 0 then FStore else FLibStore;
-      if (S = nil) or Found then Continue;
-      for var Cand in S.FindSymbolsByExactName(Parent) do
-        if (Cand.Kind = skClass) and ((not Found) or (Cand.EndLine - Cand.StartLine > Next.EndLine - Next.StartLine)) then
-        begin
-          Next := Cand;
-          Store:= S;
-          Found:= True;
-        end;
-    end;
-    if not Found then Exit;
+    var Parent: string;
+    var Next  : TSymbol;
+    if not NextAncestor(Cur, Store, Next, Parent) then Exit;
     Cur:= Next;
   end;
 end;
