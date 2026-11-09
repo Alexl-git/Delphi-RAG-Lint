@@ -1248,6 +1248,9 @@ type
     /// <returns><!-- drag-lint:auto -->Int64 -- Observed: 0; Cands[InScopeIdx].Id;
     /// Cands[0].Id; PickShadowingType(Cands, ADeclFileId, Qual).</returns>
     /// <remarks>
+    /// 149-RB1: a forward declaration (`TH = class;`: no heritage, no members, a
+    /// later same-kind candidate in the same file) is not a second candidate --
+    /// FullDeclOverForward answers the full declaration before the shadowing tie-break.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.BindExternally (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.CollectionElementOfText (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.DecideInlineInitType (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.DerefPointerAlias (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.InitMemberResultText (DRagLint.Index.CallResolver.pas) (+16 more)</para>
     /// <para>Calls: ChangeFileExt, Copy, Default, DRagLint.Index.CallResolver.TCallResolver.CandInScope, DRagLint.Index.CallResolver.TCallResolver.ResolveTypeNameToSymbol.PickShadowingType, EndsText, ExtractFileName, LowerCase, Pos, SameText, SymbolById, Trim</para>
@@ -3534,8 +3537,11 @@ type
     /// A constructor reference is typed by its RECEIVER, because `TThing.Create`
     /// bound to an inherited TBase.Create makes a TThing. An unbound `Create` on a
     /// typed receiver is a constructor of a library class, by name only. An
-    /// unbound bare call that names exactly one type is a cast. Refs bound to a
-    /// routine with no return type, or to a type name, have no static type.
+    /// unbound bare call that names exactly one type is a cast -- outside a with
+    /// scope, or where every with layer proves it declares no such member
+    /// (wvNone; 149-RB1): inside `with U do TBox(1)` the name may be U's member.
+    /// Refs bound to a routine with no return type, or to a type name, have no
+    /// static type.
     /// Not thread-safe: the pass's one resolver, one thread.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveRefTypes (DRagLint.Storage.SQLite.pas)</para>
@@ -4537,6 +4543,40 @@ var
     end;
   end;
 
+  { 149-RB1 (hub-scc P5): Delphi's forward declaration `TH = class;` precedes the full `TH = class ... end;` in
+    the same type section, and the index holds BOTH as type symbols -- so every forward-declared name was two
+    candidates in one unit and declined (Loader2025: 1826 refs through `frmLoader2019_Main` unbound). A
+    candidate is a forward when it has no heritage and no members and a LATER candidate of the same kind in
+    the same file completes it. Answers the one candidate left after dropping forwards, or 0 (still ambiguous,
+    or nothing was a forward). AInScopeOnly: consider only candidates the declaring file can see. }
+  function FullDeclOverForward(ACands: TList<TSymbol>; AFile: Int64; AInScopeOnly: Boolean): Int64;
+  var
+    Seen: TList<TSymbol>;
+    Left: Integer;
+  begin
+    Result:= 0;
+    Left  := 0;
+    Seen  := TList<TSymbol>.Create;
+    try
+      for var C: TSymbol in ACands do
+        if (not AInScopeOnly) or CandInScope(AFile, C.FileId) then Seen.Add(SymbolById(C.Id));
+      for var C: TSymbol in Seen do
+      begin
+        var IsForward: Boolean:= False;
+        if (Trim(C.Heritage) = '') and (ChildrenOf(C.Id).Count = 0) then
+          for var D: TSymbol in Seen do
+            if (D.Id <> C.Id) and (D.FileId = C.FileId) and (D.Kind = C.Kind) and (D.StartLine > C.StartLine) then
+              IsForward:= True;
+        if IsForward then Continue;
+        Inc(Left);
+        Result:= C.Id;
+      end;
+      if Left <> 1 then Result:= 0;
+    finally
+      Seen.Free;
+    end;
+  end;
+
 begin
   Result:= 0;
   // Normalize the same way ResolveAncestry does: strip generics + dotted qualifier.
@@ -4567,8 +4607,13 @@ begin
     Result:= Cands[InScopeIdx].Id
   else if (InScopeCount = 0) and (Cands.Count = 1) then
     Result:= Cands[0].Id
-  else if InScopeCount > 1 then
-    Result:= PickShadowingType(Cands, ADeclFileId, Qual);
+  else if InScopeCount = 0 then
+    Result:= FullDeclOverForward(Cands, ADeclFileId, False) // 149-RB1: one global def plus its forward
+  else
+  begin
+    Result:= FullDeclOverForward(Cands, ADeclFileId, True); // 149-RB1: a forward is not a second type
+    if Result = 0 then Result:= PickShadowingType(Cands, ADeclFileId, Qual);
+  end;
 end;
 
 function TCallResolver.ChildrenOf(AParentId: Int64): TList<TSymbol>;
@@ -7069,6 +7114,9 @@ begin
   end;
 end;
 
+{ 149-RB1: declared here for TypeReceiverThroughWith's call-head shape; defined beside TypeOfCallChain. }
+function IsOneParenGroup(const AText: string): Boolean; forward;
+
 function TCallResolver.TypeReceiverThroughWith(const ACallRef: TReference;
   const AReceiverExpr: string; out AHandled: Boolean): Int64;
 var
@@ -7084,9 +7132,27 @@ begin
     supply; a cast, a call or an indexer is typed by the ordinary rungs, and an
     explicit Self is never a with member. }
   Segs:= AReceiverExpr.Split(['.']);
+  { 149-RB1 (145 gaps a, W17): a CALL head -- `with H do Names().FLeaf`, `Names(1).A.B` -- is one identifier,
+    ONE paren group, then plain identifiers. The head is typed as the with member ROUTINE's result (a value
+    member followed by parens is not read here); every other parenthesised shape stays with the ordinary rungs. }
+  var CallHead: Boolean:= False;
+  var POpen: Integer:= Pos('(', AReceiverExpr);
+  if (POpen > 1) and IsIdentChain([Trim(Copy(AReceiverExpr, 1, POpen - 1))]) then
+  begin
+    var PClose: Integer:= AReceiverExpr.LastIndexOf(')') + 1;
+    var Tail  : string := Copy(AReceiverExpr, PClose + 1, MaxInt);
+    var Rest  : TArray<string>:= [];
+    if Tail.StartsWith('.') then Rest:= Copy(Tail, 2, MaxInt).Split(['.']);
+    if IsOneParenGroup(Copy(AReceiverExpr, POpen, PClose - POpen + 1)) and ((Tail = '') or IsIdentChain(Rest)) then
+    begin
+      Segs    := [Trim(Copy(AReceiverExpr, 1, POpen - 1))] + Rest;
+      CallHead:= True;
+    end;
+  end;
   if not IsIdentChain(Segs) or SameText(Segs[0], 'Self') then Exit;
   Verdict := WithScopeAt(ACallRef, ACallRef.StartLine, ACallRef.StartCol, Segs[0], LT, MK);
   AHandled:= Verdict <> wvNone;
+  if CallHead and (MK <> wmRoutine) then MK:= wmNone;
   if (Verdict = wvMember) and (MK in [wmValue, wmRoutine]) then
   begin
     Result:= TypeOfMember(LT, Segs[0]);
@@ -7749,7 +7815,7 @@ var
     var Encl: TSymbol:= SymbolById(ACallRef.EnclosingSymbolId);
     var Decl: TSymbol:= LocalInScopeAt(ACallRef, AName, Declared);
     if (Decl.Id <= 0) and (not Declared) and (Encl.ParentId > 0) and not SameText(AName, 'Result') then
-      Decl:= FindChildOfKind(Encl.ParentId, AName, [skField, skProperty]);
+      Decl:= FindChildOfKind(Encl.ParentId, AName, [skField, skProperty, skVarDecl]); // 149-RB1: + class-level var (D12)
     if Decl.Id > 0 then
     begin
       TypeText := Trim(LocalTypeText(Decl));
@@ -7788,17 +7854,43 @@ var
     Result:= (TypeText <> '') or (TypeId > 0);
   end;
 
-  { Type member AName of the current type. }
+  { Type member AName of the current type: a field / property, or (149-RB1, 146 b8) a parameterless function
+    called without parens, typed by its return type -- the step kind 10 takes (ChainSegmentValue). }
   function TypeMember(const AName: string): Boolean;
   begin
     var Owner: Int64:= CurrentTypeId;
-    var Member: TSymbol:= if Owner > 0 then LookupMemberOnType(Owner, AName) else Default(TSymbol);
+    var SegFile: Int64:= 0;
+    var Member: TSymbol:= if Owner > 0 then ChainSegmentValue(Owner, AName, SegFile) else Default(TSymbol);
     TypeText := Trim(Member.Signature);
     TypeId   := 0;
     TextFile := Member.FileId;
     TextScope:= Member.ParentId;
     Indexed  := (Member.Kind = skProperty) and StartsText(PROPERTY_INDEXED_DIRECTIVE, Member.Directives);
     Result   := (Member.Id > 0) and (TypeText <> '');
+  end;
+
+  { 149-RB1 (146 b3 p3): a CALL head `F()[0]` / `F(A)[0]^` -- one identifier, ONE paren group, then selectors
+    only -- typed by F's declared return type (TypeOfFunctionResult, the rung kind 11 uses). Sets Name / Sels. }
+  function TypeCallHead(const ASeg: string): Boolean;
+  begin
+    Result:= False;
+    var POpen: Integer:= Pos('(', ASeg);
+    if POpen <= 1 then Exit;
+    var Depth : Integer:= 0;
+    var PClose: Integer:= 0;
+    for var I: Integer:= POpen to Length(ASeg) do
+    begin
+      if ASeg[I] = '(' then Inc(Depth)
+      else if ASeg[I] = ')' then Dec(Depth);
+      if (Depth = 0) and (PClose = 0) then PClose:= I;
+    end;
+    if (PClose = 0) or not SplitSelectorSegment(Trim(Copy(ASeg, 1, POpen - 1)) + Copy(ASeg, PClose + 1, MaxInt), Name, Sels)
+       or (Sels = '') then Exit;
+    var FnText: string;
+    TypeText:= '';
+    TypeId  := TypeOfFunctionResult(ACallRef, Name, FnText);
+    if (TypeId = 0) and (FnText <> '') then TypeText:= FnText;
+    Result:= (TypeId > 0) or (TypeText <> '');
   end;
 
   { Item 4: the text a chain stopped at, when every segment from the failing
@@ -7829,8 +7921,9 @@ begin
   begin
     PrevText:= if TypeText <> '' then TypeText else if TypeId > 0 then SymbolById(TypeId).Name else '';
     Indexed := False;
-    Ok:= SplitSelectorSegment(Segs[SegIx], Name, Sels)
-         and (if SegIx = 0 then TypeHead(Name) else TypeMember(Name));
+    Ok:= ((SegIx = 0) and TypeCallHead(Segs[0]))
+         or (SplitSelectorSegment(Segs[SegIx], Name, Sels)
+             and (if SegIx = 0 then TypeHead(Name) else TypeMember(Name)));
     if (not Ok) and (SegIx > 0) and (PrevText <> '') then StopAt(SegIx);
     for var Sel: Char in Sels do
       if Ok and Indexed and (Sel = '[') then Indexed:= False // the property's own index: its type IS the element
@@ -8052,6 +8145,19 @@ begin
       block is such a place (`Application.Run` in the .dpr): offer the head to the library
       oracle exactly as the fall-through at the end does. BindExternally still declines a
       head that names a project type or unit-level value, so nothing local is overridden. }
+    { 149-RB1 (146 b1 residual): a plain identifier the PROGRAM declares (`COne.Alpha` on a typed const or a
+      var of the .dpr, or a project type) is typed through the unit-level rungs of TypeOfOrdinaryName first --
+      there is no local or class to search. Anything it cannot type still goes to the oracle as a head. }
+    if (AReceiverExpr <> '') and IsIdentChain([AReceiverExpr]) and not SameText(AReceiverExpr, 'inherited') then
+    begin
+      var MainText: string;
+      Result:= TypeOfOrdinaryName(ACallRef, AReceiverExpr, MainText);
+      if Result > 0 then
+      begin
+        AText.Text:= NormalizeTypeLeaf(MainText);
+        Exit;
+      end;
+    end;
     if (AReceiverExpr <> '') and not SameText(AReceiverExpr, 'inherited') then AText.Head:= AReceiverExpr;
     Exit;
   end;
@@ -8165,6 +8271,23 @@ begin
       var SegFile: Int64:= ACallRef.FileId;
       var SegMember: TSymbol:= ChainSegmentValue(ChainType, Segs[SegIx], SegFile);
       if CurText = '' then CurText:= SymbolById(ChainType).Name;
+      { 149-RB1 (146 b8): `TFoo.Create.Run` -- an argument-less CONSTRUCTOR hop makes an instance of the type
+        it is called on (TSub.Create declared on TBase is still a TSub), so the chain type does not change. A
+        CLASS whose indexed chain declares no `Create` at all inherits TObject.Create: the same instance. }
+      if SegMember.Id <= 0 then
+      begin
+        var CtorConf: string;
+        var CtorId: Int64:= LookupMethodOnType(ChainType, Segs[SegIx], 0, True, CtorConf);
+        var CtorLo, CtorHi: Integer;
+        if ((CtorId > 0) and (CtorConf = 'certain') and (SymbolById(CtorId).Kind = skConstructor)
+            and SignatureArityRange(SymbolById(CtorId).Signature, CtorLo, CtorHi) and (CtorLo = 0))
+           or ((CtorId <= 0) and SameText(Segs[SegIx], 'Create') and (SymbolById(ChainType).Kind = skClass)) then
+        begin
+          StopIx:= SegIx + 1;
+          Inc(SegIx);
+          Continue;
+        end;
+      end;
       if SegMember.Id > 0 then
       begin
         CurText:= NormalizeTypeLeaf(SegMember.Signature);
@@ -9530,7 +9653,8 @@ begin
   if (Open <= 0) or not AText.EndsWith('>') then Exit;
   var Head: string:= LowerCase(AText.Substring(0, Open));
   var IsSystem: Boolean:= (Head = 'tdictionary') or (Head = 'tobjectdictionary');
-  if not (IsSystem or (Head = 'idictionary')) or FNameToCands.ContainsKey(Head) then Exit;
+  { 149-RB1 (146 b3): Spring's IReadOnlyDictionary<K, V> subscripts to V like IDictionary. }
+  if not (IsSystem or (Head = 'idictionary') or (Head = 'ireadonlydictionary')) or FNameToCands.ContainsKey(Head) then Exit;
   var UsesUnit: Boolean:= False;
   for var U: string in FileUsesUnits(AFileId) do
     UsesUnit:= UsesUnit or (if IsSystem then (U = 'system.generics.collections') or (U = 'generics.collections') else U = 'spring.collections');
@@ -9714,6 +9838,20 @@ begin
       if Text <> '' then Result:= CollectionElementOfText(Text, FromFile, FromScope, ADecl.FileId, ADecl.ParentId);
     end;
     Exit;
+  end;
+  { 149-RB1 (146 b3): `var X := Default(T);` on one line is a T -- the intrinsic, unless the project declares a
+    routine named Default. Only a plain (dotted) type name; anything else falls to the forms below. }
+  var DefLine: string:= Lines[ADecl.StartLine - 1];
+  var AssignAt: Integer:= Pos(':=', DefLine, ADecl.StartCol);
+  var DefRhs: string:= if AssignAt > 0 then Trim(Copy(DefLine, AssignAt + 2, MaxInt)) else '';
+  if StartsText('Default', DefRhs) and not FNameToRoutines.ContainsKey('default') then
+  begin
+    var DefArg: string:= Trim(Copy(DefRhs, Length('Default') + 1, MaxInt));
+    var CloseAt: Integer:= Pos(')', DefArg);
+    var DefType: string:= if DefArg.StartsWith('(') and (CloseAt > 2) then Trim(Copy(DefArg, 2, CloseAt - 2)) else '';
+    var DefTail: string:= Trim(Copy(DefArg, CloseAt + 1, MaxInt));
+    if (DefType <> '') and IsIdentChain(DefType.Split(['.'])) and ((DefTail = '') or DefTail.StartsWith(';')) then
+      Exit(DefType);
   end;
   var CastType: string;
   if ParseAsInit(Lines, ADecl, CastType) then
@@ -10674,8 +10812,10 @@ const
   CTOR_NAME  = 'Create';
   RESULT_VAR = 'Result';
 var
-  Target : TSymbol;
-  RcvText: TRcvTypeText;
+  Target  : TSymbol;
+  RcvText : TRcvTypeText;
+  WithType: Int64;
+  WithKind: TWithMemberKind;
 begin
   AType:= Default(TRefStaticType);
   if ARef.SymbolId > 0 then
@@ -10713,8 +10853,11 @@ begin
     AType.TypeQName   := if AType.TypeSymbolId > 0 then SymbolById(AType.TypeSymbolId).QualifiedName else RcvText.Text;
     AType.Via         := 'result';
   end
-  else if SameText(ARef.Kind, REF_KIND_CALL) and FNameToCands.ContainsKey(LowerCase(ARef.NameText)) then
+  else if SameText(ARef.Kind, REF_KIND_CALL) and FNameToCands.ContainsKey(LowerCase(ARef.NameText))
+          and (WithScopeAt(ARef, ARef.StartLine, ARef.StartCol, ARef.NameText, WithType, WithKind) = wvNone) then
   begin
+    { 149-RB1 (145 gaps b): inside `with U do TBox(1)` the name may be U's member, which the compiler reads
+      before the type; only a with scope that proves no layer declares it (wvNone) lets the cast stand. }
     AType.TypeSymbolId:= ResolveTypeNameToSymbol(ARef.NameText, ARef.FileId);
     if AType.TypeSymbolId > 0 then
     begin
@@ -10811,6 +10954,9 @@ var
   begin
     EnclosingClassChainDeclares(ACallRef.EnclosingSymbolId, '', ClassId);
     Result:= if ClassId > 0 then FirstUnresolvedAncestorName(ClassId) else '';
+    { 149-RB1 (146 b7 leftover): a bare `Free` in `TFoo = class` -- a complete chain ends at the implicit
+      root, exactly as the typed-receiver path below takes it (IMPLICIT_ROOT_CLASS). }
+    if (Result = '') and (ClassId > 0) and (SymbolById(ClassId).Kind = skClass) then Result:= IMPLICIT_ROOT_CLASS;
   end;
 
 begin
