@@ -13,7 +13,7 @@
     E7  `AObj is uEx3Types.TEx3Runner` (dotted is-rhs) emits a type_use in the shape of every other
         dotted type use: name_text TEx3Runner at its own span, the unit qualifier the text left of it.
         Binding is the resolver's: a dotted type_use stays symbol_id NULL today for a var type too
-        (ar V: uEx3Types.TEx3Runner), so it is not asserted here. RED on base: no type_use at that span.
+        (var V: uEx3Types.TEx3Runner), so it is not asserted here. RED on base: no type_use at that span.
     E5  the call + member-access twin at one span is pinned (by design) and usages counts it once.
   POSITIVE CONTROLS: the unit symbols keep parent NULL and kind unit; the headerless program has no
   .dproj and so no project_settings row; the bare is-rhs keeps its bare name (a regression that
