@@ -218,6 +218,10 @@ uses
 const
   TYPE_NODE_ID     = 'identifier';
   NODE_DOT         = 'exprDot';
+  { Grammar v1.4.5 (Paul McGee, edb0d50): the right of `is` is a TYPE, so a
+    dotted name there is a typerefDot (lhs / rhs fields, as exprDot), never an
+    exprDot. Lane 149-GA grammar-shape audit, shape (b). }
+  NODE_TYPEREF_DOT = 'typerefDot';
   NODE_CALL        = 'exprCall';
   NODE_PARENS      = 'exprParens';
   { The grammar aliases exprAs to exprBinary: `x as T` is told apart by its operator node. }
@@ -839,8 +843,10 @@ function TRefTypeScan.WrittenType(const ANode: TTSNode): TTypeFacts;
 begin
   Result:= Default(TTypeFacts);
   if ANode.IsNull then Exit;
-  if (ANode.NodeType <> TYPE_NODE_ID) and (ANode.NodeType <> NODE_DOT) then Exit;
-  var Name: TTSNode:= if ANode.NodeType = NODE_DOT then ANode.ChildByField(FIELD_RHS) else ANode;
+  if (ANode.NodeType <> TYPE_NODE_ID) and (ANode.NodeType <> NODE_DOT) and (ANode.NodeType <> NODE_TYPEREF_DOT) then Exit;
+  { `X is Unit.TFoo` arrives as a typerefDot (v1.4.5); a cast entity or an `as`
+    operand stays an exprDot. Both carry the leaf in 'rhs'. }
+  var Name: TTSNode:= if ANode.NodeType = TYPE_NODE_ID then ANode else ANode.ChildByField(FIELD_RHS);
   var Fact: TRefFact;
   if FactAt(Name, Fact) and (Fact.SymbolId > 0) then
   begin
