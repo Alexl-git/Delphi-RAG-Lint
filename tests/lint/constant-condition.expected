@@ -4,3 +4,7 @@ constant-condition 11
 constant-condition 13
 !constant-condition 23
 !constant-condition 21
+# grammar-shape audit (lane 149-GA): an if WITH an else is an ifElse node -- if True/False..else (29, 30) fire, if B..else (34) does not
+constant-condition 29
+constant-condition 30
+!constant-condition 34

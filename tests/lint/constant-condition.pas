@@ -24,4 +24,14 @@ begin
     break;
 end;
 
+procedure WithElse(B: Boolean);
+begin
+  if True then Writeln('a') else Writeln('b');
+  if False then
+    Writeln('c')
+  else
+    Writeln('d');
+  if B then Writeln('e') else Writeln('f');
+end;
+
 end.
