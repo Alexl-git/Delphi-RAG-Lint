@@ -68,14 +68,13 @@ uses
   System.Generics.Collections, System.Generics.Defaults, System.Math, Winapi.Windows,
   FireDAC.Comp.Client,
   DRagLint.Core.Model, DRagLint.Project.OwnRoots, DRagLint.Report.CyclePlan, DRagLint.Refactor.CompileGate,  // dl:ok uses-global-census@98a3 -- the CompileGate globals travel with the gated refactor verbs by design (R3 / G3P compile gate)
-  DRagLint.Refactor.ScratchGate, DRagLint.Refactor.RedundantCast, DRagLint.Storage.SQLite, DRagLint.Lint.InitSections,
+  DRagLint.Refactor.VerbShape, DRagLint.Refactor.RedundantCast, DRagLint.Storage.SQLite, DRagLint.Lint.InitSections,
   TreeSitter, DRagLint.Diagnostics.ParseCache;
 
 const
   CExitOk      = 0;
   CExitRefused = 1;
   CExitError   = 2;
-  CMsPerSec    = 1000;
   CVerb        = 'lazy-init';
   CSchema      = 'lazy-init/1';
 
@@ -563,22 +562,9 @@ end;
 
 function RunLazyInit(const pStore: ISymbolStore; const pOpts: TLazyInitOptions): Integer;  // dl:ok too-many-exit-points@ea4e -- one guard per named refusal, in the documented order: the exits are the contract
 
-  function Fail(const pMessage: string): Integer;  // dl:ok duplicate-code@7744 -- sibling verb plumbing (lazy-init / extract-interface / deps share the refactor-verb shape); a shared helper is a 148 row (147 INT sweep)
+  function Fail(const pMessage: string): Integer;
   begin
-    Result:= CExitError;
-    if pOpts.Json then
-    begin
-      var J:= TJSONObject.Create;
-      try
-        J.AddPair('schema', CSchema);
-        J.AddPair('error', pMessage);
-        J.AddPair('exit_code', TJSONNumber.Create(CExitError));
-        Writeln(J.Format(2));
-      finally
-        J.Free;
-      end;
-    end
-    else Writeln('ERROR: ', pMessage);
+    Result:= ReportVerbError(pOpts.Json, CSchema, pMessage);
   end;
 
 begin
@@ -621,28 +607,17 @@ begin
     if Plans[0].RefusalKind <> '' then Result:= CExitRefused  // dl:ok duplicate-code@55f9 -- sibling verb plumbing (lazy-init / extract-interface / deps share the refactor-verb shape); a shared helper is a 148 row (147 INT sweep)
     else
     begin
-      var Secs:= StrToIntDef(pOpts.BuildTimeout, 0);
-      GBuildTimeoutMs:= if Secs <= 0 then INFINITE else Cardinal(Secs) * CMsPerSec;
-      var Req:= Default(TGateRequest);
-      Req.Project := ExpandFileName(pOpts.Project);
-      Req.Platform:= pOpts.Platform;
-      Req.Verb    := CVerb;
-      Req.RsVars  := if pOpts.RsVars <> '' then ExpandFileName(pOpts.RsVars) else '';
-      Req.NoBackup:= pOpts.NoBackup;
-      Req.Header  := Format('[%s] %s --apply: %s', [FormatDateTime('yyyy-mm-dd hh:nn:ss', Now), CVerb, Plans[0].RoutineName]);
-      Req.LogDir  := FreshScratchName('_build');
-      var F: TGateFile;
-      F.Path := Plans[0].FilePath;
-      F.Bytes:= EncodeSource(Plans[0].NewText, Plans[0].Enc);
-      Req.Files:= [F];
-      Gate:= ApplyThroughScratch(Conn, Req);
+      var Args:= Default(TOneFileApplyArgs);
+      Args.Verb:= CVerb;
+      Args.HeaderTail:= Plans[0].RoutineName;
+      Args.Project:= pOpts.Project;
+      Args.Platform:= pOpts.Platform;
+      Args.RsVars:= pOpts.RsVars;
+      Args.BuildTimeout:= pOpts.BuildTimeout;
+      Args.NoBackup:= pOpts.NoBackup;
+      Args.FilePath:= Plans[0].FilePath;
+      Gate:= ApplyOneFileThroughScratch(Conn, Args, EncodeSource(Plans[0].NewText, Plans[0].Enc));
       Ran:= True;
-      if not GScratchCited and TDirectory.Exists(Req.LogDir) then
-      try
-        TDirectory.Delete(Req.LogDir, True);  // dl:ok taint-path-traversal@ff48 -- the path is the run's own fresh scratch name under C:\TEMP or the operator's --project: local input, no privilege crossed
-      except
-        on EInOutError do Writeln(ErrOutput, 'drag-lint: note: scratch not deleted: ', Req.LogDir); // best effort: a locked log must not change the result
-      end;
       if not Gate.Applied then Result:= if Gate.RollbackFailed then CExitError else CExitRefused;
     end;
   if pOpts.Json then

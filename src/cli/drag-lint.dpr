@@ -198,6 +198,7 @@ uses
   DRagLint.Refactor.RedundantCast in '..\refactor\DRagLint.Refactor.RedundantCast.pas',
   DRagLint.Refactor.NarrowParam in '..\refactor\DRagLint.Refactor.NarrowParam.pas',
   DRagLint.Refactor.ScratchGate in '..\refactor\DRagLint.Refactor.ScratchGate.pas',
+  DRagLint.Refactor.VerbShape in '..\refactor\DRagLint.Refactor.VerbShape.pas',
   DRagLint.Refactor.ExtractInterface in '..\refactor\DRagLint.Refactor.ExtractInterface.pas',
   DRagLint.Refactor.LazyInit in '..\refactor\DRagLint.Refactor.LazyInit.pas',
   DRagLint.Refactor.DocStub in '..\refactor\DRagLint.Refactor.DocStub.pas',
