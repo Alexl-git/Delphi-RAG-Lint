@@ -201,9 +201,10 @@ $oRisky = HoverMd $off[2]; $oSafe = HoverMd $off[3]
 Check 'O1 OFF: hover still answers' ($oRisky -match 'Risky') ("md=" + ($oRisky -replace "`n", ' / '))
 Check 'O1 OFF: no Raises: line' ((RaisesLines $oRisky).Count -eq 0 -and (RaisesLines $oSafe).Count -eq 0)
 function Strip([string]$md) { return ((($md -split "`n") | Where-Object { $_ -notmatch 'Raises:' }) -join "`n") }
-# Risky's only fact is Raises:, so ON also carries the 'Analysis facts:' header that line opened.
-$riskyOnMinus = $mdRisky -replace '\r\n\r\n\*\*Analysis facts:\*\*\r\n- Raises: [^\r\n]*\r\n', "`r`n"
-Check 'O1 OFF markdown == ON markdown minus its Raises: block (Risky, no-doc, Raises: the only fact)' ($oRisky -ne '' -and $riskyOnMinus -ne $mdRisky -and $riskyOnMinus -ceq $oRisky)
+# Wave 150 LX2: Risky also has a 'Called from:' fact now (Safe calls it), so the 'Analysis facts:'
+# header stays in both arms and only the Raises: line differs.
+$riskyOnMinus = Strip $mdRisky
+Check 'O1 OFF markdown == ON markdown minus its Raises: line (Risky, no-doc)' ($oRisky -ne '' -and $riskyOnMinus -ne $mdRisky -and $riskyOnMinus -ceq $oRisky)
 Check 'O1 OFF markdown == ON markdown minus its Raises: line (Safe, doc)' ($oSafe -ne '' -and (Strip $mdSafe) -ceq $oSafe)
 $ob = @(); if ($null -ne $off[5].result -and $null -ne $off[5].result.model) { $ob = @($off[5].result.model.facts) }
 Check 'O1 OFF: no Raises: in bundle facts' (@($ob | Where-Object { $_ -match 'Raises:' }).Count -eq 0)
@@ -212,6 +213,10 @@ Check 'O1 OFF: no exception lens' (@($olens | Where-Object { ([string]$_.command
 Check 'O1 OFF: caller lenses unchanged' ((LensTitles $olens $lnRisky) -contains '1 caller')
 Check 'O1 OFF: callerCounts exceptions = [] (counts still there)' ($null -ne $off[7].result -and @($off[7].result.exceptions).Count -eq 0 -and @($off[7].result.counts).Count -gt 0)
 Check 'O1 OFF: exceptionFacts answers []' ($null -ne $off[8] -and @($off[8].result).Count -eq 0)
+# Wave 150 LX2 item 2: the capability follows the switch (ON advertises it: X1 above = the positive control).
+$offCmds = @($off[1].result.capabilities.executeCommandProvider.commands)
+Check 'O2 OFF: executeCommandProvider does NOT advertise draglint.exceptionFacts' ($offCmds.Count -gt 0 -and $offCmds -notcontains 'draglint.exceptionFacts') ($offCmds -join ',')
+Check 'O2 OFF: the other commands are still advertised (showCallers, setContext)' ($offCmds -contains 'draglint.showCallers' -and $offCmds -contains 'draglint.setContext') ($offCmds -join ',')
 
 if ($script:Failed) { Write-Host 'run_lsp_hover_exceptions_guard: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'run_lsp_hover_exceptions_guard: PASS' -ForegroundColor Green

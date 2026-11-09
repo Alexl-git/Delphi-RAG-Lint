@@ -1026,6 +1026,22 @@ function DocFactsBuildProfile: string;
   /// </remarks>
   function EffectiveDocIndent(const ALines: TArray<string>; ADeclLine, ADocStart, ADocEnd: Integer): string;
 
+  /// <summary>The hover card's 'Called from:' line: the routine's inbound callers, as plain text
+  /// (no XML escaping, no &lt;para&gt;), in the order and with the '(+N more)' suffix and the
+  /// mixed-list ' ?' marker the managed doc block uses.</summary>
+  /// <param name="AFacts">Facts from TDocFactsBuilder.Build for the hovered symbol.</param>
+  /// <param name="ADocText">The symbol's own doc-comment text (raw block and remarks); when it
+  /// already carries a 'Called from:' line (written by document --apply) the card shows that one,
+  /// so this returns ''.</param>
+  /// <returns>'Called from: A.X (a.pas), B.Y (b.pas) (+N more)', or '' when there are no callers,
+  /// the symbol is not callable (CanBeCallTarget), it has resolved 'Used in:' uses (that line
+  /// speaks for it, as in the doc block), or ADocText already holds the line.</returns>
+  /// <remarks>Pure. Wave 150 LX2 item 1: every hover surface rendered only FormatPhase2FactLines,
+  /// and 'Called from:' is a Phase-1 line only the doc-block writer emitted, so the card named the
+  /// callers only after document --apply. Used by textDocument/hover and `hover --format md`; NOT
+  /// by draglint/hoverBundle model facts (the RAD Studio popup renders resolvedCallers).</remarks>
+  function FormatHoverCalledFromLine(const AFacts: TDocFacts; const ADocText: string): string;
+
 implementation
 
 uses
@@ -1064,7 +1080,11 @@ uses
   // site is not written as the caller's cref. Doc.SymbolFacts already reaches
   // the same cache, so this adds no cycle.
   TreeSitter,
-  DRagLint.Diagnostics.ParseCache;
+  DRagLint.Diagnostics.ParseCache,
+  // 150 LX2: TSharedFacts.CompareInboundEntries, the doc block's inbound order, for
+  // FormatHoverCalledFromLine. Doc.SharedFacts reaches this unit only through
+  // Doc.Regions' interface, so this implementation-side edge is the legal half.
+  DRagLint.Doc.SharedFacts;
 
 { PERF ATTRIBUTION for Build, printed by the DRAGLINT_PROFILE doc-drift
   breakdown. Build is called once per declaration and dominated both the
@@ -5355,6 +5375,40 @@ begin
   Result.Wiring:= ComputeWiring(AStore, ASym);
   Inc(GBWiring, BTick - TB0);
   Inc(GBTotal, BTick - TBAll);
+end;
+
+function FormatHoverCalledFromLine(const AFacts: TDocFacts; const ADocText: string): string;
+{ The doc block's JoinRefs (Doc.Regions RenderFactsBlock) minus EscXml: same entry text, same
+  mixed-only ' ?' marker, same sort AFTER the cap, same suffix. A plain-text twin because that one
+  is a nested routine emitting XML, and the hover surfaces render markdown literally. }
+const
+  CALLED_FROM_LABEL = 'Called from:';
+begin
+  Result:= '';
+  if (Length(AFacts.CalledFrom) = 0) or (not CanBeCallTarget(AFacts.SymbolKind)) or
+     (Length(AFacts.UsedIn) > 0) or ADocText.Contains(CALLED_FROM_LABEL) then Exit;
+  var AnyCertain: Boolean:= False;
+  var AnyUncertain: Boolean:= False;
+  for var R: TDocFactRef in AFacts.CalledFrom do
+    if (R.Confidence = '') or SameText(R.Confidence, 'certain') then AnyCertain:= True
+    else AnyUncertain:= True;
+  var Rendered: TArray<string>;
+  SetLength(Rendered, Length(AFacts.CalledFrom));
+  for var I:= 0 to High(AFacts.CalledFrom) do
+  begin
+    var R: TDocFactRef:= AFacts.CalledFrom[I];
+    Rendered[I]:= R.Display + ' (' + R.Location + ')';
+    if AnyCertain and AnyUncertain and not ((R.Confidence = '') or SameText(R.Confidence, 'certain')) then
+      Rendered[I]:= Rendered[I] + ' ?';
+  end;
+  TArray.Sort<string>(Rendered, TComparer<string>.Construct(
+    function(const X, Y: string): Integer
+    begin
+      Result:= TSharedFacts.CompareInboundEntries(X, Y);
+    end));
+  Result:= CALLED_FROM_LABEL + ' ' + string.Join(', ', Rendered);
+  if AFacts.CalledFromTotal > Length(AFacts.CalledFrom) then
+    Result:= Result + Format(' (+%d more)', [AFacts.CalledFromTotal - Length(AFacts.CalledFrom)]);
 end;
 
 initialization

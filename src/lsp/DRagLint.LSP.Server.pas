@@ -2357,7 +2357,9 @@ const
   { LSP-1 CORE: SPEC.md 1b -- the placeholder platform when nothing names one. }
   LSP_PLACEHOLDER_PLATFORM = 'Win64';
   LSP_CMD_SET_CONTEXT      = 'draglint.setContext';
-  LSP_NOTIFY_CONTEXT       = 'draglint/context';
+  { 150 LX2: the exception-lens command; withdrawn from executeCommandProvider under --no-exception-facts. }
+  LSP_CMD_EXCEPTION_FACTS  = 'draglint.exceptionFacts';
+  LSP_NOTIFY_CONTEXT      = 'draglint/context';
   LSP_MSG_TYPE_WARNING     = 2; // window/showMessage MessageType.Warning
   LSP_MSG_TYPE_INFO        = 3; // window/showMessage MessageType.Info
   { 1.44 lspctx: how far FindListingProject climbs when no repository root stops it. }
@@ -2989,6 +2991,15 @@ begin
       var NewProv: TJSONObject:= TJSONObject.Create;
       NewProv.AddPair('commands', Cmds);
       Caps.AddPair('executeCommandProvider', NewProv);
+    end;
+    { 150 LX2: the capability follows the switch. Under --no-exception-facts no lens runs
+      draglint.exceptionFacts and it answers [], so advertising it promised a command that
+      does nothing. The feature table cannot see the switch; the server withdraws it here. }
+    if (not FExceptionFacts) and (ExecProv is TJSONObject) and (TJSONObject(ExecProv).GetValue('commands') is TJSONArray) then
+    begin
+      var ExcCmds: TJSONArray:= TJSONArray(TJSONObject(ExecProv).GetValue('commands'));
+      for var Ci:= ExcCmds.Count - 1 downto 0 do
+        if ExcCmds.Items[Ci].Value = LSP_CMD_EXCEPTION_FACTS then ExcCmds.Remove(Ci).Free;
     end;
     { LSP-1 CORE: initializationOptions (project, platform, config), or the
       IDE's settingsFile (.delphilsp.json), is the client context. }
@@ -5068,6 +5079,9 @@ begin
     var HovFactLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(HovFacts, LoadDocComplexityMin);
     { E-USE-EDGES-PHASE2: the property/field 'Used in:' line, same formatter as the doc block. }
     HovFactLines:= TDocRegions.FormatUsedInLines(HovFacts) + HovFactLines;
+    { 150 LX2: the callers, first as in the doc block; '' when the /// block already shows them. }
+    var HovCalledFrom: string:= FormatHoverCalledFromLine(HovFacts, Doc.RawBlock + Doc.Remarks);
+    if HovCalledFrom <> '' then HovFactLines:= [HovCalledFrom] + HovFactLines;
     HovFactLines:= HovFactLines + ExceptionFactLines(HitStore, Sel); { D1: Raises:, after the doc-block facts }
     MdValue:= DRagLint.Hover.Renderer.RenderHoverMarkdown(Sel, Doc, HovRhs, HovFactLines,
       FormatDeclaredType(DescribeDeclaredType(Sel, HitStore)));
@@ -5191,6 +5205,8 @@ begin
         var NdFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Filtered[0], LoadDocHandlesOptions, False, False, '', HoverExtraStores(APath, HitStore)); { 149 LX: cross-DB uses }
         var NdLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(NdFacts, LoadDocComplexityMin);
         NdLines:= TDocRegions.FormatUsedInLines(NdFacts) + NdLines; { E-USE-EDGES-PHASE2 }
+        var NdCalledFrom: string:= FormatHoverCalledFromLine(NdFacts, ''); { 150 LX2: no /// block here }
+        if NdCalledFrom <> '' then NdLines:= [NdCalledFrom] + NdLines;
         NdLines:= NdLines + ExceptionFactLines(HitStore, Filtered[0]); { D1: Raises: }
         if Length(NdLines) > 0 then
         begin
