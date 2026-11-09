@@ -4,7 +4,8 @@
 #
 # usage: pwsh -File tools\grammar\gate-grammar.ps1 -Grammar <worktree> -Base <dir with root\ and pure\ base DLLs>
 #            -Out <scratch dir> -Tools <dir with tsdiff.exe/tserr.exe> -ListDir <dir of *.txt path lists>
-#            [-Step <name>] [-NoGen] [-X86] [-TreeSitter <tree-sitter.exe>] [-VsEnv <_vsenv.bat>]
+#            [-Step <name>] [-NoGen] [-NoTest] [-X86] [-TreeSitter <tree-sitter.exe>] [-VsEnv <_vsenv.bat>]
+# -NoGen skips generate (src\ already current), -NoTest skips tree-sitter test, -X86 also builds x86 DLLs.
 # Output: <Out>\gate-<Step>.log (one line per step), <Out>\dll\<Step>\{root,pure}\*.dll (x64),
 #         <Out>\dll\<Step>-x86\..., <Out>\test-<Step>-{root,pure}.txt, <Out>\gate-<Step>-<grammar>-<list>.tsv,
 #         <Out>\tserr-<Step>-<grammar>-<list>.tsv (changed files only). Last log line: GATE_DONE <Step>.
@@ -17,6 +18,7 @@ param(
   [Parameter(Mandatory)][string]$ListDir,
   [string]$Step = 'new',
   [switch]$NoGen,
+  [switch]$NoTest,
   [switch]$X86,
   [string]$TreeSitter = 'C:\Projects\tree-sitter-delphi13\node_modules\tree-sitter-cli\tree-sitter.exe',
   [string]$VsEnv = (Join-Path $PSScriptRoot '..\..\build\_vsenv.bat')
@@ -40,7 +42,8 @@ if (-not $NoGen) {
 $grs = @(
   @('root', 'tree-sitter-delphi13.dll', 'tree_sitter_delphi13', "$Grammar\src"),
   @('pure', 'tree-sitter-delphi13-pure.dll', 'tree_sitter_delphi13_pure', "$Grammar\pure\src"))
-$archs = @(@('64', 'X64', "$Step")); if ($X86) { $archs += , @('32', 'X86', "$Step-x86") }
+# one element per arch: the leading comma keeps the inner array from being flattened
+$archs = @(, @('64', 'X64', "$Step")); if ($X86) { $archs += , @('32', 'X86', "$Step-x86") }
 foreach ($ar in $archs) {
   foreach ($gr in $grs) {
     $dll = "$Out\dll\$($ar[2])\$($gr[0])"; New-Item -ItemType Directory -Force $dll | Out-Null
@@ -53,6 +56,7 @@ foreach ($ar in $archs) {
 }
 
 foreach ($gr in $grs) {
+  if ($NoTest) { break }
   $dir = if ($gr[0] -eq 'root') { $Grammar } else { "$Grammar\pure" }
   if (-not (Test-Path "$dir\test\corpus")) { Gate-Log "tree-sitter test $($gr[0]): no corpus"; continue }
   New-Item -ItemType Directory -Force "$Out\tslib\$Step-$($gr[0])" | Out-Null
