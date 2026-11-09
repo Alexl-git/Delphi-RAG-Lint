@@ -22,7 +22,7 @@ unit DRagLint.Report.CycleEdge;  // dl:ok unit-too-large@9f6f -- the edge surfac
 interface
 
 uses
-  System.JSON,
+  System.JSON, System.Generics.Collections,
   DRagLint.Core.Model, DRagLint.Core.Interfaces;
 
 type
@@ -284,8 +284,17 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function CachedChildByName(pParentId: Int64; const pName: string): TSymbol;
+    /// <summary>The lower-case names of every symbol the index holds in the files of one unit stem.</summary>
+    /// <param name="pStem">Lower-case unit stem, as BindName reports it.</param>
+    /// <returns>A set owned by the cache, valid while it lives: LowerCase(Name) of every row
+    /// ISymbolStore.FindSymbolsByFile returns for every indexed file whose stem is pStem.</returns>
+    /// <remarks>
+    /// Lane 150 CY3 (150-CAUSES-SPEED): a plain identifier outside this set cannot bind (BindName) to
+    /// pStem -- the store's exact pass needs the same text and its NOCASE retry folds ASCII as LowerCase
+    /// does -- so BuildEdgeSurfaces skips the bind (a store query per distinct name) for it.
+    /// </remarks>
+    function CachedNamesOfStem(const pStem: string): TDictionary<string, Boolean>;
   end;
-
   /// <summary>The recipe that cuts one edge of a circular group.</summary>
   /// <remarks>
   /// crMoveGlobals = move the declarations into a leaf unit (the playbook's
@@ -1097,7 +1106,7 @@ implementation
 
 uses
   System.SysUtils, System.StrUtils, System.Classes, System.RegularExpressions, System.Math,
-  System.Generics.Collections, System.Generics.Defaults, System.Hash, System.IOUtils;
+  System.Generics.Defaults, System.Hash, System.IOUtils;
 
 const
   { The Delphi default unit-scope names (.dproj DCC_Namespace when it sets none); a type written
@@ -1218,6 +1227,8 @@ type
     FRcvLines : TDictionary<string, Boolean>;
     FClassUses: TList<TReference>;
     FSurface  : TEdgeSurface;
+    FNameFilter: TDictionary<string, Boolean>;  // lane 150 CY3: BuildEdgeSurfaces' key pass only -- the names the target stems declare
+    function MayBindToTarget(const pName: string): Boolean;
     function Sym(pId: Int64): TSymbol;
     function Child(pParentId: Int64; const pName: string): TSymbol;
     function TopLevel(const pSym: TSymbol): TSymbol;
@@ -1264,6 +1275,7 @@ end;
 
 destructor TSurfaceBuilder.Destroy;
 begin
+  FNameFilter.Free;
   FClassUses.Free;
   FRcvLines.Free;
   FOwners.Free;
@@ -1525,8 +1537,18 @@ end;
 { Lane 150 CY2: the keys of the edges a ref can touch, mirroring Collect's dispatch step for step --
   'file#<fid>' where a step compares a symbol's file with FToFid, 'stem#<stem>' where it compares a bound
   stem with the edge's ToStem. A key too many only costs time; a missing key would change a surface. }
-procedure TSurfaceBuilder.TargetKeys(const pR: TReference; const pKeys: TList<string>);
-var
+{ Lane 150 CY3: False only when FNameFilter is set (the key pass) and pName is a plain identifier no symbol
+  of any target stem carries: BindName could then only return a stem outside the targets, a key no edge
+  reads (CachedNamesOfStem says why). A dotted, generic or escaped name always binds. }
+function TSurfaceBuilder.MayBindToTarget(const pName: string): Boolean;
+begin
+  if (FNameFilter = nil) or (pName = '') or CharInSet(pName[1], ['0'..'9']) then Exit(True);
+  for var C in pName do
+    if not CharInSet(C, ['A'..'Z', 'a'..'z', '0'..'9', '_']) then Exit(True);
+  Result:= FNameFilter.ContainsKey(LowerCase(pName));
+end;
+
+procedure TSurfaceBuilder.TargetKeys(const pR: TReference; const pKeys: TList<string>);var
   MA  : TCallEdge;
   Cls : TSymbol;
   Stem: string;
@@ -1541,7 +1563,7 @@ begin
     { TakeClassMemberAccess and TakeReceiverRef: a receiver bound to a class of the edge's unit }
     if not (SameText(pR.Kind, 'member-access') or SameText(pR.Kind, 'call')) then Exit;
     var Rcv:= pR.ReceiverText.Substring(pR.ReceiverText.LastIndexOf('.') + 1);
-    if FSource.BindName(FFromFid, pR.StartLine, Rcv, Cls, Stem) then pKeys.Add('stem#' + Stem);
+    if MayBindToTarget(Rcv) and FSource.BindName(FFromFid, pR.StartLine, Rcv, Cls, Stem) then pKeys.Add('stem#' + Stem);
     { TakeReceiverRef's second arm: a call bound to a routine of the edge's unit }
     if SameText(pR.Kind, 'call') and (pR.SymbolId > 0) then pKeys.Add('file#' + IntToStr(Sym(pR.SymbolId).FileId));
     Exit;
@@ -1550,7 +1572,7 @@ begin
     target) or not at all, and the DB lookup behind IsLocal cost more than the bind (Loader: 2 of 6 s) }
   if SameText(pR.Kind, 'member-access') then Exit;
   if pR.SymbolId > 0 then pKeys.Add('file#' + IntToStr(TopLevel(Sym(pR.SymbolId)).FileId))
-  else if FSource.BindName(FFromFid, pR.StartLine, pR.NameText, Cls, Stem) then pKeys.Add('stem#' + Stem);
+  else if MayBindToTarget(pR.NameText) and FSource.BindName(FFromFid, pR.StartLine, pR.NameText, Cls, Stem) then pKeys.Add('stem#' + Stem);
 end;
 
 procedure TSurfaceBuilder.CollectRefs(const pRefs: TArray<TReference>);
@@ -1614,7 +1636,8 @@ var
   Picked: TList<Integer>;
 begin
   SetLength(Result, Length(pToStems));
-  if (pFromFid <= 0) or (Length(pToStems) < 2) then
+  { lane 150 CY3: one target takes the keyed pass too -- the name filter (MayBindToTarget) makes it the cheaper one }
+  if (pFromFid <= 0) or (Length(pToStems) = 0) then
   begin
     for var I:= 0 to High(pToStems) do Result[I]:= BuildEdgeSurface(pSource, pFromFid, pToStems[I]);
     Exit;
@@ -1624,6 +1647,12 @@ begin
   Picked:= TList<Integer>.Create;
   Probe := TSurfaceBuilder.Create(pSource, pFromFid, '');
   try
+    if Probe.FCache <> nil then
+    begin
+      Probe.FNameFilter:= TDictionary<string, Boolean>.Create;
+      for var T in pToStems do
+        for var N in Probe.FCache.CachedNamesOfStem(T).Keys do Probe.FNameFilter.AddOrSetValue(N, True);
+    end;
     Refs:= if Probe.FCache <> nil then Probe.FCache.CachedRefsFromFile(pFromFid)
       else Probe.FStore.GetReferencesFromFile(pFromFid);
     for var I:= 0 to High(Refs) do

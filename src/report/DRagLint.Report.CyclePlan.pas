@@ -968,6 +968,8 @@ type
   private
     FAccess     : TDictionary<Int64, TCallEdge>;  // ref id -> member_accesses row, loaded on first use
     FChildMemo  : TDictionary<string, TSymbol>;   // HP2B: '<parent id>:<name>' -> FindChildSymbolByName, on first use
+    FStemFids   : TObjectDictionary<string, TList<Int64>>;                 // lane 150 CY3: stem -> every file id of that stem, on first use
+    FStemNames  : TObjectDictionary<string, TDictionary<string, Boolean>>;  // lane 150 CY3: CachedNamesOfStem, per stem
     FNeedsTo    : TObjectDictionary<Int64, TDictionary<string, TArray<TNeed>>>;  // HP2B: fid -> owner stem -> NeedsOf rows, in order
     FBodyMemo   : TDictionary<Int64, TArray<TLineRange>>;  // HP2B: symbol id -> BodyRanges, on first use
     FChainMemo  : TDictionary<string, Boolean>;   // HP2B: '<type id>:<name>' -> IsClassChainMember, on first use
@@ -1224,6 +1226,7 @@ type
     function CachedRefsFromFile(pFid: Int64): TArray<TReference>;
     function CachedSymbolById(pId: Int64): TSymbol;
     function CachedChildByName(pParentId: Int64; const pName: string): TSymbol;
+    function CachedNamesOfStem(const pStem: string): TDictionary<string, Boolean>;
     function NeedsToStem(pFid: Int64; const pStem: string): TArray<TNeed>;
     function ClassChainMember(pEnclosingId: Int64; const pName: string): Boolean;
   public
@@ -2300,6 +2303,8 @@ begin
   FFiles.Free;
   FAccess.Free;
   FChildMemo.Free;
+  FStemNames.Free;
+  FStemFids.Free;
   FNeedsTo.Free;
   FBodyMemo.Free;
   FChainMemo.Free;
@@ -8084,6 +8089,36 @@ end;
 function TCyclePlanner.CachedSymbolById(pId: Int64): TSymbol;
 begin
   Result:= GetSym(pId);
+end;
+
+{ Lane 150 CY3: the names behind BindName's stems -- CandidatesFor reports StemOfFid(owner's file), the
+  owner sits in the declaring symbol's file (an enum value's type too), so the set covers every file of
+  the stem (any extension, as StemOfFid does), read through GetFile like the rest of the planner. }
+function TCyclePlanner.CachedNamesOfStem(const pStem: string): TDictionary<string, Boolean>;
+var
+  Fids: TList<Int64>;
+begin
+  if FStemNames = nil then
+  begin
+    FStemNames:= TObjectDictionary<string, TDictionary<string, Boolean>>.Create([doOwnsValues]);
+    FStemFids := TObjectDictionary<string, TList<Int64>>.Create([doOwnsValues]);
+    for var Fid in FStore.GetAllFileIds do
+    begin
+      var Stem:= StemOfFid(Fid);
+      if not FStemFids.TryGetValue(Stem, Fids) then
+      begin
+        Fids:= TList<Int64>.Create;
+        FStemFids.Add(Stem, Fids);
+      end;
+      Fids.Add(Fid);
+    end;
+  end;
+  if FStemNames.TryGetValue(pStem, Result) then Exit;
+  Result:= TDictionary<string, Boolean>.Create;
+  FStemNames.Add(pStem, Result);
+  if FStemFids.TryGetValue(pStem, Fids) then
+    for var Fid in Fids do
+      for var S in GetFile(Fid).Syms do Result.AddOrSetValue(LowerCase(S.Name), True);
 end;
 
 function TCyclePlanner.CachedChildByName(pParentId: Int64; const pName: string): TSymbol;
