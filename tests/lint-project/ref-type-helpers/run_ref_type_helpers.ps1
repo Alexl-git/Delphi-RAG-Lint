@@ -99,10 +99,12 @@ try {
   Check 'with: a call on the subject'                ($on -contains 'LEAF|W10(Names())>Names()|TRhOther')
   Check 'with: Self is never a with member'          ($on -contains 'LEAF|W13(Self.FLeaf)>Self.FLeaf|TRhLeaf')
   Check 'with: T(x) that is a subject method, not a cast' ($on -contains 'LEAF|W20(TRhMid(1))>TRhMid(1)|TRhOther')
+  # 149 INT: resolver 1.23 (RB1, with-scope call heads) proves Names() is H.Names (TRhHolder, a complete surface), so W17 now answers.
+  Check 'with: a call head on a complete subject, then a field' ($on -contains 'LEAF|W17(Names().FLeaf)>Names().FLeaf|TRhLeaf')
   # UNKNOWN, never a wrong type: the subject's surface cannot be followed, or the written type is no proof
   foreach ($e in @('W03(Q)>Q', 'W04(Q)>Q', 'W06(H.FLeaf)>H.FLeaf', 'W08(TRhLeaf(Q))>TRhLeaf(Q)', 'W09(Q as TRhLeaf)>Q as TRhLeaf',
                    'W11(TRhHolder(Q).FLeaf)>TRhHolder(Q).FLeaf', 'W12(RhFree().FLeaf)>RhFree().FLeaf', 'W14(TRhLeaf.Create)>TRhLeaf.Create',
-                   'W15(RhFree())>RhFree()', 'W17(Names().FLeaf)>Names().FLeaf', 'W18(TRhLeaf(Q))>TRhLeaf(Q)', 'TRhHolder(Q)')) {
+                   'W15(RhFree())>RhFree()', 'W18(TRhLeaf(Q))>TRhLeaf(Q)', 'TRhHolder(Q)')) {
     Check "with: unknown for $e" ($on -contains "LEAF|$e|-")
   }
   # CONTROLS: out of the scope answers again: a `with` first subject and code after the with
