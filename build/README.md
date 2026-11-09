@@ -29,6 +29,16 @@ parameters everywhere; the default output is `dll-win32\` for the 32 bats and `d
 for the 64 bats. A worktree path works as the first parameter. Pass an explicit second
 parameter to build to a scratch path without touching `third_party\`.
 
+## Grammar gate tools
+
+`tools\grammar\` holds the grammar lanes' instruments: `tsdiff` (tree-by-tree comparison of
+two grammar DLLs over a file list), `tserr` (ERROR / MISSING counts and outermost-ERROR bytes,
+old vs new) and `tsparse` (S-expression dump of one file), built by
+`tools\grammar\build-grammar-tools.bat [grammar-checkout] [out-dir]` with the same `_vsenv.bat`
+the manual grammar bats use; `tools\grammar\gate-grammar.ps1` runs generate + DLL build +
+`tree-sitter test` + tsdiff/tserr for one grammar worktree against a base DLL pair. They read
+DLLs only and never write `third_party\`. See `tools\grammar\README.md`.
+
 ## Staging a built engine
 
 `stage-engine.ps1 -FreshExe <new> -Target <deployed>` holds the deployed engine, kills the
