@@ -335,6 +335,8 @@ type
   TRoutineThreadFacts = record
     /// <summary>Its first UI access and where; '' when it has none or protects itself.</summary>
     Witness: string;
+    /// <summary>Its first process-ending call (Halt, PostQuitMessage, ...) and where; '' when it has none.</summary>
+    QuitWitness: string;
     Callees: TArray<Int64>;
   end;
 
@@ -397,6 +399,7 @@ type
       FSelfFacts: TTypeFacts;
       FRoutineFacts: TDictionary<Int64, TRoutineThreadFacts>;
       FReach   : TDictionary<Int64, TThreadReach>;
+      FQuitReach: TDictionary<Int64, TThreadReach>;
       FUiOwners: TDictionary<string, TArray<string>>;
       FOwnRoots: TDictionary<string, Boolean>;
       FEmitted : TDictionary<Int64, Boolean>;
@@ -419,7 +422,9 @@ type
       function FindDefProc(const ANode: TTSNode; ALine: Integer): TTSNode;
       function SwitchToFile(AFileId: Int64): Boolean;
       function RoutineFacts(AId: Int64): TRoutineThreadFacts;
-      function ReachOf(ATarget: Int64; out AReach: TThreadReach): Boolean;
+      function ReachOf(ATarget: Int64; out AReach: TThreadReach; AQuit: Boolean = False): Boolean;
+      function QuitHitOf(const ANode: TTSNode): string;
+      function FirstQuit(const ANode: TTSNode; out ALine: Integer): string;
       procedure EmitThreadFinding(const ATouch: TThreadTouch; const AMessage: string; const ARuleId: string = UI_ACCESS_IN_THREAD_TYPED_RULE);
       procedure EmitReach(const ATouch: TThreadTouch; const AEntry: string);
       procedure CheckThreadBody(const ABody: TTSNode; const AEntry: string);
@@ -579,6 +584,7 @@ begin
   FTouches := TList<TThreadTouch>.Create;
   FRoutineFacts:= TDictionary<Int64, TRoutineThreadFacts>.Create;
   FReach   := TDictionary<Int64, TThreadReach>.Create;
+  FQuitReach:= TDictionary<Int64, TThreadReach>.Create;
   FUiOwners:= TDictionary<string, TArray<string>>.Create;
   FOwnRoots:= TDictionary<string, Boolean>.Create;
   FEmitted := TDictionary<Int64, Boolean>.Create;
@@ -592,6 +598,7 @@ begin
   FEmitted.Free;
   FOwnRoots.Free;
   FUiOwners.Free;
+  FQuitReach.Free;
   FReach.Free;
   FRoutineFacts.Free;
   FTouches.Free;
@@ -1512,6 +1519,9 @@ begin
             if T.IsCall then Result.Callees:= Result.Callees + [T.Target]
             else if Result.Witness = '' then
               Result.Witness:= Format('%s at %s:%d', [T.Text, ExtractFileName(FPath), T.StartLine]);
+          var QLine: Integer;
+          var QHit : string:= FirstQuit(Body, QLine);
+          if QHit <> '' then Result.QuitWitness:= Format('%s at %s:%d', [QHit, ExtractFileName(FPath), QLine]);
         end;
       end;
     finally
@@ -1531,7 +1541,7 @@ begin
   FRoutineFacts.Add(AId, Result);
 end;
 
-function TRefTypeScan.ReachOf(ATarget: Int64; out AReach: TThreadReach): Boolean;
+function TRefTypeScan.ReachOf(ATarget: Int64; out AReach: TThreadReach; AQuit: Boolean): Boolean;
 type
   TStep = record
     Id  : Int64;
@@ -1545,7 +1555,8 @@ type
   end;
 
 begin
-  if FReach.TryGetValue(ATarget, AReach) then Exit(AReach.Witness <> '');
+  var Cache: TDictionary<Int64, TThreadReach>:= if AQuit then FQuitReach else FReach;
+  if Cache.TryGetValue(ATarget, AReach) then Exit(AReach.Witness <> '');
   AReach:= Default(TThreadReach);
   var Visited: TDictionary<Int64, Boolean>:= TDictionary<Int64, Boolean>.Create;
   try
@@ -1560,11 +1571,12 @@ begin
       for var St: TStep in Frontier do
       begin
         var Facts: TRoutineThreadFacts:= RoutineFacts(St.Id);
-        if Facts.Witness <> '' then
+        var Wit: string:= if AQuit then Facts.QuitWitness else Facts.Witness;
+        if Wit <> '' then
         begin
           AReach.Path   := St.Path;
-          AReach.Witness:= Facts.Witness;
-          FReach.Add(ATarget, AReach);
+          AReach.Witness:= Wit;
+          Cache.Add(ATarget, AReach);
           Exit(True);
         end;
         for var C: Int64 in Facts.Callees do
@@ -1582,7 +1594,7 @@ begin
   finally
     Visited.Free;
   end;
-  FReach.Add(ATarget, AReach);
+  Cache.Add(ATarget, AReach);
   Result:= False;
 end;
 
@@ -1614,6 +1626,53 @@ begin
       '-- marshal the call through Synchronize or Queue', [AEntry, AEntry, Reach.Path, Reach.Witness]));
 end;
 
+{ The written text of a process-ending call at this node, '' when the node is not one. }
+function TRefTypeScan.QuitHitOf(const ANode: TTSNode): string;
+begin
+  Result:= '';
+  var NT: string:= ANode.NodeType;
+  if NT = NODE_DOT then
+  begin
+    var Qual: string:= Text(ANode.ChildByField(FIELD_LHS)).Replace(' ', '').ToLower;
+    var Member: string:= Text(ANode.ChildByField(FIELD_RHS)).Replace(' ', '').ToLower;
+    if (Qual = QUIT_APPLICATION) and (Member = QUIT_TERMINATE) then Result:= 'Application.Terminate'
+    else if MatchStr(Member, QUIT_ROUTINES) and MatchStr(Qual, QUIT_QUALIFIERS) then Result:= Text(ANode);
+  end
+  else if (NT = TYPE_NODE_ID) and MatchStr(Text(ANode).ToLower, QUIT_ROUTINES) then Result:= Text(ANode);
+end;
+
+{ The first process-ending call in a routine body, under the same skips as CheckQuits (marshal arguments, lambdas,
+  nested routines). RN 149: lets a quit reached through a called routine be reported at the call site. }
+function TRefTypeScan.FirstQuit(const ANode: TTSNode; out ALine: Integer): string;
+begin
+  Result:= '';
+  ALine:= 0;
+  if ANode.IsNull then Exit;
+  var NT: string:= ANode.NodeType;
+  if (NT = NODE_LAMBDA) or (NT = NODE_DEFPROC) then Exit;
+  Result:= QuitHitOf(ANode);
+  if Result <> '' then
+  begin
+    ALine:= Integer(ANode.StartPoint.Row) + 1;
+    Exit;
+  end;
+  if NT = NODE_CALL then
+  begin
+    var Ent: TTSNode:= ANode.ChildByField(FIELD_ENTITY);
+    var Callee: string:= '';
+    if (not Ent.IsNull) and (Ent.NodeType = TYPE_NODE_ID) then Callee:= Text(Ent)
+    else if (not Ent.IsNull) and (Ent.NodeType = NODE_DOT) then Callee:= Text(Ent.ChildByField(FIELD_RHS));
+    if MatchStr(Callee.ToLower, MARSHAL_CALLS) then Exit;
+  end;
+  if NT = NODE_DOT then
+    Exit(FirstQuit(ANode.ChildByField(FIELD_LHS), ALine));
+  for var I: Integer:= 0 to Integer(ANode.NamedChildCount) - 1 do
+  begin
+    Result:= FirstQuit(ANode.NamedChild(I), ALine);
+    if Result <> '' then Exit;
+  end;
+end;
+
 { quit-from-thread: a call that ends the process or posts WM_QUIT, found anywhere in the thread body outside
   Synchronize/Queue arguments, nested routines and lambdas (those are entries of their own or not thread code). }
 procedure TRefTypeScan.CheckQuits(const ANode: TTSNode; const AEntry: string);
@@ -1623,17 +1682,9 @@ begin
   if ANode.IsNull then Exit;
   var NT: string:= ANode.NodeType;
   if (NT = NODE_LAMBDA) or (NT = NODE_DEFPROC) then Exit;
-  Hit:= '';
-  if NT = NODE_DOT then
-  begin
-    var Qual: string:= Text(ANode.ChildByField(FIELD_LHS)).Replace(' ', '').ToLower;
-    var Member: string:= Text(ANode.ChildByField(FIELD_RHS)).Replace(' ', '').ToLower;
-    if (Qual = QUIT_APPLICATION) and (Member = QUIT_TERMINATE) then Hit:= 'Application.Terminate'
-    else if MatchStr(Member, QUIT_ROUTINES) and MatchStr(Qual, QUIT_QUALIFIERS) then Hit:= Text(ANode);
-    if Hit = '' then CheckQuits(ANode.ChildByField(FIELD_LHS), AEntry);
-  end
-  else if (NT = TYPE_NODE_ID) and MatchStr(Text(ANode).ToLower, QUIT_ROUTINES) then Hit:= Text(ANode)
-  else if NT = NODE_CALL then
+  Hit:= QuitHitOf(ANode);
+  if (NT = NODE_DOT) and (Hit = '') then CheckQuits(ANode.ChildByField(FIELD_LHS), AEntry);
+  if NT = NODE_CALL then
   begin
     var Ent: TTSNode:= ANode.ChildByField(FIELD_ENTITY);
     var Callee: string:= '';
@@ -1660,7 +1711,22 @@ end;
 procedure TRefTypeScan.CheckThreadBody(const ABody: TTSNode; const AEntry: string);
 begin
   if ABody.IsNull then Exit;
-  if Wants(QUIT_FROM_THREAD_RULE) then CheckQuits(ABody, AEntry);
+  if Wants(QUIT_FROM_THREAD_RULE) then
+  begin
+    CheckQuits(ABody, AEntry);
+    { RN 149: a quit reached through a routine the body calls (ReachOf over the resolved calls). }
+    var QSelf: TTypeFacts:= FSelfFacts;
+    CollectBody(ABody);
+    var QTouches: TArray<TThreadTouch>:= FTouches.ToArray;
+    for var T: TThreadTouch in QTouches do
+    begin
+      var QReach: TThreadReach;
+      if T.IsCall and ReachOf(T.Target, QReach, True) then
+        EmitThreadFinding(T, Format('%s runs on a worker thread and reaches a call that ends the whole process: %s -> %s, which calls %s ' +
+          '-- signal the main thread through Synchronize or Queue instead', [AEntry, AEntry, QReach.Path, QReach.Witness]), QUIT_FROM_THREAD_RULE);
+    end;
+    FSelfFacts:= QSelf;
+  end;
   if (not Wants(UI_ACCESS_IN_THREAD_TYPED_RULE)) or BodyNames(ABody, GUARD_WORDS) then Exit;
   var SavedSelf: TTypeFacts:= FSelfFacts;
   CollectBody(ABody);
