@@ -90,6 +90,8 @@ Do not also install a third-party Pascal extension: a second one declaring
 
 Settings `dragLint.project`, `dragLint.platform`, `dragLint.config` choose which project index and platform library the server answers from (empty = auto-detect). Commands **drag-lint: Select Platform** and **drag-lint: Select Project** change them and tell the server at once (`workspace/executeCommand draglint.setContext`). The status bar shows the resolved context (`DL: App | Win64 | Debug`; warning colour when the server reports a notice); click it to pick a platform. Needs a server that sends the `draglint/context` notification; otherwise it reads `DL: context unknown`.
 
+Code lenses: above each routine the server shows `N callers` and, when the routine raises or handles exceptions, `raises N types, handles M types`. Clicking the exception lens lists its raise and handler sites in a quick pick (`workspace/executeCommand draglint.exceptionFacts`, engine 1.49 or later); picking one jumps to it. `lsp --no-exception-facts` turns the exception lens and the hover `Raises:` line off.
+
 ## Packaging
 
 From this directory:
