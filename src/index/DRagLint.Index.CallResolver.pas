@@ -414,6 +414,15 @@ type
     Pending: string;
     /// <summary>An identifier-chain receiver whose head no project rung typed; ''.</summary>
     Head   : string;
+    /// <summary>150-RS1 (2): the generic argument group of the declared type Text came from
+    /// (`&lt;TBinder&gt;` of `TList&lt;TBinder&gt;`), set only when the project could not type it;
+    /// handed to the library oracle with Text, never written to refs.receiver_type_text.</summary>
+    Args   : string;
+    /// <summary>150-RS1 (5): the file and line of the field / local whose declared type Text is
+    /// (0 = unknown): a library type name is looked up in the uses visible there.</summary>
+    DeclFile: Int64;
+    /// <summary>See DeclFile.</summary>
+    DeclLine: Integer;
   end;
 
   /// <summary>B9 F1 (resolver 1.20.0-alpha): the static type of one reference, one
@@ -8005,6 +8014,8 @@ var
     TypeText:= '';
     TypeId  := TypeOfFunctionResult(ACallRef, Name, FnText);
     if (TypeId = 0) and (FnText <> '') then TypeText:= FnText;
+    { 150-RS1 (1): no function of the name -> a HARD CAST `PRec(P)^.K`: the value has the named type. }
+    if (TypeId = 0) and (TypeText = '') then TypeId:= ResolveTypeNameToSymbol(Name, ACallRef.FileId);
     Result:= (TypeId > 0) or (TypeText <> '');
   end;
 
@@ -8243,7 +8254,7 @@ begin
   Result:= DerefPointerAlias(TypeReceiverCore(ACallRef, AReceiverExpr, AText));
 end;
 
-function TCallResolver.TypeReceiverCore(const ACallRef: TReference; const AReceiverExpr: string;  // dl:ok too-many-exit-points@416f, cyclomatic-complexity@00b0, method-too-long@55c6, cognitive-complexity@12d5 -- (item 4, lane R4R: the out AText adds no rung and changes no answer -- each existing rung writes the type text it already read before resolving it, and the added branches are that bookkeeping in kinds 6 and 10; the rung order is still the contract. Earlier: 2026-10-26 whole-branch review extract-136: T-11 added kind 12, the call-chain rung, two more exits and complexity 32 over the 30 bound; first reviewed 2026-10-25 at X1/X2): the exits are the receiver-kind LADDER -- each rung (Self, cast, selector chain, unit-qualified type, local/field/Result, function result, ordinary name, ...) answers and leaves; the body is the old TypeReceiver unchanged, renamed so TypeReceiver can apply the implicit dereference once. One exit would thread a found flag through a dozen rungs whose order IS the contract.
+function TCallResolver.TypeReceiverCore(const ACallRef: TReference; const AReceiverExpr: string;  // dl:ok too-many-exit-points@416f, cyclomatic-complexity@e514, method-too-long@42fc, cognitive-complexity@22e3 -- (re-reviewed 2026-11-09 lane 150-RS1: +the KeepArgs nested helper and the kind-10 head-declaration carry, bookkeeping only, no new rung; item 4, lane R4R: the out AText adds no rung and changes no answer -- each existing rung writes the type text it already read before resolving it, and the added branches are that bookkeeping in kinds 6 and 10; the rung order is still the contract. Earlier: 2026-10-26 whole-branch review extract-136: T-11 added kind 12, the call-chain rung, two more exits and complexity 32 over the 30 bound; first reviewed 2026-10-25 at X1/X2): the exits are the receiver-kind LADDER -- each rung (Self, cast, selector chain, unit-qualified type, local/field/Result, function result, ordinary name, ...) answers and leaves; the body is the old TypeReceiver unchanged, renamed so TypeReceiver can apply the implicit dereference once. One exit would thread a found flag through a dozen rungs whose order IS the contract.
   out AText: TRcvTypeText): Int64;
 var
   Encl    : TSymbol;
@@ -8251,6 +8262,26 @@ var
   Member  : TSymbol;
   CastType: string ;
   RetType : string ;
+
+  { 150-RS1 (2): AId when the project typed the declared text ADecl; otherwise 0, and the text's
+    generic argument group (`<TBinder>`) rides to the library oracle in AText.Args. (5): the
+    declaration ASym that wrote ADecl (a field / local; Id 0 = unknown) is where the library type
+    name is looked up -- AText.DeclFile / DeclLine. }
+  function KeepArgs(AId: Int64; const ADecl: string; const ASym: TSymbol): Int64;
+  begin
+    Result:= AId;
+    if AId <> 0 then Exit;
+    var Lt: Integer:= Pos('<', ADecl);
+    var Gt: Integer:= ADecl.LastIndexOf('>') + 1;
+    if (Lt > 1) and (Gt > Lt) and not Trim(ADecl).StartsWith('^') then
+      AText.Args:= Copy(ADecl, Lt, Gt - Lt + 1);
+    if ASym.Id > 0 then
+    begin
+      AText.DeclFile:= ASym.FileId;
+      AText.DeclLine:= ASym.StartLine;
+    end;
+  end;
+
 begin
   Result:= 0;
   AText := Default(TRcvTypeText); { item 4: '' for bare / Self / with-typed / untyped }
@@ -8426,6 +8457,14 @@ begin
     begin
       AText.Text   := CurText;
       AText.Pending:= if StopIx <= High(Segs) then string.Join('.', Segs, StopIx, Length(Segs) - StopIx) else '';
+      if StopIx = 1 then
+      begin
+        { found-in-150 (RS1 item 5): nothing was stepped, so CurText IS the head's declared text --
+          its generic args and declaration ride along (`BBitmap.Canvas.Lock`). }
+        AText.Args    := HeadText.Args;
+        AText.DeclFile:= HeadText.DeclFile;
+        AText.DeclLine:= HeadText.DeclLine;
+      end;
     end
     else if HeadText.Head <> '' then
       AText.Head:= AReceiverExpr;
@@ -8453,7 +8492,7 @@ begin
   begin
     var LocalType: string:= LocalTypeText(Member);
     AText.Text:= NormalizeTypeLeaf(LocalType);
-    Exit(ResolveTypeNameToSymbol(LocalType, ACallRef.FileId));
+    Exit(KeepArgs(ResolveTypeNameToSymbol(LocalType, ACallRef.FileId), LocalType, Member));
   end;
   if Declared then
     Exit; // a local/param of that name exists but none covers the site -> 0
@@ -8484,7 +8523,7 @@ begin
     if Member.Id > 0 then
     begin
       AText.Text:= NormalizeTypeLeaf(Member.Signature);
-      Exit(ResolveTypeNameToSymbol(Member.Signature, ACallRef.FileId));
+      Exit(KeepArgs(ResolveTypeNameToSymbol(Member.Signature, ACallRef.FileId), Member.Signature, Member));
     end;
   end;
 
@@ -8520,7 +8559,7 @@ begin
   //     rung is still the last word when no value of the name is in scope. Pinned by
   //     tests\callresolve\run_unit_var_receiver_bind.ps1.
   var OrdText: string;
-  Result:= TypeOfOrdinaryName(ACallRef, AReceiverExpr, OrdText);
+  Result:= KeepArgs(TypeOfOrdinaryName(ACallRef, AReceiverExpr, OrdText), OrdText, Default(TSymbol));
   AText.Text:= NormalizeTypeLeaf(OrdText);
   if Result > 0 then Exit;
 
@@ -11147,6 +11186,29 @@ begin
     if A.Resolved and (A.SymbolId > 0) and (FindChildOfKind(A.SymbolId, AName, AnyMember).Id > 0) then Exit(True);
 end;
 
+{ 150-RS1 (4): the unit scope names (DCC_Namespace) the project file ADproj declares, every
+  configuration's, lower-cased, first occurrence kept; `$(..)` references dropped. [] when the
+  file is missing or unreadable. Read from the .dproj text until EX3's stored project fact
+  (project_settings 'DCC_Namespace', GetProjectSettings) is merged -- then this reads that. }
+function DprojNamespaces(const ADproj: string): TArray<string>;
+begin
+  Result:= [];
+  if not TFile.Exists(ADproj) then Exit;
+  var Text: string;
+  try
+    Text:= TFile.ReadAllText(ADproj);
+  except  // dl:ok try-except-swallowed@7e54 -- 150-RS1: an unreadable .dproj means no scope names are known (the documented [] answer); the resolve pass must not abort on a side file
+    on EInOutError do Exit;
+    on EFileStreamError do Exit;
+  end;
+  for var M: TMatch in TRegEx.Matches(Text, '<DCC_Namespace>([^<]*)</DCC_Namespace>', [roIgnoreCase]) do
+    for var Part: string in M.Groups[1].Value.Split([';']) do
+    begin
+      var Ns: string:= LowerCase(Trim(Part));
+      if (Ns <> '') and not Ns.StartsWith('$(') and (IndexStr(Ns, Result) < 0) then Result:= Result + [Ns];
+    end;
+end;
+
 function TCallResolver.FileOwnUses(AFileId: Int64): TArray<string>;
 begin
   var AllUses: TArray<string>:= FileUsesUnits(AFileId); // loads FDprUses first
@@ -11161,7 +11223,10 @@ begin
     FDprLoaded:= True;
     for var Id: Int64 in FStore.GetAllFileIds do
       if SameText(ExtractFileExt(FStore.GetFilePath(Id)), '.dpr') then
+      begin
         for var U: TUnitUse in FStore.GetUnitUsesForFile(Id) do FDprUses:= FDprUses + [LowerCase(U.UnitName)];
+        FOracle.Namespaces:= FOracle.Namespaces + DprojNamespaces(ChangeFileExt(FStore.GetFilePath(Id), '.dproj'));
+      end;
   end;
   Result:= FDprUses;
   for var U: TUnitUse in FStore.GetUnitUsesForFile(AFileId) do Result:= Result + [LowerCase(U.UnitName)];
@@ -11246,7 +11311,26 @@ begin
     Exit(FOracle.Bind(Anc, AText.Pending, ACallRef.NameText, Kind, FileUsesUnits(ACallRef.FileId), Reason));
   end;
   if AText.Text <> '' then
-    Exit(FOracle.Bind(AText.Text, AText.Pending, ACallRef.NameText, Kind, FileUsesUnits(ACallRef.FileId), Reason));
+  begin
+    { 150-RS1 (5): the type text is a name looked up where it was DECLARED -- System, SysInit, the
+      interface uses, then the implementation uses written before the declaration, in source order. }
+    var DeclUses: TArray<string>:= [];
+    if AText.DeclFile > 0 then
+    begin
+      var Impl: TArray<string>:= [];
+      DeclUses:= ['system', 'sysinit'];
+      for var U: TUnitUse in FStore.GetUnitUsesForFile(AText.DeclFile) do
+        if U.Section <> uusImplementation then DeclUses:= DeclUses + [LowerCase(U.UnitName)]
+        else if (U.OriginPath = '') and (U.StartLine < AText.DeclLine) then Impl:= Impl + [LowerCase(U.UnitName)];
+      DeclUses:= DeclUses + Impl;
+    end;
+    FOracle.DeclUses:= DeclUses;
+    try
+      Exit(FOracle.Bind(AText.Text + AText.Args, AText.Pending, ACallRef.NameText, Kind, FileUsesUnits(ACallRef.FileId), Reason));
+    finally
+      FOracle.DeclUses:= nil;
+    end;
+  end;
   if AText.Head = '' then
   begin
     { E-RECV-UNDECIDABLE D08: `TArray<Integer>.Create(1)` has no head text (generic
