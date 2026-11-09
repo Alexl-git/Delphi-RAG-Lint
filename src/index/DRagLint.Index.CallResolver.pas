@@ -8003,6 +8003,8 @@ var
     TypeText:= '';
     TypeId  := TypeOfFunctionResult(ACallRef, Name, FnText);
     if (TypeId = 0) and (FnText <> '') then TypeText:= FnText;
+    { 150-RS1 (1): no function of the name -> a HARD CAST `PRec(P)^.K`: the value has the named type. }
+    if (TypeId = 0) and (TypeText = '') then TypeId:= ResolveTypeNameToSymbol(Name, ACallRef.FileId);
     Result:= (TypeId > 0) or (TypeText <> '');
   end;
 
