@@ -59,9 +59,20 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FileExtensions: TArray<string>                                     ;
-      /// <param name="ASource"><!-- drag-lint:auto type -->const TBytes</param>
+      /// <summary>Extracts the form / component symbols, event-binding references
+      /// and dfm-prop / dfm-type literals of ONE text .dfm with tree-sitter-dfm.</summary>
+      /// <param name="ASource">The .dfm bytes as UTF-8 WITHOUT a BOM, or the RAW bytes
+      /// of a binary (TPF0 / FF 0A 00) .dfm. The caller transcodes: TIndexer.IndexFileBody
+      /// runs EnsureUtf8Bytes (UTF-8 BOM stripped, UTF-16 BOM and BOM-less ANSI =
+      /// Windows-1252 re-encoded) before this call, so a Windows-1252 `object
+      /// btn&#xDC;ber: TButton` reaches the grammar as valid UTF-8 and the
+      /// identifier rule (tree-sitter-dfm 1.2.0: Unicode letters, wave 149 DF) keeps the
+      /// WHOLE name. Up to 1.48 the grammar was ASCII-only and the symbol was stored as
+      /// its ASCII prefix (`btn`); invalid UTF-8 handed in raw still truncates there,
+      /// because tree-sitter decodes it as U+FFFD, not a letter.</param>
       /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto type -->TParseResult</returns>
+      /// <returns>Symbol names / qualified names / signatures are the identifier text
+      /// decoded from the UTF-8 node span (NodeText); columns are UTF-8 BYTE columns.</returns>
       /// <exception cref="ETreeSitterException"><!-- drag-lint:auto exc -->via TreeSitter.TTSParser.SetLanguage: Failed to set parser language to 0x%p</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
