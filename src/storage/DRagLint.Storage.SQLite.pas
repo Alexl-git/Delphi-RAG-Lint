@@ -16296,7 +16296,6 @@ procedure TSQLiteSymbolStore.WidenDerivedScope(const AScopeWhere: string;
   out ATypesWhere, AReceiversWhere: string);
 const
   DS_UNIVERSE = 'refs.kind IN (''read'', ''write'', ''member-access'', ''call'')';
-  DS_LOST_ID  = ' WHERE type_symbol_id IS NULL AND type_qname IN (SELECT qualified_name FROM symbols)';
 begin
   ATypesWhere    := '';
   AReceiversWhere:= '';
@@ -16305,9 +16304,9 @@ begin
   FConn.ExecSQL('DROP TABLE IF EXISTS temp.dl_scope_rt_files');
   FConn.ExecSQL('CREATE TEMP TABLE dl_scope_rt (r INTEGER PRIMARY KEY)');
   FConn.ExecSQL('CREATE TEMP TABLE dl_scope_rt_files (f INTEGER PRIMARY KEY)');
-  FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_scope_rt(r) SELECT refs.id FROM refs WHERE ' + DS_UNIVERSE + ' AND (' + AScopeWhere + ')');  // dl:ok sql-injection-concat -- AScopeWhere is SQL this pass BUILT (MaterializeResolveScope), never user text
-  FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_scope_rt(r) SELECT ref_id FROM ref_types' + DS_LOST_ID);
-  FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_scope_rt(r) SELECT ref_id FROM ref_element_types' + DS_LOST_ID);
+  FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_scope_rt(r) SELECT refs.id FROM refs WHERE ' + DS_UNIVERSE + ' AND (' + AScopeWhere + ')');  // dl:ok sql-injection-concat@a2ea -- AScopeWhere is SQL this pass BUILT (MaterializeResolveScope), never user text
+  FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_scope_rt(r) SELECT ref_id FROM ref_types WHERE type_symbol_id IS NULL AND type_qname IN (SELECT qualified_name FROM symbols)');
+  FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_scope_rt(r) SELECT ref_id FROM ref_element_types WHERE type_symbol_id IS NULL AND type_qname IN (SELECT qualified_name FROM symbols)');
   FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_scope_rt_files(f) SELECT DISTINCT refs.file_id FROM refs JOIN temp.dl_scope_rt s ON s.r = refs.id');
   ATypesWhere    := 'refs.id IN (SELECT r FROM temp.dl_scope_rt)';
   AReceiversWhere:= 'refs.file_id IN (SELECT f FROM temp.dl_scope_rt_files)';
