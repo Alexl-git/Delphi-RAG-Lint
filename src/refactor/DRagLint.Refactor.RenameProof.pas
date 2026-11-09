@@ -1663,7 +1663,7 @@ end;
 function TProver.LeavesIntoLibrary(const pRow: TRefRow): Boolean;
 begin
   Result:= False;
-  if not SameText(pRow.Kind, REF_KIND_REC_FIELD) or (Pos('.', pRow.ReceiverText) = 0) then Exit;
+  if not SameText(pRow.Kind, REF_KIND_REC_FIELD) or not pRow.ReceiverText.Contains('.') then Exit;
   var Segs:= pRow.ReceiverText.Split(['.']);
   var Q:= TFDQuery.Create(nil);
   try
