@@ -58,6 +58,15 @@ $rules   = (Resolve-Path $RulesDir).Path
 if (Test-Path $WorkDir) { [System.IO.Directory]::Delete($WorkDir, $true) }
 $src = Join-Path $WorkDir 'src'
 New-Item -ItemType Directory -Path $src -Force | Out-Null
+# 150 CQ (RQ-6b): a library is a manifest library SECTION's db, not a `library-` file-name prefix. The run
+# uses an ENGINE COPY whose own drag-lint.json names library-Fixture.sqlite (in $WorkDir) as a library section.
+$engDir = Join-Path $WorkDir 'eng'
+New-Item -ItemType Directory -Path $engDir -Force | Out-Null
+$exeDir = Split-Path -Parent $exePath
+Copy-Item $exePath (Join-Path $engDir 'drag-lint.exe') -Force
+Get-ChildItem $exeDir -File | Where-Object { $_.Extension -in '.dll', '.castlib' } | ForEach-Object { Copy-Item $_.FullName (Join-Path $engDir $_.Name) -Force }
+$exePath = Join-Path $engDir 'drag-lint.exe'
+Write-Ascii (Join-Path $engDir 'drag-lint.json') ('{"settings":{"defaultPlatform":"Win32","maxJobs":1},"indexes":{"outDir":"' + $WorkDir.Replace('\', '/') + '","sections":[{"name":"Lib","db":"library-Fixture.sqlite","source":"registry-libraries","platforms":["Win32"]}]}}')
 Push-Location $WorkDir
 
 # An interface-section uses cycle: circular-uses must fire for uCycA in a

@@ -68,6 +68,21 @@ $Exe = (Resolve-Path $Exe).Path
 if (Test-Path $WorkDir) { Remove-Item -Recurse -Force $WorkDir }
 New-Item -ItemType Directory $WorkDir | Out-Null
 
+# 150 CQ (RQ-6b): a library is a manifest library SECTION's db, not a `library-` file-name prefix, so the
+# run uses an ENGINE COPY whose own drag-lint.json names library-Test.sqlite (in $WorkDir) as a library section.
+$engDir = Join-Path $WorkDir 'eng'
+New-Item -ItemType Directory $engDir | Out-Null
+$exeDir = Split-Path -Parent $Exe
+Copy-Item $Exe (Join-Path $engDir 'drag-lint.exe') -Force
+Get-ChildItem $exeDir -File | Where-Object { $_.Extension -in '.dll', '.castlib' } | ForEach-Object { Copy-Item $_.FullName (Join-Path $engDir $_.Name) -Force }
+if (Test-Path (Join-Path $exeDir 'rules')) { Copy-Item (Join-Path $exeDir 'rules') (Join-Path $engDir 'rules') -Recurse -Force }
+$Exe = Join-Path $engDir 'drag-lint.exe'
+$outDirJson = $WorkDir.Replace('\', '/')
+[System.IO.File]::WriteAllText((Join-Path $engDir 'drag-lint.json'),
+  ('{"settings":{"defaultPlatform":"Win32","maxJobs":1},"indexes":{"outDir":"' + $outDirJson + '","sections":[' +
+   '{"name":"Lib","db":"library-Test.sqlite","source":"registry-libraries","platforms":["Win32"]}]}}'),
+  [System.Text.Encoding]::ASCII)
+
 function Write-Ascii([string]$Path, [string]$Body) {
   $norm = $Body -replace "`r`n", "`n" -replace "`n", "`r`n"
   [System.IO.File]::WriteAllText($Path, $norm, [System.Text.Encoding]::ASCII)
@@ -218,7 +233,7 @@ end;
 end.
 '@
 
-# The `library-` FILENAME PREFIX is load-bearing -- it is how the engine tells a
+# (150 CQ: the manifest library SECTION above is how the engine tells a
 # library index from a project one (the same test ResolveLibraryDb uses). Rename
 # this file and every case below silently becomes a no-context case.
 $libDb  = Join-Path $WorkDir 'library-Test.sqlite'

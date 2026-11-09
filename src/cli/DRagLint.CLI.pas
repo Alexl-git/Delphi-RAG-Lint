@@ -6283,6 +6283,25 @@ begin
     if SameText(L, ExpandFileName(ADb)) then Exit(True);
 end;
 
+/// <summary>True when ADb is a database a LIBRARY section of the manifest this run
+/// loads names (RQ-6b, lane 150): the section KIND decides, never the `library-`
+/// file-name prefix.</summary>
+/// <param name="ADb">The database path to classify.</param>
+/// <returns>True for a library-section database; False for any other file, a
+/// project DB that merely starts with `library-`, and a manifest that will not
+/// load (nothing is then a library).</returns>
+/// <remarks>Walks the manifest once per call (LibrarySectionDbs); callers that
+/// classify many DBs call LibrarySectionDbs themselves and use IsLibrarySectionDb.</remarks>
+function IsManifestLibraryDb(const ADb: string): Boolean;
+begin
+  Result:= False;
+  try
+    Result:= IsLibrarySectionDb(LibrarySectionDbs(TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir)), ADb);
+  except
+    Result:= False; // dl:ok swallowed-exception -- an unreadable manifest names no library; the caller degrades to "not a library"
+  end;
+end;
+
 /// <summary>Splits a consumer DB list into the PROJECT store and the platform
 /// LIBRARY store.</summary>
 /// <param name="AArgs">Parsed args; an explicit --db list changes the rule.</param>
@@ -17279,7 +17298,11 @@ begin
 end;
 
 { lane 144: the platform library a rewrite's proof reads, read-only and silent on stdout (a JSON document follows):
-  every --library-db, 'none' = none, or the one the manifest names. }
+  every --library-db, 'none' = none, or the one the manifest names.
+
+  Lane 150 CQ (RT): with no --library-db the manifest's library for --platform is loaded -- the same
+  ResolveLibraryDb `index` uses -- and ONE stderr NOTE names it (or says none was found), so a refusal
+  that needs the library is never a silent default. }
 function RefactorLibraries(const AArgs: TArgs): TArray<ISymbolStore>;
 begin
   Result:= nil;
@@ -17287,7 +17310,15 @@ begin
   if Length(Paths) = 0 then
   begin
     var P:= ResolveLibraryDb(AArgs);
-    if P <> '' then Paths:= [P];
+    if P <> '' then
+    begin
+      Paths:= [P];
+      Writeln(ErrOutput, 'drag-lint: NOTE: no --library-db given; the proof reads the manifest platform library ' + P +
+        ' (pass --library-db <file> to choose another, or --library-db none for none).');
+    end
+    else
+      Writeln(ErrOutput, 'drag-lint: NOTE: no --library-db given and the manifest names no platform library: ' +
+        'casts and ancestors that need a library stay refused (pass --library-db <file>).');
   end;
   for var P in Paths do
   begin
@@ -18068,7 +18099,7 @@ begin
       end;
       { E29 / LSP C11: decided HERE, before the flow checker, because both the flow
         gate and the project-rules gate below read it -- see those gates. }
-      FlowIsLibrary:= (FlowStore <> nil) and (FlowFid > 0) and StartsText('library-', ExtractFileName(FlowDb));
+      FlowIsLibrary:= (FlowStore <> nil) and (FlowFid > 0) and IsManifestLibraryDb(FlowDb);
       { Say which index answered. Both traps above are INVISIBLE from the output
         -- a dropped store does not fail, it just quietly reports more -- and
         this line is what turned four rebuild-and-guess cycles into one run.
@@ -18403,8 +18434,8 @@ begin
         spent 28 s in the two whole-refs scans. The answers are meaningless
         anyway: who calls an RTL routine, or whether an RTL import is used, is
         about the CONSUMERS, which are not in the library index -- the same
-        ruling as ResolveFrameworkContextDb, with the same `library-` file-name
-        test. The per-file checkers above keep the store.
+        ruling as ResolveFrameworkContextDb, with the same manifest library-section
+        test (IsManifestLibraryDb; RQ-6b: no `library-` file-name prefix). The per-file checkers above keep the store.
         tests\autotest\run_lint_library_unit_project_rules_guard.ps1.
         FlowIsLibrary is set after the store is resolved, above the flow gate. }
       if FlowStoreSeen and (not FlowIsLibrary) then
@@ -25785,8 +25816,16 @@ begin
   if (AArgs.Rule = '') or (AArgs.Rule = 'used-unit-not-resolvable') then
   begin
     var LibDbPath2: string := '';
+    { RQ-6b: the library is the --db a manifest library SECTION names, not a `library-` file-name prefix. }
+    var LibDbs2: TArray<string>:= nil;
+    if Length(AArgs.DbPaths) > 0 then
+      try
+        LibDbs2:= LibrarySectionDbs(TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir));
+      except
+        LibDbs2:= nil; // dl:ok swallowed-exception -- an unreadable manifest names no library; the positional fallback below applies
+      end;
     for var DbI := 0 to High(AArgs.DbPaths) do
-      if ContainsText(ExtractFileName(AArgs.DbPaths[DbI]), 'library-') then
+      if IsLibrarySectionDb(LibDbs2, AArgs.DbPaths[DbI]) then
       begin LibDbPath2 := AArgs.DbPaths[DbI]; Break; end;
     if (LibDbPath2 = '') and (Length(AArgs.DbPaths) > 1) then LibDbPath2 := AArgs.DbPaths[High(AArgs.DbPaths)];
     Findings := Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable(Store, LibDbPath2, AArgs.ProjectPath);
@@ -35818,13 +35857,29 @@ end; // function
 
   A library index is never the context even when it is the only one: it carries
   both frameworks by construction, so its own uses describe the RTL, not a
-  consumer. Identified by the `library-` filename prefix, the same test
-  ResolveLibraryDb uses. }
+  consumer. Identified by the manifest's library SECTION databases
+  (IsLibrarySectionDb, the same test ResolveLibraryDb uses) -- NOT by a
+  `library-` file-name prefix: a library section may name its DB anything, and
+  a project DB may start with that prefix (RQ-6b, lane 150). }
 function ResolveFrameworkContextDb(const AArgs: TArgs; const APathsToScan: TArray<string>): string;
+var
+  LibDbs      : TArray<string>;
+  LibDbsLoaded: Boolean       ;
 
+  { RQ-6b: a library is a manifest library SECTION's database (IsLibrarySectionDb), not a
+    `library-` file-name prefix; the section list is read once per call. }
   function IsLibraryDb(const ADb: string): Boolean;
   begin
-    Result:= StartsText('library-', ExtractFileName(ADb));
+    if not LibDbsLoaded then
+    begin
+      LibDbsLoaded:= True;
+      try
+        LibDbs:= LibrarySectionDbs(TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir));
+      except
+        LibDbs:= nil; // dl:ok swallowed-exception -- an unreadable manifest names no library: every DB is then a candidate project
+      end;
+    end;
+    Result:= IsLibrarySectionDb(LibDbs, ADb);
   end;
 
   { The unique member of APathsToScan that is not a library index and satisfies
@@ -35854,6 +35909,8 @@ var
   Claimants: TArray<string> ;
 begin
   Result:= '';
+  LibDbs:= nil;
+  LibDbsLoaded:= False;
 
   if AArgs.ProjectPath <> '' then
   begin
