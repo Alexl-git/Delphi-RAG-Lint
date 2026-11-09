@@ -48,7 +48,7 @@ Re-measure with `git rev-list --count main..<b>` = 0 before deleting.
 | pr-3 | 39036a4f | re-split: d5860f6e (PR #3 part) + 87ee5e74 |
 | pr-10 | 62d0628d | re-split: 3eff7cd3 (PR #10 throughput half re-split onto main) |
 | pr-11 | ad47d8cf | re-split: 38c6473a (x11 per-section preprocessing) + def36f7c |
-| pr-9 | b8b4c90d | resolver 1.13 PR: the 1.39 lanes re-did it (see the 1.39 handoff); no one-to-one SHA found -- UNVERIFIED, check `git diff main...pr-9 --stat` (60 files) before deleting |
+| pr-9 | b8b4c90d | resolver 1.13 PR: the 1.39 lanes re-did it (see the 1.39 handoff); OBSOLETE (149 RQ): both commits re-done on main (cli = 03917ac63; resolver 1.13 re-pinned 03c6078c0, now 1.22+); deletable with `git branch -D` (no patch-id match, so -d refuses) |
 
 ## 4. HOUSEKEEPING (owner call)
 

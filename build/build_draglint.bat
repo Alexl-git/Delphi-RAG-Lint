@@ -10,7 +10,8 @@ if not exist %RSVARS% (
 
 set HERE=%~dp0
 set ROOT=%HERE%..
-set OUT=%ROOT%\third_party\dll
+REM Win64 exe + Win64 DLLs only: never stage into third_party\dll (x86 DLLs = 0xC000007B trap).
+set OUT=%ROOT%\third_party\dll-win64
 
 if not exist "%OUT%\tree-sitter.dll"             ( echo ERROR: missing tree-sitter.dll & exit /b 1 )
 if not exist "%OUT%\tree-sitter-delphi13.dll"    ( echo ERROR: missing tree-sitter-delphi13.dll & exit /b 1 )

@@ -4,9 +4,9 @@ unit ChartsTests.CoreTraceShim;
   of charts\src\Trace.Walk.ps1 Part 2; task-3-harvest.txt of the d1 ledger holds what the PowerShell
   printed for the same calls, and the PS output is the reference). The expectations are rows of
   text, one per PS call, so a regression names the row. The synthetic cases write the PS arrays to a
-  temp .pas and strip it exactly as the PS did; the golden guards read the live ORM3 sources
-  (C:\Projects\DB\ORM3), which are the files the indexed clones were built from -- a box without
-  that tree passes them vacuously. The fresh-check (AC-14) is the Walk unit's, not tested here.
+  temp .pas and strip it exactly as the PS did; the golden guards read FROZEN copies of the ORM3 sources
+  (tests\charts\fixtures\orm3, hg revs the indexed clones were built from), so a moving live tree
+  cannot drift them. The fresh-check (AC-14) is the Walk unit's, not tested here.
   Expected conditions are compared whole, never with Contains (ruling T4-R2).
 
   A guard row is  id|source|exit line|routine start|form|keyword|if line|block|condition|reason|exit arg
@@ -244,12 +244,32 @@ begin
   end;
 end;
 
-{ a golden source read through the reader's path hook; False when the ORM3 tree is absent }
-function GoldenLines(const pPath: string; out pRaw, pStripped: TArray<string>): Boolean;
+{ pRel under the repo root: the DRAGLINT_REPO_ROOT env var, else walking up from the current dir; '' when absent }
+function FrozenPath(const pRel: string): string;
+begin
+  Result:= '';
+  var Root:= GetEnvironmentVariable('DRAGLINT_REPO_ROOT');
+  if (Root <> '') and TFile.Exists(TPath.Combine(Root, pRel)) then
+    Exit(TPath.Combine(Root, pRel));
+  var Dir:= GetCurrentDir;
+  while Dir <> '' do
+  begin
+    if TFile.Exists(TPath.Combine(Dir, pRel)) then
+      Exit(TPath.Combine(Dir, pRel));
+    var Up:= ExtractFileDir(ExcludeTrailingPathDelimiter(Dir));
+    if SameText(Up, Dir) then
+      Break;
+    Dir:= Up;
+  end;
+end;
+
+{ a frozen golden source (tests\charts\fixtures\orm3) read through the reader's path hook; False when the fixture is absent }
+function GoldenLines(const pRel: string; out pRaw, pStripped: TArray<string>): Boolean;
 begin
   pRaw:= nil;
   pStripped:= nil;
-  Result:= TFile.Exists(pPath);
+  var pPath:= FrozenPath(pRel);
+  Result:= pPath <> '';
   if not Result then
     Exit;
   var Rd:= TSourceReader.Create(nil);

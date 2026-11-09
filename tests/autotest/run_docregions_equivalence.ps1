@@ -26,8 +26,10 @@
 #>
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory)][string]$OldExe,
-  [Parameter(Mandatory)][string]$NewExe,
+  # 149 RQ item 2: defaults so the battery can run this unattended. Old = the DEPLOYED engine (this tree, else the main
+  # tree via the git common dir); New = this tree's Debug build. Same file for both = vacuous -> FATAL below.
+  [string]$OldExe = $(foreach ($c in @(("$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe"), (Join-Path (Split-Path -Parent (& git -C $PSScriptRoot rev-parse --path-format=absolute --git-common-dir 2>$null)) 'third_party\dll-win64\drag-lint.exe'))) { if (Test-Path -LiteralPath $c) { $c; break } }),
+  [string]$NewExe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$WorkDir = "$env:TEMP\drag-lint-docregions-eq-$PID",
   [string[]]$Projects = @(
     'C:\Projects\DataCopy\DataCopy.dproj|C:\Projects\DataCopy\_D-RAG\DataCopy.sqlite',
@@ -42,6 +44,7 @@ function Check($n, $ok, $d = '') {
   if (-not $ok) { $script:Failed = $true }
 }
 foreach ($e in $OldExe, $NewExe) { if (-not (Test-Path $e)) { Write-Host "FATAL: exe not found: $e"; exit 2 } }
+if ((Resolve-Path $OldExe).Path -eq (Resolve-Path $NewExe).Path) { Write-Host "FATAL: OldExe and NewExe are the same file (a self-comparison cannot fail): $OldExe"; exit 2 }
 [IO.Directory]::CreateDirectory($WorkDir) | Out-Null
 
 # Runs one engine, stdout to a file as raw bytes; returns @{ Sha; Len; Exit; Path }.
