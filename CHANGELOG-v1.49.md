@@ -114,6 +114,9 @@ Wave 149 (DRAFT assembled by lane DOC from the lanes' REPORT.md "CHANGELOG lines
 - charts tests: CoreTraceShim goldens now read the frozen tests\charts\fixtures\orm3 copies (520/520).
 - internal: lazy-init / extract-interface share DRagLint.Refactor.VerbShape (no behaviour change).
 - MS / GL (149-150): measurement docs only, no product change: docs\measurements\ms-phase1-2026-11-09.md, gl-ab-client-2026-11-09.md (lint-all 33627 = 33627 on CLIENT, 0 per-rule deltas), gl-ab-jedi when committed.
+- convert-apply reads the dfm_objects table first (CF); uses-audit anchors an include-listed unit (CF).
+- Build fix for older compilers (GitHub #13): the if-expression branches in Preprocess.Expr AsReal and UsageLog RatioOf are both Double.
+- Schema 24 is additive (project_settings, pp_directives); an engine reads schema 23..24 indexes (SC).
 
 ### Not in this changelog (by design)
 - Wave 150 lane items that are test-only or doc-only (RG audit guard run_grammar_shape_audit_148, CF consumers behind table-first reads with scan fallback, CQ/RT NOTE) are in their REPORT.md files.
