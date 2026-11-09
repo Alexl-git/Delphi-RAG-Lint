@@ -1893,9 +1893,7 @@ begin
   end;
 end;
 
-class function TDocBlockScanner.SplitResidualLines(const ARawBlock: string;  // dl:ok method-too-long@53ac, cognitive-complexity@dc12, deep-nesting@a2ef, cyclomatic-complexity@8b8c -- moved verbatim by the E-TDOCREGIONS-RFC split (147 G2/B1 merge); pre-existing size, splitting it is a 148 row
-  AEngineEmitsOwnRemarks: Boolean;
-  out AAccountedRaw: string; out AResidualLines: TArray<string>): Boolean;
+// SplitResidualLines state and helpers (150 DQ: the 388-line body split into one routine per pass; no logic change).
 type
   // One span of ARawBlock the engine can re-emit on its own. Dropped spans are
   // retracted: the emitter must NOT see them, because the line carrying them
@@ -1921,7 +1919,10 @@ type
     NonRetractable: Boolean;
     Dropped       : Boolean;
   end;
-var
+
+  // The working state of one SplitResidualLines call, threaded through its passes.
+  TResidualScan = record
+    EmitsOwnRemarks: Boolean;
   RawLines : TArray<string> ;
   Joined   : string         ;
   LineLo   : TArray<Integer>;
@@ -1934,96 +1935,86 @@ var
   Blocked  : TArray<Boolean>;
   InFence  : TArray<Boolean>;
   Spans    : TArray<TResSpan>;
-  Sb       : TStringBuilder ;
-  I, J, K  : Integer        ;
-  Changed  : Boolean        ;
-  First    : Boolean        ;
-  ResCount : Integer        ;
-  // v(ADP3 T3h): occurrence counter for the surplus pass. Declared HERE, and
-  // reset explicitly per tag, rather than as an inline `var Ordinal: Integer:= 0`
-  // inside the loop body -- an inline declaration in a loop is a footgun worth
-  // avoiding in a function this delicate, and "reset once per tag" is the whole
-  // correctness condition when a region carries surplus occurrences of TWO
-  // different tags (covered by tagoccurrence.TwoSinceAndTwoSummary).
-  Ordinal  : Integer        ;
-
-  procedure AddSpan(APos, ALen, ATagIx: Integer; AIsExample, AIsRemarks: Boolean);
-  var
-    Body: string;
-  begin
-    if ALen <= 0 then Exit;
-    Body:= Copy(Joined, APos, ALen);
-    SetLength(Spans, Length(Spans) + 1);
-    Spans[High(Spans)].Lo            := APos;
-    Spans[High(Spans)].Hi            := APos + ALen - 1;
-    Spans[High(Spans)].TagIx         := ATagIx;
-    Spans[High(Spans)].IsExample     := AIsExample;
-    // Tested with RxResEngineMarker itself rather than a second, literal
-    // spelling of the marker text -- one definition of "an engine marker",
-    // so this test can never drift from what the mask accounts for.
-    //
-    // v(ADP3 T3d, T3f minor 1): the <remarks> arm is now CONDITIONAL. It used
-    // to be an unconditional AIsRemarks, which is broader than its own
-    // justification: the rule exists to stop the engine freezing its OWN
-    // regenerated text and to stop it emitting a SECOND <remarks> beside a
-    // frozen copy, and NEITHER hazard exists for a <remarks> that carries no
-    // fence and no marker when the engine is going to emit no <remarks> at
-    // all. On that shape the unconditional rule aborted the carry-through and
-    // dropped the tail with no duplicate to avoid and no stale fact to trade
-    // against -- a strict regression against the first cut of this mechanism,
-    // which preserved it. The two real hazards are tested directly instead:
-    //   * AEngineEmitsOwnRemarks -- the caller has already established that
-    //     RenderFactsBlock produces something, so a retracted author
-    //     <remarks> would sit verbatim beside the engine's own. Computed by
-    //     the caller because only it holds AFacts (see MergeComment's call).
-    //   * a fence inside the span -- its lines are engine-generated and
-    //     re-derived every run. The marker test below would ALSO catch this
-    //     (AUTO_BEGIN is itself a drag-lint HTML marker), but relying on that
-    //     coincidence would make the fence's protection depend on the fence's
-    //     spelling continuing to match a generic pattern, so it is asserted
-    //     here in its own right.
-    Spans[High(Spans)].NonRetractable:=
-      (AIsRemarks and (AEngineEmitsOwnRemarks or (Pos(AUTO_BEGIN, Body) > 0)))
-      or RxResEngineMarker.IsMatch(Body);
-    Spans[High(Spans)].Dropped       := False;
   end;
 
-  procedure AddMatches(const ARe: TRegEx; ATagIx: Integer; AIsExample, AIsRemarks: Boolean);
-  var
-    MC: TMatchCollection;
-    M : Integer         ;
-  begin
-    MC:= ARe.Matches(Joined);
-    for M:= 0 to MC.Count - 1 do
-      AddSpan(MC[M].Index, MC[M].Length, ATagIx, AIsExample, AIsRemarks);
-  end;
-
-  // v(ADP3 T3h): True when span AIx sits entirely inside the span of a
-  // DIFFERENT container -- i.e. it is a nested look-alike, whose line the OUTER
-  // container already accounts for, so it never needs a slot of its own and can
-  // never be "surplus". Same containment shape as the multi-line-<example>
-  // nesting test below; TagIx is what makes "a different container" expressible
-  // (a span can only ever be compared against another CONTAINER, never against
-  // a marker or a <see>, and never against itself).
-  function NestedInOtherContainer(AIx: Integer): Boolean;
-  var
-    K2: Integer;
-  begin
-    Result:= False;
-    for K2:= 0 to High(Spans) do
-      if (Spans[K2].TagIx >= 0) and (Spans[K2].TagIx <> Spans[AIx].TagIx)
-         and (Spans[K2].Lo <= Spans[AIx].Lo) and (Spans[AIx].Hi <= Spans[K2].Hi) then
-        Exit(True);
-  end;
-
+procedure ResAddSpan(var S: TResidualScan; APos, ALen, ATagIx: Integer; AIsExample, AIsRemarks: Boolean);
+var
+  Body: string;
 begin
-  AAccountedRaw := ARawBlock;
-  AResidualLines:= nil;
-  Result        := False;
-  Spans         := nil;
+  if ALen <= 0 then Exit;
+  Body:= Copy(S.Joined, APos, ALen);
+  SetLength(S.Spans, Length(S.Spans) + 1);
+  S.Spans[High(S.Spans)].Lo            := APos;
+  S.Spans[High(S.Spans)].Hi            := APos + ALen - 1;
+  S.Spans[High(S.Spans)].TagIx         := ATagIx;
+  S.Spans[High(S.Spans)].IsExample     := AIsExample;
+  // Tested with RxResEngineMarker itself rather than a second, literal
+  // spelling of the marker text -- one definition of "an engine marker",
+  // so this test can never drift from what the mask accounts for.
+  //
+  // v(ADP3 T3d, T3f minor 1): the <remarks> arm is now CONDITIONAL. It used
+  // to be an unconditional AIsRemarks, which is broader than its own
+  // justification: the rule exists to stop the engine freezing its OWN
+  // regenerated text and to stop it emitting a SECOND <remarks> beside a
+  // frozen copy, and NEITHER hazard exists for a <remarks> that carries no
+  // fence and no marker when the engine is going to emit no <remarks> at
+  // all. On that shape the unconditional rule aborted the carry-through and
+  // dropped the tail with no duplicate to avoid and no stale fact to trade
+  // against -- a strict regression against the first cut of this mechanism,
+  // which preserved it. The two real hazards are tested directly instead:
+  //   * AEngineEmitsOwnRemarks -- the caller has already established that
+  //     RenderFactsBlock produces something, so a retracted author
+  //     <remarks> would sit verbatim beside the engine's own. Computed by
+  //     the caller because only it holds AFacts (see MergeComment's call).
+  //   * a fence inside the span -- its lines are engine-generated and
+  //     re-derived every run. The marker test below would ALSO catch this
+  //     (AUTO_BEGIN is itself a drag-lint HTML marker), but relying on that
+  //     coincidence would make the fence's protection depend on the fence's
+  //     spelling continuing to match a generic pattern, so it is asserted
+  //     here in its own right.
+  S.Spans[High(S.Spans)].NonRetractable:=
+    (AIsRemarks and (S.EmitsOwnRemarks or (Pos(AUTO_BEGIN, Body) > 0)))
+    or RxResEngineMarker.IsMatch(Body);
+  S.Spans[High(S.Spans)].Dropped       := False;
+end;
 
-  RawLines:= ARawBlock.Split([sLineBreak, #10, #13]);
-  if Length(RawLines) = 0 then Exit;
+procedure ResAddMatches(var S: TResidualScan; const ARe: TRegEx; ATagIx: Integer; AIsExample, AIsRemarks: Boolean);
+var
+  MC: TMatchCollection;
+  M : Integer         ;
+begin
+  MC:= ARe.Matches(S.Joined);
+  for M:= 0 to MC.Count - 1 do
+    ResAddSpan(S, MC[M].Index, MC[M].Length, ATagIx, AIsExample, AIsRemarks);
+end;
+
+// v(ADP3 T3h): True when span AIx sits entirely inside the span of a
+// DIFFERENT container -- i.e. it is a nested look-alike, whose line the OUTER
+// container already accounts for, so it never needs a slot of its own and can
+// never be "surplus". Same containment shape as the multi-line-<example>
+// nesting test below; TagIx is what makes "a different container" expressible
+// (a span can only ever be compared against another CONTAINER, never against
+// a marker or a <see>, and never against itself).
+function ResNestedInOtherContainer(const S: TResidualScan; AIx: Integer): Boolean;
+var
+  K2: Integer;
+begin
+  Result:= False;
+  for K2:= 0 to High(S.Spans) do
+    if (S.Spans[K2].TagIx >= 0) and (S.Spans[K2].TagIx <> S.Spans[AIx].TagIx)
+       and (S.Spans[K2].Lo <= S.Spans[AIx].Lo) and (S.Spans[AIx].Hi <= S.Spans[K2].Hi) then
+      Exit(True);
+end;
+
+// Pass 1: split the raw block into lines and build the joined text with per-line offsets. False = empty.
+function ResSplitJoin(var S: TResidualScan; const ARawBlock: string): Boolean;
+var
+  I : Integer       ;
+  Sb: TStringBuilder;
+begin
+  Result:= False;
+  S.RawLines:= ARawBlock.Split([sLineBreak, #10, #13]);
+  if Length(S.RawLines) = 0 then Exit(False);
 
   // An LF-joined copy of the same lines: identical to ARawBlock as far as tag
   // matching is concerned (a line break is a line break to every pattern
@@ -2031,39 +2022,46 @@ begin
   // one separator character per break. Line I occupies [LineLo[I]..LineHi[I]];
   // an EMPTY line yields Hi = Lo - 1, an empty range, which every loop below
   // simply skips.
-  SetLength(LineLo, Length(RawLines));
-  SetLength(LineHi, Length(RawLines));
+  SetLength(S.LineLo, Length(S.RawLines));
+  SetLength(S.LineHi, Length(S.RawLines));
   Sb:= TStringBuilder.Create;
   try
-    for I:= 0 to High(RawLines) do
+    for I:= 0 to High(S.RawLines) do
     begin
       if I > 0 then Sb.Append(#10);
-      LineLo[I]:= Sb.Length + 1;
-      Sb.Append(RawLines[I]);
-      LineHi[I]:= Sb.Length;
+      S.LineLo[I]:= Sb.Length + 1;
+      Sb.Append(S.RawLines[I]);
+      S.LineHi[I]:= Sb.Length;
     end;
-    Joined:= Sb.ToString;
+    S.Joined:= Sb.ToString;
   finally
     Sb.Free;
   end;
-  if Joined = '' then Exit;
+  if S.Joined = '' then Exit(False);
+  Result:= True;
+end;
 
+// Pass 2: collect every span the engine can re-emit on its own.
+procedure ResCollectSpans(var S: TResidualScan);
+var
+  I: Integer;
+begin
   EnsureResidualRegexes;
 
   for I:= Low(PRESERVED_VERBATIM_CONTAINERS) to High(PRESERVED_VERBATIM_CONTAINERS) do
-    AddMatches(RxResContainer[I], I,
+    ResAddMatches(S, RxResContainer[I], I,
       SameText(PRESERVED_VERBATIM_CONTAINERS[I], 'example'),
       SameText(PRESERVED_VERBATIM_CONTAINERS[I], 'remarks'));
   // <see>/<seealso>/<deprecated/> are round-tripped verbatim, so they ARE
   // retractable -- that is what lets an inline <see cref> inside an unmodeled
   // <para> stay on the author's own line instead of being hoisted out.
-  AddMatches(RxResSee           , -1, False, False);
-  AddMatches(RxResDeprecatedBare, -1, False, False);
+  ResAddMatches(S, RxResSee           , -1, False, False);
+  ResAddMatches(S, RxResDeprecatedBare, -1, False, False);
   // Engine markers carry AUTO_MARKER_LEAD by construction, so AddSpan marks
   // every one of them non-retractable: a line mixing the engine's own
   // bookkeeping with author content is ambiguous, and this whole mechanism
   // fails closed on ambiguity.
-  AddMatches(RxResEngineMarker  , -1, False, False);
+  ResAddMatches(S, RxResEngineMarker  , -1, False, False);
 
   // ParseXmlDoc's untagged-prefix fallback: when no <summary> body survives,
   // the run before the first '<' (or the WHOLE text, when there is no '<' at
@@ -2071,14 +2069,21 @@ begin
   // accounted for. When a real <summary> body IS present the fallback never
   // fires, so leading prose there is genuinely unrepresented and must stay
   // residual.
-  var SumM: TMatch:= RxResSummaryBody.Match(Joined);
+  var SumM: TMatch:= RxResSummaryBody.Match(S.Joined);
   if (not SumM.Success) or (Trim(SumM.Groups[1].Value) = '') then
   begin
-    var LtPos: Integer:= Pos('<', Joined);
-    if LtPos = 0 then AddSpan(1, Length(Joined), -1, False, False)
-    else if LtPos > 1 then AddSpan(1, LtPos - 1, -1, False, False);
+    var LtPos: Integer:= Pos('<', S.Joined);
+    if LtPos = 0 then ResAddSpan(S, 1, Length(S.Joined), -1, False, False)
+    else if LtPos > 1 then ResAddSpan(S, 1, LtPos - 1, -1, False, False);
   end;
+end;
 
+// Pass 3: mark the lines inside managed fences. False = unterminated fence (fail closed).
+function ResMarkFences(var S: TResidualScan): Boolean;
+var
+  I, J, K: Integer;
+begin
+  Result:= False;
   // v(ADP3 T3f review, IMPORTANT 2): lines inside an AUTO_BEGIN..AUTO_END fence
   // are ENGINE-GENERATED and re-derived on every run, so they can never be
   // author content and must never be carried through -- not even when the
@@ -2090,38 +2095,58 @@ begin
   // An AUTO_BEGIN with no matching AUTO_END is ambiguous corruption: abort the
   // whole mechanism and leave the region exactly as it is, the same way
   // RegionFullyEngineOwned and StripRegion both already fail closed on it.
-  SetLength(InFence, Length(RawLines));
+  SetLength(S.InFence, Length(S.RawLines));
   I:= 0;
-  while I <= High(RawLines) do
-    if Pos(AUTO_BEGIN, RawLines[I]) > 0 then
+  while I <= High(S.RawLines) do
+    if Pos(AUTO_BEGIN, S.RawLines[I]) > 0 then
     begin
       J:= I;
-      while (J <= High(RawLines)) and (Pos(AUTO_END, RawLines[J]) = 0) do Inc(J);
-      if J > High(RawLines) then Exit; // unterminated fence -- fail closed
-      for K:= I to J do InFence[K]:= True;
+      while (J <= High(S.RawLines)) and (Pos(AUTO_END, S.RawLines[J]) = 0) do Inc(J);
+      if J > High(S.RawLines) then Exit(False); // unterminated fence -- fail closed
+      for K:= I to J do S.InFence[K]:= True;
       I:= J + 1;
     end
     else Inc(I);
+  Result:= True;
+end;
 
+// Pass 4: retract multi-line top-level <example> spans.
+procedure ResDropMultilineExamples(var S: TResidualScan);
+var
+  I, J: Integer;
+begin
   // A multi-line <example> that is not nested inside another container is
   // retracted up front: see this function's interface remarks for why the
   // engine cannot faithfully re-serialize a code sample. Nested ones are left
   // accounted, so shapes where <example> sits inside <remarks>/<since>/... keep
   // behaving exactly as they did before.
-  for I:= 0 to High(Spans) do
-    if Spans[I].IsExample
-       and (Pos(#10, Copy(Joined, Spans[I].Lo, Spans[I].Hi - Spans[I].Lo + 1)) > 0) then
+  for I:= 0 to High(S.Spans) do
+    if S.Spans[I].IsExample
+       and (Pos(#10, Copy(S.Joined, S.Spans[I].Lo, S.Spans[I].Hi - S.Spans[I].Lo + 1)) > 0) then
     begin
       var Nested: Boolean:= False;
-      for J:= 0 to High(Spans) do
-        if (J <> I) and (Spans[J].Lo <= Spans[I].Lo) and (Spans[I].Hi <= Spans[J].Hi) then
+      for J:= 0 to High(S.Spans) do
+        if (J <> I) and (S.Spans[J].Lo <= S.Spans[I].Lo) and (S.Spans[I].Hi <= S.Spans[J].Hi) then
         begin
           Nested:= True;
           Break;
         end;
-      if not Nested then Spans[I].Dropped:= True;
+      if not Nested then S.Spans[I].Dropped:= True;
     end;
+end;
 
+// Pass 5: retract surplus occurrences of the singular-match containers.
+procedure ResDropSurplusOccurrences(var S: TResidualScan);
+var
+  // v(ADP3 T3h): occurrence counter for the surplus pass. Declared HERE, and
+  // reset explicitly per tag, rather than as an inline `var Ordinal: Integer:= 0`
+  // inside the loop body -- an inline declaration in a loop is a footgun worth
+  // avoiding in a function this delicate, and "reset once per tag" is the whole
+  // correctness condition when a region carries surplus occurrences of TWO
+  // different tags (covered by tagoccurrence.TwoSinceAndTwoSummary).
+  Ordinal  : Integer        ;
+  I, J     : Integer;
+begin
   // v(ADP3 T3h, register N2/D11): SURPLUS occurrences of a SINGULAR-MATCH
   // container are retracted, so their lines come back verbatim.
   //
@@ -2165,114 +2190,139 @@ begin
   begin
     if not IsRetractableSurplusContainer(PRESERVED_VERBATIM_CONTAINERS[I]) then Continue;
     Ordinal:= 0;
-    for J:= 0 to High(Spans) do
-      if (Spans[J].TagIx = I) and (not Spans[J].Dropped) and (not NestedInOtherContainer(J)) then
+    for J:= 0 to High(S.Spans) do
+      if (S.Spans[J].TagIx = I) and (not S.Spans[J].Dropped) and (not ResNestedInOtherContainer(S, J)) then
       begin
         Inc(Ordinal);
-        if (Ordinal > 1) and (not Spans[J].NonRetractable) then Spans[J].Dropped:= True;
+        if (Ordinal > 1) and (not S.Spans[J].NonRetractable) then S.Spans[J].Dropped:= True;
       end;
   end;
+end;
 
+// One retraction step of the fixed-point closure for span AIx (150 DQ: split out of ResRetractToFixpoint to cut its nesting; no logic change). True when anything changed.
+function ResRetractSpan(var S: TResidualScan; AIx: Integer): Boolean;
+var
+  K: Integer;
+begin
+  Result:= False;
+  for K:= 0 to High(S.RawLines) do
+    if S.Residual[K] and (S.Spans[AIx].Lo <= S.LineHi[K]) and (S.LineLo[K] <= S.Spans[AIx].Hi) then
+    begin
+      // v(ADP3 T3f review, IMPORTANT 2 and 3): a span whose content the
+      // engine regenerates cannot be handed back. There is no third
+      // option for THAT LINE -- emitting it verbatim WITHOUT retracting
+      // the span duplicates the tag (measured: two <returns>, one
+      // permanently stale), and retracting the span freezes engine
+      // content. So the line loses its carry-through and falls back to
+      // the pre-v(ADP3 T3f) behaviour, which drops the unmodeled text on
+      // it. That is a real, disclosed non-improvement for this shape,
+      // chosen deliberately over a malformed comment carrying a fact the
+      // engine has silently stopped maintaining.
+      //
+      // v(ADP3 T3d, T3f minor 3): the blast radius is now THE OFFENDING
+      // LINE, not the whole region. This used to Exit outright, which
+      // aborted the mechanism for every OTHER line too -- so an innocent
+      // <value> sitting on its own line, overlapping nothing
+      // non-retractable, was deleted because a DIFFERENT line elsewhere
+      // in the same comment happened to mix author text into an
+      // engine-marked tag. Nothing about that innocent line is
+      // ambiguous, and the fail-closed argument above says nothing about
+      // it. Blocking just this line keeps the argument exactly as narrow
+      // as its own justification: the line stays accounted (so its spans
+      // are still emitted, unduplicated) and every other residual line
+      // still carries through.
+      //
+      // Note the two OTHER fail-closed exits in this function still
+      // abort the WHOLE region, and correctly so: an unterminated fence
+      // means the region's engine/author boundary cannot be established
+      // at all, which is a statement about the region, not a line.
+      if S.Spans[AIx].NonRetractable then
+      begin
+        if not S.Blocked[K] then
+        begin
+          S.Blocked[K] := True;
+          S.Residual[K]:= False;
+          Result     := True;
+        end;
+        Continue;
+      end;
+      S.Spans[AIx].Dropped:= True;
+      Result:= True;
+      Break;
+    end;
+end;
+
+// Pass 6: fixed-point closure of accounted / residual / blocked lines.
+procedure ResRetractToFixpoint(var S: TResidualScan);
+var
+  I, J: Integer;
+  Changed: Boolean;
+begin
   // Fixed-point closure. Retracting a span can leave a line that was accounted
   // only BECAUSE of it newly residual, which can in turn retract further
   // spans; the loop is monotone (spans are only ever dropped, residual lines
   // only ever added, lines only ever blocked), so it terminates in at most
   // Length(Spans) + Length(RawLines) rounds.
-  SetLength(Accounted, Length(Joined) + 1);
-  SetLength(Residual , Length(RawLines));
-  SetLength(Blocked  , Length(RawLines));
+  SetLength(S.Accounted, Length(S.Joined) + 1);
+  SetLength(S.Residual , Length(S.RawLines));
+  SetLength(S.Blocked  , Length(S.RawLines));
   repeat
-    for J:= 1 to Length(Joined) do Accounted[J]:= False;
-    for I:= 0 to High(Spans) do
-      if not Spans[I].Dropped then
-        for J:= Spans[I].Lo to Spans[I].Hi do Accounted[J]:= True;
+    for J:= 1 to Length(S.Joined) do S.Accounted[J]:= False;
+    for I:= 0 to High(S.Spans) do
+      if not S.Spans[I].Dropped then
+        for J:= S.Spans[I].Lo to S.Spans[I].Hi do S.Accounted[J]:= True;
 
-    for I:= 0 to High(RawLines) do
+    for I:= 0 to High(S.RawLines) do
     begin
-      Residual[I]:= False;
-      if InFence[I] then Continue; // engine-generated, re-derived: never author content
-      if Blocked[I] then Continue; // see the NonRetractable arm below
-      for J:= LineLo[I] to LineHi[I] do
-        if (not Accounted[J]) and (Joined[J] > ' ') then
+      S.Residual[I]:= False;
+      if S.InFence[I] then Continue; // engine-generated, re-derived: never author content
+      if S.Blocked[I] then Continue; // see the NonRetractable arm below
+      for J:= S.LineLo[I] to S.LineHi[I] do
+        if (not S.Accounted[J]) and (S.Joined[J] > ' ') then
         begin
-          Residual[I]:= True;
+          S.Residual[I]:= True;
           Break;
         end;
     end;
 
     Changed:= False;
-    for I:= 0 to High(Spans) do
-      if not Spans[I].Dropped then
-        for K:= 0 to High(RawLines) do
-          if Residual[K] and (Spans[I].Lo <= LineHi[K]) and (LineLo[K] <= Spans[I].Hi) then
-          begin
-            // v(ADP3 T3f review, IMPORTANT 2 and 3): a span whose content the
-            // engine regenerates cannot be handed back. There is no third
-            // option for THAT LINE -- emitting it verbatim WITHOUT retracting
-            // the span duplicates the tag (measured: two <returns>, one
-            // permanently stale), and retracting the span freezes engine
-            // content. So the line loses its carry-through and falls back to
-            // the pre-v(ADP3 T3f) behaviour, which drops the unmodeled text on
-            // it. That is a real, disclosed non-improvement for this shape,
-            // chosen deliberately over a malformed comment carrying a fact the
-            // engine has silently stopped maintaining.
-            //
-            // v(ADP3 T3d, T3f minor 3): the blast radius is now THE OFFENDING
-            // LINE, not the whole region. This used to Exit outright, which
-            // aborted the mechanism for every OTHER line too -- so an innocent
-            // <value> sitting on its own line, overlapping nothing
-            // non-retractable, was deleted because a DIFFERENT line elsewhere
-            // in the same comment happened to mix author text into an
-            // engine-marked tag. Nothing about that innocent line is
-            // ambiguous, and the fail-closed argument above says nothing about
-            // it. Blocking just this line keeps the argument exactly as narrow
-            // as its own justification: the line stays accounted (so its spans
-            // are still emitted, unduplicated) and every other residual line
-            // still carries through.
-            //
-            // Note the two OTHER fail-closed exits in this function still
-            // abort the WHOLE region, and correctly so: an unterminated fence
-            // means the region's engine/author boundary cannot be established
-            // at all, which is a statement about the region, not a line.
-            if Spans[I].NonRetractable then
-            begin
-              if not Blocked[K] then
-              begin
-                Blocked[K] := True;
-                Residual[K]:= False;
-                Changed    := True;
-              end;
-              Continue;
-            end;
-            Spans[I].Dropped:= True;
-            Changed:= True;
-            Break;
-          end;
+    for I:= 0 to High(S.Spans) do
+      if (not S.Spans[I].Dropped) and ResRetractSpan(S, I) then Changed:= True;
   until not Changed;
+end;
 
+// Pass 7: hand the residual lines back and rebuild the accounted raw block. False = nothing residual.
+function ResEmitCarried(const S: TResidualScan; var AAccountedRaw: string; var AResidualLines: TArray<string>): Boolean;
+var
+  I, K    : Integer       ;
+  First   : Boolean       ;
+  ResCount: Integer       ;
+  Sb      : TStringBuilder;
+begin
+  Result:= False;
   ResCount:= 0;
-  for I:= 0 to High(RawLines) do if Residual[I] then Inc(ResCount);
-  if ResCount = 0 then Exit; // nothing unrepresented: caller stays on the pre-v(ADP3 T3f) path
+  for I:= 0 to High(S.RawLines) do if S.Residual[I] then Inc(ResCount);
+  if ResCount = 0 then Exit(False); // nothing unrepresented: caller stays on the pre-v(ADP3 T3f) path
 
   SetLength(AResidualLines, ResCount);
   K    := 0;
   First:= True;
   Sb   := TStringBuilder.Create;
   try
-    for I:= 0 to High(RawLines) do
-      if Residual[I] then
+    for I:= 0 to High(S.RawLines) do
+      if S.Residual[I] then
       begin
         // Right-trimmed only: leading whitespace IS the indentation this
         // whole mechanism exists to preserve. Trailing whitespace would
         // otherwise be written back into the source, and (being idempotent
         // to remove) costs nothing to drop.
-        AResidualLines[K]:= TrimRight(RawLines[I]);
+        AResidualLines[K]:= TrimRight(S.RawLines[I]);
         Inc(K);
       end
       else
       begin
         if not First then Sb.Append(sLineBreak);
-        Sb.Append(RawLines[I]);
+        Sb.Append(S.RawLines[I]);
         First:= False;
       end;
     AAccountedRaw:= Sb.ToString;
@@ -2280,6 +2330,26 @@ begin
     Sb.Free;
   end;
   Result:= True;
+end;
+
+class function TDocBlockScanner.SplitResidualLines(const ARawBlock: string;
+  AEngineEmitsOwnRemarks: Boolean;
+  out AAccountedRaw: string; out AResidualLines: TArray<string>): Boolean;
+var
+  S: TResidualScan;
+begin
+  AAccountedRaw := ARawBlock;
+  AResidualLines:= nil;
+  Result        := False;
+  S:= Default(TResidualScan);
+  S.EmitsOwnRemarks:= AEngineEmitsOwnRemarks;
+  if not ResSplitJoin(S, ARawBlock) then Exit;
+  ResCollectSpans(S);
+  if not ResMarkFences(S) then Exit;
+  ResDropMultilineExamples(S);
+  ResDropSurplusOccurrences(S);
+  ResRetractToFixpoint(S);
+  Result:= ResEmitCarried(S, AAccountedRaw, AResidualLines);
 end;
 
 class function TDocMarkers.IsManagedText(const S: string): Boolean;
@@ -2615,6 +2685,299 @@ begin
   Result:= AFailure = '';
 end;
 
+// Local twins of RenderFactsBlock's MoreSuffix/JoinEsc. They are nested
+// functions THERE, so they are not reachable here; duplicated rather than
+// hoisted because hoisting would change RenderFactsBlock's own shape in a
+// change whose subject is a new fact. Same format string, deliberately: two
+// '(+N more)' spellings in one block would read as two different measurements.
+function MoreSuffixP2(AShown, ATotal: Integer): string;
+begin
+  if ATotal > AShown then Result:= Format(' (+%d more)', [ATotal - AShown]) else Result:= '';
+end;
+function JoinEscP2(const A: TArray<string>): string;
+var i: Integer;
+begin
+  Result:= '';
+  for i:= 0 to High(A) do
+  begin
+    if i > 0 then Result:= Result + ', ';
+    Result:= Result + EscXml(A[i]);
+  end;
+end;
+
+// Complexity / Reads+Writes / Owns-returned lines of FormatPhase2FactLines (split out of it, 150 DQ; no logic change).
+procedure AddCoreFactLines(ALines: TStringList; const AFacts: TDocFacts; AComplexityMin: Integer);
+begin
+  // v(ADP2 T3): Complexity -- THRESHOLD APPLIED HERE (render time), not when
+  // AFacts was built: AFacts.Cyclomatic/BodyLoc are the RAW index-time
+  // values, so a routine at or above AComplexityMin (docs.complexity_min,
+  // default 10) gets the line and everything else stays lean -- changing
+  // the threshold takes effect on the very next `document`/`hover` call
+  // with NO reindex. 'Cyclomatic > 0' guards the AComplexityMin <= 0 edge
+  // case: a REAL analyzed routine's cyclomatic complexity is
+  // architecturally always >= 1, so 0 is an UNAMBIGUOUS "not computed"
+  // sentinel (no symbol_facts row, or no matching defProc at index time).
+  // PHASE C B4: the two numbers on this line MEASURE DIFFERENT SCOPES, and
+  // saying so is the whole fix. CyclomaticCountDecisions returns at a nested
+  // `defProc` ("nested routine counted separately"), so the count covers the
+  // OUTER body only; BodyLoc is impl_end - impl_start, the whole
+  // implementation including every nested routine. Presented as a bare pair
+  // they read as one measurement of one thing, and on YADF's FormatSource that
+  // is 'Complexity: 24 (cyclomatic), 603 lines' for a range holding 109
+  // decision keywords across 15 nested routines -- a reader can only conclude
+  // the numbers are wrong.
+  //
+  // Labelled, the SAME pair becomes the useful signal the review pointed at:
+  // a low outer complexity over a long implementation says the work sits in
+  // nested scopes. The labels are unconditional because they are always true;
+  // suppressing them when the body has no nested routine would need a nested
+  // count the index does not record (that is B3's boundary work), and a label
+  // that appears only sometimes is a worse contract than one that always does.
+  if (AFacts.Cyclomatic > 0) and (AFacts.Cyclomatic >= AComplexityMin) then
+    ALines.Add(Format('Complexity: %d (cyclomatic, outer body), %d lines (full implementation)',
+                     [AFacts.Cyclomatic, AFacts.BodyLoc]));
+  // v(ADP2 T4): Reads/Writes fields -- ONE line, each side omitted when
+  // empty, the WHOLE line omitted when both are empty. AFacts.ReadsFields/
+  // WritesFields are ALREADY display-ready (capped, ', '-joined, a
+  // ' (+N more)' suffix when truncated), so this is a passthrough. Three
+  // literal spaces separate the two sides, per the design spec's own
+  // rendering example.
+  if (AFacts.ReadsFields <> '') or (AFacts.WritesFields <> '') then
+  begin
+    var RWLine: string:= '';
+    if AFacts.ReadsFields <> '' then RWLine:= 'Reads: ' + EscXml(AFacts.ReadsFields);
+    if AFacts.WritesFields <> '' then
+    begin
+      if RWLine <> '' then RWLine:= RWLine + '   ';
+      RWLine:= RWLine + 'Writes: ' + EscXml(AFacts.WritesFields);
+    end;
+    ALines.Add(RWLine);
+  end;
+  // v(ADP2 T8): Returned-object ownership -- ONE line, omitted entirely
+  // when AFacts.ReturnsOwner = '' (no unanimous, high-confidence verdict --
+  // absence over a wrong verdict, since a wrong 'new' invites a
+  // double-free). 'new' expands to the fuller 'new (caller owns)' display
+  // text here (at render time); 'borrowed'/'self' are already the final
+  // display word.
+  if AFacts.ReturnsOwner <> '' then
+  begin
+    var OwnsWord: string;
+    if AFacts.ReturnsOwner = 'new' then OwnsWord:= 'new (caller owns)'
+    else OwnsWord:= AFacts.ReturnsOwner;
+    ALines.Add('Owns returned: ' + EscXml(OwnsWord));
+  end;
+end;
+
+// Recursive / Handles / Catches / SQL / Covered / Mutates / UI-affinity lines of FormatPhase2FactLines (150 DQ split).
+procedure AddBehaviourFactLines(ALines: TStringList; const AFacts: TDocFacts);
+begin
+  // Recursion -- ONE word, emitted only on a call_edges SELF-LOOP. It is the
+  // one caller/callee fact the Calls list deliberately discards (it drops the
+  // symbol's own name, because the impl span includes the routine header and
+  // because 'Calls: self' reads as noise), so without this line genuine
+  // recursion is invisible in the docs -- and recursion is exactly what a
+  // reader wants flagged, since it bounds stack depth and termination.
+  //
+  // SELF-loops only; mutual recursion would need a cycle walk and is not
+  // claimed. Placed with 'Owns returned' and 'Pure' because all three are
+  // CONCLUSIONS about the routine itself rather than lists of things it
+  // touches.
+  if AFacts.IsRecursive then
+    ALines.Add('Recursive');
+  // v(ADP2 T6): DFM event-wiring -- ONE line, 'Handles: Button1.OnClick',
+  // omitted entirely when AFacts.DfmEvent = ''. Already the final display
+  // string (index-time), so no cap/threshold logic is needed here.
+  if AFacts.DfmEvent <> '' then
+    ALines.Add('Handles: ' + EscXml(AFacts.DfmEvent));
+  // INBOX-report-exceptions-raised-and-handled gap 3: the exceptions the
+  // body HANDLES -- ONE line, 'Catches: EConvertError (dialog: ShowMessage);
+  // Exception (re-raise)', omitted entirely when AFacts.Catches = ''.
+  // Display-ready (sorted, deduped, capped by TDocFactsBuilder.RenderCatches
+  // under the caller's TDocHandlesOptions), so a passthrough like DfmEvent.
+  // A DIFFERENT label from the DFM line above on purpose: Doc.SharedFacts
+  // bounds a fact's slice in the flattened stored block BY LABEL, so a
+  // second 'Handles:' would collide with the first there. Placed directly
+  // after it because both answer "what does this routine respond to".
+  if AFacts.Catches <> '' then
+    ALines.Add('Catches: ' + EscXml(AFacts.Catches));
+  // v(ADP2 T7): SQL tables touched -- ONE line, 'SQL: reads A, B; writes
+  // C', either side omitted when empty, the WHOLE line omitted when both
+  // sides are empty. Semicolon-SPACE separates the two sides here (NOT the
+  // three-literal-space separator Reads/Writes fields uses above -- this
+  // line's own format per the design spec's rendering example).
+  if (AFacts.SqlReads <> '') or (AFacts.SqlWrites <> '') then
+  begin
+    var SqlLine: string:= '';
+    if AFacts.SqlReads <> '' then SqlLine:= 'reads ' + EscXml(AFacts.SqlReads);
+    if AFacts.SqlWrites <> '' then
+    begin
+      if SqlLine <> '' then SqlLine:= SqlLine + '; ';
+      SqlLine:= SqlLine + 'writes ' + EscXml(AFacts.SqlWrites);
+    end;
+    ALines.Add('SQL: ' + SqlLine);
+  end;
+  // v(ADP2 T5): Covered-by-tests -- CONTROLLER OVERRIDE: AFacts.CoveredBy
+  // is computed LAZILY by the caller (DRagLint.Doc.SymbolFacts.
+  // ComputeCoveredBy), never read back from the index -- see TDocFacts.
+  // CoveredBy's own field comment for the full rationale. Already
+  // DISPLAY-READY, so this is a one-line omit-when-empty emit.
+  if AFacts.CoveredBy <> '' then
+    ALines.Add('Covered by: ' + EscXml(AFacts.CoveredBy));
+  // v(ADP3 T11): Mutates -- the var/out parameters the routine writes
+  // through. Closes the Phase-2 T4 deferred gap (that fact covered the owning
+  // class's FIELDS only, so a free procedure that exists solely to fill an
+  // `out` parameter said nothing). Display-ready at index time, so this is a
+  // passthrough; omitted entirely when empty, like every other fact line.
+  //
+  // POSITION IS PART OF THE CONTRACT. The Phase 3 lines are appended AFTER
+  // the existing six, in the plan's fixed order -- Mutates: (T11), UI thread
+  // only (T12), Touches:/Transaction: (T13), Registered as:/Dataset: (T14),
+  // Pure last (T13). Fixing the order here is what keeps the doc/hover
+  // consistency lock meaningful and regeneration byte-idempotent: this ONE
+  // function is the single home for both surfaces, so a line inserted in the
+  // middle would rewrite every already-documented block in the corpus.
+  if AFacts.MutatesParams <> '' then
+    ALines.Add('Mutates: ' + EscXml(AFacts.MutatesParams));
+  // v(ADP3 T12): UI affinity -- POSITIVE FINDINGS ONLY. The absence of this
+  // line means "no UI touch was DETECTED", never "this routine is
+  // thread-safe": a stale curated list under-reports, and a thread-safety
+  // claim cannot be proven by this analysis. Nothing here may ever grow an
+  // `else` arm that says the opposite.
+  if AFacts.UiAffinity <> '' then
+    ALines.Add('UI thread only -- touches ' + EscXml(AFacts.UiAffinity));
+  // v(ADP3 T13): external surfaces touched, as CATEGORIES (not call sites)
+  // and transaction verbs. Stored as 'resources|transactions'; either side
+  // may be empty, and the whole line pair is omitted when both are.
+end;
+
+// Touches / Transaction and DI-wiring lines of FormatPhase2FactLines (150 DQ split).
+procedure AddTouchWiringFactLines(ALines: TStringList; const AFacts: TDocFacts);
+begin
+  if AFacts.Touches <> '' then
+  begin
+    var TouchParts: TArray<string>:= AFacts.Touches.Split(['|']);
+    if (Length(TouchParts) > 0) and (TouchParts[0] <> '') then
+      ALines.Add('Touches: ' + EscXml(TouchParts[0]));
+    if (Length(TouchParts) > 1) and (TouchParts[1] <> '') then
+      ALines.Add('Transaction: ' + EscXml(TouchParts[1]));
+  end;
+  // v(ADP3 T14): DI/ORM wiring -- a JOIN over already-indexed tables
+  // (di_bindings / orm_links / fb_relations / fb_columns), NOT a new
+  // analysis. Stored as '; '-joined 'di:'/'ds:' entries; split into two
+  // display lines here so each can be omitted independently.
+  if AFacts.Wiring <> '' then
+  begin
+    var DiPart: string:= ''; var DsPart: string:= '';
+    for var WEntry in AFacts.Wiring.Split(['; ']) do
+      if StartsStr('di:', WEntry) then
+      begin
+        if DiPart <> '' then DiPart:= DiPart + ', ';
+        DiPart:= DiPart + Copy(WEntry, 4, MaxInt);
+      end
+      else if StartsStr('ds:', WEntry) then
+      begin
+        if DsPart <> '' then DsPart:= DsPart + ', ';
+        DsPart:= DsPart + Copy(WEntry, 4, MaxInt);
+      end;
+    if DiPart <> '' then ALines.Add('Registered as: ' + EscXml(DiPart));
+    if DsPart <> '' then ALines.Add('Dataset: ' + EscXml(DsPart));
+  end;
+end;
+
+// Effect-free / Directives / Implemented-by / Extended-by lines of FormatPhase2FactLines (150 DQ split).
+procedure AddClosingFactLines(ALines: TStringList; const AFacts: TDocFacts; AHasOtherContent: Boolean);
+begin
+  // PURITY V2 (spec docs\superpowers\specs\2026-09-15-interprocedural-
+  // purity.md section 12): 'Effect-free (proven)' is READ from
+  // symbol_facts.effect_free, written by the `purity` resolve stage. It is a
+  // POSITIVE CLAIM -- the stage proved it, by translating every callee's
+  // effect summary through this routine's own arguments to a fixpoint -- and
+  // its ABSENCE says nothing at all: -1 means nobody judged this routine and
+  // 0 means the proof did not go through, which is not the same as an effect
+  // having been observed. Emitted LAST, per the fixed Phase 3 line order,
+  // in the slot the old line held.
+  //
+  // WHAT IT REPLACED, and why the rename is the point. Until 2026-09-22 this
+  // line was 'Pure', DERIVED here from five local facts being empty --
+  // BodyLoc > 0 with no WritesFields / MutatesParams / Touches / SqlWrites /
+  // SqlReads. That could never see past the routine's own body, so it was
+  // wrong in both directions the moment a routine called anything: a routine
+  // writing a unit-level GLOBAL (not a field, so WritesFields stayed empty)
+  // was labelled Pure, and so was every routine that merely called it. The
+  // with-a-body gate is gone from here because the stage subsumes it -- it
+  // judges only routines that have a symbol_facts row, and a symbol with no
+  // row reads back -1.
+  //
+  // THE LINE NEVER CREATES A BLOCK OF ITS OWN -- the AHasOtherContent gate,
+  // carried over unchanged and for the unchanged reason. Being effect-free is
+  // true of a very large fraction of any real codebase, so an unconditional
+  // emit would give a managed block to nearly every trivial routine --
+  // reversing the long-standing "omit when empty" contract corpus-wide, and
+  // silently: five existing suites assert in so many words that a symbol with
+  // nothing to say gets NO managed block at all (run_doc_p2_sql's 'NoSql has
+  // NO managed block at all (no fact fires)' and its four siblings), and every
+  // one of them went red when the literal version was tried. Writing a doc
+  // block into a file is an EDIT; the bar for creating one is "there was
+  // something to say". The line still appears on every block that exists for
+  // any other reason, which is where it is actually useful.
+  //
+  // 'Pure' IS NEVER EMITTED AGAIN. It stays registered in
+  // DRagLint.Doc.SharedFacts.ALL_LABELS as a LEGACY PARSE label only -- see
+  // the comment there -- because every block written before this change still
+  // carries it, and in an unwrapped block it is the only terminator the fact
+  // above it has. run_autodoc_all_labels_covers_renderer.ps1 asserts that
+  // split two-way.
+  if (AFacts.EffectFree = 1) and ((ALines.Count > 0) or AHasOtherContent) then
+    ALines.Add('Effect-free (proven)');
+  { v22 (PLAN-routine-directives-in-index.md): the routine's declared
+    DIRECTIVES, appended AFTER the effect line.
+    POSITION. Every other Phase 3 line has a fixed slot and the order is a
+    contract, because this ONE function feeds BOTH the managed doc block and
+    hover -- a line inserted mid-block would rewrite every already-documented
+    block in the corpus. Appending after the last existing emitter is the only
+    placement that leaves existing blocks byte-identical except for the new
+    trailing line, which is exactly what the autodoc golden triage expects to
+    see and nothing else.
+    DISPLAY FORM DIFFERS FROM STORED FORM ON PURPOSE. The column is
+    space-joined and canonical ('virtual overload stdcall') because it is a
+    machine-readable list; the line is '; '-joined because that is how a
+    Delphi programmer writes directives and this line is read by people.
+    Omitted entirely when empty, like every other fact line -- and it never
+    creates a block of its own for the same reason Pure does not: it is
+    gated behind the same content test by virtue of being appended here. }
+  if AFacts.Directives <> '' then
+    ALines.Add('Directives: ' + EscXml(StringReplace(AFacts.Directives, ' ', '; ', [rfReplaceAll])));
+  { Implemented by / Extended by -- the interface's own reverse edge, the
+    answer to "what satisfies this contract?".
+
+    POSITION: appended after the last existing emitter, for the reason the
+    Directives note above states in full -- this ONE function feeds BOTH the
+    managed doc block and hover, so a line inserted mid-block would rewrite
+    every already-documented block in the corpus. These two are last.
+
+    WHY THEY ARE HERE AND NOT IN RenderFactsBlock. `Implements` -- the FORWARD
+    edge -- is rendered by RenderFactsBlock and is deliberately doc-only, so
+    hover has never shown it. The owner's request was specifically that
+    HOVERING an interface answer the question, and this helper is the only
+    formatter hover calls. Putting the fact here therefore makes the doc block
+    and hover agree BY CONSTRUCTION (the v(ADP2 T9) consistency lock) instead
+    of by a second implementation that can drift.
+
+    THIS FUNCTION'S SUMMARY SAYS "THE SIX PHASE-2 FACTS" AND IS NOW WRONG;
+    it is corrected in the same change rather than left to be discovered.
+
+    TWO LINES, NEVER MERGED: a class implementing IFoo and an interface
+    extending IFoo are different claims. Each is omitted when empty -- there
+    is no 'Implemented by: (none)', because that would assert a measured
+    absence over whatever corpus happened to be indexed. }
+  if Length(AFacts.ImplementedBy) > 0 then
+    ALines.Add('Implemented by: ' + JoinEscP2(AFacts.ImplementedBy)
+              + MoreSuffixP2(Length(AFacts.ImplementedBy), AFacts.ImplementedByTotal));
+  if Length(AFacts.ExtendedBy) > 0 then
+    ALines.Add('Extended by: ' + JoinEscP2(AFacts.ExtendedBy)
+              + MoreSuffixP2(Length(AFacts.ExtendedBy), AFacts.ExtendedByTotal));
+end;
+
 // v(ADP2 T9): the DOC/HOVER CONSISTENCY LOCK -- see this function's own
 // DocInsight comment (interface section) for the full rationale. Logic here
 // is a byte-for-byte lift of the six Phase-2 blocks RenderFactsBlock used to
@@ -2622,285 +2985,17 @@ end;
 // literal spaces for Reads/Writes, semicolon-space for SQL), same order.
 // Lines are UNPREFIXED -- callers (RenderFactsBlock, hover) each apply
 // whatever leading text their own surface needs.
-class function TDocFactsRenderer.FormatPhase2FactLines(const AFacts: TDocFacts; AComplexityMin: Integer = 10;  // dl:ok method-too-long@9ae9, cyclomatic-complexity@4f78 -- moved verbatim by the E-TDOCREGIONS-RFC split (147 G2/B1 merge); pre-existing size, splitting it is a 148 row
+class function TDocFactsRenderer.FormatPhase2FactLines(const AFacts: TDocFacts; AComplexityMin: Integer = 10;
   AHasOtherContent: Boolean = True): TArray<string>;
 var
   Lines: TStringList;
-  // Local twins of RenderFactsBlock's MoreSuffix/JoinEsc. They are nested
-  // functions THERE, so they are not reachable here; duplicated rather than
-  // hoisted because hoisting would change RenderFactsBlock's own shape in a
-  // change whose subject is a new fact. Same format string, deliberately: two
-  // '(+N more)' spellings in one block would read as two different measurements.
-  function MoreSuffixP2(AShown, ATotal: Integer): string;
-  begin
-    if ATotal > AShown then Result:= Format(' (+%d more)', [ATotal - AShown]) else Result:= '';
-  end;
-  function JoinEscP2(const A: TArray<string>): string;
-  var i: Integer;
-  begin
-    Result:= '';
-    for i:= 0 to High(A) do
-    begin
-      if i > 0 then Result:= Result + ', ';
-      Result:= Result + EscXml(A[i]);
-    end;
-  end;
 begin
   Lines:= TStringList.Create;
   try
-    // v(ADP2 T3): Complexity -- THRESHOLD APPLIED HERE (render time), not when
-    // AFacts was built: AFacts.Cyclomatic/BodyLoc are the RAW index-time
-    // values, so a routine at or above AComplexityMin (docs.complexity_min,
-    // default 10) gets the line and everything else stays lean -- changing
-    // the threshold takes effect on the very next `document`/`hover` call
-    // with NO reindex. 'Cyclomatic > 0' guards the AComplexityMin <= 0 edge
-    // case: a REAL analyzed routine's cyclomatic complexity is
-    // architecturally always >= 1, so 0 is an UNAMBIGUOUS "not computed"
-    // sentinel (no symbol_facts row, or no matching defProc at index time).
-    // PHASE C B4: the two numbers on this line MEASURE DIFFERENT SCOPES, and
-    // saying so is the whole fix. CyclomaticCountDecisions returns at a nested
-    // `defProc` ("nested routine counted separately"), so the count covers the
-    // OUTER body only; BodyLoc is impl_end - impl_start, the whole
-    // implementation including every nested routine. Presented as a bare pair
-    // they read as one measurement of one thing, and on YADF's FormatSource that
-    // is 'Complexity: 24 (cyclomatic), 603 lines' for a range holding 109
-    // decision keywords across 15 nested routines -- a reader can only conclude
-    // the numbers are wrong.
-    //
-    // Labelled, the SAME pair becomes the useful signal the review pointed at:
-    // a low outer complexity over a long implementation says the work sits in
-    // nested scopes. The labels are unconditional because they are always true;
-    // suppressing them when the body has no nested routine would need a nested
-    // count the index does not record (that is B3's boundary work), and a label
-    // that appears only sometimes is a worse contract than one that always does.
-    if (AFacts.Cyclomatic > 0) and (AFacts.Cyclomatic >= AComplexityMin) then
-      Lines.Add(Format('Complexity: %d (cyclomatic, outer body), %d lines (full implementation)',
-                       [AFacts.Cyclomatic, AFacts.BodyLoc]));
-    // v(ADP2 T4): Reads/Writes fields -- ONE line, each side omitted when
-    // empty, the WHOLE line omitted when both are empty. AFacts.ReadsFields/
-    // WritesFields are ALREADY display-ready (capped, ', '-joined, a
-    // ' (+N more)' suffix when truncated), so this is a passthrough. Three
-    // literal spaces separate the two sides, per the design spec's own
-    // rendering example.
-    if (AFacts.ReadsFields <> '') or (AFacts.WritesFields <> '') then
-    begin
-      var RWLine: string:= '';
-      if AFacts.ReadsFields <> '' then RWLine:= 'Reads: ' + EscXml(AFacts.ReadsFields);
-      if AFacts.WritesFields <> '' then
-      begin
-        if RWLine <> '' then RWLine:= RWLine + '   ';
-        RWLine:= RWLine + 'Writes: ' + EscXml(AFacts.WritesFields);
-      end;
-      Lines.Add(RWLine);
-    end;
-    // v(ADP2 T8): Returned-object ownership -- ONE line, omitted entirely
-    // when AFacts.ReturnsOwner = '' (no unanimous, high-confidence verdict --
-    // absence over a wrong verdict, since a wrong 'new' invites a
-    // double-free). 'new' expands to the fuller 'new (caller owns)' display
-    // text here (at render time); 'borrowed'/'self' are already the final
-    // display word.
-    if AFacts.ReturnsOwner <> '' then
-    begin
-      var OwnsWord: string;
-      if AFacts.ReturnsOwner = 'new' then OwnsWord:= 'new (caller owns)'
-      else OwnsWord:= AFacts.ReturnsOwner;
-      Lines.Add('Owns returned: ' + EscXml(OwnsWord));
-    end;
-    // Recursion -- ONE word, emitted only on a call_edges SELF-LOOP. It is the
-    // one caller/callee fact the Calls list deliberately discards (it drops the
-    // symbol's own name, because the impl span includes the routine header and
-    // because 'Calls: self' reads as noise), so without this line genuine
-    // recursion is invisible in the docs -- and recursion is exactly what a
-    // reader wants flagged, since it bounds stack depth and termination.
-    //
-    // SELF-loops only; mutual recursion would need a cycle walk and is not
-    // claimed. Placed with 'Owns returned' and 'Pure' because all three are
-    // CONCLUSIONS about the routine itself rather than lists of things it
-    // touches.
-    if AFacts.IsRecursive then
-      Lines.Add('Recursive');
-    // v(ADP2 T6): DFM event-wiring -- ONE line, 'Handles: Button1.OnClick',
-    // omitted entirely when AFacts.DfmEvent = ''. Already the final display
-    // string (index-time), so no cap/threshold logic is needed here.
-    if AFacts.DfmEvent <> '' then
-      Lines.Add('Handles: ' + EscXml(AFacts.DfmEvent));
-    // INBOX-report-exceptions-raised-and-handled gap 3: the exceptions the
-    // body HANDLES -- ONE line, 'Catches: EConvertError (dialog: ShowMessage);
-    // Exception (re-raise)', omitted entirely when AFacts.Catches = ''.
-    // Display-ready (sorted, deduped, capped by TDocFactsBuilder.RenderCatches
-    // under the caller's TDocHandlesOptions), so a passthrough like DfmEvent.
-    // A DIFFERENT label from the DFM line above on purpose: Doc.SharedFacts
-    // bounds a fact's slice in the flattened stored block BY LABEL, so a
-    // second 'Handles:' would collide with the first there. Placed directly
-    // after it because both answer "what does this routine respond to".
-    if AFacts.Catches <> '' then
-      Lines.Add('Catches: ' + EscXml(AFacts.Catches));
-    // v(ADP2 T7): SQL tables touched -- ONE line, 'SQL: reads A, B; writes
-    // C', either side omitted when empty, the WHOLE line omitted when both
-    // sides are empty. Semicolon-SPACE separates the two sides here (NOT the
-    // three-literal-space separator Reads/Writes fields uses above -- this
-    // line's own format per the design spec's rendering example).
-    if (AFacts.SqlReads <> '') or (AFacts.SqlWrites <> '') then
-    begin
-      var SqlLine: string:= '';
-      if AFacts.SqlReads <> '' then SqlLine:= 'reads ' + EscXml(AFacts.SqlReads);
-      if AFacts.SqlWrites <> '' then
-      begin
-        if SqlLine <> '' then SqlLine:= SqlLine + '; ';
-        SqlLine:= SqlLine + 'writes ' + EscXml(AFacts.SqlWrites);
-      end;
-      Lines.Add('SQL: ' + SqlLine);
-    end;
-    // v(ADP2 T5): Covered-by-tests -- CONTROLLER OVERRIDE: AFacts.CoveredBy
-    // is computed LAZILY by the caller (DRagLint.Doc.SymbolFacts.
-    // ComputeCoveredBy), never read back from the index -- see TDocFacts.
-    // CoveredBy's own field comment for the full rationale. Already
-    // DISPLAY-READY, so this is a one-line omit-when-empty emit.
-    if AFacts.CoveredBy <> '' then
-      Lines.Add('Covered by: ' + EscXml(AFacts.CoveredBy));
-    // v(ADP3 T11): Mutates -- the var/out parameters the routine writes
-    // through. Closes the Phase-2 T4 deferred gap (that fact covered the owning
-    // class's FIELDS only, so a free procedure that exists solely to fill an
-    // `out` parameter said nothing). Display-ready at index time, so this is a
-    // passthrough; omitted entirely when empty, like every other fact line.
-    //
-    // POSITION IS PART OF THE CONTRACT. The Phase 3 lines are appended AFTER
-    // the existing six, in the plan's fixed order -- Mutates: (T11), UI thread
-    // only (T12), Touches:/Transaction: (T13), Registered as:/Dataset: (T14),
-    // Pure last (T13). Fixing the order here is what keeps the doc/hover
-    // consistency lock meaningful and regeneration byte-idempotent: this ONE
-    // function is the single home for both surfaces, so a line inserted in the
-    // middle would rewrite every already-documented block in the corpus.
-    if AFacts.MutatesParams <> '' then
-      Lines.Add('Mutates: ' + EscXml(AFacts.MutatesParams));
-    // v(ADP3 T12): UI affinity -- POSITIVE FINDINGS ONLY. The absence of this
-    // line means "no UI touch was DETECTED", never "this routine is
-    // thread-safe": a stale curated list under-reports, and a thread-safety
-    // claim cannot be proven by this analysis. Nothing here may ever grow an
-    // `else` arm that says the opposite.
-    if AFacts.UiAffinity <> '' then
-      Lines.Add('UI thread only -- touches ' + EscXml(AFacts.UiAffinity));
-    // v(ADP3 T13): external surfaces touched, as CATEGORIES (not call sites)
-    // and transaction verbs. Stored as 'resources|transactions'; either side
-    // may be empty, and the whole line pair is omitted when both are.
-    if AFacts.Touches <> '' then
-    begin
-      var TouchParts: TArray<string>:= AFacts.Touches.Split(['|']);
-      if (Length(TouchParts) > 0) and (TouchParts[0] <> '') then
-        Lines.Add('Touches: ' + EscXml(TouchParts[0]));
-      if (Length(TouchParts) > 1) and (TouchParts[1] <> '') then
-        Lines.Add('Transaction: ' + EscXml(TouchParts[1]));
-    end;
-    // v(ADP3 T14): DI/ORM wiring -- a JOIN over already-indexed tables
-    // (di_bindings / orm_links / fb_relations / fb_columns), NOT a new
-    // analysis. Stored as '; '-joined 'di:'/'ds:' entries; split into two
-    // display lines here so each can be omitted independently.
-    if AFacts.Wiring <> '' then
-    begin
-      var DiPart: string:= ''; var DsPart: string:= '';
-      for var WEntry in AFacts.Wiring.Split(['; ']) do
-        if StartsStr('di:', WEntry) then
-        begin
-          if DiPart <> '' then DiPart:= DiPart + ', ';
-          DiPart:= DiPart + Copy(WEntry, 4, MaxInt);
-        end
-        else if StartsStr('ds:', WEntry) then
-        begin
-          if DsPart <> '' then DsPart:= DsPart + ', ';
-          DsPart:= DsPart + Copy(WEntry, 4, MaxInt);
-        end;
-      if DiPart <> '' then Lines.Add('Registered as: ' + EscXml(DiPart));
-      if DsPart <> '' then Lines.Add('Dataset: ' + EscXml(DsPart));
-    end;
-    // PURITY V2 (spec docs\superpowers\specs\2026-09-15-interprocedural-
-    // purity.md section 12): 'Effect-free (proven)' is READ from
-    // symbol_facts.effect_free, written by the `purity` resolve stage. It is a
-    // POSITIVE CLAIM -- the stage proved it, by translating every callee's
-    // effect summary through this routine's own arguments to a fixpoint -- and
-    // its ABSENCE says nothing at all: -1 means nobody judged this routine and
-    // 0 means the proof did not go through, which is not the same as an effect
-    // having been observed. Emitted LAST, per the fixed Phase 3 line order,
-    // in the slot the old line held.
-    //
-    // WHAT IT REPLACED, and why the rename is the point. Until 2026-09-22 this
-    // line was 'Pure', DERIVED here from five local facts being empty --
-    // BodyLoc > 0 with no WritesFields / MutatesParams / Touches / SqlWrites /
-    // SqlReads. That could never see past the routine's own body, so it was
-    // wrong in both directions the moment a routine called anything: a routine
-    // writing a unit-level GLOBAL (not a field, so WritesFields stayed empty)
-    // was labelled Pure, and so was every routine that merely called it. The
-    // with-a-body gate is gone from here because the stage subsumes it -- it
-    // judges only routines that have a symbol_facts row, and a symbol with no
-    // row reads back -1.
-    //
-    // THE LINE NEVER CREATES A BLOCK OF ITS OWN -- the AHasOtherContent gate,
-    // carried over unchanged and for the unchanged reason. Being effect-free is
-    // true of a very large fraction of any real codebase, so an unconditional
-    // emit would give a managed block to nearly every trivial routine --
-    // reversing the long-standing "omit when empty" contract corpus-wide, and
-    // silently: five existing suites assert in so many words that a symbol with
-    // nothing to say gets NO managed block at all (run_doc_p2_sql's 'NoSql has
-    // NO managed block at all (no fact fires)' and its four siblings), and every
-    // one of them went red when the literal version was tried. Writing a doc
-    // block into a file is an EDIT; the bar for creating one is "there was
-    // something to say". The line still appears on every block that exists for
-    // any other reason, which is where it is actually useful.
-    //
-    // 'Pure' IS NEVER EMITTED AGAIN. It stays registered in
-    // DRagLint.Doc.SharedFacts.ALL_LABELS as a LEGACY PARSE label only -- see
-    // the comment there -- because every block written before this change still
-    // carries it, and in an unwrapped block it is the only terminator the fact
-    // above it has. run_autodoc_all_labels_covers_renderer.ps1 asserts that
-    // split two-way.
-    if (AFacts.EffectFree = 1) and ((Lines.Count > 0) or AHasOtherContent) then
-      Lines.Add('Effect-free (proven)');
-    { v22 (PLAN-routine-directives-in-index.md): the routine's declared
-      DIRECTIVES, appended AFTER the effect line.
-      POSITION. Every other Phase 3 line has a fixed slot and the order is a
-      contract, because this ONE function feeds BOTH the managed doc block and
-      hover -- a line inserted mid-block would rewrite every already-documented
-      block in the corpus. Appending after the last existing emitter is the only
-      placement that leaves existing blocks byte-identical except for the new
-      trailing line, which is exactly what the autodoc golden triage expects to
-      see and nothing else.
-      DISPLAY FORM DIFFERS FROM STORED FORM ON PURPOSE. The column is
-      space-joined and canonical ('virtual overload stdcall') because it is a
-      machine-readable list; the line is '; '-joined because that is how a
-      Delphi programmer writes directives and this line is read by people.
-      Omitted entirely when empty, like every other fact line -- and it never
-      creates a block of its own for the same reason Pure does not: it is
-      gated behind the same content test by virtue of being appended here. }
-    if AFacts.Directives <> '' then
-      Lines.Add('Directives: ' + EscXml(StringReplace(AFacts.Directives, ' ', '; ', [rfReplaceAll])));
-    { Implemented by / Extended by -- the interface's own reverse edge, the
-      answer to "what satisfies this contract?".
-
-      POSITION: appended after the last existing emitter, for the reason the
-      Directives note above states in full -- this ONE function feeds BOTH the
-      managed doc block and hover, so a line inserted mid-block would rewrite
-      every already-documented block in the corpus. These two are last.
-
-      WHY THEY ARE HERE AND NOT IN RenderFactsBlock. `Implements` -- the FORWARD
-      edge -- is rendered by RenderFactsBlock and is deliberately doc-only, so
-      hover has never shown it. The owner's request was specifically that
-      HOVERING an interface answer the question, and this helper is the only
-      formatter hover calls. Putting the fact here therefore makes the doc block
-      and hover agree BY CONSTRUCTION (the v(ADP2 T9) consistency lock) instead
-      of by a second implementation that can drift.
-
-      THIS FUNCTION'S SUMMARY SAYS "THE SIX PHASE-2 FACTS" AND IS NOW WRONG;
-      it is corrected in the same change rather than left to be discovered.
-
-      TWO LINES, NEVER MERGED: a class implementing IFoo and an interface
-      extending IFoo are different claims. Each is omitted when empty -- there
-      is no 'Implemented by: (none)', because that would assert a measured
-      absence over whatever corpus happened to be indexed. }
-    if Length(AFacts.ImplementedBy) > 0 then
-      Lines.Add('Implemented by: ' + JoinEscP2(AFacts.ImplementedBy)
-                + MoreSuffixP2(Length(AFacts.ImplementedBy), AFacts.ImplementedByTotal));
-    if Length(AFacts.ExtendedBy) > 0 then
-      Lines.Add('Extended by: ' + JoinEscP2(AFacts.ExtendedBy)
-                + MoreSuffixP2(Length(AFacts.ExtendedBy), AFacts.ExtendedByTotal));
+    AddCoreFactLines(Lines, AFacts, AComplexityMin);
+    AddBehaviourFactLines(Lines, AFacts);
+    AddTouchWiringFactLines(Lines, AFacts);
+    AddClosingFactLines(Lines, AFacts, AHasOtherContent);
     Result:= Lines.ToStringArray;
   finally
     Lines.Free;
@@ -3420,10 +3515,7 @@ begin
   end;
 end;
 
-class function TDocCommentMerger.MergeComment(const AExisting: TParsedDoc;  // dl:ok method-too-long@49c2, cognitive-complexity@038e, cyclomatic-complexity@c8c3 -- moved verbatim by the E-TDOCREGIONS-RFC split (147 G2/B1 merge); pre-existing size, splitting it is a 148 row
-  const ASigParams: TArray<string>; const AFacts: TDocFacts;
-  AHasReturn: Boolean; const APrefix: string; AComplexityMin: Integer;
-  AExistingHasAnyTag: Boolean): string;
+// MergeComment working state and helpers (150 DQ: the 1471-line body split into phases; no logic change).
 type
   // v(ADP3 T3 review round 2, Finding 1 -- PARAM ONLY): the action the
   // repair path takes for one existing <param>'s raw parsed text -- see
@@ -3440,379 +3532,1490 @@ type
   // refresh mechanism and no drift report to ever surface it -- a decision
   // the plan never made, unlike summary/returns.
   TTagAction = (taEngineOwned, taPreserveStripped, taPreserveVerbatim);
-var
-  Sb   : TStringBuilder;
-  P    : string        ;
-  Facts: string        ;
-  // Emits APrefix + AOpen + AValue + AClose as one or more ///-prefixed lines.
-  // A hand-written summary/param/returns description may span several source
-  // lines -- the parser preserves the interior #10 line breaks -- so each
-  // continuation line MUST be re-prefixed (like the remarks-prose path below).
-  // Emitting a multi-line value on a single AppendLine would leave the interior
-  // lines WITHOUT a /// prefix: that both corrupts the source and breaks the
-  // ///-comment block, so a later run mis-parses the fragment and injects/
-  // duplicates managed blocks. Single-line values are emitted unchanged.
-  function EmitTagged(const AOpen, AValue, AClose: string): string;
-  var Norm: string; Parts: TArray<string>; i: Integer;
-  begin
-    Norm:= StringReplace(AValue, #13#10, #10, [rfReplaceAll]);
-    Norm:= StringReplace(Norm, #13, #10, [rfReplaceAll]);
-    // v(PHASE C, B8): wrap generated prose -- and ONLY generated prose. The
-    // discriminator is AUTO_MARK in the OPEN TAG, which is precisely how this
-    // emitter already distinguishes the two arms that reach it: the engine arm
-    // stamps the marker (e.g. '<summary>' + AUTO_MARK), the preserve arm that
-    // carries a human's text does not (see the <returns> preserve arm, which
-    // passes a bare '<returns>'). Keying on the marker therefore reuses an
-    // existing, already-tested invariant instead of inventing a parallel one,
-    // and it is what makes the reverted first attempt at B8 safe this time:
-    // that one reflowed hand-written values too, which changed the text the
-    // merge re-parses and made doc blocks disappear from
-    // run_doc_p3_decayrouting's fixtures.
-    //
-    // The budget subtracts the prefix (every line carries it) and the closing
-    // tag (the last line carries it, and reserving it for all lines is the
-    // cheap, still-idempotent over-approximation).
-    // AUTO_SUM (v(SESSION 74)) wraps too: a harvested <summary> is engine
-    // PROSE, which is exactly what this budget exists for. Omitting it here
-    // would leave harvested summaries unwrapped the moment they stopped
-    // carrying AUTO_MARK, silently reintroducing the 759-column lines B8 fixed.
-    if (Pos(AUTO_MARK, AOpen) > 0) or (Pos(AUTO_SUM, AOpen) > 0) then
-      Norm:= WrapEngineProse(Norm,
-               DOC_WRAP_COLS - Length(APrefix) - Length(AClose),
-               DOC_WRAP_COLS - Length(APrefix) - Length(AClose) - Length(AOpen));
-    Parts:= Norm.Split([#10]);
-    Result:= APrefix + AOpen;
-    for i:= 0 to High(Parts) do
-      if i = 0 then Result:= Result + Parts[i]
-      else Result:= Result + sLineBreak + APrefix + Trim(Parts[i]);
-    Result:= Result + AClose;
-  end;
-  // v(2026-09-15, defect 3): the preserve arms' emitter. The author's own
-  // lines from ARaw (see VerbatimTagLines) when they exist and say what the
-  // model says; EmitTagged's rebuild otherwise. ALinePrefix is the comment
-  // marker WITHOUT APrefix's trailing blank, for the same reason the residual
-  // carry-through uses it: the scanner leaves the blank after the slashes on
-  // the raw line, so re-adding it would indent every preserved line by one
-  // more column per run.
-  function EmitPreserved(const ARaw, ALinePrefix, ATag, AOpen, AValue, AClose: string): string;
-  var Raw: TArray<string>;
-  begin
-    Raw:= VerbatimTagLines(ARaw, ATag, AOpen, AValue, AClose);
-    if Length(Raw) = 0 then Exit(EmitTagged(AOpen, AValue, AClose));
-    Result:= ALinePrefix + string.Join(sLineBreak + ALinePrefix, Raw);
-  end;
-  // v(ADP3 T9): the body of this test now lives on TDocRegions itself, as
-  // IsEngineOwnedTagText -- Doc.Drift's harvest-drift check needs the SAME
-  // ownership test, and a second hand-expansion of its two arms is exactly how
-  // that unit desynced from MergeComment before (see IsManagedDesc's own
-  // remarks). This local name is kept only so the call sites and the comments
-  // that cite them read unchanged.
-  function IsEngineOwnedRegardlessOfContent(const S: string): Boolean;
-  begin
-    Result:= TDocMarkers.IsEngineOwnedTagText(S);
-  end;
-  // E-DOC-ORPHAN-PARAM: a hand tag whose name is not ONE bare parameter name --
-  // a list (`S, WordDelims`) or a modifier-prefixed one (`var Pos`). ParamTagCovers
-  // says whether such a tag names the signature parameter AParam.
-  function IsCompoundParamTag(const AName: string): Boolean;
-  begin
-    Result:= AName.Contains(',') or Trim(AName).Contains(' ');
-  end;
-  function ParamTagCovers(const AName, AParam: string): Boolean;
-  var Part: string; Words: TArray<string>;
-  begin
-    Result:= False;
-    for Part in AName.Split([',']) do
-    begin
-      Words:= Trim(Part).Split([' ']);
-      if (Length(Words) > 0) and SameText(Words[High(Words)], AParam) then Exit(True);
-    end;
-  end;
-  // v(PHASE A3, ruling D-3): the MEANING mined for parameter AName, or '' when
-  // the source states none. '' is not a failure -- it is the ordinary case, and
-  // it produces a <param> tag with an empty body: structure without meaning.
-  function ParamNoteFor(const AName: string): string;
-  var PN: TDocParamNote;
-  begin
-    Result:= '';
-    for PN in AFacts.ParamNotes do
-      if SameText(PN.Name, AName) then Exit(EscXml(PN.Text));
-  end;
-  // The DENSE type baseline, escaped on the same terms as a mined note: a type
-  // can contain '<' ('TArray<string>'), and an unescaped one would close the
-  // <param> element and corrupt every downstream doc/HTML help build.
-  function ParamTypeFor(const AName: string): string;
-  var PT: TDocParamNote;
-  begin
-    Result:= '';
-    for PT in AFacts.ParamTypes do
-      if SameText(PT.Name, AName) then Exit(EscXml(PT.Text));
-  end;
-  // The engine-owned <param> emit. ONE writer for both MergeComment paths (the
-  // fresh insert and the repair), because a <param> that appeared on only one of
-  // them would look like a mining bug rather than a wiring one -- the same
-  // reasoning EmitHarvestedRemarks records for itself.
-  //
-  // Marked, so `document --strip` and the drift check can tell this tag is the
-  // engine's. ClassifyParamAction then reads that marker on the NEXT run:
-  // marked-and-empty is engine-owned (regenerated), marked-with-text is
-  // preserved -- which is exactly ruling D-4's "regenerate the structure, leave
-  // the meaning alone", including a meaning a human typed INSIDE the tag without
-  // removing the marker.
-  function EmitEngineParam(const AName: string): string;
-  begin
-    // PHASE C B7, as CLARIFIED by the user 2026-08-09: "Autodocument has to
-    // produce the param section among other things if it does not reflect the
-    // correct situation. Warnings and errors is what Linter produces."
-    //
-    // So <param> is STRUCTURAL and ruling D-3 stands: the tag set mirrors the
-    // signature, always, because the documenter's job is to make the block
-    // reflect the code. It is NOT one of the "empty sections are omitted" cases
-    // -- those are <summary> and <returns>, elements that carry prose and
-    // nothing else, where a blank one is purely a blank tooltip.
-    //
-    // An undocumented parameter is therefore reported by the LINTER, not
-    // silently dropped here: ddParamNoDescription at WARNING (severity set by
-    // the same 2026-08-09 ruling, in DRagLint.Lint.DocRules).
-    //
-    // v(2026-08-10, owner ruling): the tag is no longer allowed to be EMPTY. It
-    // must "reflect the current situation" -- so when the source states no
-    // meaning for this parameter, the DECLARED TYPE is the body, written under
-    // AUTO_TYPE so both MergeComment and --strip can recognise it as ours
-    // without recomputing it. Precedence is meaning-over-type: a mined note WINS
-    // (D-3's "meaning only where the source states it").
-    //
-    // Why a type is not redundant with the declaration one line below: these
-    // comments are also generated into doc/HTML help, where the parameter table
-    // is the deliverable and the signature is not adjacent to it.
-    //
-    // A parameter with neither note nor type (untyped var/const) still emits an
-    // empty AUTO_MARK tag -- the structure is D-3's, and the linter still names
-    // it, which is the one case doc-param-no-description is left reporting.
-    var Body: string:= ParamNoteFor(AName);
-    if Trim(TDocMarkers.StripMark(Body)) <> '' then
-      Exit(EmitTagged('<param name="' + AName + '">' + AUTO_MARK, Body, '</param>'));
-    Body:= ParamTypeFor(AName);
-    if Body = '' then
-      Exit(EmitTagged('<param name="' + AName + '">' + AUTO_MARK, '', '</param>'));
-    Result:= EmitTagged('<param name="' + AName + '">' + AUTO_TYPE, Body, '</param>');
+  // The inputs and the state MergeComment's phases share. Eff / Standalone* / Body* are the
+  // views of the existing comment; Sb collects the output.
+  TMergeCtx = record
+    AExisting         : TParsedDoc;
+    ASigParams        : TArray<string>;
+    AFacts            : TDocFacts;
+    AHasReturn        : Boolean;
+    APrefix           : string;
+    AComplexityMin    : Integer;
+    AExistingHasAnyTag: Boolean;
+    Sb                : TStringBuilder;
+    Facts             : string;
+    Eff               : TParsedDoc;
+    Residual          : TArray<string>;
+    LinePrefix        : string;
+    StandaloneExc     : TParsedDoc;
+    StandaloneExample : TParsedDoc;
+    StandaloneDep     : TParsedDoc;
+    StandaloneSee     : TParsedDoc;
+    StandaloneSince   : TParsedDoc;
+    StandaloneSummary : TParsedDoc;
+    StandaloneParam   : TParsedDoc;
+    StandaloneReturns : TParsedDoc;
+    StandaloneRemarks : TParsedDoc;
+    BodySummary       : string;
+    BodyReturns       : string;
+    BodyRemarks       : string;
+    BodySince         : string;
+    BodyDep           : string;
+    BodyExample       : string;
+    ReturnsHandWritten: Boolean;
+    IncludeReturns    : Boolean;
+    SummaryRaw        : string;
+    LenBeforeResidual : Integer;
+    LenAfterResidual  : Integer;
+    ResidualCarriesRemarks: Boolean;
+    HarvestedForEmit  : string;
+    Prose             : string;
+    NormProse         : string;
   end;
 
-  // PHASE C B7: an element whose body is blank once its marker is removed. Such
-  // an element carries NOTHING TO PRESERVE, so the ownership question that
-  // governs every other merge decision simply does not arise -- dropping it
-  // cannot lose a human's words, because there are none. That is what lets this
-  // clear tags the engine did not write: YADF's corpus holds 78 empty elements
-  // that carry no marker at all, are therefore treated as hand-written, and
-  // survived every regeneration precisely because the merge was protecting them.
-  function IsBlankBody(const AText: string): Boolean;
-  begin
-    Result:= Trim(TDocMarkers.StripMark(AText)) = '';
-  end;
-  // The engine's own declared-type baseline is regenerable, not a human's
-  // meaning -- decided LEXICALLY by its marker. See AUTO_TYPE for why this is a
-  // marker test and not a content comparison against a freshly built type.
-  function IsEngineTypeBody(const AText: string): Boolean;
-  begin
-    Result:= StartsStr(AUTO_TYPE, TrimLeft(AText));
-  end;
-  // The engine-owned <returns>, on exactly the terms EmitEngineParam uses.
-  //
-  // Was: emit ONLY when a return expression could be MINED from the body, and
-  // omit the tag entirely otherwise. That left `doc-drift: function returns a
-  // value but has no <returns> tag` findings the documenter could not clear --
-  // the rule demanded a tag the writer refused to write, which is the same
-  // checker-vs-writer split that produced the <seealso> and scope defects.
-  //
-  // Now: mined observation FIRST (it says what the function actually returns),
-  // and the DECLARED RETURN TYPE as the baseline beneath it, under AUTO_TYPE so
-  // both MergeComment and --strip recognise it as ours. Same ruling as <param>:
-  // reflect the CURRENT situation, and these comments are generated into
-  // doc/HTML help where the returns row is part of the deliverable.
-  //
-  // THE FIRST ATTEMPT AT THIS DESTROYED HAND-WRITTEN PROSE, and the reason is
-  // worth keeping: emitting for EVERY function turns "no edit" into "always an
-  // edit", which drags previously-untouched declarations into MergeComment's
-  // rewrite -- including ones whose only protection was that the engine had
-  // nothing to say about them. A malformed managed fence is exactly that shape.
-  // It is safe now because HasMalformedManagedFence makes that protection
-  // EXPLICIT at the top of MergeComment instead of incidental.
-  //
-  // A procedure never reaches here (callers gate on AHasReturn), and a function
-  // whose return type the index could not recover still emits nothing rather
-  // than an empty tag -- absence over a blank row.
-  function EmitEngineReturns(const AF: TDocFacts): string;
-  var Obs, Ty: string;
-  begin
-    Obs:= Trim(ObservedSuffix(AF.ReturnCases));
-    Ty := Trim(AF.ReturnType);
-
-    { v(2026-08-24, owner): the type travels WITH the observed values.
-
-      This used to be an either/or -- mined cases won and the declared type
-      was dropped -- so the moment the miner found anything, the reader was
-      told what came out and never what shape it is. Backwards for the common
-      case: a function with several return sites is precisely the one whose
-      type you most want stated.
-
-      THE TYPE LEADS because it is the CERTAIN fact -- it is declared in the
-      source. The observed list is mined from `Result :=` sites: a sample, not
-      a proof, since a site the miner cannot see is simply absent from it and
-      the list can be capped. Ordering says which is which without a sentence
-      explaining it.
-
-      The MARKER stays AUTO_MARK whenever a description is emitted. AUTO_TYPE
-      is reserved for the bare-type case, and drift/idempotency both key off
-      which marker is present -- swapping them would make every existing
-      documented unit read as hand-written. }
-    if (Obs <> '') and (Ty <> '') then
-      Exit(EmitTagged('<returns>' + AUTO_MARK, EscXml(Ty) + ' -- ' + Obs, '</returns>'));
-    if Obs <> '' then
-      Exit(EmitTagged('<returns>' + AUTO_MARK, Obs, '</returns>'));
-    if Ty <> '' then
-      Exit(EmitTagged('<returns>' + AUTO_TYPE, EscXml(Ty), '</returns>'));
-    Result:= '';
-  end;
-  // The STRUCTURAL <exception cref> for one mined raise class, on exactly the
-  // same terms as EmitEngineParam: the tag set mirrors what the code does, and
-  // the description is left for a human to fill.
-  //
-  // <exception cref=""> is the one tag REQUIRED by this project's own
-  // documentation standard that the engine never generated. Mined raises used
-  // to surface only as a `Raises: EFoo` line inside <remarks>, which is prose
-  // in the wrong element: DocInsight and Help Insight render <exception> as its
-  // own section, and a linter looking for the required tag never saw one.
-  //
-  // Empty rather than invented: the class name is the only thing the source
-  // states. WHEN it is raised is a claim the miner cannot make, and guessing it
-  // would be the "absence over wrong" policy broken in the place a wrong claim
-  // does most damage.
-  { AMessage is the literal the raise was constructed with, mined by
-    TDocFactsBuilder.MineRaisesDetailed, and is EMPTY whenever nothing was
-    captured -- a bare raise, a re-raise, or a message the miner declines to
-    claim. The empty case emits exactly what this function emitted before
-    messages existed, so a symbol whose message cannot be mined is unchanged
-    rather than newly blank. }
-  function EmitEngineException(const ATypeName: string; const AMessage: string = ''): string;
-  begin
-    { AUTO_EXC, not AUTO_MARK, whenever there IS a message: ruling D-4 reads a
-      non-blank AUTO_MARK body as a human's text, so emitting the mined message
-      under AUTO_MARK made the engine's own output indistinguishable from a
-      human's -- pass 2 preserved it, dropped the marker, and a deleted `raise`
-      stopped deleting its tag. The empty case keeps AUTO_MARK exactly as
-      before, so nothing about an undescribed exception changes. }
-    if Trim(AMessage) <> '' then
-      Result:= EmitTagged('<exception cref="' + ATypeName + '">' + AUTO_EXC,
-                          EscXml(Trim(AMessage)), '</exception>')
-    else
-      Result:= EmitTagged('<exception cref="' + ATypeName + '">' + AUTO_MARK, '', '</exception>');
-  end;
-  { EVERY distinct mined message for ACls, joined, or '' when that class was
-    raised only in forms the miner declines to describe. Matched
-    case-INSENSITIVELY because AFacts.Raises is a case-insensitive set and the
-    two must agree about which class an entry belongs to.
-
-    ALL of them, not the first, and that is the point. One <exception cref> is
-    emitted per CLASS, but a routine routinely raises one class from several
-    places with different messages -- TCompileChecker.SpawnAndCapture raises
-    Exception for both 'CreatePipe failed' and 'CreateProcessW failed: %d'.
-    Taking the first would pick by source order, which is arbitrary, and would
-    silently hide the other; a reader who saw one message would reasonably
-    believe it was the only one. Distinct, in source order, joined with '; '. }
-  function MinedRaiseMessage(const AF: TDocFacts; const ACls: string): string;
-  begin
-    Result:= '';
-    var Seen: TStringList:= TStringList.Create;
-    try
-      Seen.Sorted:= True;
-      Seen.Duplicates:= dupIgnore;
-      Seen.CaseSensitive:= False;
-      for var D in AF.RaisesDetailed do
-      begin
-        var M: string:= Trim(D.Message);
-        if (M = '') or (not SameText(D.ExcClass, ACls)) then Continue;
-        if Seen.IndexOf(M) >= 0 then Continue;
-        Seen.Add(M);
-        if Result = '' then Result:= M else Result:= Result + '; ' + M;
-      end;
-
-      { TRANSITIVE ATTRIBUTION (gap 2). Everything above is what THIS routine
-        raises; everything below is what a resolved one-hop callee raises, and
-        the two are deliberately not blended.
-
-        WHY NAME THE CALLEE. `via <qname>` is the difference between a fact and
-        a puzzle. A cref on a one-line delegator is otherwise indistinguishable
-        from one the routine earns itself, and a reader who finds it wrong has
-        nowhere to look. The name is also what makes the tag REAPABLE with
-        confidence: the emitter can tell its own attribution from a human's
-        sentence without guessing.
-
-        OWN MESSAGES FIRST, always. A routine that raises a class itself is
-        describing its own contract; the delegated raise is supporting detail.
-        AF.CalleeRaises arrives sorted by class then callee qualified name --
-        stable, because the edge query has no ORDER BY and an unstable order
-        would rewrite the same file on every run.
-
-        CAPPED at MAX_EXCEPTION_VIA, then counted. A tag that lists a dozen
-        callees is not more informative than one that lists three and says how
-        many more there are, and it wraps across half the doc block. }
-      var Shown: Integer:= 0;
-      var Extra: Integer:= 0;
-      for var CR in AF.CalleeRaises do
-      begin
-        if not SameText(CR.ExcClass, ACls) then Continue;
-        if Shown >= MAX_EXCEPTION_VIA then
-        begin
-          Inc(Extra);
-          Continue;
-        end;
-        var Attrib: string:= 'via ' + CR.ViaQName;
-        if Trim(CR.Message) <> '' then Attrib:= Attrib + ': ' + Trim(CR.Message);
-        if Seen.IndexOf(Attrib) >= 0 then Continue;
-        Seen.Add(Attrib);
-        Inc(Shown);
-        if Result = '' then Result:= Attrib else Result:= Result + '; ' + Attrib;
-      end;
-      if Extra > 0 then
-        Result:= Result + Format(' (+%d more)', [Extra]);
-    finally
-      Seen.Free;
-    end;
-  end;
-  // v(ADP3 T3 review round 2, Finding 1 -- PARAM ONLY): classifies
-  // ownership of one existing <param>'s raw parsed text (S) for the repair
-  // path, given whether the tag is literally present at all (AHasTag) --
-  //   - marked (AUTO_MARK) + EMPTY post-marker body -> taEngineOwned: DROP
-  //     entirely (v(ADP3 T3)'s omit-when-empty rule; no harvester for
-  //     params exists, or ever will, so there is no "regenerate" arm).
-  //   - marked + NON-EMPTY post-marker body -> taPreserveStripped: a human
-  //     added real text INSIDE the tag WITHOUT removing the marker. Unlike
-  //     <summary>/<returns>, the plan's "both refresh" deviation does not
-  //     reach params (harvesting is explicitly out of scope for <param>
-  //     forever), so "engine-owned, dropped" here would be PERMANENT,
-  //     unrecoverable loss with no refresh and no drift report ever able to
-  //     surface it -- preserved instead, marker stripped (the human is now
-  //     the de facto owner).
-  //   - the legacy pre-v(ADP3) 'TODO: describe.'/trailing-AUTO_PARAM
-  //     sentinel -> taEngineOwned UNCONDITIONALLY: the sentinel carries no
-  //     real information regardless of its own non-empty text, so it always
-  //     self-heals away.
-  //   - unmarked, tag literally present (AHasTag), not the legacy sentinel
-  //     -> taPreserveVerbatim: hand-written, preserved exactly as parsed,
-  //     including a deliberately blank slot.
-  //   - unmarked, no tag at all -> taEngineOwned (nothing to preserve).
-  function ClassifyParamAction(const S: string; AHasTag: Boolean): TTagAction;
-  begin
-    if TDocMarkers.IsManagedText(S) then
-    begin
-      Result:= if Trim(TDocMarkers.StripMark(S)) = '' then taEngineOwned else taPreserveStripped;
-    end
-    else if SameText(Trim(S), 'TODO: describe.') then Result:= taEngineOwned
-    else if AHasTag then Result:= taPreserveVerbatim
-    else Result:= taEngineOwned;
-  end;
+// Emits APrefix + AOpen + AValue + AClose as one or more ///-prefixed lines.
+// A hand-written summary/param/returns description may span several source
+// lines -- the parser preserves the interior #10 line breaks -- so each
+// continuation line MUST be re-prefixed (like the remarks-prose path below).
+// Emitting a multi-line value on a single AppendLine would leave the interior
+// lines WITHOUT a /// prefix: that both corrupts the source and breaks the
+// ///-comment block, so a later run mis-parses the fragment and injects/
+// duplicates managed blocks. Single-line values are emitted unchanged.
+function McEmitTagged(const C: TMergeCtx; const AOpen, AValue, AClose: string): string;
+var Norm: string; Parts: TArray<string>; i: Integer;
 begin
-  Sb:= TStringBuilder.Create;
+  Norm:= StringReplace(AValue, #13#10, #10, [rfReplaceAll]);
+  Norm:= StringReplace(Norm, #13, #10, [rfReplaceAll]);
+  // v(PHASE C, B8): wrap generated prose -- and ONLY generated prose. The
+  // discriminator is AUTO_MARK in the OPEN TAG, which is precisely how this
+  // emitter already distinguishes the two arms that reach it: the engine arm
+  // stamps the marker (e.g. '<summary>' + AUTO_MARK), the preserve arm that
+  // carries a human's text does not (see the <returns> preserve arm, which
+  // passes a bare '<returns>'). Keying on the marker therefore reuses an
+  // existing, already-tested invariant instead of inventing a parallel one,
+  // and it is what makes the reverted first attempt at B8 safe this time:
+  // that one reflowed hand-written values too, which changed the text the
+  // merge re-parses and made doc blocks disappear from
+  // run_doc_p3_decayrouting's fixtures.
+  //
+  // The budget subtracts the prefix (every line carries it) and the closing
+  // tag (the last line carries it, and reserving it for all lines is the
+  // cheap, still-idempotent over-approximation).
+  // AUTO_SUM (v(SESSION 74)) wraps too: a harvested <summary> is engine
+  // PROSE, which is exactly what this budget exists for. Omitting it here
+  // would leave harvested summaries unwrapped the moment they stopped
+  // carrying AUTO_MARK, silently reintroducing the 759-column lines B8 fixed.
+  if (Pos(AUTO_MARK, AOpen) > 0) or (Pos(AUTO_SUM, AOpen) > 0) then
+    Norm:= WrapEngineProse(Norm,
+             DOC_WRAP_COLS - Length(C.APrefix) - Length(AClose),
+             DOC_WRAP_COLS - Length(C.APrefix) - Length(AClose) - Length(AOpen));
+  Parts:= Norm.Split([#10]);
+  Result:= C.APrefix + AOpen;
+  for i:= 0 to High(Parts) do
+    if i = 0 then Result:= Result + Parts[i]
+    else Result:= Result + sLineBreak + C.APrefix + Trim(Parts[i]);
+  Result:= Result + AClose;
+end;
+// v(2026-09-15, defect 3): the preserve arms' emitter. The author's own
+// lines from ARaw (see VerbatimTagLines) when they exist and say what the
+// model says; EmitTagged's rebuild otherwise. ALinePrefix is the comment
+// marker WITHOUT APrefix's trailing blank, for the same reason the residual
+// carry-through uses it: the scanner leaves the blank after the slashes on
+// the raw line, so re-adding it would indent every preserved line by one
+// more column per run.
+function McEmitPreserved(const C: TMergeCtx; const ARaw, ALinePrefix, ATag, AOpen, AValue, AClose: string): string;
+var Raw: TArray<string>;
+begin
+  Raw:= VerbatimTagLines(ARaw, ATag, AOpen, AValue, AClose);
+  if Length(Raw) = 0 then Exit(McEmitTagged(C, AOpen, AValue, AClose));
+  Result:= ALinePrefix + string.Join(sLineBreak + ALinePrefix, Raw);
+end;
+// v(ADP3 T9): the body of this test now lives on TDocRegions itself, as
+// IsEngineOwnedTagText -- Doc.Drift's harvest-drift check needs the SAME
+// ownership test, and a second hand-expansion of its two arms is exactly how
+// that unit desynced from MergeComment before (see IsManagedDesc's own
+// remarks). This local name is kept only so the call sites and the comments
+// that cite them read unchanged.
+function McIsEngineOwnedRegardlessOfContent(const S: string): Boolean;
+begin
+  Result:= TDocMarkers.IsEngineOwnedTagText(S);
+end;
+// E-DOC-ORPHAN-PARAM: a hand tag whose name is not ONE bare parameter name --
+// a list (`S, WordDelims`) or a modifier-prefixed one (`var Pos`). ParamTagCovers
+// says whether such a tag names the signature parameter AParam.
+function McIsCompoundParamTag(const AName: string): Boolean;
+begin
+  Result:= AName.Contains(',') or Trim(AName).Contains(' ');
+end;
+function McParamTagCovers(const AName, AParam: string): Boolean;
+var Part: string; Words: TArray<string>;
+begin
+  Result:= False;
+  for Part in AName.Split([',']) do
+  begin
+    Words:= Trim(Part).Split([' ']);
+    if (Length(Words) > 0) and SameText(Words[High(Words)], AParam) then Exit(True);
+  end;
+end;
+// v(PHASE A3, ruling D-3): the MEANING mined for parameter AName, or '' when
+// the source states none. '' is not a failure -- it is the ordinary case, and
+// it produces a <param> tag with an empty body: structure without meaning.
+function McParamNoteFor(const C: TMergeCtx; const AName: string): string;
+var PN: TDocParamNote;
+begin
+  Result:= '';
+  for PN in C.AFacts.ParamNotes do
+    if SameText(PN.Name, AName) then Exit(EscXml(PN.Text));
+end;
+// The DENSE type baseline, escaped on the same terms as a mined note: a type
+// can contain '<' ('TArray<string>'), and an unescaped one would close the
+// <param> element and corrupt every downstream doc/HTML help build.
+function McParamTypeFor(const C: TMergeCtx; const AName: string): string;
+var PT: TDocParamNote;
+begin
+  Result:= '';
+  for PT in C.AFacts.ParamTypes do
+    if SameText(PT.Name, AName) then Exit(EscXml(PT.Text));
+end;
+// The engine-owned <param> emit. ONE writer for both MergeComment paths (the
+// fresh insert and the repair), because a <param> that appeared on only one of
+// them would look like a mining bug rather than a wiring one -- the same
+// reasoning EmitHarvestedRemarks records for itself.
+//
+// Marked, so `document --strip` and the drift check can tell this tag is the
+// engine's. ClassifyParamAction then reads that marker on the NEXT run:
+// marked-and-empty is engine-owned (regenerated), marked-with-text is
+// preserved -- which is exactly ruling D-4's "regenerate the structure, leave
+// the meaning alone", including a meaning a human typed INSIDE the tag without
+// removing the marker.
+function McEmitEngineParam(const C: TMergeCtx; const AName: string): string;
+begin
+  // PHASE C B7, as CLARIFIED by the user 2026-08-09: "Autodocument has to
+  // produce the param section among other things if it does not reflect the
+  // correct situation. Warnings and errors is what Linter produces."
+  //
+  // So <param> is STRUCTURAL and ruling D-3 stands: the tag set mirrors the
+  // signature, always, because the documenter's job is to make the block
+  // reflect the code. It is NOT one of the "empty sections are omitted" cases
+  // -- those are <summary> and <returns>, elements that carry prose and
+  // nothing else, where a blank one is purely a blank tooltip.
+  //
+  // An undocumented parameter is therefore reported by the LINTER, not
+  // silently dropped here: ddParamNoDescription at WARNING (severity set by
+  // the same 2026-08-09 ruling, in DRagLint.Lint.DocRules).
+  //
+  // v(2026-08-10, owner ruling): the tag is no longer allowed to be EMPTY. It
+  // must "reflect the current situation" -- so when the source states no
+  // meaning for this parameter, the DECLARED TYPE is the body, written under
+  // AUTO_TYPE so both MergeComment and --strip can recognise it as ours
+  // without recomputing it. Precedence is meaning-over-type: a mined note WINS
+  // (D-3's "meaning only where the source states it").
+  //
+  // Why a type is not redundant with the declaration one line below: these
+  // comments are also generated into doc/HTML help, where the parameter table
+  // is the deliverable and the signature is not adjacent to it.
+  //
+  // A parameter with neither note nor type (untyped var/const) still emits an
+  // empty AUTO_MARK tag -- the structure is D-3's, and the linter still names
+  // it, which is the one case doc-param-no-description is left reporting.
+  var Body: string:= McParamNoteFor(C, AName);
+  if Trim(TDocMarkers.StripMark(Body)) <> '' then
+    Exit(McEmitTagged(C, '<param name="' + AName + '">' + AUTO_MARK, Body, '</param>'));
+  Body:= McParamTypeFor(C, AName);
+  if Body = '' then
+    Exit(McEmitTagged(C, '<param name="' + AName + '">' + AUTO_MARK, '', '</param>'));
+  Result:= McEmitTagged(C, '<param name="' + AName + '">' + AUTO_TYPE, Body, '</param>');
+end;
+
+// PHASE C B7: an element whose body is blank once its marker is removed. Such
+// an element carries NOTHING TO PRESERVE, so the ownership question that
+// governs every other merge decision simply does not arise -- dropping it
+// cannot lose a human's words, because there are none. That is what lets this
+// clear tags the engine did not write: YADF's corpus holds 78 empty elements
+// that carry no marker at all, are therefore treated as hand-written, and
+// survived every regeneration precisely because the merge was protecting them.
+function McIsBlankBody(const AText: string): Boolean;
+begin
+  Result:= Trim(TDocMarkers.StripMark(AText)) = '';
+end;
+// The engine's own declared-type baseline is regenerable, not a human's
+// meaning -- decided LEXICALLY by its marker. See AUTO_TYPE for why this is a
+// marker test and not a content comparison against a freshly built type.
+function McIsEngineTypeBody(const AText: string): Boolean;
+begin
+  Result:= StartsStr(AUTO_TYPE, TrimLeft(AText));
+end;
+// The engine-owned <returns>, on exactly the terms EmitEngineParam uses.
+//
+// Was: emit ONLY when a return expression could be MINED from the body, and
+// omit the tag entirely otherwise. That left `doc-drift: function returns a
+// value but has no <returns> tag` findings the documenter could not clear --
+// the rule demanded a tag the writer refused to write, which is the same
+// checker-vs-writer split that produced the <seealso> and scope defects.
+//
+// Now: mined observation FIRST (it says what the function actually returns),
+// and the DECLARED RETURN TYPE as the baseline beneath it, under AUTO_TYPE so
+// both MergeComment and --strip recognise it as ours. Same ruling as <param>:
+// reflect the CURRENT situation, and these comments are generated into
+// doc/HTML help where the returns row is part of the deliverable.
+//
+// THE FIRST ATTEMPT AT THIS DESTROYED HAND-WRITTEN PROSE, and the reason is
+// worth keeping: emitting for EVERY function turns "no edit" into "always an
+// edit", which drags previously-untouched declarations into MergeComment's
+// rewrite -- including ones whose only protection was that the engine had
+// nothing to say about them. A malformed managed fence is exactly that shape.
+// It is safe now because HasMalformedManagedFence makes that protection
+// EXPLICIT at the top of MergeComment instead of incidental.
+//
+// A procedure never reaches here (callers gate on AHasReturn), and a function
+// whose return type the index could not recover still emits nothing rather
+// than an empty tag -- absence over a blank row.
+function McEmitEngineReturns(const C: TMergeCtx; const AF: TDocFacts): string;
+var Obs, Ty: string;
+begin
+  Obs:= Trim(ObservedSuffix(AF.ReturnCases));
+  Ty := Trim(AF.ReturnType);
+
+  { v(2026-08-24, owner): the type travels WITH the observed values.
+
+    This used to be an either/or -- mined cases won and the declared type
+    was dropped -- so the moment the miner found anything, the reader was
+    told what came out and never what shape it is. Backwards for the common
+    case: a function with several return sites is precisely the one whose
+    type you most want stated.
+
+    THE TYPE LEADS because it is the CERTAIN fact -- it is declared in the
+    source. The observed list is mined from `Result :=` sites: a sample, not
+    a proof, since a site the miner cannot see is simply absent from it and
+    the list can be capped. Ordering says which is which without a sentence
+    explaining it.
+
+    The MARKER stays AUTO_MARK whenever a description is emitted. AUTO_TYPE
+    is reserved for the bare-type case, and drift/idempotency both key off
+    which marker is present -- swapping them would make every existing
+    documented unit read as hand-written. }
+  if (Obs <> '') and (Ty <> '') then
+    Exit(McEmitTagged(C, '<returns>' + AUTO_MARK, EscXml(Ty) + ' -- ' + Obs, '</returns>'));
+  if Obs <> '' then
+    Exit(McEmitTagged(C, '<returns>' + AUTO_MARK, Obs, '</returns>'));
+  if Ty <> '' then
+    Exit(McEmitTagged(C, '<returns>' + AUTO_TYPE, EscXml(Ty), '</returns>'));
+  Result:= '';
+end;
+// The STRUCTURAL <exception cref> for one mined raise class, on exactly the
+// same terms as EmitEngineParam: the tag set mirrors what the code does, and
+// the description is left for a human to fill.
+//
+// <exception cref=""> is the one tag REQUIRED by this project's own
+// documentation standard that the engine never generated. Mined raises used
+// to surface only as a `Raises: EFoo` line inside <remarks>, which is prose
+// in the wrong element: DocInsight and Help Insight render <exception> as its
+// own section, and a linter looking for the required tag never saw one.
+//
+// Empty rather than invented: the class name is the only thing the source
+// states. WHEN it is raised is a claim the miner cannot make, and guessing it
+// would be the "absence over wrong" policy broken in the place a wrong claim
+// does most damage.
+{ AMessage is the literal the raise was constructed with, mined by
+  TDocFactsBuilder.MineRaisesDetailed, and is EMPTY whenever nothing was
+  captured -- a bare raise, a re-raise, or a message the miner declines to
+  claim. The empty case emits exactly what this function emitted before
+  messages existed, so a symbol whose message cannot be mined is unchanged
+  rather than newly blank. }
+function McEmitEngineException(const C: TMergeCtx; const ATypeName: string; const AMessage: string = ''): string;
+begin
+  { AUTO_EXC, not AUTO_MARK, whenever there IS a message: ruling D-4 reads a
+    non-blank AUTO_MARK body as a human's text, so emitting the mined message
+    under AUTO_MARK made the engine's own output indistinguishable from a
+    human's -- pass 2 preserved it, dropped the marker, and a deleted `raise`
+    stopped deleting its tag. The empty case keeps AUTO_MARK exactly as
+    before, so nothing about an undescribed exception changes. }
+  if Trim(AMessage) <> '' then
+    Result:= McEmitTagged(C, '<exception cref="' + ATypeName + '">' + AUTO_EXC,
+                        EscXml(Trim(AMessage)), '</exception>')
+  else
+    Result:= McEmitTagged(C, '<exception cref="' + ATypeName + '">' + AUTO_MARK, '', '</exception>');
+end;
+{ EVERY distinct mined message for ACls, joined, or '' when that class was
+  raised only in forms the miner declines to describe. Matched
+  case-INSENSITIVELY because AFacts.Raises is a case-insensitive set and the
+  two must agree about which class an entry belongs to.
+
+  ALL of them, not the first, and that is the point. One <exception cref> is
+  emitted per CLASS, but a routine routinely raises one class from several
+  places with different messages -- TCompileChecker.SpawnAndCapture raises
+  Exception for both 'CreatePipe failed' and 'CreateProcessW failed: %d'.
+  Taking the first would pick by source order, which is arbitrary, and would
+  silently hide the other; a reader who saw one message would reasonably
+  believe it was the only one. Distinct, in source order, joined with '; '. }
+function McMinedRaiseMessage(const AF: TDocFacts; const ACls: string): string;
+begin
+  Result:= '';
+  var Seen: TStringList:= TStringList.Create;
+  try
+    Seen.Sorted:= True;
+    Seen.Duplicates:= dupIgnore;
+    Seen.CaseSensitive:= False;
+    for var D in AF.RaisesDetailed do
+    begin
+      var M: string:= Trim(D.Message);
+      if (M = '') or (not SameText(D.ExcClass, ACls)) then Continue;
+      if Seen.IndexOf(M) >= 0 then Continue;
+      Seen.Add(M);
+      if Result = '' then Result:= M else Result:= Result + '; ' + M;
+    end;
+
+    { TRANSITIVE ATTRIBUTION (gap 2). Everything above is what THIS routine
+      raises; everything below is what a resolved one-hop callee raises, and
+      the two are deliberately not blended.
+
+      WHY NAME THE CALLEE. `via <qname>` is the difference between a fact and
+      a puzzle. A cref on a one-line delegator is otherwise indistinguishable
+      from one the routine earns itself, and a reader who finds it wrong has
+      nowhere to look. The name is also what makes the tag REAPABLE with
+      confidence: the emitter can tell its own attribution from a human's
+      sentence without guessing.
+
+      OWN MESSAGES FIRST, always. A routine that raises a class itself is
+      describing its own contract; the delegated raise is supporting detail.
+      AF.CalleeRaises arrives sorted by class then callee qualified name --
+      stable, because the edge query has no ORDER BY and an unstable order
+      would rewrite the same file on every run.
+
+      CAPPED at MAX_EXCEPTION_VIA, then counted. A tag that lists a dozen
+      callees is not more informative than one that lists three and says how
+      many more there are, and it wraps across half the doc block. }
+    var Shown: Integer:= 0;
+    var Extra: Integer:= 0;
+    for var CR in AF.CalleeRaises do
+    begin
+      if not SameText(CR.ExcClass, ACls) then Continue;
+      if Shown >= MAX_EXCEPTION_VIA then
+      begin
+        Inc(Extra);
+        Continue;
+      end;
+      var Attrib: string:= 'via ' + CR.ViaQName;
+      if Trim(CR.Message) <> '' then Attrib:= Attrib + ': ' + Trim(CR.Message);
+      if Seen.IndexOf(Attrib) >= 0 then Continue;
+      Seen.Add(Attrib);
+      Inc(Shown);
+      if Result = '' then Result:= Attrib else Result:= Result + '; ' + Attrib;
+    end;
+    if Extra > 0 then
+      Result:= Result + Format(' (+%d more)', [Extra]);
+  finally
+    Seen.Free;
+  end;
+end;
+// v(ADP3 T3 review round 2, Finding 1 -- PARAM ONLY): classifies
+// ownership of one existing <param>'s raw parsed text (S) for the repair
+// path, given whether the tag is literally present at all (AHasTag) --
+//   - marked (AUTO_MARK) + EMPTY post-marker body -> taEngineOwned: DROP
+//     entirely (v(ADP3 T3)'s omit-when-empty rule; no harvester for
+//     params exists, or ever will, so there is no "regenerate" arm).
+//   - marked + NON-EMPTY post-marker body -> taPreserveStripped: a human
+//     added real text INSIDE the tag WITHOUT removing the marker. Unlike
+//     <summary>/<returns>, the plan's "both refresh" deviation does not
+//     reach params (harvesting is explicitly out of scope for <param>
+//     forever), so "engine-owned, dropped" here would be PERMANENT,
+//     unrecoverable loss with no refresh and no drift report ever able to
+//     surface it -- preserved instead, marker stripped (the human is now
+//     the de facto owner).
+//   - the legacy pre-v(ADP3) 'TODO: describe.'/trailing-AUTO_PARAM
+//     sentinel -> taEngineOwned UNCONDITIONALLY: the sentinel carries no
+//     real information regardless of its own non-empty text, so it always
+//     self-heals away.
+//   - unmarked, tag literally present (AHasTag), not the legacy sentinel
+//     -> taPreserveVerbatim: hand-written, preserved exactly as parsed,
+//     including a deliberately blank slot.
+//   - unmarked, no tag at all -> taEngineOwned (nothing to preserve).
+function McClassifyParamAction(const S: string; AHasTag: Boolean): TTagAction;
+begin
+  if TDocMarkers.IsManagedText(S) then
+  begin
+    Result:= if Trim(TDocMarkers.StripMark(S)) = '' then taEngineOwned else taPreserveStripped;
+  end
+  else if SameText(Trim(S), 'TODO: describe.') then Result:= taEngineOwned
+  else if AHasTag then Result:= taPreserveVerbatim
+  else Result:= taEngineOwned;
+end;
+// Resolves Eff (the existing comment minus its carried-through residual lines) and LinePrefix (150 DQ: split out of MergeComment; no logic change).
+procedure McResolveEffective(var C: TMergeCtx);
+begin
+  C.Eff:= C.AExisting;
+  C.Residual:= nil;
+  if C.AExistingHasAnyTag and (C.AExisting.Format = dfXmlDoc) then
+  begin
+    var AccountedRaw: string;
+    // v(ADP3 T3d, T3f minor 1): "will the engine emit a <remarks> of its
+    // own?", answered by RENDERING rather than by guessing at AFacts'
+    // fields -- RenderFactsBlock applies its own gating (the complexity
+    // threshold, per-section emptiness), so rendering is the only test that
+    // cannot disagree with what actually gets emitted below.
+    //
+    // AIncludeReturns is passed True, the MAXIMAL render, because the real
+    // IncludeReturns is not computable yet: it derives from Eff, which is
+    // what this call produces. Maximal is the SAFE direction -- it can only
+    // say "the engine may emit a <remarks>" when the truth is "it will not",
+    // which keeps an author <remarks> non-retractable, which is exactly the
+    // pre-v(ADP3 T3d) behaviour. It can never say "no remarks" when one is
+    // coming. The one shape where the two answers differ is a symbol whose
+    // ONLY fact is the mined 'Returns:' line AND whose <returns> is not
+    // hand-written; that shape keeps the old, conservative outcome.
+    //
+    // COST, stated honestly rather than waved away: this renders ONCE PER
+    // REPAIRED XML doc comment, residual lines or not -- it cannot be made
+    // lazy, because SplitResidualLines takes it as an argument and needs it
+    // inside AddSpan. It is a string build over facts this call site has
+    // already computed, on a path that may also run nine BuildStandaloneFor
+    // re-parses, and Facts is rendered again a few hundred lines below
+    // anyway; so the added work is one more render on a path that already
+    // does far more than that, not a new order of cost.
+    var EngineEmitsOwnRemarks: Boolean:=
+      TDocFactsRenderer.RenderFactsBlock(C.AFacts, C.APrefix, True, C.AComplexityMin) <> '';
+    if TDocBlockScanner.SplitResidualLines(C.AExisting.RawBlock, EngineEmitsOwnRemarks, AccountedRaw, C.Residual) then
+      C.Eff:= TDocCommentParser.ParseXmlDoc(AccountedRaw);
+  end;
+  // Residual lines are re-emitted with the comment marker ONLY -- never
+  // APrefix's trailing space -- because the scanner strips exactly the three
+  // slashes and leaves everything after them, the leading space included. So
+  // '///' + ' <example>' reproduces '/// <example>' and '///' + '   Foo;'
+  // reproduces '///   Foo;', both byte-exact, which is what makes the
+  // carry-through a fixed point instead of a slow re-indent on every run.
+  C.LinePrefix:= TrimRight(C.APrefix);
+
+end;
+
+// Builds the per-tag standalone views and bodies of Eff (150 DQ: split out of MergeComment; no logic change).
+procedure McClassifyStandalone(var C: TMergeCtx);
+begin
+  // v(ADP3 T3b review, Critical 1 fix; round 2 -- STILL-OPEN GAP CLOSED;
+  // round 3 -- STRUCTURAL 1, moved to the TOP of the function and expanded
+  // to all eight containers): every container in PRESERVED_VERBATIM_
+  // CONTAINERS (<summary>/<param>/<returns>/<remarks>/<exception>/
+  // <example>/<deprecated>/<since>) is preserved verbatim below (its own
+  // raw text, unparsed) -- but AExisting's fields for ALL of them come from
+  // regexes that match ANYWHERE in the raw block, so a tag genuinely
+  // nested inside ONE of the eight can ALSO be captured as if it were a
+  // second, separate, standalone sibling and re-emitted a second time.
+  // Round 2 wired this protection into only FOUR of the eight emission
+  // sites (exception/example/deprecated/since); STRUCTURAL 1 (round 3)
+  // found the other four (summary/param/returns/remarks) still read
+  // AExisting directly, unconditionally, so e.g. a <summary> nested inside
+  // <exception>'s own desc still fabricated a standalone sibling
+  // (reproduced: '<exception cref="E1">exc text <summary>nested summary
+  // </summary> tail</exception>' emitted a standalone '<summary>nested
+  // summary</summary>' in addition to the exception's own, unmangled,
+  // verbatim desc). Moved here (was previously computed just before the
+  // <deprecated/> emission, deep in this function) because
+  // ReturnsHandWritten, just below, now needs StandaloneReturns before it
+  // is computed -- Object Pascal has no forward-reference problem with
+  // this (it is one flat function body), but the OLD position textually
+  // preceded ReturnsHandWritten's own USE two hundred lines apart, which
+  // made the dependency easy to miss; now they are adjacent.
+  //
+  // A SINGLE shared "Standalone" cannot be correct for more than one field
+  // at once: stripping <exception> before reading Standalone.Exceptions
+  // would erase every exception, genuinely standalone ones included --
+  // exactly the content this is trying to recover. BuildStandaloneFor (see
+  // its own remarks) is called ONCE PER FIELD, each time excluding that
+  // field's own container from the strip list -- so a tag nested inside
+  // any OTHER preserved container never survives to be (re-)captured,
+  // while a field's own genuinely top-level occurrences always do (their
+  // container was never stripped for their own computation). Gated on
+  // AExisting.Format = dfXmlDoc (the eight containers are XML-DocInsight
+  // syntax; PasDoc's own @tag recognition is anchored to the START of a
+  // trimmed line -- RxTag's own '(?m)^\s*@(\w+)' -- so it has no
+  // equivalent match-anywhere nesting risk).
+  //
+  // v(ADP3 T3b review round 3, STRUCTURAL 1): HasAnySignal's OR-chain is
+  // UNCHANGED from round 2 -- it still tests only the four "rich-body"
+  // containers (exception/example/deprecated/since) plus seealso, NOT
+  // summary/param/returns/remarks themselves. This is deliberate, not an
+  // oversight: nesting REQUIRES an outer container and a distinct inner
+  // one, so a <summary>/<param>/<returns>/<remarks> can only be
+  // fabricated from something nested INSIDE one of these five -- if NONE
+  // of them are present, there is nothing for any of the four "plain"
+  // fields to be nested inside (short of nesting inside EACH OTHER --
+  // <summary> inside <param>, say -- which every one of the review's own
+  // reproductions leaves untested, and which this fix does NOT protect
+  // against; disclosed as a bounded residual in this task's report).
+  // Reusing this same narrow gate for the four NEW fields keeps the
+  // expensive path exactly as rare as round 2 left it: a plain,
+  // thoroughly-documented function (<summary>+<param>s+<returns>+a
+  // <remarks> facts block, no exotic tag at all) is the overwhelming
+  // common case in any real codebase, and must NOT pay for nine extra
+  // ParseXmlDoc calls on every single one of them -- it still does not,
+  // here, since HasAnySignal stays False for exactly that shape, same as
+  // before this round.
+  //
+  // v(ADP3 T3b review round 4, MINOR): AExistingHasAnyTag is now the FIRST
+  // conjunct. Round 3 moved this block to the top of the function (it has
+  // to be here: ReturnsHandWritten, just below, needs StandaloneReturns) --
+  // which also moved it ABOVE the fresh path's own Exit, so nine
+  // BuildStandaloneFor calls (nine ParseXmlDoc parses plus their ~63
+  // StripElement regex constructions) ran on every FRESH comment and were
+  // then discarded unread. Verified behaviour-neutral by reading every
+  // Standalone* use in this function: the ONLY one textually before the
+  // fresh path's Exit is ReturnsHandWritten's own
+  // "AExistingHasAnyTag and StandaloneReturns.HasReturnsTag", whose value is
+  // already False whenever AExistingHasAnyTag is False regardless of what
+  // StandaloneReturns holds (and IncludeReturns/RenderFactsBlock derive from
+  // it, so they are unaffected too); every other read -- <summary>,
+  // <deprecated>, both <param> loops, <exception>, <example>,
+  // <seealso>/<see>, <since>, <remarks> -- sits AFTER that Exit, on the
+  // repair path, where AExistingHasAnyTag is True by construction and this
+  // conjunct is therefore always satisfied. A revert-to-RED check is
+  // impossible for this one BY CONSTRUCTION (a behaviour-neutral change has
+  // no failing state to revert to); it is evidenced instead by the whole
+  // idempotency sweep producing byte-identical md5s before and after.
+  var HasAnySignal: Boolean:=
+    C.AExistingHasAnyTag and
+    (C.Eff.Format = dfXmlDoc) and
+    ((Length(C.Eff.Exceptions) > 0) or C.Eff.HasExampleTag or
+     (Length(C.Eff.SeeAlso) > 0) or C.Eff.HasSinceTag or C.Eff.Deprecated);
+  // v(ADP3 T3b review round 3, STRUCTURAL 1): the four fields round 2 left
+  // unprotected -- see each one's own emission site, below, for how its
+  // presence gate now reads from these instead of from AExisting directly.
+  // v(ADP3 T3h, register N2): the CONTENT half of the presence/content split
+  // for the six SINGULAR-MATCH containers -- the body of the occurrence the
+  // matching Standalone* view found PRESENT, rather than of whichever
+  // occurrence happened to come first in the region. <param> and <exception>
+  // need no equivalent: they are plural .Matches and correlate by name/cref,
+  // so they already read the right occurrence's text (see their own loops).
+  //
+  // Computed in THIS block, on THIS gate, deliberately: presence and content
+  // must describe the SAME occurrence, so wherever presence falls back to the
+  // unfiltered Eff (HasAnySignal False -- no exotic container present to hide
+  // anything behind) content must fall back with it. Each call's fallback is
+  // the very field it replaces, so this is a byte-for-byte no-op on every
+  // shape with at most one occurrence of the tag -- see StandaloneBodyOf.
+  if HasAnySignal then
+  begin
+    // v(ADP3 T3f): every one of these nine reads Eff.RawBlock, the ACCOUNTED
+    // lines -- not AExisting.RawBlock. A tag sitting on a residual line is
+    // therefore invisible to the presence views too, which is what keeps the
+    // verbatim line the sole emitter of that tag (see the Eff computation at
+    // the top of this function). Eff.RawBlock IS AExisting.RawBlock whenever
+    // nothing is residual.
+    C.StandaloneExc     := TDocBlockScanner.BuildStandaloneFor(C.Eff.RawBlock, 'exception');
+    C.StandaloneExample := TDocBlockScanner.BuildStandaloneFor(C.Eff.RawBlock, 'example');
+    C.StandaloneDep     := TDocBlockScanner.BuildStandaloneFor(C.Eff.RawBlock, 'deprecated');
+    // seealso/see never need self-exclusion (StripElement can never match
+    // their always-self-closing form -- see PRESERVED_VERBATIM_CONTAINERS'
+    // own comment), so '' (strip everything) is correct and simplest.
+    C.StandaloneSee     := TDocBlockScanner.BuildStandaloneFor(C.Eff.RawBlock, '');
+    C.StandaloneSince   := TDocBlockScanner.BuildStandaloneFor(C.Eff.RawBlock, 'since');
+    C.StandaloneSummary := TDocBlockScanner.BuildStandaloneFor(C.Eff.RawBlock, 'summary');
+    C.StandaloneParam   := TDocBlockScanner.BuildStandaloneFor(C.Eff.RawBlock, 'param');
+    C.StandaloneReturns := TDocBlockScanner.BuildStandaloneFor(C.Eff.RawBlock, 'returns');
+    C.StandaloneRemarks := TDocBlockScanner.BuildStandaloneFor(C.Eff.RawBlock, 'remarks');
+    C.BodySummary       := TDocBlockScanner.StandaloneBodyOf(C.Eff.RawBlock, 'summary'   , C.Eff.Summary       );
+    C.BodyReturns       := TDocBlockScanner.StandaloneBodyOf(C.Eff.RawBlock, 'returns'   , C.Eff.ReturnsText   );
+    C.BodyRemarks       := TDocBlockScanner.StandaloneBodyOf(C.Eff.RawBlock, 'remarks'   , C.Eff.Remarks       );
+    C.BodySince         := TDocBlockScanner.StandaloneBodyOf(C.Eff.RawBlock, 'since'     , C.Eff.SinceText     );
+    C.BodyDep           := TDocBlockScanner.StandaloneBodyOf(C.Eff.RawBlock, 'deprecated', C.Eff.DeprecatedText);
+    C.BodyExample       := TDocBlockScanner.StandaloneBodyOf(C.Eff.RawBlock, 'example'   , C.Eff.ExampleText   );
+  end
+  else
+  begin
+    C.StandaloneExc     := C.Eff;
+    C.StandaloneExample := C.Eff;
+    C.StandaloneDep     := C.Eff;
+    C.StandaloneSee     := C.Eff;
+    C.StandaloneSince   := C.Eff;
+    C.StandaloneSummary := C.Eff;
+    C.StandaloneParam   := C.Eff;
+    C.StandaloneReturns := C.Eff;
+    C.StandaloneRemarks := C.Eff;
+    C.BodySummary       := C.Eff.Summary       ;
+    C.BodyReturns       := C.Eff.ReturnsText   ;
+    C.BodyRemarks       := C.Eff.Remarks       ;
+    C.BodySince         := C.Eff.SinceText     ;
+    C.BodyDep           := C.Eff.DeprecatedText;
+    C.BodyExample       := C.Eff.ExampleText   ;
+  end;
+
+end;
+
+// Decides ReturnsHandWritten / IncludeReturns and renders the facts block (150 DQ: split out of MergeComment; no logic change).
+procedure McPrepareFacts(var C: TMergeCtx);
+begin
+  // The mined return cases surface in exactly ONE place. For a symbol whose
+  // existing <returns> is HAND-WRITTEN (a real tag, not engine-owned) they go
+  // in a managed 'Returns:' fact line (so they show alongside the author's
+  // prose); for an engine-owned <returns> they fill the tag itself
+  // (ObservedSuffix, below). Never both. v(ADP3 T3): "hand-written" now
+  // requires AExisting.HasReturnsTag (the tag literally exists) as well as
+  // not-engine-owned -- so a human's deliberately EMPTY <returns></returns>
+  // is ALSO hand-written (gets a Returns: fact line, exactly like non-empty
+  // prose), whereas NO tag at all (HasReturnsTag False) is never
+  // "hand-written": its mined cases go straight into the (possibly
+  // newly-added) tag instead of ALSO duplicating into a fact line. v(ADP3
+  // T1): ownership is otherwise marker-keyed; the pre-v(ADP3)
+  // StartsText('Observed:', ...) content sniff stays deleted -- and (v(ADP3
+  // T3 review round 2)) stays deleted for good reason: a marked <returns>
+  // is ALWAYS engine-owned regardless of content (see
+  // IsEngineOwnedRegardlessOfContent's own comment).
+  // v(ADP3 T3 review round 2, Finding 4 interaction): gated on
+  // AExistingHasAnyTag, not AExisting.HasContent -- since AExistingHasAnyTag
+  // (not just HasContent) is what now decides whether the repair path runs
+  // at all (see below), gating "hand-written" on the narrower HasContent
+  // here would be internally inconsistent: a comment consisting ONLY of an
+  // unmarked, blank <returns></returns> (HasReturnsTag True, HasContent
+  // False) correctly enters the repair path via AExistingHasAnyTag, and
+  // must ALSO be recognized as hand-written there (preserved verbatim) --
+  // not silently regenerated because a narrower, pre-Finding-4 gate never
+  // anticipated reaching this code with HasContent still False.
+  // v(ADP3 T3b review round 3, STRUCTURAL 1): reads StandaloneReturns.
+  // HasReturnsTag, not AExisting.HasReturnsTag -- a <returns> genuinely
+  // nested inside e.g. <deprecated>'s own text (reproduced: '<deprecated>
+  // dep <returns>nested returns text</returns> tail</deprecated>') must
+  // not ALSO be treated as this symbol's own hand-written returns tag.
+  // v(ADP3 T3h): the ownership test reads BodyReturns -- the body of the
+  // occurrence StandaloneReturns.HasReturnsTag is True ABOUT -- not Eff's
+  // first-occurrence-anywhere body. With a <returns> nested inside
+  // <deprecated> and the engine's OWN marked <returns> beside it, Eff's body
+  // is the nested (unmarked) one, so this read said "hand-written" about a tag
+  // that is engine-owned: the engine then re-emitted the nested text at its own
+  // slot, unmarked -- an unstrippable fabrication -- AND duplicated the mined
+  // case into a 'Returns:' fact line, breaking "never both".
+  C.ReturnsHandWritten:= 
+    C.AExistingHasAnyTag and C.StandaloneReturns.HasReturnsTag
+    and (not McIsEngineOwnedRegardlessOfContent(C.BodyReturns));
+  C.IncludeReturns:= 
+    C.ReturnsHandWritten and C.AHasReturn and (Length(C.AFacts.ReturnCases) > 0);
+  C.Facts:= TDocFactsRenderer.RenderFactsBlock(C.AFacts, C.APrefix, C.IncludeReturns, C.AComplexityMin);
+end;
+
+// The fresh (no existing tags) comment (150 DQ: split out of MergeComment; no logic change).
+function McFreshComment(var C: TMergeCtx): string;
+var
+  P: string;
+begin
+  // v(ADP3 T3 review round 2, Finding 4): AExistingHasAnyTag is a SEPARATE
+  // signal from AExisting.HasContent, computed by the caller (BuildForSymbol)
+  // from HasSummaryTag/HasReturnsTag/Params/AExisting.HasContent itself/an
+  // unmodeled-tag check over the raw region -- NOT a widening of
+  // TParsedDoc.HasContent itself (reverted; other consumers -- the
+  // indexer's symbol_docs write, context bundling, TypeAt, MCP, LSP hover
+  // -- correctly treat a blank-slot-only comment as "not documented", and
+  // that must stay true). Only THIS repair-vs-fresh decision needs "does a
+  // comment region exist at all", so only this decision gets the wider
+  // signal (AExistingHasAnyTag already subsumes AExisting.HasContent --
+  // see BuildForSymbol's own computation -- so testing it alone suffices).
+  // v(ADP3 T3): omit-when-empty. A tag with nothing to say is not written
+  // at all -- an empty <summary> renders as a BLANK DocInsight tooltip,
+  // which is strictly worse than no tooltip. The FRESH path has no
+  // hand-written content by definition, so <summary> is emitted only when
+  // the harvester (v(ADP3 T7)) supplied text, and <param> never (see the
+  // spec's out-of-scope note on <param> harvesting -- a fresh comment
+  // never carries a <param> skeleton at all).
+  // v(SESSION 74): AUTO_SUM -- harvested prose is the engine's, and saying
+  // so lexically is what lets a later run REMOVE it when the source comment
+  // goes away without also deleting words a human typed (see AUTO_SUM).
+  if C.AFacts.HarvestedSummary <> '' then
+    C.Sb.AppendLine(McEmitTagged(C, '<summary>' + AUTO_SUM, C.AFacts.HarvestedSummary, '</summary>'));
+  // v(PHASE A3, ruling D-3): STRUCTURE ALWAYS. The comment above used to
+  // read "and <param> never", on the ground that no harvester for parameter
+  // descriptions existed. One does now, and more importantly the omission
+  // was itself a defect: `doc-drift` reported every one of these tags as
+  // missing while `document` refused to write any, so the two halves could
+  // never converge -- 22 unclearable findings on one corpus
+  // (INBOX-datacopy-2026-08-06, section 3). An automatic generator supplies
+  // structure, not meaning; the body is filled only where the source states
+  // it, and is otherwise empty.
+  for P in C.ASigParams do
+    C.Sb.AppendLine(McEmitEngineParam(C, P));
+  if C.AHasReturn then
+  begin
+    var RetLine: string:= McEmitEngineReturns(C, C.AFacts);
+    if RetLine <> '' then C.Sb.AppendLine(RetLine);
+  end;
+  // Mined raises, in DocInsight's element order (after <returns>, before
+  // <remarks>). Structural, like <param>: a fresh comment has no
+  // hand-written exception tag to collide with by definition.
+  for var RaiseCls in C.AFacts.Raises do
+    C.Sb.AppendLine(McEmitEngineException(C, RaiseCls, McMinedRaiseMessage(C.AFacts, RaiseCls)));
+  // v(ADP3 T7): the <remarks> element is now also warranted by harvested
+  // prose alone -- a symbol can have a second paragraph worth promoting and
+  // no facts at all -- so the condition is widened past `Facts <> ''`.
+  if (C.Facts <> '') or (C.AFacts.HarvestedRemarks <> '') then
+  begin
+    C.Sb.AppendLine(C.APrefix + '<remarks>');
+    EmitHarvestedRemarks(C.Sb, C.APrefix, C.AFacts.HarvestedRemarks);
+    if C.Facts <> '' then
+    begin
+      C.Sb.AppendLine(C.APrefix + AUTO_BEGIN);
+      C.Sb.AppendLine(C.Facts);
+      C.Sb.AppendLine(C.APrefix + AUTO_END);
+    end;
+    C.Sb.AppendLine(C.APrefix + '</remarks>');
+  end;
+  Result:= C.Sb.ToString.TrimRight([#13, #10]);
+end;
+
+// Emits the summary element (150 DQ: split out of MergeComment; no logic change).
+procedure McEmitSummary(var C: TMergeCtx);
+begin
+  // Existing comment: preserve prose, regenerate managed regions. Rebuild
+  // from the parsed model: keep Summary (or drop it when it is engine-
+  // owned and the harvest has nothing to say), keep hand-typed params +
+  // descs (including a MARKED <param> with real post-marker text --
+  // Finding 1, param-only), never add a <param> skeleton for a sig param
+  // with nothing hand-written (no harvester, ever), flag hand-typed stale
+  // params, then the returns tag, then a fresh <remarks> managed block.
+  //
+  // v(ADP3 T3): three-way rule for <summary> --
+  //   unmarked + the tag is LITERALLY PRESENT (HasSummaryTag), empty or
+  //     not -> a HUMAN wrote it: preserve verbatim, whatever it says.
+  //   marked (or legacy self-heal), or no tag at all -> ENGINE-owned:
+  //     refill from the harvest, or omit entirely when there is nothing
+  //     to refill with (v(ADP3 T3)'s omit-when-empty rule) -- v(ADP3 T3
+  //     review round 2): marked ALWAYS means engine-owned here regardless
+  //     of post-marker content, same as <returns> -- see
+  //     IsEngineOwnedRegardlessOfContent's own comment.
+  // v(ADP3 T3b review round 3, STRUCTURAL 1): reads StandaloneSummary.
+  // HasSummaryTag, not AExisting.HasSummaryTag -- a <summary> genuinely
+  // nested inside e.g. <exception>'s own desc (reproduced: '<exception
+  // cref="E1">exc text <summary>nested summary</summary> tail</exception>')
+  // must not ALSO be treated as this symbol's own hand-written summary.
+  // Content (SummaryRaw) still reads AExisting.Summary, not
+  // StandaloneSummary.Summary: computing StandaloneSummary strips
+  // <exception>/<example>/<deprecated>/<since> from the WHOLE block, which
+  // would ALSO strip anything legitimately nested INSIDE a genuinely
+  // standalone summary's own prose (e.g. NestedTagsInSummary's inline
+  // <exception cref> -- see that fixture's own comment) -- HasSummaryTag
+  // only needs to answer "is there a genuine, standalone summary at all",
+  // never "what does it say".
+  // v(ADP3 T3h): BodySummary, not Eff.Summary -- the body of the occurrence
+  // StandaloneSummary.HasSummaryTag is True ABOUT. The reasoning above still
+  // holds in full (a STRIPPED view's Summary would lose anything nested inside
+  // a genuinely standalone summary's own prose); StandaloneBodyOf reads the
+  // located occurrence out of the UNSTRIPPED text precisely so both properties
+  // hold at once.
+  C.SummaryRaw:= C.BodySummary;
+  // PHASE C B7: `and not IsBlankBody` is the added clause. An UNMARKED empty
+  // <summary> used to satisfy the preserve arm and be re-emitted verbatim
+  // forever -- 39 of them in YADF, every one a blank DocInsight tooltip that no
+  // regeneration could clear. Empty means there is nothing to preserve, so the
+  // harvested summary (if any) gets its chance below, and otherwise no tag is
+  // written at all.
+  if C.StandaloneSummary.HasSummaryTag and (not McIsEngineOwnedRegardlessOfContent(C.SummaryRaw))
+     and (not McIsBlankBody(C.SummaryRaw)) then
+    C.Sb.AppendLine(McEmitPreserved(C, C.Eff.RawBlock, C.LinePrefix, 'summary', '<summary>', C.SummaryRaw, '</summary>'))
+  // v(SESSION 74): AUTO_SUM, not AUTO_MARK. This arm is also the MIGRATION
+  // for every legacy bare-AUTO_MARK summary: reaching it means the source
+  // comment still yields prose, so the tag is the engine's, and it is
+  // re-emitted under the marker that says so. Nothing compares strings to
+  // decide that -- see AUTO_SUM's header for why a content compare was not
+  // an option.
+  else if C.AFacts.HarvestedSummary <> '' then
+    C.Sb.AppendLine(McEmitTagged(C, '<summary>' + AUTO_SUM, C.AFacts.HarvestedSummary, '</summary>'))
+  // v(SESSION 74, owner ruling 2026-09-06 -- D-4 WINS OVER THE T3 DEVIATION).
+  //
+  // The arm below splits what a single bare AUTO_MARK used to conflate, and
+  // getting EITHER side wrong was reproduced before this code existed:
+  //
+  //   * AUTO_SUM + no harvest left  -> the engine's own harvested prose whose
+  //     source comment was DELETED. It must be OMITTED -- that removal is a
+  //     designed, announced behaviour ("has no source comment left to harvest
+  //     -- it will be REMOVED"), pinned by run_doc_p3_harvest_drift STEP 4.
+  //     This is what the `not IsEngineSummaryBody` clause excludes; without
+  //     it the engine's own stale prose is promoted to human-owned and the
+  //     removal silently stops working.
+  //   * AUTO_MARK + authored words  -> a human typed into an engine stub
+  //     without removing its HTML comment. D-4 calls that the human's text.
+  //     Deleting it cost 53 words out of DRagLint.Lint.Linter.pas on the real
+  //     91-file sweep, which is what kept that sweep blocked.
+  //
+  // ORDER IS THE WHOLE MECHANISM. The refill arm above runs FIRST, so the
+  // engine keeps (and re-marks) its tag whenever it still has something to
+  // say; only then does ownership get decided, and only for words the engine
+  // cannot replace.
+  //
+  // IsManagedText, deliberately, and NOT IsEngineOwnedRegardlessOfContent:
+  // the latter also answers True for the legacy 'TODO: describe.' sentinel,
+  // which is a stub and must keep being deleted (run_doc_no_todo).
+  //
+  // The marker is DROPPED, which is the second half of D-4 ("keep the
+  // words, drop the marker") and is load-bearing rather than cosmetic:
+  // leaving it would re-arm this same deletion on the next run. Ownership
+  // transfers once, and visibly in the diff. Emitting without a marker also
+  // routes past EmitTagged's WrapEngineProse call, so a human's own line
+  // breaks are not reflowed to the engine's column budget.
+  else if C.StandaloneSummary.HasSummaryTag and TDocMarkers.IsManagedText(C.SummaryRaw)
+     and (not TDocMarkers.IsEngineSummaryBody(C.SummaryRaw))
+     and (not McIsBlankBody(C.SummaryRaw)) then
+    C.Sb.AppendLine(McEmitTagged(C, '<summary>', Trim(TDocMarkers.StripMark(C.SummaryRaw)), '</summary>'));
+  // else: engine-owned-and-EMPTY, or genuinely absent, and nothing
+  // harvested -- omit the tag entirely (v(ADP3 T3), narrowed above from
+  // "engine-owned" to "engine-owned and holding no authored words").
+
+end;
+
+// Emits the deprecated tag (150 DQ: split out of MergeComment; no logic change).
+procedure McEmitDeprecated(var C: TMergeCtx);
+begin
+  // <deprecated/>: v(ADP3 T3b; review Important 2 -- message preserved).
+  // Fixed order (see this function's own header remarks): <summary> ->
+  // <deprecated/> -> <param>s -> <returns> -> <exception>s -> <example> ->
+  // <seealso>s -> <since> -> <remarks>. Never engine-owned -- MergeComment
+  // has never generated this XML tag (the ground-truth 'Deprecated: msg'/
+  // 'Deprecated.' PLAIN-TEXT fact line inside the AUTO_BEGIN..AUTO_END
+  // fence is a DIFFERENT thing: the Pascal `deprecated` directive, not
+  // this doc-comment tag -- see RenderFactsBlock's own comment), so there
+  // is nothing to classify: whenever a human wrote it, it is preserved;
+  // nothing ever refills it, same as <param>. A message is re-emitted
+  // verbatim (no re-escaping -- opaque hand-written XML text, same
+  // reasoning as <exception>/<example> below); a bare tag has no
+  // message-text spelling to preserve regardless (self-closing vs. an
+  // explicit close tag with empty content both collapse to '', so the
+  // canonical bare '<deprecated/>' is emitted either way).
+  //
+  // v(ADP3 T3b review round 2, Critical 1 -- SECOND bug found while fixing
+  // the first): StandaloneDep is used ONLY to decide WHETHER a <deprecated>
+  // is genuinely standalone (not nested inside something else) -- its OWN
+  // DeprecatedText must NEVER be read for the actual message, because
+  // BuildStandaloneFor('deprecated') strips example/exception/since FROM
+  // THE WHOLE RAW BLOCK, including from WITHIN this <deprecated>'s own
+  // body -- a message that legitimately contains e.g. "<see cref=.../>...
+  // <since>2.0</since>" would have that '<since>' silently deleted, not
+  // merely excluded from double-counting (reproduced empirically: without
+  // this fix, "Added in <since>2.0</since> and still valid." mangled down
+  // to "Added in  and still valid."). AExisting.DeprecatedText -- the
+  // ORIGINAL, entirely unstripped parse -- is always the correct source
+  // for the message text; only presence/absence needs the filtered view.
+  // v(ADP3 T3h): BodyDep, the located standalone occurrence's own message --
+  // still the UNSTRIPPED text, so the '"Added in <since>2.0</since> and still
+  // valid." -> "Added in  and still valid."' mangling this comment describes
+  // stays fixed; what changes is only WHICH <deprecated> supplies it.
+  if C.StandaloneDep.Deprecated then
+  begin
+    if C.BodyDep <> '' then
+      C.Sb.AppendLine(McEmitPreserved(C, C.Eff.RawBlock, C.LinePrefix, 'deprecated', '<deprecated>', C.BodyDep, '</deprecated>'))
+    else
+      C.Sb.AppendLine(McEmitPreserved(C, C.Eff.RawBlock, C.LinePrefix, 'deprecated', '<deprecated/>', '', ''));
+  end;
+
+end;
+
+// Emits one param tag per signature parameter (150 DQ: split out of MergeComment; no logic change).
+procedure McEmitParams(var C: TMergeCtx);
+var
+  P: string;
+begin
+  // <param>: v(ADP3 T3 review round 2, Finding 1 -- the ONE tag where
+  // marked+content is preserved rather than treated as engine-owned; see
+  // ClassifyParamAction's own comment for why params differ from
+  // summary/returns.
+  // v(ADP3 T3b review round 3, STRUCTURAL 1): presence now DOES need a
+  // separate check -- a matching EP existing in AExisting.Params is no
+  // longer sufficient proof of standalone presence, since AExisting.Params
+  // also captures a <param name="X"> genuinely nested inside e.g.
+  // <example>'s own body (reproduced: '<example>Ex <param name="AV">
+  // nested param desc</param> body.</example>' fabricated a standalone
+  // '<param name="AV">nested param desc</param>' for a signature parameter
+  // named AV, even though the author never wrote a top-level <param> for
+  // it at all). A matching entry must ALSO exist in StandaloneParam.Params
+  // (built by stripping every OTHER preserved container first) before this
+  // is treated as hand-written. Content (EP.Desc) still comes from
+  // AExisting -- the correlation is by NAME (params have a natural key,
+  // same pattern as <exception>'s cref-based correlation below), so there
+  // is no risk of reading the wrong occurrence's text the way an unkeyed,
+  // single-match field would have.
+  // existing params first, in signature order where possible
+  var CompoundDone: string:= '|';
+  for P in C.ASigParams do
+  begin
+    // v(PHASE A3): tracks whether the HAND-WRITTEN arm already emitted this
+    // param, so the structural arm below does not write a second tag for it.
+    var ParamEmitted: Boolean:= False;
+    // E-DOC-ORPHAN-PARAM: a standalone hand tag naming several real params or
+    // a `var`/`const`/`out`-prefixed one is not stale and not duplicated: it
+    // is kept, once, with its own bytes, and covers every name it lists.
+    for var CP in C.Eff.Params do
+    begin
+      if not (McIsCompoundParamTag(CP.Name) and McParamTagCovers(CP.Name, P)) then Continue;
+      var CompoundStandalone: Boolean:= False;
+      for var SP in C.StandaloneParam.Params do
+        if SameText(SP.Name, CP.Name) then
+        begin
+          CompoundStandalone:= True;
+          Break;
+        end;
+      if not CompoundStandalone then Continue;
+      ParamEmitted:= True;
+      if not CompoundDone.Contains('|' + LowerCase(CP.Name) + '|') then
+      begin
+        CompoundDone:= CompoundDone + LowerCase(CP.Name) + '|';
+        C.Sb.AppendLine(McEmitPreserved(C, C.Eff.RawBlock, C.LinePrefix, 'param', '<param name="' + CP.Name + '">', CP.Desc, '</param>'));
+      end;
+    end;
+    if not ParamEmitted then
+    for var EP in C.Eff.Params do
+      if SameText(EP.Name, P) then
+      begin
+        var IsStandaloneParam: Boolean:= False;
+        for var SP in C.StandaloneParam.Params do
+          if SameText(SP.Name, P) then begin IsStandaloneParam:= True; Break; end;
+        if IsStandaloneParam then
+        begin
+          // v(PHASE A3): IS THIS MARKED BODY THE ENGINE'S OWN HARVEST, OR A
+          // HUMAN'S EDIT INSIDE THE ENGINE'S TAG? Before A3 the question could
+          // not arise -- nothing ever filled a <param>, so marked-with-content
+          // could only be a human (Finding 1's taPreserveStripped rule). Now
+          // the miner fills one, and taPreserveStripped applied to ITS OWN
+          // output strips the marker on the second run: the block changes
+          // every cycle (measured: cycle 2 removed four markers) and the
+          // engine quietly hands ownership of its own text to the human.
+          //
+          // The question is answerable EXACTLY rather than by heuristic:
+          // compare the marked body with what the miner produces from the
+          // CURRENT source. Equal means the engine wrote it and the source
+          // still says so -- regenerate, and the run is a fixed point. Not
+          // equal means a human typed something else there, or the source
+          // comment changed under a body someone has since adjusted; ruling
+          // D-4 says leave that meaning alone, so it falls through to the
+          // preserve arm exactly as before.
+          var MinedNow: string:= Trim(McParamNoteFor(C, P));
+          if (MinedNow <> '') and TDocMarkers.IsManagedDesc(EP.Desc)
+             and SameText(Trim(TDocMarkers.StripMark(EP.Desc)), MinedNow) then
+          begin
+            C.Sb.AppendLine(McEmitEngineParam(C, P));
+            ParamEmitted:= True;
+            Break;
+          end;
+          // PHASE C B7: an UNMARKED empty tag falls through to be REGENERATED
+          // rather than preserved verbatim. It carries nothing to protect (see
+          // IsBlankBody), and regenerating re-marks it as the engine's, so a
+          // description mined later can fill it. Marked-and-empty already fell
+          // through; this only adds the unmarked case, which the preserve arms
+          // below would otherwise freeze forever -- the property that kept
+          // YADF's empty tags alive through every regeneration.
+          if McIsBlankBody(EP.Desc) or McIsEngineTypeBody(EP.Desc) then
+          begin
+            C.Sb.AppendLine(McEmitEngineParam(C, P));
+            ParamEmitted:= True;
+            Break;
+          end;
+          case McClassifyParamAction(EP.Desc, True) of
+            // RULING D-4, the meaning half: a body a human wrote is never
+            // overwritten -- including one typed INSIDE the engine's own tag
+            // without removing the marker (taPreserveStripped).
+            taPreserveStripped:
+              begin
+                C.Sb.AppendLine(McEmitTagged(C, '<param name="' + P + '">', TDocMarkers.StripMark(EP.Desc), '</param>'));
+                ParamEmitted:= True;
+              end;
+            taPreserveVerbatim: begin C.Sb.AppendLine(McEmitPreserved(C, C.Eff.RawBlock, C.LinePrefix, 'param', '<param name="' + P + '">', EP.Desc, '</param>')); ParamEmitted:= True; end;
+            taEngineOwned: ;  // engine-owned and empty: fall through and REGENERATE
+          end;
+        end;
+        Break;
+      end;
+    // v(PHASE A3, ruling D-3), replacing "fresh/missing params never get a
+    // skeleton": no hand-written tag exists for this signature parameter (no
+    // match at all, a non-standalone match, or an engine-owned empty one), so
+    // the STRUCTURE is (re)generated here. That is D-4's other half -- the
+    // structure part is regenerated on every run, which is what makes a
+    // renamed parameter's tag follow the signature instead of rotting.
+    if not ParamEmitted then C.Sb.AppendLine(McEmitEngineParam(C, P));
+  end;
+end;
+
+// Re-emits author params whose parameter no longer exists (150 DQ: split out of MergeComment; no logic change).
+procedure McEmitVanishedParams(var C: TMergeCtx);
+var
+  P: string;
+begin
+  // stale hand-typed params: in the comment but not the signature -> flag, keep.
+  // v(ADP3 T3b review round 3, STRUCTURAL 1): same standalone-presence
+  // check as the loop above -- a nested-elsewhere <param> for a name that
+  // does not even match a current signature parameter must not be flagged
+  // as a "stale" leftover either (same fabrication risk, for a name with
+  // no real sig-param counterpart at all).
+  for var EP in C.Eff.Params do
+  begin
+    var StillThere: Boolean:= False;
+    for P in C.ASigParams do
+      if SameText(EP.Name, P) or (McIsCompoundParamTag(EP.Name) and McParamTagCovers(EP.Name, P)) then
+      begin
+        StillThere:= True;
+        Break;
+      end;
+    var IsStandaloneParam: Boolean:= False;
+    for var SP in C.StandaloneParam.Params do
+      if SameText(SP.Name, EP.Name) then begin IsStandaloneParam:= True; Break; end;
+    // E-DOC-ORPHAN-PARAM: the orphan keeps its own bytes (blanks inside the
+    // tag); only the trailing marker is appended to its last line.
+    if (not StillThere) and (not TDocMarkers.IsManagedDesc(EP.Desc)) and IsStandaloneParam then
+      C.Sb.AppendLine(McEmitPreserved(C, StringReplace(C.Eff.RawBlock, ' <!-- drag-lint: param no longer exists -->', '', [rfReplaceAll]),
+          C.LinePrefix, 'param', '<param name="' + EP.Name + '">', EP.Desc, '</param>')
+        + ' <!-- drag-lint: param no longer exists -->');
+  end;
+
+end;
+
+// Emits the returns tag (150 DQ: split out of MergeComment; no logic change).
+procedure McEmitReturns(var C: TMergeCtx);
+begin
+  if C.AHasReturn then
+  begin
+    // PHASE C B7: the "deliberate blank slot" is no longer honoured. The user's
+    // 2026-08-09 ruling is that an empty section is omitted, and a blank
+    // <returns> is a blank tooltip like any other -- 2 of them in YADF, frozen
+    // by exactly this preserve arm. A hand-written blank falls through to the
+    // engine arm, which refills it from the mined cases or writes nothing.
+    if C.ReturnsHandWritten and (not McIsBlankBody(C.BodyReturns)) then
+      // hand-written, with content -- preserved verbatim; its mined cases (if
+      // any) went into the 'Returns:' fact line above (IncludeReturns) instead
+      // of disturbing this text.
+      C.Sb.AppendLine(McEmitPreserved(C, C.Eff.RawBlock, C.LinePrefix, 'returns', '<returns>', C.BodyReturns, '</returns>'))
+    else
+    begin
+      // engine-owned (marked -- ALWAYS, regardless of post-marker content,
+      // v(ADP3 T3 review round 2) -- or the legacy TODO self-heal) or no
+      // tag at all: refill from the mined cases, or omit entirely when
+      // there is nothing mined to say (v(ADP3 T3): a managed/empty
+      // <returns> is never written).
+      var RetLine: string:= McEmitEngineReturns(C, C.AFacts);
+      if RetLine <> '' then C.Sb.AppendLine(RetLine);
+    end;
+  end;
+
+end;
+
+// Emits preserved and mined exception tags (150 DQ: split out of MergeComment; no logic change).
+procedure McEmitExceptions(var C: TMergeCtx);
+begin
+  // <exception>: v(ADP3 T3b). Never engine-owned -- MergeComment has never
+  // generated this tag, so, like <param> and <deprecated/>, there is
+  // nothing to classify: every <exception> found is hand-written,
+  // preserved verbatim (mirrors the <param> loop's shape above). TypeName
+  // (the cref) and Desc are re-emitted EXACTLY as parsed, with NO
+  // re-escaping: they were captured raw out of already-valid XML text (the
+  // author's own source), so they are opaque strings to round-trip, not
+  // fresh content to escape -- exactly like Desc in the <param> loop above
+  // and SummaryRaw/AExisting.ReturnsText below. Escaping them again here
+  // would double-escape any entity the author's text already carries
+  // (e.g. a hand-written '&amp;' would become '&amp;amp;') and would not
+  // be idempotent -- EscXml/EscXmlAttr are reserved in this function for
+  // MINED content only (RenderFactsBlock/ObservedSuffix), never for a
+  // verbatim hand-written passthrough. Multiple <exception> tags keep
+  // their relative SOURCE order (Excs is populated in regex-match order
+  // by the parser; the parser does not track cross-TYPE tag order, hence
+  // this function's fixed emission order -- see its own header remarks).
+  //
+  // v(ADP3 T3b review round 2, Critical 1 -- SECOND bug, same class as
+  // <deprecated>'s own fix just above): StandaloneExc.Exceptions is used
+  // ONLY to determine WHICH cref values are genuinely standalone (not
+  // nested inside example/deprecated/summary/etc.) -- its OWN Desc text
+  // must NOT be re-emitted directly, because BuildStandaloneFor
+  // ('exception') strips example/deprecated/since from the WHOLE raw
+  // block, including from WITHIN this exception's own desc (reproduced:
+  // "Added in <since>2.0</since> and still valid." mangled down to
+  // "Added in  and still valid." before this fix). For each standalone
+  // cref, look up the MATCHING entry in AExisting.Exceptions (the
+  // ORIGINAL, entirely unstripped parse) by TypeName, and re-emit ITS
+  // Desc -- unmangled, whatever it contains. (Two <exception> tags
+  // sharing the identical cref is the one case this cannot disambiguate;
+  // out of scope, same as the pre-existing "keeps only the first
+  // <deprecated>/<since>" limitation.)
+  //
+  // OWNERSHIP (new, with the generated tags below): the engine now writes
+  // <exception> too, so "every <exception> found is hand-written" -- true
+  // when the paragraph above was written -- no longer is. The split mirrors
+  // <param>'s exactly:
+  //   * marked AND blank      -> the engine's own from a prior run. NOT
+  //     preserved; it is regenerated below IF the body still raises that
+  //     class, which is what makes a deleted `raise` delete its tag instead
+  //     of freezing it forever.
+  //   * marked AND non-blank  -> a human typed inside the engine's tag
+  //     without removing the marker. Ruling D-4: their words stay, and the
+  //     marker is dropped so the tag is hand-written from now on.
+  //   * unmarked              -> hand-written, preserved verbatim, exactly
+  //     as before.
+  var PreservedCrefs: TArray<string>:= nil;
+  for var StandaloneExcItem in C.StandaloneExc.Exceptions do
+    for var OrigExc in C.Eff.Exceptions do
+      if SameText(OrigExc.TypeName, StandaloneExcItem.TypeName) then
+      begin
+        { AUTO_EXC says the body is the engine's own mined raise message, so
+          it is engine-owned REGARDLESS of being non-blank -- same contract as
+          AUTO_TYPE for a typed <param>. Falling through to the preserve arm
+          below would strip the marker and freeze the message, which is the
+          exact breakage D-4's emptiness test causes once the engine writes
+          prose of its own. Checked BEFORE the blank test because a mined
+          message is never blank. }
+        if TDocMarkers.IsManagedDesc(OrigExc.Desc) and StartsStr(AUTO_EXC, TrimLeft(OrigExc.Desc)) then Break;
+        if TDocMarkers.IsManagedDesc(OrigExc.Desc) and McIsBlankBody(OrigExc.Desc) then Break;
+        if TDocMarkers.IsManagedDesc(OrigExc.Desc) then
+          C.Sb.AppendLine(McEmitTagged(C, '<exception cref="' + OrigExc.TypeName + '">', TDocMarkers.StripMark(OrigExc.Desc), '</exception>'))
+        else
+          C.Sb.AppendLine(McEmitPreserved(C, C.Eff.RawBlock, C.LinePrefix, 'exception', '<exception cref="' + OrigExc.TypeName + '">', OrigExc.Desc, '</exception>'));
+        PreservedCrefs:= PreservedCrefs + [OrigExc.TypeName];
+        Break;
+      end;
+
+  // Generated structural tags for every mined raise class that no
+  // hand-written tag already covers. A hand-written <exception> for a class
+  // the body does not raise is left alone above -- the author may be
+  // documenting a raise from a callee, which the miner cannot see.
+  for var RaiseCls in C.AFacts.Raises do
+  begin
+    var Covered: Boolean:= False;
+    for var PC in PreservedCrefs do
+      if SameText(PC, RaiseCls) then begin Covered:= True; Break; end;
+    if not Covered then
+      C.Sb.AppendLine(McEmitEngineException(C, RaiseCls, McMinedRaiseMessage(C.AFacts, RaiseCls)));
+  end;
+
+end;
+
+// Emits example, see/seealso and since tags (150 DQ: split out of MergeComment; no logic change).
+procedure McEmitExampleSeeSince(var C: TMergeCtx);
+begin
+  // <example>: v(ADP3 T3b; review Minor 1 -- gated on HasExampleTag, not
+  // ExampleText <> '', so a deliberate, empty <example></example> is
+  // preserved rather than silently dropped -- consistent with <summary>'s
+  // own HasSummaryTag gate, and required for the strip round-trip to be
+  // byte-exact on that shape). Same reasoning as <exception> -- never
+  // engine-owned, always hand-written when present, preserved verbatim
+  // (no re-escaping, see above).
+  //
+  // v(ADP3 T3b review round 2, Critical 1 -- same "presence vs. content"
+  // split as <deprecated>/<exception> above): StandaloneExample.
+  // HasExampleTag decides WHETHER this is genuinely standalone; the TEXT
+  // always comes from AExisting.ExampleText (the original, unmangled
+  // parse), never from StandaloneExample.ExampleText, which could have a
+  // legitimately-nested tag (e.g. a nested <exception>) stripped out from
+  // within it by BuildStandaloneFor('example')'s own exception/deprecated/
+  // since strip.
+  // v(ADP3 T3h): BodyExample, the located standalone occurrence's own text
+  // (still unstripped, for the reason just above).
+  if C.StandaloneExample.HasExampleTag then
+    C.Sb.AppendLine(McEmitPreserved(C, C.Eff.RawBlock, C.LinePrefix, 'example', '<example>', C.BodyExample, '</example>'));
+
+  // <seealso>/<since>: v(ADP3 T3b) -- UNLIKE exception/example/deprecated,
+  // these two DO have an engine-generated counterpart: RenderFactsBlock
+  // emits an opt-in auto '<seealso cref=.../>' per related symbol and an
+  // opt-in auto '<since>date</since>' fact, both INSIDE the AUTO_BEGIN..
+  // AUTO_END fence (see its own comment) when the caller opted in via
+  // --seealso/--since. StandaloneSee's/StandaloneSince's own strip
+  // (BuildStandaloneFor, above) removes the <remarks> element wholesale,
+  // which is where the fence always lives, so an auto-generated line from
+  // a PRIOR run is excluded the same way any other remarks-nested content
+  // is (the Task 3b brief's own "Trap 1", confirmed empirically before
+  // this fix).
+  //
+  // v(ADP3 T3b review, Critical 1 fix, second symptom): RxSee's own
+  // '(?:see|seealso)' alternation means SeeAlso conflates a hand-written
+  // bare '<see cref="X"/>' (an inline cross-reference) with '<seealso
+  // cref="X"/>' (a separate, top-level "also see" entry) -- two DIFFERENT
+  // DocInsight tags that render differently. Re-emitting every entry as
+  // '<seealso ...>' would silently rewrite an author's '<see>' into a
+  // '<seealso>' -- a destruction (the '<see>' is gone) AND a fabrication
+  // (a '<seealso>' the author never wrote appears), both violating
+  // "preserve verbatim, never fabricate". SeeAlsoIsInline (parallel to
+  // SeeAlso, same index correspondence, set by the parser -- see
+  // TParsedDoc's own field comment) records which spelling the author
+  // actually used, so the ORIGINAL tag name is what gets re-emitted.
+  //
+  // v(ADP3 T3b review round 2, Minor): FAIL LOUDLY on a length mismatch
+  // rather than silently defaulting every out-of-range entry to
+  // '<seealso>' (a silent default is exactly how the very rewrite this
+  // field exists to prevent could reappear unnoticed -- e.g. a future
+  // producer that fills SeeAlso without ALSO filling SeeAlsoIsInline, such
+  // as a rehydrate from SeeAlsoJsonRaw). Both current producers
+  // (ParseXmlDoc, ParsePasDoc) always size them equal, so this can only
+  // fire if a THIRD producer is added later without updating this
+  // invariant -- exactly the case worth a loud, immediate failure over a
+  // silently-wrong tag name.
+  if Length(C.StandaloneSee.SeeAlso) <> Length(C.StandaloneSee.SeeAlsoIsInline) then
+    raise Exception.CreateFmt(
+      'TDocRegions.MergeComment: SeeAlso/SeeAlsoIsInline length mismatch (%d vs %d) -- ' +
+      'every TParsedDoc producer must size SeeAlsoIsInline to match SeeAlso.',
+      [Length(C.StandaloneSee.SeeAlso), Length(C.StandaloneSee.SeeAlsoIsInline)]);
+  for var SeeIx:= 0 to High(C.StandaloneSee.SeeAlso) do
+  begin
+    var SeeTag: string:= 'seealso';
+    if C.StandaloneSee.SeeAlsoIsInline[SeeIx] then SeeTag:= 'see';
+    C.Sb.AppendLine(McEmitPreserved(C, C.Eff.RawBlock, C.LinePrefix, SeeTag,
+      '<' + SeeTag + ' cref="' + C.StandaloneSee.SeeAlso[SeeIx] + '"/>', '', ''));
+  end;
+  // v(ADP3 T3b review round 3, NEW IMPORTANT): reads StandaloneSince.
+  // HasSinceTag for PRESENCE (not the old SinceText <> '' content test,
+  // and NOT StandaloneSince.SinceText for the actual text). The old
+  // content-test gate was doubly wrong: (1) SinceText <> '' cannot tell
+  // "no <since> at all" apart from a human's deliberate, empty
+  // <since></since> -- the same presence-vs-content gap HasSummaryTag/
+  // HasReturnsTag/HasExampleTag/HasRemarksTag already closed for their own
+  // tags; (2) far worse, reading the CONTENT from StandaloneSince (built by
+  // stripping <exception>/<example>/<deprecated>/<summary>/etc. from the
+  // WHOLE block) silently deleted anything legitimately nested inside a
+  // genuinely standalone <since>'s own body -- reproduced: '<since>1.0
+  // <exception cref="EInSince">x</exception></since>' emitted only
+  // '<since>1.0</since>', and '<since>2.0 <example>see the sample below
+  // </example> onwards</since>' emitted '<since>2.0 onwards</since>' (the
+  // nested tag's own text silently gone, not merely excluded from
+  // double-counting). The WORST shape combined this with <deprecated>'s
+  // OWN self-exclusion: '<since><deprecated>2.0-beta</deprecated></since>'
+  // deleted the ENTIRE hand-written comment, because StandaloneSince
+  // strips 'deprecated' (so SinceText became '', failing the old gate) AND
+  // StandaloneDep strips 'since' (so Deprecated became False, failing
+  // ITS gate) -- both tags vanished simultaneously, worse than round 1's
+  // duplication and round 2's line-deletion defect, both of which at
+  // least left something behind. AExisting.SinceText (the ORIGINAL,
+  // entirely unstripped parse) is always the correct source for the text,
+  // exactly like DeprecatedText/exception Desc/ExampleText above; only
+  // presence/absence needed the filtered view.
+  // v(ADP3 T3h): BodySince, the located standalone occurrence's own text. Note
+  // this is also where register D11 stops being a loss: a SECOND <since> is now
+  // a surplus occurrence, retracted by SplitResidualLines and carried through
+  // verbatim below, instead of being accounted for and then never emitted.
+  if C.StandaloneSince.HasSinceTag then
+    C.Sb.AppendLine(McEmitPreserved(C, C.Eff.RawBlock, C.LinePrefix, 'since', '<since>', C.BodySince, '</since>'));
+
+end;
+
+// Carries the residual (unrepresentable) lines through verbatim (150 DQ: split out of MergeComment; no logic change).
+procedure McEmitResidual(var C: TMergeCtx);
+begin
+  // v(ADP3 T3f): the carried-through residual -- every line of the original
+  // region this function could not fully account for, verbatim, in source
+  // order, re-prefixed with LinePrefix -- the comment marker WITHOUT
+  // APrefix's trailing space, so the INTERIOR indentation the scanner left
+  // after the slashes survives byte-exact (see LinePrefix, above).
+  // v(ADP3 T3g): APrefix now carries the declaration's own indentation, so
+  // LinePrefix is that indentation plus the marker, not a bare marker; the
+  // line therefore lands where its indented siblings do while everything the
+  // scanner handed back is still reproduced character for character.
+  //
+  // Position: AFTER every modeled tag, BEFORE the <remarks> facts block.
+  // The engine's own fixed emission order already reorders modeled tags
+  // relative to the source, so "the author's original relative position"
+  // is not on offer for anything here -- what IS load-bearing is that the
+  // position be DERIVED (so it is the same on every run, hence a fixed
+  // point) and that it not be FIRST. Emitting residual prose ahead of every
+  // tag would put it before the first '<' in the region, where ParseXmlDoc's
+  // untagged-prefix fallback would adopt it as the summary on the NEXT run
+  // and re-emit it inside a <summary> the author never wrote -- a
+  // fabrication AND a non-idempotent one. Keeping the facts block last also
+  // preserves the convention every other shape in this codebase already
+  // follows.
+  C.LenBeforeResidual:= C.Sb.Length;
+  // v(ADP3 T9): note whether the carried-through residual ALREADY contains a
+  // <remarks> element of the author's. See ResidualCarriesRemarks' use below.
+  C.ResidualCarriesRemarks:= False;
+  for var ResidualLine in C.Residual do
+  begin
+    C.Sb.AppendLine(C.LinePrefix + ResidualLine);
+    if not C.ResidualCarriesRemarks then
+      C.ResidualCarriesRemarks:= ContainsText(ResidualLine, '<remarks');
+  end;
+  C.LenAfterResidual:= C.Sb.Length;
+
+end;
+
+// Computes the harvested / prose remarks inputs (150 DQ: split out of MergeComment; no logic change).
+procedure McPrepareRemarks(var C: TMergeCtx);
+begin
+  // v(ADP3 T9): DO NOT FABRICATE A SECOND <remarks> BESIDE THE AUTHOR'S.
+  //
+  // The shape (fixtures/docp3/guards.pas, UnfencedRemarksTail):
+  //   /// <remarks>Plain hand prose, no fence, no marker.</remarks> <value>tail value</value>
+  // T3f carries that whole line through VERBATIM, because the author's prose
+  // shares the line with an unmodeled <value> tail. Carrying it through also
+  // removes it from AccountedRaw, so Eff parses no remarks and Prose is ''
+  // (which is why the author's prose is correctly emitted exactly once).
+  // The harvester then had HarvestedRemarks <> '' with nowhere to put it, so
+  // the emitter below opened a <remarks> of its OWN -- and the region ended
+  // up with two sibling <remarks> elements, which is not well-formed
+  // DocInsight. run_doc_p3_guards' "no <remarks> was fabricated beside the
+  // author's" check names exactly this.
+  //
+  // The rule applied here is T8's, not a new one: HAND-WRITTEN WINS.
+  // Harvested prose is the fallback for a symbol whose author wrote none --
+  // an author who HAS written <remarks> outranks it. Nothing is destroyed by
+  // dropping it either: the harvest is derived from a source comment that is
+  // still sitting in the file, so it is recomputed, not lost.
+  //
+  // NARROW ON PURPOSE -- gated on Facts = ''. When there ARE facts, the fence
+  // genuinely needs a <remarks> container and suppressing it would drop real
+  // engine output; that case keeps its own element and is covered by the
+  // idempotency sweep's NON-DESTRUCTIVE checks. This gate only removes an
+  // element whose ENTIRE contents would have been the harvested paragraph.
+  C.HarvestedForEmit:= C.AFacts.HarvestedRemarks;
+  if C.ResidualCarriesRemarks and (C.Facts = '') then
+    C.HarvestedForEmit:= '';
+
+  // remarks: keep hand prose (AExisting.Remarks) OUTSIDE the fence, then a fresh
+  // managed block. Strip any old fenced block from the prose before re-emitting
+  // so a second run does not nest blocks.
+  // v(ADP3 T3b review round 3, STRUCTURAL 1): only reads AExisting.Remarks
+  // when StandaloneRemarks.HasRemarksTag confirms a genuinely standalone
+  // <remarks> exists -- a <remarks> nested inside e.g. <example>'s own
+  // body (reproduced: '<example>ex <remarks>nested remarks</remarks> tail
+  // </example>') used to become the engine's real remarks prose, with the
+  // facts fence wrongly attaching to it. When not standalone, Prose stays
+  // '' regardless of what AExisting.Remarks captured -- there is nothing
+  // genuine to preserve from a fabricated match, so (unlike summary/
+  // returns/since/param above) there is no unstripped content to read
+  // instead; the whole point is that this text was never the author's
+  // real remarks prose to begin with.
+  // v(ADP3 T3h): BodyRemarks, the located standalone occurrence's own prose.
+  // The gate alone was not enough: on the SECOND apply cycle the region holds
+  // BOTH the nested <remarks> and the engine's own (folded in by
+  // MergeAdjacentSameKind), so the gate correctly said "a standalone <remarks>
+  // exists" while Eff.Remarks still returned the NESTED one's text -- and
+  // 'nested remarks' was duplicated into the engine's prose slot, above the
+  // fence, unmarked, where --strip left it forever.
+  C.Prose:= '';
+  if C.StandaloneRemarks.HasRemarksTag then
+    C.Prose:= TDocBlockScanner.StripManagedBlock(C.BodyRemarks);
+  C.NormProse:= StringReplace(Trim(C.Prose), #13#10, #10, [rfReplaceAll]);
+  C.NormProse:= StringReplace(C.NormProse, #13, #10, [rfReplaceAll]);
+  // v(ADP3 T7): DROP AUTO_MARK-carrying lines from the preserved-prose slot.
+  // Harvested remarks live inside <remarks> ABOVE the fence, so
+  // StripManagedBlock -- which removes the AUTO_BEGIN..AUTO_END fence and
+  // nothing else -- leaves them behind and they arrive here looking exactly
+  // like hand-written prose. Re-emitted as prose AND regenerated by
+  // EmitHarvestedRemarks below, the harvested paragraph DOUBLED on every
+  // apply cycle: measured, cycle 2 of run_doc_p3_harvest_text.ps1 carried the
+  // paragraph twice.
+  //
+  // This is the same defect shape the comment above describes for nested
+  // <remarks>, and it takes the same marker-keyed answer the rest of this
+  // unit uses: marked means engine-owned, so it is regenerated, never
+  // preserved. Ownership changes hands by REMOVING the marker (v(ADP3 T3)) --
+  // a human who deletes it keeps the line as their own prose, and the
+  // harvester will not put it back because MergeComment no longer recognises
+  // it as its own.
+  if C.NormProse <> '' then
+  begin
+    // The harvested block is a RUN, not a set of individually marked lines.
+    // EmitHarvestedRemarks marks only its FIRST line (so the emitted prose is
+    // not littered with one HTML comment per line), which means a per-line
+    // marker test kept paragraphs 2..N -- they arrived here looking
+    // hand-written, were re-emitted as prose AND regenerated below, and the
+    // block grew by its own length on EVERY apply cycle. Measured on
+    // fixtures/docp3/tagoccurrence.pas: a constant +1501 bytes per cycle,
+    // never converging. The original T7 fix was verified only against
+    // harvest_text.pas, whose harvest is a single line, so it could not
+    // surface this.
+    //
+    // Truncating at the first marked line is what TDocStripper's rule 1b
+    // already does (delete from the marked line to the next tag/fence), and
+    // the two verbs MUST agree or apply and strip diverge again. It is safe
+    // for the same reason rule 1b states: MergeComment emits preserved
+    // hand-written prose ABOVE this block and never below it, so everything
+    // from the marker onward is engine-written continuation.
+    var Kept: TStringBuilder:= TStringBuilder.Create;
+    try
+      for var PL in C.NormProse.Split([#10]) do
+      begin
+        if Pos(AUTO_MARK, PL) > 0 then Break;
+        if Kept.Length > 0 then Kept.Append(#10);
+        Kept.Append(PL);
+      end;
+      C.NormProse:= Trim(Kept.ToString);
+    finally
+      Kept.Free;
+    end;
+    C.Prose:= C.NormProse; // keep the two views in step -- both branches below read them
+  end;
+  // v(PHASE A1, ruling D-1): ... and now drop any harvested line the reader
+  // would otherwise see TWICE -- once as preserved hand prose (or in the
+  // hand-written summary), once regenerated below. See
+  // DropAlreadyPresentPhrases for why the truncate-at-first-marker rule above
+  // cannot catch this: the duplicate copy is the one whose marker a human
+  // removed to take ownership of it.
+  //
+  // Placed AFTER the truncation, deliberately: the two rules compose in one
+  // direction only. Truncation removes the engine's own still-marked tail, and
+  // this then compares what a human genuinely owns against what is about to be
+  // regenerated. Reversed, it would compare against text the truncation was
+  // going to delete anyway and drop harvested prose that had no duplicate.
+  C.HarvestedForEmit:= DropAlreadyPresentPhrases(C.HarvestedForEmit,
+                                               C.NormProse + #10 + C.SummaryRaw);
+end;
+
+// Emits the remarks element (150 DQ: split out of MergeComment; no logic change).
+procedure McEmitRemarks(var C: TMergeCtx);
+begin
+  // v(ADP3 T2 adjacent fix): a SINGLE-LINE hand-written remarks with NO
+  // facts to add is re-emitted on ONE line -- '<remarks>prose</remarks>' --
+  // exactly like EmitTagged already does for a single-line summary/param/
+  // returns value, instead of the unconditional open-tag-alone / prose-
+  // alone / close-tag-alone split below. Without this, merely touching a
+  // comment that has an UNTOUCHED single-line <remarks> (e.g. adding a
+  // managed <returns> tag elsewhere in the SAME comment) forces that
+  // remarks tag to expand into three lines even though nothing about it
+  // needed to change -- churn a marker-keyed `document --strip` can never
+  // undo, since there is no marker distinguishing "the engine reformatted
+  // this" from "a human genuinely wrote three lines" (see TDocStripper's
+  // own marker-only ownership rule). Multi-line prose, or any Facts to
+  // fence, still take the multi-line path below unchanged -- a fence
+  // always needs its own lines.
+  // v(ADP3 T7): ... and no harvested prose to place above a fence. The
+  // one-line form has nowhere to put a second, marked paragraph, so harvested
+  // remarks take the multi-line path below exactly as Facts already do.
+  if (Trim(C.Prose) <> '') and (C.Facts = '') and (C.HarvestedForEmit = '') and (not C.NormProse.Contains(#10)) then
+    C.Sb.AppendLine(McEmitPreserved(C, C.Eff.RawBlock, C.LinePrefix, 'remarks', '<remarks>', Trim(C.Prose), '</remarks>'))
+  else if (Trim(C.Prose) <> '') or (C.Facts <> '') or (C.HarvestedForEmit <> '') then
+  begin
+    C.Sb.AppendLine(C.APrefix + '<remarks>');
+    if Trim(C.Prose) <> '' then
+    begin
+      // Hand-written remarks prose may contain multiple lines (the parser joins
+      // them with bare #10). Emit EACH line APrefix-prefixed so every output line
+      // carries /// and the final CRLF join stays valid -- never one line with an
+      // embedded bare LF.
+      // v(2026-09-15, defect 3): the author's own lines when they exist and
+      // say what NormProse says (VerbatimRemarksProseLines) -- their
+      // indentation and blank lines are theirs to keep; the trimmed rebuild
+      // only when the shape is one the helper declines.
+      var RawProse: TArray<string>:= VerbatimRemarksProseLines(C.Eff.RawBlock, C.NormProse);
+      if Length(RawProse) > 0 then
+        for var RawLine in RawProse do
+          C.Sb.AppendLine(C.LinePrefix + RawLine)
+      else
+        for var ProseLine in C.NormProse.Split([#10]) do
+          if Trim(ProseLine) <> '' then
+            C.Sb.AppendLine(C.APrefix + Trim(ProseLine));
+    end;
+    // v(ADP3 T7): after the preserved hand prose, before the fence.
+    // v(ADP3 T9): HarvestedForEmit, not AFacts.HarvestedRemarks -- see the
+    // "DO NOT FABRICATE A SECOND <remarks>" comment above.
+    EmitHarvestedRemarks(C.Sb, C.APrefix, C.HarvestedForEmit);
+    if C.Facts <> '' then
+    begin
+      C.Sb.AppendLine(C.APrefix + AUTO_BEGIN);
+      C.Sb.AppendLine(C.Facts);
+      C.Sb.AppendLine(C.APrefix + AUTO_END);
+    end;
+    C.Sb.AppendLine(C.APrefix + '</remarks>');
+  end;
+end;
+
+class function TDocCommentMerger.MergeComment(const AExisting: TParsedDoc;
+  const ASigParams: TArray<string>; const AFacts: TDocFacts;
+  AHasReturn: Boolean; const APrefix: string; AComplexityMin: Integer;
+  AExistingHasAnyTag: Boolean): string;
+var
+  C: TMergeCtx;
+begin
+  C:= Default(TMergeCtx);
+  C.AExisting         := AExisting;
+  C.ASigParams        := ASigParams;
+  C.AFacts            := AFacts;
+  C.AHasReturn        := AHasReturn;
+  C.APrefix           := APrefix;
+  C.AComplexityMin    := AComplexityMin;
+  C.AExistingHasAnyTag:= AExistingHasAnyTag;
+  C.Sb:= TStringBuilder.Create;
   try
     // v(ADP3 T3f): FIRST, split the region into the lines this function can
     // fully account for and the ones it cannot (SplitResidualLines -- see its
@@ -3865,1012 +5068,26 @@ begin
     // So the region is left byte-identical and the action is daUnchanged. This
     // is the same fail-closed posture RegionFullyEngineOwned and StripRegion
     // already take, which SplitResidualLines' comment cites as precedent.
-    if HasMalformedManagedFence(AExisting.RawBlock) then Exit('');
+    if HasMalformedManagedFence(C.AExisting.RawBlock) then Exit('');
 
-    var Eff: TParsedDoc:= AExisting;
-    var Residual: TArray<string>:= nil;
-    if AExistingHasAnyTag and (AExisting.Format = dfXmlDoc) then
+    McResolveEffective(C);
+    McClassifyStandalone(C);
+    McPrepareFacts(C);
+    if not C.AExistingHasAnyTag then
     begin
-      var AccountedRaw: string;
-      // v(ADP3 T3d, T3f minor 1): "will the engine emit a <remarks> of its
-      // own?", answered by RENDERING rather than by guessing at AFacts'
-      // fields -- RenderFactsBlock applies its own gating (the complexity
-      // threshold, per-section emptiness), so rendering is the only test that
-      // cannot disagree with what actually gets emitted below.
-      //
-      // AIncludeReturns is passed True, the MAXIMAL render, because the real
-      // IncludeReturns is not computable yet: it derives from Eff, which is
-      // what this call produces. Maximal is the SAFE direction -- it can only
-      // say "the engine may emit a <remarks>" when the truth is "it will not",
-      // which keeps an author <remarks> non-retractable, which is exactly the
-      // pre-v(ADP3 T3d) behaviour. It can never say "no remarks" when one is
-      // coming. The one shape where the two answers differ is a symbol whose
-      // ONLY fact is the mined 'Returns:' line AND whose <returns> is not
-      // hand-written; that shape keeps the old, conservative outcome.
-      //
-      // COST, stated honestly rather than waved away: this renders ONCE PER
-      // REPAIRED XML doc comment, residual lines or not -- it cannot be made
-      // lazy, because SplitResidualLines takes it as an argument and needs it
-      // inside AddSpan. It is a string build over facts this call site has
-      // already computed, on a path that may also run nine BuildStandaloneFor
-      // re-parses, and Facts is rendered again a few hundred lines below
-      // anyway; so the added work is one more render on a path that already
-      // does far more than that, not a new order of cost.
-      var EngineEmitsOwnRemarks: Boolean:=
-        TDocFactsRenderer.RenderFactsBlock(AFacts, APrefix, True, AComplexityMin) <> '';
-      if TDocBlockScanner.SplitResidualLines(AExisting.RawBlock, EngineEmitsOwnRemarks, AccountedRaw, Residual) then
-        Eff:= TDocCommentParser.ParseXmlDoc(AccountedRaw);
-    end;
-    // Residual lines are re-emitted with the comment marker ONLY -- never
-    // APrefix's trailing space -- because the scanner strips exactly the three
-    // slashes and leaves everything after them, the leading space included. So
-    // '///' + ' <example>' reproduces '/// <example>' and '///' + '   Foo;'
-    // reproduces '///   Foo;', both byte-exact, which is what makes the
-    // carry-through a fixed point instead of a slow re-indent on every run.
-    var LinePrefix: string:= TrimRight(APrefix);
-
-    // v(ADP3 T3b review, Critical 1 fix; round 2 -- STILL-OPEN GAP CLOSED;
-    // round 3 -- STRUCTURAL 1, moved to the TOP of the function and expanded
-    // to all eight containers): every container in PRESERVED_VERBATIM_
-    // CONTAINERS (<summary>/<param>/<returns>/<remarks>/<exception>/
-    // <example>/<deprecated>/<since>) is preserved verbatim below (its own
-    // raw text, unparsed) -- but AExisting's fields for ALL of them come from
-    // regexes that match ANYWHERE in the raw block, so a tag genuinely
-    // nested inside ONE of the eight can ALSO be captured as if it were a
-    // second, separate, standalone sibling and re-emitted a second time.
-    // Round 2 wired this protection into only FOUR of the eight emission
-    // sites (exception/example/deprecated/since); STRUCTURAL 1 (round 3)
-    // found the other four (summary/param/returns/remarks) still read
-    // AExisting directly, unconditionally, so e.g. a <summary> nested inside
-    // <exception>'s own desc still fabricated a standalone sibling
-    // (reproduced: '<exception cref="E1">exc text <summary>nested summary
-    // </summary> tail</exception>' emitted a standalone '<summary>nested
-    // summary</summary>' in addition to the exception's own, unmangled,
-    // verbatim desc). Moved here (was previously computed just before the
-    // <deprecated/> emission, deep in this function) because
-    // ReturnsHandWritten, just below, now needs StandaloneReturns before it
-    // is computed -- Object Pascal has no forward-reference problem with
-    // this (it is one flat function body), but the OLD position textually
-    // preceded ReturnsHandWritten's own USE two hundred lines apart, which
-    // made the dependency easy to miss; now they are adjacent.
-    //
-    // A SINGLE shared "Standalone" cannot be correct for more than one field
-    // at once: stripping <exception> before reading Standalone.Exceptions
-    // would erase every exception, genuinely standalone ones included --
-    // exactly the content this is trying to recover. BuildStandaloneFor (see
-    // its own remarks) is called ONCE PER FIELD, each time excluding that
-    // field's own container from the strip list -- so a tag nested inside
-    // any OTHER preserved container never survives to be (re-)captured,
-    // while a field's own genuinely top-level occurrences always do (their
-    // container was never stripped for their own computation). Gated on
-    // AExisting.Format = dfXmlDoc (the eight containers are XML-DocInsight
-    // syntax; PasDoc's own @tag recognition is anchored to the START of a
-    // trimmed line -- RxTag's own '(?m)^\s*@(\w+)' -- so it has no
-    // equivalent match-anywhere nesting risk).
-    //
-    // v(ADP3 T3b review round 3, STRUCTURAL 1): HasAnySignal's OR-chain is
-    // UNCHANGED from round 2 -- it still tests only the four "rich-body"
-    // containers (exception/example/deprecated/since) plus seealso, NOT
-    // summary/param/returns/remarks themselves. This is deliberate, not an
-    // oversight: nesting REQUIRES an outer container and a distinct inner
-    // one, so a <summary>/<param>/<returns>/<remarks> can only be
-    // fabricated from something nested INSIDE one of these five -- if NONE
-    // of them are present, there is nothing for any of the four "plain"
-    // fields to be nested inside (short of nesting inside EACH OTHER --
-    // <summary> inside <param>, say -- which every one of the review's own
-    // reproductions leaves untested, and which this fix does NOT protect
-    // against; disclosed as a bounded residual in this task's report).
-    // Reusing this same narrow gate for the four NEW fields keeps the
-    // expensive path exactly as rare as round 2 left it: a plain,
-    // thoroughly-documented function (<summary>+<param>s+<returns>+a
-    // <remarks> facts block, no exotic tag at all) is the overwhelming
-    // common case in any real codebase, and must NOT pay for nine extra
-    // ParseXmlDoc calls on every single one of them -- it still does not,
-    // here, since HasAnySignal stays False for exactly that shape, same as
-    // before this round.
-    //
-    // v(ADP3 T3b review round 4, MINOR): AExistingHasAnyTag is now the FIRST
-    // conjunct. Round 3 moved this block to the top of the function (it has
-    // to be here: ReturnsHandWritten, just below, needs StandaloneReturns) --
-    // which also moved it ABOVE the fresh path's own Exit, so nine
-    // BuildStandaloneFor calls (nine ParseXmlDoc parses plus their ~63
-    // StripElement regex constructions) ran on every FRESH comment and were
-    // then discarded unread. Verified behaviour-neutral by reading every
-    // Standalone* use in this function: the ONLY one textually before the
-    // fresh path's Exit is ReturnsHandWritten's own
-    // "AExistingHasAnyTag and StandaloneReturns.HasReturnsTag", whose value is
-    // already False whenever AExistingHasAnyTag is False regardless of what
-    // StandaloneReturns holds (and IncludeReturns/RenderFactsBlock derive from
-    // it, so they are unaffected too); every other read -- <summary>,
-    // <deprecated>, both <param> loops, <exception>, <example>,
-    // <seealso>/<see>, <since>, <remarks> -- sits AFTER that Exit, on the
-    // repair path, where AExistingHasAnyTag is True by construction and this
-    // conjunct is therefore always satisfied. A revert-to-RED check is
-    // impossible for this one BY CONSTRUCTION (a behaviour-neutral change has
-    // no failing state to revert to); it is evidenced instead by the whole
-    // idempotency sweep producing byte-identical md5s before and after.
-    var HasAnySignal: Boolean:=
-      AExistingHasAnyTag and
-      (Eff.Format = dfXmlDoc) and
-      ((Length(Eff.Exceptions) > 0) or Eff.HasExampleTag or
-       (Length(Eff.SeeAlso) > 0) or Eff.HasSinceTag or Eff.Deprecated);
-    var StandaloneExc     : TParsedDoc;
-    var StandaloneExample : TParsedDoc;
-    var StandaloneDep     : TParsedDoc;
-    var StandaloneSee     : TParsedDoc;
-    var StandaloneSince   : TParsedDoc;
-    // v(ADP3 T3b review round 3, STRUCTURAL 1): the four fields round 2 left
-    // unprotected -- see each one's own emission site, below, for how its
-    // presence gate now reads from these instead of from AExisting directly.
-    var StandaloneSummary : TParsedDoc;
-    var StandaloneParam   : TParsedDoc;
-    var StandaloneReturns : TParsedDoc;
-    var StandaloneRemarks : TParsedDoc;
-    // v(ADP3 T3h, register N2): the CONTENT half of the presence/content split
-    // for the six SINGULAR-MATCH containers -- the body of the occurrence the
-    // matching Standalone* view found PRESENT, rather than of whichever
-    // occurrence happened to come first in the region. <param> and <exception>
-    // need no equivalent: they are plural .Matches and correlate by name/cref,
-    // so they already read the right occurrence's text (see their own loops).
-    //
-    // Computed in THIS block, on THIS gate, deliberately: presence and content
-    // must describe the SAME occurrence, so wherever presence falls back to the
-    // unfiltered Eff (HasAnySignal False -- no exotic container present to hide
-    // anything behind) content must fall back with it. Each call's fallback is
-    // the very field it replaces, so this is a byte-for-byte no-op on every
-    // shape with at most one occurrence of the tag -- see StandaloneBodyOf.
-    var BodySummary : string;
-    var BodyReturns : string;
-    var BodyRemarks : string;
-    var BodySince   : string;
-    var BodyDep     : string;
-    var BodyExample : string;
-    if HasAnySignal then
-    begin
-      // v(ADP3 T3f): every one of these nine reads Eff.RawBlock, the ACCOUNTED
-      // lines -- not AExisting.RawBlock. A tag sitting on a residual line is
-      // therefore invisible to the presence views too, which is what keeps the
-      // verbatim line the sole emitter of that tag (see the Eff computation at
-      // the top of this function). Eff.RawBlock IS AExisting.RawBlock whenever
-      // nothing is residual.
-      StandaloneExc     := TDocBlockScanner.BuildStandaloneFor(Eff.RawBlock, 'exception');
-      StandaloneExample := TDocBlockScanner.BuildStandaloneFor(Eff.RawBlock, 'example');
-      StandaloneDep     := TDocBlockScanner.BuildStandaloneFor(Eff.RawBlock, 'deprecated');
-      // seealso/see never need self-exclusion (StripElement can never match
-      // their always-self-closing form -- see PRESERVED_VERBATIM_CONTAINERS'
-      // own comment), so '' (strip everything) is correct and simplest.
-      StandaloneSee     := TDocBlockScanner.BuildStandaloneFor(Eff.RawBlock, '');
-      StandaloneSince   := TDocBlockScanner.BuildStandaloneFor(Eff.RawBlock, 'since');
-      StandaloneSummary := TDocBlockScanner.BuildStandaloneFor(Eff.RawBlock, 'summary');
-      StandaloneParam   := TDocBlockScanner.BuildStandaloneFor(Eff.RawBlock, 'param');
-      StandaloneReturns := TDocBlockScanner.BuildStandaloneFor(Eff.RawBlock, 'returns');
-      StandaloneRemarks := TDocBlockScanner.BuildStandaloneFor(Eff.RawBlock, 'remarks');
-      BodySummary       := TDocBlockScanner.StandaloneBodyOf(Eff.RawBlock, 'summary'   , Eff.Summary       );
-      BodyReturns       := TDocBlockScanner.StandaloneBodyOf(Eff.RawBlock, 'returns'   , Eff.ReturnsText   );
-      BodyRemarks       := TDocBlockScanner.StandaloneBodyOf(Eff.RawBlock, 'remarks'   , Eff.Remarks       );
-      BodySince         := TDocBlockScanner.StandaloneBodyOf(Eff.RawBlock, 'since'     , Eff.SinceText     );
-      BodyDep           := TDocBlockScanner.StandaloneBodyOf(Eff.RawBlock, 'deprecated', Eff.DeprecatedText);
-      BodyExample       := TDocBlockScanner.StandaloneBodyOf(Eff.RawBlock, 'example'   , Eff.ExampleText   );
-    end
-    else
-    begin
-      StandaloneExc     := Eff;
-      StandaloneExample := Eff;
-      StandaloneDep     := Eff;
-      StandaloneSee     := Eff;
-      StandaloneSince   := Eff;
-      StandaloneSummary := Eff;
-      StandaloneParam   := Eff;
-      StandaloneReturns := Eff;
-      StandaloneRemarks := Eff;
-      BodySummary       := Eff.Summary       ;
-      BodyReturns       := Eff.ReturnsText   ;
-      BodyRemarks       := Eff.Remarks       ;
-      BodySince         := Eff.SinceText     ;
-      BodyDep           := Eff.DeprecatedText;
-      BodyExample       := Eff.ExampleText   ;
-    end;
-
-    // The mined return cases surface in exactly ONE place. For a symbol whose
-    // existing <returns> is HAND-WRITTEN (a real tag, not engine-owned) they go
-    // in a managed 'Returns:' fact line (so they show alongside the author's
-    // prose); for an engine-owned <returns> they fill the tag itself
-    // (ObservedSuffix, below). Never both. v(ADP3 T3): "hand-written" now
-    // requires AExisting.HasReturnsTag (the tag literally exists) as well as
-    // not-engine-owned -- so a human's deliberately EMPTY <returns></returns>
-    // is ALSO hand-written (gets a Returns: fact line, exactly like non-empty
-    // prose), whereas NO tag at all (HasReturnsTag False) is never
-    // "hand-written": its mined cases go straight into the (possibly
-    // newly-added) tag instead of ALSO duplicating into a fact line. v(ADP3
-    // T1): ownership is otherwise marker-keyed; the pre-v(ADP3)
-    // StartsText('Observed:', ...) content sniff stays deleted -- and (v(ADP3
-    // T3 review round 2)) stays deleted for good reason: a marked <returns>
-    // is ALWAYS engine-owned regardless of content (see
-    // IsEngineOwnedRegardlessOfContent's own comment).
-    // v(ADP3 T3 review round 2, Finding 4 interaction): gated on
-    // AExistingHasAnyTag, not AExisting.HasContent -- since AExistingHasAnyTag
-    // (not just HasContent) is what now decides whether the repair path runs
-    // at all (see below), gating "hand-written" on the narrower HasContent
-    // here would be internally inconsistent: a comment consisting ONLY of an
-    // unmarked, blank <returns></returns> (HasReturnsTag True, HasContent
-    // False) correctly enters the repair path via AExistingHasAnyTag, and
-    // must ALSO be recognized as hand-written there (preserved verbatim) --
-    // not silently regenerated because a narrower, pre-Finding-4 gate never
-    // anticipated reaching this code with HasContent still False.
-    // v(ADP3 T3b review round 3, STRUCTURAL 1): reads StandaloneReturns.
-    // HasReturnsTag, not AExisting.HasReturnsTag -- a <returns> genuinely
-    // nested inside e.g. <deprecated>'s own text (reproduced: '<deprecated>
-    // dep <returns>nested returns text</returns> tail</deprecated>') must
-    // not ALSO be treated as this symbol's own hand-written returns tag.
-    // v(ADP3 T3h): the ownership test reads BodyReturns -- the body of the
-    // occurrence StandaloneReturns.HasReturnsTag is True ABOUT -- not Eff's
-    // first-occurrence-anywhere body. With a <returns> nested inside
-    // <deprecated> and the engine's OWN marked <returns> beside it, Eff's body
-    // is the nested (unmarked) one, so this read said "hand-written" about a tag
-    // that is engine-owned: the engine then re-emitted the nested text at its own
-    // slot, unmarked -- an unstrippable fabrication -- AND duplicated the mined
-    // case into a 'Returns:' fact line, breaking "never both".
-    var ReturnsHandWritten: Boolean:=
-      AExistingHasAnyTag and StandaloneReturns.HasReturnsTag
-      and (not IsEngineOwnedRegardlessOfContent(BodyReturns));
-    var IncludeReturns: Boolean:=
-      ReturnsHandWritten and AHasReturn and (Length(AFacts.ReturnCases) > 0);
-    Facts:= TDocFactsRenderer.RenderFactsBlock(AFacts, APrefix, IncludeReturns, AComplexityMin);
-    // v(ADP3 T3 review round 2, Finding 4): AExistingHasAnyTag is a SEPARATE
-    // signal from AExisting.HasContent, computed by the caller (BuildForSymbol)
-    // from HasSummaryTag/HasReturnsTag/Params/AExisting.HasContent itself/an
-    // unmodeled-tag check over the raw region -- NOT a widening of
-    // TParsedDoc.HasContent itself (reverted; other consumers -- the
-    // indexer's symbol_docs write, context bundling, TypeAt, MCP, LSP hover
-    // -- correctly treat a blank-slot-only comment as "not documented", and
-    // that must stay true). Only THIS repair-vs-fresh decision needs "does a
-    // comment region exist at all", so only this decision gets the wider
-    // signal (AExistingHasAnyTag already subsumes AExisting.HasContent --
-    // see BuildForSymbol's own computation -- so testing it alone suffices).
-    if not AExistingHasAnyTag then
-    begin
-      // v(ADP3 T3): omit-when-empty. A tag with nothing to say is not written
-      // at all -- an empty <summary> renders as a BLANK DocInsight tooltip,
-      // which is strictly worse than no tooltip. The FRESH path has no
-      // hand-written content by definition, so <summary> is emitted only when
-      // the harvester (v(ADP3 T7)) supplied text, and <param> never (see the
-      // spec's out-of-scope note on <param> harvesting -- a fresh comment
-      // never carries a <param> skeleton at all).
-      // v(SESSION 74): AUTO_SUM -- harvested prose is the engine's, and saying
-      // so lexically is what lets a later run REMOVE it when the source comment
-      // goes away without also deleting words a human typed (see AUTO_SUM).
-      if AFacts.HarvestedSummary <> '' then
-        Sb.AppendLine(EmitTagged('<summary>' + AUTO_SUM, AFacts.HarvestedSummary, '</summary>'));
-      // v(PHASE A3, ruling D-3): STRUCTURE ALWAYS. The comment above used to
-      // read "and <param> never", on the ground that no harvester for parameter
-      // descriptions existed. One does now, and more importantly the omission
-      // was itself a defect: `doc-drift` reported every one of these tags as
-      // missing while `document` refused to write any, so the two halves could
-      // never converge -- 22 unclearable findings on one corpus
-      // (INBOX-datacopy-2026-08-06, section 3). An automatic generator supplies
-      // structure, not meaning; the body is filled only where the source states
-      // it, and is otherwise empty.
-      for P in ASigParams do
-        Sb.AppendLine(EmitEngineParam(P));
-      if AHasReturn then
-      begin
-        var RetLine: string:= EmitEngineReturns(AFacts);
-        if RetLine <> '' then Sb.AppendLine(RetLine);
-      end;
-      // Mined raises, in DocInsight's element order (after <returns>, before
-      // <remarks>). Structural, like <param>: a fresh comment has no
-      // hand-written exception tag to collide with by definition.
-      for var RaiseCls in AFacts.Raises do
-        Sb.AppendLine(EmitEngineException(RaiseCls, MinedRaiseMessage(AFacts, RaiseCls)));
-      // v(ADP3 T7): the <remarks> element is now also warranted by harvested
-      // prose alone -- a symbol can have a second paragraph worth promoting and
-      // no facts at all -- so the condition is widened past `Facts <> ''`.
-      if (Facts <> '') or (AFacts.HarvestedRemarks <> '') then
-      begin
-        Sb.AppendLine(APrefix + '<remarks>');
-        EmitHarvestedRemarks(Sb, APrefix, AFacts.HarvestedRemarks);
-        if Facts <> '' then
-        begin
-          Sb.AppendLine(APrefix + AUTO_BEGIN);
-          Sb.AppendLine(Facts);
-          Sb.AppendLine(APrefix + AUTO_END);
-        end;
-        Sb.AppendLine(APrefix + '</remarks>');
-      end;
-      Result:= Sb.ToString.TrimRight([#13, #10]);
+      Result:= McFreshComment(C);
       Exit;
     end;
-
-    // Existing comment: preserve prose, regenerate managed regions. Rebuild
-    // from the parsed model: keep Summary (or drop it when it is engine-
-    // owned and the harvest has nothing to say), keep hand-typed params +
-    // descs (including a MARKED <param> with real post-marker text --
-    // Finding 1, param-only), never add a <param> skeleton for a sig param
-    // with nothing hand-written (no harvester, ever), flag hand-typed stale
-    // params, then the returns tag, then a fresh <remarks> managed block.
-    //
-    // v(ADP3 T3): three-way rule for <summary> --
-    //   unmarked + the tag is LITERALLY PRESENT (HasSummaryTag), empty or
-    //     not -> a HUMAN wrote it: preserve verbatim, whatever it says.
-    //   marked (or legacy self-heal), or no tag at all -> ENGINE-owned:
-    //     refill from the harvest, or omit entirely when there is nothing
-    //     to refill with (v(ADP3 T3)'s omit-when-empty rule) -- v(ADP3 T3
-    //     review round 2): marked ALWAYS means engine-owned here regardless
-    //     of post-marker content, same as <returns> -- see
-    //     IsEngineOwnedRegardlessOfContent's own comment.
-    // v(ADP3 T3b review round 3, STRUCTURAL 1): reads StandaloneSummary.
-    // HasSummaryTag, not AExisting.HasSummaryTag -- a <summary> genuinely
-    // nested inside e.g. <exception>'s own desc (reproduced: '<exception
-    // cref="E1">exc text <summary>nested summary</summary> tail</exception>')
-    // must not ALSO be treated as this symbol's own hand-written summary.
-    // Content (SummaryRaw) still reads AExisting.Summary, not
-    // StandaloneSummary.Summary: computing StandaloneSummary strips
-    // <exception>/<example>/<deprecated>/<since> from the WHOLE block, which
-    // would ALSO strip anything legitimately nested INSIDE a genuinely
-    // standalone summary's own prose (e.g. NestedTagsInSummary's inline
-    // <exception cref> -- see that fixture's own comment) -- HasSummaryTag
-    // only needs to answer "is there a genuine, standalone summary at all",
-    // never "what does it say".
-    // v(ADP3 T3h): BodySummary, not Eff.Summary -- the body of the occurrence
-    // StandaloneSummary.HasSummaryTag is True ABOUT. The reasoning above still
-    // holds in full (a STRIPPED view's Summary would lose anything nested inside
-    // a genuinely standalone summary's own prose); StandaloneBodyOf reads the
-    // located occurrence out of the UNSTRIPPED text precisely so both properties
-    // hold at once.
-    var SummaryRaw: string:= BodySummary;
-    // PHASE C B7: `and not IsBlankBody` is the added clause. An UNMARKED empty
-    // <summary> used to satisfy the preserve arm and be re-emitted verbatim
-    // forever -- 39 of them in YADF, every one a blank DocInsight tooltip that no
-    // regeneration could clear. Empty means there is nothing to preserve, so the
-    // harvested summary (if any) gets its chance below, and otherwise no tag is
-    // written at all.
-    if StandaloneSummary.HasSummaryTag and (not IsEngineOwnedRegardlessOfContent(SummaryRaw))
-       and (not IsBlankBody(SummaryRaw)) then
-      Sb.AppendLine(EmitPreserved(Eff.RawBlock, LinePrefix, 'summary', '<summary>', SummaryRaw, '</summary>'))
-    // v(SESSION 74): AUTO_SUM, not AUTO_MARK. This arm is also the MIGRATION
-    // for every legacy bare-AUTO_MARK summary: reaching it means the source
-    // comment still yields prose, so the tag is the engine's, and it is
-    // re-emitted under the marker that says so. Nothing compares strings to
-    // decide that -- see AUTO_SUM's header for why a content compare was not
-    // an option.
-    else if AFacts.HarvestedSummary <> '' then
-      Sb.AppendLine(EmitTagged('<summary>' + AUTO_SUM, AFacts.HarvestedSummary, '</summary>'))
-    // v(SESSION 74, owner ruling 2026-09-06 -- D-4 WINS OVER THE T3 DEVIATION).
-    //
-    // The arm below splits what a single bare AUTO_MARK used to conflate, and
-    // getting EITHER side wrong was reproduced before this code existed:
-    //
-    //   * AUTO_SUM + no harvest left  -> the engine's own harvested prose whose
-    //     source comment was DELETED. It must be OMITTED -- that removal is a
-    //     designed, announced behaviour ("has no source comment left to harvest
-    //     -- it will be REMOVED"), pinned by run_doc_p3_harvest_drift STEP 4.
-    //     This is what the `not IsEngineSummaryBody` clause excludes; without
-    //     it the engine's own stale prose is promoted to human-owned and the
-    //     removal silently stops working.
-    //   * AUTO_MARK + authored words  -> a human typed into an engine stub
-    //     without removing its HTML comment. D-4 calls that the human's text.
-    //     Deleting it cost 53 words out of DRagLint.Lint.Linter.pas on the real
-    //     91-file sweep, which is what kept that sweep blocked.
-    //
-    // ORDER IS THE WHOLE MECHANISM. The refill arm above runs FIRST, so the
-    // engine keeps (and re-marks) its tag whenever it still has something to
-    // say; only then does ownership get decided, and only for words the engine
-    // cannot replace.
-    //
-    // IsManagedText, deliberately, and NOT IsEngineOwnedRegardlessOfContent:
-    // the latter also answers True for the legacy 'TODO: describe.' sentinel,
-    // which is a stub and must keep being deleted (run_doc_no_todo).
-    //
-    // The marker is DROPPED, which is the second half of D-4 ("keep the
-    // words, drop the marker") and is load-bearing rather than cosmetic:
-    // leaving it would re-arm this same deletion on the next run. Ownership
-    // transfers once, and visibly in the diff. Emitting without a marker also
-    // routes past EmitTagged's WrapEngineProse call, so a human's own line
-    // breaks are not reflowed to the engine's column budget.
-    else if StandaloneSummary.HasSummaryTag and TDocMarkers.IsManagedText(SummaryRaw)
-       and (not TDocMarkers.IsEngineSummaryBody(SummaryRaw))
-       and (not IsBlankBody(SummaryRaw)) then
-      Sb.AppendLine(EmitTagged('<summary>', Trim(TDocMarkers.StripMark(SummaryRaw)), '</summary>'));
-    // else: engine-owned-and-EMPTY, or genuinely absent, and nothing
-    // harvested -- omit the tag entirely (v(ADP3 T3), narrowed above from
-    // "engine-owned" to "engine-owned and holding no authored words").
-
-    // <deprecated/>: v(ADP3 T3b; review Important 2 -- message preserved).
-    // Fixed order (see this function's own header remarks): <summary> ->
-    // <deprecated/> -> <param>s -> <returns> -> <exception>s -> <example> ->
-    // <seealso>s -> <since> -> <remarks>. Never engine-owned -- MergeComment
-    // has never generated this XML tag (the ground-truth 'Deprecated: msg'/
-    // 'Deprecated.' PLAIN-TEXT fact line inside the AUTO_BEGIN..AUTO_END
-    // fence is a DIFFERENT thing: the Pascal `deprecated` directive, not
-    // this doc-comment tag -- see RenderFactsBlock's own comment), so there
-    // is nothing to classify: whenever a human wrote it, it is preserved;
-    // nothing ever refills it, same as <param>. A message is re-emitted
-    // verbatim (no re-escaping -- opaque hand-written XML text, same
-    // reasoning as <exception>/<example> below); a bare tag has no
-    // message-text spelling to preserve regardless (self-closing vs. an
-    // explicit close tag with empty content both collapse to '', so the
-    // canonical bare '<deprecated/>' is emitted either way).
-    //
-    // v(ADP3 T3b review round 2, Critical 1 -- SECOND bug found while fixing
-    // the first): StandaloneDep is used ONLY to decide WHETHER a <deprecated>
-    // is genuinely standalone (not nested inside something else) -- its OWN
-    // DeprecatedText must NEVER be read for the actual message, because
-    // BuildStandaloneFor('deprecated') strips example/exception/since FROM
-    // THE WHOLE RAW BLOCK, including from WITHIN this <deprecated>'s own
-    // body -- a message that legitimately contains e.g. "<see cref=.../>...
-    // <since>2.0</since>" would have that '<since>' silently deleted, not
-    // merely excluded from double-counting (reproduced empirically: without
-    // this fix, "Added in <since>2.0</since> and still valid." mangled down
-    // to "Added in  and still valid."). AExisting.DeprecatedText -- the
-    // ORIGINAL, entirely unstripped parse -- is always the correct source
-    // for the message text; only presence/absence needs the filtered view.
-    // v(ADP3 T3h): BodyDep, the located standalone occurrence's own message --
-    // still the UNSTRIPPED text, so the '"Added in <since>2.0</since> and still
-    // valid." -> "Added in  and still valid."' mangling this comment describes
-    // stays fixed; what changes is only WHICH <deprecated> supplies it.
-    if StandaloneDep.Deprecated then
-    begin
-      if BodyDep <> '' then
-        Sb.AppendLine(EmitPreserved(Eff.RawBlock, LinePrefix, 'deprecated', '<deprecated>', BodyDep, '</deprecated>'))
-      else
-        Sb.AppendLine(EmitPreserved(Eff.RawBlock, LinePrefix, 'deprecated', '<deprecated/>', '', ''));
-    end;
-
-    // <param>: v(ADP3 T3 review round 2, Finding 1 -- the ONE tag where
-    // marked+content is preserved rather than treated as engine-owned; see
-    // ClassifyParamAction's own comment for why params differ from
-    // summary/returns.
-    // v(ADP3 T3b review round 3, STRUCTURAL 1): presence now DOES need a
-    // separate check -- a matching EP existing in AExisting.Params is no
-    // longer sufficient proof of standalone presence, since AExisting.Params
-    // also captures a <param name="X"> genuinely nested inside e.g.
-    // <example>'s own body (reproduced: '<example>Ex <param name="AV">
-    // nested param desc</param> body.</example>' fabricated a standalone
-    // '<param name="AV">nested param desc</param>' for a signature parameter
-    // named AV, even though the author never wrote a top-level <param> for
-    // it at all). A matching entry must ALSO exist in StandaloneParam.Params
-    // (built by stripping every OTHER preserved container first) before this
-    // is treated as hand-written. Content (EP.Desc) still comes from
-    // AExisting -- the correlation is by NAME (params have a natural key,
-    // same pattern as <exception>'s cref-based correlation below), so there
-    // is no risk of reading the wrong occurrence's text the way an unkeyed,
-    // single-match field would have.
-    // existing params first, in signature order where possible
-    var CompoundDone: string:= '|';
-    for P in ASigParams do
-    begin
-      // v(PHASE A3): tracks whether the HAND-WRITTEN arm already emitted this
-      // param, so the structural arm below does not write a second tag for it.
-      var ParamEmitted: Boolean:= False;
-      // E-DOC-ORPHAN-PARAM: a standalone hand tag naming several real params or
-      // a `var`/`const`/`out`-prefixed one is not stale and not duplicated: it
-      // is kept, once, with its own bytes, and covers every name it lists.
-      for var CP in Eff.Params do
-      begin
-        if not (IsCompoundParamTag(CP.Name) and ParamTagCovers(CP.Name, P)) then Continue;
-        var CompoundStandalone: Boolean:= False;
-        for var SP in StandaloneParam.Params do
-          if SameText(SP.Name, CP.Name) then
-          begin
-            CompoundStandalone:= True;
-            Break;
-          end;
-        if not CompoundStandalone then Continue;
-        ParamEmitted:= True;
-        if not CompoundDone.Contains('|' + LowerCase(CP.Name) + '|') then
-        begin
-          CompoundDone:= CompoundDone + LowerCase(CP.Name) + '|';
-          Sb.AppendLine(EmitPreserved(Eff.RawBlock, LinePrefix, 'param', '<param name="' + CP.Name + '">', CP.Desc, '</param>'));
-        end;
-      end;
-      if not ParamEmitted then
-      for var EP in Eff.Params do
-        if SameText(EP.Name, P) then
-        begin
-          var IsStandaloneParam: Boolean:= False;
-          for var SP in StandaloneParam.Params do
-            if SameText(SP.Name, P) then begin IsStandaloneParam:= True; Break; end;
-          if IsStandaloneParam then
-          begin
-            // v(PHASE A3): IS THIS MARKED BODY THE ENGINE'S OWN HARVEST, OR A
-            // HUMAN'S EDIT INSIDE THE ENGINE'S TAG? Before A3 the question could
-            // not arise -- nothing ever filled a <param>, so marked-with-content
-            // could only be a human (Finding 1's taPreserveStripped rule). Now
-            // the miner fills one, and taPreserveStripped applied to ITS OWN
-            // output strips the marker on the second run: the block changes
-            // every cycle (measured: cycle 2 removed four markers) and the
-            // engine quietly hands ownership of its own text to the human.
-            //
-            // The question is answerable EXACTLY rather than by heuristic:
-            // compare the marked body with what the miner produces from the
-            // CURRENT source. Equal means the engine wrote it and the source
-            // still says so -- regenerate, and the run is a fixed point. Not
-            // equal means a human typed something else there, or the source
-            // comment changed under a body someone has since adjusted; ruling
-            // D-4 says leave that meaning alone, so it falls through to the
-            // preserve arm exactly as before.
-            var MinedNow: string:= Trim(ParamNoteFor(P));
-            if (MinedNow <> '') and TDocMarkers.IsManagedDesc(EP.Desc)
-               and SameText(Trim(TDocMarkers.StripMark(EP.Desc)), MinedNow) then
-            begin
-              Sb.AppendLine(EmitEngineParam(P));
-              ParamEmitted:= True;
-              Break;
-            end;
-            // PHASE C B7: an UNMARKED empty tag falls through to be REGENERATED
-            // rather than preserved verbatim. It carries nothing to protect (see
-            // IsBlankBody), and regenerating re-marks it as the engine's, so a
-            // description mined later can fill it. Marked-and-empty already fell
-            // through; this only adds the unmarked case, which the preserve arms
-            // below would otherwise freeze forever -- the property that kept
-            // YADF's empty tags alive through every regeneration.
-            if IsBlankBody(EP.Desc) or IsEngineTypeBody(EP.Desc) then
-            begin
-              Sb.AppendLine(EmitEngineParam(P));
-              ParamEmitted:= True;
-              Break;
-            end;
-            case ClassifyParamAction(EP.Desc, True) of
-              // RULING D-4, the meaning half: a body a human wrote is never
-              // overwritten -- including one typed INSIDE the engine's own tag
-              // without removing the marker (taPreserveStripped).
-              taPreserveStripped:
-                begin
-                  Sb.AppendLine(EmitTagged('<param name="' + P + '">', TDocMarkers.StripMark(EP.Desc), '</param>'));
-                  ParamEmitted:= True;
-                end;
-              taPreserveVerbatim: begin Sb.AppendLine(EmitPreserved(Eff.RawBlock, LinePrefix, 'param', '<param name="' + P + '">', EP.Desc, '</param>')); ParamEmitted:= True; end;
-              taEngineOwned: ;  // engine-owned and empty: fall through and REGENERATE
-            end;
-          end;
-          Break;
-        end;
-      // v(PHASE A3, ruling D-3), replacing "fresh/missing params never get a
-      // skeleton": no hand-written tag exists for this signature parameter (no
-      // match at all, a non-standalone match, or an engine-owned empty one), so
-      // the STRUCTURE is (re)generated here. That is D-4's other half -- the
-      // structure part is regenerated on every run, which is what makes a
-      // renamed parameter's tag follow the signature instead of rotting.
-      if not ParamEmitted then Sb.AppendLine(EmitEngineParam(P));
-    end;
-    // stale hand-typed params: in the comment but not the signature -> flag, keep.
-    // v(ADP3 T3b review round 3, STRUCTURAL 1): same standalone-presence
-    // check as the loop above -- a nested-elsewhere <param> for a name that
-    // does not even match a current signature parameter must not be flagged
-    // as a "stale" leftover either (same fabrication risk, for a name with
-    // no real sig-param counterpart at all).
-    for var EP in Eff.Params do
-    begin
-      var StillThere: Boolean:= False;
-      for P in ASigParams do
-        if SameText(EP.Name, P) or (IsCompoundParamTag(EP.Name) and ParamTagCovers(EP.Name, P)) then
-        begin
-          StillThere:= True;
-          Break;
-        end;
-      var IsStandaloneParam: Boolean:= False;
-      for var SP in StandaloneParam.Params do
-        if SameText(SP.Name, EP.Name) then begin IsStandaloneParam:= True; Break; end;
-      // E-DOC-ORPHAN-PARAM: the orphan keeps its own bytes (blanks inside the
-      // tag); only the trailing marker is appended to its last line.
-      if (not StillThere) and (not TDocMarkers.IsManagedDesc(EP.Desc)) and IsStandaloneParam then
-        Sb.AppendLine(EmitPreserved(StringReplace(Eff.RawBlock, ' <!-- drag-lint: param no longer exists -->', '', [rfReplaceAll]),
-            LinePrefix, 'param', '<param name="' + EP.Name + '">', EP.Desc, '</param>')
-          + ' <!-- drag-lint: param no longer exists -->');
-    end;
-
-    if AHasReturn then
-    begin
-      // PHASE C B7: the "deliberate blank slot" is no longer honoured. The user's
-      // 2026-08-09 ruling is that an empty section is omitted, and a blank
-      // <returns> is a blank tooltip like any other -- 2 of them in YADF, frozen
-      // by exactly this preserve arm. A hand-written blank falls through to the
-      // engine arm, which refills it from the mined cases or writes nothing.
-      if ReturnsHandWritten and (not IsBlankBody(BodyReturns)) then
-        // hand-written, with content -- preserved verbatim; its mined cases (if
-        // any) went into the 'Returns:' fact line above (IncludeReturns) instead
-        // of disturbing this text.
-        Sb.AppendLine(EmitPreserved(Eff.RawBlock, LinePrefix, 'returns', '<returns>', BodyReturns, '</returns>'))
-      else
-      begin
-        // engine-owned (marked -- ALWAYS, regardless of post-marker content,
-        // v(ADP3 T3 review round 2) -- or the legacy TODO self-heal) or no
-        // tag at all: refill from the mined cases, or omit entirely when
-        // there is nothing mined to say (v(ADP3 T3): a managed/empty
-        // <returns> is never written).
-        var RetLine: string:= EmitEngineReturns(AFacts);
-        if RetLine <> '' then Sb.AppendLine(RetLine);
-      end;
-    end;
-
-    // <exception>: v(ADP3 T3b). Never engine-owned -- MergeComment has never
-    // generated this tag, so, like <param> and <deprecated/>, there is
-    // nothing to classify: every <exception> found is hand-written,
-    // preserved verbatim (mirrors the <param> loop's shape above). TypeName
-    // (the cref) and Desc are re-emitted EXACTLY as parsed, with NO
-    // re-escaping: they were captured raw out of already-valid XML text (the
-    // author's own source), so they are opaque strings to round-trip, not
-    // fresh content to escape -- exactly like Desc in the <param> loop above
-    // and SummaryRaw/AExisting.ReturnsText below. Escaping them again here
-    // would double-escape any entity the author's text already carries
-    // (e.g. a hand-written '&amp;' would become '&amp;amp;') and would not
-    // be idempotent -- EscXml/EscXmlAttr are reserved in this function for
-    // MINED content only (RenderFactsBlock/ObservedSuffix), never for a
-    // verbatim hand-written passthrough. Multiple <exception> tags keep
-    // their relative SOURCE order (Excs is populated in regex-match order
-    // by the parser; the parser does not track cross-TYPE tag order, hence
-    // this function's fixed emission order -- see its own header remarks).
-    //
-    // v(ADP3 T3b review round 2, Critical 1 -- SECOND bug, same class as
-    // <deprecated>'s own fix just above): StandaloneExc.Exceptions is used
-    // ONLY to determine WHICH cref values are genuinely standalone (not
-    // nested inside example/deprecated/summary/etc.) -- its OWN Desc text
-    // must NOT be re-emitted directly, because BuildStandaloneFor
-    // ('exception') strips example/deprecated/since from the WHOLE raw
-    // block, including from WITHIN this exception's own desc (reproduced:
-    // "Added in <since>2.0</since> and still valid." mangled down to
-    // "Added in  and still valid." before this fix). For each standalone
-    // cref, look up the MATCHING entry in AExisting.Exceptions (the
-    // ORIGINAL, entirely unstripped parse) by TypeName, and re-emit ITS
-    // Desc -- unmangled, whatever it contains. (Two <exception> tags
-    // sharing the identical cref is the one case this cannot disambiguate;
-    // out of scope, same as the pre-existing "keeps only the first
-    // <deprecated>/<since>" limitation.)
-    //
-    // OWNERSHIP (new, with the generated tags below): the engine now writes
-    // <exception> too, so "every <exception> found is hand-written" -- true
-    // when the paragraph above was written -- no longer is. The split mirrors
-    // <param>'s exactly:
-    //   * marked AND blank      -> the engine's own from a prior run. NOT
-    //     preserved; it is regenerated below IF the body still raises that
-    //     class, which is what makes a deleted `raise` delete its tag instead
-    //     of freezing it forever.
-    //   * marked AND non-blank  -> a human typed inside the engine's tag
-    //     without removing the marker. Ruling D-4: their words stay, and the
-    //     marker is dropped so the tag is hand-written from now on.
-    //   * unmarked              -> hand-written, preserved verbatim, exactly
-    //     as before.
-    var PreservedCrefs: TArray<string>:= nil;
-    for var StandaloneExcItem in StandaloneExc.Exceptions do
-      for var OrigExc in Eff.Exceptions do
-        if SameText(OrigExc.TypeName, StandaloneExcItem.TypeName) then
-        begin
-          { AUTO_EXC says the body is the engine's own mined raise message, so
-            it is engine-owned REGARDLESS of being non-blank -- same contract as
-            AUTO_TYPE for a typed <param>. Falling through to the preserve arm
-            below would strip the marker and freeze the message, which is the
-            exact breakage D-4's emptiness test causes once the engine writes
-            prose of its own. Checked BEFORE the blank test because a mined
-            message is never blank. }
-          if TDocMarkers.IsManagedDesc(OrigExc.Desc) and StartsStr(AUTO_EXC, TrimLeft(OrigExc.Desc)) then Break;
-          if TDocMarkers.IsManagedDesc(OrigExc.Desc) and IsBlankBody(OrigExc.Desc) then Break;
-          if TDocMarkers.IsManagedDesc(OrigExc.Desc) then
-            Sb.AppendLine(EmitTagged('<exception cref="' + OrigExc.TypeName + '">', TDocMarkers.StripMark(OrigExc.Desc), '</exception>'))
-          else
-            Sb.AppendLine(EmitPreserved(Eff.RawBlock, LinePrefix, 'exception', '<exception cref="' + OrigExc.TypeName + '">', OrigExc.Desc, '</exception>'));
-          PreservedCrefs:= PreservedCrefs + [OrigExc.TypeName];
-          Break;
-        end;
-
-    // Generated structural tags for every mined raise class that no
-    // hand-written tag already covers. A hand-written <exception> for a class
-    // the body does not raise is left alone above -- the author may be
-    // documenting a raise from a callee, which the miner cannot see.
-    for var RaiseCls in AFacts.Raises do
-    begin
-      var Covered: Boolean:= False;
-      for var PC in PreservedCrefs do
-        if SameText(PC, RaiseCls) then begin Covered:= True; Break; end;
-      if not Covered then
-        Sb.AppendLine(EmitEngineException(RaiseCls, MinedRaiseMessage(AFacts, RaiseCls)));
-    end;
-
-    // <example>: v(ADP3 T3b; review Minor 1 -- gated on HasExampleTag, not
-    // ExampleText <> '', so a deliberate, empty <example></example> is
-    // preserved rather than silently dropped -- consistent with <summary>'s
-    // own HasSummaryTag gate, and required for the strip round-trip to be
-    // byte-exact on that shape). Same reasoning as <exception> -- never
-    // engine-owned, always hand-written when present, preserved verbatim
-    // (no re-escaping, see above).
-    //
-    // v(ADP3 T3b review round 2, Critical 1 -- same "presence vs. content"
-    // split as <deprecated>/<exception> above): StandaloneExample.
-    // HasExampleTag decides WHETHER this is genuinely standalone; the TEXT
-    // always comes from AExisting.ExampleText (the original, unmangled
-    // parse), never from StandaloneExample.ExampleText, which could have a
-    // legitimately-nested tag (e.g. a nested <exception>) stripped out from
-    // within it by BuildStandaloneFor('example')'s own exception/deprecated/
-    // since strip.
-    // v(ADP3 T3h): BodyExample, the located standalone occurrence's own text
-    // (still unstripped, for the reason just above).
-    if StandaloneExample.HasExampleTag then
-      Sb.AppendLine(EmitPreserved(Eff.RawBlock, LinePrefix, 'example', '<example>', BodyExample, '</example>'));
-
-    // <seealso>/<since>: v(ADP3 T3b) -- UNLIKE exception/example/deprecated,
-    // these two DO have an engine-generated counterpart: RenderFactsBlock
-    // emits an opt-in auto '<seealso cref=.../>' per related symbol and an
-    // opt-in auto '<since>date</since>' fact, both INSIDE the AUTO_BEGIN..
-    // AUTO_END fence (see its own comment) when the caller opted in via
-    // --seealso/--since. StandaloneSee's/StandaloneSince's own strip
-    // (BuildStandaloneFor, above) removes the <remarks> element wholesale,
-    // which is where the fence always lives, so an auto-generated line from
-    // a PRIOR run is excluded the same way any other remarks-nested content
-    // is (the Task 3b brief's own "Trap 1", confirmed empirically before
-    // this fix).
-    //
-    // v(ADP3 T3b review, Critical 1 fix, second symptom): RxSee's own
-    // '(?:see|seealso)' alternation means SeeAlso conflates a hand-written
-    // bare '<see cref="X"/>' (an inline cross-reference) with '<seealso
-    // cref="X"/>' (a separate, top-level "also see" entry) -- two DIFFERENT
-    // DocInsight tags that render differently. Re-emitting every entry as
-    // '<seealso ...>' would silently rewrite an author's '<see>' into a
-    // '<seealso>' -- a destruction (the '<see>' is gone) AND a fabrication
-    // (a '<seealso>' the author never wrote appears), both violating
-    // "preserve verbatim, never fabricate". SeeAlsoIsInline (parallel to
-    // SeeAlso, same index correspondence, set by the parser -- see
-    // TParsedDoc's own field comment) records which spelling the author
-    // actually used, so the ORIGINAL tag name is what gets re-emitted.
-    //
-    // v(ADP3 T3b review round 2, Minor): FAIL LOUDLY on a length mismatch
-    // rather than silently defaulting every out-of-range entry to
-    // '<seealso>' (a silent default is exactly how the very rewrite this
-    // field exists to prevent could reappear unnoticed -- e.g. a future
-    // producer that fills SeeAlso without ALSO filling SeeAlsoIsInline, such
-    // as a rehydrate from SeeAlsoJsonRaw). Both current producers
-    // (ParseXmlDoc, ParsePasDoc) always size them equal, so this can only
-    // fire if a THIRD producer is added later without updating this
-    // invariant -- exactly the case worth a loud, immediate failure over a
-    // silently-wrong tag name.
-    if Length(StandaloneSee.SeeAlso) <> Length(StandaloneSee.SeeAlsoIsInline) then
-      raise Exception.CreateFmt(
-        'TDocRegions.MergeComment: SeeAlso/SeeAlsoIsInline length mismatch (%d vs %d) -- ' +
-        'every TParsedDoc producer must size SeeAlsoIsInline to match SeeAlso.',
-        [Length(StandaloneSee.SeeAlso), Length(StandaloneSee.SeeAlsoIsInline)]);
-    for var SeeIx:= 0 to High(StandaloneSee.SeeAlso) do
-    begin
-      var SeeTag: string:= 'seealso';
-      if StandaloneSee.SeeAlsoIsInline[SeeIx] then SeeTag:= 'see';
-      Sb.AppendLine(EmitPreserved(Eff.RawBlock, LinePrefix, SeeTag,
-        '<' + SeeTag + ' cref="' + StandaloneSee.SeeAlso[SeeIx] + '"/>', '', ''));
-    end;
-    // v(ADP3 T3b review round 3, NEW IMPORTANT): reads StandaloneSince.
-    // HasSinceTag for PRESENCE (not the old SinceText <> '' content test,
-    // and NOT StandaloneSince.SinceText for the actual text). The old
-    // content-test gate was doubly wrong: (1) SinceText <> '' cannot tell
-    // "no <since> at all" apart from a human's deliberate, empty
-    // <since></since> -- the same presence-vs-content gap HasSummaryTag/
-    // HasReturnsTag/HasExampleTag/HasRemarksTag already closed for their own
-    // tags; (2) far worse, reading the CONTENT from StandaloneSince (built by
-    // stripping <exception>/<example>/<deprecated>/<summary>/etc. from the
-    // WHOLE block) silently deleted anything legitimately nested inside a
-    // genuinely standalone <since>'s own body -- reproduced: '<since>1.0
-    // <exception cref="EInSince">x</exception></since>' emitted only
-    // '<since>1.0</since>', and '<since>2.0 <example>see the sample below
-    // </example> onwards</since>' emitted '<since>2.0 onwards</since>' (the
-    // nested tag's own text silently gone, not merely excluded from
-    // double-counting). The WORST shape combined this with <deprecated>'s
-    // OWN self-exclusion: '<since><deprecated>2.0-beta</deprecated></since>'
-    // deleted the ENTIRE hand-written comment, because StandaloneSince
-    // strips 'deprecated' (so SinceText became '', failing the old gate) AND
-    // StandaloneDep strips 'since' (so Deprecated became False, failing
-    // ITS gate) -- both tags vanished simultaneously, worse than round 1's
-    // duplication and round 2's line-deletion defect, both of which at
-    // least left something behind. AExisting.SinceText (the ORIGINAL,
-    // entirely unstripped parse) is always the correct source for the text,
-    // exactly like DeprecatedText/exception Desc/ExampleText above; only
-    // presence/absence needed the filtered view.
-    // v(ADP3 T3h): BodySince, the located standalone occurrence's own text. Note
-    // this is also where register D11 stops being a loss: a SECOND <since> is now
-    // a surplus occurrence, retracted by SplitResidualLines and carried through
-    // verbatim below, instead of being accounted for and then never emitted.
-    if StandaloneSince.HasSinceTag then
-      Sb.AppendLine(EmitPreserved(Eff.RawBlock, LinePrefix, 'since', '<since>', BodySince, '</since>'));
-
-    // v(ADP3 T3f): the carried-through residual -- every line of the original
-    // region this function could not fully account for, verbatim, in source
-    // order, re-prefixed with LinePrefix -- the comment marker WITHOUT
-    // APrefix's trailing space, so the INTERIOR indentation the scanner left
-    // after the slashes survives byte-exact (see LinePrefix, above).
-    // v(ADP3 T3g): APrefix now carries the declaration's own indentation, so
-    // LinePrefix is that indentation plus the marker, not a bare marker; the
-    // line therefore lands where its indented siblings do while everything the
-    // scanner handed back is still reproduced character for character.
-    //
-    // Position: AFTER every modeled tag, BEFORE the <remarks> facts block.
-    // The engine's own fixed emission order already reorders modeled tags
-    // relative to the source, so "the author's original relative position"
-    // is not on offer for anything here -- what IS load-bearing is that the
-    // position be DERIVED (so it is the same on every run, hence a fixed
-    // point) and that it not be FIRST. Emitting residual prose ahead of every
-    // tag would put it before the first '<' in the region, where ParseXmlDoc's
-    // untagged-prefix fallback would adopt it as the summary on the NEXT run
-    // and re-emit it inside a <summary> the author never wrote -- a
-    // fabrication AND a non-idempotent one. Keeping the facts block last also
-    // preserves the convention every other shape in this codebase already
-    // follows.
-    var LenBeforeResidual: Integer:= Sb.Length;
-    // v(ADP3 T9): note whether the carried-through residual ALREADY contains a
-    // <remarks> element of the author's. See ResidualCarriesRemarks' use below.
-    var ResidualCarriesRemarks: Boolean:= False;
-    for var ResidualLine in Residual do
-    begin
-      Sb.AppendLine(LinePrefix + ResidualLine);
-      if not ResidualCarriesRemarks then
-        ResidualCarriesRemarks:= ContainsText(ResidualLine, '<remarks');
-    end;
-    var LenAfterResidual: Integer:= Sb.Length;
-
-    // v(ADP3 T9): DO NOT FABRICATE A SECOND <remarks> BESIDE THE AUTHOR'S.
-    //
-    // The shape (fixtures/docp3/guards.pas, UnfencedRemarksTail):
-    //   /// <remarks>Plain hand prose, no fence, no marker.</remarks> <value>tail value</value>
-    // T3f carries that whole line through VERBATIM, because the author's prose
-    // shares the line with an unmodeled <value> tail. Carrying it through also
-    // removes it from AccountedRaw, so Eff parses no remarks and Prose is ''
-    // (which is why the author's prose is correctly emitted exactly once).
-    // The harvester then had HarvestedRemarks <> '' with nowhere to put it, so
-    // the emitter below opened a <remarks> of its OWN -- and the region ended
-    // up with two sibling <remarks> elements, which is not well-formed
-    // DocInsight. run_doc_p3_guards' "no <remarks> was fabricated beside the
-    // author's" check names exactly this.
-    //
-    // The rule applied here is T8's, not a new one: HAND-WRITTEN WINS.
-    // Harvested prose is the fallback for a symbol whose author wrote none --
-    // an author who HAS written <remarks> outranks it. Nothing is destroyed by
-    // dropping it either: the harvest is derived from a source comment that is
-    // still sitting in the file, so it is recomputed, not lost.
-    //
-    // NARROW ON PURPOSE -- gated on Facts = ''. When there ARE facts, the fence
-    // genuinely needs a <remarks> container and suppressing it would drop real
-    // engine output; that case keeps its own element and is covered by the
-    // idempotency sweep's NON-DESTRUCTIVE checks. This gate only removes an
-    // element whose ENTIRE contents would have been the harvested paragraph.
-    var HarvestedForEmit: string:= AFacts.HarvestedRemarks;
-    if ResidualCarriesRemarks and (Facts = '') then
-      HarvestedForEmit:= '';
-
-    // remarks: keep hand prose (AExisting.Remarks) OUTSIDE the fence, then a fresh
-    // managed block. Strip any old fenced block from the prose before re-emitting
-    // so a second run does not nest blocks.
-    // v(ADP3 T3b review round 3, STRUCTURAL 1): only reads AExisting.Remarks
-    // when StandaloneRemarks.HasRemarksTag confirms a genuinely standalone
-    // <remarks> exists -- a <remarks> nested inside e.g. <example>'s own
-    // body (reproduced: '<example>ex <remarks>nested remarks</remarks> tail
-    // </example>') used to become the engine's real remarks prose, with the
-    // facts fence wrongly attaching to it. When not standalone, Prose stays
-    // '' regardless of what AExisting.Remarks captured -- there is nothing
-    // genuine to preserve from a fabricated match, so (unlike summary/
-    // returns/since/param above) there is no unstripped content to read
-    // instead; the whole point is that this text was never the author's
-    // real remarks prose to begin with.
-    // v(ADP3 T3h): BodyRemarks, the located standalone occurrence's own prose.
-    // The gate alone was not enough: on the SECOND apply cycle the region holds
-    // BOTH the nested <remarks> and the engine's own (folded in by
-    // MergeAdjacentSameKind), so the gate correctly said "a standalone <remarks>
-    // exists" while Eff.Remarks still returned the NESTED one's text -- and
-    // 'nested remarks' was duplicated into the engine's prose slot, above the
-    // fence, unmarked, where --strip left it forever.
-    var Prose: string:= '';
-    if StandaloneRemarks.HasRemarksTag then
-      Prose:= TDocBlockScanner.StripManagedBlock(BodyRemarks);
-    var NormProse: string:= StringReplace(Trim(Prose), #13#10, #10, [rfReplaceAll]);
-    NormProse:= StringReplace(NormProse, #13, #10, [rfReplaceAll]);
-    // v(ADP3 T7): DROP AUTO_MARK-carrying lines from the preserved-prose slot.
-    // Harvested remarks live inside <remarks> ABOVE the fence, so
-    // StripManagedBlock -- which removes the AUTO_BEGIN..AUTO_END fence and
-    // nothing else -- leaves them behind and they arrive here looking exactly
-    // like hand-written prose. Re-emitted as prose AND regenerated by
-    // EmitHarvestedRemarks below, the harvested paragraph DOUBLED on every
-    // apply cycle: measured, cycle 2 of run_doc_p3_harvest_text.ps1 carried the
-    // paragraph twice.
-    //
-    // This is the same defect shape the comment above describes for nested
-    // <remarks>, and it takes the same marker-keyed answer the rest of this
-    // unit uses: marked means engine-owned, so it is regenerated, never
-    // preserved. Ownership changes hands by REMOVING the marker (v(ADP3 T3)) --
-    // a human who deletes it keeps the line as their own prose, and the
-    // harvester will not put it back because MergeComment no longer recognises
-    // it as its own.
-    if NormProse <> '' then
-    begin
-      // The harvested block is a RUN, not a set of individually marked lines.
-      // EmitHarvestedRemarks marks only its FIRST line (so the emitted prose is
-      // not littered with one HTML comment per line), which means a per-line
-      // marker test kept paragraphs 2..N -- they arrived here looking
-      // hand-written, were re-emitted as prose AND regenerated below, and the
-      // block grew by its own length on EVERY apply cycle. Measured on
-      // fixtures/docp3/tagoccurrence.pas: a constant +1501 bytes per cycle,
-      // never converging. The original T7 fix was verified only against
-      // harvest_text.pas, whose harvest is a single line, so it could not
-      // surface this.
-      //
-      // Truncating at the first marked line is what TDocStripper's rule 1b
-      // already does (delete from the marked line to the next tag/fence), and
-      // the two verbs MUST agree or apply and strip diverge again. It is safe
-      // for the same reason rule 1b states: MergeComment emits preserved
-      // hand-written prose ABOVE this block and never below it, so everything
-      // from the marker onward is engine-written continuation.
-      var Kept: TStringBuilder:= TStringBuilder.Create;
-      try
-        for var PL in NormProse.Split([#10]) do
-        begin
-          if Pos(AUTO_MARK, PL) > 0 then Break;
-          if Kept.Length > 0 then Kept.Append(#10);
-          Kept.Append(PL);
-        end;
-        NormProse:= Trim(Kept.ToString);
-      finally
-        Kept.Free;
-      end;
-      Prose:= NormProse; // keep the two views in step -- both branches below read them
-    end;
-    // v(PHASE A1, ruling D-1): ... and now drop any harvested line the reader
-    // would otherwise see TWICE -- once as preserved hand prose (or in the
-    // hand-written summary), once regenerated below. See
-    // DropAlreadyPresentPhrases for why the truncate-at-first-marker rule above
-    // cannot catch this: the duplicate copy is the one whose marker a human
-    // removed to take ownership of it.
-    //
-    // Placed AFTER the truncation, deliberately: the two rules compose in one
-    // direction only. Truncation removes the engine's own still-marked tail, and
-    // this then compares what a human genuinely owns against what is about to be
-    // regenerated. Reversed, it would compare against text the truncation was
-    // going to delete anyway and drop harvested prose that had no duplicate.
-    HarvestedForEmit:= DropAlreadyPresentPhrases(HarvestedForEmit,
-                                                 NormProse + #10 + SummaryRaw);
-    // v(ADP3 T2 adjacent fix): a SINGLE-LINE hand-written remarks with NO
-    // facts to add is re-emitted on ONE line -- '<remarks>prose</remarks>' --
-    // exactly like EmitTagged already does for a single-line summary/param/
-    // returns value, instead of the unconditional open-tag-alone / prose-
-    // alone / close-tag-alone split below. Without this, merely touching a
-    // comment that has an UNTOUCHED single-line <remarks> (e.g. adding a
-    // managed <returns> tag elsewhere in the SAME comment) forces that
-    // remarks tag to expand into three lines even though nothing about it
-    // needed to change -- churn a marker-keyed `document --strip` can never
-    // undo, since there is no marker distinguishing "the engine reformatted
-    // this" from "a human genuinely wrote three lines" (see TDocStripper's
-    // own marker-only ownership rule). Multi-line prose, or any Facts to
-    // fence, still take the multi-line path below unchanged -- a fence
-    // always needs its own lines.
-    // v(ADP3 T7): ... and no harvested prose to place above a fence. The
-    // one-line form has nowhere to put a second, marked paragraph, so harvested
-    // remarks take the multi-line path below exactly as Facts already do.
-    if (Trim(Prose) <> '') and (Facts = '') and (HarvestedForEmit = '') and (not NormProse.Contains(#10)) then
-      Sb.AppendLine(EmitPreserved(Eff.RawBlock, LinePrefix, 'remarks', '<remarks>', Trim(Prose), '</remarks>'))
-    else if (Trim(Prose) <> '') or (Facts <> '') or (HarvestedForEmit <> '') then
-    begin
-      Sb.AppendLine(APrefix + '<remarks>');
-      if Trim(Prose) <> '' then
-      begin
-        // Hand-written remarks prose may contain multiple lines (the parser joins
-        // them with bare #10). Emit EACH line APrefix-prefixed so every output line
-        // carries /// and the final CRLF join stays valid -- never one line with an
-        // embedded bare LF.
-        // v(2026-09-15, defect 3): the author's own lines when they exist and
-        // say what NormProse says (VerbatimRemarksProseLines) -- their
-        // indentation and blank lines are theirs to keep; the trimmed rebuild
-        // only when the shape is one the helper declines.
-        var RawProse: TArray<string>:= VerbatimRemarksProseLines(Eff.RawBlock, NormProse);
-        if Length(RawProse) > 0 then
-          for var RawLine in RawProse do
-            Sb.AppendLine(LinePrefix + RawLine)
-        else
-          for var ProseLine in NormProse.Split([#10]) do
-            if Trim(ProseLine) <> '' then
-              Sb.AppendLine(APrefix + Trim(ProseLine));
-      end;
-      // v(ADP3 T7): after the preserved hand prose, before the fence.
-      // v(ADP3 T9): HarvestedForEmit, not AFacts.HarvestedRemarks -- see the
-      // "DO NOT FABRICATE A SECOND <remarks>" comment above.
-      EmitHarvestedRemarks(Sb, APrefix, HarvestedForEmit);
-      if Facts <> '' then
-      begin
-        Sb.AppendLine(APrefix + AUTO_BEGIN);
-        Sb.AppendLine(Facts);
-        Sb.AppendLine(APrefix + AUTO_END);
-      end;
-      Sb.AppendLine(APrefix + '</remarks>');
-    end;
+    McEmitSummary(C);
+    McEmitDeprecated(C);
+    McEmitParams(C);
+    McEmitVanishedParams(C);
+    McEmitReturns(C);
+    McEmitExceptions(C);
+    McEmitExampleSeeSince(C);
+    McEmitResidual(C);
+    McPrepareRemarks(C);
+    McEmitRemarks(C);
     // v(ADP3 T3f): carried-through residual ALONE is not output. When the
     // engine modeled nothing and generated nothing, the only thing it could
     // write is a copy of lines that are already sitting in the file -- so it
@@ -4883,12 +5100,12 @@ begin
     // it. Identical to the pre-v(ADP3 T3f) expression whenever Residual is
     // empty: both conditions then reduce to "Sb is empty", which TrimRight
     // would have returned as '' anyway.
-    if (LenBeforeResidual = 0) and (Sb.Length = LenAfterResidual) then
+    if (C.LenBeforeResidual = 0) and (C.Sb.Length = C.LenAfterResidual) then
       Result:= ''
     else
-      Result:= Sb.ToString.TrimRight([#13, #10]);
+      Result:= C.Sb.ToString.TrimRight([#13, #10]);
   finally
-    Sb.Free;
+    C.Sb.Free;
   end;
 end;
 
