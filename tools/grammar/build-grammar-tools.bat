@@ -20,7 +20,7 @@ if not exist "%OUT%" mkdir "%OUT%"
 cd /d "%OUT%"
 cl /nologo /O2 /MD /c /D_CRT_SECURE_NO_WARNINGS /I "%TSLIB%\include" /I "%TSLIB%\src" "%TSLIB%\src\lib.c"
 if errorlevel 1 exit /b 1
-for %%T in (tsdiff tserr tsparse) do (
+for %%T in (tsdiff tserr tsparse tsblank) do (
   cl /nologo /O2 /MD /D_CRT_SECURE_NO_WARNINGS /I "%TSLIB%\include" "%HERE%%%T.c" lib.obj /Fe:"%OUT%\%%T.exe"
   if errorlevel 1 exit /b 1
 )
