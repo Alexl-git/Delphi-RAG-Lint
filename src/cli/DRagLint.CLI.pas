@@ -152,6 +152,7 @@ uses
   , DRagLint.Analysis.LintTree
   , DRagLint.Analysis.PurityStage { Purity v2: TPurityStage.Run after the `calls` stage at every index site }
   , DRagLint.Storage.SQLite
+  , DRagLint.Storage.Schema { 150 SC: IsSchemaReadable / SchemaUnreadableReason -- the schema read gate of the library openers }
   , DRagLint.Storage.FileMembership { DbContainsFile: membership probe for resolve-dbs --in; ConnectReadOnly: the raw reader open }
   , DRagLint.Parser .Delphi13
   , DRagLint.Parser .DFM
@@ -2654,7 +2655,10 @@ var
   Expected: Integer;
 begin
   Result:= TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}True);
-  if Result.IsSchemaCurrent(Found, Expected) then AOk:= True
+  { 150 SC: the READ gate is IsSchemaReadable (>= SCHEMA_READ_MIN), not current: an index one
+    additive version old answers every read verb (spec 2026-11-09-schema-read-compat.md). }
+  Result.IsSchemaCurrent(Found, Expected);
+  if IsSchemaReadable(Found) then AOk:= True
   else
   begin
     AOk:= False;
@@ -2670,8 +2674,9 @@ begin
         opt-out -- and where the 11 verbs measured printing it to stdout stop
         corrupting machine-readable output. AQuiet is kept: it still lets a
         caller that reports the schema gap ITSELF avoid saying it twice. }
-      Writeln(ErrOutput, Format('index schema v%d < v%d: to migrate, run "drag-lint index --project <file.dproj> --db <db>"'
-                   + ' for a project index, or "drag-lint index <dir> --db <db>" for a library index', [Found, Expected]));
+      Writeln(ErrOutput, Format('index schema v%d < v%d (%s): to migrate, run "drag-lint index --project <file.dproj> --db <db>"'
+                   + ' for a project index, or "drag-lint index <dir> --db <db>" for a library index',
+                   [Found, SCHEMA_READ_MIN, SchemaUnreadableReason(Found)]));
   end;
   { INDEX FRESHNESS -- the 2026-08-13 owner ruling, warn-only half.
     "A stale DB is not authoritative; the answer is to rescan, not to report."
@@ -2759,12 +2764,14 @@ begin
       Exit;
     end;
   end;
-  if not Result.IsSchemaCurrent(Found, Expected) then
+  { 150 SC: the schema read gate -- readable (>= SCHEMA_READ_MIN), not current }
+  Result.IsSchemaCurrent(Found, Expected);
+  if not IsSchemaReadable(Found) then
   begin
     Result:= nil;
-    AWhy  := Format('library index %s is schema v%d, this build needs v%d -- ' +
+    AWhy  := Format('library index %s is schema v%d, this build needs v%d (reads v%d..v%d) -- ' +
                     'skipping it for this run; re-index it to restore full ancestry resolution',
-                    [ADbPath, Found, Expected]);
+                    [ADbPath, Found, SCHEMA_READ_MIN, SCHEMA_READ_MIN, SCHEMA_VERSION]);
   end;
 end;
 
@@ -6130,7 +6137,7 @@ begin
   if not Result then Flush(ErrOutput);
 end;
 
-/// <summary>True when at least one of the databases is at the current schema.</summary>
+/// <summary>True when at least one of the databases is READABLE (schema &gt;= SCHEMA_READ_MIN; 150 SC).</summary>
 /// <param name="APaths">Existing database files, as ResolveConsumerDbs returned them.</param>
 /// <returns>True on the first store at the current schema; False when every store
 ///  is stale or cannot be opened.</returns>
@@ -6148,7 +6155,8 @@ begin
   begin
     try
       var Probe: ISymbolStore:= TSQLiteSymbolStore.Create(P, {AReadOnly=}True);
-      if Probe.IsSchemaCurrent(Found, Expected) then Exit(True);
+      Probe.IsSchemaCurrent(Found, Expected);
+      if IsSchemaReadable(Found) then Exit(True); // 150 SC: readable counts, as at every read gate
     except  // dl:ok try-except-swallowed@5384 -- probe only: an unopenable store counts as not current; the verb's own open reports it
       on E: Exception do Continue;
     end; // try
@@ -6914,9 +6922,11 @@ begin
     end;
     try
       S:= TSQLiteSymbolStore.Create(P);
-      if not S.IsSchemaCurrent(Found, Expected) then
+      { 150 SC: READABLE, not current -- a library one additive version old is used, not skipped }
+      S.IsSchemaCurrent(Found, Expected);
+      if not IsSchemaReadable(Found) then
       begin
-        Writeln(ErrOutput, Format('  (library-db skipped, schema v%d, this build needs v%d -- re-index it) %s', [Found, Expected, P]));
+        Writeln(ErrOutput, Format('  (library-db skipped, %s) %s', [SchemaUnreadableReason(Found), P]));
         Continue;
       end;
       Result:= Result + [S];
@@ -19774,6 +19784,10 @@ begin
       JRoot:= TJSONObject.Create;
       try
         JRoot.AddPair('schema_version', TJSONNumber.Create(SchemaVer));
+        { 150 SC: what THIS engine does with that number (additive keys) }
+        JRoot.AddPair('engine_schema_version', TJSONNumber.Create(SCHEMA_VERSION));
+        JRoot.AddPair('engine_schema_read_min', TJSONNumber.Create(SCHEMA_READ_MIN));
+        JRoot.AddPair('schema_readable', TJSONBool.Create(IsSchemaReadable(SchemaVer)));
         AddStalenessPairs(JRoot, DbPath); { ENG-3 }
         JTables:= TJSONArray.Create;
         for T in TableNames do
@@ -19838,6 +19852,7 @@ begin
       SB:= TStringBuilder.Create;
       try
         SB.AppendLine(Format('schema_version: %d', [SchemaVer]));
+        SB.AppendLine(SchemaCompatLine(SchemaVer)); { 150 SC: the read-compat range, in words }
         for T in TableNames do
         begin
           if not IsSafeIdent(T) then Continue;
@@ -24254,16 +24269,14 @@ begin
   Result:= RunLintTree(
     Options,
     function(const ADbPath: string): ISymbolStore
+    var
+      Why: string;
     begin
-      try
-        Result:= TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}True);
-      except
-        on E: Exception do
-          { nil makes RunLintTree exit 2 naming the path. A missing file, a stale
-            schema and a locked DB are one outcome to the caller; catching
-            Exception rather than bare still lets EOutOfMemory through. }
-          Result:= nil;
-      end;
+      { nil makes RunLintTree exit 2 naming the path. A missing file, a schema below
+        SCHEMA_READ_MIN and a locked DB are one outcome to the caller (150 SC: the
+        schema read gate -- a store with nil prepared queries is never handed out). }
+      Result:= TSQLiteSymbolStore.OpenReadable(ADbPath, Why);
+      if Result = nil then Writeln(ErrOutput, 'lint-tree: ', Why);
     end,
     function(const AExtension: string): IParser
     begin

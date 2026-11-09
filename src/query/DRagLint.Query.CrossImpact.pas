@@ -217,7 +217,7 @@ implementation
 
 uses
   System.Generics.Collections, System.StrUtils,
-  DRagLint.Core.Interfaces, DRagLint.Storage.SQLite, DRagLint.Index.Freshness,
+  DRagLint.Core.Interfaces, DRagLint.Storage.SQLite, DRagLint.Storage.Schema, DRagLint.Index.Freshness,
   DRagLint.Query.Callers, DRagLint.Query.Implementors;
 
 const
@@ -379,10 +379,11 @@ begin
   end;
   try
     Store:= TSQLiteSymbolStore.Create(pRow.DbPath, {AReadOnly=}True);
-    if not Store.IsSchemaCurrent(Found, Expected) then
+    Store.IsSchemaCurrent(Found, Expected);
+    if not IsSchemaReadable(Found) then // 150 SC: the schema read gate
     begin
       pRow.State := cisOldSchema;
-      pRow.Reason:= Format('index schema v%d < v%d', [Found, Expected]);
+      pRow.Reason:= Format('index schema v%d < v%d', [Found, SCHEMA_READ_MIN]);
       Exit;
     end;
     var Fresh:= ProbeIndexFreshness(Store);

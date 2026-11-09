@@ -2322,6 +2322,7 @@ implementation
 
 uses
   System.StrUtils, { LSP-1 CORE: MatchText }
+  DRagLint.Storage.Schema, { 150 SC: IsSchemaReadable, the read gate of the store opener }
   System.RegularExpressions, { 1.44 lspctx: a project file's units and declared platform }
   DRagLint.Query.Implementors, { 1.40 ifrpt: the implementors counts of draglint/callerCounts }
   DRagLint.Query.ExceptionFacts, { D1 (wave 148): the Raises: hover line and the exception lens }
@@ -2570,8 +2571,10 @@ begin
       side that brings the index forward. Pinned by run_lsp_reader_guard.ps1. }
     S:= TSQLiteSymbolStore.Create(APath, {AReadOnly=}True);
     var Found, Expected: Integer;
-    if not S.IsSchemaCurrent(Found, Expected) then
+    S.IsSchemaCurrent(Found, Expected);
+    if not IsSchemaReadable(Found) then // 150 SC: the schema read gate (>= SCHEMA_READ_MIN)
     begin
+      Expected:= SCHEMA_READ_MIN;
       Writeln(ErrOutput, Format('drag-lint LSP: index schema v%d < v%d, refusing %s -- a reader does not migrate; '
         + 'to migrate, run "drag-lint index --project <file.dproj> --db <db>" for a project index, '
         + 'or "drag-lint index <dir> --db <db>" for a library index', [Found, Expected, APath]));

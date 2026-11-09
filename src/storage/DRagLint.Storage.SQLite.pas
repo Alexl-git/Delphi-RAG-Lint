@@ -1413,9 +1413,9 @@ type
       /// silently DROPs the string_literals sync triggers). Default False = the
       /// write behaviour, byte-identical to before this parameter existed.</param>
       /// <remarks>
-      /// Read-only callers should first check IsSchemaCurrent and emit
-      /// the actionable stale-schema message rather than run a query against a
-      /// pre-current schema. Not thread-safe; single owning thread only.
+      /// Read-only callers should first check the schema READ gate (IsSchemaCurrent's
+      /// AFound through IsSchemaReadable, or use OpenReadable) and emit the actionable
+      /// stale-schema message rather than query an index below SCHEMA_READ_MIN (150 SC). Not thread-safe; single owning thread only.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.AddLibraryPendingNotes (DRagLint.CLI.pas), DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas), DRagLint.CLI.AnyDbSchemaCurrent (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas) (+52 more)</para>
       /// <para>Calls: DRagLint.Core.Interfaces.TFlowOracleCache.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Connect, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Fts5TableExists, DRagLint.Storage.SQLite.TSQLiteSymbolStore.IsSchemaCurrent, DRagLint.Storage.SQLite.TSQLiteSymbolStore.PrepareStatements, DRagLint.Storage.SQLite.TSQLiteSymbolStore.TableExists</para>
@@ -1489,6 +1489,18 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function IsSchemaCurrent(out AFound, AExpected: Integer): Boolean;
+
+      /// <summary>The one read-only opener with the schema read gate (150 SC): opens
+      /// ADbPath read-only and returns the store when its schema is readable
+      /// (IsSchemaReadable), else nil with the reason.</summary>
+      /// <param name="ADbPath">The index file; a missing file is a nil + reason, not an exception.</param>
+      /// <param name="AReason">'' on success; SchemaUnreadableReason text below
+      /// SCHEMA_READ_MIN; 'index not found: ...' or the open exception's
+      /// ClassName: Message otherwise.</param>
+      /// <returns>The read-only store (caller owns the reference), or nil.</returns>
+      /// <remarks>Never raises for an unreadable or unopenable index. Use instead of TSQLiteSymbolStore.Create(Db, True)
+      /// wherever a stale or foreign DB must degrade rather than crash.</remarks>
+      class function OpenReadable(const ADbPath: string; out AReason: string): ISymbolStore; static;
 
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AMtimeUnix"><!-- drag-lint:auto type -->Int64</param>
@@ -5004,8 +5016,14 @@ begin
     exits; the index/write path (also pre-current on a fresh DB) skips here and lets
     Migrate build the schema then prepare. PrepareStatements is idempotent
     (FStatementsPrepared), so Migrate's later call is a safe no-op after this. }
+  { 150 SC: READABLE, not current -- an index in [SCHEMA_READ_MIN, SCHEMA_VERSION]
+    gets its statements too, so a schema-24 engine reading a schema-23 library no
+    longer leaves every FQ* nil (the 149 INT access violation in TLibraryOracle).
+    Sound because everything after READ_MIN is additive and probed (spec
+    2026-11-09-schema-read-compat.md). }
   var LFound, LExpected: Integer;
-  if IsSchemaCurrent(LFound, LExpected) then
+  IsSchemaCurrent(LFound, LExpected);
+  if IsSchemaReadable(LFound) then
   begin
     PrepareStatements;
     { The write path sets FFts5Available via a temp-table probe (a write). Without
@@ -6850,6 +6868,36 @@ begin
     Q.Free;
   end;
   Result := AFound >= AExpected;
+end;
+
+class function TSQLiteSymbolStore.OpenReadable(const ADbPath: string; out AReason: string): ISymbolStore;
+var
+  LFound   : Integer;
+  LExpected: Integer;
+begin
+  Result := nil;
+  AReason:= '';
+  if (ADbPath = '') or not FileExists(ADbPath) then
+  begin
+    AReason:= 'index not found: ' + ADbPath;
+    Exit;
+  end;
+  try
+    Result:= TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}True);
+    Result.IsSchemaCurrent(LFound, LExpected);
+    if not IsSchemaReadable(LFound) then
+    begin
+      AReason:= SchemaUnreadableReason(LFound);
+      Result := nil;
+    end;
+  except
+    on E: Exception do
+    begin
+      { a locked, corrupt or foreign file is one outcome to every caller: no store + why }
+      AReason:= E.ClassName + ': ' + E.Message;
+      Result := nil;
+    end;
+  end;
 end;
 
 procedure TSQLiteSymbolStore.PrepareStatements;

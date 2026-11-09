@@ -175,13 +175,15 @@ procedure TPPUnitSourceResolver.OpenStores;
   function OpenAll(const ADbs: TArray<string>): TArray<ISymbolStore>;
   begin
     Result:= nil;
+    { 150 SC: the schema read gate. A DB below SCHEMA_READ_MIN (or unopenable) answers
+      nothing -- the lookup falls through to pp-unresolved-if -- instead of handing out
+      a store whose prepared queries are nil (the 149 INT access-violation trap). }
     for var Db: string in ADbs do
-      if (Db <> '') and TFile.Exists(Db) then
-        try
-          Result:= Result + [TSQLiteSymbolStore.Create(Db, True) as ISymbolStore];
-        except // dl:ok try-except-swallowed@5384 -- REVIEWED 2026-10-27 an unreadable DB answers nothing; the lookup falls through to pp-unresolved-if
-          on E: Exception do Continue;
-        end;
+    begin
+      var Why: string;
+      var Store: ISymbolStore:= TSQLiteSymbolStore.OpenReadable(Db, Why);
+      if Store <> nil then Result:= Result + [Store];
+    end;
   end;
 
 begin
