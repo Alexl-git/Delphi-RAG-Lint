@@ -562,6 +562,20 @@ begin
   Result:= IsIndexedMemberReceiver(ANode.ChildByField('lhs'));
 end;
 
+/// <summary>Is ANode a POSTFIX unary -- `X^` -- rather than a prefix one (`@X`, `not X`, `-X`)?</summary>
+/// <param name="ANode">Any node; a null node or a non-unary answers False.</param>
+/// <returns>True when ANode is an exprUnary whose operator follows its operand.</returns>
+/// <remarks>Same test as IsIndexedMemberReceiver's X1 arm: the grammar gives both forms one node type, so the
+/// operator's position is what tells them apart.</remarks>
+function IsPostfixDeref(const ANode: TTSNode): Boolean;
+begin
+  Result:= False;
+  if ANode.IsNull or (ANode.NodeType <> 'exprUnary') then Exit;
+  var Op     := ANode.ChildByField('operator');
+  var Operand:= ANode.ChildByField('operand');
+  Result:= (not Op.IsNull) and (not Operand.IsNull) and (Op.StartByte >= Operand.EndByte);
+end;
+
 { Ref-gap G4 support (T-11 R5, INBOX-member-access-after-paren-cast): is this
   node a PARENTHESISED receiver -- `(pShape as TBfShape)` -- or a dotted chain
   of identifier members rooted in one, `(X as T).A.B`? G / G2 / G3 all answer
@@ -588,11 +602,16 @@ end;
   kind 6 types `T(X)` as the cast target when T names a type, kind 11 types
   `F(X)` by F's declared result, and an unknown head binds nothing. Only a
   BARE identifier head with one argument qualifies: every other call receiver
-  is IsCallRootedReceiver's. }
+  is IsCallRootedReceiver's.
+
+  149 EX1 (145 gaps e): a POSTFIX DEREFERENCE of such a receiver -- `PRec(P)^`,
+  `T(X).A^` -- answers True as well, so `PRec(P)^.K` emits its member-access like
+  `PRec(P).K` does (the X1 rule of IsIndexedMemberReceiver, applied to this rung). }
 function IsHardCastRootedReceiver(const ANode: TTSNode): Boolean;
 begin
   Result:= False;
   if ANode.IsNull then Exit;
+  if IsPostfixDeref(ANode) then Exit(IsHardCastRootedReceiver(ANode.ChildByField('operand')));
   if ANode.NodeType = 'exprCall' then
   begin
     var E:= ANode.ChildByField('entity');
@@ -611,11 +630,17 @@ end;
   CALLED (`H.Names().Make(2)`) and nothing records one that is only read:
   `M:= H.Names().FLeaf` had no ref for FLeaf at all, so ref_types, find-callers
   and unused-public-symbol could not see it. Exactly the complement of G5 among
-  call-rooted receivers, so one member never gets two rows from these rungs. }
+  call-rooted receivers, so one member never gets two rows from these rungs.
+
+  149 EX1 (145 gaps e): a POSTFIX DEREFERENCE of such a receiver -- `F()^`,
+  `G(1, 2)^`, `O.Mk(x).P^` -- answers True as well: `X:= F()^.M` had no ref
+  for M. The deref keeps the rungs disjoint, since it only looks through to the
+  operand, which still answers to exactly one of G5 / G6. }
 function IsCallRootedReceiver(const ANode: TTSNode): Boolean;
 begin
   Result:= False;
   if ANode.IsNull then Exit;
+  if IsPostfixDeref(ANode) then Exit(IsCallRootedReceiver(ANode.ChildByField('operand')));
   if ANode.NodeType = 'exprCall' then Exit(not IsHardCastRootedReceiver(ANode));
   if ANode.NodeType <> 'exprDot' then Exit;
   var R:= ANode.ChildByField('rhs');
