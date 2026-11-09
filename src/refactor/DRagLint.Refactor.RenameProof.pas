@@ -354,6 +354,7 @@ type
     function ChainMemberExists(pClass: Int64; const pName: string): Boolean;
     procedure AddDelegates(const pIface: TSymRow; pWork: TQueue<TSymRow>);
     function SpecifierHeadType(const pTok: TTok; const pRow: TRefRow): Int64;
+    function LeavesIntoLibrary(const pRow: TRefRow): Boolean;
     procedure BuildGroup;
     procedure BuildFamily;
     procedure CheckNewNameDeclarations;
@@ -1655,6 +1656,41 @@ begin
     Q.Free;
   end;
 end;
+{ 150 RF (146 b1): a record constant's field path `TWrap.Sh.Pts[].X` that walks off the project into a library record and then through an
+  array level: the resolver stops at the array level, so the leaf refs stay unbound with no type text. The field ref
+  one step up the SAME path (`Pts`) is bound to a library field (external_target): a library record's field is no project symbol,
+  so the leaf cannot be the target -- unless the target's name is a library member too (FTargetInLib). }
+function TProver.LeavesIntoLibrary(const pRow: TRefRow): Boolean;
+begin
+  Result:= False;
+  if not SameText(pRow.Kind, REF_KIND_REC_FIELD) or (Pos('.', pRow.ReceiverText) = 0) then Exit;
+  var Segs:= pRow.ReceiverText.Split(['.']);
+  var Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT 1 FROM refs WHERE file_id = :f AND kind = :k AND external_target IS NOT NULL AND external_target <> '''' ' +
+                 'AND receiver_text = :r AND name_text = :n LIMIT 1';
+    var Owner:= '';
+    for var I:= 0 to High(Segs) do
+    begin
+      var Name:= Segs[I];
+      while Name.EndsWith('[]') do Name:= Copy(Name, 1, Length(Name) - 2);
+      if I > 0 then
+      begin
+        Q.Close;
+        Q.ParamByName('f').AsLargeInt:= pRow.FileId;
+        Q.ParamByName('k').AsWideString:= REF_KIND_REC_FIELD;
+        Q.ParamByName('r').AsWideString:= Owner;
+        Q.ParamByName('n').AsWideString:= Name;
+        Q.Open;
+        if not Q.Eof then Exit(True);
+      end;
+      Owner:= if I = 0 then Segs[0] else Owner + '.' + Segs[I];
+    end;
+  finally
+    Q.Free;
+  end;
+end;
 { Only unbound rows on the token: the receiver's static type decides, or nothing does. }
 procedure TProver.ClassifyUnbound(const pTok: TTok; const pRow: TRefRow);
 var
@@ -1673,6 +1709,12 @@ begin
     Refuse(CRefuseNoFacts, pTok.Path, pTok.Line, pTok.Col, Prefix + 'the index predates ref_receivers: run index --resolve-only')
   else if pRow.ReceiverText = '' then
     Refuse(CRefuseBareUnbound, pTok.Path, pTok.Line, pTok.Col, Prefix + 'no receiver, and the resolver bound it to nothing')
+  else if (pRow.ReceiverType <= 0) and (SpecType <= 0) and (pRow.ElementText = '') and not IsPlainTypeName(pRow.ReceiverTypeText) and LeavesIntoLibrary(pRow) then
+  begin
+    Inc(FTyped);
+    if FTargetInLib then Refuse(CRefuseAmbiguousType, pTok.Path, pTok.Line, pTok.Col, Prefix + Format('%s is in the library too, so a library record field does not rule it out', [FQName]))
+    else Inc(FOther);
+  end
   else if (pRow.ReceiverType <= 0) and (SpecType <= 0) and (pRow.ElementText = '') and not IsPlainTypeName(pRow.ReceiverTypeText) then
     Refuse(CRefuseReceiverUntyped, pTok.Path, pTok.Line, pTok.Col,
       Prefix + Format('the receiver "%s" has no static type in the index', [pRow.ReceiverText]))
