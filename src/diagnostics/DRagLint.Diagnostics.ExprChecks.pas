@@ -68,6 +68,7 @@ implementation
 
 uses
   System.SysUtils
+  , System.StrUtils
   , System.Classes
   , System.Generics.Collections
   , System.RegularExpressions
@@ -497,11 +498,11 @@ var
     begin
       Stmt:= AParent.NamedChild(I);
       T:= Stmt.NodeType;
-      if (T <> 'if') and (T <> 'ifElse') and (T <> 'while') and (T <> 'for') and (T <> 'foreach') and (T <> 'with') then Continue;
+      if not MatchText(T, ['if', 'ifElse', 'while', 'for', 'foreach', 'with']) then Continue;
       { if..else: the controlled single statement a reader tends to extend is the ELSE branch }
-      if T = 'if' then Body:= Stmt.ChildByField('then')
-      else if T = 'ifElse' then Body:= Stmt.ChildByField('else')
-      else Body:= Stmt.ChildByField('body');
+      Body:= if T = 'if' then Stmt.ChildByField('then')
+        else if T = 'ifElse' then Stmt.ChildByField('else')
+        else Stmt.ChildByField('body');
       if Body.IsNull or (Pos(Body.NodeType + ';', SIMPLE_BODY_BLOCKERS) > 0) then Continue;
       Nxt:= Default(TTSNode);
       for J:= I + 1 to AParent.NamedChildCount - 1 do
