@@ -353,6 +353,7 @@ type
     procedure CheckScopeIncludes(pFileId: Int64; const pPath: string; pLines: TStringList);
     function ChainMemberExists(pClass: Int64; const pName: string): Boolean;
     procedure AddDelegates(const pIface: TSymRow; pWork: TQueue<TSymRow>);
+    function SpecifierHeadType(const pTok: TTok; const pRow: TRefRow): Int64;
     procedure BuildGroup;
     procedure BuildFamily;
     procedure CheckNewNameDeclarations;
@@ -1615,10 +1616,50 @@ begin
   Result:= (pText <> '') and IsValidIdent(pText);
 end;
 
+{ 150 RF (146 b1): `property P: Integer read FRec.Count write FRec.Count` -- the head FRec of a DOTTED specifier sits in no routine, so the
+  resolver typed nothing. The proof types it itself: FRec is a field of the property's class (or of a project ancestor)
+  and its declared type is one project type. Returns that type's id, 0 when anything is not exactly that. }
+function TProver.SpecifierHeadType(const pTok: TTok; const pRow: TRefRow): Int64;
+const
+  CMaxChain = 64;
+begin
+  Result:= 0;
+  if (pRow.ReceiverType > 0) or (pRow.ElementText <> '') or not IsPlainTypeName(pRow.ReceiverText) then Exit;
+  var Cur:= PropertyOwnerAt(pTok.FileId, pTok.Line);
+  if Cur <= 0 then Exit;
+  var Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    for var Step:= 1 to CMaxChain do
+    begin
+      for var M in Members(Cur, pRow.ReceiverText) do
+        if SameText(M.Kind, CKindField) then
+        begin
+          Q.Close;
+          Q.SQL.Text:= 'SELECT signature FROM symbols WHERE id = :i';
+          Q.ParamByName('i').AsLargeInt:= M.Id;
+          Q.Open;
+          var TypeName:= if Q.Eof then '' else Trim(Q.Fields[0].AsString);
+          if not IsPlainTypeName(TypeName) then Exit;
+          var Types:= ReadSyms('name = :n COLLATE NOCASE AND kind IN (' + CTypeKinds + ')', TypeName);
+          Exit(if Length(Types) = 1 then Types[0].Id else 0);
+        end;
+      Q.Close;
+      Q.SQL.Text:= 'SELECT ancestor_symbol_id FROM type_ancestors WHERE symbol_id = :i ORDER BY ordinal LIMIT 1';
+      Q.ParamByName('i').AsLargeInt:= Cur;
+      Q.Open;
+      Cur:= if Q.Eof then 0 else Q.Fields[0].AsLargeInt;
+      if Cur <= 0 then Exit;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
 { Only unbound rows on the token: the receiver's static type decides, or nothing does. }
 procedure TProver.ClassifyUnbound(const pTok: TTok; const pRow: TRefRow);
 var
   Kind, Why: string;
+  SpecType: Int64;
 begin
   { Nothing qualified can name a routine's local. }
   if FIsRoutineLocal and pTok.Qualified then
@@ -1627,11 +1668,12 @@ begin
     Exit;
   end;
   var Prefix:= 'unresolved reference to "' + FOld + '" not renamed -- ';
+  SpecType:= SpecifierHeadType(pTok, pRow);
   if not FHasFacts then
     Refuse(CRefuseNoFacts, pTok.Path, pTok.Line, pTok.Col, Prefix + 'the index predates ref_receivers: run index --resolve-only')
   else if pRow.ReceiverText = '' then
     Refuse(CRefuseBareUnbound, pTok.Path, pTok.Line, pTok.Col, Prefix + 'no receiver, and the resolver bound it to nothing')
-  else if (pRow.ReceiverType <= 0) and (pRow.ElementText = '') and not IsPlainTypeName(pRow.ReceiverTypeText) then
+  else if (pRow.ReceiverType <= 0) and (SpecType <= 0) and (pRow.ElementText = '') and not IsPlainTypeName(pRow.ReceiverTypeText) then
     Refuse(CRefuseReceiverUntyped, pTok.Path, pTok.Line, pTok.Col,
       Prefix + Format('the receiver "%s" has no static type in the index', [pRow.ReceiverText]))
   else
@@ -1639,6 +1681,7 @@ begin
     { E-RENAME-RESIDUE: a receiver typed by a type the project does not declare (`Lines: TStringList`) is decided
       like a library element type. }
     var Verdict:= if pRow.ReceiverType > 0 then DecideChain(pRow.ReceiverType, pTok.FileId, Kind, Why)
+                  else if SpecType > 0 then DecideChain(SpecType, pTok.FileId, Kind, Why)
                   else DecideOutsideElement(if pRow.ElementText <> '' then pRow.ElementText else pRow.ReceiverTypeText, Kind, Why);
     case Verdict of
       cvTarget:
