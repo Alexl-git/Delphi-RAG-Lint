@@ -7669,8 +7669,13 @@ begin
   try
     for var A in FComp do
       if FGraph.Adj.TryGetValue(A, Used) then
+      begin
+        { 150-CAUSES-SPEED (CY2 HANDOVER): every edge FROM A in one pass (BuildEdgeSurfaces), same surfaces, same order }
+        var Tos: TArray<string>:= nil;
         for var B in FComp do
-          if (A <> B) and Used.Contains(B) then L.Add(BuildEdgeSurface(Self, FidOfStem(A), B));
+          if (A <> B) and Used.Contains(B) then Tos:= Tos + [B];
+        L.AddRange(BuildEdgeSurfaces(Self, FidOfStem(A), Tos));
+      end;
     Result:= L.ToArray;
   finally
     L.Free;
