@@ -20,7 +20,6 @@ uses
   , DRagLint.Core    .Encoding
   , DRagLint.Core    .LintBudget { C13: LintChildTimeoutMs -- the --full-rules child budget, shared with the IDE plugin }
   , DRagLint.Storage .SQLite
-  , DRagLint.Storage .Schema { 150 SC: IsSchemaReadable, the read gate of the store opener }
   , DRagLint.Parser  .Delphi13
   , DRagLint.Core    .Indexer  { INBOX-lsp-hover-unindexed-file: TIndexer.IndexFile builds the ephemeral single-unit index }
   , DRagLint.Hover   .Renderer
@@ -2323,6 +2322,7 @@ implementation
 
 uses
   System.StrUtils, { LSP-1 CORE: MatchText }
+  DRagLint.Storage.Schema, { 150 SC: IsSchemaReadable, the read gate of the store opener }
   System.RegularExpressions, { 1.44 lspctx: a project file's units and declared platform }
   DRagLint.Query.Implementors, { 1.40 ifrpt: the implementors counts of draglint/callerCounts }
   DRagLint.Query.ExceptionFacts, { D1 (wave 148): the Raises: hover line and the exception lens }

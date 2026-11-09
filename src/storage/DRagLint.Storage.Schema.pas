@@ -460,14 +460,10 @@ end;
 function SchemaCompatLine(AFound: Integer): string;
 begin
   Result:= Format('engine schema v%d reads v%d..v%d: ', [SCHEMA_VERSION, SCHEMA_READ_MIN, SCHEMA_VERSION]);
-  if AFound > SCHEMA_VERSION then
-    Result:= Result + Format('this index is NEWER (v%d) -- readable, never written by this engine', [AFound])
-  else if AFound = SCHEMA_VERSION then
-    Result:= Result + 'current'
-  else if IsSchemaReadable(AFound) then
-    Result:= Result + Format('v%d readable by v%d; re-index to write', [AFound, SCHEMA_VERSION])
-  else
-    Result:= Result + SchemaUnreadableReason(AFound);
+  Result:= Result + (if AFound > SCHEMA_VERSION then Format('this index is NEWER (v%d) -- readable, never written by this engine', [AFound])
+    else if AFound = SCHEMA_VERSION then 'current'
+    else if IsSchemaReadable(AFound) then Format('v%d readable by v%d; re-index to write', [AFound, SCHEMA_VERSION])
+    else SchemaUnreadableReason(AFound));
 end;
 
 end.
