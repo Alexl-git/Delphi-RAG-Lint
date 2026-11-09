@@ -21558,7 +21558,7 @@ begin
         removal that would strand ONLY instances --only left out is skipped
         (apply/1 uses[] action 'skipped') instead of refusing the unit. }
       JCap.AddPair('only_skips_unit_rules', TJSONBool.Create(True));
-      { 1.47.0 (wave 148 CV, C12 N5): convert-apply --only-type T1,T2 converts every
+      { 1.48.0 (wave 148 CV, C12 N5): convert-apply --only-type T1,T2 converts every
         instance of those bare #convert From types; exclusive with --only. }
       JCap.AddPair('only_type', TJSONBool.Create(True));
       { 1.27.0 (C9): convert-apply reconciles uses (watch list kept by .dfm needs,
