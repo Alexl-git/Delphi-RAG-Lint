@@ -25,9 +25,14 @@ follow the `--plan` playbook (measured below), but that is optional.
 5. A refused group: `drag-lint cycles --db <db> --plan > cycle-plan.md` prints the by-hand playbook.
 ## Running it from the CLI
 ```
-drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--format json|text]
+drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--hub] [--plan [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--format json|text]
 ```
-`--edges` and `--causes` add detail to the cycle report; `--plan` produces the
+`--edges` and `--causes` add detail to the cycle report; `--hub` tells a star from a
+tangle: per group the hub units (a unit whose removal leaves the rest acyclic), the uses
+edges and reference weights on each side, whether cutting one side alone breaks the group,
+what the spokes take from the hub (globals with the member names read through them,
+routines), what the hub takes from the spokes, and the dead `uses` inside the group
+(read-only, no planner; JSON adds `hubs[]` and `zero_ref_edges` per group); `--plan` produces the
 refactoring playbook; `--f2047` narrows the report to the interface-only cycles
 the compiler rejects with F2047 (`--unit <stem>` limits it to one unit's cycle);
 `--format` selects `json` or `text` output. `--fix` makes the edits

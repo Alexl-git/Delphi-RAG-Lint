@@ -467,7 +467,14 @@ Find circular unit dependencies and the exact `uses` lines that form them:
 
 ```
 drag-lint cycles --db myapp.sqlite --edges
+drag-lint cycles --db myapp.sqlite --hub
 ```
+
+`--hub` tells a star from a tangle: for each group it names the hub units (a unit whose
+removal leaves the rest acyclic), the uses edges and reference weights on each side of
+the hub, whether cutting one side alone breaks the group, what the spokes take from the hub
+(globals with the member names read through them, routines), what the hub takes from the
+spokes, and the dead `uses` inside the group. Read-only; it never runs the planner.
 
 Each cycle lists its `A uses B [interface|implementation]` edges, marks the
 **interface** edges as move-to-implementation candidates, and flags layering
