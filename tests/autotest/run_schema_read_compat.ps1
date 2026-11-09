@@ -7,8 +7,10 @@
   `index --library-db` die (EAccessViolation, TLibraryOracle -> FindSymbolsByExactName on a nil
   prepared query); 556ad9d7e then SKIPPED the library, so every bind ran without it.
 
-  The engine's range is read from `schema --format json` (engine_schema_version /
-  engine_schema_read_min). An exe without those keys (pre-150) is taken as READ_MIN = its schema.
+  The CONTRACT is the repo's SCHEMA_READ_MIN (src\storage\DRagLint.Storage.Schema.pas); the exe's own
+  schema comes from `schema --format json` (engine_schema_version, else the schema_version of a fresh
+  index). An exe that reports engine_schema_read_min must report the repo's value (R0). A pre-150 exe has
+  no key and is held to the repo's range -- which is what makes the base build at 24 FAIL arm R.
 
   Fixture (temp dir): library LibU (TLibBase, TLibThing = class(TLibBase) with Run) indexed by -Exe;
   project App.dpr / AppU.pas calling TLibThing.Create / Run / Free and testing
@@ -140,8 +142,12 @@ end.
   $sj = $sj.Substring($sj.IndexOf('{'))
   $schema = $sj | ConvertFrom-Json
   $engine = if ($null -ne $schema.engine_schema_version) { [int]$schema.engine_schema_version } else { [int]$schema.schema_version }
-  $readMin = if ($null -ne $schema.engine_schema_read_min) { [int]$schema.engine_schema_read_min } else { $engine }
   $hasKeys = $null -ne $schema.engine_schema_read_min
+  $srcMin = [regex]::Match([IO.File]::ReadAllText((Join-Path $Repo 'src\storage\DRagLint.Storage.Schema.pas')), 'SCHEMA_READ_MIN\s*=\s*(\d+)\s*;')
+  if (-not $srcMin.Success) { Write-Host 'FATAL: SCHEMA_READ_MIN not found in DRagLint.Storage.Schema.pas'; exit 2 }
+  $readMin = [int]$srcMin.Groups[1].Value
+  if ($hasKeys) { Src-Check 'R0' ([int]$schema.engine_schema_read_min -eq $readMin) "the exe reports READ_MIN v$($schema.engine_schema_read_min), the repo declares v$readMin" }
+  if ($readMin -gt $engine) { Write-Host "FATAL: repo READ_MIN v$readMin is above the exe's schema v$engine"; exit 2 }
   Write-Host "engine schema v$engine, reads v$readMin..v$engine (keys present: $hasKeys)"
   if ($engine -eq $readMin) { Write-Host 'R: engine at READ_MIN -- arm R runs at the current schema (bites after the 24 flip)' }
 
