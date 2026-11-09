@@ -1582,18 +1582,75 @@ end;
   rescans: the clause must still parse, holding exactly the other entries in order; otherwise pText and
   pDels are left as they were (the caller then refuses `directive` as before). Returns True when one or
   more regions went. }
-function DropGuardedBlocks(var pText: string; const pOrig: TUsesClause; var pDels: TArray<string>;
-  const pAdds: TArray<string>): Boolean;
+{ Lane 148 CY: the single-branch region around entry pE of pOrig in pText -- the directive before the entry
+  opens it (IFDEF / IFNDEF / IF / IFOPT), the next one after it closes it (ENDIF / IFEND), inside the clause,
+  with no other brace (an ELSE, a nested IF, a comment) between the two. pSpan = from the opening brace to
+  just past the closing one. False when the shape is anything else. }
+function GuardRegionOf(const pText: string; const pOrig: TUsesClause; const pE: TUsesEntry; out pSpan: TOfsSpan): Boolean;
 const
   COpenRx  = '^\{\$(IFDEF|IFNDEF|IF|IFOPT)\b[^}]*\}$';
   CCloseRx = '^\{\$(ENDIF|IFEND)\b[^}]*\}$';
+begin
+  pSpan:= OfsSpan(0, 0);
+  var OpenAt := LastDelimiter('{', Copy(pText, 1, pE.Start - 1));
+  var CloseAt:= Pos('{$', pText, pE.Stop);
+  var OpenEnd := if OpenAt > 0 then Pos('}', pText, OpenAt) else 0;
+  var CloseEnd:= if CloseAt > 0 then Pos('}', pText, CloseAt) else 0;
+  var InClause:= (OpenAt > pOrig.UsesTok.Stop) and (CloseAt > 0) and (CloseAt < pOrig.Semi.Start);
+  var Closed  := (OpenEnd > 0) and (CloseEnd > 0);
+  Result:= InClause and Closed;
+  Result:= Result and TRegEx.IsMatch(Copy(pText, OpenAt, OpenEnd - OpenAt + 1), COpenRx, [roIgnoreCase]);
+  Result:= Result and TRegEx.IsMatch(Copy(pText, CloseAt, CloseEnd - CloseAt + 1), CCloseRx, [roIgnoreCase]);
+  Result:= Result and not Copy(pText, OpenEnd + 1, CloseAt - OpenEnd - 1).Contains('{');
+  if Result then pSpan:= OfsSpan(OpenAt, CloseEnd + 1);
+end;
+
+{ Lane 148 CY: deletes region pR from pText -- mid-line (`A $IFDEF X, B $ENDIF;`) with the blanks before it,
+  at a line start with the blanks after it. }
+procedure DeleteRegion(var pText: string; const pR: TOfsSpan);
+begin
+  var Start:= pR.Start;
+  var Stop := pR.Stop;
+  while (Start > 1) and CharInSet(pText[Start - 1], [' ', #9]) do Dec(Start);
+  if (Start = 1) or CharInSet(pText[Start - 1], [#10, #13]) then
+  begin
+    Start:= pR.Start;
+    while (Stop <= Length(pText)) and CharInSet(pText[Stop], [' ', #9]) do Inc(Stop);
+  end;
+  Delete(pText, Start, Stop - Start);
+end;
+
+{ Lane 148 CY: True when the first uses clause of pText still parses (its `;` outside any conditional) and holds
+  exactly the entries of pOrig whose lower-cased names are not in pGone, in their order. }
+function ClauseKeepsOthers(const pText: string; const pOrig: TUsesClause; pGone: TList<string>): Boolean;
+var
+  Lex: TUsesLexer;
+  Cur: TUsesClause;
+begin
+  Lex:= TUsesLexer.Create(pText);
+  try
+    Cur:= ScanClause(Lex);
+  finally
+    Lex.Free;
+  end;
+  Result:= Cur.Present and (Cur.Semi.Depth = 0);
+  var K:= 0;
+  for var E in pOrig.Entries do
+    if Result and not pGone.Contains(LowerCase(E.Name)) then
+    begin
+      Result:= (K <= High(Cur.Entries)) and SameText(Cur.Entries[K].Name, E.Name);
+      Inc(K);
+    end;
+  Result:= Result and (K = Length(Cur.Entries));
+end;
+
+function DropGuardedBlocks(var pText: string; const pOrig: TUsesClause; var pDels: TArray<string>;
+  const pAdds: TArray<string>): Boolean;
 var
   Text   : string;
   Dels   : TList<string>;
   Gone   : TList<string>;
   Regions: TList<TOfsSpan>;
-  Lex    : TUsesLexer;
-  Cur    : TUsesClause;
 begin
   Result:= False;
   if not pOrig.Present or (pOrig.Semi.Depth > 0) then Exit;
@@ -1611,59 +1668,22 @@ begin
       for var D in Dels do Removed:= Removed or SameText(D, E.Name);
       for var A in pAdds do Removed:= Removed and not SameText(StemOfEntry(A), E.Name);
       if not Removed then Exit;  { a guarded entry that stays: the block cannot go whole }
-      { the directive before the entry opens the region, the one after it closes it }
-      var OpenAt := LastDelimiter('{', Copy(Text, 1, E.Start - 1));
-      var CloseAt:= Pos('{$', Text, E.Stop);
-      if (OpenAt <= pOrig.UsesTok.Stop) or (CloseAt <= 0) or (CloseAt >= pOrig.Semi.Start) then Exit;
-      var OpenEnd := Pos('}', Text, OpenAt);
-      var CloseEnd:= Pos('}', Text, CloseAt);
-      if (OpenEnd <= 0) or (CloseEnd <= 0) then Exit;
-      if not TRegEx.IsMatch(Copy(Text, OpenAt, OpenEnd - OpenAt + 1), COpenRx, [roIgnoreCase]) or
-        not TRegEx.IsMatch(Copy(Text, CloseAt, CloseEnd - CloseAt + 1), CCloseRx, [roIgnoreCase]) then Exit;
-      { no other directive (an ELSE, a nested IF) and no comment brace inside the region }
-      if Pos('{', Copy(Text, OpenEnd + 1, CloseAt - OpenEnd - 1)) > 0 then Exit;
-      var Span:= OfsSpan(OpenAt, CloseEnd + 1);
+      var Span: TOfsSpan;
+      if not GuardRegionOf(Text, pOrig, E, Span) then Exit;
       if (Regions.Count > 0) and (Regions.Last.Start = Span.Start) then Continue;  { the region's next entry }
       Regions.Add(Span);
     end;
-    if Regions.Count = 0 then Exit;
     { every entry inside a region is removed, and named once }
+    var Bad:= Regions.Count = 0;
     for var E in pOrig.Entries do
       for var R in Regions do
         if (E.Start >= R.Start) and (E.Stop <= R.Stop) then
         begin
-          if (E.Depth <> 1) or Gone.Contains(LowerCase(E.Name)) then Exit;
+          Bad:= Bad or (E.Depth <> 1) or Gone.Contains(LowerCase(E.Name));
           Gone.Add(LowerCase(E.Name));
         end;
-    for var I:= Regions.Count - 1 downto 0 do
-    begin
-      var R:= Regions[I];
-      var Start:= R.Start;
-      var Stop := R.Stop;
-      // mid-line (`A $IFDEF X, B $ENDIF;`) the blanks before the region go; at a line start the ones after it
-      while (Start > 1) and CharInSet(Text[Start - 1], [' ', #9]) do Dec(Start);
-      if (Start = 1) or CharInSet(Text[Start - 1], [#10, #13]) then
-      begin
-        Start:= R.Start;
-        while (Stop <= Length(Text)) and CharInSet(Text[Stop], [' ', #9]) do Inc(Stop);
-      end;
-      Delete(Text, Start, Stop - Start);
-    end;
-    Lex:= TUsesLexer.Create(Text);
-    try
-      Cur:= ScanClause(Lex);
-    finally
-      Lex.Free;
-    end;
-    if not Cur.Present or (Cur.Semi.Depth > 0) then Exit;
-    var K:= 0;
-    for var E in pOrig.Entries do
-      if not Gone.Contains(LowerCase(E.Name)) then
-      begin
-        if (K > High(Cur.Entries)) or not SameText(Cur.Entries[K].Name, E.Name) then Exit;
-        Inc(K);
-      end;
-    if K <> Length(Cur.Entries) then Exit;
+    for var I:= Regions.Count - 1 downto 0 do DeleteRegion(Text, Regions[I]);
+    if Bad or not ClauseKeepsOthers(Text, pOrig, Gone) then Exit;
     for var I:= Dels.Count - 1 downto 0 do
       if Gone.Contains(LowerCase(Dels[I])) then Dels.Delete(I);
     pText:= Text;

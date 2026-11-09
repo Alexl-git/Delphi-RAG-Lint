@@ -4054,7 +4054,7 @@ begin
     while S.ParentId > 0 do
     begin
       var P:= FStore.GetSymbolById(S.ParentId);
-      if not (P.Kind in [skProcedure, skFunction, skMethod]) then Break;
+      if P.Kind not in [skProcedure, skFunction, skMethod] then Break;
       S:= P;
     end;
     var First:= if S.ImplStartLine > 0 then S.ImplStartLine else S.StartLine;
