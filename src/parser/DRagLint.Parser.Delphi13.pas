@@ -3846,6 +3846,9 @@ begin
   // arithmetic/comparison exprBinary nodes; RHS must be a bare identifier
   // (a type name), not a nested expression. No Exit -- the default recursion
   // below still walks lhs + children.
+  // 149 GA E1: since grammar v1.4.5 the right of `is` is a TYPE node for a
+  // dotted or generic type (typerefDot / typerefTpl): `X is Unit.TFoo` and
+  // `X is TList<Integer>` emit their type uses through EmitTypeExprRefs.
   if NodeType = 'exprBinary' then
   begin
     var OpNode:= ANode.ChildByField('operator');
@@ -3853,7 +3856,10 @@ begin
     begin
       var RhsNode:= ANode.ChildByField('rhs');
       if (not RhsNode.IsNull) and (RhsNode.NodeType = 'identifier') then
-        AState.EmitRef('type_use', NodeText(RhsNode, AState.Source), RhsNode);
+        AState.EmitRef('type_use', NodeText(RhsNode, AState.Source), RhsNode)
+      else if (not RhsNode.IsNull) and (OpNode.NodeType = 'kIs') and
+        ((RhsNode.NodeType = 'typerefDot') or (RhsNode.NodeType = 'typerefTpl')) then
+        EmitTypeExprRefs(RhsNode, AState, 0);
     end;
   end;
 
