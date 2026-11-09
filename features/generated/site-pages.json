@@ -88,7 +88,7 @@
     "version": "1.46.0-alpha"
   },
   "features/circular-uses-report-cycles-fix-plan.md": {
-    "hash": "f5994f182a91c55781a7d93c521d271ac0ccbd07aefd65685826d8d90195ad09",
+    "hash": "ecc8dc528eee7a5f208c11b8af1488d345783a948a9d7214940728ebc2cdc658",
     "version": "1.48.0-alpha"
   },
   "features/class-surface.md": {
@@ -240,7 +240,7 @@
     "version": "1.35.1-alpha"
   },
   "features/cycles-fix.md": {
-    "hash": "05765c6dc8bb7e6dfae459f85f6c29b3a5f94e0117b5eae8e72cfa7d4cf0b583",
+    "hash": "e9709b25fd93f9a00862f02eb283c75d865273252db9a9191f0b4ef38dd82a79",
     "version": "1.48.0-alpha"
   },
   "features/datamodule-form-global.md": {

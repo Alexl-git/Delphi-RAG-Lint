@@ -28,6 +28,7 @@ Full flag list: [cycles in the CLI reference](../cli.md#cycles).
 | `--edges` |  |  |  |
 | `--causes` |  |  |  |
 | `--hub` |  |  |  |
+| `--hub-surface` |  |  |  |
 | `--plan` |  |  |  |
 | `--project` | `<X.dproj>` |  |  |
 | `--f2047` |  |  |  |
@@ -83,14 +84,14 @@ follow the `--plan` playbook (measured below), but that is optional.
 5. A refused group: `drag-lint cycles --db <db> --plan > cycle-plan.md` prints the by-hand playbook.
 ### Running it from the CLI
 ```text
-drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--hub] [--plan [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--format json|text]
+drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--hub] [--plan [--hub-surface [--apply]] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--format json|text]
 ```
 `--edges` and `--causes` add detail to the cycle report; `--hub` tells a star from a
 tangle: per group the hub units (a unit whose removal leaves the rest acyclic), the uses
 edges and reference weights on each side, whether cutting one side alone breaks the group,
 what the spokes take from the hub (globals with the member names read through them,
 routines), what the hub takes from the spokes, and the dead `uses` inside the group
-(read-only, no planner; JSON adds `hubs[]` and `zero_ref_edges` per group); `--plan` produces the
+(read-only, no planner; JSON adds `hubs[]` and `zero_ref_edges` per group); `--plan --hub-surface` plans recipe R3 for such a star with one hub read through one global: a new leaf unit `<Hub>.Hub` holding an interface with one property per field and one method per method the spokes read through the global, the hub class implementing it with an AfterConstruction / BeforeDestruction hand-over, and a receiver-only rewrite in each spoke (`frmMain.edtX` becomes `MainHub.edtX`); `Inc` / `Dec` of an integer field becomes an assignment; a bare use, a write to the global or a designer field, another var-parameter use or an ancestor's member refuses only that spoke; OFF by default, `--apply` writes one group (`.BCK<n>` backups) and runs no compile gate yet (build after it); `--plan` produces the
 refactoring playbook; `--f2047` narrows the report to the interface-only cycles
 the compiler rejects with F2047 (`--unit <stem>` limits it to one unit's cycle);
 `--format` selects `json` or `text` output. `--fix` makes the edits

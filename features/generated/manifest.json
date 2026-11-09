@@ -8791,7 +8791,7 @@
         {
           "type": "cli",
           "verb": "cycles",
-          "usage": "drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--hub] [--plan [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --hub = per group its hub units (removal leaves the rest acyclic): edges, ref weights and surfaces per side, dead uses; read-only, no planner; --f2047 = only the interface-only cycles dcc rejects with F2047, each edge with its forcing symbols and the next --plan / --fix commands; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group naming the exact --fix dry-run and --apply commands; --fix = the mechanical fix of one group, see the cycles-fix entry)",
+          "usage": "drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--hub] [--plan [--hub-surface [--apply]] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --hub = per group its hub units (removal leaves the rest acyclic): edges, ref weights and surfaces per side, dead uses; read-only, no planner; --f2047 = only the interface-only cycles dcc rejects with F2047, each edge with its forcing symbols and the next --plan / --fix commands; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group naming the exact --fix dry-run and --apply commands; --fix = the mechanical fix of one group, see the cycles-fix entry)",
           "flags": [
             {
               "name": "--db",
@@ -8805,6 +8805,9 @@
             },
             {
               "name": "--hub"
+            },
+            {
+              "name": "--hub-surface"
             },
             {
               "name": "--plan"
@@ -8870,7 +8873,7 @@
             }
           ],
           "helpOrder": 68,
-          "help": ["  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--hub] [--plan [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>]   (circular unit deps; --hub = per group its hub units (removal leaves the rest acyclic): edges, ref weights and surfaces per side, dead uses; read-only, no planner; --f2047 = only the interface-only cycles dcc rejects with F2047: units, each interface edge with the symbols forcing it, and the next --plan / --fix commands; --unit <stem> (the name in dcc's message) narrows it, a unit in no such cycle is exit 0 with a note; --format json = [{units[],edges[{from,to,symbols[]}],plan,fix}]; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\\TEMP\\draglint_cyclefix_<pid>\\, deleted at exit unless a message of the run cites a file in it, then kept and named on stderr; --shadow-out names another, never deleted) and builds the project (msbuild /p:Config=Debug for --platform, default the project's active platform, else win32) unless --no-compile, exit 0 mechanical / 1 refused / 2 error; --apply writes it (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 written and verified (or written with --no-reindex, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified / 2 error: a write or build failed part-way (rolled back, project not changed, or the rollback failure is named) or bad flags; a rollback restores the sources, not the DCUs the failed build wrote: rebuild after a rollback; --apply --no-compile is exit 2; --rsvars <path> = the Studio build environment the compile gate calls (default: the Studio the registry or BDS names; forwarded to every --part all iteration; a missing file is exit 2); --build-timeout <s> = whole seconds one build may take (default 0 = no limit; forwarded to every --part all iteration; anything but a whole number >= 0 is exit 2); a stand-down request (drag-lint shutdown --db <db>, or the IDE's Cancel) kills the build, rolls an --apply back and exits 1 (\"cancelled -- rolled back\"); --part all needs --apply, refuses --no-reindex; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest's library for the build platform: --platform, else the --project's active platform, else win32; --library-db none = no library); --rules-dir is forwarded to every --part all iteration; --format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge's surface: members read, writes, construction, class methods, routine + signature types)"]
+          "help": ["  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--hub] [--plan [--hub-surface [--apply]] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>]   (circular unit deps; --hub = per group its hub units (removal leaves the rest acyclic): edges, ref weights and surfaces per side, dead uses; read-only, no planner; --f2047 = only the interface-only cycles dcc rejects with F2047: units, each interface edge with the symbols forcing it, and the next --plan / --fix commands; --unit <stem> (the name in dcc's message) narrows it, a unit in no such cycle is exit 0 with a note; --format json = [{units[],edges[{from,to,symbols[]}],plan,fix}]; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\\TEMP\\draglint_cyclefix_<pid>\\, deleted at exit unless a message of the run cites a file in it, then kept and named on stderr; --shadow-out names another, never deleted) and builds the project (msbuild /p:Config=Debug for --platform, default the project's active platform, else win32) unless --no-compile, exit 0 mechanical / 1 refused / 2 error; --apply writes it (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 written and verified (or written with --no-reindex, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified / 2 error: a write or build failed part-way (rolled back, project not changed, or the rollback failure is named) or bad flags; a rollback restores the sources, not the DCUs the failed build wrote: rebuild after a rollback; --apply --no-compile is exit 2; --rsvars <path> = the Studio build environment the compile gate calls (default: the Studio the registry or BDS names; forwarded to every --part all iteration; a missing file is exit 2); --build-timeout <s> = whole seconds one build may take (default 0 = no limit; forwarded to every --part all iteration; anything but a whole number >= 0 is exit 2); a stand-down request (drag-lint shutdown --db <db>, or the IDE's Cancel) kills the build, rolls an --apply back and exits 1 (\"cancelled -- rolled back\"); --part all needs --apply, refuses --no-reindex; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest's library for the build platform: --platform, else the --project's active platform, else win32; --library-db none = no library); --rules-dir is forwarded to every --part all iteration; --plan --hub-surface = recipe R3 for a group with exactly one hub read through one global (spec P2): a new leaf unit <Hub>.Hub with an interface of the members the spokes read through the global, the hub class implements it, receiver-only rewrite in the spokes; dry run writes nothing, --apply writes ONE group (.BCK<n> backups unless --no-backup) and runs no compile gate yet: build after it; --format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge's surface: members read, writes, construction, class methods, routine + signature types)"]
         }
       ],
       "audience": "both",
@@ -8890,10 +8893,10 @@
         }
       ],
       "verified": {
-        "date": "2026-11-08",
+        "date": "2026-11-09",
         "by": "ENGINE",
         "build": "1.48.0-alpha",
-        "surfaceHash": "3e9fdd0f1b0dca91a62ab30815f90793df88526aa391f6fcccc2a2d949763f43"
+        "surfaceHash": "79a71da3e54197242150eb71ec4005c40ace3e5d24fa1f0803bca4fc19ca3451"
       }
     },
     {
@@ -9148,10 +9151,10 @@
         }
       ],
       "verified": {
-        "date": "2026-11-08",
+        "date": "2026-11-09",
         "by": "ENGINE",
         "build": "1.48.0-alpha",
-        "surfaceHash": "b768f3174f2b85898abe4c20fcb30566ba02eeb0a9c23923209b4bf425874498"
+        "surfaceHash": "fc908c8a250d6c15e672d0b1042cddf6f15a8b521828d597e63a4812641689a7"
       }
     },
     {
