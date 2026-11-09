@@ -117,6 +117,18 @@ try {
   Check 'D12 no IInterface: refused, the flag named' (($r.refusal.kind -eq 'no-iinterface') -and ($r.refusal.reason -match 'reparent-interfaced')) "$($r.refusal.kind)"
   $r = Run-Json $A @('--class', 'TEiDeep', '--plan', '--reparent-interfaced')
   Check 'D13 --reparent-interfaced stops at a direct TObject parent' ($r.refusal.kind -eq 'no-iinterface') "$($r.refusal.kind)"
+  $r = Run-Json $A @('--class', 'TEiPlain', '--plan', '--reparent-interfaced=norefcount')
+  Check 'D15 norefcount without System.Generics.Defaults in the unit: refused base-unit-missing' (($r.refusal.kind -eq 'base-unit-missing') -and ($r.refusal.reason -match 'Generics.Defaults')) "$($r.refusal.kind)"
+  $r = Run-Json $A @('--class', 'TEiDeep', '--plan', '--reparent-interfaced=norefcount')
+  Check 'D16 norefcount keeps the TObject-parent-only rule (control)' ($r.refusal.kind -eq 'no-iinterface') "$($r.refusal.kind)"
+  $N = New-Project 'norefcount'
+  $nt = [IO.File]::ReadAllText($N.Unit)
+  [IO.File]::WriteAllText($N.Unit, ($nt -replace '(?m)^implementation\s*$', "implementation`r`n`r`nuses System.Generics.Defaults;"), [Text.Encoding]::ASCII)
+  & $Exe index --project $N.Proj --db $N.Db --library-db none *> $null
+  $r = Run-Json $N @('--class', 'TEiPlain', '--plan', '--reparent-interfaced=norefcount')
+  Check 'D17 norefcount: the parent is TSingletonImplementation' ($r.heritage_after -eq 'TEiPlain = class(TSingletonImplementation, IEiPlain)') "$($r.heritage_after) $($r.refusal.kind)"
+  $r = Run-Json $N @('--class', 'TEiPlain', '--plan', '--reparent-interfaced')
+  Check 'D18 the bare flag still writes TInterfacedObject (control)' ($r.heritage_after -eq 'TEiPlain = class(TInterfacedObject, IEiPlain)') "$($r.heritage_after)"
   Check 'D14 the plans wrote nothing' ((Tree-Hash $A.Dir) -ceq $before)
 
   Write-Host 'surface'

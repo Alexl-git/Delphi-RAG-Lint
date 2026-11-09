@@ -546,6 +546,7 @@ type
     EiClass      : string ; // extract-interface --class <name>
     EiMembers    : string ; // extract-interface --members <a,b>
     EiReparent   : Boolean; // extract-interface --reparent-interfaced
+    EiNoRefCount : Boolean; // extract-interface --reparent-interfaced=norefcount
     LiDefer      : Boolean; // lazy-init --defer (lane 147 G3P)
     FixNaming    : Boolean; // --fix-naming (batch --fix: explicit consent to the opt-in naming fixes)
     { --stand-in-for <realpath>: analyse THIS file's text, but answer as though
@@ -1891,6 +1892,11 @@ begin
       Result.EiMembers:= ParamStr(i);
     end
     else if A = '--reparent-interfaced' then Result.EiReparent:= True
+    else if A = '--reparent-interfaced=norefcount' then
+    begin
+      Result.EiReparent:= True;
+      Result.EiNoRefCount:= True;
+    end
     else if A = '--defer' then Result.LiDefer:= True
     else if (A = '--routine') and (i < ParamCount) then
     begin
@@ -17333,6 +17339,7 @@ begin
   Opts.Members     := AArgs.EiMembers;
   Opts.IfaceName   := AArgs.Name;
   Opts.Reparent    := AArgs.EiReparent;
+  Opts.NoRefCount  := AArgs.EiNoRefCount;
   Opts.Project     := AArgs.ProjectPath;
   Opts.Platform    := AArgs.CheckPlatform;
   Opts.RsVars      := AArgs.CycleRsVars;
