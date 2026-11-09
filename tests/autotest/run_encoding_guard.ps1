@@ -179,6 +179,18 @@ Write-Host '== source byte guard (H1) ==' -ForegroundColor Cyan
 $DeliberateFixtures = [ordered]@{
   'tests/preprocess/fixtures/bom_main.pas' =
     'tests\preprocess\run_bom.ps1 asserts this file STARTS with EF BB BF and that the preprocessor blanks those 3 bytes without moving any offset. Removing the BOM deletes the test.'
+  # wave 149 DF: the non-ASCII identifier IS the test subject (object btn<U-umlaut>ber in a
+  # Windows-1252 .dfm and in a UTF-8+BOM .dfm; the .pas pairs declare the same fields).
+  # tests\autotest\run_dfm_nonascii_identifier.ps1 asserts the DFM extractor stores the FULL
+  # identifier, not its ASCII prefix. Converting these files to 7-bit ASCII deletes the test.
+  'tests/fixtures/dfm-nonascii/FormAnsi.dfm' =
+    'run_dfm_nonascii_identifier.ps1: Windows-1252 .dfm, BOM-less, object btn<U-umlaut>ber. The byte $DC must stay.'
+  'tests/fixtures/dfm-nonascii/FormAnsi.pas' =
+    'run_dfm_nonascii_identifier.ps1: Windows-1252 .pas declaring btn<U-umlaut>ber: TButton (the field the .dfm names).'
+  'tests/fixtures/dfm-nonascii/FormUtf8.dfm' =
+    'run_dfm_nonascii_identifier.ps1: UTF-8 + BOM .dfm, object btn<U-umlaut>ber and a Cyrillic btn<De><a>. BOM and bytes must stay.'
+  'tests/fixtures/dfm-nonascii/FormUtf8.pas' =
+    'run_dfm_nonascii_identifier.ps1: UTF-8 + BOM .pas declaring the same fields.'
 }
 #
 # K12: this banner used to print UNCONDITIONALLY, so an entry could keep
