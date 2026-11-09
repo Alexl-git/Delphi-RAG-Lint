@@ -69,11 +69,7 @@ const
   VERSION = DRAGLINT_VERSION;
 
 /// <returns><!-- drag-lint:auto -->Integer -- Observed: 0; 2; DoIndexAll(Args);
-/// DoIndex(Args); DoWarmRuleCache(Args); DoQuery (Args); DoRules (Args); DoLint (Args);
-/// DoAllow (Args); DoExport (Args); DoTop (Args); DoGain (Args); RunOverview
-/// (Args.DbPath, Args.MaxRows, Args.AsJson); DoImportLog (Args); DoGraph (Args);
-/// DoArchDiagram (Args); DoTodos (Args); DoHover (Args); DoContrastSelfTest; if
-/// Args.AllProjects then DoImpactAllProjects(Args).</returns>
+/// DoIndex(Args); DoWarmRuleCache(Args); DoQuery (Args).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas) ?, main block (drag-lint.dpr)</para>

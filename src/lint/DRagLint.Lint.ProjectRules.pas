@@ -118,7 +118,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.ComputeRuleCacheEntry (DRagLint.CLI.pas), DRagLint.CLI.WholeGraphProvider (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.Run.WholeGraph (DRagLint.Lint.ProjectRules.pas) ?</para>
     /// <para>Calls: DRagLint.Lint.EnumOrdinalPersisted.CollectEnumOrdinalPersisted, DRagLint.Lint.ProjectRules.CollectCircularUses, DRagLint.Lint.ProjectRules.CollectDfmEventHandlerMissing, DRagLint.Lint.ProjectRules.CollectDuplicateGlobalDecls, DRagLint.Lint.ProjectRules.CollectEnumHelperSeparateUnits, DRagLint.Lint.ProjectRules.CollectRepeatedTypeSwitch, SameText</para>
-    /// <para>Returns: nil; CollectCircularUses(AStore); CollectDuplicateGlobalDecls(AStore, ALibraryStore); CollectEnumHelperSeparateUnits(AStore); CollectRepeatedTypeSwitch(AStore); CollectEnumOrdinalPersisted(AStore); CollectDfmEventHandlerMissing(AStore, ALibraryStore)</para>
+    /// <para>Returns: nil; CollectCircularUses(AStore); CollectDuplicateGlobalDecls(AStore, ALibraryStore); CollectEnumHelperSeparateUnits(AStore); CollectRepeatedTypeSwitch(AStore); CollectEnumOrdinalPersisted(AStore)</para>
     /// <seealso cref="DRagLint.Lint.EnumOrdinalPersisted.CollectEnumOrdinalPersisted"/>
     /// <seealso cref="DRagLint.Lint.ProjectRules.CollectCircularUses"/>
     /// <seealso cref="DRagLint.Lint.ProjectRules.CollectDfmEventHandlerMissing"/>

@@ -238,23 +238,51 @@ type
   /// <summary>Optional read cache an IEdgeSurfaceSource may also implement (lane 148 HP2B): BuildEdgeSurface
   /// then reads a file's refs, a symbol by id and a child symbol by name through it instead of asking the
   /// store again for every edge of the same consumer.</summary>
-  /// <remarks>Each method must return exactly what the store returns for the same arguments (a memo of
+  /// <remarks>
+  /// Each method must return exactly what the store returns for the same arguments (a memo of
   /// ISymbolStore.GetReferencesFromFile / GetSymbolById / FindChildSymbolByName over an index that does not
-  /// change while the cache lives), so the surface is the same with or without it. Not thread-safe.</remarks>
+  /// change while the cache lives), so the surface is the same with or without it. Not thread-safe.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Report.CycleEdge.pas) ?, declaration (DRagLint.Report.CyclePlan.pas) ?, DRagLint.Report.CycleEdge.TSurfaceBuilder.Create (DRagLint.Report.CycleEdge.pas)</para>
+  /// <para>Used in units: DRagLint.Report.CycleEdge, DRagLint.Report.CyclePlan</para>
+  /// <para>Implemented by: TCyclePlanner</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   IEdgeSurfaceCache = interface
     ['{5B0E2D7A-3C41-4F8E-9A6B-1D2C7E40B913}']
     /// <summary>The refs recorded in a file, as ISymbolStore.GetReferencesFromFile returns them.</summary>
     /// <param name="pFid">File id; greater than 0.</param>
     /// <returns>The refs, in the store's order.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Report.CycleEdge.TSurfaceBuilder.Collect (DRagLint.Report.CycleEdge.pas)</para>
+    /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceCache.CachedChildByName"/>
+    /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceCache.CachedSymbolById"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function CachedRefsFromFile(pFid: Int64): TArray<TReference>;
     /// <summary>A symbol by id, as ISymbolStore.GetSymbolById returns it.</summary>
     /// <param name="pId">Symbol id.</param>
     /// <returns>The symbol; Id = 0 when there is none.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Report.CycleEdge.TSurfaceBuilder.Sym (DRagLint.Report.CycleEdge.pas)</para>
+    /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceCache.CachedChildByName"/>
+    /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceCache.CachedRefsFromFile"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function CachedSymbolById(pId: Int64): TSymbol;
     /// <summary>A child symbol by name, as ISymbolStore.FindChildSymbolByName returns it.</summary>
     /// <param name="pParentId">Parent symbol id.</param>
     /// <param name="pName">Child name, passed to the store as given.</param>
     /// <returns>The child; Id = 0 when there is none.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Report.CycleEdge.TSurfaceBuilder.Child (DRagLint.Report.CycleEdge.pas)</para>
+    /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceCache.CachedRefsFromFile"/>
+    /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceCache.CachedSymbolById"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function CachedChildByName(pParentId: Int64; const pName: string): TSymbol;
   end;
 
@@ -726,12 +754,12 @@ function AncestorImplementingIInterface(const pProject, pLibrary: ISymbolStore; 
 /// <remarks>
 /// Reads the index only. Parameters and locals do not count as members.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Report.CyclePlan.TCyclePlanner.Resolve (DRagLint.Report.CyclePlan.pas)</para>
-/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Report.CycleEdge.TTypeIndex.Find, DRagLint.Report.CycleEdge.TTypeIndex.IsLib, DRagLint.Report.CycleEdge.TTypeIndex.ParentOf</para>
+/// <para>Called from: DRagLint.Report.CyclePlan.TCyclePlanner.ClassChainMember (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Report.CycleEdge.EnclosingTypeOf, DRagLint.Report.CycleEdge.TTypeIndex.Find, DRagLint.Report.CycleEdge.TTypeIndex.IsLib, DRagLint.Report.CycleEdge.TTypeIndex.ParentOf</para>
 /// <para>Returns: False</para>
-/// <para>Complexity: 14 (cyclomatic, outer body), 27 lines (full implementation)</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 22 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
-/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+/// <seealso cref="DRagLint.Report.CycleEdge.EnclosingTypeOf"/>
 /// <seealso cref="DRagLint.Report.CycleEdge.TTypeIndex.Find"/>
 /// <seealso cref="DRagLint.Report.CycleEdge.TTypeIndex.IsLib"/>
 /// <seealso cref="DRagLint.Report.CycleEdge.TTypeIndex.ParentOf"/>
@@ -747,7 +775,14 @@ function IsClassChainMember(const pProject, pLibrary: ISymbolStore; pEnclosingId
 /// <returns>That symbol; Id = 0 when an id on the way is unknown. Calling IsClassChainMember with the
 /// returned class or record id gives the same answer as with pEnclosingId (lane 148 HP2B: the planner
 /// memoizes by the type, not by every routine of it).</returns>
-/// <remarks>Reads the index only.</remarks>
+/// <remarks>
+/// Reads the index only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Report.CycleEdge.IsClassChainMember (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.ClassChainMember (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function EnclosingTypeOf(const pProject: ISymbolStore; pEnclosingId: Int64): TSymbol;
 
 /// <summary>Recipe R2, member hand-over through an extracted interface: the edge A -&gt; B is
