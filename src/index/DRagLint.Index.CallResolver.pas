@@ -602,6 +602,8 @@ type
     /// <returns>The class / interface / record / type / enum id, or 0.</returns>
     /// <remarks>
     /// Counts nothing: each public caller keeps its own counters.
+    /// 149 RB2 item 5: two or more used-unit types of the name are decided by Delphi's uses
+    /// order (UsesOrderPick) at the ref's line, else 'ambiguous'.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.ResolveEnumCast (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveExceptionType (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveTypeRead (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveTypeUse (DRagLint.Index.CallResolver.pas)</para>
     /// <para>Calls: Default, DRagLint.Index.CallResolver.NamesGenericParam, DRagLint.Index.CallResolver.TCallResolver.AncestorsOf, DRagLint.Index.CallResolver.TCallResolver.BareReadSite, DRagLint.Index.CallResolver.TCallResolver.CandInScope, DRagLint.Index.CallResolver.TCallResolver.FindChildOfKind, DRagLint.Index.CallResolver.TCallResolver.LocalDeclNamesOf, DRagLint.Index.CallResolver.TCallResolver.ScopeSymbolAt, DRagLint.Index.CallResolver.TCallResolver.SymbolById, LowerCase, Pos, SameText</para>
@@ -617,6 +619,13 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function LookupTypeName(const ARef: TReference; out AReason: string): Int64;
+    { 149 RB2 item 5 (147 B4 residue / B5's tie-break across sections): of ACandIds, top-level
+      types of OTHER units, the one Delphi's uses order picks for a mention at ALine of AFile --
+      the unit listed LAST wins, the implementation uses coming after the interface uses; a
+      unit of the implementation uses clause is not visible above that clause (an interface
+      mention). 0 when a candidate's unit is not in AFile's uses exactly once, when two
+      candidates share a unit, or when none is visible at ALine. }
+    function UsesOrderPick(const ACandIds: TArray<Int64>; AFile: Int64; ALine: Integer): Int64;
 
     /// <summary>The names ARoutineId's implementation text declares in a const
     /// or type section, or as an inline const / var -- declarations the extractor
@@ -10141,9 +10150,49 @@ begin
     if Count = 0 then AReason:= 'not-found'
     else if Count > 1 then
     begin
-      Result := 0;
-      AReason:= 'ambiguous';
+      var Ids: TArray<Int64>:= [];
+      for S in Cands do
+        if (S.FileId <> ARef.FileId) and CandInScope(ARef.FileId, S.FileId) then
+        begin
+          Full:= SymbolById(S.Id);
+          if SameText(Full.Section, 'interface') and (Full.ParentId > 0)
+             and (SymbolById(Full.ParentId).ParentId <= 0) then Ids:= Ids + [S.Id];
+        end;
+      Result:= UsesOrderPick(Ids, ARef.FileId, ARef.StartLine);
+      if Result = 0 then AReason:= 'ambiguous';
     end;
+  end;
+end;
+
+function TCallResolver.UsesOrderPick(const ACandIds: TArray<Int64>; AFile: Int64; ALine: Integer): Int64;
+var
+  BestLine, BestCol: Integer;
+begin
+  Result  := 0;
+  BestLine:= -1;
+  BestCol := -1;
+  var UsesList: TArray<TUnitUse>:= FStore.GetUnitUsesForFile(AFile);
+  for var Id: Int64 in ACandIds do
+  begin
+    var UnitName: string:= ChangeFileExt(ExtractFileName(FStore.GetFilePath(SymbolById(Id).FileId)), '');
+    var Hits: Integer:= 0;
+    var Hit : TUnitUse:= Default(TUnitUse);
+    for var U: TUnitUse in UsesList do
+      if SameText(U.UnitName, UnitName) or EndsText('.' + U.UnitName, UnitName) then
+      begin
+        Inc(Hits);
+        Hit:= U;
+      end;
+    if Hits <> 1 then Exit(0);
+    { Not yet visible: an implementation-uses unit, for a mention above its clause. }
+    if Hit.StartLine > ALine then Continue;
+    if (Hit.StartLine > BestLine) or ((Hit.StartLine = BestLine) and (Hit.StartCol > BestCol)) then
+    begin
+      BestLine:= Hit.StartLine;
+      BestCol := Hit.StartCol;
+      Result  := Id;
+    end
+    else if (Hit.StartLine = BestLine) and (Hit.StartCol = BestCol) then Exit(0); // two types of one unit
   end;
 end;
 

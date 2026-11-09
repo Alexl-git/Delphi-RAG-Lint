@@ -14,11 +14,10 @@
   exactly one TOP-LEVEL INTERFACE type of a used unit. Identity only.
 
   WHAT THIS GUARD PINS
-    TU-*   seven type_use refs bind to the named type (own unit, used unit,
+    TU-*   the type_use refs bind to the named type (own unit, used unit,
            nested type, heritage, generic argument)
-    NEG-*  five stay NULL: a generic parameter (uTuLib declares a type T, so a
-           by-name join binds it), two used units declaring the
-           name, a used unit's IMPLEMENTATION-section type, a unit-qualified
+    NEG-*  four stay NULL: a generic parameter (uTuLib declares a type T, so a
+           by-name join binds it), a used unit's IMPLEMENTATION-section type, a unit-qualified
            name (declined, not guessed), and a routine-LOCAL type the index
            does not list (positive control: the unit-level TLoc must not answer)
     the calls-stage `type-uses:` log line
@@ -85,14 +84,17 @@ $pos = @(
   @('TU-GENERIC-ARG', 'TBase',   'uTuUse.TBase'),
   # review 2026-10-23: an ancestor's nested type is in scope before the used
   # units. Positive control: without the ancestor walk uTuLib.TNest answers.
-  @('TU-INHERITED-NESTED', 'TNest', 'uTuUse.TBase2.TNest')
+  @('TU-INHERITED-NESTED', 'TNest', 'uTuUse.TBase2.TNest'),
+  # 149 RB2 item 5: two used units declaring the name are decided by uses order (the LAST
+  # listed wins: `uses uTuLib, uTuLib2`), as dcc does -- this was NEG-AMBIGUOUS (unbound).
+  @('NEG-AMBIGUOUS', 'TClash', 'uTuLib2.TClash')
 )
 foreach ($p in $pos) {
   $r = @(TypeUseAt $p[0] $p[1])
   $got = if ($r.Count -eq 1) { [string]$r[0].tq } else { "rows=$($r.Count)" }
   Check "$($p[0]) binds $($p[1]) to $($p[2])" ($got -eq $p[2]) "got=$got"
 }
-foreach ($n in @(@('NEG-GENERIC', 'T'), @('NEG-AMBIGUOUS', 'TClash'), @('NEG-IMPL-SECTION', 'TImplOnly'),
+foreach ($n in @(@('NEG-GENERIC', 'T'), @('NEG-IMPL-SECTION', 'TImplOnly'),
                  @('NEG-QUALIFIED', 'TShared'), @('NEG-LOCAL-TYPE', 'TLoc'))) {
   $r = @(TypeUseAt $n[0] $n[1])
   Check "$($n[0]) $($n[1]) stays unbound" (($r.Count -eq 1) -and ($null -eq $r[0].symbol_id)) `

@@ -70,13 +70,14 @@ function CastAt([string]$Marker, [string]$Name) {
                 "AND r.start_line = $line AND r.name_text = '$Name'") | Where-Object { $_ })
 }
 function CheckAll([string]$Phase) {
-  foreach ($p in @(@('EC-OWN', 'TOwnKind', 'uEcUse.TOwnKind'), @('EC-USED', 'TLibKind', 'uEcLib.TLibKind'))) {
+  # 149 RB2 item 5: TClashE (uses uEcLib, uEcLib2) is decided by uses order -- the last listed wins.
+  foreach ($p in @(@('EC-OWN', 'TOwnKind', 'uEcUse.TOwnKind'), @('EC-USED', 'TLibKind', 'uEcLib.TLibKind'), @('NEG-AMBIGUOUS', 'TClashE', 'uEcLib2.TClashE'))) {
     $r = @(CastAt $p[0] $p[1])
     $got = if ($r.Count -eq 1) { [string]$r[0].tq } else { "rows=$($r.Count)" }
     Check "$Phase $($p[0]) binds $($p[1]) to $($p[2])" ($got -eq $p[2]) "got=$got"
     if ($r.Count -eq 1) { Check "$Phase $($p[0]) writes no call edge" ([int]$r[0].edges -eq 0) "edges=$($r[0].edges)" }
   }
-  foreach ($n in @(@('NEG-CLASS', 'TLibClass'), @('NEG-QUALIFIED', 'TLibKind'), @('NEG-AMBIGUOUS', 'TClashE'))) {
+  foreach ($n in @(@('NEG-CLASS', 'TLibClass'), @('NEG-QUALIFIED', 'TLibKind'))) {
     $r = @(CastAt $n[0] $n[1])
     Check "$Phase $($n[0]) $($n[1]) stays unbound" (($r.Count -ge 1) -and (@($r | Where-Object { $null -ne $_.symbol_id }).Count -eq 0)) `
       ("rows=$($r.Count) tq=" + $(if ($r.Count) { $r[0].tq } else { '' }))
