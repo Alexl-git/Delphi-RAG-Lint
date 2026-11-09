@@ -21,6 +21,8 @@
     N3  no-write + library: every table identical to a forced WHOLE run      (identity)
     T1  2-file change, no library: the pass is SCOPED                        (CONTROL)
     T2  2-file change: every table of the scoped run == the whole run        (identity)
+    T4  POSITIVE CONTROL: the whole run stores SetIt(Thing.FCount) as a var-arg (150-RS2 (2): the
+        persisted argument use is part of the identity, and its callee lives in an edited file)
     T3  POSITIVE CONTROL: the whole run really holds a call edge in uUser whose receiver type is
         uEdit.TEditThing (else T2 compares nothing)
   Excluded from the dump (named, not hidden): table schema_meta (fingerprints, timings, run
@@ -124,10 +126,17 @@ type
     procedure Go;
   end;
 
+procedure SetIt(var A: Integer);
+
 implementation
 
 procedure TOther.Go;
 begin
+end;
+
+procedure SetIt(var A: Integer);
+begin
+  A := A + 1;
 end;
 
 end.
@@ -160,6 +169,7 @@ begin
   Thing.Bump;
   N := Thing.Count;
   Thing.FCount := N;
+  SetIt(Thing.FCount);
   O := TOther.Create;
   O.Go;
   L := TLibThing.Create;
@@ -270,6 +280,8 @@ try {
   $pc = Sql $tw ("SELECT count(*) FROM call_edges ce JOIN refs r ON r.id = ce.ref_id JOIN files f ON f.id = r.file_id " +
                  "JOIN symbols t ON t.id = ce.receiver_type_symbol_id WHERE f.path LIKE '%uUser.pas' AND t.qualified_name = 'uEdit.TEditThing'")
   Check 'T3 POSITIVE CONTROL: the whole run holds uUser call edges whose receiver type is uEdit.TEditThing' ([int]$pc.rows[0][0] -ge 2) "count=$($pc.rows[0][0])"
+  $va = Sql $tw "SELECT count(*) FROM member_accesses WHERE accessor_kind = 'var-arg'"
+  Check 'T4 POSITIVE CONTROL: the whole run stores the uUser SetIt(Thing.FCount) site as var-arg' ([int]$va.rows[0][0] -ge 1) "count=$($va.rows[0][0])"
   Compare-All 'T2' (Dump-All $t1) $dTW 'scoped' 'whole'
 } finally { Pop-Location }
 } finally {

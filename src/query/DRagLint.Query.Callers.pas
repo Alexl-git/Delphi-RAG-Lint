@@ -476,6 +476,27 @@ function MemberUsersForName(const AStore: ISymbolStore; const AName: string): TA
 /// </remarks>
 function UnboundUsersForName(const AStore: ISymbolStore; const AName: string): TUnboundUsers;
 
+/// <summary>Is the identifier that starts at (ALine, ACol) a WHOLE argument of a call?
+/// The text half of the var / out / Inc-Dec argument classifier, shared with the calls
+/// pass that persists the mode (150-RS2 (2)).</summary>
+/// <param name="ALines">The file's source lines (0-based array, 1-based ALine).</param>
+/// <param name="ALine">1-based line of the identifier.</param>
+/// <param name="ACol">1-based column of the identifier.</param>
+/// <param name="ACallee">Receives the called identifier before the opening parenthesis.</param>
+/// <param name="ACalleeLine">Receives the callee's 1-based line.</param>
+/// <param name="ACalleeCol">Receives the callee's 1-based column.</param>
+/// <param name="AArgIndex">Receives the 0-based index of the argument.</param>
+/// <returns>False when the site is not a whole argument of a call (or the text does not match).</returns>
+/// <remarks>Text only: strings are skipped, comments are not parsed; looks back at most 12 lines.</remarks>
+function LocateArgument(const ALines: TArray<string>; ALine, ACol: Integer;
+  out ACallee: string; out ACalleeLine, ACalleeCol, AArgIndex: Integer): Boolean;
+
+/// <summary>The mode word of the AIndex-th (0-based) parameter of a routine signature.</summary>
+/// <param name="ASig">A signature such as `(A, B: T; var C: U)`.</param>
+/// <param name="AIndex">0-based parameter index.</param>
+/// <returns>'var' | 'out' | 'const' | 'in' | '' (by value, or past the list).</returns>
+function ParamModeAt(const ASig: string; AIndex: Integer): string;
+
 implementation
 
 uses
@@ -1332,6 +1353,16 @@ begin
   var Key: string:= Format('%s:%d:%d', [LowerCase(ARC.FullPath), ARC.CallSiteLine, ARC.CallSiteCol]);
   if FUse.TryGetValue(Key, Result) then Exit;
   Result:= auNone;
+  { 150-RS2 (2): the calls pass persisted the var / out use of a member_accesses row; read it
+    first. A row without one (an identity-only local / parameter, a DB resolved before) falls
+    through to the read-time classification below, so the answer is the same either way. }
+  if SameText(ARC.ArgUse, ARG_LABELS[auVarArg]) then Result:= auVarArg
+  else if SameText(ARC.ArgUse, ARG_LABELS[auOutArg]) then Result:= auOutArg;
+  if Result <> auNone then
+  begin
+    FUse.Add(Key, Result);
+    Exit;
+  end;
   var Lines: TArray<string>:= LinesOf(ARC.FullPath);
   if (Length(Lines) > 0) and LocateArgument(Lines, ARC.CallSiteLine, ARC.CallSiteCol, Callee, CL, CC, Idx) then
   begin

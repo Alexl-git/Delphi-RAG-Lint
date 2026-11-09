@@ -4846,6 +4846,7 @@ uses
   , DRagLint.Core.Versions { REBUILD_IN_PROGRESS_META_KEY: ClearAllFiles stamps it (B-23) }
   , DRagLint.Query  .Fuzzy
   , DRagLint.Query.IdentWords { SplitIdentifierWords: concept-search tokens (BuildSymbolSearch) }
+  , DRagLint.Query.Callers { 150-RS2 (2): LocateArgument + ParamModeAt for PersistArgUses }
   { DRagLint.Index.CallResolver (v14, D5: the receiver-typing engine for
     ResolveCallTargets) moved to the INTERFACE uses on 2026-09-23 -- see the
     note there. Listing it in both sections is a duplicate-uses error. }
@@ -8745,7 +8746,9 @@ begin
     if HasMemberAccesses then
       MemberArm:=
         'UNION ALL ' +
-        'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, r.start_col, ''certain'' AS confidence, ma.mode ' +
+        'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, r.start_col, ''certain'' AS confidence, ma.mode, ' +
+        { 150-RS2 (2): the persisted var / out ARGUMENT use (accessor_kind on an accessor-less row). }
+        'CASE WHEN ma.accessor_symbol_id IS NULL AND ma.accessor_kind IN (''var-arg'', ''out-arg'') THEN ma.accessor_kind ELSE '''' END AS arg_use ' +
         'FROM member_accesses ma ' +
         'JOIN refs r ON r.id = ma.ref_id ' +
         'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
@@ -8796,7 +8799,7 @@ begin
     ValueArm:=
       'UNION ALL ' +
       'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, r.start_col, ''certain'' AS confidence, ' +
-      'CASE r.kind WHEN ''write'' THEN ''write'' ELSE ''read'' END AS mode ' +
+      'CASE r.kind WHEN ''write'' THEN ''write'' ELSE ''read'' END AS mode, '''' AS arg_use ' +
       'FROM refs r ' +
       'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
       'JOIN files f ON f.id = r.file_id ' +
@@ -8808,7 +8811,7 @@ begin
       { Wrapped in a subquery: a compound SELECT may only ORDER BY a result
         column, and the confidence CASE below is an expression. }
       'SELECT * FROM (' +
-      'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, r.start_col, ce.confidence, '''' AS mode ' +
+      'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, r.start_col, ce.confidence, '''' AS mode, '''' AS arg_use ' +
       'FROM call_edges ce ' +
       'JOIN refs r ON r.id = ce.ref_id ' +
       'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
@@ -8851,6 +8854,8 @@ begin
       R.Confidence:= Q.FieldByName('confidence').AsString;
       var ModeF: TField:= Q.FindField('mode');
       if (ModeF <> nil) and not ModeF.IsNull then R.Mode:= ModeF.AsString else R.Mode:= '';
+      var ArgF: TField:= Q.FindField('arg_use');
+      if (ArgF <> nil) and not ArgF.IsNull then R.ArgUse:= ArgF.AsString;
       List.Add(R);
       Q.Next;
     end; // while
@@ -17210,6 +17215,119 @@ begin
   Result:= '[' + string.Join(',', Parts) + ']';
 end;
 
+{ 150-RS2 (2) / 150-RB2-a: persist the var / out ARGUMENT use of a member access. A
+  member_accesses 'read' row with no accessor (a field, a unit / class var) that is the WHOLE
+  argument of a var (read + write) or out (write) parameter of a resolved call gets
+  accessor_kind 'var-arg' / 'out-arg' (mode stays 'read'; spec
+  docs\superpowers\specs\2026-11-09-persist-arg-mode.md, option B). The classifier is
+  Query.Callers' own (LocateArgument + ParamModeAt), and the target is found the way its
+  TArgClassifier.TargetOf finds it (the ref at the callee position: refs.symbol_id, else its
+  certain call edge), so `usages --rw` reads back what it would have derived. Runs after every
+  edge writer, in the pass's transaction. Scoped: every row of a file that holds an in-scope ref
+  (the call that decides the mode is such a ref). Inc / Dec stays read-time (text only). }
+procedure PersistArgUses(AConn: TFDConnection; const AScopeWhere, AStaleWhere: string;
+  out ACandidates, AStored: Int64);
+var
+  Q    : TFDQuery;
+  QTgt : TFDQuery;
+  QSig : TFDQuery;
+  Upd  : TFDQuery;
+  Lines: TDictionary<string, TArray<string>>;
+  Callee: string;
+  CL, CC, Idx: Integer;
+begin
+  ACandidates:= 0;
+  AStored    := 0;
+  var Filter: string:= '';
+  if AScopeWhere <> '' then
+    Filter:= Filter + ' AND refs.file_id IN (SELECT DISTINCT refs.file_id FROM refs WHERE ' + AScopeWhere + ')';  // dl:ok sql-injection-concat@a2ea -- AScopeWhere is SQL this pass BUILT (MaterializeResolveScope), never user text
+  if AStaleWhere <> '' then Filter:= Filter + ' AND (' + AStaleWhere + ')';
+  Q    := TFDQuery.Create(nil);
+  QTgt := TFDQuery.Create(nil);
+  QSig := TFDQuery.Create(nil);
+  Upd  := TFDQuery.Create(nil);
+  Lines:= TDictionary<string, TArray<string>>.Create;
+  try
+    QTgt.Connection:= AConn;
+    QTgt.SQL.Text  := 'SELECT refs.symbol_id, (SELECT ce.target_symbol_id FROM call_edges ce WHERE ce.ref_id = refs.id ' +
+                      'AND ce.confidence = ''certain'') AS tgt FROM refs WHERE refs.file_id = :f AND refs.start_line = :l ' +
+                      'AND refs.start_col = :c AND refs.name_text = :n COLLATE NOCASE ORDER BY refs.id';
+    QSig.Connection:= AConn;
+    QSig.SQL.Text  := 'SELECT signature FROM symbols WHERE id = :id';
+    Upd.Connection := AConn;
+    Upd.SQL.Text   := 'UPDATE member_accesses SET accessor_kind = :k WHERE ref_id = :r';
+    Upd.ParamByName('k').DataType:= ftWideString;
+    Upd.ParamByName('r').DataType:= ftLargeint;
+    Q.Connection:= AConn;
+    Q.SQL.Text  := 'SELECT ma.ref_id, ma.accessor_kind, refs.file_id, refs.start_line, refs.start_col, f.path ' +
+                   'FROM member_accesses ma JOIN refs ON refs.id = ma.ref_id JOIN files f ON f.id = refs.file_id ' +
+                   'WHERE ma.mode = ''read'' AND ma.accessor_symbol_id IS NULL ' +
+                   'AND (ma.accessor_kind IS NULL OR ma.accessor_kind IN (''var-arg'', ''out-arg''))' + Filter;  // dl:ok sql-injection-concat@a2ea -- Filter is built from this pass's own predicates above
+    Q.Open;
+    while not Q.Eof do
+    begin
+      Inc(ACandidates);
+      var Path: string:= Q.FieldByName('path').AsString;
+      var Src : TArray<string>;
+      if not Lines.TryGetValue(Path, Src) then
+      begin
+        Src:= nil;
+        try
+          if TFile.Exists(Path) then Src:= TFile.ReadAllLines(Path);
+        except
+          on E: EInOutError do Src:= nil;
+          on E: EEncodingError do Src:= nil;
+        end;
+        Lines.Add(Path, Src);
+      end;
+      var Kind: string:= '';
+      if (Length(Src) > 0) and LocateArgument(Src, Q.FieldByName('start_line').AsInteger, Q.FieldByName('start_col').AsInteger,
+           Callee, CL, CC, Idx)
+         and not ((Idx = 0) and (SameText(Callee, 'Inc') or SameText(Callee, 'Dec'))) then
+      begin
+        var Target: Int64:= 0;
+        QTgt.ParamByName('f').AsLargeInt := Q.FieldByName('file_id').AsLargeInt;
+        QTgt.ParamByName('l').AsInteger  := CL;
+        QTgt.ParamByName('c').AsInteger  := CC;
+        QTgt.ParamByName('n').AsWideString:= Callee;
+        QTgt.Open;
+        while (Target = 0) and not QTgt.Eof do
+        begin
+          if (not QTgt.Fields[0].IsNull) and (QTgt.Fields[0].AsLargeInt > 0) then Target:= QTgt.Fields[0].AsLargeInt
+          else if not QTgt.Fields[1].IsNull then Target:= QTgt.Fields[1].AsLargeInt;
+          QTgt.Next;
+        end;
+        QTgt.Close;
+        if Target > 0 then
+        begin
+          QSig.ParamByName('id').AsLargeInt:= Target;
+          QSig.Open;
+          var Mode: string:= if QSig.Eof then '' else ParamModeAt(QSig.Fields[0].AsString, Idx);
+          QSig.Close;
+          if Mode = 'var' then Kind:= 'var-arg'
+          else if Mode = 'out' then Kind:= 'out-arg';
+        end;
+      end;
+      var Have: string:= if Q.FieldByName('accessor_kind').IsNull then '' else Q.FieldByName('accessor_kind').AsString;
+      if Kind <> Have then
+      begin
+        if Kind = '' then Upd.ParamByName('k').Clear else Upd.ParamByName('k').AsWideString:= Kind;
+        Upd.ParamByName('r').AsLargeInt:= Q.FieldByName('ref_id').AsLargeInt;
+        Upd.ExecSQL;
+      end;
+      if Kind <> '' then Inc(AStored);
+      Q.Next;
+    end;
+    Q.Close;
+  finally
+    Lines.Free;
+    Upd.Free;
+    QSig.Free;
+    QTgt.Free;
+    Q.Free;
+  end;
+end;
+
 function TSQLiteSymbolStore.ExtraStoresDeclineReason(const AExtraStores: TArray<ISymbolStore>): string;
 begin
   { Order: the two library tests first, so the scoping predicate's own queries are not run
@@ -17817,6 +17935,10 @@ begin
       TMark:= TStopwatch.GetTimeStamp;
       ResolveWriteRefs(Resolver, ScopeWhere, StaleWhere, WriteCandidates, WriteBound);
       TWrites:= (TStopwatch.GetTimeStamp - TMark) / TStopwatch.Frequency;
+      { 150-RS2 (2): after every member_accesses writer, before the derived streams. }
+      var ArgCandidates, ArgStored: Int64;
+      PersistArgUses(FConn, ScopeWhere, StaleWhere, ArgCandidates, ArgStored);
+      ResolveLog(Format('calls      arg-uses: %d of %d accessor-less member read(s) stored as a var / out argument', [ArgStored, ArgCandidates]));
       { B9 F1: the LAST stream, it reads what all the others wrote. }
       TMark:= TStopwatch.GetTimeStamp;
       { 149 IC round 3: the derived streams get a WIDER scope than the binding streams. }
