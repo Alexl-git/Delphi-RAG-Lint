@@ -5,7 +5,7 @@ breaking changes** until v2.0.
 
 ## v1.47.0-alpha -- unreleased
 
-Wave 147, integrated on lane/147-int. ONE extractor bump over 1.46 (1.34.0-alpha: grammar v1.4.4, use edges, Markdown text nodes, indexed property facts) and ONE resolver bump (1.22.0-alpha): every index re-parses once. Grammar v1.4.4 staged.
+Wave 147, integrated on lane/147-int. ONE extractor bump over 1.46 (1.34.0-alpha: grammar v1.4.4 + v1.4.5, use edges, Markdown text nodes, indexed property facts) and ONE resolver bump (1.22.0-alpha): every index re-parses once. Grammar v1.4.5 staged.
 
 ### Breaking
 - Platform default (owner ruling a3, L-C20): the project file's active platform decides; a project that names none (Delphi 7, 2007..XE .dproj, a folder index) is Win32, no longer Win64. Applies to `index --project`, `index --all` project sections and `cycles --fix` (build platform, child runs, JSON). A marker-less .dproj with a delphilsp.json takes the platform that file names. Upgrade note: Win32 / older-Delphi / folder DBs re-parse once more on the first index after upgrading (fingerprint plat=win64 -> win32). Related: DL issue #13 (older-Delphi library path).
@@ -24,6 +24,8 @@ Wave 147, integrated on lane/147-int. ONE extractor bump over 1.46 (1.34.0-alpha
 
 ### Changed
 - Grammar v1.4.4 (PR #2, pmcgee69): an if statement whose branches also read as expressions (calls, bare raise, assignment) is an ifElse statement, not an exprIf; about 13 percent of corpus files change trees, 0 new parse failures.
+- Grammar v1.4.5: seven fixes by Paul McGee (pmcgee69): quoted-character subrange bounds; several hint directives on a variable; chained calling conventions on a procedural-type field; a named constant as a code page; an optional program header; the right of `is` is a type (`is` binds tighter than `and`); a generic's `<` in an expression is its own token, so `a < b - 1` groups as `a < (b - 1)`. 0 new parse failures on the 533 / 8286 corpora; root 8286 failures 305 -> 300.
+- Grammar v1.4.5: an `asm ... end;` with no header (a routine's second body under another {$IFDEF}, System.Win.OleControls) is a definition-level recovery node (asmOrphan), both grammars; fixes the whole-unit ERROR the generic-`<` token's recovery produced there (46 -> 2 errors).
 - Resolver: a bare, Self.-qualified or with-scoped write of a property or field records its use (member_accesses mode write, plus the setter call edge), so `find-callers --name SetX --resolved` lists `X := v` inside the class and in with bodies.
 - Resolver: a project class helper on a library type binds its methods (`LIni.ReadBoolean` -> TMemIniFileHelper.ReadBoolean); helper target names compare case-insensitively. Methods of a library helper on a built-in type bind (`S.Split` -> TStringHelper.Split, `B.ToString`, `S.Trim.LastIndexOf`). Dotted calls in a program's main block (`Application.Run` in the .dpr) reach the library. A generic project alias (`TAccountList = TList<TAccountInfo>`) binds library members through its declared type; a same-member answer over several candidates ignores units the file does not use. Micronite2027 receiver residue 884 -> 538, targets moved 0.
 - Resolver: calls through an event property or procedural field (`V.OnColumnSizeChanged(V, nil)`) bind to the property, marked indirect (refs.external_kind); find-callers on the property lists the firing sites (mode event).

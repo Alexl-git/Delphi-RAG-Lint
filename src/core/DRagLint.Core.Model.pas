@@ -239,6 +239,10 @@ const
   { 1.33.0 -> 1.34.0 (2026-11-08, 1.47, lane/147-int -- ONE bump for the wave):
     * grammar v1.4.4 (PR #2): an if statement whose branches also read as expressions is an ifElse
       statement, not an exprIf; about 13 percent of corpus files change trees (lane GP).
+    * grammar v1.4.5 (owner ruling 2026-11-08, same unreleased bump, no new constant): Paul McGee's
+      seven fixes (lane 148-GX: subrange char bounds, var hints, field callconv chain, codepage
+      constant, optional program header, `is` right operand a type, generic `<` token) + the
+      asmOrphan recovery node (lane 148-G7); comparison / `is` grouping changes refs and edges.
     * parser: bare / Self / with property and field writes record member_accesses (mode write) and
       the setter call edge (E-USE-EDGES-PHASE2, lane B1).
     * extractor: Markdown text nodes for the graph export (E-PARITY-GRAPHIFY, lane B2).
