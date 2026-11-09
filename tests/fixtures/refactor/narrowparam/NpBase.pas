@@ -22,6 +22,7 @@ type
 
   TMid = class(TBase)
   public
+    MidField: Integer;
     procedure MidOnly;
     procedure Hidden;
     procedure VirtualM; override;
@@ -30,6 +31,16 @@ type
   TLeaf = class(TMid)
   public
     procedure LeafOnly;
+  end;
+
+  TGenBase<T> = class(TRoot)
+  public
+    GenField: Integer;
+  end;
+
+  TGenLeaf = class(TGenBase<Integer>)
+  public
+    procedure GenLeafOnly;
   end;
 
   ICounted = interface
@@ -79,6 +90,10 @@ begin
 end;
 
 procedure TLeaf.LeafOnly;
+begin
+end;
+
+procedure TGenLeaf.GenLeafOnly;
 begin
 end;
 

@@ -1165,11 +1165,42 @@ var
     end;
   end;
 
-  { True when a defProc's header args re-declare Target (shadowing guard). }
-  function NestedRedeclares(const AProc: TTSNode): Boolean;
-  var HN, AN, Nm: TTSNode; K, J: Integer;
+  { True when a section's declaration (declVar / declConst / declType ...) names Target before its type or value. }
+  function SectionRedeclares(const ASection: TTSNode): Boolean;
+  var Decl, Id, NameN: TTSNode; K, J: Integer;
   begin
     Result:= False;
+    for K:= 0 to ASection.NamedChildCount - 1 do
+    begin
+      Decl:= ASection.NamedChild(K);
+      NameN:= Decl.ChildByField('name');
+      if not NameN.IsNull then
+      begin
+        if SameText(Trim(NStr(NameN)), Target) then Exit(True);
+        Continue;
+      end;
+      { declVar: the names are identifier children ahead of the type field. }
+      for J:= 0 to Decl.NamedChildCount - 1 do
+      begin
+        Id:= Decl.NamedChild(J);
+        if Id.NodeType <> 'identifier' then Break;
+        if SameText(Trim(NStr(Id)), Target) then Exit(True);
+      end;
+    end;
+  end;
+
+  { True when a defProc re-declares Target (shadowing guard): a header arg, or a name in the routine's own var / const /
+    type section. A nested routine's own same-named local is another symbol, so its uses are not the target's. }
+  function NestedRedeclares(const AProc: TTSNode): Boolean;
+  var HN, AN, Nm, Sec: TTSNode; K, J: Integer;
+  begin
+    Result:= False;
+    for K:= 0 to AProc.NamedChildCount - 1 do
+    begin
+      Sec:= AProc.NamedChild(K);
+      if ((Sec.NodeType = 'declVars') or (Sec.NodeType = 'declConsts') or (Sec.NodeType = 'declTypes'))
+        and SectionRedeclares(Sec) then Exit(True);
+    end;
     HN:= AProc.ChildByField('header');
     if HN.IsNull then Exit;
     AN:= HN.ChildByField('args');

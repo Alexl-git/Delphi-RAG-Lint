@@ -90,3 +90,27 @@ on one thread. Phase 2 must decide thread safety before adding a second caller.
 - The IDE plugin wiring of either verb.
 - Retyping consumers (extract-interface phase 2), moving the work (lazy-init phase 2).
 - A lint rule pointing at either verb.
+
+## Phase 2 consumer retype: why `--reparent-interfaced` cannot prove one (wave 148 RN, 2026-11-08)
+
+Row: "`--reparent-interfaced` opt-in retypes one consumer (lifetime proof)". Not built; 149 row. The analysis:
+
+- `--reparent-interfaced` makes the class a `TInterfacedObject`: reference-counted. Every instance in the program today
+  is created into a CLASS-typed location (no interface type exists before the verb runs), so its count is 0.
+- Retyping ONE consumer `p: TFoo` to `p: IFoo` (by value or `const`) makes each caller convert an object reference to an
+  interface. The compiler holds the result in a hidden temporary: `_AddRef` (count 1), call, temporary finalized,
+  `_Release` (count 0), destructor. The caller's `TFoo` variable now dangles. dcc reports nothing, a build gate proves
+  nothing, and a run shows it only when the freed memory is reused. That is the "lifetime proof the index does not hold":
+  with a reference-counted base it cannot hold for any caller that passes a class reference, which is every caller.
+- So for a `TInterfacedObject` reparent the honest proof is "never"; a guarded retype would refuse 100 percent of the time.
+
+Options for a 149 phase:
+
+| option | proof | cost |
+|---|---|---|
+| A. Retype only when the class's `IInterface` does NOT count references: chain reaches `TComponent` (no `VCLComObject`) or `TNoRefCountObject`; refuse `lifetime-refcounted` otherwise | `_AddRef`/`_Release` return -1, so no interface reference can free the instance; uses checked as narrow-param checks members (every use is an interface member, nil test; `is`/cast/store refused) | M: reuse NarrowParam's body scan + ExtractInterface's member set |
+| B. `--reparent-interfaced=norefcount`: reparent to `TNoRefCountObject` instead of `TInterfacedObject`, then A applies | as A | S on top of A |
+| C. Whole-program ownership proof for a counted class: every `TFoo.Create` lands in an interface-typed location and nothing calls `Free` | needs every construction site and every free; cross-unit rewrite | XL |
+
+Default proposed (owner can reverse): A + B, opt-in flag `--retype-consumer <Routine>.<param>`, one consumer per run,
+through the scratch gate and the compile gate. Owner question filed in lanes\148\OWNER-QUESTIONS.md.
