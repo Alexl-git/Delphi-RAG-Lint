@@ -48,9 +48,11 @@ foreach ($ar in $archs) {
   foreach ($gr in $grs) {
     $dll = "$Out\dll\$($ar[2])\$($gr[0])"; New-Item -ItemType Directory -Force $dll | Out-Null
     $log = "$Out\cl-$($ar[2])-$($gr[0]).log"
-    $bat = "@echo off`r`ncall `"$VsEnv`" $($ar[0]) >NUL 2>NUL`r`ncd /d `"$dll`"`r`ncl /nologo /O2 /LD /MD /D_CRT_SECURE_NO_WARNINGS /wd4146 /wd4244 /wd4267 /wd4090 /I `"$inc`" `"$($gr[3])\parser.c`" `"$($gr[3])\scanner.c`" /Fe:`"$dll\$($gr[1])`" /link /EXPORT:$($gr[2]) /MACHINE:$($ar[1]) > `"$log`" 2>&1`r`necho CL_EXIT=%errorlevel%>>`"$log`"`r`n"
+    $bat = "@echo off`r`ncall `"$VsEnv`" $($ar[0]) >NUL 2>NUL`r`ncd /d `"$dll`"`r`ncl /nologo /O2 /LD /MD /D_CRT_SECURE_NO_WARNINGS /wd4146 /wd4244 /wd4267 /wd4090 /I `"$inc`" `"$($gr[3])\parser.c`" `"$($gr[3])\scanner.c`" /Fe:`"$dll\$($gr[1])`" /link /EXPORT:$($gr[2]) /MACHINE:$($ar[1]) > `"$log`" 2>&1`r`necho CL_EXIT=%errorlevel% >>`"$log`"`r`n"
     [IO.File]::WriteAllText("$Out\b-$($ar[2])-$($gr[0]).bat", $bat, [Text.Encoding]::ASCII)
-    Start-Process cmd.exe -ArgumentList '/c', "$Out\b-$($ar[2])-$($gr[0]).bat" -Wait -WindowStyle Hidden
+    # -PassThru + WaitForExit, not -Wait: -Wait also waits for every descendant, and cl.exe leaves a vctip.exe
+    # (VC telemetry) behind that lives ~7 min after the compile (150 GR2: 4 x 7 min idle on a 40-s build).
+    $cp = Start-Process cmd.exe -ArgumentList '/c', "$Out\b-$($ar[2])-$($gr[0]).bat" -PassThru -WindowStyle Hidden; $cp.WaitForExit()
     Gate-Log ("cl $($ar[2]) $($gr[0]): " + ((Get-Content $log) -join ' | '))
   }
 }
