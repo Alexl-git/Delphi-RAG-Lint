@@ -1047,6 +1047,7 @@ type
     function ProbeInversionMoves(var pEv: TEdgeEval; out pMoved: TArray<string>; out pMoveIds: TArray<Int64>;
       out pCount: Integer): Boolean;
     procedure PlanMemberHandOver(pEvals: TList<TEdgeEval>);
+    procedure QualifiedClassRef(const pUnitStem: string; var pRefusal: TRecipeRefusal);
     procedure SettleIfaceName(const pSurface: TEdgeSurface; const pLeaf: TUntangleLeaf; const pUnitScopes: TArray<string>;
       var pSteps: TRecipeSteps; var pRefusal: TRecipeRefusal);
     procedure RenderMemberHandOver(pStep: Integer);
@@ -6623,6 +6624,24 @@ begin
   end;
 end;
 
+{ INT-E1b planner half (lane 150 CY1): a `class-ref` refusal of the member plan whose line names the class qualified by
+  its own unit (`X is Unit.TFoo`, `C = Unit.TFoo`) is a `qualified-ref`: dropping the uses entry breaks that spelling
+  whatever the hand-over does, and the reason must say so (run_cyclefix_r2 f8 / f8b). Reads the dotted TEXT of the
+  refused line (code only), so it holds whether or not the index carries a type_use for the dotted operand (EX3 emits
+  one for the `is` right side). Any other refusal, and a line without the qualifier, is left as it is. }
+procedure TCyclePlanner.QualifiedClassRef(const pUnitStem: string; var pRefusal: TRecipeRefusal);
+begin
+  if (pRefusal.Kind <> 'class-ref') or (pRefusal.Fid <= 0) or (pRefusal.Line <= 0) or (pUnitStem = '') then Exit;
+  var Parts:= pUnitStem.Split(['.']);
+  for var I:= 0 to High(Parts) do Parts[I]:= TRegEx.Escape(Parts[I]);
+  var Code:= CodePart(LineAt(GetFile(pRefusal.Fid).Lines, pRefusal.Line));
+  if not TRegEx.IsMatch(Code, '(?<![\w.])' + string.Join('\s*\.\s*', Parts) + '\s*\.\s*' + TRegEx.Escape(pRefusal.Symbol) + '\b',
+    [roIgnoreCase]) then Exit;
+  pRefusal.Kind  := 'qualified-ref';
+  pRefusal.Reason:= Format('line %d names `%s` qualified by its unit (`%s`); that use keeps needing the uses entry the ' +
+    'cut removes', [pRefusal.Line, pRefusal.Symbol, Trim(LineAt(GetFile(pRefusal.Fid).Lines, pRefusal.Line))]);
+end;
+
 { R2 on every edge that neither moves nor is one routine, and whose surface tests or
   casts against a class with `is` / `as`: as PlanInversion, a refusal is recorded on
   the edge, an applicable edge gets Recipe crMemberInterface, its Steps and Cost = its
@@ -6646,6 +6665,7 @@ begin
     var Leaf := ResolveUntangleLeaf(FStore, Ev.Surface.ToStem, FComp, Root);
     var Steps:= PlanMemberInterface(Self, FLibStore, Ev.Surface, Leaf.UnitName, UnitScopes, Refusal);
     if (Refusal.Kind = '') and (Leaf.Decision = udExtend) then SettleIfaceName(Ev.Surface, Leaf, UnitScopes, Steps, Refusal);
+    QualifiedClassRef(Ev.Surface.ToStem, Refusal);
     if Refusal.Kind <> '' then
     begin
       Ev.Refusal:= Refusal.Kind;
