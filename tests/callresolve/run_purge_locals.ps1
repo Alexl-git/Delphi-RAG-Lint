@@ -105,8 +105,18 @@ try {
   # fixable in PurgeLocals, so allow exactly ONE 4 KiB page of slack. Two or more extra
   # pages (VACUUM skipped, a user table growing) still fail this check.
   $pageSlack = 4096
-  Check 'DB size not larger than one page after purge+VACUUM' ($sizeAfter -le ($sizeBefore + $pageSlack))
-
+  function SizeWithinSlack([long]$before, [long]$after) { return ($after -le ($before + $pageSlack)) }
+  Check 'DB size not larger than one page after purge+VACUUM' (SizeWithinSlack $sizeBefore $sizeAfter)
+  # 149 RQ item 4 -- mutation run: the slack check must be CAPABLE of failing. The mutant is a REAL
+  # file made from the purged DB (sizeAfter is read off disk, not computed): the purged DB grown by
+  # 2 pages (VACUUM skipped / a user table growing) must fail the same predicate, whatever the
+  # sqlite_schema repack did to the real sizeAfter.
+  $mdb = Join-Path $scratch 'mutant_2p.sqlite'
+  Copy-Item $db $mdb -Force
+  $fs = [IO.File]::Open($mdb, 'Append', 'Write')
+  try { $fs.Write((New-Object byte[] 8192), 0, 8192) } finally { $fs.Dispose() }
+  $mSize = (Get-Item $mdb).Length
+  Check ("MUTATION: purged DB + 2 pages must FAIL the slack check (sizeAfter {0}, mutant {1}, sizeBefore {2})" -f $sizeAfter, $mSize, $sizeBefore) (-not (SizeWithinSlack $sizeBefore $mSize))
   # --- Idempotent second run: nothing left to delete. ---
   $purge2Txt = & $exePath purge-locals --db $db 2>$null | Out-String
   Check 'second purge exit 0 (idempotent)'     ($LASTEXITCODE -eq 0)
