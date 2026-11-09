@@ -352,6 +352,9 @@ type
     procedure BuildScope;
     procedure CheckScopeIncludes(pFileId: Int64; const pPath: string; pLines: TStringList);
     function ChainMemberExists(pClass: Int64; const pName: string): Boolean;
+    procedure AddDelegates(const pIface: TSymRow; pWork: TQueue<TSymRow>);
+    function SpecifierHeadType(const pTok: TTok; const pRow: TRefRow): Int64;
+    function LeavesIntoLibrary(const pRow: TRefRow): Boolean;
     procedure BuildGroup;
     procedure BuildFamily;
     procedure CheckNewNameDeclarations;
@@ -1185,6 +1188,66 @@ end;
 // The group and the family
 // ---------------------------------------------------------------------------
 
+{ 150 RF: `property P: TImpl read FImpl implements IFoo` -- TImpl need not list IFoo, the compiler answers IFoo's members with
+  TImpl's by NAME, so the member of the class chain that the delegate answers with belongs to the group of IFoo's method.
+  An interface-typed delegate needs nothing (its implementors carry their own edges); a delegate type that is not one
+  project class cannot be renamed whole. }
+procedure TProver.AddDelegates(const pIface: TSymRow; pWork: TQueue<TSymRow>);
+const
+  CMaxChain = 64;
+begin
+  var Props:= TList<TPair<TSymRow, string>>.Create;
+  var Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'WITH RECURSIVE sub(id) AS (SELECT :i UNION SELECT a.symbol_id FROM type_ancestors a JOIN sub ON a.ancestor_symbol_id = sub.id) ' +
+                 'SELECT e.impl_symbol_id, p.signature FROM dispatch_edges e JOIN symbols p ON p.id = e.impl_symbol_id ' +
+                 'WHERE e.kind = ''delegates'' AND e.base_symbol_id IN (SELECT id FROM sub)';
+    Q.ParamByName('i').AsLargeInt:= pIface.Id;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      Props.Add(TPair<TSymRow, string>.Create(SymRow(Q.Fields[0].AsLargeInt), Trim(Q.Fields[1].AsString)));
+      Q.Next;
+    end;
+    for var P in Props do
+    begin
+      var Types:= ReadSyms('name = :n COLLATE NOCASE AND kind IN (' + CTypeKinds + ')', P.Value);
+      if (Length(Types) = 1) and SameText(Types[0].Kind, CKindInterface) then Continue;
+      var Found:= False;
+      if (Length(Types) = 1) and MatchText(Types[0].Kind, [CKindClass, CKindForm]) then
+      begin
+        var Cur:= Types[0].Id;
+        for var Step:= 1 to CMaxChain do
+        begin
+          for var M in Members(Cur, FOld) do
+            if SameText(M.Kind, CKindMethod) then
+            begin
+              Found:= True;
+              if not FGroup.ContainsKey(M.Id) then
+              begin
+                FGroup.Add(M.Id, M);
+                pWork.Enqueue(M);
+              end;
+            end;
+          if Found then Break;
+          Q.Close;
+          Q.SQL.Text:= 'SELECT ancestor_symbol_id FROM type_ancestors WHERE symbol_id = :i ORDER BY ordinal LIMIT 1';
+          Q.ParamByName('i').AsLargeInt:= Cur;
+          Q.Open;
+          Cur:= if Q.Eof then 0 else Q.Fields[0].AsLargeInt;
+          if Cur <= 0 then Break;
+        end;
+      end;
+      if not Found then
+        Refuse(CRefuseImplementsUnindexed, FStore.GetFilePath(P.Key.FileId), P.Key.Line, 0,
+          Format('%s delegates %s to "%s", which is not one project class declaring "%s"', [P.Key.QName, pIface.Name, P.Value, FOld]));
+    end;
+  finally
+    Q.Free;
+    Props.Free;
+  end;
+end;
 procedure TProver.BuildGroup;
 begin
   var Work:= TQueue<TSymRow>.Create;
@@ -1223,6 +1286,7 @@ begin
         end;
         Q.Next;
       end;
+      if SameText(SymRow(S.ParentId).Kind, CKindInterface) then AddDelegates(SymRow(S.ParentId), Work);
       if HasWord(S.Directives, CDirOverride) and not HasBase then
         Refuse(CRefuseOverrideOfLibrary, FStore.GetFilePath(S.FileId), S.Line, 0,
           Format('%s overrides a method the index does not hold; its base cannot be renamed', [S.QName]));
@@ -1553,10 +1617,85 @@ begin
   Result:= (pText <> '') and IsValidIdent(pText);
 end;
 
+{ 150 RF (146 b1): `property P: Integer read FRec.Count write FRec.Count` -- the head FRec of a DOTTED specifier sits in no routine, so the
+  resolver typed nothing. The proof types it itself: FRec is a field of the property's class (or of a project ancestor)
+  and its declared type is one project type. Returns that type's id, 0 when anything is not exactly that. }
+function TProver.SpecifierHeadType(const pTok: TTok; const pRow: TRefRow): Int64;
+const
+  CMaxChain = 64;
+begin
+  Result:= 0;
+  if (pRow.ReceiverType > 0) or (pRow.ElementText <> '') or not IsPlainTypeName(pRow.ReceiverText) then Exit;
+  var Cur:= PropertyOwnerAt(pTok.FileId, pTok.Line);
+  if Cur <= 0 then Exit;
+  var Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    for var Step:= 1 to CMaxChain do
+    begin
+      for var M in Members(Cur, pRow.ReceiverText) do
+        if SameText(M.Kind, CKindField) then
+        begin
+          Q.Close;
+          Q.SQL.Text:= 'SELECT signature FROM symbols WHERE id = :i';
+          Q.ParamByName('i').AsLargeInt:= M.Id;
+          Q.Open;
+          var TypeName:= if Q.Eof then '' else Trim(Q.Fields[0].AsString);
+          if not IsPlainTypeName(TypeName) then Exit;
+          var Types:= ReadSyms('name = :n COLLATE NOCASE AND kind IN (' + CTypeKinds + ')', TypeName);
+          Exit(if Length(Types) = 1 then Types[0].Id else 0);
+        end;
+      Q.Close;
+      Q.SQL.Text:= 'SELECT ancestor_symbol_id FROM type_ancestors WHERE symbol_id = :i ORDER BY ordinal LIMIT 1';
+      Q.ParamByName('i').AsLargeInt:= Cur;
+      Q.Open;
+      Cur:= if Q.Eof then 0 else Q.Fields[0].AsLargeInt;
+      if Cur <= 0 then Exit;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+{ 150 RF (146 b1): a record constant's field path `TWrap.Sh.Pts[].X` that walks off the project into a library record and then through an
+  array level: the resolver stops at the array level, so the leaf refs stay unbound with no type text. The field ref
+  one step up the SAME path (`Pts`) is bound to a library field (external_target): a library record's field is no project symbol,
+  so the leaf cannot be the target -- unless the target's name is a library member too (FTargetInLib). }
+function TProver.LeavesIntoLibrary(const pRow: TRefRow): Boolean;
+begin
+  Result:= False;
+  if not SameText(pRow.Kind, REF_KIND_REC_FIELD) or not pRow.ReceiverText.Contains('.') then Exit;
+  var Segs:= pRow.ReceiverText.Split(['.']);
+  var Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT 1 FROM refs WHERE file_id = :f AND kind = :k AND external_target IS NOT NULL AND external_target <> '''' ' +
+                 'AND receiver_text = :r AND name_text = :n LIMIT 1';
+    var Owner:= '';
+    for var I:= 0 to High(Segs) do
+    begin
+      var Name:= Segs[I];
+      while Name.EndsWith('[]') do Name:= Copy(Name, 1, Length(Name) - 2);
+      if I > 0 then
+      begin
+        Q.Close;
+        Q.ParamByName('f').AsLargeInt:= pRow.FileId;
+        Q.ParamByName('k').AsWideString:= REF_KIND_REC_FIELD;
+        Q.ParamByName('r').AsWideString:= Owner;
+        Q.ParamByName('n').AsWideString:= Name;
+        Q.Open;
+        if not Q.Eof then Exit(True);
+      end;
+      Owner:= if I = 0 then Segs[0] else Owner + '.' + Segs[I];
+    end;
+  finally
+    Q.Free;
+  end;
+end;
 { Only unbound rows on the token: the receiver's static type decides, or nothing does. }
 procedure TProver.ClassifyUnbound(const pTok: TTok; const pRow: TRefRow);
 var
   Kind, Why: string;
+  SpecType: Int64;
 begin
   { Nothing qualified can name a routine's local. }
   if FIsRoutineLocal and pTok.Qualified then
@@ -1565,11 +1704,18 @@ begin
     Exit;
   end;
   var Prefix:= 'unresolved reference to "' + FOld + '" not renamed -- ';
+  SpecType:= SpecifierHeadType(pTok, pRow);
   if not FHasFacts then
     Refuse(CRefuseNoFacts, pTok.Path, pTok.Line, pTok.Col, Prefix + 'the index predates ref_receivers: run index --resolve-only')
   else if pRow.ReceiverText = '' then
     Refuse(CRefuseBareUnbound, pTok.Path, pTok.Line, pTok.Col, Prefix + 'no receiver, and the resolver bound it to nothing')
-  else if (pRow.ReceiverType <= 0) and (pRow.ElementText = '') and not IsPlainTypeName(pRow.ReceiverTypeText) then
+  else if (pRow.ReceiverType <= 0) and (SpecType <= 0) and (pRow.ElementText = '') and not IsPlainTypeName(pRow.ReceiverTypeText) and LeavesIntoLibrary(pRow) then
+  begin
+    Inc(FTyped);
+    if FTargetInLib then Refuse(CRefuseAmbiguousType, pTok.Path, pTok.Line, pTok.Col, Prefix + Format('%s is in the library too, so a library record field does not rule it out', [FQName]))
+    else Inc(FOther);
+  end
+  else if (pRow.ReceiverType <= 0) and (SpecType <= 0) and (pRow.ElementText = '') and not IsPlainTypeName(pRow.ReceiverTypeText) then
     Refuse(CRefuseReceiverUntyped, pTok.Path, pTok.Line, pTok.Col,
       Prefix + Format('the receiver "%s" has no static type in the index', [pRow.ReceiverText]))
   else
@@ -1577,6 +1723,7 @@ begin
     { E-RENAME-RESIDUE: a receiver typed by a type the project does not declare (`Lines: TStringList`) is decided
       like a library element type. }
     var Verdict:= if pRow.ReceiverType > 0 then DecideChain(pRow.ReceiverType, pTok.FileId, Kind, Why)
+                  else if SpecType > 0 then DecideChain(SpecType, pTok.FileId, Kind, Why)
                   else DecideOutsideElement(if pRow.ElementText <> '' then pRow.ElementText else pRow.ReceiverTypeText, Kind, Why);
     case Verdict of
       cvTarget:
