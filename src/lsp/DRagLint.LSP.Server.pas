@@ -4942,7 +4942,7 @@ begin
   Result:= True;
 end; // function
 
-function TLSPServer.ComputeHoverAt(const APath: string; ALine, ACol: Integer; out AOut: THoverComputation): Boolean;  // dl:ok cyclomatic-complexity@b387, cognitive-complexity@7029, method-too-long@e886 -- REVIEWED S0: the hover RENDERING half of the former ComputeHover (54 before); the selection half moved to SelectSymbolAt, further splitting is out of S0 scope (re-reviewed A5 fix: now 35; still one rendering pass, a split stays out of scope here)
+function TLSPServer.ComputeHoverAt(const APath: string; ALine, ACol: Integer; out AOut: THoverComputation): Boolean;  // dl:ok cyclomatic-complexity@b387, cognitive-complexity@7029, method-too-long@2d59, deep-nesting@5f57 -- REVIEWED S0: the hover RENDERING half of the former ComputeHover (54 before); the selection half moved to SelectSymbolAt, further splitting is out of S0 scope (re-reviewed A5 fix: now 35; still one rendering pass, a split stays out of scope here)
 var
   Path    : string         ;
   Ident   : string         ;
@@ -5414,7 +5414,7 @@ end;
 function TLSPServer.ComputeExceptionFactsAt(const APath: string; ALine0: Integer): TJSONArray;
 begin
   Result:= TJSONArray.Create;
-  if (not FExceptionFacts) or (APath = '') or (ALine0 < 0) then Exit;
+  if (not FExceptionFacts) or (APath = '') or (ALine0 < 0) then Exit;  // dl:ok duplicate-code@fa81 -- 149 LX exception-site JSON mirrors the callerCounts title builder over the same facts; 150 row to share
   var DbPath: string:= '';
   var FilePath: string:= '';
   for var St: ISymbolStore in StoresForFile(APath) do
@@ -5440,7 +5440,7 @@ begin
       O.AddPair('via'      , F.Via);
       O.AddPair('routine'  , F.Routine);
     end;
-  except  // dl:ok bare-except@149lx -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
+  except  // dl:ok bare-except@041e -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
     Result.Free;
     raise;
   end;

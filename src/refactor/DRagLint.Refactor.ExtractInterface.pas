@@ -584,7 +584,7 @@ begin
        TRegEx.IsMatch(Masked, '\b' + TRegEx.Escape(Other.Name) + '\b', [roIgnoreCase]) then Exit(True);
 end;
 
-function TIfacePlanner.RefuseClass: Boolean;  // dl:ok too-many-exit-points@93b5 -- one guard per named refusal, in the documented order: the exits are the contract
+function TIfacePlanner.RefuseClass: Boolean;  // dl:ok too-many-exit-points@dda4 -- one guard per named refusal, in the documented order: the exits are the contract
 begin
   Result:= True;
   if not MatchText(ExtractFileExt(FClass.Path), ['.pas', '.dpr', '.dpk']) then

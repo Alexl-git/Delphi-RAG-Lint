@@ -8241,7 +8241,7 @@ begin
   Result:= DerefPointerAlias(TypeReceiverCore(ACallRef, AReceiverExpr, AText));
 end;
 
-function TCallResolver.TypeReceiverCore(const ACallRef: TReference; const AReceiverExpr: string;  // dl:ok too-many-exit-points@5913, cyclomatic-complexity@b800 -- REVIEWED 2026-10-28 (item 4, lane R4R: the out AText adds no rung and changes no answer -- each existing rung writes the type text it already read before resolving it, and the added branches are that bookkeeping in kinds 6 and 10; the rung order is still the contract. Earlier: 2026-10-26 whole-branch review extract-136: T-11 added kind 12, the call-chain rung, two more exits and complexity 32 over the 30 bound; first reviewed 2026-10-25 at X1/X2): the exits are the receiver-kind LADDER -- each rung (Self, cast, selector chain, unit-qualified type, local/field/Result, function result, ordinary name, ...) answers and leaves; the body is the old TypeReceiver unchanged, renamed so TypeReceiver can apply the implicit dereference once. One exit would thread a found flag through a dozen rungs whose order IS the contract.
+function TCallResolver.TypeReceiverCore(const ACallRef: TReference; const AReceiverExpr: string;  // dl:ok too-many-exit-points@416f, cyclomatic-complexity@00b0, method-too-long@55c6, cognitive-complexity@12d5 -- (item 4, lane R4R: the out AText adds no rung and changes no answer -- each existing rung writes the type text it already read before resolving it, and the added branches are that bookkeeping in kinds 6 and 10; the rung order is still the contract. Earlier: 2026-10-26 whole-branch review extract-136: T-11 added kind 12, the call-chain rung, two more exits and complexity 32 over the 30 bound; first reviewed 2026-10-25 at X1/X2): the exits are the receiver-kind LADDER -- each rung (Self, cast, selector chain, unit-qualified type, local/field/Result, function result, ordinary name, ...) answers and leaves; the body is the old TypeReceiver unchanged, renamed so TypeReceiver can apply the implicit dereference once. One exit would thread a found flag through a dozen rungs whose order IS the contract.
   out AText: TRcvTypeText): Int64;
 var
   Encl    : TSymbol;
@@ -8392,7 +8392,7 @@ begin
         var CtorConf: string;
         var CtorId: Int64:= LookupMethodOnType(ChainType, Segs[SegIx], 0, True, CtorConf);
         var CtorLo, CtorHi: Integer;
-        if ((CtorId > 0) and (CtorConf = 'certain') and (SymbolById(CtorId).Kind = skConstructor)
+        if ((CtorId > 0) and (CtorConf = 'certain') and (SymbolById(CtorId).Kind = skConstructor)  // dl:ok boolean-expression-complexity@385a -- one binding gate (149 RB), each conjunct a named precondition of the same rung
             and SignatureArityRange(SymbolById(CtorId).Signature, CtorLo, CtorHi) and (CtorLo = 0))
            or ((CtorId <= 0) and SameText(Segs[SegIx], 'Create') and (SymbolById(ChainType).Kind = skClass)) then
         begin
@@ -9942,7 +9942,7 @@ begin
   end;
 end;
 
-function TCallResolver.DecideInlineInitType(const ADecl: TSymbol): string;  // dl:ok too-many-exit-points@611b -- REVIEWED 2026-11-05 one Exit per initializer form (for-in, as, index, call), each a decision with its own result
+function TCallResolver.DecideInlineInitType(const ADecl: TSymbol): string;  // dl:ok too-many-exit-points@352d, cyclomatic-complexity@2550 -- one Exit per initializer form (for-in, as, index, call), each a decision with its own result
 var
   Lines: TStringList;
   IsFor: Boolean    ;

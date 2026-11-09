@@ -837,7 +837,7 @@ type
     procedure Release;
   end;
 
-  TCyclePlanner = class(TNoRefCountObject, IEdgeSurfaceSource, IEdgeSurfaceCache)  // dl:ok god-class@ac0b, high-response@ac0b -- implementation-private; one per cycles --plan run, holding the shared per-cycle state that every small step reads; its many methods are the steps, each short
+  TCyclePlanner = class(TNoRefCountObject, IEdgeSurfaceSource, IEdgeSurfaceCache)  // dl:ok god-class@5bac, high-response@5bac -- implementation-private; one per cycles --plan run, holding the shared per-cycle state that every small step reads; its many methods are the steps, each short
   private
     FAccess     : TDictionary<Int64, TCallEdge>;  // ref id -> member_accesses row, loaded on first use
     FChildMemo  : TDictionary<string, TSymbol>;   // HP2B: '<parent id>:<name>' -> FindChildSymbolByName, on first use
@@ -5895,8 +5895,8 @@ begin
   Names:= TList<string>.Create;
   try
     var W:= TStopwatch.StartNew;
-    var TNeeds:= TStopwatch.Create;
-    var TEval:= TStopwatch.Create;
+    var TNeeds:= TStopwatch.Create;  // dl:ok object-leak@9063 -- FP: TStopwatch is a record
+    var TEval:= TStopwatch.Create;  // dl:ok object-leak@473a -- FP: TStopwatch is a record
     var Pairs:= 0;
     for var G in FPredicted do
       for var A in G.Members do

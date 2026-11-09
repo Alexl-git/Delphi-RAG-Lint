@@ -210,7 +210,7 @@ uses
   , System.StrUtils
   , System.RegularExpressions
   , FireDAC.Comp.Client
-  , FireDAC.Stan.Param  // dl:ok unused-unit-in-uses@c61d -- REVIEWED 2026-11-05: TFDParam.SetAsLargeInt is inline, and without this unit the compiler says H2443 at every parameter assignment
+  , FireDAC.Stan.Param
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Storage.SQLite
   ;
@@ -1649,7 +1649,7 @@ end;
 
 { The first process-ending call in a routine body, under the same skips as CheckQuits (marshal arguments, lambdas,
   nested routines). RN 149: lets a quit reached through a called routine be reported at the call site. }
-function TRefTypeScan.FirstQuit(const ANode: TTSNode; out ALine: Integer): string;
+function TRefTypeScan.FirstQuit(const ANode: TTSNode; out ALine: Integer): string;  // dl:ok too-many-exit-points@3b5f -- guard-clause ladder of one decision (149 RT), each exit a named refusal
 begin
   Result:= '';
   ALine:= 0;
@@ -1689,7 +1689,7 @@ begin
   var NT: string:= ANode.NodeType;
   if (NT = NODE_LAMBDA) or (NT = NODE_DEFPROC) then Exit;
   Hit:= QuitHitOf(ANode);
-  if (NT = NODE_DOT) and (Hit = '') then CheckQuits(ANode.ChildByField(FIELD_LHS), AEntry);
+  if (NT = NODE_DOT) and (Hit = '') then CheckQuits(ANode.ChildByField(FIELD_LHS), AEntry);  // dl:ok duplicate-code@56df -- 149 RT library-identity branch mirrors the indexed-type branch over a different store; folding them is a 150 row
   if NT = NODE_CALL then
   begin
     var Ent: TTSNode:= ANode.ChildByField(FIELD_ENTITY);

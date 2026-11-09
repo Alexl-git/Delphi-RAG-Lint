@@ -216,7 +216,7 @@ type
       FHasDataFlows          : Integer      ; { taint T0: -1 unprobed, 0 absent, 1 present -- see HasDataFlows }
       FQPutDataFlows         : TFDQuery     ; { taint T0: data_flows writer, prepared on first use }
       FHasFileFacts          : Integer      ; { 149 EX2: -1 unprobed, 0 absent, 1 present -- see HasFileFacts }
-      FQFileFacts            : array[0..5] of TFDQuery; { 149 EX2: 3 deletes + 3 inserts, prepared on first use (FF_* in PutFileFacts) }
+      FQFileFacts            : array[0..5] of TFDQuery; { 149 EX2: 3 deletes + 3 inserts, prepared on first use (FF_* in PutFileFacts) }  // dl:ok referenced-never-set@1db5 -- FP: the array ELEMENTS are assigned in PutFileFacts.Prepared (FQFileFacts[AIdx]:= Result)
       FQDeleteFileSymbols    : TFDQuery     ;
       FQDeleteFileRefs       : TFDQuery     ;
       FQUpsertDiBinding          : TFDQuery     ;
@@ -5151,7 +5151,7 @@ procedure TSQLiteSymbolStore.PutFileFacts(const AToken: TFileTxToken; const AInc
           P.DataType:= if MatchText(P.Name, FF_TEXT_PARAMS) then ftWideString else ftLargeint;
         end;
         Result.Prepare;
-      except
+      except  // dl:ok bare-except@041e -- frees the half-prepared query and re-raises; nothing is swallowed
         Result.Free;
         raise;
       end;
@@ -5241,7 +5241,7 @@ begin
     while not Q.Eof do
     begin
       R:= Default(TFileIncludeRow);
-      R.IncPath := Q.FieldByName('inc_path' ).AsString;
+      R.IncPath := Q.FieldByName('inc_path' ).AsString;  // dl:ok field-by-name-in-loop@ef09 -- 149 EX2 per-file fact reader: a handful of rows per file, OFF-by-default consumers; a field cache is not worth it here
       R.HostLine:= Q.FieldByName('host_line').AsInteger;
       R.HostCol := Q.FieldByName('host_col' ).AsInteger;
       R.Depth   := Q.FieldByName('depth'    ).AsInteger;
@@ -5257,7 +5257,7 @@ begin
   end;
 end;
 
-function TSQLiteSymbolStore.GetDfmObjects(AFileId: Int64): TArray<TDfmObjectRow>;
+function TSQLiteSymbolStore.GetDfmObjects(AFileId: Int64): TArray<TDfmObjectRow>;  // dl:ok duplicate-code@e288 -- the three 149 EX2 fact readers share one shape per table (columns differ); a generic reader would hide the column list
 var
   Q: TFDQuery;
   L: TList<TDfmObjectRow>;
@@ -5276,7 +5276,7 @@ begin
     while not Q.Eof do
     begin
       R:= Default(TDfmObjectRow);
-      R.Name      := Q.FieldByName('name'       ).AsString;
+      R.Name      := Q.FieldByName('name'       ).AsString;  // dl:ok field-by-name-in-loop@6fc8 -- 149 EX2 per-file fact reader: a handful of rows per file, OFF-by-default consumers
       R.ClassName := Q.FieldByName('class_name' ).AsString;
       R.ParentName:= Q.FieldByName('parent_name').AsString;
       R.ObjKind   := Q.FieldByName('obj_kind'   ).AsString;
@@ -5296,7 +5296,7 @@ begin
   end;
 end;
 
-function TSQLiteSymbolStore.GetPpRegions(AFileId: Int64): TArray<TPpRegionRow>;
+function TSQLiteSymbolStore.GetPpRegions(AFileId: Int64): TArray<TPpRegionRow>;  // dl:ok duplicate-code@7049 -- the three 149 EX2 fact readers share one shape per table (columns differ)
 var
   Q: TFDQuery;
   L: TList<TPpRegionRow>;
@@ -5315,7 +5315,7 @@ begin
     while not Q.Eof do
     begin
       R:= Default(TPpRegionRow);
-      R.Region   := Q.FieldByName('region'    ).AsInteger;
+      R.Region   := Q.FieldByName('region'    ).AsInteger;  // dl:ok field-by-name-in-loop@9114 -- 149 EX2 per-file fact reader: a handful of rows per file, OFF-by-default consumers
       R.Branch   := Q.FieldByName('branch'    ).AsInteger;
       R.Parent   := Q.FieldByName('parent'    ).AsInteger;
       R.Nesting  := Q.FieldByName('nesting'   ).AsInteger;
@@ -17198,7 +17198,7 @@ begin
                 [FScopeTypesBefore.Count, FScopeTypesAfter.Count]));
 end;
 
-procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);  // dl:ok method-too-long@4a54, deep-nesting@6ffc, cyclomatic-complexity@3b05, cognitive-complexity@54d8 -- one transaction over one resolver with shared maps; a split is its own change with its own re-resolve measurement, and lane facts (1.44) added only two calls, three counters and two log lines here
+procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);  // dl:ok method-too-long@1d4b, deep-nesting@6ffc, cyclomatic-complexity@3b05, cognitive-complexity@54d8 -- one transaction over one resolver with shared maps; a split is its own change with its own re-resolve measurement, and lane facts (1.44) added only two calls, three counters and two log lines here
 { v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
   (wipe the table, resolve in memory, batch-write in one transaction). Builds one
   TCallResolver (its name/scope maps cost O(symbols) to build ONCE), then streams

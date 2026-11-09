@@ -1883,7 +1883,7 @@ begin
       Inc(i);
       Result.EiClass:= ParamStr(i);
     end
-    else if (A = '--members') and (Result.Command = 'extract-interface') and (i < ParamCount) then  // dl:ok duplicate-code@55a2 -- sibling verb plumbing (lazy-init / extract-interface / deps share the refactor-verb shape); a shared helper is a 148 row (147 INT sweep)
+    else if (A = '--members') and (Result.Command = 'extract-interface') and (i < ParamCount) then
     begin
       Inc(i);
       Result.EiMembers:= ParamStr(i);
@@ -27711,7 +27711,7 @@ begin
       { lane 149 CYA (P6 prep): --plan dry run = the planner with R3 asked first per group; --causes --format json = R3's
         fix object without the planner for a group R3 plans; --apply = R3 writes one group (below) }
       var HubJson:= SameText(AArgs.Format, 'json');
-      if AArgs.Fix or (HubJson and (AArgs.Plan or not AArgs.Causes)) or ((not HubJson) and not AArgs.Plan) then
+      if AArgs.Fix or (HubJson and (AArgs.Plan or not AArgs.Causes)) or ((not HubJson) and not AArgs.Plan) then  // dl:ok boolean-expression-complexity@ca40 -- one dispatch condition over the verb flags
       begin
         Writeln(ErrOutput, 'ERROR: cycles --hub-surface needs --plan (text; --apply writes one group) or --causes --format json, and does not combine with --fix yet');
         Exit(2);
@@ -33319,7 +33319,7 @@ var
   // (and its freshness checked) the FIRST time a unit reaches that step, then
   // reused: a single --unit run keeps its old order, a batch pays for both and
   // for every class's members once. Returns the unit's exit code (0 / 1 / 2).
-  function RunUnit(const AUnitPas: string): Integer;  // dl:ok too-many-exit-points@ab98, cyclomatic-complexity@5774, method-too-long@501e -- REVIEWED 2026-11-04 (lint sweep b0bad3cf..HEAD): the branch count and length are that same early-outcome chain; splitting it is a convert-apply refactor, not a sweep fix. Each Exit is a distinct per-unit outcome (refusal incl. an unindexed unit (1.33.0), rule errors, freshness, an unexecutable castlib (1.27.0), plan failure, write failure, dry run) moved from DoConvertApply, which carried the same shape; one result per early outcome is the convert-apply contract
+  function RunUnit(const AUnitPas: string): Integer;  // dl:ok too-many-exit-points@ab98, cyclomatic-complexity@4c61, method-too-long@9bf6, cognitive-complexity@fa3c -- (lint sweep b0bad3cf..HEAD): the branch count and length are that same early-outcome chain; splitting it is a convert-apply refactor, not a sweep fix. Each Exit is a distinct per-unit outcome (refusal incl. an unindexed unit (1.33.0), rule errors, freshness, an unexecutable castlib (1.27.0), plan failure, write failure, dry run) moved from DoConvertApply, which carried the same shape; one result per early outcome is the convert-apply contract
   var
     UnitStart: Integer; { Trees.ClassesBuilt when this unit started }
     ValHere  : Integer; { classes this unit's call to the book validation built (0 after the first) }

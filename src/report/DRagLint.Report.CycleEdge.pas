@@ -1443,7 +1443,7 @@ begin
     '(?<![\w.])' + C + '\s*\(\s*[A-Za-z_]\w*\s*\)\s*\.\s*([A-Za-z_]\w*)(\s*:=)?', [roIgnoreCase]) do
   begin
     var Member:= Child(pCls.Id, M.Groups[1].Value);
-    if (Member.Id <= 0) or not (Member.Kind in [skField, skProperty]) then Continue;
+    if (Member.Id <= 0) or (Member.Kind not in [skField, skProperty]) then Continue;
     R:= pR;
     R.NameText:= Member.Name;
     if (M.Groups.Count > 2) and (M.Groups[2].Value <> '') then

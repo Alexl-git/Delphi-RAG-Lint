@@ -1414,7 +1414,7 @@ begin
   Result:= Count(Result, AReason);
 end;
 
-function TLibraryOracle.BindHead(const AChain, AMember: string; AKind: TExternalKind;  // dl:ok too-many-exit-points@18cf -- REVIEWED 2026-10-28 (item 4, lane R4R): the exits are Delphi's name-lookup ORDER for an untyped head -- inherited member, library type, library global, unit-qualified type -- each answering and leaving, plus the three declines inside the first rung that must stop the walk (a nearer member hides a farther meaning). One exit would thread a found flag through four rungs whose order is the contract.
+function TLibraryOracle.BindHead(const AChain, AMember: string; AKind: TExternalKind;  // dl:ok too-many-exit-points@7128 -- (item 4, lane R4R): the exits are Delphi's name-lookup ORDER for an untyped head -- inherited member, library type, library global, unit-qualified type -- each answering and leaving, plus the three declines inside the first rung that must stop the walk (a nearer member hides a farther meaning). One exit would thread a found flag through four rungs whose order is the contract.
   const AUsesUnits: TArray<string>; const AScopeType: string; out AReason: string;
   out ATypeText: string): string;
 var

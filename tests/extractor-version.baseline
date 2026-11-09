@@ -1203,4 +1203,8 @@
 #   Superseded: 1.35.0-alpha|8ed4ccb9b01e879f21c8402bf63f6969242abbf70dacdb80b877200a71b7352a
 #   2026-11-09 149 INT re-pin (same unreleased bump): SW residue -- document --unit --apply on 9 units rewrote /// doc-comment blocks only (diff checked: no non-comment line changed).
 #   Superseded: 1.35.0-alpha|59d8bed2a950b6f6f961cada39e3999dea031d3955e919ddde98999bc441c893
-1.35.0-alpha|067cf8614c9d744eb2cbeab84e4599b98a6f3b029f876b126e57f9dc8c01f9e1
+#   2026-11-09 149 INT re-pin (same unreleased bump): whole-branch lint sweep -- dl:ok markers added / re-hashed and one Parser.DFM doc block regenerated; comments only, plus CycleEdge `not in` (not hashed).
+#   Superseded: 1.35.0-alpha|067cf8614c9d744eb2cbeab84e4599b98a6f3b029f876b126e57f9dc8c01f9e1
+#   2026-11-09 149 INT re-pin (same unreleased bump): lint sweep allow --apply added metric rules to existing dl:ok markers (comments only).
+#   Superseded: 1.35.0-alpha|d7809474ef2883fb519941f7b894db2ec4848bfc635127544a61175e3b5b00fc
+1.35.0-alpha|27dadc92b57b648508203038e612731ff2e0b6f8184a119d70482ffb5414fd79

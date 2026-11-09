@@ -724,7 +724,11 @@
 #   Superseded: 1.22.0-alpha|04605251e520e1f546c80a014bed54129db5b764eaa965960affb380a010061b
 #   2026-11-09 149 INT re-pin (same unreleased bump): SW residue -- document --unit --apply on 9 units rewrote /// doc-comment blocks only (diff checked: no non-comment line changed).
 #   Superseded: 1.23.0-alpha|039e29b51fd22c2f4c89f391bf4dd9b653ee13198178f0f6249fe14ee919b95c
-1.23.0-alpha|13c74d0df28d896157a5b28e71707f06b597f86b72a9c57cff26fa3d083f02e0
+#   2026-11-09 149 INT re-pin (same unreleased bump): whole-branch lint sweep -- dl:ok markers added / re-hashed and one Parser.DFM doc block regenerated; comments only, plus CycleEdge `not in` (not hashed).
+#   Superseded: 1.23.0-alpha|13c74d0df28d896157a5b28e71707f06b597f86b72a9c57cff26fa3d083f02e0
+#   2026-11-09 149 INT re-pin (same unreleased bump): lint sweep allow --apply added metric rules to existing dl:ok markers (comments only).
+#   Superseded: 1.23.0-alpha|05ea3b637959f53b574fd0583148110fa2d897f847d83e0a51d18ceee9a3cfb3
+1.23.0-alpha|4af6b081faa9e74519d0e0737f096b16f042ff1f8980790bf932537916dfbbd0
 #   2026-11-06 int2: hash moved WITHOUT a bump from 631322c4: the dl:ok comment on ResolveCallTargets re-stamped by the lint sweep, no code change.
 # superseded: 1.19.0-alpha|e4c14c16d87b21940e6ce6017456b8446a5cc516e342b72b816e3e161612ecba
 #   2026-11-06 1.19.0 -> 1.20.0-alpha (lanes facts + rename): ref_types (static type of a reference), ref_receivers (receiver link of a ref), references in initialization / finalization attributed to the section symbol. Additive, no SCHEMA_VERSION move. Remedy: index --all --resolve-only.
