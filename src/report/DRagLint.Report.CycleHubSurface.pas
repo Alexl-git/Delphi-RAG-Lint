@@ -1376,7 +1376,6 @@ begin
     { P4: AsForm joins the surface (and the hub's accessors) only when a rewritten spoke passes the global }
     for var S in Result.Spokes do
       if (S.Refusal = '') and (S.Values > 0) then Result.AsForm:= True;
-    if not BuildHubText(Result, HubText) then Exit;
     { P3: the hub's free routines the rewritten spokes still call go through R1 pointers in the surface unit }
     PlanRoutines(Result);
     for var I:= 0 to High(Result.Spokes) do
@@ -1385,7 +1384,7 @@ begin
       FinishSpoke(Result, Result.Spokes[I]);
     end;
     for var I:= 0 to High(Result.Routines) do Result.Routines[I]:= FRoutines[LowerCase(Result.Routines[I].Name)];
-    if not AddRoutineAssigns(Result) then Exit;
+    if not BuildHubText(Result, HubText) or not AddRoutineAssigns(Result) then Exit;
     Result.SurfaceText:= BuildSurfaceText(Result, SurfaceUsesList(HubText));
   finally
     Globals.Free;
