@@ -66,3 +66,29 @@ function Initialize-EngineCompanions {
   }
   return $true
 }
+
+<#
+  Initialize-DeployedEngineStage -Repo <root>   (GD 148, 1.39 #9)
+    ~1000 guards default -Exe to <Repo>\third_party\dll-win64\drag-lint.exe, which a fresh worktree does not have
+    (the deploy step is the controller's). When that exe is missing and this tree's own build output
+    <Repo>\src\cli\Win64\Debug\drag-lint.exe exists, copy it plus its companions (*.dll, casts.castlib, rules\)
+    into the worktree's OWN third_party\dll-win64 (gitignored), so a worktree battery does not start with
+    hundreds of "exe not found". An existing dll-win64 exe is NEVER touched (that is a deployed artefact).
+    Returns $true when it staged, $false when nothing was done.
+#>
+function Initialize-DeployedEngineStage {
+  [CmdletBinding()]
+  param([string] $Repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path)
+  $dst = Join-Path $Repo 'third_party\dll-win64'
+  $built = Join-Path $Repo 'src\cli\Win64\Debug'
+  if (Test-Path -LiteralPath (Join-Path $dst 'drag-lint.exe')) { return $false }
+  if (-not (Test-Path -LiteralPath (Join-Path $built 'drag-lint.exe'))) { return $false }
+  [void](New-Item -ItemType Directory -Force -Path $dst)
+  foreach ($f in (Get-ChildItem -LiteralPath $built -File | Where-Object { $_.Extension -in '.exe', '.dll' -or $_.Name -in 'casts.castlib', 'drag-lint.json' })) {
+    Copy-Item -LiteralPath $f.FullName -Destination (Join-Path $dst $f.Name) -Force
+  }
+  if (Test-Path -LiteralPath (Join-Path $built 'rules')) {
+    Copy-Item -LiteralPath (Join-Path $built 'rules') -Destination $dst -Recurse -Force
+  }
+  return $true
+}

@@ -1472,6 +1472,8 @@ wired up. That is why each has a `break` mode, and why the guards that use them
 `tests\autotest\run_flow_oracle_memo.ps1`) assert BOTH that a clean run is clean
 and that an injected fault is caught.
 
+Guards under 	ests\ run under **pwsh 7** (pwsh -File ...), never Windows PowerShell 5: the engine prints a banner on stderr that PS5 turns into a terminating error under $ErrorActionPreference = Stop. 	ests\run_battery.ps1 refuses (exit 2) under PS5.
+
 ## 6. Bonus: the graph viewer (optional, experimental)
 
 There is a companion **standalone VCL graph viewer** over the same index:

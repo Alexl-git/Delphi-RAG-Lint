@@ -47,6 +47,8 @@ $script:missing = New-Object System.Collections.Generic.List[string]
 # The engine must be runnable (sqlite3/tree-sitter beside it) before any step below indexes with it.
 . (Join-Path $PSScriptRoot 'lib\EngineCompanions.ps1')
 [void](Initialize-EngineCompanions -Exe $Exe)
+# a worktree has no deployed engine: stage this trees own build into its third_party\dll-win64 so default-Exe guards run (GD 148)
+[void](Initialize-DeployedEngineStage -Repo $root)
 
 function Say([string]$m) { Write-Host "[prepare_battery] $m" }
 

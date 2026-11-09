@@ -80,13 +80,15 @@ $rs = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 . (Join-Path $PSScriptRoot '..\autotest\lib\CliBuildPaths.ps1')
 $cli = Get-CliDcc64Args
 # Private DCU dir (-NU): a bare dcc64 writes each unit's DCU beside its source, i.e. under src\, where a battery-parallel run_legacy_cli_fixtures sees it.
-New-Item -ItemType Directory -Force (Join-Path $PSScriptRoot '_dcu') | Out-Null
-$buildOut = cmd /c "call `"$rs`" && cd /d `"$PSScriptRoot`" && dcc64 -B -NU`"$PSScriptRoot\_dcu`" $($cli.Args) -E`"$PSScriptRoot`" `"$PSScriptRoot\EnumHelperTests.dpr`"" 2>&1
+# GD 148: build in a PER-RUN dir ($WorkDir carries the PID): two runs at battery -Jobs 4 shared EnumHelperTests.exe + _dcu here (F2039 Could not create output file).
+$buildDir = Join-Path $WorkDir 'build'
+New-Item -ItemType Directory -Force (Join-Path $buildDir '_dcu') | Out-Null
+$buildOut = cmd /c "call `"$rs`" && cd /d `"$PSScriptRoot`" && dcc64 -B -NU`"$buildDir\_dcu`" $($cli.Args) -E`"$buildDir`" `"$PSScriptRoot\EnumHelperTests.dpr`"" 2>&1
 $err = $buildOut | Select-String -Pattern "\bError\b|E2\d{3}|F2\d{3}|Fatal"
 if ($err) { Write-Host "BUILD FAILED:"; $err | Select-Object -First 12; exit 1 }
-Copy-TreeSitterDlls -Dest $PSScriptRoot | Out-Null
+Copy-TreeSitterDlls -Dest $buildDir | Out-Null
 
-& "$PSScriptRoot\EnumHelperTests.exe" $dbSimple $dbAlready $dbSeparate $dbIfaceOnly $dbNoImpl $dbOrdinalsUnit $dbMultiLineUnit
+& "$buildDir\EnumHelperTests.exe" $dbSimple $dbAlready $dbSeparate $dbIfaceOnly $dbNoImpl $dbOrdinalsUnit $dbMultiLineUnit
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 # =====================================================================
