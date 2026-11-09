@@ -1,4 +1,4 @@
-# Index DB Schema (schema 23)
+# Index DB Schema (schema 24)
 
 Reference for the SQLite file drag-lint builds: `<project folder>\_D-RAG\<base>.sqlite`
 (project DB) and `library-Win32|Win64.sqlite` (platform library). Everything here was
@@ -13,7 +13,7 @@ Never open a real DB with a writer to "look": copy it first, or use the read-onl
 
 ## 1. Overview
 
-* **Schema version** `schema_meta.schema_version` = `23`. It is stamped LAST by `Migrate`
+* **Schema version** `schema_meta.schema_version` = `24` (v24, wave 149: `file_includes`, `dfm_objects`, `pp_regions`). It is stamped LAST by `Migrate`
   (the commit point of a migration), so an interrupted upgrade keeps the old number and
   the next writable open heals it.
 * **Two kinds of change.** A change that alters what the indexer WRITES bumps
@@ -23,7 +23,7 @@ Never open a real DB with a writer to "look": copy it first, or use the read-onl
   `files.indexed_at_fingerprint`) is created by `Migrate` on every WRITABLE open with no
   version bump and is probed for by every reader. A read-only open never migrates, so an
   older DB simply lacks those tables/columns until the next `index`.
-* **Table count.** 24 ordinary tables + 2 FTS5 virtual tables (`string_fts`,
+* **Table count.** 27 ordinary tables + 2 FTS5 virtual tables (`string_fts`,
   `string_fts_tri`, each with its own shadow tables `*_data`, `*_idx`, `*_docsize`,
   `*_config`, ignored below). Tables by group:
   * identity: `schema_meta`, `files`
@@ -31,7 +31,7 @@ Never open a real DB with a writer to "look": copy it first, or use the read-onl
     `type_ancestors`, `type_helpers`
   * usage and calls: `refs`, `call_edges`, `member_accesses`, `dispatch_edges`,
     `classref_args`, `data_flows`
-  * structure: `unit_uses`, `di_bindings`
+  * structure: `unit_uses`, `di_bindings`, `file_includes`, `dfm_objects`, `pp_regions` (v24)
   * text: `string_literals` (+ FTS5)
   * external feeds: `compiler_findings`, `fb_relations`, `fb_columns`, `fb_field_info`,
     `fb_datasets`, `fb_enum_values`, `orm_links`
@@ -46,6 +46,10 @@ erDiagram
   files ||--o{ string_literals : "file_id (cascade)"
   files ||--o{ di_bindings : "file_id (cascade)"
   files ||--o{ data_flows : "file_id (cascade)"
+  files ||--o{ file_includes : "file_id (cascade)"
+  files ||--o{ dfm_objects : "file_id (cascade)"
+  files ||--o{ pp_regions : "file_id (cascade)"
+  symbols ||--o{ dfm_objects : "symbol_id (set null)"
   files ||--o{ compiler_findings : "file_id (set null)"
   symbols ||--o{ symbols : "parent_id (cascade)"
   symbols ||--o{ refs : "symbol_id (set null)"
@@ -74,7 +78,7 @@ erDiagram
 
 | Pass | Verb / stage | Writes |
 |---|---|---|
-| **index** (per file, one transaction) | `index`, `index --project` | `files` (incl. `indexed_at_fingerprint`, stamped in the same tx), `symbols`, `refs` (raw: `symbol_id` NULL for most), `unit_uses`, `string_literals` (+FTS via triggers), `di_bindings`, `data_flows`, `symbol_trigrams` |
+| **index** (per file, one transaction) | `index`, `index --project` | `files` (incl. `indexed_at_fingerprint`, stamped in the same tx), `symbols`, `refs` (raw: `symbol_id` NULL for most), `unit_uses`, `string_literals` (+FTS via triggers), `di_bindings`, `data_flows`, `file_includes`, `dfm_objects`, `pp_regions` (v24), `symbol_trigrams` |
 | **resolve** (whole DB, after files) | end of `index` | `refs.symbol_id`, `refs.receiver_text`, `refs.receiver_type_text`, `refs.external_target`, `call_edges`, `member_accesses`, `type_ancestors` (rebuilt each run), `type_helpers`, `dispatch_edges` (wiped and rebuilt), `classref_args`, `unit_uses.target_file_id` |
 | **doc / facts** | index-time doc extraction and ADP analysis | `symbol_docs`, `symbol_facts` (`effect_*` columns come from the purity stage) |
 | **external feeds** | `import-log`, `fb-snapshot`, ORM link pass | `compiler_findings`, `fb_*`, `orm_links` |
@@ -227,6 +231,57 @@ trailing segment: `System.SysUtils` -> `sysutils`), `section TEXT` (`interface` 
 (entry came from an `{$I}` include: the `.inc` path and the host directive line; NULL for the
 unit's own text).
 
+### file_includes (v24)
+One row per include directive the preprocessor RESOLVED and followed while indexing the file
+(inactive and unresolvable includes have none); written inside the file transaction and
+replaced on every re-parse. Column image of `TFileIncludeRow`. Indexes
+`idx_file_includes_file (file_id, ordinal)`, `idx_file_includes_path (inc_path NOCASE)`.
+
+| column | type | meaning |
+|---|---|---|
+| file_id | INTEGER FK files (cascade) | the indexed file (the host) |
+| ordinal | INTEGER | 0-based source order; a nested include follows its parent |
+| inc_path | TEXT | absolute resolved include path |
+| host_line, host_col | INTEGER | 1-based position of the directive in the file that WRITES it (the host at depth 0, the including `.inc` deeper) |
+| depth | INTEGER | 0 = written in the host; 1+ = inside an include |
+| section | TEXT | host section of a depth-0 directive (`interface` / `implementation` / `program` / `package`); '' when nested |
+| in_uses | INTEGER | 1 = a depth-0 directive standing in a uses list (`uses` + include as the entry list): its entries reach `unit_uses` with `origin_path` set |
+
+### dfm_objects (v24)
+One row per `object` / `inherited` / `inline` block of a text `.dfm`; written inside the
+file transaction. `name` / `class_name` are the strings the block's `form` / `component`
+symbol carries, so `name` joins `symbols.name` exactly. Indexes `(file_id, ordinal)`,
+`symbol_id`, `name NOCASE`.
+
+| column | type | meaning |
+|---|---|---|
+| file_id | INTEGER FK files (cascade) | the `.dfm` |
+| ordinal | INTEGER | 0-based source order |
+| symbol_id | INTEGER FK symbols (set null) | the block's symbol |
+| name, class_name | TEXT | `object Name: TClass` (class '' when absent) |
+| parent_name | TEXT | enclosing block's name; '' for the root |
+| obj_kind | TEXT | `object` / `inherited` / `inline` |
+| depth | INTEGER | 0 for the root |
+| start_line, start_col, end_line, end_col | INTEGER | block span, 1-based (columns in UTF-8 bytes) |
+
+### pp_regions (v24)
+One row per BRANCH of a conditional-compilation block (`IFDEF` / `IFNDEF` / `IF` / `IFOPT`
+... `ENDIF` / `IFEND`) of the file itself, never inside an include, with its state under the
+index's define profile. Written inside the file transaction. Column image of `TPpRegionRow`.
+Index `(file_id, region, branch)`.
+
+| column | type | meaning |
+|---|---|---|
+| file_id | INTEGER FK files (cascade) | |
+| region | INTEGER | 0-based block number, source order of the opening directives |
+| branch | INTEGER | 0 = the opening directive; 1.. = each `ELSEIF` / `ELSE` |
+| parent | INTEGER | `region` of the enclosing block; -1 at top level |
+| nesting | INTEGER | 0 at top level |
+| directive | TEXT | `ifdef` / `ifndef` / `if` / `ifopt` / `elseif` / `else` |
+| condition | TEXT | the directive's trimmed argument; '' for `else` |
+| start_line, end_line | INTEGER | lines of the directive opening the branch and of the one closing it (next branch or `ENDIF`); the file's last line when never closed |
+| active | INTEGER | 1 = the branch's text was kept for the parse |
+
 ### symbol_trigrams
 `trigram TEXT`, `symbol_id INTEGER FK symbols (cascade)`; PK `(trigram, symbol_id)`,
 `WITHOUT ROWID`. Fuzzy-name index, populated lazily on first fuzzy query for a DB lacking it.
@@ -318,7 +373,7 @@ variable passed at position `src_index` of an earlier call).
 
 All three live in `schema_meta` and drive "is this index current".
 
-* **schema** `schema_version` (= `SCHEMA_VERSION`, 23): structural generation of the file.
+* **schema** `schema_version` (= `SCHEMA_VERSION`, 24): structural generation of the file.
 * **indexer** `indexer_fingerprint`, e.g. `v=1.25.0-alpha;schema=23;pp=1;plat=win64;cfg=debug;defs=42819f5f`:
   product/extractor version, schema, preprocessing on, platform, config, hash of the defines.
   A mismatch means rows were produced by a different extractor: re-parse. The extractor

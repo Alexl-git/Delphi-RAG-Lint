@@ -6,11 +6,15 @@ uses-clauses, type ancestry, DI bindings, and more). It is written for anyone
 building a tool OTHER than drag-lint itself that wants to read this database
 directly.
 
-Current schema version at time of writing: **23** (`SCHEMA_VERSION` in
-`src/storage/DRagLint.Storage.Schema.pas`, verified 2026-09-17 against the
-constant AND against the guard fixture index `run_generic_symbol_names.ps1`
-builds -- previously this line had only ever been checked against the
-constant). Recent additive changes:
+Current schema version at time of writing: **24** (`SCHEMA_VERSION` in
+`src/storage/DRagLint.Storage.Schema.pas`, verified 2026-11-09 against the
+constant AND against the guard fixture index `run_file_facts_149.ps1` builds).
+Recent additive changes:
+**v24 added three file-fact tables** -- `file_includes` (the include
+directives a file resolved, with host section and whether one stands in a uses
+list), `dfm_objects` (every object block of a text `.dfm`) and `pp_regions`
+(every conditional-compilation branch with its state under the index's
+profile); see 2.17;
 **v23 added `symbols.generic_params` and `type_ancestors.ancestor_type_args`**
 -- a generic type or method is now indexed under its BARE name with the
 parameter list in its own column, and an ancestor edge carries the
@@ -45,6 +49,11 @@ Schema history, one line per step:
   member's section). Riding the same extractor bump: the DFM extractor now emits
   a `dfm-prop` row for EVERY value kind, not only string-valued properties, so
   colours, sets, numbers and booleans became text-searchable.
+- `23 -> 24` (2026-11-09, wave 149): new tables `file_includes`, `dfm_objects`,
+  `pp_regions` (see 2.17), written per file by the indexer. Riding extractor
+  1.35: a uses list written as an include (the entries and the closing semicolon
+  in the `.inc`) now yields its `unit_uses` rows (`origin_path` set) and no
+  longer swallows the host's next section.
 - `22 -> 23`: additive columns `symbols.generic_params` (the generic parameter
   list as written, `T: class` / `K, V`; NULL for a non-generic symbol) and
   `type_ancestors.ancestor_type_args` (the type arguments written on a heritage
@@ -205,6 +214,9 @@ Limits -- where the triple stops identifying, stated so a consumer can guard:
 | `fb_datasets` | 0 (sample) | Live Firebird dataset (`TFIBDataSet`-style) SQL snapshot |
 | `fb_enum_values` | 0 (sample) | Live Firebird enum-domain value snapshot |
 | `orm_links` | 0 (sample) | Cross-DB Delphi-symbol <-> SQL-symbol ORM link candidates |
+| `file_includes` | (v24) | Resolved include directives per file: path, host line, depth, section, in a uses list -- see 2.17 |
+| `dfm_objects` | (v24) | Every object / inherited / inline block of a text `.dfm`, linked to its symbol -- see 2.17 |
+| `pp_regions` | (v24) | Every conditional-compilation branch of a file with its active state -- see 2.17 |
 
 Row counts marked "0 (sample)" are populated by optional ingest steps (compiler
 log import, live Firebird connection snapshot, ORM link resolution) that were
@@ -818,6 +830,24 @@ interface, record, type, enum, method, function, procedure, constructor,
 destructor, property, field, const, var, component, form (not param,
 local_var, enum_value, initialization, finalization). See wiki page
 `concept-search`.
+### 2.17 `file_includes`, `dfm_objects`, `pp_regions` (v24)
+
+Written by the indexer inside each file's transaction and replaced on every
+re-parse of the file; `file_id` cascades. Full column tables:
+`docs\wiki\Index-DB-Schema.md` (same names). In short:
+
+- `file_includes(file_id, ordinal, inc_path, host_line, host_col, depth, section, in_uses)`
+  -- one row per include the preprocessor resolved and followed (none for an
+  inactive or unresolvable one). `depth` 0 = written in the file itself;
+  `in_uses` 1 = it stands in a uses list, and its entries are in `unit_uses`
+  with `origin_path` = `inc_path`.
+- `dfm_objects(file_id, ordinal, symbol_id, name, class_name, parent_name, obj_kind, depth, start_line, start_col, end_line, end_col)`
+  -- `name` / `class_name` equal the block symbol's `symbols.name` /
+  `signature`; `obj_kind` is `object` / `inherited` / `inline`.
+- `pp_regions(file_id, region, branch, parent, nesting, directive, condition, start_line, end_line, active)`
+  -- one row per branch of each IFDEF-family block of the file itself;
+  `branch` 0 is the opening directive; `active` = its text was parsed.
+
 ## 3. Programmatic introspection
 
 Do not hardcode a table/column list in a consuming tool if you can avoid it.

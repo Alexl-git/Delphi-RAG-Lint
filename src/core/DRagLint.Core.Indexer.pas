@@ -1326,6 +1326,9 @@ var
   Mtime         : Int64                      ;
   ParseRes      : TParseResult               ;
   IncSites      : TArray<TPPIncludeSite>     ; { N-06: depth-0+ include sites the preprocess met }
+  PpRep         : TPPReport                  ; { 149 EX2: the preprocess report (sites + regions) }
+  PpRegions     : TArray<TPPRegion>          ; { 149 EX2: the file's conditional branches (pp_regions) }
+  IncInUses     : TArray<Boolean>            ; { 149 EX2: per IncSites entry, True = stands in a uses list }
   Token         : TFileTxToken               ;
   Sym           : TSymbol                    ;
   IdxToId       : TDictionary<Integer, Int64>;
@@ -1507,25 +1510,50 @@ begin
       PpOpts.IncludeMode:= 'defines-only';
       PpOpts.BaseDir    := TPath.GetDirectoryName(AFilePath);
       PpOpts.SearchPaths:= FIncSearchPaths; // lane INC: empty unless a project run set it
-      // N-06: the 3-arg overload also hands back each active include's child
-      // output, so a uses clause inside it can be extracted below. Same bytes.
-      ParseBytes:= Preprocess(Utf8, PpOpts, IncSites);
+      // N-06: the report also hands back each active include's child output, so
+      // a uses clause inside it can be extracted below; 149 EX2: and the file's
+      // conditional branches (pp_regions). Same bytes as the 3-arg overload.
+      ParseBytes:= PreprocessReport(Utf8, PpOpts, PpRep);
+      IncSites  := PpRep.Sites;
+      PpRegions := PpRep.Regions;
     except
       on E: Exception do
       begin
         LogPreprocessFallbackOnce(AFilePath, E);
         ParseBytes:= Utf8;
         IncSites  := nil;
+        PpRegions := nil;
       end;
     end;
   end
   else
     ParseBytes:= Utf8;
+  { 149 EX2 (F4): a depth-0 include standing in a host uses list -- `uses <$I x.inc>` (an include directive as the entry list) --
+    left the host a uses clause with no entries (the directive is blanked), which then
+    swallowed the next section. Patch the parse bytes (same length) and remember which
+    sites those were; the include's entries are taken below. Delphi hosts only. }
+  IncInUses:= nil;
+  if (Length(IncSites) > 0) and MatchText(ExtractFileExt(AFilePath), ['.pas', '.dpr', '.dpk']) then
+    IncInUses:= MarkUsesListIncludes(IncSites, Utf8, ParseBytes);
   if FIncludeContext and MatchText(ExtractFileExt(AFilePath), ['.pas', '.dpr', '.dpk']) then
     RememberIncludeSites(AFilePath, IncSites);
   Inc(GProfPre, ProfNow - TPre);
   var TProf: Int64:= ProfNow;
   ParseRes:= Parser.Parse(ParseBytes, AFilePath);
+  // 149 EX2 (F6): the conditional branches the preprocess walked, as pp_regions rows.
+  SetLength(ParseRes.PpRegions, Length(PpRegions));
+  for I:= 0 to High(PpRegions) do
+  begin
+    ParseRes.PpRegions[I].Region   := PpRegions[I].Region;
+    ParseRes.PpRegions[I].Branch   := PpRegions[I].Branch;
+    ParseRes.PpRegions[I].Parent   := PpRegions[I].Parent;
+    ParseRes.PpRegions[I].Nesting  := PpRegions[I].Nesting;
+    ParseRes.PpRegions[I].Directive:= PpRegions[I].Directive;
+    ParseRes.PpRegions[I].Condition:= PpRegions[I].Condition;
+    ParseRes.PpRegions[I].StartLine:= PpRegions[I].StartLine;
+    ParseRes.PpRegions[I].EndLine  := PpRegions[I].EndLine;
+    ParseRes.PpRegions[I].Active   := PpRegions[I].Active;
+  end;
   // N-06: a uses clause inside a depth-0 include becomes host rows carrying
   // OriginPath / IncludeLine (coordinates inside the .inc). Only for a Delphi
   // host (.pas/.dpr/.dpk): a DFM has no uses, and an .inc indexed on its own is
@@ -1535,7 +1563,10 @@ begin
     var HostExt: string:= LowerCase(TPath.GetExtension(AFilePath));
     if (HostExt = '.pas') or (HostExt = '.dpr') or (HostExt = '.dpk') then
     begin
-      var IncRows: TArray<TUnitUse>:= ExtractIncludeUses(IncSites, Parser, AFilePath, ParseRes.ImplementationLine);
+      // 149 EX2 (F4): drop the uses-list placeholders, record the include facts.
+      DropIncludePlaceholders(IncSites, IncInUses, ParseRes.UsesEntries);
+      ParseRes.Includes:= BuildFileIncludeRows(IncSites, IncInUses, AFilePath, ParseRes.ImplementationLine);
+      var IncRows: TArray<TUnitUse>:= ExtractIncludeUses(IncSites, Parser, AFilePath, ParseRes.ImplementationLine, IncInUses);
       if Length(IncRows) > 0 then ParseRes.UsesEntries:= ParseRes.UsesEntries + IncRows;
       // E14: a SCOPEDENUMS switch inside an include reaches the host's enums.
       ApplyIncludeScopedEnums(IncSites, ParseBytes, ParseRes.Symbols);
@@ -1659,6 +1690,8 @@ begin
           transaction to ensure consistency on rollback. }
         FStore.DeleteUnitUsesForFile(Token.FileId);
         for I:= 0 to High(ParseRes.UsesEntries) do FStore.UpsertUnitUse(Token, ParseRes.UsesEntries[I]);
+        // 149 EX2 (schema v24): file_includes / dfm_objects / pp_regions, replaced every parse.
+        FStore.PutFileFacts(Token, ParseRes.Includes, ParseRes.DfmObjects, ParseRes.PpRegions, IdxToId);
         // v10: text-content index. Resolve each literal's enclosing symbol by line,
         // then persist. Per-file delete keeps re-index idempotent (FTS cascades via triggers).
         Inc(GProfUses, ProfNow - TProf);

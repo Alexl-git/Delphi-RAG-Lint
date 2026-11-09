@@ -2856,6 +2856,43 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function HasDataFlows: Boolean;
+    /// <summary>149 EX2 (schema v24): replaces the file's rows in the three
+    /// file-fact tables -- file_includes, dfm_objects and pp_regions -- with the
+    /// given ones. Called once per indexed file, inside its file tx, after its
+    /// symbols are written.</summary>
+    /// <param name="AToken">The open file tx; supplies file_id.</param>
+    /// <param name="AIncludes">The file's resolved include directives (may be empty).</param>
+    /// <param name="ADfmObjects">The file's .dfm object blocks (empty for a non-.dfm).</param>
+    /// <param name="APpRegions">The file's conditional-compilation branches (may be empty).</param>
+    /// <param name="ASymbolIds">Maps an index into TParseResult.Symbols to the
+    /// symbols.id just written; resolves TDfmObjectRow.SymbolIdx (a missing
+    /// entry stores NULL). May be nil when ADfmObjects is empty.</param>
+    /// <remarks>
+    /// The old rows are deleted first, also when all three arrays are empty, so
+    /// a file that lost its includes / regions loses its rows. A no-op when the
+    /// tables are absent (HasFileFacts False). Part of the extractor guard's
+    /// emit list.
+    /// </remarks>
+    procedure PutFileFacts(const AToken: TFileTxToken; const AIncludes: TArray<TFileIncludeRow>;
+      const ADfmObjects: TArray<TDfmObjectRow>; const APpRegions: TArray<TPpRegionRow>;
+      const ASymbolIds: TDictionary<Integer, Int64>);
+    /// <summary>True when this database has the schema v24 file-fact tables
+    /// (file_includes, dfm_objects, pp_regions); probed once.</summary>
+    /// <returns>False on a DB below schema v24 opened read-only.</returns>
+    function HasFileFacts: Boolean;
+    /// <summary>The file_includes rows of one file, source order.</summary>
+    /// <param name="AFileId">files.id of the host.</param>
+    /// <returns>Empty when the file has none or HasFileFacts is False.</returns>
+    function GetFileIncludes(AFileId: Int64): TArray<TFileIncludeRow>;
+    /// <summary>The dfm_objects rows of one .dfm, source order.</summary>
+    /// <param name="AFileId">files.id of the .dfm.</param>
+    /// <returns>Empty when the file has none or HasFileFacts is False.
+    /// SymbolIdx of each row is -1 (the stored link is symbol_id, not an index).</returns>
+    function GetDfmObjects(AFileId: Int64): TArray<TDfmObjectRow>;
+    /// <summary>The pp_regions rows of one file, ordered by region, branch.</summary>
+    /// <param name="AFileId">files.id of the file.</param>
+    /// <returns>Empty when the file has none or HasFileFacts is False.</returns>
+    function GetPpRegions(AFileId: Int64): TArray<TPpRegionRow>;
     /// <summary>Rows whose destination is AT one site (an 'arg' / 'write' call or
     /// member-write ref position, or a field/global/result/outparam write site).</summary>
     /// <param name="AFileId">files.id of the site.</param>
@@ -3080,6 +3117,12 @@ type
     // program / package / library or a unit without one. Lets the indexer give a
     // {$I} uses clause the host section its directive sits in.
     ImplementationLine: Integer;
+    // 149 EX2 (schema v24): file facts. DfmObjects is filled by the DFM parser;
+    // Includes and PpRegions by the indexer from the preprocess report (a
+    // parser never sees an include). All three go to ISymbolStore.PutFileFacts.
+    DfmObjects: TArray<TDfmObjectRow> ;
+    Includes  : TArray<TFileIncludeRow>;
+    PpRegions : TArray<TPpRegionRow>  ;
   end;
 
   /// <remarks>
