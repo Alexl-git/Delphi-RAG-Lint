@@ -141,6 +141,15 @@ Check 'F1  F.Show (uses Forms, namespace Vcl): Vcl.Forms.TCustomForm.Show' (AllE
 $r = ExtAt $vcl 'F2' 'ProcessMessages'
 Check 'F2  Application.ProcessMessages: Vcl.Forms.TApplication.ProcessMessages' (AllExt $r 'Vcl.Forms.TApplication.ProcessMessages') (Show $r)
 
+# S1 (150 INT, RS1 handover): the resolver reads the STORED project fact (EX3 project_settings),
+# not the .dproj text. Strip the namespaces from the .dproj on disk and re-resolve from the
+# stored parses: F1 must stay bound. RED on a build that still reads the .dproj text.
+$vd = Split-Path $vcl
+W (Join-Path $vd 'App.dproj') ($dproj.Replace('__NS__', ''))
+& $Exe index --project (Join-Path $vd 'App.dproj') --db $vcl --resolve-only --library-db $LibraryDb 2>&1 | Out-Null
+$r = ExtAt $vcl 'F1' 'Show'
+Check 'S1  .dproj namespaces removed after the index, --resolve-only: F.Show still Vcl.Forms (stored DCC_Namespace fact)' (AllExt $r 'Vcl.Forms.TCustomForm.Show') (Show $r)
+
 $none = Build 'none' ''
 $r = ExtAt $none 'F1' 'Show'
 Check 'N1  no DCC_Namespace: F.Show stays unbound (negative control -- the tie is real)' (($r.Count -ge 1) -and (@($r | Where-Object { $_.ext }).Count -eq 0)) (Show $r)

@@ -1441,6 +1441,11 @@ type
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddVisibleUnitRoutines"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
+    /// <summary>150 INT: the unit scope names (DCC_Namespace) of one project file -- the stored
+    /// project_settings fact, or the .dproj text when the index has no such rows.</summary>
+    /// <param name="AProjectFileId">files.id of the .dpr / .dpk.</param>
+    /// <returns>Lower-cased names, first occurrence kept, `$(..)` dropped; empty when none.</returns>
+    function ProjectNamespaces(AProjectFileId: Int64): TArray<string>;
     /// <summary>149 RB2 item 3: AFileId's OWN uses (both sections, lower-cased, source order) --
     /// FileUsesUnits without the .dpr part.</summary>
     /// <param name="AFileId">The referencing file.</param>
@@ -11218,6 +11223,21 @@ begin
     end;
 end;
 
+{ 150 INT (RS1 handover): the scope names of the project file AProjectFileId -- EX3's stored
+  fact (project_settings 'DCC_Namespace', lower-cased, first occurrence kept) when the index
+  has it; otherwise (a DB written before the table, e.g. `--resolve-only` on an older index)
+  the .dproj text beside the .dpr, as RS1 read it. }
+function TCallResolver.ProjectNamespaces(AProjectFileId: Int64): TArray<string>;
+begin
+  Result:= [];
+  for var V: string in FStore.GetProjectSettings('DCC_Namespace', AProjectFileId) do
+  begin
+    var Ns: string:= LowerCase(Trim(V));
+    if (Ns <> '') and not Ns.StartsWith('$(') and (IndexStr(Ns, Result) < 0) then Result:= Result + [Ns];
+  end;
+  if Length(Result) = 0 then Result:= DprojNamespaces(ChangeFileExt(FStore.GetFilePath(AProjectFileId), '.dproj'));
+end;
+
 function TCallResolver.FileOwnUses(AFileId: Int64): TArray<string>;
 begin
   var AllUses: TArray<string>:= FileUsesUnits(AFileId); // loads FDprUses first
@@ -11234,7 +11254,7 @@ begin
       if SameText(ExtractFileExt(FStore.GetFilePath(Id)), '.dpr') then
       begin
         for var U: TUnitUse in FStore.GetUnitUsesForFile(Id) do FDprUses:= FDprUses + [LowerCase(U.UnitName)];
-        FOracle.Namespaces:= FOracle.Namespaces + DprojNamespaces(ChangeFileExt(FStore.GetFilePath(Id), '.dproj'));
+        FOracle.Namespaces:= FOracle.Namespaces + ProjectNamespaces(Id);
       end;
   end;
   Result:= FDprUses;
