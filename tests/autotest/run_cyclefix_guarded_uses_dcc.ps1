@@ -10,6 +10,8 @@
 #   n3  the region inactive in the build (GU_EXTRA undefined): the index sees no edge, no cycle, nothing planned
 #   n4  lane 149 CYB (case 9 extension): GuB only used in GuA's implementation -> the plan would MOVE the guarded entry;
 #       refused directive with the named reason (the guard cannot follow the entry), not moved unguarded
+#   n4b lane 150 CY2: the n4 plan carries no unguarded move of GuB (no **move**, no implementation `uses GuB;`)
+#   n4c positive control: the same entry WITHOUT the guard is planned as a move and --apply builds byte-identical
 #
 # Usage: pwsh -File run_cyclefix_guarded_uses_dcc.ps1 [-Exe <drag-lint.exe>] [-WorkDir <dir>] [-KeepWorkDir]
 param(
@@ -140,7 +142,17 @@ try {
   $M = New-Proj 'guardeduses' 'GuardedUses' { param($r) Edit-Text (Join-Path $r 'GuA.pas') "  Result := UpperCase('gu-a');`nend;" "  Result := UpperCase('gu-a');`n  if Result = '' then`n    GuSay;`nend;" }
   Push-Location $WorkDir
   try { $mp = ($null | & $Exe cycles --plan --db $M.Db --library-db none 2>$null | Out-String) } finally { Pop-Location }
-  Check 'n4 lane 149 CYB: a guarded entry that MOVES to the implementation refuses directive, naming the move   (RED on 1.48.0: moved unguarded)' (($mp -match 'refused: directive -- the interface uses clause, line \d+, .*`GuB` moves from this section to the other one but sits in a conditional region') -and ($mp -match 'Fix it: not available -- directive')) $mp} finally {
+  Check 'n4 lane 149 CYB: a guarded entry that MOVES to the implementation refuses directive, naming the move   (RED on 1.48.0: moved unguarded)' (($mp -match 'refused: directive -- the interface uses clause, line \d+, .*`GuB` moves from this section to the other one but sits in a conditional region') -and ($mp -match 'Fix it: not available -- directive')) $mp
+  Check 'n4b lane 150 CY2: the guarded n4 plan never MOVES GuB unguarded (no **move**, no implementation `uses GuB;` insert)   (RED on 1.48.0)' (($mp -notmatch '`GuA\.pas` / `GuB`:.*\*\*move\*\*') -and ($mp -notmatch '(?m)^uses\r?\n\s+GuB;')) $mp
+  # n4c positive control: the SAME move with the guard removed is planned and applied -- the n4 refusal is the guard's, not the move's.
+  $UnguardMove = { param($r)
+    Edit-Text (Join-Path $r 'GuA.pas') "{`$IFDEF GU_EXTRA}`n  GuB,`n{`$ENDIF}`n" "  GuB,`n"
+    Edit-Text (Join-Path $r 'GuA.pas') "  Result := UpperCase('gu-a');`nend;" "  Result := UpperCase('gu-a');`n  if Result = '' then`n    GuSay;`nend;" }
+  $C = New-Proj 'guardeduses' 'GuardedUses' $UnguardMove
+  $cp = Get-Plan $C
+  Check 'n4c positive control: the unguarded entry MOVES to the implementation (no directive refusal)' (($cp -notmatch 'refused: directive') -and ($cp -match '`GuA\.pas` / `GuB`:.*\*\*move\*\* it from the interface uses to the implementation uses')) $cp
+  $null = Prove-Apply 'n4c' 'guardeduses' 'GuardedUses' $UnguardMove
+} finally {
   if (-not $KeepWorkDir) {
     for ($i = 0; ($i -lt 15) -and (Test-Path -LiteralPath $WorkDir); $i++) {
       try { [IO.Directory]::Delete($WorkDir, $true) } catch { Start-Sleep -Seconds 2 }
