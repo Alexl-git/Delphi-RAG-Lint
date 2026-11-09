@@ -2,8 +2,9 @@
   run_cyclefix_c1_guarded.ps1 -- plan 2026-10-25 C1 (rest), `receiver-unknown` when `is`-guarded, and the C9 plan
   wording (lane X-CYC 2026-10-26): recipe R2 casts a receiver whose static type it cannot tell (`GetOwner as TX`,
   `TX(GetOwner).M`) through the IInterface ancestor when an `X is TX` test on the same receiver text precedes the
-  cast inside the same routine -- the cast is reached only when X IS a TX (the J9 argument). Unguarded stays
-  `receiver-unknown`, now saying so; a guard in ANOTHER routine does not count.
+  cast inside the same routine -- the cast is reached only when X IS a TX (the J9 argument). An unguarded `as` goes
+  through the As<Surface> helper since 149 CYB; an unguarded hard cast stays `receiver-unknown`, saying so; a guard in
+  ANOTHER routine does not count.
 
   THE PLATFORM LIBRARY: copied into the $PID scratch dir, passed with --library-db; z1 compares the real DBs'
   size + mtime. Without -LibraryDb on disk: SKIP, exit 0.
@@ -13,8 +14,9 @@
   ACCEPTED: guardedas (Attach: `if not (GetOwner is TDemoGagePort) then Exit; with GetOwner as TDemoGagePort do`
             -> `with TComponent(GetOwner) as IDemoGagePortSurface do`), guardedcast (OnData: the same guard, then
             `TDemoGagePort(GetOwner).Log.Add('g')` -> `(TComponent(GetOwner) as IDemoGagePortSurface).Log.Add('g')`).
-  REFUSED:  unguardedas (`with GetOwner as TDemoGagePort do`, no guard on GetOwner), guardelsewhere (the guard in
-            Attach, the cast in OnData) -- `receiver-unknown`, the reason names the missing guard.
+            unguardedas (`with GetOwner as TDemoGagePort do`, no guard on GetOwner; lane 149 CYB, 149-CY-8b: was refused
+            receiver-unknown) -> `with AsDemoGagePortSurface(GetOwner) do`, the raise-preserving helper (TObject parameter).
+  REFUSED:  guardelsewhere (the guard in Attach, the hard cast in OnData) -- `receiver-unknown`, the reason names the missing guard.
   C9 WORDING: keptgetter (TDemoGagePort already declares `function GetLog: TStrings;` read by Log): the hand-over
             step says the getter is reused, not declared.
   POSITIVE CONTROL: the clean pair is mechanical. The compile of the accepted trees: run_cyclefix_c1_guarded_dcc.ps1.
@@ -118,7 +120,8 @@ try {
   Write-Host '== accepted: a receiver of unknown static type behind its own `is` guard' -ForegroundColor Cyan
   $Accepted = @(
     @('guardedas', @(, @($U, $attachOld, "  if not (GetOwner is TDemoGagePort) then`n    Exit;`n  with GetOwner as TDemoGagePort do`n")), 52, '  with TComponent(GetOwner) as IDemoGagePortSurface do'),
-    @('guardedcast', @(, @($U, $onDataOld, ($onDataOld + "  if not (GetOwner is TDemoGagePort) then`n    Exit;`n  TDemoGagePort(GetOwner).Log.Add('g');`n"))), 62, "  (TComponent(GetOwner) as IDemoGagePortSurface).Log.Add('g');")
+    @('guardedcast', @(, @($U, $onDataOld, ($onDataOld + "  if not (GetOwner is TDemoGagePort) then`n    Exit;`n  TDemoGagePort(GetOwner).Log.Add('g');`n"))), 62, "  (TComponent(GetOwner) as IDemoGagePortSurface).Log.Add('g');"),
+    @('unguardedas', @(, @($U, $attachOld, "  if not (Owner is TDemoGagePort) then`n    Exit;`n  with GetOwner as TDemoGagePort do`n")), 52, '  with AsDemoGagePortSurface(GetOwner) do')
   )
   foreach ($c in $Accepted) {
     $v = Get-VariantPlan (New-Variant $c[0] $c[1]) $c[0]
@@ -129,8 +132,7 @@ try {
 
   Write-Host '== refused: no guard, or the guard in another routine' -ForegroundColor Cyan
   $Refused = @(
-    @('unguardedas', @(, @($U, $attachOld, "  if not (Owner is TDemoGagePort) then`n    Exit;`n  with GetOwner as TDemoGagePort do`n")), 52),
-    @('guardelsewhere', @(@($U, $attachOld, "  if not (GetOwner is TDemoGagePort) then`n    Exit;`n  with Owner as TDemoGagePort do`n"), @($U, $onDataOld, ($onDataOld + "  TDemoGagePort(GetOwner).Log.Add('g');`n"))), 60)
+    ,@('guardelsewhere', @(@($U, $attachOld, "  if not (GetOwner is TDemoGagePort) then`n    Exit;`n  with Owner as TDemoGagePort do`n"), @($U, $onDataOld, ($onDataOld + "  TDemoGagePort(GetOwner).Log.Add('g');`n"))), 60)
   )
   foreach ($c in $Refused) {
     $v = Get-VariantPlan (New-Variant $c[0] $c[1]) $c[0]

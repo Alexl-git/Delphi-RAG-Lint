@@ -8,6 +8,8 @@
 #   n1  an ELSE branch: still refused directive (multi-branch is not provable)
 #   n2  a region with an entry that stays: still refused directive
 #   n3  the region inactive in the build (GU_EXTRA undefined): the index sees no edge, no cycle, nothing planned
+#   n4  lane 149 CYB (case 9 extension): GuB only used in GuA's implementation -> the plan would MOVE the guarded entry;
+#       refused directive with the named reason (the guard cannot follow the entry), not moved unguarded
 #
 # Usage: pwsh -File run_cyclefix_guarded_uses_dcc.ps1 [-Exe <drag-lint.exe>] [-WorkDir <dir>] [-KeepWorkDir]
 param(
@@ -135,7 +137,10 @@ try {
   $I = New-Proj 'guardeduses' 'GuardedUses' { param($r) Edit-Text (Join-Path $r 'GuardedUses.dproj') 'GU_EXTRA;' '' }
   $c = ($null | & $Exe cycles --db $I.Db --library-db none 2>$null | Out-String)
   Check 'n3 the region inactive in the build: no edge, no cycle' ($c -match 'No circular unit dependencies found\.') $c
-} finally {
+  $M = New-Proj 'guardeduses' 'GuardedUses' { param($r) Edit-Text (Join-Path $r 'GuA.pas') "  Result := UpperCase('gu-a');`nend;" "  Result := UpperCase('gu-a');`n  if Result = '' then`n    GuSay;`nend;" }
+  Push-Location $WorkDir
+  try { $mp = ($null | & $Exe cycles --plan --db $M.Db --library-db none 2>$null | Out-String) } finally { Pop-Location }
+  Check 'n4 lane 149 CYB: a guarded entry that MOVES to the implementation refuses directive, naming the move   (RED on 1.48.0: moved unguarded)' (($mp -match 'refused: directive -- the interface uses clause, line \d+, .*`GuB` moves from this section to the other one but sits in a conditional region') -and ($mp -match 'Fix it: not available -- directive')) $mp} finally {
   if (-not $KeepWorkDir) {
     for ($i = 0; ($i -lt 15) -and (Test-Path -LiteralPath $WorkDir); $i++) {
       try { [IO.Directory]::Delete($WorkDir, $true) } catch { Start-Sleep -Seconds 2 }

@@ -9,6 +9,12 @@
 #   r2  --fix --apply: exit 0, no refusal; the applied copy builds; stdout byte-identical; no cycle after a re-index
 #   pc1 POSITIVE CONTROL: the applied copy with the helper raising EIntfCastError instead builds, and its stdout DIFFERS
 #       (the handler no longer catches it: the compare has teeth)
+#   u1  lane 149 CYB (149-CY-8b): the same under the handler with a receiver of unknown static type (GetOwner, a method):
+#       through the helper, not refused receiver-unknown; --apply builds, stdout identical   (RED on 1.48.0: receiver-unknown)
+#   u2  no handler, unguarded `GetOwner as TDemoGagePort`: the helper too (the plan says why); builds, stdout identical
+#       (the plain-TComponent attach raises EInvalidCast out of the program in both copies: same class + message)
+#   u3  control: a known receiver without a handler keeps `as IDemoGagePortSurface` (no helper)
+#   h1  a hard cast `TDemoGagePort(Owner).Log` under the handler: the plan states the behaviour change (EIntfCastError)
 #
 # Fixture: tests\fixtures\cyclefix\memberwrite, Attach rewritten to the unguarded try/except shape, and the .dpr
 # attaching a TDemoUIConnect to a plain TComponent once. Library: a COPY of -LibraryDb in the work dir.
@@ -48,13 +54,14 @@ function Get-SrcHash([string]$Dir) {
 if (-not (Test-Path $LibraryDb)) { Write-Host "SKIP: no platform library DB at $LibraryDb" -ForegroundColor Yellow; exit 0 }
 $AttachOld = "procedure TDemoUIConnect.Attach;`nbegin`n  if not (Owner is TDemoGagePort) then`n    Exit;`n  with Owner as TDemoGagePort do`n    Log.Add(Format('ui connected (last gage %d)', [LastGage]));`nend;"
 $AttachNew = "procedure TDemoUIConnect.Attach;`nbegin`n  try`n    with Owner as TDemoGagePort do`n      Log.Add(Format('ui connected (last gage %d)', [LastGage]));`n  except`n    on E: EInvalidCast do`n      Writeln('[ui] ', E.ClassName, ': ', E.Message);`n  end;`nend;"
-function New-Raise([string]$Tag) {
+function New-Raise([string]$Tag, [scriptblock]$Patch = $null) {
   $root = Join-Path $WorkDir $Tag
   New-Item -ItemType Directory -Force $root | Out-Null
   Get-ChildItem (Join-Path $Repo 'tests\fixtures\cyclefix\memberwrite') -File | ForEach-Object { Copy-Item $_.FullName (Join-Path $root $_.Name) }
   Edit-Text (Join-Path $root 'DemoUIConnect.pas') $AttachOld $AttachNew
   Edit-Text (Join-Path $root 'MemberWrite.dpr') "uses`n  System.SysUtils," "uses`n  System.SysUtils,`n  System.Classes,"
   Edit-Text (Join-Path $root 'MemberWrite.dpr') "      GPort.ReadGage(43);" "      GPort.ReadGage(43);`n      var O := TComponent.Create(nil);`n      try`n        TDemoUIConnect.Create(O).Attach;`n      finally`n        O.Free;`n      end;"
+  if ($Patch) { & $Patch $root }
   $db = "$root.sqlite"
   Push-Location $WorkDir
   try { $null | & $Exe index --project (Join-Path $root 'MemberWrite.dproj') --db $db --library-db $Lib *> "$db.log" } finally { Pop-Location }
@@ -121,6 +128,32 @@ try {
   Check 'pc1a the EIntfCastError variant compiles' $bc.Ok $bc.Errors
   $outC = Invoke-Program $P
   Check 'pc1b its output DIFFERS (EInvalidCast handler bypassed)' (($outC -ne '<no exe>') -and ($outC -cne $out0)) "[$outC]"
+  Write-Host '== u: 149-CY-8b -- an unknown-type receiver goes through the helper (lane 149 CYB)' -ForegroundColor Cyan
+  $UnkHandler = "procedure TDemoUIConnect.Attach;`nbegin`n  try`n    with GetOwner as TDemoGagePort do`n      Log.Add(Format('ui connected (last gage %d)', [LastGage]));`n  except`n    on E: EInvalidCast do`n      Writeln('[ui] ', E.ClassName, ': ', E.Message);`n  end;`nend;"
+  $UnkPlain   = "procedure TDemoUIConnect.Attach;`nbegin`n  with GetOwner as TDemoGagePort do`n    Log.Add(Format('ui connected (last gage %d)', [LastGage]));`nend;"
+  foreach ($case in @(@{ Tag = 'u1'; Attach = $UnkHandler; Raise = $true }, @{ Tag = 'u2'; Attach = $UnkPlain; Raise = $false })) {
+    $Prep = { param($root) Edit-Text (Join-Path $root 'DemoUIConnect.pas') $AttachNew $case.Attach }
+    $UB = New-Raise "$($case.Tag)-base" $Prep
+    $ub0 = Invoke-Build $UB
+    $uout0 = Invoke-Program $UB
+    $UP = New-Raise "$($case.Tag)-edit" $Prep
+    Push-Location $WorkDir
+    try { $uplan = ($null | & $Exe cycles --plan --project $UP.Dproj --db $UP.Db --library-db $Lib 2>$null | Out-String) } finally { Pop-Location }
+    $why = if ($case.Raise) { 'handles EInvalidCast and casts with `as TDemoGagePort` unguarded' } else { 'casts with `as TDemoGagePort` on a receiver whose static type is not known' }
+    Check "$($case.Tag).1 planned through AsDemoGagePortSurface(GetOwner), no receiver-unknown; the Exceptions line says why   (RED on 1.48.0: receiver-unknown)" (($uplan -notmatch 'receiver-unknown') -and $uplan.Contains('with AsDemoGagePortSurface(GetOwner) do') -and $uplan.Contains($why)) $uplan
+    $ua = Run-Fix $UP @('--apply')
+    $ub1 = Invoke-Build $UP
+    $uout1 = Invoke-Program $UP
+    Check "$($case.Tag).2 --apply: exit 0, both copies build, stdout identical" (($ua.Exit -eq 0) -and ($ua.Kinds.Count -eq 0) -and $ub0.Ok -and $ub1.Ok -and ($uout0 -ne '<no exe>') -and ($uout1 -ceq $uout0) -and ($uout0 -match 'ui connected|EInvalidCast')) "exit=$($ua.Exit) $($ua.Kinds -join ' || ') base=[$($ub0.Errors)] applied=[$($ub1.Errors)] before=[$uout0] after=[$uout1]"
+  }
+  $K = New-Raise 'u3' { param($root) Edit-Text (Join-Path $root 'DemoUIConnect.pas') $AttachNew $AttachOld }
+  Push-Location $WorkDir
+  try { $kplan = ($null | & $Exe cycles --plan --project $K.Dproj --db $K.Db --library-db $Lib 2>$null | Out-String) } finally { Pop-Location }
+  Check 'u3 control: a known, guarded receiver and no handler keep `as IDemoGagePortSurface`, no helper' ($kplan.Contains('with Owner as IDemoGagePortSurface do') -and -not $kplan.Contains('AsDemoGagePortSurface(')) $kplan
+  $H = New-Raise 'h1' { param($root) Edit-Text (Join-Path $root 'DemoUIConnect.pas') "    with Owner as TDemoGagePort do`n      Log.Add(Format('ui connected (last gage %d)', [LastGage]));`n  except" "    if Owner is TDemoGagePort then`n      TDemoGagePort(Owner).Log.Add('ui connected');`n  except" }
+  Push-Location $WorkDir
+  try { $hplan = ($null | & $Exe cycles --plan --project $H.Dproj --db $H.Db --library-db $Lib 2>$null | Out-String) } finally { Pop-Location }
+  Check 'h1 a hard cast under the EInvalidCast handler: the plan states the behaviour change   (RED on 1.48.0: no such line)' ($hplan.Contains('- Behaviour change: `DemoUIConnect.pas` handles EInvalidCast and reads through a hard cast `TDemoGagePort(X).M`, which becomes `(X as IDemoGagePortSurface).M`')) $hplan
 } finally {
   if (-not $KeepWorkDir) {
     for ($i = 0; ($i -lt 15) -and (Test-Path -LiteralPath $WorkDir); $i++) {

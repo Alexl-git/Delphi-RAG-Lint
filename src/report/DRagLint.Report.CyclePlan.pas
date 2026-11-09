@@ -1735,8 +1735,9 @@ end;
   when nothing changes; a refusal is an ekManual edit on the line it names,
   its Refusal the kind. }
 function ClauseEdit(const pLines: TArray<string>; pUsesLine: Integer; const pSectLabel: string;
-  const pAdds, pDels: TArray<string>): TFileEdit;
+  const pAdds, pDels: TArray<string>; const pMoved: TArray<string> = nil): TFileEdit;
 var
+  Why   : string;           // lane 149 CYB: a named reason that replaces the generic one
   Old   : TArray<string>;
   Src   : string;           // the clause onward, unedited
   Text  : string;           // the same, as the ops edit it
@@ -1764,6 +1765,18 @@ begin
   BadOfs:= if Orig.Present then Orig.UsesTok.Start else 1;
   if not Orig.Present then Kind:= CRefManual;
   var Dels:= Copy(pDels);
+  Why:= '';
+  { lane 149 CYB (case 9 extension): an entry of a conditional region that MOVES to the other section would
+    lose its guard there (become unconditional) -- refused with that reason, never dropped with its guard }
+  if Kind = '' then
+    for var E in Orig.Entries do
+      if (Why = '') and (E.Depth > 0) and MatchText(E.Name, pDels) and MatchText(E.Name, pMoved) then
+      begin
+        Kind  := CRefDirective;
+        BadOfs:= E.Start;
+        Why   := Format('`%s` moves from this section to the other one but sits in a conditional region: the ' +
+          'region would have to move with it, or the entry would become unconditional there', [E.Name]);
+      end;
   // lane 148 CY: removed entries of a single-branch $IFDEF region go with their guard
   if Kind = '' then DropGuardedBlocks(Text, Orig, Dels, pAdds);
   Ops:= TList<string>.Create;
@@ -1827,7 +1840,7 @@ begin
     Result.Last   := Result.First;
     Result.Note   := Format('refused: %s -- the %s uses clause, line %d, cannot be edited token by token (%s). ' +
       'Edit it by hand: remove %s; add %s.', [Kind, pSectLabel, Result.First,
-      (if Kind = CRefDirective then 'the edit would touch a compiler directive or a conditional entry'
+      (if Why <> '' then Why else if Kind = CRefDirective then 'the edit would touch a compiler directive or a conditional entry'
        else 'a comment inside an entry, or a clause shape the lexer does not read'),
       (if Length(pDels) > 0 then QuoteList(pDels) else 'nothing'), (if Length(pAdds) > 0 then QuoteList(pAdds) else 'nothing')]);
     Exit;
@@ -4832,7 +4845,11 @@ begin
   UsesLine:= Entries[0].StartLine;
   while (UsesLine > 1) and not TRegEx.IsMatch(CodePart(LineAt(pF.Lines, UsesLine)), '\buses\b', [roIgnoreCase]) do
     Dec(UsesLine);
-  E:= ClauseEdit(pF.Lines, UsesLine, SectLabel(pSect), Adds.ToArray, Dels.ToArray);
+  { lane 149 CYB: the stems the other section gains -- a removed guarded entry among them is a move }
+  var Moved: TArray<string>:= nil;
+  if pSect in [scIntf, scImpl] then
+    for var S in ListOf(FUsesAdd, pF.Fid, if pSect = scIntf then scImpl else scIntf) do Moved:= Moved + [StemOfEntry(S)];
+  E:= ClauseEdit(pF.Lines, UsesLine, SectLabel(pSect), Adds.ToArray, Dels.ToArray, Moved);
   if E.First > 0 then EditList(pF.Fid).Add(E);
 end;
 
@@ -6574,7 +6591,8 @@ begin
     var Ev:= pEvals[I];
     var Tested:= False;
     for var R in Ev.Surface.Refs do
-      if R.Kind in [erTypeIs, erTypeAs] then Tested:= True;
+      if (R.Kind in [erTypeIs, erTypeAs]) or ((R.Kind = erTypeCast) and (R.SymbolId > 0) and  { lane 149 CYB (149-CY-12): a hard cast to a class }
+        (FStore.GetSymbolById(R.SymbolId).Kind = skClass)) then Tested:= True;
     if (Ev.Recipe <> crNone) or (Ev.Surface.RoutineName <> '') or not Tested then Continue;
     var Leaf := ResolveUntangleLeaf(FStore, Ev.Surface.ToStem, FComp, Root);
     var Steps:= PlanMemberInterface(Self, FLibStore, Ev.Surface, Leaf.UnitName, UnitScopes, Refusal);
@@ -6923,7 +6941,12 @@ begin
   Emit('- Checked: no name inside a `with` body changes what it binds to; the members carried are fields and ' +
     'properties of the class itself, read only.');
   for var S in FInversion.Surfaces do
-    if S.AsHelper <> '' then  { lane 148 CY (fabcyc case 8) }
+    if (S.AsHelper <> '') and not S.HandlesInvalidCast then  { lane 149 CYB (149-CY-8b) }
+      EmitFmt('- Exceptions: `%s` casts with `as %s` on a receiver whose static type is not known, so every such `as` ' +
+        'goes through `%s(X)` (a TObject parameter), a helper the plan adds to `%s`: nil for nil, else the interface, ' +
+        'else `raise EInvalidCast.CreateRes(@SInvalidCast)` -- the class and message the failed class cast raised; ' +
+        'only the raise address differs.', [Consumer, S.ClassTypeName, S.AsHelper, Consumer])
+    else if S.AsHelper <> '' then  { lane 148 CY (fabcyc case 8) }
       EmitFmt('- Exceptions: `%s` handles EInvalidCast and casts with `as %s` unguarded, so every such `as` goes ' +
         'through `%s(X)`, a helper the plan adds to `%s`: nil for nil, else the interface, else ' +
         '`raise EInvalidCast.CreateRes(@SInvalidCast)` -- the class and message the failed class cast raised; ' +
@@ -6932,6 +6955,11 @@ begin
       EmitFmt('- Exceptions: a failed `as %s` raises EIntfCastError, not EInvalidCast as `as %s` did -- a handler ' +
         'for EInvalidCast no longer catches it. Checked: `%s` handles no EInvalidCast, or each `as` follows its ' +
         '`is` guard.', [S.IfaceName, S.ClassTypeName, Consumer]);
+  for var S in FInversion.Surfaces do
+    if S.HardCastChange then  { lane 149 CYB (149-CY-8b): a stated behaviour change }
+      EmitFmt('- Behaviour change: `%s` handles EInvalidCast and reads through a hard cast `%s(X).M`, which becomes ' +
+        '`(X as %s).M`: a wrong X now raises EIntfCastError, which that handler does not catch, where the old code ' +
+        'read through the wrong object.', [Consumer, S.ClassTypeName, S.IfaceName]);
   Emit('');
 end;
 
