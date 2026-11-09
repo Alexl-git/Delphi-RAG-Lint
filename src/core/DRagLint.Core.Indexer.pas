@@ -799,6 +799,8 @@ begin
     L.Free;
   end;
 end;
+
+constructor TIndexer.Create(const AStore: ISymbolStore; const AParsers: TArray<IParser>; const ADocConfig: TDocConfig);
 var
   P: IParser;
 begin
