@@ -26,4 +26,8 @@ assert.strictEqual(i.warning, false);
 assert.ok(i.tooltip.includes('no platform'));
 assert.ok(b.tooltip.includes('unknown') && b.tooltip.includes('no project'));
 assert.deepStrictEqual(ctx.initOptions(() => undefined), { project: '', platform: '', config: '' });
+// 148 VS: the item is hidden on non-Delphi files (a .md has no owning project)
+assert.strictEqual(typeof ctx.isDelphiLanguage, 'function');
+for (const l of ['pascal', 'objectpascal', 'delphi', 'dfm', 'delphi-project', 'Pascal']) assert.strictEqual(ctx.isDelphiLanguage(l), true, l);
+for (const l of ['markdown', 'json', 'plaintext', 'javascript', '', undefined, null]) assert.strictEqual(ctx.isDelphiLanguage(l), false, String(l));
 console.log('context.test.js: all assertions passed');

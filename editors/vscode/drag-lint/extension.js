@@ -558,13 +558,21 @@ async function generateThemeFile() {
 let ctxStatus;
 let ctxWarned = false;
 
+// Show the item only while a Delphi file is active (dlctx.isDelphiLanguage).
+function updateContextVisibility() {
+  if (!ctxStatus) return;
+  const ed = window.activeTextEditor;
+  if (ed && !dlctx.isDelphiLanguage(ed.document.languageId)) ctxStatus.hide();
+  else ctxStatus.show();
+}
+
 function showContext(ctx) {
   if (!ctxStatus) return;
   const f = dlctx.formatStatus(ctx);
   ctxStatus.text = f.text;
   ctxStatus.tooltip = f.tooltip;
   ctxStatus.backgroundColor = f.warning ? new ThemeColor('statusBarItem.warningBackground') : undefined;
-  ctxStatus.show();
+  updateContextVisibility();
 }
 
 async function applyContext(patch) {
@@ -645,6 +653,7 @@ function activate(context) {
   ctxStatus.command = 'dragLint.selectPlatform';
   context.subscriptions.push(ctxStatus);
   showContext(undefined);
+  context.subscriptions.push(window.onDidChangeActiveTextEditor(updateContextVisibility));
   context.subscriptions.push(commands.registerCommand('dragLint.selectPlatform', selectPlatform));
   context.subscriptions.push(commands.registerCommand('dragLint.selectProject', selectProject));
 
