@@ -841,9 +841,12 @@ begin
       Exit;
     end;
     var BodyIdx:= -1;
+    { lane 150 CY3: both patterns compiled once, not once per line }
+    var SectRx:= TRegEx.Create('(?i)^\s*(initialization|finalization)\b');
+    var EndRx := TRegEx.Create('(?i)^\s*end\s*\.');
     for var K:= Lines.Count - 1 downto EndIdx + 1 do
-      if TRegEx.IsMatch(Lines[K], '(?i)^\s*(initialization|finalization)\b') then BodyIdx:= K
-      else if (BodyIdx < 0) and TRegEx.IsMatch(Lines[K], '(?i)^\s*end\s*\.') then BodyIdx:= K;
+      if SectRx.IsMatch(Lines[K]) then BodyIdx:= K
+      else if (BodyIdx < 0) and EndRx.IsMatch(Lines[K]) then BodyIdx:= K;
     var HeadIdx:= FClass.StartLine - 1;
     var Head:= TRegEx.Match(Lines[HeadIdx], '(?i)=\s*class\s*\(([^)]*)\)');
     if (BodyIdx < 0) or not Head.Success then
@@ -1242,10 +1245,14 @@ begin
     var InitIdx:= -1;
     var FinIdx := -1;
     var EndIdx := -1;
+    { lane 150 CY3: the three patterns compiled once, not once per line (the class IsMatch builds its regex on every call) }
+    var InitRx:= TRegEx.Create('(?i)^initialization\b');
+    var FinRx := TRegEx.Create('(?i)^finalization\b');
+    var EndRx := TRegEx.Create('(?i)^end\s*\.');
     for var K:= Lines.Count - 1 downto 0 do
-      if TRegEx.IsMatch(Lines[K], '(?i)^initialization\b') then InitIdx:= K
-      else if TRegEx.IsMatch(Lines[K], '(?i)^finalization\b') then FinIdx:= K
-      else if (EndIdx < 0) and TRegEx.IsMatch(Lines[K], '(?i)^end\s*\.') then EndIdx:= K;
+      if InitRx.IsMatch(Lines[K]) then InitIdx:= K
+      else if FinRx.IsMatch(Lines[K]) then FinIdx:= K
+      else if (EndIdx < 0) and EndRx.IsMatch(Lines[K]) then EndIdx:= K;
     if InitIdx >= 0 then Lines.InsertRange(InitIdx + 1, Assigns)
     else if (FinIdx >= 0) or (EndIdx >= 0) then
     begin
