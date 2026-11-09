@@ -10840,7 +10840,10 @@ begin
       the project's: never answer it from a library. }
     if Declared or FNameToRoutines.ContainsKey(LowerCase(ACallRef.NameText))
        or EnclosingClassChainDeclares(ACallRef.EnclosingSymbolId, ACallRef.NameText, ClassId) then Exit;
-    Exit(FOracle.BindBare(ACallRef.NameText, FileUsesUnits(ACallRef.FileId), ScopeType, Reason));
+    { 149 RB2 item 3: FileUsesUnits is the .dpr's uses followed by the file's own; the oracle
+      decides on the file's own first (a unit does not see what the program uses). }
+    var AllUses: TArray<string>:= FileUsesUnits(ACallRef.FileId);
+    Exit(FOracle.BindBare(ACallRef.NameText, AllUses, ScopeType, Reason, Copy(AllUses, Length(FDprUses), MaxInt)));
   end;
   Kind:= if SameText(ACallRef.Kind, 'member-access') or SameText(ACallRef.Kind, REF_KIND_PROP_SPEC)
            or SameText(ACallRef.Kind, REF_KIND_REC_FIELD) then ekMemberAccess else ekCall;

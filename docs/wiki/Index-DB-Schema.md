@@ -141,7 +141,7 @@ filled by the resolve pass. Indexes: `idx_refs_file`, `idx_refs_symbol`,
 | column | type | meaning |
 |---|---|---|
 | id | INTEGER PK | |
-| symbol_id | INTEGER FK symbols (set null) | resolved target declaration; NULL = unresolved or external |
+| symbol_id | INTEGER FK symbols (set null) | resolved target declaration, written for a CERTAIN binding only; NULL = unresolved, external (see external_target) or ambiguous (a call_edges row with confidence `ambiguous` holds the picked candidate, no single declaration is claimed). Count unresolved calls as refs with no call_edges row and no external_target, never as `symbol_id IS NULL` |
 | file_id | INTEGER FK files (cascade) | file containing the use |
 | kind | TEXT | see section 4 |
 | name_text | TEXT | identifier as written (generics keep their arguments) |
