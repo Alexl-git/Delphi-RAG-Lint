@@ -35,8 +35,12 @@ const
     1.35, whose re-parse fills them. INT reverted the bump: the tables are ADDITIVE and probed
     (HasFileFacts), the data_flows / ref_types precedent, and a bump made every library index
     unusable (skipped as stale) until its re-parse -- the 149 battery and every post-deploy
-    index run would have bound without the library. }
-  SCHEMA_VERSION = 23;
+    index run would have bound without the library.
+    150 INT (2026-11-09): 23 -> 24 again, now SAFE on a 23 library: lane SC's read-compat range
+    (SCHEMA_READ_MIN = 23) opens a v23 store for reading with the additive 150 tables probed
+    (file_includes / dfm_objects / pp_regions, project_settings, pp_directives); a writer at
+    v23 still takes the stale -> rebuild path. }
+  SCHEMA_VERSION = 24;
 
   /// <summary>The oldest stored schema_version this engine READS without migrating
   /// (150 SC, docs\superpowers\specs\2026-11-09-schema-read-compat.md).</summary>

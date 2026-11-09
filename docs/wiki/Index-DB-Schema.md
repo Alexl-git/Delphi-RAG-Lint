@@ -1,4 +1,4 @@
-# Index DB Schema (schema 23)
+# Index DB Schema (schema 24)
 
 Reference for the SQLite file drag-lint builds: `<project folder>\_D-RAG\<base>.sqlite`
 (project DB) and `library-Win32|Win64.sqlite` (platform library). Everything here was
@@ -13,7 +13,7 @@ Never open a real DB with a writer to "look": copy it first, or use the read-onl
 
 ## 1. Overview
 
-* **Schema version** `schema_meta.schema_version` = `23` (wave 149 / extractor 1.35 added `file_includes`, `dfm_objects`, `pp_regions` additively, no bump). It is stamped LAST by `Migrate`
+* **Schema version** `schema_meta.schema_version` = `24` (wave 150: 23 -> 24 with a read-compat range, `SCHEMA_READ_MIN` = 23 -- a v24 engine reads a v23 index, its additive tables probed; the 1.35 / wave-150 tables `file_includes`, `dfm_objects`, `pp_regions`, `project_settings`, `pp_directives` are additive and probed). It is stamped LAST by `Migrate`
   (the commit point of a migration), so an interrupted upgrade keeps the old number and
   the next writable open heals it.
 * **Two kinds of change.** A change that alters what the indexer WRITES bumps
@@ -434,7 +434,7 @@ variable passed at position `src_index` of an earlier call).
 
 All three live in `schema_meta` and drive "is this index current".
 
-* **schema** `schema_version` (= `SCHEMA_VERSION`, 23): structural generation of the file.
+* **schema** `schema_version` (= `SCHEMA_VERSION`, 24; read range from `SCHEMA_READ_MIN` = 23): structural generation of the file.
 * **indexer** `indexer_fingerprint`, e.g. `v=1.25.0-alpha;schema=23;pp=1;plat=win64;cfg=debug;defs=42819f5f`:
   product/extractor version, schema, preprocessing on, platform, config, hash of the defines.
   A mismatch means rows were produced by a different extractor: re-parse. The extractor
