@@ -2370,7 +2370,6 @@ function LoadDocComplexityMin: Integer;
 var
   DocManifest: TIndexManifest;
 begin
-  Result:= 10;
   try
     DocManifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
     Result:= DocManifest.Docs.ComplexityMin;
