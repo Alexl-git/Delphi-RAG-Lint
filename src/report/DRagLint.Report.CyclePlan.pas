@@ -1640,6 +1640,45 @@ begin
   if Result then pSpan:= OfsSpan(OpenAt, CloseEnd + 1);
 end;
 
+{ 150 CY1 (EX2 150 row, cycles half): the 1-based file line of offset pOfs of pText, the clause text that starts on
+  file line pFirstLine (lines joined by CClauseBreak). }
+function ClauseLineOf(const pText: string; pOfs, pFirstLine: Integer): Integer;
+begin
+  Result:= pFirstLine;
+  var At:= Pos(CClauseBreak, pText);
+  while (At > 0) and (At < pOfs) do
+  begin
+    Inc(Result);
+    At:= Pos(CClauseBreak, pText, At + Length(CClauseBreak));
+  end;
+end;
+
+{ 150 CY1 (EX2 150 row, cycles half): GuardRegionOf with the region's SHAPE read from the pp_regions rows of the file
+  (pRegions, non-empty) instead of from the braces alone: the innermost branch holding the entry's line must be branch 0
+  of an IFDEF / IFNDEF / IF / IFOPT region with no ELSE / ELSEIF branch and no region nested in it, and the braces
+  GuardRegionOf finds must sit on that branch's StartLine (opener) and EndLine (closer). The table carries lines, not
+  columns, so the text still locates the braces (pSpan) and still refuses any other brace between them. False when the
+  table and the text disagree. }
+function GuardRegionByTable(const pText: string; const pOrig: TUsesClause; const pE: TUsesEntry;
+  const pRegions: TArray<TPpRegionRow>; pFirstLine: Integer; out pSpan: TOfsSpan): Boolean;
+begin
+  Result:= GuardRegionOf(pText, pOrig, pE, pSpan);
+  if not Result then Exit;
+  var Line:= ClauseLineOf(pText, pE.Start, pFirstLine);
+  var Hit := -1;
+  for var I:= 0 to High(pRegions) do
+    if (pRegions[I].StartLine <= Line) and (pRegions[I].EndLine >= Line) and
+      ((Hit < 0) or (pRegions[I].Nesting > pRegions[Hit].Nesting)) then Hit:= I;
+  Result:= (Hit >= 0) and (pRegions[Hit].Branch = 0) and
+    MatchText(pRegions[Hit].Directive, ['ifdef', 'ifndef', 'if', 'ifopt']) and
+    (ClauseLineOf(pText, pSpan.Start, pFirstLine) = pRegions[Hit].StartLine) and
+    (ClauseLineOf(pText, pSpan.Stop - 1, pFirstLine) = pRegions[Hit].EndLine);
+  for var X in pRegions do
+    if Result and (Hit >= 0) and (((X.Region = pRegions[Hit].Region) and (X.Branch > 0)) or (X.Parent = pRegions[Hit].Region)) then
+      Result:= False;
+  if not Result then pSpan:= OfsSpan(0, 0);
+end;
+
 { Lane 148 CY: deletes region pR from pText -- mid-line (`A $IFDEF X, B $ENDIF;`) with the blanks before it,
   at a line start with the blanks after it. }
 procedure DeleteRegion(var pText: string; const pR: TOfsSpan);
@@ -1680,7 +1719,7 @@ begin
 end;
 
 function DropGuardedBlocks(var pText: string; const pOrig: TUsesClause; var pDels: TArray<string>;
-  const pAdds: TArray<string>): Boolean;
+  const pAdds: TArray<string>; const pRegions: TArray<TPpRegionRow>; pFirstLine: Integer): Boolean;
 var
   Text   : string;
   Dels   : TList<string>;
@@ -1704,7 +1743,12 @@ begin
       for var A in pAdds do Removed:= Removed and not SameText(StemOfEntry(A), E.Name);
       if not Removed then Exit;  { a guarded entry that stays: the block cannot go whole }
       var Span: TOfsSpan;
-      if not GuardRegionOf(Text, pOrig, E, Span) then Exit;
+      { 150 CY1: the pp_regions rows decide the region's shape when the index has them (schema-23 DB / scan: the text) }
+      if Length(pRegions) > 0 then
+      begin
+        if not GuardRegionByTable(Text, pOrig, E, pRegions, pFirstLine, Span) then Exit;
+      end
+      else if not GuardRegionOf(Text, pOrig, E, Span) then Exit;
       if (Regions.Count > 0) and (Regions.Last.Start = Span.Start) then Continue;  { the region's next entry }
       Regions.Add(Span);
     end;
@@ -1737,7 +1781,7 @@ end;
   when nothing changes; a refusal is an ekManual edit on the line it names,
   its Refusal the kind. }
 function ClauseEdit(const pLines: TArray<string>; pUsesLine: Integer; const pSectLabel: string;
-  const pAdds, pDels: TArray<string>; const pMoved: TArray<string> = nil): TFileEdit;
+  const pAdds, pDels: TArray<string>; const pMoved: TArray<string> = nil; const pRegions: TArray<TPpRegionRow> = nil): TFileEdit;
 var
   Why   : string;           // lane 149 CYB: a named reason that replaces the generic one
   Old   : TArray<string>;
@@ -1780,7 +1824,7 @@ begin
           'region would have to move with it, or the entry would become unconditional there', [E.Name]);
       end;
   // lane 148 CY: removed entries of a single-branch $IFDEF region go with their guard
-  if Kind = '' then DropGuardedBlocks(Text, Orig, Dels, pAdds);
+  if Kind = '' then DropGuardedBlocks(Text, Orig, Dels, pAdds, pRegions, pUsesLine);
   Ops:= TList<string>.Create;
   try
     if Kind = '' then
@@ -4899,7 +4943,16 @@ begin
   var Moved: TArray<string>:= nil;
   if pSect in [scIntf, scImpl] then
     for var S in ListOf(FUsesAdd, pF.Fid, if pSect = scIntf then scImpl else scIntf) do Moved:= Moved + [StemOfEntry(S)];
-  E:= ClauseEdit(pF.Lines, UsesLine, SectLabel(pSect), Adds.ToArray, Dels.ToArray, Moved);
+  { 150 CY1 (EX2 150 row, cycles half): case 9 reads the file's pp_regions rows when the index has them; the brace scan
+    alone is the fallback (a schema-23 DB, a file indexed before the table, or DRAGLINT_CYCLES_PP=scan -- the identity
+    guard run_cyclefix_pp_regions_identity compares both). With DRAGLINT_CYCLES_PP set, stderr names the path taken. }
+  var PpMode:= GetEnvironmentVariable('DRAGLINT_CYCLES_PP');
+  var Regions: TArray<TPpRegionRow>:= nil;
+  if not SameText(PpMode, 'scan') and FStore.HasFileFacts then Regions:= FStore.GetPpRegions(pF.Fid);
+  if PpMode <> '' then
+    Writeln(ErrOutput, Format('cycles: case 9 %s uses: conditional regions from %s', [ExtractFileName(pF.Path),
+      (if Length(Regions) > 0 then 'pp_regions (table)' else 'the brace scan')]));
+  E:= ClauseEdit(pF.Lines, UsesLine, SectLabel(pSect), Adds.ToArray, Dels.ToArray, Moved, Regions);
   if E.First > 0 then EditList(pF.Fid).Add(E);
 end;
 
