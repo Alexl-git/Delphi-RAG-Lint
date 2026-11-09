@@ -3,6 +3,72 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## v1.49.0-alpha -- unreleased
+
+Wave 149, integrated on lane/149-INT over main bdbf7f91a. Extractor 1.34.0 -> 1.35.0-alpha and resolver 1.22.0 -> 1.23.0-alpha: ONE re-parse of every DB after the deploy. Index SCHEMA_VERSION stays 23 (the three new fact tables are additive).
+
+### Added
+- uses-recover --apply: stores the units recovered from vendor .hpp headers in the project index (one files row per
+  header, language 'hpp'; its includes as interface unit_uses rows) and binds the project's uses rows to them, so
+  cycles, impact and the uses graph see past a compiled-only library. Idempotent; a re-index keeps the binding (an
+  indexed .pas of the same name always wins). Off unless --apply.
+- uses-recover --project <x.dproj>: resolves unit aliases (DCC_UnitAlias + Delphi defaults such as WinProcs/WinTypes
+  = Winapi.Windows) before classifying used units; json aliases[].
+- Resolver/extractor: unit-uses resolution gains rule C (bind to a header-recovered row by exact name).
+- cycles --plan --hub-surface: the hub's free routines a spoke still calls go through R1 pointers in <Hub>.Hub; ancestor
+  members (frmMain.Invalidate) typed from the platform library; Loader's 78-unit hub group: 76/76 edges, group breaks.
+- cycles --plan --hub-surface is now the full playbook with R3 (+ the --hub block) in place of Part A for a hub-shaped
+  group; --causes --format json --hub-surface returns R3's fix object (part r3) without running the planner.
+- cycles --plan / --fix: a protected or private `override` no longer blocks the constructor inversion (149-CY-10).
+- cycles --plan / --fix: a metaclass `TXClass = class of TX` moves into the leaf together with its class (149-CY-7).
+- cycles --plan --hub-surface (P4): `Assigned(frmMain)` becomes `Assigned(MainHub)`, any other bare use `MainHubAsForm`
+  (nil-safe, over a new `AsForm` property typed with the form's library class); `with frmMain do` refuses with-member.
+- cycles --plan / --fix: an edge that reaches several classes by hard casts `TX(X).M` (no is/as) is cut with one
+  interface per class (149-CY-12).
+- cycles --plan / --fix: `X as TX` on a receiver of unknown static type goes through the As<Surface> helper instead of
+  refusing receiver-unknown; a hard cast under an EInvalidCast handler is planned with a stated behaviour change.
+- cycles --plan / --fix: a uses entry inside an {$IFDEF} region that would MOVE to the other section refuses
+  `directive` with the reason (1.48 moved it unguarded).
+- LSP: draglint/callerCounts carries the exception lens titles (`exceptions`), for the RAD Studio lens.
+- LSP/VS Code: clicking the exception lens lists the routine's raise/handler sites (executeCommand
+  draglint.exceptionFacts) in a quick pick and jumps to the one picked.
+- hover (CLI, LSP, hoverBundle): 'Used in:' / 'Used in (via property X):' include uses from the other
+  project DBs (non-library) that hold the unit.
+- document / doc-drift: 'Used in (via property X):' lines are merged and project-tagged on shared units.
+- LSP: a .dproj without a platform marker takes the manifest defaultPlatform, else Win32 (as index).
+- plugin: the RAD Studio code lens shows the exception summary beside the caller count, e.g.
+  `[1 caller] [raises 2 types, handles 1 type]` (needs the 1.49 engine; older engines unchanged).
+
+### Changed (extractor / resolver / index)
+- index: a member read through a dereferenced call result -- `F()^.M`, `G(1, 2)^.N`, `PRec(P)^.K` -- now has its member-access ref (find-callers, ref_types, unused-public-symbol see it).
+- Index: new additive tables file_includes, dfm_objects, pp_regions (written per file from extractor 1.35; schema version unchanged at 23; docs\wiki\Index-DB-Schema.md).
+- index: a generic type on the right of `is` (`X is TList<Integer>`) records its type uses again (grammar 1.4.5 spells it as a type node).
+- A uses list written as an include (entries and ';' in the .inc) now yields its uses edges; the host no longer loses the section after it (cycles/deps see the edge).
+- Resolver: a class with a forward declaration (`TFoo = class;`) types its receivers -- member access through a global of such a class binds (Loader2025: 1664 refs through the hub global).
+- Resolver: `with H do Names().X` types through the with member; a type-named call inside a with scope that may be a member is no longer written as a cast.
+- Resolver: selector chains step parameterless methods (`H.Get.Items[0].X`), call heads (`F()[0].X`), class-level var heads; `TFoo.Create.Run` binds; IReadOnlyDictionary subscripts; `var X := Default(T)` is typed; a .dpr main block types used-unit vars; a bare `Free` in a parentless class binds TObject.Free.
+- Resolver: a bare library call (IntToStr, FreeAndNil, UpperCase) is decided on the calling unit's own uses, not the program file's -- the EurekaLog units an ORM3 .dpr lists made them ambiguous everywhere (CLIENT: +344 external targets, IntToStr 0 -> 155).
+- Resolver: a library type tie is decided on the calling unit's own uses too.
+- Resolver: `FW.Lost.Run`, Lost a member of unknown type, no longer binds to an unrelated class named Lost.
+- Resolver: a type mention two used units declare follows Delphi's uses order (last listed wins; implementation uses after interface uses).
+- Resolver: unit- and class-level vars, consts and enum values get use edges (member_accesses read / write).
+- Docs: refs.symbol_id is NULL for an ambiguous edge by design; interface dispatch is one edge to the interface method (derive the kind from the target's parent).
+- Resolver: a 1-file reindex with a library attached runs the SCOPED calls pass when the library is unchanged and no type name moved (was always whole DB; 305 of 359 s on OM's run).
+- Every reader announces a never-completed index; auto-create's reindex failure names its own verb; library marker refreshed while bound.
+- dfm extractor: a non-ASCII letter inside object Name: TType no longer truncates the stored symbol to its ASCII prefix (tree-sitter-dfm 1.2.0: Unicode identifiers); convert-apply --only finds such blocks (148 CV NEXT-BUMP). Fixtures tests\fixtures\dfm-nonascii, guard run_dfm_nonascii_identifier.ps1.
+- build\_builddfm32.bat compiles the Win32 DLL with cl /MACHINE:X86 (tree-sitter build linked x64 under vcvars32).
+- Grammar v1.4.7: `external` tails without `;` (`external L`, `index N`, `name Ident`) parse; pure grammar gets the orphan `begin..end;` definition-level block; `declProcFwd` conflict entry dropped; corpus-tail guard. 0 newly failing files on 533/8286, root 8286 +1 file fixed (JvShDlg), pure 8286 +63 fixed.
+- tools\grammar: tsdiff / tserr / tsparse + build bat + gate script committed (were lane scratch since 147 GP).
+
+### Fixed
+- index: `--library-db` naming a library index at an older schema is skipped with a note instead of crashing the calls stage (access violation in TDataSet.GetActive).
+- redundant-cast: a cast to a library class (one distinct qualified name) or of a string-returning call to string is identity by name when the type is not in the project index (149 RT item 2).
+- lint: is-always-true and is-never-true see a qualified type after `is` again (`X is Unit.TFoo`) -- grammar 1.4.5 spells it as a type node and the reader knew only the expression form.
+- lint: constant-condition reports `if True then .. else ..` / `if False then .. else ..` (the else form was never matched).
+- `lint-all`: review-marker-unused / -stale on a dl:shared unit resolves the owning project DBs from the manifest when no --shared-db is given (149 RT item 6).
+- `rename --kind param` / the proof forms accept a routine-local's tokens in an inactive {$IFDEF} branch (same symbol by scope); `quit-from-thread` follows a quit reached through a called routine; `extract-interface --reparent-interfaced=norefcount` re-parents onto TSingletonImplementation; doc-drift matches a library raise through its ancestor (149 RT items 1, 3, 4, 5).
+- Build: build_draglint.bat / build_phase0.bat write to third_party\dll-win64 (were third_party\dll); tests: run_mcp_protocol_guard / run_lsp_proxy_lifecycle_guard default to the tree's own build (tests\autotest\lib\DefaultEngineExe.ps1) (149 RQ items 5, 7).
+
 ## v1.48.0-alpha -- unreleased
 
 Wave 148, integrated on lane/148-int over lane/147-int b9482d4a4. NO extractor or resolver bump (extractor 1.34.0-alpha, resolver 1.22.0-alpha unchanged): no re-parse beyond 1.47's. Bump-needing items are prepared for 149 (lane/148-PB is not merged).
