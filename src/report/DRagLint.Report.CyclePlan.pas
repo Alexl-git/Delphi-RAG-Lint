@@ -2471,11 +2471,10 @@ begin
   F:= GetFile(pSym.FileId);
   Result.Decl:= OneRange(DocStart(F.Lines, pSym.StartLine), pSym.EndLine);
   case pSym.Kind of
-    skEnum, skTypeAlias, skInterface, skConstDecl, skVarDecl: Result.Kind:= mvDecl;
-    { 149-CY-7 (lane 149 CYA), the cycle-declared metaclass whose class can move: `TXClass = class of TX;` is a plain
-      declaration; AddDependencies pulls TX along (its own TryAdd decides), so the pair moves into the leaf together.
-      A TX that cannot move refuses the classref with TX's reason. }
-    skClassRef: Result.Kind:= mvDecl;
+    { 149-CY-7 (lane 149 CYA), skClassRef: the cycle-declared metaclass whose class can move -- `TXClass = class of TX;`
+      is a plain declaration; AddDependencies pulls TX along (its own TryAdd decides), so the pair moves into the leaf
+      together. A TX that cannot move refuses the classref with TX's reason. }
+    skEnum, skTypeAlias, skInterface, skConstDecl, skVarDecl, skClassRef: Result.Kind:= mvDecl;
     skRecord, skClass: ClassifyStructured(F, Result);
     skProcedure, skFunction:
       begin
