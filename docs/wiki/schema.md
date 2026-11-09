@@ -62,6 +62,10 @@ class's `Create` is stored by name when the index was resolved with its library.
 `finalization` section names that section's symbol. Elsewhere outside a routine
 it stays NULL.
 
+## Which indexes it can read (schema range)
+
+An engine reads an index whose stored schema version lies in `SCHEMA_READ_MIN .. SCHEMA_VERSION` (23..24 in 1.49) with full function: a library index at the older version is used, not skipped. Below the range every opener refuses with one named reason (`index schema vN is older than this engine reads (vMIN..vCUR); re-index it`). The text output prints `engine schema vCUR reads vMIN..vCUR`; `--format json` adds `engine_schema_version`, `engine_schema_read_min` and `schema_readable`. Writers still upgrade the schema through the migration step.
+
 ## Example
 
 Illustrative only:

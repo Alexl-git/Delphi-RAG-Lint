@@ -185,7 +185,7 @@ Guard: `tests\callresolve\run_interface_dispatch_attribution.ps1`.
 Property/field accesses. `ref_id INTEGER PK FK refs (cascade)`, `member_symbol_id INTEGER
 NOT NULL FK symbols (cascade)`, `mode TEXT` (`read` | `write`), `accessor_symbol_id INTEGER FK
 symbols (set null)` (getter/setter method, which ALSO earns a `call_edges` row),
-`accessor_kind TEXT` (`field` when the accessor is the backing field; NULL otherwise),
+`accessor_kind TEXT` (`field` when the accessor is the backing field; `var-arg` / `out-arg` on an accessor-less read row whose member is passed as a var / out argument -- a write in effect, mode stays `read` so every mode reader is unchanged (150 RS2); NULL otherwise),
 `receiver_type_symbol_id INTEGER FK symbols (set null)`. Indexes on `member_symbol_id`,
 `accessor_symbol_id`.
 
