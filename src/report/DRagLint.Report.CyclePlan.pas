@@ -818,9 +818,14 @@ type
     procedure Release;
   end;
 
-  TCyclePlanner = class(TNoRefCountObject, IEdgeSurfaceSource)  // dl:ok god-class@ac0b, high-response@ac0b -- implementation-private; one per cycles --plan run, holding the shared per-cycle state that every small step reads; its many methods are the steps, each short
+  TCyclePlanner = class(TNoRefCountObject, IEdgeSurfaceSource, IEdgeSurfaceCache)  // dl:ok god-class@ac0b, high-response@ac0b -- implementation-private; one per cycles --plan run, holding the shared per-cycle state that every small step reads; its many methods are the steps, each short
   private
     FAccess     : TDictionary<Int64, TCallEdge>;  // ref id -> member_accesses row, loaded on first use
+    FChildMemo  : TDictionary<string, TSymbol>;   // HP2B: '<parent id>:<name>' -> FindChildSymbolByName, on first use
+    FNeedsTo    : TObjectDictionary<Int64, TDictionary<string, TArray<TNeed>>>;  // HP2B: fid -> owner stem -> NeedsOf rows, in order
+    FBodyMemo   : TDictionary<Int64, TArray<TLineRange>>;  // HP2B: symbol id -> BodyRanges, on first use
+    FChainMemo  : TDictionary<string, Boolean>;   // HP2B: '<type id>:<name>' -> IsClassChainMember, on first use
+    FEnclType   : TDictionary<Int64, Int64>;      // HP2B: enclosing symbol id -> its class / record id (0 = none)
     FStore      : ISymbolStore;
     FLibStore   : ISymbolStore;  // platform library (R2 ancestry), read-only; nil when none
     FDbPath     : string;
@@ -1056,6 +1061,12 @@ type
       out pStem: string): Boolean;
     function IsSccStem(const pStem: string): Boolean;
     function MemberAccessOf(pRefId: Int64; out pAccess: TCallEdge): Boolean;
+    // IEdgeSurfaceCache (DRagLint.Report.CycleEdge; lane 148 HP2B)
+    function CachedRefsFromFile(pFid: Int64): TArray<TReference>;
+    function CachedSymbolById(pId: Int64): TSymbol;
+    function CachedChildByName(pParentId: Int64; const pName: string): TSymbol;
+    function NeedsToStem(pFid: Int64; const pStem: string): TArray<TNeed>;
+    function ClassChainMember(pEnclosingId: Int64; const pName: string): Boolean;
   public
     constructor Create(const pStore: ISymbolStore; const pDbPath: string;
       const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings;
@@ -2070,6 +2081,11 @@ begin
   FPaths.Free;
   FFiles.Free;
   FAccess.Free;
+  FChildMemo.Free;
+  FNeedsTo.Free;
+  FBodyMemo.Free;
+  FChainMemo.Free;
+  FEnclType.Free;
   inherited Destroy;
 end;
 
@@ -2235,8 +2251,34 @@ var
   Local: TSymbol;
 begin
   if pR.EnclosingSymbolId <= 0 then Exit(False);
-  Local:= FStore.FindChildSymbolByName(pR.EnclosingSymbolId, pR.NameText);
+  Local:= CachedChildByName(pR.EnclosingSymbolId, pR.NameText);
   Result:= (Local.Id > 0) and (Local.Kind in [skLocalVar, skParam]);
+end;
+
+{ HP2B: IsClassChainMember through two memos -- the enclosing routine's type by id, then the answer by
+  (type, name); IsClassChainMember with the type's id answers as with the routine's (EnclosingTypeOf).
+  A form's methods name the same inherited members over and over, and every hop asks the stores. }
+function TCyclePlanner.ClassChainMember(pEnclosingId: Int64; const pName: string): Boolean;
+var
+  TypeId: Int64;
+begin
+  if (pEnclosingId <= 0) or (pName = '') then Exit(False);
+  if FChainMemo = nil then
+  begin
+    FChainMemo:= TDictionary<string, Boolean>.Create;
+    FEnclType := TDictionary<Int64, Int64>.Create;
+  end;
+  if not FEnclType.TryGetValue(pEnclosingId, TypeId) then
+  begin
+    var S:= EnclosingTypeOf(FStore, pEnclosingId);
+    TypeId:= if (S.Id > 0) and (S.Kind in [skClass, skRecord]) then S.Id else 0;
+    FEnclType.Add(pEnclosingId, TypeId);
+  end;
+  if TypeId = 0 then Exit(False);
+  var Key:= IntToStr(TypeId) + ':' + pName;
+  if FChainMemo.TryGetValue(Key, Result) then Exit;
+  Result:= IsClassChainMember(FStore, FLibStore, TypeId, pName);
+  FChainMemo.Add(Key, Result);
 end;
 
 function TCyclePlanner.Resolve(const pF: TPlanFile; const pR: TReference; out pNeed: TNeed): Boolean;
@@ -2249,8 +2291,11 @@ begin
   Cands:= CandidatesFor(pR.NameText);
   if Length(Cands) = 0 then Exit(False);
   Best:= PickCandidate(pF, SectOf(pF, pR.StartLine), Cands);
-  if (Best = CNotFound) or IsLocalName(pR) or
-    IsClassChainMember(FStore, FLibStore, pR.EnclosingSymbolId, pR.NameText) then Exit(False);
+  if Best = CNotFound then Exit(False);
+  if IsLocalName(pR) then Exit(False);
+  { HP2B: a memo by (enclosing symbol, name) -- the walk up the class chain asks the stores every hop, and
+    a form's methods name the same inherited members over and over }
+  if ClassChainMember(pR.EnclosingSymbolId, pR.NameText) then Exit(False);
   pNeed.Owner    := Cands[Best].Owner;
   pNeed.OwnerStem:= Cands[Best].Stem;
   pNeed.Sect     := SectOf(pF, pR.StartLine);
@@ -2321,6 +2366,9 @@ function TCyclePlanner.BodyRanges(const pSym: TSymbol): TArray<TLineRange>;
 var
   L: TList<TLineRange>;
 begin
+  { HP2B: a memo by symbol id -- IsDeclOnly asks again for every need of every class body it weighs }
+  if FBodyMemo = nil then FBodyMemo:= TDictionary<Int64, TArray<TLineRange>>.Create;
+  if FBodyMemo.TryGetValue(pSym.Id, Result) then Exit;
   L:= TList<TLineRange>.Create;
   try
     for var C in FStore.FindAllChildSymbols(pSym.Id) do
@@ -2334,6 +2382,7 @@ begin
   finally
     L.Free;
   end;
+  FBodyMemo.Add(pSym.Id, Result);
 end;
 
 function TCyclePlanner.IsDeclOnly(const pSym: TSymbol): Boolean;
@@ -4974,7 +5023,7 @@ begin
   Seen:= TDictionary<Int64, Boolean>.Create;
   try
     Fid:= FidOfStem(pFrom);
-    for var N in NeedsOf(Fid) do
+    for var N in NeedsToStem(Fid, pTo) do
     begin
       if (N.OwnerStem <> pTo) or Seen.ContainsKey(N.Owner.Id) then Continue;
       if (not pAll) and (IsMovedFor(N.Owner, Fid) or IsDeleted(Fid, N.Line)) then Continue;
@@ -5789,23 +5838,37 @@ var
 begin
   Names:= TList<string>.Create;
   try
+    var W:= TStopwatch.StartNew;
+    var TNeeds:= TStopwatch.Create;
+    var TEval:= TStopwatch.Create;
+    var Pairs:= 0;
     for var G in FPredicted do
       for var A in G.Members do
         for var B in G.Members do
         begin
           if A = B then Continue;
+          Inc(Pairs);
+          TNeeds.Start;
           var Needs:= RemainingNeeds(A, B, False);
+          TNeeds.Stop;
           if Length(Needs) = 0 then Continue;
+          TEval.Start;
           var Ev:= EvaluateEdge(A, B, Needs);
+          TEval.Stop;
           if Ev.Movable then Ev.Recipe:= crMoveGlobals;
           Names.Clear;
           for var N in Needs do Names.Add(Format('%s (%s)', [N.Owner.Name, N.Owner.Kind.ToText]));
           pEvals.Add(Ev);
           pTexts.Add(QuoteList(Names.ToArray));
         end;
+    { HP2B: where Part B's time goes (DRAGLINT_CYCLE_TIMING=1, stderr only) }
+    PlanStage(Format('PartB edges (%d pairs, %d edges; RemainingNeeds %d ms, EvaluateEdge %d ms)',
+      [Pairs, pEvals.Count, TNeeds.ElapsedMilliseconds, TEval.ElapsedMilliseconds]), W);
     { E18 T7 R3: the same recipes and order the re-run after Part A uses }
     PlanInversion(pEvals);
+    PlanStage('PartB PlanInversion', W);
     PlanMemberHandOver(pEvals);
+    PlanStage('PartB PlanMemberHandOver', W);
   finally
     Names.Free;
   end;
@@ -7313,6 +7376,60 @@ begin
     for var E in FStore.DumpAllMemberAccesses do FAccess.AddOrSetValue(E.RefId, E);
   end;
   Result:= FAccess.TryGetValue(pRefId, pAccess);
+end;
+
+{ Lane 148 HP2B (149-CY-PERF): BuildEdgeSurface used to ask the store again for every edge of the same
+  consumer -- on Loader's 78-unit group 189 Part B edges spent 94 of 146 s there. The memos below return
+  what the store returns (the index does not change during a plan; GetFile and GetSym already memoize
+  the same calls). }
+function TCyclePlanner.CachedRefsFromFile(pFid: Int64): TArray<TReference>;
+begin
+  Result:= GetFile(pFid).Refs;
+end;
+
+function TCyclePlanner.CachedSymbolById(pId: Int64): TSymbol;
+begin
+  Result:= GetSym(pId);
+end;
+
+function TCyclePlanner.CachedChildByName(pParentId: Int64; const pName: string): TSymbol;
+begin
+  if FChildMemo = nil then FChildMemo:= TDictionary<string, TSymbol>.Create;
+  var Key:= IntToStr(pParentId) + ':' + pName;
+  if FChildMemo.TryGetValue(Key, Result) then Exit;
+  Result:= FStore.FindChildSymbolByName(pParentId, pName);
+  FChildMemo.Add(Key, Result);
+end;
+
+{ HP2B: NeedsOf(pFid) restricted to the needs whose owner lives in pStem, in NeedsOf's order; built for
+  every stem of pFid on first use (NeedsOf is itself a memo, so this never goes stale). }
+function TCyclePlanner.NeedsToStem(pFid: Int64; const pStem: string): TArray<TNeed>;
+var
+  ByStem: TDictionary<string, TArray<TNeed>>;
+begin
+  if FNeedsTo = nil then FNeedsTo:= TObjectDictionary<Int64, TDictionary<string, TArray<TNeed>>>.Create([doOwnsValues]);
+  if not FNeedsTo.TryGetValue(pFid, ByStem) then
+  begin
+    ByStem:= TDictionary<string, TArray<TNeed>>.Create;
+    FNeedsTo.Add(pFid, ByStem);
+    var Lists:= TObjectDictionary<string, TList<TNeed>>.Create([doOwnsValues]);
+    try
+      for var N in NeedsOf(pFid) do
+      begin
+        var L: TList<TNeed>;
+        if not Lists.TryGetValue(N.OwnerStem, L) then
+        begin
+          L:= TList<TNeed>.Create;
+          Lists.Add(N.OwnerStem, L);
+        end;
+        L.Add(N);
+      end;
+      for var P in Lists do ByStem.Add(P.Key, P.Value.ToArray);
+    finally
+      Lists.Free;
+    end;
+  end;
+  if not ByStem.TryGetValue(pStem, Result) then Result:= nil;
 end;
 
 function TCyclePlanner.EdgeSurfacesOf(pCycleIndex: Integer): TArray<TEdgeSurface>;
