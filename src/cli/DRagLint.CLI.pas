@@ -1086,7 +1086,7 @@ function PairedManifestPath(const ACfgPath: string): string; forward;
 function NamingReindexHint(const AArgs: TArgs; const ADbPath: string): string; forward;
 { Forward: the multi-project rename's reindex callback (FinalizeAndOutput)
   wraps RefreshProjectIndex, which sits beside convert-apply far below. }
-function ReindexOwnerProject(const AProjectFile, ADbPath: string): Boolean; forward;
+function ReindexOwnerProject(const AProjectFile, ADbPath: string; const AVerb: string = 'rename'): Boolean; forward;
 function ResolveLibraryDb(const AArgs: TArgs): string        ; forward;
 function RefactorLibraries(const AArgs: TArgs): TArray<ISymbolStore>; forward;
 function OpenLibraryStores(const AArgs: TArgs): TArray<ISymbolStore>; forward;
@@ -2620,6 +2620,31 @@ begin
   Flush(ErrOutput);
 end;
 
+var GIncompleteNoted: string = ''; { lower-cased db paths already noted, ';'-joined }
+
+{ 149 IC (148 IX row): a database no index run ever COMPLETED -- an auto-create child killed at its
+  timeout after the parse wrote the file, or a --rebuild that did not finish -- is announced by
+  EVERY reader, once per database, on stderr. Before, only the run that built it said so, and every
+  later run read the half index as complete. The evidence is what CommitIndexerFingerprint writes
+  last: no indexer_fingerprint, or rebuild_in_progress still '1'. Silent while an index run holds
+  the lock (NoteIndexRunInProgressOnce speaks then, or it is this process's own run). No stdout,
+  no exit code. Guard run_autocreate_project_db.ps1 arm N. }
+procedure NoteIndexIncompleteOnce(const AStore: ISymbolStore; const ADbPath: string);
+begin
+  var Key: string:= LowerCase(ExpandFileName(ADbPath));
+  if (';' + GIncompleteNoted).Contains(';' + Key + ';') then Exit;
+  if TFile.Exists(ADbPath + '.indexing.lock') then Exit;
+  var Why: string:=
+    if AStore.GetMetaValue(REBUILD_IN_PROGRESS_META_KEY) = '1' then 'a --rebuild of it did not finish'
+    else if AStore.GetMetaValue(INDEXER_FINGERPRINT_META_KEY) = '' then 'no index run ever completed it (no indexer fingerprint)'
+    else '';
+  if Why = '' then Exit;
+  GIncompleteNoted:= GIncompleteNoted + Key + ';';
+  Writeln(ErrOutput, Format('NOTE: %s is INCOMPLETE -- %s; answers are short until an index run completes it: ' +
+    'drag-lint index --project <file.dproj> --db "%s"', [ADbPath, Why, ADbPath]));
+  Flush(ErrOutput);
+end;
+
 function OpenReadOnlyStore(const ADbPath: string; out AOk: Boolean; AQuiet: Boolean = False): ISymbolStore;
 var
   Found   : Integer;
@@ -2661,6 +2686,7 @@ begin
     or per-command -- stay open, and a warning cannot pre-empt them. }
   if AOk then NoteIndexFreshnessOnce(Result, ADbPath);
   NoteIndexRunInProgressOnce(ADbPath);
+  if AOk then NoteIndexIncompleteOnce(Result, ADbPath);
 end;
 
 // WRITABLE open (same schema-current guard as OpenReadOnlyStore). Used by
@@ -4489,7 +4515,10 @@ begin
   begin
     M.State    := LIBSTATE_BOUND;
     M.SinceUnix:= if ARun.Old.State = LIBSTATE_BOUND then ARun.Old.SinceUnix else NowUnix;
-    if ARun.Old.State <> LIBSTATE_BOUND then AStore.SetMetaValue(LIBRARY_RESOLVE_STATE_META_KEY, LibraryMarkerToJson(M));
+    { 149 IC (148 IX item 8): also rewritten while bound when the library's fingerprint moved, so
+      library_fingerprint_seen means the LAST fingerprint seen, not the one that first bound it. }
+    if (ARun.Old.State <> LIBSTATE_BOUND) or (ARun.Old.FpSeen <> ARun.Fp) then
+      AStore.SetMetaValue(LIBRARY_RESOLVE_STATE_META_KEY, LibraryMarkerToJson(M));
     if ARanCalls then Writeln(APrefix, 'library: bound (', ExtractFileName(ARun.LibDb), ')');
     Exit;
   end;
@@ -32767,7 +32796,7 @@ begin
   begin
     ARx.Status:= 'failed';
     ARx.Reason:= Format('%s -- the child was terminated; run: drag-lint index --project "%s" --db "%s"',
-      [if WaitRes = WAIT_TIMEOUT then Format('index did not finish within %d s', [REINDEX_TIMEOUT_MS div MS_PER_SECOND])
+      [if WaitRes = WAIT_TIMEOUT then Format('index did not finish within %d s', [ARx.Ms div MS_PER_SECOND])
        else 'waiting for the index failed (' + WaitErr + ')', ARx.Project, ARx.Db]);
   end
   else if ExitCode = 0 then ARx.Status:= 'done'
@@ -32784,7 +32813,7 @@ end;
   DoIndex writes its progress to STDOUT, which is the lint run's output (and,
   under --json, a JSON document). True when the child exited 0; on failure its
   reason goes to stderr and RefreshOwner reports the owner unverified. }
-function ReindexOwnerProject(const AProjectFile, ADbPath: string): Boolean;
+function ReindexOwnerProject(const AProjectFile, ADbPath: string; const AVerb: string): Boolean;
 var
   Rx: TUsesReindex;
 begin
@@ -32793,7 +32822,8 @@ begin
   Rx.Db     := ADbPath;
   RefreshProjectIndex(Rx);
   Result:= Rx.Status = 'done';
-  if not Result then Writeln(ErrOutput, 'drag-lint: rename: reindex failed -- ' + Rx.Reason);
+  { 149 IC: AVerb names the caller -- the auto-create path printed 'rename:' too (148 IX). }
+  if not Result then Writeln(ErrOutput, 'drag-lint: ' + AVerb + ': reindex failed -- ' + Rx.Reason);
 end;
 
 type
@@ -35528,7 +35558,7 @@ begin
     { 148 IX: a build stopped after the parse wrote the file (the 10-minute child timeout on a large project)
       leaves a HALF index. Say so, or this run and every later one read it as complete.
       Guard: run_autocreate_project_db.ps1 arm M. }
-    if not ReindexOwnerProject(AArgs.ProjectPath, AProjDb) then
+    if not ReindexOwnerProject(AArgs.ProjectPath, AProjDb, 'auto-create') then
       if TFile.Exists(AProjDb) then
         Writeln(ErrOutput, Format('NOTE: building it did not finish; %s is INCOMPLETE and answers short until ' +
           'this completes it: drag-lint index --project "%s" --db "%s"', [AProjDb, AArgs.ProjectPath, AProjDb]))
