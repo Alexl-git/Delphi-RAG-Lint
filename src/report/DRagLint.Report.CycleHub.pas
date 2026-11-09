@@ -14,8 +14,8 @@ unit DRagLint.Report.CycleHub;
 interface
 
 uses
-  System.SysUtils, System.Generics.Collections, System.Generics.Defaults, System.JSON,
-  DRagLint.Core.Interfaces, DRagLint.Core.Model, DRagLint.Report.CyclePlan;
+  System.SysUtils, System.Generics.Collections, System.JSON,
+  DRagLint.Core.Interfaces, DRagLint.Report.CyclePlan;
 
 type
   /// <summary>One side of a hub: the uses edges that enter (in) or leave (out) it inside the group.</summary>
@@ -99,6 +99,9 @@ procedure AddCycleHubJson(const pReport: TCycleHubReport; const pGroup: TJSONObj
 
 implementation
 
+uses
+  System.Generics.Defaults, DRagLint.Core.Model;
+
 const
   CMembersInText = 6;  { member names named on the text line; JSON carries them all }
   CSymbolsInText = 6;
@@ -109,9 +112,49 @@ type
     B: string;
   end;
 
-{ Kahn: is the group acyclic once the units in pDrop and the edges pSkip accepts are ignored? }
+  { refs and distinct consumer units per key (a symbol id as text, or a member name) }
+  TTally = class
+  private
+    FRefs : TDictionary<string, Integer>;
+    FUnits: TObjectDictionary<string, TDictionary<string, Boolean>>;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    procedure Add(const pKey, pUnit: string);
+    function Keys: TArray<string>;
+    function Refs(const pKey: string): Integer;
+    function Units(const pKey: string): Integer;
+  end;
+
+  { the symbols and references of one group, loaded once }
+  TGroupFacts = class
+  private
+    FGroup   : TArray<string>;
+    FGraph   : TCycleGraph;
+    FEdges   : TArray<TEdge>;
+    FSymUnit : TDictionary<Int64, string>;      { symbol id -> declaring unit stem (group units only) }
+    FSymKind : TDictionary<Int64, TSymbolKind>;
+    FSymName : TDictionary<Int64, string>;
+    FSymMember: TDictionary<Int64, Boolean>;    { declared inside a type (field, method, property) }
+    FRefsOf  : TDictionary<string, TArray<TReference>>;
+    FWeight  : TDictionary<string, Integer>;    { 'a->b' -> refs crossing the edge }
+    function TargetUnit(const pRef: TReference; out pUnit: string): Boolean;
+    procedure LoadEdges;
+    procedure LoadSymbolsAndRefs(const pStore: ISymbolStore);
+    procedure CountWeights;
+    function SpokeToHub(const pHub: string): TArray<TCycleHubSymbol>;
+    function MembersThrough(const pHub, pGlobal: string): TArray<TCycleHubMember>;
+    function HubToSpoke(const pHub: string): TCycleHubOut;
+    function SideOf(const pHub: string; pIn: Boolean): TCycleHubSide;
+  public
+    constructor Create(const pStore: ISymbolStore; const pGroup: TArray<string>; const pGraph: TCycleGraph);
+    destructor Destroy; override;
+    function Analyse: TCycleHubReport;
+  end;
+
+{ Kahn: is the group acyclic once pDropUnit and the edges leaving pSkipFrom / entering pSkipTo are ignored? }
 function IsAcyclic(const pUnits: TArray<string>; const pEdges: TArray<TEdge>;
-  const pDropUnit: string; const pSkipFrom, pSkipTo: string): Boolean;
+  const pDropUnit, pSkipFrom, pSkipTo: string): Boolean;
 var
   InDeg: TDictionary<string, Integer>;
   Queue: TQueue<string>;
@@ -140,11 +183,11 @@ begin
       var U:= Queue.Dequeue;
       Inc(Seen);
       for var E in Kept do
-        if E.A = U then
-        begin
-          InDeg[E.B]:= InDeg[E.B] - 1;
-          if InDeg[E.B] = 0 then Queue.Enqueue(E.B);
-        end;
+      begin
+        if E.A <> U then Continue;
+        InDeg[E.B]:= InDeg[E.B] - 1;
+        if InDeg[E.B] = 0 then Queue.Enqueue(E.B);
+      end;
     end;
     Result:= Seen = InDeg.Count;
   finally
@@ -175,258 +218,306 @@ begin
   end;
 end;
 
-function AnalyseCycleHubs(const pStore: ISymbolStore; const pGroup: TArray<string>;
-  const pGraph: TCycleGraph): TCycleHubReport;
-var
-  InGroup  : TDictionary<string, Boolean>;
-  Edges    : TList<TEdge>;
-  SymUnit  : TDictionary<Int64, string>;      { symbol id -> declaring unit stem (group units only) }
-  SymKind  : TDictionary<Int64, TSymbolKind>;
-  SymName  : TDictionary<Int64, string>;
-  SymMember: TDictionary<Int64, Boolean>;     { symbol id -> declared inside a type (field, method, property) }
-  RefsOf   : TDictionary<string, TArray<TReference>>;
-  Weight   : TDictionary<string, Integer>;    { 'a->b' -> refs crossing }
-  Hubs     : TList<TCycleHub>;
+{ TTally }
+
+constructor TTally.Create;
 begin
-  Result.Hubs:= nil;
-  Result.ZeroRefEdges:= 0;
-  Result.Edges:= 0;
+  inherited Create;
+  FRefs := TDictionary<string, Integer>.Create;
+  FUnits:= TObjectDictionary<string, TDictionary<string, Boolean>>.Create([doOwnsValues]);
+end;
+
+destructor TTally.Destroy;
+begin
+  FUnits.Free;
+  FRefs.Free;
+  inherited Destroy;
+end;
+
+procedure TTally.Add(const pKey, pUnit: string);
+var
+  N : Integer;
+  Us: TDictionary<string, Boolean>;
+begin
+  if not FRefs.TryGetValue(pKey, N) then N:= 0;
+  FRefs.AddOrSetValue(pKey, N + 1);
+  if not FUnits.TryGetValue(pKey, Us) then
+  begin
+    Us:= TDictionary<string, Boolean>.Create;
+    FUnits.Add(pKey, Us);
+  end;
+  Us.AddOrSetValue(pUnit, True);
+end;
+
+function TTally.Keys: TArray<string>;
+begin
+  Result:= FRefs.Keys.ToArray;
+end;
+
+function TTally.Refs(const pKey: string): Integer;
+begin
+  Result:= FRefs[pKey];
+end;
+
+function TTally.Units(const pKey: string): Integer;
+begin
+  Result:= FUnits[pKey].Count;
+end;
+
+{ TGroupFacts }
+
+constructor TGroupFacts.Create(const pStore: ISymbolStore; const pGroup: TArray<string>; const pGraph: TCycleGraph);
+begin
+  inherited Create;
+  FGroup:= pGroup;
+  FGraph:= pGraph;
+  FSymUnit  := TDictionary<Int64, string>.Create;
+  FSymKind  := TDictionary<Int64, TSymbolKind>.Create;
+  FSymName  := TDictionary<Int64, string>.Create;
+  FSymMember:= TDictionary<Int64, Boolean>.Create;
+  FRefsOf   := TDictionary<string, TArray<TReference>>.Create;
+  FWeight   := TDictionary<string, Integer>.Create;
+  LoadEdges;
+  LoadSymbolsAndRefs(pStore);
+  CountWeights;
+end;
+
+destructor TGroupFacts.Destroy;
+begin
+  FWeight.Free;
+  FRefsOf.Free;
+  FSymMember.Free;
+  FSymName.Free;
+  FSymKind.Free;
+  FSymUnit.Free;
+  inherited Destroy;
+end;
+
+procedure TGroupFacts.LoadEdges;
+var
+  InGroup: TDictionary<string, Boolean>;
+  Edges  : TList<TEdge>;
+  L      : TList<string>;
+begin
   InGroup:= TDictionary<string, Boolean>.Create;
   Edges  := TList<TEdge>.Create;
-  SymUnit:= TDictionary<Int64, string>.Create;
-  SymKind:= TDictionary<Int64, TSymbolKind>.Create;
-  SymName:= TDictionary<Int64, string>.Create;
-  SymMember:= TDictionary<Int64, Boolean>.Create;
-  RefsOf := TDictionary<string, TArray<TReference>>.Create;
-  Weight := TDictionary<string, Integer>.Create;
-  Hubs   := TList<TCycleHub>.Create;
   try
-    for var U in pGroup do InGroup.AddOrSetValue(U, True);
-    { the uses edges inside the group }
-    for var U in pGroup do
+    for var U in FGroup do InGroup.AddOrSetValue(U, True);
+    for var U in FGroup do
     begin
-      var L: TList<string>;
-      if not pGraph.Adj.TryGetValue(U, L) then Continue;
+      if not FGraph.Adj.TryGetValue(U, L) then Continue;
       for var V in L do
-        if (V <> U) and InGroup.ContainsKey(V) then
-        begin
-          var E: TEdge;
-          E.A:= U;
-          E.B:= V;
-          Edges.Add(E);
-          Weight.AddOrSetValue(U + '->' + V, 0);
-        end;
-    end;
-    Result.Edges:= Edges.Count;
-    { symbols and refs of every unit of the group, once }
-    for var U in pGroup do
-    begin
-      var Path: string;
-      var Fid : Int64;
-      if pGraph.UnitFile.TryGetValue(U, Path) then
-        for var S in pStore.FindSymbolsByFile(Path) do
-        begin
-          SymUnit.AddOrSetValue(S.Id, U);
-          SymKind.AddOrSetValue(S.Id, S.Kind);
-          SymName.AddOrSetValue(S.Id, S.Name);
-          SymMember.AddOrSetValue(S.Id, S.ParentId > 0);
-        end;
-      if pGraph.UnitFid.TryGetValue(U, Fid) then RefsOf.AddOrSetValue(U, pStore.GetReferencesFromFile(Fid))
-      else RefsOf.AddOrSetValue(U, nil);
-    end;
-    { edge weights }
-    for var U in pGroup do
-      for var R in RefsOf[U] do
       begin
-        var T: string;
-        if (R.SymbolId > 0) and SymUnit.TryGetValue(R.SymbolId, T) and (T <> U) then
-        begin
-          var K:= U + '->' + T;
-          var W: Integer;
-          if Weight.TryGetValue(K, W) then Weight[K]:= W + 1;
-        end;
+        if (V = U) or not InGroup.ContainsKey(V) then Continue;
+        var E: TEdge;
+        E.A:= U;
+        E.B:= V;
+        Edges.Add(E);
+        FWeight.AddOrSetValue(U + '->' + V, 0);
       end;
-    for var P in Weight do
-      if P.Value = 0 then Inc(Result.ZeroRefEdges);
-    { hubs: the units whose removal leaves the rest acyclic }
-    var EdgeArr:= Edges.ToArray;
-    for var U in pGroup do
-    begin
-      if not IsAcyclic(pGroup, EdgeArr, U, '', '') then Continue;
-      var H: TCycleHub;
-      H.UnitStem:= U;
-      H.InSide.Edges:= 0; H.InSide.IntfEdges:= 0; H.InSide.Refs:= 0;
-      H.OutSide.Edges:= 0; H.OutSide.IntfEdges:= 0; H.OutSide.Refs:= 0;
-      for var E in EdgeArr do
+    end;
+    FEdges:= Edges.ToArray;
+  finally
+    Edges.Free;
+    InGroup.Free;
+  end;
+end;
+
+procedure TGroupFacts.LoadSymbolsAndRefs(const pStore: ISymbolStore);
+var
+  Path: string;
+  Fid : Int64;
+begin
+  for var U in FGroup do
+  begin
+    if FGraph.UnitFile.TryGetValue(U, Path) then
+      for var S in pStore.FindSymbolsByFile(Path) do
       begin
-        var IsIntf:= pGraph.IntfEdges.ContainsKey(E.A + '->' + E.B);
-        if E.B = U then
-        begin
-          Inc(H.InSide.Edges);
-          if IsIntf then Inc(H.InSide.IntfEdges);
-          Inc(H.InSide.Refs, Weight[E.A + '->' + E.B]);
-        end
-        else if E.A = U then
-        begin
-          Inc(H.OutSide.Edges);
-          if IsIntf then Inc(H.OutSide.IntfEdges);
-          Inc(H.OutSide.Refs, Weight[E.A + '->' + E.B]);
-        end;
+        FSymUnit.AddOrSetValue(S.Id, U);
+        FSymKind.AddOrSetValue(S.Id, S.Kind);
+        FSymName.AddOrSetValue(S.Id, S.Name);
+        FSymMember.AddOrSetValue(S.Id, S.ParentId > 0);
       end;
-      H.InSide.BreaksAlone := IsAcyclic(pGroup, EdgeArr, '', '', U);
-      H.OutSide.BreaksAlone:= IsAcyclic(pGroup, EdgeArr, '', U, '');
-      { spoke->hub surface: hub symbols referenced from the other units }
-      var SymRefs : TDictionary<Int64, Integer>;
-      var SymUnits: TDictionary<Int64, TDictionary<string, Boolean>>;
-      var HubVars: TDictionary<string, Boolean>;  { lower-case names of the hub's globals }
-      SymRefs := TDictionary<Int64, Integer>.Create;
-      SymUnits:= TObjectDictionary<Int64, TDictionary<string, Boolean>>.Create([doOwnsValues]);
-      HubVars := TDictionary<string, Boolean>.Create;
-      try
-        for var P in SymUnit do
-          if (P.Value = U) and (SymKind[P.Key] = skVarDecl) then HubVars.AddOrSetValue(LowerCase(SymName[P.Key]), True);
-        for var V in pGroup do
-        begin
-          if V = U then Continue;
-          for var R in RefsOf[V] do
-          begin
-            var T: string;
-            if (R.SymbolId > 0) and SymUnit.TryGetValue(R.SymbolId, T) and (T = U) then
-            begin
-              { a resolved member reached through a hub global is counted under that global's
-                member names below, not as a surface symbol of its own }
-              if SymMember[R.SymbolId] and HubVars.ContainsKey(LowerCase(R.ReceiverText)) then Continue;
-              var N: Integer;
-              if not SymRefs.TryGetValue(R.SymbolId, N) then N:= 0;
-              SymRefs.AddOrSetValue(R.SymbolId, N + 1);
-              var Us: TDictionary<string, Boolean>;
-              if not SymUnits.TryGetValue(R.SymbolId, Us) then
-              begin
-                Us:= TDictionary<string, Boolean>.Create;
-                SymUnits.Add(R.SymbolId, Us);
-              end;
-              Us.AddOrSetValue(V, True);
-            end;
-          end;
-        end;
-        var Syms:= TList<TCycleHubSymbol>.Create;
-        try
-          for var P in SymRefs do
-          begin
-            var HS: TCycleHubSymbol;
-            HS.Kind := KindName(SymKind[P.Key]);
-            HS.Name := SymName[P.Key];
-            HS.Refs := P.Value;
-            HS.Units:= SymUnits[P.Key].Count;
-            HS.Members:= nil;
-            if SymKind[P.Key] = skVarDecl then
-            begin
-              { member names read through the global: refs whose receiver text is the global }
-              var MemRefs : TDictionary<string, Integer>;
-              var MemUnits: TDictionary<string, TDictionary<string, Boolean>>;
-              MemRefs := TDictionary<string, Integer>.Create;
-              MemUnits:= TObjectDictionary<string, TDictionary<string, Boolean>>.Create([doOwnsValues]);
-              try
-                for var V in pGroup do
-                begin
-                  if V = U then Continue;
-                  for var R in RefsOf[V] do
-                    if SameText(R.ReceiverText, HS.Name) and (R.NameText <> '') then
-                    begin
-                      var N: Integer;
-                      if not MemRefs.TryGetValue(R.NameText, N) then N:= 0;
-                      MemRefs.AddOrSetValue(R.NameText, N + 1);
-                      var Us: TDictionary<string, Boolean>;
-                      if not MemUnits.TryGetValue(R.NameText, Us) then
-                      begin
-                        Us:= TDictionary<string, Boolean>.Create;
-                        MemUnits.Add(R.NameText, Us);
-                      end;
-                      Us.AddOrSetValue(V, True);
-                    end;
-                end;
-                var Mems:= TList<TCycleHubMember>.Create;
-                try
-                  for var M in MemRefs do
-                  begin
-                    var HM: TCycleHubMember;
-                    HM.Name := M.Key;
-                    HM.Refs := M.Value;
-                    HM.Units:= MemUnits[M.Key].Count;
-                    Mems.Add(HM);
-                  end;
-                  Mems.Sort(TComparer<TCycleHubMember>.Construct(
-                    function(const L, R: TCycleHubMember): Integer
-                    begin
-                      Result:= R.Refs - L.Refs;
-                      if Result = 0 then Result:= CompareText(L.Name, R.Name);
-                    end));
-                  HS.Members:= Mems.ToArray;
-                finally
-                  Mems.Free;
-                end;
-              finally
-                MemUnits.Free;
-                MemRefs.Free;
-              end;
-            end;
-            Syms.Add(HS);
-          end;
-          Syms.Sort(TComparer<TCycleHubSymbol>.Construct(
-            function(const L, R: TCycleHubSymbol): Integer
-            begin
-              Result:= R.Refs - L.Refs;
-              if Result = 0 then Result:= CompareText(L.Name, R.Name);
-            end));
-          H.SpokeToHub:= Syms.ToArray;
-        finally
-          Syms.Free;
-        end;
-      finally
-        HubVars.Free;
-        SymUnits.Free;
-        SymRefs.Free;
+    if FGraph.UnitFid.TryGetValue(U, Fid) then FRefsOf.AddOrSetValue(U, pStore.GetReferencesFromFile(Fid))
+    else FRefsOf.AddOrSetValue(U, nil);
+  end;
+end;
+
+function TGroupFacts.TargetUnit(const pRef: TReference; out pUnit: string): Boolean;
+begin
+  Result:= (pRef.SymbolId > 0) and FSymUnit.TryGetValue(pRef.SymbolId, pUnit);
+end;
+
+procedure TGroupFacts.CountWeights;
+var
+  T: string;
+  W: Integer;
+begin
+  for var U in FGroup do
+    for var R in FRefsOf[U] do
+      if TargetUnit(R, T) and (T <> U) and FWeight.TryGetValue(U + '->' + T, W) then FWeight[U + '->' + T]:= W + 1;
+end;
+
+function TGroupFacts.SideOf(const pHub: string; pIn: Boolean): TCycleHubSide;
+begin
+  Result:= Default(TCycleHubSide);
+  for var E in FEdges do
+  begin
+    if (pIn and (E.B <> pHub)) or (not pIn and (E.A <> pHub)) then Continue;
+    Inc(Result.Edges);
+    if FGraph.IntfEdges.ContainsKey(E.A + '->' + E.B) then Inc(Result.IntfEdges);
+    Inc(Result.Refs, FWeight[E.A + '->' + E.B]);
+  end;
+  Result.BreaksAlone:= if pIn then IsAcyclic(FGroup, FEdges, '', '', pHub) else IsAcyclic(FGroup, FEdges, '', pHub, '');
+end;
+
+function TGroupFacts.MembersThrough(const pHub, pGlobal: string): TArray<TCycleHubMember>;
+var
+  Tally: TTally;
+  Mems : TList<TCycleHubMember>;
+begin
+  Tally:= TTally.Create;
+  Mems := TList<TCycleHubMember>.Create;
+  try
+    for var V in FGroup do
+    begin
+      if V = pHub then Continue;
+      for var R in FRefsOf[V] do
+        if SameText(R.ReceiverText, pGlobal) and (R.NameText <> '') then Tally.Add(R.NameText, V);
+    end;
+    for var K in Tally.Keys do
+    begin
+      var M: TCycleHubMember;
+      M.Name := K;
+      M.Refs := Tally.Refs(K);
+      M.Units:= Tally.Units(K);
+      Mems.Add(M);
+    end;
+    Mems.Sort(TComparer<TCycleHubMember>.Construct(
+      function(const L, R: TCycleHubMember): Integer
+      begin
+        Result:= R.Refs - L.Refs;
+        if Result = 0 then Result:= CompareText(L.Name, R.Name);
+      end));
+    Result:= Mems.ToArray;
+  finally
+    Mems.Free;
+    Tally.Free;
+  end;
+end;
+
+function TGroupFacts.SpokeToHub(const pHub: string): TArray<TCycleHubSymbol>;
+var
+  HubVars: TDictionary<string, Boolean>;  { lower-case names of the hub's globals }
+  Tally  : TTally;
+  Syms   : TList<TCycleHubSymbol>;
+  T      : string;
+begin
+  HubVars:= TDictionary<string, Boolean>.Create;
+  Tally  := TTally.Create;
+  Syms   := TList<TCycleHubSymbol>.Create;
+  try
+    for var P in FSymUnit do
+      if (P.Value = pHub) and (FSymKind[P.Key] = skVarDecl) then HubVars.AddOrSetValue(LowerCase(FSymName[P.Key]), True);
+    for var V in FGroup do
+    begin
+      if V = pHub then Continue;
+      for var R in FRefsOf[V] do
+      begin
+        if not (TargetUnit(R, T) and (T = pHub)) then Continue;
+        { a resolved member reached through a hub global is counted under that global's member names, not as a surface symbol }
+        if FSymMember[R.SymbolId] and HubVars.ContainsKey(LowerCase(R.ReceiverText)) then Continue;
+        Tally.Add(IntToStr(R.SymbolId), V);
       end;
-      { hub->spoke surface: what the hub's own refs take from the other units }
-      H.HubToSpoke.Construction:= 0;
-      H.HubToSpoke.VarWrite    := 0;
-      H.HubToSpoke.VarRead     := 0;
-      H.HubToSpoke.MethodCall  := 0;
-      var OutUnits:= TDictionary<string, Boolean>.Create;
-      try
-        for var R in RefsOf[U] do
-        begin
-          var T: string;
-          if not ((R.SymbolId > 0) and SymUnit.TryGetValue(R.SymbolId, T) and (T <> U)) then Continue;
-          OutUnits.AddOrSetValue(T, True);
-          case SymKind[R.SymbolId] of
-            skClass      : if SameText(R.Kind, 'read') then Inc(H.HubToSpoke.Construction);
-            skConstructor: Inc(H.HubToSpoke.Construction);
-            skVarDecl    : if SameText(R.Kind, 'write') then Inc(H.HubToSpoke.VarWrite)
-                           else Inc(H.HubToSpoke.VarRead);
-            skMethod     : if SameText(R.Kind, 'call') then Inc(H.HubToSpoke.MethodCall);
-          end;
-        end;
-        H.HubToSpoke.Units:= OutUnits.Count;
-      finally
-        OutUnits.Free;
+    end;
+    for var K in Tally.Keys do
+    begin
+      var Id:= StrToInt64(K);
+      var S: TCycleHubSymbol;
+      S.Kind := KindName(FSymKind[Id]);
+      S.Name := FSymName[Id];
+      S.Refs := Tally.Refs(K);
+      S.Units:= Tally.Units(K);
+      S.Members:= if FSymKind[Id] = skVarDecl then MembersThrough(pHub, S.Name) else nil;
+      Syms.Add(S);
+    end;
+    Syms.Sort(TComparer<TCycleHubSymbol>.Construct(
+      function(const L, R: TCycleHubSymbol): Integer
+      begin
+        Result:= R.Refs - L.Refs;
+        if Result = 0 then Result:= CompareText(L.Name, R.Name);
+      end));
+    Result:= Syms.ToArray;
+  finally
+    Syms.Free;
+    Tally.Free;
+    HubVars.Free;
+  end;
+end;
+
+function TGroupFacts.HubToSpoke(const pHub: string): TCycleHubOut;
+var
+  OutUnits: TDictionary<string, Boolean>;
+  T       : string;
+begin
+  Result:= Default(TCycleHubOut);
+  OutUnits:= TDictionary<string, Boolean>.Create;
+  try
+    for var R in FRefsOf[pHub] do
+    begin
+      if not (TargetUnit(R, T) and (T <> pHub)) then Continue;
+      OutUnits.AddOrSetValue(T, True);
+      case FSymKind[R.SymbolId] of
+        skClass      : if SameText(R.Kind, 'read') then Inc(Result.Construction);
+        skConstructor: Inc(Result.Construction);
+        skVarDecl    : if SameText(R.Kind, 'write') then Inc(Result.VarWrite) else Inc(Result.VarRead);
+        skMethod     : if SameText(R.Kind, 'call') then Inc(Result.MethodCall);
       end;
-      { the lighter side: distinct surfaces to cut }
-      if Length(H.SpokeToHub) <= H.HubToSpoke.Units then H.LighterSide:= 'spoke->hub'
-      else H.LighterSide:= 'hub->spoke';
+    end;
+    Result.Units:= OutUnits.Count;
+  finally
+    OutUnits.Free;
+  end;
+end;
+
+function TGroupFacts.Analyse: TCycleHubReport;
+var
+  Hubs: TList<TCycleHub>;
+begin
+  Result:= Default(TCycleHubReport);
+  Result.Edges:= Length(FEdges);
+  for var P in FWeight do
+    if P.Value = 0 then Inc(Result.ZeroRefEdges);
+  Hubs:= TList<TCycleHub>.Create;
+  try
+    for var U in FGroup do
+    begin
+      if not IsAcyclic(FGroup, FEdges, U, '', '') then Continue;
+      var H:= Default(TCycleHub);
+      H.UnitStem  := U;
+      H.InSide    := SideOf(U, True);
+      H.OutSide   := SideOf(U, False);
+      H.SpokeToHub:= SpokeToHub(U);
+      H.HubToSpoke:= HubToSpoke(U);
+      H.LighterSide:= if Length(H.SpokeToHub) <= H.HubToSpoke.Units then 'spoke->hub' else 'hub->spoke';
       Hubs.Add(H);
     end;
     Result.Hubs:= Hubs.ToArray;
   finally
     Hubs.Free;
-    Weight.Free;
-    RefsOf.Free;
-    SymMember.Free;
-    SymName.Free;
-    SymKind.Free;
-    SymUnit.Free;
-    Edges.Free;
-    InGroup.Free;
+  end;
+end;
+
+function AnalyseCycleHubs(const pStore: ISymbolStore; const pGroup: TArray<string>;
+  const pGraph: TCycleGraph): TCycleHubReport;
+var
+  Facts: TGroupFacts;
+begin
+  Facts:= TGroupFacts.Create(pStore, pGroup, pGraph);
+  try
+    Result:= Facts.Analyse;
+  finally
+    Facts.Free;
   end;
 end;
 
@@ -435,62 +526,74 @@ begin
   Result:= if pB then 'yes' else 'no';
 end;
 
+function SideText(const pSide: TCycleHubSide; const pLabel, pAlone: string): string;
+begin
+  Result:= Format('%s %d edges (%d impl, %d intf) %d refs, %s: %s',
+    [pLabel, pSide.Edges, pSide.Edges - pSide.IntfEdges, pSide.IntfEdges, pSide.Refs, pAlone, YesNo(pSide.BreaksAlone)]);
+end;
+
+{ "var GH 12 refs in 3 units (2 member names: F1 6, M 6)" }
+function SymbolText(const pSym: TCycleHubSymbol): string;
+var
+  MP: TList<string>;
+begin
+  Result:= Format('%s %s %d refs in %d units', [pSym.Kind, pSym.Name, pSym.Refs, pSym.Units]);
+  if Length(pSym.Members) = 0 then Exit;
+  MP:= TList<string>.Create;
+  try
+    for var J:= 0 to Length(pSym.Members) - 1 do
+    begin
+      if J >= CMembersInText then
+      begin
+        MP.Add('...');
+        Break;
+      end;
+      MP.Add(Format('%s %d', [pSym.Members[J].Name, pSym.Members[J].Refs]));
+    end;
+    Result:= Format('%s (%d member names: %s)', [Result, Length(pSym.Members), string.Join(', ', MP.ToArray)]);
+  finally
+    MP.Free;
+  end;
+end;
+
+function SurfaceText(const pHub: TCycleHub): string;
+var
+  Parts: TList<string>;
+begin
+  Parts:= TList<string>.Create;
+  try
+    for var I:= 0 to Length(pHub.SpokeToHub) - 1 do
+    begin
+      if I >= CSymbolsInText then
+      begin
+        Parts.Add(Format('... %d more', [Length(pHub.SpokeToHub) - CSymbolsInText]));
+        Break;
+      end;
+      Parts.Add(SymbolText(pHub.SpokeToHub[I]));
+    end;
+    Result:= Format('        spoke->hub surface: %d symbols -- %s', [Length(pHub.SpokeToHub), string.Join('; ', Parts.ToArray)]);
+  finally
+    Parts.Free;
+  end;
+end;
+
 function CycleHubLines(const pReport: TCycleHubReport): TArray<string>;
 var
   L: TList<string>;
 begin
   L:= TList<string>.Create;
   try
-    if Length(pReport.Hubs) = 0 then
-      L.Add('      hubs: none (no single unit whose removal leaves the group acyclic)')
-    else
-      for var H in pReport.Hubs do
-      begin
-        L.Add(Format('      hub %s: in %d edges (%d impl, %d intf) %d refs, the in-side alone breaks the group: %s; ' +
-          'out %d edges (%d impl, %d intf) %d refs, the out-side alone: %s',
-          [H.UnitStem, H.InSide.Edges, H.InSide.Edges - H.InSide.IntfEdges, H.InSide.IntfEdges, H.InSide.Refs,
-           YesNo(H.InSide.BreaksAlone), H.OutSide.Edges, H.OutSide.Edges - H.OutSide.IntfEdges, H.OutSide.IntfEdges,
-           H.OutSide.Refs, YesNo(H.OutSide.BreaksAlone)]));
-        var Parts:= TList<string>.Create;
-        try
-          for var I:= 0 to Length(H.SpokeToHub) - 1 do
-          begin
-            if I >= CSymbolsInText then
-            begin
-              Parts.Add(Format('... %d more', [Length(H.SpokeToHub) - CSymbolsInText]));
-              Break;
-            end;
-            var S:= H.SpokeToHub[I];
-            var Txt:= Format('%s %s %d refs in %d units', [S.Kind, S.Name, S.Refs, S.Units]);
-            if Length(S.Members) > 0 then
-            begin
-              var MP:= TList<string>.Create;
-              try
-                for var J:= 0 to Length(S.Members) - 1 do
-                begin
-                  if J >= CMembersInText then
-                  begin
-                    MP.Add('...');
-                    Break;
-                  end;
-                  MP.Add(Format('%s %d', [S.Members[J].Name, S.Members[J].Refs]));
-                end;
-                Txt:= Txt + Format(' (%d member names: %s)', [Length(S.Members), string.Join(', ', MP.ToArray)]);
-              finally
-                MP.Free;
-              end;
-            end;
-            Parts.Add(Txt);
-          end;
-          L.Add(Format('        spoke->hub surface: %d symbols -- %s', [Length(H.SpokeToHub), string.Join('; ', Parts.ToArray)]));
-        finally
-          Parts.Free;
-        end;
-        L.Add(Format('        hub->spoke surface: %d constructions, %d var writes, %d var reads, %d method calls in %d units',
-          [H.HubToSpoke.Construction, H.HubToSpoke.VarWrite, H.HubToSpoke.VarRead, H.HubToSpoke.MethodCall, H.HubToSpoke.Units]));
-        L.Add(Format('        lighter side: %s (%d hub symbols vs %d spoke surfaces)',
-          [H.LighterSide, Length(H.SpokeToHub), H.HubToSpoke.Units]));
-      end;
+    if Length(pReport.Hubs) = 0 then L.Add('      hubs: none (no single unit whose removal leaves the group acyclic)');
+    for var H in pReport.Hubs do
+    begin
+      L.Add(Format('      hub %s: %s; %s', [H.UnitStem,
+        SideText(H.InSide, 'in', 'the in-side alone breaks the group'), SideText(H.OutSide, 'out', 'the out-side alone')]));
+      L.Add(SurfaceText(H));
+      L.Add(Format('        hub->spoke surface: %d constructions, %d var writes, %d var reads, %d method calls in %d units',
+        [H.HubToSpoke.Construction, H.HubToSpoke.VarWrite, H.HubToSpoke.VarRead, H.HubToSpoke.MethodCall, H.HubToSpoke.Units]));
+      L.Add(Format('        lighter side: %s (%d hub symbols vs %d spoke surfaces)',
+        [H.LighterSide, Length(H.SpokeToHub), H.HubToSpoke.Units]));
+    end;
     L.Add(Format('      zero-ref edges inside the group: %d of %d', [pReport.ZeroRefEdges, pReport.Edges]));
     Result:= L.ToArray;
   finally
@@ -507,48 +610,55 @@ begin
   Result.AddPair('breaks_alone', TJSONBool.Create(pSide.BreaksAlone));
 end;
 
+function SymbolToJson(const pSym: TCycleHubSymbol): TJSONObject;
+var
+  JM: TJSONArray;
+begin
+  Result:= TJSONObject.Create;
+  Result.AddPair('kind', pSym.Kind);
+  Result.AddPair('name', pSym.Name);
+  Result.AddPair('refs', TJSONNumber.Create(pSym.Refs));
+  Result.AddPair('units', TJSONNumber.Create(pSym.Units));
+  JM:= TJSONArray.Create;
+  for var M in pSym.Members do
+  begin
+    var JMO:= TJSONObject.Create;
+    JMO.AddPair('name', M.Name);
+    JMO.AddPair('refs', TJSONNumber.Create(M.Refs));
+    JMO.AddPair('units', TJSONNumber.Create(M.Units));
+    JM.AddElement(JMO);
+  end;
+  Result.AddPair('members', JM);
+end;
+
+function HubToJson(const pHub: TCycleHub): TJSONObject;
+var
+  JS: TJSONArray;
+  JT: TJSONObject;
+begin
+  Result:= TJSONObject.Create;
+  Result.AddPair('unit', pHub.UnitStem);
+  Result.AddPair('in', SideToJson(pHub.InSide));
+  Result.AddPair('out', SideToJson(pHub.OutSide));
+  JS:= TJSONArray.Create;
+  for var S in pHub.SpokeToHub do JS.AddElement(SymbolToJson(S));
+  Result.AddPair('spoke_to_hub', JS);
+  JT:= TJSONObject.Create;
+  JT.AddPair('construction', TJSONNumber.Create(pHub.HubToSpoke.Construction));
+  JT.AddPair('var_write', TJSONNumber.Create(pHub.HubToSpoke.VarWrite));
+  JT.AddPair('var_read', TJSONNumber.Create(pHub.HubToSpoke.VarRead));
+  JT.AddPair('method_call', TJSONNumber.Create(pHub.HubToSpoke.MethodCall));
+  JT.AddPair('units', TJSONNumber.Create(pHub.HubToSpoke.Units));
+  Result.AddPair('hub_to_spoke', JT);
+  Result.AddPair('lighter_side', pHub.LighterSide);
+end;
+
 procedure AddCycleHubJson(const pReport: TCycleHubReport; const pGroup: TJSONObject);
 var
   Arr: TJSONArray;
 begin
   Arr:= TJSONArray.Create;
-  for var H in pReport.Hubs do
-  begin
-    var JH:= TJSONObject.Create;
-    JH.AddPair('unit', H.UnitStem);
-    JH.AddPair('in', SideToJson(H.InSide));
-    JH.AddPair('out', SideToJson(H.OutSide));
-    var JS:= TJSONArray.Create;
-    for var S in H.SpokeToHub do
-    begin
-      var JO:= TJSONObject.Create;
-      JO.AddPair('kind', S.Kind);
-      JO.AddPair('name', S.Name);
-      JO.AddPair('refs', TJSONNumber.Create(S.Refs));
-      JO.AddPair('units', TJSONNumber.Create(S.Units));
-      var JM:= TJSONArray.Create;
-      for var M in S.Members do
-      begin
-        var JMO:= TJSONObject.Create;
-        JMO.AddPair('name', M.Name);
-        JMO.AddPair('refs', TJSONNumber.Create(M.Refs));
-        JMO.AddPair('units', TJSONNumber.Create(M.Units));
-        JM.AddElement(JMO);
-      end;
-      JO.AddPair('members', JM);
-      JS.AddElement(JO);
-    end;
-    JH.AddPair('spoke_to_hub', JS);
-    var JT:= TJSONObject.Create;
-    JT.AddPair('construction', TJSONNumber.Create(H.HubToSpoke.Construction));
-    JT.AddPair('var_write', TJSONNumber.Create(H.HubToSpoke.VarWrite));
-    JT.AddPair('var_read', TJSONNumber.Create(H.HubToSpoke.VarRead));
-    JT.AddPair('method_call', TJSONNumber.Create(H.HubToSpoke.MethodCall));
-    JT.AddPair('units', TJSONNumber.Create(H.HubToSpoke.Units));
-    JH.AddPair('hub_to_spoke', JT);
-    JH.AddPair('lighter_side', H.LighterSide);
-    Arr.AddElement(JH);
-  end;
+  for var H in pReport.Hubs do Arr.AddElement(HubToJson(H));
   pGroup.AddPair('hubs', Arr);
   pGroup.AddPair('zero_ref_edges', TJSONNumber.Create(pReport.ZeroRefEdges));
 end;
