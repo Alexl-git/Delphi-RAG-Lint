@@ -56,6 +56,10 @@ type
     /// or 'string (declared in Unit.TBase)'); '' when the symbol has none.
     /// What the md / plain renderers take as their ADeclaredType.</summary>
     DeclaredType: string;
+    /// <summary>The 'Called from:' line (Doc.Facts.FormatHoverCalledFromLine) for the md card;
+    /// '' without AWithFacts, without callers, or when the /// block already shows it. Kept OUT
+    /// of FactLines: the json model feeds the RAD Studio popup, which lists resolvedCallers.</summary>
+    CalledFromLine: string;
   end;
 
 /// <summary>Assembles the structured hover model for one indexed symbol,
@@ -317,6 +321,7 @@ begin
     Result.Model.EffectFree   := Facts.EffectFree;
     Result.Model.EffectSummary:= Facts.EffectSummary;
     Result.Model.EffectWitness:= Facts.EffectWitness;
+    Result.CalledFromLine:= FormatHoverCalledFromLine(Facts, Doc.RawBlock + Doc.Remarks); { 150 LX2 }
   end;
   { C22: an interface METHOD names its answering methods (ImplementingMethodsOf, the
     LSP implementation / code-lens primitive). [] for any other symbol. }

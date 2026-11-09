@@ -5065,6 +5065,9 @@ begin
     var HovFactLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(HovFacts, LoadDocComplexityMin);
     { E-USE-EDGES-PHASE2: the property/field 'Used in:' line, same formatter as the doc block. }
     HovFactLines:= TDocRegions.FormatUsedInLines(HovFacts) + HovFactLines;
+    { 150 LX2: the callers, first as in the doc block; '' when the /// block already shows them. }
+    var HovCalledFrom: string:= FormatHoverCalledFromLine(HovFacts, Doc.RawBlock + Doc.Remarks);
+    if HovCalledFrom <> '' then HovFactLines:= [HovCalledFrom] + HovFactLines;
     HovFactLines:= HovFactLines + ExceptionFactLines(HitStore, Sel); { D1: Raises:, after the doc-block facts }
     MdValue:= DRagLint.Hover.Renderer.RenderHoverMarkdown(Sel, Doc, HovRhs, HovFactLines,
       FormatDeclaredType(DescribeDeclaredType(Sel, HitStore)));
@@ -5188,6 +5191,8 @@ begin
         var NdFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Filtered[0], LoadDocHandlesOptions, False, False, '', HoverExtraStores(APath, HitStore)); { 149 LX: cross-DB uses }
         var NdLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(NdFacts, LoadDocComplexityMin);
         NdLines:= TDocRegions.FormatUsedInLines(NdFacts) + NdLines; { E-USE-EDGES-PHASE2 }
+        var NdCalledFrom: string:= FormatHoverCalledFromLine(NdFacts, ''); { 150 LX2: no /// block here }
+        if NdCalledFrom <> '' then NdLines:= [NdCalledFrom] + NdLines;
         NdLines:= NdLines + ExceptionFactLines(HitStore, Filtered[0]); { D1: Raises: }
         if Length(NdLines) > 0 then
         begin

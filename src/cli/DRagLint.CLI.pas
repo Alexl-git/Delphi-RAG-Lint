@@ -11732,7 +11732,13 @@ begin
   if (Fmt = 'json') or (Fmt = 'md') then
   begin
     if Fmt = 'json' then Write(DRagLint.Hover.Renderer.RenderHoverJson(Model, Asm_.FactLines))
-    else Write(DRagLint.Hover.Renderer.RenderHoverMarkdown(Syms[0], Doc, Rhs, Asm_.FactLines, Asm_.DeclaredType));
+    else
+    begin
+      { 150 LX2: the md card names the callers, as the doc block does (json stays the popup's model). }
+      var MdFacts: TArray<string>:= Asm_.FactLines;
+      if Asm_.CalledFromLine <> '' then MdFacts:= [Asm_.CalledFromLine] + MdFacts;
+      Write(DRagLint.Hover.Renderer.RenderHoverMarkdown(Syms[0], Doc, Rhs, MdFacts, Asm_.DeclaredType));
+    end;
   end
   else
   begin
