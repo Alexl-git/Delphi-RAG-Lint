@@ -17096,10 +17096,25 @@ begin
         var Found: Boolean:= False;
         if Text.EndsWith(')') then
         begin
-          var Open: Integer:= Pos('(', Text);
+          { 150-RS2 (1) / 149-RB1 2c: the call that ENDS the receiver is the one whose '(' matches the
+            last ')' (`A.GetB(Twice(3))`, `MakeA().GetB(2)`), and its name starts after the head's last
+            dot -- not at the start of the whole text, which is the call only for a bare head. }
+          var Open : Integer:= Length(Text);
+          var Depth: Integer:= 0;
+          while Open > 0 do
+          begin
+            if Text[Open] = ')' then Inc(Depth)
+            else if Text[Open] = '(' then
+            begin
+              Dec(Depth);
+              if Depth = 0 then Break;
+            end;
+            Dec(Open);
+          end;
           var Head: string := Copy(Text, 1, Open - 1);
-          if (Open > 1) and StartAt.TryGetValue(Format(POS_KEY, [Line, Col - 1 - Length(Text)]), Cand) then
-            Found:= SameText(Cand.Name, Head.Substring(Head.LastIndexOf('.') + 1));
+          var Dot : Integer:= Head.LastIndexOf('.');
+          if (Open > 1) and StartAt.TryGetValue(Format(POS_KEY, [Line, Col - 1 - Length(Text) + Dot + 1]), Cand) then
+            Found:= SameText(Cand.Name, Head.Substring(Dot + 1));
         end
         else if EndAt.TryGetValue(Format(POS_KEY, [Line, Col - 1]), Cand) then
           Found:= SameText(Cand.Name, Text.Substring(Text.LastIndexOf('.') + 1));
