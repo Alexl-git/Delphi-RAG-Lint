@@ -17409,6 +17409,8 @@ var
     and its reconciliation keep meaning what their labels say. }
   WrittenUnitValues: Int64  ; { rung 3d -- unit-qualified vars/consts bound by the main stream }
   UnitValuesBefore : Int64  ; { Resolver.UnitValueBound before this ref's ResolveOne       }
+  EnumBefore       : Int64  ; { found-in-150: Resolver.EnumStats.Bound before ResolveOne   }
+  WrittenOtherValues: Int64 ; { found-in-150: rung 3c answers that are NOT enum values      }
   EnumCandidates: Int64     ; { Shape A -- bare `read` rows examined by the enum stream   }
   EnumBound     : Int64     ; { Shape A -- of those, the rows that bound                  }
   EnumShadowDecls: Int64    ; { size of the R3(c) unit-level const/var shadow set         }
@@ -17537,6 +17539,7 @@ begin
   Written := 0;
   WrittenValues  := 0;
   WrittenUnitValues:= 0;
+  WrittenOtherValues:= 0;
   EnumCandidates := 0;
   EnumBound      := 0;
   EnumShadowDecls:= 0;
@@ -17789,6 +17792,7 @@ begin
         if BeatRefs mod RESOLVE_BEAT_EVERY = 0 then BeatProgress(BeatRefs); { 1.40 heartbeat: the 37-minute pass is not silent }
         if Profiled then TMark:= TStopwatch.GetTimeStamp;
         UnitValuesBefore:= Resolver.UnitValueBound;
+        EnumBefore      := Resolver.EnumStats.Bound;
         Edge:= Resolver.ResolveOne(Ref);
         if Profiled then Inc(AccRes, TStopwatch.GetTimeStamp - TMark);
         { v20: persist the receiver for EVERY call ref, resolved or not. The
@@ -17846,7 +17850,8 @@ begin
             that moves UnitValueBound, so it is counted on the unit-values line,
             not into Written (reported as edge(s), which it earns none of). }
           if Resolver.UnitValueBound > UnitValuesBefore then Inc(WrittenUnitValues)
-          else if Edge.ValueOnly then Inc(WrittenValues) // 150-RS2 (3): rung 3c's use edge, not a call edge
+          else if Edge.ValueOnly and (Resolver.EnumStats.Bound > EnumBefore) then Inc(WrittenValues) // 150-RS2 (3): rung 3c's use edge, not a call edge
+          else if Edge.ValueOnly then Inc(WrittenOtherValues)
           else Inc(Written);
         end
         { 2026-09-23 (enum-value-ref-binding): a QUALIFIED enum value --
@@ -17863,7 +17868,8 @@ begin
           FQSetRefSymbol.ParamByName('sid').AsLargeInt:= Edge.TargetSymbolId;
           FQSetRefSymbol.ParamByName('rid').AsLargeInt:= Ref.Id;
           FQSetRefSymbol.ExecSQL;
-          Inc(WrittenValues);
+          { found-in-150: a record-field initializer / class const bound by rung 3c is not an enum value }
+          if Resolver.EnumStats.Bound > EnumBefore then Inc(WrittenValues) else Inc(WrittenOtherValues);
         end
         else if Edge.TargetSymbolId > 0 then
         begin
@@ -18099,6 +18105,10 @@ begin
       ResolveLog(Format('calls      unit-values: WARNING -- the resolver counted %d unit-qualified ' +
         'var/const binding(s) but the store wrote %d. A resolved value did not reach refs.symbol_id; ' +
         'the write path is the place to look.', [Resolver.UnitValueBound, WrittenUnitValues]));
+    { found-in-150 (RS2): rung 3c's NON-enum answers -- a record-field name in a typed-const initializer
+      `(Alpha: 1)`, a class const -- on their own line; counted as Shape B they made the enum line print a
+      false WARNING on every index holding a typed record const. }
+    ResolveLog(Format('calls      other-values: %d qualified non-enum value ref(s) bound (record-field initializers, class consts)', [WrittenOtherValues]));
     { 2026-09-23 (parenless-call binding). Every decline by reason, for the same
       reason as the enum line above: a declined read writes nothing, so these
       numbers are the only trace of what the stream refused. The edges it wrote
