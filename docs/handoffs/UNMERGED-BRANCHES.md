@@ -1,28 +1,40 @@
-<!-- dl:backlog status=open last-measured=2026-11-08 -->
+<!-- dl:backlog status=open last-measured=2026-11-09 -->
 # Unmerged branches -- standing tracker
 
 Every local branch not an ancestor of `main`, classified. Re-measure before acting:
 `git branch --no-merged main` + `git rev-list --count main..<b>` + `git cherry main <b>`
 (`+` = patch not in main, `-` = already in main under another SHA).
-Measured 2026-11-08 (wave 148 lane HK) against main = b036f2cb (1.46.0-alpha). 468 local branches: 415 are merged into main
-(deletable, `git branch -d`), 53 are not. Owner of the merge: ENGINE. LSP has nothing unmerged.
-The delete candidates are in `C:\TEMP\claude\lanes\148\HK\OWNER-DELETES-148.ps1` (dry run; -Go needed).
+Measured 2026-11-09 (wave 149 lane DOC) against main = bdbf7f91 (1.48.0-alpha: the 148 integration 8a4ccf2d3 + the plugin BPL build). 507 local branches:
+466 are merged into main (deletable, plain `git branch -d`), 41 are not (the in-flight lane/149-* branches among them). Owner of the merge: ENGINE. LSP has nothing unmerged.
+Delete candidates: the merged ones are covered by `C:\TEMP\claude\lanes\147\H1\OWNER-DELETES.ps1` (generic `branch --merged main`, dry run, -Go needed);
+the unmerged DONE set of section 3 (needs a force delete, git cannot see the equivalence) is in `C:\TEMP\claude\lanes\149\DOC\staged\OWNER-DELETES-149-DOC.ps1` (dry run, -Go needed).
+
+## 0. lane/148-* (33 branches): merged vs not
+
+30 of 33 are in main via the 148 integration (8a4ccf2d3): AF BV CV CY D1P DC DX G7 GB GD GX HK HP HP2 HS INT IX LS MF OM RF RN RO T2 T3 TN UP VS XP3 (G7 carries GX; both are the grammar-master stack, released as grammar v1.4.5 / v1.4.6).
+Not in main, by design:
+
+| Branch | Head | State | Where it goes |
+|---|---|---|---|
+| lane/148-HP2B | 64e4aae0 | Part B 145 -> 14 s | in `149 CY-BASE` 883c48a46 (CYA/CYB base); reaches main with the 149 integration |
+| lane/148-PB | dad64ba1 | PurityStage shallow-file `?` (146 g1) + NarrowToNearest renamed-param override (146 b4) | carried by RB2 (seed merge); reaches main with the 149 integration |
+| lane/148-XF | e42fa95c | FPC grammar spec (sibling layout `fpc/`) | NOT-FOR-MERGE; the grammar-fork decision is owner-side (FPC/Lazarus ruling) |
 
 ## 1. REAL WORK NOT IN MAIN -- needs a decision or a lane
 
 | Branch | Head | Work | State | Ask / lane |
 |---|---|---|---|---|
-| lane/146-b6 | 36f26086 | docs+lint(146 b6): proof results and NOT-FOR-MERGE verdict (is-never-true) | 6 commits, verdict recorded in its spec | keep as evidence; 148/T3 measures the rule on real DBs |
-| lane/146-x2 | 01085ace | E-DCU-INDEX design + read-only prototype verb (NOT-FOR-MERGE) | superseded by owner ruling 2026-11-08: NO .dcu parsing (lane HP uses .hpp + dcc map) | delete candidate after the owner's OK |
-| gaps/ext-dirword | f065a904 | WIP: Tree-sitter directive-word names (callconv names) | PARKED by owner 2026-10-28; grammar v1.4.4 is now tagged | keep; revisit with the grammar fork |
+| lane/146-b6 | 36f26086 | docs+lint(146 b6): proof results and NOT-FOR-MERGE verdict (is-never-true) | 6 commits, verdict recorded in its spec | NOT-FOR-MERGE; keep as evidence (148/T3 measured the rule on real DBs) |
+| lane/146-x2 | 01085ace | E-DCU-INDEX design + read-only prototype verb | NOT-FOR-MERGE; superseded by owner ruling 2026-11-08: NO .dcu parsing (lane HP uses .hpp + dcc map) | delete candidate after the owner's OK |
+| gaps/ext-dirword | f065a904 | WIP: Tree-sitter directive-word names (callconv names) | STRUCK from the 149 bump list (owner 2026-11-08): fixed in grammar v1.4.0 (12088ad) | delete candidate after the owner's OK |
 | lane/143-cyc4 | ce7b27be | docs(cycles): cyc4 registry output regenerated | registry output, stale (featuregen build --all regenerates it) | delete candidate (generated output) |
 | lane/144-enummap | 64caa16a | convrules: D5 -> Win64 enum map evidence book (ENUMMAP) | CONVERTER's evidence book | CONVERTER decides |
 | charts/docs-no-powershell | 6048ee46 | docs(handoff): CHARTS docs merged after 1.43 | handoff text only | CHARTS decides |
 
-## 2. IN LANE/147-INT (reach main with the 147 integration; do not delete)
+## 2. IN THE 147 / 148 INTEGRATIONS (reached main; do not treat as open)
 
-lane/146-g3, lane/146-r4, lane/146-x1, lane/146-x3, lane/146-x4, lane/146-x5 (`git rev-list --count lane/147-int..<b>` = 0 for each),
-and every lane/147-* (B1 B2 B4 B5 C1 D1 G2 G3P H1 K1 K2 K5 P1 PF PRE R3 R4F TL U1 X5P, base, int) and lane/148-* (GD HP VS and the lanes to come).
+lane/146-g3, lane/146-r4, lane/146-x1, lane/146-x3, lane/146-x4, lane/146-x5 and every lane/147-* are ancestors of main (147 integration, then 148 INT 8a4ccf2d3).
+Re-measure with `git rev-list --count main..<b>` = 0 before deleting.
 
 ## 3. DONE -- in main under another SHA, or absorbed; safe to delete (needs `branch -D`: git cannot see the equivalence)
 
@@ -40,5 +52,6 @@ and every lane/147-* (B1 B2 B4 B5 C1 D1 G2 G3P H1 K1 K2 K5 P1 PF PRE R3 R4F TL U
 
 ## 4. HOUSEKEEPING (owner call)
 
-415 merged branches (19 of them `worktree-agent-*`) are deletable with `git branch -d`; ~80 `worktree-agent-*` worktrees under `.claude\worktrees\`
+466 merged branches (several `worktree-agent-*`) are deletable with plain `git branch -d` (the 147 H1 OWNER-DELETES.ps1 dry run lists them); ~80 `worktree-agent-*` worktrees under `.claude\worktrees\`
 (~35 locked) mostly hold nothing ahead of main. Removed since the last measurement: every conv/*, clippy/*, gaps/int and fix/* branch listed in the 2026-10-27 tracker.
+Wave-149 lane branches (lane/149-*) are in flight; their worktrees are under `C:\TEMP\claude\lanes\149\<lane>\wt` and are the controller's to remove after the 149 integration.
