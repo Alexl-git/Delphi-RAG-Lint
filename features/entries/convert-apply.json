@@ -30,6 +30,10 @@
           "name": "--only"
         },
         {
+          "name": "--only-type",
+          "arg": "<Type1,Type2,...>"
+        },
+        {
           "name": "--castlib",
           "arg": "<file>"
         },

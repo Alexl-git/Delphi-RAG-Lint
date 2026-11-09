@@ -1896,6 +1896,32 @@ function NestedOnlyInstances(const ADfmText: string; const ARules: TConversionRu
 procedure SplitOnlyNames(const ADfmText: string; const ARules: TConversionRuleSet;
   const AOnly: TArray<string>; out AMatched, AUnmatched: TArray<string>);
 
+/// <summary>Expands convert-apply --only-type into the instance-name allow-list
+/// every --only consumer already understands (wave 148 CV, C12 ask N5).</summary>
+/// <param name="ADfmText">The unit's .dfm text ('' when it has none).</param>
+/// <param name="ARules">The parsed rule book.</param>
+/// <param name="ATypes">The --only-type bare type names, comma-split.</param>
+/// <param name="ANames">The allow-list: every own instance (nested and inline
+/// included) and every inherited / inline one whose From type bare-matches a
+/// type, case-insensitively, in .dfm order; plus ONE unmatchable
+/// 'type:&lt;T&gt;' sentinel per type that matched nothing, so an all-unmatched
+/// request filters everything out instead of reading as an empty (= no) filter.</param>
+/// <param name="AMatched">The ATypes entries that matched an object, as given.</param>
+/// <param name="AUnmatched">The rest, as given: the types only_unmatched[] names.</param>
+/// <remarks>Pure; no I/O. A qualified From type in the .dfm is compared by its
+/// bare tail.</remarks>
+procedure ExpandOnlyTypes(const ADfmText: string; const ARules: TConversionRuleSet;
+  const ATypes: TArray<string>; out ANames, AMatched, AUnmatched: TArray<string>);
+
+/// <summary>A unit's .pas / .dfm text decoded as the writer decodes it: a UTF-8 or
+/// UTF-16 BOM is stripped and its encoding honoured, a BOM-less file is read as
+/// the machine ANSI page (wave 148 CV, 146 c2: the CLI's own --only / --only-type
+/// .dfm reads were ANSI, so a UTF-8 .dfm's non-ASCII instance name never matched).</summary>
+/// <param name="APath">The file to read; must exist.</param>
+/// <returns>The decoded text.</returns>
+/// <exception cref="EFileNotFoundException">Raised when APath does not exist.</exception>
+/// <remarks>Not for a binary (TPF0) .dfm: the text is garbage, no object header matches.</remarks>
+function ReadUnitText(const APath: string): string;
 /// <summary>The stable wire name of an item kind, e.g. 'creator-verify'.</summary>
 /// <param name="AKind">The kind to spell.</param>
 /// <returns>A lowercase, hyphenated ASCII token; never empty.</returns>
@@ -4495,8 +4521,49 @@ begin
     if MatchText(N, Names) then AMatched:= AMatched + [N] else AUnmatched:= AUnmatched + [N];
 end;
 
-// R26 (1.20.6): the refusal reason when a planned unit-rule REMOVAL (#unuse,
-// or #useswap's Old) takes away the unit declaring the From type of a .dfm
+procedure ExpandOnlyTypes(const ADfmText: string; const ARules: TConversionRuleSet;
+  const ATypes: TArray<string>; out ANames, AMatched, AUnmatched: TArray<string>);
+
+  function Bare(const AType: string): string;
+  begin
+    Result:= AType;
+    var Dot: Integer:= LastDelimiter('.', Result);
+    if Dot > 0 then Result:= Copy(Result, Dot + 1, MaxInt);
+  end;
+
+begin
+  ANames    := nil;
+  AMatched  := nil;
+  AUnmatched:= nil;
+  var Hit: TArray<Boolean>;
+  SetLength(Hit, Length(ATypes));
+  if ADfmText <> '' then
+  begin
+    for var Inst: TConvertInstance in FindConvertInstances(ADfmText, ARules, nil) do
+      for var K:= 0 to High(ATypes) do
+        if SameText(Bare(Inst.FromType), Bare(ATypes[K])) then
+        begin
+          ANames:= ANames + [Inst.InstanceName];
+          Hit[K]:= True;
+        end;
+    for var Inh: TInheritedInstance in ScanInheritedConvertInstances(ADfmText, ARules) do
+      for var K:= 0 to High(ATypes) do
+        if SameText(Bare(Inh.TypeName), Bare(ATypes[K])) then
+        begin
+          ANames:= ANames + [Inh.Name];
+          Hit[K]:= True;
+        end;
+  end;
+  for var K:= 0 to High(ATypes) do
+    if Hit[K] then AMatched:= AMatched + [ATypes[K]]
+    else
+    begin
+      AUnmatched:= AUnmatched + [ATypes[K]];
+      ANames:= ANames + ['type:' + ATypes[K]];
+    end;
+end;
+
+// R26 (1.20.6): the refusal reason when a planned unit-rule REMOVAL (#unuse,// or #useswap's Old) takes away the unit declaring the From type of a .dfm
 // instance that stays unconverted -- skipped, or left out by --only -- which
 // would break the compile (E2003); '' when no removal does. Every #convert
 // instance of ADfmText counts, inherited / inline ones too (C8 N1: they are
