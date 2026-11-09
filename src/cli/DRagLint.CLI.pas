@@ -27295,7 +27295,8 @@ var
   end;
 
   { E18 T6: recipe R2 reads class ancestry from the platform library -- the explicit
-    --library-db, else the manifest's library section for --platform (default win64),
+    --library-db, else the manifest's library section for EffectiveIndexPlatform (--platform, else
+    the --project's active platform, else Win32 -- lane 148 CY, the platform --fix builds for),
     as `resolve-dbs --platform` lists it. Opened READ-ONLY; without one, R2 refuses
     wherever the answer needs it. `--library-db none` opens no library at all (fix
     round 1: test runners must never reach the real one through the manifest).
@@ -27326,7 +27327,9 @@ var
         var LibDbs  := LibrarySectionDbs(Manifest);
         var LibRes  := DRagLint.Project.Resolver.TProjectResolver.Create;
         try
-          for var D in TDbSelect.Resolve(Manifest, (if AArgs.CheckPlatform <> '' then AArgs.CheckPlatform else 'win64'),
+          { lane 148 CY (D4/D5): the platform the --fix build uses (K5 ruling a3: --platform, else the
+            --project's active platform, else Win32), no longer a fixed win64 }
+          for var D in TDbSelect.Resolve(Manifest, EffectiveIndexPlatform(AArgs.CheckPlatform, AArgs.ProjectPath),
             LibRes, True) do
             if IsLibrarySectionDb(LibDbs, D) and TFile.Exists(D) then
             begin

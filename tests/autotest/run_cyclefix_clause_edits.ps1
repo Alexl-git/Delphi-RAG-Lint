@@ -12,13 +12,15 @@
   = `, <Unit>` after the last entry; remove = the entry and one separator;
   every comment is kept; a directive in the span an edit touches (or an entry
   inside a conditional region) refuses the whole cycle with `directive`.
+  Lane 148 CY: except a single-branch region whose entries are all removed --
+  it goes whole, guard included (variants c9-guarded / c9-inline).
 
   FIXTURES (tests\fixtures\cyclefix\, indexed as COPIES into scratch DBs):
     commentclause -- CfAlpha <-> CfBeta, implementation-only; CfAlpha's
       implementation clause has a `// comment` line between entries and a
       trailing `; // why` (the DemoAudit.pas / Regions.pas shapes).
     ifdefclause   -- the same, with the partner entry inside
-      `{$IFDEF MSWINDOWS} , CfBeta {$ENDIF}` (MSWINDOWS, not DEBUG: the index
+      `{$IFDEF MSWINDOWS} , CfBeta {$ELSE} , CfBeta {$ENDIF}` (MSWINDOWS, not DEBUG: the index
       does not define DEBUG, and an inactive branch has no edge, no cycle).
 
   ASSERTS
@@ -175,6 +177,11 @@ try {
     # J5 positive: a directive in the clause but OUTSIDE the span the removal deletes does not refuse
     @{ N = 'j5';     In = "uses`r`n  System.SysUtils {`$IFDEF MSWINDOWS}, System.Classes {`$ENDIF},`r`n  CfBeta;";
        Out = "uses`r`n  System.SysUtils {`$IFDEF MSWINDOWS}, System.Classes {`$ENDIF},`r`n  CfBeta.Untangle;`r`n" },
+    # lane 148 CY (fabcyc case 9): the removed entry alone in a single-branch region goes with its guard
+    @{ N = 'c9-guarded'; In = "uses`r`n  System.SysUtils,`r`n{`$IFDEF MSWINDOWS}`r`n  CfBeta,`r`n{`$ENDIF}`r`n  System.Classes;";
+       Out = "uses`r`n  System.SysUtils,`r`n  System.Classes,`r`n  CfBeta.Untangle;`r`n" },
+    @{ N = 'c9-inline'; In = "uses`r`n  System.SysUtils {`$IFDEF MSWINDOWS}, CfBeta{`$ENDIF};";
+       Out = "uses`r`n  System.SysUtils,`r`n  CfBeta.Untangle;`r`n" },
     # an `in 'path'` literal holding `{` and `//` is a string token, not a comment
     @{ N = 'inpath'; In = "uses`r`n  System.SysUtils,`r`n  CfBeta in '.\{b}\..\.//CfBeta.pas';";
        Out = "uses`r`n  System.SysUtils,`r`n  CfBeta.Untangle;`r`n" },
