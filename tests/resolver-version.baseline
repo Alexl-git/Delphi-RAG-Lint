@@ -720,7 +720,9 @@
 #   Superseded: 1.20.0-alpha|6bc3037a43a8c8b21cff2a69d69feca93e13513de1c390b9cf4651d12aa58d85
 # 2026-11-08 148 INT: hash re-pinned WITHOUT a version bump -- document --unit --apply on 17 units (DX's doc-drift convergence) rewrote /// doc-comment blocks only (diff checked: no non-comment line changed); no parse, symbol, ref or call edge changes.
 #   Superseded: 1.22.0-alpha|e1ec74446cb9fcc101bf25add4149d2e642ee0d24618f2c5fc5f06138d142d25
-1.22.0-alpha|04605251e520e1f546c80a014bed54129db5b764eaa965960affb380a010061b
+# 2026-11-09 149 INT: ONE bump for wave 149 (RB1 receiver typing, RB2 binding + 148 PB, IC scoped calls pass with a library store, HW uses-recover targets; see Core.Model). Rides the 1.35.0 extractor re-parse.
+#   Superseded: 1.22.0-alpha|04605251e520e1f546c80a014bed54129db5b764eaa965960affb380a010061b
+1.23.0-alpha|039e29b51fd22c2f4c89f391bf4dd9b653ee13198178f0f6249fe14ee919b95c
 #   2026-11-06 int2: hash moved WITHOUT a bump from 631322c4: the dl:ok comment on ResolveCallTargets re-stamped by the lint sweep, no code change.
 # superseded: 1.19.0-alpha|e4c14c16d87b21940e6ce6017456b8446a5cc516e342b72b816e3e161612ecba
 #   2026-11-06 1.19.0 -> 1.20.0-alpha (lanes facts + rename): ref_types (static type of a reference), ref_receivers (receiver link of a ref), references in initialization / finalization attributed to the section symbol. Additive, no SCHEMA_VERSION move. Remedy: index --all --resolve-only.

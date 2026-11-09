@@ -17,7 +17,7 @@ const
   /// This unit is the right home because it is the one both sides already use:
   /// DRagLint.LSP.Server uses Core.Model, and CLI uses LSP.Server, so a
   /// constant here reaches both with no new dependency and no cycle.</remarks>
-  DRAGLINT_VERSION = '1.48.0-alpha';
+  DRAGLINT_VERSION = '1.49.0-alpha';
 
   /// <summary>The identity of what this build EXTRACTS from a byte sequence.
   /// Part of the indexer fingerprint; <see cref="DRAGLINT_VERSION"/> is not.
@@ -248,8 +248,17 @@ const
     * extractor: Markdown text nodes for the graph export (E-PARITY-GRAPHIFY, lane B2).
     * parser: default / indexed property facts ('indexed' / 'indexed default' in symbols.directives)
       (E-RENAME-RESIDUE, lane B5). }
-  DRAGLINT_EXTRACTOR_VERSION = '1.34.0-alpha';
-
+  { 1.34.0 -> 1.35.0 (2026-11-09, 1.49, lane/149-INT -- ONE bump for the wave):
+    * grammar v1.4.7 (lane GR): external L without a semicolon yields declProc rows; procExternal
+      trees gain index / name children (D5 windows.pas / shlobj.pas, JvShDlg).
+    * tree-sitter-dfm v1.2.0 (lane DF): a non-ASCII letter in an object identifier no longer
+      truncates the stored symbol name.
+    * parser: F()^.M / G(1,2)^.N member-access refs through a postfix deref (lane EX1); the right
+      of is as a typerefDot / typerefTpl emits its type_use refs (GA E1, applied by INT).
+    * storage schema 24: file_includes, dfm_objects, pp_regions fact tables and a uses list
+      written as an include (lane EX2, F4/F5/F6).
+    * uses-recover --apply writes header-recovered uses rows (lane HW). }
+  DRAGLINT_EXTRACTOR_VERSION = '1.35.0-alpha';
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
   /// Deliberately SEPARATE from <see cref="DRAGLINT_EXTRACTOR_VERSION"/>.</summary>
@@ -481,8 +490,14 @@ const
   /// (E-USE-EDGES-PHASE2, lane B1); A[i] through a default or indexed property binds to the
   /// element type's member and two same-named types in scope take Delphi's tie-break
   /// (E-RENAME-RESIDUE, lane B5).</para>
-  DRAGLINT_RESOLVER_VERSION = '1.22.0-alpha';
-
+  /// <para>1.22.0-alpha -&gt; 1.23.0-alpha (2026-11-09, 1.49, rides the 1.35.0 extractor
+  /// re-parse): receiver typing through forward-declared classes, with-scope call heads and
+  /// cast rungs, selector chains, IReadOnlyDictionary, Default(T), a .dpr main block and a bare
+  /// Free in a no-parent class (lane RB1); the 146 b8 override pair, interface-dispatch
+  /// attribution and var / const / enum-value use edges (lane RB2, with 148 PB); a 1-file
+  /// incremental with a library store attached runs the scoped calls pass and widens its
+  /// derived streams (lane IC); header-recovered uses bind their target files (lane HW).</para>
+  DRAGLINT_RESOLVER_VERSION = '1.23.0-alpha';
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
   /// the ghost-compile journal that first created the folder.</summary>
