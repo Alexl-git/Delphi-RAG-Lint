@@ -49,12 +49,12 @@ const
   H4_LEAF = 'frmBlueprint4_cxGroupBox16';
   H5_LEAF = 'OPERAT_NAME';
   H6_LEAF = 'Blueprint4_ViewModel_TBlueprint_ViewModel_FfFtrs_USLLSLName';
-  H1_SHA = '09d311ca439bd5b92c88c55dab4e54aa68baeea7666a3c9db2a148323f85fb3b';
-  H2_SHA = '566b492e9b4d487b5db04114b38ed28d354a531c225b9d5c50fc9576d4208f96';
-  H3_SHA = '7e555a5e300c307d795810ec45e678f59f1cf37f98dc6c781427ceb112d7847a';
-  H4_SHA = 'd8b83e783d91df8f53e04523b24d4d8b929f3968eb17b878bf1af834252fce2f';
-  H5_SHA = '4cca90913c3005dc77a2c559d9acd221aca3930ce975f495936039f22f1ed99d';
-  H6_SHA = 'bf1b7c471009f436be784efa737c64f3e8b6de61f457f2c9c148083e79f0b43e';
+  H1_SHA = 'f533164a72d7297b9791519bb56f271db2724acbfb9a8fe79c9ce74156b95b16';
+  H2_SHA = '331ac844adf155696281e568b7dc09fa659fb8bedc976df794707b57bcf3a1da';
+  H3_SHA = 'b7a66490ff5a2baf486ff0c52e2adbcb7fe962c82ded2af9be4f783acde5148a';
+  H4_SHA = '1713e0ff2abc892591efc9c828f9972a74c51cc633ccdc895e5b0234697b2c83';
+  H5_SHA = 'b1e42d07ab5390666ff994b61df2b4fe695f98e48a898228d42d991a78fc5994';
+  H6_SHA = 'e4c1de303b93c31708c2a81fc68f39b279c7aa71d5ea68fede7871fa45cef0db';
   SUM_SHA = '3e0395c374e40b220b9cc283f9ca317224f80f0332849490dc4a6d9304a35378';
   SUMC_SHA = '90425338adef5bb26fe3db487f9efc5d98355dbf4f2dd259bb5b79884b5f63a4';
   F6_SHA = '5a456787aa4e6584d7103f5236ebce5f665f0401e79c22e5475d623f378e1628';
@@ -66,10 +66,13 @@ const
   SUM_ROW = '100 cards folded (300 rows not shown) -- [01]-[300] -- the full trace is in the text answer';
   SUMC_ROW = '60 cards folded (180 rows not shown) -- 180 steps -- the full trace is in the text answer';
   F6_ROW = '6 cards folded (18 rows not shown) -- 18 steps -- the full trace is in the text answer';
-  CLIENT_DIR = 'C:\Projects\DB\ORM3\CLIENT\';  // dl:ok hardcoded-absolute-path@d23c -- REVIEWED 2026-10-18: a map VALUE of the PowerShell emitter's anchor-path table (the harvest's text), only formatted into links, never opened
-  COMMON_DIR = 'C:\Projects\DB\ORM3\COMMON\';  // dl:ok hardcoded-absolute-path@33c4 -- REVIEWED 2026-10-18: a map VALUE of the PowerShell emitter's anchor-path table (the harvest's text), only formatted into links, never opened
-  SERVER_DIR = 'C:\Projects\DB\ORM3\SERVER\';  // dl:ok hardcoded-absolute-path@a1aa -- REVIEWED 2026-10-18: a map VALUE of the PowerShell emitter's anchor-path table (the harvest's text), only formatted into links, never opened
-  SQL_DIR = 'C:\Projects\DB\SQL\';  // dl:ok hardcoded-absolute-path@0428 -- REVIEWED 2026-10-18: a map VALUE of the PowerShell emitter's anchor-path table (the harvest's text), only formatted into links, never opened
+  // 150 DQ item 7: the anchor-path map VALUES (formatted into the DOT links, never opened) now point at the frozen
+  // fixture tree instead of the live ORM3 checkout, so a moved or edited live tree can never touch a golden SHA.
+  ANCHOR_DIR = 'tests\charts\fixtures\orm3\';
+  CLIENT_DIR = ANCHOR_DIR;
+  COMMON_DIR = ANCHOR_DIR;
+  SERVER_DIR = ANCHOR_DIR;
+  SQL_DIR = ANCHOR_DIR;
   ANCHOR_STRIDE = 10;
   SYN_ROWS = 3;
   H2_STEPS = 76;
