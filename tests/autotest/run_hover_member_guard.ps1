@@ -30,7 +30,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1"),
   [string]$WorkDir = "$env:TEMP\drag-lint-hover-member-guard-$PID"
 )
 try {

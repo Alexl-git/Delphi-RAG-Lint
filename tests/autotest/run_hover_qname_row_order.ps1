@@ -56,7 +56,7 @@
 # Usage: pwsh -File tests/autotest/run_hover_qname_row_order.ps1 [-Exe <path>]
 [CmdletBinding()]
 param(
-    [string] $Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+    [string] $Exe     = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1"),
     [string] $WorkDir = "$env:TEMP\drag-lint-hover-qname-row-order-$PID"
 )
 try {

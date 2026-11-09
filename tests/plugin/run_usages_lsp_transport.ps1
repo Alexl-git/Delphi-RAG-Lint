@@ -16,7 +16,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe    = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe    = $(& "$PSScriptRoot\..\autotest\lib\DefaultEngineExe.ps1"),
   [string]$SrcDir = "$PSScriptRoot\..\..\src\delphi-plugin"
 )
 $ErrorActionPreference = 'Stop'
