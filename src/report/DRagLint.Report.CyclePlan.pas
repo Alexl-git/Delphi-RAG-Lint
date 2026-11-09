@@ -991,6 +991,7 @@ type
     procedure DedupeAdds;
     procedure BuildUsesEdits;
     procedure BuildClauseEdit(const pF: TPlanFile; pSect: TSect);
+    function EntryInRegion(const pF: TPlanFile; pSect: TSect; const pStem: string): Boolean;
     function SectionEntries(const pF: TPlanFile; pSect: TSect): TArray<TUnitUse>;
     function ListOf(pDict: TObjectDictionary<string, TList<string>>; pFid: Int64; pSect: TSect): TList<string>;
     function EditList(pFid: Int64): TList<TFileEdit>;
@@ -4900,6 +4901,19 @@ begin
   Adds   := ListOf(FUsesAdd, pF.Fid, pSect);
   Dels   := ListOf(FUsesDel, pF.Fid, pSect);
   E      := Default(TFileEdit);
+  { found-in-150 (CY2 HANDOVER, guarded_uses n4b): an entry the OTHER section removes from a conditional region is no
+    move -- ClauseEdit refuses it there (`directive`, the guard cannot follow), so this section must not gain it
+    unconditionally. A copy: the shared list still tells the other section's ClauseEdit that the entry moves. }
+  var AddArr:= Adds.ToArray;
+  if pSect in [scIntf, scImpl] then
+  begin
+    var Other:= if pSect = scIntf then scImpl else scIntf;
+    var Kept: TArray<string>:= nil;
+    for var A in AddArr do
+      if not (ListOf(FUsesDel, pF.Fid, Other).Contains(LowerCase(StemOfEntry(A))) and
+        EntryInRegion(pF, Other, StemOfEntry(A))) then Kept:= Kept + [A];
+    AddArr:= Kept;
+  end;
   { N-06: a section whose uses entries come (partly) from an include is never
     edited -- the .inc may be shared, and its coordinates are not this file's.
     ONE manual edit at the include line names the refusal. }
@@ -4920,16 +4934,16 @@ begin
   end;
   if Length(Entries) = 0 then
   begin
-    if Adds.Count = 0 then Exit;
+    if Length(AddArr) = 0 then Exit;
     E.Kind := ekInsertAfter;
     E.First:= if pSect = scIntf then pF.IntfLine else pF.ImplLine;
     E.Last := E.First;
     if (pSect = scProg) or (E.First = 0) then
     begin
       E.Kind:= ekManual;
-      E.Note:= Format('Add a `uses` clause naming %s to the %s section.', [QuoteList(Adds.ToArray), SectLabel(pSect)]);
+      E.Note:= Format('Add a `uses` clause naming %s to the %s section.', [QuoteList(AddArr), SectLabel(pSect)]);
     end
-    else E.NewLines:= PrependBlank(FormatUses('', Adds.ToArray, nil));
+    else E.NewLines:= PrependBlank(FormatUses('', AddArr, nil));
     EditList(pF.Fid).Add(E);
     Exit;
   end;
@@ -4952,8 +4966,29 @@ begin
   if PpMode <> '' then
     Writeln(ErrOutput, Format('cycles: case 9 %s uses: conditional regions from %s', [ExtractFileName(pF.Path),
       (if Length(Regions) > 0 then 'pp_regions (table)' else 'the brace scan')]));
-  E:= ClauseEdit(pF.Lines, UsesLine, SectLabel(pSect), Adds.ToArray, Dels.ToArray, Moved, Regions);
+  E:= ClauseEdit(pF.Lines, UsesLine, SectLabel(pSect), AddArr, Dels.ToArray, Moved, Regions);
   if E.First > 0 then EditList(pF.Fid).Add(E);
+end;
+
+{ found-in-150 (CY2 HANDOVER): whether the entry pStem of pF's pSect uses clause sits in a conditional region (the
+  clause's TUsesLexer scan puts it at Depth > 0) -- the predicate ClauseEdit refuses a moved entry by. }
+function TCyclePlanner.EntryInRegion(const pF: TPlanFile; pSect: TSect; const pStem: string): Boolean;
+var
+  Lex: TUsesLexer;
+begin
+  Result:= False;
+  var Entries:= SectionEntries(pF, pSect);
+  if Length(Entries) = 0 then Exit;
+  var UsesLine:= Entries[0].StartLine;
+  while (UsesLine > 1) and not TRegEx.IsMatch(CodePart(LineAt(pF.Lines, UsesLine)), '\buses\b', [roIgnoreCase]) do
+    Dec(UsesLine);
+  Lex:= TUsesLexer.Create(string.Join(CClauseBreak, Copy(pF.Lines, UsesLine - 1, MaxInt)));
+  try
+    for var E in ScanClause(Lex).Entries do
+      if SameText(E.Name, pStem) and (E.Depth > 0) then Exit(True);
+  finally
+    Lex.Free;
+  end;
 end;
 
 function TCyclePlanner.EditList(pFid: Int64): TList<TFileEdit>;
@@ -5547,8 +5582,13 @@ begin
         EmitFmt('%s**keep** it in the %s uses (the index saw no symbol from it there -- do not touch it).',
           [Who, SectLabel(D.Sect)]);
       uvMove:
-        EmitFmt('%sthe interface no longer needs it; the implementation still does (%s) -> **move** it ' +
-          'from the interface uses to the implementation uses.', [Who, D.Still]);
+        { found-in-150 (CY2 HANDOVER): a guarded entry is never moved by the plan (BuildClauseEdit / ClauseEdit) }
+        if EntryInRegion(GetFile(D.Fid), scIntf, UnitNameOfStem(D.PartnerStem)) then
+          EmitFmt('%sthe interface no longer needs it; the implementation still does (%s), but it sits in a ' +
+            'conditional region -> **refused**: move it by hand together with its guard.', [Who, D.Still])
+        else
+          EmitFmt('%sthe interface no longer needs it; the implementation still does (%s) -> **move** it ' +
+            'from the interface uses to the implementation uses.', [Who, D.Still]);
       uvRemove:
         EmitFmt('%snothing from it is used there any more -> **remove** it from the %s uses.',
           [Who, SectLabel(D.Sect)]);

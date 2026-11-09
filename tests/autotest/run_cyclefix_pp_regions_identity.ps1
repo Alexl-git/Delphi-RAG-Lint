@@ -70,7 +70,7 @@ $Variants = @(
   @{ Tag = 'g';  Patch = $null },
   @{ Tag = 'n1'; Patch = { param($r) Edit-Text (Join-Path $r 'GuA.pas') $Region "{`$IFDEF GU_EXTRA}`n  GuB,`n{`$ELSE}`n  System.Classes,`n{`$ENDIF}" } },
   @{ Tag = 'n2'; Patch = { param($r) Edit-Text (Join-Path $r 'GuA.pas') $Region "{`$IFDEF GU_EXTRA}`n  GuB,`n  System.Classes,`n{`$ENDIF}" } },
-  @{ Tag = 'n4'; Patch = { param($r) Edit-Text (Join-Path $r 'GuA.pas') "  Result := UpperCase('gu-a');`nend;" "  Result := UpperCase('gu-a');`n  if Result = '' then`n    GuSay;`nend;" } },
+  @{ Tag = 'n4'; Patch = { param($r) Edit-Text (Join-Path $r 'GuA.pas') "  Result := UpperCase('gu-a');`nend;" "  Result := UpperCase('gu-a');`n  if Result = '' then`n    GuSay;`nend;" }; NoBase = $true },
   @{ Tag = 'm1'; Patch = { param($r) Edit-Text (Join-Path $r 'GuA.pas') "uses`n$Region`n  System.SysUtils;" "uses`n  {`$IFDEF GU_EXTRA} GuB, {`$ENDIF} System.SysUtils;" } },
   @{ Tag = 'c1'; Patch = { param($r) Edit-Text (Join-Path $r 'GuA.pas') $Region "{`$IFDEF GU_EXTRA}`n  { extra } GuB,`n{`$ENDIF}" } },
   @{ Tag = 'k1'; Patch = { param($r) Edit-Text (Join-Path $r 'GuA.pas') $Region "{`$IFDEF GU_EXTRA}`n{`$IFDEF MSWINDOWS}`n  GuB,`n{`$ENDIF}`n{`$ENDIF}" } }
@@ -89,7 +89,9 @@ try {
     Check "s-$t control: DRAGLINT_CYCLES_PP=scan takes the brace scan" (($ps.Err -match 'case 9 GuA\.pas uses: conditional regions from the brace scan') -and ($ps.Err -notmatch 'pp_regions \(table\)')) $ps.Err
     Check "i-$t plan stdout byte-identical: default (table) == scan" (($pd.Out.Length -gt 0) -and ($pd.Out -ceq $ps.Out) -and ($pt.Out -ceq $pd.Out)) ($pd.Text + ' ||| ' + $ps.Text)
     Check "o-$t the default run prints no trace (stderr names no path)" ($pd.Err -notmatch 'case 9') $pd.Err
-    if ($BaselineExe) {
+    # n4: its plan text changed on purpose in the same lane (found-in-150, CY2 HANDOVER: a guarded entry is no longer
+    # rendered as a **move**), so the pre-change engine is no identity reference for it; i-n4 still compares both paths
+    if ($BaselineExe -and -not $v.NoBase) {
       $pb = Get-Plan $P 'base' ((Resolve-Path $BaselineExe).Path)
       Check "b-$t plan stdout byte-identical to the engine before the change (-BaselineExe)" ($pb.Out -ceq $pd.Out) ($pb.Text + ' ||| ' + $pd.Text)
     }
