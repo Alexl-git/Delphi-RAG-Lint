@@ -292,6 +292,20 @@ type
   /// </remarks>
   TCyclePlanVisit = reference to function(const pView: TCyclePlanView; const pRender: TFunc<TArray<string>>): Boolean;
 
+  /// <summary>Hub-SCC phase P6 prep (lane 149 CYA, behind `--hub-surface`): another recipe offered one
+  /// group before the planner. True = the hook planned it and appended its lines to pOut; the
+  /// planner then skips the group (no BuildPlan: on Loader's hub group that is the minutes-long part).</summary>
+  /// <param name="pIndex">1-based group, as `cycles` numbers them.</param>
+  /// <param name="pOut">Receives the hook's markdown lines.</param>
+  /// <returns>True when the hook planned the group.</returns>
+  TCycleGroupHook = reference to function(pIndex: Integer; const pOut: TStrings): Boolean;
+
+  /// <summary>As TCycleGroupHook for the `--causes --format json` fix object: True = the hook built it.</summary>
+  /// <param name="pIndex">1-based group.</param>
+  /// <param name="pFix">Receives the fix object, owned by the caller once True is returned.</param>
+  /// <returns>True when the hook built the group's fix object.</returns>
+  TCycleFixHook = reference to function(pIndex: Integer; out pFix: TJSONObject): Boolean;
+
 /// <summary>The encoding a source file is read and written in: UTF-8 when it starts with the
 /// UTF-8 BOM, else the system ANSI code page (the indexer's basis).</summary>
 /// <param name="pBytes">The file's raw bytes.</param>
@@ -382,6 +396,8 @@ procedure VisitCyclePlans(const pStore: ISymbolStore; const pDbPath: string;
 /// without it R2 refuses wherever the answer needs the library.</param>
 /// <param name="pFixProject">The project file named in each cycle's `Fix it` commands, or '' to print
 /// the placeholder `&lt;your.dproj&gt;`.</param>
+/// <param name="pGroupHook">Hub-SCC P6 prep: asked first for every group; a group it plans is not
+/// planned here (nil = none, the default).</param>
 /// <remarks>
 /// <para>An INTERFACE-coupled group gets Part A: every symbol that one member's
 /// interface takes from another moves into a new leaf unit
@@ -406,7 +422,7 @@ procedure VisitCyclePlans(const pStore: ISymbolStore; const pDbPath: string;
 /// </remarks>
 procedure RenderCyclePlaybook(const pStore: ISymbolStore; const pDbPath: string;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings;
-  const pLibStore: ISymbolStore = nil; const pFixProject: string = '');
+  const pLibStore: ISymbolStore = nil; const pFixProject: string = ''; const pGroupHook: TCycleGroupHook = nil);
 
 type
 /// <summary>The inputs of AddCycleFixHints bundled in one record (keeps the routine under the parameter limit).</summary>
@@ -432,6 +448,9 @@ TCycleFixHintInput = record
   FixProject: string;
   /// <summary>When not empty, no planner runs: every fix object is available=false with this text as its reason (the platform library could not be opened).</summary>
   Unavailable: string;
+  /// <summary>Hub-SCC P6 prep (`--hub-surface`): asked first per group; a group whose fix object it
+  /// builds is not planned (nil = none).</summary>
+  FixHook: TCycleFixHook;
 end;
 
 /// <summary>Adds a `fix` object (TCycleFixHint) to every group object of a `cycles --format json` report.</summary>
@@ -872,6 +891,7 @@ type
     FPartBBest  : TEdgeEval;     // Part A groups: the edge Part B cuts after Part A (FromStem = '' when none)
     FPartBDone  : Boolean;       // FPartBBest has been computed for the current group
     FFixProject : string;        // the project named in the Fix it commands; '' = placeholder
+    FGroupHook  : TCycleGroupHook;  // hub-SCC P6 prep: a group it plans is skipped by Run; nil = none
     // loading + resolution
     procedure IndexAllFiles;
     function GetFile(pFid: Int64): TPlanFile;
@@ -1096,6 +1116,8 @@ type
     function FixHintOf(const pPlan: TCycleFixPlan): TCycleFixHint;
     /// <summary>The project named in the Fix it commands; '' prints the placeholder `&lt;your.dproj&gt;`.</summary>
     property FixProject: string read FFixProject write FFixProject;
+    /// <summary>Hub-SCC P6 prep: asked first per group by Run; True = the group is planned already.</summary>
+    property GroupHook: TCycleGroupHook read FGroupHook write FGroupHook;
     /// <summary>The surface of every uses edge inside one SCC.</summary>
     /// <param name="pCycleIndex">1-based index into the circular groups.</param>
     /// <returns>One surface per edge A -&gt; B with A, B in the group and B in A's
@@ -2450,6 +2472,10 @@ begin
   Result.Decl:= OneRange(DocStart(F.Lines, pSym.StartLine), pSym.EndLine);
   case pSym.Kind of
     skEnum, skTypeAlias, skInterface, skConstDecl, skVarDecl: Result.Kind:= mvDecl;
+    { 149-CY-7 (lane 149 CYA), the cycle-declared metaclass whose class can move: `TXClass = class of TX;` is a plain
+      declaration; AddDependencies pulls TX along (its own TryAdd decides), so the pair moves into the leaf together.
+      A TX that cannot move refuses the classref with TX's reason. }
+    skClassRef: Result.Kind:= mvDecl;
     skRecord, skClass: ClassifyStructured(F, Result);
     skProcedure, skFunction:
       begin
@@ -2763,8 +2789,13 @@ begin
       if not pUsed.ContainsKey(LowerCase(C.Name)) then Continue;
       if (C.Kind = skProperty) and not PullAccessors(C) then Break;
       { --ctor-wide: an `override` stays in the class: the base class inherits the same virtual from the same
-        parent, so a call through the base class dispatches to the class's own body }
-      if GCtorWide and (C.Kind in [skMethod, skFunction, skProcedure]) and SameText(Trim(C.Directives), 'override') then Continue;
+        parent, so a call through the base class dispatches to the class's own body. 149-CY-10 (lane 149 CYA): on
+        the default path too when the override is protected or private -- no unit outside the class's own could
+        call it through the class before, so the parent's declaration seen through the base changes no call
+        (Loader TFolderWorker.Execute). A public / published override keeps the refusal below: the parent may
+        declare it less visible (TThread.Execute is protected), which only --ctor-wide accepts. }
+      if (C.Kind in [skMethod, skFunction, skProcedure]) and SameText(Trim(C.Directives), 'override') and
+        (GCtorWide or (C.VisExplicit and MatchText(Trim(C.Modifiers), ['protected', 'private', 'strict protected', 'strict private']))) then Continue;
       { a field in the published section is what a .dfm streams into: FieldAddress finds it on the class that declares it,
         at run time; pulled into the base class it would turn protected (E-CTORINV-DEFAULT-PATH: no longer --ctor-wide only) }
       if (C.Kind = skField) and (ContainsText(C.Modifiers, 'published') or not C.VisExplicit) then
@@ -3613,6 +3644,15 @@ begin
     if not TryAdd(N.Owner, nil, Why) then
     begin
       pWhy:= Format('it needs `%s` (%s), which cannot move: %s', [N.Owner.Name, N.Owner.Kind.ToText, Why]);
+      Exit(False);
+    end;
+    { 149-CY-7: `class of TX` in the leaf must see TX itself; a TX that only gets a base class extracted stays behind }
+    var Moved: TMoveItem;
+    if (pItem.Sym.Kind = skClassRef) and FItems.TryGetValue(N.Owner.Id, Moved) and (Moved.Kind = mvBase) then
+    begin
+      pWhy:= Format('it needs `%s` (%s), which cannot move: only its base class would move, and `class of %0:s` in the ' +
+        'leaf cannot name a class left in the cycle (a metaclass of the base needs a virtual-constructor proof: 150)',
+        [N.Owner.Name, N.Owner.Kind.ToText]);
       Exit(False);
     end;
   end;
@@ -7317,6 +7357,7 @@ begin
   end;
   for var I:= 1 to FSccs.Count do
   begin
+    if Assigned(FGroupHook) and FGroupHook(I, FOut) then Continue;  { hub-SCC P6 prep: R3 planned it }
     var W:= TStopwatch.StartNew;
     var Plan:= BuildPlan(I);
     PlanStage(Format('cycle %d BuildPlan total', [I]), W);
@@ -7452,13 +7493,14 @@ end;
 
 procedure RenderCyclePlaybook(const pStore: ISymbolStore; const pDbPath: string;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings;
-  const pLibStore: ISymbolStore; const pFixProject: string);
+  const pLibStore: ISymbolStore; const pFixProject: string; const pGroupHook: TCycleGroupHook);
 var
   Planner: TCyclePlanner;
 begin
   Planner:= TCyclePlanner.Create(pStore, pDbPath, pSccs, pGraph, pOut, pLibStore);
   try
     Planner.FixProject:= pFixProject;
+    Planner.GroupHook := pGroupHook;
     Planner.Run;
   finally
     Planner.Free;
@@ -7531,6 +7573,12 @@ begin
     Planner.FixProject:= pIn.FixProject;
     for var I:= 1 to pIn.Sccs.Count do
     begin
+      var HookFix: TJSONObject;
+      if Assigned(pIn.FixHook) and pIn.FixHook(I, HookFix) then
+      begin
+        (pGroups.Items[I - 1] as TJSONObject).AddPair('fix', HookFix);  { hub-SCC P6 prep: no planner for this group }
+        Continue;
+      end;
       var Plan:= Planner.BuildPlan(I);
       try
         var H:= Planner.FixHintOf(Plan);

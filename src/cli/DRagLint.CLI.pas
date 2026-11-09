@@ -27595,16 +27595,27 @@ begin
     { --hub-surface (spec 2026-11-08-hub-scc-phased P2): recipe R3 in place of the planner, OFF by default }
     if AArgs.HubSurface then
     begin
-      if (not AArgs.Plan) or AArgs.Fix or SameText(AArgs.Format, 'json') then
+      { lane 149 CYA (P6 prep): --plan dry run = the planner with R3 asked first per group; --causes --format json = R3's
+        fix object without the planner for a group R3 plans; --apply = R3 writes one group (below) }
+      var HubJson:= SameText(AArgs.Format, 'json');
+      if AArgs.Fix or (HubJson and (AArgs.Plan or not AArgs.Causes)) or ((not HubJson) and not AArgs.Plan) then
       begin
-        Writeln(ErrOutput, 'ERROR: cycles --hub-surface needs --plan (text; --apply writes one group) and does not combine with --fix or --format json yet');
+        Writeln(ErrOutput, 'ERROR: cycles --hub-surface needs --plan (text; --apply writes one group) or --causes --format json, and does not combine with --fix yet');
         Exit(2);
       end;
+    end;
+    if AArgs.HubSurface and AArgs.Plan and AArgs.Apply then
+    begin
       var HubOpts:= Default(THubSurfaceOptions);
       HubOpts.Apply     := AArgs.Apply;
       HubOpts.NoBackup  := AArgs.NoBackup;
       HubOpts.CycleIndex:= if AArgs.FixCycleGiven then AArgs.FixCycle else 0;
       HubOpts.UnitStem  := LowerCase(AArgs.GhostUnit);
+      { lane 149 CYA: the platform library types an ancestor's member (`frmMain.Invalidate`); without it that member stays refused }
+      var HubLibFailed: Boolean;
+      var HubLibMessage: string;
+      HubOpts.LibraryStore:= OpenPlanLibrary(HubLibFailed, HubLibMessage);
+      if HubLibFailed then Writeln(ErrOutput, 'drag-lint: note: cycles --hub-surface: ', HubLibMessage, ' -- ancestor members stay refused');
       var HubLines:= TStringList.Create;
       try
         Result:= RunHubSurface(Store, Sccs, CycGraph, HubOpts, HubLines);
@@ -27665,7 +27676,13 @@ begin
       begin
         var PlanLines:= TStringList.Create;
         try
-          RenderCyclePlaybook(Store, AArgs.DbPath, Sccs, Graph, PlanLines, LibStore, AArgs.ProjectPath);
+          var GroupHook: TCycleGroupHook:= nil;
+          if AArgs.HubSurface then
+            GroupHook:= function(pIndex: Integer; const pOut: TStrings): Boolean
+              begin
+                Result:= HubSurfaceGroupLines(Store, LibStore, Sccs[pIndex - 1], pIndex, Graph, pOut);
+              end;
+          RenderCyclePlaybook(Store, AArgs.DbPath, Sccs, Graph, PlanLines, LibStore, AArgs.ProjectPath, GroupHook);
           for var PlanLine in PlanLines do Writeln(PlanLine);
         finally
           PlanLines.Free;
@@ -27715,6 +27732,16 @@ begin
           HintIn.LibStore:= OpenPlanLibrary(JsonLibFailed, JsonLibMessage);
           HintIn.FixProject:= AArgs.ProjectPath;
           HintIn.Unavailable:= (if JsonLibFailed then 'library unavailable: ' + (if JsonLibMessage <> '' then JsonLibMessage else 'the platform library could not be opened') else '');
+          HintIn.FixHook:= nil;
+          if AArgs.HubSurface then
+          begin
+            var HubLibStore:= HintIn.LibStore;
+            var HubDbPath  := AArgs.DbPath;
+            HintIn.FixHook:= function(pIndex: Integer; out pFix: TJSONObject): Boolean
+              begin
+                Result:= HubSurfaceFixJson(Store, HubLibStore, Sccs[pIndex - 1], pIndex, EdgeGraph, HubDbPath, pFix);
+              end;
+          end;
           AddCycleFixHints(HintIn, JArr);
         end;
         Writeln(JArr.ToJson);

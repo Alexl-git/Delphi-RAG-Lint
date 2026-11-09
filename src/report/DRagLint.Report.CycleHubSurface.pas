@@ -7,8 +7,11 @@ unit DRagLint.Report.CycleHubSurface;
 /// property per field and one method per method the spokes read through the global, a global of
 /// that interface type, the hub class implementing it (heritage, accessors, an
 /// AfterConstruction / BeforeDestruction hand-over) and a receiver-only rewrite in every spoke
-/// (`frmMain.edtX.Text` becomes `MainHub.edtX.Text`). A spoke that no longer names anything else
-/// of the hub drops it from its uses: that uses edge is cut.</summary>
+/// (`frmMain.edtX.Text` becomes `MainHub.edtX.Text`). Phase P3 (lane 149 CYA): a free routine of the
+/// hub's interface that a rewritten spoke still calls is inverted by recipe R1 into the same unit --
+/// procedural type `T&lt;Name&gt;Ptr` and variable `&lt;Name&gt;Ptr` there, `&lt;Name&gt;Ptr := &lt;Name&gt;;`
+/// in the hub's initialization, the spoke's calls through the pointer; the routine's body stays in the
+/// hub. A spoke that no longer names anything else of the hub drops it from its uses: that uses edge is cut.</summary>
 /// <remarks>OFF by default: nothing runs without `--hub-surface`. The dry run writes nothing;
 /// `--apply` writes the new unit, the hub and the rewritten spokes (.BCK&lt;n&gt; backups unless
 /// `--no-backup`) and runs NO compile gate (149): build the project after it. Refusals are per
@@ -18,7 +21,7 @@ unit DRagLint.Report.CycleHubSurface;
 interface
 
 uses
-  System.Classes, System.Generics.Collections,
+  System.Classes, System.Generics.Collections, System.JSON,
   DRagLint.Core.Interfaces, DRagLint.Report.CyclePlan;
 
 type
@@ -32,6 +35,10 @@ type
     CycleIndex: Integer;
     /// <summary>Lower-case unit stem: the group that contains it; '' = no filter.</summary>
     UnitStem: string;
+    /// <summary>The platform library (read only), or nil: an ancestor's member the spokes read
+    /// through the global (`frmMain.Invalidate`, TControl's) is on the surface only when the
+    /// library declares it (lane 149 CYA); without one it stays refused member-unsupported.</summary>
+    LibraryStore: ISymbolStore;
   end;
 
 /// <summary>Plans recipe R3 for the circular groups and, with Apply, writes one of them.</summary>
@@ -45,9 +52,42 @@ type
 /// <remarks>Planned only for a group with exactly one hub, one hub global and a hub class declared
 /// in the hub unit; members a spoke reads that are not plain fields or methods of that class, a
 /// bare use, a write to the global or a designer field, or a var-parameter use refuse that spoke,
-/// never the group; Inc / Dec of an integer plain field is rewritten to an assignment.</remarks>
+/// never the group; Inc / Dec of an integer plain field is rewritten to an assignment. A hub routine
+/// is refused (overloaded, unsupported-directive, signature-in-cycle, duplicate-identifier) as a whole;
+/// one a spoke names from its initialization / finalization, by address or under a shadowing
+/// declaration stays named in that spoke only (init-order, address-of, name-shadowed), which keeps
+/// that spoke's uses edge.</remarks>
 function RunHubSurface(const pStore: ISymbolStore; const pSccs: TList<TArray<string>>;
   const pGraph: TCycleGraph; const pOptions: THubSurfaceOptions; const pOut: TStrings): Integer;
+
+/// <summary>Hub-SCC phase P6 prep (lane 149 CYA; the planner's TCycleGroupHook under `cycles --plan
+/// --hub-surface`): plans R3 for ONE group and, when it plans, appends the P1 hub block (`cycles --hub`)
+/// and the R3 plan to pOut, so the planner skips that group's Part A / Part B.</summary>
+/// <param name="pStore">The index; read only.</param>
+/// <param name="pLibrary">The platform library or nil (ancestor members).</param>
+/// <param name="pGroup">The group's lower-case unit stems.</param>
+/// <param name="pIndex">1-based group number.</param>
+/// <param name="pGraph">The uses graph.</param>
+/// <param name="pOut">Receives the lines; when False only a one-line note naming R3's refusal (the planner's plan follows it).</param>
+/// <returns>True when R3 planned the group (one hub, one global, at least one spoke).</returns>
+/// <remarks>Writes nothing (a dry run); a group R3 refuses gets nothing here and the planner as before.</remarks>
+function HubSurfaceGroupLines(const pStore, pLibrary: ISymbolStore; const pGroup: TArray<string>; pIndex: Integer;
+  const pGraph: TCycleGraph; const pOut: TStrings): Boolean;
+
+/// <summary>Hub-SCC phase P6 prep: the `cycles --causes --format json --hub-surface` fix object of ONE
+/// group when R3 plans it (the planner's TCycleFixHook): `available` = the prediction breaks the group,
+/// `part` = "r3", `recipe` = "hub-surface", the dry-run / apply commands, one edge per cut spoke->hub
+/// edge, `reason` = '' or what keeps the group.</summary>
+/// <param name="pStore">The index; read only.</param>
+/// <param name="pLibrary">The platform library or nil.</param>
+/// <param name="pGroup">The group's lower-case unit stems.</param>
+/// <param name="pIndex">1-based group number.</param>
+/// <param name="pGraph">The uses graph.</param>
+/// <param name="pDbPath">The index path quoted in the commands.</param>
+/// <param name="pFix">Receives the object (the caller owns it) when True; nil otherwise.</param>
+/// <returns>True when R3 planned the group.</returns>
+function HubSurfaceFixJson(const pStore, pLibrary: ISymbolStore; const pGroup: TArray<string>; pIndex: Integer;
+  const pGraph: TCycleGraph; const pDbPath: string; out pFix: TJSONObject): Boolean;
 
 implementation
 
@@ -58,6 +98,7 @@ uses
 const
   CMaxNamedKeepers = 6;   { hub symbols named per "kept by" line }
   CMaxNamedSpokes  = 12;  { refused spokes named one per line }
+  CSectionWordSpan = 20;  { characters from a section keyword's line start that hold the keyword }
 
 type
   TMemberShape = (msReadOnly, msReadWrite, msMethod);
@@ -80,7 +121,19 @@ type
     Refusal  : string;
     Why      : string;
     Keepers  : TArray<string>;  { other hub symbols the spoke still names: the edge stays }
+    Kept     : TArray<string>;  { P3: why a planned hub routine stays named here (`Name`: kind -- why) }
     NewText  : string;
+  end;
+
+  { P3: one hub free routine the rewritten spokes still call, inverted by recipe R1: a procedural
+    type and variable in the surface unit, assigned in the hub's initialization, called by the spokes }
+  THubRoutine = record
+    Name    : string;
+    PtrVar  : string;  { <Name>Ptr }
+    TypeDecl: string;  { T<Name>Ptr = procedure|function<signature>; [convention;] }
+    Spokes  : Integer; { spokes whose calls go through the pointer }
+    Refusal : string;  { '' = inverted }
+    Why     : string;
   end;
 
   { the plan of one group }
@@ -102,6 +155,7 @@ type
     HubNewText : string;
     Members    : TArray<THubMember>;
     Spokes     : TArray<THubSpoke>;
+    Routines   : TArray<THubRoutine>;  { P3 }
     EdgesLeft  : Integer;
     Breaks     : Boolean;
   end;
@@ -112,6 +166,7 @@ type
   THubSurfacePlanner = class  // dl:ok high-response@c76f -- implementation-private; one planner per run holding the per-group state its short steps share
   private
     FStore    : ISymbolStore;
+    FLib      : ISymbolStore;  { the platform library, or nil }
     FGraph    : TCycleGraph;
     FGroup    : TArray<string>;
     FHubSyms  : TArray<TSymbol>;
@@ -120,10 +175,12 @@ type
     FMembers  : TDictionary<string, THubMember>;  { lower-case name -> member }
     FHubIds   : TDictionary<Int64, TSymbol>;
     FEncodings: TDictionary<string, TEncoding>;  { path -> its source encoding }
+    FRoutines : TDictionary<string, THubRoutine>;  { P3: lower-case routine name -> its R1 plan }
     function InGroup(const pStem: string): Boolean;
     function ReadText(const pPath: string): string;
     function FindHubSymbols(var pPlan: THubGroupPlan): Boolean;
     function MemberOf(const pName: string): THubMember;
+    function AncestorMember(const pName: string; out pSym: TSymbol): Boolean;
     procedure PlanMembers(var pPlan: THubGroupPlan; const pNames: TArray<string>);
     function TypeDeclaredInGroup(const pType: string): Boolean;
     function NamesClash(var pPlan: THubGroupPlan): Boolean;
@@ -133,9 +190,14 @@ type
     function PlanSpoke(const pPlan: THubGroupPlan; const pStem: string): THubSpoke;
     procedure RewriteReceivers(const pPlan: THubGroupPlan; var pSpoke: THubSpoke; const pText: string);
     procedure CollectKeepers(var pSpoke: THubSpoke);
+    function RoutineOf(const pName: string): THubRoutine;
+    procedure PlanRoutines(var pPlan: THubGroupPlan);
+    procedure InvertCalls(const pPlan: THubGroupPlan; var pSpoke: THubSpoke);
+    procedure FinishSpoke(const pPlan: THubGroupPlan; var pSpoke: THubSpoke);
+    function AddRoutineAssigns(var pPlan: THubGroupPlan): Boolean;
     procedure Predict(var pPlan: THubGroupPlan);
   public
-    constructor Create(const pStore: ISymbolStore; const pGraph: TCycleGraph);
+    constructor Create(const pStore, pLibrary: ISymbolStore; const pGraph: TCycleGraph);
     destructor Destroy; override;
     function PlanGroup(const pGroup: TArray<string>; pIndex: Integer): THubGroupPlan;
     function Write(const pPlan: THubGroupPlan; pNoBackup: Boolean; out pMessage: string): Boolean;
@@ -278,18 +340,21 @@ end;
 
 { --- THubSurfacePlanner ---------------------------------------------------------------------- }
 
-constructor THubSurfacePlanner.Create(const pStore: ISymbolStore; const pGraph: TCycleGraph);
+constructor THubSurfacePlanner.Create(const pStore, pLibrary: ISymbolStore; const pGraph: TCycleGraph);
 begin
   inherited Create;
   FStore    := pStore;
+  FLib      := pLibrary;
   FGraph    := pGraph;
   FMembers  := TDictionary<string, THubMember>.Create;
   FHubIds   := TDictionary<Int64, TSymbol>.Create;
   FEncodings:= TDictionary<string, TEncoding>.Create;
+  FRoutines := TDictionary<string, THubRoutine>.Create;
 end;
 
 destructor THubSurfacePlanner.Destroy;
 begin
+  FRoutines.Free;
   FEncodings.Free;
   FHubIds.Free;
   FMembers.Free;
@@ -358,13 +423,26 @@ begin
   try
     for var S in FHubSyms do
       if (S.ParentId = FClass.Id) and SameText(S.Name, pName) then Found.Add(S);
-    if Found.Count = 0 then
+    var IsInherited:= Found.Count = 0;
+    var Anc: TSymbol;
+    if IsInherited then
     begin
-      Result.Refusal:= 'member-unsupported';
-      Result.Why    := Format('`%s` is not declared in `%s` (an ancestor''s member: phase P4 / 149)', [pName, FClass.Name]);
-      Exit;
+      if not AncestorMember(pName, Anc) then
+      begin
+        Result.Refusal:= 'member-unsupported';
+        Result.Why    := Format('`%s` is not declared in `%s` nor found in its ancestors%s', [pName, FClass.Name,
+          if FLib = nil then ' (no platform library read: --library-db)' else '']);
+        Exit;
+      end;
+      if not ContainsText(' public published ', ' ' + LowerCase(Trim(Anc.Modifiers)) + ' ') then
+      begin
+        Result.Refusal:= 'member-unsupported';
+        Result.Why    := Format('`%s` is a %s member of an ancestor of `%s`', [Anc.Name, Trim(Anc.Modifiers), FClass.Name]);
+        Exit;
+      end;
+      Found.Add(Anc);
     end;
-    if Found.Count > 1 then
+    if (Found.Count > 1) or ContainsText(' ' + LowerCase(Found[0].Directives) + ' ', ' overload ') then
     begin
       Result.Refusal:= 'member-overloaded';
       Result.Why    := Format('`%s` has %d declarations in `%s`', [pName, Found.Count, FClass.Name]);
@@ -372,7 +450,30 @@ begin
     end;
     var S:= Found[0];
     Result.Name:= S.Name;
+    if IsInherited and (S.Kind = skField) then S.VisExplicit:= True;  { a public field of an ancestor: read/write }
     case S.Kind of
+      skProperty:
+        begin
+          { lane 149 CYA: a property (own or inherited) goes through accessors like a field; `ro` and a bare
+            redeclaration read-only, `rw` read/write, `wo` refused }
+          Result.TypeText:= Trim(S.Signature.TrimLeft([':', ' ']));
+          Result.Shape   := if SameText(S.PropAccess, 'rw') then msReadWrite else msReadOnly;
+          if SameText(S.PropAccess, 'wo') then
+          begin
+            Result.Refusal:= 'member-unsupported';
+            Result.Why    := Format('`%s` is a write-only property', [S.Name]);
+          end
+          else if not TRegEx.IsMatch(Result.TypeText, '^[A-Za-z_][\w.]*(<[\w., ]+>)?$') then
+          begin
+            Result.Refusal:= 'member-type';
+            Result.Why    := Format('`%s: %s` is not a named type (an array property?)', [S.Name, Result.TypeText]);
+          end
+          else if TypeDeclaredInGroup(Result.TypeText) then
+          begin
+            Result.Refusal:= 'member-type-in-cycle';
+            Result.Why    := Format('the type of `%s` (`%s`) is declared in a unit of the cycle', [S.Name, Result.TypeText]);
+          end;
+        end;
       skField:
         begin
           Result.TypeText:= Trim(S.Signature);
@@ -409,6 +510,48 @@ begin
   finally
     Found.Free;
   end;
+end;
+
+{ lane 149 CYA: pName declared by an ancestor of the hub class -- the project's linked ancestors
+  nearest first, then, from each name the project could not link (a library class), the library's
+  classes of that name (forward declarations skipped) and their ancestors. False when none declares
+  it, or when two library classes of one name disagree (VCL / FMX): the surface never guesses. A one-line `TX = class(TY);` is a class, `TX = class;` a forward. }
+function THubSurfacePlanner.AncestorMember(const pName: string; out pSym: TSymbol): Boolean;
+begin
+  pSym:= Default(TSymbol);
+  for var A in FStore.GetTransitiveAncestors(FClass.Id) do
+    if A.Resolved and (A.SymbolId > 0) then
+    begin
+      var M:= FStore.FindChildSymbolByName(A.SymbolId, pName);
+      if (M.Id > 0) and (M.Kind not in [skParam, skLocalVar]) then
+      begin
+        pSym:= M;
+        Exit(True);
+      end;
+    end;
+  Result:= False;
+  if FLib = nil then Exit;
+  var Hits:= 0;
+  for var Root in FStore.UnresolvedAncestorNames(FClass.Name, FClass.FileId) do
+    for var C in FLib.FindSymbolsByExactName(Root) do
+    begin
+      if (C.Kind <> skClass) or ((C.EndLine <= C.StartLine) and (Trim(C.Heritage) = '')) then Continue;  { a forward declaration; `TX = class(TY);` is a class }
+      var Found:= Default(TSymbol);
+      var M:= FLib.FindChildSymbolByName(C.Id, pName);
+      if (M.Id > 0) and (M.Kind not in [skParam, skLocalVar]) then Found:= M
+      else
+        for var A in FLib.GetTransitiveAncestors(C.Id) do
+          if (Found.Id = 0) and A.Resolved and (A.SymbolId > 0) then
+          begin
+            M:= FLib.FindChildSymbolByName(A.SymbolId, pName);
+            if (M.Id > 0) and (M.Kind not in [skParam, skLocalVar]) then Found:= M;
+          end;
+      if Found.Id = 0 then Continue;
+      Inc(Hits);
+      if (Hits > 1) and not (SameText(Found.Signature, pSym.Signature) and (Found.Kind = pSym.Kind)) then Exit(False);
+      pSym:= Found;
+    end;
+  Result:= Hits > 0;
 end;
 
 procedure THubSurfacePlanner.PlanMembers(var pPlan: THubGroupPlan; const pNames: TArray<string>);
@@ -544,8 +687,22 @@ begin
     end;
     L.Add('  end;');
     L.Add('');
+    for var R in pPlan.Routines do
+      if (R.Refusal = '') and (R.Spokes > 0) then
+      begin
+        L.Add(Format('  /// <summary>Signature of %s (%s), copied verbatim.</summary>', [R.Name, pPlan.HubUnit]));
+        L.Add('  ' + R.TypeDecl);
+        L.Add('');
+      end;
     L.Add('var');
     L.Add('  ' + pPlan.VarName + ': ' + pPlan.IntfName + ';');
+    for var R in pPlan.Routines do
+      if (R.Refusal = '') and (R.Spokes > 0) then
+      begin
+        L.Add(Format('  /// <summary>Holds %s, assigned by %s in its initialization section; the units of ' +
+          'its former cycle call it instead of naming the routine.</summary>', [R.Name, pPlan.HubUnit]));
+        L.Add(Format('  %s: T%0:s;', [R.PtrVar]));
+      end;
     L.Add('');
     L.Add('implementation');
     L.Add('');
@@ -765,8 +922,6 @@ begin
 end;
 
 function THubSurfacePlanner.PlanSpoke(const pPlan: THubGroupPlan; const pStem: string): THubSpoke;
-var
-  Entry, EntryLen: Integer;
 begin
   Result:= Default(THubSpoke);
   Result.Stem:= pStem;
@@ -788,15 +943,200 @@ begin
   RewriteReceivers(pPlan, Result, Text);
   if Result.Refusal <> '' then Exit;
   CollectKeepers(Result);
-  var NewText:= Result.NewText;
+end;
+
+{ the spoke's uses entry of the hub: the surface unit replaces it, or joins it while a keeper is left }
+procedure THubSurfacePlanner.FinishSpoke(const pPlan: THubGroupPlan; var pSpoke: THubSpoke);
+var
+  Entry, EntryLen: Integer;
+begin
+  if pSpoke.Refusal <> '' then Exit;
+  var NewText:= pSpoke.NewText;
   if not FindUsesEntry(NewText, CodeMaskOf(NewText), pPlan.HubUnit, Entry, EntryLen) then
   begin
-    Result.Refusal:= 'manual-edit';
-    Result.Why    := Format('no uses entry `%s` found', [pPlan.HubUnit]);
+    pSpoke.Refusal:= 'manual-edit';
+    pSpoke.Why    := Format('no uses entry `%s` found', [pPlan.HubUnit]);
     Exit;
   end;
-  var Repl:= if Length(Result.Keepers) > 0 then pPlan.HubUnit + ', ' + pPlan.SurfaceUnit else pPlan.SurfaceUnit;
-  Result.NewText:= Copy(NewText, 1, Entry - 1) + Repl + Copy(NewText, Entry + EntryLen, MaxInt);
+  var Repl:= if Length(pSpoke.Keepers) > 0 then pPlan.HubUnit + ', ' + pPlan.SurfaceUnit else pPlan.SurfaceUnit;
+  pSpoke.NewText:= Copy(NewText, 1, Entry - 1) + Repl + Copy(NewText, Entry + EntryLen, MaxInt);
+end;
+
+{ P3: one hub free routine as recipe R1 inverts it (CycleEdge PlanRoutineInversion's shape: `<Name>Ptr`
+  of type `T<Name>Ptr`, the signature verbatim); refused when it is overloaded, takes varargs, or its
+  signature names a type declared in a unit of the cycle (the surface unit could not name it) }
+function THubSurfacePlanner.RoutineOf(const pName: string): THubRoutine;
+var
+  Found: TList<TSymbol>;
+  Owner: TSymbol;
+begin
+  Result:= Default(THubRoutine);
+  Result.Name:= pName;
+  Found:= TList<TSymbol>.Create;
+  try
+    for var S in FHubSyms do
+      if (S.Kind in [skProcedure, skFunction]) and SameText(S.Name, pName) and FHubIds.TryGetValue(S.ParentId, Owner) and
+        (Owner.Kind = skUnit) and SameText(S.Section, 'interface') then Found.Add(S);
+    if Found.Count = 0 then Exit(Default(THubRoutine));  { not a free routine of the hub's interface }
+    var S:= Found[0];
+    Result.Name  := S.Name;
+    Result.PtrVar:= S.Name + 'Ptr';
+    var Dirs:= ' ' + LowerCase(S.Directives) + ' ';
+    var Conv:= '';
+    for var C in TArray<string>.Create('stdcall', 'cdecl', 'pascal', 'safecall', 'winapi') do
+      if Dirs.Contains(' ' + C + ' ') then Conv:= C;
+    if (Found.Count > 1) or Dirs.Contains(' overload ') then
+    begin
+      Result.Refusal:= 'overloaded';
+      Result.Why    := Format('`%s` is overloaded (one pointer cannot carry every overload)', [S.Name]);
+    end
+    else if Dirs.Contains(' varargs ') then
+    begin
+      Result.Refusal:= 'unsupported-directive';
+      Result.Why    := Format('`%s` takes varargs', [S.Name]);
+    end
+    else
+      for var M in TRegEx.Matches(S.Signature, ':\s*(?:array\s+of\s+)?([A-Za-z_][\w.]*)', [roIgnoreCase]) do
+        if (Result.Refusal = '') and TypeDeclaredInGroup(M.Groups[1].Value) then
+        begin
+          Result.Refusal:= 'signature-in-cycle';
+          Result.Why    := Format('its signature names `%s`, declared in a unit of the cycle', [M.Groups[1].Value]);
+        end;
+    if (Result.Refusal = '') and ((Length(FStore.FindSymbolsByExactName(Result.PtrVar)) > 0) or
+      (Length(FStore.FindSymbolsByExactName('T' + Result.PtrVar)) > 0)) then
+    begin
+      Result.Refusal:= 'duplicate-identifier';
+      Result.Why    := Format('`%s` or `T%0:s` already exists', [Result.PtrVar]);
+    end;
+    Result.TypeDecl:= Format('T%s = %s%s;%s', [Result.PtrVar, if S.Kind = skFunction then 'function' else 'procedure',
+      S.Signature, if Conv <> '' then ' ' + Conv + ';' else '']);
+  finally
+    Found.Free;
+  end;
+end;
+
+{ P3: every keeper of a rewritten spoke that is a free routine of the hub gets its R1 plan }
+procedure THubSurfacePlanner.PlanRoutines(var pPlan: THubGroupPlan);
+var
+  List: TList<THubRoutine>;
+begin
+  FRoutines.Clear;
+  List:= TList<THubRoutine>.Create;
+  try
+    for var Sp in pPlan.Spokes do
+      if Sp.Refusal = '' then
+        for var K in Sp.Keepers do
+        begin
+          if FRoutines.ContainsKey(LowerCase(K)) then Continue;
+          var R:= RoutineOf(K);
+          if R.Name = '' then Continue;
+          FRoutines.Add(LowerCase(K), R);
+          List.Add(R);
+        end;
+    pPlan.Routines:= List.ToArray;
+  finally
+    List.Free;
+  end;
+end;
+
+{ P3: the spoke's calls of every inverted routine go through its pointer (`Hub.F` too); a routine named
+  from the spoke's initialization / finalization (the hub may not have assigned it yet), taken by address,
+  or shadowed by a declaration of the spoke stays a keeper, with the reason in Kept }
+procedure THubSurfacePlanner.InvertCalls(const pPlan: THubGroupPlan; var pSpoke: THubSpoke);
+var
+  Left: TList<string>;
+  R   : THubRoutine;
+begin
+  if pSpoke.Refusal <> '' then Exit;
+  var Qual:= '';
+  for var Seg in pPlan.HubUnit.Split(['.']) do Qual:= Qual + TRegEx.Escape(Seg) + '\s*\.\s*';
+  var Own:= FStore.FindSymbolsByFile(pSpoke.Path);
+  Left:= TList<string>.Create;
+  try
+    for var K in pSpoke.Keepers do
+    begin
+      if not FRoutines.TryGetValue(LowerCase(K), R) or (R.Refusal <> '') then
+      begin
+        Left.Add(K);
+        Continue;
+      end;
+      var Why:= '';
+      for var S in Own do
+        if (Why = '') and (SameText(S.Name, R.Name) or SameText(S.Name, R.PtrVar)) then
+          Why:= Format('name-shadowed -- line %d declares `%s`', [S.StartLine, S.Name]);
+      var Text:= pSpoke.NewText;
+      var Mask:= CodeMaskOf(Text);
+      var InitAt:= MaxInt;
+      for var M in TRegEx.Matches(Text, '(?im)^\s*(initialization|finalization)\b') do
+        if Mask[M.Index + M.Length - 1] and (M.Index < InitAt) then InitAt:= M.Index;
+      var Hits:= TRegEx.Matches(Text, '(?i)(?<![\w.])(?:' + Qual + ')?' + TRegEx.Escape(R.Name) + '\b');
+      for var M in Hits do
+      begin
+        if (Why <> '') or not Mask[M.Index] then Continue;
+        if M.Index > InitAt then
+          Why:= Format('init-order -- line %d calls it from the %s section', [LineOfPos(Text, M.Index),
+            if ContainsText(Copy(Text, InitAt, CSectionWordSpan), 'final') then 'finalization' else 'initialization'])
+        else if CharBefore(Text, M.Index) = '@' then
+          Why:= Format('address-of -- line %d takes `@%s`', [LineOfPos(Text, M.Index), R.Name]);
+      end;
+      if Why <> '' then
+      begin
+        pSpoke.Kept:= pSpoke.Kept + [Format('`%s`: %s', [R.Name, Why])];
+        Left.Add(K);
+        Continue;
+      end;
+      for var I:= Hits.Count - 1 downto 0 do
+        if Mask[Hits[I].Index] then Text:= Copy(Text, 1, Hits[I].Index - 1) + R.PtrVar + Copy(Text, Hits[I].Index + Hits[I].Length, MaxInt);
+      pSpoke.NewText:= Text;
+      R.Spokes:= R.Spokes + 1;
+      FRoutines[LowerCase(K)]:= R;
+    end;
+    pSpoke.Keepers:= Left.ToArray;
+  finally
+    Left.Free;
+  end;
+end;
+
+{ P3: the hub assigns every inverted routine's pointer in its initialization section (created before
+  `finalization` / the unit's `end.` when it has none) }
+function THubSurfacePlanner.AddRoutineAssigns(var pPlan: THubGroupPlan): Boolean;
+var
+  Lines  : TList<string>;
+  Assigns: TList<string>;
+begin
+  Result:= True;
+  Assigns:= TList<string>.Create;
+  Lines  := TList<string>.Create;
+  try
+    for var R in pPlan.Routines do
+      if (R.Refusal = '') and (R.Spokes > 0) then Assigns.Add(Format('  %s := %s;', [R.PtrVar, R.Name]));
+    if Assigns.Count = 0 then Exit;
+    Lines.AddRange(StringReplace(pPlan.HubNewText, #13#10, #10, [rfReplaceAll]).Split([#10]));
+    var InitIdx:= -1;
+    var FinIdx := -1;
+    var EndIdx := -1;
+    for var K:= Lines.Count - 1 downto 0 do
+      if TRegEx.IsMatch(Lines[K], '(?i)^initialization\b') then InitIdx:= K
+      else if TRegEx.IsMatch(Lines[K], '(?i)^finalization\b') then FinIdx:= K
+      else if (EndIdx < 0) and TRegEx.IsMatch(Lines[K], '(?i)^end\s*\.') then EndIdx:= K;
+    if InitIdx >= 0 then Lines.InsertRange(InitIdx + 1, Assigns)
+    else if (FinIdx >= 0) or (EndIdx >= 0) then
+    begin
+      Assigns.Insert(0, 'initialization');
+      Assigns.Add('');
+      Lines.InsertRange(if FinIdx >= 0 then FinIdx else EndIdx, Assigns);
+    end
+    else
+    begin
+      pPlan.Refusal:= 'manual-edit';
+      pPlan.Why    := Format('`%s` has no initialization section and no final `end.`', [ExtractFileName(pPlan.HubPath)]);
+      Exit(False);
+    end;
+    pPlan.HubNewText:= JoinCrLf(Lines.ToArray);
+  finally
+    Lines.Free;
+    Assigns.Free;
+  end;
 end;
 
 { the group after the plan: the cut spoke->hub edges removed, is it acyclic? (Kahn) }
@@ -897,17 +1237,26 @@ begin
     Result.SurfacePath:= TPath.Combine(ExtractFilePath(Result.HubPath), Result.SurfaceUnit + '.pas');
     PlanMembers(Result, Names);
     if NamesClash(Result) or not BuildHubText(Result, HubText) then Exit;
+    Spokes:= TList<THubSpoke>.Create;
+    try
+      for var U in pGroup do
+        if (U <> Result.HubStem) and FGraph.Adj.TryGetValue(U, L) and L.Contains(Result.HubStem) then Spokes.Add(PlanSpoke(Result, U));
+      Result.Spokes:= Spokes.ToArray;
+    finally
+      Spokes.Free;
+    end;
+    { P3: the hub's free routines the rewritten spokes still call go through R1 pointers in the surface unit }
+    PlanRoutines(Result);
+    for var I:= 0 to High(Result.Spokes) do
+    begin
+      InvertCalls(Result, Result.Spokes[I]);
+      FinishSpoke(Result, Result.Spokes[I]);
+    end;
+    for var I:= 0 to High(Result.Routines) do Result.Routines[I]:= FRoutines[LowerCase(Result.Routines[I].Name)];
+    if not AddRoutineAssigns(Result) then Exit;
     Result.SurfaceText:= BuildSurfaceText(Result, SurfaceUsesList(HubText));
   finally
     Globals.Free;
-  end;
-  Spokes:= TList<THubSpoke>.Create;
-  try
-    for var U in pGroup do
-      if (U <> Result.HubStem) and FGraph.Adj.TryGetValue(U, L) and L.Contains(Result.HubStem) then Spokes.Add(PlanSpoke(Result, U));
-    Result.Spokes:= Spokes.ToArray;
-  finally
-    Spokes.Free;
   end;
   Predict(Result);
 end;
@@ -1027,10 +1376,38 @@ begin
       KeepList.Free;
     end;
     pOut.Add(Format('- uses: %d spokes drop `%s` (edge cut); %d keep it for other hub symbols%s', [Cut, pPlan.HubUnit, Done - Cut,
-      if KeepText = '' then '' else ': ' + KeepText + ' (phase P3 moves the hub routines)']));
+      if KeepText = '' then '' else ': ' + KeepText]));
   finally
     Keep.Free;
   end;
+end;
+
+{ P3: the hub routines R1 inverts, the refused ones and the spokes that keep a routine by name }
+procedure RenderRoutines(const pPlan: THubGroupPlan; const pOut: TStrings);
+var
+  Done : TList<string>;
+  Named: Integer;
+begin
+  if Length(pPlan.Routines) = 0 then Exit;
+  Done:= TList<string>.Create;
+  try
+    for var R in pPlan.Routines do
+      if (R.Refusal = '') and (R.Spokes > 0) then Done.Add(Format('`%s` -> `%s` (%d spokes)', [R.Name, R.PtrVar, R.Spokes]));
+    pOut.Add(Format('- hub routines (R1, phase P3): %d of %d inverted through pointers in `%s`%s', [Done.Count, Length(pPlan.Routines),
+      pPlan.SurfaceUnit, if Done.Count = 0 then '' else ': ' + string.Join(', ', Done.ToArray)]));
+  finally
+    Done.Free;
+  end;
+  for var R in pPlan.Routines do
+    if R.Refusal <> '' then pOut.Add(Format('  - refused routine `%s`: %s -- %s', [R.Name, R.Refusal, R.Why]));
+  Named:= 0;
+  for var S in pPlan.Spokes do
+    for var K in S.Kept do
+    begin
+      if Named < CMaxNamedSpokes then pOut.Add(Format('  - `%s` keeps %s', [ExtractFileName(S.Path), K]));
+      Inc(Named);
+    end;
+  if Named > CMaxNamedSpokes then pOut.Add(Format('  - (+%d more spokes keep a routine)', [Named - CMaxNamedSpokes]));
 end;
 
 procedure RenderGroup(const pPlan: THubGroupPlan; const pOut: TStrings);
@@ -1045,6 +1422,7 @@ begin
   pOut.Add(Format('- hub `%s`, global `%s`: `%s` -> interface `%s` in the new unit `%s` (%s), global `%s`',
     [pPlan.HubUnit, pPlan.GlobalName, pPlan.ClassName, pPlan.IntfName, pPlan.SurfaceUnit, ExtractFileName(pPlan.SurfacePath), pPlan.VarName]));
   RenderMembers(pPlan, pOut);
+  RenderRoutines(pPlan, pOut);
   RenderSpokes(pPlan, pOut);
   pOut.Add(Format('- hub edits (`%s`): interface uses + `%s`; heritage + `%s`; accessors; hand-over `%s:= Self` in AfterConstruction (before inherited), `%3:s:= nil` in BeforeDestruction',
     [ExtractFileName(pPlan.HubPath), pPlan.SurfaceUnit, pPlan.IntfName, pPlan.VarName]));
@@ -1067,7 +1445,7 @@ begin
     Exit(2);
   end;
   Result:= 1;
-  Planner:= THubSurfacePlanner.Create(pStore, pGraph);
+  Planner:= THubSurfacePlanner.Create(pStore, pOptions.LibraryStore, pGraph);
   try
     for var I:= 0 to pSccs.Count - 1 do
     begin
@@ -1098,6 +1476,67 @@ begin
     Planner.Free;
   end;
   if pSccs.Count = 0 then pOut.Add('No circular unit dependencies found.');
+end;
+
+function HubSurfaceGroupLines(const pStore, pLibrary: ISymbolStore; const pGroup: TArray<string>; pIndex: Integer;
+  const pGraph: TCycleGraph; const pOut: TStrings): Boolean;
+var
+  Planner: THubSurfacePlanner;
+begin
+  Planner:= THubSurfacePlanner.Create(pStore, pLibrary, pGraph);
+  try
+    var Plan:= Planner.PlanGroup(pGroup, pIndex);
+    Result:= (Plan.Refusal = '') and (Length(Plan.Spokes) > 0);
+    if not Result then
+    begin
+      if Plan.Refusal <> '' then pOut.Add(Format('- group %d: hub-surface recipe R3 refused: %s -- %s; the planner''s plan follows', [pIndex, Plan.Refusal, Plan.Why]));
+      Exit;
+    end;
+    pOut.Add(Format('## Group %d (%d units): hub-shaped -- recipe R3 in place of Part A / Part B (--hub-surface)', [pIndex, Length(pGroup)]));
+    pOut.AddStrings(CycleHubLines(AnalyseCycleHubs(pStore, pGroup, pGraph)));
+    pOut.Add('');
+    RenderGroup(Plan, pOut);
+    pOut.Add(Format('- dry run: nothing written (write it: cycles --plan --hub-surface --cycle %d --apply)', [pIndex]));
+    pOut.Add('');
+  finally
+    Planner.Free;
+  end;
+end;
+
+function HubSurfaceFixJson(const pStore, pLibrary: ISymbolStore; const pGroup: TArray<string>; pIndex: Integer;
+  const pGraph: TCycleGraph; const pDbPath: string; out pFix: TJSONObject): Boolean;
+var
+  Planner: THubSurfacePlanner;
+begin
+  pFix:= nil;
+  Planner:= THubSurfacePlanner.Create(pStore, pLibrary, pGraph);
+  try
+    var Plan:= Planner.PlanGroup(pGroup, pIndex);
+    Result:= (Plan.Refusal = '') and (Length(Plan.Spokes) > 0);
+    if not Result then Exit;
+    var Cmd:= Format('drag-lint cycles --plan --hub-surface --db "%s" --cycle %d', [pDbPath, pIndex]);
+    pFix:= TJSONObject.Create;
+    pFix.AddPair('available', TJSONBool.Create(Plan.Breaks));
+    pFix.AddPair('part', 'r3');
+    pFix.AddPair('recipe', 'hub-surface');
+    pFix.AddPair('dry_run', Cmd);
+    pFix.AddPair('apply', Cmd + ' --apply');
+    var Edges:= TJSONArray.Create;
+    pFix.AddPair('edges', Edges);
+    for var S in Plan.Spokes do
+      if (S.Refusal = '') and (Length(S.Keepers) = 0) then
+      begin
+        var E:= TJSONObject.Create;
+        E.AddPair('from', ChangeFileExt(ExtractFileName(S.Path), ''));
+        E.AddPair('to', Plan.HubUnit);
+        E.AddPair('recipe', 'hub-surface');
+        E.AddPair('chosen', TJSONBool.Create(True));
+        Edges.AddElement(E);
+      end;
+    pFix.AddPair('reason', if Plan.Breaks then '' else Format('the group stays -- %d spoke->hub edges remain', [Plan.EdgesLeft]));
+  finally
+    Planner.Free;
+  end;
 end;
 
 end.
