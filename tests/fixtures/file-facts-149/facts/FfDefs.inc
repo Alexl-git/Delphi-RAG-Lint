@@ -1,0 +1,1 @@
+{$DEFINE FF_FROM_INC}

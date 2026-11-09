@@ -209,6 +209,8 @@ type
       FHasUseOriginCols      : Integer      ; { N-06: -1 unprobed, 0 absent, 1 present -- see HasUseOriginCols }
       FHasDataFlows          : Integer      ; { taint T0: -1 unprobed, 0 absent, 1 present -- see HasDataFlows }
       FQPutDataFlows         : TFDQuery     ; { taint T0: data_flows writer, prepared on first use }
+      FHasFileFacts          : Integer      ; { 149 EX2: -1 unprobed, 0 absent, 1 present -- see HasFileFacts }
+      FQFileFacts            : array[0..5] of TFDQuery; { 149 EX2: 3 deletes + 3 inserts, prepared on first use (FF_* in PutFileFacts) }
       FQDeleteFileSymbols    : TFDQuery     ;
       FQDeleteFileRefs       : TFDQuery     ;
       FQUpsertDiBinding          : TFDQuery     ;
@@ -3010,6 +3012,31 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function HasDataFlows: Boolean;
+      /// <summary>149 EX2: implements ISymbolStore.PutFileFacts (file_includes,
+      /// dfm_objects, pp_regions of one file; delete then insert).</summary>
+      /// <param name="AToken">The open file tx.</param>
+      /// <param name="AIncludes">file_includes rows.</param>
+      /// <param name="ADfmObjects">dfm_objects rows.</param>
+      /// <param name="APpRegions">pp_regions rows.</param>
+      /// <param name="ASymbolIds">Symbol index -> symbols.id; may be nil.</param>
+      procedure PutFileFacts(const AToken: TFileTxToken; const AIncludes: TArray<TFileIncludeRow>;
+        const ADfmObjects: TArray<TDfmObjectRow>; const APpRegions: TArray<TPpRegionRow>;
+        const ASymbolIds: TDictionary<Integer, Int64>);
+      /// <summary>149 EX2: implements ISymbolStore.HasFileFacts.</summary>
+      /// <returns>True when all three file-fact tables exist (probed once).</returns>
+      function HasFileFacts: Boolean;
+      /// <summary>149 EX2: implements ISymbolStore.GetFileIncludes.</summary>
+      /// <param name="AFileId">files.id.</param>
+      /// <returns>The file's rows, ordinal order.</returns>
+      function GetFileIncludes(AFileId: Int64): TArray<TFileIncludeRow>;
+      /// <summary>149 EX2: implements ISymbolStore.GetDfmObjects.</summary>
+      /// <param name="AFileId">files.id.</param>
+      /// <returns>The file's rows, ordinal order; SymbolIdx -1.</returns>
+      function GetDfmObjects(AFileId: Int64): TArray<TDfmObjectRow>;
+      /// <summary>149 EX2: implements ISymbolStore.GetPpRegions.</summary>
+      /// <param name="AFileId">files.id.</param>
+      /// <returns>The file's rows, region / branch order.</returns>
+      function GetPpRegions(AFileId: Int64): TArray<TPpRegionRow>;
       /// <summary>data_flows rows whose destination is at (AFileId, ALine, ACol).</summary>
       /// <param name="AFileId">files.id.</param>
       /// <param name="ALine">dst_line.</param>
@@ -4816,6 +4843,7 @@ begin
   FHasEffectCols    := -1; { probed lazily -- see HasEffectCols }
   FHasUseOriginCols := -1; { N-06: probed lazily -- see HasUseOriginCols }
   FHasDataFlows     := -1; { taint T0: probed lazily -- see HasDataFlows }
+  FHasFileFacts     := -1; { 149 EX2: probed lazily -- see HasFileFacts }
   FLateAncCache  := TDictionary<string, TSymbol>.Create;
   FAnchorCache   := TDictionary<Int64, string>.Create; // Task 3c; see FrameworkAnchorForFile
   FFlowOracles   := TFlowOracleCache.Create;           // C1b; see FlowOracles
@@ -4944,6 +4972,238 @@ begin
     FQPutDataFlows.ParamByName('vl' ).AsInteger   := Ord(R.ViaLocal);
     FQPutDataFlows.ParamByName('cd' ).AsInteger   := Ord(R.Cond);
     FQPutDataFlows.ExecSQL;
+  end;
+end;
+
+{ 149 EX2 (schema v24): the file-fact tables -- see ISymbolStore.PutFileFacts. FQFileFacts holds
+  one lazily prepared statement per FF_SQL entry; the first three delete, the last three insert. }
+const
+  FF_DEL_FIRST = 0;
+  FF_DEL_LAST  = 2;
+  FF_INS_INC   = 3;
+  FF_INS_DFM   = 4;
+  FF_INS_PP    = 5;
+  FF_SQL: array[0..5] of string = (
+    'DELETE FROM file_includes WHERE file_id = :fid',
+    'DELETE FROM dfm_objects WHERE file_id = :fid',
+    'DELETE FROM pp_regions WHERE file_id = :fid',
+    'INSERT INTO file_includes(file_id, ordinal, inc_path, host_line, host_col, depth, section, in_uses) ' +
+      'VALUES (:fid, :ord, :path, :hl, :hc, :dep, :sec, :inu)',
+    'INSERT INTO dfm_objects(file_id, ordinal, symbol_id, name, class_name, parent_name, obj_kind, depth, ' +
+      'start_line, start_col, end_line, end_col) VALUES (:fid, :ord, :sid, :nm, :cls, :par, :knd, :dep, :sl, :sc, :el, :ec)',
+    'INSERT INTO pp_regions(file_id, region, branch, parent, nesting, directive, condition, start_line, end_line, active) ' +
+      'VALUES (:fid, :reg, :br, :prn, :nest, :dir, :cond, :sl, :el, :act)');
+  { Parameters bound as text; every other FF_SQL parameter is an integer. }
+  FF_TEXT_PARAMS: array[0..7] of string = ('path', 'sec', 'nm', 'cls', 'par', 'knd', 'dir', 'cond');
+
+function TSQLiteSymbolStore.HasFileFacts: Boolean;
+begin
+  if FHasFileFacts < 0 then
+    FHasFileFacts:= if TableExists('file_includes') and TableExists('dfm_objects') and TableExists('pp_regions') then 1 else 0;
+  Result:= FHasFileFacts = 1;
+end;
+
+procedure TSQLiteSymbolStore.PutFileFacts(const AToken: TFileTxToken; const AIncludes: TArray<TFileIncludeRow>;
+  const ADfmObjects: TArray<TDfmObjectRow>; const APpRegions: TArray<TPpRegionRow>;
+  const ASymbolIds: TDictionary<Integer, Int64>);
+
+  function Prepared(AIdx: Integer): TFDQuery;
+  var
+    K: Integer;
+    P: TFDParam;
+  begin
+    if FQFileFacts[AIdx] = nil then
+    begin
+      Result:= TFDQuery.Create(nil);
+      try
+        Result.Connection:= FConn;
+        Result.SQL.Text  := FF_SQL[AIdx];
+        for K:= 0 to Result.Params.Count - 1 do
+        begin
+          P:= Result.Params[K];
+          P.DataType:= if MatchText(P.Name, FF_TEXT_PARAMS) then ftWideString else ftLargeint;
+        end;
+        Result.Prepare;
+      except
+        Result.Free;
+        raise;
+      end;
+      FQFileFacts[AIdx]:= Result;
+    end;
+    Result:= FQFileFacts[AIdx];
+  end;
+
+var
+  I  : Integer;
+  Q  : TFDQuery;
+  Sid: Int64;
+begin
+  if not HasFileFacts then Exit;
+  for I:= FF_DEL_FIRST to FF_DEL_LAST do
+  begin
+    Q:= Prepared(I);
+    Q.ParamByName('fid').AsLargeInt:= AToken.FileId;
+    Q.ExecSQL;
+  end;
+  Q:= Prepared(FF_INS_INC);
+  for I:= 0 to High(AIncludes) do
+  begin
+    Q.ParamByName('fid' ).AsLargeInt  := AToken.FileId;
+    Q.ParamByName('ord' ).AsLargeInt  := I;
+    Q.ParamByName('path').AsWideString:= AIncludes[I].IncPath;
+    Q.ParamByName('hl'  ).AsLargeInt  := AIncludes[I].HostLine;
+    Q.ParamByName('hc'  ).AsLargeInt  := AIncludes[I].HostCol;
+    Q.ParamByName('dep' ).AsLargeInt  := AIncludes[I].Depth;
+    Q.ParamByName('sec' ).AsWideString:= AIncludes[I].Section;
+    Q.ParamByName('inu' ).AsLargeInt  := Ord(AIncludes[I].InUses);
+    Q.ExecSQL;
+  end;
+  Q:= Prepared(FF_INS_DFM);
+  for I:= 0 to High(ADfmObjects) do
+  begin
+    Q.ParamByName('fid').AsLargeInt:= AToken.FileId;
+    Q.ParamByName('ord').AsLargeInt:= I;
+    if (ASymbolIds <> nil) and ASymbolIds.TryGetValue(ADfmObjects[I].SymbolIdx, Sid) then
+      Q.ParamByName('sid').AsLargeInt:= Sid
+    else
+      Q.ParamByName('sid').Clear;
+    Q.ParamByName('nm' ).AsWideString:= ADfmObjects[I].Name;
+    Q.ParamByName('cls').AsWideString:= ADfmObjects[I].ClassName;
+    Q.ParamByName('par').AsWideString:= ADfmObjects[I].ParentName;
+    Q.ParamByName('knd').AsWideString:= ADfmObjects[I].ObjKind;
+    Q.ParamByName('dep').AsLargeInt  := ADfmObjects[I].Depth;
+    Q.ParamByName('sl' ).AsLargeInt  := ADfmObjects[I].StartLine;
+    Q.ParamByName('sc' ).AsLargeInt  := ADfmObjects[I].StartCol;
+    Q.ParamByName('el' ).AsLargeInt  := ADfmObjects[I].EndLine;
+    Q.ParamByName('ec' ).AsLargeInt  := ADfmObjects[I].EndCol;
+    Q.ExecSQL;
+  end;
+  Q:= Prepared(FF_INS_PP);
+  for I:= 0 to High(APpRegions) do
+  begin
+    Q.ParamByName('fid' ).AsLargeInt  := AToken.FileId;
+    Q.ParamByName('reg' ).AsLargeInt  := APpRegions[I].Region;
+    Q.ParamByName('br'  ).AsLargeInt  := APpRegions[I].Branch;
+    Q.ParamByName('prn' ).AsLargeInt  := APpRegions[I].Parent;
+    Q.ParamByName('nest').AsLargeInt  := APpRegions[I].Nesting;
+    Q.ParamByName('dir' ).AsWideString:= APpRegions[I].Directive;
+    Q.ParamByName('cond').AsWideString:= APpRegions[I].Condition;
+    Q.ParamByName('sl'  ).AsLargeInt  := APpRegions[I].StartLine;
+    Q.ParamByName('el'  ).AsLargeInt  := APpRegions[I].EndLine;
+    Q.ParamByName('act' ).AsLargeInt  := Ord(APpRegions[I].Active);
+    Q.ExecSQL;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetFileIncludes(AFileId: Int64): TArray<TFileIncludeRow>;
+var
+  Q: TFDQuery;
+  L: TList<TFileIncludeRow>;
+  R: TFileIncludeRow;
+begin
+  Result:= nil;
+  if not HasFileFacts then Exit;
+  L:= TList<TFileIncludeRow>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT inc_path, host_line, host_col, depth, section, in_uses FROM file_includes ' +
+                   'WHERE file_id = :fid ORDER BY ordinal';
+    Q.ParamByName('fid').AsLargeInt:= AFileId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      R:= Default(TFileIncludeRow);
+      R.IncPath := Q.FieldByName('inc_path' ).AsString;
+      R.HostLine:= Q.FieldByName('host_line').AsInteger;
+      R.HostCol := Q.FieldByName('host_col' ).AsInteger;
+      R.Depth   := Q.FieldByName('depth'    ).AsInteger;
+      R.Section := Q.FieldByName('section'  ).AsString;
+      R.InUses  := Q.FieldByName('in_uses'  ).AsInteger <> 0;
+      L.Add(R);
+      Q.Next;
+    end;
+    Result:= L.ToArray;
+  finally
+    Q.Free;
+    L.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetDfmObjects(AFileId: Int64): TArray<TDfmObjectRow>;
+var
+  Q: TFDQuery;
+  L: TList<TDfmObjectRow>;
+  R: TDfmObjectRow;
+begin
+  Result:= nil;
+  if not HasFileFacts then Exit;
+  L:= TList<TDfmObjectRow>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT name, class_name, parent_name, obj_kind, depth, start_line, start_col, end_line, end_col ' +
+                   'FROM dfm_objects WHERE file_id = :fid ORDER BY ordinal';
+    Q.ParamByName('fid').AsLargeInt:= AFileId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      R:= Default(TDfmObjectRow);
+      R.Name      := Q.FieldByName('name'       ).AsString;
+      R.ClassName := Q.FieldByName('class_name' ).AsString;
+      R.ParentName:= Q.FieldByName('parent_name').AsString;
+      R.ObjKind   := Q.FieldByName('obj_kind'   ).AsString;
+      R.Depth     := Q.FieldByName('depth'      ).AsInteger;
+      R.SymbolIdx := -1;
+      R.StartLine := Q.FieldByName('start_line' ).AsInteger;
+      R.StartCol  := Q.FieldByName('start_col'  ).AsInteger;
+      R.EndLine   := Q.FieldByName('end_line'   ).AsInteger;
+      R.EndCol    := Q.FieldByName('end_col'    ).AsInteger;
+      L.Add(R);
+      Q.Next;
+    end;
+    Result:= L.ToArray;
+  finally
+    Q.Free;
+    L.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetPpRegions(AFileId: Int64): TArray<TPpRegionRow>;
+var
+  Q: TFDQuery;
+  L: TList<TPpRegionRow>;
+  R: TPpRegionRow;
+begin
+  Result:= nil;
+  if not HasFileFacts then Exit;
+  L:= TList<TPpRegionRow>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT region, branch, parent, nesting, directive, condition, start_line, end_line, active ' +
+                   'FROM pp_regions WHERE file_id = :fid ORDER BY region, branch';
+    Q.ParamByName('fid').AsLargeInt:= AFileId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      R:= Default(TPpRegionRow);
+      R.Region   := Q.FieldByName('region'    ).AsInteger;
+      R.Branch   := Q.FieldByName('branch'    ).AsInteger;
+      R.Parent   := Q.FieldByName('parent'    ).AsInteger;
+      R.Nesting  := Q.FieldByName('nesting'   ).AsInteger;
+      R.Directive:= Q.FieldByName('directive' ).AsString;
+      R.Condition:= Q.FieldByName('condition' ).AsString;
+      R.StartLine:= Q.FieldByName('start_line').AsInteger;
+      R.EndLine  := Q.FieldByName('end_line'  ).AsInteger;
+      R.Active   := Q.FieldByName('active'    ).AsInteger <> 0;
+      L.Add(R);
+      Q.Next;
+    end;
+    Result:= L.ToArray;
+  finally
+    Q.Free;
+    L.Free;
   end;
 end;
 
@@ -5360,6 +5620,7 @@ begin
   FQGetSymbolDoc.Free;
   FQPutSymbolFacts.Free;
   FQPutDataFlows.Free;
+  for var FFQ: TFDQuery in FQFileFacts do FFQ.Free; { 149 EX2 }
   FQGetSymbolFacts.Free;
   FQFindByDocTag.Free;
   FQFindUndocumented.Free;
@@ -6092,6 +6353,51 @@ begin
   TryExec('CREATE INDEX IF NOT EXISTS idx_data_flows_dst  ON data_flows(file_id, dst_line, dst_col)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_data_flows_sym  ON data_flows(symbol_id, dst_kind)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_data_flows_name ON data_flows(dst_kind, dst_name COLLATE NOCASE)');
+  { 149 EX2 (schema v24): the three file-fact tables, written per file by PutFileFacts inside the
+    file tx and replaced on every re-parse of the file. Here, not in SCHEMA_DDL (data_flows
+    precedent), so SCHEMA_DDL_FTS5_FIRST does not move. file_id leads an index on each (the v0.85
+    PERF rule below); dfm_objects.symbol_id is SET NULL with its own index. Column semantics:
+    TFileIncludeRow / TDfmObjectRow / TPpRegionRow in DRagLint.Core.Model and
+    docs\wiki\Index-DB-Schema.md. }
+  TryExec('CREATE TABLE IF NOT EXISTS file_includes (' +
+          '  file_id   INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,' +
+          '  ordinal   INTEGER NOT NULL,' +
+          '  inc_path  TEXT    NOT NULL,' +
+          '  host_line INTEGER NOT NULL,' +
+          '  host_col  INTEGER NOT NULL,' +
+          '  depth     INTEGER NOT NULL,' +
+          '  section   TEXT    NOT NULL,' +
+          '  in_uses   INTEGER NOT NULL)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_file_includes_file ON file_includes(file_id, ordinal)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_file_includes_path ON file_includes(inc_path COLLATE NOCASE)');
+  TryExec('CREATE TABLE IF NOT EXISTS dfm_objects (' +
+          '  file_id     INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,' +
+          '  ordinal     INTEGER NOT NULL,' +
+          '  symbol_id   INTEGER REFERENCES symbols(id) ON DELETE SET NULL,' +
+          '  name        TEXT    NOT NULL,' +
+          '  class_name  TEXT    NOT NULL,' +
+          '  parent_name TEXT    NOT NULL,' +
+          '  obj_kind    TEXT    NOT NULL,' +
+          '  depth       INTEGER NOT NULL,' +
+          '  start_line  INTEGER NOT NULL,' +
+          '  start_col   INTEGER NOT NULL,' +
+          '  end_line    INTEGER NOT NULL,' +
+          '  end_col     INTEGER NOT NULL)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_dfm_objects_file   ON dfm_objects(file_id, ordinal)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_dfm_objects_symbol ON dfm_objects(symbol_id)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_dfm_objects_name   ON dfm_objects(name COLLATE NOCASE)');
+  TryExec('CREATE TABLE IF NOT EXISTS pp_regions (' +
+          '  file_id    INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,' +
+          '  region     INTEGER NOT NULL,' +
+          '  branch     INTEGER NOT NULL,' +
+          '  parent     INTEGER NOT NULL,' +
+          '  nesting    INTEGER NOT NULL,' +
+          '  directive  TEXT    NOT NULL,' +
+          '  condition  TEXT    NOT NULL,' +
+          '  start_line INTEGER NOT NULL,' +
+          '  end_line   INTEGER NOT NULL,' +
+          '  active     INTEGER NOT NULL)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_pp_regions_file ON pp_regions(file_id, region, branch)');
   { v0.85 PERF -- the three FK child columns that had no index.
 
     `PRAGMA foreign_keys = ON` is set on the write connection, so deleting a

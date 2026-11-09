@@ -229,6 +229,8 @@ type
     // mirrors Literals' own always-collect discipline; the cost of a few
     // TList.Add calls per DFM is negligible.
     EventBindings: TList<TDfmEventBinding>   ;
+    // 149 EX2 (F5): one dfm_objects row per object block, source order.
+    DfmObjects   : TList<TDfmObjectRow>      ;
     constructor Create(const ASource: TBytes);
     destructor Destroy; override;
     function Emit(AKind: TSymbolKind; const AName, AQualifiedName, ASignature: string; AParentSymbolIdx: Integer; const ARangeNode: TTSNode): Integer;
@@ -243,6 +245,7 @@ begin
   References   := TList<TReference      >.Create;
   Literals     := TList<TStringLiteral  >.Create;
   EventBindings:= TList<TDfmEventBinding>.Create;
+  DfmObjects   := TList<TDfmObjectRow    >.Create;
 end;
 
 destructor TDfmState.Destroy;
@@ -251,6 +254,7 @@ begin
   References.Free;
   Literals.Free;
   EventBindings.Free;
+  DfmObjects.Free;
   inherited;
 end;
 
@@ -293,6 +297,35 @@ begin
 end;
 
 procedure WalkObject(const ANode: TTSNode; const AState: TDfmState; AParentSymbolIdx: Integer; const AParentQualifiedName: string; AIsRoot: Boolean); forward;
+
+{ 149 EX2 (F5): one dfm_objects row for the object block ANode. AName / AClass are
+  the strings its symbol was emitted with (contract with lane DF); the parent's name
+  is the last segment of AParentQName ('' for the root), the depth the number of
+  segments above it. }
+procedure EmitDfmObject(const AState: TDfmState; const ANode: TTSNode; const AName, AClass, AParentQName, AQName: string;
+  ASymbolIdx: Integer);
+var
+  Row     : TDfmObjectRow;
+  KindNode: TTSNode;
+  K       : Integer;
+begin
+  Row:= Default(TDfmObjectRow);
+  Row.Name      := AName;
+  Row.ClassName := AClass;
+  K:= LastDelimiter('.', AParentQName);
+  Row.ParentName:= Copy(AParentQName, K + 1, MaxInt);
+  Row.Depth     := 0;
+  for K:= 1 to Length(AQName) do
+    if AQName[K] = '.' then Inc(Row.Depth);
+  KindNode:= ANode.ChildByField('kind');
+  Row.ObjKind   := if KindNode.IsNull then 'object' else LowerCase(NodeText(KindNode, AState.Source));
+  Row.SymbolIdx := ASymbolIdx;
+  Row.StartLine := Integer(ANode.StartPoint.row   ) + 1;
+  Row.StartCol  := Integer(ANode.StartPoint.column) + 1;
+  Row.EndLine   := Integer(ANode.EndPoint  .row   ) + 1;
+  Row.EndCol    := Integer(ANode.EndPoint  .column) + 1;
+  AState.DfmObjects.Add(Row);
+end;
 
 /// <summary>Decodes a DFM `string` value node to its logical text: joins
 /// quoted_string atoms (unescaping '' -> '), and renders char_code (#nn)
@@ -451,6 +484,7 @@ begin
   if AIsRoot then Kind:= skForm
   else Kind:= skComponent;
   Idx:= AState.Emit(Kind, ObjName, QName, Signature, AParentSymbolIdx, ANode);
+  EmitDfmObject(AState, ANode, ObjName, ObjClass, AParentQualifiedName, QName, Idx); { 149 EX2 (F5) }
 
   { THE TYPE ON THE `object` LINE IS ITS OWN TOKEN CLASS, so `query --text
     "TOvcTable" --source dfm` can answer "which forms hold a component of this
@@ -627,6 +661,7 @@ begin
     Result.Symbols   := State.Symbols   .ToArray;
     Result.References:= State.References.ToArray;
     Result.Literals  := State.Literals  .ToArray;
+    Result.DfmObjects:= State.DfmObjects.ToArray; { 149 EX2 (F5) }
   finally
     State.Free;
     Tree.Free;

@@ -95,11 +95,36 @@ type
   /// <para>Used in units: DRagLint.Diagnostics.ParseCache, DRagLint.Index.PPUnitSource, DRagLint.Preprocess</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
+  /// <summary>149 EX2 (F6): one branch of a conditional-compilation region of
+  /// the TOP-LEVEL file (never inside an include), as the run evaluated it.</summary>
+  /// <remarks>
+  /// Region numbers the IFDEF / IFNDEF / IF / IFOPT blocks in source order from
+  /// 0; Branch is 0 for the opening directive and counts each ELSEIF / ELSE.
+  /// Parent is the enclosing block's Region (-1 at top level), Nesting its
+  /// depth (0 at top level). Directive is the lowercase directive word,
+  /// Condition its trimmed argument text. StartLine / EndLine are the 1-based
+  /// lines of the directive that opens and the one that closes the branch (the
+  /// file's last line when never closed). Active: the branch's text was kept.
+  /// A stray ELSE / ELSEIF / ENDIF with no open block records nothing.
+  /// </remarks>
+  TPPRegion = record
+    Region   : Integer;
+    Branch   : Integer;
+    Parent   : Integer;
+    Nesting  : Integer;
+    Directive: string ;
+    Condition: string ;
+    StartLine: Integer;
+    EndLine  : Integer;
+    Active   : Boolean;
+  end;
+
   TPPReport = record
     Sites     : TArray<TPPIncludeSite>;   // as Preprocess(..., out ASites)
     Unresolved: TArray<TPPUnresolvedIf>;  // top-level file only (not inside includes)
     Exported  : TArray<TPPDecl>;          // the file's interface declarations
     UsedUnits : TArray<string>;           // the active uses clauses, source order
+    Regions   : TArray<TPPRegion>;        // 149 EX2: top-level file only, source order of the branches
   end;
 
 /// <summary>Runs the compiler-directive preprocessor over AUtf8 under the given
@@ -253,6 +278,7 @@ type
     Scanner   : TPPDeclScanner;
     Lookup    : TPPNameLookup;
     Unresolved: TList<TPPUnresolvedIf>;
+    Regions   : TList<TPPRegion>; // 149 EX2: top-level branches; nil = not collected
   end;
 
   // One nested-IF state frame (preprocess.js stack entries):
@@ -502,6 +528,58 @@ var
   Chunks: TArray<TPPChunk>  ;
   C     : TPPChunk          ;
   Stack : TArray<TIfState>  ;
+  RegOpen   : TArray<Integer>; // 149 EX2: open branch rows (indices into ACtx.Regions), innermost last
+  NextRegion: Integer        ; // 149 EX2: Region number of the next opening directive
+
+  // 149 EX2 (F6): branches are recorded for the top-level file only, when wanted.
+  function TrackRegions: Boolean;
+  begin
+    Result:= (ADepth = 0) and (ACtx.Regions <> nil);
+  end;
+
+  // 149 EX2: close the innermost open branch at the directive on 1-based ALine.
+  procedure CloseBranch(ALine: Integer);
+  var
+    R: TPPRegion;
+  begin
+    if Length(RegOpen) = 0 then Exit;
+    R:= ACtx.Regions[RegOpen[High(RegOpen)]];
+    R.EndLine:= ALine;
+    ACtx.Regions[RegOpen[High(RegOpen)]]:= R;
+    SetLength(RegOpen, Length(RegOpen) - 1);
+  end;
+
+  // 149 EX2: record the branch AChunk opens. AIsFirst = an IFDEF-family
+  // directive (a new region); otherwise an ELSE / ELSEIF of the innermost one.
+  procedure OpenBranch(const AChunk: TPPChunk; AIsFirst, AActive: Boolean);
+  var
+    R   : TPPRegion;
+    Prev: TPPRegion;
+  begin
+    R:= Default(TPPRegion);
+    if AIsFirst then
+    begin
+      R.Region := NextRegion;
+      Inc(NextRegion);
+      R.Parent := if Length(RegOpen) > 0 then ACtx.Regions[RegOpen[High(RegOpen)]].Region else -1;
+      R.Nesting:= Length(RegOpen);
+    end
+    else
+    begin
+      if Length(RegOpen) = 0 then Exit; // stray ELSE / ELSEIF: no region to extend
+      Prev:= ACtx.Regions[RegOpen[High(RegOpen)]];
+      CloseBranch(AChunk.Line + 1);
+      R.Region := Prev.Region;
+      R.Branch := Prev.Branch + 1;
+      R.Parent := Prev.Parent;
+      R.Nesting:= Prev.Nesting;
+    end;
+    R.Directive:= AChunk.Dir;
+    R.Condition:= Trim(AChunk.Args);
+    R.StartLine:= AChunk.Line + 1;
+    R.Active   := AActive;
+    RegOpen:= RegOpen + [ACtx.Regions.Add(R)];
+  end;
 
   // Every stack frame Active? (preprocess.js effectivelyActive: stack.every).
   function EffectivelyActive: Boolean;
@@ -672,6 +750,7 @@ begin
   Stack[0].Active       := True;
   Stack[0].TakenBranch  := True;
   Stack[0].AnyOuterFalse:= False;
+  NextRegion:= 0;
 
   for C in Chunks do
   begin
@@ -716,6 +795,7 @@ begin
       Stack[High(Stack)].Active       := Cond and (not OuterInactive);
       Stack[High(Stack)].TakenBranch  := Cond;
       Stack[High(Stack)].AnyOuterFalse:= OuterInactive;
+      if TrackRegions then OpenBranch(C, True, Stack[High(Stack)].Active);
       BlankifyDirective(C.SrcStart, C.SrcEnd);
       Continue;
     end;
@@ -727,6 +807,7 @@ begin
       Stack[High(Stack)].Active     := (not Stack[High(Stack)].TakenBranch)
                                        and (not Stack[High(Stack)].AnyOuterFalse);
       Stack[High(Stack)].TakenBranch:= True;
+      if TrackRegions then OpenBranch(C, False, Stack[High(Stack)].Active);
       BlankifyDirective(C.SrcStart, C.SrcEnd);
       Continue;
     end;
@@ -741,12 +822,14 @@ begin
         Stack[High(Stack)].Active:= Cond2 and (not Stack[High(Stack)].AnyOuterFalse);
         if Cond2 then Stack[High(Stack)].TakenBranch:= True;
       end;
+      if TrackRegions then OpenBranch(C, False, Stack[High(Stack)].Active);
       BlankifyDirective(C.SrcStart, C.SrcEnd);
       Continue;
     end;
 
     if (C.Dir = 'endif') or (C.Dir = 'ifend') then
     begin
+      if TrackRegions then CloseBranch(C.Line + 1);
       if Length(Stack) > 1 then SetLength(Stack, Length(Stack) - 1);
       BlankifyDirective(C.SrcStart, C.SrcEnd);
       Continue;
@@ -778,6 +861,14 @@ begin
     // text chunks, so this is a guard).
     BlankifyDirective(C.SrcStart, C.SrcEnd);
   end;
+  // 149 EX2: a region never closed ends on the file's last line.
+  if TrackRegions and (Length(RegOpen) > 0) then
+  begin
+    var LastLine: Integer:= 1;
+    for var B: Byte in Bytes do
+      if B = LF_BYTE then Inc(LastLine);
+    while Length(RegOpen) > 0 do CloseBranch(LastLine);
+  end;
 end;
 
 // N-06: the shared body of both TPPOptions overloads; ASites may be nil (no
@@ -805,6 +896,7 @@ begin
   Ctx:= Default(TPPRunCtx);
   Ctx.Scanner   := TPPDeclScanner.Create;
   Ctx.Unresolved:= TList<TPPUnresolvedIf>.Create;
+  Ctx.Regions   := TList<TPPRegion>.Create; // 149 EX2
   Src:= PPUnitSource;
   try
     { Lane INC3: an IF name resolves in the constants declared earlier in the
@@ -870,6 +962,7 @@ begin
     AReport.Unresolved:= Ctx.Unresolved.ToArray;
     AReport.Exported  := Ctx.Scanner.ExportedDecls;
     AReport.UsedUnits := Ctx.Scanner.UsedUnits;
+    AReport.Regions   := Ctx.Regions.ToArray; // 149 EX2
   finally
     // The two closures share one frame that holds Lookup: clear every
     // reference or the frame keeps itself alive.
@@ -877,6 +970,7 @@ begin
     Ctx.Lookup:= nil;
     Lookup:= nil;
     Ctx.Unresolved.Free;
+    Ctx.Regions.Free; // 149 EX2
     Ctx.Scanner.Free;
     Switches.Free;
     Numeric.Free;

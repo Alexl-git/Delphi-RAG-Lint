@@ -1276,6 +1276,80 @@ type
     EndCol       : Integer;
   end;
 
+  /// <summary>149 EX2 (F4, schema v24): one include directive the preprocessor
+  /// RESOLVED and followed while indexing a host file -- a row of the
+  /// file_includes table.</summary>
+  /// <remarks>
+  /// Only active, resolved includes are recorded (the preprocessor reports no
+  /// site for an inactive or unresolvable one). HostLine / HostCol are 1-based
+  /// and name the directive's opening brace in the file that WRITES it: the
+  /// host itself at Depth 0, the including .inc at Depth 1 and deeper (its path
+  /// is the nearest earlier row with Depth - 1). Section is the host section a
+  /// Depth-0 directive sits in ('interface' | 'implementation' | 'program' |
+  /// 'package'), '' for a nested one. InUses is True when a Depth-0 directive
+  /// stands in a uses list (`uses <$I x.inc>` (an include directive as the entry list)), whose entries the indexer then
+  /// takes from the include. Rows keep source order.
+  /// </remarks>
+  TFileIncludeRow = record
+    IncPath : string ;
+    HostLine: Integer;
+    HostCol : Integer;
+    Depth   : Integer;
+    Section : string ;
+    InUses  : Boolean;
+  end;
+
+  /// <summary>149 EX2 (F5, schema v24): one `object` / `inherited` / `inline`
+  /// block of a text .dfm -- a row of the dfm_objects table.</summary>
+  /// <remarks>
+  /// Name and ClassName are the very strings the DFM parser emits the block's
+  /// skForm / skComponent symbol with (contract with lane DF, ledger
+  /// 2026-11-09), so dfm_objects.name joins symbols.name byte-exactly.
+  /// ParentName is the enclosing block's Name ('' for the root). ObjKind is the
+  /// lowercased keyword. Depth is 0 for the root. SymbolIdx is the index of the
+  /// block's symbol in TParseResult.Symbols; the store maps it to symbols.id.
+  /// Lines and columns are 1-based (columns in UTF-8 bytes, as for symbols).
+  /// </remarks>
+  TDfmObjectRow = record
+    Name      : string ;
+    ClassName : string ;
+    ParentName: string ;
+    ObjKind   : string ;
+    Depth     : Integer;
+    SymbolIdx : Integer;
+    StartLine : Integer;
+    StartCol  : Integer;
+    EndLine   : Integer;
+    EndCol    : Integer;
+  end;
+
+  /// <summary>149 EX2 (F6, schema v24): one BRANCH of a conditional-compilation
+  /// region of a file, with the state it had under the index's define profile
+  /// -- a row of the pp_regions table.</summary>
+  /// <remarks>
+  /// A region is one IFDEF / IFNDEF / IF / IFOPT ... ENDIF / IFEND block of the
+  /// file itself (never inside an include). Region numbers the blocks in source
+  /// order from 0; Branch is 0 for the opening directive and counts each ELSEIF
+  /// / ELSE after it. Parent is the Region of the enclosing block, -1 at top
+  /// level; Nesting is 0 at top level. Directive is lowercase ('ifdef',
+  /// 'ifndef', 'if', 'ifopt', 'elseif', 'else'); Condition its argument text
+  /// ('' for else). StartLine is the branch directive's line, EndLine the line
+  /// of the directive that closes the branch (the next branch or the ENDIF),
+  /// the file's last line when the region is never closed. Active is True when
+  /// the branch's text was kept for the parse.
+  /// </remarks>
+  TPpRegionRow = record
+    Region   : Integer;
+    Branch   : Integer;
+    Parent   : Integer;
+    Nesting  : Integer;
+    Directive: string ;
+    Condition: string ;
+    StartLine: Integer;
+    EndLine  : Integer;
+    Active   : Boolean;
+  end;
+
   /// <summary>v(ADP3 T14): one ORM dataset link -- a Delphi symbol tied by the
   /// orm-link pass to a Firebird relation, with that relation's leading columns
   /// in declaration order. Backs the doc/hover 'Dataset: qryFolders -&gt;
