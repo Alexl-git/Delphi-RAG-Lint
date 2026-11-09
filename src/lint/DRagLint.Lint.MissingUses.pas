@@ -33,6 +33,7 @@ unit DRagLint.Lint.MissingUses;
 interface
 
 uses
+  System.Generics.Collections,
   DRagLint.Core.Model,
   DRagLint.Core.Interfaces,
   DRagLint.Core.UsesInsert;
@@ -79,6 +80,48 @@ type
     Fixes   : TArray<TMissingUsesFix>;
   end;
 
+  /// <summary>Store-wide memo of the bound-ref check: symbol id -> the unit whose
+  /// interface declares it ('' for a local, a member or a dangling id).</summary>
+  /// <remarks>
+  /// The answer depends on the store only, never on the file being checked, so
+  /// one memo serves every file of a run; the per-file half (is that unit in the
+  /// text's uses?) stays inside TMissingUsesChecker.Analyze. Bound to the FIRST
+  /// store it is used with: a call with any other store bypasses it, so a memo
+  /// can never answer for a store it was not filled from.
+  /// Lifetime: owned by the caller and valid only while the store's rows do not
+  /// change -- one `lint-all` run (CLI DoLintAll creates and frees it). The LSP
+  /// passes nil (a fresh per-call memo = one per document generation), because
+  /// its store is re-indexed while the server lives.
+  /// Not thread-safe.
+  /// </remarks>
+  TMissingUsesMemo = class
+  private
+    FStore    : ISymbolStore;
+    FUnits    : TDictionary<Int64, string>;
+    FLookups  : Int64;
+    FStoreReads: Int64;
+  public
+    /// <summary>An empty memo, not yet bound to a store.</summary>
+    constructor Create;
+    /// <summary>Frees the cache; does not touch the store.</summary>
+    destructor Destroy; override;
+    /// <summary>The cached declaring unit of ASymbolId in AStore.</summary>
+    /// <param name="AStore">The store the id belongs to; binds the memo on first use.</param>
+    /// <param name="ASymbolId">A symbol id of AStore.</param>
+    /// <param name="AUnit">The cached unit ('' = explains itself) when True.</param>
+    /// <returns>True on a hit; False on a miss or when AStore is not the bound store.</returns>
+    function TryGet(const AStore: ISymbolStore; ASymbolId: Int64; out AUnit: string): Boolean;
+    /// <summary>Records the declaring unit of ASymbolId (a store read just made).</summary>
+    /// <param name="AStore">The store the id belongs to; ignored unless it is the bound store.</param>
+    /// <param name="ASymbolId">A symbol id of AStore.</param>
+    /// <param name="AUnit">Its declaring unit, '' when the binding explains itself.</param>
+    procedure Put(const AStore: ISymbolStore; ASymbolId: Int64; const AUnit: string);
+    /// <summary>Bound-ref questions asked through this memo (hits + misses).</summary>
+    property Lookups: Int64 read FLookups;
+    /// <summary>Of Lookups, the ones that had to read the store.</summary>
+    property StoreReads: Int64 read FStoreReads;
+  end;
+
   /// <summary>The unit-missing-from-uses checker.</summary>
   /// <remarks>
   /// Store-backed: reads the file's refs, symbols and uses from the
@@ -99,6 +142,9 @@ type
     /// <param name="AFileId">The file's id in AFileStore; 0 -> no findings.</param>
     /// <param name="ALookup">Stores to look names up in; AFileStore is used
     /// when it is not among them. nil entries are ignored.</param>
+    /// <param name="AMemo">Optional store-wide memo of the bound-ref check, shared
+    /// across the files of one run; nil -> a per-call memo (today's behaviour). The
+    /// findings are the same either way; only the number of store reads changes.</param>
     /// <returns>One finding per use the text's uses clauses do not explain (unbound,
     /// or bound to a unit-level declaration of a unit the text does not use), grouped
     /// by name in first-use order.</returns>
@@ -116,12 +162,13 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Analyze(const AFile: string; const AFileStore: ISymbolStore; AFileId: Int64;
-      const ALookup: TArray<ISymbolStore>): TArray<TMissingUsesFinding>; static;
+      const ALookup: TArray<ISymbolStore>; AMemo: TMissingUsesMemo = nil): TArray<TMissingUsesFinding>; static;
     /// <summary>The plain findings of Analyze, for the lint verbs.</summary>
     /// <param name="AFile">As Analyze.</param>
     /// <param name="AFileStore">As Analyze.</param>
     /// <param name="AFileId">As Analyze.</param>
     /// <param name="ALookup">As Analyze.</param>
+    /// <param name="AMemo">As Analyze (lint-all passes one per run).</param>
     /// <returns>The findings.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -133,7 +180,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; const AFileStore: ISymbolStore; AFileId: Int64;
-      const ALookup: TArray<ISymbolStore>): TArray<TLintFinding>; static;
+      const ALookup: TArray<ISymbolStore>; AMemo: TMissingUsesMemo = nil): TArray<TLintFinding>; static;
     /// <summary>The uses cycle a new edge AFromUnit -> AToUnit would close.</summary>
     /// <param name="AStore">The store whose uses graph is walked (the file's own index).</param>
     /// <param name="AFromFid">The file id of AFromUnit in AStore.</param>
@@ -165,7 +212,6 @@ implementation
 uses
   System.SysUtils,
   System.StrUtils,
-  System.Generics.Collections,
   System.RegularExpressions,
   System.Math,
   DRagLint.Core.LiveDocs,
@@ -363,7 +409,7 @@ end;
 
 class function TMissingUsesChecker.Analyze(const AFile: string;  // dl:ok cyclomatic-complexity@1b9d -- REVIEWED 2026-10-29: the body is the rule's ordered list of precision guards, one Continue each; splitting it scatters the contract the unit header states
   const AFileStore: ISymbolStore; AFileId: Int64;
-  const ALookup: TArray<ISymbolStore>): TArray<TMissingUsesFinding>;
+  const ALookup: TArray<ISymbolStore>; AMemo: TMissingUsesMemo): TArray<TMissingUsesFinding>;
 var
   Lines    : TArray<string>;
   Stores   : TArray<ISymbolStore>;
@@ -413,11 +459,18 @@ var
 
   { True when the symbol a ref is bound to explains the name: anything but a
     unit-level declaration of a unit the text does not use. A dangling id, a local
-    or a member answers True -- the binding alone never makes a candidate. }
+    or a member answers True -- the binding alone never makes a candidate.
+    The declaring unit is store-wide (AMemo, shared by the run); IsUsed is this
+    text's, so BoundOk stays per call. }
   function BindingExplains(ASymbolId: Int64): Boolean;
   begin
     if BoundOk.TryGetValue(ASymbolId, Result) then Exit;
-    var U: string:= DeclaringUnit(OwnStore, AFileStore.GetSymbolById(ASymbolId));
+    var U: string;
+    if (AMemo = nil) or not AMemo.TryGet(AFileStore, ASymbolId, U) then
+    begin
+      U:= DeclaringUnit(OwnStore, AFileStore.GetSymbolById(ASymbolId));
+      if AMemo <> nil then AMemo.Put(AFileStore, ASymbolId, U);
+    end;
     Result:= (U = '') or IsUsed(U);
     BoundOk.Add(ASymbolId, Result);
   end;
@@ -719,11 +772,40 @@ begin
 end;
 
 class function TMissingUsesChecker.Check(const AFile: string; const AFileStore: ISymbolStore; AFileId: Int64;
-  const ALookup: TArray<ISymbolStore>): TArray<TLintFinding>;
+  const ALookup: TArray<ISymbolStore>; AMemo: TMissingUsesMemo): TArray<TLintFinding>;
 begin
   Result:= nil;
-  for var MF: TMissingUsesFinding in Analyze(AFile, AFileStore, AFileId, ALookup) do
+  for var MF: TMissingUsesFinding in Analyze(AFile, AFileStore, AFileId, ALookup, AMemo) do
     Result:= Result + [MF.Finding];
+end;
+
+{ TMissingUsesMemo }
+
+constructor TMissingUsesMemo.Create;
+begin
+  inherited Create;
+  FUnits:= TDictionary<Int64, string>.Create;
+end;
+
+destructor TMissingUsesMemo.Destroy;
+begin
+  FUnits.Free;
+  inherited Destroy;
+end;
+
+function TMissingUsesMemo.TryGet(const AStore: ISymbolStore; ASymbolId: Int64; out AUnit: string): Boolean;
+begin
+  AUnit:= '';
+  if FStore = nil then FStore:= AStore;
+  if FStore <> AStore then Exit(False);
+  Inc(FLookups);
+  Result:= FUnits.TryGetValue(ASymbolId, AUnit);
+  if not Result then Inc(FStoreReads);
+end;
+
+procedure TMissingUsesMemo.Put(const AStore: ISymbolStore; ASymbolId: Int64; const AUnit: string);
+begin
+  if FStore = AStore then FUnits.AddOrSetValue(ASymbolId, AUnit);
 end;
 
 { `lint --fix`: every finding of the rule in one file, its units grouped per

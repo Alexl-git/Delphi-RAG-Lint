@@ -24778,6 +24778,9 @@ begin
   { exception-class-unit stage 1. Empty unless the lint config carries an
     "exceptions" block with a "unit" key; empty means the harvest never runs. }
   Linter.ExceptionsUnit:= Cfg.ExceptionsUnit;
+  { PF2 (150): unit-missing-from-uses' store-wide bound-ref memo, owned by this run }
+  var MissingMemo: TMissingUsesMemo:= TMissingUsesMemo.Create;
+  var MissingLookups, MissingReads: Int64;
   LastPct:= -1;
   try
     for FileIdx:= 0 to Length(FilePaths) - 1 do
@@ -24901,7 +24904,7 @@ begin
         if LintRuleWants(Nr, ['enum-bare-read-scoped']) then { X4 }
           ScanAdd(30, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckEnumBareReadScoped(PasPath, Store, Store.FindFileIdByPath(PasPath)));  // dl:ok magic-literal@099b -- REVIEWED 2026-10-25 profiler scan-slot id of the ScanAdd table, not a quantity
         if LintRuleWants(Nr, [MISSING_USES_RULE]) then
-          for F in TMissingUsesChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath), [Store, LibStore]) do Findings:= Findings + [F];
+          for F in TMissingUsesChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath), [Store, LibStore], MissingMemo) do Findings:= Findings + [F];
         if LintRuleWants(Nr, [ENUM_ORDINAL_CAST_RULE]) then { B-ENUM }
           for F in TEnumOrdinalCastChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
         { v0.68: naming-convention prefix rules (store-optional; store enables exception-ancestry sub-check, + library store continues the chain) }
@@ -24970,6 +24973,9 @@ begin
     ScmDefOff:= Linter.DefaultDisabledRuleIds;
   finally
     Linter.Free;
+    MissingLookups:= MissingMemo.Lookups;
+    MissingReads  := MissingMemo.StoreReads;
+    MissingMemo.Free;
     GScanTgt:= nil; { the pointer must not outlive Findings' frame }
   end; // try
   if LintStoodAt >= 0 then
@@ -25002,6 +25008,8 @@ begin
            GScanT[K] * 1000 / (TStopwatch.Frequency * Max(1, GScanN[K]))]));
     Writeln(ErrOutput, Format('    %-28s %9.4f s  <-- the quadratic accumulation, measured at last',
       ['(Findings append)', GScanAppend / TStopwatch.Frequency]));
+    Writeln(ErrOutput, Format('      %-26s %d bound-ref lookup(s), %d store read(s)',
+      ['missing-uses memo', MissingLookups, MissingReads]));
     { The .scm slot split into its two halves. Only the PARSE half could be
       recovered by sharing TAstParseCache with the AST checks (TLinter builds its
       own parser, so every file is parsed twice) -- the query half would remain
