@@ -1403,6 +1403,11 @@ type
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddVisibleUnitRoutines"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
+    /// <summary>149 RB2 item 3: AFileId's OWN uses (both sections, lower-cased, source order) --
+    /// FileUsesUnits without the .dpr part.</summary>
+    /// <param name="AFileId">The referencing file.</param>
+    /// <returns>The names; empty when the file uses nothing.</returns>
+    function FileOwnUses(AFileId: Int64): TArray<string>;
     function FileUsesUnits(AFileId: Int64): TArray<string>;    /// <summary>Direct children of AParentId (cached). Empty when none / 0.</summary>
     /// <param name="AParentId"><!-- drag-lint:auto type -->Int64</param>
     /// <returns><!-- drag-lint:auto -->TList&lt;TSymbol&gt; -- Observed:
@@ -10423,7 +10428,15 @@ begin
       Exit;
     end;
   end;
-  if ARef.ReceiverText <> '' then AEdge.ExternalTarget:= BindExternally(ARef, ARef.ReceiverText, Owner, Text);
+  if ARef.ReceiverText <> '' then
+  begin
+    FOracle.OwnUses:= FileOwnUses(ARef.FileId); // 149 RB2 item 3: a library tie is re-decided on the file's own uses
+    try
+      AEdge.ExternalTarget:= BindExternally(ARef, ARef.ReceiverText, Owner, Text);
+    finally
+      FOracle.OwnUses:= nil;
+    end;
+  end;
   if AEdge.ExternalTarget <> '' then AEdge.ExternalKind:= FOracle.LastKind; // D08 / D10 mark
 end;
 
@@ -10683,7 +10696,12 @@ begin
   // `receivers:` line exists to print.
   if Result.TargetSymbolId = 0 then
   begin
-    Result.ExternalTarget:= BindExternally(ACallRef, Rcv, TypeId, RcvType);
+    FOracle.OwnUses:= FileOwnUses(ACallRef.FileId); // 149 RB2 item 3: a library tie is re-decided on the file's own uses
+    try
+      Result.ExternalTarget:= BindExternally(ACallRef, Rcv, TypeId, RcvType);
+    finally
+      FOracle.OwnUses:= nil;
+    end;
     if Result.ExternalTarget <> '' then Result.ExternalKind:= FOracle.LastKind; // D08 / D10 mark
     { BindHead typed a head the project could not: that text is the fact now. }
     if (Result.ReceiverTypeText = '') and (RcvType.Text <> '') then
@@ -10835,6 +10853,12 @@ begin
     if A.Resolved and (A.SymbolId > 0) and (FindChildOfKind(A.SymbolId, AName, AnyMember).Id > 0) then Exit(True);
 end;
 
+function TCallResolver.FileOwnUses(AFileId: Int64): TArray<string>;
+begin
+  var AllUses: TArray<string>:= FileUsesUnits(AFileId); // loads FDprUses first
+  Result:= Copy(AllUses, Length(FDprUses), MaxInt);
+end;
+
 function TCallResolver.FileUsesUnits(AFileId: Int64): TArray<string>;
 begin
   if FFileUses.TryGetValue(AFileId, Result) then Exit;
@@ -10895,8 +10919,7 @@ begin
        or EnclosingClassChainDeclares(ACallRef.EnclosingSymbolId, ACallRef.NameText, ClassId) then Exit;
     { 149 RB2 item 3: FileUsesUnits is the .dpr's uses followed by the file's own; the oracle
       decides on the file's own first (a unit does not see what the program uses). }
-    var AllUses: TArray<string>:= FileUsesUnits(ACallRef.FileId);
-    Exit(FOracle.BindBare(ACallRef.NameText, AllUses, ScopeType, Reason, Copy(AllUses, Length(FDprUses), MaxInt)));
+    Exit(FOracle.BindBare(ACallRef.NameText, FileUsesUnits(ACallRef.FileId), ScopeType, Reason, FileOwnUses(ACallRef.FileId)));
   end;
   Kind:= if SameText(ACallRef.Kind, 'member-access') or SameText(ACallRef.Kind, REF_KIND_PROP_SPEC)
            or SameText(ACallRef.Kind, REF_KIND_REC_FIELD) then ekMemberAccess else ekCall;

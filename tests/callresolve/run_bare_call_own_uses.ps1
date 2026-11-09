@@ -19,7 +19,9 @@
   stays unbound (two visible units declare it -- the tie is not this guard's to break);
   A3 uFall uses neither, LeakOnly (declared only in ELeaks, which the .dpr uses) still binds
   through the fallback; A4 Format, never in ELeaks, binds on both engines.
-  POSITIVE CONTROL: on 1.48.0-alpha A1 is RED (3 FAIL), A2-A4 are green.
+  A5: the same rule for a library TYPE tie (TLibraryOracle.Pick, OwnUses): B: TBox with Lib.Box in the
+  file's uses and ELeaks (also declaring TBox) only in the .dpr -> Lib.Box.TBox.Go.
+  POSITIVE CONTROL: on 1.48.0-alpha A1 (3 FAIL) and A5 are RED, A2-A4 are green.
   Run from any CWD, pwsh 7. Pass -Exe with the engine under test.
 #>
 [CmdletBinding()]
@@ -76,7 +78,13 @@ function IntToStr(Value: Integer): string;
 function UpperCase(const S: string): string;
 procedure FreeAndNil(var Obj);
 procedure LeakOnly;
+type
+  TBox = class
+  public
+    procedure Go;
+  end;
 implementation
+procedure TBox.Go; begin end;
 function IntToStr(Value: Integer): string; begin Result:= ''; end;
 function UpperCase(const S: string): string; begin Result:= S; end;
 procedure FreeAndNil(var Obj); begin end;
@@ -84,6 +92,32 @@ procedure LeakOnly; begin end;
 end.
 '@
 
+W $lib 'Lib.Box.pas' @'
+unit Lib.Box;
+interface
+type
+  TBox = class
+  public
+    procedure Go;
+  end;
+implementation
+procedure TBox.Go; begin end;
+end.
+'@
+W $app 'uTyped.pas' @'
+unit uTyped;
+interface
+uses Lib.Box;
+procedure GoTyped;
+implementation
+procedure GoTyped;
+var
+  B: TBox;
+begin
+  B.Go;
+end;
+end.
+'@
 W $app 'uOwn.pas' @'
 unit uOwn;
 interface
@@ -133,7 +167,8 @@ uses
   ELeaks,
   uOwn in 'uOwn.pas',
   uBoth in 'uBoth.pas',
-  uFall in 'uFall.pas';
+  uFall in 'uFall.pas',
+  uTyped in 'uTyped.pas';
 begin
 end.
 '@
@@ -149,6 +184,8 @@ Pop-Location
 $j = $raw | ConvertFrom-Json
 $rows = foreach ($r in $j.rows) { [pscustomobject]@{ File=[IO.Path]::GetFileNameWithoutExtension([string]$r[0]); Name=[string]$r[1]; Ext=[string]$r[2] } }
 Check "V the sites were read ($(@($rows).Count))" (@($rows).Count -ge 6) $raw
+$rawT = & $exePath sql --db $appDb --json --limit 50 --query "SELECT coalesce(r.external_target,'') FROM refs r JOIN files f ON f.id = r.file_id WHERE r.kind = 'call' AND r.receiver_text = 'B' AND r.name_text = 'Go'" | Out-String
+$extT = [string](@(($rawT | ConvertFrom-Json).rows) | Select-Object -First 1 | ForEach-Object { $_[0] })
 function Site($file,$name){ @($rows | Where-Object { $_.File -eq $file -and $_.Name -eq $name }) | Select-Object -First 1 }
 
 foreach ($n in 'IntToStr','UpperCase','FreeAndNil') {
@@ -161,6 +198,8 @@ $s = Site 'uFall' 'LeakOnly'
 Check "A3 CONTROL uFall LeakOnly still binds ELeaks.LeakOnly through the program-wide fallback (got '$($s.Ext)')" ($null -ne $s -and $s.Ext -ceq 'ELeaks.LeakOnly')
 $s = Site 'uOwn' 'Format'
 Check "A4 CONTROL uOwn Format -> System.SysUtils.Format (got '$($s.Ext)')" ($null -ne $s -and $s.Ext -ceq 'System.SysUtils.Format')
+
+Check "A5 uTyped B.Go (B: TBox; uses Lib.Box, the .dpr uses ELeaks which also declares TBox) -> Lib.Box.TBox.Go (got '$extT')" ($extT -ceq 'Lib.Box.TBox.Go')
 
 Write-Host ''
 if ($script:fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
