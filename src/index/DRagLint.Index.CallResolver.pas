@@ -8194,7 +8194,11 @@ begin
       AText.Text:= if CurText <> '' then CurText else SymbolById(ChainType).Name;
       Exit(ChainType);
     end;
-    Result:= ResolveTypeNameToSymbol(Segs[High(Segs)], ACallRef.FileId);
+    { 149 RB2 item 1 (146 b8 leftover): once the walk STEPPED a member (StopIx > 1) the chain
+      is a value chain -- `FW.Lost.Run`, Lost a function of an unknown type -- and its last
+      segment is a member, never a unit-qualified type name; a type named Lost in scope bound
+      the site to Lost.Run, certain and wrong. }
+    Result:= if StopIx > 1 then 0 else ResolveTypeNameToSymbol(Segs[High(Segs)], ACallRef.FileId);
     if Result > 0 then AText.Text:= NormalizeTypeLeaf(Segs[High(Segs)])
     else if CurText <> '' then
     begin
