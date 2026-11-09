@@ -65,9 +65,9 @@ const
 /// silence.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
-/// <para>Calls: CompareText, ContainsText, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByKind, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile, DRagLint.Lint.ReadNeverAssigned.CollectReadNeverAssigned.AddCandidate, DRagLint.Lint.ReadNeverAssigned.CollectReadNeverAssigned.GlobalExempt, DRagLint.Lint.ReadNeverAssigned.CollectReadNeverAssigned.NoteUnboundWrite (+17 more)</para>
+/// <para>Calls: CharInSet, CompareText, ContainsText, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByKind, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile, DRagLint.Lint.ReadNeverAssigned.CollectReadNeverAssigned.AddCandidate, DRagLint.Lint.ReadNeverAssigned.CollectReadNeverAssigned.GlobalExempt (+21 more)</para>
 /// <para>Returns: nil; Findings.ToArray</para>
-/// <para>Complexity: 26 (cyclomatic, outer body), 281 lines (full implementation)</para>
+/// <para>Complexity: 26 (cyclomatic, outer body), 300 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByKind"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile"/>

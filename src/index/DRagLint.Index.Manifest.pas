@@ -586,9 +586,9 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoSelfTestManifestMerge (DRagLint.CLI.pas), DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.ParseText (DRagLint.Index.Manifest.pas)</para>
-      /// <para>Calls: Default, DRagLint.Index.Manifest.GetManifestArray, DRagLint.Index.Manifest.GetManifestNumber, DRagLint.Index.Manifest.GetManifestObject, DRagLint.Index.Manifest.JsonStrArr, DRagLint.Index.Manifest.JsonTypeName, DRagLint.Index.Manifest.ParseManifestRoot, DRagLint.Index.Manifest.ParseProjectsIndexing, DRagLint.Index.Manifest.ParseSection, DRagLint.Index.Manifest.TDocSettings.Defaults (+6 more)</para>
+      /// <para>Calls: Default, DRagLint.Index.Manifest.GetManifestArray, DRagLint.Index.Manifest.GetManifestNumber, DRagLint.Index.Manifest.GetManifestObject, DRagLint.Index.Manifest.JsonStrArr, DRagLint.Index.Manifest.JsonTypeName, DRagLint.Index.Manifest.ParseManifestRoot, DRagLint.Index.Manifest.ParseProjectsIndexing, DRagLint.Index.Manifest.ParseSection, DRagLint.Index.Manifest.TDocSettings.Defaults (+8 more)</para>
       /// <para>Returns: Default(TIndexManifest)</para>
-      /// <para>Complexity: 30 (cyclomatic, outer body), 162 lines (full implementation)</para>
+      /// <para>Complexity: 31 (cyclomatic, outer body), 163 lines (full implementation)</para>
       /// <para>Mutates: ASettingsKeys (out)</para>
       /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Index.Manifest.GetManifestArray"/>
@@ -940,7 +940,7 @@ function OrderDbsByMembership(const ACandidates: TArray<string>;
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas) (+1 more)</para>
 /// <para>Calls: DRagLint.Index.Manifest.TManifestIO.Load, ExtractFilePath, ParamStr</para>
-/// <para>Returns: 10; DocManifest.Docs.ComplexityMin</para>
+/// <para>Returns: DocManifest.Docs.ComplexityMin; 10</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
 /// <!-- drag-lint:auto END -->

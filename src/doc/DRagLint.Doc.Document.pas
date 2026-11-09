@@ -175,7 +175,6 @@ type
     /// <param name="AMaxCallers"><!-- drag-lint:auto type -->Integer = 5</param>
     /// <param name="AComplexityMin"><!-- drag-lint:auto type -->Integer = 10</param>
     /// <returns>The classified action plus file/line and the computed edits.</returns>
-    /// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.Doc.Regions.TDocRegions.MergeComment: TDocRegions.MergeComment: SeeAlso/SeeAlsoIsInline length mismatch (%d vs %d) --</exception>
     /// <remarks>
     /// Does not write files; TTextEditApplier.Apply performs any I/O.
     /// AIncludeSeeAlso / AIncludeSince / ABaseDir / AExtraStores /
@@ -184,9 +183,9 @@ type
     /// ASym.QualifiedName.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/10 (DRagLint.Doc.Document.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc (DRagLint.Lint.DocRules.pas)</para>
-    /// <para>Calls: CharInSet, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.CommentLinesContain, DRagLint.Doc.Document.CommentLinesEqual, DRagLint.Doc.Document.CommentLinesIndentEqual, DRagLint.Doc.Document.CommentRunStartAbove, DRagLint.Doc.Document.DlMarkerRunStart, DRagLint.Doc.Document.ExtractSourceSpan (+32 more)</para>
+    /// <para>Calls: CharInSet, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.CommentLinesContain, DRagLint.Doc.Document.CommentLinesEqual, DRagLint.Doc.Document.CommentLinesIndentEqual, DRagLint.Doc.Document.CommentRunStartAbove, DRagLint.Doc.Document.DlMarkerRunStart, DRagLint.Doc.Document.ExtractSourceSpan (+33 more)</para>
     /// <para>Returns: Default(TDocumentResult)</para>
-    /// <para>Complexity: 33 (cyclomatic, outer body), 570 lines (full implementation)</para>
+    /// <para>Complexity: 35 (cyclomatic, outer body), 586 lines (full implementation)</para>
     /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>

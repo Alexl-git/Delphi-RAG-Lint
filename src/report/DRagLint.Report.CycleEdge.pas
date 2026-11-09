@@ -603,14 +603,14 @@ function EdgeSurfaceToJson(const pS: TEdgeSurface): TJSONObject;
 /// final `end.` is replaced by the section plus `end.`.</para>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Report.CycleEdge.PlanRoutinesInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.SettleInversionNames (DRagLint.Report.CyclePlan.pas)</para>
-/// <para>Calls: ChangeFileExt, Default, DRagLint.Report.CycleEdge.AssignmentEdit, DRagLint.Report.CycleEdge.CallRefusal, DRagLint.Report.CycleEdge.CodeStarts, DRagLint.Report.CycleEdge.DeclConvention, DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FidOfStem, DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FileLines, DRagLint.Report.CycleEdge.IEdgeSurfaceSource.Store, DRagLint.Report.CycleEdge.LineOf (+9 more)</para>
+/// <para>Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Report.CycleEdge.AssignmentEdit, DRagLint.Report.CycleEdge.CallRefusal, DRagLint.Report.CycleEdge.CodeStarts, DRagLint.Report.CycleEdge.DeclConvention, DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FidOfStem, DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FileLines, DRagLint.Report.CycleEdge.IEdgeSurfaceSource.Store (+10 more)</para>
 /// <para>Returns: Default(TRecipeSteps)</para>
 /// <para>Mutates: pRefusal (out)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
 /// <seealso cref="DRagLint.Report.CycleEdge.AssignmentEdit"/>
 /// <seealso cref="DRagLint.Report.CycleEdge.CallRefusal"/>
 /// <seealso cref="DRagLint.Report.CycleEdge.CodeStarts"/>
 /// <seealso cref="DRagLint.Report.CycleEdge.DeclConvention"/>
-/// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FidOfStem"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function PlanRoutineInversion(const pSource: IEdgeSurfaceSource; const pSurface: TEdgeSurface;

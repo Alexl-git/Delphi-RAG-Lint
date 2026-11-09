@@ -68,9 +68,9 @@ const
 /// which is the bug this rule exists for. Never raises.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
-/// <para>Calls: Default, DRagLint.Analysis.Purity.TEffectSummary.Decode, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsWithFacts, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetAllSymbolFacts, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Lint.EffectRules.AcceptCallSite, DRagLint.Lint.EffectRules.AndOrNear (+10 more)</para>
+/// <para>Calls: Default, DRagLint.Analysis.Purity.TEffectSummary.Decode, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsWithFacts, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetAllSymbolFacts, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Lint.EffectRules.AcceptCallSite, DRagLint.Lint.EffectRules.AndOrNear (+12 more)</para>
 /// <para>Returns: Findings.ToArray</para>
-/// <para>Complexity: 16 (cyclomatic, outer body), 82 lines (full implementation)</para>
+/// <para>Complexity: 19 (cyclomatic, outer body), 88 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.Decode"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsWithFacts"/>

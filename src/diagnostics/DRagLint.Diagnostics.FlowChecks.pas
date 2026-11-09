@@ -72,9 +72,9 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: ApplyEntryDefs, ApplyWithRecordEntity, AssignedUnderSameGuard, AssignmentBaseIndex, AssignmentTargetIndex, CheckByValueArgs, CheckOutArgLiveness, CollectAndOrLeftDefs, CollectGuardTokens, CollectInterfaceDerefs (+63 more)</para>
-    /// <para>Returns: nil; True; not ParamClearlyNonOwning(DP, PName, CPF.Src); False; CanBeCallTarget(MemSym.Kind); pmUnknown</para>
-    /// <para>Complexity: 66 (cyclomatic, outer body), 1401 lines (full implementation)</para>
+    /// <para>Calls: AKeep, ApplyEntryDefs, ApplyWithRecordEntity, AssignedUnderSameGuard, AssignmentBaseIndex, AssignmentTargetIndex, CheckByValueArgs, CheckOutArgLiveness, CollectAndOrLeftDefs, CollectGuardTokens (+64 more)</para>
+    /// <para>Returns: nil; True; not ParamClearlyNonOwning(DP, PName, CPF.Src); False; CanBeCallTarget(MemSym.Kind); pmUnknown; Seen; StoreModes(ACalleeName, AIndex); Findings.ToArray</para>
+    /// <para>Complexity: 69 (cyclomatic, outer body), 1408 lines (full implementation)</para>
     /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Analysis.Cfg.CfgFindProcs"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>

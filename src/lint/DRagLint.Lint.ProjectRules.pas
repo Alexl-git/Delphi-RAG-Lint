@@ -86,9 +86,9 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas) ?</para>
-    /// <para>Calls: AWholeGraph, ChangeFileExt, CollectFrom, CollectWholeGraphRule, CompareDottedVersions, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds (+70 more)</para>
+    /// <para>Calls: AWholeGraph, ChangeFileExt, CollectFrom, CollectWholeGraphRule, CompareDottedVersions, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds (+71 more)</para>
     /// <para>Returns: TDictionary&lt;string, Boolean&gt;.Create; Flags &lt;&gt; 0; InfoIn(AStore, Found); InfoIn(ALibraryStore, Found); nil; Findings.ToArray</para>
-    /// <para>Complexity: 134 (cyclomatic, outer body), 1039 lines (full implementation)</para>
+    /// <para>Complexity: 140 (cyclomatic, outer body), 1061 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
@@ -118,7 +118,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.ComputeRuleCacheEntry (DRagLint.CLI.pas), DRagLint.CLI.WholeGraphProvider (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.Run.WholeGraph (DRagLint.Lint.ProjectRules.pas) ?</para>
     /// <para>Calls: DRagLint.Lint.EnumOrdinalPersisted.CollectEnumOrdinalPersisted, DRagLint.Lint.ProjectRules.CollectCircularUses, DRagLint.Lint.ProjectRules.CollectDfmEventHandlerMissing, DRagLint.Lint.ProjectRules.CollectDuplicateGlobalDecls, DRagLint.Lint.ProjectRules.CollectEnumHelperSeparateUnits, DRagLint.Lint.ProjectRules.CollectRepeatedTypeSwitch, SameText</para>
-    /// <para>Returns: nil; CollectCircularUses(AStore); CollectDuplicateGlobalDecls(AStore, ALibraryStore); CollectEnumHelperSeparateUnits(AStore); CollectRepeatedTypeSwitch(AStore); CollectEnumOrdinalPersisted(AStore)</para>
+    /// <para>Returns: nil; CollectCircularUses(AStore); CollectDuplicateGlobalDecls(AStore, ALibraryStore); CollectEnumHelperSeparateUnits(AStore); CollectRepeatedTypeSwitch(AStore); CollectEnumOrdinalPersisted(AStore); CollectDfmEventHandlerMissing(AStore, ALibraryStore)</para>
     /// <seealso cref="DRagLint.Lint.EnumOrdinalPersisted.CollectEnumOrdinalPersisted"/>
     /// <seealso cref="DRagLint.Lint.ProjectRules.CollectCircularUses"/>
     /// <seealso cref="DRagLint.Lint.ProjectRules.CollectDfmEventHandlerMissing"/>
