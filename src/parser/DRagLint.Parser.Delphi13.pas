@@ -3872,8 +3872,10 @@ begin
   // (a type name), not a nested expression. No Exit -- the default recursion
   // below still walks lhs + children.
   // 149 GA E1: since grammar v1.4.5 the right of `is` is a TYPE node for a
-  // dotted or generic type (typerefDot / typerefTpl): `X is Unit.TFoo` and
-  // `X is TList<Integer>` emit their type uses through EmitTypeExprRefs.
+  // generic type (typerefTpl): `X is TList<Integer>` emits its type uses through
+  // EmitTypeExprRefs. The DOTTED form (typerefDot, `X is Unit.TFoo`) is left out on
+  // purpose: it never emitted a ref, and a bare type_use there turns the cycle
+  // planner's qualified-ref refusal into class-ref (run_cyclefix_r2 f8) -- 150 row.
   if NodeType = 'exprBinary' then
   begin
     var OpNode:= ANode.ChildByField('operator');
@@ -3883,7 +3885,7 @@ begin
       if (not RhsNode.IsNull) and (RhsNode.NodeType = 'identifier') then
         AState.EmitRef('type_use', NodeText(RhsNode, AState.Source), RhsNode)
       else if (not RhsNode.IsNull) and (OpNode.NodeType = 'kIs') and
-        ((RhsNode.NodeType = 'typerefDot') or (RhsNode.NodeType = 'typerefTpl')) then
+        (RhsNode.NodeType = 'typerefTpl') then
         EmitTypeExprRefs(RhsNode, AState, 0);
     end;
   end;
