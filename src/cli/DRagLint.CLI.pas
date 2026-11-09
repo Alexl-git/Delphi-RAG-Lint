@@ -546,6 +546,7 @@ type
     EiClass      : string ; // extract-interface --class <name>
     EiMembers    : string ; // extract-interface --members <a,b>
     EiReparent   : Boolean; // extract-interface --reparent-interfaced
+    EiNoRefCount : Boolean; // extract-interface --reparent-interfaced=norefcount
     LiDefer      : Boolean; // lazy-init --defer (lane 147 G3P)
     FixNaming    : Boolean; // --fix-naming (batch --fix: explicit consent to the opt-in naming fixes)
     { --stand-in-for <realpath>: analyse THIS file's text, but answer as though
@@ -1096,6 +1097,7 @@ function ResolveFrameworkContextDb(const AArgs: TArgs; const APathsToScan: TArra
 function MakeSiblingStoreResolver(const AArgs: TArgs;
   const AKeepAlive: TList<ISymbolStore>;
   const AOwned: TObjectList<TObject>): DRagLint.Lint.SharedScope.TSiblingStoreResolver; forward;
+procedure LoadSiblingNameToDb(const AArgs: TArgs; const ANameToDb: TDictionary<string, string>); forward;
 function MakeSiblingProjectLister(const AArgs: TArgs): DRagLint.Lint.SharedScope.TSiblingProjectLister; forward;
 
 var
@@ -1891,6 +1893,11 @@ begin
       Result.EiMembers:= ParamStr(i);
     end
     else if A = '--reparent-interfaced' then Result.EiReparent:= True
+    else if A = '--reparent-interfaced=norefcount' then
+    begin
+      Result.EiReparent:= True;
+      Result.EiNoRefCount:= True;
+    end
     else if A = '--defer' then Result.LiDefer:= True
     else if (A = '--routine') and (i < ParamCount) then
     begin
@@ -14326,22 +14333,76 @@ begin
   end;
 end; // function
 
+/// <summary>Finds the peer DBs of a lint-all run that was given no --shared-db: the projects
+/// named by the dl:shared header of every scanned unit that carries a dl:ok marker, mapped to
+/// their index DBs through the manifest the run reads (LoadSiblingNameToDb).</summary>
+/// <param name="AArgs">Parsed args; --config / the machine manifest select the name-to-DB map.</param>
+/// <param name="APrimaryDb">The store this run reports from; never returned as its own peer.</param>
+/// <param name="AFilePaths">The files this run scans.</param>
+/// <returns>Existing DB paths, distinct, in first-seen order; empty when --rule narrows the run
+/// to a non-marker rule, no unit qualifies, or the manifest resolves no name.</returns>
+/// <remarks>A name the manifest cannot resolve, or whose DB file is missing, is simply not a
+/// peer: the marker then keeps the skip because fewer DBs scanned it than its header lists --
+/// never "no finding there". Costs one header read per scanned file that mentions dl:ok.</remarks>
+function DeriveSharedPeers(const AArgs: TArgs; const APrimaryDb: string;
+  const AFilePaths: TArray<string>): TArray<string>;
+var
+  Names: TDictionary<string, string>;
+  Wanted: TDictionary<string, Boolean>;
+begin
+  Result:= nil;
+  if (AArgs.Rule <> '') and not ContainsText(AArgs.Rule, 'review-marker') then Exit;
+  { A peer run (MARKER_ACCOUNT_ENV set by its parent) must not derive peers of its own: --config carries over, so it would recurse without end. }
+  if GetEnvironmentVariable(MARKER_ACCOUNT_ENV) <> '' then Exit;
+  Names:= TDictionary<string, string>.Create;
+  Wanted:= TDictionary<string, Boolean>.Create;
+  try
+    for var FP: string in AFilePaths do
+    begin
+      if not FileExists(FP) then Continue;
+      var Text: string:= TFile.ReadAllText(FP, TEncoding.ANSI);
+      if not Text.Contains('dl:ok') then Continue;
+      var Listed: TArray<string>:= TSharedUnit.ProjectsOfText(Text);
+      if Length(Listed) < 2 then Continue;
+      for var PName: string in Listed do Wanted.AddOrSetValue(LowerCase(PName), True);
+    end;
+    if Wanted.Count = 0 then Exit;
+    LoadSiblingNameToDb(AArgs, Names);
+    var Primary: string:= LowerCase(ExpandFileName(APrimaryDb));
+    for var Key: string in Wanted.Keys do
+    begin
+      var Db: string;
+      if not Names.TryGetValue(Key, Db) then Continue;
+      Db:= ExpandFileName(Db);
+      if (LowerCase(Db) = Primary) or not FileExists(Db) or MatchText(Db, Result) then Continue;
+      Result:= Result + [Db];
+    end;
+  finally
+    Wanted.Free;
+    Names.Free;
+  end;
+end; // function
 /// <summary>Runs `lint-all --db peer` once per --shared-db and merges what each run
 /// learned about review markers.</summary>
 /// <param name="AArgs">Parsed args; the rule, config and preprocess selections carry
 /// over so a peer answers the same question the primary was asked.</param>
 /// <param name="APrimaryDb">The store this run reports from; naming it as a peer adds
 /// no witness, so it is skipped with a note.</param>
-/// <returns>The merged evidence, owned by the caller; nil when no --shared-db was given.</returns>
+/// <param name="AFilePaths">The files this run scans; with no --shared-db, the dl:shared
+/// headers of those carrying a dl:ok marker name the projects whose DBs become the peers
+/// (resolved through the manifest the run reads, see DeriveSharedPeers).</param>
+/// <returns>The merged evidence, owned by the caller; nil when no --shared-db was given and
+/// the manifest names no peer.</returns>
 /// <remarks>A peer that fails, or leaves no complete account, took no part: it is named
 /// on stderr and the markers it could have witnessed stay unjudged -- never "no finding
 /// there". Peers run one after another, each costing a full lint-all of its DB.</remarks>
-function RunMarkerPeers(const AArgs: TArgs; const APrimaryDb: string): TMarkerUnion;
+function RunMarkerPeers(const AArgs: TArgs; const APrimaryDb: string; const AFilePaths: TArray<string>): TMarkerUnion;
 const
   EXIT_FINDINGS_SURVIVED = 1;
 var
   CommonArgs: string;
   Seen: TArray<string>;
+  Peers: TArray<string>;
 
   function Quoted(const AValue: string): string;
   begin
@@ -14355,7 +14416,9 @@ var
 
 begin
   Result:= nil;
-  if Length(AArgs.SharedDbs) = 0 then Exit;
+  Peers:= AArgs.SharedDbs;
+  if Length(Peers) = 0 then Peers:= DeriveSharedPeers(AArgs, APrimaryDb, AFilePaths);
+  if Length(Peers) = 0 then Exit;
   Result:= TMarkerUnion.Create;
   CommonArgs:= '--json --quiet';
   AddFlag('--rule', AArgs.Rule);
@@ -14367,7 +14430,7 @@ begin
   if AArgs.NoPreprocess then CommonArgs:= CommonArgs + ' --no-preprocess';
   if AArgs.LintThirdParty then CommonArgs:= CommonArgs + ' --lint-third-party';
   Seen:= [ExpandFileName(APrimaryDb)];
-  for var Peer: string in AArgs.SharedDbs do
+  for var Peer: string in Peers do
   begin
     var FullPeer: string:= ExpandFileName(Peer);
     if MatchText(FullPeer, Seen) then
@@ -17375,6 +17438,7 @@ begin
   Opts.Members     := AArgs.EiMembers;
   Opts.IfaceName   := AArgs.Name;
   Opts.Reparent    := AArgs.EiReparent;
+  Opts.NoRefCount  := AArgs.EiNoRefCount;
   Opts.Project     := AArgs.ProjectPath;
   Opts.Platform    := AArgs.CheckPlatform;
   Opts.RsVars      := AArgs.CycleRsVars;
@@ -25412,7 +25476,7 @@ begin
     Config "enabled":["<id>"] still overrides any of them (opt-in). doc-drift
     stays ON -- do NOT add it. }
   LintPhase('finalize+output');
-  var MarkerUnion: TMarkerUnion:= RunMarkerPeers(AArgs, ProjectDb);
+  var MarkerUnion: TMarkerUnion:= RunMarkerPeers(AArgs, ProjectDb, FilePaths);
   try
   Result:= FinalizeAndOutput(
     { ...less the --rule id: naming a rule opts it back in for this run, the

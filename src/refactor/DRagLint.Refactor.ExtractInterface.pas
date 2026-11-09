@@ -22,6 +22,8 @@ type
     IfaceName: string;
     /// <summary>--reparent-interfaced: a class whose direct parent is TObject becomes a TInterfacedObject.</summary>
     Reparent: Boolean;
+    /// <summary>--reparent-interfaced=norefcount: with Reparent, the new parent is TSingletonImplementation (System.Generics.Defaults), an IInterface base that never counts references, so Free stays the owner's call. The unit must already use System.Generics.Defaults.</summary>
+    NoRefCount: Boolean;
     /// <summary>--project: required with --apply; bounds the edit to the project's own roots.</summary>
     Project: string;
     /// <summary>--platform, '' = win64.</summary>
@@ -147,6 +149,7 @@ type
     function MethodText(const pM: TMemberRow): string;
     function NamesClassScope(const pM: TMemberRow): Boolean;
     function RefuseClass: Boolean;
+    function ReparentBase: string;
     function HeritageEdit(out pOffset, pRemove: Integer; out pInsert: string): Boolean;
     function PropertyFits(const pM: TMemberRow; const pUse: TUseCount; out pAccessors: TArray<TMemberRow>; out pDecl: string): Boolean;
     procedure Build(const pInGoes: TArray<TMemberRow>; const pProps: TArray<string>);
@@ -661,8 +664,19 @@ begin
       Refuse(Chain, 'the class does not implement IInterface; --reparent-interfaced makes its parent TInterfacedObject');
       Exit;
     end;
+    if FOpts.NoRefCount and not TRegEx.IsMatch(FSource.Masked, '\bSystem\.Generics\.Defaults\b', [roIgnoreCase]) then
+    begin
+      Refuse('base-unit-missing', 'norefcount makes the parent TSingletonImplementation: add System.Generics.Defaults to the unit''s uses first');
+      Exit;
+    end;
   end;
   Result:= False;
+end;
+
+// The parent --reparent-interfaced writes: TInterfacedObject counts references, norefcount's TSingletonImplementation never does.
+function TIfacePlanner.ReparentBase: string;
+begin
+  Result:= if FOpts.NoRefCount then 'TSingletonImplementation' else 'TInterfacedObject';
 end;
 
 // The edit of `TFoo = class(...)`; False when the shape is not understood.
@@ -681,7 +695,7 @@ begin
   if Bare then
   begin
     pOffset:= After;
-    pInsert:= '(' + (if FOpts.Reparent then 'TInterfacedObject' else 'TObject') + ', ' + FPlan.IfaceName + ')';
+    pInsert:= '(' + (if FOpts.Reparent then ReparentBase else 'TObject') + ', ' + FPlan.IfaceName + ')';
     FPlan.HeritageBefore:= Copy(FSource.Text, A, After - A);
     FPlan.HeritageAfter := FPlan.HeritageBefore + pInsert;
     Exit;
@@ -695,7 +709,7 @@ begin
   begin
     pOffset:= After;
     pRemove:= Close_ - After;
-    pInsert:= 'TInterfacedObject, ' + FPlan.IfaceName;
+    pInsert:= ReparentBase + ', ' + FPlan.IfaceName;
   end
   else
   begin

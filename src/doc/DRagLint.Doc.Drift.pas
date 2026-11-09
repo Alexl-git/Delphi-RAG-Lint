@@ -825,8 +825,9 @@ end;
   when it is abstract (they are the only bodies there are) or virtual and not
   final (148 DX: each override is a dispatch target). A bare call is answered
   only by a free routine of a unit the calling file uses (148 DX).
-  Pinned by tests\autotest\run_doc_exception_rtl_callee.ps1 and
-  run_doc_exception_rtl_callee_scope.ps1. }
+  A library raise also satisfies a cref naming an ANCESTOR of the raised class (149 RT).
+  Pinned by tests\autotest\run_doc_exception_rtl_callee.ps1,
+  run_doc_exception_rtl_callee_scope.ps1 and run_doc_exception_rtl_ancestor.ps1. }
 const
   { Free routines of one name the library may hold before the bare-call lookup
     gives up; overrides of one abstract method it will mine. Both are fan-out
@@ -854,6 +855,21 @@ begin
   Result:= False;
 end;
 
+{ 149 RT: a library raise of ARaised satisfies a cref naming ARaised or any of its
+  ancestors in the library (Exception over an EInOutError raise). Library bodies only:
+  the routine's own-body test stays exact. }
+function LibraryRaiseMatches(const ALib: ISymbolStore; const ARaised, ATypeName: string): Boolean;
+begin
+  if SameText(ARaised, ATypeName) then Exit(True);
+  for var Ty in ALib.FindSymbolsByExactName(ARaised) do
+  begin
+    if not IsLibTypeKind(Ty.Kind) then Continue;
+    for var A in ALib.GetTransitiveAncestors(Ty.Id) do
+      if (A.SymbolId > 0) and SameText(ALib.GetSymbolById(A.SymbolId).Name, ATypeName) then Exit(True);
+  end;
+  Result:= False;
+end;
+
 { One library routine: its own raises and its callees within the library, or the
   contract when it has no body. }
 function LibraryRoutineRaises(const ALib: ISymbolStore; const ACand: TSymbol;
@@ -861,7 +877,7 @@ function LibraryRoutineRaises(const ALib: ISymbolStore; const ACand: TSymbol;
 begin
   if ACand.ImplStartLine <= 0 then Exit(BodylessContractDeclares(ALib, ACand.Id, ATypeName));
   for var D in TDocFactsBuilder.MineRaisesDetailed(ALib, ACand) do
-    if SameText(D.ExcClass, ATypeName) then Exit(True);
+    if LibraryRaiseMatches(ALib, D.ExcClass, ATypeName) then Exit(True);
   var Edges: TArray<TCallEdge>:= nil;
   var Loaded: Boolean:= False;
   Result:= CalleeRaisesType(ALib, ACand, ATypeName, Edges, Loaded);

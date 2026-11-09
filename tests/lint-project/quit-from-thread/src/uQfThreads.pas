@@ -19,12 +19,19 @@ type
     procedure Execute; override;
   end;
 
+  TQfReacher = class(TThread)
+  protected
+    procedure Execute; override;
+  end;
+
   TQfNotAThread = class
   public
     procedure Execute;
   end;
 
 procedure StartAll;
+procedure QfQuitHelper;
+procedure QfSafeHelper;
 
 implementation
 
@@ -74,9 +81,25 @@ begin
   PostQuitMessage(0); // TRIGGER-QF-UNBUILT
 end;
 
+procedure QfQuitHelper;
+begin
+  Halt(3); // CONTROL-QF-HELPER-BODY
+end;
+
+procedure QfSafeHelper;
+begin
+  Sleep(1);
+end;
+
+procedure TQfReacher.Execute;
+begin
+  QfSafeHelper; // CONTROL-QF-REACHED-SAFE
+  QfQuitHelper; // TRIGGER-QF-REACHED
+end;
+
 procedure TQfNotAThread.Execute;
 begin
   PostQuitMessage(0); // CONTROL-QF-NOT-A-THREAD
 end;
 
-end.
+end.

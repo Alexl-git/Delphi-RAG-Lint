@@ -280,6 +280,14 @@ try {
   $lp = (& $exePath lint (Join-Path $scratch 'shared\gone.pas') --db $dbA --shared-db $dbB 2>&1 | Out-String); $lx = $LASTEXITCODE
   Check '12. --shared-db on another verb refuses instead of being ignored' (($lx -eq 3) -and ($lp -match 'shared-db.*lint-all only')) "exit=$lx"
 
+  # 14. (149 RT item 6) no --shared-db: the owning DBs come from the manifest the run reads
+  $au = (& $exePath lint-all --db $dbA --config $cfg 2>&1 | Out-String)
+  Check '14. manifest-resolved peers: gone.pas reported unused with no --shared-db' (UnusedAt $au 'gone\.pas')
+  Check '14b. manifest-resolved peers: thing.pas live under SecB, not unused' (-not (UnusedAt $au 'thing\.pas'))
+  Check '14c. manifest-resolved peers: drift.pas stale under SecB' (HintAt $au 'drift\.pas' 'review-marker-stale')
+  Check '14d. manifest-resolved peers: triple.pas (SecC unresolvable) stays skipped' (-not (UnusedAt $au 'triple\.pas'))
+  Check '14e. manifest-resolved peers: aonly.pas stays skipped' (-not (UnusedAt $au 'aonly\.pas'))
+  Check '14f. the run names the peers it resolved' ($au -match '(?im)^lint-all: --shared-db: running .*b\.sqlite')
   $left = @(Get-ChildItem ([IO.Path]::GetTempPath()) -Filter 'draglint-marker-account-*' -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt (Get-Date).AddMinutes(-5) })
   Check '13. no account temp file left behind' ($left.Count -eq 0) "left=$($left.Count)"
 } finally { Pop-Location; [IO.Directory]::Delete($scratch, $true) }

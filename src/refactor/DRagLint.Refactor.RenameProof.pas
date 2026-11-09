@@ -1490,6 +1490,12 @@ begin
     else Inc(FOther);
     Exit;
   end;
+  { RN 149: a routine-local's scope is its routine, so an unqualified token inside it (an inactive branch holds no ref) is the same symbol. }
+  if FScoped and not pTok.Qualified then
+  begin
+    AddEdit(pTok.Path, pTok.Line, pTok.Col);
+    Exit;
+  end;
   Refuse(CRefuseNoRefOccurrence, pTok.Path, pTok.Line, pTok.Col,
     Format('"%s" sits here and the index holds no ref for it: an inactive {$IFDEF} branch, or a chain the parse dropped', [FOld]));
 end;
