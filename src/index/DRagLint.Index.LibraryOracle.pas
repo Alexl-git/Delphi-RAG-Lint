@@ -110,6 +110,7 @@ type
     FHelperMembers: TDictionary<string, string>;
     FHelperTypes  : TDictionary<string, TArray<TLibCand>>;
     FAliases      : TDictionary<string, TArray<TLibCand>>;
+    FOwnUses      : TArray<string>;
     FLastKind     : string;
     /// <param name="ATypeText"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AUses"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
@@ -691,6 +692,12 @@ type
     /// <param name="AUsesUnits">As for Bind; the System unit is always visible.</param>
     /// <param name="AScopeType">The enclosing class's first library ancestor name, or ''.</param>
     /// <param name="AReason">As for Bind.</param>
+    /// <param name="AOwnUses">The calling file's OWN uses (both sections, lower-cased), or nil.
+    /// When given, the free-routine rung is decided on AOwnUses + System / SysInit first: a unit
+    /// sees what its uses clauses name, not what the program file uses (149 RB2: the ORM3 .dpr's
+    /// EurekaLog units declare IntToStr / FreeAndNil / UpperCase and made every unit's call
+    /// ambiguous). Only when that set holds NO routine of the name does AUsesUnits decide, as
+    /// before (a uses list the parser read short still binds).</param>
     /// <returns>The qualified name, or '' with AReason set.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -706,7 +713,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function BindBare(const AName: string; const AUsesUnits: TArray<string>; const AScopeType: string;
-      out AReason: string): string;
+      out AReason: string; const AOwnUses: TArray<string> = nil): string;
     /// <summary>True only when the library PROVES that a type named ATypeText cannot supply
     /// AMember, so a `with` target descending from it does not hide an outer AMember.</summary>
     /// <param name="ATypeText">The ancestor's name as the project wrote it; generics and unit
@@ -737,7 +744,13 @@ type
     function MemberProvablyAbsent(const ATypeText, AMember: string; const AProjectStore: ISymbolStore): Boolean;
     /// <summary>Outcome counters since Create.</summary>
     property Stats: TOracleStats read FStats;
-  end;
+    /// <summary>149 RB2 item 3: the calling file's OWN uses (lower-cased, both sections), set by
+    /// the resolver around one external binding and cleared after it; nil = not known.</summary>
+    /// <remarks>When set, Pick re-decides a tie (2+ visible candidates) on these + System /
+    /// SysInit: a unit sees what its own uses clauses name, not what the program file uses
+    /// (the ORM3 .dpr's EurekaLog units). It never overrides a single visible answer, and an
+    /// own-uses tie stays ambiguous. Not thread-safe: one resolver thread owns the oracle.</remarks>
+    property OwnUses: TArray<string> read FOwnUses write FOwnUses;  end;
 
 /// <summary>A declared type text reduced to the name the oracle and refs.receiver_type_text
 /// carry: generic arguments and unit qualifier stripped, a leading '^' kept.</summary>
@@ -1017,6 +1030,18 @@ begin
       Inc(Hits);
       ACand:= C;
     end;
+  { 149 RB2 item 3: a tie among the program-wide visible set is re-decided on the file's own uses. }
+  if (Hits > 1) and (FOwnUses <> nil) then
+  begin
+    Hits:= 0;
+    for var C: TLibCand in ACands do
+      if InUses(C.UnitStem, FOwnUses + ['system', 'sysinit']) then
+      begin
+        Inc(Hits);
+        ACand:= C;
+      end;
+    if Hits = 0 then Hits:= 2; // none of the tie is in the own uses: stays ambiguous
+  end;
   Result:= Hits = 1;
   if not Result then
   begin
@@ -1478,12 +1503,25 @@ begin
 end;
 
 function TLibraryOracle.BindBare(const AName: string; const AUsesUnits: TArray<string>;
-  const AScopeType: string; out AReason: string): string;
+  const AScopeType: string; out AReason: string; const AOwnUses: TArray<string>): string;
 var
   C   : TLibCand;
   Hit : TSymbol ;
   Why : string  ;
   Hits: Integer ;
+
+  function CountVisible(const AVisible: TArray<string>; out AQName: string): Integer;
+  begin
+    Result:= 0;
+    AQName:= '';
+    for var R: TLibCand in Cached(FRoutines, AName, ROUTINE_KINDS, False) do
+      if InUses(R.UnitStem, AVisible) then
+      begin
+        Inc(Result);
+        AQName:= R.QName;
+      end;
+  end;
+
 begin
   Result := '';
   AReason:= '';
@@ -1495,14 +1533,11 @@ begin
     Exit(Count('', R_NO_MEMBER));
   end;
   { A free routine: its unit must be one the file uses (System always is);
-    exactly one such qualified name, or nothing. }
+    exactly one such qualified name, or nothing. The file's own uses decide first
+    (AOwnUses); the program-wide set only when they name no such routine. }
   Hits:= 0;
-  for var R: TLibCand in Cached(FRoutines, AName, ROUTINE_KINDS, False) do
-    if InUses(R.UnitStem, Visible) then
-    begin
-      Inc(Hits);
-      Result:= R.QName;
-    end;
+  if AOwnUses <> nil then Hits:= CountVisible(AOwnUses + ['system', 'sysinit'], Result);
+  if Hits = 0 then Hits:= CountVisible(Visible, Result);
   if Hits > 1 then
   begin
     Result := '';

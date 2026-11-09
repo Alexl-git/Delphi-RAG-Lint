@@ -602,6 +602,8 @@ type
     /// <returns>The class / interface / record / type / enum id, or 0.</returns>
     /// <remarks>
     /// Counts nothing: each public caller keeps its own counters.
+    /// 149 RB2 item 5: two or more used-unit types of the name are decided by Delphi's uses
+    /// order (UsesOrderPick) at the ref's line, else 'ambiguous'.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.ResolveEnumCast (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveExceptionType (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveTypeRead (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveTypeUse (DRagLint.Index.CallResolver.pas)</para>
     /// <para>Calls: Default, DRagLint.Index.CallResolver.NamesGenericParam, DRagLint.Index.CallResolver.TCallResolver.AncestorsOf, DRagLint.Index.CallResolver.TCallResolver.BareReadSite, DRagLint.Index.CallResolver.TCallResolver.CandInScope, DRagLint.Index.CallResolver.TCallResolver.FindChildOfKind, DRagLint.Index.CallResolver.TCallResolver.LocalDeclNamesOf, DRagLint.Index.CallResolver.TCallResolver.ScopeSymbolAt, DRagLint.Index.CallResolver.TCallResolver.SymbolById, LowerCase, Pos, SameText</para>
@@ -617,6 +619,13 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function LookupTypeName(const ARef: TReference; out AReason: string): Int64;
+    { 149 RB2 item 5 (147 B4 residue / B5's tie-break across sections): of ACandIds, top-level
+      types of OTHER units, the one Delphi's uses order picks for a mention at ALine of AFile --
+      the unit listed LAST wins, the implementation uses coming after the interface uses; a
+      unit of the implementation uses clause is not visible above that clause (an interface
+      mention). 0 when a candidate's unit is not in AFile's uses exactly once, when two
+      candidates share a unit, or when none is visible at ALine. }
+    function UsesOrderPick(const ACandIds: TArray<Int64>; AFile: Int64; ALine: Integer): Int64;
 
     /// <summary>The names ARoutineId's implementation text declares in a const
     /// or type section, or as an inline const / var -- declarations the extractor
@@ -1397,6 +1406,11 @@ type
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddVisibleUnitRoutines"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
+    /// <summary>149 RB2 item 3: AFileId's OWN uses (both sections, lower-cased, source order) --
+    /// FileUsesUnits without the .dpr part.</summary>
+    /// <param name="AFileId">The referencing file.</param>
+    /// <returns>The names; empty when the file uses nothing.</returns>
+    function FileOwnUses(AFileId: Int64): TArray<string>;
     function FileUsesUnits(AFileId: Int64): TArray<string>;    /// <summary>Direct children of AParentId (cached). Empty when none / 0.</summary>
     /// <param name="AParentId"><!-- drag-lint:auto type -->Int64</param>
     /// <returns><!-- drag-lint:auto -->TList&lt;TSymbol&gt; -- Observed:
@@ -1499,8 +1513,9 @@ type
     /// override without `overload` leaves the sibling overloads reachable; proved by
     /// tests\callresolve\run_bind_nearest_dcc.ps1, which asks the compiler). A deeper
     /// candidate with the parameter list of a nearer one is its overridden twin
-    /// and goes too (compared as text, so an override that renames a parameter
-    /// stays ambiguous). Candidates of ONE level are never chosen between: an
+    /// and goes too (compared as text, or by parameter modifier + type and the
+    /// result text, so an override that renames a parameter is still the twin --
+    /// 146 b4). Candidates of ONE level are never chosen between: an
     /// overload tie or an IFDEF twin stays ambiguous. When every survivor refuses
     /// the site's arity the list stands untouched: a narrowing may improve an
     /// answer, never remove one. Sibling interfaces are not a chain, so the
@@ -3459,9 +3474,10 @@ type
     /// the write accessor of a property (AccessorSymbolId / AccessorKind
     /// 'method' or 'field'; none for a field or a property without a write
     /// clause the resolver can find) and ReceiverTypeSymbolId (the `with`
-    /// target's type, else the enclosing class). Any other target (local,
-    /// parameter, unit var, class var, const) leaves MemberMode '' --
-    /// identity only, exactly as before.</returns>
+    /// target's type, else the enclosing class). A unit-level or class-level
+    /// var / typed const target (149 RB2 item 4) gets ValueUseEdge's 'write'.
+    /// Any other target (local, parameter, routine-local const) leaves MemberMode
+    /// '' -- identity only, exactly as before.</returns>
     /// <remarks>
     /// The caller writes a member_accesses row (and the call edge
     /// of a method setter) when MemberMode is set, else refs.symbol_id only.
@@ -3479,6 +3495,22 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function ResolveWriteEdge(const ARef: TReference; out AReason: string): TCallEdge;
+    /// <summary>149 RB2 item 4 (147 B1 leftover): the use edge of a bound VALUE -- a unit-level
+    /// or class-level var, a const, or an enum value -- as a member_accesses row, the row a
+    /// property or field use already gets.</summary>
+    /// <param name="ARef">The read or write ref; only its Id is used.</param>
+    /// <param name="ATargetId">The declaration the ref is bound to (refs.symbol_id).</param>
+    /// <param name="AMode">'read' or 'write'.</param>
+    /// <returns>TargetSymbolId = ATargetId always. MemberMode = AMode, Confidence 'certain' and
+    /// ReceiverTypeSymbolId = the declaring class / record / enum (0 for a unit-level value)
+    /// when the target is a skVarDecl / skConstDecl / skEnumValue whose parent is a unit or a
+    /// type; MemberMode '' (identity only) for anything else -- a routine-local const, a local,
+    /// a parameter, a routine.</returns>
+    /// <remarks>No accessor: a value has none. The caller (Storage ResolveValueReadRefs,
+    /// ResolveEnumReadRefs, ResolveWriteRefs) writes the member_accesses row when MemberMode is
+    /// set, else refs.symbol_id only. A var / out argument stays 'read' here: its write half
+    /// is classified at read time by usages --rw (Query.Callers TMemberUserRow.Arg).</remarks>
+    function ValueUseEdge(const ARef: TReference; ATargetId: Int64; const AMode: string): TCallEdge;
 
     /// <summary>Per-run counters of the write-ref pass. Read by the calls stage
     /// for its ResolveLog line.</summary>
@@ -5098,6 +5130,18 @@ begin
   Result:= string.Join('', ASignature.Split([' ', #9, #13, #10]));
 end;
 
+// 146 b4: a signature by what the compiler matches -- each parameter's modifier
+// and type (ParamTypeKey: names and default values dropped) plus the text after
+// the parameter list (the result type). '' when there is no readable parameter
+// list, so a parameterless or unreadable signature never matches this way.
+function ParamShapeKey(const ASignature: string): string;
+var
+  Types: string;
+begin
+  Types:= ParamTypeKey(ASignature);
+  Result:= if Types = '' then '' else Types + '|' + LowerCase(ParamListKey(Copy(ASignature, LastDelimiter(')', ASignature) + 1, MaxInt)));
+end;
+
 function TCallResolver.NarrowToNearest(AMatches: TList<TSymbol>; AFrom, AArgCount: Integer;
   AArgsKnown: Boolean): Boolean;
 
@@ -5105,13 +5149,16 @@ function TCallResolver.NarrowToNearest(AMatches: TList<TSymbol>; AFrom, AArgCoun
   // the overridden (or hidden) twin, and the nearer one answers every site S could.
   function Shadowed(AKept: TList<TSymbol>; const S: TSymbol): Boolean;
   var
-    K  : TSymbol;
-    Key: string ;
+    K    : TSymbol;
+    Key  : string ;
+    Shape: string ;
   begin
     Result:= False;
     Key   := ParamListKey(S.Signature);
+    Shape := ParamShapeKey(S.Signature);
     for K in AKept do
-      if (K.ParentId <> S.ParentId) and SameText(ParamListKey(K.Signature), Key) then Exit(True);
+      if (K.ParentId <> S.ParentId) and (SameText(ParamListKey(K.Signature), Key)
+         or ((Shape <> '') and (ParamShapeKey(K.Signature) = Shape))) then Exit(True);
   end;
 
   // False only when every kept candidate provably refuses the site's arity. A
@@ -8301,7 +8348,11 @@ begin
       AText.Text:= if CurText <> '' then CurText else SymbolById(ChainType).Name;
       Exit(ChainType);
     end;
-    Result:= ResolveTypeNameToSymbol(Segs[High(Segs)], ACallRef.FileId);
+    { 149 RB2 item 1 (146 b8 leftover): once the walk STEPPED a member (StopIx > 1) the chain
+      is a value chain -- `FW.Lost.Run`, Lost a function of an unknown type -- and its last
+      segment is a member, never a unit-qualified type name; a type named Lost in scope bound
+      the site to Lost.Run, certain and wrong. }
+    Result:= if StopIx > 1 then 0 else ResolveTypeNameToSymbol(Segs[High(Segs)], ACallRef.FileId);
     if Result > 0 then AText.Text:= NormalizeTypeLeaf(Segs[High(Segs)])
     else if CurText <> '' then
     begin
@@ -9160,6 +9211,20 @@ begin
   TallyWrite(AReason);
 end;
 
+function TCallResolver.ValueUseEdge(const ARef: TReference; ATargetId: Int64; const AMode: string): TCallEdge;
+begin
+  Result               := Default(TCallEdge);
+  Result.RefId         := ARef.Id;
+  Result.TargetSymbolId:= ATargetId;
+  if ATargetId <= 0 then Exit;
+  var V: TSymbol:= SymbolById(ATargetId);
+  if V.Kind not in [skVarDecl, skConstDecl, skEnumValue] then Exit;
+  var P: TSymbol:= if V.ParentId > 0 then SymbolById(V.ParentId) else Default(TSymbol);
+  if (P.Id > 0) and (P.Kind not in [skUnit, skProgram, skClass, skRecord, skEnum]) then Exit; // routine-local
+  Result.Confidence:= 'certain';
+  Result.MemberMode:= AMode;
+  if P.Kind in [skClass, skRecord, skEnum] then Result.ReceiverTypeSymbolId:= P.Id;
+end;
 function TCallResolver.ResolveWriteEdge(const ARef: TReference; out AReason: string): TCallEdge;
 var
   M      : TSymbol;
@@ -9171,6 +9236,7 @@ begin
   Result.TargetSymbolId:= ResolveWriteRef(ARef, AReason);
   if Result.TargetSymbolId <= 0 then Exit;
   M:= SymbolById(Result.TargetSymbolId);
+  if M.Kind in [skVarDecl, skConstDecl] then Exit(ValueUseEdge(ARef, Result.TargetSymbolId, 'write'));
   if M.Kind not in [skProperty, skField] then Exit;
   Result.Confidence := 'certain';
   Result.MemberMode := 'write';
@@ -10259,9 +10325,49 @@ begin
     if Count = 0 then AReason:= 'not-found'
     else if Count > 1 then
     begin
-      Result := 0;
-      AReason:= 'ambiguous';
+      var Ids: TArray<Int64>:= [];
+      for S in Cands do
+        if (S.FileId <> ARef.FileId) and CandInScope(ARef.FileId, S.FileId) then
+        begin
+          Full:= SymbolById(S.Id);
+          if SameText(Full.Section, 'interface') and (Full.ParentId > 0)
+             and (SymbolById(Full.ParentId).ParentId <= 0) then Ids:= Ids + [S.Id];
+        end;
+      Result:= UsesOrderPick(Ids, ARef.FileId, ARef.StartLine);
+      if Result = 0 then AReason:= 'ambiguous';
     end;
+  end;
+end;
+
+function TCallResolver.UsesOrderPick(const ACandIds: TArray<Int64>; AFile: Int64; ALine: Integer): Int64;
+var
+  BestLine, BestCol: Integer;
+begin
+  Result  := 0;
+  BestLine:= -1;
+  BestCol := -1;
+  var UsesList: TArray<TUnitUse>:= FStore.GetUnitUsesForFile(AFile);
+  for var Id: Int64 in ACandIds do
+  begin
+    var UnitName: string:= ChangeFileExt(ExtractFileName(FStore.GetFilePath(SymbolById(Id).FileId)), '');
+    var Hits: Integer:= 0;
+    var Hit : TUnitUse:= Default(TUnitUse);
+    for var U: TUnitUse in UsesList do
+      if SameText(U.UnitName, UnitName) or EndsText('.' + U.UnitName, UnitName) then
+      begin
+        Inc(Hits);
+        Hit:= U;
+      end;
+    if Hits <> 1 then Exit(0);
+    { Not yet visible: an implementation-uses unit, for a mention above its clause. }
+    if Hit.StartLine > ALine then Continue;
+    if (Hit.StartLine > BestLine) or ((Hit.StartLine = BestLine) and (Hit.StartCol > BestCol)) then
+    begin
+      BestLine:= Hit.StartLine;
+      BestCol := Hit.StartCol;
+      Result  := Id;
+    end
+    else if (Hit.StartLine = BestLine) and (Hit.StartCol = BestCol) then Exit(0); // two types of one unit
   end;
 end;
 
@@ -10492,7 +10598,15 @@ begin
       Exit;
     end;
   end;
-  if ARef.ReceiverText <> '' then AEdge.ExternalTarget:= BindExternally(ARef, ARef.ReceiverText, Owner, Text);
+  if ARef.ReceiverText <> '' then
+  begin
+    FOracle.OwnUses:= FileOwnUses(ARef.FileId); // 149 RB2 item 3: a library tie is re-decided on the file's own uses
+    try
+      AEdge.ExternalTarget:= BindExternally(ARef, ARef.ReceiverText, Owner, Text);
+    finally
+      FOracle.OwnUses:= nil;
+    end;
+  end;
   if AEdge.ExternalTarget <> '' then AEdge.ExternalKind:= FOracle.LastKind; // D08 / D10 mark
 end;
 
@@ -10752,7 +10866,12 @@ begin
   // `receivers:` line exists to print.
   if Result.TargetSymbolId = 0 then
   begin
-    Result.ExternalTarget:= BindExternally(ACallRef, Rcv, TypeId, RcvType);
+    FOracle.OwnUses:= FileOwnUses(ACallRef.FileId); // 149 RB2 item 3: a library tie is re-decided on the file's own uses
+    try
+      Result.ExternalTarget:= BindExternally(ACallRef, Rcv, TypeId, RcvType);
+    finally
+      FOracle.OwnUses:= nil;
+    end;
     if Result.ExternalTarget <> '' then Result.ExternalKind:= FOracle.LastKind; // D08 / D10 mark
     { BindHead typed a head the project could not: that text is the fact now. }
     if (Result.ReceiverTypeText = '') and (RcvType.Text <> '') then
@@ -10909,6 +11028,12 @@ begin
     if A.Resolved and (A.SymbolId > 0) and (FindChildOfKind(A.SymbolId, AName, AnyMember).Id > 0) then Exit(True);
 end;
 
+function TCallResolver.FileOwnUses(AFileId: Int64): TArray<string>;
+begin
+  var AllUses: TArray<string>:= FileUsesUnits(AFileId); // loads FDprUses first
+  Result:= Copy(AllUses, Length(FDprUses), MaxInt);
+end;
+
 function TCallResolver.FileUsesUnits(AFileId: Int64): TArray<string>;
 begin
   if FFileUses.TryGetValue(AFileId, Result) then Exit;
@@ -10970,7 +11095,9 @@ begin
       the project's: never answer it from a library. }
     if Declared or FNameToRoutines.ContainsKey(LowerCase(ACallRef.NameText))
        or EnclosingClassChainDeclares(ACallRef.EnclosingSymbolId, ACallRef.NameText, ClassId) then Exit;
-    Exit(FOracle.BindBare(ACallRef.NameText, FileUsesUnits(ACallRef.FileId), ScopeType, Reason));
+    { 149 RB2 item 3: FileUsesUnits is the .dpr's uses followed by the file's own; the oracle
+      decides on the file's own first (a unit does not see what the program uses). }
+    Exit(FOracle.BindBare(ACallRef.NameText, FileUsesUnits(ACallRef.FileId), ScopeType, Reason, FileOwnUses(ACallRef.FileId)));
   end;
   Kind:= if SameText(ACallRef.Kind, 'member-access') or SameText(ACallRef.Kind, REF_KIND_PROP_SPEC)
            or SameText(ACallRef.Kind, REF_KIND_REC_FIELD) then ekMemberAccess else ekCall;

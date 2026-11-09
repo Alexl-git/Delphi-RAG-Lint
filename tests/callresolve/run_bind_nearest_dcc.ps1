@@ -23,7 +23,9 @@ $Cases = @(
   @{ N='C kid with overload lets the lookup go on'; K="  TKid = class(TBase)`r`n    procedure M(X: Double); overload;`r`n  end;"; Impl="procedure TKid.M(X: Double); begin end;"; C="K.M('x')"; Must=$true; Why='a level with overload does not hide' },
   @{ N='D override without overload'; K="  TKid = class(TBase)`r`n    procedure M(A: Integer); override;`r`n  end;"; Impl="procedure TKid.M(A: Integer); begin end;"; C="K.M('x')"; Must=$true; Why='an override with no overload directive does NOT hide the sibling overload' },
   @{ N='E override with overload'; K="  TKid = class(TBase)`r`n    procedure M(A: Integer); overload; override;`r`n  end;"; Impl="procedure TKid.M(A: Integer); begin end;"; C="K.M('x')"; Must=$true; Why='overload on the override keeps the sibling visible' },
-  @{ N='F reintroduce without overload hides'; K="  TKid = class(TBase)`r`n    procedure M(A: Integer); reintroduce;`r`n  end;"; Impl="procedure TKid.M(A: Integer); begin end;"; C="K.M('x')"; Must=$false; Why='reintroduce with no overload hides' }
+  @{ N='F reintroduce without overload hides'; K="  TKid = class(TBase)`r`n    procedure M(A: Integer); reintroduce;`r`n  end;"; Impl="procedure TKid.M(A: Integer); begin end;"; C="K.M('x')"; Must=$false; Why='reintroduce with no overload hides' },
+  @{ N='G override that renames its parameter'; K="  TKid = class(TBase)`r`n    procedure M(B: Integer); override;`r`n  end;"; Impl="procedure TKid.M(B: Integer); begin end;"; C="K.M(1)"; Must=$true; Why='149 RB2 item 6 (PB 146 b4): parameter NAMES take no part in override matching' },
+  @{ N='H control: override that changes the parameter TYPE'; K="  TKid = class(TBase)`r`n    procedure M(B: Double); override;`r`n  end;"; Impl="procedure TKid.M(B: Double); begin end;"; C="K.M(1)"; Must=$false; Why='the shape (modifier + type) is what matches, so a different type is refused' }
 )
 try {
   foreach ($c in $Cases) {
@@ -41,6 +43,22 @@ try {
     Write-Host ("  [{0}] {1}: compiled={2}, expected={3} ({4}) {5}" -f $tag, $c.N, $compiled, $c.Must, $c.Why, $err)
     if (-not $ok) { $script:Failed = $true }
   }
+  # 149 RB2 item 6: G compiling proves the renamed override is LEGAL; this proves it is the
+  # overridden TWIN -- a call through a TBase reference dispatches to TKid.M at run time,
+  # which only an override (never a hiding sibling) does. ParamShapeKey (CallResolver) keys
+  # the twin on modifier + type, names dropped, for exactly this reason.
+  $rdpr = Join-Path $Work 'pR.dpr'
+  $rsrc = "program pR;`r`n{`$APPTYPE CONSOLE}`r`ntype`r`n  TBase = class`r`n    procedure M(A: Integer); virtual;`r`n  end;`r`n" +
+          "  TKid = class(TBase)`r`n    procedure M(B: Integer); override;`r`n  end;`r`n" +
+          "procedure TBase.M(A: Integer); begin Write('BASE'); end;`r`nprocedure TKid.M(B: Integer); begin Write('KID'); end;`r`n" +
+          "var B: TBase;`r`nbegin`r`n  B:= TKid.Create;`r`n  B.M(1);`r`n  B.Free;`r`nend.`r`n"
+  [IO.File]::WriteAllText($rdpr, $rsrc, [Text.Encoding]::ASCII)
+  $null = & $Dcc -Q -CC "-E$Work" "-NU$Work" -NSSystem $rdpr 2>&1 | Out-String
+  $rexe = Join-Path $Work 'pR.exe'
+  $rout = if (Test-Path $rexe) { (& $rexe | Out-String).Trim() } else { '<no exe>' }
+  $rok = ($rout -ceq 'KID')
+  Write-Host ("  [{0}] R renamed-param override is the overridden twin: TBase ref dispatches to TKid.M (got '{1}')" -f (@('FAIL','PASS')[[int]$rok]), $rout)
+  if (-not $rok) { $script:Failed = $true }
 } finally {
   [IO.Directory]::Delete($Work, $true)
 }

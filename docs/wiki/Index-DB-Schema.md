@@ -145,7 +145,7 @@ filled by the resolve pass. Indexes: `idx_refs_file`, `idx_refs_symbol`,
 | column | type | meaning |
 |---|---|---|
 | id | INTEGER PK | |
-| symbol_id | INTEGER FK symbols (set null) | resolved target declaration; NULL = unresolved or external |
+| symbol_id | INTEGER FK symbols (set null) | resolved target declaration, written for a CERTAIN binding only; NULL = unresolved, external (see external_target) or ambiguous (a call_edges row with confidence `ambiguous` holds the picked candidate, no single declaration is claimed). Count unresolved calls as refs with no call_edges row and no external_target, never as `symbol_id IS NULL` |
 | file_id | INTEGER FK files (cascade) | file containing the use |
 | kind | TEXT | see section 4 |
 | name_text | TEXT | identifier as written (generics keep their arguments) |
@@ -163,6 +163,11 @@ one edge. Indexes: `idx_call_edges_target`, `_ref`, `_receiver`.
 (cascade)`, `confidence TEXT` (`certain` | `ambiguous`: several overloads/receivers
 matched), `receiver_type_symbol_id INTEGER FK symbols (set null)` (static receiver type).
 Only `refs.kind = 'call'` is ever resolved here.
+Interface dispatch (RB-5, owner ruling 2026-09-16): a call through an interface-typed receiver
+has ONE edge, to the interface method, never one per implementor. The dispatch kind is not a
+column; derive it: the target's parent symbol has `kind = 'interface'`. The implementors are a
+query on `dispatch_edges` (`base_symbol_id` = the interface method, `kind = 'implements'`).
+Guard: `tests\callresolve\run_interface_dispatch_attribution.ps1`.
 
 ### member_accesses
 Property/field accesses. `ref_id INTEGER PK FK refs (cascade)`, `member_symbol_id INTEGER

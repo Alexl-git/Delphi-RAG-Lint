@@ -16233,9 +16233,16 @@ begin
       Id:= AResolver.ResolveEnumValueRead(Ref, Reason);
       if Id > 0 then
       begin
-        FQSetRefSymbol.ParamByName('sid').AsLargeInt:= Id;
-        FQSetRefSymbol.ParamByName('rid').AsLargeInt:= Ref.Id;
-        FQSetRefSymbol.ExecSQL;
+        { 149 RB2 item 4: a unit- / class-level var, const or enum value also records its use
+          (member_accesses mode 'read'); anything else stays identity only. }
+        var UseEdge: TCallEdge:= AResolver.ValueUseEdge(Ref, Id, 'read');
+        if UseEdge.MemberMode <> '' then WriteMemberAccess(Ref.Id, UseEdge)
+        else
+        begin
+          FQSetRefSymbol.ParamByName('sid').AsLargeInt:= Id;
+          FQSetRefSymbol.ParamByName('rid').AsLargeInt:= Ref.Id;
+          FQSetRefSymbol.ExecSQL;
+        end;
         Inc(ABound);
       end;
       Inc(ACandidates);
@@ -16567,9 +16574,16 @@ begin
       Id:= AResolver.ResolveBareValueRead(Ref, Reason);
       if Id > 0 then
       begin
-        FQSetRefSymbol.ParamByName('sid').AsLargeInt:= Id;
-        FQSetRefSymbol.ParamByName('rid').AsLargeInt:= Ref.Id;
-        FQSetRefSymbol.ExecSQL;
+        { 149 RB2 item 4: a unit- / class-level var, const or enum value also records its use
+          (member_accesses mode 'read'); anything else stays identity only. }
+        var UseEdge: TCallEdge:= AResolver.ValueUseEdge(Ref, Id, 'read');
+        if UseEdge.MemberMode <> '' then WriteMemberAccess(Ref.Id, UseEdge)
+        else
+        begin
+          FQSetRefSymbol.ParamByName('sid').AsLargeInt:= Id;
+          FQSetRefSymbol.ParamByName('rid').AsLargeInt:= Ref.Id;
+          FQSetRefSymbol.ExecSQL;
+        end;
         Inc(ABound);
       end;
       Inc(ACandidates);
