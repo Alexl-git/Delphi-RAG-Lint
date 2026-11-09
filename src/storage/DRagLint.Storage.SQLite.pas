@@ -15152,7 +15152,7 @@ begin
     Q.Connection:= FConn;
     for U in AUnits do
       Keep.AddOrSetValue(LowerCase(NormalizeStoredPath(U.Path)), True);
-    Q.Open('SELECT id, path FROM files WHERE language = ''' + CHeaderLanguage + '''');
+    Q.Open('SELECT id, path FROM files WHERE language = :l', [CHeaderLanguage]);
     while not Q.Eof do
     begin
       if not Keep.ContainsKey(LowerCase(Q.Fields[1].AsString)) then
@@ -15209,8 +15209,11 @@ begin
       end;
       FConn.Commit;
     except
-      FConn.Rollback;
-      raise;
+      on Exception do
+      begin
+        FConn.Rollback;
+        raise;
+      end;
     end;
   finally
     Stale.Free;

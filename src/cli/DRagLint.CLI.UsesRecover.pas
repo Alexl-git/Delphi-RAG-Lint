@@ -460,7 +460,7 @@ procedure TUsesRecoverRun.Recover(const pDirect: TDictionary<string, TList<strin
 var
   LQueue: TQueue<TRecoveredUnit>;
   LNames: TArray<string>;
-  LName, LCanon, LHeader, LUser, LInc, LUsed: string;
+  LName, LCanon, LHeader, LUser, LInc, LUsed, LTarget: string;
   LUnit, LOther: TRecoveredUnit;
   LEdge: TRecoveredEdge;
   LAlias: TAliasUse;
@@ -494,13 +494,14 @@ begin
     for LName in LNames do
     begin
       LUsed:= LName;
-      if FAliases.TryGetValue(LowerCase(LName), LAlias.Target) then
+      if FAliases.TryGetValue(LowerCase(LName), LTarget) then
       begin
         { --project: a used alias is classified, and followed, by its target. }
         LAlias.UnitName:= LName;
-        LAlias.Status:= Classify(LAlias.Target);
+        LAlias.Target:= LTarget;
+        LAlias.Status:= Classify(LTarget);
         FAliasUses:= FAliasUses + [LAlias];
-        LUsed:= LAlias.Target;
+        LUsed:= LTarget;
       end;
       if Classify(LUsed) = CStatusSourceless then
         for LUser in pDirect[LName] do
