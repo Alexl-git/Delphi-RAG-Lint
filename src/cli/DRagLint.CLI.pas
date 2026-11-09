@@ -277,6 +277,7 @@ uses
   , DRagLint.Report    .Deps
   , DRagLint.Report    .RCallTree
   , DRagLint.Report    .Overview
+  , DRagLint.Report    .CycleHub  // cycles --hub (spec 2026-11-08-hub-scc-phased P1)
   , DRagLint.Report    .CyclePlan // dl:unit DRagLint.Report.CyclePlan accepted -- the report's line formats travel with the playbook that predicts them, so the predicted output cannot drift from what cycles prints
   , DRagLint.CLI       .CycleFix
   , DRagLint.Convert   .PropTree
@@ -517,6 +518,7 @@ type
     Causes         : Boolean; // --causes (cycles: pinpoint the symbols forcing each interface edge)
     Plan           : Boolean; // --plan (cycles: emit a followable markdown refactoring playbook)
     F2047          : Boolean; // --f2047 (cycles: only the interface-only cycles dcc rejects, N-09)
+    Hub            : Boolean; // --hub (cycles: hub analysis per group, spec 2026-11-08-hub-scc-phased P1)
     FixCycle       : Integer; // --cycle <n> (cycles --fix: the 1-based group to plan)
     FixCycleGiven  : Boolean; // --cycle was on the command line (so 0 / junk is an error, not 'absent')
     FixPart        : string ; // --part a|b|all (cycles --fix)
@@ -1902,6 +1904,7 @@ begin
     else if A = '--causes'        then Result.Causes         := True
     else if A = '--plan'          then Result.Plan           := True
     else if A = '--f2047'         then Result.F2047          := True
+    else if A = '--hub'           then Result.Hub            := True
     else if A = '--apply'         then Result.Apply          := True
     else if A = '--fix'           then Result.Fix            := True
     else if A = '--remove-unused' then Result.RemoveUnused   := True
@@ -27546,6 +27549,8 @@ begin
           JO.AddPair('units', JMembers);
           JO.AddPair('size', TJSONNumber.Create(Length(Comp)));
           JO.AddPair('interface_cycle', TJSONBool.Create(HasIntf));
+          { --hub (spec 2026-11-08-hub-scc-phased P1): the hub analysis of the group, read-only }
+          if AArgs.Hub then AddCycleHubJson(AnalyseCycleHubs(Store, Comp, CycGraph), JO);
           JArr.AddElement(JO);
         end;
         if AArgs.Causes then
@@ -27642,8 +27647,13 @@ begin
                   Writeln(Format('      * %s -> %s interface dep: no specific symbol ' + 'resolved (index gap -- inspect %s''s interface uses of %s by hand)', [A, B, A, B]));
               end; // for
           end; // if
+
+          { --hub (spec 2026-11-08-hub-scc-phased P1): the units whose removal leaves the
+            group acyclic, with the edges, weights and surfaces on each side. Read-only. }
+          if AArgs.Hub then
+            for var HubLine in CycleHubLines(AnalyseCycleHubs(Store, Comp, CycGraph)) do Writeln(HubLine);
         end; // for
-        if not (AArgs.Edges or AArgs.Causes) then Writeln(CCycleEdgesHint);
+        if not (AArgs.Edges or AArgs.Causes or AArgs.Hub) then Writeln(CCycleEdgesHint);
       end; // else
     end; // else
     Result:= if FixCode >= 0 then FixCode else 0;

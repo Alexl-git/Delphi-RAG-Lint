@@ -248,6 +248,7 @@ uses
   DRagLint.Report.Deps in '..\report\DRagLint.Report.Deps.pas',
   DRagLint.Report.RCallTree in '..\report\DRagLint.Report.RCallTree.pas',
   DRagLint.Report.CyclePlan in '..\report\DRagLint.Report.CyclePlan.pas',
+  DRagLint.Report.CycleHub in '..\report\DRagLint.Report.CycleHub.pas',
   DRagLint.Report.CycleEdge in '..\report\DRagLint.Report.CycleEdge.pas',
   DRagLint.Report.Overview in '..\report\DRagLint.Report.Overview.pas',
   DRagLint.Report.UntangleCatalog in '..\report\DRagLint.Report.UntangleCatalog.pas',
