@@ -201,7 +201,7 @@ begin
   Writeln('  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]');
   Writeln('                               --output <file>: the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).');
   Writeln('                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)');
-  Writeln('                               --rule <id>: report ONLY that rule (one id per run; a comma list or a second, different --rule exits 2); naming an OFF-by-default rule opts it in');
+  Writeln('                               --rule <id>: report ONLY that rule (a comma list a,b limits the report to those rules and opts each in; an unknown id or a second, different --rule exits 2); naming an OFF-by-default rule opts it in');
   Writeln('                               for the run (no --enable needed) -- the same contract as lint and lint-project.');
   Writeln('                               --quiet: suppress per-file progress lines written to stderr');
   Writeln('                               --project <.dproj|.dpr>: report ONLY on the units that project compiles');
@@ -822,7 +822,7 @@ begin
     Writeln('  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]');
     Writeln('                               --output <file>: the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).');
     Writeln('                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)');
-    Writeln('                               --rule <id>: report ONLY that rule (one id per run; a comma list or a second, different --rule exits 2); naming an OFF-by-default rule opts it in');
+    Writeln('                               --rule <id>: report ONLY that rule (a comma list a,b limits the report to those rules and opts each in; an unknown id or a second, different --rule exits 2); naming an OFF-by-default rule opts it in');
     Writeln('                               for the run (no --enable needed) -- the same contract as lint and lint-project.');
     Writeln('                               --quiet: suppress per-file progress lines written to stderr');
     Writeln('                               --project <.dproj|.dpr>: report ONLY on the units that project compiles');
