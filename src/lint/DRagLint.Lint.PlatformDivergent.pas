@@ -41,7 +41,8 @@ interface
 
 uses
   System.SysUtils,
-  DRagLint.Core.Model;
+  DRagLint.Core.Model,
+  DRagLint.Core.Interfaces;
 
 const
   /// <summary>The rule id reported by TPlatformDivergentCheck.</summary>
@@ -72,6 +73,9 @@ type
     /// <param name="AExtraIncludeDirs">Directories searched for {$I} files
     /// after the file's own folder -- for a file analysed from a temporary
     /// snapshot, pass the real file's folder.</param>
+    /// <param name="AStore">150 PP: the project index, or nil; passed to
+    /// TIfdefUndefinedCheck.ScanFileTests, which reads a current file's own
+    /// directives from pp_directives instead of re-lexing it. Same findings.</param>
     /// <returns>At most one warning per divergent symbol, anchored at its first
     /// test site.</returns>
     /// <remarks>
@@ -91,7 +95,7 @@ type
     /// </remarks>
     class function CheckFiles(const AFiles: TArray<string>; const ADprojPath: string;
       const AAllow: TArray<string>;
-      const AExtraIncludeDirs: TArray<string> = nil): TArray<TLintFinding>; static;
+      const AExtraIncludeDirs: TArray<string> = nil; const AStore: ISymbolStore = nil): TArray<TLintFinding>; static;
   end;
 
 implementation
@@ -226,7 +230,7 @@ end;
 
 class function TPlatformDivergentCheck.CheckFiles(const AFiles: TArray<string>;
   const ADprojPath: string; const AAllow: TArray<string>;
-  const AExtraIncludeDirs: TArray<string>): TArray<TLintFinding>;
+  const AExtraIncludeDirs: TArray<string>; const AStore: ISymbolStore): TArray<TLintFinding>;
 var
   Content   : string;
   Platforms : TArray<string>;
@@ -272,7 +276,7 @@ begin
     SearchDirs:= AExtraIncludeDirs + TIfdefUndefinedCheck.ProjectSearchDirs(ADprojPath);
     for FilePath in AFiles do
     begin
-      if not TIfdefUndefinedCheck.ScanFileTests(FilePath, SearchDirs, Tests, Locals) then Continue;
+      if not TIfdefUndefinedCheck.ScanFileTests(FilePath, SearchDirs, Tests, Locals, AStore) then Continue;
       for Test in Tests do
       begin
         Sym:= LowerCase(Test.Symbol);

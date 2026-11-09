@@ -2864,6 +2864,9 @@ type
     /// <param name="AIncludes">The file's resolved include directives (may be empty).</param>
     /// <param name="ADfmObjects">The file's .dfm object blocks (empty for a non-.dfm).</param>
     /// <param name="APpRegions">The file's conditional-compilation branches (may be empty).</param>
+    /// <param name="APpDirectives">150 PP: the file's define / undef / test /
+    /// include directives (may be empty); written to pp_directives when that
+    /// table exists (HasPpDirectives).</param>
     /// <param name="ASymbolIds">Maps an index into TParseResult.Symbols to the
     /// symbols.id just written; resolves TDfmObjectRow.SymbolIdx (a missing
     /// entry stores NULL). May be nil when ADfmObjects is empty.</param>
@@ -2883,7 +2886,19 @@ type
     /// </remarks>
     procedure PutFileFacts(const AToken: TFileTxToken; const AIncludes: TArray<TFileIncludeRow>;
       const ADfmObjects: TArray<TDfmObjectRow>; const APpRegions: TArray<TPpRegionRow>;
-      const ASymbolIds: TDictionary<Integer, Int64>);
+      const APpDirectives: TArray<TPpDirectiveRow>; const ASymbolIds: TDictionary<Integer, Int64>);
+    /// <summary>150 PP: True when this database has the pp_directives table;
+    /// probed once.</summary>
+    /// <returns>False on a schema-23 DB (or a 149-built v24 DB) opened
+    /// read-only: readers then fall back to scanning the source text.</returns>
+    function HasPpDirectives: Boolean;
+    /// <summary>150 PP: the pp_directives rows of one file, source order.</summary>
+    /// <param name="AFileId">files.id of the file.</param>
+    /// <returns>Empty when the file has no such directive, when the file was
+    /// indexed by an engine that did not write the table, or when
+    /// HasPpDirectives is False -- a reader cannot tell these apart and must
+    /// treat empty as "not recorded" (scan the text).</returns>
+    function GetPpDirectives(AFileId: Int64): TArray<TPpDirectiveRow>;
     /// <summary>True when this database has the schema v24 file-fact tables
     /// (file_includes, dfm_objects, pp_regions); probed once.</summary>
     /// <returns>False on a DB below schema v24 opened read-only.</returns>
@@ -3149,6 +3164,8 @@ type
     DfmObjects: TArray<TDfmObjectRow> ;
     Includes  : TArray<TFileIncludeRow>;
     PpRegions : TArray<TPpRegionRow>  ;
+    // 150 PP: the file's define / undef / test / include directives (pp_directives).
+    PpDirectives: TArray<TPpDirectiveRow>;
   end;
 
   /// <remarks>

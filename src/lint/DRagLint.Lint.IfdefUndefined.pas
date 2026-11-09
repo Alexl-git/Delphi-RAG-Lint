@@ -41,7 +41,8 @@ interface
 
 uses
   System.SysUtils,
-  DRagLint.Core.Model;
+  DRagLint.Core.Model,
+  DRagLint.Core.Interfaces;
 
 const
   /// <summary>The rule id reported by TIfdefUndefinedCheck.</summary>
@@ -133,6 +134,11 @@ type
     /// <param name="AExtraIncludeDirs">Directories searched for {$I} files
     /// after the file's own folder -- for a file analysed from a temporary
     /// snapshot, pass the real file's folder.</param>
+    /// <param name="AStore">150 PP: the project index, or nil. When it has
+    /// pp_directives rows for a file whose stamp is current, the file's own
+    /// directives are read from the table instead of re-lexing its text (see
+    /// ScanFileTests); otherwise, and for every {$I} file, the text is scanned.
+    /// The findings are identical either way.</param>
     /// <returns>One warning per undefined symbol per directive, anchored at the
     /// directive's line; the message names the symbol and, when one is within
     /// edit distance 2, the nearest defined symbol.</returns>
@@ -153,7 +159,7 @@ type
     /// </remarks>
     class function CheckFiles(const AFiles: TArray<string>; const ADprojPath: string;
       const AAllow: TArray<string>;
-      const AExtraIncludeDirs: TArray<string> = nil): TArray<TLintFinding>; static;
+      const AExtraIncludeDirs: TArray<string> = nil; const AStore: ISymbolStore = nil): TArray<TLintFinding>; static;
 
     /// <summary>The directories searched for {$I} files of a project: the
     /// .dproj's folder, then its literal (macro-free) DCC_IncludePath and
@@ -186,6 +192,13 @@ type
     /// <param name="ATests">The file's own tests, in source order.</param>
     /// <param name="ALocalSymbols">Lowercased symbols $DEFINEd or $UNDEFed in
     /// the file or its includes.</param>
+    /// <param name="AStore">150 PP: the project index, or nil. Table-first:
+    /// when the store has the pp_directives table, the file is indexed there
+    /// with rows and its stamp (mtime + size) is current, the file's own
+    /// directives come from GetPpDirectives; {$I} files are still read from
+    /// disk. Any miss -- nil store, schema-23 DB, no rows, stale stamp, or the
+    /// environment variable DRAGLINT_PP_TABLE=0 -- scans the text as before.
+    /// Both paths give identical results (tests\autotest\run_pp_directives.ps1).</param>
     /// <returns>False when the file cannot be read or one of its includes
     /// cannot be resolved -- the caller should then skip the file, because
     /// the missing text might define anything.</returns>
@@ -203,7 +216,8 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function ScanFileTests(const AFilePath: string; const ASearchDirs: TArray<string>;
-      out ATests: TArray<TConditionalTest>; out ALocalSymbols: TArray<string>): Boolean; static;
+      out ATests: TArray<TConditionalTest>; out ALocalSymbols: TArray<string>;
+      const AStore: ISymbolStore = nil): Boolean; static;
   end;
 
 implementation
@@ -217,7 +231,8 @@ uses
   System.Generics.Collections,
   DRagLint.Preprocess.Types,
   DRagLint.Preprocess.Lexer,
-  DRagLint.Preprocess.Profile;
+  DRagLint.Preprocess.Profile,
+  DRagLint.Core.FileTime;
 
 const
   // Include nesting deeper than this is treated as unresolvable (a cycle guard
@@ -490,23 +505,25 @@ end;
 
 // Adds the conditional tests of one directive chunk (IFDEF / IFNDEF symbol, or
 // every defined() of an IF / ELSEIF) to ATests.
-procedure AddDirectiveTests(const ACh: TPPChunk; const ABytes: TBytes;
+// 150 PP: the same, from a directive's word, argument text and 1-based position
+// (a lexer chunk or a pp_directives row).
+procedure AddDirectiveTestsAt(const ADir, AArgs: string; ALine, ACol: Integer;
   ATests: TList<TConditionalTest>);
 var
   Test: TConditionalTest;
   M   : TMatch;
 begin
   Test:= Default(TConditionalTest);
-  Test.Line:= ACh.Line + 1;
-  Test.Col := DirectiveCol(ABytes, ACh.SrcStart);
-  if (ACh.Dir = 'ifdef') or (ACh.Dir = 'ifndef') then
+  Test.Line:= ALine;
+  Test.Col := ACol;
+  if (ADir = 'ifdef') or (ADir = 'ifndef') then
   begin
-    Test.Symbol:= LeadingIdent(ACh.Args);
+    Test.Symbol:= LeadingIdent(AArgs);
     if Test.Symbol <> '' then ATests.Add(Test);
   end
-  else if (ACh.Dir = 'if') or (ACh.Dir = 'elseif') then
+  else if (ADir = 'if') or (ADir = 'elseif') then
   begin
-    M:= TRegEx.Match(ACh.Args, '\bdefined\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)', [roIgnoreCase]);
+    M:= TRegEx.Match(AArgs, '\bdefined\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)', [roIgnoreCase]);
     while M.Success do
     begin
       Test.Symbol:= M.Groups[1].Value;
@@ -516,6 +533,12 @@ begin
   end;
 end;
 
+// 150 PP: forward -- ScanSource hands its lexed directives to ScanRows, which
+// recurses into ScanSource for an {$I} file.
+function ScanRows(const ARows: TArray<TPpDirectiveRow>; const AOwnDir: string;
+  const ASearchDirs: TArray<string>; const ASets: TScanSets;
+  ATests: TList<TConditionalTest>; ADepth: Integer): Boolean; forward;
+
 // Collects the $DEFINEs of AText (and, transitively, of its includes) into
 // ASets.Defined, its $UNDEFs into ASets.Undefs when that is not nil, and --
 // when ATests is not nil -- the conditional tests of AText itself. Returns
@@ -523,39 +546,106 @@ end;
 function ScanSource(const AText, AOwnDir: string; const ASearchDirs: TArray<string>;
   const ASets: TScanSets; ATests: TList<TConditionalTest>; ADepth: Integer): Boolean;
 var
-  Chunks : TArray<TPPChunk>;
-  Ch     : TPPChunk;
-  IncPath: string;
-  IncText: string;
-  Bytes  : TBytes;
+  Chunks: TArray<TPPChunk>;
+  Ch    : TPPChunk;
+  Bytes : TBytes;
+  Rows  : TList<TPpDirectiveRow>;
+  Row   : TPpDirectiveRow;
 begin
-  Result:= True;
   Chunks:= LexDirectives(AText);
   Bytes:= TEncoding.UTF8.GetBytes(AText);
-  for Ch in Chunks do
+  // 150 PP: the lexed directives in the pp_directives row shape, then the one
+  // loop both paths share (ScanRows).
+  Rows:= TList<TPpDirectiveRow>.Create;
+  try
+    for Ch in Chunks do
+    begin
+      if Ch.Kind <> ckDirective then Continue;
+      Row:= Default(TPpDirectiveRow);
+      Row.Directive:= Ch.Dir;
+      Row.Args     := Ch.Args;
+      Row.Line     := Ch.Line + 1;
+      Row.Col      := DirectiveCol(Bytes, Ch.SrcStart);
+      Rows.Add(Row);
+    end;
+    Result:= ScanRows(Rows.ToArray, AOwnDir, ASearchDirs, ASets, ATests, ADepth);
+  finally
+    Rows.Free;
+  end;
+end;
+
+// The directive loop of ScanSource, over rows: a lexed text's or -- 150 PP --
+// a file's pp_directives rows (same order, same sets, same tests). An {$I}
+// row resolves and scans the include's text from disk; tests inside an
+// include are the include's own business, only its DEFINEs (and UNDEFs) are
+// collected.
+function ScanRows(const ARows: TArray<TPpDirectiveRow>; const AOwnDir: string;
+  const ASearchDirs: TArray<string>; const ASets: TScanSets;
+  ATests: TList<TConditionalTest>; ADepth: Integer): Boolean;
+var
+  Row    : TPpDirectiveRow;
+  IncPath: string;
+  IncText: string;
+begin
+  Result:= True;
+  for Row in ARows do
   begin
-    if Ch.Kind <> ckDirective then Continue;
-    if Ch.Dir = 'define' then
-      AddDirectiveSymbol(Ch.Args, ASets.Defined)
-    else if Ch.Dir = 'undef' then
-      AddDirectiveSymbol(Ch.Args, ASets.Undefs)
-    else if (Ch.Dir = 'i') or (Ch.Dir = 'include') then
+    if Row.Directive = 'define' then
+      AddDirectiveSymbol(Row.Args, ASets.Defined)
+    else if Row.Directive = 'undef' then
+      AddDirectiveSymbol(Row.Args, ASets.Undefs)
+    else if (Row.Directive = 'i') or (Row.Directive = 'include') then
     begin
       // {$I+} / {$I-} is the I/O-checking switch, not an include.
-      if (Ch.Args = '') or CharInSet(Ch.Args[1], ['+', '-']) then Continue;
-      IncPath:= ResolveInclude(Ch.Args, AOwnDir, ASearchDirs);
+      if (Row.Args = '') or CharInSet(Row.Args[1], ['+', '-']) then Continue;
+      IncPath:= ResolveInclude(Row.Args, AOwnDir, ASearchDirs);
       if (IncPath = '') or (ADepth >= MAX_INCLUDE_DEPTH) then Exit(False);
       if ASets.Visited.ContainsKey(LowerCase(IncPath)) then Continue;
       ASets.Visited.Add(LowerCase(IncPath), 0);
       if not TryReadSource(IncPath, IncText) then Exit(False);
-      // Tests inside an include are the include's own business: only its
-      // DEFINEs (and UNDEFs) are collected here.
       if not ScanSource(IncText, ExtractFilePath(IncPath), ASearchDirs, ASets, nil,
         ADepth + 1) then Exit(False);
     end
     else if ATests <> nil then
-      AddDirectiveTests(Ch, Bytes, ATests);
+      AddDirectiveTestsAt(Row.Directive, Row.Args, Row.Line, Row.Col, ATests);
   end;
+end;
+
+// 150 PP: the pp_directives rows of AFilePath when the store holds a CURRENT
+// copy of the file (same mtime + size as on disk) and the table path is not
+// switched off (DRAGLINT_PP_TABLE=0); nil otherwise -- the caller then scans.
+function CurrentDirectiveRows(const AStore: ISymbolStore; const AFilePath: string): TArray<TPpDirectiveRow>;
+var
+  Full: string;
+  Fid : Int64;
+begin
+  Result:= nil;
+  if (AStore = nil) or (GetEnvironmentVariable('DRAGLINT_PP_TABLE') = '0') then Exit;
+  if not AStore.HasPpDirectives then Exit;
+  Full:= ExpandFileName(AFilePath);
+  if not TFile.Exists(Full) then Exit;
+  Fid:= AStore.FindFileIdByPath(Full);
+  if Fid <= 0 then Exit;
+  if not AStore.FileStampIsCurrent(Full, FileMTimeUnix(Full), TFile.GetSize(Full)) then Exit;
+  Result:= AStore.GetPpDirectives(Fid);
+end;
+
+// 150 PP: the file's own scan, table-first. Fills ASets / ATests exactly as
+// TryReadSource + ScanSource(..., 0) would, and returns what that would.
+function ScanFile(const AFilePath: string; const ASearchDirs: TArray<string>;
+  const ASets: TScanSets; ATests: TList<TConditionalTest>; const AStore: ISymbolStore): Boolean;
+var
+  Rows: TArray<TPpDirectiveRow>;
+  Text: string;
+begin
+  Rows:= CurrentDirectiveRows(AStore, AFilePath);
+  if GetEnvironmentVariable('DRAGLINT_PP_TRACE') = '1' then
+    Writeln(ErrOutput, Format('pp-directives: %s %s rows=%d',
+      [if Length(Rows) > 0 then 'table' else 'scan', AFilePath, Length(Rows)]));
+  if Length(Rows) > 0 then
+    Exit(ScanRows(Rows, ExtractFilePath(ExpandFileName(AFilePath)), ASearchDirs, ASets, ATests, 0));
+  if not TryReadSource(AFilePath, Text) then Exit(False);
+  Result:= ScanSource(Text, ExtractFilePath(ExpandFileName(AFilePath)), ASearchDirs, ASets, ATests, 0);
 end;
 
 // The nearest known spelling within MAX_SUGGEST_DISTANCE, or ''.
@@ -585,7 +675,7 @@ end;
 
 class function TIfdefUndefinedCheck.CheckFiles(const AFiles: TArray<string>;
   const ADprojPath: string; const AAllow: TArray<string>;
-  const AExtraIncludeDirs: TArray<string>): TArray<TLintFinding>;
+  const AExtraIncludeDirs: TArray<string>; const AStore: ISymbolStore): TArray<TLintFinding>;
 var
   ProjectDefs: TSymbolSet;
   UnitDefs   : TSymbolSet;
@@ -594,7 +684,6 @@ var
   Findings   : TList<TLintFinding>;
   SearchDirs : TArray<string>;
   FilePath   : string;
-  Text       : string;
   Sym        : string;
   Test       : TConditionalTest;
   Finding    : TLintFinding;
@@ -620,7 +709,6 @@ begin
 
     for FilePath in AFiles do
     begin
-      if not TryReadSource(FilePath, Text) then Continue;
       UnitDefs.Clear;
       Visited.Clear;
       Tests.Clear;
@@ -628,8 +716,7 @@ begin
       Sets:= Default(TScanSets);
       Sets.Defined:= UnitDefs;
       Sets.Visited:= Visited;
-      if not ScanSource(Text, ExtractFilePath(ExpandFileName(FilePath)), SearchDirs,
-        Sets, Tests, 0) then Continue;
+      if not ScanFile(FilePath, SearchDirs, Sets, Tests, AStore) then Continue; { 150 PP: table-first }
       for Test in Tests do
       begin
         Sym:= LowerCase(Test.Symbol);
@@ -672,9 +759,8 @@ end;
 
 class function TIfdefUndefinedCheck.ScanFileTests(const AFilePath: string;
   const ASearchDirs: TArray<string>; out ATests: TArray<TConditionalTest>;
-  out ALocalSymbols: TArray<string>): Boolean;
+  out ALocalSymbols: TArray<string>; const AStore: ISymbolStore): Boolean;
 var
-  Text   : string;
   Defs   : TSymbolSet;
   Undefs : TSymbolSet;
   Visited: TDictionary<string, Byte>;
@@ -684,7 +770,6 @@ var
 begin
   ATests:= nil;
   ALocalSymbols:= nil;
-  if not TryReadSource(AFilePath, Text) then Exit(False);
   Defs   := TSymbolSet.Create;
   Undefs := TSymbolSet.Create;
   Visited:= TDictionary<string, Byte>.Create;
@@ -693,8 +778,7 @@ begin
     Sets.Defined:= Defs;
     Sets.Undefs := Undefs;
     Sets.Visited:= Visited;
-    Result:= ScanSource(Text, ExtractFilePath(ExpandFileName(AFilePath)), ASearchDirs,
-      Sets, Tests, 0);
+    Result:= ScanFile(AFilePath, ASearchDirs, Sets, Tests, AStore); { 150 PP: table-first }
     if not Result then Exit;
     ATests:= Tests.ToArray;
     for Sym in Defs.Keys do ALocalSymbols:= ALocalSymbols + [Sym];

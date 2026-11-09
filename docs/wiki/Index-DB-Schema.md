@@ -42,7 +42,7 @@ Never open a real DB with a writer to "look": copy it first, or use the read-onl
     `type_ancestors`, `type_helpers`
   * usage and calls: `refs`, `call_edges`, `member_accesses`, `dispatch_edges`,
     `classref_args`, `data_flows`
-  * structure: `unit_uses`, `di_bindings`, `file_includes`, `dfm_objects`, `pp_regions` (1.35)
+  * structure: `unit_uses`, `di_bindings`, `file_includes`, `dfm_objects`, `pp_regions` (1.35), `pp_directives` (150)
   * text: `string_literals` (+ FTS5)
   * external feeds: `compiler_findings`, `fb_relations`, `fb_columns`, `fb_field_info`,
     `fb_datasets`, `fb_enum_values`, `orm_links`
@@ -60,6 +60,7 @@ erDiagram
   files ||--o{ file_includes : "file_id (cascade)"
   files ||--o{ dfm_objects : "file_id (cascade)"
   files ||--o{ pp_regions : "file_id (cascade)"
+  files ||--o{ pp_directives : "file_id (cascade)"
   symbols ||--o{ dfm_objects : "symbol_id (set null)"
   files ||--o{ compiler_findings : "file_id (set null)"
   symbols ||--o{ symbols : "parent_id (cascade)"
@@ -89,7 +90,7 @@ erDiagram
 
 | Pass | Verb / stage | Writes |
 |---|---|---|
-| **index** (per file, one transaction) | `index`, `index --project` | `files` (incl. `indexed_at_fingerprint`, stamped in the same tx), `symbols`, `refs` (raw: `symbol_id` NULL for most), `unit_uses`, `string_literals` (+FTS via triggers), `di_bindings`, `data_flows`, `file_includes`, `dfm_objects`, `pp_regions` (1.35), `project_settings` (150, for a `.dpr` / `.dpk`), `symbol_trigrams` |
+| **index** (per file, one transaction) | `index`, `index --project` | `files` (incl. `indexed_at_fingerprint`, stamped in the same tx), `symbols`, `refs` (raw: `symbol_id` NULL for most), `unit_uses`, `string_literals` (+FTS via triggers), `di_bindings`, `data_flows`, `file_includes`, `dfm_objects`, `pp_regions` (1.35), `project_settings` (150, for a `.dpr` / `.dpk`), `pp_directives` (150), `symbol_trigrams` |
 | **resolve** (whole DB, after files) | end of `index` | `refs.symbol_id`, `refs.receiver_text`, `refs.receiver_type_text`, `refs.external_target`, `call_edges`, `member_accesses`, `type_ancestors` (rebuilt each run), `type_helpers`, `dispatch_edges` (wiped and rebuilt), `classref_args`, `unit_uses.target_file_id` |
 | **doc / facts** | index-time doc extraction and ADP analysis | `symbol_docs`, `symbol_facts` (`effect_*` columns come from the purity stage) |
 | **external feeds** | `import-log`, `fb-snapshot`, ORM link pass | `compiler_findings`, `fb_*`, `orm_links` |
@@ -310,6 +311,32 @@ Index `(file_id, setting, ordinal)`.
 | setting | TEXT | `DCC_Namespace` (the only setting so far) |
 | ordinal | INTEGER | 0-based position in project order |
 | value | TEXT | `DCC_Namespace`: one unit scope (`Winapi`, `Vcl`...) -- every `<DCC_Namespace>` of the `.dproj` (any PropertyGroup condition) in document order, split at `;`, case-insensitively de-duplicated, the `$(DCC_Namespace)` macro dropped; no Delphi defaults added. No rows when no `.dproj` sits beside the file |
+
+### pp_directives (1.35, wave 150)
+One row per conditional-compilation DIRECTIVE of the file's own text, every branch included:
+`DEFINE`, `UNDEF`, `IFDEF`, `IFNDEF`, `IF`, `ELSEIF`, `I` / `INCLUDE` (exactly the directives
+the `ifdef-undefined-symbol` and `platform-divergent-define` scan acts on). Written inside the
+file transaction for `.pas` / `.dpr` / `.dpk` / `.inc`; a file with none of them has no rows.
+Additive: a DB without the table (schema 23, or built by a 1.49.0-alpha engine before wave 150)
+is read as "not recorded". Column image of `TPpDirectiveRow`. Indexes `(file_id, ordinal)`,
+`(symbol COLLATE NOCASE)`.
+
+| column | type | meaning |
+|---|---|---|
+| file_id | INTEGER FK files (cascade) | |
+| ordinal | INTEGER | source order, from 0 |
+| directive | TEXT | the directive word, lowercase: `define` / `undef` / `ifdef` / `ifndef` / `if` / `elseif` / `i` / `include` |
+| args | TEXT | the argument text as the directive lexer returns it |
+| symbol | TEXT | leading identifier of `args` for define / undef / ifdef / ifndef; '' otherwise |
+| line, col | INTEGER | 1-based position of the opening brace; `col` counted in UTF-8 bytes |
+| src_offset | INTEGER | 0-based character offset of the opening brace in the decoded text |
+| region, branch | INTEGER | the innermost `pp_regions` branch holding the line; -1 / -1 at top level or without the preprocessor |
+
+Consumers: the two directive lint rules read a file's rows instead of re-lexing it when the
+file's stamp (mtime + size) is current; otherwise, and for every `{$I}` file, they scan the
+text. Identical findings either way (`tests\autotest\run_pp_directives.ps1`).
+`DRAGLINT_PP_TABLE=0` forces the scan; `DRAGLINT_PP_TRACE=1` prints the path taken per file
+to stderr.
 
 ### symbol_trigrams
 `trigram TEXT`, `symbol_id INTEGER FK symbols (cascade)`; PK `(trigram, symbol_id)`,

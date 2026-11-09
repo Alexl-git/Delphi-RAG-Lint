@@ -25393,7 +25393,7 @@ begin
         if TFile.Exists(ChangeFileExt(IfdefProj, IfdefSib)) then
           IfdefFiles:= IfdefFiles + [ChangeFileExt(IfdefProj, IfdefSib)];
       Findings:= Findings + TIfdefUndefinedCheck.CheckFiles(IfdefFiles, IfdefProj,
-        LoadLintConfig(AArgs).IfdefAllow);
+        LoadLintConfig(AArgs).IfdefAllow, nil, Store); { 150 PP: table-first directive scan }
     end;
   end;
   { platform-divergent-define over the same files (units + program file): a
@@ -25409,7 +25409,7 @@ begin
         if TFile.Exists(ChangeFileExt(DivProj, DivSib)) then
           DivFiles:= DivFiles + [ChangeFileExt(DivProj, DivSib)];
       Findings:= Findings + TPlatformDivergentCheck.CheckFiles(DivFiles, DivProj,
-        LoadLintConfig(AArgs).PlatformDivergentAllow);
+        LoadLintConfig(AArgs).PlatformDivergentAllow, nil, Store); { 150 PP: table-first directive scan }
     end;
   end;
   { Used-unit resolvability (used-unit-not-resolvable) }
