@@ -6283,6 +6283,25 @@ begin
     if SameText(L, ExpandFileName(ADb)) then Exit(True);
 end;
 
+/// <summary>The library-section databases of the manifest this run loads (RQ-6b,
+/// lane 150); empty, with one stderr NOTE, when the manifest will not load.</summary>
+/// <returns>LibrarySectionDbs of TManifestIO.Load(engine dir, cwd), or nil.</returns>
+/// <remarks>A manifest that does not load names no library, so every caller then
+/// treats nothing as a library -- the same degradation SplitConsumerDbs makes.</remarks>
+function ManifestLibraryDbs: TArray<string>;
+begin
+  try
+    Result:= LibrarySectionDbs(TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir));
+  except
+    on E: Exception do
+    begin
+      Result:= nil;
+      Writeln(ErrOutput, Format('NOTE: could not load the manifest (%s: %s); no database is treated as the library.',
+                                [E.ClassName, E.Message]));
+    end;
+  end; // try
+end;
+
 /// <summary>True when ADb is a database a LIBRARY section of the manifest this run
 /// loads names (RQ-6b, lane 150): the section KIND decides, never the `library-`
 /// file-name prefix.</summary>
@@ -6290,16 +6309,11 @@ end;
 /// <returns>True for a library-section database; False for any other file, a
 /// project DB that merely starts with `library-`, and a manifest that will not
 /// load (nothing is then a library).</returns>
-/// <remarks>Walks the manifest once per call (LibrarySectionDbs); callers that
-/// classify many DBs call LibrarySectionDbs themselves and use IsLibrarySectionDb.</remarks>
+/// <remarks>Walks the manifest once per call (ManifestLibraryDbs); callers that
+/// classify many DBs call ManifestLibraryDbs themselves and use IsLibrarySectionDb.</remarks>
 function IsManifestLibraryDb(const ADb: string): Boolean;
 begin
-  Result:= False;
-  try
-    Result:= IsLibrarySectionDb(LibrarySectionDbs(TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir)), ADb);
-  except
-    Result:= False; // dl:ok swallowed-exception -- an unreadable manifest names no library; the caller degrades to "not a library"
-  end;
+  Result:= IsLibrarySectionDb(ManifestLibraryDbs, ADb);
 end;
 
 /// <summary>Splits a consumer DB list into the PROJECT store and the platform
@@ -25818,12 +25832,7 @@ begin
     var LibDbPath2: string := '';
     { RQ-6b: the library is the --db a manifest library SECTION names, not a `library-` file-name prefix. }
     var LibDbs2: TArray<string>:= nil;
-    if Length(AArgs.DbPaths) > 0 then
-      try
-        LibDbs2:= LibrarySectionDbs(TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir));
-      except
-        LibDbs2:= nil; // dl:ok swallowed-exception -- an unreadable manifest names no library; the positional fallback below applies
-      end;
+    if Length(AArgs.DbPaths) > 0 then LibDbs2:= ManifestLibraryDbs; // an unreadable manifest names no library: the positional fallback below applies
     for var DbI := 0 to High(AArgs.DbPaths) do
       if IsLibrarySectionDb(LibDbs2, AArgs.DbPaths[DbI]) then
       begin LibDbPath2 := AArgs.DbPaths[DbI]; Break; end;
@@ -35873,11 +35882,7 @@ var
     if not LibDbsLoaded then
     begin
       LibDbsLoaded:= True;
-      try
-        LibDbs:= LibrarySectionDbs(TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir));
-      except
-        LibDbs:= nil; // dl:ok swallowed-exception -- an unreadable manifest names no library: every DB is then a candidate project
-      end;
+      LibDbs:= ManifestLibraryDbs; // an unreadable manifest names no library: every DB is then a candidate project
     end;
     Result:= IsLibrarySectionDb(LibDbs, ADb);
   end;
