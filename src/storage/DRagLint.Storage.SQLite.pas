@@ -7526,9 +7526,11 @@ begin
   // v0.25: dead-code finder - symbols with no entry in refs.name_text
   FQFindNoCallers:= NewQuery(
     { COLLATE NOCASE -- Delphi identifiers are case-insensitive; without it a
-      symbol referenced under different casing looks unreferenced (dead). }
+      symbol referenced under different casing looks unreferenced (dead).
+      150 X4: a program / library / package ROOT is an entry point -- nothing calls it by
+      name, and since EX3 / T2 every .dpr / .dpk has one -- so it is never a candidate. }
     'SELECT s.* FROM symbols s ' + 'LEFT JOIN refs r ON r.name_text = s.name COLLATE NOCASE ' + 'WHERE r.id IS NULL ' + '  AND (:kind = '''' OR s.kind = :kind) ' +
-    '  AND s.name NOT IN (''Main'', ''Register'', ''initialization'', ''finalization'') ' + '  AND s.kind NOT IN (''constructor'', ''destructor'') ' +
+    '  AND s.name NOT IN (''Main'', ''Register'', ''initialization'', ''finalization'') ' + '  AND s.kind NOT IN (''constructor'', ''destructor'', ''program'', ''package'') ' +
     '  AND (:includePrivate = 1 OR (s.modifiers IS NULL ' + '       OR s.modifiers NOT LIKE ''%private%''))');
 
   // v0.26: compiler findings helpers
@@ -10042,6 +10044,10 @@ function TSQLiteSymbolStore.GetUnitLevelRoutines: TArray<TSymbol>;
   (parent = class/record) and nested routines (parent = a routine), and both of
   those already have their own resolution rung. Measured on this repo's own
   index: 895 rows, 218 interface / 677 implementation.
+  150 X4: a PROGRAM / PACKAGE root parents its own routines too (EX3 / T2 gave a .dpr
+  -- program or library -- a root symbol), so p.kind = 'unit' alone dropped every routine
+  declared in a .dpr and a call to one from its main block or exports clause never bound.
+  Their section is '' (never 'interface'), so rung 2 still keeps them private to the .dpr.
   Signature is carried because the caller narrows an overload set by arity, and
   Section because it decides cross-unit visibility. }
 var
@@ -10056,7 +10062,7 @@ begin
     Q.SQL.Text  := 'SELECT s.id, s.file_id, s.parent_id, s.kind, s.name, ' +
                    '       s.signature, s.section ' +
                    'FROM symbols s ' +
-                   'JOIN symbols p ON p.id = s.parent_id AND p.kind = ''unit'' ' +
+                   'JOIN symbols p ON p.id = s.parent_id AND p.kind IN (''unit'', ''program'', ''package'') ' +
                    'WHERE s.kind IN (''procedure'',''function'')';
     Q.Open;
     while not Q.Eof do

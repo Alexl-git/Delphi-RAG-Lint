@@ -3323,6 +3323,26 @@ begin
   else if NodeType = 'assignment' then TryEmitSpringDI(ANode.ChildByField('rhs'), AState)
   else if NodeType = 'inherited' then EmitInheritedReference(ANode, AState); { E-PARSER-NOREFS; recursion below finds nothing more in it }
 
+  // 150 X1: each entry of an `exports` clause (`exports Foo, Bar name 'x', U.Baz index 2;`,
+  // legal in a library .dpr and in a unit) is a reference to the exported routine: emit it
+  // as a 'call' ref so the resolver binds it, find-callers lists it and the unused rules stop
+  // calling an exported routine dead. Before, the clause emitted NO ref at all (T2 FOUND).
+  // A dotted entry names the routine by its LAST segment, receiver = the qualifier (the same
+  // shape as a qualified call). Recursion below still walks the name/index expressions.
+  if NodeType = 'declExport' then
+  begin
+    var ExpName:= ANode.NamedChild(0);
+    if (not ExpName.IsNull) and (ExpName.NodeType = 'identifier') then
+      AState.EmitRef(REF_KIND_CALL, NodeText(ExpName, AState.Source), ExpName)
+    else if (not ExpName.IsNull) and (ExpName.NodeType = 'genericDot') and (ExpName.NamedChildCount >= 2) then
+    begin
+      var ExpLeaf:= ExpName.NamedChild(ExpName.NamedChildCount - 1);
+      if ExpLeaf.NodeType = 'identifier' then
+        AState.EmitRef(REF_KIND_CALL, NodeText(ExpLeaf, AState.Source), ExpLeaf,
+          NodeText(ExpName.NamedChild(0), AState.Source));
+    end;
+  end;
+
   if NodeType = 'unit' then
   begin
     WalkUnit(ANode, AState);
