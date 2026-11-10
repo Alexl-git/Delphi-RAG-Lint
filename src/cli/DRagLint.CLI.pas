@@ -1047,6 +1047,7 @@ end;
 procedure SizeGuardCheck(const ADbPath: string; ASizeGuardMB: Integer; AForce32: Boolean); forward;
 function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>; forward;
 function DoUnwith(const AArgs: TArgs): Integer; forward;
+function DoImplementors(const AArgs: TArgs): Integer; forward;
 function ApplyEditsGated(const AEdits: TArray<TTextEdit>; const AVerb: string; const AArgs: TArgs; out ATouched: Integer): Boolean; forward;
 procedure AutoCreateMissingProjectDb(const AArgs: TArgs; const AProjDb: string); forward;
 function ManifestStartDir(const AProjectPath: string): string; forward;
@@ -9962,6 +9963,15 @@ begin
   // substring/discovery search over NAMES (distinct from --name, whose
   // contract stays exact-plus-edit-distance-fallback).
   if AArgs.NameLike <> '' then Exit(DoQueryNameLike(AArgs));
+  { query implementors (wave 150 G7): the global verb table names it, so it routes to the
+    top-level implementors verb (an alias, same report and exit codes). --name is accepted as the
+    target when --target/--qname is absent. Pinned by tests\query\run_query_implementors_alias.ps1. }
+  if AArgs.SubCommand = 'implementors' then
+  begin
+    var Alias: TArgs:= AArgs;
+    if (Alias.Target = '') and (Alias.QName = '') then Alias.Target:= Alias.Name;
+    Exit(DoImplementors(Alias));
+  end;
   // v1.7: "which of these type names does this file reference?"
   if AArgs.SubCommand = 'type-usage' then Exit(DoQueryTypeUsage(AArgs));
   // v1.8: "of a unit's exports, which does this file reference?"

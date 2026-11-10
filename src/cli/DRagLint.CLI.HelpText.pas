@@ -301,6 +301,7 @@ begin
   Writeln('                               (interface report: who implements an interface -- lists / via a derived interface / inherited / delegated; which method answers an interface method in each class, resolution clauses included;');
   Writeln('                               the call/read/write sites of an interface member, attributed to it (RB-5); a class: its interfaces and what answers each member; a class method: the members it answers + --uses the sites reaching it.');
   Writeln('                               --json = implementors/1 {target,implementors[],unanswered[],sites[],sites_total,library_implementors,notes[]}; exit 0 answered, 1 no such target, 2 usage/ambiguous; --qname is accepted for --target; chart: ask implementors)');
+  Writeln('  drag-lint query implementors --target <IFoo|TFoo> --db <file.sqlite> [same flags]   (alias of the implementors verb; --name is accepted for --target)');
   Writeln('  drag-lint wiring             --qname <IIntf|TForm> [--db <file.sqlite>] [--format text|json]   (Spring4D DI + DFM event edges)');
   Writeln('  drag-lint wiring             --coverage           [--db <file.sqlite>] [--format text|json]   (DI registrations not resolved to I->T)');
   Writeln('  drag-lint surface            --qname <Foo.TBar>   [--db <file.sqlite>] [--include-impl] [--all-visibility] [--format text|json]');
@@ -1006,6 +1007,7 @@ begin
     Writeln('                               (interface report: who implements an interface -- lists / via a derived interface / inherited / delegated; which method answers an interface method in each class, resolution clauses included;');
     Writeln('                               the call/read/write sites of an interface member, attributed to it (RB-5); a class: its interfaces and what answers each member; a class method: the members it answers + --uses the sites reaching it.');
     Writeln('                               --json = implementors/1 {target,implementors[],unanswered[],sites[],sites_total,library_implementors,notes[]}; exit 0 answered, 1 no such target, 2 usage/ambiguous; --qname is accepted for --target; chart: ask implementors)');
+    Writeln('  drag-lint query implementors --target <IFoo|TFoo> --db <file.sqlite> [same flags]   (alias of the implementors verb; --name is accepted for --target)');
     Exit;
   end;
   if pVerb = 'wiring' then
