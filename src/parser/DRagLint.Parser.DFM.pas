@@ -114,7 +114,7 @@ type
 /// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function tree_sitter_dfm: PTSLanguage; cdecl;
+function tree_sitter_dfm: PTSLanguage; cdecl;  // dl:ok method-pascalcase@78b2 -- DLL export name must match the tree-sitter-dfm C symbol
 external 'tree-sitter-dfm';
 
 /// <summary>Extracts every (object, event-property, handler) triple from a
@@ -266,7 +266,7 @@ begin
   Literals.Free;
   EventBindings.Free;
   DfmObjects.Free;
-  inherited;
+  inherited;  // dl:ok inherited-bare@246d -- destructor: the only ancestor is TObject
 end;
 
 function TDfmState.Emit(AKind: TSymbolKind; const AName, AQualifiedName, ASignature: string; AParentSymbolIdx: Integer; const ARangeNode: TTSNode): Integer;
@@ -278,8 +278,7 @@ begin
   Sym.Name         := AName;
   Sym.QualifiedName:= AQualifiedName;
   Sym.Signature    := ASignature;
-  if AParentSymbolIdx >= 0 then Sym.ParentId:= AParentSymbolIdx
-  else Sym.ParentId:= -1;
+  Sym.ParentId:= if AParentSymbolIdx >= 0 then AParentSymbolIdx else -1;
   if not ARangeNode.IsNull then
   begin
     Sym.StartLine:= Integer(ARangeNode.StartPoint.row   ) + 1;
@@ -356,10 +355,10 @@ begin
       Raw:= NodeText(Atom, ASource);
       if (Length(Raw) >= 2) and (Raw[1] = '''') and (Raw[Length(Raw)] = '''') then
         Raw:= Copy(Raw, 2, Length(Raw) - 2);
-      Result:= Result + StringReplace(Raw, '''''', '''', [rfReplaceAll]);
+      Result:= Result + StringReplace(Raw, '''''', '''', [rfReplaceAll]);  // dl:ok concat-in-loop@e758 -- one DFM string atom per iteration, a handful of short pieces, never a hot path
     end
     else if Atom.NodeType = 'char_code' then
-      Result:= Result + ' ';
+      Result:= Result + ' ';  // dl:ok concat-in-loop@9c4f -- one char_code atom per iteration, same bounded loop
   end;
 end;
 
@@ -489,11 +488,9 @@ begin
   if ObjName = '' then Exit;
   ObjClass:= '';
   if not ClassNode.IsNull then ObjClass:= NodeText(ClassNode, AState.Source);
-  if AParentQualifiedName <> '' then QName:= AParentQualifiedName + '.' + ObjName
-  else QName:= ObjName;
+  QName:= if AParentQualifiedName <> '' then AParentQualifiedName + '.' + ObjName else ObjName;
   Signature:= ObjClass;
-  if AIsRoot then Kind:= skForm
-  else Kind:= skComponent;
+  Kind:= if AIsRoot then skForm else skComponent;
   Idx:= AState.Emit(Kind, ObjName, QName, Signature, AParentSymbolIdx, ANode);
   EmitDfmObject(AState, ANode, ObjName, ObjClass, AParentQualifiedName, QName, Idx); { 149 EX2 (F5) }
 
