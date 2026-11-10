@@ -157,7 +157,7 @@ function RunCapture([string]$ArgLine) {
 # reordered or renamed breaks the match rather than being skipped over by a
 # permissive gap pattern.
 # ---------------------------------------------------------------------------
-$SUMMARY_RX = '===\s*(?<name>\S+)[^\r\n]*?\sfiles=(?<files>\d+)\s+symbols=(?<symbols>\d+)\s+refs=(?<refs>\d+)\s+walked=(?<walked>\d+)\s+attempted=(?<attempted>\d+)\s+up-to-date=(?<utd>\d+)\s+committed=(?<committed>\d+)\s+\[(?<secs>\d+(?:\.\d+)?)s,\s*(?<rate>[^\]]+)\]\s*==='
+$SUMMARY_RX = '===\s*(?<name>\S+)[^\r\n]*?\sfiles=(?<files>\d+)\s+symbols=(?<symbols>\d+)\s+refs=(?<refs>\d+)\s+walked=(?<walked>\d+)\s+attempted=(?<attempted>\d+)\s+up-to-date=(?<utd>\d+)\s+committed=(?<committed>\d+)\s+\[(?<secs>\d+(?:\.\d+)?)s,\s*(?<rate>[^\]]+)\]\s*parse-errors=(?<perr>\d+)\s*==='
 
 function Parse-Summary([string]$Text) {
   $m = [regex]::Match($Text, $SUMMARY_RX)
@@ -171,6 +171,7 @@ function Parse-Summary([string]$Text) {
     attempted = [int]$m.Groups['attempted'].Value
     utd       = [int]$m.Groups['utd'].Value
     committed = [int]$m.Groups['committed'].Value
+    perr      = [int]$m.Groups['perr'].Value
     secs      = [double]$m.Groups['secs'].Value
     rate      = $m.Groups['rate'].Value.Trim()
     line      = $m.Value

@@ -1848,6 +1848,7 @@ BEFORE the parse, so it legitimately exceeds `files=` when a parse fails, and
 landed this run: `attempted - committed` is the count of attempts that rolled back
 (each also gets an `ERROR indexing` line on stderr and fails the section), so a
 silently failed parse is visible at a glance; on an all-good run it equals `attempted=`.
+The LAST field, `parse-errors=N` (after the timing bracket), is the count of files parsed this run whose syntax tree had ERROR or MISSING nodes (the `DIAG: ... parse error [..]` lines): their rows were committed, so `committed=` does not show them, and an unparseable construct otherwise indexes silently short. 0 on a clean run.
 
 Procedure, triage rules and the per-project run list:
 `docs\PLAN-project-completeness-sweep.md`.

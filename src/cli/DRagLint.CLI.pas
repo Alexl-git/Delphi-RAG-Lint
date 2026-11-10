@@ -5290,10 +5290,10 @@ begin
       field order; fields keep their meanings. }
     var SectionFailedFiles: Integer:= Indexer.FailedFiles;
     var SectionCommitted: Integer:= Max(0, Indexer.ParsedFiles - SectionFailedFiles);
-    Writeln(Format('=== %s%s -> %s : files=%d symbols=%d refs=%d walked=%d attempted=%d up-to-date=%d committed=%d [%.1fs, %s] ===',
+    Writeln(Format('=== %s%s -> %s : files=%d symbols=%d refs=%d walked=%d attempted=%d up-to-date=%d committed=%d [%.1fs, %s] parse-errors=%d ===',
       [AItem.Name, PlatSuffix, AItem.DbPath, Store.CountFiles, Store.CountSymbols,
        Store.CountReferences, Length(Indexer.VisitedFiles), Indexer.ParsedFiles,
-       Indexer.SkippedUpToDate, SectionCommitted, Elapsed, RateStr]));
+       Indexer.SkippedUpToDate, SectionCommitted, Elapsed, RateStr, Indexer.ParseErrorFiles]));
     { F1: a section with a file that failed to store is a FAILED section -- the
       failed file keeps its old rows. Read the count before the warm below
       releases the indexer. The rule cache is still warmed: the rows that did

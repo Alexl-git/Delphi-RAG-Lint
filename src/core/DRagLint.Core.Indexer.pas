@@ -109,6 +109,7 @@ type
       { F1 (deep review 2026-10-25): files whose store phase RAISED and was
         rolled back. Backs IIndexer.FailedFiles -- see there. }
       FFailedFiles    : Integer                            ;
+      FParseErrorFiles: Integer                            ;
       { TEST SEAM, read once in Create from DRAGLINT_INDEX_TEST_FAIL_FILE: a bare
         file NAME whose store phase is made to raise just before its commit, so
         a guard can drive the per-file failure path without a corrupt DB. ''
@@ -476,6 +477,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FailedFiles: Integer;
+      /// <summary>Files parsed with ERROR/MISSING tree nodes -- see IIndexer.ParseErrorFiles.</summary>
+      function ParseErrorFiles: Integer;
       /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed:
       /// FVisited.ToArray.</returns>
       /// <remarks>
@@ -1001,6 +1004,11 @@ end;
 function TIndexer.FailedFiles: Integer;
 begin
   Result:= FFailedFiles;
+end;
+
+function TIndexer.ParseErrorFiles: Integer;
+begin
+  Result:= FParseErrorFiles;
 end;
 
 function TIndexer.VisitedFiles: TArray<string>;
@@ -2000,8 +2008,13 @@ begin
         FStore.CommitFileTx(Token);
         Inc(GProfCommit, ProfNow - TProf);
         ReportProgress(AFilePath, Length(ParseRes.Symbols), Length(ParseRes.References), Length(ParseRes.Diagnostics));
+        var HasTreeError: Boolean:= False;
         for var Diag in ParseRes.Diagnostics do
+        begin
           Writeln('    DIAG: ' + Diag);
+          if Diag.Contains(': parse error [') then HasTreeError:= True;
+        end;
+        if HasTreeError then Inc(FParseErrorFiles);
       except
         on E: Exception do
         begin
