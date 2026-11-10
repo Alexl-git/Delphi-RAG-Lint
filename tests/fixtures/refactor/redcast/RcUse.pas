@@ -4,7 +4,7 @@ unit RcUse;
 //   FIX = removed; REFUSE <kind> = named refusal; NONE = a real conversion, in neither list.
 // A line with two casts names both, in the order the guard expects them.
 // RcTypes.TDup(Dup) is NONE: a qualified cast has no via=cast row, so it is neither seen nor touched.
-// TBox(BX): TBox has a generic twin, the resolver cannot name one symbol, so the cast has no type row.
+// TBox(BX): TBox has a generic twin; since 150 the resolver names both (cast TBox vs BX TBox<T>): not identical.
 
 interface
 
@@ -104,7 +104,7 @@ begin
   E:= TEn(Ord(E) + 1); // REFUSE operand-shape
   Hold:= THolder(Self); // REFUSE operand-untyped
   PV:= TProc1(PV); // REFUSE procedural-type
-  B:= TBox(BX); // REFUSE type-not-indexed
+  B:= TBox(BX); // NONE
   B:= TBase(GetOv(1)); // REFUSE overloaded-operand
   B:= TBase(B) {$IFDEF NEVER_SET_X} {$ENDIF}; // REFUSE ifdef-line
   B:= TBase({c} B); // REFUSE comment-in-cast
