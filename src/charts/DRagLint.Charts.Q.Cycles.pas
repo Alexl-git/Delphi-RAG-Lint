@@ -296,7 +296,7 @@ end;
 /// <remarks>Opens a read-only TSQLiteSymbolStore beside the TChartsIndex (two read-only handles on one file) for the Tarjan mirror. Zero cycles is an answer, not a refusal.</remarks>
 function Emit(const pArgs: TQuestionArgs; const pOutDir: string): TChartResult;  // dl:ok deep-nesting@5be6 -- REVIEWED 2026-10-17: ports the one-script PS body line for line (H9-H13); splitting it would scatter the shared counters and the dot buffer
 begin
-  var Store: ISymbolStore:= TSQLiteSymbolStore.CreateReadable(pArgs.GuardedDb, True);
+  var Store: ISymbolStore:= TSQLiteSymbolStore.Create(pArgs.GuardedDb, True);
   var Index:= TChartsIndex.Create(pArgs.GuardedDb);
   var UnitRows: TObjectList<TIndexRow>:= nil;
   var EdgeRows: TObjectList<TIndexRow>:= nil;

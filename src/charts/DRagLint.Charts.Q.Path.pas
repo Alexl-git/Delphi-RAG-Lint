@@ -640,7 +640,7 @@ begin
   var From:= pArgs.Target;
   if SameText(From, ToQ) then
     raise EChartsQuestion.CreateFmt('path: name two different routines -- -From and -To are both %s', [From]);
-  var Store: ISymbolStore:= TSQLiteSymbolStore.CreateReadable(pArgs.GuardedDb, True);
+  var Store: ISymbolStore:= TSQLiteSymbolStore.Create(pArgs.GuardedDb, True);
   var Index:= TChartsIndex.Create(pArgs.GuardedDb);
   var Graph: TPathGraph:= nil;
   var Ids:= TList<Int64>.Create;

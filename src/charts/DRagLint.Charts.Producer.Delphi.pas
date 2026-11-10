@@ -252,7 +252,7 @@ end;
 { Ask-Report's step 3, through the engine's own sweep; the store is closed before the emitter opens the index }
 function Freshness(const pDb: string): TFreshnessReport;
 begin
-  var Store: ISymbolStore:= TSQLiteSymbolStore.CreateReadable(pDb, True);
+  var Store: ISymbolStore:= TSQLiteSymbolStore.Create(pDb, True);
   Result:= ProbeIndexFreshness(Store);
 end;
 

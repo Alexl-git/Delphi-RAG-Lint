@@ -362,7 +362,7 @@ begin
   if not TFile.Exists(pDb) then
     Exit(True);
   try
-    var Store: ISymbolStore:= TSQLiteSymbolStore.CreateReadable(pDb, True);
+    var Store: ISymbolStore:= TSQLiteSymbolStore.Create(pDb, True);
     var Rep:= ProbeIndexFreshness(Store, 0);
     pFact.Stale:= Rep.Verdict = fvStale;
     pFact.StaleFiles:= Rep.Changed;

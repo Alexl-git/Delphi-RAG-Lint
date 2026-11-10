@@ -270,7 +270,7 @@ end;
 /// refusal in this verb). An empty wing is a valid chart.</remarks>
 function Emit(const pArgs: TQuestionArgs; const pOutDir: string): TChartResult;
 begin
-  var Store: ISymbolStore:= TSQLiteSymbolStore.CreateReadable(pArgs.GuardedDb, True);
+  var Store: ISymbolStore:= TSQLiteSymbolStore.Create(pArgs.GuardedDb, True);
   var CallerNodes:= TList<TBfNode>.Create;
   var CalleeNodes:= TList<TBfNode>.Create;
   var PortMap:= TDictionary<string, string>.Create(TIStringComparer.Ordinal);

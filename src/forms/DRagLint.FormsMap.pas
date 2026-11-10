@@ -3044,11 +3044,11 @@ var
   I      : Integer;
 begin
   if Length(ADbPaths) = 0 then raise Exception.Create('forms-csv: no DB paths');
-  Primary:= TSQLiteSymbolStore.CreateReadable(ADbPaths[0], {AReadOnly=}False);
+  Primary:= TSQLiteSymbolStore.Create(ADbPaths[0]);
   try
     SetLength(Extras, 0);
     for I:= 1 to High(ADbPaths) do
-      Extras:= Extras + [TSQLiteSymbolStore.CreateReadable(ADbPaths[I], {AReadOnly=}False)];
+      Extras:= Extras + [TSQLiteSymbolStore.Create(ADbPaths[I])];
     try
       Result:= GenerateFormsCsvCore(Primary, Extras, AProjectFile, ARootForm, ADbPaths[0]);
     finally

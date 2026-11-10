@@ -268,7 +268,7 @@ begin
   if Writing then
     Mode:= MODE_WRITE;
   var Db:= pArgs.GuardedDb;
-  var Store: ISymbolStore:= TSQLiteSymbolStore.CreateReadable(Db, True);
+  var Store: ISymbolStore:= TSQLiteSymbolStore.Create(Db, True);
   var Index:= TChartsIndex.Create(Db);
   var Data: TMemberAccessData:= nil;
   try

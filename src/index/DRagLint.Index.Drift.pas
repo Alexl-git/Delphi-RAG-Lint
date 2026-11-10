@@ -195,7 +195,7 @@ begin
   for R:= 0 to High(ACurrentRoots) do NormRoots[R]:= NormRoot(ACurrentRoots[R]);
 
   { Open the store and enumerate all indexed file paths. }
-  Store:= TSQLiteSymbolStore.CreateReadable(ADbPath, {AReadOnly=}False);
+  Store:= TSQLiteSymbolStore.Create(ADbPath);
   try
     FileIds:= Store.GetAllFileIds;
     PathCount:= Length(FileIds);

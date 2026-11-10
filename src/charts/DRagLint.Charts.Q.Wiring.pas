@@ -147,7 +147,7 @@ function Emit(const pArgs: TQuestionArgs; const pOutDir: string): TChartResult;
 var
   Found: Boolean;
 begin
-  var Store: ISymbolStore:= TSQLiteSymbolStore.CreateReadable(pArgs.GuardedDb, True);
+  var Store: ISymbolStore:= TSQLiteSymbolStore.Create(pArgs.GuardedDb, True);
   var Index:= TChartsIndex.Create(pArgs.GuardedDb);
   try
     { ---- 1. the index-wide pre-check, before anything else ---- }

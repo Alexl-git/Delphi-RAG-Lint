@@ -508,7 +508,7 @@ constructor TChartsIndex.Create(const pDbPath: string);
 begin
   inherited Create;
   FNotes:= TStringList.Create;
-  FStore:= TSQLiteSymbolStore.CreateReadable(pDbPath, True);
+  FStore:= TSQLiteSymbolStore.Create(pDbPath, True);
 end;
 
 destructor TChartsIndex.Destroy;

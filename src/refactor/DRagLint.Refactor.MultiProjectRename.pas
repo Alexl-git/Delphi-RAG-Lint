@@ -788,7 +788,7 @@ var
   Store: ISymbolStore;
   Tag  : string      ;
 begin
-  Store:= TSQLiteSymbolStore.CreateReadable(AOwner.DbPath, True);
+  Store:= TSQLiteSymbolStore.Create(AOwner.DbPath, True);
   Tag  := Trim(Store.GetMetaValue(PROJECT_TAG_KEY));
   if not ProjectTagConflicts(Tag, AOwner.ProjectFile) then Exit('');
   Result:= Format(REASON_TAG_MISMATCH, [Tag, ExtractFileName(AOwner.ProjectFile), AOwner.ProjectFile, AOwner.DbPath]);
@@ -808,7 +808,7 @@ begin
   AMissing:= '';
   { Read-only never CREATES: a missing path raises instead of leaving an empty
     database behind. }
-  Store:= TSQLiteSymbolStore.CreateReadable(AOwner.DbPath, True);
+  Store:= TSQLiteSymbolStore.Create(AOwner.DbPath, True);
   if Store.GetMetaValue(INDEXED_AT_KEY) = '' then Exit('index carries no ' + INDEXED_AT_KEY + ' stamp');
   Changed := ChangedFilePaths(Store);
   AChanged:= Length(Changed);
@@ -961,7 +961,7 @@ begin
     Result[I].Report.Reason   := Reason;
     if Result[I].Report.Freshness = ofUnverified then Continue;
     try
-      Result[I].Store  := TSQLiteSymbolStore.CreateReadable(ADiscovery.Owners[I].DbPath, True);
+      Result[I].Store  := TSQLiteSymbolStore.Create(ADiscovery.Owners[I].DbPath, True);
       Result[I].Targets:= BuildNamingTargets(Result[I].Store, AFindings, ANaming);
     except
       on E: Exception do
@@ -1459,7 +1459,7 @@ var
     if Fresh = ofStale then Result.Notes:= Result.Notes + [ProjectReason(AOwner, 'planned on a stale index -- ' + Reason)];
     if AOwners.QName <> '' then
     begin
-      var Store: ISymbolStore:= TSQLiteSymbolStore.CreateReadable(AOwner.DbPath, True);
+      var Store: ISymbolStore:= TSQLiteSymbolStore.Create(AOwner.DbPath, True);
       var P:= ProveRename(Store, AOwners.Libraries, AOwners.QName, AOwners.NewName);
       if not P.Found then
         Refuse(CRefuseOwnerUnverified, AFile, ProjectReason(AOwner, 'its index does not hold ' + AOwners.QName));

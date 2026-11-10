@@ -1657,7 +1657,7 @@ begin
     if Code <> 0 then ProofFailure:= Format('the re-index exited %d (log %s)', [Code, TPath.Combine(Dir, 'after-proof-index.log')])
     else
     begin
-      var AfterStore: ISymbolStore:= TSQLiteSymbolStore.CreateReadable(AfterDb, True);
+      var AfterStore: ISymbolStore:= TSQLiteSymbolStore.Create(AfterDb, True);
       for var P: TUnwithFilePlan in pPlans do
         if Length(P.NewBytes) > 0 then Compare(P, AfterStore);
       AfterStore:= nil;

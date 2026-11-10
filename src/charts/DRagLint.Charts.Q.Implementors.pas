@@ -28,7 +28,7 @@ uses
 function Emit(const pArgs: TQuestionArgs; const pOutDir: string): TChartResult;
 begin
   Result:= Default(TChartResult);
-  var Store: ISymbolStore:= TSQLiteSymbolStore.CreateReadable(pArgs.GuardedDb, True);
+  var Store: ISymbolStore:= TSQLiteSymbolStore.Create(pArgs.GuardedDb, True);
   var Opts:= TImplementorsOptions.Defaults;
   Opts.WithUses:= True;
   if pArgs.Cap > 0 then Opts.MaxSites:= pArgs.Cap;
