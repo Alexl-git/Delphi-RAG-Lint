@@ -448,8 +448,13 @@ None 'D03l' 'uD03' 'B'  'Free'
 None 'D03m' 'uD03' 'LU' 'Free'
 None 'D03n' 'uD03' 'LR' 'Free'
 None 'D03o' 'uD03' 'LI' 'Free'
-None 'D03p' 'uD03' 'L2' 'Add'
-None 'D03q' 'uD03' 'W'  'Free'
+# 150 INT4: D03p / D03q were "stays unbound" (two visible candidates). 150 RS1 binds them the
+# Delphi way and both now FAIL on the 1.49.0-alpha base: L2: TList (no args) can only be the
+# zero-parameter Old.Classes.TList, not Gen.Coll.TList<T> (RS1 item 2, GenericArity); W: TTwice
+# is Other.Classes.TTwice, the unit used LAST (RS1 item 5). D03r stays the negative: TMixed is
+# Other.Classes' RECORD (used last), which has no Free.
+Ext  'D03p' 'uD03' 'L2' 'Add'     'Old.Classes.TList.Add'
+Ext  'D03q' 'uD03' 'W'  'Free'    'Other.Classes.TTwice.Free'
 None 'D03r' 'uD03' 'M'  'Free'
 
 # ---- D12 ----

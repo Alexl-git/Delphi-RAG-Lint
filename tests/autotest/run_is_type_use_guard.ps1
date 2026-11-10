@@ -8,8 +8,9 @@
   Checks:
     T1  L59 has a type_use 'Integer'            -- FAILS on 1.48.0-alpha (0 type_use on the line)
     T2  L98 has a type_use 'Integer'            -- FAILS on 1.48.0-alpha
-    T3  L53 `is System.Classes.TComponent` (typerefDot) emits NO type_use: the dotted form is
-        deliberately out (cycle planner qualified-ref, run_cyclefix_r2 f8; 150 row) -- passes on both.
+    T3  L53 `is System.Classes.TComponent` (typerefDot) emits exactly ONE type_use naming
+        TComponent: 150 EX3 item 7 (2b7c57d75, "dotted is-rhs type_use") brought the dotted form
+        in -- the 150 row this check was waiting for. FAILS on the 1.49.0-alpha base (0 rows).
     T4  L59 has exactly ONE type_use 'TList'    -- no double emit from the default recursion
     P1  POSITIVE CONTROL: the bare `is TBase`-style identifier arm still emits (some type_use exists
         on an identifier `is` line of the same file) -- passes on both engines.
@@ -52,7 +53,7 @@ try {
   Write-Host ("L59: " + ($l59 -join ',') + " | L98: " + ($l98 -join ',') + " | L53: " + ($l53 -join ','))
   IsTU-Check 'T1' ($l59 -contains 'Integer') 'L59 is TList<Integer> emits Integer'
   IsTU-Check 'T2' ($l98 -contains 'Integer') 'L98 is TList<Integer> emits Integer'
-  IsTU-Check 'T3' (@($l53 | Where-Object { $_ -match 'TComponent$' }).Count -eq 0) 'L53 is System.Classes.TComponent emits no type_use (dotted form out)'
+  IsTU-Check 'T3' (@($l53 | Where-Object { $_ -match 'TComponent$' }).Count -eq 1) 'L53 is System.Classes.TComponent emits exactly one type_use (dotted form in, 150 EX3)'
   IsTU-Check 'T4' (@($l59 | Where-Object { $_ -eq 'TList' }).Count -eq 1) 'L59 emits TList exactly once'
 
   $q = "select count(*) from refs r join files f on f.id = r.file_id where r.kind = 'type_use' and f.path like '%GA_IsType.pas'"

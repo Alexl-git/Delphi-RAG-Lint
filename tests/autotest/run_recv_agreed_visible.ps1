@@ -8,8 +8,11 @@
 
   Pins: uses Lib.A + Lib.B (two visible TList, both reach TObject.Free) -> L.Free binds
   System.TObject.Free although Lib.C's TList (unknown parent) exists; controls: with Lib.C
-  also used the veto stands (unbound); a member the visible candidates disagree on
-  (`L.Add`, declared differently in Lib.A and Lib.B) stays unbound.
+  also used the veto stands (unbound). 150 INT4: a member the visible candidates disagree on
+  (`L.Add`, declared differently in Lib.A and Lib.B) is no longer left unbound -- Delphi takes
+  the unit used LAST (RS1 item 5), so A3 binds Lib.B and the reversed uses list (A3b, control)
+  binds Lib.A; `TList<Integer>` can only be Lib.G's one-parameter TList (RS1 item 2, A5).
+  A3 / A3b / A5 FAIL on the 1.49.0-alpha base (unbound).
   Run from any CWD, pwsh 7.
 #>
 [CmdletBinding()]
@@ -136,10 +139,25 @@ begin
 end;
 end.
 '@
+W $app 'uSeeRev.pas' @'
+unit uSeeRev;
+interface
+uses Lib.B, Lib.A;
+procedure GoSeeRev;
+implementation
+procedure GoSeeRev;
+var
+  L: TList;
+begin
+  L.Add(nil);
+end;
+end.
+'@
 W $app 'App.dpr' @'
 program App;
 uses
   uSee in 'uSee.pas',
+  uSeeRev in 'uSeeRev.pas',
   uAll in 'uAll.pas',
   uAlias in 'uAlias.pas';
 begin
@@ -163,12 +181,14 @@ Check "A1 uSee L.Free -> System.TObject.Free (got '$($s.Ext)')" ($null -ne $s -a
 $s = Site 'uAll' 'L' 'Free'
 Check "A2 CONTROL uAll L.Free stays unbound: the visible Lib.C TList has an unknown parent (got '$($s.Ext)')" ($null -ne $s -and $s.Ext -eq '')
 $s = Site 'uSee' 'L' 'Add'
-Check "A3 CONTROL uSee L.Add stays unbound: the visible candidates disagree (got '$($s.Ext)')" ($null -ne $s -and $s.Ext -eq '')
+Check "A3 uSee L.Add (uses Lib.A, Lib.B) -> Lib.B.TList.Add: the unit used LAST declares the name (150 RS1 item 5, 4f322842b) (got '$($s.Ext)')" ($null -ne $s -and $s.Ext -ceq 'Lib.B.TList.Add')
+$s = Site 'uSeeRev' 'L' 'Add'
+Check "A3b CONTROL uSeeRev L.Add (uses Lib.B, Lib.A) -> Lib.A.TList.Add: the uses ORDER decides, not a fixed pick (got '$($s.Ext)')" ($null -ne $s -and $s.Ext -ceq 'Lib.A.TList.Add')
 
 $s = Site 'uAlias' 'L' 'Free'
 Check "A4 uAlias L.Free on a generic alias (TAccList = TList<Integer>, no ancestor row) -> System.TObject.Free (got '$($s.Ext)')" ($null -ne $s -and $s.Ext -ceq 'System.TObject.Free')
 $s = Site 'uAlias' 'L' 'Add'
-Check "A5 CONTROL uAlias L.Add stays unbound: Lib.A and Lib.G disagree (got '$($s.Ext)')" ($null -ne $s -and $s.Ext -eq '')
+Check "A5 uAlias L.Add on TList<Integer> -> Lib.G.TList.Add: only Lib.G declares a ONE-parameter TList (150 RS1 item 2 GenericArity, e08a070d6) (got '$($s.Ext)')" ($null -ne $s -and $s.Ext -ceq 'Lib.G.TList.Add')
 
 Write-Host ''
 if ($script:fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
