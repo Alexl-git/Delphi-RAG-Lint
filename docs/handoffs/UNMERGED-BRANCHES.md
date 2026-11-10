@@ -4,9 +4,10 @@
 Every local branch not an ancestor of `main`, classified. Re-measure before acting:
 `git branch --no-merged main` + `git rev-list --count main..<b>` + `git cherry main <b>`
 (`+` = patch not in main, `-` = already in main under another SHA).
-Measured 2026-11-09 (wave 149 lane DOC) against main = bdbf7f91 (1.48.0-alpha: the 148 integration 8a4ccf2d3 + the plugin BPL build). 507 local branches:
+Measured 2026-11-09 (wave 149 lane DOC; refreshed by 150 DOC2 below) against main = bdbf7f91 (1.48.0-alpha: the 148 integration 8a4ccf2d3 + the plugin BPL build). 507 local branches:
 466 are merged into main (deletable, plain `git branch -d`), 41 are not (the in-flight lane/149-* branches among them). Owner of the merge: ENGINE. LSP has nothing unmerged.
-Delete candidates: the merged ones are covered by `C:\TEMP\claude\lanes\147\H1\OWNER-DELETES.ps1` (generic `branch --merged main`, dry run, -Go needed);
+Wave-150 refresh (lane DOC2, 2026-11-09, main = f8d66a21f = the 149 integration, pushed): see sections 5-7. ONE script does every delete: `C:\TEMP\claude\lanes\150\DOC2\staged\OWNER-DELETES-150.ps1` (dry run, -Go needed; -LaneWorktrees also removes the 149/150 lane worktrees first; it folds in RQ's pr-9 and the 149 DOC list). The older scripts stay valid.
+Delete candidates (before 150): the merged ones are covered by `C:\TEMP\claude\lanes\147\H1\OWNER-DELETES.ps1` (generic `branch --merged main`, dry run, -Go needed);
 the unmerged DONE set of section 3 (needs a force delete, git cannot see the equivalence) is in `C:\TEMP\claude\lanes\149\DOC\staged\OWNER-DELETES-149-DOC.ps1` (dry run, -Go needed).
 
 ## 0. lane/148-* (33 branches): merged vs not
@@ -54,4 +55,18 @@ Re-measure with `git rev-list --count main..<b>` = 0 before deleting.
 
 466 merged branches (several `worktree-agent-*`) are deletable with plain `git branch -d` (the 147 H1 OWNER-DELETES.ps1 dry run lists them); ~80 `worktree-agent-*` worktrees under `.claude\worktrees\`
 (~35 locked) mostly hold nothing ahead of main. Removed since the last measurement: every conv/*, clippy/*, gaps/int and fix/* branch listed in the 2026-10-27 tracker.
-Wave-149 lane branches (lane/149-*) are in flight; their worktrees are under `C:\TEMP\claude\lanes\149\<lane>\wt` and are the controller's to remove after the 149 integration.
+Wave-149 lane branches: all 19 are ancestors of main now (section 5). Their worktrees (`C:\TEMP\claude\lanes\149\<lane>\wt`) and the wave-150 ones are the controller's to remove after the 150 re-parse; the gaps/ext-dirword WORKTREE (`C:\Projects\Delphi-RAG-lint-wt\ext-dirword`) blocks the delete of that branch until `git worktree remove` (OWNER-DELETES-150.ps1 step E).
+
+## 5. lane/149-* (19 branches): all merged
+
+Measured 2026-11-09 with `git merge-base --is-ancestor <b> main`: CYA CYB DF DOC EX1 EX2 GA GL GR HW IC INT LX MS PL RB1 RB2 RQ RT are ancestors of main (f8d66a21f); plain `git branch -d` works once the lane worktree is gone. Nothing from 149 is unmerged. (lane/148-HP2B and lane/148-PB, section 0, reached main inside the 149 integration.)
+
+## 6. lane/150-* (wave 150): the integration set
+
+All of CQ CY1 CY2 CY3 DF2 DQ EX3 GR2 HG INT LN LX2 PP PS RF RG RS1 RS2 SC W1 are ancestors of `lane/150-INT` (the integrator merged them; CY3 contains CY1's commits). Reaches main when the controller merges lane/150-INT. Still outside it at the time of writing (re-measure with `git merge-base --is-ancestor lane/150-<X> lane/150-INT`): CF (PARTIAL dd44e34ca), PF2 (PARTIAL 54bd311ef; item 1 merges only after the CLIENT identity finisher says IDENTICAL), MS-A (PARTIAL abdf9865f, measurement docs), SW, DOC2 (CHANGELOG-v1.49.md + this file; INT commits). `lane/150-GV` in THIS repo sits at the base: the graph work is the Graph repo's branch lane/150-GV (main-based), merged there by the controller; its exe SHA256 is in the 150 ledger.
+
+Grammar repo (`C:\Projects\tree-sitter-delphi13`, owner merge to master + tag + npm): lane/149-GR (v1.4.7), lane/150-GR2 (v1.4.8, 4960c8d, local release commit), lane/150-PS (v1.4.9, 5ec1b35), lane/150-W1 (tsblank measurement; the scanner prototype was handed to GR2). tree-sitter-DFM: v1.2.0 (+ v1.2.1) master merge / tag.
+
+## 7. NOT-FOR-MERGE (kept as evidence; do not merge, delete only on the owner's word)
+
+lane/146-b6 (is-never-true verdict), lane/146-x2 (.dcu prototype, superseded by the 2026-11-08 ruling; delete candidate), lane/148-XF (FPC grammar spec), gaps/ext-dirword (struck, fixed in grammar v1.4.0; delete candidate after `git worktree remove`), lane/144-enummap (CONVERTER), charts/docs-no-powershell (CHARTS), the 36f26086 b6 twins and E-BIND-LIB-EFFECTS 0b617232 (parked by owner ruling), pr-9 (OBSOLETE, superseded by 03917ac63 + 03c6078c0; `git branch -D`, in OWNER-DELETES-150.ps1 step C).

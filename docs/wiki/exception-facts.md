@@ -31,6 +31,10 @@ drag-lint exception-facts --name <Type> --db <db> [--json]
 * `unknown`: nothing tells: `raise MakeError(..)`, a `raise;` under a bare `except`;
 * empty on `handles-all`, which names no type.
 
+## The language server and the quick pick
+
+The language server advertises the `draglint.exceptionFacts` command only while exception facts are on: under `drag-lint lsp --no-exception-facts` it is not advertised (`showCallers` and `setContext` stay). Guard: `tests\autotest\run_lsp_hover_exceptions_guard.ps1` (150 LX2).
+
 ## Read it carefully
 
 * **No ancestry.** `on E: Exception` is not listed under `EFoo`, though it catches one. `ask exception-paths` walks ancestry.
