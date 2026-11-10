@@ -6875,11 +6875,79 @@ end;
 
   1.43: --resolve-only does not call this unconditionally. It walks nothing, so it
   cannot claim a walk completed: see CommitAfterResolveOnly. }
+/// <summary>The CONTENT identity of the tree-sitter DLLs this process has loaded, in
+/// the GRAMMAR_DLLS_META_KEY format: 'name=&lt;size&gt;:&lt;first 16 hex of SHA-256&gt;' per
+/// module, ';'-joined, fixed order (runtime, delphi13, dfm).</summary>
+/// <returns>The identity; a module not loaded reads 'name=not-loaded', one that cannot
+/// be read 'name=unknown'.</returns>
+/// <remarks>Path and mtime are left out on purpose (unlike TreeSitterModuleStamp): every
+/// lane and VS Code copy of the engine has its own path and copy time, and the question
+/// is "same bytes?". Hashes ~4.5 MB; called once per committed index run and once per
+/// `info`.</remarks>
+var
+  GLoadedGrammarDlls: string; { LoadedGrammarDllsIdentity's cache: a loaded module does not change in-process }
+
+function LoadedGrammarDllsIdentity: string;
+const
+  MODS: array[0..2] of string = ('tree-sitter.dll', 'tree-sitter-delphi13.dll', 'tree-sitter-dfm.dll');
+var
+  Buf: array[0..MAX_PATH] of Char;
+begin
+  if GLoadedGrammarDlls <> '' then Exit(GLoadedGrammarDlls);
+  Result:= '';
+  for var M: string in MODS do
+  begin
+    var Part: string:= 'not-loaded';
+    var H: HMODULE:= GetModuleHandle(PChar(M));
+    if H <> 0 then
+    begin
+      Part:= 'unknown';
+      if GetModuleFileName(H, Buf, Length(Buf)) <> 0 then
+      try
+        var P: string:= Buf;
+        Part:= IntToStr(TFile.GetSize(P)) + ':' + Copy(THashSHA2.GetHashStringFromFile(P), 1, 16);
+      except
+        on E: Exception do Part:= 'unknown';
+      end;
+    end;
+    if Result <> '' then Result:= Result + ';';
+    Result:= Result + M + '=' + Part;
+  end;
+  GLoadedGrammarDlls:= Result;
+end;
+
+/// <summary>Decides whether CommitIndexerFingerprint may (re)write the grammar_dlls stamp.</summary>
+/// <param name="AStored">The stamp the DB holds ('' = none yet).</param>
+/// <param name="ALoaded">LoadedGrammarDllsIdentity of this process.</param>
+/// <param name="ARebuilding">A --rebuild is completing (every file was parsed by this run).</param>
+/// <param name="AFingerprintChanged">The indexer fingerprint changes in this commit, so every
+/// file was re-parsed under it.</param>
+/// <returns>True to write ALoaded; False keeps AStored, which then still differs and `info`
+/// keeps reporting it until a run that re-parsed everything.</returns>
+/// <remarks>An incremental run that parsed a few files must NOT relabel the rest: that is
+/// exactly how a wrong-grammar re-parse would read as healed after the DLL was put back.
+/// A first stamp ('' stored) can only claim the current DLLs -- older parses are unknowable.</remarks>
+function MayStampGrammarDlls(const AStored, ALoaded: string; ARebuilding, AFingerprintChanged: Boolean): Boolean;
+begin
+  Result:= (AStored = '') or (AStored = ALoaded) or ARebuilding or AFingerprintChanged;
+end;
+
 procedure CommitIndexerFingerprint(const AStore: ISymbolStore;
   APreprocess: Boolean; const APlatform, ACfgLimb: string);
 begin
-  AStore.SetMetaValue(INDEXER_FP_KEY,
-                      IndexerFingerprint(AStore, APreprocess, APlatform, ACfgLimb));
+  var NewFp: string:= IndexerFingerprint(AStore, APreprocess, APlatform, ACfgLimb);
+  { grammar_dlls: read the PREVIOUS fingerprint and the rebuild flag before either is rewritten. }
+  var Loaded: string:= LoadedGrammarDllsIdentity;
+  var StoredDlls: string:= AStore.GetMetaValue(GRAMMAR_DLLS_META_KEY);
+  if MayStampGrammarDlls(StoredDlls, Loaded,
+       AStore.GetMetaValue(REBUILD_IN_PROGRESS_META_KEY) <> '',
+       AStore.GetMetaValue(INDEXER_FP_KEY) <> NewFp) then
+    AStore.SetMetaValue(GRAMMAR_DLLS_META_KEY, Loaded)
+  else
+    Writeln(ErrOutput, 'note: this index was parsed with other tree-sitter DLLs (', StoredDlls,
+      ') than this engine loads (', Loaded, '); an incremental run does not re-parse for that -- ',
+      'run index --rebuild to re-parse with these.');
+  AStore.SetMetaValue(INDEXER_FP_KEY, NewFp);
   { The freshness stamp rides the fingerprint's guarantee rather than getting a
     site of its own: BOTH are written only after a walk that ran to completion,
     so an interrupted run leaves both untouched and the next run still knows it
@@ -21546,6 +21614,13 @@ type
       probe's current word on the library (a readiness token, '' when no marker). }
     LibraryMarker   : TLibraryMarker;
     LibraryState    : string;
+    { grammar_dlls (151 GD): the stored content identity of the tree-sitter DLLs the index was
+      parsed with ('' = not recorded: an index last completed before 1.50), this engine's, and
+      whether they differ. ADDITIVE: the verdict is not changed by it (detection, not
+      invalidation -- see GRAMMAR_DLLS_META_KEY). }
+    GrammarDllsStored: string;
+    GrammarDllsLoaded: string;
+    GrammarDllsDiffer: Boolean;
   end;
 
 /// <summary>Computes the `info --db` staleness verdict for one index file:
@@ -21594,6 +21669,10 @@ begin
       Result.ResolverFp      := St.GetMetaValue(RESOLVER_FP_KEY);
       Result.ResolverExpected:= ResolverFingerprint(St);
       Result.LibraryMarker   := LibraryMarkerFromJson(St.GetMetaValue(LIBRARY_RESOLVE_STATE_META_KEY));
+      Result.GrammarDllsStored:= St.GetMetaValue(GRAMMAR_DLLS_META_KEY);
+      Result.GrammarDllsLoaded:= LoadedGrammarDllsIdentity;
+      { Not recorded is NOT a difference: an older index simply never said. }
+      Result.GrammarDllsDiffer:= (Result.GrammarDllsStored <> '') and (Result.GrammarDllsStored <> Result.GrammarDllsLoaded);
     end;
   except
     on E: Exception do Ok:= False;
@@ -21862,6 +21941,9 @@ begin
             JOne.AddPair('resolver_stale', TJSONBool.Create(V.ResolverStale));
             JOne.AddPair('indexer_newer' , TJSONBool.Create(V.IndexerNewer));
             JOne.AddPair('resolver_newer', TJSONBool.Create(V.ResolverNewer));
+            JOne.AddPair('grammar_dlls_stored', V.GrammarDllsStored);
+            JOne.AddPair('grammar_dlls_loaded', V.GrammarDllsLoaded);
+            JOne.AddPair('grammar_dlls_differ', TJSONBool.Create(V.GrammarDllsDiffer));
           end;
           JOne.AddPair('verdict', V.Verdict);
           if V.Remedy <> '' then
@@ -21905,6 +21987,12 @@ begin
         Writeln('  remedy: ', V.Remedy);
       if V.LibraryMarker.State <> '' then
         Writeln('  library_resolve: ', V.LibraryMarker.State, '  ', V.LibraryMarker.Reason);
+      if V.GrammarDllsDiffer then
+      begin
+        Writeln('  grammar: DIFFERS -- parsed with ', V.GrammarDllsStored);
+        Writeln('           this engine loads   ', V.GrammarDllsLoaded);
+        Writeln('           remedy: index --rebuild (the verdict above does not see this; an incremental run will not re-parse)');
+      end;
     end;
   end;
 end; // function
