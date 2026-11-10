@@ -120,6 +120,33 @@ c.close()
     $c = Suo-Run ($v.Args + @('--db', $proj))
     Suo-Check ("C" + $v.Id.Substring(1)) (-not ($c.Out -match 'older than this engine reads') -and -not (Suo-Av $c.Out)) "$($v.Name) on the current index: no refusal, no AV (exit $($c.Code))"
   }
+
+  # 150 INT2: an UNSTAMPED but POPULATED index (schema_version row deleted = v0). OpenReadable keeps
+  # refusing it: letting v0 through (as CreateReadable does after G1F) was tried and gave an
+  # EAccessViolation in lint-tree (no prepared statements below READ_MIN) -- U1 pins 'refused, no AV'.
+  # U4: a CreateReadable verb (menu-tree) on the same index: no AV.
+  $unst = Join-Path $tmp 'proj-unstamped.sqlite'
+  [IO.File]::Copy($proj, $unst, $true)
+  $unstamp = Join-Path $tmp 'unstamp.py'
+  [IO.File]::WriteAllText($unstamp, @'
+import sqlite3, sys
+c = sqlite3.connect(sys.argv[1])
+c.execute("DELETE FROM schema_meta WHERE key = 'schema_version'")
+c.commit()
+c.close()
+'@)
+  & $py -I $unstamp $unst
+  if ($LASTEXITCODE -ne 0) { throw "unstamp $unst failed" }
+  $appU = Join-Path $appDir 'AppU.pas'
+  $u = Suo-Run @('lint-tree', '--unit', $appU, '--db', $unst)
+  Suo-Check 'U1' (($u.Out -match 'older than this engine reads') -and ($u.Code -eq 2) -and -not (Suo-Av $u.Out)) "lint-tree (OpenReadable) on an UNSTAMPED populated index: refused with the reason, no AV (exit $($u.Code))"
+  $m = Suo-Run @('menu-tree', '--project', $dpr, '--db', $unst)
+  Suo-Check 'U4' (-not (Suo-Av $m.Out)) "menu-tree (CreateReadable) on an UNSTAMPED populated index: no AV (exit $($m.Code))"
+  if ($u.Code -ne 2) { ($u.Out -split "`n" | Select-Object -Last 3) | ForEach-Object { Write-Host "  | $_" } }
+  # (a query --json check is not reachable: the verb's own guarded opener refuses an unstamped index
+  #  before AddStalenessPairs / AddLibraryPendingNotes run; lint-tree is the observable OpenReadable caller)
+  $s = Suo-Run @('lint-tree', '--unit', $appU, '--db', $projU)
+  Suo-Check 'U3' (($s.Out -match 'older than this engine reads') -and ($s.Code -eq 2) -and -not (Suo-Av $s.Out)) "lint-tree (OpenReadable) on a STAMPED v$old index still refused with the reason (exit $($s.Code))"
 }
 finally {
   try { [IO.Directory]::Delete($tmp, $true) } catch { Write-Verbose "temp dir left: $tmp" }
