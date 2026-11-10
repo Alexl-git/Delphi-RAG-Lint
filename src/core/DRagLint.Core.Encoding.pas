@@ -34,7 +34,7 @@ uses
 /// (ASCII is valid UTF-8, so this returns the input unchanged). Pure function;
 /// thread-safe (no shared state; the CP1252 encoding it allocates is freed).
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Analysis.LintTree.RunLintTree (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.ValidateAndResolve (DRagLint.Analysis.LintTree.pas), DRagLint.CLI.ApplyLineMarkers.LineIsPreprocessorInactive (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas) (+13 more)</para>
+/// <para>Called from: DRagLint.Analysis.LintTree.RunLintTree (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.ValidateAndResolve (DRagLint.Analysis.LintTree.pas), DRagLint.CLI.ApplyLineMarkers.LineIsPreprocessorInactive (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas) (+14 more)</para>
 /// <para>Calls: DRagLint.Core.Encoding.IsValidUtf8, Move</para>
 /// <para>Complexity: 14 (cyclomatic, outer body), 43 lines (full implementation)</para>
 /// <para>Pure</para>

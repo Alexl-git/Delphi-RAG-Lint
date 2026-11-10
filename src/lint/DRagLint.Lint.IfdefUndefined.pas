@@ -53,7 +53,7 @@ type
   /// {$IFDEF} / {$IFNDEF}, or of a defined() inside {$IF} / {$ELSEIF}.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Lint.IfdefUndefined.pas) ?, DRagLint.Lint.IfdefUndefined.AddDirectiveTests (DRagLint.Lint.IfdefUndefined.pas), DRagLint.Lint.IfdefUndefined.ScanSource (DRagLint.Lint.IfdefUndefined.pas) ?, DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.CheckFiles (DRagLint.Lint.IfdefUndefined.pas) ?, DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.ScanFileTests (DRagLint.Lint.IfdefUndefined.pas) ? (+2 more)</para>
+  /// <para>Used by: declaration (DRagLint.Lint.IfdefUndefined.pas) ?, DRagLint.Lint.IfdefUndefined.AddDirectiveTestsAt (DRagLint.Lint.IfdefUndefined.pas), DRagLint.Lint.IfdefUndefined.ScanFile (DRagLint.Lint.IfdefUndefined.pas) ?, DRagLint.Lint.IfdefUndefined.ScanRows (DRagLint.Lint.IfdefUndefined.pas) ?, DRagLint.Lint.IfdefUndefined.ScanSource (DRagLint.Lint.IfdefUndefined.pas) ? (+4 more)</para>
   /// <para>Used in units: DRagLint.Lint.IfdefUndefined, DRagLint.Lint.PlatformDivergent</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -145,15 +145,14 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: Default, DRagLint.Lint.IfdefUndefined.CollectDprojDefines, DRagLint.Lint.IfdefUndefined.DprojSearchDirs, DRagLint.Lint.IfdefUndefined.NearestSymbol, DRagLint.Lint.IfdefUndefined.ScanSource, DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.IsCompilerPredefined, DRagLint.Lint.IfdefUndefined.TryReadSource, ExpandFileName, ExtractFileName, ExtractFilePath, Format, LowerCase, Trim</para>
+    /// <para>Calls: Default, DRagLint.Lint.IfdefUndefined.CollectDprojDefines, DRagLint.Lint.IfdefUndefined.DprojSearchDirs, DRagLint.Lint.IfdefUndefined.NearestSymbol, DRagLint.Lint.IfdefUndefined.ScanFile, DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.IsCompilerPredefined, ExtractFileName, Format, LowerCase, Trim</para>
     /// <para>Returns: nil; Findings.ToArray</para>
-    /// <para>Complexity: 10 (cyclomatic, outer body), 80 lines (full implementation)</para>
     /// <para>Touches: file system</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Lint.IfdefUndefined.CollectDprojDefines"/>
     /// <seealso cref="DRagLint.Lint.IfdefUndefined.DprojSearchDirs"/>
     /// <seealso cref="DRagLint.Lint.IfdefUndefined.NearestSymbol"/>
-    /// <seealso cref="DRagLint.Lint.IfdefUndefined.ScanSource"/>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.ScanFile"/>
     /// <seealso cref="DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.IsCompilerPredefined"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
@@ -205,14 +204,15 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Lint.PlatformDivergent.TPlatformDivergentCheck.CheckFiles (DRagLint.Lint.PlatformDivergent.pas)</para>
-    /// <para>Calls: DRagLint.Lint.IfdefUndefined.ScanSource, DRagLint.Lint.IfdefUndefined.TryReadSource, ExpandFileName, ExtractFilePath</para>
+    /// <para>Calls: DRagLint.Lint.IfdefUndefined.ScanFile</para>
+    /// <para>Returns: ScanFile(AFilePath, ASearchDirs, Sets, Tests, AStore)</para>
     /// <para>Mutates: ATests (out), ALocalSymbols (out)</para>
     /// <para>Directives: static</para>
-    /// <seealso cref="DRagLint.Lint.IfdefUndefined.ScanSource"/>
-    /// <seealso cref="DRagLint.Lint.IfdefUndefined.TryReadSource"/>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.ScanFile"/>
     /// <seealso cref="DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.CheckFiles"/>
     /// <seealso cref="DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.DprojDefineUnion"/>
     /// <seealso cref="DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.IsCompilerPredefined"/>
+    /// <seealso cref="DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.ProjectSearchDirs"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function ScanFileTests(const AFilePath: string; const ASearchDirs: TArray<string>;

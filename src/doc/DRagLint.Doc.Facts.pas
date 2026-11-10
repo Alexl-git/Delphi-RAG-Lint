@@ -54,7 +54,7 @@ type
   /// only where the source states it. Nothing in this record is ever
   /// invented.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.ParamNoteFor (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.ParamTypeFor (DRagLint.Doc.Regions.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Regions.McParamNoteFor (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.McParamTypeFor (DRagLint.Doc.Regions.pas)</para>
   /// <para>Used in units: DRagLint.Doc.Facts, DRagLint.Doc.Regions</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -65,7 +65,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build.AddDistinct (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build.ToFactRef (DRagLint.Doc.Facts.pas), DRagLint.Doc.Regions.TDocFactsRenderer.RenderFactsBlock.IsCertain (DRagLint.Doc.Regions.pas) ? (+1 more)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.FoldUseRows (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build.AddDistinct (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build.ToFactRef (DRagLint.Doc.Facts.pas) (+6 more)</para>
   /// <para>Used in units: DRagLint.Doc.Facts, DRagLint.Doc.Regions</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -89,9 +89,15 @@ type
   /// <summary>The 'Used in (via property X):' list of a getter or setter: the
   /// property accesses that RAN this accessor, for ONE property (wave 148 UP,
   /// spec 2026-09-14-use-edges-design.md sec 8.1 bullet 2).</summary>
-  /// <remarks>Entries holds one entry per enclosing routine, Mode 'r' / 'w' / 'rw',
+  /// <remarks>
+  /// Entries holds one entry per enclosing routine, Mode 'r' / 'w' / 'rw',
   /// capped like CalledFrom; EntriesTotal is the distinct count before the cap.
-  /// An accessor shared by several properties gets one record per property.</remarks>
+  /// An accessor shared by several properties gets one record per property.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas)</para>
+  /// <para>Used in units: DRagLint.Doc.Facts</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDocUsedInVia = record
     /// <summary>The accessed property's name, e.g. 'Value'.</summary>
     PropertyName: string             ;
@@ -184,7 +190,7 @@ type
   /// fields carry the true count so the renderer can add '(+N more)'.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas) ?, DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas) ?, DRagLint.Doc.Facts.DemoteForeignSummary (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas) (+14 more)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas) ?, DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas) ?, DRagLint.Doc.Facts.DemoteForeignSummary (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas) (+19 more)</para>
   /// <para>Used in units: DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.Doc.Facts, DRagLint.Doc.Regions, DRagLint.LSP.Server, DRagLint.Query.HoverModel</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -766,13 +772,13 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
-    /// <para>Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNamesOfKind, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName (+48 more)</para>
-    /// <para>Complexity: 92 (cyclomatic, outer body), 1173 lines (full implementation)</para>
+    /// <para>Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAccessorEchoUses, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNamesOfKind, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers (+53 more)</para>
+    /// <para>Complexity: 92 (cyclomatic, outer body), 1212 lines (full implementation)</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAccessorEchoUses"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames"/>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNamesOfKind"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Build(const AStore: ISymbolStore; const ASym: TSymbol;
@@ -1036,10 +1042,19 @@ function DocFactsBuildProfile: string;
   /// <returns>'Called from: A.X (a.pas), B.Y (b.pas) (+N more)', or '' when there are no callers,
   /// the symbol is not callable (CanBeCallTarget), it has resolved 'Used in:' uses (that line
   /// speaks for it, as in the doc block), or ADocText already holds the line.</returns>
-  /// <remarks>Pure. Wave 150 LX2 item 1: every hover surface rendered only FormatPhase2FactLines,
+  /// <remarks>
+  /// Pure. Wave 150 LX2 item 1: every hover surface rendered only FormatPhase2FactLines,
   /// and 'Called from:' is a Phase-1 line only the doc-block writer emitted, so the card named the
   /// callers only after document --apply. Used by textDocument/hover and `hover --format md`; NOT
-  /// by draglint/hoverBundle model facts (the RAD Studio popup renders resolvedCallers).</remarks>
+  /// by draglint/hoverBundle model facts (the RAD Studio popup renders resolvedCallers).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
+  /// <para>Calls: DRagLint.Core.Model.CanBeCallTarget, DRagLint.Doc.SharedFacts.TSharedFacts.CompareInboundEntries, Format, SameText</para>
+  /// <para>Complexity: 13 (cyclomatic, outer body), 32 lines (full implementation)</para>
+  /// <seealso cref="DRagLint.Core.Model.CanBeCallTarget"/>
+  /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.CompareInboundEntries"/>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   function FormatHoverCalledFromLine(const AFacts: TDocFacts; const ADocText: string): string;
 
 implementation

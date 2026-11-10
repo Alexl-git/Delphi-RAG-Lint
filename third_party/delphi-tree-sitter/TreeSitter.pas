@@ -10,7 +10,7 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: TreeSitter.TTSParser.ParseString (TreeSitter.pas), TreeSitter.TTSParser.SetLanguage (TreeSitter.pas)
+  /// <para>Used by: TreeSitter.TTSParser.ParseString (TreeSitter.pas), TreeSitter.TTSParser.SetLanguage (TreeSitter.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   ETreeSitterException = Exception;
@@ -19,48 +19,53 @@ type
   /// <remarks>
   /// <!-- drag-lint:auto -->some aliases, so TreeSitterLib is not needed in uses clause
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.CLI.pas), DRagLint.CLI.TreeSitterGrammarVersion (DRagLint.CLI.pas), declaration (DRagLint.Diagnostics.AstChecks.pas), declaration (DRagLint.Diagnostics.ParseCache.pas), declaration (DRagLint.Lint.Linter.pas) (+12 more)
+  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Diagnostics.AstChecks.pas), declaration (DRagLint.Diagnostics.ParseCache.pas), declaration (DRagLint.Index.CallResolver.pas), DRagLint.CLI.TreeSitterGrammarVersion (DRagLint.CLI.pas) (+13 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   PTSLanguage = TreeSitterLib.PTSLanguage;
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (TreeSitter.pas)
+  /// <para>Used by: declaration (TreeSitter.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TTSLanguage = TSLanguage;
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (TreeSitter.pas), TreeSitter.TTSLanguageHelper.GetFieldId (TreeSitter.pas), TreeSitter.TTSLanguageHelper.GetFieldName (TreeSitter.pas), TreeSitter.TTSTreeCursor.GetCurrentFieldId (TreeSitter.pas)
+  /// <para>Used by: declaration (TreeSitter.pas), TreeSitter.TTSLanguageHelper.GetFieldId (TreeSitter.pas), TreeSitter.TTSLanguageHelper.GetFieldName (TreeSitter.pas), TreeSitter.TTSTreeCursor.GetCurrentFieldId (TreeSitter.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSFieldId    = TreeSitterLib.TSFieldId;
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (TreeSitter.pas), TreeSitter.TTSNodeHelper.GrammarSymbol (TreeSitter.pas), TreeSitter.TTSNodeHelper.Symbol (TreeSitter.pas), TreeSitter.TTSLanguageHelper.GetSymbolForName (TreeSitter.pas), TreeSitter.TTSLanguageHelper.GetSymbolName (TreeSitter.pas) (+2 more)
+  /// <para>Used by: declaration (TreeSitter.pas), TreeSitter.TTSLanguageHelper.GetSymbolForName (TreeSitter.pas), TreeSitter.TTSLanguageHelper.GetSymbolName (TreeSitter.pas), TreeSitter.TTSNodeHelper.GrammarSymbol (TreeSitter.pas), TreeSitter.TTSNodeHelper.Symbol (TreeSitter.pas) (+2 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSSymbol     = TreeSitterLib.TSSymbol;
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (TreeSitter.pas), TreeSitter.TTSLanguageHelper.GetSymbolType (TreeSitter.pas)
+  /// <para>Used by: declaration (TreeSitter.pas), TreeSitter.TTSLanguageHelper.GetSymbolType (TreeSitter.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSSymbolType = TreeSitterLib.TSSymbolType;
 
   PTSGetLanguageFunc = ^TTSGetLanguageFunc;
+  /// <returns><!-- drag-lint:auto type -->PTSLanguage</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.TreeSitterGrammarVersion (DRagLint.CLI.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTSGetLanguageFunc = function(): PTSLanguage; cdecl;
 
   TTSLanguageHelper = record helper for TTSLanguage
     private
       /// <param name="AFieldId"><!-- drag-lint:auto type -->TSFieldId</param>
-      /// <returns><!-- drag-lint:auto -->Observed:
+      /// <returns><!-- drag-lint:auto -->string -- Observed:
       /// string(AnsiString(ts_language_field_name_for_id(@Self, AFieldId))).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: AnsiString, TreeSitterLib.ts_language_field_name_for_id
-      /// Pure
+      /// <para>Calls: AnsiString, TreeSitterLib.ts_language_field_name_for_id</para>
       /// <seealso cref="TreeSitterLib.ts_language_field_name_for_id"/>
       /// <seealso cref="TreeSitter.TTSLanguageHelper.FieldCount"/>
       /// <seealso cref="TreeSitter.TTSLanguageHelper.GetFieldId"/>
@@ -70,12 +75,12 @@ type
       /// </remarks>
       function GetFieldName(AFieldId: TSFieldId): string                               ;
       /// <param name="AFieldName"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: ts_language_field_id_for_name(@Self,
-      /// PAnsiChar(ansiFieldName), Length(ansiFieldName)).</returns>
+      /// <returns><!-- drag-lint:auto -->TSFieldId -- Observed:
+      /// ts_language_field_id_for_name(@Self, PAnsiChar(ansiFieldName),
+      /// Length(ansiFieldName)).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: AnsiString, PAnsiChar, TreeSitterLib.ts_language_field_id_for_name
-      /// Pure
+      /// <para>Calls: AnsiString, PAnsiChar, TreeSitterLib.ts_language_field_id_for_name</para>
       /// <seealso cref="TreeSitterLib.ts_language_field_id_for_name"/>
       /// <seealso cref="TreeSitter.TTSLanguageHelper.FieldCount"/>
       /// <seealso cref="TreeSitter.TTSLanguageHelper.GetFieldName"/>
@@ -85,12 +90,11 @@ type
       /// </remarks>
       function GetFieldId(const AFieldName: string): TSFieldId                         ;
       /// <param name="ASymbol"><!-- drag-lint:auto type -->TSSymbol</param>
-      /// <returns><!-- drag-lint:auto -->Observed:
+      /// <returns><!-- drag-lint:auto -->string -- Observed:
       /// string(AnsiString(ts_language_symbol_name(@Self, ASymbol))).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: AnsiString, TreeSitterLib.ts_language_symbol_name
-      /// Pure
+      /// <para>Calls: AnsiString, TreeSitterLib.ts_language_symbol_name</para>
       /// <seealso cref="TreeSitterLib.ts_language_symbol_name"/>
       /// <seealso cref="TreeSitter.TTSLanguageHelper.FieldCount"/>
       /// <seealso cref="TreeSitter.TTSLanguageHelper.GetFieldId"/>
@@ -101,12 +105,12 @@ type
       function GetSymbolName(ASymbol: TSSymbol): string                                ;
       /// <param name="ASymbolName"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AIsNamed"><!-- drag-lint:auto type -->Boolean</param>
-      /// <returns><!-- drag-lint:auto -->Observed: ts_language_symbol_for_name(@Self,
-      /// PAnsiChar(ansiSymbolName), Length(ansiSymbolName), AIsNamed).</returns>
+      /// <returns><!-- drag-lint:auto -->TSSymbol -- Observed:
+      /// ts_language_symbol_for_name(@Self, PAnsiChar(ansiSymbolName),
+      /// Length(ansiSymbolName), AIsNamed).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: AnsiString, PAnsiChar, TreeSitterLib.ts_language_symbol_for_name
-      /// Pure
+      /// <para>Calls: AnsiString, PAnsiChar, TreeSitterLib.ts_language_symbol_for_name</para>
       /// <seealso cref="TreeSitterLib.ts_language_symbol_for_name"/>
       /// <seealso cref="TreeSitter.TTSLanguageHelper.FieldCount"/>
       /// <seealso cref="TreeSitter.TTSLanguageHelper.GetFieldId"/>
@@ -116,12 +120,11 @@ type
       /// </remarks>
       function GetSymbolForName(const ASymbolName: string; AIsNamed: Boolean): TSSymbol;
       /// <param name="ASymbol"><!-- drag-lint:auto type -->TSSymbol</param>
-      /// <returns><!-- drag-lint:auto -->Observed: ts_language_symbol_type(@Self,
-      /// ASymbol).</returns>
+      /// <returns><!-- drag-lint:auto -->TSSymbolType -- Observed:
+      /// ts_language_symbol_type(@Self, ASymbol).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_language_symbol_type
-      /// Pure
+      /// <para>Calls: TreeSitterLib.ts_language_symbol_type</para>
       /// <seealso cref="TreeSitterLib.ts_language_symbol_type"/>
       /// <seealso cref="TreeSitter.TTSLanguageHelper.FieldCount"/>
       /// <seealso cref="TreeSitter.TTSLanguageHelper.GetFieldId"/>
@@ -131,11 +134,10 @@ type
       /// </remarks>
       function GetSymbolType(ASymbol: TSSymbol): TSSymbolType                          ;
     public
-      /// <returns><!-- drag-lint:auto -->Observed: ts_language_version(@Self).</returns>
+      /// <returns><!-- drag-lint:auto -->UInt32 -- Observed: ts_language_version(@Self).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_language_version
-      /// Pure
+      /// <para>Calls: TreeSitterLib.ts_language_version</para>
       /// <seealso cref="TreeSitterLib.ts_language_version"/>
       /// <seealso cref="TreeSitter.TTSLanguageHelper.FieldCount"/>
       /// <seealso cref="TreeSitter.TTSLanguageHelper.GetFieldId"/>
@@ -144,12 +146,12 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Version    : UInt32;
-      /// <summary><!-- drag-lint:auto -->TTSLanguageHelper</summary>
-      /// <returns><!-- drag-lint:auto -->Observed: ts_language_field_count(@Self).</returns>
+      /// <summary><!-- drag-lint:auto sum -->TTSLanguageHelper</summary>
+      /// <returns><!-- drag-lint:auto -->UInt32 -- Observed:
+      /// ts_language_field_count(@Self).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_language_field_count
-      /// Pure
+      /// <para>Calls: TreeSitterLib.ts_language_field_count</para>
       /// <seealso cref="TreeSitterLib.ts_language_field_count"/>
       /// <seealso cref="TreeSitter.TTSLanguageHelper.GetFieldId"/>
       /// <seealso cref="TreeSitter.TTSLanguageHelper.GetFieldName"/>
@@ -158,11 +160,11 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FieldCount : UInt32;
-      /// <returns><!-- drag-lint:auto -->Observed: ts_language_symbol_count(@Self).</returns>
+      /// <returns><!-- drag-lint:auto -->UInt32 -- Observed:
+      /// ts_language_symbol_count(@Self).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_language_symbol_count
-      /// Pure
+      /// <para>Calls: TreeSitterLib.ts_language_symbol_count</para>
       /// <seealso cref="TreeSitterLib.ts_language_symbol_count"/>
       /// <seealso cref="TreeSitter.TTSLanguageHelper.FieldCount"/>
       /// <seealso cref="TreeSitter.TTSLanguageHelper.GetFieldId"/>
@@ -174,12 +176,11 @@ type
 
       /// <param name="AState"><!-- drag-lint:auto type -->TSStateId</param>
       /// <param name="ASymbol"><!-- drag-lint:auto type -->TSSymbol</param>
-      /// <returns><!-- drag-lint:auto -->Observed: ts_language_next_state(@Self, AState,
-      /// ASymbol).</returns>
+      /// <returns><!-- drag-lint:auto -->TSStateId -- Observed:
+      /// ts_language_next_state(@Self, AState, ASymbol).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_language_next_state
-      /// Pure
+      /// <para>Calls: TreeSitterLib.ts_language_next_state</para>
       /// <seealso cref="TreeSitterLib.ts_language_next_state"/>
       /// <seealso cref="TreeSitter.TTSLanguageHelper.FieldCount"/>
       /// <seealso cref="TreeSitter.TTSLanguageHelper.GetFieldId"/>
@@ -198,27 +199,27 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition (DRagLint.LSP.Server.pas), DRagLint.Parser.DFM.ExtractDfmEventBindings (DRagLint.Parser.DFM.pas), DRagLint.Parser.DFM.TDFMParser.Parse (DRagLint.Parser.DFM.pas) (+5 more)
-  /// Used in units: DRagLint.Convert.DfmReemit, DRagLint.Diagnostics.ParseCache, DRagLint.Lint.Linter, DRagLint.LSP.Server, DRagLint.Parser.Delphi13, DRagLint.Parser.DFM, TreeSitter
+  /// <para>Used by: declaration (DRagLint.Diagnostics.ParseCache.pas) ?, DRagLint.Index.CallResolver.TCallResolver.WithStatementsOf (DRagLint.Index.CallResolver.pas) ?, TreeSitter.TTSParser.Parse (TreeSitter.pas), TreeSitter.TTSParser.ParseString (TreeSitter.pas), TreeSitter.TTSTree.Clone (TreeSitter.pas) (+14 more)</para>
+  /// <para>Used in units: DRagLint.Convert.DfmReemit, DRagLint.Diagnostics.ParseCache, DRagLint.Index.CallResolver, DRagLint.Lint.Linter, DRagLint.LSP.Feature.FoldingRange, DRagLint.LSP.Feature.InlayHint, DRagLint.LSP.Feature.SemanticTokens, DRagLint.LSP.Server, DRagLint.LSP.SyntaxTree, DRagLint.Parser.Delphi13, DRagLint.Parser.DFM, TreeSitter</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TTSTree    = class;
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Used by: declaration (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.StatementKeyword (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.IsValuedExit (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.ForLoopAlwaysExecutes (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfgBlock.AddItem (DRagLint.Analysis.Cfg.pas) (+151 more)
+    /// <para>Used by: DRagLint.Analysis.Cfg.FindClassDecl (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.ForLoopAlwaysExecutes (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TBuilderState.EmitStmt (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Flow.Lattices.FirstIdentChild (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.FirstOperandChild (DRagLint.Analysis.Flow.Lattices.pas) (+1154 more)</para>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     TTSNode  = TSNode;
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Used by: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept.Visit (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.VisitProcs (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection.VisitProcs (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas) (+12 more)
+    /// <para>Used by: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit.CheckList (DRagLint.Diagnostics.AstChecks.pas) ?, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRaiseInFinally.SearchForRaise (DRagLint.Diagnostics.AstChecks.pas) ?, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept.Visit (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors.Visit (DRagLint.Diagnostics.AstChecks.pas) ?, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnusedLocals.CheckProc (DRagLint.Diagnostics.AstChecks.pas) ? (+72 more)</para>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     TTSPoint = TSPoint;
 
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Used by: DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition (DRagLint.LSP.Server.pas), DRagLint.Parser.DFM.ExtractDfmEventBindings (DRagLint.Parser.DFM.pas), DRagLint.Parser.DFM.TDFMParser.Parse (DRagLint.Parser.DFM.pas) (+4 more)
+    /// <para>Used by: DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.CallResolver.TCallResolver.WithStatementsOf (DRagLint.Index.CallResolver.pas), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), DRagLint.LSP.SyntaxTree.ParseDelphiUtf8 (DRagLint.LSP.SyntaxTree.pas) (+5 more)</para>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     TTSInputEncoding = TreeSitterLib.TSInputEncoding;
@@ -229,26 +230,26 @@ type
     /// <returns><!-- drag-lint:auto type -->TBytes</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Used by: declaration (TreeSitter.pas), TreeSitter.TTSParser.Parse (TreeSitter.pas)
+    /// <para>Used by: declaration (TreeSitter.pas), TreeSitter.TTSParser.Parse (TreeSitter.pas)</para>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     TTSParseReadFunction = reference to function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes;
 
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Used by: DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition (DRagLint.LSP.Server.pas), DRagLint.Parser.DFM.ExtractDfmEventBindings (DRagLint.Parser.DFM.pas), DRagLint.Parser.DFM.TDFMParser.Parse (DRagLint.Parser.DFM.pas) (+2 more)
-    /// Used in units: DRagLint.Convert.DfmReemit, DRagLint.Diagnostics.ParseCache, DRagLint.Lint.Linter, DRagLint.LSP.Server, DRagLint.Parser.Delphi13, DRagLint.Parser.DFM
+    /// <para>Used by: DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.CallResolver.TCallResolver.WithStatementsOf (DRagLint.Index.CallResolver.pas), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), DRagLint.LSP.SyntaxTree.ParseDelphiUtf8 (DRagLint.LSP.SyntaxTree.pas) (+5 more)</para>
+    /// <para>Used in units: DRagLint.Convert.DfmReemit, DRagLint.Diagnostics.ParseCache, DRagLint.Index.CallResolver, DRagLint.Lint.Linter, DRagLint.LSP.SyntaxTree, DRagLint.Parser.Delphi13, DRagLint.Parser.DFM</para>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     TTSParser = class
       strict private
         FParser: PTSParser               ;
-        /// <returns><!-- drag-lint:auto -->Observed: ts_parser_language(FParser).</returns>
+        /// <returns><!-- drag-lint:auto -->PTSLanguage -- Observed:
+        /// ts_parser_language(FParser).</returns>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: TreeSitterLib.ts_parser_language
-        /// Reads: FParser
-        /// Pure
+        /// <para>Calls: TreeSitterLib.ts_parser_language</para>
+        /// <para>Reads: FParser</para>
         /// <seealso cref="TreeSitterLib.ts_parser_language"/>
         /// <seealso cref="TreeSitter.TTSParser.Create"/>
         /// <seealso cref="TreeSitter.TTSParser.Destroy"/>
@@ -258,12 +259,13 @@ type
         /// </remarks>
         function GetLanguage: PTSLanguage;
         /// <param name="Value"><!-- drag-lint:auto type -->const PTSLanguage</param>
-        /// <exception cref="ETreeSitterException"><!-- drag-lint:auto --></exception>
+        /// <exception cref="ETreeSitterException"><!-- drag-lint:auto exc -->Failed to set parser language to 0x%p</exception>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: TreeSitterLib.ts_parser_set_language
-        /// Reads: FParser
-        /// Pure
+        /// <para>Called from: DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.CallResolver.TCallResolver.WithStatementsOf (DRagLint.Index.CallResolver.pas), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), DRagLint.LSP.SyntaxTree.ParseDelphiUtf8 (DRagLint.LSP.SyntaxTree.pas) (+4 more)</para>
+        /// <para>Used in (via property Language): DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas) [w], DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (DRagLint.Diagnostics.ParseCache.pas) [w], DRagLint.Index.CallResolver.TCallResolver.WithStatementsOf (DRagLint.Index.CallResolver.pas) [w], DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas) [w], DRagLint.LSP.SyntaxTree.ParseDelphiUtf8 (DRagLint.LSP.SyntaxTree.pas) [w] (+4 more)</para>
+        /// <para>Calls: TreeSitterLib.ts_parser_set_language</para>
+        /// <para>Reads: FParser</para>
         /// <seealso cref="TreeSitterLib.ts_parser_set_language"/>
         /// <seealso cref="TreeSitter.TTSParser.Create"/>
         /// <seealso cref="TreeSitter.TTSParser.Destroy"/>
@@ -273,26 +275,28 @@ type
         /// </remarks>
         procedure SetLanguage(const Value: PTSLanguage);
       public
-        /// <summary><!-- drag-lint:auto -->TTSParser</summary>
+        /// <summary><!-- drag-lint:auto sum -->TTSParser</summary>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Called from: DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (DRagLint.Diagnostics.ParseCache.pas), DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition (DRagLint.LSP.Server.pas), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), DRagLint.Parser.DFM.ExtractDfmEventBindings (DRagLint.Parser.DFM.pas) (+2 more)
-        /// virtual
-        /// constructor
-        /// Writes: FParser
+        /// <para>Called from: [drag-lint]DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), [drag-lint]DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (DRagLint.Diagnostics.ParseCache.pas), [drag-lint]DRagLint.Index.CallResolver.TCallResolver.WithStatementsOf (DRagLint.Index.CallResolver.pas), [drag-lint]DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), [drag-lint]DRagLint.Lint.Linter.TLinter.HarvestFile (DRagLint.Lint.Linter.pas), [drag-lint]DRagLint.LSP.SyntaxTree.ParseDelphiUtf8 (DRagLint.LSP.SyntaxTree.pas), [drag-lint]DRagLint.Parser.Delphi13.TDelphi13Parser.Parse (DRagLint.Parser.Delphi13.pas), [drag-lint]DRagLint.Parser.DFM.ExtractDfmEventBindings (DRagLint.Parser.DFM.pas), [drag-lint]DRagLint.Parser.DFM.TDFMParser.Parse (DRagLint.Parser.DFM.pas)</para>
+        /// <para>Calls: TreeSitterLib.ts_parser_new</para>
+        /// <para>virtual</para>
+        /// <para>constructor</para>
+        /// <para>Writes: FParser</para>
+        /// <para>Directives: virtual</para>
+        /// <seealso cref="TreeSitterLib.ts_parser_new"/>
         /// <seealso cref="TreeSitter.TTSParser.Destroy"/>
         /// <seealso cref="TreeSitter.TTSParser.GetLanguage"/>
         /// <seealso cref="TreeSitter.TTSParser.Parse"/>
         /// <seealso cref="TreeSitter.TTSParser.ParseString"/>
-        /// <seealso cref="TreeSitter.TTSParser.Reset"/>
         /// <!-- drag-lint:auto END -->
         /// </remarks>
         constructor Create; virtual;
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: TreeSitterLib.ts_parser_delete
-        /// Reads: FParser
-        /// Pure
+        /// <para>Calls: TreeSitterLib.ts_parser_delete</para>
+        /// <para>Reads: FParser</para>
+        /// <para>Directives: override</para>
         /// <seealso cref="TreeSitterLib.ts_parser_delete"/>
         /// <seealso cref="TreeSitter.TTSParser.Create"/>
         /// <seealso cref="TreeSitter.TTSParser.GetLanguage"/>
@@ -304,9 +308,8 @@ type
 
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: TreeSitterLib.ts_parser_reset
-        /// Reads: FParser
-        /// Pure
+        /// <para>Calls: TreeSitterLib.ts_parser_reset</para>
+        /// <para>Reads: FParser</para>
         /// <seealso cref="TreeSitterLib.ts_parser_reset"/>
         /// <seealso cref="TreeSitter.TTSParser.Create"/>
         /// <seealso cref="TreeSitter.TTSParser.Destroy"/>
@@ -318,39 +321,37 @@ type
 
         /// <param name="AString"><!-- drag-lint:auto type -->const string</param>
         /// <param name="AOldTree"><!-- drag-lint:auto type -->const TTSTree = nil</param>
-        /// <returns><!-- drag-lint:auto -->Observed: TTSTree.Create(Tree).</returns>
-        /// <exception cref="ETreeSitterException"><!-- drag-lint:auto --></exception>
+        /// <returns><!-- drag-lint:auto -->TTSTree -- Observed: TTSTree.Create(Tree).</returns>
+        /// <exception cref="ETreeSitterException"><!-- drag-lint:auto exc -->Cannot parse empty string; Faild to parse string</exception>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: TreeSitterLib.ts_parser_parse_string_encoding
-        /// Reads: FParser
-        /// Owns returned: new (caller owns)
-        /// Pure
+        /// <para>Calls: TreeSitter.TTSTree.Create, TreeSitter.TTSTree.TreeNilSafe, TreeSitterLib.ts_parser_parse_string_encoding</para>
+        /// <para>Reads: FParser</para>
+        /// <para>Owns returned: new (caller owns)</para>
+        /// <seealso cref="TreeSitter.TTSTree.Create"/>
+        /// <seealso cref="TreeSitter.TTSTree.TreeNilSafe"/>
         /// <seealso cref="TreeSitterLib.ts_parser_parse_string_encoding"/>
         /// <seealso cref="TreeSitter.TTSParser.Create"/>
         /// <seealso cref="TreeSitter.TTSParser.Destroy"/>
-        /// <seealso cref="TreeSitter.TTSParser.GetLanguage"/>
-        /// <seealso cref="TreeSitter.TTSParser.Parse"/>
         /// <!-- drag-lint:auto END -->
         /// </remarks>
         function ParseString(const AString: string; const AOldTree: TTSTree = nil): TTSTree                                          ;
         /// <param name="AParseReadFunction"><!-- drag-lint:auto type -->TTSParseReadFunction</param>
         /// <param name="AEncoding"><!-- drag-lint:auto type -->TTSInputEncoding</param>
         /// <param name="AOldTree"><!-- drag-lint:auto type -->const TTSTree = nil</param>
-        /// <returns><!-- drag-lint:auto -->Observed:
+        /// <returns><!-- drag-lint:auto -->TTSTree -- Observed:
         /// TTSTree.Create(ts_parser_parse(FParser, AOldTree.TreeNilSafe, tsi)).</returns>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Called from: DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (DRagLint.Diagnostics.ParseCache.pas), DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition (DRagLint.LSP.Server.pas), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), DRagLint.Parser.DFM.ExtractDfmEventBindings (DRagLint.Parser.DFM.pas) (+2 more)
-        /// Calls: TreeSitterLib.ts_parser_parse
-        /// Reads: FParser
-        /// Owns returned: new (caller owns)
-        /// Pure
+        /// <para>Called from: DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.CallResolver.TCallResolver.WithStatementsOf (DRagLint.Index.CallResolver.pas), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), DRagLint.LSP.SyntaxTree.ParseDelphiUtf8 (DRagLint.LSP.SyntaxTree.pas) (+3 more)</para>
+        /// <para>Calls: TreeSitter.TTSTree.Create, TreeSitter.TTSTree.TreeNilSafe, TreeSitterLib.ts_parser_parse</para>
+        /// <para>Reads: FParser</para>
+        /// <para>Owns returned: new (caller owns)</para>
+        /// <seealso cref="TreeSitter.TTSTree.Create"/>
+        /// <seealso cref="TreeSitter.TTSTree.TreeNilSafe"/>
         /// <seealso cref="TreeSitterLib.ts_parser_parse"/>
         /// <seealso cref="TreeSitter.TTSParser.Create"/>
         /// <seealso cref="TreeSitter.TTSParser.Destroy"/>
-        /// <seealso cref="TreeSitter.TTSParser.GetLanguage"/>
-        /// <seealso cref="TreeSitter.TTSParser.ParseString"/>
         /// <!-- drag-lint:auto END -->
         /// </remarks>
         function Parse(AParseReadFunction: TTSParseReadFunction; AEncoding: TTSInputEncoding; const AOldTree: TTSTree = nil): TTSTree;
@@ -361,8 +362,8 @@ type
 
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Used by: declaration (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition (DRagLint.LSP.Server.pas), DRagLint.Parser.DFM.ExtractDfmEventBindings (DRagLint.Parser.DFM.pas), DRagLint.Parser.DFM.TDFMParser.Parse (DRagLint.Parser.DFM.pas) (+5 more)
-    /// Used in units: DRagLint.Convert.DfmReemit, DRagLint.Diagnostics.ParseCache, DRagLint.Lint.Linter, DRagLint.LSP.Server, DRagLint.Parser.Delphi13, DRagLint.Parser.DFM, TreeSitter
+    /// <para>Used by: declaration (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.CallResolver.TCallResolver.WithStatementsOf (DRagLint.Index.CallResolver.pas), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.HarvestFile (DRagLint.Lint.Linter.pas), DRagLint.LSP.Feature.FoldingRange.TLspFoldingRangeFeature.Handle (DRagLint.LSP.Feature.FoldingRange.pas) (+13 more)</para>
+    /// <para>Used in units: DRagLint.Convert.DfmReemit, DRagLint.Diagnostics.ParseCache, DRagLint.Index.CallResolver, DRagLint.Lint.Linter, DRagLint.LSP.Feature.FoldingRange, DRagLint.LSP.Feature.InlayHint, DRagLint.LSP.Feature.SemanticTokens, DRagLint.LSP.Server, DRagLint.LSP.SyntaxTree, DRagLint.Parser.Delphi13, DRagLint.Parser.DFM, TreeSitter</para>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     TTSTree = class
@@ -372,9 +373,11 @@ type
         /// <param name="ATree"><!-- drag-lint:auto type -->PTSTree</param>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// virtual
-        /// constructor
-        /// Writes: FTree
+        /// <para>Called from: TreeSitter.TTSParser.Parse (TreeSitter.pas), TreeSitter.TTSParser.ParseString (TreeSitter.pas), TreeSitter.TTSTree.Clone (TreeSitter.pas)</para>
+        /// <para>virtual</para>
+        /// <para>constructor</para>
+        /// <para>Writes: FTree</para>
+        /// <para>Directives: virtual</para>
         /// <seealso cref="TreeSitter.TTSTree.Clone"/>
         /// <seealso cref="TreeSitter.TTSTree.Destroy"/>
         /// <seealso cref="TreeSitter.TTSTree.Language"/>
@@ -385,9 +388,9 @@ type
         constructor Create(ATree: PTSTree); virtual;
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: TreeSitterLib.ts_tree_delete
-        /// Reads: FTree
-        /// Pure
+        /// <para>Calls: TreeSitterLib.ts_tree_delete</para>
+        /// <para>Reads: FTree</para>
+        /// <para>Directives: override</para>
         /// <seealso cref="TreeSitterLib.ts_tree_delete"/>
         /// <seealso cref="TreeSitter.TTSTree.Clone"/>
         /// <seealso cref="TreeSitter.TTSTree.Create"/>
@@ -397,12 +400,12 @@ type
         /// </remarks>
         destructor Destroy; override;
 
-        /// <returns><!-- drag-lint:auto -->Observed: ts_tree_language(FTree).</returns>
+        /// <returns><!-- drag-lint:auto -->PTSLanguage -- Observed:
+        /// ts_tree_language(FTree).</returns>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: TreeSitterLib.ts_tree_language
-        /// Reads: FTree
-        /// Pure
+        /// <para>Calls: TreeSitterLib.ts_tree_language</para>
+        /// <para>Reads: FTree</para>
         /// <seealso cref="TreeSitterLib.ts_tree_language"/>
         /// <seealso cref="TreeSitter.TTSTree.Clone"/>
         /// <seealso cref="TreeSitter.TTSTree.Create"/>
@@ -411,12 +414,12 @@ type
         /// <!-- drag-lint:auto END -->
         /// </remarks>
         function Language   : PTSLanguage;
-        /// <returns><!-- drag-lint:auto -->Observed: ts_tree_root_node(FTree).</returns>
+        /// <returns><!-- drag-lint:auto -->TTSNode -- Observed: ts_tree_root_node(FTree).</returns>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: TreeSitterLib.ts_tree_root_node
-        /// Reads: FTree
-        /// Pure
+        /// <para>Called from: DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity/2 (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckControlFlowInFinally (DRagLint.Diagnostics.AstChecks.pas) (+87 more)</para>
+        /// <para>Calls: TreeSitterLib.ts_tree_root_node</para>
+        /// <para>Reads: FTree</para>
         /// <seealso cref="TreeSitterLib.ts_tree_root_node"/>
         /// <seealso cref="TreeSitter.TTSTree.Clone"/>
         /// <seealso cref="TreeSitter.TTSTree.Create"/>
@@ -425,11 +428,12 @@ type
         /// <!-- drag-lint:auto END -->
         /// </remarks>
         function RootNode   : TTSNode;
-        /// <returns><!-- drag-lint:auto -->Observed: FTree.</returns>
+        /// <returns><!-- drag-lint:auto -->PTSTree -- Observed: FTree.</returns>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Reads: FTree
-        /// Pure
+        /// <para>Called from: TreeSitter.TTSParser.Parse (TreeSitter.pas), TreeSitter.TTSParser.ParseString (TreeSitter.pas)</para>
+        /// <para>Reads: FTree</para>
+        /// <para>Effect-free (proven)</para>
         /// <seealso cref="TreeSitter.TTSTree.Clone"/>
         /// <seealso cref="TreeSitter.TTSTree.Create"/>
         /// <seealso cref="TreeSitter.TTSTree.Destroy"/>
@@ -438,16 +442,16 @@ type
         /// <!-- drag-lint:auto END -->
         /// </remarks>
         function TreeNilSafe: PTSTree;
-        /// <summary><!-- drag-lint:auto -->TTSTree</summary>
-        /// <returns><!-- drag-lint:auto -->Observed: TTSTree.Create(ts_tree_copy(FTree)).</returns>
+        /// <summary><!-- drag-lint:auto sum -->TTSTree</summary>
+        /// <returns><!-- drag-lint:auto -->TTSTree -- Observed:
+        /// TTSTree.Create(ts_tree_copy(FTree)).</returns>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: TreeSitterLib.ts_tree_copy
-        /// Reads: FTree
-        /// Owns returned: new (caller owns)
-        /// Pure
-        /// <seealso cref="TreeSitterLib.ts_tree_copy"/>
+        /// <para>Calls: TreeSitter.TTSTree.Create, TreeSitterLib.ts_tree_copy</para>
+        /// <para>Reads: FTree</para>
+        /// <para>Owns returned: new (caller owns)</para>
         /// <seealso cref="TreeSitter.TTSTree.Create"/>
+        /// <seealso cref="TreeSitterLib.ts_tree_copy"/>
         /// <seealso cref="TreeSitter.TTSTree.Destroy"/>
         /// <seealso cref="TreeSitter.TTSTree.Language"/>
         /// <seealso cref="TreeSitter.TTSTree.RootNode"/>
@@ -460,18 +464,20 @@ type
 
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// Used by: declaration (TreeSitter.pas)
-    /// Used in units: TreeSitter
+    /// <para>Used by: DRagLint.Lint.QueryRules.NamedChildrenOf (DRagLint.Lint.QueryRules.pas), DRagLint.LSP.Feature.FoldingRange.WalkFolds (DRagLint.LSP.Feature.FoldingRange.pas), DRagLint.LSP.Feature.InlayHint.THintWalker.Walk (DRagLint.LSP.Feature.InlayHint.pas), DRagLint.LSP.Feature.SemanticTokens.WalkSyntax (DRagLint.LSP.Feature.SemanticTokens.pas), DRagLint.Query.SyntaxCount.CountTreeFeatures (DRagLint.Query.SyntaxCount.pas) (+1 more)</para>
+    /// <para>Used in units: DRagLint.Lint.QueryRules, DRagLint.LSP.Feature.FoldingRange, DRagLint.LSP.Feature.InlayHint, DRagLint.LSP.Feature.SemanticTokens, DRagLint.Query.SyntaxCount, TreeSitter</para>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     TTSTreeCursor = class
       strict private
         FTreeCursor: TSTreeCursor                 ;
-        /// <returns><!-- drag-lint:auto -->Observed: @FTreeCursor.</returns>
+        /// <returns><!-- drag-lint:auto -->PTSTreeCursor -- Observed: @FTreeCursor.</returns>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Reads: FTreeCursor
-        /// Pure
+        /// <para>Called from: TreeSitter.TTSTreeCursor.Create/1 (TreeSitter.pas), TreeSitter.TTSTreeCursor.Reset/1 (TreeSitter.pas)</para>
+        /// <para>Used in (via property TreeCursor): TreeSitter.TTSTreeCursor.Create/1 (TreeSitter.pas) [r], TreeSitter.TTSTreeCursor.Reset/1 (TreeSitter.pas) [r]</para>
+        /// <para>Reads: FTreeCursor</para>
+        /// <para>Effect-free (proven)</para>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Create"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Destroy"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.GetCurrentDepth"/>
@@ -480,13 +486,14 @@ type
         /// <!-- drag-lint:auto END -->
         /// </remarks>
         function GetTreeCursor : PTSTreeCursor;
-        /// <returns><!-- drag-lint:auto -->Observed:
+        /// <returns><!-- drag-lint:auto -->TTSNode -- Observed:
         /// ts_tree_cursor_current_node(@FTreeCursor).</returns>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: TreeSitterLib.ts_tree_cursor_current_node
-        /// Reads: FTreeCursor
-        /// Pure
+        /// <para>Called from: DRagLint.Lint.QueryRules.NamedChildrenOf (DRagLint.Lint.QueryRules.pas), DRagLint.LSP.Feature.FoldingRange.WalkFolds (DRagLint.LSP.Feature.FoldingRange.pas), DRagLint.LSP.Feature.InlayHint.THintWalker.Walk (DRagLint.LSP.Feature.InlayHint.pas), DRagLint.LSP.Feature.SemanticTokens.WalkSyntax (DRagLint.LSP.Feature.SemanticTokens.pas), DRagLint.Query.SyntaxCount.CountTreeFeatures (DRagLint.Query.SyntaxCount.pas)</para>
+        /// <para>Used in (via property CurrentNode): DRagLint.Lint.QueryRules.NamedChildrenOf (DRagLint.Lint.QueryRules.pas) [r], DRagLint.LSP.Feature.FoldingRange.WalkFolds (DRagLint.LSP.Feature.FoldingRange.pas) [r], DRagLint.LSP.Feature.InlayHint.THintWalker.Walk (DRagLint.LSP.Feature.InlayHint.pas) [r], DRagLint.LSP.Feature.SemanticTokens.WalkSyntax (DRagLint.LSP.Feature.SemanticTokens.pas) [r], DRagLint.Query.SyntaxCount.CountTreeFeatures (DRagLint.Query.SyntaxCount.pas) [r]</para>
+        /// <para>Calls: TreeSitterLib.ts_tree_cursor_current_node</para>
+        /// <para>Reads: FTreeCursor</para>
         /// <seealso cref="TreeSitterLib.ts_tree_cursor_current_node"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Create"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Destroy"/>
@@ -495,13 +502,12 @@ type
         /// <!-- drag-lint:auto END -->
         /// </remarks>
         function GetCurrentNode: TTSNode;
-        /// <returns><!-- drag-lint:auto -->Observed:
+        /// <returns><!-- drag-lint:auto -->string -- Observed:
         /// string(AnsiString(ts_tree_cursor_current_field_name(@FTreeCursor))).</returns>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: AnsiString, TreeSitterLib.ts_tree_cursor_current_field_name
-        /// Reads: FTreeCursor
-        /// Pure
+        /// <para>Calls: AnsiString, TreeSitterLib.ts_tree_cursor_current_field_name</para>
+        /// <para>Reads: FTreeCursor</para>
         /// <seealso cref="TreeSitterLib.ts_tree_cursor_current_field_name"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Create"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Destroy"/>
@@ -510,13 +516,12 @@ type
         /// <!-- drag-lint:auto END -->
         /// </remarks>
         function GetCurrentFieldName: string      ;
-        /// <returns><!-- drag-lint:auto -->Observed:
+        /// <returns><!-- drag-lint:auto -->TSFieldId -- Observed:
         /// ts_tree_cursor_current_field_id(@FTreeCursor).</returns>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: TreeSitterLib.ts_tree_cursor_current_field_id
-        /// Reads: FTreeCursor
-        /// Pure
+        /// <para>Calls: TreeSitterLib.ts_tree_cursor_current_field_id</para>
+        /// <para>Reads: FTreeCursor</para>
         /// <seealso cref="TreeSitterLib.ts_tree_cursor_current_field_id"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Create"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Destroy"/>
@@ -525,13 +530,14 @@ type
         /// <!-- drag-lint:auto END -->
         /// </remarks>
         function GetCurrentFieldId        : TSFieldId;
-        /// <returns><!-- drag-lint:auto -->Observed:
+        /// <returns><!-- drag-lint:auto -->UInt32 -- Observed:
         /// ts_tree_cursor_current_depth(@FTreeCursor).</returns>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: TreeSitterLib.ts_tree_cursor_current_depth
-        /// Reads: FTreeCursor
-        /// Pure
+        /// <para>Called from: DRagLint.Query.SyntaxCount.CountTreeFeatures (DRagLint.Query.SyntaxCount.pas)</para>
+        /// <para>Used in (via property CurrentDepth): DRagLint.Query.SyntaxCount.CountTreeFeatures (DRagLint.Query.SyntaxCount.pas) [r]</para>
+        /// <para>Calls: TreeSitterLib.ts_tree_cursor_current_depth</para>
+        /// <para>Reads: FTreeCursor</para>
         /// <seealso cref="TreeSitterLib.ts_tree_cursor_current_depth"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Create"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Destroy"/>
@@ -540,13 +546,12 @@ type
         /// <!-- drag-lint:auto END -->
         /// </remarks>
         function GetCurrentDepth          : UInt32;
-        /// <returns><!-- drag-lint:auto -->Observed:
+        /// <returns><!-- drag-lint:auto -->UInt32 -- Observed:
         /// ts_tree_cursor_current_descendant_index(@FTreeCursor).</returns>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: TreeSitterLib.ts_tree_cursor_current_descendant_index
-        /// Reads: FTreeCursor
-        /// Pure
+        /// <para>Calls: TreeSitterLib.ts_tree_cursor_current_descendant_index</para>
+        /// <para>Reads: FTreeCursor</para>
         /// <seealso cref="TreeSitterLib.ts_tree_cursor_current_descendant_index"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Create"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Destroy"/>
@@ -556,31 +561,17 @@ type
         /// </remarks>
         function GetCurrentDescendantIndex: UInt32;
       public
+        /// <summary><!-- drag-lint:auto sum -->TTSTreeCursor</summary>
         /// <param name="ANode"><!-- drag-lint:auto type -->TTSNode</param>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: TreeSitterLib.ts_tree_cursor_copy
-        /// Overload 1 of 2
-        /// virtual
-        /// constructor
-        /// Writes: FTreeCursor
-        /// <seealso cref="TreeSitterLib.ts_tree_cursor_copy"/>
-        /// <seealso cref="TreeSitter.TTSTreeCursor.Create"/>
-        /// <seealso cref="TreeSitter.TTSTreeCursor.Destroy"/>
-        /// <seealso cref="TreeSitter.TTSTreeCursor.GetCurrentDepth"/>
-        /// <seealso cref="TreeSitter.TTSTreeCursor.GetCurrentDescendantIndex"/>
-        /// <!-- drag-lint:auto END -->
-        /// </remarks>
-        constructor Create(ANode        : TTSNode      ); overload; virtual;
-        /// <summary><!-- drag-lint:auto -->TTSTreeCursor</summary>
-        /// <param name="ACursorToCopy"><!-- drag-lint:auto type -->TTSTreeCursor</param>
-        /// <remarks>
-        /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: TreeSitterLib.ts_tree_cursor_new
-        /// Overload 2 of 2
-        /// virtual
-        /// constructor
-        /// Writes: FTreeCursor
+        /// <para>Called from: DRagLint.Lint.QueryRules.NamedChildrenOf (DRagLint.Lint.QueryRules.pas), DRagLint.LSP.Feature.FoldingRange.WalkFolds (DRagLint.LSP.Feature.FoldingRange.pas), DRagLint.LSP.Feature.InlayHint.THintWalker.Walk (DRagLint.LSP.Feature.InlayHint.pas), DRagLint.LSP.Feature.SemanticTokens.WalkSyntax (DRagLint.LSP.Feature.SemanticTokens.pas), DRagLint.Query.SyntaxCount.CountTreeFeatures (DRagLint.Query.SyntaxCount.pas)</para>
+        /// <para>Calls: TreeSitterLib.ts_tree_cursor_new</para>
+        /// <para>Overload 1 of 2</para>
+        /// <para>virtual</para>
+        /// <para>constructor</para>
+        /// <para>Writes: FTreeCursor</para>
+        /// <para>Directives: overload; virtual</para>
         /// <seealso cref="TreeSitterLib.ts_tree_cursor_new"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Create"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Destroy"/>
@@ -588,12 +579,30 @@ type
         /// <seealso cref="TreeSitter.TTSTreeCursor.GetCurrentDescendantIndex"/>
         /// <!-- drag-lint:auto END -->
         /// </remarks>
+        constructor Create(ANode        : TTSNode      ); overload; virtual;
+        /// <summary>TTSTreeCursor</summary>
+        /// <param name="ACursorToCopy"><!-- drag-lint:auto type -->TTSTreeCursor</param>
+        /// <remarks>
+        /// <!-- drag-lint:auto BEGIN -->
+        /// <para>Calls: TreeSitter.TTSTreeCursor.GetTreeCursor, TreeSitterLib.ts_tree_cursor_copy</para>
+        /// <para>Overload 2 of 2</para>
+        /// <para>virtual</para>
+        /// <para>constructor</para>
+        /// <para>Writes: FTreeCursor</para>
+        /// <para>Directives: overload; virtual</para>
+        /// <seealso cref="TreeSitter.TTSTreeCursor.GetTreeCursor"/>
+        /// <seealso cref="TreeSitterLib.ts_tree_cursor_copy"/>
+        /// <seealso cref="TreeSitter.TTSTreeCursor.Create"/>
+        /// <seealso cref="TreeSitter.TTSTreeCursor.Destroy"/>
+        /// <seealso cref="TreeSitter.TTSTreeCursor.GetCurrentDepth"/>
+        /// <!-- drag-lint:auto END -->
+        /// </remarks>
         constructor Create(ACursorToCopy: TTSTreeCursor); overload; virtual;
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: FillChar, TreeSitterLib.ts_tree_cursor_delete
-        /// Reads: FTreeCursor
-        /// Pure
+        /// <para>Calls: FillChar, TreeSitterLib.ts_tree_cursor_delete</para>
+        /// <para>Reads: FTreeCursor</para>
+        /// <para>Directives: override</para>
         /// <seealso cref="TreeSitterLib.ts_tree_cursor_delete"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Create"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.GetCurrentDepth"/>
@@ -606,10 +615,10 @@ type
         /// <param name="ANode"><!-- drag-lint:auto type -->TTSNode</param>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: TreeSitterLib.ts_tree_cursor_reset
-        /// Overload 1 of 2
-        /// Reads: FTreeCursor
-        /// Pure
+        /// <para>Calls: TreeSitterLib.ts_tree_cursor_reset</para>
+        /// <para>Overload 1 of 2</para>
+        /// <para>Reads: FTreeCursor</para>
+        /// <para>Directives: overload</para>
         /// <seealso cref="TreeSitterLib.ts_tree_cursor_reset"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Create"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Destroy"/>
@@ -621,26 +630,26 @@ type
         /// <param name="ACursor"><!-- drag-lint:auto type -->TTSTreeCursor</param>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: TreeSitterLib.ts_tree_cursor_reset_to
-        /// Overload 2 of 2
-        /// Reads: FTreeCursor
-        /// Pure
+        /// <para>Calls: TreeSitter.TTSTreeCursor.GetTreeCursor, TreeSitterLib.ts_tree_cursor_reset_to</para>
+        /// <para>Overload 2 of 2</para>
+        /// <para>Reads: FTreeCursor</para>
+        /// <para>Directives: overload</para>
+        /// <seealso cref="TreeSitter.TTSTreeCursor.GetTreeCursor"/>
         /// <seealso cref="TreeSitterLib.ts_tree_cursor_reset_to"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Create"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Destroy"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.GetCurrentDepth"/>
-        /// <seealso cref="TreeSitter.TTSTreeCursor.GetCurrentDescendantIndex"/>
         /// <!-- drag-lint:auto END -->
         /// </remarks>
         procedure Reset(ACursor: TTSTreeCursor); overload;
 
-        /// <returns><!-- drag-lint:auto -->Observed:
+        /// <returns><!-- drag-lint:auto -->Boolean -- Observed:
         /// ts_tree_cursor_goto_parent(@FTreeCursor).</returns>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: TreeSitterLib.ts_tree_cursor_goto_parent
-        /// Reads: FTreeCursor
-        /// Pure
+        /// <para>Called from: DRagLint.LSP.Feature.FoldingRange.WalkFolds (DRagLint.LSP.Feature.FoldingRange.pas), DRagLint.LSP.Feature.InlayHint.THintWalker.Walk (DRagLint.LSP.Feature.InlayHint.pas), DRagLint.LSP.Feature.SemanticTokens.WalkSyntax (DRagLint.LSP.Feature.SemanticTokens.pas), DRagLint.Query.SyntaxCount.CountTreeFeatures (DRagLint.Query.SyntaxCount.pas)</para>
+        /// <para>Calls: TreeSitterLib.ts_tree_cursor_goto_parent</para>
+        /// <para>Reads: FTreeCursor</para>
         /// <seealso cref="TreeSitterLib.ts_tree_cursor_goto_parent"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Create"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Destroy"/>
@@ -649,13 +658,13 @@ type
         /// <!-- drag-lint:auto END -->
         /// </remarks>
         function GotoParent     : Boolean;
-        /// <returns><!-- drag-lint:auto -->Observed:
+        /// <returns><!-- drag-lint:auto -->Boolean -- Observed:
         /// ts_tree_cursor_goto_next_sibling(@FTreeCursor).</returns>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: TreeSitterLib.ts_tree_cursor_goto_next_sibling
-        /// Reads: FTreeCursor
-        /// Pure
+        /// <para>Called from: DRagLint.Lint.QueryRules.NamedChildrenOf (DRagLint.Lint.QueryRules.pas), DRagLint.LSP.Feature.FoldingRange.WalkFolds (DRagLint.LSP.Feature.FoldingRange.pas), DRagLint.LSP.Feature.InlayHint.THintWalker.Walk (DRagLint.LSP.Feature.InlayHint.pas), DRagLint.LSP.Feature.SemanticTokens.WalkSyntax (DRagLint.LSP.Feature.SemanticTokens.pas), DRagLint.Query.SyntaxCount.CountTreeFeatures (DRagLint.Query.SyntaxCount.pas)</para>
+        /// <para>Calls: TreeSitterLib.ts_tree_cursor_goto_next_sibling</para>
+        /// <para>Reads: FTreeCursor</para>
         /// <seealso cref="TreeSitterLib.ts_tree_cursor_goto_next_sibling"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Create"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Destroy"/>
@@ -664,13 +673,12 @@ type
         /// <!-- drag-lint:auto END -->
         /// </remarks>
         function GotoNextSibling: Boolean;
-        /// <returns><!-- drag-lint:auto -->Observed:
+        /// <returns><!-- drag-lint:auto -->Boolean -- Observed:
         /// ts_tree_cursor_goto_previous_sibling(@FTreeCursor).</returns>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: TreeSitterLib.ts_tree_cursor_goto_previous_sibling
-        /// Reads: FTreeCursor
-        /// Pure
+        /// <para>Calls: TreeSitterLib.ts_tree_cursor_goto_previous_sibling</para>
+        /// <para>Reads: FTreeCursor</para>
         /// <seealso cref="TreeSitterLib.ts_tree_cursor_goto_previous_sibling"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Create"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Destroy"/>
@@ -679,13 +687,13 @@ type
         /// <!-- drag-lint:auto END -->
         /// </remarks>
         function GotoPrevSibling: Boolean;
-        /// <returns><!-- drag-lint:auto -->Observed:
+        /// <returns><!-- drag-lint:auto -->Boolean -- Observed:
         /// ts_tree_cursor_goto_first_child(@FTreeCursor).</returns>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: TreeSitterLib.ts_tree_cursor_goto_first_child
-        /// Reads: FTreeCursor
-        /// Pure
+        /// <para>Called from: DRagLint.Lint.QueryRules.NamedChildrenOf (DRagLint.Lint.QueryRules.pas), DRagLint.LSP.Feature.FoldingRange.WalkFolds (DRagLint.LSP.Feature.FoldingRange.pas), DRagLint.LSP.Feature.InlayHint.THintWalker.Walk (DRagLint.LSP.Feature.InlayHint.pas), DRagLint.LSP.Feature.SemanticTokens.WalkSyntax (DRagLint.LSP.Feature.SemanticTokens.pas), DRagLint.Query.SyntaxCount.CountTreeFeatures (DRagLint.Query.SyntaxCount.pas)</para>
+        /// <para>Calls: TreeSitterLib.ts_tree_cursor_goto_first_child</para>
+        /// <para>Reads: FTreeCursor</para>
         /// <seealso cref="TreeSitterLib.ts_tree_cursor_goto_first_child"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Create"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Destroy"/>
@@ -694,13 +702,12 @@ type
         /// <!-- drag-lint:auto END -->
         /// </remarks>
         function GotoFirstChild : Boolean;
-        /// <returns><!-- drag-lint:auto -->Observed:
+        /// <returns><!-- drag-lint:auto -->Boolean -- Observed:
         /// ts_tree_cursor_goto_last_child(@FTreeCursor).</returns>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: TreeSitterLib.ts_tree_cursor_goto_last_child
-        /// Reads: FTreeCursor
-        /// Pure
+        /// <para>Calls: TreeSitterLib.ts_tree_cursor_goto_last_child</para>
+        /// <para>Reads: FTreeCursor</para>
         /// <seealso cref="TreeSitterLib.ts_tree_cursor_goto_last_child"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Create"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Destroy"/>
@@ -712,9 +719,8 @@ type
         /// <param name="AGoalDescendantIndex"><!-- drag-lint:auto type -->UInt32</param>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: TreeSitterLib.ts_tree_cursor_goto_descendant
-        /// Reads: FTreeCursor
-        /// Pure
+        /// <para>Calls: TreeSitterLib.ts_tree_cursor_goto_descendant</para>
+        /// <para>Reads: FTreeCursor</para>
         /// <seealso cref="TreeSitterLib.ts_tree_cursor_goto_descendant"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Create"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Destroy"/>
@@ -724,14 +730,14 @@ type
         /// </remarks>
         procedure GotoDescendant(AGoalDescendantIndex: UInt32);
         /// <param name="AGoalByte"><!-- drag-lint:auto type -->UInt32</param>
-        /// <returns><!-- drag-lint:auto -->Observed:
+        /// <returns><!-- drag-lint:auto -->Int64 -- Observed:
         /// ts_tree_cursor_goto_first_child_for_byte(@FTreeCursor, AGoalByte).</returns>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: TreeSitterLib.ts_tree_cursor_goto_first_child_for_byte
-        /// Overload 1 of 2
-        /// Reads: FTreeCursor
-        /// Pure
+        /// <para>Calls: TreeSitterLib.ts_tree_cursor_goto_first_child_for_byte</para>
+        /// <para>Overload 1 of 2</para>
+        /// <para>Reads: FTreeCursor</para>
+        /// <para>Directives: overload</para>
         /// <seealso cref="TreeSitterLib.ts_tree_cursor_goto_first_child_for_byte"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Create"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Destroy"/>
@@ -741,14 +747,14 @@ type
         /// </remarks>
         function GotoFirstChildForGoal(AGoalByte : UInt32  ): Int64; overload;
         /// <param name="AGoalPoint"><!-- drag-lint:auto type -->TTSPoint</param>
-        /// <returns><!-- drag-lint:auto -->Observed:
+        /// <returns><!-- drag-lint:auto -->Int64 -- Observed:
         /// ts_tree_cursor_goto_first_child_for_point(@FTreeCursor, AGoalPoint).</returns>
         /// <remarks>
         /// <!-- drag-lint:auto BEGIN -->
-        /// Calls: TreeSitterLib.ts_tree_cursor_goto_first_child_for_point
-        /// Overload 2 of 2
-        /// Reads: FTreeCursor
-        /// Pure
+        /// <para>Calls: TreeSitterLib.ts_tree_cursor_goto_first_child_for_point</para>
+        /// <para>Overload 2 of 2</para>
+        /// <para>Reads: FTreeCursor</para>
+        /// <para>Directives: overload</para>
         /// <seealso cref="TreeSitterLib.ts_tree_cursor_goto_first_child_for_point"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Create"/>
         /// <seealso cref="TreeSitter.TTSTreeCursor.Destroy"/>
@@ -767,11 +773,10 @@ type
     end;
 
     TTSNodeHelper = record helper for TTSNode
-      /// <returns><!-- drag-lint:auto -->Observed: ts_node_language(Self).</returns>
+      /// <returns><!-- drag-lint:auto -->PTSLanguage -- Observed: ts_node_language(Self).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_node_language
-      /// Pure
+      /// <para>Calls: TreeSitterLib.ts_node_language</para>
       /// <seealso cref="TreeSitterLib.ts_node_language"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -781,12 +786,12 @@ type
       /// </remarks>
       function Language: PTSLanguage;
 
-      /// <returns><!-- drag-lint:auto -->Observed:
+      /// <returns><!-- drag-lint:auto -->string -- Observed:
       /// string(AnsiString(ts_node_type(Self))).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: AnsiString, TreeSitterLib.ts_node_type
-      /// Pure
+      /// <para>Called from: DRagLint.Analysis.Cfg.CfgFindProcs.Walk (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.ClassChainLacks (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.DeclaredTypeOfVar.TyperefNameOf (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.DeclaredTypeOfVar.Visit (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.DottedCalleeText (DRagLint.Analysis.Cfg.pas) (+731 more)</para>
+      /// <para>Calls: AnsiString, TreeSitterLib.ts_node_type</para>
       /// <seealso cref="TreeSitterLib.ts_node_type"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -795,11 +800,10 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function NodeType: string       ;
-      /// <returns><!-- drag-lint:auto -->Observed: ts_node_symbol(Self).</returns>
+      /// <returns><!-- drag-lint:auto -->TSSymbol -- Observed: ts_node_symbol(Self).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_node_symbol
-      /// Pure
+      /// <para>Calls: TreeSitterLib.ts_node_symbol</para>
       /// <seealso cref="TreeSitterLib.ts_node_symbol"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -808,12 +812,11 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Symbol: TSSymbol       ;
-      /// <returns><!-- drag-lint:auto -->Observed:
+      /// <returns><!-- drag-lint:auto -->string -- Observed:
       /// string(AnsiString(ts_node_grammar_type(Self))).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: AnsiString, TreeSitterLib.ts_node_grammar_type
-      /// Pure
+      /// <para>Calls: AnsiString, TreeSitterLib.ts_node_grammar_type</para>
       /// <seealso cref="TreeSitterLib.ts_node_grammar_type"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -822,11 +825,11 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GrammarType: string    ;
-      /// <returns><!-- drag-lint:auto -->Observed: ts_node_grammar_symbol(Self).</returns>
+      /// <returns><!-- drag-lint:auto -->TSSymbol -- Observed:
+      /// ts_node_grammar_symbol(Self).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_node_grammar_symbol
-      /// Pure
+      /// <para>Calls: TreeSitterLib.ts_node_grammar_symbol</para>
       /// <seealso cref="TreeSitterLib.ts_node_grammar_symbol"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -836,11 +839,11 @@ type
       /// </remarks>
       function GrammarSymbol: TSSymbol;
 
-      /// <returns><!-- drag-lint:auto -->Observed: ts_node_is_null(Self).</returns>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: ts_node_is_null(Self).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_node_is_null
-      /// Pure
+      /// <para>Called from: DRagLint.Analysis.Cfg.CfgFindProcs.Walk (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.ClassChainLacks (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.DeclaredTypeOfVar.TyperefNameOf (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.DeclaredTypeOfVar.Visit (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.DottedCalleeText (DRagLint.Analysis.Cfg.pas) (+794 more)</para>
+      /// <para>Calls: TreeSitterLib.ts_node_is_null</para>
       /// <seealso cref="TreeSitterLib.ts_node_is_null"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -849,11 +852,11 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function IsNull    : Boolean;
-      /// <returns><!-- drag-lint:auto -->Observed: ts_node_is_error(Self).</returns>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: ts_node_is_error(Self).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_node_is_error
-      /// Pure
+      /// <para>Called from: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors.Visit (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Lint.Linter.CollectDfmParseErrors.Visit (DRagLint.Lint.Linter.pas), DRagLint.Parser.Delphi13.CollectParseErrors (DRagLint.Parser.Delphi13.pas), DRagLint.Parser.DFM.CollectParseErrors (DRagLint.Parser.DFM.pas)</para>
+      /// <para>Calls: TreeSitterLib.ts_node_is_error</para>
       /// <seealso cref="TreeSitterLib.ts_node_is_error"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -862,11 +865,11 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function IsError   : Boolean;
-      /// <returns><!-- drag-lint:auto -->Observed: ts_node_has_error(Self).</returns>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: ts_node_has_error(Self).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_node_has_error
-      /// Pure
+      /// <para>Called from: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors.Visit (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Lint.Linter.CollectDfmParseErrors.Visit (DRagLint.Lint.Linter.pas), DRagLint.Parser.Delphi13.CollectParseErrors (DRagLint.Parser.Delphi13.pas), DRagLint.Parser.DFM.CollectParseErrors (DRagLint.Parser.DFM.pas), DRagLint.Parser.DFM.TDFMParser.Parse (DRagLint.Parser.DFM.pas) (+3 more)</para>
+      /// <para>Calls: TreeSitterLib.ts_node_has_error</para>
       /// <seealso cref="TreeSitterLib.ts_node_has_error"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -875,11 +878,10 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function HasError  : Boolean;
-      /// <returns><!-- drag-lint:auto -->Observed: ts_node_has_changes(Self).</returns>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: ts_node_has_changes(Self).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_node_has_changes
-      /// Pure
+      /// <para>Calls: TreeSitterLib.ts_node_has_changes</para>
       /// <seealso cref="TreeSitterLib.ts_node_has_changes"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -888,11 +890,11 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function HasChanges: Boolean;
-      /// <returns><!-- drag-lint:auto -->Observed: ts_node_is_extra(Self).</returns>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: ts_node_is_extra(Self).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_node_is_extra
-      /// Pure
+      /// <para>Called from: DRagLint.Diagnostics.CloneChecks.RunEngine.CollectLeaves (DRagLint.Diagnostics.CloneChecks.pas)</para>
+      /// <para>Calls: TreeSitterLib.ts_node_is_extra</para>
       /// <seealso cref="TreeSitterLib.ts_node_is_extra"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -901,11 +903,11 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function IsExtra   : Boolean;
-      /// <returns><!-- drag-lint:auto -->Observed: ts_node_is_missing(Self).</returns>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: ts_node_is_missing(Self).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_node_is_missing
-      /// Pure
+      /// <para>Called from: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors.Visit (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Lint.Linter.CollectDfmParseErrors.Visit (DRagLint.Lint.Linter.pas), DRagLint.Parser.Delphi13.CollectParseErrors (DRagLint.Parser.Delphi13.pas), DRagLint.Parser.DFM.CollectParseErrors (DRagLint.Parser.DFM.pas)</para>
+      /// <para>Calls: TreeSitterLib.ts_node_is_missing</para>
       /// <seealso cref="TreeSitterLib.ts_node_is_missing"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -914,11 +916,11 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function IsMissing : Boolean;
-      /// <returns><!-- drag-lint:auto -->Observed: ts_node_is_named(Self).</returns>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: ts_node_is_named(Self).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_node_is_named
-      /// Pure
+      /// <para>Called from: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept.Visit (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check.ScanRaise (DRagLint.Diagnostics.ExceptionThreadChecks.pas), DRagLint.Lint.QueryRules.NamedChildrenOf (DRagLint.Lint.QueryRules.pas), DRagLint.LSP.Feature.SemanticTokens.IsKeywordType (DRagLint.LSP.Feature.SemanticTokens.pas), DRagLint.Query.SyntaxCount.CountTreeFeatures (DRagLint.Query.SyntaxCount.pas)</para>
+      /// <para>Calls: TreeSitterLib.ts_node_is_named</para>
       /// <seealso cref="TreeSitterLib.ts_node_is_named"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -927,11 +929,11 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function IsNamed   : Boolean;
-      /// <returns><!-- drag-lint:auto -->Observed: ts_node_parent(Self).</returns>
+      /// <returns><!-- drag-lint:auto -->TTSNode -- Observed: ts_node_parent(Self).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_node_parent
-      /// Pure
+      /// <para>Called from: DRagLint.Analysis.Cfg.TBuilderState.BareIsRtl (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.EnclosingListEnd (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.IsWholeStatement (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckHardcodedPath.IsConditionalAsgn (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept.EnclosingDefProc (DRagLint.Diagnostics.AstChecks.pas) (+76 more)</para>
+      /// <para>Calls: TreeSitterLib.ts_node_parent</para>
       /// <seealso cref="TreeSitterLib.ts_node_parent"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -940,11 +942,10 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Parent    : TTSNode;
-      /// <returns><!-- drag-lint:auto -->Observed: string(AnsiString(pach)).</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: string(AnsiString(pach)).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: AnsiString, FreeMem, TreeSitterLib.ts_node_string
-      /// Pure
+      /// <para>Calls: AnsiString, FreeMem, TreeSitterLib.ts_node_string</para>
       /// <seealso cref="TreeSitterLib.ts_node_string"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -954,11 +955,11 @@ type
       /// </remarks>
       function ToString: string   ;
 
-      /// <returns><!-- drag-lint:auto -->Observed: ts_node_child_count(Self).</returns>
+      /// <returns><!-- drag-lint:auto -->Integer -- Observed: ts_node_child_count(Self).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_node_child_count
-      /// Pure
+      /// <para>Called from: DRagLint.Analysis.Cfg.FindClassDecl (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AbsoluteTargetIdx (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddArgs (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Diagnostics.AstChecks.CyclomaticCountDecisions (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit.Visit (DRagLint.Diagnostics.AstChecks.pas) (+118 more)</para>
+      /// <para>Calls: TreeSitterLib.ts_node_child_count</para>
       /// <seealso cref="TreeSitterLib.ts_node_child_count"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -967,14 +968,14 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ChildCount: Integer            ;
-      /// <summary><!-- drag-lint:auto -->TTSNodeHelper</summary>
+      /// <summary><!-- drag-lint:auto sum -->TTSNodeHelper</summary>
       /// <param name="AIndex"><!-- drag-lint:auto type -->Integer</param>
-      /// <returns><!-- drag-lint:auto -->Observed: ts_node_child(Self, AIndex).</returns>
+      /// <returns><!-- drag-lint:auto -->TTSNode -- Observed: ts_node_child(Self,
+      /// AIndex).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddArgs (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors.Visit (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRaiseInFinally.SearchForRaise (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRaiseInFinally.Visit (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit.Visit (DRagLint.Diagnostics.AstChecks.pas) (+54 more)
-      /// Calls: TreeSitterLib.ts_node_child
-      /// Pure
+      /// <para>Called from: DRagLint.Analysis.Cfg.FindClassDecl (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AbsoluteTargetIdx (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddArgs (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Diagnostics.AstChecks.CyclomaticCountDecisions (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit.Visit (DRagLint.Diagnostics.AstChecks.pas) (+118 more)</para>
+      /// <para>Calls: TreeSitterLib.ts_node_child</para>
       /// <seealso cref="TreeSitterLib.ts_node_child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildCount"/>
@@ -983,11 +984,10 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Child(AIndex: Integer): TTSNode;
-      /// <returns><!-- drag-lint:auto -->Observed: ts_node_next_sibling(Self).</returns>
+      /// <returns><!-- drag-lint:auto -->TTSNode -- Observed: ts_node_next_sibling(Self).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_node_next_sibling
-      /// Pure
+      /// <para>Calls: TreeSitterLib.ts_node_next_sibling</para>
       /// <seealso cref="TreeSitterLib.ts_node_next_sibling"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -996,11 +996,10 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function NextSibling: TTSNode;
-      /// <returns><!-- drag-lint:auto -->Observed: ts_node_prev_sibling(Self).</returns>
+      /// <returns><!-- drag-lint:auto -->TTSNode -- Observed: ts_node_prev_sibling(Self).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_node_prev_sibling
-      /// Pure
+      /// <para>Calls: TreeSitterLib.ts_node_prev_sibling</para>
       /// <seealso cref="TreeSitterLib.ts_node_prev_sibling"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -1010,11 +1009,12 @@ type
       /// </remarks>
       function PrevSibling: TTSNode;
 
-      /// <returns><!-- drag-lint:auto -->Observed: ts_node_named_child_count(Self).</returns>
+      /// <returns><!-- drag-lint:auto -->Integer -- Observed:
+      /// ts_node_named_child_count(Self).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_node_named_child_count
-      /// Pure
+      /// <para>Called from: DRagLint.Analysis.Cfg.CfgFindProcs.Walk (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.ClassChainLacks (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.DeclaredTypeOfVar.TyperefNameOf (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.DeclaredTypeOfVar.Visit (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.DottedCalleeText (DRagLint.Analysis.Cfg.pas) (+445 more)</para>
+      /// <para>Calls: TreeSitterLib.ts_node_named_child_count</para>
       /// <seealso cref="TreeSitterLib.ts_node_named_child_count"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -1024,12 +1024,12 @@ type
       /// </remarks>
       function NamedChildCount: Integer            ;
       /// <param name="AIndex"><!-- drag-lint:auto type -->Integer</param>
-      /// <returns><!-- drag-lint:auto -->Observed: ts_node_named_child(Self, AIndex).</returns>
+      /// <returns><!-- drag-lint:auto -->TTSNode -- Observed: ts_node_named_child(Self,
+      /// AIndex).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Called from: DRagLint.Analysis.Cfg.StatementKeyword (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.IsValuedExit (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.ForLoopAlwaysExecutes (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.CfgFindProcs.Walk (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.RoutineHasGotoOrAsm (DRagLint.Analysis.Cfg.pas) (+175 more)
-      /// Calls: TreeSitterLib.ts_node_named_child
-      /// Pure
+      /// <para>Called from: DRagLint.Analysis.Cfg.CfgFindProcs.Walk (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.ClassChainLacks (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.DeclaredTypeOfVar.TyperefNameOf (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.DeclaredTypeOfVar.Visit (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.DottedCalleeText (DRagLint.Analysis.Cfg.pas) (+450 more)</para>
+      /// <para>Calls: TreeSitterLib.ts_node_named_child</para>
       /// <seealso cref="TreeSitterLib.ts_node_named_child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -1038,11 +1038,12 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function NamedChild(AIndex: Integer): TTSNode;
-      /// <returns><!-- drag-lint:auto -->Observed: ts_node_next_named_sibling(Self).</returns>
+      /// <returns><!-- drag-lint:auto -->TTSNode -- Observed:
+      /// ts_node_next_named_sibling(Self).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_node_next_named_sibling
-      /// Pure
+      /// <para>Called from: DRagLint.Diagnostics.FlowChecks.OverwrittenInsideFollowingTry (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.ProtectedByFollowingTry (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Fix.Stmt.FixBareExcept (DRagLint.Fix.Stmt.pas), DRagLint.Fix.Stmt.FixCreateInsideTry (DRagLint.Fix.Stmt.pas)</para>
+      /// <para>Calls: TreeSitterLib.ts_node_next_named_sibling</para>
       /// <seealso cref="TreeSitterLib.ts_node_next_named_sibling"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -1051,11 +1052,11 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function NextNamedSibling: TTSNode;
-      /// <returns><!-- drag-lint:auto -->Observed: ts_node_prev_named_sibling(Self).</returns>
+      /// <returns><!-- drag-lint:auto -->TTSNode -- Observed:
+      /// ts_node_prev_named_sibling(Self).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_node_prev_named_sibling
-      /// Pure
+      /// <para>Calls: TreeSitterLib.ts_node_prev_named_sibling</para>
       /// <seealso cref="TreeSitterLib.ts_node_prev_named_sibling"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -1065,11 +1066,11 @@ type
       /// </remarks>
       function PrevNamedSibling: TTSNode;
 
-      /// <returns><!-- drag-lint:auto -->Observed: ts_node_start_byte(Self).</returns>
+      /// <returns><!-- drag-lint:auto -->UInt32 -- Observed: ts_node_start_byte(Self).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_node_start_byte
-      /// Pure
+      /// <para>Called from: DRagLint.Analysis.Cfg.NodeStr (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Flow.Lattices.ApplyWithRecordEntity (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.AssignmentTargetIndex (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs.Walk (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.FreedOperandVar (DRagLint.Analysis.Flow.Lattices.pas) (+199 more)</para>
+      /// <para>Calls: TreeSitterLib.ts_node_start_byte</para>
       /// <seealso cref="TreeSitterLib.ts_node_start_byte"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -1078,12 +1079,12 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function StartByte : UInt32;
-      /// <returns><!-- drag-lint:auto -->Observed: TTSPoint(ts_node_start_point(Self));
-      /// ts_node_start_point(Self).</returns>
+      /// <returns><!-- drag-lint:auto -->TTSPoint -- Observed:
+      /// TTSPoint(ts_node_start_point(Self)); ts_node_start_point(Self).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_node_start_point, TTSPoint
-      /// Pure
+      /// <para>Called from: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddArgs (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddDeclVars (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddInline (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits.HandleProc (DRagLint.Diagnostics.AstChecks.pas) (+148 more)</para>
+      /// <para>Calls: TreeSitterLib.ts_node_start_point, TTSPoint</para>
       /// <seealso cref="TreeSitterLib.ts_node_start_point"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -1092,11 +1093,11 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function StartPoint: TTSPoint;
-      /// <returns><!-- drag-lint:auto -->Observed: ts_node_end_byte(Self).</returns>
+      /// <returns><!-- drag-lint:auto -->UInt32 -- Observed: ts_node_end_byte(Self).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_node_end_byte
-      /// Pure
+      /// <para>Called from: DRagLint.Analysis.Cfg.NodeStr (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Flow.Lattices.NodeStr (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddInlineVars (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.EnclosingListEnd (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Convert.DfmReemit.NodeText (DRagLint.Convert.DfmReemit.pas) (+113 more)</para>
+      /// <para>Calls: TreeSitterLib.ts_node_end_byte</para>
       /// <seealso cref="TreeSitterLib.ts_node_end_byte"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -1105,12 +1106,12 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function EndByte   : UInt32;
-      /// <returns><!-- drag-lint:auto -->Observed: TTSPoint(ts_node_end_point(Self));
-      /// ts_node_end_point(Self).</returns>
+      /// <returns><!-- drag-lint:auto -->TTSPoint -- Observed:
+      /// TTSPoint(ts_node_end_point(Self)); ts_node_end_point(Self).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_node_end_point, TTSPoint
-      /// Pure
+      /// <para>Called from: DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits.HandleProc (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckHardcodedPath.FindDefProcNamed.Walk (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics.CheckProc (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors.Visit (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check (DRagLint.Diagnostics.DeadCodeChecks.pas) (+48 more)</para>
+      /// <para>Calls: TreeSitterLib.ts_node_end_point, TTSPoint</para>
       /// <seealso cref="TreeSitterLib.ts_node_end_point"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -1121,13 +1122,15 @@ type
       function EndPoint  : TTSPoint;
 
       /// <param name="AFieldName"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Observed: ts_node_child_by_field_name(Self,
-      /// PAnsiChar(ansiFieldName), Length(ansiFieldName)).</returns>
+      /// <returns><!-- drag-lint:auto -->TTSNode -- Observed:
+      /// ts_node_child_by_field_name(Self, PAnsiChar(ansiFieldName),
+      /// Length(ansiFieldName)).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: AnsiString, PAnsiChar, TreeSitterLib.ts_node_child_by_field_name
-      /// Overload 1 of 2
-      /// Pure
+      /// <para>Called from: DRagLint.Analysis.Cfg.DeclaredTypeOfVar.Visit (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.DottedCalleeText (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.FindClassDecl (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.ForLoopAlwaysExecutes (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.IsValuedExit (DRagLint.Analysis.Cfg.pas) (+507 more)</para>
+      /// <para>Calls: AnsiString, PAnsiChar, TreeSitterLib.ts_node_child_by_field_name</para>
+      /// <para>Overload 1 of 2</para>
+      /// <para>Directives: overload</para>
       /// <seealso cref="TreeSitterLib.ts_node_child_by_field_name"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -1137,13 +1140,13 @@ type
       /// </remarks>
       function ChildByField(const AFieldName: string): TTSNode; overload;
       /// <param name="AFieldId"><!-- drag-lint:auto type -->const UInt32</param>
-      /// <returns><!-- drag-lint:auto -->Observed: ts_node_child_by_field_id(Self,
-      /// AFieldId).</returns>
+      /// <returns><!-- drag-lint:auto -->TTSNode -- Observed:
+      /// ts_node_child_by_field_id(Self, AFieldId).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_node_child_by_field_id
-      /// Overload 2 of 2
-      /// Pure
+      /// <para>Calls: TreeSitterLib.ts_node_child_by_field_id</para>
+      /// <para>Overload 2 of 2</para>
+      /// <para>Directives: overload</para>
       /// <seealso cref="TreeSitterLib.ts_node_child_by_field_id"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -1153,11 +1156,11 @@ type
       /// </remarks>
       function ChildByField(const AFieldId: UInt32): TTSNode; overload  ;
 
-      /// <returns><!-- drag-lint:auto -->Observed: ts_node_descendant_count(Self).</returns>
+      /// <returns><!-- drag-lint:auto -->UInt32 -- Observed:
+      /// ts_node_descendant_count(Self).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_node_descendant_count
-      /// Pure
+      /// <para>Calls: TreeSitterLib.ts_node_descendant_count</para>
       /// <seealso cref="TreeSitterLib.ts_node_descendant_count"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -1169,11 +1172,10 @@ type
 
       /// <param name="A"><!-- drag-lint:auto type -->TTSNode</param>
       /// <param name="B"><!-- drag-lint:auto type -->TTSNode</param>
-      /// <returns><!-- drag-lint:auto -->Observed: ts_node_eq(A, B).</returns>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: ts_node_eq(A, B).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: TreeSitterLib.ts_node_eq
-      /// Pure
+      /// <para>Calls: TreeSitterLib.ts_node_eq</para>
       /// <seealso cref="TreeSitterLib.ts_node_eq"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -1185,12 +1187,12 @@ type
     end; // record
 
     TTSPointHelper = record helper for TTSPoint
-      /// <summary><!-- drag-lint:auto -->TTSPointHelper</summary>
-      /// <returns><!-- drag-lint:auto -->Observed: Format('(%d, %d)', [row, column]).</returns>
+      /// <summary><!-- drag-lint:auto sum -->TTSPointHelper</summary>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: Format('(%d, %d)', [row,
+      /// column]).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// Calls: Format
-      /// Pure
+      /// <para>Calls: Format</para>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ToString: string;

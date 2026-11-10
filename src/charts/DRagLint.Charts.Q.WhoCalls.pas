@@ -318,7 +318,7 @@ begin
   var RoleFill:= if pCallees then CALLEE_FILL else CALLER_FILL;
   var RoleHdr:= if pCallees then CALLEE_HDR else CALLER_HDR;
   var Db:= pArgs.GuardedDb;
-  var Store: ISymbolStore:= TSQLiteSymbolStore.Create(Db, True);
+  var Store: ISymbolStore:= TSQLiteSymbolStore.CreateReadable(Db, True);
   var Index:= TChartsIndex.Create(Db);
   var Rows:= TList<TCallRow>.Create;
   var Groups:= TObjectList<TCallGroup>.Create(True);

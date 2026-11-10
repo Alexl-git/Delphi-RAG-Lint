@@ -416,8 +416,8 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
-      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.FileTime.FileMTimeUnix, DRagLint.Core.Indexer.BuildContainingLineMap, DRagLint.Core.Indexer.BuildEnclosingLineMap, DRagLint.Core.Indexer.FindDocRegionAbove, DRagLint.Core.Indexer.HasBinaryDfmHeader, DRagLint.Core.Indexer.PaintDocOwner, DRagLint.Core.Indexer.PreferBodyRoutine, DRagLint.Core.Indexer.ProfNow, DRagLint.Core.Indexer.TIndexer.Intern (+53 more)</para>
-      /// <para>Complexity: 87 (cyclomatic, outer body), 573 lines (full implementation)</para>
+      /// <para>Calls: ChangeFileExt, DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.FileTime.FileMTimeUnix, DRagLint.Core.Indexer.BuildContainingLineMap, DRagLint.Core.Indexer.BuildEnclosingLineMap, DRagLint.Core.Indexer.BuildPpDirectiveRows, DRagLint.Core.Indexer.FindDocRegionAbove, DRagLint.Core.Indexer.HasBinaryDfmHeader, DRagLint.Core.Indexer.PaintDocOwner, DRagLint.Core.Indexer.PreferBodyRoutine (+61 more)</para>
+      /// <para>Complexity: 93 (cyclomatic, outer body), 612 lines (full implementation)</para>
       /// <para>Reads: FVisitedKeys, FVisited, FWalkFilter, FResumeFingerprint, FStore, FIncludeContext, FPreprocessEnabled, FIncContexts (+6 more)   Writes: FSkippedUpToDate, FParsedFiles, FFailedFiles</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
@@ -425,7 +425,7 @@ type
       /// <seealso cref="DRagLint.Core.FileTime.FileMTimeUnix"/>
       /// <seealso cref="DRagLint.Core.Indexer.BuildContainingLineMap"/>
       /// <seealso cref="DRagLint.Core.Indexer.BuildEnclosingLineMap"/>
-      /// <seealso cref="DRagLint.Core.Indexer.FindDocRegionAbove"/>
+      /// <seealso cref="DRagLint.Core.Indexer.BuildPpDirectiveRows"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure IndexFileBody(const AFilePath: string);

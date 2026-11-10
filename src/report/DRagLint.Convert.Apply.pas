@@ -128,7 +128,7 @@ type
   /// (To), per the matching #convert rule.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.Apply.ConvertedInstancesOf (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.Apply.FindConvertInstances (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindDescendantUses (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.Apply.RetypedInstances (DRagLint.Convert.Apply.pas) (+6 more)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.Apply.ConvertedInstancesOf (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.Apply.FindConvertInstances (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindDescendantUses (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.Apply.RetypedInstances (DRagLint.Convert.Apply.pas) (+7 more)</para>
   /// <para>Used in units: DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -177,7 +177,7 @@ type
   /// code access sites are rewritten) or 'skipped' (every other state, and a
   /// retype that could not be planned; Reason says why).
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.pas) ?, DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.FindInheritedCodeUses.Candidate (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindInheritedCodeUses.UnconvertedCandidate (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ScanInheritedConvertInstances (DRagLint.Convert.Apply.pas) (+19 more)</para>
+  /// <para>Used by: declaration (DRagLint.CLI.pas) ?, DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.FindInheritedCodeUses.Candidate (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindInheritedCodeUses.UnconvertedCandidate (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ScanInheritedConvertInstances (DRagLint.Convert.Apply.pas) (+20 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -626,7 +626,7 @@ type
   /// a ToType whose unit could not be resolved for the uses-add).
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: DRagLint.CLI.DoConvertApply.RunUnit (DRagLint.CLI.pas), DRagLint.CLI.RefuseUnapplicablePlan (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildUnitRulesOnlyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.TApplyResult.Refusal (DRagLint.Convert.Apply.pas) (+2 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.UsesRecover, DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TApplyResult = record
@@ -906,7 +906,7 @@ type
   /// object owns its caches, not Stores; the caller keeps them alive. Not
   /// thread-safe.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.BookScopeKey (DRagLint.CLI.pas) ?, DRagLint.CLI.BuildBlockClasses (DRagLint.CLI.pas) ?, DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.QualifyConvertArg (DRagLint.CLI.pas), DRagLint.CLI.ValidateConvertBook (DRagLint.CLI.pas) ? (+19 more)</para>
+  /// <para>Used by: DRagLint.CLI.BookScopeKey (DRagLint.CLI.pas) ?, DRagLint.CLI.BuildBlockClasses (DRagLint.CLI.pas) ?, DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.QualifyConvertArg (DRagLint.CLI.pas), DRagLint.CLI.ValidateConvertBook (DRagLint.CLI.pas) ? (+20 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -980,6 +980,7 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply.EmitBatchJson (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply.RunUnit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply.RunUnit.UnitClassesBuilt (DRagLint.CLI.pas)</para>
+    /// <para>Used in (via property ClassesBuilt): DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas) [r], DRagLint.CLI.DoConvertApply.EmitBatchJson (DRagLint.CLI.pas) [r], DRagLint.CLI.DoConvertApply.RunUnit (DRagLint.CLI.pas) [r], DRagLint.CLI.DoConvertApply.RunUnit.UnitClassesBuilt (DRagLint.CLI.pas) [r]</para>
     /// <para>Reads: FCaches</para>
     /// <para>Effect-free (proven)</para>
     /// <seealso cref="DRagLint.Convert.Apply.TConvertTreeCache.CacheFor"/>
@@ -1366,7 +1367,7 @@ function CheckUnitFreshness(const AStores: TArray<ISymbolStore>; const AUnitPas,
 /// ancestors' .dfm files; writes nothing.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoConvertApply.RunUnit (DRagLint.CLI.pas)</para>
-/// <para>Calls: DecodeUnitBytes, DfmDeclaresComponent, DRagLint.Convert.Apply.FindInheritedInstances.Resolve, DRagLint.Convert.Apply.InOnlyList, DRagLint.Convert.Apply.ReadUnitText, DRagLint.Convert.Apply.ScanInheritedConvertInstances, ExtractFileName, Format, IsBinaryDfmBytes, OwnerChainFiles, SamePath, SameText, StartsWithBlockHeader, TryAncestorDfmText, UpperCase</para>
+/// <para>Calls: DecodeUnitBytes, DfmDeclaresComponentVia, DRagLint.Convert.Apply.FindInheritedInstances.Resolve, DRagLint.Convert.Apply.InOnlyList, DRagLint.Convert.Apply.ReadUnitText, DRagLint.Convert.Apply.ScanInheritedConvertInstances, ExtractFileName, Format, IsBinaryDfmBytes, OwnerChainFiles, SamePath, SameText, StartsWithBlockHeader, TryAncestorDfmText, UpperCase</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Convert.Apply.FindInheritedInstances.Resolve"/>
@@ -1462,7 +1463,7 @@ function UnitFileIdIn(const AStore: ISymbolStore; const APath: string): Int64;
 /// which is what 'converted' means here. Reads that .dfm; writes nothing.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoConvertApply.RunUnit (DRagLint.CLI.pas)</para>
-/// <para>Calls: BareTypeTail, ClassOf, DecodeUnitBytes, Default, DfmDeclaresComponent, DfmTextOf, DRagLint.Convert.Apply.FindInheritedCodeUses.Candidate, DRagLint.Convert.Apply.FindInheritedCodeUses.CollectUnbound, DRagLint.Convert.Apply.UnitFileIdIn, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile (+12 more)</para>
+/// <para>Calls: BareTypeTail, ClassOf, DecodeUnitBytes, Default, DfmDeclaresComponentVia, DfmTextOf, DRagLint.Convert.Apply.FindInheritedCodeUses.Candidate, DRagLint.Convert.Apply.FindInheritedCodeUses.CollectUnbound, DRagLint.Convert.Apply.UnitFileIdIn, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile (+12 more)</para>
 /// <para>Returns: nil; Found.ToArray</para>
 /// <para>Complexity: 13 (cyclomatic, outer body), 251 lines (full implementation)</para>
 /// <para>Catches: EFileStreamError (swallowed); EInOutError (swallowed)</para>
@@ -1834,7 +1835,7 @@ function BuildUnitRulesOnlyPlan(const ATrees: TConvertTreeCache; const AUnitPas,
 /// scan only, not a full DFM parse (Task 3's ParseDfmBlock/ReemitComponent do
 /// the real per-instance re-emit). Pure; deterministic; no I/O.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.ConvertApplyComponentPart (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ConvertedInstancesOf (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.DemoteOnlySkips (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.RemovalLeavesUnconverted (DRagLint.Convert.Apply.pas) (+1 more)</para>
+/// <para>Called from: DRagLint.CLI.ConvertApplyComponentPart (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ConvertedInstancesOf (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.DemoteOnlySkips (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ExpandOnlyTypes (DRagLint.Convert.Apply.pas) (+2 more)</para>
 /// <para>Calls: Default, DRagLint.Convert.Apply.FindConvertRuleFor, DRagLint.Convert.Apply.InOnlyList, DRagLint.Convert.Apply.TryParseObjectHeader, Trim</para>
 /// <para>Returns: nil; List.ToArray</para>
 /// <seealso cref="DRagLint.Convert.Apply.FindConvertRuleFor"/>
@@ -1908,8 +1909,18 @@ procedure SplitOnlyNames(const ADfmText: string; const ARules: TConversionRuleSe
 /// request filters everything out instead of reading as an empty (= no) filter.</param>
 /// <param name="AMatched">The ATypes entries that matched an object, as given.</param>
 /// <param name="AUnmatched">The rest, as given: the types only_unmatched[] names.</param>
-/// <remarks>Pure; no I/O. A qualified From type in the .dfm is compared by its
-/// bare tail.</remarks>
+/// <remarks>
+/// Pure; no I/O. A qualified From type in the .dfm is compared by its
+/// bare tail.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoConvertApply.RunUnit (DRagLint.CLI.pas)</para>
+/// <para>Calls: Copy, DRagLint.Convert.Apply.ExpandOnlyTypes.Bare, DRagLint.Convert.Apply.FindConvertInstances, DRagLint.Convert.Apply.ScanInheritedConvertInstances, LastDelimiter, SameText</para>
+/// <para>Mutates: ANames (out), AMatched (out), AUnmatched (out)</para>
+/// <seealso cref="DRagLint.Convert.Apply.ExpandOnlyTypes.Bare"/>
+/// <seealso cref="DRagLint.Convert.Apply.FindConvertInstances"/>
+/// <seealso cref="DRagLint.Convert.Apply.ScanInheritedConvertInstances"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ExpandOnlyTypes(const ADfmText: string; const ARules: TConversionRuleSet;
   const ATypes: TArray<string>; out ANames, AMatched, AUnmatched: TArray<string>);
 
@@ -1919,7 +1930,21 @@ procedure ExpandOnlyTypes(const ADfmText: string; const ARules: TConversionRuleS
 /// .dfm reads were ANSI, so a UTF-8 .dfm's non-ASCII instance name never matched).</summary>
 /// <param name="APath">The file to read; a missing file reads as empty text (TTextFileFormat.ReadFile checks TFile.Exists).</param>
 /// <returns>The decoded text; empty when APath does not exist.</returns>
-/// <remarks>Not for a binary (TPF0) .dfm: the text is garbage, no object header matches.</remarks>
+/// <remarks>
+/// Not for a binary (TPF0) .dfm: the text is garbage, no object header matches.
+/// <!-- drag-lint:auto -->Lane H (2026-10-26): a unit's text for the uses planner, decoded as the
+/// writer decodes it (TTextFileFormat.ReadFile): a UTF-8 / UTF-16 BOM is stripped and its encoding
+/// honoured. The old ANSI read kept a UTF-8 BOM as three characters in front of 'unit', so a UTF-8
+/// + BOM unit with any #use rule was refused as "not a unit". Lane L1 (2026-10-26): EVERY
+/// convert-apply read of a user .pas / .dfm goes through here or DecodeUnitBytes -- a column
+/// computed on an ANSI-decoded UTF-8 line drifted against the writer's text, and a .dfm block
+/// re-emitted from an ANSI decode wrote its non-ASCII captions back as mojibake.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ConvertApplyComponentPart (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply.RunUnit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BoundAccessSites (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.PlanUsesAdditions (DRagLint.Convert.Apply.pas) (+8 more)</para>
+/// <para>Calls: DRagLint.Refactor.TextEdit.TTextFileFormat.ReadFile</para>
+/// <seealso cref="DRagLint.Refactor.TextEdit.TTextFileFormat.ReadFile"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReadUnitText(const APath: string): string;
 /// <summary>The stable wire name of an item kind, e.g. 'creator-verify'.</summary>
 /// <param name="AKind">The kind to spell.</param>

@@ -52,12 +52,13 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: ArgsKey, BitMaskPieces, CheckBitMask, CheckCase, CheckDoubleLookup, CheckIndent, CheckRegex, CollectContainsKey, Copy, CreateStoreTypeOracle (+19 more)</para>
+    /// <para>Calls: ArgsKey, BitMaskPieces, CheckBitMask, CheckCase, CheckDoubleLookup, CheckIndent, CheckRegex, CollectContainsKey, Copy, CreateStoreTypeOracle (+21 more)</para>
     /// <para>Returns: nil; Findings.ToArray</para>
     /// <para>Catches: Exception (swallowed)</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Diagnostics.ExprChecks.TExprChecker.Check.Visit"/>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+    /// <seealso cref="TreeSitter.TTSTree.RootNode"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; const ACfg: TLintConfig;

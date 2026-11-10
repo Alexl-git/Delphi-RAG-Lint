@@ -47,6 +47,19 @@ type
   /// </remarks>
   EIndexNewerThanEngine = class(Exception);
 
+  /// <summary>Raised by TSQLiteSymbolStore.CreateReadable when the index schema is below
+  /// SCHEMA_READ_MIN (150 TL); the message is SchemaUnreadableReason, which names the found
+  /// version, the readable range and the remedy (re-index).</summary>
+  /// <remarks>
+  /// Replaces the access violation a bare Create gave on the first query of such an
+  /// index (its prepared statements are never built below READ_MIN).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Storage.SQLite.TSQLiteSymbolStore.CreateReadable (DRagLint.Storage.SQLite.pas)</para>
+  /// <para>Used in units: DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  ESchemaUnreadable = class(Exception);
+
 var
   /// <summary>Process-wide switch: when False (the DEFAULT) the two exact name
   /// lookups -- FindSymbolsByExactName and FindSymbolsByQualifiedName -- compare
@@ -194,8 +207,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.AddLibraryPendingNotes (DRagLint.CLI.pas), DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas), DRagLint.CLI.AnyDbSchemaCurrent (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas) (+113 more)</para>
-  /// <para>Used in units: DRagLint.Charts.AskVerb, DRagLint.Charts.Compare, DRagLint.Charts.Index, DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Cycles, DRagLint.Charts.Q.Hierarchy, DRagLint.Charts.Q.Implementors, DRagLint.Charts.Q.MemberAccess (+31 more)</para>
+  /// <para>Used by: DRagLint.CLI.AddLibraryPendingNotes (DRagLint.CLI.pas), DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas), DRagLint.CLI.AnyDbSchemaCurrent (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas) (+115 more)</para>
+  /// <para>Used in units: DRagLint.Charts.AskVerb, DRagLint.Charts.Compare, DRagLint.Charts.Index, DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Cycles, DRagLint.Charts.Q.Hierarchy, DRagLint.Charts.Q.Implementors, DRagLint.Charts.Q.MemberAccess (+32 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSQLiteSymbolStore = class(TInterfacedObject, ISymbolStore)
@@ -1418,7 +1431,7 @@ type
       /// AFound through IsSchemaReadable, or use OpenReadable) and emit the actionable
       /// stale-schema message rather than query an index below SCHEMA_READ_MIN (150 SC). Not thread-safe; single owning thread only.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.AddLibraryPendingNotes (DRagLint.CLI.pas), DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas), DRagLint.CLI.AnyDbSchemaCurrent (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas) (+51 more)</para>
+      /// <para>Called from: DRagLint.CLI.AnyDbSchemaCurrent (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas), DRagLint.CLI.DoFbSnapshot (DRagLint.CLI.pas) (+25 more)</para>
       /// <para>Calls: DRagLint.Core.Interfaces.TFlowOracleCache.Create, DRagLint.Storage.Schema.IsSchemaReadable, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Connect, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Fts5TableExists, DRagLint.Storage.SQLite.TSQLiteSymbolStore.IsSchemaCurrent, DRagLint.Storage.SQLite.TSQLiteSymbolStore.PrepareStatements, DRagLint.Storage.SQLite.TSQLiteSymbolStore.TableExists</para>
       /// <para>constructor</para>
       /// <para>Reads: FReadOnly, FFts5Available   Writes: FReadOnly, FHasMemberAccesses, FHasEffectCols, FHasUseOriginCols, FHasDataFlows, FHasFileFacts, FHasPpDirectives, FLateAncCache (+18 more)</para>
@@ -1474,7 +1487,7 @@ type
       /// <returns>True when AFound &gt;= AExpected (current enough to read).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.UsesRecover.ApplyRecovered (DRagLint.CLI.UsesRecover.pas), DRagLint.CLI.UsesRecover.LoadSourceNames (DRagLint.CLI.UsesRecover.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate (DRagLint.Storage.SQLite.pas)</para>
+      /// <para>Called from: DRagLint.CLI.UsesRecover.ApplyRecovered (DRagLint.CLI.UsesRecover.pas), DRagLint.CLI.UsesRecover.LoadSourceNames (DRagLint.CLI.UsesRecover.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.CreateReadable (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate (DRagLint.Storage.SQLite.pas)</para>
       /// <para>Calls: StrToIntDef</para>
       /// <para>Returns: AFound &gt;= AExpected</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent</para>
@@ -1503,7 +1516,7 @@ type
       /// Never raises for an unreadable or unopenable index. Use instead of TSQLiteSymbolStore.Create(Db, True)
       /// wherever a stale or foreign DB must degrade rather than crash.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoLintTree (DRagLint.CLI.pas), DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.OpenStores.OpenAll (DRagLint.Index.PPUnitSource.pas)</para>
+      /// <para>Called from: DRagLint.CLI.AddLibraryPendingNotes (DRagLint.CLI.pas), DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas), DRagLint.CLI.DoLintTree (DRagLint.CLI.pas), DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.OpenStores.OpenAll (DRagLint.Index.PPUnitSource.pas)</para>
       /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent, DRagLint.Storage.Schema.IsSchemaReadable, DRagLint.Storage.Schema.SchemaUnreadableReason, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, FileExists</para>
       /// <para>Returns: nil; TSQLiteSymbolStore.Create(ADbPath, True)</para>
       /// <para>Catches: Exception (swallowed)</para>
@@ -1517,6 +1530,30 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function OpenReadable(const ADbPath: string; out AReason: string): ISymbolStore; static;
+
+      /// <summary>The raising read opener (150 TL): TSQLiteSymbolStore.Create, then the schema READ
+      /// gate; for the read-only sites that have no degrade path of their own.</summary>
+      /// <param name="ADbPath">The index file, passed to Create unchanged.</param>
+      /// <param name="AReadOnly">Passed to Create unchanged (default True: query_only open).</param>
+      /// <returns>The opened store at a readable schema (IsSchemaReadable); the caller owns it.</returns>
+      /// <exception cref="ESchemaUnreadable">The index schema is below SCHEMA_READ_MIN; the message is
+      /// SchemaUnreadableReason (the store is freed first).</exception>
+      /// <remarks>
+      /// Create's own exceptions (missing file, lock, corrupt header) propagate unchanged.
+      /// Never use on a write path that calls Migrate: an older index is upgraded there, not refused.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Charts.AskVerb.ProbeDb (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Compare.IndexFactFor (DRagLint.Charts.Compare.pas), DRagLint.Charts.Index.TChartsIndex.Create (DRagLint.Charts.Index.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestFiles (DRagLint.CLI.pas) (+20 more)</para>
+      /// <para>Calls: DRagLint.Storage.Schema.IsSchemaReadable, DRagLint.Storage.Schema.SchemaUnreadableReason, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.IsSchemaCurrent</para>
+      /// <para>Returns: TSQLiteSymbolStore.Create(ADbPath, AReadOnly)</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Storage.Schema.IsSchemaReadable"/>
+      /// <seealso cref="DRagLint.Storage.Schema.SchemaUnreadableReason"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.IsSchemaCurrent"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      class function CreateReadable(const ADbPath: string; AReadOnly: Boolean = True): TSQLiteSymbolStore; static;
 
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AMtimeUnix"><!-- drag-lint:auto type -->Int64</param>
@@ -2155,7 +2192,6 @@ type
       /// <param name="AOwnerTypeName"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->TArray&lt;TResolvedCaller&gt; -- Observed:
       /// List.ToArray.</returns>
-      /// <exception cref="EArgumentException"><!-- drag-lint:auto exc -->via DRagLint.Core.Model.CallSiteRefKindSql: CallSiteRefKindSql: ARefAlias must name a table or alias</exception>
       /// <remarks>
       /// <!-- drag-lint:auto -->v(ADP3 T3i review round 2): the '= True' default is declared ONCE,
       /// on ISymbolStore. Delphi binds a default from the STATIC type of the expression, so
@@ -2262,7 +2298,6 @@ type
       /// </remarks>
       function PurgeLocals: Int64;
       /// <returns><!-- drag-lint:auto -->TArray&lt;TSymbol&gt; -- Observed: List.ToArray.</returns>
-      /// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.Core.Model.TSymbolKindHelper.FromText: Unknown symbol kind: "%s"</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: Default, DRagLint.Core.Model.TSymbolKindHelper.FromText</para>
@@ -2328,7 +2363,6 @@ type
     function GetLiteralsByKind(AFileId: Int64;
                                const AKind: string): TArray<TStringLiteral>;
       /// <returns><!-- drag-lint:auto -->TArray&lt;TSymbol&gt; -- Observed: List.ToArray.</returns>
-      /// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.Core.Model.TSymbolKindHelper.FromText: Unknown symbol kind: "%s"</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: Default, DRagLint.Core.Model.TSymbolKindHelper.FromText</para>
@@ -2409,7 +2443,6 @@ type
       /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->TArray&lt;TResolvedCaller&gt; -- Observed:
       /// List.ToArray.</returns>
-      /// <exception cref="EArgumentException"><!-- drag-lint:auto exc -->via DRagLint.Core.Model.CallSiteRefKindSql: CallSiteRefKindSql: ARefAlias must name a table or alias</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: Default, DRagLint.Core.Model.CallSiteRefKindSql, ExtractFileName</para>
@@ -3698,7 +3731,6 @@ type
       /// </remarks>
       function ReplaceHeaderUnits(const AUnits: TArray<THeaderUnitRow>): Integer;
       // v11 (M1): type & hierarchy resolution (see ISymbolStore).
-      /// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.Core.Model.TSymbolKindHelper.FromText: Unknown symbol kind: "%s"</exception>
       /// <remarks>
       /// <!-- drag-lint:auto -->v11 (M1): type &amp; hierarchy resolution (see ISymbolStore).
       /// <!-- drag-lint:auto BEGIN -->
@@ -3720,7 +3752,6 @@ type
       /// <summary>v15: populate the type_helpers table (record/class helper targets).
       /// Analogous to ResolveAncestry (resolves each helper's target type name
       /// cross-unit via the in-scope uses graph). Run after ResolveAncestry.</summary>
-      /// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.Core.Model.TSymbolKindHelper.FromText: Unknown symbol kind: "%s"</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: Default, DRagLint.Core.Model.TSymbolKindHelper.FromText, DRagLint.Storage.SQLite.NormalizeAncestorName, DRagLint.Storage.SQLite.ResolveLog, DRagLint.Storage.SQLite.ResolveSecs, DRagLint.Storage.SQLite.SplitHeritageList, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveHelpers.CandInScope, Format, LowerCase</para>
@@ -3741,7 +3772,6 @@ type
       // v14 (D5): whole-DB call-resolution pass (see ISymbolStore).
       /// <param name="AExtraStores"><!-- drag-lint:auto type -->const TArray&lt;ISymbolStore&gt;</param>
       /// <param name="AClearFirst"><!-- drag-lint:auto type -->Boolean</param>
-      /// <exception cref="EArgumentException"><!-- drag-lint:auto exc -->via DRagLint.Core.Model.CallSiteRefKindSql: CallSiteRefKindSql: ARefAlias must name a table or alias</exception>
       /// <remarks>
       /// <!-- drag-lint:auto -->v14 (D5): whole-DB call-resolution pass (see ISymbolStore).
       /// <!-- drag-lint:auto BEGIN -->
@@ -7157,6 +7187,20 @@ begin
       AReason:= E.ClassName + ': ' + E.Message;
       Result := nil;
     end;
+  end;
+end;
+
+class function TSQLiteSymbolStore.CreateReadable(const ADbPath: string; AReadOnly: Boolean): TSQLiteSymbolStore;
+var
+  LFound   : Integer;
+  LExpected: Integer;
+begin
+  Result:= TSQLiteSymbolStore.Create(ADbPath, AReadOnly);
+  Result.IsSchemaCurrent(LFound, LExpected);
+  if not IsSchemaReadable(LFound) then
+  begin
+    Result.Free;
+    raise ESchemaUnreadable.Create(SchemaUnreadableReason(LFound) + ': ' + ADbPath);
   end;
 end;
 

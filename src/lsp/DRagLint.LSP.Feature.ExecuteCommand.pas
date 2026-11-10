@@ -72,15 +72,15 @@ type
     /// -32601; a missing command, or arguments that are not [string, number],
     /// answer -32602.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Calls: DRagLint.LSP.Context.ILspServerContext.FileFromUri, DRagLint.LSP.Context.ILspServerContext.Reply, DRagLint.LSP.Context.ILspServerContext.ReplyError, DRagLint.LSP.Feature.ExecuteCommand.ShowCallers, TJSONArray, TJSONNumber</para>
+    /// <para>Calls: DRagLint.LSP.Context.ILspServerContext.ExceptionFactsAt, DRagLint.LSP.Context.ILspServerContext.FileFromUri, DRagLint.LSP.Context.ILspServerContext.Reply, DRagLint.LSP.Context.ILspServerContext.ReplyError, DRagLint.LSP.Feature.ExecuteCommand.ShowCallers, TJSONArray, TJSONNumber</para>
     /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Handle</para>
-    /// <para>Complexity: 11 (cyclomatic, outer body), 24 lines (full implementation)</para>
+    /// <para>Complexity: 13 (cyclomatic, outer body), 25 lines (full implementation)</para>
     /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ExceptionFactsAt"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Reply"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ReplyError"/>
     /// <seealso cref="DRagLint.LSP.Feature.ExecuteCommand.ShowCallers"/>
-    /// <seealso cref="DRagLint.LSP.Feature.ExecuteCommand.TLspExecuteCommandFeature.AddCapabilities"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure Handle(const ACtx: ILspServerContext; const AMethod: string; const AId: TJSONValue; const AParams: TJSONObject); override;

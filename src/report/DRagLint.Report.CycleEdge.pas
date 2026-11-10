@@ -85,7 +85,7 @@ type
   /// <summary>Everything unit FromStem takes from unit ToStem, as index facts.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Report.CycleEdge.pas) ?, DRagLint.Report.CycleEdge.BuildEdgeSurface (DRagLint.Report.CycleEdge.pas) ?, DRagLint.Report.CycleEdge.EdgeSurfaceToJson (DRagLint.Report.CycleEdge.pas) ?, DRagLint.Report.CycleEdge.TSurfaceBuilder.Create (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TSurfaceBuilder.Run (DRagLint.Report.CycleEdge.pas) ? (+15 more)</para>
+  /// <para>Used by: declaration (DRagLint.Report.CycleEdge.pas) ?, DRagLint.Report.CycleEdge.BuildEdgeSurface (DRagLint.Report.CycleEdge.pas) ?, DRagLint.Report.CycleEdge.BuildEdgeSurfaces (DRagLint.Report.CycleEdge.pas) ?, DRagLint.Report.CycleEdge.TSurfaceBuilder.Create (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TSurfaceBuilder.Run (DRagLint.Report.CycleEdge.pas) ? (+17 more)</para>
   /// <para>Used in units: DRagLint.Report.CycleEdge, DRagLint.Report.CyclePlan</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -136,7 +136,7 @@ type
   /// Implemented by the planner of DRagLint.Report.CyclePlan, which keeps
   /// its own lifetime (not reference counted). All stems are lower-case unit stems.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.BuildEdgeSurface (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PickExistingLeaf (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.SignatureTypes (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TSurfaceBuilder.Create (DRagLint.Report.CycleEdge.pas) (+14 more)</para>
+  /// <para>Used by: declaration (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.BuildEdgeSurface (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.BuildEdgeSurfaces (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.SignatureTypes (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TSurfaceBuilder.Create (DRagLint.Report.CycleEdge.pas) (+15 more)</para>
   /// <para>Used in units: DRagLint.Report.CycleEdge, DRagLint.Report.CyclePlan</para>
   /// <para>Implemented by: TCyclePlanner</para>
   /// <!-- drag-lint:auto END -->
@@ -194,7 +194,7 @@ type
     /// <returns>False when no visible declaration has that name.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Report.CycleEdge.FinalOrderWhy (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.ShadowRefusal (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.SignatureTypes (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TMemberPlan.AddLeafUse (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TSurfaceBuilder.BindBare (DRagLint.Report.CycleEdge.pas) (+2 more)</para>
+    /// <para>Called from: DRagLint.Report.CycleEdge.FinalOrderWhy (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.ShadowRefusal (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.SignatureTypes (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TMemberPlan.AddLeafUse (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TSurfaceBuilder.BindBare (DRagLint.Report.CycleEdge.pas) (+3 more)</para>
     /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FidOfStem"/>
     /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FileLines"/>
     /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceSource.IsSccStem"/>
@@ -224,7 +224,7 @@ type
     /// <returns>False when the ref has no member_accesses row.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Report.CycleEdge.TSurfaceBuilder.TakeMemberAccess (DRagLint.Report.CycleEdge.pas)</para>
+    /// <para>Called from: DRagLint.Report.CycleEdge.TSurfaceBuilder.TakeMemberAccess (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TSurfaceBuilder.TargetKeys (DRagLint.Report.CycleEdge.pas)</para>
     /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceSource.BindName"/>
     /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FidOfStem"/>
     /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FileLines"/>
@@ -255,8 +255,9 @@ type
     /// <returns>The refs, in the store's order.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Report.CycleEdge.TSurfaceBuilder.Collect (DRagLint.Report.CycleEdge.pas)</para>
+    /// <para>Called from: DRagLint.Report.CycleEdge.BuildEdgeSurfaces (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TSurfaceBuilder.Collect (DRagLint.Report.CycleEdge.pas)</para>
     /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceCache.CachedChildByName"/>
+    /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceCache.CachedNamesOfStem"/>
     /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceCache.CachedSymbolById"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
@@ -268,6 +269,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Report.CycleEdge.TSurfaceBuilder.Sym (DRagLint.Report.CycleEdge.pas)</para>
     /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceCache.CachedChildByName"/>
+    /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceCache.CachedNamesOfStem"/>
     /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceCache.CachedRefsFromFile"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
@@ -279,6 +281,7 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Report.CycleEdge.TSurfaceBuilder.Child (DRagLint.Report.CycleEdge.pas)</para>
+    /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceCache.CachedNamesOfStem"/>
     /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceCache.CachedRefsFromFile"/>
     /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceCache.CachedSymbolById"/>
     /// <!-- drag-lint:auto END -->
@@ -292,6 +295,12 @@ type
     /// Lane 150 CY3 (150-CAUSES-SPEED): a plain identifier outside this set cannot bind (BindName) to
     /// pStem -- the store's exact pass needs the same text and its NOCASE retry folds ASCII as LowerCase
     /// does -- so BuildEdgeSurfaces skips the bind (a store query per distinct name) for it.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Report.CycleEdge.BuildEdgeSurfaces (DRagLint.Report.CycleEdge.pas)</para>
+    /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceCache.CachedChildByName"/>
+    /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceCache.CachedRefsFromFile"/>
+    /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceCache.CachedSymbolById"/>
+    /// <!-- drag-lint:auto END -->
     /// </remarks>
     function CachedNamesOfStem(const pStem: string): TDictionary<string, Boolean>;
   end;
@@ -310,7 +319,7 @@ type
   /// <summary>One line edit a recipe makes in an existing unit.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Report.CycleEdge.pas) ?, DRagLint.Report.CycleEdge.AssignmentEdit (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutineInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutinesInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TMemberPlan.Create (DRagLint.Report.CycleEdge.pas) ? (+3 more)</para>
+  /// <para>Used by: declaration (DRagLint.Report.CycleEdge.pas) ?, DRagLint.Report.CycleEdge.AssignmentEdit (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutineInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutinesInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.MetaclassSteps (DRagLint.Report.CyclePlan.pas) (+4 more)</para>
   /// <para>Used in units: DRagLint.Report.CycleEdge, DRagLint.Report.CyclePlan</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -328,7 +337,7 @@ type
   /// <summary>Why a recipe does not apply to an edge.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Report.CycleEdge.CallRefusal (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutinesInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.ShadowRefusal (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.SignatureRefusal (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TEdgeComposer.Run (DRagLint.Report.CycleEdge.pas) (+10 more)</para>
+  /// <para>Used by: DRagLint.Report.CycleEdge.CallRefusal (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutinesInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.ShadowRefusal (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.SignatureRefusal (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TEdgeComposer.Run (DRagLint.Report.CycleEdge.pas) (+12 more)</para>
   /// <para>Used in units: DRagLint.Report.CycleEdge, DRagLint.Report.CyclePlan</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -349,8 +358,8 @@ type
   /// can carry several).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Report.CycleEdge.pas) ?, DRagLint.Report.CycleEdge.PlanRoutineInversion (DRagLint.Report.CycleEdge.pas)</para>
-  /// <para>Used in units: DRagLint.Report.CycleEdge</para>
+  /// <para>Used by: declaration (DRagLint.Report.CycleEdge.pas) ?, DRagLint.Report.CycleEdge.PlanRoutineInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.MetaclassSteps (DRagLint.Report.CyclePlan.pas)</para>
+  /// <para>Used in units: DRagLint.Report.CycleEdge, DRagLint.Report.CyclePlan</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TInvertedRoutine = record
@@ -427,7 +436,7 @@ type
   /// classes the singular class fields (ClassTypeName .. IfaceGuid, CastAncestor) name the first of
   /// Surfaces; Edits, IfaceDecl, LeafUses, ConsumerUses and the signature lists hold all of them.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Report.CycleEdge.PlanRoutineInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutinesInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TEdgeComposer.Run (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TMemberPlan.Run (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.ResetCycle (DRagLint.Report.CyclePlan.pas) (+9 more)</para>
+  /// <para>Used by: DRagLint.Report.CycleEdge.PlanRoutineInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutinesInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TEdgeComposer.Run (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TMemberPlan.Run (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.MetaclassSteps (DRagLint.Report.CyclePlan.pas) (+12 more)</para>
   /// <para>Used in units: DRagLint.Report.CycleEdge, DRagLint.Report.CyclePlan</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -578,7 +587,7 @@ function SigTypesOutsideScc(const pTypes: TArray<TSigType>; out pStems: TArray<s
 /// Empty for blank text.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Report.CycleEdge.TTypeIndex.ListsInterface (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TTypeIndex.ParentOf (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.BuildBase (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.FindCtor (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Called from: DRagLint.Report.CycleEdge.TTypeIndex.ListsInterface (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TTypeIndex.ParentOf (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.BuildBase (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.NextAncestor (DRagLint.Report.CyclePlan.pas)</para>
 /// <para>Calls: Copy, Trim</para>
 /// <para>Returns: L.ToArray</para>
 /// <!-- drag-lint:auto END -->
@@ -597,7 +606,7 @@ function SplitHeritage(const pText: string): TArray<string>;
 /// bound by its symbol_id when it has one, else by name (BindName), and a name that
 /// is a local or parameter of its routine is never bound.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Report.CyclePlan.TCyclePlanner.EdgeSurfacesOf (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.EvaluateEdge (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Called from: DRagLint.Report.CycleEdge.BuildEdgeSurfaces (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.EvaluateEdge (DRagLint.Report.CyclePlan.pas)</para>
 /// <para>Calls: DRagLint.Report.CycleEdge.TSurfaceBuilder.Create, DRagLint.Report.CycleEdge.TSurfaceBuilder.Run</para>
 /// <para>Returns: B.Run</para>
 /// <seealso cref="DRagLint.Report.CycleEdge.TSurfaceBuilder.Create"/>
@@ -622,6 +631,16 @@ function BuildEdgeSurface(const pSource: IEdgeSurfaceSource; const pFromFid: Int
 /// over the refs that can touch it, in the store's order. A skipped ref is one the per-edge
 /// steps would leave without effect, so the result is byte-identical (identity proven on the
 /// Loader and cyclefix fixture sets). Reads the index only; not thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Report.CyclePlan.TCyclePlanner.EdgeSurfacesOf (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile, DRagLint.Report.CycleEdge.BuildEdgeSurface, DRagLint.Report.CycleEdge.IEdgeSurfaceCache.CachedNamesOfStem, DRagLint.Report.CycleEdge.IEdgeSurfaceCache.CachedRefsFromFile, DRagLint.Report.CycleEdge.RefsAt, DRagLint.Report.CycleEdge.TSurfaceBuilder.CollectRefs, DRagLint.Report.CycleEdge.TSurfaceBuilder.Create, DRagLint.Report.CycleEdge.TSurfaceBuilder.TargetKeys, IntToStr</para>
+/// <para>Complexity: 13 (cyclomatic, outer body), 67 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile"/>
+/// <seealso cref="DRagLint.Report.CycleEdge.BuildEdgeSurface"/>
+/// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceCache.CachedNamesOfStem"/>
+/// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceCache.CachedRefsFromFile"/>
+/// <seealso cref="DRagLint.Report.CycleEdge.RefsAt"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function BuildEdgeSurfaces(const pSource: IEdgeSurfaceSource; const pFromFid: Int64;
   const pToStems: TArray<string>): TArray<TEdgeSurface>;
@@ -722,7 +741,7 @@ function PlanRoutineInversion(const pSource: IEdgeSurfaceSource; const pSurface:
 /// otherwise LeafStem is '' (B's Untangle leaf, which receives the moved declarations too).
 /// With one routine and nothing moved the result equals PlanRoutineInversion's.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Report.CyclePlan.TCyclePlanner.PlanInversion (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Called from: DRagLint.Report.CyclePlan.TCyclePlanner.PlanInversion (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.PlanMemberHandOver (DRagLint.Report.CyclePlan.pas)</para>
 /// <para>Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Report.CycleEdge.AssignmentEdit, DRagLint.Report.CycleEdge.CodeStarts, DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FidOfStem, DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FileLines, DRagLint.Report.CycleEdge.IEdgeSurfaceSource.Store, DRagLint.Report.CycleEdge.LineOf, DRagLint.Report.CycleEdge.PlanRoutineInversion, DRagLint.Report.CycleEdge.ReplaceInCode, DRagLint.Report.CycleEdge.RoutineSlice, DRagLint.Report.CycleEdge.StartAt, ExtractFileName, Format</para>
 /// <para>Returns: Default(TRecipeSteps); PlanRoutineInversion(pSource, pSurface, pRefusal); Parts[0]</para>
 /// <para>Mutates: pRefusal (out)</para>
@@ -1009,7 +1028,7 @@ function CodeOnly(const pLine: string; var pInBrace, pInParen: Boolean): string;
 /// <returns>One TCodeStart per line.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Report.CycleEdge.PlanRoutineInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutinesInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TMemberPlan.StartOf (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.BuildSwitches (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.CtorSiteLine (DRagLint.Report.CyclePlan.pas) (+2 more)</para>
+/// <para>Called from: DRagLint.Report.CycleEdge.PlanRoutineInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutinesInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TMemberPlan.StartOf (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.BuildSwitches (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.CtorSiteLine (DRagLint.Report.CyclePlan.pas) (+3 more)</para>
 /// <para>Calls: DRagLint.Report.CycleEdge.CodeOnly</para>
 /// <seealso cref="DRagLint.Report.CycleEdge.CodeOnly"/>
 /// <!-- drag-lint:auto END -->
@@ -1045,7 +1064,7 @@ function CodeOf(const pLine: string; pStart: TCodeStart): string;
 /// <returns>The rewritten line.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Report.CycleEdge.PlanRoutineInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutinesInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TMemberPlan.CheckTypeDecls (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TMemberPlan.RewriteLine (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.BuildSwitches (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Called from: DRagLint.Report.CycleEdge.PlanRoutineInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutinesInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TMemberPlan.CheckTypeDecls (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TMemberPlan.RewriteLine (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.BuildSwitches (DRagLint.Report.CyclePlan.pas) (+1 more)</para>
 /// <para>Calls: ContainsStr, Copy, DRagLint.Report.CycleEdge.CodeOf</para>
 /// <seealso cref="DRagLint.Report.CycleEdge.CodeOf"/>
 /// <!-- drag-lint:auto END -->
@@ -1060,7 +1079,7 @@ function ReplaceInCode(const pLine: string; pStart: TCodeStart; const pPattern, 
 /// <returns>'' when no such order problem is seen.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Report.CycleEdge.CallRefusal (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.TakeCtor (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Called from: DRagLint.Report.CycleEdge.CallRefusal (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.MetaclassSteps (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.TakeCtor (DRagLint.Report.CyclePlan.pas)</para>
 /// <para>Calls: DRagLint.Report.CycleEdge.CodeOnlyLines, DRagLint.Report.CycleEdge.LastKeywordLine, DRagLint.Report.CycleEdge.LineOf, Format</para>
 /// <para>Returns: ''</para>
 /// <para>Complexity: 10 (cyclomatic, outer body), 19 lines (full implementation)</para>
@@ -1080,7 +1099,7 @@ function InitOrderWhy(const pLines: TArray<string>; const pRef: TEdgeRef; const 
 /// <returns>False when the unit has no final `end.`, `initialization` or `finalization` line.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Report.CycleEdge.PlanRoutineInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutinesInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.AddCtorEdits (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Called from: DRagLint.Report.CycleEdge.PlanRoutineInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutinesInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.AddCtorEdits (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.MetaclassSteps (DRagLint.Report.CyclePlan.pas)</para>
 /// <para>Calls: Default, DRagLint.Report.CycleEdge.LastKeywordLine, DRagLint.Report.CycleEdge.LineOf</para>
 /// <para>Returns: pEdit.Line &gt; 0</para>
 /// <para>Mutates: pEdit (out)</para>
@@ -1095,7 +1114,7 @@ function AssignmentEdit(const pLines: TArray<string>; pFid: Int64; const pAssign
 /// <returns>True for a built-in (Integer, string, TObject, TClass ...).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Report.CyclePlan.TCyclePlanner.CtorTypeWhy (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Called from: DRagLint.Report.CyclePlan.TCyclePlanner.ComposeRoutines (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.CtorTypeWhy (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.MetaclassTypeUnit (DRagLint.Report.CyclePlan.pas)</para>
 /// <para>Calls: ContainsText</para>
 /// <para>Returns: ContainsText(CBuiltinTypes, ' ' + pName + ' ')</para>
 /// <!-- drag-lint:auto END -->

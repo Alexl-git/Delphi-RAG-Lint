@@ -46,12 +46,13 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: DRagLint.Diagnostics.DeclParityChecks.TParityRun.Create, DRagLint.Diagnostics.DeclParityChecks.TParityRun.Run, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get</para>
+    /// <para>Calls: DRagLint.Diagnostics.DeclParityChecks.TParityRun.Create, DRagLint.Diagnostics.DeclParityChecks.TParityRun.Run, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, TreeSitter.TTSTree.RootNode</para>
     /// <para>Returns: nil; Run.Run(PF.Tree.RootNode)</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Diagnostics.DeclParityChecks.TParityRun.Create"/>
     /// <seealso cref="DRagLint.Diagnostics.DeclParityChecks.TParityRun.Run"/>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+    /// <seealso cref="TreeSitter.TTSTree.RootNode"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; const ACfg: TLintConfig;

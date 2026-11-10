@@ -52,21 +52,47 @@ type
   /// planners read -- for ONE run: the index does not change during it. Every answer is the array that
   /// store returned the first time, SHARED with every later caller: callers read it and never write into
   /// it. Not thread-safe. NewCycleReadMemo makes one; TCycleGraph.Reads carries it.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.NewCycleReadMemo (DRagLint.Report.CyclePlan.pas)</para>
+  /// <para>Used in units: DRagLint.Report.CyclePlan</para>
+  /// <para>Implemented by: TCycleReadMemo</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   ICycleReadMemo = interface
     ['{6E2B4C1A-3F57-4D8E-9A21-7C0B5D3E8F14}']
     /// <summary>ISymbolStore.FindSymbolsByFile, memoised by the path text.</summary>
     /// <param name="pPath">The file path, as the caller would pass it to the store.</param>
     /// <returns>The store's rows (shared; read only).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Report.CyclePlan.CycleSymbolsByFile (DRagLint.Report.CyclePlan.pas)</para>
+    /// <seealso cref="DRagLint.Report.CyclePlan.ICycleReadMemo.RefsFromFile"/>
+    /// <seealso cref="DRagLint.Report.CyclePlan.ICycleReadMemo.SymbolsByExactName"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function SymbolsByFile(const pPath: string): TArray<TSymbol>;
     /// <summary>ISymbolStore.GetReferencesFromFile, memoised by file id.</summary>
     /// <param name="pFid">The file id.</param>
     /// <returns>The store's rows (shared; read only).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Report.CyclePlan.CycleRefsFromFile (DRagLint.Report.CyclePlan.pas)</para>
+    /// <seealso cref="DRagLint.Report.CyclePlan.ICycleReadMemo.SymbolsByExactName"/>
+    /// <seealso cref="DRagLint.Report.CyclePlan.ICycleReadMemo.SymbolsByFile"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function RefsFromFile(pFid: Int64): TArray<TReference>;
     /// <summary>ISymbolStore.FindSymbolsByExactName, memoised by the name text (case kept: the store's
     /// exact pass is case-sensitive).</summary>
     /// <param name="pName">The name, as the caller would pass it to the store.</param>
     /// <returns>The store's rows (shared; read only).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Report.CyclePlan.CycleSymbolsByExactName (DRagLint.Report.CyclePlan.pas)</para>
+    /// <seealso cref="DRagLint.Report.CyclePlan.ICycleReadMemo.RefsFromFile"/>
+    /// <seealso cref="DRagLint.Report.CyclePlan.ICycleReadMemo.SymbolsByFile"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function SymbolsByExactName(const pName: string): TArray<TSymbol>;
   end;
   /// <summary>The unit-uses graph DoCycles already built, handed to the
@@ -76,8 +102,8 @@ type
   /// without extension) and is owned by the caller; the renderer only reads
   /// them.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.CycleToJson (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.IntfEdgeCount (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunAll (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunCycleFixGroups (DRagLint.CLI.CycleFix.pas) (+12 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.CycleFix, DRagLint.Report.CyclePlan</para>
+  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.CycleToJson (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.IntfEdgeCount (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunAll (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunCycleFixGroups (DRagLint.CLI.CycleFix.pas) (+23 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.CycleFix, DRagLint.Report.CycleHub, DRagLint.Report.CycleHubSurface, DRagLint.Report.CyclePlan</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCycleGraph = record
@@ -327,12 +353,22 @@ type
   /// <param name="pIndex">1-based group, as `cycles` numbers them.</param>
   /// <param name="pOut">Receives the hook's markdown lines.</param>
   /// <returns>True when the hook planned the group.</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Report.CyclePlan.pas), DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.Report.CyclePlan.RenderCyclePlaybook (DRagLint.Report.CyclePlan.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCycleGroupHook = reference to function(pIndex: Integer; const pOut: TStrings): Boolean;
 
   /// <summary>As TCycleGroupHook for the `--causes --format json` fix object: True = the hook built it.</summary>
   /// <param name="pIndex">1-based group.</param>
   /// <param name="pFix">Receives the fix object, owned by the caller once True is returned.</param>
   /// <returns>True when the hook built the group's fix object.</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Report.CyclePlan.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCycleFixHook = reference to function(pIndex: Integer; out pFix: TJSONObject): Boolean;
 
 /// <summary>The encoding a source file is read and written in: UTF-8 when it starts with the
@@ -353,7 +389,7 @@ function SourceEncodingOf(const pBytes: TBytes): TEncoding;
 /// <returns>The text without the BOM.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.TRepairFile.Create (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.NarrowParam.BuildGateFiles (DRagLint.Refactor.NarrowParam.pas), DRagLint.Refactor.RedundantCast.BuildGateFiles (DRagLint.Refactor.RedundantCast.pas), DRagLint.Refactor.RedundantCast.TMaskedSource.Create (DRagLint.Refactor.RedundantCast.pas) (+1 more)</para>
+/// <para>Called from: DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.TRepairFile.Create (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.NarrowParam.BuildGateFiles (DRagLint.Refactor.NarrowParam.pas), DRagLint.Refactor.RedundantCast.BuildGateFiles (DRagLint.Refactor.RedundantCast.pas), DRagLint.Refactor.RedundantCast.TMaskedSource.Create (DRagLint.Refactor.RedundantCast.pas) (+2 more)</para>
 /// <para>Calls: DRagLint.Report.CyclePlan.SourceEncodingOf</para>
 /// <para>Returns: TEncoding.UTF8.GetString(pBytes, Length(TEncoding.UTF8.GetPreamble), Length(pBytes) - Length(TEncoding.UTF8.GetPreamble)); TEncoding.ANSI.GetString(pBytes)</para>
 /// <para>Mutates: pEncoding (out)</para>
@@ -368,7 +404,7 @@ function DecodeSource(const pBytes: TBytes; out pEncoding: TEncoding): string;
 /// <returns>The bytes, with the UTF-8 BOM first when the encoding is UTF-8.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.TRepairFile.Save (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.ExtractInterface.RunExtractInterface (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.LazyInit.RunLazyInit (DRagLint.Refactor.LazyInit.pas), DRagLint.Refactor.NarrowParam.BuildGateFiles (DRagLint.Refactor.NarrowParam.pas) (+1 more)</para>
+/// <para>Called from: DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.TRepairFile.Save (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.ExtractInterface.RunExtractInterface (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.LazyInit.RunLazyInit (DRagLint.Refactor.LazyInit.pas), DRagLint.Refactor.NarrowParam.BuildGateFiles (DRagLint.Refactor.NarrowParam.pas) (+2 more)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function EncodeSource(const pText: string; pEncoding: TEncoding): TBytes;
@@ -551,6 +587,15 @@ function BuildCycleGraph(const pStore: ISymbolStore): TCycleGraph;
 /// <summary>A new, empty read memo over one store (ICycleReadMemo).</summary>
 /// <param name="pStore">The project index the planners read; must stay open while the memo lives.</param>
 /// <returns>The memo; set it on TCycleGraph.Reads for one run.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Report.CyclePlan.TCycleReadMemo.Create</para>
+/// <para>Returns: TCycleReadMemo.Create(pStore)</para>
+/// <para>Owns returned: new (caller owns)</para>
+/// <seealso cref="DRagLint.Report.CyclePlan.TCycleReadMemo.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function NewCycleReadMemo(const pStore: ISymbolStore): ICycleReadMemo;
 
 /// <summary>pStore.FindSymbolsByFile(pPath), through pGraph.Reads when the graph carries a memo.</summary>
@@ -558,6 +603,15 @@ function NewCycleReadMemo(const pStore: ISymbolStore): ICycleReadMemo;
 /// <param name="pStore">The store the memo was built over.</param>
 /// <param name="pPath">The file path.</param>
 /// <returns>The rows the store returns; read only when they come from the memo.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Report.CycleHub.TGroupFacts.LoadSymbolsAndRefs (DRagLint.Report.CycleHub.pas), DRagLint.Report.CycleHubSurface.THubSurfacePlanner.FindHubSymbols (DRagLint.Report.CycleHubSurface.pas), DRagLint.Report.CycleHubSurface.THubSurfacePlanner.InvertCalls (DRagLint.Report.CycleHubSurface.pas), DRagLint.Report.CycleHubSurface.THubSurfacePlanner.PlanSpoke (DRagLint.Report.CycleHubSurface.pas), DRagLint.Report.CyclePlan.TCyclePlanner.GetFile (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Report.CyclePlan.ICycleReadMemo.SymbolsByFile</para>
+/// <para>Returns: if pGraph.Reads &lt;&gt; nil then pGraph.Reads.SymbolsByFile(pPath)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
+/// <seealso cref="DRagLint.Report.CyclePlan.ICycleReadMemo.SymbolsByFile"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CycleSymbolsByFile(const pGraph: TCycleGraph; const pStore: ISymbolStore; const pPath: string): TArray<TSymbol>;
 
 /// <summary>pStore.GetReferencesFromFile(pFid), through pGraph.Reads when the graph carries a memo.</summary>
@@ -565,6 +619,15 @@ function CycleSymbolsByFile(const pGraph: TCycleGraph; const pStore: ISymbolStor
 /// <param name="pStore">The store the memo was built over.</param>
 /// <param name="pFid">The file id.</param>
 /// <returns>The rows the store returns; read only when they come from the memo.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Report.CycleHub.TGroupFacts.LoadSymbolsAndRefs (DRagLint.Report.CycleHub.pas), DRagLint.Report.CycleHubSurface.THubSurfacePlanner.CollectKeepers (DRagLint.Report.CycleHubSurface.pas), DRagLint.Report.CyclePlan.TCyclePlanner.GetFile (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile, DRagLint.Report.CyclePlan.ICycleReadMemo.RefsFromFile</para>
+/// <para>Returns: if pGraph.Reads &lt;&gt; nil then pGraph.Reads.RefsFromFile(pFid)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile"/>
+/// <seealso cref="DRagLint.Report.CyclePlan.ICycleReadMemo.RefsFromFile"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CycleRefsFromFile(const pGraph: TCycleGraph; const pStore: ISymbolStore; pFid: Int64): TArray<TReference>;
 
 /// <summary>pStore.FindSymbolsByExactName(pName), through pGraph.Reads when the graph carries a memo.</summary>
@@ -572,6 +635,15 @@ function CycleRefsFromFile(const pGraph: TCycleGraph; const pStore: ISymbolStore
 /// <param name="pStore">The store the memo was built over.</param>
 /// <param name="pName">The name.</param>
 /// <returns>The rows the store returns; read only when they come from the memo.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Report.CycleHubSurface.THubSurfacePlanner.NamesClash (DRagLint.Report.CycleHubSurface.pas), DRagLint.Report.CycleHubSurface.THubSurfacePlanner.PlanFormType (DRagLint.Report.CycleHubSurface.pas), DRagLint.Report.CycleHubSurface.THubSurfacePlanner.RoutineOf (DRagLint.Report.CycleHubSurface.pas), DRagLint.Report.CycleHubSurface.THubSurfacePlanner.TypeDeclaredInGroup (DRagLint.Report.CycleHubSurface.pas), DRagLint.Report.CyclePlan.TCyclePlanner.CandidatesFor (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Report.CyclePlan.ICycleReadMemo.SymbolsByExactName</para>
+/// <para>Returns: if pGraph.Reads &lt;&gt; nil then pGraph.Reads.SymbolsByExactName(pName)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+/// <seealso cref="DRagLint.Report.CyclePlan.ICycleReadMemo.SymbolsByExactName"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CycleSymbolsByExactName(const pGraph: TCycleGraph; const pStore: ISymbolStore; const pName: string): TArray<TSymbol>;
 /// <summary>Frees the four dictionaries (and the adjacency lists) of a graph from BuildCycleGraph
 /// and sets them to nil.</summary>

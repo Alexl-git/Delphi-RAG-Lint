@@ -47,53 +47,59 @@ const
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (TreeSitter.pas), TreeSitter.TTSLanguageHelper.NextState (TreeSitter.pas), declaration (TreeSitterLib.pas)
+  /// <para>Used by: declaration (TreeSitter.pas), declaration (TreeSitterLib.pas), TreeSitter.TTSLanguageHelper.NextState (TreeSitter.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSStateId           = UInt16;
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (TreeSitter.pas), TreeSitter.TTSNodeHelper.GrammarSymbol (TreeSitter.pas), TreeSitter.TTSNodeHelper.Symbol (TreeSitter.pas), TreeSitter.TTSLanguageHelper.GetSymbolForName (TreeSitter.pas), TreeSitter.TTSLanguageHelper.GetSymbolName (TreeSitter.pas) (+3 more)
+  /// <para>Used by: declaration (TreeSitter.pas), TreeSitter.TTSLanguageHelper.GetSymbolForName (TreeSitter.pas), TreeSitter.TTSLanguageHelper.GetSymbolName (TreeSitter.pas), TreeSitter.TTSNodeHelper.GrammarSymbol (TreeSitter.pas), TreeSitter.TTSNodeHelper.Symbol (TreeSitter.pas) (+3 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSSymbol            = UInt16;
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (TreeSitter.pas), TreeSitter.TTSLanguageHelper.GetFieldId (TreeSitter.pas), TreeSitter.TTSLanguageHelper.GetFieldName (TreeSitter.pas), TreeSitter.TTSTreeCursor.GetCurrentFieldId (TreeSitter.pas), declaration (TreeSitterLib.pas)
+  /// <para>Used by: declaration (TreeSitter.pas), declaration (TreeSitterLib.pas), TreeSitter.TTSLanguageHelper.GetFieldId (TreeSitter.pas), TreeSitter.TTSLanguageHelper.GetFieldName (TreeSitter.pas), TreeSitter.TTSTreeCursor.GetCurrentFieldId (TreeSitter.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSFieldId           = UInt16;
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (DRagLint.CLI.pas), DRagLint.CLI.TreeSitterGrammarVersion (DRagLint.CLI.pas), declaration (DRagLint.Diagnostics.AstChecks.pas), declaration (DRagLint.Diagnostics.ParseCache.pas), declaration (DRagLint.Lint.Linter.pas) (+13 more)
+  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Diagnostics.AstChecks.pas), declaration (DRagLint.Diagnostics.ParseCache.pas), declaration (DRagLint.Index.CallResolver.pas), DRagLint.CLI.TreeSitterGrammarVersion (DRagLint.CLI.pas) (+14 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   PTSLanguage         = ^TSLanguage;
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (TreeSitter.pas)</para>
+  /// <para>Used in units: TreeSitter</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSLanguage          = record end;
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (TreeSitter.pas), declaration (TreeSitterLib.pas)
+  /// <para>Used by: declaration (TreeSitter.pas), declaration (TreeSitterLib.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   PTSParser           = ^TSParser;
   TSParser            = record end;
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (TreeSitter.pas), TreeSitter.TTSParser.ParseString (TreeSitter.pas), TreeSitter.TTSTree.Create (TreeSitter.pas), TreeSitter.TTSTree.TreeNilSafe (TreeSitter.pas), declaration (TreeSitterLib.pas)
+  /// <para>Used by: declaration (TreeSitter.pas), declaration (TreeSitterLib.pas), TreeSitter.TTSParser.ParseString (TreeSitter.pas), TreeSitter.TTSTree.Create (TreeSitter.pas), TreeSitter.TTSTree.TreeNilSafe (TreeSitter.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   PTSTree             = ^TSTree;
   TSTree              = record end;
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (TreeSitter.Query.pas), declaration (TreeSitterLib.pas)
+  /// <para>Used by: declaration (TreeSitter.Query.pas), declaration (TreeSitterLib.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   PTSQuery            = ^TSQuery;
   TSQuery             = record end;
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (TreeSitter.Query.pas), declaration (TreeSitterLib.pas)
+  /// <para>Used by: declaration (TreeSitter.Query.pas), declaration (TreeSitterLib.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   PTSQueryCursor      = ^TSQueryCursor;
@@ -103,22 +109,22 @@ type
   {$MINENUMSIZE 4}
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (TreeSitterLib.pas)
+  /// <para>Used by: declaration (TreeSitter.pas), declaration (TreeSitterLib.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSInputEncoding = (TSInputEncodingUTF8, TSInputEncodingUTF16);
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (TreeSitter.pas), TreeSitter.TTSLanguageHelper.GetSymbolType (TreeSitter.pas), declaration (TreeSitterLib.pas)
+  /// <para>Used by: declaration (TreeSitter.pas), declaration (TreeSitterLib.pas), TreeSitter.TTSLanguageHelper.GetSymbolType (TreeSitter.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSSymbolType = (TSSymbolTypeRegular, TSSymbolTypeAnonymous, TSSymbolTypeAuxiliary);
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (TreeSitterLib.pas)
-  /// Used in units: TreeSitterLib
+  /// <para>Used by: declaration (TreeSitter.pas), declaration (TreeSitterLib.pas), TreeSitter.TSInputRead (TreeSitter.pas)</para>
+  /// <para>Used in units: TreeSitter, TreeSitterLib</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSPoint = record
@@ -135,8 +141,8 @@ typedef struct TSRange {
 *)
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: TreeSitter.TTSParser.Parse (TreeSitter.pas), declaration (TreeSitterLib.pas)
-  /// Used in units: TreeSitter, TreeSitterLib
+  /// <para>Used by: declaration (TreeSitterLib.pas), TreeSitter.TTSParser.Parse (TreeSitter.pas)</para>
+  /// <para>Used in units: TreeSitter, TreeSitterLib</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSInput = record
@@ -164,8 +170,8 @@ typedef struct TSInputEdit {
 *)
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (TreeSitterLib.pas)
-  /// Used in units: TreeSitterLib
+  /// <para>Used by: declaration (TreeSitter.pas), declaration (TreeSitterLib.pas)</para>
+  /// <para>Used in units: TreeSitter, TreeSitterLib</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSNode = record
@@ -176,14 +182,14 @@ typedef struct TSInputEdit {
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (TreeSitter.pas), TreeSitter.TTSTreeCursor.GetTreeCursor (TreeSitter.pas), declaration (TreeSitterLib.pas)
+  /// <para>Used by: declaration (TreeSitter.pas), declaration (TreeSitterLib.pas), TreeSitter.TTSTreeCursor.GetTreeCursor (TreeSitter.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   PTSTreeCursor = ^TSTreeCursor;
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (TreeSitter.pas), declaration (TreeSitterLib.pas)
-  /// Used in units: TreeSitter, TreeSitterLib
+  /// <para>Used by: declaration (TreeSitter.pas), declaration (TreeSitterLib.pas)</para>
+  /// <para>Used in units: TreeSitter, TreeSitterLib</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSTreeCursor  = record
@@ -192,6 +198,12 @@ typedef struct TSInputEdit {
     context: array[1..3] of UInt32;
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (TreeSitter.Query.pas), declaration (TreeSitterLib.pas)</para>
+  /// <para>Used in units: TreeSitter.Query, TreeSitterLib</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSQueryCapture = record
     node : TSNode;
     index: UInt32;
@@ -199,7 +211,7 @@ typedef struct TSInputEdit {
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (TreeSitterLib.pas)
+  /// <para>Used by: declaration (TreeSitterLib.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   PSQueryCaptureArray = ^TSQueryCaptureArray;
@@ -207,7 +219,7 @@ typedef struct TSInputEdit {
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (TreeSitterLib.pas)
+  /// <para>Used by: declaration (TreeSitter.Query.pas), declaration (TreeSitterLib.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSQuantifier = (
@@ -216,8 +228,8 @@ typedef struct TSInputEdit {
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (TreeSitterLib.pas)
-  /// Used in units: TreeSitterLib
+  /// <para>Used by: declaration (TreeSitter.Query.pas), declaration (TreeSitterLib.pas)</para>
+  /// <para>Used in units: TreeSitter.Query, TreeSitterLib</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSQueryMatch = record
@@ -232,11 +244,17 @@ typedef struct TSInputEdit {
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (TreeSitterLib.pas)
+  /// <para>Used by: declaration (TreeSitter.Query.pas), declaration (TreeSitterLib.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSQueryPredicateStepType = ( TSQueryPredicateStepTypeDone, TSQueryPredicateStepTypeCapture, TSQueryPredicateStepTypeString);
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (TreeSitter.Query.pas), declaration (TreeSitterLib.pas)</para>
+  /// <para>Used in units: TreeSitter.Query, TreeSitterLib</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSQueryPredicateStep = record
     &type   : TSQueryPredicateStepType;
     value_id: UInt32                  ;
@@ -244,7 +262,7 @@ typedef struct TSInputEdit {
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: TreeSitter.Query.TTSQuery.PredicatesForPattern (TreeSitter.Query.pas), declaration (TreeSitterLib.pas)
+  /// <para>Used by: declaration (TreeSitterLib.pas), TreeSitter.Query.TTSQuery.PredicatesForPattern (TreeSitter.Query.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   PTSQueryPredicateStepArray = ^TSQueryPredicateStepArray;
@@ -252,7 +270,7 @@ typedef struct TSInputEdit {
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: DRagLint.Lint.QueryRules.TQueryRule.Create (DRagLint.Lint.QueryRules.pas), declaration (TreeSitterLib.pas)
+  /// <para>Used by: declaration (TreeSitter.Query.pas), declaration (TreeSitterLib.pas), DRagLint.Lint.QueryRules.TQueryRule.Create (DRagLint.Lint.QueryRules.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSQueryError = (
@@ -267,18 +285,28 @@ typedef struct TSInputEdit {
  * Create a new parser.
  */
 *)
+/// <summary><!-- drag-lint:auto sum -->/********************/ /* Section - Parser */
+/// /********************/ /** * Create a new parser. */</summary>
+/// <returns><!-- drag-lint:auto type -->PTSParser</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: TreeSitter.TTSParser.Create (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ts_parser_new(): PTSParser; cdecl; external ModuleName;
 (*
 /**
  * Delete the parser, freeing all of the memory that it used.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Delete the parser, freeing all of the memory
+/// <summary><!-- drag-lint:auto sum -->/** * Delete the parser, freeing all of the memory
 /// that it used. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->PTSParser</param>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSParser.Destroy (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSParser.Destroy (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure ts_parser_delete(self: PTSParser); cdecl; external ModuleName;
@@ -287,12 +315,13 @@ procedure ts_parser_delete(self: PTSParser); cdecl; external ModuleName;
  * Get the parser's current language.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the parser's current language. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Get the parser's current language. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->PTSParser</param>
 /// <returns><!-- drag-lint:auto type -->PTSLanguage</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSParser.GetLanguage (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSParser.GetLanguage (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_parser_language(self: PTSParser): PTSLanguage; cdecl; external ModuleName;
@@ -308,19 +337,20 @@ function ts_parser_language(self: PTSParser): PTSLanguage; cdecl; external Modul
  * [`TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION`] constants.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Set the language that the parser should use for
-/// parsing. * * Returns a boolean indicating whether or not the language was successfully
-/// * assigned. True means assignment succeeded. False means there was a version *
-/// mismatch: the language was generated with an incompatible version of the * Tree-sitter
-/// CLI. Check the language's version using [`ts_language_version`] * and compare it to
-/// this library's [`TREE_SITTER_LANGUAGE_VERSION`] and *
+/// <summary><!-- drag-lint:auto sum -->/** * Set the language that the parser should use
+/// for parsing. * * Returns a boolean indicating whether or not the language was
+/// successfully * assigned. True means assignment succeeded. False means there was a
+/// version * mismatch: the language was generated with an incompatible version of the *
+/// Tree-sitter CLI. Check the language's version using [`ts_language_version`] * and
+/// compare it to this library's [`TREE_SITTER_LANGUAGE_VERSION`] and *
 /// [`TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION`] constants. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->PTSParser</param>
 /// <param name="language"><!-- drag-lint:auto type -->PTSLanguage</param>
 /// <returns><!-- drag-lint:auto type -->Boolean</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSParser.SetLanguage (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSParser.SetLanguage (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_parser_set_language(self: PTSParser; language: PTSLanguage): Boolean; cdecl; external ModuleName;
@@ -415,7 +445,8 @@ const TSRange *ts_parser_included_ranges(
 /// <returns><!-- drag-lint:auto type -->PTSTree</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSParser.Parse (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSParser.Parse (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_parser_parse( self: PTSParser; const old_tree: PTSTree; input: TSInput ): PTSTree; cdecl; external ModuleName;
@@ -427,6 +458,20 @@ function ts_parser_parse( self: PTSParser; const old_tree: PTSTree; input: TSInp
  * length in bytes.
  */
 *)
+/// <summary><!-- drag-lint:auto sum -->/** * Use the parser to parse some source code
+/// stored in one contiguous buffer. * The first two parameters are the same as in the
+/// [`ts_parser_parse`] function * above. The second two parameters indicate the location
+/// of the buffer and its * length in bytes. */</summary>
+/// <param name="self"><!-- drag-lint:auto type -->PTSParser</param>
+/// <param name="old_tree"><!-- drag-lint:auto type -->PTSTree</param>
+/// <param name="_string"><!-- drag-lint:auto type -->PAnsiChar</param>
+/// <param name="length"><!-- drag-lint:auto type -->UInt32</param>
+/// <returns><!-- drag-lint:auto type -->PTSTree</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Directives: cdecl; external</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ts_parser_parse_string( self: PTSParser; old_tree: PTSTree; _string: PAnsiChar; length: UInt32 ): PTSTree; cdecl; external ModuleName;
 (*
 /**
@@ -436,9 +481,9 @@ function ts_parser_parse_string( self: PTSParser; old_tree: PTSTree; _string: PA
  * the text is encoded as UTF8 or UTF16.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Use the parser to parse some source code stored
-/// in one contiguous buffer with * a given encoding. The first four parameters work the
-/// same as in the * [`ts_parser_parse_string`] method above. The final parameter
+/// <summary><!-- drag-lint:auto sum -->/** * Use the parser to parse some source code
+/// stored in one contiguous buffer with * a given encoding. The first four parameters
+/// work the same as in the * [`ts_parser_parse_string`] method above. The final parameter
 /// indicates whether * the text is encoded as UTF8 or UTF16. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->PTSParser</param>
 /// <param name="old_tree"><!-- drag-lint:auto type -->PTSTree</param>
@@ -448,7 +493,8 @@ function ts_parser_parse_string( self: PTSParser; old_tree: PTSTree; _string: PA
 /// <returns><!-- drag-lint:auto type -->PTSTree</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSParser.ParseString (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSParser.ParseString (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_parser_parse_string_encoding( self: PTSParser; old_tree: PTSTree; _string: PByte; length: UInt32; encoding: TSInputEncoding ): PTSTree; cdecl; external ModuleName;
@@ -463,8 +509,8 @@ function ts_parser_parse_string_encoding( self: PTSParser; old_tree: PTSTree; _s
  * call [`ts_parser_reset`] first.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Instruct the parser to start the next parse from
-/// the beginning. * * If the parser previously failed because of a timeout or a
+/// <summary><!-- drag-lint:auto sum -->/** * Instruct the parser to start the next parse
+/// from the beginning. * * If the parser previously failed because of a timeout or a
 /// cancellation, then * by default, it will resume where it left off on the next call to
 /// * [`ts_parser_parse`] or other parsing functions. If you don't want to resume, * and
 /// instead intend to use this parser to parse some other document, you must * call
@@ -472,7 +518,8 @@ function ts_parser_parse_string_encoding( self: PTSParser; old_tree: PTSTree; _s
 /// <param name="self"><!-- drag-lint:auto type -->PTSParser</param>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSParser.Reset (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSParser.Reset (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure ts_parser_reset(self: PTSParser); cdecl; external ModuleName;
@@ -536,7 +583,8 @@ void ts_parser_print_dot_graphs(TSParser *self, int fd);
 /// <returns><!-- drag-lint:auto type -->PTSTree</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSTree.Clone (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSTree.Clone (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_tree_copy(const self: PTSTree): PTSTree; cdecl; external ModuleName;
@@ -545,12 +593,13 @@ function ts_tree_copy(const self: PTSTree): PTSTree; cdecl; external ModuleName;
  * Delete the syntax tree, freeing all of the memory that it used.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Delete the syntax tree, freeing all of the
+/// <summary><!-- drag-lint:auto sum -->/** * Delete the syntax tree, freeing all of the
 /// memory that it used. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->PTSTree</param>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSTree.Destroy (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSTree.Destroy (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure ts_tree_delete(self: PTSTree); cdecl; external ModuleName;
@@ -559,12 +608,13 @@ procedure ts_tree_delete(self: PTSTree); cdecl; external ModuleName;
  * Get the root node of the syntax tree.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the root node of the syntax tree. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Get the root node of the syntax tree. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->PTSTree</param>
 /// <returns><!-- drag-lint:auto type -->TSNode</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSTree.RootNode (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSTree.RootNode (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_tree_root_node(self: PTSTree): TSNode; cdecl; external ModuleName;
@@ -588,7 +638,8 @@ TSNode ts_tree_root_node_with_offset(
 /// <returns><!-- drag-lint:auto type -->PTSLanguage</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSTree.Language (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSTree.Language (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_tree_language(const self: PTSTree): PTSLanguage; cdecl; external ModuleName;
@@ -643,7 +694,8 @@ void ts_tree_print_dot_graph(const TSTree *self, int file_descriptor);
 /// <returns><!-- drag-lint:auto type -->PAnsiChar</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.NodeType (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.NodeType (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_type(self: TSNode): PAnsiChar; cdecl; external ModuleName;
@@ -652,12 +704,13 @@ function ts_node_type(self: TSNode): PAnsiChar; cdecl; external ModuleName;
  * Get the node's type as a numerical id.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the node's type as a numerical id. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Get the node's type as a numerical id. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->TSNode</param>
 /// <returns><!-- drag-lint:auto type -->TSSymbol</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.Symbol (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.Symbol (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_symbol(self: TSNode): TSSymbol; cdecl; external ModuleName;
@@ -666,12 +719,13 @@ function ts_node_symbol(self: TSNode): TSSymbol; cdecl; external ModuleName;
  * Get the node's language.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the node's language. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Get the node's language. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->TSNode</param>
 /// <returns><!-- drag-lint:auto type -->PTSLanguage</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.Language (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.Language (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_language(self: TSNode): PTSLanguage; cdecl; external ModuleName;
@@ -681,13 +735,14 @@ function ts_node_language(self: TSNode): PTSLanguage; cdecl; external ModuleName
  * null-terminated string.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the node's type as it appears in the grammar
-/// ignoring aliases as a * null-terminated string. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Get the node's type as it appears in the
+/// grammar ignoring aliases as a * null-terminated string. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->TSNode</param>
 /// <returns><!-- drag-lint:auto type -->PAnsiChar</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.GrammarType (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.GrammarType (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_grammar_type(self: TSNode): PAnsiChar; cdecl; external ModuleName;
@@ -698,14 +753,15 @@ function ts_node_grammar_type(self: TSNode): PAnsiChar; cdecl; external ModuleNa
  * [`ts_node_symbol`].
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the node's type as a numerical id as it
+/// <summary><!-- drag-lint:auto sum -->/** * Get the node's type as a numerical id as it
 /// appears in the grammar ignoring * aliases. This should be used in
 /// [`ts_language_next_state`] instead of * [`ts_node_symbol`]. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->TSNode</param>
 /// <returns><!-- drag-lint:auto type -->TSSymbol</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.GrammarSymbol (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.GrammarSymbol (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_grammar_symbol(self: TSNode): TSSymbol; cdecl; external ModuleName;
@@ -714,12 +770,13 @@ function ts_node_grammar_symbol(self: TSNode): TSSymbol; cdecl; external ModuleN
  * Get the node's start byte.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the node's start byte. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Get the node's start byte. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->TSNode</param>
 /// <returns><!-- drag-lint:auto type -->UInt32</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.StartByte (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.StartByte (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_start_byte(self: TSNode): UInt32; cdecl; external ModuleName;
@@ -738,7 +795,8 @@ function ts_node_start_point(self: TSNode): Int64; cdecl; external ModuleName;
 /// <returns><!-- drag-lint:auto type -->TSPoint</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.StartPoint (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.StartPoint (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_start_point(self: TSNode): TSPoint; cdecl; external ModuleName;
@@ -748,12 +806,13 @@ function ts_node_start_point(self: TSNode): TSPoint; cdecl; external ModuleName;
  * Get the node's end byte.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the node's end byte. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Get the node's end byte. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->TSNode</param>
 /// <returns><!-- drag-lint:auto type -->UInt32</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.EndByte (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.EndByte (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_end_byte(self: TSNode): UInt32; cdecl; external ModuleName;
@@ -772,7 +831,8 @@ function ts_node_end_point(self: TSNode): Int64; cdecl; external ModuleName;
 /// <returns><!-- drag-lint:auto type -->TSPoint</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.EndPoint (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.EndPoint (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_end_point(self: TSNode): TSPoint; cdecl; external ModuleName;
@@ -785,14 +845,15 @@ function ts_node_end_point(self: TSNode): TSPoint; cdecl; external ModuleName;
  * freeing it using `free`.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get an S-expression representing the node as a
-/// string. * * This string is allocated with `malloc` and the caller is responsible for *
-/// freeing it using `free`. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Get an S-expression representing the node as
+/// a string. * * This string is allocated with `malloc` and the caller is responsible for
+/// * freeing it using `free`. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->TSNode</param>
 /// <returns><!-- drag-lint:auto type -->PAnsiChar</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.ToString (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.ToString (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_string(self: TSNode): PAnsiChar; cdecl; external ModuleName;
@@ -803,14 +864,15 @@ function ts_node_string(self: TSNode): PAnsiChar; cdecl; external ModuleName;
  * was found.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Check if the node is null. Functions like
+/// <summary><!-- drag-lint:auto sum -->/** * Check if the node is null. Functions like
 /// [`ts_node_child`] and * [`ts_node_next_sibling`] will return a null node to indicate
 /// that no such node * was found. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->TSNode</param>
 /// <returns><!-- drag-lint:auto type -->Boolean</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.IsNull (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.IsNull (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_is_null(self: TSNode): Boolean; cdecl; external ModuleName;
@@ -821,14 +883,15 @@ function ts_node_is_null(self: TSNode): Boolean; cdecl; external ModuleName;
  * grammar.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Check if the node is *named*. Named nodes
+/// <summary><!-- drag-lint:auto sum -->/** * Check if the node is *named*. Named nodes
 /// correspond to named rules in the * grammar, whereas *anonymous* nodes correspond to
 /// string literals in the * grammar. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->TSNode</param>
 /// <returns><!-- drag-lint:auto type -->Boolean</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.IsNamed (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.IsNamed (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_is_named(self: TSNode): Boolean; cdecl; external ModuleName;
@@ -838,14 +901,15 @@ function ts_node_is_named(self: TSNode): Boolean; cdecl; external ModuleName;
  * order to recover from certain kinds of syntax errors.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Check if the node is *missing*. Missing nodes
-/// are inserted by the parser in * order to recover from certain kinds of syntax errors.
-/// */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Check if the node is *missing*. Missing
+/// nodes are inserted by the parser in * order to recover from certain kinds of syntax
+/// errors. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->TSNode</param>
 /// <returns><!-- drag-lint:auto type -->Boolean</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.IsMissing (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.IsMissing (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_is_missing(self: TSNode): Boolean; cdecl; external ModuleName;
@@ -855,14 +919,15 @@ function ts_node_is_missing(self: TSNode): Boolean; cdecl; external ModuleName;
  * which are not required the grammar, but can appear anywhere.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Check if the node is *extra*. Extra nodes
+/// <summary><!-- drag-lint:auto sum -->/** * Check if the node is *extra*. Extra nodes
 /// represent things like comments, * which are not required the grammar, but can appear
 /// anywhere. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->TSNode</param>
 /// <returns><!-- drag-lint:auto type -->Boolean</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.IsExtra (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.IsExtra (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_is_extra(self: TSNode): Boolean; cdecl; external ModuleName;
@@ -871,12 +936,13 @@ function ts_node_is_extra(self: TSNode): Boolean; cdecl; external ModuleName;
  * Check if a syntax node has been edited.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Check if a syntax node has been edited. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Check if a syntax node has been edited. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->TSNode</param>
 /// <returns><!-- drag-lint:auto type -->Boolean</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.HasChanges (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.HasChanges (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_has_changes(self: TSNode): Boolean; cdecl; external ModuleName;
@@ -885,13 +951,14 @@ function ts_node_has_changes(self: TSNode): Boolean; cdecl; external ModuleName;
  * Check if the node is a syntax error or contains any syntax errors.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Check if the node is a syntax error or contains
-/// any syntax errors. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Check if the node is a syntax error or
+/// contains any syntax errors. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->TSNode</param>
 /// <returns><!-- drag-lint:auto type -->Boolean</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.HasError (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.HasError (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_has_error(self: TSNode): Boolean; cdecl; external ModuleName;
@@ -900,12 +967,13 @@ function ts_node_has_error(self: TSNode): Boolean; cdecl; external ModuleName;
  * Check if the node is a syntax error.
 */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Check if the node is a syntax error. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Check if the node is a syntax error. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->TSNode</param>
 /// <returns><!-- drag-lint:auto type -->Boolean</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.IsError (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.IsError (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_is_error(self: TSNode): Boolean; cdecl; external ModuleName;
@@ -928,7 +996,8 @@ TSStateId ts_node_next_parse_state(TSNode self);
 /// <returns><!-- drag-lint:auto type -->TSNode</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.Parent (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.Parent (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_parent(self: TSNode): TSNode; cdecl; external ModuleName;
@@ -938,14 +1007,15 @@ function ts_node_parent(self: TSNode): TSNode; cdecl; external ModuleName;
  * child.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the node's child at the given index, where
-/// zero represents the first * child. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Get the node's child at the given index,
+/// where zero represents the first * child. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->TSNode</param>
 /// <param name="child_index"><!-- drag-lint:auto type -->UInt32</param>
 /// <returns><!-- drag-lint:auto type -->TSNode</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.Child (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.Child (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_child(self: TSNode; child_index: UInt32): TSNode; cdecl; external ModuleName;
@@ -965,7 +1035,8 @@ const char *ts_node_field_name_for_child(TSNode self, uint32_t child_index);
 /// <returns><!-- drag-lint:auto type -->UInt32</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.ChildCount (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.ChildCount (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_child_count(self: TSNode): UInt32; cdecl; external ModuleName;
@@ -976,14 +1047,15 @@ function ts_node_child_count(self: TSNode): UInt32; cdecl; external ModuleName;
  * See also [`ts_node_is_named`].
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the node's *named* child at the given index.
-/// * * See also [`ts_node_is_named`]. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Get the node's *named* child at the given
+/// index. * * See also [`ts_node_is_named`]. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->TSNode</param>
 /// <param name="child_index"><!-- drag-lint:auto type -->UInt32</param>
 /// <returns><!-- drag-lint:auto type -->TSNode</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.NamedChild (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.NamedChild (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_named_child(self: TSNode; child_index: UInt32): TSNode; cdecl; external ModuleName;
@@ -994,13 +1066,14 @@ function ts_node_named_child(self: TSNode; child_index: UInt32): TSNode; cdecl; 
  * See also [`ts_node_is_named`].
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the node's number of *named* children. * *
-/// See also [`ts_node_is_named`]. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Get the node's number of *named* children. *
+/// * See also [`ts_node_is_named`]. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->TSNode</param>
 /// <returns><!-- drag-lint:auto type -->UInt32</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.NamedChildCount (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.NamedChildCount (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_named_child_count(self: TSNode): UInt32; cdecl; external ModuleName;
@@ -1009,15 +1082,16 @@ function ts_node_named_child_count(self: TSNode): UInt32; cdecl; external Module
  * Get the node's child with the given field name.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the node's child with the given field name.
-/// */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Get the node's child with the given field
+/// name. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->TSNode</param>
 /// <param name="name"><!-- drag-lint:auto type -->const PAnsiChar</param>
 /// <param name="name_length"><!-- drag-lint:auto type -->UInt32</param>
 /// <returns><!-- drag-lint:auto type -->TSNode</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.ChildByField/1 (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.ChildByField/1 (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_child_by_field_name( self: TSNode; const name: PAnsiChar; name_length: UInt32 ): TSNode; cdecl; external ModuleName;
@@ -1029,15 +1103,16 @@ function ts_node_child_by_field_name( self: TSNode; const name: PAnsiChar; name_
  * [`ts_language_field_id_for_name`] function.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the node's child with the given numerical
-/// field id. * * You can convert a field name to an id using the *
+/// <summary><!-- drag-lint:auto sum -->/** * Get the node's child with the given
+/// numerical field id. * * You can convert a field name to an id using the *
 /// [`ts_language_field_id_for_name`] function. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->TSNode</param>
 /// <param name="field_id"><!-- drag-lint:auto type -->TSFieldId</param>
 /// <returns><!-- drag-lint:auto type -->TSNode</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.ChildByField/1 (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.ChildByField/1 (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_child_by_field_id(self: TSNode; field_id: TSFieldId): TSNode; cdecl; external ModuleName;
@@ -1046,12 +1121,13 @@ function ts_node_child_by_field_id(self: TSNode; field_id: TSFieldId): TSNode; c
  * Get the node's next / previous sibling.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the node's next / previous sibling. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Get the node's next / previous sibling. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->TSNode</param>
 /// <returns><!-- drag-lint:auto type -->TSNode</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.NextSibling (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.NextSibling (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_next_sibling(self: TSNode): TSNode; cdecl; external ModuleName;
@@ -1059,7 +1135,8 @@ function ts_node_next_sibling(self: TSNode): TSNode; cdecl; external ModuleName;
 /// <returns><!-- drag-lint:auto type -->TSNode</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.PrevSibling (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.PrevSibling (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_prev_sibling(self: TSNode): TSNode; cdecl; external ModuleName;
@@ -1068,13 +1145,14 @@ function ts_node_prev_sibling(self: TSNode): TSNode; cdecl; external ModuleName;
  * Get the node's next / previous *named* sibling.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the node's next / previous *named* sibling.
-/// */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Get the node's next / previous *named*
+/// sibling. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->TSNode</param>
 /// <returns><!-- drag-lint:auto type -->TSNode</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.NextNamedSibling (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.NextNamedSibling (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_next_named_sibling(self: TSNode): TSNode; cdecl; external ModuleName;
@@ -1082,7 +1160,8 @@ function ts_node_next_named_sibling(self: TSNode): TSNode; cdecl; external Modul
 /// <returns><!-- drag-lint:auto type -->TSNode</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.PrevNamedSibling (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.PrevNamedSibling (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_prev_named_sibling(self: TSNode): TSNode; cdecl; external ModuleName;
@@ -1105,7 +1184,8 @@ TSNode ts_node_first_named_child_for_byte(TSNode self, uint32_t byte);
 /// <returns><!-- drag-lint:auto type -->UInt32</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.DescendantCount (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.DescendantCount (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_descendant_count(self: TSNode): UInt32; cdecl; external ModuleName;
@@ -1143,7 +1223,8 @@ void ts_node_edit(TSNode *self, const TSInputEdit *edit);
 /// <returns><!-- drag-lint:auto type -->Boolean</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSNodeHelper.Equal (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSNodeHelper.Equal (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_node_eq(self, other: TSNode): Boolean; cdecl; external ModuleName;
@@ -1168,7 +1249,8 @@ function ts_node_eq(self, other: TSNode): Boolean; cdecl; external ModuleName;
 /// [`TSNode`] functions. It is a mutable object that is always * on a certain syntax node, and can
 /// be moved imperatively to different nodes. */
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSTreeCursor.Create/1 (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSTreeCursor.Create/1 (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_tree_cursor_new(node: TSNode): TSTreeCursor; cdecl; external ModuleName;
@@ -1177,12 +1259,13 @@ function ts_tree_cursor_new(node: TSNode): TSTreeCursor; cdecl; external ModuleN
  * Delete a tree cursor, freeing all of the memory that it used.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Delete a tree cursor, freeing all of the memory
-/// that it used. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Delete a tree cursor, freeing all of the
+/// memory that it used. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->PTSTreeCursor</param>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSTreeCursor.Destroy (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSTreeCursor.Destroy (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure ts_tree_cursor_delete(self: PTSTreeCursor); cdecl; external ModuleName;
@@ -1191,13 +1274,14 @@ procedure ts_tree_cursor_delete(self: PTSTreeCursor); cdecl; external ModuleName
  * Re-initialize a tree cursor to start at a different node.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Re-initialize a tree cursor to start at a
+/// <summary><!-- drag-lint:auto sum -->/** * Re-initialize a tree cursor to start at a
 /// different node. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->PTSTreeCursor</param>
 /// <param name="node"><!-- drag-lint:auto type -->TSNode</param>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSTreeCursor.Reset/1 (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSTreeCursor.Reset/1 (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure ts_tree_cursor_reset(self: PTSTreeCursor; node: TSNode); cdecl; external ModuleName;
@@ -1209,14 +1293,15 @@ procedure ts_tree_cursor_reset(self: PTSTreeCursor; node: TSNode); cdecl; extern
  * allows reusing already created cursors.
 */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Re-initialize a tree cursor to the same position
-/// as another cursor. * * Unlike [`ts_tree_cursor_reset`], this will not lose parent
-/// information and * allows reusing already created cursors. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Re-initialize a tree cursor to the same
+/// position as another cursor. * * Unlike [`ts_tree_cursor_reset`], this will not lose
+/// parent information and * allows reusing already created cursors. */</summary>
 /// <param name="dst"><!-- drag-lint:auto type -->PTSTreeCursor</param>
 /// <param name="src"><!-- drag-lint:auto type -->const PTSTreeCursor</param>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSTreeCursor.Reset/1 (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSTreeCursor.Reset/1 (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure ts_tree_cursor_reset_to(dst: PTSTreeCursor; const src: PTSTreeCursor); cdecl; external ModuleName;
@@ -1225,12 +1310,13 @@ procedure ts_tree_cursor_reset_to(dst: PTSTreeCursor; const src: PTSTreeCursor);
  * Get the tree cursor's current node.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the tree cursor's current node. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Get the tree cursor's current node. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->const PTSTreeCursor</param>
 /// <returns><!-- drag-lint:auto type -->TSNode</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSTreeCursor.GetCurrentNode (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSTreeCursor.GetCurrentNode (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_tree_cursor_current_node(const self: PTSTreeCursor): TSNode; cdecl; external ModuleName;
@@ -1242,14 +1328,15 @@ function ts_tree_cursor_current_node(const self: PTSTreeCursor): TSNode; cdecl; 
  * See also [`ts_node_child_by_field_name`].
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the field name of the tree cursor's current
-/// node. * * This returns `NULL` if the current node doesn't have a field. * See also
-/// [`ts_node_child_by_field_name`]. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Get the field name of the tree cursor's
+/// current node. * * This returns `NULL` if the current node doesn't have a field. * See
+/// also [`ts_node_child_by_field_name`]. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->const PTSTreeCursor</param>
 /// <returns><!-- drag-lint:auto type -->PAnsiChar</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSTreeCursor.GetCurrentFieldName (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSTreeCursor.GetCurrentFieldName (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_tree_cursor_current_field_name(const self: PTSTreeCursor): PAnsiChar; cdecl; external ModuleName;
@@ -1261,14 +1348,15 @@ function ts_tree_cursor_current_field_name(const self: PTSTreeCursor): PAnsiChar
  * See also [`ts_node_child_by_field_id`], [`ts_language_field_id_for_name`].
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the field id of the tree cursor's current
-/// node. * * This returns zero if the current node doesn't have a field. * See also
-/// [`ts_node_child_by_field_id`], [`ts_language_field_id_for_name`]. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Get the field id of the tree cursor's
+/// current node. * * This returns zero if the current node doesn't have a field. * See
+/// also [`ts_node_child_by_field_id`], [`ts_language_field_id_for_name`]. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->const PTSTreeCursor</param>
 /// <returns><!-- drag-lint:auto type -->TSFieldId</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSTreeCursor.GetCurrentFieldId (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSTreeCursor.GetCurrentFieldId (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_tree_cursor_current_field_id(const self: PTSTreeCursor): TSFieldId; cdecl; external ModuleName;
@@ -1280,14 +1368,15 @@ function ts_tree_cursor_current_field_id(const self: PTSTreeCursor): TSFieldId; 
  * if there was no parent node (the cursor was already on the root node).
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Move the cursor to the parent of its current
+/// <summary><!-- drag-lint:auto sum -->/** * Move the cursor to the parent of its current
 /// node. * * This returns `true` if the cursor successfully moved, and returns `false` *
 /// if there was no parent node (the cursor was already on the root node). */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->PTSTreeCursor</param>
 /// <returns><!-- drag-lint:auto type -->Boolean</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSTreeCursor.GotoParent (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSTreeCursor.GotoParent (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_tree_cursor_goto_parent(self: PTSTreeCursor): Boolean; cdecl; external ModuleName;
@@ -1299,14 +1388,15 @@ function ts_tree_cursor_goto_parent(self: PTSTreeCursor): Boolean; cdecl; extern
  * if there was no next sibling node.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Move the cursor to the next sibling of its
+/// <summary><!-- drag-lint:auto sum -->/** * Move the cursor to the next sibling of its
 /// current node. * * This returns `true` if the cursor successfully moved, and returns
 /// `false` * if there was no next sibling node. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->PTSTreeCursor</param>
 /// <returns><!-- drag-lint:auto type -->Boolean</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSTreeCursor.GotoNextSibling (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSTreeCursor.GotoNextSibling (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_tree_cursor_goto_next_sibling(self: PTSTreeCursor): Boolean; cdecl; external ModuleName;
@@ -1323,17 +1413,18 @@ function ts_tree_cursor_goto_next_sibling(self: PTSTreeCursor): Boolean; cdecl; 
  * previous sibling node to recalculate its position.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Move the cursor to the previous sibling of its
-/// current node. * * This returns `true` if the cursor successfully moved, and returns
-/// `false` if * there was no previous sibling node. * * Note, that this function may be
-/// slower than * [`ts_tree_cursor_goto_next_sibling`] due to how node positions are
-/// stored. In * the worst case, this will need to iterate through all the children upto
-/// the * previous sibling node to recalculate its position. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Move the cursor to the previous sibling of
+/// its current node. * * This returns `true` if the cursor successfully moved, and
+/// returns `false` if * there was no previous sibling node. * * Note, that this function
+/// may be slower than * [`ts_tree_cursor_goto_next_sibling`] due to how node positions
+/// are stored. In * the worst case, this will need to iterate through all the children
+/// upto the * previous sibling node to recalculate its position. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->PTSTreeCursor</param>
 /// <returns><!-- drag-lint:auto type -->Boolean</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSTreeCursor.GotoPrevSibling (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSTreeCursor.GotoPrevSibling (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_tree_cursor_goto_previous_sibling(self: PTSTreeCursor): Boolean; cdecl; external ModuleName;
@@ -1345,14 +1436,15 @@ function ts_tree_cursor_goto_previous_sibling(self: PTSTreeCursor): Boolean; cde
  * if there were no children.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Move the cursor to the first child of its
+/// <summary><!-- drag-lint:auto sum -->/** * Move the cursor to the first child of its
 /// current node. * * This returns `true` if the cursor successfully moved, and returns
 /// `false` * if there were no children. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->PTSTreeCursor</param>
 /// <returns><!-- drag-lint:auto type -->Boolean</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSTreeCursor.GotoFirstChild (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSTreeCursor.GotoFirstChild (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_tree_cursor_goto_first_child(self: PTSTreeCursor): Boolean; cdecl; external ModuleName;
@@ -1368,16 +1460,17 @@ function ts_tree_cursor_goto_first_child(self: PTSTreeCursor): Boolean; cdecl; e
  * position.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Move the cursor to the last child of its current
-/// node. * * This returns `true` if the cursor successfully moved, and returns `false` if
-/// * there were no children. * * Note that this function may be slower than
+/// <summary><!-- drag-lint:auto sum -->/** * Move the cursor to the last child of its
+/// current node. * * This returns `true` if the cursor successfully moved, and returns
+/// `false` if * there were no children. * * Note that this function may be slower than
 /// [`ts_tree_cursor_goto_first_child`] * because it needs to iterate through all the
 /// children to compute the child's * position. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->PTSTreeCursor</param>
 /// <returns><!-- drag-lint:auto type -->Boolean</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSTreeCursor.GotoLastChild (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSTreeCursor.GotoLastChild (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_tree_cursor_goto_last_child(self: PTSTreeCursor): Boolean; cdecl; external ModuleName;
@@ -1388,14 +1481,15 @@ function ts_tree_cursor_goto_last_child(self: PTSTreeCursor): Boolean; cdecl; ex
  * zero represents the original node itself.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Move the cursor to the node that is the nth
+/// <summary><!-- drag-lint:auto sum -->/** * Move the cursor to the node that is the nth
 /// descendant of * the original node that the cursor was constructed with, where * zero
 /// represents the original node itself. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->PTSTreeCursor</param>
 /// <param name="goal_descendant_index"><!-- drag-lint:auto type -->UInt32</param>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSTreeCursor.GotoDescendant (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSTreeCursor.GotoDescendant (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure ts_tree_cursor_goto_descendant(self: PTSTreeCursor; goal_descendant_index: UInt32); cdecl; external ModuleName;
@@ -1405,14 +1499,15 @@ procedure ts_tree_cursor_goto_descendant(self: PTSTreeCursor; goal_descendant_in
  * descendants of the original node that the cursor was constructed with.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the index of the cursor's current node out
-/// of all of the * descendants of the original node that the cursor was constructed with.
-/// */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Get the index of the cursor's current node
+/// out of all of the * descendants of the original node that the cursor was constructed
+/// with. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->const PTSTreeCursor</param>
 /// <returns><!-- drag-lint:auto type -->UInt32</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSTreeCursor.GetCurrentDescendantIndex (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSTreeCursor.GetCurrentDescendantIndex (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_tree_cursor_current_descendant_index(const self: PTSTreeCursor): UInt32; cdecl; external ModuleName;
@@ -1422,13 +1517,14 @@ function ts_tree_cursor_current_descendant_index(const self: PTSTreeCursor): UIn
  * node that the cursor was constructed with.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the depth of the cursor's current node
+/// <summary><!-- drag-lint:auto sum -->/** * Get the depth of the cursor's current node
 /// relative to the original * node that the cursor was constructed with. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->const PTSTreeCursor</param>
 /// <returns><!-- drag-lint:auto type -->UInt32</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSTreeCursor.GetCurrentDepth (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSTreeCursor.GetCurrentDepth (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_tree_cursor_current_depth(const self: PTSTreeCursor): UInt32; cdecl; external ModuleName;
@@ -1441,7 +1537,7 @@ function ts_tree_cursor_current_depth(const self: PTSTreeCursor): UInt32; cdecl;
  * if no such child was found.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Move the cursor to the first child of its
+/// <summary><!-- drag-lint:auto sum -->/** * Move the cursor to the first child of its
 /// current node that extends beyond * the given byte offset or point. * * This returns
 /// the index of the child node if one was found, and returns -1 * if no such child was
 /// found. */</summary>
@@ -1450,7 +1546,8 @@ function ts_tree_cursor_current_depth(const self: PTSTreeCursor): UInt32; cdecl;
 /// <returns><!-- drag-lint:auto type -->Int64</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSTreeCursor.GotoFirstChildForGoal/1 (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSTreeCursor.GotoFirstChildForGoal/1 (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_tree_cursor_goto_first_child_for_byte (self: PTSTreeCursor; goal_byte : UInt32 ): Int64; cdecl; external ModuleName;
@@ -1459,7 +1556,8 @@ function ts_tree_cursor_goto_first_child_for_byte (self: PTSTreeCursor; goal_byt
 /// <returns><!-- drag-lint:auto type -->Int64</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSTreeCursor.GotoFirstChildForGoal/1 (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSTreeCursor.GotoFirstChildForGoal/1 (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_tree_cursor_goto_first_child_for_point(self: PTSTreeCursor; goal_point: TSPoint): Int64; cdecl; external ModuleName;
@@ -1468,7 +1566,8 @@ function ts_tree_cursor_goto_first_child_for_point(self: PTSTreeCursor; goal_poi
 /// <returns><!-- drag-lint:auto type -->TSTreeCursor</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSTreeCursor.Create/1 (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSTreeCursor.Create/1 (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_tree_cursor_copy(const cursor: PTSTreeCursor): TSTreeCursor; cdecl; external ModuleName;
@@ -1488,7 +1587,7 @@ function ts_tree_cursor_copy(const cursor: PTSTreeCursor): TSTreeCursor; cdecl; 
  * 2. The type of error is written to the `error_type` parameter.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/*******************/ /* Section - Query */
+/// <summary><!-- drag-lint:auto sum -->/*******************/ /* Section - Query */
 /// /*******************/ /** * Create a new query from a string containing one or more
 /// S-expression * patterns. The query is associated with a particular language, and can *
 /// only be run on syntax nodes parsed with that language. * * If all of the given
@@ -1504,7 +1603,8 @@ function ts_tree_cursor_copy(const cursor: PTSTreeCursor): TSTreeCursor; cdecl; 
 /// <returns><!-- drag-lint:auto type -->PTSQuery</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.Query.TTSQuery.Create (TreeSitter.Query.pas)
+/// <para>Called from: TreeSitter.Query.TTSQuery.Create (TreeSitter.Query.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_query_new( const language: PTSLanguage; const source: PAnsiChar; source_len: UInt32; var error_offset: UInt32; var error_type: TSQueryError): PTSQuery; cdecl; external ModuleName;
@@ -1513,12 +1613,13 @@ function ts_query_new( const language: PTSLanguage; const source: PAnsiChar; sou
  * Delete a query, freeing all of the memory that it used.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Delete a query, freeing all of the memory that
-/// it used. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Delete a query, freeing all of the memory
+/// that it used. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->PTSQuery</param>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.Query.TTSQuery.Destroy (TreeSitter.Query.pas)
+/// <para>Called from: TreeSitter.Query.TTSQuery.Destroy (TreeSitter.Query.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure ts_query_delete(self: PTSQuery); cdecl; external ModuleName;
@@ -1527,13 +1628,14 @@ procedure ts_query_delete(self: PTSQuery); cdecl; external ModuleName;
  * Get the number of patterns, captures, or string literals in the query.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the number of patterns, captures, or string
-/// literals in the query. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Get the number of patterns, captures, or
+/// string literals in the query. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->const PTSQuery</param>
 /// <returns><!-- drag-lint:auto type -->UInt32</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.Query.TTSQuery.PatternCount (TreeSitter.Query.pas)
+/// <para>Called from: TreeSitter.Query.TTSQuery.PatternCount (TreeSitter.Query.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_query_pattern_count(const self: PTSQuery): UInt32; cdecl; external ModuleName;
@@ -1541,7 +1643,8 @@ function ts_query_pattern_count(const self: PTSQuery): UInt32; cdecl; external M
 /// <returns><!-- drag-lint:auto type -->UInt32</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.Query.TTSQuery.CaptureCount (TreeSitter.Query.pas)
+/// <para>Called from: TreeSitter.Query.TTSQuery.CaptureCount (TreeSitter.Query.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_query_capture_count(const self: PTSQuery): UInt32; cdecl; external ModuleName;
@@ -1549,7 +1652,8 @@ function ts_query_capture_count(const self: PTSQuery): UInt32; cdecl; external M
 /// <returns><!-- drag-lint:auto type -->UInt32</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.Query.TTSQuery.StringCount (TreeSitter.Query.pas)
+/// <para>Called from: TreeSitter.Query.TTSQuery.StringCount (TreeSitter.Query.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_query_string_count (const self: PTSQuery): UInt32; cdecl; external ModuleName;
@@ -1561,7 +1665,7 @@ function ts_query_string_count (const self: PTSQuery): UInt32; cdecl; external M
  * code strings.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the byte offset where the given pattern
+/// <summary><!-- drag-lint:auto sum -->/** * Get the byte offset where the given pattern
 /// starts in the query's source. * * This can be useful when combining queries by
 /// concatenating their source * code strings. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->const PTSQuery</param>
@@ -1569,7 +1673,8 @@ function ts_query_string_count (const self: PTSQuery): UInt32; cdecl; external M
 /// <returns><!-- drag-lint:auto type -->UInt32</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.Query.TTSQuery.StartByteForPattern (TreeSitter.Query.pas)
+/// <para>Called from: TreeSitter.Query.TTSQuery.StartByteForPattern (TreeSitter.Query.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_query_start_byte_for_pattern(const self: PTSQuery; pattern_index: UInt32): UInt32; cdecl; external ModuleName;
@@ -1591,11 +1696,11 @@ function ts_query_start_byte_for_pattern(const self: PTSQuery; pattern_index: UI
  *    predicates, then there will be two steps with this `type` in the array.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get all of the predicates for the given pattern
-/// in the query. * * The predicates are represented as a single array of steps. There are
-/// three * types of steps in this array, which correspond to the three legal values for *
-/// the `type` field: * - `TSQueryPredicateStepTypeCapture` - Steps with this type
-/// represent names * of captures. Their `value_id` can be used with the *
+/// <summary><!-- drag-lint:auto sum -->/** * Get all of the predicates for the given
+/// pattern in the query. * * The predicates are represented as a single array of steps.
+/// There are three * types of steps in this array, which correspond to the three legal
+/// values for * the `type` field: * - `TSQueryPredicateStepTypeCapture` - Steps with this
+/// type represent names * of captures. Their `value_id` can be used with the *
 /// [`ts_query_capture_name_for_id`] function to obtain the name of the capture. * -
 /// `TSQueryPredicateStepTypeString` - Steps with this type represent literal * strings.
 /// Their `value_id` can be used with the * [`ts_query_string_value_for_id`] function to
@@ -1608,7 +1713,8 @@ function ts_query_start_byte_for_pattern(const self: PTSQuery; pattern_index: UI
 /// <returns><!-- drag-lint:auto type -->PTSQueryPredicateStepArray</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.Query.TTSQuery.PredicatesForPattern (TreeSitter.Query.pas)
+/// <para>Called from: TreeSitter.Query.TTSQuery.PredicatesForPattern (TreeSitter.Query.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_query_predicates_for_pattern( const self: PTSQuery; pattern_index: UInt32; var step_count: UInt32 ): PTSQueryPredicateStepArray; cdecl; external ModuleName;
@@ -1645,7 +1751,8 @@ bool ts_query_is_pattern_guaranteed_at_step(const TSQuery *self, uint32_t byte_o
 /// <returns><!-- drag-lint:auto type -->PAnsiChar</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.Query.TTSQuery.CaptureNameForID (TreeSitter.Query.pas)
+/// <para>Called from: TreeSitter.Query.TTSQuery.CaptureNameForID (TreeSitter.Query.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_query_capture_name_for_id( const self: PTSQuery; index: UInt32; var length: UInt32 ): PAnsiChar; cdecl; external ModuleName;
@@ -1655,16 +1762,17 @@ function ts_query_capture_name_for_id( const self: PTSQuery; index: UInt32; var 
  * with a numeric id based on the order that it appeared in the query's source.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the quantifier of the query's captures. Each
-/// capture is * associated * with a numeric id based on the order that it appeared in the
-/// query's source. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Get the quantifier of the query's captures.
+/// Each capture is * associated * with a numeric id based on the order that it appeared
+/// in the query's source. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->const PTSQuery</param>
 /// <param name="pattern_index"><!-- drag-lint:auto type -->UInt32</param>
 /// <param name="capture_index"><!-- drag-lint:auto type -->UInt32</param>
 /// <returns><!-- drag-lint:auto type -->TSQuantifier</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.Query.TTSQuery.QuantifierForCapture (TreeSitter.Query.pas)
+/// <para>Called from: TreeSitter.Query.TTSQuery.QuantifierForCapture (TreeSitter.Query.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_query_capture_quantifier_for_id( const self: PTSQuery; pattern_index: UInt32; capture_index: UInt32 ): TSQuantifier; cdecl; external ModuleName;
@@ -1675,7 +1783,8 @@ function ts_query_capture_quantifier_for_id( const self: PTSQuery; pattern_index
 /// <returns><!-- drag-lint:auto type -->PAnsiChar</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.Query.TTSQuery.StringValueForID (TreeSitter.Query.pas)
+/// <para>Called from: TreeSitter.Query.TTSQuery.StringValueForID (TreeSitter.Query.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_query_string_value_for_id( const self: PTSQuery; index: UInt32; var length: UInt32 ): PAnsiChar; cdecl; external ModuleName;
@@ -1720,18 +1829,26 @@ void ts_query_disable_pattern(TSQuery *self, uint32_t pattern_index);
  *  [`ts_query_cursor_exec`] again.
  */
 *)
+/// <returns><!-- drag-lint:auto type -->PTSQueryCursor</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: TreeSitter.Query.TTSQueryCursor.Create (TreeSitter.Query.pas)</para>
+/// <para>Directives: cdecl; external</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ts_query_cursor_new: PTSQueryCursor; cdecl; external ModuleName;
 (*
 /**
  * Delete a query cursor, freeing all of the memory that it used.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Delete a query cursor, freeing all of the memory
-/// that it used. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Delete a query cursor, freeing all of the
+/// memory that it used. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->PTSQueryCursor</param>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.Query.TTSQueryCursor.Destroy (TreeSitter.Query.pas)
+/// <para>Called from: TreeSitter.Query.TTSQueryCursor.Destroy (TreeSitter.Query.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure ts_query_cursor_delete(self: PTSQueryCursor); cdecl; external ModuleName;
@@ -1740,13 +1857,15 @@ procedure ts_query_cursor_delete(self: PTSQueryCursor); cdecl; external ModuleNa
  * Start running a given query on a given node.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Start running a given query on a given node. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Start running a given query on a given node.
+/// */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->PTSQueryCursor</param>
 /// <param name="query"><!-- drag-lint:auto type -->const PTSQuery</param>
 /// <param name="node"><!-- drag-lint:auto type -->TSNode</param>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.Query.TTSQueryCursor.Execute (TreeSitter.Query.pas)
+/// <para>Called from: TreeSitter.Query.TTSQueryCursor.Execute (TreeSitter.Query.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure ts_query_cursor_exec(self: PTSQueryCursor; const query: PTSQuery; node: TSNode); cdecl; external ModuleName;
@@ -1767,7 +1886,8 @@ procedure ts_query_cursor_exec(self: PTSQueryCursor; const query: PTSQuery; node
 /// <returns><!-- drag-lint:auto type -->Boolean</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.Query.TTSQueryCursor.DidExceedMatchLimit (TreeSitter.Query.pas)
+/// <para>Called from: TreeSitter.Query.TTSQueryCursor.DidExceedMatchLimit (TreeSitter.Query.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_query_cursor_did_exceed_match_limit(const self: PTSQueryCursor): Boolean; cdecl; external ModuleName;
@@ -1775,7 +1895,8 @@ function ts_query_cursor_did_exceed_match_limit(const self: PTSQueryCursor): Boo
 /// <returns><!-- drag-lint:auto type -->UInt32</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.Query.TTSQueryCursor.GetMatchLimit (TreeSitter.Query.pas)
+/// <para>Called from: TreeSitter.Query.TTSQueryCursor.GetMatchLimit (TreeSitter.Query.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_query_cursor_match_limit           (const self: PTSQueryCursor): UInt32 ; cdecl; external ModuleName;
@@ -1783,7 +1904,8 @@ function ts_query_cursor_match_limit           (const self: PTSQueryCursor): UIn
 /// <param name="limit"><!-- drag-lint:auto type -->UInt32</param>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.Query.TTSQueryCursor.SetMatchLimit (TreeSitter.Query.pas)
+/// <para>Called from: TreeSitter.Query.TTSQueryCursor.SetMatchLimit (TreeSitter.Query.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure ts_query_cursor_set_match_limit(self: PTSQueryCursor; limit: UInt32); cdecl; external ModuleName;
@@ -1808,10 +1930,18 @@ void ts_query_cursor_set_point_range(TSQueryCursor *self, TSPoint start_point, T
 /// <returns><!-- drag-lint:auto type -->Boolean</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.Query.TTSQueryCursor.NextMatch (TreeSitter.Query.pas)
+/// <para>Called from: TreeSitter.Query.TTSQueryCursor.NextMatch (TreeSitter.Query.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_query_cursor_next_match(self: PTSQueryCursor; var match: TSQueryMatch): Boolean; cdecl; external ModuleName;
+/// <param name="self"><!-- drag-lint:auto type -->PTSQueryCursor</param>
+/// <param name="match_id"><!-- drag-lint:auto type -->UInt32</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Directives: cdecl; external</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ts_query_cursor_remove_match(self: PTSQueryCursor; match_id: UInt32); cdecl; external ModuleName;
 (*
 /**
@@ -1821,7 +1951,7 @@ procedure ts_query_cursor_remove_match(self: PTSQueryCursor; match_id: UInt32); 
  * the matche's capture list to `*capture_index`. Otherwise, return `false`.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Advance to the next capture of the currently
+/// <summary><!-- drag-lint:auto sum -->/** * Advance to the next capture of the currently
 /// running query. * * If there is a capture, write its match to `*match` and its index
 /// within * the matche's capture list to `*capture_index`. Otherwise, return `false`. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->PTSQueryCursor</param>
@@ -1830,7 +1960,8 @@ procedure ts_query_cursor_remove_match(self: PTSQueryCursor; match_id: UInt32); 
 /// <returns><!-- drag-lint:auto type -->Boolean</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.Query.TTSQueryCursor.NextCapture (TreeSitter.Query.pas)
+/// <para>Called from: TreeSitter.Query.TTSQueryCursor.NextCapture (TreeSitter.Query.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_query_cursor_next_capture( self: PTSQueryCursor; var match: TSQueryMatch; var capture_index: UInt32 ): Boolean; cdecl; external ModuleName;
@@ -1850,19 +1981,21 @@ function ts_query_cursor_next_capture( self: PTSQueryCursor; var match: TSQueryM
  * Set to `UINT32_MAX` to remove the maximum start depth.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Set the maximum start depth for a query cursor.
-/// * * This prevents cursors from exploring children nodes at a certain depth. * Note if
-/// a pattern includes many children, then they will still be checked. * * The zero max
-/// start depth value can be used as a special behavior and * it helps to destructure a
-/// subtree by staying on a node and using captures * for interested parts. Note that the
-/// zero max start depth only limit a search * depth for a pattern's root node but other
-/// nodes that are parts of the pattern * may be searched at any depth what defined by the
-/// pattern structure. * * Set to `UINT32_MAX` to remove the maximum start depth. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Set the maximum start depth for a query
+/// cursor. * * This prevents cursors from exploring children nodes at a certain depth. *
+/// Note if a pattern includes many children, then they will still be checked. * * The
+/// zero max start depth value can be used as a special behavior and * it helps to
+/// destructure a subtree by staying on a node and using captures * for interested parts.
+/// Note that the zero max start depth only limit a search * depth for a pattern's root
+/// node but other nodes that are parts of the pattern * may be searched at any depth what
+/// defined by the pattern structure. * * Set to `UINT32_MAX` to remove the maximum start
+/// depth. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->PTSQueryCursor</param>
 /// <param name="max_start_depth"><!-- drag-lint:auto type -->UInt32</param>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.Query.TTSQueryCursor.SetMaxStartDepth (TreeSitter.Query.pas)
+/// <para>Called from: TreeSitter.Query.TTSQueryCursor.SetMaxStartDepth (TreeSitter.Query.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure ts_query_cursor_set_max_start_depth(self: PTSQueryCursor; max_start_depth: UInt32); cdecl; external ModuleName;
@@ -1889,7 +2022,8 @@ void ts_language_delete(const TSLanguage *self);
 /// <returns><!-- drag-lint:auto type -->UInt32</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSLanguageHelper.SymbolCount (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSLanguageHelper.SymbolCount (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_language_symbol_count(const self: PTSLanguage): UInt32; cdecl; external ModuleName;
@@ -1898,20 +2032,30 @@ function ts_language_symbol_count(const self: PTSLanguage): UInt32; cdecl; exter
  * Get the number of valid states in this language.
 */
 *)
+/// <summary><!-- drag-lint:auto sum -->/** * Get the number of valid states in this
+/// language. */</summary>
+/// <param name="self"><!-- drag-lint:auto type -->const PTSLanguage</param>
+/// <returns><!-- drag-lint:auto type -->UInt32</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Directives: cdecl; external</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ts_language_state_count(const self: PTSLanguage): UInt32; cdecl; external ModuleName;
 (*
 /**
  * Get a node type string for the given numerical id.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get a node type string for the given numerical
-/// id. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Get a node type string for the given
+/// numerical id. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->const PTSLanguage</param>
 /// <param name="symbol"><!-- drag-lint:auto type -->TSSymbol</param>
 /// <returns><!-- drag-lint:auto type -->PAnsiChar</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSLanguageHelper.GetSymbolName (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSLanguageHelper.GetSymbolName (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_language_symbol_name(const self: PTSLanguage; symbol: TSSymbol): PAnsiChar; cdecl; external ModuleName;
@@ -1920,7 +2064,7 @@ function ts_language_symbol_name(const self: PTSLanguage; symbol: TSSymbol): PAn
  * Get the numerical id for the given node type string.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the numerical id for the given node type
+/// <summary><!-- drag-lint:auto sum -->/** * Get the numerical id for the given node type
 /// string. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->const PTSLanguage</param>
 /// <param name="AString"><!-- drag-lint:auto type -->PAnsiChar</param>
@@ -1929,7 +2073,8 @@ function ts_language_symbol_name(const self: PTSLanguage; symbol: TSSymbol): PAn
 /// <returns><!-- drag-lint:auto type -->TSSymbol</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSLanguageHelper.GetSymbolForName (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSLanguageHelper.GetSymbolForName (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_language_symbol_for_name( const self: PTSLanguage; AString: PAnsiChar; length: UInt32; is_named: Boolean ): TSSymbol; cdecl; external ModuleName;
@@ -1938,13 +2083,14 @@ function ts_language_symbol_for_name( const self: PTSLanguage; AString: PAnsiCha
  * Get the number of distinct field names in the language.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the number of distinct field names in the
-/// language. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Get the number of distinct field names in
+/// the language. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->const PTSLanguage</param>
 /// <returns><!-- drag-lint:auto type -->UInt32</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSLanguageHelper.FieldCount (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSLanguageHelper.FieldCount (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_language_field_count(const self: PTSLanguage): UInt32; cdecl; external ModuleName;
@@ -1953,14 +2099,15 @@ function ts_language_field_count(const self: PTSLanguage): UInt32; cdecl; extern
  * Get the field name string for the given numerical id.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the field name string for the given
+/// <summary><!-- drag-lint:auto sum -->/** * Get the field name string for the given
 /// numerical id. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->const PTSLanguage</param>
 /// <param name="id"><!-- drag-lint:auto type -->TSFieldId</param>
 /// <returns><!-- drag-lint:auto type -->PAnsiChar</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSLanguageHelper.GetFieldName (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSLanguageHelper.GetFieldName (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_language_field_name_for_id(const self: PTSLanguage; id: TSFieldId): PAnsiChar; cdecl; external ModuleName;
@@ -1969,15 +2116,16 @@ function ts_language_field_name_for_id(const self: PTSLanguage; id: TSFieldId): 
  * Get the numerical id for the given field name string.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the numerical id for the given field name
-/// string. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Get the numerical id for the given field
+/// name string. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->const PTSLanguage</param>
 /// <param name="name"><!-- drag-lint:auto type -->const PAnsiChar</param>
 /// <param name="name_length"><!-- drag-lint:auto type -->UInt32</param>
 /// <returns><!-- drag-lint:auto type -->TSFieldId</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSLanguageHelper.GetFieldId (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSLanguageHelper.GetFieldId (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_language_field_id_for_name(const self: PTSLanguage; const name: PAnsiChar; name_length: UInt32): TSFieldId; cdecl; external ModuleName;
@@ -1989,15 +2137,16 @@ function ts_language_field_id_for_name(const self: PTSLanguage; const name: PAns
  * See also [`ts_node_is_named`]. Hidden nodes are never returned from the API.
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Check whether the given node type id belongs to
-/// named nodes, anonymous nodes, * or a hidden nodes. * * See also [`ts_node_is_named`].
-/// Hidden nodes are never returned from the API. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Check whether the given node type id belongs
+/// to named nodes, anonymous nodes, * or a hidden nodes. * * See also
+/// [`ts_node_is_named`]. Hidden nodes are never returned from the API. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->const PTSLanguage</param>
 /// <param name="symbol"><!-- drag-lint:auto type -->TSSymbol</param>
 /// <returns><!-- drag-lint:auto type -->TSSymbolType</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSLanguageHelper.GetSymbolType (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSLanguageHelper.GetSymbolType (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_language_symbol_type(const self: PTSLanguage; symbol: TSSymbol): TSSymbolType; cdecl; external ModuleName;
@@ -2010,14 +2159,15 @@ function ts_language_symbol_type(const self: PTSLanguage; symbol: TSSymbol): TSS
  * See also [`ts_parser_set_language`].
  */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the ABI version number for this language.
-/// This version number is used * to ensure that languages were generated by a compatible
-/// version of * Tree-sitter. * * See also [`ts_parser_set_language`]. */</summary>
+/// <summary><!-- drag-lint:auto sum -->/** * Get the ABI version number for this
+/// language. This version number is used * to ensure that languages were generated by a
+/// compatible version of * Tree-sitter. * * See also [`ts_parser_set_language`]. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->const PTSLanguage</param>
 /// <returns><!-- drag-lint:auto type -->UInt32</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSLanguageHelper.Version (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSLanguageHelper.Version (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_language_version(const self: PTSLanguage): UInt32; cdecl; external ModuleName;
@@ -2028,7 +2178,7 @@ function ts_language_version(const self: PTSLanguage): UInt32; cdecl; external M
  * [`ts_node_grammar_symbol`] for valid symbols.
 */
 *)
-/// <summary><!-- drag-lint:auto -->/** * Get the next parse state. Combine this with
+/// <summary><!-- drag-lint:auto sum -->/** * Get the next parse state. Combine this with
 /// lookahead iterators to generate * completion suggestions or valid symbols in error
 /// nodes. Use * [`ts_node_grammar_symbol`] for valid symbols. */</summary>
 /// <param name="self"><!-- drag-lint:auto type -->const PTSLanguage</param>
@@ -2037,7 +2187,8 @@ function ts_language_version(const self: PTSLanguage): UInt32; cdecl; external M
 /// <returns><!-- drag-lint:auto type -->TSStateId</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: TreeSitter.TTSLanguageHelper.NextState (TreeSitter.pas)
+/// <para>Called from: TreeSitter.TTSLanguageHelper.NextState (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ts_language_next_state(const self: PTSLanguage; state: TSStateId; symbol: TSSymbol): TSStateId; cdecl; external ModuleName;
@@ -2185,28 +2336,28 @@ TSWasmStore *ts_parser_take_wasm_store(TSParser * );
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (TreeSitterLib.pas)
+  /// <para>Used by: declaration (TreeSitterLib.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   Pts_malloc_func  = ^Tts_malloc_func;
   Tts_malloc_func  = function(sizeOf: NativeUInt): Pointer; cdecl;
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (TreeSitterLib.pas)
+  /// <para>Used by: declaration (TreeSitterLib.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   Pts_calloc_func  = ^Tts_calloc_func;
   Tts_calloc_func  = function(nitems: NativeUInt; size: NativeUInt): Pointer; cdecl;
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (TreeSitterLib.pas)
+  /// <para>Used by: declaration (TreeSitterLib.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   Pts_free_func    = ^Tts_free_func;
   Tts_free_func    = procedure(ptr: Pointer); cdecl;
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// Used by: declaration (TreeSitterLib.pas)
+  /// <para>Used by: declaration (TreeSitterLib.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   Pts_realloc_func = ^Tts_realloc_func;
@@ -2218,7 +2369,8 @@ type
 /// <param name="new_free"><!-- drag-lint:auto type -->Pts_free_func</param>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// Called from: declaration (TreeSitter.pas)
+/// <para>Called from: TreeSitter.initialization (TreeSitter.pas)</para>
+/// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure ts_set_allocator( new_malloc: Pts_malloc_func; new_calloc: Pts_calloc_func; new_realloc: Pts_realloc_func; new_free: Pts_free_func); cdecl; external ModuleName;

@@ -46,7 +46,7 @@ function CliErrorLine(const pReason, pMessage: string; pAsJson: Boolean; const p
 /// <param name="pValue">The extra member's value.</param>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.CompareEmit (DRagLint.CLI.pas), DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas), DRagLint.CLI.DoMenuTree (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.Query.SyntaxCountVerb.RunSyntaxCountVerb (DRagLint.Query.SyntaxCountVerb.pas)</para>
+/// <para>Called from: DRagLint.CLI.CompareEmit (DRagLint.CLI.pas), DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas), DRagLint.CLI.DoMenuTree (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.CLI.UsesRecover.RunUsesRecoverVerb (DRagLint.CLI.UsesRecover.pas) (+1 more)</para>
 /// <para>Calls: DRagLint.Core.CliError.CliErrorLine, Writeln</para>
 /// <seealso cref="DRagLint.Core.CliError.CliErrorLine"/>
 /// <!-- drag-lint:auto END -->
@@ -57,7 +57,7 @@ procedure WriteCliError(const pReason, pMessage: string; pAsJson: Boolean; const
 /// <returns>True if any ParamStr is exactly --json.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.Query.SyntaxCountVerb.RunSyntaxCountVerb (DRagLint.Query.SyntaxCountVerb.pas)</para>
+/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.CLI.UsesRecover.RunUsesRecoverVerb (DRagLint.CLI.UsesRecover.pas), DRagLint.Query.SyntaxCountVerb.RunSyntaxCountVerb (DRagLint.Query.SyntaxCountVerb.pas)</para>
 /// <para>Calls: ParamStr</para>
 /// <para>Returns: False</para>
 /// <!-- drag-lint:auto END -->

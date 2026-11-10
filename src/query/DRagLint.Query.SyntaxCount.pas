@@ -147,11 +147,13 @@ function TryParseSyntaxFeatures(const pList: string; out pFeatures: TSyntaxFeatu
 /// Not thread-safe (TAstParseCache is not).
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Query.SyntaxCountVerb.RunSyntaxCountVerb (DRagLint.Query.SyntaxCountVerb.pas)</para>
-/// <para>Calls: Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Query.SyntaxCount.CountTreeFeatures</para>
+/// <para>Calls: Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Query.SyntaxCount.CountTreeFeatures, TreeSitter.TTSNodeHelper.HasError, TreeSitter.TTSTree.RootNode</para>
 /// <para>Returns: Default(TSyntaxCountReport)</para>
 /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear"/>
 /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
 /// <seealso cref="DRagLint.Query.SyntaxCount.CountTreeFeatures"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.HasError"/>
+/// <seealso cref="TreeSitter.TTSTree.RootNode"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function CountSyntaxFeatures(const pFiles: TArray<string>; const pFeatures: TSyntaxFeatures;

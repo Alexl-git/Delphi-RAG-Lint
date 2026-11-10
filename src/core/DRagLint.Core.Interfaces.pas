@@ -132,7 +132,7 @@ type
     /// these answers derive from.</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.Index.TChartsIndex.ResolveMemberSelection (DRagLint.Charts.Index.pas) ?, DRagLint.Charts.Q.Effects.ParamNames (DRagLint.Charts.Q.Effects.pas) ?, DRagLint.Charts.Q.RoundTrip.Disown (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveAncestry (DRagLint.Storage.SQLite.pas), initialization/finalization (DRagLint.Charts.Q.RoundTrip.pas) ? (+101 more)</para>
+    /// <para>Called from: DRagLint.Charts.Index.TChartsIndex.ResolveMemberSelection (DRagLint.Charts.Index.pas) ?, DRagLint.Charts.Q.Effects.ParamNames (DRagLint.Charts.Q.Effects.pas) ?, DRagLint.Charts.Q.RoundTrip.Disown (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveAncestry (DRagLint.Storage.SQLite.pas), initialization/finalization (DRagLint.Charts.Q.RoundTrip.pas) ? (+105 more)</para>
     /// <para>Reads: FOwns, FParamMd, FRecDef, FRecType, FManaged</para>
     /// <seealso cref="DRagLint.Core.Interfaces.TFlowOracleCache.Create"/>
     /// <seealso cref="DRagLint.Core.Interfaces.TFlowOracleCache.Destroy"/>
@@ -195,8 +195,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.BuildFindings (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.BuildIndexSide (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.CollectUnchecked (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.NameIsAmbiguous (DRagLint.Analysis.LintTree.pas) (+803 more)</para>
-  /// <para>Used in units: DRagLint.Analysis.LintTree, DRagLint.Analysis.PurityStage, DRagLint.Analysis.SurfaceAdapters, DRagLint.Charts.AskVerb, DRagLint.Charts.Compare, DRagLint.Charts.MemberAccess, DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Cycles (+120 more)</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.BuildFindings (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.BuildIndexSide (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.CollectUnchecked (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.NameIsAmbiguous (DRagLint.Analysis.LintTree.pas) (+818 more)</para>
+  /// <para>Used in units: DRagLint.Analysis.LintTree, DRagLint.Analysis.PurityStage, DRagLint.Analysis.SurfaceAdapters, DRagLint.Charts.AskVerb, DRagLint.Charts.Compare, DRagLint.Charts.MemberAccess, DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Cycles (+122 more)</para>
   /// <para>Implemented by: TSQLiteSymbolStore</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -228,7 +228,7 @@ type
     /// <returns><!-- drag-lint:auto type -->Boolean</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.AnyDbSchemaCurrent (DRagLint.CLI.pas), DRagLint.CLI.IndexerFingerprint (DRagLint.CLI.pas), DRagLint.CLI.LibraryReady.ProbeLibraryReadiness (DRagLint.CLI.LibraryReady.pas), DRagLint.CLI.OpenLibraryStoreIfCurrent (DRagLint.CLI.pas), DRagLint.CLI.OpenLibraryStores (DRagLint.CLI.pas) (+8 more)</para>
+    /// <para>Called from: DRagLint.CLI.AnyDbSchemaCurrent (DRagLint.CLI.pas), DRagLint.CLI.IndexerFingerprint (DRagLint.CLI.pas), DRagLint.CLI.LibraryReady.ProbeLibraryReadiness (DRagLint.CLI.LibraryReady.pas), DRagLint.CLI.OpenLibraryStoreIfCurrent (DRagLint.CLI.pas), DRagLint.CLI.OpenLibraryStores (DRagLint.CLI.pas) (+9 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
@@ -267,7 +267,7 @@ type
     /// A rewrite that keeps both the second and the byte count is the one
     /// change this does not see -- the same trade make and git's index make.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas)</para>
+    /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Lint.IfdefUndefined.CurrentDirectiveRows (DRagLint.Lint.IfdefUndefined.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
@@ -625,7 +625,7 @@ type
     /// guard (the unit case through `query unit-usage`, which has no
     /// qualified-name fallback of its own).
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoCycles.IntfEdgeSymbols (DRagLint.CLI.pas), DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoFindUnit (DRagLint.CLI.pas), DRagLint.CLI.DoImpact (DRagLint.CLI.pas) (+156 more)</para>
+    /// <para>Called from: DRagLint.CLI.DoCycles.IntfEdgeSymbols (DRagLint.CLI.pas), DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoFindUnit (DRagLint.CLI.pas), DRagLint.CLI.DoImpact (DRagLint.CLI.pas) (+155 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
@@ -674,7 +674,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Analysis.LintTree.BuildIndexSide (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.PurityStage.TPurityRun.ScanFiles (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.SurfaceAdapters.TryFingerprintOfIndex (DRagLint.Analysis.SurfaceAdapters.pas), DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoOutline (DRagLint.CLI.pas) (+48 more)</para>
+    /// <para>Called from: DRagLint.Analysis.LintTree.BuildIndexSide (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.PurityStage.TPurityRun.ScanFiles (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.SurfaceAdapters.TryFingerprintOfIndex (DRagLint.Analysis.SurfaceAdapters.pas), DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoOutline (DRagLint.CLI.pas) (+45 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
@@ -812,7 +812,7 @@ type
     /// <returns><!-- drag-lint:auto type -->string</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Analysis.PurityStage.TPurityRun.ReadFileLines (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.ScanFiles (DRagLint.Analysis.PurityStage.pas), DRagLint.CLI.AppendReferencesJson (DRagLint.CLI.pas), DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas) (+222 more)</para>
+    /// <para>Called from: DRagLint.Analysis.PurityStage.TPurityRun.ReadFileLines (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.ScanFiles (DRagLint.Analysis.PurityStage.pas), DRagLint.CLI.AppendReferencesJson (DRagLint.CLI.pas), DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas) (+226 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
@@ -843,7 +843,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;Int64&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestFiles (DRagLint.CLI.pas) (+47 more)</para>
+    /// <para>Called from: DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestFiles (DRagLint.CLI.pas) (+48 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
@@ -1179,7 +1179,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TUnitUse&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Analysis.LintTree.BuildIndexSide (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.SurfaceAdapters.TryFingerprintOfIndex (DRagLint.Analysis.SurfaceAdapters.pas), DRagLint.CLI.CircularUsesForFile (DRagLint.CLI.pas), DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas), DRagLint.CLI.DoUsesFix (DRagLint.CLI.pas) (+46 more)</para>
+    /// <para>Called from: DRagLint.Analysis.LintTree.BuildIndexSide (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.SurfaceAdapters.TryFingerprintOfIndex (DRagLint.Analysis.SurfaceAdapters.pas), DRagLint.CLI.CircularUsesForFile (DRagLint.CLI.pas), DRagLint.CLI.DoResolveUses (DRagLint.CLI.pas), DRagLint.CLI.DoUsesFix (DRagLint.CLI.pas) (+47 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
@@ -1835,7 +1835,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TSymbol</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Analysis.PurityStage.TPurityRun.SymbolById (DRagLint.Analysis.PurityStage.pas), DRagLint.CLI.BuildCallGraphJson (DRagLint.CLI.pas), DRagLint.CLI.DoCallPath (DRagLint.CLI.pas), DRagLint.CLI.DoDumpCallEdges (DRagLint.CLI.pas), DRagLint.CLI.DoDumpRefs (DRagLint.CLI.pas) (+136 more)</para>
+    /// <para>Called from: DRagLint.Analysis.PurityStage.TPurityRun.SymbolById (DRagLint.Analysis.PurityStage.pas), DRagLint.CLI.BuildCallGraphJson (DRagLint.CLI.pas), DRagLint.CLI.DoCallPath (DRagLint.CLI.pas), DRagLint.CLI.DoDumpCallEdges (DRagLint.CLI.pas), DRagLint.CLI.DoDumpRefs (DRagLint.CLI.pas) (+137 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
@@ -1848,7 +1848,7 @@ type
     /// <returns><!-- drag-lint:auto type -->Int64</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Analysis.LintTree.BuildIndexSide (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.RunLintTree (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.SurfaceAdapters.TryFingerprintOfIndex (DRagLint.Analysis.SurfaceAdapters.pas), DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoDumpRefs (DRagLint.CLI.pas) (+41 more)</para>
+    /// <para>Called from: DRagLint.Analysis.LintTree.BuildIndexSide (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.RunLintTree (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.SurfaceAdapters.TryFingerprintOfIndex (DRagLint.Analysis.SurfaceAdapters.pas), DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoDumpRefs (DRagLint.CLI.pas) (+43 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
@@ -2016,7 +2016,7 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Analysis.PurityStage.TPurityRun.FieldsOfClass (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.OwnMembersOf (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.PropsOfClass (DRagLint.Analysis.PurityStage.pas), DRagLint.CLI.DoSurface (DRagLint.CLI.pas), DRagLint.CLI.DoUsesFix.ForcedInitKnown (DRagLint.CLI.pas) (+46 more)</para>
+    /// <para>Called from: DRagLint.Analysis.PurityStage.TPurityRun.FieldsOfClass (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.OwnMembersOf (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.PropsOfClass (DRagLint.Analysis.PurityStage.pas), DRagLint.CLI.DoSurface (DRagLint.CLI.pas), DRagLint.CLI.DoUsesFix.ForcedInitKnown (DRagLint.CLI.pas) (+47 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
@@ -2891,6 +2891,16 @@ type
     /// probed once.</summary>
     /// <returns>False on a schema-23 DB (or a 149-built v24 DB) opened
     /// read-only: readers then fall back to scanning the source text.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.IfdefUndefined.CurrentDirectiveRows (DRagLint.Lint.IfdefUndefined.pas)</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.Checkpoint"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function HasPpDirectives: Boolean;
     /// <summary>150 PP: the pp_directives rows of one file, source order.</summary>
     /// <param name="AFileId">files.id of the file.</param>
@@ -2898,10 +2908,30 @@ type
     /// indexed by an engine that did not write the table, or when
     /// HasPpDirectives is False -- a reader cannot tell these apart and must
     /// treat empty as "not recorded" (scan the text).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.IfdefUndefined.CurrentDirectiveRows (DRagLint.Lint.IfdefUndefined.pas)</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.Checkpoint"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function GetPpDirectives(AFileId: Int64): TArray<TPpDirectiveRow>;
     /// <summary>True when this database has the schema v24 file-fact tables
     /// (file_includes, dfm_objects, pp_regions); probed once.</summary>
     /// <returns>False on a DB below schema v24 opened read-only.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.Apply.DfmDeclaresComponentVia (DRagLint.Convert.Apply.pas), DRagLint.Report.CyclePlan.TCyclePlanner.BuildClauseEdit (DRagLint.Report.CyclePlan.pas)</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.Checkpoint"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function HasFileFacts: Boolean;
     /// <summary>The file_includes rows of one file, source order.</summary>
     /// <param name="AFileId">files.id of the host.</param>
@@ -2911,10 +2941,30 @@ type
     /// <param name="AFileId">files.id of the .dfm.</param>
     /// <returns>Empty when the file has none or HasFileFacts is False.
     /// SymbolIdx of each row is -1 (the stored link is symbol_id, not an index).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.Apply.DfmDeclaresComponentVia (DRagLint.Convert.Apply.pas)</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.Checkpoint"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function GetDfmObjects(AFileId: Int64): TArray<TDfmObjectRow>;
     /// <summary>The pp_regions rows of one file, ordered by region, branch.</summary>
     /// <param name="AFileId">files.id of the file.</param>
     /// <returns>Empty when the file has none or HasFileFacts is False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Report.CyclePlan.TCyclePlanner.BuildClauseEdit (DRagLint.Report.CyclePlan.pas)</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.Checkpoint"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function GetPpRegions(AFileId: Int64): TArray<TPpRegionRow>;
     /// <summary>150 EX3: replaces one setting's project_settings rows of the file in
     /// AToken (a .dpr / .dpk) with AValues, one row per value in order (ordinal 0..).</summary>
@@ -2925,6 +2975,14 @@ type
     /// Called inside the file tx, so a rolled-back parse keeps the old rows. A no-op when
     /// the table is absent (a DB below schema v24 opened read-only). Part of the extractor
     /// guard's emit list.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas)</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.Checkpoint"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
+    /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure PutProjectSettings(const AToken: TFileTxToken; const ASetting: string; const AValues: TArray<string>);
     /// <summary>150 EX3: the project_settings values of one setting, ordered by file, then
@@ -2933,6 +2991,16 @@ type
     /// <param name="AFileId">files.id of the .dpr / .dpk; 0 = every project file of the DB
     /// (a project DB holds one).</param>
     /// <returns>Empty when the table is absent, the project has no .dproj or names no value.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.ProjectNamespaces (DRagLint.Index.CallResolver.pas)</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.Checkpoint"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearAllFiles"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function GetProjectSettings(const ASetting: string; AFileId: Int64 = 0): TArray<string>;
     /// <summary>Rows whose destination is AT one site (an 'arg' / 'write' call or
     /// member-write ref position, or a field/global/result/outparam write site).</summary>

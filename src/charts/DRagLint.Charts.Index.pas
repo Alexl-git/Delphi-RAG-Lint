@@ -202,10 +202,10 @@ type
     /// The store is owned and freed by Destroy. Errors opening it propagate.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.Create (DRagLint.Charts.Q.Consumers.pas) (+21 more)</para>
-    /// <para>Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create</para>
+    /// <para>Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.CreateReadable</para>
     /// <para>constructor</para>
     /// <para>Writes: FNotes, FStore</para>
-    /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
+    /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.CreateReadable"/>
     /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.AllRows"/>
     /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Destroy"/>
     /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.EdgelessDisclosure"/>
@@ -508,7 +508,7 @@ constructor TChartsIndex.Create(const pDbPath: string);
 begin
   inherited Create;
   FNotes:= TStringList.Create;
-  FStore:= TSQLiteSymbolStore.Create(pDbPath, True);
+  FStore:= TSQLiteSymbolStore.CreateReadable(pDbPath, True);
 end;
 
 destructor TChartsIndex.Destroy;

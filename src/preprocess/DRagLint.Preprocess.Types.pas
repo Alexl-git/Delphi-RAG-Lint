@@ -25,8 +25,8 @@ type
   /// offsets into the input; Line is 0-based (matches lexer.js lineAt).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoDumpPpLex (DRagLint.CLI.pas) ?, DRagLint.Lint.IfdefUndefined.AddDirectiveTests (DRagLint.Lint.IfdefUndefined.pas) ?, DRagLint.Lint.IfdefUndefined.ScanSource (DRagLint.Lint.IfdefUndefined.pas) ?, DRagLint.Preprocess.Lexer.LexDirectives (DRagLint.Preprocess.Lexer.pas), DRagLint.Preprocess.Lexer.LexDirectives.FlushText (DRagLint.Preprocess.Lexer.pas) (+4 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.IfdefUndefined, DRagLint.Preprocess, DRagLint.Preprocess.Lexer</para>
+  /// <para>Used by: DRagLint.CLI.DoDumpPpLex (DRagLint.CLI.pas) ?, DRagLint.Core.Indexer.BuildPpDirectiveRows (DRagLint.Core.Indexer.pas) ?, DRagLint.Lint.IfdefUndefined.ScanSource (DRagLint.Lint.IfdefUndefined.pas) ?, DRagLint.Preprocess.Lexer.LexDirectives (DRagLint.Preprocess.Lexer.pas), DRagLint.Preprocess.Lexer.LexDirectives.FlushText (DRagLint.Preprocess.Lexer.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Lint.IfdefUndefined, DRagLint.Preprocess, DRagLint.Preprocess.Lexer</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TPPChunk = record
@@ -113,7 +113,7 @@ type
   /// Unresolved, inactive and over-depth includes produce no site.
   /// Sites are recorded in source order (a nested site follows its parent).
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Core.Indexer.pas) ?, DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas) ?, DRagLint.CLI.InstallLintIncludeContexts (DRagLint.CLI.pas) ?, DRagLint.Core.Indexer.TIndexer.RememberIncludeSites (DRagLint.Core.Indexer.pas) ?, DRagLint.Preprocess.PreprocessInto.ApplyIncludeDefines (DRagLint.Preprocess.pas) (+15 more)</para>
+  /// <para>Used by: declaration (DRagLint.Core.Indexer.pas) ?, DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas) ?, DRagLint.CLI.InstallLintIncludeContexts (DRagLint.CLI.pas) ?, DRagLint.Core.Indexer.TIndexer.RememberIncludeSites (DRagLint.Core.Indexer.pas) ?, DRagLint.Preprocess.PreprocessInto.ApplyIncludeDefines (DRagLint.Preprocess.pas) (+20 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Diagnostics.ParseCache, DRagLint.Index.Closure, DRagLint.Index.IncludeUses, DRagLint.Preprocess</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

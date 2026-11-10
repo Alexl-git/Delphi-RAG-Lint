@@ -108,13 +108,13 @@ function GenerateFormsCsv(const ADbPath, AProjectFile, ARootForm: string): strin
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.FormsMap.GenerateFormsCsv/3 (DRagLint.FormsMap.pas)</para>
-/// <para>Calls: DRagLint.FormsMap.GenerateFormsCsvCore, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create</para>
+/// <para>Calls: DRagLint.FormsMap.GenerateFormsCsvCore, DRagLint.Storage.SQLite.TSQLiteSymbolStore.CreateReadable</para>
 /// <para>Returns: GenerateFormsCsvCore(Primary, Extras, AProjectFile, ARootForm, ADbPaths[0])</para>
 /// <para>Overload 2 of 2</para>
 /// <para>Pure</para>
 /// <para>Directives: overload</para>
 /// <seealso cref="DRagLint.FormsMap.GenerateFormsCsvCore"/>
-/// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
+/// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.CreateReadable"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function GenerateFormsCsv(const ADbPaths: TArray<string>; const AProjectFile, ARootForm: string): string; overload;
@@ -3044,11 +3044,11 @@ var
   I      : Integer;
 begin
   if Length(ADbPaths) = 0 then raise Exception.Create('forms-csv: no DB paths');
-  Primary:= TSQLiteSymbolStore.Create(ADbPaths[0]);
+  Primary:= TSQLiteSymbolStore.CreateReadable(ADbPaths[0], {AReadOnly=}False);
   try
     SetLength(Extras, 0);
     for I:= 1 to High(ADbPaths) do
-      Extras:= Extras + [TSQLiteSymbolStore.Create(ADbPaths[I])];
+      Extras:= Extras + [TSQLiteSymbolStore.CreateReadable(ADbPaths[I], {AReadOnly=}False)];
     try
       Result:= GenerateFormsCsvCore(Primary, Extras, AProjectFile, ARootForm, ADbPaths[0]);
     finally

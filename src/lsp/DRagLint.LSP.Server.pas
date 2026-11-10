@@ -716,14 +716,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.Create/1 (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ReindexFinished (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.StoreSet (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue, DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, Format, Writeln</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue, DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent, DRagLint.Storage.Schema.IsSchemaReadable, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, Format, Writeln</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent"/>
+      /// <seealso cref="DRagLint.Storage.Schema.IsSchemaReadable"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  OpenReaderStore(const APath: string): ISymbolStore;
@@ -1286,9 +1286,9 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverMarkdown (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Core.Model.IntrinsicSignature, DRagLint.Core.Model.IsCompilerIntrinsic, DRagLint.Doc.Facts.TDocFactsBuilder.Build, DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines (+19 more)</para>
+      /// <para>Calls: Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Core.Model.IntrinsicSignature, DRagLint.Core.Model.IsCompilerIntrinsic, DRagLint.Doc.Facts.FormatHoverCalledFromLine, DRagLint.Doc.Facts.TDocFactsBuilder.Build (+20 more)</para>
       /// <para>Returns: False; True</para>
-      /// <para>Complexity: 35 (cyclomatic, outer body), 276 lines (full implementation)</para>
+      /// <para>Complexity: 37 (cyclomatic, outer body), 281 lines (full implementation)</para>
       /// <para>Reads: FStores</para>
       /// <para>Mutates: AOut (out)</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
@@ -1305,8 +1305,8 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.DispatchMessage (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.LSP.Context.TLspFeature.AddCapabilities, DRagLint.LSP.Server.HasContextKeys, DRagLint.LSP.Server.JsonStrOf, DRagLint.LSP.Server.TLSPServer.ApplyClientContext, DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile, DRagLint.LSP.Server.TLSPServer.FileFromUri, DRagLint.LSP.Server.TLSPServer.SendMessage, TJSONArray, TJSONObject</para>
-      /// <para>Complexity: 10 (cyclomatic, outer body), 89 lines (full implementation)</para>
-      /// <para>Reads: FFeatures   Writes: FInitialized</para>
+      /// <para>Complexity: 15 (cyclomatic, outer body), 98 lines (full implementation)</para>
+      /// <para>Reads: FFeatures, FExceptionFacts   Writes: FInitialized</para>
       /// <seealso cref="DRagLint.LSP.Context.TLspFeature.AddCapabilities"/>
       /// <seealso cref="DRagLint.LSP.Server.HasContextKeys"/>
       /// <seealso cref="DRagLint.LSP.Server.JsonStrOf"/>

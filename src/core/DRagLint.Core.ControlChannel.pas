@@ -127,6 +127,7 @@ const
 /// <para>Pure</para>
 /// <para>Calls: SameText</para>
 /// <para>Returns: SameText(ACommand, 'lsp') or SameText(ACommand, 'cycles') or SameText(ACommand, 'index')</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 8 lines (full implementation)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ControlChannelEnabledFor(const ACommand: string): Boolean;

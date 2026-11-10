@@ -66,7 +66,7 @@ type
     /// Never raises on an unparsable file (empty result).
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: BareLower, CaseHasLiteralLabel, CaseSelector, Copy, CountImplicitOrdinals, DeclTextOf, Default, DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile, DRagLint.Diagnostics.EnumOrdinalCast.TEnumOrdinalCastChecker.Check.CollectDecls, DRagLint.Diagnostics.EnumOrdinalCast.TEnumOrdinalCastChecker.Check.Visit (+24 more)</para>
+    /// <para>Calls: BareLower, CaseHasLiteralLabel, CaseSelector, Copy, CountImplicitOrdinals, DeclTextOf, Default, DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile, DRagLint.Diagnostics.EnumOrdinalCast.TEnumOrdinalCastChecker.Check.CollectDecls, DRagLint.Diagnostics.EnumOrdinalCast.TEnumOrdinalCastChecker.Check.Visit (+25 more)</para>
     /// <para>Returns: nil; Findings.ToArray</para>
     /// <para>Catches: EEncodingError (swallowed); EInOutError (swallowed); EStreamError (swallowed)</para>
     /// <para>Directives: static</para>
@@ -74,6 +74,7 @@ type
     /// <seealso cref="DRagLint.Diagnostics.EnumOrdinalCast.TEnumOrdinalCastChecker.Check.CollectDecls"/>
     /// <seealso cref="DRagLint.Diagnostics.EnumOrdinalCast.TEnumOrdinalCastChecker.Check.Visit"/>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+    /// <seealso cref="TreeSitter.TTSTree.RootNode"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; const AStore: ISymbolStore;

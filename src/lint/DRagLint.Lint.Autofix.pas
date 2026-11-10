@@ -379,12 +379,13 @@ function EnsureImplUses(const APath: string; ALines: TStrings; const AUnit: stri
 /// fixer and a rule agree on what a local is.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Fix.Expr.FixGetTickCount (DRagLint.Fix.Expr.pas), DRagLint.Fix.Expr.FixUselessFormat (DRagLint.Fix.Expr.pas), DRagLint.Fix.Expr.IsArrayOperand (DRagLint.Fix.Expr.pas), DRagLint.Fix.Shape.FixConstructorCallOnInstance (DRagLint.Fix.Shape.pas), DRagLint.Fix.Stmt.FixIndexLoopToForIn (DRagLint.Fix.Stmt.pas) (+2 more)</para>
-/// <para>Calls: DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Lint.QueryRules.DeclaredTypeAt, UInt32</para>
+/// <para>Calls: DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Lint.QueryRules.DeclaredTypeAt, TreeSitter.TTSTree.RootNode, UInt32</para>
 /// <para>Returns: ''</para>
 /// <para>Complexity: 13 (cyclomatic, outer body), 36 lines (full implementation)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
 /// <seealso cref="DRagLint.Lint.QueryRules.DeclaredTypeAt"/>
+/// <seealso cref="TreeSitter.TTSTree.RootNode"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function DeclTypeOf(const APath: string; ALine: Integer; const AName: string): string;

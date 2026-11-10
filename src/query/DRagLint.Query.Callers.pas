@@ -145,7 +145,7 @@ type
     /// <param name="AKind"><!-- drag-lint:auto type -->const string</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.MemberAccess.GroupRoutines (DRagLint.Charts.MemberAccess.pas) ?, DRagLint.Charts.MemberAccess.LoadSites (DRagLint.Charts.MemberAccess.pas) ?, DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.PrintReferenceLines (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.RenderJson (DRagLint.Context.Bundler.pas) (+81 more)</para>
+    /// <para>Called from: DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas) ?, DRagLint.Charts.ArchDiagram.DiagramSvg (DRagLint.Charts.ArchDiagram.pas) ?, DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.PrintReferenceLines (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.RenderJson (DRagLint.Context.Bundler.pas) (+676 more)</para>
     /// <para>Writes: Exact, Ambiguous, External, NameOnly</para>
     /// <seealso cref="DRagLint.Query.Callers.TResolutionTally.ToText"/>
     /// <!-- drag-lint:auto END -->
@@ -487,7 +487,21 @@ function UnboundUsersForName(const AStore: ISymbolStore; const AName: string): T
 /// <param name="ACalleeCol">Receives the callee's 1-based column.</param>
 /// <param name="AArgIndex">Receives the 0-based index of the argument.</param>
 /// <returns>False when the site is not a whole argument of a call (or the text does not match).</returns>
-/// <remarks>Text only: strings are skipped, comments are not parsed; looks back at most 12 lines.</remarks>
+/// <remarks>
+/// Text only: strings are skipped, comments are not parsed; looks back at most 12 lines.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.Callers.TArgClassifier.Classify (DRagLint.Query.Callers.pas), DRagLint.Storage.SQLite.PersistArgUses (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Calls: CharInSet, DRagLint.Query.Callers.ArgumentEndsAt, DRagLint.Query.Callers.CalleeBefore, DRagLint.Query.Callers.CharAtPos, DRagLint.Query.Callers.IsIdentChar, DRagLint.Query.Callers.SkipReceiverBack, DRagLint.Query.Callers.StepBack, DRagLint.Query.Callers.WalkToOpenParen, InRange, Max</para>
+/// <para>Returns: False; CharInSet(CharAtPos(ALines, L, C), ['(', ','])</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 21 lines (full implementation)</para>
+/// <para>Mutates: ACallee (out), ACalleeLine (out), ACalleeCol (out), AArgIndex (out)</para>
+/// <seealso cref="DRagLint.Query.Callers.ArgumentEndsAt"/>
+/// <seealso cref="DRagLint.Query.Callers.CalleeBefore"/>
+/// <seealso cref="DRagLint.Query.Callers.CharAtPos"/>
+/// <seealso cref="DRagLint.Query.Callers.IsIdentChar"/>
+/// <seealso cref="DRagLint.Query.Callers.SkipReceiverBack"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LocateArgument(const ALines: TArray<string>; ALine, ACol: Integer;
   out ACallee: string; out ACalleeLine, ACalleeCol, AArgIndex: Integer): Boolean;
 
@@ -495,6 +509,14 @@ function LocateArgument(const ALines: TArray<string>; ALine, ACol: Integer;
 /// <param name="ASig">A signature such as `(A, B: T; var C: U)`.</param>
 /// <param name="AIndex">0-based parameter index.</param>
 /// <returns>'var' | 'out' | 'const' | 'in' | '' (by value, or past the list).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.Callers.TArgClassifier.Classify (DRagLint.Query.Callers.pas), DRagLint.Storage.SQLite.PersistArgUses (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Calls: CharInSet, Copy, LowerCase, Pos, Trim</para>
+/// <para>Returns: ''</para>
+/// <para>Complexity: 17 (cyclomatic, outer body), 40 lines (full implementation)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParamModeAt(const ASig: string; AIndex: Integer): string;
 
 implementation

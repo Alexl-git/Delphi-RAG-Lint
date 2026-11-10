@@ -51,9 +51,9 @@ type
     /// <para>Called from: DRagLint.LSP.Feature.CallHierarchy.Prepare (DRagLint.LSP.Feature.CallHierarchy.pas), DRagLint.LSP.Feature.CodeLens.TLspCodeLensFeature.Handle (DRagLint.LSP.Feature.CodeLens.pas), DRagLint.LSP.Feature.DocumentHighlight.TLspDocumentHighlightFeature.Handle (DRagLint.LSP.Feature.DocumentHighlight.pas), DRagLint.LSP.Feature.DocumentSymbol.TLspDocumentSymbolFeature.Handle (DRagLint.LSP.Feature.DocumentSymbol.pas), DRagLint.LSP.Feature.ExecuteCommand.TLspExecuteCommandFeature.Handle (DRagLint.LSP.Feature.ExecuteCommand.pas) (+7 more)</para>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.CallerCounts"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Definition"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ExceptionFactsAt"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ExceptionLenses"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileToUri"/>
-    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.HoverMarkdown"/>
-    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.IdentifierAtPosition"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FileFromUri(const AUri: string): string;
@@ -66,9 +66,9 @@ type
     /// <para>Called from: DRagLint.LSP.Feature.ExecuteCommand.ShowCallers (DRagLint.LSP.Feature.ExecuteCommand.pas), DRagLint.LSP.Feature.ImplDecl.SymbolUri (DRagLint.LSP.Feature.ImplDecl.pas), DRagLint.LSP.Feature.Rename.BuildWorkspaceEdit (DRagLint.LSP.Feature.Rename.pas), DRagLint.LSP.HierarchyUtil.BuildHierarchyItem (DRagLint.LSP.HierarchyUtil.pas)</para>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.CallerCounts"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Definition"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ExceptionFactsAt"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ExceptionLenses"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
-    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.HoverMarkdown"/>
-    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.IdentifierAtPosition"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FileToUri(const APath: string): string;
@@ -82,9 +82,9 @@ type
     /// <para>Called from: DRagLint.LSP.Feature.CodeLens.TLspCodeLensFeature.Handle (DRagLint.LSP.Feature.CodeLens.pas), DRagLint.LSP.Feature.ImplDecl.AddDescendantMethods (DRagLint.LSP.Feature.ImplDecl.pas), DRagLint.LSP.Feature.Ping.TPingFeature.Handle (DRagLint.LSP.Feature.Ping.pas), DRagLint.LSP.Feature.TypeDefinition.UniqueType (DRagLint.LSP.Feature.TypeDefinition.pas), DRagLint.LSP.HierarchyUtil.FindItemSymbol (DRagLint.LSP.HierarchyUtil.pas) (+1 more)</para>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.CallerCounts"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Definition"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ExceptionFactsAt"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ExceptionLenses"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
-    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileToUri"/>
-    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.HoverMarkdown"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Stores: TArray<ISymbolStore>;
@@ -98,9 +98,9 @@ type
     /// <para>Called from: DRagLint.LSP.Feature.DocumentSymbol.TLspDocumentSymbolFeature.Handle (DRagLint.LSP.Feature.DocumentSymbol.pas), DRagLint.LSP.Feature.ExecuteCommand.ShowCallers (DRagLint.LSP.Feature.ExecuteCommand.pas), DRagLint.LSP.Feature.InlayHint.TLspInlayHintFeature.Handle (DRagLint.LSP.Feature.InlayHint.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas), DRagLint.LSP.Feature.Rename.ResolveTarget (DRagLint.LSP.Feature.Rename.pas) (+3 more)</para>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.CallerCounts"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Definition"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ExceptionFactsAt"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ExceptionLenses"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
-    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileToUri"/>
-    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.HoverMarkdown"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function StoresForFile(const APath: string): TArray<ISymbolStore>;
@@ -115,9 +115,9 @@ type
     /// <para>Called from: DRagLint.LSP.Feature.Rename.BuildWorkspaceEdit (DRagLint.LSP.Feature.Rename.pas), DRagLint.LSP.Feature.Rename.HandlePrepare (DRagLint.LSP.Feature.Rename.pas)</para>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.CallerCounts"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Definition"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ExceptionFactsAt"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ExceptionLenses"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
-    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileToUri"/>
-    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.HoverMarkdown"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function IdentifierAtPosition(const APath: string; ALine0, ACol0: Integer): string;
@@ -139,9 +139,9 @@ type
     /// <para>Called from: DRagLint.LSP.Feature.CallHierarchy.Prepare (DRagLint.LSP.Feature.CallHierarchy.pas), DRagLint.LSP.Feature.ImplDecl.TLspImplDeclFeature.Handle (DRagLint.LSP.Feature.ImplDecl.pas), DRagLint.LSP.Feature.Rename.ResolveTarget (DRagLint.LSP.Feature.Rename.pas), DRagLint.LSP.Feature.TypeDefinition.TLspTypeDefinitionFeature.Handle (DRagLint.LSP.Feature.TypeDefinition.pas), DRagLint.LSP.Feature.TypeHierarchy.Prepare (DRagLint.LSP.Feature.TypeHierarchy.pas)</para>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.CallerCounts"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Definition"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ExceptionFactsAt"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ExceptionLenses"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
-    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileToUri"/>
-    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.HoverMarkdown"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function ResolveSymbolAt(const APath: string; ALine0, ACol0: Integer; out ASym: TSymbol; out AStore: ISymbolStore): Boolean;
@@ -162,9 +162,9 @@ type
     /// <para>Called from: DRagLint.LSP.Feature.DocumentHighlight.TLspDocumentHighlightFeature.Handle (DRagLint.LSP.Feature.DocumentHighlight.pas)</para>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.CallerCounts"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Definition"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ExceptionFactsAt"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ExceptionLenses"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
-    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileToUri"/>
-    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.HoverMarkdown"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function References(const APath: string; ALine0, ACol0: Integer; AIncludeDecl: Boolean): TJSONArray;
@@ -176,10 +176,10 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.LSP.Feature.CodeLens.TLspCodeLensFeature.Handle (DRagLint.LSP.Feature.CodeLens.pas)</para>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Definition"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ExceptionFactsAt"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ExceptionLenses"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileToUri"/>
-    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.HoverMarkdown"/>
-    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.IdentifierAtPosition"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function CallerCounts(const APath: string): TJSONArray;
@@ -187,6 +187,16 @@ type
     /// 0-based on the routine's declaration; [] when lsp --no-exception-facts is set.</summary>
     /// <param name="APath">The local path.</param>
     /// <returns>A new array the caller frees.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Feature.CodeLens.TLspCodeLensFeature.Handle (DRagLint.LSP.Feature.CodeLens.pas)</para>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.CallerCounts"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Definition"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ExceptionFactsAt"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileToUri"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ExceptionLenses(const APath: string): TJSONArray;
     /// <summary>Wave 149 LX (spec P1, executeCommand draglint.exceptionFacts): the raise and
     /// handler sites of the routine whose declaration starts on ALine0 -- the line an exception
@@ -197,9 +207,19 @@ type
     /// routine}] with 0-based positions, in the reader's order (routine, line, column);
     /// [] when lsp --no-exception-facts is set, the file is not indexed or no routine on
     /// that line raises or handles.</returns>
-    /// <remarks>Same reader as the lens and the exception-facts verb
+    /// <remarks>
+    /// Same reader as the lens and the exception-facts verb
     /// (DRagLint.Query.ExceptionFacts.ExceptionFactsOfFile), so the pick lists exactly the
-    /// sites the lens title counts.</remarks>
+    /// sites the lens title counts.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Feature.ExecuteCommand.TLspExecuteCommandFeature.Handle (DRagLint.LSP.Feature.ExecuteCommand.pas)</para>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.CallerCounts"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Definition"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ExceptionLenses"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileToUri"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ExceptionFactsAt(const APath: string; ALine0: Integer): TJSONArray;
     /// <summary>The markdown `textDocument/hover` shows for a position.</summary>
     /// <param name="APath">The local path.</param>
@@ -220,9 +240,9 @@ type
     /// <para>Called from: DRagLint.LSP.Feature.CallHierarchy.TLspCallHierarchyFeature.Handle (DRagLint.LSP.Feature.CallHierarchy.pas), DRagLint.LSP.Feature.CodeLens.TLspCodeLensFeature.Handle (DRagLint.LSP.Feature.CodeLens.pas), DRagLint.LSP.Feature.DocumentHighlight.TLspDocumentHighlightFeature.Handle (DRagLint.LSP.Feature.DocumentHighlight.pas), DRagLint.LSP.Feature.DocumentSymbol.TLspDocumentSymbolFeature.Handle (DRagLint.LSP.Feature.DocumentSymbol.pas), DRagLint.LSP.Feature.ExecuteCommand.TLspExecuteCommandFeature.Handle (DRagLint.LSP.Feature.ExecuteCommand.pas) (+9 more)</para>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.CallerCounts"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Definition"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ExceptionFactsAt"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ExceptionLenses"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
-    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileToUri"/>
-    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.HoverMarkdown"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure Reply(const AId: TJSONValue; AResult: TJSONValue);
@@ -235,9 +255,9 @@ type
     /// <para>Called from: DRagLint.LSP.Feature.ExecuteCommand.TLspExecuteCommandFeature.Handle (DRagLint.LSP.Feature.ExecuteCommand.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas)</para>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.CallerCounts"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Definition"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ExceptionFactsAt"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ExceptionLenses"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
-    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileToUri"/>
-    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.HoverMarkdown"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure ReplyError(const AId: TJSONValue; ACode: Integer; const AMessage: string);

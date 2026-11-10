@@ -76,7 +76,7 @@ type
     /// unknown/unreadable file answers {data: []}.</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Calls: Copy, DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadBytes, DRagLint.LSP.Context.ILspServerContext.FileFromUri, DRagLint.LSP.Context.ILspServerContext.Reply, DRagLint.LSP.Context.ILspServerContext.StoresForFile, DRagLint.LSP.Feature.SemanticTokens.AddDeclarations, DRagLint.LSP.Feature.SemanticTokens.Encode, DRagLint.LSP.Feature.SemanticTokens.SplitLines, DRagLint.LSP.Feature.SemanticTokens.TByteMap.Build, DRagLint.LSP.Feature.SemanticTokens.WalkSyntax, DRagLint.LSP.SyntaxTree.ParseDelphiUtf8, DRagLint.Preprocess.Types.NormalizeLoneCR</para>
+    /// <para>Calls: Copy, DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadBytes, DRagLint.LSP.Context.ILspServerContext.FileFromUri, DRagLint.LSP.Context.ILspServerContext.Reply, DRagLint.LSP.Context.ILspServerContext.StoresForFile, DRagLint.LSP.Feature.SemanticTokens.AddDeclarations, DRagLint.LSP.Feature.SemanticTokens.Encode, DRagLint.LSP.Feature.SemanticTokens.SplitLines, DRagLint.LSP.Feature.SemanticTokens.TByteMap.Build, DRagLint.LSP.Feature.SemanticTokens.WalkSyntax, DRagLint.LSP.SyntaxTree.ParseDelphiUtf8, DRagLint.Preprocess.Types.NormalizeLoneCR, TreeSitter.TTSTree.RootNode</para>
     /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Handle</para>
     /// <para>Catches: Exception (re-raise)</para>
     /// <para>Directives: override</para>

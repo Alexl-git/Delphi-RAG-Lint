@@ -154,7 +154,7 @@ begin
   FTree   := pTree;
   FDb     := pDb;
   FProject:= pProject;
-  FStore  := TSQLiteSymbolStore.Create(pDb, True);
+  FStore  := TSQLiteSymbolStore.CreateReadable(pDb, True);
   FMap    := TObjectDictionary<TFormDfmNode, TList<TMenuNode>>.Create([doOwnsValues]);
   FLinked := TDictionary<string, Boolean>.Create;
 end;

@@ -106,6 +106,10 @@ type
   /// lines of the directive that opens and the one that closes the branch (the
   /// file's last line when never closed). Active: the branch's text was kept.
   /// A stray ELSE / ELSEIF / ENDIF with no open block records nothing.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Preprocess.pas) ?, DRagLint.Core.Indexer.BuildPpDirectiveRows (DRagLint.Core.Indexer.pas) ?, DRagLint.Core.Indexer.IsInnerBranch (DRagLint.Core.Indexer.pas) ?, DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas) ?, DRagLint.Preprocess.PreprocessInto.OpenBranch (DRagLint.Preprocess.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.Core.Indexer, DRagLint.Preprocess</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TPPRegion = record
     Region   : Integer;
@@ -119,6 +123,12 @@ type
     Active   : Boolean;
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas) ?, DRagLint.Diagnostics.ParseCache.TAstParseCache.UnresolvedIfs (DRagLint.Diagnostics.ParseCache.pas) ?, DRagLint.Preprocess.Preprocess/2 (DRagLint.Preprocess.pas), DRagLint.Preprocess.Preprocess/3 (DRagLint.Preprocess.pas), DRagLint.Preprocess.PreprocessReport (DRagLint.Preprocess.pas) (+3 more)</para>
+  /// <para>Used in units: DRagLint.Core.Indexer, DRagLint.Diagnostics.ParseCache, DRagLint.Index.PPUnitSource, DRagLint.Preprocess</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPPReport = record
     Sites     : TArray<TPPIncludeSite>;   // as Preprocess(..., out ASites)
     Unresolved: TArray<TPPUnresolvedIf>;  // top-level file only (not inside includes)
@@ -145,7 +155,7 @@ type
 /// No shared mutable state -- each call builds its own defines
 /// dictionary and IF stack.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.Closure.TClosureResolver.MaybePreprocess (DRagLint.Index.Closure.pas), DRagLint.Preprocess.Preprocess/2 (DRagLint.Preprocess.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas), DRagLint.Index.Closure.TClosureResolver.MaybePreprocess (DRagLint.Index.Closure.pas), DRagLint.Preprocess.Preprocess/2 (DRagLint.Preprocess.pas)</para>
 /// <para>Calls: DRagLint.Preprocess.Preprocess/2, DRagLint.Preprocess.Types.TPPOptionsDefault</para>
 /// <para>Returns: Preprocess(AUtf8, Opts)</para>
 /// <para>Overload 1 of 3</para>
@@ -196,7 +206,7 @@ function Preprocess(const AUtf8: TBytes; const AOptions: TPPOptions): TBytes; ov
 /// Each site's Resolved bytes are the child output the recursion
 /// already produced -- no second preprocess.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.HostIncludeSites (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.Closure.TClosureResolver.TryPreprocessWithSites (DRagLint.Index.Closure.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.HostIncludeSites (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.Closure.TClosureResolver.TryPreprocessWithSites (DRagLint.Index.Closure.pas)</para>
 /// <para>Calls: Default, DRagLint.Preprocess.PreprocessWithSites</para>
 /// <para>Returns: PreprocessWithSites(AUtf8, AOptions, Sites, Report)</para>
 /// <para>Overload 3 of 3</para>
@@ -223,7 +233,7 @@ function Preprocess(const AUtf8: TBytes; const AOptions: TPPOptions;
 /// one TSV line per evaluated IF (base dir, line, result, result without the
 /// symbol table, unresolved names, expression) -- a measurement aid.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Diagnostics.ParseCache.TAstParseCache.UnresolvedIfs (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.Scan (DRagLint.Index.PPUnitSource.pas)</para>
+/// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.UnresolvedIfs (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.Scan (DRagLint.Index.PPUnitSource.pas)</para>
 /// <para>Calls: Default, DRagLint.Preprocess.PreprocessWithSites</para>
 /// <para>Returns: PreprocessWithSites(AUtf8, AOptions, Sites, AReport)</para>
 /// <para>Mutates: AReport (out)</para>

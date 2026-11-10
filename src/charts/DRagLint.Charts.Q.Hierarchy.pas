@@ -138,7 +138,7 @@ function Emit(const pArgs: TQuestionArgs; const pOutDir: string): TChartResult;
 var
   Found: Boolean;
 begin
-  var Store: ISymbolStore:= TSQLiteSymbolStore.Create(pArgs.GuardedDb, True);
+  var Store: ISymbolStore:= TSQLiteSymbolStore.CreateReadable(pArgs.GuardedDb, True);
   var Index:= TChartsIndex.Create(pArgs.GuardedDb);
   var Lookup:= TLookup.Create([doOwnsValues], TIStringComparer.Ordinal);
   var LookupRows: TObjectList<TIndexRow>:= nil;

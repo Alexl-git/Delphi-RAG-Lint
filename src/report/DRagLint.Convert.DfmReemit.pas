@@ -270,6 +270,10 @@ type
   /// image nor its G[count] leaves. SourceN is 0 when the count was never read.
   /// DroppedSlots is named by the rule's chosen alternative, never inferred.
   /// Message is the sentence the report prints.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas) ?, declaration (DRagLint.Convert.DfmReemit.pas) ?, DRagLint.Convert.Apply.BuildApplyPlan.FoldGlyphOutcome (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.DfmReemit.ReemitBlock.RealiseGlyphLink (DRagLint.Convert.DfmReemit.pas)</para>
+  /// <para>Used in units: DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReemitGlyph = record
     FromPath    : string;
@@ -392,7 +396,6 @@ type
 /// OWNS and must Free it. Set to nil on failure.</param>
 /// <returns>True when the block parsed into a single root object; False on a
 /// binary DFM, an empty block, or a parse with no top-level object.</returns>
-/// <exception cref="ETreeSitterException"><!-- drag-lint:auto exc -->via TreeSitter.TTSParser.SetLanguage: Failed to set parser language to 0x%p</exception>
 /// <remarks>
 /// Pure: no file I/O. Uses the same tree-sitter-dfm grammar the indexer
 /// uses (node types object/property/identifier_value/qualified_identifier/
@@ -401,7 +404,7 @@ type
 /// respect to the tree-sitter runtime if called concurrently.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.HandleNested (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitComponent (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphVacuum.HarvestFile (DRagLint.Convert.GlyphVacuum.pas)</para>
-/// <para>Calls: DRagLint.Convert.DfmReemit.ChildPosOf, DRagLint.Convert.DfmReemit.NodeText, DRagLint.Convert.DfmReemit.ObjectKeyword, DRagLint.Convert.DfmReemit.TDfmNode.Create, DRagLint.Convert.DfmReemit.WalkNodeInto, DRagLint.Parser.DFM.tree_sitter_dfm, Integer, Move, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull (+7 more)</para>
+/// <para>Calls: DRagLint.Convert.DfmReemit.ChildPosOf, DRagLint.Convert.DfmReemit.NodeText, DRagLint.Convert.DfmReemit.ObjectKeyword, DRagLint.Convert.DfmReemit.TDfmNode.Create, DRagLint.Convert.DfmReemit.WalkNodeInto, DRagLint.Parser.DFM.tree_sitter_dfm, Integer, Move, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull (+8 more)</para>
 /// <para>Complexity: 10 (cyclomatic, outer body), 55 lines (full implementation)</para>
 /// <para>Mutates: ARoot (out)</para>
 /// <seealso cref="DRagLint.Convert.DfmReemit.ChildPosOf"/>

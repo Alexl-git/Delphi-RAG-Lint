@@ -48,13 +48,14 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: DRagLint.Diagnostics.ParityExtChecks.TParityRun.Create, DRagLint.Diagnostics.ParityExtChecks.TParityRun.Findings, DRagLint.Diagnostics.ParityExtChecks.TParityRun.Run, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get</para>
+    /// <para>Calls: DRagLint.Diagnostics.ParityExtChecks.TParityRun.Create, DRagLint.Diagnostics.ParityExtChecks.TParityRun.Findings, DRagLint.Diagnostics.ParityExtChecks.TParityRun.Run, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, TreeSitter.TTSTree.RootNode</para>
     /// <para>Returns: nil; Run.Findings</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Diagnostics.ParityExtChecks.TParityRun.Create"/>
     /// <seealso cref="DRagLint.Diagnostics.ParityExtChecks.TParityRun.Findings"/>
     /// <seealso cref="DRagLint.Diagnostics.ParityExtChecks.TParityRun.Run"/>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+    /// <seealso cref="TreeSitter.TTSTree.RootNode"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; const ACfg: TLintConfig;

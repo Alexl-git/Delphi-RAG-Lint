@@ -79,7 +79,7 @@ function LibraryReadinessToken(AState: TLibraryReadiness): string;
 /// default): binding against an old parse would record a fingerprint the next `info` calls stale.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.ComputeInfoIndexVerdict (DRagLint.CLI.pas), DRagLint.CLI.EvaluateLibraryGate (DRagLint.CLI.pas), DRagLint.CLI.PlanLibraryResolve (DRagLint.CLI.pas)</para>
-/// <para>Calls: DRagLint.CLI.LibraryReady.ClassifyLibraryStamps, DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue, DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, Format</para>
+/// <para>Calls: DRagLint.CLI.LibraryReady.ClassifyLibraryStamps, DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue, DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent, DRagLint.Storage.Schema.IsSchemaReadable, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, Format</para>
 /// <para>Returns: lrMissing; lrSchemaOld; lrUnreadable</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <para>Mutates: AStampFp (out), AWhy (out)</para>
@@ -87,6 +87,7 @@ function LibraryReadinessToken(AState: TLibraryReadiness): string;
 /// <seealso cref="DRagLint.CLI.LibraryReady.ClassifyLibraryStamps"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent"/>
+/// <seealso cref="DRagLint.Storage.Schema.IsSchemaReadable"/>
 /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

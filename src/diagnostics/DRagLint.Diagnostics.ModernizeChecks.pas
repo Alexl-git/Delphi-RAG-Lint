@@ -36,11 +36,12 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: CheckFor, Default, DRagLint.Diagnostics.ModernizeChecks.TModernizeChecker.Check.Walk, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, NodeText, ParseBound, ReadsAfter, ScanBody, Squash</para>
+    /// <para>Calls: CheckFor, Default, DRagLint.Diagnostics.ModernizeChecks.TModernizeChecker.Check.Walk, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, NodeText, ParseBound, ReadsAfter, ScanBody, Squash, TreeSitter.TTSTree.RootNode</para>
     /// <para>Returns: nil; Findings</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Diagnostics.ModernizeChecks.TModernizeChecker.Check.Walk"/>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+    /// <seealso cref="TreeSitter.TTSTree.RootNode"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; const ACfg: TLintConfig;

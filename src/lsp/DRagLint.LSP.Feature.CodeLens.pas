@@ -67,15 +67,15 @@ type
     /// <param name="AParams">{textDocument:{uri}}; a missing uri answers [].</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Calls: DRagLint.LSP.Context.ILspServerContext.CallerCounts, DRagLint.LSP.Context.ILspServerContext.FileFromUri, DRagLint.LSP.Context.ILspServerContext.Reply, DRagLint.LSP.Context.ILspServerContext.Stores, DRagLint.LSP.Feature.CodeLens.BuildLens, DRagLint.Query.Implementors.ImplementorCountsForFile</para>
+    /// <para>Calls: DRagLint.LSP.Context.ILspServerContext.CallerCounts, DRagLint.LSP.Context.ILspServerContext.ExceptionLenses, DRagLint.LSP.Context.ILspServerContext.FileFromUri, DRagLint.LSP.Context.ILspServerContext.Reply, DRagLint.LSP.Context.ILspServerContext.Stores, DRagLint.LSP.Feature.CodeLens.BuildLens, DRagLint.Query.Implementors.ImplementorCountsForFile</para>
     /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Handle</para>
     /// <para>Catches: Exception (re-raise)</para>
     /// <para>Directives: override</para>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.CallerCounts"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ExceptionLenses"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Reply"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Stores"/>
-    /// <seealso cref="DRagLint.LSP.Feature.CodeLens.BuildLens"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure Handle(const ACtx: ILspServerContext; const AMethod: string; const AId: TJSONValue; const AParams: TJSONObject); override;

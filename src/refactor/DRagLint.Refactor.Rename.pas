@@ -374,7 +374,7 @@ type
       /// column; byte wins. Every returned Col is a character column, as StaleEditReason and Apply expect.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal (DRagLint.Refactor.Rename.pas), DRagLint.Refactor.RenameProof.ProveLocalRename (DRagLint.Refactor.RenameProof.pas)</para>
-      /// <para>Calls: AddEdit, ArgsSig, Copy, Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.EnclosingProc, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.FindIdentAt, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.NStr, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.SyncForwardHeaders, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.Walk (+17 more)</para>
+      /// <para>Calls: AddEdit, ArgsSig, Copy, Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.EnclosingProc, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.FindIdentAt, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.NStr, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.SyncForwardHeaders, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.Walk (+19 more)</para>
       /// <para>Returns: nil; Final.ToArray</para>
       /// <para>Mutates: AWithSites (out), ANewNameSites (out)</para>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
