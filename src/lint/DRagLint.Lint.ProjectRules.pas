@@ -2585,7 +2585,7 @@ begin
         F.EndCol   := Row.EndCol;
         F.Message  := Format('%s is in the interface uses but only the implementation section ' +
                              'needs it -- move it down to cut coupling and compile time ' +
-                             '(drag-lint uses-fix verifies the move by compiling)', [Row.UnitName]);
+                             '(drag-lint uses-fix verifies the move by compiling)%s', [Row.UnitName, Row.IncludeSuffix]);
         Findings.Add(F);
       end;
     end;

@@ -44,6 +44,9 @@ type
     StartCol : Integer;
     EndLine  : Integer;
     EndCol   : Integer;
+    /// <summary>N-06: ' (in include Name.inc, line N)' naming where an include-origin entry
+    /// really is (TUnitUse.IncludeSuffix); '' for an inline entry.</summary>
+    IncludeSuffix: string;
   end;
 
   /// <summary>Computes uses-audit verdicts for the files of one open store.</summary>
@@ -286,6 +289,7 @@ begin
       Row.StartCol := Uo.HostCol;
       Row.EndLine  := if Uo.FromInclude then Uo.IncludeLine else Uo.EndLine;
       Row.EndCol   := if Uo.FromInclude then 1 else Uo.EndCol;
+      Row.IncludeSuffix:= Uo.IncludeSuffix;
       Result:= Result + [Row];
     end;
   finally
