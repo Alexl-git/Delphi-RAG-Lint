@@ -7182,8 +7182,8 @@ var
     OTHER_TABLE_SQL = 'SELECT COUNT(*) FROM sqlite_master WHERE type = ''table'''
                     + ' AND name NOT LIKE ''sqlite\_%'' ESCAPE ''\'' AND name <> ''schema_meta''';
   begin
-    if AConn.ExecSQLScalar(FILES_TABLE_SQL) > 0 then Result:= AConn.ExecSQLScalar(ANY_FILE_SQL) = 0
-    else Result:= AConn.ExecSQLScalar(OTHER_TABLE_SQL) = 0;
+    Result:= if AConn.ExecSQLScalar(FILES_TABLE_SQL) > 0 then AConn.ExecSQLScalar(ANY_FILE_SQL) = 0
+             else AConn.ExecSQLScalar(OTHER_TABLE_SQL) = 0;
   end;
 
   { 150 Y1: the empty answer -- a private in-memory store migrated to the current schema (so
@@ -7198,8 +7198,11 @@ var
       Result.Migrate;
       Result.FConn.ExecSQL('PRAGMA query_only = ON');
     except
-      Result.Free;
-      raise;
+      on Exception do
+      begin
+        Result.Free; { not yet held by an interface reference }
+        raise;
+      end;
     end;
   end;
 
