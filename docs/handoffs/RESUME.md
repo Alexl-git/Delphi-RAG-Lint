@@ -8,7 +8,7 @@ handoff it resumes; several `open` lines are normal. New handoffs are written he
 The legacy `..\RESUME-*.md` files below are gitignored (`docs/RESUME-*`) and exist only in
 the main working tree; their links do not resolve in a fresh clone or worktree.
 
-- 2026-11-10 | engine | 150 deployed + re-parsed (main a3aea3675 unpushed, 1.49.0-alpha, schema 24); owner page QWrmj65xP1U3hFX31mtLsK; next: owner reboot + IDE test, then push + release | open | [HANDOFF-2026-11-10-engine-150-deployed-reparsed-ide-test.md](HANDOFF-2026-11-10-engine-150-deployed-reparsed-ide-test.md)
+- 2026-11-10 | engine | 150 deployed + re-parsed (main a3aea3675 unpushed, 1.49.0-alpha, schema 24); owner page QWrmj65xP1U3hFX31mtLsK; next: DFM DLL fixed -> rebuild 37 project DBs after ORM3 all-clear + owner go, then reboot + IDE test, push, release | open | [HANDOFF-2026-11-10-engine-150-deployed-reparsed-ide-test.md](HANDOFF-2026-11-10-engine-150-deployed-reparsed-ide-test.md)
 - 2026-11-09 | engine | wave 150 running: 6 DONE, CY2 PARTIAL, 9 lanes running, INT step 0 running; controller delphi-rag-lint-1c | closed | [HANDOFF-2026-11-09-engine-150-wave-running.md](HANDOFF-2026-11-09-engine-150-wave-running.md)
 - 2026-11-09 | engine | 149 merged to main f8d66a21f (not deployed); wave 150 planned (lanes\150\PLAN.md + W1/W2 + scanner fix); next: dispatch 150 | resumed 2026-11-09 12:40 | [HANDOFF-2026-11-09-engine-150-ready-to-dispatch.md](HANDOFF-2026-11-09-engine-150-ready-to-dispatch.md)
 - 2026-11-09 | engine | wave 149 running (HW done; RB1/DF/EX1/LX/IC partial + finishers; INT started); owner away, deploy+re-parse go | closed | [HANDOFF-2026-11-09-engine-149-wave-running-owner-away.md](HANDOFF-2026-11-09-engine-149-wave-running-owner-away.md)
