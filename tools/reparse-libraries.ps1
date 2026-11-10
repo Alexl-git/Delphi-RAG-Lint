@@ -53,7 +53,14 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-if ($Engine -eq '') { $Engine = Join-Path $PSScriptRoot '..\third_party\dll-win64\drag-lint.exe' }
+if ($Engine -eq '') {
+  $Engine = Join-Path $PSScriptRoot '..\third_party\dll-win64\drag-lint.exe'
+  # A re-parse with a grammar DLL that is not HEAD's is hours of silently wrong facts, and
+  # `info` still says current (2026-11-10, DFM v1.1 under a v1.2.0 HEAD). Only the deployed
+  # engine dir is checked; an explicit -Engine is the caller's own pinned copy.
+  & pwsh -NoProfile -File (Join-Path $PSScriptRoot '..\build\check-thirdparty-head.ps1') -Root (Join-Path $PSScriptRoot '..')
+  if ($LASTEXITCODE -ne 0) { throw "third_party DLLs differ from git HEAD -- fix before a re-parse (see above)" }
+}
 $Summary = Join-Path $OutDir 'SUMMARY.txt'
 
 if ($Status) {

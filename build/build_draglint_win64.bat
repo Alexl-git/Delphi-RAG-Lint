@@ -38,6 +38,11 @@ REM second implementation of the copy below. tests\run_battery.ps1 and
 REM tests\autotest\run_exe_freshness.ps1 do not close it either: the freshness
 REM guard checks exe existence and mtime-vs-newest-source only -- it never looks
 REM for tree-sitter DLLs beside the exe, so it could not catch a regression here.
+REM The DLLs copied below must be the ones git HEAD records: a merge that could not replace a
+REM loaded DLL left the July DFM grammar deployed under a v1.2.0 HEAD (2026-11-10). Lane override:
+REM DRAGLINT_ALLOW_DLL_DRIFT=1. Guard: tests\autotest\run_thirdparty_head_guard.ps1.
+pwsh -NoProfile -File "%ROOT%\build\check-thirdparty-head.ps1" -Root "%ROOT%"
+if errorlevel 1 exit /b 1
 copy /Y "%ROOT%\third_party\dll-win64\tree-sitter*.dll" "%ROOT%\src\cli\Win64\Debug\" >NUL
 if errorlevel 1 (
   echo ERROR: failed to stage tree-sitter companions into %ROOT%\src\cli\Win64\Debug
