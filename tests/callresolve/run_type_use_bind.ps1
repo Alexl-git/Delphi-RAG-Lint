@@ -18,7 +18,7 @@
            nested type, heritage, generic argument)
     NEG-*  four stay NULL: a generic parameter (uTuLib declares a type T, so a
            by-name join binds it), a used unit's IMPLEMENTATION-section type, a unit-qualified
-           name (declined, not guessed), and a routine-LOCAL type the index
+           name (150 T3: binds that unit's type), and a routine-LOCAL type the index
            does not list (positive control: the unit-level TLoc must not answer)
     the calls-stage `type-uses:` log line
 
@@ -87,7 +87,10 @@ $pos = @(
   @('TU-INHERITED-NESTED', 'TNest', 'uTuUse.TBase2.TNest'),
   # 149 RB2 item 5: two used units declaring the name are decided by uses order (the LAST
   # listed wins: `uses uTuLib, uTuLib2`), as dcc does -- this was NEG-AMBIGUOUS (unbound).
-  @('NEG-AMBIGUOUS', 'TClash', 'uTuLib2.TClash')
+  @('NEG-AMBIGUOUS', 'TClash', 'uTuLib2.TClash'),
+  # 150 T3 (TAILS G4): a UNIT-qualified name binds that unit's type -- this was NEG-QUALIFIED
+  # (declined). The non-unit qualifier negatives live in run_t3_dotted_type_local_const.ps1 (N1/N2).
+  @('NEG-QUALIFIED', 'TShared', 'uTuLib.TShared')
 )
 foreach ($p in $pos) {
   $r = @(TypeUseAt $p[0] $p[1])
@@ -95,7 +98,7 @@ foreach ($p in $pos) {
   Check "$($p[0]) binds $($p[1]) to $($p[2])" ($got -eq $p[2]) "got=$got"
 }
 foreach ($n in @(@('NEG-GENERIC', 'T'), @('NEG-IMPL-SECTION', 'TImplOnly'),
-                 @('NEG-QUALIFIED', 'TShared'), @('NEG-LOCAL-TYPE', 'TLoc'))) {
+                 @('NEG-LOCAL-TYPE', 'TLoc'))) {
   $r = @(TypeUseAt $n[0] $n[1])
   Check "$($n[0]) $($n[1]) stays unbound" (($r.Count -eq 1) -and ($null -eq $r[0].symbol_id)) `
     ("rows=$($r.Count) tq=" + $(if ($r.Count) { $r[0].tq } else { '' }))

@@ -13,8 +13,8 @@
 
   WHAT THIS GUARD PINS
     EC-*   two casts bind: own-unit enum, used-unit enum
-    NEG-*  three stay NULL: a CLASS cast (only enums bind), a unit-qualified
-           cast (declined, not guessed), a name two used units declare
+    NEG-*  a CLASS cast stays NULL (only enums bind); a unit-qualified cast binds that unit's enum
+           (150 T3), a name two used units declare is decided by uses order (149 RB2)
     no call_edges row for a bound cast (find-callers unchanged)
     the binding survives an incremental (scoped) reindex of the using unit
     the calls-stage `enum-casts:` log line
@@ -71,13 +71,15 @@ function CastAt([string]$Marker, [string]$Name) {
 }
 function CheckAll([string]$Phase) {
   # 149 RB2 item 5: TClashE (uses uEcLib, uEcLib2) is decided by uses order -- the last listed wins.
-  foreach ($p in @(@('EC-OWN', 'TOwnKind', 'uEcUse.TOwnKind'), @('EC-USED', 'TLibKind', 'uEcLib.TLibKind'), @('NEG-AMBIGUOUS', 'TClashE', 'uEcLib2.TClashE'))) {
+  foreach ($p in @(@('EC-OWN', 'TOwnKind', 'uEcUse.TOwnKind'), @('EC-USED', 'TLibKind', 'uEcLib.TLibKind'), @('NEG-AMBIGUOUS', 'TClashE', 'uEcLib2.TClashE'),
+                   # 150 T3 (TAILS G4): a UNIT-qualified cast binds that unit's enum (was NEG-QUALIFIED, declined).
+                   @('NEG-QUALIFIED', 'TLibKind', 'uEcLib.TLibKind'))) {
     $r = @(CastAt $p[0] $p[1])
     $got = if ($r.Count -eq 1) { [string]$r[0].tq } else { "rows=$($r.Count)" }
     Check "$Phase $($p[0]) binds $($p[1]) to $($p[2])" ($got -eq $p[2]) "got=$got"
     if ($r.Count -eq 1) { Check "$Phase $($p[0]) writes no call edge" ([int]$r[0].edges -eq 0) "edges=$($r[0].edges)" }
   }
-  foreach ($n in @(@('NEG-CLASS', 'TLibClass'), @('NEG-QUALIFIED', 'TLibKind'))) {
+  foreach ($n in @(,@('NEG-CLASS', 'TLibClass'))) {
     $r = @(CastAt $n[0] $n[1])
     Check "$Phase $($n[0]) $($n[1]) stays unbound" (($r.Count -ge 1) -and (@($r | Where-Object { $null -ne $_.symbol_id }).Count -eq 0)) `
       ("rows=$($r.Count) tq=" + $(if ($r.Count) { $r[0].tq } else { '' }))
