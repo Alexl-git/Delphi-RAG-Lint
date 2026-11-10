@@ -231,7 +231,7 @@ function DocEditCount([string]$Db, [string]$Unit) {
   return 0
 }
 function DriftCount([string]$Db, [string]$Unit) {
-  $o = & $Exe lint-all --db $Db --quiet 2>$null
+  $o = & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $Db --quiet 2>$null
   ($o | Select-String 'doc-drift' | Where-Object { $_.Line -match "\\$Unit\.pas:" }).Count
 }
 function BlockLine([string]$Unit, [string]$Label) {
@@ -439,7 +439,7 @@ Check 'no entry is duplicated in the merged list' (
 
 Check 'the --fix path starts from real drift' ((DriftCount $dbB 'MarkFix') -gt 0)
 
-& $Exe lint-all --db $dbB --fix --apply --no-backup 2>$null | Out-Null
+& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $dbB --fix --apply --no-backup 2>$null | Out-Null
 Reindex $dbA @($shDir)
 Reindex $dbB @($shDir)
 
@@ -451,7 +451,7 @@ Check '--fix gains this project''s caller' ($fixed -match 'BOnly') `
 Check '--fix converges under B' ((DriftCount $dbB 'MarkFix') -eq 0)
 # A's one-time adoption, through the --fix path this time (see the convergence
 # section above): it must be offered as fixable, and once applied BOTH converge.
-& $Exe lint-all --db $dbA --fix --apply --no-backup 2>$null | Out-Null
+& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $dbA --fix --apply --no-backup 2>$null | Out-Null
 Reindex $dbA @($shDir)
 Reindex $dbB @($shDir)
 Check '--fix converges under A too' ((DriftCount $dbA 'MarkFix') -eq 0) `

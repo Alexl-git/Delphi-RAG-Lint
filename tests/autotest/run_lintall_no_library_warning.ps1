@@ -29,7 +29,7 @@ try {
   $Rule = @('--rule', 'unused-global')
   function Err([string[]]$More) {
     $f = Join-Path $Tmp 'err.txt'
-    & $E lint-all --db $Db @Rule @More 1> $null 2> $f
+    & $E lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $Db @Rule @More 1> $null 2> $f
     return [IO.File]::ReadAllText($f)
   }
   $Warn = 'no platform library for this run'

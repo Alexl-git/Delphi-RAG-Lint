@@ -39,6 +39,7 @@ function Frame($obj) {
 }
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 $Exe = (Resolve-Path $Exe).Path
+. "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 150 H1: no machine drag-lint.json
 if (Test-Path $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 foreach ($d in 'libsrc','projsrc','loose','listed') { New-Item -ItemType Directory "$WorkDir\$d" -Force | Out-Null }
 

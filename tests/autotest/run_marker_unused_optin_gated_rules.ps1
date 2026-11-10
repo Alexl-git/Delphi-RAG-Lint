@@ -63,7 +63,7 @@ $body.AddRange([string[]]@('', 'end.'))
 & $Exe index $WorkDir --db $db *> $null
 Check 'fixture indexed' ($LASTEXITCODE -eq 0) ''
 
-function LintAll { ((& $Exe lint-all --db $db 2>$err | Out-String) -replace "`r`n", "`n") }
+function LintAll { ((& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db 2>$err | Out-String) -replace "`r`n", "`n") }
 function LintFile([string]$P) { ((& $Exe lint $P --db $db 2>$err | Out-String) -replace "`r`n", "`n") }
 
 Write-Host ''

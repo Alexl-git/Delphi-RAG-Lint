@@ -128,7 +128,7 @@ $db = Join-Path $work 'fx.sqlite'
 & $Exe index $work --db $db --rebuild *> $null
 Check 'fixture indexed' (Test-Path $db) $db
 
-$out  = (& $Exe lint-all --db $db --quiet --enable dfm-property-not-declared 2>$null | Out-String)
+$out  = (& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --quiet --enable dfm-property-not-declared 2>$null | Out-String)
 $rows = @($out -split "`r?`n" | Where-Object { $_ -match 'dfm-property-not-declared' })
 
 # 0 -- POSITIVE CONTROL FOR THE WHOLE FILE. Every NEG below is a claim that
@@ -216,7 +216,7 @@ Check 'POS a literal OUTSIDE the DefineProperties span still FIRES' `
 # --json` reported the rule ON and a default lint-all still printed NOTHING,
 # which is indistinguishable from a clean corpus.
 Check 'the rule is ON by default (owner ruling 2026-09-14)' `
-      (((& $Exe lint-all --db $db --quiet 2>$null | Out-String) -match 'dfm-property-not-declared')) `
+      (((& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --quiet 2>$null | Out-String) -match 'dfm-property-not-declared')) `
       'all THREE gates must agree: catalog default_enabled, the print filter, and ShouldKeep(id, ADefaultDisabled=False)'
 
 Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue

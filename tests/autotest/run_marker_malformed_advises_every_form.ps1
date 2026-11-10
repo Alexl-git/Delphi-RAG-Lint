@@ -149,7 +149,7 @@ Check 'fixture indexed' (Test-Path $db)
 
 function Lint-Fixture {
   $concat = @(); $stale = @{}; $malformed = @{}
-  foreach ($line in (& $Exe lint-all --db $db 2>&1)) {
+  foreach ($line in (& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db 2>&1)) {
     $t = "$line"
     if ($t -match ':(\d+):\d+\s+\[\w+\]\s+concat-in-loop:')           { $concat += [int]$Matches[1] }
     elseif ($t -match ':(\d+):\d+\s+\[\w+\]\s+review-marker-stale:')  { $stale[[int]$Matches[1]] = $t }

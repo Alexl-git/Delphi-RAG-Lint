@@ -183,7 +183,7 @@ ReadVerbUnchanged 'dump-refs'    { & $Exe dump-refs $pas --db $db }
 # --- D24: verbs that only READ the index but opened it writable + Migrate ---
 $excCfg = "$WorkDir\exc-on.json"
 Set-Content -LiteralPath $excCfg -Value '{ "exceptions": { } }' -Encoding ascii
-ReadVerbUnchanged 'lint-all'                  { & $Exe lint-all --db $db --quiet }
+ReadVerbUnchanged 'lint-all'                  { & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --quiet }
 ReadVerbUnchanged 'lint-project'              { & $Exe lint-project --db $db }
 ReadVerbUnchanged 'rename --kind symbol (dry)' { & $Exe rename --kind symbol --name Fixture.TFoo.Greet --to Salute --db $db --json }
 ReadVerbUnchanged 'safe-delete (dry)'         { & $Exe safe-delete --name Fixture.TFoo.DoWork --db $db --json }

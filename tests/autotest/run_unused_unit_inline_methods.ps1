@@ -88,7 +88,7 @@ if (-not (Test-Path $db)) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 $dir = (& $Exe sql --query "select directives from symbols where qualified_name='GridU.TByteGrid.At'" --db $db --json 2>$null | Out-String)
 Check 'premise: TByteGrid.At carries directives=inline' ($dir -match '"inline"') ''
 
-$out = @(& $Exe lint-all --db $db --rule unused-unit-in-uses 2>$null)
+$out = @(& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --rule unused-unit-in-uses 2>$null)
 $inl = @($out | Where-Object { $_ -match 'UseInline\.pas:' -and $_ -match "unused-unit-in-uses: Unit 'GridU'" })
 $pln = @($out | Where-Object { $_ -match 'UsePlain\.pas:'  -and $_ -match "unused-unit-in-uses: Unit 'GridU'" })
 

@@ -107,7 +107,9 @@ function Lint-All([string]$Db, [string]$Rule, [hashtable]$Env = @{}) {
   foreach ($k in $Env.Keys) { [Environment]::SetEnvironmentVariable($k, $Env[$k]) }
   try {
     $errFile = Join-Path $WorkDir 'trace.txt'
-    $raw = (& $Exe lint-all --db $Db --project $proj --rule $Rule --json 2>$errFile) -join "`n"
+    # DRAGLINT_PP_TRACE='1' is ALSO read by the preprocessor as a trace FILE PATH: a file named '1' lands in the cwd (150 H1).
+    Push-Location $WorkDir
+    try { $raw = (& $Exe lint-all --db $Db --project $proj --rule $Rule --json 2>$errFile) -join "`n" } finally { Pop-Location }
     $trace = if (Test-Path $errFile) { (Get-Content $errFile) -join "`n" } else { '' }
   } finally {
     foreach ($k in $Env.Keys) { [Environment]::SetEnvironmentVariable($k, $null) }

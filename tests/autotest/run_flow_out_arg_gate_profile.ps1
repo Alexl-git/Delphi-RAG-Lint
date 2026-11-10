@@ -76,8 +76,8 @@ try {
 
   $env:DRAGLINT_PROFILE = '1'
   try {
-    $dflt = (& $exePath lint-all --db $db --rules-dir $rules --library-db none 2>&1 | Out-String)
-    $on   = (& $exePath lint-all --db $db --rules-dir $rules --library-db none --enable 'local-only-out-arg,dead-store-before-out-arg' 2>&1 | Out-String)
+    $dflt = (& $exePath lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --rules-dir $rules --library-db none 2>&1 | Out-String)
+    $on   = (& $exePath lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --rules-dir $rules --library-db none --enable 'local-only-out-arg,dead-store-before-out-arg' 2>&1 | Out-String)
   } finally { $env:DRAGLINT_PROFILE = $null }
 
   Check 'profile printed the flow breakdown (default run)' ($dflt -match 'FlowChecker\.Check breakdown') ''

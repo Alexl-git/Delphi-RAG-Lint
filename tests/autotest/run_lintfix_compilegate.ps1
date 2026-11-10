@@ -87,7 +87,7 @@ try {
     $r = & $Exe $v --db $E.Db --compile-gate 2>&1 | Out-String
     Check "f $v --compile-gate without --fix exit 2" (($LASTEXITCODE -eq 2) -and ($r -match 'needs --fix')) "exit $LASTEXITCODE"
   }
-  $r = & $Exe lint-all --db $E.Db 2>&1 | Out-String
+  $r = & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $E.Db 2>&1 | Out-String
   Check 'f control: lint-all without the flag is not exit 2' ($LASTEXITCODE -ne 2) "exit $LASTEXITCODE"
 }
 finally { try { [IO.Directory]::Delete($Tmp, $true) } catch { } }
