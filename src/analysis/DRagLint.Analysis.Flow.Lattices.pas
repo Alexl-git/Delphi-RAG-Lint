@@ -1695,7 +1695,7 @@ procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
 
   procedure Walk(const N: TTSNode; AAfterDot: Boolean);
   var I, Idx: Integer; K: string; ArgsN, Arg, Lhs, Ent: TTSNode;
-      CalleeNm: string; Mode: TParamMode;
+      CalleeNm: string; Mode: TParamMode; IsNamedArg: Boolean;
   begin
     if N.IsNull then Exit;
     K := N.NodeType;
@@ -1783,12 +1783,19 @@ procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
         for I := 0 to ArgsN.NamedChildCount - 1 do
         begin
           Arg := ArgsN.NamedChild(I);
+          { An Automation NAMED argument Foo(Name := Value) (grammar v1.4.9, node exprArgNamed)
+            is a label plus a value: the label is NOT a read of a same-named local, and its
+            position says nothing about the callee's parameter order (RG2, wave 150). Judge the
+            value only, with the conservative pmUnknown mode. }
+          IsNamedArg := Arg.NodeType = 'exprArgNamed';
+          if IsNamedArg then Arg := Arg.ChildByField('value');
+          if Arg.IsNull then Continue;
           { WHAT THE CALLEE DOES WITH THIS ARGUMENT, when it can be known.
             var/out -> passing a local DEFINES it. value/const -> READS it.
             pmUnknown -> both, which is what this code did for every argument
             before the signature was consulted. See TParamModeLookup. }
           Mode := pmUnknown;
-          if Assigned(AParamMode) and (CalleeNm <> '') then Mode := AParamMode(CalleeNm, I);
+          if Assigned(AParamMode) and (CalleeNm <> '') and (not IsNamedArg) then Mode := AParamMode(CalleeNm, I);
           { the arg's base var may be assigned by the callee (var/out param, e.g.
             SetLength(Result.Must,..) / SetLength(arr,..)) -> a possible def.
             NOT recorded when the signature says the parameter is by value: that
