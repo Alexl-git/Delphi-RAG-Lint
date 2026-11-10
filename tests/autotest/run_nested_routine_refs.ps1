@@ -111,7 +111,10 @@ Check 'find-callers resolves the nested call site' ($fc -match 'nestedrefs\.pas'
 
 Write-Host ''
 Write-Host 'unused-public-symbol' -ForegroundColor Cyan
-$lint = (& $Exe lint-all --db $db 2>$null | Out-String)
+# Run from the DB's temp dir: lint-all drops lint-report-<date>.txt into the caller's cwd (a stray
+# C:\Projects\Delphi-RAG-lint\lint-report-20261109.txt, 150 INT2); stdout is still the findings.
+Push-Location (Split-Path $db)
+try { $lint = (& $Exe lint-all --db $db 2>$null | Out-String) } finally { Pop-Location }
 # Match the DEAD tier's message only: since L11 (a3084012) the own-unit hint shares this rule id
 # and correctly names a routine that IS called, but only from its own unit.
 Check 'the nested-called export is NOT called dead' `
