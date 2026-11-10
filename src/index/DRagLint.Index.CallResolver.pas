@@ -3752,8 +3752,10 @@ type
     /// a type child of the level binds (a nested type -- of the level's
     /// resolved ancestors too, nearest first -- then the own unit's types). Then the used units: exactly one TOP-LEVEL INTERFACE type of a
     /// unit in scope binds; two are 'ambiguous' (uses-clause order is not
-    /// modelled). A qualified name is declined rather than guessed. Identity
-    /// only. Counted into TypeUseStats.
+    /// modelled). A UNIT-qualified name (`uTypes.TRunner`, 150 T3) binds the one
+    /// top-level type of that name in that unit (in scope; interface section
+    /// unless it is the own unit); any other qualified name is declined
+    /// ('qualified') rather than guessed. Identity only. Counted into TypeUseStats.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveTypeUseRefs (DRagLint.Storage.SQLite.pas)</para>
     /// <para>Calls: DRagLint.Index.CallResolver.TCallResolver.LookupTypeName</para>
@@ -8551,6 +8553,26 @@ begin
   if Declared then
     Exit; // a local/param of that name exists but none covers the site -> 0
 
+  // --- Kind 4b (150-T3 G4): a routine-local TYPED CONST 'CLocal.Alpha' -> the
+  //     const's written type (`CLocal: TRec = (...)`, the text left of ' = ').
+  //     LocalInScopeAt answers locals and params only (a const is skConstDecl);
+  //     a routine's const section covers its whole body and every nested
+  //     routine, so the enclosing routines are searched nearest first. An
+  //     untyped const has no written type and declines, as before.
+  var ConstScope: TSymbol:= Encl;
+  while (ConstScope.Id > 0) and (ConstScope.Kind in METHOD_KINDS) do
+  begin
+    Member:= FindChildOfKind(ConstScope.Id, AReceiverExpr, [skConstDecl]);
+    if Member.Id > 0 then
+    begin
+      var ConstType: string:= ConstTypeText(Member.Signature);
+      if ConstType = '' then Exit;
+      AText.Text:= NormalizeTypeLeaf(ConstType);
+      Exit(KeepArgs(ResolveTypeNameToSymbol(ConstType, ACallRef.FileId), ConstType, Member));
+    end;
+    ConstScope:= SymbolById(ConstScope.ParentId);
+  end;
+
   // --- Kind 9 (N-07, 2026-10-23): the implicit `Result` of the enclosing
   //     FUNCTION -- `Result:= TJob.Create; Result.Streaming:= False;`. Typed
   //     from the routine's declared return type. No symbol row exists for
@@ -10477,10 +10499,46 @@ var
     if Length(Result) = 0 then Result:= ACands;
   end;
 
+  { 150-T3 G4: a UNIT-qualified type use (`V: uTypes.TRunner`, `X is Unit.TFoo`) names exactly
+    the type of that name declared at the top level of that unit -- in its interface section, or
+    anywhere when the unit is the site's own. The qualifier must name a unit in the site's scope
+    (the own unit, a used unit; `Classes` also matches `System.Classes`, the namespace-scope
+    form). A qualifier that names no such unit (a type: `TOuter.TInner`, a library unit the
+    index does not hold) answers 0 and the use stays declined 'qualified', as before. }
+  function UnitQualifiedType(const AQualifier: string): Int64;
+  begin
+    Result:= 0;
+    var QCands: TList<TSymbol>;
+    if not FNameToCands.TryGetValue(LowerCase(ARef.NameText), QCands) then Exit;
+    var Hits: Integer:= 0;
+    for var C: TSymbol in QCands do
+    begin
+      var T: TSymbol:= SymbolById(C.Id);
+      if (T.Kind not in TYPE_LIKE) or (T.ParentId <= 0) then Continue;
+      var Owner: TSymbol:= SymbolById(T.ParentId);
+      if (Owner.ParentId > 0) or not (SameText(Owner.Name, AQualifier) or EndsText('.' + AQualifier, Owner.Name)) then
+        Continue;
+      if (T.FileId <> ARef.FileId)
+         and not (CandInScope(ARef.FileId, T.FileId) and SameText(T.Section, 'interface')) then Continue;
+      Inc(Hits);
+      Result:= T.Id;
+    end;
+    if Hits <> 1 then Result:= 0;
+  end;
+
 begin
   Result := 0;
   AReason:= BareReadSite(ARef, Lines, Rcv);
   if (AReason = '') and (Rcv <> '') then AReason:= 'qualified';
+  if (AReason = 'qualified') and (Rcv <> '') then
+  begin
+    Result:= UnitQualifiedType(Rcv);
+    if Result > 0 then
+    begin
+      AReason:= '';
+      Exit;
+    end;
+  end;
   Lc:= LowerCase(ARef.NameText);
   { 1. The ref's scope outwards: enclosing routines, types, the own unit. }
   Cur  := ScopeSymbolAt(ARef);
