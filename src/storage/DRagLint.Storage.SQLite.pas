@@ -230,6 +230,7 @@ type
       FQPutDataFlows         : TFDQuery     ; { taint T0: data_flows writer, prepared on first use }
       FHasFileFacts          : Integer      ; { 149 EX2: -1 unprobed, 0 absent, 1 present -- see HasFileFacts }
       FHasPpDirectives       : Integer      ; { 150 PP: -1 unprobed, 0 absent, 1 present -- see HasPpDirectives }
+      FHasDfmNav             : Integer      ; { 150 Y2: -1 unprobed, 0 absent, 1 present -- see HasDfmNav }
       FQFileFacts            : array[0..7] of TFDQuery; { 149 EX2: 3 deletes + 3 inserts (150 PP: + pp_directives delete / insert), prepared on first use (FF_* in PutFileFacts) }  // dl:ok referenced-never-set@4c97 -- FP: the array ELEMENTS are assigned in PutFileFacts.Prepared (FQFileFacts[AIdx]:= Result)
       FQDeleteFileSymbols    : TFDQuery     ;
       FQDeleteFileRefs       : TFDQuery     ;
@@ -3253,6 +3254,22 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetDfmObjects(AFileId: Int64): TArray<TDfmObjectRow>;
+      /// <summary>150 Y2: implements ISymbolStore.HasDfmNav.</summary>
+      /// <returns>True when dfm_nav_nodes and dfm_nav_props exist.</returns>
+      function HasDfmNav: Boolean;
+      /// <summary>150 Y2: implements ISymbolStore.PutDfmNav.</summary>
+      /// <param name="AToken">The open file tx of the .dfm.</param>
+      /// <param name="ANodes">dfm_nav_nodes rows.</param>
+      /// <param name="AProps">dfm_nav_props rows.</param>
+      procedure PutDfmNav(const AToken: TFileTxToken; const ANodes: TArray<TDfmNavNodeRow>;
+        const AProps: TArray<TDfmNavPropRow>);
+      /// <summary>150 Y2: implements ISymbolStore.GetDfmNav.</summary>
+      /// <param name="AFileId">files.id of the .dfm.</param>
+      /// <param name="ANodes">Out: the nodes.</param>
+      /// <param name="AProps">Out: the properties.</param>
+      /// <returns>False when the tables are absent or hold no node of the file.</returns>
+      function GetDfmNav(AFileId: Int64; out ANodes: TArray<TDfmNavNodeRow>;
+        out AProps: TArray<TDfmNavPropRow>): Boolean;
       /// <summary>149 EX2: implements ISymbolStore.GetPpRegions.</summary>
       /// <param name="AFileId">files.id.</param>
       /// <returns>The file's rows, region / branch order.</returns>
@@ -5117,6 +5134,7 @@ begin
   FHasDataFlows     := -1; { taint T0: probed lazily -- see HasDataFlows }
   FHasFileFacts     := -1; { 149 EX2: probed lazily -- see HasFileFacts }
   FHasPpDirectives  := -1; { 150 PP: probed lazily -- see HasPpDirectives }
+  FHasDfmNav        := -1; { 150 Y2: probed lazily -- see HasDfmNav }
   FLateAncCache  := TDictionary<string, TSymbol>.Create;
   FAnchorCache   := TDictionary<Int64, string>.Create; // Task 3c; see FrameworkAnchorForFile
   FFlowOracles   := TFlowOracleCache.Create;           // C1b; see FlowOracles
@@ -5478,6 +5496,129 @@ begin
     Q.Free;
     L.Free;
   end;
+end;
+
+function TSQLiteSymbolStore.HasDfmNav: Boolean;
+begin
+  if FHasDfmNav < 0 then
+    FHasDfmNav:= if TableExists('dfm_nav_nodes') and TableExists('dfm_nav_props') then 1 else 0;
+  Result:= FHasDfmNav = 1;
+end;
+
+procedure TSQLiteSymbolStore.PutDfmNav(const AToken: TFileTxToken; const ANodes: TArray<TDfmNavNodeRow>;
+  const AProps: TArray<TDfmNavPropRow>);
+var
+  Q: TFDQuery;
+  I: Integer;
+begin
+  if not HasDfmNav then Exit;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'DELETE FROM dfm_nav_nodes WHERE file_id = :fid';
+    Q.ParamByName('fid').AsLargeInt:= AToken.FileId;
+    Q.ExecSQL;
+    Q.SQL.Text  := 'DELETE FROM dfm_nav_props WHERE file_id = :fid';
+    Q.ParamByName('fid').AsLargeInt:= AToken.FileId;
+    Q.ExecSQL;
+    if Length(ANodes) > 0 then
+    begin
+      Q.SQL.Text:= 'INSERT INTO dfm_nav_nodes(file_id, ordinal, parent, line, name, comp_class, is_item, coll_prop) ' +
+                   'VALUES (:fid, :ord, :par, :ln, :nm, :cls, :itm, :coll)';
+      for I:= 0 to High(ANodes) do
+      begin
+        Q.ParamByName('fid' ).AsLargeInt  := AToken.FileId;
+        Q.ParamByName('ord' ).AsLargeInt  := ANodes[I].Ordinal;
+        Q.ParamByName('par' ).AsLargeInt  := ANodes[I].Parent;
+        Q.ParamByName('ln'  ).AsLargeInt  := ANodes[I].Line;
+        Q.ParamByName('nm'  ).AsWideString:= ANodes[I].Name;
+        Q.ParamByName('cls' ).AsWideString:= ANodes[I].CompClass;
+        Q.ParamByName('itm' ).AsLargeInt  := Ord(ANodes[I].IsItem);
+        Q.ParamByName('coll').AsWideString:= ANodes[I].CollProp;
+        Q.ExecSQL;
+      end;
+    end;
+    if Length(AProps) > 0 then
+    begin
+      Q.SQL.Text:= 'INSERT INTO dfm_nav_props(file_id, ordinal, node, name, value) VALUES (:fid, :ord, :nd, :nm, :val)';
+      for I:= 0 to High(AProps) do
+      begin
+        Q.ParamByName('fid').AsLargeInt  := AToken.FileId;
+        Q.ParamByName('ord').AsLargeInt  := I;
+        Q.ParamByName('nd' ).AsLargeInt  := AProps[I].Node;
+        Q.ParamByName('nm' ).AsWideString:= AProps[I].Name;
+        Q.ParamByName('val').AsWideString:= AProps[I].Value;
+        Q.ExecSQL;
+      end;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetDfmNav(AFileId: Int64; out ANodes: TArray<TDfmNavNodeRow>;
+  out AProps: TArray<TDfmNavPropRow>): Boolean;
+var
+  Q : TFDQuery;
+  LN: TList<TDfmNavNodeRow>;
+  LP: TList<TDfmNavPropRow>;
+  N : TDfmNavNodeRow;
+  P : TDfmNavPropRow;
+begin
+  ANodes:= nil;
+  AProps:= nil;
+  if not HasDfmNav then Exit(False);
+  LN:= TList<TDfmNavNodeRow>.Create;
+  LP:= TList<TDfmNavPropRow>.Create;
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT ordinal, parent, line, name, comp_class, is_item, coll_prop FROM dfm_nav_nodes ' +
+                   'WHERE file_id = :fid ORDER BY ordinal';
+    Q.ParamByName('fid').AsLargeInt:= AFileId;
+    Q.Open;
+    var FOrd : TField:= Q.FieldByName('ordinal'   );
+    var FPar : TField:= Q.FieldByName('parent'    );
+    var FLn  : TField:= Q.FieldByName('line'      );
+    var FNm  : TField:= Q.FieldByName('name'      );
+    var FCls : TField:= Q.FieldByName('comp_class');
+    var FItm : TField:= Q.FieldByName('is_item'   );
+    var FColl: TField:= Q.FieldByName('coll_prop' );
+    while not Q.Eof do
+    begin
+      N.Ordinal  := FOrd.AsInteger;
+      N.Parent   := FPar.AsInteger;
+      N.Line     := FLn.AsInteger;
+      N.Name     := FNm.AsString;
+      N.CompClass:= FCls.AsString;
+      N.IsItem   := FItm.AsInteger <> 0;
+      N.CollProp := FColl.AsString;
+      LN.Add(N);
+      Q.Next;
+    end;
+    Q.Close;
+    Q.SQL.Text:= 'SELECT node, name, value FROM dfm_nav_props WHERE file_id = :fid ORDER BY ordinal';
+    Q.ParamByName('fid').AsLargeInt:= AFileId;
+    Q.Open;
+    var FNode: TField:= Q.FieldByName('node' );
+    var FPNm : TField:= Q.FieldByName('name' );
+    var FVal : TField:= Q.FieldByName('value');
+    while not Q.Eof do
+    begin
+      P.Node := FNode.AsInteger;
+      P.Name := FPNm.AsString;
+      P.Value:= FVal.AsString;
+      LP.Add(P);
+      Q.Next;
+    end;
+    ANodes:= LN.ToArray;
+    AProps:= LP.ToArray;
+  finally
+    Q.Free;
+    LP.Free;
+    LN.Free;
+  end;
+  Result:= Length(ANodes) > 0;
 end;
 
 function TSQLiteSymbolStore.GetPpRegions(AFileId: Int64): TArray<TPpRegionRow>;  // dl:ok duplicate-code@7049 -- the three 149 EX2 fact readers share one shape per table (columns differ)
@@ -6802,6 +6943,27 @@ begin
   TryExec('CREATE INDEX IF NOT EXISTS idx_dfm_objects_file   ON dfm_objects(file_id, ordinal)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_dfm_objects_symbol ON dfm_objects(symbol_id)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_dfm_objects_name   ON dfm_objects(name COLLATE NOCASE)');
+  { 150 Y2 (schema v24, additive; declared in the schema-read-compat spec): the .dfm navigation
+    tree forms-csv / menu-tree read instead of re-scanning the .dfm text (TDfmNavNodeRow /
+    TDfmNavPropRow in DRagLint.Core.Model; rows from DRagLint.Parser.DfmNav.ScanDfmNav), written
+    per .dfm by PutDfmNav and replaced on its every parse. Readers probe HasDfmNav. }
+  TryExec('CREATE TABLE IF NOT EXISTS dfm_nav_nodes (' +
+          '  file_id    INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,' +
+          '  ordinal    INTEGER NOT NULL,' +
+          '  parent     INTEGER NOT NULL,' +
+          '  line       INTEGER NOT NULL,' +
+          '  name       TEXT    NOT NULL,' +
+          '  comp_class TEXT    NOT NULL,' +
+          '  is_item    INTEGER NOT NULL,' +
+          '  coll_prop  TEXT    NOT NULL)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_dfm_nav_nodes_file ON dfm_nav_nodes(file_id, ordinal)');
+  TryExec('CREATE TABLE IF NOT EXISTS dfm_nav_props (' +
+          '  file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,' +
+          '  ordinal INTEGER NOT NULL,' +
+          '  node    INTEGER NOT NULL,' +
+          '  name    TEXT    NOT NULL,' +
+          '  value   TEXT    NOT NULL)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_dfm_nav_props_file ON dfm_nav_props(file_id, ordinal)');
   TryExec('CREATE TABLE IF NOT EXISTS pp_regions (' +
           '  file_id    INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,' +
           '  region     INTEGER NOT NULL,' +

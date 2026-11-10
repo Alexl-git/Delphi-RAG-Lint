@@ -1855,6 +1855,8 @@ begin
         for I:= 0 to High(ParseRes.UsesEntries) do FStore.UpsertUnitUse(Token, ParseRes.UsesEntries[I]);
         // 149 EX2 (schema v24): file_includes / dfm_objects / pp_regions, replaced every parse.
         FStore.PutFileFacts(Token, ParseRes.Includes, ParseRes.DfmObjects, ParseRes.PpRegions, ParseRes.PpDirectives, IdxToId);
+        { 150 Y2: every parsed .dfm replaces its navigation tree (a binary one deletes it). }
+        if SameText(ExtractFileExt(AFilePath), '.dfm') then FStore.PutDfmNav(Token, ParseRes.DfmNavNodes, ParseRes.DfmNavProps);
         { 150 EX3: a program / package root carries its project's unit scopes (the sibling
           .dproj's DCC_Namespace), replaced every parse of the .dpr / .dpk. }
         if MatchText(ExtractFileExt(AFilePath), ['.dpr', '.dpk']) then

@@ -1668,7 +1668,7 @@ begin
   Result:= TFormDfmTree.Create;
   FTrees.Add(LowerCase(AFormClass), Result);
   if not FClassToNode.TryGetValue(AFormClass, N) then Exit;
-  Result.LoadFromFile(N.DfmPath);
+  Result.LoadFromIndexOrFile(N.DfmPath, FStores); { 150 Y2: the stored tree, text fallback }
   if FCodeMenus = nil then Exit;
   { an external root named in THIS form's .pas whose ident is one of its .dfm items }
   for X in FCodeMenus.External do

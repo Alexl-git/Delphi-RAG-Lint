@@ -157,6 +157,7 @@ implementation
 
 uses
   DRagLint.Core.Encoding { 150 DF2: EnsureUtf8Bytes in ExtractDfmEventBindings }
+  , DRagLint.Parser.DfmNav { 150 Y2: ScanDfmNav in TDFMParser.Parse }
   ;
 
 const
@@ -678,6 +679,8 @@ begin
     Result.References:= State.References.ToArray;
     Result.Literals  := State.Literals  .ToArray;
     Result.DfmObjects:= State.DfmObjects.ToArray; { 149 EX2 (F5) }
+    { 150 Y2: the navigation tree forms-csv / menu-tree read (dfm_nav_nodes / dfm_nav_props). }
+    ScanDfmNav(DfmNavLinesFromBytes(Source), Result.DfmNavNodes, Result.DfmNavProps);
   finally
     State.Free;
     Tree.Free;

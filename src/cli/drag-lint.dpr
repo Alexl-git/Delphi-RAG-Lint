@@ -85,6 +85,7 @@ uses
   DRagLint.Parser.Delphi13 in '..\parser\DRagLint.Parser.Delphi13.pas',
   DRagLint.Parser.SpringDI in '..\parser\DRagLint.Parser.SpringDI.pas',
   DRagLint.Parser.DFM in '..\parser\DRagLint.Parser.DFM.pas',
+  DRagLint.Parser.DfmNav in '..\parser\DRagLint.Parser.DfmNav.pas',
   DRagLint.Parser.Sql in '..\parser\DRagLint.Parser.Sql.pas',
   DRagLint.Parser.Markdown in '..\parser\DRagLint.Parser.Markdown.pas',
   DRagLint.Query.TextNodes in '..\query\DRagLint.Query.TextNodes.pas',

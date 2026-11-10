@@ -125,6 +125,7 @@
         <DCCReference Include="..\parser\DRagLint.Parser.Delphi13.pas"/>
         <DCCReference Include="..\parser\DRagLint.Parser.SpringDI.pas"/>
         <DCCReference Include="..\parser\DRagLint.Parser.DFM.pas"/>
+        <DCCReference Include="..\parser\DRagLint.Parser.DfmNav.pas"/>
         <DCCReference Include="..\parser\DRagLint.Parser.Sql.pas"/>
         <DCCReference Include="..\parser\DRagLint.Parser.Markdown.pas"/>
         <DCCReference Include="..\query\DRagLint.Query.TextNodes.pas"/>
