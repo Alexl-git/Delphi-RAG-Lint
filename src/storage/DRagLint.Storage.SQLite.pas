@@ -194,7 +194,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.AddLibraryPendingNotes (DRagLint.CLI.pas), DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas), DRagLint.CLI.AnyDbSchemaCurrent (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas) (+112 more)</para>
+  /// <para>Used by: DRagLint.CLI.AddLibraryPendingNotes (DRagLint.CLI.pas), DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas), DRagLint.CLI.AnyDbSchemaCurrent (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas) (+113 more)</para>
   /// <para>Used in units: DRagLint.Charts.AskVerb, DRagLint.Charts.Compare, DRagLint.Charts.Index, DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Cycles, DRagLint.Charts.Q.Hierarchy, DRagLint.Charts.Q.Implementors, DRagLint.Charts.Q.MemberAccess (+31 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -979,9 +979,9 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.DeleteFilesByIds (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.OpenFileTx (DRagLint.Storage.SQLite.pas)</para>
       /// <para>Calls: DRagLint.Storage.SQLite.IsTypeDeclaringKind, DRagLint.Storage.SQLite.TSQLiteSymbolStore.CountFiles, Format, LowerCase</para>
-      /// <para>Complexity: 12 (cyclomatic, outer body), 101 lines (full implementation)</para>
+      /// <para>Complexity: 14 (cyclomatic, outer body), 120 lines (full implementation)</para>
       /// <para>Reads: FScopeWhole, FScopeFiles, FScopeMaxFiles, FScopeCorpusBefore, FScopeNames, FScopeTypesBefore, FScopeTypeAncestors, FScopeTypesAfter (+1 more)   Writes: FScopeCorpusBefore, FScopeMaxFiles, FScopeWhole, FScopeWholeByShare, FScopeWholeWhy</para>
-      /// <para>SQL: reads SYMBOLS, TYPE_ANCESTORS</para>
+      /// <para>SQL: reads CALL_EDGES, MEMBER_ACCESSES, REFS, SYMBOLS, TYPE_ANCESTORS</para>
       /// <seealso cref="DRagLint.Storage.SQLite.IsTypeDeclaringKind"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.CountFiles"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
@@ -1069,8 +1069,8 @@ type
       /// goes with either ref by FK cascade, and both refs live in one file.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas)</para>
-      /// <para>Calls: Copy, DRagLint.Storage.SQLite.BeatStreamOpen, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveRefReceivers.Offer, Format, Pos, SameText</para>
-      /// <para>Complexity: 13 (cyclomatic, outer body), 109 lines (full implementation)</para>
+      /// <para>Calls: Copy, DRagLint.Storage.SQLite.BeatStreamOpen, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveRefReceivers.Offer, Format, SameText</para>
+      /// <para>Complexity: 17 (cyclomatic, outer body), 124 lines (full implementation)</para>
       /// <para>Reads: FConn</para>
       /// <para>SQL: reads REF_TYPES, REFS; writes REF_RECEIVERS</para>
       /// <para>Mutates: ACandidates (out), ABound (out)</para>
@@ -1278,7 +1278,7 @@ type
       /// <returns>True when a table of that name exists in this database.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.BuildSymbolSearch (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ConceptSearchReady (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.Fts5TableExists (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.HasDataFlows (DRagLint.Storage.SQLite.pas) (+3 more)</para>
+      /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.BuildSymbolSearch (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ConceptSearchReady (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.Fts5TableExists (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetProjectSettings (DRagLint.Storage.SQLite.pas) (+6 more)</para>
       /// <para>Returns: False; not Q.IsEmpty</para>
       /// <para>Reads: FConn</para>
       /// <para>Catches: Exception (swallowed)</para>
@@ -1418,15 +1418,15 @@ type
       /// AFound through IsSchemaReadable, or use OpenReadable) and emit the actionable
       /// stale-schema message rather than query an index below SCHEMA_READ_MIN (150 SC). Not thread-safe; single owning thread only.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.AddLibraryPendingNotes (DRagLint.CLI.pas), DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas), DRagLint.CLI.AnyDbSchemaCurrent (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas) (+52 more)</para>
-      /// <para>Calls: DRagLint.Core.Interfaces.TFlowOracleCache.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Connect, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Fts5TableExists, DRagLint.Storage.SQLite.TSQLiteSymbolStore.IsSchemaCurrent, DRagLint.Storage.SQLite.TSQLiteSymbolStore.PrepareStatements, DRagLint.Storage.SQLite.TSQLiteSymbolStore.TableExists</para>
+      /// <para>Called from: DRagLint.CLI.AddLibraryPendingNotes (DRagLint.CLI.pas), DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas), DRagLint.CLI.AnyDbSchemaCurrent (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas) (+51 more)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.TFlowOracleCache.Create, DRagLint.Storage.Schema.IsSchemaReadable, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Connect, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Fts5TableExists, DRagLint.Storage.SQLite.TSQLiteSymbolStore.IsSchemaCurrent, DRagLint.Storage.SQLite.TSQLiteSymbolStore.PrepareStatements, DRagLint.Storage.SQLite.TSQLiteSymbolStore.TableExists</para>
       /// <para>constructor</para>
-      /// <para>Reads: FReadOnly, FFts5Available   Writes: FReadOnly, FHasMemberAccesses, FHasEffectCols, FHasUseOriginCols, FHasDataFlows, FHasFileFacts, FLateAncCache, FAnchorCache (+17 more)</para>
+      /// <para>Reads: FReadOnly, FFts5Available   Writes: FReadOnly, FHasMemberAccesses, FHasEffectCols, FHasUseOriginCols, FHasDataFlows, FHasFileFacts, FHasPpDirectives, FLateAncCache (+18 more)</para>
       /// <seealso cref="DRagLint.Core.Interfaces.TFlowOracleCache.Create"/>
+      /// <seealso cref="DRagLint.Storage.Schema.IsSchemaReadable"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Connect"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Fts5TableExists"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.IsSchemaCurrent"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.PrepareStatements"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const ADbPath: string; AReadOnly: Boolean = False);
@@ -1452,7 +1452,7 @@ type
       /// <para>Called from: DRagLint.CLI.DoFbSnapshot (DRagLint.CLI.pas), DRagLint.FormsMap.GenerateFormsCsvCore (DRagLint.FormsMap.pas), DRagLint.Sql.OrmLinker.TOrmLinker.Run (DRagLint.Sql.OrmLinker.pas)</para>
       /// <para>Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.CanonicalizeFilePaths, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ConfigureUnitUseStatements, DRagLint.Storage.SQLite.TSQLiteSymbolStore.FinishDeferredTextIndex, DRagLint.Storage.SQLite.TSQLiteSymbolStore.IsSchemaCurrent, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.DropStringLiteralTriggers, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.DropTriggerVerbose, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.PrintTriggerCount, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.ProbeFts5, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.ProbeTrigram, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.SqliteVersion (+10 more)</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.Migrate</para>
-      /// <para>Complexity: 16 (cyclomatic, outer body), 693 lines (full implementation)</para>
+      /// <para>Complexity: 16 (cyclomatic, outer body), 718 lines (full implementation)</para>
       /// <para>Reads: FConn, FFts5Available, FTrigramAvailable, FQGetSymbolFacts   Writes: FFts5Available, FTrigramAvailable, FHasEffectCols, FHasUseOriginCols</para>
       /// <para>Catches: Exception (empty); Exception (re-raise); Exception (swallowed)</para>
       /// <para>SQL: reads SQLITE_MASTER; writes SCHEMA_META, STRING_FTS_TRI</para>
@@ -1474,7 +1474,7 @@ type
       /// <returns>True when AFound &gt;= AExpected (current enough to read).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.UsesRecover.ApplyRecovered (DRagLint.CLI.UsesRecover.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate (DRagLint.Storage.SQLite.pas)</para>
+      /// <para>Called from: DRagLint.CLI.UsesRecover.ApplyRecovered (DRagLint.CLI.UsesRecover.pas), DRagLint.CLI.UsesRecover.LoadSourceNames (DRagLint.CLI.UsesRecover.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate (DRagLint.Storage.SQLite.pas)</para>
       /// <para>Calls: StrToIntDef</para>
       /// <para>Returns: AFound &gt;= AExpected</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent</para>
@@ -1499,8 +1499,23 @@ type
       /// SCHEMA_READ_MIN; 'index not found: ...' or the open exception's
       /// ClassName: Message otherwise.</param>
       /// <returns>The read-only store (caller owns the reference), or nil.</returns>
-      /// <remarks>Never raises for an unreadable or unopenable index. Use instead of TSQLiteSymbolStore.Create(Db, True)
-      /// wherever a stale or foreign DB must degrade rather than crash.</remarks>
+      /// <remarks>
+      /// Never raises for an unreadable or unopenable index. Use instead of TSQLiteSymbolStore.Create(Db, True)
+      /// wherever a stale or foreign DB must degrade rather than crash.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.DoLintTree (DRagLint.CLI.pas), DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.OpenStores.OpenAll (DRagLint.Index.PPUnitSource.pas)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent, DRagLint.Storage.Schema.IsSchemaReadable, DRagLint.Storage.Schema.SchemaUnreadableReason, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, FileExists</para>
+      /// <para>Returns: nil; TSQLiteSymbolStore.Create(ADbPath, True)</para>
+      /// <para>Catches: Exception (swallowed)</para>
+      /// <para>Mutates: AReason (out)</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent"/>
+      /// <seealso cref="DRagLint.Storage.Schema.IsSchemaReadable"/>
+      /// <seealso cref="DRagLint.Storage.Schema.SchemaUnreadableReason"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function OpenReadable(const ADbPath: string; out AReason: string): ISymbolStore; static;
 
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
@@ -2098,6 +2113,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: Default, DRagLint.Storage.SQLite.TSQLiteSymbolStore.HasMemberAccesses, ExtractFileName</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 134 lines (full implementation)</para>
       /// <para>Reads: FConn</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.HasMemberAccesses"/>
@@ -3052,17 +3068,19 @@ type
       /// <param name="AIncludes">file_includes rows.</param>
       /// <param name="ADfmObjects">dfm_objects rows.</param>
       /// <param name="APpRegions">pp_regions rows.</param>
+      /// <param name="APpDirectives"><!-- drag-lint:auto type -->const TArray&lt;TPpDirectiveRow&gt;</param>
       /// <param name="ASymbolIds">Symbol index -> symbols.id; may be nil.</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.HasFileFacts, DRagLint.Storage.SQLite.TSQLiteSymbolStore.PutFileFacts.Prepared, MatchText</para>
+      /// <para>Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.HasFileFacts, DRagLint.Storage.SQLite.TSQLiteSymbolStore.HasPpDirectives, DRagLint.Storage.SQLite.TSQLiteSymbolStore.PutFileFacts.Prepared, MatchText</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.PutFileFacts</para>
+      /// <para>Complexity: 10 (cyclomatic, outer body), 110 lines (full implementation)</para>
       /// <para>Catches: Exception (re-raise)</para>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.HasFileFacts"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.HasPpDirectives"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.PutFileFacts.Prepared"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginDeferredTextIndex"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginFileBatch"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure PutFileFacts(const AToken: TFileTxToken; const AIncludes: TArray<TFileIncludeRow>;
@@ -3072,18 +3090,76 @@ type
       /// <param name="AToken">The open file tx of the .dpr / .dpk.</param>
       /// <param name="ASetting">The setting name.</param>
       /// <param name="AValues">The values in order; empty deletes the setting's rows.</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto -->150 EX3 (schema v24, additive): project_settings -- see
+      /// ISymbolStore.PutProjectSettings. One .dpr / .dpk writes a handful of rows once per parse,
+      /// so plain queries, no prepared cache.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.TableExists</para>
+      /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.PutProjectSettings</para>
+      /// <para>Reads: FConn</para>
+      /// <para>SQL: writes PROJECT_SETTINGS</para>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.TableExists"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginDeferredTextIndex"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginFileBatch"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginTargetedTextIndex"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure PutProjectSettings(const AToken: TFileTxToken; const ASetting: string; const AValues: TArray<string>);
       /// <summary>150 EX3: implements ISymbolStore.GetProjectSettings.</summary>
       /// <param name="ASetting">The setting name.</param>
       /// <param name="AFileId">files.id of the project file; 0 = all.</param>
       /// <returns>The values by file, ordinal; empty when the table is absent.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.TableExists</para>
+      /// <para>Returns: nil; L.ToArray</para>
+      /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.GetProjectSettings</para>
+      /// <para>Reads: FConn</para>
+      /// <para>SQL: reads PROJECT_SETTINGS</para>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.TableExists"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginDeferredTextIndex"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginFileBatch"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginTargetedTextIndex"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function GetProjectSettings(const ASetting: string; AFileId: Int64 = 0): TArray<string>;
       /// <summary>150 PP: implements ISymbolStore.HasPpDirectives.</summary>
       /// <returns>True when the pp_directives table exists (probed once).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetPpDirectives (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.PutFileFacts (DRagLint.Storage.SQLite.pas)</para>
+      /// <para>Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.TableExists</para>
+      /// <para>Returns: FHasPpDirectives = 1</para>
+      /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.HasPpDirectives</para>
+      /// <para>Reads: FHasPpDirectives   Writes: FHasPpDirectives</para>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.TableExists"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginDeferredTextIndex"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginFileBatch"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginTargetedTextIndex"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function HasPpDirectives: Boolean;
       /// <summary>150 PP: implements ISymbolStore.GetPpDirectives.</summary>
       /// <param name="AFileId">files.id of the file.</param>
       /// <returns>The file's rows in source order; empty when none or the table is absent.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: Default, DRagLint.Storage.SQLite.TSQLiteSymbolStore.HasPpDirectives</para>
+      /// <para>Returns: nil; L.ToArray</para>
+      /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.GetPpDirectives</para>
+      /// <para>Reads: FConn</para>
+      /// <para>SQL: reads PP_DIRECTIVES</para>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.HasPpDirectives"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginDeferredTextIndex"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginFileBatch"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginTargetedTextIndex"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function GetPpDirectives(AFileId: Int64): TArray<TPpDirectiveRow>;
       /// <summary>149 EX2: implements ISymbolStore.HasFileFacts.</summary>
       /// <returns>True when all three file-fact tables exist (probed once).</returns>
@@ -3669,9 +3745,9 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto -->v14 (D5): whole-DB call-resolution pass (see ISymbolStore).
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: Default, DRagLint.Core.ControlChannel.BeatProgress, DRagLint.Core.ControlChannel.BeatTestHold, DRagLint.Core.Model.CallSiteRefKindSql, DRagLint.Index.CallResolver.TCallResolver.Create, DRagLint.Index.CallResolver.TCallResolver.FileIsStaleProbe, DRagLint.Index.CallResolver.TCallResolver.OracleStats, DRagLint.Index.CallResolver.TCallResolver.ResolveOne, DRagLint.Storage.SQLite.BeatStreamOpen, DRagLint.Storage.SQLite.ReadDataVersion (+32 more)</para>
+      /// <para>Calls: Default, DRagLint.Core.ControlChannel.BeatProgress, DRagLint.Core.ControlChannel.BeatTestHold, DRagLint.Core.Model.CallSiteRefKindSql, DRagLint.Index.CallResolver.TCallResolver.Create, DRagLint.Index.CallResolver.TCallResolver.FileIsStaleProbe, DRagLint.Index.CallResolver.TCallResolver.OracleStats, DRagLint.Index.CallResolver.TCallResolver.ResolveOne, DRagLint.Storage.SQLite.BeatStreamOpen, DRagLint.Storage.SQLite.PersistArgUses (+33 more)</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.ResolveCallTargets</para>
-      /// <para>Complexity: 60 (cyclomatic, outer body), 826 lines (full implementation)</para>
+      /// <para>Complexity: 64 (cyclomatic, outer body), 841 lines (full implementation)</para>
       /// <para>Reads: FScopeFiles, FConn, FQSetRefSymbol</para>
       /// <para>Catches: Exception (re-raise); Exception (swallowed)</para>
       /// <para>SQL: reads REFS, SYMBOLS; writes CALL_EDGES, MEMBER_ACCESSES, REFS</para>
@@ -3733,14 +3809,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas)</para>
-      /// <para>Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ExternalStoresJson, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetMetaValue, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ScopedResolveDeclineReason, Format</para>
-      /// <para>Returns: ScopedResolveDeclineReason</para>
+      /// <para>Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.CallEdgesNeedRebuild, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ExternalStoresJson, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetMetaValue, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ScopedResolveDeclineReason, Format</para>
+      /// <para>Returns: ScopedResolveDeclineReason; ''</para>
       /// <para>Reads: FScopeTypesBefore, FScopeTypesAfter</para>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.CallEdgesNeedRebuild"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.ExternalStoresJson"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetMetaValue"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.ScopedResolveDeclineReason"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginDeferredTextIndex"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ExtraStoresDeclineReason(const AExtraStores: TArray<ISymbolStore>): string;
@@ -3788,7 +3864,7 @@ type
       /// FROM call_edges LIMIT 1')); True.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ScopedResolveDeclineReason (DRagLint.Storage.SQLite.pas)</para>
+      /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ExtraStoresDeclineReason (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ScopedResolveDeclineReason (DRagLint.Storage.SQLite.pas)</para>
       /// <para>Calls: DRagLint.Core.Model.CallSiteRefKindSql, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ProbeExists</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild</para>
       /// <para>Catches: Exception (swallowed)</para>
