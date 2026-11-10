@@ -4124,7 +4124,15 @@ begin
       for i:= 0 to ANode.NamedChildCount - 1 do
       begin
         var Arg:= ANode.NamedChild(i);
-        if Arg.NodeType = 'identifier' then AState.EmitRef('read', NodeText(Arg, AState.Source), Arg);
+        if Arg.NodeType = 'identifier' then AState.EmitRef('read', NodeText(Arg, AState.Source), Arg)
+        { Automation named argument Foo(Name := Value) (grammar v1.4.9): the NAME is a label, no ref;
+          a bare-identifier VALUE is a read exactly like a positional argument (RG2, wave 150). }
+        else if Arg.NodeType = 'exprArgNamed' then
+        begin
+          var NamedValue:= Arg.ChildByField('value');
+          if (not NamedValue.IsNull) and (NamedValue.NodeType = 'identifier') then
+            AState.EmitRef('read', NodeText(NamedValue, AState.Source), NamedValue);
+        end;
       end;
       for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
       Exit;
