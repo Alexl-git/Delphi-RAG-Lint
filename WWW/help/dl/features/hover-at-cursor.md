@@ -7,7 +7,7 @@ group: search-navigation
 order: 20017
 since: 0.7.0-alpha
 status: shipped
-updated: 1.48.0-alpha
+updated: 1.49.0-alpha
 ---
 
 # Hover at Cursor
@@ -105,6 +105,10 @@ JSON `facts` array and in the IDE popup. Capped by `docs.max_callers` with
 property accesses that ran that accessor (wave 148). Hover reads the one
 index it was given, so uses recorded only in another project's index appear in
 `document --db A --db B` but not in the card.
+
+### Who calls the routine
+
+Hovering a routine names its callers as the first analysis fact, `Called from: Unit.TClass.A (a.pas), Unit.TClass.B (b.pas)`, even when the routine's `///` block does not carry the line yet (150 LX2). If the block was written by `document --apply` and already has `<para>Called from: ...</para>`, the line appears exactly once (the block's). A routine nobody calls shows no such line. The same fact is in `drag-lint hover --qname <name> --db <db> --format md`; the RAD Studio popup keeps its CALLED FROM grid and adds no extra row.
 
 ### When the engine is slow
 The IDE never waits for the engine. A hover (the menu command or a mouse

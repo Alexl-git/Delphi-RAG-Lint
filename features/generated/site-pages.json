@@ -332,8 +332,8 @@
     "version": "1.48.0-alpha"
   },
   "features/exception-facts.md": {
-    "hash": "4b4d80d57b097d2130bed99d74229cba7b5d9477dc6bfc2ac6097a2af349113f",
-    "version": "1.46.0-alpha"
+    "hash": "d1af6b0a09c3ea89bb09362dc55a99246eef610cbdb42ab369db6aef9f71025b",
+    "version": "1.49.0-alpha"
   },
   "features/exceptions-sync.md": {
     "hash": "3bcfddd76e93d329ff517745143e9fb05a88d3d84bd9a92f9def5ae483e3d6f0",
@@ -476,8 +476,8 @@
     "version": "1.46.0-alpha"
   },
   "features/hover-at-cursor.md": {
-    "hash": "9fae4d58ab8bfb91fe73d6736d92e96c4c85a744809627d7109b4754f5d01f40",
-    "version": "1.48.0-alpha"
+    "hash": "14bc42b94850e26ca8dcee8bcea8d1408e277e24a208abf9d50de7249db55138",
+    "version": "1.49.0-alpha"
   },
   "features/ide-help-line.md": {
     "hash": "521acca30676d04fd1a8fa7546357fef78b71cdd3ed5dbe382dbbd40207c6033",
@@ -784,8 +784,8 @@
     "version": "1.46.0-alpha"
   },
   "features/schema.md": {
-    "hash": "7032c94c4e46251babdf9d61342a5bb95b27b22e3d067ddabc67bd34480dc7e7",
-    "version": "1.47.0-alpha"
+    "hash": "da9efce769e7c41febc3801656264d48453d3ca63f16cbd8458d25c6a2b99969",
+    "version": "1.49.0-alpha"
   },
   "features/serve.md": {
     "hash": "ca52101dbdc1a6c893852a389e80535c1d4822965caf2ab83c5988495d988823",
