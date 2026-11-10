@@ -118,5 +118,24 @@ Wave 149 (DRAFT assembled by lane DOC from the lanes' REPORT.md "CHANGELOG lines
 - Build fix for older compilers (GitHub #13): the if-expression branches in Preprocess.Expr AsReal and UsageLog RatioOf are both Double.
 - Schema 24 is additive (project_settings, pp_directives); an engine reads schema 23..24 indexes (SC).
 
+#### Tail lanes (T / X / Y / G1)
+- index: a `library X;` .dpr (DLL project) now has a root symbol (kind program) like a program / package; its const / var / routines are parented to it and qualified by it, and its uses clause is recorded (before: none).
+- Resolver: a unit-qualified type use (`V: Unit.TFoo`, `X is Unit.TFoo`, `Unit.TEnum(n)`) now binds to that unit's type; before it was declined as 'qualified'.
+- Resolver: a member access on a routine-local typed const (`CLocal.Alpha`) binds the field, including from nested routines.
+- Fixed: `Owns returned: borrowed` was written for a function returning a record when the record's unit was indexed after the caller's, and then flagged by doc-drift after any incremental reindex (`document` and doc-drift now agree regardless of index order).
+- Resolver: a call to a routine declared in the .dpr itself (program or library main block, exports clause) now binds
+  to it; find-callers lists it as an exact caller.
+- find-deadcode no longer lists a program / library / package root symbol as dead code.
+- extractor: implementation-only overloaded routines (every overload pair in a .dpr) and a free routine sharing its name with an earlier nested routine are now separate symbols; redundant-cast refuses a cast over such an overloaded call instead of fixing it.
+- Read-only openers no longer refuse a fresh/empty (unstamped) index as 'schema v0'; only a stamped schema below the readable minimum is refused.
+- uses-audit: a unit listed through an include shows the include in the finding (T1/G2, "in include X, line N").
+- query implementors is an alias of the implementors verb (was "unknown query subcommand"); charts verbs no longer depend on the working folder (T5/G7, G8).
+- Extractor: each entry of an exports clause emits a call ref bound to the exported routine (X1).
+- index summary line gains a trailing parse-errors=N (files with parse ERROR or MISSING nodes) (X3).
+- forms-csv and menu-tree --with-dfm read each .dfm tree from the dfm_nav_nodes / dfm_nav_props index tables while current for that .dfm; output byte-identical to the text read (DRAGLINT_NO_FILE_FACTS=1 forces the text); UTF-8 / UTF-16 .dfm files are decoded correctly (Y2/G14).
+- OpenReadable (lint-tree, JSON envelope probes): an empty unstamped index opens and answers empty; a populated unstamped or stamped-too-old index is refused with its reason, never an access violation (Y1).
+- Read verbs that opened an index without a schema check (menu-tree, forms-csv, unwith, multi-project rename, charts, drift, MCP rename) now refuse an index older than the engine reads with the named reason (TL/G1).
+- Rules vs grammar v1.4.9: used-before-assignment label fix; the value of a named argument now emits a read ref (RG2, extractor).
+
 ### Not in this changelog (by design)
 - Wave 150 lane items that are test-only or doc-only (RG audit guard run_grammar_shape_audit_148, CF consumers behind table-first reads with scan fallback, CQ/RT NOTE) are in their REPORT.md files.
