@@ -163,8 +163,13 @@ function Snapshot($fx) {
 
 function Run-Rename($fx, [string[]]$RenameArgs) {
   Push-Location $fx.Dir
-  try { $o = & $Exe rename @RenameArgs --db $fx.Db 2>&1 } finally { Pop-Location }
-  [pscustomobject]@{ Exit = $LASTEXITCODE; Out = ($o -join "`n") }
+  # stdout and stderr apart: a stderr NOTE (e.g. 'no --library-db given') must
+  # not reach ConvertFrom-Json; refusal checks read Out (both streams).
+  $errFile = [IO.Path]::GetTempFileName()
+  try { $o = & $Exe rename @RenameArgs --db $fx.Db 2>$errFile; $ec = $LASTEXITCODE } finally { Pop-Location }
+  $e = [IO.File]::ReadAllText($errFile); [IO.File]::Delete($errFile)
+  $std = ($o -join "`n")
+  [pscustomobject]@{ Exit = $ec; Std = $std; Out = (($std, $e.TrimEnd()) -join "`n") }
 }
 
 # Every edit's (line, col, len(old)) slice of its file must BE old.
@@ -198,7 +203,7 @@ $cases = @(
 foreach ($c in $cases) {
   $r = Run-Rename $r1 @('--kind', 'symbol', '--name', $c.Q, '--to', $c.To, '--json')
   Check "$($c.Q) --json exits 0" ($r.Exit -eq 0) "exit=$($r.Exit)"
-  $ed = Check-Ranges $c.Q $r.Out
+  $ed = Check-Ranges $c.Q $r.Std
   Check "$($c.Q) has >= $($c.MinEdits) edits" (@($ed).Count -ge $c.MinEdits) "count=$(@($ed).Count)"
 }
 
@@ -207,7 +212,7 @@ Write-Host 'Fixture H: handler rename rewrites the text .dfm binding' -Foregroun
 $h = New-Fixture 'H'
 $r = Run-Rename $h @('--kind', 'symbol', '--name', 'Unit1.TForm1.Button1Click', '--to', 'OkClick', '--json')
 Check 'handler --json exits 0' ($r.Exit -eq 0) "exit=$($r.Exit)"
-$ed = Check-Ranges 'handler' $r.Out
+$ed = Check-Ranges 'handler' $r.Std
 Check 'handler --json carries a Unit1.dfm edit' (@($ed | Where-Object { $_.file -like '*Unit1.dfm' }).Count -eq 1)
 $r = Run-Rename $h @('--kind', 'symbol', '--name', 'Unit1.TForm1.Button1Click', '--to', 'OkClick', '--apply', '--no-backup')
 Check 'handler --apply exits 0' ($r.Exit -eq 0) "exit=$($r.Exit) $($r.Out)"
