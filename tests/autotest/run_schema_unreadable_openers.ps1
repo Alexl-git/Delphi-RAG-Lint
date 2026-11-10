@@ -148,6 +148,46 @@ c.close()
   #  before AddStalenessPairs / AddLibraryPendingNotes run; lint-tree is the observable OpenReadable caller)
   $s = Suo-Run @('lint-tree', '--unit', $appU, '--db', $projU)
   Suo-Check 'U3' (($s.Out -match 'older than this engine reads') -and ($s.Code -eq 2) -and -not (Suo-Av $s.Out)) "lint-tree (OpenReadable) on a STAMPED v$old index still refused with the reason (exit $($s.Code))"
+
+  # 150 Y1: an UNSTAMPED store that holds NO index (a 0-byte file; a file with only an empty
+  # schema_meta table) OPENS through OpenReadable and answers EMPTY -- an in-memory store migrated to
+  # the current schema, never the file's own store (whose queries are nil below READ_MIN: the INT
+  # pass-through AV). E1/E2 lint-tree answers 'does not cover' (empty index), not a refusal; E3/E4
+  # the JSON probes (AddStalenessPairs + AddLibraryPendingNotes) run on that store: schema --json and
+  # sql --json parse with stale=false; E5 the file is not touched. RED on the head before Y1: E1/E2
+  # 'has no schema stamp'. Positive control (REPORT Y1): the INT pass-through build AVs E1/E2 (exit 3).
+  # E3/E4 are no-AV pins WITHOUT a failing control: the JSON probes already degrade on a store with
+  # nil queries (they PASS on the pass-through build too) -- kept as regression pins, not as proof.
+  $e0 = Join-Path $tmp 'empty-0byte.sqlite'
+  [IO.File]::WriteAllBytes($e0, [byte[]]@())
+  $em = Join-Path $tmp 'empty-meta.sqlite'
+  $mkMeta = Join-Path $tmp 'mkmeta.py'
+  [IO.File]::WriteAllText($mkMeta, @'
+import sqlite3, sys
+c = sqlite3.connect(sys.argv[1])
+c.execute("CREATE TABLE schema_meta(key TEXT PRIMARY KEY, value TEXT)")
+c.commit()
+c.close()
+'@)
+  & $py -I $mkMeta $em
+  if ($LASTEXITCODE -ne 0) { throw "schema_meta-only $em failed" }
+  $n = 1
+  foreach ($edb in @($e0, $em)) {
+    $lt = Suo-Run @('lint-tree', '--unit', $appU, '--db', $edb)
+    Suo-Check "E$n" (($lt.Out -match 'does not cover') -and -not ($lt.Out -match 'has no schema stamp|older than this engine reads') -and ($lt.Code -eq 2) -and -not (Suo-Av $lt.Out)) "lint-tree (OpenReadable) on an EMPTY unstamped index ($([IO.Path]::GetFileName($edb))): opens, answers empty ('does not cover'), no AV (exit $($lt.Code))"
+    if ($lt.Out -notmatch 'does not cover') { ($lt.Out -split "`n" | Select-Object -Last 3) | ForEach-Object { Write-Host "  | $_" } }
+    $n++
+  }
+  $sj = Suo-Run @('schema', '--json', '--db', $e0)
+  $sjOk = $false
+  try { $o = ($sj.Out -replace '(?s)^[^{]*', '') | ConvertFrom-Json; $sjOk = ($o.stale -eq $false) -and ($o.stale_files -eq 0) } catch { $sjOk = $false }
+  Suo-Check 'E3' ($sjOk -and ($sj.Code -eq 0) -and -not (Suo-Av $sj.Out)) "schema --json (JSON probes) on the 0-byte index: parses, stale=false, no AV (exit $($sj.Code))"
+  $qj = Suo-Run @('sql', '--json', '--query', 'SELECT 1 AS x', '--db', $em)
+  $qjOk = $false
+  try { $o = ($qj.Out -replace '(?s)^[^{]*', '') | ConvertFrom-Json; $qjOk = ($o.stale -eq $false) -and ($o.row_count -eq 1) } catch { $qjOk = $false }
+  Suo-Check 'E4' ($qjOk -and ($qj.Code -eq 0) -and -not (Suo-Av $qj.Out)) "sql --json (JSON probes) on the schema_meta-only index: parses, stale=false, no AV (exit $($qj.Code))"
+  $untouched = ((Get-Item $e0).Length -eq 0) -and -not (Test-Path "$e0-wal") -and -not (Test-Path "$e0-shm")
+  Suo-Check 'E5' $untouched "the 0-byte index is not written (still 0 bytes, no -wal/-shm)"
 }
 finally {
   try { [IO.Directory]::Delete($tmp, $true) } catch { Write-Verbose "temp dir left: $tmp" }

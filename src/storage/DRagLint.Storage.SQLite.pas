@@ -7167,6 +7167,39 @@ class function TSQLiteSymbolStore.OpenReadable(const ADbPath: string; out AReaso
 var
   LFound   : Integer;
   LExpected: Integer;
+  LStore   : TSQLiteSymbolStore;
+
+  { 150 Y1: True when the unstamped file holds nothing an answer could come from -- no
+    files row in a files table, or no files table and no user table but schema_meta (a
+    0-byte file, a store whose creation stopped before Migrate). Read-only SELECTs only. }
+  function HoldsNoIndex(const AConn: TFDConnection): Boolean;
+  const
+    FILES_TABLE_SQL = 'SELECT COUNT(*) FROM sqlite_master WHERE type = ''table'' AND name = ''files''';
+    ANY_FILE_SQL    = 'SELECT COUNT(*) FROM (SELECT 1 FROM files LIMIT 1)';
+    OTHER_TABLE_SQL = 'SELECT COUNT(*) FROM sqlite_master WHERE type = ''table'''
+                    + ' AND name NOT LIKE ''sqlite\_%'' ESCAPE ''\'' AND name <> ''schema_meta''';
+  begin
+    if AConn.ExecSQLScalar(FILES_TABLE_SQL) > 0 then Result:= AConn.ExecSQLScalar(ANY_FILE_SQL) = 0
+    else Result:= AConn.ExecSQLScalar(OTHER_TABLE_SQL) = 0;
+  end;
+
+  { 150 Y1: the empty answer -- a private in-memory store migrated to the current schema (so
+    every statement is prepared and every query answers no rows), then put under query_only.
+    Opened through the read-only connect (no writer heartbeat for a ':memory:' path); the
+    migration is the one write, made before query_only goes back on. The file is not touched. }
+  function OpenEmptyStore: TSQLiteSymbolStore;
+  begin
+    Result:= TSQLiteSymbolStore.Create(':memory:', {AReadOnly=}True);
+    try
+      Result.FConn.ExecSQL('PRAGMA query_only = OFF');
+      Result.Migrate;
+      Result.FConn.ExecSQL('PRAGMA query_only = ON');
+    except
+      Result.Free;
+      raise;
+    end;
+  end;
+
 begin
   Result := nil;
   AReason:= '';
@@ -7176,14 +7209,22 @@ begin
     Exit;
   end;
   try
-    Result:= TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}True);
-    Result.IsSchemaCurrent(LFound, LExpected);
-    { 150 INT2: no stamp (LFound = 0: fresh, being created, empty) is not an OLD schema -- say so;
-      still nil, because the constructor prepares no statements without a readable stamp. }
+    LStore:= TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}True);
+    Result:= LStore; { the interface reference owns it from here }
+    LStore.IsSchemaCurrent(LFound, LExpected);
+    { 150 INT2 / Y1: no stamp (LFound = 0) is not an OLD schema. The constructor prepares no
+      statements without a readable stamp, so this store is NEVER handed out (the INT
+      pass-through AV'd in lint-tree on its nil queries). An unstamped store that holds no
+      index answers empty through OpenEmptyStore; one that holds rows of an unknown shape
+      is refused with the 'no schema stamp' reason. }
     if LFound = 0 then
     begin
-      AReason:= 'index has no schema stamp (fresh, empty or not a drag-lint index): ' + ADbPath;
-      Result := nil;
+      if HoldsNoIndex(LStore.FConn) then Result:= OpenEmptyStore { releases the file's store }
+      else
+      begin
+        AReason:= 'index has no schema stamp (populated, or not a drag-lint index): ' + ADbPath;
+        Result := nil;
+      end;
     end
     else if not IsSchemaReadable(LFound) then
     begin
