@@ -535,7 +535,7 @@ begin
   FPrevTok:= AText;
 end;
 
-procedure TPPDeclScanner.Feed(const AText: string); // dl:ok cognitive-complexity@b13a -- REVIEWED 2026-10-27 the tokenizer: one arm per lexical class  // dl:ok cyclomatic-complexity@bbd3 -- REVIEWED 2026-10-27 same tokenizer
+procedure TPPDeclScanner.Feed(const AText: string); // dl:ok cognitive-complexity@74f2 -- REVIEWED 2026-11-09 150 INT (re-hash only: the metric-bound hash changed, the routine did not -- untouched since 149): the tokenizer: one arm per lexical class  // dl:ok cyclomatic-complexity@86cf -- REVIEWED 2026-11-09 150 INT: same tokenizer
 var
   I, N, S: Integer;
   C      : Char;

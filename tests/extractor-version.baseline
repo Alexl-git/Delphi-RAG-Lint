@@ -1209,4 +1209,6 @@
 #   Superseded: 1.35.0-alpha|d7809474ef2883fb519941f7b894db2ec4848bfc635127544a61175e3b5b00fc
 #   2026-11-09 150 INT re-pin (same unreleased 1.35.0 bump, ONE re-pin for wave 150): EX3 (routine-local typed const pinned; .dpr program-level const/var parented to the program; headerless .dpr program symbol; project_settings DCC_Namespace; dotted is-rhs type_use INT-E1b; MarkUsesListIncludes in TAstParseCache), PP (pp_directives rows, PutFileFacts signature), DF2 (ExtractDfmEventBindings BOM-less CP1252), grammar v1.4.9 (GR2 v1.4.8 scanner fix incl. pmcgee PR #3 + PS Automation named args), SW comment-only, INT lint sweep (ReadDprojUnitScopes to the implementation).
 #   Superseded: 1.35.0-alpha|27dadc92b57b648508203038e612731ff2e0b6f8184a119d70482ffb5414fd79
-1.35.0-alpha|6e07387e99fe1ccb452ef64d6f08db38e4409ea89fda8d2953c382cfa524bd24
+#   2026-11-09 150 INT re-pin (same bump): Preprocess.Decls TPPDeclScanner.Feed dl:ok markers re-hashed (metric-bound hash; review-marker-stale named by EX2's finisher) -- comment only.
+#   Superseded: 1.35.0-alpha|6e07387e99fe1ccb452ef64d6f08db38e4409ea89fda8d2953c382cfa524bd24
+1.35.0-alpha|c9486d616a831ef34384742604c65d6b0e7742f66c1601cf8546952affaa10bb
