@@ -3337,7 +3337,11 @@ begin
   // qualified by it (`Ex3App.COne`), the way WalkUnit parents a unit's. Before,
   // program-level const / var / routines had parent_id NULL and the resolver's
   // unit-level value table (parent kind unit) never held them (RB1 P1/P2).
-  if (NodeType = 'program') or (NodeType = 'package') then
+  // 150 T2 (G3): a `library X;` .dpr (a DLL project) is the same root to dcc: it gets a
+  // skProgram symbol (no skLibrary kind exists; every reader that accepts a program root
+  // then accepts it) and its uses clause is walked as uusProgram. Before, a library root had
+  // no symbol, parent_id NULL decls and NO unit_uses rows.
+  if (NodeType = 'program') or (NodeType = 'package') or (NodeType = 'library') then
   begin
     var ProgName: string:= '';
     var ProgQName: string:= AParentQualifiedName;
@@ -3347,7 +3351,7 @@ begin
     if ProgName <> '' then
     begin
       AState.CurrentSection:= '';
-      AParentSymbolIdx:= AState.Emit(if NodeType = 'program' then skProgram else skPackage, ProgName, ProgName, -1, ANode);
+      AParentSymbolIdx:= AState.Emit(if NodeType = 'package' then skPackage else skProgram, ProgName, ProgName, -1, ANode);
       ProgQName:= ProgName;
     end;
     for i:= 0 to ANode.NamedChildCount - 1 do
@@ -3355,8 +3359,8 @@ begin
       var SectChild:= ANode.NamedChild(i);
       if SectChild.NodeType = 'declUses' then
       begin
-        if NodeType = 'program' then WalkUsesClause(SectChild, AState, uusProgram)
-        else WalkUsesClause(SectChild, AState, uusPackage);
+        if NodeType = 'package' then WalkUsesClause(SectChild, AState, uusPackage)
+        else WalkUsesClause(SectChild, AState, uusProgram);
       end;
     end;
     for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, ProgQName);
