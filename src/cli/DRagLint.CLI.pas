@@ -2386,7 +2386,10 @@ var
   Remedy: string;
 begin
   if (AObj = nil) or (ADbPath = '') or not TFile.Exists(ADbPath) then Exit;
-  var Probe: ISymbolStore:= TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}True);
+  { 150 TL: the schema read gate -- an index below SCHEMA_READ_MIN gets no note (its statements are never built). }
+  var Why: string;
+  var Probe: ISymbolStore:= TSQLiteSymbolStore.OpenReadable(ADbPath, Why);
+  if Probe = nil then Exit;
   var M: TLibraryMarker:= LibraryMarkerFromJson(Probe.GetMetaValue(LIBRARY_RESOLVE_STATE_META_KEY));
   if M.State <> LIBSTATE_PENDING then Exit;
   Remedy:= 'drag-lint ' + IndexRemedyFor(Probe, ADbPath, {AResolveOnly=}True);
@@ -2424,8 +2427,10 @@ begin
     { A local, not an inline temporary: a freshly created object passed
       straight into a const interface parameter is never reference-counted
       and never freed. }
-    var Probe: ISymbolStore:= TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}True);
-    Rep:= ProbeIndexFreshness(Probe, 0);
+    var Why: string;
+    var Probe: ISymbolStore:= TSQLiteSymbolStore.OpenReadable(ADbPath, Why);
+    { 150 TL: below SCHEMA_READ_MIN -> no freshness probe (Rep stays default), never an AV }
+    if Probe <> nil then Rep:= ProbeIndexFreshness(Probe, 0);
   end;
   AObj.AddPair('stale'      , TJSONBool.Create(Rep.Verdict = fvStale));
   AObj.AddPair('stale_files', TJSONNumber.Create(Rep.Changed));
@@ -5780,7 +5785,7 @@ begin
             var DryStore: ISymbolStore:= nil;
             if TFile.Exists(PS.DbPath) then
               try
-                DryStore:= TSQLiteSymbolStore.Create(PS.DbPath, {AReadOnly=}True);
+                DryStore:= TSQLiteSymbolStore.CreateReadable(PS.DbPath, {AReadOnly=}True);
               except
                 on E: Exception do DryStore:= nil;
               end;
@@ -36818,7 +36823,7 @@ var
 begin
   if NoDbResolved(AArgs.DbPath, 'self-test-files') then Exit(2);
   if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store:= TSQLiteSymbolStore.CreateReadable(AArgs.DbPath, {AReadOnly=}False);
   FileIds:= Store.GetAllFileIds;
   for Id in FileIds do begin Path:= Store.GetFilePath(Id); if Path <> '' then Writeln(Path); end;
   Result:= 0;
