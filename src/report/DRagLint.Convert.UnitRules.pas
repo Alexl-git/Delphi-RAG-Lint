@@ -84,7 +84,7 @@ type
   /// 1-based, Stop exclusive; Depth is the conditional-region depth at its
   /// first token (see TTok).
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.ParseClause (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.IsPresent (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.TUnitRulePlanner.RecordKeeps (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.TUnitRulePlanner.SectionOf (DRagLint.Convert.UnitRules.pas) ? (+6 more)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.ParseClause (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.IsPresent (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.TUnitRulePlanner.RecordKeeps (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.TUnitRulePlanner.SectionOf (DRagLint.Convert.UnitRules.pas) ? (+8 more)</para>
   /// <para>Used in units: DRagLint.Convert.UnitRules, DRagLint.Report.CyclePlan</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -105,7 +105,7 @@ type
   /// (KwLine: the section keyword's line, kept for a clause that has to be
   /// created).
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.ParseClause (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.TUnitRulePlanner.Create (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.RemovalSpans (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Report.CyclePlan.ScanClause (DRagLint.Report.CyclePlan.pas) (+9 more)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.ParseClause (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.TUnitRulePlanner.Create (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.RemovalSpans (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Report.CyclePlan.ScanClause (DRagLint.Report.CyclePlan.pas) (+13 more)</para>
   /// <para>Used in units: DRagLint.Convert.UnitRules, DRagLint.Report.CyclePlan</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -133,7 +133,7 @@ type
   /// directives lexed so far. Not thread-safe; one instance per text. Shared
   /// with DRagLint.Report.CyclePlan (E18 T3a: minimal uses-clause edits).</para>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.ImplementationKeywordLine (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.Create (DRagLint.Convert.UnitRules.pas), DRagLint.Report.CyclePlan.ClauseEdit (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.EntryHasTrivia (DRagLint.Report.CyclePlan.pas) (+5 more)</para>
+  /// <para>Used by: DRagLint.Convert.UnitRules.ImplementationKeywordLine (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.Create (DRagLint.Convert.UnitRules.pas), DRagLint.Report.CyclePlan.ClauseEdit (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.ClauseKeepsOthers (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.EntryHasTrivia (DRagLint.Report.CyclePlan.pas) (+7 more)</para>
   /// <para>Used in units: DRagLint.Convert.UnitRules, DRagLint.Report.CyclePlan</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -225,7 +225,7 @@ type
     /// <param name="AText">The text to lex; the lexer keeps its own copy.</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Convert.UnitRules.ImplementationKeywordLine (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.Create (DRagLint.Convert.UnitRules.pas), DRagLint.Report.CyclePlan.ClauseEdit (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.EntryHasTrivia (DRagLint.Report.CyclePlan.pas)</para>
+    /// <para>Called from: DRagLint.Convert.UnitRules.ImplementationKeywordLine (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.Create (DRagLint.Convert.UnitRules.pas), DRagLint.Report.CyclePlan.ClauseEdit (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.ClauseKeepsOthers (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.EntryHasTrivia (DRagLint.Report.CyclePlan.pas) (+1 more)</para>
     /// <para>constructor</para>
     /// <para>Writes: FText, FPos, FDirectives</para>
     /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Destroy"/>

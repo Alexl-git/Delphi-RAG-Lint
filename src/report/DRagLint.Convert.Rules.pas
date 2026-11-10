@@ -215,7 +215,7 @@ type
   /// resolve paths lazily and never read it. At most one '#depth' per book: a
   /// second one is a parse error on its own line and the first one stands.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ConvertApplyComponentPart (DRagLint.CLI.pas) ?, DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas) ?, DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas) ?, DRagLint.CLI.QualifyConvertArg (DRagLint.CLI.pas) ?, DRagLint.CLI.ResolveTreeDepth (DRagLint.CLI.pas) (+59 more)</para>
+  /// <para>Used by: DRagLint.CLI.ConvertApplyComponentPart (DRagLint.CLI.pas) ?, DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas) ?, DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas) ?, DRagLint.CLI.QualifyConvertArg (DRagLint.CLI.pas) ?, DRagLint.CLI.ResolveTreeDepth (DRagLint.CLI.pas) (+60 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules, DRagLint.Convert.UnitRules, DRagLint.Convert.UsesReconcile</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

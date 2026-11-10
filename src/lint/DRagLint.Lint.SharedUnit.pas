@@ -44,7 +44,7 @@ type
   /// is 7-bit ASCII and the file's original line endings are preserved -- only
   /// the single marker line is ever rewritten.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoSharedUnit (DRagLint.CLI.pas), DRagLint.Doc.Facts.UnitIsShared (DRagLint.Doc.Facts.pas), DRagLint.Doc.SharedFacts.Participates (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.RegenerationDropsUnvouchable (DRagLint.Doc.SharedFacts.pas) (+5 more)</para>
+  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DeriveSharedPeers (DRagLint.CLI.pas), DRagLint.CLI.DoSharedUnit (DRagLint.CLI.pas), DRagLint.Doc.Facts.UnitIsShared (DRagLint.Doc.Facts.pas), DRagLint.Doc.SharedFacts.Participates (DRagLint.Doc.SharedFacts.pas) (+6 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Facts, DRagLint.Doc.SharedFacts, DRagLint.Fix.Store, DRagLint.Lint.ProjectRules, DRagLint.Lint.SharedScope, DRagLint.Lint.UnusedGlobal</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -145,7 +145,7 @@ type
     /// Names.ToArray.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoSharedUnit (DRagLint.CLI.pas), DRagLint.Lint.SharedUnit.TSharedUnit.AddProjectToText (DRagLint.Lint.SharedUnit.pas), DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOf (DRagLint.Lint.SharedUnit.pas)</para>
+    /// <para>Called from: DRagLint.CLI.DeriveSharedPeers (DRagLint.CLI.pas), DRagLint.CLI.DoSharedUnit (DRagLint.CLI.pas), DRagLint.Lint.SharedUnit.TSharedUnit.AddProjectToText (DRagLint.Lint.SharedUnit.pas), DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOf (DRagLint.Lint.SharedUnit.pas)</para>
     /// <para>Calls: Copy, DRagLint.Lint.SharedUnit.LineRangeAt, DRagLint.Lint.SharedUnit.ScanHeader, DRagLint.Lint.SharedUnit.SplitCommentTail, Trim</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Lint.SharedUnit.LineRangeAt"/>

@@ -152,7 +152,7 @@ type
   /// changes treatment. The file -> .dproj memo is dropped by Forget / Clear; a
   /// .dproj created later for an already-looked-up file is seen after Forget.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.InstallFileProfileResolver (DRagLint.CLI.pas), DRagLint.CLI.InstallLintIncludeContexts (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.ComputeFileContext (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidChangeWatchedFiles (DRagLint.LSP.Server.pas) (+2 more)</para>
+  /// <para>Used by: DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.InstallFileProfileResolver (DRagLint.CLI.pas), DRagLint.CLI.InstallLintIncludeContexts (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.ComputeFileContext (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.FileContext (DRagLint.LSP.Server.pas) (+3 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -214,7 +214,7 @@ type
     /// <param name="AFile">Source path.</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleDidChangeWatchedFiles (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidClose (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.RefreshFileFromDisk (DRagLint.LSP.Server.pas)</para>
+    /// <para>Called from: DRagLint.LSP.Server.TLSPServer.FileContext (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidChangeWatchedFiles (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidClose (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.RefreshFileFromDisk (DRagLint.LSP.Server.pas)</para>
     /// <para>Calls: ExpandFileName, LowerCase</para>
     /// <seealso cref="DRagLint.Project.DefineProfile.TProjectProfileCache.BuildForFile"/>
     /// <seealso cref="DRagLint.Project.DefineProfile.TProjectProfileCache.Clear"/>

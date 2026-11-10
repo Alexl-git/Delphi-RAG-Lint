@@ -37,7 +37,7 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: AddLoopAssigned, Canon, ContainsText, ContainsTryExcept, Copy, Default, Delete, DescentOf, DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check.CheckAsyncLambda, DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check.CheckClosure (+28 more)</para>
+    /// <para>Calls: AddLoopAssigned, Canon, ContainsText, ContainsTryExcept, Copy, Default, Delete, DescentOf, DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check.CheckAsyncLambda, DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check.CheckClosure (+29 more)</para>
     /// <para>Returns: nil; Findings.ToArray</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check.CheckAsyncLambda"/>

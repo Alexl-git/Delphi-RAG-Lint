@@ -108,9 +108,9 @@ type
   /// changes for anyone who has not opted in. Not thread-safe: the closure set
   /// is cached in class state, keyed on the store it was built from.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: [drag-lint]DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocument (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLint (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Run (DRagLint.CLI.pas), [drag-lint]DRagLint.Doc.Document.SameButForLegacyPure (DRagLint.Doc.Document.pas), [drag-lint]DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), [drag-lint]DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), [drag-lint]DRagLint.Doc.Regions.TDocFactsRenderer.FormatUsedInLines (DRagLint.Doc.Regions.pas), [drag-lint]DRagLint.Doc.Regions.TDocFactsRenderer.RenderFactsBlock.JoinRefs (DRagLint.Doc.Regions.pas),
-  /// [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent.SortedJoin (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.StripOwnTag (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.WithoutLegacyPure (DRagLint.Doc.SharedFacts.pas)</para>
-  /// <para>Used in units: [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.Doc.Document, [drag-lint]DRagLint.Doc.Drift, [drag-lint]DRagLint.Doc.Regions, [drag-lint]DRagLint.Doc.SharedFacts</para>
+  /// <para>Used by: [drag-lint]DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocument (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLint (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Run (DRagLint.CLI.pas), [drag-lint]DRagLint.Doc.Document.SameButForLegacyPure (DRagLint.Doc.Document.pas), [drag-lint]DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), [drag-lint]DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), [drag-lint]DRagLint.Doc.Facts.FormatHoverCalledFromLine (DRagLint.Doc.Facts.pas), [drag-lint]DRagLint.Doc.Regions.JoinUsedInEntries (DRagLint.Doc.Regions.pas),
+  /// [drag-lint]DRagLint.Doc.Regions.TDocFactsRenderer.RenderFactsBlock.JoinRefs (DRagLint.Doc.Regions.pas), [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent.SortedJoin (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.StripOwnTag (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.WithoutLegacyPure (DRagLint.Doc.SharedFacts.pas)</para>
+  /// <para>Used in units: [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.Doc.Document, [drag-lint]DRagLint.Doc.Drift, [drag-lint]DRagLint.Doc.Facts, [drag-lint]DRagLint.Doc.Regions, [drag-lint]DRagLint.Doc.SharedFacts</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSharedFacts = class
@@ -140,14 +140,14 @@ type
     /// it; on an unmarked unit it is a stale entry and still drift.</para>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas)</para>
-    /// <para>Calls: DRagLint.Doc.ProjectTags.SplitEntries, DRagLint.Doc.SharedFacts.CollapseWs, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.ParaLabelCount, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.ReconciledDrift, DRagLint.Doc.SharedFacts.StripPara, DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries, DRagLint.Doc.SharedFacts.UnitVouchable, DRagLint.Doc.SharedFacts.WithoutStoredOnlyFacts, LowerCase</para>
+    /// <para>Calls: DRagLint.Doc.ProjectTags.SplitEntries, DRagLint.Doc.SharedFacts.CollapseWs, DRagLint.Doc.SharedFacts.InboundKeys, DRagLint.Doc.SharedFacts.InboundLabelsInText, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.ParaLabelCount, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.ReconciledDrift, DRagLint.Doc.SharedFacts.StripPara, DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries, DRagLint.Doc.SharedFacts.UnitVouchable, DRagLint.Doc.SharedFacts.WithoutStoredOnlyFacts, LowerCase</para>
     /// <para>Returns: CollapseWs(StoredCmp) &lt;&gt; CollapseWs(FreshCmp); False</para>
-    /// <para>Complexity: 29 (cyclomatic, outer body), 186 lines (full implementation)</para>
+    /// <para>Complexity: 27 (cyclomatic, outer body), 184 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Doc.ProjectTags.SplitEntries"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.CollapseWs"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.InboundKeys"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.InboundLabelsInText"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.IsTruncated"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.IsUncertainEntry"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.ParaLabelCount"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function BlockDrifted(const AStored, AFresh: string;
@@ -176,14 +176,14 @@ type
     /// wrap, so it is one physical line again whenever it fits.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas)</para>
-    /// <para>Calls: Copy, DRagLint.Doc.SharedFacts.BlockHoldsUnvouchable, DRagLint.Doc.SharedFacts.FenceBounds, DRagLint.Doc.SharedFacts.InsertFactLines, DRagLint.Doc.SharedFacts.MergeFactLines, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.ReconcileContent, DRagLint.Doc.SharedFacts.ReinsertAt, DRagLint.Doc.SharedFacts.TSharedFacts.StoredBlockBody, Pos</para>
+    /// <para>Calls: Copy, DRagLint.Doc.SharedFacts.BlockHoldsUnvouchable, DRagLint.Doc.SharedFacts.FenceBounds, DRagLint.Doc.SharedFacts.InboundKeys, DRagLint.Doc.SharedFacts.InsertFactLines, DRagLint.Doc.SharedFacts.MergeFactLines, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.ReconcileContent, DRagLint.Doc.SharedFacts.ReinsertAt, DRagLint.Doc.SharedFacts.TSharedFacts.StoredBlockBody, Pos</para>
     /// <para>Returns: ADocText; Lines.Text</para>
-    /// <para>Complexity: 15 (cyclomatic, outer body), 98 lines (full implementation)</para>
+    /// <para>Complexity: 14 (cyclomatic, outer body), 96 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Doc.SharedFacts.BlockHoldsUnvouchable"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.FenceBounds"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.InboundKeys"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.InsertFactLines"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.MergeFactLines"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.ParseBlock"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function MergeInboundFacts(const ADocText, AStoredRemarks: string;
@@ -290,14 +290,13 @@ type
     /// drift. Caught by run_doc_drift_unseen_units (CASE-A) and run_doc_drift_extra_stores (#3).
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted (DRagLint.Doc.SharedFacts.pas)</para>
-    /// <para>Calls: DRagLint.Doc.ProjectTags.SplitEntries, DRagLint.Doc.ProjectTags.SplitTagged, DRagLint.Doc.ProjectTags.WithoutTag, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.UnitVouchable</para>
+    /// <para>Calls: DRagLint.Doc.ProjectTags.SplitEntries, DRagLint.Doc.ProjectTags.SplitTagged, DRagLint.Doc.ProjectTags.WithoutTag, DRagLint.Doc.SharedFacts.InboundKeys, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.UnitVouchable</para>
     /// <para>Returns: False</para>
-    /// <para>Complexity: 10 (cyclomatic, outer body), 52 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Doc.ProjectTags.SplitEntries"/>
     /// <seealso cref="DRagLint.Doc.ProjectTags.SplitTagged"/>
     /// <seealso cref="DRagLint.Doc.ProjectTags.WithoutTag"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.InboundKeys"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.IsTruncated"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.IsUncertainEntry"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function HoldsForeignInboundEntries(const AStoredBody: string;
@@ -374,7 +373,7 @@ type
     /// non-determinism. Two comparators is the mirrored-predicate trap; there
     /// is deliberately only one, and both callers route through it.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: [drag-lint]DRagLint.Doc.Regions.TDocFactsRenderer.FormatUsedInLines (DRagLint.Doc.Regions.pas), [drag-lint]DRagLint.Doc.Regions.TDocFactsRenderer.RenderFactsBlock.JoinRefs (DRagLint.Doc.Regions.pas), [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent.SortedJoin (DRagLint.Doc.SharedFacts.pas)</para>
+    /// <para>Called from: [drag-lint]DRagLint.Doc.Facts.FormatHoverCalledFromLine (DRagLint.Doc.Facts.pas), [drag-lint]DRagLint.Doc.Regions.JoinUsedInEntries (DRagLint.Doc.Regions.pas), [drag-lint]DRagLint.Doc.Regions.TDocFactsRenderer.RenderFactsBlock.JoinRefs (DRagLint.Doc.Regions.pas), [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent.SortedJoin (DRagLint.Doc.SharedFacts.pas)</para>
     /// <para>Calls: CompareText, DRagLint.Doc.ProjectTags.BareEntry</para>
     /// <para>Returns: CompareText(BareEntry(X), BareEntry(Y)); CompareText(X, Y)</para>
     /// <para>Directives: static</para>

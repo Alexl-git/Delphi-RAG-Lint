@@ -67,6 +67,7 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas)</para>
+    /// <para>Used in (via property StaleHints): DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas) [r]</para>
     /// <para>Reads: FStale</para>
     /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.AddPeerAccount"/>
     /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.Create"/>

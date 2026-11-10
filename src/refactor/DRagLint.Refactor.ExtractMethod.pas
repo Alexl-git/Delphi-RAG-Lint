@@ -183,7 +183,7 @@ type
     /// with 'not-yet-implemented' (Tasks 3-4 add classification + synthesis).
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoExtractMethod (DRagLint.CLI.pas)</para>
-    /// <para>Calls: Default, DRagLint.Analysis.Cfg.TCfg.ComputePreds, DRagLint.Analysis.Cfg.TCfgBuilder.Build, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Refactor.ExtractMethod.ArgListText, DRagLint.Refactor.ExtractMethod.ClassHasMemberNamed, DRagLint.Refactor.ExtractMethod.EmitInternalDeletions, DRagLint.Refactor.ExtractMethod.FindDeclClass (+12 more)</para>
+    /// <para>Calls: Default, DRagLint.Analysis.Cfg.TCfg.ComputePreds, DRagLint.Analysis.Cfg.TCfgBuilder.Build, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Get, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Refactor.ExtractMethod.ArgListText, DRagLint.Refactor.ExtractMethod.ClassHasMemberNamed, DRagLint.Refactor.ExtractMethod.EmitInternalDeletions, DRagLint.Refactor.ExtractMethod.FindDeclClass (+13 more)</para>
     /// <para>Returns: nil; ' + OutName + '; Edits.ToArray</para>
     /// <para>Complexity: 30 (cyclomatic, outer body), 226 lines (full implementation)</para>
     /// <para>Mutates: ARefuse (out)</para>
@@ -228,7 +228,7 @@ type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Called from: DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas)</para>
-  /// <para>Calls: Default, DRagLint.Analysis.Cfg.TCfg.ComputePreds, DRagLint.Analysis.Cfg.TCfgBuilder.Build, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Refactor.ExtractMethod.ByteOfLineEnd, DRagLint.Refactor.ExtractMethod.ByteOfLineStart, DRagLint.Refactor.ExtractMethod.CollectEnclosingProcs, DRagLint.Refactor.ExtractMethod.ContainsGotoOrLabel, DRagLint.Refactor.ExtractMethod.FindEscapingControlFlow, DRagLint.Refactor.ExtractMethod.InnermostProc (+12 more)</para>
+  /// <para>Calls: Default, DRagLint.Analysis.Cfg.TCfg.ComputePreds, DRagLint.Analysis.Cfg.TCfgBuilder.Build, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Refactor.ExtractMethod.ByteOfLineEnd, DRagLint.Refactor.ExtractMethod.ByteOfLineStart, DRagLint.Refactor.ExtractMethod.CollectEnclosingProcs, DRagLint.Refactor.ExtractMethod.ContainsGotoOrLabel, DRagLint.Refactor.ExtractMethod.FindEscapingControlFlow, DRagLint.Refactor.ExtractMethod.InnermostProc (+13 more)</para>
   /// <para>Returns: eoRefused; eoOK</para>
   /// <para>Complexity: 37 (cyclomatic, outer body), 224 lines (full implementation)</para>
   /// <para>Mutates: ASel (out), ARefuse (out)</para>

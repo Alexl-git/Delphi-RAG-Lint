@@ -58,7 +58,7 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: DRagLint.Diagnostics.LifetimeShapeChecks.TShapeRun.CheckBoundRefs, DRagLint.Diagnostics.LifetimeShapeChecks.TShapeRun.Create, DRagLint.Diagnostics.LifetimeShapeChecks.TShapeRun.Findings, DRagLint.Diagnostics.LifetimeShapeChecks.TShapeRun.Run, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get</para>
+    /// <para>Calls: DRagLint.Diagnostics.LifetimeShapeChecks.TShapeRun.CheckBoundRefs, DRagLint.Diagnostics.LifetimeShapeChecks.TShapeRun.Create, DRagLint.Diagnostics.LifetimeShapeChecks.TShapeRun.Findings, DRagLint.Diagnostics.LifetimeShapeChecks.TShapeRun.Run, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, TreeSitter.TTSTree.RootNode</para>
     /// <para>Returns: nil; Run.Findings</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Diagnostics.LifetimeShapeChecks.TShapeRun.CheckBoundRefs"/>

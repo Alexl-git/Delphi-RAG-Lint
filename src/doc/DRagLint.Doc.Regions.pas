@@ -203,7 +203,7 @@ type
   /// <remarks>
   /// Pure class functions; thread-safe.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.ClassifyParamAction (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.EmitEngineParam (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.IsBlankBody (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.IsEngineOwnedRegardlessOfContent (DRagLint.Doc.Regions.pas) (+6 more)</para>
+  /// <para>Used by: DRagLint.Doc.Regions.McClassifyParamAction (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.McEmitEngineParam (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.McEmitExceptions (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.McEmitParams (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.McEmitSummary (DRagLint.Doc.Regions.pas) (+9 more)</para>
   /// <para>Used in units: DRagLint.Doc.Regions</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -219,7 +219,7 @@ type
     /// TrimLeft(S)) or StartsStr(AUTO_TYPE, TrimLeft(S)).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.ClassifyParamAction (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocMarkers.IsEngineOwnedTagText (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocMarkers.IsManagedDesc (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.IsManagedText (DRagLint.Doc.Regions.pas)</para>
+    /// <para>Called from: DRagLint.Doc.Regions.McClassifyParamAction (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.McEmitSummary (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocMarkers.IsEngineOwnedTagText (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocMarkers.IsManagedDesc (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.IsManagedText (DRagLint.Doc.Regions.pas)</para>
     /// <para>Calls: StartsStr, TrimLeft</para>
     /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsEngineOwnedTagText"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsEngineSummaryBody"/>
@@ -249,7 +249,7 @@ type
     /// that unit silently drifted out of sync with MergeComment once already.
     /// One executable home; both callers read it.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.IsEngineOwnedRegardlessOfContent (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText (DRagLint.Doc.Regions.pas)</para>
+    /// <para>Called from: DRagLint.Doc.Regions.McIsEngineOwnedRegardlessOfContent (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText (DRagLint.Doc.Regions.pas)</para>
     /// <para>Calls: DRagLint.Doc.Regions.TDocMarkers.IsManagedText, SameText, Trim</para>
     /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsManagedText"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsEngineSummaryBody"/>
@@ -277,7 +277,7 @@ type
     /// desynced from MergeComment once already (see IsEngineOwnedTagText, which
     /// was promoted for the same reason, and check 9's own comment in Drift).
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody (DRagLint.Doc.Regions.pas)</para>
+    /// <para>Called from: DRagLint.Doc.Regions.McEmitSummary (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody (DRagLint.Doc.Regions.pas)</para>
     /// <para>Calls: StartsStr, TrimLeft</para>
     /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsEngineOwnedTagText"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsManagedDesc"/>
@@ -297,7 +297,7 @@ type
     /// <returns><!-- drag-lint:auto type -->string</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.ClassifyParamAction (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.EmitEngineParam (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.IsBlankBody (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocMarkers.StripForDisplay (DRagLint.Doc.Regions.pas) (+1 more)</para>
+    /// <para>Called from: DRagLint.Doc.Regions.McClassifyParamAction (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.McEmitEngineParam (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.McEmitExceptions (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.McEmitParams (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.McEmitSummary (DRagLint.Doc.Regions.pas) (+3 more)</para>
     /// <para>Calls: Copy, StartsStr, TrimLeft</para>
     /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsEngineOwnedTagText"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsEngineSummaryBody"/>
@@ -324,7 +324,7 @@ type
     /// = '').</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.IsManagedDesc (DRagLint.Doc.Regions.pas)</para>
+    /// <para>Called from: DRagLint.Doc.Regions.McEmitExceptions (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.McEmitParams (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.McEmitVanishedParams (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.IsManagedDesc (DRagLint.Doc.Regions.pas)</para>
     /// <para>Calls: DRagLint.Doc.Regions.TDocMarkers.IsManagedText, SameText, Trim</para>
     /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsManagedText"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.IsEngineOwnedTagText"/>
@@ -372,7 +372,7 @@ type
   /// Pure class functions. Private, so visible in this unit only, as they were
   /// in TDocRegions.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment (DRagLint.Doc.Regions.pas)</para>
+  /// <para>Used by: DRagLint.Doc.Regions.McClassifyStandalone (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.McPrepareRemarks (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.McResolveEffective (DRagLint.Doc.Regions.pas)</para>
   /// <para>Used in units: DRagLint.Doc.Regions</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -387,7 +387,7 @@ type
     /// 1).TrimRight([#13, #10, ' ', '/']); Head + sLineBreak + Tail; Head + Tail.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment (DRagLint.Doc.Regions.pas)</para>
+    /// <para>Called from: DRagLint.Doc.Regions.McPrepareRemarks (DRagLint.Doc.Regions.pas)</para>
     /// <para>Calls: Copy, Pos, PosEx</para>
     /// <seealso cref="DRagLint.Doc.Regions.TDocBlockScanner.BuildStandaloneFor"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocBlockScanner.SplitResidualLines"/>
@@ -451,7 +451,7 @@ type
     /// erased before it can be read back. MergeComment therefore calls this
     /// once per field, each time excluding that field's own container.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment (DRagLint.Doc.Regions.pas)</para>
+    /// <para>Called from: DRagLint.Doc.Regions.McClassifyStandalone (DRagLint.Doc.Regions.pas)</para>
     /// <para>Calls: DRagLint.Doc.Regions.TDocBlockScanner.StripElement, DRagLint.Parser.DocComments.TDocCommentParser.ParseXmlDoc, SameText</para>
     /// <seealso cref="DRagLint.Doc.Regions.TDocBlockScanner.StripElement"/>
     /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.ParseXmlDoc"/>
@@ -504,7 +504,7 @@ type
     /// T3b round 3 disclosed and deliberately did not widen (it would put nine
     /// extra parses on every plainly-documented symbol).
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment (DRagLint.Doc.Regions.pas)</para>
+    /// <para>Called from: DRagLint.Doc.Regions.McClassifyStandalone (DRagLint.Doc.Regions.pas)</para>
     /// <para>Calls: Copy, DRagLint.Doc.Regions.ContainerIndexOf, DRagLint.Doc.Regions.EnsureResidualRegexes, DRagLint.Doc.Regions.IsSingularMatchContainer, DRagLint.Doc.Regions.MaskMatches, DRagLint.Doc.Regions.NormalizeContainerBody, DRagLint.Parser.DocComments.TDocCommentParser.BuildCleaned, SameText</para>
     /// <para>Returns: AFallback; Body</para>
     /// <para>Pure</para>
@@ -543,7 +543,8 @@ type
     /// <param name="AResidualLines">The residual lines, in source order, right-
     /// trimmed, still without their /// prefix. The caller re-prefixes and
     /// emits them verbatim.</param>
-    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; ResEmitCarried(S,
+    /// AAccountedRaw, AResidualLines).</returns>
     /// <remarks>
     /// The rule is LINE-LEVEL OWNERSHIP: the engine owns a line only
     /// when it can represent EVERYTHING on it. A line carrying any non-
@@ -584,15 +585,14 @@ type
     /// built from the residual flags, so a blocked line is still handed to the
     /// parser and its tag is still emitted.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment (DRagLint.Doc.Regions.pas)</para>
-    /// <para>Calls: Copy, DRagLint.Doc.Regions.EnsureResidualRegexes, DRagLint.Doc.Regions.IsRetractableSurplusContainer, DRagLint.Doc.Regions.TDocBlockScanner.SplitResidualLines.AddMatches, DRagLint.Doc.Regions.TDocBlockScanner.SplitResidualLines.AddSpan, DRagLint.Doc.Regions.TDocBlockScanner.SplitResidualLines.NestedInOtherContainer, Pos, SameText, Trim, TrimRight</para>
-    /// <para>Complexity: 57 (cyclomatic, outer body), 387 lines (full implementation)</para>
+    /// <para>Called from: DRagLint.Doc.Regions.McResolveEffective (DRagLint.Doc.Regions.pas)</para>
+    /// <para>Calls: Default, DRagLint.Doc.Regions.ResCollectSpans, DRagLint.Doc.Regions.ResDropMultilineExamples, DRagLint.Doc.Regions.ResDropSurplusOccurrences, DRagLint.Doc.Regions.ResEmitCarried, DRagLint.Doc.Regions.ResMarkFences, DRagLint.Doc.Regions.ResRetractToFixpoint, DRagLint.Doc.Regions.ResSplitJoin</para>
     /// <para>Mutates: AAccountedRaw (out), AResidualLines (out)</para>
-    /// <seealso cref="DRagLint.Doc.Regions.EnsureResidualRegexes"/>
-    /// <seealso cref="DRagLint.Doc.Regions.IsRetractableSurplusContainer"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocBlockScanner.SplitResidualLines.AddMatches"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocBlockScanner.SplitResidualLines.AddSpan"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocBlockScanner.SplitResidualLines.NestedInOtherContainer"/>
+    /// <seealso cref="DRagLint.Doc.Regions.ResCollectSpans"/>
+    /// <seealso cref="DRagLint.Doc.Regions.ResDropMultilineExamples"/>
+    /// <seealso cref="DRagLint.Doc.Regions.ResDropSurplusOccurrences"/>
+    /// <seealso cref="DRagLint.Doc.Regions.ResEmitCarried"/>
+    /// <seealso cref="DRagLint.Doc.Regions.ResMarkFences"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function SplitResidualLines(const ARawBlock: string;
@@ -605,7 +605,7 @@ type
   /// <remarks>
   /// Pure class functions; thread-safe.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.FormatUsedInLines (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock (DRagLint.Doc.Regions.pas)</para>
+  /// <para>Used by: DRagLint.Doc.Regions.McPrepareFacts (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.McResolveEffective (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.FormatUsedInLines (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock (DRagLint.Doc.Regions.pas)</para>
   /// <para>Used in units: DRagLint.Doc.Regions</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -693,7 +693,7 @@ type
     /// #10]).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Regions.TDocCommentMerger.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock (DRagLint.Doc.Regions.pas)</para>
+    /// <para>Called from: DRagLint.Doc.Regions.McPrepareFacts (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.McResolveEffective (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock (DRagLint.Doc.Regions.pas)</para>
     /// <para>Calls: DRagLint.Core.Model.CanBeCallTarget, DRagLint.Doc.Regions.EscXml, DRagLint.Doc.Regions.EscXmlAttr, DRagLint.Doc.Regions.TDocFactsRenderer.FormatPhase2FactLines, DRagLint.Doc.Regions.TDocFactsRenderer.FormatUsedInLines, DRagLint.Doc.Regions.TDocFactsRenderer.RenderFactsBlock.AppendFact, DRagLint.Doc.Regions.TDocFactsRenderer.RenderFactsBlock.JoinEsc, DRagLint.Doc.Regions.TDocFactsRenderer.RenderFactsBlock.JoinRefs, DRagLint.Doc.Regions.TDocFactsRenderer.RenderFactsBlock.MoreSuffix, Format, IsCertain, SameText, WrapFactLine</para>
     /// <para>Complexity: 22 (cyclomatic, outer body), 331 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Core.Model.CanBeCallTarget"/>
@@ -760,14 +760,13 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Regions.TDocFactsRenderer.RenderFactsBlock (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines (DRagLint.Doc.Regions.pas)</para>
-    /// <para>Calls: Copy, DRagLint.Doc.Regions.EscXml, DRagLint.Doc.Regions.TDocFactsRenderer.FormatPhase2FactLines.JoinEscP2, DRagLint.Doc.Regions.TDocFactsRenderer.FormatPhase2FactLines.MoreSuffixP2, Format, StartsStr, StringReplace</para>
+    /// <para>Calls: DRagLint.Doc.Regions.AddBehaviourFactLines, DRagLint.Doc.Regions.AddClosingFactLines, DRagLint.Doc.Regions.AddCoreFactLines, DRagLint.Doc.Regions.AddTouchWiringFactLines</para>
     /// <para>Returns: Lines.ToStringArray</para>
-    /// <para>Complexity: 39 (cyclomatic, outer body), 283 lines (full implementation)</para>
-    /// <seealso cref="DRagLint.Doc.Regions.EscXml"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocFactsRenderer.FormatPhase2FactLines.JoinEscP2"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocFactsRenderer.FormatPhase2FactLines.MoreSuffixP2"/>
+    /// <seealso cref="DRagLint.Doc.Regions.AddBehaviourFactLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.AddClosingFactLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.AddCoreFactLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.AddTouchWiringFactLines"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocFactsRenderer.FormatUsedInLines"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocFactsRenderer.RenderFactsBlock"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function FormatPhase2FactLines(const AFacts: TDocFacts; AComplexityMin: Integer = 10;
@@ -865,21 +864,20 @@ type
     /// &lt;param&gt;) must still take the REPAIR path, not insert a second,
     /// separate block below it. Default False preserves prior behavior for
     /// any caller that has no such region to report.</param>
-    /// <returns><!-- drag-lint:auto -->string -- Observed: Sb.ToString.TrimRight([#13,
-    /// #10]); ''.</returns>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: McFreshComment(C); '';
+    /// C.Sb.ToString.TrimRight([#13, #10]).</returns>
     /// <exception cref="Exception">TDocRegions.MergeComment:
     /// SeeAlso/SeeAlsoIsInline length mismatch (%d vs %d) --</exception>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas)</para>
-    /// <para>Calls: ContainsText, DRagLint.Doc.Regions.DropAlreadyPresentPhrases, DRagLint.Doc.Regions.EmitHarvestedRemarks, DRagLint.Doc.Regions.HasMalformedManagedFence, DRagLint.Doc.Regions.TDocBlockScanner.BuildStandaloneFor, DRagLint.Doc.Regions.TDocBlockScanner.SplitResidualLines, DRagLint.Doc.Regions.TDocBlockScanner.StandaloneBodyOf, DRagLint.Doc.Regions.TDocBlockScanner.StripManagedBlock, DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.ClassifyParamAction, DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.EmitEngineException (+32 more)</para>
-    /// <para>Complexity: 95 (cyclomatic, outer body), 1470 lines (full implementation)</para>
+    /// <para>Calls: Default, DRagLint.Doc.Regions.HasMalformedManagedFence, DRagLint.Doc.Regions.McClassifyStandalone, DRagLint.Doc.Regions.McEmitDeprecated, DRagLint.Doc.Regions.McEmitExampleSeeSince, DRagLint.Doc.Regions.McEmitExceptions, DRagLint.Doc.Regions.McEmitParams, DRagLint.Doc.Regions.McEmitRemarks, DRagLint.Doc.Regions.McEmitResidual, DRagLint.Doc.Regions.McEmitReturns (+6 more)</para>
     /// <para>Pure</para>
-    /// <seealso cref="DRagLint.Doc.Regions.DropAlreadyPresentPhrases"/>
-    /// <seealso cref="DRagLint.Doc.Regions.EmitHarvestedRemarks"/>
     /// <seealso cref="DRagLint.Doc.Regions.HasMalformedManagedFence"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocBlockScanner.BuildStandaloneFor"/>
-    /// <seealso cref="DRagLint.Doc.Regions.TDocBlockScanner.SplitResidualLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.McClassifyStandalone"/>
+    /// <seealso cref="DRagLint.Doc.Regions.McEmitDeprecated"/>
+    /// <seealso cref="DRagLint.Doc.Regions.McEmitExampleSeeSince"/>
+    /// <seealso cref="DRagLint.Doc.Regions.McEmitExceptions"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function MergeComment(const AExisting: TParsedDoc;
@@ -968,7 +966,6 @@ type
     /// <param name="AComplexityMin"><!-- drag-lint:auto type -->Integer = 10</param>
     /// <param name="AExistingHasAnyTag"><!-- drag-lint:auto type -->Boolean = False</param>
     /// <returns><!-- drag-lint:auto type -->string</returns>
-    /// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.Doc.Regions.TDocCommentMerger.MergeComment: TDocRegions.MergeComment: SeeAlso/SeeAlsoIsInline length mismatch (%d vs %d) --</exception>
     /// <seealso cref="TDocCommentMerger.MergeComment"/>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -1213,7 +1210,7 @@ function SelfTestFactWrap(out AFailure: string): Boolean;
 /// dependency cycle this unit's interface would otherwise close
 /// (Regions -&gt; Facts -&gt; Harvest -&gt; Regions) never forms.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Doc.Harvest.HarvestText (DRagLint.Doc.Harvest.pas), DRagLint.Doc.Regions.EscXmlAttr (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.JoinUsedInEntries (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.ObservedSuffix (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.EmitEngineException (DRagLint.Doc.Regions.pas) (+9 more)</para>
+/// <para>Called from: DRagLint.Doc.Harvest.HarvestText (DRagLint.Doc.Harvest.pas), DRagLint.Doc.Regions.AddBehaviourFactLines (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.AddClosingFactLines (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.AddCoreFactLines (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.AddTouchWiringFactLines (DRagLint.Doc.Regions.pas) (+12 more)</para>
 /// <para>Calls: StringReplace</para>
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->

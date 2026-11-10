@@ -136,11 +136,10 @@ type
       procedure HarvestExceptions(const ANode: TTSNode; const ASource: TBytes; const AFilePath: string);
       /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto type -->TArray&lt;TLintFinding&gt;</returns>
-      /// <exception cref="ETreeSitterException"><!-- drag-lint:auto exc -->via TreeSitter.TTSParser.SetLanguage: Failed to set parser language to 0x%p</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Lint.Linter.TLinter.LintFile (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.LintFolder (DRagLint.Lint.Linter.pas)</para>
-      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Lint.Linter.CheckDfmCredentials, DRagLint.Lint.Linter.CollectDfmParseErrors, DRagLint.Lint.Linter.EmptyBranchIsCommented, DRagLint.Lint.Linter.TLinter.HarvestExceptions, DRagLint.Lint.Linter.TLinter.Wants, DRagLint.Lint.Linter.tree_sitter_dfm, DRagLint.Lint.Linter.WalkForFieldByNameInLoop, DRagLint.Lint.QueryRules.TQueryRule.Run (+8 more)</para>
+      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Lint.Linter.CheckDfmCredentials, DRagLint.Lint.Linter.CollectDfmParseErrors, DRagLint.Lint.Linter.EmptyBranchIsCommented, DRagLint.Lint.Linter.TLinter.HarvestExceptions, DRagLint.Lint.Linter.TLinter.Wants, DRagLint.Lint.Linter.tree_sitter_dfm, DRagLint.Lint.Linter.WalkForFieldByNameInLoop, DRagLint.Lint.QueryRules.TQueryRule.Run (+9 more)</para>
       /// <para>Complexity: 26 (cyclomatic, outer body), 137 lines (full implementation)</para>
       /// <para>Reads: FOnlyRuleId, FExcUnit, FQueryRules, FLanguage</para>
       /// <para>Touches: file system</para>
@@ -326,7 +325,7 @@ type
       /// because one unrelated unit is malformed would be the wrong trade.</para>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas)</para>
-      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Lint.Linter.TLinter.HarvestExceptions, ExtractFileExt, Integer, Move, SameText, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, TreeSitter.TTSParser.SetLanguage</para>
+      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Lint.Linter.TLinter.HarvestExceptions, ExtractFileExt, Integer, Move, SameText, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, TreeSitter.TTSParser.SetLanguage, TreeSitter.TTSTree.RootNode</para>
       /// <para>Reads: FExcUnit, FLanguage</para>
       /// <para>Catches: Exception (empty)</para>
       /// <para>Touches: file system</para>

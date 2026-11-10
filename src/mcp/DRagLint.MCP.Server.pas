@@ -59,14 +59,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.MCP.Server.TMCPServer.Create (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.ResolveStore (DRagLint.MCP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, Format</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent, DRagLint.Storage.Schema.IsSchemaReadable, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, Format</para>
       /// <para>Mutates: AError (out)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent"/>
+      /// <seealso cref="DRagLint.Storage.Schema.IsSchemaReadable"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
-      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.DispatchToolsCall"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function OpenStore(const ADbPath: string; out AError: string): ISymbolStore;

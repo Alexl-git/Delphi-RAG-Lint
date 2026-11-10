@@ -36,13 +36,14 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: BareName, BoolNames, CharInSet, CheckBoolClass, CheckInlineProc, CheckVar, CompactType, Copy, Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (+14 more)</para>
+    /// <para>Calls: BareName, BoolNames, CharInSet, CheckBoolClass, CheckInlineProc, CheckVar, CompactType, Copy, Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (+15 more)</para>
     /// <para>Returns: nil; Findings.ToArray</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
     /// <seealso cref="DRagLint.Diagnostics.SizeChecks.TSizeChecker.Check.CollectInline"/>
     /// <seealso cref="DRagLint.Diagnostics.SizeChecks.TSizeChecker.Check.Visit"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.ThresholdFor"/>
+    /// <seealso cref="TreeSitter.TTSTree.RootNode"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; const ACfg: TLintConfig;

@@ -94,7 +94,7 @@ function NowLocal: TDateTime;
 /// <remarks>
 /// Thread-safe.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.CommitIndexerFingerprint (DRagLint.CLI.pas), DRagLint.CLI.DoImportLog (DRagLint.CLI.pas), DRagLint.CLI.FinishLibraryResolve (DRagLint.CLI.pas), DRagLint.CLI.OpenInObsidian (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas) (+3 more)</para>
+/// <para>Called from: DRagLint.CLI.CommitIndexerFingerprint (DRagLint.CLI.pas), DRagLint.CLI.DoImportLog (DRagLint.CLI.pas), DRagLint.CLI.FinishLibraryResolve (DRagLint.CLI.pas), DRagLint.CLI.OpenInObsidian (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas) (+4 more)</para>
 /// <para>Calls: DRagLint.Core.FileTime.FileTimeToUnix, GetSystemTimeAsFileTime</para>
 /// <para>Returns: FileTimeToUnix(Stamp)</para>
 /// <seealso cref="DRagLint.Core.FileTime.FileTimeToUnix"/>
@@ -111,7 +111,7 @@ function NowUnixUtc: Int64;
 /// TDateTime, which is ambiguous for the repeated hour at DST end (stored +3600 s). This reads the
 /// UTC FILETIME and never touches a time zone.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.CycleFix.FileStampIsCurrent (DRagLint.CLI.CycleFix.pas), DRagLint.Convert.Apply.FileStampIsCurrent (DRagLint.Convert.Apply.pas), DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Index.CallResolver.TCallResolver.LinesOf (DRagLint.Index.CallResolver.pas), DRagLint.Index.DispatchResolver.TDispatchResolver.LinesOf (DRagLint.Index.DispatchResolver.pas) (+6 more)</para>
+/// <para>Called from: DRagLint.CLI.CycleFix.FileStampIsCurrent (DRagLint.CLI.CycleFix.pas), DRagLint.Convert.Apply.FileStampIsCurrent (DRagLint.Convert.Apply.pas), DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Index.CallResolver.TCallResolver.LinesOf (DRagLint.Index.CallResolver.pas), DRagLint.Index.DispatchResolver.TDispatchResolver.LinesOf (DRagLint.Index.DispatchResolver.pas) (+8 more)</para>
 /// <para>Calls: DRagLint.Core.FileTime.TryGetFileMTimeUnix</para>
 /// <seealso cref="DRagLint.Core.FileTime.TryGetFileMTimeUnix"/>
 /// <!-- drag-lint:auto END -->
