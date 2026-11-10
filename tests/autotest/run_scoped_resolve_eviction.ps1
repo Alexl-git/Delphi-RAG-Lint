@@ -303,9 +303,18 @@ try {
   Check 'C2p permissive still takes the SCOPED pass' `
     ($tp.Out -match 'starting SCOPED pass') `
     (($tp.Out -split "`n" | Where-Object { $_ -match 'starting' }) -join ' / ')
-  Check 'C2p and WITHOUT the widening the stale X.Ping edge SURVIVES' `
-    ($tp.Edges -match 'uConsumer\.pas\|.*\|Ping\|') `
-    "the channel did not reproduce -- C1 above proves nothing:`n$($tp.Edges)"
+  # 150 INT4: until 150 the stale edge SURVIVED here. 150-RS2 (6) (c98a165f7, NoteScopeRemoval)
+  # closes the same ON DELETE SET NULL channel from the RECEIVER side: X.Ping's call_edges row has
+  # receiver_type_symbol_id = TDoomed (a symbol of the evicted file), so 'Ping' is put in scope and
+  # re-resolved with the widening OFF too. The channel is now closed TWICE; this check asserts the
+  # second closure and FAILS on the 1.49.0-alpha base (edge survives there = the old polarity
+  # control, still observable by -Exe <base>). The widening's own polarity control would need a
+  # hatch for RS2 (6), which 150 does not have (INT4 FOUND, BACKLOG-AFTER-150).
+  Check 'C2p and WITHOUT the widening the stale X.Ping edge is STILL gone (150-RS2 (6) receiver-side scope)' `
+    (-not ($tp.Edges -match 'uConsumer\.pas\|.*\|Ping\|')) `
+    "RS2 (6) did not put Ping in scope:`n$($tp.Edges)"
+  Check 'C2p VACUITY: the permissive run still produced edges' `
+    ($tp.Edges -match 'EDGE\|') 'the permissive run produced NO edges at all'
 
   # ---- C2o: the off switch restores the pre-2026-08-28 answer --------------
   # A hatch that quietly stopped being read would look exactly like a hatch
