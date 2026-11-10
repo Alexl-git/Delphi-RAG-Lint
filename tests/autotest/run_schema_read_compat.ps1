@@ -179,7 +179,8 @@ c.close()
   try { $qj = $q.Out.Substring($q.Out.IndexOf('{')) | ConvertFrom-Json; $n = [int]$qj.rows[0][0] } catch { $n = -1 }
   Src-Check 'R2' ($n -gt 0) "the call T.Run binds into the library (external_target rows=$n)"
 
-  $r = Src-Run @('lint-all', '--db', $r1db, '--library-db', $libR, '--rule', 'pp-unresolved-if')
+  # --output: lint-all otherwise drops lint-report-<date>.txt into the caller's cwd (run_guard_cwd_hygiene).
+  $r = Src-Run @('lint-all', '--db', $r1db, '--library-db', $libR, '--rule', 'pp-unresolved-if', '--output', (Join-Path (Split-Path $r1db) 'lint-report.txt'))
   Src-Check 'R3' ((($r.Code -eq 0) -or ($r.Code -eq 1)) -and (Src-NoAv $r.Out)) "lint-all --library-db <lib@v$readMin> pp-unresolved-if: exit $($r.Code), no AV"
 
   $r = Src-Run @('lint-tree', '--unit', (Join-Path $appDir 'AppU.pas'), '--db', $projR)

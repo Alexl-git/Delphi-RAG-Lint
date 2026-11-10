@@ -38,7 +38,9 @@ param(
   'run_shared_unit_staleness.ps1',
   'run_unused_public_shared_siblings.ps1',
   'run_unused_unit_inline_methods.ps1',
-  'run_vm_polish_guard.ps1'),
+  'run_vm_polish_guard.ps1',
+  'run_schema_read_compat.ps1',
+  '..\ergonomics\run_pipeline_tests.ps1'),
   [switch]$All,
   [int]$Jobs = 4,
   [int]$TimeoutSec = 600,
@@ -78,6 +80,15 @@ $list = if ($All) { Get-ChildItem $here -Filter 'run_*.ps1' | Where-Object { $_.
 $rootOut = Join-Path $tmpRoot 'g'
 [IO.Directory]::CreateDirectory($rootOut) | Out-Null
 $runOneText = $runOne.ToString()
+# A guard that does `Set-Location $repo` writes its stray into the REPO ROOT, not the empty cwd
+# above (run_pipeline_tests, run_schema_read_compat -- 2026-11-10; lint-report-*.txt is gitignored,
+# so nobody saw it). Watch the root's stray shapes too. Under a parallel battery another guard may
+# be the writer -- the finding is still a real stray; run the named guards alone to attribute it.
+$repoRoot = (Resolve-Path (Join-Path $here '..\..')).Path
+$rootStart = Get-Date
+$rootStrays = { Get-ChildItem -LiteralPath $repoRoot -File -Force -ErrorAction SilentlyContinue |
+  Where-Object { ($_.Name -like 'lint-report-*.txt' -or $_.Name -eq '1') -and $_.LastWriteTime -ge $rootStart } |
+  ForEach-Object Name }
 $rs = $list | ForEach-Object -ThrottleLimit $Jobs -Parallel {
   & ([scriptblock]::Create($using:runOneText)) $_ $using:rootOut $using:TimeoutSec $using:Exe
 }
@@ -85,6 +96,8 @@ foreach ($r in $rs) {
   Check "$($r.Guard) leaves nothing in its cwd" ($r.Left.Count -eq 0) ($r.Left -join ', ')
   if ($All -and $r.Left.Count -gt 0) { Write-Host "STRAY`t$($r.Guard)`t$($r.Left -join ';')" }
 }
+$rootLeft = @(& $rootStrays)
+Check 'no lint-report-*.txt / "1" written into the repo root during the run' ($rootLeft.Count -eq 0) ($rootLeft -join ', ')
 try { [IO.Directory]::Delete($tmpRoot, $true) } catch { }
 if ($script:Failed) { Write-Host 'run_guard_cwd_hygiene: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'run_guard_cwd_hygiene: PASS'; exit 0

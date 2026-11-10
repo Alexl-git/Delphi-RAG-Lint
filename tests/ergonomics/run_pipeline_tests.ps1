@@ -101,7 +101,9 @@ Ok "lint-all --json stdout has no scanning banner"  (-not ($rawJson -match 'lint
 # records that came from stderr (a native command's stderr surfaces as
 # ErrorRecord once redirected).
 # (EmitNoteLine: a text run prints the banner on stdout; a JSON run drops it.)
-$err6 = ((& $exe lint-all --db $db6 2>&1) -join "`n")
+# --output: a text run otherwise drops lint-report-<date>.txt into the caller's cwd -- under the
+# battery that is the repo root, where it failed shared_via_property S1 (150 INT, 05:38:17).
+$err6 = ((& $exe lint-all --db $db6 --output (Join-Path $scratch6 'lint-report.txt') 2>&1) -join "`n")
 Ok "lint-all banner is still printed (text mode)" ($err6 -match 'lint-all: scanning')
 Remove-Item $scratch6 -Recurse -Force -ErrorAction SilentlyContinue
 
