@@ -86,9 +86,9 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas) ?</para>
-    /// <para>Calls: AWholeGraph, ChangeFileExt, CollectFrom, CollectWholeGraphRule, CompareDottedVersions, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds (+71 more)</para>
+    /// <para>Calls: AWholeGraph, ChangeFileExt, CollectFrom, CollectWholeGraphRule, CompareDottedVersions, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds (+72 more)</para>
     /// <para>Returns: TDictionary&lt;string, Boolean&gt;.Create; Flags &lt;&gt; 0; InfoIn(AStore, Found); InfoIn(ALibraryStore, Found); nil; Findings.ToArray</para>
-    /// <para>Complexity: 140 (cyclomatic, outer body), 1061 lines (full implementation)</para>
+    /// <para>Complexity: 141 (cyclomatic, outer body), 1111 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>

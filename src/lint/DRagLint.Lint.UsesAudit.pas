@@ -152,14 +152,14 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoUsesAudit (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.CollectUsesMovableToImplementation (DRagLint.Lint.ProjectRules.pas)</para>
-    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Lint.UsesAudit.TUsesAuditor.StemOf, DRagLint.Lint.UsesAudit.TUsesAuditor.UnitsDefining, FileExists, LowerCase, SameText, Trim</para>
-    /// <para>Complexity: 13 (cyclomatic, outer body), 71 lines (full implementation)</para>
+    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Core.Model.TUnitUse.FromInclude, DRagLint.Core.Model.TUnitUse.HostCol, DRagLint.Core.Model.TUnitUse.HostLine, DRagLint.Core.Model.TUnitUse.IncludeSuffix, DRagLint.Lint.UsesAudit.TUsesAuditor.StemOf, DRagLint.Lint.UsesAudit.TUsesAuditor.UnitsDefining, FileExists, LowerCase, SameText, Trim</para>
+    /// <para>Complexity: 13 (cyclomatic, outer body), 74 lines (full implementation)</para>
     /// <para>Reads: FStore, FIndexedUnits</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile"/>
-    /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.StemOf"/>
-    /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.UnitsDefining"/>
+    /// <seealso cref="DRagLint.Core.Model.TUnitUse.FromInclude"/>
+    /// <seealso cref="DRagLint.Core.Model.TUnitUse.HostCol"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Audit(AFileId: Int64; const AFallbackPath: string): TArray<TUsesAuditRow>;

@@ -93,6 +93,10 @@ type
   /// passes nil (a fresh per-call memo = one per document generation), because
   /// its store is re-indexed while the server lives.
   /// Not thread-safe.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.MissingUses.pas) ?, DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze (DRagLint.Lint.MissingUses.pas) ?, DRagLint.Lint.MissingUses.TMissingUsesChecker.Check (DRagLint.Lint.MissingUses.pas) ?</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.MissingUses</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TMissingUsesMemo = class
   private
@@ -102,19 +106,58 @@ type
     FStoreReads: Int64;
   public
     /// <summary>An empty memo, not yet bound to a store.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FUnits</para>
+    /// <seealso cref="DRagLint.Lint.MissingUses.TMissingUsesMemo.Destroy"/>
+    /// <seealso cref="DRagLint.Lint.MissingUses.TMissingUsesMemo.Put"/>
+    /// <seealso cref="DRagLint.Lint.MissingUses.TMissingUsesMemo.TryGet"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
     /// <summary>Frees the cache; does not touch the store.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FUnits</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Lint.MissingUses.TMissingUsesMemo.Create"/>
+    /// <seealso cref="DRagLint.Lint.MissingUses.TMissingUsesMemo.Put"/>
+    /// <seealso cref="DRagLint.Lint.MissingUses.TMissingUsesMemo.TryGet"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>The cached declaring unit of ASymbolId in AStore.</summary>
     /// <param name="AStore">The store the id belongs to; binds the memo on first use.</param>
     /// <param name="ASymbolId">A symbol id of AStore.</param>
     /// <param name="AUnit">The cached unit ('' = explains itself) when True.</param>
     /// <returns>True on a hit; False on a miss or when AStore is not the bound store.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze.BindingExplains (DRagLint.Lint.MissingUses.pas)</para>
+    /// <para>Returns: FUnits.TryGetValue(ASymbolId, AUnit)</para>
+    /// <para>Reads: FStore, FUnits   Writes: FStore, FLookups, FStoreReads</para>
+    /// <para>Mutates: AUnit (out)</para>
+    /// <seealso cref="DRagLint.Lint.MissingUses.TMissingUsesMemo.Create"/>
+    /// <seealso cref="DRagLint.Lint.MissingUses.TMissingUsesMemo.Destroy"/>
+    /// <seealso cref="DRagLint.Lint.MissingUses.TMissingUsesMemo.Put"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function TryGet(const AStore: ISymbolStore; ASymbolId: Int64; out AUnit: string): Boolean;
     /// <summary>Records the declaring unit of ASymbolId (a store read just made).</summary>
     /// <param name="AStore">The store the id belongs to; ignored unless it is the bound store.</param>
     /// <param name="ASymbolId">A symbol id of AStore.</param>
     /// <param name="AUnit">Its declaring unit, '' when the binding explains itself.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze.BindingExplains (DRagLint.Lint.MissingUses.pas)</para>
+    /// <para>Reads: FStore, FUnits</para>
+    /// <seealso cref="DRagLint.Lint.MissingUses.TMissingUsesMemo.Create"/>
+    /// <seealso cref="DRagLint.Lint.MissingUses.TMissingUsesMemo.Destroy"/>
+    /// <seealso cref="DRagLint.Lint.MissingUses.TMissingUsesMemo.TryGet"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Put(const AStore: ISymbolStore; ASymbolId: Int64; const AUnit: string);
     /// <summary>Bound-ref questions asked through this memo (hits + misses).</summary>
     property Lookups: Int64 read FLookups;
@@ -152,7 +195,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Lint.MissingUses.TMissingUsesChecker.Check (DRagLint.Lint.MissingUses.pas), DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics (DRagLint.LSP.Completion.pas)</para>
     /// <para>Calls: ContainsText, Copy, CyclePath, DeclaringUnit, Default, DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Core.UsesInsert.TUsesText.ImplementationLine, DRagLint.Core.UsesInsert.TUsesText.IsUnitText, DRagLint.Core.UsesInsert.TUsesText.UsesEntries (+25 more)</para>
-    /// <para>Complexity: 38 (cyclomatic, outer body), 355 lines (full implementation)</para>
+    /// <para>Complexity: 38 (cyclomatic, outer body), 362 lines (full implementation)</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile"/>
     /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines"/>
