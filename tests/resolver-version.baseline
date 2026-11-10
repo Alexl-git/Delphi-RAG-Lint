@@ -730,7 +730,9 @@
 #   Superseded: 1.23.0-alpha|05ea3b637959f53b574fd0583148110fa2d897f847d83e0a51d18ceee9a3cfb3
 #   2026-11-09 150 INT re-pin (same unreleased 1.23.0 bump, ONE re-pin for wave 150): RS1 (F()^.M / PRec(P)^.K receivers, generic receiver args kept, hard-cast-to-library-class receivers, library-type uses-order, chain head declaration carry), RS2 (ref_receivers for call-chain receivers, var/out ARGUMENT mode in member_accesses, qualified enum / unit const ValueOnly, program-level .dpr values bound, scoped calls pass identity, forward-decl + generic twin), INT (ProjectNamespaces reads the stored project_settings DCC_Namespace fact), SW comment-only. CLIENT --resolve-only A/B: 0 certain lost, 0 moved, +422 refs bound.
 #   Superseded: 1.23.0-alpha|4af6b081faa9e74519d0e0737f096b16f042ff1f8980790bf932537916dfbbd0
-1.23.0-alpha|a7b0355669caaf5c7a8fcfa8896976dc736591aeeb363f0b27ed0113e74c0dab
+#   2026-11-10 150 INT3 re-pin (same unreleased 1.23.0 bump, the ONE wave-150 re-pin after the T/X/Y lanes): T3 (G4 unit-qualified type_use, routine-local typed-const receiver), TL / G1F (Storage.SQLite CreateReadable / schema-unreadable openers, doc-facts comment pass), X4 (.dpr own-routine calls bind, program/library roots never dead), Y1 (OpenReadable: empty unstamped index -> in-memory empty store), INT2 OpenReadable unstamped wording. CLIENT --resolve-only A/B: 0 certain lost, 0 moved, 0 cert->amb, +420 refs bound.
+#   Superseded: 1.23.0-alpha|a7b0355669caaf5c7a8fcfa8896976dc736591aeeb363f0b27ed0113e74c0dab
+1.23.0-alpha|64ab8c0375052d5ba890e4eb08db822729973a2fe42b5c7640bbe90c8be6a0ae
 #   2026-11-06 int2: hash moved WITHOUT a bump from 631322c4: the dl:ok comment on ResolveCallTargets re-stamped by the lint sweep, no code change.
 # superseded: 1.19.0-alpha|e4c14c16d87b21940e6ce6017456b8446a5cc516e342b72b816e3e161612ecba
 #   2026-11-06 1.19.0 -> 1.20.0-alpha (lanes facts + rename): ref_types (static type of a reference), ref_receivers (receiver link of a ref), references in initialization / finalization attributed to the section symbol. Additive, no SCHEMA_VERSION move. Remedy: index --all --resolve-only.
