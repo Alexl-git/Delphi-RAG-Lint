@@ -1509,10 +1509,13 @@ type
       /// (IsSchemaReadable), else nil with the reason.</summary>
       /// <param name="ADbPath">The index file; a missing file is a nil + reason, not an exception.</param>
       /// <param name="AReason">'' on success; SchemaUnreadableReason text for a stamped schema below
-      /// SCHEMA_READ_MIN; 'index has no schema stamp ...' for an unstamped (fresh / empty) store
+      /// SCHEMA_READ_MIN; 'index has no schema stamp ...' for an unstamped store that HOLDS rows
       /// (nil: no statements are prepared without a stamp); 'index not found: ...' or the open exception's
       /// ClassName: Message otherwise.</param>
-      /// <returns>The read-only store (caller owns the reference), or nil.</returns>
+      /// <returns>The read-only store (caller owns the reference), or nil. An unstamped store that holds
+      /// no index (a 0-byte file; no files row; only schema_meta) returns a private in-memory store
+      /// migrated to the current schema under query_only, so every query answers empty (150 Y1); the
+      /// file's own unstamped store is never returned (its queries are nil).</returns>
       /// <remarks>
       /// Never raises for an unreadable or unopenable index. Use instead of TSQLiteSymbolStore.Create(Db, True)
       /// wherever a stale or foreign DB must degrade rather than crash.
