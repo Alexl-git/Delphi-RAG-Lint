@@ -96,7 +96,8 @@ $emitRoutines = @('UpsertSymbol','UpsertReference','UpsertDiBinding','UpsertStri
                   'UpsertChunk','UpsertSymbolDoc','PutSymbolFacts','PutEffectFacts',
                   'InsertCompilerFinding','UpsertUnitUse','WriteMemberAccess',
                   'PutDataFlows',   # 2026-10-27 taint T0: data_flows rows (per-routine facts, file tx)
-                  'PutFileFacts')   # 2026-11-09 149 EX2: file_includes / dfm_objects / pp_regions rows (file tx)
+                  'PutFileFacts',   # 2026-11-09 149 EX2: file_includes / dfm_objects / pp_regions rows (file tx); 150 PP: + pp_directives
+                  'PutProjectSettings')   # 2026-11-09 150 EX3: project_settings rows of a .dpr / .dpk (file tx)
 $notEmit      = @('UpsertCallEdge','WriteExternalStores')   # resolver surface (resolver-surface.txt); WriteExternalStores = schema_meta.external_stores, written by the resolve pass (R2, 2026-10-28)
 $HdrRx  = [regex]'^(?i)(function|procedure|constructor|destructor)\s+([A-Za-z0-9_]+\.)?([A-Za-z0-9_]+)'
 $ImplRx = [regex]'^(?i)implementation\s*$'
