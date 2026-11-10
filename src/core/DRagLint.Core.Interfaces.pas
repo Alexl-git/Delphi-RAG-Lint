@@ -3377,6 +3377,12 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FailedFiles: Integer;
+    /// <summary>How many files, among those this indexer parsed, came back with
+    /// ERROR or MISSING nodes in their syntax tree (the parser's <c>parse error [..]</c>
+    /// diagnostics). The index is otherwise silent on such files.</summary>
+    /// <returns>The cumulative count; 0 when every parsed file was syntactically clean.</returns>
+    /// <remarks>Reported as <c>parse-errors=N</c> on the index summary line. Not a failure: the file's rows were committed.</remarks>
+    function ParseErrorFiles: Integer;
     /// <summary>Every file this indexer ADMITTED since it was created -- the
     /// walk's in-scope set, in the spelling the walk produced.</summary>
     /// <returns>The admitted paths, in visit order, with duplicates collapsed.</returns>
