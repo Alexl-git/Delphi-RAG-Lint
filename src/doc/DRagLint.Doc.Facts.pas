@@ -772,8 +772,8 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
-    /// <para>Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAccessorEchoUses, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNamesOfKind, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers (+53 more)</para>
-    /// <para>Complexity: 92 (cyclomatic, outer body), 1212 lines (full implementation)</para>
+    /// <para>Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAccessorEchoUses, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNamesOfKind, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers (+54 more)</para>
+    /// <para>Complexity: 95 (cyclomatic, outer body), 1217 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAccessorEchoUses"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
@@ -3498,6 +3498,35 @@ begin
   end;
 end;
 
+// 150 X2: True when the store NOW resolves ATypeName to a value type (record or
+// enum) -- the ground-truth NEGATIVE of Doc.SymbolFacts.IsReferenceTypeName's
+// tier 1, re-asked at read time. symbol_facts.returns_owner is written inside
+// ONE file's index transaction, so on a fresh `index` the unit declaring the
+// return type may not be stored yet; the gate then falls back to the T/I naming
+// convention and stores 'borrowed' for a record. An incremental reindex of the
+// same unchanged unit stores '' -- the fact flipped with index order, and every
+// block written from a full index drifted after the next incremental one
+// (TLSPServer.Defaults: TContextDefaults). Same candidate order and the same
+// first-decisive-kind rule as tier 1, so the read agrees with what an
+// incremental reindex stores. Suppression only: unresolved or a class /
+// interface -> False, the stored word stands.
+function ReturnsValueTypeNow(const AStore: ISymbolStore; const ATypeName: string): Boolean;
+var
+  Bare: string ;
+  P   : Integer;
+begin
+  Result:= False;
+  Bare  := Trim(ATypeName);
+  P     := Bare.LastDelimiter('.');
+  if P >= 0 then Bare:= Trim(Copy(Bare, P + 2, MaxInt));
+  if Bare = '' then Exit;
+  for var Cand in AStore.FindSymbolsByExactName(Bare) do
+  begin
+    if Cand.Kind in [skClass, skInterface] then Exit(False);
+    if Cand.Kind in [skRecord, skEnum] then Exit(True);
+  end;
+end;
+
 // True when AName resolves in the index and EVERY declaration of it sits in a
 // file other than ASym's. Unresolvable -> False (prose, not a symbol reference);
 // declared here as well as elsewhere -> False (not foreign).
@@ -5369,6 +5398,11 @@ begin
   // by DRagLint.Doc.SymbolFacts.TSymbolFactsAnalyzer.Analyze/
   // AnalyzeReturnsOwner).
   Result.ReturnsOwner:= SFacts.ReturnsOwner;
+  // 150 X2: the stored word is index-order dependent for a record return type;
+  // see ReturnsValueTypeNow. 'new' needs no gate (T.Create is object-certain).
+  if ((Result.ReturnsOwner = 'borrowed') or (Result.ReturnsOwner = 'self'))
+     and ReturnsValueTypeNow(AStore, Result.ReturnType) then
+    Result.ReturnsOwner:= '';
   Inc(GBSymFacts, BTick - TB0);
 
   // v(ADP2 T5): Covered-by-tests -- CONTROLLER OVERRIDE: computed LAZILY
