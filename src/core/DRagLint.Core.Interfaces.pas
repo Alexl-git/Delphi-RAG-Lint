@@ -195,7 +195,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.BuildFindings (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.BuildIndexSide (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.CollectUnchecked (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.NameIsAmbiguous (DRagLint.Analysis.LintTree.pas) (+820 more)</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.BuildFindings (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.BuildIndexSide (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.CollectUnchecked (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.NameIsAmbiguous (DRagLint.Analysis.LintTree.pas) (+821 more)</para>
   /// <para>Used in units: DRagLint.Analysis.LintTree, DRagLint.Analysis.PurityStage, DRagLint.Analysis.SurfaceAdapters, DRagLint.Charts.AskVerb, DRagLint.Charts.Compare, DRagLint.Charts.MemberAccess, DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Cycles (+122 more)</para>
   /// <para>Implemented by: TSQLiteSymbolStore</para>
   /// <!-- drag-lint:auto END -->
@@ -625,7 +625,7 @@ type
     /// guard (the unit case through `query unit-usage`, which has no
     /// qualified-name fallback of its own).
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoCycles.IntfEdgeSymbols (DRagLint.CLI.pas), DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoFindUnit (DRagLint.CLI.pas), DRagLint.CLI.DoImpact (DRagLint.CLI.pas) (+155 more)</para>
+    /// <para>Called from: DRagLint.CLI.DoCycles.IntfEdgeSymbols (DRagLint.CLI.pas), DRagLint.CLI.DoDocFactsSelfTest (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoFindUnit (DRagLint.CLI.pas), DRagLint.CLI.DoImpact (DRagLint.CLI.pas) (+156 more)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BuildSymbolSearch"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
