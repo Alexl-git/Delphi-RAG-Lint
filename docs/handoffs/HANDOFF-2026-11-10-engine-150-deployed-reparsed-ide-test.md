@@ -29,3 +29,7 @@ Previous: HANDOFF-2026-11-09-engine-150-wave-running.md (closed).
 - orm3-f7: Task 10 committed (COMMON rev 40 2effe47, SERVER rev 47 5e11236); no ORM3 drag-lint writes until our rebuild is done.
 - NEXT ACTION: on owner go -> forced rebuild of the 37 project DBs (libraries skipped, ~1 h). Then owner reboot + IDE test. Then MESSAGE orm3-f7 (rebuild + IDE tests done) -- it runs CPU benches needing an idle box. Then push main + release 1.49.0-alpha.
 - Lane 151-GD (option C) is DONE on its branch, waits for the next wave; nothing to do for it now.
+## Update ~14:50 -- forced project rebuild DONE (RESUME HERE)
+- Owner go 14:35. `index --all --only <37 sections> --rebuild --jobs 4 --rule-cache-warm off` (libraries skipped) 14:36:45-14:48:03, EXIT=0; 37/37 sections attempted=committed, parse-errors=0. check-thirdparty-head OK before the run. Logs C:\TEMP\claude\lanes\150\rebuild-projects\.
+- VS Code extension engines (Code-dl, Code-gmail) were left running (own engine copies, read-only). `shutdown --all` is refused by the autonomy hook (matches 'shutdown'); ide-release hold lifted after the run.
+- NEXT ACTION: owner reboot + IDE test (page QWrmj65xP1U3hFX31mtLsK). Then MESSAGE orm3-f7 (rebuild + IDE tests done). Then push main + release 1.49.0-alpha.
