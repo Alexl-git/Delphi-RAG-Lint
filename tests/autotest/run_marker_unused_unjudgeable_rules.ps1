@@ -80,7 +80,7 @@ $pasB = Join-Path $WorkDir 'uDupB.pas'
 & $Exe index $WorkDir --db $db *> $null
 Check 'fixture indexed' ($LASTEXITCODE -eq 0) ''
 
-function LintAll { ((& $Exe lint-all --db $db 2>$err | Out-String) -replace "`r`n", "`n") }
+function LintAll { ((& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db 2>$err | Out-String) -replace "`r`n", "`n") }
 function LintFile([string]$P, [switch]$NoDb) {
   $o = if ($NoDb) { & $Exe lint $P 2>$err } else { & $Exe lint $P --db $db 2>$err }
   (($o | Out-String) -replace "`r`n", "`n")

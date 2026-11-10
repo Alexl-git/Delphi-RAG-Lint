@@ -133,21 +133,21 @@ $stripped = ($withSeeAlso -split "`r`n" | Where-Object { $_ -notmatch '<seealso 
 Check 'seealso lines stripped' (-not ((Get-Content $pas -Raw) -match '<seealso cref='))
 
 # 3. The CHECKER must see that as drift.
-$lint0 = & $Exe lint-all --db $db --quiet 2>&1 | Out-String
+$lint0 = & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --quiet 2>&1 | Out-String
 $drift0 = ([regex]::Matches($lint0, 'doc-drift')).Count
 Check 'checker reports the drift' ($drift0 -gt 0) `
   'if the checker is silent here the fixture no longer exercises the seam'
 
 # 4. THE ASSERTION. The repairer must plan a fix for what the checker reported.
-$fix = & $Exe lint-all --db $db --quiet --fix 2>&1 | Out-String
+$fix = & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --quiet --fix 2>&1 | Out-String
 Check 'repairer plans a fix for what the checker reported' `
   ($fix -notmatch 'autofix: no fixable findings') `
   'checker said stale, repairer said nothing to do -- the two render under different options'
 
 # 5. And it must actually converge: apply, reindex, drift gone.
-& $Exe lint-all --db $db --quiet --fix --apply 2>&1 | Out-Null
+& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --quiet --fix --apply 2>&1 | Out-Null
 & $Exe index $srcDir --db $db 2>&1 | Out-Null
-$lint1 = & $Exe lint-all --db $db --quiet 2>&1 | Out-String
+$lint1 = & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --quiet 2>&1 | Out-String
 $drift1 = ([regex]::Matches($lint1, 'doc-drift')).Count
 Check 'the repair converges: doc-drift reaches 0' ($drift1 -eq 0) `
   "was $drift0, now $drift1 -- a finding that survives fix+reindex is unrepairable by any command"
@@ -155,7 +155,7 @@ Check 'the repair converges: doc-drift reaches 0' ($drift1 -eq 0) `
 Check 'the repair restored the <seealso> crefs' ((Get-Content $pas -Raw) -match '<seealso cref=')
 
 # 6. Idempotent: a second pass plans nothing.
-$fix2 = & $Exe lint-all --db $db --quiet --fix 2>&1 | Out-String
+$fix2 = & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --quiet --fix 2>&1 | Out-String
 Check 'second pass is a no-op' ($fix2 -match 'autofix: no fixable findings') $fix2
 
 Write-Host ''

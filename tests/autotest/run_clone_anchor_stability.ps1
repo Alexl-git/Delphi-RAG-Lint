@@ -218,7 +218,7 @@ Write-Host ("  uKeepA.pas / uKeepB.pas byte-identical across all {0} states" -f 
 function Keep-Findings([string]$Dir) {
   $db = Join-Path $Dir 'x.sqlite'
   & $Exe index $Dir --db $db 2>$null | Out-Null
-  $out = & $Exe lint-all --db $db 2>$null
+  $out = & $Exe lint-all --db $db --output (Join-Path $WorkDir 'lint-report.txt') 2>$null
   @($out | Select-String 'duplicate-code' | Where-Object { $_ -match 'uKeep' } |
     ForEach-Object { $_.Line -replace [regex]::Escape($Dir + '\'), '' } | Sort-Object)
 }

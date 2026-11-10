@@ -171,7 +171,7 @@ Check 'precondition: AppTwo does NOT reference DeadRoutine' ($callsDead -notmatc
 Write-Host ''
 Write-Host 'lint AppOne -- both routines are unreferenced HERE; only AppTwo can separate them' -ForegroundColor Cyan
 
-$lint = (@(& $Exe lint-all --db $dbOne --config $manifest --rules-dir "$PSScriptRoot\..\..\rules" --quiet 2>&1) |
+$lint = (@(& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $dbOne --config $manifest --rules-dir "$PSScriptRoot\..\..\rules" --quiet 2>&1) |
            ForEach-Object { "$_" }) -join "`n"
 $ups = ($lint -split "`n") | Where-Object { $_ -match 'unused-public-symbol' }
 

@@ -150,7 +150,7 @@ $db = Join-Path $WorkDir 'MarkerSpan.sqlite'
 Check 'fixture indexed' (Test-Path $db)
 
 $unused = @()
-foreach ($line in (& $Exe lint-all --db $db 2>&1)) {
+foreach ($line in (& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db 2>&1)) {
   if ("$line" -match ':(\d+):\d+\s+\[\w+\]\s+review-marker-unused:') { $unused += [int]$Matches[1] }
 }
 $unused = @($unused | Sort-Object -Unique)
@@ -242,7 +242,7 @@ $rtDb = Join-Path $rtDir '_D-RAG\App.sqlite'
 
 function RtLines($pattern) {
   $out = @()
-  foreach ($line in (& $Exe lint-all --db $rtDb 2>&1)) {
+  foreach ($line in (& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $rtDb 2>&1)) {
     if ("$line" -match (':(\d+):\d+\s+\[\w+\]\s+' + $pattern + ':')) { $out += [int]$Matches[1] }
   }
   return @($out | Sort-Object -Unique)

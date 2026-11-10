@@ -138,7 +138,7 @@ Check 'fixture indexed' ((Test-Path $db) -and ($LASTEXITCODE -eq 0))
 
 function Report {
   $out = @()
-  foreach ($line in (& $Exe lint-all --db $db 2>&1)) {
+  foreach ($line in (& $Exe lint-all --db $db --output (Join-Path $WorkDir 'lint-report.txt') 2>&1)) {
     if ("$line" -match ':(\d+):\d+\s+\[\w+\]\s+([a-z0-9-]+):') { $out += [pscustomobject]@{ Line = [int]$Matches[1]; Rule = $Matches[2] } }
   }
   return $out
