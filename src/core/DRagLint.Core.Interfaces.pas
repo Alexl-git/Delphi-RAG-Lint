@@ -2646,7 +2646,8 @@ type
     function GetLiteralsByKind(AFileId: Int64;
                                const AKind: string): TArray<TStringLiteral>;
     /// <summary>Option 4: every UNIT-LEVEL routine -- a procedure/function whose
-    /// parent symbol is the unit itself (id, file_id, name, signature, section
+    /// parent symbol is the unit itself -- or, since 150 X4, the program / library / package
+    /// root of a .dpr / .dpk (id, file_id, name, signature, section
     /// populated). Backs TCallResolver's unit-level rung for a BARE call, which
     /// is the step Delphi takes after the lexical scopes and the enclosing
     /// class's methods, and which no other candidate set covers.</summary>
