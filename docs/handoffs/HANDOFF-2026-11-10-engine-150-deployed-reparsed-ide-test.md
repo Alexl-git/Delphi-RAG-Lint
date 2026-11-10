@@ -25,3 +25,7 @@ Previous: HANDOFF-2026-11-09-engine-150-wave-running.md (closed).
 - DONE: build\check-thirdparty-head.ps1 (tracked *.dll in dll-win64/dll-win32/dll == HEAD) called by build_draglint_win64.bat and reparse-libraries.ps1 (default engine); guard tests\autotest\run_thirdparty_head_guard.ps1 7/7 with positive control; encoding guard PASS.
 - 39df9242e: S1 'flake' was real -- run_pipeline_tests + run_schema_read_compat wrote lint-report-<date>.txt into the repo root; fixed, hygiene guard now watches the root. Other 3 flakes = -Jobs 6 timing.
 - Owner chose option C (detect, not invalidate): lane/151-GD 8d018c075 (worktree C:\TEMP\claude\lanes\151\GD\wt, NOT merged/deployed): schema_meta grammar_dlls + info grammar_dlls_differ; guard run_grammar_dlls_stamp_guard.ps1 GREEN 8/8, RED 7/8 on 1.49. Owed at integration: lint-all, featuregen entry for info (grammar_dlls fields), wiki/AI-USAGE mention.
+## Update ~14:20 -- ORM3 ALL-CLEAR received (RESUME HERE)
+- orm3-f7: Task 10 committed (COMMON rev 40 2effe47, SERVER rev 47 5e11236); no ORM3 drag-lint writes until our rebuild is done.
+- NEXT ACTION: on owner go -> forced rebuild of the 37 project DBs (libraries skipped, ~1 h). Then owner reboot + IDE test. Then MESSAGE orm3-f7 (rebuild + IDE tests done) -- it runs CPU benches needing an idle box. Then push main + release 1.49.0-alpha.
+- Lane 151-GD (option C) is DONE on its branch, waits for the next wave; nothing to do for it now.
