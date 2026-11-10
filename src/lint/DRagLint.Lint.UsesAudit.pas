@@ -38,7 +38,8 @@ type
     Verdict  : string;
     /// <summary>The section the entry sits in (uusInterface / uusImplementation).</summary>
     Section  : TUnitUseSection;
-    /// <summary>1-based position of the entry's unit name in the source file.</summary>
+    /// <summary>1-based position of the entry's unit name in the source file; for an
+    /// entry written inside an include file, the include directive's line (column 1).</summary>
     StartLine: Integer;
     StartCol : Integer;
     EndLine  : Integer;
@@ -279,10 +280,12 @@ begin
       else Continue;
       Row.UnitName := Uo.UnitName;
       Row.Section  := Uo.Section;
-      Row.StartLine:= Uo.StartLine;
-      Row.StartCol := Uo.StartCol;
-      Row.EndLine  := Uo.EndLine;
-      Row.EndCol   := Uo.EndCol;
+      // 150 CF: an entry written inside an include file has its coordinates in the .inc, not in
+      // this file -- anchor at the host's include directive (as used-unit-not-resolvable does).
+      Row.StartLine:= Uo.HostLine;
+      Row.StartCol := Uo.HostCol;
+      Row.EndLine  := if Uo.FromInclude then Uo.IncludeLine else Uo.EndLine;
+      Row.EndCol   := if Uo.FromInclude then 1 else Uo.EndCol;
       Result:= Result + [Row];
     end;
   finally

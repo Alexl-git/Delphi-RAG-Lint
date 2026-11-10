@@ -2872,6 +2872,8 @@ const
   { a UTF-8 byte-order mark as an ANSI decode spells it }
   UTF8_BOM_AS_ANSI = #$EF#$BB#$BF;
   { .dfm block keywords, without their trailing space }
+  { the switch that turns the file-fact table readers off (150 CF) }
+  ENV_NO_FILE_FACTS = 'DRAGLINT_NO_FILE_FACTS';
   KW_OBJECT    = 'object';
   KW_INHERITED = 'inherited';
   KW_INLINE    = 'inline';
@@ -3037,6 +3039,69 @@ begin
   Result:= False;
 end;
 
+function FileStampIsCurrent(const AStore: ISymbolStore; const APath: string): Boolean; forward;
+
+/// <summary>150 CF: DfmDeclaresComponent answered from the dfm_objects fact table
+/// of the store that indexed ADfmPath, the text scan being the fallback.</summary>
+/// <param name="ATrees">Supplies the stores to look the .dfm up in.</param>
+/// <param name="ADfmPath">Full path of the .dfm that ADfmText was read from.</param>
+/// <param name="ADfmText">That .dfm's decoded text; empty (missing / binary) is answered
+/// by the text scan, i.e. False.</param>
+/// <param name="AName">Component name to find (case-insensitive).</param>
+/// <param name="AClassName">Out: the declaring block's class, '' when not found.</param>
+/// <returns>Same value and class as DfmDeclaresComponent(ADfmText, AName, AClassName).</returns>
+/// <remarks>The table is used only when it is present (schema with file facts), the
+/// .dfm is indexed, the index is current for it (FileStampIsCurrent) and it holds rows;
+/// anything else falls back to the scan. A row is read exactly as the scan reads a
+/// header: kind object / inline, non-empty name, class cut to its leading identifier run
+/// of A-Z a-z 0-9 _ (a dotted class name is cut at the dot, as TryParseHeaderAfter does).
+/// Env DRAGLINT_NO_FILE_FACTS=1 forces the scan; DRAGLINT_DEBUG=1 names the path taken
+/// on stderr. Not thread-safe (reads the stores through ATrees).</remarks>
+function DfmDeclaresComponentVia(const ATrees: TConvertTreeCache; const ADfmPath, ADfmText, AName: string;
+  out AClassName: string): Boolean;
+var
+  FullPath: string;
+  Rows    : TArray<TDfmObjectRow>;
+  Row     : TDfmObjectRow;
+  Cls     : string;
+  Fid     : Int64;
+  I       : Integer;
+begin
+  if (ADfmText <> '') and (GetEnvironmentVariable(ENV_NO_FILE_FACTS) <> '1') then
+  begin
+    FullPath:= TPath.GetFullPath(ADfmPath);
+    for var St: ISymbolStore in ATrees.Stores do
+    begin
+      if not St.HasFileFacts then Continue;
+      Fid:= St.FindFileIdByPath(FullPath);
+      if Fid <= 0 then Continue;
+      if not FileStampIsCurrent(St, FullPath) then Break; { a stale index is not evidence }
+      Rows:= St.GetDfmObjects(Fid);
+      if Length(Rows) = 0 then Break;
+      AClassName:= '';
+      for Row in Rows do
+      begin
+        if not (SameText(Row.ObjKind, 'object') or SameText(Row.ObjKind, 'inline')) then Continue;
+        Cls:= Row.ClassName;
+        I:= 1;
+        while (I <= Length(Cls)) and CharInSet(Cls[I], ['A'..'Z', 'a'..'z', '0'..'9', '_']) do Inc(I);
+        Cls:= Copy(Cls, 1, I - 1);
+        if (Trim(Row.Name) = '') or (Cls = '') or not SameText(Trim(Row.Name), AName) then Continue;
+        AClassName:= Cls;
+        if GetEnvironmentVariable('DRAGLINT_DEBUG') = '1' then
+          Writeln(ErrOutput, '[dfm-facts] table ', ExtractFileName(FullPath), ' ', AName);
+        Exit(True);
+      end;
+      if GetEnvironmentVariable('DRAGLINT_DEBUG') = '1' then
+        Writeln(ErrOutput, '[dfm-facts] table ', ExtractFileName(FullPath), ' ', AName);
+      Exit(False);
+    end;
+  end;
+  if GetEnvironmentVariable('DRAGLINT_DEBUG') = '1' then
+    Writeln(ErrOutput, '[dfm-facts] text ', ExtractFileName(ADfmPath), ' ', AName);
+  Result:= DfmDeclaresComponent(ADfmText, AName, AClassName);
+end;
+
 // True when ABytes are a compiled (binary) .dfm: the TPF0 filer signature, or
 // a Windows resource header (first byte $FF).
 function IsBinaryDfmBytes(const ABytes: TBytes): Boolean;
@@ -3199,7 +3264,7 @@ var
           Detail:= Format('%s %s', [ExtractFileName(Dfm), Why]);
           Break;
         end;
-        if not DfmDeclaresComponent(Text, AInst.Name, DeclClass) then Continue;
+        if not DfmDeclaresComponentVia(ATrees, Dfm, Text, AInst.Name, DeclClass) then Continue;
         AInst.AncestorUnit:= TPath.GetFileNameWithoutExtension(F);
         if SameText(DeclClass, AInst.TypeName) then
         begin
@@ -3466,7 +3531,7 @@ var
       if SameText(Inh.Name, AField.Name) then Exit;
     if not FindConvertRuleFor(ARules, BareTypeTail(AField.Signature), ToType) then Exit;
     DeclPas:= St.GetFilePath(AField.FileId);
-    if not DfmDeclaresComponent(DfmTextOf(TPath.ChangeExtension(DeclPas, DFM_EXT)), AField.Name, DeclClass) or
+    if not DfmDeclaresComponentVia(ATrees, TPath.ChangeExtension(DeclPas, DFM_EXT), DfmTextOf(TPath.ChangeExtension(DeclPas, DFM_EXT)), AField.Name, DeclClass) or
        not SameText(DeclClass, BareTypeTail(AField.Signature)) then Exit;
     Inst              := Default(TInheritedInstance);
     Inst.Name         := AField.Name;
@@ -3504,7 +3569,7 @@ var
       end;
     if FromType = '' then Exit;
     DeclPas:= St.GetFilePath(AField.FileId);
-    if not DfmDeclaresComponent(DfmTextOf(TPath.ChangeExtension(DeclPas, DFM_EXT)), AField.Name, DeclClass) or
+    if not DfmDeclaresComponentVia(ATrees, TPath.ChangeExtension(DeclPas, DFM_EXT), DfmTextOf(TPath.ChangeExtension(DeclPas, DFM_EXT)), AField.Name, DeclClass) or
        not SameText(DeclClass, BareTypeTail(AField.Signature)) then Exit;
     Inst              := Default(TInheritedInstance);
     Inst.Name         := AField.Name;
