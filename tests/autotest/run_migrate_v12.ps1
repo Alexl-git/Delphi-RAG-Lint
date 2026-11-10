@@ -85,11 +85,20 @@ $out = "$WorkDir\forms.csv"
 Check 'forms-csv exits 0' ($LASTEXITCODE -eq 0)
 Check 'csv exists' (Test-Path $out)
 
-# --- 4. forms-csv alone on a FRESH v12 db (no prior index) must also migrate ---
+# --- 4. forms-csv alone on a FRESH v12 db (no prior index) ---
+# Until 150 a READER opened a v12 index through Migrate. 150 SC (spec
+# docs\superpowers\specs\2026-11-09-schema-read-compat.md, option C) made readers open only
+# SCHEMA_READ_MIN (23)..SCHEMA_VERSION and refuse anything older with a NAMED reason; only
+# writers (step 2 above) still migrate. forms-csv is a reader, so the contract is now: exit
+# non-zero with the "re-index it" reason -- and never the original "no such column" death.
+# FAILS on the 1.49.0-alpha base (it migrates and exits 0).
 $db2 = "$WorkDir\v12b.sqlite"
 python $py $db2
-& $Exe forms-csv --project "$FixtureDir\Demo.dproj" --db $db2 --out "$WorkDir\forms2.csv" 2>&1 | Out-Null
-Check 'forms-csv directly on v12 db exits 0' ($LASTEXITCODE -eq 0)
+$fc2 = (& $Exe forms-csv --project "$FixtureDir\Demo.dproj" --db $db2 --out "$WorkDir\forms2.csv" 2>&1 | Out-String)
+$fc2Exit = $LASTEXITCODE
+Check 'forms-csv directly on v12 db is refused (exit <> 0)' ($fc2Exit -ne 0) "exit=$fc2Exit"
+Check 'forms-csv directly on v12 db names the reason (older than this engine reads; re-index it)' ($fc2 -match 'v12 is older than this engine reads' -and $fc2 -match 're-index it') $fc2.Trim()
+Check 'forms-csv directly on v12 db never dies on the old column (no such column)' ($fc2 -notmatch 'no such column') $fc2.Trim()
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
