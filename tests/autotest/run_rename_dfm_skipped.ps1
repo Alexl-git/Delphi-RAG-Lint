@@ -120,7 +120,9 @@ Write-Ascii (Join-Path $src 'Unit4.dfm') (Text-Dfm 'Form4' 'TForm4' 'inherited')
 function Run-Rename([string[]]$RenameArgs) {
   $errFile = Join-Path $WorkDir 'stderr.txt'
   Push-Location $dir
-  try { $o = & $Exe rename @RenameArgs --db $db 2>$errFile } finally { Pop-Location }
+  # 150 INT4: --library-db none -- the fixture has no library, and 150 CQ (d48cf1bdc1) prints a stderr
+  # 'drag-lint: NOTE: no --library-db given ...' that the case-insensitive note filter below would count.
+  try { $o = & $Exe rename @RenameArgs --db $db --library-db none 2>$errFile } finally { Pop-Location }
   $code = $LASTEXITCODE
   $err = if (Test-Path $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
   [pscustomobject]@{ Exit = $code; Out = ($o -join "`n"); Err = $err }

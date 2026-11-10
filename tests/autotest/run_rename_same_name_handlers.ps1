@@ -184,7 +184,9 @@ function New-Fixture([string]$Name) {
 
 function Run-Rename($fx, [string[]]$RenameArgs) {
   Push-Location $fx.Dir
-  try { $o = & $Exe rename @RenameArgs --db $fx.Db 2>&1 } finally { Pop-Location }
+  # 150 INT4: --library-db none -- the fixture has no library, and 150 CQ (d48cf1bdc1) prints a stderr
+  # 'drag-lint: NOTE: no --library-db given ...' that 2>&1 would splice into the --json document.
+  try { $o = & $Exe rename @RenameArgs --db $fx.Db --library-db none 2>&1 } finally { Pop-Location }
   [pscustomobject]@{ Exit = $LASTEXITCODE; Out = ($o -join "`n") }
 }
 
