@@ -2817,14 +2817,19 @@ end; // procedure
 
 { v0.48: does the in-memory symbol list already hold a free routine (proc/func) by
   this name? Used to dedup an implementation-only free routine against a prior
-  interface or forward declaration so we never emit a duplicate symbol. }
+  interface or forward declaration so we never emit a duplicate symbol.
+  150 Y3: only a declaration still WAITING for its body counts (ImplStartLine = 0).
+  A same-name routine that already has a body is not this body's declaration: an
+  implementation-only overload twin (every overload pair in a .dpr) or an earlier
+  NESTED routine of that name. Name-only matching collapsed both into one symbol,
+  so redundant-cast's HasOverloads saw no overload (run_redcast_dpr.ps1). }
 function FreeRoutineSymbolExists(const AState: TWalkState; const AName: string): Boolean;
 var
   i: Integer;
 begin
   Result:= False;
   for i:= 0 to AState.Symbols.Count - 1 do
-    if (AState.Symbols[i].Kind in [skProcedure, skFunction]) and SameText(AState.Symbols[i].Name, AName) then Exit(True);
+    if (AState.Symbols[i].Kind in [skProcedure, skFunction]) and (AState.Symbols[i].ImplStartLine = 0) and SameText(AState.Symbols[i].Name, AName) then Exit(True);
 end;
 
 { v9: stamp a routine's implementation body span onto its symbol so "which routine
