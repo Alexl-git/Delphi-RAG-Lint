@@ -266,7 +266,7 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
   method answers an interface method in each class (resolution clauses `IJob.Execute = RunJob` included), the call/read/write
   sites of an interface member (attributed to the member, RB-5), a class's interfaces and what answers each member, and for a
   class method the members it answers (`--uses`: the sites reaching it; `--max-sites N` caps the list). `--json` = `implementors/1`; `--format dot|mermaid`;
-  `--library-db` adds library implementor counts (`--include-library` lists them). Chart: `ask implementors`. MCP: `get_implementors`.
+  `--library-db` adds library implementor counts (`--include-library` lists them). Chart: `ask implementors`. `query implementors` is an alias of the same verb (same flags and exit codes; `--name` is accepted for `--target`). MCP: `get_implementors`.
 * `find-unit` for an **RTL / VCL / third-party** symbol needs the **platform
   library** database (`resolve-dbs --platform win64`), not a project DB - a
   project DB holds only that project's own units.

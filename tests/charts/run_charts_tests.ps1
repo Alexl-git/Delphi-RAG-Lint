@@ -19,12 +19,19 @@ param(
 )
 try {
 $ErrorActionPreference = 'Stop'
+$Pushed = $false
 . (Join-Path $PSScriptRoot '..\autotest\lib\CliBuildPaths.ps1')
 
 if (-not (Test-Path $Dpr)) { Write-Host "FATAL: dpr not found: $Dpr" -ForegroundColor Red; exit 2 }
 $Dpr     = (Resolve-Path $Dpr).Path
 $DprDir  = Split-Path $Dpr -Parent
 $DprName = Split-Path $Dpr -Leaf
+
+# The fixtures are found by walking UP from the cwd (GetCurrentDir), so the cwd has to be inside the repo:
+# from any other cwd 69 checks failed on a missing fixture folder (wave 150 G8). Anchor on the script.
+$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+Push-Location $RepoRoot
+$Pushed = $true
 
 $rs = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 if (-not (Test-Path $rs)) { Write-Host "FATAL: rsvars not found: $rs" -ForegroundColor Red; exit 2 }
@@ -83,6 +90,7 @@ exit 0
   Write-Host "FATAL: $($_.Exception.Message)" -ForegroundColor Red
   exit 2
 } finally {
+  if ($Pushed) { Pop-Location }
   # this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
   if (Test-Path -LiteralPath $WorkDir) { Remove-Item -LiteralPath $WorkDir -Recurse -Force -ErrorAction SilentlyContinue }
 }
