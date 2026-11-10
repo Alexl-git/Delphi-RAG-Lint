@@ -37,6 +37,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'g8-common.ps1')
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 $Exe = (Resolve-Path $Exe).Path
+. "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 150 H1: no machine drag-lint.json
 if (Test-Path $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 $src = Join-Path $WorkDir 'src'
 New-Item -ItemType Directory -Force $src | Out-Null
