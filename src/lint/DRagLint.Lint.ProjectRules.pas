@@ -4224,6 +4224,12 @@ var
   { purity v2 (spec 14): the two summary-driven rules, timed together --
     they share the one symbol_facts scan. }
   TPurity: Int64;
+  { PF2 (150): one lap per rule that had no counter (147 PF: ~31 s of the
+    project-rules growth sat in work this breakdown did not list), plus the
+    whole Run, so the untimed remainder is printed instead of guessed. }
+  TLap, TRun0   : Int64;
+  LapNames      : TArray<string>;
+  LapTicks      : TArray<Int64>;
   { "Referenced at all?" as two sets, built with one scan each instead of two
     queries per symbol. See IsReferenced. }
   RefdIds       : TDictionary<Int64 , Boolean>;
@@ -4265,6 +4271,16 @@ var
   procedure ProfLine(const AName: string; ATicks: Int64);
   begin
     Writeln(ErrOutput, Format('    %-28s %10.2f s', [AName, ATicks / TStopwatch.Frequency]));
+  end;
+
+  { Charges the time since the previous lap to AName and starts the next lap. }
+  procedure Lap(const AName: string);
+  begin
+    if not Prof then Exit;
+    var N: Int64:= TStopwatch.GetTimeStamp;
+    LapNames:= LapNames + [AName];
+    LapTicks:= LapTicks + [N - TLap];
+    TLap    := N;
   end;
 
   { Exactly the test the two dead-code rules used to make -- "no reference to
@@ -4669,6 +4685,10 @@ begin
   TCirc:= 0; TEnum:= 0; TRts:= 0; TUuiu:= 0; TGod:= 0; TUpub:= 0; TUpriv:= 0; TAccess:= 0; TOuter:= 0;
   TGlob:= 0; TDupD:= 0; TCens:= 0;
   TPurity:= 0;
+  LapNames:= nil;
+  LapTicks:= nil;
+  TRun0   := Tick;
+  TLap    := TRun0;
   try
     { Built only for the rules that need them -- on a large index these are two
       scans of the whole refs table, which is pure waste for a --rule run that
@@ -4678,6 +4698,7 @@ begin
       for var RId: Int64  in AStore.GetReferencedSymbolIds  do RefdIds  .AddOrSetValue(RId, True);
       for var RNm: string in AStore.GetReferencedNamesLower do RefdNames.AddOrSetValue(RNm, True);
     end;
+    Lap('(referenced-id/name sets)');
 
     { circular-uses: whole-graph SCC pass (not per-file). }
     var T0: Int64:= Tick;
@@ -4695,10 +4716,12 @@ begin
     if WantRule('global-only-uses-edge') and OptedIn('global-only-uses-edge') then
       for var Gf in CollectGlobalOnlyUsesEdges(AStore, ALibraryStore) do Findings.Add(Gf);
     Inc(TGlob, Tick - T0); T0:= Tick;
+    TLap:= T0;
 
     { duplicate-unit-on-search-path: one pass over the file list, grouped by unit stem. }
     if WantRule('duplicate-unit-on-search-path') then
       for var Df in CollectDuplicateUnits(AStore) do Findings.Add(Df);
+    Lap('duplicate-unit-on-search-path');
 
     { dfm-property-not-declared (R1): whole-DFM pass. OFF by default AND gated
       on OptedIn, for the reason that gate exists -- an ungated run would walk
@@ -4707,12 +4730,14 @@ begin
       volume before the default moves. }
     if WantRule('dfm-property-not-declared') and OptedIn('dfm-property-not-declared') then
       for var Pf in CollectDfmPropertyNotDeclared(AStore, ALibraryStore) do Findings.Add(Pf);
+    Lap('dfm-property-not-declared');
 
     { dependent-project-not-recompiled (R2): opens SIBLING indexes, so it is
       gated the same way and for the same reason. }
     if WantRule('dependent-project-not-recompiled') and OptedIn('dependent-project-not-recompiled') then
       for var Rf2 in CollectDependentProjectNotRecompiled(AStore, ASiblingStore) do Findings.Add(Rf2);
-    Inc(TGlob, Tick - T0); T0:= Tick;
+    Lap('dependent-project-not-recomp');
+    T0:= Tick; { PF2: these three were charged to TGlob ('global-only-uses-edge') until 150 }
 
     { duplicate-global-decl: whole-symbols pass (not per-file). ON by default
       and NOT OptedIn-gated -- 0.05 s on the 144 MB client index, symbols only,
@@ -4769,36 +4794,47 @@ begin
     if WantRule('repeated-type-switch') then
       for var Rf in WholeGraph('repeated-type-switch') do Findings.Add(Rf);
     Inc(TRts, Tick - T0);
+    TLap:= Tick;
 
     { enum-ordinal-persisted (lane X6): ON by default, NOT OptedIn-gated -- one
       refs read per file that names a sink, symbols by kind, no per-row query. }
     if WantRule('enum-ordinal-persisted') then
       for var Eo in WholeGraph('enum-ordinal-persisted') do Findings.Add(Eo);
+    Lap('enum-ordinal-persisted');
     { unused-enum-value (lane B-ENUM; ON since ENUMRULES 2026-10-28, the caller opts it in) and OptedIn-gated --
       a refs read per file, which a post-hoc config filter would hide while still charging for it. }
     if WantRule(UNUSED_ENUM_VALUE_RULE) and OptedIn(UNUSED_ENUM_VALUE_RULE) then
       for var Uv in CollectUnusedEnumValue(AStore) do Findings.Add(Uv);
+    Lap('unused-enum-value');
     { unused-global (1.40 lane unusedg): unit-level const / var / type nothing names; one refs read per file. }
     if WantRule(UNUSED_GLOBAL_RULE) and OptedIn(UNUSED_GLOBAL_RULE) then
       for var Ug in CollectUnusedGlobal(AStore, Shared) do Findings.Add(Ug);
+    Lap('unused-global');
     { read-never-assigned (owner request #5b, 1.40 lane flow): OptedIn-gated like unused-enum-value --
       a refs read per file plus source text, whole-project by nature (one unit cannot prove "never"). }
     if WantRule(READ_NEVER_ASSIGNED_RULE) and OptedIn(READ_NEVER_ASSIGNED_RULE) then
       for var Rn in CollectReadNeverAssigned(AStore, ALibraryStore) do Findings.Add(Rn);
+    Lap('read-never-assigned');
     { datamodule-form-global (1.42 lane ruleset): OFF; whole-project by nature (both ends live in the index). }
     if WantRule(INIT_ORDER_HAZARD_RULE) and OptedIn(INIT_ORDER_HAZARD_RULE) then
       for var Is_ in CollectInitOrderHazard(AStore) do Findings.Add(Is_);
+    Lap('init-order-hazard');
     if WantRule(FINALIZATION_AFTER_DEPENDENCY_RULE) and OptedIn(FINALIZATION_AFTER_DEPENDENCY_RULE) then
       for var Is_ in CollectFinalizationAfterDependency(AStore) do Findings.Add(Is_);
+    Lap('finalization-after-dependency');
     if WantRule(HEAVY_INITIALIZATION_RULE) and OptedIn(HEAVY_INITIALIZATION_RULE) then
       for var Is_ in CollectHeavyInitialization(AStore, ALibraryStore) do Findings.Add(Is_);
+    Lap('heavy-initialization');
     if WantRule(GLOBAL_NEVER_FREED_RULE) and OptedIn(GLOBAL_NEVER_FREED_RULE) then
       for var Is_ in CollectGlobalNeverFreed(AStore, ALibraryStore) do Findings.Add(Is_);
+    Lap('global-set-in-init-never-freed');
     if WantRule(DATAMODULE_FORM_GLOBAL_RULE) and OptedIn(DATAMODULE_FORM_GLOBAL_RULE) then
       for var Dm in CollectDataModuleFormGlobal(AStore, ALibraryStore) do Findings.Add(Dm);
+    Lap('datamodule-form-global');
     { parameter-type-too-wide (1.46 lane t4): OFF; the narrow-param plan's fixes -- a routine scan plus a file read per routine, which a post-hoc filter would hide while still charging for it. }
     if WantRule(PARAM_TOO_WIDE_RULE) and OptedIn(PARAM_TOO_WIDE_RULE) then
       for var Pw in CollectParamTooWide(AStore, ALibraryStore) do Findings.Add(Pw);
+    Lap('parameter-type-too-wide');
     { The rules on index fact F1 (1.44 lane rulesf1): OptedIn-gated -- one refs read and one parse per file.
       An index older than 1.44 answers nothing (see the unit). }
     var RefTypeWanted: TArray<string>:= nil;
@@ -4813,27 +4849,34 @@ begin
     if WantRule(UI_ACCESS_IN_THREAD_TYPED_RULE) and OptedIn('ui-access-in-thread-typed') then RefTypeWanted:= RefTypeWanted + [UI_ACCESS_IN_THREAD_TYPED_RULE];
     if WantRule(QUIT_FROM_THREAD_RULE) and OptedIn('quit-from-thread') then RefTypeWanted:= RefTypeWanted + [QUIT_FROM_THREAD_RULE];
     for var Rt in CollectRefTypeRules(AStore, ALibraryStore, RefTypeWanted, AOnlyFileId) do Findings.Add(Rt);
+    Lap('ref-type rules (F1)');
     { gap-rules wave, lane G8. The two DFM rules and uses-movable-to-implementation are ON by
       default and walk one table each (uses-movable back ON in lane IMOV after REFTYPE: 0 FP on
       engine 114 / ORM3 243, and the engine dogfood --fix --apply builds); virtual-never-overridden
       scans every file's symbols, so it is OFF by default and OptedIn-gated. }
     if WantRule('dfm-event-handler-missing') then
       for var Hf in WholeGraph('dfm-event-handler-missing') do Findings.Add(Hf);
+    Lap('dfm-event-handler-missing');
     { ancestor-not-in-project (1.42 lane enum, owner ruling 2026-11-03): ERROR, ON by
       default. One class scan plus a file-head read per form unit; needs the library index
       (silent without it -- see the unit). }
     if WantRule('ancestor-not-in-project') then
       for var An in CollectAncestorNotInProject(AStore, ALibraryStore) do Findings.Add(An);
+    Lap('ancestor-not-in-project');
     { opaque-to-analysis (1.42 lane opaque): OFF, OptedIn-gated -- two refs reads per routine plus
       the library oracle; needs the library index (silent without it -- see the unit). }
     if WantRule(OPAQUE_TO_ANALYSIS_RULE) and OptedIn(OPAQUE_TO_ANALYSIS_RULE) then
       for var Oa in CollectOpaqueToAnalysis(AStore, ALibraryStore, AOnlyFileId) do Findings.Add(Oa);
+    Lap('opaque-to-analysis');
     if WantRule('dfm-password-edit-unmasked') then
       for var Pw in CollectDfmPasswordEditUnmasked(AStore) do Findings.Add(Pw);
+    Lap('dfm-password-edit-unmasked');
     if WantRule('uses-movable-to-implementation') then
       for var Um in CollectUsesMovableToImplementation(AStore, AOnlyFileId) do Findings.Add(Um);
+    Lap('uses-movable-to-implementation');
     if WantRule('virtual-never-overridden') and OptedIn('virtual-never-overridden') then
       for var Vn in CollectVirtualNeverOverridden(AStore, ALibraryStore) do Findings.Add(Vn);
+    Lap('virtual-never-overridden');
 
     { ONE FILE when the caller names one (`lint <file>`): every finding this loop
       emits is stamped with the loop's own Path, and the memos it fills are caches
@@ -5209,6 +5252,13 @@ begin
       ProfLine('unused-private-member'     , TUpriv );
       ProfLine('  (accessor-set parse)'    , TAccess);
       ProfLine('  (per-file store reads)'  , TOuter );
+      var Listed: Int64:= TCirc + TGlob + TDupD + TCens + TPurity + TEnum + TRts + TUuiu + TGod + TUpub + TUpriv + TAccess + TOuter;
+      for var Li:= 0 to High(LapNames) do
+      begin
+        ProfLine(LapNames[Li], LapTicks[Li]);
+        Inc(Listed, LapTicks[Li]);
+      end;
+      ProfLine('(untimed remainder)', Tick - TRun0 - Listed);
       Writeln(ErrOutput, Format('    %-28s %10d file(s)', ['per-file loop', Length(FileIds)]));
       Flush(ErrOutput);
     end;

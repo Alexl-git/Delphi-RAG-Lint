@@ -6576,7 +6576,7 @@ type
   TFindingArray = TArray<TLintFinding>;
   PFindingArray = ^TFindingArray;
 const
-  SCAN_SLOTS = 32;
+  SCAN_SLOTS = 36;
   { Slots in execution order, named for the routine that owns each -- a hot slot
     should name code to open, not a rule id that several checks can emit. }
   SCAN_NAMES: array[0..SCAN_SLOTS - 1] of string = (
@@ -6587,7 +6587,10 @@ const
     'SeparateQueryFromModifier', 'ShellExec', 'PathTraversal', 'HardcodedPath', 'LoopAtMostOnce',
     'FormatCall', 'SwallowedExcept', 'DatasetOpen', 'CriticalSection',
     'TooManyExitPoints', 'CyclomaticComplexity', 'CognitiveComplexity',
-    'VirtualInConstructor', 'FlowChecker.Check', 'NamingChecker.Check',
+    'VirtualInConstructor', 'FlowChecker.Check',
+    { PF2 (150): the old 'NamingChecker.Check' slot was a window over five checkers }
+    'AstChecker.CheckWithHiding', 'AstChecker.CheckEnumBareReadScoped',
+    'MissingUsesChecker.Check', 'EnumOrdinalCastChecker.Check', 'NamingChecker.Check',
     'DeadCodeChecker.Check');
 var
   GScanT     : array[0..SCAN_SLOTS - 1] of Int64; { compute ticks per slot   }
@@ -24858,6 +24861,9 @@ begin
   { exception-class-unit stage 1. Empty unless the lint config carries an
     "exceptions" block with a "unit" key; empty means the harvest never runs. }
   Linter.ExceptionsUnit:= Cfg.ExceptionsUnit;
+  { PF2 (150): unit-missing-from-uses' store-wide bound-ref memo, owned by this run }
+  var MissingMemo: TMissingUsesMemo:= TMissingUsesMemo.Create;
+  var MissingLookups, MissingReads: Int64;
   LastPct:= -1;
   try
     for FileIdx:= 0 to Length(FilePaths) - 1 do
@@ -24979,15 +24985,17 @@ begin
         if LintRuleWants(Nr, LINT_GATE_WITH_HIDING) then
           ScanAdd(30, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckWithHiding(PasPath, Store, LibStore, Store.FindFileIdByPath(PasPath)));
         if LintRuleWants(Nr, ['enum-bare-read-scoped']) then { X4 }
-          ScanAdd(30, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckEnumBareReadScoped(PasPath, Store, Store.FindFileIdByPath(PasPath)));  // dl:ok magic-literal@099b -- REVIEWED 2026-10-25 profiler scan-slot id of the ScanAdd table, not a quantity
+          ScanAdd(31, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckEnumBareReadScoped(PasPath, Store, Store.FindFileIdByPath(PasPath)));  // dl:ok magic-literal@0fe1, large-magic-number@0fe1 -- profiler scan-slot id of the ScanAdd table, not a quantity
         if LintRuleWants(Nr, [MISSING_USES_RULE]) then
-          for F in TMissingUsesChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath), [Store, LibStore]) do Findings:= Findings + [F];
+          for F in TMissingUsesChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath), [Store, LibStore], MissingMemo) do Findings:= Findings + [F];
+        ScanMark(32);  // dl:ok magic-literal@605a -- REVIEWED 2026-11-09 PF2: profiler scan-slot id of the SCAN_NAMES table, not a quantity
         if LintRuleWants(Nr, [ENUM_ORDINAL_CAST_RULE]) then { B-ENUM }
           for F in TEnumOrdinalCastChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        ScanMark(33);  // dl:ok magic-literal@0301, large-magic-number@0301 -- REVIEWED 2026-11-09 PF2: profiler scan-slot id of the SCAN_NAMES table, not a quantity
         { v0.68: naming-convention prefix rules (store-optional; store enables exception-ancestry sub-check, + library store continues the chain) }
         if LintRuleWants(Nr, LINT_GATE_NAMING) then
           for F in DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check(PasPath, Cfg.Naming, Store, Store.FindFileIdByPath(PasPath), LibStore) do Findings:= Findings + [F];
-        ScanMark(30);
+        ScanMark(34);  // dl:ok magic-literal@6e09, large-magic-number@6e09 -- REVIEWED 2026-11-09 PF2: profiler scan-slot id of the SCAN_NAMES table, not a quantity
         { v0.68: dead-code checks (unused-parameter, identical-then-else, referenced-never-set);
           v0.70-72: + redundant-parens/commented-out-code/function-result-ignored + #5/#6/#7 rules }
         if LintRuleWants(Nr, LINT_GATE_DEAD_CODE) then
@@ -25025,7 +25033,7 @@ begin
         if LintRuleWants(Nr, LINT_GATE_LIFETIME_SHAPE) then
           for F in TLifetimeShapeChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath),
               (Nr = IDENTIFIER_CASE_MISMATCH_RULE) or Cfg.ShouldKeep(IDENTIFIER_CASE_MISMATCH_RULE, {ADefaultDisabled=}True)) do Findings:= Findings + [F];
-        ScanMark(31);
+        ScanMark(35);  // dl:ok magic-literal@4d39, large-magic-number@4d39 -- REVIEWED 2026-11-09 PF2: profiler scan-slot id of the SCAN_NAMES table, not a quantity
       except
         on E: Exception do Writeln(ErrOutput, Format('lint-all: skip %s (%s: %s)', [ExtractFileName(PasPath), E.ClassName, E.Message]));
       end; // try
@@ -25050,6 +25058,9 @@ begin
     ScmDefOff:= Linter.DefaultDisabledRuleIds;
   finally
     Linter.Free;
+    MissingLookups:= MissingMemo.Lookups;
+    MissingReads  := MissingMemo.StoreReads;
+    MissingMemo.Free;
     GScanTgt:= nil; { the pointer must not outlive Findings' frame }
   end; // try
   if LintStoodAt >= 0 then
@@ -25082,6 +25093,8 @@ begin
            GScanT[K] * 1000 / (TStopwatch.Frequency * Max(1, GScanN[K]))]));
     Writeln(ErrOutput, Format('    %-28s %9.4f s  <-- the quadratic accumulation, measured at last',
       ['(Findings append)', GScanAppend / TStopwatch.Frequency]));
+    Writeln(ErrOutput, Format('      %-26s %d bound-ref lookup(s), %d store read(s)',
+      ['missing-uses memo', MissingLookups, MissingReads]));
     { The .scm slot split into its two halves. Only the PARSE half could be
       recovered by sharing TAstParseCache with the AST checks (TLinter builds its
       own parser, so every file is parsed twice) -- the query half would remain
