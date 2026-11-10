@@ -64,7 +64,8 @@ incrementally, and check `files=` grew. Procedure: `docs\PLAN-project-completene
 Summary-line fields: `files=` = every row in the DB (a stock); `walked=` = paths this run
 admitted; `attempted=` counts attempts before the parse (can exceed `files=`);
 `up-to-date=` is not the log's `SKIP` lines; `committed=` = attempted files whose rows landed
-(`attempted - committed` = rolled-back files). **`files > walked` = a once-widened DB: run
+(`attempted - committed` = rolled-back files); `parse-errors=` (last field, 1.49) = files whose
+parse had ERROR/MISSING tree nodes this run (lane 150 X3). **`files > walked` = a once-widened DB: run
 `index --project <X.dproj> --db <db> --rebuild`** -- the periodic rebuild is the remedy, there
 is no eviction verb (owner 2026-09-16). Incremental already handles a refactored unit (full
 re-emit by `file_id`) and a unit dropped from the `.dproj` under a scope root (evicted).
