@@ -1536,9 +1536,11 @@ type
       /// <param name="ADbPath">The index file, passed to Create unchanged.</param>
       /// <param name="AReadOnly">Passed to Create unchanged (default True: query_only open).</param>
       /// <returns>The opened store at a readable schema (IsSchemaReadable); the caller owns it.</returns>
-      /// <exception cref="ESchemaUnreadable">The index schema is below SCHEMA_READ_MIN; the message is
-      /// SchemaUnreadableReason (the store is freed first).</exception>
+      /// <exception cref="ESchemaUnreadable">The index carries a schema_version stamp below SCHEMA_READ_MIN;
+      /// the message is SchemaUnreadableReason (the store is freed first).</exception>
       /// <remarks>
+      /// A store with NO stamp (no schema_meta table or row: fresh, being created, empty) is not old
+      /// and is returned as the bare Create would (150 G1F); only a stamped old schema is refused.
       /// Create's own exceptions (missing file, lock, corrupt header) propagate unchanged.
       /// Never use on a write path that calls Migrate: an older index is upgraded there, not refused.
       /// <!-- drag-lint:auto BEGIN -->
@@ -7197,7 +7199,9 @@ var
 begin
   Result:= TSQLiteSymbolStore.Create(ADbPath, AReadOnly);
   Result.IsSchemaCurrent(LFound, LExpected);
-  if not IsSchemaReadable(LFound) then
+  { 150 G1F: LFound = 0 is NO stamp (a fresh, being-created or empty store), not an old one --
+    it opens as before G1 (the charts tests' fresh index); only a STAMPED schema below READ_MIN is refused. }
+  if (LFound > 0) and not IsSchemaReadable(LFound) then
   begin
     Result.Free;
     raise ESchemaUnreadable.Create(SchemaUnreadableReason(LFound) + ': ' + ADbPath);
