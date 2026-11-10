@@ -52,6 +52,12 @@
       "help": ["  drag-lint implementors       --target <IFoo|IFoo.Bar|TFoo|TFoo.Bar> --db <file.sqlite> [--library-db <lib.sqlite>] [--uses] [--max-sites N] [--include-library] [--format text|json|dot|mermaid] [--json] [--output <file>]", "                               (interface report: who implements an interface -- lists / via a derived interface / inherited / delegated; which method answers an interface method in each class, resolution clauses included;", "                               the call/read/write sites of an interface member, attributed to it (RB-5); a class: its interfaces and what answers each member; a class method: the members it answers + --uses the sites reaching it.", "                               --json = implementors/1 {target,implementors[],unanswered[],sites[],sites_total,library_implementors,notes[]}; exit 0 answered, 1 no such target, 2 usage/ambiguous; --qname is accepted for --target; chart: ask implementors)", "  drag-lint query implementors --target <IFoo|TFoo> --db <file.sqlite> [same flags]   (alias of the implementors verb; --name is accepted for --target)"]
     },
     {
+      "type": "cli",
+      "verb": "query",
+      "sub": "implementors",
+      "example": "drag-lint query implementors --target IJob.Execute --db app.sqlite"
+    },
+    {
       "type": "mcp",
       "tool": "get_implementors"
     },
@@ -84,9 +90,9 @@
     }
   ],
   "verified": {
-    "date": "2026-11-05",
+    "date": "2026-11-09",
     "by": "ENGINE",
-    "build": "1.44.0-alpha",
-    "surfaceHash": "a4ef8fdb7f0088b64ea4b58b9408d41f7f3442969abf0ae182ab1e80d029dc82"
+    "build": "1.49.0-alpha",
+    "surfaceHash": "1d822e8d141dd8a68e374366b03a7c28453e32ac0e303898e16a20f6cca903cc"
   }
 }

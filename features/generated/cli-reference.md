@@ -1611,6 +1611,7 @@ Uses query hints to surface compiler hint/warning findings that have been import
 drag-lint query --concept "<words>" [--limit N] [--kind k,...] [--json] --db <db>
 drag-lint query hints --db <file.sqlite> [--name <code>] [--rule <severity>]
 drag-lint query find [--doc-tag X | --doc-contains Y | --decl-contains Z | --no-docs] [--kind K] [--name N] [--unit U] [--public] [--db ...]
+drag-lint query implementors --target <IFoo|TFoo> --db <file.sqlite> [same flags] (alias of the implementors verb; --name is accepted for --target)
 drag-lint query ancestors --name <type> [--of <ancestor>] [--db ...] [--json] (transitive class/interface hierarchy)
 drag-lint query descendants --of <ancestor> [--db ...] [--json] (the REVERSE of ancestors: every CLASS descending from <ancestor>, across all scanned DBs. Derived INTERFACES are deliberately excluded -- this backs the conversion editor's class pickers. exit 1 = no such ancestor)
 drag-lint query find-callers --name <callee-name> [--context N] [--resolved] [--db ...] [--json]
@@ -1653,6 +1654,7 @@ Described in:
 * [Compiler Hints](../../docs/wiki/Compiler-Hints.md)
 * [query --concept](../../docs/wiki/concept-search.md)
 * [Find Undocumented (public)](../../docs/wiki/Find-Undocumented-public.md)
+* [Interface Implementors Report](../../docs/wiki/interface-implementors.md)
 * [query ancestors](../../docs/wiki/query-ancestors.md)
 * [query descendants](../../docs/wiki/query-descendants.md)
 * [query find-callers](../../docs/wiki/query-find-callers.md)

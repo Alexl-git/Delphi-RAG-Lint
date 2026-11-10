@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70015
 since: 1.40.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.49.0-alpha
 ---
 
 # Interface Implementors Report
@@ -29,6 +29,18 @@ drag-lint implementors --target IJob.Execute --db app.sqlite
 ```
 
 Full flag list: [implementors in the CLI reference](../cli.md#implementors).
+
+```text
+drag-lint query implementors --target <IFoo|TFoo> --db <file.sqlite> [same flags] (alias of the implementors verb; --name is accepted for --target)
+```
+
+Example:
+
+```text
+drag-lint query implementors --target IJob.Execute --db app.sqlite
+```
+
+Full flag list: [query in the CLI reference](../cli.md#query).
 
 ## Flags
 
