@@ -24,6 +24,8 @@ $ns  = 'System;Xml;Data;Datasnap;Web;Soap;Winapi;System.Win'
 $usp = @(
   '..\..\src\preprocess'
   '..\..\src\core'
+  '..\..\src\index'
+  '..\..\src\parser'
   '..\..\src\analysis'
   '..\..\src\diagnostics'
   '..\..\third_party\delphi-tree-sitter'
