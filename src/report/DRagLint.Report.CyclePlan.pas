@@ -23,7 +23,7 @@ interface
 
 uses
   System.Classes, System.SysUtils, System.Generics.Collections, System.JSON,
-  DRagLint.Core.Interfaces, DRagLint.Core.Model;
+  DRagLint.Core.Interfaces, DRagLint.Core.Model;  // dl:unit DRagLint.Core.Model accepted -- the shared refusal wording constants (REFUSAL_USES_IN_INCLUDE) live in Core.Model by design
 
 const
   /// <summary>Tag `cycles` prints after a group that has interface coupling.
@@ -664,7 +664,7 @@ implementation
 uses
   System.IOUtils, System.StrUtils, System.RegularExpressions, System.Math, System.TypInfo,
   System.Generics.Defaults, System.Diagnostics,
-  DRagLint.Convert.UnitRules, DRagLint.Report.CycleEdge,
+  DRagLint.Convert.UnitRules, DRagLint.Report.CycleEdge,  // dl:unit DRagLint.Report.CycleEdge accepted -- 150 CY1 INT-E1b: the planner reads the edge scanner's unit-qualifier constant, one definition for both
   DRagLint.Report.UntangleCatalog;
 
 var

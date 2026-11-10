@@ -11,7 +11,6 @@ uses
   , DRagLint.Core       .Model
   , DRagLint.Core       .Interfaces
   , DRagLint.Storage    .SQLite
-  , DRagLint.Storage    .Schema { 150 SC: IsSchemaReadable, the read gate of OpenStore }
   , DRagLint.Lint       .Linter
   , DRagLint.Context    .Bundler
   , DRagLint.Resolver   .TypeAt
@@ -505,6 +504,7 @@ uses
   Winapi.Windows
   , System.Math
   , System.Generics.Defaults
+  , DRagLint.Storage.Schema { 150 SC: IsSchemaReadable, the read gate of OpenStore }  // dl:unit DRagLint.Storage.Schema accepted -- 150 SC: SCHEMA_READ_MIN (and SCHEMA_VERSION) are the read-compat bounds every read gate compares; they travel with the schema
   , DRagLint.Doc.Regions
   , DRagLint.Query.Implementors { get_implementors (interface report, 1.40) }
   , DRagLint.Query.ExceptionFacts { get_exception_facts (wave 148 D1) }

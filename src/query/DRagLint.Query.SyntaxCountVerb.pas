@@ -34,7 +34,7 @@ implementation
 uses
   System.SysUtils, System.JSON,
   DRagLint.Core.CliError, DRagLint.Core.Interfaces, DRagLint.Core.Model,  // dl:ok uses-global-census@6918 -- REVIEWED 2026-11-04: CLI_ERR_UNKNOWN_FLAG is the shared exit vocabulary of every verb
-  DRagLint.Storage.SQLite, DRagLint.Storage.Schema, DRagLint.CLI.HelpText, DRagLint.Query.SyntaxCount;
+  DRagLint.Storage.SQLite, DRagLint.Storage.Schema, DRagLint.CLI.HelpText, DRagLint.Query.SyntaxCount;  // dl:unit DRagLint.Storage.Schema accepted -- 150 SC: SCHEMA_READ_MIN (and SCHEMA_VERSION) are the read-compat bounds every read gate compares; they travel with the schema
 
 const
   CVerb = 'syntax-count';

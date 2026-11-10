@@ -1340,7 +1340,7 @@ end;
 
 { (#in-virtual-method? @x) / (#not-in-virtual-method? @x) -- see InVirtualMethod. Malformed
   arguments pass, like every predicate here. }
-function EvalVirtualMethod(const AMatch: TTSQueryMatch; const ASource: TBytes;
+function EvalVirtualMethod(const AMatch: TTSQueryMatch; const ASource: TBytes;  // dl:ok duplicate-code@1688 -- the per-predicate evaluator shape (arg check, scan, negate) every #...? predicate repeats; one function per predicate keeps the dispatch table flat (150 LN-1)
   const AArgs: TArray<TPredicateArg>; ANegated: Boolean): Boolean;
 const
   OP_AND_CAPTURE = 2;

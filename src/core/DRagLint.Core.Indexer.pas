@@ -639,21 +639,6 @@ const
   /// DCC_Namespace list).</summary>
   PROJECT_SETTING_DCC_NAMESPACE = 'DCC_Namespace';
 
-/// <summary>150 EX3: the unit scopes a .dproj names in its `&lt;DCC_Namespace&gt;`
-/// elements, as written: every PropertyGroup (any condition) in document order,
-/// split at `;`, trimmed, case-insensitively de-duplicated (first wins), the
-/// `$(DCC_Namespace)` inheritance macro dropped.</summary>
-/// <param name="ADprojPath">Path of the .dproj; a missing or unreadable file is no error.</param>
-/// <returns>The scope names (`System`, `Winapi`, `Vcl`...); empty when the file is absent,
-/// unreadable or names no scope. No Delphi defaults are added: a consumer that needs the
-/// IDE's implied scopes adds its own (the macro is the only thing that refers to them).</returns>
-/// <remarks>
-/// The fact TIndexer stores per .dpr / .dpk (project_settings, setting DCC_Namespace) so a
-/// bare `uses Forms` can be read as Vcl.Forms vs FMX.Forms by the project's own scope order.
-/// Reads the file system; thread-safe.
-/// </remarks>
-function ReadDprojUnitScopes(const ADprojPath: string): TArray<string>;
-
 implementation
 
 uses
@@ -668,6 +653,19 @@ uses
   , System.Math                    { 150 PP: InRange }
   ;
 
+/// <summary>150 EX3: the unit scopes a .dproj names in its `&lt;DCC_Namespace&gt;`
+/// elements, as written: every PropertyGroup (any condition) in document order,
+/// split at `;`, trimmed, case-insensitively de-duplicated (first wins), the
+/// `$(DCC_Namespace)` inheritance macro dropped.</summary>
+/// <param name="ADprojPath">Path of the .dproj; a missing or unreadable file is no error.</param>
+/// <returns>The scope names (`System`, `Winapi`, `Vcl`...); empty when the file is absent,
+/// unreadable or names no scope. No Delphi defaults are added: a consumer that needs the
+/// IDE's implied scopes adds its own (the macro is the only thing that refers to them).</returns>
+/// <remarks>
+/// The fact TIndexer stores per .dpr / .dpk (project_settings, setting DCC_Namespace) so a
+/// bare `uses Forms` can be read as Vcl.Forms vs FMX.Forms by the project's own scope order.
+/// Reads the file system; thread-safe.
+/// </remarks>
 function ReadDprojUnitScopes(const ADprojPath: string): TArray<string>;
 var
   Text: string;

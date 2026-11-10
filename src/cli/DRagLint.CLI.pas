@@ -152,7 +152,7 @@ uses
   , DRagLint.Analysis.LintTree
   , DRagLint.Analysis.PurityStage { Purity v2: TPurityStage.Run after the `calls` stage at every index site }
   , DRagLint.Storage.SQLite
-  , DRagLint.Storage.Schema { 150 SC: IsSchemaReadable / SchemaUnreadableReason -- the schema read gate of the library openers }
+  , DRagLint.Storage.Schema { 150 SC: IsSchemaReadable / SchemaUnreadableReason -- the schema read gate of the library openers }  // dl:unit DRagLint.Storage.Schema accepted -- 150 SC: SCHEMA_READ_MIN (and SCHEMA_VERSION) are the read-compat bounds every read gate compares; they travel with the schema
   , DRagLint.Storage.FileMembership { DbContainsFile: membership probe for resolve-dbs --in; ConnectReadOnly: the raw reader open }
   , DRagLint.Parser .Delphi13
   , DRagLint.Parser .DFM

@@ -174,7 +174,7 @@ uses
   , DRagLint.Core.Versions
   , DRagLint.Index.Freshness
   , DRagLint.Storage.SQLite
-  , DRagLint.Storage.Schema { 150 SC: IsSchemaReadable -- a readable library is ready to read }
+  , DRagLint.Storage.Schema { 150 SC: IsSchemaReadable -- a readable library is ready to read }  // dl:unit DRagLint.Storage.Schema accepted -- 150 SC: SCHEMA_READ_MIN (and SCHEMA_VERSION) are the read-compat bounds every read gate compares; they travel with the schema
   , DRagLint.Preprocess.Profile
   ;
 

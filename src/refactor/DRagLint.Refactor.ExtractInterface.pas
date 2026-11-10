@@ -65,7 +65,7 @@ uses
   System.Classes, System.IOUtils, System.JSON, System.StrUtils, System.RegularExpressions, System.Hash,
   System.Generics.Collections, Winapi.Windows,
   FireDAC.Comp.Client,
-  DRagLint.Project.OwnRoots, DRagLint.Report.CyclePlan, DRagLint.Refactor.CompileGate, DRagLint.Refactor.VerbShape,  // dl:ok uses-global-census@2c28 -- the CompileGate globals travel with the gated refactor verbs by design (R3 / G3P compile gate)
+  DRagLint.Project.OwnRoots, DRagLint.Report.CyclePlan, DRagLint.Refactor.CompileGate, DRagLint.Refactor.VerbShape,
   DRagLint.Refactor.RedundantCast, DRagLint.Storage.SQLite;
 
 const

@@ -217,7 +217,7 @@ implementation
 
 uses
   System.Generics.Collections, System.StrUtils,
-  DRagLint.Core.Interfaces, DRagLint.Storage.SQLite, DRagLint.Storage.Schema, DRagLint.Index.Freshness,
+  DRagLint.Core.Interfaces, DRagLint.Storage.SQLite, DRagLint.Storage.Schema, DRagLint.Index.Freshness,  // dl:unit DRagLint.Storage.Schema accepted -- 150 SC: SCHEMA_READ_MIN (and SCHEMA_VERSION) are the read-compat bounds every read gate compares; they travel with the schema
   DRagLint.Query.Callers, DRagLint.Query.Implementors;
 
 const

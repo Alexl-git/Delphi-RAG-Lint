@@ -10,7 +10,7 @@ interface
 
 uses
   System.SysUtils, FireDAC.Comp.Client,
-  DRagLint.Refactor.CompileGate;  // dl:ok uses-global-census@98b1 -- the CompileGate globals travel with the gated refactor verbs by design
+  DRagLint.Refactor.CompileGate;  // dl:ok uses-global-census@4ebc -- the CompileGate globals travel with the gated refactor verbs by design
 
 /// <summary>Prints a verb's error: a JSON object {schema, error, exit_code: 2} when pJson, else `ERROR: message`.</summary>
 /// <param name="pJson">True for --json output.</param>
