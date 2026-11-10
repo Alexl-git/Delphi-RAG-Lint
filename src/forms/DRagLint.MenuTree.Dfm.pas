@@ -354,7 +354,7 @@ begin
   FMap.Clear;
   FLinked.Clear;
   FDfm:= TFormDfmTree.Create;
-  FDfm.LoadFromFile(pPath);
+  FDfm.LoadFromIndexOrFile(pPath, [FStore]); { 150 Y2: the stored tree (sha checked above), text fallback }
   if FDfm.Root = nil then Exit;
   FDfmPath:= pPath;
   FPasPath:= ChangeFileExt(pPath, '.pas');

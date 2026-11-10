@@ -2953,6 +2953,27 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function GetDfmObjects(AFileId: Int64): TArray<TDfmObjectRow>;
+    /// <summary>150 Y2: True when this database has the dfm_nav_nodes and
+    /// dfm_nav_props tables (schema v24, additive); probed once.</summary>
+    /// <returns>False on a DB built before the tables existed, opened read-only.</returns>
+    function HasDfmNav: Boolean;
+    /// <summary>150 Y2: replaces one .dfm's dfm_nav_nodes / dfm_nav_props rows
+    /// (delete, then insert in array order) inside the open file tx.</summary>
+    /// <param name="AToken">The open file tx of the .dfm.</param>
+    /// <param name="ANodes">TParseResult.DfmNavNodes; empty deletes only.</param>
+    /// <param name="AProps">TParseResult.DfmNavProps.</param>
+    /// <remarks>No-op when HasDfmNav is False. Called for every parsed .dfm, so a
+    /// .dfm that became binary or empty loses its old rows.</remarks>
+    procedure PutDfmNav(const AToken: TFileTxToken; const ANodes: TArray<TDfmNavNodeRow>;
+      const AProps: TArray<TDfmNavPropRow>);
+    /// <summary>150 Y2: the dfm_nav_nodes / dfm_nav_props rows of one .dfm, in
+    /// the order PutDfmNav wrote them.</summary>
+    /// <param name="AFileId">files.id of the .dfm.</param>
+    /// <param name="ANodes">Out: the nodes, by Ordinal.</param>
+    /// <param name="AProps">Out: the properties, in .dfm order.</param>
+    /// <returns>False (both empty) when HasDfmNav is False or the file has no node rows.</returns>
+    function GetDfmNav(AFileId: Int64; out ANodes: TArray<TDfmNavNodeRow>;
+      out AProps: TArray<TDfmNavPropRow>): Boolean;
     /// <summary>The pp_regions rows of one file, ordered by region, branch.</summary>
     /// <param name="AFileId">files.id of the file.</param>
     /// <returns>Empty when the file has none or HasFileFacts is False.</returns>
@@ -3235,6 +3256,9 @@ type
     PpRegions : TArray<TPpRegionRow>  ;
     // 150 PP: the file's define / undef / test / include directives (pp_directives).
     PpDirectives: TArray<TPpDirectiveRow>;
+    // 150 Y2: the .dfm navigation tree (dfm_nav_nodes / dfm_nav_props), DFM parser only.
+    DfmNavNodes: TArray<TDfmNavNodeRow>;
+    DfmNavProps: TArray<TDfmNavPropRow>;
   end;
 
   /// <remarks>

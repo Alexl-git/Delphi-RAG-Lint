@@ -13,7 +13,7 @@ Never open a real DB with a writer to "look": copy it first, or use the read-onl
 
 ## 1. Overview
 
-* **Schema version** `schema_meta.schema_version` = `24` (wave 150: 23 -> 24 with a read-compat range, `SCHEMA_READ_MIN` = 23 -- a v24 engine reads a v23 index, its additive tables probed; the 1.35 / wave-150 tables `file_includes`, `dfm_objects`, `pp_regions`, `project_settings`, `pp_directives` are additive and probed). It is stamped LAST by `Migrate`
+* **Schema version** `schema_meta.schema_version` = `24` (wave 150: 23 -> 24 with a read-compat range, `SCHEMA_READ_MIN` = 23 -- a v24 engine reads a v23 index, its additive tables probed; the 1.35 / wave-150 tables `file_includes`, `dfm_objects`, `pp_regions`, `project_settings`, `pp_directives`, `dfm_nav_nodes`, `dfm_nav_props` are additive and probed). It is stamped LAST by `Migrate`
   (the commit point of a migration), so an interrupted upgrade keeps the old number and
   the next writable open heals it.
 * **Two kinds of change.** A change that alters what the indexer WRITES bumps
@@ -42,7 +42,7 @@ Never open a real DB with a writer to "look": copy it first, or use the read-onl
     `type_ancestors`, `type_helpers`
   * usage and calls: `refs`, `call_edges`, `member_accesses`, `dispatch_edges`,
     `classref_args`, `data_flows`
-  * structure: `unit_uses`, `di_bindings`, `file_includes`, `dfm_objects`, `pp_regions` (1.35), `pp_directives` (150)
+  * structure: `unit_uses`, `di_bindings`, `file_includes`, `dfm_objects`, `pp_regions` (1.35), `pp_directives` (150), `dfm_nav_nodes` / `dfm_nav_props` (150 Y2: the .dfm navigation tree of forms-csv / menu-tree -- blocks and collection items, parent by ordinal, and the Caption / Action / Item / ItemName / ToolbarName / BeginGroup / IsMainMenu / OldName / On* properties as `DRagLint.Parser.DfmNav.ScanDfmNav` reads them)
   * text: `string_literals` (+ FTS5)
   * external feeds: `compiler_findings`, `fb_relations`, `fb_columns`, `fb_field_info`,
     `fb_datasets`, `fb_enum_values`, `orm_links`
@@ -61,6 +61,8 @@ erDiagram
   files ||--o{ dfm_objects : "file_id (cascade)"
   files ||--o{ pp_regions : "file_id (cascade)"
   files ||--o{ pp_directives : "file_id (cascade)"
+  files ||--o{ dfm_nav_nodes : "file_id (cascade)"
+  files ||--o{ dfm_nav_props : "file_id (cascade)"
   symbols ||--o{ dfm_objects : "symbol_id (set null)"
   files ||--o{ compiler_findings : "file_id (set null)"
   symbols ||--o{ symbols : "parent_id (cascade)"
@@ -90,7 +92,7 @@ erDiagram
 
 | Pass | Verb / stage | Writes |
 |---|---|---|
-| **index** (per file, one transaction) | `index`, `index --project` | `files` (incl. `indexed_at_fingerprint`, stamped in the same tx), `symbols`, `refs` (raw: `symbol_id` NULL for most), `unit_uses`, `string_literals` (+FTS via triggers), `di_bindings`, `data_flows`, `file_includes`, `dfm_objects`, `pp_regions` (1.35), `project_settings` (150, for a `.dpr` / `.dpk`), `pp_directives` (150), `symbol_trigrams` |
+| **index** (per file, one transaction) | `index`, `index --project` | `files` (incl. `indexed_at_fingerprint`, stamped in the same tx), `symbols`, `refs` (raw: `symbol_id` NULL for most), `unit_uses`, `string_literals` (+FTS via triggers), `di_bindings`, `data_flows`, `file_includes`, `dfm_objects`, `pp_regions` (1.35), `project_settings` (150, for a `.dpr` / `.dpk`), `pp_directives` (150), `dfm_nav_nodes` / `dfm_nav_props` (150, for a `.dfm`), `symbol_trigrams` |
 | **resolve** (whole DB, after files) | end of `index` | `refs.symbol_id`, `refs.receiver_text`, `refs.receiver_type_text`, `refs.external_target`, `call_edges`, `member_accesses`, `type_ancestors` (rebuilt each run), `type_helpers`, `dispatch_edges` (wiped and rebuilt), `classref_args`, `unit_uses.target_file_id` |
 | **doc / facts** | index-time doc extraction and ADP analysis | `symbol_docs`, `symbol_facts` (`effect_*` columns come from the purity stage) |
 | **external feeds** | `import-log`, `fb-snapshot`, ORM link pass | `compiler_findings`, `fb_*`, `orm_links` |

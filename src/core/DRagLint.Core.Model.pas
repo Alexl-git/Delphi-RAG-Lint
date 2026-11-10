@@ -1357,6 +1357,44 @@ type
     EndCol    : Integer;
   end;
 
+  /// <summary>150 Y2 (schema v24, additive): one node of a text .dfm's navigation
+  /// tree -- an `object` / `inherited` / `inline` block or a collection `item` --
+  /// a row of the dfm_nav_nodes table.</summary>
+  /// <remarks>
+  /// Produced by DRagLint.Parser.DfmNav.ScanDfmNav, the one line scanner shared by
+  /// the indexer and forms-csv / menu-tree's text fallback, so a stored tree and a
+  /// re-read one are the same rows. Parent is the Ordinal of the enclosing node,
+  /// -1 for a top-level block. Line is the 1-based line of the block's header.
+  /// CompClass is '' for an item; CollProp is the collection property an item
+  /// belongs to ('' for a block). Not the same table as dfm_objects (tree-sitter,
+  /// blocks only, joined to symbols): this one keeps items and the scanner's view.
+  /// </remarks>
+  TDfmNavNodeRow = record
+    Ordinal  : Integer;
+    Parent   : Integer;
+    Line     : Integer;
+    Name     : string ;
+    CompClass: string ;
+    IsItem   : Boolean;
+    CollProp : string ;
+  end;
+
+  /// <summary>150 Y2 (schema v24, additive): one navigation property of a
+  /// dfm_nav_nodes node -- a row of the dfm_nav_props table.</summary>
+  /// <remarks>
+  /// Only the properties forms-csv / menu-tree read are kept (DfmNav.IsDfmNavProp:
+  /// Caption, Action, Item, ItemName, ToolbarName, BeginGroup, IsMainMenu,
+  /// OldName and every event, i.e. a name whose last dotted segment starts with
+  /// "On"). Value is the scanner's value: a string decoded ('' doubled quotes,
+  /// #nnn codes, '+' continuation lines joined), anything else the raw text of
+  /// its first line. Node is the owning node's Ordinal; rows keep .dfm order.
+  /// </remarks>
+  TDfmNavPropRow = record
+    Node : Integer;
+    Name : string ;
+    Value: string ;
+  end;
+
   /// <summary>149 EX2 (F6, schema v24): one BRANCH of a conditional-compilation
   /// region of a file, with the state it had under the index's define profile
   /// -- a row of the pp_regions table.</summary>
