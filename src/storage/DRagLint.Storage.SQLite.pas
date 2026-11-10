@@ -1508,8 +1508,9 @@ type
       /// ADbPath read-only and returns the store when its schema is readable
       /// (IsSchemaReadable), else nil with the reason.</summary>
       /// <param name="ADbPath">The index file; a missing file is a nil + reason, not an exception.</param>
-      /// <param name="AReason">'' on success; SchemaUnreadableReason text below
-      /// SCHEMA_READ_MIN; 'index not found: ...' or the open exception's
+      /// <param name="AReason">'' on success; SchemaUnreadableReason text for a stamped schema below
+      /// SCHEMA_READ_MIN; 'index has no schema stamp ...' for an unstamped (fresh / empty) store
+      /// (nil: no statements are prepared without a stamp); 'index not found: ...' or the open exception's
       /// ClassName: Message otherwise.</param>
       /// <returns>The read-only store (caller owns the reference), or nil.</returns>
       /// <remarks>
@@ -7177,7 +7178,14 @@ begin
   try
     Result:= TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}True);
     Result.IsSchemaCurrent(LFound, LExpected);
-    if not IsSchemaReadable(LFound) then
+    { 150 INT2: no stamp (LFound = 0: fresh, being created, empty) is not an OLD schema -- say so;
+      still nil, because the constructor prepares no statements without a readable stamp. }
+    if LFound = 0 then
+    begin
+      AReason:= 'index has no schema stamp (fresh, empty or not a drag-lint index): ' + ADbPath;
+      Result := nil;
+    end
+    else if not IsSchemaReadable(LFound) then
     begin
       AReason:= SchemaUnreadableReason(LFound);
       Result := nil;

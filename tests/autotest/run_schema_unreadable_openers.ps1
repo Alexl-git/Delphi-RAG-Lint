@@ -123,7 +123,8 @@ c.close()
 
   # 150 INT2: an UNSTAMPED but POPULATED index (schema_version row deleted = v0). OpenReadable keeps
   # refusing it: letting v0 through (as CreateReadable does after G1F) was tried and gave an
-  # EAccessViolation in lint-tree (no prepared statements below READ_MIN) -- U1 pins 'refused, no AV'.
+  # EAccessViolation in lint-tree (no prepared statements below READ_MIN) -- U1 pins 'refused as unstamped
+  # (OpenReadable names it: no schema stamp, not an old schema), no AV'; the JSON probes then stay silent.
   # U4: a CreateReadable verb (menu-tree) on the same index: no AV.
   $unst = Join-Path $tmp 'proj-unstamped.sqlite'
   [IO.File]::Copy($proj, $unst, $true)
@@ -139,7 +140,7 @@ c.close()
   if ($LASTEXITCODE -ne 0) { throw "unstamp $unst failed" }
   $appU = Join-Path $appDir 'AppU.pas'
   $u = Suo-Run @('lint-tree', '--unit', $appU, '--db', $unst)
-  Suo-Check 'U1' (($u.Out -match 'older than this engine reads') -and ($u.Code -eq 2) -and -not (Suo-Av $u.Out)) "lint-tree (OpenReadable) on an UNSTAMPED populated index: refused with the reason, no AV (exit $($u.Code))"
+  Suo-Check 'U1' (($u.Out -match 'has no schema stamp') -and -not ($u.Out -match 'older than this engine reads') -and ($u.Code -eq 2) -and -not (Suo-Av $u.Out)) "lint-tree (OpenReadable) on an UNSTAMPED index: refused as UNSTAMPED (not 'older'), no AV (exit $($u.Code))"
   $m = Suo-Run @('menu-tree', '--project', $dpr, '--db', $unst)
   Suo-Check 'U4' (-not (Suo-Av $m.Out)) "menu-tree (CreateReadable) on an UNSTAMPED populated index: no AV (exit $($m.Code))"
   if ($u.Code -ne 2) { ($u.Out -split "`n" | Select-Object -Last 3) | ForEach-Object { Write-Host "  | $_" } }
