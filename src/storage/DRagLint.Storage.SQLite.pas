@@ -47,6 +47,13 @@ type
   /// </remarks>
   EIndexNewerThanEngine = class(Exception);
 
+  /// <summary>Raised by TSQLiteSymbolStore.CreateReadable when the index schema is below
+  /// SCHEMA_READ_MIN (150 TL); the message is SchemaUnreadableReason, which names the found
+  /// version, the readable range and the remedy (re-index).</summary>
+  /// <remarks>Replaces the access violation a bare Create gave on the first query of such an
+  /// index (its prepared statements are never built below READ_MIN).</remarks>
+  ESchemaUnreadable = class(Exception);
+
 var
   /// <summary>Process-wide switch: when False (the DEFAULT) the two exact name
   /// lookups -- FindSymbolsByExactName and FindSymbolsByQualifiedName -- compare
@@ -1517,6 +1524,17 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function OpenReadable(const ADbPath: string; out AReason: string): ISymbolStore; static;
+
+      /// <summary>The raising read opener (150 TL): TSQLiteSymbolStore.Create, then the schema READ
+      /// gate; for the read-only sites that have no degrade path of their own.</summary>
+      /// <param name="ADbPath">The index file, passed to Create unchanged.</param>
+      /// <param name="AReadOnly">Passed to Create unchanged (default True: query_only open).</param>
+      /// <returns>The opened store at a readable schema (IsSchemaReadable); the caller owns it.</returns>
+      /// <exception cref="ESchemaUnreadable">The index schema is below SCHEMA_READ_MIN; the message is
+      /// SchemaUnreadableReason (the store is freed first).</exception>
+      /// <remarks>Create's own exceptions (missing file, lock, corrupt header) propagate unchanged.
+      /// Never use on a write path that calls Migrate: an older index is upgraded there, not refused.</remarks>
+      class function CreateReadable(const ADbPath: string; AReadOnly: Boolean = True): TSQLiteSymbolStore; static;
 
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AMtimeUnix"><!-- drag-lint:auto type -->Int64</param>
@@ -7157,6 +7175,20 @@ begin
       AReason:= E.ClassName + ': ' + E.Message;
       Result := nil;
     end;
+  end;
+end;
+
+class function TSQLiteSymbolStore.CreateReadable(const ADbPath: string; AReadOnly: Boolean): TSQLiteSymbolStore;
+var
+  LFound   : Integer;
+  LExpected: Integer;
+begin
+  Result:= TSQLiteSymbolStore.Create(ADbPath, AReadOnly);
+  Result.IsSchemaCurrent(LFound, LExpected);
+  if not IsSchemaReadable(LFound) then
+  begin
+    Result.Free;
+    raise ESchemaUnreadable.Create(SchemaUnreadableReason(LFound) + ': ' + ADbPath);
   end;
 end;
 

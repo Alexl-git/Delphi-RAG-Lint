@@ -1339,7 +1339,7 @@ begin
   inherited Create;
   FDbPath    := pDb;
   FProject   := pProject;
-  FStore     := TSQLiteSymbolStore.Create(pDb, True);
+  FStore     := TSQLiteSymbolStore.CreateReadable(pDb, True);
   FFiles     := TObjectDictionary<string, TWalkFile>.Create([doOwnsValues]);
   FEnvs      := TObjectList<TWalkEnv>.Create(True);
   FCreated   := TList<TMenuNode>.Create;

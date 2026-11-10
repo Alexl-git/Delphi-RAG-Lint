@@ -1756,7 +1756,7 @@ begin
           RenFilesTouched:= 0;
           var RenLibs: TArray<ISymbolStore>:= nil;
           if Args.GetValue('library_db') <> nil then
-            RenLibs:= [TSQLiteSymbolStore.Create(Args.GetValue('library_db').Value, True) as ISymbolStore];
+            RenLibs:= [TSQLiteSymbolStore.CreateReadable(Args.GetValue('library_db').Value, True) as ISymbolStore];
           var RenOwners:= Default(TRenameOwnersRequest);
           RenOwners.ExeDir:= ExtractFilePath(ParamStr(0));
           if Args.GetValue('db') <> nil then RenOwners.PrimaryDb:= Args.GetValue('db').Value

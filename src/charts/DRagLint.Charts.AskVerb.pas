@@ -543,7 +543,7 @@ end;
 { The engine's own freshness sweep; the store is closed before the producer opens the index. }
 function ProbeDb(const pDb: string): TFreshnessReport;
 begin
-  var Store: ISymbolStore:= TSQLiteSymbolStore.Create(pDb, True);
+  var Store: ISymbolStore:= TSQLiteSymbolStore.CreateReadable(pDb, True);
   Result:= ProbeIndexFreshness(Store);
 end;
 
