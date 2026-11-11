@@ -19,7 +19,7 @@ uses
 /// path: a Pascal source (.pas, .dpr, .dpk, .inc, .pp, .lpr).</summary>
 /// <param name="AFilePath">Full path or bare file name; only the extension is read.</param>
 /// <returns>False for every other extension (.dfm, .sql, ...).</returns>
-function IsCommentFactsFile(const AFilePath: string): Boolean;
+function IsCommentFactsFile(const AFilePath: string): Boolean;  // dl:ok unused-public-symbol@8666 -- public on purpose: the parity harness (tests\fixtures\comment-facts-151) and future table readers pick files by it
 
 /// <summary>The comment rows of one file, in source order.</summary>
 /// <param name="AFilePath">Full path of the file; IsCommentFactsFile decides by
@@ -62,6 +62,8 @@ uses
   System.SysUtils
   , System.Generics.Collections
   , System.Generics.Defaults
+  , System.StrUtils
+  , System.Math
   ;
 
 const
@@ -73,14 +75,17 @@ const
   KIND_DOC     = '///';
   KIND_BRACE   = '{';
   KIND_PAREN   = '(*';
+  UTF8_PAIR_BYTES = 4; { a UTF-16 surrogate pair is one 4-byte UTF-8 sequence, counted on its high half }
+  UTF8_BMP_BYTES  = 3; { any other code unit at or above U+0800 }
+  COMMENT_FACT_EXTS: array[0..5] of string = ('.pas', '.dpr', '.dpk', '.inc', '.pp', '.lpr');
   MIN_ML_QUOTES = 3; { a Delphi 12+ multi-line string opens with an odd run of >= 3 quotes }
 
 function IsCommentFactsFile(const AFilePath: string): Boolean;
 var
   Ext: string;
 begin
-  Ext:= LowerCase(ExtractFileExt(AFilePath));
-  Result:= (Ext = '.pas') or (Ext = '.dpr') or (Ext = '.dpk') or (Ext = '.inc') or (Ext = '.pp') or (Ext = '.lpr');
+  Ext:= ExtractFileExt(AFilePath);
+  Result:= MatchText(Ext, COMMENT_FACT_EXTS);
 end;
 
 { UTF-8 byte length of one UTF-16 code unit: a surrogate pair is 4 bytes, all on its high half. }
@@ -89,10 +94,10 @@ begin
   case Ord(AChar) of
     0..$7F       : Result:= 1;
     $80..$7FF    : Result:= 2;
-    $D800..$DBFF : Result:= 4;
+    $D800..$DBFF : Result:= UTF8_PAIR_BYTES;
     $DC00..$DFFF : Result:= 0;
   else
-    Result:= 3;
+    Result:= UTF8_BMP_BYTES;
   end;
 end;
 
@@ -115,7 +120,7 @@ var
 
   function At(AIdx: Integer): Char;
   begin
-    if AIdx <= N then Result:= AText[AIdx] else Result:= #0;
+    Result:= if AIdx <= N then AText[AIdx] else #0;
   end;
 
   { Advances I over a line break at I (CRLF counts once) and starts the next line. }
@@ -149,7 +154,7 @@ var
     P: Integer;
   begin
     P:= Pos(ATerm, AText, AFrom);
-    if P = 0 then Result:= N + 1 else Result:= P + Length(ATerm);
+    Result:= if P = 0 then N + 1 else P + Length(ATerm);
   end;
 
   function RestOfLineBlank(AFrom: Integer): Boolean;
@@ -278,7 +283,7 @@ var
 
   procedure NoteDecl(ALine, AIdx: Integer);
   begin
-    if (ALine >= 1) and (ALine <= Lines) and ((DeclAt[ALine] < 0) or (AIdx < DeclAt[ALine])) then DeclAt[ALine]:= AIdx;
+    if InRange(ALine, 1, Lines) and ((DeclAt[ALine] < 0) or (AIdx < DeclAt[ALine])) then DeclAt[ALine]:= AIdx;
   end;
 
   { The first declaration line in the doc window below AEndLine; 0 = none. }
