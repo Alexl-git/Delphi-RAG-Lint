@@ -231,7 +231,9 @@ type
       FHasFileFacts          : Integer      ; { 149 EX2: -1 unprobed, 0 absent, 1 present -- see HasFileFacts }
       FHasPpDirectives       : Integer      ; { 150 PP: -1 unprobed, 0 absent, 1 present -- see HasPpDirectives }
       FHasDfmNav             : Integer      ; { 150 Y2: -1 unprobed, 0 absent, 1 present -- see HasDfmNav }
-      FQFileFacts            : array[0..7] of TFDQuery; { 149 EX2: 3 deletes + 3 inserts (150 PP: + pp_directives delete / insert), prepared on first use (FF_* in PutFileFacts) }  // dl:ok referenced-never-set@4c97 -- FP: the array ELEMENTS are assigned in PutFileFacts.Prepared (FQFileFacts[AIdx]:= Result)
+      FHasDfmProps           : Integer      ; { 151 ST: -1 unprobed, 0 absent, 1 present -- see HasDfmProperties }
+      FHasCommentFacts       : Integer      ; { 151 ST: -1 unprobed, 0 absent, 1 present -- see HasCommentFacts }
+      FQFileFacts            : array[0..11] of TFDQuery; { 149 EX2: 3 deletes + 3 inserts (150 PP: + pp_directives delete / insert; 151 ST: + dfm_properties, comment_facts), prepared on first use (FF_* in PutFileFacts) }  // dl:ok referenced-never-set@9274 -- FP: the array ELEMENTS are assigned in PutFileFacts.Prepared (FQFileFacts[AIdx]:= Result)
       FQDeleteFileSymbols    : TFDQuery     ;
       FQDeleteFileRefs       : TFDQuery     ;
       FQUpsertDiBinding          : TFDQuery     ;
@@ -3125,7 +3127,22 @@ type
       /// </remarks>
       procedure PutFileFacts(const AToken: TFileTxToken; const AIncludes: TArray<TFileIncludeRow>;
         const ADfmObjects: TArray<TDfmObjectRow>; const APpRegions: TArray<TPpRegionRow>;
-        const APpDirectives: TArray<TPpDirectiveRow>; const ASymbolIds: TDictionary<Integer, Int64>);
+        const APpDirectives: TArray<TPpDirectiveRow>; const ADfmProperties: TArray<TDfmPropertyRow>;
+        const AComments: TArray<TCommentFactRow>; const ASymbolIds: TDictionary<Integer, Int64>);
+      /// <summary>151 ST: implements ISymbolStore.HasDfmProperties.</summary>
+      /// <returns>True when the dfm_properties table exists (probed once).</returns>
+      function HasDfmProperties: Boolean;
+      /// <summary>151 ST: implements ISymbolStore.GetDfmProperties.</summary>
+      /// <param name="AFileId">files.id of the .dfm.</param>
+      /// <returns>The file's rows in ordinal order; empty when none or the table is absent.</returns>
+      function GetDfmProperties(AFileId: Int64): TArray<TDfmPropertyRow>;
+      /// <summary>151 ST: implements ISymbolStore.HasCommentFacts.</summary>
+      /// <returns>True when the comment_facts table exists (probed once).</returns>
+      function HasCommentFacts: Boolean;
+      /// <summary>151 ST: implements ISymbolStore.GetCommentFacts.</summary>
+      /// <param name="AFileId">files.id of the file.</param>
+      /// <returns>The file's rows in source order; empty when none or the table is absent.</returns>
+      function GetCommentFacts(AFileId: Int64): TArray<TCommentFactRow>;
       /// <summary>150 EX3: implements ISymbolStore.PutProjectSettings (project_settings).</summary>
       /// <param name="AToken">The open file tx of the .dpr / .dpk.</param>
       /// <param name="ASetting">The setting name.</param>
@@ -5135,6 +5152,8 @@ begin
   FHasFileFacts     := -1; { 149 EX2: probed lazily -- see HasFileFacts }
   FHasPpDirectives  := -1; { 150 PP: probed lazily -- see HasPpDirectives }
   FHasDfmNav        := -1; { 150 Y2: probed lazily -- see HasDfmNav }
+  FHasDfmProps      := -1; { 151 ST: probed lazily -- see HasDfmProperties }
+  FHasCommentFacts  := -1; { 151 ST: probed lazily -- see HasCommentFacts }
   FLateAncCache  := TDictionary<string, TSymbol>.Create;
   FAnchorCache   := TDictionary<Int64, string>.Create; // Task 3c; see FrameworkAnchorForFile
   FFlowOracles   := TFlowOracleCache.Create;           // C1b; see FlowOracles
@@ -5282,7 +5301,11 @@ const
   FF_INS_PP    = 5;
   FF_DEL_PPD   = 6; { 150 PP: pp_directives, only when HasPpDirectives }
   FF_INS_PPD   = 7;
-  FF_SQL: array[0..7] of string = (
+  FF_DEL_DFP   = 8;  { 151 ST: dfm_properties, only when HasDfmProperties }
+  FF_INS_DFP   = 9;
+  FF_DEL_CMT   = 10; { 151 ST: comment_facts, only when HasCommentFacts }
+  FF_INS_CMT   = 11;
+  FF_SQL: array[0..11] of string = (
     'DELETE FROM file_includes WHERE file_id = :fid',
     'DELETE FROM dfm_objects WHERE file_id = :fid',
     'DELETE FROM pp_regions WHERE file_id = :fid',
@@ -5294,9 +5317,16 @@ const
       'VALUES (:fid, :reg, :br, :prn, :nest, :dir, :cond, :sl, :el, :act)',
     'DELETE FROM pp_directives WHERE file_id = :fid',
     'INSERT INTO pp_directives(file_id, ordinal, directive, args, symbol, line, col, src_offset, region, branch) ' +
-      'VALUES (:fid, :ord, :dir, :args, :sym, :ln, :col, :off, :reg, :br)');
+      'VALUES (:fid, :ord, :dir, :args, :sym, :ln, :col, :off, :reg, :br)',
+    'DELETE FROM dfm_properties WHERE file_id = :fid',
+    'INSERT INTO dfm_properties(file_id, ordinal, object_ordinal, parent, depth, name, value_text, value_kind, ' +
+      'start_line, start_col, end_line, end_col) VALUES (:fid, :ord, :oord, :prn, :dep, :nm, :val, :vk, :sl, :sc, :el, :ec)',
+    'DELETE FROM comment_facts WHERE file_id = :fid',
+    'INSERT INTO comment_facts(file_id, ordinal, start_offset, end_offset, line, col, end_line, kind, text, ' +
+      'anchor_kind, anchor_symbol_id) VALUES (:fid, :ord, :so, :eo, :ln, :col, :el, :knd, :txt, :ak, :sid)');
   { Parameters bound as text; every other FF_SQL parameter is an integer. }
-  FF_TEXT_PARAMS: array[0..9] of string = ('path', 'sec', 'nm', 'cls', 'par', 'knd', 'dir', 'cond', 'args', 'sym');
+  FF_TEXT_PARAMS: array[0..13] of string = ('path', 'sec', 'nm', 'cls', 'par', 'knd', 'dir', 'cond', 'args', 'sym',
+    'val', 'vk', 'txt', 'ak');
 
 function TSQLiteSymbolStore.HasFileFacts: Boolean;
 begin
@@ -5314,7 +5344,8 @@ end;
 
 procedure TSQLiteSymbolStore.PutFileFacts(const AToken: TFileTxToken; const AIncludes: TArray<TFileIncludeRow>;
   const ADfmObjects: TArray<TDfmObjectRow>; const APpRegions: TArray<TPpRegionRow>;
-  const APpDirectives: TArray<TPpDirectiveRow>; const ASymbolIds: TDictionary<Integer, Int64>);
+  const APpDirectives: TArray<TPpDirectiveRow>; const ADfmProperties: TArray<TDfmPropertyRow>;
+  const AComments: TArray<TCommentFactRow>; const ASymbolIds: TDictionary<Integer, Int64>);
 
   function Prepared(AIdx: Integer): TFDQuery;
   var
@@ -5402,6 +5433,55 @@ begin
     Q.ParamByName('act' ).AsLargeInt  := Ord(APpRegions[I].Active);
     Q.ExecSQL;
   end;
+  // 151 ST: dfm_properties and comment_facts are each their own probe (a 150-built v24 DB lacks both).
+  if HasDfmProperties then
+  begin
+    Q:= Prepared(FF_DEL_DFP);
+    Q.ParamByName('fid').AsLargeInt:= AToken.FileId;
+    Q.ExecSQL;
+    Q:= Prepared(FF_INS_DFP);
+    for I:= 0 to High(ADfmProperties) do
+    begin
+      Q.ParamByName('fid' ).AsLargeInt  := AToken.FileId;
+      Q.ParamByName('ord' ).AsLargeInt  := I;
+      Q.ParamByName('oord').AsLargeInt  := ADfmProperties[I].ObjectOrdinal;
+      Q.ParamByName('prn' ).AsLargeInt  := ADfmProperties[I].Parent;
+      Q.ParamByName('dep' ).AsLargeInt  := ADfmProperties[I].Depth;
+      Q.ParamByName('nm'  ).AsWideString:= ADfmProperties[I].Name;
+      Q.ParamByName('val' ).AsWideString:= ADfmProperties[I].ValueText;
+      Q.ParamByName('vk'  ).AsWideString:= ADfmProperties[I].ValueKind;
+      Q.ParamByName('sl'  ).AsLargeInt  := ADfmProperties[I].StartLine;
+      Q.ParamByName('sc'  ).AsLargeInt  := ADfmProperties[I].StartCol;
+      Q.ParamByName('el'  ).AsLargeInt  := ADfmProperties[I].EndLine;
+      Q.ParamByName('ec'  ).AsLargeInt  := ADfmProperties[I].EndCol;
+      Q.ExecSQL;
+    end;
+  end;
+  if HasCommentFacts then
+  begin
+    Q:= Prepared(FF_DEL_CMT);
+    Q.ParamByName('fid').AsLargeInt:= AToken.FileId;
+    Q.ExecSQL;
+    Q:= Prepared(FF_INS_CMT);
+    for I:= 0 to High(AComments) do
+    begin
+      Q.ParamByName('fid').AsLargeInt  := AToken.FileId;
+      Q.ParamByName('ord').AsLargeInt  := I;
+      Q.ParamByName('so' ).AsLargeInt  := AComments[I].StartOffset;
+      Q.ParamByName('eo' ).AsLargeInt  := AComments[I].EndOffset;
+      Q.ParamByName('ln' ).AsLargeInt  := AComments[I].Line;
+      Q.ParamByName('col').AsLargeInt  := AComments[I].Col;
+      Q.ParamByName('el' ).AsLargeInt  := AComments[I].EndLine;
+      Q.ParamByName('knd').AsWideString:= AComments[I].Kind;
+      Q.ParamByName('txt').AsWideString:= AComments[I].Text;
+      Q.ParamByName('ak' ).AsWideString:= AComments[I].AnchorKind;
+      if (ASymbolIds <> nil) and ASymbolIds.TryGetValue(AComments[I].AnchorSymbolIdx, Sid) then
+        Q.ParamByName('sid').AsLargeInt:= Sid
+      else
+        Q.ParamByName('sid').Clear;
+      Q.ExecSQL;
+    end;
+  end;
   // 150 PP: pp_directives is its own probe -- a 149-built v24 DB has the three tables above only.
   if not HasPpDirectives then Exit;
   Q:= Prepared(FF_DEL_PPD);
@@ -5488,6 +5568,117 @@ begin
       R.StartCol  := Q.FieldByName('start_col'  ).AsInteger;
       R.EndLine   := Q.FieldByName('end_line'   ).AsInteger;
       R.EndCol    := Q.FieldByName('end_col'    ).AsInteger;
+      L.Add(R);
+      Q.Next;
+    end;
+    Result:= L.ToArray;
+  finally
+    Q.Free;
+    L.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.HasDfmProperties: Boolean;
+begin
+  if FHasDfmProps < 0 then
+    FHasDfmProps:= if TableExists('dfm_properties') then 1 else 0;
+  Result:= FHasDfmProps = 1;
+end;
+
+function TSQLiteSymbolStore.HasCommentFacts: Boolean;
+begin
+  if FHasCommentFacts < 0 then
+    FHasCommentFacts:= if TableExists('comment_facts') then 1 else 0;
+  Result:= FHasCommentFacts = 1;
+end;
+
+function TSQLiteSymbolStore.GetDfmProperties(AFileId: Int64): TArray<TDfmPropertyRow>;
+var
+  Q: TFDQuery;
+  L: TList<TDfmPropertyRow>;
+  R: TDfmPropertyRow;
+begin
+  Result:= nil;
+  if not HasDfmProperties then Exit;
+  L:= TList<TDfmPropertyRow>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT object_ordinal, parent, depth, name, value_text, value_kind, start_line, start_col, ' +
+                   'end_line, end_col FROM dfm_properties WHERE file_id = :fid ORDER BY ordinal';
+    Q.ParamByName('fid').AsLargeInt:= AFileId;
+    Q.Open;
+    var FObj := Q.FieldByName('object_ordinal');
+    var FPrn := Q.FieldByName('parent'        );
+    var FDep := Q.FieldByName('depth'         );
+    var FNm  := Q.FieldByName('name'          );
+    var FVal := Q.FieldByName('value_text'    );
+    var FVk  := Q.FieldByName('value_kind'    );
+    var FSl  := Q.FieldByName('start_line'    );
+    var FSc  := Q.FieldByName('start_col'     );
+    var FEl  := Q.FieldByName('end_line'      );
+    var FEc  := Q.FieldByName('end_col'       );
+    while not Q.Eof do
+    begin
+      R:= Default(TDfmPropertyRow);
+      R.ObjectOrdinal:= FObj.AsInteger;
+      R.Parent       := FPrn.AsInteger;
+      R.Depth        := FDep.AsInteger;
+      R.Name         := FNm .AsString;
+      R.ValueText    := FVal.AsString;
+      R.ValueKind    := FVk .AsString;
+      R.StartLine    := FSl .AsInteger;
+      R.StartCol     := FSc .AsInteger;
+      R.EndLine      := FEl .AsInteger;
+      R.EndCol       := FEc .AsInteger;
+      L.Add(R);
+      Q.Next;
+    end;
+    Result:= L.ToArray;
+  finally
+    Q.Free;
+    L.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetCommentFacts(AFileId: Int64): TArray<TCommentFactRow>;
+var
+  Q: TFDQuery;
+  L: TList<TCommentFactRow>;
+  R: TCommentFactRow;
+begin
+  Result:= nil;
+  if not HasCommentFacts then Exit;
+  L:= TList<TCommentFactRow>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT start_offset, end_offset, line, col, end_line, kind, text, anchor_kind, ' +
+                   'COALESCE(anchor_symbol_id, 0) AS anchor_id FROM comment_facts WHERE file_id = :fid ORDER BY ordinal';
+    Q.ParamByName('fid').AsLargeInt:= AFileId;
+    Q.Open;
+    var FSo  := Q.FieldByName('start_offset');
+    var FEo  := Q.FieldByName('end_offset'  );
+    var FLn  := Q.FieldByName('line'        );
+    var FCol := Q.FieldByName('col'         );
+    var FEl  := Q.FieldByName('end_line'    );
+    var FKnd := Q.FieldByName('kind'        );
+    var FTxt := Q.FieldByName('text'        );
+    var FAk  := Q.FieldByName('anchor_kind' );
+    var FAid := Q.FieldByName('anchor_id'   );
+    while not Q.Eof do
+    begin
+      R:= Default(TCommentFactRow);
+      R.StartOffset    := FSo .AsInteger;
+      R.EndOffset      := FEo .AsInteger;
+      R.Line           := FLn .AsInteger;
+      R.Col            := FCol.AsInteger;
+      R.EndLine        := FEl .AsInteger;
+      R.Kind           := FKnd.AsString;
+      R.Text           := FTxt.AsString;
+      R.AnchorKind     := FAk .AsString;
+      R.AnchorSymbolIdx:= -1;
+      R.AnchorSymbolId := FAid.AsLargeInt;
       L.Add(R);
       Q.Next;
     end;
@@ -7001,6 +7192,40 @@ begin
           '  branch    INTEGER NOT NULL)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_pp_directives_file ON pp_directives(file_id, ordinal)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_pp_directives_symbol ON pp_directives(symbol COLLATE NOCASE)');
+  { 151 ST (schema v25, additive, each table its own probe): every property assignment of a text
+    .dfm (TDfmPropertyRow; producer DRagLint.Parser.DFMProps) and every comment of a source file
+    (TCommentFactRow; producer DRagLint.Index.CommentFacts), replaced per file by PutFileFacts.
+    Spec: docs\superpowers\specs\2026-11-11-dfm-props-and-comment-facts.md. }
+  TryExec('CREATE TABLE IF NOT EXISTS dfm_properties (' +
+          '  file_id        INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,' +
+          '  ordinal        INTEGER NOT NULL,' +
+          '  object_ordinal INTEGER NOT NULL,' +
+          '  parent         INTEGER NOT NULL,' +
+          '  depth          INTEGER NOT NULL,' +
+          '  name           TEXT    NOT NULL,' +
+          '  value_text     TEXT    NOT NULL,' +
+          '  value_kind     TEXT    NOT NULL,' +
+          '  start_line     INTEGER NOT NULL,' +
+          '  start_col      INTEGER NOT NULL,' +
+          '  end_line       INTEGER NOT NULL,' +
+          '  end_col        INTEGER NOT NULL)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_dfm_properties_file   ON dfm_properties(file_id, ordinal)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_dfm_properties_object ON dfm_properties(file_id, object_ordinal)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_dfm_properties_name   ON dfm_properties(name COLLATE NOCASE)');
+  TryExec('CREATE TABLE IF NOT EXISTS comment_facts (' +
+          '  file_id          INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,' +
+          '  ordinal          INTEGER NOT NULL,' +
+          '  start_offset     INTEGER NOT NULL,' +
+          '  end_offset       INTEGER NOT NULL,' +
+          '  line             INTEGER NOT NULL,' +
+          '  col              INTEGER NOT NULL,' +
+          '  end_line         INTEGER NOT NULL,' +
+          '  kind             TEXT    NOT NULL,' +
+          '  text             TEXT    NOT NULL,' +
+          '  anchor_kind      TEXT    NOT NULL,' +
+          '  anchor_symbol_id INTEGER REFERENCES symbols(id) ON DELETE SET NULL)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_comment_facts_file   ON comment_facts(file_id, ordinal)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_comment_facts_anchor ON comment_facts(anchor_symbol_id)');
   { v0.85 PERF -- the three FK child columns that had no index.
 
     `PRAGMA foreign_keys = ON` is set on the write connection, so deleting a

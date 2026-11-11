@@ -650,6 +650,8 @@ uses
   , DRagLint.Diagnostics.ParseCache { v(ADP2 T3): TAstParseCache.Clear -- bound the per-file tree cache }
   , DRagLint.Index.IncludeUses     { N-06: uses clauses written inside a depth-0 include }
   , DRagLint.Index.DataFlowFacts   { taint T1: the per-routine data_flows rows, written beside symbol_facts }
+  , DRagLint.Parser.DFMProps       { 151 ST: dfm_properties producer (lane Y2) }
+  , DRagLint.Index.CommentFacts    { 151 ST: comment_facts producer (lane W1) }
   , DRagLint.Core.ControlChannel   { 1.40 heartbeat: BeatProgress per indexed file }
   , System.RegularExpressions      { 150 EX3: ReadDprojUnitScopes }
   , DRagLint.Preprocess.Lexer      { 150 PP: LexDirectives for the pp_directives rows }
@@ -1758,6 +1760,11 @@ begin
   TProf:= ProfNow;
   DocRegions:= TDocCommentScanner.Scan(SourceText);
   Inc(GProfDocScan, ProfNow - TProf);
+  { 151 ST: the dfm_properties / comment_facts rows, written by PutFileFacts below. The
+    producers (lanes Y2 / W1) decide by path and text; a binary .dfm gets AText ''. }
+  if SameText(ExtractFileExt(AFilePath), '.dfm') then
+    ParseRes.DfmProperties:= ExtractDfmPropertyRows(AFilePath, SourceText, ParseRes.DfmObjects);
+  ParseRes.CommentFacts:= ExtractCommentFacts(AFilePath, SourceText, ParseRes.Symbols);
   try
     TProf:= ProfNow;
     Token:= FStore.OpenFileTx(AFilePath, Mtime, Sha, Parser.LanguageName);
@@ -1854,7 +1861,8 @@ begin
         FStore.DeleteUnitUsesForFile(Token.FileId);
         for I:= 0 to High(ParseRes.UsesEntries) do FStore.UpsertUnitUse(Token, ParseRes.UsesEntries[I]);
         // 149 EX2 (schema v24): file_includes / dfm_objects / pp_regions, replaced every parse.
-        FStore.PutFileFacts(Token, ParseRes.Includes, ParseRes.DfmObjects, ParseRes.PpRegions, ParseRes.PpDirectives, IdxToId);
+        FStore.PutFileFacts(Token, ParseRes.Includes, ParseRes.DfmObjects, ParseRes.PpRegions, ParseRes.PpDirectives,
+          ParseRes.DfmProperties, ParseRes.CommentFacts, IdxToId);
         { 150 Y2: every parsed .dfm replaces its navigation tree (a binary one deletes it). }
         if SameText(ExtractFileExt(AFilePath), '.dfm') then FStore.PutDfmNav(Token, ParseRes.DfmNavNodes, ParseRes.DfmNavProps);
         { 150 EX3: a program / package root carries its project's unit scopes (the sibling
