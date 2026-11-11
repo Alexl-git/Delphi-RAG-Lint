@@ -9670,28 +9670,29 @@ end;
   tests\callresolve\run_generic_constraint_typeuse.ps1. }
 function NamesGenericParam(const AParams, ALc: string): Boolean;
 var
-  Group: string;
-  Depth: Integer;
-  InCons: Boolean;
+  GroupStart: Integer; // first char of the current ';' group
+  NamesEnd  : Integer; // its first depth-0 ':' (0 = none yet)
+  Depth     : Integer;
 begin
   Result:= False;
   var Text: string:= Trim(AParams);
   if Text.StartsWith('<') and Text.EndsWith('>') then Text:= Copy(Text, 2, Length(Text) - 2);
-  Group := '';
-  Depth := 0;
-  InCons:= False;
-  for var Ch: Char in Text + ';' do
-    if (Ch = ';') and (Depth = 0) then
+  Text      := Text + ';';
+  GroupStart:= 1;
+  NamesEnd  := 0;
+  Depth     := 0;
+  for var I: Integer:= 1 to Length(Text) do
+    if (Text[I] = ';') and (Depth = 0) then
     begin
-      for var Tok: string in LowerCase(Group).Split([',', ' '], TStringSplitOptions.ExcludeEmpty) do
+      var Names: string:= Copy(Text, GroupStart, (if NamesEnd > 0 then NamesEnd else I) - GroupStart);
+      for var Tok: string in LowerCase(Names).Split([',', ' ', '<', '>'], TStringSplitOptions.ExcludeEmpty) do
         if Tok = ALc then Exit(True);
-      Group := '';
-      InCons:= False;
+      GroupStart:= I + 1;
+      NamesEnd  := 0;
     end
-    else if Ch = '<' then Inc(Depth)
-    else if Ch = '>' then Dec(Depth)
-    else if (Ch = ':') and (Depth = 0) then InCons:= True
-    else if not InCons then Group:= Group + Ch;
+    else if Text[I] = '<' then Inc(Depth)
+    else if Text[I] = '>' then Dec(Depth)
+    else if (Text[I] = ':') and (Depth = 0) and (NamesEnd = 0) then NamesEnd:= I;
 end;
 
 { 1.43 (recv2): [Unit.]Name[<args>], and nothing an array, a pointer, a `set of`, a
