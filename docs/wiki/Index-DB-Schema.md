@@ -42,7 +42,7 @@ Never open a real DB with a writer to "look": copy it first, or use the read-onl
     `type_ancestors`, `type_helpers`
   * usage and calls: `refs`, `call_edges`, `member_accesses`, `dispatch_edges`,
     `classref_args`, `data_flows`
-  * structure: `unit_uses`, `di_bindings`, `file_includes`, `dfm_objects`, `pp_regions` (1.35), `pp_directives` (150), `dfm_nav_nodes` / `dfm_nav_props` (150 Y2: the .dfm navigation tree of forms-csv / menu-tree -- blocks and collection items, parent by ordinal, and the Caption / Action / Item / ItemName / ToolbarName / BeginGroup / IsMainMenu / OldName / On* properties as `DRagLint.Parser.DfmNav.ScanDfmNav` reads them)
+  * structure: `unit_uses`, `di_bindings`, `file_includes`, `dfm_objects`, `pp_regions` (1.35), `pp_directives` (150), `dfm_nav_nodes` / `dfm_nav_props` (150 Y2: the .dfm navigation tree of forms-csv / menu-tree -- blocks and collection items, parent by ordinal, and the Caption / Action / Item / ItemName / ToolbarName / BeginGroup / IsMainMenu / OldName / On* properties as `DRagLint.Parser.DfmNav.ScanDfmNav` reads them), `dfm_properties` / `comment_facts` (151, additive)
   * text: `string_literals` (+ FTS5)
   * external feeds: `compiler_findings`, `fb_relations`, `fb_columns`, `fb_field_info`,
     `fb_datasets`, `fb_enum_values`, `orm_links`
@@ -63,7 +63,10 @@ erDiagram
   files ||--o{ pp_directives : "file_id (cascade)"
   files ||--o{ dfm_nav_nodes : "file_id (cascade)"
   files ||--o{ dfm_nav_props : "file_id (cascade)"
+  files ||--o{ dfm_properties : "file_id (cascade)"
+  files ||--o{ comment_facts : "file_id (cascade)"
   symbols ||--o{ dfm_objects : "symbol_id (set null)"
+  symbols ||--o{ comment_facts : "anchor_symbol_id (set null)"
   files ||--o{ compiler_findings : "file_id (set null)"
   symbols ||--o{ symbols : "parent_id (cascade)"
   symbols ||--o{ refs : "symbol_id (set null)"
@@ -92,7 +95,7 @@ erDiagram
 
 | Pass | Verb / stage | Writes |
 |---|---|---|
-| **index** (per file, one transaction) | `index`, `index --project` | `files` (incl. `indexed_at_fingerprint`, stamped in the same tx), `symbols`, `refs` (raw: `symbol_id` NULL for most), `unit_uses`, `string_literals` (+FTS via triggers), `di_bindings`, `data_flows`, `file_includes`, `dfm_objects`, `pp_regions` (1.35), `project_settings` (150, for a `.dpr` / `.dpk`), `pp_directives` (150), `dfm_nav_nodes` / `dfm_nav_props` (150, for a `.dfm`), `symbol_trigrams` |
+| **index** (per file, one transaction) | `index`, `index --project` | `files` (incl. `indexed_at_fingerprint`, stamped in the same tx), `symbols`, `refs` (raw: `symbol_id` NULL for most), `unit_uses`, `string_literals` (+FTS via triggers), `di_bindings`, `data_flows`, `file_includes`, `dfm_objects`, `pp_regions` (1.35), `project_settings` (150, for a `.dpr` / `.dpk`), `pp_directives` (150), `dfm_nav_nodes` / `dfm_nav_props` (150, for a `.dfm`), `dfm_properties` (151, for a `.dfm`), `comment_facts` (151), `symbol_trigrams` |
 | **resolve** (whole DB, after files) | end of `index` | `refs.symbol_id`, `refs.receiver_text`, `refs.receiver_type_text`, `refs.external_target`, `call_edges`, `member_accesses`, `type_ancestors` (rebuilt each run), `type_helpers`, `dispatch_edges` (wiped and rebuilt), `classref_args`, `unit_uses.target_file_id` |
 | **doc / facts** | index-time doc extraction and ADP analysis | `symbol_docs`, `symbol_facts` (`effect_*` columns come from the purity stage) |
 | **external feeds** | `import-log`, `fb-snapshot`, ORM link pass | `compiler_findings`, `fb_*`, `orm_links` |
@@ -339,6 +342,46 @@ file's stamp (mtime + size) is current; otherwise, and for every `{$I}` file, th
 text. Identical findings either way (`tests\autotest\run_pp_directives.ps1`).
 `DRAGLINT_PP_TABLE=0` forces the scan; `DRAGLINT_PP_TRACE=1` prints the path taken per file
 to stderr.
+
+### dfm_properties (151, additive)
+One row per property assignment of a text `.dfm`, written inside the file transaction and
+replaced on its every parse. Producer `DRagLint.Parser.DFMProps.ExtractDfmPropertyRows`
+(column image of `TDfmPropertyRow`). A superset of `dfm_nav_props`, which stays. Additive and
+probed on its own (`HasDfmProperties`): a schema 23 / 24 DB without the table is read through
+the `.dfm` text; a file with no rows is "not recorded" for that file. Indexes
+`(file_id, ordinal)`, `(file_id, object_ordinal)`, `(name COLLATE NOCASE)`. Spec
+`docs\superpowers\specs\2026-11-11-dfm-props-and-comment-facts.md`.
+
+| column | type | meaning |
+|---|---|---|
+| file_id | INTEGER FK files (cascade) | the `.dfm` |
+| ordinal | INTEGER | 0-based source order |
+| object_ordinal | INTEGER | `dfm_objects.ordinal` of the owning block in the same file; -1 when no block encloses it |
+| parent | INTEGER | `ordinal` of the enclosing property row (collection item / nested list); -1 at object level |
+| depth | INTEGER | 0 = direct property of the object; +1 per enclosing item / nested value |
+| name | TEXT | the property name as written, dotted kept (`Font.Name`) |
+| value_text | TEXT | a string value decoded (doubled quotes, `#nnn`, `+` continuations joined); any other value its source text |
+| value_kind | TEXT | `string` / `integer` / `float` / `ident` / `set` / `list` / `collection` / `binary` / `other` |
+| start_line, start_col, end_line, end_col | INTEGER | assignment span, 1-based (columns in UTF-8 bytes) |
+
+### comment_facts (151, additive)
+One row per comment of a source file, written inside the file transaction and replaced on its
+every parse. Producer `DRagLint.Index.CommentFacts.ExtractCommentFacts` (column image of
+`TCommentFactRow`). A directive (`{$..}` / `(*$..*)`) is not a comment and has no row; a `//`
+inside a string literal is not one either. Additive and probed on its own (`HasCommentFacts`):
+a schema 23 / 24 DB without the table is read by scanning the text. Indexes
+`(file_id, ordinal)`, `anchor_symbol_id`.
+
+| column | type | meaning |
+|---|---|---|
+| file_id | INTEGER FK files (cascade) | |
+| ordinal | INTEGER | 0-based source order |
+| start_offset, end_offset | INTEGER | 0-based character offsets into the decoded text; end exclusive |
+| line, col, end_line | INTEGER | 1-based; `col` in UTF-8 bytes from the line start |
+| kind | TEXT | the opener: `//` / `///` / `{` / `(*` |
+| text | TEXT | the comment as written, delimiters included |
+| anchor_kind | TEXT | `end-of-line` / `statement` / `block` / `next-declaration`; '' = not decided |
+| anchor_symbol_id | INTEGER FK symbols (set null) | the declaration a `next-declaration` / `end-of-line` comment documents; NULL = none |
 
 ### symbol_trigrams
 `trigram TEXT`, `symbol_id INTEGER FK symbols (cascade)`; PK `(trigram, symbol_id)`,
