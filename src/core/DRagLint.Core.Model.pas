@@ -1459,6 +1459,62 @@ type
     Branch   : Integer;
   end;
 
+  /// <summary>151 ST (schema v25, additive): one property assignment of a text
+  /// .dfm -- a row of the dfm_properties table.</summary>
+  /// <remarks>
+  /// Produced by DRagLint.Parser.DFMProps.ExtractDfmPropertyRows (lane Y2).
+  /// ObjectOrdinal is the index of the owning block in the same file's
+  /// TParseResult.DfmObjects (= dfm_objects.ordinal), -1 when no block encloses
+  /// it. Parent is the array index of the enclosing property row (a collection
+  /// item or a nested list), -1 at object level; Depth is 0 at object level.
+  /// Name is the property name as written (dotted kept). ValueText is a string
+  /// value DECODED (doubled quotes, #nnn codes, '+' continuations joined), any
+  /// other value its source text. ValueKind is one of 'string', 'integer',
+  /// 'float', 'ident', 'set', 'list', 'collection', 'binary', 'other'. Lines and
+  /// columns are 1-based (columns in UTF-8 bytes, as for dfm_objects). The store
+  /// writes the array index as the row's ordinal. Spec:
+  /// docs\superpowers\specs\2026-11-11-dfm-props-and-comment-facts.md.
+  /// </remarks>
+  TDfmPropertyRow = record
+    ObjectOrdinal: Integer;
+    Parent       : Integer;
+    Depth        : Integer;
+    Name         : string ;
+    ValueText    : string ;
+    ValueKind    : string ;
+    StartLine    : Integer;
+    StartCol     : Integer;
+    EndLine      : Integer;
+    EndCol       : Integer;
+  end;
+
+  /// <summary>151 ST (schema v25, additive): one comment of a source file -- a
+  /// row of the comment_facts table.</summary>
+  /// <remarks>
+  /// Produced by DRagLint.Index.CommentFacts.ExtractCommentFacts (lane W1).
+  /// StartOffset / EndOffset are 0-based character offsets into the decoded text
+  /// the producer was given, EndOffset exclusive. Line / EndLine are 1-based; Col
+  /// is 1-based in UTF-8 bytes from the line start. Kind is the opener: '//',
+  /// '///', '{' or '(*'; Text is the comment as written, delimiters included.
+  /// A directive ({$..} / (*$..*)) is NOT a comment and has no row. AnchorKind is
+  /// 'end-of-line', 'statement', 'block', 'next-declaration' or '' (undecided).
+  /// AnchorSymbolIdx indexes TParseResult.Symbols (-1 = none) and is mapped to
+  /// comment_facts.anchor_symbol_id by the store; a row READ back has
+  /// AnchorSymbolIdx -1 and AnchorSymbolId the stored id (0 = NULL).
+  /// </remarks>
+  TCommentFactRow = record
+    StartOffset    : Integer;
+    EndOffset      : Integer;
+    Line           : Integer;
+    Col            : Integer;
+    EndLine        : Integer;
+    Kind           : string ;
+    Text           : string ;
+    AnchorKind     : string ;
+    AnchorSymbolIdx: Integer;
+    AnchorSymbolId : Int64  ;
+  end;
+
   /// <summary>v(ADP3 T14): one ORM dataset link -- a Delphi symbol tied by the
   /// orm-link pass to a Firebird relation, with that relation's leading columns
   /// in declaration order. Backs the doc/hover 'Dataset: qryFolders -&gt;

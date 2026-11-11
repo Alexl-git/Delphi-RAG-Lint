@@ -2868,10 +2868,18 @@ type
     /// <param name="APpDirectives">150 PP: the file's define / undef / test /
     /// include directives (may be empty); written to pp_directives when that
     /// table exists (HasPpDirectives).</param>
+    /// <param name="ADfmProperties">151 ST: the .dfm's property rows (empty for a
+    /// non-.dfm); written to dfm_properties when HasDfmProperties.</param>
+    /// <param name="AComments">151 ST: the file's comments; written to
+    /// comment_facts when HasCommentFacts.</param>
     /// <param name="ASymbolIds">Maps an index into TParseResult.Symbols to the
-    /// symbols.id just written; resolves TDfmObjectRow.SymbolIdx (a missing
-    /// entry stores NULL). May be nil when ADfmObjects is empty.</param>
+    /// symbols.id just written; resolves TDfmObjectRow.SymbolIdx and
+    /// TCommentFactRow.AnchorSymbolIdx (a missing entry stores NULL). May be nil
+    /// when ADfmObjects and AComments are empty.</param>
     /// <remarks>
+    /// Each optional table (pp_directives, dfm_properties, comment_facts) is
+    /// probed on its own and skipped when absent, so a DB built before it existed
+    /// is written without error.
     /// The old rows are deleted first, also when all three arrays are empty, so
     /// a file that lost its includes / regions loses its rows. A no-op when the
     /// tables are absent (HasFileFacts False). Part of the extractor guard's
@@ -2887,7 +2895,30 @@ type
     /// </remarks>
     procedure PutFileFacts(const AToken: TFileTxToken; const AIncludes: TArray<TFileIncludeRow>;
       const ADfmObjects: TArray<TDfmObjectRow>; const APpRegions: TArray<TPpRegionRow>;
-      const APpDirectives: TArray<TPpDirectiveRow>; const ASymbolIds: TDictionary<Integer, Int64>);
+      const APpDirectives: TArray<TPpDirectiveRow>; const ADfmProperties: TArray<TDfmPropertyRow>;
+      const AComments: TArray<TCommentFactRow>; const ASymbolIds: TDictionary<Integer, Int64>);
+    /// <summary>151 ST: True when this database has the dfm_properties table;
+    /// probed once.</summary>
+    /// <returns>False on a schema 23 / 24 DB opened read-only: readers then fall
+    /// back to reading the .dfm text.</returns>
+    function HasDfmProperties: Boolean;
+    /// <summary>151 ST: the dfm_properties rows of one .dfm, in ordinal order.</summary>
+    /// <param name="AFileId">files.id of the .dfm.</param>
+    /// <returns>Empty when the file has none, was indexed by an engine that did
+    /// not write the table, or HasDfmProperties is False -- a reader must treat
+    /// empty as "not recorded" and read the text.</returns>
+    function GetDfmProperties(AFileId: Int64): TArray<TDfmPropertyRow>;
+    /// <summary>151 ST: True when this database has the comment_facts table;
+    /// probed once.</summary>
+    /// <returns>False on a schema 23 / 24 DB opened read-only: readers then fall
+    /// back to scanning the source text.</returns>
+    function HasCommentFacts: Boolean;
+    /// <summary>151 ST: the comment_facts rows of one file, in source order.</summary>
+    /// <param name="AFileId">files.id of the file.</param>
+    /// <returns>Empty when the file has none, was indexed by an engine that did
+    /// not write the table, or HasCommentFacts is False. Each row has
+    /// AnchorSymbolIdx -1 and AnchorSymbolId the stored id (0 = NULL).</returns>
+    function GetCommentFacts(AFileId: Int64): TArray<TCommentFactRow>;
     /// <summary>150 PP: True when this database has the pp_directives table;
     /// probed once.</summary>
     /// <returns>False on a schema-23 DB (or a 149-built v24 DB) opened
@@ -3259,6 +3290,10 @@ type
     // 150 Y2: the .dfm navigation tree (dfm_nav_nodes / dfm_nav_props), DFM parser only.
     DfmNavNodes: TArray<TDfmNavNodeRow>;
     DfmNavProps: TArray<TDfmNavPropRow>;
+    // 151 ST: dfm_properties / comment_facts rows, filled by the indexer from the
+    // producers DRagLint.Parser.DFMProps / DRagLint.Index.CommentFacts.
+    DfmProperties: TArray<TDfmPropertyRow>;
+    CommentFacts : TArray<TCommentFactRow>;
   end;
 
   /// <remarks>
