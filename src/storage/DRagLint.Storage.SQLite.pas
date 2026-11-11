@@ -18051,6 +18051,36 @@ begin
   Result:= (Int64(ALine) shl ARG_ROW_LINE_SHIFT) or Cardinal(ACol);
 end;
 
+{ 151 PF: AFile's refs into ARows by ArgRowKey, each bucket in refs.id order. AQ is
+  PersistArgUses' per-file callee query (symbol_id, tgt, start_line, start_col, name_text). }
+procedure LoadArgCalleeRows(AQ: TFDQuery; AFile: Int64; ARows: TDictionary<Int64, TArray<TArgCalleeRow>>);
+begin
+  ARows.Clear;
+  AQ.ParamByName('f').AsLargeInt:= AFile;
+  AQ.Open;
+  try
+  var FTLine: TField:= AQ.FieldByName('start_line');
+  var FTCol : TField:= AQ.FieldByName('start_col');
+  var FTName: TField:= AQ.FieldByName('name_text');
+  while not AQ.Eof do
+  begin
+    var Row: TArgCalleeRow;
+    Row.HasSymbol:= not AQ.Fields[0].IsNull;
+    Row.SymbolId := if Row.HasSymbol then AQ.Fields[0].AsLargeInt else 0;
+    Row.HasTarget:= not AQ.Fields[1].IsNull;
+    Row.Target   := if Row.HasTarget then AQ.Fields[1].AsLargeInt else 0;
+    Row.HasName  := not FTName.IsNull;
+    Row.Name     := FTName.AsString;
+    var RowKey: Int64:= ArgRowKey(FTLine.AsInteger, FTCol.AsInteger);
+    var Bucket: TArray<TArgCalleeRow>;
+    if not ARows.TryGetValue(RowKey, Bucket) then Bucket:= nil;
+    ARows.AddOrSetValue(RowKey, Bucket + [Row]);
+    AQ.Next;
+  end;
+  finally
+    AQ.Close;
+  end;
+end;
 { 150-RS2 (2) / 150-RB2-a: persist the var / out ARGUMENT use of a member access. A
   member_accesses 'read' row with no accessor (a field, a unit / class var) that is the WHOLE
   argument of a var (read + write) or out (write) parameter of a resolved call gets
@@ -18139,28 +18169,7 @@ begin
         if FFile.AsLargeInt <> RowsFile then
         begin
           RowsFile:= FFile.AsLargeInt;
-          Rows.Clear;
-          QTgt.ParamByName('f').AsLargeInt:= RowsFile;
-          QTgt.Open;
-          var FTLine: TField:= QTgt.FieldByName('start_line');
-          var FTCol : TField:= QTgt.FieldByName('start_col');
-          var FTName: TField:= QTgt.FieldByName('name_text');
-          while not QTgt.Eof do
-          begin
-            var Row: TArgCalleeRow;
-            Row.HasSymbol:= not QTgt.Fields[0].IsNull;
-            Row.SymbolId := if Row.HasSymbol then QTgt.Fields[0].AsLargeInt else 0;
-            Row.HasTarget:= not QTgt.Fields[1].IsNull;
-            Row.Target   := if Row.HasTarget then QTgt.Fields[1].AsLargeInt else 0;
-            Row.HasName  := not FTName.IsNull;
-            Row.Name     := FTName.AsString;
-            var RowKey: Int64:= ArgRowKey(FTLine.AsInteger, FTCol.AsInteger);
-            var Bucket: TArray<TArgCalleeRow>;
-            if not Rows.TryGetValue(RowKey, Bucket) then Bucket:= nil;
-            Rows.AddOrSetValue(RowKey, Bucket + [Row]);
-            QTgt.Next;
-          end;
-          QTgt.Close;
+          LoadArgCalleeRows(QTgt, RowsFile, Rows);
         end;
         { The replaced query's WHERE (start_line, start_col, name_text COLLATE NOCASE -- ASCII
           folding, as SameText) and its first-hit loop, over the same rows in refs.id order. }
