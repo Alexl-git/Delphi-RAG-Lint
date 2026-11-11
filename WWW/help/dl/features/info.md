@@ -7,7 +7,7 @@ group: maintenance
 order: 120008
 since: 0.19.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.49.0-alpha
 ---
 
 # info
@@ -55,6 +55,15 @@ index was built or resolved by a NEWER engine than this one -- reads work, but
 the remedy is to use a newer engine), `missing` or `unreadable`. Versions are
 compared semantically (`1.10.0` is newer than `1.9.0`); an absent stamp is
 stale, never newer.
+
+Each `indexes` entry also carries `grammar_dlls_stored` (the size and SHA-256
+prefix of the tree-sitter runtime, Delphi and DFM DLLs the index was last
+fully parsed with; empty for an index that never recorded it),
+`grammar_dlls_loaded` (this engine's) and `grammar_dlls_differ`. A difference
+does NOT change the verdict (the parse is not invalidated automatically): the
+text form prints a `grammar: DIFFERS` block and the remedy is
+`index --rebuild`. An incremental run never relabels an index as parsed with
+the new DLLs; only a `--rebuild` or an indexer-fingerprint change does.
 
 ### What it needs
 
