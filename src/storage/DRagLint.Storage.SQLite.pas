@@ -9405,6 +9405,17 @@ end;
 { Read out the names a file is about to lose. Called from OpenFileTx between
   resolving the file id and deleting its symbols -- the only moment at which the
   outgoing names still exist. One indexed lookup per re-indexed file. }
+{ 151 ST (150 INT4 FOUND 1): the OFF switch of 150-RS2 (6)'s receiver-side closure in
+  NoteScopeRemoval. DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE = 1 / on / yes / true skips it, so the
+  scoped pass relies on WidenScopeThroughRemovedTypes alone: the eviction guard's polarity
+  control (run_scoped_resolve_eviction.ps1 C2h) and a one-run answer to "is RS2 (6) wrong?".
+  Unset or any other value = the closure runs (the shipped, conservative behaviour). Not
+  DRAGLINT_NO_SCOPED_RESOLVE, which switches the WHOLE scoped pass off. }
+function ScopedReceiverClosureOff: Boolean;
+begin
+  Result:= MatchText(Trim(GetEnvironmentVariable('DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE')), ['1', 'on', 'yes', 'true']);
+end;
+
 procedure TSQLiteSymbolStore.NoteScopeRemoval(AFileId: Int64);
 const
   SCOPE_SHARE_DIVISOR = 3; { "one file in three" -- see the latch below }
@@ -9470,20 +9481,23 @@ begin
       that id when the file is re-emitted, and its ref's NAME need not be one this file declares
       (`Thing.Run` reaches TBase.Run through TEditThing): put the names of those refs in scope so
       the scoped pass rewrites them as the whole pass does. Indexed lookups (idx_call_edges_receiver,
-      idx_member_accesses_receiver / _accessor). }
-    Q.SQL.Text:= 'SELECT r.name_text FROM refs r JOIN call_edges ce ON ce.ref_id = r.id ' +
-                 'WHERE ce.receiver_type_symbol_id IN (SELECT id FROM symbols WHERE file_id = :f) ' +
-                 'UNION SELECT r.name_text FROM refs r JOIN member_accesses ma ON ma.ref_id = r.id ' +
-                 'WHERE ma.receiver_type_symbol_id IN (SELECT id FROM symbols WHERE file_id = :f) ' +
-                 '   OR ma.accessor_symbol_id IN (SELECT id FROM symbols WHERE file_id = :f)';
-    Q.ParamByName('f').AsLargeInt:= AFileId;
-    Q.Open;
-    while not Q.Eof do
+      idx_member_accesses_receiver / _accessor). 151 ST: ScopedReceiverClosureOff skips it. }
+    if not ScopedReceiverClosureOff then
     begin
-      if Q.Fields[0].AsString <> '' then FScopeNames.AddOrSetValue(LowerCase(Q.Fields[0].AsString), True);
-      Q.Next;
+      Q.SQL.Text:= 'SELECT r.name_text FROM refs r JOIN call_edges ce ON ce.ref_id = r.id ' +
+                   'WHERE ce.receiver_type_symbol_id IN (SELECT id FROM symbols WHERE file_id = :f) ' +
+                   'UNION SELECT r.name_text FROM refs r JOIN member_accesses ma ON ma.ref_id = r.id ' +
+                   'WHERE ma.receiver_type_symbol_id IN (SELECT id FROM symbols WHERE file_id = :f) ' +
+                   '   OR ma.accessor_symbol_id IN (SELECT id FROM symbols WHERE file_id = :f)';
+      Q.ParamByName('f').AsLargeInt:= AFileId;
+      Q.Open;
+      while not Q.Eof do
+      begin
+        if Q.Fields[0].AsString <> '' then FScopeNames.AddOrSetValue(LowerCase(Q.Fields[0].AsString), True);
+        Q.Next;
+      end;
+      Q.Close;
     end;
-    Q.Close;
     { THE ONE MOMENT THE HERITAGE STILL EXISTS. A withdrawn type takes its
       symbols row -- and, by CASCADE, its type_ancestors rows -- with it, so by
       the time WidenScopeThroughRemovedTypes runs there is nothing left to ask
