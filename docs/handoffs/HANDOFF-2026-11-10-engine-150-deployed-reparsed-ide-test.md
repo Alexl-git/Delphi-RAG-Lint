@@ -33,3 +33,7 @@ Previous: HANDOFF-2026-11-09-engine-150-wave-running.md (closed).
 - Owner go 14:35. `index --all --only <37 sections> --rebuild --jobs 4 --rule-cache-warm off` (libraries skipped) 14:36:45-14:48:03, EXIT=0; 37/37 sections attempted=committed, parse-errors=0. check-thirdparty-head OK before the run. Logs C:\TEMP\claude\lanes\150\rebuild-projects\.
 - VS Code extension engines (Code-dl, Code-gmail) were left running (own engine copies, read-only). `shutdown --all` is refused by the autonomy hook (matches 'shutdown'); ide-release hold lifted after the run.
 - NEXT ACTION: owner reboot + IDE test (page QWrmj65xP1U3hFX31mtLsK). Then MESSAGE orm3-f7 (rebuild + IDE tests done). Then push main + release 1.49.0-alpha.
+## Update 2026-11-11 ~00:55 -- VS Code fixed, owner testing Part A (RESUME HERE)
+- Reboot done 11-10 18:45. VS Code: DL profile registered drag-lint 1.6.0 at a deleted folder (never loaded); default profile had 1.6.2 + engine copy from 10-27. Extension 1.6.4 packaged (e0b122aa9; 1.6.3 vsix lacked 148 VS + 149 LX) and installed into both profiles; activated 00:48, engine copy hash-equal to deployed 1.49 exe + 3 tree-sitter DLLs. check-thirdparty-head OK.
+- Owner page republished (v3): status box, V0 PASSED, C15, new backlog rows (silent stale extension, package-lock drift, 151-GD owed items).
+- NEXT ACTION: owner runs Part A. Then MESSAGE orm3-f7 (rebuild + IDE tests done). Then push main (198 ahead) + release 1.49.0-alpha + vsix 1.6.4 on go.
