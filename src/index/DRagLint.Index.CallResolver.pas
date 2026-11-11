@@ -9662,14 +9662,37 @@ begin
 end;
 
 { True when AParams -- a level's generic parameter list as indexed, e.g.
-  'K, V: class' -- names ALc. }
+  'K, V: class' or 'I: IMicObject' -- names ALc as a PARAMETER. 151 RB-A item 2: a
+  constraint is not a parameter name. Each ';' group (outside nested '<>') is
+  `names[: constraints]`; only the names before its first ':' count, so in
+  'I: IMicObject' the type IMicObject is no longer shadowed (the last unbound
+  IMicObject type_use on ORM3 CLIENT). Pinned by
+  tests\callresolve\run_generic_constraint_typeuse.ps1. }
 function NamesGenericParam(const AParams, ALc: string): Boolean;
 var
-  Tok: string;
+  GroupStart: Integer; // first char of the current ';' group
+  NamesEnd  : Integer; // its first depth-0 ':' (0 = none yet)
+  Depth     : Integer;
 begin
   Result:= False;
-  for Tok in LowerCase(AParams).Split([',', ';', ':', ' ', '<', '>', '(', ')'], TStringSplitOptions.ExcludeEmpty) do
-    if Tok = ALc then Exit(True);
+  var Text: string:= Trim(AParams);
+  if Text.StartsWith('<') and Text.EndsWith('>') then Text:= Copy(Text, 2, Length(Text) - 2);
+  Text      := Text + ';';
+  GroupStart:= 1;
+  NamesEnd  := 0;
+  Depth     := 0;
+  for var I: Integer:= 1 to Length(Text) do
+    if (Text[I] = ';') and (Depth = 0) then
+    begin
+      var Names: string:= Copy(Text, GroupStart, (if NamesEnd > 0 then NamesEnd else I) - GroupStart);
+      for var Tok: string in LowerCase(Names).Split([',', ' ', '<', '>'], TStringSplitOptions.ExcludeEmpty) do
+        if Tok = ALc then Exit(True);
+      GroupStart:= I + 1;
+      NamesEnd  := 0;
+    end
+    else if Text[I] = '<' then Inc(Depth)
+    else if Text[I] = '>' then Dec(Depth)
+    else if (Text[I] = ':') and (Depth = 0) and (NamesEnd = 0) then NamesEnd:= I;
 end;
 
 { 1.43 (recv2): [Unit.]Name[<args>], and nothing an array, a pointer, a `set of`, a
@@ -10954,6 +10977,13 @@ begin
   // 2. type the receiver -> a class/interface/record symbol id.
   TypeId:= TypeReceiver(ACallRef, Rcv, RcvType);
   Result.ReceiverTypeSymbolId:= TypeId; // 0 when the receiver type is unknown
+  { 151 RB-A X4-r: a bare / Self call in a routine that is not a method is typed by kind 1 as the
+    routine's parent -- the PROGRAM (.dpr) or UNIT symbol. Rung 3 may still find the routine there
+    (the bind is unchanged), but the edge must not claim a receiver the source never wrote: rung 4
+    clears it for the same reason. Pinned by tests\callresolve\run_x4r_dpr_receiver.ps1. }
+  if (TypeId > 0) and ((Rcv = '') or SameText(Rcv, 'Self'))
+    and (SymbolById(TypeId).Kind in [skUnit, skProgram, skPackage]) then
+    Result.ReceiverTypeSymbolId:= 0;
   { Item 4: the declared type TEXT, set here so every exit below carries it
     (spec s.4.1): '' for a bare / Self receiver and for one nothing types. }
   Result.ReceiverTypeText:= RcvType.Text + (if (RcvType.Text <> '') and (RcvType.Pending <> '') then '.' + RcvType.Pending else '');
