@@ -37,8 +37,8 @@ Two kinds of source fact are re-derived from file text by every consumer:
 | parent | INTEGER NOT NULL | `ordinal` of the enclosing property row (a collection `item` or a nested list), -1 at object level |
 | depth | INTEGER NOT NULL | 0 = direct property of the object; +1 per enclosing collection item / nested value |
 | name | TEXT NOT NULL | the property name as written, dotted kept (`Font.Name`, `Items.Strings`) |
-| value_text | TEXT NOT NULL | the value: a string DECODED (doubled quotes, `#nnn`, `+` continuations joined); anything else its source text, line breaks kept as `#10` |
-| value_kind | TEXT NOT NULL | `string`, `integer`, `float`, `ident`, `set`, `list`, `collection`, `binary`, `other` |
+| value_text | TEXT NOT NULL | the value: a string DECODED (doubled quotes, `#nnn`, `+` continuations joined); anything else its source text, line breaks kept as `#10`; '' for list / collection / item / binary (content in the child rows: list elements name '', collection items name 'item') |
+| value_kind | TEXT NOT NULL | `string`, `integer`, `float`, `ident`, `set`, `list`, `collection`, `item`, `binary`, `other` |
 | start_line, start_col, end_line, end_col | INTEGER NOT NULL | 1-based; columns in UTF-8 bytes (as `dfm_objects` and `symbols`) |
 
 Indexes: `(file_id, ordinal)`, `(file_id, object_ordinal)`, `(name COLLATE NOCASE)`.

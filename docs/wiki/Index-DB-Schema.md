@@ -360,8 +360,8 @@ the `.dfm` text; a file with no rows is "not recorded" for that file. Indexes
 | parent | INTEGER | `ordinal` of the enclosing property row (collection item / nested list); -1 at object level |
 | depth | INTEGER | 0 = direct property of the object; +1 per enclosing item / nested value |
 | name | TEXT | the property name as written, dotted kept (`Font.Name`) |
-| value_text | TEXT | a string value decoded (doubled quotes, `#nnn`, `+` continuations joined); any other value its source text |
-| value_kind | TEXT | `string` / `integer` / `float` / `ident` / `set` / `list` / `collection` / `binary` / `other` |
+| value_text | TEXT | a string value decoded (doubled quotes, `#nnn`, `+` continuations joined); any other value its source text; '' for list / collection / item / binary |
+| value_kind | TEXT | `string` / `integer` / `float` / `ident` / `set` / `list` / `collection` / `item` / `binary` / `other` |
 | start_line, start_col, end_line, end_col | INTEGER | assignment span, 1-based (columns in UTF-8 bytes) |
 
 ### comment_facts (151, additive)

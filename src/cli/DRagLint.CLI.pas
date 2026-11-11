@@ -19852,7 +19852,7 @@ var
     end
     else if Key = 'dfm_properties.value_kind' then
     begin
-      ADesc  := 'The shape of the value: value_text is the decoded string for string, the source text otherwise.';
+      ADesc  := 'The shape of the value: string / integer / float / ident / set / list / collection / item / binary / other. value_text is the decoded string for string, '''' for list / collection / item / binary (their content is in the child rows), the source text otherwise.';
       AValues:= 'binary,collection,float,ident,integer,list,other,set,string';
     end
     else if Key = 'dfm_properties.object_ordinal' then

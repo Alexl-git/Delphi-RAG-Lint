@@ -1470,7 +1470,9 @@ type
   /// Name is the property name as written (dotted kept). ValueText is a string
   /// value DECODED (doubled quotes, #nnn codes, '+' continuations joined), any
   /// other value its source text. ValueKind is one of 'string', 'integer',
-  /// 'float', 'ident', 'set', 'list', 'collection', 'binary', 'other'. Lines and
+  /// 'float', 'ident', 'set', 'list', 'collection', 'item', 'binary', 'other';
+  /// a list / collection / item / binary row has ValueText '' (the content is in
+  /// the child rows: list elements Name '', collection items Name 'item'). Lines and
   /// columns are 1-based (columns in UTF-8 bytes, as for dfm_objects). The store
   /// writes the array index as the row's ordinal. Spec:
   /// docs\superpowers\specs\2026-11-11-dfm-props-and-comment-facts.md.
