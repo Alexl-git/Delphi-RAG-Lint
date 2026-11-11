@@ -2579,6 +2579,9 @@ begin
     Writeln(ErrOutput, 'drag-lint LSP: db not found, skipping: ', APath);
     Exit;
   end;
+  { 151 CF: doc-facts memos are keyed by store pointer; a store opened now (re-index,
+    context switch) may reuse a freed one's address over different ids. }
+  ClearDocFactsMemos;
   try
     { A READER, since 2026-09-15 (owner ruling 2: only the IDE writes; every
       other client reads -- docs\PLAN-multi-client-index-safety.md). Until
@@ -3629,6 +3632,7 @@ var
 begin
   Result:= False;
   DropEphemeralStore;
+  ClearDocFactsMemos;  { 151 CF: the new store may reuse the dropped one's address }
   Inc(FEphemSeq);
   { The database goes to %TEMP%, never beside the user's source -- a stray
     .sqlite dropped next to a file someone merely HOVERED would be a second

@@ -989,6 +989,17 @@ type
 /// </remarks>
 function DocFactsBuildProfile: string;
 
+/// <summary>Forgets every run-level memo TDocFactsBuilder.Build keeps per (store
+/// instance, id): the overload tag, the see-also sibling lists, the routine name
+/// counts and the C14 receiver lookups.</summary>
+/// <remarks>151 CF. The memos are keyed by the store's interface POINTER, which is
+/// sound only while every store stays open for the whole process. A long-lived host
+/// (the LSP) frees and opens stores -- after a re-index, on a context switch, for
+/// each loose file's ephemeral index -- and a new store can reuse a freed address
+/// over different ids. Such a host calls this before it opens any store. Not
+/// thread-safe: call it from the thread that runs Build.</remarks>
+procedure ClearDocFactsMemos;
+
   /// <summary>Applies the display cap: a list of ATotal items shows all of them
   /// UNLESS ATotal > 15, in which case only the first 10 are kept and the caller
   /// appends '(+N more)' with N = ATotal - 10. Returns how many to display.</summary>
@@ -1325,6 +1336,15 @@ begin
       end;
   end;
   if not Counts.TryGetValue(LowerCase(AName), Result) then Result:= 0;
+end;
+
+procedure ClearDocFactsMemos;
+begin
+  GOverloadMemo     .Clear;
+  GSiblingMemo      .Clear;
+  GRoutineNameCounts.Clear;
+  GScopeMemberMemo  .Clear;
+  GForeignKnownMemo .Clear;
 end;
 
 function DocFactsBuildProfile: string;
