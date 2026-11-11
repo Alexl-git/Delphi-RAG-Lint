@@ -62,6 +62,8 @@ That writes `dist\drag-lint-<version>.vsix`. Install it with
 code --install-extension dist\drag-lint-1.5.0.vsix
 ```
 
+VS Code keeps one extension set per profile. The release script `build\pack-lint-release.ps1` installs the new vsix into EVERY profile (default + each `userDataProfiles` entry of `%APPDATA%\Code\User\globalStorage\storage.json`) through `build\install-vsix-all-profiles.ps1` (`-WhatIf` prints the plan; `-NoProfileInstall` on the release script skips the step). `tests\autotest\run_vscode_extension_installed_guard.ps1` fails when a profile still points at an older or deleted drag-lint folder.
+
 `node_modules` is not tracked; `npm install` restores exactly what
 `package-lock.json` pins. `@vscode/vsce` is a devDependency, so it is not
 shipped inside the package (vsce bundles production deps only).
