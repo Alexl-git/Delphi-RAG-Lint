@@ -1243,6 +1243,10 @@ type
   end;
 var
   GSiblingMemo: TDictionary<string, TArray<TSeeSibling>>;
+  { 151 CF (LX-5): (store, parent id) -> lowercase routine name -> how many
+    ROUTINE-kind children carry it. Owns its inner dictionaries. Same lifetime
+    and the same never-invalidated reasoning as GOverloadMemo above. }
+  GRoutineNameCounts: TObjectDictionary<string, TDictionary<string, Integer>>;
 
 function BTick: Int64; inline;
 begin
@@ -1289,6 +1293,34 @@ begin
       end;
   end;
   GSiblingMemo.AddOrSetValue(Key, Result);
+end;
+
+{ 151 CF: how many ROUTINE-kind children of AParentId are named AName (no case),
+  from one FindAllChildSymbols per (store, parent) -- GRoutineNameCounts. The
+  count OverloadArityTag compared against 1 used to be recomputed by materialising
+  every sibling once per CALLER ROW. Lowercase keys fold exactly what SameText
+  folds (ASCII letters), so the count is the same. }
+function RoutineNameCount(const AStore: ISymbolStore; AParentId: Int64; const AName: string): Integer;
+const
+  ROUTINE_KINDS = [skMethod, skConstructor, skDestructor, skFunction, skProcedure];
+var
+  Counts: TDictionary<string, Integer>;
+begin
+  var Key: string:= StoreKey(AStore, AParentId);
+  if not GRoutineNameCounts.TryGetValue(Key, Counts) then
+  begin
+    Counts:= TDictionary<string, Integer>.Create;
+    GRoutineNameCounts.Add(Key, Counts);
+    for var S in AStore.FindAllChildSymbols(AParentId) do
+      if S.Kind in ROUTINE_KINDS then
+      begin
+        var N: Integer:= 0;
+        var Lower: string:= LowerCase(S.Name);
+        Counts.TryGetValue(Lower, N);
+        Counts.AddOrSetValue(Lower, N + 1);
+      end;
+  end;
+  if not Counts.TryGetValue(LowerCase(AName), Result) then Result:= 0;
 end;
 
 function DocFactsBuildProfile: string;
@@ -1354,7 +1386,6 @@ const
   ROUTINE_KINDS = [skMethod, skConstructor, skDestructor, skFunction, skProcedure];
 var
   Sym    : TSymbol;
-  Sibs   : TArray<TSymbol>;
   Same   : Integer;
   Lo, Hi : Integer;
 begin
@@ -1376,10 +1407,13 @@ begin
     { Same container, same name -- the sibling test 'Overload k of n' already uses
       (FindAllChildSymbols scopes to a class for methods and to the unit symbol for
       free routines), so the two facts cannot disagree about what an overload is. }
-    Sibs:= AStore.FindAllChildSymbols(Sym.ParentId);
-    Same:= 0;
-    for var S in Sibs do
-      if (S.Kind in ROUTINE_KINDS) and SameText(S.Name, Sym.Name) then Inc(Same);
+    { 151 CF (LX-5 hover cost): the per-NAME routine counts of one container are
+      memoised per (store, parent id) -- see GRoutineNameCounts. Measured on the
+      drag-lint DB, 100 hovers: 1,637 calls, 1.45 ms each, almost all of it this
+      sibling materialisation repeated for every caller of the same class. Same
+      count as the loop it replaces (ROUTINE_KINDS children whose name matches
+      without case), so the tag cannot change. }
+    Same:= RoutineNameCount(AStore, Sym.ParentId, Sym.Name);
     if Same <= 1 then Exit;
     if not SignatureArityRange(Sym.Signature, Lo, Hi) then Exit;
     Result:= '/' + IntToStr(Hi);
@@ -5465,9 +5499,11 @@ initialization
   GSeeTargetSeen:= TDictionary<string, Boolean>.Create;
   GSeeParentSeen:= TDictionary<string, Boolean>.Create;
   GSiblingMemo  := TDictionary<string, TArray<TSeeSibling>>.Create;
+  GRoutineNameCounts:= TObjectDictionary<string, TDictionary<string, Integer>>.Create([doOwnsValues]);
 
 finalization
   GSiblingMemo  .Free;
+  GRoutineNameCounts.Free;
   GSeeParentSeen.Free;
   GSeeTargetSeen.Free;
   GOverloadMemo.Free;
