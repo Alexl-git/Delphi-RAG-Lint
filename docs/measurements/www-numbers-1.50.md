@@ -12,11 +12,9 @@ firedac 3, policy 3. Same as 1.49 and 1.48 (315 / 18 / 110): the planner's figur
 ## cycles --hub numbers of the 149 article
 The article (lanes\149\www-drafts\2026-11-10-which-unit-is-the-hub-of-this-cycle.html) quotes `cycles --hub` on drag-lint's own
 index (2-unit group draglint.lsp.proxy.merge / draglint.lsp.proxy; 5-unit group draglint.doc.*; refs 16 / 55 / 28 / 153).
-STATUS: NOT REFRESHED. A scratch index of the wt (325 files) needs ~6 min CPU (over the 2 min LIGHT limit, box BUSY); the run I
-started was stopped before the refs stage and `cycles --hub` on it printed `0 refs` on every edge: that output is NOT a
-measurement and is discarded. The group SHAPE did come out the same (same two groups, same hubs, same in/out edge counts
-3 impl + 0 intf in, 1 impl + 1 intf out; 1 impl in, 1 intf out), i.e. structure unchanged, ref counts unproven.
-Finisher: staged\hub-index.ps1 (re-index, assert refs != 0, print the report) -> compare against the article.
+STATUS: REFRESHED (MEASURED 2026-11-11: fresh index of the lane wt, 1.50.0-alpha engine, `cycles --hub --format text`).
+- 2-unit group lsp.proxy.merge / lsp.proxy: identical to the article (in 16 refs / out 55 refs; hub lsp.proxy.merge in 1 impl, out 1 intf; zero-ref 0 of 2; spoke surfaces 11 and 10 symbols).
+- 5-unit doc group, hub draglint.doc.regions: in 3 impl edges 28 refs (same); out 2 edges (1 impl, 1 intf) **157 refs (article: 153)**; zero-ref edges **0 of 8 (article: 0 of 7)**. The article text must change 153 to 157 and 7 to 8 edges (the source grew since 2026-11-09). Raw: lanes152MSscratchhub-run.log.
 
 ## Product intro 1.50
 Staged: lanes\152\MS\staged\www-drafts\product-intro-dl-1.50.0-alpha.txt (WWW\ is the website team's; no edit here).
