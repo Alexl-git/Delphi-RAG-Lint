@@ -41,6 +41,8 @@ param(
   [string]$OutDir = 'C:\TEMP\draglint-reparse',
   [string]$WorkDir = 'C:\Projects',
   [string[]]$Platforms = @('win32', 'win64'),
+  [string]$D5Root = '\\alex9-1\D5Source',   # used only when -Platforms contains 'd5' (Delphi 5 source copy; wave 151 OPS)
+  [string]$D5Db = 'C:\Projects\.drag-lint\library-D5.sqlite',
   [string]$ProjectsCsv = '',
   [int]$ProjectJobs = 4,
   [int]$PollSec = 60,
@@ -100,8 +102,9 @@ function Read-LibraryProgress([string]$LogPath) {
 function Get-LibraryFileCount([string]$Platform) {
   # Read-only, before the run. Unknown stays 0 and the ETA says so.
   try {
+    if ($Platform -eq 'd5') { $db = $D5Db } else {
     $paths = (& $Engine resolve-dbs --platform $Platform --json 2>$null) -join '' | ConvertFrom-Json
-    $db = @($paths | Where-Object { $_ -match '\\library-[^\\]+\.sqlite$' }) | Select-Object -Last 1
+    $db = @($paths | Where-Object { $_ -match '\\library-[^\\]+\.sqlite$' }) | Select-Object -Last 1 }
     if (-not $db) { return 0 }
     $json = (& $Engine sql --db $db --query 'select count(*) from files' --json 2>$null) -join '' | ConvertFrom-Json
     return [int]$json.rows[0][0]    # sql --json rows are positional
@@ -120,6 +123,13 @@ function Get-BusyEngines {
 
 $Steps = New-Object System.Collections.Generic.List[object]
 foreach ($plat in $Platforms) {
+  if ($plat -eq 'd5') {
+    # library-D5 is not a manifest section (the Library section excludes Delphi5): index the source root into its own DB.
+    $Steps.Add([pscustomobject]@{ Name = 'library-d5'; Phase = 'libraries'; Platform = 'd5'
+      Args = @('index', $D5Root, '--db', $D5Db, '--target-compiler', '5', '--library-db', 'none')
+      Proc = $null; Exit = $null; Started = $null; Ended = $null; Total = 0 })
+    continue
+  }
   $Steps.Add([pscustomobject]@{ Name = "library-$plat"; Phase = 'libraries'; Platform = $plat
     Args = @('index', '--all', '--only', 'Library', '--platform', $plat, '--jobs', '1', '--rule-cache-warm', 'off')
     Proc = $null; Exit = $null; Started = $null; Ended = $null; Total = 0 })

@@ -137,9 +137,13 @@ $srvPas = Join-Path $PSScriptRoot '..\..\src\lsp\DRagLint.LSP.Server.pas'
 $srv = [IO.File]::ReadAllText($srvPas)
 $mi = [regex]::Match($srv, 'function TLSPServer\.IdentifierAtPosition\(.*?\r?\nend; // function', 'Singleline')
 Check 'static: the IdentifierAtPosition body was found' $mi.Success ''
-Check 'static: IdentifierAtPosition parses through ParseDelphiUtf8' ($mi.Value -match 'ParseDelphiUtf8\(') ''
-Check 'static: IdentifierAtPosition builds no TTSParser of its own' ($mi.Value -notmatch 'TTSParser') ''
-Check 'static: IdentifierAtPosition has no tail-copy read callback' ($mi.Value -notmatch 'Remaining') ''
+# 151 CF moved the parse into IdentTreeFor (one cached tree per file version); the pinned
+# properties hold for the body PLUS that helper when the body calls it.
+$mt = [regex]::Match($srv, 'function TLSPServer\.IdentTreeFor\(.*?\r?\nend; // function', 'Singleline')
+$identParse = if ($mi.Value -match 'IdentTreeFor\(') { $mi.Value + $mt.Value } else { $mi.Value }
+Check 'static: IdentifierAtPosition parses through ParseDelphiUtf8 (directly or via IdentTreeFor)' ($identParse -match 'ParseDelphiUtf8\(') ''
+Check 'static: IdentifierAtPosition builds no TTSParser of its own' ($identParse -notmatch 'TTSParser') ''
+Check 'static: IdentifierAtPosition has no tail-copy read callback' ($identParse -notmatch 'Remaining') ''
 
 # ================= (b) --full-rules child gets --project / --platform =================
 Write-Host '(b) --full-rules child argv' -ForegroundColor Cyan

@@ -72,7 +72,7 @@ type
       /// <exception cref="ETreeSitterException"><!-- drag-lint:auto exc -->via TreeSitter.TTSParser.SetLanguage: Failed to set parser language to 0x%p</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: Default, DRagLint.Parser.Delphi13.CollectParseErrors, DRagLint.Parser.Delphi13.HarvestStringLiterals, DRagLint.Parser.Delphi13.TWalkState.Create, DRagLint.Parser.Delphi13.Walk, DRagLint.Preprocess.Types.NormalizeLoneCR, Integer, Move, TreeSitter.TTSNodeHelper.HasError, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, TreeSitter.TTSParser.SetLanguage</para>
+      /// <para>Calls: ChangeFileExt, Default, DRagLint.Parser.Delphi13.CollectParseErrors, DRagLint.Parser.Delphi13.HarvestStringLiterals, DRagLint.Parser.Delphi13.TWalkState.Create, DRagLint.Parser.Delphi13.Walk, DRagLint.Preprocess.Types.NormalizeLoneCR, ExtractFileName, Integer, Move, TreeSitter.TTSNodeHelper.HasError, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, TreeSitter.TTSParser.SetLanguage, TreeSitter.TTSTree.RootNode</para>
       /// <para>Implements: DRagLint.Core.Interfaces.IParser.Parse</para>
       /// <para>Reads: FLanguage, EmitUsageRefs</para>
       /// <para>Pure</para>

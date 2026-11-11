@@ -332,6 +332,7 @@ begin
   Writeln('  drag-lint info [--json] [--db <file.sqlite>]...      (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only)');
   Writeln('                               each --db adds an `indexes` entry (--json): stored fingerprints, indexer_stale / resolver_stale, a verdict');
   Writeln('                               (current | resolve-owed | library-resolve-owed | reparse-owed | index-newer | missing | unreadable) and the remedy. Keyed lookups, no COUNT.');
+  Writeln('                               grammar_dlls (--json: grammar_dlls_stored / grammar_dlls_loaded / grammar_dlls_differ; text: a `grammar: DIFFERS` block): the index was parsed with other tree-sitter DLLs than this engine loads; the verdict is unchanged, the remedy is index --rebuild.');
   Writeln('                               text form: one "index: <path>  verdict: <v>" line per --db, then "  remedy: ..." when one is owed.');
   Writeln('                               library-resolve-owed: the DB was resolved without its platform library (marker schema_meta library_resolve_state = pending); --json adds library_resolve {state, reason, since_unix, library_state}, the text form a library_resolve line.');
   Writeln('  drag-lint fb-snapshot --connection "Database=...;User=...;Password=...;DriverID=FB" --db <sql.sqlite>');
@@ -1094,6 +1095,7 @@ begin
     Writeln('  drag-lint info [--json] [--db <file.sqlite>]...      (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only)');
     Writeln('                               each --db adds an `indexes` entry (--json): stored fingerprints, indexer_stale / resolver_stale, a verdict');
     Writeln('                               (current | resolve-owed | library-resolve-owed | reparse-owed | index-newer | missing | unreadable) and the remedy. Keyed lookups, no COUNT.');
+    Writeln('                               grammar_dlls (--json: grammar_dlls_stored / grammar_dlls_loaded / grammar_dlls_differ; text: a `grammar: DIFFERS` block): the index was parsed with other tree-sitter DLLs than this engine loads; the verdict is unchanged, the remedy is index --rebuild.');
     Writeln('                               text form: one "index: <path>  verdict: <v>" line per --db, then "  remedy: ..." when one is owed.');
     Writeln('                               library-resolve-owed: the DB was resolved without its platform library (marker schema_meta library_resolve_state = pending); --json adds library_resolve {state, reason, since_unix, library_state}, the text form a library_resolve line.');
     Exit;

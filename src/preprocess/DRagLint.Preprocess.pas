@@ -229,9 +229,10 @@ function Preprocess(const AUtf8: TBytes; const AOptions: TPPOptions;
 /// IF expressions are evaluated against the constants declared
 /// earlier in the active text, then against the units of the uses clause
 /// through the installed PPUnitSource (none installed = same-file only).
-/// Setting the environment variable DRAGLINT_PP_TRACE to a file path appends
-/// one TSV line per evaluated IF (base dir, line, result, result without the
-/// symbol table, unresolved names, expression) -- a measurement aid.
+/// Setting the environment variable DRAGLINT_PP_TRACE (see PPTracePath: a flag
+/// or a file path) appends one TSV line per evaluated IF (base dir, line,
+/// result, result without the symbol table, unresolved names, expression) --
+/// a measurement aid.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.UnresolvedIfs (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.Scan (DRagLint.Index.PPUnitSource.pas)</para>
 /// <para>Calls: Default, DRagLint.Preprocess.PreprocessWithSites</para>
@@ -242,6 +243,22 @@ function Preprocess(const AUtf8: TBytes; const AOptions: TPPOptions;
 /// </remarks>
 function PreprocessReport(const AUtf8: TBytes; const AOptions: TPPOptions;
   out AReport: TPPReport): TBytes;
+
+/// <summary>The single reader of the DRAGLINT_PP_TRACE environment variable:
+/// where the preprocessor and the directive lint rules append their trace.</summary>
+/// <returns>'' = tracing off (variable unset or empty). A value of 1, true or
+/// yes (any case) is a FLAG: the trace goes to %TEMP%\drag-lint-pp-trace.log
+/// and one NOTE naming that file is written to stderr, once per process.
+/// Anything else is taken as the trace file path.</returns>
+/// <remarks>Read once at unit initialization; the answer never changes during
+/// the process. Thread-safe (immutable after initialization).</remarks>
+function PPTracePath: string;
+
+/// <summary>Appends one line to the PPTracePath file, CRLF-terminated.</summary>
+/// <param name="ALine">The text of the line, without a line terminator.</param>
+/// <remarks>Does nothing when tracing is off. Thread-safe: appends are
+/// serialised by one lock shared with the preprocessor's own trace.</remarks>
+procedure PPTraceAppend(const ALine: string);
 
 implementation
 
@@ -279,6 +296,10 @@ var
   // serialises the appends.
   GTracePath: string = '';
   GTraceLock: TObject = nil;
+
+const
+  PP_TRACE_ENV  = 'DRAGLINT_PP_TRACE';
+  PP_TRACE_FILE = 'drag-lint-pp-trace.log';
 
 type
   // Lane INC3: per-run state shared BY REFERENCE through the include recursion
@@ -637,18 +658,13 @@ var
       U.Names  := if U.Assumed then Assum else Unres;
       ACtx.Unresolved.Add(U);
     end;
-    if GTracePath <> '' then
+    if PPTracePath <> '' then
     begin
       var Bare: TArray<string>;
       var BareResult: Boolean:= EvalPPExprScoped(AChunk.Args, ADefines, ANumeric, nil, Bare);
-      TMonitor.Enter(GTraceLock);
-      try
-        TFile.AppendAllText(GTracePath, Format('%s'#9'%d'#9'%s'#9'%s'#9'%s'#9'%s'#13#10,
-          [ABaseDir, AChunk.Line + 1, BoolToStr(Result, True), BoolToStr(BareResult, True),
-           string.Join(',', Unres), AChunk.Args.Replace(#9, ' ').Replace(#13, ' ').Replace(#10, ' ')]));
-      finally
-        TMonitor.Exit(GTraceLock);
-      end;
+      PPTraceAppend(Format('%s'#9'%d'#9'%s'#9'%s'#9'%s'#9'%s',
+        [ABaseDir, AChunk.Line + 1, BoolToStr(Result, True), BoolToStr(BareResult, True),
+         string.Join(',', Unres), AChunk.Args.Replace(#9, ' ').Replace(#13, ' ').Replace(#10, ' ')]));
     end;
   end;
 
@@ -1050,8 +1066,45 @@ begin
   Result:= Preprocess(AUtf8, Opts);
 end;
 
+function PPTracePath: string;
+begin
+  Result:= GTracePath;
+end;
+
+procedure PPTraceAppend(const ALine: string);
+begin
+  if GTracePath = '' then Exit;
+  TMonitor.Enter(GTraceLock);
+  try
+    TFile.AppendAllText(GTracePath, ALine + #13#10);
+  finally
+    TMonitor.Exit(GTraceLock);
+  end;
+end;
+
+// PP_TRACE_ENV: '' = off; 1 / true / yes = flag -> the file under %TEMP% (+ one
+// stderr NOTE); anything else = the trace file path itself.
+function ResolveTracePath: string;
+var
+  Raw: string;
+begin
+  Raw:= GetEnvironmentVariable(PP_TRACE_ENV);
+  if Raw = '' then Exit('');
+  if SameText(Raw, '1') or SameText(Raw, 'true') or SameText(Raw, 'yes') then
+  begin
+    Result:= TPath.Combine(TPath.GetTempPath, PP_TRACE_FILE);
+    try
+      Writeln(ErrOutput, 'NOTE: ' + PP_TRACE_ENV + '=' + Raw + ' is a flag; tracing to ' + Result);
+    except  // dl:ok try-except-swallowed@d59a -- best-effort NOTE: no console (IDE / service) must not stop the trace
+      on EInOutError do ; // no console (IDE / service): the NOTE is best-effort  // dl:ok empty-on-handler@59cd
+    end;
+  end
+  else
+    Result:= Raw;
+end;
+
 initialization
-  GTracePath:= GetEnvironmentVariable('DRAGLINT_PP_TRACE');
+  GTracePath:= ResolveTracePath;
   GTraceLock:= TObject.Create;
 finalization
   GTraceLock.Free;

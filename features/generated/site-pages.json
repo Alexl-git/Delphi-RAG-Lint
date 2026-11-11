@@ -512,8 +512,8 @@
     "version": "1.38.0-alpha"
   },
   "features/info.md": {
-    "hash": "1736f08144cb5faa9eb0487fca5694c5617542344f339fb09d61ee5318e22d5e",
-    "version": "1.35.1-alpha"
+    "hash": "656fdb2f9ad2118de588e553e0d283dff058811580b4d0ffa677cddaa63601d7",
+    "version": "1.49.0-alpha"
   },
   "features/init-order-hazard.md": {
     "hash": "b48061e27a84eef1e8e04e5f13df4ebe620a6652565015783a7a80a931e8d40a",

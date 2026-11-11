@@ -39,6 +39,9 @@
     C2  that same run still goes WHOLE-DB, and the reason now comes from the
         TYPE GATE rather than from a file count. Before the fix it said "pruned
         or evicted". The safety property, and the one that must never invert.
+    C2h 151 ST: permissive (widening off) + DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE=1
+        (150-RS2 (6) off): the stale edge SURVIVES -- the polarity control that
+        proves C1 / C2p can fail; with the hatch alone the edges equal C1's.
     C3  eviction of a unit declaring NO TYPES goes SCOPED. RED before the fix
         (it said "pruned or evicted" there too).
     C4  ORACLE for C3: the identical delta re-run with
@@ -234,7 +237,7 @@ $pyf = Join-Path $scratch 'dump.py'
 Write-Ascii $pyf $py
 
 # One eviction run. Returns the console text so the announce line can be read.
-function Run-Eviction([string]$Tag, [string]$Victim, [string]$NoScoped, [string]$Removals) {
+function Run-Eviction([string]$Tag, [string]$Victim, [string]$NoScoped, [string]$Removals, [string]$NoClosure = '') {
   $dir = Join-Path $scratch $Tag
   Build-Corpus $dir
   $db = Join-Path $scratch "$Tag.sqlite"
@@ -249,10 +252,13 @@ function Run-Eviction([string]$Tag, [string]$Victim, [string]$NoScoped, [string]
   Remove-Item Env:\DRAGLINT_SCOPED_RESOLVE_REMOVALS -ErrorAction SilentlyContinue
   if ($NoScoped) { $env:DRAGLINT_NO_SCOPED_RESOLVE      = $NoScoped }
   if ($Removals) { $env:DRAGLINT_SCOPED_RESOLVE_REMOVALS = $Removals }
+  Remove-Item Env:\DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE -ErrorAction SilentlyContinue
+  if ($NoClosure) { $env:DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE = $NoClosure }
   try   { $out = & $exePath index $dir --db $db 2>&1 | Out-String }
   finally {
     Remove-Item Env:\DRAGLINT_NO_SCOPED_RESOLVE      -ErrorAction SilentlyContinue
     Remove-Item Env:\DRAGLINT_SCOPED_RESOLVE_REMOVALS -ErrorAction SilentlyContinue
+    Remove-Item Env:\DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE -ErrorAction SilentlyContinue
   }
 
   return [pscustomobject]@{
@@ -307,14 +313,38 @@ try {
   # closes the same ON DELETE SET NULL channel from the RECEIVER side: X.Ping's call_edges row has
   # receiver_type_symbol_id = TDoomed (a symbol of the evicted file), so 'Ping' is put in scope and
   # re-resolved with the widening OFF too. The channel is now closed TWICE; this check asserts the
-  # second closure and FAILS on the 1.49.0-alpha base (edge survives there = the old polarity
-  # control, still observable by -Exe <base>). The widening's own polarity control would need a
-  # hatch for RS2 (6), which 150 does not have (INT4 FOUND, BACKLOG-AFTER-150).
+  # second closure. It FAILS on a pre-150 engine (edge survives there = the old polarity control,
+  # observable by -Exe <pre-150 engine>); the 1.49.0-alpha base already carries RS2 (6) and PASSES
+  # (151 ST FOUND). The widening's own polarity control is arm C2h below (151 ST hatch).
   Check 'C2p and WITHOUT the widening the stale X.Ping edge is STILL gone (150-RS2 (6) receiver-side scope)' `
     (-not ($tp.Edges -match 'uConsumer\.pas\|.*\|Ping\|')) `
     "RS2 (6) did not put Ping in scope:`n$($tp.Edges)"
   Check 'C2p VACUITY: the permissive run still produced edges' `
     ($tp.Edges -match 'EDGE\|') 'the permissive run produced NO edges at all'
+
+  # ---- C2h: the WIDENING's own polarity control (151 ST, INT4 FOUND 1) -----
+  # permissive (widening off) AND DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE=1 (RS2 (6)
+  # off): both closures of the ON DELETE SET NULL channel are open, so the stale
+  # X.Ping edge MUST survive. This is the arm that proves C1 / C2p can fail: with
+  # it, removing the widening or RS2 (6) would be SEEN. FAILS on the 1.49.0-alpha
+  # base and on any engine without the hatch (RS2 (6) still closes the channel).
+  Write-Host ''
+  Write-Host 'C2h: permissive + RS2 (6) hatch -- both closures off, the stale edge comes back' -ForegroundColor Cyan
+  $th = Run-Eviction 'typed_perm_noclose' 'uDoomed.pas' $null 'permissive' '1'
+  Check 'C2h permissive + hatch still takes the SCOPED pass' `
+    ($th.Out -match 'starting SCOPED pass') `
+    (($th.Out -split "`n" | Where-Object { $_ -match 'starting' }) -join ' / ')
+  Check 'C2h with both closures off the stale X.Ping edge SURVIVES (the guard can fail)' `
+    ($th.Edges -match 'uConsumer\.pas\|.*\|Ping\|') `
+    "the hatch did not open the channel:`n$($th.Edges)"
+  Check 'C2h VACUITY: the hatch run still produced edges' `
+    ($th.Edges -match 'EDGE\|') 'the hatch run produced NO edges at all'
+  # The hatch alone (widening ON) must not change the answer: the widening still
+  # closes the channel, so the edge stays gone and the edge set equals C1's.
+  $tw = Run-Eviction 'typed_noclose' 'uDoomed.pas' $null $null '1'
+  Check 'C2h hatch alone (widening on): the stale edge is still gone, same edges as C1' `
+    ((-not ($tw.Edges -match 'uConsumer\.pas\|.*\|Ping\|')) -and ($tw.Edges -eq $t.Edges)) `
+    "hatch-only:`n$($tw.Edges)`n`nC1:`n$($t.Edges)"
 
   # ---- C2o: the off switch restores the pre-2026-08-28 answer --------------
   # A hatch that quietly stopped being read would look exactly like a hatch

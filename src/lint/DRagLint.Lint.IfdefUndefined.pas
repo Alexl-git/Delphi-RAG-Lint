@@ -229,6 +229,7 @@ uses
   System.IOUtils,
   System.RegularExpressions,
   System.Generics.Collections,
+  DRagLint.Preprocess,
   DRagLint.Preprocess.Types,
   DRagLint.Preprocess.Lexer,
   DRagLint.Preprocess.Profile,
@@ -639,8 +640,8 @@ var
   Text: string;
 begin
   Rows:= CurrentDirectiveRows(AStore, AFilePath);
-  if GetEnvironmentVariable('DRAGLINT_PP_TRACE') = '1' then
-    Writeln(ErrOutput, Format('pp-directives: %s %s rows=%d',
+  if PPTracePath <> '' then
+    PPTraceAppend(Format('pp-directives: %s %s rows=%d',
       [if Length(Rows) > 0 then 'table' else 'scan', AFilePath, Length(Rows)]));
   if Length(Rows) > 0 then
     Exit(ScanRows(Rows, ExtractFilePath(ExpandFileName(AFilePath)), ASearchDirs, ASets, ATests, 0));

@@ -32,6 +32,18 @@ const
   /// Pinned by tests\autotest\run_rename_owners_harness.ps1 (M9-M11).</remarks>
   REBUILD_IN_PROGRESS_META_KEY = 'rebuild_in_progress';
 
+  /// <summary>schema_meta key holding the CONTENT identity of the tree-sitter DLLs the
+  /// index was parsed with: 'tree-sitter.dll=&lt;size&gt;:&lt;sha256/16&gt;;tree-sitter-delphi13.dll=...;
+  /// tree-sitter-dfm.dll=...'.</summary>
+  /// <remarks>NOT part of the indexer fingerprint, on purpose: it detects, it does not
+  /// invalidate (a grammar change made on purpose bumps DRAGLINT_EXTRACTOR_VERSION). Written
+  /// by DRagLint.CLI.CommitIndexerFingerprint only when every file was re-parsed (a fresh
+  /// stamp, a --rebuild, or a changed fingerprint), so an incremental run never launders an
+  /// old grammar's parses; read by `info` (grammar_dlls_differ). 2026-11-10: the 1.49
+  /// re-parse ran with the July DFM grammar under a HEAD that recorded v1.2.0 and `info`
+  /// said current.</remarks>
+  GRAMMAR_DLLS_META_KEY = 'grammar_dlls';
+
   /// <summary>schema_meta key holding the project DB's "needs library re-resolve" marker: a small
   /// JSON object {"state":"pending"|"bound","platform","library","reason",
   /// "library_fingerprint_seen","engine","since_unix","last_check_unix"}. Absent or empty = no

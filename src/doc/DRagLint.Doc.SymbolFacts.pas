@@ -2855,7 +2855,18 @@ end;
 //      drops 'Owns returned:' entirely, the SAME omission tier 1's
 //      skRecord/skEnum ground-truth negative above already produces when
 //      the type IS indexed), never fabricate one.
-function IsReferenceTypeName(const AStore: ISymbolStore; const ATypeName: string): Boolean;
+//   151 X2R (index-order independence): tier 1 only trusts a candidate
+//      declared in AFileId -- the routine's OWN file, whose symbols are
+//      stored before its facts pass in every index order. A candidate from
+//      another file was present or absent depending on whether that file was
+//      indexed first, so a class named without the T/I prefix (Widget) stored
+//      '' on a full index and 'borrowed' after an incremental reindex, and
+//      doc-drift flagged the full-index block. Cross-file names now always go
+//      to tier 2 (store-free); a record/enum the prefix accepts is still
+//      dropped at read time by Doc.Facts ReturnsValueTypeNow (150 X2).
+//      Guard: tests\autotest\run_returns_owner_order.ps1.
+function IsReferenceTypeName(const AStore: ISymbolStore; const ATypeName: string;
+  const AFileId: Int64): Boolean;
 var
   Bare : string         ;
   P    : Integer        ;
@@ -2872,6 +2883,7 @@ begin
   Cands:= AStore.FindSymbolsByExactName(Bare);
   for Cand in Cands do
   begin
+    if Cand.FileId <> AFileId then Continue; // 151 X2R: own file only, see header
     if Cand.Kind in [skClass, skInterface] then Exit(True);
     // FIX (Phase 2 T8 review, Fix 2): ground-truth NEGATIVE -- see this
     // function's header comment, tier 1, for why the ORIGINAL code's
@@ -3214,7 +3226,7 @@ begin
     // type -- else a value-returning function (e.g. Count: Integer above)
     // would wrongly render 'borrowed'/'self' for a plain value type.
     if (Verdict = 'borrowed') or (Verdict = 'self') then
-      if not IsReferenceTypeName(AStore, RetTypeName) then Exit;
+      if not IsReferenceTypeName(AStore, RetTypeName, ASym.FileId) then Exit;
 
     Result:= Verdict;
   finally

@@ -37,6 +37,7 @@ uses
   , DRagLint.LSP     .Context   { S0: ILspServerContext + the feature registry }
   , DRagLint.Project .ContextFile { LSP-1 CORE: .dlcontext.json + central context defaults }
   , DRagLint.Lint    .TargetCompiler { 1.38: the target-compiler gate of each file's diagnostics }
+  , DRagLint.Charts  .Index     { 151 CF: FExcIndex -- the Raises: line's open index }
   ;
 
 type
@@ -102,6 +103,13 @@ type
     OnForwardStub : Boolean        ;
     HaveOwnerFloor: Boolean        ;
     OwnerFloorType: TSymbol        ;
+    /// <summary>151 CF (LX-5 hover cost): the TTypeAtResolver.Resolve answer SelectSymbolAt
+    /// computed for this position, valid only while HasTypeAt is True. The undocumented-symbol
+    /// branch of ComputeHoverAt asks the SAME question (same stores, path, line, column), so it
+    /// reuses this instead of resolving twice -- measured 135 resolves for 100 hovers on a CLIENT
+    /// copy, each one an index round-trip of several queries.</summary>
+    HasTypeAt     : Boolean        ;
+    TypeAt        : TTypeAtResult  ;
   end;
 
   /// <summary>Which precedence step decided a file's project context (spec 1b):
@@ -251,6 +259,18 @@ type
       FControl     : TControlChannel     ; { nil = no channel (every mode but lsp); not owned }
       FFullRules   : Boolean             ; { C1: --full-rules; OFF by default }
       FExceptionFacts: Boolean           ; { D1 (wave 148): Raises: hover line + exception code lens; ON by default, lsp --no-exception-facts }
+      { 151 CF (LX-5 hover cost): the last tree IdentifierAtPosition parsed, keyed by the path
+        and the PREPROCESSED bytes the parser saw (so a context switch that changes the active
+        IFDEF branches, or an edit, is a miss). Owned; freed on replacement and in Destroy.
+        Main-thread only, like every hover. See IdentTreeFor. }
+      FIdentTree    : TTSTree            ;
+      FIdentTreePath: string             ;
+      FIdentTreePre : TBytes             ;
+      { 151 CF (LX-5 hover cost): the index ExceptionFactLines reads the Raises: line from,
+        kept open for the last DB path instead of opened per hover. Owned; dropped when that
+        DB is re-indexed (ReindexFinished) and in Destroy. Main thread only. }
+      FExcIndex     : TChartsIndex       ;
+      FExcIndexPath : string             ;
       FFullRulesSuperseded: Boolean      ; { the last RunFullRulesLint child was discarded because a newer save of the same file was waiting }
       FStartProject : string             ; { C15: explicit --project the CLI was started with, or '' }
       FStartPlatform: string             ; { C15: explicit --platform the CLI was started with, or '' }
@@ -1857,6 +1877,14 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function IdentifierAtPosition(const APath: string; ALine, ACol: Integer): string;
+      /// <summary>151 CF: the parse tree of ASource for APath, reused from the last call when
+      /// the path and the preprocessed bytes are identical, else parsed and cached.</summary>
+      /// <param name="ASource">UTF-8 source of APath (overlay or disk).</param>
+      /// <param name="APath">The file the source belongs to (define profile + cache key).</param>
+      /// <returns>The cached tree, OWNED BY THE SERVER -- never free it; nil when the parse failed.</returns>
+      /// <remarks>Measured on a CLIENT copy: 100 hovers in 8 files parsed 100 times
+      /// (~9 ms each); with the cache 8 parses. Not thread-safe: main thread only.</remarks>
+      function IdentTreeFor(const ASource: TBytes; const APath: string): TTSTree;
       /// <returns><!-- drag-lint:auto -->TLinter -- Observed: FLinter.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -2329,6 +2357,7 @@ uses
   DRagLint.Project.DefineProfile,
   DRagLint.Symbol.Describe,  // DescribeDeclaredType: the type a hover shows for a value kind
   DRagLint.Convert.PropTree, // ClearPropertyDeclaredTypeCache: a reopened DB must not answer from old rows
+  DRagLint.Diagnostics.ParseCache, // 151 CF: TAstParseCache.ApplyPreprocess -- the key of IdentTreeFor's parse cache
   DRagLint.LSP.Features,  // linked for its feature units' initialization (RegisterLspFeature); no identifier is referenced
   DRagLint.LSP.UsesOnSave  { KINDS_ON_SAVE: the codeActionKinds initialize advertises } // dl:unit DRagLint.LSP.UsesOnSave accepted -- KINDS_ON_SAVE and UNUSED_UNIT_RULE are the protocol kinds and rule id TUsesOnSave builds for, so they travel with it
   ;
@@ -2550,6 +2579,9 @@ begin
     Writeln(ErrOutput, 'drag-lint LSP: db not found, skipping: ', APath);
     Exit;
   end;
+  { 151 CF: doc-facts memos are keyed by store pointer; a store opened now (re-index,
+    context switch) may reuse a freed one's address over different ids. }
+  ClearDocFactsMemos;
   try
     { A READER, since 2026-09-15 (owner ruling 2: only the IDE writes; every
       other client reads -- docs\PLAN-multi-client-index-safety.md). Until
@@ -2664,6 +2696,8 @@ begin
   if FDeferred <> nil then
     while FDeferred.Count > 0 do FDeferred.Dequeue.Free;
   FDeferred.Free;
+  FIdentTree.Free;  { 151 CF: IdentTreeFor's cached parse }
+  FExcIndex.Free;   { 151 CF: ExceptionFactLines' open index }
   FContext:= nil;
   FFeatureByMethod.Free;
   FFeatures.Free;
@@ -3094,9 +3128,9 @@ begin
   if not FromOverlay then Source:= EnsureUtf8Bytes(Source);
   // C15: the C9 preprocessed parse (inactive IFDEF branches blanked, length-preserving, so
   // Source still slices the identifier text) with a bounded read callback.
-  Tree:= ParseDelphiUtf8(Source, APath);
+  Tree:= IdentTreeFor(Source, APath);  { 151 CF: cached; owned by the server, not freed here }
   if Tree = nil then Exit;
-  try
+  begin
     Node:= FindSmallestNamedAt(Tree.RootNode, ALine, ACol);
     if Node.IsNull then Exit;
     // Prefer an identifier-shaped node. If the smallest enclosing is e.g.
@@ -3133,9 +3167,29 @@ begin
       Node:= ChildIt;
     end; // if
     Result:= Trim(NodeTextLocal(Node, Source));
-  finally
-    Tree.Free;
-  end; // try
+  end;
+end; // function
+
+function TLSPServer.IdentTreeFor(const ASource: TBytes; const APath: string): TTSTree;
+begin
+  { The key is what the PARSER sees: ParseDelphiUtf8 preprocesses with the file's define
+    profile, which a setContext can change without the source changing. Comparing the
+    preprocessed bytes makes that a miss; a change confined to an inactive branch is a hit,
+    and the tree for it is the same tree (the blanking is length-preserving). }
+  var Pre: TBytes:= TAstParseCache.ApplyPreprocess(ASource, APath);
+  if (FIdentTree <> nil) and SameText(FIdentTreePath, APath) and (Length(Pre) = Length(FIdentTreePre))
+     and ((Length(Pre) = 0) or CompareMem(@Pre[0], @FIdentTreePre[0], Length(Pre))) then
+    Exit(FIdentTree);
+  FreeAndNil(FIdentTree);
+  FIdentTreePath:= '';
+  FIdentTreePre := nil;
+  FIdentTree:= ParseDelphiUtf8(ASource, APath);
+  if FIdentTree <> nil then
+  begin
+    FIdentTreePath:= APath;
+    FIdentTreePre := Pre  ;
+  end;
+  Result:= FIdentTree;
 end; // function
 
 procedure TLSPServer.HandleShutdown(const AId: TJSONValue);
@@ -3578,6 +3632,7 @@ var
 begin
   Result:= False;
   DropEphemeralStore;
+  ClearDocFactsMemos;  { 151 CF: the new store may reuse the dropped one's address }
   Inc(FEphemSeq);
   { The database goes to %TEMP%, never beside the user's source -- a stray
     .sqlite dropped next to a file someone merely HOVERED would be a second
@@ -4427,6 +4482,12 @@ begin
     { The declared-type session cache is keyed by store INSTANCE; the reopened
       store may reuse a freed address over changed rows. }
     ClearPropertyDeclaredTypeCache;
+    { 151 CF: the Raises: line's open index is re-opened on next use, like the stores. }
+    if SameText(FExcIndexPath, Run.Db) then
+    begin
+      FreeAndNil(FExcIndex);
+      FExcIndexPath:= '';
+    end;
     { Re-open that DB: drop every cached set holding it (reopened lazily) and
       swap a startup store in place. }
     for var I:= FSets.Count - 1 downto 0 do
@@ -4932,6 +4993,8 @@ begin
   if not FoundDeclImpl then
   begin
     var TAR:= TTypeAtResolver.Resolve(Stores, Path, Line + 1, Col + 1);
+    ASel.HasTypeAt:= True;  { 151 CF: ComputeHoverAt's undocumented branch reuses it }
+    ASel.TypeAt   := TAR ;
     if TAR.HasResolved and (TAR.Resolved.Id > 0) and SameText(TAR.Resolved.Name, Ident) then
     begin
       Sel:= TAR.Resolved;
@@ -4955,7 +5018,7 @@ begin
   Result:= True;
 end; // function
 
-function TLSPServer.ComputeHoverAt(const APath: string; ALine, ACol: Integer; out AOut: THoverComputation): Boolean;  // dl:ok cyclomatic-complexity@b387, cognitive-complexity@7029, method-too-long@2d59, deep-nesting@5f57 -- REVIEWED S0: the hover RENDERING half of the former ComputeHover (54 before); the selection half moved to SelectSymbolAt, further splitting is out of S0 scope (re-reviewed A5 fix: now 35; still one rendering pass, a split stays out of scope here)
+function TLSPServer.ComputeHoverAt(const APath: string; ALine, ACol: Integer; out AOut: THoverComputation): Boolean;  // dl:ok cyclomatic-complexity@22a3, cognitive-complexity@e6bb, method-too-long@ebc3, deep-nesting@5f57 -- REVIEWED S0: the hover RENDERING half of the former ComputeHover (54 before); the selection half moved to SelectSymbolAt, further splitting is out of S0 scope (re-reviewed A5 fix: now 35; still one rendering pass, a split stays out of scope here; 151 INT re-review: 37 / 270 lines after CF's one-TypeAt-per-hover reuse, same single pass)
 var
   Path    : string         ;
   Ident   : string         ;
@@ -5092,7 +5155,10 @@ begin
       { v0.40.8f: try to resolve the actual type at cursor first. If we
         can, narrow the candidate list to symbols on THAT type (else a
         common member like DataBinding lists every class that has one). }
-      var TAResult:= TTypeAtResolver.Resolve( Stores, Path, Line + 1, Col + 1);
+      { 151 CF (LX-5): SelectSymbolAt already asked this exact question when the cursor was
+        not on a declaration; resolve again only when it did not. }
+      var TAResult: TTypeAtResult:= if Selection.HasTypeAt then Selection.TypeAt
+                                    else TTypeAtResolver.Resolve( Stores, Path, Line + 1, Col + 1);
 
       var Filtered: TArray<TSymbol>;
       SetLength(Filtered, 0);
@@ -5361,7 +5427,14 @@ begin
   if (not FExceptionFacts) or (ASym.Kind not in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) then Exit;
   var DbPath: string:= StorePathOf(AStore);
   if DbPath = '' then Exit;
-  var Line: string:= ExceptionRaisesLine(ExceptionFactsOf(DbPath, ASym.QualifiedName, ''));
+  { 151 CF (LX-5): one open index per DB path instead of TChartsIndex.Create per hover. }
+  if (FExcIndex = nil) or not SameText(FExcIndexPath, DbPath) then
+  begin
+    FreeAndNil(FExcIndex);
+    FExcIndex    := TChartsIndex.Create(DbPath);
+    FExcIndexPath:= DbPath;
+  end;
+  var Line: string:= ExceptionRaisesLine(ExceptionFactsOfIndex(FExcIndex, ASym.QualifiedName, ''));
   if Line <> '' then Result:= [Line];
 end;
 

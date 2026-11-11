@@ -17,7 +17,7 @@ const
   /// This unit is the right home because it is the one both sides already use:
   /// DRagLint.LSP.Server uses Core.Model, and CLI uses LSP.Server, so a
   /// constant here reaches both with no new dependency and no cycle.</remarks>
-  DRAGLINT_VERSION = '1.49.0-alpha';
+  DRAGLINT_VERSION = '1.50.0-alpha';
 
   /// <summary>The identity of what this build EXTRACTS from a byte sequence.
   /// Part of the indexer fingerprint; <see cref="DRAGLINT_VERSION"/> is not.
@@ -258,7 +258,14 @@ const
     * storage schema 24: file_includes, dfm_objects, pp_regions fact tables and a uses list
       written as an include (lane EX2, F4/F5/F6).
     * uses-recover --apply writes header-recovered uses rows (lane HW). }
-  DRAGLINT_EXTRACTOR_VERSION = '1.35.0-alpha';
+  { 1.35.0 -> 1.36.0 (2026-11-11, 1.50, lane/151-INT -- ONE bump for the wave):
+    * storage schema 25: dfm_properties (every property assignment of a text .dfm) and comment_facts
+      (every comment with offsets, kind and anchor) fact tables, additive and probed (lane ST API,
+      producers lanes Y2 / W1).
+    * Doc.SymbolFacts: returns_owner tier 1 trusts own-file declarations only, independent of the
+      index order (lane X2R).
+    * Preprocess: one DRAGLINT_PP_TRACE accessor (lane PP; no extraction change, hashed unit). }
+  DRAGLINT_EXTRACTOR_VERSION = '1.36.0-alpha';
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
   /// Deliberately SEPARATE from <see cref="DRAGLINT_EXTRACTOR_VERSION"/>.</summary>
@@ -497,7 +504,14 @@ const
   /// attribution and var / const / enum-value use edges (lane RB2, with 148 PB); a 1-file
   /// incremental with a library store attached runs the scoped calls pass and widens its
   /// derived streams (lane IC); header-recovered uses bind their target files (lane HW).</para>
-  DRAGLINT_RESOLVER_VERSION = '1.23.0-alpha';
+  /// <para>1.23.0-alpha -&gt; 1.24.0-alpha (2026-11-11, 1.50, rides the 1.36.0 extractor
+  /// re-parse): a bare call inside a .dpr routine records no receiver type and a generic
+  /// constraint name no longer shadows a type (lane RB-A, X4-r / IMicObject); an exact
+  /// class-typed argument narrows same-arity overloads (lane RB-B, System.TypInfo FindPropInfo);
+  /// the scoped pass's receiver-side closure gets the DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE hatch
+  /// (lane ST, RS2 (6)); the calls stage reads a declaring file's uses once per pass and the
+  /// arg-uses pass reads refs once per file, rows identical (lane PF).</para>
+  DRAGLINT_RESOLVER_VERSION = '1.24.0-alpha';
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
   /// the ghost-compile journal that first created the folder.</summary>
@@ -1457,6 +1471,64 @@ type
     Offset   : Integer;
     Region   : Integer;
     Branch   : Integer;
+  end;
+
+  /// <summary>151 ST (schema v25, additive): one property assignment of a text
+  /// .dfm -- a row of the dfm_properties table.</summary>
+  /// <remarks>
+  /// Produced by DRagLint.Parser.DFMProps.ExtractDfmPropertyRows (lane Y2).
+  /// ObjectOrdinal is the index of the owning block in the same file's
+  /// TParseResult.DfmObjects (= dfm_objects.ordinal), -1 when no block encloses
+  /// it. Parent is the array index of the enclosing property row (a collection
+  /// item or a nested list), -1 at object level; Depth is 0 at object level.
+  /// Name is the property name as written (dotted kept). ValueText is a string
+  /// value DECODED (doubled quotes, #nnn codes, '+' continuations joined), any
+  /// other value its source text. ValueKind is one of 'string', 'integer',
+  /// 'float', 'ident', 'set', 'list', 'collection', 'item', 'binary', 'other';
+  /// a list / collection / item / binary row has ValueText '' (the content is in
+  /// the child rows: list elements Name '', collection items Name 'item'). Lines and
+  /// columns are 1-based (columns in UTF-8 bytes, as for dfm_objects). The store
+  /// writes the array index as the row's ordinal. Spec:
+  /// docs\superpowers\specs\2026-11-11-dfm-props-and-comment-facts.md.
+  /// </remarks>
+  TDfmPropertyRow = record
+    ObjectOrdinal: Integer;
+    Parent       : Integer;
+    Depth        : Integer;
+    Name         : string ;
+    ValueText    : string ;
+    ValueKind    : string ;
+    StartLine    : Integer;
+    StartCol     : Integer;
+    EndLine      : Integer;
+    EndCol       : Integer;
+  end;
+
+  /// <summary>151 ST (schema v25, additive): one comment of a source file -- a
+  /// row of the comment_facts table.</summary>
+  /// <remarks>
+  /// Produced by DRagLint.Index.CommentFacts.ExtractCommentFacts (lane W1).
+  /// StartOffset / EndOffset are 0-based character offsets into the decoded text
+  /// the producer was given, EndOffset exclusive. Line / EndLine are 1-based; Col
+  /// is 1-based in UTF-8 bytes from the line start. Kind is the opener: '//',
+  /// '///', '{' or '(*'; Text is the comment as written, delimiters included.
+  /// A directive ({$..} / (*$..*)) is NOT a comment and has no row. AnchorKind is
+  /// 'end-of-line', 'statement', 'block', 'next-declaration' or '' (undecided).
+  /// AnchorSymbolIdx indexes TParseResult.Symbols (-1 = none) and is mapped to
+  /// comment_facts.anchor_symbol_id by the store; a row READ back has
+  /// AnchorSymbolIdx -1 and AnchorSymbolId the stored id (0 = NULL).
+  /// </remarks>
+  TCommentFactRow = record
+    StartOffset    : Integer;
+    EndOffset      : Integer;
+    Line           : Integer;
+    Col            : Integer;
+    EndLine        : Integer;
+    Kind           : string ;
+    Text           : string ;
+    AnchorKind     : string ;
+    AnchorSymbolIdx: Integer;
+    AnchorSymbolId : Int64  ;
   end;
 
   /// <summary>v(ADP3 T14): one ORM dataset link -- a Delphi symbol tied by the

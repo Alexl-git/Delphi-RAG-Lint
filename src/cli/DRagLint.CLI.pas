@@ -1087,6 +1087,7 @@ function NamingReindexHint(const AArgs: TArgs; const ADbPath: string): string; f
   wraps RefreshProjectIndex, which sits beside convert-apply far below. }
 function ReindexOwnerProject(const AProjectFile, ADbPath: string; const AVerb: string = 'rename'): Boolean; forward;
 function ResolveLibraryDb(const AArgs: TArgs): string        ; forward;
+function ResolveLibraryDbs(const AArgs: TArgs): TArray<string>; forward;
 function RefactorLibraries(const AArgs: TArgs): TArray<ISymbolStore>; forward;
 function OpenLibraryStores(const AArgs: TArgs): TArray<ISymbolStore>; forward;
 function FindCalleesLibraryDb(const AArgs: TArgs; var AProjectDb: string): string; forward;
@@ -6875,11 +6876,81 @@ end;
 
   1.43: --resolve-only does not call this unconditionally. It walks nothing, so it
   cannot claim a walk completed: see CommitAfterResolveOnly. }
+/// <summary>The CONTENT identity of the tree-sitter DLLs this process has loaded, in
+/// the GRAMMAR_DLLS_META_KEY format: 'name=&lt;size&gt;:&lt;first 16 hex of SHA-256&gt;' per
+/// module, ';'-joined, fixed order (runtime, delphi13, dfm).</summary>
+/// <returns>The identity; a module not loaded reads 'name=not-loaded', one that cannot
+/// be read 'name=unknown'.</returns>
+/// <remarks>Path and mtime are left out on purpose (unlike TreeSitterModuleStamp): every
+/// lane and VS Code copy of the engine has its own path and copy time, and the question
+/// is "same bytes?". Hashes ~4.5 MB; called once per committed index run and once per
+/// `info`.</remarks>
+var
+  GLoadedGrammarDlls: string; { LoadedGrammarDllsIdentity's cache: a loaded module does not change in-process }
+
+function LoadedGrammarDllsIdentity: string;
+const
+  MODS: array[0..2] of string = ('tree-sitter.dll', 'tree-sitter-delphi13.dll', 'tree-sitter-dfm.dll');
+  HASH_HEX_LEN = 16; { first 16 hex chars of the SHA-256: enough to tell two builds apart }
+var
+  Buf: array[0..MAX_PATH] of Char;
+  Parts: array[0..2] of string;
+begin
+  if GLoadedGrammarDlls <> '' then Exit(GLoadedGrammarDlls);
+  for var I: Integer:= Low(MODS) to High(MODS) do
+  begin
+    var M: string:= MODS[I];
+    var Part: string:= 'not-loaded';
+    var H: HMODULE:= GetModuleHandle(PChar(M));
+    if H <> 0 then
+    begin
+      Part:= 'unknown';
+      if GetModuleFileName(H, Buf, Length(Buf)) <> 0 then
+      try
+        var P: string:= Buf;
+        Part:= IntToStr(TFile.GetSize(P)) + ':' + Copy(THashSHA2.GetHashStringFromFile(P), 1, HASH_HEX_LEN);
+      except
+        on E: Exception do Part:= 'unknown';
+      end;
+    end;
+    Parts[I]:= M + '=' + Part;
+  end;
+  Result:= string.Join(';', Parts);
+  GLoadedGrammarDlls:= Result;
+end;
+
+/// <summary>Decides whether CommitIndexerFingerprint may (re)write the grammar_dlls stamp.</summary>
+/// <param name="AStored">The stamp the DB holds ('' = none yet).</param>
+/// <param name="ALoaded">LoadedGrammarDllsIdentity of this process.</param>
+/// <param name="ARebuilding">A --rebuild is completing (every file was parsed by this run).</param>
+/// <param name="AFingerprintChanged">The indexer fingerprint changes in this commit, so every
+/// file was re-parsed under it.</param>
+/// <returns>True to write ALoaded; False keeps AStored, which then still differs and `info`
+/// keeps reporting it until a run that re-parsed everything.</returns>
+/// <remarks>An incremental run that parsed a few files must NOT relabel the rest: that is
+/// exactly how a wrong-grammar re-parse would read as healed after the DLL was put back.
+/// A first stamp ('' stored) can only claim the current DLLs -- older parses are unknowable.</remarks>
+function MayStampGrammarDlls(const AStored, ALoaded: string; ARebuilding, AFingerprintChanged: Boolean): Boolean;
+begin
+  Result:= (AStored = '') or (AStored = ALoaded) or ARebuilding or AFingerprintChanged;
+end;
+
 procedure CommitIndexerFingerprint(const AStore: ISymbolStore;
   APreprocess: Boolean; const APlatform, ACfgLimb: string);
 begin
-  AStore.SetMetaValue(INDEXER_FP_KEY,
-                      IndexerFingerprint(AStore, APreprocess, APlatform, ACfgLimb));
+  var NewFp: string:= IndexerFingerprint(AStore, APreprocess, APlatform, ACfgLimb);
+  { grammar_dlls: read the PREVIOUS fingerprint and the rebuild flag before either is rewritten. }
+  var Loaded: string:= LoadedGrammarDllsIdentity;
+  var StoredDlls: string:= AStore.GetMetaValue(GRAMMAR_DLLS_META_KEY);
+  if MayStampGrammarDlls(StoredDlls, Loaded,
+       AStore.GetMetaValue(REBUILD_IN_PROGRESS_META_KEY) <> '',
+       AStore.GetMetaValue(INDEXER_FP_KEY) <> NewFp) then
+    AStore.SetMetaValue(GRAMMAR_DLLS_META_KEY, Loaded)
+  else
+    Writeln(ErrOutput, 'note: this index was parsed with other tree-sitter DLLs (', StoredDlls,
+      ') than this engine loads (', Loaded, '); an incremental run does not re-parse for that -- ',
+      'run index --rebuild to re-parse with these.');
+  AStore.SetMetaValue(INDEXER_FP_KEY, NewFp);
   { The freshness stamp rides the fingerprint's guarantee rather than getting a
     site of its own: BOTH are written only after a walk that ran to completion,
     so an interrupted run leaves both untouched and the next run still knows it
@@ -17352,7 +17423,7 @@ begin
 end;
 
 { lane 144: the platform library a rewrite's proof reads, read-only and silent on stdout (a JSON document follows):
-  every --library-db, 'none' = none, or the one the manifest names.
+  every --library-db, 'none' = none, or every library section the manifest names for the platform (151 RC).
 
   Lane 150 CQ (RT): with no --library-db the manifest's library for --platform is loaded -- the same
   ResolveLibraryDb `index` uses -- and ONE stderr NOTE names it (or says none was found), so a refusal
@@ -17363,13 +17434,12 @@ begin
   var Paths:= AArgs.LibraryDbs;
   if Length(Paths) = 0 then
   begin
-    var P:= ResolveLibraryDb(AArgs);
-    if P <> '' then
-    begin
-      Paths:= [P];
-      Writeln(ErrOutput, 'drag-lint: NOTE: no --library-db given; the proof reads the manifest platform library ' + P +
-        ' (pass --library-db <file> to choose another, or --library-db none for none).');
-    end
+    { 151 RC: EVERY library section of the platform, not the first existing one. }
+    Paths:= ResolveLibraryDbs(AArgs);
+    if Length(Paths) > 0 then
+      Writeln(ErrOutput, 'drag-lint: NOTE: no --library-db given; the proof reads the manifest platform library ' +
+        string.Join(', ', Paths) +
+        ' (pass --library-db <file> to choose another, or --library-db none for none).')
     else
       Writeln(ErrOutput, 'drag-lint: NOTE: no --library-db given and the manifest names no platform library: ' +
         'casts and ancestors that need a library stay refused (pass --library-db <file>).');
@@ -19768,7 +19838,25 @@ var
       ADesc:= 'The receiver expression, when the reference is qualified '
             + '(the "A" of A.B). Empty for a bare name. On a reraise, and on a '
             + 'raise-expr naming the handler variable: the type of the nearest '
-            + 'enclosing on..do, empty under a bare except.';
+            + 'enclosing on..do, empty under a bare except.'
+    else if Key = 'comment_facts.kind' then
+    begin
+      ADesc  := 'The comment opener. A {$..} / (*$..*) directive is not a comment and has no row.';
+      AValues:= '(*,//,///,{';
+    end
+    else if Key = 'comment_facts.anchor_kind' then
+    begin
+      ADesc  := 'What the comment is attached to; '''' = not decided. anchor_symbol_id names the '
+              + 'declaration of a next-declaration / end-of-line comment.';
+      AValues:= ',block,end-of-line,next-declaration,statement';
+    end
+    else if Key = 'dfm_properties.value_kind' then
+    begin
+      ADesc  := 'The shape of the value: string / integer / float / ident / set / list / collection / item / binary / other. value_text is the decoded string for string, '''' for list / collection / item / binary (their content is in the child rows), the source text otherwise.';
+      AValues:= 'binary,collection,float,ident,integer,list,other,set,string';
+    end
+    else if Key = 'dfm_properties.object_ordinal' then
+      ADesc:= 'dfm_objects.ordinal of the owning block in the same .dfm; -1 when no block encloses it.';
 
     Result:= (ADesc <> '') or (AValues <> '');
   end;
@@ -21546,6 +21634,13 @@ type
       probe's current word on the library (a readiness token, '' when no marker). }
     LibraryMarker   : TLibraryMarker;
     LibraryState    : string;
+    { grammar_dlls (151 GD): the stored content identity of the tree-sitter DLLs the index was
+      parsed with ('' = not recorded: an index last completed before 1.50), this engine's, and
+      whether they differ. ADDITIVE: the verdict is not changed by it (detection, not
+      invalidation -- see GRAMMAR_DLLS_META_KEY). }
+    GrammarDllsStored: string;
+    GrammarDllsLoaded: string;
+    GrammarDllsDiffer: Boolean;
   end;
 
 /// <summary>Computes the `info --db` staleness verdict for one index file:
@@ -21594,6 +21689,10 @@ begin
       Result.ResolverFp      := St.GetMetaValue(RESOLVER_FP_KEY);
       Result.ResolverExpected:= ResolverFingerprint(St);
       Result.LibraryMarker   := LibraryMarkerFromJson(St.GetMetaValue(LIBRARY_RESOLVE_STATE_META_KEY));
+      Result.GrammarDllsStored:= St.GetMetaValue(GRAMMAR_DLLS_META_KEY);
+      Result.GrammarDllsLoaded:= LoadedGrammarDllsIdentity;
+      { Not recorded is NOT a difference: an older index simply never said. }
+      Result.GrammarDllsDiffer:= (Result.GrammarDllsStored <> '') and (Result.GrammarDllsStored <> Result.GrammarDllsLoaded);
     end;
   except
     on E: Exception do Ok:= False;
@@ -21862,6 +21961,9 @@ begin
             JOne.AddPair('resolver_stale', TJSONBool.Create(V.ResolverStale));
             JOne.AddPair('indexer_newer' , TJSONBool.Create(V.IndexerNewer));
             JOne.AddPair('resolver_newer', TJSONBool.Create(V.ResolverNewer));
+            JOne.AddPair('grammar_dlls_stored', V.GrammarDllsStored);
+            JOne.AddPair('grammar_dlls_loaded', V.GrammarDllsLoaded);
+            JOne.AddPair('grammar_dlls_differ', TJSONBool.Create(V.GrammarDllsDiffer));
           end;
           JOne.AddPair('verdict', V.Verdict);
           if V.Remedy <> '' then
@@ -21905,6 +22007,12 @@ begin
         Writeln('  remedy: ', V.Remedy);
       if V.LibraryMarker.State <> '' then
         Writeln('  library_resolve: ', V.LibraryMarker.State, '  ', V.LibraryMarker.Reason);
+      if V.GrammarDllsDiffer then
+      begin
+        Writeln('  grammar: DIFFERS -- parsed with ', V.GrammarDllsStored);
+        Writeln('           this engine loads   ', V.GrammarDllsLoaded);
+        Writeln('           remedy: index --rebuild (the verdict above does not see this; an incremental run will not re-parse)');
+      end;
     end;
   end;
 end; // function
@@ -36147,16 +36255,31 @@ begin
 end;
 
 function ResolveLibraryDb(const AArgs: TArgs): string;
+begin
+  var All:= ResolveLibraryDbs(AArgs);
+  Result:= if Length(All) > 0 then All[0] else '';
+end;
+
+/// <summary>Every existing LIBRARY index of the manifest for this run's platform, in
+/// manifest resolution order (151 RC).</summary>
+/// <param name="AArgs">Parsed args; CheckPlatform and ProjectPath pick the platform.</param>
+/// <returns>Existing DB paths, no duplicates; empty when the manifest names none or
+/// cannot be read.</returns>
+/// <remarks>A manifest may split the platform library across several sections (RTL in
+/// one, a vendor library in another); a reader that keeps only the first misses every
+/// type of the others, and a proof read on a partial library can call a name unique
+/// that is not (run_redundant_cast_multi_library.ps1). ResolveLibraryDb keeps the
+/// first for the single-store callers. Never raises.</remarks>
+function ResolveLibraryDbs(const AArgs: TArgs): TArray<string>;
 var
   Manifest : TIndexManifest                            ;
   Resolver : DRagLint.Project.Resolver.TProjectResolver;
   EngineDir: string                                    ;
   Platform : string                                    ;
-  Resolved : TArray<string>                            ;
+  Plan     : TIndexPlan                                ;
   D        : string                                    ;
-  LibDbs   : TArray<string>                            ;
 begin
-  Result:= '';
+  Result:= nil;
   try
     EngineDir:= ExtractFilePath(ParamStr(0));
     Manifest:= if (GLibraryManifestPath <> '') and TFile.Exists(GLibraryManifestPath)
@@ -36167,26 +36290,32 @@ begin
     Platform:= ReadPlatformFor(Manifest, AArgs.CheckPlatform, AArgs.ProjectPath);
 
 
+    { ONE ResolvePlan per call (~0.7 s on a 15-project manifest): the LSP --full-rules
+      child has an 8 s budget (LintChildTimeoutMs, run_lsp_dlok_filtering_guard).
+      151 RC: walked here instead of TDbSelect.Resolve, which keeps only the FIRST
+      library section of the platform -- right for a consumer DB list, wrong for a
+      proof that must see every library type. }
+    var PlatFilter: TArray<string>:= if Platform <> '' then [Platform] else nil;
     Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
     try
-      Resolved:= TDbSelect.Resolve(Manifest, Platform, Resolver, True);
+      Plan:= ResolvePlan(Manifest, PlatFilter, Resolver);
     finally
       Resolver.Free;
     end;
-
-    { ONE ResolvePlan, not one per resolved DB: LibrarySectionDbs walks the whole
-      manifest, and this loop runs over every DB of the platform. Called inside the
-      loop it cost ~0.7 s x N -- 20-25 s per `lint` on a 15-project manifest under
-      load, and INC3 made every `lint` setup resolve the library (InstallPPUnitSource),
-      so the LSP --full-rules child (8 s budget, LintChildTimeoutMs) timed out and fell
-      back to the subset (run_lsp_dlok_filtering_guard, metric rule). }
-    LibDbs:= LibrarySectionDbs(Manifest);
-    for D in Resolved do
-      if IsLibrarySectionDb(LibDbs, D) and TFile.Exists(D) then Exit(D);
+    for var PS: TPlanSection in Plan.Items do
+    begin
+      if (PS.Mode <> smLibrary) or not SameText(PS.Platform, Platform) then Continue;
+      D:= PS.DbPath;
+      if (D = '') or not TFile.Exists(D) then Continue;
+      var Dup:= False;
+      for var X in Result do
+        if SameText(X, D) then Dup:= True;
+      if not Dup then Result:= Result + [D];
+    end;
   except
     { A manifest that will not load is not this function's problem to report --
-      every caller already treats '' as "no library index" and degrades. }
-    Result:= '';
+      every caller already treats an empty answer as "no library index" and degrades. }
+    Result:= nil;
   end;
 end; // function
 

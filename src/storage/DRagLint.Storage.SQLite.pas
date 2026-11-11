@@ -231,7 +231,9 @@ type
       FHasFileFacts          : Integer      ; { 149 EX2: -1 unprobed, 0 absent, 1 present -- see HasFileFacts }
       FHasPpDirectives       : Integer      ; { 150 PP: -1 unprobed, 0 absent, 1 present -- see HasPpDirectives }
       FHasDfmNav             : Integer      ; { 150 Y2: -1 unprobed, 0 absent, 1 present -- see HasDfmNav }
-      FQFileFacts            : array[0..7] of TFDQuery; { 149 EX2: 3 deletes + 3 inserts (150 PP: + pp_directives delete / insert), prepared on first use (FF_* in PutFileFacts) }  // dl:ok referenced-never-set@4c97 -- FP: the array ELEMENTS are assigned in PutFileFacts.Prepared (FQFileFacts[AIdx]:= Result)
+      FHasDfmProps           : Integer      ; { 151 ST: -1 unprobed, 0 absent, 1 present -- see HasDfmProperties }
+      FHasCommentFacts       : Integer      ; { 151 ST: -1 unprobed, 0 absent, 1 present -- see HasCommentFacts }
+      FQFileFacts            : array[0..11] of TFDQuery; { 149 EX2: 3 deletes + 3 inserts (150 PP: + pp_directives delete / insert; 151 ST: + dfm_properties, comment_facts), prepared on first use (FF_* in PutFileFacts) }  // dl:ok referenced-never-set@9274 -- FP: the array ELEMENTS are assigned in PutFileFacts.Prepared (FQFileFacts[AIdx]:= Result)
       FQDeleteFileSymbols    : TFDQuery     ;
       FQDeleteFileRefs       : TFDQuery     ;
       FQUpsertDiBinding          : TFDQuery     ;
@@ -3125,7 +3127,22 @@ type
       /// </remarks>
       procedure PutFileFacts(const AToken: TFileTxToken; const AIncludes: TArray<TFileIncludeRow>;
         const ADfmObjects: TArray<TDfmObjectRow>; const APpRegions: TArray<TPpRegionRow>;
-        const APpDirectives: TArray<TPpDirectiveRow>; const ASymbolIds: TDictionary<Integer, Int64>);
+        const APpDirectives: TArray<TPpDirectiveRow>; const ADfmProperties: TArray<TDfmPropertyRow>;
+        const AComments: TArray<TCommentFactRow>; const ASymbolIds: TDictionary<Integer, Int64>);
+      /// <summary>151 ST: implements ISymbolStore.HasDfmProperties.</summary>
+      /// <returns>True when the dfm_properties table exists (probed once).</returns>
+      function HasDfmProperties: Boolean;
+      /// <summary>151 ST: implements ISymbolStore.GetDfmProperties.</summary>
+      /// <param name="AFileId">files.id of the .dfm.</param>
+      /// <returns>The file's rows in ordinal order; empty when none or the table is absent.</returns>
+      function GetDfmProperties(AFileId: Int64): TArray<TDfmPropertyRow>;
+      /// <summary>151 ST: implements ISymbolStore.HasCommentFacts.</summary>
+      /// <returns>True when the comment_facts table exists (probed once).</returns>
+      function HasCommentFacts: Boolean;
+      /// <summary>151 ST: implements ISymbolStore.GetCommentFacts.</summary>
+      /// <param name="AFileId">files.id of the file.</param>
+      /// <returns>The file's rows in source order; empty when none or the table is absent.</returns>
+      function GetCommentFacts(AFileId: Int64): TArray<TCommentFactRow>;
       /// <summary>150 EX3: implements ISymbolStore.PutProjectSettings (project_settings).</summary>
       /// <param name="AToken">The open file tx of the .dpr / .dpk.</param>
       /// <param name="ASetting">The setting name.</param>
@@ -5135,6 +5152,8 @@ begin
   FHasFileFacts     := -1; { 149 EX2: probed lazily -- see HasFileFacts }
   FHasPpDirectives  := -1; { 150 PP: probed lazily -- see HasPpDirectives }
   FHasDfmNav        := -1; { 150 Y2: probed lazily -- see HasDfmNav }
+  FHasDfmProps      := -1; { 151 ST: probed lazily -- see HasDfmProperties }
+  FHasCommentFacts  := -1; { 151 ST: probed lazily -- see HasCommentFacts }
   FLateAncCache  := TDictionary<string, TSymbol>.Create;
   FAnchorCache   := TDictionary<Int64, string>.Create; // Task 3c; see FrameworkAnchorForFile
   FFlowOracles   := TFlowOracleCache.Create;           // C1b; see FlowOracles
@@ -5282,7 +5301,11 @@ const
   FF_INS_PP    = 5;
   FF_DEL_PPD   = 6; { 150 PP: pp_directives, only when HasPpDirectives }
   FF_INS_PPD   = 7;
-  FF_SQL: array[0..7] of string = (
+  FF_DEL_DFP   = 8;  { 151 ST: dfm_properties, only when HasDfmProperties }
+  FF_INS_DFP   = 9;
+  FF_DEL_CMT   = 10; { 151 ST: comment_facts, only when HasCommentFacts }
+  FF_INS_CMT   = 11;
+  FF_SQL: array[0..11] of string = (
     'DELETE FROM file_includes WHERE file_id = :fid',
     'DELETE FROM dfm_objects WHERE file_id = :fid',
     'DELETE FROM pp_regions WHERE file_id = :fid',
@@ -5294,9 +5317,16 @@ const
       'VALUES (:fid, :reg, :br, :prn, :nest, :dir, :cond, :sl, :el, :act)',
     'DELETE FROM pp_directives WHERE file_id = :fid',
     'INSERT INTO pp_directives(file_id, ordinal, directive, args, symbol, line, col, src_offset, region, branch) ' +
-      'VALUES (:fid, :ord, :dir, :args, :sym, :ln, :col, :off, :reg, :br)');
+      'VALUES (:fid, :ord, :dir, :args, :sym, :ln, :col, :off, :reg, :br)',
+    'DELETE FROM dfm_properties WHERE file_id = :fid',
+    'INSERT INTO dfm_properties(file_id, ordinal, object_ordinal, parent, depth, name, value_text, value_kind, ' +
+      'start_line, start_col, end_line, end_col) VALUES (:fid, :ord, :oord, :prn, :dep, :nm, :val, :vk, :sl, :sc, :el, :ec)',
+    'DELETE FROM comment_facts WHERE file_id = :fid',
+    'INSERT INTO comment_facts(file_id, ordinal, start_offset, end_offset, line, col, end_line, kind, text, ' +
+      'anchor_kind, anchor_symbol_id) VALUES (:fid, :ord, :so, :eo, :ln, :col, :el, :knd, :txt, :ak, :sid)');
   { Parameters bound as text; every other FF_SQL parameter is an integer. }
-  FF_TEXT_PARAMS: array[0..9] of string = ('path', 'sec', 'nm', 'cls', 'par', 'knd', 'dir', 'cond', 'args', 'sym');
+  FF_TEXT_PARAMS: array[0..13] of string = ('path', 'sec', 'nm', 'cls', 'par', 'knd', 'dir', 'cond', 'args', 'sym',
+    'val', 'vk', 'txt', 'ak');
 
 function TSQLiteSymbolStore.HasFileFacts: Boolean;
 begin
@@ -5314,7 +5344,8 @@ end;
 
 procedure TSQLiteSymbolStore.PutFileFacts(const AToken: TFileTxToken; const AIncludes: TArray<TFileIncludeRow>;
   const ADfmObjects: TArray<TDfmObjectRow>; const APpRegions: TArray<TPpRegionRow>;
-  const APpDirectives: TArray<TPpDirectiveRow>; const ASymbolIds: TDictionary<Integer, Int64>);
+  const APpDirectives: TArray<TPpDirectiveRow>; const ADfmProperties: TArray<TDfmPropertyRow>;
+  const AComments: TArray<TCommentFactRow>; const ASymbolIds: TDictionary<Integer, Int64>);
 
   function Prepared(AIdx: Integer): TFDQuery;
   var
@@ -5402,6 +5433,55 @@ begin
     Q.ParamByName('act' ).AsLargeInt  := Ord(APpRegions[I].Active);
     Q.ExecSQL;
   end;
+  // 151 ST: dfm_properties and comment_facts are each their own probe (a 150-built v24 DB lacks both).
+  if HasDfmProperties then
+  begin
+    Q:= Prepared(FF_DEL_DFP);
+    Q.ParamByName('fid').AsLargeInt:= AToken.FileId;
+    Q.ExecSQL;
+    Q:= Prepared(FF_INS_DFP);
+    for I:= 0 to High(ADfmProperties) do
+    begin
+      Q.ParamByName('fid' ).AsLargeInt  := AToken.FileId;
+      Q.ParamByName('ord' ).AsLargeInt  := I;
+      Q.ParamByName('oord').AsLargeInt  := ADfmProperties[I].ObjectOrdinal;
+      Q.ParamByName('prn' ).AsLargeInt  := ADfmProperties[I].Parent;
+      Q.ParamByName('dep' ).AsLargeInt  := ADfmProperties[I].Depth;
+      Q.ParamByName('nm'  ).AsWideString:= ADfmProperties[I].Name;
+      Q.ParamByName('val' ).AsWideString:= ADfmProperties[I].ValueText;
+      Q.ParamByName('vk'  ).AsWideString:= ADfmProperties[I].ValueKind;
+      Q.ParamByName('sl'  ).AsLargeInt  := ADfmProperties[I].StartLine;
+      Q.ParamByName('sc'  ).AsLargeInt  := ADfmProperties[I].StartCol;
+      Q.ParamByName('el'  ).AsLargeInt  := ADfmProperties[I].EndLine;
+      Q.ParamByName('ec'  ).AsLargeInt  := ADfmProperties[I].EndCol;
+      Q.ExecSQL;
+    end;
+  end;
+  if HasCommentFacts then
+  begin
+    Q:= Prepared(FF_DEL_CMT);
+    Q.ParamByName('fid').AsLargeInt:= AToken.FileId;
+    Q.ExecSQL;
+    Q:= Prepared(FF_INS_CMT);
+    for I:= 0 to High(AComments) do
+    begin
+      Q.ParamByName('fid').AsLargeInt  := AToken.FileId;
+      Q.ParamByName('ord').AsLargeInt  := I;
+      Q.ParamByName('so' ).AsLargeInt  := AComments[I].StartOffset;
+      Q.ParamByName('eo' ).AsLargeInt  := AComments[I].EndOffset;
+      Q.ParamByName('ln' ).AsLargeInt  := AComments[I].Line;
+      Q.ParamByName('col').AsLargeInt  := AComments[I].Col;
+      Q.ParamByName('el' ).AsLargeInt  := AComments[I].EndLine;
+      Q.ParamByName('knd').AsWideString:= AComments[I].Kind;
+      Q.ParamByName('txt').AsWideString:= AComments[I].Text;
+      Q.ParamByName('ak' ).AsWideString:= AComments[I].AnchorKind;
+      if (ASymbolIds <> nil) and ASymbolIds.TryGetValue(AComments[I].AnchorSymbolIdx, Sid) then
+        Q.ParamByName('sid').AsLargeInt:= Sid
+      else
+        Q.ParamByName('sid').Clear;
+      Q.ExecSQL;
+    end;
+  end;
   // 150 PP: pp_directives is its own probe -- a 149-built v24 DB has the three tables above only.
   if not HasPpDirectives then Exit;
   Q:= Prepared(FF_DEL_PPD);
@@ -5488,6 +5568,117 @@ begin
       R.StartCol  := Q.FieldByName('start_col'  ).AsInteger;
       R.EndLine   := Q.FieldByName('end_line'   ).AsInteger;
       R.EndCol    := Q.FieldByName('end_col'    ).AsInteger;
+      L.Add(R);
+      Q.Next;
+    end;
+    Result:= L.ToArray;
+  finally
+    Q.Free;
+    L.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.HasDfmProperties: Boolean;
+begin
+  if FHasDfmProps < 0 then
+    FHasDfmProps:= if TableExists('dfm_properties') then 1 else 0;
+  Result:= FHasDfmProps = 1;
+end;
+
+function TSQLiteSymbolStore.HasCommentFacts: Boolean;
+begin
+  if FHasCommentFacts < 0 then
+    FHasCommentFacts:= if TableExists('comment_facts') then 1 else 0;
+  Result:= FHasCommentFacts = 1;
+end;
+
+function TSQLiteSymbolStore.GetDfmProperties(AFileId: Int64): TArray<TDfmPropertyRow>;
+var
+  Q: TFDQuery;
+  L: TList<TDfmPropertyRow>;
+  R: TDfmPropertyRow;
+begin
+  Result:= nil;
+  if not HasDfmProperties then Exit;
+  L:= TList<TDfmPropertyRow>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT object_ordinal, parent, depth, name, value_text, value_kind, start_line, start_col, ' +
+                   'end_line, end_col FROM dfm_properties WHERE file_id = :fid ORDER BY ordinal';
+    Q.ParamByName('fid').AsLargeInt:= AFileId;
+    Q.Open;
+    var FObj := Q.FieldByName('object_ordinal');
+    var FPrn := Q.FieldByName('parent'        );
+    var FDep := Q.FieldByName('depth'         );
+    var FNm  := Q.FieldByName('name'          );
+    var FVal := Q.FieldByName('value_text'    );
+    var FVk  := Q.FieldByName('value_kind'    );
+    var FSl  := Q.FieldByName('start_line'    );
+    var FSc  := Q.FieldByName('start_col'     );
+    var FEl  := Q.FieldByName('end_line'      );
+    var FEc  := Q.FieldByName('end_col'       );
+    while not Q.Eof do
+    begin
+      R:= Default(TDfmPropertyRow);
+      R.ObjectOrdinal:= FObj.AsInteger;
+      R.Parent       := FPrn.AsInteger;
+      R.Depth        := FDep.AsInteger;
+      R.Name         := FNm .AsString;
+      R.ValueText    := FVal.AsString;
+      R.ValueKind    := FVk .AsString;
+      R.StartLine    := FSl .AsInteger;
+      R.StartCol     := FSc .AsInteger;
+      R.EndLine      := FEl .AsInteger;
+      R.EndCol       := FEc .AsInteger;
+      L.Add(R);
+      Q.Next;
+    end;
+    Result:= L.ToArray;
+  finally
+    Q.Free;
+    L.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetCommentFacts(AFileId: Int64): TArray<TCommentFactRow>;
+var
+  Q: TFDQuery;
+  L: TList<TCommentFactRow>;
+  R: TCommentFactRow;
+begin
+  Result:= nil;
+  if not HasCommentFacts then Exit;
+  L:= TList<TCommentFactRow>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT start_offset, end_offset, line, col, end_line, kind, text, anchor_kind, ' +
+                   'COALESCE(anchor_symbol_id, 0) AS anchor_id FROM comment_facts WHERE file_id = :fid ORDER BY ordinal';
+    Q.ParamByName('fid').AsLargeInt:= AFileId;
+    Q.Open;
+    var FSo  := Q.FieldByName('start_offset');
+    var FEo  := Q.FieldByName('end_offset'  );
+    var FLn  := Q.FieldByName('line'        );
+    var FCol := Q.FieldByName('col'         );
+    var FEl  := Q.FieldByName('end_line'    );
+    var FKnd := Q.FieldByName('kind'        );
+    var FTxt := Q.FieldByName('text'        );
+    var FAk  := Q.FieldByName('anchor_kind' );
+    var FAid := Q.FieldByName('anchor_id'   );
+    while not Q.Eof do
+    begin
+      R:= Default(TCommentFactRow);
+      R.StartOffset    := FSo .AsInteger;
+      R.EndOffset      := FEo .AsInteger;
+      R.Line           := FLn .AsInteger;
+      R.Col            := FCol.AsInteger;
+      R.EndLine        := FEl .AsInteger;
+      R.Kind           := FKnd.AsString;
+      R.Text           := FTxt.AsString;
+      R.AnchorKind     := FAk .AsString;
+      R.AnchorSymbolIdx:= -1;
+      R.AnchorSymbolId := FAid.AsLargeInt;
       L.Add(R);
       Q.Next;
     end;
@@ -7001,6 +7192,40 @@ begin
           '  branch    INTEGER NOT NULL)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_pp_directives_file ON pp_directives(file_id, ordinal)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_pp_directives_symbol ON pp_directives(symbol COLLATE NOCASE)');
+  { 151 ST (schema v25, additive, each table its own probe): every property assignment of a text
+    .dfm (TDfmPropertyRow; producer DRagLint.Parser.DFMProps) and every comment of a source file
+    (TCommentFactRow; producer DRagLint.Index.CommentFacts), replaced per file by PutFileFacts.
+    Spec: docs\superpowers\specs\2026-11-11-dfm-props-and-comment-facts.md. }
+  TryExec('CREATE TABLE IF NOT EXISTS dfm_properties (' +
+          '  file_id        INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,' +
+          '  ordinal        INTEGER NOT NULL,' +
+          '  object_ordinal INTEGER NOT NULL,' +
+          '  parent         INTEGER NOT NULL,' +
+          '  depth          INTEGER NOT NULL,' +
+          '  name           TEXT    NOT NULL,' +
+          '  value_text     TEXT    NOT NULL,' +
+          '  value_kind     TEXT    NOT NULL,' +
+          '  start_line     INTEGER NOT NULL,' +
+          '  start_col      INTEGER NOT NULL,' +
+          '  end_line       INTEGER NOT NULL,' +
+          '  end_col        INTEGER NOT NULL)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_dfm_properties_file   ON dfm_properties(file_id, ordinal)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_dfm_properties_object ON dfm_properties(file_id, object_ordinal)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_dfm_properties_name   ON dfm_properties(name COLLATE NOCASE)');
+  TryExec('CREATE TABLE IF NOT EXISTS comment_facts (' +
+          '  file_id          INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,' +
+          '  ordinal          INTEGER NOT NULL,' +
+          '  start_offset     INTEGER NOT NULL,' +
+          '  end_offset       INTEGER NOT NULL,' +
+          '  line             INTEGER NOT NULL,' +
+          '  col              INTEGER NOT NULL,' +
+          '  end_line         INTEGER NOT NULL,' +
+          '  kind             TEXT    NOT NULL,' +
+          '  text             TEXT    NOT NULL,' +
+          '  anchor_kind      TEXT    NOT NULL,' +
+          '  anchor_symbol_id INTEGER REFERENCES symbols(id) ON DELETE SET NULL)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_comment_facts_file   ON comment_facts(file_id, ordinal)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_comment_facts_anchor ON comment_facts(anchor_symbol_id)');
   { v0.85 PERF -- the three FK child columns that had no index.
 
     `PRAGMA foreign_keys = ON` is set on the write connection, so deleting a
@@ -9180,6 +9405,17 @@ end;
 { Read out the names a file is about to lose. Called from OpenFileTx between
   resolving the file id and deleting its symbols -- the only moment at which the
   outgoing names still exist. One indexed lookup per re-indexed file. }
+{ 151 ST (150 INT4 FOUND 1): the OFF switch of 150-RS2 (6)'s receiver-side closure in
+  NoteScopeRemoval. DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE = 1 / on / yes / true skips it, so the
+  scoped pass relies on WidenScopeThroughRemovedTypes alone: the eviction guard's polarity
+  control (run_scoped_resolve_eviction.ps1 C2h) and a one-run answer to "is RS2 (6) wrong?".
+  Unset or any other value = the closure runs (the shipped, conservative behaviour). Not
+  DRAGLINT_NO_SCOPED_RESOLVE, which switches the WHOLE scoped pass off. }
+function ScopedReceiverClosureOff: Boolean;
+begin
+  Result:= MatchText(Trim(GetEnvironmentVariable('DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE')), ['1', 'on', 'yes', 'true']);
+end;
+
 procedure TSQLiteSymbolStore.NoteScopeRemoval(AFileId: Int64);
 const
   SCOPE_SHARE_DIVISOR = 3; { "one file in three" -- see the latch below }
@@ -9245,20 +9481,23 @@ begin
       that id when the file is re-emitted, and its ref's NAME need not be one this file declares
       (`Thing.Run` reaches TBase.Run through TEditThing): put the names of those refs in scope so
       the scoped pass rewrites them as the whole pass does. Indexed lookups (idx_call_edges_receiver,
-      idx_member_accesses_receiver / _accessor). }
-    Q.SQL.Text:= 'SELECT r.name_text FROM refs r JOIN call_edges ce ON ce.ref_id = r.id ' +
-                 'WHERE ce.receiver_type_symbol_id IN (SELECT id FROM symbols WHERE file_id = :f) ' +
-                 'UNION SELECT r.name_text FROM refs r JOIN member_accesses ma ON ma.ref_id = r.id ' +
-                 'WHERE ma.receiver_type_symbol_id IN (SELECT id FROM symbols WHERE file_id = :f) ' +
-                 '   OR ma.accessor_symbol_id IN (SELECT id FROM symbols WHERE file_id = :f)';
-    Q.ParamByName('f').AsLargeInt:= AFileId;
-    Q.Open;
-    while not Q.Eof do
+      idx_member_accesses_receiver / _accessor). 151 ST: ScopedReceiverClosureOff skips it. }
+    if not ScopedReceiverClosureOff then
     begin
-      if Q.Fields[0].AsString <> '' then FScopeNames.AddOrSetValue(LowerCase(Q.Fields[0].AsString), True);
-      Q.Next;
+      Q.SQL.Text:= 'SELECT r.name_text FROM refs r JOIN call_edges ce ON ce.ref_id = r.id ' +
+                   'WHERE ce.receiver_type_symbol_id IN (SELECT id FROM symbols WHERE file_id = :f) ' +
+                   'UNION SELECT r.name_text FROM refs r JOIN member_accesses ma ON ma.ref_id = r.id ' +
+                   'WHERE ma.receiver_type_symbol_id IN (SELECT id FROM symbols WHERE file_id = :f) ' +
+                   '   OR ma.accessor_symbol_id IN (SELECT id FROM symbols WHERE file_id = :f)';
+      Q.ParamByName('f').AsLargeInt:= AFileId;
+      Q.Open;
+      while not Q.Eof do
+      begin
+        if Q.Fields[0].AsString <> '' then FScopeNames.AddOrSetValue(LowerCase(Q.Fields[0].AsString), True);
+        Q.Next;
+      end;
+      Q.Close;
     end;
-    Q.Close;
     { THE ONE MOMENT THE HERITAGE STILL EXISTS. A withdrawn type takes its
       symbols row -- and, by CASCADE, its type_ancestors rows -- with it, so by
       the time WidenScopeThroughRemovedTypes runs there is nothing left to ask
@@ -17791,6 +18030,57 @@ begin
   Result:= '[' + string.Join(',', Parts) + ']';
 end;
 
+type
+  { 151 PF: one refs row of a file as PersistArgUses' callee lookup reads it -- the columns, the
+    NULLs and the row order (refs.id) of the per-candidate query it replaced. }
+  TArgCalleeRow = record
+    SymbolId : Int64;   { refs.symbol_id, 0 when NULL                  }
+    HasSymbol: Boolean;
+    Target   : Int64;   { its certain call_edges target, 0 when none   }
+    HasTarget: Boolean;
+    Name     : string;  { refs.name_text                               }
+    HasName  : Boolean;
+  end;
+
+const
+  ARG_ROW_LINE_SHIFT = 32; { 151 PF: PersistArgUses' callee map key is (line shl 32) or col }
+
+{ 151 PF: the callee map key of a (start_line, start_col) position. }
+function ArgRowKey(ALine, ACol: Integer): Int64;
+begin
+  Result:= (Int64(ALine) shl ARG_ROW_LINE_SHIFT) or Cardinal(ACol);
+end;
+
+{ 151 PF: AFile's refs into ARows by ArgRowKey, each bucket in refs.id order. AQ is
+  PersistArgUses' per-file callee query (symbol_id, tgt, start_line, start_col, name_text). }
+procedure LoadArgCalleeRows(AQ: TFDQuery; AFile: Int64; ARows: TDictionary<Int64, TArray<TArgCalleeRow>>);
+begin
+  ARows.Clear;
+  AQ.ParamByName('f').AsLargeInt:= AFile;
+  AQ.Open;
+  try
+  var FTLine: TField:= AQ.FieldByName('start_line');
+  var FTCol : TField:= AQ.FieldByName('start_col');
+  var FTName: TField:= AQ.FieldByName('name_text');
+  while not AQ.Eof do
+  begin
+    var Row: TArgCalleeRow;
+    Row.HasSymbol:= not AQ.Fields[0].IsNull;
+    Row.SymbolId := if Row.HasSymbol then AQ.Fields[0].AsLargeInt else 0;
+    Row.HasTarget:= not AQ.Fields[1].IsNull;
+    Row.Target   := if Row.HasTarget then AQ.Fields[1].AsLargeInt else 0;
+    Row.HasName  := not FTName.IsNull;
+    Row.Name     := FTName.AsString;
+    var RowKey: Int64:= ArgRowKey(FTLine.AsInteger, FTCol.AsInteger);
+    var Bucket: TArray<TArgCalleeRow>;
+    if not ARows.TryGetValue(RowKey, Bucket) then Bucket:= nil;
+    ARows.AddOrSetValue(RowKey, Bucket + [Row]);
+    AQ.Next;
+  end;
+  finally
+    AQ.Close;
+  end;
+end;
 { 150-RS2 (2) / 150-RB2-a: persist the var / out ARGUMENT use of a member access. A
   member_accesses 'read' row with no accessor (a field, a unit / class var) that is the WHOLE
   argument of a var (read + write) or out (write) parameter of a resolved call gets
@@ -17800,7 +18090,10 @@ end;
   TArgClassifier.TargetOf finds it (the ref at the callee position: refs.symbol_id, else its
   certain call edge), so `usages --rw` reads back what it would have derived. Runs after every
   edge writer, in the pass's transaction. Scoped: every row of a file that holds an in-scope ref
-  (the call that decides the mode is such a ref). Inc / Dec stays read-time (text only). }
+  (the call that decides the mode is such a ref). Inc / Dec stays read-time (text only).
+  151 PF: the callee ref is looked up in a per-file map (one refs read per FILE, candidates in
+  file order) instead of one refs query per candidate: on a CLIENT copy that query was 15.6 s
+  of the calls stage (refs has no (file_id, start_line, start_col) index). Same rows, same order. }
 procedure PersistArgUses(AConn: TFDConnection; const AScopeWhere, AStaleWhere: string;
   out ACandidates, AStored: Int64);
 var
@@ -17809,6 +18102,8 @@ var
   QSig : TFDQuery;
   Upd  : TFDQuery;
   Lines: TDictionary<string, TArray<string>>;
+  Rows : TDictionary<Int64, TArray<TArgCalleeRow>>; { 151 PF: RowsFile's refs by ArgRowKey }
+  RowsFile: Int64;
   Callee: string;
   CL, CC, Idx: Integer;
 begin
@@ -17823,11 +18118,13 @@ begin
   QSig := TFDQuery.Create(nil);
   Upd  := TFDQuery.Create(nil);
   Lines:= TDictionary<string, TArray<string>>.Create;
+  Rows := TDictionary<Int64, TArray<TArgCalleeRow>>.Create;
+  RowsFile:= 0;
   try
     QTgt.Connection:= AConn;
     QTgt.SQL.Text  := 'SELECT refs.symbol_id, (SELECT ce.target_symbol_id FROM call_edges ce WHERE ce.ref_id = refs.id ' +
-                      'AND ce.confidence = ''certain'') AS tgt FROM refs WHERE refs.file_id = :f AND refs.start_line = :l ' +
-                      'AND refs.start_col = :c AND refs.name_text = :n COLLATE NOCASE ORDER BY refs.id';
+                      'AND ce.confidence = ''certain'') AS tgt, refs.start_line, refs.start_col, refs.name_text ' +
+                      'FROM refs WHERE refs.file_id = :f ORDER BY refs.id';
     QSig.Connection:= AConn;
     QSig.SQL.Text  := 'SELECT signature FROM symbols WHERE id = :id';
     Upd.Connection := AConn;
@@ -17838,7 +18135,8 @@ begin
     Q.SQL.Text  := 'SELECT ma.ref_id, ma.accessor_kind, refs.file_id, refs.start_line, refs.start_col, f.path ' +
                    'FROM member_accesses ma JOIN refs ON refs.id = ma.ref_id JOIN files f ON f.id = refs.file_id ' +
                    'WHERE ma.mode = ''read'' AND ma.accessor_symbol_id IS NULL ' +
-                   'AND (ma.accessor_kind IS NULL OR ma.accessor_kind IN (''var-arg'', ''out-arg''))' + Filter;
+                   'AND (ma.accessor_kind IS NULL OR ma.accessor_kind IN (''var-arg'', ''out-arg''))' + Filter +
+                   ' ORDER BY refs.file_id'; { 151 PF: one file's callee map at a time }
     Q.Open;
     var FRef : TField:= Q.FieldByName('ref_id');
     var FKind: TField:= Q.FieldByName('accessor_kind');
@@ -17868,18 +18166,22 @@ begin
          and not ((Idx = 0) and (SameText(Callee, 'Inc') or SameText(Callee, 'Dec'))) then
       begin
         var Target: Int64:= 0;
-        QTgt.ParamByName('f').AsLargeInt := FFile.AsLargeInt;
-        QTgt.ParamByName('l').AsInteger  := CL;
-        QTgt.ParamByName('c').AsInteger  := CC;
-        QTgt.ParamByName('n').AsWideString:= Callee;
-        QTgt.Open;
-        while (Target = 0) and not QTgt.Eof do
+        if FFile.AsLargeInt <> RowsFile then
         begin
-          if (not QTgt.Fields[0].IsNull) and (QTgt.Fields[0].AsLargeInt > 0) then Target:= QTgt.Fields[0].AsLargeInt
-          else if not QTgt.Fields[1].IsNull then Target:= QTgt.Fields[1].AsLargeInt;
-          QTgt.Next;
+          RowsFile:= FFile.AsLargeInt;
+          LoadArgCalleeRows(QTgt, RowsFile, Rows);
         end;
-        QTgt.Close;
+        { The replaced query's WHERE (start_line, start_col, name_text COLLATE NOCASE -- ASCII
+          folding, as SameText) and its first-hit loop, over the same rows in refs.id order. }
+        var AtCallee: TArray<TArgCalleeRow>;
+        if Rows.TryGetValue(ArgRowKey(CL, CC), AtCallee) then
+          for var Row: TArgCalleeRow in AtCallee do
+          begin
+            if Target <> 0 then Break;
+            if not (Row.HasName and SameText(Row.Name, Callee)) then Continue;
+            if Row.HasSymbol and (Row.SymbolId > 0) then Target:= Row.SymbolId
+            else if Row.HasTarget then Target:= Row.Target;
+          end;
         if Target > 0 then
         begin
           QSig.ParamByName('id').AsLargeInt:= Target;
@@ -17902,6 +18204,7 @@ begin
     end;
     Q.Close;
   finally
+    Rows.Free;
     Lines.Free;
     Upd.Free;
     QSig.Free;
@@ -17945,7 +18248,7 @@ begin
                 [FScopeTypesBefore.Count, FScopeTypesAfter.Count]));
 end;
 
-procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);  // dl:ok method-too-long@1d4b, deep-nesting@6ffc, cyclomatic-complexity@3b05, cognitive-complexity@54d8 -- one transaction over one resolver with shared maps; a split is its own change with its own re-resolve measurement, and lane facts (1.44) added only two calls, three counters and two log lines here
+procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);  // dl:ok method-too-long@55f3, deep-nesting@6ffc, cyclomatic-complexity@c205, cognitive-complexity@dc23 -- one transaction over one resolver with shared maps; a split is its own change with its own re-resolve measurement, and lane facts (1.44) added only two calls, three counters and two log lines here
 { v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
   (wipe the table, resolve in memory, batch-write in one transaction). Builds one
   TCallResolver (its name/scope maps cost O(symbols) to build ONCE), then streams
@@ -18026,6 +18329,7 @@ var
   AccEdge   : Int64         ; { UpsertCallEdge                                   }
   TMark     : Int64         ; { scratch for the accumulators above               }
   Profiled  : Boolean       ;
+  PfMark    : Int64         ; { 151 PF: DRAGLINT_PROFILE_CALLS section stamp }
   Scoped    : Boolean       ; { re-resolving only the affected refs -- see ScopedResolveIsSound }
   ScopeWhere: string        ; { the predicate that selects them ('' when not scoped)           }
   DataVersion0: Int64       ; { PRAGMA data_version right after the transaction opened (item 12) }
@@ -18344,6 +18648,7 @@ begin
       SectionRefs:= ResolveSectionEnclosing;
       SkippedStaleRcv:= 0;
       BeatRefs:= 0;
+      PfMark:= Resolver.ProfBegin(cpsStreamMain); { 151 PF: DRAGLINT_PROFILE_CALLS sections }
       BeatStreamOpen(FConn, Q, 'resolve calls');
       while not Q.Eof do
       begin
@@ -18492,50 +18797,77 @@ begin
         Q.Next;
       end;
       Q.Close;
+      Resolver.ProfEnd(cpsStreamMain, PfMark);
       { 2026-09-23 (enum-value-ref-binding): the SECOND stream, Shape A. Inside
         this transaction and before the commit, so the bindings share the
         lifetime of the edges above and an interrupted pass rolls back whole. }
+      PfMark:= Resolver.ProfBegin(cpsStreamEnum); { 151 PF }
       ResolveEnumValueRefs(Resolver, ScopeWhere, StaleWhere,
                            EnumCandidates, EnumBound, EnumShadowDecls);
+      Resolver.ProfEnd(cpsStreamEnum, PfMark);
       { 2026-09-23 (parenless-call binding): the THIRD stream, and AFTER the enum
         stream on purpose -- see ResolveParenlessCallRefs' remarks. Same
         transaction, so its edges share the pass's all-or-nothing lifetime. }
+      PfMark:= Resolver.ProfBegin(cpsStreamParenless); { 151 PF }
       ResolveParenlessCallRefs(Resolver, ScopeWhere, StaleWhere, ParenCandidates, ParenBound);
+      Resolver.ProfEnd(cpsStreamParenless, PfMark);
       { 1.8.0 (D14 + D16a): the FOURTH stream, last of the READS, over the `read` refs the two
         streams above left unbound -- see ResolveMemberReadRefs' remarks. }
+      PfMark:= Resolver.ProfBegin(cpsStreamMemberRead); { 151 PF }
       ResolveMemberReadRefs(Resolver, ScopeWhere, StaleWhere, MemberCandidates, MemberBound);
+      Resolver.ProfEnd(cpsStreamMemberRead, PfMark);
       { B-28 (2026-10-23): the SIXTH stream, after the member reads -- it only
         sees what the three read streams above declined. }
+      PfMark:= Resolver.ProfBegin(cpsStreamValueRead); { 151 PF }
       ResolveValueReadRefs(Resolver, ScopeWhere, StaleWhere, ValueCandidates, ValueBound);
+      Resolver.ProfEnd(cpsStreamValueRead, PfMark);
       { B-31 (2026-10-23): the SEVENTH stream, type_use refs, identity only. }
+      PfMark:= Resolver.ProfBegin(cpsStreamTypeUse); { 151 PF }
       ResolveTypeUseRefs(Resolver, ScopeWhere, StaleWhere, TypeCandidates, TypeBound);
+      Resolver.ProfEnd(cpsStreamTypeUse, PfMark);
       { b5 (spec 2026-11-06-raise-handle-type-facts): raise / handle rows, identity only. }
       TMark:= TStopwatch.GetTimeStamp;
+      PfMark:= Resolver.ProfBegin(cpsStreamException); { 151 PF }
       ResolveExceptionTypeRefs(Resolver, ScopeWhere, StaleWhere, ExcCandidates, ExcBound);
+      Resolver.ProfEnd(cpsStreamException, PfMark);
       TExc:= (TStopwatch.GetTimeStamp - TMark) / TStopwatch.Frequency;
       { X6 / G1 (2026-10-25): the EIGHTH stream, enum hard casts, identity only. }
+      PfMark:= Resolver.ProfBegin(cpsStreamEnumCast); { 151 PF }
       ResolveEnumCastRefs(Resolver, ScopeWhere, StaleWhere, CastCandidates, CastBound);
+      Resolver.ProfEnd(cpsStreamEnumCast, PfMark);
       { GAP-CALLERS (1.40): the NINTH stream, type-name reads, identity only;
         last of the reads, so it sees only what every read stream declined. }
+      PfMark:= Resolver.ProfBegin(cpsStreamTypeRead); { 151 PF }
       ResolveTypeReadRefs(Resolver, ScopeWhere, StaleWhere, TReadCandidates, TReadBound);
+      Resolver.ProfEnd(cpsStreamTypeRead, PfMark);
       { 2026-09-23 (D13, resolver 1.8.0-alpha): the FIFTH stream -- bare writes,
         identity only. Same transaction, same all-or-nothing lifetime. }
       TMark:= TStopwatch.GetTimeStamp;
+      PfMark:= Resolver.ProfBegin(cpsStreamWrite); { 151 PF }
       ResolveWriteRefs(Resolver, ScopeWhere, StaleWhere, WriteCandidates, WriteBound);
+      Resolver.ProfEnd(cpsStreamWrite, PfMark);
       TWrites:= (TStopwatch.GetTimeStamp - TMark) / TStopwatch.Frequency;
       { 150-RS2 (2): after every member_accesses writer, before the derived streams. }
       var ArgCandidates, ArgStored: Int64;
+      PfMark:= Resolver.ProfBegin(cpsStreamArgUses); { 151 PF }
       PersistArgUses(FConn, ScopeWhere, StaleWhere, ArgCandidates, ArgStored);
+      Resolver.ProfEnd(cpsStreamArgUses, PfMark);
       ResolveLog(Format('calls      arg-uses: %d of %d accessor-less member read(s) stored as a var / out argument', [ArgStored, ArgCandidates]));
       { B9 F1: the LAST stream, it reads what all the others wrote. }
       TMark:= TStopwatch.GetTimeStamp;
       { 149 IC round 3: the derived streams get a WIDER scope than the binding streams. }
       var TypesWhere, ReceiversWhere: string;
       WidenDerivedScope(ScopeWhere, TypesWhere, ReceiversWhere);
+      PfMark:= Resolver.ProfBegin(cpsStreamRefTypes); { 151 PF }
       ResolveRefTypes(Resolver, TypesWhere, StaleWhere, RefTypeCandidates, RefTypeBound);
+      Resolver.ProfEnd(cpsStreamRefTypes, PfMark);
       TRefTypes:= (TStopwatch.GetTimeStamp - TMark) / TStopwatch.Frequency;
       { lane 144 item 3: after ref_types, the typed receiver wins a position two refs share. }
+      PfMark:= Resolver.ProfBegin(cpsStreamRefReceivers); { 151 PF }
       ResolveRefReceivers(ReceiversWhere, StaleWhere, RcvCandidates, RcvBound);
+      Resolver.ProfEnd(cpsStreamRefReceivers, PfMark);
+      if Resolver.ProfileOn then
+        for var PfLine: string in Resolver.ProfileLines do ResolveLog('calls      profile: ' + PfLine);
       FConn.Commit;
     except
       on E: Exception do

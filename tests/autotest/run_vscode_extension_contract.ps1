@@ -104,5 +104,14 @@ if (Test-Path $sa) {
 }
 Check "changing dragLint.fullRules restarts the server (a running server keeps its old argv)" ($ext -match 'affectsConfiguration\(.dragLint\.fullRules.\)') ""
 
+Write-Host 'package-lock.json agrees with package.json' -ForegroundColor Cyan
+$lockPath = Join-Path $Dir 'package-lock.json'
+Check 'package-lock.json exists' (Test-Path $lockPath) ''
+if (Test-Path $lockPath) {
+  $lock = Get-Content $lockPath -Raw | ConvertFrom-Json -AsHashtable
+  Check 'lock top-level version == package.json version (regen: npm install --package-lock-only)' ($lock["version"] -eq $pkg.version) ("lock=" + $lock["version"] + " package=" + $pkg.version)
+  Check 'lock root package version == package.json version' ($lock.packages.''.version -eq $pkg.version) ("lock=" + $lock.packages.''.version)
+}
+
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

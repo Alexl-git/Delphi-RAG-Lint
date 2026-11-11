@@ -1,0 +1,6 @@
+# Known non-grammar parse failures (lint parser-error rule, engine path) -- wave 151 OPS, base 1.49.0-alpha.
+# Columns: file<TAB>line<TAB>cause-class<TAB>verdict<TAB>reason
+# Measured by lanes\150\PS (parser-error over JVCL run + Studio rtl); 0 grammar defects. A new row here must carry a reason.
+JvInspXVCL.pas	308,310	source-error	UPSTREAM	extra ')' after both CreatePrim(...) calls; dcc rejects it too (draft: lanes\151\OPS\upstream\JVCL-JvInspXVCL-extra-paren.md, owner posts)
+JvMenus.pas	764	define-profile	ACCEPT	SUPPORTS_DEPRECATED comes from jvcl.inc -> jedi.inc; the library profile (defines-only preprocess, no JVCL include chain) leaves 'procedure X(..); ;' which dcc also rejects; raw file parses clean. Not a grammar gap; a stray ';' is NOT accepted
+Posix.SysSocket.pas	73	platform-only	ACCEPT	every body of CMSG_NXTHDR is under ANDROID/LINUX/MACOS; under the Windows profile the implementation has no body (platform-foreign unit)
