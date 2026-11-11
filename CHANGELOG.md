@@ -3,6 +3,44 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## v1.50.0-alpha -- unreleased
+
+Wave 151, integrated on lane/151-INT over main e78d939fc. Extractor 1.35.0 -> 1.36.0-alpha, resolver 1.23.0 -> 1.24.0-alpha and index SCHEMA_VERSION 24 -> 25 (two additive tables; SCHEMA_READ_MIN stays 23): ONE re-parse of every DB after the deploy.
+
+### Added
+- index: `dfm_properties` -- every text .dfm stores all its property assignments (names, decoded values, kinds,
+  nesting, positions) from the same parse that writes dfm_objects.
+- index: `comment_facts` -- every comment with offsets, kind and anchor; parity with the DocInsight / dl:ok / dl:bk
+  scanners proven on 504 engine units (0 differences).
+- info: an index records the tree-sitter DLLs it was parsed with; `info` reports grammar_dlls_stored / _loaded /
+  _differ (text: a `grammar: DIFFERS` block); remedy `index --rebuild`.
+- DRAGLINT_PROFILE_CALLS=1 prints a per-sub-pass timing table of the resolve calls stage on stderr (off = no cost).
+- DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE=1 switches off the receiver-side closure of the scoped resolve pass.
+- tools\reparse-libraries.ps1 `-Platforms d5` indexes the Delphi 5 source root into library-D5; known non-grammar
+  parse failures are recorded in tools\corpusscan\known-parse-failures.tsv.
+- Release script installs the VS Code extension vsix into every profile (`-NoProfileInstall` skips it); new
+  installed-extension guard.
+
+### Changed
+- Resolve calls stage ~21 % faster (CLIENT resolve-only 150 s -> 111 s): uses lists cached per declaring file, refs
+  read once per file for argument uses; output identical.
+- LSP hover about a third faster (CLIENT 70.6 -> 49.0 ms, documented routines 149 -> 96 ms) with byte-identical text.
+- forms-csv reads .dfm caption, action and shown-on-create from dfm_properties when current (DRAGLINT_NO_FILE_FACTS=1
+  forces the text read); output byte-identical.
+- lint --fix redundant-cast reads EVERY library section of the platform in the manifest, not only the first; an
+  engine with no drag-lint.json beside it says so (NOTE).
+- DRAGLINT_PP_TRACE: 1/true/yes writes %TEMP%\drag-lint-pp-trace.log, any other value is the trace file path.
+
+### Fixed
+- Resolver: same-arity overloads that differ only by a class / class-reference parameter (System.TypInfo
+  FindPropInfo) are told apart; all 35 library calls now bind certain.
+- Resolver: a bare call inside a .dpr routine no longer records the program as its receiver type; a generic
+  constraint name no longer shadows a real type of the same name.
+- `Owns returned:` no longer depends on index order for a function returning a cross-unit class whose name does not
+  start with T/I (now consistently omitted).
+- DRAGLINT_PP_TRACE=1 no longer creates a file named `1` in the current directory.
+- The language server drops its per-store doc-facts memos whenever it opens a store.
+
 ## v1.49.0-alpha -- unreleased
 
 Wave 149, integrated on lane/149-INT over main bdbf7f91a. Extractor 1.34.0 -> 1.35.0-alpha and resolver 1.22.0 -> 1.23.0-alpha: ONE re-parse of every DB after the deploy. Index SCHEMA_VERSION stays 23 (the three new fact tables are additive).
