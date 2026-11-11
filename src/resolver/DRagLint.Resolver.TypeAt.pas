@@ -786,13 +786,12 @@ begin
     returns '' on a tie rather than inventing a winner. Primary is the store
     that owns the hovered file, which is the project index whenever the file is
     indexed at all. }
+  { 151 CF (LX-5 hover cost): asked LAZILY, at its one consumer below (a value LHS whose
+    declared type must be looked up). GuiFrameworkInUse is a GROUP BY over the whole
+    unit_uses table, not cached by the store: asked eagerly it cost ~8 ms on a CLIENT copy
+    for every hover, while most hovers (bare identifiers, type LHS) never read the answer.
+    Same value, same exception policy; only the moment it is asked changed. }
   Framework:= '';
-  if (Primary <> nil) and (FileId > 0) then
-    try
-      Framework:= Primary.GuiFrameworkInUse;
-    except
-      on E: Exception do Framework:= '';   { never let a preference query break hover }
-    end;
 
   if FileId > 0 then
   begin
@@ -832,7 +831,16 @@ begin
         every member lookup fall through to the owner-type floor and report
         "member may be inherited" for members that are right there on the real
         class. }
-      if VT <> '' then TS:= FindTypeWithMembersAnywhere(AStores, VT, LhsStore, UsedUnits, Framework);
+      if VT <> '' then
+      begin
+        if (Primary <> nil) and (FileId > 0) then
+          try
+            Framework:= Primary.GuiFrameworkInUse;
+          except
+            on E: Exception do Framework:= '';   { never let a preference query break hover }
+          end;
+        TS:= FindTypeWithMembersAnywhere(AStores, VT, LhsStore, UsedUnits, Framework);
+      end;
       LhsSym:= TS;
     end;
     { v0.46: LHS not a global symbol -> infer it as a local var/param and

@@ -14,7 +14,9 @@
   0, the loop never ran, nothing was launched, and the "result" was [double]::MaxValue - MaxValue = 0.
 
   Read-only on -DbPath (lsp opens it; nothing indexes). Use a COPY, never a live project DB.
-  Exit: 0 = every arm answered every hover; 1 = an arm had a missing or empty answer; 2 = setup error.
+  Exit: 0 = every arm answered every hover; 1 = an arm had a missing or empty answer, or (with
+  -RequireIdentical, 151 CF) an answer differed between A and B; 2 = setup error.
+  Positive control of -RequireIdentical: -ExeA X -ExeB X -ExtraB --no-exception-facts -> IDENTITY FAIL (2/100 on CLIENT).
 #>
 [CmdletBinding()]
 param(
@@ -28,7 +30,11 @@ param(
   [string[]]$ExtraB = @(),
   # A second store passed to BOTH arms (lsp --db A --db B): exercises the 149 LX extra-stores path
   # (HoverExtraStores = the other project stores that own the hovered file). '' = one store.
-  [string]$SecondDb = ''
+  [string]$SecondDb = '',
+  # 151 CF: fail unless every hover answer is BYTE-IDENTICAL between arm A and arm B (an identity
+  # acceptance: a speed fix must not change one byte of what the user reads). Off by default, so an
+  # A/B of two versions that are MEANT to render differently still measures.
+  [switch]$RequireIdentical
 )
 $ErrorActionPreference = 'Stop'
 foreach ($p in @($DbPath, $ExeA, $ExeB)) { if (-not (Test-Path $p)) { Write-Host "FATAL: not found: $p" -ForegroundColor Red; exit 2 } }
@@ -69,14 +75,15 @@ function Invoke-HoverSession([string]$Exe, [string[]]$Extra, [int]$Count, [strin
   Start-Process $Exe -ArgumentList (@('lsp', '--db', $DbPath) + $(if ($SecondDb) { @('--db', $SecondDb) } else { @() }) + $Extra) -WorkingDirectory $work -RedirectStandardInput $inF `
     -RedirectStandardOutput $outF -RedirectStandardError (Join-Path $work "err-$Tag.txt") -NoNewWindow -Wait | Out-Null
   $ms = $sw.Elapsed.TotalMilliseconds
-  $answered = 0; $bytes = 0
+  $answered = 0; $bytes = 0; $vals = @{}
   foreach ($mm in [regex]::Matches([IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
     try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
     if ($null -eq $o.id -or [int]$o.id -lt 1000) { continue }
     $v = if ($null -ne $o.result -and $null -ne $o.result.contents) { [string]$o.result.contents.value } else { '' }
     if ($v.Length -gt 0) { $answered++; $bytes += $v.Length }
+    $vals[[int]$o.id] = $v
   }
-  return [pscustomobject]@{ Ms = $ms; Answered = $answered; Bytes = $bytes }
+  return [pscustomobject]@{ Ms = $ms; Answered = $answered; Bytes = $bytes; Values = $vals }
 }
 
 $arms = @(
@@ -98,6 +105,22 @@ foreach ($arm in $arms) {
   ("{0}: T1={1:N0} ms  T{2}={3:N0} ms  per hover={4:N1} ms  answered={5}/{2}  md bytes={6}  {7}" -f $arm.Name, $best1, $N, $bestN, $per, $last.Answered, $last.Bytes, $state) |
     Tee-Object -FilePath $Out -Append
   if ($armBad) { $bad = $true }
+  $arm | Add-Member -NotePropertyName Last -NotePropertyValue $last
+}
+if ($RequireIdentical) {
+  # 151 CF: per hover id, A's markdown vs B's, ordinal (byte) comparison.
+  $va = $arms[0].Last.Values; $vb = $arms[1].Last.Values; $diff = 0; $first = $null
+  for ($i = 0; $i -lt $N; $i++) {
+    $id = 1000 + $i
+    if (-not [string]::Equals([string]$va[$id], [string]$vb[$id], [StringComparison]::Ordinal)) { $diff++; if ($null -eq $first) { $first = $i } }
+  }
+  if ($diff -gt 0) {
+    $p0 = $pos[$first]
+    ("IDENTITY FAIL: {0} of {1} hover answers differ between A and B (first: {2} line {3} col {4})" -f $diff, $N, $p0.uri, $p0.line, $p0.character) | Tee-Object -FilePath $Out -Append
+    $bad = $true
+  } else {
+    ("IDENTITY OK: all {0} hover answers byte-identical between A and B" -f $N) | Tee-Object -FilePath $Out -Append
+  }
 }
 if ($bad) { exit 1 }
 exit 0
