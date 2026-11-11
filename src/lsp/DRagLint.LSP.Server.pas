@@ -5018,7 +5018,7 @@ begin
   Result:= True;
 end; // function
 
-function TLSPServer.ComputeHoverAt(const APath: string; ALine, ACol: Integer; out AOut: THoverComputation): Boolean;  // dl:ok cyclomatic-complexity@b387, cognitive-complexity@7029, method-too-long@2d59, deep-nesting@5f57 -- REVIEWED S0: the hover RENDERING half of the former ComputeHover (54 before); the selection half moved to SelectSymbolAt, further splitting is out of S0 scope (re-reviewed A5 fix: now 35; still one rendering pass, a split stays out of scope here)
+function TLSPServer.ComputeHoverAt(const APath: string; ALine, ACol: Integer; out AOut: THoverComputation): Boolean;  // dl:ok cyclomatic-complexity@22a3, cognitive-complexity@e6bb, method-too-long@ebc3, deep-nesting@5f57 -- REVIEWED S0: the hover RENDERING half of the former ComputeHover (54 before); the selection half moved to SelectSymbolAt, further splitting is out of S0 scope (re-reviewed A5 fix: now 35; still one rendering pass, a split stays out of scope here; 151 INT re-review: 37 / 270 lines after CF's one-TypeAt-per-hover reuse, same single pass)
 var
   Path    : string         ;
   Ident   : string         ;

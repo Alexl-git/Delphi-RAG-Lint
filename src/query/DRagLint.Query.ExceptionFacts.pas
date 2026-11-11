@@ -86,7 +86,7 @@ uses
   System.JSON,
   System.Generics.Collections,
   System.Generics.Defaults,
-  DRagLint.Core.Model;  // dl:ok uses-global-census@744f -- the one spelling of a ref kind the parser writes (146 int)
+  DRagLint.Core.Model;  // dl:ok uses-global-census@1abd -- the one spelling of a ref kind the parser writes (146 int)
 
 const
   ALL_KINDS = '''' + REF_KIND_RAISE + ''',''' + REF_KIND_RAISE_EXPR + ''',''' + REF_KIND_RERAISE + ''',''' +

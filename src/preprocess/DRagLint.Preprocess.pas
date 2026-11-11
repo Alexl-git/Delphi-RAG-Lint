@@ -1095,8 +1095,8 @@ begin
     Result:= TPath.Combine(TPath.GetTempPath, PP_TRACE_FILE);
     try
       Writeln(ErrOutput, 'NOTE: ' + PP_TRACE_ENV + '=' + Raw + ' is a flag; tracing to ' + Result);
-    except
-      on EInOutError do ; // no console (IDE / service): the NOTE is best-effort
+    except  // dl:ok try-except-swallowed@d59a -- best-effort NOTE: no console (IDE / service) must not stop the trace
+      on EInOutError do ; // no console (IDE / service): the NOTE is best-effort  // dl:ok empty-on-handler@59cd
     end;
   end
   else
@@ -1105,7 +1105,8 @@ end;
 
 initialization
   GTracePath:= ResolveTracePath;
-  GTraceLock:= TObject.Create;finalization
+  GTraceLock:= TObject.Create;
+finalization
   GTraceLock.Free;
   // Release the process-lifetime subdir cache (v1.2.1 port change #2). Lazily
   // created in SubdirsOf; may be nil if the widened search was never used.

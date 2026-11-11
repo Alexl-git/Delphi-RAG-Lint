@@ -13,7 +13,7 @@ unit DRagLint.Index.CommentFacts;
 interface
 
 uses
-  DRagLint.Core.Model;
+  DRagLint.Core.Model;  // dl:ok uses-global-census@1abd -- DOC_ALLOW_GAP is the DocInsight scanner's own constant; parity with Parser.DocComments needs the same value (151 INT)
 
 /// <summary>True when ExtractCommentFacts produces rows for a file with this
 /// path: a Pascal source (.pas, .dpr, .dpk, .inc, .pp, .lpr).</summary>
