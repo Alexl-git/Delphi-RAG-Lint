@@ -11,7 +11,7 @@
 #     (DRAGLINT_PP_TABLE=0) gives byte-identical findings for both rules, and the
 #     findings are the expected ones (absolute line/col values = the positive
 #     control: a table path that got a column wrong fails here, not only in
-#     the A/B). DRAGLINT_PP_TRACE=1 proves which path ran: 'table' for U.pas by
+#     the A/B). DRAGLINT_PP_TRACE=<file> proves which path ran: 'table' for U.pas by
 #     default, 'scan' under DRAGLINT_PP_TABLE=0, 'scan' once U.pas is touched
 #     (stale stamp -> fallback), 'scan' for a file with no directive rows.
 # (c) FALLBACK on a DB without the table (indexed by -BaseExe when given):
@@ -106,10 +106,12 @@ function Sql-Rows([string]$Db, [string]$Q) {
 function Lint-All([string]$Db, [string]$Rule, [hashtable]$Env = @{}) {
   foreach ($k in $Env.Keys) { [Environment]::SetEnvironmentVariable($k, $Env[$k]) }
   try {
+    # 151 PP: DRAGLINT_PP_TRACE is a trace FILE PATH (or a 1/true/yes flag -> %TEMP% log); the guard names its own file.
     $errFile = Join-Path $WorkDir 'trace.txt'
-    # DRAGLINT_PP_TRACE='1' is ALSO read by the preprocessor as a trace FILE PATH: a file named '1' lands in the cwd (150 H1).
+    if (Test-Path $errFile) { [IO.File]::Delete($errFile) }
+    if ($Env.ContainsKey('DRAGLINT_PP_TRACE')) { [Environment]::SetEnvironmentVariable('DRAGLINT_PP_TRACE', $errFile) }
     Push-Location $WorkDir
-    try { $raw = (& $Exe lint-all --db $Db --project $proj --rule $Rule --json 2>$errFile) -join "`n" } finally { Pop-Location }
+    try { $raw = (& $Exe lint-all --db $Db --project $proj --rule $Rule --json 2>$null) -join "`n" } finally { Pop-Location }
     $trace = if (Test-Path $errFile) { (Get-Content $errFile) -join "`n" } else { '' }
   } finally {
     foreach ($k in $Env.Keys) { [Environment]::SetEnvironmentVariable($k, $null) }
