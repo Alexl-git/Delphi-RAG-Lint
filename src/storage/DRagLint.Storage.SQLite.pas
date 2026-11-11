@@ -18030,6 +18030,57 @@ begin
   Result:= '[' + string.Join(',', Parts) + ']';
 end;
 
+type
+  { 151 PF: one refs row of a file as PersistArgUses' callee lookup reads it -- the columns, the
+    NULLs and the row order (refs.id) of the per-candidate query it replaced. }
+  TArgCalleeRow = record
+    SymbolId : Int64;   { refs.symbol_id, 0 when NULL                  }
+    HasSymbol: Boolean;
+    Target   : Int64;   { its certain call_edges target, 0 when none   }
+    HasTarget: Boolean;
+    Name     : string;  { refs.name_text                               }
+    HasName  : Boolean;
+  end;
+
+const
+  ARG_ROW_LINE_SHIFT = 32; { 151 PF: PersistArgUses' callee map key is (line shl 32) or col }
+
+{ 151 PF: the callee map key of a (start_line, start_col) position. }
+function ArgRowKey(ALine, ACol: Integer): Int64;
+begin
+  Result:= (Int64(ALine) shl ARG_ROW_LINE_SHIFT) or Cardinal(ACol);
+end;
+
+{ 151 PF: AFile's refs into ARows by ArgRowKey, each bucket in refs.id order. AQ is
+  PersistArgUses' per-file callee query (symbol_id, tgt, start_line, start_col, name_text). }
+procedure LoadArgCalleeRows(AQ: TFDQuery; AFile: Int64; ARows: TDictionary<Int64, TArray<TArgCalleeRow>>);
+begin
+  ARows.Clear;
+  AQ.ParamByName('f').AsLargeInt:= AFile;
+  AQ.Open;
+  try
+  var FTLine: TField:= AQ.FieldByName('start_line');
+  var FTCol : TField:= AQ.FieldByName('start_col');
+  var FTName: TField:= AQ.FieldByName('name_text');
+  while not AQ.Eof do
+  begin
+    var Row: TArgCalleeRow;
+    Row.HasSymbol:= not AQ.Fields[0].IsNull;
+    Row.SymbolId := if Row.HasSymbol then AQ.Fields[0].AsLargeInt else 0;
+    Row.HasTarget:= not AQ.Fields[1].IsNull;
+    Row.Target   := if Row.HasTarget then AQ.Fields[1].AsLargeInt else 0;
+    Row.HasName  := not FTName.IsNull;
+    Row.Name     := FTName.AsString;
+    var RowKey: Int64:= ArgRowKey(FTLine.AsInteger, FTCol.AsInteger);
+    var Bucket: TArray<TArgCalleeRow>;
+    if not ARows.TryGetValue(RowKey, Bucket) then Bucket:= nil;
+    ARows.AddOrSetValue(RowKey, Bucket + [Row]);
+    AQ.Next;
+  end;
+  finally
+    AQ.Close;
+  end;
+end;
 { 150-RS2 (2) / 150-RB2-a: persist the var / out ARGUMENT use of a member access. A
   member_accesses 'read' row with no accessor (a field, a unit / class var) that is the WHOLE
   argument of a var (read + write) or out (write) parameter of a resolved call gets
@@ -18039,7 +18090,10 @@ end;
   TArgClassifier.TargetOf finds it (the ref at the callee position: refs.symbol_id, else its
   certain call edge), so `usages --rw` reads back what it would have derived. Runs after every
   edge writer, in the pass's transaction. Scoped: every row of a file that holds an in-scope ref
-  (the call that decides the mode is such a ref). Inc / Dec stays read-time (text only). }
+  (the call that decides the mode is such a ref). Inc / Dec stays read-time (text only).
+  151 PF: the callee ref is looked up in a per-file map (one refs read per FILE, candidates in
+  file order) instead of one refs query per candidate: on a CLIENT copy that query was 15.6 s
+  of the calls stage (refs has no (file_id, start_line, start_col) index). Same rows, same order. }
 procedure PersistArgUses(AConn: TFDConnection; const AScopeWhere, AStaleWhere: string;
   out ACandidates, AStored: Int64);
 var
@@ -18048,6 +18102,8 @@ var
   QSig : TFDQuery;
   Upd  : TFDQuery;
   Lines: TDictionary<string, TArray<string>>;
+  Rows : TDictionary<Int64, TArray<TArgCalleeRow>>; { 151 PF: RowsFile's refs by ArgRowKey }
+  RowsFile: Int64;
   Callee: string;
   CL, CC, Idx: Integer;
 begin
@@ -18062,11 +18118,13 @@ begin
   QSig := TFDQuery.Create(nil);
   Upd  := TFDQuery.Create(nil);
   Lines:= TDictionary<string, TArray<string>>.Create;
+  Rows := TDictionary<Int64, TArray<TArgCalleeRow>>.Create;
+  RowsFile:= 0;
   try
     QTgt.Connection:= AConn;
     QTgt.SQL.Text  := 'SELECT refs.symbol_id, (SELECT ce.target_symbol_id FROM call_edges ce WHERE ce.ref_id = refs.id ' +
-                      'AND ce.confidence = ''certain'') AS tgt FROM refs WHERE refs.file_id = :f AND refs.start_line = :l ' +
-                      'AND refs.start_col = :c AND refs.name_text = :n COLLATE NOCASE ORDER BY refs.id';
+                      'AND ce.confidence = ''certain'') AS tgt, refs.start_line, refs.start_col, refs.name_text ' +
+                      'FROM refs WHERE refs.file_id = :f ORDER BY refs.id';
     QSig.Connection:= AConn;
     QSig.SQL.Text  := 'SELECT signature FROM symbols WHERE id = :id';
     Upd.Connection := AConn;
@@ -18077,7 +18135,8 @@ begin
     Q.SQL.Text  := 'SELECT ma.ref_id, ma.accessor_kind, refs.file_id, refs.start_line, refs.start_col, f.path ' +
                    'FROM member_accesses ma JOIN refs ON refs.id = ma.ref_id JOIN files f ON f.id = refs.file_id ' +
                    'WHERE ma.mode = ''read'' AND ma.accessor_symbol_id IS NULL ' +
-                   'AND (ma.accessor_kind IS NULL OR ma.accessor_kind IN (''var-arg'', ''out-arg''))' + Filter;
+                   'AND (ma.accessor_kind IS NULL OR ma.accessor_kind IN (''var-arg'', ''out-arg''))' + Filter +
+                   ' ORDER BY refs.file_id'; { 151 PF: one file's callee map at a time }
     Q.Open;
     var FRef : TField:= Q.FieldByName('ref_id');
     var FKind: TField:= Q.FieldByName('accessor_kind');
@@ -18107,18 +18166,22 @@ begin
          and not ((Idx = 0) and (SameText(Callee, 'Inc') or SameText(Callee, 'Dec'))) then
       begin
         var Target: Int64:= 0;
-        QTgt.ParamByName('f').AsLargeInt := FFile.AsLargeInt;
-        QTgt.ParamByName('l').AsInteger  := CL;
-        QTgt.ParamByName('c').AsInteger  := CC;
-        QTgt.ParamByName('n').AsWideString:= Callee;
-        QTgt.Open;
-        while (Target = 0) and not QTgt.Eof do
+        if FFile.AsLargeInt <> RowsFile then
         begin
-          if (not QTgt.Fields[0].IsNull) and (QTgt.Fields[0].AsLargeInt > 0) then Target:= QTgt.Fields[0].AsLargeInt
-          else if not QTgt.Fields[1].IsNull then Target:= QTgt.Fields[1].AsLargeInt;
-          QTgt.Next;
+          RowsFile:= FFile.AsLargeInt;
+          LoadArgCalleeRows(QTgt, RowsFile, Rows);
         end;
-        QTgt.Close;
+        { The replaced query's WHERE (start_line, start_col, name_text COLLATE NOCASE -- ASCII
+          folding, as SameText) and its first-hit loop, over the same rows in refs.id order. }
+        var AtCallee: TArray<TArgCalleeRow>;
+        if Rows.TryGetValue(ArgRowKey(CL, CC), AtCallee) then
+          for var Row: TArgCalleeRow in AtCallee do
+          begin
+            if Target <> 0 then Break;
+            if not (Row.HasName and SameText(Row.Name, Callee)) then Continue;
+            if Row.HasSymbol and (Row.SymbolId > 0) then Target:= Row.SymbolId
+            else if Row.HasTarget then Target:= Row.Target;
+          end;
         if Target > 0 then
         begin
           QSig.ParamByName('id').AsLargeInt:= Target;
@@ -18141,6 +18204,7 @@ begin
     end;
     Q.Close;
   finally
+    Rows.Free;
     Lines.Free;
     Upd.Free;
     QSig.Free;
@@ -18184,7 +18248,7 @@ begin
                 [FScopeTypesBefore.Count, FScopeTypesAfter.Count]));
 end;
 
-procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);  // dl:ok method-too-long@1d4b, deep-nesting@6ffc, cyclomatic-complexity@3b05, cognitive-complexity@54d8 -- one transaction over one resolver with shared maps; a split is its own change with its own re-resolve measurement, and lane facts (1.44) added only two calls, three counters and two log lines here
+procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);  // dl:ok method-too-long@55f3, deep-nesting@6ffc, cyclomatic-complexity@c205, cognitive-complexity@dc23 -- one transaction over one resolver with shared maps; a split is its own change with its own re-resolve measurement, and lane facts (1.44) added only two calls, three counters and two log lines here
 { v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
   (wipe the table, resolve in memory, batch-write in one transaction). Builds one
   TCallResolver (its name/scope maps cost O(symbols) to build ONCE), then streams
@@ -18265,6 +18329,7 @@ var
   AccEdge   : Int64         ; { UpsertCallEdge                                   }
   TMark     : Int64         ; { scratch for the accumulators above               }
   Profiled  : Boolean       ;
+  PfMark    : Int64         ; { 151 PF: DRAGLINT_PROFILE_CALLS section stamp }
   Scoped    : Boolean       ; { re-resolving only the affected refs -- see ScopedResolveIsSound }
   ScopeWhere: string        ; { the predicate that selects them ('' when not scoped)           }
   DataVersion0: Int64       ; { PRAGMA data_version right after the transaction opened (item 12) }
@@ -18583,6 +18648,7 @@ begin
       SectionRefs:= ResolveSectionEnclosing;
       SkippedStaleRcv:= 0;
       BeatRefs:= 0;
+      PfMark:= Resolver.ProfBegin(cpsStreamMain); { 151 PF: DRAGLINT_PROFILE_CALLS sections }
       BeatStreamOpen(FConn, Q, 'resolve calls');
       while not Q.Eof do
       begin
@@ -18731,50 +18797,77 @@ begin
         Q.Next;
       end;
       Q.Close;
+      Resolver.ProfEnd(cpsStreamMain, PfMark);
       { 2026-09-23 (enum-value-ref-binding): the SECOND stream, Shape A. Inside
         this transaction and before the commit, so the bindings share the
         lifetime of the edges above and an interrupted pass rolls back whole. }
+      PfMark:= Resolver.ProfBegin(cpsStreamEnum); { 151 PF }
       ResolveEnumValueRefs(Resolver, ScopeWhere, StaleWhere,
                            EnumCandidates, EnumBound, EnumShadowDecls);
+      Resolver.ProfEnd(cpsStreamEnum, PfMark);
       { 2026-09-23 (parenless-call binding): the THIRD stream, and AFTER the enum
         stream on purpose -- see ResolveParenlessCallRefs' remarks. Same
         transaction, so its edges share the pass's all-or-nothing lifetime. }
+      PfMark:= Resolver.ProfBegin(cpsStreamParenless); { 151 PF }
       ResolveParenlessCallRefs(Resolver, ScopeWhere, StaleWhere, ParenCandidates, ParenBound);
+      Resolver.ProfEnd(cpsStreamParenless, PfMark);
       { 1.8.0 (D14 + D16a): the FOURTH stream, last of the READS, over the `read` refs the two
         streams above left unbound -- see ResolveMemberReadRefs' remarks. }
+      PfMark:= Resolver.ProfBegin(cpsStreamMemberRead); { 151 PF }
       ResolveMemberReadRefs(Resolver, ScopeWhere, StaleWhere, MemberCandidates, MemberBound);
+      Resolver.ProfEnd(cpsStreamMemberRead, PfMark);
       { B-28 (2026-10-23): the SIXTH stream, after the member reads -- it only
         sees what the three read streams above declined. }
+      PfMark:= Resolver.ProfBegin(cpsStreamValueRead); { 151 PF }
       ResolveValueReadRefs(Resolver, ScopeWhere, StaleWhere, ValueCandidates, ValueBound);
+      Resolver.ProfEnd(cpsStreamValueRead, PfMark);
       { B-31 (2026-10-23): the SEVENTH stream, type_use refs, identity only. }
+      PfMark:= Resolver.ProfBegin(cpsStreamTypeUse); { 151 PF }
       ResolveTypeUseRefs(Resolver, ScopeWhere, StaleWhere, TypeCandidates, TypeBound);
+      Resolver.ProfEnd(cpsStreamTypeUse, PfMark);
       { b5 (spec 2026-11-06-raise-handle-type-facts): raise / handle rows, identity only. }
       TMark:= TStopwatch.GetTimeStamp;
+      PfMark:= Resolver.ProfBegin(cpsStreamException); { 151 PF }
       ResolveExceptionTypeRefs(Resolver, ScopeWhere, StaleWhere, ExcCandidates, ExcBound);
+      Resolver.ProfEnd(cpsStreamException, PfMark);
       TExc:= (TStopwatch.GetTimeStamp - TMark) / TStopwatch.Frequency;
       { X6 / G1 (2026-10-25): the EIGHTH stream, enum hard casts, identity only. }
+      PfMark:= Resolver.ProfBegin(cpsStreamEnumCast); { 151 PF }
       ResolveEnumCastRefs(Resolver, ScopeWhere, StaleWhere, CastCandidates, CastBound);
+      Resolver.ProfEnd(cpsStreamEnumCast, PfMark);
       { GAP-CALLERS (1.40): the NINTH stream, type-name reads, identity only;
         last of the reads, so it sees only what every read stream declined. }
+      PfMark:= Resolver.ProfBegin(cpsStreamTypeRead); { 151 PF }
       ResolveTypeReadRefs(Resolver, ScopeWhere, StaleWhere, TReadCandidates, TReadBound);
+      Resolver.ProfEnd(cpsStreamTypeRead, PfMark);
       { 2026-09-23 (D13, resolver 1.8.0-alpha): the FIFTH stream -- bare writes,
         identity only. Same transaction, same all-or-nothing lifetime. }
       TMark:= TStopwatch.GetTimeStamp;
+      PfMark:= Resolver.ProfBegin(cpsStreamWrite); { 151 PF }
       ResolveWriteRefs(Resolver, ScopeWhere, StaleWhere, WriteCandidates, WriteBound);
+      Resolver.ProfEnd(cpsStreamWrite, PfMark);
       TWrites:= (TStopwatch.GetTimeStamp - TMark) / TStopwatch.Frequency;
       { 150-RS2 (2): after every member_accesses writer, before the derived streams. }
       var ArgCandidates, ArgStored: Int64;
+      PfMark:= Resolver.ProfBegin(cpsStreamArgUses); { 151 PF }
       PersistArgUses(FConn, ScopeWhere, StaleWhere, ArgCandidates, ArgStored);
+      Resolver.ProfEnd(cpsStreamArgUses, PfMark);
       ResolveLog(Format('calls      arg-uses: %d of %d accessor-less member read(s) stored as a var / out argument', [ArgStored, ArgCandidates]));
       { B9 F1: the LAST stream, it reads what all the others wrote. }
       TMark:= TStopwatch.GetTimeStamp;
       { 149 IC round 3: the derived streams get a WIDER scope than the binding streams. }
       var TypesWhere, ReceiversWhere: string;
       WidenDerivedScope(ScopeWhere, TypesWhere, ReceiversWhere);
+      PfMark:= Resolver.ProfBegin(cpsStreamRefTypes); { 151 PF }
       ResolveRefTypes(Resolver, TypesWhere, StaleWhere, RefTypeCandidates, RefTypeBound);
+      Resolver.ProfEnd(cpsStreamRefTypes, PfMark);
       TRefTypes:= (TStopwatch.GetTimeStamp - TMark) / TStopwatch.Frequency;
       { lane 144 item 3: after ref_types, the typed receiver wins a position two refs share. }
+      PfMark:= Resolver.ProfBegin(cpsStreamRefReceivers); { 151 PF }
       ResolveRefReceivers(ReceiversWhere, StaleWhere, RcvCandidates, RcvBound);
+      Resolver.ProfEnd(cpsStreamRefReceivers, PfMark);
+      if Resolver.ProfileOn then
+        for var PfLine: string in Resolver.ProfileLines do ResolveLog('calls      profile: ' + PfLine);
       FConn.Commit;
     except
       on E: Exception do
