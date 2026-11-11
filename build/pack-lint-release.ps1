@@ -22,10 +22,16 @@
   third_party\dll-win64\drag-lint.exe, so it is safe to run while something else
   is using that engine. Never cut a real release with it: the archive then carries
   whatever was last built, which is not necessarily this checkout.
+
+  -NoProfileInstall skips the final step that packages the VS Code extension and installs
+  dist\drag-lint-<package.json version>.vsix into EVERY local VS Code profile
+  (build\install-vsix-all-profiles.ps1; default ON since 2026-11-11, when a profile
+  pointing at a deleted folder silently left the extension unloaded).
 #>
 [CmdletBinding()]
 param([Parameter(Mandatory=$true)][string]$Version,
-      [switch]$SkipBuild)
+      [switch]$SkipBuild,
+      [switch]$NoProfileInstall)
 
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
@@ -180,5 +186,11 @@ foreach ($plat in 'win64','win32') {
     Write-Host "  verified: win64 zip holds drag-lint.exe, ConvRulesEditor.exe and drag-lint-switch.exe"
   }
   $zips += $z
+}
+if (-not $NoProfileInstall) {
+  & node (Join-Path $repo "editors\vscode\drag-lint\scripts\package.js")
+  if ($LASTEXITCODE -ne 0) { Write-Host "PACK STOPPED: vsix packaging failed" -ForegroundColor Red; exit 1 }
+  & pwsh -NoProfile -File (Join-Path $PSScriptRoot "install-vsix-all-profiles.ps1")
+  if ($LASTEXITCODE -ne 0) { Write-Host "PACK STOPPED: vsix install into a VS Code profile failed (-NoProfileInstall skips this step)" -ForegroundColor Red; exit 1 }
 }
 Write-Host ("ZIPS: " + ($zips -join " "))
