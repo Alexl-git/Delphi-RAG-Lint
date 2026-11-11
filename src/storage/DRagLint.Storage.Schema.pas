@@ -39,8 +39,12 @@ const
     150 INT (2026-11-09): 23 -> 24 again, now SAFE on a 23 library: lane SC's read-compat range
     (SCHEMA_READ_MIN = 23) opens a v23 store for reading with the additive 150 tables probed
     (file_includes / dfm_objects / pp_regions, project_settings, pp_directives); a writer at
-    v23 still takes the stale -> rebuild path. }
-  SCHEMA_VERSION = 24;
+    v23 still takes the stale -> rebuild path.
+    151 INT (2026-11-11): 24 -> 25 for dfm_properties and comment_facts (lane ST spec
+    docs\superpowers\specs\2026-11-11-dfm-props-and-comment-facts.md): both ADDITIVE, created by
+    Migrate and probed per table, so SCHEMA_READ_MIN stays 23 (a 23 / 24 index reads with the text
+    fallback). }
+  SCHEMA_VERSION = 25;
 
   /// <summary>The oldest stored schema_version this engine READS without migrating
   /// (150 SC, docs\superpowers\specs\2026-11-09-schema-read-compat.md).</summary>

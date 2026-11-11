@@ -1213,4 +1213,6 @@
 #   Superseded: 1.35.0-alpha|6e07387e99fe1ccb452ef64d6f08db38e4409ea89fda8d2953c382cfa524bd24
 #   2026-11-10 150 INT3 re-pin (same unreleased 1.35.0 bump, the ONE wave-150 re-pin after the T/X/Y lanes): T2 (G3 library root symbol, parented decls, uses walked), T4 G6 (Parser.DFM residual lint, emit unchanged), TL (G1 doc-facts pass, comment-only), X1 (exports-clause entries emit call refs), X4 (Core.Interfaces), RG2 (grammar v1.4.9 named-argument value read), Y3 (impl-only routine body dedups only against a declaration waiting for its body: impl-only overload twins / free-after-nested routines are separate symbols), Y2 (Parser.DfmNav: dfm_nav_nodes / dfm_nav_props emit via PutDfmNav, added to the guard emit list; UTF-8 .dfm decode), X2 comment-only. 533-file EX-AB: 0 files lost refs, +112 symbols = separated overloads.
 #   Superseded: 1.35.0-alpha|c9486d616a831ef34384742604c65d6b0e7742f66c1601cf8546952affaa10bb
-1.35.0-alpha|dd83058afd2b888326dbb7951a3446d708f588a8827e6072c814ae01d44fd138
+# 2026-11-11 151 INT: ONE bump 1.35.0 -> 1.36.0-alpha for wave 151 (schema 25 dfm_properties / comment_facts tables: ST API, Y2 + W1 producers; X2R returns_owner order-independent; PP trace accessor; see Core.Model).
+#   Superseded: 1.35.0-alpha|dd83058afd2b888326dbb7951a3446d708f588a8827e6072c814ae01d44fd138
+1.36.0-alpha|79faaf616308e0311f5e6cf2bd1334acc354ee44db74f36260f569087b60ff39

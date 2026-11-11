@@ -17,7 +17,7 @@ const
   /// This unit is the right home because it is the one both sides already use:
   /// DRagLint.LSP.Server uses Core.Model, and CLI uses LSP.Server, so a
   /// constant here reaches both with no new dependency and no cycle.</remarks>
-  DRAGLINT_VERSION = '1.49.0-alpha';
+  DRAGLINT_VERSION = '1.50.0-alpha';
 
   /// <summary>The identity of what this build EXTRACTS from a byte sequence.
   /// Part of the indexer fingerprint; <see cref="DRAGLINT_VERSION"/> is not.
@@ -258,7 +258,14 @@ const
     * storage schema 24: file_includes, dfm_objects, pp_regions fact tables and a uses list
       written as an include (lane EX2, F4/F5/F6).
     * uses-recover --apply writes header-recovered uses rows (lane HW). }
-  DRAGLINT_EXTRACTOR_VERSION = '1.35.0-alpha';
+  { 1.35.0 -> 1.36.0 (2026-11-11, 1.50, lane/151-INT -- ONE bump for the wave):
+    * storage schema 25: dfm_properties (every property assignment of a text .dfm) and comment_facts
+      (every comment with offsets, kind and anchor) fact tables, additive and probed (lane ST API,
+      producers lanes Y2 / W1).
+    * Doc.SymbolFacts: returns_owner tier 1 trusts own-file declarations only, independent of the
+      index order (lane X2R).
+    * Preprocess: one DRAGLINT_PP_TRACE accessor (lane PP; no extraction change, hashed unit). }
+  DRAGLINT_EXTRACTOR_VERSION = '1.36.0-alpha';
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
   /// Deliberately SEPARATE from <see cref="DRAGLINT_EXTRACTOR_VERSION"/>.</summary>
@@ -497,7 +504,14 @@ const
   /// attribution and var / const / enum-value use edges (lane RB2, with 148 PB); a 1-file
   /// incremental with a library store attached runs the scoped calls pass and widens its
   /// derived streams (lane IC); header-recovered uses bind their target files (lane HW).</para>
-  DRAGLINT_RESOLVER_VERSION = '1.23.0-alpha';
+  /// <para>1.23.0-alpha -&gt; 1.24.0-alpha (2026-11-11, 1.50, rides the 1.36.0 extractor
+  /// re-parse): a bare call inside a .dpr routine records no receiver type and a generic
+  /// constraint name no longer shadows a type (lane RB-A, X4-r / IMicObject); an exact
+  /// class-typed argument narrows same-arity overloads (lane RB-B, System.TypInfo FindPropInfo);
+  /// the scoped pass's receiver-side closure gets the DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE hatch
+  /// (lane ST, RS2 (6)); the calls stage reads a declaring file's uses once per pass and the
+  /// arg-uses pass reads refs once per file, rows identical (lane PF).</para>
+  DRAGLINT_RESOLVER_VERSION = '1.24.0-alpha';
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
   /// the ghost-compile journal that first created the folder.</summary>
