@@ -8,6 +8,7 @@ param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
 $ErrorActionPreference = 'Stop'
 $fail = $false
 function Check($n, $ok) { Write-Host ("  [{0}] {1}" -f $(if ($ok) {'PASS'} else {'FAIL'}), $n) -ForegroundColor $(if ($ok) {'Green'} else {'Red'}); if (-not $ok) { $script:fail = $true } }
+. "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG1: no machine drag-lint.json
 $exeSrc = (Resolve-Path $Exe).Path; $exeSrcDir = Split-Path -Parent $exeSrc
 $w = "$env:TEMP\draglint_recon_nm_$PID"
 [IO.Directory]::CreateDirectory($w) | Out-Null

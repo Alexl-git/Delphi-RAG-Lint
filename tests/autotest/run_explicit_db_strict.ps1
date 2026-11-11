@@ -50,6 +50,7 @@ if ($orphans.Count -gt 0) {
   Write-Host "NOTE: $($orphans.Count) drag-lint process(es) already running (LSP servers are normal)." -ForegroundColor DarkYellow
 }
 
+. "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG1: no machine drag-lint.json
 $exePath = (Resolve-Path $Exe).Path
 if (Test-Path $WorkDir) { Remove-Item $WorkDir -Recurse -Force -ErrorAction SilentlyContinue }
 $srcA = Join-Path $WorkDir 'a'; $srcB = Join-Path $WorkDir 'b'

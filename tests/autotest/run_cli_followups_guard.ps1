@@ -39,6 +39,7 @@ function Write-Ascii([string]$Path, [string]$Body) {
 }
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 $Exe = (Resolve-Path $Exe).Path
+. "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG1: no machine drag-lint.json
 $exeDir = Split-Path $Exe -Parent
 if (Test-Path $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 New-Item -ItemType Directory -Path $WorkDir | Out-Null
