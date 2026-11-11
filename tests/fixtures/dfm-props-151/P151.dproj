@@ -1,0 +1,15 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MainSource>P151.dpr</MainSource>
+  </PropertyGroup>
+  <ItemGroup>
+    <DCCReference Include="uP151Main.pas"><Form>frmP151Main</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uP151Dlg.pas"><Form>frmP151Dlg</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uP151Act.pas"><Form>frmP151Act</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uP151Child.pas"><Form>frmP151Child</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uP151Mdi.pas"><Form>frmP151Mdi</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uP151Help.pas"><Form>frmP151Help</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uP151Help2.pas"><Form>frmP151Help2</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uP151Hooks.pas"/>
+  </ItemGroup>
+</Project>
