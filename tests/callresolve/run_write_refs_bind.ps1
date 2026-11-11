@@ -43,9 +43,15 @@
   positional arrays, which Sql() maps onto column names.
 
   Usage: pwsh -File tests\callresolve\run_write_refs_bind.ps1 [-Exe <drag-lint.exe>]
+  Default -Exe = this tree's Debug build (what the battery tests), NEVER the deployed
+  third_party\dll-win64 exe (152 HG2). Missing exe = FATAL exit 2. Runs via Get-HermeticEngine.
+  FLAKE HG-4 (152 HG2 stress: see HG2 REPORT). If it recurs capture: exit code, the number of the
+  FAIL check, and KEEP the scratch dir C:\TEMP\draglint_write_refs_bind_<PID> (disable the finally cleanup).
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe'))
+if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: no engine at $Exe -- pass -Exe <drag-lint.exe>"; exit 2 }
+. "$PSScriptRoot\..\autotest\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG2: no machine drag-lint.json
 try {
 
 $ErrorActionPreference = 'Stop'
