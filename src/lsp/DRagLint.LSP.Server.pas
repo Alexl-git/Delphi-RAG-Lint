@@ -5153,9 +5153,8 @@ begin
         common member like DataBinding lists every class that has one). }
       { 151 CF (LX-5): SelectSymbolAt already asked this exact question when the cursor was
         not on a declaration; resolve again only when it did not. }
-      var TAResult: TTypeAtResult;
-      if Selection.HasTypeAt then TAResult:= Selection.TypeAt
-      else                        TAResult:= TTypeAtResolver.Resolve( Stores, Path, Line + 1, Col + 1);
+      var TAResult: TTypeAtResult:= if Selection.HasTypeAt then Selection.TypeAt
+                                    else TTypeAtResolver.Resolve( Stores, Path, Line + 1, Col + 1);
 
       var Filtered: TArray<TSymbol>;
       SetLength(Filtered, 0);
