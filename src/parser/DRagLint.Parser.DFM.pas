@@ -76,17 +76,17 @@ type
       /// <exception cref="ETreeSitterException"><!-- drag-lint:auto exc -->via TreeSitter.TTSParser.SetLanguage: Failed to set parser language to 0x%p</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: Default, DRagLint.Parser.DFM.CollectParseErrors, DRagLint.Parser.DFM.IsBinaryDfmBytes, DRagLint.Parser.DFM.TDfmState.Create, DRagLint.Parser.DFM.WalkObject, Integer, Move, TreeSitter.TTSNodeHelper.HasError, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, TreeSitter.TTSParser.SetLanguage, TreeSitter.TTSTree.RootNode</para>
+      /// <para>Calls: Default, DRagLint.Parser.DFM.CollectParseErrors, DRagLint.Parser.DFM.IsBinaryDfmBytes, DRagLint.Parser.DFM.ParseDfmSource, DRagLint.Parser.DFM.TDfmState.Create, DRagLint.Parser.DFM.WalkObject, DRagLint.Parser.DfmNav.DfmNavLinesFromBytes, DRagLint.Parser.DfmNav.ScanDfmNav, TreeSitter.TTSNodeHelper.HasError, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.SetLanguage, TreeSitter.TTSTree.RootNode</para>
+      /// <para>Returns: Default(TParseResult)</para>
       /// <para>Implements: DRagLint.Core.Interfaces.IParser.Parse</para>
       /// <para>Reads: FLanguage</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Parser.DFM.CollectParseErrors"/>
       /// <seealso cref="DRagLint.Parser.DFM.IsBinaryDfmBytes"/>
+      /// <seealso cref="DRagLint.Parser.DFM.ParseDfmSource"/>
       /// <seealso cref="DRagLint.Parser.DFM.TDfmState.Create"/>
       /// <seealso cref="DRagLint.Parser.DFM.WalkObject"/>
-      /// <seealso cref="TreeSitter.TTSNodeHelper.HasError"/>
-      /// <!-- drag-lint:auto END -->
-      /// </remarks>
+      /// <!-- drag-lint:auto END -->      /// </remarks>
       function Parse(const ASource: TBytes; const AFilePath: string): TParseResult;
   end;
 
@@ -142,15 +142,15 @@ external 'tree-sitter-dfm';
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Doc.SymbolFacts.DfmEventMapFor (DRagLint.Doc.SymbolFacts.pas)</para>
-/// <para>Calls: DRagLint.Parser.DFM.IsBinaryDfmBytes, DRagLint.Parser.DFM.TDfmState.Create, DRagLint.Parser.DFM.tree_sitter_dfm, DRagLint.Parser.DFM.WalkObject, Integer, Move, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, TreeSitter.TTSParser.SetLanguage, TreeSitter.TTSTree.RootNode</para>
+/// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Parser.DFM.IsBinaryDfmBytes, DRagLint.Parser.DFM.ParseDfmSource, DRagLint.Parser.DFM.TDfmState.Create, DRagLint.Parser.DFM.tree_sitter_dfm, DRagLint.Parser.DFM.WalkObject, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.SetLanguage, TreeSitter.TTSTree.RootNode</para>
 /// <para>Pure</para>
+/// <para>Returns: nil; State.EventBindings.ToArray</para>
+/// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
 /// <seealso cref="DRagLint.Parser.DFM.IsBinaryDfmBytes"/>
+/// <seealso cref="DRagLint.Parser.DFM.ParseDfmSource"/>
 /// <seealso cref="DRagLint.Parser.DFM.TDfmState.Create"/>
 /// <seealso cref="DRagLint.Parser.DFM.tree_sitter_dfm"/>
-/// <seealso cref="DRagLint.Parser.DFM.WalkObject"/>
-/// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
+/// <!-- drag-lint:auto END -->/// </remarks>
 function ExtractDfmEventBindings(const ASource: TBytes): TArray<TDfmEventBinding>;
 
 /// <summary>151 Y2: every property assignment of ONE text .dfm as dfm_properties
