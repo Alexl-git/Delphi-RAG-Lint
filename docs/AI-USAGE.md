@@ -393,6 +393,10 @@ A routine with a body also carries `[impl A-B]` in the text row (`impl_start_lin
 >   Help>About box calls. Each `--db <index>` adds that index's freshness
 >   verdict: in `--json` an `indexes` entry, in text an
 >   `index: <path>  verdict: <v>` line plus `  remedy: ...` when one is owed.
+  `grammar_dlls_differ` (with `grammar_dlls_stored` / `grammar_dlls_loaded`;
+  text: a `grammar: DIFFERS` block) is true when the index was parsed with other
+  tree-sitter DLLs than this engine loads -- the verdict is unchanged, run
+  `index --rebuild`.
 > - **Framework wiring (Spring4D DI + DFM events):** `drag-lint wiring --qname <IIntf|TForm> --db <DB> [--format json]`
 >   Answers "who implements `IFoo` and where is it resolved" (DI: impl class +
 >   lifetime + resolve-sites) and "what handles this form's events" (DFM

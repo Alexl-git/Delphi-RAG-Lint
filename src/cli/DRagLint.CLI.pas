@@ -6890,13 +6890,15 @@ var
 function LoadedGrammarDllsIdentity: string;
 const
   MODS: array[0..2] of string = ('tree-sitter.dll', 'tree-sitter-delphi13.dll', 'tree-sitter-dfm.dll');
+  HASH_HEX_LEN = 16; { first 16 hex chars of the SHA-256: enough to tell two builds apart }
 var
   Buf: array[0..MAX_PATH] of Char;
+  Parts: array[0..2] of string;
 begin
   if GLoadedGrammarDlls <> '' then Exit(GLoadedGrammarDlls);
-  Result:= '';
-  for var M: string in MODS do
+  for var I: Integer:= Low(MODS) to High(MODS) do
   begin
+    var M: string:= MODS[I];
     var Part: string:= 'not-loaded';
     var H: HMODULE:= GetModuleHandle(PChar(M));
     if H <> 0 then
@@ -6905,14 +6907,14 @@ begin
       if GetModuleFileName(H, Buf, Length(Buf)) <> 0 then
       try
         var P: string:= Buf;
-        Part:= IntToStr(TFile.GetSize(P)) + ':' + Copy(THashSHA2.GetHashStringFromFile(P), 1, 16);
+        Part:= IntToStr(TFile.GetSize(P)) + ':' + Copy(THashSHA2.GetHashStringFromFile(P), 1, HASH_HEX_LEN);
       except
         on E: Exception do Part:= 'unknown';
       end;
     end;
-    if Result <> '' then Result:= Result + ';';
-    Result:= Result + M + '=' + Part;
+    Parts[I]:= M + '=' + Part;
   end;
+  Result:= string.Join(';', Parts);
   GLoadedGrammarDlls:= Result;
 end;
 
