@@ -25,7 +25,7 @@ try {
   }
   # B's dfm DLL = A's plus 16 trailing bytes: still loads (PE overlay), other content hash.
   $bd = Join-Path $tmp 'B\tree-sitter-dfm.dll'; $fs = [IO.File]::Open($bd, 'Append'); $fs.Write([byte[]](1..16), 0, 16); $fs.Close()
-  $A = Join-Path $tmp 'A\drag-lint.exe'; $B = Join-Path $tmp 'B\drag-lint.exe'
+  $A = Join-Path $tmp 'A\drag-lint.exe'; $B = Join-Path $tmp 'B\drag-lint.exe'  # exe-freshness: absent -- per-run copies under $tmp, created above
   $fx = Join-Path $tmp 'fx'; [IO.Directory]::CreateDirectory($fx) | Out-Null
   [IO.File]::WriteAllText("$fx\U.pas", "unit U;`r`ninterface`r`nprocedure P;`r`nimplementation`r`nprocedure P;`r`nbegin`r`nend;`r`nend.`r`n")
   [IO.File]::WriteAllText("$fx\U.dfm", "object F: TForm`r`n  Caption = 'x'`r`nend`r`n")
