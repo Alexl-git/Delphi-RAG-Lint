@@ -313,9 +313,9 @@ try {
   # closes the same ON DELETE SET NULL channel from the RECEIVER side: X.Ping's call_edges row has
   # receiver_type_symbol_id = TDoomed (a symbol of the evicted file), so 'Ping' is put in scope and
   # re-resolved with the widening OFF too. The channel is now closed TWICE; this check asserts the
-  # second closure and FAILS on the 1.49.0-alpha base (edge survives there = the old polarity
-  # control, still observable by -Exe <base>). The widening's own polarity control would need a
-  # hatch for RS2 (6), which 150 does not have (INT4 FOUND, BACKLOG-AFTER-150).
+  # second closure. It FAILS on a pre-150 engine (edge survives there = the old polarity control,
+  # observable by -Exe <pre-150 engine>); the 1.49.0-alpha base already carries RS2 (6) and PASSES
+  # (151 ST FOUND). The widening's own polarity control is arm C2h below (151 ST hatch).
   Check 'C2p and WITHOUT the widening the stale X.Ping edge is STILL gone (150-RS2 (6) receiver-side scope)' `
     (-not ($tp.Edges -match 'uConsumer\.pas\|.*\|Ping\|')) `
     "RS2 (6) did not put Ping in scope:`n$($tp.Edges)"
