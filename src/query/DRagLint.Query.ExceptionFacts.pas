@@ -6,6 +6,9 @@ unit DRagLint.Query.ExceptionFacts;
 
 interface
 
+uses
+  DRagLint.Charts.Index;  { 151 CF: ExceptionFactsOfIndex takes an index the caller keeps open }
+
 type
   /// <summary>One raise or handler site, with the type it names.</summary>
   /// <remarks>Via says how the type is known: 'bound' (the row's symbol_id), 'handler' (the
@@ -33,6 +36,17 @@ type
 /// `on E: Exception` is not listed under EFoo.</param>
 /// <returns>The sites, by routine, line and column.</returns>
 function ExceptionFactsOf(const pDbPath, pRoutine, pTypeName: string): TArray<TExceptionFact>;
+
+/// <summary>ExceptionFactsOf over an index the CALLER keeps open: same query, same type rules,
+/// same order, without opening the database per call.</summary>
+/// <param name="pIndex">An open index; must not be nil. Caller owns it.</param>
+/// <param name="pRoutine">As ExceptionFactsOf.</param>
+/// <param name="pTypeName">As ExceptionFactsOf.</param>
+/// <returns>As ExceptionFactsOf -- the same rows for the same database.</returns>
+/// <remarks>151 CF (LX-5 hover cost): the LSP hover asks this for every routine it shows, and
+/// opening the store (TChartsIndex.Create) per hover was most of ~9 ms per call on a CLIENT copy.
+/// One caller thread per index.</remarks>
+function ExceptionFactsOfIndex(const pIndex: TChartsIndex; const pRoutine, pTypeName: string): TArray<TExceptionFact>;
 
 /// <summary>The exception facts of every routine in one file: the raise / handle sites whose
 /// ref row is in that file, sorted like ExceptionFactsOf.</summary>
@@ -72,8 +86,7 @@ uses
   System.JSON,
   System.Generics.Collections,
   System.Generics.Defaults,
-  DRagLint.Core.Model,  // dl:ok uses-global-census@744f -- the one spelling of a ref kind the parser writes (146 int)
-  DRagLint.Charts.Index;
+  DRagLint.Core.Model;  // dl:ok uses-global-census@744f -- the one spelling of a ref kind the parser writes (146 int)
 
 const
   ALL_KINDS = '''' + REF_KIND_RAISE + ''',''' + REF_KIND_RAISE_EXPR + ''',''' + REF_KIND_RERAISE + ''',''' +
@@ -164,13 +177,12 @@ begin
 end;
 
 { The one query behind every surface: pWhere narrows the refs (routine or file). }
-function FactsWhere(const pDbPath, pWhere, pTypeName: string): TArray<TExceptionFact>;
+function FactsWhereIn(const Index: TChartsIndex; const pWhere, pTypeName: string): TArray<TExceptionFact>;
 var
   Found: TList<TExceptionFact>;
   Fact : TExceptionFact;
 begin
   Found:= TList<TExceptionFact>.Create;
-  var Index:= TChartsIndex.Create(pDbPath);
   try
     var Rows:= Index.Query('SELECT r.kind AS kind, r.name_text AS nm, r.receiver_text AS rt, r.start_line AS line, r.start_col AS col, ' +
       'r.enclosing_symbol_id AS eid, e.qualified_name AS routine, e.start_line AS rline, f.path AS path, b.qualified_name AS bound FROM refs r ' +
@@ -203,12 +215,21 @@ begin
       end));
     Result:= Found.ToArray;
   finally
-    Index.Free;
     Found.Free;
   end;
 end;
 
-function ExceptionFactsOf(const pDbPath, pRoutine, pTypeName: string): TArray<TExceptionFact>;
+function FactsWhere(const pDbPath, pWhere, pTypeName: string): TArray<TExceptionFact>;
+begin
+  var Index:= TChartsIndex.Create(pDbPath);
+  try
+    Result:= FactsWhereIn(Index, pWhere, pTypeName);
+  finally
+    Index.Free;
+  end;
+end;
+
+function RoutineWhere(const pRoutine: string): string;
 var
   Where: string;
 begin
@@ -221,7 +242,17 @@ begin
       ' COLLATE NOCASE OR (s.name = ' + QuotedStr(pRoutine.Substring(pRoutine.LastIndexOf('.') + 1)) +
       ' COLLATE NOCASE AND substr(s.qualified_name, -' + IntToStr(Length(pRoutine) + 1) + ') = ' +
       QuotedStr('.' + pRoutine) + ' COLLATE NOCASE))';
-  Result:= FactsWhere(pDbPath, Where, pTypeName);
+  Result:= Where;
+end;
+
+function ExceptionFactsOf(const pDbPath, pRoutine, pTypeName: string): TArray<TExceptionFact>;
+begin
+  Result:= FactsWhere(pDbPath, RoutineWhere(pRoutine), pTypeName);
+end;
+
+function ExceptionFactsOfIndex(const pIndex: TChartsIndex; const pRoutine, pTypeName: string): TArray<TExceptionFact>;
+begin
+  Result:= FactsWhereIn(pIndex, RoutineWhere(pRoutine), pTypeName);
 end;
 
 function ExceptionFactsOfFile(const pDbPath, pFilePath: string): TArray<TExceptionFact>;

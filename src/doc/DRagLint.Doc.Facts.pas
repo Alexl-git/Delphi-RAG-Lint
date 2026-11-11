@@ -989,6 +989,17 @@ type
 /// </remarks>
 function DocFactsBuildProfile: string;
 
+/// <summary>Forgets every run-level memo TDocFactsBuilder.Build keeps per (store
+/// instance, id): the overload tag, the see-also sibling lists, the routine name
+/// counts and the C14 receiver lookups.</summary>
+/// <remarks>151 CF. The memos are keyed by the store's interface POINTER, which is
+/// sound only while every store stays open for the whole process. A long-lived host
+/// (the LSP) frees and opens stores -- after a re-index, on a context switch, for
+/// each loose file's ephemeral index -- and a new store can reuse a freed address
+/// over different ids. Such a host calls this before it opens any store. Not
+/// thread-safe: call it from the thread that runs Build.</remarks>
+procedure ClearDocFactsMemos;
+
   /// <summary>Applies the display cap: a list of ATotal items shows all of them
   /// UNLESS ATotal > 15, in which case only the first 10 are kept and the caller
   /// appends '(+N more)' with N = ATotal - 10. Returns how many to display.</summary>
@@ -1243,6 +1254,14 @@ type
   end;
 var
   GSiblingMemo: TDictionary<string, TArray<TSeeSibling>>;
+  { 151 CF (LX-5): (store, parent id) -> lowercase routine name -> how many
+    ROUTINE-kind children carry it. Owns its inner dictionaries. Same lifetime
+    and the same never-invalidated reasoning as GOverloadMemo above. }
+  GRoutineNameCounts: TObjectDictionary<string, TDictionary<string, Integer>>;
+  { 151 CF (LX-5): C14 receiver memos -- see ScopeMember and ForeignReceiverType.
+    Same lifetime and reasoning as GOverloadMemo. }
+  GScopeMemberMemo : TDictionary<string, TSymbol>;
+  GForeignKnownMemo: TDictionary<string, Boolean>;
 
 function BTick: Int64; inline;
 begin
@@ -1289,6 +1308,43 @@ begin
       end;
   end;
   GSiblingMemo.AddOrSetValue(Key, Result);
+end;
+
+{ 151 CF: how many ROUTINE-kind children of AParentId are named AName (no case),
+  from one FindAllChildSymbols per (store, parent) -- GRoutineNameCounts. The
+  count OverloadArityTag compared against 1 used to be recomputed by materialising
+  every sibling once per CALLER ROW. Lowercase keys fold exactly what SameText
+  folds (ASCII letters), so the count is the same. }
+function RoutineNameCount(const AStore: ISymbolStore; AParentId: Int64; const AName: string): Integer;
+const
+  ROUTINE_KINDS = [skMethod, skConstructor, skDestructor, skFunction, skProcedure];
+var
+  Counts: TDictionary<string, Integer>;
+begin
+  var Key: string:= StoreKey(AStore, AParentId);
+  if not GRoutineNameCounts.TryGetValue(Key, Counts) then
+  begin
+    Counts:= TDictionary<string, Integer>.Create;
+    GRoutineNameCounts.Add(Key, Counts);
+    for var S in AStore.FindAllChildSymbols(AParentId) do
+      if S.Kind in ROUTINE_KINDS then
+      begin
+        var N: Integer:= 0;
+        var Lower: string:= LowerCase(S.Name);
+        Counts.TryGetValue(Lower, N);
+        Counts.AddOrSetValue(Lower, N + 1);
+      end;
+  end;
+  if not Counts.TryGetValue(LowerCase(AName), Result) then Result:= 0;
+end;
+
+procedure ClearDocFactsMemos;
+begin
+  GOverloadMemo     .Clear;
+  GSiblingMemo      .Clear;
+  GRoutineNameCounts.Clear;
+  GScopeMemberMemo  .Clear;
+  GForeignKnownMemo .Clear;
 end;
 
 function DocFactsBuildProfile: string;
@@ -1354,7 +1410,6 @@ const
   ROUTINE_KINDS = [skMethod, skConstructor, skDestructor, skFunction, skProcedure];
 var
   Sym    : TSymbol;
-  Sibs   : TArray<TSymbol>;
   Same   : Integer;
   Lo, Hi : Integer;
 begin
@@ -1376,10 +1431,13 @@ begin
     { Same container, same name -- the sibling test 'Overload k of n' already uses
       (FindAllChildSymbols scopes to a class for methods and to the unit symbol for
       free routines), so the two facts cannot disagree about what an overload is. }
-    Sibs:= AStore.FindAllChildSymbols(Sym.ParentId);
-    Same:= 0;
-    for var S in Sibs do
-      if (S.Kind in ROUTINE_KINDS) and SameText(S.Name, Sym.Name) then Inc(Same);
+    { 151 CF (LX-5 hover cost): the per-NAME routine counts of one container are
+      memoised per (store, parent id) -- see GRoutineNameCounts. Measured on the
+      drag-lint DB, 100 hovers: 1,637 calls, 1.45 ms each, almost all of it this
+      sibling materialisation repeated for every caller of the same class. Same
+      count as the loop it replaces (ROUTINE_KINDS children whose name matches
+      without case), so the tag cannot change. }
+    Same:= RoutineNameCount(AStore, Sym.ParentId, Sym.Name);
     if Same <= 1 then Exit;
     if not SignatureArityRange(Sym.Signature, Lo, Hi) then Exit;
     Result:= '/' + IntToStr(Hi);
@@ -1510,6 +1568,25 @@ end;
   upward (class -> unit), with a class's resolved ancestors checked for an
   inherited field. Default(TSymbol) when not found. AGenerics collects every
   generic parameter list met on the way, for ForeignReceiverType. }
+{ 151 CF (LX-5 hover cost): ARcv declared directly in scope ACur, else -- for a
+  class or record -- in the first resolved ancestor that declares it; Default(TSymbol)
+  when neither does. Memoised per (store, scope id, exact name) in GScopeMemberMemo:
+  the class and unit hops of ReceiverDeclaration repeat for every caller routine of
+  the same class (measured on the drag-lint DB, 100 hovers: ForeignReceiverType
+  2.44 s over 1,340 calls). Same queries in the same order on a miss, so the same
+  answer. }
+function ScopeMember(const AStore: ISymbolStore; const ACur: TSymbol; const ARcv: string): TSymbol;
+begin
+  var Key: string:= StoreKey(AStore, ACur.Id) + '|' + ARcv;
+  if GScopeMemberMemo.TryGetValue(Key, Result) then Exit;
+  Result:= AStore.FindChildSymbolByName(ACur.Id, ARcv);
+  if (Result.Id = 0) and (ACur.Kind in [skClass, skRecord]) then
+    for var Anc in AStore.GetTransitiveAncestors(ACur.Id) do
+      if (Result.Id = 0) and Anc.Resolved and (Anc.SymbolId > 0) then
+        Result:= AStore.FindChildSymbolByName(Anc.SymbolId, ARcv);
+  GScopeMemberMemo.Add(Key, Result);
+end;
+
 function ReceiverDeclaration(const AStore: ISymbolStore; AEnclosingId: Int64;
   const ARcv: string; out AGenerics: string): TSymbol;
 const
@@ -1525,11 +1602,7 @@ begin
   while (Cur.Id > 0) and (Result.Id = 0) and (Hops < MAX_SCOPE_HOPS) do
   begin
     AGenerics:= AGenerics + ',' + Cur.GenericParams;
-    Result:= AStore.FindChildSymbolByName(Cur.Id, ARcv);
-    if (Result.Id = 0) and (Cur.Kind in [skClass, skRecord]) then
-      for var Anc in AStore.GetTransitiveAncestors(Cur.Id) do
-        if (Result.Id = 0) and Anc.Resolved and (Anc.SymbolId > 0) then
-          Result:= AStore.FindChildSymbolByName(Anc.SymbolId, ARcv);
+    Result:= ScopeMember(AStore, Cur, ARcv);  { 151 CF: memoised per (store, scope, name) }
     if Cur.ParentId > 0 then Cur:= AStore.GetSymbolById(Cur.ParentId) else Cur:= Default(TSymbol);
     Inc(Hops);
   end;
@@ -1587,21 +1660,27 @@ begin
     TypeName:= DeclaredTypeName(Decl.Signature);
   if (TypeName = '') or SameText(TypeName, AOwnerLeaf) or IsGenericParam(TypeName, Generics)
      or SameText(TypeName, ROOT_CLASS) then Exit;
-  TypeSym:= AStore.ResolveTypeNameToClass(TypeName, Decl.FileId);
-  if TypeSym.Id > 0 then
-    { in this index: unrelated unless an interface (dispatch undecidable here)
-      or a descendant of the owner }
-    Known:= (TypeSym.Kind <> skInterface)
-            and not AStore.IsDescendantOf(TypeSym.Name, AOwnerLeaf, Decl.FileId)
-  else
-    { not a class here: known-foreign only if this index declares the name in
-      no shape at all (an alias or enum would be found), it does not LOOK like
-      an interface (a library interface can be implemented by the owner or a
-      descendant, so a call through it may well dispatch here), and the owner
+  { 151 CF (LX-5): the verdict below reads only (store, TypeName, Decl.FileId,
+    AOwnerLeaf), and a type name repeats across receivers; memoised in
+    GForeignKnownMemo. }
+  var KnownKey: string:= StoreKey(AStore, Decl.FileId) + '|' + TypeName + '|' + AOwnerLeaf;
+  if not GForeignKnownMemo.TryGetValue(KnownKey, Known) then
+  begin
+    TypeSym:= AStore.ResolveTypeNameToClass(TypeName, Decl.FileId);
+    { In this index: unrelated unless an interface (dispatch undecidable here) or a
+      descendant of the owner. Not a class here: known-foreign only if this index
+      declares the name in no shape at all (an alias or enum would be found), it does
+      not LOOK like an interface (a library interface can be implemented by the owner
+      or a descendant, so a call through it may well dispatch here), and the owner
       does not name it among its own ancestors. }
-    Known:= (AStore.FindSymbolByExactNameAnywhere(TypeName).Id = 0)
-            and not LooksLikeInterfaceName(TypeName)
-            and not OwnerNamesAncestor(AStore, AOwnerLeaf, TypeName);
+    Known:= if TypeSym.Id > 0
+              then (TypeSym.Kind <> skInterface)
+                   and not AStore.IsDescendantOf(TypeSym.Name, AOwnerLeaf, Decl.FileId)
+              else (AStore.FindSymbolByExactNameAnywhere(TypeName).Id = 0)
+                   and not LooksLikeInterfaceName(TypeName)
+                   and not OwnerNamesAncestor(AStore, AOwnerLeaf, TypeName);
+    GForeignKnownMemo.Add(KnownKey, Known);
+  end;
   if Known then Result:= TypeName;
 end;
 
@@ -5465,9 +5544,15 @@ initialization
   GSeeTargetSeen:= TDictionary<string, Boolean>.Create;
   GSeeParentSeen:= TDictionary<string, Boolean>.Create;
   GSiblingMemo  := TDictionary<string, TArray<TSeeSibling>>.Create;
+  GRoutineNameCounts:= TObjectDictionary<string, TDictionary<string, Integer>>.Create([doOwnsValues]);
+  GScopeMemberMemo  := TDictionary<string, TSymbol>.Create;
+  GForeignKnownMemo := TDictionary<string, Boolean>.Create;
 
 finalization
   GSiblingMemo  .Free;
+  GRoutineNameCounts.Free;
+  GScopeMemberMemo  .Free;
+  GForeignKnownMemo .Free;
   GSeeParentSeen.Free;
   GSeeTargetSeen.Free;
   GOverloadMemo.Free;
