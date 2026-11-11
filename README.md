@@ -864,7 +864,9 @@ be written and writes nothing. This verb replaces `Register-DragLintProtocol.ps1
 5. On IDE startup, the drag-lint logo + version appear on the RAD Studio
    splash screen. **Help > About > drag-lint** shows an entry with live
    engine self-info (version, build date, tree-sitter versions,
-   capabilities, exe path, plugin log location), fetched from `drag-lint.exe`
+   capabilities, exe path, plugin log location; `drag-lint info --db` also
+   reports `grammar_dlls_differ` when an index was parsed with other
+   tree-sitter DLLs), fetched from `drag-lint.exe`
    on a background thread so it never blocks IDE startup; if the exe call
    fails, the entry shows a structured diagnostic error block instead.
 
