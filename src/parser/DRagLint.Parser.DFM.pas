@@ -153,6 +153,32 @@ external 'tree-sitter-dfm';
 /// </remarks>
 function ExtractDfmEventBindings(const ASource: TBytes): TArray<TDfmEventBinding>;
 
+/// <summary>151 Y2: every property assignment of ONE text .dfm as dfm_properties
+/// rows, from the SAME tree-sitter-dfm walk (WalkObject / WalkProperty) that
+/// writes dfm_objects, so TDfmPropertyRow.ObjectOrdinal is the index of the
+/// owning block in TParseResult.DfmObjects of the same bytes.</summary>
+/// <param name="ASource">The .dfm bytes in any encoding the indexer accepts
+/// (UTF-8 with or without BOM, UTF-16 BOM, BOM-less Windows-1252); transcoded with
+/// EnsureUtf8Bytes exactly as ExtractDfmEventBindings does, so a CP1252 or
+/// UTF-8-BOM caption decodes to the same Unicode text. Already-UTF-8 input (the
+/// indexer's SourceText) is an identity passthrough.</param>
+/// <returns>Rows in source order (array index = ordinal). Object-level
+/// properties have Depth 0 and Parent -1. A collection (`&lt; item .. end &gt;`)
+/// gets one row of kind 'collection', then per item one row named 'item' of kind
+/// 'item' (range = the `item` keyword to its `end`), whose properties follow with
+/// Parent = that item row. A list (`( .. )`) gets one row of kind 'list', then
+/// one row per element (Name '', Parent = the list row). Depth = the length of
+/// the Parent chain. ValueText: a string DECODED (doubled quotes, #nnn as the
+/// character, '+' continuations joined); 'list', 'collection', 'item' and
+/// 'binary' rows carry '' (their content is in the child rows, a blob is never
+/// copied); any other kind its source text with CR LF / CR as #10. Positions are
+/// 1-based, columns in UTF-8 bytes. Empty for a binary .dfm.</returns>
+/// <exception cref="ETreeSitterException">via TreeSitter.TTSParser.SetLanguage when the grammar DLL cannot be bound.</exception>
+/// <remarks>Objects nested INSIDE a collection item are not dfm_objects rows
+/// (WalkObject never descends into a property value) and get no rows. Pure; one
+/// parse per call.</remarks>
+function ExtractDfmPropertyRowsFromBytes(const ASource: TBytes): TArray<TDfmPropertyRow>;
+
 implementation
 
 uses
@@ -243,6 +269,9 @@ type
     EventBindings: TList<TDfmEventBinding>   ;
     // 149 EX2 (F5): one dfm_objects row per object block, source order.
     DfmObjects   : TList<TDfmObjectRow>      ;
+    // 151 Y2: dfm_properties rows; nil (not collected) unless
+    // ExtractDfmPropertyRowsFromBytes creates it, so TDFMParser.Parse costs nothing more.
+    DfmProps     : TList<TDfmPropertyRow>    ;
     constructor Create(const ASource: TBytes);
     destructor Destroy; override;
     function Emit(AKind: TSymbolKind; const AName, AQualifiedName, ASignature: string; AParentSymbolIdx: Integer; const ARangeNode: TTSNode): Integer;
@@ -267,6 +296,7 @@ begin
   Literals.Free;
   EventBindings.Free;
   DfmObjects.Free;
+  DfmProps.Free;
   inherited;  // dl:ok inherited-bare@246d -- destructor: the only ancestor is TObject
 end;
 
@@ -363,7 +393,172 @@ begin
   end;
 end;
 
-procedure WalkProperty(const ANode: TTSNode; const AState: TDfmState; const AObjectName: string);
+const
+  DfmBmpMax        = $FFFF;   { last code point that is one UTF-16 unit }
+  DfmCodePointMax  = $10FFFF; { last Unicode code point }
+  DfmSuppBase      = $10000;  { first supplementary code point }
+  DfmHiSurrogate   = $D800;
+  DfmLoSurrogate   = $DC00;
+  DfmSurrogateBits = 10;
+  DfmSurrogateMask = $3FF;
+
+{ 151 Y2: TDfmPropertyRow.ValueKind of a value node. }
+function DfmPropValueKind(const AValue: TTSNode): string;
+var
+  T: string;
+begin
+  if AValue.IsNull then Exit('other');
+  T:= AValue.NodeType;
+  if T = 'number' then
+  begin
+    if AValue.NamedChildCount > 0 then T:= AValue.NamedChild(0).NodeType;
+    Exit(if (T = 'float') or (T = 'datetime_literal') then 'float' else 'integer');
+  end;
+  Result:= if T = 'string' then 'string'
+           else if (T = 'boolean') or (T = 'identifier_value') then 'ident'
+           else if T = 'set'         then 'set'
+           else if T = 'list'        then 'list'
+           else if T = 'items'       then 'collection'
+           else if T = 'binary_blob' then 'binary'
+           else 'other';
+end;
+
+{ 151 Y2: a DFM string value as the STORED value: quoted atoms unescaped
+  ('' -> '), a #nnn atom as the character nnn (the IDE writes UTF-16 units; a
+  value above $FFFF becomes a surrogate pair), '+' continuations joined. Unlike
+  DfmDecodeString (the FTS literal, #nnn as a space). }
+function DfmPropDecodeString(const ANode: TTSNode; const ASource: TBytes): string;
+var
+  i   : Integer;
+  Atom: TTSNode;
+  Raw : string ;
+  Code: Integer;
+  Sb  : TStringBuilder;
+begin
+  Sb:= TStringBuilder.Create;
+  try
+    for i:= 0 to ANode.NamedChildCount - 1 do
+    begin
+      Atom:= ANode.NamedChild(i);
+      Raw := NodeText(Atom, ASource);
+      if Atom.NodeType = 'quoted_string' then
+      begin
+        if (Length(Raw) >= 2) and (Raw[1] = '''') and (Raw[Length(Raw)] = '''') then Raw:= Copy(Raw, 2, Length(Raw) - 2);
+        Sb.Append(StringReplace(Raw, '''''', '''', [rfReplaceAll]));
+      end
+      else if (Atom.NodeType = 'char_code') and TryStrToInt(Copy(Raw, 2, MaxInt), Code)
+              and (Code >= 0) and (Code <= DfmCodePointMax) then
+      begin
+        if Code <= DfmBmpMax then Sb.Append(Char(Code))
+        else
+        begin
+          Dec(Code, DfmSuppBase);
+          Sb.Append(Char(DfmHiSurrogate + (Code shr DfmSurrogateBits)));
+          Sb.Append(Char(DfmLoSurrogate + (Code and DfmSurrogateMask)));
+        end;
+      end;
+    end;
+    Result:= Sb.ToString;
+  finally
+    Sb.Free;
+  end;
+end;
+
+{ 151 Y2: a dfm_properties row without its position (AddDfmPropRow sets that). }
+function DfmPropRow(AObjOrd, AParent, ADepth: Integer; const AName, AKind, AText: string): TDfmPropertyRow;
+begin
+  Result:= Default(TDfmPropertyRow);
+  Result.ObjectOrdinal:= AObjOrd;
+  Result.Parent       := AParent;
+  Result.Depth        := ADepth;
+  Result.Name         := AName;
+  Result.ValueKind    := AKind;
+  Result.ValueText    := AText;
+end;
+
+{ 151 Y2: appends ARow spanning AFirst's start to ALast's end; returns its index
+  (= ordinal). }
+function AddDfmPropRow(const AState: TDfmState; const AFirst, ALast: TTSNode; ARow: TDfmPropertyRow): Integer;
+var
+  Row: TDfmPropertyRow;
+begin
+  Row:= ARow;
+  Row.StartLine    := Integer(AFirst.StartPoint.row   ) + 1;
+  Row.StartCol     := Integer(AFirst.StartPoint.column) + 1;
+  Row.EndLine      := Integer(ALast .EndPoint  .row   ) + 1;
+  Row.EndCol       := Integer(ALast .EndPoint  .column) + 1;
+  AState.DfmProps.Add(Row);
+  Result:= AState.DfmProps.Count - 1;
+end;
+
+procedure EmitDfmPropValue(const AState: TDfmState; const ARange: TTSNode; const AName: string; const AValue: TTSNode;
+  AObjOrd, AParent, ADepth: Integer); forward;
+
+{ 151 Y2: the item rows of a collection value (`< item .. end item .. end >`). The
+  grammar's _item is hidden, so an item is the span from its anonymous `item`
+  token to its `end` token; its properties are the named children in between. }
+procedure EmitDfmItems(const AState: TDfmState; const AItems: TTSNode; AObjOrd, AParent, ADepth: Integer);
+var
+  i       : Integer;
+  ItemIdx : Integer;
+  C       : TTSNode;
+  NameNode: TTSNode;
+  Row     : TDfmPropertyRow;
+begin
+  ItemIdx:= -1;
+  for i:= 0 to AItems.ChildCount - 1 do
+  begin
+    C:= AItems.Child(i);
+    if C.IsNamed then
+    begin
+      if (C.NodeType = 'property') and (ItemIdx >= 0) then
+      begin
+        NameNode:= C.ChildByField('name');
+        if not NameNode.IsNull then
+          EmitDfmPropValue(AState, C, NodeText(NameNode, AState.Source), C.ChildByField('value'), AObjOrd, ItemIdx, ADepth + 1);
+      end;
+    end
+    else if SameText(C.NodeType, 'item') then
+      ItemIdx:= AddDfmPropRow(AState, C, C, DfmPropRow(AObjOrd, AParent, ADepth, 'item', 'item', ''))
+    else if SameText(C.NodeType, 'end') and (ItemIdx >= 0) then
+    begin
+      Row:= AState.DfmProps[ItemIdx];
+      Row.EndLine:= Integer(C.EndPoint.row   ) + 1;
+      Row.EndCol := Integer(C.EndPoint.column) + 1;
+      AState.DfmProps[ItemIdx]:= Row;
+      ItemIdx:= -1;
+    end;
+  end;
+end;
+
+{ 151 Y2: one row for the value AValue (a property when ARange is the property
+  node, a list element when ARange = AValue), then its children: list elements
+  (Name '') or collection items. Comments inside a list are not elements. }
+procedure EmitDfmPropValue(const AState: TDfmState; const ARange: TTSNode; const AName: string; const AValue: TTSNode;
+  AObjOrd, AParent, ADepth: Integer);
+var
+  Kind: string ;
+  Txt : string ;
+  Idx : Integer;
+  i   : Integer;
+  El  : TTSNode;
+begin
+  Kind:= DfmPropValueKind(AValue);
+  Txt := if Kind = 'string' then DfmPropDecodeString(AValue, AState.Source)
+         else if AValue.IsNull or (Kind = 'list') or (Kind = 'collection') or (Kind = 'binary') then ''
+         else StringReplace(StringReplace(NodeText(AValue, AState.Source), #13#10, #10, [rfReplaceAll]), #13, #10, [rfReplaceAll]);
+  Idx:= AddDfmPropRow(AState, ARange, ARange, DfmPropRow(AObjOrd, AParent, ADepth, AName, Kind, Txt));
+  if Kind = 'list' then
+    for i:= 0 to AValue.NamedChildCount - 1 do
+    begin
+      El:= AValue.NamedChild(i);
+      if El.NodeType <> 'comment' then EmitDfmPropValue(AState, El, '', El, AObjOrd, Idx, ADepth + 1);
+    end
+  else if Kind = 'collection' then
+    EmitDfmItems(AState, AValue, AObjOrd, Idx, ADepth + 1);
+end;
+
+procedure WalkProperty(const ANode: TTSNode; const AState: TDfmState; const AObjectName: string; AObjOrd: Integer);
 var
   NameNode   : TTSNode;
   ValueNode  : TTSNode;
@@ -378,6 +573,7 @@ begin
   // qualified_identifier wraps an identifier (or chain). Take whole text.
   PropName:= NodeText(NameNode, AState.Source);
   if PropName = '' then Exit;
+  if AState.DfmProps <> nil then EmitDfmPropValue(AState, ANode, PropName, ValueNode, AObjOrd, -1, 0); { 151 Y2 }
   // Event bindings: property names starting with "On" whose value is an
   // identifier_value (a method name).
   if not ValueNode.IsNull and (Copy(PropName, 1, 2) = 'On') and (ValueNode.NodeType = 'identifier_value') then
@@ -480,6 +676,7 @@ var
   Signature: string     ;
   Kind     : TSymbolKind;
   Idx      : Integer    ;
+  ObjOrd   : Integer    ;
   i        : Integer    ;
 begin
   NameNode := ANode.ChildByField('name' );
@@ -494,6 +691,7 @@ begin
   Kind:= if AIsRoot then skForm else skComponent;
   Idx:= AState.Emit(Kind, ObjName, QName, Signature, AParentSymbolIdx, ANode);
   EmitDfmObject(AState, ANode, ObjName, ObjClass, AParentQualifiedName, QName, Idx); { 149 EX2 (F5) }
+  ObjOrd:= AState.DfmObjects.Count - 1; { 151 Y2: this block's dfm_objects ordinal, before the children add theirs }
 
   { THE TYPE ON THE `object` LINE IS ITS OWN TOKEN CLASS, so `query --text
     "TOvcTable" --source dfm` can answer "which forms hold a component of this
@@ -526,7 +724,7 @@ begin
   begin
     ChildNode:= ANode.NamedChild(i);
     if ChildNode.NodeType      = 'object' then WalkObject(ChildNode, AState, Idx, QName, False)
-    else if ChildNode.NodeType = 'property' then WalkProperty(ChildNode, AState, ObjName);
+    else if ChildNode.NodeType = 'property' then WalkProperty(ChildNode, AState, ObjName, ObjOrd);
   end;
 end; // procedure
 
@@ -587,6 +785,41 @@ begin
           if Child.NodeType = 'object' then WalkObject(Child, State, -1, '', True);
         end;
         Result:= State.EventBindings.ToArray;
+      finally
+        State.Free;
+      end;
+    finally
+      Tree.Free;
+    end;
+  finally
+    Parser.Free;
+  end;
+end; // function
+
+function ExtractDfmPropertyRowsFromBytes(const ASource: TBytes): TArray<TDfmPropertyRow>;
+var
+  Source: TBytes   ;
+  Parser: TTSParser;
+  Tree  : TTSTree  ;
+  State : TDfmState;
+  Root  : TTSNode  ;
+  i     : Integer  ;
+begin
+  Result:= nil;
+  if IsBinaryDfmBytes(ASource) then Exit; { the text grammar cannot read a binary .dfm (no dfm_objects either) }
+  Source:= EnsureUtf8Bytes(ASource);
+  Parser:= TTSParser.Create;
+  try
+    Parser.Language:= tree_sitter_dfm;
+    Tree:= ParseDfmSource(Parser, Source);
+    try
+      State:= TDfmState.Create(Source);
+      try
+        State.DfmProps:= TList<TDfmPropertyRow>.Create;
+        Root:= Tree.RootNode;
+        for i:= 0 to Root.NamedChildCount - 1 do
+          if Root.NamedChild(i).NodeType = 'object' then WalkObject(Root.NamedChild(i), State, -1, '', True);
+        Result:= State.DfmProps.ToArray;
       finally
         State.Free;
       end;

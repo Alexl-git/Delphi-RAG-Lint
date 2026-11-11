@@ -124,6 +124,8 @@ implementation
 uses
   System.RegularExpressions
   , System.JSON
+  , System.Math
+  , DRagLint.Core.FileTime { 151 Y2: FileMTimeUnix for the dfm_properties currency check }
   , DRagLint.FormsMap.Dfm
   , DRagLint.MenuTree
   ;
@@ -650,6 +652,255 @@ begin
   end;
 end; // function
 
+{ ---- 151 Y2: the three .dfm line-range readers above, answered from dfm_properties ----
+  Table first, text as the fallback (the 150 dfm_nav rule): the table is used only
+  when a store has it (HasDfmProperties) and dfm_objects (HasFileFacts), the .dfm is
+  indexed, its mtime and size are what the index recorded and it has rows; anything
+  else -- and DRAGLINT_NO_FILE_FACTS=1 -- reads the text. The table path EMULATES the
+  text readers line by line (their stops, their name match, their value cut), so
+  forms-csv is byte-identical either way; a case the rows cannot settle exactly (a
+  value over several lines, '+' / #nnn strings, a non-ASCII caption the ANSI text
+  read may decode differently, a non-canonical `Name = value` spacing) is handed to
+  the text reader. DRAGLINT_DEBUG=1 prints `[dfm-props] table|text <reader> <file>`. }
+type
+  TDfmLineReader = (dlrCaption, dlrActionRef, dlrShownOnCreate);
+
+  TDfmPropsView = record
+    Rows: TArray<TDfmPropertyRow>;
+    Objs: TArray<TDfmObjectRow>;
+  end;
+
+  { one line event of the emulated text scan }
+  TDfmLineEvent = record
+    Line: Integer;
+    Kind: Integer; { DLE_* }
+    Row : Integer; { index into Rows for DLE_PROP / DLE_ITEM }
+  end;
+
+const
+  ENV_DFM_PROPS_OFF = 'DRAGLINT_NO_FILE_FACTS';
+  ENV_DFM_PROPS_DBG = 'DRAGLINT_DEBUG';
+  DLR_NAMES: array[TDfmLineReader] of string = ('ReadCaption', 'ReadActionRef', 'DfmShownOnCreate');
+  DLE_HEADER_OBJECT = 0; { `object X: T` -- every reader stops }
+  DLE_HEADER_OTHER  = 1; { `inherited` / `inline` -- only DfmShownOnCreate stops }
+  DLE_ITEM          = 2; { a collection `item` line -- ReadCaption stops }
+  DLE_ITEM_END      = 3; { the `end` of a non-last item -- DfmShownOnCreate stops }
+  DLE_OBJ_END       = 4; { an object's own `end` -- DfmShownOnCreate stops }
+  DLE_PROP          = 5; { a property row's first line }
+  DLE_CANON_GAP     = 3; { the ' = ' between a canonical name and its value }
+  DLE_QUOTES        = 2; { the two quotes of a one-atom string }
+  DLE_ASCII_MAX     = 127;
+
+var
+  GDfmPropsKey : string;        { last view's cache key (path|fid|mtime|size|store) }
+  GDfmPropsView: TDfmPropsView; { single-shot report: the last file's rows, reused across calls }
+
+function DfmPropsUtf8Len(const S: string): Integer;
+begin
+  Result:= TEncoding.UTF8.GetByteCount(S);
+end;
+
+function DfmPropsIsAscii(const S: string): Boolean;
+var
+  C: Char;
+begin
+  for C in S do
+    if Ord(C) > DLE_ASCII_MAX then Exit(False);
+  Result:= True;
+end;
+
+{ True when ARow is `Name = value` on one line with the IDE's spacing and, for a
+  string, ONE plain quoted atom -- the only shape whose text-reader answer the row
+  reproduces exactly. }
+function DfmPropsCanonical(const ARow: TDfmPropertyRow): Boolean;
+var
+  ValLen: Integer;
+begin
+  if ARow.StartLine <> ARow.EndLine then Exit(False);
+  if ARow.ValueKind = 'string' then
+    ValLen:= DfmPropsUtf8Len(StringReplace(ARow.ValueText, '''', '''''', [rfReplaceAll])) + DLE_QUOTES
+  else if (ARow.ValueKind = 'ident') or (ARow.ValueKind = 'integer') or (ARow.ValueKind = 'float') or (ARow.ValueKind = 'set') then
+    ValLen:= DfmPropsUtf8Len(ARow.ValueText)
+  else
+    Exit(False);
+  Result:= ARow.EndCol - ARow.StartCol = DfmPropsUtf8Len(ARow.Name) + DLE_CANON_GAP + ValLen;
+end;
+
+{ The view of ADfmPath from the first store that has current rows for it. }
+function LoadDfmPropsView(const ADfmPath: string; const AStores: array of TSQLiteSymbolStore; out AView: TDfmPropsView): Boolean;
+var
+  St   : TSQLiteSymbolStore;
+  Fid  : Int64;
+  MTime: Int64;
+  Size : Int64;
+  Key  : string;
+begin
+  Result:= False;
+  AView := Default(TDfmPropsView);
+  if (GetEnvironmentVariable(ENV_DFM_PROPS_OFF) = '1') or (ADfmPath = '') or not TFile.Exists(ADfmPath) then Exit;
+  MTime:= FileMTimeUnix(ADfmPath);
+  Size := TFile.GetSize(ADfmPath);
+  for St in AStores do
+  begin
+    if (St = nil) or not St.HasDfmProperties or not St.HasFileFacts then Continue;
+    Fid:= St.FindFileIdByPath(ADfmPath);
+    if Fid <= 0 then Continue;
+    { a stale index is not evidence: the indexer's own currency rule }
+    if not St.FileStampIsCurrent(ADfmPath, MTime, Size) then Exit;
+    Key:= Format('%s|%d|%d|%d|%p', [ADfmPath, Fid, MTime, Size, Pointer(St)]);
+    if Key <> GDfmPropsKey then
+    begin
+      GDfmPropsView.Rows:= St.GetDfmProperties(Fid);
+      GDfmPropsView.Objs:= St.GetDfmObjects(Fid);
+      GDfmPropsKey:= Key;
+    end;
+    { present but no rows for this file = not indexed by a producing engine }
+    if (Length(GDfmPropsView.Rows) = 0) or (Length(GDfmPropsView.Objs) = 0) then Exit;
+    AView:= GDfmPropsView;
+    Exit(True);
+  end;
+end;
+
+{ The line events of AView between AFromLine and AToLine (1-based, inclusive), in
+  line order -- what the text readers see when they walk those lines. }
+function DfmLineEvents(const AView: TDfmPropsView; AFromLine, AToLine: Integer): TArray<TDfmLineEvent>;
+var
+  L : TList<TDfmLineEvent>;
+  E : TDfmLineEvent;
+  I : Integer;
+  J : Integer;
+  Last: Boolean;
+begin
+  L:= TList<TDfmLineEvent>.Create;
+  try
+    for I:= 0 to High(AView.Objs) do
+    begin
+      E.Row := -1;
+      E.Line:= AView.Objs[I].StartLine;
+      E.Kind:= if SameText(AView.Objs[I].ObjKind, 'object') then DLE_HEADER_OBJECT else DLE_HEADER_OTHER;
+      if InRange(E.Line, AFromLine, AToLine) then L.Add(E);
+      E.Line:= AView.Objs[I].EndLine;
+      E.Kind:= DLE_OBJ_END;
+      if InRange(E.Line, AFromLine, AToLine) then L.Add(E);
+    end;
+    for I:= 0 to High(AView.Rows) do
+    begin
+      E.Row:= I;
+      if AView.Rows[I].ValueKind = 'item' then
+      begin
+        E.Line:= AView.Rows[I].StartLine;
+        E.Kind:= DLE_ITEM;
+        if InRange(E.Line, AFromLine, AToLine) then L.Add(E);
+        { the last item of a collection closes with `end>`, the others with a bare `end` }
+        Last:= True;
+        for J:= I + 1 to High(AView.Rows) do
+          if (AView.Rows[J].Parent = AView.Rows[I].Parent) and (AView.Rows[J].ValueKind = 'item') then
+          begin
+            Last:= False;
+            Break;
+          end;
+        E.Line:= AView.Rows[I].EndLine;
+        E.Kind:= DLE_ITEM_END;
+        if (not Last) and InRange(E.Line, AFromLine, AToLine) then L.Add(E);
+      end
+      else if AView.Rows[I].Name <> '' then
+      begin
+        E.Line:= AView.Rows[I].StartLine;
+        E.Kind:= DLE_PROP;
+        if InRange(E.Line, AFromLine, AToLine) then L.Add(E);
+      end;
+    end;
+    { stable on equal lines: headers / ends before rows never share a line in a .dfm }
+    L.Sort(TComparer<TDfmLineEvent>.Construct(
+      function(const A, B: TDfmLineEvent): Integer
+      begin
+        Result:= A.Line - B.Line;
+        if Result = 0 then Result:= A.Kind - B.Kind;
+      end));
+    Result:= L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
+{ One property row of the emulated walk. Returns True when the reader stops at
+  this row; ASettled False = the row's shape needs the text reader. }
+function DfmPropsAnswerRow(const R: TDfmPropertyRow; AReader: TDfmLineReader; var AValue: string;
+  out ASettled: Boolean): Boolean;
+begin
+  ASettled:= True;
+  Result  := False;
+  case AReader of
+    dlrCaption:
+      if SameText(R.Name, 'Caption') then
+      begin
+        Result  := True;
+        ASettled:= (R.ValueKind = 'string') and DfmPropsCanonical(R) and DfmPropsIsAscii(R.ValueText);
+        if ASettled then AValue:= StringReplace(R.ValueText, '&', '', [rfReplaceAll]);
+      end;
+    dlrActionRef:
+      if SameText(R.Name, 'Action') then
+      begin
+        Result  := True;
+        ASettled:= (R.ValueKind <> 'string') and DfmPropsCanonical(R) and DfmPropsIsAscii(R.ValueText);
+        if ASettled then AValue:= R.ValueText;
+      end;
+    dlrShownOnCreate:
+      if (R.StartLine = R.EndLine) and (R.ValueKind = 'ident') then
+        if SameText(R.Name, 'FormStyle') and SameText(R.ValueText, 'fsMDIChild') then
+        begin
+          AValue:= 'FormStyle = fsMDIChild';
+          Result:= True;
+        end
+        else if SameText(R.Name, 'Visible') and SameText(R.ValueText, 'True') then AValue:= 'Visible = True';
+  end;
+end;
+
+{ Emulates one text reader over AView. True = settled (AValue is the text reader's
+  answer); False = a case the rows cannot settle exactly: read the text. }
+function DfmPropsAnswer(const AView: TDfmPropsView; AReader: TDfmLineReader; AFromLine, AToLine: Integer;
+  out AValue: string): Boolean;
+var
+  E   : TDfmLineEvent;
+  Stop: Boolean;
+begin
+  AValue:= '';
+  Result:= True;
+  for E in DfmLineEvents(AView, AFromLine, AToLine) do
+  begin
+    Stop:= False;
+    case E.Kind of
+      DLE_HEADER_OBJECT                         : Stop:= True;
+      DLE_HEADER_OTHER, DLE_ITEM_END, DLE_OBJ_END: Stop:= AReader = dlrShownOnCreate;
+      DLE_ITEM                                  : Stop:= AReader = dlrCaption;
+      DLE_PROP                                  : Stop:= DfmPropsAnswerRow(AView.Rows[E.Row], AReader, AValue, Result);
+    end;
+    if Stop then Break;
+  end;
+end;
+{ Table-or-text front of the three readers; ARange* as the text reader takes them. }
+function DfmPropsRead(AReader: TDfmLineReader; const AStores: array of TSQLiteSymbolStore; const ADfmPath: string;
+  AStartLine, AEndLine: Integer): string;
+var
+  View   : TDfmPropsView;
+  ByTable: Boolean;
+begin
+  ByTable:= False;
+  Result := '';
+  if LoadDfmPropsView(ADfmPath, AStores, View) then
+    { the text DfmShownOnCreate starts at line 2 whatever the root's line: only a root on line 1 is the same walk }
+    ByTable:= if AReader = dlrShownOnCreate then (View.Objs[0].StartLine = 1) and DfmPropsAnswer(View, AReader, 2, MaxInt, Result)
+              else DfmPropsAnswer(View, AReader, AStartLine + 1, AEndLine, Result);
+  if GetEnvironmentVariable(ENV_DFM_PROPS_DBG) = '1' then
+    Writeln(ErrOutput, '[dfm-props] ', IfThen(ByTable, 'table', 'text'), ' ', DLR_NAMES[AReader], ' ', ExtractFileName(ADfmPath));
+  if ByTable then Exit;
+  case AReader of
+    dlrCaption      : Result:= ReadCaption(ADfmPath, AStartLine, AEndLine);
+    dlrActionRef    : Result:= ReadActionRef(ADfmPath, AStartLine, AEndLine);
+    dlrShownOnCreate: Result:= DfmShownOnCreate(ADfmPath);
+  end;
+end;
+
 /// <summary>Finds a component symbol by name within a .dfm file.</summary>
 function FindComponent(AStore: TSQLiteSymbolStore; ADfmFileId: Int64; const AName: string): TSymbol;
 var
@@ -703,7 +954,7 @@ begin
       Ctrl:= AStore.FindContainingSymbol(ANode.DfmFileId, Line);
       if Ctrl.Name <> '' then
       begin
-        Cap:= ReadCaption(ANode.DfmPath, Ctrl.StartLine, Ctrl.EndLine);
+        Cap:= DfmPropsRead(dlrCaption, [AStore], ANode.DfmPath, Ctrl.StartLine, Ctrl.EndLine); { 151 Y2: table first }
         if Cap <> '' then
         begin
           Q.Free;
@@ -711,13 +962,13 @@ begin
           Exit(Cap);
         end;
         // (2) control bound via Action: read "Action = X", resolve X's caption.
-        ActName:= ReadActionRef(ANode.DfmPath, Ctrl.StartLine, Ctrl.EndLine);
+        ActName:= DfmPropsRead(dlrActionRef, [AStore], ANode.DfmPath, Ctrl.StartLine, Ctrl.EndLine); { 151 Y2 }
         if ActName <> '' then
         begin
           ActSym:= FindComponent(AStore, ANode.DfmFileId, ActName);
           if ActSym.Name <> '' then
           begin
-            Cap:= ReadCaption(ANode.DfmPath, ActSym.StartLine, ActSym.EndLine);
+            Cap:= DfmPropsRead(dlrCaption, [AStore], ANode.DfmPath, ActSym.StartLine, ActSym.EndLine); { 151 Y2 }
             if Cap <> '' then
             begin
               Q.Free;
@@ -2002,7 +2253,7 @@ var
 begin
   ANote:= '';
   Result:= '?';
-  Why:= DfmShownOnCreate(AY.DfmPath);
+  Why:= DfmPropsRead(dlrShownOnCreate, FStores, AY.DfmPath, 0, 0); { 151 Y2: table first }
   if Why = '' then Exit;
   ANote := 'modal from ' + ExtractFileName(AY.DfmPath) + ': ' + Why;
   Result:= 'No';
