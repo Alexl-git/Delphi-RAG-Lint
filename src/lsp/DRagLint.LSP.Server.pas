@@ -37,6 +37,7 @@ uses
   , DRagLint.LSP     .Context   { S0: ILspServerContext + the feature registry }
   , DRagLint.Project .ContextFile { LSP-1 CORE: .dlcontext.json + central context defaults }
   , DRagLint.Lint    .TargetCompiler { 1.38: the target-compiler gate of each file's diagnostics }
+  , DRagLint.Charts  .Index     { 151 CF: FExcIndex -- the Raises: line's open index }
   ;
 
 type
@@ -265,6 +266,11 @@ type
       FIdentTree    : TTSTree            ;
       FIdentTreePath: string             ;
       FIdentTreePre : TBytes             ;
+      { 151 CF (LX-5 hover cost): the index ExceptionFactLines reads the Raises: line from,
+        kept open for the last DB path instead of opened per hover. Owned; dropped when that
+        DB is re-indexed (ReindexFinished) and in Destroy. Main thread only. }
+      FExcIndex     : TChartsIndex       ;
+      FExcIndexPath : string             ;
       FFullRulesSuperseded: Boolean      ; { the last RunFullRulesLint child was discarded because a newer save of the same file was waiting }
       FStartProject : string             ; { C15: explicit --project the CLI was started with, or '' }
       FStartPlatform: string             ; { C15: explicit --platform the CLI was started with, or '' }
@@ -2688,6 +2694,7 @@ begin
     while FDeferred.Count > 0 do FDeferred.Dequeue.Free;
   FDeferred.Free;
   FIdentTree.Free;  { 151 CF: IdentTreeFor's cached parse }
+  FExcIndex.Free;   { 151 CF: ExceptionFactLines' open index }
   FContext:= nil;
   FFeatureByMethod.Free;
   FFeatures.Free;
@@ -4471,6 +4478,12 @@ begin
     { The declared-type session cache is keyed by store INSTANCE; the reopened
       store may reuse a freed address over changed rows. }
     ClearPropertyDeclaredTypeCache;
+    { 151 CF: the Raises: line's open index is re-opened on next use, like the stores. }
+    if SameText(FExcIndexPath, Run.Db) then
+    begin
+      FreeAndNil(FExcIndex);
+      FExcIndexPath:= '';
+    end;
     { Re-open that DB: drop every cached set holding it (reopened lazily) and
       swap a startup store in place. }
     for var I:= FSets.Count - 1 downto 0 do
@@ -5411,7 +5424,14 @@ begin
   if (not FExceptionFacts) or (ASym.Kind not in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) then Exit;
   var DbPath: string:= StorePathOf(AStore);
   if DbPath = '' then Exit;
-  var Line: string:= ExceptionRaisesLine(ExceptionFactsOf(DbPath, ASym.QualifiedName, ''));
+  { 151 CF (LX-5): one open index per DB path instead of TChartsIndex.Create per hover. }
+  if (FExcIndex = nil) or not SameText(FExcIndexPath, DbPath) then
+  begin
+    FreeAndNil(FExcIndex);
+    FExcIndex    := TChartsIndex.Create(DbPath);
+    FExcIndexPath:= DbPath;
+  end;
+  var Line: string:= ExceptionRaisesLine(ExceptionFactsOfIndex(FExcIndex, ASym.QualifiedName, ''));
   if Line <> '' then Result:= [Line];
 end;
 
