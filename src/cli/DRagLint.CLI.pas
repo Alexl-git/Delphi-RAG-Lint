@@ -1087,6 +1087,7 @@ function NamingReindexHint(const AArgs: TArgs; const ADbPath: string): string; f
   wraps RefreshProjectIndex, which sits beside convert-apply far below. }
 function ReindexOwnerProject(const AProjectFile, ADbPath: string; const AVerb: string = 'rename'): Boolean; forward;
 function ResolveLibraryDb(const AArgs: TArgs): string        ; forward;
+function ResolveLibraryDbs(const AArgs: TArgs): TArray<string>; forward;
 function RefactorLibraries(const AArgs: TArgs): TArray<ISymbolStore>; forward;
 function OpenLibraryStores(const AArgs: TArgs): TArray<ISymbolStore>; forward;
 function FindCalleesLibraryDb(const AArgs: TArgs; var AProjectDb: string): string; forward;
@@ -17422,7 +17423,7 @@ begin
 end;
 
 { lane 144: the platform library a rewrite's proof reads, read-only and silent on stdout (a JSON document follows):
-  every --library-db, 'none' = none, or the one the manifest names.
+  every --library-db, 'none' = none, or every library section the manifest names for the platform (151 RC).
 
   Lane 150 CQ (RT): with no --library-db the manifest's library for --platform is loaded -- the same
   ResolveLibraryDb `index` uses -- and ONE stderr NOTE names it (or says none was found), so a refusal
@@ -17433,13 +17434,12 @@ begin
   var Paths:= AArgs.LibraryDbs;
   if Length(Paths) = 0 then
   begin
-    var P:= ResolveLibraryDb(AArgs);
-    if P <> '' then
-    begin
-      Paths:= [P];
-      Writeln(ErrOutput, 'drag-lint: NOTE: no --library-db given; the proof reads the manifest platform library ' + P +
-        ' (pass --library-db <file> to choose another, or --library-db none for none).');
-    end
+    { 151 RC: EVERY library section of the platform, not the first existing one. }
+    Paths:= ResolveLibraryDbs(AArgs);
+    if Length(Paths) > 0 then
+      Writeln(ErrOutput, 'drag-lint: NOTE: no --library-db given; the proof reads the manifest platform library ' +
+        string.Join(', ', Paths) +
+        ' (pass --library-db <file> to choose another, or --library-db none for none).')
     else
       Writeln(ErrOutput, 'drag-lint: NOTE: no --library-db given and the manifest names no platform library: ' +
         'casts and ancestors that need a library stay refused (pass --library-db <file>).');
@@ -19838,7 +19838,25 @@ var
       ADesc:= 'The receiver expression, when the reference is qualified '
             + '(the "A" of A.B). Empty for a bare name. On a reraise, and on a '
             + 'raise-expr naming the handler variable: the type of the nearest '
-            + 'enclosing on..do, empty under a bare except.';
+            + 'enclosing on..do, empty under a bare except.'
+    else if Key = 'comment_facts.kind' then
+    begin
+      ADesc  := 'The comment opener. A {$..} / (*$..*) directive is not a comment and has no row.';
+      AValues:= '(*,//,///,{';
+    end
+    else if Key = 'comment_facts.anchor_kind' then
+    begin
+      ADesc  := 'What the comment is attached to; '''' = not decided. anchor_symbol_id names the '
+              + 'declaration of a next-declaration / end-of-line comment.';
+      AValues:= ',block,end-of-line,next-declaration,statement';
+    end
+    else if Key = 'dfm_properties.value_kind' then
+    begin
+      ADesc  := 'The shape of the value: value_text is the decoded string for string, the source text otherwise.';
+      AValues:= 'binary,collection,float,ident,integer,list,other,set,string';
+    end
+    else if Key = 'dfm_properties.object_ordinal' then
+      ADesc:= 'dfm_objects.ordinal of the owning block in the same .dfm; -1 when no block encloses it.';
 
     Result:= (ADesc <> '') or (AValues <> '');
   end;
@@ -36237,16 +36255,31 @@ begin
 end;
 
 function ResolveLibraryDb(const AArgs: TArgs): string;
+begin
+  var All:= ResolveLibraryDbs(AArgs);
+  Result:= if Length(All) > 0 then All[0] else '';
+end;
+
+/// <summary>Every existing LIBRARY index of the manifest for this run's platform, in
+/// manifest resolution order (151 RC).</summary>
+/// <param name="AArgs">Parsed args; CheckPlatform and ProjectPath pick the platform.</param>
+/// <returns>Existing DB paths, no duplicates; empty when the manifest names none or
+/// cannot be read.</returns>
+/// <remarks>A manifest may split the platform library across several sections (RTL in
+/// one, a vendor library in another); a reader that keeps only the first misses every
+/// type of the others, and a proof read on a partial library can call a name unique
+/// that is not (run_redundant_cast_multi_library.ps1). ResolveLibraryDb keeps the
+/// first for the single-store callers. Never raises.</remarks>
+function ResolveLibraryDbs(const AArgs: TArgs): TArray<string>;
 var
   Manifest : TIndexManifest                            ;
   Resolver : DRagLint.Project.Resolver.TProjectResolver;
   EngineDir: string                                    ;
   Platform : string                                    ;
-  Resolved : TArray<string>                            ;
+  Plan     : TIndexPlan                                ;
   D        : string                                    ;
-  LibDbs   : TArray<string>                            ;
 begin
-  Result:= '';
+  Result:= nil;
   try
     EngineDir:= ExtractFilePath(ParamStr(0));
     Manifest:= if (GLibraryManifestPath <> '') and TFile.Exists(GLibraryManifestPath)
@@ -36257,26 +36290,32 @@ begin
     Platform:= ReadPlatformFor(Manifest, AArgs.CheckPlatform, AArgs.ProjectPath);
 
 
+    { ONE ResolvePlan per call (~0.7 s on a 15-project manifest): the LSP --full-rules
+      child has an 8 s budget (LintChildTimeoutMs, run_lsp_dlok_filtering_guard).
+      151 RC: walked here instead of TDbSelect.Resolve, which keeps only the FIRST
+      library section of the platform -- right for a consumer DB list, wrong for a
+      proof that must see every library type. }
+    var PlatFilter: TArray<string>:= if Platform <> '' then [Platform] else nil;
     Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
     try
-      Resolved:= TDbSelect.Resolve(Manifest, Platform, Resolver, True);
+      Plan:= ResolvePlan(Manifest, PlatFilter, Resolver);
     finally
       Resolver.Free;
     end;
-
-    { ONE ResolvePlan, not one per resolved DB: LibrarySectionDbs walks the whole
-      manifest, and this loop runs over every DB of the platform. Called inside the
-      loop it cost ~0.7 s x N -- 20-25 s per `lint` on a 15-project manifest under
-      load, and INC3 made every `lint` setup resolve the library (InstallPPUnitSource),
-      so the LSP --full-rules child (8 s budget, LintChildTimeoutMs) timed out and fell
-      back to the subset (run_lsp_dlok_filtering_guard, metric rule). }
-    LibDbs:= LibrarySectionDbs(Manifest);
-    for D in Resolved do
-      if IsLibrarySectionDb(LibDbs, D) and TFile.Exists(D) then Exit(D);
+    for var PS: TPlanSection in Plan.Items do
+    begin
+      if (PS.Mode <> smLibrary) or not SameText(PS.Platform, Platform) then Continue;
+      D:= PS.DbPath;
+      if (D = '') or not TFile.Exists(D) then Continue;
+      var Dup:= False;
+      for var X in Result do
+        if SameText(X, D) then Dup:= True;
+      if not Dup then Result:= Result + [D];
+    end;
   except
     { A manifest that will not load is not this function's problem to report --
-      every caller already treats '' as "no library index" and degrades. }
-    Result:= '';
+      every caller already treats an empty answer as "no library index" and degrades. }
+    Result:= nil;
   end;
 end; // function
 
