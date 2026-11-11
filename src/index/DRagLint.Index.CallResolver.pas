@@ -27,6 +27,18 @@ uses
   DRagLint.Index.LibraryOracle;
 
 type
+  /// <summary>151 PF: the sections DRAGLINT_PROFILE_CALLS times inside the calls stage -- each
+  /// binding stream of TSQLiteSymbolStore.ResolveCallTargets (cpsStream*) and the resolver
+  /// routines those streams spend their time in.</summary>
+  /// <remarks>Times are inclusive and taken at a slot's outermost entry only, so a routine slot
+  /// nests inside a stream slot and inside other routine slots: never sum them.</remarks>
+  TCallProfSlot = (cpsStreamMain, cpsStreamEnum, cpsStreamParenless, cpsStreamMemberRead,
+    cpsStreamValueRead, cpsStreamTypeUse, cpsStreamException, cpsStreamEnumCast, cpsStreamTypeRead,
+    cpsStreamWrite, cpsStreamArgUses, cpsStreamRefTypes, cpsStreamRefReceivers,
+    cpsTypeReceiverCore, cpsTypeOfSelectorChain, cpsBindExternally, cpsDeclUses,
+    cpsResolveTypeNameToSymbol, cpsLookupTypeName, cpsLocalInScopeAt, cpsLinesOf, cpsFileUsesUnits,
+    cpsDecideInlineInitType, cpsInlineInitMemberType);
+
   /// <summary>v14 (D5): a set of symbol kinds -- lets the resolver's child scans
   /// filter by "any method-shaped kind" / "any type-defining kind" in one test.</summary>
   /// <remarks>
@@ -533,6 +545,12 @@ type
     // FEnumStats.Bound because a unit var/const is not an enum value -- the
     // calls stage reconciles each against what it wrote.
     FUnitValueBound  : Int64;
+    // 151 PF: DRAGLINT_PROFILE_CALLS, read once in Create. Ticks count the outermost
+    // entry of a slot only (recursion is not double-counted); hits count every entry.
+    FProfileOn   : Boolean;
+    FProfTicks: array[TCallProfSlot] of Int64;
+    FProfHits : array[TCallProfSlot] of Int64;
+    FProfDepth: array[TCallProfSlot] of Integer;
     // 2026-09-24 (D22, R14 review): rung 3c `Unit.enumValue` refs the
     // UnshadowedUnitFile gate declined although the receiver names one unit.
     FEnumUnitGateDeclined: Int64;
@@ -602,6 +620,9 @@ type
     FOracle   : TLibraryOracle;
     FReceiverStats : TReceiverStats;
     FFileUses : TDictionary<Int64, TArray<string>>;
+    { 151 PF: GetUnitUsesForFile per DECLARING file, read once per pass -- BindExternally's
+      DeclUses read it per library-typed receiver (21015 reads, 11.4 s of a CLIENT resolve). }
+    FDeclFileUses: TDictionary<Int64, TArray<TUnitUse>>;
     FDprUses  : TArray<string>;
     FDprLoaded: Boolean;
     { D01: the project's helper rows per lower-cased library type name (type_helpers by name). }
@@ -3895,6 +3916,29 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function OracleStats: TOracleStats;
+
+    /// <summary>151 PF: opens a timed section of the calls-stage profile.</summary>
+    /// <param name="ASlot">The section being entered.</param>
+    /// <returns>The start stamp to hand to ProfEnd; 0 when DRAGLINT_PROFILE_CALLS is unset or
+    /// the slot is already open further up the stack (a recursive entry is not timed twice).</returns>
+    /// <remarks>Off: one Boolean test, no clock read, no counter write. Every ProfBegin is
+    /// paired with exactly one ProfEnd of the same slot, normally in a finally.</remarks>
+    function ProfBegin(ASlot: TCallProfSlot): Int64;
+
+    /// <summary>151 PF: closes a section ProfBegin opened.</summary>
+    /// <param name="ASlot">The section being left; the same slot ProfBegin was given.</param>
+    /// <param name="AMark">ProfBegin's result; 0 adds no time (profile off, or a nested entry).</param>
+    /// <remarks>Off: one Boolean test.</remarks>
+    procedure ProfEnd(ASlot: TCallProfSlot; AMark: Int64);
+
+    /// <summary>151 PF: the profile as one line per slot that was entered, in slot order:
+    /// name, inclusive seconds, entries.</summary>
+    /// <returns>Empty when DRAGLINT_PROFILE_CALLS is unset.</returns>
+    /// <remarks>Routine slots nest inside stream slots; do not sum the two kinds.</remarks>
+    function ProfileLines: TArray<string>;
+
+    /// <summary>151 PF: True when DRAGLINT_PROFILE_CALLS was set when this resolver was created.</summary>
+    property ProfileOn: Boolean read FProfileOn;
   end;
 
   /// <summary>Extract the receiver expression immediately left of a dotted call.
@@ -4011,6 +4055,7 @@ implementation
 
 uses
   DRagLint.Core.FileTime,
+  System.Diagnostics, // TStopwatch -- the 151 PF calls-stage profile
   System.Math,     // Min -- ResolveAccessor's declaring-line range
   System.StrUtils, // B1: StartsText / SplitString, used by SignatureArityRange
   System.RegularExpressions, // rb5-ovl: ArgShapeOfText's number literals
@@ -4519,6 +4564,7 @@ constructor TCallResolver.Create(const AStore: ISymbolStore;
   const AExtraStores: TArray<ISymbolStore>);
 begin
   inherited Create;
+  FProfileOn:= GetEnvironmentVariable('DRAGLINT_PROFILE_CALLS') <> ''; { 151 PF }
   FStore      := AStore;
   FExtraStores:= AExtraStores;
   FNameToCands:= TObjectDictionary<string, TList<TSymbol>>.Create([doOwnsValues]);
@@ -4547,16 +4593,53 @@ begin
   FOracle    := TLibraryOracle.Create(AExtraStores);
   FReceiverStats  := Default(TReceiverStats);
   FFileUses  := TDictionary<Int64, TArray<string>>.Create;
+  FDeclFileUses:= TDictionary<Int64, TArray<TUnitUse>>.Create;
   FDprUses   := [];
   FDprLoaded := False;
   FLibTypeHelpers:= TDictionary<string, TArray<THelperEdge>>.Create;
   BuildMaps;
 end;
 
+const
+  { 151 PF: ProfileLines' names, one per TCallProfSlot, in declaration order. }
+  CALL_PROF_NAMES: array[TCallProfSlot] of string = ('stream main', 'stream enum-values',
+    'stream parenless', 'stream member-reads', 'stream value-reads', 'stream type-uses',
+    'stream exception-types', 'stream enum-casts', 'stream type-reads', 'stream writes',
+    'stream arg-uses', 'stream ref-types', 'stream ref-receivers', 'TypeReceiverCore',
+    'TypeOfSelectorChain', 'BindExternally', 'BindExternally.DeclUses', 'ResolveTypeNameToSymbol',
+    'LookupTypeName', 'LocalInScopeAt', 'LinesOf', 'FileUsesUnits', 'DecideInlineInitType',
+    'InlineInitMemberType');
+
+function TCallResolver.ProfBegin(ASlot: TCallProfSlot): Int64;
+begin
+  Result:= 0;
+  if not FProfileOn then Exit;
+  Inc(FProfHits[ASlot]);
+  Inc(FProfDepth[ASlot]);
+  if FProfDepth[ASlot] = 1 then Result:= TStopwatch.GetTimeStamp;
+end;
+
+procedure TCallResolver.ProfEnd(ASlot: TCallProfSlot; AMark: Int64);
+begin
+  if not FProfileOn then Exit;
+  Dec(FProfDepth[ASlot]);
+  if AMark <> 0 then Inc(FProfTicks[ASlot], TStopwatch.GetTimeStamp - AMark);
+end;
+
+function TCallResolver.ProfileLines: TArray<string>;
+begin
+  Result:= [];
+  for var S: TCallProfSlot:= Low(TCallProfSlot) to High(TCallProfSlot) do
+    if FProfHits[S] > 0 then
+      Result:= Result + [Format('%-26s %8.2f s %10d entries',
+        [CALL_PROF_NAMES[S], FProfTicks[S] / TStopwatch.Frequency, FProfHits[S]])];
+end;
+
 destructor TCallResolver.Destroy;
 begin
   FLibTypeHelpers.Free;
   FFileUses.Free;
+  FDeclFileUses.Free;
   FOracle.Free;
   FRows.Ancestors     .Free;
   FRows.Symbols       .Free;
@@ -4758,6 +4841,8 @@ var
   end;
 
 begin
+  var PfMark: Int64:= ProfBegin(cpsResolveTypeNameToSymbol); { 151 PF: DRAGLINT_PROFILE_CALLS }
+  try
   Result:= 0;
   // Normalize the same way ResolveAncestry does: strip generics + dotted qualifier.
   N:= ATypeText;
@@ -4794,6 +4879,9 @@ begin
     Result:= FullDeclOverForward(Cands, ADeclFileId, True, LtPos > 0); // 149-RB1: a forward is not a second type
     if Result = 0 then Result:= PickShadowingType(Cands, ADeclFileId, Qual);
   end;
+  finally
+    ProfEnd(cpsResolveTypeNameToSymbol, PfMark);
+  end;
 end;
 
 function TCallResolver.ChildrenOf(AParentId: Int64): TList<TSymbol>;
@@ -4829,6 +4917,8 @@ var
   Bytes: TBytes;
   Txt  : string;
 begin
+  var PfMark: Int64:= ProfBegin(cpsLinesOf); { 151 PF: DRAGLINT_PROFILE_CALLS }
+  try
   if AFileId <= 0 then Exit(nil);
   if FLineCache.TryGetValue(AFileId, Result) then Exit;
   Result:= TStringList.Create;
@@ -4879,6 +4969,9 @@ begin
       FStaleFiles.AddOrSetValue(AFileId, True);
     end;
   FLineCache.Add(AFileId, Result);
+  finally
+    ProfEnd(cpsLinesOf, PfMark);
+  end;
 end;
 
 function TCallResolver.FileIsStale(AFileId: Int64): Boolean;
@@ -8166,6 +8259,8 @@ var
   end;
 
 begin
+  var PfMark: Int64:= ProfBegin(cpsTypeOfSelectorChain); { 151 PF: DRAGLINT_PROFILE_CALLS }
+  try
   AText    := Default(TRcvTypeText);
   TypeText := '';
   TypeId   := 0;
@@ -8190,6 +8285,9 @@ begin
   if Ok then
     AText.Text:= if TypeText <> '' then NormalizeTypeLeaf(TypeText)
                  else if TypeId > 0 then SymbolById(TypeId).Name else '';
+  finally
+    ProfEnd(cpsTypeOfSelectorChain, PfMark);
+  end;
 end;
 
 { T-11: split a receiver at its TOP-LEVEL dots -- outside ( ) and [ ] groups
@@ -8393,7 +8491,7 @@ end;
 // cast, selector chain, unit-qualified type, local/field/Result, function result, ordinary name, ...) answers
 // and leaves; the body is the old TypeReceiver unchanged, renamed so TypeReceiver can apply the implicit
 // dereference once. One exit would thread a found flag through a dozen rungs whose order IS the contract.
-function TCallResolver.TypeReceiverCore(const ACallRef: TReference; const AReceiverExpr: string;  // dl:ok too-many-exit-points@416f, cyclomatic-complexity@e514, method-too-long@42fc, cognitive-complexity@22e3 -- the receiver-kind LADDER: one exit per rung, the rung order IS the contract (review history in the comment above)
+function TCallResolver.TypeReceiverCore(const ACallRef: TReference; const AReceiverExpr: string;  // dl:ok too-many-exit-points@ac4c, cyclomatic-complexity@a5c1, method-too-long@3516, cognitive-complexity@e04a -- the receiver-kind LADDER: one exit per rung, the rung order IS the contract (review history in the comment above)
   out AText: TRcvTypeText): Int64;
 var
   Encl    : TSymbol;
@@ -8422,6 +8520,8 @@ var
   end;
 
 begin
+  var PfMark: Int64:= ProfBegin(cpsTypeReceiverCore); { 151 PF: DRAGLINT_PROFILE_CALLS }
+  try
   Result:= 0;
   AText := Default(TRcvTypeText); { item 4: '' for bare / Self / with-typed / untyped }
   if ACallRef.EnclosingSymbolId <= 0 then
@@ -8737,6 +8837,9 @@ begin
   // index even names its type, the identifier goes to the library oracle as a
   // HEAD -- a library type, global, or inherited member.
   if AText.Text = '' then AText.Head:= AReceiverExpr;
+  finally
+    ProfEnd(cpsTypeReceiverCore, PfMark);
+  end;
 end;
 
 function TCallResolver.LookupMemberOnType(ATypeSymbolId: Int64; const AMemberName: string): TSymbol;
@@ -9716,6 +9819,8 @@ var
   Matches: TList<TSymbol>;
   Ctors  : Integer       ;
 begin
+  var PfMark: Int64:= ProfBegin(cpsInlineInitMemberType); { 151 PF: DRAGLINT_PROFILE_CALLS }
+  try
   Result:= '';
   var Owner: TSymbol:= SymbolById(ATypeId);
   if Owner.Kind = skInterface then Exit;
@@ -9741,6 +9846,9 @@ begin
     end;
   finally
     Matches.Free;
+  end;
+  finally
+    ProfEnd(cpsInlineInitMemberType, PfMark);
   end;
 end;
 
@@ -10173,6 +10281,8 @@ var
   FromFile : Int64  ;
   FromScope: Int64  ;
 begin
+  var PfMark: Int64:= ProfBegin(cpsDecideInlineInitType); { 151 PF: DRAGLINT_PROFILE_CALLS }
+  try
   Result:= '';
   Lines := LinesOf(ADecl.FileId);
   if (Lines = nil) or FileIsStale(ADecl.FileId) or (ADecl.StartLine < 1) or (ADecl.StartLine > Lines.Count) then Exit;
@@ -10238,6 +10348,9 @@ begin
        and (CollectionElementOfText(Text, FromFile, FromScope, ADecl.FileId, ADecl.ParentId) <> '') then
       Result:= Text;
   end;
+  finally
+    ProfEnd(cpsDecideInlineInitType, PfMark);
+  end;
 end;
 
 function TCallResolver.LocalInScopeAt(const ARef: TReference; const AName: string;
@@ -10247,6 +10360,8 @@ var
   S     : TSymbol         ;
   Values: TArray<TSymbol> ;
 begin
+  var PfMark: Int64:= ProfBegin(cpsLocalInScopeAt); { 151 PF: DRAGLINT_PROFILE_CALLS }
+  try
   Result   := Default(TSymbol);
   ADeclared:= False;
   Kids     := ChildrenOf(ARef.EnclosingSymbolId);
@@ -10259,6 +10374,9 @@ begin
     if LocalScopeCovers(S, ARef.FileId, ARef.StartLine, ARef.StartCol) then Exit(S);
   if not ADeclared then Result:= OuterLocalInScopeAt(ARef, AName);
   ADeclared:= ADeclared or (Result.Id > 0);
+  finally
+    ProfEnd(cpsLocalInScopeAt, PfMark);
+  end;
 end;
 
 function TCallResolver.OuterLocalInScopeAt(const ARef: TReference; const AName: string): TSymbol;
@@ -10633,6 +10751,8 @@ var
   end;
 
 begin
+  var PfMark: Int64:= ProfBegin(cpsLookupTypeName); { 151 PF: DRAGLINT_PROFILE_CALLS }
+  try
   Result := 0;
   AReason:= BareReadSite(ARef, Lines, Rcv);
   if (AReason = '') and (Rcv <> '') then AReason:= 'qualified';
@@ -10703,6 +10823,9 @@ begin
       Result:= UsesOrderPick(Ids, ARef.FileId, ARef.StartLine);
       if Result = 0 then AReason:= 'ambiguous';
     end;
+  end;
+  finally
+    ProfEnd(cpsLookupTypeName, PfMark);
   end;
 end;
 
@@ -11457,6 +11580,8 @@ end;
 
 function TCallResolver.FileUsesUnits(AFileId: Int64): TArray<string>;
 begin
+  var PfMark: Int64:= ProfBegin(cpsFileUsesUnits); { 151 PF: DRAGLINT_PROFILE_CALLS }
+  try
   if FFileUses.TryGetValue(AFileId, Result) then Exit;
   if not FDprLoaded then
   begin
@@ -11471,6 +11596,9 @@ begin
   Result:= FDprUses;
   for var U: TUnitUse in FStore.GetUnitUsesForFile(AFileId) do Result:= Result + [LowerCase(U.UnitName)];
   FFileUses.Add(AFileId, Result);
+  finally
+    ProfEnd(cpsFileUsesUnits, PfMark);
+  end;
 end;
 
 { Item 4. A wrong external name is a wrong FACT rendered in documentation, so
@@ -11509,6 +11637,8 @@ var
   end;
 
 begin
+  var PfMark: Int64:= ProfBegin(cpsBindExternally); { 151 PF: DRAGLINT_PROFILE_CALLS }
+  try
   Result:= '';
   if AReceiver = '' then
   begin
@@ -11554,16 +11684,24 @@ begin
   begin
     { 150-RS1 (5): the type text is a name looked up where it was DECLARED -- System, SysInit, the
       interface uses, then the implementation uses written before the declaration, in source order. }
+    var PfDecl: Int64:= ProfBegin(cpsDeclUses); { 151 PF: was a GetUnitUsesForFile read per ref }
     var DeclUses: TArray<string>:= [];
     if AText.DeclFile > 0 then
     begin
       var Impl: TArray<string>:= [];
       DeclUses:= ['system', 'sysinit'];
-      for var U: TUnitUse in FStore.GetUnitUsesForFile(AText.DeclFile) do
+      var FileUses: TArray<TUnitUse>;
+      if not FDeclFileUses.TryGetValue(AText.DeclFile, FileUses) then
+      begin
+        FileUses:= FStore.GetUnitUsesForFile(AText.DeclFile);
+        FDeclFileUses.Add(AText.DeclFile, FileUses);
+      end;
+      for var U: TUnitUse in FileUses do
         if U.Section <> uusImplementation then DeclUses:= DeclUses + [LowerCase(U.UnitName)]
         else if (U.OriginPath = '') and (U.StartLine < AText.DeclLine) then Impl:= Impl + [LowerCase(U.UnitName)];
       DeclUses:= DeclUses + Impl;
     end;
+    ProfEnd(cpsDeclUses, PfDecl);
     FOracle.DeclUses:= DeclUses;
     try
       Exit(FOracle.Bind(AText.Text + AText.Args, AText.Pending, ACallRef.NameText, Kind, FileUsesUnits(ACallRef.FileId), Reason));
@@ -11583,6 +11721,9 @@ begin
   Result:= FOracle.BindHead(AText.Head, ACallRef.NameText, Kind, FileUsesUnits(ACallRef.FileId), ScopeType,
     Reason, HeadText);
   if HeadText <> '' then AText.Text:= HeadText;
+  finally
+    ProfEnd(cpsBindExternally, PfMark);
+  end;
 end;
 
 function TCallResolver.LookupLibraryTypeHelper(const ACallRef: TReference; const ATypeText: string;
