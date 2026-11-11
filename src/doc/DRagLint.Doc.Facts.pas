@@ -1247,6 +1247,10 @@ var
     ROUTINE-kind children carry it. Owns its inner dictionaries. Same lifetime
     and the same never-invalidated reasoning as GOverloadMemo above. }
   GRoutineNameCounts: TObjectDictionary<string, TDictionary<string, Integer>>;
+  { 151 CF (LX-5): C14 receiver memos -- see ScopeMember and ForeignReceiverType.
+    Same lifetime and reasoning as GOverloadMemo. }
+  GScopeMemberMemo : TDictionary<string, TSymbol>;
+  GForeignKnownMemo: TDictionary<string, Boolean>;
 
 function BTick: Int64; inline;
 begin
@@ -1544,6 +1548,25 @@ end;
   upward (class -> unit), with a class's resolved ancestors checked for an
   inherited field. Default(TSymbol) when not found. AGenerics collects every
   generic parameter list met on the way, for ForeignReceiverType. }
+{ 151 CF (LX-5 hover cost): ARcv declared directly in scope ACur, else -- for a
+  class or record -- in the first resolved ancestor that declares it; Default(TSymbol)
+  when neither does. Memoised per (store, scope id, exact name) in GScopeMemberMemo:
+  the class and unit hops of ReceiverDeclaration repeat for every caller routine of
+  the same class (measured on the drag-lint DB, 100 hovers: ForeignReceiverType
+  2.44 s over 1,340 calls). Same queries in the same order on a miss, so the same
+  answer. }
+function ScopeMember(const AStore: ISymbolStore; const ACur: TSymbol; const ARcv: string): TSymbol;
+begin
+  var Key: string:= StoreKey(AStore, ACur.Id) + '|' + ARcv;
+  if GScopeMemberMemo.TryGetValue(Key, Result) then Exit;
+  Result:= AStore.FindChildSymbolByName(ACur.Id, ARcv);
+  if (Result.Id = 0) and (ACur.Kind in [skClass, skRecord]) then
+    for var Anc in AStore.GetTransitiveAncestors(ACur.Id) do
+      if (Result.Id = 0) and Anc.Resolved and (Anc.SymbolId > 0) then
+        Result:= AStore.FindChildSymbolByName(Anc.SymbolId, ARcv);
+  GScopeMemberMemo.Add(Key, Result);
+end;
+
 function ReceiverDeclaration(const AStore: ISymbolStore; AEnclosingId: Int64;
   const ARcv: string; out AGenerics: string): TSymbol;
 const
@@ -1559,11 +1582,7 @@ begin
   while (Cur.Id > 0) and (Result.Id = 0) and (Hops < MAX_SCOPE_HOPS) do
   begin
     AGenerics:= AGenerics + ',' + Cur.GenericParams;
-    Result:= AStore.FindChildSymbolByName(Cur.Id, ARcv);
-    if (Result.Id = 0) and (Cur.Kind in [skClass, skRecord]) then
-      for var Anc in AStore.GetTransitiveAncestors(Cur.Id) do
-        if (Result.Id = 0) and Anc.Resolved and (Anc.SymbolId > 0) then
-          Result:= AStore.FindChildSymbolByName(Anc.SymbolId, ARcv);
+    Result:= ScopeMember(AStore, Cur, ARcv);  { 151 CF: memoised per (store, scope, name) }
     if Cur.ParentId > 0 then Cur:= AStore.GetSymbolById(Cur.ParentId) else Cur:= Default(TSymbol);
     Inc(Hops);
   end;
@@ -1621,21 +1640,27 @@ begin
     TypeName:= DeclaredTypeName(Decl.Signature);
   if (TypeName = '') or SameText(TypeName, AOwnerLeaf) or IsGenericParam(TypeName, Generics)
      or SameText(TypeName, ROOT_CLASS) then Exit;
-  TypeSym:= AStore.ResolveTypeNameToClass(TypeName, Decl.FileId);
-  if TypeSym.Id > 0 then
-    { in this index: unrelated unless an interface (dispatch undecidable here)
-      or a descendant of the owner }
-    Known:= (TypeSym.Kind <> skInterface)
-            and not AStore.IsDescendantOf(TypeSym.Name, AOwnerLeaf, Decl.FileId)
-  else
-    { not a class here: known-foreign only if this index declares the name in
-      no shape at all (an alias or enum would be found), it does not LOOK like
-      an interface (a library interface can be implemented by the owner or a
-      descendant, so a call through it may well dispatch here), and the owner
+  { 151 CF (LX-5): the verdict below reads only (store, TypeName, Decl.FileId,
+    AOwnerLeaf), and a type name repeats across receivers; memoised in
+    GForeignKnownMemo. }
+  var KnownKey: string:= StoreKey(AStore, Decl.FileId) + '|' + TypeName + '|' + AOwnerLeaf;
+  if not GForeignKnownMemo.TryGetValue(KnownKey, Known) then
+  begin
+    TypeSym:= AStore.ResolveTypeNameToClass(TypeName, Decl.FileId);
+    { In this index: unrelated unless an interface (dispatch undecidable here) or a
+      descendant of the owner. Not a class here: known-foreign only if this index
+      declares the name in no shape at all (an alias or enum would be found), it does
+      not LOOK like an interface (a library interface can be implemented by the owner
+      or a descendant, so a call through it may well dispatch here), and the owner
       does not name it among its own ancestors. }
-    Known:= (AStore.FindSymbolByExactNameAnywhere(TypeName).Id = 0)
-            and not LooksLikeInterfaceName(TypeName)
-            and not OwnerNamesAncestor(AStore, AOwnerLeaf, TypeName);
+    Known:= if TypeSym.Id > 0
+              then (TypeSym.Kind <> skInterface)
+                   and not AStore.IsDescendantOf(TypeSym.Name, AOwnerLeaf, Decl.FileId)
+              else (AStore.FindSymbolByExactNameAnywhere(TypeName).Id = 0)
+                   and not LooksLikeInterfaceName(TypeName)
+                   and not OwnerNamesAncestor(AStore, AOwnerLeaf, TypeName);
+    GForeignKnownMemo.Add(KnownKey, Known);
+  end;
   if Known then Result:= TypeName;
 end;
 
@@ -5500,10 +5525,14 @@ initialization
   GSeeParentSeen:= TDictionary<string, Boolean>.Create;
   GSiblingMemo  := TDictionary<string, TArray<TSeeSibling>>.Create;
   GRoutineNameCounts:= TObjectDictionary<string, TDictionary<string, Integer>>.Create([doOwnsValues]);
+  GScopeMemberMemo  := TDictionary<string, TSymbol>.Create;
+  GForeignKnownMemo := TDictionary<string, Boolean>.Create;
 
 finalization
   GSiblingMemo  .Free;
   GRoutineNameCounts.Free;
+  GScopeMemberMemo  .Free;
+  GForeignKnownMemo .Free;
   GSeeParentSeen.Free;
   GSeeTargetSeen.Free;
   GOverloadMemo.Free;
