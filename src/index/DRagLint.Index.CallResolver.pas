@@ -568,6 +568,11 @@ type
     FSiteLines      : TStringList;
     FSiteArgCount   : Integer;
     FSiteShapes     : TArray<TArgShape>;
+    // 151 RB-B: per argument of the same site, the declared type key (lower
+    // case, no blanks) of a plain identifier whose type is NOT a built-in
+    // family (a class, a class reference, a record, an enum ...); '' for any
+    // other argument. Filled with FSiteShapes, valid while FSiteShapesState = 1.
+    FSiteArgTypes   : TArray<string>;
     FSiteShapesState: Integer;
     // Per-run counters of the bare member-read pass.
     FMemberReadStats: TMemberReadStats;
@@ -1667,6 +1672,22 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure NarrowByArgShapes(AFit: TList<TSymbol>; AArgCount: Integer);
+    /// <summary>151 RB-B: narrows a same-arity tie by the EXACT declared type of
+    /// plain-identifier arguments whose type is not a built-in family -- the
+    /// System.TypInfo FindPropInfo shape, `(AClass: TClass; ..)` vs
+    /// `(Instance: TObject; ..)` called with a TClass or a TObject parameter.</summary>
+    /// <param name="AFit">The candidates left after arity and shape narrowing;
+    /// replaced by the one survivor when exactly one candidate matches.</param>
+    /// <param name="AArgCount">The count arity was decided on.</param>
+    /// <remarks>Only the positions where the candidates' parameter TYPES differ
+    /// are compared; at each of them the argument's declared type must be known
+    /// (FSiteArgTypes) or nothing is decided. A candidate survives when its
+    /// parameter type equals the argument's type at every such position -- an
+    /// exact match is what the compiler picks over a conversion. Narrowing only:
+    /// zero or several survivors leave AFit unchanged, so the site stays
+    /// 'ambiguous'. A signature whose parameter groups do not align with its
+    /// arity decides nothing. Call after SiteArgShapes has read the site.</remarks>
+    procedure NarrowByExactArgTypes(AFit: TList<TSymbol>; AArgCount: Integer);
     /// <summary>rb5-ovl: the argument shapes of the site ResolveOne is on, read
     /// once per site with LexCallArguments.</summary>
     /// <param name="AArgCount">The count arity was decided on.</param>
@@ -1692,6 +1713,9 @@ type
     /// <summary>rb5-ovl: the shape of a bare-identifier argument, from its
     /// declared type as TypeReceiver reads it at the current site.</summary>
     /// <param name="AName">The identifier.</param>
+    /// <param name="ATypeKey">Out (151 RB-B): the declared type text, lower
+    /// case without blanks, when it is known and NOT a built-in family (the
+    /// result is then asUnknown); '' otherwise.</param>
     /// <returns>An *Var shape for a built-in scalar or string type; asUnknown
     /// otherwise.</returns>
     /// <remarks>
@@ -1710,7 +1734,7 @@ type
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AncestorsOf"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    function VariableArgShape(const AName: string): TArgShape;
+    function VariableArgShape(const AName: string; out ATypeKey: string): TArgShape;
     /// <summary>Given a resolved receiver TYPE symbol id, look up a method named
     /// AMethodName on the type's own children + its transitive ancestors. Sets
     /// AConfidence ('certain' one surviving candidate | 'ambiguous' >1) and
@@ -5150,24 +5174,28 @@ begin
   end;
 end;
 
-function TCallResolver.VariableArgShape(const AName: string): TArgShape;
+function TCallResolver.VariableArgShape(const AName: string; out ATypeKey: string): TArgShape;
 var
   Txt  : TRcvTypeText;
   Saved: TWithScopeStats;
+  Key  : string;
 begin
-  Result:= asUnknown;
+  Result  := asUnknown;
+  ATypeKey:= '';
   if (AName = '') or SameText(AName, 'Self') or SameText(AName, 'Result') then Exit;
   Saved:= FWith.Stats;
   TypeReceiver(FSiteRef, AName, Txt);
   FWith.Stats:= Saved;
   if (Txt.Pending <> '') or (Txt.Text = '') then Exit;
-  case ParamFamily(LowerCase(StringReplace(Txt.Text, ' ', '', [rfReplaceAll]))) of
+  Key:= LowerCase(StringReplace(Txt.Text, ' ', '', [rfReplaceAll]));
+  case ParamFamily(Key) of
     pfInt   : Result:= asIntVar;
     pfFloat : Result:= asFloatVar;
     pfString: Result:= asStrVar;
     pfChar  : Result:= asCharVar;
     pfBool  : Result:= asBoolVar;
   end;
+  if Result = asUnknown then ATypeKey:= Key;
 end;
 
 function TCallResolver.SiteArgShapes(AArgCount: Integer; out AShapes: TArray<TArgShape>): Boolean;
@@ -5193,11 +5221,13 @@ begin
     for var i:= 0 to N - 1 do Slice[i]:= FSiteLines[Line - 1 + i];
     if not LexCallArguments(Slice, 1, Col + Length(Name), Args) or (Length(Args) <> AArgCount) then Exit(False);
     SetLength(FSiteShapes, Length(Args));
+    SetLength(FSiteArgTypes, Length(Args));
     for var i:= 0 to High(Args) do
     begin
-      FSiteShapes[i]:= ArgShapeOfText(Args[i]);
+      FSiteShapes[i]  := ArgShapeOfText(Args[i]);
+      FSiteArgTypes[i]:= '';
       if (FSiteShapes[i] = asUnknown) and IsPlainIdent(Args[i]) then
-        FSiteShapes[i]:= VariableArgShape(Args[i]);
+        FSiteShapes[i]:= VariableArgShape(Args[i], FSiteArgTypes[i]);
     end;
     FSiteShapesState:= 1;
   end;
@@ -5241,6 +5271,59 @@ begin
     begin
       AFit.Clear;
       AFit.AddRange(Keep);
+    end;
+  finally
+    Keep.Free;
+  end;
+  NarrowByExactArgTypes(AFit, AArgCount);
+end;
+
+// The type half of one ParamTypeKey group (`modifier:type` -> `type`).
+function ParamTypeOfKey(const AParamKey: string): string;
+begin
+  Result:= Copy(AParamKey, Pos(':', AParamKey) + 1, MaxInt);
+end;
+
+procedure TCallResolver.NarrowByExactArgTypes(AFit: TList<TSymbol>; AArgCount: Integer);
+var
+  Params : TArray<TArray<string>>;
+  Keep   : TList<TSymbol>;
+  Lo, Hi : Integer;
+  Decided: Boolean;
+  Exact  : Boolean;
+  Differs: Boolean;
+  TypeKey: string;
+begin
+  if (AFit.Count < 2) or (FSiteShapesState <> 1) or (Length(FSiteArgTypes) <> AArgCount) then Exit;
+  SetLength(Params, AFit.Count);
+  for var C:= 0 to AFit.Count - 1 do
+  begin
+    Params[C]:= ParamTypeKey(AFit[C].Signature).Split([';'], TStringSplitOptions.ExcludeEmpty);
+    if not SignatureArityRange(AFit[C].Signature, Lo, Hi) or (Length(Params[C]) <> Hi) or (AArgCount > Hi) then Exit;
+  end;
+  Decided:= False;
+  Keep   := TList<TSymbol>.Create;
+  try
+    for var C:= 0 to AFit.Count - 1 do
+    begin
+      Exact:= True;
+      for var I:= 0 to AArgCount - 1 do
+      begin
+        TypeKey:= ParamTypeOfKey(Params[C][I]);
+        Differs:= False;
+        for var D:= 0 to AFit.Count - 1 do
+          if ParamTypeOfKey(Params[D][I]) <> TypeKey then Differs:= True;
+        if not Differs then Continue;
+        if FSiteArgTypes[I] = '' then Exit; { the candidates differ where the argument's type is unknown }
+        Decided:= True;
+        if TypeKey <> FSiteArgTypes[I] then Exact:= False;
+      end;
+      if Exact then Keep.Add(AFit[C]);
+    end;
+    if Decided and (Keep.Count = 1) then
+    begin
+      AFit.Clear;
+      AFit.Add(Keep[0]);
     end;
   finally
     Keep.Free;
