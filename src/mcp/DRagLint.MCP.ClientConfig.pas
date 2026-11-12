@@ -175,7 +175,7 @@ uses
   Winapi.Windows,
   System.SysUtils,
   System.IOUtils,
-  System.Generics.Collections,  // dl:ok unused-unit-in-uses@0dbd -- REVIEWED 2026-10-14: no symbol is named from it, but TJSONObject.Get / TJSONArray.Items are inline and expand through it; without it dcc emits H2443 at every call
+  System.Generics.Collections,  // no symbol is named from it, but TJSONObject.Get / TJSONArray.Items are inline and expand through it; without it dcc emits H2443 at every call
   System.JSON,
   DRagLint.Charts.Process;
 

@@ -92,7 +92,7 @@ type
 /// (with-body, other-use, no-member-use); each m has a first declaring class in the chain (member-not-in-chain), is
 /// not overloaded (overloaded-member), and an index binding agrees with it (binding-mismatch); the narrow type is not generic (generic-ancestor) and is in scope
 /// or its unit can be added without a cycle (uses-cycle).</remarks>
-function PlanNarrowParams(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;  // dl:ok unused-public-symbol@a394 -- public API for the next gated rewrites (items 3 and 4) and the owed report rule
+function PlanNarrowParams(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;
   const pOpts: TNarrowParamOptions): TNarrowPlan;
 
 /// <summary>Runs the verb: prints the plan and, with --apply, writes through ApplyGated.</summary>
@@ -491,7 +491,7 @@ end;
 
 // Classifies every use of the parameter in the body. True and the member names when each is a member read or call, or a
 // nil test.
-function TNarrowPlanner.ScanBody(const pR: TRoutineRow; const pParam: TParamRow; pSource: TMaskedSource; pMembers: TList<string>;  // dl:ok too-many-exit-points@9b65 -- one guard per named refusal, in the documented order: the exits are the contract
+function TNarrowPlanner.ScanBody(const pR: TRoutineRow; const pParam: TParamRow; pSource: TMaskedSource; pMembers: TList<string>;  // dl:ok too-many-exit-points@e7d7 -- one guard per named refusal, in the documented order: the exits are the contract
   out pVerdict: TVerdict): Boolean;
 const
   CNilRight = '^\s*(=|<>)\s*nil\b';
@@ -654,7 +654,7 @@ begin
   FRefused.Add(S);
 end;
 
-procedure TNarrowPlanner.Decide(const pR: TRoutineRow; const pParam: TParamRow);  // dl:ok cyclomatic-complexity@595f, too-many-exit-points@4b02 -- one branch per named refusal, documented on the public function
+procedure TNarrowPlanner.Decide(const pR: TRoutineRow; const pParam: TParamRow);  // dl:ok cyclomatic-complexity@0bf7, too-many-exit-points@0beb -- one branch per named refusal, documented on the public function
 var
   V: TVerdict;
 begin
