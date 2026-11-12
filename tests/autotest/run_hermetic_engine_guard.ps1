@@ -7,7 +7,7 @@
 
   RULE. Every tests\**\run_*.ps1 that (a) takes an -Exe parameter, (b) says "no|without|absent
   ... drag-lint.json|manifest" in its text and (c) does not call Get-HermeticEngine is FLAGGED.
-  A flagged guard fails the run unless it is in $Reported below: guards the 152 HG1 lane reviewed (all converted by HG3; the list is empty) that
+  A flagged guard fails the run unless it is in $Reported below: guards the 152 HG1 lane reviewed (HG3 converted 27; the 2 layout-v2 guards are reviewed in) that
   build their OWN manifest-less engine copy or otherwise need no conversion, closed by evidence (the
   151 and 152 INT batteries run every guard with a drag-lint.json beside the exe). The list is a
   ratchet: a NEW flagged guard fails until it calls Get-HermeticEngine or is reviewed in.
@@ -25,6 +25,11 @@ function Check($n, $ok, $d = '') {
 $Reported = @(
   # 152 HG3: empty -- all 29 guards HG1 pinned here now call Get-HermeticEngine. A guard that truly cannot
   # convert is listed here with a one-line reason: 'run_x.ps1'  # reason
+  # 152 INT: the two layout-v2 guards copy exe + dlls + rules into their own WorkDir engine and write their
+  # own manifests (already hermetic); converting them moved their "real drag-lint.json beside the exe
+  # untouched" watch onto the hermetic copy, so HG3's conversion of these two was reverted.
+  'run_installed_layout_v2_guard.ps1'         # own manifest-less engine copy; watches the real exe dir
+  'run_installed_layout_v2_phase2_guard.ps1'  # own manifest-less engine copies; watches the real exe dir
 )
 
 $phrase = '(?i)\b(no|without|absent)\b[^\r\n]{0,30}(drag-lint\.json|manifest)'
