@@ -361,6 +361,31 @@ begin
   if ALine <= Length(Lines) then Result:= Lines[ALine - 1];
 end;
 
+// Length of the leading `[...]` attribute group of S (S[1] = '['), 0 when it does
+// not close on this line. Skips Pascal string literals ('' escapes) and nested [].
+// Pinned by tests\autotest\run_doc_drift_attr_and_orphan_152b.ps1.
+function SkipAttributeGroup(const S: string): Integer;
+var
+  I, Depth: Integer;
+  InStr: Boolean;
+begin
+  Result:= 0;
+  Depth:= 0;
+  InStr:= False;
+  for I:= 1 to Length(S) do
+  begin
+    if S[I] = '''' then InStr:= not InStr
+    else if not InStr then
+    begin
+      if S[I] = '[' then Inc(Depth)
+      else if S[I] = ']' then
+      begin
+        Dec(Depth);
+        if Depth = 0 then Exit(I);
+      end;
+    end;
+  end;
+end;
 // ReadDeclLineRaw with its comments blanked, trimmed. Comments go for the reason
 // Facts.ReadDeclLine strips them (see its header): this line is EffectiveSignature's
 // fallback for a parameterless routine, and ParseReturnType reads "text after the last
@@ -369,9 +394,29 @@ end;
 // holds a colon) read as a function returning the marker text and drew a false
 // "no <returns> tag" finding. Same scrubber as Facts.
 // Pinned by tests\autotest\run_doc_drift_procedure_marker.ps1.
+// 152b: also skips leading attribute groups / attribute-only lines (run_doc_drift_attr_and_orphan_152b.ps1).
 function ReadDeclLine(const AFilePath: string; ALine: Integer): string;
+const
+  MAX_ATTR_LINES = 8; // attribute-only lines skipped above the heading
+var
+  I, L: Integer;
+  S: string;
 begin
-  Result:= Trim(StripPasCommentsKeepLayout(ReadDeclLineRaw(AFilePath, ALine)));
+  Result:= '';
+  for I:= 0 to MAX_ATTR_LINES - 1 do
+  begin
+    S:= Trim(StripPasCommentsKeepLayout(ReadDeclLineRaw(AFilePath, ALine + I)));
+    // An attribute group `[Test] [Ignore('text')]` sits on the symbol's first line
+    // (the index start line includes it): its argument is not a parameter. Drop
+    // every leading `[...]` group, quote- and nesting-aware.
+    while (S <> '') and (S[1] = '[') do
+    begin
+      L:= SkipAttributeGroup(S);
+      if L = 0 then Exit; // unbalanced (multi-line attribute): nothing reliable to read
+      S:= Trim(Copy(S, L + 1, MaxInt));
+    end;
+    if S <> '' then Exit(S);
+  end;
 end;
 
 // v(1.20.6 T5): the lines of AFilePath, for the indent decision. Drift asks once
