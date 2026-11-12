@@ -13,6 +13,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 * [arch-diagram](features/arch-diagram.md) -- Draws one self-contained HTML layer diagram of a project's units by folder, with the layers measured from the uses clauses.
 * [Bookmarks (IDE)](features/bookmarks-ide.md) -- Lists, finds, strips and restores the // dl:bk comment anchors of the current unit from the IDE.
+* [Cycle edge written in an include (lint rule)](features/cycle-edge-in-include.md) -- Project lint rule: a uses entry or declaration a uses cycle runs through is written in an include, which cycles --fix never edits; write it in the .pas.
 * [Exception facts in the editor](features/editor-exception-facts.md) -- Hover, code lens and an MCP tool show which exception types a routine raises and handles.
 * [Extract an interface from the members used (scratch + compile gate)](features/extract-interface.md) -- Declares an interface from the members of a class the project uses and adds it to the class; --apply through a scratch build and the compile gate.
 * [manifest where / migrate (installed layout v2)](features/installed-layout-v2.md) -- Shows which drag-lint.json this engine reads and why; moves the exe-side one to %APPDATA% once (renamed, never deleted). Installed layout v2, off by default.

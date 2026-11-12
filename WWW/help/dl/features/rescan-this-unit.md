@@ -4,10 +4,10 @@ title: Rescan this unit
 summary: Re-indexes the active project and re-lints the current unit on demand, so the Diagnostics panel drops findings already fixed
 product: DL
 group: linting
-order: 30034
+order: 30035
 since: 1.28.3-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.50.0-alpha
 ---
 
 # Rescan this unit

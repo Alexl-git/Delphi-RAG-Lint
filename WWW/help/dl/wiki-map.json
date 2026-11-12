@@ -128,6 +128,7 @@
   "convrules-editor-unit-rules": "convrules-unit-rules",
   "convrules-editor-work-list": "convrules-work-list",
   "create-enum-helper": "create-enum-helper",
+  "cycle-edge-in-include": "cycle-edge-in-include",
   "datamodule-form-global": "datamodule-form-global",
   "deps-report": "deps-report",
   "diff": "diff",

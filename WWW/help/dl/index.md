@@ -83,6 +83,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Copy All Diagnostics](features/copy-all-diagnostics.md) | Puts every lint finding for the current unit onto the clipboard, starting from the Structure form | 0.1.0-alpha |
 | [Copy Diagnostics (Current File)](features/copy-diagnostics-current-file.md) | Puts the current file's lint findings onto the clipboard | 0.1.0-alpha |
 | [Copy Selected Diagnostics](features/copy-selected-diagnostics.md) | Copies only the Diagnostics rows selected in the Structure form (Ctrl/Shift-click, Ctrl+C) to the clipboard | 1.28.3-alpha |
+| [Cycle edge written in an include (lint rule)](features/cycle-edge-in-include.md) | Project lint rule: a uses entry or declaration a uses cycle runs through is written in an include, which cycles --fix never edits; write it in the .pas | 1.50.0-alpha |
 | [Data module reaching a global form (lint rule)](features/datamodule-form-global.md) | Project lint rule, OFF by default: a data module unit reads or writes another unit's global form variable | 1.42.0-alpha |
 | [drag-lint: Project Rules](features/drag-lint-project-rules.md) | Right-click a project in the Project Manager to make it the active project and open its Lint Options tab in the drag-lint dock | 0.95.0-alpha |
 | [Effect-free call in a loop that could move out (lint rule)](features/effect-free-in-loop-invariant.md) | Project-wide lint rule, ON by default since 1.43: a proven effect-free call inside a loop whose arguments, and the state it reads, cannot change in that loop | 1.42.0-alpha |

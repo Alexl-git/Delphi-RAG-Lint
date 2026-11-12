@@ -4,10 +4,10 @@ title: Lint rules on the static type of a reference
 summary: "Lint rules on ref_types: is-always-true, is-never-true, argument-narrows, UI access from a thread, quit from a thread; sharper redundant-cast and unsafe casts"
 product: DL
 group: linting
-order: 30033
+order: 30034
 since: 1.44.1-alpha
 status: shipped
-updated: 1.48.0-alpha
+updated: 1.50.0-alpha
 ---
 
 # Lint rules on the static type of a reference

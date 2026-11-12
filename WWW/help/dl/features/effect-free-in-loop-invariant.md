@@ -4,10 +4,10 @@ title: Effect-free call in a loop that could move out (lint rule)
 summary: "Project-wide lint rule, ON by default since 1.43: a proven effect-free call inside a loop whose arguments, and the state it reads, cannot change in that loop"
 product: DL
 group: linting
-order: 30009
+order: 30010
 since: 1.42.0-alpha
 status: shipped
-updated: 1.43.0-alpha
+updated: 1.50.0-alpha
 ---
 
 # Effect-free call in a loop that could move out (lint rule)
