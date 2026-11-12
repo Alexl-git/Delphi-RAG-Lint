@@ -16,7 +16,10 @@ unit DRagLint.Lint.ReadNeverAssigned;
       hard cast `T(P).X := v`;
     * the symbol passed as an argument where the callee may take it by var /
       out: an RTL intrinsic (SetLength, Inc, Val, ...), a routine of the project
-      or the platform library with a var / out parameter at that position, or a
+      or the platform library with a var / out parameter at that position, a
+      field / variable / parameter of a procedural type (`reference to
+      function(out ..)`, `procedure(var ..) of object`, inline or named) with a
+      var / out parameter at that position (152b DC), or a
       callee the indexes do not know at all. A call the resolver bound to a
       routine answers from THAT routine's overload set only (owner ruling D6);
       the bare-name merge across project + library is the fallback for an
@@ -327,6 +330,38 @@ begin
   Result:= AKind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor];
 end;
 
+{ 152b DC: True when AKind is a value holder (field, variable, parameter) that
+  can be CALLED when its type is procedural. A type symbol is deliberately not
+  one: `TFolderLoader(X)` is a cast, never a call. }
+function IsCallableHolderKind(AKind: TSymbolKind): Boolean;
+begin
+  Result:= AKind in [skField, skVarDecl, skLocalVar, skParam];
+end;
+
+{ 152b DC: the parameter list of a procedural type text, starting at its '(',
+  or '' when ASig is not a procedural type (`reference to function(..)`,
+  `procedure(..) of object`, `function(..): T`). A parameterless one answers
+  '()' so the caller still knows it is a routine. }
+function ProcTypeParams(const ASig: string): string;
+var
+  S: string;
+
+  { Consumes the keyword AWord (a whole word) from the front of S. }
+  function TakeWord(const AWord: string): Boolean;
+  begin
+    Result:= StartsText(AWord, S)
+      and ((Length(S) = Length(AWord)) or not CharInSet(S[Length(AWord) + 1], IDENT_PART));
+    if Result then S:= TrimLeft(Copy(S, Length(AWord) + 1, MaxInt));
+  end;
+
+begin
+  Result:= '';
+  S:= Trim(ASig);
+  if TakeWord('reference') and not TakeWord('to') then Exit;
+  if not (TakeWord('procedure') or TakeWord('function')) then Exit;
+  Result:= if (S <> '') and (S[1] = '(') then S else '()';
+end;
+
 { ---- TCollector ---------------------------------------------------------- }
 
 constructor TCollector.Create(const AStore, ALibStore: ISymbolStore);
@@ -380,18 +415,55 @@ var
   Modes: TArray<Boolean>;
   Known: Integer;
 
+  procedure Merge(const AParams: string);
+  begin
+    Known:= CALLEE_ROUTINE;
+    var M: TArray<Boolean>:= ParamModes(AParams);
+    if Length(M) > Length(Modes) then SetLength(Modes, Length(M));
+    for var I:= 0 to High(M) do
+      if M[I] then Modes[I]:= True;
+  end;
+
+  { 152b DC: the parameter list of a holder's procedural type -- inline in its
+    signature, or of the named type it spells (project, then library). }
+  function HolderParams(const ASig: string): string;
+  begin
+    Result:= ProcTypeParams(ASig);
+    if Result <> '' then Exit;
+    var TypeName: string:= Trim(ASig);
+    var Dot: Integer:= LastDelimiter('.', TypeName);
+    if Dot > 0 then TypeName:= Copy(TypeName, Dot + 1, MaxInt);
+    if (TypeName = '') or not CharInSet(TypeName[1], IDENT_START) then Exit;
+    for var T in FStore.FindSymbolsByExactName(TypeName) do
+      if not (IsRoutineKind(T.Kind) or IsCallableHolderKind(T.Kind)) then
+      begin
+        Result:= ProcTypeParams(T.Signature);
+        if Result <> '' then Exit;
+      end;
+    if FLib <> nil then
+      for var T in FLib.FindSymbolsByExactName(TypeName) do
+        if not (IsRoutineKind(T.Kind) or IsCallableHolderKind(T.Kind)) then
+        begin
+          Result:= ProcTypeParams(T.Signature);
+          if Result <> '' then Exit;
+        end;
+  end;
+
   procedure Take(const ASyms: TArray<TSymbol>);
   begin
     for var Sy in ASyms do
       if IsRoutineKind(Sy.Kind) then
+        Merge(Sy.Signature)
+      else
       begin
-        Known:= CALLEE_ROUTINE;
-        var M: TArray<Boolean>:= ParamModes(Sy.Signature);
-        if Length(M) > Length(Modes) then SetLength(Modes, Length(M));
-        for var I:= 0 to High(M) do
-          if M[I] then Modes[I]:= True;
-      end
-      else if Known = CALLEE_UNKNOWN then Known:= CALLEE_OTHER;
+        { 152b DC: a field / variable / parameter of a procedural type is a
+          callee too -- `ALoadFolders(S.Folders, S.FolderRows, Err)` with
+          ALoadFolders: reference to function(out ..; out ..; out ..).
+          (docs\INBOX-default-encoding-io-name-match-and-out-arg-writes.md #2.) }
+        var Params: string:= if IsCallableHolderKind(Sy.Kind) then HolderParams(Sy.Signature) else '';
+        if Params <> '' then Merge(Params)
+        else if Known = CALLEE_UNKNOWN then Known:= CALLEE_OTHER;
+      end;
   end;
 
 begin

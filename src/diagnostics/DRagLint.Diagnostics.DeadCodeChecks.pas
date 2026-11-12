@@ -1468,15 +1468,29 @@ var
     .Create. Each of these RTL methods also has a sibling overload that takes
     a trailing TEncoding argument -- that overload is the safe one and is
     excluded by the "no encoding arg" scan in EmitDefaultEncodingIo, not by
-    this name match (the callee text is identical for both overloads). }
+    this name match (the callee text is identical for both overloads).
+    152b DC: matched by whole dotted name SEGMENTS, never by a substring --
+    `SetCurrentStreamWriter(nil)` ("...tStreamWriter") is a plain procedure
+    and fired (docs\INBOX-default-encoding-io-name-match-and-out-arg-writes.md).
+    The LAST segment must be one of the method names, or a TStreamReader /
+    TStreamWriter segment must be followed by `Create`. Fixture:
+    tests\fixtures\dc-fp-152b\dei, guard run_dc_fp_152b.ps1. }
   function IsDefaultEncodingApi(const AText: string): Boolean;
-  var L: string;
+  var
+    Segs: TArray<string>;
+    Last: string;
+    I   : Integer;
   begin
-    L:= LowerCase(AText);
-    Result:= (Pos('savetofile', L) > 0) or (Pos('loadfromfile', L) > 0)
-          or (Pos('readalltext', L) > 0) or (Pos('writealltext', L) > 0)
-          or (Pos('readalllines', L) > 0) or (Pos('appendalltext', L) > 0)
-          or (Pos('tstreamreader', L) > 0) or (Pos('tstreamwriter', L) > 0);
+    Segs:= LowerCase(AText).Replace(' ', '').Replace(#9, '').Replace(#13, '').Replace(#10, '').Split(['.']);
+    Result:= False;
+    if Length(Segs) = 0 then Exit;
+    Last:= Segs[High(Segs)];
+    if MatchStr(Last, ['savetofile', 'loadfromfile', 'readalltext', 'writealltext',
+                       'readalllines', 'appendalltext']) then
+      Exit(True);
+    if Last <> 'create' then Exit;
+    for I:= 0 to High(Segs) - 1 do
+      if MatchStr(Segs[I], ['tstreamreader', 'tstreamwriter']) then Exit(True);
   end;
 
   { 2026-09-28: True when a default-encoding-io callee's RECEIVER is a name
@@ -2894,6 +2908,57 @@ var
       CreditPropertyFieldWrites(ANode.NamedChild(I), AClassMap, AWriteMaps, AFieldMaps, Idx);
   end;
 
+  { 152b DC: `TGreet(LOld).FReplaced := True` writes TGreet.FReplaced -- a hard
+    cast names the receiver's class exactly, and a private field is reachable
+    from any routine of this unit, so the write may sit in ANOTHER class's
+    method (where ProcessDefProcs never looks). Walks the whole tree; credits
+    only the direct `<Class>(<one arg>).<field> :=` shape whose <Class> is a
+    collected class owning <field>, so a cast to another class credits that
+    class, never a same-named field elsewhere.
+    (docs\INBOX-referenced-never-set-cast-write.md; guard run_dc_fp_152b.ps1.) }
+  procedure CreditCastFieldWrites(const ANode: TTSNode;
+    AClassMap: TDictionary<string, Integer>;
+    AWriteMaps: TArray<TDictionary<string, Integer>>;
+    AFieldMaps: TArray<TDictionary<string, Boolean>>);
+  var
+    I     : Integer;
+    Idx   : Integer;
+    Cnt   : Integer;
+    LhsN  : TTSNode;
+    CastN : TTSNode;
+    EntN  : TTSNode;
+    ArgsN : TTSNode;
+    Member: string ;
+  begin
+    if ANode.IsNull then Exit;
+    if ANode.NodeType = 'assignment' then
+    begin
+      LhsN:= ANode.ChildByField('lhs');
+      if (not LhsN.IsNull) and (LhsN.NodeType = 'exprDot') then
+      begin
+        CastN:= LhsN.ChildByField('lhs');
+        if (not CastN.IsNull) and (CastN.NodeType = 'exprCall') then
+        begin
+          EntN := CastN.ChildByField('entity');
+          ArgsN:= CastN.ChildByField('args');
+          Member:= LhsMemberIdent(LhsN);
+          var IsCastShape: Boolean:= (not EntN.IsNull) and (EntN.NodeType = 'identifier')
+            and (not ArgsN.IsNull) and (ArgsN.NamedChildCount = 1);
+          if IsCastShape and (Member <> '')
+             and AClassMap.TryGetValue(LowerCase(Trim(NodeStr(EntN))), Idx)
+             and AFieldMaps[Idx].ContainsKey(Member) then
+          begin
+            Cnt:= 0;
+            AWriteMaps[Idx].TryGetValue(Member, Cnt);
+            AWriteMaps[Idx].AddOrSetValue(Member, Cnt + 1);
+          end;
+        end;
+      end;
+    end;
+    for I:= 0 to ANode.NamedChildCount - 1 do
+      CreditCastFieldWrites(ANode.NamedChild(I), AClassMap, AWriteMaps, AFieldMaps);
+  end;
+
   { Main referenced-never-set check. }
   procedure CheckReferencedNeverSet;
   var
@@ -2934,6 +2999,7 @@ var
         ProcessDefProcs(PF.Tree.RootNode, ClassMap, Classes,
           ReadMaps, WriteMaps, FieldMaps);
         CreditPropertyFieldWrites(PF.Tree.RootNode, ClassMap, WriteMaps, FieldMaps, -1);
+        CreditCastFieldWrites(PF.Tree.RootNode, ClassMap, WriteMaps, FieldMaps);
 
         { Emit findings for fields with >= 1 read and 0 writes. }
         for I:= 0 to Classes.Count - 1 do
