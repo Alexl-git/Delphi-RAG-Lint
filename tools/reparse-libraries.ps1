@@ -34,6 +34,11 @@
     pwsh -File tools\reparse-libraries.ps1 -OutDir C:\TEMP\claude\lanes\143\reparse
     pwsh -File tools\reparse-libraries.ps1 -OutDir <dir> -Status
     pwsh -File tools\reparse-libraries.ps1 -DryRun
+
+  -Platforms takes a comma list (win32,win64,d5). Both forms work: from a pwsh prompt
+    & tools\reparse-libraries.ps1 -Platforms win32,win64 -OutDir <dir>
+  and through -File (one comma string, split inside the script):
+    pwsh -File tools\reparse-libraries.ps1 -Platforms win32,win64 -OutDir <dir>
 #>
 [CmdletBinding()]
 param(
@@ -55,6 +60,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# Through `pwsh -File` a [string[]] arrives as ONE string (`-Platforms win32,win64` = 'win32,win64'): split on commas here.
+$Platforms = @($Platforms | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim().ToLowerInvariant() } | Where-Object { $_ -ne '' })
 if ($Engine -eq '') {
   $Engine = Join-Path $PSScriptRoot '..\third_party\dll-win64\drag-lint.exe'
   # A re-parse with a grammar DLL that is not HEAD's is hours of silently wrong facts, and

@@ -120,6 +120,11 @@ Check 'A7 mid-run line: libraries phase carries a dated ETA' ($null -ne $lib -an
 Check 'A8 mid-run progress counts stdout files against the DB total' ($null -ne $lib -and (($lib -join "`n") -match 'parsed 2/7000')) ($lib -join ' | ')
 Check 'A9 mid-run: projects are waiting while libraries run' ($null -ne $lib -and (($lib -join "`n") -match '(?m)^projects\s+waiting')) ($lib -join ' | ')
 
+# D: -Platforms through `pwsh -File` arrives as ONE comma string (wave 151 incident, O10): the script splits it.
+$r = Invoke-Runner 'commas' '' @('-AllowBusy', '-Platforms', 'win32,win64')
+$v = @(Get-OrderViolations $r.Calls)
+Check 'D1 one comma string = two parallel libraries, exit 0' ($r.Exit -eq 0 -and $v.Count -eq 0 -and $r.Calls.Count -eq 8) ("exit=$($r.Exit) " + ($v -join '; ') + " calls=$($r.Calls.Count)")
+Check 'D2 each platform got its own library call' (@($r.Calls | Where-Object { $_ -match '^START library win32 index --all --only Library --platform win32 ' }).Count -eq 1 -and @($r.Calls | Where-Object { $_ -match '^START library win64 index --all --only Library --platform win64 ' }).Count -eq 1) ($r.Calls -join ' | ')
 # B: a failed library stops the run before the projects.
 $r = Invoke-Runner 'fail' 'win64'
 Check 'B1 exit 1' ($r.Exit -eq 1) "exit=$($r.Exit)"

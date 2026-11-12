@@ -15,6 +15,14 @@
        extensions.json lists drag-lint.drag-lint points at an EXISTING folder whose
        version is package.json's. A profile with NO entry is a NOTE (the owner may
        keep a profile extension-free); a stale or missing folder is a FAIL.
+    3. (O15, wave 152b) the extension's PRIVATE ENGINE COPY. The language server runs a
+       snapshot of the engine under <globalStorage>\drag-lint.drag-lint\engine\b<stamp>\
+       (default user dir + every profile), refreshed only when the window activates, so
+       after a deploy it keeps serving the OLD engine until the window is reloaded (1.50
+       deploy: a 1.49 copy). The newest copy's `--version` must equal the deployed
+       engine's (-EngineExe); a different one is a FAIL naming both versions and the fix
+       (reload the window / "drag-lint: Update Engine Copy Now"). A user dir with no copy
+       is a NOTE (the extension was never activated there).
   SKIP (exit 0, with the reason) when VS Code's user dir is absent.
   SELF-TEST (always runs, builds fake dirs under %TEMP%): RED = entry pointing at a
   deleted 1.6.0 folder, GREEN = current folder, missing vsix = FAIL.
@@ -27,7 +35,8 @@ param(
   [string]$Dir = "$PSScriptRoot\..\..\editors\vscode\drag-lint",
   [string]$DistDir = "$PSScriptRoot\..\..\dist",
   [string]$UserDir = "$env:APPDATA\Code\User",
-  [string]$ExtRoot = "$env:USERPROFILE\.vscode\extensions"
+  [string]$ExtRoot = "$env:USERPROFILE\.vscode\extensions",
+  [string]$EngineExe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe"
 )
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -64,6 +73,34 @@ function Test-InstalledTree([string]$pUserDir, [string]$pExtRoot, [string]$pDist
   return @{ Fails = $fails; Notes = $notes }
 }
 
+# O15: the "drag-lint <version>" line of an engine exe, or '' when it cannot be run.
+function Get-EngineVersion([string]$pExe) {
+  try { return ((& $pExe --version 2>&1 | Select-Object -First 1) -as [string]).Trim() } catch { return '' }
+}
+
+# O15: Fails/Notes for the private engine copies of one VS Code user dir. A copy dir is
+# globalStorage\drag-lint.drag-lint\engine\b<stamp>\<ExeName>; the NEWEST one is what a fresh
+# window would start, so it is the one compared with the deployed engine.
+function Test-EngineCopies([string]$pUserDir, [string]$pDeployedExe, [string]$pExeName = 'drag-lint.exe') {
+  $fails = @(); $notes = @()
+  $want = Get-EngineVersion $pDeployedExe
+  if ($want -eq '') { return @{ Fails = @("cannot run the deployed engine: $pDeployedExe"); Notes = @() } }
+  $roots = @(@{ Name = '(default)'; Dir = (Join-Path $pUserDir 'globalStorage\drag-lint.drag-lint\engine') })
+  $profDir = Join-Path $pUserDir 'profiles'
+  if (Test-Path -LiteralPath $profDir) {
+    foreach ($p in Get-ChildItem -LiteralPath $profDir -Directory) {
+      $roots += @{ Name = $p.Name; Dir = (Join-Path $p.FullName 'globalStorage\drag-lint.drag-lint\engine') }
+    }
+  }
+  foreach ($r in $roots) {
+    if (-not (Test-Path -LiteralPath $r.Dir)) { continue }
+    $exes = @(Get-ChildItem -LiteralPath $r.Dir -Directory | ForEach-Object { Get-Item -LiteralPath (Join-Path $_.FullName $pExeName) -ErrorAction SilentlyContinue } | Where-Object { $_ } | Sort-Object LastWriteTime -Descending)
+    if ($exes.Count -eq 0) { $notes += "$($r.Name): no engine copy yet"; continue }
+    $have = Get-EngineVersion $exes[0].FullName
+    if ($have -ne $want) { $fails += "$($r.Name): private engine copy is '$have', deployed engine is '$want' -- reload the VS Code window or run 'drag-lint: Update Engine Copy Now' ($($exes[0].FullName))" }
+  }
+  return @{ Fails = $fails; Notes = $notes }
+}
 $pkgPath = Join-Path $Dir 'package.json'
 if (-not (Test-Path $pkgPath)) { Write-Host "FATAL: not found: $pkgPath" -ForegroundColor Red; exit 2 }
 $ver = (Get-Content $pkgPath -Raw | ConvertFrom-Json).version
@@ -95,7 +132,27 @@ try {
   [IO.File]::Delete("$d\drag-lint-$ver.vsix")
   $r = Test-InstalledTree $u $x $d $ver
   Check 'positive control: missing vsix FAILs' (($r.Fails -join ';') -match 'vsix missing') ($r.Fails -join ';')
-} finally {
+
+  # O15 controls: fake engines are .cmd files that print a version line.
+  function New-FakeEngine([string]$pDir, [string]$pVer) {
+    New-Item -ItemType Directory -Force -Path $pDir | Out-Null
+    [IO.File]::WriteAllText("$pDir\drag-lint.cmd", "@echo drag-lint $pVer`r`n")
+  }
+  $depDir = Join-Path $tmp 'deployed'
+  New-FakeEngine $depDir '1.50.0-alpha'
+  $eng = "$u\globalStorage\drag-lint.drag-lint\engine"
+  New-FakeEngine "$eng\b111-1" '1.49.0-alpha'
+  $r = Test-EngineCopies $u "$depDir\drag-lint.cmd" 'drag-lint.cmd'
+  Check 'O15 RED: a 1.49 private engine copy against a 1.50 deployed engine FAILs' (($r.Fails -join ';') -match "'drag-lint 1.49.0-alpha'.*'drag-lint 1.50.0-alpha'") ($r.Fails -join ';')
+  Start-Sleep -Milliseconds 1100
+  New-FakeEngine "$eng\b222-2" '1.50.0-alpha'
+  $r = Test-EngineCopies $u "$depDir\drag-lint.cmd" 'drag-lint.cmd'
+  Check 'O15 GREEN: the NEWEST copy at the deployed version passes (older dir ignored)' ($r.Fails.Count -eq 0) ($r.Fails -join ';')
+  New-FakeEngine "$u\profiles\abc123\globalStorage\drag-lint.drag-lint\engine\b333-3" '1.49.0-alpha'
+  $r = Test-EngineCopies $u "$depDir\drag-lint.cmd" 'drag-lint.cmd'
+  Check 'O15 profile copies are checked too: stale DL-profile copy FAILs' (($r.Fails -join ';') -match 'abc123: private engine copy') ($r.Fails -join ';')
+  $r = Test-EngineCopies $u "$tmp\nope\drag-lint.cmd" 'drag-lint.cmd'
+  Check 'O15 positive control: an unrunnable deployed engine FAILs (never vacuous)' ($r.Fails.Count -eq 1) ($r.Fails -join ';')} finally {
   if (Test-Path $tmp) { [IO.Directory]::Delete($tmp, $true) }
 }
 
@@ -106,6 +163,9 @@ if (-not (Test-Path -LiteralPath $UserDir)) {
   $r = Test-InstalledTree $UserDir $ExtRoot $DistDir $ver
   Check "dist vsix for $ver exists and every profile holds drag-lint $ver in an existing folder" ($r.Fails.Count -eq 0) ($r.Fails -join '; ')
   foreach ($n in $r.Notes) { Write-Host "  [NOTE] $n" -ForegroundColor DarkGray }
+  $e = Test-EngineCopies $UserDir $EngineExe
+  Check "every private engine copy runs the deployed engine's version" ($e.Fails.Count -eq 0) ($e.Fails -join '; ')
+  foreach ($n in $e.Notes) { Write-Host "  [NOTE] $n" -ForegroundColor DarkGray }
 }
 
 Write-Host ''
