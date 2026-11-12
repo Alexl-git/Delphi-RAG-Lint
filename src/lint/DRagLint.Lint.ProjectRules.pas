@@ -4483,6 +4483,26 @@ var
                    and (SameText(Copy(M.Name, 1, ACCESSOR_PREFIX_LEN), 'Get') or SameText(Copy(M.Name, 1, ACCESSOR_PREFIX_LEN), 'Set')) then
                   ATo.AddOrSetValue(LowerCase(Copy(M.Name, ACCESSOR_PREFIX_LEN + 1, MaxInt)), True);
           end;
+        { 152c INCR (M3): A DECLARATION IN AN INCLUDE OF THE UNIT IS ITS EXPORT TOO. An include of Types.inc in
+          the interface brings `TRec` in: its symbol carries the .inc's file_id and no parent, so the child
+          scan above never saw it and a user of TRec read as "no symbols from it are referenced"
+          (deleting the import fails with E2003). The unit's file_includes rows name the includes; their
+          top-level symbols (and enum values) join the export set. An include in the implementation
+          section is private and stays out; a uses-list include declares nothing. }
+        for var Site: TFileIncludeRow in AFrom.GetIncludeSites(U.FileId) do
+        begin
+          if Site.InUses or SameText(Site.Section, 'implementation') then Continue;
+          for var Inc: TSymbol in AFrom.FindSymbolsByFile(Site.IncPath) do
+          begin
+            if (Inc.ParentId > 0) or (Inc.Name = '') then Continue;
+            ATo.AddOrSetValue(LowerCase(Inc.Name), True);
+            var IncLt: Integer:= Pos('<', Inc.Name);
+            if IncLt > 1 then ATo.AddOrSetValue(LowerCase(Copy(Inc.Name, 1, IncLt - 1)), True);
+            if Inc.Kind = skEnum then
+              for var IncV: TSymbol in AFrom.FindAllChildSymbols(Inc.Id) do
+                if IncV.Kind = skEnumValue then ATo.AddOrSetValue(LowerCase(IncV.Name), True);
+          end;
+        end;
         { BLIND SPOT 1 (T4/U1): TYPE HELPER MEMBERS ARE PART OF THE SURFACE.
 
           The loop above adds names, not members, and that is right for ordinary

@@ -24788,6 +24788,67 @@ const
   LINTALL_SCAN_PCT    = 90;
   LINTALL_TAIL_PHASES = 14;
 
+/// <summary>152c INCR (M4): drops the parser-error / syntax-error findings of an include file that is
+/// only ever included inside a uses clause.</summary>
+/// <param name="AStore">The index the findings were produced on; nil or a store without the file-fact
+/// tables keeps every finding.</param>
+/// <param name="AFindings">The lint-all findings.</param>
+/// <returns>AFindings without the parse errors of fragment includes: an .inc whose EVERY file_includes
+/// site, over every host of the index, has in_uses = 1 (`uses {$I Entries.inc}`, a bare list of unit
+/// names). Such a fragment cannot parse on its own, so the error is the linter's view, not the
+/// build's; the same include also included as code (in_uses = 0) is NOT a fragment and keeps its
+/// errors, as does a real syntax error in an include that is included as code.</returns>
+/// <remarks>Lint side only: the indexer's DIAG line and the summary's parse-errors= still count the
+/// fragment (src\index is a hashed surface). Reads one GetIncludeSites per host, and only when some
+/// finding is such a parse error on an .inc file.</remarks>
+function DropUsesFragmentParseErrors(const AStore: ISymbolStore; const AFindings: TArray<TLintFinding>): TArray<TLintFinding>;
+var
+  Cand   : TDictionary<string, Boolean>;
+  AsUses : TDictionary<string, Boolean>;
+  AsCode : TDictionary<string, Boolean>;
+  F      : TLintFinding;
+  Fid    : Int64;
+  Row    : TFileIncludeRow;
+  Key    : string;
+  Kept   : TList<TLintFinding>;
+begin
+  Result:= AFindings;
+  if (AStore = nil) or not AStore.HasFileFacts then Exit;
+  Cand  := TDictionary<string, Boolean>.Create;
+  AsUses:= TDictionary<string, Boolean>.Create;
+  AsCode:= TDictionary<string, Boolean>.Create;
+  Kept  := TList<TLintFinding>.Create;
+  try
+    for F in AFindings do
+      if MatchText(F.RuleId, ['parser-error', 'syntax-error']) and SameText(ExtractFileExt(F.FilePath), '.inc') then
+        Cand.AddOrSetValue(LowerCase(TPath.GetFullPath(F.FilePath)), True);
+    if Cand.Count = 0 then Exit;
+    for Fid in AStore.GetAllFileIds do
+    begin
+      if not MatchText(ExtractFileExt(AStore.GetFilePath(Fid)), ['.pas', '.dpr', '.dpk']) then Continue;
+      for Row in AStore.GetIncludeSites(Fid) do
+      begin
+        Key:= LowerCase(TPath.GetFullPath(Row.IncPath));
+        if not Cand.ContainsKey(Key) then Continue;
+        if Row.InUses then AsUses.AddOrSetValue(Key, True) else AsCode.AddOrSetValue(Key, True);
+      end;
+    end;
+    for F in AFindings do
+    begin
+      Key:= LowerCase(TPath.GetFullPath(F.FilePath));
+      if MatchText(F.RuleId, ['parser-error', 'syntax-error']) and SameText(ExtractFileExt(F.FilePath), '.inc')
+         and AsUses.ContainsKey(Key) and not AsCode.ContainsKey(Key) then Continue;
+      Kept.Add(F);
+    end;
+    Result:= Kept.ToArray;
+  finally
+    Kept.Free;
+    AsCode.Free;
+    AsUses.Free;
+    Cand.Free;
+  end;
+end;
+
 { Lane INC2: LINT AN INCLUDE FROM THE BYTES THE INDEXER PARSED. A project index
   parses each .inc from its includer's include site (lane INC, TIndexer.
   SetIncludeContext: the host's live defines at the directive, first host wins),
@@ -25860,6 +25921,7 @@ begin
     cluster heavily by file and each call costs a LowerCase + MatchesMask per
     configured glob. Pinned by
     tests\autotest\run_lintall_project_rules_honour_exclude_paths.ps1. }
+  Findings:= DropUsesFragmentParseErrors(Store, Findings);   { 152c lane INCR (M4) }
   LintPhase(Format('exclude_paths filter (%d findings)', [Length(Findings)]));
   begin
     var ExclMemo: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
