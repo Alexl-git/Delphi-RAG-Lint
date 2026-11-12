@@ -7096,18 +7096,23 @@ end;
 /// <param name="ARoots">The --exclude-under values; empty means keep everything.</param>
 /// <returns>APaths without the entries under an excluded root (case-insensitive, whole path segments).</returns>
 /// <remarks>E-UNWITH-EXCLUDE: the folder walk asks the indexer's exclude roots, but a project scope list is
-/// FILES handed to IndexFile, which never does, so the flag was accepted and ignored for `index --project`.</remarks>
+/// FILES handed to IndexFile, which never does, so the flag was accepted and ignored for `index --project`.
+/// Both sides are normalised (`/` -> `\`, a relative root expanded against the current directory): 152b R16
+/// found `--exclude-under C:/x/ext` matching nothing, because the closure lists `C:\x\ext\U.pas` -- the walk
+/// pruned, the closure unit stayed. Pinned by run_index_exclude_under_slash_forms.ps1.</remarks>
 function DropUnderExcludeRoots(const APaths, ARoots: TArray<string>): TArray<string>;
 begin
   Result:= APaths;
   if Length(ARoots) = 0 then Exit;
   var Norm: TArray<string>:= [];
   for var R in ARoots do
-    if R <> '' then Norm:= Norm + [LowerCase(IncludeTrailingPathDelimiter(ExcludeTrailingPathDelimiter(R)))];
+    if R <> '' then
+      Norm:= Norm + [LowerCase(IncludeTrailingPathDelimiter(ExcludeTrailingPathDelimiter(
+        ExpandFileName(R.Replace('/', '\')))))];
   Result:= [];
   for var P in APaths do
   begin
-    var L: string:= LowerCase(P);
+    var L: string:= LowerCase(P.Replace('/', '\'));
     var Hit: Boolean:= False;
     for var N in Norm do
       if StartsStr(N, L) then Hit:= True;
