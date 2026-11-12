@@ -22596,6 +22596,9 @@ begin
       if not ReindexAfterStaleAnchor(AArgs, AArgs.DocUnit) then Exit(1);
       Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
       if not Ok then Exit(2);
+      { 152b DF O16d: the run-level Doc.Facts / ComputeCoveredBy memos are keyed by
+        store pointer, and the reopened store may reuse the freed one's address. }
+      ClearDocFactsMemos;
       Res:= TDocBatch.DocumentUnit(Store, AArgs.DocUnit, Opts);
       Skipped:= 0;
       if Length(Res.Edits) > 0 then
@@ -23332,6 +23335,9 @@ begin
       if not ReindexAfterStaleAnchor(AArgs, Res.FilePath) then Exit(1);
       Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
       if not Ok then Exit(2);
+      { 152b DF O16d: the run-level Doc.Facts / ComputeCoveredBy memos are keyed by
+        store pointer, and the reopened store may reuse the freed one's address. }
+      ClearDocFactsMemos;
       Res:= DRagLint.Doc.Document.TDocumenter.BuildFor(Store, AArgs.QName, LoadDocHandlesOptions, AArgs.DocSeeAlso,
         AArgs.DocSince, AArgs.DocBaseDir, OpenExtraStores(AArgs), LoadDocMaxReturnCases,
         LoadDocMaxCallers, LoadDocComplexityMin);
