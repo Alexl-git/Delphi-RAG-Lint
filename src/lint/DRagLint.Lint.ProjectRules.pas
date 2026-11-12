@@ -255,7 +255,7 @@ uses
   DRagLint.Lint.EffectRules, { the three B-EFFECT purity / ui_affinity readers }
   DRagLint.Lint.AncestorNotInProject, { ancestor-not-in-project (1.42 enum) }
   DRagLint.Lint.OpaqueToAnalysis, { opaque-to-analysis (1.42 opaque) } // dl:unit DRagLint.Lint.OpaqueToAnalysis accepted -- OPAQUE_TO_ANALYSIS_RULE is the rule id the dispatch names; it travels with CollectOpaqueToAnalysis, the collector this unit calls
-  DRagLint.Lint.RttiRules, { rtti-unavailable (wave 152b lane RTTI) }
+  DRagLint.Lint.RttiRules, { rtti-unavailable (wave 152b lane RTTI) } // dl:unit DRagLint.Lint.RttiRules accepted -- RTTI_UNAVAILABLE_RULE is the rule id the dispatch names; it travels with the rule unit, as OPAQUE_TO_ANALYSIS_RULE does
   DRagLint.Lint.UsesAudit; { TUsesAuditor -- uses-movable-to-implementation (lane G8) } // dl:unit DRagLint.Lint.UsesAudit accepted -- USES_VERDICT_MOVE is how this unit reads the verdict TUsesAuditor returns; it travels with TUsesAuditor, the auditor this unit calls
 
 { Side-effect / operator / helper units that are legitimately used without any

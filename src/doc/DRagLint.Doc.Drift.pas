@@ -361,31 +361,6 @@ begin
   if ALine <= Length(Lines) then Result:= Lines[ALine - 1];
 end;
 
-// Length of the leading `[...]` attribute group of S (S[1] = '['), 0 when it does
-// not close on this line. Skips Pascal string literals ('' escapes) and nested [].
-// Pinned by tests\autotest\run_doc_drift_attr_and_orphan_152b.ps1.
-function SkipAttributeGroup(const S: string): Integer;
-var
-  I, Depth: Integer;
-  InStr: Boolean;
-begin
-  Result:= 0;
-  Depth:= 0;
-  InStr:= False;
-  for I:= 1 to Length(S) do
-  begin
-    if S[I] = '''' then InStr:= not InStr
-    else if not InStr then
-    begin
-      if S[I] = '[' then Inc(Depth)
-      else if S[I] = ']' then
-      begin
-        Dec(Depth);
-        if Depth = 0 then Exit(I);
-      end;
-    end;
-  end;
-end;
 // ReadDeclLineRaw with its comments blanked, trimmed. Comments go for the reason
 // Facts.ReadDeclLine strips them (see its header): this line is EffectiveSignature's
 // fallback for a parameterless routine, and ParseReturnType reads "text after the last
@@ -411,7 +386,7 @@ begin
     // every leading `[...]` group, quote- and nesting-aware.
     while (S <> '') and (S[1] = '[') do
     begin
-      L:= SkipAttributeGroup(S);
+      L:= SkipDeclAttributeGroup(S);  { Doc.Facts: one rule for both readers }
       if L = 0 then Exit; // unbalanced (multi-line attribute): nothing reliable to read
       S:= Trim(Copy(S, L + 1, MaxInt));
     end;

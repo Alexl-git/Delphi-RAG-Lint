@@ -1068,6 +1068,14 @@ procedure ClearDocFactsMemos;
   /// </remarks>
   function FormatHoverCalledFromLine(const AFacts: TDocFacts; const ADocText: string): string;
 
+  /// <summary>Length of the leading `[...]` attribute group of a declaration line.</summary>
+  /// <param name="S">The line, starting at the `[` (S[1] = '[').</param>
+  /// <returns>Index of the closing `]` of the outermost group, 0 when the group does not close on
+  /// this line. Pascal string literals (with '' escapes) and nested [] are skipped.</returns>
+  /// <remarks>Shared by ReadDeclLine here and the Doc.Drift declaration-line fallback (152b DOC / DF),
+  /// so doc facts and doc-drift read past `[Test] [Ignore('...')]` the same way. Pure.</remarks>
+  function SkipDeclAttributeGroup(const S: string): Integer;
+
 implementation
 
 uses
@@ -3122,9 +3130,7 @@ end;
   Same function ParseUsesFromContent and ParseDprUses scrub with -- one
   implementation. This is the family whose every previous instance came from a
   site growing its own half-scanner. }
-// 152b DOC handover: length of the leading `[...]` attribute group of S (S[1] =
-// '['), 0 when it does not close on this line. Skips Pascal string literals ('')
-// escapes) and nested []. Same rule as Doc.Drift.SkipAttributeGroup.
+// 152b DOC handover; declared in the interface (Doc.Drift calls it too).
 function SkipDeclAttributeGroup(const S: string): Integer;
 var
   I, Depth: Integer;

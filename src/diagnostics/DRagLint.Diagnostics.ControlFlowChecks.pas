@@ -454,7 +454,7 @@ end;
 
 { The first call to AName (bare or via Self) that is evaluated unconditionally
   inside expression N, or a null node. Short-circuit operands and the ternary are not entered. }
-function TCfRun.ExprCallsSelf(const N: TTSNode; const AName: string; AIsFunc: Boolean): TTSNode;  // dl:ok too-many-exit-points@3e12 -- REVIEWED 2026-10-27: early-out guards of a recursive tree search; a single exit would nest every guard
+function TCfRun.ExprCallsSelf(const N: TTSNode; const AName: string; AIsFunc: Boolean): TTSNode;  // dl:ok too-many-exit-points@9d8f -- REVIEWED 2026-10-27, re-checked 2026-11-12 (152b INT2, GF1 named-arg unwrap): early-out guards of a recursive tree search; a single exit would nest every guard
 var
   I      : Integer;
   Ent, R : TTSNode;
