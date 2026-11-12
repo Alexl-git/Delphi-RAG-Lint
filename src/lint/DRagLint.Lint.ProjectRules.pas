@@ -255,6 +255,7 @@ uses
   DRagLint.Lint.EffectRules, { the three B-EFFECT purity / ui_affinity readers }
   DRagLint.Lint.AncestorNotInProject, { ancestor-not-in-project (1.42 enum) }
   DRagLint.Lint.OpaqueToAnalysis, { opaque-to-analysis (1.42 opaque) } // dl:unit DRagLint.Lint.OpaqueToAnalysis accepted -- OPAQUE_TO_ANALYSIS_RULE is the rule id the dispatch names; it travels with CollectOpaqueToAnalysis, the collector this unit calls
+  DRagLint.Lint.RttiRules, { rtti-unavailable (wave 152b lane RTTI) }
   DRagLint.Lint.UsesAudit; { TUsesAuditor -- uses-movable-to-implementation (lane G8) } // dl:unit DRagLint.Lint.UsesAudit accepted -- USES_VERDICT_MOVE is how this unit reads the verdict TUsesAuditor returns; it travels with TUsesAuditor, the auditor this unit calls
 
 { Side-effect / operator / helper units that are legitimately used without any
@@ -4868,6 +4869,10 @@ begin
     if WantRule(OPAQUE_TO_ANALYSIS_RULE) and OptedIn(OPAQUE_TO_ANALYSIS_RULE) then
       for var Oa in CollectOpaqueToAnalysis(AStore, ALibraryStore, AOnlyFileId) do Findings.Add(Oa);
     Lap('opaque-to-analysis');
+    { rtti-unavailable (wave 152b lane RTTI): OFF, OptedIn-gated -- reads every source file from disk. }
+    if WantRule(RTTI_UNAVAILABLE_RULE) and OptedIn(RTTI_UNAVAILABLE_RULE) then
+      for var Ru in CollectRttiUnavailable(AStore, ALibraryStore, AOnlyFileId) do Findings.Add(Ru);
+    Lap('rtti-unavailable');
     if WantRule('dfm-password-edit-unmasked') then
       for var Pw in CollectDfmPasswordEditUnmasked(AStore) do Findings.Add(Pw);
     Lap('dfm-password-edit-unmasked');

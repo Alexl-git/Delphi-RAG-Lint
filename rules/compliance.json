@@ -240,6 +240,7 @@
   "review-marker-reason-unreviewed": {},
   "review-marker-stale": {},
   "review-marker-unused": {},
+  "rtti-unavailable": {},
   "self-assignment": {"cwe": ["CWE-1164"], "weak": ["CWE-1164"]},
   "separate-query-from-modifier": {},
   "shared-marker-legacy-shape": {},
