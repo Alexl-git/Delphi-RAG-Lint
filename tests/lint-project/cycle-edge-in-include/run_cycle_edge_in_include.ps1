@@ -58,6 +58,7 @@ try {
   $fire = IndexScenario 'fire'
   $circ = LintAll $fire.Db @('--rule', 'circular-uses')
   Check 'CONTROL fire: circular-uses sees the 3 groups' ($circ.Count -eq 3) "$($circ.Count)"
+  # positive-control: cycle-edge-in-include
   $hits = @((LintAll $fire.Db @('--rule', $Rule)) | Where-Object { $_.rule -eq $Rule })
   $hits | ForEach-Object { Write-Host ("    {0}:{1}:{2} {3}" -f (Leaf $_), $_.start_line, $_.start_col, $_.message.Substring(0, [Math]::Min(110, $_.message.Length))) -ForegroundColor DarkGray }
   Check 'fire: exactly 4 findings (U + D + 2 for the shared include)' ($hits.Count -eq 4) "$($hits.Count)"
