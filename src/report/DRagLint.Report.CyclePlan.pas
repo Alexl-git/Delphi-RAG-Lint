@@ -2331,10 +2331,8 @@ end;
   class type as a value (ClassTypeName set, the metaclass hand-over) is named as the step text names it. }
 function EvalRecipeLabel(const pEv: TEdgeEval): string;
 begin
-  if (pEv.Recipe = crRoutineInversion) and (pEv.Steps.ClassTypeName <> '') then
-    Result:= 'metaclass hand-over'
-  else
-    Result:= RecipeLabel(pEv.Recipe);
+  Result:= if (pEv.Recipe = crRoutineInversion) and (pEv.Steps.ClassTypeName <> '') then 'metaclass hand-over'
+    else RecipeLabel(pEv.Recipe);
 end;
 
 { ---------------------------------------------------------------------------

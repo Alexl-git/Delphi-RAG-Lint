@@ -255,8 +255,8 @@ uses
   DRagLint.Lint.EffectRules, { the three B-EFFECT purity / ui_affinity readers }
   DRagLint.Lint.AncestorNotInProject, { ancestor-not-in-project (1.42 enum) }
   DRagLint.Lint.OpaqueToAnalysis, { opaque-to-analysis (1.42 opaque) } // dl:unit DRagLint.Lint.OpaqueToAnalysis accepted -- OPAQUE_TO_ANALYSIS_RULE is the rule id the dispatch names; it travels with CollectOpaqueToAnalysis, the collector this unit calls
-  DRagLint.Lint.RttiRules, { rtti-unavailable (wave 152b lane RTTI) }
-  DRagLint.Lint.IncludeCycleRules, { cycle-edge-in-include (wave 152c lane INCR) } // dl:unit DRagLint.Lint.RttiRules accepted -- RTTI_UNAVAILABLE_RULE is the rule id the dispatch names; it travels with the rule unit, as OPAQUE_TO_ANALYSIS_RULE does
+  DRagLint.Lint.RttiRules, { rtti-unavailable (wave 152b lane RTTI) } // dl:unit DRagLint.Lint.RttiRules accepted -- RTTI_UNAVAILABLE_RULE is the rule id the dispatch names; it travels with the rule unit, as OPAQUE_TO_ANALYSIS_RULE does
+  DRagLint.Lint.IncludeCycleRules, { cycle-edge-in-include (wave 152c lane INCR) } // dl:unit DRagLint.Lint.IncludeCycleRules accepted -- CYCLE_EDGE_IN_INCLUDE_RULE is the rule id the dispatch names; it travels with CollectCycleEdgeInInclude, the collector this unit calls
   DRagLint.Lint.UsesAudit; { TUsesAuditor -- uses-movable-to-implementation (lane G8) } // dl:unit DRagLint.Lint.UsesAudit accepted -- USES_VERDICT_MOVE is how this unit reads the verdict TUsesAuditor returns; it travels with TUsesAuditor, the auditor this unit calls
 
 { Side-effect / operator / helper units that are legitimately used without any
@@ -4441,6 +4441,20 @@ var
     var
       U : TSymbol;
       Ch: TSymbol;
+
+      { The export names of one interface symbol: its name, the name without type parameters (a generic is
+        stored as `TComparer<T>`, a use site names `TComparer`), and, for an enum, every value (BLIND SPOT 3).
+        Shared by the unit's own children and (152c INCR M3) the top-level symbols of its interface includes. }
+      procedure AddExport(const S: TSymbol);
+      begin
+        ATo.AddOrSetValue(LowerCase(S.Name), True);
+        var LtPos: Integer:= Pos('<', S.Name);
+        if LtPos > 1 then ATo.AddOrSetValue(LowerCase(Copy(S.Name, 1, LtPos - 1)), True);
+        if S.Kind = skEnum then
+          for var V: TSymbol in AFrom.FindAllChildSymbols(S.Id) do
+            if V.Kind = skEnumValue then ATo.AddOrSetValue(LowerCase(V.Name), True);
+      end;
+
     begin
       if AFrom = nil then Exit;
       for U in AFrom.FindSymbolsByExactName(AUnitName) do
@@ -4455,18 +4469,13 @@ var
               match fires on neither. Stripping only the reference side -- which
               is what I did first -- changes nothing, and the measurement said so:
               91 findings before and 91 after. }
-            ATo.AddOrSetValue(LowerCase(Ch.Name), True);
-            var LtPos: Integer:= Pos('<', Ch.Name);
-            if LtPos > 1 then ATo.AddOrSetValue(LowerCase(Copy(Ch.Name, 1, LtPos - 1)), True);
+            AddExport(Ch);  { the name, its generic-stripped stem and (BLIND SPOT 3 below) an enum's values }
             { BLIND SPOT 3 (1.28.2, converter report): AN ENUM'S VALUES ARE
               EXPORTS TOO. They are children of the ENUM, one level below the
               unit, so the loop above never saw them -- and `Panel.Align:=
               alTop;` names no Vcl.Controls symbol but alTop. The extractor
               already records those refs (kind read); only this set lacked
               the names. Removing such an import fails with E2003. }
-            if Ch.Kind = skEnum then
-              for var V: TSymbol in AFrom.FindAllChildSymbols(Ch.Id) do
-                if V.Kind = skEnumValue then ATo.AddOrSetValue(LowerCase(V.Name), True);
             { UNUSEDUNIT-INLINE-PROP (RF 2026-11-08, 145 int, H2443): A PROPERTY WHOSE
               ACCESSOR IS inline NEEDS ITS UNIT TOO. `P.ParamByName('A').AsInteger:= 5`
               names no symbol of FireDAC.Stan.Param (the receiver type arrives through a
@@ -4495,12 +4504,7 @@ var
           for var Inc: TSymbol in AFrom.FindSymbolsByFile(Site.IncPath) do
           begin
             if (Inc.ParentId > 0) or (Inc.Name = '') then Continue;
-            ATo.AddOrSetValue(LowerCase(Inc.Name), True);
-            var IncLt: Integer:= Pos('<', Inc.Name);
-            if IncLt > 1 then ATo.AddOrSetValue(LowerCase(Copy(Inc.Name, 1, IncLt - 1)), True);
-            if Inc.Kind = skEnum then
-              for var IncV: TSymbol in AFrom.FindAllChildSymbols(Inc.Id) do
-                if IncV.Kind = skEnumValue then ATo.AddOrSetValue(LowerCase(IncV.Name), True);
+            AddExport(Inc);
           end;
         end;
         { BLIND SPOT 1 (T4/U1): TYPE HELPER MEMBERS ARE PART OF THE SURFACE.

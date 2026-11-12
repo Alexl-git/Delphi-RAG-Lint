@@ -5963,7 +5963,7 @@ var
   Q: TFDQuery;
   L: TList<TFileIncludeRow>;
   R: TFileIncludeRow;
-  FPath, FLine, FCol, FDepth, FSection, FUses: TField;
+  FldPath, FldLine, FldCol, FldDepth, FldSection, FldUses: TField;
 begin
   Result:= nil;
   if not HasFileFacts then Exit;
@@ -5975,21 +5975,21 @@ begin
                    'FROM file_includes WHERE file_id = :fid ORDER BY ordinal';
     Q.ParamByName('fid').AsLargeInt:= AFileId;
     Q.Open;
-    FPath   := Q.FieldByName('inc_path');
-    FLine   := Q.FieldByName('host_line');
-    FCol    := Q.FieldByName('host_col');
-    FDepth  := Q.FieldByName('depth');
-    FSection:= Q.FieldByName('section');
-    FUses   := Q.FieldByName('in_uses');
+    FldPath   := Q.FieldByName('inc_path');
+    FldLine   := Q.FieldByName('host_line');
+    FldCol    := Q.FieldByName('host_col');
+    FldDepth  := Q.FieldByName('depth');
+    FldSection:= Q.FieldByName('section');
+    FldUses   := Q.FieldByName('in_uses');
     while not Q.Eof do
     begin
       R:= Default(TFileIncludeRow);
-      R.IncPath := FPath.AsString;
-      R.HostLine:= FLine.AsInteger;
-      R.HostCol := FCol.AsInteger;
-      R.Depth   := FDepth.AsInteger;
-      R.Section := FSection.AsString;
-      R.InUses  := FUses.AsInteger <> 0;
+      R.IncPath := FldPath.AsString;
+      R.HostLine:= FldLine.AsInteger;
+      R.HostCol := FldCol.AsInteger;
+      R.Depth   := FldDepth.AsInteger;
+      R.Section := FldSection.AsString;
+      R.InUses  := FldUses.AsInteger <> 0;
       L.Add(R);
       Q.Next;
     end;

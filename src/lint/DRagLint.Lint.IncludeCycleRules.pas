@@ -70,7 +70,7 @@ type
   end;
 
   /// <summary>Per-run readers and caches; one instance per CollectCycleEdgeInInclude call.</summary>
-  TIncludeCycleScan = class
+  TIncludeCycleScan = class  // dl:ok high-response@1e49 -- REVIEWED 2026-11-12 (152c INT3b): the scan IS the rule (cycle graph, include sites, uses rows, symbols per include, finding text); its response set is the store readers and caches each check needs, already split into per-check private methods
   private
     FStore   : ISymbolStore;
     FSites   : TDictionary<Int64, TArray<TFileIncludeRow>>;
