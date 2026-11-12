@@ -133,6 +133,37 @@ function Set-HandCut([string]$Root, [switch]$NoAssign) {
   if (-not $NoAssign) { Edit-Text (Join-Path $Root 'IP3B.pas') "initialization`n  Writeln('init IP3B');" "initialization`n  IP3BWritePtr:= IP3BWrite;`n  Writeln('init IP3B');" }
 }
 function Get-InitLines([string]$Out) { return @([regex]::Matches($Out, '(?m)^init (\w+)') | ForEach-Object { $_.Groups[1].Value }) }
+function Get-Plan($P, [switch]$NoProject) {
+  $a = @('cycles', '--plan', '--db', $P.Db, '--library-db', 'none')
+  if (-not $NoProject) { $a += @('--project', $P.Dproj) }
+  Push-Location $WorkDir
+  try { return ($null | & $Exe @a 2>$null | Out-String) } finally { Pop-Location }
+}
+function Get-CausesJson($P) {
+  Push-Location $WorkDir
+  try { $o = ($null | & $Exe cycles --causes --format json --project $P.Dproj --db $P.Db --library-db none 2>$null | Out-String) } finally { Pop-Location }
+  try { return ($o | ConvertFrom-Json) } catch { return $null }
+}
+function Run-Fix($P, [string[]]$Extra) {
+  $a = @('cycles', '--fix', '--build-timeout', '1800', '--project', $P.Dproj, '--db', $P.Db, '--library-db', 'none', '--format', 'json') + $Extra
+  Push-Location $WorkDir
+  try { $out = ($null | & $Exe @a 2>$null | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
+  $j = $null; try { $j = $out | ConvertFrom-Json } catch { }
+  $k = @(); $r = @()
+  foreach ($c in @($j.cycles)) { foreach ($x in @($c.refusals)) { if ($x) { $k += $x.kind; $r += "$($x.kind): $($x.reason)" } } }
+  foreach ($x in @($j.refusals)) { if ($x) { $k += $x.kind; $r += "$($x.kind): $($x.reason)" } }
+  return @{ Exit = $code; Out = $out; Kinds = $k; Reasons = ($r -join ' || ') }
+}
+# Reindex, then the init-order-hazard findings (lint-all --json: a bare array of findings).
+function Get-Hazard($P) {
+  Push-Location $WorkDir
+  try {
+    $null | & $Exe index --project $P.Dproj --db $P.Db --library-db none *> "$($P.Db).hzlog"
+    $o = ($null | & $Exe lint-all --db $P.Db --rule init-order-hazard --json 2>$null | Out-String)
+  } finally { Pop-Location }
+  $j = @(); try { $j = @($o | ConvertFrom-Json) } catch { }
+  return @($j | Where-Object { $_ -and $_.rule -eq 'init-order-hazard' })
+}
 
 New-Item -ItemType Directory -Force $WorkDir | Out-Null
 try {
@@ -162,6 +193,97 @@ try {
     Check 'm.pc without the assignment the run prints "pointer nil" (the run tells nil from assigned)' ((Invoke-Program $P) -match 'pointer nil')
     Write-Host '  | .dpr | graph | run order | model order | pointer |' -ForegroundColor DarkGray
     $script:ModelTable | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
+  }
+  if ($Phase -in 'all', 'engine') {
+    # 1-based model positions of the cycle as written, per .dpr order (the M table proves the model = the run)
+    function Get-Pos([string]$Root, [string]$Unit) { return [array]::IndexOf(@(Get-ModelOrder $Root), $Unit) + 1 }
+    $RefusedRx = '(?m)^- `ip3a -> ip3b`:.*?`IP3BWrite` \(procedure\): refused: init-order -- (.*)$'
+
+    Write-Host '== A IP3A first: proved, planned, applied, compiled, same output' -ForegroundColor Cyan
+    $P = New-Proj @('IP3A', 'IP3B', 'IP3C')
+    $plan = Get-Plan $P
+    $pa = Get-Pos $P.Root 'IP3A'; $pb = Get-Pos $P.Root 'IP3B'
+    Check 'a.1 the plan cuts ip3a -> ip3b by routine-call inversion' ($plan -match '(?m)^- `ip3a -> ip3b`: recipe: routine-call inversion -- \*\*cut by this plan\*\*') $plan
+    $want = "init order: ``IP3B`` initializes before ``IP3A`` in ``InitP3.dpr`` (position $pb before $pa; ``IP3A`` reaches ``IP3B`` through ``IP3C``)"
+    Check "a.2 the step carries the proof line with the run's positions ($pb before $pa)" ($plan.Contains("- $want")) $plan
+    Check 'a.3 the plan is mechanical (Fix it block, no init-order refusal)' (($plan -match 'Fix it \(mechanical') -and ($plan -notmatch 'refused: init-order')) $plan
+    $j = Get-CausesJson $P
+    $edge = @($j | ForEach-Object { $_.fix.edges } | Where-Object { $_.from -eq 'ip3a' -and $_.to -eq 'ip3b' })[0]
+    Check 'a.4 JSON: the chosen edge carries init_order with the proof line' (($null -ne $edge) -and $edge.chosen -and ("$($edge.init_order)".StartsWith($want))) ($j | ConvertTo-Json -Depth 8 -Compress)
+    $base = New-Proj @('IP3A', 'IP3B', 'IP3C') -NoIndex
+    $b0 = Invoke-Build $base
+    Check 'a.5 the untouched copy builds' $b0.Ok $b0.Errors
+    $out0 = Invoke-Program $base
+    $a = Run-Fix $P @('--apply')
+    Check 'a.6 --fix --apply: exit 0, no refusal (compile gate passed)' (($a.Exit -eq 0) -and ($a.Kinds.Count -eq 0)) "exit=$($a.Exit) kinds=$($a.Kinds -join ',') $($a.Reasons)"
+    $b1 = Invoke-Build $P
+    Check 'a.7 the applied copy builds (independent msbuild)' $b1.Ok $b1.Errors
+    $out1 = Invoke-Program $P
+    Check 'a.8 stdout byte-identical to the untouched build (the pointer was assigned in time)' (($out0 -ne '<no exe>') -and ($out1 -ceq $out0) -and ($out0 -match '\[b\] a started')) "before=[$out0] after=[$out1]"
+
+    Write-Host '== G safety net: the applied program with the .dpr order reversed' -ForegroundColor Cyan
+    $h0 = Get-Hazard $P
+    Check 'g.1 init-order-hazard is silent on the applied program as ordered (B first)' ($h0.Count -eq 0) ($h0 | ConvertTo-Json -Compress)
+    $dpr = Join-Path $P.Root 'InitP3.dpr'
+    $dt = [IO.File]::ReadAllText($dpr, $Ascii)
+    [IO.File]::WriteAllText($dpr, [regex]::Replace($dt, "(?s)uses\r\n.*?;\r\n", "uses`r`n  IP3C in 'IP3C.pas',`r`n  IP3A in 'IP3A.pas',`r`n  IP3B in 'IP3B.pas',`r`n  IP3B.Untangle in 'IP3B.Untangle.pas';`r`n"), $Ascii)
+    $h1 = Get-Hazard $P
+    Check 'g.2 after the swap (IP3C first) init-order-hazard reports the pointer read in IP3A''s initialization' (@($h1 | Where-Object { $_.file_path -match 'IP3A\.pas$' -and $_.message -match 'IP3BWritePtr' }).Count -ge 1) ($h1 | ConvertTo-Json -Compress)
+    $null = Invoke-Build $P
+    Check 'g.3 (the run agrees) the swapped program calls the nil pointer: its output differs' ((Invoke-Program $P) -cne $out0)
+
+    Write-Host '== B the other two orders refuse, naming both positions and the .dpr' -ForegroundColor Cyan
+    foreach ($first in 'IP3B', 'IP3C') {
+      $order = @($first) + @($Units | Where-Object { $_ -ne $first })
+      $P = New-Proj $order
+      $plan = Get-Plan $P
+      $pa = Get-Pos $P.Root 'IP3A'; $pb = Get-Pos $P.Root 'IP3B'
+      $m = [regex]::Match($plan, $RefusedRx)
+      $want = "in ``InitP3.dpr`` ``IP3A`` (position $pa) initializes before ``IP3B`` (position $pb): list ``IP3A`` before ``$first`` in the .dpr, or cut another edge"
+      Check "b.$first first: init-order refused, text names .dpr + positions $pa / $pb + the entry to reorder" ($m.Success -and $m.Groups[1].Value.Contains($want)) $plan
+    }
+
+    Write-Host '== C a two-unit cycle: never provable' -ForegroundColor Cyan
+    $P = New-Proj @('IP3A', 'IP3B', 'IP3C') {
+      param($r)
+      Edit-Text (Join-Path $r 'IP3A.pas') "uses`n  IP3C, IP3B;" "uses`n  IP3B;"
+      Edit-Text (Join-Path $r 'IP3A.pas') "  GPing:= @IP3CPing;`n" ""
+      Edit-Text (Join-Path $r 'IP3A.pas') "var`n  GPing: procedure;`n`n" ""
+    }
+    $plan = Get-Plan $P
+    $m = [regex]::Match($plan, $RefusedRx)
+    Check 'c.1 ip3a -> ip3b refused: "whatever the .dpr order"' ($m.Success -and $m.Groups[1].Value.Contains('after the cut `IP3B` still uses `IP3A` and `IP3A` no longer reaches `IP3B`, so `IP3A` initializes first whatever the .dpr order')) $plan
+
+    Write-Host '== D a conditional path entry; no program' -ForegroundColor Cyan
+    $P = New-Proj @('IP3A', 'IP3B', 'IP3C') { param($r) Edit-Text (Join-Path $r 'IP3C.pas') "uses`n  IP3B;" "uses`n  {`$IFDEF MSWINDOWS}`n  IP3B`n  {`$ENDIF}`n  ;" }
+    $ifLine = [array]::IndexOf(@([IO.File]::ReadAllLines((Join-Path $P.Root 'IP3C.pas'))), '  {$IFDEF MSWINDOWS}') + 1
+    $plan = Get-Plan $P
+    $m = [regex]::Match($plan, $RefusedRx)
+    Check "d.1 refused: the order depends on a conditional uses entry (IP3C.pas:$ifLine)" ($m.Success -and $m.Groups[1].Value.Contains("conditional uses entry (``IP3C.pas:$ifLine``)")) $plan
+    $P = New-Proj $null { param($r) [IO.File]::Delete((Join-Path $r 'InitP3.dpr')); [IO.File]::Delete((Join-Path $r 'InitP3.dproj')) } -NoIndex
+    Push-Location $WorkDir
+    try { $null | & $Exe index $P.Root --db $P.Db --library-db none *> "$($P.Db).log" } finally { Pop-Location }
+    $plan = Get-Plan $P -NoProject
+    $m = [regex]::Match($plan, $RefusedRx)
+    Check 'd.2 no .dpr in the index: refused "no program"' ($m.Success -and $m.Groups[1].Value.Contains('no program in this index')) $plan
+
+    Write-Host '== E Part B predicted after Part A: re-checked, then planned' -ForegroundColor Cyan
+    $P = New-Proj @('IP3A', 'IP3B', 'IP3C') {
+      param($r)
+      Edit-Text (Join-Path $r 'IP3A.pas') "interface`n" "interface`n`nuses`n  IP3C, IP3B;`n"
+      Edit-Text (Join-Path $r 'IP3A.pas') "implementation`n`nuses`n  IP3C, IP3B;`n" "implementation`n"
+      Edit-Text (Join-Path $r 'IP3B.pas') "interface`n" "interface`n`nuses`n  IP3A;`n"
+      Edit-Text (Join-Path $r 'IP3B.pas') "implementation`n`nuses`n  IP3A;`n" "implementation`n"
+    }
+    $plan = Get-Plan $P
+    $m = [regex]::Match($plan, $RefusedRx)
+    Check 'e.1 predicted Part B: init-order kept, "re-checked against the program order once Part A is applied"' ($m.Success -and $m.Groups[1].Value.TrimEnd().EndsWith('; re-checked against the program order once Part A is applied')) $plan
+    $a = Run-Fix $P @('--part', 'a', '--apply')
+    Check 'e.2 Part A applied (exit 0)' ($a.Exit -eq 0) "exit=$($a.Exit) $($a.Reasons)"
+    Push-Location $WorkDir
+    try { $null | & $Exe index --project $P.Dproj --db $P.Db --library-db none *> "$($P.Db).relog" } finally { Pop-Location }
+    $plan = Get-Plan $P
+    Check 'e.3 after Part A + reindex the same edge is planned with the proof line' (($plan -match '(?m)^- `ip3a -> ip3b`: recipe: routine-call inversion -- \*\*cut by this plan\*\*') -and $plan.Contains('- init order: `IP3B` initializes before `IP3A` in `InitP3.dpr`')) $plan
   }
 } finally {
   if (-not $KeepWorkDir) { try { [IO.Directory]::Delete($WorkDir, $true) } catch { } }

@@ -305,6 +305,9 @@ type
     Recipe: string;
     /// <summary>True for the edge `cycles --fix` cuts (the planner's CutEdge).</summary>
     Chosen: Boolean;
+    /// <summary>Lane CYC3: the init-order proof line of a routine-call inversion whose call runs from the consumer's
+    /// initialization section ('' otherwise); JSON `init_order`, written only when not empty.</summary>
+    InitOrder: string;
   end;
 
   /// <summary>What a `Fix it` block (text) or `fix` object (JSON) says about one circular group.</summary>
@@ -944,6 +947,7 @@ type
     BaseAncestor: string; // B4-d: the ancestor the base class inherits, as the header writes it; '' = TObject
     CtorName    : string; // B8: the constructor the consumers call through the pointer; '' = no inversion
     CtorSig     : string; // B8: its parameter list verbatim, parentheses included; '' = none
+    CtorProof   : string; // lane CYC3: the init-order proof line when the call runs from an initialization section
   end;
 
   TConsumer = record
@@ -1092,6 +1096,7 @@ type
     FInversion  : TRecipeSteps;  // R1 / R2 steps of FCutEdge; Recipe = crNone otherwise
     FPartBBest  : TEdgeEval;     // Part A groups: the edge Part B cuts after Part A (FromStem = '' when none)
     FPartBDone  : Boolean;       // FPartBBest has been computed for the current group
+    FInPartB    : Boolean;       // lane CYC3: Part B is being weighed on the graph predicted after Part A
     FFixProject : string;        // the project named in the Fix it commands; '' = placeholder
     FGroupHook  : TCycleGroupHook;  // hub-SCC P6 prep: a group it plans is skipped by Run; nil = none
     // loading + resolution
@@ -3379,7 +3384,10 @@ begin
     var Ref:= Default(TEdgeRef);
     Ref.Line:= pLine;
     Ref.Enclosing:= RoutineAt(pF, pLine).Name;
-    Why:= InitOrderWhy(pF.Lines, Ref, pF.UnitName);
+    var Proof:= '';
+    Why:= InitOrderVerdict(FStore, InitOrderWhy(pF.Lines, Ref, pF.UnitName), pF.UnitName, UnitNameOfStem(pItem.Stem),
+      FInPartB, Proof);
+    if Why = '' then pItem.CtorProof:= Proof;
     var Fin:= 0;
     for var I:= High(pF.Lines) downto 0 do
       if SameText(Trim(CodePart(pF.Lines[I])), 'finalization') then
@@ -5711,6 +5719,7 @@ begin
       EmitFmt('   - **Constructor inversion:** `%s.%s` is called through the pointer `%2:s%0:s%3:s` of the leaf; `%2:s%0:s` in `%4:s` ' +
         'runs the same constructor with the same arguments and its initialization assigns the pointer.',
         [pItem.Sym.Name, pItem.CtorName, CCtorFuncPrefix, CCtorPtrSuffix, ExtractFileName(PathOf(pItem.Sym.FileId))]);
+    if pItem.CtorProof <> '' then EmitFmt('   - %s', [pItem.CtorProof]);
     for var Fid in pItem.CutFids do
     begin
       Lines.Clear;
@@ -6266,6 +6275,7 @@ begin
           if Length(Needs) = 0 then Continue;
           TEval.Start;
           var Ev:= EvaluateEdge(A, B, Needs);
+          Ev.Surface.Predicted:= True;
           TEval.Stop;
           if Ev.Movable then Ev.Recipe:= crMoveGlobals;
           Names.Clear;
@@ -6277,7 +6287,12 @@ begin
     PlanStage(Format('PartB edges (%d pairs, %d edges; RemainingNeeds %d ms, EvaluateEdge %d ms)',
       [Pairs, pEvals.Count, TNeeds.ElapsedMilliseconds, TEval.ElapsedMilliseconds]), W);
     { E18 T7 R3: the same recipes and order the re-run after Part A uses }
-    PlanInversion(pEvals);
+    FInPartB:= True;
+    try
+      PlanInversion(pEvals);
+    finally
+      FInPartB:= False;
+    end;
     PlanStage('PartB PlanInversion', W);
     PlanMemberHandOver(pEvals);
     PlanStage('PartB PlanMemberHandOver', W);
@@ -6377,6 +6392,7 @@ const
     Result.ToUnit  := pEv.ToStem;
     Result.Recipe  := CRecipeId[pEv.Recipe];
     Result.Chosen  := pChosen;
+    Result.InitOrder:= if pEv.Recipe = crRoutineInversion then pEv.Steps.InitOrderProof else '';
   end;
 
 begin
@@ -7134,6 +7150,7 @@ function TCyclePlanner.MetaclassSteps(const pEv: TEdgeEval; out pWhy: string): T
 begin
   Result:= Default(TRecipeSteps);
   pWhy  := '';
+  var Proof := '';
   var S     := pEv.Surface;
   var TX    := S.ClassNames[0];
   var A     := GetFile(FidOfStem(S.FromStem));
@@ -7160,8 +7177,11 @@ begin
     else if (Formal <> '') and not SameText(Formal, Typ) then
       pWhy:= Format('signature-unknown -- `%s` is passed where `%s` and `%s` are expected: one variable cannot carry both',
         [TX, Formal, Typ])
-    else if InitOrderWhy(A.Lines, R, A.UnitName) <> '' then
-      pWhy:= 'init-order -- ' + InitOrderWhy(A.Lines, R, A.UnitName);
+    else
+    begin
+      var IoWhy:= InitOrderVerdict(FStore, InitOrderWhy(A.Lines, R, A.UnitName), A.UnitName, B.UnitName, S.Predicted, Proof);
+      if IoWhy <> '' then pWhy:= 'init-order -- ' + IoWhy;
+    end;
     if pWhy <> '' then Break;
     Formal:= Typ;
     var Edit:= Default(TRecipeEdit);
@@ -7196,6 +7216,7 @@ begin
   Result.PtrVar       := VarName;
   Result.VarDecl      := Inv.VarDecl;
   Result.ClassTypeName:= TX;
+  Result.InitOrderProof:= Proof;
   Result.LeafUses     := LeafUses;
   Result.Routines     := [Inv];
   Result.Edits        := Edits + [Assign];
@@ -7462,6 +7483,7 @@ begin
         [FLeafName[FInversion.DeclStem], FInversion.VarDecl]);
       EmitFmt('- `%s` assigns `%s := %s;` as the first statement of its initialization section.',
         [Decl, FInversion.PtrVar, FInversion.ClassTypeName]);
+      if FInversion.InitOrderProof <> '' then EmitFmt('- %s', [FInversion.InitOrderProof]);
       EmitFmt('- `%s` passes `%s` instead of `%s` (line %s). Checked: its own initialization section makes none ' +
         'of these calls and does not name the routine that makes them. NOT checked: an initialization section of ' +
         'another unit that reaches them through a call chain.', [ExtractFileName(PathOf(FInversion.ConsumerFid)),
@@ -7507,6 +7529,13 @@ begin
       else
         EmitFmt('- `%s` assigns `%s := %s;` as the first statement of its initialization section.',
           [Decl, R.PtrVar, R.Name]);
+      if FInversion.InitOrderProof <> '' then
+      begin
+        EmitFmt('- `%s` calls `%s` instead of `%s` (line %s); its initialization section reaches the call.',
+          [ExtractFileName(PathOf(FInversion.ConsumerFid)), R.PtrVar, R.Name, string.Join(', ', Calls.ToArray)]);
+        EmitFmt('- %s', [FInversion.InitOrderProof]);
+        Continue;
+      end;
       EmitFmt('- `%s` calls `%s` instead of `%s` (line %s). Checked: its own initialization section ' +
         'makes none of these calls and does not name the routine that makes them. NOT checked: an ' +
         'initialization section of another unit that reaches them through a call chain.',
@@ -8314,6 +8343,7 @@ procedure AddCycleFixHints(const pIn: TCycleFixHintInput; const pGroups: TJSONAr
     Result.AddPair('to', pEdge.ToUnit);
     Result.AddPair('recipe', pEdge.Recipe);
     if pWithChosen then Result.AddPair('chosen', TJSONBool.Create(pEdge.Chosen));
+    if pEdge.InitOrder <> '' then Result.AddPair('init_order', pEdge.InitOrder);
   end;
 
 var

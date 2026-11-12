@@ -83,6 +83,34 @@ function CollectHeavyInitialization(const AStore: ISymbolStore; const ALibrarySt
 /// any text that frees it: the check is lexical, so a free in a comment also silences it.</remarks>
 function CollectGlobalNeverFreed(const AStore: ISymbolStore; const ALibraryStore: ISymbolStore = nil): TArray<TLintFinding>;
 
+type
+  /// <summary>Lane CYC3 (152c, fabcyc case 3): the verdict of ProveInitOrderInversion.</summary>
+  /// <remarks>Proved True: Text is the plan's proof line ("init order: ..."). Proved False: Text is the reason the
+  /// order cannot be proved, worded to follow an init-order refusal after "; ".</remarks>
+  TInitOrderProof = record
+    Proved: Boolean;
+    Text  : string;
+  end;
+
+/// <summary>Lane CYC3 (152c, fabcyc case 3): may AConsumer's initialization call a routine of ADeclaring through a
+/// pointer that ADeclaring's initialization assigns, once the uses rows AConsumer -&gt; ADeclaring are cut? Proved
+/// when ADeclaring initializes before AConsumer in the computed order (see this unit's header) of EVERY program of
+/// the index that reaches both, both with the uses as they stand and with those rows removed.</summary>
+/// <param name="AStore">The project index; nil proves nothing.</param>
+/// <param name="AConsumer">The unit whose initialization makes the call (any case).</param>
+/// <param name="ADeclaring">The unit that declares the routine and would assign the pointer (any case).</param>
+/// <returns>Proved with the proof line, or not proved with one of five reasons: a unit with no single position,
+/// AConsumer no longer reaching ADeclaring after the cut (then AConsumer initializes first whatever the .dpr
+/// order: always the case in a two-unit cycle), a program where AConsumer comes first (naming both 1-based
+/// positions, the .dpr and its entry to list AConsumer before), no program reaching both, or a uses entry that
+/// comes from an include or sits in a conditional region in the .dpr, either unit, or a unit on the path that
+/// carries AConsumer to ADeclaring after the cut.</returns>
+/// <remarks>Not thread-safe; reads the index once per call. Sound subset, default refuse: the order is the one of
+/// the index's configuration, so a conditional or include-borne entry on the deciding files refuses. Without the
+/// pp_regions facts (an index older than schema 24) every such check refuses. The rule init-order-hazard is the
+/// net once a later uses change reverses a proved order.</remarks>
+function ProveInitOrderInversion(const AStore: ISymbolStore; const AConsumer, ADeclaring: string): TInitOrderProof;
+
 implementation
 
 uses
@@ -150,6 +178,7 @@ type
   TStateVar = record
     UnitKey: string;
     VarName: string;
+    DeclKey: string;  { lane CYC3: the unit that declares it -- UnitKey, or a unit UnitKey uses (an R1 pointer's leaf) }
   end;
 
   TSectionKind = (skiInit, skiFinal);
@@ -185,8 +214,15 @@ type
     /// <summary>The files whose uses clause is a program's.</summary>
     function ProgramFiles: TArray<Int64>;
     /// <summary>Lower-case unit name -> position in the order AProgram initializes its units.</summary>
+    /// <param name="AProgram">The program file (ProgramFiles).</param>
+    /// <param name="ASkipFrom">Lane CYC3: with ASkipTo, a lower-case unit whose uses entry ASkipTo is left out,
+    /// as if the cut were made; '' (the default) leaves every entry in.</param>
+    /// <param name="ASkipTo">Lane CYC3: the lower-case unit of the left-out entry.</param>
+    /// <param name="ARoots">Lane CYC3: when not nil, receives lower-case unit -> the program's uses entry
+    /// (lower case) whose visit placed it.</param>
     /// <remarks>The caller owns the result.</remarks>
-    function ComputeOrder(AProgram: Int64): TDictionary<string, Integer>;
+    function ComputeOrder(AProgram: Int64; const ASkipFrom: string = ''; const ASkipTo: string = '';
+      ARoots: TDictionary<string, string> = nil): TDictionary<string, Integer>;
     /// <summary>The refs enclosed by ASym that run when ASym runs: a reference inside an anonymous
     /// method's body is left out, since passing a closure does not call it.</summary>
     function RefsOf(const ASym: TSymbol): TArray<TReference>;
@@ -425,10 +461,12 @@ begin
       end;
 end;
 
-function TInitGraph.ComputeOrder(AProgram: Int64): TDictionary<string, Integer>;
+function TInitGraph.ComputeOrder(AProgram: Int64; const ASkipFrom, ASkipTo: string;
+  ARoots: TDictionary<string, string>): TDictionary<string, Integer>;
 var
   Visited: TDictionary<string, Boolean>;
   Order  : TDictionary<string, Integer>;
+  Root   : string;
 
   procedure Visit(const AKey: string);
   var
@@ -436,15 +474,21 @@ var
   begin
     if Visited.ContainsKey(AKey) or not FUnits.TryGetValue(AKey, Node) then Exit;
     Visited.Add(AKey, True);
-    for var Dep in UsesOfFile(Node.FileId) do Visit(Dep);
+    for var Dep in UsesOfFile(Node.FileId) do
+      if (ASkipFrom = '') or (AKey <> ASkipFrom) or (Dep <> ASkipTo) then Visit(Dep);
     Order.Add(AKey, Order.Count);
+    if ARoots <> nil then ARoots.AddOrSetValue(AKey, Root);
   end;
 
 begin
   Order:= TDictionary<string, Integer>.Create;
   Visited:= TDictionary<string, Boolean>.Create;
   try
-    for var Root in UsesOfFile(AProgram) do Visit(Root);
+    for var R in UsesOfFile(AProgram) do
+    begin
+      Root:= R;
+      Visit(R);
+    end;
   finally
     Visited.Free;
   end;
@@ -682,6 +726,7 @@ begin
   var Done: TDictionary<Int64, Boolean>:= TDictionary<Int64, Boolean>.Create;
   var Queue: TQueue<Int64>:= TQueue<Int64>.Create;
   var Marked: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+  var Foreign: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
   try
     for var Ch in FGraph.Store.FindAllChildSymbols(ANode.UnitId) do
       if Ch.Kind = skVarDecl then Vars.AddOrSetValue(LowerCase(Ch.Name), Ch.Name);
@@ -699,7 +744,9 @@ begin
         begin
           var Name: string:= if R.ReceiverText = '' then LowerCase(R.NameText) else ReceiverHead(R.ReceiverText);
           var Counts: Boolean:= if FKind = skiInit then (R.ReceiverText = '') and ((R.Kind = REF_WRITE) or AllocLines.ContainsKey(R.StartLine)) else True;
-          if Counts and Vars.ContainsKey(Name) then Marked.AddOrSetValue(Name, True);
+          if Counts and Vars.ContainsKey(Name) then Marked.AddOrSetValue(Name, True)
+          else if Counts and (FKind = skiInit) and (R.ReceiverText = '') and (R.Kind = REF_WRITE) then
+            Foreign.AddOrSetValue(Name, True);
         end;
       finally
         AllocLines.Free;
@@ -716,11 +763,38 @@ begin
       var S: TStateVar:= Default(TStateVar);
       S.UnitKey:= AKey;
       S.VarName:= Vars[Name];
+      S.DeclKey:= AKey;
+      var List: TArray<TStateVar>;
+      if not FState.TryGetValue(Name, List) then List:= nil;
+      FState.AddOrSetValue(Name, List + [S]);
+    end;
+    { Lane CYC3: the section also sets a unit-level variable that exactly one unit of its uses clause declares -- the
+      shape `cycles --fix` writes for a routine-call inversion (the pointer lives in a leaf, the declaring unit assigns
+      it first in its initialization): a reader that initializes earlier sees nil. }
+    for var Name in Foreign.Keys do
+    begin
+      var S: TStateVar:= Default(TStateVar);
+      var Hits: Integer:= 0;
+      for var Dep in FGraph.UsesOfFile(ANode.FileId) do
+      begin
+        var DNode: TUnitNode;
+        if not FGraph.Units.TryGetValue(Dep, DNode) then Continue;
+        for var Ch in FGraph.Store.FindAllChildSymbols(DNode.UnitId) do
+          if (Ch.Kind = skVarDecl) and (LowerCase(Ch.Name) = Name) then
+          begin
+            Inc(Hits);
+            S.VarName:= Ch.Name;
+            S.DeclKey:= Dep;
+          end;
+      end;
+      if Hits <> 1 then Continue;
+      S.UnitKey:= AKey;
       var List: TArray<TStateVar>;
       if not FState.TryGetValue(Name, List) then List:= nil;
       FState.AddOrSetValue(Name, List + [S]);
     end;
   finally
+    Foreign.Free;
     Marked.Free;
     Queue.Free;
     Done.Free;
@@ -744,8 +818,8 @@ function TOrderWalk.IsVisible(const ASym: TSymbol; const AState: TStateVar; cons
 begin
   var Owner: string;
   if not FGraph.ByFile.TryGetValue(ASym.FileId, Owner) then Owner:= '';
-  if Owner <> AState.UnitKey then
-    Exit(FGraph.FileUses(ASym.FileId, AState.UnitKey) and not FGraph.FileDeclares(ASym.FileId, ALowerName));
+  if Owner <> AState.DeclKey then
+    Exit(FGraph.FileUses(ASym.FileId, AState.DeclKey) and not FGraph.FileDeclares(ASym.FileId, ALowerName));
   Result:= True;
   for var Ch in FGraph.Store.FindAllChildSymbols(ASym.Id) do
     if LowerCase(Ch.Name) = ALowerName then Exit(False);
@@ -758,7 +832,7 @@ end;
 procedure TOrderWalk.AddFinding(const AKey: string; const AState: TStateVar; const AVia: TSymbol;
   const AAnchor: TReference; const AProgramName: string);
 begin
-  var DedupKey: string:= AKey + '|' + AState.UnitKey + '|' + LowerCase(AState.VarName);
+  var DedupKey: string:= AKey + '|' + AState.UnitKey + '|' + AState.DeclKey + '|' + LowerCase(AState.VarName);
   if FSeen.ContainsKey(DedupKey) then Exit;
   FSeen.Add(DedupKey, True);
   var Later: string:= FGraph.Units[AState.UnitKey].Name;
@@ -774,7 +848,8 @@ begin
   F.EndCol    := AAnchor.EndCol;
   F.SymbolName:= AState.VarName;
   var Pattern: string:= if FKind = skiInit then MESSAGE_INIT_ORDER else MESSAGE_FINAL_ORDER;
-  F.Message:= Format(Pattern, [Own, Later, AState.VarName, AVia.QualifiedName, Later, Own, AProgramName]);
+  F.Message:= Format(Pattern, [Own, FGraph.Units[AState.DeclKey].Name, AState.VarName, AVia.QualifiedName, Later, Own,
+    AProgramName]);
   FFindings.Add(F);
 end;
 
@@ -1201,6 +1276,156 @@ end;
 function CollectFinalizationAfterDependency(const AStore: ISymbolStore): TArray<TLintFinding>;
 begin
   Result:= RunOrderWalk(AStore, skiFinal);
+end;
+
+{ Lane CYC3: 'file:line' of the first uses entry of AFileId that comes from an include or sits in a conditional
+  region (a pp_regions branch overlapping a uses clause, from its first entry to one line past its last, so an
+  inactive branch between or after the entries counts too); '' when there is none. }
+function OrderDependsOnConfig(const AStore: ISymbolStore; AFileId: Int64): string;
+begin
+  Result:= '';
+  var Name:= ExtractFileName(AStore.GetFilePath(AFileId));
+  var Rows:= AStore.GetUnitUsesForFile(AFileId);
+  for var R in Rows do
+    if R.FromInclude then Exit(Format('%s:%d', [Name, R.IncludeLine]));
+  if Length(Rows) = 0 then Exit;
+  if not AStore.HasFileFacts then Exit(Format('%s (the index has no conditional-region facts: reindex)', [Name]));
+  var Regions:= AStore.GetPpRegions(AFileId);
+  for var Sect:= Low(TUnitUseSection) to High(TUnitUseSection) do
+  begin
+    var Lo:= MaxInt;
+    var Hi:= 0;
+    for var R in Rows do
+      if R.Section = Sect then
+      begin
+        Lo:= Min(Lo, R.StartLine);
+        Hi:= Max(Hi, R.EndLine + 1);
+      end;
+    for var G in Regions do
+      if (Hi > 0) and (G.StartLine <= Hi) and (G.EndLine >= Lo) then Exit(Format('%s:%d', [Name, G.StartLine]));
+  end;
+end;
+
+{ Lane CYC3: the units between AFrom and ATo on a shortest uses path with the entry AFrom -> ATo left out; False when
+  AFrom no longer reaches ATo. }
+function PathAfterCut(AGraph: TInitGraph; const AFrom, ATo: string; out APath: TArray<string>): Boolean;
+var
+  Parent: TDictionary<string, string>;
+  Queue : TQueue<string>;
+begin
+  APath:= nil;
+  Parent:= TDictionary<string, string>.Create;
+  Queue:= TQueue<string>.Create;
+  try
+    Parent.Add(AFrom, '');
+    Queue.Enqueue(AFrom);
+    while Queue.Count > 0 do
+    begin
+      var K:= Queue.Dequeue;
+      var Node: TUnitNode;
+      if not AGraph.Units.TryGetValue(K, Node) then Continue;
+      for var Dep in AGraph.UsesOfFile(Node.FileId) do
+      begin
+        if ((K = AFrom) and (Dep = ATo)) or Parent.ContainsKey(Dep) then Continue;
+        Parent.Add(Dep, K);
+        if Dep = ATo then
+        begin
+          var P:= K;
+          while P <> AFrom do
+          begin
+            APath:= [AGraph.Units[P].Name] + APath;
+            P:= Parent[P];
+          end;
+          Exit(True);
+        end;
+        Queue.Enqueue(Dep);
+      end;
+    end;
+    Result:= False;
+  finally
+    Queue.Free;
+    Parent.Free;
+  end;
+end;
+
+function ProveInitOrderInversion(const AStore: ISymbolStore; const AConsumer, ADeclaring: string): TInitOrderProof;
+var
+  Graph: TInitGraph;
+  A, B : TUnitNode;
+  Path : TArray<string>;
+begin
+  Result:= Default(TInitOrderProof);
+  if AStore = nil then Exit;
+  var KA:= LowerCase(AConsumer);
+  var KB:= LowerCase(ADeclaring);
+  Graph:= TInitGraph.Create(AStore);
+  try
+    if not Graph.Units.TryGetValue(KA, A) or not Graph.Units.TryGetValue(KB, B) then
+    begin
+      Result.Text:= Format('`%s` or `%s` has no single place in the initialization order (the index holds that unit ' +
+        'name twice, or not at all)', [AConsumer, ADeclaring]);
+      Exit;
+    end;
+    if not PathAfterCut(Graph, KA, KB, Path) then
+    begin
+      Result.Text:= Format('after the cut `%s` still uses `%s` and `%s` no longer reaches `%s`, so `%s` initializes ' +
+        'first whatever the .dpr order: the variable is nil there', [B.Name, A.Name, A.Name, B.Name, A.Name]);
+      Exit;
+    end;
+    var Programs: TArray<Int64>:= nil;
+    var First:= '';
+    for var P in Graph.ProgramFiles do
+    begin
+      var Roots:= TDictionary<string, string>.Create;
+      var Before:= Graph.ComputeOrder(P);
+      var After:= Graph.ComputeOrder(P, KA, KB, Roots);
+      try
+        if not (Before.ContainsKey(KA) and Before.ContainsKey(KB)) then Continue;
+        var Dpr:= ExtractFileName(AStore.GetFilePath(P));
+        var Orders: TArray<TDictionary<string, Integer>>:= [Before, After];
+        for var Order in Orders do
+          if Order[KB] > Order[KA] then
+          begin
+            var Entry:= Roots[KA];
+            if Graph.Units.ContainsKey(Entry) then Entry:= Graph.Units[Entry].Name;
+            Result.Text:= Format('in `%s` `%s` (position %d) initializes before `%s` (position %d)%s: list `%s` ' +
+              'before `%s` in the .dpr, or cut another edge', [Dpr, A.Name, Order[KA] + 1, B.Name, Order[KB] + 1,
+              (if Order = After then ' once the cut is made' else ''), A.Name, Entry]);
+            Exit;
+          end;
+        if First = '' then
+          First:= Format('`%s` initializes before `%s` in `%s` (position %d before %d; `%s` reaches `%s` through `%s`)',
+            [B.Name, A.Name, Dpr, After[KB] + 1, After[KA] + 1, A.Name, B.Name, string.Join('`, `', Path)]);
+        Programs:= Programs + [P];
+      finally
+        After.Free;
+        Before.Free;
+        Roots.Free;
+      end;
+    end;
+    if Length(Programs) = 0 then
+    begin
+      Result.Text:= 'no program in this index: a package has no initialization order to prove';
+      Exit;
+    end;
+    var Files: TArray<Int64>:= Programs + [A.FileId, B.FileId];
+    for var N in Path do Files:= Files + [Graph.Units[LowerCase(N)].FileId];
+    for var F in Files do
+    begin
+      var Site:= OrderDependsOnConfig(AStore, F);
+      if Site <> '' then
+      begin
+        Result.Text:= Format('the order depends on a conditional uses entry (`%s`)', [Site]);
+        Exit;
+      end;
+    end;
+    Result.Proved:= True;
+    Result.Text:= 'init order: ' + First + (if Length(Programs) > 1 then Format(', and so in %d other programs',
+      [Length(Programs) - 1]) else '') + '. This holds for this uses order; the lint rule `init-order-hazard` ' +
+      'reports it if a later uses change reverses it.';
+  finally
+    Graph.Free;
+  end;
 end;
 
 end.
