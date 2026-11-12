@@ -1007,6 +1007,25 @@ function DocFactsBuildProfile: string;
 /// </remarks>
 procedure ClearDocFactsMemos;
 
+/// <summary>Starts a fresh record of the source files the fact builders read
+/// (every path SourceLines is asked for, cache hits included).</summary>
+/// <remarks>
+/// 152b DOCU. The facts of one declaration are mined from OTHER files too -- a
+/// callee's body for its exception tags -- at that file's INDEXED line range,
+/// read from the file AS IT IS NOW. When an earlier `document --apply` rewrote
+/// that file and the index was not refreshed, the range lands on other text.
+/// The `document` verbs call this before building, then compare
+/// SourceFilesRead with the files the index reports changed. Not thread-safe:
+/// call it from the thread that runs Build.
+/// </remarks>
+procedure ResetSourceFilesRead;
+
+/// <summary>The distinct source paths read since the last ResetSourceFilesRead,
+/// in the stored form the store handed out, sorted case-insensitively.</summary>
+/// <returns>Empty when nothing was read since the reset.</returns>
+/// <remarks>Not thread-safe, as ResetSourceFilesRead.</remarks>
+function SourceFilesRead: TArray<string>;
+
   /// <summary>Applies the display cap: a list of ATotal items shows all of them
   /// UNLESS ATotal > 15, in which case only the first 10 are kept and the caller
   /// appends '(+N more)' with N = ATotal - 10. Returns how many to display.</summary>
@@ -3087,6 +3106,17 @@ var
   GSrcCachePath : string         ;
   GSrcCacheStamp: TDateTime      ;
   GSrcCacheLines: TArray<string> ;
+  GSrcFilesRead : TStringList    ; { 152b DOCU: see ResetSourceFilesRead }
+
+procedure ResetSourceFilesRead;
+begin
+  GSrcFilesRead.Clear;
+end;
+
+function SourceFilesRead: TArray<string>;
+begin
+  Result:= GSrcFilesRead.ToStringArray;
+end;
 
 function SourceLines(const AFilePath: string): TArray<string>;
 var
@@ -3094,6 +3124,7 @@ var
 begin
   Result:= nil;
   if AFilePath = '' then Exit;
+  GSrcFilesRead.Add(AFilePath); { asked for = depended on, whether or not the read succeeds }
   try
     Stamp:= System.IOUtils.TFile.GetLastWriteTime(AFilePath);
   except
@@ -5594,8 +5625,13 @@ initialization
   GRoutineNameCounts:= TObjectDictionary<string, TDictionary<string, Integer>>.Create([doOwnsValues]);
   GScopeMemberMemo  := TDictionary<string, TSymbol>.Create;
   GForeignKnownMemo := TDictionary<string, Boolean>.Create;
+  GSrcFilesRead     := TStringList.Create;
+  GSrcFilesRead.Sorted       := True;
+  GSrcFilesRead.Duplicates   := dupIgnore;
+  GSrcFilesRead.CaseSensitive:= False;
 
 finalization
+  GSrcFilesRead.Free;
   GSiblingMemo  .Free;
   GRoutineNameCounts.Free;
   GScopeMemberMemo  .Free;
