@@ -1387,7 +1387,8 @@ begin
           if Order[KB] > Order[KA] then
           begin
             var Entry:= Roots[KA];
-            if Graph.Units.ContainsKey(Entry) then Entry:= Graph.Units[Entry].Name;
+            var EntryNode: TUnitNode;
+            if Graph.Units.TryGetValue(Entry, EntryNode) then Entry:= EntryNode.Name;
             Result.Text:= Format('in `%s` `%s` (position %d) initializes before `%s` (position %d)%s: list `%s` ' +
               'before `%s` in the .dpr, or cut another edge', [Dpr, A.Name, Order[KA] + 1, B.Name, Order[KB] + 1,
               (if Order = After then ' once the cut is made' else ''), A.Name, Entry]);
@@ -1410,17 +1411,12 @@ begin
     end;
     var Files: TArray<Int64>:= Programs + [A.FileId, B.FileId];
     for var N in Path do Files:= Files + [Graph.Units[LowerCase(N)].FileId];
+    var Site:= '';
     for var F in Files do
-    begin
-      var Site:= OrderDependsOnConfig(AStore, F);
-      if Site <> '' then
-      begin
-        Result.Text:= Format('the order depends on a conditional uses entry (`%s`)', [Site]);
-        Exit;
-      end;
-    end;
-    Result.Proved:= True;
-    Result.Text:= 'init order: ' + First + (if Length(Programs) > 1 then Format(', and so in %d other programs',
+      if Site = '' then Site:= OrderDependsOnConfig(AStore, F);
+    Result.Proved:= Site = '';
+    Result.Text:= if Site <> '' then Format('the order depends on a conditional uses entry (`%s`)', [Site])
+      else 'init order: ' + First + (if Length(Programs) > 1 then Format(', and so in %d other programs',
       [Length(Programs) - 1]) else '') + '. This holds for this uses order; the lint rule `init-order-hazard` ' +
       'reports it if a later uses change reverses it.';
   finally
