@@ -489,7 +489,11 @@ var
     Result:= False;
     var Wanted: Boolean:= False;
     for var X: TDocDriftFinding in ADrifts do
-      if X.Kind in CALLEE_FACT_KINDS then begin Wanted:= True; Break; end; // dl:ok multiple-statements-per-line -- REVIEWED 2026-11-12: the set-and-stop idiom this unit already uses (AnyFix)
+      if X.Kind in CALLEE_FACT_KINDS then
+      begin
+        Wanted:= True;
+        Break;
+      end;
     if not Wanted then Exit;
     var Stale: TArray<string>:= StaleCalleeReads(AStore, AStore.GetFilePath(ResSym.FileId), Changed, ChangedKnown);
     if Length(Stale) = 0 then Exit;
@@ -499,7 +503,11 @@ var
     begin
       var Known: Boolean:= False;
       for var Q: string in StaleFiles do
-        if SameText(P, Q) then begin Known:= True; Break; end; // dl:ok multiple-statements-per-line -- REVIEWED 2026-11-12: same set-and-stop idiom
+        if SameText(P, Q) then
+        begin
+          Known:= True;
+          Break;
+        end;
       if not Known then StaleFiles:= StaleFiles + [P];
     end;
   end;
@@ -509,7 +517,10 @@ begin
   if AStore = nil then Exit;
   Prof:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
   TDecls:= 0; TExisting:= 0; TAnalyze:= 0; NDecl:= 0; NDiff:= 0;
-  Changed:= nil; ChangedKnown:= False; StaleFiles:= nil; StaleDecls:= 0;
+  Changed     := nil;
+  ChangedKnown:= False;
+  StaleFiles  := nil;
+  StaleDecls  := 0;
   Findings:= TList<TLintFinding>.Create;
   try
     T0:= Tick;
