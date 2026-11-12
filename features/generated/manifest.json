@@ -1,7 +1,7 @@
 {
   "product": "1.50.0-alpha",
-  "extractor": "1.36.0-alpha",
-  "resolver": "1.24.0-alpha",
+  "extractor": "1.37.0-alpha",
+  "resolver": "1.25.0-alpha",
   "schema": 25,
   "groups": [
     {
@@ -4553,6 +4553,31 @@
         "by": "ENGINE",
         "build": "1.33.0-alpha",
         "surfaceHash": "1d22ae2d34cfdb987bfc0783ee41fc8d462df481401d98ae849e6d00856ae193"
+      }
+    },
+    {
+      "id": "rtti-unavailable",
+      "title": "RTTI unavailable (lint rule)",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.50.0-alpha",
+      "summary": "Project lint rule, OFF by default: declarations that lose classic or extended RTTI (enums without type info, record properties, narrowing directives)",
+      "intro": "Read this to see what rtti-unavailable reports and how generated persistence classes keep complete RTTI. It runs in lint-all, lint-project and lint over a project index.",
+      "wikiPage": "rtti-unavailable",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "example": "drag-lint lint-all --db <project.sqlite> --rule rtti-unavailable"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-11",
+        "by": "ENGINE",
+        "build": "1.50.0-alpha",
+        "surfaceHash": "c86e88b99bad3d1352c6b7e19e7394f26a185b860c009bb97ac366379a830ab4"
       }
     },
     {
@@ -13921,7 +13946,7 @@
         {
           "type": "cli",
           "verb": "sql",
-          "usage": "drag-lint sql --query \"SELECT ...\" | --in <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>] (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)",
+          "usage": "drag-lint sql --query \"SELECT ...\" | --in <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>] (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 (none with --output unless --limit is given; --limit 0 = every row; JSON says truncated + total_rows) and time cap 10000 ms; ask `schema --format json` for the columns)",
           "flags": [
             {
               "name": "--query"
@@ -13954,7 +13979,7 @@
             }
           ],
           "helpOrder": 47,
-          "help": ["  drag-lint sql --query \"SELECT ...\" | --in <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>]   (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)"]
+          "help": ["  drag-lint sql --query \"SELECT ...\" | --in <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>]   (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 (none with --output unless --limit is given; --limit 0 = every row; JSON says truncated + total_rows) and time cap 10000 ms; ask `schema --format json` for the columns)"]
         }
       ],
       "audience": "both",
@@ -18900,6 +18925,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "review-marker-unused"
+      },
+      {
+        "id": "rule.rtti-unavailable",
+        "title": "rtti-unavailable",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "A declaration loses classic or extended RTTI: an enum whose explicit ordinals are not contiguous from 0 (no type info, E2134) and a p... (project-wide, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule rtti-unavailable"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "rtti-unavailable"
       },
       {
         "id": "rule.self-assignment",

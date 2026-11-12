@@ -724,7 +724,7 @@ drag-lint schema --db myapp.sqlite --format json        # schema_version + table
 
 When no verb answers the question you actually have, query the index directly.
 `sql` is read-only by construction -- an sqlite3 authorizer refuses ATTACH,
-PRAGMA, DDL and every write, a row cap and a wall-clock cap bound the answer,
+PRAGMA, DDL and every write, a row cap (default 200; `--limit 0` = none; `--output <file>` without `--limit` writes every row; `--json` reports `truncated`, `total_rows` and `row_limit`) and a wall-clock cap bound the answer,
 and exactly one statement is allowed:
 
 ```
@@ -878,7 +878,7 @@ be written and writes nothing. This verb replaces `Register-DragLintProtocol.ps1
 |---|---:|---|
 | [Indexing](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#indexing) | 11 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#indexing) |
 | [Search and navigation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#search-and-navigation) | 37 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#search-and-navigation) |
-| [Linting](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#linting) | 44 (+ 315 rules, 110 fixable) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#linting) |
+| [Linting](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#linting) | 45 (+ 316 rules, 110 fixable) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#linting) |
 | [Documentation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#documentation) | 12 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#documentation) |
 | [Refactoring and code generation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#refactoring-and-code-generation) | 21 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#refactoring-and-code-generation) |
 | [Component conversion](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#component-conversion) | 25 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#component-conversion) |
@@ -1058,7 +1058,7 @@ Win64 build.
 
 #### Lint
 
-**315 rules across 18 categories -- 221 built-in + 94 external `.scm`, 262
+**316 rules across 18 categories -- 222 built-in + 94 external `.scm`, 262
 enabled by default, 110 with an auto-fix.**
 
 | Command | What it does | Notable flags |
@@ -1275,7 +1275,7 @@ messages from `MS*.sql` files by default (`--no-sql-ms` to index every `.sql`).
 | `check-ast <file>` | Run tree-sitter lint rules without compiling | `--rule <id>`, `--format text\|json` |
 | [`purge-locals`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/purge-locals) `--db <db>` | Size escape hatch: drop local-var/param symbols + VACUUM (call graph unchanged; re-inflated on next index) | `--json` |
 | [`workspace index`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/workspace-index) / [`status`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/workspace-status) / [`add <dproj>`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/workspace-add) | Multi-project workspace management | `--config <file>` |
-| `--version` / `--help` | Print version / usage. `--help` is accepted **after any verb** too -- `drag-lint lint --help` prints this same full banner and exits 0. Only `menu-tree` and `menu-drift` print help of their own. | |
+| `--version` / `--help` | Print version / usage. `--help` is accepted **after any verb** too -- `drag-lint lint --help` prints this same full banner and exits 0. Only `menu-tree` and `menu-drift` print help of their own. The banner ends with an **Environment variables** section listing every `DRAGLINT_*` variable the engine reads. | |
 
 ### Flag aliases
 
@@ -1320,10 +1320,10 @@ CLI-only verbs).
 | `run_ast_checks` | Compiler-less AST diagnostics on a file (unbalanced begin/end, undeclared identifiers) |
 | `run_compile_check` | Spawn dcc/msbuild against a file or project; return H/W/E/F diagnostics as JSON |
 
-### Lint rule pack (315 rules)
+### Lint rule pack (316 rules)
 
 Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
-external `.scm`). As of v1.48.0-alpha: **315 rules across 18 categories -- 221
+external `.scm`). As of v1.50.0-alpha: **316 rules across 18 categories -- 222
 built-in and 94 external `.scm`, 262 enabled by default, and 110 with an
 auto-fix.** The table below is a small sample of the built-in rules:
 

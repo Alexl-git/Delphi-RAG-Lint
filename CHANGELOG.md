@@ -86,6 +86,7 @@ Everything since v1.46.0-alpha (2026-11-07): waves 147, 148, 149, 151 and 152, r
 - Fixed: object-leak and field-created-not-freed no longer report an object handed on through an Automation named argument `Foo(Name := Obj)`, and the fixer no longer proposes FreeAndNil for such a field; a name used only as the argument label is no longer taken as handing the object on. (152b GF1)
 - Fixed: magic-literal no longer flags the ordinal in `external Lib index N`; unconditional-recursion, inlay hints and element reads see a call inside an Automation named argument value. (152b GF1)
 - Fixed: doc-drift no longer reads a DUnitX / attribute argument (`[Test] [Ignore('text')]` above a parameterless method) as a signature parameter; `document --apply` orphan-param handling is pinned by a guard. (152b DOC)
+- Fixed: a `dl:ok empty-on-handler` marker written between `do` and `;` of an empty handler is no longer reported review-marker-unused (the marker comment itself silences the rule). (152b CLI)
 
 ### Cycles
 - Added: `cycles --hub` (read-only): names per group the hub units whose removal leaves the rest acyclic, with the uses edges, reference weights and surfaces on each side, whether cutting one side alone breaks the group, and the dead uses inside it; JSON adds hubs[] and zero_ref_edges. Spec 2026-11-08-hub-scc-phased.md (fabcyc case 18, phases P1-P6).
@@ -128,6 +129,10 @@ Everything since v1.46.0-alpha (2026-11-07): waves 147, 148, 149, 151 and 152, r
 - `rename --kind param`: a nested routine's own same-named local, const or type is no longer renamed with the outer local. `narrow-param`: a member write p.m:= v counts as a use of m; new refusal generic-ancestor.
 - Rename: A[i] through a default or indexed property, and through a TObjectList<T> descendant, binds to the element type's member, so rename moves those reads; an indexed property records 'indexed' / 'indexed default' in symbols.directives; with two same-named types in scope Delphi's tie-break decides (unit qualifier, own unit, last used unit; split uses sections still decline); a member read on a library-typed receiver (e.g. TStringList) no longer refuses the plan.
 - Fixed: `rename --kind param` / the proof forms accept a routine-local's tokens in an inactive {$IFDEF} branch (same symbol by scope); `quit-from-thread` follows a quit reached through a called routine; `extract-interface --reparent-interfaced=norefcount` re-parents onto TSingletonImplementation; doc-drift matches a library raise through its ancestor (149 RT items 1, 3, 4, 5).
+- sql: `--json` reports `total_rows` and `row_limit` beside `truncated`; a truncated JSON / --output answer prints a NOTE on stderr; `--limit 0` prints every row; `--output` without `--limit` writes every row. (152b CLI O8)
+- --help: new "Environment variables" section listing every DRAGLINT_* variable from one table, guarded against drift. (152b CLI O3)
+- Fixed: index --project --exclude-under: a forward-slash or relative root now drops the closure units under it (only the backslash absolute form matched before). (152b CLI / W144 R16)
+- Fixed: document --apply no longer refuses an attributed routine (`[Test] procedure P;`) in the anchor check, and its stale-anchor retry clears the doc-facts memos after reopening the store. (152b CLI, DF handovers)
 
 ### Autodoc, hover and exception facts
 - Added: Editor exception facts, ON by default: hovering a routine shows 'Raises: EFoo (bound), EBar (spelled)' (LSP hover + the IDE popup), the LSP code lens adds 'raises N types, handles M types' on routine headers, and MCP gains get_exception_facts (18 tools); `lsp --no-exception-facts` switches the hover line and lens off. exception-facts --target is about 3x faster (indexed routine lookup).

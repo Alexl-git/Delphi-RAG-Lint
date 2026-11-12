@@ -506,7 +506,7 @@ define further codes.
 | `arch-diagram --db <db> --output F.html` | one self-contained HTML layer diagram of the units by folder: which folder sits on which, back-edges, the `uses` lines behind each arrow; `--json` for the model (`ask architecture` needs Graphviz and adds the third-party groups) |
 | `schema` | live index schema: version + tables + columns + row counts (read-only) |
 | `query --name-like <substr>` | SUBSTRING search over symbol NAMES -- the DISCOVERY query, when you do not know the identifier yet (`--kind class,interface,...`, `--limit N` default 50, `--json`). Distinct from `--name`, which is exact with an edit-distance fallback and CANNOT match mid-name; distinct from `--text`, which searches string literals. JSON rows carry `match_kind: substring` |
-| `sql --query "SELECT ..."` | guarded READ-ONLY SQL over the index -- one statement; `--in <q.sql>`, `--limit N` (default 200), `--timeout-ms N` (default 10000), `--json` |
+| `sql --query "SELECT ..."` | guarded READ-ONLY SQL over the index -- one statement; `--in <q.sql>`, `--limit N` (default 200; `--limit 0` = every row), `--timeout-ms N` (default 10000), `--json` (`truncated`, `total_rows`, `row_limit`), `--output <file>` (without `--limit`: every row) |
 | `wiki --term "<phrase>"` | route a HUMAN word to the code -- looks a phrase or alias up against the `dl:wiki` concept topics authors wrote in `///` comments, and prints the owning symbol, its resolved `SeeCode` participants and the body. **Use this when a task names something that is not an identifier** ("the scheduler", "delta streaming") -- it is the only query that maps team vocabulary to symbols. `--list` prints every topic, `--check` is the drift gate (exit 1). Exits 1 on no match, so "not in the wiki" is branchable. `--json` |
 | `ide-release` | ask a running Delphi IDE plugin not to respawn `drag-lint.exe` while a hold lasts, so the engine binary can be rebuilt while the IDE stays open (`--seconds N` default 120, `--resume`, `--status`, `--json`). No DB. It frees nothing by itself. The staging step of `build_draglint_win64.bat` does this automatically when it hits the lock. While a hold lasts the IDE plugin's job queue also DEFERS its heavy jobs (reindex / lint-all / autodoc / forms-CSV / refresh-findings) rather than starting them; they run when the hold lifts |
 | `manifest where` | read-only: which `drag-lint.json`, log folder and library folder this engine resolves, and each lookup rung. Order: explicit `DRAGLINT_MANIFEST` / `--manifest <path>`, then with `DRAGLINT_LAYOUT=v2` the file in `%APPDATA%\drag-lint`, then beside the exe. A missing explicit file never falls through. Phase 1 of installed layout v2: off by default, creates, moves and renames nothing (`--json`) |
@@ -983,6 +983,7 @@ have a `cli` surface). Do not edit it by hand; edit the entry and regenerate.
 | `lint-all` | [Parameter type too wide (lint rule)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/parameter-type-too-wide) | Project lint rule, OFF by default: a class-typed parameter that an ancestor type could carry, proved by the narrow-param plan |  |
 | `lint-all` | [Read but never assigned (lint rule)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/read-never-assigned) | Project-wide lint rule: a field or global that is read but that nothing in the project assigns or creates |  |
 | `lint-all` | [Lint rules on the static type of a reference](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ref-type-rules) | Lint rules on ref_types: is-always-true, is-never-true, argument-narrows, UI access from a thread, quit from a thread; sharper redundant-cast and unsafe casts |  |
+| `lint-all` | [RTTI unavailable (lint rule)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/rtti-unavailable) | Project lint rule, OFF by default: declarations that lose classic or extended RTTI (enums without type info, record properties, narrowing directives) |  |
 | `lint-all` | [Run Lint All (Full Report)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Run-Lint-All-Full-Report) | Runs the whole rule catalog against a project's indexed code and reports every surviving finding -- the overall project health check |  |
 | `lint-all` | [Stream buffer used after free (lint rule)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/stream-buffer-after-free) | Lint rule, OFF by default: a pointer into a memory stream buffer is used after the stream was freed |  |
 | `lint-all` | [Taint analysis (SQL, command, path)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/taint-analysis) | taint-sql-injection, taint-command-injection and taint-path-traversal follow index data_flows facts from a source to a sink |  |
@@ -1453,7 +1454,7 @@ CLI does not yet consume that key.
 
 ## 5c. Environment variables (diagnostics)
 
-These are **not CLI flags** and so do not appear in `--help`. They exist for
+These are **not CLI flags**; `--help` lists every one in its closing **Environment variables** section (one table, guarded against drift). They exist for
 diagnosing the engine itself; none of them changes which findings you get,
 except where noted. All are read once per process.
 
