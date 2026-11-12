@@ -9,7 +9,9 @@
   R2  DRagLint.Storage.SQLite.pas declares / implements no GetFileIncludes.
   K1  the table is still created (CREATE TABLE IF NOT EXISTS file_includes).
   K2  the indexer still writes it (INSERT INTO file_includes in PutFileFacts).
-  K3  Storage.Schema.pas says the table is SQL-facing with no engine reader.
+  K3  Storage.Schema.pas names the table's one engine reader (152c INCR: ISymbolStore.GetIncludeSites,
+      a per-host read for cycle-edge-in-include / unused-unit-in-uses / the M4 parse-error filter) and
+      no longer says it has none (152c INT3b: the 152b note went stale when INCR added the reader).
   K4  (with -Exe) an index of tests\fixtures\file-facts-149\facts still FILLS
       file_includes (rows > 0) -- the write path is untouched.
 
@@ -37,7 +39,7 @@ Check 'R1 ISymbolStore declares no GetFileIncludes' (-not ($intf -match '(?m)^\s
 Check 'R2 TSQLiteSymbolStore has no GetFileIncludes' (-not ($store -match '(?m)^\s*function\s+(TSQLiteSymbolStore\.)?GetFileIncludes\b'))
 Check 'K1 file_includes table still created' ($store -match 'CREATE TABLE IF NOT EXISTS file_includes')
 Check 'K2 file_includes still written' ($store -match 'INSERT INTO file_includes\(')
-Check 'K3 Schema.pas documents file_includes as SQL-facing, no engine reader' ($schema -match 'file_includes has no engine reader')
+Check 'K3 Schema.pas names GetIncludeSites as the file_includes reader, not "no engine reader"' (($schema -match 'file_includes is read by ISymbolStore\.GetIncludeSites') -and -not ($schema -match 'file_includes has no engine reader'))
 
 if (Test-Path $Exe) {
   $fix = Join-Path $repo 'tests\fixtures\file-facts-149\facts'
