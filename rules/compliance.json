@@ -41,6 +41,7 @@
   "copy-paste-assignment": {},
   "create-inside-try": {"cwe": ["CWE-824"], "weak": ["CWE-824"]},
   "criticalsection-not-released": {"cwe": ["CWE-667"], "cert": ["CON51-CPP"]},
+  "cycle-edge-in-include": {},
   "cycle-participant-unit": {"cwe": ["CWE-1047"], "weak": ["CWE-1047"]},
   "cyclomatic-complexity": {"cwe": ["CWE-1121"]},
   "datamodule-form-global": {"cwe": ["CWE-1054"]},

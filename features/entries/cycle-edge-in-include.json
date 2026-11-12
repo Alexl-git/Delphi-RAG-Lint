@@ -1,0 +1,28 @@
+{
+  "id": "cycle-edge-in-include",
+  "title": "Cycle edge written in an include (lint rule)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.50.0-alpha",
+  "summary": "Project lint rule: a uses entry or declaration a uses cycle runs through is written in an include, which cycles --fix never edits; write it in the .pas",
+  "intro": "Read this when circular-uses names a cycle whose entries live in a {$I} include: it says what drag-lint cannot fix there and what to move into the .pas. It runs in lint-all and lint-project.",
+  "wikiPage": "cycle-edge-in-include",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-all"
+    },
+    {
+      "type": "cli",
+      "verb": "lint"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-12",
+    "by": "ENGINE",
+    "build": "1.50.0-alpha",
+    "surfaceHash": "fa5a03cb6f44b6c7294bed01e6ec5a009500e7fddf785d7381843c45862017a7"
+  }
+}

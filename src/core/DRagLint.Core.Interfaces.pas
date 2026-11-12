@@ -3046,6 +3046,15 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function GetPpRegions(AFileId: Int64): TArray<TPpRegionRow>;
+    /// <summary>152c INCR: the file_includes rows of one host, in source order -- every
+    /// {$I} / {$INCLUDE} directive of the host the preprocessor followed, nested ones too.</summary>
+    /// <param name="AFileId">files.id of the host.</param>
+    /// <returns>One TFileIncludeRow per directive (IncPath is the absolute .inc path, HostLine /
+    /// HostCol the directive in the host for Depth 0, InUses True for a uses-list include).
+    /// Empty when the host has none or HasFileFacts is False.</returns>
+    /// <remarks>Reader of the cycle-edge-in-include rule (DRagLint.Lint.IncludeCycleRules).
+    /// Named apart from the removed 149 reader GetFileIncludes on purpose: this one has a caller.</remarks>
+    function GetIncludeSites(AFileId: Int64): TArray<TFileIncludeRow>;
     /// <summary>150 EX3: replaces one setting's project_settings rows of the file in
     /// AToken (a .dpr / .dpk) with AValues, one row per value in order (ordinal 0..).</summary>
     /// <param name="AToken">The open file tx; supplies file_id.</param>

@@ -16433,7 +16433,7 @@ const
     'used-before-assignment', 'not-assigned-interface', 'double-free', 'function-result-not-set',
     'out-param-not-set', 'overwrite-before-read', 'write-only-local', 'split-variable',
     'loop-var-after-loop', 'object-leak', 'local-only-out-arg', 'dead-store-before-out-arg', 'by-value-arg-before-assignment');
-  LINT_GATE_PROJECT_RULES: array[0..47] of string = (
+  LINT_GATE_PROJECT_RULES: array[0..48] of string = (
     'unused-public-symbol', 'unused-private-member', 'circular-uses', 'cycle-participant-unit', 'global-only-uses-edge',
     'dfm-property-not-declared', 'dependent-project-not-recompiled', 'duplicate-global-decl',
     'uses-global-census', 'discarded-effect-free-result', 'query-name-with-effect',
@@ -16443,7 +16443,7 @@ const
     'unused-enum-value', 'unused-global', 'read-never-assigned',
     'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive',
     'effect-free-in-loop-invariant', 'ancestor-not-in-project', 'opaque-to-analysis', 'datamodule-form-global',
-    'global-set-in-initialization-never-freed', 'heavy-initialization', 'finalization-after-dependency', 'init-order-hazard',
+    'global-set-in-initialization-never-freed', 'heavy-initialization', 'finalization-after-dependency', 'init-order-hazard', 'cycle-edge-in-include',
     'is-always-true', 'is-never-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows', 'redundant-cast', 'unsafe-typecast-without-is', 'ui-access-in-thread-typed', 'parameter-type-too-wide', 'quit-from-thread', 'rtti-unavailable');
   { The project rules TProjectLintRules.Run gates on OptedIn (global-only-uses-edge,
     uses-global-census, ...). `lint <file>` hands Run NO opt-in list, so even with an
@@ -16451,14 +16451,14 @@ const
     cannot be judged unused there (LintUnjudgedMarkerRules). Pinned against the
     OptedIn('<id>') calls in DRagLint.Lint.ProjectRules.pas by
     tests\autotest\run_marker_unused_optin_gated_rules.ps1. }
-  PROJECT_RULES_OPTIN_GATED: array[0..33] of string = (
+  PROJECT_RULES_OPTIN_GATED: array[0..34] of string = (
     'global-only-uses-edge', 'uses-global-census', 'dfm-property-not-declared',
     'dependent-project-not-recompiled', 'discarded-effect-free-result', 'cycle-participant-unit',
     'query-name-with-effect', 'assert-with-side-effect', 'virtual-never-overridden',
     'unused-enum-value', 'unused-global', 'read-never-assigned',
     'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive',
     'effect-free-in-loop-invariant', 'opaque-to-analysis', 'datamodule-form-global',
-    'global-set-in-initialization-never-freed', 'heavy-initialization', 'finalization-after-dependency', 'init-order-hazard',
+    'global-set-in-initialization-never-freed', 'heavy-initialization', 'finalization-after-dependency', 'init-order-hazard', 'cycle-edge-in-include',
     'is-always-true', 'is-never-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows', 'redundant-cast', 'unsafe-typecast-without-is', 'ui-access-in-thread-typed', 'parameter-type-too-wide', 'quit-from-thread', 'rtti-unavailable');
   { The OptedIn-gated project rules that ship ON, and that `lint <file>` therefore
     opts in itself when a store CONTAINS the file (lane DIRLINT, 2026-10-27). Each
@@ -24788,6 +24788,67 @@ const
   LINTALL_SCAN_PCT    = 90;
   LINTALL_TAIL_PHASES = 14;
 
+/// <summary>152c INCR (M4): drops the parser-error / syntax-error findings of an include file that is
+/// only ever included inside a uses clause.</summary>
+/// <param name="AStore">The index the findings were produced on; nil or a store without the file-fact
+/// tables keeps every finding.</param>
+/// <param name="AFindings">The lint-all findings.</param>
+/// <returns>AFindings without the parse errors of fragment includes: an .inc whose EVERY file_includes
+/// site, over every host of the index, has in_uses = 1 (`uses {$I Entries.inc}`, a bare list of unit
+/// names). Such a fragment cannot parse on its own, so the error is the linter's view, not the
+/// build's; the same include also included as code (in_uses = 0) is NOT a fragment and keeps its
+/// errors, as does a real syntax error in an include that is included as code.</returns>
+/// <remarks>Lint side only: the indexer's DIAG line and the summary's parse-errors= still count the
+/// fragment (src\index is a hashed surface). Reads one GetIncludeSites per host, and only when some
+/// finding is such a parse error on an .inc file.</remarks>
+function DropUsesFragmentParseErrors(const AStore: ISymbolStore; const AFindings: TArray<TLintFinding>): TArray<TLintFinding>;
+var
+  Cand   : TDictionary<string, Boolean>;
+  AsUses : TDictionary<string, Boolean>;
+  AsCode : TDictionary<string, Boolean>;
+  F      : TLintFinding;
+  Fid    : Int64;
+  Row    : TFileIncludeRow;
+  Key    : string;
+  Kept   : TList<TLintFinding>;
+begin
+  Result:= AFindings;
+  if (AStore = nil) or not AStore.HasFileFacts then Exit;
+  Cand  := TDictionary<string, Boolean>.Create;
+  AsUses:= TDictionary<string, Boolean>.Create;
+  AsCode:= TDictionary<string, Boolean>.Create;
+  Kept  := TList<TLintFinding>.Create;
+  try
+    for F in AFindings do
+      if MatchText(F.RuleId, ['parser-error', 'syntax-error']) and SameText(ExtractFileExt(F.FilePath), '.inc') then
+        Cand.AddOrSetValue(LowerCase(TPath.GetFullPath(F.FilePath)), True);
+    if Cand.Count = 0 then Exit;
+    for Fid in AStore.GetAllFileIds do
+    begin
+      if not MatchText(ExtractFileExt(AStore.GetFilePath(Fid)), ['.pas', '.dpr', '.dpk']) then Continue;
+      for Row in AStore.GetIncludeSites(Fid) do
+      begin
+        Key:= LowerCase(TPath.GetFullPath(Row.IncPath));
+        if not Cand.ContainsKey(Key) then Continue;
+        if Row.InUses then AsUses.AddOrSetValue(Key, True) else AsCode.AddOrSetValue(Key, True);
+      end;
+    end;
+    for F in AFindings do
+    begin
+      Key:= LowerCase(TPath.GetFullPath(F.FilePath));
+      if MatchText(F.RuleId, ['parser-error', 'syntax-error']) and SameText(ExtractFileExt(F.FilePath), '.inc')
+         and AsUses.ContainsKey(Key) and not AsCode.ContainsKey(Key) then Continue;
+      Kept.Add(F);
+    end;
+    Result:= Kept.ToArray;
+  finally
+    Kept.Free;
+    AsCode.Free;
+    AsUses.Free;
+    Cand.Free;
+  end;
+end;
+
 { Lane INC2: LINT AN INCLUDE FROM THE BYTES THE INDEXER PARSED. A project index
   parses each .inc from its includer's include site (lane INC, TIndexer.
   SetIncludeContext: the host's live defines at the directive, first host wins),
@@ -25674,6 +25735,8 @@ begin
       OptIn:= OptIn + ['virtual-never-overridden'];
     if Cfg.ShouldKeep('init-order-hazard', {ADefaultDisabled=}False) then   { 1.44 lane rulesf2 }
       OptIn:= OptIn + ['init-order-hazard'];
+    if Cfg.ShouldKeep('cycle-edge-in-include', {ADefaultDisabled=}False) then   { 152c lane INCR }
+      OptIn:= OptIn + ['cycle-edge-in-include'];
     if Cfg.ShouldKeep('finalization-after-dependency', {ADefaultDisabled=}False) then   { 1.44 lane rulesf2 }
       OptIn:= OptIn + ['finalization-after-dependency'];
     if Cfg.ShouldKeep('heavy-initialization', {ADefaultDisabled=}False) then   { 1.44 lane rulesf2 }
@@ -25858,6 +25921,7 @@ begin
     cluster heavily by file and each call costs a LowerCase + MatchesMask per
     configured glob. Pinned by
     tests\autotest\run_lintall_project_rules_honour_exclude_paths.ps1. }
+  Findings:= DropUsesFragmentParseErrors(Store, Findings);   { 152c lane INCR (M4) }
   LintPhase(Format('exclude_paths filter (%d findings)', [Length(Findings)]));
   begin
     var ExclMemo: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
@@ -26203,6 +26267,8 @@ begin
       OptIn2:= OptIn2 + ['opaque-to-analysis'];
     if LoadLintConfig(AArgs).ShouldKeep('init-order-hazard', {ADefaultDisabled=}False) then   { 1.44 lane rulesf2 }
       OptIn2:= OptIn2 + ['init-order-hazard'];
+    if LoadLintConfig(AArgs).ShouldKeep('cycle-edge-in-include', {ADefaultDisabled=}False) then   { 152c lane INCR }
+      OptIn2:= OptIn2 + ['cycle-edge-in-include'];
     if LoadLintConfig(AArgs).ShouldKeep('finalization-after-dependency', {ADefaultDisabled=}False) then   { 1.44 lane rulesf2 }
       OptIn2:= OptIn2 + ['finalization-after-dependency'];
     if LoadLintConfig(AArgs).ShouldKeep('heavy-initialization', {ADefaultDisabled=}False) then   { 1.44 lane rulesf2 }

@@ -3440,6 +3440,10 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetPpRegions(AFileId: Int64): TArray<TPpRegionRow>;
+      /// <summary>152c INCR: implements ISymbolStore.GetIncludeSites.</summary>
+      /// <param name="AFileId">files.id of the host.</param>
+      /// <returns>The host's file_includes rows in source order.</returns>
+      function GetIncludeSites(AFileId: Int64): TArray<TFileIncludeRow>;
       /// <summary>data_flows rows whose destination is at (AFileId, ALine, ACol).</summary>
       /// <param name="AFileId">files.id.</param>
       /// <param name="ALine">dst_line.</param>
@@ -5944,6 +5948,48 @@ begin
       R.StartLine:= Q.FieldByName('start_line').AsInteger;
       R.EndLine  := Q.FieldByName('end_line'  ).AsInteger;
       R.Active   := Q.FieldByName('active'    ).AsInteger <> 0;
+      L.Add(R);
+      Q.Next;
+    end;
+    Result:= L.ToArray;
+  finally
+    Q.Free;
+    L.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetIncludeSites(AFileId: Int64): TArray<TFileIncludeRow>;
+var
+  Q: TFDQuery;
+  L: TList<TFileIncludeRow>;
+  R: TFileIncludeRow;
+  FPath, FLine, FCol, FDepth, FSection, FUses: TField;
+begin
+  Result:= nil;
+  if not HasFileFacts then Exit;
+  L:= TList<TFileIncludeRow>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT inc_path, host_line, host_col, depth, section, in_uses ' +
+                   'FROM file_includes WHERE file_id = :fid ORDER BY ordinal';
+    Q.ParamByName('fid').AsLargeInt:= AFileId;
+    Q.Open;
+    FPath   := Q.FieldByName('inc_path');
+    FLine   := Q.FieldByName('host_line');
+    FCol    := Q.FieldByName('host_col');
+    FDepth  := Q.FieldByName('depth');
+    FSection:= Q.FieldByName('section');
+    FUses   := Q.FieldByName('in_uses');
+    while not Q.Eof do
+    begin
+      R:= Default(TFileIncludeRow);
+      R.IncPath := FPath.AsString;
+      R.HostLine:= FLine.AsInteger;
+      R.HostCol := FCol.AsInteger;
+      R.Depth   := FDepth.AsInteger;
+      R.Section := FSection.AsString;
+      R.InUses  := FUses.AsInteger <> 0;
       L.Add(R);
       Q.Next;
     end;
