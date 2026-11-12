@@ -654,6 +654,10 @@ type
     // --unit flag with ghost-check's GhostUnit, so it is parsed into a DISTINCT
     // field ONLY when Command='document' to avoid the ghost-check collision.
     DocUnit    : string; // document --unit <file.pas>
+    { 152b DOCU2: '<first>, <second>' when `document` got --unit twice with
+      DIFFERENT values. DocUnit holds one file, so the earlier one used to be
+      dropped in silence; Run refuses the command line instead (exit 2). }
+    DocUnitConflict: string;
     // AutoDocument (batch scope): --stubs flips the facts-only default. Off
     // (default) documents only facts-backed / already-documented decls; on keeps
     // the pure all-TODO create too (opt-in TODO stubs). Consumed by document /
@@ -2153,7 +2157,12 @@ begin
     else if (A = '--unit') and (i < ParamCount) then
     begin
       Inc(i);
-      if (Result.Command = 'document') or (Result.Command = 'document-all') then Result.DocUnit:= ParamStr(i)
+      if (Result.Command = 'document') or (Result.Command = 'document-all') then
+      begin
+        if (Result.DocUnit <> '') and (not SameText(Result.DocUnit, ParamStr(i))) and (Result.DocUnitConflict = '') then
+          Result.DocUnitConflict:= Result.DocUnit + ', ' + ParamStr(i);
+        Result.DocUnit:= ParamStr(i);
+      end
       else if Result.Command = 'query' then Result.UnitName:= ParamStr(i)
       else
       begin
@@ -40051,6 +40060,19 @@ begin
     begin
       Writeln(ErrOutput, Format('ERROR: --rule given more than once (%s). One --rule per run -- ' +
         'run once per rule, or drop --rule to report every enabled rule.', [Args.RuleConflict]));
+      Exit(2);
+    end;
+
+    { 152b DOCU2: one --unit per `document` run, same reason as N-02 above. A
+      second, different file REPLACED the first, so only the last unit was
+      documented and the run exited 0. Refused, not looped: each unit's run must
+      see a fresh index (DoDocumentUnit refuses facts read from a file changed
+      since indexing), so a list would stop at the second unit anyway. }
+    if Args.DocUnitConflict <> '' then
+    begin
+      Writeln(ErrOutput, Format('ERROR: --unit given more than once (%s). document takes ONE --unit per run -- ' +
+        'run it once per unit, reindexing between runs that --apply, or use document --project <file.dproj> for every unit.',
+        [Args.DocUnitConflict]));
       Exit(2);
     end;
 
