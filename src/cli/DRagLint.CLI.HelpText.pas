@@ -344,7 +344,7 @@ begin
   Writeln('      (an event handler rename also rewrites its text .dfm binding, OnClick = Name; a binary .dfm that holds the name refuses, exit 2, naming the file; other binary or unindexed .dfm files are reported as not rewritten, never skipped silently)');
   Writeln('  drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]');
   Writeln('  drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--no-backup|--migrate-pure] [--db PATH]   - generate/repair a managed DocInsight comment');
-  Writeln('  drag-lint document --unit <file.pas> [--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]         - document every public decl in the unit (facts-only)');
+  Writeln('  drag-lint document --unit <file.pas> [--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]         - document every public decl in the unit (facts-only; ONE --unit per run: a second, different --unit is exit 2)');
   Writeln('  drag-lint document --project <p.dpr|.dproj> [--stubs|--apply|--json|--no-backup|--include-accessors|--reindex|--document-third-party|--migrate-pure] [--db PATH]  - document every public decl the project OWNS (--reindex brackets with index: self-freshens so hover/LSP are correct immediately after)');
   Writeln('                                 scope: the compile closure restricted to the project''s own roots (_D-RAG\drag-lint-project.json, same declaration lint-all reads).');
   Writeln('                                 Vendored roots are named and skipped; --document-third-party writes to them too.');
@@ -1127,7 +1127,7 @@ begin
   if pVerb = 'document' then
   begin
     Writeln('  drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--no-backup|--migrate-pure] [--db PATH]   - generate/repair a managed DocInsight comment');
-    Writeln('  drag-lint document --unit <file.pas> [--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]         - document every public decl in the unit (facts-only)');
+    Writeln('  drag-lint document --unit <file.pas> [--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]         - document every public decl in the unit (facts-only; ONE --unit per run: a second, different --unit is exit 2)');
     Writeln('  drag-lint document --project <p.dpr|.dproj> [--stubs|--apply|--json|--no-backup|--include-accessors|--reindex|--document-third-party|--migrate-pure] [--db PATH]  - document every public decl the project OWNS (--reindex brackets with index: self-freshens so hover/LSP are correct immediately after)');
     Writeln('                                 scope: the compile closure restricted to the project''s own roots (_D-RAG\drag-lint-project.json, same declaration lint-all reads).');
     Writeln('                                 Vendored roots are named and skipped; --document-third-party writes to them too.');
