@@ -7,7 +7,7 @@
 
   RULE. Every tests\**\run_*.ps1 that (a) takes an -Exe parameter, (b) says "no|without|absent
   ... drag-lint.json|manifest" in its text and (c) does not call Get-HermeticEngine is FLAGGED.
-  A flagged guard fails the run unless it is in $Reported below: guards the 152 HG1 lane reviewed that
+  A flagged guard fails the run unless it is in $Reported below: guards the 152 HG1 lane reviewed (all converted by HG3; the list is empty) that
   build their OWN manifest-less engine copy or otherwise need no conversion, closed by evidence (the
   151 and 152 INT batteries run every guard with a drag-lint.json beside the exe). The list is a
   ratchet: a NEW flagged guard fails until it calls Get-HermeticEngine or is reviewed in.
@@ -23,17 +23,10 @@ function Check($n, $ok, $d = '') {
   if (-not $ok) { $script:Failed = $true }
 }
 $Reported = @(
-  # guards reviewed by HG1, not converted: own engine copy or no -Exe-sensitive manifest premise (see lanes\152\HG1\REPORT.md)
-  'run_compare_verb.ps1','run_doc_returns.ps1','run_doc_returns_and_callers.ps1','run_docs_manifest_roundtrip.ps1',
-  'run_info_verb.ps1','run_installed_layout_v2_phase2_guard.ps1','run_library_sibling_platform_guard.ps1',
-  'run_lintall_infers_project_for_unit_not_in_dpr.ps1','run_lintall_no_library_warning.ps1','run_lintall_unanchored_note.ps1',
-  'run_nodb_error_on_stderr.ps1','run_outline_resolves_from_file.ps1','run_project_db_resolve.ps1',
-  'run_redundant_cast_multi_library.ps1','run_rename_owners_harness.ps1','run_resolve_dbs_in_uncovered.ps1',
-  'run_resolve_dbs_library_contract.ps1','run_starter_manifest.ps1','run_usages_no_db_guard.ps1',
-  'run_cli141_followups.ps1','run_context_library_calls.ps1','run_cq_library_defaults.ps1','run_index_all_library_first.ps1',
-  'run_index_all_no_prune.ps1','run_installed_layout_v2_guard.ps1','run_lint_library_unit_project_rules_guard.ps1',
-  'run_lintall_corrupt_library.ps1','run_lsp_watch_pascal_guard.ps1','run_qcli_142_guard.ps1'
+  # 152 HG3: empty -- all 29 guards HG1 pinned here now call Get-HermeticEngine. A guard that truly cannot
+  # convert is listed here with a one-line reason: 'run_x.ps1'  # reason
 )
+
 $phrase = '(?i)\b(no|without|absent)\b[^\r\n]{0,30}(drag-lint\.json|manifest)'
 function Get-FlaggedGuards([string]$Root) {
   $self = 'run_hermetic_engine_guard.ps1'

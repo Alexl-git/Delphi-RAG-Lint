@@ -49,6 +49,8 @@ param(
   [string]$FixtureDir = "$PSScriptRoot\fixtures\renameowners",
   [string]$WorkDir    = "$env:TEMP\draglint-owners-$([guid]::NewGuid().ToString('N'))"
 )
+if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
+. "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG3: no machine drag-lint.json
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
