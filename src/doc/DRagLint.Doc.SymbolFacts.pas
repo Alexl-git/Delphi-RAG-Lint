@@ -335,7 +335,7 @@ function SymbolFactsCsvSplit(const ACsv: string): TArray<string>;
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)</para>
-/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.HasTestRoutineMarkers, DRagLint.Core.Model.CanBeCallTarget, DRagLint.Doc.SymbolFacts.ComputeCoveredBy.Walk, DRagLint.Doc.SymbolFacts.JoinCappedDisplay, IsTestRoutine, LastSegment, LowerCase, TargetIsMethodOf, Trim</para>
+/// <para>Calls: CbKey, DRagLint.Core.Interfaces.ISymbolStore.HasTestRoutineMarkers, DRagLint.Core.Model.CanBeCallTarget, DRagLint.Doc.SymbolFacts.ComputeCoveredBy.Walk, DRagLint.Doc.SymbolFacts.JoinCappedDisplay, IntToStr, LastSegment, LowerCase, MemoIsTestRoutine, MemoNameCallers, MemoResolvedCallers, MemoSymbolById, TargetIsMethodOf, Trim</para>
 /// <para>Returns: ''; JoinCappedDisplay(Capped, COVERED_BY_CAP)</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.HasTestRoutineMarkers"/>
@@ -356,18 +356,33 @@ function ComputeCoveredBy(const AStore: ISymbolStore; const ASym: TSymbol): stri
 /// <returns>True for a store-resolved class / interface; False for a resolved
 /// record / enum or a built-in value type; otherwise the T/I naming convention.
 /// '' -> False.</returns>
-/// <remarks>Pure. 152b O7: Doc.Facts asks it at READ time with AFileId = 0, so a
+/// <remarks>
+/// Pure. 152b O7: Doc.Facts asks it at READ time with AFileId = 0, so a
 /// non-T/I class declared in another unit (Widget) is accepted and a
-/// HWND / DWORD-like alias is not. Guard: tests\autotest\run_returns_owner_order.ps1.</remarks>
+/// HWND / DWORD-like alias is not. Guard: tests\autotest\run_returns_owner_order.ps1.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)</para>
+/// <para>Calls: CharInSet, Copy, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Doc.SymbolFacts.IsBuiltinValueTypeName, Trim</para>
+/// <para>Returns: False; (Length(Bare) &gt;= 2) and CharInSet(Bare[1], ['T', 'I'])</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 31 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+/// <seealso cref="DRagLint.Doc.SymbolFacts.IsBuiltinValueTypeName"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsReferenceTypeName(const AStore: ISymbolStore; const ATypeName: string;
   const AFileId: Int64): Boolean;
 
 /// <summary>Drops ComputeCoveredBy's run-level store-lookup memos (152b O6).</summary>
-/// <remarks>The memos are keyed by the store's interface pointer and never expire on
+/// <remarks>
+/// The memos are keyed by the store's interface pointer and never expire on
 /// their own (nothing on the doc-facts path writes to a store). Call it whenever a
 /// store is freed or reopened while the process lives on -- Doc.Facts
 /// ClearDocFactsMemos does, so every caller of that clears these too. Not
-/// thread-safe: the doc-facts path runs on one thread.</remarks>
+/// thread-safe: the doc-facts path runs on one thread.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Doc.Facts.ClearDocFactsMemos (DRagLint.Doc.Facts.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ClearCoveredByMemos;
 
 /// <summary>AStore.FindResolvedCallers(ASymbolId) through ComputeCoveredBy's run-level
@@ -376,9 +391,18 @@ procedure ClearCoveredByMemos;
 /// <param name="AStore">Open symbol store; not owned. Must not be nil.</param>
 /// <param name="ASymbolId">Target symbol id in AStore.</param>
 /// <returns>The store's answer, unchanged.</returns>
-/// <remarks>Doc.Facts TDocFactsBuilder.Build asks it for the declaration's own
+/// <remarks>
+/// Doc.Facts TDocFactsBuilder.Build asks it for the declaration's own
 /// 'Called from:' rows, so ComputeCoveredBy's first hop for the same symbol is a memo hit.
-/// Cleared by ClearCoveredByMemos. Not thread-safe.</remarks>
+/// Cleared by ClearCoveredByMemos. Not thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Doc.SymbolFacts.ComputeCoveredBy.Walk (DRagLint.Doc.SymbolFacts.pas)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Doc.SymbolFacts.CbKey, IntToStr</para>
+/// <para>Returns: AStore.FindResolvedCallers(ASymbolId)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers"/>
+/// <seealso cref="DRagLint.Doc.SymbolFacts.CbKey"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MemoResolvedCallers(const AStore: ISymbolStore; ASymbolId: Int64): TArray<TResolvedCaller>;
 
 /// <summary>v(ADP3 T14): the DI/ORM wiring string for ASym -- '; '-joined

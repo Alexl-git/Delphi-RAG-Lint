@@ -145,7 +145,7 @@ type
     /// <param name="AKind"><!-- drag-lint:auto type -->const string</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas) ?, DRagLint.Charts.ArchDiagram.DiagramSvg (DRagLint.Charts.ArchDiagram.pas) ?, DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.PrintReferenceLines (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.RenderJson (DRagLint.Context.Bundler.pas) (+676 more)</para>
+    /// <para>Called from: DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas) ?, DRagLint.Charts.ArchDiagram.DiagramSvg (DRagLint.Charts.ArchDiagram.pas) ?, DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.PrintReferenceLines (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.RenderJson (DRagLint.Context.Bundler.pas) (+699 more)</para>
     /// <para>Writes: Exact, Ambiguous, External, NameOnly</para>
     /// <seealso cref="DRagLint.Query.Callers.TResolutionTally.ToText"/>
     /// <!-- drag-lint:auto END -->

@@ -561,7 +561,7 @@ const
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoSchema.ColumnSemantics (DRagLint.CLI.pas), DRagLint.Core.Model.TSymbolKindHelper.FromText (DRagLint.Core.Model.pas), DRagLint.Report.CyclePlan.TCyclePlanner.BuildView (DRagLint.Report.CyclePlan.pas), DRagLint.Storage.SQLite.ReadSymbolFromQuery (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetTypeCandidates (DRagLint.Storage.SQLite.pas) (+55 more)</para>
+  /// <para>Used by: DRagLint.CLI.DoSchema.ColumnSemantics (DRagLint.CLI.pas), DRagLint.Core.Model.TSymbolKindHelper.FromText (DRagLint.Core.Model.pas), DRagLint.Report.CyclePlan.TCyclePlanner.BuildView (DRagLint.Report.CyclePlan.pas), DRagLint.Storage.SQLite.ReadSymbolFromQuery (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetTypeCandidates (DRagLint.Storage.SQLite.pas) (+56 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSymbolKind = (  // NOTE: DragLint.Plugin.StructureCache deliberately re-declares this; it is a design-time BPL that shells out to the CLI and uses only System.* units, so depending on Core.Model would link the whole engine into the IDE package
@@ -636,7 +636,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas) ?, declaration (DRagLint.Storage.SQLite.pas) ?, DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas) ?, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveParenlessCallRefs (DRagLint.Storage.SQLite.pas) (+14 more)</para>
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas) ?, declaration (DRagLint.Storage.SQLite.pas) ?, DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas) ?, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveParenlessCallRefs (DRagLint.Storage.SQLite.pas) (+15 more)</para>
   /// <para>Used in units: DRagLint.Core.Indexer, DRagLint.Core.Interfaces, DRagLint.Storage.SQLite</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -647,8 +647,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Analysis.PurityStage.TPurityRun.SymbolById (DRagLint.Analysis.PurityStage.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.Convert.Apply.BoundAccessSites.ScopeOf (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.CheckTypeFreshness (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindClassMember (DRagLint.Convert.Apply.pas) (+879 more)</para>
-  /// <para>Used in units: DRagLint.Analysis.LintTree, DRagLint.Analysis.PurityStage, DRagLint.Analysis.SurfaceAdapters, DRagLint.Analysis.SurfaceFingerprint, DRagLint.CLI, DRagLint.Context.Bundler, DRagLint.Convert.Apply, DRagLint.Convert.GlyphVacuum, DRagLint.Convert.PropCache, DRagLint.Convert.PropTree (+77 more)</para>
+  /// <para>Used by: DRagLint.Analysis.PurityStage.TPurityRun.SymbolById (DRagLint.Analysis.PurityStage.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.Convert.Apply.BoundAccessSites.ScopeOf (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.CheckTypeFreshness (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindClassMember (DRagLint.Convert.Apply.pas) (+886 more)</para>
+  /// <para>Used in units: DRagLint.Analysis.LintTree, DRagLint.Analysis.PurityStage, DRagLint.Analysis.SurfaceAdapters, DRagLint.Analysis.SurfaceFingerprint, DRagLint.CLI, DRagLint.Context.Bundler, DRagLint.Convert.Apply, DRagLint.Convert.GlyphVacuum, DRagLint.Convert.PropCache, DRagLint.Convert.PropTree (+78 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSymbol = record
@@ -898,7 +898,7 @@ type
     /// <remarks>
     /// Pure; no side effects.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Convert.PropTree.TPropMemberResolver.IsComponentType (DRagLint.Convert.PropTree.pas), DRagLint.Doc.SymbolFacts.IsTestRoutine (DRagLint.Doc.SymbolFacts.pas), DRagLint.Lint.ProjectRules.CollectUsesGlobalCensus.IsDataModuleClass (DRagLint.Lint.ProjectRules.pas), DRagLint.LSP.Completion.EnclosingTypeDescendsFrom (DRagLint.LSP.Completion.pas), DRagLint.Query.Implementors.AncestorIs (DRagLint.Query.Implementors.pas) (+3 more)</para>
+    /// <para>Called from: DRagLint.Convert.PropTree.TPropMemberResolver.IsComponentType (DRagLint.Convert.PropTree.pas), DRagLint.Doc.SymbolFacts.DescendsFromTestCase (DRagLint.Doc.SymbolFacts.pas), DRagLint.Lint.ProjectRules.CollectUsesGlobalCensus.IsDataModuleClass (DRagLint.Lint.ProjectRules.pas), DRagLint.LSP.Completion.EnclosingTypeDescendsFrom (DRagLint.LSP.Completion.pas), DRagLint.Query.Implementors.AncestorIs (DRagLint.Query.Implementors.pas) (+3 more)</para>
     /// <para>Calls: SameText</para>
     /// <para>Reads: Name, ResolvedName</para>
     /// <!-- drag-lint:auto END -->
@@ -1119,7 +1119,7 @@ type
   /// plain; 'ambiguous'/'unverified' -> append ' ?'.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoAmbiguousCalls (DRagLint.CLI.pas) ?, DRagLint.CLI.RenderCallGraphText (DRagLint.CLI.pas) ?, DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindResolvedCallers (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindUnresolvedNameCallers (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetAmbiguousCalls (DRagLint.Storage.SQLite.pas) (+22 more)</para>
+  /// <para>Used by: DRagLint.CLI.DoAmbiguousCalls (DRagLint.CLI.pas) ?, DRagLint.CLI.RenderCallGraphText (DRagLint.CLI.pas) ?, DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindResolvedCallers (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindUnresolvedNameCallers (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetAmbiguousCalls (DRagLint.Storage.SQLite.pas) (+26 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Interfaces, DRagLint.Core.Model, DRagLint.Doc.Facts, DRagLint.Doc.SymbolFacts, DRagLint.Lint.EffectRules, DRagLint.Lint.TaintRules, DRagLint.LSP.Feature.CallHierarchy, DRagLint.Query.Callers, DRagLint.Report.RCallTree, DRagLint.Storage.SQLite</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -1343,7 +1343,7 @@ type
   /// stands in a uses list (`uses <$I x.inc>` (an include directive as the entry list)), whose entries the indexer then
   /// takes from the include. Rows keep source order.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas) ?, declaration (DRagLint.Index.IncludeUses.pas) ?, declaration (DRagLint.Storage.SQLite.pas) ?, DRagLint.Index.IncludeUses.BuildFileIncludeRows (DRagLint.Index.IncludeUses.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetFileIncludes (DRagLint.Storage.SQLite.pas) (+1 more)</para>
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas) ?, declaration (DRagLint.Index.IncludeUses.pas) ?, declaration (DRagLint.Storage.SQLite.pas) ?, DRagLint.Index.IncludeUses.BuildFileIncludeRows (DRagLint.Index.IncludeUses.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.PutFileFacts (DRagLint.Storage.SQLite.pas) ?</para>
   /// <para>Used in units: DRagLint.Core.Interfaces, DRagLint.Index.IncludeUses, DRagLint.Storage.SQLite</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -1367,8 +1367,8 @@ type
   /// block's symbol in TParseResult.Symbols; the store maps it to symbols.id.
   /// Lines and columns are 1-based (columns in UTF-8 bytes, as for symbols).
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas) ?, declaration (DRagLint.Parser.DFM.pas) ?, DRagLint.Parser.DFM.EmitDfmObject (DRagLint.Parser.DFM.pas), DRagLint.Parser.DFM.TDfmState.Create (DRagLint.Parser.DFM.pas) ?, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetDfmObjects (DRagLint.Storage.SQLite.pas) (+3 more)</para>
-  /// <para>Used in units: DRagLint.Convert.Apply, DRagLint.Core.Interfaces, DRagLint.Parser.DFM, DRagLint.Storage.SQLite</para>
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas) ?, declaration (DRagLint.FormsMap.pas) ?, declaration (DRagLint.Parser.DFM.pas) ?, DRagLint.Parser.DFM.EmitDfmObject (DRagLint.Parser.DFM.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetDfmObjects (DRagLint.Storage.SQLite.pas) (+6 more)</para>
+  /// <para>Used in units: DRagLint.Convert.Apply, DRagLint.Core.Interfaces, DRagLint.FormsMap, DRagLint.Parser.DFM, DRagLint.Parser.DFMProps, DRagLint.Storage.SQLite</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDfmObjectRow = record
@@ -1395,6 +1395,10 @@ type
   /// CompClass is '' for an item; CollProp is the collection property an item
   /// belongs to ('' for a block). Not the same table as dfm_objects (tree-sitter,
   /// blocks only, joined to symbols): this one keeps items and the scanner's view.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas) ?, declaration (DRagLint.FormsMap.Dfm.pas) ?, DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromIndexOrFile (DRagLint.FormsMap.Dfm.pas) ?, DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromRows (DRagLint.FormsMap.Dfm.pas) ?, DRagLint.Parser.DfmNav.ScanDfmNav (DRagLint.Parser.DfmNav.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.Core.Interfaces, DRagLint.FormsMap.Dfm, DRagLint.Parser.DfmNav, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDfmNavNodeRow = record
     Ordinal  : Integer;
@@ -1415,6 +1419,10 @@ type
   /// "On"). Value is the scanner's value: a string decoded ('' doubled quotes,
   /// #nnn codes, '+' continuation lines joined), anything else the raw text of
   /// its first line. Node is the owning node's Ordinal; rows keep .dfm order.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas), declaration (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromIndexOrFile (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromLines (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromRows (DRagLint.FormsMap.Dfm.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.Core.Interfaces, DRagLint.FormsMap.Dfm, DRagLint.Parser.DfmNav, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDfmNavPropRow = record
     Node : Integer;
@@ -1503,6 +1511,10 @@ type
   /// columns are 1-based (columns in UTF-8 bytes, as for dfm_objects). The store
   /// writes the array index as the row's ordinal. Spec:
   /// docs\superpowers\specs\2026-11-11-dfm-props-and-comment-facts.md.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas) ?, declaration (DRagLint.FormsMap.pas) ?, DRagLint.FormsMap.DfmPropsCanonical (DRagLint.FormsMap.pas) ?, DRagLint.Parser.DFM.DfmPropRow (DRagLint.Parser.DFM.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetDfmProperties (DRagLint.Storage.SQLite.pas) (+9 more)</para>
+  /// <para>Used in units: DRagLint.Core.Interfaces, DRagLint.FormsMap, DRagLint.Parser.DFM, DRagLint.Parser.DFMProps, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDfmPropertyRow = record
     ObjectOrdinal: Integer;
@@ -1530,6 +1542,10 @@ type
   /// AnchorSymbolIdx indexes TParseResult.Symbols (-1 = none) and is mapped to
   /// comment_facts.anchor_symbol_id by the store; a row READ back has
   /// AnchorSymbolIdx -1 and AnchorSymbolId the stored id (0 = NULL).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas) ?, declaration (DRagLint.Index.CommentFacts.pas) ?, declaration (DRagLint.Storage.SQLite.pas) ?, DRagLint.Index.CommentFacts.ExtractCommentFacts (DRagLint.Index.CommentFacts.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetCommentFacts (DRagLint.Storage.SQLite.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.Core.Interfaces, DRagLint.Index.CommentFacts, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCommentFactRow = record
     StartOffset    : Integer;
@@ -1773,8 +1789,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers.EmitHint (DRagLint.CLI.pas), DRagLint.CLI.CircularUsesForFile (DRagLint.CLI.pas), DRagLint.CLI.UnitNotInLibraryFindings (DRagLint.CLI.pas), DRagLint.Core.Model.TLintFinding.AtSymbol (DRagLint.Core.Model.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit.CheckList (DRagLint.Diagnostics.AstChecks.pas) (+418 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Interfaces, DRagLint.Core.Model, DRagLint.Diagnostics.AstChecks, DRagLint.Diagnostics.BoundsNilChecks, DRagLint.Diagnostics.CloneChecks, DRagLint.Diagnostics.ConcurrencyChecks, DRagLint.Diagnostics.ControlFlowChecks, DRagLint.Diagnostics.DeadCodeChecks, DRagLint.Diagnostics.DeclChecks (+55 more)</para>
+  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers.EmitHint (DRagLint.CLI.pas), DRagLint.CLI.CircularUsesForFile (DRagLint.CLI.pas), DRagLint.CLI.UnitNotInLibraryFindings (DRagLint.CLI.pas), DRagLint.Core.Model.TLintFinding.AtSymbol (DRagLint.Core.Model.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit.CheckList (DRagLint.Diagnostics.AstChecks.pas) (+421 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Interfaces, DRagLint.Core.Model, DRagLint.Diagnostics.AstChecks, DRagLint.Diagnostics.BoundsNilChecks, DRagLint.Diagnostics.CloneChecks, DRagLint.Diagnostics.ConcurrencyChecks, DRagLint.Diagnostics.ControlFlowChecks, DRagLint.Diagnostics.DeadCodeChecks, DRagLint.Diagnostics.DeclChecks (+56 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TLintFinding = record
@@ -1958,7 +1974,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Index.CallResolver.TCallResolver.ResolveTypeNameToSymbol.PickShadowingType (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.UsesOrderPick (DRagLint.Index.CallResolver.pas), DRagLint.Index.UsesRecoverWrite.HeaderRow (DRagLint.Index.UsesRecoverWrite.pas), DRagLint.Parser.Delphi13.TWalkState.EmitUnitUse (DRagLint.Parser.Delphi13.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas) (+65 more)</para>
+  /// <para>Used by: DRagLint.Index.CallResolver.TCallResolver.ResolveTypeNameToSymbol.PickShadowingType (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.UsesOrderPick (DRagLint.Index.CallResolver.pas), DRagLint.Index.UsesRecoverWrite.HeaderRow (DRagLint.Index.UsesRecoverWrite.pas), DRagLint.Parser.Delphi13.TWalkState.EmitUnitUse (DRagLint.Parser.Delphi13.pas), DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas) (+67 more)</para>
   /// <para>Used in units: DRagLint.Analysis.LintTree, DRagLint.Analysis.SurfaceAdapters, DRagLint.Analysis.SurfaceFingerprint, DRagLint.CLI, DRagLint.Context.Bundler, DRagLint.Convert.Apply, DRagLint.Core.Indexer, DRagLint.Core.Interfaces, DRagLint.Core.Model, DRagLint.Diagnostics.AstChecks (+16 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -2758,9 +2774,9 @@ const
 /// Proximity only. It says nothing about WHAT occupies the gap -- pair
 /// it with NoDeclarationInGap (or use DocRegionFitsDecl, which is both).
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Core.Indexer.FindDocRegionAbove (DRagLint.Core.Indexer.pas), DRagLint.Core.Model.DocRegionFitsDecl (DRagLint.Core.Model.pas), DRagLint.Doc.Document.FindDocRegionAbove (DRagLint.Doc.Document.pas), DRagLint.Doc.Strip.TDocStripper.StripSymbolRegion (DRagLint.Doc.Strip.pas)</para>
+/// <para>Called from: DRagLint.Core.Indexer.FindDocRegionAbove (DRagLint.Core.Indexer.pas), DRagLint.Core.Model.DocRegionFitsDecl (DRagLint.Core.Model.pas), DRagLint.Doc.Document.FindDocRegionAbove (DRagLint.Doc.Document.pas), DRagLint.Doc.Strip.TDocStripper.StripSymbolRegion (DRagLint.Doc.Strip.pas), DRagLint.Index.CommentFacts.ExtractCommentFacts.DeclBelow (DRagLint.Index.CommentFacts.pas)</para>
 /// <para>Returns: (AEndLine &gt;= ADeclLine - 1 - AAllowGap) and (AEndLine &lt;= ADeclLine - 1)</para>
-/// <para>Pure</para>
+/// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function DocRegionInGapWindow(AEndLine, ADeclLine, AAllowGap: Integer): Boolean;

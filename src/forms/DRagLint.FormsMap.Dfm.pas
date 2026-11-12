@@ -49,7 +49,7 @@ type
   /// <remarks>
   /// Owned by the TFormDfmTree that created it; never free one directly.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.FormsMap.Dfm.pas) ?, DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti (DRagLint.FormsMap.Dfm.pas) ?, DRagLint.FormsMap.Dfm.TFormDfmTree.Create (DRagLint.FormsMap.Dfm.pas) ?, DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromLines (DRagLint.FormsMap.Dfm.pas) ?, DRagLint.FormsMap.Dfm.TFormDfmTree.NewNode (DRagLint.FormsMap.Dfm.pas) (+30 more)</para>
+  /// <para>Used by: declaration (DRagLint.FormsMap.Dfm.pas) ?, DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti (DRagLint.FormsMap.Dfm.pas) ?, DRagLint.FormsMap.Dfm.TFormDfmTree.Create (DRagLint.FormsMap.Dfm.pas) ?, DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromRows (DRagLint.FormsMap.Dfm.pas) ?, DRagLint.FormsMap.Dfm.TFormDfmTree.NewNode (DRagLint.FormsMap.Dfm.pas) (+30 more)</para>
   /// <para>Used in units: DRagLint.FormsMap, DRagLint.FormsMap.Dfm, DRagLint.MenuTree.Dfm</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -176,7 +176,7 @@ type
     /// TFormDfmNode.Create(AParent).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromLines (DRagLint.FormsMap.Dfm.pas)</para>
+    /// <para>Called from: DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromRows (DRagLint.FormsMap.Dfm.pas)</para>
     /// <para>Calls: DRagLint.FormsMap.Dfm.TFormDfmNode.Create</para>
     /// <para>Reads: FNodes, FRoot   Writes: FRoot</para>
     /// <para>Owns returned: new (caller owns)</para>
@@ -235,7 +235,7 @@ type
     procedure AddMulti(ADict: TObjectDictionary<string, TList<TFormDfmNode>>; const AKey: string; ANode: TFormDfmNode);
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromLines (DRagLint.FormsMap.Dfm.pas)</para>
+    /// <para>Called from: DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromRows (DRagLint.FormsMap.Dfm.pas)</para>
     /// <para>Calls: ContainsText, DRagLint.FormsMap.Dfm.TFormDfmNode.Prop, DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti, DRagLint.FormsMap.Dfm.TFormDfmTree.LinkListOf, SameText</para>
     /// <para>Complexity: 11 (cyclomatic, outer body), 31 lines (full implementation)</para>
     /// <para>Reads: FNodes, FLinkOwners, FBarTabs, FBackstage</para>
@@ -347,10 +347,22 @@ type
     /// <summary>Reads a text .dfm file with the text scan (DfmNav.ScanDfmNav); a
     /// missing or binary (TPF0) file leaves the tree empty.</summary>
     /// <param name="APath">Full path to the .dfm.</param>
-    /// <remarks>The bytes are decoded as the indexer decodes them
+    /// <remarks>
+    /// The bytes are decoded as the indexer decodes them
     /// (DfmNav.DfmNavLinesFromBytes: BOM stripped, UTF-16 transcoded, BOM-less
     /// non-UTF-8 read as Windows-1252), so a UTF-8 .dfm reads right and the
-    /// result equals the stored rows of a current index.</remarks>
+    /// result equals the stored rows of a current index.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoCycles.IntfEdgeSymbols (DRagLint.CLI.pas) ?, DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromIndexOrFile (DRagLint.FormsMap.Dfm.pas)</para>
+    /// <para>Calls: DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromLines, DRagLint.Parser.DfmNav.DfmNavLinesFromBytes</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromLines"/>
+    /// <seealso cref="DRagLint.Parser.DfmNav.DfmNavLinesFromBytes"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure LoadFromFile(const APath: string);
     /// <summary>150 Y2: builds the tree from the index's dfm_nav_nodes /
     /// dfm_nav_props rows of APath when one of AStores indexed it and is current
@@ -358,20 +370,57 @@ type
     /// <param name="APath">Full path to the .dfm, as the index stores it.</param>
     /// <param name="AStores">The stores to look in, first match wins; not owned.</param>
     /// <returns>True when the tree came from the index.</returns>
-    /// <remarks>The table is used only when the store has the tables
+    /// <exception cref="EFileNotFoundException"><!-- drag-lint:auto exc -->via DRagLint.Core.FileTime.FileMTimeUnix: Cannot read the last-write time of %s</exception>
+    /// <remarks>
+    /// The table is used only when the store has the tables
     /// (HasDfmNav), the .dfm is indexed, its mtime and size are what the index
     /// recorded (FileStampIsCurrent, the indexer's own skip rule) and it has node
     /// rows; anything else reads the text. Env DRAGLINT_NO_FILE_FACTS=1 forces the
     /// text; DRAGLINT_DEBUG=1 prints `[dfm-nav] table|text &lt;file&gt;` on stderr.
-    /// Either way the tree is the same: both build from ScanDfmNav rows.</remarks>
+    /// Either way the tree is the same: both build from ScanDfmNav rows.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.TNavBuilder.TreeFor (DRagLint.FormsMap.pas), DRagLint.MenuTree.Dfm.TDfmRootBuilder.DoForm (DRagLint.MenuTree.Dfm.pas)</para>
+    /// <para>Calls: DRagLint.Core.FileTime.FileMTimeUnix, DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromFile, DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromRows, DRagLint.Storage.SQLite.TSQLiteSymbolStore.FileStampIsCurrent, DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindFileIdByPath, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetDfmNav, DRagLint.Storage.SQLite.TSQLiteSymbolStore.HasDfmNav, ExtractFileName, GetEnvironmentVariable, IfThen, Writeln</para>
+    /// <para>Returns: False; True</para>
+    /// <para>Complexity: 10 (cyclomatic, outer body), 24 lines (full implementation)</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="DRagLint.Core.FileTime.FileMTimeUnix"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromFile"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromRows"/>
+    /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.FileStampIsCurrent"/>
+    /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindFileIdByPath"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function LoadFromIndexOrFile(const APath: string; const AStores: array of TSQLiteSymbolStore): Boolean;
     /// <summary>150 Y2: builds the tree from navigation rows (stored or scanned)
     /// and indexes it; the tree must be empty.</summary>
     /// <param name="ANodes">The nodes, Ordinal = index, Parent an earlier Ordinal or -1.</param>
     /// <param name="AProps">The properties, in .dfm order; Node an Ordinal.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromIndexOrFile (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromLines (DRagLint.FormsMap.Dfm.pas)</para>
+    /// <para>Calls: DRagLint.FormsMap.Dfm.TFormDfmTree.BuildIndexes, DRagLint.FormsMap.Dfm.TFormDfmTree.NewNode, InRange</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.BuildIndexes"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.NewNode"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure LoadFromRows(const ANodes: TArray<TDfmNavNodeRow>; const AProps: TArray<TDfmNavPropRow>);
     /// <summary>Parses .dfm text already split into lines (ScanDfmNav, then LoadFromRows).</summary>
     /// <param name="ALines">The .dfm lines, in order.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromFile (DRagLint.FormsMap.Dfm.pas)</para>
+    /// <para>Calls: DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromRows, DRagLint.Parser.DfmNav.ScanDfmNav</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromRows"/>
+    /// <seealso cref="DRagLint.Parser.DfmNav.ScanDfmNav"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure LoadFromLines(const ALines: TArray<string>);
     /// <summary>Every control a tester can press to run AHandler on this form,
     /// best location first, followed by non-control bindings (an action no

@@ -155,13 +155,13 @@ type
 /// No shared mutable state -- each call builds its own defines
 /// dictionary and IF stack.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas), DRagLint.Index.Closure.TClosureResolver.MaybePreprocess (DRagLint.Index.Closure.pas), DRagLint.Preprocess.Preprocess/2 (DRagLint.Preprocess.pas)</para>
+/// <para>Called from: DRagLint.Index.Closure.TClosureResolver.MaybePreprocess (DRagLint.Index.Closure.pas)</para>
 /// <para>Calls: DRagLint.Preprocess.Preprocess/2, DRagLint.Preprocess.Types.TPPOptionsDefault</para>
 /// <para>Returns: Preprocess(AUtf8, Opts)</para>
 /// <para>Overload 1 of 3</para>
-/// <para>Recursive</para>
 /// <para>Pure</para>
 /// <para>Directives: overload</para>
+/// <seealso cref="DRagLint.Preprocess.Preprocess"/>
 /// <seealso cref="DRagLint.Preprocess.Types.TPPOptionsDefault"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -183,6 +183,7 @@ function Preprocess(const AUtf8: TBytes; const AProfile: TDefineProfile): TBytes
 /// directive is always blanked, never spliced.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas), DRagLint.Preprocess.Preprocess/2 (DRagLint.Preprocess.pas)</para>
 /// <para>Calls: Default, DRagLint.Preprocess.PreprocessWithSites</para>
 /// <para>Returns: PreprocessWithSites(AUtf8, AOptions, nil, Report)</para>
 /// <para>Overload 2 of 3</para>
@@ -250,14 +251,27 @@ function PreprocessReport(const AUtf8: TBytes; const AOptions: TPPOptions;
 /// yes (any case) is a FLAG: the trace goes to %TEMP%\drag-lint-pp-trace.log
 /// and one NOTE naming that file is written to stderr, once per process.
 /// Anything else is taken as the trace file path.</returns>
-/// <remarks>Read once at unit initialization; the answer never changes during
-/// the process. Thread-safe (immutable after initialization).</remarks>
+/// <remarks>
+/// Read once at unit initialization; the answer never changes during
+/// the process. Thread-safe (immutable after initialization).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.IfdefUndefined.ScanFile (DRagLint.Lint.IfdefUndefined.pas), DRagLint.Preprocess.PreprocessInto.EvalIf (DRagLint.Preprocess.pas)</para>
+/// <para>Returns: GTracePath</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PPTracePath: string;
 
 /// <summary>Appends one line to the PPTracePath file, CRLF-terminated.</summary>
 /// <param name="ALine">The text of the line, without a line terminator.</param>
-/// <remarks>Does nothing when tracing is off. Thread-safe: appends are
-/// serialised by one lock shared with the preprocessor's own trace.</remarks>
+/// <remarks>
+/// Does nothing when tracing is off. Thread-safe: appends are
+/// serialised by one lock shared with the preprocessor's own trace.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.IfdefUndefined.ScanFile (DRagLint.Lint.IfdefUndefined.pas), DRagLint.Preprocess.PreprocessInto.EvalIf (DRagLint.Preprocess.pas)</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure PPTraceAppend(const ALine: string);
 
 implementation

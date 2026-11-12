@@ -39,7 +39,7 @@ uses
 /// Guards: tests\autotest\run_lsp_c9_preprocess_guard.ps1,
 /// tests\autotest\run_lsp_c10_feature_parse_guard.ps1.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.LSP.Feature.FoldingRange.TLspFoldingRangeFeature.Handle (DRagLint.LSP.Feature.FoldingRange.pas), DRagLint.LSP.Feature.InlayHint.THintWalker.WalkSource (DRagLint.LSP.Feature.InlayHint.pas), DRagLint.LSP.Feature.SemanticTokens.TLspSemanticTokensFeature.Handle (DRagLint.LSP.Feature.SemanticTokens.pas), DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition (DRagLint.LSP.Server.pas)</para>
+/// <para>Called from: DRagLint.LSP.Feature.FoldingRange.TLspFoldingRangeFeature.Handle (DRagLint.LSP.Feature.FoldingRange.pas), DRagLint.LSP.Feature.InlayHint.THintWalker.WalkSource (DRagLint.LSP.Feature.InlayHint.pas), DRagLint.LSP.Feature.SemanticTokens.TLspSemanticTokensFeature.Handle (DRagLint.LSP.Feature.SemanticTokens.pas), DRagLint.LSP.Server.TLSPServer.IdentTreeFor (DRagLint.LSP.Server.pas)</para>
 /// <para>Calls: DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Parser.Delphi13.tree_sitter_delphi13, Integer, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, TreeSitter.TTSParser.SetLanguage</para>
 /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess"/>
 /// <seealso cref="DRagLint.Parser.Delphi13.tree_sitter_delphi13"/>

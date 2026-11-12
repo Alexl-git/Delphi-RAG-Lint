@@ -665,7 +665,7 @@ procedure FreeCycleGraph(var pGraph: TCycleGraph);
 /// The one SCC pass behind `cycles` (DoCycles) and the per-file circular-uses finding of
 /// `lint &lt;file&gt;` (E18 T15b), so the two cannot disagree on which units cycle.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.CircularUsesForFile (DRagLint.CLI.pas), DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.Report.CyclePlan.ComputeInterfaceSccs (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.ComputeSccs/1 (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.Report.CyclePlan.ComputeInterfaceSccs (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.ComputeSccs/1 (DRagLint.Report.CyclePlan.pas)</para>
 /// <para>Calls: DRagLint.Report.CyclePlan.ComputeSccs.StrongConnect, FreeAndNil</para>
 /// <para>Returns: Sccs</para>
 /// <para>Overload 1 of 2</para>
@@ -680,6 +680,7 @@ function ComputeSccs(const pGraph: TCycleGraph): TList<TArray<string>>; overload
 /// <returns>A NEW list owned by the caller, one array of lower-case stems per group.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CircularUsesForFile (DRagLint.CLI.pas)</para>
 /// <para>Calls: DRagLint.Report.CyclePlan.BuildCycleGraph, DRagLint.Report.CyclePlan.ComputeSccs/1, DRagLint.Report.CyclePlan.FreeCycleGraph</para>
 /// <para>Returns: ComputeSccs(Graph)</para>
 /// <para>Overload 2 of 2</para>

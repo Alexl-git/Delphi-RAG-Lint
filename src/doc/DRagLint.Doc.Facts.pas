@@ -772,8 +772,8 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
-    /// <para>Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAccessorEchoUses, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNamesOfKind, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers (+54 more)</para>
-    /// <para>Complexity: 95 (cyclomatic, outer body), 1217 lines (full implementation)</para>
+    /// <para>Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAccessorEchoUses, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNamesOfKind, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers (+55 more)</para>
+    /// <para>Complexity: 95 (cyclomatic, outer body), 1222 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAccessorEchoUses"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
@@ -992,12 +992,19 @@ function DocFactsBuildProfile: string;
 /// <summary>Forgets every run-level memo TDocFactsBuilder.Build keeps per (store
 /// instance, id): the overload tag, the see-also sibling lists, the routine name
 /// counts and the C14 receiver lookups.</summary>
-/// <remarks>151 CF. The memos are keyed by the store's interface POINTER, which is
+/// <remarks>
+/// 151 CF. The memos are keyed by the store's interface POINTER, which is
 /// sound only while every store stays open for the whole process. A long-lived host
 /// (the LSP) frees and opens stores -- after a re-index, on a context switch, for
 /// each loose file's ephemeral index -- and a new store can reuse a freed address
 /// over different ids. Such a host calls this before it opens any store. Not
-/// thread-safe: call it from the thread that runs Build.</remarks>
+/// thread-safe: call it from the thread that runs Build.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.OpenReaderStore (DRagLint.LSP.Server.pas)</para>
+/// <para>Calls: DRagLint.Doc.SymbolFacts.ClearCoveredByMemos</para>
+/// <seealso cref="DRagLint.Doc.SymbolFacts.ClearCoveredByMemos"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ClearDocFactsMemos;
 
   /// <summary>Applies the display cap: a list of ATotal items shows all of them
@@ -1072,8 +1079,18 @@ procedure ClearDocFactsMemos;
   /// <param name="S">The line, starting at the `[` (S[1] = '[').</param>
   /// <returns>Index of the closing `]` of the outermost group, 0 when the group does not close on
   /// this line. Pascal string literals (with '' escapes) and nested [] are skipped.</returns>
-  /// <remarks>Shared by ReadDeclLine here and the Doc.Drift declaration-line fallback (152b DOC / DF),
-  /// so doc facts and doc-drift read past `[Test] [Ignore('...')]` the same way. Pure.</remarks>
+  /// <remarks>
+  /// Shared by ReadDeclLine here and the Doc.Drift declaration-line fallback (152b DOC / DF),
+  /// so doc facts and doc-drift read past `[Test] [Ignore('...')]` the same way. Pure.
+  /// <!-- drag-lint:auto -->Same function ParseUsesFromContent and ParseDprUses scrub with -- one
+  /// implementation. This is the family whose every previous instance came from a site growing its
+  /// own half-scanner. 152b DOC handover; declared in the interface (Doc.Drift calls it too).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Called from: DRagLint.Doc.Drift.ReadDeclLine (DRagLint.Doc.Drift.pas), DRagLint.Doc.Facts.ReadDeclLine (DRagLint.Doc.Facts.pas)</para>
+  /// <para>Returns: 0</para>
+  /// <para>Effect-free (proven)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   function SkipDeclAttributeGroup(const S: string): Integer;
 
 implementation
