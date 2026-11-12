@@ -16424,7 +16424,7 @@ const
     'used-before-assignment', 'not-assigned-interface', 'double-free', 'function-result-not-set',
     'out-param-not-set', 'overwrite-before-read', 'write-only-local', 'split-variable',
     'loop-var-after-loop', 'object-leak', 'local-only-out-arg', 'dead-store-before-out-arg', 'by-value-arg-before-assignment');
-  LINT_GATE_PROJECT_RULES: array[0..46] of string = (
+  LINT_GATE_PROJECT_RULES: array[0..47] of string = (
     'unused-public-symbol', 'unused-private-member', 'circular-uses', 'cycle-participant-unit', 'global-only-uses-edge',
     'dfm-property-not-declared', 'dependent-project-not-recompiled', 'duplicate-global-decl',
     'uses-global-census', 'discarded-effect-free-result', 'query-name-with-effect',
@@ -16435,14 +16435,14 @@ const
     'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive',
     'effect-free-in-loop-invariant', 'ancestor-not-in-project', 'opaque-to-analysis', 'datamodule-form-global',
     'global-set-in-initialization-never-freed', 'heavy-initialization', 'finalization-after-dependency', 'init-order-hazard',
-    'is-always-true', 'is-never-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows', 'redundant-cast', 'unsafe-typecast-without-is', 'ui-access-in-thread-typed', 'parameter-type-too-wide', 'quit-from-thread');
+    'is-always-true', 'is-never-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows', 'redundant-cast', 'unsafe-typecast-without-is', 'ui-access-in-thread-typed', 'parameter-type-too-wide', 'quit-from-thread', 'rtti-unavailable');
   { The project rules TProjectLintRules.Run gates on OptedIn (global-only-uses-edge,
     uses-global-census, ...). `lint <file>` hands Run NO opt-in list, so even with an
     index it never evaluates them unless --rule names one: a dl:ok for one of them
     cannot be judged unused there (LintUnjudgedMarkerRules). Pinned against the
     OptedIn('<id>') calls in DRagLint.Lint.ProjectRules.pas by
     tests\autotest\run_marker_unused_optin_gated_rules.ps1. }
-  PROJECT_RULES_OPTIN_GATED: array[0..32] of string = (
+  PROJECT_RULES_OPTIN_GATED: array[0..33] of string = (
     'global-only-uses-edge', 'uses-global-census', 'dfm-property-not-declared',
     'dependent-project-not-recompiled', 'discarded-effect-free-result', 'cycle-participant-unit',
     'query-name-with-effect', 'assert-with-side-effect', 'virtual-never-overridden',
@@ -16450,7 +16450,7 @@ const
     'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive',
     'effect-free-in-loop-invariant', 'opaque-to-analysis', 'datamodule-form-global',
     'global-set-in-initialization-never-freed', 'heavy-initialization', 'finalization-after-dependency', 'init-order-hazard',
-    'is-always-true', 'is-never-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows', 'redundant-cast', 'unsafe-typecast-without-is', 'ui-access-in-thread-typed', 'parameter-type-too-wide', 'quit-from-thread');
+    'is-always-true', 'is-never-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows', 'redundant-cast', 'unsafe-typecast-without-is', 'ui-access-in-thread-typed', 'parameter-type-too-wide', 'quit-from-thread', 'rtti-unavailable');
   { The OptedIn-gated project rules that ship ON, and that `lint <file>` therefore
     opts in itself when a store CONTAINS the file (lane DIRLINT, 2026-10-27). Each
     is answered exactly for one file -- its own call sites, narrowed by AOnlyFileId
@@ -25611,6 +25611,8 @@ begin
       OptIn:= OptIn + ['global-set-in-initialization-never-freed'];
     if Cfg.ShouldKeep('datamodule-form-global', {ADefaultDisabled=}True) then   { 1.42 lane ruleset }
       OptIn:= OptIn + ['datamodule-form-global'];
+    if Cfg.ShouldKeep('rtti-unavailable', {ADefaultDisabled=}True) then   { 152b lane RTTI }
+      OptIn:= OptIn + ['rtti-unavailable'];
     if Cfg.ShouldKeep('parameter-type-too-wide', {ADefaultDisabled=}True) then   { 1.46 lane t4 }
       OptIn:= OptIn + ['parameter-type-too-wide'];
     for var Rt in REF_TYPE_RULES do   { 1.44 lane rulesf1 }
@@ -26138,6 +26140,8 @@ begin
       OptIn2:= OptIn2 + ['global-set-in-initialization-never-freed'];
     if LoadLintConfig(AArgs).ShouldKeep('datamodule-form-global', {ADefaultDisabled=}True) then   { 1.42 lane ruleset }
       OptIn2:= OptIn2 + ['datamodule-form-global'];
+    if LoadLintConfig(AArgs).ShouldKeep('rtti-unavailable', {ADefaultDisabled=}True) then   { 152b lane RTTI }
+      OptIn2:= OptIn2 + ['rtti-unavailable'];
     if LoadLintConfig(AArgs).ShouldKeep('parameter-type-too-wide', {ADefaultDisabled=}True) then   { 1.46 lane t4 }
       OptIn2:= OptIn2 + ['parameter-type-too-wide'];
     for var Rt2 in REF_TYPE_RULES do   { 1.44 lane rulesf1 }
