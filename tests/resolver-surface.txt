@@ -284,6 +284,11 @@ EXCLUDE unresolvedancestornames
 # autodoc and doc-drift); nothing in the index walk or CallResolver reads it.
 # It consumes call_edges, it never writes them.
 EXCLUDE getunresolvedcallsfromsymbol
+# 2026-11-11: added by 152b DF O6F. Answers whether any type_ancestors row names
+# a TTestCase-family ancestor, so Doc.SymbolFacts (hover / document covered-by)
+# can skip the ancestor walk; read-only, never reached from the index walk or
+# CallResolver. Flagged only because its name contains 'ancestry'.
+EXCLUDE hastestcaseancestrynames
 
 # Asks whether call_edges must be rebuilt; it reads state and answers, and the
 # answer is acted on by ResolveCallTargets, which IS in the surface.

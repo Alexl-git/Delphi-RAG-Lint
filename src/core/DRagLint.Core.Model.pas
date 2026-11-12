@@ -265,7 +265,16 @@ const
     * Doc.SymbolFacts: returns_owner tier 1 trusts own-file declarations only, independent of the
       index order (lane X2R).
     * Preprocess: one DRAGLINT_PP_TRACE accessor (lane PP; no extraction change, hashed unit). }
-  DRAGLINT_EXTRACTOR_VERSION = '1.36.0-alpha';
+  { 1.36.0 -> 1.37.0 (2026-11-11, 1.50, lane/152-INT2 -- ONE bump for wave 152b):
+    * storage: string values are stored as written -- FireDAC StrsTrim off, trailing spaces kept
+      (lane ST O5; Storage.FileMembership.pas joins the hashed surface).
+    * Doc.SymbolFacts: the returns-owner verdict checks reference types against the whole index
+      at read time, the declaration line is read past leading attributes, and the covered-by
+      walk memoizes (lanes DF O7 / O6F).
+    * Flow.Lattices: Automation named-argument values are read, labels are not (lane GF1).
+    * grammar: tree-sitter-delphi13 v1.4.10 -- a field may be named Private / Protected /
+      Public / Published (lane GR3). }
+  DRAGLINT_EXTRACTOR_VERSION = '1.37.0-alpha';
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
   /// Deliberately SEPARATE from <see cref="DRAGLINT_EXTRACTOR_VERSION"/>.</summary>
@@ -511,7 +520,11 @@ const
   /// the scoped pass's receiver-side closure gets the DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE hatch
   /// (lane ST, RS2 (6)); the calls stage reads a declaring file's uses once per pass and the
   /// arg-uses pass reads refs once per file, rows identical (lane PF).</para>
-  DRAGLINT_RESOLVER_VERSION = '1.24.0-alpha';
+  /// <para>1.24.0-alpha -&gt; 1.25.0-alpha (2026-11-11, 1.50, rides the 1.37.0 extractor
+  /// re-parse): GetTransitiveAncestors, a resolve-surface reader, runs its query through the
+  /// store's prepared-statement cache (lane DF O6F; same SQL, same rows -- a billing bump, the
+  /// re-parse re-resolves every DB anyway).</para>
+  DRAGLINT_RESOLVER_VERSION = '1.25.0-alpha';
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
   /// the ghost-compile journal that first created the folder.</summary>
