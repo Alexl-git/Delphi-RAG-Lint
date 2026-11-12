@@ -5963,6 +5963,7 @@ var
   Q: TFDQuery;
   L: TList<TFileIncludeRow>;
   R: TFileIncludeRow;
+  FPath, FLine, FCol, FDepth, FSection, FUses: TField;
 begin
   Result:= nil;
   if not HasFileFacts then Exit;
@@ -5974,15 +5975,21 @@ begin
                    'FROM file_includes WHERE file_id = :fid ORDER BY ordinal';
     Q.ParamByName('fid').AsLargeInt:= AFileId;
     Q.Open;
+    FPath   := Q.FieldByName('inc_path');
+    FLine   := Q.FieldByName('host_line');
+    FCol    := Q.FieldByName('host_col');
+    FDepth  := Q.FieldByName('depth');
+    FSection:= Q.FieldByName('section');
+    FUses   := Q.FieldByName('in_uses');
     while not Q.Eof do
     begin
       R:= Default(TFileIncludeRow);
-      R.IncPath := Q.FieldByName('inc_path' ).AsString;  // dl:ok field-by-name-in-loop@9114 -- per-host fact reader: a handful of rows per file, read once per cycle member
-      R.HostLine:= Q.FieldByName('host_line').AsInteger;
-      R.HostCol := Q.FieldByName('host_col' ).AsInteger;
-      R.Depth   := Q.FieldByName('depth'    ).AsInteger;
-      R.Section := Q.FieldByName('section'  ).AsString;
-      R.InUses  := Q.FieldByName('in_uses'  ).AsInteger <> 0;
+      R.IncPath := FPath.AsString;
+      R.HostLine:= FLine.AsInteger;
+      R.HostCol := FCol.AsInteger;
+      R.Depth   := FDepth.AsInteger;
+      R.Section := FSection.AsString;
+      R.InUses  := FUses.AsInteger <> 0;
       L.Add(R);
       Q.Next;
     end;
