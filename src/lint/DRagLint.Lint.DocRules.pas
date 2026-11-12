@@ -106,6 +106,11 @@ type
     /// is 'warning'. The fixable subset is applied via FixEditsForDocDrift, NOT by
     /// re-parsing the message: a finding is merely a report here. Never raises;
     /// per-symbol failures are swallowed so one bad decl cannot abort the sweep.
+    /// 152b DOCU2: a decl whose facts were read from ANOTHER file changed since
+    /// indexing (a callee rewritten, index not refreshed) gets no ddExceptionNotRaised
+    /// or ddFactsBlockStale finding -- the callee's indexed line range no longer
+    /// matches its text -- and one stderr note names the files and the reindex.
+    /// Its other kinds are still reported.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
     /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol, DRagLint.Doc.Drift.TDocDrift.Analyze/4, DRagLint.Doc.Drift.TDocDrift.FactsBuildTicks, DRagLint.Doc.Facts.DocFactsBuildProfile, DRagLint.Lint.DocRules.DocumentedPublicDecls, DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift.Tick, Flush, Format, GetEnvironmentVariable, Writeln</para>
@@ -140,6 +145,9 @@ type
     /// <returns>The repair edits (a delete+insert pair per repaired doc span);
     /// empty when nothing fixable drifted.</returns>
     /// <remarks>
+    /// 152b DOCU2: a decl whose facts were read from another file changed since
+    /// indexing gets NO edit -- regenerating its block would write facts mined
+    /// from text the index no longer describes (see RunDocDrift).
     /// SCOPED TO ATargeted, and that is load-bearing. This used to take the store
     /// alone and walk every documented public decl in the database, which made
     /// `lint-all --project X --fix` plan repairs into files X does not own: on
@@ -256,9 +264,11 @@ implementation
 
 uses
   System.Diagnostics, { TStopwatch -- DRAGLINT_PROFILE doc-drift attribution }
+  System.Math,        { Min -- the stale-callee note }
   { DRagLint.Doc.Facts is in the INTERFACE uses -- TDocFactsRenderOptions appears
     in the signatures below, and it also supplies DocFactsBuildProfile here. }
-  DRagLint.Doc.Drift, DRagLint.Doc.Document;
+  DRagLint.Doc.Drift, DRagLint.Doc.Document,
+  DRagLint.Index.Freshness; { ChangedFilePaths -- see StaleCalleeReads }
 
 { Kinds CDD/DocInsight applies to: public/published types + routines +
   properties. Excludes containers (unit/program/package), fields (CDD scopes
@@ -402,6 +412,46 @@ begin
   end;
 end;
 
+const
+  { 152b DOCU2: the drift kinds graded from facts mined out of OTHER files (a
+    callee's raises, the rendered facts block) -- the ones a stale callee range
+    makes wrong. See StaleCalleeReads. }
+  CALLEE_FACT_KINDS: set of TDocDriftKind = [ddExceptionNotRaised, ddFactsBlockStale];
+  STALE_NOTE_MAX_NAMED = 3; { files named in the stderr note; the count covers the rest }
+
+{ 152b DOCU2: the files the last fact build read (Doc.Facts.SourceFilesRead,
+  reset by the caller before TDocDrift.Analyze) that changed since AStore
+  indexed them, AOwnFile excluded -- the lint twin of the CLI's
+  StaleFactSources. A callee's raises are mined from its file AS IT IS NOW at
+  its INDEXED line range; once that file was edited and not reindexed the range
+  covers other text, and doc-drift graded the doc against the wrong routine.
+  The documented file itself is left out: its staleness moves the decl too and
+  is the freshness note's case, not this one. AChanged is
+  ChangedFilePaths(AStore), filled on the first call that needs it
+  (AChangedKnown), so a sweep pays one stamp scan at most. }
+function StaleCalleeReads(const AStore: ISymbolStore; const AOwnFile: string;
+  var AChanged: TArray<string>; var AChangedKnown: Boolean): TArray<string>;
+begin
+  Result:= nil;
+  var Own: string:= ExpandFileName(AOwnFile);
+  var Others: TArray<string>:= nil;
+  for var R: string in SourceFilesRead do
+    if not SameText(ExpandFileName(R), Own) then Others:= Others + [ExpandFileName(R)];
+  if Length(Others) = 0 then Exit;
+  if not AChangedKnown then
+  begin
+    AChanged     := ChangedFilePaths(AStore);
+    AChangedKnown:= True;
+  end;
+  for var P: string in AChanged do
+    for var R: string in Others do
+      if SameText(ExpandFileName(P), R) then
+      begin
+        Result:= Result + [P];
+        Break;
+      end;
+end;
+
 class function TDocLintRules.RunDocDrift(const AStore: ISymbolStore;
   const AOpts: TDocFactsRenderOptions; AFileId: Int64 = 0): TArray<TLintFinding>;
 var
@@ -421,10 +471,37 @@ var
   TDecls, TExisting, TAnalyze: Int64;
   NDecl, NDiff: Integer         ;
   T0      : Int64               ;
+  { 152b DOCU2: see StaleCalleeReads }
+  Changed     : TArray<string>  ;
+  ChangedKnown: Boolean         ;
+  StaleFiles  : TArray<string>  ; { distinct stale callee files, for the note }
+  StaleDecls  : Integer         ;
 
   function Tick: Int64;
   begin
     if Prof then Result:= TStopwatch.GetTimeStamp else Result:= 0;
+  end;
+
+  { True when ADrifts carries a callee-fact kind AND the facts were read from a
+    stale callee file; records the files for the closing note. }
+  function SkipCalleeFacts(const ADrifts: TArray<TDocDriftFinding>): Boolean;
+  begin
+    Result:= False;
+    var Wanted: Boolean:= False;
+    for var X: TDocDriftFinding in ADrifts do
+      if X.Kind in CALLEE_FACT_KINDS then begin Wanted:= True; Break; end; // dl:ok multiple-statements-per-line -- REVIEWED 2026-11-12: the set-and-stop idiom this unit already uses (AnyFix)
+    if not Wanted then Exit;
+    var Stale: TArray<string>:= StaleCalleeReads(AStore, AStore.GetFilePath(ResSym.FileId), Changed, ChangedKnown);
+    if Length(Stale) = 0 then Exit;
+    Result:= True;
+    Inc(StaleDecls);
+    for var P: string in Stale do
+    begin
+      var Known: Boolean:= False;
+      for var Q: string in StaleFiles do
+        if SameText(P, Q) then begin Known:= True; Break; end; // dl:ok multiple-statements-per-line -- REVIEWED 2026-11-12: same set-and-stop idiom
+      if not Known then StaleFiles:= StaleFiles + [P];
+    end;
   end;
 
 begin
@@ -432,6 +509,7 @@ begin
   if AStore = nil then Exit;
   Prof:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
   TDecls:= 0; TExisting:= 0; TAnalyze:= 0; NDecl:= 0; NDiff:= 0;
+  Changed:= nil; ChangedKnown:= False; StaleFiles:= nil; StaleDecls:= 0;
   Findings:= TList<TLintFinding>.Create;
   try
     T0:= Tick;
@@ -455,10 +533,13 @@ begin
         Inc(NDiff);
 
         T0:= Tick;
+        ResetSourceFilesRead; { 152b DOCU2: this decl's reads only -- see StaleCalleeReads }
         Drifts:= TDocDrift.Analyze(AStore, ResSym, Live, AOpts);
         Inc(TAnalyze, Tick - T0);
+        var SkipFacts: Boolean:= SkipCalleeFacts(Drifts);
         for D in Drifts do
         begin
+          if SkipFacts and (D.Kind in CALLEE_FACT_KINDS) then Continue;
           F:= Default(TLintFinding);
           { ddParamNoDescription is NOT doc-drift. doc-drift is a `warning` and
             means the doc and the code moved APART; an empty <param> body is not
@@ -527,6 +608,17 @@ begin
         { A single malformed decl must not abort the whole sweep. }
       end;
     end;
+    { 152b DOCU2: say what was NOT graded -- a silent skip would read as clean.
+      stderr, so --json stays a bare array. }
+    if StaleDecls > 0 then
+    begin
+      var Named: string:= '';
+      for var I: Integer:= 0 to Min(High(StaleFiles), STALE_NOTE_MAX_NAMED - 1) do
+        Named:= Named + (if Named = '' then '' else ', ') + StaleFiles[I];
+      Writeln(ErrOutput, Format('drag-lint: doc-drift: %d declaration(s) NOT graded for <exception> / facts-block drift -- ' +
+        'their facts are read from %d file(s) changed since indexing (%s), whose indexed line ranges no longer match the text. ' +
+        'Reindex first: drag-lint index --project <file.dproj> --db <db>', [StaleDecls, Length(StaleFiles), Named]));
+    end;
     if Prof then
     begin
       Writeln(ErrOutput, Format('  DOC-DRIFT BREAKDOWN (%d decl(s), %d with a live doc)', [NDecl, NDiff]));
@@ -567,6 +659,8 @@ var
   Drifts  : TArray<TDocDriftFinding>;
   D       : TDocDriftFinding    ;
   AnyFix  : Boolean             ;
+  Changed     : TArray<string>  ; { 152b DOCU2: see StaleCalleeReads }
+  ChangedKnown: Boolean         ;
   DocRes  : TDocumentResult     ;
   E       : TTextEdit           ;
   F       : TLintFinding        ;
@@ -588,6 +682,8 @@ var
 begin
   Result:= nil;
   Trace:= GetEnvironmentVariable('DRAGLINT_FIXDOC_TRACE') <> '';
+  Changed:= nil;
+  ChangedKnown:= False;
   if AStore = nil then Exit;
   if Length(ATargeted) = 0 then Exit;
   Edits:= TList<TTextEdit>.Create;
@@ -638,6 +734,7 @@ begin
         { Only repair a decl that actually carries a FIXABLE drift signal --
           report-only drift (renamed param, spurious <returns>, never-raised
           <exception>, ...) produces NO edit; a human decides on those. }
+        ResetSourceFilesRead; { 152b DOCU2: this decl's reads only }
         Drifts:= TDocDrift.Analyze(AStore, ResSym, Live, AOpts);
         AnyFix:= False;
         for D in Drifts do
@@ -645,6 +742,15 @@ begin
         if not AnyFix then
         begin
           ReportTrace(Format('DROP no-fixable-of-%d', [Length(Drifts)]), ResSym.QualifiedName);
+          Continue;
+        end;
+        { 152b DOCU2: BuildForSymbol regenerates the WHOLE managed block from the
+          same facts, so a decl whose facts read a stale callee file gets no edit
+          at all -- the repair would write the wrong routine's raises. RunDocDrift
+          already dropped its facts findings and printed the reindex note. }
+        if Length(StaleCalleeReads(AStore, SymPath, Changed, ChangedKnown)) > 0 then
+        begin
+          ReportTrace('DROP stale-callee-file', ResSym.QualifiedName);
           Continue;
         end;
 
