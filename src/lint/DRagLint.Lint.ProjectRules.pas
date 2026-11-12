@@ -255,7 +255,8 @@ uses
   DRagLint.Lint.EffectRules, { the three B-EFFECT purity / ui_affinity readers }
   DRagLint.Lint.AncestorNotInProject, { ancestor-not-in-project (1.42 enum) }
   DRagLint.Lint.OpaqueToAnalysis, { opaque-to-analysis (1.42 opaque) } // dl:unit DRagLint.Lint.OpaqueToAnalysis accepted -- OPAQUE_TO_ANALYSIS_RULE is the rule id the dispatch names; it travels with CollectOpaqueToAnalysis, the collector this unit calls
-  DRagLint.Lint.RttiRules, { rtti-unavailable (wave 152b lane RTTI) } // dl:unit DRagLint.Lint.RttiRules accepted -- RTTI_UNAVAILABLE_RULE is the rule id the dispatch names; it travels with the rule unit, as OPAQUE_TO_ANALYSIS_RULE does
+  DRagLint.Lint.RttiRules, { rtti-unavailable (wave 152b lane RTTI) }
+  DRagLint.Lint.IncludeCycleRules, { cycle-edge-in-include (wave 152c lane INCR) } // dl:unit DRagLint.Lint.RttiRules accepted -- RTTI_UNAVAILABLE_RULE is the rule id the dispatch names; it travels with the rule unit, as OPAQUE_TO_ANALYSIS_RULE does
   DRagLint.Lint.UsesAudit; { TUsesAuditor -- uses-movable-to-implementation (lane G8) } // dl:unit DRagLint.Lint.UsesAudit accepted -- USES_VERDICT_MOVE is how this unit reads the verdict TUsesAuditor returns; it travels with TUsesAuditor, the auditor this unit calls
 
 { Side-effect / operator / helper units that are legitimately used without any
@@ -931,6 +932,27 @@ begin
       Result:= Result + [F];
     end;
   end;
+end;
+
+{ cycle-edge-in-include (152c lane INCR): the circular-uses groups, projected onto the
+  include-aware reader. The SAME Tarjan pass as circular-uses (CollectCircularUsesDetailed),
+  never a second one, so the two rules cannot disagree about which units cycle. }
+function CollectCycleEdgeInIncludeRule(const AStore: ISymbolStore): TArray<TLintFinding>;
+var
+  CC    : TCycleCoupling;
+  Groups: TArray<TIncludeCycleGroup>;
+  G     : TIncludeCycleGroup;
+begin
+  Result:= nil;
+  if (AStore = nil) or not AStore.HasFileFacts then Exit;
+  Groups:= nil;
+  for CC in CollectCircularUsesDetailed(AStore) do
+  begin
+    G.Paths:= CC.MemberPaths;
+    G.Names:= CC.MemberNames;
+    Groups := Groups + [G];
+  end;
+  Result:= CollectCycleEdgeInInclude(AStore, Groups);
 end;
 
 { duplicate-unit-on-search-path (clippy-parity L11). Two indexed .pas files that
@@ -4820,6 +4842,10 @@ begin
     if WantRule(INIT_ORDER_HAZARD_RULE) and OptedIn(INIT_ORDER_HAZARD_RULE) then
       for var Is_ in CollectInitOrderHazard(AStore) do Findings.Add(Is_);
     Lap('init-order-hazard');
+    { cycle-edge-in-include (152c lane INCR): ON, project-wide; the same groups as circular-uses. }
+    if WantRule(CYCLE_EDGE_IN_INCLUDE_RULE) and OptedIn(CYCLE_EDGE_IN_INCLUDE_RULE) then
+      for var Ci in CollectCycleEdgeInIncludeRule(AStore) do Findings.Add(Ci);
+    Lap('cycle-edge-in-include');
     if WantRule(FINALIZATION_AFTER_DEPENDENCY_RULE) and OptedIn(FINALIZATION_AFTER_DEPENDENCY_RULE) then
       for var Is_ in CollectFinalizationAfterDependency(AStore) do Findings.Add(Is_);
     Lap('finalization-after-dependency');

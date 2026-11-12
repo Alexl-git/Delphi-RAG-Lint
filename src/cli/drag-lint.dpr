@@ -138,6 +138,7 @@ uses
   DRagLint.Lint.ReadNeverAssigned in '..\lint\DRagLint.Lint.ReadNeverAssigned.pas',
   DRagLint.Lint.OpaqueToAnalysis in '..\lint\DRagLint.Lint.OpaqueToAnalysis.pas',
   DRagLint.Lint.RttiRules in '..\lint\DRagLint.Lint.RttiRules.pas',
+  DRagLint.Lint.IncludeCycleRules in '..\lint\DRagLint.Lint.IncludeCycleRules.pas',
   DRagLint.Lint.EffectRules in '..\lint\DRagLint.Lint.EffectRules.pas',
   DRagLint.Lint.AncestorNotInProject in '..\lint\DRagLint.Lint.AncestorNotInProject.pas',
   DRagLint.Lint.UsesAudit in '..\lint\DRagLint.Lint.UsesAudit.pas',

@@ -98,6 +98,7 @@ $OwnRunner = @{
     'opaque-to-analysis'        = 'tests\autotest\run_opaque_to_analysis.ps1'
     'datamodule-form-global'    = 'tests\lint-project\datamodule-form-global\run_datamodule_form_global.ps1'
     'rtti-unavailable'          = 'tests\lint-project\rtti-unavailable\run_rtti_unavailable.ps1'
+    'cycle-edge-in-include'     = 'tests\lint-project\cycle-edge-in-include\run_cycle_edge_in_include.ps1'
     'global-set-in-initialization-never-freed' = 'tests\lint-project\global-set-in-initialization-never-freed\run_global_set_in_initialization_never_freed.ps1'
     'parameter-type-too-wide' = 'tests\lint-project\parameter-type-too-wide\run_parameter_type_too_wide.ps1'
     'heavy-initialization' = 'tests\lint-project\heavy-initialization\run_heavy_initialization.ps1'
