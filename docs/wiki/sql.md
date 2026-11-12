@@ -49,7 +49,8 @@ Two more limits sit on top:
 * **exactly one statement.** `SELECT 1; DROP TABLE symbols` is rejected before
   it reaches SQLite. A semicolon inside a string literal or a comment does not
   count.
-* **a row cap**, 200 by default (`--limit N`; `--limit 0` = every row). When it
+* **a row cap**, 200 by default (`--limit N`; `--limit 0` = every row; `--output`
+  without `--limit` writes EVERY row -- the full-dump route). When it
   truncates, it SAYS so and COUNTS what it left out -- a cap that stayed quiet
   would read as the complete answer. A truncated `--json` / `--output` answer also
   prints one `NOTE:` line on stderr.
@@ -65,7 +66,7 @@ write to `sqlite_master`, because that is the action SQLite authorizes first.
 | `--query "<sql>"` | the statement to run |
 | `--in <q.sql>` | read the statement from a file instead |
 | `--db <file.sqlite>` | the index to query (required) |
-| `--limit N` | row cap; default 200; `0` = every row |
+| `--limit N` | row cap; default 200 (no cap with `--output`); `0` = every row |
 | `--timeout-ms N` | wall-clock cap; default 10000. There is no "unlimited" -- pass a bigger number |
 | `--format json` / `--json` | emit the stable `sql/1` JSON document |
 | `--output <file>` | write to a file instead of stdout |

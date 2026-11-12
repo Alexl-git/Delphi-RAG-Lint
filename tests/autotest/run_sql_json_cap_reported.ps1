@@ -73,6 +73,18 @@ try {
 
   $r4 = RunSql @('--query', (Cte 1226), '--limit', '10')
   Check 'J4 text footer names the cap and the total' ($r4.Out -match 'ROW CAP REACHED at 10 rows' -and $r4.Out -match '1226') (@($r4.Out -split "`n" | Select-Object -Last 2) -join ' | ')
+
+  # --output is the documented full-dump route (GR3 FOUND-152b): no --limit = EVERY row.
+  $f5 = Join-Path $Work 'j5.json'
+  $r5 = RunSql @('--query', (Cte 1226), '--json', '--output', $f5)
+  $j5 = $null; try { $j5 = [IO.File]::ReadAllText($f5) | ConvertFrom-Json } catch { }
+  Check 'J5 --output without --limit writes all 1226 rows' ($null -ne $j5 -and @($j5.rows).Count -eq 1226 -and $j5.truncated -eq $false) "rows=$(@($j5.rows).Count) exit=$($r5.Exit)"
+  Check 'J5 no NOTE on stderr' ($r5.Err -notmatch 'NOTE') $r5.Err.Trim()
+  $f6 = Join-Path $Work 'j6.json'
+  $r6 = RunSql @('--query', (Cte 1226), '--json', '--output', $f6, '--limit', '10')
+  $j6 = $null; try { $j6 = [IO.File]::ReadAllText($f6) | ConvertFrom-Json } catch { }
+  Check 'J6 control: --output --limit 10 writes 10 rows, truncated, total 1226' ($null -ne $j6 -and @($j6.rows).Count -eq 10 -and $j6.truncated -eq $true -and $j6.total_rows -eq 1226) "rows=$(@($j6.rows).Count)"
+  Check 'J6 control: and says so on stderr' ($r6.Err -match 'NOTE' -and $r6.Err -match '1226') $r6.Err.Trim()
 } finally {
   Pop-Location
   try { [IO.Directory]::Delete($Work, $true) } catch { }

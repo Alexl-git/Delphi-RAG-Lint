@@ -21106,8 +21106,8 @@ end; // function
 /// wall-clock time, and the connection is already query_only.</summary>
 /// <param name="AArgs">Parsed CLI args. SqlQuery (--query) or InFile (--file)
 /// supplies the statement -- exactly one of the two; DbPath/DbPaths[0] names
-/// the index; Limit caps rows (default 200; an explicit `--limit 0`, i.e.
-/// LimitGiven with Limit = 0, prints every row); TimeoutMs caps wall-clock time
+/// the index; Limit caps rows (default 200, but no cap with --output; an
+/// explicit `--limit 0`, i.e. LimitGiven with Limit = 0, prints every row); TimeoutMs caps wall-clock time
 /// (default 10000); Format='json' or AsJson selects JSON; Output redirects to
 /// a file.</param>
 /// <returns>0 on success; 2 for a usage error (no query, both sources, more
@@ -21254,6 +21254,9 @@ begin
   { O8: an EXPLICIT `--limit 0` lifts the cap; a missing or negative --limit
     keeps the default. RowCap = 0 is reported as "no cap". }
   if (RowCap < 0) or ((RowCap = 0) and not AArgs.LimitGiven) then RowCap:= DEFAULT_ROW_CAP;
+  { --output is the full-dump route (GR3 FOUND-152b): without --limit it writes
+    EVERY row; the 200 cap protects a terminal, not a file. }
+  if (AArgs.Output <> '') and not AArgs.LimitGiven then RowCap:= 0;
   TimeoutMs:= AArgs.TimeoutMs;
   if TimeoutMs <= 0 then TimeoutMs:= DEFAULT_TIMEOUT_MS;
 
