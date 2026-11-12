@@ -22428,9 +22428,10 @@ end;
 // would not take long, but insures a precise result" -- so the verb reindexes
 // and recomputes ONCE before giving up.
 //
-// Scope: the project when one was named, otherwise the target file's own
-// directory. Not the whole `--all` manifest -- D-2's scope is the PROJECT, and
-// a --unit run has no project, only the file whose coordinates went stale.
+// Scope: the project when one was named, otherwise the target FILE alone
+// (152b DOCU2; it was the file's directory, a folder walk into a project DB).
+// Not the whole `--all` manifest -- D-2's scope is the PROJECT, and a --unit
+// run has no project, only the file whose coordinates went stale.
 //
 // Returns False when the reindex itself failed, in which case the caller must
 // stop: retrying against an index that could not be rebuilt would just refuse
@@ -22444,10 +22445,13 @@ begin
   IndexArgs         := AArgs;
   IndexArgs.IndexAll:= False;
   if AArgs.ProjectPath <> '' then IndexArgs.Path:= ''    // ProjectPath drives the closure
-  // ExpandFileName first: `--unit foo.pas` from the file's own directory gives
-  // ExtractFileDir '' , which would hand the indexer an empty scope and turn a
-  // recoverable staleness into a hard failure.
-  else IndexArgs.Path:= ExtractFileDir(ExpandFileName(AFilePath));
+  // 152b DOCU2: the ONE stale file, never its folder. `index <dir> --db
+  // <projectDb>` is the widening the index verb refuses (exit 2), so the folder
+  // form made this recovery fail on every project DB, and on an unstamped DB it
+  // walked every loose .pas beside the unit into the index. A single-file index
+  // is the endorsed incremental move: it cannot widen a scope and it leaves the
+  // scan_type stamp alone. ExpandFileName: a bare `--unit foo.pas` is cwd-relative.
+  else IndexArgs.Path:= ExpandFileName(AFilePath);
   Result:= DoIndex(IndexArgs) = 0;
   if not Result then
     Writeln('doc: the reindex FAILED. Nothing was written at the unverified coordinate(s).');
