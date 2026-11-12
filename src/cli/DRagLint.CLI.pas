@@ -819,6 +819,114 @@ type
     CompareOutRoot: string ; // --out-root <dir>  (compare: where the rerun's per-run bundle folder is made; '' = %TEMP%\drag-lint-reports)
   end; // record
 
+type
+  /// <summary>One environment variable a drag-lint binary reads: its name and a
+  /// one-line purpose for the ENVIRONMENT section of --help (leftovers O3).</summary>
+  TEnvVarHelp = record
+    Name   : string;
+    Purpose: string;
+  end; // record
+
+const
+  /// <summary>EVERY DRAGLINT_* environment variable read by a binary built from
+  /// src\ (engine, LSP / MCP, charts, drag-lint-open.exe), one entry each, sorted.
+  /// "test hook" entries exist for guards and are never set in production.</summary>
+  /// <remarks>Single source of the ENVIRONMENT section of --help. Pinned by
+  /// tests\autotest\run_help_env_table.ps1: every quoted 'DRAGLINT_*' literal
+  /// under src\ must be a Name here and --help must print every Name. A new
+  /// variable is added HERE in the same change, or that guard fails.</remarks>
+  ENV_VARS_HELP: array[0..76] of TEnvVarHelp = (
+    (Name: 'DRAGLINT_BUSY_TIMEOUT_MS';                Purpose: 'writer busy timeout in ms (overrides the built-in default; a non-negative integer)'),
+    (Name: 'DRAGLINT_CHARTS_ALLOW_LIVE_DB';           Purpose: 'charts: lets CloneDb accept a non-clone (live) database'),
+    (Name: 'DRAGLINT_CHARTS_DIR';                     Purpose: 'charts: folder of the charts scripts'),
+    (Name: 'DRAGLINT_CONTEXT_DEFAULTS';               Purpose: 'test hook: path of the central context-defaults file'),
+    (Name: 'DRAGLINT_CYCLEFIX_ALL_CHILD';             Purpose: 'test hook (project under TEMP): the exe the cycle-fix --part all children run'),
+    (Name: 'DRAGLINT_CYCLEFIX_ALL_PLANT';             Purpose: 'test hook (project under TEMP): a file copied over each --part all child output'),
+    (Name: 'DRAGLINT_CYCLEFIX_BREAK';                 Purpose: 'test hook (project under TEMP): 1-4 breaks the cycle-fix plan before staging'),
+    (Name: 'DRAGLINT_CYCLEFIX_BUILD_TIMEOUT_MS';      Purpose: 'test hook: compile-gate build timeout in ms'),
+    (Name: 'DRAGLINT_CYCLEFIX_KEEP_SCRATCH';          Purpose: '1 keeps the cycle-fix default scratch folder'),
+    (Name: 'DRAGLINT_CYCLEFIX_REINDEXED';             Purpose: 'internal: set for the one cycle-fix re-run after its pre-plan re-index'),
+    (Name: 'DRAGLINT_CYCLEFIX_REPAIR_PROBE';          Purpose: 'test hook: cycle-fix repair-probe spec (|-separated)'),
+    (Name: 'DRAGLINT_CYCLEFIX_TEST_TAMPER';           Purpose: 'test hook: cycle-fix tampers with a staged file (|-separated spec)'),
+    (Name: 'DRAGLINT_CYCLES_PP';                     Purpose: 'cycles: scan = brace scan instead of the stored pp_regions; when set, stderr names the path taken'),
+    (Name: 'DRAGLINT_CYCLE_TIMING';                   Purpose: 'cycles: per-stage timings on stderr'),
+    (Name: 'DRAGLINT_DEBUG';                          Purpose: 'extra diagnostics on stderr'),
+    (Name: 'DRAGLINT_DOC_SELFTEST_DAMAGE';            Purpose: 'test hook: 1 appends one synthetic code-deleting doc edit'),
+    (Name: 'DRAGLINT_DOT';                            Purpose: 'charts: path of dot.exe (first step of the dot lookup)'),
+    (Name: 'DRAGLINT_EXCLUDE_ROOTS';                  Purpose: 'extra ;-separated search roots the compile-in-context path skips (like cloud-backed roots)'),
+    (Name: 'DRAGLINT_FIXDOC_TRACE';                   Purpose: 'traces doc-drift fix edits on stderr'),
+    (Name: 'DRAGLINT_FULLRULES_CHILD_EXE';            Purpose: 'test hook: the LSP full-rules child exe'),
+    (Name: 'DRAGLINT_GATE_TEST_BREAK';                Purpose: 'test hook: breaks the compile gate'),
+    (Name: 'DRAGLINT_INDEX_TEST_FAIL_FILE';           Purpose: 'test hook: index fails on the named file'),
+    (Name: 'DRAGLINT_LAYOUT';                         Purpose: 'installed-layout switch (unset = the default layout)'),
+    (Name: 'DRAGLINT_LIBRARY_POLL_MS';                Purpose: '--wait-library poll interval in ms (default 30000)'),
+    (Name: 'DRAGLINT_LSP_REINDEX_EXE';                Purpose: 'test hook: the exe the LSP reindex runs'),
+    (Name: 'DRAGLINT_LSP_TEST_MARK_INCOMPLETE';       Purpose: 'test hook: LSP marks its answer incomplete'),
+    (Name: 'DRAGLINT_LSP_TEST_RAISE';                 Purpose: 'test hook: LSP raises inside a request'),
+    (Name: 'DRAGLINT_MANIFEST';                       Purpose: 'explicit drag-lint.json manifest path (what --manifest sets for the process)'),
+    (Name: 'DRAGLINT_MARKER_ACCOUNT_OUT';             Purpose: 'internal to lint-all --shared-db: the file a peer writes its marker account to'),
+    (Name: 'DRAGLINT_MCP_PROBE_TTL_MS';               Purpose: 'MCP: staleness-probe window per DB in ms'),
+    (Name: 'DRAGLINT_MERGE_TEST_ANSWER_INLINE';       Purpose: 'test hook: merge answers inline'),
+    (Name: 'DRAGLINT_MERGE_TEST_EMPTY_REPLACEMENT';   Purpose: 'test hook: merge gets an empty replacement'),
+    (Name: 'DRAGLINT_MERGE_TEST_FASTPATH';            Purpose: 'test hook: merge fast path'),
+    (Name: 'DRAGLINT_NO_AUTOCREATE';                  Purpose: '1 = a query verb never builds a missing project index on first use'),
+    (Name: 'DRAGLINT_NO_FILE_FACTS';                  Purpose: 'forces the text read of a .dfm instead of the stored file facts'),
+    (Name: 'DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE';     Purpose: '1|on|yes|true switches off the scoped receiver closure of the resolve pass (A/B)'),
+    (Name: 'DRAGLINT_NO_SCOPED_RESOLVE';              Purpose: 'any value switches the scoped resolve pass off (whole-database A/B)'),
+    (Name: 'DRAGLINT_PP_TABLE';                       Purpose: '0 = ifdef-undefined ignores the stored directive table'),
+    (Name: 'DRAGLINT_PP_TRACE';                       Purpose: 'preprocessor trace: 1/true/yes = a file under %TEMP%, else the named file'),
+    (Name: 'DRAGLINT_PROFILE';                        Purpose: 'per-stage timings on stderr'),
+    (Name: 'DRAGLINT_PROFILE_CALLS';                  Purpose: 'call-resolver profile sections on stderr'),
+    (Name: 'DRAGLINT_PROTOCOL_TEST_ROOT';             Purpose: 'test hook: protocol-handler root'),
+    (Name: 'DRAGLINT_RENAME_TEST_UNGATED';            Purpose: 'test hook: rename skips its gate'),
+    (Name: 'DRAGLINT_RULE_CACHE';                     Purpose: '0 disables the lint rule cache'),
+    (Name: 'DRAGLINT_RULE_CACHE_DIR';                 Purpose: 'folder of the lint rule cache'),
+    (Name: 'DRAGLINT_RULE_CACHE_WARM';                Purpose: 'rule-cache warm mode when --rule-cache-warm is not given'),
+    (Name: 'DRAGLINT_SCOPED_RESOLVE_ADDITIONS';       Purpose: 'scoped-resolve escape hatch (unset = widened; an unknown value = off)'),
+    (Name: 'DRAGLINT_SCOPED_RESOLVE_REMOVALS';        Purpose: 'scoped-resolve escape hatch (unset = widened; an unknown value = off)'),
+    (Name: 'DRAGLINT_STAGE_HEARTBEAT_MS';             Purpose: 'test hook: stage heartbeat period in ms'),
+    (Name: 'DRAGLINT_STAGE_STALL_EXIT_MS';            Purpose: 'test hook: --stall-exit-min in ms'),
+    (Name: 'DRAGLINT_STAGE_STALL_WARN_MS';            Purpose: 'test hook: stall-warning threshold in ms (default 15 min)'),
+    (Name: 'DRAGLINT_TEST_AVAIL_PHYS_MB';             Purpose: 'test hook: pretends this much free physical memory'),
+    (Name: 'DRAGLINT_TEST_BDS_REGISTRY';              Purpose: 'test hook: replaces the BDS registry lookup'),
+    (Name: 'DRAGLINT_TEST_BEAT_MOVES';                Purpose: 'test hook: heartbeat moves'),
+    (Name: 'DRAGLINT_TEST_BEAT_RAISE_ONCE';           Purpose: 'test hook: heartbeat raises once'),
+    (Name: 'DRAGLINT_TEST_CALLS_START_DELAY_MS';      Purpose: 'test hook: delay before the calls stage'),
+    (Name: 'DRAGLINT_TEST_DUMP_PLAN';                 Purpose: 'test hook: dumps the plan'),
+    (Name: 'DRAGLINT_TEST_FAIL_ROLLBACK';             Purpose: 'test hook: fails the rollback'),
+    (Name: 'DRAGLINT_TEST_FAIL_WRITE_AT';             Purpose: 'test hook: fails a write at the named step'),
+    (Name: 'DRAGLINT_TEST_HANG_STORE_CLOSE_MS';       Purpose: 'test hook: hangs the store close'),
+    (Name: 'DRAGLINT_TEST_INDEX_FILE_DELAY_MS';       Purpose: 'test hook: delay per indexed file'),
+    (Name: 'DRAGLINT_TEST_LINT_FILE_DELAY_MS';        Purpose: 'test hook: delay per linted file'),
+    (Name: 'DRAGLINT_TEST_REINDEX_TIMEOUT_MS';        Purpose: 'test hook: reindex timeout'),
+    (Name: 'DRAGLINT_TEST_RESOLVE_DELAY_MS';          Purpose: 'test hook: delay in the resolve pass'),
+    (Name: 'DRAGLINT_TEST_SCRATCH_PID';               Purpose: 'test hook: scratch-folder owner pid'),
+    (Name: 'DRAGLINT_TEST_STORE_CLOSE_GRACE_MS';      Purpose: 'test hook: store-close grace period'),
+    (Name: 'DRAGLINT_TEST_STREAM_COUNT_DELAY_MS';     Purpose: 'test hook: delay in the stream count'),
+    (Name: 'DRAGLINT_TEST_WARM_DELAY_MS';             Purpose: 'test hook: delay in the rule-cache warm'),
+    (Name: 'DRAGLINT_TEST_WARM_HOLD_MS';              Purpose: 'test hook: hold in the rule-cache warm'),
+    (Name: 'DRAGLINT_UNWITH_TEST_SKIP_PREFIX';        Purpose: 'test hook: unwith skips this prefix'),
+    (Name: 'DRAGLINT_URI_TEST_LOG';                   Purpose: 'test hook of drag-lint-open.exe: its log file'),
+    (Name: 'DRAGLINT_URI_TEST_TIMEOUT';               Purpose: 'test hook of drag-lint-open.exe: timeout (default 1000)'),
+    (Name: 'DRAGLINT_URI_TEST_WHATIF';                Purpose: 'test hook of drag-lint-open.exe: 1 = report, start nothing'),
+    (Name: 'DRAGLINT_USAGE_LOG';                      Purpose: '0 disables the usage log'),
+    (Name: 'DRAGLINT_VERIFY_GEN';                     Purpose: 'flow analysis: generator self-verification mode (diagnostic)'),
+    (Name: 'DRAGLINT_VERIFY_ORACLE';                  Purpose: 'flow analysis: oracle self-verification mode (diagnostic)'),
+    (Name: 'DRAGLINT_WHOLEDB_SLOW_REFS';              Purpose: 'refs count above which a whole-database resolve is reported slow (default 1000000)')
+  );
+
+/// <summary>Writes the "Environment variables" section of --help from ENV_VARS_HELP,
+/// one line per variable.</summary>
+procedure WriteEnvironmentHelp;
+const
+  NAME_COL = 38;
+begin
+  Writeln('');
+  Writeln('Environment variables (every DRAGLINT_* a drag-lint binary reads; "test hook" = for guards, never set in production):');
+  for var EV: TEnvVarHelp in ENV_VARS_HELP do
+    Writeln('  ', EV.Name.PadRight(NAME_COL), EV.Purpose);
+end; // procedure
+
 procedure PrintHelp;
 begin
   Writeln('drag-lint ', VERSION, ' - Delphi-RAG-Lint: symbol-aware index + RAG + lint for Delphi/Pascal');
@@ -973,6 +1081,7 @@ begin
   Writeln('  ascii: 7-bit only; each non-ASCII UTF-16 code unit is written \uXXXX (lower-case hex,');
   Writeln('         a surrogate pair outside the BMP) -- the JSON escape, so --json decodes exactly.');
   Writeln('  utf8 / utf16: UTF-8 / UTF-16LE, no BOM. Files a verb writes (--output) obey it too; ascii runs that lose characters warn once on stderr.');
+  WriteEnvironmentHelp;
 end; // procedure
 
 const
