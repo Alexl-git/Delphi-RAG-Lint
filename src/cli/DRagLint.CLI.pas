@@ -13335,6 +13335,35 @@ end; // function
   Defined beside the LINT_GATE_* consts. }
 function IsClosureDependentMarkerRule(const ARule: string): Boolean; forward;
 
+/// <summary>True when line ALine of ALines is the `on ... do` line of an EMPTY
+///  exception handler and the `do` is followed only by a `//` comment.</summary>
+/// <param name="ALines">The file's lines, 0-based.</param>
+/// <param name="ALine">1-based line that carries the marker.</param>
+/// <returns>True when the code before the comment ends in `do` and the next code
+///  line (blank and `//` lines skipped) opens with `;`, `end` or `else`.</returns>
+/// <remarks>rules\empty-on-handler.scm anchors on `do` being the handler's LAST
+///  child; a comment between `do` and the separating `;` is a child too, so the
+///  dl:ok comment ITSELF stops the rule firing (INBOX review-marker-unused-on-
+///  handler, wave 152b). Same loop as COMMENT_SENSITIVE, but position dependent:
+///  a comment AFTER the `;` leaves the rule live, which is why the 2026-08-12
+///  probe measured "not comment-sensitive". Only this shape is exempt from
+///  review-marker-unused; a marker anywhere else is still reported.</remarks>
+function IsCommentSilencedEmptyHandler(const ALines: TArray<string>; ALine: Integer): Boolean;
+const
+  HANDLER_DO_COMMENT = '\bon\b.*\bdo\s*//';
+  EMPTY_BODY_NEXT    = '^\s*(;|end\b|else\b)';
+begin
+  Result:= False;
+  if (ALine < 1) or (ALine > Length(ALines)) then Exit;
+  if not TRegEx.IsMatch(ALines[ALine - 1], HANDLER_DO_COMMENT, [roIgnoreCase]) then Exit;
+  for var I: Integer:= ALine to High(ALines) do
+  begin
+    var T: string:= Trim(ALines[I]);
+    if (T = '') or T.StartsWith('//') then Continue;
+    Exit(TRegEx.IsMatch(T, EMPTY_BODY_NEXT, [roIgnoreCase]));
+  end;
+end; // function
+
 { Drops findings whose source line records them as reviewed, and reports review
   markers that have gone stale or unused.
 
@@ -13785,7 +13814,9 @@ begin
       measured. Some rules treat a comment as content, so writing the marker is
       itself enough to stop the rule firing. Probe of the empty-* family
       (2026-08-12): empty-except and empty-case-branch both go 1 -> 0 findings
-      when ANY trailing comment is added; empty-on-handler does not. Reporting
+      when ANY trailing comment is added; empty-on-handler does not when the
+      comment follows the `;`, but DOES when it sits between `do` and the `;`
+      (wave 152b, IsCommentSilencedEmptyHandler). Reporting
       those as "unused" would create a loop with no exit -- mark the finding, the
       comment silences the rule, the hint says remove the marker, removing it
       brings the finding back. Marking such a finding is in fact the remedy the
@@ -13937,6 +13968,9 @@ begin
             end;
             if StampMsg <> '' then EmitHint(SF, LN, 'review-marker-reason-unreviewed', StampMsg);
             if MatchStr(LowerCase(M.RuleId), COMMENT_SENSITIVE) then Continue;
+            { empty-on-handler is comment-sensitive only when the marker sits
+              between `do` and the `;` -- see IsCommentSilencedEmptyHandler. }
+            if SameText(M.RuleId, 'empty-on-handler') and IsCommentSilencedEmptyHandler(Lines, LN) then Continue;
             { A placeholder @hash that no finding claimed. With a finding on the
               line the suppression path above has already said so (and Accounted
               the marker); without one this would otherwise read as
