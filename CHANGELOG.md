@@ -32,6 +32,9 @@ Everything since v1.46.0-alpha (2026-11-07): waves 147, 148, 149, 151 and 152, r
 - Fixed: index: `--library-db` naming a library index at an older schema is skipped with a note instead of crashing the calls stage (access violation in TDataSet.GetActive).
 - DRAGLINT_PP_TRACE: 1/true/yes writes %TEMP%\drag-lint-pp-trace.log, any other value is the trace file path.
 - Fixed: DRAGLINT_PP_TRACE=1 no longer creates a file named `1` in the current directory.
+- Fixed: the index stores and returns string values as written -- FireDAC's StrsTrim default trimmed trailing spaces (a .dfm `Caption = 'OGP  '` was stored as 'OGP'; menu-tree --with-dfm table and text paths now agree). Extraction change: needs the re-parse. (152b ST O5)
+- Removed the unused ISymbolStore.GetFileIncludes reader; the file_includes table is still written and queryable with `drag-lint sql`. (152b ST O16c)
+- Measured, not landed: a refs position index (file_id, start_line, start_col) grew the CLIENT index by 3.49 % (rule: <= 3 %); schema stays 25. (152b ST O16b)
 
 ### Resolver
 - Added: DRAGLINT_PROFILE_CALLS=1 prints a per-sub-pass timing table of the resolve calls stage on stderr (off = no cost).
@@ -76,6 +79,13 @@ Everything since v1.46.0-alpha (2026-11-07): waves 147, 148, 149, 151 and 152, r
 - Fixed: lint: enum-read-inside-with reports a with-target that is a unit-level function result (`with GetObj do`), the residual the resolver still binds to the enum value after the same-named-type tie-break.
 - Fixed: lint-all, lint-project and check-ast refuse `--compile-gate` without `--fix` (exit 2) instead of ignoring it; `manifest migrate --dry-run` and `bookmarks-strip / bookmarks-restore --format json` are documented.
 - perf: lint-all and lint <file> no longer run the OFF out-arg / by-value data-flow passes (local-only-out-arg, dead-store-before-out-arg, by-value-arg-before-assignment) unless one of them is enabled; about 60 s off a 164 MB lint-all. The larger 1.46 regression (unit-missing-from-uses bound-ref path, +100 s) is named and left for 1.48.
+- Added: new rule `rtti-unavailable` (OFF by default; `--rule` / `--enable rtti-unavailable`): declarations that lose classic or extended RTTI -- enums whose explicit ordinals are not contiguous from 0 (no type info, E2134) and published properties of such types, published record properties (info when DefineProperties streams them), `{$RTTI EXPLICIT}` sets without vcPublic / vcPublished, `{$M-}` / `{$TYPEINFO OFF}` over published classes, `{$WEAKLINKRTTI ON}` in component units, published sections without TPersistent ancestry or `{$M+}`. CLIENT sample 24/24 true positives. (152b RTTI)
+- Fixed: `default-encoding-io` matches the callee by its dotted name segments, not a substring -- `SetCurrentStreamWriter(nil)` no longer fires. (152b DC)
+- Fixed: `read-never-assigned` counts a field passed to an `out` / `var` parameter of a procedural-type callee (a parameter, field or variable typed `reference to function(out ..)` / `procedure(var ..) of object`) as a write. (152b DC)
+- Fixed: `referenced-never-set` credits a write through a hard cast to the field's class, `TGreet(LOld).FReplaced := True`, from any routine of the unit. (152b DC)
+- Fixed: object-leak and field-created-not-freed no longer report an object handed on through an Automation named argument `Foo(Name := Obj)`, and the fixer no longer proposes FreeAndNil for such a field; a name used only as the argument label is no longer taken as handing the object on. (152b GF1)
+- Fixed: magic-literal no longer flags the ordinal in `external Lib index N`; unconditional-recursion, inlay hints and element reads see a call inside an Automation named argument value. (152b GF1)
+- Fixed: doc-drift no longer reads a DUnitX / attribute argument (`[Test] [Ignore('text')]` above a parameterless method) as a signature parameter; `document --apply` orphan-param handling is pinned by a guard. (152b DOC)
 
 ### Cycles
 - Added: `cycles --hub` (read-only): names per group the hub units whose removal leaves the rest acyclic, with the uses edges, reference weights and surfaces on each side, whether cutting one side alone breaks the group, and the dead uses inside it; JSON adds hubs[] and zero_ref_edges. Spec 2026-11-08-hub-scc-phased.md (fabcyc case 18, phases P1-P6).
@@ -128,6 +138,9 @@ Everything since v1.46.0-alpha (2026-11-07): waves 147, 148, 149, 151 and 152, r
 - `doc-drift`: a bare call into the library is answered only by a unit the calling file uses; a virtual library member reached through its base also counts its overrides. `document --apply`: a block whose capped `Calls:` list ends "(+N more)" is no longer REFUSED as naming an unseen unit.
 - Fixed: `Owns returned:` no longer depends on index order for a function returning a cross-unit class whose name does not
   start with T/I (now consistently omitted).
+- Fixed: `Owns returned:` is shown for a function returning a class declared in another unit even when its name does not start with T/I, and never for HWND / DWORD-like value aliases; the reference-type check runs when the facts are read, so it does not depend on index order. Needs the re-parse (extractor change). (152b DF O7)
+- Fixed: doc facts read the declaration line past leading attributes, so an attribute argument is no longer part of the signature. (152b DF)
+- Faster: the `Covered by:` walk prepares each store query once and memoizes symbol rows and the TTestCase verdict per run: CLIENT 4.8-4.9 -> 1.3-1.7 ms per hover, hover text identical 199/199. (152b DF O6)
 
 ### Language server, IDE plugin and VS Code
 - Added: LSP: draglint/callerCounts carries the exception lens titles (`exceptions`), for the RAD Studio lens.
@@ -151,12 +164,14 @@ Everything since v1.46.0-alpha (2026-11-07): waves 147, 148, 149, 151 and 152, r
 ### Manifest and installed layout
 - Added: `manifest migrate [--apply] [--json]`: one-time move of the exe-side drag-lint.json to %APPDATA%\drag-lint (installed layout v2, phase 2; off by default); it renames, never deletes, and DBs stay put. Layout v2 (DRAGLINT_LAYOUT=v2): %VAR% expansion in outDir; a roaming manifest with no outDir puts DBs in %LOCALAPPDATA%\drag-lint\library; register-project creates the roaming manifest when none exists; DRAGLINT_LAYOUT=v1 is the explicit way back. Installer: Build-Installer.ps1 -LayoutV2 builds the v2 setup (not for release before phase 3 and the VM test).
 - Added (from wave 146 branches): `manifest where` + `--manifest` / DRAGLINT_MANIFEST and installed layout v2 phase 1 behind DRAGLINT_LAYOUT=v2 (off, x5).
+- Fixed: a manifest with more than one library section for a platform -- `query`, `usages`, `resolve-dbs`, hover and the other manifest-driven consumers saw only the FIRST section; they now read every library section of the platform in manifest order (first wins on a duplicate name), and the LSP opens the further sections beside the first. (152b DBS O4)
 
 ### Grammar
 - Grammar v1.4.4 (PR #2, pmcgee69): an if statement whose branches also read as expressions (calls, bare raise, assignment) is an ifElse statement, not an exprIf; about 13 percent of corpus files change trees, 0 new parse failures.
 - Grammar v1.4.5: seven fixes by Paul McGee (pmcgee69): quoted-character subrange bounds; several hint directives on a variable; chained calling conventions on a procedural-type field; a named constant as a code page; an optional program header; the right of `is` is a type (`is` binds tighter than `and`); a generic's `<` in an expression is its own token, so `a < b - 1` groups as `a < (b - 1)`. 0 new parse failures on the 533 / 8286 corpora; root 8286 failures 305 -> 300.
 - Grammar v1.4.5: an `asm ... end;` with no header (a routine's second body under another {$IFDEF}, System.Win.OleControls) is a definition-level recovery node (asmOrphan), both grammars; fixes the whole-unit ERROR the generic-`<` token's recovery produced there (46 -> 2 errors).
 - Grammar v1.4.7: `external` tails without `;` (`external L`, `index N`, `name Ident`) parse; pure grammar gets the orphan `begin..end;` definition-level block; `declProcFwd` conflict entry dropped; corpus-tail guard. 0 newly failing files on 533/8286, root 8286 +1 file fixed (JvShDlg), pure 8286 +63 fixed.
+- Grammar tree-sitter-delphi13 v1.4.10: a record or class field may be named Private, Protected, Public or Published (Delphi 5 SysUtils.TFileRec); library-D5 files with parse errors 25 -> 24 (23 are binary DFMs, 1 is a Delphi 6+ unit under Delphi 5 defines). Needs the re-parse. (152b GR3)
 
 ### Build, tests and tools
 - Added: tools\reparse-libraries.ps1 `-Platforms d5` indexes the Delphi 5 source root into library-D5; known non-grammar
@@ -172,6 +187,9 @@ Everything since v1.46.0-alpha (2026-11-07): waves 147, 148, 149, 151 and 152, r
 - Internal: TDocRegions split into four classes behind a facade (no output change, proved byte-equal on 3 projects).
 - Internal: LoadDocComplexityMin dead store removed (H2077).
 - Docs: editor-integration programme re-scoped after the exception fact (spec 2026-11-07-editor-programme.md).
+- tools\reparse-libraries.ps1 -Platforms accepts a comma list through `pwsh -File` (it arrived as one string). (152b OPS2 O10)
+- Guard: the VS Code extension's private engine copy must report the deployed engine's --version. (152b OPS2 O15)
+- Guards added in 152b run on the tree build through Get-HermeticEngine (no machine drag-lint.json). (152b INT2)
 
 ### Measured, no change
 - The raise/handle exception type fact (1.46) costs no measurable parse time (-0.1 percent CPU, 570 files x 4 passes) and 0.1 s of resolve on Micronite2027; the 1.46 '+19 percent rebuild' was machine load (B3).
