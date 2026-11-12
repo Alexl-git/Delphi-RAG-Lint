@@ -1,4 +1,4 @@
-﻿{
+{
   "settings": {
     "currentProjectsIndexing": "perProject",
     "defaultPlatform": "Win32",
@@ -109,7 +109,8 @@
           "C:\\Projects\\Loader2019\\Loader2025.dproj"
         ],
         "useIgnoreFiles": true,
-        "sqlOnlyMS": true
+        "sqlOnlyMS": true,
+        "libraryResolve": true
       },
       {
         "name": "TableTools-TableTools370P",
@@ -305,7 +306,7 @@
       },
       {
         "name": "Library",
-        "db": "library-{platform}.sqlite",
+        "db": "C:\\Projects\\.drag-lint\\library-{platform}.sqlite",
         "source": "registry-libraries",
         "platforms": [
           "Win32",

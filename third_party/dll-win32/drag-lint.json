@@ -109,7 +109,8 @@
           "C:\\Projects\\Loader2019\\Loader2025.dproj"
         ],
         "useIgnoreFiles": true,
-        "sqlOnlyMS": true
+        "sqlOnlyMS": true,
+        "libraryResolve": true
       },
       {
         "name": "TableTools-TableTools370P",
