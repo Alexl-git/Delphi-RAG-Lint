@@ -27,6 +27,16 @@
        'borrowed' in both states -- fails if the gate drops everything
     4. POSITIVE CONTROL: GetLocal (non-T/I class declared in the SAME unit) is
        'borrowed' in both states -- fails if tier 1 is dropped wholesale
+
+  152b DF / O7 (full precision for cross-file non-T/I classes, both halves):
+  the index half stores the verdict unless the return type is a definite value
+  type (own-file record/enum, or the built-in value list); Doc.Facts gates it
+  at READ time with IsReferenceTypeName over the complete store (any file).
+    5. GetWidget (non-T/I class from the LATER unit) shows `Owns returned:
+       borrowed` in the block written from the FRESH index     [RED before]
+    6. CONTROL: GetHandle / GetFlags (HWND / DWORD aliases from the later
+       unit) show NO `Owns returned:` -- fails if only the index half lands
+    7. the same block scan after the incremental reindex + re-document
 #>
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
 $ErrorActionPreference = 'Stop'
@@ -55,10 +65,32 @@ function StoredFacts() {
 Check 'fresh index exits 0' ($LASTEXITCODE -eq 0)
 $full = StoredFacts
 Write-Host "  (info) after fresh index : $full"
-Check 'all three methods have a facts row' (($full -split ';').Count -eq 3)
+Check 'all five methods have a facts row' (($full -split ';').Count -eq 5)
 
 & $exePath document --unit $user --db $db --apply --no-backup 2>$null | Out-Null
 Check 'document --apply exits 0' ($LASTEXITCODE -eq 0)
+
+# 152b O7: is `Owns returned:` in the /// block right above the interface
+# declaration of $method (the block document --apply wrote)?
+function OwnsShown([string]$method) {
+  $lines = [IO.File]::ReadAllLines($user)
+  $at = -1
+  for ($i = 0; $i -lt $lines.Count; $i++) {
+    if ($lines[$i] -match ('^\s*function\s+' + $method + '\s*:')) { $at = $i; break }
+  }
+  if ($at -lt 0) { throw "declaration of $method not found in $user" }
+  for ($j = $at - 1; ($j -ge 0) -and ($lines[$j] -match '^\s*///'); $j--) {
+    if ($lines[$j] -match 'Owns returned:') { return $true }
+  }
+  return $false
+}
+function CheckShown([string]$state) {
+  Check "O7: GetWidget (non-T/I class, later unit) shows Owns returned ($state)" (OwnsShown 'GetWidget')
+  Check "O7 CONTROL: GetHandle (HWND alias, later unit) shows none ($state)" (-not (OwnsShown 'GetHandle'))
+  Check "O7 CONTROL: GetFlags (DWORD alias, later unit) shows none ($state)" (-not (OwnsShown 'GetFlags'))
+  Check "O7 CONTROL: GetThing and GetLocal still show Owns returned ($state)" ((OwnsShown 'GetThing') -and (OwnsShown 'GetLocal'))
+}
+CheckShown 'fresh index'
 
 # Touch the unit without moving a line, so the incremental pass re-parses it.
 [IO.File]::AppendAllText($user, "`r`n", [Text.Encoding]::ASCII)
@@ -78,6 +110,8 @@ Check "doc-drift after incremental reindex is 0 (got $($arr.Count))" ($arr.Count
 
 $dry = (& $exePath document --unit $user --db $db 2>&1) -join "`n"
 Check 'document after incremental reindex proposes no edit' (-not ($dry -match '(?m)^\s*(insert|delete)\b'))
+& $exePath document --unit $user --db $db --apply --no-backup 2>$null | Out-Null
+CheckShown 'incremental reindex'
 
 try { [IO.Directory]::Delete($scratch, $true) } catch { }
 if ($fails -gt 0) { Write-Host "FAIL ($fails)"; exit 1 }

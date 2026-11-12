@@ -346,6 +346,41 @@ function SymbolFactsCsvSplit(const ACsv: string): TArray<string>;
 /// </remarks>
 function ComputeCoveredBy(const AStore: ISymbolStore; const ASym: TSymbol): string;
 
+/// <summary>True when ATypeName names a reference type (class or interface),
+/// the object-type gate of the 'borrowed' / 'self' returns-owner verdicts.</summary>
+/// <param name="AStore">Open symbol store; not owned. Must not be nil.</param>
+/// <param name="ATypeName">Return type text; a unit qualifier is stripped.</param>
+/// <param name="AFileId">Only declarations in this file are trusted by the store
+/// tier (index time: the routine's own file, stored before its facts pass in every
+/// order). 0 or less = any file (read time, against the complete store).</param>
+/// <returns>True for a store-resolved class / interface; False for a resolved
+/// record / enum or a built-in value type; otherwise the T/I naming convention.
+/// '' -> False.</returns>
+/// <remarks>Pure. 152b O7: Doc.Facts asks it at READ time with AFileId = 0, so a
+/// non-T/I class declared in another unit (Widget) is accepted and a
+/// HWND / DWORD-like alias is not. Guard: tests\autotest\run_returns_owner_order.ps1.</remarks>
+function IsReferenceTypeName(const AStore: ISymbolStore; const ATypeName: string;
+  const AFileId: Int64): Boolean;
+
+/// <summary>Drops ComputeCoveredBy's run-level store-lookup memos (152b O6).</summary>
+/// <remarks>The memos are keyed by the store's interface pointer and never expire on
+/// their own (nothing on the doc-facts path writes to a store). Call it whenever a
+/// store is freed or reopened while the process lives on -- Doc.Facts
+/// ClearDocFactsMemos does, so every caller of that clears these too. Not
+/// thread-safe: the doc-facts path runs on one thread.</remarks>
+procedure ClearCoveredByMemos;
+
+/// <summary>AStore.FindResolvedCallers(ASymbolId) through ComputeCoveredBy's run-level
+/// memo (152b O6): the first call asks the store, later calls for the same store and id
+/// return the identical array.</summary>
+/// <param name="AStore">Open symbol store; not owned. Must not be nil.</param>
+/// <param name="ASymbolId">Target symbol id in AStore.</param>
+/// <returns>The store's answer, unchanged.</returns>
+/// <remarks>Doc.Facts TDocFactsBuilder.Build asks it for the declaration's own
+/// 'Called from:' rows, so ComputeCoveredBy's first hop for the same symbol is a memo hit.
+/// Cleared by ClearCoveredByMemos. Not thread-safe.</remarks>
+function MemoResolvedCallers(const AStore: ISymbolStore; ASymbolId: Int64): TArray<TResolvedCaller>;
+
 /// <summary>v(ADP3 T14): the DI/ORM wiring string for ASym -- '; '-joined
 /// entries, each &lt;c&gt;di:&lt;interface&gt; (&lt;lifetime&gt;)&lt;/c&gt; or
 /// &lt;c&gt;ds:&lt;symbol&gt; -&gt; &lt;RELATION&gt; (&lt;COL&gt;, &lt;COL&gt;)&lt;/c&gt;. '' when the
@@ -2802,6 +2837,27 @@ begin
     Result:= Trim(Copy(ASig, Colon + 2, MaxInt)).TrimRight([';']);
 end;
 
+// 152b O7: the fixed list of well-known VALUE types that the T/I naming
+// convention would misread (see IsReferenceTypeName's header, tier 2 and the
+// Phase 2 final-review FIX). Shared by IsReferenceTypeName (read and index
+// time) and IsDefiniteValueTypeName (index time), so both name the same set.
+function IsBuiltinValueTypeName(const ABare: string): Boolean;
+begin
+  Result:= MatchText(ABare, [
+    'Integer', 'Int64', 'UInt64', 'Cardinal', 'Byte', 'Word',
+    'SmallInt', 'ShortInt', 'LongInt', 'LongWord', 'NativeInt', 'NativeUInt',
+    'Boolean', 'ByteBool', 'WordBool', 'LongBool',
+    'string', 'AnsiString', 'WideString', 'UnicodeString', 'ShortString',
+    'Char', 'AnsiChar', 'WideChar',
+    'Double', 'Single', 'Extended', 'Currency', 'Comp', 'Real', 'Real48',
+    'TDateTime', 'TDate', 'TTime', 'TGUID', 'Variant', 'OleVariant',
+    'Pointer', 'TBytes',
+    // FIX (Phase 2 final review): common RTL VALUE-RECORD names -- see the
+    // header comment above for the full rationale.
+    'TRect', 'TPoint', 'TSize', 'TRectF', 'TPointF', 'TSizeF', 'TSmallPoint',
+    'TValue', 'TColor', 'TGraphicsColor']);
+end;
+
 // ADP2 T8: object-type gate for the 'borrowed'/'self' verdicts (task brief
 // step 5) -- a wrong 'borrowed'/'self' on a VALUE-returning function (e.g.
 // 'function Count: Integer; begin Result := FCount; end;') is nonsense, so
@@ -2883,7 +2939,7 @@ begin
   Cands:= AStore.FindSymbolsByExactName(Bare);
   for Cand in Cands do
   begin
-    if Cand.FileId <> AFileId then Continue; // 151 X2R: own file only, see header
+    if (AFileId > 0) and (Cand.FileId <> AFileId) then Continue; // 151 X2R: own file only, see header; <= 0 = any file (152b O7 read gate)
     if Cand.Kind in [skClass, skInterface] then Exit(True);
     // FIX (Phase 2 T8 review, Fix 2): ground-truth NEGATIVE -- see this
     // function's header comment, tier 1, for why the ORIGINAL code's
@@ -2893,21 +2949,38 @@ begin
     if Cand.Kind in [skRecord, skEnum] then Exit(False);
   end;
 
-  if MatchText(Bare, [
-    'Integer', 'Int64', 'UInt64', 'Cardinal', 'Byte', 'Word',
-    'SmallInt', 'ShortInt', 'LongInt', 'LongWord', 'NativeInt', 'NativeUInt',
-    'Boolean', 'ByteBool', 'WordBool', 'LongBool',
-    'string', 'AnsiString', 'WideString', 'UnicodeString', 'ShortString',
-    'Char', 'AnsiChar', 'WideChar',
-    'Double', 'Single', 'Extended', 'Currency', 'Comp', 'Real', 'Real48',
-    'TDateTime', 'TDate', 'TTime', 'TGUID', 'Variant', 'OleVariant',
-    'Pointer', 'TBytes',
-    // FIX (Phase 2 final review): common RTL VALUE-RECORD names -- see the
-    // header comment above for the full rationale.
-    'TRect', 'TPoint', 'TSize', 'TRectF', 'TPointF', 'TSizeF', 'TSmallPoint',
-    'TValue', 'TColor', 'TGraphicsColor']) then Exit(False);
+  if IsBuiltinValueTypeName(Bare) then Exit(False);
 
   Result:= (Length(Bare) >= 2) and CharInSet(Bare[1], ['T', 'I']);
+end;
+
+// 152b O7 (index half of the read-time owner check): True only when ATypeName
+// is CERTAINLY a value type without asking any other file -- a record / enum
+// declared in AFileId (the routine's own file, stored before its facts pass in
+// every index order) or a built-in value type (IsBuiltinValueTypeName). Anything
+// else keeps the 'borrowed' / 'self' verdict in symbol_facts.returns_owner and
+// Doc.Facts TDocFactsBuilder.Build decides at READ time with IsReferenceTypeName
+// over the complete store: a non-T/I class from another unit (Widget) is then
+// shown, a HWND / DWORD-like alias is not. Store-free across files, so the
+// stored word cannot depend on index order (151 X2R).
+function IsDefiniteValueTypeName(const AStore: ISymbolStore; const ATypeName: string;
+  const AFileId: Int64): Boolean;
+var
+  Bare: string ;
+  P   : Integer;
+begin
+  Result:= False;
+  Bare  := Trim(ATypeName);
+  P     := Bare.LastDelimiter('.');
+  if P >= 0 then Bare:= Trim(Copy(Bare, P + 2, MaxInt));
+  if Bare = '' then Exit;
+  for var Cand in AStore.FindSymbolsByExactName(Bare) do
+  begin
+    if Cand.FileId <> AFileId then Continue;
+    if Cand.Kind in [skClass, skInterface] then Exit(False);
+    if Cand.Kind in [skRecord, skEnum] then Exit(True);
+  end;
+  Result:= IsBuiltinValueTypeName(Bare);
 end;
 
 // FIX (Phase 2 T8 review, Fix 1): the constructor-call's own RECEIVER node --
@@ -3226,7 +3299,9 @@ begin
     // type -- else a value-returning function (e.g. Count: Integer above)
     // would wrongly render 'borrowed'/'self' for a plain value type.
     if (Verdict = 'borrowed') or (Verdict = 'self') then
-      if not IsReferenceTypeName(AStore, RetTypeName, ASym.FileId) then Exit;
+      // 152b O7: only a CERTAIN value type is dropped here; the rest is gated at
+      // read time (Doc.Facts) against the complete store -- see IsDefiniteValueTypeName.
+      if IsDefiniteValueTypeName(AStore, RetTypeName, ASym.FileId) then Exit;
 
     Result:= Verdict;
   finally
@@ -3454,6 +3529,49 @@ begin
   if P >= 0 then Result:= Copy(S, P + 2, MaxInt) else Result:= S;
 end;
 
+{ 152b O6F: run-level memos of the walk's symbol lookups. GCbTestCase: rule (b) per FIXTURE
+  CLASS -- every method of one class asked GetTransitiveAncestors for the same class again.
+  GCbSymbols: the symbol rows IsTestRoutine and TargetIsMethodOf read -- the same caller and its
+  owning class were fetched by both, and by every sibling method. Key: store pointer + id (ids
+  are per-DB, as for the other covered-by memos); cleared by ClearCoveredByMemos. }
+var
+  GCbTestCase: TDictionary<string, Boolean>;
+  GCbSymbols : TDictionary<string, TSymbol>;
+
+function MemoSymbolById(const AStore: ISymbolStore; AId: Int64): TSymbol;
+begin
+  var Key: string:= IntToHex(NativeUInt(Pointer(AStore))) + ':' + IntToStr(AId);
+  if GCbSymbols.TryGetValue(Key, Result) then Exit;
+  Result:= AStore.GetSymbolById(AId);
+  GCbSymbols.Add(Key, Result);
+end;
+
+function DescendsFromTestCase(const AStore: ISymbolStore; AClassId: Int64): Boolean;
+var
+  Anc: TTypeAncestor;
+begin
+  var Key: string:= IntToHex(NativeUInt(Pointer(AStore))) + ':' + IntToStr(AClassId);
+  if GCbTestCase.TryGetValue(Key, Result) then Exit;
+  Result:= False;
+  { An index with no 'TTestCase' name at all cannot answer True (HasTestCaseAncestryNames is
+    that proof); asked once per run under the key '<store>:*'. }
+  var AnyKey: string:= IntToHex(NativeUInt(Pointer(AStore))) + ':*';
+  var Any: Boolean;
+  if not GCbTestCase.TryGetValue(AnyKey, Any) then
+  begin
+    Any:= AStore.HasTestCaseAncestryNames;
+    GCbTestCase.Add(AnyKey, Any);
+  end;
+  if not Any then Exit;
+  for Anc in AStore.GetTransitiveAncestors(AClassId) do
+    if Anc.MatchesName('TTestCase') then { alias AND its target }
+    begin
+      Result:= True;
+      Break;
+    end;
+  GCbTestCase.Add(Key, Result);
+end;
+
 // True when the caller routine identified by (ASymbolId, AQName, ALocation)
 // -- one row of a FindResolvedCallers/FindUnresolvedNameCallers result -- is
 // a TEST routine, by either of two GROUND-TRUTH rules:
@@ -3516,11 +3634,10 @@ var
   BaseName : string;
   Sym      : TSymbol;
   ParentSym: TSymbol;
-  Anc      : TTypeAncestor;
 begin
   Result:= False;
   if ASymbolId <= 0 then Exit;
-  Sym:= AStore.GetSymbolById(ASymbolId);
+  Sym:= MemoSymbolById(AStore, ASymbolId);
 
   // (a) file-name convention -- query-free, and NECESSARY-not-sufficient
   //     (B10). One of (a1)/(a2) must corroborate it.
@@ -3532,7 +3649,7 @@ begin
     // (a2) or it is a method of a fixture-named class.
     if Sym.ParentId > 0 then
     begin
-      ParentSym:= AStore.GetSymbolById(Sym.ParentId);
+      ParentSym:= MemoSymbolById(AStore, Sym.ParentId);
       if (ParentSym.Kind = skClass)
          and (StartsText('Test', ParentSym.Name)
               or EndsText('Test', ParentSym.Name)
@@ -3542,10 +3659,9 @@ begin
 
   // (b) TTestCase ancestry -- reached whenever (a) did not already conclude.
   if Sym.ParentId <= 0 then Exit;
-  ParentSym:= AStore.GetSymbolById(Sym.ParentId);
+  ParentSym:= MemoSymbolById(AStore, Sym.ParentId);
   if ParentSym.Kind <> skClass then Exit;
-  for Anc in AStore.GetTransitiveAncestors(ParentSym.Id) do
-    if Anc.MatchesName('TTestCase') then Exit(True); { alias AND its target }
+  Result:= DescendsFromTestCase(AStore, ParentSym.Id); // 152b O6F: memo per class
 end;
 
 // v(ADP3 T14): DI/ORM wiring for one symbol, as the stored wire string --
@@ -3649,6 +3765,60 @@ begin
   end;
 end;
 
+{ 152b O6: run-level memos for ComputeCoveredBy's store lookups.
+  Every hover / document Build walks up to COVERED_BY_DEPTH reverse hops, and each
+  hop asked the store again for the same answers another walk had already fetched:
+  the callers of a shared caller, whether a routine is a test, whether a target is
+  a method. Profiled on the microniteTests copy (100 hovers): 7.4 ms per hover in
+  ComputeCoveredBy, all of it in those store calls (~1 ms each). The memo holds
+  exactly what the store returned, so a hit returns the identical answer (identity:
+  hover-cost.ps1 -RequireIdentical).
+  KEYED BY THE STORE POINTER, like Doc.Facts' run-level memos and for the same
+  reason (ids are per-DB); cleared by ClearCoveredByMemos, which
+  Doc.Facts.ClearDocFactsMemos calls wherever a store is reopened. }
+var
+  GCbCallers: TDictionary<string, TArray<TResolvedCaller>>; // 'r' resolved by id / 'n' unresolved by name
+  GCbFlags  : TDictionary<string, Boolean>;                 // 'm' TargetIsMethodOf / 't' IsTestRoutine
+
+function CbKey(const AStore: ISymbolStore; const AKind: Char; const ARest: string): string;
+begin
+  Result:= AKind + IntToHex(NativeUInt(Pointer(AStore))) + ':' + ARest;
+end;
+
+procedure ClearCoveredByMemos;
+begin
+  if GCbCallers <> nil then GCbCallers.Clear;
+  if GCbFlags   <> nil then GCbFlags.Clear;
+  if GCbTestCase <> nil then GCbTestCase.Clear;
+  if GCbSymbols  <> nil then GCbSymbols.Clear;
+end;
+
+function MemoResolvedCallers(const AStore: ISymbolStore; ASymbolId: Int64): TArray<TResolvedCaller>;
+begin
+  var Key: string:= CbKey(AStore, 'r', IntToStr(ASymbolId));
+  if GCbCallers.TryGetValue(Key, Result) then Exit;
+  Result:= AStore.FindResolvedCallers(ASymbolId);
+  GCbCallers.Add(Key, Result);
+end;
+
+// Keyed by the name AS GIVEN (case kept): the memo never assumes how the store
+// compares names, so a hit is always the answer the same call returned.
+function MemoNameCallers(const AStore: ISymbolStore; const AName: string): TArray<TResolvedCaller>;
+begin
+  var Key: string:= CbKey(AStore, 'n', AName);
+  if GCbCallers.TryGetValue(Key, Result) then Exit;
+  Result:= AStore.FindUnresolvedNameCallers(AName);
+  GCbCallers.Add(Key, Result);
+end;
+
+function MemoIsTestRoutine(const AStore: ISymbolStore; ASymbolId: Int64; const ALocation: string): Boolean;
+begin
+  var Key: string:= CbKey(AStore, 't', IntToStr(ASymbolId) + ':' + ALocation);
+  if GCbFlags.TryGetValue(Key, Result) then Exit;
+  Result:= IsTestRoutine(AStore, ASymbolId, ALocation);
+  GCbFlags.Add(Key, Result);
+end;
+
 function ComputeCoveredBy(const AStore: ISymbolStore; const ASym: TSymbol): string;
 var
   Names  : TStringList;
@@ -3668,10 +3838,15 @@ var
   begin
     Result:= False;
     if ASymbolId <= 0 then Exit;
-    S:= AStore.GetSymbolById(ASymbolId);
-    if (S.Id <= 0) or (S.ParentId <= 0) then Exit;
-    P:= AStore.GetSymbolById(S.ParentId);
-    Result:= P.Kind in [skClass, skInterface, skRecord];
+    var Key: string:= CbKey(AStore, 'm', IntToStr(ASymbolId)); // 152b O6
+    if GCbFlags.TryGetValue(Key, Result) then Exit;
+    S:= MemoSymbolById(AStore, ASymbolId);
+    if (S.Id > 0) and (S.ParentId > 0) then
+    begin
+      P:= MemoSymbolById(AStore, S.ParentId);
+      Result:= P.Kind in [skClass, skInterface, skRecord];
+    end;
+    GCbFlags.Add(Key, Result);
   end;
 
   // Finds every caller of (ASymbolId as a resolved call_edges target) UNION
@@ -3697,7 +3872,7 @@ var
     NResolved:= 0;
     if ASymbolId > 0 then
     begin
-      Combined:= Combined + AStore.FindResolvedCallers(ASymbolId);
+      Combined:= Combined + MemoResolvedCallers(AStore, ASymbolId);
       NResolved:= Length(Combined);
     end;
     // v(ADP3 T3i, register E1): takes FindUnresolvedNameCallers' DEFAULT
@@ -3714,7 +3889,7 @@ var
     // below restricts it to routine kinds, so the non-routine exemption
     // DRagLint.Doc.Facts needs cannot arise here at all.
     if AQName <> '' then
-      Combined:= Combined + AStore.FindUnresolvedNameCallers(LastSegment(AQName));
+      Combined:= Combined + MemoNameCallers(AStore, LastSegment(AQName));
     if Length(Combined) = 0 then Exit;
 
     { IS THIS HOP'S TARGET A METHOD? Only then can a missing receiver be evidence
@@ -3758,7 +3933,7 @@ var
           (Idx < NResolved) or (not TargetIsMethod) or (Trim(RC.ReceiverText) <> '');
         var PathVerified: Boolean:= AVerified and EdgeVerified;
 
-        if IsTestRoutine(AStore, RC.EnclosingSymbolId, RC.Location) then
+        if MemoIsTestRoutine(AStore, RC.EnclosingSymbolId, RC.Location) then
         begin
           Names.Add(RC.EnclosingQName);
           { A test reachable by ANY verified path is verified, however many
@@ -3851,10 +4026,18 @@ begin
 end;
 
 initialization
+  GCbCallers:= TDictionary<string, TArray<TResolvedCaller>>.Create; // 152b O6
+  GCbFlags  := TDictionary<string, Boolean>.Create;
+  GCbTestCase:= TDictionary<string, Boolean>.Create; // 152b O6F
+  GCbSymbols := TDictionary<string, TSymbol>.Create; // 152b O6F
 
 finalization
   WriteFactsProfile;
   GUiTypeCache.Free;
+  GCbCallers.Free;
+  GCbFlags.Free;
+  GCbTestCase.Free;
+  GCbSymbols.Free;
   GFieldNames.Free;
   GFieldTypes.Free;
 
