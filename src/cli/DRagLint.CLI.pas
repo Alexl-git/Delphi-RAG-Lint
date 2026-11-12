@@ -394,7 +394,8 @@ type
     Output          : string        ;
     OutputDir       : string        ;
     Limit           : Integer       ;
-    MaxRows         : Integer       ; // --max-rows N: per-section row cap of `overview`
+    LimitGiven      : Boolean       ; // --limit was on the command line (sql: `--limit 0` = every row)
+    MaxRows        : Integer       ; // --max-rows N: per-section row cap of `overview`
     SortBy          : string        ;
     ScanLibraries   : Boolean       ;
     ScanLibrariesAll: Boolean       ; // --scan-libraries-all: every platform subkey
@@ -1719,7 +1720,12 @@ begin
     else if (A = '--size-guard-mb') and (i < ParamCount) then begin Inc(i); Result.SizeGuardMB:= StrToIntDef(ParamStr(i), 0); Result.SizeGuardMBSet:= True; end
     else if (A = '--max-file-kb') and (i < ParamCount) then begin Inc(i); Result.MaxFileKB:= StrToIntDef(ParamStr(i), 2048); Result.MaxFileKBSet:= True; end
     else if (A = '--connection') and (i < ParamCount) then begin Inc(i); Result.FbConnection:= ParamStr(i); end
-    else if (A = '--limit') and (i < ParamCount) then begin Inc(i); Result.Limit:= StrToIntDef(ParamStr(i), 50); end
+    else if (A = '--limit') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.Limit     := StrToIntDef(ParamStr(i), 50);
+      Result.LimitGiven:= True;
+    end
     else if (A = '--max-rows') and (i < ParamCount) then
     begin
       Inc(i);
@@ -20968,6 +20974,17 @@ begin
   if Matched = 0 then Result:= 1 else Result:= 0;
 end; // function
 
+/// <summary>The "how many rows were there" half of the sql row-cap notices.</summary>
+/// <param name="ATotalRows">Rows the statement returned in all; -1 when the
+/// count past the cap was stopped (time cap).</param>
+/// <returns>"1226 in all", or "the total is unknown (the count was stopped by
+/// --timeout-ms)".</returns>
+function SqlTotalRowsPhrase(ATotalRows: Integer): string;
+begin
+  if ATotalRows < 0 then Result:= 'the total is unknown (the count was stopped by --timeout-ms)'
+  else Result:= System.SysUtils.Format('%d in all', [ATotalRows]);
+end; // function
+
 /// <summary>drag-lint sql: runs ONE read-only SQL statement against an index
 /// and prints the result set as text or JSON. Enforces at the SQLite engine --
 /// not by inspecting the query text -- that nothing but a read can happen: an
@@ -20975,14 +20992,21 @@ end; // function
 /// wall-clock time, and the connection is already query_only.</summary>
 /// <param name="AArgs">Parsed CLI args. SqlQuery (--query) or InFile (--file)
 /// supplies the statement -- exactly one of the two; DbPath/DbPaths[0] names
-/// the index; Limit caps rows (default 200); TimeoutMs caps wall-clock time
+/// the index; Limit caps rows (default 200; an explicit `--limit 0`, i.e.
+/// LimitGiven with Limit = 0, prints every row); TimeoutMs caps wall-clock time
 /// (default 10000); Format='json' or AsJson selects JSON; Output redirects to
 /// a file.</param>
 /// <returns>0 on success; 2 for a usage error (no query, both sources, more
 /// than one statement, missing or absent --db); 1 when the guard refuses the
 /// query, the time cap fires, or SQLite rejects it.</returns>
 /// <remarks>Strictly read-only. The row cap is REPORTED when it truncates --
-/// a silent cap reads as "that is all the data there is".</remarks>
+/// a silent cap reads as "that is all the data there is" (151 RB-B diffed 200 of
+/// 1226 rows). The JSON carries `truncated`, `row_limit` (0 = no cap; `row_cap`
+/// is the same value, kept for sql/1 readers) and `total_rows`: the rows past
+/// the cap are COUNTED, not fetched into the answer, and `total_rows` is null
+/// when the time cap stopped that count. A truncated JSON or --output answer
+/// also prints one NOTE on stderr; the text grid says it in its footer.
+/// Pinned by tests\autotest\run_sql_json_cap_reported.ps1.</remarks>
 function DoSql(const AArgs: TArgs): Integer;
 const
   DEFAULT_ROW_CAP    = 200  ;
@@ -21006,6 +21030,7 @@ var
   c        : Integer           ;
   r        : Integer           ;
   Truncated: Boolean           ;
+  TotalRows: Integer           ; { -1 = the count past the cap was stopped }
   ElapsedMs: Int64             ;
   Failure  : string            ;
   Refused  : Boolean           ;
@@ -21112,11 +21137,14 @@ begin
 
   UseJson:= AArgs.AsJson or SameText(AArgs.Format, 'json');
   RowCap := AArgs.Limit;
-  if RowCap <= 0 then RowCap:= DEFAULT_ROW_CAP;
+  { O8: an EXPLICIT `--limit 0` lifts the cap; a missing or negative --limit
+    keeps the default. RowCap = 0 is reported as "no cap". }
+  if (RowCap < 0) or ((RowCap = 0) and not AArgs.LimitGiven) then RowCap:= DEFAULT_ROW_CAP;
   TimeoutMs:= AArgs.TimeoutMs;
   if TimeoutMs <= 0 then TimeoutMs:= DEFAULT_TIMEOUT_MS;
 
   Truncated:= False;
+  TotalRows:= 0;
   ElapsedMs:= 0;
   Failure  := '';
   Refused  := False;
@@ -21178,7 +21206,7 @@ begin
             end;
 
             r:= 0;
-            while (not Q.Eof) and (r < RowCap) do
+            while (not Q.Eof) and ((RowCap = 0) or (r < RowCap)) do
             begin
               SetLength(RowVals, Q.FieldCount);
               for c:= 0 to Q.FieldCount - 1 do RowVals[c]:= CellText(Q.Fields[c]);
@@ -21193,6 +21221,21 @@ begin
               Q.Next;
             end;
             Truncated:= not Q.Eof;
+            TotalRows:= r;
+            { O8: COUNT the rest so the answer can say how much it left out.
+              Rows are stepped over, never added to the answer. The guard's
+              time cap still applies; if it stops the count, the rows already
+              read stand and total_rows is reported unknown (-1 -> null). }
+            if Truncated then
+            try
+              while not Q.Eof do
+              begin
+                Inc(TotalRows);
+                Q.Next;
+              end;
+            except
+              on Exception do TotalRows:= -1; { best effort: reported as total_rows null }
+            end; // try
           except
             on E: Exception do
             begin
@@ -21267,6 +21310,9 @@ begin
 
         JRoot.AddPair('row_count' , TJSONNumber.Create(Length(Cells)));
         JRoot.AddPair('truncated' , TJSONBool  .Create(Truncated)    );
+        if TotalRows >= 0 then JRoot.AddPair('total_rows', TJSONNumber.Create(TotalRows))
+        else JRoot.AddPair('total_rows', TJSONNull.Create);
+        JRoot.AddPair('row_limit' , TJSONNumber.Create(RowCap)       );
         AddStalenessPairs(JRoot, DbPath); { ENG-3 }
         JRoot.AddPair('row_cap'   , TJSONNumber.Create(RowCap)       );
         JRoot.AddPair('timeout_ms', TJSONNumber.Create(TimeoutMs)    );
@@ -21322,7 +21368,8 @@ begin
           was cut off. }
         if Truncated then
           SB.AppendLine(System.SysUtils.Format(
-            '-- ROW CAP REACHED at %d rows; there are more. Pass --limit N.', [RowCap]));
+            '-- ROW CAP REACHED at %d rows; %s. Pass --limit N (--limit 0 = every row).',
+            [RowCap, SqlTotalRowsPhrase(TotalRows)]));
         OutStr:= SB.ToString;
       finally
         SB.Free;
@@ -21332,6 +21379,12 @@ begin
     JRows.Free; { nil once JRoot took it; a failure path still owns it here }
   end; // try
 
+  { O8: a JSON or --output answer is read by a program or lands in a file, so
+    its truncation is ALSO said on stderr, where a human running it sees it. }
+  if Truncated and (UseJson or (AArgs.Output <> '')) then
+    Writeln(ErrOutput, System.SysUtils.Format(
+      'NOTE: sql row cap reached -- %d row(s) printed; %s. Pass --limit N (--limit 0 = every row).',
+      [RowCap, SqlTotalRowsPhrase(TotalRows)]));
   if AArgs.Output <> '' then WriteOutputFile(AArgs.Output, OutStr)
   else WriteStdoutDocument(OutStr + sLineBreak); // after every stderr byte (T2i R18)
   Result:= 0;
