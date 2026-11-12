@@ -1832,7 +1832,7 @@ begin
     else if (A = '--limit') and (i < ParamCount) then
     begin
       Inc(i);
-      Result.Limit     := StrToIntDef(ParamStr(i), 50);
+      Result.Limit     := StrToIntDef(ParamStr(i), 50);  // dl:ok magic-literal@2ff3 -- REVIEWED 2026-11-12 (152b INT2): the --limit fallback default, unchanged since before 152b; CLI O8 only split the line into a block
       Result.LimitGiven:= True;
     end
     else if (A = '--max-rows') and (i < ParamCount) then
