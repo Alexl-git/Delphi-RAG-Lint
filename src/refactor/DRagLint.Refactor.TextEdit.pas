@@ -1036,6 +1036,55 @@ begin
   end;
 end;
 
+// 152b DOC/DF: the first non-empty text at or below line AIdx (0-based) once
+// leading `[...]` attribute groups are dropped (quote- and nesting-aware), over at
+// most MAX_ATTR_LINES lines; '' when a group does not close on its line. Same rule
+// as Doc.Drift / Doc.Facts ReadDeclLine. Pinned by run_doc_attr_decl_apply_152b.ps1.
+
+// The 1-based index of the `]` that closes the `[` at S[1] (quote- and
+// nesting-aware), or 0 when the group does not close in S.
+function AttributeGroupEnd(const S: string): Integer;
+var
+  Depth: Integer;
+  InStr: Boolean;
+begin
+  Depth:= 0;
+  InStr:= False;
+  for var K:= 1 to Length(S) do
+  begin
+    if S[K] = '''' then InStr:= not InStr
+    else if InStr then Continue
+    else if S[K] = '[' then Inc(Depth)
+    else if S[K] = ']' then
+    begin
+      Dec(Depth);
+      if Depth = 0 then Exit(K);
+    end;
+  end;
+  Result:= 0;
+end;
+
+function TextAfterAttributes(ALines: TStrings; AIdx: Integer): string;
+const
+  MAX_ATTR_LINES = 8;
+var
+  I, J: Integer;
+  S   : string ;
+begin
+  Result:= '';
+  for I:= AIdx to Min(AIdx + MAX_ATTR_LINES, ALines.Count) - 1 do
+  begin
+    S:= Trim(ALines[I]);
+    while (S <> '') and (S[1] = '[') do
+    begin
+      J:= AttributeGroupEnd(S);
+      if J = 0 then Exit; // unbalanced (multi-line attribute)
+      S:= Trim(Copy(S, J + 1, MaxInt));
+    end;
+    if S <> '' then Exit(S);
+  end;
+end;
+
 function AnchorIsValid(const E: TTextEdit; ALines: TStrings): Boolean;
 var
   S: string;
@@ -1045,6 +1094,9 @@ begin
   S:= TrimLeft(ALines[E.ExpectLine - 1]);
   { A comment line is never a declaration -- see the header above. }
   if S.StartsWith('//') or S.StartsWith('{') or S.StartsWith('(*') then Exit(False);
+  // 152b DOC/DF: an attribute group `[Test] [Ignore('x')]` is the symbol's index
+  // start line; the declaration is the first text after the leading [...] groups.
+  if S.StartsWith('[') then S:= TextAfterAttributes(ALines, E.ExpectLine - 1);
   Result:= ContainsWholeWord(S, E.ExpectText);
 end;
 

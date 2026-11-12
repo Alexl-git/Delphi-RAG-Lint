@@ -12,7 +12,7 @@
     {
       "type": "cli",
       "verb": "sql",
-      "usage": "drag-lint sql --query \"SELECT ...\" | --in <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>] (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)",
+      "usage": "drag-lint sql --query \"SELECT ...\" | --in <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>] (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 (none with --output unless --limit is given; --limit 0 = every row; JSON says truncated + total_rows) and time cap 10000 ms; ask `schema --format json` for the columns)",
       "flags": [
         {
           "name": "--query"
@@ -45,7 +45,7 @@
         }
       ],
       "helpOrder": 47,
-      "help": ["  drag-lint sql --query \"SELECT ...\" | --in <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>]   (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)"]
+      "help": ["  drag-lint sql --query \"SELECT ...\" | --in <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>]   (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 (none with --output unless --limit is given; --limit 0 = every row; JSON says truncated + total_rows) and time cap 10000 ms; ask `schema --format json` for the columns)"]
     }
   ],
   "audience": "both",
