@@ -18823,6 +18823,17 @@ begin
           for F in DRagLint.Lint.DocRules.TDocLintRules.RunMissingDoc(FlowStore, FlowFid) do
             if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       end;
+      { 152c RINC: a uses-list fragment include is not a parse error -- the rule lint-all
+        (DropUsesFragmentParseErrors) and the indexer's DIAG / parse-errors= apply. }
+      if (FlowStore <> nil) and SameText(ExtractFileExt(EffPath), '.inc')
+         and FlowStore.IncludeIsUsesFragment(TPath.GetFullPath(EffPath)) then
+      begin
+        var FragKept: TArray<TLintFinding>:= nil;
+        for F in Findings do
+          if not (MatchText(F.RuleId, ['parser-error', 'syntax-error'])
+                  and SameText(TPath.GetFullPath(F.FilePath), TPath.GetFullPath(EffPath))) then FragKept:= FragKept + [F];
+        Findings:= FragKept;
+      end;
       { Free cached tree after single-file lint }
       TraceLintChecker('after-checkers');
       DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;

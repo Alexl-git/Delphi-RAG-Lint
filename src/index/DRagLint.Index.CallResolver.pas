@@ -569,6 +569,8 @@ type
     FWriteReceiver   : Int64;
     // Declaring file id -> the resolved target file ids it can see (uses graph).
     FFileScope  : TObjectDictionary<Int64, TList<Int64>>;
+    // 152c RINC: code-include file id -> the host it belongs to (an interface site wins).
+    FIncHost    : TDictionary<Int64, TIncludeHostRow>;
     // Cache of a routine/type symbol's direct children, keyed by symbol id, so a
     // per-ref field/method scan does not re-hit the DB for the same enclosing
     // symbol repeatedly across a whole-DB pass.
@@ -1289,6 +1291,24 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure BuildMaps;
+    /// <summary>152c RINC: makes the declarations of an include file members of its host
+    /// unit's scope -- the host and every unit that uses it see an include the host brings
+    /// into its interface (only the host sees an implementation one), and the include's
+    /// routines / const / var join the unit-level candidate maps with the host's section.</summary>
+    /// <remarks>Called once, at the end of BuildMaps (the uses-scope edges must be loaded).
+    /// Fills FIncHost; adds FFileScope edges host -> include and user-of-host -> include.
+    /// No effect on an index without file_includes rows.</remarks>
+    procedure BuildIncludeScope;
+    /// <summary>152c RINC: the unit file a declaration of AFileId belongs to -- the host of a
+    /// code include, else AFileId itself.</summary>
+    /// <param name="AFileId">files.id of the declaration.</param>
+    /// <returns>The host's files.id for an include file, AFileId otherwise.</returns>
+    function UnitFileOfDecl(AFileId: Int64): Int64;
+    /// <summary>152c RINC: True when ASym is declared at the top level of a unit -- its parent
+    /// is the unit symbol, or it is a parentless declaration of a code include (the host's).</summary>
+    /// <param name="ASym">A full symbol row (SymbolById).</param>
+    /// <returns>True for a unit-level declaration.</returns>
+    function IsUnitLevelDecl(const ASym: TSymbol): Boolean;
     /// <summary>True when a candidate declared in ACandFile is visible from
     /// ADeclFile (same file, or in ADeclFile's resolved uses scope).</summary>
     /// <param name="ADeclFile"><!-- drag-lint:auto type -->Int64</param>
@@ -4629,6 +4649,7 @@ begin
   FEnumStats  := Default(TEnumResolveStats);
   FParenlessStats:= Default(TParenlessResolveStats);
   FFileScope  := TObjectDictionary<Int64, TList<Int64>>.Create([doOwnsValues]);
+  FIncHost    := TDictionary<Int64, TIncludeHostRow>.Create;
   FChildCache := TObjectDictionary<Int64, TList<TSymbol>>.Create([doOwnsValues]);
   FLineCache  := TObjectDictionary<Int64, TStringList>.Create([doOwnsValues]);
   FStaleFiles := TDictionary<Int64, Boolean>.Create;
@@ -4710,6 +4731,7 @@ begin
   FStaleFiles.Free;
   FChildCache.Free;
   FFileScope .Free;
+  FIncHost.Free;
   FNameToUnitValues.Free;
   FNameToEnumValues.Free;
   FNameToRoutines.Free;
@@ -4770,6 +4792,83 @@ begin
     if not FFileScope.ContainsKey(E.FileId) then FFileScope.Add(E.FileId, TList<Int64>.Create);
     FFileScope[E.FileId].Add(E.TargetFileId);
   end;
+  BuildIncludeScope;  { 152c RINC }
+end;
+
+procedure TCallResolver.BuildIncludeScope;
+
+  procedure AddEdge(AFrom, ATo: Int64);
+  begin
+    if not FFileScope.ContainsKey(AFrom) then FFileScope.Add(AFrom, TList<Int64>.Create);
+    if FFileScope[AFrom].IndexOf(ATo) < 0 then FFileScope[AFrom].Add(ATo);
+  end;
+
+  procedure AddCand(AMap: TObjectDictionary<string, TList<TSymbol>>; const ASym: TSymbol);
+  var
+    Lc: string;
+  begin
+    Lc:= LowerCase(ASym.Name);
+    if Lc = '' then Exit;
+    if not AMap.ContainsKey(Lc) then AMap.Add(Lc, TList<TSymbol>.Create);
+    AMap[Lc].Add(ASym);
+  end;
+
+var
+  H, Prev: TIncludeHostRow;
+  IntfInc: TObjectDictionary<Int64, TList<Int64>>;
+  Incs   : TList<Int64>;
+  L      : TList<Int64>;
+  S      : TSymbol;
+  N, I   : Integer;
+begin
+  IntfInc:= TObjectDictionary<Int64, TList<Int64>>.Create([doOwnsValues]);
+  try
+    for H in FStore.GetIncludeHosts do
+    begin
+      if not FIncHost.TryGetValue(H.IncFileId, Prev)
+         or (SameText(H.Section, 'interface') and not SameText(Prev.Section, 'interface')) then
+        FIncHost.AddOrSetValue(H.IncFileId, H);
+      AddEdge(H.HostFileId, H.IncFileId);
+      if not SameText(H.Section, 'interface') then Continue;
+      if not IntfInc.ContainsKey(H.HostFileId) then IntfInc.Add(H.HostFileId, TList<Int64>.Create);
+      IntfInc[H.HostFileId].Add(H.IncFileId);
+    end;
+    if FIncHost.Count = 0 then Exit;
+    { A unit that uses a host sees the host's interface includes (no key is added here). }
+    for L in FFileScope.Values do
+    begin
+      N:= L.Count;
+      for I:= 0 to N - 1 do
+        if IntfInc.TryGetValue(L[I], Incs) then
+          for var IncId: Int64 in Incs do
+            if L.IndexOf(IncId) < 0 then L.Add(IncId);
+    end;
+  finally
+    IntfInc.Free;
+  end;
+  for S in FStore.GetIncludeTopLevelSymbols do
+  begin
+    if not FIncHost.TryGetValue(S.FileId, H) then Continue;
+    var C: TSymbol:= S;
+    C.ParentId:= H.HostUnitId;
+    C.Section := H.Section;
+    if C.Kind in [skProcedure, skFunction] then AddCand(FNameToRoutines, C)
+    else if C.Kind in [skConstDecl, skVarDecl] then AddCand(FNameToUnitValues, C);
+  end;
+end;
+
+function TCallResolver.UnitFileOfDecl(AFileId: Int64): Int64;
+var
+  H: TIncludeHostRow;
+begin
+  Result:= AFileId;
+  if FIncHost.TryGetValue(AFileId, H) then Result:= H.HostFileId;
+end;
+
+function TCallResolver.IsUnitLevelDecl(const ASym: TSymbol): Boolean;
+begin
+  Result:= if ASym.ParentId > 0 then SymbolById(ASym.ParentId).ParentId <= 0
+           else (ASym.Kind not in [skUnit, skProgram, skPackage]) and FIncHost.ContainsKey(ASym.FileId);
 end;
 
 function TCallResolver.CandInScope(ADeclFile, ACandFile: Int64): Boolean;
@@ -4956,6 +5055,10 @@ function TCallResolver.SymbolById(AId: Int64): TSymbol;
 begin
   if FRows.Symbols.TryGetValue(AId, Result) then Exit;
   Result:= FStore.GetSymbolById(AId);
+  { 152c RINC: a top-level declaration of a code include carries its host's section. }
+  var H: TIncludeHostRow;
+  if (Result.ParentId <= 0) and (Result.Section = '') and FIncHost.TryGetValue(Result.FileId, H) then
+    Result.Section:= H.Section;
   FRows.Symbols.Add(AId, Result);
 end;
 
@@ -9256,7 +9359,7 @@ begin
   Matches:= TList<TSymbol>.Create;
   try
     for S in Cands do
-      if (S.FileId = UnitFile)
+      if (UnitFileOfDecl(S.FileId) = UnitFile)
          and (SameText(S.Section, 'interface') or (UnitFile = ACallRef.FileId)) then Matches.Add(S);
     Result:= PickFromMatches(Matches, AArgCount, AArgsKnown, AConfidence);
   finally
@@ -9319,7 +9422,7 @@ begin
   Visible:= 0;
   Found  := 0;
   for S in Cands do
-    if (S.FileId = UnitFile)
+    if (UnitFileOfDecl(S.FileId) = UnitFile)
        and (SameText(S.Section, 'interface') or (UnitFile = ARef.FileId)) then
     begin
       Inc(Visible);
@@ -10793,8 +10896,11 @@ var
     for var C: TSymbol in QCands do
     begin
       var T: TSymbol:= SymbolById(C.Id);
-      if (T.Kind not in TYPE_LIKE) or (T.ParentId <= 0) then Continue;
-      var Owner: TSymbol:= SymbolById(T.ParentId);
+      var OwnerId: Int64:= T.ParentId;
+      var IncH: TIncludeHostRow;
+      if (OwnerId <= 0) and FIncHost.TryGetValue(T.FileId, IncH) then OwnerId:= IncH.HostUnitId;  { 152c RINC }
+      if (T.Kind not in TYPE_LIKE) or (OwnerId <= 0) then Continue;
+      var Owner: TSymbol:= SymbolById(OwnerId);
       if (Owner.ParentId > 0) or not (SameText(Owner.Name, AQualifier) or EndsText('.' + AQualifier, Owner.Name)) then
         Continue;
       if (T.FileId <> ARef.FileId)
@@ -10855,8 +10961,7 @@ begin
         if (S.FileId <> ARef.FileId) and CandInScope(ARef.FileId, S.FileId) then
         begin
           Full:= SymbolById(S.Id);
-          if SameText(Full.Section, 'interface') and (Full.ParentId > 0)
-             and (SymbolById(Full.ParentId).ParentId <= 0) then
+          if SameText(Full.Section, 'interface') and IsUnitLevelDecl(Full) then
           begin
             Inc(Count);
             Result:= S.Id;
@@ -10870,8 +10975,7 @@ begin
         if (S.FileId <> ARef.FileId) and CandInScope(ARef.FileId, S.FileId) then
         begin
           Full:= SymbolById(S.Id);
-          if SameText(Full.Section, 'interface') and (Full.ParentId > 0)
-             and (SymbolById(Full.ParentId).ParentId <= 0) then Ids:= Ids + [S.Id];
+          if SameText(Full.Section, 'interface') and IsUnitLevelDecl(Full) then Ids:= Ids + [S.Id];
         end;
       Ids:= DropForwardsAndTwins(Ids, ARef, Lines);
       if Length(Ids) = 1 then Exit(Ids[0]);
@@ -10894,7 +10998,7 @@ begin
   var UsesList: TArray<TUnitUse>:= FStore.GetUnitUsesForFile(AFile);
   for var Id: Int64 in ACandIds do
   begin
-    var UnitName: string:= ChangeFileExt(ExtractFileName(FStore.GetFilePath(SymbolById(Id).FileId)), '');
+    var UnitName: string:= ChangeFileExt(ExtractFileName(FStore.GetFilePath(UnitFileOfDecl(SymbolById(Id).FileId))), '');
     var Hits: Integer:= 0;
     var Hit : TUnitUse:= Default(TUnitUse);
     for var U: TUnitUse in UsesList do

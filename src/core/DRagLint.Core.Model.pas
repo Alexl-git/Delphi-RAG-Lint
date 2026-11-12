@@ -1356,6 +1356,22 @@ type
     InUses  : Boolean;
   end;
 
+  /// <summary>152c RINC: one (include file, host unit) pair of the index -- an .inc that a
+  /// unit includes AS CODE (file_includes.in_uses = 0), at any depth.</summary>
+  /// <remarks>
+  /// The include's declarations belong to the host unit: TCallResolver lets a ref bind to a
+  /// top-level symbol of IncFileId as if the host declared it, visible to the units that use
+  /// the host when Section is 'interface'. Section is the host section of the depth-0 directive
+  /// that brings the include in ('interface' | 'implementation' | 'program' | 'package').
+  /// HostUnitId is the host's unit / program / package symbol (0 when the host has none).
+  /// </remarks>
+  TIncludeHostRow = record
+    IncFileId : Int64 ;
+    HostFileId: Int64 ;
+    HostUnitId: Int64 ;
+    Section   : string;
+  end;
+
   /// <summary>149 EX2 (F5, schema v24): one `object` / `inherited` / `inline`
   /// block of a text .dfm -- a row of the dfm_objects table.</summary>
   /// <remarks>
