@@ -5,83 +5,45 @@ breaking changes** until v2.0.
 
 ## v1.50.0-alpha -- unreleased
 
-Wave 151, integrated on lane/151-INT over main e78d939fc. Extractor 1.35.0 -> 1.36.0-alpha, resolver 1.23.0 -> 1.24.0-alpha and index SCHEMA_VERSION 24 -> 25 (two additive tables; SCHEMA_READ_MIN stays 23): ONE re-parse of every DB after the deploy.
+Everything since v1.46.0-alpha (2026-11-07): waves 147, 148, 149, 151 and 152, released together as 1.50.0-alpha (owner ruling 2026-11-11; the unreleased 1.47.0 / 1.48.0 / 1.49.0 sections are folded in here). Versions: extractor -> 1.34.0 (147) -> 1.35.0 (149) -> 1.36.0-alpha (151); resolver -> 1.22.0 (147) -> 1.23.0 (149) -> 1.24.0-alpha (151); index SCHEMA_VERSION 23 -> 25 at 151 (two additive tables; SCHEMA_READ_MIN stays 23; 147's refs.external_kind and 149's file_includes / dfm_objects / pp_regions are additive without a schema bump). ONE re-parse of every DB after the deploy. Grammar v1.4.4 + v1.4.5 + v1.4.7, tree-sitter-dfm 1.2.0.
 
-### Added
-- index: `dfm_properties` -- every text .dfm stores all its property assignments (names, decoded values, kinds,
+### Breaking
+- Platform default (owner ruling a3, L-C20): the project file's active platform decides; a project that names none (Delphi 7, 2007..XE .dproj, a folder index) is Win32, no longer Win64. Applies to `index --project`, `index --all` project sections and `cycles --fix` (build platform, child runs, JSON). A marker-less .dproj with a delphilsp.json takes the platform that file names. Upgrade note: Win32 / older-Delphi / folder DBs re-parse once more on the first index after upgrading (fingerprint plat=win64 -> win32). Related: DL issue #13 (older-Delphi library path).
+- Lint: `ui-access-in-thread-typed` is ON by default (owner ruling a9): the default-ON count is 262 (was 261) and lint-all counts on projects with TThread descendants rise; an Execute whose TThread class nothing in the project constructs is reported as a hint labelled '(class never constructed)'.
+- Autodoc / hover: a property or field with resolved uses is documented with 'Used in: Routine (file.pas) [r|w|rw]' (one entry per routine, read/write folded, default ON by owner ruling) instead of the name-matched 'Used by:'; hover (md, json, IDE, LSP) shows the same line. The next `document --apply` rewrites those blocks.
+
+### Index and extractor
+- Added: `dfm_properties` -- every text .dfm stores all its property assignments (names, decoded values, kinds,
   nesting, positions) from the same parse that writes dfm_objects.
-- index: `comment_facts` -- every comment with offsets, kind and anchor; parity with the DocInsight / dl:ok / dl:bk
+- Added: `comment_facts` -- every comment with offsets, kind and anchor; parity with the DocInsight / dl:ok / dl:bk
   scanners proven on 504 engine units (0 differences).
-- info: an index records the tree-sitter DLLs it was parsed with; `info` reports grammar_dlls_stored / _loaded /
+- Added: `info`: an index records the tree-sitter DLLs it was parsed with; `info` reports grammar_dlls_stored / _loaded /
   _differ (text: a `grammar: DIFFERS` block); remedy `index --rebuild`.
-- DRAGLINT_PROFILE_CALLS=1 prints a per-sub-pass timing table of the resolve calls stage on stderr (off = no cost).
-- DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE=1 switches off the receiver-side closure of the scoped resolve pass.
-- tools\reparse-libraries.ps1 `-Platforms d5` indexes the Delphi 5 source root into library-D5; known non-grammar
-  parse failures are recorded in tools\corpusscan\known-parse-failures.tsv.
-- Release script installs the VS Code extension vsix into every profile (`-NoProfileInstall` skips it); new
-  installed-extension guard.
-
-### Changed
-- Resolve calls stage ~21 % faster (CLIENT resolve-only 150 s -> 111 s): uses lists cached per declaring file, refs
-  read once per file for argument uses; output identical.
-- LSP hover about a third faster (CLIENT 70.6 -> 49.0 ms, documented routines 149 -> 96 ms) with byte-identical text.
-- forms-csv reads .dfm caption, action and shown-on-create from dfm_properties when current (DRAGLINT_NO_FILE_FACTS=1
-  forces the text read); output byte-identical.
-- lint --fix redundant-cast reads EVERY library section of the platform in the manifest, not only the first; an
-  engine with no drag-lint.json beside it says so (NOTE).
-- DRAGLINT_PP_TRACE: 1/true/yes writes %TEMP%\drag-lint-pp-trace.log, any other value is the trace file path.
-
-### Fixed
-- Resolver: same-arity overloads that differ only by a class / class-reference parameter (System.TypInfo
-  FindPropInfo) are told apart; all 35 library calls now bind certain.
-- Resolver: a bare call inside a .dpr routine no longer records the program as its receiver type; a generic
-  constraint name no longer shadows a real type of the same name.
-- `Owns returned:` no longer depends on index order for a function returning a cross-unit class whose name does not
-  start with T/I (now consistently omitted).
-- DRAGLINT_PP_TRACE=1 no longer creates a file named `1` in the current directory.
-- The language server drops its per-store doc-facts memos whenever it opens a store.
-
-## v1.49.0-alpha -- unreleased
-
-Wave 149, integrated on lane/149-INT over main bdbf7f91a. Extractor 1.34.0 -> 1.35.0-alpha and resolver 1.22.0 -> 1.23.0-alpha: ONE re-parse of every DB after the deploy. Index SCHEMA_VERSION stays 23 (the three new fact tables are additive).
-
-### Added
-- uses-recover --apply: stores the units recovered from vendor .hpp headers in the project index (one files row per
-  header, language 'hpp'; its includes as interface unit_uses rows) and binds the project's uses rows to them, so
-  cycles, impact and the uses graph see past a compiled-only library. Idempotent; a re-index keeps the binding (an
-  indexed .pas of the same name always wins). Off unless --apply.
-- uses-recover --project <x.dproj>: resolves unit aliases (DCC_UnitAlias + Delphi defaults such as WinProcs/WinTypes
-  = Winapi.Windows) before classifying used units; json aliases[].
-- Resolver/extractor: unit-uses resolution gains rule C (bind to a header-recovered row by exact name).
-- cycles --plan --hub-surface: the hub's free routines a spoke still calls go through R1 pointers in <Hub>.Hub; ancestor
-  members (frmMain.Invalidate) typed from the platform library; Loader's 78-unit hub group: 76/76 edges, group breaks.
-- cycles --plan --hub-surface is now the full playbook with R3 (+ the --hub block) in place of Part A for a hub-shaped
-  group; --causes --format json --hub-surface returns R3's fix object (part r3) without running the planner.
-- cycles --plan / --fix: a protected or private `override` no longer blocks the constructor inversion (149-CY-10).
-- cycles --plan / --fix: a metaclass `TXClass = class of TX` moves into the leaf together with its class (149-CY-7).
-- cycles --plan --hub-surface (P4): `Assigned(frmMain)` becomes `Assigned(MainHub)`, any other bare use `MainHubAsForm`
-  (nil-safe, over a new `AsForm` property typed with the form's library class); `with frmMain do` refuses with-member.
-- cycles --plan / --fix: an edge that reaches several classes by hard casts `TX(X).M` (no is/as) is cut with one
-  interface per class (149-CY-12).
-- cycles --plan / --fix: `X as TX` on a receiver of unknown static type goes through the As<Surface> helper instead of
-  refusing receiver-unknown; a hard cast under an EInvalidCast handler is planned with a stated behaviour change.
-- cycles --plan / --fix: a uses entry inside an {$IFDEF} region that would MOVE to the other section refuses
-  `directive` with the reason (1.48 moved it unguarded).
-- LSP: draglint/callerCounts carries the exception lens titles (`exceptions`), for the RAD Studio lens.
-- LSP/VS Code: clicking the exception lens lists the routine's raise/handler sites (executeCommand
-  draglint.exceptionFacts) in a quick pick and jumps to the one picked.
-- hover (CLI, LSP, hoverBundle): 'Used in:' / 'Used in (via property X):' include uses from the other
-  project DBs (non-library) that hold the unit.
-- document / doc-drift: 'Used in (via property X):' lines are merged and project-tagged on shared units.
-- LSP: a .dproj without a platform marker takes the manifest defaultPlatform, else Win32 (as index).
-- plugin: the RAD Studio code lens shows the exception summary beside the caller count, e.g.
-  `[1 caller] [raises 2 types, handles 1 type]` (needs the 1.49 engine; older engines unchanged).
-
-### Changed (extractor / resolver / index)
-- index: a member read through a dereferenced call result -- `F()^.M`, `G(1, 2)^.N`, `PRec(P)^.K` -- now has its member-access ref (find-callers, ref_types, unused-public-symbol see it).
+- Added: `graph --format json|html` and `query --text --source md`: the Markdown beside a project file is indexed as text nodes (headings, paragraphs, list items) and linked by backticked names to the units that declare them (E-PARITY-GRAPHIFY).
 - Index: new additive tables file_includes, dfm_objects, pp_regions (written per file from extractor 1.35; schema version unchanged at 23; docs\wiki\Index-DB-Schema.md).
+- Index schema: refs.external_kind (indirect | intrinsic), additive (Migrate ALTER on open, no schema bump; older engines ignore it).
+- index: a member read through a dereferenced call result -- `F()^.M`, `G(1, 2)^.N`, `PRec(P)^.K` -- now has its member-access ref (find-callers, ref_types, unused-public-symbol see it).
 - index: a generic type on the right of `is` (`X is TList<Integer>`) records its type uses again (grammar 1.4.5 spells it as a type node).
 - A uses list written as an include (entries and ';' in the .inc) now yields its uses edges; the host no longer loses the section after it (cycles/deps see the edge).
+- dfm extractor: a non-ASCII letter inside object Name: TType no longer truncates the stored symbol to its ASCII prefix (tree-sitter-dfm 1.2.0: Unicode identifiers); convert-apply --only finds such blocks (148 CV NEXT-BUMP). Fixtures tests\fixtures\dfm-nonascii, guard run_dfm_nonascii_identifier.ps1.
+- Every reader announces a never-completed index; auto-create's reindex failure names its own verb; library marker refreshed while bound.
+- auto-create: a project index whose build did not finish (10-minute limit) is reported as INCOMPLETE with the command that finishes it. index: a heartbeat line that raises no longer ends the heartbeat; while a resolve stream counts its rows the heartbeat names that stream.
+- index: a project that names no platform takes the manifest's explicit `defaultPlatform` before the Win32 fallback (preprocessing and the library pick agree).
+- Fixed: index: `--library-db` naming a library index at an older schema is skipped with a note instead of crashing the calls stage (access violation in TDataSet.GetActive).
+- DRAGLINT_PP_TRACE: 1/true/yes writes %TEMP%\drag-lint-pp-trace.log, any other value is the trace file path.
+- Fixed: DRAGLINT_PP_TRACE=1 no longer creates a file named `1` in the current directory.
+
+### Resolver
+- Added: DRAGLINT_PROFILE_CALLS=1 prints a per-sub-pass timing table of the resolve calls stage on stderr (off = no cost).
+- Added: DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE=1 switches off the receiver-side closure of the scoped resolve pass.
+- Resolver/extractor: unit-uses resolution gains rule C (bind to a header-recovered row by exact name).
+- Resolve calls stage ~21 % faster (CLIENT resolve-only 150 s -> 111 s): uses lists cached per declaring file, refs
+  read once per file for argument uses; output identical.
+- Resolver: a 1-file reindex with a library attached runs the SCOPED calls pass when the library is unchanged and no type name moved (was always whole DB; 305 of 359 s on OM's run).
+- Resolver: a bare, Self.-qualified or with-scoped write of a property or field records its use (member_accesses mode write, plus the setter call edge), so `find-callers --name SetX --resolved` lists `X := v` inside the class and in with bodies.
+- Resolver: a project class helper on a library type binds its methods (`LIni.ReadBoolean` -> TMemIniFileHelper.ReadBoolean); helper target names compare case-insensitively. Methods of a library helper on a built-in type bind (`S.Split` -> TStringHelper.Split, `B.ToString`, `S.Trim.LastIndexOf`). Dotted calls in a program's main block (`Application.Run` in the .dpr) reach the library. A generic project alias (`TAccountList = TList<TAccountInfo>`) binds library members through its declared type; a same-member answer over several candidates ignores units the file does not use. Micronite2027 receiver residue 884 -> 538, targets moved 0.
+- Resolver: calls through an event property or procedural field (`V.OnColumnSizeChanged(V, nil)`) bind to the property, marked indirect (refs.external_kind); find-callers on the property lists the firing sites (mode event).
+- Resolver: dynamic-array constructors (`TBytes.Create`, `TArray<Integer>.Create`) bind to the built-in `System.@intrinsic.DynArray.Create` (mode built-in; context labels it built-in).
 - Resolver: a class with a forward declaration (`TFoo = class;`) types its receivers -- member access through a global of such a class binds (Loader2025: 1664 refs through the hub global).
 - Resolver: `with H do Names().X` types through the with member; a type-named call inside a with scope that may be a member is no longer written as a cast.
 - Resolver: selector chains step parameterless methods (`H.Get.Items[0].X`), call heads (`F()[0].X`), class-level var heads; `TFoo.Create.Run` binds; IReadOnlyDictionary subscripts; `var X := Default(T)` is typed; a .dpr main block types used-unit vars; a bare `Free` in a parentless class binds TObject.Free.
@@ -90,105 +52,133 @@ Wave 149, integrated on lane/149-INT over main bdbf7f91a. Extractor 1.34.0 -> 1.
 - Resolver: `FW.Lost.Run`, Lost a member of unknown type, no longer binds to an unrelated class named Lost.
 - Resolver: a type mention two used units declare follows Delphi's uses order (last listed wins; implementation uses after interface uses).
 - Resolver: unit- and class-level vars, consts and enum values get use edges (member_accesses read / write).
+- Fixed: Resolver: same-arity overloads that differ only by a class / class-reference parameter (System.TypInfo
+  FindPropInfo) are told apart; all 35 library calls now bind certain.
+- Fixed: Resolver: a bare call inside a .dpr routine no longer records the program as its receiver type; a generic
+  constraint name no longer shadows a real type of the same name.
 - Docs: refs.symbol_id is NULL for an ambiguous edge by design; interface dispatch is one edge to the interface method (derive the kind from the target's parent).
-- Resolver: a 1-file reindex with a library attached runs the SCOPED calls pass when the library is unchanged and no type name moved (was always whole DB; 305 of 359 s on OM's run).
-- Every reader announces a never-completed index; auto-create's reindex failure names its own verb; library marker refreshed while bound.
-- dfm extractor: a non-ASCII letter inside object Name: TType no longer truncates the stored symbol to its ASCII prefix (tree-sitter-dfm 1.2.0: Unicode identifiers); convert-apply --only finds such blocks (148 CV NEXT-BUMP). Fixtures tests\fixtures\dfm-nonascii, guard run_dfm_nonascii_identifier.ps1.
-- build\_builddfm32.bat compiles the Win32 DLL with cl /MACHINE:X86 (tree-sitter build linked x64 under vcvars32).
-- Grammar v1.4.7: `external` tails without `;` (`external L`, `index N`, `name Ident`) parse; pure grammar gets the orphan `begin..end;` definition-level block; `declProcFwd` conflict entry dropped; corpus-tail guard. 0 newly failing files on 533/8286, root 8286 +1 file fixed (JvShDlg), pure 8286 +63 fixed.
-- tools\grammar: tsdiff / tserr / tsparse + build bat + gate script committed (were lane scratch since 147 GP).
 
-### Fixed
-- index: `--library-db` naming a library index at an older schema is skipped with a note instead of crashing the calls stage (access violation in TDataSet.GetActive).
-- redundant-cast: a cast to a library class (one distinct qualified name) or of a string-returning call to string is identity by name when the type is not in the project index (149 RT item 2).
-- lint: is-always-true and is-never-true see a qualified type after `is` again (`X is Unit.TFoo`) -- grammar 1.4.5 spells it as a type node and the reader knew only the expression form.
-- lint: constant-condition reports `if True then .. else ..` / `if False then .. else ..` (the else form was never matched).
-- `lint-all`: review-marker-unused / -stale on a dl:shared unit resolves the owning project DBs from the manifest when no --shared-db is given (149 RT item 6).
-- `rename --kind param` / the proof forms accept a routine-local's tokens in an inactive {$IFDEF} branch (same symbol by scope); `quit-from-thread` follows a quit reached through a called routine; `extract-interface --reparent-interfaced=norefcount` re-parents onto TSingletonImplementation; doc-drift matches a library raise through its ancestor (149 RT items 1, 3, 4, 5).
-- Build: build_draglint.bat / build_phase0.bat write to third_party\dll-win64 (were third_party\dll); tests: run_mcp_protocol_guard / run_lsp_proxy_lifecycle_guard default to the tree's own build (tests\autotest\lib\DefaultEngineExe.ps1) (149 RQ items 5, 7).
-
-## v1.48.0-alpha -- unreleased
-
-Wave 148, integrated on lane/148-int over lane/147-int b9482d4a4. NO extractor or resolver bump (extractor 1.34.0-alpha, resolver 1.22.0-alpha unchanged): no re-parse beyond 1.47's. Bump-needing items are prepared for 149 (lane/148-PB is not merged).
-
-### Added
-- `uses-recover` (new verb): recovers the uses edges of units that ship without source from the vendor's C++Builder .hpp headers, follows sourceless targets, and with --map (dcc -GS/-GD) says which the linker pulled in and which linked units no header explains. Read-only; never reads a .dcu.
-- `cycles --hub` (read-only): names per group the hub units whose removal leaves the rest acyclic, with the uses edges, reference weights and surfaces on each side, whether cutting one side alone breaks the group, and the dead uses inside it; JSON adds hubs[] and zero_ref_edges. Spec 2026-11-08-hub-scc-phased.md (fabcyc case 18, phases P1-P6).
-- Editor exception facts, ON by default: hovering a routine shows 'Raises: EFoo (bound), EBar (spelled)' (LSP hover + the IDE popup), the LSP code lens adds 'raises N types, handles M types' on routine headers, and MCP gains get_exception_facts (18 tools); `lsp --no-exception-facts` switches the hover line and lens off. exception-facts --target is about 3x faster (indexed routine lookup).
-- `convert-apply --only-type Type1,Type2`: converts every instance of those bare #convert From types (nested and inline too); exclusive with `--only` (exit 2); unmatched types in only_unmatched[]; info capability `only_type`.
-- New rule `quit-from-thread` (OFF by default): PostQuitMessage / Application.Terminate / Halt / ExitProcess in TThread.Execute or a thread-start lambda, outside Synchronize/Queue; a class never constructed is a hint.
-- `graph --format html` draws the Markdown text layer: a note box per text node, dashed edges to the unit each backticked name resolves to, a legend and a "Show text nodes" checkbox (on; absent when the index has no Markdown).
-- Autodoc / hover: a property getter or setter keeps 'Called from:' and adds 'Used in (via property X): Routine (file.pas) [r|w|rw]' -- the property accesses that ran it; 'Used in:' on a property or field also lists the resolved uses recorded in extra --db indexes.
-- `cycles --fix / --plan`: a uses entry inside a single-branch {$IFDEF} region is removed together with its guard when every entry of the region goes (was: refused directive); a consumer that handles EInvalidCast and casts with an unguarded `as` is cut through a helper As<Surface>(X) that raises EInvalidCast as the class cast did (was: refused exception-semantics). DRAGLINT_CYCLE_TIMING=1 prints the planner's stage times on stderr.
-- IDE plugin: with DRAGLINT_LAYOUT=v2 (or DRAGLINT_MANIFEST) the plugin reads and writes the same drag-lint.json as the engine (installed layout v2, phase 3; off by default). Find Usages shows "Raised at" / "Handled at" groups for exception classes.
-- VS Code: the DL project/platform status item is hidden while a non-Delphi file is active.
-- `lint --rule` takes a comma list.
-
-### Changed
-- `cycles --plan` / `--causes --format json`: without --library-db the platform library is the one of the build platform (--platform, else the project's active platform, else Win32), no longer always win64. A moved line naming another unit of the cycle qualified refuses coupling-remains in the plan instead of failing the compile gate.
+### Lint
+- Added: New rule `quit-from-thread` (OFF by default): PostQuitMessage / Application.Terminate / Halt / ExitProcess in TThread.Execute or a thread-start lambda, outside Synchronize/Queue; a class never constructed is a hint.
+- Added: `lint` / `lint-all` / `lint-project` / `check-ast --fix --apply --compile-gate` (opt-in, + `--project` / `--platform` / `--rsvars` / `--build-timeout`): a build-gated, all-or-nothing write with rollback.
+- Added: `lint --rule` takes a comma list.
 - `lint --fix --apply`: naming renames are written through the compile gate whenever --project names a .dproj (no --compile-gate needed); stderr says so. `extract-interface` / `lazy-init --apply` listen on the control channel: shutdown --db / Cancel stop the build and roll back (exit 1).
-- `rename --kind param`: a nested routine's own same-named local, const or type is no longer renamed with the outer local. `narrow-param`: a member write p.m:= v counts as a use of m; new refusal generic-ancestor.
-- `doc-drift`: a bare call into the library is answered only by a unit the calling file uses; a virtual library member reached through its base also counts its overrides. `document --apply`: a block whose capped `Calls:` list ends "(+N more)" is no longer REFUSED as naming an unseen unit.
 - `lint-all`: without --output or --project the report file is written in the current directory, not beside the database. An unknown `--rule` id is refused (exit 2) instead of a silent empty report.
+- lint --fix redundant-cast reads EVERY library section of the platform in the manifest, not only the first; an
+  engine with no drag-lint.json beside it says so (NOTE).
+- Lint: the taint note on an empty data_flows table names both possible causes instead of one wrong one; LSP completion percent-encodes the file:/// URIs it builds (space, #); LSP.Server still builds two raw URIs (row for 148).
+- Fixed: redundant-cast: a cast to a library class (one distinct qualified name) or of a string-returning call to string is identity by name when the type is not in the project index (149 RT item 2).
+- Fixed: lint: is-always-true and is-never-true see a qualified type after `is` again (`X is Unit.TFoo`) -- grammar 1.4.5 spells it as a type node and the reader knew only the expression form.
+- Fixed: lint: constant-condition reports `if True then .. else ..` / `if False then .. else ..` (the else form was never matched).
+- Fixed: `lint-all`: review-marker-unused / -stale on a dl:shared unit resolves the owning project DBs from the manifest when no --shared-db is given (149 RT item 6).
+- Fixed: Lint false positives: for-bound-modified-in-body / loop-condition-invariant (a `with` in the loop body is not a modification of the loop variable); concat-in-loop (a variable initialised from a numeric literal is numeric); unused-unit-in-uses (a unit needed only for an inline property accessor, FireDAC.Stan.Param); shared-marker-legacy-shape (prose with several words after the tag); unsafe-typecast-without-is recognises lower-case-prefixed class names (TcxFoo, TfrmFoo); compiler-magic-comments' message names the `raise ENotImplemented` form.
+- Fixed: lint: deep-nesting counts grammar v1.4.4's statement `ifElse` node (PR #2 moved a statement if-with-else off `exprIf`); without it a trailing else scored the nest ZERO again (run_deep_nesting_else_forms).
+- Fixed: lint: enum-read-inside-with reports a with-target that is a unit-level function result (`with GetObj do`), the residual the resolver still binds to the enum value after the same-named-type tie-break.
+- Fixed: lint-all, lint-project and check-ast refuse `--compile-gate` without `--fix` (exit 2) instead of ignoring it; `manifest migrate --dry-run` and `bookmarks-strip / bookmarks-restore --format json` are documented.
+- perf: lint-all and lint <file> no longer run the OFF out-arg / by-value data-flow passes (local-only-out-arg, dead-store-before-out-arg, by-value-arg-before-assignment) unless one of them is enabled; about 60 s off a 164 MB lint-all. The larger 1.46 regression (unit-missing-from-uses bound-ref path, +100 s) is named and left for 1.48.
+
+### Cycles
+- Added: `cycles --hub` (read-only): names per group the hub units whose removal leaves the rest acyclic, with the uses edges, reference weights and surfaces on each side, whether cutting one side alone breaks the group, and the dead uses inside it; JSON adds hubs[] and zero_ref_edges. Spec 2026-11-08-hub-scc-phased.md (fabcyc case 18, phases P1-P6).
+- Added: cycles --plan --hub-surface: the hub's free routines a spoke still calls go through R1 pointers in <Hub>.Hub; ancestor
+  members (frmMain.Invalidate) typed from the platform library; Loader's 78-unit hub group: 76/76 edges, group breaks.
+- Added: cycles --plan --hub-surface is now the full playbook with R3 (+ the --hub block) in place of Part A for a hub-shaped
+  group; --causes --format json --hub-surface returns R3's fix object (part r3) without running the planner.
+- Added: cycles --plan --hub-surface (P4): `Assigned(frmMain)` becomes `Assigned(MainHub)`, any other bare use `MainHubAsForm`
+  (nil-safe, over a new `AsForm` property typed with the form's library class); `with frmMain do` refuses with-member.
+- Added: cycles --plan / --fix: a protected or private `override` no longer blocks the constructor inversion (149-CY-10).
+- Added: cycles --plan / --fix: a metaclass `TXClass = class of TX` moves into the leaf together with its class (149-CY-7).
+- Added: cycles --plan / --fix: an edge that reaches several classes by hard casts `TX(X).M` (no is/as) is cut with one
+  interface per class (149-CY-12).
+- Added: cycles --plan / --fix: `X as TX` on a receiver of unknown static type goes through the As<Surface> helper instead of
+  refusing receiver-unknown; a hard cast under an EInvalidCast handler is planned with a stated behaviour change.
+- Added: cycles --plan / --fix: a uses entry inside an {$IFDEF} region that would MOVE to the other section refuses
+  `directive` with the reason (1.48 moved it unguarded).
+- Added: `cycles --fix / --plan`: a uses entry inside a single-branch {$IFDEF} region is removed together with its guard when every entry of the region goes (was: refused directive); a consumer that handles EInvalidCast and casts with an unguarded `as` is cut through a helper As<Surface>(X) that raises EInvalidCast as the class cast did (was: refused exception-semantics). DRAGLINT_CYCLE_TIMING=1 prints the planner's stage times on stderr.
+- Added (from wave 146 branches): `cycles --plan/--fix --ctor-wide` (wider constructor inversion, off by default, r4).
+- `cycles --plan` / `--causes --format json`: without --library-db the platform library is the one of the build platform (--platform, else the project's active platform, else Win32), no longer always win64. A moved line naming another unit of the cycle qualified refuses coupling-remains in the plan instead of failing the compile gate.
+- `cycles --fix --unit` accepts a dotted unit name (Wide.Worker); `--part all` no longer fails on a group whose first unit is dotted. A new unit next to a form/data module listed with children in the .dproj is a self-closing DCCReference after the element, so the compile gate no longer rolls it back. Constructor inversion (default path) refuses to pull a published field into the base class; a dotted uses entry or a multi-line comment naming the slot no longer refuses.
+
+### Other verbs
+- Added: `uses-recover` (new verb): recovers the uses edges of units that ship without source from the vendor's C++Builder .hpp headers, follows sourceless targets, and with --map (dcc -GS/-GD) says which the linker pulled in and which linked units no header explains. Read-only; never reads a .dcu.
+- Added: uses-recover --apply: stores the units recovered from vendor .hpp headers in the project index (one files row per
+  header, language 'hpp'; its includes as interface unit_uses rows) and binds the project's uses rows to them, so
+  cycles, impact and the uses graph see past a compiled-only library. Idempotent; a re-index keeps the binding (an
+  indexed .pas of the same name always wins). Off unless --apply.
+- Added: uses-recover --project <x.dproj>: resolves unit aliases (DCC_UnitAlias + Delphi defaults such as WinProcs/WinTypes
+  = Winapi.Windows) before classifying used units; json aliases[].
+- Added: `bookmarks-strip` / `bookmarks-restore` (new verbs): strip `// dl:bk` comment anchors into a sidecar and restore them byte-identical (anchor-text relocation on an edited file; dry run without --apply).
+- Added: `lazy-init --defer` (phase 2): the run-once routine is called on first use from every routine that touches what the section writes; the section no longer calls it; finalization runs only if the work ran. Opt-in, one `--unit`; six new named refusals.
+- Added (from wave 146 branches): new verbs `extract-interface` and `lazy-init` (first phase; plan by default, --apply through the compile gate, g3); new verb `arch-diagram` (one self-contained HTML layer diagram of the units by folder, x3). Specs: FPC grammar fork (x1), receiver-undecidable calls (x4).
+- Added: `convert-apply --only-type Type1,Type2`: converts every instance of those bare #convert From types (nested and inline too); exclusive with `--only` (exit 2); unmatched types in only_unmatched[]; info capability `only_type`.
+- Added: `graph --format html` draws the Markdown text layer: a note box per text node, dashed edges to the unit each backticked name resolves to, a legend and a "Show text nodes" checkbox (on; absent when the index has no Markdown).
+- `convert-apply`: the trailing units of a '#convert A -> B, U1, U2' line are added to the unit's uses clause (they were parsed and ignored). `convert-validate`: a raw 'A -> B' line draws a warning that convert-apply does not execute it (exit code unchanged).
 - `convert-apply` reads the sibling .dfm at its own encoding (UTF-8 / UTF-16 BOM) for the --only name match instead of the ANSI page.
+- forms-csv reads .dfm caption, action and shown-on-create from dfm_properties when current (DRAGLINT_NO_FILE_FACTS=1
+  forces the text read); output byte-identical.
+- `rename --kind param`: a nested routine's own same-named local, const or type is no longer renamed with the outer local. `narrow-param`: a member write p.m:= v counts as a use of m; new refusal generic-ancestor.
+- Rename: A[i] through a default or indexed property, and through a TObjectList<T> descendant, binds to the element type's member, so rename moves those reads; an indexed property records 'indexed' / 'indexed default' in symbols.directives; with two same-named types in scope Delphi's tie-break decides (unit qualifier, own unit, last used unit; split uses sections still decline); a member read on a library-typed receiver (e.g. TStringList) no longer refuses the plan.
+- Fixed: `rename --kind param` / the proof forms accept a routine-local's tokens in an inactive {$IFDEF} branch (same symbol by scope); `quit-from-thread` follows a quit reached through a called routine; `extract-interface --reparent-interfaced=norefcount` re-parents onto TSingletonImplementation; doc-drift matches a library raise through its ancestor (149 RT items 1, 3, 4, 5).
+
+### Autodoc, hover and exception facts
+- Added: Editor exception facts, ON by default: hovering a routine shows 'Raises: EFoo (bound), EBar (spelled)' (LSP hover + the IDE popup), the LSP code lens adds 'raises N types, handles M types' on routine headers, and MCP gains get_exception_facts (18 tools); `lsp --no-exception-facts` switches the hover line and lens off. exception-facts --target is about 3x faster (indexed routine lookup).
+- Added: Autodoc / hover: a property getter or setter keeps 'Called from:' and adds 'Used in (via property X): Routine (file.pas) [r|w|rw]' -- the property accesses that ran it; 'Used in:' on a property or field also lists the resolved uses recorded in extra --db indexes.
+- Added: hover (CLI, LSP, hoverBundle): 'Used in:' / 'Used in (via property X):' include uses from the other
+  project DBs (non-library) that hold the unit.
+- Added: document / doc-drift: 'Used in (via property X):' lines are merged and project-tagged on shared units.
+- `doc-drift`: a bare call into the library is answered only by a unit the calling file uses; a virtual library member reached through its base also counts its overrides. `document --apply`: a block whose capped `Calls:` list ends "(+N more)" is no longer REFUSED as naming an unseen unit.
+- Fixed: `Owns returned:` no longer depends on index order for a function returning a cross-unit class whose name does not
+  start with T/I (now consistently omitted).
+
+### Language server, IDE plugin and VS Code
+- Added: LSP: draglint/callerCounts carries the exception lens titles (`exceptions`), for the RAD Studio lens.
+- Added: LSP/VS Code: clicking the exception lens lists the routine's raise/handler sites (executeCommand
+  draglint.exceptionFacts) in a quick pick and jumps to the one picked.
+- Added: LSP: a .dproj without a platform marker takes the manifest defaultPlatform, else Win32 (as index).
+- Added: plugin: the RAD Studio code lens shows the exception summary beside the caller count, e.g.
+  `[1 caller] [raises 2 types, handles 1 type]` (needs the 1.49 engine; older engines unchanged).
+- Added: IDE plugin: with DRAGLINT_LAYOUT=v2 (or DRAGLINT_MANIFEST) the plugin reads and writes the same drag-lint.json as the engine (installed layout v2, phase 3; off by default). Find Usages shows "Raised at" / "Handled at" groups for exception classes.
+- Added: IDE: new drag-lint > Bookmarks submenu -- list, go to, strip (into a per-user sidecar) and restore the `// dl:bk` anchors of the current unit. The form designer's right-click menu has drag-lint: Convert Selected Component(s)... and drag-lint: Convert All of This Type on the Form....
+- Added: VS Code: the DL project/platform status item is hidden while a non-Delphi file is active.
+- Added: Release script installs the VS Code extension vsix into every profile (`-NoProfileInstall` skips it); new
+  installed-extension guard.
+- LSP hover about a third faster (CLIENT 70.6 -> 49.0 ms, documented routines 149 -> 96 ms) with byte-identical text.
 - LSP: WorkspaceEdit URIs follow the client's drive form (VS Code c%3A); uses-on-save removal edits are percent-encoded; a project file created while the server runs is found without restart. lint / LSP: a .dproj naming no platform is preprocessed as Win32 (ruling a3), as index does. Clearer `index --resolve-only` scope error.
-- auto-create: a project index whose build did not finish (10-minute limit) is reported as INCOMPLETE with the command that finishes it. index: a heartbeat line that raises no longer ends the heartbeat; while a resolve stream counts its rows the heartbeat names that stream.
+- IDE: while the conversion editor is open, the plugin's own reindex and lint-all jobs on that project's index wait in the queue and run when it closes. Rename Symbol's Preview leaves Apply disabled when occurrences are not proved, and says how many.
+- Fixed: The language server drops its per-store doc-facts memos whenever it opens a store.
+- Fixed: IDE plugin: Find Usages no longer sticks at "(searching...)" when the language server stops mid-question; with no engine found the language server is not spawned off PATH (one "drag-lint.exe not found" note); Rename Symbol reads the typeat answer even when the engine prints a note after the JSON; a save-reindex refused by the index lock says "the next save retries".
+- Fixed: IDE plugin: version literals read v1.47.0-alpha (Editor PLUGIN_VERSION, Usages form).
 
-### Fixed
-- Lint false positives: for-bound-modified-in-body / loop-condition-invariant (a `with` in the loop body is not a modification of the loop variable); concat-in-loop (a variable initialised from a numeric literal is numeric); unused-unit-in-uses (a unit needed only for an inline property accessor, FireDAC.Stan.Param); shared-marker-legacy-shape (prose with several words after the tag); unsafe-typecast-without-is recognises lower-case-prefixed class names (TcxFoo, TfrmFoo); compiler-magic-comments' message names the `raise ENotImplemented` form.
-- IDE plugin: Find Usages no longer sticks at "(searching...)" when the language server stops mid-question; with no engine found the language server is not spawned off PATH (one "drag-lint.exe not found" note); Rename Symbol reads the typeat answer even when the engine prints a note after the JSON; a save-reindex refused by the index lock says "the next save retries".
-- Internal: LoadDocComplexityMin dead store removed (H2077).
-- Tests / build: guards fall back to the worktree build when no engine is deployed (prepare_battery stages it into the tree's own dll-win64); the battery refuses Windows PowerShell 5 (pwsh 7); run_enum_helper builds into a per-run dir; grammar / dfm / runtime build bats deploy to dll-win64 with the three-directory rule documented; new guard run_cyclefix_r1_dcc_win32.
+### Manifest and installed layout
+- Added: `manifest migrate [--apply] [--json]`: one-time move of the exe-side drag-lint.json to %APPDATA%\drag-lint (installed layout v2, phase 2; off by default); it renames, never deletes, and DBs stay put. Layout v2 (DRAGLINT_LAYOUT=v2): %VAR% expansion in outDir; a roaming manifest with no outDir puts DBs in %LOCALAPPDATA%\drag-lint\library; register-project creates the roaming manifest when none exists; DRAGLINT_LAYOUT=v1 is the explicit way back. Installer: Build-Installer.ps1 -LayoutV2 builds the v2 setup (not for release before phase 3 and the VM test).
+- Added (from wave 146 branches): `manifest where` + `--manifest` / DRAGLINT_MANIFEST and installed layout v2 phase 1 behind DRAGLINT_LAYOUT=v2 (off, x5).
 
-### Measured, no change
-- by-value-arg-before-assignment stays OFF (0 hits on 7 DB copies). Index memory: full index peak working set 632 MB / 763 s, a one-file incremental 428 MB; the slowness seen was machine pressure, not the engine. ORM3 CLIENT lint-all baseline for 1.46.0-alpha (PARAM-TOO-WIDE 7, ROW16 0) and rule precision samples (docs\measurements\rule-precision-2026-11-08.md).
-## v1.47.0-alpha -- unreleased
-
-Wave 147, integrated on lane/147-int. ONE extractor bump over 1.46 (1.34.0-alpha: grammar v1.4.4 + v1.4.5, use edges, Markdown text nodes, indexed property facts) and ONE resolver bump (1.22.0-alpha): every index re-parses once. Grammar v1.4.5 staged.
-
-### Breaking
-- Platform default (owner ruling a3, L-C20): the project file's active platform decides; a project that names none (Delphi 7, 2007..XE .dproj, a folder index) is Win32, no longer Win64. Applies to `index --project`, `index --all` project sections and `cycles --fix` (build platform, child runs, JSON). A marker-less .dproj with a delphilsp.json takes the platform that file names. Upgrade note: Win32 / older-Delphi / folder DBs re-parse once more on the first index after upgrading (fingerprint plat=win64 -> win32). Related: DL issue #13 (older-Delphi library path).
-- Lint: `ui-access-in-thread-typed` is ON by default (owner ruling a9): the default-ON count is 262 (was 261) and lint-all counts on projects with TThread descendants rise; an Execute whose TThread class nothing in the project constructs is reported as a hint labelled '(class never constructed)'.
-- Autodoc / hover: a property or field with resolved uses is documented with 'Used in: Routine (file.pas) [r|w|rw]' (one entry per routine, read/write folded, default ON by owner ruling) instead of the name-matched 'Used by:'; hover (md, json, IDE, LSP) shows the same line. The next `document --apply` rewrites those blocks.
-
-### Added
-- `bookmarks-strip` / `bookmarks-restore` (new verbs): strip `// dl:bk` comment anchors into a sidecar and restore them byte-identical (anchor-text relocation on an edited file; dry run without --apply).
-- `lint` / `lint-all` / `lint-project` / `check-ast --fix --apply --compile-gate` (opt-in, + `--project` / `--platform` / `--rsvars` / `--build-timeout`): a build-gated, all-or-nothing write with rollback.
-- `lazy-init --defer` (phase 2): the run-once routine is called on first use from every routine that touches what the section writes; the section no longer calls it; finalization runs only if the work ran. Opt-in, one `--unit`; six new named refusals.
-- `manifest migrate [--apply] [--json]`: one-time move of the exe-side drag-lint.json to %APPDATA%\drag-lint (installed layout v2, phase 2; off by default); it renames, never deletes, and DBs stay put. Layout v2 (DRAGLINT_LAYOUT=v2): %VAR% expansion in outDir; a roaming manifest with no outDir puts DBs in %LOCALAPPDATA%\drag-lint\library; register-project creates the roaming manifest when none exists; DRAGLINT_LAYOUT=v1 is the explicit way back. Installer: Build-Installer.ps1 -LayoutV2 builds the v2 setup (not for release before phase 3 and the VM test).
-- `graph --format json|html` and `query --text --source md`: the Markdown beside a project file is indexed as text nodes (headings, paragraphs, list items) and linked by backticked names to the units that declare them (E-PARITY-GRAPHIFY).
-- From wave 146 branches merged here: `cycles --plan/--fix --ctor-wide` (wider constructor inversion, off by default, r4); new verbs `extract-interface` and `lazy-init` (first phase; plan by default, --apply through the compile gate, g3); new verb `arch-diagram` (one self-contained HTML layer diagram of the units by folder, x3); `manifest where` + `--manifest` / DRAGLINT_MANIFEST and installed layout v2 phase 1 behind DRAGLINT_LAYOUT=v2 (off, x5). Specs: FPC grammar fork (x1), receiver-undecidable calls (x4).
-- IDE: new drag-lint > Bookmarks submenu -- list, go to, strip (into a per-user sidecar) and restore the `// dl:bk` anchors of the current unit. The form designer's right-click menu has drag-lint: Convert Selected Component(s)... and drag-lint: Convert All of This Type on the Form....
-- Build: `build_draglint_win64.bat -NoStage`; `_buildgrammar*.bat` take the grammar checkout / output as parameters.
-
-### Changed
+### Grammar
 - Grammar v1.4.4 (PR #2, pmcgee69): an if statement whose branches also read as expressions (calls, bare raise, assignment) is an ifElse statement, not an exprIf; about 13 percent of corpus files change trees, 0 new parse failures.
 - Grammar v1.4.5: seven fixes by Paul McGee (pmcgee69): quoted-character subrange bounds; several hint directives on a variable; chained calling conventions on a procedural-type field; a named constant as a code page; an optional program header; the right of `is` is a type (`is` binds tighter than `and`); a generic's `<` in an expression is its own token, so `a < b - 1` groups as `a < (b - 1)`. 0 new parse failures on the 533 / 8286 corpora; root 8286 failures 305 -> 300.
 - Grammar v1.4.5: an `asm ... end;` with no header (a routine's second body under another {$IFDEF}, System.Win.OleControls) is a definition-level recovery node (asmOrphan), both grammars; fixes the whole-unit ERROR the generic-`<` token's recovery produced there (46 -> 2 errors).
-- Resolver: a bare, Self.-qualified or with-scoped write of a property or field records its use (member_accesses mode write, plus the setter call edge), so `find-callers --name SetX --resolved` lists `X := v` inside the class and in with bodies.
-- Resolver: a project class helper on a library type binds its methods (`LIni.ReadBoolean` -> TMemIniFileHelper.ReadBoolean); helper target names compare case-insensitively. Methods of a library helper on a built-in type bind (`S.Split` -> TStringHelper.Split, `B.ToString`, `S.Trim.LastIndexOf`). Dotted calls in a program's main block (`Application.Run` in the .dpr) reach the library. A generic project alias (`TAccountList = TList<TAccountInfo>`) binds library members through its declared type; a same-member answer over several candidates ignores units the file does not use. Micronite2027 receiver residue 884 -> 538, targets moved 0.
-- Resolver: calls through an event property or procedural field (`V.OnColumnSizeChanged(V, nil)`) bind to the property, marked indirect (refs.external_kind); find-callers on the property lists the firing sites (mode event).
-- Resolver: dynamic-array constructors (`TBytes.Create`, `TArray<Integer>.Create`) bind to the built-in `System.@intrinsic.DynArray.Create` (mode built-in; context labels it built-in).
-- Index schema: refs.external_kind (indirect | intrinsic), additive (Migrate ALTER on open, no schema bump; older engines ignore it).
-- Rename: A[i] through a default or indexed property, and through a TObjectList<T> descendant, binds to the element type's member, so rename moves those reads; an indexed property records 'indexed' / 'indexed default' in symbols.directives; with two same-named types in scope Delphi's tie-break decides (unit qualifier, own unit, last used unit; split uses sections still decline); a member read on a library-typed receiver (e.g. TStringList) no longer refuses the plan.
-- `cycles --fix --unit` accepts a dotted unit name (Wide.Worker); `--part all` no longer fails on a group whose first unit is dotted. A new unit next to a form/data module listed with children in the .dproj is a self-closing DCCReference after the element, so the compile gate no longer rolls it back. Constructor inversion (default path) refuses to pull a published field into the base class; a dotted uses entry or a multi-line comment naming the slot no longer refuses.
-- `convert-apply`: the trailing units of a '#convert A -> B, U1, U2' line are added to the unit's uses clause (they were parsed and ignored). `convert-validate`: a raw 'A -> B' line draws a warning that convert-apply does not execute it (exit code unchanged).
-- Lint: the taint note on an empty data_flows table names both possible causes instead of one wrong one; LSP completion percent-encodes the file:/// URIs it builds (space, #); LSP.Server still builds two raw URIs (row for 148).
-- IDE: while the conversion editor is open, the plugin's own reindex and lint-all jobs on that project's index wait in the queue and run when it closes. Rename Symbol's Preview leaves Apply disabled when occurrences are not proved, and says how many.
-- Internal: TDocRegions split into four classes behind a facade (no output change, proved byte-equal on 3 projects).
+- Grammar v1.4.7: `external` tails without `;` (`external L`, `index N`, `name Ident`) parse; pure grammar gets the orphan `begin..end;` definition-level block; `declProcFwd` conflict entry dropped; corpus-tail guard. 0 newly failing files on 533/8286, root 8286 +1 file fixed (JvShDlg), pure 8286 +63 fixed.
 
-### Fixed (integration)
-- lint: deep-nesting counts grammar v1.4.4's statement `ifElse` node (PR #2 moved a statement if-with-else off `exprIf`); without it a trailing else scored the nest ZERO again (run_deep_nesting_else_forms).
-- IDE plugin: version literals read v1.47.0-alpha (Editor PLUGIN_VERSION, Usages form).
-- lint: enum-read-inside-with reports a with-target that is a unit-level function result (`with GetObj do`), the residual the resolver still binds to the enum value after the same-named-type tie-break.
-- index: a project that names no platform takes the manifest's explicit `defaultPlatform` before the Win32 fallback (preprocessing and the library pick agree).
-- lint-all, lint-project and check-ast refuse `--compile-gate` without `--fix` (exit 2) instead of ignoring it; `manifest migrate --dry-run` and `bookmarks-strip / bookmarks-restore --format json` are documented.
+### Build, tests and tools
+- Added: tools\reparse-libraries.ps1 `-Platforms d5` indexes the Delphi 5 source root into library-D5; known non-grammar
+  parse failures are recorded in tools\corpusscan\known-parse-failures.tsv.
+- Added: Build: `build_draglint_win64.bat -NoStage`; `_buildgrammar*.bat` take the grammar checkout / output as parameters.
+- build\_builddfm32.bat compiles the Win32 DLL with cl /MACHINE:X86 (tree-sitter build linked x64 under vcvars32).
+- tools\grammar: tsdiff / tserr / tsparse + build bat + gate script committed (were lane scratch since 147 GP).
+- Fixed: Build: build_draglint.bat / build_phase0.bat write to third_party\dll-win64 (were third_party\dll); tests: run_mcp_protocol_guard / run_lsp_proxy_lifecycle_guard default to the tree's own build (tests\autotest\lib\DefaultEngineExe.ps1) (149 RQ items 5, 7).
+- Fixed: Tests / build: guards fall back to the worktree build when no engine is deployed (prepare_battery stages it into the tree's own dll-win64); the battery refuses Windows PowerShell 5 (pwsh 7); run_enum_helper builds into a per-run dir; grammar / dfm / runtime build bats deploy to dll-win64 with the three-directory rule documented; new guard run_cyclefix_r1_dcc_win32.
+- Tests (152): the engine-spawning guards that relied on an absent drag-lint.json run on a hermetic engine copy (tests\autotest\lib\HermeticEngine.ps1, Get-HermeticEngine); new meta-guard run_hermetic_engine_guard ratchets the list.
+- Tests (152): run_bind_nearest_dcc accepts -Exe; run_write_refs_bind defaults to the tree's Debug build on a hermetic engine and is FATAL without one.
+- Tests (152): new guard run_profile_calls_identity -- the DRAGLINT_PROFILE_CALLS table covers all 24 calls sub-pass sections with entries, and resolve rows are identical with profiling on and off.
+- Internal: TDocRegions split into four classes behind a facade (no output change, proved byte-equal on 3 projects).
+- Internal: LoadDocComplexityMin dead store removed (H2077).
+- Docs: editor-integration programme re-scoped after the exception fact (spec 2026-11-07-editor-programme.md).
 
 ### Measured, no change
 - The raise/handle exception type fact (1.46) costs no measurable parse time (-0.1 percent CPU, 570 files x 4 passes) and 0.1 s of resolve on Micronite2027; the 1.46 '+19 percent rebuild' was machine load (B3).
 - local-only-out-arg / dead-store-before-out-arg / by-value-arg-before-assignment stay OFF (CLIENT copy: 24 / 0 / 0 findings; T1).
-- perf: lint-all and lint <file> no longer run the OFF out-arg / by-value data-flow passes (local-only-out-arg, dead-store-before-out-arg, by-value-arg-before-assignment) unless one of them is enabled; about 60 s off a 164 MB lint-all. The larger 1.46 regression (unit-missing-from-uses bound-ref path, +100 s) is named and left for 1.48.
-- Docs: editor-integration programme re-scoped after the exception fact (spec 2026-11-07-editor-programme.md).
+- by-value-arg-before-assignment stays OFF (0 hits on 7 DB copies). Index memory: full index peak working set 632 MB / 763 s, a one-file incremental 428 MB; the slowness seen was machine pressure, not the engine. ORM3 CLIENT lint-all baseline for 1.46.0-alpha (PARAM-TOO-WIDE 7, ROW16 0) and rule precision samples (docs\measurements\rule-precision-2026-11-08.md).
+- Resolve calls stage (152 PF2): ABAB x3 on the CLIENT copy, 1.49 build 91.77 s vs 1.50 build 95.63 s (x1.042, inside the x1.05 budget); per-sub-pass profile in docs\measurements\resolve-calls-profile-2026-11-12.md.
+- unused-public-symbol count reconcile (152 MS): phase 1 reconciled the lint-all vs lint --rule counts on the CLIENT copy, 0 unexplained (241 / 288 on both commands; docs\measurements\unused-count-reconcile-2026-11-12.md). Website numbers for 1.50: docs\measurements\www-numbers-1.50.md.
 
 ## v1.46.0-alpha -- 2026-11-07
 

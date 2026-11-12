@@ -4,7 +4,7 @@
   "group": "editor-integration",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "1.48.0-alpha",
+  "since": "1.50.0-alpha",
   "summary": "Hover, code lens and an MCP tool show which exception types a routine raises and handles",
   "intro": "Read this when you want to see, without leaving the editor, which exceptions a routine raises and which it catches. Hovering a routine adds one Raises: line (each type once, with how it is known: bound, handler, local, name, spelled or unknown); a code lens on the routine header says raises N types, handles M types (VS Code: a click lists the sites; the Delphi IDE lens reads the same titles); the MCP tool get_exception_facts returns the same rows as exception-facts --json. ON by default; lsp --no-exception-facts switches the hover line and the lens off.",
   "wikiPage": "editor-exception-facts",
@@ -68,7 +68,7 @@
   "verified": {
     "date": "2026-11-09",
     "by": "ENGINE",
-    "build": "1.49.0-alpha",
+    "build": "1.50.0-alpha",
     "surfaceHash": "77e6c3a6683aa71784b573cd45fb2849c3c8fb9b4183325fd370e848a5dd0f51"
   }
 }

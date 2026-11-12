@@ -4,7 +4,7 @@
   "group": "maintenance",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "1.47.0-alpha",
+  "since": "1.50.0-alpha",
   "summary": "Shows which drag-lint.json this engine reads and why; moves the exe-side one to %APPDATA% once (renamed, never deleted). Installed layout v2, off by default",
   "intro": "Read this when you need to know which manifest an engine would read. manifest where is read-only. The new layout is off unless DRAGLINT_LAYOUT=v2; an explicit manifest (DRAGLINT_MANIFEST or --manifest) wins in both layouts, and a missing explicit file never falls through to another manifest.",
   "wikiPage": "installed-layout-v2",
@@ -66,7 +66,7 @@
   "verified": {
     "date": "2026-11-08",
     "by": "ENGINE",
-    "build": "1.47.0-alpha",
+    "build": "1.50.0-alpha",
     "surfaceHash": "756076580f926aa5c715f8148b5efd8b83a46b7e11f44991632223fe91231cbe"
   }
 }

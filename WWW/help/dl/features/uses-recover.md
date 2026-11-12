@@ -5,9 +5,9 @@ summary: Recovers the uses edges of units that ship without source, from the ven
 product: DL
 group: search-navigation
 order: 20036
-since: 1.48.0-alpha
+since: 1.50.0-alpha
 status: shipped
-updated: 1.49.0-alpha
+updated: 1.50.0-alpha
 ---
 
 # uses-recover

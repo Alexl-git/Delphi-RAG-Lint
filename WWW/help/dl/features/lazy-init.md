@@ -5,9 +5,9 @@ summary: Names what an initialization section does; --apply moves its body verba
 product: DL
 group: refactoring
 order: 50007
-since: 1.47.0-alpha
+since: 1.50.0-alpha
 status: shipped
-updated: 1.47.0-alpha
+updated: 1.50.0-alpha
 ---
 
 # Prepare heavy initialization for lazy loading (first phase)

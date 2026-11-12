@@ -5,9 +5,9 @@ summary: "Lists, finds, strips and restores the // dl:bk comment anchors of the 
 product: DL
 group: documentation
 order: 40002
-since: 1.47.0-alpha
+since: 1.50.0-alpha
 status: shipped
-updated: 1.47.0-alpha
+updated: 1.50.0-alpha
 ---
 
 # Bookmarks (IDE)

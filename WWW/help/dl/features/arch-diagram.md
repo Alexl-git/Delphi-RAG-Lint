@@ -5,9 +5,9 @@ summary: Draws one self-contained HTML layer diagram of a project's units by fol
 product: DL
 group: graphs-reports
 order: 70001
-since: 1.47.0-alpha
+since: 1.50.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.50.0-alpha
 ---
 
 # arch-diagram

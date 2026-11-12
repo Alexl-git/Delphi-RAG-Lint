@@ -5,9 +5,9 @@ summary: Hover, code lens and an MCP tool show which exception types a routine r
 product: DL
 group: editor-integration
 order: 110006
-since: 1.48.0-alpha
+since: 1.50.0-alpha
 status: shipped
-updated: 1.49.0-alpha
+updated: 1.50.0-alpha
 ---
 
 # Exception facts in the editor

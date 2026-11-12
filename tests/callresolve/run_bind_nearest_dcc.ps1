@@ -8,7 +8,10 @@
   so a harness that always answered "compiled" fails here.
 #>
 [CmdletBinding()]
-param([string]$Dcc = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\dcc64.exe')
+param([string]$Dcc = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\dcc64.exe',
+      # -Exe: accepted for uniformity with the battery guards and IGNORED -- this guard drives dcc64 only and
+      # never spawns drag-lint (152 HG2). An UNKNOWN parameter still fails binding (positive control).
+      [string]$Exe)
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
 if (-not (Test-Path $Dcc)) { Write-Host "FATAL: no compiler at $Dcc"; exit 2 }

@@ -5,9 +5,9 @@ summary: Declares an interface from the members of a class the project uses and 
 product: DL
 group: refactoring
 order: 50005
-since: 1.47.0-alpha
+since: 1.50.0-alpha
 status: shipped
-updated: 1.49.0-alpha
+updated: 1.50.0-alpha
 ---
 
 # Extract an interface from the members used (scratch + compile gate)

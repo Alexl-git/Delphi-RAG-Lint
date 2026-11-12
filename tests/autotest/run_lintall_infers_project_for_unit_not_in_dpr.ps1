@@ -39,9 +39,11 @@
 # Usage: pwsh -File tests/autotest/run_lintall_infers_project_for_unit_not_in_dpr.ps1 [-Exe <path>]
 [CmdletBinding()]
 param(
-    [string] $Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+    [string] $Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
     [string] $WorkDir = "$env:TEMP\drag-lint-lintall-infers-project-$PID"
 )
+if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
+. "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG3: no machine drag-lint.json
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
