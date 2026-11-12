@@ -7777,11 +7777,20 @@ begin
         [FLeafName[FInversion.DeclStem], FInversion.VarDecl]);
       EmitFmt('- `%s` assigns `%s := %s;` as the first statement of its initialization section.',
         [Decl, FInversion.PtrVar, FInversion.ClassTypeName]);
-      if FInversion.InitOrderProof <> '' then EmitFmt('- %s', [FInversion.InitOrderProof]);
-      EmitFmt('- `%s` passes `%s` instead of `%s` (line %s). Checked: its own initialization section makes none ' +
-        'of these calls and does not name the routine that makes them. NOT checked: an initialization section of ' +
-        'another unit that reaches them through a call chain.', [ExtractFileName(PathOf(FInversion.ConsumerFid)),
-        FInversion.PtrVar, FInversion.ClassTypeName, string.Join(', ', Calls.ToArray)]);
+      { found-in-152c (CYC3F): with a proved init order the consumer's initialization DOES reach the calls --
+        say so and print the proof, as the routine-call inversion below does }
+      if FInversion.InitOrderProof <> '' then
+      begin
+        EmitFmt('- `%s` passes `%s` instead of `%s` (line %s); its initialization section reaches these calls.',
+          [ExtractFileName(PathOf(FInversion.ConsumerFid)), FInversion.PtrVar, FInversion.ClassTypeName,
+           string.Join(', ', Calls.ToArray)]);
+        EmitFmt('- %s', [FInversion.InitOrderProof]);
+      end
+      else
+        EmitFmt('- `%s` passes `%s` instead of `%s` (line %s). Checked: its own initialization section makes none ' +
+          'of these calls and does not name the routine that makes them. NOT checked: an initialization section of ' +
+          'another unit that reaches them through a call chain.', [ExtractFileName(PathOf(FInversion.ConsumerFid)),
+          FInversion.PtrVar, FInversion.ClassTypeName, string.Join(', ', Calls.ToArray)]);
       if FInversion.RegisterDecl then
         EmitFmt('- `%s` joins the program''s uses (`%s`) so it stays linked and its initialization assigns `%s`.',
           [Decl, ExtractFileName(PathOf(FProjectFid)), FInversion.PtrVar]);
