@@ -35,6 +35,7 @@ Everything since v1.46.0-alpha (2026-11-07): waves 147, 148, 149, 151 and 152, r
 - Fixed: the index stores and returns string values as written -- FireDAC's StrsTrim default trimmed trailing spaces (a .dfm `Caption = 'OGP  '` was stored as 'OGP'; menu-tree --with-dfm table and text paths now agree). Extraction change: needs the re-parse. (152b ST O5)
 - Removed the unused ISymbolStore.GetFileIncludes reader; the file_includes table is still written and queryable with `drag-lint sql`. (152b ST O16c)
 - Measured, not landed: a refs position index (file_id, start_line, start_col) grew the CLIENT index by 3.49 % (rule: <= 3 %); schema stays 25. (152b ST O16b)
+- index: a uses-fragment include (every `{$I}` site of it stands in a uses list) is no longer counted as a parse error -- no DIAG line, no per-file error count, not in `parse-errors=`; `lint <file>` drops parser-error / syntax-error on it too (152c RINC).
 
 ### Resolver
 - Added: DRAGLINT_PROFILE_CALLS=1 prints a per-sub-pass timing table of the resolve calls stage on stderr (off = no cost).
@@ -60,6 +61,7 @@ Everything since v1.46.0-alpha (2026-11-07): waves 147, 148, 149, 151 and 152, r
 - Fixed: Resolver: a bare call inside a .dpr routine no longer records the program as its receiver type; a generic
   constraint name no longer shadows a real type of the same name.
 - Docs: refs.symbol_id is NULL for an ambiguous edge by design; interface dispatch is one edge to the interface method (derive the kind from the target's parent).
+- Resolver 1.26.0-alpha: a ref to a type, routine, const or var declared in a code include of a used unit now binds to that declaration (as a member of the host unit; interface includes are visible to users, implementation includes are not). Remedy rides the 1.37.0 re-parse (152c RINC).
 
 ### Lint
 - Added: New rule `quit-from-thread` (OFF by default): PostQuitMessage / Application.Terminate / Halt / ExitProcess in TThread.Execute or a thread-start lambda, outside Synchronize/Queue; a class never constructed is a hint.
