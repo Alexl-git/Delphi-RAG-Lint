@@ -448,7 +448,8 @@ Write-Host ("      [NOTE] cross-verb (pre-dispatch) flags, excluded: " + (($glob
 # pre-dispatch flag like --platform, read for every verb (CHANGELOG 1.39.0 Added, 'Preprocessing for the TARGET Delphi').
 # --no-create (1.44 C8): read by AutoCreateMissingProjectDb, reached through ResolveConsumerDbs by every read verb.
 # --enable / --rule (1.48, wave 148 RO): Main validates a --rule comma list id by id BEFORE dispatch and appends the ids to Enable, so both are read for every verb (reclassified 2026-11-09 by 148 INT).
-$ExpectedGlobalFlags = @('--db', '--dir', '--enable', '--in', '--no-create', '--platform', '--project', '--rule', '--target-compiler')
+# --unit (152b DOCU2, reclassified 2026-11-12 by 152c DOCU3): Run refuses a second, different --unit (DocUnitConflict, exit 2) BEFORE dispatch, the N-02 --rule pattern, so it is read for every verb.
+$ExpectedGlobalFlags = @('--db', '--dir', '--enable', '--in', '--no-create', '--platform', '--project', '--rule', '--target-compiler', '--unit')
 $globalDiff = @(Compare-Object -ReferenceObject $ExpectedGlobalFlags -DifferenceObject @($globalFlags | Sort-Object) |
                 ForEach-Object { '{0}{1}' -f $(if ($_.SideIndicator -eq '=>') { '+' } else { '-' }), $_.InputObject })
 Check 'cross-verb flag set is exactly the pinned set (--db --dir --in --platform --project --target-compiler)' ($globalDiff.Count -eq 0) `
