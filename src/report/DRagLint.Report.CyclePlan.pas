@@ -305,6 +305,10 @@ type
     Recipe: string;
     /// <summary>True for the edge `cycles --fix` cuts (the planner's CutEdge).</summary>
     Chosen: Boolean;
+    /// <summary>152c INT3b: a routine-inversion edge whose steps are the metaclass hand-over (R1 with a class
+    /// type passed as a value); the text says "metaclass hand-over", the JSON `recipe` id stays
+    /// routine-inversion.</summary>
+    Metaclass: Boolean;
     /// <summary>Lane CYC3: the init-order proof line of a routine-call inversion whose call runs from the consumer's
     /// initialization section ('' otherwise); JSON `init_order`, written only when not empty.</summary>
     InitOrder: string;
@@ -2321,6 +2325,16 @@ begin
   else
     Result:= 'none';
   end;
+end;
+
+{ 152c INT3b: the label of one weighed edge -- RecipeLabel, except that a routine-call inversion whose steps pass a
+  class type as a value (ClassTypeName set, the metaclass hand-over) is named as the step text names it. }
+function EvalRecipeLabel(const pEv: TEdgeEval): string;
+begin
+  if (pEv.Recipe = crRoutineInversion) and (pEv.Steps.ClassTypeName <> '') then
+    Result:= 'metaclass hand-over'
+  else
+    Result:= RecipeLabel(pEv.Recipe);
 end;
 
 { ---------------------------------------------------------------------------
@@ -6640,7 +6654,7 @@ begin
       var Ev:= Evals[I];
       EmitFmt('- `%s -> %s`: %s -- %s', [Ev.FromStem, Ev.ToStem, Texts[I],
         (if Ev.Recipe = crMoveGlobals then 'mechanical: these can move into a new leaf unit'
-         else if Ev.Recipe <> crNone then 'mechanical: recipe: ' + RecipeLabel(Ev.Recipe)
+         else if Ev.Recipe <> crNone then 'mechanical: recipe: ' + EvalRecipeLabel(Ev)
          else 'not mechanical: ' + Ev.Why)]);
     end;
   finally
@@ -6654,7 +6668,7 @@ begin
     EmitFmt('To do it: finish Part A (every checklist item), then run `%s` again. It prints Part B as ' +
       'the same kind of numbered, mechanical steps, with line numbers for the edited files. The edge ' +
       'it will cut is `%s -> %s`. Recipe: %s.', [CyclesCommand(True), Best.FromStem, Best.ToStem,
-      RecipeLabel(Best.Recipe)])
+      EvalRecipeLabel(Best)])
   else
     EmitFmt('No edge above can be cut mechanically as the units stand before Part A. Part A changes what ' +
       'these edges carry, so after it run `%s` again: it weighs move globals, routine-call inversion and ' +
@@ -6685,6 +6699,7 @@ const
     Result.ToUnit  := pEv.ToStem;
     Result.Recipe  := CRecipeId[pEv.Recipe];
     Result.Chosen  := pChosen;
+    Result.Metaclass:= (pEv.Recipe = crRoutineInversion) and (pEv.Steps.ClassTypeName <> '');
     Result.InitOrder:= if pEv.Recipe = crRoutineInversion then pEv.Steps.InitOrderProof else '';
   end;
 
@@ -6725,7 +6740,8 @@ const
   function EdgeText(const pEdge: TFixEdge): string;
   begin
     Result:= Format('%s -> %s (%s)', [pEdge.FromUnit, pEdge.ToUnit,
-      (if pEdge.Recipe = 'routine-inversion' then CRecipeText[crRoutineInversion]
+      (if pEdge.Metaclass then 'metaclass hand-over'
+       else if pEdge.Recipe = 'routine-inversion' then CRecipeText[crRoutineInversion]
        else if pEdge.Recipe = 'member-interface' then CRecipeText[crMemberInterface]
        else CRecipeText[crMoveGlobals])]);
   end;
@@ -6874,7 +6890,7 @@ begin
     if Ev.Recipe = crNone then
       EmitFmt('- `%s -> %s`: not mechanical: %s', [Ev.FromStem, Ev.ToStem, Ev.Why])
     else
-      EmitFmt('- `%s -> %s`: recipe: %s%s', [Ev.FromStem, Ev.ToStem, RecipeLabel(Ev.Recipe),
+      EmitFmt('- `%s -> %s`: recipe: %s%s', [Ev.FromStem, Ev.ToStem, EvalRecipeLabel(Ev),
         (if (Ev.FromStem = FCutEdge.FromStem) and (Ev.ToStem = FCutEdge.ToStem) then ' -- **cut by this plan**'
          else ' -- also possible, not cut by this plan')]);
 end;

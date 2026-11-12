@@ -11,6 +11,8 @@
        these calls", and NOT the "Checked: its own initialization section makes none" sentence (RED on the base).
     b  POSITIVE CONTROL, MiB first: the same edge is refused `init-order` -- the proof can say no, so row a is the
        proof talking, not a constant.
+    a.6-a.8 (152c INT3b): the edge-choice line and the Fix it `cuts` line say "metaclass hand-over", not
+       "routine-call inversion" (R1 keeps its label: run_cyclefix_initorder_proof_dcc a.1 is the control).
   Indexed and planned with the platform library (RegisterClass's parameter type). Exit 0 all PASS, 1 any FAIL,
   2 setup; SKIP (exit 0) without the library.
 #>
@@ -61,6 +63,10 @@ try {
   Check 'a.3 the pass step says the initialization reaches the calls' ($plan -match '(?m)^- `MiA\.pas` passes `\w+` instead of `TMiJob` \(line [\d, ]+\); its initialization section reaches these calls\.\r?$')
   Check 'a.4 no "Checked: its own initialization section makes none" sentence' (-not $plan.Contains('Checked: its own initialization section makes none'))
   Check 'a.5 Fix it is mechanical' ($plan -match '(?m)^Fix it \(mechanical, compile-gated\):')
+  # 152c INT3b: the edge-choice list and the Fix it `cuts` line name the recipe the step text uses, not R1's label
+  Check 'a.6 edge choice says metaclass hand-over' $plan.Contains('- `mia -> mib`: recipe: metaclass hand-over -- **cut by this plan**')
+  Check 'a.7 Fix it cuts line says metaclass hand-over' ($plan -match '(?m)^  cuts    : mia -> mib \(metaclass hand-over\) \(chosen\)')
+  Check 'a.8 no routine-call inversion label on the metaclass edge' (-not ($plan -match '(?m)mia -> mib.{0,30}routine-call inversion'))
 
   Write-Host '== b: MiB first (positive control: refused init-order)' -ForegroundColor Cyan
   $plan = Get-Plan 'bfirst' @('MiB', 'MiA', 'MiC')
