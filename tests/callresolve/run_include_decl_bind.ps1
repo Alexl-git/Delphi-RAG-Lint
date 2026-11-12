@@ -50,9 +50,9 @@ try {
   $q = "SELECT f.path AS src, r.name_text AS name, r.kind AS kind, r.start_line AS line, " +
        "COALESCE(tf.path, '') AS target, (SELECT COUNT(*) FROM call_edges c WHERE c.ref_id = r.id AND c.target_symbol_id = r.symbol_id) AS edges " +
        "FROM refs r JOIN files f ON f.id = r.file_id LEFT JOIN symbols s ON s.id = r.symbol_id LEFT JOIN files tf ON tf.id = s.file_id " +
-       "WHERE r.name_text IN ('TFoo', 'P', 'cIncLimit', 'cImplOnly', 'TBar', 'Q') AND r.kind IN ('type_use', 'read', 'call')"
+       "WHERE r.name_text IN ('TFoo', 'P', 'cIncLimit', 'cImplOnly', 'TBar', 'Q', 'R', 'TBaz') AND r.kind IN ('type_use', 'read', 'call')"
   $rows = Invoke-Rows $db $q
-  Check 'the fixture produced the 13 candidate refs' ($rows.Count -eq 13) "$($rows.Count)"
+  Check 'the fixture produced the 17 candidate refs' ($rows.Count -eq 17) "$($rows.Count)"
   function Target([string]$Src, [string]$Name, [string]$Kind) {
     $hit = @($rows | Where-Object { (Split-Path $_.src -Leaf) -eq $Src -and $_.name -eq $Name -and $_.kind -eq $Kind })
     if ($hit.Count -ne 1) { return "<$($hit.Count) refs>" }
@@ -75,8 +75,15 @@ try {
   Check 'control: C (no uses) does not bind TFoo' ((Target 'IncDeclC.pas' 'TFoo' 'type_use') -eq '') (Target 'IncDeclC.pas' 'TFoo' 'type_use')
   Check 'control: C (no uses) does not bind P' ((Target 'IncDeclC.pas' 'P' 'call') -eq '') (Target 'IncDeclC.pas' 'P' 'call')
   Check 'control: C (no uses) does not bind cIncLimit' ((Target 'IncDeclC.pas' 'cIncLimit' 'read') -eq '') (Target 'IncDeclC.pas' 'cIncLimit' 'read')
-} finally {
-  if (Test-Path $scratch) { [IO.Directory]::Delete($scratch, $true) }
+  # 152c RINC2 (a): a routine header that FOLLOWS a type section in an include (IncDeclD_decls.inc:
+  # `type TBaz = class end;` then `procedure R;`) is a symbol of the include, and E's call binds to it.
+  $incD = 'IncDeclD_decls.inc'
+  $rSym = Invoke-Rows $db "SELECT s.kind AS kind, s.start_line AS line FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.name = 'R' AND f.path LIKE '%IncDeclD_decls.inc'"
+  Check '(a) IncDeclD_decls.inc declares R (a routine after a type section), line 5' (($rSym.Count -eq 1) -and ($rSym[0].kind -eq 'procedure') -and ($rSym[0].line -eq 5)) "$($rSym.Count) $($rSym.kind) $($rSym.line)"
+  Check '(a) E: R (call) binds to the include declaration' ((Target 'IncDeclE.pas' 'R' 'call') -eq $incD) (Target 'IncDeclE.pas' 'R' 'call')
+  Check '(a) control: E: TBaz (type_use) binds to the include declaration' ((Target 'IncDeclE.pas' 'TBaz' 'type_use') -eq $incD) (Target 'IncDeclE.pas' 'TBaz' 'type_use')
+  Check '(a) control: F (no uses) does not bind R' ((Target 'IncDeclF.pas' 'R' 'call') -eq '') (Target 'IncDeclF.pas' 'R' 'call')
+} finally {  if (Test-Path $scratch) { [IO.Directory]::Delete($scratch, $true) }
 }
 Write-Host ''
 if ($script:fail) { Write-Host 'RESULT: FAIL' -ForegroundColor Red; exit 1 }
