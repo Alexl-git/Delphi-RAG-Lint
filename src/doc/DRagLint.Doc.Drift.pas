@@ -355,7 +355,7 @@ begin
   if (AFilePath = '') or (ALine <= 0) or (not TFile.Exists(AFilePath)) then Exit;
   try
     Lines:= TFile.ReadAllLines(AFilePath, TEncoding.ANSI);
-  except
+  except  // dl:ok bare-except@8f3b, try-except-swallowed@8f3b -- REVIEWED 2026-11-11 (152b INT2): tolerant probe by contract ('' on any error, see the header); an unreadable file means no declaration line to compare, never an error
     Exit;
   end;
   if ALine <= Length(Lines) then Result:= Lines[ALine - 1];
