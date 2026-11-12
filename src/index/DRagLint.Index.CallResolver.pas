@@ -4867,8 +4867,8 @@ end;
 
 function TCallResolver.IsUnitLevelDecl(const ASym: TSymbol): Boolean;
 begin
-  if ASym.ParentId > 0 then Result:= SymbolById(ASym.ParentId).ParentId <= 0
-  else Result:= not (ASym.Kind in [skUnit, skProgram, skPackage]) and FIncHost.ContainsKey(ASym.FileId);
+  Result:= if ASym.ParentId > 0 then SymbolById(ASym.ParentId).ParentId <= 0
+           else (ASym.Kind not in [skUnit, skProgram, skPackage]) and FIncHost.ContainsKey(ASym.FileId);
 end;
 
 function TCallResolver.CandInScope(ADeclFile, ACandFile: Int64): Boolean;

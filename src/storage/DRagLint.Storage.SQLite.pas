@@ -6017,7 +6017,7 @@ var
   Q        : TFDQuery;
   L        : TList<TIncludeHostRow>;
   R        : TIncludeHostRow;
-  FHost, FDepth, FSection, FUses, FInc, FUnit: TField;
+  ColHost, ColDepth, ColSection, ColUses, ColInc, ColUnit: TField;
   CurHost  : Int64;
   TopSect  : string;
   TopInUses: Boolean;
@@ -6034,34 +6034,34 @@ begin
                    'FROM file_includes fi LEFT JOIN files f ON LOWER(f.path) = LOWER(fi.inc_path) ' +
                    'ORDER BY fi.file_id, fi.ordinal';
     Q.Open;
-    FHost   := Q.FieldByName('file_id');
-    FDepth  := Q.FieldByName('depth');
-    FSection:= Q.FieldByName('section');
-    FUses   := Q.FieldByName('in_uses');
-    FInc    := Q.FieldByName('inc_id');
-    FUnit   := Q.FieldByName('unit_id');
+    ColHost   := Q.FieldByName('file_id');
+    ColDepth  := Q.FieldByName('depth');
+    ColSection:= Q.FieldByName('section');
+    ColUses   := Q.FieldByName('in_uses');
+    ColInc    := Q.FieldByName('inc_id');
+    ColUnit   := Q.FieldByName('unit_id');
     CurHost  := 0;
     TopSect  := '';
     TopInUses:= False;
     while not Q.Eof do
     begin
-      if FHost.AsLargeInt <> CurHost then
+      if ColHost.AsLargeInt <> CurHost then
       begin
-        CurHost  := FHost.AsLargeInt;
+        CurHost  := ColHost.AsLargeInt;
         TopSect  := '';
         TopInUses:= False;
       end;
-      if FDepth.AsInteger = 0 then
+      if ColDepth.AsInteger = 0 then
       begin
-        TopSect  := FSection.AsString;
-        TopInUses:= FUses.AsInteger <> 0;
+        TopSect  := ColSection.AsString;
+        TopInUses:= ColUses.AsInteger <> 0;
       end;
-      if not TopInUses and (FUses.AsInteger = 0) and not FInc.IsNull and (FInc.AsLargeInt <> CurHost) then
+      if not TopInUses and (ColUses.AsInteger = 0) and not ColInc.IsNull and (ColInc.AsLargeInt <> CurHost) then
       begin
         R:= Default(TIncludeHostRow);
-        R.IncFileId := FInc.AsLargeInt;
+        R.IncFileId := ColInc.AsLargeInt;
         R.HostFileId:= CurHost;
-        R.HostUnitId:= FUnit.AsLargeInt;
+        R.HostUnitId:= ColUnit.AsLargeInt;
         R.Section   := TopSect;
         L.Add(R);
       end;
@@ -6100,7 +6100,7 @@ var
   Q: TFDQuery;
   L: TList<TSymbol>;
   S: TSymbol;
-  FId, FFile, FKind, FName, FSig, FSection: TField;
+  ColId, ColFile, ColKind, ColName, ColSig, ColSection: TField;
 begin
   Result:= nil;
   if not HasFileFacts then Exit;
@@ -6113,21 +6113,21 @@ begin
                    '  AND s.file_id IN (SELECT f.id FROM files f JOIN file_includes fi ' +
                    '                    ON LOWER(f.path) = LOWER(fi.inc_path) AND fi.in_uses = 0)';
     Q.Open;
-    FId     := Q.FieldByName('id');
-    FFile   := Q.FieldByName('file_id');
-    FKind   := Q.FieldByName('kind');
-    FName   := Q.FieldByName('name');
-    FSig    := Q.FieldByName('signature');
-    FSection:= Q.FieldByName('section');
+    ColId     := Q.FieldByName('id');
+    ColFile   := Q.FieldByName('file_id');
+    ColKind   := Q.FieldByName('kind');
+    ColName   := Q.FieldByName('name');
+    ColSig    := Q.FieldByName('signature');
+    ColSection:= Q.FieldByName('section');
     while not Q.Eof do
     begin
       S:= Default(TSymbol);
-      S.Id       := FId.AsLargeInt;
-      S.FileId   := FFile.AsLargeInt;
-      S.Kind     := TSymbolKind.FromText(FKind.AsString);
-      S.Name     := FName.AsString;
-      S.Signature:= FSig.AsString;
-      S.Section  := FSection.AsString;
+      S.Id       := ColId.AsLargeInt;
+      S.FileId   := ColFile.AsLargeInt;
+      S.Kind     := TSymbolKind.FromText(ColKind.AsString);
+      S.Name     := ColName.AsString;
+      S.Signature:= ColSig.AsString;
+      S.Section  := ColSection.AsString;
       L.Add(S);
       Q.Next;
     end;
