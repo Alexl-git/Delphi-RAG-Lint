@@ -1221,4 +1221,6 @@
 #   Superseded: 1.36.0-alpha|2ce5c03f1dfc072fe69fd79e2a21fca88fc36a11c1f023b4fbe27695b9cdee70
 #   2026-11-12 152b INT2 re-pin (same unreleased 1.37.0 bump, no extraction change): comment-only -- BKL O3 doc-drift regen (/// facts blocks, 32 units), dl:ok marker re-hash / removal, CLI.pas dl:ok magic-literal on --limit; Doc.Facts SkipDeclAttributeGroup moved to the interface (doc side, not extraction)
 #   Superseded: 1.37.0-alpha|3744504d7fc3ac508ec2b86445513f50721bcc55e8f7d4201a05245f78ed0dfa
-1.37.0-alpha|76f35ddad4fe6e537d10cc9d145cc5c61845abcff35670bcda7fe5c4c607c70d
+#   2026-11-12 152c INT3b re-pin (same unreleased 1.37.0 bump, never deployed; its ONE re-parse is still ahead): Core.Indexer.pas (RINC item 2) drops the parse-error DIAG / per-file error count / parse-errors= of a uses-fragment include (every file_includes site in_uses=1); no symbol / ref / uses / call-edge row changes (RINC copies 0 diffs). Comment-only elsewhere.
+#   Superseded: 1.37.0-alpha|76f35ddad4fe6e537d10cc9d145cc5c61845abcff35670bcda7fe5c4c607c70d
+1.37.0-alpha|2fab6f58f70fb2447a2388295ba91dac543d0f533055ff089852b2c9b150453d

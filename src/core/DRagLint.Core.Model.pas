@@ -524,7 +524,12 @@ const
   /// re-parse): GetTransitiveAncestors, a resolve-surface reader, runs its query through the
   /// store's prepared-statement cache (lane DF O6F; same SQL, same rows -- a billing bump, the
   /// re-parse re-resolves every DB anyway).</para>
-  DRAGLINT_RESOLVER_VERSION = '1.25.0-alpha';
+  /// <para>1.25.0-alpha -&gt; 1.26.0-alpha (2026-11-12, 1.50, rides the 1.37.0 extractor
+  /// re-parse): a ref to a type, routine, const or var declared in a code include of a used unit binds
+  /// to that declaration as a member of the host unit (TCallResolver.BuildIncludeScope over the new
+  /// readers GetIncludeHosts / GetIncludeTopLevelSymbols; interface includes are visible to users,
+  /// implementation includes are not; lane 152c RINC).</para>
+  DRAGLINT_RESOLVER_VERSION = '1.26.0-alpha';
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
   /// the ghost-compile journal that first created the folder.</summary>
