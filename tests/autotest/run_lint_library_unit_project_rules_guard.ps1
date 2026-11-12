@@ -41,13 +41,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe      = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe      = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$RulesDir = "$PSScriptRoot\..\..\rules",
   [string]$WorkDir  = "C:\TEMP\draglint_lib_unit_projrules_$PID",
   [string]$LibraryDb   = '',
   [string]$LibraryUnit = '',
   [int]   $CpuBudgetSec = 30
 )
+if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
+. "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG3: no machine drag-lint.json
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){ if($d){Write-Host "      $d" -ForegroundColor DarkGray}; $script:fail=$true } }

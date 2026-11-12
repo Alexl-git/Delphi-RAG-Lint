@@ -69,6 +69,8 @@
 param(
   [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
 )
+if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
+. "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG3: no machine drag-lint.json
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -92,7 +94,7 @@ Check 'registry lists platforms (independent expectation source)' ($registered.C
 # stdout and stderr to SEPARATE handles: merged, a stderr write can be cut in
 # half and a stdout line spliced into the gap, which breaks line-anchored regex.
 # The manifest is named EXPLICITLY rather than left to discovery. Without it the
-# answer depends on which exe ran: the deployed third_party\dll-win64\drag-lint.exe
+# answer depends on which exe ran: the deployed src\cli\Win64\Debug\drag-lint.exe
 # sits beside its drag-lint.json and resolves 35 sections, while the freshly built
 # src\cli\Win64\Debug\drag-lint.exe has no manifest beside it and resolves ZERO --
 # which this guard reported as "0 library section(s)", i.e. as a failure of the
