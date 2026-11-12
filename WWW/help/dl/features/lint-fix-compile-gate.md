@@ -5,9 +5,9 @@ summary: lint --fix --apply --project X.dproj --compile-gate writes the fixes on
 product: DL
 group: refactoring
 order: 50008
-since: 1.47.0-alpha
+since: 1.50.0-alpha
 status: shipped
-updated: 1.48.0-alpha
+updated: 1.50.0-alpha
 ---
 
 # Lint --fix through the compile gate

@@ -24,8 +24,8 @@
     "version": "1.42.0-alpha"
   },
   "features/arch-diagram.md": {
-    "hash": "fcfea02e1c470341de16402dbb3a31a6812ce7325293930a44cb5ac7a9264557",
-    "version": "1.46.0-alpha"
+    "hash": "8904552ff11204b800606bc09151afebec375dd417377fd4f88a5fabf4eabe2e",
+    "version": "1.50.0-alpha"
   },
   "features/ask.md": {
     "hash": "158895ed8f66505fcab1b58bc98d78a3a270555061e260b4b4760391ccfd9aa4",
@@ -48,8 +48,8 @@
     "version": "1.35.1-alpha"
   },
   "features/bookmarks-ide.md": {
-    "hash": "07711ec23066163410627ccabed10d32e5e8e7be63a3198e4f8d36f97310e090",
-    "version": "1.47.0-alpha"
+    "hash": "eb8a6f9b1529769b011a9f855bbd6d5d430f7ca73e3e51f8b2ccfd0edc6bba48",
+    "version": "1.50.0-alpha"
   },
   "features/bookmarks.md": {
     "hash": "45851dd39b2ec36c17e000af5c9700d8b315e30785d8027ee1d96000d9a9b694",
@@ -316,8 +316,8 @@
     "version": "1.35.1-alpha"
   },
   "features/editor-exception-facts.md": {
-    "hash": "76303f594374815d78c2eb44ba9b8eec1512a1d32f7ce8379e9f087794b80abc",
-    "version": "1.49.0-alpha"
+    "hash": "e9bdbc3d76480f40c07968f2f64aff51ecaab93b134a3f470bf9fdadb4c3d40d",
+    "version": "1.50.0-alpha"
   },
   "features/effect-free-in-loop-invariant.md": {
     "hash": "40a7d39df700383c81be734add3ba9a09b0853d2b02f466a8e87416e9e28d1ca",
@@ -352,8 +352,8 @@
     "version": "1.46.0-alpha"
   },
   "features/extract-interface.md": {
-    "hash": "7853095a07202fa64054cecb70828203d2f2b7fc8ddebf1c61db456512fa2e30",
-    "version": "1.49.0-alpha"
+    "hash": "a034af510437bb1ead921f24d722849772c51e7bfdd1072ba8565964b4b2e859",
+    "version": "1.50.0-alpha"
   },
   "features/extract-method.md": {
     "hash": "efaaa6a8fd86a9b19f196ef41bf2f0a6f591ff10dc5d04be4086faca70fa2a03",
@@ -528,8 +528,8 @@
     "version": "1.48.0-alpha"
   },
   "features/installed-layout-v2.md": {
-    "hash": "a88bca0d7b9b67459aee0c4a9859f37759317d8d97b908d20c450eba0ed6deee",
-    "version": "1.47.0-alpha"
+    "hash": "4274e1d3f173eee7714393cf222a8bb9928baeb5d7c5bda8dcedbe4cf9ccc1ee",
+    "version": "1.50.0-alpha"
   },
   "features/interface-implementors.md": {
     "hash": "aca5d389b4c46454918d9a5a844eef2d5e99bcb2d4a8b3e29f28b7a4fe94099e",
@@ -540,8 +540,8 @@
     "version": "1.46.0-alpha"
   },
   "features/lazy-init.md": {
-    "hash": "dda715178abc7713bf678a350dfeb9fda391300d7cbc31cc4beda0fdec1d7585",
-    "version": "1.47.0-alpha"
+    "hash": "eda43363f10ac3bbefa0637d441dad25060d3e3ca6bd8732bc43417c2102c52e",
+    "version": "1.50.0-alpha"
   },
   "features/library-drift-check.md": {
     "hash": "94107837a3d362099fcc5e10b2476a890e0f8405bada744bec6b512e7349f201",
@@ -556,8 +556,8 @@
     "version": "1.46.0-alpha"
   },
   "features/lint-fix-compile-gate.md": {
-    "hash": "869a9675381baad048e3303edcea3038cdb40e9851cd4e88b41b9c0eb3af40d9",
-    "version": "1.48.0-alpha"
+    "hash": "26b6b9dbcbda53712cf4a3a46f5775c6fd9d92090ede571307d7f217dfc0f2f6",
+    "version": "1.50.0-alpha"
   },
   "features/lint-project.md": {
     "hash": "458d9f247ae20eeaa0c3ca07eb93a542c6be09db4787b0b8290be17c4f5b7934",
@@ -904,8 +904,8 @@
     "version": "1.47.0-alpha"
   },
   "features/uses-recover.md": {
-    "hash": "3f6644dd7217529fb5a272125837a3d31cc1ca3a3dc09c187cf40e95d1823cd9",
-    "version": "1.49.0-alpha"
+    "hash": "0e9d2b00f4d6266ce8f6b6bb05ded12c16d9b552d2e3f3f582cd47d44942ba48",
+    "version": "1.50.0-alpha"
   },
   "features/uses-report-csv.md": {
     "hash": "41a5eb7edee0afa47064aa9a57808ae194aa943bdc07e6553085afa77ee79701",

@@ -4,7 +4,7 @@
   "group": "search-navigation",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "1.48.0-alpha",
+  "since": "1.50.0-alpha",
   "summary": "Recovers the uses edges of units that ship without source, from the vendor's .hpp headers and a dcc map; never reads a .dcu; --apply stores them in the index",
   "intro": "Read this when a project uses a library shipped as compiled units only and you want to know what those units depend on. uses-recover lists every unit the index uses but has no source for, reads its interface uses from the C++Builder header the vendor ships, follows the units those headers name and, given a dcc map, says which the linker pulled in. --project resolves unit aliases first; --apply stores the result so cycles, impact and the uses graph see past the library. No .dcu is read.",
   "wikiPage": "uses-recover",
@@ -64,7 +64,7 @@
   "verified": {
     "date": "2026-11-09",
     "by": "ENGINE",
-    "build": "1.49.0-alpha",
+    "build": "1.50.0-alpha",
     "surfaceHash": "4c1a590d577158d254447a7a97d3fbd4c0daeebe1c419e11ad18c170b688817d"
   }
 }

@@ -105,7 +105,7 @@
   "verified": {
     "date": "2026-11-08",
     "by": "ENGINE",
-    "build": "1.48.0-alpha",
+    "build": "1.50.0-alpha",
     "surfaceHash": "38af3a8497455076283fdb3c217155ca98effd7ee44990ca6fecb9c3e9286835"
   }
 }

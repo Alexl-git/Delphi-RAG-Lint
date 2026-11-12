@@ -256,7 +256,7 @@
       "verified": {
         "date": "2026-11-09",
         "by": "ENGINE",
-        "build": "1.49.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "f2a0478a796ade4e9cce69218410755d7d887176fd05d65248876316fc7401bd"
       }
     },
@@ -639,7 +639,7 @@
       "verified": {
         "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "4caeb5467c27dc1118726ace2ce053ad97a7adc4c79a7110df17756bb42caa55"
       }
     },
@@ -1646,7 +1646,7 @@
       "verified": {
         "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "c69cb05880f5f5bd5b68dbddc39404b274f23a964817fca00b6e6466cae29b4b"
       }
     },
@@ -1839,7 +1839,7 @@
       "verified": {
         "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "f0e28d4cf59846e8a6d84f32c7ce62560cd5396e199a86ca51134e0509227eed"
       }
     },
@@ -2733,7 +2733,7 @@
       "group": "search-navigation",
       "owner": "ENGINE",
       "status": "shipped",
-      "since": "1.48.0-alpha",
+      "since": "1.50.0-alpha",
       "summary": "Recovers the uses edges of units that ship without source, from the vendor's .hpp headers and a dcc map; never reads a .dcu; --apply stores them in the index",
       "intro": "Read this when a project uses a library shipped as compiled units only and you want to know what those units depend on. uses-recover lists every unit the index uses but has no source for, reads its interface uses from the C++Builder header the vendor ships, follows the units those headers name and, given a dcc map, says which the linker pulled in. --project resolves unit aliases first; --apply stores the result so cycles, impact and the uses graph see past the library. No .dcu is read.",
       "wikiPage": "uses-recover",
@@ -2793,7 +2793,7 @@
       "verified": {
         "date": "2026-11-09",
         "by": "ENGINE",
-        "build": "1.49.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "4c1a590d577158d254447a7a97d3fbd4c0daeebe1c419e11ad18c170b688817d"
       }
     },
@@ -3337,7 +3337,7 @@
       "verified": {
         "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "6c846729f767fec67c376ee12be3025c72d27bfaef5b725ee7866b0df4216218"
       }
     },
@@ -3534,7 +3534,7 @@
       "verified": {
         "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "27d33393509aca722a1e101b0f98eee165b840bbd25a6ead78f38084381faed2"
       }
     },
@@ -3724,7 +3724,7 @@
       "verified": {
         "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "38af3a8497455076283fdb3c217155ca98effd7ee44990ca6fecb9c3e9286835"
       }
     },
@@ -4127,7 +4127,7 @@
       "verified": {
         "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "c86e88b99bad3d1352c6b7e19e7394f26a185b860c009bb97ac366379a830ab4"
       }
     },
@@ -4187,7 +4187,7 @@
       "verified": {
         "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "705db8e60b73cfa9130304fc465e5d099d54877dbc5b0294285efffb6c50d9f0"
       }
     },
@@ -4738,7 +4738,7 @@
       "verified": {
         "date": "2026-11-09",
         "by": "ENGINE",
-        "build": "1.49.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "d462abbd3e60aa8afaa21419fc796baf0b809d5cc742f6eb8a88dc77dc7f8141"
       }
     },
@@ -5112,7 +5112,7 @@
       "group": "documentation",
       "owner": "ENGINE",
       "status": "shipped",
-      "since": "1.47.0-alpha",
+      "since": "1.50.0-alpha",
       "summary": "Lists, finds, strips and restores the // dl:bk comment anchors of the current unit from the IDE",
       "intro": "Read this when you marked code with // dl:bk3 or // dl:bk:A7K3QX comments and want to jump to one from the IDE, or take them all out of a unit before a commit and put them back later. drag-lint > Bookmarks runs the bookmarks, bookmarks-strip and bookmarks-restore verbs; Strip and Restore show a dry run first and write only after you say Yes.",
       "wikiPage": "Bookmarks-IDE",
@@ -5152,7 +5152,7 @@
       "verified": {
         "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.47.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "e2d2fadc800e8cef1a3eee5da4a9b69ceb2e2fc2ab7bcfb102799c1dfbeb28e1"
       }
     },
@@ -5235,7 +5235,7 @@
       "verified": {
         "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.47.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "4f1b33ba85621e69b7d9f26164f6e0395d83d8c0a1c339d6d283cfaf7cf855cc"
       }
     },
@@ -5405,7 +5405,7 @@
       "verified": {
         "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "e7129abd51f83d6c910608813277b6334776faf78f049f08c54738b8a63f15b2"
       }
     },
@@ -5479,7 +5479,7 @@
       "verified": {
         "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "f9ceb71c5380ad62dcb2168d93fc060e3eb055095a49f13d069becc17d79a344"
       }
     },
@@ -5542,7 +5542,7 @@
       "verified": {
         "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "ac4838ac360a28ffef7cf43933580ae9ced66a7baf8a96d658e73bf1170938d7"
       }
     },
@@ -5660,7 +5660,7 @@
       "verified": {
         "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "7928ec8d0e418cc306a99a68c1485faa645515d255dd6be6ac4c21c491c1db6c"
       }
     },
@@ -6132,7 +6132,7 @@
       "group": "refactoring",
       "owner": "ENGINE",
       "status": "shipped",
-      "since": "1.47.0-alpha",
+      "since": "1.50.0-alpha",
       "summary": "Declares an interface from the members of a class the project uses and adds it to the class; --apply through a scratch build and the compile gate",
       "intro": "Read this when a class needs an interface and you want it to hold what its callers actually use, not every public method. The default prints the plan, the very text it would write; --apply builds a scratch copy with the change first, then builds the project before and after and rolls back on any error. No consumer is retyped, so no lifetime changes.",
       "wikiPage": "extract-interface",
@@ -6206,7 +6206,7 @@
       "verified": {
         "date": "2026-11-09",
         "by": "ENGINE",
-        "build": "1.49.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "411f26d39af139267eb99ec2135457bf5a31438824d63b812e7b2a331f03c5b2"
       }
     },
@@ -6302,7 +6302,7 @@
       "group": "refactoring",
       "owner": "ENGINE",
       "status": "shipped",
-      "since": "1.47.0-alpha",
+      "since": "1.50.0-alpha",
       "summary": "lint --fix --apply --project X.dproj --compile-gate writes the fixes only if the project still builds; a fix that breaks the compile is refused and rolled back",
       "intro": "Read this before letting lint --fix write into a project you cannot afford to break. With --compile-gate the project builds before and after the write and any compile error rolls every file back. Opt-in: without the flag nothing builds, except a naming rename (field/param/local/const prefix or casing fixes), which is always written through the gate when --project names a .dproj.",
       "wikiPage": "lint-fix-compile-gate",
@@ -6380,7 +6380,7 @@
       "verified": {
         "date": "2026-11-09",
         "by": "ENGINE",
-        "build": "1.49.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "bcc441782f9d3e58636b7d7f0826f34beb19f517dafcf8ec33a946ad56cb318b"
       }
     },
@@ -6460,7 +6460,7 @@
       "verified": {
         "date": "2026-11-09",
         "by": "ENGINE",
-        "build": "1.49.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "b490a52384bb1cb7fb000bf7cc26c2dcfdf39c0accb20e5489fe4195dd66e2e0"
       }
     },
@@ -6470,7 +6470,7 @@
       "group": "refactoring",
       "owner": "ENGINE",
       "status": "shipped",
-      "since": "1.47.0-alpha",
+      "since": "1.50.0-alpha",
       "summary": "Names what an initialization section does; --apply moves its body verbatim into a run-once routine, through a scratch build and the compile gate",
       "intro": "Read this when the heavy-initialization rule reports a unit and you want the work out of the section. This first phase changes no behaviour: the plan shows which statement is heavy and which global could go lazy, and --apply only extracts the body, so that moving the call later is a one-line change.",
       "wikiPage": "lazy-init",
@@ -6543,7 +6543,7 @@
       "verified": {
         "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.47.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "6aa57b8d947b01bf7871f6b3bbc8c7f9f9029f29b76e86d178c3e89f4a9aaac2"
       }
     },
@@ -7145,7 +7145,7 @@
       "verified": {
         "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "0bf3538cc94f5ecde760f03ee0fea048fe0414b596efd2894f2b9fb2e9524f9e"
       }
     },
@@ -7369,7 +7369,7 @@
       "verified": {
         "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.47.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "7d36039d421d52f73d5373c105c122c277767758fcee0b736376e2d3b3552ee9"
       }
     },
@@ -8509,7 +8509,7 @@
       "group": "graphs-reports",
       "owner": "ENGINE",
       "status": "shipped",
-      "since": "1.47.0-alpha",
+      "since": "1.50.0-alpha",
       "summary": "Draws one self-contained HTML layer diagram of a project's units by folder, with the layers measured from the uses clauses",
       "intro": "Read this when you want the shape of a project in one file you can open anywhere: which folder sits on which, and the uses lines behind every arrow. It needs no Graphviz and fetches nothing.",
       "wikiPage": "arch-diagram",
@@ -8551,7 +8551,7 @@
       "verified": {
         "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.47.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "ab2b5e72a961c370c9c96cdc39380451472d2aff80de376435e72e216058591a"
       }
     },
@@ -8906,7 +8906,7 @@
       "verified": {
         "date": "2026-11-09",
         "by": "ENGINE",
-        "build": "1.49.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "0a0ad9006cab029c6b9643bf79eaca9690afba738d48e248fd8efba554648213"
       }
     },
@@ -9164,7 +9164,7 @@
       "verified": {
         "date": "2026-11-09",
         "by": "ENGINE",
-        "build": "1.49.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "46680e7eaa46ccd97c921a274a298fc6e6e16b12d909994c4ee1dc9c19012eb4"
       }
     },
@@ -9351,7 +9351,7 @@
       "verified": {
         "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "cfa73ef402d259c06d66a408e41bc3e536fb01f52d4e68cd46eaaa3cc36117c1"
       }
     },
@@ -9695,7 +9695,7 @@
       "verified": {
         "date": "2026-11-09",
         "by": "ENGINE",
-        "build": "1.49.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "1d822e8d141dd8a68e374366b03a7c28453e32ac0e303898e16a20f6cca903cc"
       }
     },
@@ -9984,7 +9984,7 @@
       "verified": {
         "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "f8991ed70fba2bd25446c15b66688e472b5a748da0fcfa523bc7a1376ef5dd00"
       }
     },
@@ -10815,7 +10815,7 @@
       "verified": {
         "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "4e75c8e04ee01aaa7b25c2139cad843457dfdbac9908dd1ff8a84cd87f81f637"
       }
     },
@@ -11224,7 +11224,7 @@
       "verified": {
         "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "5a2453d7609d4f43aa33d05dd123b4c8b6c0ea3c09911c36042f39b03c9fe3e1"
       }
     },
@@ -11446,7 +11446,7 @@
       "verified": {
         "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "0d0fae9b811328f06e081c70594d77e6e809fdcb36128d567c6ac5446fefb71b"
       }
     },
@@ -11563,7 +11563,7 @@
       "group": "editor-integration",
       "owner": "ENGINE",
       "status": "shipped",
-      "since": "1.48.0-alpha",
+      "since": "1.50.0-alpha",
       "summary": "Hover, code lens and an MCP tool show which exception types a routine raises and handles",
       "intro": "Read this when you want to see, without leaving the editor, which exceptions a routine raises and which it catches. Hovering a routine adds one Raises: line (each type once, with how it is known: bound, handler, local, name, spelled or unknown); a code lens on the routine header says raises N types, handles M types (VS Code: a click lists the sites; the Delphi IDE lens reads the same titles); the MCP tool get_exception_facts returns the same rows as exception-facts --json. ON by default; lsp --no-exception-facts switches the hover line and the lens off.",
       "wikiPage": "editor-exception-facts",
@@ -11627,7 +11627,7 @@
       "verified": {
         "date": "2026-11-09",
         "by": "ENGINE",
-        "build": "1.49.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "77e6c3a6683aa71784b573cd45fb2849c3c8fb9b4183325fd370e848a5dd0f51"
       }
     },
@@ -12212,7 +12212,7 @@
       "verified": {
         "date": "2026-11-09",
         "by": "ENGINE",
-        "build": "1.49.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "10022e84258187bc2c007e3f25e7d555f66920a2b2d6cbbdc39b8d081e7164a3"
       }
     },
@@ -12346,7 +12346,7 @@
       "verified": {
         "date": "2026-11-09",
         "by": "ENGINE",
-        "build": "1.49.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "54238dbe14546a9adc7642ae77efcf4256ccccd619a32b671fa068c1022aa2c1"
       }
     },
@@ -13554,7 +13554,7 @@
       "verified": {
         "date": "2026-11-11",
         "by": "ENGINE",
-        "build": "1.49.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "50933f95ecd01a9516bd4ef00f58ac9d1ddc49b7f824bc0dcd204b0e948ac292"
       }
     },
@@ -13661,7 +13661,7 @@
       "group": "maintenance",
       "owner": "ENGINE",
       "status": "shipped",
-      "since": "1.47.0-alpha",
+      "since": "1.50.0-alpha",
       "summary": "Shows which drag-lint.json this engine reads and why; moves the exe-side one to %APPDATA% once (renamed, never deleted). Installed layout v2, off by default",
       "intro": "Read this when you need to know which manifest an engine would read. manifest where is read-only. The new layout is off unless DRAGLINT_LAYOUT=v2; an explicit manifest (DRAGLINT_MANIFEST or --manifest) wins in both layouts, and a missing explicit file never falls through to another manifest.",
       "wikiPage": "installed-layout-v2",
@@ -13723,7 +13723,7 @@
       "verified": {
         "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.47.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "756076580f926aa5c715f8148b5efd8b83a46b7e11f44991632223fe91231cbe"
       }
     },
@@ -13903,7 +13903,7 @@
       "verified": {
         "date": "2026-11-08",
         "by": "ENGINE",
-        "build": "1.48.0-alpha",
+        "build": "1.50.0-alpha",
         "surfaceHash": "1ec133398b13dd5b6640e87d8b3604d65295b5cbb4698cfb41f2b46682d8a72d"
       }
     },

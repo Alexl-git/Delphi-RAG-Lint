@@ -68,7 +68,7 @@ Find symbols, callers, callees, text and types in the index.
 | [syntax-count](features/syntax-count.md) | Counts modern syntax in the parse of every unit, uncapped: Delphi 13 if-expressions, is not, not in; inline var/const; anonymous methods; multiline strings | 1.42.0-alpha |
 | [Type at Cursor](features/type-at-cursor.md) | Resolves the static type of the expression under the editor caret | 0.19.0-alpha |
 | [usages](features/usages.md) | Finds usage sites of a named symbol, with a choice of report width | 0.33.0-alpha |
-| [uses-recover](features/uses-recover.md) | Recovers the uses edges of units that ship without source, from the vendor's .hpp headers and a dcc map; never reads a .dcu; --apply stores them in the index | 1.48.0-alpha |
+| [uses-recover](features/uses-recover.md) | Recovers the uses edges of units that ship without source, from the vendor's .hpp headers and a dcc map; never reads a .dcu; --apply stores them in the index | 1.50.0-alpha |
 | [wiki](features/wiki.md) | Looks up the dl:wiki concept topics a team has written into their own doc comments, and routes a human phrase to the code that implements it | 1.7.0-alpha |
 
 ## Linting
@@ -128,7 +128,7 @@ DocInsight comments generated from the index, and drift detection.
 | Feature | What it does | Since |
 | --- | --- | --- |
 | [bookmarks](features/bookmarks.md) | Lists or finds the dl:bk comment-anchor bookmarks in a unit or a folder, and strips / restores them on request | 1.46.0-alpha |
-| [Bookmarks (IDE)](features/bookmarks-ide.md) | Lists, finds, strips and restores the // dl:bk comment anchors of the current unit from the IDE | 1.47.0-alpha |
+| [Bookmarks (IDE)](features/bookmarks-ide.md) | Lists, finds, strips and restores the // dl:bk comment anchors of the current unit from the IDE | 1.50.0-alpha |
 | [Doc Comment Stub (symbol)](features/doc-comment-stub-symbol.md) | Uses generate-docs to produce a doc-comment stub for one qualified symbol | 0.25.0-alpha |
 | [doc-drift](features/doc-drift.md) | Diagnostic that computes deterministic doc-vs-code drift findings for one symbol | 0.93.0-alpha |
 | [doc-forget](features/doc-forget.md) | Reap or rename the project tags on inbound documentation facts; a dry run unless told to apply | 1.17.0-alpha |
@@ -150,10 +150,10 @@ Rename, extract, safe delete, uses cleanup and code stubs.
 | [Allow this message](features/allow-this-message.md) | Records a dl:ok review of one finding, so it stops being reported without being fixed | 0.54.0-alpha |
 | [create-enum-helper](features/create-enum-helper.md) | Generates a Byte-family record helper (ToByte/FromByte/ToInteger/ FromInteger/ToString/FromString) for an enum type | 0.94.0-alpha |
 | [Create helper class](features/create-helper-class.md) | Generates a Byte-family record helper for an enum type represented by a Structure-tree node | 0.94.0-alpha |
-| [Extract an interface from the members used (scratch + compile gate)](features/extract-interface.md) | Declares an interface from the members of a class the project uses and adds it to the class; --apply through a scratch build and the compile gate | 1.47.0-alpha |
+| [Extract an interface from the members used (scratch + compile gate)](features/extract-interface.md) | Declares an interface from the members of a class the project uses and adds it to the class; --apply through a scratch build and the compile gate | 1.50.0-alpha |
 | [extract-method](features/extract-method.md) | Pulls a run of statements out of a routine into a new method | 0.85.0-alpha |
-| [Prepare heavy initialization for lazy loading (first phase)](features/lazy-init.md) | Names what an initialization section does; --apply moves its body verbatim into a run-once routine, through a scratch build and the compile gate | 1.47.0-alpha |
-| [Lint --fix through the compile gate](features/lint-fix-compile-gate.md) | lint --fix --apply --project X.dproj --compile-gate writes the fixes only if the project still builds; a fix that breaks the compile is refused and rolled back | 1.47.0-alpha |
+| [Prepare heavy initialization for lazy loading (first phase)](features/lazy-init.md) | Names what an initialization section does; --apply moves its body verbatim into a run-once routine, through a scratch build and the compile gate | 1.50.0-alpha |
+| [Lint --fix through the compile gate](features/lint-fix-compile-gate.md) | lint --fix --apply --project X.dproj --compile-gate writes the fixes only if the project still builds; a fix that breaks the compile is refused and rolled back | 1.50.0-alpha |
 | [Narrow parameter types (compile-gated)](features/narrow-param.md) | Retypes a class-typed parameter to the deepest ancestor that declares every member the routine uses, when a static proof holds, through the compile gate | 1.44.1-alpha |
 | [Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor](features/quick-fix-add-unit-for-inline-hint-h2443-at-cursor.md) | The same idea as the undeclared-identifier quick-fix, but for compiler hint H2443 -- an inline routine whose declaring unit is not in scope | 1.2.0-alpha |
 | [Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)](features/quick-fix-add-unit-for-undeclared-at-cursor-ctrl-alt-u.md) | Finds which unit declares the identifier under the caret and adds that unit to the current unit's uses clause | 0.47.0-alpha |
@@ -205,7 +205,7 @@ Call graphs, dependency reports, dead code, tester spreadsheets.
 
 | Feature | What it does | Since |
 | --- | --- | --- |
-| [arch-diagram](features/arch-diagram.md) | Draws one self-contained HTML layer diagram of a project's units by folder, with the layers measured from the uses clauses | 1.47.0-alpha |
+| [arch-diagram](features/arch-diagram.md) | Draws one self-contained HTML layer diagram of a project's units by folder, with the layers measured from the uses clauses | 1.50.0-alpha |
 | [butterfly](features/butterfly.md) | Composes a symbol's callers (upward wing) and callees (downward wing) into one combined chart in a single command | 0.99.0-alpha |
 | [Call Graph (Butterfly)](features/call-graph-butterfly.md) | Shows callers and callees of one symbol together in a single "butterfly" view | 0.96.0-alpha |
 | [callgraph](features/callgraph.md) | Prints an N-deep resolved call tree for a symbol, in either direction | 0.91.0-alpha |
@@ -281,7 +281,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [drag-lint Graph (dockable)](features/drag-lint-graph-dockable.md) | Opens the drag-lint graph viewer as a dockable window inside the IDE, so it can sit beside Structure | 0.43.0-alpha |
 | [drag-lint Options](features/drag-lint-options.md) | The plugin's settings dialog for drag-lint: lets you browse and toggle the lint rule catalog | 0.95.0-alpha |
 | [drag-lint Panel (dockable)](features/drag-lint-panel-dockable.md) | Opens the main drag-lint dockable tool window inside the IDE | 0.42.0-alpha |
-| [Exception facts in the editor](features/editor-exception-facts.md) | Hover, code lens and an MCP tool show which exception types a routine raises and handles | 1.48.0-alpha |
+| [Exception facts in the editor](features/editor-exception-facts.md) | Hover, code lens and an MCP tool show which exception types a routine raises and handles | 1.50.0-alpha |
 | [Engine heartbeat: the IDE tells a busy engine from a stuck one](features/engine-heartbeat.md) | A running engine reports what it is doing, so the IDE kills only an engine whose status stopped moving | 1.40.0-alpha |
 | [Help line (DL page)](features/ide-help-line.md) | Type part of a feature name on the DL page, pick a match (with its menu path) and open that feature's help page at the configured help root | 1.33.0-alpha |
 | [IDE Menu Reference](features/ide-menu-reference.md) | What every item in the drag-lint menu does | 1.4.0-alpha |
@@ -319,7 +319,7 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [dump-refs](features/dump-refs.md) | Diagnostic that dumps every ref in a file together with its enclosingsymbolid attribution | 0.82.0-alpha |
 | [Feature registry](features/feature-registry.md) | The machine-checked master list of every feature, and the generator of the index pages | 1.22.0-alpha |
 | [info](features/info.md) | Prints engine self-info: version, build date, license (MIT), tree-sitter details, and capabilities | 0.19.0-alpha |
-| [manifest where / migrate (installed layout v2)](features/installed-layout-v2.md) | Shows which drag-lint.json this engine reads and why; moves the exe-side one to %APPDATA% once (renamed, never deleted). Installed layout v2, off by default | 1.47.0-alpha |
+| [manifest where / migrate (installed layout v2)](features/installed-layout-v2.md) | Shows which drag-lint.json this engine reads and why; moves the exe-side one to %APPDATA% once (renamed, never deleted). Installed layout v2, off by default | 1.50.0-alpha |
 | [Library Drift Check](features/library-drift-check.md) | Flags registered library roots that have source on disk but nothing in the index | 0.47.0-alpha |
 | [Maintenance](features/maintenance.md) | Indexes, the manifest, reindexing, and what to do when something looks wrong | 1.4.0-alpha |
 | [Open Plugin Log](features/open-plugin-log.md) | Opens the drag-lint plugin's own log file | 0.39.0-alpha |

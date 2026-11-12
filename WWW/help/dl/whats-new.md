@@ -9,19 +9,16 @@ product: DL
 
 drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.com](https://www.htrmicronite.com)), our quality and production-control software.
 
-## 1.48.0-alpha
-
-* [Exception facts in the editor](features/editor-exception-facts.md) -- Hover, code lens and an MCP tool show which exception types a routine raises and handles.
-* [uses-recover](features/uses-recover.md) -- Recovers the uses edges of units that ship without source, from the vendor's .hpp headers and a dcc map; never reads a .dcu; --apply stores them in the index.
-
-## 1.47.0-alpha
+## 1.50.0-alpha
 
 * [arch-diagram](features/arch-diagram.md) -- Draws one self-contained HTML layer diagram of a project's units by folder, with the layers measured from the uses clauses.
 * [Bookmarks (IDE)](features/bookmarks-ide.md) -- Lists, finds, strips and restores the // dl:bk comment anchors of the current unit from the IDE.
+* [Exception facts in the editor](features/editor-exception-facts.md) -- Hover, code lens and an MCP tool show which exception types a routine raises and handles.
 * [Extract an interface from the members used (scratch + compile gate)](features/extract-interface.md) -- Declares an interface from the members of a class the project uses and adds it to the class; --apply through a scratch build and the compile gate.
 * [manifest where / migrate (installed layout v2)](features/installed-layout-v2.md) -- Shows which drag-lint.json this engine reads and why; moves the exe-side one to %APPDATA% once (renamed, never deleted). Installed layout v2, off by default.
 * [Prepare heavy initialization for lazy loading (first phase)](features/lazy-init.md) -- Names what an initialization section does; --apply moves its body verbatim into a run-once routine, through a scratch build and the compile gate.
 * [Lint --fix through the compile gate](features/lint-fix-compile-gate.md) -- lint --fix --apply --project X.dproj --compile-gate writes the fixes only if the project still builds; a fix that breaks the compile is refused and rolled back.
+* [uses-recover](features/uses-recover.md) -- Recovers the uses edges of units that ship without source, from the vendor's .hpp headers and a dcc map; never reads a .dcu; --apply stores them in the index.
 
 ## 1.46.0-alpha
 

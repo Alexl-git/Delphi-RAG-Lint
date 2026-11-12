@@ -121,7 +121,7 @@
   "verified": {
     "date": "2026-11-09",
     "by": "ENGINE",
-    "build": "1.49.0-alpha",
+    "build": "1.50.0-alpha",
     "surfaceHash": "0a0ad9006cab029c6b9643bf79eaca9690afba738d48e248fd8efba554648213"
   }
 }

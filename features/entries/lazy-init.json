@@ -4,7 +4,7 @@
   "group": "refactoring",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "1.47.0-alpha",
+  "since": "1.50.0-alpha",
   "summary": "Names what an initialization section does; --apply moves its body verbatim into a run-once routine, through a scratch build and the compile gate",
   "intro": "Read this when the heavy-initialization rule reports a unit and you want the work out of the section. This first phase changes no behaviour: the plan shows which statement is heavy and which global could go lazy, and --apply only extracts the body, so that moving the call later is a one-line change.",
   "wikiPage": "lazy-init",
@@ -77,7 +77,7 @@
   "verified": {
     "date": "2026-11-08",
     "by": "ENGINE",
-    "build": "1.47.0-alpha",
+    "build": "1.50.0-alpha",
     "surfaceHash": "6aa57b8d947b01bf7871f6b3bbc8c7f9f9029f29b76e86d178c3e89f4a9aaac2"
   }
 }
