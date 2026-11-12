@@ -2816,6 +2816,26 @@ begin
   end;
 end;
 
+const
+  { lane CYC3 (cases 14 / 15, fabcyc section 6): why a base class cannot stand in at such a site }
+  CReasonVarParam = 'the compiler requires the actual and the formal `%s` parameter to be of the identical type ' +
+    '(E2033), so every caller''s variable would have to be retyped';
+  CReasonResult = 'every caller''s expression would change type; that is retyping the callers, not a cut';
+  CReasonRefCounted = 'an interface reference would count the object and free it when the reference goes out of ' +
+    'scope while plain object references still hold it';
+  CRefCountRoots: array[0..2] of string = ('TInterfacedObject', 'TAggregatedObject', 'TContainedObject');
+{ Lane CYC3 (case 15): '' unless the class descends from a reference-counting root; then the clause appended to
+  another base-class refusal, so the "hand over an interface" alternative is not mistaken for a safe one. }
+function RefCountedNote(const pStore: ISymbolStore; const pClass: TSymbol; const pAncestor: string): string;
+begin
+  Result:= '';
+  var Root:= '';
+  for var R in CRefCountRoots do
+    if SameText(pAncestor.Substring(pAncestor.LastIndexOf('.') + 1), R) or
+      pStore.IsDescendantOf(pClass.Name, R, pClass.FileId) then Root:= R;
+  if Root <> '' then
+    Result:= Format('; also, `%s` descends from `%s`: %s', [pClass.Name, Root, CReasonRefCounted]);
+end;
 { The F5 base-class plan of a class: `TX = class` or, since B4-d, `TX = class(TAnc[, I1, ...])`
   with TAnc declared outside the cycle -- the leaf gets `TXBase = class(TAnc)`, the class becomes
   `TX = class(TXBase[, I1, ...])` (the interfaces stay on TX: their methods are implemented there). }
@@ -2883,6 +2903,7 @@ begin
   { E18 T7 F5: the base class stands in for the class only where nothing but a
     member read or a nil test happens to it }
   Site:= BaseSiteRefusal(pItem);
+  if Site <> '' then Site:= Site + RefCountedNote(FStore, pItem.Sym, pItem.BaseAncestor);
   { B4-d: a form / data module keeps its streamed members; the RTTI parent must not be observed }
   if Site = '' then Site:= StreamedMemberRefusal(pF, pItem);
   if Site = '' then Site:= ClassParentRefusal(pItem);
@@ -2893,6 +2914,7 @@ begin
   end;
   pItem.Kind:= mvBase;
 end;
+
 
 { B4-d: '' when the ancestor pAnc of the class is declared outside the cycle -- in a project unit
   that is no member of the group, or (no project row) in the platform library; else the site. }
@@ -3593,7 +3615,7 @@ begin
     for var M in TRegEx.Matches(CodeOf(LineAt(F.Lines, S.Line), csCode), '\b' + pItem.Sym.Name + '\b', [roIgnoreCase]) do
     begin
       case TypeSiteAt(F.Lines, S.Line, M.Index, Param) of
-        tsResult: Exit(Format('%s: a function result of type `%s`', [Site, pItem.Sym.Name]));
+        tsResult: Exit(Format('%s: a function result of type `%s` -- %s', [Site, pItem.Sym.Name, CReasonResult]));
         tsOther :
           begin
             var Why:= FieldSiteRefusal(pItem, S.Fid, S.Line, Field, SlotNames(Slots, -1));
@@ -3603,8 +3625,17 @@ begin
             else if (Field = '') and CtorSiteOk(pItem, CodeOf(LineAt(F.Lines, S.Line), csCode), M.Index, M.Length,
               SlotNames(Slots, RoutineAt(F, S.Line).Id), Fields) then Continue
             else if Field = '' then
+            begin
+              { lane CYC3 (case 15): a generic type argument says why }
+              var Gen:= TRegEx.Match(CodeOf(LineAt(F.Lines, S.Line), csCode), '([A-Za-z_][\w.]*)\s*<[^<>;]*\b' +
+                TRegEx.Escape(pItem.Sym.Name) + '\b[^<>;]*>', [roIgnoreCase]);
+              if Gen.Success then
+                Exit(Format('%s: `%s` is a generic type argument here (`%s`) -- `%s<%s>` and `%3:s<%5:s>` are different ' +
+                  'types (E2010), so every use of the constructed type would have to be retyped', [Site, pItem.Sym.Name,
+                  Gen.Value, Gen.Groups[1].Value, pItem.Sym.Name, pItem.BaseName]));
               Exit(Format('%s: `%s` is used here as something other than a parameter type (a field, ' +
                 'variable, cast or type argument)', [Site, pItem.Sym.Name]));
+            end;
             if Why <> '' then Exit(Why);
             Continue;
           end;
@@ -3612,8 +3643,8 @@ begin
       var Group:= Trim(TRegEx.Replace(Param, '^\[\s*ref\s*\]', '', [roIgnoreCase]));
       var Modifier:= LowerCase(Copy(Group, 1, Pos(' ', Group + ' ') - 1));
       if MatchText(Modifier, ['var', 'out']) then
-        Exit(Format('%s: `%s` is a `%s` parameter of type `%s`; a base class cannot stand in for it',
-          [Site, Group, Modifier, pItem.Sym.Name]));
+        Exit(Format('%s: `%s` is a `%s` parameter of type `%s`; a base class cannot stand in for it -- %s',
+          [Site, Group, Modifier, pItem.Sym.Name, Format(CReasonVarParam, [Modifier])]));
       if MatchText(Modifier, ['const', 'constref']) then Group:= Trim(Copy(Group, Length(Modifier) + 1, MaxInt));
       for var Name in Group.Split([',']) do
       begin
