@@ -362,6 +362,25 @@ function ComputeCoveredBy(const AStore: ISymbolStore; const ASym: TSymbol): stri
 function IsReferenceTypeName(const AStore: ISymbolStore; const ATypeName: string;
   const AFileId: Int64): Boolean;
 
+/// <summary>Drops ComputeCoveredBy's run-level store-lookup memos (152b O6).</summary>
+/// <remarks>The memos are keyed by the store's interface pointer and never expire on
+/// their own (nothing on the doc-facts path writes to a store). Call it whenever a
+/// store is freed or reopened while the process lives on -- Doc.Facts
+/// ClearDocFactsMemos does, so every caller of that clears these too. Not
+/// thread-safe: the doc-facts path runs on one thread.</remarks>
+procedure ClearCoveredByMemos;
+
+/// <summary>AStore.FindResolvedCallers(ASymbolId) through ComputeCoveredBy's run-level
+/// memo (152b O6): the first call asks the store, later calls for the same store and id
+/// return the identical array.</summary>
+/// <param name="AStore">Open symbol store; not owned. Must not be nil.</param>
+/// <param name="ASymbolId">Target symbol id in AStore.</param>
+/// <returns>The store's answer, unchanged.</returns>
+/// <remarks>Doc.Facts TDocFactsBuilder.Build asks it for the declaration's own
+/// 'Called from:' rows, so ComputeCoveredBy's first hop for the same symbol is a memo hit.
+/// Cleared by ClearCoveredByMemos. Not thread-safe.</remarks>
+function MemoResolvedCallers(const AStore: ISymbolStore; ASymbolId: Int64): TArray<TResolvedCaller>;
+
 /// <summary>v(ADP3 T14): the DI/ORM wiring string for ASym -- '; '-joined
 /// entries, each &lt;c&gt;di:&lt;interface&gt; (&lt;lifetime&gt;)&lt;/c&gt; or
 /// &lt;c&gt;ds:&lt;symbol&gt; -&gt; &lt;RELATION&gt; (&lt;COL&gt;, &lt;COL&gt;)&lt;/c&gt;. '' when the
@@ -3705,6 +3724,58 @@ begin
   end;
 end;
 
+{ 152b O6: run-level memos for ComputeCoveredBy's store lookups.
+  Every hover / document Build walks up to COVERED_BY_DEPTH reverse hops, and each
+  hop asked the store again for the same answers another walk had already fetched:
+  the callers of a shared caller, whether a routine is a test, whether a target is
+  a method. Profiled on the microniteTests copy (100 hovers): 7.4 ms per hover in
+  ComputeCoveredBy, all of it in those store calls (~1 ms each). The memo holds
+  exactly what the store returned, so a hit returns the identical answer (identity:
+  hover-cost.ps1 -RequireIdentical).
+  KEYED BY THE STORE POINTER, like Doc.Facts' run-level memos and for the same
+  reason (ids are per-DB); cleared by ClearCoveredByMemos, which
+  Doc.Facts.ClearDocFactsMemos calls wherever a store is reopened. }
+var
+  GCbCallers: TDictionary<string, TArray<TResolvedCaller>>; // 'r' resolved by id / 'n' unresolved by name
+  GCbFlags  : TDictionary<string, Boolean>;                 // 'm' TargetIsMethodOf / 't' IsTestRoutine
+
+function CbKey(const AStore: ISymbolStore; const AKind: Char; const ARest: string): string;
+begin
+  Result:= AKind + IntToHex(NativeUInt(Pointer(AStore))) + ':' + ARest;
+end;
+
+procedure ClearCoveredByMemos;
+begin
+  if GCbCallers <> nil then GCbCallers.Clear;
+  if GCbFlags   <> nil then GCbFlags.Clear;
+end;
+
+function MemoResolvedCallers(const AStore: ISymbolStore; ASymbolId: Int64): TArray<TResolvedCaller>;
+begin
+  var Key: string:= CbKey(AStore, 'r', IntToStr(ASymbolId));
+  if GCbCallers.TryGetValue(Key, Result) then Exit;
+  Result:= AStore.FindResolvedCallers(ASymbolId);
+  GCbCallers.Add(Key, Result);
+end;
+
+// Keyed by the name AS GIVEN (case kept): the memo never assumes how the store
+// compares names, so a hit is always the answer the same call returned.
+function MemoNameCallers(const AStore: ISymbolStore; const AName: string): TArray<TResolvedCaller>;
+begin
+  var Key: string:= CbKey(AStore, 'n', AName);
+  if GCbCallers.TryGetValue(Key, Result) then Exit;
+  Result:= AStore.FindUnresolvedNameCallers(AName);
+  GCbCallers.Add(Key, Result);
+end;
+
+function MemoIsTestRoutine(const AStore: ISymbolStore; ASymbolId: Int64; const ALocation: string): Boolean;
+begin
+  var Key: string:= CbKey(AStore, 't', IntToStr(ASymbolId) + ':' + ALocation);
+  if GCbFlags.TryGetValue(Key, Result) then Exit;
+  Result:= IsTestRoutine(AStore, ASymbolId, ALocation);
+  GCbFlags.Add(Key, Result);
+end;
+
 function ComputeCoveredBy(const AStore: ISymbolStore; const ASym: TSymbol): string;
 var
   Names  : TStringList;
@@ -3724,10 +3795,15 @@ var
   begin
     Result:= False;
     if ASymbolId <= 0 then Exit;
+    var Key: string:= CbKey(AStore, 'm', IntToStr(ASymbolId)); // 152b O6
+    if GCbFlags.TryGetValue(Key, Result) then Exit;
     S:= AStore.GetSymbolById(ASymbolId);
-    if (S.Id <= 0) or (S.ParentId <= 0) then Exit;
-    P:= AStore.GetSymbolById(S.ParentId);
-    Result:= P.Kind in [skClass, skInterface, skRecord];
+    if (S.Id > 0) and (S.ParentId > 0) then
+    begin
+      P:= AStore.GetSymbolById(S.ParentId);
+      Result:= P.Kind in [skClass, skInterface, skRecord];
+    end;
+    GCbFlags.Add(Key, Result);
   end;
 
   // Finds every caller of (ASymbolId as a resolved call_edges target) UNION
@@ -3753,7 +3829,7 @@ var
     NResolved:= 0;
     if ASymbolId > 0 then
     begin
-      Combined:= Combined + AStore.FindResolvedCallers(ASymbolId);
+      Combined:= Combined + MemoResolvedCallers(AStore, ASymbolId);
       NResolved:= Length(Combined);
     end;
     // v(ADP3 T3i, register E1): takes FindUnresolvedNameCallers' DEFAULT
@@ -3770,7 +3846,7 @@ var
     // below restricts it to routine kinds, so the non-routine exemption
     // DRagLint.Doc.Facts needs cannot arise here at all.
     if AQName <> '' then
-      Combined:= Combined + AStore.FindUnresolvedNameCallers(LastSegment(AQName));
+      Combined:= Combined + MemoNameCallers(AStore, LastSegment(AQName));
     if Length(Combined) = 0 then Exit;
 
     { IS THIS HOP'S TARGET A METHOD? Only then can a missing receiver be evidence
@@ -3814,7 +3890,7 @@ var
           (Idx < NResolved) or (not TargetIsMethod) or (Trim(RC.ReceiverText) <> '');
         var PathVerified: Boolean:= AVerified and EdgeVerified;
 
-        if IsTestRoutine(AStore, RC.EnclosingSymbolId, RC.Location) then
+        if MemoIsTestRoutine(AStore, RC.EnclosingSymbolId, RC.Location) then
         begin
           Names.Add(RC.EnclosingQName);
           { A test reachable by ANY verified path is verified, however many
@@ -3907,10 +3983,14 @@ begin
 end;
 
 initialization
+  GCbCallers:= TDictionary<string, TArray<TResolvedCaller>>.Create; // 152b O6
+  GCbFlags  := TDictionary<string, Boolean>.Create;
 
 finalization
   WriteFactsProfile;
   GUiTypeCache.Free;
+  GCbCallers.Free;
+  GCbFlags.Free;
   GFieldNames.Free;
   GFieldTypes.Free;
 

@@ -1345,6 +1345,7 @@ begin
   GRoutineNameCounts.Clear;
   GScopeMemberMemo  .Clear;
   GForeignKnownMemo .Clear;
+  ClearCoveredByMemos; // 152b O6: Doc.SymbolFacts' ComputeCoveredBy memos, same store-pointer keys
 end;
 
 function DocFactsBuildProfile: string;
@@ -4546,7 +4547,7 @@ begin
   EchoOrder:= TList<string>.Create;
   try
     TB0:= BTick;
-    ResCallers:= AStore.FindResolvedCallers(ASym.Id);
+    ResCallers:= MemoResolvedCallers(AStore, ASym.Id); { 152b O6: same store call, memoised -- ComputeCoveredBy's first hop reuses it }
     for RC in ResCallers do
     begin
       FR:= ToFactRef(AStore, RC); { primary store's rows -> primary store's ids }
