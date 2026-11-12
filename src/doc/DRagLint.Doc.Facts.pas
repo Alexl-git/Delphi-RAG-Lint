@@ -3121,13 +3121,60 @@ end;
   Same function ParseUsesFromContent and ParseDprUses scrub with -- one
   implementation. This is the family whose every previous instance came from a
   site growing its own half-scanner. }
+// 152b DOC handover: length of the leading `[...]` attribute group of S (S[1] =
+// '['), 0 when it does not close on this line. Skips Pascal string literals ('')
+// escapes) and nested []. Same rule as Doc.Drift.SkipAttributeGroup.
+function SkipDeclAttributeGroup(const S: string): Integer;
+var
+  I, Depth: Integer;
+  InStr   : Boolean;
+begin
+  Result:= 0;
+  Depth := 0;
+  InStr := False;
+  for I:= 1 to Length(S) do
+  begin
+    if S[I] = '''' then InStr:= not InStr
+    else if not InStr then
+    begin
+      if S[I] = '[' then Inc(Depth)
+      else if S[I] = ']' then
+      begin
+        Dec(Depth);
+        if Depth = 0 then Exit(I);
+      end;
+    end;
+  end;
+end;
+
+// 152b DOC handover: an attribute group `[Test] [Ignore('why: x')]` sits on the
+// symbol's index start line, so the line read here could be attribute text, not the
+// heading (its argument was then read as the signature). Leading `[...]` groups are
+// dropped, quote- and nesting-aware; an attribute-only line moves on to the next
+// one, up to MAX_ATTR_LINES. An unbalanced group (multi-line attribute) -> ''.
+// Pinned by tests\autotest\run_doc_attr_decl_apply_152b.ps1 (lane DOC).
 function ReadDeclLine(const AFilePath: string; ALine: Integer): string;
-var Lines: TArray<string>;
+const
+  MAX_ATTR_LINES = 8; // attribute-only lines skipped above the heading
+var
+  Lines: TArray<string>;
+  I, L : Integer      ;
+  S    : string       ;
 begin
   Result:= '';
   if (AFilePath = '') or (ALine <= 0) then Exit;
   Lines:= SourceLines(AFilePath);
-  if ALine <= Length(Lines) then Result:= Trim(StripPasCommentsKeepLayout(Lines[ALine - 1]));
+  for I:= ALine - 1 to Min(ALine - 1 + MAX_ATTR_LINES, Length(Lines)) - 1 do
+  begin
+    S:= Trim(StripPasCommentsKeepLayout(Lines[I]));
+    while (S <> '') and (S[1] = '[') do
+    begin
+      L:= SkipDeclAttributeGroup(S);
+      if L = 0 then Exit; // unbalanced (multi-line attribute): nothing reliable to read
+      S:= Trim(Copy(S, L + 1, MaxInt));
+    end;
+    if S <> '' then Exit(S);
+  end;
 end;
 
 { v(Q0, 2026-08-14): is the declaring unit marked `dl:shared`?
