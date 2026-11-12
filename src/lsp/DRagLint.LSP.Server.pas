@@ -158,6 +158,12 @@ type
   /// </remarks>
   TLspDbSet = record
     ProjectDb, LibraryDb: string;
+    /// <summary>152b DBS (O4): the platform's FURTHER library sections, in manifest
+    /// order, after LibraryDb (the first). Filled only by the manifest resolver
+    /// (TLspContextDbResolver); empty for --db lists, a context file's libraryDb and
+    /// the central defaults' library. StoreSet opens them after LibraryDb, so
+    /// first-wins on a duplicate name keeps the first library's symbol.</summary>
+    ExtraLibraryDbs: TArray<string>;
   end;
 
   /// <summary>Resolves (project file, platform) to its DB pair with the CLI's
@@ -4242,6 +4248,12 @@ begin
   if Result.LibraryDb = '' then Result.LibraryDb:= DefaultsLibraryDbFor(Defaults, ACtx.Platform);
   if (Result.LibraryDb = '') and UseResolver then Result.LibraryDb:= Resolved.LibraryDb;
   if (Result.LibraryDb <> '') and not TFile.Exists(Result.LibraryDb) then Result.LibraryDb:= '';
+  { 152b DBS (O4): the manifest's further library sections ride along only when the
+    library in use IS the manifest's first one -- a context file's or the defaults'
+    library is another install, and its siblings are not these. }
+  if UseResolver and (Result.LibraryDb <> '') and SameText(Result.LibraryDb, Resolved.LibraryDb) then
+    for var X: string in Resolved.ExtraLibraryDbs do
+      if TFile.Exists(X) and not SameText(X, Result.LibraryDb) then Result.ExtraLibraryDbs:= Result.ExtraLibraryDbs + [X];
 end;
 
 function TLSPServer.StoreSet(const ADbs: TLspDbSet): TArray<ISymbolStore>;
@@ -4249,7 +4261,7 @@ var
   E: TStoreSet;
   S: ISymbolStore;
 begin
-  E.Key:= LowerCase(ADbs.ProjectDb + '|' + ADbs.LibraryDb);
+  E.Key:= LowerCase(ADbs.ProjectDb + '|' + ADbs.LibraryDb + '|' + string.Join('|', ADbs.ExtraLibraryDbs));
   for var I:= 0 to FSets.Count - 1 do
     if FSets[I].Key = E.Key then
     begin
@@ -4263,7 +4275,9 @@ begin
     end;
   E.Stores:= nil;
   E.Paths := nil;
-  for var D: string in [ADbs.ProjectDb, ADbs.LibraryDb] do
+  var Wanted: TArray<string>:= [ADbs.ProjectDb, ADbs.LibraryDb];
+  Wanted:= Wanted + ADbs.ExtraLibraryDbs;  { 152b DBS (O4): further library sections last }
+  for var D: string in Wanted do
   begin
     if (D = '') or ((Length(E.Paths) > 0) and SameText(E.Paths[0], D)) then Continue;
     { Reuse an already open connection: the startup stores, then the cached sets. }
