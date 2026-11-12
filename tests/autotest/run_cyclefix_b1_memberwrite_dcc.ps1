@@ -22,6 +22,10 @@ param(
   [string]$Exe       = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-b1-dcc-$PID",
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite',
+  # Off by default (152b): the platform library is READ in place via --library-db, never copied (the DB is ~3.5 GB;
+  # a copy per run cost minutes and disk). -CopyLibrary restores the private copy for a run that must be immune to a
+  # concurrent re-index of the library.
+  [switch]$CopyLibrary,
   [switch]$KeepWorkDir
 )
 $ErrorActionPreference = 'Stop'
@@ -37,6 +41,7 @@ function Check($n, $ok, $d = '') {
 }
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 $Exe   = (Resolve-Path $Exe).Path
+. "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152b: no machine drag-lint.json beside the engine
 $Repo  = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $Fx    = Join-Path $Repo 'tests\fixtures\cyclefix\memberwrite'
 $Ascii = [Text.Encoding]::ASCII
@@ -127,10 +132,19 @@ function Test-Tree([string]$Tag, [string]$Member, [scriptblock]$Edit) {
   return @{ Dir = $work; Out = $out0 }
 }
 
+# Files over pMB megabytes under pDir (a library copy is ~3500 MB; the fixture trees are KBs).
+function Get-BigFiles([string]$pDir, [double]$pMB) {
+  @(Get-ChildItem -LiteralPath $pDir -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Length -gt ($pMB * 1MB) })
+}
 New-Item -ItemType Directory -Force $WorkDir | Out-Null
 try {
-  $Lib = Join-Path $WorkDir 'library-copy.sqlite'
-  Copy-Item $LibraryDb $Lib
+  Check 'H1 the engine runs without a drag-lint.json beside it (hermetic)' (-not (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $Exe) 'drag-lint.json'))) $Exe
+  $ctl = Join-Path $WorkDir 'ctl'; New-Item -ItemType Directory -Force $ctl | Out-Null
+  [IO.File]::WriteAllBytes((Join-Path $ctl 'big.bin'), (New-Object byte[] (2MB)))
+  Check 'H0 control: Get-BigFiles sees a 2 MB file at a 1 MB threshold' ((Get-BigFiles $ctl 1).Count -eq 1) ''
+  [IO.File]::Delete((Join-Path $ctl 'big.bin'))
+  $Lib = $LibraryDb
+  if ($CopyLibrary) { $Lib = Join-Path $WorkDir 'library-copy.sqlite'; Copy-Item $LibraryDb $Lib }
   $prop = Test-Tree 'property' 'LastGage' $null
   $null = Test-Tree 'field' 'Count' {
     param($d)
@@ -154,6 +168,7 @@ try {
   Check 'pc2a the cast line was changed back' $ok2 ''
   $bc = Invoke-Build (Join-Path $prop.Dir 'MemberWrite.dproj')
   Check 'pc2b it does NOT compile (the build check has teeth)' (-not $bc.Ok) $bc.Errors
+  if (-not $CopyLibrary) { Check 'H2 no library copy: the work dir holds no file over 100 MB' ((Get-BigFiles $WorkDir 100).Count -eq 0) ((Get-BigFiles $WorkDir 100 | ForEach-Object FullName) -join ', ') }
 } finally {
   # Cleanup is best effort: under load a just-exited MemberWrite.exe (or a scanner) still holds
   # the demo exe for a moment. Retry, then WARN; a locked scratch dir is not a product failure.
