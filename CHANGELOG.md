@@ -145,6 +145,7 @@ Everything since v1.46.0-alpha (2026-11-07): waves 147, 148, 149, 151 and 152, r
   start with T/I (now consistently omitted).
 - Fixed: `Owns returned:` is shown for a function returning a class declared in another unit even when its name does not start with T/I, and never for HWND / DWORD-like value aliases; the reference-type check runs when the facts are read, so it does not depend on index order. Needs the re-parse (extractor change). (152b DF O7)
 - Fixed: doc facts read the declaration line past leading attributes, so an attribute argument is no longer part of the signature. (152b DF)
+- Fixed: `document --unit` / `--qname` no longer builds exception and call facts from a callee file rewritten since it was indexed (e.g. by an earlier `document --unit X --apply`, no reindex between): the callee's indexed line range covered other text, so tags cited the wrong routines or dropped the right one. The run is now REFUSED (exit 1, nothing written) naming the changed file(s) and the reindex command; the documented file's own staleness keeps the reindex-and-retry.
 - Faster: the `Covered by:` walk prepares each store query once and memoizes symbol rows and the TTestCase verdict per run: CLIENT 4.8-4.9 -> 1.3-1.7 ms per hover, hover text identical 199/199. (152b DF O6)
 
 ### Language server, IDE plugin and VS Code
