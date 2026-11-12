@@ -336,6 +336,7 @@ type
       // index -- no writes, so --no-write-back is unaffected.
       FAnchorCache           : TDictionary<Int64, string>; // file id -> '' | 'Vcl' | 'FMX'
       FDerivingAnchor        : Boolean;                    // re-entrancy guard
+      FQBySql                : TObjectDictionary<string, TFDQuery>; // 152b O6F: read statements prepared on first use, keyed by SQL text (see CachedQuery)
 
       { C1b: the flow oracles' store-lifetime memo. Rides the SAME invalidation
         as FAnchorCache above -- ResolveAncestry clears both -- because both are
@@ -1177,6 +1178,19 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure PrepareStatements;
+      /// <summary>A query on FConn holding ASql, prepared on first use and kept for the store's
+      /// lifetime (152b O6F), so a hot read verb pays bind + step instead of a TFDQuery build and an
+      /// SQL compile per call.</summary>
+      /// <param name="ASql">The exact statement text; it is the cache key, so a routine that builds
+      /// several shapes gets one statement per shape.</param>
+      /// <param name="AOwned">True when the cached statement was busy (open in an outer frame) and a
+      /// fresh query was built instead: the caller frees it. False: the caller only closes it (never
+      /// frees it: the cache owns it).</param>
+      /// <returns>A closed query with SQL.Text = ASql; parameters keep the previous call's values
+      /// until set.</returns>
+      /// <remarks>Same threading contract as the other prepared statements of this store (one
+      /// thread at a time).</remarks>
+      function CachedQuery(const ASql: string; out AOwned: Boolean): TFDQuery;
       { PHASE C B6: one-off repair for `files` rows that name ONE file under more
         than one spelling, plus a re-spelling of any surviving legacy row to the
         canonical form. Run from Migrate, so it reaches every DB that is opened
@@ -2828,6 +2842,11 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function HasTestRoutineMarkers: Boolean                                                ;
+      /// <summary>Implements ISymbolStore.HasTestCaseAncestryNames -- two LIMIT 1 probes, not cached
+      /// (the caller memoizes per run).</summary>
+      /// <returns>True when type_ancestors has an ancestor_name or symbols a name equal to
+      /// 'TTestCase' (COLLATE NOCASE).</returns>
+      function HasTestCaseAncestryNames: Boolean;
       /// <param name="APattern"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ATopK"><!-- drag-lint:auto type -->Integer = 10</param>
       /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
@@ -5156,6 +5175,7 @@ begin
   FHasCommentFacts  := -1; { 151 ST: probed lazily -- see HasCommentFacts }
   FLateAncCache  := TDictionary<string, TSymbol>.Create;
   FAnchorCache   := TDictionary<Int64, string>.Create; // Task 3c; see FrameworkAnchorForFile
+  FQBySql        := TObjectDictionary<string, TFDQuery>.Create([doOwnsValues]); // 152b O6F; see CachedQuery
   FFlowOracles   := TFlowOracleCache.Create;           // C1b; see FlowOracles
   FDerivingAnchor:= False;
   { Resolve scope -- see the field block. Empty means "this instance has written
@@ -6389,6 +6409,7 @@ begin
   FQDeleteFileUnitUses.Free;
   FQGetFileUnitUses.Free;
   FQFindUsersOfUnit.Free;
+  FQBySql.Free;
   FAnchorCache.Free;
   FFlowOracles.Free;
   if Assigned(FConn) then
@@ -9541,6 +9562,33 @@ begin
   end;
 end;
 
+function TSQLiteSymbolStore.CachedQuery(const ASql: string; out AOwned: Boolean): TFDQuery;
+begin
+  AOwned:= False;
+  if FQBySql.TryGetValue(ASql, Result) and not Result.Active then Exit;
+  if Result = nil then
+  begin
+    Result:= TFDQuery.Create(nil);
+    try
+      Result.Connection:= FConn;
+      Result.SQL.Text:= ASql;
+      FQBySql.Add(ASql, Result);
+    except
+      on Exception do
+      begin
+        Result.Free; { not yet held by the cache }
+        raise;
+      end;
+    end;
+    Exit;
+  end;
+  { Busy: an outer frame still has the cached statement open. }
+  AOwned:= True;
+  Result:= TFDQuery.Create(nil);
+  Result.Connection:= FConn;
+  Result.SQL.Text:= ASql;
+end;
+
 function TSQLiteSymbolStore.FindResolvedCallers(ATargetSymbolId: Int64): TArray<TResolvedCaller>;
 var
   Q   : TFDQuery              ;
@@ -9549,11 +9597,12 @@ var
   MemberArm: string           ; { the member_accesses UNION arm, '' on a DB without the table }
   ValueArm : string           ; { the bound-USAGE UNION arm (enum reads, bound bare writes) }
   NoMemberAccess: string      ; { ValueArm's member_accesses exclusion, '' without the table }
+  Owned    : Boolean          ; { 152b O6F: Q is a fresh query to free, not the cached statement }
 begin
   List:= TList<TResolvedCaller>.Create;
-  Q:= TFDQuery.Create(nil);
+  Q:= nil;
+  Owned:= False;
   try
-    Q.Connection:= FConn;
     if HasMemberAccesses then
       MemberArm:=
         'UNION ALL ' +
@@ -9618,7 +9667,8 @@ begin
       'AND NOT EXISTS (SELECT 1 FROM call_edges ce2 WHERE ce2.ref_id = r.id) ' +
       NoMemberAccess;
 
-    Q.SQL.Text:=
+    { 152b O6F: one prepared statement per shape for the store's lifetime (see CachedQuery). }
+    Q:= CachedQuery(
       { Wrapped in a subquery: a compound SELECT may only ORDER BY a result
         column, and the confidence CASE below is an expression. }
       'SELECT * FROM (' +
@@ -9647,7 +9697,7 @@ begin
       // value is ever introduced, it must be slotted into this CASE on purpose --
       // it will otherwise fall into the ELSE bucket (sorted last, alongside
       // 'ambiguous') rather than silently reordering the existing two.
-      ') ORDER BY CASE confidence WHEN ''certain'' THEN 0 ELSE 1 END, encl_qname';
+      ') ORDER BY CASE confidence WHEN ''certain'' THEN 0 ELSE 1 END, encl_qname', Owned);
     Q.ParamByName('x').AsLargeInt:= ATargetSymbolId;
     Q.Open;
     while not Q.Eof do
@@ -9672,7 +9722,7 @@ begin
     end; // while
     Result:= List.ToArray;
   finally
-    Q.Free;
+    if Owned then Q.Free else if Q <> nil then Q.Close;
     List.Free;
   end; // try
 end; // function
@@ -9794,6 +9844,7 @@ var
   RtyCol: string                ; { item 4: the receiver_type_text select term }
   RtyList: TList<string>        ; { item 4: receiver_type_text per row of List }
   UnknownRty: Boolean           ; { item 4: the column is absent (pre-item-4 DB) }
+  Owned : Boolean               ; { 152b O6F: Q is a fresh query to free, not the cached statement }
 begin
   { ACallSitesOnly=False is the historic kind-blind scan. Its contract lives on
     the ISymbolStore declaration in DRagLint.Core.Interfaces and nowhere else --
@@ -9926,10 +9977,11 @@ begin
     FRtyColumn:= (if ProbeExists('SELECT 1 FROM pragma_table_info(''refs'') WHERE name = ''receiver_type_text''') then 1 else 2);
   UnknownRty:= FRtyColumn = 2;
   RtyCol:= (if UnknownRty then ''''' AS rty ' else 'r.receiver_type_text AS rty ');
-  Q:= TFDQuery.Create(nil);
+  Q:= nil;
+  Owned:= False;
   try
-    Q.Connection:= FConn;
-    Q.SQL.Text:= ScopeC +
+    { 152b O6F: one prepared statement per shape for the store's lifetime (see CachedQuery). }
+    Q:= CachedQuery(ScopeC +
       'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, ' +
       '       r.receiver_text, ' + RtyCol +
       'FROM refs r ' +
@@ -9941,7 +9993,7 @@ begin
       '        SELECT id FROM symbols WHERE name = :n2 AND kind IN (''class'',''interface'',''record'',''type''))) ' +
       RcvP +
       ScopeP +
-      'ORDER BY f.path, r.start_line';
+      'ORDER BY f.path, r.start_line', Owned);
     Q.ParamByName('n').AsWideString:= AName;
     Q.ParamByName('n2').AsWideString:= AName;
     if RcvP <> '' then
@@ -9977,7 +10029,7 @@ begin
     if (Trim(AOwnerTypeName) <> '') and not UnknownRty then MarkForeignTypedCallers(AOwnerTypeName, List, RtyList);
     Result:= List.ToArray;
   finally
-    Q.Free;
+    if Owned then Q.Free else if Q <> nil then Q.Close;
     List.Free;
     RtyList.Free;
   end; // try
@@ -12528,6 +12580,13 @@ begin
   FTestMarkersValue:= Result;
   FTestMarkersKnown:= True;
 end; // function
+
+function TSQLiteSymbolStore.HasTestCaseAncestryNames: Boolean;
+begin
+  { NOCASE folds ASCII only, as SameText (MatchesName) does, and 'TTestCase' is ASCII. }
+  Result:= ProbeExists('SELECT 1 FROM type_ancestors WHERE ancestor_name = ''TTestCase'' COLLATE NOCASE LIMIT 1')
+       or ProbeExists('SELECT 1 FROM symbols WHERE name = ''TTestCase'' COLLATE NOCASE LIMIT 1');
+end;
 
 function TSQLiteSymbolStore.CountCallerSitesByNames(const ANames: TArray<string>): TArray<Integer>;
 { ONE statement for the whole batch:
@@ -19136,17 +19195,19 @@ var
   Queue    : TQueue<Int64>             ;
   Q        : TFDQuery                  ;
   Hops     : Integer                   ;
+  Owned    : Boolean                   ; // 152b O6F: Q is a fresh query to free, not the cached statement
 begin
   Acc     := TList<TTypeAncestor>.Create;
   Seen    := TDictionary<string, Boolean>.Create;
   Expanded:= TDictionary<Int64, Boolean>.Create;
   CurFileId:= TDictionary<Int64, Int64>.Create;
   Queue   := TQueue<Int64>.Create;
-  Q       := TFDQuery.Create(nil);
+  Q       := nil;
+  Owned   := False;
   try
-    Q.Connection:= FConn;
-    Q.SQL.Text  := 'SELECT ordinal, ancestor_name, ancestor_kind, ancestor_symbol_id, ' +
-                   '  ancestor_file_id, ancestor_type_args FROM type_ancestors WHERE symbol_id = :sid ORDER BY ordinal';
+    // 152b O6F: prepared once per store (see CachedQuery).
+    Q:= CachedQuery('SELECT ordinal, ancestor_name, ancestor_kind, ancestor_symbol_id, ' +
+                   '  ancestor_file_id, ancestor_type_args FROM type_ancestors WHERE symbol_id = :sid ORDER BY ordinal', Owned);
     Queue.Enqueue(ASymbolId);
     Expanded.AddOrSetValue(ASymbolId, True);
     Hops:= 0;
@@ -19282,7 +19343,7 @@ begin
     end; // while
     Result:= Acc.ToArray;
   finally
-    Q.Free;
+    if Owned then Q.Free else if Q <> nil then Q.Close;
     Queue.Free;
     CurFileId.Free;
     Expanded.Free;

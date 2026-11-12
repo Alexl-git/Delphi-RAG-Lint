@@ -3529,6 +3529,49 @@ begin
   if P >= 0 then Result:= Copy(S, P + 2, MaxInt) else Result:= S;
 end;
 
+{ 152b O6F: run-level memos of the walk's symbol lookups. GCbTestCase: rule (b) per FIXTURE
+  CLASS -- every method of one class asked GetTransitiveAncestors for the same class again.
+  GCbSymbols: the symbol rows IsTestRoutine and TargetIsMethodOf read -- the same caller and its
+  owning class were fetched by both, and by every sibling method. Key: store pointer + id (ids
+  are per-DB, as for the other covered-by memos); cleared by ClearCoveredByMemos. }
+var
+  GCbTestCase: TDictionary<string, Boolean>;
+  GCbSymbols : TDictionary<string, TSymbol>;
+
+function MemoSymbolById(const AStore: ISymbolStore; AId: Int64): TSymbol;
+begin
+  var Key: string:= IntToHex(NativeUInt(Pointer(AStore))) + ':' + IntToStr(AId);
+  if GCbSymbols.TryGetValue(Key, Result) then Exit;
+  Result:= AStore.GetSymbolById(AId);
+  GCbSymbols.Add(Key, Result);
+end;
+
+function DescendsFromTestCase(const AStore: ISymbolStore; AClassId: Int64): Boolean;
+var
+  Anc: TTypeAncestor;
+begin
+  var Key: string:= IntToHex(NativeUInt(Pointer(AStore))) + ':' + IntToStr(AClassId);
+  if GCbTestCase.TryGetValue(Key, Result) then Exit;
+  Result:= False;
+  { An index with no 'TTestCase' name at all cannot answer True (HasTestCaseAncestryNames is
+    that proof); asked once per run under the key '<store>:*'. }
+  var AnyKey: string:= IntToHex(NativeUInt(Pointer(AStore))) + ':*';
+  var Any: Boolean;
+  if not GCbTestCase.TryGetValue(AnyKey, Any) then
+  begin
+    Any:= AStore.HasTestCaseAncestryNames;
+    GCbTestCase.Add(AnyKey, Any);
+  end;
+  if not Any then Exit;
+  for Anc in AStore.GetTransitiveAncestors(AClassId) do
+    if Anc.MatchesName('TTestCase') then { alias AND its target }
+    begin
+      Result:= True;
+      Break;
+    end;
+  GCbTestCase.Add(Key, Result);
+end;
+
 // True when the caller routine identified by (ASymbolId, AQName, ALocation)
 // -- one row of a FindResolvedCallers/FindUnresolvedNameCallers result -- is
 // a TEST routine, by either of two GROUND-TRUTH rules:
@@ -3591,11 +3634,10 @@ var
   BaseName : string;
   Sym      : TSymbol;
   ParentSym: TSymbol;
-  Anc      : TTypeAncestor;
 begin
   Result:= False;
   if ASymbolId <= 0 then Exit;
-  Sym:= AStore.GetSymbolById(ASymbolId);
+  Sym:= MemoSymbolById(AStore, ASymbolId);
 
   // (a) file-name convention -- query-free, and NECESSARY-not-sufficient
   //     (B10). One of (a1)/(a2) must corroborate it.
@@ -3607,7 +3649,7 @@ begin
     // (a2) or it is a method of a fixture-named class.
     if Sym.ParentId > 0 then
     begin
-      ParentSym:= AStore.GetSymbolById(Sym.ParentId);
+      ParentSym:= MemoSymbolById(AStore, Sym.ParentId);
       if (ParentSym.Kind = skClass)
          and (StartsText('Test', ParentSym.Name)
               or EndsText('Test', ParentSym.Name)
@@ -3617,10 +3659,9 @@ begin
 
   // (b) TTestCase ancestry -- reached whenever (a) did not already conclude.
   if Sym.ParentId <= 0 then Exit;
-  ParentSym:= AStore.GetSymbolById(Sym.ParentId);
+  ParentSym:= MemoSymbolById(AStore, Sym.ParentId);
   if ParentSym.Kind <> skClass then Exit;
-  for Anc in AStore.GetTransitiveAncestors(ParentSym.Id) do
-    if Anc.MatchesName('TTestCase') then Exit(True); { alias AND its target }
+  Result:= DescendsFromTestCase(AStore, ParentSym.Id); // 152b O6F: memo per class
 end;
 
 // v(ADP3 T14): DI/ORM wiring for one symbol, as the stored wire string --
@@ -3748,6 +3789,8 @@ procedure ClearCoveredByMemos;
 begin
   if GCbCallers <> nil then GCbCallers.Clear;
   if GCbFlags   <> nil then GCbFlags.Clear;
+  if GCbTestCase <> nil then GCbTestCase.Clear;
+  if GCbSymbols  <> nil then GCbSymbols.Clear;
 end;
 
 function MemoResolvedCallers(const AStore: ISymbolStore; ASymbolId: Int64): TArray<TResolvedCaller>;
@@ -3797,10 +3840,10 @@ var
     if ASymbolId <= 0 then Exit;
     var Key: string:= CbKey(AStore, 'm', IntToStr(ASymbolId)); // 152b O6
     if GCbFlags.TryGetValue(Key, Result) then Exit;
-    S:= AStore.GetSymbolById(ASymbolId);
+    S:= MemoSymbolById(AStore, ASymbolId);
     if (S.Id > 0) and (S.ParentId > 0) then
     begin
-      P:= AStore.GetSymbolById(S.ParentId);
+      P:= MemoSymbolById(AStore, S.ParentId);
       Result:= P.Kind in [skClass, skInterface, skRecord];
     end;
     GCbFlags.Add(Key, Result);
@@ -3985,12 +4028,16 @@ end;
 initialization
   GCbCallers:= TDictionary<string, TArray<TResolvedCaller>>.Create; // 152b O6
   GCbFlags  := TDictionary<string, Boolean>.Create;
+  GCbTestCase:= TDictionary<string, Boolean>.Create; // 152b O6F
+  GCbSymbols := TDictionary<string, TSymbol>.Create; // 152b O6F
 
 finalization
   WriteFactsProfile;
   GUiTypeCache.Free;
   GCbCallers.Free;
   GCbFlags.Free;
+  GCbTestCase.Free;
+  GCbSymbols.Free;
   GFieldNames.Free;
   GFieldTypes.Free;
 

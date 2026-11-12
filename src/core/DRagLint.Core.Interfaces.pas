@@ -794,6 +794,17 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function HasTestRoutineMarkers: Boolean                                                ;
+    /// <summary>True when this index holds a type_ancestors row or a symbol named 'TTestCase'
+    /// (case-insensitive) -- the only two sources a GetTransitiveAncestors row can satisfy
+    /// TTypeAncestor.MatchesName('TTestCase') from: Name is a stored ancestor_name, ResolvedName
+    /// the name of a symbol of this index (152b O6F).</summary>
+    /// <returns>False is a PROOF that no ancestor walk over this store reaches TTestCase, by name or
+    /// as an alias target, so DRagLint.Doc.SymbolFacts.IsTestRoutine's ancestry rule is False for
+    /// every routine.</returns>
+    /// <remarks>Not cached by the store: DRagLint.Doc.SymbolFacts memoizes it per run (cleared by
+    /// ClearCoveredByMemos). type_ancestors.ancestor_name carries no index, so a call is one
+    /// scan of that table at worst.</remarks>
+    function HasTestCaseAncestryNames: Boolean;
     /// <param name="APattern"><!-- drag-lint:auto type -->const string</param>
     /// <param name="ATopK"><!-- drag-lint:auto type -->Integer = 10</param>
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
