@@ -81,6 +81,10 @@ $files += @(Get-ChildItem (Join-Path $repo 'src\doc') -File -Filter 'DRagLint.Do
 foreach ($a in @('DRagLint.Analysis.Cfg.pas', 'DRagLint.Analysis.DataFlow.pas', 'DRagLint.Analysis.Flow.Lattices.pas')) {
   $files += @(Get-ChildItem (Join-Path $repo 'src\analysis') -File -Filter $a)
 }
+# 152b ST O5 (2026-11-11): DRagLint.Storage.FileMembership.pas sets the FireDAC connection's
+# StrsTrim := False, which decides whether a stored TEXT value keeps its trailing spaces -- a
+# change to it changes stored rows, so it is extraction surface (joined with extractor 1.37.0).
+$files += @(Get-ChildItem (Join-Path $repo 'src\storage') -File -Filter 'DRagLint.Storage.FileMembership.pas')
 
 # F3 (deep review 2026-10-25): the storage WRITE side decides what a stored row
 # CONTAINS (receiver_text, member_accesses.mode, ...), so it is part of the
@@ -132,6 +136,8 @@ Check 'no storage writer is outside the emit list' ($unlisted.Count -eq 0) `
   $(if ($unlisted.Count) { ($unlisted -join ', ') + '  -- add to $emitRoutines, or $notEmit with a reason' } else { 'emit list covers Upsert*/Put*/Insert*/Write*' })
 $rel = @($files | ForEach-Object { $_.FullName.Substring($repo.Length + 1) } | Sort-Object)
 Check 'the extraction surface is non-empty' ($rel.Count -gt 5) "$($rel.Count) file(s)"
+Check 'the surface holds Storage.FileMembership.pas (StrsTrim decides stored TEXT)' `
+  ($rel -contains 'src\storage\DRagLint.Storage.FileMembership.pas') 'missing from $files'
 
 $sha = [System.Security.Cryptography.SHA256]::Create()
 $acc = New-Object System.IO.MemoryStream

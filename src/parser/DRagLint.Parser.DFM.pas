@@ -86,7 +86,8 @@ type
       /// <seealso cref="DRagLint.Parser.DFM.ParseDfmSource"/>
       /// <seealso cref="DRagLint.Parser.DFM.TDfmState.Create"/>
       /// <seealso cref="DRagLint.Parser.DFM.WalkObject"/>
-      /// <!-- drag-lint:auto END -->      /// </remarks>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function Parse(const ASource: TBytes; const AFilePath: string): TParseResult;
   end;
 
@@ -110,7 +111,7 @@ type
 /// <returns><!-- drag-lint:auto type -->PTSLanguage</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Parser.DFM.ExtractDfmEventBindings (DRagLint.Parser.DFM.pas), DRagLint.Parser.DFM.TDFMParser.Create (DRagLint.Parser.DFM.pas)</para>
+/// <para>Called from: DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Parser.DFM.ExtractDfmEventBindings (DRagLint.Parser.DFM.pas), DRagLint.Parser.DFM.ExtractDfmPropertyRowsFromBytes (DRagLint.Parser.DFM.pas), DRagLint.Parser.DFM.TDFMParser.Create (DRagLint.Parser.DFM.pas)</para>
 /// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -150,7 +151,8 @@ external 'tree-sitter-dfm';
 /// <seealso cref="DRagLint.Parser.DFM.ParseDfmSource"/>
 /// <seealso cref="DRagLint.Parser.DFM.TDfmState.Create"/>
 /// <seealso cref="DRagLint.Parser.DFM.tree_sitter_dfm"/>
-/// <!-- drag-lint:auto END -->/// </remarks>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ExtractDfmEventBindings(const ASource: TBytes): TArray<TDfmEventBinding>;
 
 /// <summary>151 Y2: every property assignment of ONE text .dfm as dfm_properties
@@ -174,9 +176,21 @@ function ExtractDfmEventBindings(const ASource: TBytes): TArray<TDfmEventBinding
 /// copied); any other kind its source text with CR LF / CR as #10. Positions are
 /// 1-based, columns in UTF-8 bytes. Empty for a binary .dfm.</returns>
 /// <exception cref="ETreeSitterException">via TreeSitter.TTSParser.SetLanguage when the grammar DLL cannot be bound.</exception>
-/// <remarks>Objects nested INSIDE a collection item are not dfm_objects rows
+/// <remarks>
+/// Objects nested INSIDE a collection item are not dfm_objects rows
 /// (WalkObject never descends into a property value) and get no rows. Pure; one
-/// parse per call.</remarks>
+/// parse per call.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Parser.DFMProps.ExtractDfmPropertyRows (DRagLint.Parser.DFMProps.pas)</para>
+/// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Parser.DFM.IsBinaryDfmBytes, DRagLint.Parser.DFM.ParseDfmSource, DRagLint.Parser.DFM.TDfmState.Create, DRagLint.Parser.DFM.tree_sitter_dfm, DRagLint.Parser.DFM.WalkObject, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.SetLanguage, TreeSitter.TTSTree.RootNode</para>
+/// <para>Returns: nil; State.DfmProps.ToArray</para>
+/// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
+/// <seealso cref="DRagLint.Parser.DFM.IsBinaryDfmBytes"/>
+/// <seealso cref="DRagLint.Parser.DFM.ParseDfmSource"/>
+/// <seealso cref="DRagLint.Parser.DFM.TDfmState.Create"/>
+/// <seealso cref="DRagLint.Parser.DFM.tree_sitter_dfm"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ExtractDfmPropertyRowsFromBytes(const ASource: TBytes): TArray<TDfmPropertyRow>;
 
 implementation

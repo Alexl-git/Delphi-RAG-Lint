@@ -131,6 +131,10 @@ procedure ArmBusyTimeout(AConn: TFDConnection; ABusyTimeoutMs: Integer = DEFAULT
 /// `graph`, `diff`, `query hints` and `--selftest-schema` until 2026-09-23.
 /// Does not check the schema version: a caller that needs the current schema
 /// asks for it (TSQLiteSymbolStore.IsSchemaCurrent) and refuses a stale one.
+/// STRINGS ARE FETCHED AS STORED (152b O5): FormatOptions.StrsTrim is False,
+/// so a value with trailing spaces (a .dfm Caption = 'OGP  ') reads back with
+/// them; FireDAC's default True trimmed them. Pinned by
+/// run_store_trailing_space.ps1 (B1, C1).
 /// Thread-safe: touches only AConn.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.CountStaleFilesWithoutCallEdges (DRagLint.CLI.pas), DRagLint.CLI.DbLooksHealthy (DRagLint.CLI.pas), DRagLint.CLI.DoDiff (DRagLint.CLI.pas), DRagLint.CLI.DoExportObsidian (DRagLint.CLI.pas), DRagLint.CLI.DoGraph (DRagLint.CLI.pas) (+11 more)</para>
@@ -186,6 +190,10 @@ procedure ConnectReadOnly(AConn: TFDConnection; const ADbPath: string;
 /// commit in between (the intermittent FOREIGN KEY failure of the resolve
 /// passes). A second writer now waits on the busy timeout instead; guard:
 /// tests\autotest\run_index_two_writers_fk.ps1.
+/// STRINGS ARE STORED AS WRITTEN (152b O5): FormatOptions.StrsTrim is False.
+/// FireDAC's default True trimmed every string parameter, so a .dfm
+/// Caption = 'OGP  ' and a literal 'Pad  ' were stored without their trailing
+/// spaces. Pinned by run_store_trailing_space.ps1 (A1-A4).
 /// Thread-safe: touches only AConn.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoImportLog (DRagLint.CLI.pas), DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.Connect (DRagLint.Storage.SQLite.pas)</para>
@@ -433,6 +441,7 @@ begin
   AConn.Params.Values['JournalMode']:= if HeaderSaysWal(ADbPath) then 'WAL' else 'Delete';
   AConn.Params.Values['Synchronous']:= 'Normal';
   ArmBusyTimeout(AConn, ABusyTimeoutMs);
+  AConn.FormatOptions.StrsTrim:= False; { O5: fetch 'OGP  ' as stored, never trimmed }
   AConn.LoginPrompt:= False;
   AConn.Connected  := True;
   AConn.ExecSQL('PRAGMA query_only = ON'); { reject every write on this handle }
@@ -594,6 +603,7 @@ begin
     and so reads and writes under one lock; a second writer waits on the busy timeout
     instead of re-issuing the ids between the pass's reads and its writes. }
   AConn.TxOptions.Isolation:= xiSnapshot;
+  AConn.FormatOptions.StrsTrim:= False; { O5: store 'OGP  ' as written; FireDAC's default trims string params }
   AConn.LoginPrompt:= False;
   AConn.Connected  := True;
 end; // procedure

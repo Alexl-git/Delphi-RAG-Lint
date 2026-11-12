@@ -1217,4 +1217,8 @@
 #   Superseded: 1.35.0-alpha|dd83058afd2b888326dbb7951a3446d708f588a8827e6072c814ae01d44fd138
 #   2026-11-11 151 INT re-pin (same unreleased 1.36.0 bump): whole-branch lint sweep -- dl:ok markers on Preprocess ResolveTracePath (best-effort NOTE) and CommentFacts uses, Preprocess 'finalization' moved to its own line; comments / layout only, no parse, symbol, ref or edge change.
 #   Superseded: 1.36.0-alpha|79faaf616308e0311f5e6cf2bd1334acc354ee44db74f36260f569087b60ff39
-1.36.0-alpha|2ce5c03f1dfc072fe69fd79e2a21fca88fc36a11c1f023b4fbe27695b9cdee70
+#   2026-11-11 152b INT2 bump 1.36.0 -> 1.37.0 (ONE bump for wave 152b): ST O5 StrsTrim off (Storage.FileMembership.pas joins the surface), DF O7/O6F Doc.SymbolFacts, GF1 Flow.Lattices named args, GR3 grammar v1.4.10.
+#   Superseded: 1.36.0-alpha|2ce5c03f1dfc072fe69fd79e2a21fca88fc36a11c1f023b4fbe27695b9cdee70
+#   2026-11-12 152b INT2 re-pin (same unreleased 1.37.0 bump, no extraction change): comment-only -- BKL O3 doc-drift regen (/// facts blocks, 32 units), dl:ok marker re-hash / removal, CLI.pas dl:ok magic-literal on --limit; Doc.Facts SkipDeclAttributeGroup moved to the interface (doc side, not extraction)
+#   Superseded: 1.37.0-alpha|3744504d7fc3ac508ec2b86445513f50721bcc55e8f7d4201a05245f78ed0dfa
+1.37.0-alpha|76f35ddad4fe6e537d10cc9d145cc5c61845abcff35670bcda7fe5c4c607c70d

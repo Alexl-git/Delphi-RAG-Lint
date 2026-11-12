@@ -90,7 +90,7 @@ type
   /// recovered from the nearest visibility-bearing sibling instead of being
   /// fabricated.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoConvertScaffold.NodeOfPath (DRagLint.CLI.pas), DRagLint.CLI.DoPropTree.KindLabel (DRagLint.CLI.pas) ?, DRagLint.CLI.DoPropTree.PassesMinVisibility (DRagLint.CLI.pas) ?, DRagLint.Convert.PropCache.TClassRef.ResolvePath (DRagLint.Convert.PropCache.pas), DRagLint.Convert.PropTree.TPropMemberResolver.ResolveMembers (DRagLint.Convert.PropTree.pas) (+21 more)</para>
+  /// <para>Used by: DRagLint.CLI.DoConvertScaffold.NodeOfPath (DRagLint.CLI.pas), DRagLint.CLI.DoPropTree.KindLabel (DRagLint.CLI.pas) ?, DRagLint.CLI.DoPropTree.PassesMinVisibility (DRagLint.CLI.pas) ?, DRagLint.Convert.PropCache.TClassRef.ResolvePath (DRagLint.Convert.PropCache.pas), DRagLint.Convert.PropTree.TPropMemberResolver.ResolveMembers (DRagLint.Convert.PropTree.pas) (+20 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.GlyphVacuum, DRagLint.Convert.PropCache, DRagLint.Convert.PropTree</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -204,7 +204,7 @@ type
   /// True when the Depth cap stopped a class-typed expansion that would otherwise
   /// have recursed further.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: [drag-lint]declaration (DRagLint.Convert.DfmReemit.pas), [drag-lint]declaration (DRagLint.Convert.GlyphVacuum.pas), [drag-lint]declaration (DRagLint.Convert.PropCache.pas), [drag-lint]DRagLint.CLI.DoConvertScaffold (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoConvertScaffold.NodeOfPath (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoConvertScaffold.SortedPaths (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoConvertScaffold.TypeOfPath (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoPropTree (DRagLint.CLI.pas), [drag-lint]DRagLint.Convert.DfmReemit.LeafDefaultOf (DRagLint.Convert.DfmReemit.pas) ?, [drag-lint]DRagLint.Convert.GlyphVacuum.CountRuntimeRefs (DRagLint.Convert.GlyphVacuum.pas), [drag-lint]DRagLint.Convert.PropCache.BuildPropTree (DRagLint.Convert.PropCache.pas) ?, [drag-lint]DRagLint.Convert.PropCache.TPropMemberCache.BuildTree (DRagLint.Convert.PropCache.pas)</para>
+  /// <para>Used by: [drag-lint]declaration (DRagLint.Convert.DfmReemit.pas), [drag-lint]declaration (DRagLint.Convert.GlyphVacuum.pas), [drag-lint]declaration (DRagLint.Convert.PropCache.pas), [drag-lint]DRagLint.CLI.DoConvertScaffold (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoConvertScaffold.NodeOfPath (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoConvertScaffold.SortedPaths (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoConvertScaffold.TypeOfPath (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoPropTree (DRagLint.CLI.pas), [drag-lint]DRagLint.Convert.DfmReemit.LeafDefaultOf/3 (DRagLint.Convert.DfmReemit.pas) ?, [drag-lint]DRagLint.Convert.GlyphVacuum.CountRuntimeRefs (DRagLint.Convert.GlyphVacuum.pas), [drag-lint]DRagLint.Convert.PropCache.BuildPropTree (DRagLint.Convert.PropCache.pas) ?, [drag-lint]DRagLint.Convert.PropCache.TPropMemberCache.BuildTree (DRagLint.Convert.PropCache.pas)</para>
   /// <para>Used in units: ConvRules.Engine, ConvRules.MainForm, ConvRules.MappingForm, ConvRules.Mappings, ConvRulesModelTests, [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.Convert.DfmReemit, [drag-lint]DRagLint.Convert.GlyphVacuum, [drag-lint]DRagLint.Convert.PropCache</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

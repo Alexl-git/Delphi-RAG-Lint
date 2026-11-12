@@ -84,7 +84,7 @@ type
   /// <remarks>
   /// One class; the two PowerShell objects differ by Kind. Owned by its TTraceItem.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Charts.Q.RoundTrip.pas) ?, declaration (DRagLint.Charts.Trace.Chart.pas) ?, DRagLint.Charts.Trace.Chart.TChartBuilder.BuildCondCell (DRagLint.Charts.Trace.Chart.pas) ?, DRagLint.Charts.Trace.FormA.NewTraceCond (DRagLint.Charts.Trace.FormA.pas), DRagLint.Charts.Trace.FormA.NewTraceFacet (DRagLint.Charts.Trace.FormA.pas) (+6 more)</para>
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Chart.pas) ?, DRagLint.Charts.Q.RoundTrip.Disown/1 (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Charts.Trace.Chart.TChartBuilder.BuildCondCell (DRagLint.Charts.Trace.Chart.pas) ?, DRagLint.Charts.Trace.FormA.NewTraceCond (DRagLint.Charts.Trace.FormA.pas), DRagLint.Charts.Trace.FormA.NewTraceFacet (DRagLint.Charts.Trace.FormA.pas) (+6 more)</para>
   /// <para>Used in units: DRagLint.Charts.Q.RoundTrip, DRagLint.Charts.Trace.Chart, DRagLint.Charts.Trace.FormA, DRagLint.Charts.Trace.Walk</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -125,7 +125,7 @@ type
   /// Owns Children. The walker fields (Line .. Omits) are set by Trace.Walk and ignored by
   /// WriteFormA; they are Add-Member properties in the PowerShell. Number is assigned by WriteFormA.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Charts.Q.RoundTrip.Disown (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Charts.Q.RoundTrip.TRoundTripRun.AddNotWalked (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Create (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Charts.Trace.FormA.NewTraceStep (DRagLint.Charts.Trace.FormA.pas) (+42 more)</para>
+  /// <para>Used by: declaration (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Charts.Q.RoundTrip.Disown/1 (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Charts.Q.RoundTrip.Disown/2 (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Create (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Charts.Trace.FormA.NewTraceStep (DRagLint.Charts.Trace.FormA.pas) (+43 more)</para>
   /// <para>Used in units: DRagLint.Charts.Q.RoundTrip, DRagLint.Charts.Trace.Anchor, DRagLint.Charts.Trace.Calc, DRagLint.Charts.Trace.Chart, DRagLint.Charts.Trace.FormA, DRagLint.Charts.Trace.Walk</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

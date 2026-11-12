@@ -158,6 +158,12 @@ type
   /// </remarks>
   TLspDbSet = record
     ProjectDb, LibraryDb: string;
+    /// <summary>152b DBS (O4): the platform's FURTHER library sections, in manifest
+    /// order, after LibraryDb (the first). Filled only by the manifest resolver
+    /// (TLspContextDbResolver); empty for --db lists, a context file's libraryDb and
+    /// the central defaults' library. StoreSet opens them after LibraryDb, so
+    /// first-wins on a duplicate name keeps the first library's symbol.</summary>
+    ExtraLibraryDbs: TArray<string>;
   end;
 
   /// <summary>Resolves (project file, platform) to its DB pair with the CLI's
@@ -454,9 +460,9 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.StartReindex (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: CloseHandle, DRagLint.Convert.PropTree.ClearPropertyDeclaredTypeCache, DRagLint.LSP.Server.LastLogLine, DRagLint.LSP.Server.TLSPServer.FileFromUri, DRagLint.LSP.Server.TLSPServer.FlushPending, DRagLint.LSP.Server.TLSPServer.OpenReaderStore, DRagLint.LSP.Server.TLSPServer.PublishDiagnostics, DRagLint.LSP.Server.TLSPServer.QueueContextNotification, DRagLint.LSP.Server.TLSPServer.StoresForFile, Format, GetExitCodeProcess, SameText, Writeln</para>
-      /// <para>Complexity: 10 (cyclomatic, outer body), 65 lines (full implementation)</para>
-      /// <para>Reads: FReindex, FSets, FStorePaths, FStores, FCtxCache, FProxyPaths, FOpenDocs   Writes: FStores, FStore</para>
+      /// <para>Calls: CloseHandle, DRagLint.Convert.PropTree.ClearPropertyDeclaredTypeCache, DRagLint.LSP.Server.LastLogLine, DRagLint.LSP.Server.TLSPServer.FileFromUri, DRagLint.LSP.Server.TLSPServer.FlushPending, DRagLint.LSP.Server.TLSPServer.OpenReaderStore, DRagLint.LSP.Server.TLSPServer.PublishDiagnostics, DRagLint.LSP.Server.TLSPServer.QueueContextNotification, DRagLint.LSP.Server.TLSPServer.StoresForFile, Format, FreeAndNil, GetExitCodeProcess, SameText, Writeln</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 71 lines (full implementation)</para>
+      /// <para>Reads: FReindex, FExcIndexPath, FExcIndex, FSets, FStorePaths, FStores, FCtxCache, FProxyPaths (+1 more)   Writes: FExcIndexPath, FStores, FStore</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Convert.PropTree.ClearPropertyDeclaredTypeCache"/>
@@ -717,8 +723,8 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ContextFooter (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.QueueContextNotification (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.RunFullRulesLint (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.StoresForFile (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: Default, DRagLint.LSP.Server.DefaultsLibraryDbFor, DRagLint.LSP.Server.TLSPServer.Defaults, DRagLint.LSP.Server.TLSPServer.OwningStartupProjectDb, DRagLint.LSP.Server.TLSPServer.StartupLibraryFor, FDbResolver, LowerCase, Writeln</para>
-      /// <para>Complexity: 21 (cyclomatic, outer body), 51 lines (full implementation)</para>
+      /// <para>Calls: Default, DRagLint.LSP.Server.DefaultsLibraryDbFor, DRagLint.LSP.Server.TLSPServer.Defaults, DRagLint.LSP.Server.TLSPServer.OwningStartupProjectDb, DRagLint.LSP.Server.TLSPServer.StartupLibraryFor, FDbResolver, LowerCase, SameText, Writeln</para>
+      /// <para>Complexity: 26 (cyclomatic, outer body), 57 lines (full implementation)</para>
       /// <para>Reads: FDbResolver, FExplicitDbs, FResolved</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
@@ -735,14 +741,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.Create/1 (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ReindexFinished (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.StoreSet (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue, DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent, DRagLint.Storage.Schema.IsSchemaReadable, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, Format, Writeln</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue, DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent, DRagLint.Doc.Facts.ClearDocFactsMemos, DRagLint.Storage.Schema.IsSchemaReadable, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, Format, Writeln</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent"/>
+      /// <seealso cref="DRagLint.Doc.Facts.ClearDocFactsMemos"/>
       /// <seealso cref="DRagLint.Storage.Schema.IsSchemaReadable"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  OpenReaderStore(const APath: string): ISymbolStore;
@@ -753,7 +759,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ContextFooter (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.StoresForFile (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.LSP.Server.TLSPServer.OpenReaderStore, LowerCase, SameText</para>
-      /// <para>Complexity: 15 (cyclomatic, outer body), 38 lines (full implementation)</para>
+      /// <para>Complexity: 15 (cyclomatic, outer body), 40 lines (full implementation)</para>
       /// <para>Reads: FSets, FStorePaths, FStores</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.OpenReaderStore"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
@@ -1057,7 +1063,7 @@ type
       /// server is a worse one.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.StoresForFile (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: AssignFile, CloseFile, DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts, DRagLint.Core.Indexer.TIndexer.Create/2, DRagLint.Core.Indexer.TIndexer.IndexFile, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.Migrate, DRagLint.Core.Interfaces.ISymbolStore.ResolveAncestry, DRagLint.Core.Interfaces.ISymbolStore.ResolveHelpers, DRagLint.Core.Interfaces.ISymbolStore.ResolveUnitUseTargets (+9 more)</para>
+      /// <para>Calls: AssignFile, CloseFile, DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts, DRagLint.Core.Indexer.TIndexer.Create/2, DRagLint.Core.Indexer.TIndexer.IndexFile, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.Migrate, DRagLint.Core.Interfaces.ISymbolStore.ResolveAncestry, DRagLint.Core.Interfaces.ISymbolStore.ResolveHelpers, DRagLint.Core.Interfaces.ISymbolStore.ResolveUnitUseTargets (+10 more)</para>
       /// <para>Returns: False; True</para>
       /// <para>Reads: FEphemSeq, FEphemDbPath   Writes: FEphemSeq, FEphemDbPath, FEphemStore, FEphemFile, FEphemStamp</para>
       /// <para>Catches: Exception (empty); Exception (swallowed)</para>
@@ -1286,7 +1292,7 @@ type
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ResolveSymbolAt (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve/4, SameText</para>
       /// <para>Returns: False; True</para>
-      /// <para>Complexity: 25 (cyclomatic, outer body), 118 lines (full implementation)</para>
+      /// <para>Complexity: 25 (cyclomatic, outer body), 120 lines (full implementation)</para>
       /// <para>Mutates: ASel (out)</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
@@ -1307,7 +1313,7 @@ type
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverMarkdown (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Core.Model.IntrinsicSignature, DRagLint.Core.Model.IsCompilerIntrinsic, DRagLint.Doc.Facts.FormatHoverCalledFromLine, DRagLint.Doc.Facts.TDocFactsBuilder.Build (+20 more)</para>
       /// <para>Returns: False; True</para>
-      /// <para>Complexity: 37 (cyclomatic, outer body), 281 lines (full implementation)</para>
+      /// <para>Complexity: 37 (cyclomatic, outer body), 284 lines (full implementation)</para>
       /// <para>Reads: FStores</para>
       /// <para>Mutates: AOut (out)</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
@@ -1866,8 +1872,8 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeDefinition (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeReferences (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ResolveSymbolAt (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLspServerContextAdapter.IdentifierAtPosition (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadBytes, DRagLint.LSP.Server.ContainsPosition, DRagLint.LSP.Server.FindSmallestNamedAt, DRagLint.LSP.Server.NodeTextLocal, DRagLint.LSP.SyntaxTree.ParseDelphiUtf8, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSTree.RootNode, Trim</para>
-      /// <para>Complexity: 18 (cyclomatic, outer body), 61 lines (full implementation)</para>
+      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadBytes, DRagLint.LSP.Server.ContainsPosition, DRagLint.LSP.Server.FindSmallestNamedAt, DRagLint.LSP.Server.NodeTextLocal, DRagLint.LSP.Server.TLSPServer.IdentTreeFor, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSTree.RootNode, Trim</para>
+      /// <para>Complexity: 18 (cyclomatic, outer body), 59 lines (full implementation)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Readable"/>
@@ -1882,8 +1888,22 @@ type
       /// <param name="ASource">UTF-8 source of APath (overlay or disk).</param>
       /// <param name="APath">The file the source belongs to (define profile + cache key).</param>
       /// <returns>The cached tree, OWNED BY THE SERVER -- never free it; nil when the parse failed.</returns>
-      /// <remarks>Measured on a CLIENT copy: 100 hovers in 8 files parsed 100 times
-      /// (~9 ms each); with the cache 8 parses. Not thread-safe: main thread only.</remarks>
+      /// <remarks>
+      /// Measured on a CLIENT copy: 100 hovers in 8 files parsed 100 times
+      /// (~9 ms each); with the cache 8 parses. Not thread-safe: main thread only.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: CompareMem, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.LSP.SyntaxTree.ParseDelphiUtf8, FreeAndNil, SameText</para>
+      /// <para>Returns: FIdentTree</para>
+      /// <para>Reads: FIdentTree, FIdentTreePath, FIdentTreePre   Writes: FIdentTreePath, FIdentTreePre, FIdentTree</para>
+      /// <para>Owns returned: borrowed</para>
+      /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess"/>
+      /// <seealso cref="DRagLint.LSP.SyntaxTree.ParseDelphiUtf8"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function IdentTreeFor(const ASource: TBytes; const APath: string): TTSTree;
       /// <returns><!-- drag-lint:auto -->TLinter -- Observed: FLinter.</returns>
       /// <remarks>
@@ -1964,7 +1984,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: CloseHandle, DRagLint.LSP.Server.TLSPServer.DropEphemeralStore</para>
-      /// <para>Reads: FStopEvent, FReindexThreads, FDeferred, FFeatureByMethod, FFeatures, FLinter, FStdIn, FReindex (+12 more)   Writes: FContext, FStore</para>
+      /// <para>Reads: FStopEvent, FReindexThreads, FDeferred, FIdentTree, FExcIndex, FFeatureByMethod, FFeatures, FLinter (+14 more)   Writes: FContext, FStore</para>
       /// <para>Directives: override</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.DropEphemeralStore"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
@@ -2285,14 +2305,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.LSP.Server.TLSPServer.StorePathOf, DRagLint.Query.ExceptionFacts.ExceptionFactsOf, DRagLint.Query.ExceptionFacts.ExceptionRaisesLine</para>
+      /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.Create, DRagLint.LSP.Server.TLSPServer.StorePathOf, DRagLint.Query.ExceptionFacts.ExceptionFactsOfIndex, DRagLint.Query.ExceptionFacts.ExceptionRaisesLine, FreeAndNil, SameText</para>
       /// <para>Returns: []; [Line]</para>
-      /// <para>Reads: FExceptionFacts</para>
+      /// <para>Reads: FExceptionFacts, FExcIndex, FExcIndexPath   Writes: FExcIndex, FExcIndexPath</para>
+      /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Create"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.StorePathOf"/>
-      /// <seealso cref="DRagLint.Query.ExceptionFacts.ExceptionFactsOf"/>
+      /// <seealso cref="DRagLint.Query.ExceptionFacts.ExceptionFactsOfIndex"/>
       /// <seealso cref="DRagLint.Query.ExceptionFacts.ExceptionRaisesLine"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ExceptionFactLines(const AStore: ISymbolStore; const ASym: TSymbol): TArray<string>;
@@ -4242,6 +4262,12 @@ begin
   if Result.LibraryDb = '' then Result.LibraryDb:= DefaultsLibraryDbFor(Defaults, ACtx.Platform);
   if (Result.LibraryDb = '') and UseResolver then Result.LibraryDb:= Resolved.LibraryDb;
   if (Result.LibraryDb <> '') and not TFile.Exists(Result.LibraryDb) then Result.LibraryDb:= '';
+  { 152b DBS (O4): the manifest's further library sections ride along only when the
+    library in use IS the manifest's first one -- a context file's or the defaults'
+    library is another install, and its siblings are not these. }
+  if UseResolver and (Result.LibraryDb <> '') and SameText(Result.LibraryDb, Resolved.LibraryDb) then
+    for var X: string in Resolved.ExtraLibraryDbs do
+      if TFile.Exists(X) and not SameText(X, Result.LibraryDb) then Result.ExtraLibraryDbs:= Result.ExtraLibraryDbs + [X];
 end;
 
 function TLSPServer.StoreSet(const ADbs: TLspDbSet): TArray<ISymbolStore>;
@@ -4249,7 +4275,7 @@ var
   E: TStoreSet;
   S: ISymbolStore;
 begin
-  E.Key:= LowerCase(ADbs.ProjectDb + '|' + ADbs.LibraryDb);
+  E.Key:= LowerCase(ADbs.ProjectDb + '|' + ADbs.LibraryDb + '|' + string.Join('|', ADbs.ExtraLibraryDbs));
   for var I:= 0 to FSets.Count - 1 do
     if FSets[I].Key = E.Key then
     begin
@@ -4263,7 +4289,9 @@ begin
     end;
   E.Stores:= nil;
   E.Paths := nil;
-  for var D: string in [ADbs.ProjectDb, ADbs.LibraryDb] do
+  var Wanted: TArray<string>:= [ADbs.ProjectDb, ADbs.LibraryDb];
+  Wanted:= Wanted + ADbs.ExtraLibraryDbs;  { 152b DBS (O4): further library sections last }
+  for var D: string in Wanted do
   begin
     if (D = '') or ((Length(E.Paths) > 0) and SameText(E.Paths[0], D)) then Continue;
     { Reuse an already open connection: the startup stores, then the cached sets. }

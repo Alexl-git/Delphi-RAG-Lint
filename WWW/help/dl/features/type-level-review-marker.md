@@ -4,10 +4,10 @@ title: "Type-level dl:ok review"
 summary: "One dl:ok on an enum type declaration reviews every unused-enum-value or enum-ordinal-cast finding of that type, in any unit"
 product: DL
 group: linting
-order: 30041
+order: 30042
 since: 1.38.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.50.0-alpha
 ---
 
 # Type-level dl:ok review

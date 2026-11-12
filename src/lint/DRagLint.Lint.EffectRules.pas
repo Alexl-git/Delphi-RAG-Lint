@@ -193,6 +193,7 @@ uses
   , TreeSitter
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Analysis.Purity
+  , DRagLint.Analysis.Flow.Lattices
   ;
 
 const
@@ -1243,12 +1244,12 @@ function TLoopInvariantRun.Invariant(const N, ACallee, ACall, AOwnDot: TTSNode; 
   ALocals: TDictionary<string, Boolean>; const AChanges: TLoopChanges): Boolean;
 begin
   if N.IsNull or SameNode(N, ACallee) then Exit(True);
+  if N.NodeType = 'exprArgNamed' then Exit(Invariant(ArgValueNode(N), ACallee, ACall, AOwnDot, ASrc, ALocals, AChanges));  // the label is not a read
   if HasAddressOf(N) then Exit(False);
   if N.NodeType = 'identifier' then Exit(NameInvariant(LowerCase(NodeText(N, ASrc)), ALocals, AChanges));
-  if not (AChanges.Frozen or SameNode(N, ACall) or SameNode(N, AOwnDot) or ReadsOperandsOnly(N)) then Exit(False);
-  Result:= True;
+  Result:= AChanges.Frozen or SameNode(N, ACall) or SameNode(N, AOwnDot) or ReadsOperandsOnly(N);
   for var I:= 0 to N.NamedChildCount - 1 do
-    if not Invariant(N.NamedChild(I), ACallee, ACall, AOwnDot, ASrc, ALocals, AChanges) then Exit(False);
+    if Result then Result:= Invariant(N.NamedChild(I), ACallee, ACall, AOwnDot, ASrc, ALocals, AChanges);
 end;
 { The nearest loop whose every iteration runs N; null when there is none or a
   `with` sits anywhere around it (it may rebind any name). }

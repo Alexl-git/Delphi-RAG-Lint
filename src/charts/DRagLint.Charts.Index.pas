@@ -187,8 +187,8 @@ type
   /// connection (spec P5: no process is started). Not thread-safe; one owning thread.
   /// Lines the PS wrote with Write-Host ' NOTE: ...' are collected in Notes instead.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.ArchDiagram.MetaValue (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.Chain.AccessorField (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.BareRhsStop (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.DataSourceRows (DRagLint.Charts.Chain.pas) (+120 more)</para>
-  /// <para>Used in units: DRagLint.Charts.ArchDiagram, DRagLint.Charts.Chain, DRagLint.Charts.Columns, DRagLint.Charts.Exceptions, DRagLint.Charts.MemberAccess, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.ChangeImpact, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.Consumers, DRagLint.Charts.Q.CrossesBoundary (+24 more)</para>
+  /// <para>Used by: DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.ArchDiagram.MetaValue (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.Chain.AccessorField (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.BareRhsStop (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.DataSourceRows (DRagLint.Charts.Chain.pas) (+125 more)</para>
+  /// <para>Used in units: DRagLint.Charts.ArchDiagram, DRagLint.Charts.Chain, DRagLint.Charts.Columns, DRagLint.Charts.Exceptions, DRagLint.Charts.MemberAccess, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.ChangeImpact, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.Consumers, DRagLint.Charts.Q.CrossesBoundary (+25 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TChartsIndex = class
@@ -198,10 +198,11 @@ type
   public
     /// <summary>Opens the index read-only.</summary>
     /// <param name="pDbPath">Path of an existing .sqlite index.</param>
+    /// <exception cref="ESchemaUnreadable"><!-- drag-lint:auto exc -->via DRagLint.Storage.SQLite.TSQLiteSymbolStore.CreateReadable: :</exception>
     /// <remarks>
     /// The store is owned and freed by Destroy. Errors opening it propagate.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.Create (DRagLint.Charts.Q.Consumers.pas) (+21 more)</para>
+    /// <para>Called from: DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.Create (DRagLint.Charts.Q.Consumers.pas) (+22 more)</para>
     /// <para>Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.CreateReadable</para>
     /// <para>constructor</para>
     /// <para>Writes: FNotes, FStore</para>

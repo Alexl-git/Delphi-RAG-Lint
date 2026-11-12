@@ -394,7 +394,8 @@ type
     Output          : string        ;
     OutputDir       : string        ;
     Limit           : Integer       ;
-    MaxRows         : Integer       ; // --max-rows N: per-section row cap of `overview`
+    LimitGiven      : Boolean       ; // --limit was on the command line (sql: `--limit 0` = every row)
+    MaxRows        : Integer       ; // --max-rows N: per-section row cap of `overview`
     SortBy          : string        ;
     ScanLibraries   : Boolean       ;
     ScanLibrariesAll: Boolean       ; // --scan-libraries-all: every platform subkey
@@ -818,6 +819,114 @@ type
     CompareOutRoot: string ; // --out-root <dir>  (compare: where the rerun's per-run bundle folder is made; '' = %TEMP%\drag-lint-reports)
   end; // record
 
+type
+  /// <summary>One environment variable a drag-lint binary reads: its name and a
+  /// one-line purpose for the ENVIRONMENT section of --help (leftovers O3).</summary>
+  TEnvVarHelp = record
+    Name   : string;
+    Purpose: string;
+  end; // record
+
+const
+  /// <summary>EVERY DRAGLINT_* environment variable read by a binary built from
+  /// src\ (engine, LSP / MCP, charts, drag-lint-open.exe), one entry each, sorted.
+  /// "test hook" entries exist for guards and are never set in production.</summary>
+  /// <remarks>Single source of the ENVIRONMENT section of --help. Pinned by
+  /// tests\autotest\run_help_env_table.ps1: every quoted 'DRAGLINT_*' literal
+  /// under src\ must be a Name here and --help must print every Name. A new
+  /// variable is added HERE in the same change, or that guard fails.</remarks>
+  ENV_VARS_HELP: array[0..76] of TEnvVarHelp = (
+    (Name: 'DRAGLINT_BUSY_TIMEOUT_MS';                Purpose: 'writer busy timeout in ms (overrides the built-in default; a non-negative integer)'),
+    (Name: 'DRAGLINT_CHARTS_ALLOW_LIVE_DB';           Purpose: 'charts: lets CloneDb accept a non-clone (live) database'),
+    (Name: 'DRAGLINT_CHARTS_DIR';                     Purpose: 'charts: folder of the charts scripts'),
+    (Name: 'DRAGLINT_CONTEXT_DEFAULTS';               Purpose: 'test hook: path of the central context-defaults file'),
+    (Name: 'DRAGLINT_CYCLEFIX_ALL_CHILD';             Purpose: 'test hook (project under TEMP): the exe the cycle-fix --part all children run'),
+    (Name: 'DRAGLINT_CYCLEFIX_ALL_PLANT';             Purpose: 'test hook (project under TEMP): a file copied over each --part all child output'),
+    (Name: 'DRAGLINT_CYCLEFIX_BREAK';                 Purpose: 'test hook (project under TEMP): 1-4 breaks the cycle-fix plan before staging'),
+    (Name: 'DRAGLINT_CYCLEFIX_BUILD_TIMEOUT_MS';      Purpose: 'test hook: compile-gate build timeout in ms'),
+    (Name: 'DRAGLINT_CYCLEFIX_KEEP_SCRATCH';          Purpose: '1 keeps the cycle-fix default scratch folder'),
+    (Name: 'DRAGLINT_CYCLEFIX_REINDEXED';             Purpose: 'internal: set for the one cycle-fix re-run after its pre-plan re-index'),
+    (Name: 'DRAGLINT_CYCLEFIX_REPAIR_PROBE';          Purpose: 'test hook: cycle-fix repair-probe spec (|-separated)'),
+    (Name: 'DRAGLINT_CYCLEFIX_TEST_TAMPER';           Purpose: 'test hook: cycle-fix tampers with a staged file (|-separated spec)'),
+    (Name: 'DRAGLINT_CYCLES_PP';                     Purpose: 'cycles: scan = brace scan instead of the stored pp_regions; when set, stderr names the path taken'),
+    (Name: 'DRAGLINT_CYCLE_TIMING';                   Purpose: 'cycles: per-stage timings on stderr'),
+    (Name: 'DRAGLINT_DEBUG';                          Purpose: 'extra diagnostics on stderr'),
+    (Name: 'DRAGLINT_DOC_SELFTEST_DAMAGE';            Purpose: 'test hook: 1 appends one synthetic code-deleting doc edit'),
+    (Name: 'DRAGLINT_DOT';                            Purpose: 'charts: path of dot.exe (first step of the dot lookup)'),
+    (Name: 'DRAGLINT_EXCLUDE_ROOTS';                  Purpose: 'extra ;-separated search roots the compile-in-context path skips (like cloud-backed roots)'),
+    (Name: 'DRAGLINT_FIXDOC_TRACE';                   Purpose: 'traces doc-drift fix edits on stderr'),
+    (Name: 'DRAGLINT_FULLRULES_CHILD_EXE';            Purpose: 'test hook: the LSP full-rules child exe'),
+    (Name: 'DRAGLINT_GATE_TEST_BREAK';                Purpose: 'test hook: breaks the compile gate'),
+    (Name: 'DRAGLINT_INDEX_TEST_FAIL_FILE';           Purpose: 'test hook: index fails on the named file'),
+    (Name: 'DRAGLINT_LAYOUT';                         Purpose: 'installed-layout switch (unset = the default layout)'),
+    (Name: 'DRAGLINT_LIBRARY_POLL_MS';                Purpose: '--wait-library poll interval in ms (default 30000)'),
+    (Name: 'DRAGLINT_LSP_REINDEX_EXE';                Purpose: 'test hook: the exe the LSP reindex runs'),
+    (Name: 'DRAGLINT_LSP_TEST_MARK_INCOMPLETE';       Purpose: 'test hook: LSP marks its answer incomplete'),
+    (Name: 'DRAGLINT_LSP_TEST_RAISE';                 Purpose: 'test hook: LSP raises inside a request'),
+    (Name: 'DRAGLINT_MANIFEST';                       Purpose: 'explicit drag-lint.json manifest path (what --manifest sets for the process)'),
+    (Name: 'DRAGLINT_MARKER_ACCOUNT_OUT';             Purpose: 'internal to lint-all --shared-db: the file a peer writes its marker account to'),
+    (Name: 'DRAGLINT_MCP_PROBE_TTL_MS';               Purpose: 'MCP: staleness-probe window per DB in ms'),
+    (Name: 'DRAGLINT_MERGE_TEST_ANSWER_INLINE';       Purpose: 'test hook: merge answers inline'),
+    (Name: 'DRAGLINT_MERGE_TEST_EMPTY_REPLACEMENT';   Purpose: 'test hook: merge gets an empty replacement'),
+    (Name: 'DRAGLINT_MERGE_TEST_FASTPATH';            Purpose: 'test hook: merge fast path'),
+    (Name: 'DRAGLINT_NO_AUTOCREATE';                  Purpose: '1 = a query verb never builds a missing project index on first use'),
+    (Name: 'DRAGLINT_NO_FILE_FACTS';                  Purpose: 'forces the text read of a .dfm instead of the stored file facts'),
+    (Name: 'DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE';     Purpose: '1|on|yes|true switches off the scoped receiver closure of the resolve pass (A/B)'),
+    (Name: 'DRAGLINT_NO_SCOPED_RESOLVE';              Purpose: 'any value switches the scoped resolve pass off (whole-database A/B)'),
+    (Name: 'DRAGLINT_PP_TABLE';                       Purpose: '0 = ifdef-undefined ignores the stored directive table'),
+    (Name: 'DRAGLINT_PP_TRACE';                       Purpose: 'preprocessor trace: 1/true/yes = a file under %TEMP%, else the named file'),
+    (Name: 'DRAGLINT_PROFILE';                        Purpose: 'per-stage timings on stderr'),
+    (Name: 'DRAGLINT_PROFILE_CALLS';                  Purpose: 'call-resolver profile sections on stderr'),
+    (Name: 'DRAGLINT_PROTOCOL_TEST_ROOT';             Purpose: 'test hook: protocol-handler root'),
+    (Name: 'DRAGLINT_RENAME_TEST_UNGATED';            Purpose: 'test hook: rename skips its gate'),
+    (Name: 'DRAGLINT_RULE_CACHE';                     Purpose: '0 disables the lint rule cache'),
+    (Name: 'DRAGLINT_RULE_CACHE_DIR';                 Purpose: 'folder of the lint rule cache'),
+    (Name: 'DRAGLINT_RULE_CACHE_WARM';                Purpose: 'rule-cache warm mode when --rule-cache-warm is not given'),
+    (Name: 'DRAGLINT_SCOPED_RESOLVE_ADDITIONS';       Purpose: 'scoped-resolve escape hatch (unset = widened; an unknown value = off)'),
+    (Name: 'DRAGLINT_SCOPED_RESOLVE_REMOVALS';        Purpose: 'scoped-resolve escape hatch (unset = widened; an unknown value = off)'),
+    (Name: 'DRAGLINT_STAGE_HEARTBEAT_MS';             Purpose: 'test hook: stage heartbeat period in ms'),
+    (Name: 'DRAGLINT_STAGE_STALL_EXIT_MS';            Purpose: 'test hook: --stall-exit-min in ms'),
+    (Name: 'DRAGLINT_STAGE_STALL_WARN_MS';            Purpose: 'test hook: stall-warning threshold in ms (default 15 min)'),
+    (Name: 'DRAGLINT_TEST_AVAIL_PHYS_MB';             Purpose: 'test hook: pretends this much free physical memory'),
+    (Name: 'DRAGLINT_TEST_BDS_REGISTRY';              Purpose: 'test hook: replaces the BDS registry lookup'),
+    (Name: 'DRAGLINT_TEST_BEAT_MOVES';                Purpose: 'test hook: heartbeat moves'),
+    (Name: 'DRAGLINT_TEST_BEAT_RAISE_ONCE';           Purpose: 'test hook: heartbeat raises once'),
+    (Name: 'DRAGLINT_TEST_CALLS_START_DELAY_MS';      Purpose: 'test hook: delay before the calls stage'),
+    (Name: 'DRAGLINT_TEST_DUMP_PLAN';                 Purpose: 'test hook: dumps the plan'),
+    (Name: 'DRAGLINT_TEST_FAIL_ROLLBACK';             Purpose: 'test hook: fails the rollback'),
+    (Name: 'DRAGLINT_TEST_FAIL_WRITE_AT';             Purpose: 'test hook: fails a write at the named step'),
+    (Name: 'DRAGLINT_TEST_HANG_STORE_CLOSE_MS';       Purpose: 'test hook: hangs the store close'),
+    (Name: 'DRAGLINT_TEST_INDEX_FILE_DELAY_MS';       Purpose: 'test hook: delay per indexed file'),
+    (Name: 'DRAGLINT_TEST_LINT_FILE_DELAY_MS';        Purpose: 'test hook: delay per linted file'),
+    (Name: 'DRAGLINT_TEST_REINDEX_TIMEOUT_MS';        Purpose: 'test hook: reindex timeout'),
+    (Name: 'DRAGLINT_TEST_RESOLVE_DELAY_MS';          Purpose: 'test hook: delay in the resolve pass'),
+    (Name: 'DRAGLINT_TEST_SCRATCH_PID';               Purpose: 'test hook: scratch-folder owner pid'),
+    (Name: 'DRAGLINT_TEST_STORE_CLOSE_GRACE_MS';      Purpose: 'test hook: store-close grace period'),
+    (Name: 'DRAGLINT_TEST_STREAM_COUNT_DELAY_MS';     Purpose: 'test hook: delay in the stream count'),
+    (Name: 'DRAGLINT_TEST_WARM_DELAY_MS';             Purpose: 'test hook: delay in the rule-cache warm'),
+    (Name: 'DRAGLINT_TEST_WARM_HOLD_MS';              Purpose: 'test hook: hold in the rule-cache warm'),
+    (Name: 'DRAGLINT_UNWITH_TEST_SKIP_PREFIX';        Purpose: 'test hook: unwith skips this prefix'),
+    (Name: 'DRAGLINT_URI_TEST_LOG';                   Purpose: 'test hook of drag-lint-open.exe: its log file'),
+    (Name: 'DRAGLINT_URI_TEST_TIMEOUT';               Purpose: 'test hook of drag-lint-open.exe: timeout (default 1000)'),
+    (Name: 'DRAGLINT_URI_TEST_WHATIF';                Purpose: 'test hook of drag-lint-open.exe: 1 = report, start nothing'),
+    (Name: 'DRAGLINT_USAGE_LOG';                      Purpose: '0 disables the usage log'),
+    (Name: 'DRAGLINT_VERIFY_GEN';                     Purpose: 'flow analysis: generator self-verification mode (diagnostic)'),
+    (Name: 'DRAGLINT_VERIFY_ORACLE';                  Purpose: 'flow analysis: oracle self-verification mode (diagnostic)'),
+    (Name: 'DRAGLINT_WHOLEDB_SLOW_REFS';              Purpose: 'refs count above which a whole-database resolve is reported slow (default 1000000)')
+  );
+
+/// <summary>Writes the "Environment variables" section of --help from ENV_VARS_HELP,
+/// one line per variable.</summary>
+procedure WriteEnvironmentHelp;
+const
+  NAME_COL = 38;
+begin
+  Writeln('');
+  Writeln('Environment variables (every DRAGLINT_* a drag-lint binary reads; "test hook" = for guards, never set in production):');
+  for var EV: TEnvVarHelp in ENV_VARS_HELP do
+    Writeln('  ', EV.Name.PadRight(NAME_COL), EV.Purpose);
+end; // procedure
+
 procedure PrintHelp;
 begin
   Writeln('drag-lint ', VERSION, ' - Delphi-RAG-Lint: symbol-aware index + RAG + lint for Delphi/Pascal');
@@ -972,6 +1081,7 @@ begin
   Writeln('  ascii: 7-bit only; each non-ASCII UTF-16 code unit is written \uXXXX (lower-case hex,');
   Writeln('         a surrogate pair outside the BMP) -- the JSON escape, so --json decodes exactly.');
   Writeln('  utf8 / utf16: UTF-8 / UTF-16LE, no BOM. Files a verb writes (--output) obey it too; ascii runs that lose characters warn once on stderr.');
+  WriteEnvironmentHelp;
 end; // procedure
 
 const
@@ -1719,7 +1829,12 @@ begin
     else if (A = '--size-guard-mb') and (i < ParamCount) then begin Inc(i); Result.SizeGuardMB:= StrToIntDef(ParamStr(i), 0); Result.SizeGuardMBSet:= True; end
     else if (A = '--max-file-kb') and (i < ParamCount) then begin Inc(i); Result.MaxFileKB:= StrToIntDef(ParamStr(i), 2048); Result.MaxFileKBSet:= True; end
     else if (A = '--connection') and (i < ParamCount) then begin Inc(i); Result.FbConnection:= ParamStr(i); end
-    else if (A = '--limit') and (i < ParamCount) then begin Inc(i); Result.Limit:= StrToIntDef(ParamStr(i), 50); end
+    else if (A = '--limit') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.Limit     := StrToIntDef(ParamStr(i), 50);  // dl:ok magic-literal@2ff3 -- REVIEWED 2026-11-12 (152b INT2): the --limit fallback default, unchanged since before 152b; CLI O8 only split the line into a block
+      Result.LimitGiven:= True;
+    end
     else if (A = '--max-rows') and (i < ParamCount) then
     begin
       Inc(i);
@@ -7090,18 +7205,23 @@ end;
 /// <param name="ARoots">The --exclude-under values; empty means keep everything.</param>
 /// <returns>APaths without the entries under an excluded root (case-insensitive, whole path segments).</returns>
 /// <remarks>E-UNWITH-EXCLUDE: the folder walk asks the indexer's exclude roots, but a project scope list is
-/// FILES handed to IndexFile, which never does, so the flag was accepted and ignored for `index --project`.</remarks>
+/// FILES handed to IndexFile, which never does, so the flag was accepted and ignored for `index --project`.
+/// Both sides are normalised (`/` -> `\`, a relative root expanded against the current directory): 152b R16
+/// found `--exclude-under C:/x/ext` matching nothing, because the closure lists `C:\x\ext\U.pas` -- the walk
+/// pruned, the closure unit stayed. Pinned by run_index_exclude_under_slash_forms.ps1.</remarks>
 function DropUnderExcludeRoots(const APaths, ARoots: TArray<string>): TArray<string>;
 begin
   Result:= APaths;
   if Length(ARoots) = 0 then Exit;
   var Norm: TArray<string>:= [];
   for var R in ARoots do
-    if R <> '' then Norm:= Norm + [LowerCase(IncludeTrailingPathDelimiter(ExcludeTrailingPathDelimiter(R)))];
+    if R <> '' then
+      Norm:= Norm + [LowerCase(IncludeTrailingPathDelimiter(ExcludeTrailingPathDelimiter(
+        ExpandFileName(R.Replace('/', '\')))))];
   Result:= [];
   for var P in APaths do
   begin
-    var L: string:= LowerCase(P);
+    var L: string:= LowerCase(P.Replace('/', '\'));
     var Hit: Boolean:= False;
     for var N in Norm do
       if StartsStr(N, L) then Hit:= True;
@@ -13335,6 +13455,35 @@ end; // function
   Defined beside the LINT_GATE_* consts. }
 function IsClosureDependentMarkerRule(const ARule: string): Boolean; forward;
 
+/// <summary>True when line ALine of ALines is the `on ... do` line of an EMPTY
+///  exception handler and the `do` is followed only by a `//` comment.</summary>
+/// <param name="ALines">The file's lines, 0-based.</param>
+/// <param name="ALine">1-based line that carries the marker.</param>
+/// <returns>True when the code before the comment ends in `do` and the next code
+///  line (blank and `//` lines skipped) opens with `;`, `end` or `else`.</returns>
+/// <remarks>rules\empty-on-handler.scm anchors on `do` being the handler's LAST
+///  child; a comment between `do` and the separating `;` is a child too, so the
+///  dl:ok comment ITSELF stops the rule firing (INBOX review-marker-unused-on-
+///  handler, wave 152b). Same loop as COMMENT_SENSITIVE, but position dependent:
+///  a comment AFTER the `;` leaves the rule live, which is why the 2026-08-12
+///  probe measured "not comment-sensitive". Only this shape is exempt from
+///  review-marker-unused; a marker anywhere else is still reported.</remarks>
+function IsCommentSilencedEmptyHandler(const ALines: TArray<string>; ALine: Integer): Boolean;
+const
+  HANDLER_DO_COMMENT = '\bon\b.*\bdo\s*//';
+  EMPTY_BODY_NEXT    = '^\s*(;|end\b|else\b)';
+begin
+  Result:= False;
+  if (ALine < 1) or (ALine > Length(ALines)) then Exit;
+  if not TRegEx.IsMatch(ALines[ALine - 1], HANDLER_DO_COMMENT, [roIgnoreCase]) then Exit;
+  for var I: Integer:= ALine to High(ALines) do
+  begin
+    var T: string:= Trim(ALines[I]);
+    if (T = '') or T.StartsWith('//') then Continue;
+    Exit(TRegEx.IsMatch(T, EMPTY_BODY_NEXT, [roIgnoreCase]));
+  end;
+end; // function
+
 { Drops findings whose source line records them as reviewed, and reports review
   markers that have gone stale or unused.
 
@@ -13785,7 +13934,9 @@ begin
       measured. Some rules treat a comment as content, so writing the marker is
       itself enough to stop the rule firing. Probe of the empty-* family
       (2026-08-12): empty-except and empty-case-branch both go 1 -> 0 findings
-      when ANY trailing comment is added; empty-on-handler does not. Reporting
+      when ANY trailing comment is added; empty-on-handler does not when the
+      comment follows the `;`, but DOES when it sits between `do` and the `;`
+      (wave 152b, IsCommentSilencedEmptyHandler). Reporting
       those as "unused" would create a loop with no exit -- mark the finding, the
       comment silences the rule, the hint says remove the marker, removing it
       brings the finding back. Marking such a finding is in fact the remedy the
@@ -13937,6 +14088,9 @@ begin
             end;
             if StampMsg <> '' then EmitHint(SF, LN, 'review-marker-reason-unreviewed', StampMsg);
             if MatchStr(LowerCase(M.RuleId), COMMENT_SENSITIVE) then Continue;
+            { empty-on-handler is comment-sensitive only when the marker sits
+              between `do` and the `;` -- see IsCommentSilencedEmptyHandler. }
+            if SameText(M.RuleId, 'empty-on-handler') and IsCommentSilencedEmptyHandler(Lines, LN) then Continue;
             { A placeholder @hash that no finding claimed. With a finding on the
               line the suppression path above has already said so (and Accounted
               the marker); without one this would otherwise read as
@@ -16270,7 +16424,7 @@ const
     'used-before-assignment', 'not-assigned-interface', 'double-free', 'function-result-not-set',
     'out-param-not-set', 'overwrite-before-read', 'write-only-local', 'split-variable',
     'loop-var-after-loop', 'object-leak', 'local-only-out-arg', 'dead-store-before-out-arg', 'by-value-arg-before-assignment');
-  LINT_GATE_PROJECT_RULES: array[0..46] of string = (
+  LINT_GATE_PROJECT_RULES: array[0..47] of string = (
     'unused-public-symbol', 'unused-private-member', 'circular-uses', 'cycle-participant-unit', 'global-only-uses-edge',
     'dfm-property-not-declared', 'dependent-project-not-recompiled', 'duplicate-global-decl',
     'uses-global-census', 'discarded-effect-free-result', 'query-name-with-effect',
@@ -16281,14 +16435,14 @@ const
     'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive',
     'effect-free-in-loop-invariant', 'ancestor-not-in-project', 'opaque-to-analysis', 'datamodule-form-global',
     'global-set-in-initialization-never-freed', 'heavy-initialization', 'finalization-after-dependency', 'init-order-hazard',
-    'is-always-true', 'is-never-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows', 'redundant-cast', 'unsafe-typecast-without-is', 'ui-access-in-thread-typed', 'parameter-type-too-wide', 'quit-from-thread');
+    'is-always-true', 'is-never-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows', 'redundant-cast', 'unsafe-typecast-without-is', 'ui-access-in-thread-typed', 'parameter-type-too-wide', 'quit-from-thread', 'rtti-unavailable');
   { The project rules TProjectLintRules.Run gates on OptedIn (global-only-uses-edge,
     uses-global-census, ...). `lint <file>` hands Run NO opt-in list, so even with an
     index it never evaluates them unless --rule names one: a dl:ok for one of them
     cannot be judged unused there (LintUnjudgedMarkerRules). Pinned against the
     OptedIn('<id>') calls in DRagLint.Lint.ProjectRules.pas by
     tests\autotest\run_marker_unused_optin_gated_rules.ps1. }
-  PROJECT_RULES_OPTIN_GATED: array[0..32] of string = (
+  PROJECT_RULES_OPTIN_GATED: array[0..33] of string = (
     'global-only-uses-edge', 'uses-global-census', 'dfm-property-not-declared',
     'dependent-project-not-recompiled', 'discarded-effect-free-result', 'cycle-participant-unit',
     'query-name-with-effect', 'assert-with-side-effect', 'virtual-never-overridden',
@@ -16296,7 +16450,7 @@ const
     'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive',
     'effect-free-in-loop-invariant', 'opaque-to-analysis', 'datamodule-form-global',
     'global-set-in-initialization-never-freed', 'heavy-initialization', 'finalization-after-dependency', 'init-order-hazard',
-    'is-always-true', 'is-never-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows', 'redundant-cast', 'unsafe-typecast-without-is', 'ui-access-in-thread-typed', 'parameter-type-too-wide', 'quit-from-thread');
+    'is-always-true', 'is-never-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows', 'redundant-cast', 'unsafe-typecast-without-is', 'ui-access-in-thread-typed', 'parameter-type-too-wide', 'quit-from-thread', 'rtti-unavailable');
   { The OptedIn-gated project rules that ship ON, and that `lint <file>` therefore
     opts in itself when a store CONTAINS the file (lane DIRLINT, 2026-10-27). Each
     is answered exactly for one file -- its own call sites, narrowed by AOnlyFileId
@@ -20934,6 +21088,17 @@ begin
   if Matched = 0 then Result:= 1 else Result:= 0;
 end; // function
 
+/// <summary>The "how many rows were there" half of the sql row-cap notices.</summary>
+/// <param name="ATotalRows">Rows the statement returned in all; -1 when the
+/// count past the cap was stopped (time cap).</param>
+/// <returns>"1226 in all", or "the total is unknown (the count was stopped by
+/// --timeout-ms)".</returns>
+function SqlTotalRowsPhrase(ATotalRows: Integer): string;
+begin
+  Result:= if ATotalRows < 0 then 'the total is unknown (the count was stopped by --timeout-ms)'
+           else System.SysUtils.Format('%d in all', [ATotalRows]);
+end; // function
+
 /// <summary>drag-lint sql: runs ONE read-only SQL statement against an index
 /// and prints the result set as text or JSON. Enforces at the SQLite engine --
 /// not by inspecting the query text -- that nothing but a read can happen: an
@@ -20941,14 +21106,21 @@ end; // function
 /// wall-clock time, and the connection is already query_only.</summary>
 /// <param name="AArgs">Parsed CLI args. SqlQuery (--query) or InFile (--file)
 /// supplies the statement -- exactly one of the two; DbPath/DbPaths[0] names
-/// the index; Limit caps rows (default 200); TimeoutMs caps wall-clock time
+/// the index; Limit caps rows (default 200, but no cap with --output; an
+/// explicit `--limit 0`, i.e. LimitGiven with Limit = 0, prints every row); TimeoutMs caps wall-clock time
 /// (default 10000); Format='json' or AsJson selects JSON; Output redirects to
 /// a file.</param>
 /// <returns>0 on success; 2 for a usage error (no query, both sources, more
 /// than one statement, missing or absent --db); 1 when the guard refuses the
 /// query, the time cap fires, or SQLite rejects it.</returns>
 /// <remarks>Strictly read-only. The row cap is REPORTED when it truncates --
-/// a silent cap reads as "that is all the data there is".</remarks>
+/// a silent cap reads as "that is all the data there is" (151 RB-B diffed 200 of
+/// 1226 rows). The JSON carries `truncated`, `row_limit` (0 = no cap; `row_cap`
+/// is the same value, kept for sql/1 readers) and `total_rows`: the rows past
+/// the cap are COUNTED, not fetched into the answer, and `total_rows` is null
+/// when the time cap stopped that count. A truncated JSON or --output answer
+/// also prints one NOTE on stderr; the text grid says it in its footer.
+/// Pinned by tests\autotest\run_sql_json_cap_reported.ps1.</remarks>
 function DoSql(const AArgs: TArgs): Integer;
 const
   DEFAULT_ROW_CAP    = 200  ;
@@ -20972,6 +21144,7 @@ var
   c        : Integer           ;
   r        : Integer           ;
   Truncated: Boolean           ;
+  TotalRows: Integer           ; { -1 = the count past the cap was stopped }
   ElapsedMs: Int64             ;
   Failure  : string            ;
   Refused  : Boolean           ;
@@ -21078,11 +21251,17 @@ begin
 
   UseJson:= AArgs.AsJson or SameText(AArgs.Format, 'json');
   RowCap := AArgs.Limit;
-  if RowCap <= 0 then RowCap:= DEFAULT_ROW_CAP;
+  { O8: an EXPLICIT `--limit 0` lifts the cap; a missing or negative --limit
+    keeps the default. RowCap = 0 is reported as "no cap". }
+  if (RowCap < 0) or ((RowCap = 0) and not AArgs.LimitGiven) then RowCap:= DEFAULT_ROW_CAP;
+  { --output is the full-dump route (GR3 FOUND-152b): without --limit it writes
+    EVERY row; the 200 cap protects a terminal, not a file. }
+  if (AArgs.Output <> '') and not AArgs.LimitGiven then RowCap:= 0;
   TimeoutMs:= AArgs.TimeoutMs;
   if TimeoutMs <= 0 then TimeoutMs:= DEFAULT_TIMEOUT_MS;
 
   Truncated:= False;
+  TotalRows:= 0;
   ElapsedMs:= 0;
   Failure  := '';
   Refused  := False;
@@ -21144,7 +21323,7 @@ begin
             end;
 
             r:= 0;
-            while (not Q.Eof) and (r < RowCap) do
+            while (not Q.Eof) and ((RowCap = 0) or (r < RowCap)) do
             begin
               SetLength(RowVals, Q.FieldCount);
               for c:= 0 to Q.FieldCount - 1 do RowVals[c]:= CellText(Q.Fields[c]);
@@ -21159,6 +21338,21 @@ begin
               Q.Next;
             end;
             Truncated:= not Q.Eof;
+            TotalRows:= r;
+            { O8: COUNT the rest so the answer can say how much it left out.
+              Rows are stepped over, never added to the answer. The guard's
+              time cap still applies; if it stops the count, the rows already
+              read stand and total_rows is reported unknown (-1 -> null). }
+            if Truncated then
+            try
+              while not Q.Eof do
+              begin
+                Inc(TotalRows);
+                Q.Next;
+              end;
+            except
+              on Exception do TotalRows:= -1; { best effort: reported as total_rows null }
+            end; // try
           except
             on E: Exception do
             begin
@@ -21233,6 +21427,9 @@ begin
 
         JRoot.AddPair('row_count' , TJSONNumber.Create(Length(Cells)));
         JRoot.AddPair('truncated' , TJSONBool  .Create(Truncated)    );
+        if TotalRows >= 0 then JRoot.AddPair('total_rows', TJSONNumber.Create(TotalRows))
+        else JRoot.AddPair('total_rows', TJSONNull.Create);
+        JRoot.AddPair('row_limit' , TJSONNumber.Create(RowCap)       );
         AddStalenessPairs(JRoot, DbPath); { ENG-3 }
         JRoot.AddPair('row_cap'   , TJSONNumber.Create(RowCap)       );
         JRoot.AddPair('timeout_ms', TJSONNumber.Create(TimeoutMs)    );
@@ -21288,7 +21485,8 @@ begin
           was cut off. }
         if Truncated then
           SB.AppendLine(System.SysUtils.Format(
-            '-- ROW CAP REACHED at %d rows; there are more. Pass --limit N.', [RowCap]));
+            '-- ROW CAP REACHED at %d rows; %s. Pass --limit N (--limit 0 = every row).',
+            [RowCap, SqlTotalRowsPhrase(TotalRows)]));
         OutStr:= SB.ToString;
       finally
         SB.Free;
@@ -21298,6 +21496,12 @@ begin
     JRows.Free; { nil once JRoot took it; a failure path still owns it here }
   end; // try
 
+  { O8: a JSON or --output answer is read by a program or lands in a file, so
+    its truncation is ALSO said on stderr, where a human running it sees it. }
+  if Truncated and (UseJson or (AArgs.Output <> '')) then
+    Writeln(ErrOutput, System.SysUtils.Format(
+      'NOTE: sql row cap reached -- %d row(s) printed; %s. Pass --limit N (--limit 0 = every row).',
+      [RowCap, SqlTotalRowsPhrase(TotalRows)]));
   if AArgs.Output <> '' then WriteOutputFile(AArgs.Output, OutStr)
   else WriteStdoutDocument(OutStr + sLineBreak); // after every stderr byte (T2i R18)
   Result:= 0;
@@ -22395,6 +22599,9 @@ begin
       if not ReindexAfterStaleAnchor(AArgs, AArgs.DocUnit) then Exit(1);
       Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
       if not Ok then Exit(2);
+      { 152b DF O16d: the run-level Doc.Facts / ComputeCoveredBy memos are keyed by
+        store pointer, and the reopened store may reuse the freed one's address. }
+      ClearDocFactsMemos;
       Res:= TDocBatch.DocumentUnit(Store, AArgs.DocUnit, Opts);
       Skipped:= 0;
       if Length(Res.Edits) > 0 then
@@ -23131,6 +23338,9 @@ begin
       if not ReindexAfterStaleAnchor(AArgs, Res.FilePath) then Exit(1);
       Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
       if not Ok then Exit(2);
+      { 152b DF O16d: the run-level Doc.Facts / ComputeCoveredBy memos are keyed by
+        store pointer, and the reopened store may reuse the freed one's address. }
+      ClearDocFactsMemos;
       Res:= DRagLint.Doc.Document.TDocumenter.BuildFor(Store, AArgs.QName, LoadDocHandlesOptions, AArgs.DocSeeAlso,
         AArgs.DocSince, AArgs.DocBaseDir, OpenExtraStores(AArgs), LoadDocMaxReturnCases,
         LoadDocMaxCallers, LoadDocComplexityMin);
@@ -25410,6 +25620,8 @@ begin
       OptIn:= OptIn + ['global-set-in-initialization-never-freed'];
     if Cfg.ShouldKeep('datamodule-form-global', {ADefaultDisabled=}True) then   { 1.42 lane ruleset }
       OptIn:= OptIn + ['datamodule-form-global'];
+    if Cfg.ShouldKeep('rtti-unavailable', {ADefaultDisabled=}True) then   { 152b lane RTTI }
+      OptIn:= OptIn + ['rtti-unavailable'];
     if Cfg.ShouldKeep('parameter-type-too-wide', {ADefaultDisabled=}True) then   { 1.46 lane t4 }
       OptIn:= OptIn + ['parameter-type-too-wide'];
     for var Rt in REF_TYPE_RULES do   { 1.44 lane rulesf1 }
@@ -25937,6 +26149,8 @@ begin
       OptIn2:= OptIn2 + ['global-set-in-initialization-never-freed'];
     if LoadLintConfig(AArgs).ShouldKeep('datamodule-form-global', {ADefaultDisabled=}True) then   { 1.42 lane ruleset }
       OptIn2:= OptIn2 + ['datamodule-form-global'];
+    if LoadLintConfig(AArgs).ShouldKeep('rtti-unavailable', {ADefaultDisabled=}True) then   { 152b lane RTTI }
+      OptIn2:= OptIn2 + ['rtti-unavailable'];
     if LoadLintConfig(AArgs).ShouldKeep('parameter-type-too-wide', {ADefaultDisabled=}True) then   { 1.46 lane t4 }
       OptIn2:= OptIn2 + ['parameter-type-too-wide'];
     for var Rt2 in REF_TYPE_RULES do   { 1.44 lane rulesf1 }
@@ -36292,9 +36506,9 @@ begin
 
     { ONE ResolvePlan per call (~0.7 s on a 15-project manifest): the LSP --full-rules
       child has an 8 s budget (LintChildTimeoutMs, run_lsp_dlok_filtering_guard).
-      151 RC: walked here instead of TDbSelect.Resolve, which keeps only the FIRST
-      library section of the platform -- right for a consumer DB list, wrong for a
-      proof that must see every library type. }
+      151 RC: walked here instead of TDbSelect.Resolve, which then kept only the FIRST
+      library section of the platform. 152b DBS (O4): Resolve now returns every library
+      section in this same order; this walk stays because it needs no project sections. }
     var PlatFilter: TArray<string>:= if Platform <> '' then [Platform] else nil;
     Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
     try
@@ -39558,9 +39772,20 @@ begin
       A:= Snapshot;
       A.ProjectPath  := AProject;
       A.CheckPlatform:= APlatform;
-      SplitConsumerDbs(A, ResolveConsumerDbs(A), ProjDb, LibDb);
+      var All: TArray<string>:= ResolveConsumerDbs(A);
+      SplitConsumerDbs(A, All, ProjDb, LibDb);
       Result.ProjectDb:= if AProject <> '' then ProjDb else '';
       Result.LibraryDb:= LibDb;
+      { 152b DBS (O4): the platform's further library sections. TDbSelect.Resolve puts
+        every library section LAST, in manifest order, and no file is named here
+        (InFile / Path cleared, so no membership reorder): everything after LibDb is one. }
+      Result.ExtraLibraryDbs:= nil;
+      var AfterLib: Boolean:= False;
+      for var D: string in All do
+      begin
+        if AfterLib then Result.ExtraLibraryDbs:= Result.ExtraLibraryDbs + [D];
+        if (LibDb <> '') and SameText(D, LibDb) then AfterLib:= True;
+      end;
     end;
 end;
 

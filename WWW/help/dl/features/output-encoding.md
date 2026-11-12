@@ -7,7 +7,7 @@ group: editor-integration
 order: 110021
 since: 1.35.0-alpha
 status: shipped
-updated: 1.48.0-alpha
+updated: 1.50.0-alpha
 ---
 
 # Output encoding (--output-encoding)
@@ -19,7 +19,7 @@ Read this when a tool reads drag-lint output through a pipe and a path or messag
 ## How to run it
 
 ```text
-drag-lint sql --query "SELECT ..." | --in <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>] (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)
+drag-lint sql --query "SELECT ..." | --in <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>] (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 (none with --output unless --limit is given; --limit 0 = every row; JSON says truncated + total_rows) and time cap 10000 ms; ask `schema --format json` for the columns)
 ```
 
 Example:

@@ -396,6 +396,7 @@ type
 /// OWNS and must Free it. Set to nil on failure.</param>
 /// <returns>True when the block parsed into a single root object; False on a
 /// binary DFM, an empty block, or a parse with no top-level object.</returns>
+/// <exception cref="ETreeSitterException"><!-- drag-lint:auto exc -->via TreeSitter.TTSParser.SetLanguage: Failed to set parser language to 0x%p</exception>
 /// <remarks>
 /// Pure: no file I/O. Uses the same tree-sitter-dfm grammar the indexer
 /// uses (node types object/property/identifier_value/qualified_identifier/
@@ -478,9 +479,10 @@ function ReemitComponent(const AFromBlock: string; const ARules: TConversionRule
 /// is genuinely unknown and the caller must not invent a value.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.ResolveLeafValue (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphVacuum.AddRow (DRagLint.Convert.GlyphVacuum.pas)</para>
+/// <para>Called from: DRagLint.Convert.GlyphVacuum.AddRow (DRagLint.Convert.GlyphVacuum.pas)</para>
 /// <para>Calls: SameText</para>
 /// <para>Returns: False; True</para>
+/// <para>Overload 1 of 2</para>
 /// <para>Mutates: AValue (out)</para>
 /// <para>Directives: overload</para>
 /// <!-- drag-lint:auto END -->

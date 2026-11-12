@@ -259,7 +259,7 @@ type
     /// here exactly when a tree of sufficient depth would contain it. There is
     /// no depth limit.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Convert.PropCache.TClassRef.ResolvePath (DRagLint.Convert.PropCache.pas), initialization/finalization (DRagLint.Convert.DfmReemit.pas) ?</para>
+    /// <para>Called from: DRagLint.Convert.PropCache.TClassRef.ResolvePath (DRagLint.Convert.PropCache.pas)</para>
     /// <para>Calls: DRagLint.Convert.PropCache.TPropMemberCache.ResolvePathEx</para>
     /// <para>Returns: Res.Outcome = poFound</para>
     /// <para>Mutates: ANode (out)</para>
@@ -351,7 +351,7 @@ type
   /// query then answers absent and RootType is ''. The record does not own
   /// Cache.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ConvertClassIn (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas) ?, DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas) ?, DRagLint.CLI.DoConvertValidate.ClassFor (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.TConvertTreeCache.ClassFor (DRagLint.Convert.Apply.pas) (+12 more)</para>
+  /// <para>Used by: DRagLint.CLI.ConvertClassIn (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas) ?, DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas) ?, DRagLint.CLI.DoConvertValidate.ClassFor (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.TConvertTreeCache.ClassFor (DRagLint.Convert.Apply.pas) (+13 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -380,7 +380,7 @@ type
     /// <returns>False when unset, or when the path does not resolve.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Convert.Apply.TConvertTreeCache.InferAmbiguous.DeclaresRow (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.LeafIsClassTyped (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.LeafTypeOf (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.PublishedChain (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.TargetRedeclaresDefault (DRagLint.Convert.DfmReemit.pas) (+1 more)</para>
+    /// <para>Called from: DRagLint.Convert.Apply.TConvertTreeCache.InferAmbiguous.DeclaresRow (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.LeafDefaultOf/3 (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.LeafIsClassTyped (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.LeafTypeOf (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.PublishedChain (DRagLint.Convert.DfmReemit.pas) (+1 more)</para>
     /// <para>Calls: Default, DRagLint.Convert.PropCache.TPropMemberCache.ResolvePath</para>
     /// <para>Returns: Cache.ResolvePath(QName, APath, ASurface, ANode)</para>
     /// <para>Reads: QName, Cache</para>

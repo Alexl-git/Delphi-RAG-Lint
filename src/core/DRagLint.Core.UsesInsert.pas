@@ -300,7 +300,7 @@ end;
   a dot dropped: `System .Classes` is the one token `System.Classes`) and
   single punctuation characters. Comments, directives, strings, char codes
   and numbers produce no token. }
-function Tokenize(const ALines: TArray<string>): TArray<TUTok>;  // dl:ok cognitive-complexity@029a -- a flat lexer state machine (code / brace / paren-star, strings, numbers, idents); each branch is one token class; the dotted-name join delegates to NextDottedPart
+function Tokenize(const ALines: TArray<string>): TArray<TUTok>;  // dl:ok cognitive-complexity@ce51 -- a flat lexer state machine (code / brace / paren-star, strings, numbers, idents); each branch is one token class; the dotted-name join delegates to NextDottedPart
 var
   State: Integer; { 0 code, 1 inside braces, 2 inside paren-star }
   Count: Integer;

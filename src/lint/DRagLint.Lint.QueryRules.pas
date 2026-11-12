@@ -544,7 +544,7 @@ type
 /// Reads the file's ref_types rows once, on the first question. No ref_types table
 /// (an index older than 1.44) = TypeAt answers False for ever.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?, DRagLint.CLI.QueryOracleForFile (DRagLint.CLI.pas) ?, DRagLint.Diagnostics.ExprChecks.TExprChecker.Check.CheckDoubleLookup (DRagLint.Diagnostics.ExprChecks.pas) ?, DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.QueryOracleForFile (DRagLint.CLI.pas) ?, DRagLint.Diagnostics.ExprChecks.TExprChecker.Check.CheckDoubleLookup (DRagLint.Diagnostics.ExprChecks.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas)</para>
 /// <para>Calls: DRagLint.Lint.QueryRules.TStoreTypeOracle.Create</para>
 /// <para>Returns: TStoreTypeOracle.Create(AStore, AFileId, ALibStore, nil)</para>
 /// <para>Overload 1 of 2</para>

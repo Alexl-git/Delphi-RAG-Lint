@@ -7,7 +7,7 @@ group: maintenance
 order: 120014
 since: 0.40.5-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.50.0-alpha
 ---
 
 # sql
@@ -86,8 +86,11 @@ Two more limits sit on top:
 * **exactly one statement.** `SELECT 1; DROP TABLE symbols` is rejected before
   it reaches SQLite. A semicolon inside a string literal or a comment does not
   count.
-* **a row cap**, 200 by default (`--limit N`). When it truncates, it SAYS so --
-  a cap that stayed quiet would read as the complete answer.
+* **a row cap**, 200 by default (`--limit N`; `--limit 0` = every row; `--output`
+  without `--limit` writes EVERY row -- the full-dump route). When it
+  truncates, it SAYS so and COUNTS what it left out -- a cap that stayed quiet
+  would read as the complete answer. A truncated `--json` / `--output` answer also
+  prints one `NOTE:` line on stderr.
 
 A denied statement names the action that was refused, e.g.
 `ERROR: refused -- ATTACH is not permitted (other.sqlite)`. DDL reports as a
@@ -100,7 +103,7 @@ write to `sqlite_master`, because that is the action SQLite authorizes first.
 | `--query "<sql>"` | the statement to run |
 | `--in <q.sql>` | read the statement from a file instead |
 | `--db <file.sqlite>` | the index to query (required) |
-| `--limit N` | row cap; default 200 |
+| `--limit N` | row cap; default 200 (no cap with `--output`); `0` = every row |
 | `--timeout-ms N` | wall-clock cap; default 10000. There is no "unlimited" -- pass a bigger number |
 | `--format json` / `--json` | emit the stable `sql/1` JSON document |
 | `--output <file>` | write to a file instead of stdout |
@@ -141,11 +144,13 @@ path                                   n
 C:\Projects\MyApp\src\MyApp.Main.pas   2282
 ...
 5 row(s) in 12 ms
--- ROW CAP REACHED at 5 rows; there are more. Pass --limit N.
+-- ROW CAP REACHED at 5 rows; 1226 in all. Pass --limit N (--limit 0 = every row).
 ```
 
 The JSON form emits `"schema": "sql/1"` with `columns`, `rows`, `row_count`,
-`truncated`, `row_cap`, `timeout_ms` and `elapsed_ms`. Rows are **arrays**
+`truncated`, `total_rows` (every row the statement returned, counted past the cap;
+`null` when the time cap stopped the count), `row_limit` (0 = no cap; `row_cap` is
+the same value), `timeout_ms` and `elapsed_ms`. Rows are **arrays**
 positionally matching `columns`, not objects -- a query may legitimately return
 two columns with the same name, and an object would silently lose one.
 

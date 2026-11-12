@@ -4,10 +4,10 @@ title: Run Lint All (Full Report)
 summary: Runs the whole rule catalog against a project's indexed code and reports every surviving finding -- the overall project health check
 product: DL
 group: linting
-order: 30037
+order: 30038
 since: 0.61.0-alpha
 status: shipped
-updated: 1.49.0-alpha
+updated: 1.50.0-alpha
 ---
 
 # Run Lint All (Full Report)
@@ -56,7 +56,7 @@ Full flag list: [lint-all in the CLI reference](../cli.md#lint-all).
 
 ## Details
 
-Runs the full rule catalog (315 rules, 262 on by default across 18 categories,
+Runs the full rule catalog (316 rules, 262 on by default across 18 categories,
 110 auto-fixable) against a project's indexed code and reports every surviving
 finding. Reach for it as the overall project health check.
 

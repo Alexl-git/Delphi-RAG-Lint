@@ -60,6 +60,7 @@ uses
   , System.StrUtils
   , System.Generics.Collections
   , TreeSitter
+  , DRagLint.Analysis.Flow.Lattices
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Refactor.TextEdit
   , DRagLint.Lint.Autofix
@@ -546,8 +547,9 @@ begin
       end
       else if N.NodeType = 'exprArgs' then
       begin
+        { a named argument Foo(Name := FField) hands on its VALUE; the label is no field }
         for I:= 0 to N.NamedChildCount - 1 do
-          FHandled.AddOrSetValue(AClass + '|' + Canon(NodeStr(N.NamedChild(I))), True);
+          FHandled.AddOrSetValue(AClass + '|' + Canon(NodeStr(ArgValueNode(N.NamedChild(I)))), True);
       end
       else
         FHandled.AddOrSetValue(AClass + '|' + Canon(NodeStr(N.ChildByField('rhs'))), True);

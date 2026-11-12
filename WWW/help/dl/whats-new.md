@@ -18,6 +18,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 * [manifest where / migrate (installed layout v2)](features/installed-layout-v2.md) -- Shows which drag-lint.json this engine reads and why; moves the exe-side one to %APPDATA% once (renamed, never deleted). Installed layout v2, off by default.
 * [Prepare heavy initialization for lazy loading (first phase)](features/lazy-init.md) -- Names what an initialization section does; --apply moves its body verbatim into a run-once routine, through a scratch build and the compile gate.
 * [Lint --fix through the compile gate](features/lint-fix-compile-gate.md) -- lint --fix --apply --project X.dproj --compile-gate writes the fixes only if the project still builds; a fix that breaks the compile is refused and rolled back.
+* [RTTI unavailable (lint rule)](features/rtti-unavailable.md) -- Project lint rule, OFF by default: declarations that lose classic or extended RTTI (enums without type info, record properties, narrowing directives).
 * [uses-recover](features/uses-recover.md) -- Recovers the uses edges of units that ship without source, from the vendor's .hpp headers and a dcc map; never reads a .dcu; --apply stores them in the index.
 
 ## 1.46.0-alpha

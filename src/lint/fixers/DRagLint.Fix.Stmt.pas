@@ -1534,7 +1534,7 @@ begin
   P:= ASub.Parent;
   Result:= not ((((P.NodeType = 'assignment') or (P.NodeType = 'exprDot')) and SameNode(P.ChildByField('lhs'), ASub))  // dl:ok boolean-expression-complexity@27f9 -- REVIEWED 2026-10-27: the four may-be-a-write shapes of ONE element read, kept as one test
                 or (P.NodeType = 'exprUnary')
-                or ((P.NodeType = 'exprArgs') and (P.Parent.NodeType = 'exprCall') and not AAllowArg));
+                or (((P.NodeType = 'exprArgs') and (P.Parent.NodeType = 'exprCall') or (P.NodeType = 'exprArgNamed')) and not AAllowArg));
 end;
 
 { index-loop-to-for-in: every element read of the body, or False when the

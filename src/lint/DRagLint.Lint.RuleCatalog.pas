@@ -121,7 +121,9 @@ const
     { 1.46 lane t1 }
     'local-only-out-arg', 'dead-store-before-out-arg', 'by-value-arg-before-assignment',
     { 1.47 wave 148 lane PQ }
-    'quit-from-thread'];
+    'quit-from-thread',
+    { 152b lane RTTI }
+    'rtti-unavailable'];
 
   { THE WHOLE-ROUTINE METRIC RULES, in one place because the CHECKER and the
     `allow` WRITER must agree on the list or a marker is written under one hash
@@ -937,6 +939,7 @@ begin
     B('is-never-true', 'project-wide', 'warning', 'x is T that no object can answer yes to: two classes where neither descends from the other, or a sealed class against an interface it does not implement; the branch is dead. Proof only: both ancestries followed to the end; needs a 1.44 index (ref_types), and a 1.46 parse for sealed', False);
     B('ui-access-in-thread-typed', 'project-wide', 'warning', 'Thread code (Execute of any TThread descendant, a lambda or routine passed to TThread.CreateAnonymousThread, TTask.Run/Create/Future, TParallel.For) reads, writes or calls a member of a receiver whose static type descends from TControl, TCustomForm, TFmxObject, or is TApplication/TScreen, directly or over resolved calls, outside Synchronize/Queue; needs a 1.44 index (ref_types) and the library index; a thread class nothing constructs is labelled (class never constructed) and reported as a hint'); { ON since 1.47 (owner ruling a9, lane U1). }
     B('quit-from-thread', 'project-wide', 'warning', 'Thread code (Execute of a TThread descendant, a lambda passed to TThread.CreateAnonymousThread, TTask.Run/Create/Future, TParallel.For) calls PostQuitMessage, Application.Terminate, Halt or ExitProcess outside Synchronize/Queue: the call ends the process or posts WM_QUIT from the wrong thread; a quit reached over a called routine is not followed; a thread class nothing constructs is labelled (class never constructed) and reported as a hint; needs a 1.44 index (ref_types) and the library index', False); { OFF: 1.47 wave 148 lane PQ. }
+    B('rtti-unavailable', 'project-wide', 'warning', 'A declaration loses classic or extended RTTI: an enum whose explicit ordinals are not contiguous from 0 (no type info, E2134) and a published property of such a type; a published property of a record type (TWriter skips it; info when DefineProperties streams it); $RTTI EXPLICIT without vcPublic / vcPublished, $M- / $TYPEINFO OFF over a published class, $WEAKLINKRTTI ON in a unit declaring components; a published section on a class without TPersistent ancestry or $M+. The message starts with the sub-kind', False); { OFF: 152b lane RTTI (INBOX rtti-availability-rule, owner request 2026-11-09 for ORM3 COMMON\OBJECTS). }
     { taint wave T2: store-backed interprocedural taint (DRagLint.Lint.TaintRules; catalogues rules\taint-*.json) }
     B('taint-sql-injection', 'security', 'error', 'Tainted data reaches an SQL text sink -- a catalogued source (command line, edit control, request) flows across routines into ExecSQL / SQL.Text (CWE-89)');
     B('taint-command-injection', 'security', 'error', 'Tainted data reaches a process launch sink -- a catalogued source flows across routines into ShellExecute / CreateProcess / WinExec (CWE-78)');

@@ -292,8 +292,8 @@
     "version": "1.35.1-alpha"
   },
   "features/drag-lint-options.md": {
-    "hash": "b6b4d1bddf367bf1cd12d6f9ca6ed31bbce5fd2c4ae0e05c141a8b9aee557db2",
-    "version": "1.48.0-alpha"
+    "hash": "04cae6ff27867d013f81510c32843bfea77f2a60d9e4fa3ca1b2e6a65f99d840",
+    "version": "1.50.0-alpha"
   },
   "features/drag-lint-panel-dockable.md": {
     "hash": "37fbcfa09e39665b420b70b6c797da7549c6ee454223fa9fb6f09a895c8c606f",
@@ -400,16 +400,16 @@
     "version": "1.44.1-alpha"
   },
   "features/fix-all-in-unit.md": {
-    "hash": "8937fa7e8941746a58f2c59b9fabd70f0974b3f76b53f714f257b0623b0c470a",
-    "version": "1.48.0-alpha"
+    "hash": "7905a5d6a3961b862d7a7a659a98819277d968c2ee2f6a50dfc59e26929f52e2",
+    "version": "1.50.0-alpha"
   },
   "features/fix-all-reliability.md": {
     "hash": "c2f6845623b6bd7b705c05493fd047809b2508c7e08ef688409ae06d7977b9fb",
     "version": "1.44.1-alpha"
   },
   "features/fix-it.md": {
-    "hash": "b1d9e8e5c44738728544afa19e073f9629ccaee231884a45890ec82f1d97936d",
-    "version": "1.48.0-alpha"
+    "hash": "6d007af3c5b2c9a07fad82fc4b5a39c5f6e38dbef8480b048d91077117ae267a",
+    "version": "1.50.0-alpha"
   },
   "features/flow-out-arg-rules.md": {
     "hash": "bfdc160428fc0917cace3382a46659fa43b3d0cc69c14362531b810344dc15b7",
@@ -564,8 +564,8 @@
     "version": "1.46.0-alpha"
   },
   "features/lint-rules.md": {
-    "hash": "c5a9681656478525b4ef9f9c63480d1df209c8716567c20fb0cc1fb1ed647931",
-    "version": "1.48.0-alpha"
+    "hash": "5299badd29d400409dd31a80d9c9fb40a5e1fb5886511fdf0c3bcceea1ed85c1",
+    "version": "1.50.0-alpha"
   },
   "features/lint-tree.md": {
     "hash": "e19f5ae1113990939db806e41918b2a8a9facb35468f6f60ade80c468439fae5",
@@ -636,8 +636,8 @@
     "version": "1.46.0-alpha"
   },
   "features/output-encoding.md": {
-    "hash": "7b8c862003fe0875b362c1d125cc989f2a0d30f731fa4d3dc440611014d11945",
-    "version": "1.48.0-alpha"
+    "hash": "c3ffff303d9fef4fd7692bedf0da05db3caeda15de7d51b6fd912d51e2ba56d0",
+    "version": "1.50.0-alpha"
   },
   "features/parameter-type-too-wide.md": {
     "hash": "0507ebfb646d6bfa820579ba9a7d29c77cd7f3d4aa7e6aef8ac5fb7a2941da26",
@@ -763,17 +763,21 @@
     "hash": "23dc79c475bd737ffb805926cf086c84756a4fe305b71a7706793cfc40475b80",
     "version": "1.46.0-alpha"
   },
+  "features/rtti-unavailable.md": {
+    "hash": "c37967fd31c9611a02d5792152202162f676bbc2825851ae661c89e0bda01bd9",
+    "version": "1.50.0-alpha"
+  },
   "features/run-ast-checks.md": {
-    "hash": "8727d25da63f8dd126844acdc8be3903aa9e0618d2febd9dd42649c882a7517a",
-    "version": "1.46.0-alpha"
+    "hash": "d66c431eb2e56838e6f86ca261d4e46203caa238488e773dfbbd4c146e2af446",
+    "version": "1.50.0-alpha"
   },
   "features/run-diagnostics-didsave.md": {
-    "hash": "57bf5d21f55348649b0651236680a55e20704cdd8b227213fafc7d5481a86d8b",
-    "version": "1.46.0-alpha"
+    "hash": "5d0eba7d5df42ebc0537a27734cac4084f306281f43876b1ea14fef420fd374a",
+    "version": "1.50.0-alpha"
   },
   "features/run-lint-all-full-report.md": {
-    "hash": "ed0869242b3bd5f7bcca523d0b8fa0ed3ef809c1e5d3b95bd567c7182c5c9ecb",
-    "version": "1.49.0-alpha"
+    "hash": "717cbfbbeb72d81b5112fdca0cc7ba657c34191a26915859810f51398859d9e2",
+    "version": "1.50.0-alpha"
   },
   "features/safe-delete.md": {
     "hash": "206de3a35bc87cece09a694906dace50f4b16d16567ba9a6cb9006c1a21ea909",
@@ -828,12 +832,12 @@
     "version": "1.46.0-alpha"
   },
   "features/sql.md": {
-    "hash": "d1824b15f36d967274bd03abb2ef43c6d302e0dd62f616244f3e89f6b4d66abf",
-    "version": "1.46.0-alpha"
+    "hash": "c22c533b02cf5745b6701226fa1020ecc9ae6188fff3e42e82c04ea987828141",
+    "version": "1.50.0-alpha"
   },
   "features/stream-buffer-after-free.md": {
-    "hash": "a8f4d8662678511e02418d53081c47e8463cde351ba255157a367cbafa888796",
-    "version": "1.46.0-alpha"
+    "hash": "97fcb2e918c75069a6fb7204e1c7cb3e85ed7ebf268e26b302d1c8a88d619b74",
+    "version": "1.50.0-alpha"
   },
   "features/symbol-search.md": {
     "hash": "0beaf7c28097e8d3c15ae8e41443e7ebc012c2aa62cd4dd3df58f5a09455ee9c",
@@ -848,16 +852,16 @@
     "version": "1.46.0-alpha"
   },
   "features/taint-analysis.md": {
-    "hash": "dbc9d96465f239ca53e4793a0f66d5cf476c66b2d4687e7da74ce18a34c0b6c6",
-    "version": "1.46.0-alpha"
+    "hash": "81e99a357d64b8a4c0689091eb4aa5badb8509f5b8f4da81b79c4b37ecfa9829",
+    "version": "1.50.0-alpha"
   },
   "features/target-bds-library-path.md": {
     "hash": "eb174ea5dee975b29d8f22bb0603f439a9751e88e5b3d82f45a96d1ee8e2d6d3",
     "version": "1.43.0-alpha"
   },
   "features/target-compiler.md": {
-    "hash": "aac737fa1e66a4cf408b093a2fc4345f8868c1f221043550f841f8c72dc1429a",
-    "version": "1.46.0-alpha"
+    "hash": "fcb71bfbc4fcaf3dcf683eebfa162541e2c58efe9d4e62be05728363a449e9da",
+    "version": "1.50.0-alpha"
   },
   "features/top-symbols-fan-in.md": {
     "hash": "ac4495d8238e37409a318fd06d2f07729e034292bb7365abdcad29fe4d8226d8",
@@ -868,12 +872,12 @@
     "version": "1.46.0-alpha"
   },
   "features/type-level-review-marker.md": {
-    "hash": "213bca20c48d29e25e8556b512fd3cb0eebc35a4798d6a2ce17a07dbd6b76015",
-    "version": "1.46.0-alpha"
+    "hash": "9e8e416d1dbc8917d84e0faf0bbd3bb041c2b723b41cb2a955feb79142c80947",
+    "version": "1.50.0-alpha"
   },
   "features/type-name-prefix-origin.md": {
-    "hash": "1f8b30de4ba8ca1f28b11407ccee51ceca9b4d4a8157ab9a72e9f99c3baff6ab",
-    "version": "1.46.0-alpha"
+    "hash": "7df19bf94a4aacbf254b0a158c0b4f2c8e565b4dc7d8a59143c85e02be072935",
+    "version": "1.50.0-alpha"
   },
   "features/unit-missing-from-uses.md": {
     "hash": "73063ece7c69cd13b441b172c9431e4a68a1cf2f12eb5ed586fae7fc5fdfec1b",
@@ -916,8 +920,8 @@
     "version": "1.48.0-alpha"
   },
   "features/warm-rule-cache.md": {
-    "hash": "edc8b285b3312832958c2d46146b6dd52e0ed89bf071fcb0ac6955a51f1e8530",
-    "version": "1.46.0-alpha"
+    "hash": "775dda9f5956c4d5f666709cf85d0f478aafdac97af359bd3a1027009c25a775",
+    "version": "1.50.0-alpha"
   },
   "features/wiki-blocks-authoring.md": {
     "hash": "df4e3cb44155e0d22ada9eca6a3c60a4d9c0d966f6c2c442e62ab6d9531b95b5",

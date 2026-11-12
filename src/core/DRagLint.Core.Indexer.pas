@@ -417,9 +417,9 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
-      /// <para>Calls: ChangeFileExt, DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.FileTime.FileMTimeUnix, DRagLint.Core.Indexer.BuildContainingLineMap, DRagLint.Core.Indexer.BuildEnclosingLineMap, DRagLint.Core.Indexer.BuildPpDirectiveRows, DRagLint.Core.Indexer.FindDocRegionAbove, DRagLint.Core.Indexer.HasBinaryDfmHeader, DRagLint.Core.Indexer.PaintDocOwner, DRagLint.Core.Indexer.PreferBodyRoutine (+61 more)</para>
-      /// <para>Complexity: 93 (cyclomatic, outer body), 612 lines (full implementation)</para>
-      /// <para>Reads: FVisitedKeys, FVisited, FWalkFilter, FResumeFingerprint, FStore, FIncludeContext, FPreprocessEnabled, FIncContexts (+6 more)   Writes: FSkippedUpToDate, FParsedFiles, FFailedFiles</para>
+      /// <para>Calls: ChangeFileExt, DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.FileTime.FileMTimeUnix, DRagLint.Core.Indexer.BuildContainingLineMap, DRagLint.Core.Indexer.BuildEnclosingLineMap, DRagLint.Core.Indexer.BuildPpDirectiveRows, DRagLint.Core.Indexer.FindDocRegionAbove, DRagLint.Core.Indexer.HasBinaryDfmHeader, DRagLint.Core.Indexer.PaintDocOwner, DRagLint.Core.Indexer.PreferBodyRoutine (+64 more)</para>
+      /// <para>Complexity: 97 (cyclomatic, outer body), 625 lines (full implementation)</para>
+      /// <para>Reads: FVisitedKeys, FVisited, FWalkFilter, FResumeFingerprint, FStore, FIncludeContext, FPreprocessEnabled, FIncContexts (+6 more)   Writes: FSkippedUpToDate, FParsedFiles, FParseErrorFiles, FFailedFiles</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
@@ -478,6 +478,19 @@ type
       /// </remarks>
       function FailedFiles: Integer;
       /// <summary>Files parsed with ERROR/MISSING tree nodes -- see IIndexer.ParseErrorFiles.</summary>
+      /// <returns><!-- drag-lint:auto -->Integer -- Observed: FParseErrorFiles.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Implements: DRagLint.Core.Interfaces.IIndexer.ParseErrorFiles</para>
+      /// <para>Reads: FParseErrorFiles</para>
+      /// <para>Effect-free (proven)</para>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.FailedFiles"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function ParseErrorFiles: Integer;
       /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed:
       /// FVisited.ToArray.</returns>

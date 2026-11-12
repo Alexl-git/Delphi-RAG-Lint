@@ -355,7 +355,7 @@ begin
   if (AFilePath = '') or (ALine <= 0) or (not TFile.Exists(AFilePath)) then Exit;
   try
     Lines:= TFile.ReadAllLines(AFilePath, TEncoding.ANSI);
-  except
+  except  // dl:ok bare-except@8f3b, try-except-swallowed@8f3b -- REVIEWED 2026-11-11 (152b INT2): tolerant probe by contract ('' on any error, see the header); an unreadable file means no declaration line to compare, never an error
     Exit;
   end;
   if ALine <= Length(Lines) then Result:= Lines[ALine - 1];
@@ -369,9 +369,29 @@ end;
 // holds a colon) read as a function returning the marker text and drew a false
 // "no <returns> tag" finding. Same scrubber as Facts.
 // Pinned by tests\autotest\run_doc_drift_procedure_marker.ps1.
+// 152b: also skips leading attribute groups / attribute-only lines (run_doc_drift_attr_and_orphan_152b.ps1).
 function ReadDeclLine(const AFilePath: string; ALine: Integer): string;
+const
+  MAX_ATTR_LINES = 8; // attribute-only lines skipped above the heading
+var
+  I, L: Integer;
+  S: string;
 begin
-  Result:= Trim(StripPasCommentsKeepLayout(ReadDeclLineRaw(AFilePath, ALine)));
+  Result:= '';
+  for I:= 0 to MAX_ATTR_LINES - 1 do
+  begin
+    S:= Trim(StripPasCommentsKeepLayout(ReadDeclLineRaw(AFilePath, ALine + I)));
+    // An attribute group `[Test] [Ignore('text')]` sits on the symbol's first line
+    // (the index start line includes it): its argument is not a parameter. Drop
+    // every leading `[...]` group, quote- and nesting-aware.
+    while (S <> '') and (S[1] = '[') do
+    begin
+      L:= SkipDeclAttributeGroup(S);  { Doc.Facts: one rule for both readers }
+      if L = 0 then Exit; // unbalanced (multi-line attribute): nothing reliable to read
+      S:= Trim(Copy(S, L + 1, MaxInt));
+    end;
+    if S <> '' then Exit(S);
+  end;
 end;
 
 // v(1.20.6 T5): the lines of AFilePath, for the indent decision. Drift asks once

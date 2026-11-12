@@ -200,6 +200,7 @@
   "read-never-assigned": "read-never-assigned",
   "redundant-cast-fix": "redundant-cast-fix",
   "ref-type-rules": "ref-type-rules",
+  "rtti-unavailable": "rtti-unavailable",
   "rules": "lint-rules",
   "safe-delete": "safe-delete",
   "schema": "schema",

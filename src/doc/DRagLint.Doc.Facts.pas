@@ -772,8 +772,8 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
-    /// <para>Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAccessorEchoUses, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNamesOfKind, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers (+54 more)</para>
-    /// <para>Complexity: 95 (cyclomatic, outer body), 1217 lines (full implementation)</para>
+    /// <para>Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAccessorEchoUses, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNamesOfKind, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers (+55 more)</para>
+    /// <para>Complexity: 95 (cyclomatic, outer body), 1222 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAccessorEchoUses"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
@@ -992,12 +992,19 @@ function DocFactsBuildProfile: string;
 /// <summary>Forgets every run-level memo TDocFactsBuilder.Build keeps per (store
 /// instance, id): the overload tag, the see-also sibling lists, the routine name
 /// counts and the C14 receiver lookups.</summary>
-/// <remarks>151 CF. The memos are keyed by the store's interface POINTER, which is
+/// <remarks>
+/// 151 CF. The memos are keyed by the store's interface POINTER, which is
 /// sound only while every store stays open for the whole process. A long-lived host
 /// (the LSP) frees and opens stores -- after a re-index, on a context switch, for
 /// each loose file's ephemeral index -- and a new store can reuse a freed address
 /// over different ids. Such a host calls this before it opens any store. Not
-/// thread-safe: call it from the thread that runs Build.</remarks>
+/// thread-safe: call it from the thread that runs Build.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.OpenReaderStore (DRagLint.LSP.Server.pas)</para>
+/// <para>Calls: DRagLint.Doc.SymbolFacts.ClearCoveredByMemos</para>
+/// <seealso cref="DRagLint.Doc.SymbolFacts.ClearCoveredByMemos"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ClearDocFactsMemos;
 
   /// <summary>Applies the display cap: a list of ATotal items shows all of them
@@ -1067,6 +1074,24 @@ procedure ClearDocFactsMemos;
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   function FormatHoverCalledFromLine(const AFacts: TDocFacts; const ADocText: string): string;
+
+  /// <summary>Length of the leading `[...]` attribute group of a declaration line.</summary>
+  /// <param name="S">The line, starting at the `[` (S[1] = '[').</param>
+  /// <returns>Index of the closing `]` of the outermost group, 0 when the group does not close on
+  /// this line. Pascal string literals (with '' escapes) and nested [] are skipped.</returns>
+  /// <remarks>
+  /// Shared by ReadDeclLine here and the Doc.Drift declaration-line fallback (152b DOC / DF),
+  /// so doc facts and doc-drift read past `[Test] [Ignore('...')]` the same way. Pure.
+  /// <!-- drag-lint:auto -->Same function ParseUsesFromContent and ParseDprUses scrub with -- one
+  /// implementation. This is the family whose every previous instance came from a site growing its
+  /// own half-scanner. 152b DOC handover; declared in the interface (Doc.Drift calls it too).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Called from: DRagLint.Doc.Drift.ReadDeclLine (DRagLint.Doc.Drift.pas), DRagLint.Doc.Facts.ReadDeclLine (DRagLint.Doc.Facts.pas)</para>
+  /// <para>Returns: 0</para>
+  /// <para>Effect-free (proven)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  function SkipDeclAttributeGroup(const S: string): Integer;
 
 implementation
 
@@ -1345,6 +1370,7 @@ begin
   GRoutineNameCounts.Clear;
   GScopeMemberMemo  .Clear;
   GForeignKnownMemo .Clear;
+  ClearCoveredByMemos; // 152b O6: Doc.SymbolFacts' ComputeCoveredBy memos, same store-pointer keys
 end;
 
 function DocFactsBuildProfile: string;
@@ -3121,13 +3147,58 @@ end;
   Same function ParseUsesFromContent and ParseDprUses scrub with -- one
   implementation. This is the family whose every previous instance came from a
   site growing its own half-scanner. }
+// 152b DOC handover; declared in the interface (Doc.Drift calls it too).
+function SkipDeclAttributeGroup(const S: string): Integer;
+var
+  I, Depth: Integer;
+  InStr   : Boolean;
+begin
+  Result:= 0;
+  Depth := 0;
+  InStr := False;
+  for I:= 1 to Length(S) do
+  begin
+    if S[I] = '''' then InStr:= not InStr
+    else if not InStr then
+    begin
+      if S[I] = '[' then Inc(Depth)
+      else if S[I] = ']' then
+      begin
+        Dec(Depth);
+        if Depth = 0 then Exit(I);
+      end;
+    end;
+  end;
+end;
+
+// 152b DOC handover: an attribute group `[Test] [Ignore('why: x')]` sits on the
+// symbol's index start line, so the line read here could be attribute text, not the
+// heading (its argument was then read as the signature). Leading `[...]` groups are
+// dropped, quote- and nesting-aware; an attribute-only line moves on to the next
+// one, up to MAX_ATTR_LINES. An unbalanced group (multi-line attribute) -> ''.
+// Pinned by tests\autotest\run_doc_attr_decl_apply_152b.ps1 (lane DOC).
 function ReadDeclLine(const AFilePath: string; ALine: Integer): string;
-var Lines: TArray<string>;
+const
+  MAX_ATTR_LINES = 8; // attribute-only lines skipped above the heading
+var
+  Lines: TArray<string>;
+  I, L : Integer      ;
+  S    : string       ;
 begin
   Result:= '';
   if (AFilePath = '') or (ALine <= 0) then Exit;
   Lines:= SourceLines(AFilePath);
-  if ALine <= Length(Lines) then Result:= Trim(StripPasCommentsKeepLayout(Lines[ALine - 1]));
+  for I:= ALine - 1 to Min(ALine - 1 + MAX_ATTR_LINES, Length(Lines)) - 1 do
+  begin
+    S:= Trim(StripPasCommentsKeepLayout(Lines[I]));
+    while (S <> '') and (S[1] = '[') do
+    begin
+      L:= SkipDeclAttributeGroup(S);
+      if L = 0 then Exit; // unbalanced (multi-line attribute): nothing reliable to read
+      S:= Trim(Copy(S, L + 1, MaxInt));
+    end;
+    if S <> '' then Exit(S);
+  end;
 end;
 
 { v(Q0, 2026-08-14): is the declaring unit marked `dl:shared`?
@@ -3574,35 +3645,6 @@ begin
     if Length(Result) >= MAX_CANDIDATES then Break;
     SetLength(Result, Length(Result) + 1);
     Result[High(Result)]:= Word;
-  end;
-end;
-
-// 150 X2: True when the store NOW resolves ATypeName to a value type (record or
-// enum) -- the ground-truth NEGATIVE of Doc.SymbolFacts.IsReferenceTypeName's
-// tier 1, re-asked at read time. symbol_facts.returns_owner is written inside
-// ONE file's index transaction, so on a fresh `index` the unit declaring the
-// return type may not be stored yet; the gate then falls back to the T/I naming
-// convention and stores 'borrowed' for a record. An incremental reindex of the
-// same unchanged unit stores '' -- the fact flipped with index order, and every
-// block written from a full index drifted after the next incremental one
-// (TLSPServer.Defaults: TContextDefaults). Same candidate order and the same
-// first-decisive-kind rule as tier 1, so the read agrees with what an
-// incremental reindex stores. Suppression only: unresolved or a class /
-// interface -> False, the stored word stands.
-function ReturnsValueTypeNow(const AStore: ISymbolStore; const ATypeName: string): Boolean;
-var
-  Bare: string ;
-  P   : Integer;
-begin
-  Result:= False;
-  Bare  := Trim(ATypeName);
-  P     := Bare.LastDelimiter('.');
-  if P >= 0 then Bare:= Trim(Copy(Bare, P + 2, MaxInt));
-  if Bare = '' then Exit;
-  for var Cand in AStore.FindSymbolsByExactName(Bare) do
-  begin
-    if Cand.Kind in [skClass, skInterface] then Exit(False);
-    if Cand.Kind in [skRecord, skEnum] then Exit(True);
   end;
 end;
 
@@ -4528,7 +4570,7 @@ begin
   EchoOrder:= TList<string>.Create;
   try
     TB0:= BTick;
-    ResCallers:= AStore.FindResolvedCallers(ASym.Id);
+    ResCallers:= MemoResolvedCallers(AStore, ASym.Id); { 152b O6: same store call, memoised -- ComputeCoveredBy's first hop reuses it }
     for RC in ResCallers do
     begin
       FR:= ToFactRef(AStore, RC); { primary store's rows -> primary store's ids }
@@ -5477,10 +5519,15 @@ begin
   // by DRagLint.Doc.SymbolFacts.TSymbolFactsAnalyzer.Analyze/
   // AnalyzeReturnsOwner).
   Result.ReturnsOwner:= SFacts.ReturnsOwner;
-  // 150 X2: the stored word is index-order dependent for a record return type;
-  // see ReturnsValueTypeNow. 'new' needs no gate (T.Create is object-certain).
+  // 152b O7 (was 150 X2 ReturnsValueTypeNow): the index stores 'borrowed' /
+  // 'self' unless the return type is CERTAINLY a value type without asking another
+  // file (Doc.SymbolFacts.IsDefiniteValueTypeName); the reference-type gate runs
+  // HERE, against the complete store (AFileId 0 = any file), so a non-T/I class
+  // from another unit is shown, a record / enum / HWND-like alias is not, and the
+  // answer cannot depend on index order. 'new' needs no gate (T.Create is
+  // object-certain).
   if ((Result.ReturnsOwner = 'borrowed') or (Result.ReturnsOwner = 'self'))
-     and ReturnsValueTypeNow(AStore, Result.ReturnType) then
+     and not IsReferenceTypeName(AStore, Result.ReturnType, 0) then
     Result.ReturnsOwner:= '';
   Inc(GBSymFacts, BTick - TB0);
 

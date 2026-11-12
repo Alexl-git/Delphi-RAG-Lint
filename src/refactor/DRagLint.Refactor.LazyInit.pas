@@ -67,7 +67,7 @@ uses
   System.Classes, System.IOUtils, System.JSON, System.StrUtils, System.RegularExpressions,
   System.Generics.Collections, System.Generics.Defaults, System.Math, Winapi.Windows,
   FireDAC.Comp.Client,
-  DRagLint.Core.Model, DRagLint.Project.OwnRoots, DRagLint.Report.CyclePlan, DRagLint.Refactor.CompileGate,  // dl:ok uses-global-census@98a3 -- the CompileGate globals travel with the gated refactor verbs by design (R3 / G3P compile gate)
+  DRagLint.Core.Model, DRagLint.Project.OwnRoots, DRagLint.Report.CyclePlan, DRagLint.Refactor.CompileGate,
   DRagLint.Refactor.VerbShape, DRagLint.Refactor.RedundantCast, DRagLint.Storage.SQLite, DRagLint.Lint.InitSections,
   TreeSitter, DRagLint.Diagnostics.ParseCache;
 
@@ -604,7 +604,7 @@ begin
   var Gate:= Default(TGateOutcome);
   var Ran:= False;
   if pOpts.Apply then
-    if Plans[0].RefusalKind <> '' then Result:= CExitRefused  // dl:ok duplicate-code@55f9 -- sibling verb plumbing (lazy-init / extract-interface / deps share the refactor-verb shape); a shared helper is a 148 row (147 INT sweep)
+    if Plans[0].RefusalKind <> '' then Result:= CExitRefused
     else
     begin
       var Args:= Default(TOneFileApplyArgs);

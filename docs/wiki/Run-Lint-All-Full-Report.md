@@ -1,6 +1,6 @@
 # Run Lint All (Full Report)
 
-Runs the full rule catalog (315 rules, 262 on by default across 18 categories,
+Runs the full rule catalog (316 rules, 262 on by default across 18 categories,
 110 auto-fixable) against a project's indexed code and reports every surviving
 finding. Reach for it as the overall project health check.
 
