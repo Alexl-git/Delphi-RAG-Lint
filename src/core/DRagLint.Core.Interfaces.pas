@@ -3061,6 +3061,15 @@ type
     /// section of the depth-0 directive before it. Empty when HasFileFacts is False.</returns>
     /// <remarks>Read once per resolve by TCallResolver.BuildMaps.</remarks>
     function GetIncludeHosts: TArray<TIncludeHostRow>;
+    /// <summary>152c RINC: True when AIncPath is a uses-list fragment -- it has at least one
+    /// file_includes site and EVERY site, over every host of the index, stands in a uses clause
+    /// (in_uses = 1).</summary>
+    /// <param name="AIncPath">Absolute path of the include file (compared case-insensitively).</param>
+    /// <returns>False for an include with no recorded site, one included as code anywhere, or
+    /// when HasFileFacts is False.</returns>
+    /// <remarks>Such a fragment cannot parse on its own, so the indexer's DIAG / parse-errors=
+    /// and `lint &lt;file&gt;` do not report its parse error (the rule lint-all applies, 152c INCR M4).</remarks>
+    function IncludeIsUsesFragment(const AIncPath: string): Boolean;
     /// <summary>152c RINC: the top-level declarations of include files -- every parentless,
     /// non-unit symbol whose file is an include included as code somewhere in the index.</summary>
     /// <returns>Id, FileId (the include), Kind, Name, Signature and the stored Section ('' --

@@ -2030,9 +2030,19 @@ begin
           raise EInOutError.Create('DRAGLINT_INDEX_TEST_FAIL_FILE: injected store failure');
         FStore.CommitFileTx(Token);
         Inc(GProfCommit, ProfNow - TProf);
-        ReportProgress(AFilePath, Length(ParseRes.Symbols), Length(ParseRes.References), Length(ParseRes.Diagnostics));
+        { 152c RINC: a uses-list fragment include (every site stands in a uses clause) cannot
+          parse on its own -- its parse error is not reported or counted, as lint-all does (INCR M4). }
+        var Shown: TArray<string>:= ParseRes.Diagnostics;
+        if (Length(Shown) > 0) and SameText(ExtractFileExt(AFilePath), '.inc')
+           and FStore.IncludeIsUsesFragment(TPath.GetFullPath(AFilePath)) then
+        begin
+          Shown:= nil;
+          for var FragDiag in ParseRes.Diagnostics do
+            if not FragDiag.Contains(': parse error [') then Shown:= Shown + [FragDiag];
+        end;
+        ReportProgress(AFilePath, Length(ParseRes.Symbols), Length(ParseRes.References), Length(Shown));
         var HasTreeError: Boolean:= False;
-        for var Diag in ParseRes.Diagnostics do
+        for var Diag in Shown do
         begin
           Writeln('    DIAG: ' + Diag);
           if Diag.Contains(': parse error [') then HasTreeError:= True;

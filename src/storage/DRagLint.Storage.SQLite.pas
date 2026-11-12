@@ -3447,6 +3447,10 @@ type
       /// <summary>152c RINC: implements ISymbolStore.GetIncludeHosts.</summary>
       /// <returns>The (include, host) pairs of code includes.</returns>
       function GetIncludeHosts: TArray<TIncludeHostRow>;
+      /// <summary>152c RINC: implements ISymbolStore.IncludeIsUsesFragment.</summary>
+      /// <param name="AIncPath">Absolute path of the include file.</param>
+      /// <returns>True when every recorded site of the include stands in a uses clause.</returns>
+      function IncludeIsUsesFragment(const AIncPath: string): Boolean;
       /// <summary>152c RINC: implements ISymbolStore.GetIncludeTopLevelSymbols.</summary>
       /// <returns>The parentless declarations of code-include files.</returns>
       function GetIncludeTopLevelSymbols: TArray<TSymbol>;
@@ -6067,6 +6071,26 @@ begin
   finally
     Q.Free;
     L.Free;
+  end;
+end;
+
+{ 152c RINC: a uses-list fragment = an include whose every site stands in a uses clause. }
+function TSQLiteSymbolStore.IncludeIsUsesFragment(const AIncPath: string): Boolean;
+var
+  Q: TFDQuery;
+begin
+  Result:= False;
+  if (AIncPath = '') or not HasFileFacts then Exit;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN in_uses = 0 THEN 1 ELSE 0 END), 0) AS code ' +
+                   'FROM file_includes WHERE LOWER(inc_path) = LOWER(:p)';
+    Q.ParamByName('p').AsString:= AIncPath;
+    Q.Open;
+    Result:= (Q.FieldByName('n').AsInteger > 0) and (Q.FieldByName('code').AsInteger = 0);
+  finally
+    Q.Free;
   end;
 end;
 

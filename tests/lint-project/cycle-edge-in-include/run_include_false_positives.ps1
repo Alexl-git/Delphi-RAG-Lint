@@ -10,6 +10,8 @@
                  UnC uses UnA and references nothing -> still fires (the positive control: the rule is on).
 
   RED on the 1.50.0-alpha base: frag reports 2 errors, UnB fires. GREEN with lane INCR.
+  152c RINC: the index's DIAG / per-file error count and `lint <file>` on the fragment agree (RED on
+  the INCR head: DIAG printed, 1 error, lint <file> = 2); fragcode / fragboth keep both, as controls.
   Usage: pwsh -File tests\lint-project\cycle-edge-in-include\run_include_false_positives.ps1 [-Exe <drag-lint.exe>]
 #>
 param([string]$Exe = "$PSScriptRoot\..\..\..\src\cli\Win64\Debug\drag-lint.exe")
@@ -30,12 +32,15 @@ function Parse-Findings([string[]]$Raw) {
   if ($null -eq $out) { $out = @() }
   return ,@($out)
 }
+$script:indexOut = @{}
+$script:dbOf = @{}
 function Scenario([string]$Name, [string[]]$LintArgs) {
   $dir = Join-Path $scratch $Name
   [void](New-Item -ItemType Directory -Force -Path $dir)
   Copy-Item (Join-Path $PSScriptRoot "$Name\*") $dir
   $db = Join-Path $scratch "$Name.sqlite"
-  & $exePath index $dir --db $db 2>&1 | Out-Null
+  $script:indexOut[$Name] = @(& $exePath index $dir --db $db 2>&1 | ForEach-Object { "$_" })
+  $script:dbOf[$Name] = $db
   $raw = & $exePath lint-all --db $db --library-db none @LintArgs --format json 2>$null
   $parsed = Parse-Findings $raw
   return ,@($parsed)
@@ -53,6 +58,25 @@ try {
   $f2 = Scenario 'fragboth' @()
   $fe2 = @($f2 | Where-Object { $_.rule -in @('parser-error', 'syntax-error') -and (Leaf $_) -eq 'FragBothUses.inc' })
   Check 'M4 control: a fragment included in a uses clause AND as code still reports both rules' ($fe2.Count -eq 2) "$($fe2.Count)"
+
+  # 152c RINC: the index (DIAG / per-file error count / parse-errors=) and `lint <file>` agree with lint-all.
+  function IndexDiag([string]$Name, [string]$Inc) {
+    return ,@($script:indexOut[$Name] | Where-Object { $_ -match 'DIAG:' -and $_ -match [regex]::Escape($Inc) -and $_ -match 'parse error' })
+  }
+  function FileLintErrors([string]$Name, [string]$Inc) {
+    $raw = & $exePath lint (Join-Path (Join-Path $scratch $Name) $Inc) --db $script:dbOf[$Name] --format json 2>$null
+    $all = Parse-Findings $raw
+    return ,@($all | Where-Object { $_.rule -in @('parser-error', 'syntax-error') })
+  }
+  $progress = @($script:indexOut['frag'] | Where-Object { $_ -match 'FragUses\.inc ->' })
+  Check 'M4 index: the fragment progress line was printed (shape)' ($progress.Count -eq 1) "$($progress.Count)"
+  Check 'M4 index: no DIAG parse error for a uses-fragment include' ((IndexDiag 'frag' 'FragUses.inc').Count -eq 0) "$((IndexDiag 'frag' 'FragUses.inc').Count)"
+  Check 'M4 index: the fragment counts 0 errors on its progress line' (($progress.Count -eq 1) -and ($progress[0] -match ', 0 errors')) "$progress"
+  Check 'M4 index control: an include used as code keeps its DIAG parse error' ((IndexDiag 'fragcode' 'FragBroken.inc').Count -eq 1) "$((IndexDiag 'fragcode' 'FragBroken.inc').Count)"
+  Check 'M4 index control: a fragment also included as code keeps its DIAG parse error' ((IndexDiag 'fragboth' 'FragBothUses.inc').Count -eq 1) "$((IndexDiag 'fragboth' 'FragBothUses.inc').Count)"
+  Check 'M4 lint <file>: a uses-fragment include reports no parser-error / syntax-error' ((FileLintErrors 'frag' 'FragUses.inc').Count -eq 0) "$((FileLintErrors 'frag' 'FragUses.inc').Count)"
+  Check 'M4 lint <file> control: an include used as code still reports both rules' ((FileLintErrors 'fragcode' 'FragBroken.inc').Count -eq 2) "$((FileLintErrors 'fragcode' 'FragBroken.inc').Count)"
+  Check 'M4 lint <file> control: a fragment also included as code still reports both rules' ((FileLintErrors 'fragboth' 'FragBothUses.inc').Count -eq 2) "$((FileLintErrors 'fragboth' 'FragBothUses.inc').Count)"
 
   $u = @(Scenario 'unusedinc' @('--rule', 'unused-unit-in-uses') | Where-Object { $_.rule -eq 'unused-unit-in-uses' })
   $u | ForEach-Object { Write-Host ("    {0}:{1} {2}" -f (Leaf $_), $_.start_line, $_.message.Substring(0, [Math]::Min(80, $_.message.Length))) -ForegroundColor DarkGray }
