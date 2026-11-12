@@ -1,0 +1,8 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MainSource>TS152.dpr</MainSource>
+  </PropertyGroup>
+  <ItemGroup>
+    <DCCReference Include="uTS152Main.pas"><Form>frmTS152Main</Form><FormType>dfm</FormType></DCCReference>
+  </ItemGroup>
+</Project>

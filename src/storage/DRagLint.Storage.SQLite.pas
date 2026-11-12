@@ -3222,7 +3222,7 @@ type
       /// <returns>True when all three file-fact tables exist (probed once).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetDfmObjects (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetFileIncludes (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetPpRegions (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.PutFileFacts (DRagLint.Storage.SQLite.pas)</para>
+      /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetDfmObjects (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetPpRegions (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.PutFileFacts (DRagLint.Storage.SQLite.pas)</para>
       /// <para>Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.TableExists</para>
       /// <para>Returns: FHasFileFacts = 1</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.HasFileFacts</para>
@@ -3235,24 +3235,6 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function HasFileFacts: Boolean;
-      /// <summary>149 EX2: implements ISymbolStore.GetFileIncludes.</summary>
-      /// <param name="AFileId">files.id.</param>
-      /// <returns>The file's rows, ordinal order.</returns>
-      /// <remarks>
-      /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: Default, DRagLint.Storage.SQLite.TSQLiteSymbolStore.HasFileFacts</para>
-      /// <para>Returns: nil; L.ToArray</para>
-      /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.GetFileIncludes</para>
-      /// <para>Reads: FConn</para>
-      /// <para>SQL: reads FILE_INCLUDES</para>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.HasFileFacts"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginDeferredTextIndex"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginFileBatch"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginTargetedTextIndex"/>
-      /// <!-- drag-lint:auto END -->
-      /// </remarks>
-      function GetFileIncludes(AFileId: Int64): TArray<TFileIncludeRow>;
       /// <summary>149 EX2: implements ISymbolStore.GetDfmObjects.</summary>
       /// <param name="AFileId">files.id.</param>
       /// <returns>The file's rows, ordinal order; SymbolIdx -1.</returns>
@@ -5501,41 +5483,6 @@ begin
     Q.ParamByName('reg' ).AsLargeInt  := APpDirectives[I].Region;
     Q.ParamByName('br'  ).AsLargeInt  := APpDirectives[I].Branch;
     Q.ExecSQL;
-  end;
-end;
-
-function TSQLiteSymbolStore.GetFileIncludes(AFileId: Int64): TArray<TFileIncludeRow>;
-var
-  Q: TFDQuery;
-  L: TList<TFileIncludeRow>;
-  R: TFileIncludeRow;
-begin
-  Result:= nil;
-  if not HasFileFacts then Exit;
-  L:= TList<TFileIncludeRow>.Create;
-  Q:= TFDQuery.Create(nil);
-  try
-    Q.Connection:= FConn;
-    Q.SQL.Text  := 'SELECT inc_path, host_line, host_col, depth, section, in_uses FROM file_includes ' +
-                   'WHERE file_id = :fid ORDER BY ordinal';
-    Q.ParamByName('fid').AsLargeInt:= AFileId;
-    Q.Open;
-    while not Q.Eof do
-    begin
-      R:= Default(TFileIncludeRow);
-      R.IncPath := Q.FieldByName('inc_path' ).AsString;  // dl:ok field-by-name-in-loop@ef09 -- 149 EX2 per-file fact reader: a handful of rows per file, OFF-by-default consumers; a field cache is not worth it here
-      R.HostLine:= Q.FieldByName('host_line').AsInteger;
-      R.HostCol := Q.FieldByName('host_col' ).AsInteger;
-      R.Depth   := Q.FieldByName('depth'    ).AsInteger;
-      R.Section := Q.FieldByName('section'  ).AsString;
-      R.InUses  := Q.FieldByName('in_uses'  ).AsInteger <> 0;
-      L.Add(R);
-      Q.Next;
-    end;
-    Result:= L.ToArray;
-  finally
-    Q.Free;
-    L.Free;
   end;
 end;
 

@@ -2965,10 +2965,6 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function HasFileFacts: Boolean;
-    /// <summary>The file_includes rows of one file, source order.</summary>
-    /// <param name="AFileId">files.id of the host.</param>
-    /// <returns>Empty when the file has none or HasFileFacts is False.</returns>
-    function GetFileIncludes(AFileId: Int64): TArray<TFileIncludeRow>;
     /// <summary>The dfm_objects rows of one .dfm, source order.</summary>
     /// <param name="AFileId">files.id of the .dfm.</param>
     /// <returns>Empty when the file has none or HasFileFacts is False.
