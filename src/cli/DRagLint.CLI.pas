@@ -22455,6 +22455,48 @@ begin
   Result:= 1;
 end;
 
+{ 152b DOCU: the files the last fact build READ (Doc.Facts.SourceFilesRead) that
+  changed since AStore indexed them, AOwnFile excluded. A declaration's facts are
+  mined from its callees' bodies at their INDEXED line ranges, read from the file
+  as it is now; once an earlier `document --apply` rewrote a callee's file, that
+  range covers other text and the exception tags cite the wrong routines (INT2
+  BKL O3: Core.Model). The documented file itself is left out on purpose: its
+  staleness is ruling D-2's case -- the applier's anchor guard refuses, the verb
+  reindexes and retries (ReindexAfterStaleAnchor). }
+function StaleFactSources(const AStore: ISymbolStore; const AOwnFile: string): TArray<string>;
+begin
+  Result:= nil;
+  var Read: TArray<string>:= SourceFilesRead;
+  if Length(Read) = 0 then Exit;
+  for var P: string in ChangedFilePaths(AStore) do
+    if not SameText(ExpandFileName(P), ExpandFileName(AOwnFile)) then
+      for var R: string in Read do
+        if SameText(ExpandFileName(P), ExpandFileName(R)) then
+        begin
+          Result:= Result + [P];
+          Break;
+        end;
+end;
+
+{ 152b DOCU: refuses a document run whose facts were read from stale files
+  (StaleFactSources). Refuse, not reindex: a --unit run has no project to
+  refresh, and a folder index into a project DB widens it; nothing is rendered or
+  written, so the run's output is either the post-reindex answer or none.
+  Returns the verb's exit code, 1. }
+function ReportStaleFactSources(const AStale: TArray<string>; const ADbPath: string): Integer;
+const
+  MAX_NAMED = 3; { files named in the message; the count covers the rest }
+begin
+  var Named: string:= '';
+  for var I: Integer:= 0 to Min(High(AStale), MAX_NAMED - 1) do
+    Named:= Named + (if Named = '' then '' else ', ') + AStale[I];
+  Writeln(ErrOutput, Format('doc: REFUSED -- %d file(s) this run reads facts from changed since it was indexed (%s). ' +
+    'Their line numbers no longer match the text, so exception and call facts would cite the wrong routines. ' +
+    'NOTHING was rendered or written. Reindex first: drag-lint index --project <file.dproj> --db %s',
+    [Length(AStale), Named, ADbPath]));
+  Result:= 1;
+end;
+
 // v(ADP3 T3d2 D6): shared strip-reporting path for the three call sites that
 // each independently built the same '--strip' JSON object / 'stripped: N
 // tags, M blocks...' text (DoDocumentUnit, ReportDocBatch,
@@ -22582,7 +22624,10 @@ begin
   Opts.ComplexityMin:= LoadDocComplexityMin; // ADP2 T3: manifest docs.complexity_min threshold for the 'Complexity:' line (default 10 on any load failure).
   Opts.Handles:= LoadDocHandlesOptions; // gap 3: manifest docs.dialog_routines / docs.max_handles for the 'Catches:' line.
   Opts.IncludeAccessors:= AArgs.DocIncludeAccessors; // ADP1 T2: --include-accessors disables the trivial-accessor skip for this run.
+  ResetSourceFilesRead; // 152b DOCU: record what the facts read, then refuse on stale text
   Res:= TDocBatch.DocumentUnit(Store, AArgs.DocUnit, Opts);
+  var StaleSrc: TArray<string>:= StaleFactSources(Store, AArgs.DocUnit);
+  if Length(StaleSrc) > 0 then Exit(ReportStaleFactSources(StaleSrc, AArgs.DbPath));
 
   Applied:= AArgs.Apply and (Length(Res.Edits) > 0);
   if Applied then
@@ -23317,11 +23362,15 @@ begin
 
   if AArgs.DocStrip then Exit(DoDocumentStripQName(AArgs, Store)); // v(ADP3 T2)
 
+  ResetSourceFilesRead; // 152b DOCU: see StaleFactSources
   Res:= DRagLint.Doc.Document.TDocumenter.BuildFor(Store, AArgs.QName, LoadDocHandlesOptions, AArgs.DocSeeAlso,
     AArgs.DocSince, AArgs.DocBaseDir, OpenExtraStores(AArgs), LoadDocMaxReturnCases, LoadDocMaxCallers,
     LoadDocComplexityMin); // gap 3: manifest docs.dialog_routines / max_handles for 'Catches:'. ADF T5: --since (git <since> date) + --base-dir repo root; multi-db: other resolved --db's searched for callers; Task 10: manifest docs.max_return_cases cap; ADP1 T1: manifest docs.max_callers cap; ADP2 T3: manifest docs.complexity_min threshold.
 
   if Res.Action = DRagLint.Doc.Document.daNotFound then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
+  { 152b DOCU: as DoDocumentUnit -- facts read from a callee file rewritten since indexing are refused. }
+  var StaleQ: TArray<string>:= StaleFactSources(Store, Res.FilePath);
+  if Length(StaleQ) > 0 then Exit(ReportStaleFactSources(StaleQ, AArgs.DbPath));
 
   Applied:= AArgs.Apply and (Length(Res.Edits) > 0);
   if Applied then
