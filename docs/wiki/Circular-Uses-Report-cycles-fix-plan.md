@@ -196,7 +196,17 @@ The engine never guesses; every kind it can give:
   lexical hit names an identifier and line), `edge-still-used` (after
   an R1 / R2 cut the consumer still uses the declaring unit for another name, so the uses
   entry -- and the edge -- would stay), `coupling-remains` (since 1.43: the moved declarations of two units need each other and cannot share one new unit, see below, or the plan's own prediction still shows the interface coupling; before 1.43 such a plan printed `mechanical`; since 1.47 also a line that moves and names another unit of the cycle qualified, as `DUnit.Foo(2)` in a method body that moves with its class, which the compile gate used to catch), `manual-edit` (the default for any edit the planner
-  cannot make mechanically).
+  cannot make mechanically), `declaration-in-include` (since 1.50: a symbol the cut would move is declared in an
+  include file of the declaring unit, `{$I}` at any depth) and `reference-in-include` (since 1.50: a line an R1 / R2 /
+  hand-over cut would redirect sits in an include file of the consuming unit) -- drag-lint never edits an include,
+  which other units may share; the reason names the symbol, the include and its line, the `{$I}` site in the unit,
+  and the remedy: move the declaration (or the code) into the unit itself and run `cycles --plan` again (the lint
+  rule `cycle-edge-in-include` reports such an edge). Before 1.50 such a use was invisible to the planner: it printed
+  "could not resolve the symbol" and could plan to REMOVE a uses entry the include still needs. An include-borne use
+  now counts as a use of the unit that includes it, so its uses entry is always kept; `Why it cycles` names it as
+  `` `IncDeclB.pas:12`; declared in `IncDeclA` through `IncDeclTypes.inc:2` (`{$I}` at `IncDeclA.pas:8`) ``.
+  Pinned by `run_cyclefix_include_aware.ps1` (positive control: the same fixtures with the include inlined plan
+  mechanically and pass the compile gate).
 * **R1 (routine-call inversion):** `not-a-routine`, `signature-in-cycle`,
   `overloaded-routine`, `signature-unknown`, `qualified-ref` (a name qualified by the declaring unit that the plan can neither redirect nor move: another routine of that unit, or the inverted routine in a shape it cannot rewrite, such as `@Unit.Foo`; `Unit.Foo(2)` of the inverted routine itself becomes `FooPtr(2)`, a comment or a string is not a use, and a global moves and is rewritten, see below), `name-shadowed` (since 1.44: a line to rewrite also holds `Foo` bound to something else, a nested routine, a method or a parameter, as in `Foo(1); Unit.Foo(2);`, or `Unit` there is a local of the consumer; the rewrite works on the text of the line, so it would call the pointer instead; on separate lines the plan is sound and goes ahead), `routine-not-called` (`@F`, a parameterless function as an argument, an argument on a line of its own; a routine passed as a whole argument is redirected, see below),
   `init-order` (the consumer's initialization section runs the call and, since 1.50, the program's uses order does not prove that the declaring unit initializes first -- see "Init order proved from the program" below; the reason says which condition failed), `finalization-order` (since 1.43: the consumer's finalization section runs the call, and the declaring unit, finalized first after the cut, has statements in its finalization section or a variable of a type the compiler may finalize), `unsupported-directive`, `duplicate-identifier` (the leaf already declares the

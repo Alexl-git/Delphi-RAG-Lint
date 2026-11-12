@@ -151,6 +151,10 @@
     {
       "ask": "Why will this refused cycle never be cut automatically?",
       "command": "drag-lint cycles --plan --project <X.dproj> --db <file.sqlite>"
+    },
+    {
+      "ask": "Why is my cycle refused declaration-in-include or reference-in-include?",
+      "command": "drag-lint cycles --plan --project <X.dproj> --db <file.sqlite>"
     }
   ],
   "lastVerified": {
