@@ -36493,9 +36493,9 @@ begin
 
     { ONE ResolvePlan per call (~0.7 s on a 15-project manifest): the LSP --full-rules
       child has an 8 s budget (LintChildTimeoutMs, run_lsp_dlok_filtering_guard).
-      151 RC: walked here instead of TDbSelect.Resolve, which keeps only the FIRST
-      library section of the platform -- right for a consumer DB list, wrong for a
-      proof that must see every library type. }
+      151 RC: walked here instead of TDbSelect.Resolve, which then kept only the FIRST
+      library section of the platform. 152b DBS (O4): Resolve now returns every library
+      section in this same order; this walk stays because it needs no project sections. }
     var PlatFilter: TArray<string>:= if Platform <> '' then [Platform] else nil;
     Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
     try
@@ -39759,9 +39759,20 @@ begin
       A:= Snapshot;
       A.ProjectPath  := AProject;
       A.CheckPlatform:= APlatform;
-      SplitConsumerDbs(A, ResolveConsumerDbs(A), ProjDb, LibDb);
+      var All: TArray<string>:= ResolveConsumerDbs(A);
+      SplitConsumerDbs(A, All, ProjDb, LibDb);
       Result.ProjectDb:= if AProject <> '' then ProjDb else '';
       Result.LibraryDb:= LibDb;
+      { 152b DBS (O4): the platform's further library sections. TDbSelect.Resolve puts
+        every library section LAST, in manifest order, and no file is named here
+        (InFile / Path cleared, so no membership reorder): everything after LibDb is one. }
+      Result.ExtraLibraryDbs:= nil;
+      var AfterLib: Boolean:= False;
+      for var D: string in All do
+      begin
+        if AfterLib then Result.ExtraLibraryDbs:= Result.ExtraLibraryDbs + [D];
+        if (LibDb <> '') and SameText(D, LibDb) then AfterLib:= True;
+      end;
     end;
 end;
 
