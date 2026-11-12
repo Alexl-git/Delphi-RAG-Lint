@@ -19,12 +19,13 @@
 
   Usage: pwsh -File tests\lint-project\rtti-unavailable\run_rtti_unavailable.ps1 [-Exe <drag-lint.exe>]
 #>
-param([string]$Exe = "third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = "$PSScriptRoot\..\..\..\src\cli\Win64\Debug\drag-lint.exe")
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
 Set-Location $repo
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 $exePath = (Resolve-Path $Exe).Path
+. "$PSScriptRoot\..\..\autotest\lib\HermeticEngine.ps1"; $exePath = Get-HermeticEngine $exePath   # 152b INT2: tree-build default, no machine drag-lint.json
 $scratch = Join-Path C:\TEMP "draglint_rtti_$PID"
 $Rule    = 'rtti-unavailable'
 $script:fail = $false

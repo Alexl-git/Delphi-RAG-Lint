@@ -11,7 +11,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$WorkDir = "$env:TEMP\drag-lint-docattr152b-$PID"
 )
 $ErrorActionPreference = 'Stop'
@@ -22,6 +22,7 @@ function Check($n, $ok, $d = '') {
 }
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 $Exe = (Resolve-Path $Exe).Path
+. "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152b INT2: tree-build default, no machine drag-lint.json
 if (Test-Path $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 New-Item -ItemType Directory -Force $WorkDir | Out-Null
 $src = Join-Path $WorkDir 'attrapply.pas'
