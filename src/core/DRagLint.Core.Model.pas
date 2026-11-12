@@ -3316,6 +3316,12 @@ const
   /// <summary>N-06: the refusal kind every uses editor reports for an entry
   /// that lives inside an include file.</summary>
   REFUSAL_USES_IN_INCLUDE = 'uses-in-include';
+  /// <summary>152c CYC3 item 2: the refusal kind `cycles --plan` / `--fix` report when the
+  /// declaration a cut would move lives in an include file of the declaring unit.</summary>
+  REFUSAL_DECLARATION_IN_INCLUDE = 'declaration-in-include';
+  /// <summary>152c CYC3 item 2: the refusal kind `cycles --plan` / `--fix` report when a
+  /// reference a cut would redirect lives in an include file of the consuming unit.</summary>
+  REFUSAL_REFERENCE_IN_INCLUDE = 'reference-in-include';
 
 /// <summary>N-06: the one refusal text every uses EDITOR prints when the entry
 /// it would edit lives inside an include file (an .inc may be shared by many
@@ -3332,6 +3338,22 @@ const
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function IncludeUsesRefusal(const AVerb: string; const AUse: TUnitUse; const AHostPath: string): string;
+
+/// <summary>152c CYC3 item 2: the reason text of a `declaration-in-include` or
+/// `reference-in-include` refusal (the kind itself is not part of it).</summary>
+/// <param name="AKind">REFUSAL_DECLARATION_IN_INCLUDE or REFUSAL_REFERENCE_IN_INCLUDE.</param>
+/// <param name="ASymbol">The symbol the cut would move (declaration) or redirect (reference).</param>
+/// <param name="AIncPath">The include file; only its file name is printed.</param>
+/// <param name="AIncLine">The symbol's line inside the include.</param>
+/// <param name="AHostPath">The unit whose text includes it; only its file name is printed.</param>
+/// <param name="AHostLine">The line of the host's {$I} directive (the outermost one for a nested include).</param>
+/// <returns>One sentence naming the symbol, the include and its line, the {$I} site in the
+/// host, that drag-lint never edits an include, what to move into the host, and the lint rule
+/// `cycle-edge-in-include`.</returns>
+/// <remarks>An include may be shared by other units, so no cycle recipe ever edits one; the
+/// remedy is the same for both kinds: put the text into the host unit and plan again.</remarks>
+function IncludeEditRefusal(const AKind, ASymbol, AIncPath: string; AIncLine: Integer;
+  const AHostPath: string; AHostLine: Integer): string;
 
 implementation
 
@@ -3379,6 +3401,21 @@ begin
      AVerb, IncName, HostName]);
 end;
 
+function IncludeEditRefusal(const AKind, ASymbol, AIncPath: string; AIncLine: Integer;
+  const AHostPath: string; AHostLine: Integer): string;
+var
+  HostName: string;
+  IncName : string;
+begin
+  HostName:= ExtractFileName(AHostPath);
+  IncName := ExtractFileName(AIncPath);
+  Result:= Format('`%s` is %s in %s (line %d), which %s includes through {$I %s} at line %d: drag-lint never ' +
+    'edits an include (it may be shared by other units); move %s into %s, then run `cycles --plan` again ' +
+    '(the lint rule `cycle-edge-in-include` reports such an edge)',
+    [ASymbol, (if AKind = REFUSAL_DECLARATION_IN_INCLUDE then 'declared' else 'named'), IncName, AIncLine,
+     HostName, IncName, AHostLine,
+     (if AKind = REFUSAL_DECLARATION_IN_INCLUDE then 'the declaration' else 'that code'), HostName]);
+end;
 { TUnitUse }
 
 function TUnitUse.FromInclude: Boolean;

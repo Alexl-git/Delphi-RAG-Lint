@@ -143,6 +143,18 @@
     {
       "ask": "Why was this cycle refused?",
       "command": "drag-lint cycles --fix --project <X.dproj> --db <file.sqlite> --cycle <n>"
+    },
+    {
+      "ask": "Can it cut a call made from an initialization section (init-order)?",
+      "command": "drag-lint cycles --plan --project <X.dproj> --db <file.sqlite>"
+    },
+    {
+      "ask": "Why will this refused cycle never be cut automatically?",
+      "command": "drag-lint cycles --plan --project <X.dproj> --db <file.sqlite>"
+    },
+    {
+      "ask": "Why is my cycle refused declaration-in-include or reference-in-include?",
+      "command": "drag-lint cycles --plan --project <X.dproj> --db <file.sqlite>"
     }
   ],
   "lastVerified": {

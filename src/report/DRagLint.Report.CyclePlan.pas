@@ -305,6 +305,9 @@ type
     Recipe: string;
     /// <summary>True for the edge `cycles --fix` cuts (the planner's CutEdge).</summary>
     Chosen: Boolean;
+    /// <summary>Lane CYC3: the init-order proof line of a routine-call inversion whose call runs from the consumer's
+    /// initialization section ('' otherwise); JSON `init_order`, written only when not empty.</summary>
+    InitOrder: string;
   end;
 
   /// <summary>What a `Fix it` block (text) or `fix` object (JSON) says about one circular group.</summary>
@@ -892,12 +895,23 @@ type
     Line     : Integer;
     RefName  : string;
     RefKind  : TSymbolKind;
+    IncFid   : Int64;    // 152c CYC3 item 2: the include the reference sits in (Line = its $I line in the host); 0 = none
+    IncLine  : Integer;  // the reference's line inside IncFid
   end;
 
   TCandidate = record
-    Actual: TSymbol;
-    Owner : TSymbol;
-    Stem  : string;
+    Actual : TSymbol;
+    Owner  : TSymbol;
+    Stem   : string;
+    IncHost: Int64;    // 152c CYC3 item 2: Owner is declared in an include of this unit file; 0 = none
+    ImplInc: Boolean;  // that include sits in the host's implementation (invisible to other units)
+  end;
+
+  /// <summary>152c CYC3 item 2: one include file reached from a unit's text, at any depth.</summary>
+  TIncSite = record
+    IncFid  : Int64;    // the include file
+    HostFid : Int64;    // the unit file whose text includes it
+    HostLine: Integer;  // the outermost {$I} directive's line in the host
   end;
 
   TMoveKind = (mvDecl, mvWithBodies, mvBase, mvBlocked);
@@ -944,6 +958,7 @@ type
     BaseAncestor: string; // B4-d: the ancestor the base class inherits, as the header writes it; '' = TObject
     CtorName    : string; // B8: the constructor the consumers call through the pointer; '' = no inversion
     CtorSig     : string; // B8: its parameter list verbatim, parentheses included; '' = none
+    CtorProof   : string; // lane CYC3: the init-order proof line when the call runs from an initialization section
   end;
 
   TConsumer = record
@@ -1062,6 +1077,10 @@ type
     FCands      : TDictionary<string, TArray<TCandidate>>;
     FSyms       : TDictionary<Int64, TSymbol>;
     FNeeds      : TDictionary<Int64, TArray<TNeed>>;
+    FIncFids    : TDictionary<string, Int64>;   // 152c CYC3 item 2: lower-case path of every non-unit file -> its id
+    FIncIds     : TDictionary<Int64, Boolean>;  // the same files by id
+    FIncSites   : TDictionary<Int64, TArray<TIncSite>>;  // host fid -> its include sites, on first use
+    FIncHosts   : TDictionary<Int64, TArray<TIncSite>>;  // include fid -> the sites that reach it; nil until first use
     // per-cycle state, cleared by ResetCycle
     FComp       : TArray<string>;
     FMembers    : TDictionary<string, Boolean>;
@@ -1092,6 +1111,7 @@ type
     FInversion  : TRecipeSteps;  // R1 / R2 steps of FCutEdge; Recipe = crNone otherwise
     FPartBBest  : TEdgeEval;     // Part A groups: the edge Part B cuts after Part A (FromStem = '' when none)
     FPartBDone  : Boolean;       // FPartBBest has been computed for the current group
+    FInPartB    : Boolean;       // lane CYC3: Part B is being weighed on the graph predicted after Part A
     FFixProject : string;        // the project named in the Fix it commands; '' = placeholder
     FGroupHook  : TCycleGroupHook;  // hub-SCC P6 prep: a group it plans is skipped by Run; nil = none
     // loading + resolution
@@ -1105,8 +1125,17 @@ type
     function VisibleStems(const pF: TPlanFile; pSect: TSect): TArray<string>;
     function PickCandidate(const pF: TPlanFile; pSect: TSect; const pCands: TArray<TCandidate>): Integer;
     function IsLocalName(const pR: TReference): Boolean;
-    function Resolve(const pF: TPlanFile; const pR: TReference; out pNeed: TNeed): Boolean;
+    function Resolve(const pF: TPlanFile; const pR: TReference; pSect: TSect; out pNeed: TNeed): Boolean;
     function NeedsOf(pFid: Int64): TArray<TNeed>;
+    // 152c CYC3 item 2: include-aware planning
+    function IncludeFidOf(const pFromPath, pArgs: string): Int64;
+    function IncludeSitesOf(pHostFid: Int64): TArray<TIncSite>;
+    function IncludeHostsOf(pIncFid: Int64): TArray<TIncSite>;
+    function IncludeDeclSite(const pSym: TSymbol; out pSite: TIncSite): Boolean;
+    function IncludeDeclWhy(const pSym: TSymbol; const pSite: TIncSite): string;
+    procedure ApplyIncludeRefusals(const pEvals: TList<TEdgeEval>);
+    function NeedSite(const pF: TPlanFile; const pN: TNeed): string;
+    function DeclSite(const pN: TNeed): string;
     function FidOfStem(const pStem: string): Int64;
     function UnitNameOfStem(const pStem: string): string;
     // closure
@@ -2316,6 +2345,9 @@ begin
   FCands     := TDictionary<string, TArray<TCandidate>>.Create;
   FSyms      := TDictionary<Int64, TSymbol>.Create;
   FNeeds     := TDictionary<Int64, TArray<TNeed>>.Create;
+  FIncFids   := TDictionary<string, Int64>.Create;
+  FIncIds    := TDictionary<Int64, Boolean>.Create;
+  FIncSites  := TDictionary<Int64, TArray<TIncSite>>.Create;
   FMembers   := TDictionary<string, Boolean>.Create;
   FItems     := TDictionary<Int64, TMoveItem>.Create;
   FOrder     := TList<Int64>.Create;
@@ -2367,6 +2399,10 @@ begin
   FOrder.Free;
   FItems.Free;
   FMembers.Free;
+  FIncHosts.Free;
+  FIncSites.Free;
+  FIncIds.Free;
+  FIncFids.Free;
   FNeeds.Free;
   FSyms.Free;
   FCands.Free;
@@ -2393,7 +2429,12 @@ begin
   begin
     var Path:= PathOf(Fid);
     var Ext := LowerCase(ExtractFileExt(Path));
-    if not MatchText(Ext, ['.pas', '.dpr', '.dpk']) then Continue;
+    if not MatchText(Ext, ['.pas', '.dpr', '.dpk']) then
+    begin
+      FIncFids.AddOrSetValue(LowerCase(Path), Fid);
+      FIncIds.AddOrSetValue(Fid, True);
+      Continue;
+    end;
     FStemFid.AddOrSetValue(StemOfPath(Path), Fid);
     if SameText(Ext, '.dpr') and (FProjectFid = 0) then FProjectFid:= Fid;
     for var U in FStore.GetUnitUsesForFile(Fid) do
@@ -2486,13 +2527,37 @@ begin
   C:= Default(TCandidate);
   L:= TList<TCandidate>.Create;
   try
-    for var S in CycleSymbolsByExactName(FGraph, FStore, pName) do
+    var Syms:= CycleSymbolsByExactName(FGraph, FStore, pName);
+    for var S in Syms do
     begin
       if not OwnerOf(S, C.Owner) then Continue;
       C.Actual:= S;
       C.Stem  := StemOfFid(C.Owner.FileId);
       L.Add(C);
     end;
+    { 152c CYC3 item 2: a top-level declaration in an include belongs to every unit that includes it -- one
+      candidate per host; a host that declares the name itself keeps its own row (an include holding a
+      routine's body repeats a name the unit already declares) }
+    if FIncFids.Count > 0 then
+      for var S in Syms do
+      begin
+        C.Owner:= if (S.Kind = skEnumValue) and (S.ParentId > 0) then GetSym(S.ParentId) else S;
+        if (C.Owner.ParentId > 0) or (C.Owner.Kind in [skLocalVar, skParam, skUnit, skProgram, skPackage]) or
+          not FIncIds.ContainsKey(C.Owner.FileId) then Continue;
+        for var Site in IncludeHostsOf(C.Owner.FileId) do
+        begin
+          var HostStem:= StemOfFid(Site.HostFid);
+          var Own:= False;
+          for var K in L do
+            if (K.IncHost = 0) and (K.Stem = HostStem) then Own:= True;
+          if Own then Continue;
+          C.Actual := S;
+          C.Stem   := HostStem;
+          C.IncHost:= Site.HostFid;
+          C.ImplInc:= SectOf(GetFile(Site.HostFid), Site.HostLine) = scImpl;
+          L.Add(C);
+        end;
+      end;
     Result:= L.ToArray;
   finally
     L.Free;
@@ -2529,13 +2594,13 @@ var
   BestPos: Integer;
 begin
   for var I:= 0 to High(pCands) do
-    if pCands[I].Owner.FileId = pF.Fid then Exit(I);   { own declaration wins }
+    if (pCands[I].Owner.FileId = pF.Fid) or (pCands[I].IncHost = pF.Fid) then Exit(I);   { own declaration wins }
   Result := CNotFound;
   BestPos:= CNotFound;
   Vis    := VisibleStems(pF, pSect);
   for var I:= 0 to High(pCands) do
   begin
-    if SameText(pCands[I].Owner.Section, 'implementation') then Continue;
+    if SameText(pCands[I].Owner.Section, 'implementation') or pCands[I].ImplInc then Continue;
     for var P:= 0 to High(Vis) do
       if (Vis[P] = pCands[I].Stem) and (P > BestPos) then
       begin
@@ -2580,7 +2645,7 @@ begin
   FChainMemo.Add(Key, Result);
 end;
 
-function TCyclePlanner.Resolve(const pF: TPlanFile; const pR: TReference; out pNeed: TNeed): Boolean;
+function TCyclePlanner.Resolve(const pF: TPlanFile; const pR: TReference; pSect: TSect; out pNeed: TNeed): Boolean;
 var
   Cands: TArray<TCandidate>;
   Best : Integer;
@@ -2589,7 +2654,7 @@ begin
   if (pR.ReceiverText <> '') or SameText(pR.Kind, 'member-access') then Exit(False);
   Cands:= CandidatesFor(pR.NameText);
   if Length(Cands) = 0 then Exit(False);
-  Best:= PickCandidate(pF, SectOf(pF, pR.StartLine), Cands);
+  Best:= PickCandidate(pF, pSect, Cands);
   if Best = CNotFound then Exit(False);
   if IsLocalName(pR) then Exit(False);
   { HP2B: a memo by (enclosing symbol, name) -- the walk up the class chain asks the stores every hop, and
@@ -2597,7 +2662,7 @@ begin
   if ClassChainMember(pR.EnclosingSymbolId, pR.NameText) then Exit(False);
   pNeed.Owner    := Cands[Best].Owner;
   pNeed.OwnerStem:= Cands[Best].Stem;
-  pNeed.Sect     := SectOf(pF, pR.StartLine);
+  pNeed.Sect     := pSect;
   pNeed.Line     := pR.StartLine;
   pNeed.RefName  := pR.NameText;
   pNeed.RefKind  := Cands[Best].Actual.Kind;
@@ -2615,12 +2680,171 @@ begin
   L:= TList<TNeed>.Create;
   try
     for var R in F.Refs do
-      if Resolve(F, R, N) then L.Add(N);
+      if Resolve(F, R, SectOf(F, R.StartLine), N) then L.Add(N);
+    { 152c CYC3 item 2: a reference in an include of this unit is a use by this unit, in the section of the
+      $I directive; Line is that directive's line, the reference's own line is IncLine }
+    for var Site in IncludeSitesOf(pFid) do
+    begin
+      var Sect:= SectOf(F, Site.HostLine);
+      for var R in CycleRefsFromFile(FGraph, FStore, Site.IncFid) do
+        if Resolve(F, R, Sect, N) then
+        begin
+          N.Line   := Site.HostLine;
+          N.IncFid := Site.IncFid;
+          N.IncLine:= R.StartLine;
+          L.Add(N);
+        end;
+    end;
     Result:= L.ToArray;
   finally
     L.Free;
   end;
   FNeeds.Add(pFid, Result);
+end;
+
+{ 152c CYC3 item 2: the indexed non-unit file a $I pArgs directive in pFromPath names -- the path relative
+  to the including file first (the name as written, then with `.inc` when it has no extension), else the one
+  indexed file of that name; 0 when none or more than one matches. }
+function TCyclePlanner.IncludeFidOf(const pFromPath, pArgs: string): Int64;
+var
+  Name: string;
+begin
+  Name:= Trim(pArgs).DeQuotedString.DeQuotedString('"');
+  if Name = '' then Exit(0);
+  var Tries: TArray<string>:= [Name];
+  if ExtractFileExt(Name) = '' then Tries:= Tries + [Name + '.inc'];
+  for var N in Tries do
+    if FIncFids.TryGetValue(LowerCase(ExpandFileName(TPath.Combine(ExtractFilePath(pFromPath), N))), Result) then Exit;
+  Result:= 0;
+  for var N in Tries do
+    for var P in FIncFids do
+      if SameText(ExtractFileName(P.Key), ExtractFileName(N)) then
+      begin
+        if Result <> 0 then Exit(0);
+        Result:= P.Value;
+      end;
+end;
+
+{ 152c CYC3 item 2: every include reached from pHostFid's text, at every depth (an include's own $I
+  directives are followed), each with the outermost directive's line in the host. Read from the index's
+  pp_directives rows (`i` / `include`); a file without rows has no sites. Memoized per host. }
+function TCyclePlanner.IncludeSitesOf(pHostFid: Int64): TArray<TIncSite>;
+var
+  L   : TList<TIncSite>;
+  Seen: TDictionary<Int64, Boolean>;
+
+  procedure Walk(pFid: Int64; pTopLine: Integer);
+  var
+    Site: TIncSite;
+  begin
+    for var D in FStore.GetPpDirectives(pFid) do
+    begin
+      if not (SameText(D.Directive, 'i') or SameText(D.Directive, 'include')) then Continue;
+      var Inc:= IncludeFidOf(PathOf(pFid), D.Args);
+      if (Inc <= 0) or Seen.ContainsKey(Inc) then Continue;
+      Seen.Add(Inc, True);
+      Site.IncFid  := Inc;
+      Site.HostFid := pHostFid;
+      Site.HostLine:= if pTopLine > 0 then pTopLine else D.Line;
+      L.Add(Site);
+      Walk(Inc, Site.HostLine);
+    end;
+  end;
+
+begin
+  if FIncFids.Count = 0 then Exit(nil);
+  if FIncSites.TryGetValue(pHostFid, Result) then Exit;
+  L   := TList<TIncSite>.Create;
+  Seen:= TDictionary<Int64, Boolean>.Create;
+  try
+    Walk(pHostFid, 0);
+    Result:= L.ToArray;
+  finally
+    Seen.Free;
+    L.Free;
+  end;
+  FIncSites.Add(pHostFid, Result);
+end;
+
+{ 152c CYC3 item 2: the unit files whose text reaches the include pIncFid; built for every unit file on first
+  use (one pp_directives read per unit), so a project without include declarations never pays it. }
+function TCyclePlanner.IncludeHostsOf(pIncFid: Int64): TArray<TIncSite>;
+begin
+  if FIncHosts = nil then
+  begin
+    FIncHosts:= TDictionary<Int64, TArray<TIncSite>>.Create;
+    for var Host in FStemFid.Values do
+      for var Site in IncludeSitesOf(Host) do
+      begin
+        var Sites: TArray<TIncSite>;
+        if not FIncHosts.TryGetValue(Site.IncFid, Sites) then Sites:= nil;
+        FIncHosts.AddOrSetValue(Site.IncFid, Sites + [Site]);
+      end;
+  end;
+  if not FIncHosts.TryGetValue(pIncFid, Result) then Result:= nil;
+end;
+
+{ 152c CYC3 item 2: pSym is declared in an include that a unit of the current cycle includes; pSite names
+  that unit and its $I line. }
+function TCyclePlanner.IncludeDeclSite(const pSym: TSymbol; out pSite: TIncSite): Boolean;
+begin
+  pSite:= Default(TIncSite);
+  if not FIncIds.ContainsKey(pSym.FileId) then Exit(False);
+  for var Site in IncludeHostsOf(pSym.FileId) do
+    if FMembers.ContainsKey(StemOfFid(Site.HostFid)) then
+    begin
+      pSite:= Site;
+      Exit(True);
+    end;
+  Result:= False;
+end;
+
+function TCyclePlanner.IncludeDeclWhy(const pSym: TSymbol; const pSite: TIncSite): string;
+begin
+  Result:= IncludeEditRefusal(REFUSAL_DECLARATION_IN_INCLUDE, pSym.Name, PathOf(pSym.FileId), pSym.StartLine,
+    PathOf(pSite.HostFid), pSite.HostLine);
+end;
+
+{ 152c CYC3 item 2: an edge whose cut needs text inside an include is refused -- a need declared in an include
+  of the used unit (`declaration-in-include`; nothing of it can move), or, for every recipe but move-globals
+  (which edits only the declaring unit and uses clauses), a reference in an include of the using unit
+  (`reference-in-include`; R1 / R2 / the hand-overs rewrite the referencing line). }
+procedure TCyclePlanner.ApplyIncludeRefusals(const pEvals: TList<TEdgeEval>);
+var
+  Site : TIncSite;
+  Owner: TSymbol;
+begin
+  for var I:= 0 to pEvals.Count - 1 do
+  begin
+    var Ev:= pEvals[I];
+    var Kind:= '';
+    var Why := '';
+    Owner:= Default(TSymbol);
+    for var N in Ev.Needs do
+      if IncludeDeclSite(N.Owner, Site) then
+      begin
+        Kind := REFUSAL_DECLARATION_IN_INCLUDE;
+        Why  := IncludeDeclWhy(N.Owner, Site);
+        Owner:= N.Owner;
+        Break;
+      end;
+    if (Kind = '') and (Ev.Recipe <> crMoveGlobals) then
+      for var N in Ev.Needs do
+        if N.IncFid > 0 then
+        begin
+          Kind := REFUSAL_REFERENCE_IN_INCLUDE;
+          Why  := IncludeEditRefusal(Kind, N.RefName, PathOf(N.IncFid), N.IncLine, PathOf(FidOfStem(Ev.FromStem)),
+            N.Line);
+          Owner:= N.Owner;
+          Break;
+        end;
+    if Kind = '' then Continue;
+    Ev.Recipe := crNone;
+    Ev.Movable:= False;
+    Ev.Refusal:= Kind;
+    Ev.Why    := Format('`%s` (%s): refused: %s -- %s', [Owner.Name, Owner.Kind.ToText, Kind, Why]);
+    pEvals[I] := Ev;
+  end;
 end;
 
 { ---------------------------------------------------------------------------
@@ -2745,6 +2969,16 @@ begin
   Result.Sym    := pSym;
   Result.Stem   := StemOfFid(pSym.FileId);
   Result.CutFids:= pCut;
+  var Site: TIncSite;
+  if IncludeDeclSite(pSym, Site) then
+  begin
+    { 152c CYC3 item 2: drag-lint never edits an include }
+    Result.Stem   := StemOfFid(Site.HostFid);
+    Result.Kind   := mvBlocked;
+    Result.Refusal:= REFUSAL_DECLARATION_IN_INCLUDE;
+    Result.Reason := IncludeDeclWhy(pSym, Site);
+    Exit;
+  end;
   F:= GetFile(pSym.FileId);
   Result.Decl:= OneRange(DocStart(F.Lines, pSym.StartLine), pSym.EndLine);
   case pSym.Kind of
@@ -2811,6 +3045,26 @@ begin
   end;
 end;
 
+const
+  { lane CYC3 (cases 14 / 15, fabcyc section 6): why a base class cannot stand in at such a site }
+  CReasonVarParam = 'the compiler requires the actual and the formal `%s` parameter to be of the identical type ' +
+    '(E2033), so every caller''s variable would have to be retyped';
+  CReasonResult = 'every caller''s expression would change type; that is retyping the callers, not a cut';
+  CReasonRefCounted = 'an interface reference would count the object and free it when the reference goes out of ' +
+    'scope while plain object references still hold it';
+  CRefCountRoots: array[0..2] of string = ('TInterfacedObject', 'TAggregatedObject', 'TContainedObject');
+{ Lane CYC3 (case 15): '' unless the class descends from a reference-counting root; then the clause appended to
+  another base-class refusal, so the "hand over an interface" alternative is not mistaken for a safe one. }
+function RefCountedNote(const pStore: ISymbolStore; const pClass: TSymbol; const pAncestor: string): string;
+begin
+  Result:= '';
+  var Root:= '';
+  for var R in CRefCountRoots do
+    if SameText(pAncestor.Substring(pAncestor.LastIndexOf('.') + 1), R) or
+      pStore.IsDescendantOf(pClass.Name, R, pClass.FileId) then Root:= R;
+  if Root <> '' then
+    Result:= Format('; also, `%s` descends from `%s`: %s', [pClass.Name, Root, CReasonRefCounted]);
+end;
 { The F5 base-class plan of a class: `TX = class` or, since B4-d, `TX = class(TAnc[, I1, ...])`
   with TAnc declared outside the cycle -- the leaf gets `TXBase = class(TAnc)`, the class becomes
   `TX = class(TXBase[, I1, ...])` (the interfaces stay on TX: their methods are implemented there). }
@@ -2878,6 +3132,7 @@ begin
   { E18 T7 F5: the base class stands in for the class only where nothing but a
     member read or a nil test happens to it }
   Site:= BaseSiteRefusal(pItem);
+  if Site <> '' then Site:= Site + RefCountedNote(FStore, pItem.Sym, pItem.BaseAncestor);
   { B4-d: a form / data module keeps its streamed members; the RTTI parent must not be observed }
   if Site = '' then Site:= StreamedMemberRefusal(pF, pItem);
   if Site = '' then Site:= ClassParentRefusal(pItem);
@@ -2888,6 +3143,7 @@ begin
   end;
   pItem.Kind:= mvBase;
 end;
+
 
 { B4-d: '' when the ancestor pAnc of the class is declared outside the cycle -- in a project unit
   that is no member of the group, or (no project row) in the platform library; else the site. }
@@ -3379,7 +3635,10 @@ begin
     var Ref:= Default(TEdgeRef);
     Ref.Line:= pLine;
     Ref.Enclosing:= RoutineAt(pF, pLine).Name;
-    Why:= InitOrderWhy(pF.Lines, Ref, pF.UnitName);
+    var Proof:= '';
+    Why:= InitOrderVerdict(FStore, InitOrderWhy(pF.Lines, Ref, pF.UnitName), pF.UnitName, UnitNameOfStem(pItem.Stem),
+      FInPartB, Proof);
+    if Why = '' then pItem.CtorProof:= Proof;
     var Fin:= 0;
     for var I:= High(pF.Lines) downto 0 do
       if SameText(Trim(CodePart(pF.Lines[I])), 'finalization') then
@@ -3585,7 +3844,7 @@ begin
     for var M in TRegEx.Matches(CodeOf(LineAt(F.Lines, S.Line), csCode), '\b' + pItem.Sym.Name + '\b', [roIgnoreCase]) do
     begin
       case TypeSiteAt(F.Lines, S.Line, M.Index, Param) of
-        tsResult: Exit(Format('%s: a function result of type `%s`', [Site, pItem.Sym.Name]));
+        tsResult: Exit(Format('%s: a function result of type `%s` -- %s', [Site, pItem.Sym.Name, CReasonResult]));
         tsOther :
           begin
             var Why:= FieldSiteRefusal(pItem, S.Fid, S.Line, Field, SlotNames(Slots, -1));
@@ -3595,8 +3854,17 @@ begin
             else if (Field = '') and CtorSiteOk(pItem, CodeOf(LineAt(F.Lines, S.Line), csCode), M.Index, M.Length,
               SlotNames(Slots, RoutineAt(F, S.Line).Id), Fields) then Continue
             else if Field = '' then
+            begin
+              { lane CYC3 (case 15): a generic type argument says why }
+              var Gen:= TRegEx.Match(CodeOf(LineAt(F.Lines, S.Line), csCode), '([A-Za-z_][\w.]*)\s*<[^<>;]*\b' +
+                TRegEx.Escape(pItem.Sym.Name) + '\b[^<>;]*>', [roIgnoreCase]);
+              if Gen.Success then
+                Exit(Format('%s: `%s` is a generic type argument here (`%s`) -- `%s<%s>` and `%3:s<%5:s>` are different ' +
+                  'types (E2010), so every use of the constructed type would have to be retyped', [Site, pItem.Sym.Name,
+                  Gen.Value, Gen.Groups[1].Value, pItem.Sym.Name, pItem.BaseName]));
               Exit(Format('%s: `%s` is used here as something other than a parameter type (a field, ' +
                 'variable, cast or type argument)', [Site, pItem.Sym.Name]));
+            end;
             if Why <> '' then Exit(Why);
             Continue;
           end;
@@ -3604,8 +3872,8 @@ begin
       var Group:= Trim(TRegEx.Replace(Param, '^\[\s*ref\s*\]', '', [roIgnoreCase]));
       var Modifier:= LowerCase(Copy(Group, 1, Pos(' ', Group + ' ') - 1));
       if MatchText(Modifier, ['var', 'out']) then
-        Exit(Format('%s: `%s` is a `%s` parameter of type `%s`; a base class cannot stand in for it',
-          [Site, Group, Modifier, pItem.Sym.Name]));
+        Exit(Format('%s: `%s` is a `%s` parameter of type `%s`; a base class cannot stand in for it -- %s',
+          [Site, Group, Modifier, pItem.Sym.Name, Format(CReasonVarParam, [Modifier])]));
       if MatchText(Modifier, ['const', 'constref']) then Group:= Trim(Copy(Group, Length(Modifier) + 1, MaxInt));
       for var Name in Group.Split([',']) do
       begin
@@ -3938,6 +4206,14 @@ begin
     { a class that only got a base class extracted has NOT moved }
     if Item.Kind <> mvBase then Exit(True);
     pWhy:= Format('`%s` itself stays in its unit -- only its base class moves', [pSym.Name]);
+    Exit(False);
+  end;
+  { 152c CYC3 item 2: a declaration in an include of a unit of the cycle never moves (its stem is the
+    include's, so the member test below would call it "outside the cycle") }
+  var Site: TIncSite;
+  if IncludeDeclSite(pSym, Site) then
+  begin
+    pWhy:= IncludeDeclWhy(pSym, Site);
     Exit(False);
   end;
   if not FMembers.ContainsKey(StemOfFid(pSym.FileId)) then Exit(True);
@@ -5595,6 +5871,28 @@ begin
   Emit('');
 end;
 
+{ 152c CYC3 item 2: where a need's reference sits -- `File.pas:line`, or the include line and its $I site }
+function TCyclePlanner.NeedSite(const pF: TPlanFile; const pN: TNeed): string;
+begin
+  Result:= if pN.IncFid > 0 then
+    Format('%s:%d` through `{$I}` at `%s:%d', [ExtractFileName(PathOf(pN.IncFid)), pN.IncLine,
+      ExtractFileName(pF.Path), pN.Line])
+  else Format('%s:%d', [ExtractFileName(pF.Path), pN.Line]);
+end;
+
+{ 152c CYC3 item 2: where a need's symbol is declared -- `File.pas:line`, or "`B` through `Inc:line`" with the
+  $I site in B for a declaration in an include of B }
+function TCyclePlanner.DeclSite(const pN: TNeed): string;
+begin
+  Result:= Format('`%s:%d`', [ExtractFileName(PathOf(pN.Owner.FileId)), pN.Owner.StartLine]);
+  if not FIncIds.ContainsKey(pN.Owner.FileId) then Exit;
+  for var Site in IncludeHostsOf(pN.Owner.FileId) do
+    if StemOfFid(Site.HostFid) = pN.OwnerStem then
+      Exit(Format('`%s` through `%s:%d` (`{$I}` at `%s:%d`)', [UnitNameOfStem(pN.OwnerStem),
+        ExtractFileName(PathOf(pN.Owner.FileId)), pN.Owner.StartLine, ExtractFileName(PathOf(Site.HostFid)),
+        Site.HostLine]));
+end;
+
 procedure TCyclePlanner.RenderIntfWhy;
 var
   Seen: TDictionary<Int64, Boolean>;
@@ -5612,9 +5910,8 @@ begin
         begin
           if (N.Sect <> scIntf) or (N.OwnerStem <> B) or Seen.ContainsKey(N.Owner.Id) then Continue;
           Seen.Add(N.Owner.Id, True);
-          EmitFmt('- `%s` interface uses `%s` (%s) at `%s:%d`; declared in `%s:%d`.',
-            [A, N.Owner.Name, N.Owner.Kind.ToText, ExtractFileName(F.Path), N.Line,
-             ExtractFileName(PathOf(N.Owner.FileId)), N.Owner.StartLine]);
+          EmitFmt('- `%s` interface uses `%s` (%s) at `%s`; declared in %s.',
+            [A, N.Owner.Name, N.Owner.Kind.ToText, NeedSite(F, N), DeclSite(N)]);
         end;
         if Seen.Count = 0 then
           EmitFmt('- `%s` interface uses `%s` but the index could not resolve the symbol (likely a ' +
@@ -5645,7 +5942,10 @@ begin
         begin
           if (N.Sect <> scImpl) or (N.OwnerStem <> B) or Seen.ContainsKey(LowerCase(N.RefName)) then Continue;
           Seen.Add(LowerCase(N.RefName), True);
-          EmitFmt('    - line %d: `%s`  [%s]  -> declared in `%s`', [N.Line, N.RefName, N.RefKind.ToText, B]);
+          if N.IncFid > 0 then
+            EmitFmt('    - `%s`: `%s`  [%s]  -> declared in `%s`', [NeedSite(F, N), N.RefName, N.RefKind.ToText, B])
+          else
+            EmitFmt('    - line %d: `%s`  [%s]  -> declared in `%s`', [N.Line, N.RefName, N.RefKind.ToText, B]);
         end;
         if Seen.Count = 0 then
           EmitFmt('    - (no specific symbol resolved -- index gap, e.g. a `set` type; open `%s` and ' +
@@ -5711,6 +6011,7 @@ begin
       EmitFmt('   - **Constructor inversion:** `%s.%s` is called through the pointer `%2:s%0:s%3:s` of the leaf; `%2:s%0:s` in `%4:s` ' +
         'runs the same constructor with the same arguments and its initialization assigns the pointer.',
         [pItem.Sym.Name, pItem.CtorName, CCtorFuncPrefix, CCtorPtrSuffix, ExtractFileName(PathOf(pItem.Sym.FileId))]);
+    if pItem.CtorProof <> '' then EmitFmt('   - %s', [pItem.CtorProof]);
     for var Fid in pItem.CutFids do
     begin
       Lines.Clear;
@@ -6266,6 +6567,7 @@ begin
           if Length(Needs) = 0 then Continue;
           TEval.Start;
           var Ev:= EvaluateEdge(A, B, Needs);
+          Ev.Surface.Predicted:= True;
           TEval.Stop;
           if Ev.Movable then Ev.Recipe:= crMoveGlobals;
           Names.Clear;
@@ -6277,11 +6579,17 @@ begin
     PlanStage(Format('PartB edges (%d pairs, %d edges; RemainingNeeds %d ms, EvaluateEdge %d ms)',
       [Pairs, pEvals.Count, TNeeds.ElapsedMilliseconds, TEval.ElapsedMilliseconds]), W);
     { E18 T7 R3: the same recipes and order the re-run after Part A uses }
-    PlanInversion(pEvals);
+    FInPartB:= True;
+    try
+      PlanInversion(pEvals);
+    finally
+      FInPartB:= False;
+    end;
     PlanStage('PartB PlanInversion', W);
     PlanMemberHandOver(pEvals);
     PlanStage('PartB PlanMemberHandOver', W);
     PlanMetaclassValue(pEvals);  { 150-CY-7b }
+    ApplyIncludeRefusals(pEvals);  { 152c CYC3 item 2 }
   finally
     Names.Free;
   end;
@@ -6377,6 +6685,7 @@ const
     Result.ToUnit  := pEv.ToStem;
     Result.Recipe  := CRecipeId[pEv.Recipe];
     Result.Chosen  := pChosen;
+    Result.InitOrder:= if pEv.Recipe = crRoutineInversion then pEv.Steps.InitOrderProof else '';
   end;
 
 begin
@@ -6603,6 +6912,7 @@ begin
     PlanMemberHandOver(Evals);
     PlanMetaclassValue(Evals);  { 150-CY-7b }
     PlanBaseHandOver(Evals);
+    ApplyIncludeRefusals(Evals);  { 152c CYC3 item 2 }
     for var Ev in Evals do
       if BetterCut(Ev, FCutEdge) then FCutEdge:= Ev;
     if FCutEdge.Recipe in [crRoutineInversion, crMemberInterface] then FInversion:= FCutEdge.Steps;
@@ -7134,6 +7444,7 @@ function TCyclePlanner.MetaclassSteps(const pEv: TEdgeEval; out pWhy: string): T
 begin
   Result:= Default(TRecipeSteps);
   pWhy  := '';
+  var Proof := '';
   var S     := pEv.Surface;
   var TX    := S.ClassNames[0];
   var A     := GetFile(FidOfStem(S.FromStem));
@@ -7160,8 +7471,11 @@ begin
     else if (Formal <> '') and not SameText(Formal, Typ) then
       pWhy:= Format('signature-unknown -- `%s` is passed where `%s` and `%s` are expected: one variable cannot carry both',
         [TX, Formal, Typ])
-    else if InitOrderWhy(A.Lines, R, A.UnitName) <> '' then
-      pWhy:= 'init-order -- ' + InitOrderWhy(A.Lines, R, A.UnitName);
+    else
+    begin
+      var IoWhy:= InitOrderVerdict(FStore, InitOrderWhy(A.Lines, R, A.UnitName), A.UnitName, B.UnitName, S.Predicted, Proof);
+      if IoWhy <> '' then pWhy:= 'init-order -- ' + IoWhy;
+    end;
     if pWhy <> '' then Break;
     Formal:= Typ;
     var Edit:= Default(TRecipeEdit);
@@ -7196,6 +7510,7 @@ begin
   Result.PtrVar       := VarName;
   Result.VarDecl      := Inv.VarDecl;
   Result.ClassTypeName:= TX;
+  Result.InitOrderProof:= Proof;
   Result.LeafUses     := LeafUses;
   Result.Routines     := [Inv];
   Result.Edits        := Edits + [Assign];
@@ -7462,10 +7777,20 @@ begin
         [FLeafName[FInversion.DeclStem], FInversion.VarDecl]);
       EmitFmt('- `%s` assigns `%s := %s;` as the first statement of its initialization section.',
         [Decl, FInversion.PtrVar, FInversion.ClassTypeName]);
-      EmitFmt('- `%s` passes `%s` instead of `%s` (line %s). Checked: its own initialization section makes none ' +
-        'of these calls and does not name the routine that makes them. NOT checked: an initialization section of ' +
-        'another unit that reaches them through a call chain.', [ExtractFileName(PathOf(FInversion.ConsumerFid)),
-        FInversion.PtrVar, FInversion.ClassTypeName, string.Join(', ', Calls.ToArray)]);
+      { found-in-152c (CYC3F): with a proved init order the consumer's initialization DOES reach the calls --
+        say so and print the proof, as the routine-call inversion below does }
+      if FInversion.InitOrderProof <> '' then
+      begin
+        EmitFmt('- `%s` passes `%s` instead of `%s` (line %s); its initialization section reaches these calls.',
+          [ExtractFileName(PathOf(FInversion.ConsumerFid)), FInversion.PtrVar, FInversion.ClassTypeName,
+           string.Join(', ', Calls.ToArray)]);
+        EmitFmt('- %s', [FInversion.InitOrderProof]);
+      end
+      else
+        EmitFmt('- `%s` passes `%s` instead of `%s` (line %s). Checked: its own initialization section makes none ' +
+          'of these calls and does not name the routine that makes them. NOT checked: an initialization section of ' +
+          'another unit that reaches them through a call chain.', [ExtractFileName(PathOf(FInversion.ConsumerFid)),
+          FInversion.PtrVar, FInversion.ClassTypeName, string.Join(', ', Calls.ToArray)]);
       if FInversion.RegisterDecl then
         EmitFmt('- `%s` joins the program''s uses (`%s`) so it stays linked and its initialization assigns `%s`.',
           [Decl, ExtractFileName(PathOf(FProjectFid)), FInversion.PtrVar]);
@@ -7507,6 +7832,13 @@ begin
       else
         EmitFmt('- `%s` assigns `%s := %s;` as the first statement of its initialization section.',
           [Decl, R.PtrVar, R.Name]);
+      if FInversion.InitOrderProof <> '' then
+      begin
+        EmitFmt('- `%s` calls `%s` instead of `%s` (line %s); its initialization section reaches the call.',
+          [ExtractFileName(PathOf(FInversion.ConsumerFid)), R.PtrVar, R.Name, string.Join(', ', Calls.ToArray)]);
+        EmitFmt('- %s', [FInversion.InitOrderProof]);
+        Continue;
+      end;
       EmitFmt('- `%s` calls `%s` instead of `%s` (line %s). Checked: its own initialization section ' +
         'makes none of these calls and does not name the routine that makes them. NOT checked: an ' +
         'initialization section of another unit that reaches them through a call chain.',
@@ -7827,6 +8159,15 @@ begin
           Add((if E.Refusal <> '' then E.Refusal else 'manual-edit'), '', PathOf(Fid), E.Note, E.First);
     for var E in pPlan.DprojEdits do
       if E.Kind = ekManual then Add('manual-edit', '', FProjectFile, E.Note, E.First);
+    { 152c CYC3 item 2: an include refusal is named first -- moving the text into the unit is what the user
+      does next, and the plan run after it is the one that can weigh the other refusals }
+    var IncFirst:= 0;
+    for var I:= 0 to L.Count - 1 do
+      if MatchStr(L[I].Kind, [REFUSAL_DECLARATION_IN_INCLUDE, REFUSAL_REFERENCE_IN_INCLUDE]) then
+      begin
+        L.Move(I, IncFirst);
+        Inc(IncFirst);
+      end;
     pPlan.Refusals:= L.ToArray;
   finally
     L.Free;
@@ -8314,6 +8655,7 @@ procedure AddCycleFixHints(const pIn: TCycleFixHintInput; const pGroups: TJSONAr
     Result.AddPair('to', pEdge.ToUnit);
     Result.AddPair('recipe', pEdge.Recipe);
     if pWithChosen then Result.AddPair('chosen', TJSONBool.Create(pEdge.Chosen));
+    if pEdge.InitOrder <> '' then Result.AddPair('init_order', pEdge.InitOrder);
   end;
 
 var
