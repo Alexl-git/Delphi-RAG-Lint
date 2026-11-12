@@ -21095,8 +21095,8 @@ end; // function
 /// --timeout-ms)".</returns>
 function SqlTotalRowsPhrase(ATotalRows: Integer): string;
 begin
-  if ATotalRows < 0 then Result:= 'the total is unknown (the count was stopped by --timeout-ms)'
-  else Result:= System.SysUtils.Format('%d in all', [ATotalRows]);
+  Result:= if ATotalRows < 0 then 'the total is unknown (the count was stopped by --timeout-ms)'
+           else System.SysUtils.Format('%d in all', [ATotalRows]);
 end; // function
 
 /// <summary>drag-lint sql: runs ONE read-only SQL statement against an index

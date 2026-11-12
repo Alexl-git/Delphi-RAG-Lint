@@ -1040,13 +1040,36 @@ end;
 // leading `[...]` attribute groups are dropped (quote- and nesting-aware), over at
 // most MAX_ATTR_LINES lines; '' when a group does not close on its line. Same rule
 // as Doc.Drift / Doc.Facts ReadDeclLine. Pinned by run_doc_attr_decl_apply_152b.ps1.
+
+// The 1-based index of the `]` that closes the `[` at S[1] (quote- and
+// nesting-aware), or 0 when the group does not close in S.
+function AttributeGroupEnd(const S: string): Integer;
+var
+  Depth: Integer;
+  InStr: Boolean;
+begin
+  Depth:= 0;
+  InStr:= False;
+  for var K:= 1 to Length(S) do
+  begin
+    if S[K] = '''' then InStr:= not InStr
+    else if InStr then Continue
+    else if S[K] = '[' then Inc(Depth)
+    else if S[K] = ']' then
+    begin
+      Dec(Depth);
+      if Depth = 0 then Exit(K);
+    end;
+  end;
+  Result:= 0;
+end;
+
 function TextAfterAttributes(ALines: TStrings; AIdx: Integer): string;
 const
   MAX_ATTR_LINES = 8;
 var
-  I, J, Depth: Integer;
-  InStr      : Boolean;
-  S          : string ;
+  I, J: Integer;
+  S   : string ;
 begin
   Result:= '';
   for I:= AIdx to Min(AIdx + MAX_ATTR_LINES, ALines.Count) - 1 do
@@ -1054,24 +1077,7 @@ begin
     S:= Trim(ALines[I]);
     while (S <> '') and (S[1] = '[') do
     begin
-      Depth:= 0;
-      InStr:= False;
-      J    := 0;
-      for var K:= 1 to Length(S) do
-      begin
-        if S[K] = '''' then InStr:= not InStr
-        else if not InStr then
-          if S[K] = '[' then Inc(Depth)
-          else if S[K] = ']' then
-          begin
-            Dec(Depth);
-            if Depth = 0 then
-            begin
-              J:= K;
-              Break;
-            end;
-          end;
-      end;
+      J:= AttributeGroupEnd(S);
       if J = 0 then Exit; // unbalanced (multi-line attribute)
       S:= Trim(Copy(S, J + 1, MaxInt));
     end;
