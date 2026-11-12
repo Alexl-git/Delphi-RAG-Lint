@@ -14,7 +14,7 @@ into `out\`. Baseline program output: `baseline-run.txt` (identical after the DL
 |---|---|---|---|
 | Demo group (DemoLogger..DemoSession) | globals + enums across 4 units | auto (Part A): 3 `*.Untangle` leaf units | none; Part B left (legal impl-only cycle) |
 | DemoUIConnect/GagePort, DemoBlueprint/ControlPlan | member access / routine call | auto | none |
-| LabInit (Consumer/Sink) | routine called from an `initialization` section | auto Part A (impl-only cycle left); Part B refuses `init-order` | optional: leave it (legal) |
+| LabInit (Consumer/Sink) | routine called from an `initialization` section | auto Part A (impl-only cycle left); Part B cuts sink -> consumer; consumer -> sink is `init-order`, unprovable in a 2-unit cycle ("whatever the .dpr order", 1.50) | optional: leave it (legal) |
 | LabExc (Host/Widget) | `as` cast + `except on EInvalidCast` | auto Part A (impl-only left) | optional; Part B would change the exception class (`exception-semantics`) |
 | LabVar (Host/Widget) | `var` parameter of the other unit's class | refused `blocked-symbol` (class used as `TX.Create`) | move the class pair into one unit, or stop naming the class in an interface |
 | LabCtor (Owner/Child) | owner creates child, child casts owner | on 1.36 refused `blocked-symbol` (`TLabCtorChild.` construction); since 1.44 auto: constructor inversion, the cycle is gone | none |
@@ -23,13 +23,13 @@ into `out\`. Baseline program output: `baseline-run.txt` (identical after the DL
 | LabCls (Registry/Widget) | `class of` type in a signature | refused `blocked-symbol` (classref cannot move) | declare the metaclass in a leaf unit that both use |
 | LabDir (A/B) | interface `uses` entry inside `{$IFDEF}`, entry unused | refused `directive` | delete the guarded entry (unused) |
 | LabGuard (A/B) | same, entry used by a class field type | refused `directive` / class bodies | restructure by hand; both branches must stay consistent |
-| LabInc (A/B) | `uses {$I file.inc}` | NOT DETECTED: index parse error on LabIncA, no cycle line | none seen by DL; known blind spot (`uses-in-include`) |
+| LabInc (A/B) | `uses {$I file.inc}` | detected since rc2 (`cycles` lists it, `circular-uses` fires at the `{$I}` line); `cycles --fix` refuses `uses-in-include` | write the entry in the .pas; see the lint rule `cycle-edge-in-include` (1.50) |
 | `illegal\` IllOrders/IllCustomers | interface loop, F2047 | `cycles --f2047` names both edges and symbols; on 1.36 `--fix` said "mechanical" and `--apply` rolled back (compile-error F2047); since 1.43 `--apply` merges both classes into one leaf and the project builds | merge the two classes into one unit (forward `TIllOrder = class;`) |
 
 ## Recorded results (this run)
 Index 32 files. 10 groups before; 7 after DL's five auto fixes (see `out\09-cycles-after.txt`);
 the build is 0 errors and the program output is byte-identical. `uses-fix` found nothing more to move.
-Remaining interface-coupled: LabVar, LabDir, LabGuard, LabCtor, LabRc, LabCls (+ LabInc unseen).
+Remaining interface-coupled: LabVar, LabDir, LabGuard, LabCtor, LabRc, LabCls (+ LabInc, refused `uses-in-include`).
 Haiku run (playbook text only): see `REPORT.md`.
 
 Folder note: this copy holds the sources BEFORE any fix. To replay, copy it to a scratch folder, put a
