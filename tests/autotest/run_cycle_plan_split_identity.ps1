@@ -42,7 +42,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe        = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe        = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe") { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" } else { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }),
   [switch]$KeepScratch,
   [string]$WorkDir    = "$env:TEMP\drag-lint-cycle-split-$PID",
   [string]$SelfDb     = '',
@@ -69,6 +69,7 @@ function Check($n, $ok, $d = '') {
 }
 
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
+. "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152c CYC3F: the wt build first, no machine drag-lint.json
 $Exe  = (Resolve-Path $Exe).Path
 $Repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 if ($SelfRoot -eq '') { $SelfRoot = $Repo }

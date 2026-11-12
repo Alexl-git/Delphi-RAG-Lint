@@ -41,7 +41,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe       = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
+  [string]$Exe       = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe") { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" } else { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }),
   [switch]$KeepScratch,
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-edgesel-$PID",
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite'
@@ -65,6 +65,7 @@ function Check($n, $ok, $d = '') {
   if ($ok) { $script:Passed++ } else { if ($d) { Write-Host "      $d" -ForegroundColor DarkGray }; $script:Failed = $true }
 }
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
+. "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152c CYC3F: the wt build first, no machine drag-lint.json
 if (-not (Test-Path $LibraryDb)) { Write-Host "SKIP: no platform library DB at $LibraryDb" -ForegroundColor Yellow; exit 0 }
 $Exe  = (Resolve-Path $Exe).Path
 $Repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
