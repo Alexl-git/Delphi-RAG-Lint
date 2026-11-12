@@ -1008,9 +1008,25 @@ type
 function DetectFreedVarKind(const ANode: TTSNode; const ASrc: TBytes; AVars: TRoutineVarTable;
   out AKind: TFreeKind): Integer;
 
+/// <summary>The expression a call argument PASSES: the value of an Automation
+/// named argument `Foo(Name := Value)` (grammar v1.4.9 node exprArgNamed), else
+/// AArg itself.</summary>
+/// <param name="AArg">One named child of an exprArgs node; may be null.</param>
+/// <returns>The `value` field of an exprArgNamed (null when the parse has none);
+/// AArg unchanged for every other node.</returns>
+/// <remarks>The label of a named argument is never a read of a same-named local
+/// or field, and its position says nothing about the callee's parameter order:
+/// every reader that judges what an argument hands on looks at this node, never
+/// the wrapper (lane 152b GF1; the wrapper read made object-leak and
+/// field-created-not-freed miss the handed-on object). Pure; thread-safe.</remarks>
+function ArgValueNode(const AArg: TTSNode): TTSNode;
+
 /// <summary>Collect every routine var passed as a call argument anywhere under
 /// ANode, with the callee's bare-identifier name (empty for method calls) and
-/// the 0-based argument position.</summary>
+/// the 0-based argument position. A named argument `Foo(Name := V)` records the
+/// var of its VALUE with an empty callee name: its position is not the callee's
+/// parameter index, so the ownership oracle is not asked and the pass is an
+/// escape (the conservative reading, as RG2 chose for the def/read walk).</summary>
 /// <param name="ANode"><!-- drag-lint:auto type -->const TTSNode</param>
 /// <param name="ASrc"><!-- drag-lint:auto type -->const TBytes</param>
 /// <param name="AVars"><!-- drag-lint:auto type -->TRoutineVarTable</param>
@@ -1788,7 +1804,7 @@ procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
             position says nothing about the callee's parameter order (RG2, wave 150). Judge the
             value only, with the conservative pmUnknown mode. }
           IsNamedArg := Arg.NodeType = 'exprArgNamed';
-          if IsNamedArg then Arg := Arg.ChildByField('value');
+          Arg := ArgValueNode(Arg);
           if Arg.IsNull then Continue;
           { WHAT THE CALLEE DOES WITH THIS ARGUMENT, when it can be known.
             var/out -> passing a local DEFINES it. value/const -> READS it.
@@ -2460,11 +2476,16 @@ begin
   end;
 end;
 
+function ArgValueNode(const AArg: TTSNode): TTSNode;
+begin
+  Result := if (not AArg.IsNull) and (AArg.NodeType = 'exprArgNamed') then AArg.ChildByField('value') else AArg;
+end;
+
 function CollectCallArgs(const ANode: TTSNode; const ASrc: TBytes;
   AVars: TRoutineVarTable): TArray<TCallArgRef>;
 var Acc: TList<TCallArgRef>;
   procedure Walk(const N: TTSNode);
-  var I, VI: Integer; Ent, Args, Arg: TTSNode; Nm: string; Rec: TCallArgRef;
+  var I, VI: Integer; Ent, Args, Arg: TTSNode; Nm: string; Rec: TCallArgRef; IsNamed: Boolean;
   begin
     if N.IsNull then Exit;
     if N.NodeType = 'exprCall' then
@@ -2478,9 +2499,17 @@ var Acc: TList<TCallArgRef>;
         for I := 0 to Args.NamedChildCount - 1 do
         begin
           Arg := Args.NamedChild(I);
+          IsNamed := Arg.NodeType = 'exprArgNamed';
+          Arg := ArgValueNode(Arg); { a named argument hands on its VALUE, never its label }
+          if Arg.IsNull then Continue;
           VI := LeftmostBaseVar(Arg, ASrc, AVars);
           if VI >= 0 then
-          begin Rec.CalleeName := Nm; Rec.ArgIdx := I; Rec.VarIdx := VI; Acc.Add(Rec); end;
+          begin
+            Rec.CalleeName := if IsNamed then '' else Nm; { named: position unknown -> escape }
+            Rec.ArgIdx := I;
+            Rec.VarIdx := VI;
+            Acc.Add(Rec);
+          end;
           Walk(Arg); { nested calls inside the argument }
         end;
       Walk(Ent);   { the receiver may itself contain a call }

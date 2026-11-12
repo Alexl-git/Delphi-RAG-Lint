@@ -1896,7 +1896,8 @@ var
           begin
             var AncT: string := Anc.NodeType;
             if (AncT = 'defaultValue') or (AncT = 'declConst') or (AncT = 'declConsts')
-               or (AncT = 'declEnumValue') or (AncT = 'constInline') then
+               or (AncT = 'declEnumValue') or (AncT = 'constInline')
+               or (AncT = 'procExternal') then  // xternal Lib index N: the ordinal is the import's identity
             begin
               IsExempt := True;
               Break;

@@ -312,7 +312,10 @@ begin
   if Ent.NodeType <> NT_IDENT then Exit;
   var ArgNodes: TArray<TTSNode>:= nil;
   for var I: Integer:= 0 to Args.NamedChildCount - 1 do
+  begin
+    if Args.NamedChild(I).NodeType = 'exprArgNamed' then Exit;  // Automation named argument: no positional label
     if Args.NamedChild(I).NodeType <> NT_COMMENT then ArgNodes:= ArgNodes + [Args.NamedChild(I)];
+  end;
   if Length(ArgNodes) = 0 then Exit;
   var Callee: TCallee:= Lookup(Text(Ent));
   if (not Callee.Known) or (Length(Callee.Params) <> Length(ArgNodes)) then Exit;

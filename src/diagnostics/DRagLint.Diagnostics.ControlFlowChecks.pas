@@ -59,6 +59,7 @@ uses
   , System.Generics.Collections
   , TreeSitter
   , DRagLint.Diagnostics.ParseCache
+  , DRagLint.Analysis.Flow.Lattices
   ;
 
 const
@@ -461,6 +462,7 @@ var
 begin
   Result:= Default(TTSNode);
   if N.IsNull then Exit;
+  if N.NodeType = 'exprArgNamed' then Exit(ExprCallsSelf(ArgValueNode(N), AName, AIsFunc));  // the label is not a read
   if N.NodeType = 'identifier' then
   begin
     if AIsFunc and (LowerCase(Trim(Txt(N))) = AName) then Exit(N);
