@@ -50,9 +50,9 @@ try {
   $q = "SELECT f.path AS src, r.name_text AS name, r.kind AS kind, r.start_line AS line, " +
        "COALESCE(tf.path, '') AS target, (SELECT COUNT(*) FROM call_edges c WHERE c.ref_id = r.id AND c.target_symbol_id = r.symbol_id) AS edges " +
        "FROM refs r JOIN files f ON f.id = r.file_id LEFT JOIN symbols s ON s.id = r.symbol_id LEFT JOIN files tf ON tf.id = s.file_id " +
-       "WHERE r.name_text IN ('TFoo', 'P', 'cIncLimit', 'cImplOnly', 'TBar', 'Q', 'R', 'TBaz') AND r.kind IN ('type_use', 'read', 'call')"
+       "WHERE r.name_text IN ('TFoo', 'P', 'cIncLimit', 'cImplOnly', 'TBar', 'Q', 'R', 'TBaz', 'cImplD', 'THiddenD', 'ImplR') AND r.kind IN ('type_use', 'read', 'call')"
   $rows = Invoke-Rows $db $q
-  Check 'the fixture produced the 17 candidate refs' ($rows.Count -eq 17) "$($rows.Count)"
+  Check 'the fixture produced the 23 candidate refs' ($rows.Count -eq 23) "$($rows.Count)"
   function Target([string]$Src, [string]$Name, [string]$Kind) {
     $hit = @($rows | Where-Object { (Split-Path $_.src -Leaf) -eq $Src -and $_.name -eq $Name -and $_.kind -eq $Kind })
     if ($hit.Count -ne 1) { return "<$($hit.Count) refs>" }
@@ -83,7 +83,17 @@ try {
   Check '(a) E: R (call) binds to the include declaration' ((Target 'IncDeclE.pas' 'R' 'call') -eq $incD) (Target 'IncDeclE.pas' 'R' 'call')
   Check '(a) control: E: TBaz (type_use) binds to the include declaration' ((Target 'IncDeclE.pas' 'TBaz' 'type_use') -eq $incD) (Target 'IncDeclE.pas' 'TBaz' 'type_use')
   Check '(a) control: F (no uses) does not bind R' ((Target 'IncDeclF.pas' 'R' 'call') -eq '') (Target 'IncDeclF.pas' 'R' 'call')
-} finally {  if (Test-Path $scratch) { [IO.Directory]::Delete($scratch, $true) }
+  # 152c RINC2 (b): the HOST binds its own refs to what its IMPLEMENTATION-section include declares
+  # (IncDeclD_impl.inc: const cImplD, class THiddenD, routine ImplR); a user of the host (E) does not.
+  $incDI = 'IncDeclD_impl.inc'
+  Check '(b) D: cImplD (read) binds to its implementation include' ((Target 'IncDeclD.pas' 'cImplD' 'read') -eq $incDI) (Target 'IncDeclD.pas' 'cImplD' 'read')
+  Check '(b) D: THiddenD (type_use) binds to its implementation include' ((Target 'IncDeclD.pas' 'THiddenD' 'type_use') -eq $incDI) (Target 'IncDeclD.pas' 'THiddenD' 'type_use')
+  Check '(b) D: ImplR (call) binds to its implementation include' ((Target 'IncDeclD.pas' 'ImplR' 'call') -eq $incDI) (Target 'IncDeclD.pas' 'ImplR' 'call')
+  Check '(b) control: E (uses D) does not see cImplD' ((Target 'IncDeclE.pas' 'cImplD' 'read') -eq '') (Target 'IncDeclE.pas' 'cImplD' 'read')
+  Check '(b) control: E (uses D) does not see THiddenD' ((Target 'IncDeclE.pas' 'THiddenD' 'type_use') -eq '') (Target 'IncDeclE.pas' 'THiddenD' 'type_use')
+  Check '(b) control: E (uses D) does not see ImplR' ((Target 'IncDeclE.pas' 'ImplR' 'call') -eq '') (Target 'IncDeclE.pas' 'ImplR' 'call')
+} finally {
+  if (Test-Path $scratch) { [IO.Directory]::Delete($scratch, $true) }
 }
 Write-Host ''
 if ($script:fail) { Write-Host 'RESULT: FAIL' -ForegroundColor Red; exit 1 }
