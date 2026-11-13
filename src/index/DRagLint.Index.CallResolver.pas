@@ -9611,8 +9611,8 @@ function TCallResolver.UnitScopeWriteTarget(ARefFileId: Int64; const ALc: string
     writing file itself (both sections), 2 the interface of a unit it uses. }
   function OnRung(ARung: Integer; AFileId: Int64; const ASection: string): Boolean;
   begin
-    if ARung = 1 then Result:= DeclInRefUnit(AFileId, ARefFileId)
-    else Result:= (AFileId <> ARefFileId) and SameText(ASection, 'interface')
+    Result:= if ARung = 1 then DeclInRefUnit(AFileId, ARefFileId)
+             else (AFileId <> ARefFileId) and SameText(ASection, 'interface')
                   and CandInScope(ARefFileId, AFileId);
   end;
 
