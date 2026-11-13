@@ -41,6 +41,12 @@ type
     NoCompile: Boolean;
     /// <summary>--format json.</summary>
     Json: Boolean;
+    /// <summary>--show-bound: also list, per parameter that reached the member proof, each member's binding and why.</summary>
+    ShowBound: Boolean;
+    /// <summary>The folder of the project the index belongs to (the parent of its _D-RAG folder), or ''. Used as the
+    /// own-roots anchor when --project is not given, so a plan never reaches a unit outside the project (a library
+    /// unit the compile closure pulled in). '' = the index is not in a _D-RAG home: no scoping, as before.</summary>
+    OwnDir: string;
   end;
 
   /// <summary>One parameter the planner decided.</summary>
@@ -65,6 +71,20 @@ type
     Reason: string;
   end;
 
+  /// <summary>One member binding the member proof settled (--show-bound).</summary>
+  TNarrowBound = record
+    /// <summary>The routine's qualified name.</summary>
+    Routine: string;
+    /// <summary>The parameter.</summary>
+    Param: string;
+    /// <summary>The member the body uses on the parameter.</summary>
+    Member: string;
+    /// <summary>The class on the parameter's chain that declares it first; '' when no index holds it.</summary>
+    ClassName: string;
+    /// <summary>Why this class: how the chain walk and the index's own binding relate.</summary>
+    Reason: string;
+  end;
+
   /// <summary>The verdict over the parameters in scope.</summary>
   TNarrowPlan = record
     /// <summary>The parameters that can narrow.</summary>
@@ -73,6 +93,8 @@ type
     Refused: TArray<TNarrowSite>;
     /// <summary>Parameters whose uses already need their declared type.</summary>
     AlreadyNarrow: Integer;
+    /// <summary>Member bindings, filled only with --show-bound.</summary>
+    Bound: TArray<TNarrowBound>;
   end;
 
 /// <summary>Decides the class-typed parameters in scope.</summary>
@@ -161,6 +183,8 @@ type
     FClasses  : TDictionary<string, TArray<TChainClass>>;
     FFixes    : TList<TNarrowSite>;
     FRefused  : TList<TNarrowSite>;
+    FBound    : TList<TNarrowBound>;
+    FScoped   : Boolean;
     FAlready  : Integer;
     FAccessors: TDictionary<string, Boolean>;  // every name after `read` / `write` in the index's files; nil = not read yet
     function SourceOf(const pPath: string): TMaskedSource;
@@ -222,7 +246,11 @@ begin
   FConn := (pStore as TSQLiteSymbolStore).GetConnection;
   for var L in pLibraries do
     if L is TSQLiteSymbolStore then FLibConns:= FLibConns + [(L as TSQLiteSymbolStore).GetConnection];
-  if pOpts.Project <> '' then FOwn:= TOwnRoots.Load(ExtractFilePath(ExpandFileName(pOpts.Project)));
+  { --project names the roots; without it the index's own project does (its _D-RAG parent), so no library unit leaks in }
+  var Anchor:= if pOpts.Project <> '' then ExtractFilePath(ExpandFileName(pOpts.Project)) else pOpts.OwnDir;
+  FScoped:= Anchor <> '';
+  if FScoped then FOwn:= TOwnRoots.Load(Anchor);
+  FBound  := TList<TNarrowBound>.Create;
   FFiles  := TObjectDictionary<string, TMaskedSource>.Create([doOwnsValues]);
   FChains := TDictionary<string, TArray<TChainClass>>.Create;
   FClasses:= TDictionary<string, TArray<TChainClass>>.Create;
@@ -232,6 +260,7 @@ end;
 
 destructor TNarrowPlanner.Destroy;
 begin
+  FBound.Free;
   FAccessors.Free;
   FRefused.Free;
   FFixes.Free;
@@ -407,6 +436,12 @@ begin
   if ContainsText(pR.Modifiers, 'published') or ((pR.ParentId > 0) and not pR.VisExplicit) then
   begin
     pVerdict:= Verdict('published-routine', 'a published method may be an event handler a .dfm binds by name and signature');
+    Exit;
+  end;
+  { a method outside the published section can still be named by an event in a form file; the index holds that binding }
+  if (pR.ParentId > 0) and (Scalar('SELECT COUNT(*) FROM dfm_properties WHERE name LIKE ''On%'' AND value_kind = ''ident'' AND value_text = :a COLLATE NOCASE', [pR.Name]) > 0) then
+  begin
+    pVerdict:= Verdict('dfm-bound', 'a form file assigns it to an event by name: a new parameter type breaks that binding');
     Exit;
   end;
   if pR.ParentId > 0 then
@@ -671,7 +706,7 @@ begin
     AddRefused(pR, pParam, 'stale-file', 'the file changed since it was indexed; re-index');
     Exit;
   end;
-  if (FOpts.Project <> '') and not FOwn.IsOurs(pR.Path) then
+  if FScoped and not FOwn.IsOurs(pR.Path) then
   begin
     AddRefused(pR, pParam, 'outside-roots', 'the file lies outside the project''s own roots');
     Exit;
@@ -753,8 +788,22 @@ begin
       { an ancestor's helper-free binding the index holds must agree with the walk }
       var Bound:= Scalar('SELECT r.symbol_id FROM refs r WHERE r.file_id = :a AND r.receiver_text = :b COLLATE NOCASE AND r.name_text = :c COLLATE NOCASE ' +
         'AND r.start_line BETWEEN :d AND :e AND r.symbol_id IS NOT NULL LIMIT 1', [pR.FileId, pParam.Name, M, pR.ImplStart, pR.ImplEnd]);
-      if (Bound > 0) and Chain[First].ProjectStore and
-        (Scalar('SELECT COUNT(*) FROM symbols WHERE id = :a AND parent_id = :b', [Bound, Chain[First].Id]) = 0) then
+      var Agrees:= (Bound > 0) and Chain[First].ProjectStore and
+        (Scalar('SELECT COUNT(*) FROM symbols WHERE id = :a AND parent_id = :b', [Bound, Chain[First].Id]) > 0);
+      if FOpts.ShowBound then
+      begin
+        var B:= Default(TNarrowBound);
+        B.Routine  := pR.QName;
+        B.Param    := pParam.Name;
+        B.Member   := M;
+        B.ClassName:= Chain[First].Name;
+        B.Reason   := if Bound = 0 then 'first class on the chain declaring it; the index holds no binding for the call'
+                      else if Agrees then 'first class on the chain declaring it; the index binds the call to the same declaration'
+                      else if not Chain[First].ProjectStore then 'first class on the chain declaring it; declared in a library index, the binding was not compared'
+                      else 'the index binds the call elsewhere than the first class declaring it (refused: binding-mismatch)';
+        FBound.Add(B);
+      end;
+      if (Bound > 0) and Chain[First].ProjectStore and not Agrees then
       begin
         AddRefused(pR, pParam, 'binding-mismatch', Format('the index binds %s elsewhere than the first class declaring it, %s', [M, Chain[First].Name]));
         Exit;
@@ -887,6 +936,7 @@ begin
   Result.Fixes        := FFixes.ToArray;
   Result.Refused      := FRefused.ToArray;
   Result.AlreadyNarrow:= FAlready;
+  Result.Bound        := FBound.ToArray;
 end;
 
 function PlanNarrowParams(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;
@@ -1001,6 +1051,12 @@ begin
     Result.AddPair('kind', pS.Kind);
     Result.AddPair('reason', pS.Reason);
   end;
+end;
+
+procedure PrintBoundText(const pPlan: TNarrowPlan);
+begin
+  for var B in pPlan.Bound do
+    Writeln(Format('bound    %s  %s.%s -> %s -- %s', [B.Routine, B.Param, B.Member, B.ClassName, B.Reason]));
 end;
 
 procedure PrintPlanText(const pPlan: TNarrowPlan; pApply: Boolean);
@@ -1138,6 +1194,21 @@ begin
       var Refused:= TJSONArray.Create;
       J.AddPair('refused', Refused);
       for var S in Plan.Refused do Refused.AddElement(SiteToJson(S));
+      if pOpts.ShowBound then
+      begin
+        var BoundArr:= TJSONArray.Create;
+        J.AddPair('bound', BoundArr);
+        for var B in Plan.Bound do
+        begin
+          var BO:= TJSONObject.Create;
+          BO.AddPair('routine', B.Routine);
+          BO.AddPair('param', B.Param);
+          BO.AddPair('member', B.Member);
+          BO.AddPair('class', B.ClassName);
+          BO.AddPair('reason', B.Reason);
+          BoundArr.AddElement(BO);
+        end;
+      end;
       if Ran then
       begin
         var G:= TJSONObject.Create;
@@ -1157,6 +1228,7 @@ begin
     Exit;
   end;
   PrintPlanText(Plan, pOpts.Apply);
+  if pOpts.ShowBound then PrintBoundText(Plan);
   if Ran then
     if Gate.Applied then Writeln(Format('applied: %d file(s) written, the project builds; re-index', [Length(Gate.Tx.Written)]))
     else Writeln(Format('NOT applied: %s -- %s', [Gate.Refusal, Gate.Detail]));
