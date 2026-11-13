@@ -79,7 +79,9 @@ try {
   Check 'b2 REFUSED (dirty-baseline)' ($r.Out -match 'REFUSED \(dirty-baseline\)') $r.Out
   Check 'b3 first error listed' ($r.Out -match 'compile gate: build 1 error: .*GateMissingOne') $r.Out
   Check 'b4 second error listed' ($r.Out -match 'compile gate: build 1 error: .*GateMissingTwo') $r.Out
-  Check 'b5 build-1 counts line' ($r.Out -match 'compile gate: build 1 \(before the write\): 2 error\(s\), 1 warning\(s\), 1 hint\(s\)') $r.Out
+  # dcc: two E2003 in GtUnit + F2063 in the .dpr; a unit that fails emits no warnings or hints
+  Check 'b5 build-1 counts line' ($r.Out -match 'compile gate: build 1 \(before the write\): 3 error\(s\), 0 warning\(s\), 0 hint\(s\)') $r.Out
+  Check 'b7 fatal F2063 listed too' ($r.Out -match 'compile gate: build 1 error: .*F2063') $r.Out
   Check 'b6 bytes identical' ((Hash $B.Unit) -eq $hb)
 
   # c: clean project, the fix lands; build 2's new hint is reported, build 1's surviving hint is not

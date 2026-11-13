@@ -14,7 +14,7 @@ interface
 
 uses
   System.SysUtils, System.Classes, Winapi.Windows,
-  DRagLint.Core.ControlChannel;
+  DRagLint.Core.ControlChannel, DRagLint.Core.Model;
 
 const
   /// <summary>The compile gate builds at most twice: the after-build and one retry after the repairs.</summary>
@@ -52,6 +52,9 @@ type
     Seconds: Double;
     /// <summary>True when the build ran past its time limit and was killed (Ok is False).</summary>
     TimedOut: Boolean;
+    /// <summary>Every dcc message of the build -- errors, warnings and hints -- once each, in log order (DccMessages).
+    /// Empty when the build did not run or was killed.</summary>
+    Messages: TArray<TCompilerFinding>;
   end;
 
   /// <summary>One bounded repair (R4) the compile gate made; an item of `repairs[]` in cycle-fix/1.</summary>
@@ -80,6 +83,8 @@ type
     Seconds: Double;
     /// <summary>True when the last build was killed at its time limit.</summary>
     TimedOut: Boolean;
+    /// <summary>Every dcc message of the last build (TBuildOutcome.Messages).</summary>
+    Messages: TArray<TCompilerFinding>;
   end;
 
   /// <summary>What WriteAll wrote and everything RollBack needs to undo it.</summary>
@@ -173,6 +178,18 @@ type
     After: TCompileAfterResult;
     /// <summary>What was written, and the backups.</summary>
     Tx: TApplyTransaction;
+    /// <summary>True when build 1 (the baseline of Project) ran to its end, clean or not.</summary>
+    BeforeBuilt: Boolean;
+    /// <summary>Every message of build 1 of Project -- errors, warnings and hints -- kept whether it passed or not (P14).</summary>
+    BeforeMessages: TArray<TCompilerFinding>;
+    /// <summary>True when build 2 (the last after-build of Project) ran to its end, clean or not.</summary>
+    AfterBuilt: Boolean;
+    /// <summary>Every message of build 2 of Project.</summary>
+    AfterMessages: TArray<TCompilerFinding>;
+    /// <summary>When Applied: the warnings and hints of build 2 that build 1 did not have (NewCompilerMessages).</summary>
+    NewMessages: TArray<TCompilerFinding>;
+    /// <summary>When Applied: how many warnings and hints of build 1 build 2 no longer has.</summary>
+    GoneMessages: Integer;
   end;
 
 var
@@ -321,6 +338,31 @@ function WriteStaged(const pTouched, pNew: TArray<string>; const pProjectDir: st
   const pStaged: TFunc<string, TBytes>; const pHeader: TFunc<Integer, Integer, string>;
   out pTx: TApplyTransaction): Boolean;
 
+/// <summary>Every dcc message of a build log: errors, warnings and hints, each (file, line, code, message) once, in
+/// log order.</summary>
+/// <param name="pLog">The msbuild or dcc output.</param>
+/// <returns>The parsed messages (TCompileChecker.ParseLine), the trailing `[project]` msbuild appends cut from the
+/// message.</returns>
+/// <remarks>Pure. A line that is no dcc message (msbuild banners, the BUILD_EXITCODE line) is skipped.</remarks>
+function DccMessages(const pLog: string): TArray<TCompilerFinding>;
+
+/// <summary>The warnings and hints of build 2 that build 1 did not have.</summary>
+/// <param name="pBefore">Every message of build 1.</param>
+/// <param name="pAfter">Every message of build 2.</param>
+/// <param name="pGone">Receives how many warnings and hints of build 1 build 2 no longer has.</param>
+/// <returns>The new warnings and hints, in build-2 order; errors and information lines are never in it.</returns>
+/// <remarks>Pure. A message is matched by file, code and message text, never by line: the rewrite between the builds
+/// moves lines. Matching counts: a hint build 1 had once and build 2 has twice is one new hint.</remarks>
+function NewCompilerMessages(const pBefore, pAfter: TArray<TCompilerFinding>; out pGone: Integer): TArray<TCompilerFinding>;
+
+/// <summary>The lines a gated verb prints about its two builds (P14).</summary>
+/// <param name="pOutcome">What ApplyGated did.</param>
+/// <returns>One `compile gate: ...` line each: the counts of build 1, every error of build 1, the counts of build 2,
+/// every error of build 2, and when the rewrite was applied the new warnings and hints of build 2 (or that there are
+/// none) and how many of build 1 are gone. Empty when no build ran.</returns>
+/// <remarks>Pure. The caller decides the stream (the CLI writes them to stderr).</remarks>
+function GateMessageReport(const pOutcome: TGateOutcome): TArray<string>;
+
 /// <summary>The after gate: builds the written project, repairs once and builds again.</summary>
 /// <param name="pBuildProject">The .dproj to build.</param>
 /// <param name="pPlatform">As RunMsBuild.</param>
@@ -366,7 +408,7 @@ implementation
 uses
   System.IOUtils, System.StrUtils, System.RegularExpressions, System.Diagnostics, System.Math,
   System.Generics.Collections,
-  DRagLint.Convert.Backup, DRagLint.Core.StudioEnv, DRagLint.Core.Model, DRagLint.Refactor.TextEdit;  // dl:ok uses-global-census@6535 -- version and ref-kind constants of the model; a small unit of its own would add nothing (146 int)
+  DRagLint.Convert.Backup, DRagLint.Core.StudioEnv, DRagLint.Refactor.TextEdit, DRagLint.Diagnostics.CompileCheck;
 
 const
   CDefaultPlatform = 'win64';
@@ -651,9 +693,119 @@ begin
   end;
   var Text:= if TFile.Exists(Log) then TFile.ReadAllText(Log, TEncoding.ANSI) else '';  // dl:ok taint-path-traversal@88fe -- the path is the operator's own --project, the run's fixed scratch or the Studio root: local input, no privilege crossed
   Result.Errors:= DccErrorLines(Text);
+  Result.Messages:= DccMessages(Text);
   Result.Ok:= ContainsStr(Text, 'BUILD_EXITCODE=0') and (Length(Result.Errors) = 0);
   if not Result.Ok and (Length(Result.Errors) = 0) then
     Result.Errors:= ['msbuild failed without a dcc error line' + CiteScratch(Log, '; see %s')];
+end;
+
+function DccMessages(const pLog: string): TArray<TCompilerFinding>;
+var
+  Seen: TDictionary<string, Boolean>;
+  Found: TList<TCompilerFinding>;
+begin
+  Seen := TDictionary<string, Boolean>.Create;
+  Found:= TList<TCompilerFinding>.Create;
+  try
+    for var Raw in pLog.Split([#10]) do
+    begin
+      var F: TCompilerFinding;
+      if not TCompileChecker.ParseLine(Trim(Raw), F) then Continue;
+      { msbuild ends every line with ` [<the .dproj>]`: not part of what dcc said }
+      F.Message:= TRegEx.Replace(F.Message, '\s*\[[^\[\]]*\]\s*$', '');
+      var Key:= LowerCase(F.RawPath) + '|' + IntToStr(F.LineNo) + '|' + F.Code + '|' + F.Message;
+      if Seen.ContainsKey(Key) then Continue;
+      Seen.Add(Key, True);
+      Found.Add(F);
+    end;
+    Result:= Found.ToArray;
+  finally
+    Found.Free;
+    Seen.Free;
+  end;
+end;
+
+// A warning or hint, matched across two builds: file, code and text, not the line (the rewrite moves lines).
+function MessageMatchKey(const pF: TCompilerFinding): string;
+begin
+  Result:= LowerCase(pF.RawPath) + '|' + pF.Code + '|' + pF.Message;
+end;
+
+function IsWarningOrHint(const pF: TCompilerFinding): Boolean;
+begin
+  Result:= SameText(pF.Severity, 'Warning') or SameText(pF.Severity, 'Hint');
+end;
+
+function NewCompilerMessages(const pBefore, pAfter: TArray<TCompilerFinding>; out pGone: Integer): TArray<TCompilerFinding>;
+var
+  Left: TDictionary<string, Integer>;
+begin
+  Result:= nil;
+  pGone := 0;
+  Left:= TDictionary<string, Integer>.Create;
+  try
+    for var F in pBefore do
+      if IsWarningOrHint(F) then
+      begin
+        var N: Integer;
+        Left.TryGetValue(MessageMatchKey(F), N);
+        Left.AddOrSetValue(MessageMatchKey(F), N + 1);
+      end;
+    for var F in pAfter do
+    begin
+      if not IsWarningOrHint(F) then Continue;
+      var N: Integer;
+      if Left.TryGetValue(MessageMatchKey(F), N) and (N > 0) then Left[MessageMatchKey(F)]:= N - 1
+      else Result:= Result + [F];
+    end;
+    for var N in Left.Values do Inc(pGone, N);
+  finally
+    Left.Free;
+  end;
+end;
+
+function GateMessageReport(const pOutcome: TGateOutcome): TArray<string>;
+
+  function Shown(const pF: TCompilerFinding): string;
+  begin
+    Result:= Format('%s(%d): %s %s', [pF.RawPath, pF.LineNo, pF.Code, pF.Message]);
+  end;
+
+  { the counts line, then every error line; pRawErrors stand in when no error line parsed (a timeout, a broken msbuild) }
+  procedure Build(const pTag, pWhen: string; const pMessages: TArray<TCompilerFinding>; const pRawErrors: TArray<string>;
+    var pLines: TArray<string>);
+  begin
+    var Errors, Warnings, Hints: Integer;
+    Errors:= 0;
+    Warnings:= 0;
+    Hints:= 0;
+    for var F in pMessages do
+      if SameText(F.Severity, 'Error') then Inc(Errors)
+      else if SameText(F.Severity, 'Warning') then Inc(Warnings)
+      else if SameText(F.Severity, 'Hint') then Inc(Hints);
+    pLines:= pLines + [Format('compile gate: %s (%s): %d error(s), %d warning(s), %d hint(s)', [pTag, pWhen, Errors, Warnings, Hints])];
+    for var F in pMessages do
+      if SameText(F.Severity, 'Error') then pLines:= pLines + ['compile gate: ' + pTag + ' error: ' + Shown(F)];
+    if Errors = 0 then
+      for var S in pRawErrors do pLines:= pLines + ['compile gate: ' + pTag + ' error: ' + S];
+  end;
+
+begin
+  Result:= nil;
+  if pOutcome.BeforeBuilt then
+    Build('build 1', 'before the write', pOutcome.BeforeMessages,
+      if pOutcome.AfterBuilt or pOutcome.Applied then nil else pOutcome.Baseline.Errors, Result);
+  if pOutcome.AfterBuilt then
+    Build('build 2', 'after the write', pOutcome.AfterMessages, if pOutcome.Applied then nil else pOutcome.After.Errors, Result);
+  if not pOutcome.Applied then Exit;
+  if Length(pOutcome.NewMessages) = 0 then Result:= Result + ['compile gate: no new warnings or hints after the write']
+  else
+  begin
+    Result:= Result + [Format('compile gate: %d new warning(s)/hint(s) after the write:', [Length(pOutcome.NewMessages)])];
+    for var F in pOutcome.NewMessages do Result:= Result + ['compile gate: new: ' + Shown(F)];
+  end;
+  if pOutcome.GoneMessages > 0 then
+    Result:= Result + [Format('compile gate: %d warning(s)/hint(s) of build 1 are gone', [pOutcome.GoneMessages])];
 end;
 
 // `File.pas(57): error E2015: Message [proj]` (msbuild) or `[dcc64 Error] File.pas(57): E2015 Message` (dcc).
@@ -959,6 +1111,7 @@ begin
   Result.Ok      := B.Ok;
   Result.Errors  := B.Errors;
   Result.TimedOut:= B.TimedOut;
+  Result.Messages:= B.Messages;
 end;
 
 function ApplyGated(const pReq: TGateRequest): TGateOutcome;  // dl:ok too-many-exit-points@277f -- one guard per named refusal, in the documented order: the exits are the contract
@@ -1001,6 +1154,8 @@ begin
         Exit(Outcome);
       end;
       Outcome.Baseline:= RunMsBuild(pReq.Project, pReq.Platform, Dir + 'baseline.log', 'baseline build');
+      Outcome.BeforeBuilt   := not Outcome.Baseline.TimedOut;
+      Outcome.BeforeMessages:= Outcome.Baseline.Messages;
       if not Outcome.Baseline.Ok then
       begin
         Outcome.Refusal:= if Outcome.Baseline.TimedOut then CGateBuildTimeout else CGateDirtyBaseline;
@@ -1056,6 +1211,8 @@ begin
         { at the top: dcc reads nothing after the final end. }
         TFile.WriteAllBytes(Outcome.Tx.Written[0], TEncoding.ASCII.GetBytes(CTestBreakLine) + TFile.ReadAllBytes(Outcome.Tx.Written[0]));  // dl:ok taint-path-traversal@57e9 -- the path is the operator's own --project, the run's fixed scratch or the Studio root: local input, no privilege crossed
       Outcome.After:= CompileAfterWith(pReq.Project, pReq.Platform, Dir, pReq.Repair);
+      Outcome.AfterBuilt   := not Outcome.After.TimedOut;
+      Outcome.AfterMessages:= Outcome.After.Messages;
       if Outcome.After.Ok then
         for var I:= 0 to High(pReq.AlsoProjects) do
         begin
@@ -1090,6 +1247,7 @@ begin
       Exit(Outcome);
     end;
     Outcome.Applied:= True;
+    Outcome.NewMessages:= NewCompilerMessages(Outcome.BeforeMessages, Outcome.AfterMessages, Outcome.GoneMessages);
   finally
     Wanted.Free;
   end;

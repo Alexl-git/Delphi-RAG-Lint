@@ -11,8 +11,10 @@
     g2  naming fix + --project, clean baseline: exit 0, local renamed, the written project builds.
     c1  POSITIVE CONTROL: the same naming fix with NO --project writes on the broken baseline (exit 0, renamed):
         the guard fails if the naming fix stops firing (g1 would then pass vacuously).
-    c2  CONTROL: a NON-naming fix (redundant-as-tobject, line 27) with --project and no --compile-gate still writes
-        on the broken baseline: only renames are auto-gated, R3's opt-in for the other fixers is unchanged.
+    c2  CONTROL: a NON-naming fix (redundant-as-tobject, line 27) with --project --no-compile-gate still writes
+        on the broken baseline: the opt-out drops the gate for every fixer but a rename (v151 GATE made the gate
+        the default with a .dproj).
+    g3  a naming fix with --project --no-compile-gate is STILL gated: broken baseline, exit 1, bytes identical.
   RED on 1.46.0-alpha / lane/147-int 6fac0082: g1 writes the rename (exit 0).
   Needs dcc: SKIPs (exit 0) when rsvars.bat is missing.
 #>
@@ -79,8 +81,15 @@ try {
   Check 'c1 POSITIVE CONTROL: no --project writes the rename (exit 0)' ($r.Code -eq 0 -and ([IO.File]::ReadAllText($C1.Unit) -cnotmatch 'my_count')) "exit $($r.Code) $($r.Out)"
 
   $C2 = New-Case 'c2' $true
-  $r = Fix $C2 'redundant-as-tobject' @('--project', $C2.Proj, '--fix-line', '27')
-  Check 'c2 CONTROL: a non-naming fix with --project stays ungated (writes)' ($r.Code -eq 0 -and ((Get-Content $C2.Unit)[26].Trim() -eq 'Take(P);')) "exit $($r.Code) $($r.Out)"
+  $r = Fix $C2 'redundant-as-tobject' @('--project', $C2.Proj, '--fix-line', '27', '--no-compile-gate')
+  Check 'c2 CONTROL: a non-naming fix with --project --no-compile-gate is ungated (writes)' ($r.Code -eq 0 -and ((Get-Content $C2.Unit)[26].Trim() -eq 'Take(P);')) "exit $($r.Code) $($r.Out)"
+
+  $G3 = New-Case 'g3' $true
+  $h3 = (Get-FileHash $G3.Unit -Algorithm SHA1).Hash
+  $r = Fix $G3 $Naming @('--project', $G3.Proj, '--no-compile-gate')
+  Check 'g3 naming fix + --no-compile-gate stays gated: exit 1' ($r.Code -eq 1) "exit $($r.Code) $($r.Out)"
+  Check 'g3 bytes identical' ((Get-FileHash $G3.Unit -Algorithm SHA1).Hash -eq $h3)
+  Check 'g3 note names the rename gate' ($r.Out -match 'naming renames are written through the compile gate') $r.Out
 }
 finally { try { [IO.Directory]::Delete($Tmp, $true) } catch { } }
 if ($script:Failed) { Write-Host 'FAILED' -ForegroundColor Red; exit 1 }
