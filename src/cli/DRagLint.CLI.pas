@@ -251,6 +251,8 @@ uses
   , DRagLint.Diagnostics.LifetimeShapeChecks // dl:unit DRagLint.Diagnostics.LifetimeShapeChecks accepted -- the three *_RULE ids name the gate list; they travel with TLifetimeShapeChecker, the checker this unit calls
   , DRagLint.Diagnostics.CloneChecks
   , DRagLint.Diagnostics.ParseCache
+  , DRagLint.V151.Api       { v151 lane FRAME: TV151FileCtx / TV151ProjectCtx }
+  , DRagLint.V151.Dispatch  { v151 lane FRAME: the one entry to the v151 rule lanes }
   , DRagLint.Diagnostics.FlowChecks
   , DRagLint.Analysis   .DataFlow  { DataFlowStats -- the solver iteration counters }
   , DRagLint.Workspace  .Config
@@ -18427,7 +18429,8 @@ begin
           or LintRuleWants(NarrowRule, ['type-name-prefix', MISSING_USES_RULE])
           or LintRuleWants(NarrowRule, LINT_GATE_TYPE_AWARE) or LintRuleWants(NarrowRule, LINT_GATE_DEAD_CODE)
           or LintRuleWants(NarrowRule, LINT_GATE_EXPR) or LintRuleWants(NarrowRule, LINT_GATE_CONCURRENCY)
-          or LintRuleWants(NarrowRule, LINT_GATE_EXCEPTION_THREAD) or LintRuleWants(NarrowRule, ['dataset-open-without-close'])) then
+          or LintRuleWants(NarrowRule, LINT_GATE_EXCEPTION_THREAD) or LintRuleWants(NarrowRule, ['dataset-open-without-close'])
+          or TV151Dispatch.Wants(NarrowRule)) then
       begin
         var FlowLibDb: string := LintLibraryDb(AArgs);
         { A STALE library index degrades to project-only exactly like an
@@ -18692,6 +18695,12 @@ begin
         for F in TLifetimeShapeChecker.Check(EffPath, FlowStore, FlowFid,
             (NarrowRule = IDENTIFIER_CASE_MISMATCH_RULE) or Cfg.ShouldKeep(IDENTIFIER_CASE_MISMATCH_RULE, {ADefaultDisabled=}True)) do
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      { v151 lane FRAME: the v151 rule lanes (DRagLint.V151.Dispatch) -- .pas, its raw
+        bytes and its sibling .dfm. Wants is False while no lane declares a rule. }
+      TraceLintChecker('v151');
+      if TV151Dispatch.Wants(NarrowRule) then
+        for F in TV151Dispatch.CheckFile(TV151FileCtx.Make(EffPath, Cfg, FlowStore, FlowFid, FlowLibStore, NarrowRule)) do
+          if (NarrowRule = '') or SameText(NarrowRule, F.RuleId) then Findings:= Findings + [F];
       { v0.77: clone / duplicate-code detection (#6) -- within-file (single-file lint).
         lint-all uses CheckProject instead (LATER task) so within-file clones are
         not double-reported. }
@@ -25490,6 +25499,9 @@ begin
         if LintRuleWants(Nr, LINT_GATE_LIFETIME_SHAPE) then
           for F in TLifetimeShapeChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath),
               (Nr = IDENTIFIER_CASE_MISMATCH_RULE) or Cfg.ShouldKeep(IDENTIFIER_CASE_MISMATCH_RULE, {ADefaultDisabled=}True)) do Findings:= Findings + [F];
+        { v151 lane FRAME: the v151 rule lanes, per file (same hook as DoLint). }
+        if TV151Dispatch.Wants(Nr) then
+          for F in TV151Dispatch.CheckFile(TV151FileCtx.Make(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath), LibStore, Nr)) do Findings:= Findings + [F];
         ScanMark(35);  // dl:ok magic-literal@4d39, large-magic-number@4d39 -- REVIEWED 2026-11-09 PF2: profiler scan-slot id of the SCAN_NAMES table, not a quantity
       except
         on E: Exception do Writeln(ErrOutput, Format('lint-all: skip %s (%s: %s)', [ExtractFileName(PasPath), E.ClassName, E.Message]));
@@ -25815,6 +25827,9 @@ begin
   LintPhase('doc-drift');
   if LintRuleWants(Nr, LINT_GATE_DOC_DRIFT) then
     Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store, DocRenderOptionsFor(AArgs, ProjectDb));
+  { v151 lane FRAME: the v151 rule lanes' project-wide checks, once per run. }
+  if TV151Dispatch.Wants(Nr) then
+    Findings:= Findings + TV151Dispatch.CheckProject(TV151ProjectCtx.Make(Store, LibStore, Cfg, Nr, FilePaths, AArgs.ProjectPath));
   { v0.77: cross-file + within-file clone detection (#6). Runs ONLY here in
     lint-all (never the per-file Check) so within-file clones are reported once. }
   LintPhase('duplicate-code');

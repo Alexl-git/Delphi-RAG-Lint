@@ -98,8 +98,13 @@ const
                                   dl:ok would report at once. Opt in per project.
 
     Every one of them is opt-in, unchanged: `--rule <id>` on the CLI, or
-    "enabled":["<id>"] in drag-lint-lint.json, which ShouldKeep honours. }
-  BUILTIN_RULES_OFF_BY_DEFAULT: TArray<string> = [
+    "enabled":["<id>"] in drag-lint-lint.json, which ShouldKeep honours.
+
+    v151 (lane FRAME): this const is the CORE list only. Every consumer reads the
+    FUNCTION BUILTIN_RULES_OFF_BY_DEFAULT (same name, so no call site changed), which
+    returns this list plus every provider row (RegisterProviderRules) declared OFF:
+    one source of truth for ShouldKeep, DefaultDisabled, rules --json and the LSP. }
+  BUILTIN_RULES_OFF_BY_DEFAULT_CORE: TArray<string> = [
     'function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case',
     'interface-object-mixing', 'multiple-statements-per-line', 'magic-literal',
     'boolean-flag-parameter', 'commented-out-code', 'string-equality-comparison',
@@ -408,6 +413,22 @@ procedure RegisterSidecarFixRule(const AId: string; ARisky: Boolean);
 /// </remarks>
 function IsSidecarFixRule(const AId: string; out ARisky: Boolean): Boolean;
 
+/// <summary>The per-file rules that ship OFF by default: the core list plus every
+/// provider row registered with DefaultEnabled = False.</summary>
+/// <returns>Rule ids; the core ids first, then the provider ids in registration order.</returns>
+/// <remarks>Was a const array until v151; kept under the SAME name so every
+/// consumer (MatchText, for-in, array +) compiles unchanged and cannot drift from
+/// the catalog. Constant after unit initialization; thread-safe to read.</remarks>
+function BUILTIN_RULES_OFF_BY_DEFAULT: TArray<string>;  // dl:ok method-pascalcase -- REVIEWED 2026-11-13 v151 FRAME: keeps the former const's name so no consumer changes
+
+/// <summary>Adds rule rows that TRuleCatalog.BuiltinRegistry appends after its own.</summary>
+/// <param name="ARows">Catalog rows; Source should be 'builtin'. A row whose
+/// DefaultEnabled is False joins BUILTIN_RULES_OFF_BY_DEFAULT.</param>
+/// <remarks>Call ONLY from a unit's initialization section (the v151 dispatcher,
+/// DRagLint.V151.Dispatch, is the one caller): the lists are not locked, they are
+/// read-only once the program body runs. An id that is already a built-in is a
+/// registration bug; BuildCatalog keeps the first row only.</remarks>
+procedure RegisterProviderRules(const ARows: TArray<TRuleInfo>);
 
 implementation
 
@@ -417,6 +438,22 @@ uses
 var
   { id -> risky. Guarded by TMonitor on itself; created in initialization. }
   GSidecarFixes: TDictionary<string, Boolean>;
+  { v151 provider rows (RegisterProviderRules) and the OFF ids among them; written
+    only during unit initialization. }
+  GProviderRows: TArray<TRuleInfo>;
+  GProviderOff : TArray<string>;
+
+function BUILTIN_RULES_OFF_BY_DEFAULT: TArray<string>;
+begin
+  Result:= BUILTIN_RULES_OFF_BY_DEFAULT_CORE + GProviderOff;
+end;
+
+procedure RegisterProviderRules(const ARows: TArray<TRuleInfo>);
+begin
+  GProviderRows:= GProviderRows + ARows;
+  for var R: TRuleInfo in ARows do
+    if not R.DefaultEnabled then GProviderOff:= GProviderOff + [R.Id];
+end;
 
 procedure RegisterSidecarFixRule(const AId: string; ARisky: Boolean);
 var
@@ -947,6 +984,8 @@ begin
     B('taint-path-traversal', 'security', 'warning', 'Tainted data reaches a file-system path sink -- a catalogued source flows across routines into a file / directory API (CWE-22)');
     { lane INC3: the preprocessor's IF symbol table (DRagLint.Diagnostics.PpChecks) }
     B('pp-unresolved-if', 'bug-patterns', 'hint', '$IF names a constant the index cannot resolve -- the directive was taken as False, so the wrong branch (and include) may be indexed');
+    { v151 (lane FRAME): rows registered by RegisterProviderRules -- the v151 rule lanes, via DRagLint.V151.Dispatch }
+    L.AddRange(GProviderRows);
     Result:= L.ToArray;
   finally
     L.Free;
