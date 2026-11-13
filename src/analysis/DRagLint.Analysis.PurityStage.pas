@@ -61,6 +61,16 @@ type
     /// pass over the refs of every file plus the fixpoint, which visits each
     /// routine once per change of a callee it depends on.</remarks>
     class function Run(const AStore: ISymbolStore): TPurityStats; static;
+    /// <summary>OFF switch of E-BIND-LIB-EFFECTS: nil (the default) means a library-bound
+    /// call is an unbound `?`, as ever. Set, a call whose stored external_target names a
+    /// non-virtual library routine takes that routine's stored summary.</summary>
+    /// <remarks>Every library summary also keeps `?`, unless LibraryEffectsTrustFree: the
+    /// library is parsed shallow (no read/write refs), so its effect_free = 1 proves nothing.
+    /// Read-only use of the store; set before Run, from the same thread.</remarks>
+    class var LibraryEffects: ISymbolStore;
+    /// <summary>Takes a library verdict at face value, effect_free = 1 included. Measurement
+    /// only: it is unsound on a shallow library (TDataSet.Open reads effect-free).</summary>
+    class var LibraryEffectsTrustFree: Boolean;
   end;
 
 implementation
@@ -121,6 +131,15 @@ const
 
 type
   TSymbolKinds = set of TSymbolKind;
+
+  /// <summary>One library routine as E-BIND-LIB-EFFECTS sees it: its joined verdict.</summary>
+  TLibCallee = record
+    Usable   : Boolean;
+    IsMember : Boolean;
+    IsCtor   : Boolean;
+    OwnerName: string;
+    Sum      : TEffectSummary;
+  end;
 
   /// <summary>One call site of a caller that the fixpoint folds in: a bound
   /// routine (TargetId) or a built-in (IsBuiltin). Arguments are lexed LAZILY,
@@ -187,6 +206,10 @@ type
     FSummary     : TArray<TEffectSummary>;
     FUses        : TArray<TArray<TCalleeUse>>;
     FUnbound     : TDictionary<string, Integer>;
+    FLibCallees  : TDictionary<string, TLibCallee>;
+    FLibBound    : Integer;
+    FLibRoutine  : Int64;
+    FLibTargets  : TDictionary<Int64, string>;
     FProcTypes   : TNameSet;   // lower-case names of plain procedural types, not reference-to
     FStats       : TPurityStats;
     FVisits      : Integer;
@@ -225,6 +248,8 @@ type
     procedure NonLocalWrite(AIndex: Integer; const ARef: TReference; var ASum: TEffectSummary; var AChanged: Boolean);
     procedure BoundCall(AIndex: Integer; const ARef: TReference; ATargetId: Int64; const ALines: TArray<string>;
       var ASum: TEffectSummary; var AChanged: Boolean; AUses: TList<TCalleeUse>);
+      function LibCallee(const AQName: string): TLibCallee;
+    function LibraryCall(AIndex: Integer; const ARef: TReference; AUses: TList<TCalleeUse>): Boolean;
     procedure CallRef(AIndex: Integer; const ARef: TReference; const ALines: TArray<string>;
       var ASum: TEffectSummary; var AChanged: Boolean; AUses: TList<TCalleeUse>);
     procedure MemberRef(AIndex: Integer; const ARef: TReference; const ALines: TArray<string>;
@@ -277,6 +302,8 @@ begin
   FOwnedSets  := TObjectList<TNameSet>.Create(True);
   FOwnedMaps  := TObjectList<TParamMap>.Create(True);
   FUnbound    := TDictionary<string, Integer>.Create;
+  FLibCallees := TDictionary<string, TLibCallee>.Create;
+  FLibTargets := TDictionary<Int64, string>.Create;
   FProcTypes  := NewSet;
   FEmptySet   := NewSet;
   FEmptyMap   := NewMap;
@@ -285,6 +312,8 @@ end;
 destructor TPurityRun.Destroy;
 begin
   FProcTypes := nil;
+  FLibTargets.Free;
+  FLibCallees.Free;
   FUnbound.Free;
   FOwnedMaps.Free;
   FOwnedSets.Free;
@@ -1128,6 +1157,94 @@ begin
   AUses.Add(U);
 end;
 
+{ E-BIND-LIB-EFFECTS: one library target's joined verdict, cached by name. Overloads join
+  (flags and params union). A virtual or interface member, or a name with no verdict row, is
+  not Usable: the caller then keeps today's unbound `?`. }
+function TPurityRun.LibCallee(const AQName: string): TLibCallee;
+var
+  Changed: Boolean;
+begin
+  if FLibCallees.TryGetValue(LowerKey(AQName), Result) then Exit;
+  Result:= Default(TLibCallee);
+  var Lib: ISymbolStore:= TPurityStage.LibraryEffects;
+  var Virt: Boolean:= False;
+  var Seen: Boolean:= False;
+  Changed:= False;
+  for var S: TSymbol in Lib.FindSymbolsByQualifiedName(AQName) do
+  begin
+    if not (S.Kind in ROUTINE_KINDS) then Continue;
+    if S.IsVirtual or (Lib.GetSymbolById(S.ParentId).Kind = skInterface) then Virt:= True;
+    Result.IsMember:= Result.IsMember or (S.ParentId > 0);
+    if S.Kind = skConstructor then
+    begin
+      Result.IsCtor:= True;
+      Result.OwnerName:= Lib.GetSymbolById(S.ParentId).Name;
+    end;
+    var F: TSymbolFacts:= Lib.GetSymbolFacts(S.Id);
+    if (not F.Present) or (F.BodyLoc <= 0) then Continue;
+    Seen:= True;
+    var D: TEffectSummary:= TEffectSummary.Decode(F.EffectSummary);
+    for var Flag:= Low(TEffectFlag) to High(TEffectFlag) do
+      { h stays out: a library routine's own temporaries read as "frees storage" and every caller
+        then reads as having an effect (IsCweId calls TRegEx.IsMatch). Measured: spec section 5. }
+      if (Flag in D.Flags) and ((Flag <> efHeap) or TPurityStage.LibraryEffectsTrustFree) then Result.Sum.AddFlag(Flag, 'library ' + AQName, Changed);
+    for var K in D.Params do Result.Sum.AddParam(K, 'library ' + AQName, Changed);
+  end;
+  Result.Usable:= Seen and not Virt;
+  if not TPurityStage.LibraryEffectsTrustFree then
+    Result.Sum.AddFlag(efUnknown, 'library ' + AQName + ' (shallow parse)', Changed);
+  FLibCallees.Add(LowerKey(AQName), Result);
+end;
+
+{ True when ARef was taken over as a library use. The use rides the built-in path of the
+  fixpoint: TranslateCallee moves s through the receiver and p<k> through the lexed args. }
+function TPurityRun.LibraryCall(AIndex: Integer; const ARef: TReference; AUses: TList<TCalleeUse>): Boolean;
+var
+  U: TCalleeUse;
+begin
+  { GetReferencesFromFile does not carry external_target; the unresolved-call reader does.
+    One query per routine that reaches this point, so an OFF run never pays it. }
+  var Id: Int64:= FRoutines[AIndex].Id;
+  if FLibRoutine <> Id then
+  begin
+    FLibRoutine:= Id;
+    FLibTargets.Clear;
+    for var R: TReference in FStore.GetUnresolvedCallsFromSymbol(Id) do
+      if R.ExternalTarget <> '' then FLibTargets.AddOrSetValue(R.Id, R.ExternalTarget);
+  end;
+  var Target: string;
+  if not FLibTargets.TryGetValue(ARef.Id, Target) then Exit(False);
+  var C: TLibCallee:= LibCallee(Target);
+  Result:= C.Usable;
+  if not Result then Exit;
+  U:= Default(TCalleeUse);
+  U.IsBuiltin:= True;
+  U.Builtin:= C.Sum;
+  U.Name:= ARef.NameText;
+  if Trim(ARef.ReceiverText) = '' then
+  begin
+    if C.IsMember then U.Receiver:= SelfReceiver
+    else
+    begin
+      U.Receiver:= Default(TArgInfo);
+      U.Receiver.Cls:= acUnknown;
+      U.Receiver.ParamOrdinal:= -1;
+    end;
+  end
+  else
+  begin
+    U.Receiver:= Classify(AIndex, ARef.ReceiverText);
+    if (U.Receiver.Cls = acUnknown) and C.IsCtor and
+       (SameText(ARef.ReceiverText, C.OwnerName) or EndsText('.' + C.OwnerName, ARef.ReceiverText)) then
+      U.Receiver.Cls:= acLocal;
+  end;
+  U.FileId:= FRoutines[AIndex].FileId;
+  U.Line:= ARef.StartLine;
+  U.ColAfter:= ARef.StartCol + Length(ARef.NameText);
+  AUses.Add(U);
+  Inc(FLibBound);
+end;
+
 procedure TPurityRun.CallRef(AIndex: Integer; const ARef: TReference; const ALines: TArray<string>;
   var ASum: TEffectSummary; var AChanged: Boolean; AUses: TList<TCalleeUse>);
 var
@@ -1159,6 +1276,7 @@ begin
     AUses.Add(U);
     Exit;
   end;
+  if (TPurityStage.LibraryEffects <> nil) and LibraryCall(AIndex, ARef, AUses) then Exit;
   Witness:= 'calls ' + ARef.NameText + ' (unbound';
   if Trim(ARef.ReceiverText) <> '' then Witness:= Witness + '; receiver ' + ARef.ReceiverText;
   ASum.AddFlag(efUnknown, Witness + ')', AChanged);
@@ -1445,6 +1563,7 @@ begin
     [FStats.Routines, FStats.EffectFree, Percent, FStats.UnboundCalls, Top,
      FStats.UnlexableCalls, FStats.StaleFiles, FStats.GatedIncomplete, FStats.Rounds]));
   Flush(Output);
+  if TPurityStage.LibraryEffects <> nil then Writeln(Format('resolve: purity library effects -- %d call ref(s) took a library summary, %d distinct target(s)', [FLibBound, FLibCallees.Count]));
   if GetEnvironmentVariable('DRAGLINT_PROFILE') <> '' then
     Writeln(ErrOutput, Format('purity: load %.1fs  scan %.1fs  lex %.1fs  fixpoint %.1fs  write %.1fs  ' +
                               '(%d visit(s); lex is part of fixpoint; %d file re-read(s) after a line-cache eviction, %d MB cached at the end)',

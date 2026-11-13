@@ -2471,6 +2471,7 @@ const
 function ProjectTagFor(const AStore: ISymbolStore; const ADbPath: string; const AArgs: TArgs): string; forward;
 
 function ResolverFingerprint(const AStore: ISymbolStore): string; forward;
+procedure RunPurityStage(const AStore: ISymbolStore); forward;
 
 { The version limb of a stored fingerprint whose FIRST limb is `<APrefix><ver>`
   (`v=` for the indexer, `r=` for the resolver), or '' when the stamp is absent
@@ -5296,7 +5297,7 @@ begin
       were re-derived -- and ALSO when a per-file reindex recreated symbol_facts
       rows with NULL verdicts while the calls pass was skipped (PurityNeedsRun). }
     if RanCalls or Store.PurityNeedsRun then
-      Stage('  ', 'purity', procedure begin TPurityStage.Run(Store); end)
+      Stage('  ', 'purity', procedure begin RunPurityStage(Store); end)
     else
       Writeln('  stage: purity -- skipped, calls did not run and every routine already carries a verdict.');
     { xj-5: concept-search table; incremental, backfills from existing rows (no re-parse). }
@@ -6774,6 +6775,22 @@ const INDEXER_FP_KEY  = INDEXER_FINGERPRINT_META_KEY; { one spelling, in Core.Mo
   recorded there. Adding it here would invalidate on a change that cannot alter
   a derived edge. The schema is included because a schema migration can change
   the shape of the very tables this pass writes. }
+{ E-BIND-LIB-EFFECTS, OFF by default: DRAGLINT_LIBRARY_EFFECTS=<library.sqlite> turns it on for
+  this run; DRAGLINT_LIBRARY_EFFECTS_TRUST=1 is the measurement-only unsound arm. }
+procedure RunPurityStage(const AStore: ISymbolStore);
+begin
+  var LibPath: string:= GetEnvironmentVariable('DRAGLINT_LIBRARY_EFFECTS');
+  if (LibPath <> '') and (TPurityStage.LibraryEffects = nil) then
+  begin
+    var Ok: Boolean;
+    var Lib: ISymbolStore:= OpenReadOnlyStore(LibPath, Ok, True);
+    if Ok then TPurityStage.LibraryEffects:= Lib
+    else Writeln(ErrOutput, 'NOTE: purity: the library for effects could not be opened: ', LibPath);
+    TPurityStage.LibraryEffectsTrustFree:= GetEnvironmentVariable('DRAGLINT_LIBRARY_EFFECTS_TRUST') = '1';
+  end;
+  TPurityStage.Run(AStore);
+end;
+
 function ResolverFingerprint(const AStore: ISymbolStore): string;
 var
   Found, Expected: Integer;
@@ -8131,7 +8148,7 @@ begin
       Before CommitIndexerFingerprint on purpose: an interrupted purity pass must
       leave the stamp absent so the next run repeats it. }
     if RanCalls or Store.PurityNeedsRun then
-      Stage('', 'purity', procedure begin TPurityStage.Run(Store); end)
+      Stage('', 'purity', procedure begin RunPurityStage(Store); end)
     else
       Writeln('stage: purity -- skipped, calls did not run and every routine already carries a verdict.');
     { xj-5: concept-search table; incremental, backfills from existing rows (no re-parse). }
@@ -8294,7 +8311,7 @@ begin
   { Purity v2 -- same gate as the DoIndex site: after the edges, or when a
     per-file reindex left NULL verdicts behind a skipped calls pass. }
   if RanCalls or Store.PurityNeedsRun then
-    Stage('  ', 'purity', procedure begin TPurityStage.Run(Store); end)
+    Stage('  ', 'purity', procedure begin RunPurityStage(Store); end)
   else
     Writeln('  stage: purity -- skipped, calls did not run and every routine already carries a verdict.');
   { xj-5: concept-search table; incremental, backfills from existing rows (no re-parse). }
@@ -38644,7 +38661,7 @@ begin
             RunLinkStages('  ', Store, Indexer2); { B-24: the one stage list (facts-inherited was missing here) }
             Stage('  ', 'calls',        procedure begin Store.ResolveCallTargets; end);
             Stage('  ', 'dispatch',     procedure begin Store.ResolveDispatch; end);     { 2026-10-26: derived from the edges just written }
-            Stage('  ', 'purity',       procedure begin TPurityStage.Run(Store); end);   { Purity v2: verdicts follow the edges; no gate, this block already runs only when files were scanned }
+            Stage('  ', 'purity',       procedure begin RunPurityStage(Store); end);   { Purity v2: verdicts follow the edges; no gate, this block already runs only when files were scanned }
             Stage('  ', 'search',       procedure begin Store.BuildSymbolSearch; end);   { xj-5: concept-search table, incremental }
           end;
 
