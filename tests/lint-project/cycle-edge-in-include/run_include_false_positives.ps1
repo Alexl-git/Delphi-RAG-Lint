@@ -37,7 +37,7 @@ $script:dbOf = @{}
 function Scenario([string]$Name, [string[]]$LintArgs) {
   $dir = Join-Path $scratch $Name
   [void](New-Item -ItemType Directory -Force -Path $dir)
-  Copy-Item (Join-Path $PSScriptRoot "$Name\*") $dir
+  Copy-Item (Join-Path $PSScriptRoot "$Name\*") $dir -Recurse
   $db = Join-Path $scratch "$Name.sqlite"
   $script:indexOut[$Name] = @(& $exePath index $dir --db $db 2>&1 | ForEach-Object { "$_" })
   $script:dbOf[$Name] = $db
@@ -77,6 +77,29 @@ try {
   Check 'M4 lint <file>: a uses-fragment include reports no parser-error / syntax-error' ((FileLintErrors 'frag' 'FragUses.inc').Count -eq 0) "$((FileLintErrors 'frag' 'FragUses.inc').Count)"
   Check 'M4 lint <file> control: an include used as code still reports both rules' ((FileLintErrors 'fragcode' 'FragBroken.inc').Count -eq 2) "$((FileLintErrors 'fragcode' 'FragBroken.inc').Count)"
   Check 'M4 lint <file> control: a fragment also included as code still reports both rules' ((FileLintErrors 'fragboth' 'FragBothUses.inc').Count -eq 2) "$((FileLintErrors 'fragboth' 'FragBothUses.inc').Count)"
+
+  # 152c RINC2: the index verdict does not depend on the walk order. fragorder: the fragment sits
+  # above its host's folder, so a fresh directory index reads it FIRST; fragordboth: one host
+  # includes it in a uses clause BEFORE it is read, a second host as code AFTER (lint-all reports
+  # it); fragordcode (control): an include read before its code host keeps its DIAG.
+  function ProgressAt([string]$Name, [string]$Leaf) {
+    $lines = $script:indexOut[$Name]
+    for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match ([regex]::Escape($Leaf) + ' ->')) { return $i } }
+    return -1
+  }
+  [void](Scenario 'fragorder' @())
+  [void](Scenario 'fragordcode' @())
+  $fob = Scenario 'fragordboth' @('--enable', 'parser-error,syntax-error')
+  Write-Host ("    walk order: fragorder inc={0} host={1}; fragordboth uses-host={2} code-host={3}" -f (ProgressAt 'fragorder' 'OrdUses.inc'), (ProgressAt 'fragorder' 'OrdHost.pas'), (ProgressAt 'fragordboth' 'AOrdBothUses.pas'), (ProgressAt 'fragordboth' 'COrdBothCode.pas')) -ForegroundColor DarkGray
+  Check 'order (shape): fragorder walks the fragment before its host' (((ProgressAt 'fragorder' 'OrdHost.pas') -ge 0) -and ((ProgressAt 'fragorder' 'OrdUses.inc') -ge 0))
+  Check 'order (shape): fragordboth walks the uses host before the code host' (((ProgressAt 'fragordboth' 'AOrdBothUses.pas') -ge 0) -and ((ProgressAt 'fragordboth' 'AOrdBothUses.pas') -lt (ProgressAt 'fragordboth' 'COrdBothCode.pas')))
+  Check 'order: a fragment walked before its host has no DIAG parse error' ((IndexDiag 'fragorder' 'OrdUses.inc').Count -eq 0) "$((IndexDiag 'fragorder' 'OrdUses.inc').Count)"
+  $op = @($script:indexOut['fragorder'] | Where-Object { $_ -match 'OrdUses\.inc ->' })
+  Check 'order: ... and counts 0 errors on its progress line' (($op.Count -eq 1) -and ($op[0] -match ', 0 errors')) "$op"
+  Check 'order control: an include walked before its CODE host keeps its DIAG parse error' ((IndexDiag 'fragordcode' 'OrdBroken.inc').Count -eq 1) "$((IndexDiag 'fragordcode' 'OrdBroken.inc').Count)"
+  Check 'order: a fragment a LATER host includes as code keeps its DIAG parse error' ((IndexDiag 'fragordboth' 'BOrdBoth.inc').Count -eq 1) "$((IndexDiag 'fragordboth' 'BOrdBoth.inc').Count)"
+  $fobe = @($fob | Where-Object { $_.rule -in @('parser-error', 'syntax-error') -and (Leaf $_) -eq 'BOrdBoth.inc' })
+  Check 'order (agreement): lint-all reports that fragment too' ($fobe.Count -eq 2) "$($fobe.Count)"
 
   $u = @(Scenario 'unusedinc' @('--rule', 'unused-unit-in-uses') | Where-Object { $_.rule -eq 'unused-unit-in-uses' })
   $u | ForEach-Object { Write-Host ("    {0}:{1} {2}" -f (Leaf $_), $_.start_line, $_.message.Substring(0, [Math]::Min(80, $_.message.Length))) -ForegroundColor DarkGray }

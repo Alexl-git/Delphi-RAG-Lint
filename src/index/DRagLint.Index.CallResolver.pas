@@ -1304,6 +1304,14 @@ type
     /// <param name="AFileId">files.id of the declaration.</param>
     /// <returns>The host's files.id for an include file, AFileId otherwise.</returns>
     function UnitFileOfDecl(AFileId: Int64): Int64;
+    /// <summary>152c RINC2: True when a declaration of ADeclFileId belongs to the unit of
+    /// ARefFileId -- the same file, or a code include (either section) of that unit.</summary>
+    /// <param name="ADeclFileId">files.id of the declaration.</param>
+    /// <param name="ARefFileId">files.id of the referencing file.</param>
+    /// <returns>True on the ref's own-unit rung (both sections visible).</returns>
+    /// <remarks>A ref INSIDE an include sees the include's own declarations (same file); it does
+    /// not gain its host's (UnitFileOfDecl maps the declaration side only).</remarks>
+    function DeclInRefUnit(ADeclFileId, ARefFileId: Int64): Boolean;
     /// <summary>152c RINC: True when ASym is declared at the top level of a unit -- its parent
     /// is the unit symbol, or it is a parentless declaration of a code include (the host's).</summary>
     /// <param name="ASym">A full symbol row (SymbolById).</param>
@@ -4865,6 +4873,11 @@ begin
   if FIncHost.TryGetValue(AFileId, H) then Result:= H.HostFileId;
 end;
 
+function TCallResolver.DeclInRefUnit(ADeclFileId, ARefFileId: Int64): Boolean;
+begin
+  Result:= (ADeclFileId = ARefFileId) or (UnitFileOfDecl(ADeclFileId) = ARefFileId);
+end;
+
 function TCallResolver.IsUnitLevelDecl(const ASym: TSymbol): Boolean;
 begin
   Result:= if ASym.ParentId > 0 then SymbolById(ASym.ParentId).ParentId <= 0
@@ -5920,8 +5933,9 @@ begin
     // RUNG 1 -- the call's OWN unit. Both sections are visible from inside the
     // unit, and a routine declared here shadows any same-named routine a used
     // unit exports, so this rung answers alone whenever it matches at all.
+    // 152c RINC2: a code include of this unit (either section) is on this rung.
     for S in Cands do
-      if S.FileId = ACallFileId then Matches.Add(S);
+      if DeclInRefUnit(S.FileId, ACallFileId) then Matches.Add(S);
     if Matches.Count > 0 then
       Exit(PickFromMatches(Matches, AArgCount, AArgsKnown, AConfidence));
 
@@ -6083,7 +6097,7 @@ function TCallResolver.CollapseIdenticalEnumCopies(const AVisible: TArray<TEnumV
   function Rank(const AE: TEnumValueDecl): Integer;
   begin
     if ARefFileId <= 0 then Exit(2);
-    if AE.FileId = ARefFileId then Exit(0);
+    if DeclInRefUnit(AE.FileId, ARefFileId) then Exit(0);
     if CandInScope(ARefFileId, AE.FileId) then Exit(1);
     Result:= 2;
   end;
@@ -6187,7 +6201,7 @@ function TCallResolver.ResolveEnumValueRead(const ARef: TReference; out AReason:
     typing uses, so a unit merely present in the index is never consulted. }
   function VisibleHere(AFileId: Int64; const ASection: string): Boolean;
   begin
-    Result:= (AFileId = ARef.FileId)
+    Result:= DeclInRefUnit(AFileId, ARef.FileId)
              or (SameText(ASection, 'interface') and CandInScope(ARef.FileId, AFileId));
   end;
 
@@ -6929,7 +6943,7 @@ function TCallResolver.UnitScopeDeclaresValue(ARefFileId: Int64; const ALc: stri
     unit only its interface, and only when this file uses it. }
   function Visible(AFileId: Int64; const ASection: string): Boolean;
   begin
-    Result:= (AFileId = ARefFileId)
+    Result:= DeclInRefUnit(AFileId, ARefFileId)
              or (SameText(ASection, 'interface') and CandInScope(ARefFileId, AFileId));
   end;
 
@@ -6956,7 +6970,7 @@ begin
   Result:= False;
   if not FNameToUnitValues.TryGetValue(ALc, L) then Exit;
   for S in L do
-    if (S.FileId = ARefFileId)
+    if DeclInRefUnit(S.FileId, ARefFileId)
        or (SameText(S.Section, 'interface') and CandInScope(ARefFileId, S.FileId)) then Exit(True);
 end;
 
@@ -6971,7 +6985,7 @@ begin
   Before:= AMatches.Count;
   { RUNG 1 -- the ref's own unit, which shadows anything a used unit exports. }
   for S in Cands do
-    if S.FileId = ARefFileId then AMatches.Add(S);
+    if DeclInRefUnit(S.FileId, ARefFileId) then AMatches.Add(S);
   if AMatches.Count > Before then Exit;
   { RUNG 2 -- the interface of a unit this file uses. }
   for S in Cands do
@@ -7346,7 +7360,7 @@ begin
   Hits:= 0;
   if FNameToUnitValues.TryGetValue(LowerCase(AName), L) then
     for S in L do
-      if TypedUnitValue(S) and ((S.FileId = ARef.FileId)
+      if TypedUnitValue(S) and (DeclInRefUnit(S.FileId, ARef.FileId)
          or (SameText(S.Section, 'interface') and CandInScope(ARef.FileId, S.FileId))) then
       begin
         Inc(Hits);
@@ -7723,7 +7737,7 @@ begin
     end;
     if (Result = '') and FNameToUnitValues.ContainsKey(LowerCase(Leaf)) then
       for S in FNameToUnitValues[LowerCase(Leaf)] do
-        if (Result = '') and ((S.FileId = ARef.FileId)
+        if (Result = '') and (DeclInRefUnit(S.FileId, ARef.FileId)
            or (SameText(S.Section, 'interface') and CandInScope(ARef.FileId, S.FileId))) then
           Result:= S.Signature;
   end;
@@ -9597,8 +9611,8 @@ function TCallResolver.UnitScopeWriteTarget(ARefFileId: Int64; const ALc: string
     writing file itself (both sections), 2 the interface of a unit it uses. }
   function OnRung(ARung: Integer; AFileId: Int64; const ASection: string): Boolean;
   begin
-    if ARung = 1 then Result:= AFileId = ARefFileId
-    else Result:= (AFileId <> ARefFileId) and SameText(ASection, 'interface')
+    Result:= if ARung = 1 then DeclInRefUnit(AFileId, ARefFileId)
+             else (AFileId <> ARefFileId) and SameText(ASection, 'interface')
                   and CandInScope(ARefFileId, AFileId);
   end;
 
@@ -10223,7 +10237,7 @@ begin
   if FNameToRoutines.ContainsKey(Lc) or FNameToCands.ContainsKey(Lc) or not FNameToUnitValues.TryGetValue(Lc, L) then Exit;
   var Hits: Integer:= 0;
   for var S: TSymbol in L do
-    if (S.FileId = ASite.FileId) or (SameText(S.Section, 'interface') and CandInScope(ASite.FileId, S.FileId)) then
+    if DeclInRefUnit(S.FileId, ASite.FileId) or (SameText(S.Section, 'interface') and CandInScope(ASite.FileId, S.FileId)) then
     begin
       Inc(Hits);
       ADecl:= S;
@@ -10418,7 +10432,7 @@ begin
   var Hit: TSymbol:= Default(TSymbol);
   var Hits: Integer:= 0;
   for var S: TSymbol in L do
-    if (S.FileId = ASite.FileId) or (SameText(S.Section, 'interface') and CandInScope(ASite.FileId, S.FileId)) then
+    if DeclInRefUnit(S.FileId, ASite.FileId) or (SameText(S.Section, 'interface') and CandInScope(ASite.FileId, S.FileId)) then
     begin
       Inc(Hits);
       Hit:= S;
@@ -10903,7 +10917,7 @@ var
       var Owner: TSymbol:= SymbolById(OwnerId);
       if (Owner.ParentId > 0) or not (SameText(Owner.Name, AQualifier) or EndsText('.' + AQualifier, Owner.Name)) then
         Continue;
-      if (T.FileId <> ARef.FileId)
+      if not DeclInRefUnit(T.FileId, ARef.FileId)
          and not (CandInScope(ARef.FileId, T.FileId) and SameText(T.Section, 'interface')) then Continue;
       Inc(Hits);
       Result:= T.Id;
@@ -10951,6 +10965,19 @@ begin
       if Cur.ParentId <= 0 then Cur:= Default(TSymbol)
       else Cur:= SymbolById(Cur.ParentId);
     end;
+  end;
+  { 1b. 152c RINC2: a top-level type of one of this unit's own code includes (either section) --
+    the include is text of this unit, so it shadows the used units like step 1 does. }
+  if (AReason = '') and (Result = 0) and (FIncHost.Count > 0) and FNameToCands.TryGetValue(Lc, Cands) then
+  begin
+    Count:= 0;
+    for S in Cands do
+      if (S.FileId <> ARef.FileId) and DeclInRefUnit(S.FileId, ARef.FileId) and IsUnitLevelDecl(SymbolById(S.Id)) then
+      begin
+        Inc(Count);
+        Result:= S.Id;
+      end;
+    if Count > 1 then Result:= 0;
   end;
   { 2. The used units: exactly one top-level interface type of the name. }
   if (AReason = '') and (Result = 0) then

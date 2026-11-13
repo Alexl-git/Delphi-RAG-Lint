@@ -3252,6 +3252,43 @@ begin
   end; // case
 end; // begin
 
+{ 152c RINC2 (a): an include FRAGMENT (no unit around it) is parsed by the grammar's
+  `_definitions` root, which has no interface-style bare routine header -- `procedure P;`
+  with no body is only valid there with `forward` / `external`. Error recovery still
+  reduces most bare headers to a declProc inside an ERROR node, but the LAST one before
+  EOF, when it has no arguments, no result and no directive (`type TFoo = class end;`
+  then `procedure P;`), stays three loose tokens: kProcedure / kFunction, identifier,
+  `;`. That routine had no symbol, so every ref to it stayed unbound. This emits it from
+  those tokens (span: keyword .. `;`), at the fragment's top level only -- inside a unit
+  (AParentSymbolIdx >= 0) a broken header is left to the parse error, as before. The
+  grammar case for the real fix is lanes\152\RINC2\GRAMMAR-CASE.md. }
+procedure EmitLooseRoutineHeaders(const AErr: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer;
+  const AParentQualifiedName: string);
+var
+  Kw, NameTok, Semi: TTSNode;
+  RoutineName: string;
+  Idx: Integer;
+  Sym: TSymbol;
+begin
+  if AParentSymbolIdx >= 0 then Exit;
+  for var i:= 0 to AErr.ChildCount - 3 do
+  begin
+    Kw:= AErr.Child(i);
+    if (Kw.NodeType <> 'kProcedure') and (Kw.NodeType <> 'kFunction') then Continue;
+    NameTok:= AErr.Child(i + 1);
+    Semi   := AErr.Child(i + 2);
+    if (NameTok.NodeType <> 'identifier') or (Semi.NodeType <> ';') then Continue;
+    RoutineName:= NodeText(NameTok, AState.Source);
+    Idx:= AState.Emit(if Kw.NodeType = 'kFunction' then skFunction else skProcedure, RoutineName,
+      if AParentQualifiedName <> '' then AParentQualifiedName + '.' + RoutineName else RoutineName,
+      AParentSymbolIdx, Semi);
+    Sym:= AState.Symbols[Idx];
+    Sym.StartLine:= Integer(Kw.StartPoint.row   ) + 1;
+    Sym.StartCol := Integer(Kw.StartPoint.column) + 1;
+    AState.Symbols[Idx]:= Sym;
+  end;
+end;
+
 procedure Walk(const ANode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string);
 var
   NodeType : string ;
@@ -3449,6 +3486,8 @@ begin
   // declProc: emit a method (when inside class/record/interface) or a free
   // proc/func otherwise. Then walk children so typerefs in args + return
   // type emit type_use refs.
+  if NodeType = 'ERROR' then EmitLooseRoutineHeaders(ANode, AState, AParentSymbolIdx, AParentQualifiedName); { 152c RINC2 (a) }
+
   if NodeType = 'declProc' then
   begin
     IsInClass:= (AParentSymbolIdx >= 0) and (AParentSymbolIdx < AState.Symbols.Count) and (AState.Symbols[AParentSymbolIdx].Kind in [skClass, skRecord, skInterface]);
