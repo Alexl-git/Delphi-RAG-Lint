@@ -18,7 +18,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe       = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe       = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe") { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" } else { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }),
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win32.sqlite',
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-reasons-$PID"
 )
