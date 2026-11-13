@@ -207,7 +207,7 @@ begin
   for var E: TLaneEntry in GLanes do
     try
       Result:= Result + E.OnFile(ACtx);
-    except
+    except  // dl:ok try-except-swallowed@e084 -- REVIEWED 2026-11-13 v151 FRAME: logged to stderr by LaneFailed; one lane failing must not stop the others
       on X: Exception do LaneFailed(E.Name, 'CheckFile', ACtx.Path, X);
     end;
   Result:= V151Narrow(Result, ACtx.NarrowRule) + CheckRawBytes(ACtx, ACtx.Path) + CheckDfm(ACtx);
@@ -221,7 +221,7 @@ begin
   for var E: TLaneEntry in GLanes do
     try
       Result:= Result + E.OnDfm(ACtx);
-    except
+    except  // dl:ok try-except-swallowed@a178 -- REVIEWED 2026-11-13 v151 FRAME: logged to stderr by LaneFailed; one lane failing must not stop the others
       on X: Exception do LaneFailed(E.Name, 'CheckDfm', ACtx.DfmPath, X);
     end;
   Result:= V151Narrow(Result, ACtx.NarrowRule);
@@ -235,7 +235,7 @@ begin
   if (Length(GIds) = 0) or (AFilePath = '') then Exit;
   try
     Bytes:= TFile.ReadAllBytes(AFilePath);
-  except
+  except  // dl:ok try-except-swallowed@1bbf -- REVIEWED 2026-11-13 v151 FRAME: logged to stderr by LaneFailed; one lane failing must not stop the others
     on X: Exception do
     begin
       LaneFailed('-', 'CheckRawBytes', AFilePath, X);
@@ -245,7 +245,7 @@ begin
   for var E: TLaneEntry in GLanes do
     try
       Result:= Result + E.OnBytes(ACtx, AFilePath, Bytes);
-    except
+    except  // dl:ok try-except-swallowed@0740 -- REVIEWED 2026-11-13 v151 FRAME: logged to stderr by LaneFailed; one lane failing must not stop the others
       on X: Exception do LaneFailed(E.Name, 'CheckRawBytes', AFilePath, X);
     end;
   Result:= V151Narrow(Result, ACtx.NarrowRule);
@@ -258,7 +258,7 @@ begin
   for var E: TLaneEntry in GLanes do
     try
       Result:= Result + E.OnProj(ACtx);
-    except
+    except  // dl:ok try-except-swallowed@a704 -- REVIEWED 2026-11-13 v151 FRAME: logged to stderr by LaneFailed; one lane failing must not stop the others
       on X: Exception do LaneFailed(E.Name, 'CheckProject', ACtx.ProjectPath, X);
     end;
   Result:= V151Narrow(Result, ACtx.NarrowRule);

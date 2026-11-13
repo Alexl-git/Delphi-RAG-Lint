@@ -419,7 +419,7 @@ function IsSidecarFixRule(const AId: string; out ARisky: Boolean): Boolean;
 /// <remarks>Was a const array until v151; kept under the SAME name so every
 /// consumer (MatchText, for-in, array +) compiles unchanged and cannot drift from
 /// the catalog. Constant after unit initialization; thread-safe to read.</remarks>
-function BUILTIN_RULES_OFF_BY_DEFAULT: TArray<string>;  // dl:ok method-pascalcase -- REVIEWED 2026-11-13 v151 FRAME: keeps the former const's name so no consumer changes
+function BUILTIN_RULES_OFF_BY_DEFAULT: TArray<string>;  // dl:ok method-pascalcase@246e -- REVIEWED 2026-11-13 v151 FRAME: keeps the former const name so every consumer compiles unchanged
 
 /// <summary>Adds rule rows that TRuleCatalog.BuiltinRegistry appends after its own.</summary>
 /// <param name="ARows">Catalog rows; Source should be 'builtin'. A row whose
@@ -443,7 +443,7 @@ var
   GProviderRows: TArray<TRuleInfo>;
   GProviderOff : TArray<string>;
 
-function BUILTIN_RULES_OFF_BY_DEFAULT: TArray<string>;
+function BUILTIN_RULES_OFF_BY_DEFAULT: TArray<string>;  // dl:ok method-pascalcase@246e -- REVIEWED 2026-11-13 v151 FRAME: keeps the former const name so every consumer compiles unchanged
 begin
   Result:= BUILTIN_RULES_OFF_BY_DEFAULT_CORE + GProviderOff;
 end;
