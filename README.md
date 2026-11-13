@@ -1107,9 +1107,13 @@ written, and one that would not apply drops the whole group. `lint --fix --json`
 marks such a finding `"declined": true` with a `"decline_reason"` (and `applied:
 false`); text output ends `, N declined (...)`.
 
-`lint` / `lint-all` / `lint-project` / `check-ast` `--fix --apply --compile-gate --project <X.dproj>
-[--platform <p>] [--rsvars <path>] [--build-timeout <s>]` (opt-in, 1.47) builds the project after the
-write and rolls every edited file back when the build fails: the whole run is all or nothing.
+`lint` / `lint-all` / `lint-project` / `check-ast` `--fix --apply --project <X.dproj>
+[--platform <p>] [--rsvars <path>] [--build-timeout <s>]` writes through the compile gate (1.47 opt-in with
+`--compile-gate`; the default with an existing `.dproj` since 1.51, `--no-compile-gate` opts out, naming renames
+stay gated): build 1 before the write keeps every message and any error stops the run, nothing written; build 2
+after the write rolls every edited file back on an error, so the run is all or nothing. stderr gives the error,
+warning and hint counts of both builds, every error line, and the warnings / hints build 2 added
+(`compile gate: new: ...`).
 
 #### Docs
 
