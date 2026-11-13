@@ -284,14 +284,13 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Model.TSymbolKindHelper.ToText, Format</para>
+      /// <para>Calls: DRagLint.Core.Model.TSymbolKindHelper.ToText, Format</para>
       /// <para>Pure</para>
-      /// <para>Reads: FStore</para>
-      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
       /// <seealso cref="DRagLint.Core.Model.TSymbolKindHelper.ToText"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.DispatchToolsCall"/>
+      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindCallersText"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FormatSymbols   (const ASymbols : TArray<TSymbol     >; const AFiles: TArray<string>): string;
@@ -496,9 +495,9 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
-      /// <para>Calls: DRagLint.Lint.Linter.TLinter.Create, DRagLint.MCP.Server.TMCPServer.OpenStore, Flush, Format, Writeln</para>
+      /// <para>Calls: DRagLint.Lint.Linter.TLinter.Create, DRagLint.MCP.Server.TMCPServer.OpenStore, Flush, Format, SameText, Writeln</para>
       /// <para>constructor</para>
-      /// <para>Reads: FDbPaths, FStoreError, FStore   Writes: FDbPaths, FStore, FLinter</para>
+      /// <para>Reads: FDbPaths, FStoreError, FStore, FMoreStores, FMorePaths   Writes: FDbPaths, FStore, FMoreStores, FMorePaths, FLinter</para>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.OpenStore"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
