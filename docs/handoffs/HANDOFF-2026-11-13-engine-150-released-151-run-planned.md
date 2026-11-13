@@ -28,3 +28,4 @@
 
 ## OWNER ANSWERED Q1-Q10 (14:45) -- read C:\TEMP\claude\lanes151\OWNER-ANSWERS.md FIRST; it overrides the defaults above (Q2: re-parse WITHOUT asking at the end; Q4: FP samples on CLIENT, SERVER, LOADER, YADF; Q7: no Table Tools until 1.52; Q8: TS grammar changes go).
 ## D-TIME (14:55): window extended, no time cap -- finish ALL rules + ALL 1.49/1.50/1.51 tails to a nearly clean backlog; see OWNER-ANSWERS.md (also: mode.json is owned by the TS run -- do not overwrite it).
+## D1 OK, D2 (15:00): rules overlapping a dcc message stay counted (our own deeper analysis); DOC-DCC documents where each goes beyond the compiler -- OWNER-ANSWERS.md.
