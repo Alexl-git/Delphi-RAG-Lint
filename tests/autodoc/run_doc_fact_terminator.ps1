@@ -171,8 +171,26 @@ $zed = Join-Path $w1 'Zed.Types.pas'
 $ech = Join-Path $w1 'Echo.Client.pas'
 Idx $w1
 Doc $w1 'Zed.Types.pas'  | Out-Null
+Check 'apply 1 exits 0 (Zed.Types.pas)' ($LASTEXITCODE -eq 0)
+
+# --- R1 (152c DOCU3): the stale-callee refusal (152b DOCU) ---------------------
+# Echo.Client's facts read the bodies of Zed.Types routines at their INDEXED
+# lines; the apply above just shifted every one of them. Documenting Echo.Client
+# now would mine the wrong text, so the engine must REFUSE (exit 1, nothing
+# written) and name Zed.Types.pas. Until 152b this runner applied both units with
+# no reindex between them; the reindex below is the documented contract.
+$echPre = [IO.File]::ReadAllBytes($ech)
+$r1 = & $exePath document --unit $ech --db (Join-Path $w1 'f.sqlite') --apply 2>&1
+$r1Exit = $LASTEXITCODE
+Check 'R1 Echo.Client.pas without a reindex is REFUSED (exit 1)' ($r1Exit -eq 1) "exit=$r1Exit"
+Check 'R1 the refusal names the changed callee file Zed.Types.pas' `
+  ((($r1 -join ' ') -match 'REFUSED') -and (($r1 -join ' ') -match 'Zed\.Types\.pas')) (($r1 -join ' ') -replace '\s+', ' ')
+Check 'R1 the refused run wrote nothing' `
+  ([Linq.Enumerable]::SequenceEqual([byte[]]$echPre, [byte[]][IO.File]::ReadAllBytes($ech)))
+
+Idx $w1
 Doc $w1 'Echo.Client.pas' | Out-Null
-Check 'apply 1 exits 0' ($LASTEXITCODE -eq 0)
+Check 'apply 1 exits 0 (Echo.Client.pas, after the reindex)' ($LASTEXITCODE -eq 0)
 
 $bRep  = Get-Block $zed '^\s*TRep = record'
 $bMode = Get-Block $zed '^\s*TMode = \('

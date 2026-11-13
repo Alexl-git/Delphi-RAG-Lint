@@ -4,10 +4,10 @@ title: "drag-lint: Project Rules"
 summary: Right-click a project in the Project Manager to make it the active project and open its Lint Options tab in the drag-lint dock
 product: DL
 group: linting
-order: 30008
+order: 30009
 since: 0.95.0-alpha
 status: shipped
-updated: 1.42.0-alpha
+updated: 1.50.0-alpha
 ---
 
 # drag-lint: Project Rules

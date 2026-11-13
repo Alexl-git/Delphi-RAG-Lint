@@ -36,9 +36,12 @@ const
     (HasFileFacts), the data_flows / ref_types precedent, and a bump made every library index
     unusable (skipped as stale) until its re-parse -- the 149 battery and every post-deploy
     index run would have bound without the library.
-    152b ST O16c: file_includes has no engine reader -- ISymbolStore.GetFileIncludes had 0
-    callers and was removed; the indexer still writes the table (PutFileFacts) and it is
-    SQL-facing (`drag-lint sql`, `schema`). Guard: run_file_includes_no_reader.ps1.
+    152b ST O16c: the unused reader ISymbolStore.GetFileIncludes (0 callers) was removed.
+    152c INCR: file_includes is read by ISymbolStore.GetIncludeSites (one host file's
+    sites: lint cycle-edge-in-include, unused-unit-in-uses' include-declared symbols and
+    the lint-all filter that keeps a uses-fragment include from reporting parse errors);
+    the indexer still writes it (PutFileFacts) and it stays SQL-facing (`drag-lint sql`,
+    `schema`). Guard: run_file_includes_no_reader.ps1 (R1/R2: GetFileIncludes stays gone).
     150 INT (2026-11-09): 23 -> 24 again, now SAFE on a 23 library: lane SC's read-compat range
     (SCHEMA_READ_MIN = 23) opens a v23 store for reading with the additive 150 tables probed
     (file_includes / dfm_objects / pp_regions, project_settings, pp_directives); a writer at

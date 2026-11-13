@@ -1,0 +1,2 @@
+const
+  cImplOnly = 3;

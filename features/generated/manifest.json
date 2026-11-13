@@ -1,7 +1,7 @@
 {
   "product": "1.50.0-alpha",
-  "extractor": "1.37.0-alpha",
-  "resolver": "1.25.0-alpha",
+  "extractor": "1.38.0-alpha",
+  "resolver": "1.26.0-alpha",
   "schema": 25,
   "groups": [
     {
@@ -3121,6 +3121,34 @@
         "by": "ENGINE",
         "build": "1.33.0-alpha",
         "surfaceHash": "6f1fce4cd47e1cacf0c4c1584782da2592f7ec22f0f6a0505c91167a9a834c53"
+      }
+    },
+    {
+      "id": "cycle-edge-in-include",
+      "title": "Cycle edge written in an include (lint rule)",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.50.0-alpha",
+      "summary": "Project lint rule: a uses entry or declaration a uses cycle runs through is written in an include, which cycles --fix never edits; write it in the .pas",
+      "intro": "Read this when circular-uses names a cycle whose entries live in a {$I} include: it says what drag-lint cannot fix there and what to move into the .pas. It runs in lint-all and lint-project.",
+      "wikiPage": "cycle-edge-in-include",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all"
+        },
+        {
+          "type": "cli",
+          "verb": "lint"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-12",
+        "by": "ENGINE",
+        "build": "1.50.0-alpha",
+        "surfaceHash": "fa5a03cb6f44b6c7294bed01e6ec5a009500e7fddf785d7381843c45862017a7"
       }
     },
     {
@@ -9184,10 +9212,22 @@
         {
           "ask": "Why was this cycle refused?",
           "command": "drag-lint cycles --fix --project <X.dproj> --db <file.sqlite> --cycle <n>"
+        },
+        {
+          "ask": "Can it cut a call made from an initialization section (init-order)?",
+          "command": "drag-lint cycles --plan --project <X.dproj> --db <file.sqlite>"
+        },
+        {
+          "ask": "Why will this refused cycle never be cut automatically?",
+          "command": "drag-lint cycles --plan --project <X.dproj> --db <file.sqlite>"
+        },
+        {
+          "ask": "Why is my cycle refused declaration-in-include or reference-in-include?",
+          "command": "drag-lint cycles --plan --project <X.dproj> --db <file.sqlite>"
         }
       ],
       "verified": {
-        "date": "2026-11-09",
+        "date": "2026-11-12",
         "by": "ENGINE",
         "build": "1.50.0-alpha",
         "surfaceHash": "46680e7eaa46ccd97c921a274a298fc6e6e16b12d909994c4ee1dc9c19012eb4"
@@ -14945,6 +14985,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "criticalsection-not-released"
+      },
+      {
+        "id": "rule.cycle-edge-in-include",
+        "title": "cycle-edge-in-include",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "A uses entry or a declaration that a uses cycle runs through is written in an include file -- drag-lint never edits an include, so `cycl... (project-wide, hint)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule cycle-edge-in-include"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "cycle-edge-in-include"
       },
       {
         "id": "rule.cycle-participant-unit",

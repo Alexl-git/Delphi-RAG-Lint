@@ -35,6 +35,9 @@ Everything since v1.46.0-alpha (2026-11-07): waves 147, 148, 149, 151 and 152, r
 - Fixed: the index stores and returns string values as written -- FireDAC's StrsTrim default trimmed trailing spaces (a .dfm `Caption = 'OGP  '` was stored as 'OGP'; menu-tree --with-dfm table and text paths now agree). Extraction change: needs the re-parse. (152b ST O5)
 - Removed the unused ISymbolStore.GetFileIncludes reader; the file_includes table is still written and queryable with `drag-lint sql`. (152b ST O16c)
 - Measured, not landed: a refs position index (file_id, start_line, start_col) grew the CLIENT index by 3.49 % (rule: <= 3 %); schema stays 25. (152b ST O16b)
+- index: a uses-fragment include (every `{$I}` site of it stands in a uses list) is no longer counted as a parse error -- no DIAG line, no per-file error count, not in `parse-errors=`; `lint <file>` drops parser-error / syntax-error on it too (152c RINC).
+- Extractor 1.38.0-alpha (one re-parse with the release; 1.37 was never deployed): a bare paramless routine header after a type section in an include file is now indexed as a symbol (152c RINC2).
+- index: a uses-list fragment include's parse-error verdict no longer depends on the order a folder walk reads files (a fragment read before its host is not reported; one that a later unit includes as code is) (152c RINC2).
 
 ### Resolver
 - Added: DRAGLINT_PROFILE_CALLS=1 prints a per-sub-pass timing table of the resolve calls stage on stderr (off = no cost).
@@ -60,6 +63,8 @@ Everything since v1.46.0-alpha (2026-11-07): waves 147, 148, 149, 151 and 152, r
 - Fixed: Resolver: a bare call inside a .dpr routine no longer records the program as its receiver type; a generic
   constraint name no longer shadows a real type of the same name.
 - Docs: refs.symbol_id is NULL for an ambiguous edge by design; interface dispatch is one edge to the interface method (derive the kind from the target's parent).
+- Resolver 1.26.0-alpha: a ref to a type, routine, const or var declared in a code include of a used unit now binds to that declaration (as a member of the host unit; interface includes are visible to users, implementation includes are not). Remedy rides the 1.37.0 re-parse (152c RINC).
+- Resolver: a unit's own refs to a type, routine, const or var declared in one of its implementation-section includes now bind to that declaration; units that use it still do not see them (152c RINC2).
 
 ### Lint
 - Added: New rule `quit-from-thread` (OFF by default): PostQuitMessage / Application.Terminate / Halt / ExitProcess in TThread.Execute or a thread-start lambda, outside Synchronize/Queue; a class never constructed is a hint.
@@ -87,6 +92,10 @@ Everything since v1.46.0-alpha (2026-11-07): waves 147, 148, 149, 151 and 152, r
 - Fixed: magic-literal no longer flags the ordinal in `external Lib index N`; unconditional-recursion, inlay hints and element reads see a call inside an Automation named argument value. (152b GF1)
 - Fixed: doc-drift no longer reads a DUnitX / attribute argument (`[Test] [Ignore('text')]` above a parameterless method) as a signature parameter; `document --apply` orphan-param handling is pinned by a guard. (152b DOC)
 - Fixed: a `dl:ok empty-on-handler` marker written between `do` and `;` of an empty handler is no longer reported review-marker-unused (the marker comment itself silences the rule). (152b CLI)
+- Lint: new rule `cycle-edge-in-include` (project-wide, lint-all, ON by default: 317 rules, 263 ON): a uses entry or declaration a uses cycle runs through that is written in a `{$I}` include, so no cycles editor can cut it there (152c INCR).
+- lint-all: a uses-fragment include (every `{$I}` site of it stands in a uses list) no longer reports `parser-error` / `syntax-error`; an include with a real syntax error included as code still does (152c INCR).
+- Lint `unused-unit-in-uses`: a symbol declared in an include of the used unit counts as that unit's, so its uses entry is no longer reported unused (152c INCR).
+- Lint `init-order-hazard`: also follows a unit-level variable declared in a used unit and assigned in an initialization (the pointer `cycles --fix` writes into a leaf), so a later uses change that reverses a proved order is reported (152c CYC3).
 
 ### Cycles
 - Added: `cycles --hub` (read-only): names per group the hub units whose removal leaves the rest acyclic, with the uses edges, reference weights and surfaces on each side, whether cutting one side alone breaks the group, and the dead uses inside it; JSON adds hubs[] and zero_ref_edges. Spec 2026-11-08-hub-scc-phased.md (fabcyc case 18, phases P1-P6).
@@ -108,6 +117,10 @@ Everything since v1.46.0-alpha (2026-11-07): waves 147, 148, 149, 151 and 152, r
 - Added (from wave 146 branches): `cycles --plan/--fix --ctor-wide` (wider constructor inversion, off by default, r4).
 - `cycles --plan` / `--causes --format json`: without --library-db the platform library is the one of the build platform (--platform, else the project's active platform, else Win32), no longer always win64. A moved line naming another unit of the cycle qualified refuses coupling-remains in the plan instead of failing the compile gate.
 - `cycles --fix --unit` accepts a dotted unit name (Wide.Worker); `--part all` no longer fails on a group whose first unit is dotted. A new unit next to a form/data module listed with children in the .dproj is a self-closing DCCReference after the element, so the compile gate no longer rolls it back. Constructor inversion (default path) refuses to pull a published field into the base class; a dotted uses entry or a multi-line comment naming the slot no longer refuses.
+- cycles --plan / --fix: a call from the consumer's initialization section is no longer refused `init-order` when the program's uses order proves the declaring unit initializes first (3+-unit cycles; every program of the index, with and without the cut, no conditional or include-borne uses entry on the deciding files); the plan prints the proof line and `--causes --format json` adds `fix.edges[].init_order`. A two-unit cycle stays refused and says why ("whatever the .dpr order"); every other init-order refusal names its reason (152c CYC3).
+- cycles --plan / --fix: base-class refusals that no engine will cut say why -- `var` / `out` parameter (E2033), function result (retyping the callers), generic type argument (E2010); a ref-counted ancestor is named on top (152c CYC3).
+- cycles --plan / --fix: include-aware -- a symbol declared in an include of a unit, and a reference written in an include of a unit, count for that unit: the plan names them with the include and its `{$I}` site, keeps the uses entry they need (it used to plan "remove" and print "could not resolve the symbol"), and refuses a cut that would edit the include: new refusal kinds `declaration-in-include` and `reference-in-include` (152c CYC3).
+- cycles --plan: a metaclass hand-over whose init order is proved no longer claims the consumer's initialization makes none of the calls; it prints the proof line. The edge list and `Fix it` label it `metaclass hand-over` (was `routine-call inversion`); the JSON `recipe` id stays `routine-inversion` (152c CYC3, INT3b).
 
 ### Other verbs
 - Added: `uses-recover` (new verb): recovers the uses edges of units that ship without source from the vendor's C++Builder .hpp headers, follows sourceless targets, and with --map (dcc -GS/-GD) says which the linker pulled in and which linked units no header explains. Read-only; never reads a .dcu.

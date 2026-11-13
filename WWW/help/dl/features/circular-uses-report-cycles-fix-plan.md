@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70006
 since: 0.43.0-alpha
 status: shipped
-updated: 1.49.0-alpha
+updated: 1.50.0-alpha
 ---
 
 # Circular Uses Report (cycles + fix plan)
@@ -255,10 +255,20 @@ The engine never guesses; every kind it can give:
   lexical hit names an identifier and line), `edge-still-used` (after
   an R1 / R2 cut the consumer still uses the declaring unit for another name, so the uses
   entry -- and the edge -- would stay), `coupling-remains` (since 1.43: the moved declarations of two units need each other and cannot share one new unit, see below, or the plan's own prediction still shows the interface coupling; before 1.43 such a plan printed `mechanical`; since 1.47 also a line that moves and names another unit of the cycle qualified, as `DUnit.Foo(2)` in a method body that moves with its class, which the compile gate used to catch), `manual-edit` (the default for any edit the planner
-  cannot make mechanically).
+  cannot make mechanically), `declaration-in-include` (since 1.50: a symbol the cut would move is declared in an
+  include file of the declaring unit, `{$I}` at any depth) and `reference-in-include` (since 1.50: a line an R1 / R2 /
+  hand-over cut would redirect sits in an include file of the consuming unit) -- drag-lint never edits an include,
+  which other units may share; the reason names the symbol, the include and its line, the `{$I}` site in the unit,
+  and the remedy: move the declaration (or the code) into the unit itself and run `cycles --plan` again (the lint
+  rule `cycle-edge-in-include` reports such an edge). Before 1.50 such a use was invisible to the planner: it printed
+  "could not resolve the symbol" and could plan to REMOVE a uses entry the include still needs. An include-borne use
+  now counts as a use of the unit that includes it, so its uses entry is always kept; `Why it cycles` names it as
+  `` `IncDeclB.pas:12`; declared in `IncDeclA` through `IncDeclTypes.inc:2` (`{$I}` at `IncDeclA.pas:8`) ``.
+  Pinned by `run_cyclefix_include_aware.ps1` (positive control: the same fixtures with the include inlined plan
+  mechanically and pass the compile gate).
 * **R1 (routine-call inversion):** `not-a-routine`, `signature-in-cycle`,
   `overloaded-routine`, `signature-unknown`, `qualified-ref` (a name qualified by the declaring unit that the plan can neither redirect nor move: another routine of that unit, or the inverted routine in a shape it cannot rewrite, such as `@Unit.Foo`; `Unit.Foo(2)` of the inverted routine itself becomes `FooPtr(2)`, a comment or a string is not a use, and a global moves and is rewritten, see below), `name-shadowed` (since 1.44: a line to rewrite also holds `Foo` bound to something else, a nested routine, a method or a parameter, as in `Foo(1); Unit.Foo(2);`, or `Unit` there is a local of the consumer; the rewrite works on the text of the line, so it would call the pointer instead; on separate lines the plan is sound and goes ahead), `routine-not-called` (`@F`, a parameterless function as an argument, an argument on a line of its own; a routine passed as a whole argument is redirected, see below),
-  `init-order` (the consumer's initialization section runs the call), `finalization-order` (since 1.43: the consumer's finalization section runs the call, and the declaring unit, finalized first after the cut, has statements in its finalization section or a variable of a type the compiler may finalize), `unsupported-directive`, `duplicate-identifier` (the leaf already declares the
+  `init-order` (the consumer's initialization section runs the call and, since 1.50, the program's uses order does not prove that the declaring unit initializes first -- see "Init order proved from the program" below; the reason says which condition failed), `finalization-order` (since 1.43: the consumer's finalization section runs the call, and the declaring unit, finalized first after the cut, has statements in its finalization section or a variable of a type the compiler may finalize), `unsupported-directive`, `duplicate-identifier` (the leaf already declares the
   pointer type or variable differently and every suffix up to 99 is taken; an identical declaration is
   reused, a different one gets the lowest free suffix; since 1.44 also when the consumer, the declaring unit or a class member already declares `FooPtr`, which would win over the pointer). `unit-leaves-program` is NOT a refusal
   any more (since 1.34.1): when the declaring unit is used only by the consumer and the
@@ -314,6 +324,47 @@ The engine never guesses; every kind it can give:
   type or a method reference with the same parameters takes it, under the same order checks as a call.
   It holds for a procedure, and for a function with a required parameter. A parameterless function as an
   argument is its RESULT, so that stays refused.
+
+#### Init order proved from the program (since 1.50)
+
+A routine-call inversion (R1) moves the call behind a pointer that the declaring unit assigns as the
+first statement of its initialization. When the consumer's own initialization makes the call, the
+pointer is still nil there unless the declaring unit initializes FIRST. Since 1.50 the planner proves
+that from the program instead of refusing outright. Delphi initializes units in a depth-first
+post-order from the .dpr uses list (interface uses, then implementation uses, a unit already being
+visited is skipped -- the order `init-order-hazard` uses; pinned by `run_cyclefix_initorder_proof_dcc.ps1`
+on six compiled programs). The call is planned when ALL hold, for every program of the index that
+reaches both units:
+
+| Condition | Refusal text when it fails (kind stays `init-order`) |
+|---|---|
+| After the cut the consumer still reaches the declaring unit through other units | "after the cut `B` still uses `A` and `A` no longer reaches `B`, so `A` initializes first whatever the .dpr order: the variable is nil there" -- always the case in a TWO-unit cycle, never provable |
+| The declaring unit comes first, with the uses as they stand and with the cut made | "in `X.dpr` `A` (position m) initializes before `B` (position n): list `A` before `<entry>` in the .dpr, or cut another edge" |
+| No uses entry of the .dpr, either unit or a unit on the path sits in a conditional region or comes from an include | "the order depends on a conditional uses entry (`file:line`)" |
+| The index holds a program (a package has no initialization order) | "no program in this index: a package has no initialization order to prove" |
+| The edge is weighed on the graph predicted after Part A | the old reason + "; re-checked against the program order once Part A is applied" (Part A moves uses entries, which changes the order; re-run `--plan` after it) |
+
+A proved plan prints, in the step that edits the declaring unit, `init order: `B` initializes before `A`
+in `X.dpr` (position n before m; `A` reaches `B` through `C`). This holds for this uses order; the lint
+rule `init-order-hazard` reports it if a later uses change reverses it.`, and `--causes --format json`
+carries the same text as `fix.edges[].init_order`. The proof holds for one uses order: a later edit of the
+.dpr or of a uses clause can reverse it, and `init-order-hazard` (which since 1.50 also follows a variable
+declared in a used unit, the pointer's leaf, and assigned in the declaring unit's initialization) reports
+the nil read then.
+
+#### Never automatic, and why (since 1.50)
+
+Some base-class refusals are final: no later engine will cut them, because the cut would retype code
+outside the cycle. The reason is now part of the refusal:
+
+| Site | Reason printed |
+|---|---|
+| a `var` / `out` parameter of the class | the compiler requires the actual and the formal `var` parameter to be of the identical type (E2033), so every caller's variable would have to be retyped |
+| a function result of the class | every caller's expression would change type; that is retyping the callers, not a cut |
+| the class as a generic type argument (`TList<TX>`) | `TList<TX>` and `TList<TXBase>` are different types (E2010) |
+| a class descending from `TInterfacedObject` (appended to any other reason) | an interface reference would count the object and free it when the reference goes out of scope while plain object references still hold it |
+
+Merge the two units, or change the signature by hand, when such a cycle must go.
 
 #### Constructor inversion (since 1.44)
 

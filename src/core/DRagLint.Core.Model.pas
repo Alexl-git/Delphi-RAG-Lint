@@ -274,7 +274,14 @@ const
     * Flow.Lattices: Automation named-argument values are read, labels are not (lane GF1).
     * grammar: tree-sitter-delphi13 v1.4.10 -- a field may be named Private / Protected /
       Public / Published (lane GR3). }
-  DRAGLINT_EXTRACTOR_VERSION = '1.37.0-alpha';
+  { 1.37.0 -> 1.38.0 (2026-11-12, 1.50, lane/152-INT3b -- wave 152c; 1.37 was never deployed, so the
+    release still has ONE re-parse):
+    * Parser.Delphi13: a bare parameterless routine header that follows a type section in an include
+      fragment (loose ERROR tokens at the fragment's top level) is emitted as a symbol (lane RINC2 a).
+    * Core.Indexer: a uses-fragment include (every file_includes site in_uses = 1) is not a parse error
+      -- no DIAG, no per-file error count, not in parse-errors=; the verdict no longer depends on the
+      walk order (lanes RINC item 2, RINC2 c). }
+  DRAGLINT_EXTRACTOR_VERSION = '1.38.0-alpha';
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
   /// Deliberately SEPARATE from <see cref="DRAGLINT_EXTRACTOR_VERSION"/>.</summary>
@@ -524,7 +531,12 @@ const
   /// re-parse): GetTransitiveAncestors, a resolve-surface reader, runs its query through the
   /// store's prepared-statement cache (lane DF O6F; same SQL, same rows -- a billing bump, the
   /// re-parse re-resolves every DB anyway).</para>
-  DRAGLINT_RESOLVER_VERSION = '1.25.0-alpha';
+  /// <para>1.25.0-alpha -&gt; 1.26.0-alpha (2026-11-12, 1.50, rides the 1.37.0 extractor
+  /// re-parse): a ref to a type, routine, const or var declared in a code include of a used unit binds
+  /// to that declaration as a member of the host unit (TCallResolver.BuildIncludeScope over the new
+  /// readers GetIncludeHosts / GetIncludeTopLevelSymbols; interface includes are visible to users,
+  /// implementation includes are not; lane 152c RINC).</para>
+  DRAGLINT_RESOLVER_VERSION = '1.26.0-alpha';
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
   /// the ghost-compile journal that first created the folder.</summary>
@@ -1354,6 +1366,22 @@ type
     Depth   : Integer;
     Section : string ;
     InUses  : Boolean;
+  end;
+
+  /// <summary>152c RINC: one (include file, host unit) pair of the index -- an .inc that a
+  /// unit includes AS CODE (file_includes.in_uses = 0), at any depth.</summary>
+  /// <remarks>
+  /// The include's declarations belong to the host unit: TCallResolver lets a ref bind to a
+  /// top-level symbol of IncFileId as if the host declared it, visible to the units that use
+  /// the host when Section is 'interface'. Section is the host section of the depth-0 directive
+  /// that brings the include in ('interface' | 'implementation' | 'program' | 'package').
+  /// HostUnitId is the host's unit / program / package symbol (0 when the host has none).
+  /// </remarks>
+  TIncludeHostRow = record
+    IncFileId : Int64 ;
+    HostFileId: Int64 ;
+    HostUnitId: Int64 ;
+    Section   : string;
   end;
 
   /// <summary>149 EX2 (F5, schema v24): one `object` / `inherited` / `inline`
@@ -3316,6 +3344,12 @@ const
   /// <summary>N-06: the refusal kind every uses editor reports for an entry
   /// that lives inside an include file.</summary>
   REFUSAL_USES_IN_INCLUDE = 'uses-in-include';
+  /// <summary>152c CYC3 item 2: the refusal kind `cycles --plan` / `--fix` report when the
+  /// declaration a cut would move lives in an include file of the declaring unit.</summary>
+  REFUSAL_DECLARATION_IN_INCLUDE = 'declaration-in-include';
+  /// <summary>152c CYC3 item 2: the refusal kind `cycles --plan` / `--fix` report when a
+  /// reference a cut would redirect lives in an include file of the consuming unit.</summary>
+  REFUSAL_REFERENCE_IN_INCLUDE = 'reference-in-include';
 
 /// <summary>N-06: the one refusal text every uses EDITOR prints when the entry
 /// it would edit lives inside an include file (an .inc may be shared by many
@@ -3332,6 +3366,22 @@ const
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function IncludeUsesRefusal(const AVerb: string; const AUse: TUnitUse; const AHostPath: string): string;
+
+/// <summary>152c CYC3 item 2: the reason text of a `declaration-in-include` or
+/// `reference-in-include` refusal (the kind itself is not part of it).</summary>
+/// <param name="AKind">REFUSAL_DECLARATION_IN_INCLUDE or REFUSAL_REFERENCE_IN_INCLUDE.</param>
+/// <param name="ASymbol">The symbol the cut would move (declaration) or redirect (reference).</param>
+/// <param name="AIncPath">The include file; only its file name is printed.</param>
+/// <param name="AIncLine">The symbol's line inside the include.</param>
+/// <param name="AHostPath">The unit whose text includes it; only its file name is printed.</param>
+/// <param name="AHostLine">The line of the host's {$I} directive (the outermost one for a nested include).</param>
+/// <returns>One sentence naming the symbol, the include and its line, the {$I} site in the
+/// host, that drag-lint never edits an include, what to move into the host, and the lint rule
+/// `cycle-edge-in-include`.</returns>
+/// <remarks>An include may be shared by other units, so no cycle recipe ever edits one; the
+/// remedy is the same for both kinds: put the text into the host unit and plan again.</remarks>
+function IncludeEditRefusal(const AKind, ASymbol, AIncPath: string; AIncLine: Integer;
+  const AHostPath: string; AHostLine: Integer): string;
 
 implementation
 
@@ -3379,6 +3429,21 @@ begin
      AVerb, IncName, HostName]);
 end;
 
+function IncludeEditRefusal(const AKind, ASymbol, AIncPath: string; AIncLine: Integer;
+  const AHostPath: string; AHostLine: Integer): string;
+var
+  HostName: string;
+  IncName : string;
+begin
+  HostName:= ExtractFileName(AHostPath);
+  IncName := ExtractFileName(AIncPath);
+  Result:= Format('`%s` is %s in %s (line %d), which %s includes through {$I %s} at line %d: drag-lint never ' +
+    'edits an include (it may be shared by other units); move %s into %s, then run `cycles --plan` again ' +
+    '(the lint rule `cycle-edge-in-include` reports such an edge)',
+    [ASymbol, (if AKind = REFUSAL_DECLARATION_IN_INCLUDE then 'declared' else 'named'), IncName, AIncLine,
+     HostName, IncName, AHostLine,
+     (if AKind = REFUSAL_DECLARATION_IN_INCLUDE then 'the declaration' else 'that code'), HostName]);
+end;
 { TUnitUse }
 
 function TUnitUse.FromInclude: Boolean;

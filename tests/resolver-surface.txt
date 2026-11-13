@@ -89,6 +89,14 @@ src/core/DRagLint.Core.Model.pas::StripGenericSegments
 # call_edges row is written.
 src/storage/DRagLint.Storage.SQLite.pas::GetTransitiveAncestors
 
+# 152c RINC (2026-11-12, INT3b): TCallResolver.BuildIncludeScope reads these two once per resolve to
+# bind refs to symbols declared in a code include of a used unit; what they return decides which
+# refs.symbol_id / call_edges rows are written, so they are resolve surface (lesson: a reader the
+# resolve pass depends on IS surface, whatever its name). IncludeIsUsesFragment is NOT: it only
+# filters the parse-error DIAG / lint findings of a uses-fragment include.
+src/storage/DRagLint.Storage.SQLite.pas::GetIncludeHosts
+src/storage/DRagLint.Storage.SQLite.pas::GetIncludeTopLevelSymbols
+
 # Scope selection. These decide WHICH refs the calls pass rewrites, so a change
 # here changes what ends up stored even though neither writes anything itself.
 # The drift check surfaced them; they were not in the first hand-written list,

@@ -1196,6 +1196,7 @@ Described in:
 * [Autofix for fixable rules](../../docs/wiki/autofix-wave.md)
 * [Copy All Diagnostics](../../docs/wiki/Copy-All-Diagnostics.md)
 * [Copy Diagnostics (Current File)](../../docs/wiki/Copy-Diagnostics-Current-File.md)
+* [Cycle edge written in an include (lint rule)](../../docs/wiki/cycle-edge-in-include.md)
 * [Fix all in unit](../../docs/wiki/Fix-all-in-unit.md)
 * [Fix all reliability (1.31.3)](../../docs/wiki/Fix-all-reliability.md)
 * [Fix it](../../docs/wiki/Fix-it.md)
@@ -1238,6 +1239,7 @@ Described in:
 
 * [Ancestor not in project (lint rule)](../../docs/wiki/ancestor-not-in-project.md)
 * [Compliance labels (CWE, CERT, MISRA)](../../docs/wiki/compliance-labels.md)
+* [Cycle edge written in an include (lint rule)](../../docs/wiki/cycle-edge-in-include.md)
 * [Data module reaching a global form (lint rule)](../../docs/wiki/datamodule-form-global.md)
 * [Effect-free call in a loop that could move out (lint rule)](../../docs/wiki/effect-free-in-loop-invariant.md)
 * [Finalization reaching a unit already finalized (lint rule)](../../docs/wiki/finalization-after-dependency.md)

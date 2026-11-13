@@ -4,10 +4,10 @@ title: Finalization reaching a unit already finalized (lint rule)
 summary: "Project lint rule: a finalization section reaches a global that a unit finalized earlier in the computed order tears down"
 product: DL
 group: linting
-order: 30011
+order: 30012
 since: 1.44.1-alpha
 status: shipped
-updated: 1.44.1-alpha
+updated: 1.50.0-alpha
 ---
 
 # Finalization reaching a unit already finalized (lint rule)

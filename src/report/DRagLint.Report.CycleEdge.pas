@@ -129,6 +129,9 @@ type
     /// that move into the leaf; the plan rewrites that text to `Leaf.G`, so it is no `qualified-ref`
     /// refusal. Filled by the planner, empty otherwise.</summary>
     QualifiedMoved: TArray<string>;
+    /// <summary>Lane CYC3: True when the edge is weighed for Part B on the graph PREDICTED after Part A; an init-order
+    /// call is then never proved from the program order (Part A moves uses entries, which changes it).</summary>
+    Predicted: Boolean;
   end;
 
   /// <summary>The index access BuildEdgeSurface needs from the cycle planner.</summary>
@@ -499,6 +502,9 @@ type
     /// consumer used it and the .dpr does not list it); the plan then adds it to the .dpr uses
     /// (and a DCCReference to the .dproj when absent) instead of refusing unit-leaves-program.</summary>
     RegisterDecl: Boolean;
+    /// <summary>R1 (lane CYC3): the proof line when a call of the consumer's initialization section is safe because the
+    /// declaring unit initializes first in every program of the index (ProveInitOrderInversion); '' otherwise.</summary>
+    InitOrderProof: string;
     /// <summary>R1 (plan B3): every routine inverted, in first-call order; one entry for a single
     /// routine, which then repeats RoutineId .. VarDecl. The singular fields always name the first.</summary>
     Routines: TArray<TInvertedRoutine>;
@@ -1090,6 +1096,21 @@ function ReplaceInCode(const pLine: string; pStart: TCodeStart; const pPattern, 
 /// </remarks>
 function InitOrderWhy(const pLines: TArray<string>; const pRef: TEdgeRef; const pUnit: string): string;
 
+/// <summary>Lane CYC3 (152c, fabcyc case 3): the one gate every InitOrderWhy caller passes its reason through. A call
+/// InitOrderWhy flags is planned after all when the program order proves the declaring unit initializes first
+/// (DRagLint.Lint.InitSections.ProveInitOrderInversion).</summary>
+/// <param name="pStore">The project index.</param>
+/// <param name="pWhy">InitOrderWhy's answer for the call.</param>
+/// <param name="pFromUnit">The consumer (whose initialization makes the call).</param>
+/// <param name="pDeclUnit">The unit that declares the routine and assigns the pointer.</param>
+/// <param name="pPredicted">True on the graph predicted after Part A: never proved, the reason says it is re-checked.</param>
+/// <param name="pProof">Receives the proof line when proved; left alone otherwise.</param>
+/// <returns>'' when pWhy is '' or the order is proved; else pWhy followed by why the order is not proved, so the
+/// refusal kind stays init-order.</returns>
+/// <remarks>Not thread-safe; reads the index on every flagged call (rare: only calls InitOrderWhy flags).</remarks>
+function InitOrderVerdict(const pStore: ISymbolStore; const pWhy, pFromUnit, pDeclUnit: string; pPredicted: Boolean;
+  var pProof: string): string;
+
 /// <summary>The declaring unit's edit: pAssigns as the first statements of its initialization
 /// section, creating the section when there is none.</summary>
 /// <param name="pLines">The declaring unit's lines.</param>
@@ -1125,7 +1146,7 @@ implementation
 
 uses
   System.SysUtils, System.StrUtils, System.Classes, System.RegularExpressions, System.Math,
-  System.Generics.Defaults, System.Hash, System.IOUtils;
+  System.Generics.Defaults, System.Hash, System.IOUtils, DRagLint.Lint.InitSections;
 
 const
   { The Delphi default unit-scope names (.dproj DCC_Namespace when it sets none); a type written
@@ -2001,6 +2022,18 @@ begin
         '`%s`: it may run before the variable is assigned', [Encl, pRef.Line, L, pUnit]));
 end;
 
+function InitOrderVerdict(const pStore: ISymbolStore; const pWhy, pFromUnit, pDeclUnit: string; pPredicted: Boolean;
+  var pProof: string): string;
+begin
+  Result:= pWhy;
+  if pWhy = '' then Exit;
+  if pPredicted then Exit(pWhy + '; re-checked against the program order once Part A is applied');
+  var Proof:= ProveInitOrderInversion(pStore, pFromUnit, pDeclUnit);
+  if not Proof.Proved then Exit(pWhy + '; ' + Proof.Text);
+  pProof:= Proof.Text;
+  Result:= '';
+end;
+
 { Lane cyc4: why the state of the declaring unit may be gone when a routine runs from the consumer's
   finalization section. The declaring unit keeps using the consumer after the cut, so it initializes
   later and FINALIZES FIRST, whatever the order was before. Safe only when finalizing it does nothing
@@ -2534,7 +2567,7 @@ end;
   section refuses finalization-order when the declaring unit's finalization can be seen (FinalOrderWhy). }
 function CallRefusal(const pSource: IEdgeSurfaceSource; const pSurface: TEdgeSurface; pFromFid: Int64;
   const pLines: TArray<string>; const pFromUnit, pDeclUnit: string; pQualified: TList<Integer>;
-  const pRoutine: TSymbol; pDeclFid: Int64): TRecipeRefusal;
+  const pRoutine: TSymbol; pDeclFid: Int64; var pProof: string): TRecipeRefusal;
 var
   Member: string;
 begin
@@ -2556,7 +2589,7 @@ begin
     Ref.Line:= L;
     var Encl:= pSource.Store.FindEnclosingRoutineByImpl(pFromFid, L);
     if Encl.Id > 0 then Ref.Enclosing:= Encl.Name;
-    var QWhy:= InitOrderWhy(pLines, Ref, pFromUnit);
+    var QWhy:= InitOrderVerdict(pSource.Store, InitOrderWhy(pLines, Ref, pFromUnit), pFromUnit, pDeclUnit, pSurface.Predicted, pProof);
     if QWhy <> '' then Exit(MakeRefusal('init-order', Name, pFromFid, L, QWhy));
     QWhy:= FinalOrderWhy(pSource, pLines, Ref, pFromUnit, pDeclFid, pDeclUnit);
     if QWhy <> '' then Exit(MakeRefusal('finalization-order', Name, pFromFid, L, QWhy));
@@ -2567,7 +2600,7 @@ begin
       not TRegEx.IsMatch(R.LineText, '@\s*' + TRegEx.Escape(Name) + '\b', [roIgnoreCase])) then
       Exit(MakeRefusal('routine-not-called', Name, pFromFid, R.Line, Format('line %d uses `%s` without ' +
         'calling it (`%s`)', [R.Line, Name, R.LineText])));
-    var Why:= InitOrderWhy(pLines, R, pFromUnit);
+    var Why:= InitOrderVerdict(pSource.Store, InitOrderWhy(pLines, R, pFromUnit), pFromUnit, pDeclUnit, pSurface.Predicted, pProof);
     if Why <> '' then Exit(MakeRefusal('init-order', Name, pFromFid, R.Line, Why));
     Why:= FinalOrderWhy(pSource, pLines, R, pFromUnit, pDeclFid, pDeclUnit);
     if Why <> '' then Exit(MakeRefusal('finalization-order', Name, pFromFid, R.Line, Why));
@@ -2584,8 +2617,10 @@ var
   E        : TRecipeEdit;
   Conv     : string;
   Why      : string;
+  Proof    : string;
 begin
   Result  := Default(TRecipeSteps);
+  Proof   := '';
   var FromFid:= pSource.FidOfStem(pSurface.FromStem);
   var DeclFid:= pSource.FidOfStem(pSurface.ToStem);
   var Name   := pSurface.RoutineName;
@@ -2598,7 +2633,7 @@ begin
     if pRefusal.Kind = '' then
       pRefusal:= CallRefusal(pSource, pSurface, FromFid, Lines,
         ChangeFileExt(ExtractFileName(pSource.Store.GetFilePath(FromFid)), ''),
-        ChangeFileExt(ExtractFileName(pSource.Store.GetFilePath(DeclFid)), ''), Qualified, Routine, DeclFid);
+        ChangeFileExt(ExtractFileName(pSource.Store.GetFilePath(DeclFid)), ''), Qualified, Routine, DeclFid, Proof);
     if (pRefusal.Kind = '') and not DeclConvention(pSource.FileLines(DeclFid), Routine.StartLine, Name, Conv, Why) then
       pRefusal:= MakeRefusal('unsupported-directive', Name, DeclFid, Routine.StartLine, Format('`%s`: %s', [Name, Why]));
     if pRefusal.Kind <> '' then Exit;
@@ -2607,6 +2642,7 @@ begin
     Result.RoutineName:= Name;
     Result.DeclStem   := pSurface.ToStem;
     Result.ConsumerFid:= FromFid;
+    Result.InitOrderProof:= Proof;
     Result.PtrVar     := Name + 'Ptr' + (if pSuffix > 1 then IntToStr(pSuffix) else '');
     var Hider: TSymbol;
     if PointerHider(pSource, Result.PtrVar, FromFid, DeclFid, Hider) then
@@ -2732,6 +2768,7 @@ begin
     for var P in Parts do
     begin
       Result.Routines:= Result.Routines + P.Routines;
+      if Result.InitOrderProof = '' then Result.InitOrderProof:= P.InitOrderProof;
       if (P.LeafStem <> Result.LeafStem) or (Length(pMovedTypes) > 0) then Result.LeafStem:= '';
       for var R in P.Edits do
         if (R.Fid = Result.ConsumerFid) and not Lines.Contains(R.Line) then Lines.Add(R.Line);

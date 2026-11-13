@@ -3046,6 +3046,37 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function GetPpRegions(AFileId: Int64): TArray<TPpRegionRow>;
+    /// <summary>152c INCR: the file_includes rows of one host, in source order -- every
+    /// {$I} / {$INCLUDE} directive of the host the preprocessor followed, nested ones too.</summary>
+    /// <param name="AFileId">files.id of the host.</param>
+    /// <returns>One TFileIncludeRow per directive (IncPath is the absolute .inc path, HostLine /
+    /// HostCol the directive in the host for Depth 0, InUses True for a uses-list include).
+    /// Empty when the host has none or HasFileFacts is False.</returns>
+    /// <remarks>Reader of the cycle-edge-in-include rule (DRagLint.Lint.IncludeCycleRules).
+    /// Named apart from the removed 149 reader GetFileIncludes on purpose: this one has a caller.</remarks>
+    function GetIncludeSites(AFileId: Int64): TArray<TFileIncludeRow>;
+    /// <summary>152c RINC: every (include file, host unit) pair whose include is included as
+    /// code (in_uses = 0) and is itself a files row of this index.</summary>
+    /// <returns>One TIncludeHostRow per pair, hosts in id order; a nested include carries the
+    /// section of the depth-0 directive before it. Empty when HasFileFacts is False.</returns>
+    /// <remarks>Read once per resolve by TCallResolver.BuildMaps.</remarks>
+    function GetIncludeHosts: TArray<TIncludeHostRow>;
+    /// <summary>152c RINC: True when AIncPath is a uses-list fragment -- it has at least one
+    /// file_includes site and EVERY site, over every host of the index, stands in a uses clause
+    /// (in_uses = 1).</summary>
+    /// <param name="AIncPath">Absolute path of the include file (compared case-insensitively).</param>
+    /// <returns>False for an include with no recorded site, one included as code anywhere, or
+    /// when HasFileFacts is False.</returns>
+    /// <remarks>Such a fragment cannot parse on its own, so the indexer's DIAG / parse-errors=
+    /// and `lint &lt;file&gt;` do not report its parse error (the rule lint-all applies, 152c INCR M4).</remarks>
+    function IncludeIsUsesFragment(const AIncPath: string): Boolean;
+    /// <summary>152c RINC: the top-level declarations of include files -- every parentless,
+    /// non-unit symbol whose file is an include included as code somewhere in the index.</summary>
+    /// <returns>Id, FileId (the include), Kind, Name, Signature and the stored Section ('' --
+    /// the caller supplies the host's) of each symbol.</returns>
+    /// <remarks>Read once per resolve by TCallResolver.BuildMaps; the include's routines and
+    /// const / var join the unit-level candidate maps as members of their host.</remarks>
+    function GetIncludeTopLevelSymbols: TArray<TSymbol>;
     /// <summary>150 EX3: replaces one setting's project_settings rows of the file in
     /// AToken (a .dpr / .dpk) with AValues, one row per value in order (ordinal 0..).</summary>
     /// <param name="AToken">The open file tx; supplies file_id.</param>

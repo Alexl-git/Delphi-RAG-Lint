@@ -4,10 +4,10 @@ title: Global set in initialization and never freed (lint rule)
 summary: "Project lint rule: a unit's initialization sets its own global to a new object and no source that names the variable frees it"
 product: DL
 group: linting
-order: 30020
+order: 30021
 since: 1.44.1-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.50.0-alpha
 ---
 
 # Global set in initialization and never freed (lint rule)

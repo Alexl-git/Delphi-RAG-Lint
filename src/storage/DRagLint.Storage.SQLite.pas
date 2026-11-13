@@ -3440,6 +3440,20 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetPpRegions(AFileId: Int64): TArray<TPpRegionRow>;
+      /// <summary>152c INCR: implements ISymbolStore.GetIncludeSites.</summary>
+      /// <param name="AFileId">files.id of the host.</param>
+      /// <returns>The host's file_includes rows in source order.</returns>
+      function GetIncludeSites(AFileId: Int64): TArray<TFileIncludeRow>;
+      /// <summary>152c RINC: implements ISymbolStore.GetIncludeHosts.</summary>
+      /// <returns>The (include, host) pairs of code includes.</returns>
+      function GetIncludeHosts: TArray<TIncludeHostRow>;
+      /// <summary>152c RINC: implements ISymbolStore.IncludeIsUsesFragment.</summary>
+      /// <param name="AIncPath">Absolute path of the include file.</param>
+      /// <returns>True when every recorded site of the include stands in a uses clause.</returns>
+      function IncludeIsUsesFragment(const AIncPath: string): Boolean;
+      /// <summary>152c RINC: implements ISymbolStore.GetIncludeTopLevelSymbols.</summary>
+      /// <returns>The parentless declarations of code-include files.</returns>
+      function GetIncludeTopLevelSymbols: TArray<TSymbol>;
       /// <summary>data_flows rows whose destination is at (AFileId, ALine, ACol).</summary>
       /// <param name="AFileId">files.id.</param>
       /// <param name="ALine">dst_line.</param>
@@ -5945,6 +5959,176 @@ begin
       R.EndLine  := Q.FieldByName('end_line'  ).AsInteger;
       R.Active   := Q.FieldByName('active'    ).AsInteger <> 0;
       L.Add(R);
+      Q.Next;
+    end;
+    Result:= L.ToArray;
+  finally
+    Q.Free;
+    L.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetIncludeSites(AFileId: Int64): TArray<TFileIncludeRow>;
+var
+  Q: TFDQuery;
+  L: TList<TFileIncludeRow>;
+  R: TFileIncludeRow;
+  FldPath, FldLine, FldCol, FldDepth, FldSection, FldUses: TField;
+begin
+  Result:= nil;
+  if not HasFileFacts then Exit;
+  L:= TList<TFileIncludeRow>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT inc_path, host_line, host_col, depth, section, in_uses ' +
+                   'FROM file_includes WHERE file_id = :fid ORDER BY ordinal';
+    Q.ParamByName('fid').AsLargeInt:= AFileId;
+    Q.Open;
+    FldPath   := Q.FieldByName('inc_path');
+    FldLine   := Q.FieldByName('host_line');
+    FldCol    := Q.FieldByName('host_col');
+    FldDepth  := Q.FieldByName('depth');
+    FldSection:= Q.FieldByName('section');
+    FldUses   := Q.FieldByName('in_uses');
+    while not Q.Eof do
+    begin
+      R:= Default(TFileIncludeRow);
+      R.IncPath := FldPath.AsString;
+      R.HostLine:= FldLine.AsInteger;
+      R.HostCol := FldCol.AsInteger;
+      R.Depth   := FldDepth.AsInteger;
+      R.Section := FldSection.AsString;
+      R.InUses  := FldUses.AsInteger <> 0;
+      L.Add(R);
+      Q.Next;
+    end;
+    Result:= L.ToArray;
+  finally
+    Q.Free;
+    L.Free;
+  end;
+end;
+
+{ 152c RINC: the code includes of every host. A nested row (depth > 0) inherits the section and
+  the uses-list flag of the depth-0 directive before it -- the include that brought it in. }
+function TSQLiteSymbolStore.GetIncludeHosts: TArray<TIncludeHostRow>;
+var
+  Q        : TFDQuery;
+  L        : TList<TIncludeHostRow>;
+  R        : TIncludeHostRow;
+  ColHost, ColDepth, ColSection, ColUses, ColInc, ColUnit: TField;
+  CurHost  : Int64;
+  TopSect  : string;
+  TopInUses: Boolean;
+begin
+  Result:= nil;
+  if not HasFileFacts then Exit;
+  L:= TList<TIncludeHostRow>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT fi.file_id, fi.depth, fi.section, fi.in_uses, f.id AS inc_id, ' +
+                   '  (SELECT u.id FROM symbols u WHERE u.file_id = fi.file_id AND u.parent_id IS NULL ' +
+                   '     AND u.kind IN (''unit'', ''program'', ''package'') ORDER BY u.id LIMIT 1) AS unit_id ' +
+                   'FROM file_includes fi LEFT JOIN files f ON LOWER(f.path) = LOWER(fi.inc_path) ' +
+                   'ORDER BY fi.file_id, fi.ordinal';
+    Q.Open;
+    ColHost   := Q.FieldByName('file_id');
+    ColDepth  := Q.FieldByName('depth');
+    ColSection:= Q.FieldByName('section');
+    ColUses   := Q.FieldByName('in_uses');
+    ColInc    := Q.FieldByName('inc_id');
+    ColUnit   := Q.FieldByName('unit_id');
+    CurHost  := 0;
+    TopSect  := '';
+    TopInUses:= False;
+    while not Q.Eof do
+    begin
+      if ColHost.AsLargeInt <> CurHost then
+      begin
+        CurHost  := ColHost.AsLargeInt;
+        TopSect  := '';
+        TopInUses:= False;
+      end;
+      if ColDepth.AsInteger = 0 then
+      begin
+        TopSect  := ColSection.AsString;
+        TopInUses:= ColUses.AsInteger <> 0;
+      end;
+      if not TopInUses and (ColUses.AsInteger = 0) and not ColInc.IsNull and (ColInc.AsLargeInt <> CurHost) then
+      begin
+        R:= Default(TIncludeHostRow);
+        R.IncFileId := ColInc.AsLargeInt;
+        R.HostFileId:= CurHost;
+        R.HostUnitId:= ColUnit.AsLargeInt;
+        R.Section   := TopSect;
+        L.Add(R);
+      end;
+      Q.Next;
+    end;
+    Result:= L.ToArray;
+  finally
+    Q.Free;
+    L.Free;
+  end;
+end;
+
+{ 152c RINC: a uses-list fragment = an include whose every site stands in a uses clause. }
+function TSQLiteSymbolStore.IncludeIsUsesFragment(const AIncPath: string): Boolean;
+var
+  Q: TFDQuery;
+begin
+  Result:= False;
+  if (AIncPath = '') or not HasFileFacts then Exit;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN in_uses = 0 THEN 1 ELSE 0 END), 0) AS code ' +
+                   'FROM file_includes WHERE LOWER(inc_path) = LOWER(:p)';
+    Q.ParamByName('p').AsString:= AIncPath;
+    Q.Open;
+    Result:= (Q.FieldByName('n').AsInteger > 0) and (Q.FieldByName('code').AsInteger = 0);
+  finally
+    Q.Free;
+  end;
+end;
+
+{ 152c RINC: the parentless declarations of every code-include file, read once per resolve. }
+function TSQLiteSymbolStore.GetIncludeTopLevelSymbols: TArray<TSymbol>;
+var
+  Q: TFDQuery;
+  L: TList<TSymbol>;
+  S: TSymbol;
+  ColId, ColFile, ColKind, ColName, ColSig, ColSection: TField;
+begin
+  Result:= nil;
+  if not HasFileFacts then Exit;
+  L:= TList<TSymbol>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT s.id, s.file_id, s.kind, s.name, s.signature, s.section FROM symbols s ' +
+                   'WHERE s.parent_id IS NULL AND s.kind NOT IN (''unit'', ''program'', ''package'') ' +
+                   '  AND s.file_id IN (SELECT f.id FROM files f JOIN file_includes fi ' +
+                   '                    ON LOWER(f.path) = LOWER(fi.inc_path) AND fi.in_uses = 0)';
+    Q.Open;
+    ColId     := Q.FieldByName('id');
+    ColFile   := Q.FieldByName('file_id');
+    ColKind   := Q.FieldByName('kind');
+    ColName   := Q.FieldByName('name');
+    ColSig    := Q.FieldByName('signature');
+    ColSection:= Q.FieldByName('section');
+    while not Q.Eof do
+    begin
+      S:= Default(TSymbol);
+      S.Id       := ColId.AsLargeInt;
+      S.FileId   := ColFile.AsLargeInt;
+      S.Kind     := TSymbolKind.FromText(ColKind.AsString);
+      S.Name     := ColName.AsString;
+      S.Signature:= ColSig.AsString;
+      S.Section  := ColSection.AsString;
+      L.Add(S);
       Q.Next;
     end;
     Result:= L.ToArray;

@@ -256,6 +256,7 @@ uses
   DRagLint.Lint.AncestorNotInProject, { ancestor-not-in-project (1.42 enum) }
   DRagLint.Lint.OpaqueToAnalysis, { opaque-to-analysis (1.42 opaque) } // dl:unit DRagLint.Lint.OpaqueToAnalysis accepted -- OPAQUE_TO_ANALYSIS_RULE is the rule id the dispatch names; it travels with CollectOpaqueToAnalysis, the collector this unit calls
   DRagLint.Lint.RttiRules, { rtti-unavailable (wave 152b lane RTTI) } // dl:unit DRagLint.Lint.RttiRules accepted -- RTTI_UNAVAILABLE_RULE is the rule id the dispatch names; it travels with the rule unit, as OPAQUE_TO_ANALYSIS_RULE does
+  DRagLint.Lint.IncludeCycleRules, { cycle-edge-in-include (wave 152c lane INCR) } // dl:unit DRagLint.Lint.IncludeCycleRules accepted -- CYCLE_EDGE_IN_INCLUDE_RULE is the rule id the dispatch names; it travels with CollectCycleEdgeInInclude, the collector this unit calls
   DRagLint.Lint.UsesAudit; { TUsesAuditor -- uses-movable-to-implementation (lane G8) } // dl:unit DRagLint.Lint.UsesAudit accepted -- USES_VERDICT_MOVE is how this unit reads the verdict TUsesAuditor returns; it travels with TUsesAuditor, the auditor this unit calls
 
 { Side-effect / operator / helper units that are legitimately used without any
@@ -931,6 +932,27 @@ begin
       Result:= Result + [F];
     end;
   end;
+end;
+
+{ cycle-edge-in-include (152c lane INCR): the circular-uses groups, projected onto the
+  include-aware reader. The SAME Tarjan pass as circular-uses (CollectCircularUsesDetailed),
+  never a second one, so the two rules cannot disagree about which units cycle. }
+function CollectCycleEdgeInIncludeRule(const AStore: ISymbolStore): TArray<TLintFinding>;
+var
+  CC    : TCycleCoupling;
+  Groups: TArray<TIncludeCycleGroup>;
+  G     : TIncludeCycleGroup;
+begin
+  Result:= nil;
+  if (AStore = nil) or not AStore.HasFileFacts then Exit;
+  Groups:= nil;
+  for CC in CollectCircularUsesDetailed(AStore) do
+  begin
+    G.Paths:= CC.MemberPaths;
+    G.Names:= CC.MemberNames;
+    Groups := Groups + [G];
+  end;
+  Result:= CollectCycleEdgeInInclude(AStore, Groups);
 end;
 
 { duplicate-unit-on-search-path (clippy-parity L11). Two indexed .pas files that
@@ -4419,6 +4441,20 @@ var
     var
       U : TSymbol;
       Ch: TSymbol;
+
+      { The export names of one interface symbol: its name, the name without type parameters (a generic is
+        stored as `TComparer<T>`, a use site names `TComparer`), and, for an enum, every value (BLIND SPOT 3).
+        Shared by the unit's own children and (152c INCR M3) the top-level symbols of its interface includes. }
+      procedure AddExport(const S: TSymbol);
+      begin
+        ATo.AddOrSetValue(LowerCase(S.Name), True);
+        var LtPos: Integer:= Pos('<', S.Name);
+        if LtPos > 1 then ATo.AddOrSetValue(LowerCase(Copy(S.Name, 1, LtPos - 1)), True);
+        if S.Kind = skEnum then
+          for var V: TSymbol in AFrom.FindAllChildSymbols(S.Id) do
+            if V.Kind = skEnumValue then ATo.AddOrSetValue(LowerCase(V.Name), True);
+      end;
+
     begin
       if AFrom = nil then Exit;
       for U in AFrom.FindSymbolsByExactName(AUnitName) do
@@ -4433,18 +4469,13 @@ var
               match fires on neither. Stripping only the reference side -- which
               is what I did first -- changes nothing, and the measurement said so:
               91 findings before and 91 after. }
-            ATo.AddOrSetValue(LowerCase(Ch.Name), True);
-            var LtPos: Integer:= Pos('<', Ch.Name);
-            if LtPos > 1 then ATo.AddOrSetValue(LowerCase(Copy(Ch.Name, 1, LtPos - 1)), True);
+            AddExport(Ch);  { the name, its generic-stripped stem and (BLIND SPOT 3 below) an enum's values }
             { BLIND SPOT 3 (1.28.2, converter report): AN ENUM'S VALUES ARE
               EXPORTS TOO. They are children of the ENUM, one level below the
               unit, so the loop above never saw them -- and `Panel.Align:=
               alTop;` names no Vcl.Controls symbol but alTop. The extractor
               already records those refs (kind read); only this set lacked
               the names. Removing such an import fails with E2003. }
-            if Ch.Kind = skEnum then
-              for var V: TSymbol in AFrom.FindAllChildSymbols(Ch.Id) do
-                if V.Kind = skEnumValue then ATo.AddOrSetValue(LowerCase(V.Name), True);
             { UNUSEDUNIT-INLINE-PROP (RF 2026-11-08, 145 int, H2443): A PROPERTY WHOSE
               ACCESSOR IS inline NEEDS ITS UNIT TOO. `P.ParamByName('A').AsInteger:= 5`
               names no symbol of FireDAC.Stan.Param (the receiver type arrives through a
@@ -4461,6 +4492,21 @@ var
                    and (SameText(Copy(M.Name, 1, ACCESSOR_PREFIX_LEN), 'Get') or SameText(Copy(M.Name, 1, ACCESSOR_PREFIX_LEN), 'Set')) then
                   ATo.AddOrSetValue(LowerCase(Copy(M.Name, ACCESSOR_PREFIX_LEN + 1, MaxInt)), True);
           end;
+        { 152c INCR (M3): A DECLARATION IN AN INCLUDE OF THE UNIT IS ITS EXPORT TOO. An include of Types.inc in
+          the interface brings `TRec` in: its symbol carries the .inc's file_id and no parent, so the child
+          scan above never saw it and a user of TRec read as "no symbols from it are referenced"
+          (deleting the import fails with E2003). The unit's file_includes rows name the includes; their
+          top-level symbols (and enum values) join the export set. An include in the implementation
+          section is private and stays out; a uses-list include declares nothing. }
+        for var Site: TFileIncludeRow in AFrom.GetIncludeSites(U.FileId) do
+        begin
+          if Site.InUses or SameText(Site.Section, 'implementation') then Continue;
+          for var Inc: TSymbol in AFrom.FindSymbolsByFile(Site.IncPath) do
+          begin
+            if (Inc.ParentId > 0) or (Inc.Name = '') then Continue;
+            AddExport(Inc);
+          end;
+        end;
         { BLIND SPOT 1 (T4/U1): TYPE HELPER MEMBERS ARE PART OF THE SURFACE.
 
           The loop above adds names, not members, and that is right for ordinary
@@ -4820,6 +4866,10 @@ begin
     if WantRule(INIT_ORDER_HAZARD_RULE) and OptedIn(INIT_ORDER_HAZARD_RULE) then
       for var Is_ in CollectInitOrderHazard(AStore) do Findings.Add(Is_);
     Lap('init-order-hazard');
+    { cycle-edge-in-include (152c lane INCR): ON, project-wide; the same groups as circular-uses. }
+    if WantRule(CYCLE_EDGE_IN_INCLUDE_RULE) and OptedIn(CYCLE_EDGE_IN_INCLUDE_RULE) then
+      for var Ci in CollectCycleEdgeInIncludeRule(AStore) do Findings.Add(Ci);
+    Lap('cycle-edge-in-include');
     if WantRule(FINALIZATION_AFTER_DEPENDENCY_RULE) and OptedIn(FINALIZATION_AFTER_DEPENDENCY_RULE) then
       for var Is_ in CollectFinalizationAfterDependency(AStore) do Findings.Add(Is_);
     Lap('finalization-after-dependency');
