@@ -1225,4 +1225,6 @@
 #   Superseded: 1.37.0-alpha|76f35ddad4fe6e537d10cc9d145cc5c61845abcff35670bcda7fe5c4c607c70d
 #   2026-11-12 152c INT3b bump 1.37.0 -> 1.38.0 (1.37 never deployed; still ONE re-parse for 1.50): RINC2 a Parser.Delphi13 emits a bare routine header after a type section in an include fragment (EXTRACTION yes); Core.Indexer fragment verdict order-independent (RINC2 c) on top of RINC item 2.
 #   Superseded: 1.37.0-alpha|2fab6f58f70fb2447a2388295ba91dac543d0f533055ff089852b2c9b150453d
-1.38.0-alpha|5b50c8c17fc03077dcd99d62af88f5a83f4a4dcdb496ebae9610c96175df8f8f
+#   2026-11-12 152c INT3b re-pin (same unreleased 1.38.0 bump): lint sweep -- EmitLooseRoutineHeaders' window size named HEADER_TOKENS (magic-literal), no extraction change.
+#   Superseded: 1.38.0-alpha|5b50c8c17fc03077dcd99d62af88f5a83f4a4dcdb496ebae9610c96175df8f8f
+1.38.0-alpha|f754dd8be4c8bb297c3635839062eb11fc1c9a8cd131621b317ee8d088e70089

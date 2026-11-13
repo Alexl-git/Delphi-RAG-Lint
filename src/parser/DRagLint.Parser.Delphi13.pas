@@ -3264,6 +3264,8 @@ end; // begin
   grammar case for the real fix is lanes\152\RINC2\GRAMMAR-CASE.md. }
 procedure EmitLooseRoutineHeaders(const AErr: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer;
   const AParentQualifiedName: string);
+const
+  HEADER_TOKENS = 3; { keyword, name, ';' }
 var
   Kw, NameTok, Semi: TTSNode;
   RoutineName: string;
@@ -3271,7 +3273,7 @@ var
   Sym: TSymbol;
 begin
   if AParentSymbolIdx >= 0 then Exit;
-  for var i:= 0 to AErr.ChildCount - 3 do
+  for var i:= 0 to AErr.ChildCount - HEADER_TOKENS do
   begin
     Kw:= AErr.Child(i);
     if (Kw.NodeType <> 'kProcedure') and (Kw.NodeType <> 'kFunction') then Continue;
