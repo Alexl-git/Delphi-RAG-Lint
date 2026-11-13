@@ -1,0 +1,1 @@
+type TOrdBroken = record X: ;

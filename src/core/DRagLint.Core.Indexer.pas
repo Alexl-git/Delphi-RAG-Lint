@@ -40,6 +40,16 @@ type
     HeldWrites: TArray<string>;
   end;
 
+  /// <summary>152c RINC2: the progress / DIAG report of an include file whose parse has a tree
+  /// error, held by a folder walk until every host of the walk has stored its include sites.</summary>
+  /// <remarks>Owned by TIndexer (FDeferredIncs); a value type, no lifetime.</remarks>
+  TDeferredIncReport = record
+    Path   : string        ;
+    Symbols: Integer       ;
+    Refs   : Integer       ;
+    Diags  : TArray<string>;
+  end;
+
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore (DRagLint.LSP.Server.pas)</para>
@@ -110,6 +120,11 @@ type
         rolled back. Backs IIndexer.FailedFiles -- see there. }
       FFailedFiles    : Integer                            ;
       FParseErrorFiles: Integer                            ;
+      { 152c RINC2: True while IndexFolder's real pass runs. An .inc whose parse has a tree error
+        is then reported from FDeferredIncs at the walk's end, so the uses-fragment verdict sees
+        every host's include sites whatever order the walk read the files in. }
+      FDeferIncReports: Boolean                            ;
+      FDeferredIncs   : TArray<TDeferredIncReport>         ;
       { TEST SEAM, read once in Create from DRAGLINT_INDEX_TEST_FAIL_FILE: a bare
         file NAME whose store phase is made to raise just before its commit, so
         a guard can drive the per-file failure path without a corrupt DB. ''
@@ -189,6 +204,17 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ReportProgress(const APath: string; ASymbols, ARefs, AErrors: Integer);
+      /// <summary>152c RINC2: prints one file's progress line and DIAG lines and counts a tree
+      /// parse error into parse-errors=, leaving out the parse error of a uses-list fragment
+      /// include (ISymbolStore.IncludeIsUsesFragment, the rule lint-all applies).</summary>
+      /// <param name="AFilePath">The indexed file.</param>
+      /// <param name="ASymbols">Symbols the parse emitted.</param>
+      /// <param name="ARefs">References the parse emitted.</param>
+      /// <param name="ADiags">The parse's diagnostics.</param>
+      procedure ReportFileDiagnostics(const AFilePath: string; ASymbols, ARefs: Integer; const ADiags: TArray<string>);
+      /// <summary>152c RINC2: reports every include held in FDeferredIncs (ReportFileDiagnostics)
+      /// and empties it.</summary>
+      procedure FlushDeferredIncReports;
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
       /// <remarks>
@@ -2030,24 +2056,23 @@ begin
           raise EInOutError.Create('DRAGLINT_INDEX_TEST_FAIL_FILE: injected store failure');
         FStore.CommitFileTx(Token);
         Inc(GProfCommit, ProfNow - TProf);
-        { 152c RINC: a uses-list fragment include (every site stands in a uses clause) cannot
-          parse on its own -- its parse error is not reported or counted, as lint-all does (INCR M4). }
-        var Shown: TArray<string>:= ParseRes.Diagnostics;
-        if (Length(Shown) > 0) and SameText(ExtractFileExt(AFilePath), '.inc')
-           and FStore.IncludeIsUsesFragment(TPath.GetFullPath(AFilePath)) then
+        { 152c RINC2: during a folder walk an include with a tree parse error is reported at the
+          walk's end (FlushDeferredIncReports), when every host's include sites are stored. }
+        var HeldIt: Boolean:= False;
+        if FDeferIncReports and SameText(ExtractFileExt(AFilePath), '.inc') then
+          for var TreeDiag in ParseRes.Diagnostics do
+            if TreeDiag.Contains(': parse error [') then HeldIt:= True;
+        if HeldIt then
         begin
-          Shown:= nil;
-          for var FragDiag in ParseRes.Diagnostics do
-            if not FragDiag.Contains(': parse error [') then Shown:= Shown + [FragDiag];
-        end;
-        ReportProgress(AFilePath, Length(ParseRes.Symbols), Length(ParseRes.References), Length(Shown));
-        var HasTreeError: Boolean:= False;
-        for var Diag in Shown do
-        begin
-          Writeln('    DIAG: ' + Diag);
-          if Diag.Contains(': parse error [') then HasTreeError:= True;
-        end;
-        if HasTreeError then Inc(FParseErrorFiles);
+          var Held: TDeferredIncReport;
+          Held.Path   := AFilePath;
+          Held.Symbols:= Length(ParseRes.Symbols);
+          Held.Refs   := Length(ParseRes.References);
+          Held.Diags  := ParseRes.Diagnostics;
+          FDeferredIncs:= FDeferredIncs + [Held];
+        end
+        else
+          ReportFileDiagnostics(AFilePath, Length(ParseRes.Symbols), Length(ParseRes.References), ParseRes.Diagnostics);
       except
         on E: Exception do
         begin
@@ -2272,8 +2297,48 @@ begin
   if FProgressTotal > 0 then
     Writeln(ErrOutput, Format('  walking %d file(s) under %s', [FProgressTotal, APath]));
   FProgressWatch:= TStopwatch.StartNew;
-  { Pass 2 -- index for real. }
-  WalkAndIndex(APath, ARecursive);
+  { Pass 2 -- index for real. 152c RINC2: include reports with a parse error wait for the end. }
+  var OuterWalk: Boolean:= not FDeferIncReports;
+  FDeferIncReports:= True;
+  try
+    WalkAndIndex(APath, ARecursive);
+  finally
+    if OuterWalk then
+    begin
+      FDeferIncReports:= False;
+      FlushDeferredIncReports;
+    end;
+  end;
+end;
+
+procedure TIndexer.ReportFileDiagnostics(const AFilePath: string; ASymbols, ARefs: Integer;
+  const ADiags: TArray<string>);
+begin
+  { 152c RINC: a uses-list fragment include (every site stands in a uses clause) cannot
+    parse on its own -- its parse error is not reported or counted, as lint-all does (INCR M4). }
+  var Shown: TArray<string>:= ADiags;
+  if (Length(Shown) > 0) and SameText(ExtractFileExt(AFilePath), '.inc')
+     and FStore.IncludeIsUsesFragment(TPath.GetFullPath(AFilePath)) then
+  begin
+    Shown:= nil;
+    for var FragDiag in ADiags do
+      if not FragDiag.Contains(': parse error [') then Shown:= Shown + [FragDiag];
+  end;
+  ReportProgress(AFilePath, ASymbols, ARefs, Length(Shown));
+  var HasTreeError: Boolean:= False;
+  for var Diag in Shown do
+  begin
+    Writeln('    DIAG: ' + Diag);
+    if Diag.Contains(': parse error [') then HasTreeError:= True;
+  end;
+  if HasTreeError then Inc(FParseErrorFiles);
+end;
+
+procedure TIndexer.FlushDeferredIncReports;
+begin
+  for var Held in FDeferredIncs do
+    ReportFileDiagnostics(Held.Path, Held.Symbols, Held.Refs, Held.Diags);
+  FDeferredIncs:= nil;
 end;
 
 { Prints the per-phase breakdown collected above. Opt-in via DRAGLINT_PROFILE so
