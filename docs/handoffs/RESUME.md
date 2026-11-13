@@ -1,6 +1,12 @@
 # RESUME index -- Delphi-RAG-lint
 
 Newest first, one line per handoff: `date | stream | one-line state | status | file`.
+
+- 2026-11-13 | engine | 1.50.0-alpha RELEASED (b7c801c47); 1.51.0 run planned (lanes/v151/PLAN.md, 45 lanes), not dispatched | open | [HANDOFF-2026-11-13-engine-150-released-151-run-planned.md](HANDOFF-2026-11-13-engine-150-released-151-run-planned.md)
+- 2026-11-13 | engine | 1.50 deployed + re-parsed (pe 0 on 37 DBs), installer built; owner IDE test next; 1.50.1 draft C:\TEMP\claude\lanes\1501\PLAN-DRAFT.md | closed | [HANDOFF-2026-11-13-engine-150-deployed-reparsed-1501-plan](HANDOFF-2026-11-13-engine-150-deployed-reparsed-1501-plan.md)
+- 2026-11-12 | engine | 1.50 final 0cb50cf9c; next: installer + page update + library re-parse (owner go) | closed 11-13 (done) | [HANDOFF-2026-11-12-engine-150-final-installer-reparse-next](HANDOFF-2026-11-12-engine-150-final-installer-reparse-next.md)
+- 2026-11-12 | engine | 1.50 final on local main 0cb50cf9c (152+152b+152c), unpushed, ready to deploy | resumed | [HANDOFF-2026-11-12-engine-152c-lanes-running-controller](HANDOFF-2026-11-12-engine-152c-lanes-running-controller.md)
+- 2026-11-11 | engine | 152 merged local aa372fdb0; 152b lanes running, controller handed off | resumed | [HANDOFF-2026-11-11-engine-152b-lanes-running-controller](HANDOFF-2026-11-11-engine-152b-lanes-running-controller.md)
 Status is `open`, `resumed` or `closed`. A session reads this file and opens ONLY the
 handoff it resumes; several `open` lines are normal. New handoffs are written here as
 `HANDOFF-<yyyy-mm-dd>-<stream>-<topic>.md` by the `handoff` skill. This folder is TRACKED.
@@ -8,8 +14,9 @@ handoff it resumes; several `open` lines are normal. New handoffs are written he
 The legacy `..\RESUME-*.md` files below are gitignored (`docs/RESUME-*`) and exist only in
 the main working tree; their links do not resolve in a fresh clone or worktree.
 
-- 2026-11-11 | engine | wave 151 wave-1 dispatched (8 lanes, PLAN/LEDGER C:\TEMP\claude\lanes\151); owner testing Part A; orm3-ea waits; main e78d939fc unpushed | open | [HANDOFF-2026-11-11-engine-wave151-dispatched.md](HANDOFF-2026-11-11-engine-wave151-dispatched.md)
-- 2026-11-10 | engine | 150 deployed + re-parsed (main a3aea3675 unpushed, 1.49.0-alpha, schema 24); owner page QWrmj65xP1U3hFX31mtLsK; 37 project DBs force-rebuilt 14:48 (DFM v1.2.0, 0 parse-errors); next: owner reboot + IDE test, message orm3-f7, push, release; guards 4ea0f0e0f/39df9242e, lane 151-GD option C done | resumed 2026-11-11 | [HANDOFF-2026-11-10-engine-150-deployed-reparsed-ide-test.md](HANDOFF-2026-11-10-engine-150-deployed-reparsed-ide-test.md)
+- 2026-11-11 | engine | wave 151 done; 1.50.0-alpha deployed + re-parsed 15:25 (37 DBs parse-errors 0); main 57 ahead unpushed; owner IDE test (page Part A2) + push + O1-O17; ORM3 bench quiet window | open | [HANDOFF-2026-11-11-engine-150-deployed-owner-ide-test.md](HANDOFF-2026-11-11-engine-150-deployed-owner-ide-test.md)
+- 2026-11-11 | engine | wave 151 wave-1 dispatched (8 lanes, PLAN/LEDGER C:\TEMP\claude\lanes\151); owner testing Part A; orm3-ea waits; main e78d939fc unpushed | closed | [HANDOFF-2026-11-11-engine-wave151-dispatched.md](HANDOFF-2026-11-11-engine-wave151-dispatched.md)
+- 2026-11-10 | engine | 150 deployed + re-parsed (main a3aea3675 unpushed, 1.49.0-alpha, schema 24); owner page QWrmj65xP1U3hFX31mtLsK; 37 project DBs force-rebuilt 14:48 (DFM v1.2.0, 0 parse-errors); next: owner reboot + IDE test, message orm3-f7, push, release; guards 4ea0f0e0f/39df9242e, lane 151-GD option C done | closed | [HANDOFF-2026-11-10-engine-150-deployed-reparsed-ide-test.md](HANDOFF-2026-11-10-engine-150-deployed-reparsed-ide-test.md)
 - 2026-11-09 | engine | wave 150 running: 6 DONE, CY2 PARTIAL, 9 lanes running, INT step 0 running; controller delphi-rag-lint-1c | closed | [HANDOFF-2026-11-09-engine-150-wave-running.md](HANDOFF-2026-11-09-engine-150-wave-running.md)
 - 2026-11-09 | engine | 149 merged to main f8d66a21f (not deployed); wave 150 planned (lanes\150\PLAN.md + W1/W2 + scanner fix); next: dispatch 150 | resumed 2026-11-09 12:40 | [HANDOFF-2026-11-09-engine-150-ready-to-dispatch.md](HANDOFF-2026-11-09-engine-150-ready-to-dispatch.md)
 - 2026-11-09 | engine | wave 149 running (HW done; RB1/DF/EX1/LX/IC partial + finishers; INT started); owner away, deploy+re-parse go | closed | [HANDOFF-2026-11-09-engine-149-wave-running-owner-away.md](HANDOFF-2026-11-09-engine-149-wave-running-owner-away.md)
