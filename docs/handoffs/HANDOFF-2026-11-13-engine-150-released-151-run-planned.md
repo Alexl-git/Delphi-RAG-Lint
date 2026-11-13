@@ -25,3 +25,5 @@
 * Autonomy guard denies push / gh release while mode=autonomous: the 1.51 run must not need either (commit only).
 * Lane rules: private engine copy per lane, private scratch, no poll loops, never index on dll-win64 or a real DB (PREP makes copies).
 * Context: this session hit 75 % at 14:25 -- the controller session must keep lane output out of its context (ledger lines only).
+
+## OWNER ANSWERED Q1-Q10 (14:45) -- read C:\TEMP\claude\lanes151\OWNER-ANSWERS.md FIRST; it overrides the defaults above (Q2: re-parse WITHOUT asking at the end; Q4: FP samples on CLIENT, SERVER, LOADER, YADF; Q7: no Table Tools until 1.52; Q8: TS grammar changes go).
