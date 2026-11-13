@@ -1,6 +1,10 @@
 <#
-  run_serve_multidb_warning_guard.ps1 -- `serve` uses only the FIRST --db, and
-  must SAY SO when it is given more than one.
+  run_serve_multidb_warning_guard.ps1 -- `serve` given more than one --db must SAY
+  which databases it serves.
+
+  v151 SERVE (owner OQ3): serve now OPENS every --db (run_v151_SERVE_all_dbs.ps1 pins the
+  answers). This guard keeps the honesty half: with two --db, stderr names BOTH as served
+  and none as "ignored"; with one, stderr stays quiet. The history below is why.
 
   THE DEFECT THIS PINS:
     TMCPServer.Create takes an ARRAY of db paths and opens FDbPaths[0]. The
@@ -108,12 +112,14 @@ try {
 finally { Pop-Location }
 
 Write-Host ''
-Write-Host 'Two --db flags: serve must admit it uses only the first' -ForegroundColor Cyan
-Check 'a warning is emitted' `
-  ($two -match '(?i)only the first|ignor') ("stderr: " + ($two -replace '\s+', ' '))
-Check 'and it NAMES the ignored database' `
-  ($two -match [regex]::Escape('beta.sqlite')) `
-  'a warning that does not say WHICH db is one the reader cannot act on'
+Write-Host 'Two --db flags: serve must name what it serves (v151: both are opened)' -ForegroundColor Cyan
+Check 'the served list is emitted' `
+  ($two -match '(?i)serving 2 database') ("stderr: " + ($two -replace '\s+', ' '))
+Check 'and it NAMES both databases' `
+  (($two -match [regex]::Escape('alpha.sqlite')) -and ($two -match [regex]::Escape('beta.sqlite'))) `
+  'a list that does not say WHICH db is one the reader cannot act on'
+Check 'and calls none of them ignored' `
+  (-not ($two -match '(?i)only the first|ignor')) ("stderr: " + ($two -replace '\s+', ' '))
 
 Write-Host ''
 Write-Host 'POSITIVE CONTROL -- one --db must stay quiet' -ForegroundColor Cyan
