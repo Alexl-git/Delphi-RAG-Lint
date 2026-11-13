@@ -412,7 +412,7 @@ begin
   end;
 end;
 
-function TNarrowPlanner.CheckRoutine(const pR: TRoutineRow; const pParam: TParamRow; out pVerdict: TVerdict): Boolean;  // dl:ok deep-nesting@3d4c, too-many-exit-points@4afe -- the guard list of the refusals; a split would hide their order
+function TNarrowPlanner.CheckRoutine(const pR: TRoutineRow; const pParam: TParamRow; out pVerdict: TVerdict): Boolean;  // dl:ok deep-nesting@3d4c, too-many-exit-points@ccb3 -- the guard list of the refusals; a split would hide their order
 begin
   Result:= False;
   pVerdict:= Default(TVerdict);
@@ -689,7 +689,7 @@ begin
   FRefused.Add(S);
 end;
 
-procedure TNarrowPlanner.Decide(const pR: TRoutineRow; const pParam: TParamRow);  // dl:ok cyclomatic-complexity@0bf7, too-many-exit-points@0beb -- one branch per named refusal, documented on the public function
+procedure TNarrowPlanner.Decide(const pR: TRoutineRow; const pParam: TParamRow);  // dl:ok cyclomatic-complexity@3d98, too-many-exit-points@0beb -- one branch per named refusal, documented on the public function
 var
   V: TVerdict;
 begin
