@@ -19,6 +19,12 @@
   the 2026-08-12 probe missed for empty-on-handler because it put the comment
   AFTER the `;`.
 
+  RECLASSIFIED (v151 RMU): the reporter was right -- there WAS no finding on
+  that line. The defect was the rule: ANY comment (not only a marker) between
+  `do` and the `;` silenced empty-on-handler, a false negative. The .scm now
+  lets comments follow `do` and the 152b reporter exemption is gone, so case A
+  passes because the marker suppresses a LIVE finding (A2 and F prove it).
+
   CASES
   -----
     A  marker on `do` of an empty handler      -> no unused hint, no warning (RED on 1.50.0-alpha)
@@ -26,6 +32,8 @@
     C  control: marker on a line with no handler -> review-marker-unused still reported
     D  control: marker on `do` of a NON-empty handler -> review-marker-unused still reported
     E  control: a wrong @hash on a live finding  -> review-marker-stale still reported
+    A2 the A marker meets a live finding         -> review-marker-stale (no @hash) on it (RED on 1.50.0-alpha)
+    F  plain comment between `do` and `;`       -> [warning] empty-on-handler (RED on 1.50.0-alpha)
 
   Run from any CWD, pwsh 7:
     pwsh -File tests\autotest\run_review_marker_comment_silenced_handler.ps1 -Exe <drag-lint.exe>
@@ -55,6 +63,7 @@ $src = @(
   'procedure CaseB;',
   'procedure CaseC;',
   'procedure CaseD;',
+  'procedure CaseF;',
   '',
   'implementation',
   '',
@@ -99,13 +108,23 @@ $src = @(
   '  end;',
   'end;',
   '',
+  'procedure CaseF;',
+  'begin',
+  '  try',
+  '    Writeln(''f'');',
+  '  except // dl:ok try-except-swallowed -- fixture',
+  '    on Exception do // swallowed on purpose, no marker {F}',
+  '      ;',
+  '  end;',
+  'end;',
+  '',
   'end.'
 )
 $dpr = @('program RmProj;', '', 'uses', '  RmUnit in ''RmUnit.pas'';', '', 'begin', '  CaseA;', 'end.')
 [IO.File]::WriteAllText((Join-Path $Work 'RmUnit.pas'), (($src -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 [IO.File]::WriteAllText((Join-Path $Work 'RmProj.dpr'), (($dpr -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 function LineOf($tag) { for ($i = 0; $i -lt $src.Count; $i++) { if ($src[$i].Contains($tag)) { return $i + 1 } }; return -1 }
-$LA = LineOf '{A}'; $LB = (LineOf "Writeln('b')") + 2; $LC = LineOf '{C}'; $LD = LineOf '{D}'; $LE = LineOf '{E}'
+$LA = LineOf '{A}'; $LB = (LineOf "Writeln('b')") + 2; $LC = LineOf '{C}'; $LD = LineOf '{D}'; $LE = LineOf '{E}'; $LF = LineOf '{F}'
 
 Push-Location $Work
 try {
@@ -123,6 +142,8 @@ try {
   Check "B: control -- empty-on-handler fires on the bare handler (line $LB)" (Has 'empty-on-handler' $LB)
   Check "C: control -- marker with no handler still reported unused (line $LC)" (Has 'review-marker-unused' $LC)
   Check "D: control -- marker on a non-empty handler still reported unused (line $LD)" (Has 'review-marker-unused' $LD)
+  Check "A2: the A marker meets a live finding, not an exemption (line $LA)" (Has 'review-marker-stale' $LA)
+  Check "F: a plain comment between do and ; no longer silences the rule (line $LF)" (Has 'empty-on-handler' $LF)
   Check "E: control -- wrong @hash on a live finding still stale (line $LE)" (Has 'review-marker-stale' $LE)
   if ($script:Failed) {
     Write-Host '--- findings ---'
