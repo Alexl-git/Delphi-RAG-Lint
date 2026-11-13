@@ -4,7 +4,7 @@ unit DRagLint.Lint.RttiRules;
 
   Generated persistence classes (ORM3 COMMON\OBJECTS) must keep complete classic AND extended RTTI so
   a TWriter / TReader stream and a future TRttiContext-based ORM can read every component. The rule
-  flags the declarations that lose it. One rule id, four sub-kinds; the message starts with the
+  flags the declarations that lose it. One rule id, six sub-kinds; the message starts with the
   sub-kind and a colon so a reader (and the guard) can split them:
 
     enum-no-typeinfo             an enum whose explicit ordinals are not contiguous from 0 (no PTypeInfo,
@@ -17,6 +17,16 @@ unit DRagLint.Lint.RttiRules;
                                  TComponent descendants
     published-without-persistent a class with a published section, no TPersistent ancestor and not
                                  declared under $M+
+    published-generic-method     a generic method in a published section: no method-table entry, no RTTI
+                                 (wave v151 lane RTTI2, owner OQ11)
+    published-unstreamable-generic  a published property whose generic type TWriter skips: TArray<..>,
+                                 TProc / TFunc / TPredicate<..>, a generic class not reaching TPersistent,
+                                 or a type parameter constrained to record; info under DefineProperties
+
+  Generic types, measured with dcc64 and a runtime probe (Delphi 13): an open generic type has no RTTI
+  of its own, every instantiation does, and published properties of an instantiation keep their
+  property info. dcc rejects a published FIELD of a type-parameter type (E2217), so that is no rule;
+  an unconstrained or class-constrained type parameter depends on the instantiation and is not judged.
 
   Source-text rule over the indexed files (the directives and the explicit ordinals are not in the
   index); the index answers what a single file cannot: whether an ancestor chain reaches TPersistent /
@@ -37,8 +47,9 @@ const
   RTTI_UNAVAILABLE_RULE = 'rtti-unavailable';
 
 /// <summary>Finds the declarations of the project that lose classic or extended RTTI: enums
-/// without type info, published record properties, RTTI-narrowing directives and published
-/// sections on classes without TPersistent ancestry.</summary>
+/// without type info, published record properties, RTTI-narrowing directives, published
+/// sections on classes without TPersistent ancestry, generic methods in a published section and
+/// published properties whose generic type TWriter cannot stream.</summary>
 /// <param name="AStore">The project index; must not be nil. Supplies the file list, the file
 /// paths and the type facts of declarations outside the scanned file.</param>
 /// <param name="ALibraryStore">The platform library index, or nil. Without it an ancestor or a
@@ -70,6 +81,16 @@ const
   KIND_RECORD    = 'published-record-property';
   KIND_DIRECTIVE = 'rtti-narrowing-directive';
   KIND_NO_PERSIST = 'published-without-persistent';
+  KIND_GEN_METHOD = 'published-generic-method';
+  KIND_GEN_PROP   = 'published-unstreamable-generic';
+  { The generic dynamic array of System; a published property of it is tkDynArray, which TWriter skips. }
+  GENERIC_DYN_ARRAY = 'tarray';
+  { Generic reference-to-procedure types of System.SysUtils: tkInterface, no component implements them. }
+  BUILTIN_GENERIC_REFERENCES: array[0..2] of string = ('tproc', 'tfunc', 'tpredicate');
+  { Generic classes of System.Generics.Collections, none a TPersistent; judged without a library index. }
+  BUILTIN_GENERIC_CLASSES: array[0..12] of string = (
+    'tlist', 'tobjectlist', 'tdictionary', 'tobjectdictionary', 'tqueue', 'tobjectqueue', 'tstack',
+    'tobjectstack', 'tthreadlist', 'tthreadedqueue', 'tenumerable', 'tsortedlist', 'thashset');
   MAX_ANCESTRY_DEPTH = 64;
   SOURCE_EXTS: array[0..2] of string = ('.pas', '.dpr', '.dpk');
   { Library names judged without a library index. A name not listed and not indexed is UNKNOWN. }
@@ -117,6 +138,7 @@ type
   TRttiProp = record
     Name    : string;
     TypeName: string;
+    Generic : Boolean; { the declared type is an instantiation: TypeName<...> }
     Line    : Integer;
     Col     : Integer;
   end;
@@ -130,6 +152,7 @@ type
     MMinusLine  : Integer; { line of the explicit $M- / $TYPEINFO OFF in effect, 0 = none }
     HasPublished: Boolean;
     Props       : TArray<TRttiProp>; { published properties with a declared type }
+    RecordParams: TArray<string>;    { lower names of the class's type parameters constrained to record }
   end;
 
   { The per-run state every file scan shares; owned by CollectRttiUnavailable. }
@@ -173,7 +196,9 @@ type
     function TypeDeclEquals(AIndex: Integer): Integer;
     function ParseTypeDecl(AIndex: Integer): Integer;
     function ParseEnum(AIndex: Integer; const ANameTok: TRttiTok): Integer;
-    function ParseClass(AIndex: Integer; const ANameTok: TRttiTok): Integer;
+    function ParseClass(AIndex: Integer; const ANameTok: TRttiTok; const ARecordParams: TArray<string>): Integer;
+    function RecordConstrainedParams(AIndex: Integer): TArray<string>;
+    function UnstreamableGeneric(const AClass: TRttiClass; const AProp: TRttiProp; out AReason: string): Boolean;
     function ParseProperty(AIndex: Integer; var AClass: TRttiClass; const AVis: string): Integer;
     procedure CollectDefineProperties(AIndex: Integer; const AClassName: string);
     function Reaches(const AAncestor: string; ATargets: TDictionary<string, Boolean>; AUseMPlus: Boolean): TTri;
@@ -717,6 +742,7 @@ begin
       var P: TRttiProp;
       P.Name:= NameTok.Text;
       P.TypeName:= BareTypeName(TypeName);
+      P.Generic:= IsSym(J + 1, '<');
       P.Line:= NameTok.Line;
       P.Col:= NameTok.Col;
       AClass.Props:= AClass.Props + [P];
@@ -725,12 +751,13 @@ begin
   Result:= SkipToSemicolon(AIndex + 1);
 end;
 
-function TRttiScan.ParseClass(AIndex: Integer; const ANameTok: TRttiTok): Integer;
+function TRttiScan.ParseClass(AIndex: Integer; const ANameTok: TRttiTok; const ARecordParams: TArray<string>): Integer;
 var
   C: TRttiClass;
 begin
   C:= Default(TRttiClass);
   C.Name:= ANameTok.Text;
+  C.RecordParams:= ARecordParams;
   C.Line:= ANameTok.Line;
   C.Col:= ANameTok.Col;
   C.MPlus:= FMPlus;
@@ -788,6 +815,16 @@ begin
       Inc(J);
     end
     else if W = 'property' then J:= ParseProperty(J, C, Vis)
+    else if (Vis = VIS_PUBLISHED) and MatchStr(W, ['procedure', 'function']) and (Tok(J + 1).Kind = rtIdent)
+      and IsSym(J + 2, '<') then
+    begin
+      var M: TRttiTok:= Tok(J + 1);
+      Add(M.Line, M.Col, SEV_WARNING, C.Name + '.' + M.Text, Format('%s: %s.%s is a generic method in a published '
+        + 'section -- the compiler accepts it but gives it no method-table entry and no RTTI, so '
+        + 'MethodAddress(''%s''), event binding from a stream and TRttiType.GetMethods never see it; move it to '
+        + 'public, or publish a non-generic wrapper', [KIND_GEN_METHOD, C.Name, M.Text, M.Text]));
+      Inc(J, 2);
+    end
     else if W = 'record' then J:= SkipBody(J)
     else if (W = 'object') and not IsIdent(J - 1, 'of') then J:= SkipBody(J)
     else if OpensNestedType(J) then J:= SkipBody(J)
@@ -811,7 +848,7 @@ begin
   end
   else if IsIdent(J, 'class') and not IsIdent(J + 1, 'of') and not IsSym(J + 1, ';') then
   begin
-    if not IsIdent(J + 1, 'helper') then Exit(ParseClass(J, NameTok));
+    if not IsIdent(J + 1, 'helper') then Exit(ParseClass(J, NameTok, RecordConstrainedParams(AIndex + 1)));
     J:= SkipBody(J);
   end
   else if IsIdent(J, 'record') or IsIdent(J, 'object') or OpensNestedType(J) then
@@ -842,6 +879,71 @@ begin
     if T.Kind in [rtIdent, rtString] then Names.AddOrSetValue(LowerCase(T.Text), True);
     Inc(J);
   end;
+end;
+
+{ AIndex sits right after a type's name. When a type-parameter list `<...>` opens there, returns the
+  lower names of the parameters whose constraint list names `record` (`<K; V: record>` -> ['v'];
+  `<K, V: record>` -> ['k', 'v']: a constraint binds the comma group before it). }
+function TRttiScan.RecordConstrainedParams(AIndex: Integer): TArray<string>;
+begin
+  Result:= nil;
+  if not IsSym(AIndex, '<') then Exit;
+  var Close: Integer:= SkipGroup(AIndex, '<', '>');
+  var Group: TArray<string>:= nil;
+  var InConstraint: Boolean:= False;
+  var Depth: Integer:= 0;
+  for var K:= AIndex + 1 to Close - 2 do
+  begin
+    var T: TRttiTok:= FToks[K];
+    if T.Kind = rtSymbol then
+    begin
+      if T.Text = '<' then Inc(Depth)
+      else if T.Text = '>' then Dec(Depth)
+      else if (Depth = 0) and (T.Text = ':') then InConstraint:= True
+      else if (Depth = 0) and (T.Text = ';') then
+      begin
+        Group:= nil;
+        InConstraint:= False;
+      end;
+    end
+    else if (T.Kind = rtIdent) and (Depth = 0) then
+    begin
+      if not InConstraint then Group:= Group + [LowerCase(T.Text)]
+      else if SameText(T.Text, 'record') then Result:= Result + Group;
+    end;
+  end;
+end;
+
+{ A published property TWriter cannot stream because of its generic type: a type parameter of the
+  class constrained to record, TArray<..> (tkDynArray), a generic reference type (tkInterface that
+  no component implements) or a generic class that does not reach TPersistent. A generic record
+  instantiation is not judged here (published-record-property covers it); an unconstrained or
+  class-constrained type parameter depends on the instantiation and is never judged; a generic
+  class neither index places is unknown and silent. }
+function TRttiScan.UnstreamableGeneric(const AClass: TRttiClass; const AProp: TRttiProp; out AReason: string): Boolean;
+var
+  Kind, Anc: string;
+begin
+  AReason:= '';
+  var Lc: string:= LowerCase(AProp.TypeName);
+  if not AProp.Generic then
+  begin
+    for var P in AClass.RecordParams do
+      if P = Lc then AReason:= Format('its type parameter %s is constrained to record, so every instantiation '
+        + 'is a record property', [AProp.TypeName]);
+  end
+  else if Lc = GENERIC_DYN_ARRAY then AReason:= 'TArray<..> is a dynamic array'
+  else if InList(Lc, BUILTIN_GENERIC_REFERENCES) then
+    AReason:= Format('%s<..> is a reference-to-procedure type (an interface no component implements)', [AProp.TypeName])
+  else
+  begin
+    var IsClass: Boolean:= InList(Lc, BUILTIN_GENERIC_CLASSES);
+    if not IsClass then
+      IsClass:= (if FLocalKind.TryGetValue(Lc, Kind) then Kind = 'class' else StoreHeritage(AProp.TypeName, Anc));
+    if IsClass and (InList(Lc, BUILTIN_GENERIC_CLASSES) or (Reaches(AProp.TypeName, FPersistent, True) = triNo)) then
+      AReason:= Format('%s<..> is a class that does not descend from TPersistent', [AProp.TypeName]);
+  end;
+  Result:= AReason <> '';
 end;
 
 function TRttiScan.StoreHeritage(const AName: string; out AAncestor: string): Boolean;
@@ -951,6 +1053,7 @@ end;
 procedure TRttiScan.Evaluate;
 var
   Values : string;
+  Reason : string;
   DefSet : TDictionary<string, Boolean>;
 begin
   var MMinusDone: TDictionary<Integer, Boolean>:= TDictionary<Integer, Boolean>.Create;
@@ -994,6 +1097,18 @@ begin
               + 'type %s -- TWriter.WriteComponent skips it silently and the value is lost from the stream; stream it '
               + 'in an overridden DefineProperties (Filer.DefineProperty / DefineBinaryProperty)',
               [KIND_RECORD, C.Name, P.Name, P.TypeName]));
+        end
+        else if UnstreamableGeneric(C, P, Reason) then
+        begin
+          if (DefSet <> nil) and DefSet.ContainsKey(LowerCase(P.Name)) then
+            Add(P.Line, P.Col, SEV_INFO, C.Name + '.' + P.Name, Format('%s: published property %s.%s cannot be '
+              + 'streamed by TWriter: %s; %s.DefineProperties names it, so classic streaming is covered by hand',
+              [KIND_GEN_PROP, C.Name, P.Name, Reason, C.Name]))
+          else
+            Add(P.Line, P.Col, SEV_WARNING, C.Name + '.' + P.Name, Format('%s: published property %s.%s cannot be '
+              + 'streamed by TWriter: %s -- WriteComponent skips it silently and the value is lost from the stream; '
+              + 'stream it in an overridden DefineProperties, or make it public if only code reads it',
+              [KIND_GEN_PROP, C.Name, P.Name, Reason]));
         end;
       end;
     end;
