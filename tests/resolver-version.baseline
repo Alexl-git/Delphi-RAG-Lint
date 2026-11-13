@@ -740,7 +740,9 @@
 #   2026-11-12 152b INT2 re-pin (same unreleased 1.25.0 bump, no resolve change): comment-only -- BKL O3 doc-drift regen of /// facts blocks in CallResolver / Core.Model / Core.Encoding / Storage.SQLite / Query.Callers, CLI.pas dl:ok magic-literal comment
 # superseded: 1.25.0-alpha|36e385479caa4e67f719678648683e29dfd74a82fa184915fc0ac55c45f13782
 #   2026-11-12 152c INT3b 1.25.0 -> 1.26.0-alpha: refs to symbols declared in a code include of a used unit bind (RINC TCallResolver.BuildIncludeScope); readers GetIncludeHosts + GetIncludeTopLevelSymbols added to the manifest. Rides the 1.37.0 extractor re-parse.
-1.26.0-alpha|bcff5f4f6857373b98731e37d5ba15287ec42f57f71cfbe22e4bd36885dfd8bb
+# superseded: 1.26.0-alpha|bcff5f4f6857373b98731e37d5ba15287ec42f57f71cfbe22e4bd36885dfd8bb
+#   2026-11-12 152c INT3b re-pin (same unreleased 1.26.0 bump, ONE per wave): RINC2 b -- the host binds its own refs to what its implementation-section include declares (CallResolver, users still do not see it).
+1.26.0-alpha|115041bf16f7a47387387a3d66e8536e82877741c0341f741c65a76f22433d47
 #   2026-11-06 int2: hash moved WITHOUT a bump from 631322c4: the dl:ok comment on ResolveCallTargets re-stamped by the lint sweep, no code change.
 # superseded: 1.19.0-alpha|e4c14c16d87b21940e6ce6017456b8446a5cc516e342b72b816e3e161612ecba
 #   2026-11-06 1.19.0 -> 1.20.0-alpha (lanes facts + rename): ref_types (static type of a reference), ref_receivers (receiver link of a ref), references in initialization / finalization attributed to the section symbol. Additive, no SCHEMA_VERSION move. Remedy: index --all --resolve-only.

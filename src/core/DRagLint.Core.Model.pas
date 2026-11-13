@@ -274,7 +274,14 @@ const
     * Flow.Lattices: Automation named-argument values are read, labels are not (lane GF1).
     * grammar: tree-sitter-delphi13 v1.4.10 -- a field may be named Private / Protected /
       Public / Published (lane GR3). }
-  DRAGLINT_EXTRACTOR_VERSION = '1.37.0-alpha';
+  { 1.37.0 -> 1.38.0 (2026-11-12, 1.50, lane/152-INT3b -- wave 152c; 1.37 was never deployed, so the
+    release still has ONE re-parse):
+    * Parser.Delphi13: a bare parameterless routine header that follows a type section in an include
+      fragment (loose ERROR tokens at the fragment's top level) is emitted as a symbol (lane RINC2 a).
+    * Core.Indexer: a uses-fragment include (every file_includes site in_uses = 1) is not a parse error
+      -- no DIAG, no per-file error count, not in parse-errors=; the verdict no longer depends on the
+      walk order (lanes RINC item 2, RINC2 c). }
+  DRAGLINT_EXTRACTOR_VERSION = '1.38.0-alpha';
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
   /// Deliberately SEPARATE from <see cref="DRAGLINT_EXTRACTOR_VERSION"/>.</summary>

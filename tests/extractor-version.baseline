@@ -1223,4 +1223,6 @@
 #   Superseded: 1.37.0-alpha|3744504d7fc3ac508ec2b86445513f50721bcc55e8f7d4201a05245f78ed0dfa
 #   2026-11-12 152c INT3b re-pin (same unreleased 1.37.0 bump, never deployed; its ONE re-parse is still ahead): Core.Indexer.pas (RINC item 2) drops the parse-error DIAG / per-file error count / parse-errors= of a uses-fragment include (every file_includes site in_uses=1); no symbol / ref / uses / call-edge row changes (RINC copies 0 diffs). Comment-only elsewhere.
 #   Superseded: 1.37.0-alpha|76f35ddad4fe6e537d10cc9d145cc5c61845abcff35670bcda7fe5c4c607c70d
-1.37.0-alpha|2fab6f58f70fb2447a2388295ba91dac543d0f533055ff089852b2c9b150453d
+#   2026-11-12 152c INT3b bump 1.37.0 -> 1.38.0 (1.37 never deployed; still ONE re-parse for 1.50): RINC2 a Parser.Delphi13 emits a bare routine header after a type section in an include fragment (EXTRACTION yes); Core.Indexer fragment verdict order-independent (RINC2 c) on top of RINC item 2.
+#   Superseded: 1.37.0-alpha|2fab6f58f70fb2447a2388295ba91dac543d0f533055ff089852b2c9b150453d
+1.38.0-alpha|5b50c8c17fc03077dcd99d62af88f5a83f4a4dcdb496ebae9610c96175df8f8f
