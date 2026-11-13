@@ -1,0 +1,7 @@
+# v151: Format with a float specifier and no TFormatSettings fires; %d, the 3-argument overload (24), %.0f (25) do not
+locale-sensitive-conversion 21
+locale-sensitive-conversion 22
+locale-sensitive-conversion 26
+!locale-sensitive-conversion 23
+!locale-sensitive-conversion 24
+!locale-sensitive-conversion 25

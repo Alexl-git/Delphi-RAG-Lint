@@ -1,0 +1,8 @@
+# v151: GetWindowLong/SetWindowLong/GetClassLong and thread Resume/Suspend fire; GetWindowLongPtr (27) does not
+deprecated-rtl-function 15
+deprecated-rtl-function 16
+deprecated-rtl-function 17
+deprecated-rtl-function 18
+deprecated-rtl-function 19
+deprecated-rtl-function 20
+!deprecated-rtl-function 27

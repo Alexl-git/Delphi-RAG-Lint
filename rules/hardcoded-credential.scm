@@ -17,3 +17,14 @@
   (#not-match? @val "^''$")
   (#not-match? @val "\\$\\(")
   (#not-match? @val "\\.\\.\\."))
+; v151 WID-SCM: property assignment (Conn.Password := 'x', Params.ApiKey := 'k').
+; The member name must END in the secret word: PasswordChar / PasswordHint / SecretLabel
+; are display settings, not secrets.
+((assignment
+  lhs: (exprDot rhs: (identifier) @name)
+  operator: (kAssign)
+  rhs: (literalString) @val) @warn
+  (#match? @name "(?i)(password|passwd|pwd|secret|apikey|api_key|(auth|access|refresh|bearer|session|api)_?token)$")
+  (#not-match? @val "^''$")
+  (#not-match? @val "\\$\\(")
+  (#not-match? @val "\\.\\.\\."))

@@ -657,6 +657,109 @@ begin
   Result:= [ReplaceEdit(AFinding.FilePath, AFinding.StartLine, AFinding.StartCol, Span, Match.Groups[1].Value)];
 end;
 
+{ ---- empty-finally, format-string-not-formatted, shared-marker-legacy-shape (v151 WID-SCM) ---- }
+
+{ A source line holding only AWord (trailing `;` and a // comment tolerated). }
+function IsWordLine(const ALine, AWord: string): Boolean;
+begin
+  Result:= TRegEx.IsMatch(ALine, '^\s*' + AWord + '\s*;?\s*(//.*)?$', [roIgnoreCase]);
+end;
+
+{ One whole-line delete guarded by the line's current trimmed text. }
+function DeleteLineEdit(const APath: string; ALine: Integer; const AText: string): TTextEdit;
+begin
+  Result:= Default(TTextEdit);
+  Result.FilePath  := APath;
+  Result.Kind      := tekDeleteLines;
+  Result.Line      := ALine;
+  Result.EndLine   := ALine;
+  Result.ExpectLine:= ALine;
+  Result.ExpectText:= Trim(AText);
+end;
+
+{ empty-finally: the aligned shape
+      try
+        <statements>;
+      finally
+      end;
+  is unwrapped -- the `try`, `finally` and `end;` lines are deleted and the body stays. The nearest
+  `try` line with the finding's indent must be reached through strictly deeper lines only; the line
+  before `try` must end a statement (`;`) or open a block (`begin`), so a `try` that is the body of
+  `if .. then` / `else` / `do` is left alone; the last body line must end in `;`. }
+function FixEmptyFinally(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
+var
+  Line  : string;
+  Ind   : Integer;
+  I     : Integer;
+  TryAt : Integer;
+  Prev  : string;
+  Body  : string;
+begin
+  Result:= nil;
+  if not LineOf(AFinding, ALines, Line) then Exit;
+  if (AFinding.StartLine >= ALines.Count) or not IsWordLine(Line, 'finally') then Exit;
+  if not TRegEx.IsMatch(ALines[AFinding.StartLine], '^\s*end\s*;\s*(//.*)?$', [roIgnoreCase]) then Exit;
+  Ind:= Length(IndentOf(Line));
+  if Length(IndentOf(ALines[AFinding.StartLine])) <> Ind then Exit;
+  TryAt:= 0;
+  for I:= AFinding.StartLine - 2 downto 0 do
+  begin
+    if Trim(ALines[I]) = '' then Continue;
+    if Length(IndentOf(ALines[I])) < Ind then Exit;
+    if Length(IndentOf(ALines[I])) = Ind then
+    begin
+      if IsWordLine(ALines[I], 'try') and (Pos(';', Trim(ALines[I])) = 0) then TryAt:= I + 1;
+      Break;
+    end;
+  end;
+  if (TryAt < 2) or (TryAt >= AFinding.StartLine - 1) then Exit;
+  Prev:= Trim(ALines[TryAt - 2]);
+  if not (Prev.EndsWith(';') or SameText(Prev, 'begin')) then Exit;
+  Body:= Trim(ALines[AFinding.StartLine - 2]);
+  if (Body = '') or not Body.EndsWith(';') or Body.Contains('//') or Body.Contains('{') then Exit;
+  Result:= [DeleteLineEdit(AFinding.FilePath, AFinding.StartLine + 1, ALines[AFinding.StartLine]),
+            DeleteLineEdit(AFinding.FilePath, AFinding.StartLine, Line),
+            DeleteLineEdit(AFinding.FilePath, TryAt, ALines[TryAt - 1])];
+end;
+
+{ format-string-not-formatted: Format('literal', []) with an EMPTY argument array becomes the literal.
+  Any non-empty array is left alone (its arguments may have side effects or be a real mistake). }
+function FixFormatNotFormatted(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
+var
+  Line : string;
+  Span : string;
+  Match: TMatch;
+begin
+  Result:= nil;
+  if not LineOf(AFinding, ALines, Line) then Exit;
+  Span:= SpanText(AFinding, Line);
+  Match:= TRegEx.Match(Span, '^(?:Wide)?Format\s*\(\s*(''(?:[^'']|'''')*'')\s*,\s*\[\s*\]\s*\)$', [roIgnoreCase]);
+  if (not Match.Success) or Match.Groups[1].Value.Contains('%') then Exit;
+  Result:= [ReplaceEdit(AFinding.FilePath, AFinding.StartLine, AFinding.StartCol, Span, Match.Groups[1].Value)];
+end;
+
+{ shared-marker-legacy-shape: `// note // dl:shared A, B` is rewritten to `// dl:shared A, B // note`.
+  RISKY (opt-in): the rule cannot tell this from prose such as `// see // dl:shared below` (R12), and the
+  rewrite would turn that prose into a marker naming `below`. }
+function FixSharedMarkerLegacy(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
+var
+  Line : string;
+  Span : string;
+  Match: TMatch;
+  Note : string;
+  Tail : string;
+begin
+  Result:= nil;
+  if not LineOf(AFinding, ALines, Line) then Exit;
+  Span:= TrimRight(Copy(Line, AFinding.StartCol, MaxInt)); // a line comment runs to the end of the line; the node may carry the CR
+  Match:= TRegEx.Match(Span, '^//\s*(.*?)\s*//\s*(dl:shared\s+\S[^/]*?)\s*(//.*)?$', [roIgnoreCase]);
+  if (not Match.Success) or (Match.Groups[1].Value = '') then Exit;
+  Note:= Match.Groups[1].Value;
+  Tail:= if Match.Groups.Count > 3 then Match.Groups[3].Value else ''; // an unmatched trailing group may be absent
+  Result:= [ReplaceEdit(AFinding.FilePath, AFinding.StartLine, AFinding.StartCol, Span,
+    '// ' + Match.Groups[2].Value + ' // ' + Note + (if Tail <> '' then ' ' + Tail else ''))];
+end;
+
 initialization
   RegisterFixer('mixed-case-hex', FixMixedCaseHex);
   RegisterFixer('unreadable-literal', FixUnreadableLiteral);
@@ -674,5 +777,8 @@ initialization
   RegisterFixer('double-dictionary-lookup', FixDoubleDictionary, True);
   RegisterFixer('case-same-branches', FixCaseSameBranches);
   RegisterFixer('enum-bare-read-scoped', FixEnumBareRead);
+  RegisterFixer('empty-finally', FixEmptyFinally);
+  RegisterFixer('format-string-not-formatted', FixFormatNotFormatted);
+  RegisterFixer('shared-marker-legacy-shape', FixSharedMarkerLegacy, True);
 
 end.

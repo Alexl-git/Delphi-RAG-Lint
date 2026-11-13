@@ -1,0 +1,9 @@
+# v151: code page, label/goto targets and array bounds are not magic numbers; case-arm literals still are
+large-magic-number 24
+large-magic-number 25
+!large-magic-number 6
+!large-magic-number 9
+!large-magic-number 10
+!large-magic-number 16
+!large-magic-number 21
+!large-magic-number 22
