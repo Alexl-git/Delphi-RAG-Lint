@@ -3,7 +3,7 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
-## v1.50.0-alpha -- unreleased
+## v1.50.0-alpha -- 2026-11-13
 
 Everything since v1.46.0-alpha (2026-11-07): waves 147, 148, 149, 151 and 152, released together as 1.50.0-alpha (owner ruling 2026-11-11; the unreleased 1.47.0 / 1.48.0 / 1.49.0 sections are folded in here). Versions: extractor -> 1.34.0 (147) -> 1.35.0 (149) -> 1.36.0-alpha (151); resolver -> 1.22.0 (147) -> 1.23.0 (149) -> 1.24.0-alpha (151); index SCHEMA_VERSION 23 -> 25 at 151 (two additive tables; SCHEMA_READ_MIN stays 23; 147's refs.external_kind and 149's file_includes / dfm_objects / pp_regions are additive without a schema bump). ONE re-parse of every DB after the deploy. Grammar v1.4.4 + v1.4.5 + v1.4.7, tree-sitter-dfm 1.2.0.
 
