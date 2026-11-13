@@ -150,7 +150,7 @@ type
     /// <returns>The store; never nil.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Report.CycleEdge.CallRefusal (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.FinalOrderWhy (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PickExistingLeaf (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutineInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutinesInversion (DRagLint.Report.CycleEdge.pas) (+7 more)</para>
+    /// <para>Called from: DRagLint.Report.CycleEdge.CallRefusal (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.FinalStateSeen (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PickExistingLeaf (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutineInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutinesInversion (DRagLint.Report.CycleEdge.pas) (+7 more)</para>
     /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceSource.BindName"/>
     /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FidOfStem"/>
     /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FileLines"/>
@@ -164,7 +164,7 @@ type
     /// <returns>The lines, empty when the file is gone.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Report.CycleEdge.FinalOrderWhy (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.OverloadsTellApart (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutineInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutinesInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.ShadowRefusal (DRagLint.Report.CycleEdge.pas) (+4 more)</para>
+    /// <para>Called from: DRagLint.Report.CycleEdge.FinalStateSeen (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.OverloadsTellApart (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutineInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutinesInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.ShadowRefusal (DRagLint.Report.CycleEdge.pas) (+4 more)</para>
     /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceSource.BindName"/>
     /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FidOfStem"/>
     /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceSource.IsSccStem"/>
@@ -197,7 +197,7 @@ type
     /// <returns>False when no visible declaration has that name.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Report.CycleEdge.FinalOrderWhy (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.ShadowRefusal (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.SignatureTypes (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TMemberPlan.AddLeafUse (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TSurfaceBuilder.BindBare (DRagLint.Report.CycleEdge.pas) (+3 more)</para>
+    /// <para>Called from: DRagLint.Report.CycleEdge.FinalStateSeen (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.ShadowRefusal (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.SignatureTypes (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TMemberPlan.AddLeafUse (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TSurfaceBuilder.BindBare (DRagLint.Report.CycleEdge.pas) (+3 more)</para>
     /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FidOfStem"/>
     /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FileLines"/>
     /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceSource.IsSccStem"/>
@@ -505,6 +505,10 @@ type
     /// <summary>R1 (lane CYC3): the proof line when a call of the consumer's initialization section is safe because the
     /// declaring unit initializes first in every program of the index (ProveInitOrderInversion); '' otherwise.</summary>
     InitOrderProof: string;
+    /// <summary>R1 (lane FINPROOF): the proof line when a call run from the consumer's finalization section is safe
+    /// although the declaring unit's finalization can be seen, because that unit is finalized after the consumer in
+    /// every program of the index (FinalOrderVerdict); '' otherwise.</summary>
+    FinalOrderProof: string;
     /// <summary>R1 (plan B3): every routine inverted, in first-call order; one entry for a single
     /// routine, which then repeats RoutineId .. VarDecl. The singular fields always name the first.</summary>
     Routines: TArray<TInvertedRoutine>;
@@ -1110,6 +1114,31 @@ function InitOrderWhy(const pLines: TArray<string>; const pRef: TEdgeRef; const 
 /// <remarks>Not thread-safe; reads the index on every flagged call (rare: only calls InitOrderWhy flags).</remarks>
 function InitOrderVerdict(const pStore: ISymbolStore; const pWhy, pFromUnit, pDeclUnit: string; pPredicted: Boolean;
   var pProof: string): string;
+
+/// <summary>Lane FINPROOF (OQ19): may a call that runs from the consumer's finalization section (in it, or in a
+/// routine the section names) reach the declaring unit once the uses rows consumer -&gt; declaring unit are cut?
+/// Safe when finalizing the declaring unit cannot be seen (no statement in its finalization section and no
+/// unit-level variable of a type that needs finalization), or when the declaring unit is finalized AFTER the
+/// consumer: finalization runs in the exact reverse of the initialization order, so that holds when
+/// DRagLint.Lint.InitSections.ProveInitOrderInversion proves the declaring unit initializes first.</summary>
+/// <param name="pSource">The index access.</param>
+/// <param name="pLines">The consumer's source lines.</param>
+/// <param name="pRef">The call: its line and the routine that holds it.</param>
+/// <param name="pFromUnit">The consumer's unit name.</param>
+/// <param name="pDeclFid">The declaring unit's file id; its file name gives the unit name the texts use.</param>
+/// <param name="pPredicted">True on the graph predicted after Part A: never proved, the reason says it is
+/// re-checked.</param>
+/// <param name="pProof">Receives the "finalization order:" proof line when the call is safe only by the order;
+/// left alone otherwise.</param>
+/// <returns>'' when the call is safe; else the refusal reason (kind finalization-order). When the consumer no
+/// longer reaches the declaring unit after the cut (always so in a two-unit cycle) the declaring unit is certainly
+/// finalized first and the reason says so; otherwise it says the unit MAY be finalized first and why the order is
+/// not proved.</returns>
+/// <remarks>Not thread-safe; reads the index only for a call the section runs. The proof is a sound subset with
+/// default refuse (see ProveInitOrderInversion); the check reads the declaring unit only, not what the routine
+/// calls.</remarks>
+function FinalOrderVerdict(const pSource: IEdgeSurfaceSource; const pLines: TArray<string>; const pRef: TEdgeRef;
+  const pFromUnit: string; pDeclFid: Int64; pPredicted: Boolean; var pProof: string): string;
 
 /// <summary>The declaring unit's edit: pAssigns as the first statements of its initialization
 /// section, creating the section when there is none.</summary>
@@ -2000,7 +2029,7 @@ end;
 { J4, conservative: the call runs in the consumer's initialization section, or
   that section names the routine that holds the call (as code: a comment naming it is not a use).
   Lane cyc4: the section ends at `finalization`: code there runs long after every initialization, so
-  the variable is assigned by then (FinalOrderWhy holds what can go wrong there instead). }
+  the variable is assigned by then (FinalOrderVerdict holds what can go wrong there instead). }
 function InitOrderWhy(const pLines: TArray<string>; const pRef: TEdgeRef; const pUnit: string): string;
 begin
   Result:= '';
@@ -2034,15 +2063,28 @@ begin
   Result:= '';
 end;
 
-{ Lane cyc4: why the state of the declaring unit may be gone when a routine runs from the consumer's
-  finalization section. The declaring unit keeps using the consumer after the cut, so it initializes
-  later and FINALIZES FIRST, whatever the order was before. Safe only when finalizing it does nothing
-  the routine could see: no statement in its finalization section and no unit-level variable the
-  compiler finalizes (a string, an interface, a dynamic array, a record ...). The types below are the
-  ones known to need no finalization; any other type counts as managed, unless it binds to a class or a
-  plain procedural type. '' when safe, or when the section does not run the call at all. }
-function FinalOrderWhy(const pSource: IEdgeSurfaceSource; const pLines: TArray<string>; const pRef: TEdgeRef;
-  const pUnit: string; pDeclFid: Int64; const pDeclUnit: string): string;
+{ Lane cyc4: does the call run from the consumer's finalization section -- in it, or in a routine the
+  section names (as code)? }
+function RunsAtFinalization(const pLines: TArray<string>; const pRef: TEdgeRef): Boolean;
+begin
+  var Code:= CodeOnlyLines(pLines);
+  var Fin := LastKeywordLine(Code, 'finalization');
+  if Fin = 0 then Exit(False);
+  var Stop:= LastKeywordLine(Code, 'end.');
+  if Stop < Fin then Stop:= Length(Code) + 1;
+  Result:= (pRef.Line > Fin) and (pRef.Line < Stop);
+  var Encl:= pRef.Enclosing.Substring(pRef.Enclosing.LastIndexOf('.') + 1);
+  if Result or (Encl = '') then Exit;
+  for var L:= Fin + 1 to Stop - 1 do
+    if TRegEx.IsMatch(LineOf(Code, L), '\b' + TRegEx.Escape(Encl) + '\b', [roIgnoreCase]) then Exit(True);
+end;
+
+{ Lane cyc4: what a routine of the declaring unit could see of that unit's finalization: a statement in
+  its finalization section, or a unit-level variable the compiler finalizes (a string, an interface, a
+  dynamic array, a record ...). The types below are the ones known to need no finalization; any other
+  type counts as managed, unless it binds to a class or a plain procedural type. '' when nothing can be
+  seen; else the clause, worded to follow "after which" / ": ". }
+function FinalStateSeen(const pSource: IEdgeSurfaceSource; pDeclFid: Int64): string;
 const
   CUnmanagedType = '^(Integer|Cardinal|Boolean|ByteBool|WordBool|LongBool|Byte|Word|ShortInt|SmallInt|LongInt|LongWord|Int8|' +
     'Int16|Int32|Int64|UInt8|UInt16|UInt32|UInt64|NativeInt|NativeUInt|Single|Double|Extended|Real|Currency|Char|AnsiChar|' +
@@ -2052,34 +2094,58 @@ var
   Stem : string;
 begin
   Result:= '';
-  var Code:= CodeOnlyLines(pLines);
-  var Fin := LastKeywordLine(Code, 'finalization');
-  if Fin = 0 then Exit;
-  var Stop:= LastKeywordLine(Code, 'end.');
-  if Stop < Fin then Stop:= Length(Code) + 1;
-  var Runs:= (pRef.Line > Fin) and (pRef.Line < Stop);
-  var Encl:= pRef.Enclosing.Substring(pRef.Enclosing.LastIndexOf('.') + 1);
-  if (not Runs) and (Encl <> '') then
-    for var L:= Fin + 1 to Stop - 1 do
-      if TRegEx.IsMatch(LineOf(Code, L), '\b' + TRegEx.Escape(Encl) + '\b', [roIgnoreCase]) then Runs:= True;
-  if not Runs then Exit;
-  var Lead:= Format('the call at line %d runs from the finalization section of `%s`, and after the cut `%s` is ' +
-    'finalized first: ', [pRef.Line, pUnit, pDeclUnit]);
   var DeclCode:= CodeOnlyLines(pSource.FileLines(pDeclFid));
   var DeclFin := LastKeywordLine(DeclCode, 'finalization');
   var DeclEnd := LastKeywordLine(DeclCode, 'end.');
   if DeclFin > 0 then
     for var L:= DeclFin + 1 to DeclEnd - 1 do
       if Trim(LineOf(DeclCode, L)) <> '' then
-        Exit(Lead + Format('its finalization section (line %d) has already run', [L]));
+        Exit(Format('its finalization section (line %d) has already run', [L]));
   for var S in pSource.Store.FindSymbolsByFile(pSource.Store.GetFilePath(pDeclFid)) do
   begin
     if S.Kind <> skVarDecl then Continue;
     var T:= Trim(S.Signature);
     if TRegEx.IsMatch(T, CUnmanagedType, [roIgnoreCase]) or TRegEx.IsMatch(T, '^(procedure|function)\b', [roIgnoreCase]) then Continue;
     if pSource.BindName(pDeclFid, S.StartLine, T, Owner, Stem) and (Owner.Kind = skClass) then Continue;
-    Exit(Lead + Format('its variable `%s` (`%s`) may be finalized already', [S.Name, T]));
+    Exit(Format('its variable `%s` (`%s`) may be finalized already', [S.Name, T]));
   end;
+end;
+
+{ Lane FINPROOF (OQ19). Finalization runs in the exact reverse of the initialization order (System.FinalizeUnits
+  walks the unit table back from the last unit initialized; dcc-checked by run_cyclefix_final_order_proof_dcc.ps1
+  M), so "the declaring unit initializes first in every program, before and after the cut" is "it is finalized
+  after the consumer". The init-order proof's own texts are reused: its proof line minus the "init order: " head
+  and the init-order-hazard tail, and its reasons after "and". A reason that says the consumer no longer reaches
+  the declaring unit means the declaring unit is CERTAINLY finalized first: the cyc4 wording stays for it. }
+function FinalOrderVerdict(const pSource: IEdgeSurfaceSource; const pLines: TArray<string>; const pRef: TEdgeRef;
+  const pFromUnit: string; pDeclFid: Int64; pPredicted: Boolean; var pProof: string): string;
+const
+  CInitHead    = 'init order: ';
+  CInitTail    = '. This holds for this uses order';
+  CNoPath      = 'after the cut ';
+  CReverse     = 'finalization runs in the reverse order of initialization';
+  CRecheck     = '; re-checked against the program order once Part A is applied';
+begin
+  Result:= '';
+  var DeclUnit:= ChangeFileExt(ExtractFileName(pSource.Store.GetFilePath(pDeclFid)), '');
+  if not RunsAtFinalization(pLines, pRef) then Exit;
+  var Seen:= FinalStateSeen(pSource, pDeclFid);
+  if Seen = '' then Exit;
+  var Certain:= Format('the call at line %d runs from the finalization section of `%s`, and after the cut `%s` is ' +
+    'finalized first: %s', [pRef.Line, pFromUnit, DeclUnit, Seen]);
+  var Maybe:= Format('the call at line %d runs from the finalization section of `%s`, and `%s` may be finalized ' +
+    'first, after which %s', [pRef.Line, pFromUnit, DeclUnit, Seen]);
+  if pPredicted then Exit(Maybe + CRecheck);
+  var Proof:= ProveInitOrderInversion(pSource.Store, pFromUnit, DeclUnit);
+  if not Proof.Proved then
+    Exit(if Proof.Text.StartsWith(CNoPath) then Certain else Maybe + '; ' + CReverse + ', and ' + Proof.Text);
+  var Body:= Proof.Text;
+  if Body.StartsWith(CInitHead) then Body:= Body.Substring(Length(CInitHead));
+  var Tail:= Body.IndexOf(CInitTail);
+  if Tail >= 0 then Body:= Body.Substring(0, Tail);
+  pProof:= Format('finalization order: `%s` is finalized after `%s`: %s, and %s. This holds for this uses order ' +
+    'only: a later uses change that reverses it makes the call run after `%s` is finalized.',
+    [DeclUnit, pFromUnit, CReverse, Body, DeclUnit]);
 end;
 
 { The declaring unit's edit: the assignments (B3: one per inverted routine) as the first
@@ -2564,10 +2630,11 @@ end;
   pQualified receives the lines that name the inverted routine qualified.
   Lane cyc4: a routine passed as a whole argument (`F(x, Foo)`) is redirected too (see NameIsTheRoutine), a
   `B.G` the plan moves (pSurface.QualifiedMoved) is rewritten, and a call that runs from the finalization
-  section refuses finalization-order when the declaring unit's finalization can be seen (FinalOrderWhy). }
+  section refuses finalization-order when the declaring unit's finalization can be seen and the program order does
+  not prove it is finalized after the consumer (FinalOrderVerdict, lane FINPROOF). }
 function CallRefusal(const pSource: IEdgeSurfaceSource; const pSurface: TEdgeSurface; pFromFid: Int64;
   const pLines: TArray<string>; const pFromUnit, pDeclUnit: string; pQualified: TList<Integer>;
-  const pRoutine: TSymbol; pDeclFid: Int64; var pProof: string): TRecipeRefusal;
+  const pRoutine: TSymbol; pDeclFid: Int64; var pProof, pFinProof: string): TRecipeRefusal;
 var
   Member: string;
 begin
@@ -2591,7 +2658,7 @@ begin
     if Encl.Id > 0 then Ref.Enclosing:= Encl.Name;
     var QWhy:= InitOrderVerdict(pSource.Store, InitOrderWhy(pLines, Ref, pFromUnit), pFromUnit, pDeclUnit, pSurface.Predicted, pProof);
     if QWhy <> '' then Exit(MakeRefusal('init-order', Name, pFromFid, L, QWhy));
-    QWhy:= FinalOrderWhy(pSource, pLines, Ref, pFromUnit, pDeclFid, pDeclUnit);
+    QWhy:= FinalOrderVerdict(pSource, pLines, Ref, pFromUnit, pDeclFid, pSurface.Predicted, pFinProof);
     if QWhy <> '' then Exit(MakeRefusal('finalization-order', Name, pFromFid, L, QWhy));
   end;
   for var R in pSurface.Refs do
@@ -2602,7 +2669,7 @@ begin
         'calling it (`%s`)', [R.Line, Name, R.LineText])));
     var Why:= InitOrderVerdict(pSource.Store, InitOrderWhy(pLines, R, pFromUnit), pFromUnit, pDeclUnit, pSurface.Predicted, pProof);
     if Why <> '' then Exit(MakeRefusal('init-order', Name, pFromFid, R.Line, Why));
-    Why:= FinalOrderWhy(pSource, pLines, R, pFromUnit, pDeclFid, pDeclUnit);
+    Why:= FinalOrderVerdict(pSource, pLines, R, pFromUnit, pDeclFid, pSurface.Predicted, pFinProof);
     if Why <> '' then Exit(MakeRefusal('finalization-order', Name, pFromFid, R.Line, Why));
   end;
 end;
@@ -2618,9 +2685,11 @@ var
   Conv     : string;
   Why      : string;
   Proof    : string;
+  FinProof : string;
 begin
   Result  := Default(TRecipeSteps);
   Proof   := '';
+  FinProof:= '';
   var FromFid:= pSource.FidOfStem(pSurface.FromStem);
   var DeclFid:= pSource.FidOfStem(pSurface.ToStem);
   var Name   := pSurface.RoutineName;
@@ -2633,7 +2702,7 @@ begin
     if pRefusal.Kind = '' then
       pRefusal:= CallRefusal(pSource, pSurface, FromFid, Lines,
         ChangeFileExt(ExtractFileName(pSource.Store.GetFilePath(FromFid)), ''),
-        ChangeFileExt(ExtractFileName(pSource.Store.GetFilePath(DeclFid)), ''), Qualified, Routine, DeclFid, Proof);
+        ChangeFileExt(ExtractFileName(pSource.Store.GetFilePath(DeclFid)), ''), Qualified, Routine, DeclFid, Proof, FinProof);
     if (pRefusal.Kind = '') and not DeclConvention(pSource.FileLines(DeclFid), Routine.StartLine, Name, Conv, Why) then
       pRefusal:= MakeRefusal('unsupported-directive', Name, DeclFid, Routine.StartLine, Format('`%s`: %s', [Name, Why]));
     if pRefusal.Kind <> '' then Exit;
@@ -2643,6 +2712,7 @@ begin
     Result.DeclStem   := pSurface.ToStem;
     Result.ConsumerFid:= FromFid;
     Result.InitOrderProof:= Proof;
+    Result.FinalOrderProof:= FinProof;
     Result.PtrVar     := Name + 'Ptr' + (if pSuffix > 1 then IntToStr(pSuffix) else '');
     var Hider: TSymbol;
     if PointerHider(pSource, Result.PtrVar, FromFid, DeclFid, Hider) then
@@ -2769,6 +2839,7 @@ begin
     begin
       Result.Routines:= Result.Routines + P.Routines;
       if Result.InitOrderProof = '' then Result.InitOrderProof:= P.InitOrderProof;
+      if Result.FinalOrderProof = '' then Result.FinalOrderProof:= P.FinalOrderProof;
       if (P.LeafStem <> Result.LeafStem) or (Length(pMovedTypes) > 0) then Result.LeafStem:= '';
       for var R in P.Edits do
         if (R.Fid = Result.ConsumerFid) and not Lines.Contains(R.Line) then Lines.Add(R.Line);

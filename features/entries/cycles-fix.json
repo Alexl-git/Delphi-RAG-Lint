@@ -149,6 +149,10 @@
       "command": "drag-lint cycles --plan --project <X.dproj> --db <file.sqlite>"
     },
     {
+      "ask": "Can it cut a call made from a finalization section (finalization-order)?",
+      "command": "drag-lint cycles --plan --project <X.dproj> --db <file.sqlite>"
+    },
+    {
       "ask": "Why will this refused cycle never be cut automatically?",
       "command": "drag-lint cycles --plan --project <X.dproj> --db <file.sqlite>"
     },
