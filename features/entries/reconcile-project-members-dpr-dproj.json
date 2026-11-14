@@ -70,6 +70,14 @@
     {
       "ask": "Does lint-all report used third-party units that are outside the library?",
       "command": "drag-lint lint-all --db <db> --project <App.dproj> --rule unit-not-in-library"
+    },
+    {
+      "ask": "Which project units are linked only through a .dfm, a qualified name or GetClass/FindClass and missing from the project file?",
+      "command": "drag-lint lint-all --db <db> --project <App.dproj> --rule unit-not-in-dpr"
+    },
+    {
+      "ask": "Does indexing a project tell me which closure units the .dpr/.dproj does not list?",
+      "command": "drag-lint index --project <App.dproj> --db <db>"
     }
   ],
   "verified": {
