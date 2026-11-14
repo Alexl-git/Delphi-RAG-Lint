@@ -30,19 +30,26 @@ type
 
   /// <summary>One object / inherited / inline block of a text form file.</summary>
   TDfmObj = class
+  strict private
+    FObjName: string;
+    FClsName: string;
+    FLine   : Integer;
+    FParent : TDfmObj;
+    FProps  : TList<TDfmProp>;
+    FKids   : TObjectList<TDfmObj>;
   public
     /// <summary>Component name ('' never; the form file always names it).</summary>
-    ObjName  : string;
+    property ObjName: string read FObjName write FObjName;
     /// <summary>Declared class name, e.g. TDBEdit.</summary>
-    ClsName: string;
+    property ClsName: string read FClsName write FClsName;
     /// <summary>1-based line of the object header.</summary>
-    Line     : Integer;
+    property Line: Integer read FLine write FLine;
     /// <summary>Enclosing object, or nil for the form itself.</summary>
-    Parent   : TDfmObj;
+    property Parent: TDfmObj read FParent write FParent;
     /// <summary>Properties in file order.</summary>
-    Props    : TList<TDfmProp>;
+    property Props: TList<TDfmProp> read FProps;
     /// <summary>Nested objects (owned).</summary>
-    Kids     : TObjectList<TDfmObj>;
+    property Kids: TObjectList<TDfmObj> read FKids;
     constructor Create;
     destructor Destroy; override;
     /// <summary>Index of the property AName (case-insensitive).</summary>
@@ -104,6 +111,8 @@ const
   RULE_DISALLOW  = 'disallowed-dfm-property';
   /// <summary>Prefix that marks a "disallowed"."names" entry as a form-file property policy.</summary>
   POLICY_PREFIX  = 'dfm:';
+  /// <summary>First bytes of a binary form file; such a file is not read.</summary>
+  BINARY_FORM_MAGIC = 'TPF0';
 
 implementation
 
@@ -117,14 +126,14 @@ uses
 constructor TDfmObj.Create;
 begin
   inherited Create;
-  Props:= TList<TDfmProp>.Create;
-  Kids:= TObjectList<TDfmObj>.Create(True);
+  FProps:= TList<TDfmProp>.Create;
+  FKids:= TObjectList<TDfmObj>.Create(True);
 end;
 
 destructor TDfmObj.Destroy;
 begin
-  Kids.Free;
-  Props.Free;
+  FKids.Free;
+  FProps.Free;
   inherited Destroy;
 end;
 
@@ -140,7 +149,7 @@ var
   I: Integer;
 begin
   I:= IndexOfProp(AName);
-  if I < 0 then Result:= '' else Result:= Props[I].Value;
+  Result:= if I < 0 then '' else Props[I].Value;
 end;
 
 function TDfmObj.Has(const AName: string): Boolean;
@@ -248,7 +257,7 @@ var
   More   : Boolean;
 begin
   Result:= TDfmModel.Create;
-  if (Length(AText) >= 4) and (Copy(AText, 1, 4) = 'TPF0') then Exit;
+  if StartsStr(BINARY_FORM_MAGIC, AText) then Exit;
   Lines:= TStringList.Create;
   Stack:= TList<TDfmObj>.Create;
   try
@@ -346,7 +355,7 @@ var
 begin
   I:= AObj.IndexOfProp('DataField');
   if I < 0 then I:= AObj.IndexOfProp('DataBinding.DataField');
-  if I < 0 then Result:= AObj.Line else Result:= AObj.Props[I].Line;
+  Result:= if I < 0 then AObj.Line else AObj.Props[I].Line;
 end;
 
 function NewFinding(const ACfg: TLintConfig; const ARule, AFile, ADefaultSev, AMsg: string;
@@ -384,31 +393,31 @@ type
 
 function CtlKindOf(const AClass: string): TCtlKind;
 begin
-  Result:= ckNone;
-  if not HasPart(AClass, ['DB']) then Exit;
-  if HasPart(AClass, ['Navigator', 'Grid', 'Lookup', 'Chart', 'Radio', 'Column', 'StaticText']) then Exit;
-  if EndsText('DBText', AClass) or EndsText('DBLabel', AClass) then Exit;
-  if HasPart(AClass, ['Image']) then Exit(ckImage);
-  if HasPart(AClass, ['CheckBox']) then Exit(ckCheck);
-  if HasPart(AClass, ['Memo', 'RichEdit']) then Exit(ckMemo);
-  if HasPart(AClass, ['ComboBox']) then Exit(ckCombo);
-  if HasPart(AClass, ['DateEdit', 'DateTime', 'TimeEdit', 'Calendar']) then Exit(ckDate);
-  if HasPart(AClass, ['SpinEdit', 'CurrencyEdit', 'CalcEdit']) then Exit(ckNumeric);
-  if HasPart(AClass, ['TextEdit', 'MaskEdit', 'ButtonEdit', 'DBEdit']) then Exit(ckEdit);
+  if not HasPart(AClass, ['DB'])
+    or HasPart(AClass, ['Navigator', 'Grid', 'Lookup', 'Chart', 'Radio', 'Column', 'StaticText'])
+    or EndsText('DBText', AClass) or EndsText('DBLabel', AClass) then Result:= ckNone
+  else if HasPart(AClass, ['Image']) then Result:= ckImage
+  else if HasPart(AClass, ['CheckBox']) then Result:= ckCheck
+  else if HasPart(AClass, ['Memo', 'RichEdit']) then Result:= ckMemo
+  else if HasPart(AClass, ['ComboBox']) then Result:= ckCombo
+  else if HasPart(AClass, ['DateEdit', 'DateTime', 'TimeEdit', 'Calendar']) then Result:= ckDate
+  else if HasPart(AClass, ['SpinEdit', 'CurrencyEdit', 'CalcEdit']) then Result:= ckNumeric
+  else if HasPart(AClass, ['TextEdit', 'MaskEdit', 'ButtonEdit', 'DBEdit']) then Result:= ckEdit
+  else Result:= ckNone;
 end;
 
 function FldKindOf(const AClass: string): TFldKind;
 begin
-  Result:= fkOther;
-  if HasPart(AClass, ['Boolean']) then Exit(fkBool);
-  if HasPart(AClass, ['Graphic']) then Exit(fkGraphic);
-  if HasPart(AClass, ['Memo']) then Exit(fkMemo);
-  if SameText(AClass, 'TBlobField') or HasPart(AClass, ['VarBytes', 'BytesField', 'BinaryField']) then Exit(fkBlob);
-  if HasPart(AClass, ['StringField', 'WideStringField', 'AnsiStringField', 'GuidField']) then Exit(fkString);
-  if HasPart(AClass, ['DateTime', 'DateField', 'TimeField', 'TimeStamp']) then Exit(fkDate);
-  if HasPart(AClass, ['IntegerField', 'SmallintField', 'LargeintField', 'WordField', 'AutoInc', 'FloatField',
+  if HasPart(AClass, ['Boolean']) then Result:= fkBool
+  else if HasPart(AClass, ['Graphic']) then Result:= fkGraphic
+  else if HasPart(AClass, ['Memo']) then Result:= fkMemo
+  else if SameText(AClass, 'TBlobField') or HasPart(AClass, ['VarBytes', 'BytesField', 'BinaryField']) then Result:= fkBlob
+  else if HasPart(AClass, ['StringField', 'WideStringField', 'AnsiStringField', 'GuidField']) then Result:= fkString
+  else if HasPart(AClass, ['DateTime', 'DateField', 'TimeField', 'TimeStamp']) then Result:= fkDate
+  else if HasPart(AClass, ['IntegerField', 'SmallintField', 'LargeintField', 'WordField', 'AutoInc', 'FloatField',
     'CurrencyField', 'BCDField', 'FMTBCD', 'SingleField', 'ExtendedField', 'ShortintField', 'ByteField',
-    'LongWordField', 'UInt32Field', 'Int64Field']) then Exit(fkNum);
+    'LongWordField', 'UInt32Field', 'Int64Field']) then Result:= fkNum
+  else Result:= fkOther;
 end;
 
 function KindMismatch(AField: TFldKind; ACtl: TCtlKind): Boolean;
@@ -442,7 +451,7 @@ end;
 
 function IsPersistentField(const AObj: TDfmObj): Boolean;
 begin
-  Result:= AObj.Has('FieldName') and AObj.Has('DataSet') and (Pos('Field', AObj.ClsName) > 0);
+  Result:= AObj.Has('FieldName') and AObj.Has('DataSet') and ContainsText(AObj.ClsName, 'Field');
 end;
 
 { ------------------------------------------------------------ the rules }
@@ -555,6 +564,13 @@ begin
   end;
 end;
 
+{ True for a property that makes a dataset query-like: its parameters link to the master by name. }
+function IsQueryProp(const AName: string): Boolean;
+begin
+  Result:= StartsText('SQL', AName) or StartsText('SelectSQL', AName) or StartsText('Command', AName)
+    or SameText(AName, 'Params') or SameText(AName, 'ProviderName') or StartsText('Proc', AName);
+end;
+
 procedure CheckMasterFields(const AModel: TDfmModel; const ACfg: TLintConfig; const AFile: string; AOut: TFindingList);
 var
   O: TDfmObj;
@@ -570,9 +586,7 @@ begin
     for I:= 0 to O.Props.Count - 1 do
     begin
       N:= O.Props[I].Name;
-      if StartsText('SQL', N) or StartsText('SelectSQL', N) or StartsText('Command', N) or SameText(N, 'Params')
-        or SameText(N, 'ProviderName') or StartsText('Proc', N) or StartsText('StoredProc', N) then
-        QueryLike:= True;
+      if IsQueryProp(N) then QueryLike:= True;
     end;
     if QueryLike then Continue;
     I:= O.IndexOfProp('MasterSource');
@@ -643,7 +657,7 @@ begin
     begin
       T:= Trim(L);
       if SameText(T, 'item') or SameText(T, '<item') then Flush
-      else if StartsText('FieldName', T) and (Pos('=', T) > 0) then Cur:= Unq(Copy(T, Pos('=', T) + 1, MaxInt))
+      else if StartsText('FieldName', T) and ContainsStr(T, '=') then Cur:= Unq(Copy(T, Pos('=', T) + 1, MaxInt))
       else if StartsText('Visible', T) and ContainsText(T, 'False') then CurHidden:= True;
     end;
     Flush;
@@ -654,10 +668,14 @@ end;
 
 type
   TCover = class
+  strict private
+    FAll  : Boolean;
+    FNames: TStringList;
+    FUsed : Boolean;
   public
-    All  : Boolean;
-    Names: TStringList;
-    Used : Boolean;
+    property All: Boolean read FAll write FAll;
+    property Names: TStringList read FNames;
+    property Used: Boolean read FUsed write FUsed;
     constructor Create;
     destructor Destroy; override;
   end;
@@ -665,12 +683,12 @@ type
 constructor TCover.Create;
 begin
   inherited Create;
-  Names:= TStringList.Create;
+  FNames:= TStringList.Create;
 end;
 
 destructor TCover.Destroy;
 begin
-  Names.Free;
+  FNames.Free;
   inherited Destroy;
 end;
 
@@ -679,7 +697,7 @@ var
   Cover: TObjectDictionary<string, TCover>;
   O, Src, DS: TDfmObj;
   C: TCover;
-  DsName, K, FName: string;
+  DsName, K, FldName: string;
   Names: TStringList;
   I: Integer;
 
@@ -697,10 +715,7 @@ begin
   try
     for O in AModel.All do
     begin
-      if BindSource(O) = '' then
-        DsName:= Unq(O.Val('DataController.DataSource'))
-      else
-        DsName:= BindSource(O);
+      DsName:= if BindSource(O) = '' then Unq(O.Val('DataController.DataSource')) else BindSource(O);
       if DsName = '' then Continue;
       Src:= AModel.Find(DsName);
       if (Src = nil) or (Unq(Src.Val('DataSet')) = '') then Continue;
@@ -736,8 +751,8 @@ begin
       if O.Has('FieldKind') and not SameText(Trim(O.Val('FieldKind')), 'fkData') then Continue;
       if not Cover.TryGetValue(LowerCase(Unq(O.Val('DataSet'))), C) then Continue;
       if not C.Used or C.All then Continue;
-      FName:= LowerCase(Unq(O.Val('FieldName')));
-      K:= FName;
+      FldName:= LowerCase(Unq(O.Val('FieldName')));
+      K:= FldName;
       I:= C.Names.IndexOf(K);
       if I >= 0 then Continue;
       AOut.Add(NewFinding(ACfg, RULE_REQUIRED, AFile, 'warning',
@@ -799,22 +814,22 @@ class function TDfmBChecker.Run(const ACfg: TLintConfig; const ADfmPath: string;
   const AWants: TFunc<string, Boolean>): TArray<TLintFinding>;
 var
   Model: TDfmModel;
-  Out_ : TFindingList;
+  Found : TFindingList;
 begin
   Result:= nil;
   if not TFile.Exists(ADfmPath) then Exit;
   Model:= TDfmModel.Parse(TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)));
-  Out_:= TFindingList.Create;
+  Found:= TFindingList.Create;
   try
-    if AWants(RULE_CIRCULAR) then CheckCircular(Model, ACfg, ADfmPath, Out_);
-    if AWants(RULE_DUPBIND) then CheckDupBinding(Model, ACfg, ADfmPath, Out_);
-    if AWants(RULE_MASTER) then CheckMasterFields(Model, ACfg, ADfmPath, Out_);
-    if AWants(RULE_TYPEMISM) then CheckTypeMismatch(Model, ACfg, ADfmPath, Out_);
-    if AWants(RULE_REQUIRED) then CheckRequired(Model, ACfg, ADfmPath, Out_);
-    if AWants(RULE_DISALLOW) then CheckDisallowed(Model, ACfg, ADfmPath, Out_);
-    Result:= Out_.ToArray;
+    if AWants(RULE_CIRCULAR) then CheckCircular(Model, ACfg, ADfmPath, Found);
+    if AWants(RULE_DUPBIND) then CheckDupBinding(Model, ACfg, ADfmPath, Found);
+    if AWants(RULE_MASTER) then CheckMasterFields(Model, ACfg, ADfmPath, Found);
+    if AWants(RULE_TYPEMISM) then CheckTypeMismatch(Model, ACfg, ADfmPath, Found);
+    if AWants(RULE_REQUIRED) then CheckRequired(Model, ACfg, ADfmPath, Found);
+    if AWants(RULE_DISALLOW) then CheckDisallowed(Model, ACfg, ADfmPath, Found);
+    Result:= Found.ToArray;
   finally
-    Out_.Free;
+    Found.Free;
     Model.Free;
   end;
 end;
