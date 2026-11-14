@@ -1,0 +1,23 @@
+{
+  "id": "v151-dfmb-rules",
+  "title": "Form-file data-binding rules",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.50.0-alpha",
+  "summary": "Six lint rules check the text .dfm beside a unit: bad data links, duplicate bindings, field-type mismatches, unreachable required fields",
+  "intro": "Read this when you want lint to check how datasets, data sources and data-aware controls are wired in a .dfm. Run drag-lint lint <unit.pas> or lint-all; the checks run for any unit that has a text form file beside it. Each rule is selectable with --rule; disallowed-dfm-property needs entries in the disallowed.names config list that start with dfm:.",
+  "wikiPage": "v151-dfm-binding-rules",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-13",
+    "by": "alexanderl",
+    "build": "1.50.0-alpha"
+  }
+}
