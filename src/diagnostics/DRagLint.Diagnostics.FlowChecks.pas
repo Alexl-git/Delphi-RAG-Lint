@@ -3304,6 +3304,315 @@ begin
   Result := not Bad;
 end;
 
+{ ===== v151 WID-FLOW: straight-line member checks =====
+
+  The lattices above track ROUTINE variables only. These checks extend three
+  host rules to MEMBER paths (`FA`, `Self.FA`, `P^.X`, `R.Inner.X`) without a
+  member lattice, by looking only at two ADJACENT items of one CFG block --
+  straight-line code with nothing executed in between:
+
+    overwrite-before-read  `FA := 1; FA := 2;`   the first value is never read
+    double-free            `FL.Free; FL.Free;`   the second free hits a dangling pointer
+    object-leak            `TFoo.Create;`        a constructed object nobody holds
+
+  Every member of the path must be a FIELD (declared as a field in this unit,
+  or a property whose write specifier is a field, or known only as a field to
+  the index). A property with a setter or getter method may act on every access,
+  and an unknown name may be a function call, so either declines. }
+
+const
+  SL_UNKNOWN = 0; { the name is not declared as a member anywhere we can see }
+  SL_FIELD   = 1; { every declaration seen is a field / field-backed property }
+  SL_UNSAFE  = 2; { some declaration is a method-backed property, a routine, ... }
+
+type
+  /// <summary>Member and class facts THIS unit declares, for the v151
+  /// straight-line member checks. Built once per file on first need.</summary>
+  TSlUnitFacts = class
+  private
+    FMembers: TDictionary<string, Integer>;
+    FParents: TDictionary<string, string>;
+    FPropSetters: TDictionary<string, string>;
+    FMethods: TDictionary<string, Boolean>;
+    procedure Note(const AName: string; AKind: Integer);
+    procedure Walk(const N: TTSNode; const ASrc: TBytes);
+  public
+    constructor Create(const ARoot: TTSNode; const ASrc: TBytes);
+    destructor Destroy; override;
+    /// <summary>SL_FIELD / SL_UNSAFE for a member name this unit declares,
+    /// SL_UNKNOWN otherwise. ALowerName is lowercase.</summary>
+    function MemberKind(const ALowerName: string): Integer;
+    /// <summary>True when this unit declares class ALowerClass; AParent is its
+    /// lowercase parent type name ('' when it names none).</summary>
+    function ClassParent(const ALowerClass: string; out AParent: string): Boolean;
+  end;
+
+constructor TSlUnitFacts.Create(const ARoot: TTSNode; const ASrc: TBytes);
+var
+  P: TPair<string, string>;
+  K: Integer;
+begin
+  inherited Create;
+  FMembers := TDictionary<string, Integer>.Create;
+  FParents := TDictionary<string, string>.Create;
+  FPropSetters := TDictionary<string, string>.Create;
+  FMethods := TDictionary<string, Boolean>.Create;
+  Walk(ARoot, ASrc);
+  { A property is field-like only when its write specifier names a FIELD of
+    this unit that is not also a method name. Decided after the walk because
+    a property may be declared above the field it writes. }
+  for P in FPropSetters do
+  begin
+    K := SL_UNSAFE;
+    if (P.Value <> '') and FMembers.TryGetValue(P.Value, K) and (K = SL_FIELD)
+       and not FMethods.ContainsKey(P.Value) then
+      K := SL_FIELD
+    else
+      K := SL_UNSAFE;
+    Note(P.Key, K);
+  end;
+end;
+
+destructor TSlUnitFacts.Destroy;
+begin
+  FMembers.Free;
+  FParents.Free;
+  FPropSetters.Free;
+  FMethods.Free;
+  inherited;
+end;
+
+procedure TSlUnitFacts.Note(const AName: string; AKind: Integer);
+var Prev: Integer;
+begin
+  if AName = '' then Exit;
+  if FMembers.TryGetValue(AName, Prev) and (Prev <> AKind) then AKind := SL_UNSAFE;
+  FMembers.AddOrSetValue(AName, AKind);
+end;
+
+procedure TSlUnitFacts.Walk(const N: TTSNode; const ASrc: TBytes);
+var
+  I: Integer;
+  C, Nm, Cls, Par: TTSNode;
+  S, Prev: string;
+begin
+  if N.IsNull then Exit;
+  if N.NodeType = 'declField' then
+  begin
+    { the names are the identifier children ahead of the `type` field }
+    for I := 0 to N.NamedChildCount - 1 do
+    begin
+      C := N.NamedChild(I);
+      if C.NodeType = 'identifier' then Note(LowerCase(Trim(NodeStr(C, ASrc))), SL_FIELD);
+    end;
+    Exit;
+  end;
+  if N.NodeType = 'declProp' then
+  begin
+    Nm := N.ChildByField('name');
+    if Nm.IsNull then Exit;
+    S := '';
+    C := N.ChildByField('setter');
+    if not C.IsNull then S := LowerCase(Trim(NodeStr(C, ASrc)));
+    { a second declaration of the same property name with a different
+      setter is resolved to UNSAFE by Note after the walk }
+    if FPropSetters.TryGetValue(LowerCase(Trim(NodeStr(Nm, ASrc))), Prev) and (Prev <> S) then S := '';
+    FPropSetters.AddOrSetValue(LowerCase(Trim(NodeStr(Nm, ASrc))), S);
+    Exit;
+  end;
+  if (N.NodeType = 'declProc') or (N.NodeType = 'defProc') then
+  begin
+    Nm := N.ChildByField('name');
+    if Nm.IsNull and (N.NodeType = 'defProc') then Nm := N.ChildByField('header').ChildByField('name');
+    if not Nm.IsNull then
+    begin
+      S := LowerCase(Trim(NodeStr(Nm, ASrc)));
+      if Pos('.', S) > 0 then S := Copy(S, LastDelimiter('.', S) + 1, MaxInt);
+      FMethods.AddOrSetValue(S, True);
+      Note(S, SL_UNSAFE);
+    end;
+  end;
+  if N.NodeType = 'declType' then
+  begin
+    Nm := N.ChildByField('name');
+    C := N.ChildByField('type');
+    Cls := Default(TTSNode);
+    if (not C.IsNull) and (C.NodeType = 'declClass') then Cls := C
+    else if not C.IsNull then
+      for I := 0 to C.NamedChildCount - 1 do
+        if C.NamedChild(I).NodeType = 'declClass' then Cls := C.NamedChild(I);
+    { a record / object type is a declClass too: only `class` counts }
+    if not Cls.IsNull then
+    begin
+      Par := Default(TTSNode);
+      for I := 0 to Cls.ChildCount - 1 do
+        if Cls.Child(I).NodeType = 'kClass' then Par := Cls.Child(I);
+      if Par.IsNull then Cls := Default(TTSNode);
+    end;
+    if (not Nm.IsNull) and (not Cls.IsNull) then
+    begin
+      Par := Cls.ChildByField('parent');
+      S := '';
+      if not Par.IsNull then S := LowerCase(Trim(NodeStr(Par, ASrc)));
+      { `TObjectList<TFoo>` -> tobjectlist, `System.Classes.TThread` -> tthread }
+      if Pos('<', S) > 0 then S := Trim(Copy(S, 1, Pos('<', S) - 1));
+      if Pos('.', S) > 0 then S := Copy(S, LastDelimiter('.', S) + 1, MaxInt);
+      FParents.AddOrSetValue(LowerCase(Trim(NodeStr(Nm, ASrc))), S);
+    end;
+  end;
+  for I := 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I), ASrc);
+end;
+
+function TSlUnitFacts.MemberKind(const ALowerName: string): Integer;
+begin
+  if not FMembers.TryGetValue(ALowerName, Result) then Result := SL_UNKNOWN;
+end;
+
+function TSlUnitFacts.ClassParent(const ALowerClass: string; out AParent: string): Boolean;
+begin
+  Result := FParents.TryGetValue(ALowerClass, AParent);
+end;
+
+{ The kind the INDEX gives a member name: SL_FIELD when every symbol of that
+  name in either store is a field (or a form component, which is a field),
+  SL_UNSAFE when any is something else, SL_UNKNOWN when neither store has it. }
+function SlStoreMemberKind(const AName: string; const AStore, ALibStore: ISymbolStore): Integer;
+var
+  Kind: Integer;
+
+  procedure Scan(const ASt: ISymbolStore);
+  var S: TSymbol;
+  begin
+    if ASt = nil then Exit;
+    for S in ASt.FindSymbolsByExactName(AName) do
+      if S.Kind in [skField, skComponent] then
+      begin
+        if Kind = SL_UNKNOWN then Kind := SL_FIELD;
+      end
+      else
+        Kind := SL_UNSAFE;
+  end;
+
+begin
+  Kind := SL_UNKNOWN;
+  Scan(AStore);
+  if Kind <> SL_UNSAFE then Scan(ALibStore);
+  Result := Kind;
+end;
+
+{ The segments of a member path built only from identifiers, `.` and `^`:
+  `Self.FA` -> [fa], `P^.X` -> [p, ^, x], `R.Inner.X` -> [r, inner, x].
+  A leading `Self` is dropped. Empty for any other shape (a call, an index,
+  a cast, an `inherited` ...), which every caller treats as "decline". }
+function SlPathSegments(const N: TTSNode; const ASrc: TBytes): TArray<string>;
+var L, R: TArray<string>; Op: TTSNode;
+begin
+  Result := nil;
+  if N.IsNull then Exit;
+  if N.NodeType = 'identifier' then Exit(TArray<string>.Create(LowerCase(Trim(NodeStr(N, ASrc)))));
+  if N.NodeType = 'exprDot' then
+  begin
+    R := SlPathSegments(N.ChildByField('rhs'), ASrc);
+    if Length(R) <> 1 then Exit;
+    L := SlPathSegments(N.ChildByField('lhs'), ASrc);
+    if Length(L) = 0 then Exit;
+    if (Length(L) = 1) and (L[0] = 'self') then Exit(R);
+    Exit(L + R);
+  end;
+  if N.NodeType = 'exprUnary' then
+  begin
+    Op := N.ChildByField('operator');
+    if Op.IsNull or (Op.NodeType <> 'kHat') then Exit;
+    L := SlPathSegments(N.ChildByField('operand'), ASrc);
+    if Length(L) = 0 then Exit;
+    Exit(L + TArray<string>.Create('^'));
+  end;
+end;
+
+{ A value whose evaluation can neither raise nor run code: a literal, nil,
+  True / False, or a routine variable. Used for the SECOND store of an
+  overwrite pair -- if it could raise, the first value would stay visible to
+  the caller, and if it could call, the callee could read the member. }
+function SlPlainValue(const N: TTSNode; const ASrc: TBytes; AVars: TRoutineVarTable): Boolean;
+var T: string;
+begin
+  Result := False;
+  if N.IsNull then Exit;
+  T := N.NodeType;
+  if (T = 'literalNumber') or (T = 'literalString') or (T = 'kNil')
+     or (T = 'kTrue') or (T = 'kFalse') then Exit(True);
+  if T = 'identifier' then Result := AVars.IndexOf(LowerCase(Trim(NodeStr(N, ASrc)))) >= 0;
+end;
+
+{ The receiver path of `X.Free` / `X.DisposeOf` / `X.Destroy` (with or without
+  empty parentheses) used as a statement; nil when AItem is not one. }
+function SlFreedPath(const AItem: TTSNode; const ASrc: TBytes): TArray<string>;
+var Inner, Args: TTSNode; M: string;
+begin
+  Result := nil;
+  Inner := AItem;
+  if (Inner.NodeType = 'statement') and (Inner.NamedChildCount > 0) then Inner := Inner.NamedChild(0);
+  if Inner.NodeType = 'exprCall' then
+  begin
+    Args := Inner.ChildByField('args');
+    if (not Args.IsNull) and (Args.NamedChildCount > 0) then Exit;
+    Inner := Inner.ChildByField('entity');
+  end;
+  if Inner.IsNull or (Inner.NodeType <> 'exprDot') then Exit;
+  M := LowerCase(Trim(NodeStr(Inner.ChildByField('rhs'), ASrc)));
+  if (M <> 'free') and (M <> 'disposeof') and (M <> 'destroy') then Exit;
+  Result := SlPathSegments(Inner.ChildByField('lhs'), ASrc);
+end;
+
+{ For a constructor call used as a statement -- `TFoo.Create`, `TFoo.Create()`
+  or `TFoo.Create(<literals>)` -- the constructed type name (last segment,
+  original case); '' otherwise. Arguments other than literals decline: a
+  constructor handed an object may link the new instance into it
+  (`TNode.Create(Parent)`), which is ownership this check cannot see. }
+function SlDiscardedCreateType(const AItem: TTSNode; const ASrc: TBytes): string;
+var Inner, Ent, Args, A: TTSNode; I: Integer; T: string;
+begin
+  Result := '';
+  Inner := AItem;
+  if (Inner.NodeType = 'statement') and (Inner.NamedChildCount > 0) then Inner := Inner.NamedChild(0);
+  Ent := Inner;
+  if Inner.NodeType = 'exprCall' then
+  begin
+    Args := Inner.ChildByField('args');
+    if not Args.IsNull then
+      for I := 0 to Args.NamedChildCount - 1 do
+      begin
+        A := Args.NamedChild(I);
+        T := A.NodeType;
+        if not ((T = 'literalNumber') or (T = 'literalString') or (T = 'kTrue') or (T = 'kFalse')) then Exit;
+      end;
+    Ent := Inner.ChildByField('entity');
+  end;
+  if Ent.IsNull or (Ent.NodeType <> 'exprDot') then Exit;
+  if not SameText(Trim(NodeStr(Ent.ChildByField('rhs'), ASrc)), 'create') then Exit;
+  { the receiver must name a type: a bare or unit-qualified identifier }
+  A := Ent.ChildByField('lhs');
+  while (not A.IsNull) and (A.NodeType = 'exprDot') do A := A.ChildByField('rhs');
+  if A.IsNull or (A.NodeType <> 'identifier') then Exit;
+  Result := Trim(NodeStr(A, ASrc));
+end;
+
+{ A member path for a message: [p, ^, x] -> p^.x }
+function SlPathDisplay(const ASegs: TArray<string>): string;
+var K: Integer;
+begin
+  Result := '';
+  for K := 0 to High(ASegs) do
+    if (K = 0) or (ASegs[K] = '^') then Result := Result + ASegs[K]
+    else Result := Result + '.' + ASegs[K];
+end;
+
+{ The noun a used-before-assignment message uses for AVar. }
+function UbaNoun(const AVar: TRoutineVar): string;
+begin
+  if AVar.Kind = vkParamOut then Result := 'Out parameter' else Result := 'Local';
+end;
+
 class function TFlowChecker.Check(const AFile: string; const AStore: ISymbolStore;
   AFileId: Int64; const ALibStore: ISymbolStore;
   const AKeep: TFunc<string, Boolean>): TArray<TLintFinding>;
@@ -3321,6 +3630,8 @@ var
   UnitSigs    : TDictionary<string, TArray<string>>;
   SameUnitClassKinds: TDictionary<string, Boolean>; { when the store answers tcUnknown }
   MethodModes : TMethodArgModes; { built on the first candidate finding of the file }
+  SlFacts     : TSlUnitFacts;    { v151 WID-FLOW member facts, built on first need }
+  SlKinds     : TDictionary<string, Integer>; { memo for SlMemberKind }
   ArgMode     : TArgModeAt;      { the three out-arg / by-value rules; see ScanItemArgs }
 
   procedure Emit(const ARule, ASev, AMsg: string; ALine, ACol: Integer);
@@ -3330,6 +3641,152 @@ var
     F.RuleId := ARule; F.Severity := ASev; F.Message := AMsg; F.FilePath := AFile;
     F.StartLine := ALine; F.StartCol := ACol; F.EndLine := ALine; F.EndCol := ACol + 1;
     Findings.Add(F);
+  end;
+
+  { v151 WID-FLOW: SL_FIELD / SL_UNSAFE / SL_UNKNOWN for a member name, from
+    this unit's declarations first and the index second; memoised per file. }
+  function SlMemberKind(const ALowerName: string): Integer;
+  begin
+    if SlFacts = nil then SlFacts := TSlUnitFacts.Create(PF.Tree.RootNode, PF.Src);
+    if SlKinds = nil then SlKinds := TDictionary<string, Integer>.Create;
+    if SlKinds.TryGetValue(ALowerName, Result) then Exit;
+    Result := SlFacts.MemberKind(ALowerName);
+    if Result = SL_UNKNOWN then Result := SlStoreMemberKind(ALowerName, AStore, ALibStore);
+    SlKinds.Add(ALowerName, Result);
+  end;
+
+  { True when ASegs is a member path the straight-line checks may judge: not
+    a bare routine variable (the lattices own those), its head a routine
+    variable or a field, and every later name a field. }
+  function SlMemberPathOk(const ASegs: TArray<string>; AVars: TRoutineVarTable): Boolean;
+  var K: Integer;
+  begin
+    Result := False;
+    if Length(ASegs) = 0 then Exit;
+    if AVars.IndexOf(ASegs[0]) >= 0 then
+    begin
+      if Length(ASegs) = 1 then Exit;
+    end
+    else if SlMemberKind(ASegs[0]) <> SL_FIELD then Exit;
+    if ASegs[High(ASegs)] = '^' then Exit;
+    for K := 1 to High(ASegs) do
+      if (ASegs[K] <> '^') and (SlMemberKind(ASegs[K]) <> SL_FIELD) then Exit;
+    Result := True;
+  end;
+
+  { True when ATypeName (as written) is a class whose discarded construction is
+    a certain leak: a class (not a record / interface), and not one whose
+    lifetime is managed elsewhere -- a thread (the self-freeing idiom), a
+    component (an owner), an exception (exception-constructed-but-not-raised
+    reports it) or a reference-counted object. Unknown -> False. }
+  function SlLeakingClass(const ATypeName: string): Boolean;
+  const
+    MANAGED: array[0..3] of string = ('tthread', 'tcomponent', 'exception', 'tinterfacedobject');
+  var
+    Cls, Par, Anc: string;
+    Guard: Integer;
+    Syms: TArray<TSymbol>;
+    IsCls: Boolean;
+    S: TSymbol;
+    M: string;
+  begin
+    Result := False;
+    Cls := LowerCase(ATypeName);
+    if (Length(ATypeName) >= 2) and (ATypeName[1] = 'E') and CharInSet(ATypeName[2], ['A'..'Z']) then Exit;
+    if TypeIsRefCountedOrValue(ATypeName, AStore) then Exit;
+    if SlFacts = nil then SlFacts := TSlUnitFacts.Create(PF.Tree.RootNode, PF.Src);
+    { 1. declared in THIS unit: walk the in-unit parent chain to its end }
+    if SlFacts.ClassParent(Cls, Par) then
+    begin
+      Guard := 0;
+      repeat
+        if (Par = '') or (Par = 'tobject') then Exit(True); { the chain ends at TObject }
+        for M in MANAGED do if Par = M then Exit;
+        Cls := Par;
+        Inc(Guard);
+      until (not SlFacts.ClassParent(Cls, Par)) or (Guard > 32);
+      if Guard > 32 then Exit;
+      { Cls is now an ancestor this unit does not declare: the index decides }
+    end;
+    { 2. the index: a class symbol, no managed ancestor in either store }
+    if AStore = nil then Exit;
+    IsCls := False;
+    Syms := AStore.FindSymbolsByExactName(Cls);
+    if (Length(Syms) = 0) and (ALibStore <> nil) then Syms := ALibStore.FindSymbolsByExactName(Cls);
+    for S in Syms do
+      if S.Kind = skClass then IsCls := True
+      else if S.Kind in [skInterface, skRecord] then Exit;
+    if not IsCls then Exit;
+    for M in MANAGED do
+    begin
+      if AStore.IsDescendantOf(Cls, M, AFileId) then Exit;
+      if (ALibStore <> nil) and ALibStore.IsDescendantOf(Cls, M, 0) then Exit;
+    end;
+    for Anc in AStore.UnresolvedAncestorNames(Cls, AFileId) do
+    begin
+      if SameText(Anc, 'TObject') then Continue;
+      if ALibStore = nil then Exit;
+      for M in MANAGED do
+        if SameText(Anc, M) or ALibStore.IsDescendantOf(Anc, M, 0) then Exit;
+      if Length(ALibStore.FindSymbolsByExactName(Anc)) = 0 then Exit; { the chain ends unseen }
+    end;
+    Result := True;
+  end;
+
+  procedure CheckStraightLineMembers(ACfg: TCfg; AVars: TRoutineVarTable);
+  var
+    B, I: Integer;
+    A1, A2: TTSNode;
+    P1, P2: TArray<string>;
+    TypeName: string;
+  begin
+    for B := 0 to ACfg.BlockCount - 1 do
+      for I := 0 to ACfg.Blocks[B].Items.Count - 1 do
+      begin
+        A1 := ACfg.Blocks[B].Items[I].Node;
+        if ACfg.Blocks[B].Items[I].Opaque then Continue;
+
+        { object-leak: a constructed object that nothing holds }
+        TypeName := SlDiscardedCreateType(A1, PF.Src);
+        if (TypeName <> '') and (AVars.IndexOf(LowerCase(TypeName)) < 0)
+           and SlLeakingClass(TypeName) then
+          Emit('object-leak', 'warning',
+            Format('Object of class "%s" is constructed and immediately lost: the result of Create ' +
+                   'is not stored, so nothing can ever free it.', [TypeName]),
+            Integer(A1.StartPoint.Row) + 1, Integer(A1.StartPoint.Column) + 1);
+
+        if I = ACfg.Blocks[B].Items.Count - 1 then Continue;
+        if ACfg.Blocks[B].Items[I + 1].Opaque then Continue;
+        A2 := ACfg.Blocks[B].Items[I + 1].Node;
+
+        { overwrite-before-read: two adjacent stores to one member path }
+        if (A1.NodeType = 'assignment') and (A2.NodeType = 'assignment')
+           and (A1.ChildByField('operator').NodeType = 'kAssign')
+           and (A2.ChildByField('operator').NodeType = 'kAssign') then
+        begin
+          P1 := SlPathSegments(A1.ChildByField('lhs'), PF.Src);
+          P2 := SlPathSegments(A2.ChildByField('lhs'), PF.Src);
+          if (Length(P1) > 0) and (string.Join('.', P1) = string.Join('.', P2))
+             and SlPlainValue(A2.ChildByField('rhs'), PF.Src, AVars)
+             and SlMemberPathOk(P1, AVars) then
+            Emit('overwrite-before-read', 'warning',
+              Format('Member "%s" is assigned again on the next line before the first value is read (dead store).',
+                [Trim(NodeStr(A1.ChildByField('lhs'), PF.Src))]),
+              Integer(A1.StartPoint.Row) + 1, Integer(A1.StartPoint.Column) + 1);
+        end;
+
+        { double-free: two adjacent frees of one member path }
+        P1 := SlFreedPath(A1, PF.Src);
+        if Length(P1) > 0 then
+        begin
+          P2 := SlFreedPath(A2, PF.Src);
+          if (string.Join('.', P1) = string.Join('.', P2)) and SlMemberPathOk(P1, AVars) then
+            Emit('double-free', 'warning',
+              Format('Member "%s" is freed twice in a row (double free) -- the second free hits a dangling pointer; ' +
+                     'use FreeAndNil or drop one of the frees.', [SlPathDisplay(P1)]),
+              Integer(A2.StartPoint.Row) + 1, Integer(A2.StartPoint.Column) + 1);
+        end;
+      end;
   end;
 
   procedure CheckRoutine(const AProc: TTSNode);
@@ -3487,7 +3944,14 @@ var
     Vars := TRoutineVarTable.Build(AProc, PF.Src);
     FlowTick(1, TickAt, TickEx);
     try
-      if Cfg.Skipped or (Vars.Count = 0) then Exit;
+      if Cfg.Skipped then Exit;
+      { v151 WID-FLOW: the member checks need no routine variable -- a
+        parameterless method storing a field twice has none. }
+      if Vars.Count = 0 then
+      begin
+        CheckStraightLineMembers(Cfg, Vars);
+        Exit;
+      end;
       Inc(GFlowRoutines);
       Ana := TDefiniteAssignment.Create(Vars, PF.Src, RecMethodDef, ParamMode);
       if not TDataFlowSolver<TDefAsgnVal>.Solve(Cfg, Ana, AIn, AOut) then Exit;
@@ -3561,7 +4025,14 @@ var
                 RIx := Reads[J];
                 if SeqDefs.IndexOf(RIx) >= 0 then Continue;
                 V := Vars.Get(RIx);
-                if V.Kind <> vkLocal then Continue;
+                { v151 WID-FLOW: an OUT parameter is checked like a local. It
+                  is unassigned on entry (TDefiniteAssignment.Boundary), and an
+                  unmanaged out parameter holds whatever the caller's variable
+                  held, which the routine must not read. A managed one is
+                  cleared by the compiler on entry and is skipped below with
+                  the managed locals. var / const / value parameters carry the
+                  caller's value and are never candidates. }
+                if not (V.Kind in [vkLocal, vkParamOut]) then Continue;
                 if IsManagedType(V.TypeText, AStore, AFileId) then Continue;
                 if not CurMust[RIx] then
                 begin
@@ -3671,18 +4142,18 @@ var
                       in seconds instead of minutes. }
                     if WitnessFlag <> '' then
                       Emit('used-before-assignment', 'warning',
-                        Format('POSSIBLE use before assignment: local "%s" is read under guard "%s", ' +
+                        Format('POSSIBLE use before assignment: %s "%s" is read under guard "%s", ' +
                                'which looks like a witness flag set where "%s" is assigned. Verify that pairing: ' +
                                'the flag must itself be initialised, never set except beside an assignment to "%s", ' +
                                'and never set from a nested routine.',
-                               [V.Name, WitnessFlag, V.Name, V.Name]), ROW, COL)
+                               [LowerCase(UbaNoun(V)), V.Name, WitnessFlag, V.Name, V.Name]), ROW, COL)
                     else
                       Emit('used-before-assignment', 'warning',
-                        Format('Local "%s" may be used before it is assigned.', [V.Name]), ROW, COL);
+                        Format('%s "%s" may be used before it is assigned.', [UbaNoun(V), V.Name]), ROW, COL);
                   end
                   else
                     Emit('used-before-assignment', 'error',
-                      Format('Local "%s" is used before it is assigned.', [V.Name]), ROW, COL);
+                      Format('%s "%s" is used before it is assigned.', [UbaNoun(V), V.Name]), ROW, COL);
                 end;
               end;
             if WantByValue then CheckByValueArgs(It);
@@ -3893,13 +4364,16 @@ var
               if It.Opaque then
               begin
                 for J := 0 to Vars.Count - 1 do
-                  if Vars.Get(J).Kind = vkLocal then Live[J] := True;
+                  if Vars.Get(J).Kind in [vkLocal, vkParamValue] then Live[J] := True;
                 Continue;
               end;
               if It.Node.NodeType = 'assignment' then
               begin
                 Tgt := AssignmentTargetIndex(It.Node, PF.Src, Vars); { whole-var only }
-                if (Tgt >= 0) and (Vars.Get(Tgt).Kind = vkLocal)
+                { v151 WID-FLOW: a by-value parameter is the routine's own copy;
+                  a store to it that no later code reads is as dead as a
+                  local's. var / out / const parameters are never candidates. }
+                if (Tgt >= 0) and (Vars.Get(Tgt).Kind in [vkLocal, vkParamValue])
                    and ReadAny[Tgt] and (not Live[Tgt])
                    { A CAPTURED local is read where liveness cannot look. The CFG
                      deliberately does not descend into a nested routine (see
@@ -3929,8 +4403,9 @@ var
                     fact a compiler reports as "value assigned ... never used"
                     (H2077), and compilers do not whisper it. }
                   Emit('overwrite-before-read', 'warning',
-                    Format('Assignment to "%s" is overwritten before it is read (dead store).',
-                      [Vars.Get(Tgt).Name]), ROW, COL);
+                    Format('Assignment to %s"%s" is overwritten before it is read (dead store).',
+                      [if Vars.Get(Tgt).Kind = vkParamValue then 'value parameter ' else '',
+                       Vars.Get(Tgt).Name]), ROW, COL);
                   ObrReported := ObrReported + [Integer(It.Node.StartByte)];
                 end;
                 { backward transfer for this item (mirror TLiveness.Transfer) }
@@ -3965,6 +4440,12 @@ var
             if (V.Kind = vkLocal) and AsgnAny[I] and (not ReadAny[I]) and (not V.Captured) then
               Emit('write-only-local', 'info',
                 Format('Local "%s" is assigned but never read.', [V.Name]),
+                V.DeclLine, V.DeclCol)
+            { v151 WID-FLOW: a by-value parameter that is stored to and never
+              read -- neither the caller's value nor the stored one is used. }
+            else if (V.Kind = vkParamValue) and AsgnAny[I] and (not ReadAny[I]) and (not V.Captured) then
+              Emit('write-only-local', 'info',
+                Format('Value parameter "%s" is assigned but never read.', [V.Name]),
                 V.DeclLine, V.DeclCol);
           end;
 
@@ -4248,6 +4729,8 @@ var
                 Format('Object "%s" may be leaked: created but not freed or transferred on some path.',
                   [Vars.Get(I).Name]), CreateRow[I], CreateCol[I]);
         end;
+
+        CheckStraightLineMembers(Cfg, Vars);
 
       finally
         Reads.Free;
@@ -4685,6 +5168,8 @@ begin
 
   SameUnitClassKinds := nil; { built on first need, see CheckRoutine }
   MethodModes := nil;
+  SlFacts := nil;
+  SlKinds := nil;
   { PF E-LINTALL-SLOWER: the two OFF out-arg/by-value passes cost lint-all on Micronite2027
     about 60 s (liveness window 1.5 -> 52 s, replay 1.8 -> 13 s); run them only when kept. }
   WantByValue := (not Assigned(AKeep)) or AKeep('by-value-arg-before-assignment');
@@ -4709,6 +5194,8 @@ begin
   finally
     MethodModes.Free;
     SameUnitClassKinds.Free;
+    SlFacts.Free;
+    SlKinds.Free;
     UnitSigs.Free;
     Findings.Free;
   end;
