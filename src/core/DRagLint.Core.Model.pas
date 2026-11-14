@@ -281,6 +281,9 @@ const
     * Core.Indexer: a uses-fragment include (every file_includes site in_uses = 1) is not a parse error
       -- no DIAG, no per-file error count, not in parse-errors=; the verdict no longer depends on the
       walk order (lanes RINC item 2, RINC2 c). }
+  { next bump (wave v151, 1.51; the constant is raised once at lane/v151-int step 3):
+    * grammar: tree-sitter-delphi13 v1.4.12 (supersedes v1.4.10 above) -- declStringCodePage and
+      classBodyOrphan shapes are read by Parser.Delphi13 (lane GR11). }
   DRAGLINT_EXTRACTOR_VERSION = '1.38.0-alpha';
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
