@@ -1,0 +1,7 @@
+{
+  "id": "filename-compare-case",
+  "severity": "warning",
+  "category": "bug-patterns",
+  "message": "A file or path name is compared with = or <>, which is case-sensitive although Windows file names are not (and the path form may differ by delimiter or relative parts). Compare with SameText (SameFileName where the unit is available) instead.",
+  "warn_capture": "warn"
+}

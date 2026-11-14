@@ -1,0 +1,7 @@
+{
+  "id": "delimited-text-without-strict",
+  "severity": "warning",
+  "category": "bug-patterns",
+  "message": "DelimitedText is parsed after Delimiter was set, but StrictDelimiter is never set in this routine: without it the list also splits at every blank and honours the quote character. Set StrictDelimiter := True next to the Delimiter assignment.",
+  "warn_capture": "warn"
+}

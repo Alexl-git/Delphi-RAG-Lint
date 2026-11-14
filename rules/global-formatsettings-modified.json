@@ -1,0 +1,7 @@
+{
+  "id": "global-formatsettings-modified",
+  "severity": "warning",
+  "category": "bug-patterns",
+  "message": "The process-wide FormatSettings (or one of the deprecated global format variables) is assigned: every thread and every later conversion sees the change. Keep a local TFormatSettings (TFormatSettings.Create / TFormatSettings.Invariant) and pass it to the conversion instead.",
+  "warn_capture": "warn"
+}

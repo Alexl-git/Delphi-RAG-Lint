@@ -1,0 +1,7 @@
+{
+  "id": "pos-arguments-swapped",
+  "severity": "warning",
+  "category": "bug-patterns",
+  "message": "The searched-for part comes FIRST in Pos/PosEx/StartsStr/EndsStr and relatives; here a string literal is passed as the text to search, so the arguments look swapped (the call is only true when both are equal). Write Pos('literal', Variable).",
+  "warn_capture": "warn"
+}

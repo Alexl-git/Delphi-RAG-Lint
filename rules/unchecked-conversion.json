@@ -1,0 +1,8 @@
+{
+  "id": "unchecked-conversion",
+  "severity": "hint",
+  "category": "bug-patterns",
+  "enabled": false,
+  "message": "User input (a control's Text, a grid cell, ParamStr) is converted straight away: invalid text raises EConvertError. Use TryStrToInt/StrToIntDef (TryStrToFloat, TryStrToDate ...) or wrap the conversion in a try..except that tells the user what is wrong.",
+  "warn_capture": "warn"
+}
