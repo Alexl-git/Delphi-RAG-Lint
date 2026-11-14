@@ -46,17 +46,22 @@ type
 
 implementation
 
-{ The lane's helpers live in DRagLint.V151.TYP.Support; name it in an
-  implementation uses clause here once it declares something. }
+uses
+  DRagLint.V151.TYP.Support
+  ;
 
 class procedure TV151TYPRules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
-  { no rules yet }
+  ADecls.Add(V151Rule(RULE_UNRELATED_CAST, 'bug-patterns', 'warning', 'Hard cast between two classes neither of which descends from the other'));
+  ADecls.Add(V151Rule(RULE_SELF_INTF_CTOR, 'bug-patterns', 'warning', 'Self handed out as an interface while construction can still free the object'));
+  ADecls.Add(V151Rule(RULE_DTOR_NIL_SAFE, 'resource-lifetime', 'warning', 'Destructor dereferences a field that a raising constructor may have left nil'));
+  ADecls.Add(V151Rule(RULE_FREE_WITHOUT_NIL, 'resource-lifetime', 'warning', 'Field freed outside the destructor keeps its dangling reference'));
+  ADecls.Add(V151Rule(RULE_OWNERSHIP_UNCLEAR, 'resource-lifetime', 'hint', 'Field created by the class, never freed by it and handed out -- ownership unclear', False));
 end;
 
 class function TV151TYPRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
 begin
-  Result:= nil;
+  Result:= TypCheckFile(ACtx);
 end;
 
 class function TV151TYPRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
