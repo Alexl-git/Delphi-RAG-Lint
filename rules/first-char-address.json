@@ -1,0 +1,7 @@
+{
+  "id": "first-char-address",
+  "severity": "warning",
+  "category": "bug-patterns",
+  "message": "@S[1] on a string fails for an empty string (range check error under {$R+}, garbage without). Use PChar(S) or Pointer(S) and guard the empty case.",
+  "warn_capture": "warn"
+}
