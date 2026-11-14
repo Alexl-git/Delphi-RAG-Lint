@@ -7241,6 +7241,54 @@ begin
   end;
 end;
 
+/// <summary>Every folder a LIBRARY section of AManifest indexes, for every platform the
+/// section expands to, as absolute paths (STRAY, OQ14).</summary>
+/// <param name="AManifest">The manifest this run loaded.</param>
+/// <returns>The library roots; empty when the manifest has no library section.</returns>
+/// <remarks>Keyed on the section KIND (smLibrary), like LibrarySectionDbs.</remarks>
+function LibrarySectionRoots(const AManifest: TIndexManifest): TArray<string>;
+var
+  Resolver: DRagLint.Project.Resolver.TProjectResolver;
+  PS      : TPlanSection;
+begin
+  Result:= nil;
+  Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
+  try
+    for PS in ResolvePlan(AManifest, nil, Resolver).Items do
+      if PS.Mode = smLibrary then Result:= Result + PS.Roots;
+  finally
+    Resolver.Free;
+  end; // try
+end;
+
+/// <summary>The library root that contains AFile, or '' when none does (STRAY, OQ14).</summary>
+/// <param name="ARoots">From LibrarySectionRoots.</param>
+/// <param name="AFile">The project file (.dproj / .dpr / .dpk) a project index was asked for.</param>
+/// <returns>The first containing library root, as given; '' when the file lies under none.</returns>
+function LibraryRootContaining(const ARoots: TArray<string>; const AFile: string): string;
+begin
+  Result:= '';
+  var L: string:= LowerCase(ExpandFileName(AFile).Replace('/', '\'));
+  for var R: string in ARoots do
+  begin
+    if R = '' then Continue;
+    var Norm: string:= LowerCase(IncludeTrailingPathDelimiter(ExcludeTrailingPathDelimiter(
+      ExpandFileName(R.Replace('/', '\')))));
+    if StartsStr(Norm, L) then Exit(R);
+  end;
+end;
+
+/// <summary>True when ADb is a library database: a library section of the manifest names it,
+/// or its file name is `library-*.sqlite` (STRAY, OQ14).</summary>
+/// <param name="ALibraryDbs">From LibrarySectionDbs.</param>
+/// <param name="ADb">The database path a project index would write.</param>
+/// <returns>True for a library database.</returns>
+function IsLibraryDbForProjectRefusal(const ALibraryDbs: TArray<string>; const ADb: string): Boolean;
+begin
+  var Nm: string:= LowerCase(ExtractFileName(ADb));
+  Result:= IsLibrarySectionDb(ALibraryDbs, ADb) or (StartsStr('library-', Nm) and EndsStr('.sqlite', Nm));
+end;
+
 function DoIndex(const AArgs: TArgs): Integer;
 var
   IdxStudio: TTargetStudio                             ;
@@ -7305,7 +7353,29 @@ begin
       IdxArgs.DbFromConfig:= False;
     end;
   end;
+  { STRAY (OQ14): a project may not live under a library root -- the library index already walks
+    that folder, so a second project index of it would double-count it. Refused before any write. }
+  var IsProjectTarget: Boolean:= (AArgs.ProjectPath <> '') or MatchText(ExtractFileExt(IndexTarget), ['.dpr', '.dproj', '.dpk']);
+  if IsProjectTarget then
+  begin
+    var LibRoot: string:= LibraryRootContaining(LibrarySectionRoots(TargetManifest), IndexTarget);
+    if LibRoot <> '' then
+    begin
+      Writeln(ErrOutput, 'ERROR: index: the project ', ExpandFileName(IndexTarget), ' lies under the library root ', LibRoot, '.');
+      Writeln(ErrOutput, '       A project may not live in a library folder (known limitation). Move the project out of that folder,');
+      Writeln(ErrOutput, '       or remove the folder from the manifest''s library section, then index it again.');
+      Exit(2);
+    end;
+  end;
   var ResolvedDb: string:= ResolveIndexDb(IdxArgs, IndexTarget, TargetManifest);
+  { STRAY (OQ14): a library database is never the write target of a PROJECT index. }
+  if IsProjectTarget and (ResolvedDb <> '') and
+     IsLibraryDbForProjectRefusal(LibrarySectionDbs(TargetManifest), ResolvedDb) then
+  begin
+    Writeln(ErrOutput, 'ERROR: index: ', ResolvedDb, ' is a library database and cannot hold a project index.');
+    Writeln(ErrOutput, '       Pass the project''s own database: drag-lint resolve-dbs --project <x.dproj>  (or --db <Project>.sqlite).');
+    Exit(2);
+  end;
   if ResolvedDb = '' then
   begin
     { A project target's refusal (two claimants, or no manifest) was already

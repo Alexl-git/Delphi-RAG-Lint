@@ -224,6 +224,7 @@ A routine with a body also carries `[impl A-B]` in the text row (`impl_start_lin
      Only the per-platform library DBs stay in a shared folder. Never guess
      the path -- `drag-lint resolve-dbs --project <x.dproj>` (or `--in
      <x.pas>`) resolves it.
+   (`index --project` refuses, exit 2, a project under a library root or a library DB as its `--db`.)
 3. Point every query at that `--db`. Re-run `index` after large code changes.
    With per-project DBs, a **cross-project** question (typically `find-callers`)
    needs **several `--db` flags** -- or omit `--db` and let the manifest

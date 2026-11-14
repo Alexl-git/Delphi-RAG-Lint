@@ -539,6 +539,7 @@ begin
   Writeln('       see wiki page: Format-Whole-Project-with-YADF');
   Writeln('  drag-lint index --project <file.dproj> --db <file.sqlite> [--build-config <Release|Debug|name>]');
   Writeln('       see wiki page: index-build-config');
+  Writeln('       index --project refuses (exit 2) a .dproj under a library-section root, and a library database (library-*.sqlite or a library section''s db) as its --db.');
   Writeln('  drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--wait-library <min>] [--require-library] [--stall-exit-min <min>] [--rule-cache-warm background|wait|off] [--watch [--interval N]] [--target-compiler <ver|auto>]');
   Writeln('       see wiki page: Rebuild-Index-for-This-Project');
   Writeln('  drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--watch [--interval N]]');
