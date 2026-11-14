@@ -1,0 +1,3 @@
+# Edit1: TMyEditA, but the form file creates a TMyEditB (a sibling class)
+form-field-type-mismatch 16
+# Edit2 (TEdit field, TMyEditA object: a descendant), Edit3 (same class) and Edit4 (qualified, same) are fine

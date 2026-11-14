@@ -1,0 +1,5 @@
+# btnGone (default published section) and edtPublished (published section) have no object
+form-field-without-object 11
+form-field-without-object 19
+# Edit1 and lblKept have objects; FCache (private) and PublicButton (public) are not published
+!form-object-without-field
