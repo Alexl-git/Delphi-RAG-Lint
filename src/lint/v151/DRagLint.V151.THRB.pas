@@ -3,7 +3,9 @@ unit DRagLint.V151.THRB;
 { Wave v151 lane THRB -- thread data-race rules B (parallel-for shared writes, unsafe increments, blocking main thread, unobserved task exceptions).
   Scaffold created EMPTY by lane FRAME; lane THRB owns this unit, its
   DRagLint.V151.THRB.Support helpers and DRagLint.Fix.V151.THRB. Called only by
-  DRagLint.V151.Dispatch. How-to: C:\TEMP\claude\lanes\v151\FRAME\HOWTO-RULE-LANE.md. }
+  DRagLint.V151.Dispatch. How-to: C:\TEMP\claude\lanes\v151\FRAME\HOWTO-RULE-LANE.md.
+  All four rules are AST walks of one unit; the index (when present) only
+  refines which classes are threads or forms. }
 
 interface
 
@@ -17,7 +19,29 @@ uses
 type
   /// <summary>Checker entry points of v151 lane THRB; every method is called by TV151Dispatch.</summary>
   /// <remarks>Stateless; class methods only. A method that has nothing to check returns nil.
-  /// Findings for ids not declared in Catalog are a lane bug: --rule would never reach them.</remarks>
+  /// Findings for ids not declared in Catalog are a lane bug: --rule would never reach them.
+  /// <para>parallel-for-shared-write: the body of TParallel.For, or of a TTask.Run / Create / Future /
+  /// TThread.CreateAnonymousThread started inside a loop, stores into a plain variable declared outside
+  /// that body (a captured local, a field, a global) and takes no lock. Element stores (`A[I] := ..`),
+  /// member stores (`Obj.X := ..`), names the body declares itself, stores inside a nested anonymous
+  /// method (Synchronize / Queue bodies run serialised) and stores under a `with` are not reported.</para>
+  /// <para>thread-unsafe-increment: Inc / Dec / `X := X + e` / `X := X - e` on a unit-level variable or
+  /// class var of the same file, in Execute of a thread class or in a TTask / anonymous-thread body,
+  /// with no lock taken in that routine. A threadvar, a local or parameter of the same name, a field
+  /// of the thread class, TInterlocked calls and Synchronize / Queue bodies are not reported; a
+  /// TParallel.For body or task-in-loop body is left to parallel-for-shared-write.</para>
+  /// <para>blocking-call-in-main-thread: in a method of a form or frame class (a unit with
+  /// `{$R *.dfm}` / `{$R *.fmx}`), a wait with no time limit: WaitFor / Wait with no argument or
+  /// INFINITE, WaitForSingleObject(..., INFINITE), WaitForMultipleObjects(..., INFINITE),
+  /// TTask.WaitForAll / WaitForAny without a timeout, and TThread.Sleep. A wait on a receiver the same
+  /// routine also stops or frees (Terminate, Stop, Shutdown, Cancel, Free, FreeAndNil: teardown), a destructor, and anonymous-method bodies are not reported.
+  /// Plain Sleep stays with sleep-in-vcl.</para>
+  /// <para>task-exception-unobserved: TTask.Run / Create / Future whose body (an anonymous method,
+  /// or a routine of the same file passed by name) has no top-level try..except, and whose ITask /
+  /// IFuture is never observed: the result is discarded (also after `.Start`) or kept in a local the
+  /// routine never uses again except to Start it. A task kept in a field, passed on, waited or read
+  /// counts as observed; a body that cannot be seen is not reported; TTask.Run with an anonymous
+  /// method is left to exception-escapes-thread.</para></remarks>
   TV151THRBRules = class
   public
     /// <summary>Declares every rule id this lane may emit: new ids (V151Rule) and host ids of in-place expansions (V151Host).</summary>
@@ -46,30 +70,443 @@ type
 
 implementation
 
-{ The lane's helpers live in DRagLint.V151.THRB.Support; name it in an
-  implementation uses clause here once it declares something. }
+uses
+  System.StrUtils
+  , TreeSitter
+  , DRagLint.V151.THRB.Support
+  ;
+
+const
+  RULE_PFOR      = 'parallel-for-shared-write';
+  RULE_INCREMENT = 'thread-unsafe-increment';
+  RULE_BLOCKING  = 'blocking-call-in-main-thread';
+  RULE_TASK_EXC  = 'task-exception-unobserved';
+  CATEGORY       = 'bug-patterns';
+  SEVERITY       = 'warning';
+  ARG_INFINITE   = 'infinite';
+  TEARDOWN_LEAVES: array[0..5] of string = ('terminate', 'stop', 'shutdown', 'cancel', 'free', 'destroy');
 
 class procedure TV151THRBRules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
-  { no rules yet }
+  ADecls.Add(V151Rule(RULE_PFOR, CATEGORY, SEVERITY,
+    'Parallel loop or task-in-loop body writes a variable declared outside it without a lock -- the iterations race'));
+  ADecls.Add(V151Rule(RULE_INCREMENT, CATEGORY, SEVERITY,
+    'Thread code increments a global or class var without a lock -- concurrent Inc/Dec lose updates; use TInterlocked'));
+  ADecls.Add(V151Rule(RULE_BLOCKING, CATEGORY, SEVERITY,
+    'Form or frame method waits with no time limit (WaitFor, WaitForSingleObject INFINITE, TTask.WaitForAll, TThread.Sleep) -- the UI freezes'));
+  ADecls.Add(V151Rule(RULE_TASK_EXC, CATEGORY, SEVERITY,
+    'TTask started with an unguarded body and never waited or read -- an exception raised in it is lost without a trace'));
+end;
+
+type
+  /// <summary>One run of the four rules over one file.</summary>
+  TThrbRun = class
+  strict private
+    FFile: TThrbFile;
+    FCtx : TV151FileCtx;
+    function EnclosingScope(const ANode: TTSNode): TTSNode;
+    function ShadowedLocally(const ANode: TTSNode; const AName: string): Boolean;
+    function InsideWith(const ANode, AStop: TTSNode): Boolean;
+    procedure WalkWrites(const ANode: TTSNode; const ADeclared: TList<string>; const AWithStop: TTSNode);
+    procedure CheckParallelBody(const ALambda: TTSNode; AKind: TThrbLambdaKind);
+    procedure WalkIncrements(const ANode: TTSNode; const AClass: string);
+    procedure CheckIncrements(const ABody: TTSNode; const AClass: string);
+    function IsInfiniteArg(const AArgs: TTSNode; AIndex: Integer): Boolean;
+    function TornDownInRoutine(const ABody: TTSNode; const AReceiver: string): Boolean;
+    procedure WalkBlocking(const ANode, ABody: TTSNode);
+    function RoutineBodyByName(const AName: string; out ABody: TTSNode): Boolean;
+    function TaskObserved(const ACall: TTSNode): Boolean;
+    procedure CheckTask(const ACall: TTSNode);
+  public
+    constructor Create(const ACtx: TV151FileCtx);
+    destructor Destroy; override;
+    /// <summary>Runs every wanted rule; the findings are in File.Findings.</summary>
+    procedure Execute;
+    /// <summary>The parsed file and its findings.</summary>
+    property ParsedFile: TThrbFile read FFile;
+  end;
+
+constructor TThrbRun.Create(const ACtx: TV151FileCtx);
+begin
+  inherited Create;
+  FCtx := ACtx;
+  FFile:= TThrbFile.Create(ACtx.Path, ACtx.Store, ACtx.FileId, ACtx.LibStore);
+end;
+
+destructor TThrbRun.Destroy;
+begin
+  FFile.Free;
+  inherited;
+end;
+
+{ The nearest enclosing defProc or lambda of ANode (not ANode itself). }
+function TThrbRun.EnclosingScope(const ANode: TTSNode): TTSNode;
+begin
+  Result:= ANode.Parent;
+  while (not Result.IsNull) and (Result.NodeType <> 'defProc') and (Result.NodeType <> 'lambda') do
+    Result:= Result.Parent;
+end;
+
+{ True when AName is declared by any routine or lambda enclosing ANode. }
+function TThrbRun.ShadowedLocally(const ANode: TTSNode; const AName: string): Boolean;
+var
+  Scope: TTSNode;
+  Names: TList<string>;
+begin
+  Result:= False;
+  Names:= TList<string>.Create;
+  try
+    Scope:= EnclosingScope(ANode);
+    while not Scope.IsNull do
+    begin
+      Names.Clear;
+      ThrbDeclaredNames(FFile, Scope, Names);
+      if Names.IndexOf(AName) >= 0 then Exit(True);
+      Scope:= EnclosingScope(Scope);
+    end;
+  finally
+    Names.Free;
+  end;
+end;
+
+function TThrbRun.InsideWith(const ANode, AStop: TTSNode): Boolean;
+var
+  Anc: TTSNode;
+begin
+  Result:= False;
+  Anc:= ANode.Parent;
+  while (not Anc.IsNull) and (not ThrbSameNode(Anc, AStop)) do
+  begin
+    if Anc.NodeType = 'with' then Exit(True);
+    Anc:= Anc.Parent;
+  end;
+end;
+
+{ ---- parallel-for-shared-write ---- }
+
+procedure TThrbRun.WalkWrites(const ANode: TTSNode; const ADeclared: TList<string>; const AWithStop: TTSNode);
+var
+  Target: TTSNode;
+  IsInc : Boolean;
+  Name  : string;
+begin
+  if ANode.IsNull or (ANode.NodeType = 'lambda') or (ANode.NodeType = 'defProc') then Exit;
+  Target:= ThrbWrittenName(FFile, ANode, IsInc);
+  if not Target.IsNull then
+  begin
+    Name:= FFile.Canon(Target);
+    if (ADeclared.IndexOf(Name) < 0) and (not InsideWith(ANode, AWithStop)) then
+      FFile.Emit(ANode, RULE_PFOR, Format('''%s'' is declared outside the parallel body and every iteration ' +
+        'writes it with no lock -- the writes race and updates are lost; give each iteration its own slot ' +
+        '(an array element, a local), or guard it with a lock or TInterlocked', [FFile.Text(Target)]));
+  end;
+  for var I: Integer:= 0 to ANode.NamedChildCount - 1 do WalkWrites(ANode.NamedChild(I), ADeclared, AWithStop);
+end;
+
+procedure TThrbRun.CheckParallelBody(const ALambda: TTSNode; AKind: TThrbLambdaKind);
+var
+  Body    : TTSNode;
+  Declared: TList<string>;
+begin
+  if not (AKind in [tlkParallelFor, tlkTaskInLoop]) then Exit;
+  Body:= ALambda.ChildByField('body');
+  if Body.IsNull or ThrbTakesLock(FFile, Body) then Exit;
+  Declared:= TList<string>.Create;
+  try
+    ThrbDeclaredNames(FFile, ALambda, Declared);
+    for var I: Integer:= 0 to Body.NamedChildCount - 1 do WalkWrites(Body.NamedChild(I), Declared, ALambda);
+  finally
+    Declared.Free;
+  end;
+end;
+
+{ ---- thread-unsafe-increment ---- }
+
+procedure TThrbRun.WalkIncrements(const ANode: TTSNode; const AClass: string);
+var
+  Target: TTSNode;
+  IsInc : Boolean;
+  Name  : string;
+begin
+  if ANode.IsNull or (ANode.NodeType = 'lambda') or (ANode.NodeType = 'defProc') then Exit;
+  Target:= ThrbWrittenName(FFile, ANode, IsInc);
+  if (not Target.IsNull) and IsInc then
+  begin
+    Name:= FFile.Canon(Target);
+    if FFile.IsGlobal(Name) and (not FFile.IsFieldOf(AClass, Name)) and (not ShadowedLocally(ANode, Name)) then
+      FFile.Emit(ANode, RULE_INCREMENT, Format('''%s'' is shared by every thread and this read-modify-write is ' +
+        'not atomic -- two threads interleave and an update is lost; use TInterlocked.Increment / Add, or ' +
+        'take a lock around it', [FFile.Text(Target)]));
+  end;
+  for var I: Integer:= 0 to ANode.NamedChildCount - 1 do WalkIncrements(ANode.NamedChild(I), AClass);
+end;
+
+procedure TThrbRun.CheckIncrements(const ABody: TTSNode; const AClass: string);
+begin
+  if ABody.IsNull or ThrbTakesLock(FFile, ABody) then Exit;
+  for var I: Integer:= 0 to ABody.NamedChildCount - 1 do WalkIncrements(ABody.NamedChild(I), AClass);
+end;
+
+{ ---- blocking-call-in-main-thread ---- }
+
+function TThrbRun.IsInfiniteArg(const AArgs: TTSNode; AIndex: Integer): Boolean;
+begin
+  Result:= (not AArgs.IsNull) and (AIndex >= 0) and (AIndex < AArgs.NamedChildCount)
+    and (FFile.Canon(AArgs.NamedChild(AIndex)) = ARG_INFINITE);
+end;
+
+{ Teardown: the routine also stops or frees AReceiver (X.Terminate / Stop / Shutdown / Cancel / Free,
+  FreeAndNil(X)), so the wait is the end of the object's life, not a wait for a result. }
+function TThrbRun.TornDownInRoutine(const ABody: TTSNode; const AReceiver: string): Boolean;
+var
+  Args: TTSNode;
+begin
+  Result:= False;
+  for var N: TTSNode in FFile.Nodes do
+  begin
+    if (N.StartByte < ABody.StartByte) or (N.EndByte > ABody.EndByte) then Continue;
+    if not ((N.NodeType = 'exprDot') or (N.NodeType = 'exprCall')) then Continue;
+    var Name: string:= if N.NodeType = 'exprCall' then FFile.Canon(N.ChildByField('entity')) else FFile.Canon(N);
+    if (ThrbReceiver(Name) = AReceiver) and MatchText(ThrbLeaf(Name), TEARDOWN_LEAVES) then Exit(True);
+    if (N.NodeType = 'exprCall') and (Name = 'freeandnil') then
+    begin
+      Args:= N.ChildByField('args');
+      if (not Args.IsNull) and (Args.NamedChildCount = 1) and (FFile.Canon(Args.NamedChild(0)) = AReceiver) then
+        Exit(True);
+    end;
+  end;
+end;
+
+procedure TThrbRun.WalkBlocking(const ANode, ABody: TTSNode);
+var
+  Name, Leaf, Recv: string;
+  Args            : TTSNode;
+  Count           : Integer;
+  Hit             : Boolean;
+  Par             : TTSNode;
+begin
+  if ANode.IsNull or (ANode.NodeType = 'lambda') or (ANode.NodeType = 'defProc') then Exit;
+  Name:= '';
+  Args:= Default(TTSNode);
+  if ANode.NodeType = 'exprCall' then
+  begin
+    Name:= FFile.Canon(ANode.ChildByField('entity'));
+    Args:= ANode.ChildByField('args');
+  end
+  else if (ANode.NodeType = 'exprDot') then
+  begin
+    Par:= ANode.Parent;
+    if (not Par.IsNull) and (Par.NodeType = 'statement') then Name:= FFile.Canon(ANode);
+  end;
+  if Name <> '' then
+  begin
+    Count:= if Args.IsNull then 0 else Args.NamedChildCount;
+    Leaf := ThrbLeaf(Name);
+    Recv := ThrbReceiver(Name);
+    Hit  := False;
+    if (Name = 'waitforsingleobject') or (Name = 'waitforsingleobjectex') then Hit:= IsInfiniteArg(Args, 1)
+    else if (Name = 'waitformultipleobjects') or (Name = 'waitformultipleobjectsex') then Hit:= IsInfiniteArg(Args, 3)
+    else if (Name = 'ttask.waitforall') or (Name = 'ttask.waitforany') then
+      Hit:= (Count = 1) or IsInfiniteArg(Args, Count - 1)
+    else if Name = 'tthread.sleep' then Hit:= True
+    else if ((Leaf = 'waitfor') or (Leaf = 'wait')) and (Recv <> '') then
+      Hit:= ((Count = 0) or ((Count = 1) and IsInfiniteArg(Args, 0))) and (not TornDownInRoutine(ABody, Recv));
+    if Hit then
+      FFile.Emit(ANode, RULE_BLOCKING, Format('%s blocks the main thread with no time limit -- the window stops ' +
+        'painting and answering input until it returns; wait in a worker and report back with ' +
+        'TThread.Queue, or poll with a short timeout', [FFile.Text(if ANode.NodeType = 'exprCall' then
+        ANode.ChildByField('entity') else ANode)]));
+  end;
+  for var I: Integer:= 0 to ANode.NamedChildCount - 1 do WalkBlocking(ANode.NamedChild(I), ABody);
+end;
+
+{ ---- task-exception-unobserved ---- }
+
+function TThrbRun.RoutineBodyByName(const AName: string; out ABody: TTSNode): Boolean;
+var
+  Found: Integer;
+begin
+  Found:= 0;
+  ABody:= Default(TTSNode);
+  for var N: TTSNode in FFile.Nodes do
+  begin
+    if N.NodeType <> 'defProc' then Continue;
+    var Hdr: TTSNode:= N.ChildByField('header');
+    if Hdr.IsNull then Continue;
+    if ThrbLeaf(FFile.Canon(Hdr.ChildByField('name'))) <> AName then Continue;
+    var Body: TTSNode:= N.ChildByField('body');
+    if Body.IsNull then Continue;
+    if ThrbGuarded(Body) then Exit(False);
+    Inc(Found);
+    ABody:= Body;
+  end;
+  Result:= Found > 0;
+end;
+
+function TThrbRun.TaskObserved(const ACall: TTSNode): Boolean;
+var
+  Cur, Par, Lhs, Routine: TTSNode;
+  Name                  : string;
+  Locals                : TList<string>;
+begin
+  Cur:= ACall;
+  Par:= Cur.Parent;
+  { TTask.Create(..).Start / .Start(): the value flows on as the ITask Start returns. }
+  if (not Par.IsNull) and (Par.NodeType = 'exprDot') and ThrbSameNode(Par.ChildByField('lhs'), Cur)
+    and (FFile.Canon(Par.ChildByField('rhs')) = 'start') then
+  begin
+    Cur:= Par;
+    Par:= Cur.Parent;
+    if (not Par.IsNull) and (Par.NodeType = 'exprCall') and ThrbSameNode(Par.ChildByField('entity'), Cur) then
+    begin
+      Cur:= Par;
+      Par:= Cur.Parent;
+    end;
+  end;
+  if Par.IsNull then Exit(True);
+  if Par.NodeType = 'statement' then Exit(False);
+  if (Par.NodeType <> 'assignment') or (not ThrbSameNode(Par.ChildByField('rhs'), Cur)) then Exit(True);
+  Lhs:= Par.ChildByField('lhs');
+  if Lhs.NodeType = 'varAssignDef' then
+  begin
+    for var I: Integer:= 0 to Lhs.NamedChildCount - 1 do
+      if Lhs.NamedChild(I).NodeType = 'identifier' then Lhs:= Lhs.NamedChild(I);
+  end;
+  if Lhs.NodeType <> 'identifier' then Exit(True);
+  Name:= FFile.Canon(Lhs);
+  Routine:= Par.Parent;
+  while (not Routine.IsNull) and (Routine.NodeType <> 'defProc') do Routine:= Routine.Parent;
+  if Routine.IsNull then Exit(True);
+  Locals:= TList<string>.Create;
+  try
+    ThrbDeclaredNames(FFile, Routine, Locals);
+    if Locals.IndexOf(Name) < 0 then Exit(True);
+  finally
+    Locals.Free;
+  end;
+  { Any other use of the local than the store itself and `.Start` observes (or may observe) the task. }
+  for var N: TTSNode in FFile.Nodes do
+  begin
+    if (N.NodeType <> 'identifier') or (N.StartByte < Routine.StartByte) or (N.EndByte > Routine.EndByte) then Continue;
+    if ThrbSameNode(N, Lhs) or (FFile.Canon(N) <> Name) then Continue;
+    var P: TTSNode:= N.Parent;
+    if (P.NodeType = 'declVar') or (P.NodeType = 'varAssignDef') then Continue;
+    if (P.NodeType = 'exprDot') and ThrbSameNode(P.ChildByField('rhs'), N) then Continue;
+    if (P.NodeType = 'exprDot') and ThrbSameNode(P.ChildByField('lhs'), N)
+      and (FFile.Canon(P.ChildByField('rhs')) = 'start') then Continue;
+    if (P.NodeType = 'assignment') and ThrbSameNode(P.ChildByField('lhs'), N) then Continue;
+    Exit(True);
+  end;
+  Result:= False;
+end;
+
+procedure TThrbRun.CheckTask(const ACall: TTSNode);
+var
+  Callee: string;
+  Args  : TTSNode;
+  Body  : TTSNode;
+  Lambda: TTSNode;
+  RefArg: TTSNode;
+  Shown : string;
+begin
+  Callee:= FFile.Canon(ACall.ChildByField('entity'));
+  if not ((Callee = 'ttask.run') or (Callee = 'ttask.create') or (Callee = 'ttask.future')) then Exit;
+  Args:= ACall.ChildByField('args');
+  if Args.IsNull then Exit;
+  Lambda:= Default(TTSNode);
+  RefArg:= Default(TTSNode);
+  for var I: Integer:= 0 to Args.NamedChildCount - 1 do
+  begin
+    var A: TTSNode:= Args.NamedChild(I);
+    if (A.NodeType = 'lambda') and Lambda.IsNull then Lambda:= A
+    else if ((A.NodeType = 'identifier') or (A.NodeType = 'exprDot')) and RefArg.IsNull then RefArg:= A;
+  end;
+  if not Lambda.IsNull then
+  begin
+    if Callee = 'ttask.run' then Exit;                       // exception-escapes-thread reports it
+    Body:= Lambda.ChildByField('body');
+    if ThrbGuarded(Body) then Exit;
+    Shown:= 'its anonymous method';
+  end
+  else
+  begin
+    if RefArg.IsNull or (not RoutineBodyByName(ThrbLeaf(FFile.Canon(RefArg)), Body)) then Exit;
+    Shown:= FFile.Text(RefArg);
+  end;
+  if TaskObserved(ACall) then Exit;
+  FFile.Emit(ACall, RULE_TASK_EXC, Format('%s runs %s, which has no try..except, and the task is never waited ' +
+    'or read -- an exception raised in it is stored in the task and lost; keep the ITask and Wait on it, or ' +
+    'catch and report inside the body', [FFile.Text(ACall.ChildByField('entity')), Shown]));
+end;
+
+{ ---- driver ---- }
+
+procedure TThrbRun.Execute;
+var
+  Kind    : TThrbLambdaKind;
+  Call    : TTSNode;
+  FormUnit: Boolean;
+begin
+  if not FFile.Ok then Exit;
+  FormUnit:= FFile.SourceContains('{$r *.dfm}') or FFile.SourceContains('{$r *.fmx}');
+  for var N: TTSNode in FFile.Nodes do
+  begin
+    if N.NodeType = 'lambda' then
+    begin
+      Kind:= ThrbLambdaKind(FFile, N, Call);
+      if FCtx.Wants(RULE_PFOR) then CheckParallelBody(N, Kind);
+      if FCtx.Wants(RULE_INCREMENT) and (Kind = tlkTask) then CheckIncrements(N.ChildByField('body'), '');
+    end
+    else if N.NodeType = 'defProc' then
+    begin
+      var Hdr: TTSNode:= N.ChildByField('header');
+      if Hdr.IsNull then Continue;
+      var NameN: TTSNode:= Hdr.ChildByField('name');
+      if NameN.IsNull or (NameN.NodeType <> 'genericDot') then Continue;
+      var Cls: string:= FFile.Canon(NameN.ChildByField('lhs'));
+      var Meth: string:= FFile.Canon(NameN.ChildByField('rhs'));
+      if FCtx.Wants(RULE_INCREMENT) and (Meth = 'execute') and FFile.IsThreadClass(Cls) then
+        CheckIncrements(N.ChildByField('body'), Cls);
+      if FCtx.Wants(RULE_BLOCKING) and FormUnit and (Hdr.ChildCount > 0) and (Hdr.Child(0).NodeType <> 'kDestructor')
+        and FFile.IsFormClass(Cls) then
+      begin
+        var Body: TTSNode:= N.ChildByField('body');
+        if not Body.IsNull then
+          for var I: Integer:= 0 to Body.NamedChildCount - 1 do WalkBlocking(Body.NamedChild(I), Body);
+      end;
+    end
+    else if (N.NodeType = 'exprCall') and FCtx.Wants(RULE_TASK_EXC) then
+      CheckTask(N);
+  end;
 end;
 
 class function TV151THRBRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+var
+  Run: TThrbRun;
+begin
+  Result:= nil;
+  if not (ACtx.Wants(RULE_PFOR) or ACtx.Wants(RULE_INCREMENT) or ACtx.Wants(RULE_BLOCKING)
+    or ACtx.Wants(RULE_TASK_EXC)) then Exit;
+  Run:= TThrbRun.Create(ACtx);
+  try
+    Run.Execute;
+    Result:= Run.ParsedFile.Findings;
+  finally
+    Run.Free;
+  end;
+end;
+
+class function TV151THRBRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter -- signature fixed by TV151Dispatch; no form-file rule in this lane
 begin
   Result:= nil;
 end;
 
-class function TV151THRBRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV151THRBRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;  // dl:ok unused-parameter -- signature fixed by TV151Dispatch; no raw-byte rule in this lane
 begin
   Result:= nil;
 end;
 
-class function TV151THRBRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;
-begin
-  Result:= nil;
-end;
-
-class function TV151THRBRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
+class function TV151THRBRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter -- signature fixed by TV151Dispatch; no project-wide rule in this lane
 begin
   Result:= nil;
 end;
