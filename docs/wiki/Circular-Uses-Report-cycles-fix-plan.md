@@ -209,7 +209,7 @@ The engine never guesses; every kind it can give:
   mechanically and pass the compile gate).
 * **R1 (routine-call inversion):** `not-a-routine`, `signature-in-cycle`,
   `overloaded-routine`, `signature-unknown`, `qualified-ref` (a name qualified by the declaring unit that the plan can neither redirect nor move: another routine of that unit, or the inverted routine in a shape it cannot rewrite, such as `@Unit.Foo`; `Unit.Foo(2)` of the inverted routine itself becomes `FooPtr(2)`, a comment or a string is not a use, and a global moves and is rewritten, see below), `name-shadowed` (since 1.44: a line to rewrite also holds `Foo` bound to something else, a nested routine, a method or a parameter, as in `Foo(1); Unit.Foo(2);`, or `Unit` there is a local of the consumer; the rewrite works on the text of the line, so it would call the pointer instead; on separate lines the plan is sound and goes ahead), `routine-not-called` (`@F`, a parameterless function as an argument, an argument on a line of its own; a routine passed as a whole argument is redirected, see below),
-  `init-order` (the consumer's initialization section runs the call and, since 1.50, the program's uses order does not prove that the declaring unit initializes first -- see "Init order proved from the program" below; the reason says which condition failed), `finalization-order` (since 1.43: the consumer's finalization section runs the call, and the declaring unit, finalized first after the cut, has statements in its finalization section or a variable of a type the compiler may finalize), `unsupported-directive`, `duplicate-identifier` (the leaf already declares the
+  `init-order` (the consumer's initialization section runs the call and, since 1.50, the program's uses order does not prove that the declaring unit initializes first -- see "Init order proved from the program" below; the reason says which condition failed), `finalization-order` (since 1.43: the consumer's finalization section runs the call, and the declaring unit has statements in its finalization section or a variable of a type the compiler may finalize; since 1.51 only when the program's uses order does not prove that unit is finalized AFTER the consumer -- see "Finalization order proved from the program" below; since 1.51 the metaclass hand-over and the constructor inversion pass the same check), `unsupported-directive`, `duplicate-identifier` (the leaf already declares the
   pointer type or variable differently and every suffix up to 99 is taken; an identical declaration is
   reused, a different one gets the lowest free suffix; since 1.44 also when the consumer, the declaring unit or a class member already declares `FooPtr`, which would win over the pointer). `unit-leaves-program` is NOT a refusal
   any more (since 1.34.1): when the declaring unit is used only by the consumer and the
@@ -254,8 +254,8 @@ The engine never guesses; every kind it can give:
   reason: the declaring unit keeps using the consumer, so it is finalized FIRST. The call is planned only
   when that cannot be seen (no statement in the declaring unit's finalization section, and every variable
   of a type known to need no finalization: an ordinal, a float, a pointer, a class, a plain procedural
-  type); otherwise `finalization-order`. The check reads the declaring unit only, not what the routine
-  calls.
+  type), or (since 1.51) when the program order proves the declaring unit is finalized after the consumer;
+  otherwise `finalization-order`. The check reads the declaring unit only, not what the routine calls.
 * **`Unit.GVar`.** A qualified name is no reference in the index. A global of the declaring unit that the
   consumer names qualified now moves with the edge, and every code occurrence of `<Unit>.<Name>` of a moved
   declaration, in the source and in every unit that uses it (Part A and Part B), becomes
@@ -292,6 +292,28 @@ carries the same text as `fix.edges[].init_order`. The proof holds for one uses 
 .dpr or of a uses clause can reverse it, and `init-order-hazard` (which since 1.50 also follows a variable
 declared in a used unit, the pointer's leaf, and assigned in the declaring unit's initialization) reports
 the nil read then.
+
+### Finalization order proved from the program (since 1.51)
+
+A call that runs from the consumer's FINALIZATION section (in it, or in a routine it names) reaches the
+declaring unit after the cut through the pointer, which is still assigned there. What can go wrong is the
+declaring unit's own state: if that unit is finalized first, its finalization section has run and its
+managed globals are gone. Delphi finalizes units in the exact reverse of the initialization order (pinned
+by `run_cyclefix_final_order_proof_dcc.ps1` on six compiled and run programs), so "the declaring unit
+initializes first, before and after the cut, in every program" -- the init-order proof above -- is "it is
+finalized after the consumer". The check, for R1, the metaclass hand-over and the constructor inversion:
+
+| Case | Result |
+|---|---|
+| The declaring unit's finalization cannot be seen (no statement in its section, no variable of a type that needs finalization) | planned, no proof needed |
+| The init-order proof holds | planned; the step prints `finalization order: `B` is finalized after `A`: finalization runs in the reverse order of initialization, and `B` initializes before `A` in `X.dpr` (position n before m; ...). This holds for this uses order only: ...`; JSON `fix.edges[].final_order` |
+| After the cut the consumer no longer reaches the declaring unit (always so in a two-unit cycle) | refused `finalization-order`: "... and after the cut `B` is finalized first: ..." |
+| Any other failed condition of the init-order proof | refused `finalization-order`: "... and `B` may be finalized first, after which ...; finalization runs in the reverse order of initialization, and " + the init-order reason (positions and the entry to reorder, a conditional entry, no program) |
+| The edge is weighed on the graph predicted after Part A | refused, "; re-checked against the program order once Part A is applied" |
+
+No lint rule re-checks a proved finalization order: `finalization-after-dependency` follows certain call
+edges, and a call through the pointer is none. A later uses change that reverses the order lets the call
+run after the declaring unit is finalized.
 
 ### Never automatic, and why (since 1.50)
 
@@ -338,8 +360,9 @@ Only this closed set is planned, every other site refuses `ctor-inversion-surfac
 * one constructor per class, not overloaded, every parameter type a plain name that is a System built-in or
   lives in a unit outside the cycle that the interface of TX's unit already uses;
 * the program lists TX's unit (nothing else may use it after the cut, and its initialization assigns the pointer);
-* the consumer's initialization section neither holds the call nor names the routine that makes it, its finalization
-  does not hold it (`init-order`'s check of R1).
+* the consumer's initialization section neither holds the call nor names the routine that makes it (`init-order`'s
+  check of R1); a call its finalization section holds or names passes R1's `finalization-order` check (since 1.51;
+  before, every call written in the finalization section was refused and one in a routine it names was not checked).
 
 Stays refused on purpose: a temporary (`TX.Create(nil).Show`, `with TX.Create do`), `Result := TX.Create`, a global or
 a property of the class type, the slot passed as an argument, a property written through it, `TX.ClassMethod`
