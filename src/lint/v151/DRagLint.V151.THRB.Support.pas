@@ -281,7 +281,7 @@ begin
       case C of
         '<': Inc(Depth);
         '>': if Depth > 0 then Dec(Depth);
-        ' ', #9, #13, #10, '&': ;
+        ' ', #9, #13, #10, '&': ; { blanks and the & escape are dropped on purpose }
       else
         if Depth = 0 then SB.Append(C);
       end;
@@ -387,8 +387,8 @@ begin
     if FReader = nil then FReader:= TExprTypeReader.Create(FStore, FLibStore, FFileId, FSrc);
     if FReader.Ready then D:= FReader.Descends(AClass, 'tthread');
   end;
-  if SpelledAncestorEndsWith(AClass, ['thread']) then Result:= D <> tdNo
-  else Result:= FParentOf.ContainsKey(AClass) and (D = tdYes);
+  Result:= if SpelledAncestorEndsWith(AClass, ['thread']) then D <> tdNo
+    else FParentOf.ContainsKey(AClass) and (D = tdYes);
 end;
 
 function TThrbFile.IsFormClass(const AClass: string): Boolean;
@@ -406,10 +406,8 @@ begin
       DFrame:= FReader.Descends(AClass, 'tcustomframe');
     end;
   end;
-  if SpelledAncestorEndsWith(AClass, ['form', 'frame']) then
-    Result:= not ((DForm = tdNo) and (DFrame = tdNo))
-  else
-    Result:= FParentOf.ContainsKey(AClass) and ((DForm = tdYes) or (DFrame = tdYes));
+  Result:= if SpelledAncestorEndsWith(AClass, ['form', 'frame']) then (DForm <> tdNo) or (DFrame <> tdNo)
+    else FParentOf.ContainsKey(AClass) and ((DForm = tdYes) or (DFrame = tdYes));
 end;
 
 function TThrbFile.IsGlobal(const AName: string): Boolean;
@@ -454,7 +452,7 @@ begin
   Result:= InList(ANode.NodeType, LOOP_NODES);
 end;
 
-function ThrbLambdaKind(const AFile: TThrbFile; const ALambda: TTSNode; out ACall: TTSNode): TThrbLambdaKind;
+function ThrbLambdaKind(const AFile: TThrbFile; const ALambda: TTSNode; out ACall: TTSNode): TThrbLambdaKind;  // dl:ok too-many-exit-points -- each early return IS the classification
 var
   Args, Anc: TTSNode;
   Callee   : string;
@@ -561,7 +559,7 @@ begin
   CollectDecls(AFile, AScope, ANames, True);
 end;
 
-function ThrbWrittenName(const AFile: TThrbFile; const ANode: TTSNode; out AIsIncrement: Boolean): TTSNode;
+function ThrbWrittenName(const AFile: TThrbFile; const ANode: TTSNode; out AIsIncrement: Boolean): TTSNode;  // dl:ok too-many-exit-points -- guard clauses per statement shape; a nested if would hide the shapes
 var
   Lhs, Rhs, Args, First: TTSNode;
   Name, Op, Callee     : string;
