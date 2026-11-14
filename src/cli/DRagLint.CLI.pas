@@ -543,6 +543,7 @@ type
     FixRule      : string ; // --fix-rule <id> ('' = all rules)
     NpRoutine    : string ; // narrow-param --routine <QName>
     NpParam      : string ; // narrow-param --param <name>
+    NpShowBound  : Boolean; // narrow-param --show-bound
     EiClass      : string ; // extract-interface --class <name>
     EiMembers    : string ; // extract-interface --members <a,b>
     EiReparent   : Boolean; // extract-interface --reparent-interfaced
@@ -2029,6 +2030,7 @@ begin
       Inc(i);
       Result.NpParam:= ParamStr(i);
     end
+    else if A = '--show-bound' then Result.NpShowBound:= True
     else if A = '--fix-naming' then Result.FixNaming:= True
     else if (A = '--stand-in-for') and (i < ParamCount) then begin Inc(i); Result.StandInFor:= ParamStr(i); end
     else if A = '--project-rules' then Result.ProjectRules:= True
@@ -17665,6 +17667,8 @@ begin
   Opts.NoBackup    := AArgs.NoBackup;
   Opts.NoCompile   := AArgs.NoCompile;
   Opts.Json        := AArgs.AsJson or SameText(AArgs.Format, 'json');
+  Opts.ShowBound   := AArgs.NpShowBound;
+  Opts.OwnDir      := AnchorDirForDb(AArgs.DbPath); { no --project: the DB's own project bounds the plan }
   if not ExplicitDbsExist(AArgs, 'narrow-param') then Exit(2);
   if NoDbResolved(AArgs.DbPath, 'narrow-param') then Exit(2);
   var Ok: Boolean;

@@ -35,9 +35,14 @@ not the proof. An `override` counts as a declaration, so v1 stops at the overrid
 | `generic-ancestor` | the narrow type would be a generic ancestor (`TBase<T>`): its bare name does not compile and the type arguments are not carried (1.47) |
 | `with-body`, `other-use`, `no-member-use` | not only `p.m` reads, writes and calls and nil tests. Stored, passed on, cast, `is`, `@`: refused. A member write `p.m:= v` binds like a read and counts as a use of m (1.47; `member-write` is no longer a refusal) |
 | `member-not-in-chain`, `overloaded-member`, `binding-mismatch` | the walk cannot name one declaring class |
+| `dfm-bound` | a method outside the published section that a form file assigns to an event by name (1.51) |
 | `uses-cycle` | the narrow type's unit cannot be added without risking a cycle |
 
 A narrow type outside the unit's scope adds its unit to the section's uses clause. Interface-typed parameters are left alone in v1.
+
+## Scope and bindings (1.51)
+
+Without `--project` the plan is bounded by the project the index belongs to (the parent of its `_D-RAG` folder): a unit outside it, such as a library unit the compile closure pulled in, is refused `outside-roots`, never planned. `--show-bound` adds, per parameter that reached the member proof, one line (JSON: a `bound` array) per member: the class on the chain that declares it first and why that class was chosen, including whether the index's own binding of the call agrees.
 
 ## See also
 
