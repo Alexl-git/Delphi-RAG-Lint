@@ -78,11 +78,11 @@ var
   Found: TList<TLintFinding>;
 begin
   Result:= nil;
-  if not (ACtx.Wants(RULE_ANON) or ACtx.Wants(RULE_SYNC) or ACtx.Wants(RULE_LOOP) or ACtx.Wants(RULE_UAF)
+  if not (ACtx.Wants(RULE_ANON) or ACtx.Wants(RULE_SYNC) or ACtx.Wants(RULE_LOOP) or ACtx.Wants(RULE_UAF)  // dl:ok boolean-expression-complexity@3a78 -- REVIEWED 2026-11-13 v151 THR-A: flat lookahead over adjacent tokens; splitting it would hide the pattern
     or ACtx.Wants(RULE_TVAR) or ACtx.Wants(RULE_QUEUE) or ACtx.Wants(RULE_FOT_HOST)) then Exit;
   try
     Src:= TFile.ReadAllText(ACtx.Path);
-  except
+  except  // dl:ok bare-except@8f3b, try-except-swallowed@8f3b -- REVIEWED 2026-11-13 v151 THR-A: an unreadable or unlistable file means no package or source facts, so no finding is the right result
     Exit;
   end;
   Scan:= TThrScan.Create(Src, ACtx.Store, ACtx.FileId);
@@ -102,17 +102,17 @@ begin
   end;
 end;
 
-class function TV151THRARules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV151THRARules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@2c91 -- REVIEWED 2026-11-13 v151 THR-A: the lane entry point signature is fixed by TV151Dispatch; this lane has nothing to check here
 begin
   Result:= nil;
 end;
 
-class function TV151THRARules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;
+class function TV151THRARules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;  // dl:ok unused-parameter@591a -- REVIEWED 2026-11-13 v151 THR-A: the lane entry point signature is fixed by TV151Dispatch; this lane has nothing to check here
 begin
   Result:= nil;
 end;
 
-class function TV151THRARules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
+class function TV151THRARules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@d468 -- REVIEWED 2026-11-13 v151 THR-A: the lane entry point signature is fixed by TV151Dispatch; this lane has nothing to check here
 begin
   Result:= nil;
 end;

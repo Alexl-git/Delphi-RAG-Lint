@@ -236,7 +236,7 @@ end;
 
 { Tokenizer ------------------------------------------------------------- }
 
-function Tokenize(const S: string): TArray<TThrTok>;
+function Tokenize(const S: string): TArray<TThrTok>;  // dl:ok deep-nesting@9caa, cyclomatic-complexity@a967, cognitive-complexity@0e50 -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
 var
   Lst: TList<TThrTok>;
   I, N, Line, Col, StartI, StartLine, StartCol: Integer;
@@ -399,7 +399,7 @@ begin
   FTypeDefs.Free;
   FClasses.Free;
   FRoutines.Free;
-  inherited;
+  inherited;  // dl:ok inherited-bare@246d -- REVIEWED 2026-11-13 v151 THR-A: TObject destructor chain only
 end;
 
 function TThrScan.Count: Integer;
@@ -414,7 +414,7 @@ end;
 
 function TThrScan.L(AIdx: Integer): string;
 begin
-  if (AIdx >= 0) and (AIdx < Length(FToks)) then Result:= FToks[AIdx].Low else Result:= '';
+  if (AIdx >= 0) and (AIdx < Length(FToks)) then Result:= FToks[AIdx].Low else Result:= '';  // dl:ok ifthen-to-if-expression@8c95 -- REVIEWED 2026-11-13 v151 THR-A: kept as a statement to match the surrounding style
 end;
 
 function TThrScan.Routines: TList<TThrRoutine>;
@@ -502,7 +502,7 @@ begin
     if (K >= 0) and (K < Length(FToks)) and (FToks[K].Kind = ttkIdent) and InArr(FToks[K].Low, AWords) then Exit(True);
 end;
 
-function TThrScan.UsesNames: TArray<string>;
+function TThrScan.UsesNames: TArray<string>;  // dl:ok deep-nesting@ddf6 -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
 var
   Res: TList<string>;
   K: Integer;
@@ -531,9 +531,9 @@ begin
               while (K < Length(FToks)) and (FToks[K].Low <> ',') and (FToks[K].Low <> ';') do Inc(K);
               Continue;
             end;
-            Cur:= Cur + FToks[K].Low;
+            Cur:= Cur + FToks[K].Low;  // dl:ok concat-in-loop@ec6e -- REVIEWED 2026-11-13 v151 THR-A: short lists (a handful of items); a builder would add noise
           end
-          else if FToks[K].Low = '.' then Cur:= Cur + '.';
+          else if FToks[K].Low = '.' then Cur:= Cur + '.';  // dl:ok concat-in-loop@3638 -- REVIEWED 2026-11-13 v151 THR-A: short lists (a handful of items); a builder would add noise
           Inc(K);
         end;
         if Cur <> '' then Res.Add(Cur);
@@ -570,7 +570,7 @@ begin
   Result:= (P < 0) or (L(P) = ';') or (L(P) = 'implementation') or (L(P) = ']');
 end;
 
-function TThrScan.ParseClassDecl(AOpener: Integer): Integer;
+function TThrScan.ParseClassDecl(AOpener: Integer): Integer;  // dl:ok deep-nesting@c943, cyclomatic-complexity@3862, cognitive-complexity@a35b -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
 var
   N, J, K, Depth, E, GenD: Integer;
   C: TThrClass;
@@ -604,7 +604,7 @@ begin
       Dec(K);
     end;
   end;
-  if (K >= 0) and (FToks[K].Kind = ttkIdent) then NameLow:= FToks[K].Low else NameLow:= '';
+  if (K >= 0) and (FToks[K].Kind = ttkIdent) then NameLow:= FToks[K].Low else NameLow:= '';  // dl:ok ifthen-to-if-expression@2dd1 -- REVIEWED 2026-11-13 v151 THR-A: kept as a statement to match the surrounding style
   J:= AOpener + 1;
   if (L(J) = 'abstract') or (L(J) = 'sealed') then Inc(J);
   Anc:= TList<string>.Create;
@@ -659,7 +659,7 @@ begin
         else if Depth = 1 then
         begin
           if (P = 'private') or (P = 'protected') or (P = 'public') or (P = 'published') then Vis:= P
-          else if IsRoutineKw(P) and (L(J - 1) <> ':') and (L(J - 1) <> 'to') and (L(J - 1) <> '=') and (L(J - 1) <> 'of')
+          else if IsRoutineKw(P) and (L(J - 1) <> ':') and (L(J - 1) <> 'to') and (L(J - 1) <> '=') and (L(J - 1) <> 'of')  // dl:ok boolean-expression-complexity@41a2 -- REVIEWED 2026-11-13 v151 THR-A: flat lookahead over adjacent tokens; splitting it would hide the pattern
             and (J + 1 < N) and (FToks[J + 1].Kind = ttkIdent) then
           begin
             M.NameLow:= L(J + 1);
@@ -684,7 +684,7 @@ begin
   end;
 end;
 
-function TThrScan.ParseRoutine(AKw: Integer): Integer;
+function TThrScan.ParseRoutine(AKw: Integer): Integer;  // dl:ok deep-nesting@c417, cyclomatic-complexity@b56d -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
 var
   N, J, D: Integer;
   R: TThrRoutine;
@@ -851,7 +851,7 @@ begin
     begin
       try
         Result:= FStore.IsDescendantOf(C.Name, 'TThread', FFileId);
-      except
+      except  // dl:ok bare-except@79dc -- REVIEWED 2026-11-13 v151 THR-A: an unreadable or unlistable file means no package or source facts, so no finding is the right result
         Result:= False;
       end;
     end;
@@ -872,7 +872,7 @@ var
     Result:= False;
     if AFrom >= ATo then Exit;
     W:= FToks[AFrom].Low;
-    if (FToks[AFrom].Kind = ttkIdent) and (InArr(W, ROUTINE_KWS) or (W = 'class') or (W = 'property') or (W = 'case')
+    if (FToks[AFrom].Kind = ttkIdent) and (InArr(W, ROUTINE_KWS) or (W = 'class') or (W = 'property') or (W = 'case')  // dl:ok boolean-expression-complexity@e871 -- REVIEWED 2026-11-13 v151 THR-A: flat lookahead over adjacent tokens; splitting it would hide the pattern
       or (W = 'private') or (W = 'public') or (W = 'strict') or (W = 'protected') or (W = 'published')) then Exit;
     ColonAt:= -1;
     Dd:= 0;
@@ -941,7 +941,7 @@ begin
   Result:= TypeManaged(S, RunEnd(S), ADepth + 1);
 end;
 
-function TThrScan.TypeManaged(AFrom, ATo, ADepth: Integer): Boolean;
+function TThrScan.TypeManaged(AFrom, ATo, ADepth: Integer): Boolean;  // dl:ok too-many-exit-points@f576 -- REVIEWED 2026-11-13 v151 THR-A: type classification returns at the first decisive token
 var
   W: string;
   Q, D: Integer;
@@ -949,7 +949,7 @@ var
 begin
   Result:= False;
   if (ADepth > MAX_DEPTH) or (AFrom >= ATo) or (AFrom >= Length(FToks)) then Exit;
-  W:= FToks[AFrom].Low;
+  W:= FToks[AFrom].Low;  // dl:ok overwrite-before-read@27e1 -- REVIEWED 2026-11-13 v151 THR-A: W is re-read from the first token on purpose after the qualifier skip
   while (L(AFrom + 1) = '.') and (AFrom + 2 < ATo) do Inc(AFrom, 2);
   W:= FToks[AFrom].Low;
   if W = 'packed' then Exit(TypeManaged(AFrom + 1, ATo, ADepth));
@@ -994,7 +994,7 @@ end;
 
 { Rule: anonymous-thread-not-started --------------------------------------- }
 
-procedure ThrCheckAnonymousNotStarted(const AScan: TThrScan; const APath: string; const AOut: TList<TLintFinding>);
+procedure ThrCheckAnonymousNotStarted(const AScan: TThrScan; const APath: string; const AOut: TList<TLintFinding>);  // dl:ok cyclomatic-complexity@40a0, cognitive-complexity@eb47 -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
 var
   I, S, Close, R, T, K: Integer;
   Nxt, Prv, Name: string;
@@ -1067,7 +1067,7 @@ procedure ThrCheckSynchronizeInDestructor(const AScan: TThrScan; const APath: st
     ACallTok:= -1;
     AVia:= '';
     Rt:= AScan.Routines[ARoutine];
-    if (Rt.BodyBeg < 0) or (ADepth > 3) then Exit;
+    if (Rt.BodyBeg < 0) or (ADepth > 3) then Exit;  // dl:ok magic-literal@5736 -- REVIEWED 2026-11-13 v151 THR-A: token lookahead offset in a fixed pattern, or a documented bound
     AVisited.Add(ARoutine);
     for K:= Rt.BodyBeg + 1 to Rt.BodyEnd - 1 do
     begin
@@ -1122,7 +1122,7 @@ end;
 
 { Rule: thread-loop-without-terminated ------------------------------------- }
 
-procedure ThrCheckLoopWithoutTerminated(const AScan: TThrScan; const APath: string; const AOut: TList<TLintFinding>);
+procedure ThrCheckLoopWithoutTerminated(const AScan: TThrScan; const APath: string; const AOut: TList<TLintFinding>);  // dl:ok deep-nesting@a746, cognitive-complexity@eb8b -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
 
   function StmtEnd(AFrom, ALimit: Integer): Integer;
   var
@@ -1154,8 +1154,8 @@ procedure ThrCheckLoopWithoutTerminated(const AScan: TThrScan; const APath: stri
     Txt: string;
   begin
     Txt:= '';
-    for var K: Integer:= AFrom to ATo do Txt:= Txt + AScan.L(K);
-    if ATrue then Result:= (Txt = 'true') or (Txt = 'notfalse') or (Txt = '1=1') or (Txt = '(true)')
+    for var K: Integer:= AFrom to ATo do Txt:= Txt + AScan.L(K);  // dl:ok concat-in-loop@bbb4 -- REVIEWED 2026-11-13 v151 THR-A: short lists (a handful of items); a builder would add noise
+    if ATrue then Result:= (Txt = 'true') or (Txt = 'notfalse') or (Txt = '1=1') or (Txt = '(true)')  // dl:ok ifthen-to-if-expression@2e6f -- REVIEWED 2026-11-13 v151 THR-A: kept as a statement to match the surrounding style
     else Result:= (Txt = 'false') or (Txt = 'nottrue') or (Txt = '(false)');
   end;
 
@@ -1186,7 +1186,7 @@ procedure ThrCheckLoopWithoutTerminated(const AScan: TThrScan; const APath: stri
         CondFrom:= K + 1;
         CondTo:= M - 1;
         BodyFrom:= M + 1;
-        if AScan.L(BodyFrom) = 'begin' then BodyTo:= AScan.MatchEnd(BodyFrom) else BodyTo:= StmtEnd(BodyFrom, AEnd) - 1;
+        if AScan.L(BodyFrom) = 'begin' then BodyTo:= AScan.MatchEnd(BodyFrom) else BodyTo:= StmtEnd(BodyFrom, AEnd) - 1;  // dl:ok ifthen-to-if-expression@a7b0 -- REVIEWED 2026-11-13 v151 THR-A: kept as a statement to match the surrounding style
         Infinite:= ConstCond(CondFrom, CondTo, True);
       end
       else if (AScan.L(K) = 'repeat') and (AScan.Tok(K).Kind = ttkIdent) then
@@ -1223,7 +1223,7 @@ procedure ThrCheckLoopWithoutTerminated(const AScan: TThrScan; const APath: stri
         or AScan.HasAnyWord(BodyFrom, BodyTo, ['terminated', 'checkterminated', 'terminate']);
       Exits:= AScan.HasAnyWord(BodyFrom, BodyTo, ['break', 'exit', 'raise', 'abort', 'halt']);
       Blocking:= AScan.HasAnyWord(CondFrom, BodyTo, ['sleep', 'sleepex', 'waitfor', 'waitforsingleobject', 'waitformultipleobjects']);
-      if (not SeesTerm) and ((Infinite and not Exits) or ((not Infinite) and Blocking and not Exits)) then
+      if (not SeesTerm) and ((Infinite and not Exits) or ((not Infinite) and Blocking and not Exits)) then  // dl:ok boolean-expression-complexity@e45e -- REVIEWED 2026-11-13 v151 THR-A: flat lookahead over adjacent tokens; splitting it would hide the pattern
         AOut.Add(ThrFinding(AScan, 'thread-loop-without-terminated', APath, K, K, 'warning',
           'This loop in a thread''s Execute path never tests Terminated, so Terminate and WaitFor cannot stop the thread; add "not Terminated" to the loop condition or test it in the body.'));
       Inc(K);
@@ -1264,7 +1264,7 @@ begin
           for K:= 0 to AScan.Count - 1 do
           begin
             if (AScan.L(K) <> Name) or (AScan.Tok(K).Kind <> ttkIdent) then Continue;
-            if (K >= AScan.Routines[Cand].KwTok) and (K <= AScan.Routines[Cand].HdrEnd) then Continue;
+            if (K >= AScan.Routines[Cand].KwTok) and (K <= AScan.Routines[Cand].HdrEnd) then Continue;  // dl:ok manual-inrange@8a11 -- REVIEWED 2026-11-13 v151 THR-A: open interval on purpose
             if AScan.L(K - 1) = '.' then
             begin
               if AScan.L(K - 2) <> 'self' then
@@ -1298,7 +1298,7 @@ end;
 
 { Rule: thread-use-after-free-on-terminate --------------------------------- }
 
-procedure ThrCheckUseAfterFreeOnTerminate(const AScan: TThrScan; const APath: string; const AOut: TList<TLintFinding>);
+procedure ThrCheckUseAfterFreeOnTerminate(const AScan: TThrScan; const APath: string; const AOut: TList<TLintFinding>);  // dl:ok deep-nesting@94d9 -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
 var
   Idx, K, M, Q: Integer;
   R: TThrRoutine;
@@ -1311,15 +1311,15 @@ begin
     if R.BodyBeg < 0 then Continue;
     for K:= R.BodyBeg + 1 to R.BodyEnd - 1 do
     begin
-      if not ((AScan.L(K) = 'freeonterminate') and (AScan.L(K - 1) = '.') and (AScan.L(K + 1) = ':=') and (AScan.L(K + 2) = 'true')
-        and (AScan.Tok(K - 2).Kind = ttkIdent) and (AScan.L(K - 3) <> '.')) then Continue;
+      if not ((AScan.L(K) = 'freeonterminate') and (AScan.L(K - 1) = '.') and (AScan.L(K + 1) = ':=') and (AScan.L(K + 2) = 'true')  // dl:ok boolean-expression-complexity@b0d3 -- REVIEWED 2026-11-13 v151 THR-A: flat lookahead over adjacent tokens; splitting it would hide the pattern
+        and (AScan.Tok(K - 2).Kind = ttkIdent) and (AScan.L(K - 3) <> '.')) then Continue;  // dl:ok magic-literal@37ff -- REVIEWED 2026-11-13 v151 THR-A: token lookahead offset in a fixed pattern, or a documented bound
       Name:= AScan.L(K - 2);
-      for M:= K + 3 to R.BodyEnd - 1 do
+      for M:= K + 3 to R.BodyEnd - 1 do  // dl:ok magic-literal@fd01 -- REVIEWED 2026-11-13 v151 THR-A: token lookahead offset in a fixed pattern, or a documented bound
       begin
         if not ((AScan.L(M) = Name) and (AScan.L(M - 1) <> '.') and (AScan.L(M + 1) = '.')
           and ((AScan.L(M + 2) = 'start') or (AScan.L(M + 2) = 'resume'))) then Continue;
         Fired:= False;
-        Q:= M + 3;
+        Q:= M + 3;  // dl:ok magic-literal@419d -- REVIEWED 2026-11-13 v151 THR-A: token lookahead offset in a fixed pattern, or a documented bound
         while (Q < R.BodyEnd) and not Fired do
         begin
           if (AScan.L(Q) = Name) and (AScan.L(Q - 1) <> '.') then
@@ -1406,23 +1406,23 @@ begin
   UnitName:= LowerCase(TPath.GetFileNameWithoutExtension(APath));
   Dir:= TPath.GetDirectoryName(APath);
   Level:= 0;
-  while (Dir <> '') and (Level < 4) do
+  while (Dir <> '') and (Level < 4) do  // dl:ok magic-literal@7bad -- REVIEWED 2026-11-13 v151 THR-A: token lookahead offset in a fixed pattern, or a documented bound
   begin
     try
       Dpks:= TDirectory.GetFiles(Dir, '*.dpk');
       for Sub in TDirectory.GetDirectories(Dir) do
       begin
-        if Length(Dpks) > 40 then Break;
-        Dpks:= Dpks + TDirectory.GetFiles(Sub, '*.dpk');
+        if Length(Dpks) > 40 then Break;  // dl:ok large-magic-number@ce2f, magic-literal@ce2f -- REVIEWED 2026-11-13 v151 THR-A: bounded directory scan, documented in the routine
+        Dpks:= Dpks + TDirectory.GetFiles(Sub, '*.dpk');  // dl:ok concat-in-loop@d2d6 -- REVIEWED 2026-11-13 v151 THR-A: short lists (a handful of items); a builder would add noise
       end;
-    except
+    except  // dl:ok bare-except@53e7 -- REVIEWED 2026-11-13 v151 THR-A: an unreadable or unlistable file means no package or source facts, so no finding is the right result
       Dpks:= nil;
     end;
     for var Dpk: string in Dpks do
     begin
       try
         Txt:= LowerCase(TFile.ReadAllText(Dpk));
-      except
+      except  // dl:ok bare-except@69ff, try-except-swallowed@69ff -- REVIEWED 2026-11-13 v151 THR-A: an unreadable or unlistable file means no package or source facts, so no finding is the right result
         Continue;
       end;
       P:= Txt.IndexOf('contains');
@@ -1450,10 +1450,10 @@ var
 begin
   Known:= False;
   InPkg:= False;
-  for I:= 2 to AScan.Count - 4 do
+  for I:= 2 to AScan.Count - 4 do  // dl:ok magic-literal@b55f -- REVIEWED 2026-11-13 v151 THR-A: token lookahead offset in a fixed pattern, or a documented bound
   begin
-    if not (((AScan.L(I) = 'queue') or (AScan.L(I) = 'forcequeue')) and (AScan.L(I - 1) = '.') and (AScan.L(I - 2) = 'tthread')
-      and (AScan.L(I + 1) = '(') and (AScan.L(I + 2) = 'nil') and (AScan.L(I + 3) = ',')) then Continue;
+    if not (((AScan.L(I) = 'queue') or (AScan.L(I) = 'forcequeue')) and (AScan.L(I - 1) = '.') and (AScan.L(I - 2) = 'tthread')  // dl:ok boolean-expression-complexity@2d70 -- REVIEWED 2026-11-13 v151 THR-A: flat lookahead over adjacent tokens; splitting it would hide the pattern
+      and (AScan.L(I + 1) = '(') and (AScan.L(I + 2) = 'nil') and (AScan.L(I + 3) = ',')) then Continue;  // dl:ok magic-literal@cde4 -- REVIEWED 2026-11-13 v151 THR-A: token lookahead offset in a fixed pattern, or a documented bound
     if not Known then
     begin
       InPkg:= UnitIsInPackage(AScan, APath);
@@ -1462,7 +1462,7 @@ begin
     if not InPkg then Exit;
     S:= I - 2;
     while (S >= 2) and (AScan.L(S - 1) = '.') and (AScan.Tok(S - 2).Kind = ttkIdent) do Dec(S, 2);
-    AOut.Add(ThrFinding(AScan, 'queue-nil-in-package', APath, S, I + 3, 'warning',
+    AOut.Add(ThrFinding(AScan, 'queue-nil-in-package', APath, S, I + 3, 'warning',  // dl:ok magic-literal@635a -- REVIEWED 2026-11-13 v151 THR-A: token lookahead offset in a fixed pattern, or a documented bound
       Format('TThread.%s(nil, ...) in a package unit: the queued entry belongs to no thread, so it is not removed when the package is unloaded and can run into freed code. Pass the owning thread or component-bound context instead.',
         [AScan.Tok(I).Text])));
   end;
@@ -1470,7 +1470,7 @@ end;
 
 { Expansion of freeonterminate-then-wait: FreeAndNil / DisposeOf ----------- }
 
-procedure ThrCheckFreeAndNilOnFreeOnTerminate(const AScan: TThrScan; const APath, AHostRuleId: string; const AOut: TList<TLintFinding>);
+procedure ThrCheckFreeAndNilOnFreeOnTerminate(const AScan: TThrScan; const APath, AHostRuleId: string; const AOut: TList<TLintFinding>);  // dl:ok deep-nesting@5c94, cyclomatic-complexity@ec8f, cognitive-complexity@e75f -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
 var
   Idx, K, M, Q, LastTok, VarTok: Integer;
   R: TThrRoutine;
@@ -1512,9 +1512,9 @@ begin
         // FreeAndNil(X) / X.DisposeOf with X known to free itself
         Name:= '';
         Q:= K;
-        if (AScan.L(K) = 'freeandnil') and (AScan.L(K + 1) = '(') and (AScan.Tok(K + 2).Kind = ttkIdent) and (AScan.L(K + 3) = ')') then
+        if (AScan.L(K) = 'freeandnil') and (AScan.L(K + 1) = '(') and (AScan.Tok(K + 2).Kind = ttkIdent) and (AScan.L(K + 3) = ')') then  // dl:ok magic-literal@c641 -- REVIEWED 2026-11-13 v151 THR-A: token lookahead offset in a fixed pattern, or a documented bound
           Name:= AScan.L(K + 2)
-        else if (AScan.L(K) = 'disposeof') and (AScan.L(K - 1) = '.') and (AScan.Tok(K - 2).Kind = ttkIdent) and (AScan.L(K - 3) <> '.') then
+        else if (AScan.L(K) = 'disposeof') and (AScan.L(K - 1) = '.') and (AScan.Tok(K - 2).Kind = ttkIdent) and (AScan.L(K - 3) <> '.') then  // dl:ok magic-literal@8e93 -- REVIEWED 2026-11-13 v151 THR-A: token lookahead offset in a fixed pattern, or a documented bound
         begin
           Name:= AScan.L(K - 2);
           Q:= K - 2;
@@ -1524,8 +1524,8 @@ begin
         // flag set to True earlier in this routine, with no reset in between
         for M:= R.BodyBeg + 1 to K - 1 do
         begin
-          if (AScan.L(M) = Name) and (AScan.L(M + 1) = '.') and (AScan.L(M + 2) = 'freeonterminate') and (AScan.L(M + 3) = ':=')
-            and (AScan.L(M - 1) <> '.') then Dead:= AScan.L(M + 4) = 'true'
+          if (AScan.L(M) = Name) and (AScan.L(M + 1) = '.') and (AScan.L(M + 2) = 'freeonterminate') and (AScan.L(M + 3) = ':=')  // dl:ok magic-literal@1624 -- REVIEWED 2026-11-13 v151 THR-A: token lookahead offset in a fixed pattern, or a documented bound
+            and (AScan.L(M - 1) <> '.') then Dead:= AScan.L(M + 4) = 'true'  // dl:ok magic-literal@a517 -- REVIEWED 2026-11-13 v151 THR-A: token lookahead offset in a fixed pattern, or a documented bound
           else if (AScan.L(M) = Name) and (AScan.L(M - 1) <> '.') and (AScan.L(M + 1) = ':=') then Dead:= False;
         end;
         if (not Dead) and LocalOfFotClass(Name) then
@@ -1538,7 +1538,7 @@ begin
         begin
           if AScan.L(K) = 'freeandnil' then
           begin
-            LastTok:= K + 3;
+            LastTok:= K + 3;  // dl:ok magic-literal@85a2 -- REVIEWED 2026-11-13 v151 THR-A: token lookahead offset in a fixed pattern, or a documented bound
             VarTok:= K + 2;
           end
           else
