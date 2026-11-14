@@ -13468,33 +13468,89 @@ end; // function
   Defined beside the LINT_GATE_* consts. }
 function IsClosureDependentMarkerRule(const ARule: string): Boolean; forward;
 
-/// <summary>True when line ALine of ALines is the `on ... do` line of an EMPTY
-///  exception handler and the `do` is followed only by a `//` comment.</summary>
-/// <param name="ALines">The file's lines, 0-based.</param>
-/// <param name="ALine">1-based line that carries the marker.</param>
-/// <returns>True when the code before the comment ends in `do` and the next code
-///  line (blank and `//` lines skipped) opens with `;`, `end` or `else`.</returns>
-/// <remarks>rules\empty-on-handler.scm anchors on `do` being the handler's LAST
-///  child; a comment between `do` and the separating `;` is a child too, so the
-///  dl:ok comment ITSELF stops the rule firing (INBOX review-marker-unused-on-
-///  handler, wave 152b). Same loop as COMMENT_SENSITIVE, but position dependent:
-///  a comment AFTER the `;` leaves the rule live, which is why the 2026-08-12
-///  probe measured "not comment-sensitive". Only this shape is exempt from
-///  review-marker-unused; a marker anywhere else is still reported.</remarks>
-function IsCommentSilencedEmptyHandler(const ALines: TArray<string>; ALine: Integer): Boolean;
+/// <summary>The rule ids a `// drag-lint:ignore &lt;id&gt; ...` directive names that
+///  are not in the catalogue -- the directive suppresses nothing for them.</summary>
+/// <param name="ALineText">One source line, without its terminator.</param>
+/// <param name="AIsKnown">Catalogue lookup, case-insensitive.</param>
+/// <returns>The unknown ids in written order; empty when the line carries no
+///  directive, the directive is bare, or every id it names is known.</returns>
+/// <remarks>Host rule review-marker-malformed, widened in v151 RMU (an unknown id
+///  in a dl:ok was reported, the same mistake in the legacy directive was not).
+///  Only the unambiguous shape is read: the tag must OPEN the `//` comment, so a
+///  comment that merely mentions the directive is prose. The list is read token
+///  by token (space, comma, tab): a known id continues it, an unknown id WITH a
+///  hyphen is reported, and any other token (`--`, a reason word, `&lt;rule-id&gt;`)
+///  ends it, because what follows is prose. The two catalogue ids without a
+///  hyphen are known and continue the list. Suppression
+///  (TReviewMarkers.IgnoreDirectiveCovers) is unchanged; this only reports.</remarks>
+function UnknownIgnoreDirectiveIds(const ALineText: string; const AIsKnown: TFunc<string, Boolean>): TArray<string>;
 const
-  HANDLER_DO_COMMENT = '\bon\b.*\bdo\s*//';
-  EMPTY_BODY_NEXT    = '^\s*(;|end\b|else\b)';
+  IGNORE_TAG    = 'drag-lint:ignore';
+  HYPHENATED_ID = '^[a-z][a-z0-9]*(-[a-z0-9]+)+$';
 begin
-  Result:= False;
-  if (ALine < 1) or (ALine > Length(ALines)) then Exit;
-  if not TRegEx.IsMatch(ALines[ALine - 1], HANDLER_DO_COMMENT, [roIgnoreCase]) then Exit;
-  for var I: Integer:= ALine to High(ALines) do
+  Result:= nil;
+  { The FIRST `//`, as IgnoreDirectiveCovers reads it; a `//` inside a string
+    literal earlier on the line makes this miss the directive -- the safe side. }
+  var CStart: Integer:= Pos('//', ALineText);
+  if CStart = 0 then Exit;
+  var Body: string:= TrimLeft(Copy(ALineText, CStart + 2, MaxInt));
+  if not StartsText(IGNORE_TAG, Body) then Exit;
+  for var Tok: string in Copy(Body, Length(IGNORE_TAG) + 1, MaxInt).Split([' ', ',', #9],
+    TStringSplitOptions.ExcludeEmpty) do
   begin
-    var T: string:= Trim(ALines[I]);
-    if (T = '') or T.StartsWith('//') then Continue;
-    Exit(TRegEx.IsMatch(T, EMPTY_BODY_NEXT, [roIgnoreCase]));
+    if AIsKnown(Tok) then Continue;
+    if not TRegEx.IsMatch(Tok, HYPHENATED_ID, [roIgnoreCase]) then Break;
+    Result:= Result + [Tok];
   end;
+end; // function
+
+/// <summary>The catalogue id closest to a mistyped one, for a "did you mean"
+///  hint on review-marker-malformed.</summary>
+/// <param name="AId">The id the marker names; not in the catalogue.</param>
+/// <param name="AKnown">Every catalogue id, lowercase.</param>
+/// <returns>The single nearest id within edit distance 2 (insert, delete,
+///  substitute; case-insensitive), or '' when none is that close or two tie --
+///  a guess between two rules would mislead.</returns>
+/// <remarks>Ids shorter than 5 characters get no suggestion: at distance 2
+///  almost anything is near them.</remarks>
+function NearestRuleId(const AId: string; const AKnown: TArray<string>): string;
+const
+  MAX_DIST = 2;
+  MIN_LEN  = 5;
+var
+  Prev, Cur: TArray<Integer>;
+begin
+  Result:= '';
+  var Id: string:= LowerCase(AId);
+  if Length(Id) < MIN_LEN then Exit;
+  var Best: Integer:= MAX_DIST + 1;
+  var Tie: Boolean:= False;
+  for var K: string in AKnown do
+  begin
+    if Abs(Length(K) - Length(Id)) > MAX_DIST then Continue;
+    SetLength(Prev, Length(K) + 1);
+    SetLength(Cur, Length(K) + 1);
+    for var J: Integer:= 0 to Length(K) do Prev[J]:= J;
+    for var I: Integer:= 1 to Length(Id) do
+    begin
+      Cur[0]:= I;
+      for var J: Integer:= 1 to Length(K) do
+        Cur[J]:= Min(Min(Prev[J] + 1, Cur[J - 1] + 1), Prev[J - 1] + Ord(Id[I] <> K[J]));
+      var Swap: TArray<Integer>:= Prev;
+      Prev:= Cur;
+      Cur:= Swap;
+    end;
+    var D: Integer:= Prev[Length(K)];
+    if D < Best then
+    begin
+      Best:= D;
+      Result:= K;
+      Tie:= False;
+    end
+    else if (D = Best) and (D <= MAX_DIST) then
+      Tie:= True;
+  end;
+  if Tie then Result:= '';
 end; // function
 
 { Drops findings whose source line records them as reviewed, and reports review
@@ -13569,6 +13625,8 @@ const
     a COMMENT, so appending a marker comment changes the very text the rule
     reads. }
   COMMENT_SENSITIVE: array[0..2] of string = ('empty-except', 'empty-case-branch', 'commented-out-code');
+  { Cheap pre-test for UnknownIgnoreDirectiveIds; lowercase. }
+  IGNORE_DIRECTIVE_TAG = 'drag-lint:ignore';
   { The rules whose findings carry a TYPE scope (TLintFinding.ScopeFile/ScopeLine),
     and the shape of the enum declaration line their type-level marker sits on. }
   TYPE_SCOPE_RULES: array[0..1] of string = ('unused-enum-value', 'enum-ordinal-cast');
@@ -13947,9 +14005,10 @@ begin
       measured. Some rules treat a comment as content, so writing the marker is
       itself enough to stop the rule firing. Probe of the empty-* family
       (2026-08-12): empty-except and empty-case-branch both go 1 -> 0 findings
-      when ANY trailing comment is added; empty-on-handler does not when the
-      comment follows the `;`, but DOES when it sits between `do` and the `;`
-      (wave 152b, IsCommentSilencedEmptyHandler). Reporting
+      when ANY trailing comment is added. empty-on-handler is NOT in the list:
+      a comment between `do` and the `;` used to silence it too, which was a
+      defect of its .scm, fixed there in v151 RMU (INBOX review-marker-unused-
+      on-handler), not exempted here. Reporting
       those as "unused" would create a loop with no exit -- mark the finding, the
       comment silences the rule, the hint says remove the marker, removing it
       brings the finding back. Marking such a finding is in fact the remedy the
@@ -13991,6 +14050,14 @@ begin
           end;
           Result:= Known.ContainsKey(LowerCase(AId));
         end;
+      { " Did you mean "x"?" for a mistyped id, or '' -- see NearestRuleId. Only
+        ever called after IsKnownRule, so Known is built. }
+      var DidYouMean: TFunc<string, string>:=
+        function(AId: string): string
+        begin
+          var Near: string:= NearestRuleId(AId, Known.Keys.ToArray);
+          Result:= if Near = '' then '' else Format(' Did you mean "%s"?', [Near]);
+        end;
       for var SF: string in AScannedFiles do
       begin
         Lines:= LinesOf(SF);
@@ -14007,6 +14074,14 @@ begin
         var InBlock: TArray<Boolean>:= TReviewMarkers.BlockOpenAtLineStart(Lines);
         for var LN: Integer:= 1 to Length(Lines) do
         begin
+          { An unknown id in the legacy directive suppresses nothing for that id,
+            exactly like one in a dl:ok -- same host rule (v151 RMU). }
+          if ((LN > Length(CanBear)) or CanBear[LN - 1])
+             and LowerCase(Lines[LN - 1]).Contains(IGNORE_DIRECTIVE_TAG) then
+            for var BadId: string in UnknownIgnoreDirectiveIds(Lines[LN - 1], IsKnownRule) do
+              EmitHint(SF, LN, 'review-marker-malformed',
+                Format('drag-lint:ignore names "%s", which is not a rule id -- it suppresses NOTHING for it.%s '
+                     + 'Name rule ids only, or use `dl:ok <rule-id> -- <reason>`.', [BadId, DidYouMean(BadId)]));
           if Pos(REVIEW_MARK, LowerCase(Lines[LN - 1])) = 0 then Continue; { cheap reject }
           var Live: TArray<TReviewMarker>:= nil;
           if (LN > Length(CanBear)) or CanBear[LN - 1] then Live:= TReviewMarkers.Parse(Lines[LN - 1]);
@@ -14071,9 +14146,10 @@ begin
                   tests\autotest\run_marker_malformed_advises_every_form.ps1:
                   every form named here is exercised there, and an accepted form
                   missing from here FAILS that suite. }
-                Format('dl:ok names "%s", which is not a rule id -- this marker suppresses NOTHING. '
+                Format('dl:ok names "%s", which is not a rule id -- this marker suppresses NOTHING.%s '
                      + 'Write `dl:ok <rule-id>`, `dl:ok <rule-id>@<hash>`, `dl:ok <rule-id> -- <reason>` '
-                     + 'or `dl:ok <rule-id>: <reason>`, or run `drag-lint allow` to format it.', [M.RuleId]));
+                     + 'or `dl:ok <rule-id>: <reason>`, or run `drag-lint allow` to format it.',
+                     [M.RuleId, DidYouMean(M.RuleId)]));
               Continue;
             end;
             { review-marker-reason-unreviewed (OFF by default; owner ruling OWN-7).
@@ -14101,9 +14177,6 @@ begin
             end;
             if StampMsg <> '' then EmitHint(SF, LN, 'review-marker-reason-unreviewed', StampMsg);
             if MatchStr(LowerCase(M.RuleId), COMMENT_SENSITIVE) then Continue;
-            { empty-on-handler is comment-sensitive only when the marker sits
-              between `do` and the `;` -- see IsCommentSilencedEmptyHandler. }
-            if SameText(M.RuleId, 'empty-on-handler') and IsCommentSilencedEmptyHandler(Lines, LN) then Continue;
             { A placeholder @hash that no finding claimed. With a finding on the
               line the suppression path above has already said so (and Accounted
               the marker); without one this would otherwise read as

@@ -1173,7 +1173,8 @@ verify, and `lint --json` carries a `metric` field on these findings.
 
 **A marker that suppresses nothing is reported, whatever the reason.** Besides
 `review-marker-stale` (the code moved), `review-marker-unused` (the finding is
-gone) and `review-marker-malformed` (not a rule id), **`review-marker-placeholder-hash`**
+gone) and `review-marker-malformed` (not a rule id -- in a `dl:ok` or in a
+`drag-lint:ignore` list, with a "did you mean" for a near miss), **`review-marker-placeholder-hash`**
 (ON) flags a `dl:ok` whose `@hash` was never computed -- `@0000` or a non-hex
 `@xxxx` on a `//` marker, or an `@0000` marker written inside a `{ }` block
 comment, where no marker is ever read. Record the real one with `allow`.

@@ -1,0 +1,13 @@
+# v151 RMU: unknown rule ids in marker comments (host review-marker-malformed)
+# dl:ok with an unknown id (19) -- already reported before v151
+review-marker-malformed 19
+# drag-lint:ignore naming an unknown id, alone (20) or after a known one (21)
+review-marker-malformed 20
+review-marker-malformed 21
+# bare directive (22), known id + prose after -- (23) or plain words (24),
+# a /// doc comment (25) and a brace comment (5) are not reported
+!review-marker-malformed 22
+!review-marker-malformed 23
+!review-marker-malformed 24
+!review-marker-malformed 25
+!review-marker-malformed 5

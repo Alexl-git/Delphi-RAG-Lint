@@ -1,4 +1,12 @@
 # empty 'on E: ... do ;' (14) fires; handler with a body (23/24) must not
+# v151 RMU: a comment between 'do' and the ';' leaves the handler empty --
+# trailing // (36), brace (38), several comment lines (39), after the ';' (44)
 empty-on-handler 14
 !empty-on-handler 23
 !empty-on-handler 24
+empty-on-handler 36
+empty-on-handler 38
+empty-on-handler 39
+empty-on-handler 44
+!empty-on-handler 53
+!empty-on-handler 55
