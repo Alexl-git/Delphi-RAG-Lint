@@ -14,7 +14,8 @@ interface
 
 uses
   System.SysUtils, System.Classes, Winapi.Windows,
-  DRagLint.Core.ControlChannel, DRagLint.Core.Model;
+  DRagLint.Core.ControlChannel,  // dl:ok uses-global-census@0000 -- CONTROL_MSG_SHUTDOWN is the stand-down contract the gate's control channel answers; it travels with the channel class
+  DRagLint.Core.Model;  // dl:ok uses-global-census@1abd -- version and ref-kind constants of the model; a small unit of its own would add nothing (146 int); TCompilerFinding moved it to the interface (v151 GATE)
 
 const
   /// <summary>The compile gate builds at most twice: the after-build and one retry after the repairs.</summary>
@@ -338,23 +339,6 @@ function WriteStaged(const pTouched, pNew: TArray<string>; const pProjectDir: st
   const pStaged: TFunc<string, TBytes>; const pHeader: TFunc<Integer, Integer, string>;
   out pTx: TApplyTransaction): Boolean;
 
-/// <summary>Every dcc message of a build log: errors, warnings and hints, each (file, line, code, message) once, in
-/// log order.</summary>
-/// <param name="pLog">The msbuild or dcc output.</param>
-/// <returns>The parsed messages (TCompileChecker.ParseLine), the trailing `[project]` msbuild appends cut from the
-/// message.</returns>
-/// <remarks>Pure. A line that is no dcc message (msbuild banners, the BUILD_EXITCODE line) is skipped.</remarks>
-function DccMessages(const pLog: string): TArray<TCompilerFinding>;
-
-/// <summary>The warnings and hints of build 2 that build 1 did not have.</summary>
-/// <param name="pBefore">Every message of build 1.</param>
-/// <param name="pAfter">Every message of build 2.</param>
-/// <param name="pGone">Receives how many warnings and hints of build 1 build 2 no longer has.</param>
-/// <returns>The new warnings and hints, in build-2 order; errors and information lines are never in it.</returns>
-/// <remarks>Pure. A message is matched by file, code and message text, never by line: the rewrite between the builds
-/// moves lines. Matching counts: a hint build 1 had once and build 2 has twice is one new hint.</remarks>
-function NewCompilerMessages(const pBefore, pAfter: TArray<TCompilerFinding>; out pGone: Integer): TArray<TCompilerFinding>;
-
 /// <summary>The lines a gated verb prints about its two builds (P14).</summary>
 /// <param name="pOutcome">What ApplyGated did.</param>
 /// <returns>One `compile gate: ...` line each: the counts of build 1, every error of build 1, the counts of build 2,
@@ -468,6 +452,23 @@ begin
   var Bat:= BuildEnvBat;
   Result:= (Bat <> '') and TFile.Exists(Bat);
 end;
+
+/// <summary>Every dcc message of a build log: errors, warnings and hints, each (file, line, code, message) once, in
+/// log order.</summary>
+/// <param name="pLog">The msbuild or dcc output.</param>
+/// <returns>The parsed messages (TCompileChecker.ParseLine), the trailing `[project]` msbuild appends cut from the
+/// message.</returns>
+/// <remarks>Pure. A line that is no dcc message (msbuild banners, the BUILD_EXITCODE line) is skipped.</remarks>
+function DccMessages(const pLog: string): TArray<TCompilerFinding>; forward;
+
+/// <summary>The warnings and hints of build 2 that build 1 did not have.</summary>
+/// <param name="pBefore">Every message of build 1.</param>
+/// <param name="pAfter">Every message of build 2.</param>
+/// <param name="pGone">Receives how many warnings and hints of build 1 build 2 no longer has.</param>
+/// <returns>The new warnings and hints, in build-2 order; errors and information lines are never in it.</returns>
+/// <remarks>Pure. A message is matched by file, code and message text, never by line: the rewrite between the builds
+/// moves lines. Matching counts: a hint build 1 had once and build 2 has twice is one new hint.</remarks>
+function NewCompilerMessages(const pBefore, pAfter: TArray<TCompilerFinding>; out pGone: Integer): TArray<TCompilerFinding>; forward;
 
 function MsBuildPlatform(const pPlatform: string): string;
 begin
