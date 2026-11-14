@@ -1,0 +1,23 @@
+{
+  "id": "v151-txt-rules",
+  "title": "Text rules: bidi, invisible, control chars, TODO, header, strings",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.50.0-alpha",
+  "summary": "Six raw-text lint rules: bidi-control, invisible-char, control-char, todo-comment, file-header, hardcoded-string",
+  "intro": "Reads the bytes of a unit and its form file to find Trojan-Source characters, invisible characters, control characters, open TODO comments, a missing file header and text that belongs in a resourcestring.",
+  "wikiPage": "text-rules",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-all"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-13",
+    "by": "alexanderl",
+    "build": "1.50.0-alpha"
+  }
+}
