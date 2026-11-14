@@ -22532,11 +22532,13 @@ end;
 function RescanTamperedFacts(const AArgs: TArgs; var AStore: ISymbolStore; const AOwnFile: string): Boolean;
 begin
   Result:= False;
-  var Files: TArray<string>:= [AOwnFile];
+  var Files: TArray<string>:= nil;
+  if AOwnFile <> '' then Files:= [AOwnFile];
   for var R: string in SourceFilesRead do
-    if not SameText(ExpandFileName(R), ExpandFileName(AOwnFile)) then Files:= Files + [R];
+    if (AOwnFile = '') or not SameText(ExpandFileName(R), ExpandFileName(AOwnFile)) then Files:= Files + [R];
   var Bad: TArray<string>:= DocFilesDisagreeingWithSource(AStore, Files);
   if Length(Bad) = 0 then Exit;
+  if AOwnFile = '' then Files:= Bad; { batch run: no single documented file -- rescan just the files that disagree }
   var Named: string:= '';
   for var I: Integer:= 0 to Min(High(Bad), 2) do
     Named:= Named + (if Named = '' then '' else ', ') + Bad[I];
@@ -22903,7 +22905,13 @@ begin
   Opts.DocumentThirdParty:= AArgs.DocumentThirdParty; // restore the pre-fix whole-closure behaviour, including vendored source.
 
   // Step 2: document --apply (shifts lines, which makes index stale)
+  ResetSourceFilesRead; // v151 DOCU5 (OQ5)
   Res:= TDocBatch.DocumentProject(Store, AArgs.ProjectPath, Opts);
+  if RescanTamperedFacts(AArgs, Store, '') then
+  begin
+    ResetSourceFilesRead;
+    Res:= TDocBatch.DocumentProject(Store, AArgs.ProjectPath, Opts);
+  end;
   Result:= ReportDocBatch(AArgs, Res, 'project', AArgs.ProjectPath);
 
   // ADP1: Step 3 (if --reindex + --apply): reindex AFTER document to re-freshen
@@ -22957,7 +22965,13 @@ begin
   Opts.Handles:= LoadDocHandlesOptions; // gap 3: manifest docs.dialog_routines / docs.max_handles for the 'Catches:' line.
   Opts.IncludeAccessors:= AArgs.DocIncludeAccessors; // ADP1 T2: --include-accessors disables the trivial-accessor skip for this run.
   TSharedFacts.MigrateLegacyPure:= AArgs.DocMigratePure; // 2026-09-23: --migrate-pure regenerates a stored legacy `Pure` line.
+  ResetSourceFilesRead; // v151 DOCU5 (OQ5)
   Res:= TDocBatch.DocumentAll(Store, Opts);
+  if RescanTamperedFacts(AArgs, Store, '') then
+  begin
+    ResetSourceFilesRead;
+    Res:= TDocBatch.DocumentAll(Store, Opts);
+  end;
   Result:= ReportDocBatch(AArgs, Res, 'scope', 'all');
 end; // function
 

@@ -680,12 +680,8 @@ begin
     if Skip then Continue;
     var Syms: TArray<TSymbol>:= AStore.FindSymbolsByFile(F);
     if Length(Syms) = 0 then Continue; { not indexed, or nothing public: no facts to disagree }
-    var Lines: TArray<string>;
-    try
-      Lines:= TFile.ReadAllLines(F);
-    except
-      Continue; { unreadable: the fact miners tolerate it, so does this }
-    end;
+    if not TFile.Exists(F) then Continue; { gone from disk: no source text to compare }
+    var Lines: TArray<string>:= TFile.ReadAllLines(F);
     for var S: TSymbol in Syms do
     begin
       if not SameText(S.Section, 'interface') then Continue;

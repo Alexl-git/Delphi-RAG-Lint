@@ -111,6 +111,16 @@ Tamper $app 'UseAlpha' 'UseAlphb'
 $t3 = RunEngine @('document','--unit',$app,'--db',$db)
 Check 'T3 own file tampered: exit 0, WARN names App.pas' (($t3.Code -eq 0) -and ($t3.Text -match 'WARN[^\r\n]*App\.pas')) "exit $($t3.Code)"
 
+Tamper $core 'EAlphY' 'EAlphZ'
+$b1 = RunEngine @('document','--project',$dpr,'--db',$db)
+Check 'B1 --project, callee tampered: exit 0, WARN names Core.pas' (($b1.Code -eq 0) -and ($b1.Text -match 'WARN[^\r\n]*Core\.pas')) "exit $($b1.Code)"
+
+Tamper $core 'EAlphZ' 'EAlphW'
+$b2 = RunEngine @('document-all','--db',$db)
+Check 'B2 document-all, callee tampered: exit 0, WARN names Core.pas' (($b2.Code -eq 0) -and ($b2.Text -match 'WARN[^\r\n]*Core\.pas')) "exit $($b2.Code)"
+$b3 = RunEngine @('document-all','--db',$db)
+Check 'B3 document-all after rescan: no WARN' (($b3.Code -eq 0) -and -not ($b3.Text -match 'WARN')) "exit $($b3.Code)"
+
 if (Test-Path $scratch) { [IO.Directory]::Delete($scratch, $true) }
 if ($fail) { Write-Host 'run_v151_DOCU5_tamper_rescan: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'run_v151_DOCU5_tamper_rescan: ALL PASS' -ForegroundColor Green; exit 0
