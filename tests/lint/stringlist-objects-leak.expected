@@ -1,0 +1,5 @@
+stringlist-objects-leak 20
+stringlist-objects-leak 34
+stringlist-objects-leak 47
+!stringlist-objects-leak 59
+!stringlist-objects-leak 75

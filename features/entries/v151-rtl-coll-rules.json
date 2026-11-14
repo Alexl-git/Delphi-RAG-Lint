@@ -1,0 +1,29 @@
+{
+  "id": "v151-rtl-coll-rules",
+  "title": "RTL collection and environment lint rules",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.50.0-alpha",
+  "summary": "Lint checks for dictionary reads without a key check, string-list leaks, Null compares, HKLM writes, Random without Randomize and Now used as a stopwatch",
+  "intro": "Catches common run-time-library mistakes around dictionaries, string lists, Null, the registry, Random and elapsed time, from the declarations a single file shows.",
+  "wikiPage": "v151-rtl-collection-rules",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "drag-lint lint <file.pas>"
+    },
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "example": "drag-lint lint-all --db <db> --rule dictionary-get-without-check"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-13",
+    "by": "alexanderl",
+    "build": "1.50.0-alpha"
+  }
+}
