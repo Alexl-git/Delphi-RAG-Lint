@@ -1,0 +1,2 @@
+# Preis is a Double money amount (line 8); Menge, Gewicht, Netto (Currency) must not fire
+money-as-float 8
