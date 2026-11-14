@@ -22534,6 +22534,46 @@ begin
   Result:= 1;
 end;
 
+{ v151 DOCU5 (owner ruling OQ5): the stamp (mtime + size) of a file says "unchanged"
+  but the facts the index stored for it disagree with the text (DocFilesDisagreeingWithSource:
+  a same-size edit with the mtime put back, a restore, a sync tool). Such a file is invisible
+  to ChangedFilePaths, so neither the stale-fact refusal nor the stale-anchor retry sees it.
+  Rescan BOTH sides -- the documented file and every file its facts were read from -- with
+  --force-reparse (the stamp fast path would skip them), say so on stderr as a WARN, and
+  re-open AStore so the caller runs on the fresh rows. Returns True when it rescanned;
+  False (nothing touched) when every stamp-clean file agrees with its source. }
+function RescanTamperedFacts(const AArgs: TArgs; var AStore: ISymbolStore; const AOwnFile: string): Boolean;
+begin
+  Result:= False;
+  var Files: TArray<string>:= nil;
+  if AOwnFile <> '' then Files:= [AOwnFile];
+  for var R: string in SourceFilesRead do
+    if (AOwnFile = '') or not SameText(ExpandFileName(R), ExpandFileName(AOwnFile)) then Files:= Files + [R];
+  var Bad: TArray<string>:= DocFilesDisagreeingWithSource(AStore, Files);
+  if Length(Bad) = 0 then Exit;
+  if AOwnFile = '' then Files:= Bad; { batch run: no single documented file -- rescan just the files that disagree }
+  var Named: string:= '';
+  for var I: Integer:= 0 to Min(High(Bad), 2) do
+    Named:= Named + (if Named = '' then '' else ', ') + Bad[I];
+  Writeln(ErrOutput, Format('doc: WARN -- %d file(s) (%s) look unchanged by timestamp and size, but the facts stored for them ' +
+    'disagree with the source text. Rescanning %d file(s) (the documented file and the files its facts were read from), then running.',
+    [Length(Bad), Named, Length(Files)]));
+  for var F: string in Files do
+  begin
+    if not TFile.Exists(F) then Continue;
+    var IndexArgs: TArgs:= AArgs;
+    IndexArgs.IndexAll     := False;
+    IndexArgs.ForceReparse := True;
+    IndexArgs.Path         := ExpandFileName(F);
+    if DoIndex(IndexArgs) <> 0 then
+      Writeln(ErrOutput, 'doc: WARN -- the rescan of ' + F + ' FAILED; the facts for it may still be stale.');
+  end;
+  var Ok: Boolean;
+  var Fresh: ISymbolStore:= OpenReadOnlyStore(AArgs.DbPath, Ok);
+  if Ok then AStore:= Fresh;
+  Result:= True;
+end;
+
 // v(ADP3 T3d2 D6): shared strip-reporting path for the three call sites that
 // each independently built the same '--strip' JSON object / 'stripped: N
 // tags, M blocks...' text (DoDocumentUnit, ReportDocBatch,
@@ -22663,6 +22703,11 @@ begin
   Opts.IncludeAccessors:= AArgs.DocIncludeAccessors; // ADP1 T2: --include-accessors disables the trivial-accessor skip for this run.
   ResetSourceFilesRead; // 152b DOCU: record what the facts read, then refuse on stale text
   Res:= TDocBatch.DocumentUnit(Store, AArgs.DocUnit, Opts);
+  if RescanTamperedFacts(AArgs, Store, AArgs.DocUnit) then // v151 DOCU5 (OQ5)
+  begin
+    ResetSourceFilesRead;
+    Res:= TDocBatch.DocumentUnit(Store, AArgs.DocUnit, Opts);
+  end;
   var StaleSrc: TArray<string>:= StaleFactSources(Store, AArgs.DocUnit);
   if Length(StaleSrc) > 0 then Exit(ReportStaleFactSources(StaleSrc, AArgs.DbPath));
 
@@ -22873,7 +22918,13 @@ begin
   Opts.DocumentThirdParty:= AArgs.DocumentThirdParty; // restore the pre-fix whole-closure behaviour, including vendored source.
 
   // Step 2: document --apply (shifts lines, which makes index stale)
+  ResetSourceFilesRead; // v151 DOCU5 (OQ5)
   Res:= TDocBatch.DocumentProject(Store, AArgs.ProjectPath, Opts);
+  if RescanTamperedFacts(AArgs, Store, '') then
+  begin
+    ResetSourceFilesRead;
+    Res:= TDocBatch.DocumentProject(Store, AArgs.ProjectPath, Opts);
+  end;
   Result:= ReportDocBatch(AArgs, Res, 'project', AArgs.ProjectPath);
 
   // ADP1: Step 3 (if --reindex + --apply): reindex AFTER document to re-freshen
@@ -22927,7 +22978,13 @@ begin
   Opts.Handles:= LoadDocHandlesOptions; // gap 3: manifest docs.dialog_routines / docs.max_handles for the 'Catches:' line.
   Opts.IncludeAccessors:= AArgs.DocIncludeAccessors; // ADP1 T2: --include-accessors disables the trivial-accessor skip for this run.
   TSharedFacts.MigrateLegacyPure:= AArgs.DocMigratePure; // 2026-09-23: --migrate-pure regenerates a stored legacy `Pure` line.
+  ResetSourceFilesRead; // v151 DOCU5 (OQ5)
   Res:= TDocBatch.DocumentAll(Store, Opts);
+  if RescanTamperedFacts(AArgs, Store, '') then
+  begin
+    ResetSourceFilesRead;
+    Res:= TDocBatch.DocumentAll(Store, Opts);
+  end;
   Result:= ReportDocBatch(AArgs, Res, 'scope', 'all');
 end; // function
 
@@ -23404,6 +23461,13 @@ begin
     AArgs.DocSince, AArgs.DocBaseDir, OpenExtraStores(AArgs), LoadDocMaxReturnCases, LoadDocMaxCallers,
     LoadDocComplexityMin); // gap 3: manifest docs.dialog_routines / max_handles for 'Catches:'. ADF T5: --since (git <since> date) + --base-dir repo root; multi-db: other resolved --db's searched for callers; Task 10: manifest docs.max_return_cases cap; ADP1 T1: manifest docs.max_callers cap; ADP2 T3: manifest docs.complexity_min threshold.
 
+  if (Res.Action <> DRagLint.Doc.Document.daNotFound) and RescanTamperedFacts(AArgs, Store, Res.FilePath) then // v151 DOCU5 (OQ5)
+  begin
+    ResetSourceFilesRead;
+    Res:= DRagLint.Doc.Document.TDocumenter.BuildFor(Store, AArgs.QName, LoadDocHandlesOptions, AArgs.DocSeeAlso,
+      AArgs.DocSince, AArgs.DocBaseDir, OpenExtraStores(AArgs), LoadDocMaxReturnCases, LoadDocMaxCallers,
+      LoadDocComplexityMin);
+  end;
   if Res.Action = DRagLint.Doc.Document.daNotFound then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
   { 152b DOCU: as DoDocumentUnit -- facts read from a callee file rewritten since indexing are refused. }
   var StaleQ: TArray<string>:= StaleFactSources(Store, Res.FilePath);
