@@ -1,0 +1,2 @@
+# direct lint of a .dfm does not run the v151 form-file checks (they run from the sibling .pas); see dfm-required-field-without-control-grid.expected
+none

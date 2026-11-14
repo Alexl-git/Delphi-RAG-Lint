@@ -28,7 +28,12 @@ type
     /// <param name="ACtx">The file being linted; Store / LibStore may be nil.</param>
     /// <returns>Findings; nil when none.</returns>
     class function CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>; static;
-    /// <summary>Per-file check of the .pas unit's sibling form file.</summary>
+    /// <summary>Per-file check of the .pas unit's sibling TEXT form file: dfm-circular-datasource, dfm-duplicate-binding,
+    /// dfm-master-without-fields, dfm-control-field-type-mismatch, dfm-required-field-without-control (persistent fields,
+    /// i.e. field objects in the form file; runtime fields are not seen) and disallowed-dfm-property (policy entries of
+    /// the config block disallowed.names whose name starts with dfm: -- dfm:TClass.Prop, dfm:*.Prop, dfm:TClass.Prop=Value).
+    /// Binary form files are skipped. Query-like datasets (SQL, CommandText, Params, ProviderName) never get
+    /// dfm-master-without-fields because their parameters link by name.</summary>
     /// <param name="ACtx">The file being linted; ACtx.DfmPath is not empty when this is called.</param>
     /// <returns>Findings (FilePath may be the .dfm); nil when none.</returns>
     class function CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>; static;
@@ -46,12 +51,24 @@ type
 
 implementation
 
-{ The lane's helpers live in DRagLint.V151.DFMB.Support; name it in an
-  implementation uses clause here once it declares something. }
+uses
+  DRagLint.V151.DFMB.Support
+  ;
 
 class procedure TV151DFMBRules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
-  { no rules yet }
+  ADecls.Add(V151Rule(RULE_CIRCULAR, 'bug-patterns', 'warning',
+    'Master/detail or data source links in the form file form a cycle'));
+  ADecls.Add(V151Rule(RULE_DUPBIND, 'bug-patterns', 'warning',
+    'Two input controls in the form file are bound to the same data source and field'));
+  ADecls.Add(V151Rule(RULE_MASTER, 'bug-patterns', 'warning',
+    'Dataset has a MasterSource but no MasterFields in the form file'));
+  ADecls.Add(V151Rule(RULE_TYPEMISM, 'bug-patterns', 'warning',
+    'Data-aware control does not suit the type of the persistent field it is bound to'));
+  ADecls.Add(V151Rule(RULE_REQUIRED, 'bug-patterns', 'warning',
+    'Required persistent field has no visible data-aware control'));
+  ADecls.Add(V151Rule(RULE_DISALLOW, 'policy', 'warning',
+    'Form-file property forbidden by the project policy table (disallowed.names entries starting dfm:)'));
 end;
 
 class function TV151DFMBRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
@@ -60,8 +77,17 @@ begin
 end;
 
 class function TV151DFMBRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+var
+  Ctx: TV151FileCtx;
 begin
   Result:= nil;
+  if ACtx.DfmPath = '' then Exit;
+  Ctx:= ACtx;
+  Result:= TDfmBChecker.Run(ACtx.Cfg, ACtx.DfmPath,
+    function(AId: string): Boolean
+    begin
+      Result:= Ctx.Wants(AId);
+    end);
 end;
 
 class function TV151DFMBRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;
