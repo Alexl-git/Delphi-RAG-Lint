@@ -799,7 +799,7 @@ emedy), and info --json --db D gives the verdict library-resolve-owed plus libra
 **Servers**
 | Verb | What it does |
 |------|--------------|
-| `serve --db DB` | MCP stdio server (JSON-RPC 2.0) -- see section 3 |
+| `serve --db DB` | MCP stdio server (JSON-RPC 2.0) -- see section 3. Opens every `--db` given (repeatable); with none, the project's index plus every library section of the platform (1.51) |
 | `mcp-config (--claude-code\|--vscode\|--cursor\|--all)` | registers `serve` with an MCP client by editing its user config: `--claude-code` -> `"mcpServers"` in `~\.claude.json` (`CLAUDE_CONFIG_DIR` wins), `--vscode` -> `"servers"` in `%APPDATA%\Code\User\mcp.json`, `--cursor` -> `"mcpServers"` in `~\.cursor\mcp.json`, `--all` all three (a client that is not installed is `skipped`). Entry `{"type":"stdio","command":"<engine>","args":["serve"(,"--db","<index>")]}` (+ `"env":{}` for Claude Code). Merged (only that entry changes), backed up (`<file>.bak-<stamp>`), idempotent (`unchanged` writes nothing); user keys on our entry survive an update; `env` / `headers` values print `***` (a not-ours entry prints only `(not ours)`). Refuses (exit 1) an entry by that name running something other than `drag-lint.exe`, a file with comments/trailing commas (prints the entry to paste), invalid JSON. `--remove`, `--dry-run`, `--name <n>`, `--db <index>` (must exist; exit 2), `--engine <exe>`, `--config-path <file>` (one target), `--json` (array of `{Target,Path,Action,Backup,Before,After,Error,ExitCode}`), `--home-dir` / `--appdata-dir` (tests). Never runs a child process. Replaces `charts\src\Set-DragLintMcpConfig.ps1` |
 | `init --project <file.dproj> [--dry-run]` | one command from a project to a wired client: runs `register-project --apply`, `index --project`, `resolve-dbs --project`, then `mcp-config --all --db <that index>` (child processes of this exe; a client that is not installed is skipped; each step echoed as `step n/4`; a failing step stops the run with its exit code). `--dry-run` prints the four commands and runs none. `--home-dir` / `--appdata-dir` are passed to `mcp-config` (tests) |
 | `protocol register\|unregister\|status` | the per-user `draglint://` click-to-source registration (`HKCU\Software\Classes\draglint`, never HKLM). `register [--handler <drag-lint-open.exe>] [--dry-run] [--force]` points it at `drag-lint-open.exe` (default: beside `drag-lint.exe`; a missing handler exits 2; a `*-wt\` path or a FOREIGN registration is refused with exit 1 unless `--force`; the legacy PowerShell registration is replaced silently). `unregister [--dry-run] [--force]` removes ours or the legacy one (foreign needs `--force`). `status [--json]` prints `ours\|legacy-powershell\|foreign\|none` and the command; exit 0 only when `ours`; `--json` is `{"schema":"protocol/1","registered","class","command","handler"}`. No sub-verb: usage on stderr, exit 2. Replaces `charts\src\Register-DragLintProtocol.ps1` |
@@ -1112,6 +1112,18 @@ of the CLI -- exactly **18 tools**:
 > carries the freshness note as a SECOND text item, so the first stays the plain
 > answer (JSON stays JSON). A tool that fails answers that one call with
 > `isError: true` and the reason; the server keeps serving.
+
+> **Every relevant database (1.51).** `serve` opens EVERY database it is given:
+> repeated `--db` as given, or with no `--db` the project's own index (first)
+> plus every library section of the platform; other projects' indexes in the
+> manifest are not served, and stderr says how many. The served list is printed
+> on stderr. The first database answers the call-graph tools (`find_callers`,
+> `get_impact`, `get_neighbors`, `get_implementors`, `get_wiring`) and the doc
+> listings; `find_symbol` searches every database (first database's symbols
+> first); `get_symbol_doc`, `get_surface`, `get_slice` and `get_context_bundle`
+> answer from the first database that declares the qname; `rename_symbol`'s
+> proof reads the served library sections when no `library_db` is passed. A
+> per-call `"db"` argument still answers from that one index only.
 
 | Tool | Purpose |
 |------|---------|

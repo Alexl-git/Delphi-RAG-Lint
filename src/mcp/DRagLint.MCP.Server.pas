@@ -24,8 +24,9 @@ type
   // Newline-delimited JSON-RPC 2.0 server speaking MCP-2024-11-05 over stdio.
   // Holds one open ISymbolStore for the lifetime of the session.
   /// <summary><!-- drag-lint:auto sum -->Newline-delimited JSON-RPC 2.0 server speaking
-  /// MCP-2024-11-05 over stdio. Holds one open ISymbolStore for the lifetime of the
-  /// session.</summary>
+  /// MCP-2024-11-05 over stdio. Holds its databases open for the lifetime of the
+  /// session: the first (the project) and, since v151, every further one (the
+  /// platform's library sections).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
@@ -37,6 +38,11 @@ type
       FStore  : ISymbolStore  ;
       FLinter : TLinter       ;
       FDbPaths: TArray<string>;
+      { v151 SERVE (OQ3): the stores of FDbPaths[1..] that opened, in the given order
+        (project DB first, then every library section), with their paths. FStore stays
+        the FIRST database; these answer the declaration questions it cannot. }
+      FMoreStores: TArray<ISymbolStore>;
+      FMorePaths : TArray<string>;
       { Gitea #34 (2026-10-15): why the --db store is not open ('' when it is),
         and the same for the last per-call "db" argument -- named in the error
         instead of a bare "no database loaded". }
@@ -269,22 +275,25 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function TextContent(const AText: string): TJSONArray                                           ;
+      /// <summary>find_symbol's text answer: one `kind qname (name) - file:line:col`
+      /// row per symbol, then the match count.</summary>
       /// <param name="ASymbols"><!-- drag-lint:auto type -->const TArray&lt;TSymbol &gt;</param>
+      /// <param name="AFiles">v151 SERVE: the file of each symbol, resolved in the
+      /// database that holds it (a file id is per database); same length as ASymbols.</param>
       /// <returns><!-- drag-lint:auto -->string -- Observed: Sb.ToString.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Model.TSymbolKindHelper.ToText, Format</para>
+      /// <para>Calls: DRagLint.Core.Model.TSymbolKindHelper.ToText, Format</para>
       /// <para>Pure</para>
-      /// <para>Reads: FStore</para>
-      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
       /// <seealso cref="DRagLint.Core.Model.TSymbolKindHelper.ToText"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.DispatchToolsCall"/>
+      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindCallersText"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      function FormatSymbols   (const ASymbols : TArray<TSymbol     >): string;
+      function FormatSymbols   (const ASymbols : TArray<TSymbol     >; const AFiles: TArray<string>): string;
       /// <param name="ARefs"><!-- drag-lint:auto type -->const TArray&lt;TReference &gt;</param>
       /// <returns><!-- drag-lint:auto -->string -- Observed: Sb.ToString.</returns>
       /// <remarks>
@@ -453,14 +462,42 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveStore(const AArgs: TJSONObject): ISymbolStore                                   ;
+      /// <summary>v151 SERVE (OQ3): the store that DECLARES AQName. A per-call "db"
+      /// argument wins (ResolveStore). Otherwise the first served database when it
+      /// holds AQName, else the first further database (a library section) that does,
+      /// else the first database, so a miss is answered where it always was.</summary>
+      /// <param name="AArgs">The tools/call arguments; may be nil.</param>
+      /// <param name="AQName">The qualified name the tool asks about.</param>
+      /// <returns>The store to answer from; nil only when no database is served.</returns>
+      /// <remarks>Sets FCallNote to the freshness note of the store it returns. Only
+      /// declaration questions use it (doc, surface, slice, bundle); call-graph
+      /// questions stay on the first database, which holds the project's call sites.</remarks>
+      function StoreForQName(const AArgs: TJSONObject; const AQName: string): ISymbolStore;
+      /// <summary>v151 SERVE (OQ3): find_symbol over EVERY served database, first
+      /// database first, then each further one in order. Exact name (or qname) first;
+      /// only when no database has an exact match, a fuzzy search over all of them,
+      /// at most AFuzzyCap rows in total.</summary>
+      /// <param name="AName">Bare name ('' when AQName is given).</param>
+      /// <param name="AQName">Qualified name; wins over AName when not ''.</param>
+      /// <param name="AFuzzyCap">Row cap for the fuzzy fallback.</param>
+      /// <param name="AFiles">Out: each symbol's file, resolved in ITS database
+      /// (file ids are per database), same length as the result.</param>
+      /// <returns>The concatenated symbols; empty when nothing matches.</returns>
+      function FindSymbolsInAll(const AName, AQName: string; AFuzzyCap: Integer; out AFiles: TArray<string>): TArray<TSymbol>;
     public
+      /// <summary>Opens EVERY database of ADbPaths read-only (v151 SERVE, OQ3): the
+      /// first is the session store (find_callers, impact, lint store, ...), the rest
+      /// (the platform's library sections, or further --db files) answer the
+      /// declaration questions the first cannot. One that does not open is named on
+      /// stderr and skipped; with more than one database the served list is printed
+      /// on stderr, never on the JSON-RPC stdout.</summary>
       /// <param name="ADbPaths"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
-      /// <para>Calls: DRagLint.Lint.Linter.TLinter.Create, DRagLint.MCP.Server.TMCPServer.OpenStore, Flush, Format, Writeln</para>
+      /// <para>Calls: DRagLint.Lint.Linter.TLinter.Create, DRagLint.MCP.Server.TMCPServer.OpenStore, Flush, Format, SameText, Writeln</para>
       /// <para>constructor</para>
-      /// <para>Reads: FDbPaths, FStoreError, FStore   Writes: FDbPaths, FStore, FLinter</para>
+      /// <para>Reads: FDbPaths, FStoreError, FStore, FMoreStores, FMorePaths   Writes: FDbPaths, FStore, FMoreStores, FMorePaths, FLinter</para>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.OpenStore"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
@@ -600,8 +637,6 @@ var
 begin
   inherited Create;
   FDbPaths:= ADbPaths;
-  // For simplicity v0.4 holds ONE primary store. Multi-DB at MCP call time
-  // is v0.5; for now the AI passes a single --db on the serve invocation.
   if Length(FDbPaths) > 0 then
   begin
     { READ-ONLY, NO MIGRATE (Gitea #34). The server answers questions; it used
@@ -614,25 +649,29 @@ begin
       Flush(ErrOutput);
     end;
   end;
-  { SAY SO. Every --db after the first is accepted, held in FDbPaths, and never
-    opened -- so `serve --db A --db B` answers every question from A while
-    looking, from the caller's side, exactly like a server that searched both.
-    An MCP client asking "who calls X" then gets a confident, complete-looking
-    answer computed over half its configured corpus: a wrong answer that renders
-    as a plausible one, which is the same class as the stale-index hazard this
-    repo already records. The difference is that here the engine has everything
-    it needs to warn and simply did not.
-
-    The ignored DBs are NAMED, not counted: a warning that does not say WHICH is
-    one the reader cannot act on. stderr, so it cannot corrupt the JSON-RPC
-    stream on stdout. }
+  { v151 SERVE (OQ3): every further database is OPENED, not only named. Until 1.50
+    they were held and ignored (with a stderr WARNING), so a question about a library
+    routine answered "nothing found" although the configured library holds it. The
+    served list is NAMED on stderr (never stdout, the JSON-RPC stream), so a reader
+    can see which corpus answers; one that fails to open says why and is skipped. }
   if Length(FDbPaths) > 1 then
   begin
-    Writeln(ErrOutput, Format(
-      'drag-lint serve: WARNING -- %d databases were given but only the FIRST is used (%s).',
-      [Length(FDbPaths), FDbPaths[0]]));
     for I:= 1 to High(FDbPaths) do
-      Writeln(ErrOutput, '  ignored: ' + FDbPaths[I]);
+    begin
+      if SameText(FDbPaths[I], FDbPaths[0]) then Continue;
+      var MoreError: string;
+      var More:= OpenStore(FDbPaths[I], MoreError);
+      if More = nil then
+      begin
+        Writeln(ErrOutput, 'drag-lint serve: ' + MoreError + ' -- not served');
+        Continue;
+      end;
+      FMoreStores:= FMoreStores + [More];
+      FMorePaths := FMorePaths + [FDbPaths[I]];
+    end;
+    Writeln(ErrOutput, Format('drag-lint serve: serving %d database(s):', [Ord(FStore <> nil) + Length(FMorePaths)]));
+    if FStore <> nil then Writeln(ErrOutput, '  ' + FDbPaths[0]);
+    for var P: string in FMorePaths do Writeln(ErrOutput, '  ' + P);
     Flush(ErrOutput);
   end;
   FLinter:= TLinter.Create;
@@ -641,6 +680,7 @@ end;
 destructor TMCPServer.Destroy;
 begin
   FLinter.Free;
+  FMoreStores:= nil;
   FStore:= nil;
   inherited;
 end;
@@ -878,7 +918,7 @@ begin
         + '"to":{"type":"string","description":"New short name for the symbol"},'
         + '"dry_run":{"type":"boolean","description":"If true, return edits without applying them (optional, default false)"},'
         + '"project":{"type":"string","description":"The .dproj the compile gate builds; required unless dry_run"},'
-        + '"library_db":{"type":"string","description":"The platform library database the proof reads; without it a write refuses"},'
+        + '"library_db":{"type":"string","description":"The platform library database the proof reads; default: the library sections serve opened (none with a per-call db); with no library a write refuses"},'
         + '"db":{"type":"string","description":"Path to .sqlite database (optional if --db passed at startup)"}' + '},"required":["qname","to"]}'));
 
   // v0.31: run AST-based diagnostics (no compiler required).
@@ -912,17 +952,17 @@ begin
   Result.AddElement(Obj);
 end;
 
-function TMCPServer.FormatSymbols(const ASymbols: TArray<TSymbol>): string;
+function TMCPServer.FormatSymbols(const ASymbols: TArray<TSymbol>; const AFiles: TArray<string>): string;
 var
-  S : TSymbol       ;
   Sb: TStringBuilder;
 begin
   Sb:= TStringBuilder.Create;
   try
     { file:line:col, as the tool description has always promised: the row used to
       carry only `line L:C`, so a caller had to search for the file separately. }
-    for S in ASymbols do
-      Sb.AppendLine(Format('%s %s (%s) - %s:%d:%d', [S.Kind.ToText, S.QualifiedName, S.Name, FStore.GetFilePath(S.FileId), S.StartLine, S.StartCol]));
+    for var I:= 0 to High(ASymbols) do
+      Sb.AppendLine(Format('%s %s (%s) - %s:%d:%d', [ASymbols[I].Kind.ToText, ASymbols[I].QualifiedName, ASymbols[I].Name,
+        AFiles[I], ASymbols[I].StartLine, ASymbols[I].StartCol]));
     if Length(ASymbols) = 0 then Sb.AppendLine('No matches.')
     else Sb.AppendLine(Format('%d match(es).', [Length(ASymbols)]));
     Result:= Sb.ToString;
@@ -988,6 +1028,53 @@ begin
     if Length(FDbPaths) > 0 then DbPath:= FDbPaths[0];
   end;
   FCallNote:= NoteFor(DbPath, Result);
+end; // function
+
+const
+  FIND_SYMBOL_FUZZY_CAP = 10; // find_symbol's fuzzy fallback: rows over all served DBs
+
+function TMCPServer.StoreForQName(const AArgs: TJSONObject; const AQName: string): ISymbolStore;
+begin
+  Result:= ResolveStore(AArgs);
+  if ((AArgs <> nil) and (AArgs.GetValue('db') <> nil)) or (AQName = '') then Exit;
+  if (Result <> nil) and (Length(Result.FindSymbolsByQualifiedName(AQName)) > 0) then Exit;
+  for var I:= 0 to High(FMoreStores) do
+    if Length(FMoreStores[I].FindSymbolsByQualifiedName(AQName)) > 0 then
+    begin
+      Result:= FMoreStores[I];
+      FCallNote:= NoteFor(FMorePaths[I], Result);
+      Exit;
+    end;
+end; // function
+
+function TMCPServer.FindSymbolsInAll(const AName, AQName: string; AFuzzyCap: Integer; out AFiles: TArray<string>): TArray<TSymbol>;
+var
+  Stores: TArray<ISymbolStore>;
+  Syms  : TArray<TSymbol>     ;
+  Files : TArray<string>      ;
+
+  procedure Add(const AStore: ISymbolStore; const AFound: TArray<TSymbol>);
+  begin
+    for var Sym: TSymbol in AFound do Files:= Files + [AStore.GetFilePath(Sym.FileId)];
+    Syms:= Syms + AFound;
+  end;
+
+begin
+  Syms := nil;
+  Files:= nil;
+  Stores:= FMoreStores;
+  if FStore <> nil then Stores:= [FStore] + Stores;
+  for var S: ISymbolStore in Stores do
+    if AQName <> '' then Add(S, S.FindSymbolsByQualifiedName(AQName))
+    else Add(S, S.FindSymbolsByExactName(AName));
+  if (Length(Syms) = 0) and (AQName = '') then
+    for var S: ISymbolStore in Stores do
+    begin
+      if Length(Syms) >= AFuzzyCap then Break;
+      Add(S, S.FindSymbolsFuzzy(AName, AFuzzyCap - Length(Syms)));
+    end;
+  AFiles:= Files;
+  Result:= Syms;
 end; // function
 
 function TMCPServer.OpenStore(const ADbPath: string; out AError: string): ISymbolStore;
@@ -1343,18 +1430,14 @@ begin
       QName:= '';
       if Args.GetValue('name' ) <> nil then Name := Args.GetValue('name' ).Value;
       if Args.GetValue('qname') <> nil then QName:= Args.GetValue('qname').Value;
-      if QName <> '' then Symbols:= FStore.FindSymbolsByQualifiedName(QName)
-      else if Name <> '' then
-      begin
-        Symbols:= FStore.FindSymbolsByExactName(Name);
-        if Length(Symbols) = 0 then Symbols:= FStore.FindSymbolsFuzzy(Name, 10);
-      end
-      else
+      if (QName = '') and (Name = '') then
       begin
         SendError(AId, -32602, 'find_symbol requires name or qname');
         Exit;
       end;
-      ResultText:= FormatSymbols(Symbols);
+      var SymFiles: TArray<string>;
+      Symbols:= FindSymbolsInAll(Name, QName, FIND_SYMBOL_FUZZY_CAP, SymFiles); { v151 SERVE: every served DB }
+      ResultText:= FormatSymbols(Symbols, SymFiles);
     end // if
     else if ToolName = 'find_callers' then
     begin
@@ -1393,7 +1476,7 @@ begin
     end // if
     else if ToolName = 'get_symbol_doc' then
     begin
-      var CallStore:= ResolveStore(Args);
+      var CallStore:= StoreForQName(Args, Args.GetValue<string>('qname', ''));
       if CallStore = nil then
       begin
         SendError(AId, JSONRPC_SERVER_ERROR, NoStoreMessage);
@@ -1570,7 +1653,7 @@ begin
     end // if
     else if ToolName = 'get_surface' then
     begin
-      var SurfStore:= ResolveStore(Args);
+      var SurfStore:= StoreForQName(Args, Args.GetValue<string>('qname', ''));
       if SurfStore = nil then
       begin
         SendError(AId, JSONRPC_SERVER_ERROR, NoStoreMessage);
@@ -1592,7 +1675,7 @@ begin
     end // if
     else if ToolName = 'get_slice' then
     begin
-      var SliceStore:= ResolveStore(Args);
+      var SliceStore:= StoreForQName(Args, Args.GetValue<string>('qname', ''));
       if SliceStore = nil then
       begin
         SendError(AId, JSONRPC_SERVER_ERROR, NoStoreMessage);
@@ -1610,7 +1693,7 @@ begin
     end // if
     else if ToolName = 'get_context_bundle' then
     begin
-      var BundleStore:= ResolveStore(Args);
+      var BundleStore:= StoreForQName(Args, Args.GetValue<string>('qname', ''));
       if BundleStore = nil then
       begin
         SendError(AId, JSONRPC_SERVER_ERROR, NoStoreMessage);
@@ -1756,7 +1839,11 @@ begin
           RenFilesTouched:= 0;
           var RenLibs: TArray<ISymbolStore>:= nil;
           if Args.GetValue('library_db') <> nil then
-            RenLibs:= [TSQLiteSymbolStore.CreateReadable(Args.GetValue('library_db').Value, True) as ISymbolStore];
+            RenLibs:= [TSQLiteSymbolStore.CreateReadable(Args.GetValue('library_db').Value, True) as ISymbolStore]
+          { v151 SERVE (OQ3): without library_db the proof reads the further databases
+            serve opened (the platform's library sections) -- unless a per-call "db"
+            moved the question to another index, whose libraries these may not be. }
+          else if Args.GetValue('db') = nil then RenLibs:= FMoreStores;
           var RenOwners:= Default(TRenameOwnersRequest);
           RenOwners.ExeDir:= ExtractFilePath(ParamStr(0));
           if Args.GetValue('db') <> nil then RenOwners.PrimaryDb:= Args.GetValue('db').Value

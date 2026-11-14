@@ -40527,11 +40527,31 @@ begin
         one. Conservative fix, behaviour unchanged: serve the first, hand the server only that one, and say
         once -- on stderr, never the JSON-RPC stdout -- how to choose. Lazy-opening or refusing without a
         scope would break MCP configs that rely on the current pick. An explicit --db list is untouched. }
+      { v151 SERVE (OQ3, owner): serve uses ALL RELEVANT databases -- the first one (the project's
+        own index) plus EVERY library section of the platform -- and the server opens each of them.
+        Other projects' indexes the manifest also lists stay out (authoritative set = project DB +
+        platform library, owner 2026-08-13), and that is said once on stderr. An explicit --db list
+        is served as given; --project already resolves to exactly project + libraries. }
       if (Length(Args.DbPaths) = 0) and (Length(DbList) > 1) then
       begin
-        Writeln(ErrOutput, Format('drag-lint serve: NOTE -- no --db given; the manifest resolved %d databases and serve uses only the FIRST (%s). ' +
-          'Pass --db <file.sqlite> (or --project) to choose.', [Length(DbList), DbList[0]]));
-        DbList:= [DbList[0]];
+        var ServeLibs: TArray<string>:= nil;
+        try
+          ServeLibs:= LibrarySectionDbs(LoadManifestForProject(ExtractFilePath(ParamStr(0)), Args.ProjectPath));
+        except
+          on E: Exception do
+          begin
+            ServeLibs:= nil; // without the manifest's library list only the first DB is served -- and that is said
+            Writeln(ErrOutput, 'drag-lint serve: NOTE -- the manifest could not be read again (' + E.Message + '); serving only the first database.');
+          end;
+        end;
+        var ServeKept: TArray<string>:= [DbList[0]];
+        for var I:= 1 to High(DbList) do
+          if IsLibrarySectionDb(ServeLibs, DbList[I]) then ServeKept:= ServeKept + [DbList[I]];
+        if Length(ServeKept) < Length(DbList) then
+          Writeln(ErrOutput, Format('drag-lint serve: NOTE -- no --db given; serving the FIRST (%s) and its %d library section(s); ' +
+            '%d other database(s) of the manifest are not served. Pass --db <file.sqlite> (or --project) to choose.',
+            [DbList[0], Length(ServeKept) - 1, Length(DbList) - Length(ServeKept)]));
+        DbList:= ServeKept;
       end;
       for var ServeDb in DbList do SizeGuardCheck(ServeDb, ServeSGMB, Args.Force32);
       { Before Create, not after: TSQLiteSymbolStore opens the path for write, and

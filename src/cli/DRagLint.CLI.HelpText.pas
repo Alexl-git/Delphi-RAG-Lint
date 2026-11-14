@@ -244,7 +244,7 @@ begin
   Writeln('                               generated class freely, but edit its comment and the next run adds a second class for the old message.');
   Writeln('                               It is a VERB and not a --fix because its input is project-wide and its output is one file; the CALL-SITE');
   Writeln('                               rewrite is the fix-it half and lives on `lint <file> --fix --fix-rule raise-bare-exception [--apply]`.');
-  Writeln('  drag-lint serve              --db <file.sqlite> [--json]   (MCP stdio server)');
+  Writeln('  drag-lint serve              --db <file.sqlite> [--json]   (MCP stdio server; --db repeatable, every one is opened; none = project + every library section)');
   Writeln('  drag-lint mcp-config (--claude-code | --vscode | --cursor | --all) [--remove] [--dry-run] [--name <n>] [--db <index>] [--engine <exe>] [--config-path <file>] [--json]');
   Writeln('                               writes {"type":"stdio","command":"<engine>","args":["serve"[,"--db","<index>"]]} (+ "env":{} for Claude Code) into');
   Writeln('                               ~\.claude.json "mcpServers" / %APPDATA%\Code\User\mcp.json "servers" / ~\.cursor\mcp.json "mcpServers": merged, backed up (<file>.bak-<stamp>), idempotent;');
@@ -896,7 +896,7 @@ begin
   end;
   if pVerb = 'serve' then
   begin
-    Writeln('  drag-lint serve              --db <file.sqlite> [--json]   (MCP stdio server)');
+    Writeln('  drag-lint serve              --db <file.sqlite> [--json]   (MCP stdio server; --db repeatable, every one is opened; none = project + every library section)');
     Exit;
   end;
   if pVerb = 'mcp-config' then
