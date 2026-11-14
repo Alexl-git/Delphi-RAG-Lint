@@ -1,0 +1,3 @@
+# Equals alone (line 8), GetHashCode alone (line 13); the pair and a two-argument Equals must not fire
+equals-without-gethashcode 8
+equals-without-gethashcode 13

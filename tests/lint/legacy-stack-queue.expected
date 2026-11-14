@@ -1,0 +1,2 @@
+# cast of Pop at line 25; the generic stack (line 26) must not fire
+legacy-stack-queue 25

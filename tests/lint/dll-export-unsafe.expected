@@ -1,0 +1,2 @@
+# KundeName has no calling convention (export line 19); stdcall / cdecl exports are fine
+dll-export-unsafe 19

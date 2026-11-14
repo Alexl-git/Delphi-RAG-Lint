@@ -1,0 +1,2 @@
+# second interface with the same GUID (case-insensitive) at line 12; IOther is unique
+duplicate-interface-guid 12

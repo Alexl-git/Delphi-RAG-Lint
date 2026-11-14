@@ -1,0 +1,3 @@
+# GetName (line 21) and SetName (line 26) only move FName; GetCity / SetCity do real work
+trivial-accessor 21
+trivial-accessor 26

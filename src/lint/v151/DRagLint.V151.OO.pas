@@ -46,17 +46,32 @@ type
 
 implementation
 
-{ The lane's helpers live in DRagLint.V151.OO.Support; name it in an
-  implementation uses clause here once it declares something. }
+uses
+  DRagLint.V151.OO.Support
+  ;
 
 class procedure TV151OORules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
-  { no rules yet }
+  ADecls.Add(V151Rule(EQUALS_HASH_RULE, 'bug-patterns', 'warning', 'Equals overridden without GetHashCode (or the reverse)'));
+  ADecls.Add(V151Rule(EVENT_CALL_RULE, 'bug-patterns', 'warning', 'Event field called without an Assigned check'));
+  ADecls.Add(V151Rule(DUP_GUID_RULE, 'bug-patterns', 'warning', 'Two interfaces declare the same GUID'));
+  ADecls.Add(V151Rule(DLL_EXPORT_RULE, 'bug-patterns', 'warning', 'Exported routine has no calling convention'));
+  ADecls.Add(V151Rule(MONEY_FLOAT_RULE, 'bug-patterns', 'warning', 'Money amount held as floating point', False));
+  ADecls.Add(V151Rule(DEFAULT_PARAM_RULE, 'structure', 'hint', 'Parameter with a default value', False));
+  ADecls.Add(V151Rule(TRIVIAL_ACCESSOR_RULE, 'refactoring', 'hint', 'Accessor method only reads or writes a field', False));
+  ADecls.Add(V151Rule(UNNEEDED_FORWARD_RULE, 'dead-code', 'hint', 'Forward declaration that is not needed', False));
+  ADecls.Add(V151Rule(LEGACY_TLIST_RULE, 'modernize', 'hint', 'Non-generic list read through a cast', False));
+  ADecls.Add(V151Rule(LEGACY_STACK_QUEUE_RULE, 'modernize', 'hint', 'Non-generic stack or queue read through a cast', False));
 end;
 
 class function TV151OORules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
 begin
-  Result:= nil;
+  var Ctx: TV151FileCtx:= ACtx;
+  Result:= OOCheckFile(ACtx.Path,
+    function(S: string): Boolean
+    begin
+      Result:= Ctx.Wants(S);
+    end);
 end;
 
 class function TV151OORules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;

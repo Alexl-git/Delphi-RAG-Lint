@@ -1,0 +1,2 @@
+# unguarded call at line 22; both guarded forms must not fire
+event-call-without-assigned 22

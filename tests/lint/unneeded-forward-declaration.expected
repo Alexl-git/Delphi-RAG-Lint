@@ -1,0 +1,2 @@
+# TNode forward (line 6) has no use before its declaration; TNeeded forward (line 11) is used by TUser
+unneeded-forward-declaration 6
