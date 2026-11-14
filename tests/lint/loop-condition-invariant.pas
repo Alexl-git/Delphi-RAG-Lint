@@ -102,4 +102,66 @@ begin
   end;
 end;
 
+
+{ WID-CF widening: read-only RTL calls in the condition, repeat-until, named-argument labels }
+procedure WideHitLen(S: string);
+begin
+  while Length(S) > 0 do {HIT}
+    WriteLn('x');
+end;
+
+procedure WideOkLen(S: string);
+begin
+  while Length(S) > 0 do {OK}
+    Delete(S, 1, 1);
+end;
+
+procedure WideHitRepeat;
+var
+  Done: Boolean;
+begin
+  Done := False;
+  repeat {HIT}
+    WriteLn('x');
+  until Done;
+end;
+
+procedure WideOkRepeat;
+var
+  Done: Boolean;
+begin
+  Done := False;
+  repeat {OK}
+    Done := True;
+  until Done;
+end;
+
+procedure WideOkRepeatCall(Obj: TObject);
+var
+  Done: Boolean;
+begin
+  Done := False;
+  repeat {OK}
+    Obj.Poll(Done);
+  until Done;
+end;
+
+procedure NamedLabelHit(Obj: TObject; N: Integer);
+var
+  Done: Boolean;
+begin
+  Done := False;
+  while not Done do {HIT}
+    Obj.Poke(Done := N);
+end;
+
+procedure NamedValueOk(Obj: TObject; N: Integer);
+var
+  Done: Boolean;
+begin
+  Done := False;
+  while not Done do {OK}
+    Obj.Poke(N := Done);
+end;
+
 end.

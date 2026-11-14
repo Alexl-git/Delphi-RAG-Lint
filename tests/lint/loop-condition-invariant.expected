@@ -11,3 +11,11 @@ loop-condition-invariant 42
 !loop-condition-invariant 82
 !loop-condition-invariant 93
 !loop-condition-invariant 99
+# WID-CF widening (v151)
+loop-condition-invariant 109
+!loop-condition-invariant 115
+loop-condition-invariant 124
+!loop-condition-invariant 134
+!loop-condition-invariant 144
+loop-condition-invariant 154
+!loop-condition-invariant 163

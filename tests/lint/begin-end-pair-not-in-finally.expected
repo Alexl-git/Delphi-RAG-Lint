@@ -4,3 +4,16 @@ begin-end-pair-not-in-finally 27
 !begin-end-pair-not-in-finally 36
 !begin-end-pair-not-in-finally 47
 !begin-end-pair-not-in-finally 56
+# WID-CF widening (v151)
+begin-end-pair-not-in-finally 16
+begin-end-pair-not-in-finally 27
+!begin-end-pair-not-in-finally 36
+!begin-end-pair-not-in-finally 47
+!begin-end-pair-not-in-finally 56
+begin-end-pair-not-in-finally 63
+!begin-end-pair-not-in-finally 70
+begin-end-pair-not-in-finally 80
+begin-end-pair-not-in-finally 87
+begin-end-pair-not-in-finally 94
+!begin-end-pair-not-in-finally 101
+!begin-end-pair-not-in-finally 111
