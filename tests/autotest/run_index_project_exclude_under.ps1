@@ -1,6 +1,7 @@
-# E-UNWITH-EXCLUDE (wave 146 rk): `index --project X.dproj --exclude-under <dir>` must keep
-# a search-path unit under <dir> out of the project index. Before, DoIndex registered the
-# root but the project scope list went to IndexFile, which never asks the exclude roots.
+# E-UNWITH-EXCLUDE (wave 146 rk) made `index --project X.dproj --exclude-under <dir>` DROP a search-path
+# unit under <dir>. Owner ruling OQ4 (v151 EXCL) reversed it: a project member is every non-library unit
+# reached through uses, and folder location counts for platform libraries only. So the flag prunes
+# library (folder) walks only; under --project the unit stays indexed and the run names it in a NOTE.
 param([string] $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe")
 try {
 $Exe = . "$PSScriptRoot\_manifest_common.ps1" -Exe $Exe
@@ -20,15 +21,17 @@ $t = Files $plain
 Check 'POSITIVE CONTROL: without the flag both lib units are indexed' (($t -match 'LibU\.pas') -and ($t -match 'LibX\.pas'))
 
 $ex = "$work\ex.sqlite"
-& $Exe index --project "$work\app\App.dproj" --db $ex --exclude-under "$work\lib" 2>&1 | Out-Null
+$out = (& $Exe index --project "$work\app\App.dproj" --db $ex --exclude-under "$work\lib" 2>&1) -join "`n"
 $t = Files $ex
-Check 'excluded subtree: LibU.pas NOT indexed' ($t -notmatch 'LibU\.pas')
-Check 'sibling prefix libx (not under lib\) still indexed' ($t -match 'LibX\.pas')
+Check 'OQ4: closure unit under the excluded root is STILL indexed' ($t -match 'LibU\.pas')
+Check 'OQ4: the run names the kept unit in a NOTE' ($out -match '(?s)NOTE: --exclude-under.*LibU\.pas')
+Check 'sibling prefix libx (not under lib\) is not counted as kept' ($out -match 'Kept 1 file\(s\) under an excluded root')
+Check 'sibling prefix libx still indexed' ($t -match 'LibX\.pas')
 Check 'project file still indexed' ((Files $ex) -match 'App\.dpr')
 
-# Reindex of the PLAIN db: an already-indexed unit is outside every eviction root, so only --rebuild drops it (existing, documented).
+# OQ4: a --rebuild with the flag keeps the closure unit too.
 & $Exe index --project "$work\app\App.dproj" --db $plain --rebuild --exclude-under "$work\lib" 2>&1 | Out-Null
-Check '--rebuild with the flag drops a previously indexed LibU.pas' ((Files $plain) -notmatch 'LibU\.pas')
+Check '--rebuild with the flag still indexes LibU.pas' ((Files $plain) -match 'LibU\.pas')
 } finally { if ($work -and (Test-Path $work)) { [IO.Directory]::Delete($work, $true) } }
 if ($script:Failed) { Write-Host 'FAIL run_index_project_exclude_under' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS run_index_project_exclude_under' -ForegroundColor Green

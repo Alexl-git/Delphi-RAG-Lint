@@ -7213,32 +7213,31 @@ begin
   end;
 end;
 
-/// <summary>Drops every path that lies under one of the --exclude-under roots.</summary>
-/// <param name="APaths">Scope list (files or folders) a project index is about to walk.</param>
-/// <param name="ARoots">The --exclude-under values; empty means keep everything.</param>
-/// <returns>APaths without the entries under an excluded root (case-insensitive, whole path segments).</returns>
-/// <remarks>E-UNWITH-EXCLUDE: the folder walk asks the indexer's exclude roots, but a project scope list is
-/// FILES handed to IndexFile, which never does, so the flag was accepted and ignored for `index --project`.
-/// Both sides are normalised (`/` -> `\`, a relative root expanded against the current directory): 152b R16
-/// found `--exclude-under C:/x/ext` matching nothing, because the closure lists `C:\x\ext\U.pas` -- the walk
-/// pruned, the closure unit stayed. Pinned by run_index_exclude_under_slash_forms.ps1.</remarks>
-function DropUnderExcludeRoots(const APaths, ARoots: TArray<string>): TArray<string>;
+/// <summary>Returns every path that lies under one of the --exclude-under roots.</summary>
+/// <param name="APaths">Scope list (files) a project index is about to walk.</param>
+/// <param name="ARoots">The --exclude-under values; empty means no path is under one.</param>
+/// <returns>The entries of APaths under an excluded root (case-insensitive, whole path segments).</returns>
+/// <remarks>v151 EXCL (owner OQ4): a project's members are its listed units plus every non-library unit
+/// reached through `uses`; folder location counts for platform libraries only. So `index --project` no longer
+/// DROPS these paths (E-UNWITH-EXCLUDE did): DoIndex keeps them and names them in a note. Both sides are
+/// normalised (`/` -> `\`, a relative root expanded against the current directory), as 152b R16 required.
+/// Pinned by run_index_exclude_under_slash_forms.ps1 and run_v151_EXCL_closure_links.ps1.</remarks>
+function PathsUnderExcludeRoots(const APaths, ARoots: TArray<string>): TArray<string>;
 begin
-  Result:= APaths;
+  Result:= [];
   if Length(ARoots) = 0 then Exit;
   var Norm: TArray<string>:= [];
   for var R in ARoots do
     if R <> '' then
       Norm:= Norm + [LowerCase(IncludeTrailingPathDelimiter(ExcludeTrailingPathDelimiter(
         ExpandFileName(R.Replace('/', '\')))))];
-  Result:= [];
   for var P in APaths do
   begin
     var L: string:= LowerCase(P.Replace('/', '\'));
     var Hit: Boolean:= False;
     for var N in Norm do
       if StartsStr(N, L) then Hit:= True;
-    if not Hit then Result:= Result + [P];
+    if Hit then Result:= Result + [P];
   end;
 end;
 
@@ -7629,7 +7628,21 @@ begin
           sibling .dfm and the project file(s). See its remarks for why both are
           load-bearing. }
         Folders:= ExpandProjectScope(AArgs.ProjectPath, CR.Files);
-        Folders:= DropUnderExcludeRoots(Folders, AArgs.ExcludeUnder); { E-UNWITH-EXCLUDE }
+        { v151 EXCL (owner OQ4): a project index never drops a closure unit. --exclude-under prunes
+          library (folder) walks only; a closure unit under such a root stays and is named here. }
+        var KeptUnder: TArray<string>:= PathsUnderExcludeRoots(Folders, AArgs.ExcludeUnder);
+        if Length(KeptUnder) > 0 then
+        begin
+          Writeln(Format('  NOTE: --exclude-under prunes library walks only; a project index keeps every ' +
+            'compile-closure unit. Kept %d file(s) under an excluded root:', [Length(KeptUnder)]));
+          for var K: string in KeptUnder do Writeln('    ', K);
+        end;
+        { v151 EXCL (owner OQ4): closure units the project files do not list are members all the same;
+          say so now, so they are added (lint --rule unit-not-in-dpr, reconcile-project --apply). }
+        if SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') then
+          for var PF: TLintFinding in DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(
+            AArgs.ProjectPath, CR.Files, False) do
+            Writeln(Format('  unit-not-in-dpr: %s', [PF.Message]));
 
         { FAIL LOUDLY. A project that resolves to nothing must NOT fall back to
           a folder walk -- that fallback is the defect above returning -- and
