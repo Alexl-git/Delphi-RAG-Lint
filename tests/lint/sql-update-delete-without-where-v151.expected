@@ -1,6 +1,6 @@
-# v151: concatenated literal/identifier statements without a where (21, 24); any where substring (22, 23) suppresses; SELECT (25) ignored
-sql-update-delete-without-where 21
+# v151: statements built from literals only and no where fire (24); identifier operands (21-23) stay non-hits; SELECT (25) ignored
 sql-update-delete-without-where 24
+!sql-update-delete-without-where 21
 !sql-update-delete-without-where 22
 !sql-update-delete-without-where 23
 !sql-update-delete-without-where 25

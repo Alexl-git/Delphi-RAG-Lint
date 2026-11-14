@@ -65,6 +65,7 @@ const
   NEQ_TOKEN         = '<>';
   SPACES_RE         = '\s+';
   SEARCH_LINE_GROUP = 3;
+  LEGACY_TAIL_GROUP = 3;   // shared-marker-legacy-shape: the optional trailing `// note` group
 
 { ---- shared helpers ---- }
 
@@ -686,7 +687,7 @@ end;
   `try` line with the finding's indent must be reached through strictly deeper lines only; the line
   before `try` must end a statement (`;`) or open a block (`begin`), so a `try` that is the body of
   `if .. then` / `else` / `do` is left alone; the last body line must end in `;`. }
-function FixEmptyFinally(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
+function FixEmptyFinally(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@7c3d -- REVIEWED 2026-11-13: a fixer declines (Exit) on every source shape it was not written for; guard clauses by design
 var
   Line  : string;
   Ind   : Integer;
@@ -708,7 +709,7 @@ begin
     if Length(IndentOf(ALines[I])) < Ind then Exit;
     if Length(IndentOf(ALines[I])) = Ind then
     begin
-      if IsWordLine(ALines[I], 'try') and (Pos(';', Trim(ALines[I])) = 0) then TryAt:= I + 1;
+      if IsWordLine(ALines[I], 'try') and (not Trim(ALines[I]).Contains(';')) then TryAt:= I + 1;
       Break;
     end;
   end;
@@ -755,7 +756,7 @@ begin
   Match:= TRegEx.Match(Span, '^//\s*(.*?)\s*//\s*(dl:shared\s+\S[^/]*?)\s*(//.*)?$', [roIgnoreCase]);
   if (not Match.Success) or (Match.Groups[1].Value = '') then Exit;
   Note:= Match.Groups[1].Value;
-  Tail:= if Match.Groups.Count > 3 then Match.Groups[3].Value else ''; // an unmatched trailing group may be absent
+  Tail:= if Match.Groups.Count > LEGACY_TAIL_GROUP then Match.Groups[LEGACY_TAIL_GROUP].Value else ''; // an unmatched trailing group may be absent
   Result:= [ReplaceEdit(AFinding.FilePath, AFinding.StartLine, AFinding.StartCol, Span,
     '// ' + Match.Groups[2].Value + ' // ' + Note + (if Tail <> '' then ' ' + Tail else ''))];
 end;

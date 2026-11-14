@@ -2890,7 +2890,7 @@
       "owner": "ENGINE",
       "status": "shipped",
       "since": "1.37.0-alpha",
-      "summary": "lint --fix repairs findings of the 110 fixable rules; --json reports per finding whether it was applied; lint accepts a folder",
+      "summary": "lint --fix repairs findings of the 113 fixable rules; --json reports per finding whether it was applied; lint accepts a folder",
       "intro": "Read this when you want drag-lint to repair findings instead of only reporting them. A dry run shows the edits, --apply writes them, and the JSON result says for each finding whether a fix was applied.",
       "wikiPage": "autofix-wave",
       "surfaces": [
@@ -5157,6 +5157,29 @@
         "by": "ENGINE",
         "build": "1.39.0-alpha",
         "surfaceHash": "b1f00d80ab1b4be410e5ec2d0d9fdf011c19aa4e6821470b1eac32d0970bef3d"
+      }
+    },
+    {
+      "id": "v151-wid-scm-rules",
+      "title": "Wider scm rules and three new fixers",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.50.0-alpha",
+      "summary": "Seven built-in rules read more constructs; empty-finally, format-string-not-formatted and shared-marker-legacy-shape gain autofixes",
+      "intro": "Read this when you want to know which constructs the 1.51 lint rules newly report or exempt, and which new fixes lint --fix offers.",
+      "wikiPage": "v151-wid-scm-rules",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-13",
+        "by": "alexanderl",
+        "build": "1.50.0-alpha"
       }
     },
     {
@@ -14573,7 +14596,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Comparing ClassName to a string literal is fragile -- use 'is' or InheritsFrom() (bug-patterns, warning, fixable)",
+        "summary": "Comparing ClassName (or ClassNameIs) to a string literal is fragile -- use 'is' or InheritsFrom() (bug-patterns, warning, fixable)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -15193,7 +15216,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Obsolete RTL routine. Prefer TEncoding / modern string APIs (platform, info, fixable)",
+        "summary": "Obsolete routine (RTL string helper, 32-bit-only Get/SetWindowLong or Get/SetClassLong, TThread.Resume/Suspend) -- use TEncoding /... (platform, info, fixable)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -15713,7 +15736,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Empty finally block does nothing -- remove it, or release the resource it was meant to free (bug-patterns, warning)",
+        "summary": "Empty finally block does nothing -- remove it, or release the resource it was meant to free (bug-patterns, warning, fixable)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -16233,7 +16256,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Format string has no '%' specifier -- nothing is formatted; use the string directly or add the missing specifier (bug-patterns, info)",
+        "summary": "Format string has no '%' specifier -- nothing is formatted; use the string directly or add the missing specifier (bug-patterns, info, fixable)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -19053,7 +19076,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Legacy two-slash dl:shared marker: the reader only honours the tag as the FIRST token of its own comment, so this unit reads as UNSHARED and... (other, warning)",
+        "summary": "Legacy two-slash dl:shared marker: the reader only honours the tag as the FIRST token of its own comment, so this unit reads as UNS... (other, warning, fixable)",
         "wikiPage": "rules",
         "surfaces": [
           {

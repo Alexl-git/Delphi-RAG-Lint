@@ -1,0 +1,23 @@
+{
+  "id": "v151-wid-scm-rules",
+  "title": "Wider scm rules and three new fixers",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.50.0-alpha",
+  "summary": "Seven built-in rules read more constructs; empty-finally, format-string-not-formatted and shared-marker-legacy-shape gain autofixes",
+  "intro": "Read this when you want to know which constructs the 1.51 lint rules newly report or exempt, and which new fixes lint --fix offers.",
+  "wikiPage": "v151-wid-scm-rules",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-13",
+    "by": "alexanderl",
+    "build": "1.50.0-alpha"
+  }
+}

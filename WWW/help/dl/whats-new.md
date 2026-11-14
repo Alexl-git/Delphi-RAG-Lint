@@ -21,6 +21,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 * [Lint --fix through the compile gate](features/lint-fix-compile-gate.md) -- lint --fix --apply --project X.dproj --compile-gate writes the fixes only if the project still builds; a fix that breaks the compile is refused and rolled back.
 * [RTTI unavailable (lint rule)](features/rtti-unavailable.md) -- Project lint rule, OFF by default: declarations that lose classic or extended RTTI (enums without type info, record properties, narrowing directives).
 * [uses-recover](features/uses-recover.md) -- Recovers the uses edges of units that ship without source, from the vendor's .hpp headers and a dcc map; never reads a .dcu; --apply stores them in the index.
+* [Wider scm rules and three new fixers](features/v151-wid-scm-rules.md) -- Seven built-in rules read more constructs; empty-finally, format-string-not-formatted and shared-marker-legacy-shape gain autofixes.
 
 ## 1.46.0-alpha
 
@@ -80,7 +81,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 1.37.0-alpha
 
-* [Autofix for fixable rules](features/autofix-wave.md) -- lint --fix repairs findings of the 110 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
+* [Autofix for fixable rules](features/autofix-wave.md) -- lint --fix repairs findings of the 113 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
 * [Compliance labels (CWE, CERT, MISRA)](features/compliance-labels.md) -- Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field.
 * [Gap-wave lint rules](features/gap-wave-rules.md) -- About 50 new lint rules (bug patterns, dead code, data flow, platform, structure) added in the 1.37.0 gap wave.
 * [Include-file indexing and IF evaluation](features/inc-indexing.md) -- Include files are indexed under the active build, value defines and IF expressions are evaluated, and an undecidable IF is reported as a pp-unresolved-if hint.

@@ -217,6 +217,7 @@
   "unwith": "unwith",
   "usages": "usages",
   "uses-recover": "uses-recover",
+  "v151-wid-scm-rules": "v151-wid-scm-rules",
   "vscode-extension": "auto-uses-on-save",
   "warm-rule-cache": "warm-rule-cache",
   "wiki": "wiki",

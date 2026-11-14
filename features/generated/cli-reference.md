@@ -1159,7 +1159,7 @@ Described in [link-orm](../../docs/wiki/link-orm.md).
 
 ### lint
 
-lint --fix repairs findings of the 110 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
+lint --fix repairs findings of the 113 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
 
 ```text
 drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]
@@ -1208,6 +1208,7 @@ Described in:
 * [type-name-prefix: expected letter from the ancestor chain](../../docs/wiki/Type-Name-Prefix-Origin.md)
 * [Missing unit in uses (unit-missing-from-uses)](../../docs/wiki/unit-missing-from-uses.md)
 * [unwith](../../docs/wiki/unwith.md)
+* [Wider scm rules and three new fixers](../../docs/wiki/v151-wid-scm-rules.md)
 
 ### lint-all
 

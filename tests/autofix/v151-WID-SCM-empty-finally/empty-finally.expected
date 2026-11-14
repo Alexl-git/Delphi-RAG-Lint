@@ -1,0 +1,27 @@
+unit EmptyFinallyFix;
+
+interface
+
+procedure Run;
+
+implementation
+
+procedure Run;
+var
+  N: Integer;
+begin
+  N := 0;
+    Inc(N);
+    Inc(N);
+  if N > 0 then
+    try
+      Inc(N);
+    finally
+    end;
+  try
+    Inc(N)
+  finally
+  end;
+end;
+
+end.
