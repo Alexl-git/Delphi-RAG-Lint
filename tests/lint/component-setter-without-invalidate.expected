@@ -1,0 +1,6 @@
+# Generated from the (+) / (-) markers of component-setter-without-invalidate.pas: (+) must fire, (-) must not.
+component-setter-without-invalidate 61
+!component-setter-without-invalidate 68
+!component-setter-without-invalidate 75
+!component-setter-without-invalidate 81
+component-setter-without-invalidate 86

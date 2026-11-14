@@ -1,0 +1,6 @@
+# Generated from the (+) / (-) markers of write-only-property.pas: (+) must fire, (-) must not.
+write-only-property 19
+!write-only-property 20
+!write-only-property 21
+write-only-property 27
+!write-only-property 32
