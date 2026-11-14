@@ -1840,7 +1840,12 @@ begin
   if TypeName = '' then Exit;
   if AParentQualifiedName <> '' then QName:= AParentQualifiedName + '.' + TypeName
   else QName:= TypeName;
-  Idx:= AState.Emit(skInterface, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, '', '', HeritageTextOf(TypeNode, AState.Source), False, False, '', '', True, GenParams);
+  { v151 EXT: the GUID clause, verbatim between its brackets (a quoted literal or a constant's
+    name), is the interface's signature -- the fact a cross-unit duplicate-GUID rule reads.
+    '' when the interface has none. }
+  var GuidNode:= TypeNode.ChildByField('guid');
+  var GuidText:= if GuidNode.IsNull then '' else NodeText(GuidNode, AState.Source).Trim(['[', ']', ' ', #9, #13, #10]);
+  Idx:= AState.Emit(skInterface, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, GuidText, '', HeritageTextOf(TypeNode, AState.Source), False, False, '', '', True, GenParams);
   { All interface members are public. }
   OldVis:= AState.CurrentVisibility;
   var OldVisExp: Boolean:= AState.CurrentVisExplicit;
@@ -3287,7 +3292,10 @@ begin
   end; // while
 
   if Length(Links) = 0 then Exit;
-  Outcome:= ClassifyDiChain(Links, Binding, ResIntf, UnresMethod);
+  { v151 EXT: the chain's root receiver (`GlobalContainer`, `FContainer`, `LookupCache`) tells a
+    container call from any other method that happens to be named Register. }
+  var Receiver: string:= if (not Cur.IsNull) and (Cur.NodeType = 'identifier') then NodeText(Cur, AState.Source) else '';
+  Outcome:= ClassifyDiChain(Links, Binding, ResIntf, UnresMethod, Receiver);
   case Outcome of
     dioRegister:
     begin
