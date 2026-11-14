@@ -1963,6 +1963,59 @@ begin
   Result:= Trim(Result);
 end; // function
 
+{ v151 GR11 (grammar v1.4.11, code-page string types). `TAnsi1252 = type AnsiString(1252);`
+  is kType + ONE node declStringCodePage(base: identifier, codePage: literalNumber | identifier);
+  before v1.4.11 the same text was kType + loose siblings. Either way no handler claimed the base:
+  TryWalkOtherTypeDecl took the kType keyword as the `type` field and stored the signature 'type',
+  and the base and a constant code page emitted no ref at all.
+  Emits skTypeAlias with the BASE type as its signature -- the same signature `type AnsiString`
+  without a code page gets, so alias chasing reaches the string intrinsic -- a type_use ref for
+  the base, and a read ref for a code page given by a constant (`AnsiString(CP_UTF8)`), gated
+  like every other usage ref. The code page itself is not stored. Always returns True once a
+  base was found: nothing else claims this shape. }
+function TryWalkCodePageString(const ADeclTypeNode, ACodePageNode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string): Boolean;
+begin
+  Result:= False;
+  var BaseNode:= ACodePageNode.ChildByField('base');
+  var NameNode:= ADeclTypeNode.ChildByField('name');
+  if BaseNode.IsNull or NameNode.IsNull then Exit;
+  var TypeName:= NodeText(NameNode, AState.Source);
+  var BaseName:= NodeText(BaseNode, AState.Source);
+  if (TypeName = '') or (BaseName = '') then Exit;
+  var QName:= if AParentQualifiedName <> '' then AParentQualifiedName + '.' + TypeName else TypeName;
+  AState.Emit(skTypeAlias, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, BaseName);
+  AState.EmitRef('type_use', BaseName, BaseNode);
+  var CodePage:= ACodePageNode.ChildByField('codePage');
+  if AState.EmitUsageRefs and (not CodePage.IsNull) and (CodePage.NodeType = 'identifier') then
+    AState.EmitRef('read', NodeText(CodePage, AState.Source), CodePage);
+  Result:= True;
+end; // function
+
+// v151 GR11 (grammar v1.4.11, issue 4). With the THEN branch of a conditional class header
+// active -- IFDEF X: `TFoo = class(TOther);`, ELSE: `TFoo = class(TBase)`, then after the
+// ENDIF `protected ... end;` -- the members follow a complete short class and the grammar
+// parses them as a classBodyOrphan SIBLING of that declType. (Line comments on purpose: a
+// directive written with its braces inside a brace comment ends the comment early.)
+// Their class is the one declared just before them: the closest preceding declType sibling
+// (directive and comment nodes skipped), if the walk already emitted it as a class or record.
+// Returns its index in AState.Symbols, or -1 (no declType before it, or that one is not a
+// class / record) -- the caller then walks the members as before.
+function ClassBodyOrphanOwner(const AOrphanNode: TTSNode; const AState: TWalkState; const AParentQualifiedName: string): Integer;
+begin
+  Result:= -1;
+  var Prev:= AOrphanNode.PrevNamedSibling;
+  while (not Prev.IsNull) and (Prev.NodeType <> 'declType') and (Prev.NodeType <> 'classBodyOrphan') do Prev:= Prev.PrevNamedSibling;
+  if Prev.IsNull or (Prev.NodeType <> 'declType') then Exit;
+  var NameNode:= Prev.ChildByField('name');
+  if NameNode.IsNull then Exit;
+  var TypeName, GenParams: string;
+  SplitGenericName(NodeText(NameNode, AState.Source), TypeName, GenParams);
+  if TypeName = '' then Exit;
+  var QName:= if AParentQualifiedName <> '' then AParentQualifiedName + '.' + TypeName else TypeName;
+  for var i:= AState.Symbols.Count - 1 downto 0 do
+    if (AState.Symbols[i].Kind in [skClass, skRecord]) and SameText(AState.Symbols[i].QualifiedName, QName) then Exit(i);
+end; // function
+
 // INBOX 2.11 (converter-editor team, 2026-08-02): a STRONG / distinct type alias
 // -- `TFileName = type string;`, `TDate = type TDateTime;` -- was never indexed.
 // Same defect class as 2.1: parsed cleanly, claimed by no handler, no row written.
@@ -2014,7 +2067,8 @@ begin
     { The section keyword of `type ... = ...` is a child of declTypes, not of
       declType, so a kType HERE only ever means the strong-alias form. }
     if Child.NodeType = 'kType' then HasTypeKeyword:= True
-    else if Child.NodeType = 'type' then WrapNode:= Child; { keep the LAST }
+    else if Child.NodeType = 'type' then WrapNode:= Child { keep the LAST }
+    else if Child.NodeType = 'declStringCodePage' then Exit(TryWalkCodePageString(ADeclTypeNode, Child, AState, AParentSymbolIdx, AParentQualifiedName));
   end;
   if not HasTypeKeyword then Exit;
   if WrapNode.IsNull then Exit;
@@ -3430,6 +3484,30 @@ begin
     for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, ProgQName);
     Exit;
   end; // if
+
+  // v151 GR11: members after a complete short class (classBodyOrphan, grammar v1.4.11) belong
+  // to that class: walked under it, its declaration span widened to their `end;`, visibility
+  // saved and restored exactly as TryWalkClassOrRecord does. Without an owner they fall
+  // through to the default recurse, as before.
+  if NodeType = 'classBodyOrphan' then
+  begin
+    var OrphanOwner:= ClassBodyOrphanOwner(ANode, AState, AParentQualifiedName);
+    if OrphanOwner >= 0 then
+    begin
+      var OwnerSym:= AState.Symbols[OrphanOwner];
+      OwnerSym.EndLine:= Integer(ANode.EndPoint.row   ) + 1;
+      OwnerSym.EndCol := Integer(ANode.EndPoint.column) + 1;
+      AState.Symbols[OrphanOwner]:= OwnerSym;
+      var OrphanOldVis:= AState.CurrentVisibility;
+      var OrphanOldVisExp:= AState.CurrentVisExplicit;
+      AState.CurrentVisibility := 'public';
+      AState.CurrentVisExplicit:= False;
+      for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, OrphanOwner, OwnerSym.QualifiedName);
+      AState.CurrentVisibility := OrphanOldVis;
+      AState.CurrentVisExplicit:= OrphanOldVisExp;
+      Exit;
+    end;
+  end;
 
   // declType wrapping a class/record/interface/enum declaration. Try each
   // shape in order; the first matching handler returns true and we're done.
