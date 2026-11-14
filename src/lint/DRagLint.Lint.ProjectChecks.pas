@@ -28,7 +28,7 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
+  /// <para>Used by: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
   /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -44,14 +44,16 @@ type
       /// <param name="AClosureFiles">The project's compile-closure .pas files,
       /// already scoped to its own roots. Optional: when empty the third
       /// direction below is SKIPPED rather than half-answered.</param>
+      /// <param name="AWithLinks">v151 EXCL: True (the default, the lint path) also appends
+      /// CheckNonUsesLinks for the same closure; the index-time report passes False to stay cheap.</param>
       /// <returns><!-- drag-lint:auto -->TArray&lt;TLintFinding&gt; -- Observed:
       /// Findings.ToArray; ASet.TryGetValue(AStem, Orig) and (Pos('.',
       /// NormUnitQualified(Orig)) = 0).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-      /// <para>Calls: Default, DRagLint.Lint.ProjectChecks.Parse.ExtractUsesNames, DRagLint.Lint.ProjectChecks.Parse.FindSiblingProgramFile, DRagLint.Lint.ProjectChecks.Parse.NormUnit, DRagLint.Lint.ProjectChecks.Parse.NormUnitQualified, DRagLint.Lint.ProjectChecks.Parse.ReadDCCReferences, DRagLint.Lint.ProjectChecks.RealCasedFileName, ExtractFileExt, ExtractFileName, ExtractFilePath, Format, Pos, SameText, StartsText, StemSatisfies</para>
-      /// <para>Complexity: 36 (cyclomatic, outer body), 199 lines (full implementation)</para>
+      /// <para>Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: Default, DRagLint.Lint.ProjectChecks.Parse.ExtractUsesNames, DRagLint.Lint.ProjectChecks.Parse.FindSiblingProgramFile, DRagLint.Lint.ProjectChecks.Parse.NormUnit, DRagLint.Lint.ProjectChecks.Parse.NormUnitQualified, DRagLint.Lint.ProjectChecks.Parse.ReadDCCReferences, DRagLint.Lint.ProjectChecks.RealCasedFileName, DRagLint.Lint.ProjectChecks.TProjectChecks.CheckNonUsesLinks, ExtractFileExt, ExtractFileName (+6 more)</para>
+      /// <para>Complexity: 37 (cyclomatic, outer body), 201 lines (full implementation)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.ExtractUsesNames"/>
       /// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.FindSiblingProgramFile"/>
@@ -61,7 +63,32 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function CheckUnitsInDpr( const ADprojPath: string;
-                                      const AClosureFiles: TArray<string> = nil): TArray<TLintFinding>;
+                                      const AClosureFiles: TArray<string> = nil;
+                                      const AWithLinks: Boolean = True): TArray<TLintFinding>;
+      /// <summary>Reports project-local units that the compile closure does NOT reach through `uses`
+      /// but that a closure unit still depends on by another link (owner ruling OQ13): such a unit
+      /// belongs to the project, so it needs a `uses` entry and a project entry.</summary>
+      /// <param name="ADprojPath">The project's .dproj; its folder is one of the candidate folders.</param>
+      /// <param name="AClosureFiles">The project's compile-closure files (.pas; others are ignored).
+      /// Empty -> no findings (nothing to compare against).</param>
+      /// <returns>One `unit-not-in-dpr` warning per (anchor file, linked unit, link). Links found:
+      /// (1) a closure unit's sibling .dfm streams a class (`object|inherited|inline Name: TClass`)
+      /// that no closure unit declares and a candidate unit does; anchored on the .dfm line.
+      /// (2) a closure source names the candidate unit qualified, `UnitName.Ident`, with Ident
+      /// declared in that unit's interface (typically inside an inactive conditional branch, the
+      /// only place such code still compiles); anchored on the source line.
+      /// (3) a closure source looks a class up by name, `GetClass|FindClass('TName')`, and TName is
+      /// declared only in a candidate unit; anchored on the source line.</returns>
+      /// <remarks>Candidates are the .pas files directly in the folders of the closure units and
+      /// of the .dproj (no recursion) that are not themselves closure members and do not share a
+      /// closure unit's name. A unit with no link at all is NOT reported: by OQ13 it is not part
+      /// of the project. Look-alike guarded: a qualified name whose first part is also declared
+      /// as an identifier in the using file (`Cfg: TRec; Cfg.Value`) is that identifier, not the
+      /// unit. Text scan with comments blanked (string literals too for link 2, kept for link 3); all
+      /// conditional branches are read on purpose. Binary .dfm files are skipped. Touches the
+      /// file system; no DB access; thread-safe.</remarks>
+      class function CheckNonUsesLinks(const ADprojPath: string;
+                                       const AClosureFiles: TArray<string>): TArray<TLintFinding>;
       /// <summary>Flags every `uses X` whose unit X resolves to no known unit
       /// (project member / platform library / standard alias / RTL namespace).
       /// Findings attach to the `uses` token line on the using file. No .dproj
@@ -96,6 +123,7 @@ uses
   FireDAC.Comp.Client
   , DRagLint.Project.TargetStudio { ResolveTargetStudio: the project's Delphi, for the .dcu search (GH #13) }
   , DRagLint.Storage.FileMembership { ConnectReadOnly: the shared reader open }
+  , System.RegularExpressions { v151 EXCL: CheckNonUsesLinks text scan }
   ;
 
 { The scoped closure list arrives LOWERCASED, so a unit reported from it read as
@@ -116,7 +144,8 @@ begin
 end;
 
 class function TProjectChecks.CheckUnitsInDpr( const ADprojPath: string;
-                                               const AClosureFiles: TArray<string>): TArray<TLintFinding>;
+                                               const AClosureFiles: TArray<string>;
+                                               const AWithLinks: Boolean): TArray<TLintFinding>;
 var
   DCCRefs    : TArray<string>             ;
   ProgramUses: TArray<string>             ;
@@ -306,6 +335,7 @@ begin
       end; // for
     end; // if
 
+    if AWithLinks then Findings.AddRange(CheckNonUsesLinks(ADprojPath, AClosureFiles));
     Result:= Findings.ToArray;
   finally
     DCCSet.Free;
@@ -315,6 +345,259 @@ begin
     Findings.Free;
   end; // try
 end; // function
+
+{ v151 EXCL helpers for CheckNonUsesLinks. }
+
+const
+  /// <summary>A class declaration (not a forward `= class;`, not a metaclass `= class of`).</summary>
+  CLASS_DECL_PATTERN = '\b([A-Za-z_]\w*)\s*=\s*(?:packed\s+)?class\b(?!\s*(?:of\b|;))';
+  /// <summary>A .dfm component line: `object|inherited|inline [Name:] TClass`.</summary>
+  DFM_CLASS_PATTERN = '^\s*(?:object|inherited|inline)\s+(?:[A-Za-z_]\w*\s*:\s*)?([A-Za-z_]\w*)';
+  /// <summary>A class looked up by its name in a string literal.</summary>
+  BY_NAME_PATTERN = '\b(?:GetClass|FindClass)\s*\(\s*''([A-Za-z_]\w*)''';
+  /// <summary>One Pascal string literal on one line (a doubled quote splits it in two; both blank).</summary>
+  STRING_LITERAL_PATTERN = '''[^''\r\n]*''';
+  /// <summary>A dotted name chain A.B[.C...] not preceded by a word character or a dot.</summary>
+  QUALIFIED_CHAIN_PATTERN = '(?<![\w.])[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)+';
+
+type
+  /// <summary>One project-local .pas outside the closure, read on first need.</summary>
+  TLinkCandidate = class
+    UnitName  : string;                       // as the file system spells it
+    Path      : string;
+    Classes   : TDictionary<string, Boolean>; // lowercase class names declared anywhere in it
+    IntfWords : TDictionary<string, Boolean>; // lowercase identifiers of its interface section
+    constructor Create(const APath: string);
+    destructor Destroy; override;
+  end;
+
+{ The file's text, or '' when it cannot be read (locked, vanished, not text):
+  a link scan is advisory and must never stop the lint run. }
+function ReadTextOrEmpty(const APath: string): string;
+begin
+  try
+    Result:= TFile.ReadAllText(APath); // dl:ok taint-path-traversal@a796 -- APath comes from the project's own closure list or a directory listing of its folders, never from outside input
+  except
+    on E: Exception do Result:= ''; // advisory scan: an unreadable, locked or vanished file has no links
+  end;
+end;
+
+function LineOfOffset(const AText: string; AOffset: Integer): Integer;
+begin
+  Result:= 1;
+  for var I: Integer:= 1 to AOffset - 1 do
+    if AText[I] = #10 then Inc(Result);
+end;
+
+procedure AddMatches(const AText, APattern: string; ADest: TDictionary<string, Boolean>);
+begin
+  for var M: TMatch in TRegEx.Matches(AText, APattern, [roIgnoreCase]) do
+    ADest.AddOrSetValue(LowerCase(M.Groups[1].Value), True);
+end;
+
+constructor TLinkCandidate.Create(const APath: string);
+begin
+  inherited Create;
+  Path:= APath;
+  UnitName:= TPath.GetFileNameWithoutExtension(RealCasedFileName(APath));
+  Classes:= TDictionary<string, Boolean>.Create;
+  IntfWords:= TDictionary<string, Boolean>.Create;
+  var Text: string:= StripPasCommentsKeepLayout(ReadTextOrEmpty(APath));
+  AddMatches(Text, CLASS_DECL_PATTERN, Classes);
+  var Impl: TMatch:= TRegEx.Match(Text, '\bimplementation\b', [roIgnoreCase]);
+  if Impl.Success then Text:= Copy(Text, 1, Impl.Index - 1);
+  AddMatches(Text, '\b([A-Za-z_]\w*)\b', IntfWords);
+end;
+
+destructor TLinkCandidate.Destroy;
+begin
+  Classes.Free;
+  IntfWords.Free;
+  inherited Destroy;
+end;
+
+class function TProjectChecks.CheckNonUsesLinks(const ADprojPath: string;
+                                                const AClosureFiles: TArray<string>): TArray<TLintFinding>;
+var
+  ClosurePaths  : TDictionary<string, Boolean>; // lowercase full path
+  ClosureUnits  : TDictionary<string, Boolean>; // lowercase unit names AND each dotted prefix of one
+  ClosureClasses: TDictionary<string, Boolean>; // lowercase class names the closure declares
+  Candidates    : TObjectDictionary<string, TLinkCandidate>; // lowercase unit name -> candidate
+  ClassOwner    : TDictionary<string, TLinkCandidate>;       // lowercase class name -> its only candidate
+  Reported      : TDictionary<string, Boolean>;
+  Findings      : TList<TLintFinding>;
+  Sources       : TList<string>;  // closure .pas plus the program file
+
+  procedure Report(const AAnchor: string; ALine: Integer; const AUnit, AKind, AMessage: string);
+  begin
+    var Key: string:= LowerCase(AAnchor + '|' + AUnit + '|' + AKind);
+    if Reported.ContainsKey(Key) then Exit;
+    Reported.Add(Key, True);
+    var F: TLintFinding:= Default(TLintFinding);
+    F.RuleId   := 'unit-not-in-dpr';
+    F.Severity := 'warning';
+    F.Message  := AMessage;
+    F.FilePath := AAnchor;
+    F.StartLine:= ALine;
+    F.StartCol := 1;
+    Findings.Add(F);
+  end;
+
+  function AddAdvice(const AUnit, AUser: string): string;
+  begin
+    Result:= Format(' By the project rules it is a member: add %s to the uses clause of %s and to the ' +
+      'project files (.dpr uses and .dproj DCCReference).', [AUnit, AUser]);
+  end;
+
+  procedure CollectCandidates;
+  begin
+    var Dirs: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+    try
+      Dirs.AddOrSetValue(LowerCase(ExcludeTrailingPathDelimiter(ExtractFilePath(TPath.GetFullPath(ADprojPath)))), True);
+      for var F: string in Sources do
+        Dirs.AddOrSetValue(LowerCase(ExcludeTrailingPathDelimiter(ExtractFilePath(F))), True);
+      for var D: string in Dirs.Keys do
+      begin
+        if not TDirectory.Exists(D) then Continue;
+        for var P: string in TDirectory.GetFiles(D, '*.pas', TSearchOption.soTopDirectoryOnly) do
+        begin
+          var Key: string:= LowerCase(TPath.GetFileNameWithoutExtension(P));
+          if ClosurePaths.ContainsKey(LowerCase(TPath.GetFullPath(P))) or ClosureUnits.ContainsKey(Key)
+             or Candidates.ContainsKey(Key) then Continue;
+          Candidates.Add(Key, TLinkCandidate.Create(P));
+        end;
+      end;
+    finally
+      Dirs.Free;
+    end;
+    { A class two candidates both declare names no single unit: no link is claimed for it. }
+    var Ambiguous: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+    try
+      for var C: TLinkCandidate in Candidates.Values do
+        for var K: string in C.Classes.Keys do
+          if ClosureClasses.ContainsKey(K) or Ambiguous.ContainsKey(K) then Continue
+          else if ClassOwner.ContainsKey(K) then
+          begin
+            ClassOwner.Remove(K);
+            Ambiguous.Add(K, True);
+          end
+          else ClassOwner.Add(K, C);
+    finally
+      Ambiguous.Free;
+    end;
+  end;
+
+  procedure ScanDfm(const APasPath: string);
+  begin
+    var Dfm: string:= TPath.ChangeExtension(APasPath, '.dfm');
+    if not TFile.Exists(Dfm) then Exit;
+    var Text: string:= ReadTextOrEmpty(Dfm);
+    if not TRegEx.IsMatch(Text, '\A\s*(?:object|inherited|inline)\b', [roIgnoreCase]) then Exit; // binary form
+    var User: string:= TPath.GetFileNameWithoutExtension(RealCasedFileName(APasPath));
+    for var M: TMatch in TRegEx.Matches(Text, DFM_CLASS_PATTERN, [roIgnoreCase, roMultiLine]) do
+    begin
+      var Cand: TLinkCandidate;
+      if not ClassOwner.TryGetValue(LowerCase(M.Groups[1].Value), Cand) then Continue;
+      Report(Dfm, LineOfOffset(Text, M.Index), Cand.UnitName, 'dfm', Format(
+        'Unit "%s" is not reached through `uses`, but %s streams class %s, which only that unit declares.',
+        [Cand.UnitName, ExtractFileName(Dfm), M.Groups[1].Value]) + AddAdvice(Cand.UnitName, User));
+    end;
+  end;
+
+  procedure ScanSource(const APath: string);
+  begin
+    var Text: string:= StripPasCommentsKeepLayout(ReadTextOrEmpty(APath));
+    if Text = '' then Exit;
+    var User: string:= TPath.GetFileNameWithoutExtension(RealCasedFileName(APath));
+    for var M: TMatch in TRegEx.Matches(Text, BY_NAME_PATTERN, [roIgnoreCase]) do
+    begin
+      var Cand: TLinkCandidate;
+      if not ClassOwner.TryGetValue(LowerCase(M.Groups[1].Value), Cand) then Continue;
+      Report(APath, LineOfOffset(Text, M.Index), Cand.UnitName, 'byname', Format(
+        'Unit "%s" is not reached through `uses`, but %s looks up class %s by name, which only that unit declares.',
+        [Cand.UnitName, ExtractFileName(APath), M.Groups[1].Value]) + AddAdvice(Cand.UnitName, User));
+    end;
+    { Link 2 reads code only: a string literal naming `Unit.Ident` is text, not a reference. }
+    var Code: string:= Text;
+    for var Lit: TMatch in TRegEx.Matches(Text, STRING_LITERAL_PATTERN) do
+      for var I: Integer:= Lit.Index to Lit.Index + Lit.Length - 1 do Code[I]:= ' ';
+    { Every dotted chain once (linear), then its leading parts looked up: one alternation of
+      hundreds of unit names ran 40 s over a 470-unit closure. }
+    for var M: TMatch in TRegEx.Matches(Code, QUALIFIED_CHAIN_PATTERN) do
+    begin
+      var Parts: TArray<string>:= TRegEx.Replace(M.Value, '\s', '').Split(['.']);
+      var Written: string:= '';
+      var Ident  : string:= '';
+      var Cand   : TLinkCandidate:= nil;
+      for var K: Integer:= 0 to High(Parts) - 1 do
+      begin
+        Written:= if K = 0 then Parts[0] else Written + '.' + Parts[K];
+        if Candidates.TryGetValue(LowerCase(Written), Cand) then
+        begin
+          Ident:= Parts[K + 1];
+          Break;
+        end;
+      end;
+      if (Cand = nil) or not Cand.IntfWords.ContainsKey(LowerCase(Ident)) then Continue;
+      if ClosureUnits.ContainsKey(LowerCase(Written + '.' + Ident)) then Continue; // a dotted closure unit name
+      { The look-alike: the same name declared as an identifier in this file is that identifier. }
+      if TRegEx.IsMatch(Code, '(?<![\w.])' + TRegEx.Escape(Written) + '\s*[:=]', [roIgnoreCase]) then Continue;
+      Report(APath, LineOfOffset(Code, M.Index), Cand.UnitName, 'qualified', Format(
+        'Unit "%s" is not reached through `uses`, but %s names it explicitly (%s.%s).',
+        [Cand.UnitName, ExtractFileName(APath), Cand.UnitName, Ident]) + AddAdvice(Cand.UnitName, User));
+    end;
+  end;
+
+begin
+  Result:= nil;
+  if Length(AClosureFiles) = 0 then Exit;
+  ClosurePaths  := TDictionary<string, Boolean>.Create;
+  ClosureUnits  := TDictionary<string, Boolean>.Create;
+  ClosureClasses:= TDictionary<string, Boolean>.Create;
+  Candidates    := TObjectDictionary<string, TLinkCandidate>.Create([doOwnsValues]);
+  ClassOwner    := TDictionary<string, TLinkCandidate>.Create;
+  Reported      := TDictionary<string, Boolean>.Create;
+  Findings      := TList<TLintFinding>.Create;
+  Sources       := TList<string>.Create;
+  try
+    for var F: string in AClosureFiles do
+      if SameText(ExtractFileExt(F), '.pas') and TFile.Exists(F) then
+      begin
+        var Full: string:= TPath.GetFullPath(F);
+        Sources.Add(Full);
+        ClosurePaths.AddOrSetValue(LowerCase(Full), True);
+        var Name: string:= LowerCase(TPath.GetFileNameWithoutExtension(Full));
+        ClosureUnits.AddOrSetValue(Name, True);
+        while Name.Contains('.') do
+        begin
+          Name:= Copy(Name, 1, LastDelimiter('.', Name) - 1);
+          ClosureUnits.AddOrSetValue(Name, True);
+        end;
+        AddMatches(StripPasCommentsKeepLayout(ReadTextOrEmpty(Full)), CLASS_DECL_PATTERN, ClosureClasses);
+      end;
+    CollectCandidates;
+    if Candidates.Count = 0 then Exit;
+    var ProgramPath: string:= FindSiblingProgramFile(ADprojPath);
+
+
+    for var S: string in Sources do
+    begin
+      ScanDfm(S);
+      ScanSource(S);
+    end;
+    if (ProgramPath <> '') and TFile.Exists(ProgramPath) then ScanSource(ProgramPath);
+    Result:= Findings.ToArray;
+  finally
+    Sources.Free;
+    Findings.Free;
+    Reported.Free;
+    ClassOwner.Free;
+    Candidates.Free;
+    ClosureClasses.Free;
+    ClosureUnits.Free;
+    ClosurePaths.Free;
+  end;
+end;
 
 class function TProjectChecks.CheckUsedUnitResolvable(const AStore: ISymbolStore;
   const ALibDbPath: string; const AProjectFile: string): TArray<TLintFinding>;

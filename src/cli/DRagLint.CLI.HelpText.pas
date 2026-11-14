@@ -33,6 +33,7 @@ begin
   Writeln('                               WALK SCOPING (any index run): [--exclude-under <dir>]... [--include-only <glob>]...');
   Writeln('                               [--max-file-kb N] [--no-use-ignore] [--no-sql-ms] [--deep|--shallow]');
   Writeln('                               --exclude-under and --include-only are repeatable and prune the walk;');
+  Writeln('                               under --project, --exclude-under never drops a compile-closure unit (it names one it kept).');
   Writeln('                               --max-file-kb skips a file larger than N KB. --no-use-ignore opts OUT of the');
   Writeln('                               .gitignore / .hgignore pattern files, which are honoured by default. A folder');
   Writeln('                               holding a .scanignore MARKER file (contents never read) is always pruned with');
@@ -620,6 +621,7 @@ begin
     Writeln('                               WALK SCOPING (any index run): [--exclude-under <dir>]... [--include-only <glob>]...');
     Writeln('                               [--max-file-kb N] [--no-use-ignore] [--no-sql-ms] [--deep|--shallow]');
     Writeln('                               --exclude-under and --include-only are repeatable and prune the walk;');
+    Writeln('                               under --project, --exclude-under never drops a compile-closure unit (it names one it kept).');
     Writeln('                               --max-file-kb skips a file larger than N KB. --no-use-ignore opts OUT of the');
     Writeln('                               .gitignore / .hgignore pattern files, which are honoured by default. A folder');
     Writeln('                               holding a .scanignore MARKER file (contents never read) is always pruned with');
