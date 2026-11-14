@@ -1,0 +1,5 @@
+# 27 GetMem, 30 AllocMem, 32 New, 34 StrNew: never released, never handed on
+raw-memory-leak 27
+raw-memory-leak 30
+raw-memory-leak 32
+raw-memory-leak 34

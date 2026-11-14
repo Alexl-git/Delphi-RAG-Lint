@@ -1,0 +1,7 @@
+# 18 literal + value, 19 bare literal, 20 const, 21 const string param, 23 local last assigned a literal, 24 AsUser arg 3
+createprocess-readonly-commandline 18
+createprocess-readonly-commandline 19
+createprocess-readonly-commandline 20
+createprocess-readonly-commandline 21
+createprocess-readonly-commandline 23
+createprocess-readonly-commandline 24

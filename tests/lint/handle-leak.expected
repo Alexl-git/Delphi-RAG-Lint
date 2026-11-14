@@ -1,0 +1,6 @@
+# 19 CreateFile, 23 LoadLibrary, 24 GetDC, 25 FindFirst, 27 RegOpenKeyEx: never closed, never handed on
+handle-leak 19
+handle-leak 23
+handle-leak 24
+handle-leak 25
+handle-leak 27

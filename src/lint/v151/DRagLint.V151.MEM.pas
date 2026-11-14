@@ -46,17 +46,64 @@ type
 
 implementation
 
-{ The lane's helpers live in DRagLint.V151.MEM.Support; name it in an
-  implementation uses clause here once it declares something. }
+uses
+  DRagLint.V151.MEM.Support
+  , DRagLint.Diagnostics.ParseCache
+  ;
 
+{ Rules of the lane (behaviour: DRagLint.V151.MEM.Support):
+  pchar-of-temporary -- PChar / PWideChar / PAnsiChar of a concatenation with a literal or of a
+    string-function result, STORED by an assignment or POSTED (PostMessage family). Passed straight
+    to a synchronous call it is silent: the temporary lives until the statement ends.
+  createprocess-readonly-commandline -- CreateProcess(W) arg 2, ..AsUser arg 3, ..WithTokenW arg 4,
+    ..WithLogonW arg 6 that may point at read-only memory: a literal, a const, 'lit' + one value,
+    a by-value / const string parameter, or a local last assigned one of those without UniqueString.
+    The Ansi version copies the buffer and stays silent.
+  managed-type-raw-memory -- FillChar / ZeroMemory / FillMemory / Move / CopyMemory / GetMem /
+    FreeMem / ReallocMem on a variable (or pointee) whose type holds strings, interfaces, variants
+    or dynamic arrays; record fields come from the file, then the project / library index. Silent
+    when the routine also calls Initialize / Finalize on it, and for FillChar(V, SizeOf(V)) over a
+    directly managed V (the host wrong-size-memory-op reports that one).
+  raw-memory-leak / handle-leak -- a LOCAL that receives memory (GetMem, New, AllocMem, GetMemory,
+    StrAlloc, StrNew) or a handle (CreateFile, LoadLibrary, GetDC, FindFirst(SR), RegOpenKeyEx, ..)
+    and is never released nor handed on (assigned elsewhere, returned, passed to Add / Insert /
+    Create / Set.. / a routine whose name says free / release / close) anywhere in the routine.
+  char-count-as-bytes -- Length(S) (+/- n) of a UTF-16 string, or StrLen(P) of a PChar, as the byte
+    count of Move / CopyMemory / CompareMem / FillChar / ReadBuffer / WriteBuffer / BlockRead /
+    ReadFile / WriteFile / GetMem(PChar) whose buffer is S / P. Split from wrong-size-memory-op
+    (own id, no autofix): the host's fix is capture-bound and the host keeps its exact shapes.
+  unsafe-string-api (expansion) -- an xxxA Windows API fed PAnsiChar(AnsiString(S)) of a UTF-16 S. }
+
+/// <summary>Declares the six new ids of the lane and the host id unsafe-string-api.</summary>
+/// <param name="ADecls">List to append to; owned by the caller.</param>
 class procedure TV151MEMRules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
-  { no rules yet }
+  ADecls.Add(V151Rule('pchar-of-temporary', 'bug-patterns', 'warning', 'PChar of a temporary string is stored or posted'));
+  ADecls.Add(V151Rule('createprocess-readonly-commandline', 'bug-patterns', 'warning', 'CreateProcess with a read-only command line'));
+  ADecls.Add(V151Rule('managed-type-raw-memory', 'bug-patterns', 'warning', 'FillChar, Move or GetMem on a managed type'));
+  ADecls.Add(V151Rule('raw-memory-leak', 'resource-lifetime', 'warning', 'GetMem or New without release'));
+  ADecls.Add(V151Rule('handle-leak', 'resource-lifetime', 'warning', 'Windows handle is not closed'));
+  ADecls.Add(V151Rule('char-count-as-bytes', 'bug-patterns', 'warning', 'Character count used as a byte count'));
+  ADecls.Add(V151Host('unsafe-string-api'));
 end;
 
 class function TV151MEMRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+var
+  PF : TParsedFile;
+  Run: TMemRun;
+  Ctx: TV151FileCtx;
 begin
   Result:= nil;
+  PF:= TAstParseCache.Get(ACtx.Path);
+  if PF.Tree = nil then Exit;
+  Ctx:= ACtx;
+  Run:= TMemRun.Create(ACtx.Path, PF.Src, ACtx.Store, ACtx.LibStore,
+    function(S: string): Boolean begin Result:= Ctx.Wants(S); end);
+  try
+    Result:= Run.Run(PF.Tree.RootNode);
+  finally
+    Run.Free;
+  end;
 end;
 
 class function TV151MEMRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;

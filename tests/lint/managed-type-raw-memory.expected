@@ -1,0 +1,8 @@
+# 28 FillChar record with string, 29 Move record, 30 GetMem / 31 FreeMem of ^record, 32 ZeroMemory(@intf record), 33 static array of records, 34 Move of a string
+managed-type-raw-memory 28
+managed-type-raw-memory 29
+managed-type-raw-memory 30
+managed-type-raw-memory 31
+managed-type-raw-memory 32
+managed-type-raw-memory 33
+managed-type-raw-memory 34
