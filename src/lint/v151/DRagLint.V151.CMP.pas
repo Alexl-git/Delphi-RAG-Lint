@@ -233,11 +233,13 @@ type
     procedure CheckPaintRoutines;
     function HasFixedLiteral(const N: TTSNode): Boolean;
     function InsideScaling(const N, ADef: TTSNode): Boolean;
+    function IsDrawCall(const ACall: TTSNode; const AName: string): Boolean;
     procedure CheckFixedBounds;
     function IsControlTarget(const ABase, ADef: TTSNode; const ACls: string): Boolean;
     function FixedValue(const N: TTSNode): Boolean;
     procedure CheckWriteOnly;
     procedure CheckOtaNotifiers;
+    function ReachesRemove(const AHolder: TTSNode; AGot: TDictionary<string, Boolean>): Boolean;
     procedure CheckInterfaceHolder;
     procedure CheckSupportsHolder;
     function IsIntfType(const ALeaf: string): Boolean;
@@ -938,7 +940,8 @@ var
   V: Int64;
 begin
   if N.IsNull or (N.NodeType = 'exprCall') then Exit(False);
-  if N.NodeType = 'literalNumber' then Exit(CmpIntLiteral(Txt(N), V) and (Abs(V) >= MIN_PIXELS));
+  { A hex literal is a colour or a bit mask, never a distance. }
+  if N.NodeType = 'literalNumber' then Exit((not StartsStr('$', Txt(N))) and CmpIntLiteral(Txt(N), V) and (Abs(V) >= MIN_PIXELS));
   if N.NodeType = 'exprBinary' then
   begin
     var Op: string:= Low(N.ChildByField('operator'));
@@ -948,6 +951,26 @@ begin
   for var I: Integer:= 0 to N.NamedChildCount - 1 do
     if HasFixedLiteral(N.NamedChild(I)) then Exit(True);
   Result:= False;
+end;
+
+{ A drawing call whose arguments are distances: the RTL arity of Rect / Bounds / Point (a
+  project routine of the same name with another arity is not it), and Draw / StretchDraw only
+  on a canvas (an image list's Draw takes an image index). }
+function TCmpRun.IsDrawCall(const ACall: TTSNode; const AName: string): Boolean;
+const
+  RECT_ARITY  = 4;
+  POINT_ARITY = 2;
+begin
+  if not MatchStr(AName, DRAW_CALLS) then Exit(False);
+  var N: Integer:= Length(Items(ACall.ChildByField('args')));
+  if MatchStr(AName, ['rect', 'bounds']) then Exit(N = RECT_ARITY);
+  if AName = 'point' then Exit(N = POINT_ARITY);
+  if MatchStr(AName, ['draw', 'stretchdraw']) then
+  begin
+    var Ent: TTSNode:= ACall.ChildByField('entity');
+    Exit((Ent.NodeType = 'exprDot') and EndsStr('canvas', Low(Ent.ChildByField('lhs'))));
+  end;
+  Result:= True;
 end;
 
 function TCmpRun.InsideScaling(const N, ADef: TTSNode): Boolean;
@@ -986,7 +1009,7 @@ begin
       begin
         var Nm: string:= CallName(Call);
         var Args: TTSNode:= Call.ChildByField('args');
-        if WantPixels and MatchStr(Nm, DRAW_CALLS) and (not InsideScaling(Call, D)) and HasFixedLiteral(Args) then
+        if WantPixels and IsDrawCall(Call, Nm) and (not InsideScaling(Call, D)) and HasFixedLiteral(Args) then
           Emit(CMP_FIXED_PIXELS_RULE, SEV_HINT,
             Format('%s uses a fixed pixel value: it is too small above 96 dpi. Scale it (ScaleValue, MulDiv by the ' +
               'current PPI) or derive it from the font / client size', [Txt(Call.ChildByField('entity'))]), Call, Call);
@@ -1126,6 +1149,39 @@ end;
 
 { ------------------------------------------------------- ota-notifier-not-removed }
 
+{ Last dotted segment of an assignment target: Self.FIdx / FIdx[I] / Reg.Index -> fidx / index. }
+function LastKey(const AKey: string): string;
+begin
+  Result:= AKey;
+  var P: Integer:= LastDelimiter('.', Result);
+  if P > 0 then Result:= Copy(Result, P + 1, MaxInt);
+end;
+
+{ The holder of the index, or a variable the unit copies it into (two hops: Reg.Index := FIndex),
+  is among the identifiers a matching remove call receives. }
+function TCmpRun.ReachesRemove(const AHolder: TTSNode; AGot: TDictionary<string, Boolean>): Boolean;
+const
+  MAX_COPY_HOPS = 2;
+begin
+  var Keys: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+  var Assigns: TList<TTSNode>:= TList<TTSNode>.Create;
+  try
+    var Full: string:= AssignKey(AHolder);
+    Keys.AddOrSetValue(Full, True);
+    CmpCollect(FRoot, 'assignment', Assigns);
+    for var Hop: Integer:= 1 to MAX_COPY_HOPS do
+      for var A: TTSNode in Assigns do
+        if Keys.ContainsKey(AssignKey(StripParens(A.ChildByField('rhs')))) then
+          Keys.AddOrSetValue(AssignKey(A.ChildByField('lhs')), True);
+    for var K: string in Keys.Keys do
+      if AGot.ContainsKey(LastKey(K)) then Exit(True);
+    Result:= False;
+  finally
+    Assigns.Free;
+    Keys.Free;
+  end;
+end;
+
 procedure TCmpRun.CheckOtaNotifiers;
 begin
   var Ota: Boolean:= False;
@@ -1172,10 +1228,7 @@ begin
           Call, Call)
       else if (Par.NodeType = 'assignment') and (Par.ChildByField('rhs').StartByte = Call.StartByte) then
       begin
-        var Key: string:= AssignKey(Par.ChildByField('lhs'));
-        var P: Integer:= LastDelimiter('.', Key);
-        if P > 0 then Key:= Copy(Key, P + 1, MaxInt);
-        if HasRemove and Got.ContainsKey(Key) then Continue;
+        if HasRemove and ReachesRemove(Par.ChildByField('lhs'), Got) then Continue;
         Emit(CMP_OTA_NOTIFIER_RULE, SEV_WARNING,
           Format('The index from %s is kept in %s, but no %s in this unit receives it: when the package unloads the ' +
             'IDE keeps calling freed code. Call %s(%s) on unload', [Ent, Txt(Par.ChildByField('lhs')), OTA_REMOVES[Idx],
