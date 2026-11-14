@@ -1,0 +1,24 @@
+{
+  "id": "v151-rtl-str-rules",
+  "title": "RTL string and path lint rules",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "experimental",
+  "since": "1.50.0-alpha",
+  "summary": "Seven lint rules for RTL string, path and conversion mistakes: swapped Pos arguments, StrictDelimiter, FormatSettings writes, path joins, file-name compares",
+  "intro": "Use these when a codebase builds paths and parses text by hand. Each rule is a tree-sitter rule, listed by drag-lint rules, switched with --rule or --disable; none has an autofix because every cure changes behaviour in the defective case.",
+  "wikiPage": "v151-rtlstr-rules",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "drag-lint lint --in <f.pas> --db <db> --rule pos-arguments-swapped"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-13",
+    "by": "alexanderl",
+    "build": "1.50.0-alpha"
+  }
+}
