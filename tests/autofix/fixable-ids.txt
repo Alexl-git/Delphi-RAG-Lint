@@ -6,7 +6,9 @@ dfm-password-edit-unmasked
 copy-paste-assignment
 doc-drift
 empty-conditional
+empty-finally
 field-name-prefix
+format-string-not-formatted
 interface-without-guid
 identical-then-else
 local-field-prefix
@@ -24,6 +26,7 @@ redundant-not-not
 redundant-parentheses
 reserved-word-casing
 self-assignment
+shared-marker-legacy-shape
 type-name-prefix
 unit-missing-from-uses
 unused-local

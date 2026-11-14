@@ -25,3 +25,23 @@
  (#any-of? @m "ExecSQL" "Execute" "ExecuteDirect")
  (#match? @sql "(?is)^'\\s*(update|delete)\\b")
  (#not-match? @sql "(?i)\\bwhere\\b"))
+; v151 WID-SCM: a statement built from concatenated LITERALS only ('DELETE FROM T' + #13#10 +
+; ' SET A=1'). An identifier operand ('DELETE FROM ' + ATable) stays a non-hit (existing
+; fixture ruling: the clause may arrive through a variable). ANY 'where' substring suppresses.
+((assignment
+  lhs: (exprDot
+    lhs: (exprDot rhs: (identifier) @p)
+    rhs: (identifier) @q)
+  rhs: (exprBinary operator: (kAdd)) @sql) @warn
+ (#eq? @p "SQL")
+ (#eq? @q "Text")
+ (#match? @sql "(?is)^'\\s*(update|delete)\\b")
+ (#not-match? @sql "(?i)where")
+ (#match? @sql "^('([^']|'')*'|#[0-9]+|\\s|[+])+$"))
+((assignment
+  lhs: (exprDot rhs: (identifier) @q)
+  rhs: (exprBinary operator: (kAdd)) @sql) @warn
+ (#eq? @q "CommandText")
+ (#match? @sql "(?is)^'\\s*(update|delete)\\b")
+ (#not-match? @sql "(?i)where")
+ (#match? @sql "^('([^']|'')*'|#[0-9]+|\\s|[+])+$"))

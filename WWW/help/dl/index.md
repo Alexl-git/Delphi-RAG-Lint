@@ -78,7 +78,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | Feature | What it does | Since |
 | --- | --- | --- |
 | [Ancestor not in project (lint rule)](features/ancestor-not-in-project.md) | Project-wide lint rule (error): a form, frame or data module whose ancestor class is declared in no project unit and not in the platform library | 1.42.0-alpha |
-| [Autofix for fixable rules](features/autofix-wave.md) | lint --fix repairs findings of the 110 fixable rules; --json reports per finding whether it was applied; lint accepts a folder | 1.37.0-alpha |
+| [Autofix for fixable rules](features/autofix-wave.md) | lint --fix repairs findings of the 113 fixable rules; --json reports per finding whether it was applied; lint accepts a folder | 1.37.0-alpha |
 | [Compliance labels (CWE, CERT, MISRA)](features/compliance-labels.md) | Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field | 1.37.0-alpha |
 | [Copy All Diagnostics](features/copy-all-diagnostics.md) | Puts every lint finding for the current unit onto the clipboard, starting from the Structure form | 0.1.0-alpha |
 | [Copy Diagnostics (Current File)](features/copy-diagnostics-current-file.md) | Puts the current file's lint findings onto the clipboard | 0.1.0-alpha |
@@ -121,6 +121,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Target compiler (--target-compiler)](features/target-compiler.md) | Names the Delphi the code is for: lint drops advice needing a newer compiler; index parses `VER<N>0` / `CompilerVersion` branches for it | 1.38.0-alpha |
 | [Type-level dl:ok review](features/type-level-review-marker.md) | One dl:ok on an enum type declaration reviews every unused-enum-value or enum-ordinal-cast finding of that type, in any unit | 1.38.0-alpha |
 | [type-name-prefix: expected letter from the ancestor chain](features/type-name-prefix-origin.md) | type-name-prefix picks E or T from the ancestor chain (project, then library index); untraceable ancestors are an index gap; autofix uses the finding's letter | 1.31.4-alpha |
+| [Wider scm rules and three new fixers](features/v151-wid-scm-rules.md) | Seven built-in rules read more constructs; empty-finally, format-string-not-formatted and shared-marker-legacy-shape gain autofixes | 1.50.0-alpha |
 | [warm-rule-cache](features/warm-rule-cache.md) | Fills the lint rule cache for a project index; index runs warm it, or start it in the background (--rule-cache-warm) | 1.39.0-alpha |
 
 ## Documentation

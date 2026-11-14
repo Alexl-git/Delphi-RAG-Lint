@@ -134,11 +134,11 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**317 rules. 110 have an auto-fix. 263 are on by default.** 223 are built-in checks; 94 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**317 rules. 113 have an auto-fix. 263 are on by default.** 223 are built-in checks; 94 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
-| bug-patterns | 88 | 33 |
+| bug-patterns | 88 | 35 |
 | complexity | 13 | 2 |
 | data-flow | 12 | 2 |
 | dead-code | 19 | 15 |
@@ -147,7 +147,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | metrics | 8 | - |
 | modernize | 4 | 4 |
 | naming | 14 | 9 |
-| other | 12 | 3 |
+| other | 12 | 4 |
 | platform | 10 | 4 |
 | policy | 3 | - |
 | project-wide | 51 | 6 |
@@ -156,7 +156,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | review-markers | 5 | 2 |
 | security | 22 | 2 |
 | structure | 12 | 6 |
-| **Total** | **317** | **110** |
+| **Total** | **317** | **113** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -188,7 +188,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Interfaced object set to nil (lint rule)](interfaced-object-nil-leak) | `lint-all` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
 | [Lint rules on the static type of a reference](ref-type-rules) | `lint-all` |  |
-| [Lint rules](rules) | 317 rules, 110 fixable; `rules` |  |
+| [Lint rules](rules) | 317 rules, 113 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
 | [Opaque to analysis (lint rule)](opaque-to-analysis) | `lint-all` |  |
@@ -206,6 +206,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Type-level dl:ok review](Type-Level-Review-Marker) | procedure: `docs\wiki\Type-Level-Review-Marker.md` |  |
 | [type-name-prefix: expected letter from the ancestor chain](Type-Name-Prefix-Origin) | `lint`; `lint-all`; `lint` |  |
 | [warm-rule-cache](warm-rule-cache) | `warm-rule-cache` |  |
+| [Wider scm rules and three new fixers](v151-wid-scm-rules) | `lint` |  |
 
 ## Documentation
 

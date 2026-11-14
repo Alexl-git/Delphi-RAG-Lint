@@ -590,7 +590,7 @@
   {
     "id": "autofix-wave",
     "title": "Autofix for fixable rules",
-    "summary": "lint --fix repairs findings of the 110 fixable rules; --json reports per finding whether it was applied; lint accepts a folder",
+    "summary": "lint --fix repairs findings of the 113 fixable rules; --json reports per finding whether it was applied; lint accepts a folder",
     "group": "linting",
     "order": 30002,
     "since": "1.37.0-alpha",
@@ -1104,11 +1104,23 @@
     "verb": "lint"
   },
   {
+    "id": "v151-wid-scm-rules",
+    "title": "Wider scm rules and three new fixers",
+    "summary": "Seven built-in rules read more constructs; empty-finally, format-string-not-formatted and shared-marker-legacy-shape gain autofixes",
+    "group": "linting",
+    "order": 30045,
+    "since": "1.50.0-alpha",
+    "file": "features/v151-wid-scm-rules.md",
+    "menus": [],
+    "context": [],
+    "verb": "lint"
+  },
+  {
     "id": "warm-rule-cache",
     "title": "warm-rule-cache",
     "summary": "Fills the lint rule cache for a project index; index runs warm it, or start it in the background (--rule-cache-warm)",
     "group": "linting",
-    "order": 30045,
+    "order": 30046,
     "since": "1.39.0-alpha",
     "file": "features/warm-rule-cache.md",
     "menus": [],

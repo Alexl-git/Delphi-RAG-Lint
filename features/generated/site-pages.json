@@ -40,8 +40,8 @@
     "version": "1.38.0-alpha"
   },
   "features/autofix-wave.md": {
-    "hash": "ceb234bbd3a7b43e04896ed4ed5dd10bd7256734e42c863e0907b2b8621bddd5",
-    "version": "1.42.0-alpha"
+    "hash": "33d6f0cc4ecc492e1815a3a6cf541ce06dc9cd06e085b0eb4ed1fdc38de092ed",
+    "version": "1.50.0-alpha"
   },
   "features/bench-context.md": {
     "hash": "40753857e02ca31b5cba13964e0852b48e63f39e75e8aaae79ad9869e80a73fb",
@@ -296,7 +296,7 @@
     "version": "1.35.1-alpha"
   },
   "features/drag-lint-options.md": {
-    "hash": "5dc9424868014438b7ba5412cbf4690e93872f5783e41b242e0be9ae36ceb8da",
+    "hash": "83ca1990d43bff5a3d85149a782e6e02af8e822e7c94c5bb78de0913212a3309",
     "version": "1.50.0-alpha"
   },
   "features/drag-lint-panel-dockable.md": {
@@ -919,12 +919,16 @@
     "hash": "41a5eb7edee0afa47064aa9a57808ae194aa943bdc07e6553085afa77ee79701",
     "version": "1.46.0-alpha"
   },
+  "features/v151-wid-scm-rules.md": {
+    "hash": "4ea1bb83e5e42673f8510047379a6807d4df078461579c959c76212f18c6429b",
+    "version": "1.50.0-alpha"
+  },
   "features/vscode-extension.md": {
     "hash": "aba4ac6318c27cf183931716983269e75d96b591c3af73c1668305ef4fdfaee1",
     "version": "1.48.0-alpha"
   },
   "features/warm-rule-cache.md": {
-    "hash": "744c999fd5c956a2f911bb6c01a142f1a2a65860c536c2bb32f8cef3b6ce52f5",
+    "hash": "03ab798f46904a7fb08eac9d9bb083010f9109cf756451503ab7a8a3012c9cdb",
     "version": "1.50.0-alpha"
   },
   "features/wiki-blocks-authoring.md": {

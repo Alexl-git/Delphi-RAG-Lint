@@ -1,6 +1,6 @@
 {
   "id": "deprecated-rtl-function",
   "severity": "info",
-  "message": "Obsolete RTL routine. Prefer TEncoding / modern string APIs.",
+  "message": "Obsolete routine (RTL string helper, 32-bit-only Get/SetWindowLong or Get/SetClassLong, TThread.Resume/Suspend) -- use TEncoding / the *Ptr variant / TThread.Start.",
   "warn_capture": "warn"
 }

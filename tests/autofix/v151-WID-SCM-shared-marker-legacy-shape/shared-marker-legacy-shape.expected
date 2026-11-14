@@ -1,0 +1,10 @@
+unit SharedLegacyFix;
+
+interface
+
+const
+  Legacy = 1;   // dl:shared A, B // note
+
+implementation
+
+end.

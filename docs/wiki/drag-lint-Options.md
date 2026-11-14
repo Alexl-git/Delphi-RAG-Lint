@@ -29,7 +29,7 @@ database.
 ## Example
 Illustrative only: opening drag-lint > drag-lint Options... shows the
 full 317-rule catalog, grouped by its 18 categories, with a toggle per
-rule and a marker for which of the 110 fixable rules have an auto-fix.
+rule and a marker for which of the 113 fixable rules have an auto-fix.
 
 ## Inline markers and severity icons (on by default)
 The editor shows a coloured marker in the gutter for each finding, and a
