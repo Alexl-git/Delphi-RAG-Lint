@@ -279,7 +279,8 @@ begin
     for var I: TTSNode in Intfs do
     begin
       var G: TTSNode:= I.ChildByField('guid');
-      if G.IsNull then Continue;
+      { a dispinterface shares the GUID of its dual interface by design (type-library units) }
+      if G.IsNull or StartsStr('dispinterface', Low(I)) then Continue;
       var Key: string:= UpperCase(StringReplace(StringReplace(StringReplace(Txt(G), '''', '', [rfReplaceAll]),
         '[', '', [rfReplaceAll]), ']', '', [rfReplaceAll])).Trim;
       if Key = '' then Continue;

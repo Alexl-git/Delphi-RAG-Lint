@@ -59,7 +59,7 @@ begin
   ADecls.Add(V151Rule(MONEY_FLOAT_RULE, 'bug-patterns', 'warning', 'Money amount held as floating point', False));
   ADecls.Add(V151Rule(DEFAULT_PARAM_RULE, 'structure', 'hint', 'Parameter with a default value', False));
   ADecls.Add(V151Rule(TRIVIAL_ACCESSOR_RULE, 'refactoring', 'hint', 'Accessor method only reads or writes a field', False));
-  ADecls.Add(V151Rule(UNNEEDED_FORWARD_RULE, 'dead-code', 'hint', 'Forward declaration that is not needed'));
+  ADecls.Add(V151Rule(UNNEEDED_FORWARD_RULE, 'dead-code', 'hint', 'Forward declaration that is not needed', False));
   ADecls.Add(V151Rule(LEGACY_TLIST_RULE, 'modernize', 'hint', 'Non-generic list read through a cast', False));
   ADecls.Add(V151Rule(LEGACY_STACK_QUEUE_RULE, 'modernize', 'hint', 'Non-generic stack or queue read through a cast', False));
 end;

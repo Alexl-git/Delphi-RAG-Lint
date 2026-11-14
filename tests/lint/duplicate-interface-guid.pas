@@ -18,6 +18,10 @@ type
     procedure Other;
   end;
 
+  IOtherDisp = dispinterface
+    ['{11111111-0E3B-4F8A-9B2D-5A7E4C3F1D08}']
+  end;
+
 implementation
 
 end.
