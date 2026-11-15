@@ -134,14 +134,14 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**317 rules. 110 have an auto-fix. 263 are on by default.** 223 are built-in checks; 94 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**326 rules. 110 have an auto-fix. 271 are on by default.** 232 are built-in checks; 94 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
-| bug-patterns | 88 | 33 |
+| bug-patterns | 96 | 33 |
 | complexity | 13 | 2 |
 | data-flow | 12 | 2 |
-| dead-code | 19 | 15 |
+| dead-code | 20 | 15 |
 | documentation | 5 | 4 |
 | firedac | 3 | 3 |
 | metrics | 8 | - |
@@ -156,7 +156,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | review-markers | 5 | 2 |
 | security | 22 | 2 |
 | structure | 12 | 6 |
-| **Total** | **317** | **110** |
+| **Total** | **326** | **110** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -172,6 +172,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Downgrade fixes (compat rules)](compat-downgrade-fixes) | `lint` | planned |
 | [drag-lint: Project Rules](drag-lint-Project-Rules) | Project Manager: drag-lint: Project Rules; `rules` |  |
 | [Effect-free call in a loop that could move out (lint rule)](effect-free-in-loop-invariant) | `lint-all` |  |
+| [Exception and inherited lint rules](exception-and-inherited-rules) | `lint`; `lint-all` |  |
 | [exceptions-sync](Features) | `exceptions-sync` |  |
 | [Finalization reaching a unit already finalized (lint rule)](finalization-after-dependency) | `lint-all` |  |
 | [Fix all in project](Fix-all-in-project) | Structure form: Fix all in project; `lint-all` |  |
@@ -188,7 +189,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Interfaced object set to nil (lint rule)](interfaced-object-nil-leak) | `lint-all` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
 | [Lint rules on the static type of a reference](ref-type-rules) | `lint-all` |  |
-| [Lint rules](rules) | 317 rules, 110 fixable; `rules` |  |
+| [Lint rules](rules) | 326 rules, 110 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
 | [Opaque to analysis (lint rule)](opaque-to-analysis) | `lint-all` |  |

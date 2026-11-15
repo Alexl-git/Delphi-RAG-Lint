@@ -1104,11 +1104,23 @@
     "verb": "lint"
   },
   {
+    "id": "v151-exc-rules",
+    "title": "Exception and inherited lint rules",
+    "summary": "Lint rules for exception handlers and inherited calls: shadowed handlers, hand-freed exceptions, wrong or missing inherited, Destroy for Free",
+    "group": "linting",
+    "order": 30045,
+    "since": "1.50.0-alpha",
+    "file": "features/v151-exc-rules.md",
+    "menus": [],
+    "context": [],
+    "verb": "lint"
+  },
+  {
     "id": "warm-rule-cache",
     "title": "warm-rule-cache",
     "summary": "Fills the lint rule cache for a project index; index runs warm it, or start it in the background (--rule-cache-warm)",
     "group": "linting",
-    "order": 30045,
+    "order": 30046,
     "since": "1.39.0-alpha",
     "file": "features/warm-rule-cache.md",
     "menus": [],

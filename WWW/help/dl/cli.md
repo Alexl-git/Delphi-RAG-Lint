@@ -1215,6 +1215,7 @@ Described in:
 * [type-name-prefix: expected letter from the ancestor chain](features/type-name-prefix-origin.md)
 * [Missing unit in uses (unit-missing-from-uses)](features/unit-missing-from-uses.md)
 * [unwith](features/unwith.md)
+* [Exception and inherited lint rules](features/v151-exc-rules.md)
 
 ### lint-all
 
@@ -1267,6 +1268,7 @@ Described in:
 * [Taint analysis (SQL, command, path)](features/taint-analysis.md)
 * [Target compiler (--target-compiler)](features/target-compiler.md)
 * [type-name-prefix: expected letter from the ancestor chain](features/type-name-prefix-origin.md)
+* [Exception and inherited lint rules](features/v151-exc-rules.md)
 
 ### lint-project
 

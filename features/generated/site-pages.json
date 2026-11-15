@@ -919,12 +919,16 @@
     "hash": "41a5eb7edee0afa47064aa9a57808ae194aa943bdc07e6553085afa77ee79701",
     "version": "1.46.0-alpha"
   },
+  "features/v151-exc-rules.md": {
+    "hash": "0c847ccf278f08ec0fad95288c10dddc7cd6c5e8736a4ac89a4eac66ec6c21ca",
+    "version": "1.50.0-alpha"
+  },
   "features/vscode-extension.md": {
     "hash": "aba4ac6318c27cf183931716983269e75d96b591c3af73c1668305ef4fdfaee1",
     "version": "1.48.0-alpha"
   },
   "features/warm-rule-cache.md": {
-    "hash": "744c999fd5c956a2f911bb6c01a142f1a2a65860c536c2bb32f8cef3b6ce52f5",
+    "hash": "03ab798f46904a7fb08eac9d9bb083010f9109cf756451503ab7a8a3012c9cdb",
     "version": "1.50.0-alpha"
   },
   "features/wiki-blocks-authoring.md": {
