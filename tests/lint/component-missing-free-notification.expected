@@ -1,0 +1,10 @@
+# Generated from the (+) / (-) markers of component-missing-free-notification.pas: (+) must fire, (-) must not.
+!component-missing-free-notification 39
+component-missing-free-notification 45
+component-missing-free-notification 75
+!component-missing-free-notification 82
+!component-missing-free-notification 89
+!component-missing-free-notification 94
+!component-missing-free-notification 105
+!component-missing-free-notification 111
+!component-missing-free-notification 116
