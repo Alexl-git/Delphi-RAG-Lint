@@ -3509,7 +3509,7 @@ end;
   `Self.FA` -> [fa], `P^.X` -> [p, ^, x], `R.Inner.X` -> [r, inner, x].
   A leading `Self` is dropped. Empty for any other shape (a call, an index,
   a cast, an `inherited` ...), which every caller treats as "decline". }
-function SlPathSegments(const N: TTSNode; const ASrc: TBytes): TArray<string>;  // dl:ok too-many-exit-points -- REVIEWED 2026-11-14: one Exit per accepted node shape plus the declines; a guard ladder
+function SlPathSegments(const N: TTSNode; const ASrc: TBytes): TArray<string>;  // dl:ok too-many-exit-points@9405 -- REVIEWED 2026-11-14: one Exit per accepted node shape plus the declines; a guard ladder
 var L, R: TArray<string>; Op: TTSNode;
 begin
   Result := nil;
@@ -3680,7 +3680,7 @@ var
     lifetime is managed elsewhere -- a thread (the self-freeing idiom), a
     component (an owner), an exception (exception-constructed-but-not-raised
     reports it) or a reference-counted object. Unknown -> False. }
-  function SlLeakingClass(const ATypeName: string): Boolean;  // dl:ok too-many-exit-points -- REVIEWED 2026-11-14: each Exit is one way the leak is not proven (managed ancestor, unknown chain)
+  function SlLeakingClass(const ATypeName: string): Boolean;  // dl:ok too-many-exit-points@b3d6 -- REVIEWED 2026-11-14: each Exit is one way the leak is not proven (managed ancestor, unknown chain)
   const
     MANAGED: array[0..3] of string = ('tthread', 'tcomponent', 'exception', 'tinterfacedobject');
   var
@@ -4374,7 +4374,7 @@ var
                 { v151 WID-FLOW: a by-value parameter is the routine's own copy;
                   a store to it that no later code reads is as dead as a
                   local's. var / out / const parameters are never candidates. }
-                if (Tgt >= 0) and (Vars.Get(Tgt).Kind in [vkLocal, vkParamValue])  // dl:ok boolean-expression-complexity -- REVIEWED 2026-11-14: pre-existing condition; each conjunct is one documented suppression
+                if (Tgt >= 0) and (Vars.Get(Tgt).Kind in [vkLocal, vkParamValue])  // dl:ok boolean-expression-complexity@d5cd -- REVIEWED 2026-11-14: pre-existing condition; each conjunct is one documented suppression
                    and ReadAny[Tgt] and (not Live[Tgt])
                    { A CAPTURED local is read where liveness cannot look. The CFG
                      deliberately does not descend into a nested routine (see
