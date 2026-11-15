@@ -47,7 +47,9 @@ type
 implementation
 
 uses
-  DRagLint.V151.OO.Support
+  System.StrUtils
+  , DRagLint.Core.Interfaces
+  , DRagLint.V151.OO.Support
   ;
 
 class procedure TV151OORules.Catalog(const ADecls: TList<TV151RuleDecl>);
@@ -56,7 +58,7 @@ begin
   ADecls.Add(V151Rule(EVENT_CALL_RULE, 'bug-patterns', 'warning', 'Event field called without an Assigned check'));
   ADecls.Add(V151Rule(DUP_GUID_RULE, 'bug-patterns', 'warning', 'Two interfaces declare the same GUID'));
   ADecls.Add(V151Rule(DLL_EXPORT_RULE, 'bug-patterns', 'warning', 'Exported routine has no calling convention'));
-  ADecls.Add(V151Rule(MONEY_FLOAT_RULE, 'bug-patterns', 'warning', 'Money amount held as floating point', False));
+  ADecls.Add(V151Rule(MONEY_FLOAT_RULE, 'bug-patterns', 'warning', 'Money amount held as floating point'));
   ADecls.Add(V151Rule(DEFAULT_PARAM_RULE, 'structure', 'hint', 'Parameter with a default value', False));
   ADecls.Add(V151Rule(TRIVIAL_ACCESSOR_RULE, 'refactoring', 'hint', 'Accessor method only reads or writes a field', False));
   ADecls.Add(V151Rule(UNNEEDED_FORWARD_RULE, 'dead-code', 'hint', 'Forward declaration that is not needed', False));
@@ -85,8 +87,57 @@ begin
 end;
 
 class function TV151OORules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
+const
+  MAX_INTERFACES = 1000000;
 begin
   Result:= nil;
+  if (ACtx.Store = nil) or not ACtx.Wants(DUP_GUID_RULE) then Exit;
+  { Cross-unit duplicate GUID: the index stores the literal GUID text of each interface in
+    symbols.signature (EXT, 1.51); a constant reference or '' is skipped (value not stored).
+    Same-file duplicates are the per-file check's job, and a dispinterface sharing its dual
+    interface's GUID lives in the same file, so only a group spanning two files is reported. }
+  var Groups: TObjectDictionary<string, TList<TSymbol>>:= TObjectDictionary<string, TList<TSymbol>>.Create([doOwnsValues]);
+  var Found : TList<TLintFinding>:= TList<TLintFinding>.Create;
+  try
+    for var Sym: TSymbol in ACtx.Store.FindSymbolsByKind('interface', False, MAX_INTERFACES) do
+    begin
+      var Key: string:= UpperCase(Sym.Signature).Trim;
+      if not StartsStr('''', Key) then Continue;
+      var L: TList<TSymbol>;
+      if not Groups.TryGetValue(Key, L) then
+      begin
+        L:= TList<TSymbol>.Create;
+        Groups.Add(Key, L);
+      end;
+      L.Add(Sym);
+    end;
+    for var L: TList<TSymbol> in Groups.Values do
+    begin
+      if L.Count < 2 then Continue;
+      var Path0: string:= ACtx.Store.GetFilePath(L[0].FileId);
+      for var I: Integer:= 1 to L.Count - 1 do
+      begin
+        if L[I].FileId = L[0].FileId then Continue;
+        var F: TLintFinding:= Default(TLintFinding);
+        F.RuleId   := DUP_GUID_RULE;
+        F.FileId   := L[I].FileId;
+        F.FilePath := ACtx.Store.GetFilePath(L[I].FileId);
+        F.StartLine:= L[I].StartLine;
+        F.StartCol := 1;
+        F.EndLine  := L[I].StartLine;
+        F.EndCol   := 1;
+        F.Severity := 'warning';
+        F.SymbolName:= L[I].Name;
+        F.Message  := Format('Interface %s has the same GUID as %s in %s; Supports and as cannot tell '
+          + 'the two apart. Give one of them a new GUID.', [L[I].Name, L[0].Name, ExtractFileName(Path0)]);
+        Found.Add(F);
+      end;
+    end;
+    Result:= Found.ToArray;
+  finally
+    Found.Free;
+    Groups.Free;
+  end;
 end;
 
 end.
