@@ -2477,6 +2477,7 @@ const
 function ProjectTagFor(const AStore: ISymbolStore; const ADbPath: string; const AArgs: TArgs): string; forward;
 
 function ResolverFingerprint(const AStore: ISymbolStore): string; forward;
+procedure RunPurityStage(const AStore: ISymbolStore); forward;
 
 { The version limb of a stored fingerprint whose FIRST limb is `<APrefix><ver>`
   (`v=` for the indexer, `r=` for the resolver), or '' when the stamp is absent
@@ -5302,7 +5303,7 @@ begin
       were re-derived -- and ALSO when a per-file reindex recreated symbol_facts
       rows with NULL verdicts while the calls pass was skipped (PurityNeedsRun). }
     if RanCalls or Store.PurityNeedsRun then
-      Stage('  ', 'purity', procedure begin TPurityStage.Run(Store); end)
+      Stage('  ', 'purity', procedure begin RunPurityStage(Store); end)
     else
       Writeln('  stage: purity -- skipped, calls did not run and every routine already carries a verdict.');
     { xj-5: concept-search table; incremental, backfills from existing rows (no re-parse). }
@@ -6764,6 +6765,52 @@ end;
 
 const INDEXER_FP_KEY  = INDEXER_FINGERPRINT_META_KEY; { one spelling, in Core.Model; the LSP reads the same key }
 
+{ E-BIND-LIB-EFFECTS (v151 LIBFX): the library whose summaries the purity stage takes for
+  library-bound calls. ON by default: the first library named in this DB's own external_stores
+  meta (the stores its call edges, hence every external_target, were resolved against) that
+  exists and opens. DRAGLINT_LIBRARY_EFFECTS=0 turns it off for the run; any other value names
+  the library DB itself (measurements); DRAGLINT_LIBRARY_EFFECTS_TRUST=1 is the measurement-only
+  unsound arm. Set for this one Run and cleared after it, so an `index --all` or a --watch tick
+  never carries one project's library into another's verdicts. }
+function PurityLibraryPath(const AStore: ISymbolStore): string;
+begin
+  Result:= GetEnvironmentVariable('DRAGLINT_LIBRARY_EFFECTS');
+  if Result = '0' then Exit('');
+  if Result <> '' then Exit;
+  var Stored: string:= AStore.GetMetaValue('external_stores');
+  if Stored = '' then Exit;
+  var Json: TJSONValue:= TJSONObject.ParseJSONValue(Stored);
+  try
+    if Json is TJSONArray then
+      for var Item: TJSONValue in TJSONArray(Json) do
+      begin
+        var P: string:= '';
+        if (Item is TJSONObject) and Item.TryGetValue<string>('path', P) and FileExists(P) then Exit(P);
+      end;
+  finally
+    Json.Free;
+  end;
+end;
+
+procedure RunPurityStage(const AStore: ISymbolStore);
+begin
+  var LibPath: string:= PurityLibraryPath(AStore);
+  if LibPath <> '' then
+  begin
+    var Ok: Boolean;
+    var Lib: ISymbolStore:= OpenReadOnlyStore(LibPath, Ok, True);
+    if Ok then TPurityStage.LibraryEffects:= Lib
+    else Writeln(ErrOutput, 'NOTE: purity: the library for effects could not be opened: ', LibPath);
+    TPurityStage.LibraryEffectsTrustFree:= GetEnvironmentVariable('DRAGLINT_LIBRARY_EFFECTS_TRUST') = '1';
+  end;
+  try
+    TPurityStage.Run(AStore);
+  finally
+    TPurityStage.LibraryEffects:= nil;
+    TPurityStage.LibraryEffectsTrustFree:= False;
+  end;
+end;
+
 { The identity of what this build DERIVES from parses it already holds --
   call_edges, type_ancestors, type_helpers, unit_uses targets.
 
@@ -8220,7 +8267,7 @@ begin
       Before CommitIndexerFingerprint on purpose: an interrupted purity pass must
       leave the stamp absent so the next run repeats it. }
     if RanCalls or Store.PurityNeedsRun then
-      Stage('', 'purity', procedure begin TPurityStage.Run(Store); end)
+      Stage('', 'purity', procedure begin RunPurityStage(Store); end)
     else
       Writeln('stage: purity -- skipped, calls did not run and every routine already carries a verdict.');
     { xj-5: concept-search table; incremental, backfills from existing rows (no re-parse). }
@@ -8383,7 +8430,7 @@ begin
   { Purity v2 -- same gate as the DoIndex site: after the edges, or when a
     per-file reindex left NULL verdicts behind a skipped calls pass. }
   if RanCalls or Store.PurityNeedsRun then
-    Stage('  ', 'purity', procedure begin TPurityStage.Run(Store); end)
+    Stage('  ', 'purity', procedure begin RunPurityStage(Store); end)
   else
     Writeln('  stage: purity -- skipped, calls did not run and every routine already carries a verdict.');
   { xj-5: concept-search table; incremental, backfills from existing rows (no re-parse). }
@@ -38898,7 +38945,7 @@ begin
             RunLinkStages('  ', Store, Indexer2); { B-24: the one stage list (facts-inherited was missing here) }
             Stage('  ', 'calls',        procedure begin Store.ResolveCallTargets; end);
             Stage('  ', 'dispatch',     procedure begin Store.ResolveDispatch; end);     { 2026-10-26: derived from the edges just written }
-            Stage('  ', 'purity',       procedure begin TPurityStage.Run(Store); end);   { Purity v2: verdicts follow the edges; no gate, this block already runs only when files were scanned }
+            Stage('  ', 'purity',       procedure begin RunPurityStage(Store); end);   { Purity v2: verdicts follow the edges; no gate, this block already runs only when files were scanned }
             Stage('  ', 'search',       procedure begin Store.BuildSymbolSearch; end);   { xj-5: concept-search table, incremental }
           end;
 
