@@ -32,3 +32,21 @@
   branch feat/mcp-descriptions (MCP tool descriptions, built, not merged).
 * Cleanup (owner, deletes need approval): ~45 lane worktrees under C:\TEMP\claude\lanes\v151\*\wt + lane/v151-* branches;
   INT\wt2; GRV leftovers (~650 MB); empty untracked package.json in the repo root.
+
+## Post-run (2026-11-15 15:30-16:30)
+* IDE plugin rebuilt for 1.51 (Win32 BPL 7BBFECD1...801F, Win64 0D342F3A...7459) in third_party\dll-win32|win64 -- UNCOMMITTED
+  in the working tree (go into the release commit). C:\TEMP\claude\lanes\v151\DEPLOY\IDE-VSC-DEPLOY.md.
+* VS Code extension 1.6.4 unchanged; its next start copies the 1.51 engine (folder b1794748218769-93978590) and removes the
+  1.50 copy. The owner's window reload = Part A6 (MCP server + post-edit hook + new engine).
+* Owner test page: C:\TEMP\DL-151-TESTS-AND-BACKLOG.html (T0 = 58 open cards carried over from 1.47-1.50 incl. YADF and the
+  IDE-bound INBOX notes; T1-T4 = 1.51 tests; Part Q = owner questions; backlog with every team INBOX). Results go to
+  C:\TEMP\claude\lanes\152\OWNER-LIVE-RESULTS.md (owner creates it).
+* INBOX filed: engine 18 notes + INBOX-151-owner-questions.md (23) + INBOX-autonomy-guard-false-deny.md; ORM3
+  C:\Projects\DB\ORM3\docs\INBOX-drag-lint-151-findings.md; Loader C:\Projects\Loader2019\docs\INBOX-drag-lint-151-findings.md;
+  YADF C:\Projects\YADF\INBOX-drag-lint-151-findings.md; TS C:\Projects\tree-sitter-delphi13\INBOX-draglint-151-inline-library-identifiers.md.
+  Backlog index guard PASS (57 notes, 37 open).
+* Disk cleanup (owner approved): report C:\TEMP\claude\lanes\CLEANUP-2026-11-15.md (agent may still have been running at the
+  clear -- if the report lacks a "done" line, re-run the remaining steps listed in it).
+## Next session
+Owner is testing in RAD Studio. Wait for results in OWNER-LIVE-RESULTS.md / Part Q answers; then release on the owner's go
+(push main, tag v1.51.0-alpha, commit BPLs, CHANGELOG date, GitHub release, website + intro, AI article), CONVERTER re-pin.
