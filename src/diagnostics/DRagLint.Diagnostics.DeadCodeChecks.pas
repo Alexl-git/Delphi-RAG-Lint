@@ -340,6 +340,11 @@ var
     the method being classified whose declared type IS that method's own class,
     or nil outside ProcessDefProcs. Set and freed there, read by ClassifyRefs. }
   SameClassVars  : TDictionary<string, Boolean>;
+  { Pass-1e result (v151): lower-cased name -> True while every declaration of
+    that name in THIS file is a constant whose value is a literal zero; False
+    once the name is also declared with another value, or as a var, field,
+    parameter or inline var. Read by division-by-zero-literal (named constant). }
+  ZeroConsts     : TDictionary<string, Boolean>;
 
   function NodeStr(const N: TTSNode): string;
   var
@@ -720,6 +725,119 @@ var
       end;
     end;
     for I:= 0 to N.NamedChildCount - 1 do CollectDeclTypes(N.NamedChild(I));
+  end;
+
+  { PASS 1e (v151): fill ZeroConsts. A `const Z = 0;` / `const Z: Double = 0.0;`
+    (section or inline) records Z as zero; any other value, and any var / field /
+    parameter / inline var of the same name, marks it not-zero for the whole file
+    (no scopes here, so a name with two meanings is never trusted). }
+  procedure CollectZeroConsts(const N: TTSNode);
+
+    procedure Mark(const AName: TTSNode; AIsZero: Boolean);
+    var
+      Key : string ;
+      Prev: Boolean;
+    begin
+      if AName.IsNull or (AName.NodeType <> 'identifier') then Exit;
+      Key:= LowerCase(Trim(NodeStr(AName)));
+      if Key = '' then Exit;
+      if ZeroConsts.TryGetValue(Key, Prev) then ZeroConsts[Key]:= Prev and AIsZero
+      else ZeroConsts.Add(Key, AIsZero);
+    end;
+
+  var
+    I     : Integer;
+    ValN  : TTSNode;
+    ValTxt: string ;
+    TypeN : TTSNode;
+  begin
+    if N.IsNull then Exit;
+    if (N.NodeType = 'declConst') or (N.NodeType = 'constInline') then
+    begin
+      if N.NodeType = 'declConst' then ValN:= N.ChildByField('defaultValue')
+      else ValN:= N.ChildByField('value');
+      ValTxt:= Trim(NodeStr(ValN));
+      if ValTxt.StartsWith('=') then ValTxt:= Trim(Copy(ValTxt, 2, MaxInt));
+      Mark(N.ChildByField('name'), (ValTxt = '0')
+        or (ValTxt.StartsWith('0.') and (Copy(ValTxt, 3, MaxInt).Trim(['0']) = '')));
+    end
+    else if (N.NodeType = 'declVar') or (N.NodeType = 'declField') or (N.NodeType = 'declArg') then
+    begin
+      TypeN:= N.ChildByField('type');
+      for I:= 0 to N.NamedChildCount - 1 do
+      begin
+        if (not TypeN.IsNull) and (N.NamedChild(I).StartByte >= TypeN.StartByte) then Break;
+        Mark(N.NamedChild(I), False);
+      end;
+    end
+    else if N.NodeType = 'varAssignDef' then
+      for I:= 0 to N.NamedChildCount - 1 do Mark(N.NamedChild(I), False);
+    for I:= 0 to N.NamedChildCount - 1 do CollectZeroConsts(N.NamedChild(I));
+  end;
+
+  { repeated-else-if-condition (v151): the operands of a top-level `or` chain
+    (AOpType = 'kOr') or `and` chain ('kAnd') of ACond, parentheses peeled, each
+    as NormaliseText. A condition with no such operator yields itself. }
+  procedure SplitBool(const ACond: TTSNode; const AOpType: string; AOut: TList<TTSNode>);
+  var
+    Cur: TTSNode;
+    Op : TTSNode;
+  begin
+    Cur:= ACond;
+    while (not Cur.IsNull) and (Cur.NodeType = 'exprParens') and (Cur.NamedChildCount = 1) do
+      Cur:= Cur.NamedChild(0);
+    if Cur.IsNull then Exit;
+    if Cur.NodeType = 'exprBinary' then
+    begin
+      Op:= Cur.ChildByField('operator');
+      if (not Op.IsNull) and (Op.NodeType = AOpType) then
+      begin
+        SplitBool(Cur.ChildByField('lhs'), AOpType, AOut);
+        SplitBool(Cur.ChildByField('rhs'), AOpType, AOut);
+        Exit;
+      end;
+    end;
+    AOut.Add(Cur);
+  end;
+
+  { repeated-else-if-condition (v151): True when ACond can only hold if one of
+    the earlier conditions of the chain held -- every operand of its top-level
+    `or` is an earlier `or`-operand (AAtoms), or has an `and`-operand that is
+    one. Text comparison after NormaliseText, the same equality the rule used. }
+  function ImpliedByEarlier(const ACond: TTSNode; AAtoms: TStringList): Boolean;
+  var
+    Disj, Conj: TList<TTSNode>;
+    D, C      : TTSNode;
+    Hit       : Boolean;
+  begin
+    Result:= False;
+    if AAtoms.Count = 0 then Exit;
+    Disj:= TList<TTSNode>.Create;
+    Conj:= TList<TTSNode>.Create;
+    try
+      SplitBool(ACond, 'kOr', Disj);
+      if Disj.Count = 0 then Exit;
+      for D in Disj do
+      begin
+        Hit:= AAtoms.IndexOf(NormaliseText(NodeStr(D))) >= 0;
+        if not Hit then
+        begin
+          Conj.Clear;
+          SplitBool(D, 'kAnd', Conj);
+          for C in Conj do
+            if AAtoms.IndexOf(NormaliseText(NodeStr(C))) >= 0 then
+            begin
+              Hit:= True;
+              Break;
+            end;
+        end;
+        if not Hit then Exit;
+      end;
+      Result:= True;
+    finally
+      Conj.Free;
+      Disj.Free;
+    end;
   end;
 
   { PASS 1c: collect every bare name that is HANDED SOMEWHERE as a value rather
@@ -1837,6 +1955,23 @@ var
       end;
     end;
 
+    { division-by-zero-literal, named-constant shape (v151): `X / Z` where Z is a
+      constant of this file whose value is a literal zero (ZeroConsts). Float
+      division only: `div` / `mod` by a zero constant is already a compile error
+      (E2098), and the literal-zero shape is the sidecar rule's. }
+    if (N.NodeType = 'exprBinary') and (ZeroConsts.Count > 0) then
+    begin
+      var DzOp : TTSNode:= N.ChildByField('operator');
+      var DzRhs: TTSNode:= N.ChildByField('rhs');
+      var DzIsZero: Boolean:= False;
+      if (not DzOp.IsNull) and (DzOp.NodeType = 'kFdiv') and (not DzRhs.IsNull)
+         and (DzRhs.NodeType = 'identifier')
+         and ZeroConsts.TryGetValue(LowerCase(Trim(NodeStr(DzRhs))), DzIsZero) and DzIsZero then
+        EmitAt(N, 'division-by-zero-literal',
+          Format('Division by the constant %s, which is zero -- the result is INF / NaN, or an EZeroDivide '
+            + 'when the FPU exception is unmasked', [Trim(NodeStr(DzRhs))]));
+    end;
+
     { magic-literal (Fowler "Replace Magic Literal", #14): a numeric literal
       ('literalNumber') used in an expression that is not a named constant.
       Numbers only -- string literals are excluded (too noisy). Off by default
@@ -1879,7 +2014,13 @@ var
             value as a direct child -- no defaultValue wrapper and no declConst, so
             both lists missed it and the literal that IS the named constant was
             reported (Gitea drag-lint#2). redundant-parentheses already knew. }
-          or (LitPT = 'constInline');
+          or (LitPT = 'constInline')
+          { grammar v1.4.11+: a string code page (`type AnsiString(1252)`), a
+            numeric label declaration (`label 99;`), a statement label (`99:`)
+            and a goto target (`goto 99`) name a place or an encoding, not a
+            quantity -- naming them as a const would not explain anything. }
+          or (LitPT = 'declStringCodePage') or (LitPT = 'declLabel')
+          or (LitPT = 'label') or (LitPT = 'goto');
         { a defaults table (N-12): the literal is the WHOLE rhs of an assignment
           to a named field (`Result.MaxLen := 180`) -- the field name states its
           meaning as a const name would. Part of an rhs, or a plain local
@@ -2145,8 +2286,15 @@ var
       if not IsCont then
       begin
         var SeenC: TStringList:= TStringList.Create;
+        { v151: the `or`-operands of every earlier condition. A later condition
+          whose every `or`-operand is one of them (or `and`-contains one) is
+          implied by an earlier branch: `if A or B .. else if A`,
+          `if A .. else if A and C`. }
+        var Atoms: TStringList:= TStringList.Create;
+        var AtomNodes: TList<TTSNode>:= TList<TTSNode>.Create;
         try
           SeenC.CaseSensitive:= False;
+          Atoms.CaseSensitive:= False;
           var Cur: TTSNode:= N;
           while (not Cur.IsNull) and ((Cur.NodeType = 'if') or (Cur.NodeType = 'ifElse')) do
           begin
@@ -2159,8 +2307,19 @@ var
                 if SeenC.IndexOf(CT) >= 0 then
                   EmitAt(Cond, 'repeated-else-if-condition',
                     'This else-if repeats an earlier condition in the chain -- the branch is unreachable')
+                else if ImpliedByEarlier(Cond, Atoms) then
+                  EmitAt(Cond, 'repeated-else-if-condition',
+                    'This else-if can only hold when an earlier condition of the chain already held -- '
+                    + 'the branch is unreachable')
                 else
                   SeenC.Add(CT);
+                AtomNodes.Clear;
+                SplitBool(Cond, 'kOr', AtomNodes);
+                for var AN in AtomNodes do
+                begin
+                  var AT: string:= NormaliseText(NodeStr(AN));
+                  if (AT <> '') and (Atoms.IndexOf(AT) < 0) then Atoms.Add(AT);
+                end;
               end;
             end;
             var Els: TTSNode:= Cur.ChildByField('else');
@@ -2170,6 +2329,8 @@ var
               Break;
           end;
         finally
+          AtomNodes.Free;
+          Atoms.Free;
           SeenC.Free;
         end;
       end;
@@ -3049,6 +3210,7 @@ begin
   LocalFunctions := TDictionary<string, Boolean>.Create;
   AddrTaken      := TDictionary<string, Boolean>.Create;
   DeclTypes      := TDictionary<string, string >.Create;
+  ZeroConsts     := TDictionary<string, Boolean>.Create;
   SameClassVars  := nil;
   Reader         := nil;
   try
@@ -3144,6 +3306,8 @@ begin
     CollectAddrTakenFromDeadBranches(PF.Src, PF.RawSrc);
     { Pass 1d: declared types of fields/vars/params, for default-encoding-io. }
     CollectDeclTypes(PF.Tree.RootNode);
+    { Pass 1e: constants whose value is a literal zero, for division-by-zero-literal. }
+    CollectZeroConsts(PF.Tree.RootNode);
     { Pass 2: walk defProc bodies, ifElse, exprParens, comments, exprCall. }
     Visit(PF.Tree.RootNode);
     { Pass 3: referenced-never-set field def-use. }
@@ -3157,6 +3321,7 @@ begin
     LocalFunctions.Free;
     AddrTaken.Free;
     DeclTypes.Free;
+    ZeroConsts.Free;
     Reader.Free;
   end;
   { De-duplicate by (RuleId, StartLine, StartCol). }

@@ -1,0 +1,4 @@
+# earlier: pA or pB (9). Implied: pA (11), pC and pB (13), (pB or pA) (15).
+repeated-else-if-condition 11
+repeated-else-if-condition 13
+repeated-else-if-condition 15
