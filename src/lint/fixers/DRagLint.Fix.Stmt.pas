@@ -592,12 +592,25 @@ begin
   Result:= if TrimRight(AFx.Txt(N)).EndsWith(';') then ';' else '';
 end;
 
-{ is AName (case-insensitive) an identifier anywhere under N? }
+{ True when N is the LABEL of an Automation named argument Foo(Name := Value)
+  (grammar v1.4.9 node exprArgNamed): the label names a dispatch parameter and
+  is no use of a same-named local (GRL-F2 part 3, wave v151). The value is a
+  real read and is never a label. }
+function IsNamedArgLabel(const N: TTSNode): Boolean;
+var
+  P: TTSNode;
+begin
+  P:= N.Parent;
+  Result:= (not P.IsNull) and (P.NodeType = 'exprArgNamed') and not SameNode(P.ChildByField('value'), N);
+end;
+
+{ is AName (case-insensitive) an identifier anywhere under N? A named-argument
+  label is not a mention. }
 function MentionsIdent(const AFx: TFx; const N: TTSNode; const AName: string): Boolean;
 var
   I: Integer;
 begin
-  if N.IsNull then Exit(False);
+  if N.IsNull or IsNamedArgLabel(N) then Exit(False);
   if (N.NodeType = 'identifier') and SameText(AFx.Txt(N), AName) then Exit(True);
   for I:= 0 to N.NamedChildCount - 1 do
     if MentionsIdent(AFx, N.NamedChild(I), AName) then Exit(True);
@@ -608,7 +621,7 @@ procedure CollectIdents(const AFx: TFx; const N: TTSNode; const AName: string; v
 var
   I: Integer;
 begin
-  if N.IsNull then Exit;
+  if N.IsNull or IsNamedArgLabel(N) then Exit;  { a named-argument label is no occurrence }
   if (N.NodeType = 'identifier') and SameText(AFx.Txt(N), AName) then AOut:= AOut + [N];
   for I:= 0 to N.NamedChildCount - 1 do CollectIdents(AFx, N.NamedChild(I), AName, AOut);
 end;
@@ -1625,6 +1638,270 @@ begin
   if not IsInl then Result:= Result + LoopVarDeclEdits(Fx, DefProc, N, Fx.Txt(V));
 end;
 
+{ ==== wave v151 lane FIX-OLD: fixes for rules that shipped without one ==== }
+
+const
+  { built-in value types: reading one runs no code (no getter, no class
+    operator) and none is managed, so a store to one can go unnoticed }
+  UNMANAGED_TYPES: array[0..22] of string = ('integer', 'cardinal', 'int64', 'uint64', 'byte', 'word',
+    'shortint', 'smallint', 'longint', 'longword', 'nativeint', 'nativeuint', 'boolean', 'bytebool',
+    'wordbool', 'longbool', 'char', 'ansichar', 'widechar', 'double', 'single', 'extended', 'currency');
+  { the string types a pure condition may also read (compared by the RTL, no user code) }
+  STRING_TYPES: array[0..2] of string = ('string', 'unicodestring', 'ansistring');
+
+{ the declared type text (lower case) of AName when ADefProc declares it as one
+  of its OWN parameters or local variables, else '' }
+function OwnDeclType(const AFx: TFx; const ADefProc: TTSNode; const AName: string): string;
+var
+  Hdr, Args, D, Sec, Ty, C: TTSNode;
+  I, J                    : Integer;
+  Decls                   : TArray<TTSNode>;
+begin
+  Result:= '';
+  Decls:= nil;
+  Hdr:= ADefProc.ChildByField('header');
+  Args:= if Hdr.IsNull then Default(TTSNode) else Hdr.ChildByField('args');
+  if not Args.IsNull then
+    for I:= 0 to Args.NamedChildCount - 1 do
+      if Args.NamedChild(I).NodeType = 'declArg' then Decls:= Decls + [Args.NamedChild(I)];
+  for I:= 0 to ADefProc.NamedChildCount - 1 do
+  begin
+    Sec:= ADefProc.NamedChild(I);
+    if Sec.NodeType <> 'declVars' then Continue;
+    for J:= 0 to Sec.NamedChildCount - 1 do
+      if Sec.NamedChild(J).NodeType = 'declVar' then Decls:= Decls + [Sec.NamedChild(J)];
+  end;
+  for D in Decls do
+  begin
+    Ty:= D.ChildByField('type');
+    if Ty.IsNull then Continue;
+    for I:= 0 to D.NamedChildCount - 1 do
+    begin
+      C:= D.NamedChild(I);
+      if C.StartByte >= Ty.StartByte then Break;
+      if (C.NodeType = 'identifier') and SameText(AFx.Txt(C), AName) then Exit(LowerCase(Trim(AFx.Txt(Ty))));
+    end;
+  end;
+end;
+
+{ repeated-else-if-condition: is N a condition that runs no code and reads only
+  literals and ADefProc's own parameters / locals of a built-in value or string
+  type? Such a condition gives the same answer every time it is evaluated
+  while nothing in between writes those names. }
+function PureCond(const AFx: TFx; const ADefProc, N: TTSNode): Boolean;
+var
+  I: Integer;
+  T: string ;
+begin
+  if N.IsNull then Exit(False);
+  T:= N.NodeType;
+  if T = 'identifier' then
+  begin
+    T:= OwnDeclType(AFx, ADefProc, AFx.Txt(N));
+    Exit(MatchStr(T, UNMANAGED_TYPES) or MatchStr(T, STRING_TYPES));
+  end;
+  if MatchStr(T, ['literalNumber', 'literalString', 'literalChar']) or IsKeywordType(T) then Exit(True);
+  if not MatchStr(T, ['exprBinary', 'exprUnary', 'exprParens']) then Exit(False);
+  for I:= 0 to N.NamedChildCount - 1 do
+    if not PureCond(AFx, ADefProc, N.NamedChild(I)) then Exit(False);
+  Result:= True;
+end;
+
+{ S without any whitespace, lower case: the comparable form of a condition }
+function Squash(const S: string): string;
+var
+  C: Char;
+begin
+  Result:= '';
+  for C in S do
+    if C > ' ' then Result:= Result + C;
+  Result:= LowerCase(Result);
+end;
+
+{ the source text between (AStartRow, AStartCol) and (AEndRow, AEndCol), 0-based byte columns on 7-bit rows }
+function SpanText(const AFx: TFx; AStartRow, AStartCol, AEndRow, AEndCol: Integer): string;
+var
+  R: Integer;
+begin
+  if AStartRow = AEndRow then Exit(Copy(AFx.Line(AStartRow), AStartCol + 1, AEndCol - AStartCol));
+  Result:= Copy(AFx.Line(AStartRow), AStartCol + 1, MaxInt);
+  for R:= AStartRow + 1 to AEndRow - 1 do Result:= Result + sLineBreak + AFx.Line(R);
+  Result:= Result + sLineBreak + Copy(AFx.Line(AEndRow), 1, AEndCol);
+end;
+
+{ the one-row replacement of rows AStartRow..AEndRow that cuts the span out }
+function CutSpan(const AFx: TFx; AStartRow, AStartCol, AEndRow, AEndCol: Integer): TTextEdit;
+var
+  Head, Tail: string;
+begin
+  Head:= Copy(AFx.Line(AStartRow), 1, AStartCol);
+  Tail:= Copy(AFx.Line(AEndRow), AEndCol + 1, MaxInt);
+  Result:= ReplaceRows(AFx, AStartRow, AEndRow, [if Trim(Tail) = '' then TrimRight(Head) else Head + Tail]);
+end;
+
+{ repeated-else-if-condition: drop the unreachable branch.
+  PROOF: the finding's condition repeats an earlier condition of the same
+  if / else-if chain. When every condition from the top of the chain down to
+  the repeat is PureCond (no call, no getter, no class operator; only the
+  routine's own value-typed locals and parameters, none under a with), no code
+  runs between the two evaluations, so the repeat is False whenever it is
+  reached and its branch never runs. Deleting `if C then S else ` (the rest of
+  the chain stays the else) or ` else if C then S` (the chain's end) therefore
+  changes nothing. Declines on a comment, a directive or non-ASCII text in the
+  cut, or any other shape. }
+function FixRepeatedElseIf(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
+var
+  Fx                                : TFx    ;
+  C, IfN, G, Top, Cur, DefProc, Els : TTSNode;
+  SR, SC, ER, EC                    : Integer;
+  Seen                              : Boolean;
+  Cut                               : string ;
+begin
+  Result:= nil;
+  if not OpenFx(AFinding.FilePath, ALines, Fx) then Exit;
+  C:= Fx.NodeAt(AFinding.StartLine, AFinding.StartCol);
+  while (not C.IsNull) and (not C.Parent.IsNull)
+        and not (MatchStr(C.Parent.NodeType, ['if', 'ifElse']) and SameNode(C.Parent.ChildByField('condition'), C)) do
+    C:= C.Parent;
+  if C.IsNull or C.Parent.IsNull or not StartsAt(C, AFinding.StartLine, AFinding.StartCol) then Exit;
+  IfN:= C.Parent;
+  G:= IfN.Parent;
+  if (G.NodeType <> 'ifElse') or not SameNode(G.ChildByField('else'), IfN) then Exit;
+  DefProc:= Ancestor(IfN, 'defProc');
+  if DefProc.IsNull or not Ancestor(IfN, 'with').IsNull then Exit;
+  Top:= IfN;
+  while (Top.Parent.NodeType = 'ifElse') and SameNode(Top.Parent.ChildByField('else'), Top) do Top:= Top.Parent;
+  Seen:= False;
+  Cur:= Top;
+  while not SameNode(Cur, IfN) do
+  begin
+    if not PureCond(Fx, DefProc, Cur.ChildByField('condition')) then Exit;
+    Seen:= Seen or (Squash(Fx.Txt(Cur.ChildByField('condition'))) = Squash(Fx.Txt(C)));
+    Cur:= Cur.ChildByField('else');
+    if Cur.IsNull then Exit;
+  end;
+  if (not Seen) or not PureCond(Fx, DefProc, C) then Exit;
+  if IfN.NodeType = 'ifElse' then
+  begin
+    Els:= IfN.ChildByField('else');
+    if Els.IsNull then Exit;
+    SR:= Row(IfN);
+    SC:= Col(IfN);
+    ER:= Row(Els);
+    EC:= Col(Els);
+  end
+  else
+  begin
+    Els:= G.ChildByField('then');
+    if Els.IsNull then Exit;
+    SR:= ERow(Els);
+    SC:= ECol(Els);
+    ER:= ERow(IfN);
+    EC:= ECol(IfN);
+  end;
+  if not Fx.Clean(SR, ER) then Exit;
+  Cut:= SpanText(Fx, SR, SC, ER, EC);
+  if Cut.Contains('{') or Cut.Contains('(*') or Cut.Contains('//') then Exit;
+  Result:= [CutSpan(Fx, SR, SC, ER, EC)];
+end;
+
+{ is-always-true: `X is T` where X's declared class already descends from T.
+  PROOF: for a class reference `is` answers (X <> nil) and X.InheritsFrom(T);
+  the second operand is True for every valid X of the declared type, so the
+  test equals Assigned(X), which evaluates X exactly once as `is` does.
+  Assigned(...) is a primary expression, so no operator around it rebinds. }
+function FixIsAlwaysTrue(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
+var
+  Fx  : TFx    ;
+  B, L: TTSNode;
+begin
+  Result:= nil;
+  if not OpenFx(AFinding.FilePath, ALines, Fx) then Exit;
+  B:= AncestorAt(Fx.NodeAt(AFinding.StartLine, AFinding.StartCol), 'exprBinary', AFinding.StartLine, AFinding.StartCol);
+  if B.IsNull or (B.ChildByField('operator').NodeType <> 'kIs') or (Row(B) <> ERow(B)) then Exit;
+  L:= B.ChildByField('lhs');
+  if L.IsNull or not Fx.Clean(Row(B), Row(B)) then Exit;
+  Result:= [ReplaceSpan(Fx, B, 'Assigned(' + Fx.Txt(L) + ')')];
+end;
+
+{ identifier-case-mismatch: respell the reported token as declared.
+  PROOF: Delphi identifiers are case-insensitive; only this use site changes,
+  never a declaration, so binding, RTTI and streamed names are untouched. }
+function FixIdentifierCase(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
+var
+  Fx       : TFx   ;
+  N        : TTSNode;
+  M        : TMatch ;
+  Used, Dcl: string ;
+begin
+  Result:= nil;
+  M:= TRegEx.Match(AFinding.Message, '^(\w+) is declared as (\w+) -- ');
+  if not M.Success then Exit;
+  Used:= M.Groups[1].Value;
+  Dcl := M.Groups[2].Value;
+  if (Used = Dcl) or not SameText(Used, Dcl) then Exit;
+  if not OpenFx(AFinding.FilePath, ALines, Fx) then Exit;
+  N:= Fx.NodeAt(AFinding.StartLine, AFinding.StartCol);
+  if (N.NodeType <> 'identifier') or not StartsAt(N, AFinding.StartLine, AFinding.StartCol) then Exit;
+  if (Fx.Txt(N) <> Used) or not Fx.Clean(Row(N), Row(N)) then Exit;
+  Result:= [ReplaceSpan(Fx, N, Dcl)];
+end;
+
+{ unused-global: delete an implementation-section const, or var of a built-in
+  value type, that nothing names.
+  PROOF: an implementation-section name is visible in this unit only; the
+  fixer re-proves the rule's index answer from the text -- the name occurs
+  exactly once in the whole file (comments and strings included) and the unit
+  includes no file -- so no code reads it. A var of a built-in value type has
+  no finalization, a const runs no code: deleting the declaration (or its
+  name from a `A, B: T` list, or the section it leaves empty) changes nothing.
+  Declines on interface-section names (other units may name them), types,
+  managed or unknown var types, and shared lines. }
+function FixUnusedGlobal(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
+var
+  Fx              : TFx            ;
+  N, D, Sec, Ty, T: TTSNode        ;
+  Names           : TArray<TTSNode>;
+  I, K            : Integer        ;
+  Nm              : string         ;
+begin
+  Result:= nil;
+  if not OpenFx(AFinding.FilePath, ALines, Fx) then Exit;
+  N:= Fx.NodeAt(AFinding.StartLine, AFinding.StartCol);
+  if (N.NodeType <> 'identifier') or not StartsAt(N, AFinding.StartLine, AFinding.StartCol) then Exit;
+  D:= N.Parent;
+  Sec:= D.Parent;
+  if not (((D.NodeType = 'declConst') and (Sec.NodeType = 'declConsts'))
+          or ((D.NodeType = 'declVar') and (Sec.NodeType = 'declVars'))) then Exit;
+  if Sec.Parent.NodeType <> 'implementation' then Exit;
+  Nm:= Fx.Txt(N);
+  if TRegEx.IsMatch(ALines.Text, '[{(]\*?\$I(NCLUDE)?\s', [roIgnoreCase]) then Exit;
+  if TRegEx.Matches(ALines.Text, '(?<![\w&])' + TRegEx.Escape(Nm) + '(?!\w)', [roIgnoreCase]).Count <> 1 then Exit;
+  Ty:= D.ChildByField('type');
+  if D.NodeType = 'declVar' then
+    if Ty.IsNull or not MatchStr(LowerCase(Trim(Fx.Txt(Ty))), UNMANAGED_TYPES) then Exit;
+  Names:= nil;
+  for I:= 0 to D.NamedChildCount - 1 do
+    if (D.NamedChild(I).NodeType = 'identifier') and (Ty.IsNull or (D.NamedChild(I).StartByte < Ty.StartByte)) then
+      Names:= Names + [D.NamedChild(I)];
+  K:= IndexIn(Names, N);
+  if K < 0 then Exit;
+  if Length(Names) > 1 then
+  begin
+    { `A, B: T`: cut the name with the comma that joins it to its neighbour }
+    T:= if K = 0 then Names[1] else Names[K - 1];
+    if (Row(T) <> Row(N)) or not Fx.Clean(Row(N), Row(N)) then Exit;
+    if K = 0 then Result:= [CutSpan(Fx, Row(N), Col(N), Row(T), Col(T))]
+    else Result:= [CutSpan(Fx, Row(T), ECol(T), Row(N), ECol(N))];
+    Exit;
+  end;
+  { the only declaration of its section takes the section keyword with it }
+  T:= if Sec.NamedChildCount = 2 then Sec else D;
+  if (Trim(Fx.Before(T)) <> '') or (Fx.Tail(T) <> tkNone) or not Fx.Clean(Row(T), ERow(T)) then Exit;
+  Result:= [ReplaceRows(Fx, Row(T), ERow(T), [])];
+end;
+
+
 initialization
   RegisterFixer('code-after-exit', FixCodeAfterExit);
   RegisterFixer('redundant-continue-exit', FixRedundantContinueExit);
@@ -1639,6 +1916,12 @@ initialization
   RegisterFixer('unprotected-object-free', FixUnprotectedFree);
   RegisterFixer('create-inside-try', FixCreateInsideTry);
   RegisterFixer('index-loop-to-for-in', FixIndexLoopToForIn, False, INLINE_VAR_SINCE);  { emits for var X in }
+  { wave v151 lane FIX-OLD }
+  RegisterFixer('dead-store-before-out-arg', FixOverwriteBeforeRead);  { same proof: a call-free store no read reaches }
+  RegisterFixer('repeated-else-if-condition', FixRepeatedElseIf);
+  RegisterFixer('is-always-true', FixIsAlwaysTrue);
+  RegisterFixer('identifier-case-mismatch', FixIdentifierCase);
+  RegisterFixer('unused-global', FixUnusedGlobal);
   { risky: behaviour-CHANGING fixes, applied and tagged risky:true }
   RegisterFixer('bare-except', FixBareExcept, True);
   RegisterFixer('duplicate-exception-handler', FixDuplicateHandler, True);
