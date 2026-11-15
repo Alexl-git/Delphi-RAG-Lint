@@ -550,6 +550,7 @@ type
     EiMembers    : string ; // extract-interface --members <a,b>
     EiReparent   : Boolean; // extract-interface --reparent-interfaced
     EiNoRefCount : Boolean; // extract-interface --reparent-interfaced=norefcount
+    EiRetype     : string ; // extract-interface --retype-consumer <Routine>.<param> (v151 REPARENT, P22)
     LiDefer      : Boolean; // lazy-init --defer (lane 147 G3P)
     FixNaming    : Boolean; // --fix-naming (batch --fix: explicit consent to the opt-in naming fixes)
     { --stand-in-for <realpath>: analyse THIS file's text, but answer as though
@@ -2017,6 +2018,11 @@ begin
     begin
       Inc(i);
       Result.EiMembers:= ParamStr(i);
+    end
+    else if (A = '--retype-consumer') and (Result.Command = 'extract-interface') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.EiRetype:= ParamStr(i);
     end
     else if A = '--reparent-interfaced' then Result.EiReparent:= True
     else if A = '--reparent-interfaced=norefcount' then
@@ -17992,6 +17998,7 @@ begin
   Opts.IfaceName   := AArgs.Name;
   Opts.Reparent    := AArgs.EiReparent;
   Opts.NoRefCount  := AArgs.EiNoRefCount;
+  Opts.RetypeConsumer:= AArgs.EiRetype;
   Opts.Project     := AArgs.ProjectPath;
   Opts.Platform    := AArgs.CheckPlatform;
   Opts.RsVars      := AArgs.CycleRsVars;

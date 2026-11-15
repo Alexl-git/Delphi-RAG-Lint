@@ -658,7 +658,7 @@ Described in:
 Declares an interface from the members of a class the project uses and adds it to the class; --apply through a scratch build and the compile gate.
 
 ```text
-drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced[=norefcount]] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]
+drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced[=norefcount]] [--retype-consumer <Routine>.<param>] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -667,6 +667,7 @@ drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>
 | `--members` | `<a,b>` |  |  |
 | `--name` | `<IFoo>` |  |  |
 | `--reparent-interfaced[=norefcount]` |  |  |  |
+| `--retype-consumer` | `<Routine>.<param>` |  |  |
 | `--plan` |  |  |  |
 | `--apply` |  |  |  |
 | `--project` | `<X.dproj>` |  |  |
@@ -1183,6 +1184,7 @@ drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--j
 | `--apply` |  |  |  |
 | `--project` | `<X.dproj>` |  |  |
 | `--compile-gate` |  |  |  |
+| `--no-compile-gate` |  |  |  |
 | `--fix-line` | `<L>` |  |  |
 | `--fix-rule` | `<id>` |  |  |
 | `--no-backup` |  |  |  |

@@ -13,7 +13,7 @@
       "type": "cli",
       "verb": "extract-interface",
       "example": "drag-lint extract-interface --class <name> --plan --db <db>",
-      "usage": "drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced[=norefcount]] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]",
+      "usage": "drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced[=norefcount]] [--retype-consumer <Routine>.<param>] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]",
       "flags": [
         {
           "name": "--class",
@@ -29,6 +29,10 @@
         },
         {
           "name": "--reparent-interfaced[=norefcount]"
+        },
+        {
+          "name": "--retype-consumer",
+          "arg": "<Routine>.<param>"
         },
         {
           "name": "--plan"
@@ -71,14 +75,14 @@
           "arg": "json"
         }
       ],
-      "help": ["  drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced[=norefcount]] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]   - declare an interface from the members of a class the project uses and add it to the class: plan by default, every refusal named, --apply through a scratch build and the compile gate"]
+      "help": ["  drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced[=norefcount]] [--retype-consumer <Routine>.<param>] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]   - declare an interface from the members of a class the project uses and add it to the class: plan by default, every refusal named, --apply through a scratch build and the compile gate"]
     }
   ],
   "audience": "both",
   "verified": {
-    "date": "2026-11-09",
+    "date": "2026-11-14",
     "by": "ENGINE",
     "build": "1.50.0-alpha",
-    "surfaceHash": "411f26d39af139267eb99ec2135457bf5a31438824d63b812e7b2a331f03c5b2"
+    "surfaceHash": "4ad9edae89b45df697219294293408755b5619b9531ad80e44179a9e14bcfe28"
   }
 }
