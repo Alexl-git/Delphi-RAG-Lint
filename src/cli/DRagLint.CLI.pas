@@ -524,7 +524,8 @@ type
     Plan           : Boolean; // --plan (cycles: emit a followable markdown refactoring playbook)
     F2047          : Boolean; // --f2047 (cycles: only the interface-only cycles dcc rejects, N-09)
     Hub            : Boolean; // --hub (cycles: hub analysis per group, spec 2026-11-08-hub-scc-phased P1)
-    HubSurface     : Boolean; // --hub-surface (cycles --plan: recipe R3, spec 2026-11-08-hub-scc-phased P2; OFF by default)
+    HubSurface     : Boolean; // --hub-surface (cycles: recipe R3 asked for by name, spec 2026-11-08-hub-scc-phased P2; needed for --apply and for --causes --format json)
+    NoHubSurface   : Boolean; // --no-hub-surface (cycles --plan: the planner's own plan for every group; since 1.51 the dry run asks R3 first, phase P6)
     FixCycle       : Integer; // --cycle <n> (cycles --fix: the 1-based group to plan)
     FixCycleGiven  : Boolean; // --cycle was on the command line (so 0 / junk is an error, not 'absent')
     FixPart        : string ; // --part a|b|all (cycles --fix)
@@ -2050,6 +2051,7 @@ begin
     else if A = '--f2047'         then Result.F2047          := True
     else if A = '--hub'           then Result.Hub            := True
     else if A = '--hub-surface'   then Result.HubSurface     := True
+    else if A = '--no-hub-surface' then Result.NoHubSurface  := True
     else if A = '--apply'         then Result.Apply          := True
     else if A = '--fix'           then Result.Fix            := True
     else if A = '--remove-unused' then Result.RemoveUnused   := True
@@ -28267,7 +28269,15 @@ begin
       Exit(ReportF2047);
     end;
 
-    { --hub-surface (spec 2026-11-08-hub-scc-phased P2): recipe R3 in place of the planner, OFF by default }
+    { --hub-surface (spec 2026-11-08-hub-scc-phased P2): recipe R3 in place of the planner. Phase P6 (lane v151 I10,
+      after the Loader apply built with 0 errors): the --plan dry run asks R3 first WITHOUT the switch, for a group R3
+      predicts to break; --no-hub-surface gives the planner's plan. Writing (--apply) and the --causes --format json
+      fix object still need the switch by name: --fix cannot run R3 yet, so the default fix object must not offer it. }
+    if AArgs.HubSurface and AArgs.NoHubSurface then
+    begin
+      Writeln(ErrOutput, 'ERROR: cycles --hub-surface and --no-hub-surface exclude each other');
+      Exit(2);
+    end;
     if AArgs.HubSurface then
     begin
       { lane 149 CYA (P6 prep): --plan dry run = the planner with R3 asked first per group; --causes --format json = R3's
@@ -28352,11 +28362,14 @@ begin
         var PlanLines:= TStringList.Create;
         try
           var GroupHook: TCycleGroupHook:= nil;
-          if AArgs.HubSurface then
+          if not AArgs.NoHubSurface then
+          begin
+            var HubAsked:= AArgs.HubSurface;  // False = the 1.51 default: only a group R3 predicts to break, no refusal note
             GroupHook:= function(pIndex: Integer; const pOut: TStrings): Boolean
               begin
-                Result:= HubSurfaceGroupLines(Store, LibStore, Sccs[pIndex - 1], pIndex, Graph, pOut);
+                Result:= HubSurfaceGroupLines(Store, LibStore, Sccs[pIndex - 1], pIndex, Graph, pOut, HubAsked);
               end;
+          end;
           RenderCyclePlaybook(Store, AArgs.DbPath, Sccs, Graph, PlanLines, LibStore, AArgs.ProjectPath, GroupHook);
           for var PlanLine in PlanLines do Writeln(PlanLine);
         finally

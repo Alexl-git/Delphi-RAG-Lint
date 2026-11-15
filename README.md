@@ -488,7 +488,12 @@ Since 1.49 (hub-SCC P3) a free routine of the hub that a spoke still calls goes 
 ancestor's public member (`frmMain.Invalidate`) is on the surface. P6 prep: the dry run is the normal playbook with R3
 (and the `--hub` block) in place of Part A for a hub-shaped group, and `cycles --causes --format json --hub-surface`
 gives R3's `fix` object (`part: r3`) for such a group without running the planner. A bare use, a write to the global or to a designer field, another var-parameter use or
-an ancestor's member refuses that spoke only. OFF by default; the dry run writes nothing, `--apply`
+an ancestor's member refuses that spoke only. Since 1.51 (P6, after the recipe was applied to a 78-unit
+application that then built with 0 errors and had no cycle left) `cycles --plan` asks R3 first WITHOUT the switch:
+a group R3 predicts to break gets R3 in place of Part A / Part B, every other group its plan as before;
+`--no-hub-surface` gives the planner's own plan for every group. `--hub-surface` by name is still what
+`--apply` and the `--causes --format json` fix object need (`--fix` cannot run R3 yet), and it also shows R3 for
+a group it cannot break and a note for each group it refuses. The dry run writes nothing, `--apply`
 writes one group and runs no compile gate yet: build the project after it.
 
 Each cycle lists its `A uses B [interface|implementation]` edges, marks the

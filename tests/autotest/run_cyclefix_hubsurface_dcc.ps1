@@ -2,7 +2,8 @@
 # `cycles --plan --hub-surface` on a hub-shaped circular group (fixture tests\fixtures\cyclefix\hubsurface:
 # HubMain owns the global HubMainForm, three spokes read it, HubMain calls them back). Real dcc proves --apply.
 #
-#   h0  control: --plan WITHOUT --hub-surface prints no R3 block (the default is unchanged)
+#   h0  control: --plan --no-hub-surface prints no R3 block: the planner's own plan
+#   h0b default (1.51, phase P6, lane v151 I10): --plan WITHOUT a switch asks R3 first for a group it predicts to break
 #   h1  plan: exit 0; IHubMainHub in HubMain.Hub; 4 members (1 read-only, 1 read/write, 2 methods);
 #       3 spokes rewritten, 3 edges cut, the group breaks; dry run writes nothing   (RED on 1.46.0: unknown flag)
 #   h2  --apply: exit 0; HubMain.Hub.pas written; builds; stdout byte-identical; comment + string literal untouched
@@ -26,6 +27,10 @@
 #   q1  P6 prep: --plan --hub-surface = the playbook with R3 (and the P1 hub block) in place of Part A for the hub group
 #   q2  control: a group R3 refuses gets a note and the planner's plan
 #   q3  --causes --format json --hub-surface: R3's fix object, no planner; q4 control: default fix object unchanged; q5 bad combo exit 2
+#   d1  default, a knot R3 refuses: no note, byte-identical to --no-hub-surface
+#   d2  default, a hub group R3 plans but cannot break: the planner's plan, byte-identical to --no-hub-surface
+#   d3  --hub-surface with --no-hub-surface: exit 2
+#   d4  --plan --apply WITHOUT --hub-surface writes nothing (writing needs the switch by name)
 #
 # Usage: pwsh -File run_cyclefix_hubsurface_dcc.ps1 [-Exe <drag-lint.exe>] [-WorkDir <dir>] [-KeepWorkDir]
 param(
@@ -108,8 +113,12 @@ try {
   Write-Host '== h: the hub-surface plan and its apply' -ForegroundColor Cyan
   $P0 = New-Proj 'hubsurface' 'HubSurface'
   Push-Location $WorkDir
-  try { $def = ($null | & $Exe cycles --plan --db $P0.Db --library-db none 2>&1 | Out-String) } finally { Pop-Location }
-  Check 'h0 control: --plan without --hub-surface prints no R3 block' (($def -notmatch 'hub-surface recipe R3') -and ($def -match '(?i)group|cycle')) $def
+  try {
+    $def = ($null | & $Exe cycles --plan --db $P0.Db --library-db none 2>&1 | Out-String)
+    $off = ($null | & $Exe cycles --plan --no-hub-surface --db $P0.Db --library-db none 2>&1 | Out-String); $offCode = $LASTEXITCODE
+  } finally { Pop-Location }
+  Check 'h0 control: --plan --no-hub-surface prints no R3 block, the planner''s own plan' (($offCode -eq 0) -and ($off -notmatch 'recipe R3') -and ($off -match '(?i)group|cycle')) $off
+  Check 'h0b default: --plan asks R3 first -- the hub group gets R3 in place of Part A, and the way back is named   (RED on 1.50.0: the planner''s plan)' ((Has $def '# Cycle refactoring playbook') -and (Has $def '## Group 1 (4 units): hub-shaped -- recipe R3 in place of Part A / Part B') -and (Has $def '- prediction: the group breaks') -and (Has $def 'cycles --plan --no-hub-surface') -and ($def.Replace($off, '') -ne '') -and ($def -ne $off)) $def
   $h0 = Get-SrcHash $P0.Root
   $r = Get-HubPlan $P0
   $o = $r.Out
@@ -248,7 +257,25 @@ try {
   Check 'q3 --causes --format json --hub-surface: the fix object is R3''s (part r3, available, 3 cut edges, its commands)   (RED on 1.48.0: exit 2)' (($jsCode -eq 0) -and ($null -ne $fx) -and ($fx.part -eq 'r3') -and ($fx.recipe -eq 'hub-surface') -and ($fx.available -eq $true) -and (@($fx.edges).Count -eq 3) -and ($fx.apply -match '--hub-surface .*--cycle 1 --apply$')) "exit=$jsCode $js"
   $fd = $null; try { $fd = ($jd | ConvertFrom-Json)[0].fix } catch { }
   Check 'q4 control: without --hub-surface the fix object is the planner''s (default unchanged)' (($null -ne $fd) -and ($fd.part -ne 'r3') -and ($fd.dry_run -match '--fix')) $jd
-  Check 'q5 --format json --hub-surface without --causes: exit 2' ($badCode -eq 2) "exit=$badCode"} finally {
+  Check 'q5 --format json --hub-surface without --causes: exit 2' ($badCode -eq 2) "exit=$badCode"
+  Write-Host '== d: the 1.51 default -- the dry run asks R3 first without the switch (phase P6, lane v151 I10)' -ForegroundColor Cyan
+  $W = New-Proj 'hubsurface' 'HubSurface' { param($r) Edit-Text (Join-Path $r 'HubSpokeC.pas') "  hubMainForm.log.Add(" "  with HubMainForm do`n    Note('w');`n  hubMainForm.log.Add(" }
+  $p0h = Get-SrcHash $P0.Root
+  Push-Location $WorkDir
+  try {
+    $kd = ($null | & $Exe cycles --plan --db $K.Db --library-db none 2>&1 | Out-String)
+    $ko = ($null | & $Exe cycles --plan --no-hub-surface --db $K.Db --library-db none 2>&1 | Out-String)
+    $wd = ($null | & $Exe cycles --plan --db $W.Db --library-db none 2>&1 | Out-String)
+    $wo = ($null | & $Exe cycles --plan --no-hub-surface --db $W.Db --library-db none 2>&1 | Out-String)
+    $null | & $Exe cycles --plan --hub-surface --no-hub-surface --db $P0.Db --library-db none *> $null; $bothCode = $LASTEXITCODE
+    $ap = ($null | & $Exe cycles --plan --apply --cycle 1 --db $P0.Db --library-db none 2>&1 | Out-String)
+  } finally { Pop-Location }
+  Check 'd1 default, a knot R3 refuses: no note, byte-identical to --no-hub-surface' (($kd -eq $ko) -and ($kd -notmatch 'recipe R3') -and ($kd -match '## Cycle 1:')) $kd
+  $wh = (Get-HubPlan $W).Out
+  Check 'd2 default, a hub group R3 plans but cannot break (control: --hub-surface shows "the group stays"): the planner''s plan, byte-identical to --no-hub-surface' ((Has $wh 'the group stays -- 1 spoke->hub edges remain') -and ($wd -eq $wo) -and ($wd -notmatch 'recipe R3')) $wd
+  Check 'd3 --hub-surface with --no-hub-surface: exit 2' ($bothCode -eq 2) "exit=$bothCode"
+  Check 'd4 --plan --apply without --hub-surface writes nothing' (((Get-SrcHash $P0.Root) -eq $p0h) -and -not (Test-Path (Join-Path $P0.Root 'HubMain.Hub.pas'))) $ap
+} finally {
   if (-not $KeepWorkDir) {
     for ($i = 0; ($i -lt 15) -and (Test-Path -LiteralPath $WorkDir); $i++) {
       try { [IO.Directory]::Delete($WorkDir, $true) } catch { Start-Sleep -Seconds 2 }
