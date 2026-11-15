@@ -17,7 +17,7 @@ const
   /// This unit is the right home because it is the one both sides already use:
   /// DRagLint.LSP.Server uses Core.Model, and CLI uses LSP.Server, so a
   /// constant here reaches both with no new dependency and no cycle.</remarks>
-  DRAGLINT_VERSION = '1.50.0-alpha';
+  DRAGLINT_VERSION = '1.51.0-alpha';
 
   /// <summary>The identity of what this build EXTRACTS from a byte sequence.
   /// Part of the indexer fingerprint; <see cref="DRAGLINT_VERSION"/> is not.
@@ -281,10 +281,14 @@ const
     * Core.Indexer: a uses-fragment include (every file_includes site in_uses = 1) is not a parse error
       -- no DIAG, no per-file error count, not in parse-errors=; the verdict no longer depends on the
       walk order (lanes RINC item 2, RINC2 c). }
-  { next bump (wave v151, 1.51; the constant is raised once at lane/v151-int step 3):
+  { 1.38.0 -> 1.39.0 (2026-11-14, 1.51, lane/v151-int -- ONE bump for wave v151):
     * grammar: tree-sitter-delphi13 v1.4.12 (supersedes v1.4.10 above) -- declStringCodePage and
-      classBodyOrphan shapes are read by Parser.Delphi13 (lane GR11). }
-  DRAGLINT_EXTRACTOR_VERSION = '1.38.0-alpha';
+      classBodyOrphan shapes are read by Parser.Delphi13 (lane GR11).
+    * facts: an interface GUID literal is stored in symbols.signature, the noreturn directive is
+      read, and a DI Register call no longer emits an unresolved fact (lane EXT).
+    * include fragments: method bodies inside a code include are emitted as symbols, refs inside an
+      include are bound in the host scope (lane INC; the b87964a0e workaround is gone). }
+  DRAGLINT_EXTRACTOR_VERSION = '1.39.0-alpha';
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
   /// Deliberately SEPARATE from <see cref="DRAGLINT_EXTRACTOR_VERSION"/>.</summary>
@@ -539,7 +543,12 @@ const
   /// to that declaration as a member of the host unit (TCallResolver.BuildIncludeScope over the new
   /// readers GetIncludeHosts / GetIncludeTopLevelSymbols; interface includes are visible to users,
   /// implementation includes are not; lane 152c RINC).</para>
-  DRAGLINT_RESOLVER_VERSION = '1.26.0-alpha';
+  /// <para>1.26.0-alpha -&gt; 1.27.0-alpha (2026-11-14, 1.51, rides the 1.39.0 extractor
+  /// re-parse): purity and effect summaries follow calls into library units (lane LIBFX,
+  /// DRAGLINT_LIBRARY_EFFECTS=0 opts out); refs inside a code include bind in each host scope and
+  /// are kept only when every host agrees, and a forward type ref binds the completing declaration
+  /// (lane INC).</para>
+  DRAGLINT_RESOLVER_VERSION = '1.27.0-alpha';
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
   /// the ghost-compile journal that first created the folder.</summary>
