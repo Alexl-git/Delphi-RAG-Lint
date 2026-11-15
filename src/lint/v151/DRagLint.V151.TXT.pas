@@ -46,12 +46,27 @@ type
 
 implementation
 
-{ The lane's helpers live in DRagLint.V151.TXT.Support; name it in an
-  implementation uses clause here once it declares something. }
+uses
+  System.Classes
+  , System.IOUtils
+  , DRagLint.Core.Encoding
+  , DRagLint.V151.TXT.Support
+  ;
 
 class procedure TV151TXTRules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
-  { no rules yet }
+  ADecls.Add(V151Rule('bidi-control', 'security', 'warning',
+    'Bidirectional control character in the source: the code can read differently from how it compiles'));
+  ADecls.Add(V151Rule('invisible-char', 'security', 'warning',
+    'Invisible or zero-width character in the source text'));
+  ADecls.Add(V151Rule('control-char', 'bug-patterns', 'warning',
+    'Control character or invalid UTF-8 byte in the source text'));
+  ADecls.Add(V151Rule('todo-comment', 'other', 'hint',
+    'Comment starts with an open-work marker (TODO, FIXME)', False));
+  ADecls.Add(V151Rule('file-header', 'policy', 'hint',
+    'File does not start with the header from drag-lint-header.txt', False));
+  ADecls.Add(V151Rule('hardcoded-string', 'other', 'hint',
+    'String literal with text for people in a statement: use a resourcestring', False));
 end;
 
 class function TV151TXTRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
@@ -65,8 +80,37 @@ begin
 end;
 
 class function TV151TXTRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;
+var
+  Found: TList<TLintFinding>;
+  Wants: TTXTCharWants;
+  Utf8: TBytes;
+  HadBom, IsPas: Boolean;
+  Src: string;
 begin
   Result:= nil;
+  if (Length(ABytes) = 0) or TxtIsBinaryDfm(ABytes) then Exit;
+  IsPas:= SameText(ExtractFileExt(AFilePath), '.pas');
+  Wants.Control:= ACtx.Wants('control-char');
+  Wants.Bidi   := ACtx.Wants('bidi-control');
+  Wants.Invis  := ACtx.Wants('invisible-char');
+  Found:= TList<TLintFinding>.Create;
+  try
+    Utf8:= EnsureUtf8Bytes(ABytes);
+    HadBom:= (Length(ABytes) >= 3) and (ABytes[0] = $EF) and (ABytes[1] = $BB) and (ABytes[2] = $BF);
+    if Wants.Control or Wants.Bidi or Wants.Invis then
+      TxtScanChars(Utf8, HadBom, AFilePath, Wants, Found);
+    if IsPas and (ACtx.Wants('todo-comment') or ACtx.Wants('hardcoded-string') or ACtx.Wants('file-header')) then
+    begin
+      Src:= TEncoding.UTF8.GetString(TxtSanitizeUtf8(Utf8));
+      if ACtx.Wants('todo-comment') or ACtx.Wants('hardcoded-string') then
+        TxtScanText(Src, AFilePath, ACtx.Wants('todo-comment'), ACtx.Wants('hardcoded-string'), Found);
+      if ACtx.Wants('file-header') then
+        TxtCheckHeader(Src, AFilePath, Found);
+    end;
+    Result:= Found.ToArray;
+  finally
+    Found.Free;
+  end;
 end;
 
 class function TV151TXTRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
