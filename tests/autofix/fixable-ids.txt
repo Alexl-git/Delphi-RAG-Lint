@@ -111,3 +111,5 @@ empty-procedure-body
 classname-string-compare
 property-accessor-name
 line-too-long
+destructor-not-nil-safe
+field-free-without-nil
