@@ -76,6 +76,14 @@ const
   { Owners of a created control: an argument here means the owner frees it. }
   OWNER_ARGS: array[0..3] of string = ('self', 'aowner', 'owner', 'powner');
   MAX_CHAIN = 32;
+  { characters after a tear-down attribute line searched for the method it marks }
+  ATTR_LOOKAHEAD = 400;
+  { TryParts phases: before try, try part, except part, finally part }
+  PH_TRY = 1;
+  PH_EXCEPT = 2;
+  PH_FINALLY = 3;
+  { an infix node: lhs, operator, rhs }
+  INFIX_KIDS = 3;
 
 type
   { One class (or record) declared in the unit. }
@@ -98,7 +106,7 @@ type
   end;
 
   { One scan of one unit. }
-  TTypScan = class
+  TTypScan = class  // dl:ok high-response@66e0 -- REVIEWED 2026-11-14 v151 TYP: one scan of one unit for five rules sharing the class/field model; splitting it per rule would duplicate that model
   strict private
     FCtx      : TV151FileCtx;
     FSrc      : TBytes;
@@ -136,7 +144,6 @@ type
     function IsHackOf(const AHack, AOther: string): Boolean;
     function IsCreateExpr(const N: TTSNode; out AClass: string; out AArgs: TArray<string>): Boolean;
     function ContainsRaisingCall(const N: TTSNode): Boolean;
-    function EnclosingRoutine(const N: TTSNode): TTSNode;
     function StatementsOf(const N: TTSNode): TArray<TTSNode>;
     function TryParts(const ATry: TTSNode; out ATryStmts, AFinStmts: TArray<TTSNode>;
       out AIsFinally: Boolean): Boolean;
@@ -374,13 +381,13 @@ begin
   begin
     var Clean: string:= Trim(StringReplace(StringReplace(Nm, 'const ', '', [rfIgnoreCase]), 'var ', '', [rfIgnoreCase]));
     Clean:= Trim(StringReplace(Clean, 'out ', '', [rfIgnoreCase]));
-    if (Clean = '') or (Pos(' ', Clean) > 0) or (Pos('[', Clean) > 0) then Continue;
+    if (Clean = '') or Clean.Contains(' ') or Clean.Contains('[') then Continue;
     AMap.AddOrSetValue(LowerCase(Clean), T);
     if ARaw <> nil then ARaw.AddOrSetValue(LowerCase(Clean), Clean);
   end;
 end;
 
-procedure TTypScan.CollectClass(const ADeclType: TTSNode);
+procedure TTypScan.CollectClass(const ADeclType: TTSNode);  // dl:ok cyclomatic-complexity@0bb4, cognitive-complexity@ad2f -- REVIEWED 2026-11-13 v151 TYP: one pass over a class declaration, one branch per member kind; splitting it scatters the member bookkeeping
 var
   TyNode, Cls, K, S: TTSNode;
   C                : TTypClass;
@@ -404,10 +411,8 @@ begin
   C.Name    := LeafType(C.RawName);
   C.IsRecord:= HasKeyword(Cls, 'kRecord') or HasKeyword(Cls, 'kObject');
   for I:= 0 to Cls.NamedChildCount - 1 do
-    if Cls.NamedChild(I).NodeType = 'typeref' then
-    begin
-      if C.Parent = '' then C.Parent:= LeafType(NodeStr(Cls.NamedChild(I)));
-    end;
+    if (Cls.NamedChild(I).NodeType = 'typeref') and (C.Parent = '') then
+      C.Parent:= LeafType(NodeStr(Cls.NamedChild(I)));
   { A first heritage entry that is an interface means the parent is TObject. }
   if (C.Parent <> '') and (FIntfs.ContainsKey(C.Parent) or (C.Parent = 'iinterface') or (C.Parent = 'iunknown')) then
     C.Parent:= '';
@@ -471,7 +476,7 @@ begin
     if ContainsText(Lo, '[TearDown') then
     begin
       var Idx: Integer:= Txt.IndexOf(Lo);
-      var Rest: string:= Copy(Txt, Idx + Length(Lo) + 1, 400);
+      var Rest: string:= Copy(Txt, Idx + Length(Lo) + 1, ATTR_LOOKAHEAD);
       var Words: TArray<string>:= Rest.Split([' ', #13, #10, '(', ';', ':'], TStringSplitOptions.ExcludeEmpty);
       for J:= 0 to Length(Words) - 2 do
         if SameText(Words[J], 'procedure') or SameText(Words[J], 'function') then
@@ -519,8 +524,9 @@ begin
   if Leaf = '' then Exit(0);
   if FKindMemo.TryGetValue(Leaf, Result) then Exit;
   Result:= 0;
-  if FClasses.ContainsKey(Leaf) then
-    Result:= if FClasses[Leaf].IsRecord then 0 else 1
+  var Cl: TTypClass;
+  if FClasses.TryGetValue(Leaf, Cl) then
+    Result:= if Cl.IsRecord then 0 else 1
   else if FIntfs.ContainsKey(Leaf) then
     Result:= 2
   else
@@ -530,7 +536,7 @@ begin
       K:= -1;
       for S in Store.FindSymbolsByExactName(Leaf) do
       begin
-        if not (S.Kind in [skClass, skInterface, skRecord, skEnum, skTypeAlias]) then Continue;
+        if S.Kind not in [skClass, skInterface, skRecord, skEnum, skTypeAlias] then Continue;
         var Ki: Integer:= if S.Kind = skClass then 1 else if S.Kind = skInterface then 2 else 0;
         if K = -1 then K:= Ki
         else if K <> Ki then K:= 0;
@@ -552,7 +558,7 @@ begin
   if K <> 0 then Exit(K = 2);
   { the I-prefix test needs the name's own case: LeafType lower-cases it }
   var Raw: string:= Trim(AType);
-  if Pos('<', Raw) > 0 then Raw:= Copy(Raw, 1, Pos('<', Raw) - 1);
+  if Raw.Contains('<') then Raw:= Copy(Raw, 1, Pos('<', Raw) - 1);
   Raw:= Copy(Raw, LastDelimiter('.', Raw) + 1, MaxInt);
   Result:= LooksLikeInterfaceName(Raw) and not FClasses.ContainsKey(LeafType(AType));
 end;
@@ -722,7 +728,7 @@ end;
 
 { Can evaluating N raise? Any call except inherited, the safe RTL calls, casts to a
   type, and the creation of a raising-free RTL class. }
-function TTypScan.ContainsRaisingCall(const N: TTSNode): Boolean;
+function TTypScan.ContainsRaisingCall(const N: TTSNode): Boolean;  // dl:ok too-many-exit-points@8d4a -- REVIEWED 2026-11-13 v151 TYP: guard clauses, each one a call shape that can or cannot raise
 var
   L   : TList<TTSNode>;
   K   : TTSNode;
@@ -765,12 +771,6 @@ begin
   end;
 end;
 
-function TTypScan.EnclosingRoutine(const N: TTSNode): TTSNode;
-begin
-  Result:= N;
-  while (not Result.IsNull) and (Result.NodeType <> 'defProc') do Result:= Result.Parent;
-end;
-
 { The statement nodes directly inside a block / statements list / try part. }
 function TTypScan.StatementsOf(const N: TTSNode): TArray<TTSNode>;
 var
@@ -804,20 +804,20 @@ begin
   for I:= 0 to ATry.ChildCount - 1 do
   begin
     K:= ATry.Child(I);
-    if K.NodeType = 'kTry' then Phase:= 1
-    else if K.NodeType = 'kExcept' then Phase:= 2
+    if K.NodeType = 'kTry' then Phase:= PH_TRY
+    else if K.NodeType = 'kExcept' then Phase:= PH_EXCEPT
     else if K.NodeType = 'kFinally' then
     begin
-      Phase:= 3;
+      Phase:= PH_FINALLY;
       AIsFinally:= True;
     end
     else if K.NodeType = 'statements' then
     begin
-      if Phase = 1 then ATryStmts:= ATryStmts + StatementsOf(K)
-      else if Phase = 3 then AFinStmts:= AFinStmts + StatementsOf(K);
+      if Phase = PH_TRY then ATryStmts:= ATryStmts + StatementsOf(K)
+      else if Phase = PH_FINALLY then AFinStmts:= AFinStmts + StatementsOf(K);
     end
-    else if K.IsNamed and (K.NodeType <> 'kEnd') and (Phase = 1) then ATryStmts:= ATryStmts + [K]
-    else if K.IsNamed and (K.NodeType <> 'kEnd') and (Phase = 3) then AFinStmts:= AFinStmts + [K];
+    else if K.IsNamed and (K.NodeType <> 'kEnd') and (Phase = PH_TRY) then ATryStmts:= ATryStmts + [K]
+    else if K.IsNamed and (K.NodeType <> 'kEnd') and (Phase = PH_FINALLY) then AFinStmts:= AFinStmts + [K];
   end;
 end;
 
@@ -892,7 +892,7 @@ var
       var NamePart: string:= if Colon > 0 then Copy(Part, 1, Colon - 1) else Part;
       var Names: TArray<string>:= NamePart.Split([',']);
       var Ty: string:= if Colon > 0 then Copy(Part, Colon + 1, MaxInt) else '';
-      if Pos('=', Ty) > 0 then Ty:= Copy(Ty, 1, Pos('=', Ty) - 1);
+      if Ty.Contains('=') then Ty:= Copy(Ty, 1, Pos('=', Ty) - 1);
       if (AIndex >= Idx) and (AIndex < Idx + Length(Names)) then
       begin
         AType:= Trim(Ty);
@@ -922,9 +922,9 @@ begin
   try
     GatherWalk(FRoot, True, ['declProc'], L);
     for D in L do
-      if SameText(Trim(NodeStr(D.ChildByField('name'))), Nm) or
-         EndsText('.' + Nm, Trim(NodeStr(D.ChildByField('name')))) then
-        if not Check(NodeStr(D)) then Exit(False);
+      if (SameText(Trim(NodeStr(D.ChildByField('name'))), Nm) or
+          EndsText('.' + Nm, Trim(NodeStr(D.ChildByField('name'))))) and not Check(NodeStr(D)) then
+        Exit(False);
   finally
     L.Free;
   end;
@@ -932,8 +932,8 @@ begin
   begin
     if Store = nil then Continue;
     for S in Store.FindSymbolsByExactName(Nm) do
-      if S.Kind in [skMethod, skProcedure, skFunction, skConstructor] then
-        if not Check(S.Signature) then Exit(False);
+      if (S.Kind in [skMethod, skProcedure, skFunction, skConstructor]) and not Check(S.Signature) then
+        Exit(False);
   end;
   Result:= Found > 0;
 end;
@@ -959,7 +959,7 @@ begin
     begin
       if (K.NodeType = 'exprAs') or (K.NodeType = 'exprBinary') then
       begin
-        if (K.NamedChildCount >= 3) and SameText(Trim(NodeStr(K.NamedChild(0))), 'self') and
+        if (K.NamedChildCount >= INFIX_KIDS) and SameText(Trim(NodeStr(K.NamedChild(0))), 'self') and
            (K.NamedChild(1).NodeType = 'kAs') and IsInterfaceType(NodeStr(K.NamedChild(2))) then
           Exit(True);
       end
@@ -968,8 +968,8 @@ begin
         if Canon(NodeStr(K.ChildByField('rhs'))) <> 'self' then Continue;
         var Lhs: string:= Canon(NodeStr(K.ChildByField('lhs')));
         Ty:= '';
-        if not ALocals.TryGetValue(Lhs, Ty) then
-          if FClasses.TryGetValue(AClass, C) then C.Fields.TryGetValue(Lhs, Ty);
+        if (not ALocals.TryGetValue(Lhs, Ty)) and FClasses.TryGetValue(AClass, C) then
+          C.Fields.TryGetValue(Lhs, Ty);
         if (Ty <> '') and IsInterfaceType(Ty) then Exit(True);
       end
       else
@@ -1033,7 +1033,6 @@ begin
       end;
   end;
   { Case 2: a TInterfacedObject descendant after inherited AfterConstruction. }
-  Interfaced:= False;
   if not OwnCount then
   begin
     if Meth <> 'afterconstruction' then Exit;
@@ -1215,7 +1214,7 @@ begin
       end
       else
         Cond:= Canon(NodeStr(N.ChildByField('condition')));
-      if ContainsStr(Cond, 'assigned(' + AField + ')') or ContainsStr(Cond, 'assigned(self.' + AField + ')') or
+      if ContainsStr(Cond, 'assigned(' + AField + ')') or ContainsStr(Cond, 'assigned(self.' + AField + ')') or  // dl:ok boolean-expression-complexity@cd56 -- REVIEWED 2026-11-13 v151 TYP: the six spellings of a nil test of one field; naming each adds nothing
          ContainsStr(Cond, AField + '<>nil') or ContainsStr(Cond, AField + '=nil') or
          ContainsStr(Cond, 'nil<>' + AField) or ContainsStr(Cond, 'nil=' + AField) then
         Exit(True);
@@ -1241,8 +1240,7 @@ begin
     Gather(BodyOf(ARoutine), ['exprDot', 'exprSubscript'], L);
     for N in L do
     begin
-      if N.NodeType = 'exprDot' then Lhs:= N.ChildByField('lhs')
-      else Lhs:= N.ChildByField('entity');
+      Lhs:= if N.NodeType = 'exprDot' then N.ChildByField('lhs') else N.ChildByField('entity');
       if Lhs.IsNull then Continue;
       if not FieldOf(AClass, NodeStr(Lhs), Fld) then Continue;
       if not ASuspect.TryGetValue(Fld, Why) then Continue;
@@ -1255,7 +1253,7 @@ begin
       var Msg: string:= Format('%s %s, so when a constructor raises it is still nil while the destructor runs -- ' +
         '%s then raises an access violation that hides the first exception; test it with Assigned first',
         [C.FieldRaw[Fld], Why, Trim(NodeStr(N))]);
-      if AViaName <> '' then Msg:= Msg + Format(' (%s is called only from the destructor)', [AViaName]);
+      if AViaName <> '' then Msg:= Msg + Format(' (%s is called only from the destructor)', [AViaName]);  // dl:ok concat-in-loop@edd3 -- REVIEWED 2026-11-13 v151 TYP: one append per finding message, at most once per finding
       Emit(RULE_DTOR_NIL_SAFE, 'warning', N, Msg, C.RawName + '.' + C.FieldRaw[Fld]);
     end;
   finally
@@ -1338,7 +1336,7 @@ end;
 { 1 = AStmt sets AField on every path through it (a direct assignment, or a call
   of a method of the class that assigns it); 2 = it ends the routine (Exit / raise);
   0 = neither. }
-function TTypScan.StmtSetsField(const AStmt: TTSNode; const AClass, AField: string;
+function TTypScan.StmtSetsField(const AStmt: TTSNode; const AClass, AField: string;  // dl:ok too-many-exit-points@9b5d -- REVIEWED 2026-11-13 v151 TYP: guard clauses, one per statement kind that decides the answer
   const ASetters: TDictionary<string, Boolean>): Integer;
 var
   Fld, Nm: string;
@@ -1376,10 +1374,10 @@ begin
     Exit;
   end;
   { an if-else that sets it in both branches sets it }
-  if AStmt.NodeType = 'ifElse' then
-    if (StmtSetsField(AStmt.ChildByField('then'), AClass, AField, ASetters) = 1) and
-       (StmtSetsField(AStmt.ChildByField('else'), AClass, AField, ASetters) = 1) then
-      Exit(1);
+  if (AStmt.NodeType = 'ifElse') and
+     (StmtSetsField(AStmt.ChildByField('then'), AClass, AField, ASetters) = 1) and
+     (StmtSetsField(AStmt.ChildByField('else'), AClass, AField, ASetters) = 1) then
+    Exit(1);
   { any other compound statement: an Exit or raise inside leaves on a path that
     has not set it }
   var Inner: TList<TTSNode>:= TList<TTSNode>.Create;
@@ -1409,7 +1407,7 @@ var
 begin
   Result:= False;
   Cur:= AStmt;
-  while (not Cur.IsNull) and not (Cur = ABody) do
+  while (not Cur.IsNull) and not (Cur = ABody) do  // dl:ok nonminimal-bool@4ac4 -- REVIEWED 2026-11-13 v151 TYP: TTSNode declares Equal but no NotEqual operator; <> does not compile
   begin
     Par:= Cur.Parent;
     if Par.IsNull then Exit;
@@ -1451,7 +1449,7 @@ begin
     if ClassOf(R) <> AClass then Continue;
     Meth:= MethodOf(R);
     { a close handler that sets Action := caFree hands the form to its destruction }
-    if IsDtor(R) or (Meth = 'beforedestruction') or EndsText('destroy', Meth) or
+    if IsDtor(R) or (Meth = 'beforedestruction') or EndsText('destroy', Meth) or  // dl:ok boolean-expression-complexity@912e -- REVIEWED 2026-11-13 v151 TYP: the list of exempt routine kinds, each a named case in the rule doc
        ((C <> nil) and C.TearDowns.ContainsKey(Meth)) or ContainsStr(Canon(NodeStr(BodyOf(R))), 'action:=cafree') then
       Result.AddOrSetValue(Meth, True);
   end;
@@ -1539,7 +1537,7 @@ begin
           St:= TDictionary<string, Boolean>.Create;
           Setters.Add(Cls + '|' + Fld, St);
           for var R2: TTSNode in FRoutines do
-            if (ClassOf(R2) = Cls) and not (R2 = R) then
+            if (ClassOf(R2) = Cls) and not (R2 = R) then  // dl:ok nonminimal-bool@b1df -- REVIEWED 2026-11-13 v151 TYP: TTSNode declares Equal but no NotEqual operator; <> does not compile
               for var S2: TTSNode in StatementsOf(BodyOf(R2)) do
                 if StmtSetsField(S2, Cls, Fld, St) = 1 then
                 begin
@@ -1564,7 +1562,7 @@ end;
 
 { ---- field-ownership-unclear ---------------------------------------------- }
 
-procedure TTypScan.CheckOwnershipUnclear;
+procedure TTypScan.CheckOwnershipUnclear;  // dl:ok cyclomatic-complexity@67bc, cognitive-complexity@6694 -- REVIEWED 2026-11-13 v151 TYP: one walk that collects created, freed and handed-out facts per class in a single pass over its routines
 var
   R         : TTSNode;
   Cls, Fld  : string;
@@ -1626,7 +1624,7 @@ begin
             begin
               var Lhs: string:= Canon(NodeStr(N.ChildByField('lhs')));
               if Lhs = 'result' then HandedOut.AddOrSetValue(Fld, 'returned')
-              else if (Pos('.', Lhs) > 0) and not HandedOut.ContainsKey(Fld) then
+              else if Lhs.Contains('.') and not HandedOut.ContainsKey(Fld) then
                 HandedOut.AddOrSetValue(Fld, 'stored in ' + Trim(NodeStr(N.ChildByField('lhs'))));
             end;
           end

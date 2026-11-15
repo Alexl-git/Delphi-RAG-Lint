@@ -64,17 +64,17 @@ begin
   Result:= TypCheckFile(ACtx);
 end;
 
-class function TV151TYPRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV151TYPRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@a8da -- REVIEWED 2026-11-13 v151 TYP: dispatcher signature; lane TYP has no form, raw-byte or project-wide check
 begin
   Result:= nil;
 end;
 
-class function TV151TYPRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;
+class function TV151TYPRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;  // dl:ok unused-parameter@075e -- REVIEWED 2026-11-13 v151 TYP: dispatcher signature; lane TYP has no form, raw-byte or project-wide check
 begin
   Result:= nil;
 end;
 
-class function TV151TYPRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
+class function TV151TYPRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@9248 -- REVIEWED 2026-11-13 v151 TYP: dispatcher signature; lane TYP has no form, raw-byte or project-wide check
 begin
   Result:= nil;
 end;

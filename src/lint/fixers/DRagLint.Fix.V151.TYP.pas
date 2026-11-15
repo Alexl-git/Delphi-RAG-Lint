@@ -54,8 +54,8 @@ var
   T: string;
 begin
   T:= Trim(ALine);
-  Result:= (T <> '') and (T[Length(T)] = ';') and (Pos(';', T) = Length(T)) and (not ContainsStr(T, '//')) and
-    (not ContainsStr(T, '{')) and (not ContainsStr(T, '(*'));
+  var HasComment: Boolean:= ContainsStr(T, '//') or ContainsStr(T, '{') or ContainsStr(T, '(*');
+  Result:= (T <> '') and (Pos(';', T) = Length(T)) and not HasComment;
 end;
 
 { The line before ALine (1-based) ends a statement or opens a statement list, so
