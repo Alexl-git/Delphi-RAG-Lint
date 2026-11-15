@@ -4,7 +4,7 @@
   "group": "linting",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "1.50.0-alpha",
+  "since": "1.51.0-alpha",
   "summary": "Lint rules for exception handlers and inherited calls: shadowed handlers, hand-freed exceptions, wrong or missing inherited, Destroy for Free",
   "intro": "Read this to see what each exception and inherited rule reports, which ship ON or OFF, and why inherited-order is OFF by default.",
   "wikiPage": "exception-and-inherited-rules",
@@ -22,7 +22,7 @@
   "verified": {
     "date": "2026-11-14",
     "by": "ENGINE",
-    "build": "1.50.0-alpha",
-    "surfaceHash": "2c19b642e8fb3929f18b3f4a4b5067702af6518dc27d0ffe0d644ff5550bd8c8"
+    "build": "1.51.0-alpha",
+    "surfaceHash": "274839f13d00cd88a96a34c1f16b90d87bc39c6d2c163b291492016dc2ed6a12"
   }
 }

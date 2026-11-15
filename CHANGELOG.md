@@ -3,6 +3,62 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## v1.51.0-alpha -- date TBD
+
+Wave v151 (39 lanes). 423 rules (was 317): 343 enabled by default (was 263), 125 with an auto-fix (was 113),
+310 built-in and 113 external `.scm`. One re-parse: extractor 1.38.0 -> 1.39.0-alpha, resolver 1.26.0 -> 1.27.0-alpha.
+
+### Breaking
+- `lint --fix --apply` is compile-gated by default: the fixed unit is rebuilt and the edit rolled back when dcc
+  reports a new error; every compiler message is reported and new warnings / hints are diffed (GATE).
+- 106 new rules, 80 of them ON by default: lint-all counts rise on existing projects. `rules\compliance.json`
+  labels the new security and bug rules with CWE ids (`weak` where the mapping is approximate).
+
+### Index, extractor and resolver (one re-parse)
+- grammar tree-sitter-delphi13 v1.4.12: declStringCodePage and classBodyOrphan shapes are extracted (GR11).
+- Interface GUID literals are stored (symbols.signature), the `noreturn` directive is read, a Spring DI
+  Register call no longer leaves an unresolved fact (EXT).
+- Code includes: method bodies inside an include are symbols; refs inside an include bind in the host scope,
+  once per host, and are kept only when every host agrees; forward type refs bind the completing declaration (INC).
+- Purity and effect summaries follow calls into library units (LIBFX; `DRAGLINT_LIBRARY_EFFECTS=0` opts out);
+  heavy-initialization follows library call bindings and heavy library types (HEAVYLIB).
+- A project index keeps every closure unit (`--exclude-under` limits library walks only) and reports unlisted
+  units at index time; `unit-not-in-dpr` sees dfm classes, qualified uses and by-name class lookups (EXCL).
+
+### New lint rules (by lane; `rules\README.md` lists all 106)
+- Threads: anonymous-thread-not-started, synchronize-in-destructor, thread-loop-without-terminated,
+  thread-use-after-free-on-terminate, threadvar-managed, queue-nil-in-package (THR-A); parallel-for-shared-write,
+  thread-unsafe-increment, blocking-call-in-main-thread, task-exception-unobserved (THR-B).
+- Memory and strings: pchar-of-temporary, createprocess-readonly-commandline, raw-memory-leak, handle-leak,
+  managed-type-raw-memory, char-count-as-bytes, char-to-pchar, first-char-address (MEM); seven RTL string / path /
+  conversion rules (RTL-STR); six collection / RTL rules incl. dictionary-get-without-check and
+  random-without-randomize (RTL-COLL).
+- Types and ownership: unrelated-class-cast, self-as-interface-in-constructor, destructor-not-nil-safe,
+  field-free-without-nil, field-ownership-unclear (TYP); ten OO rules incl. equals-without-gethashcode and a
+  cross-unit duplicate-interface-guid (OO); nine exception / inherited-call rules (EXC).
+- Forms and components: nine form-vs-.dfm rules (DFM-A), six .dfm data-binding rules (DFM-B), nine component /
+  OTA rules (CMP), three dataset / transaction rules (DS).
+- Whole program and text: seven app-level rules incl. tls-verification-disabled and weak-cipher (APP); six raw-text
+  rules incl. bidi-control and invisible-char (TXT); eleven style / loop rules (STY).
+
+### Widened rules and fixes
+- Flow: used-before-assignment, overwrite-before-read, write-only-local, object-leak and double-free read more
+  shapes (WID-FLOW); magic-literal, division-by-zero-literal, repeated-else-if-condition, ui-access-in-thread,
+  missing-inherited-ctor/-dtor and interface-object-mixing read more constructs (WID-AST); seven built-in rules
+  widened, three with new autofixes (WID-SCM); loop-condition-invariant, begin-end-pair-not-in-finally,
+  constant-index-out-of-range (WID-CF); unused-global covers implementation-only routines (WID-PROJ).
+- empty-on-handler accepts comments after `do`; review-marker-malformed names an unknown rule id with a
+  did-you-mean (RMU). rtti-unavailable gains two generic sub-kinds (RTTI2).
+- Nine new fixers (FIX-OLD), incl. repeated-else-if-condition, unused-global and the with-statement family
+  routed to the proven unwith.
+
+### Refactoring and CLI
+- `extract-interface --retype-consumer` (REPARENT); form and component rename through rename-symbol (DFMREN);
+  `cycles --plan` uses the hub surface by default (`--no-hub-surface`), hub apply proven on a Loader copy (I10);
+  narrow-param and finalization-order proofs (NARROW, FINPROOF).
+- `serve` opens the project DB plus every library section and every explicit `--db` (SERVE).
+- Every dcc message is kept and passed through under its own code (`query hints`, LSP `source: "dcc"`);
+  wiki page compiler-messages (DOC-DCC).
 ## v1.50.0-alpha -- 2026-11-13
 
 Everything since v1.46.0-alpha (2026-11-07): waves 147, 148, 149, 151 and 152, released together as 1.50.0-alpha (owner ruling 2026-11-11; the unreleased 1.47.0 / 1.48.0 / 1.49.0 sections are folded in here). Versions: extractor -> 1.34.0 (147) -> 1.35.0 (149) -> 1.36.0-alpha (151); resolver -> 1.22.0 (147) -> 1.23.0 (149) -> 1.24.0-alpha (151); index SCHEMA_VERSION 23 -> 25 at 151 (two additive tables; SCHEMA_READ_MIN stays 23; 147's refs.external_kind and 149's file_includes / dfm_objects / pp_regions are additive without a schema bump). ONE re-parse of every DB after the deploy. Grammar v1.4.4 + v1.4.5 + v1.4.7, tree-sitter-dfm 1.2.0.

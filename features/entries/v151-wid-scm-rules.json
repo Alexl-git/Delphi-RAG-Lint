@@ -4,7 +4,7 @@
   "group": "linting",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "1.50.0-alpha",
+  "since": "1.51.0-alpha",
   "summary": "Seven built-in rules read more constructs; empty-finally, format-string-not-formatted and shared-marker-legacy-shape gain autofixes",
   "intro": "Read this when you want to know which constructs the 1.51 lint rules newly report or exempt, and which new fixes lint --fix offers.",
   "wikiPage": "v151-wid-scm-rules",
@@ -16,8 +16,9 @@
   ],
   "audience": "both",
   "verified": {
-    "date": "2026-11-13",
-    "by": "alexanderl",
-    "build": "1.50.0-alpha"
+    "date": "2026-11-14",
+    "by": "ENGINE",
+    "build": "1.51.0-alpha",
+    "surfaceHash": "de319179f8b6b2ffbdba5a675a1f550133807d68a0339e632b8014cd5442cafc"
   }
 }

@@ -479,3 +479,118 @@ run on the `lint-all --db` / `lint-project --db` path (store-backed). All are `w
 | `unused-enum-value` | hint | `lint-all --db` / `lint-project --db` | ON by default. An enum value no ref names, in a type with at least one named value and no implicit use (Low/High, Succ/Pred/Inc/Dec, a cast, `Ord`, RTTI, a streamed property). A FILLER value named for its own ordinal (`Dummy0` at 0) is exempt. |
 
 Both rules honour ONE marker on the enum TYPE declaration line -- `// dl:ok unused-enum-value -- <reason>` or `// dl:ok enum-ordinal-cast -- <reason>` -- which reviews every finding of that rule for the type, in any unit (findings carry the type as `ScopeFile` / `ScopeLine`). `lint-all` reports such a marker `review-marker-unused` when it suppresses nothing; `lint <file>` does not judge it. Wiki: `Type-Level-Review-Marker`.
+
+## Shipped rules (v1.51.0-alpha -- wave v151)
+
+106 new rules (80 ON by default, 19 of them external `.scm`). Each has a fixture under
+`tests\lint\` (or a `tests\lint-project\` runner for store-backed rules). `drag-lint rules --json` is the
+authoritative catalog; `rules\compliance.json` carries their CWE labels.
+
+| Rule id | Category | Severity | Default | Source | Title |
+|---------|----------|----------|---------|--------|-------|
+| `anonymous-thread-not-started` | bug-patterns | warning | ON | built-in | Anonymous thread is created but never started |
+| `blocking-call-in-main-thread` | bug-patterns | warning | ON | built-in | Form or frame method waits with no time limit (WaitFor, WaitForSingleObject INFINITE, TTask.WaitForAll, TThread.Sleep) -- the UI freezes |
+| `char-count-as-bytes` | bug-patterns | warning | ON | built-in | Character count used as a byte count |
+| `char-to-pchar` | bug-patterns | warning | ON | `.scm` | PChar of a Char variable: the character code becomes the address. Cast a one-character string instead: PChar(string(C)). |
+| `component-default-mismatch` | bug-patterns | warning | ON | built-in | Property default value differs from the value the constructor sets -- forms that kept the default load the wrong value |
+| `component-missing-free-notification` | bug-patterns | warning | ON | built-in | Component-typed property stores a linked component without FreeNotification -- the field dangles when that component is freed |
+| `component-setter-without-invalidate` | bug-patterns | hint | OFF | built-in | Property setter changes a field Paint reads but never calls Invalidate -- the control shows the old value |
+| `control-char` | bug-patterns | warning | ON | built-in | Control character or invalid UTF-8 byte in the source text |
+| `createprocess-readonly-commandline` | bug-patterns | warning | ON | built-in | CreateProcess with a read-only command line |
+| `dataset-edit-without-post` | bug-patterns | warning | ON | built-in | Dataset Edit/Append/Insert whose record is changed but never posted or cancelled |
+| `delimited-text-without-strict` | bug-patterns | warning | ON | `.scm` | DelimitedText is parsed after Delimiter was set, but StrictDelimiter is never set in this routine: without it the list also splits at every blank and honours the quote character. Set StrictDelimiter := True next to the Delimiter assignment. |
+| `destroy-called-directly` | bug-patterns | warning | ON | built-in | Destroy called instead of Free |
+| `dfm-circular-datasource` | bug-patterns | warning | ON | built-in | Master/detail or data source links in the form file form a cycle |
+| `dfm-control-field-type-mismatch` | bug-patterns | warning | ON | built-in | Data-aware control does not suit the type of the persistent field it is bound to |
+| `dfm-duplicate-binding` | bug-patterns | warning | ON | built-in | Two input controls in the form file are bound to the same data source and field |
+| `dfm-master-without-fields` | bug-patterns | warning | ON | built-in | Dataset has a MasterSource but no MasterFields in the form file |
+| `dfm-required-field-without-control` | bug-patterns | warning | ON | built-in | Required persistent field has no visible data-aware control |
+| `dictionary-get-without-check` | bug-patterns | warning | ON | built-in | Dictionary read with no key check -- raises when the key is missing |
+| `dll-export-unsafe` | bug-patterns | warning | ON | built-in | Exported routine has no calling convention |
+| `duplicate-interface-guid` | bug-patterns | warning | ON | built-in | Two interfaces declare the same GUID |
+| `equals-without-gethashcode` | bug-patterns | warning | ON | built-in | Equals overridden without GetHashCode (or the reverse) |
+| `event-call-without-assigned` | bug-patterns | warning | ON | built-in | Event field called without an Assigned check |
+| `except-handler-order` | bug-patterns | warning | ON | built-in | A later exception handler is shadowed by an earlier one |
+| `exception-freed` | bug-patterns | warning | ON | built-in | Exception object freed by hand in its handler |
+| `filename-compare-case` | bug-patterns | warning | ON | `.scm` | A file or path name is compared with = or <>, which is case-sensitive although Windows file names are not (and the path form may differ by delimiter or relative parts). Compare with SameText (SameFileName where the unit is available) instead. |
+| `first-char-address` | bug-patterns | warning | ON | `.scm` | @S[1] on a string fails for an empty string (range check error under {$R+}, garbage without). Use PChar(S) or Pointer(S) and guard the empty case. |
+| `form-access-before-create` | bug-patterns | warning | ON | built-in | The creation code of an auto-created form or data module reads the global variable of a module the .dpr creates later -- it is still nil |
+| `form-autocreate-and-manual` | bug-patterns | warning | ON | built-in | The .dpr auto-creates a form and the code also assigns a new instance to the same global variable -- the first instance is orphaned |
+| `form-field-type-mismatch` | bug-patterns | warning | ON | built-in | A published form field is declared with a class the form file's object of that name is not -- the field holds an object of another class |
+| `form-field-without-object` | bug-patterns | warning | ON | built-in | A published field of the form class has no object of that name in the form file -- it stays nil after the form loads |
+| `form-object-without-field` | bug-patterns | hint | ON | built-in | An object of the form file has no field in the form class -- code cannot reach it by name and the designer re-adds the field |
+| `form-resource-missing` | bug-patterns | warning | ON | built-in | The unit declares the class of its form file but includes no form resource ({$R *.dfm}) -- creating the form raises EResNotFound |
+| `global-formatsettings-modified` | bug-patterns | warning | ON | `.scm` | The process-wide FormatSettings (or one of the deprecated global format variables) is assigned: every thread and every later conversion sees the change. Keep a local TFormatSettings (TFormatSettings.Create / TFormatSettings.Invariant) and pass it to the conversion instead. |
+| `inherited-form-handler-without-inherited` | bug-patterns | warning | ON | built-in | An inherited form re-declares an event handler of its ancestor form under the same name without calling inherited -- the ancestor's handler no longer runs |
+| `inherited-order` | bug-patterns | warning | OFF | built-in | Destructor calls inherited before freeing its members |
+| `inherited-without-ancestor` | bug-patterns | warning | ON | built-in | inherited in a method no ancestor declares |
+| `inherited-wrong-method` | bug-patterns | warning | ON | built-in | Override calls inherited of a different method |
+| `loop-off-by-one` | bug-patterns | warning | ON | `.scm` | For-loop bound runs one past the last valid index (High/Length/Count used as an upper index, or counting down from the count). |
+| `managed-type-raw-memory` | bug-patterns | warning | ON | built-in | FillChar, Move or GetMem on a managed type |
+| `message-handler-without-inherited` | bug-patterns | warning | ON | built-in | Message handler without inherited or default handler |
+| `missing-inherited-call` | bug-patterns | warning | ON | built-in | Component hook override without inherited |
+| `money-as-float` | bug-patterns | warning | ON | built-in | Money amount held as floating point |
+| `null-compare` | bug-patterns | hint | ON | built-in | Variant compared with Null using = or <> instead of VarIsNull |
+| `parallel-for-shared-write` | bug-patterns | warning | ON | built-in | Parallel loop or task-in-loop body writes a variable declared outside it without a lock -- the iterations race |
+| `path-concat-without-delimiter` | bug-patterns | warning | ON | `.scm` | A folder name without trailing path delimiter is joined to a file or folder name with +, giving a name with the delimiter missing (Dir + 'file.txt' reads 'Dirfile.txt'). Use TPath.Combine(Dir, Name) or IncludeTrailingPathDelimiter(Dir) + Name. |
+| `pchar-of-temporary` | bug-patterns | warning | ON | built-in | PChar of a temporary string is stored or posted |
+| `pos-arguments-swapped` | bug-patterns | warning | ON | `.scm` | The searched-for part comes FIRST in Pos/PosEx/StartsStr/EndsStr and relatives; here a string literal is passed as the text to search, so the arguments look swapped (the call is only true when both are equal). Write Pos('literal', Variable). |
+| `processmessages-in-handler` | bug-patterns | info | OFF | built-in | Application.ProcessMessages directly in an event handler |
+| `processmessages-in-loop` | bug-patterns | warning | ON | `.scm` | Application.ProcessMessages inside a loop lets other handlers (including this one) run mid-loop; move the work to a thread or use a timer, or guard against re-entry. |
+| `queue-nil-in-package` | bug-patterns | warning | ON | built-in | TThread.Queue(nil, ...) in a package unit |
+| `self-as-interface-in-constructor` | bug-patterns | warning | ON | built-in | Self handed out as an interface while construction can still free the object |
+| `self-free-in-event-handler` | bug-patterns | warning | ON | built-in | A form frees itself in its own event handler -- the VCL still uses the object after the handler returns; use Release |
+| `string-index-base` | bug-patterns | warning | ON | `.scm` | String positions are 1-based: Copy/Delete/Insert with index 0 starts before the first character, and Pos never returns -1 (it returns 0 for not found), so a comparison with -1 is always the same answer. Use 1 as the first index and compare Pos with 0. |
+| `stringlist-objects-leak` | bug-patterns | warning | ON | built-in | Object stored in a string list that does not own its objects |
+| `stringlist-unsorted` | bug-patterns | warning | ON | built-in | Find or Duplicates used on a string list that is never sorted |
+| `synchronize-in-destructor` | bug-patterns | warning | ON | built-in | Synchronize called from the destructor of a thread class |
+| `task-exception-unobserved` | bug-patterns | warning | ON | built-in | TTask started with an unguarded body and never waited or read -- an exception raised in it is lost without a trace |
+| `thread-loop-without-terminated` | bug-patterns | warning | ON | built-in | Loop in a thread's Execute path never tests Terminated |
+| `thread-unsafe-increment` | bug-patterns | warning | ON | built-in | Thread code increments a global or class var without a lock -- concurrent Inc/Dec lose updates; use TInterlocked |
+| `thread-use-after-free-on-terminate` | bug-patterns | warning | ON | built-in | Thread used after Start although it frees itself on termination |
+| `threadvar-managed` | bug-patterns | warning | ON | built-in | threadvar of a managed type is never finalized |
+| `transaction-without-rollback` | bug-patterns | warning | ON | built-in | Transaction is started and committed but never rolled back |
+| `ui-call-in-console-or-service` | bug-patterns | warning | ON | built-in | Dialog call in a console program or a Windows service |
+| `unchecked-conversion` | bug-patterns | hint | OFF | `.scm` | User input (a control's Text, a grid cell, ParamStr) is converted straight away: invalid text raises EConvertError. Use TryStrToInt/StrToIntDef (TryStrToFloat, TryStrToDate ...) or wrap the conversion in a try..except that tells the user what is wrong. |
+| `unrelated-class-cast` | bug-patterns | warning | ON | built-in | Hard cast between two classes neither of which descends from the other |
+| `missing-begin-update` | complexity | hint | ON | `.scm` | Items are added to a visual list in a loop without BeginUpdate; wrap the loop in BeginUpdate / try..finally EndUpdate to avoid a repaint per item. |
+| `setlength-in-loop` | complexity | warning | ON | `.scm` | SetLength(A, Length(A) + 1) in a loop reallocates and copies the array on every iteration; size it once up front or grow it in larger steps. |
+| `override-only-inherited` | dead-code | hint | ON | built-in | Override that only calls inherited |
+| `unneeded-forward-declaration` | dead-code | hint | OFF | built-in | Forward declaration that is not needed |
+| `legacy-stack-queue` | modernize | hint | OFF | built-in | Non-generic stack or queue read through a cast |
+| `legacy-tlist` | modernize | hint | OFF | built-in | Non-generic list read through a cast |
+| `component-palette-icon` | other | hint | OFF | built-in | Registered component has no palette bitmap in the .dcr / .res the unit includes |
+| `dunitx-test-without-assert` | other | info | ON | built-in | DUnitX test method that checks nothing |
+| `hardcoded-string` | other | hint | OFF | built-in | String literal with text for people in a statement: use a resourcestring |
+| `todo-comment` | other | hint | OFF | built-in | Comment starts with an open-work marker (TODO, FIXME) |
+| `asm-without-win64-variant` | platform | warning | ON | built-in | asm block without a 64-bit variant |
+| `component-fixed-pixels` | platform | hint | OFF | built-in | Drawing call in a paint / resize routine uses a fixed pixel value -- too small above 96 dpi |
+| `component-hardcoded-color` | platform | hint | OFF | built-in | Paint routine uses a hard-coded colour -- ignores system colours and VCL styles |
+| `control-fixed-bounds` | platform | hint | OFF | built-in | Control bounds set to a fixed pixel value in code -- does not follow screen scaling |
+| `registry-hklm-write` | platform | info | ON | built-in | Registry write below HKEY_LOCAL_MACHINE |
+| `writeln-in-gui-app` | platform | warning | ON | built-in | Write / WriteLn in a program without a console |
+| `contract-unit-declares-class` | policy | info | OFF | built-in | Contract unit (Intf / Interfaces / Contracts) declares a class |
+| `disallowed-dfm-property` | policy | warning | ON | built-in | Form-file property forbidden by the project policy table (disallowed.names entries starting dfm:) |
+| `file-header` | policy | hint | OFF | built-in | File does not start with the header from drag-lint-header.txt |
+| `boolean-assign-if` | refactoring | info | ON | `.scm` | if/else only assigns True and False to the same variable; assign the condition directly (V := Cond, or V := not Cond). |
+| `missing-begin-end` | refactoring | hint | OFF | `.scm` | The body of this if/else/for/while/with is a single statement without begin..end; bracket it so a later added statement stays inside the branch. |
+| `prefer-case` | refactoring | hint | OFF | `.scm` | An if/else-if chain compares the same name with three or more ordinal constants; a case statement states this directly. |
+| `redundant-begin-end` | refactoring | hint | OFF | `.scm` | begin..end around a single statement; the brackets can be removed. |
+| `string-if-chain` | refactoring | hint | OFF | `.scm` | An if/else-if chain compares the same string against three or more literals; a lookup (TDictionary, IndexText + case) reads and extends better. |
+| `trivial-accessor` | refactoring | hint | OFF | built-in | Accessor method only reads or writes a field |
+| `destructor-not-nil-safe` | resource-lifetime | warning | ON | built-in | Destructor dereferences a field that a raising constructor may have left nil |
+| `field-free-without-nil` | resource-lifetime | warning | ON | built-in | Field freed outside the destructor keeps its dangling reference |
+| `field-ownership-unclear` | resource-lifetime | hint | OFF | built-in | Field created by the class, never freed by it and handed out -- ownership unclear |
+| `handle-leak` | resource-lifetime | warning | ON | built-in | Windows handle is not closed |
+| `ota-notifier-not-removed` | resource-lifetime | warning | ON | built-in | IDE notifier / wizard / binding registered through the Open Tools API is never removed -- the IDE calls freed code after unload |
+| `raw-memory-leak` | resource-lifetime | warning | ON | built-in | GetMem or New without release |
+| `bidi-control` | security | warning | ON | built-in | Bidirectional control character in the source: the code can read differently from how it compiles |
+| `invisible-char` | security | warning | ON | built-in | Invisible or zero-width character in the source text |
+| `random-without-randomize` | security | info | ON | built-in | Random is used but the project never calls Randomize |
+| `tls-verification-disabled` | security | warning | ON | built-in | TLS certificate verification is switched off |
+| `weak-cipher` | security | warning | ON | built-in | Broken cipher or mode (DES, 3DES, RC2, RC4, ECB) |
+| `default-parameter` | structure | hint | OFF | built-in | Parameter with a default value |
+| `foreign-form-control-access` | structure | hint | OFF | built-in | Code reaches a control of another unit's form through its global variable (Form2.Edit1) -- the units are coupled to the form layout |
+| `method-order` | structure | hint | OFF | built-in | Method bodies are not in the order of the class declaration |
+| `sql-select-star` | structure | info | OFF | `.scm` | SELECT * returns whatever columns the table has today -- name the columns you need. |
+| `write-only-property` | structure | hint | OFF | built-in | Property has a write accessor but no read accessor |

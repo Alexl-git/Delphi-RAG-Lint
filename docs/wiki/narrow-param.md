@@ -42,7 +42,7 @@ A narrow type outside the unit's scope adds its unit to the section's uses claus
 
 ## Scope and bindings (1.51)
 
-Without `--project` the plan is bounded by the project the index belongs to (the parent of its `_D-RAG` folder): a unit outside it, such as a library unit the compile closure pulled in, is refused `outside-roots`, never planned. `--show-bound` adds, per parameter that reached the member proof, one line (JSON: a `bound` array) per member: the class on the chain that declares it first and why that class was chosen, including whether the index's own binding of the call agrees.
+Without `--project` the plan is bounded by the project the index belongs to (the parent of its `_D-RAG` folder): a unit outside it, such as a library unit the compile closure pulled in, is refused `outside-roots` and left out of the plan. `--show-bound` adds, per parameter that reached the member proof, one line (JSON: a `bound` array) per member: the class on the chain that declares it first and why that class was chosen, including whether the index's own binding of the call agrees.
 
 ## See also
 

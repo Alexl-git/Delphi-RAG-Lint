@@ -4,10 +4,10 @@ title: ghost-check
 summary: Compiles a project with one or more units' content temporarily replaced by their unsaved editor buffers, then restores the original files unchanged
 product: DL
 group: compiler
-order: 90007
+order: 90008
 since: 1.8.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.51.0-alpha
 ---
 
 # ghost-check

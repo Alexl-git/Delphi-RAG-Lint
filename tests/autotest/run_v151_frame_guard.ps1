@@ -13,9 +13,9 @@
 # declared in a lane Catalog in a scratch build makes check 1 fail with 318.
 param(
   [string]$Exe = "third_party\dll-win64\drag-lint.exe",
-  [int]$ExpectTotal = 317,
-  [int]$ExpectFixable = 119,   # FRAME 110 + FIX-OLD 9
-  [int]$ExpectOn = 263
+  [int]$ExpectTotal = 423,
+  [int]$ExpectFixable = 125,   # live at INT FINAL (1.51.0-alpha)
+  [int]$ExpectOn = 343
 )
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path

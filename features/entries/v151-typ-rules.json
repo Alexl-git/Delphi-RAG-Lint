@@ -4,7 +4,7 @@
   "group": "linting",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "1.50.0-alpha",
+  "since": "1.51.0-alpha",
   "summary": "Five rules: unrelated class casts, Self as interface during construction, nil-unsafe destructors, Free without nil, unclear field ownership",
   "intro": "Read this to see what each typing and ownership rule reports, which ship ON, what keeps them silent and which carry a risky autofix.",
   "wikiPage": "typing-and-ownership-rules",
@@ -20,8 +20,9 @@
   ],
   "audience": "both",
   "verified": {
-    "date": "2026-11-13",
-    "by": "alexanderl",
-    "build": "1.50.0-alpha"
+    "date": "2026-11-14",
+    "by": "ENGINE",
+    "build": "1.51.0-alpha",
+    "surfaceHash": "4cd8494f26078b818944a48e30ae21b811bc3d61b156974a04490a796c867192"
   }
 }

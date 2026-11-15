@@ -5,7 +5,7 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.51.0-alpha",
-  "summary": "Every Delphi compiler message (hint, warning, error) is stored per project and passed through to the editor under its own code; our rules that cover the same ground stay, and the docs state where each goes beyond the message",
+  "summary": "Every Delphi compiler message (hint, warning, error) is stored per project and passed through under its own code; overlapping rules say where they go further",
   "intro": "Read this to see how compiler messages reach you and how they relate to drag-lint's own rules. Run a build through refresh-findings or the run_compile_check tool; the messages are stored with their codes, listed by query hints and published to the editor with source dcc. A rule such as unused-local or used-before-assignment overlaps a compiler message and stays, because it runs without a build and goes further in places; the wiki page says where.",
   "wikiPage": "compiler-messages",
   "surfaces": [
@@ -29,5 +29,11 @@
       "ask": "How do compiler messages and drag-lint findings reach the editor together?",
       "command": "drag-lint lsp --proxy --merge-diagnostics"
     }
-  ]
+  ],
+  "verified": {
+    "date": "2026-11-14",
+    "by": "ENGINE",
+    "build": "1.51.0-alpha",
+    "surfaceHash": "757aa7afd6bafe3f0c52e8f203ebcd273aad9fa6b852940b5e04a81deef6e39a"
+  }
 }

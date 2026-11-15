@@ -4,10 +4,10 @@ title: ghost-recover
 summary: Scans a project's hidden D-RAG folder for recovery journals left behind when a ghost-check overlay was interrupted by a crash
 product: DL
 group: compiler
-order: 90008
+order: 90009
 since: 0.64.1-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.51.0-alpha
 ---
 
 # ghost-recover

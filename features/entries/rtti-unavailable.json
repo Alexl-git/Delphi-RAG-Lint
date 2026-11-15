@@ -5,7 +5,7 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.50.0-alpha",
-  "summary": "Project lint rule, OFF by default: declarations that lose classic or extended RTTI (enums without type info, record properties, narrowing directives, generic methods and unstreamable generic properties in a published section)",
+  "summary": "Project lint rule, OFF by default: declarations that lose classic or extended RTTI (typeless enums, record properties, narrowing directives, published generics)",
   "intro": "Read this to see what rtti-unavailable reports and how generated persistence classes keep complete RTTI. It runs in lint-all, lint-project and lint over a project index.",
   "wikiPage": "rtti-unavailable",
   "surfaces": [
@@ -17,9 +17,9 @@
   ],
   "audience": "both",
   "verified": {
-    "date": "2026-11-11",
+    "date": "2026-11-14",
     "by": "ENGINE",
-    "build": "1.50.0-alpha",
+    "build": "1.51.0-alpha",
     "surfaceHash": "c86e88b99bad3d1352c6b7e19e7394f26a185b860c009bb97ac366379a830ab4"
   }
 }

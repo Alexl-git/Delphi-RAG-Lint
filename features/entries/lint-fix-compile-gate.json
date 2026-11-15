@@ -5,7 +5,7 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.50.0-alpha",
-  "summary": "lint --fix --apply --project X.dproj writes the fixes through the compile gate by default (1.51): build 1 keeps every message and stops on an error, build 2 rolls back on an error, and the warnings / hints the fix added are reported",
+  "summary": "lint --fix --apply --project X.dproj goes through the compile gate by default (1.51): an error stops or rolls back the fix; new warnings / hints are reported",
   "intro": "Read this before letting lint --fix write into a project you cannot afford to break. When --project names an existing .dproj the project builds before and after the write (the default since 1.51; --compile-gate forces it, --no-compile-gate opts out except for naming renames). An error in build 1 stops the run, an error in build 2 rolls every file back, and stderr lists the counts of both builds, every error line and the warnings / hints the fix added.",
   "wikiPage": "lint-fix-compile-gate",
   "surfaces": [
@@ -91,9 +91,9 @@
     "by": "ENGINE"
   },
   "verified": {
-    "date": "2026-11-09",
+    "date": "2026-11-14",
     "by": "ENGINE",
-    "build": "1.50.0-alpha",
-    "surfaceHash": "bcc441782f9d3e58636b7d7f0826f34beb19f517dafcf8ec33a946ad56cb318b"
+    "build": "1.51.0-alpha",
+    "surfaceHash": "de319179f8b6b2ffbdba5a675a1f550133807d68a0339e632b8014cd5442cafc"
   }
 }

@@ -34,8 +34,8 @@ build): `REFUSED (compile-error)` and every dcc error line on stderr, every file
 Without `--project` (or with one that is not an existing `.dproj`) nothing builds, as before.
 
 A **naming rename** (the casing and prefix fixes, which rewrite a declaration and every use) is gated even with
-`--no-compile-gate`; stderr says `naming renames are written through the compile gate of <X.dproj> even with
---no-compile-gate`. Guard: `tests\autotest\run_naming_fix_gate.ps1`.
+`--no-compile-gate`; stderr says
+`naming renames are written through the compile gate of <X.dproj> even with --no-compile-gate`. Guard: `tests\autotest\run_naming_fix_gate.ps1`.
 Guard for the default, the messages and the diff: `tests\autotest\run_v151_GATE_compile_gate.ps1`.
 
 ## Example

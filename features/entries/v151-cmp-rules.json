@@ -4,7 +4,7 @@
   "group": "linting",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "1.50.0-alpha",
+  "since": "1.51.0-alpha",
   "summary": "Lint rules for component and IDE-expert code: FreeNotification, property defaults, palette bitmaps, repainting setters, DPI, OTA notifiers",
   "intro": "Read this to see what each component-authoring rule reports, which ship ON or OFF, and how the index helps them decide whether a type is a component or a control.",
   "wikiPage": "component-authoring-rules",
@@ -22,8 +22,9 @@
   ],
   "audience": "both",
   "verified": {
-    "date": "2026-11-13",
-    "by": "alexanderl",
-    "build": "1.50.0-alpha"
+    "date": "2026-11-14",
+    "by": "ENGINE",
+    "build": "1.51.0-alpha",
+    "surfaceHash": "274839f13d00cd88a96a34c1f16b90d87bc39c6d2c163b291492016dc2ed6a12"
   }
 }

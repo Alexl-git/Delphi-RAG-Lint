@@ -34,7 +34,7 @@
         }
       ],
       "helpOrder": 33,
-      "help": ["  drag-lint query hints        --db <file.sqlite>    [--name <code>] [--rule <severity>]"]
+      "help": ["  drag-lint query hints        --db <file.sqlite>    [--name <code>] [--rule <severity>]", "                               every dcc message (hint, warning, error) is kept under its own code and passed through (LSP source \"dcc\");", "                               rules that overlap one go beyond it where the wiki page compiler-messages says so"]
     }
   ],
   "audience": "both",
@@ -50,9 +50,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-11-14",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
-    "surfaceHash": "e5a3308c92221479911958a1098bfd8178ea2136b3cb649a80ae810a762f2bb3"
+    "build": "1.51.0-alpha",
+    "surfaceHash": "bc54188a1b4701e2d4f1b56352e2b9c7bbf539403b144dcb775a09d52bf5936e"
   }
 }

@@ -4,8 +4,8 @@
   "group": "linting",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "1.50.0-alpha",
-  "summary": "Lint rules for whole-program mistakes: disabled TLS verification, UI calls in console or service programs, DUnitX tests without an assertion, weak ciphers, assembler without a Win64 variant, WriteLn in a GUI program, and a contract-unit policy rule",
+  "since": "1.51.0-alpha",
+  "summary": "Whole-program lint rules: TLS checks off, UI calls in console/service apps, DUnitX tests without asserts, weak ciphers, asm without Win64, GUI WriteLn",
   "intro": "Read this to see what each application-level rule reports, which ship ON or OFF, and how the checks avoid the common false positives.",
   "wikiPage": "application-level-rules",
   "surfaces": [
@@ -20,5 +20,11 @@
       "example": "drag-lint lint-all --db <project.sqlite> --rule writeln-in-gui-app"
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-14",
+    "by": "ENGINE",
+    "build": "1.51.0-alpha",
+    "surfaceHash": "274839f13d00cd88a96a34c1f16b90d87bc39c6d2c163b291492016dc2ed6a12"
+  }
 }

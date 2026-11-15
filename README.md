@@ -883,13 +883,13 @@ be written and writes nothing. This verb replaces `Register-DragLintProtocol.ps1
 |---|---:|---|
 | [Indexing](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#indexing) | 11 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#indexing) |
 | [Search and navigation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#search-and-navigation) | 37 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#search-and-navigation) |
-| [Linting](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#linting) | 47 (+ 317 rules, 113 fixable) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#linting) |
+| [Linting](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#linting) | 63 (+ 423 rules, 125 fixable) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#linting) |
 | [Documentation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#documentation) | 12 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#documentation) |
 | [Refactoring and code generation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#refactoring-and-code-generation) | 21 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#refactoring-and-code-generation) |
 | [Component conversion](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#component-conversion) | 25 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#component-conversion) |
 | [Graphs and reports](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#graphs-and-reports) | 24 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#graphs-and-reports) |
 | [Diagrams and charts](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#diagrams-and-charts) | 6 (+ 27 questions) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#diagrams-and-charts) |
-| [Compiler integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#compiler-integration) | 12 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#compiler-integration) |
+| [Compiler integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#compiler-integration) | 13 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#compiler-integration) |
 | [Database and Firebird](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#database-and-firebird) | 2 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#database-and-firebird) |
 | [Editor integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#editor-integration) | 28 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#editor-integration) |
 | [Maintenance and diagnostics](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#maintenance-and-diagnostics) | 23 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#maintenance-and-diagnostics) |
@@ -1063,8 +1063,8 @@ Win64 build.
 
 #### Lint
 
-**317 rules across 18 categories -- 223 built-in + 94 external `.scm`, 263
-enabled by default, 113 with an auto-fix.**
+**423 rules across 18 categories -- 310 built-in + 113 external `.scm`, 343
+enabled by default, 125 with an auto-fix.**
 
 | Command | What it does | Notable flags |
 |---|---|---|
@@ -1330,11 +1330,11 @@ CLI-only verbs).
 | `run_ast_checks` | Compiler-less AST diagnostics on a file (unbalanced begin/end, undeclared identifiers) |
 | `run_compile_check` | Spawn dcc/msbuild against a file or project; return H/W/E/F diagnostics as JSON |
 
-### Lint rule pack (317 rules)
+### Lint rule pack (423 rules)
 
 Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
-external `.scm`). As of v1.50.0-alpha: **317 rules across 18 categories -- 223
-built-in and 94 external `.scm`, 263 enabled by default, and 113 with an
+external `.scm`). As of v1.51.0-alpha: **423 rules across 18 categories -- 310
+built-in and 113 external `.scm`, 343 enabled by default, and 125 with an
 auto-fix.** The table below is a small sample of the built-in rules:
 
 | Rule id | Severity | Description |
@@ -1353,6 +1353,21 @@ auto-fix.** The table below is a small sample of the built-in rules:
 | `boolean-comparison-true` | info | `X = True` or `X = False` -- redundant |
 | `redundant-as-tobject` | info | `(X as TObject)` -- every object is already TObject |
 | `inherited-bare` | info | Bare `inherited;` -- verify it calls the right ancestor |
+
+#### Compiler messages
+
+**Compiler messages.** drag-lint tracks and passes through every message the Delphi compiler reports (hints,
+warnings, errors, under their own codes): `refresh-findings` / `index --recompile` / the `run_compile_check` MCP
+tool store them in the project DB, `query hints` lists them, and the LSP server publishes them with `source: "dcc"`
+(`lsp --proxy --merge-diagnostics` puts the lint findings next to DelphiLSP's own). Rules that overlap a compiler
+message stay counted as rules: they come from drag-lint's own analysis, run without a build and go further where
+the wiki page `compiler-messages` says so: `used-before-assignment` and `function-result-not-set` are
+path-sensitive (must / may over the control-flow graph, raise / Halt / Abort paths excluded),
+`hides-ancestor-virtual` follows ancestors across units, `unused-private-member` is project-wide from the index,
+`write-only-local` has the liveness-based sibling `dead-store-before-out-arg`; `unused-local` detects the same as
+H2164 and adds availability without a build plus a fix. Only exact duplicates of a compiler message are refused as
+NEW rules (W1033 implicit package import, W1010 component create without override; W1080 noreturn-returns only if
+dcc reports it).
 
 #### Compliance labels
 Each rule can carry the CWE, CERT and MISRA ids it answers (data file `rules\compliance.json`; see `docs\wiki\compliance-labels.md`). `drag-lint rules` shows them (`[CWE-476 EXP34-C]`; `--json` adds a `compliance` object; `--standard cwe|cert|misra` lists only the rules labelled under one standard), `lint --json` / `lint-all --json` add `compliance` to each labelled finding, and `lint --labels` appends the ids to text findings. Labels never change a severity or an exit code.

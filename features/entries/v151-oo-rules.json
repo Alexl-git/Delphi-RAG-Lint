@@ -4,7 +4,7 @@
   "group": "linting",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "1.50.0-alpha",
+  "since": "1.51.0-alpha",
   "summary": "Ten single-file lint rules: Equals/GetHashCode, event calls, duplicate GUIDs, DLL exports, money as float, default params, accessors, forwards, legacy lists",
   "intro": "Read this to see what each object-model rule reports, which ship ON and what keeps them silent.",
   "wikiPage": "object-model-rules",
@@ -16,8 +16,9 @@
   ],
   "audience": "both",
   "verified": {
-    "date": "2026-11-13",
-    "by": "alexanderl",
-    "build": "1.50.0-alpha"
+    "date": "2026-11-14",
+    "by": "ENGINE",
+    "build": "1.51.0-alpha",
+    "surfaceHash": "c86e88b99bad3d1352c6b7e19e7394f26a185b860c009bb97ac366379a830ab4"
   }
 }
