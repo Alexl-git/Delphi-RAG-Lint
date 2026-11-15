@@ -1,0 +1,2 @@
+# closed, released, stored in a field, handed to a constructor: silent
+!handle-leak

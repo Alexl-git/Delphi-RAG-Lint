@@ -1,0 +1,7 @@
+{
+  "id": "char-to-pchar",
+  "severity": "warning",
+  "category": "bug-patterns",
+  "message": "PChar of a Char variable: the character code becomes the address. Cast a one-character string instead: PChar(string(C)).",
+  "warn_capture": "warn"
+}

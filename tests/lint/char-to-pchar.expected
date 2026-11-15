@@ -1,0 +1,5 @@
+# 16 PChar(local Char), 17 PWideChar(WideChar param), 18 PAnsiChar(AnsiChar), 19 PChar(const Char param)
+char-to-pchar 16
+char-to-pchar 17
+char-to-pchar 18
+char-to-pchar 19

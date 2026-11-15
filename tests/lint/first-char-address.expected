@@ -1,0 +1,5 @@
+# 17 @param[1], 18 @AnsiString[1], 19 PChar(@U[1]), 20 @S[Low(S)]
+first-char-address 17
+first-char-address 18
+first-char-address 19
+first-char-address 20

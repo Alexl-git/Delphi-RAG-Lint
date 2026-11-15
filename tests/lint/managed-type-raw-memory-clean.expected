@@ -1,0 +1,2 @@
+# plain record (ShortString field), Initialize/Finalize pairing, byte buffer: silent
+!managed-type-raw-memory

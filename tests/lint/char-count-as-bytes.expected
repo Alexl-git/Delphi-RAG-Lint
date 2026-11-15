@@ -1,0 +1,9 @@
+# 14 Move, 15 WriteBuffer, 16 ReadBuffer (+1), 17 GetMem PChar, 18 CompareMem, 19 FillChar, 20 WriteFile, 22 StrLen
+char-count-as-bytes 14
+char-count-as-bytes 15
+char-count-as-bytes 16
+char-count-as-bytes 17
+char-count-as-bytes 18
+char-count-as-bytes 19
+char-count-as-bytes 20
+char-count-as-bytes 22

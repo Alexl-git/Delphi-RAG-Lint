@@ -1,0 +1,2 @@
+# W version, literal, an AnsiString variable, an undeclared operand: silent
+!unsafe-string-api
