@@ -1,0 +1,24 @@
+{
+  "id": "v151-ds-rules",
+  "title": "Dataset and transaction lint rules",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.50.0-alpha",
+  "summary": "Lint checks: dataset edited but never posted, SELECT * in SQL text, transaction committed but never rolled back, dataset loop that never advances",
+  "intro": "Read this to see what the dataset and transaction rules report and what they leave alone. They run in lint and lint-all.",
+  "wikiPage": "dataset-rules-v151",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "drag-lint lint <unit.pas> --rule dataset-edit-without-post"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-13",
+    "by": "alexanderl",
+    "build": "1.50.0-alpha"
+  }
+}

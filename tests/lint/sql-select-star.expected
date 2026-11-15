@@ -1,0 +1,18 @@
+# Hits: a whole literal with a star column (SELECT *, alias.*, ", *") assigned to SQL.Text /
+# CommandText, added with SQL.Add, or passed to Open / ExecSQL (12-18).
+# Non-hits: named columns, COUNT(*), a multiplication, MAX(*), UPDATE, DELETE, a concatenation.
+sql-select-star 12
+sql-select-star 13
+sql-select-star 14
+sql-select-star 15
+sql-select-star 16
+sql-select-star 17
+sql-select-star 18
+!sql-select-star 23
+!sql-select-star 24
+!sql-select-star 25
+!sql-select-star 26
+!sql-select-star 28
+!sql-select-star 29
+!sql-select-star 30
+!sql-select-star 31

@@ -46,30 +46,36 @@ type
 
 implementation
 
-{ The lane's helpers live in DRagLint.V151.DS.Support; name it in an
-  implementation uses clause here once it declares something. }
+uses
+  DRagLint.V151.DS.Support;
 
 class procedure TV151DSRules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
-  { no rules yet }
+  ADecls.Add(V151Rule('dataset-edit-without-post', 'bug-patterns', 'warning', 'Dataset Edit/Append/Insert whose record is changed but never posted or cancelled'));
+  ADecls.Add(V151Host('loop-condition-invariant'));
+  ADecls.Add(V151Rule('transaction-without-rollback', 'bug-patterns', 'warning', 'Transaction is started and committed but never rolled back'));
 end;
 
 class function TV151DSRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
 begin
-  Result:= nil;
+  Result:= DsCheckFile(ACtx.Path,
+    function(AId: string): Boolean
+    begin
+      Result:= ACtx.Wants(AId);
+    end);
 end;
 
-class function TV151DSRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV151DSRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@f4f7 -- REVIEWED 2026-11-13 v151 DS: signature fixed by the dispatcher; this entry point has nothing to check in this lane
 begin
   Result:= nil;
 end;
 
-class function TV151DSRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;
+class function TV151DSRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;  // dl:ok unused-parameter@f450 -- REVIEWED 2026-11-13 v151 DS: signature fixed by the dispatcher; this entry point has nothing to check in this lane
 begin
   Result:= nil;
 end;
 
-class function TV151DSRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
+class function TV151DSRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@da23 -- REVIEWED 2026-11-13 v151 DS: signature fixed by the dispatcher; this entry point has nothing to check in this lane
 begin
   Result:= nil;
 end;
