@@ -1,0 +1,17 @@
+# Generated from the // fires and // quiet markers in thread-unsafe-increment.pas
+thread-unsafe-increment 57
+thread-unsafe-increment 58
+thread-unsafe-increment 59
+thread-unsafe-increment 60
+thread-unsafe-increment 61
+!thread-unsafe-increment 62
+!thread-unsafe-increment 63
+!thread-unsafe-increment 64
+!thread-unsafe-increment 65
+!thread-unsafe-increment 69
+!thread-unsafe-increment 71
+!thread-unsafe-increment 79
+!thread-unsafe-increment 87
+thread-unsafe-increment 95
+thread-unsafe-increment 100
+!thread-unsafe-increment 102
