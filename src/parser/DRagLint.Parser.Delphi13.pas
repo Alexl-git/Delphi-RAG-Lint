@@ -3012,6 +3012,24 @@ begin
   Result:= Result + '|' + LowerCase(Rest);
 end; // function
 
+{ v151 INC: True when a routine declaration named ADottedName (as SetRoutineImplRange
+  matches it: same last segment, qualified name equal or ending in '.' + the name) still
+  waits for its body. False means a body here would have no symbol. }
+function PendingRoutineDeclExists(const AState: TWalkState; const ADottedName: string): Boolean;
+var
+  LastSeg: string;
+begin
+  Result := False;
+  LastSeg:= Copy(ADottedName, LastDelimiter('.', ADottedName) + 1, MaxInt);
+  for var i:= 0 to AState.Symbols.Count - 1 do
+  begin
+    var Sym:= AState.Symbols[i];
+    if (Sym.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) and (Sym.ImplStartLine = 0)
+       and SameText(Sym.Name, LastSeg)
+       and (SameText(Sym.QualifiedName, ADottedName) or Sym.QualifiedName.EndsWith('.' + ADottedName, True)) then Exit(True);
+  end;
+end;
+
 procedure SetRoutineImplRange(const AState: TWalkState; const AName: string; AStartLine, AEndLine: Integer; const ASignature: string);
 var
   i          : Integer;
@@ -3314,45 +3332,6 @@ begin
   end; // case
 end; // begin
 
-{ 152c RINC2 (a): an include FRAGMENT (no unit around it) is parsed by the grammar's
-  `_definitions` root, which has no interface-style bare routine header -- `procedure P;`
-  with no body is only valid there with `forward` / `external`. Error recovery still
-  reduces most bare headers to a declProc inside an ERROR node, but the LAST one before
-  EOF, when it has no arguments, no result and no directive (`type TFoo = class end;`
-  then `procedure P;`), stays three loose tokens: kProcedure / kFunction, identifier,
-  `;`. That routine had no symbol, so every ref to it stayed unbound. This emits it from
-  those tokens (span: keyword .. `;`), at the fragment's top level only -- inside a unit
-  (AParentSymbolIdx >= 0) a broken header is left to the parse error, as before. The
-  grammar case for the real fix is lanes\152\RINC2\GRAMMAR-CASE.md. }
-procedure EmitLooseRoutineHeaders(const AErr: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer;
-  const AParentQualifiedName: string);
-const
-  HEADER_TOKENS = 3; { keyword, name, ';' }
-var
-  Kw, NameTok, Semi: TTSNode;
-  RoutineName: string;
-  Idx: Integer;
-  Sym: TSymbol;
-begin
-  if AParentSymbolIdx >= 0 then Exit;
-  for var i:= 0 to AErr.ChildCount - HEADER_TOKENS do
-  begin
-    Kw:= AErr.Child(i);
-    if (Kw.NodeType <> 'kProcedure') and (Kw.NodeType <> 'kFunction') then Continue;
-    NameTok:= AErr.Child(i + 1);
-    Semi   := AErr.Child(i + 2);
-    if (NameTok.NodeType <> 'identifier') or (Semi.NodeType <> ';') then Continue;
-    RoutineName:= NodeText(NameTok, AState.Source);
-    Idx:= AState.Emit(if Kw.NodeType = 'kFunction' then skFunction else skProcedure, RoutineName,
-      if AParentQualifiedName <> '' then AParentQualifiedName + '.' + RoutineName else RoutineName,
-      AParentSymbolIdx, Semi);
-    Sym:= AState.Symbols[Idx];
-    Sym.StartLine:= Integer(Kw.StartPoint.row   ) + 1;
-    Sym.StartCol := Integer(Kw.StartPoint.column) + 1;
-    AState.Symbols[Idx]:= Sym;
-  end;
-end;
-
 procedure Walk(const ANode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string);
 var
   NodeType : string ;
@@ -3574,7 +3553,6 @@ begin
   // declProc: emit a method (when inside class/record/interface) or a free
   // proc/func otherwise. Then walk children so typerefs in args + return
   // type emit type_use refs.
-  if NodeType = 'ERROR' then EmitLooseRoutineHeaders(ANode, AState, AParentSymbolIdx, AParentQualifiedName); { 152c RINC2 (a) }
 
   if NodeType = 'declProc' then
   begin
@@ -3835,6 +3813,13 @@ begin
           begin
             WalkDeclProc(HdrNode, AState, AParentSymbolIdx, AParentQualifiedName, False);
           end;
+          { v151 INC: a METHOD body in an include fragment (`procedure THost.Run;` in a .inc
+            whose class lives in the host unit) has no declaration in this file, so it had no
+            symbol: no locals, no enclosing routine for the refs of its body. Emit it as a
+            parentless method named by its full dotted header; the resolver hangs it under
+            the host's class. Fragment top level only (AParentSymbolIdx < 0). }
+          if (AParentSymbolIdx < 0) and (Pos('.', HdrName) > 0) and not PendingRoutineDeclExists(AState, HdrName) then
+            WalkDeclProc(HdrNode, AState, -1, Copy(HdrName, 1, LastDelimiter('.', HdrName) - 1), True);
           { v9: record this routine's body span on its symbol (decl or the
             impl-only one just emitted above). v(ADP1 Bug B): pass the impl
             header's own signature (built by the same ProcSignatureOf that
