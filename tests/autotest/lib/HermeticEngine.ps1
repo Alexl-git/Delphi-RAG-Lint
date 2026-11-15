@@ -3,7 +3,7 @@
   A machine drag-lint.json beside the exe names the real platform libraries and outranks a
   guard's fixtures. Get-HermeticEngine returns $Exe untouched when no drag-lint.json sits
   beside it; otherwise it returns an engine copy WITHOUT the manifest (exe, dlls, rules\)
-  in %TEMP%\drag-lint-hermetic\<key>, cached by exe size+mtime and shared by every guard
+  in %TEMP%\drag-lint-hermetic\<key>, cached by exe size+mtime + rules\ count/size/newest mtime, shared by every guard
   (built in a private dir, then moved into place, so parallel guards do not race).
 #>
 function Get-HermeticEngine {
@@ -12,7 +12,11 @@ function Get-HermeticEngine {
   $dir = Split-Path -Parent $src
   if (-not (Test-Path -LiteralPath (Join-Path $dir 'drag-lint.json'))) { return $src }
   $fi  = Get-Item -LiteralPath $src
-  $key = '{0}-{1}' -f $fi.Length, $fi.LastWriteTimeUtc.Ticks
+  # rules\ is part of the key (RMU FOUND, v151): a rules\*.scm edit beside the SAME exe must
+  # not be served from a cache built with the old rule files.
+  $rf  = @(Get-ChildItem -LiteralPath (Join-Path $dir 'rules') -File -Recurse -ErrorAction SilentlyContinue)
+  $rk  = '{0}-{1}-{2}' -f $rf.Count, ($rf | Measure-Object -Property Length -Sum).Sum, [long](($rf | ForEach-Object { $_.LastWriteTimeUtc.Ticks } | Measure-Object -Maximum).Maximum)
+  $key = '{0}-{1}-r{2}' -f $fi.Length, $fi.LastWriteTimeUtc.Ticks, $rk
   $root = Join-Path ([IO.Path]::GetTempPath()) 'drag-lint-hermetic'
   $dest = Join-Path $root $key
   $out  = Join-Path $dest 'drag-lint.exe'
