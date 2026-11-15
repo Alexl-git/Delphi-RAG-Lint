@@ -24,10 +24,21 @@ uses
 
 type
   /// <summary>Header kind of one .dfm node.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.DFMA.Support.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDfmNodeKind = (dnkObject, dnkInherited, dnkInline, dnkItem);  // dl:ok duplicate-global-decl@9546 -- REVIEWED 2026-11-14 v151 INT: DFM-A and DFM-B private .dfm models, never used in one unit; merging them is a 1.51.1 tail
 
   /// <summary>One property line of a .dfm node; Value is the raw text after '=' for a
   /// one-line value and '' for a string, list, blob or collection.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.DFMA.Support.pas) ?, DRagLint.V151.DFMA.Support.LoadDfm (DRagLint.V151.DFMA.Support.pas)</para>
+  /// <para>Used in units: DRagLint.V151.DFMA.Support, DRagLint.V151.DFMB.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDfmProp = record  // dl:ok duplicate-global-decl@850d -- REVIEWED 2026-11-14 v151 INT: DFM-A and DFM-B private .dfm models, never used in one unit; merging them is a 1.51.1 tail
     Name : string;
     Value: string;
@@ -37,6 +48,12 @@ type
   /// <summary>One .dfm node. Parent is the index of the enclosing node (-1 for the root).
   /// InInline is True when an enclosing node is an `inline` frame instance: such nodes
   /// belong to the frame class, not to the form class.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.DFMA.Support.pas) ?, DRagLint.V151.DFMA.CheckFieldTypes (DRagLint.V151.DFMA.pas) ?, DRagLint.V151.DFMA.CheckObjectsWithoutField (DRagLint.V151.DFMA.pas) ?, DRagLint.V151.DFMA.Support.LoadDfm (DRagLint.V151.DFMA.Support.pas)</para>
+  /// <para>Used in units: DRagLint.Convert.DfmReemit, DRagLint.Convert.GlyphVacuum, DRagLint.V151.DFMA, DRagLint.V151.DFMA.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDfmNode = record  // dl:ok duplicate-global-decl@86e1 -- REVIEWED 2026-11-14 v151 INT: DFM-A and DFM-B private .dfm models, never used in one unit; merging them is a 1.51.1 tail
     Name     : string;
     CompClass: string;
@@ -49,24 +66,100 @@ type
   end;
 
   /// <summary>A text .dfm as a node list in file order; node 0 is the root.</summary>
-  /// <remarks>Empty (no nodes) for a binary .dfm, an unreadable file or text that does not
-  /// start with a node header -- every rule is silent then.</remarks>
+  /// <remarks>
+  /// Empty (no nodes) for a binary .dfm, an unreadable file or text that does not
+  /// start with a node header -- every rule is silent then.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.DFMA.Support.pas) ?, DRagLint.V151.DFMA.CheckFieldsWithoutObject (DRagLint.V151.DFMA.pas) ?, DRagLint.V151.DFMA.RootClassIndex (DRagLint.V151.DFMA.pas) ?, DRagLint.V151.DFMA.Support.LoadDfm (DRagLint.V151.DFMA.Support.pas), DRagLint.V151.DFMA.Support.LoadDfmHead (DRagLint.V151.DFMA.Support.pas) ? (+9 more)</para>
+  /// <para>Used in units: DRagLint.V151.DFMA, DRagLint.V151.DFMA.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDfmDoc = record
     Path : string;
     Nodes: TArray<TDfmNode>;
     /// <summary>True when the file gave no node.</summary>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: Length(Nodes) = 0.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DFMA.CheckAccessBeforeCreate (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.RootClassIndex (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.Support.LoadDfmHead (DRagLint.V151.DFMA.Support.pas), DRagLint.V151.DFMA.Support.TDfmDoc.RootHasProp (DRagLint.V151.DFMA.Support.pas), DRagLint.V151.DFMA.Support.TDfmDoc.RootProp (DRagLint.V151.DFMA.Support.pas) (+1 more)</para>
+    /// <para>Reads: Nodes</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDfmDoc.HandlerNames"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDfmDoc.IndexOfName"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDfmDoc.RootHasProp"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDfmDoc.RootProp"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsEmpty: Boolean;
     /// <summary>Index of the first non-item node named AName (any case), -1 when none.</summary>
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Integer -- Observed: -1.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DFMA.CheckDfmReferenceUnits (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.CheckFieldsWithoutObject (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.CheckFieldTypes (DRagLint.V151.DFMA.pas)</para>
+    /// <para>Calls: SameText</para>
+    /// <para>Reads: Nodes</para>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDfmDoc.HandlerNames"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDfmDoc.IsEmpty"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDfmDoc.RootHasProp"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDfmDoc.RootProp"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IndexOfName(const AName: string): Integer;
     /// <summary>Raw value of the root node's property AName, '' when absent.</summary>
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: ''.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DFMA.CheckAccessBeforeCreate (DRagLint.V151.DFMA.pas)</para>
+    /// <para>Calls: DRagLint.V151.DFMA.Support.TDfmDoc.IsEmpty, SameText</para>
+    /// <para>Reads: Nodes</para>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDfmDoc.IsEmpty"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDfmDoc.HandlerNames"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDfmDoc.IndexOfName"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDfmDoc.RootHasProp"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function RootProp(const AName: string): string;
     /// <summary>True when the root node sets AName.</summary>
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DFMA.IsFormClass (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.Support.LoadDfmHead (DRagLint.V151.DFMA.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.DFMA.Support.TDfmDoc.IsEmpty, SameText</para>
+    /// <para>Reads: Nodes</para>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDfmDoc.IsEmpty"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDfmDoc.HandlerNames"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDfmDoc.IndexOfName"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDfmDoc.RootProp"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function RootHasProp(const AName: string): Boolean;
     /// <summary>Every handler name an `OnX = Name` line assigns, lower-cased, any node.</summary>
+    /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: L.ToArray.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DFMA.CheckSelfFree (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.Support.LoadDfmHead (DRagLint.V151.DFMA.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.DFMA.Support.IsPascalIdent, DRagLint.V151.DFMA.Support.LastSegment, LowerCase, StartsText</para>
+    /// <para>Reads: Nodes</para>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.IsPascalIdent"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.LastSegment"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDfmDoc.IndexOfName"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDfmDoc.IsEmpty"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDfmDoc.RootHasProp"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function HandlerNames: TArray<string>;
   end;
 
   /// <summary>One field of a class declaration.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.DFMA.Support.pas) ?, DRagLint.V151.DFMA.Support.TPasBuilder.AddClass (DRagLint.V151.DFMA.Support.pas) ?, DRagLint.V151.DFMA.Support.TPasBuilder.AddClass.AddMember (DRagLint.V151.DFMA.Support.pas)</para>
+  /// <para>Used in units: DRagLint.V151.DFMA.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPasField = record
     Name       : string;
     TypeName   : string;   // last dotted segment of the type reference
@@ -76,6 +169,12 @@ type
   end;
 
   /// <summary>One class declaration (forward declarations are skipped).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.DFMA.Support.pas) ?, DRagLint.V151.DFMA.CheckObjectsWithoutField (DRagLint.V151.DFMA.pas) ?, DRagLint.V151.DFMA.CheckResourceMissing (DRagLint.V151.DFMA.pas) ?, DRagLint.V151.DFMA.Support.BuildPas (DRagLint.V151.DFMA.Support.pas) ?, DRagLint.V151.DFMA.Support.TPasBuilder.AddClass (DRagLint.V151.DFMA.Support.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.V151.DFMA, DRagLint.V151.DFMA.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPasClass = record
     Name      : string;
     ParentName: string;   // first heritage entry, last dotted segment; '' = none
@@ -83,11 +182,39 @@ type
     Col       : Integer;
     Fields    : TArray<TPasField>;
     Methods   : TArray<string>;   // lower-case names of declared methods
+    /// <summary><!-- drag-lint:auto sum -->---- TPasClass / TPasRoutine / TPasUnit ----</summary>
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Integer -- Observed: -1.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DFMA.OwnClassHasField (DRagLint.V151.DFMA.pas)</para>
+    /// <para>Calls: SameText</para>
+    /// <para>Reads: Fields</para>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TPasClass.HasMethod"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function FieldIndex(const AName: string): Integer;
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: ListHasName(Methods, AName).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DFMA.CheckHandlerWithoutInherited (DRagLint.V151.DFMA.pas)</para>
+    /// <para>Calls: DRagLint.V151.DFMA.Support.ListHasName</para>
+    /// <para>Reads: Methods</para>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.ListHasName"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TPasClass.FieldIndex"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function HasMethod(const AName: string): Boolean;
   end;
 
   /// <summary>One unit-level variable.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.DFMA.Support.pas) ?, DRagLint.V151.DFMA.Support.BuildPas (DRagLint.V151.DFMA.Support.pas) ?, DRagLint.V151.DFMA.Support.TPasBuilder.AddVars (DRagLint.V151.DFMA.Support.pas)</para>
+  /// <para>Used in units: DRagLint.V151.DFMA.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPasVar = record
     Name       : string;
     TypeName   : string;
@@ -96,6 +223,12 @@ type
   end;
 
   /// <summary>One routine implementation (defProc).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.DFMA.Support.pas) ?, DRagLint.V151.DFMA.OwnClassHasField (DRagLint.V151.DFMA.pas) ?, DRagLint.V151.DFMA.RoutineGuards (DRagLint.V151.DFMA.pas) ?, DRagLint.V151.DFMA.Support.BuildPas (DRagLint.V151.DFMA.Support.pas) ?, DRagLint.V151.DFMA.Support.TPasBuilder.AddRoutine (DRagLint.V151.DFMA.Support.pas) (+3 more)</para>
+  /// <para>Used in units: DRagLint.V151.DFMA, DRagLint.V151.DFMA.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPasRoutine = record
     OwnerClass: string;   // 'TForm1' of TForm1.Foo; '' for a plain routine
     Name      : string;
@@ -105,12 +238,28 @@ type
     Body      : TTSNode;  // the block; IsNull for a forward / external declaration
     SenderObj : Boolean;  // has a parameter `Sender: TObject`
     Locals    : TArray<string>;  // lower-case parameter and local variable names
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: ListHasName(Locals, AName).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DFMA.CheckAccessBeforeCreate (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.CheckAutocreateAndManual (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.CheckForeignFormAccess (DRagLint.V151.DFMA.pas)</para>
+    /// <para>Calls: DRagLint.V151.DFMA.Support.ListHasName</para>
+    /// <para>Reads: Locals</para>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.ListHasName"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function HasLocal(const AName: string): Boolean;
   end;
 
   /// <summary>What the form rules read from one parsed .pas or .dpr.</summary>
-  /// <remarks>The nodes point into the shared TAstParseCache tree and are valid until
-  /// that cache is cleared; use a TPasUnit within one check only.</remarks>
+  /// <remarks>
+  /// The nodes point into the shared TAstParseCache tree and are valid until
+  /// that cache is cleared; use a TPasUnit within one check only.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.DFMA.Support.pas) ?, DRagLint.V151.DFMA.Support.BuildPas (DRagLint.V151.DFMA.Support.pas), DRagLint.V151.DFMA.Support.DeclNames (DRagLint.V151.DFMA.Support.pas) ?, DRagLint.V151.DFMA.Support.LoadPas (DRagLint.V151.DFMA.Support.pas), DRagLint.V151.DFMA.Support.LoadPasSummary (DRagLint.V151.DFMA.Support.pas) (+26 more)</para>
+  /// <para>Used in units: DRagLint.V151.DFMA, DRagLint.V151.DFMA.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPasUnit = record
     Ok       : Boolean;
     Path     : string;
@@ -124,41 +273,176 @@ type
     ImplUses : TArray<string>;
     ImplLine : Integer;
     /// <summary>Text of a node of this unit's parse.</summary>
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: '';
+    /// TEncoding.UTF8.GetString(Src, S, L).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DFMA.AssignedNames (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.CheckAccessBeforeCreate (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.CheckAutocreateAndManual (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.CheckForeignFormAccess (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.CreateCallClass (DRagLint.V151.DFMA.pas) (+9 more)</para>
+    /// <para>Calls: Integer, TreeSitter.TTSNodeHelper.EndByte, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.StartByte</para>
+    /// <para>Reads: Src</para>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.EndByte"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.StartByte"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TPasUnit.ClassIndex"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TPasUnit.UsesUnit"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Text(const N: TTSNode): string;
     /// <summary>Index of the class named AName (any case), -1 when none.</summary>
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Integer -- Observed: -1.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DFMA.AncestorHandlers (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.CheckAccessBeforeCreate (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.CheckObjectsWithoutField (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.ForeignFormsOf (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.OwnClassHasField (DRagLint.V151.DFMA.pas) (+3 more)</para>
+    /// <para>Calls: SameText</para>
+    /// <para>Reads: Classes</para>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TPasUnit.Text"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TPasUnit.UsesUnit"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TPasUnit.VarIndex"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ClassIndex(const AName: string): Integer;
     /// <summary>Index of the unit-level variable named AName, -1 when none.</summary>
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Integer -- Observed: -1.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DFMA.CheckForeignFormAccess (DRagLint.V151.DFMA.pas)</para>
+    /// <para>Calls: SameText</para>
+    /// <para>Reads: Vars</para>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TPasUnit.ClassIndex"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TPasUnit.Text"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TPasUnit.UsesUnit"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function VarIndex(const AName: string): Integer;
     /// <summary>True when AUnit is in the interface or implementation uses clause.</summary>
+    /// <param name="AUnit"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DFMA.CheckDfmReferenceUnits (DRagLint.V151.DFMA.pas)</para>
+    /// <para>Calls: DRagLint.V151.DFMA.Support.LastSegment, SameText</para>
+    /// <para>Reads: IntfUses, ImplUses</para>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.LastSegment"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TPasUnit.ClassIndex"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TPasUnit.Text"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TPasUnit.VarIndex"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function UsesUnit(const AUnit: string): Boolean;
   end;
 
   /// <summary>One `Application.CreateForm(TClass, Var)` call of a .dpr, in call order.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.DFMA.Support.pas), DRagLint.V151.DFMA.Support.DprScan (DRagLint.V151.DFMA.Support.pas)</para>
+  /// <para>Used in units: DRagLint.V151.DFMA.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDprCreate = record
     ClassName: string;
     VarName  : string;
   end;
 
   /// <summary>What the form rules read from a .dpr.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.DFMA.Support.pas) ?, DRagLint.V151.DFMA.Support.DprScan (DRagLint.V151.DFMA.Support.pas), DRagLint.V151.DFMA.Support.FindDprFor (DRagLint.V151.DFMA.Support.pas), DRagLint.V151.DFMA.Support.initialization (DRagLint.V151.DFMA.Support.pas) ?, DRagLint.V151.DFMA.Support.LoadDpr (DRagLint.V151.DFMA.Support.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.V151.DFMA, DRagLint.V151.DFMA.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDprInfo = record
     Path    : string;
     Units   : TArray<string>;      // lower-case unit names of the uses clause
     Modules : TArray<string>;      // lower-case 'module=unit' pairs from `U in 'U.pas' {Module}`
     Creates : TArray<TDprCreate>;  // in call order
+    /// <param name="AUnit"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: ListHasName(Units, AUnit) or
+    /// ListHasName(Units, LastSegment(AUnit)).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DFMA.Support.FindDprFor (DRagLint.V151.DFMA.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.DFMA.Support.LastSegment, DRagLint.V151.DFMA.Support.ListHasName</para>
+    /// <para>Reads: Units</para>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.LastSegment"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.ListHasName"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDprInfo.CreateIndexOfClass"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDprInfo.CreateIndexOfVar"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDprInfo.UnitOfModule"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function HasUnit(const AUnit: string): Boolean;
+    /// <param name="AClass"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Integer -- Observed: -1.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: SameText</para>
+    /// <para>Reads: Creates</para>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDprInfo.CreateIndexOfVar"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDprInfo.HasUnit"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDprInfo.UnitOfModule"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function CreateIndexOfClass(const AClass: string): Integer;
+    /// <param name="AVar"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Integer -- Observed: -1.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DFMA.CheckAccessBeforeCreate (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.CheckAutocreateAndManual (DRagLint.V151.DFMA.pas)</para>
+    /// <para>Calls: SameText</para>
+    /// <para>Reads: Creates</para>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDprInfo.CreateIndexOfClass"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDprInfo.HasUnit"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDprInfo.UnitOfModule"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function CreateIndexOfVar(const AVar: string): Integer;
+    /// <param name="AModule"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: ''.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DFMA.UnitOfModule (DRagLint.V151.DFMA.pas)</para>
+    /// <para>Calls: Copy, LowerCase, StartsText</para>
+    /// <para>Reads: Modules</para>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDprInfo.CreateIndexOfClass"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDprInfo.CreateIndexOfVar"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.TDprInfo.HasUnit"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function UnitOfModule(const AModule: string): string;
   end;
 
 /// <summary>Reads a text .dfm into a node list.</summary>
 /// <param name="APath">The .dfm; '' or a missing file gives an empty doc.</param>
 /// <returns>The doc; empty for a binary or unreadable form file.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.DFMA.CheckAccessBeforeCreate (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.Support.LoadDfmHead (DRagLint.V151.DFMA.Support.pas), DRagLint.V151.DFMA.TV151DFMARules.CheckDfm (DRagLint.V151.DFMA.pas)</para>
+/// <para>Calls: CharInSet, CompareMem, Copy, Default, DRagLint.Parser.DfmNav.DfmNavLinesFromBytes, FileExists, LowerCase, Pos, SameText, StartsText, Trim</para>
+/// <para>Returns: Default(TDfmDoc)</para>
+/// <para>Complexity: 41 (cyclomatic, outer body), 126 lines (full implementation)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Parser.DfmNav.DfmNavLinesFromBytes"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LoadDfm(const APath: string): TDfmDoc;
 
 /// <summary>Builds the TPasUnit of a .pas / .dpr from the shared parse cache.</summary>
 /// <param name="APath">The source file.</param>
 /// <returns>Ok = False when the file cannot be parsed.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.DFMA.TV151DFMARules.CheckDfm (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.TV151DFMARules.CheckFile (DRagLint.V151.DFMA.pas)</para>
+/// <para>Calls: Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.V151.DFMA.Support.BuildPas, FileExists</para>
+/// <para>Returns: Default(TPasUnit); BuildPas(APath, PF.Src, PF.RawSrc, PF.Tree)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+/// <seealso cref="DRagLint.V151.DFMA.Support.BuildPas"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LoadPas(const APath: string): TPasUnit;
 
 /// <summary>The declarations (classes, unit-level variables, uses clauses) of ANOTHER unit:
@@ -166,12 +450,33 @@ function LoadPas(const APath: string): TPasUnit;
 /// process, so a lint-all over thousands of units does not keep thousands of trees.</summary>
 /// <param name="APath">The source file.</param>
 /// <returns>Ok = False when unreadable; Routines, Src and RawSrc are always empty.</returns>
-/// <remarks>Thread-safe (one lock). The text is not preprocessed: the parser keeps the first
-/// branch of a conditional, as the grammar does.</remarks>
+/// <exception cref="ETreeSitterException"><!-- drag-lint:auto exc -->via TreeSitter.TTSParser.SetLanguage: Failed to set parser language to 0x%p</exception>
+/// <remarks>
+/// Thread-safe (one lock). The text is not preprocessed: the parser keeps the first
+/// branch of a conditional, as the grammar does.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.DFMA.AncestorHandlers (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.ForeignFormsOf (DRagLint.V151.DFMA.pas)</para>
+/// <para>Calls: Copy, Default, DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Parser.Delphi13.tree_sitter_delphi13, DRagLint.V151.DFMA.Support.BuildPas, FileExists, Integer, LowerCase, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, TreeSitter.TTSParser.SetLanguage</para>
+/// <para>Returns: Default(TPasUnit); nil; Copy(Src, AByteIndex, Remaining); BuildPas(APath, Src, Src, Tree)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
+/// <seealso cref="DRagLint.Parser.Delphi13.tree_sitter_delphi13"/>
+/// <seealso cref="DRagLint.V151.DFMA.Support.BuildPas"/>
+/// <seealso cref="TreeSitter.TTSParser.Create"/>
+/// <seealso cref="TreeSitter.TTSParser.Parse"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LoadPasSummary(const APath: string): TPasUnit;
 
 type
   /// <summary>What the rules read from ANOTHER unit's form file: its root and its handler names.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.DFMA.Support.pas) ?, DRagLint.V151.DFMA.AncestorHandlers (DRagLint.V151.DFMA.pas) ?, DRagLint.V151.DFMA.ForeignFormsOf (DRagLint.V151.DFMA.pas) ?, DRagLint.V151.DFMA.Support.initialization (DRagLint.V151.DFMA.Support.pas) ?, DRagLint.V151.DFMA.Support.LoadDfmHead (DRagLint.V151.DFMA.Support.pas)</para>
+  /// <para>Used in units: DRagLint.V151.DFMA, DRagLint.V151.DFMA.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDfmHead = record
     Ok         : Boolean;
     RootName   : string;
@@ -184,46 +489,163 @@ type
 /// <summary>The root and handler names of a form file, cached per path for the process.</summary>
 /// <param name="APath">The .dfm.</param>
 /// <returns>Ok = False for a missing, binary or unreadable form file.</returns>
-/// <remarks>Thread-safe (one lock).</remarks>
+/// <remarks>
+/// Thread-safe (one lock).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.DFMA.AncestorHandlers (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.ForeignFormsOf (DRagLint.V151.DFMA.pas)</para>
+/// <para>Calls: Default, DRagLint.V151.DFMA.Support.LoadDfm, DRagLint.V151.DFMA.Support.TDfmDoc.HandlerNames, DRagLint.V151.DFMA.Support.TDfmDoc.IsEmpty, DRagLint.V151.DFMA.Support.TDfmDoc.RootHasProp, LowerCase</para>
+/// <para>Returns: Default(TDfmHead)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.V151.DFMA.Support.LoadDfm"/>
+/// <seealso cref="DRagLint.V151.DFMA.Support.TDfmDoc.HandlerNames"/>
+/// <seealso cref="DRagLint.V151.DFMA.Support.TDfmDoc.IsEmpty"/>
+/// <seealso cref="DRagLint.V151.DFMA.Support.TDfmDoc.RootHasProp"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LoadDfmHead(const APath: string): TDfmHead;
 
 /// <summary>Line (1-based) of a node.</summary>
+/// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+/// <returns><!-- drag-lint:auto -->Integer -- Observed: Integer(N.StartPoint.row) + 1.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.DFMA.CheckAccessBeforeCreate (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.CheckAutocreateAndManual (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.CheckForeignFormAccess (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.CheckSelfFree (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.Support.TPasBuilder.AddClass (DRagLint.V151.DFMA.Support.pas) (+4 more)</para>
+/// <para>Calls: Integer, TreeSitter.TTSNodeHelper.StartPoint</para>
+/// <seealso cref="TreeSitter.TTSNodeHelper.StartPoint"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function NodeLine(const N: TTSNode): Integer;
 /// <summary>Column (1-based) of a node.</summary>
+/// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+/// <returns><!-- drag-lint:auto -->Integer -- Observed: Integer(N.StartPoint.column) + 1.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.DFMA.CheckAccessBeforeCreate (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.CheckAutocreateAndManual (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.CheckForeignFormAccess (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.CheckSelfFree (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.Support.TPasBuilder.AddClass (DRagLint.V151.DFMA.Support.pas) (+2 more)</para>
+/// <para>Calls: Integer, TreeSitter.TTSNodeHelper.StartPoint</para>
+/// <seealso cref="TreeSitter.TTSNodeHelper.StartPoint"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function NodeCol(const N: TTSNode): Integer;
 
 /// <summary>The source file of unit AUnitName: the project index first, then
 /// `&lt;dir of AFromPath&gt;\&lt;AUnitName&gt;.pas`.</summary>
+/// <param name="AUnitName"><!-- drag-lint:auto type -->const string</param>
+/// <param name="AFromPath"><!-- drag-lint:auto type -->const string</param>
+/// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
 /// <returns>The path, '' when neither knows it.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.DFMA.AncestorHandlers (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.ForeignForms (DRagLint.V151.DFMA.pas)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, FileExists</para>
+/// <para>Returns: ''; AStore.GetFilePath(S.FileId); Cand</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindUnitFile(const AUnitName, AFromPath: string; const AStore: ISymbolStore): string;
 
 /// <summary>The .dpr whose uses clause names AUnitName: every .dpr of the project index,
 /// then every .dpr in the unit's folder.</summary>
+/// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+/// <param name="AUnitName"><!-- drag-lint:auto type -->const string</param>
+/// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
 /// <param name="AInfo">Out: the parsed .dpr when found.</param>
 /// <returns>True when one was found.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.DFMA.CheckDfmReferenceUnits (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.TV151DFMARules.CheckFile (DRagLint.V151.DFMA.pas)</para>
+/// <para>Calls: Default, DRagLint.V151.DFMA.Support.LoadDpr, DRagLint.V151.DFMA.Support.StoreDprPaths, DRagLint.V151.DFMA.Support.TDprInfo.HasUnit</para>
+/// <para>Returns: False; True</para>
+/// <para>Catches: Exception (empty)</para>
+/// <para>Mutates: AInfo (out)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.V151.DFMA.Support.LoadDpr"/>
+/// <seealso cref="DRagLint.V151.DFMA.Support.StoreDprPaths"/>
+/// <seealso cref="DRagLint.V151.DFMA.Support.TDprInfo.HasUnit"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindDprFor(const APath, AUnitName: string; const AStore: ISymbolStore; out AInfo: TDprInfo): Boolean;
 
 /// <summary>The ancestor names of AClass, nearest first, walked through ALocal, then the
 /// project index, then the library index.</summary>
+/// <param name="AClass"><!-- drag-lint:auto type -->const string</param>
+/// <param name="ALocal"><!-- drag-lint:auto type -->const TPasUnit</param>
+/// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+/// <param name="ALib"><!-- drag-lint:auto type -->const ISymbolStore</param>
 /// <param name="AComplete">Out: True when the walk reached a class without ancestor
 /// (TObject / TInterfacedObject roots) and no step was unknown.</param>
 /// <param name="ALeftProject">Out: True when a step was answered by the library index or
 /// left both the unit and the project index (a library class never descends from a
 /// project class).</param>
 /// <returns>The chain without AClass itself; lower-case.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.DFMA.CheckFieldTypes (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.CheckObjectsWithoutField (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.ForeignFormsOf (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.IsFormClass (DRagLint.V151.DFMA.pas)</para>
+/// <para>Calls: DRagLint.V151.DFMA.Support.ClassChain.FromStore, DRagLint.V151.DFMA.Support.TPasUnit.ClassIndex, LastSegment, LowerCase, UniqueClass</para>
+/// <para>Returns: nil; Names.ToArray</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 66 lines (full implementation)</para>
+/// <para>Mutates: AComplete (out), ALeftProject (out)</para>
+/// <seealso cref="DRagLint.V151.DFMA.Support.ClassChain.FromStore"/>
+/// <seealso cref="DRagLint.V151.DFMA.Support.TPasUnit.ClassIndex"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ClassChain(const AClass: string; const ALocal: TPasUnit; const AStore, ALib: ISymbolStore;
   out AComplete, ALeftProject: Boolean): TArray<string>;
 
 /// <summary>True when AClass is declared as a class in ALocal or the project index.</summary>
+/// <param name="AClass"><!-- drag-lint:auto type -->const string</param>
+/// <param name="ALocal"><!-- drag-lint:auto type -->const TPasUnit</param>
+/// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+/// <returns><!-- drag-lint:auto -->Boolean -- Observed: (ALocal.ClassIndex(AClass) &gt;=
+/// 0) or UniqueClass(AStore, AClass, S).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.DFMA.CheckFieldTypes (DRagLint.V151.DFMA.pas)</para>
+/// <para>Calls: DRagLint.V151.DFMA.Support.TPasUnit.ClassIndex, DRagLint.V151.DFMA.Support.UniqueClass</para>
+/// <seealso cref="DRagLint.V151.DFMA.Support.TPasUnit.ClassIndex"/>
+/// <seealso cref="DRagLint.V151.DFMA.Support.UniqueClass"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsProjectClass(const AClass: string; const ALocal: TPasUnit; const AStore: ISymbolStore): Boolean;
 
 /// <summary>True for a plain Pascal identifier (letters, digits, underscore; no dot).</summary>
+/// <param name="S"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->Boolean -- Observed: S &lt;&gt; ''.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.DFMA.CheckDfmReferenceUnits (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.Support.TDfmDoc.HandlerNames (DRagLint.V151.DFMA.Support.pas)</para>
+/// <para>Calls: CharInSet</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsPascalIdent(const S: string): Boolean;
 
 /// <summary>Last dotted segment of a qualified name.</summary>
+/// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto type -->string</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.DFMA.CheckDfmReferenceUnits (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.CheckFieldTypes (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.Support.ClassChain.FromStore (DRagLint.V151.DFMA.Support.pas), DRagLint.V151.DFMA.Support.DprScan (DRagLint.V151.DFMA.Support.pas), DRagLint.V151.DFMA.Support.TDfmDoc.HandlerNames (DRagLint.V151.DFMA.Support.pas) (+7 more)</para>
+/// <para>Calls: Copy, LastDelimiter, Pos, Trim</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LastSegment(const AName: string): string;
 
 /// <summary>Makes one finding.</summary>
+/// <param name="ARule"><!-- drag-lint:auto type -->const string</param>
+/// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+/// <param name="ALine"><!-- drag-lint:auto type -->Integer</param>
+/// <param name="ACol"><!-- drag-lint:auto type -->Integer</param>
+/// <param name="ASeverity"><!-- drag-lint:auto type -->const string</param>
+/// <param name="AMessage"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->TLintFinding -- Observed: Default(TLintFinding).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.DFMA.CheckAccessBeforeCreate (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.CheckAutocreateAndManual (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.CheckDfmReferenceUnits (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.CheckFieldsWithoutObject (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.CheckFieldTypes (DRagLint.V151.DFMA.pas) (+5 more)</para>
+/// <para>Calls: Default</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MakeFinding(const ARule, APath: string; ALine, ACol: Integer; const ASeverity, AMessage: string): TLintFinding;
 
 implementation
@@ -501,7 +923,7 @@ begin
   Result:= ListHasName(Locals, AName);
 end;
 
-function TPasUnit.Text(const N: TTSNode): string;
+function TPasUnit.Text(const N: TTSNode): string;  // dl:ok duplicate-code@136e -- REVIEWED 2026-11-14 v151 INT: same shape over different fields; a helper would need more parameters than it saves
 var
   S, L: Integer;
 begin

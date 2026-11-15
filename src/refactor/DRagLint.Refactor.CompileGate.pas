@@ -14,7 +14,7 @@ interface
 
 uses
   System.SysUtils, System.Classes, Winapi.Windows,
-  DRagLint.Core.ControlChannel,  // dl:ok uses-global-census@0000 -- CONTROL_MSG_SHUTDOWN is the stand-down contract the gate's control channel answers; it travels with the channel class
+  DRagLint.Core.ControlChannel,  // dl:ok uses-global-census@dbdf -- CONTROL_MSG_SHUTDOWN is the stand-down contract the gate's control channel answers; it travels with the channel class
   DRagLint.Core.Model;  // dl:ok uses-global-census@1abd -- version and ref-kind constants of the model; a small unit of its own would add nothing (146 int); TCompilerFinding moved it to the interface (v151 GATE)
 
 const

@@ -52,7 +52,7 @@ type
 implementation
 
 uses
-  DRagLint.V151.DFMB.Support
+  DRagLint.V151.DFMB.Support  // dl:ok uses-global-census@e1ef -- REVIEWED 2026-11-14 v151 INT: a frame lane unit reads only the rule-id consts of its own Support unit; the census is the intended shape
   ;
 
 class procedure TV151DFMBRules.Catalog(const ADecls: TList<TV151RuleDecl>);

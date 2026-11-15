@@ -422,7 +422,7 @@ begin
   Result:= FFieldsOf.TryGetValue(AClass, Fields) and (Fields.IndexOf(AName) >= 0);
 end;
 
-procedure TThrbFile.Emit(const ANode: TTSNode; const ARule, AMsg: string);
+procedure TThrbFile.Emit(const ANode: TTSNode; const ARule, AMsg: string);  // dl:ok duplicate-code@d459 -- REVIEWED 2026-11-14 v151 INT: same shape over different fields; a helper would need more parameters than it saves
 var
   P: TTSPoint;
   F: TLintFinding;

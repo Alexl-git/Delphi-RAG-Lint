@@ -17,6 +17,12 @@ uses
 
 type
   /// <summary>One property line of a form-file object.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.DFMB.Support.pas), DRagLint.V151.DFMB.Support.CheckDisallowed (DRagLint.V151.DFMB.Support.pas), DRagLint.V151.DFMB.Support.TDfmModel.Parse (DRagLint.V151.DFMB.Support.pas), DRagLint.V151.DFMB.Support.TDfmObj.Create (DRagLint.V151.DFMB.Support.pas)</para>
+  /// <para>Used in units: DRagLint.V151.DFMA.Support, DRagLint.V151.DFMB.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDfmProp = record
     /// <summary>Property name, dotted for sub-properties (DataBinding.DataField).</summary>
     Name : string;
@@ -29,6 +35,12 @@ type
   end;
 
   /// <summary>One object / inherited / inline block of a text form file.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.DFMB.Support.pas) ?, DRagLint.V151.DFMB.Support.ParseHeader (DRagLint.V151.DFMB.Support.pas), DRagLint.V151.DFMB.Support.TDfmModel.Add (DRagLint.V151.DFMB.Support.pas) ?, DRagLint.V151.DFMB.Support.TDfmModel.Create (DRagLint.V151.DFMB.Support.pas) ?, DRagLint.V151.DFMB.Support.TDfmModel.Find (DRagLint.V151.DFMB.Support.pas) ? (+13 more)</para>
+  /// <para>Used in units: DRagLint.V151.DFMB.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDfmObj = class
   strict private
     FObjName: string;
@@ -50,47 +62,172 @@ type
     property Props: TList<TDfmProp> read FProps;
     /// <summary>Nested objects (owned).</summary>
     property Kids: TObjectList<TDfmObj> read FKids;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DFMB.Support.ParseHeader (DRagLint.V151.DFMB.Support.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FProps, FKids</para>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmObj.Destroy"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmObj.Has"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmObj.IndexOfProp"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmObj.Val"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FKids, FProps</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmObj.Create"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmObj.Has"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmObj.IndexOfProp"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmObj.Val"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>Index of the property AName (case-insensitive).</summary>
     /// <param name="AName">Property name; dotted for sub-properties.</param>
     /// <returns>Index into Props, or -1.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DFMB.Support.BindFieldLine (DRagLint.V151.DFMB.Support.pas), DRagLint.V151.DFMB.Support.CheckMasterFields (DRagLint.V151.DFMB.Support.pas), DRagLint.V151.DFMB.Support.CheckRequired (DRagLint.V151.DFMB.Support.pas), DRagLint.V151.DFMB.Support.TDfmObj.Has (DRagLint.V151.DFMB.Support.pas), DRagLint.V151.DFMB.Support.TDfmObj.Val (DRagLint.V151.DFMB.Support.pas)</para>
+    /// <para>Calls: SameText</para>
+    /// <para>Returns: 0 to Props.Count - 1 do; -1</para>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmObj.Create"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmObj.Destroy"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmObj.Has"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmObj.Val"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IndexOfProp(const AName: string): Integer;
     /// <summary>Raw value of a property.</summary>
     /// <param name="AName">Property name.</param>
     /// <returns>The value text, '' when the property is absent.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DFMB.Support.BindField (DRagLint.V151.DFMB.Support.pas), DRagLint.V151.DFMB.Support.BindSource (DRagLint.V151.DFMB.Support.pas), DRagLint.V151.DFMB.Support.CheckCircular.Visit (DRagLint.V151.DFMB.Support.pas), DRagLint.V151.DFMB.Support.CheckDupBinding (DRagLint.V151.DFMB.Support.pas), DRagLint.V151.DFMB.Support.CheckMasterFields (DRagLint.V151.DFMB.Support.pas) (+3 more)</para>
+    /// <para>Calls: DRagLint.V151.DFMB.Support.TDfmObj.IndexOfProp</para>
+    /// <para>Returns: if I &lt; 0 then ''</para>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmObj.IndexOfProp"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmObj.Create"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmObj.Destroy"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmObj.Has"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Val(const AName: string): string;
     /// <summary>True when the property is present.</summary>
     /// <param name="AName">Property name.</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: IndexOfProp(AName) &gt;= 0.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DFMB.Support.CheckRequired (DRagLint.V151.DFMB.Support.pas), DRagLint.V151.DFMB.Support.IsPersistentField (DRagLint.V151.DFMB.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.DFMB.Support.TDfmObj.IndexOfProp</para>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmObj.IndexOfProp"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmObj.Create"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmObj.Destroy"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmObj.Val"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Has(const AName: string): Boolean;
   end;
 
   /// <summary>The parsed text form file; owns every object.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.DFMB.Support.pas) ?, DRagLint.V151.DFMB.Support.CheckCircular (DRagLint.V151.DFMB.Support.pas) ?, DRagLint.V151.DFMB.Support.CheckDupBinding (DRagLint.V151.DFMB.Support.pas) ?, DRagLint.V151.DFMB.Support.TDfmBChecker.Run (DRagLint.V151.DFMB.Support.pas), DRagLint.V151.DFMB.Support.TDfmModel.Parse (DRagLint.V151.DFMB.Support.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.V151.DFMB.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDfmModel = class
   strict private
     FRoots: TObjectList<TDfmObj>;
     FAll  : TList<TDfmObj>;
     FByName: TDictionary<string, TDfmObj>;
   public
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DFMB.Support.TDfmModel.Parse (DRagLint.V151.DFMB.Support.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FRoots, FAll, FByName</para>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmModel.Add"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmModel.Destroy"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmModel.Find"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmModel.Parse"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FByName, FAll, FRoots</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmModel.Add"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmModel.Create"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmModel.Find"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmModel.Parse"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>Parses the text of a form file.</summary>
     /// <param name="AText">The file text.</param>
     /// <returns>The model; owned by the caller. Never nil; empty for a binary form.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DFMB.Support.TDfmBChecker.Run (DRagLint.V151.DFMB.Support.pas)</para>
+    /// <para>Calls: Copy, DRagLint.V151.DFMB.Support.ParseHeader, DRagLint.V151.DFMB.Support.ScanSegment, DRagLint.V151.DFMB.Support.StartsWordCI, DRagLint.V151.DFMB.Support.TDfmModel.Add, DRagLint.V151.DFMB.Support.TDfmModel.Create, Pos, SameText, StartsStr, Trim, TrimLeft</para>
+    /// <para>Returns: TDfmModel.Create</para>
+    /// <para>Complexity: 16 (cyclomatic, outer body), 61 lines (full implementation)</para>
+    /// <para>Owns returned: new (caller owns)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.ParseHeader"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.ScanSegment"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.StartsWordCI"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmModel.Add"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmModel.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Parse(const AText: string): TDfmModel; static;
     /// <summary>Every object in file order (not owned).</summary>
     property All: TList<TDfmObj> read FAll;
     /// <summary>Looks a component up by name, anywhere in the file.</summary>
     /// <param name="AName">Component name (case-insensitive).</param>
     /// <returns>The object or nil.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DFMB.Support.CheckCircular.Visit (DRagLint.V151.DFMB.Support.pas), DRagLint.V151.DFMB.Support.CheckRequired (DRagLint.V151.DFMB.Support.pas), DRagLint.V151.DFMB.Support.CheckTypeMismatch (DRagLint.V151.DFMB.Support.pas)</para>
+    /// <para>Calls: LowerCase, Trim</para>
+    /// <para>Returns: nil</para>
+    /// <para>Reads: FByName</para>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmModel.Add"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmModel.Create"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmModel.Destroy"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmModel.Parse"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Find(const AName: string): TDfmObj;
     /// <summary>Adds an object under AParent (nil = root).</summary>
     /// <param name="AObj">The object; ownership passes to the model.</param>
     /// <param name="AParent">Enclosing object or nil.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.AcquireIndexLock (DRagLint.CLI.pas) ?, DRagLint.CLI.DoQueryUnitUsageProjectWide (DRagLint.CLI.pas) ?, DRagLint.CLI.ExpandProjectScope.AddOnce (DRagLint.CLI.pas) ?, DRagLint.CLI.ProjectScopeRoots.AddDir (DRagLint.CLI.pas) ?, DRagLint.V151.DFMB.Support.TDfmModel.Parse (DRagLint.V151.DFMB.Support.pas) (+53 more)</para>
+    /// <para>Calls: LowerCase</para>
+    /// <para>Reads: FRoots, FAll, FByName</para>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmModel.Create"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmModel.Destroy"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmModel.Find"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmModel.Parse"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Add(AObj, AParent: TDfmObj);
   end;
 
   /// <summary>Runs the lane's checks over one form file.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.V151.DFMB.TV151DFMBRules.CheckDfm (DRagLint.V151.DFMB.pas)</para>
+  /// <para>Used in units: DRagLint.V151.DFMB</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDfmBChecker = class
   public
     /// <summary>Runs every wanted check.</summary>
@@ -98,6 +235,20 @@ type
     /// <param name="ADfmPath">The form file; read from disk.</param>
     /// <param name="AWants">Predicate: does this run report the rule id.</param>
     /// <returns>Findings located in ADfmPath.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas) ?, DRagLint.V151.DFMB.TV151DFMBRules.CheckDfm (DRagLint.V151.DFMB.pas)</para>
+    /// <para>Calls: AWants, DRagLint.V151.DFMB.Support.CheckCircular, DRagLint.V151.DFMB.Support.CheckDisallowed, DRagLint.V151.DFMB.Support.CheckDupBinding, DRagLint.V151.DFMB.Support.CheckMasterFields, DRagLint.V151.DFMB.Support.CheckRequired, DRagLint.V151.DFMB.Support.CheckTypeMismatch, DRagLint.V151.DFMB.Support.TDfmModel.Parse</para>
+    /// <para>Returns: nil; Found.ToArray</para>
+    /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.CheckCircular"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.CheckDisallowed"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.CheckDupBinding"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.CheckMasterFields"/>
+    /// <seealso cref="DRagLint.V151.DFMB.Support.CheckRequired"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Run(const ACfg: TLintConfig; const ADfmPath: string;
       const AWants: TFunc<string, Boolean>): TArray<TLintFinding>; static;
   end;

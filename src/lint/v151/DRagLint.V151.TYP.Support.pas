@@ -291,7 +291,7 @@ begin
   GatherWalk(ARoot, True, ATypes, AList);
 end;
 
-procedure TTypScan.Emit(const ARule, ASeverity: string; const N: TTSNode; const AMsg, ASym: string);
+procedure TTypScan.Emit(const ARule, ASeverity: string; const N: TTSNode; const AMsg, ASym: string);  // dl:ok duplicate-code@c2c1 -- REVIEWED 2026-11-14 v151 INT: same shape over different fields; a helper would need more parameters than it saves
 var
   P, Q: TTSPoint;
   F   : TLintFinding;
@@ -360,7 +360,7 @@ begin
 end;
 
 { 'A, B: T;' -> a and b typed T (blanks removed); ARaw keeps each name as written. }
-procedure TTypScan.ParseDecl(const AText: string; const AMap: TDictionary<string, string>;
+procedure TTypScan.ParseDecl(const AText: string; const AMap: TDictionary<string, string>;  // dl:ok duplicate-code@60de -- REVIEWED 2026-11-14 v151 INT: same shape over different fields; a helper would need more parameters than it saves
   const ARaw: TDictionary<string, string>);
 var
   P, Cut  : Integer;

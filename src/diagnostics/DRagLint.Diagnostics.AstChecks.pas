@@ -242,7 +242,7 @@ type
       /// are skipped. The search ignores 'inherited' inside nested routines. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-      /// <para>Calls: CheckProc, Default, DelegatesToOwnCtor, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMissingInherited.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, HasInherited, Integer, SrcText, TreeSitter.TTSTree.RootNode</para>
+      /// <para>Calls: CheckProc, ContainsText, Default, DelegatesToOwnCtor, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMissingInherited.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, HasInherited, Integer, SameText, SrcText, TreeSitter.TTSTree.RootNode</para>
       /// <para>Returns: nil; Findings.ToArray</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMissingInherited.Visit"/>

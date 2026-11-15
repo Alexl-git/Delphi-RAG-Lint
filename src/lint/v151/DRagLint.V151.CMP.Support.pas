@@ -17,7 +17,13 @@ uses
 
 type
   /// <summary>One property declared in a class of the unit.</summary>
-  /// <remarks>Names are lower case; an accessor that is not a plain identifier is ''.</remarks>
+  /// <remarks>
+  /// Names are lower case; an accessor that is not a plain identifier is ''.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.CMP.pas) ?, declaration (DRagLint.V151.CMP.Support.pas) ?, DRagLint.V151.CMP.Support.AddMember (DRagLint.V151.CMP.Support.pas), DRagLint.V151.CMP.Support.TCmpClass.Create (DRagLint.V151.CMP.Support.pas) ?, DRagLint.V151.CMP.TCmpRun.CheckFreeNotification (DRagLint.V151.CMP.pas) ? (+4 more)</para>
+  /// <para>Used in units: DRagLint.V151.CMP, DRagLint.V151.CMP.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCmpProp = record
     Name       : string;
     Getter     : string;
@@ -31,8 +37,14 @@ type
   end;
 
   /// <summary>One class declared in the unit, as the component rules need it.</summary>
-  /// <remarks>Owns its collections. Name and Parents are lower-case leaf names (generic
-  /// arguments and unit qualifiers cut off).</remarks>
+  /// <remarks>
+  /// Owns its collections. Name and Parents are lower-case leaf names (generic
+  /// arguments and unit qualifiers cut off).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.CMP.pas) ?, declaration (DRagLint.V151.CMP.Support.pas) ?, DRagLint.V151.CMP.Support.AddMember (DRagLint.V151.CMP.Support.pas) ?, DRagLint.V151.CMP.Support.CmpCollectClasses (DRagLint.V151.CMP.Support.pas), DRagLint.V151.CMP.Support.CollectMembers (DRagLint.V151.CMP.Support.pas) ? (+9 more)</para>
+  /// <para>Used in units: DRagLint.V151.CMP, DRagLint.V151.CMP.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCmpClass = class
   public
     Name   : string;  // dl:ok public-field@bc8e -- REVIEWED 2026-11-14 v151 CMP: plain data holder private to the CMP lane (only DRagLint.V151.CMP uses it)
@@ -42,8 +54,23 @@ type
     Fields : TDictionary<string, string>;  // dl:ok public-field@2071 -- REVIEWED 2026-11-14 v151 CMP: plain data holder private to the CMP lane (only DRagLint.V151.CMP uses it)
     Props  : TList<TCmpProp>;  // dl:ok public-field@943f -- REVIEWED 2026-11-14 v151 CMP: plain data holder private to the CMP lane (only DRagLint.V151.CMP uses it)
     /// <summary>Creates the empty model.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.CMP.Support.CmpCollectClasses (DRagLint.V151.CMP.Support.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: Fields, Props</para>
+    /// <seealso cref="DRagLint.V151.CMP.Support.TCmpClass.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
     /// <summary>Frees the collections.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: Props, Fields</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.V151.CMP.Support.TCmpClass.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
   end;
 
@@ -51,20 +78,55 @@ type
 /// <param name="ASrc">The bytes the tree was parsed from.</param>
 /// <param name="ANode">Any node; a null node gives ''.</param>
 /// <returns>The UTF-8 decoded slice.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.CMP.Support.CmpCollectClasses (DRagLint.V151.CMP.Support.pas), DRagLint.V151.CMP.Support.CmpLow (DRagLint.V151.CMP.Support.pas), DRagLint.V151.CMP.TCmpRun.Txt (DRagLint.V151.CMP.pas)</para>
+/// <para>Calls: Integer, TreeSitter.TTSNodeHelper.EndByte, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.StartByte</para>
+/// <para>Returns: ''; TEncoding.UTF8.GetString(ASrc, S, L)</para>
+/// <seealso cref="TreeSitter.TTSNodeHelper.EndByte"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.StartByte"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CmpText(const ASrc: TBytes; const ANode: TTSNode): string;
 /// <summary>Source text of a node, lower case, with every blank removed.</summary>
 /// <param name="ASrc">The bytes the tree was parsed from.</param>
 /// <param name="ANode">Any node.</param>
 /// <returns>The normalised text; '' for a null node.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.CMP.Support.AddMember (DRagLint.V151.CMP.Support.pas), DRagLint.V151.CMP.Support.CmpCollectClasses (DRagLint.V151.CMP.Support.pas), DRagLint.V151.CMP.Support.TypeLeafOf (DRagLint.V151.CMP.Support.pas), DRagLint.V151.CMP.TCmpRun.Low (DRagLint.V151.CMP.pas)</para>
+/// <para>Calls: DRagLint.V151.CMP.Support.CmpText, LowerCase</para>
+/// <para>Returns: B.ToString</para>
+/// <seealso cref="DRagLint.V151.CMP.Support.CmpText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CmpLow(const ASrc: TBytes; const ANode: TTSNode): string;
 /// <summary>The last dotted segment of a name, generic arguments cut off.</summary>
 /// <param name="AName">`Unit.TFoo&lt;T&gt;` or `TFoo`.</param>
 /// <returns>`TFoo` (case kept).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.CMP.Support.CmpCollectClasses (DRagLint.V151.CMP.Support.pas), DRagLint.V151.CMP.Support.TypeLeafOf (DRagLint.V151.CMP.Support.pas), DRagLint.V151.CMP.TCmpRun.CallName (DRagLint.V151.CMP.pas), DRagLint.V151.CMP.TCmpRun.CheckPaletteIcon (DRagLint.V151.CMP.pas), DRagLint.V151.CMP.TCmpRun.CheckSupportsHolder (DRagLint.V151.CMP.pas) (+3 more)</para>
+/// <para>Calls: Copy, LastDelimiter, Pos, Trim</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CmpLeaf(const AName: string): string;
 /// <summary>Appends every descendant of ANode (ANode included) whose node type is AType.</summary>
 /// <param name="ANode">Root of the walk.</param>
 /// <param name="AType">Node type to collect.</param>
 /// <param name="AList">Receives the nodes in source order; owned by the caller.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.CMP.Support.CmpCollect (DRagLint.V151.CMP.Support.pas), DRagLint.V151.CMP.TCmpRun.CheckDefaultOfProp (DRagLint.V151.CMP.pas), DRagLint.V151.CMP.TCmpRun.CheckFixedBounds (DRagLint.V151.CMP.pas), DRagLint.V151.CMP.TCmpRun.CheckFreeWhileHeld (DRagLint.V151.CMP.pas), DRagLint.V151.CMP.TCmpRun.CheckPaintRoutines (DRagLint.V151.CMP.pas) (+7 more)</para>
+/// <para>Calls: DRagLint.V151.CMP.Support.CmpCollect, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+/// <para>Recursive</para>
+/// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure CmpCollect(const ANode: TTSNode; const AType: string; AList: TList<TTSNode>);
 /// <summary>Builds a finding that spans AFrom..ATo.</summary>
 /// <param name="AFile">The linted file.</param>
@@ -74,34 +136,89 @@ procedure CmpCollect(const ANode: TTSNode; const AType: string; AList: TList<TTS
 /// <param name="AFrom">First node of the span.</param>
 /// <param name="ATo">Last node of the span.</param>
 /// <returns>The finding (1-based lines and columns).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.CMP.TCmpRun.Emit (DRagLint.V151.CMP.pas)</para>
+/// <para>Calls: Default, Integer, TreeSitter.TTSNodeHelper.EndPoint, TreeSitter.TTSNodeHelper.StartPoint</para>
+/// <para>Returns: Default(TLintFinding)</para>
+/// <seealso cref="TreeSitter.TTSNodeHelper.EndPoint"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.StartPoint"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CmpFinding(const AFile, ARule, ASeverity, AMessage: string; const AFrom, ATo: TTSNode): TLintFinding;
 /// <summary>The value of a numeric literal as written in Delphi (decimal, $hex, with a sign).</summary>
 /// <param name="AText">Literal text, e.g. `-5`, `$00FF8000`, `16`.</param>
 /// <param name="AValue">Out: the value.</param>
 /// <returns>False for a real number or anything that is not an integer literal.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.CMP.TCmpRun.CheckPaintRoutines (DRagLint.V151.CMP.pas), DRagLint.V151.CMP.TCmpRun.FixedValue (DRagLint.V151.CMP.pas), DRagLint.V151.CMP.TCmpRun.HasFixedLiteral (DRagLint.V151.CMP.pas), DRagLint.V151.CMP.TCmpRun.LitKey (DRagLint.V151.CMP.pas), DRagLint.V151.CMP.TCmpRun.Prepare (DRagLint.V151.CMP.pas)</para>
+/// <para>Calls: CharInSet, Copy, Trim, TryStrToInt64</para>
+/// <para>Returns: TryStrToInt64(S, AValue)</para>
+/// <para>Mutates: AValue (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CmpIntLiteral(const AText: string; out AValue: Int64): Boolean;
 /// <summary>True when ALeaf is a well-known class that descends from TComponent.</summary>
 /// <param name="ALeaf">Lower-case leaf class name.</param>
 /// <returns>Membership in the built-in list (VCL, RTL, FireDAC base classes).</returns>
-/// <remarks>Used when the index does not answer; never a reason to stay silent on its own.</remarks>
+/// <remarks>
+/// Used when the index does not answer; never a reason to stay silent on its own.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.CMP.TCmpRun.IsKindOf (DRagLint.V151.CMP.pas)</para>
+/// <para>Calls: MatchStr</para>
+/// <para>Returns: MatchStr(ALeaf, KNOWN_NONVISUAL) or MatchStr(ALeaf, KNOWN_CONTROLS)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CmpIsKnownComponent(const ALeaf: string): Boolean;
 /// <summary>True when ALeaf is a well-known class that descends from TControl.</summary>
 /// <param name="ALeaf">Lower-case leaf class name.</param>
 /// <returns>Membership in the built-in list of VCL controls and forms.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.CMP.TCmpRun.IsKindOf (DRagLint.V151.CMP.pas)</para>
+/// <para>Calls: MatchStr</para>
+/// <para>Returns: MatchStr(ALeaf, KNOWN_CONTROLS)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CmpIsKnownControl(const ALeaf: string): Boolean;
 /// <summary>Resource names in a compiled resource file (.res / .dcr) or a resource script (.rc).</summary>
 /// <param name="APath">The file; a missing or unreadable file gives nil.</param>
 /// <returns>Every resource name, upper case; ordinal names are left out.</returns>
-/// <remarks>A .res / .dcr is read as the 32-bit resource format (a 32-byte empty header entry,
+/// <remarks>
+/// A .res / .dcr is read as the 32-bit resource format (a 32-byte empty header entry,
 /// then entries of data size, header size, type, name, padding, five header fields and the
 /// DWORD-aligned data). A .rc is read line by line: the first word of a line that names a
-/// resource type. Never raises.</remarks>
+/// resource type. Never raises.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.CMP.TCmpRun.ResourceNames (DRagLint.V151.CMP.pas)</para>
+/// <para>Calls: DRagLint.V151.CMP.Support.ResNamesOfBinary, DRagLint.V151.CMP.Support.ResNamesOfScript, ExtractFileExt, SameText</para>
+/// <para>Returns: nil; ResNamesOfBinary(TFile.ReadAllBytes(APath))</para>
+/// <para>Catches: EEncodingError (swallowed); EFOpenError (swallowed); EInOutError (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.V151.CMP.Support.ResNamesOfBinary"/>
+/// <seealso cref="DRagLint.V151.CMP.Support.ResNamesOfScript"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CmpResourceNames(const APath: string): TArray<string>;
 /// <summary>Collects every class declared in the unit.</summary>
 /// <param name="ASrc">The bytes the tree was parsed from.</param>
 /// <param name="ARoot">Root node of the unit.</param>
 /// <param name="AClasses">Receives one model per class, keyed by lower-case leaf name; the first
 /// declaration of a name wins. The dictionary owns the models.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.CMP.Support.CmpCollectClasses (DRagLint.V151.CMP.Support.pas), DRagLint.V151.CMP.TCmpRun.Prepare (DRagLint.V151.CMP.pas)</para>
+/// <para>Calls: Default, DRagLint.V151.CMP.Support.CmpCollectClasses, DRagLint.V151.CMP.Support.CmpLeaf, DRagLint.V151.CMP.Support.CmpLow, DRagLint.V151.CMP.Support.CmpText, DRagLint.V151.CMP.Support.CollectMembers, DRagLint.V151.CMP.Support.TCmpClass.Create, LowerCase, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, Trim</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 30 lines (full implementation)</para>
+/// <para>Recursive</para>
+/// <seealso cref="DRagLint.V151.CMP.Support.CmpLeaf"/>
+/// <seealso cref="DRagLint.V151.CMP.Support.CmpLow"/>
+/// <seealso cref="DRagLint.V151.CMP.Support.CmpText"/>
+/// <seealso cref="DRagLint.V151.CMP.Support.CollectMembers"/>
+/// <seealso cref="DRagLint.V151.CMP.Support.TCmpClass.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure CmpCollectClasses(const ASrc: TBytes; const ARoot: TTSNode; AClasses: TObjectDictionary<string, TCmpClass>);
 
 implementation
@@ -133,7 +250,7 @@ const
     'tfdquery', 'tfdtable', 'tfdmemtable', 'tfdadaptedataset', 'tfddataset', 'tfdtransaction',
     'tcommondialog', 'topendialog', 'tsavedialog');
 
-function CmpText(const ASrc: TBytes; const ANode: TTSNode): string;
+function CmpText(const ASrc: TBytes; const ANode: TTSNode): string;  // dl:ok duplicate-code@f020 -- REVIEWED 2026-11-14 v151 INT: same shape over different fields; a helper would need more parameters than it saves
 var
   S, L: Integer;
 begin

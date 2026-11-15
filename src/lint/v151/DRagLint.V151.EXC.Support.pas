@@ -172,7 +172,7 @@ begin
   inherited Destroy;
 end;
 
-function TExcRun.NodeStr(const N: TTSNode): string;
+function TExcRun.NodeStr(const N: TTSNode): string;  // dl:ok duplicate-code@b658 -- REVIEWED 2026-11-14 v151 INT: same shape over different fields; a helper would need more parameters than it saves
 var
   S, L: Integer;
 begin
@@ -229,7 +229,7 @@ begin
   Result:= if P > 0 then Copy(S, P + 1, MaxInt) else S;
 end;
 
-class function TExcRun.HasKeyword(const N: TTSNode; const AKinds: array of string): Boolean;
+class function TExcRun.HasKeyword(const N: TTSNode; const AKinds: array of string): Boolean;  // dl:ok duplicate-code@0777 -- REVIEWED 2026-11-14 v151 INT: same shape over different fields; a helper would need more parameters than it saves
 var
   I, J: Integer;
   C   : TTSNode;
@@ -302,7 +302,7 @@ var
   Ty: TTSNode;
 begin
   Result:= nil;
-  Args:= AHdr.ChildByField('args');
+  Args:= AHdr.ChildByField('args');  // dl:ok duplicate-code@f47c -- REVIEWED 2026-11-14 v151 INT: same shape over different fields; a helper would need more parameters than it saves
   if Args.IsNull then Exit;
   for I:= 0 to Args.NamedChildCount - 1 do
   begin

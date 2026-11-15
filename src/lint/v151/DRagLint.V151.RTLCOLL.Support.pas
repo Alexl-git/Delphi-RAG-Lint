@@ -29,6 +29,12 @@ const
 
 type
   /// <summary>One hit of an analysis: where, under which rule, and what to say.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.RTLCOLL.Support.pas), DRagLint.V151.RTLCOLL.Support.FindDictionaryGetWithoutCheck (DRagLint.V151.RTLCOLL.Support.pas), DRagLint.V151.RTLCOLL.Support.FindStringListObjectsLeak (DRagLint.V151.RTLCOLL.Support.pas), DRagLint.V151.RTLCOLL.Support.FindStringListUnsorted (DRagLint.V151.RTLCOLL.Support.pas), DRagLint.V151.RTLCOLL.Support.Hit (DRagLint.V151.RTLCOLL.Support.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.V151.RTLCOLL, DRagLint.V151.RTLCOLL.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRtlCollHit = record
     Rule  : string;
     Offset: Integer;
@@ -37,6 +43,12 @@ type
   end;
 
   /// <summary>Half-open offset range [First, Last) of one routine (or of the text before the first routine).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.RTLCOLL.Support.pas), DRagLint.V151.RTLCOLL.Support.FindNowForElapsedTime (DRagLint.V151.RTLCOLL.Support.pas), DRagLint.V151.RTLCOLL.Support.FindRegistryHklmWrite (DRagLint.V151.RTLCOLL.Support.pas), DRagLint.V151.RTLCOLL.Support.Slice (DRagLint.V151.RTLCOLL.Support.pas), DRagLint.V151.RTLCOLL.Support.SplitRoutines (DRagLint.V151.RTLCOLL.Support.pas)</para>
+  /// <para>Used in units: DRagLint.V151.RTLCOLL.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRtlRange = record
     First: Integer;
     Last : Integer;
@@ -45,8 +57,15 @@ type
 /// <summary>Blanks comments and string-literal content, keeping every offset and line break.</summary>
 /// <param name="ASrc">Pascal source text.</param>
 /// <returns>Text of the same length; string delimiters stay, their content and all comments become spaces.</returns>
-/// <remarks>Handles // line comments, { } and (* *) blocks (compiler directives included) and
-/// doubled quotes inside strings. An unterminated block runs to the end of the text.</remarks>
+/// <remarks>
+/// Handles // line comments, { } and (* *) blocks (compiler directives included) and
+/// doubled quotes inside strings. An unterminated block runs to the end of the text.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.RTLCOLL.TV151RTLCOLLRules.CheckFile (DRagLint.V151.RTLCOLL.pas), DRagLint.V151.RTLCOLL.TV151RTLCOLLRules.CheckProject (DRagLint.V151.RTLCOLL.pas)</para>
+/// <para>Calls: PChar, SetString</para>
+/// <para>Complexity: 30 (cyclomatic, outer body), 85 lines (full implementation)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MaskSource(const ASrc: string): string;
 
 /// <summary>Converts an offset into a 1-based line and column.</summary>
@@ -54,63 +73,157 @@ function MaskSource(const ASrc: string): string;
 /// <param name="AOffset">0-based offset.</param>
 /// <param name="ALine">Receives the 1-based line.</param>
 /// <param name="ACol">Receives the 1-based column.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.RTLCOLL.AddHits (DRagLint.V151.RTLCOLL.pas), DRagLint.V151.RTLCOLL.TV151RTLCOLLRules.CheckProject (DRagLint.V151.RTLCOLL.pas)</para>
+/// <para>Mutates: ALine (out), ACol (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure OffsetToLineCol(const AMasked: string; AOffset: Integer; out ALine, ACol: Integer);
 
 /// <summary>Reads a Pascal source file as ANSI text.</summary>
 /// <param name="APath">File path.</param>
 /// <returns>The text; empty when the file cannot be read.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.RTLCOLL.TV151RTLCOLLRules.CheckFile (DRagLint.V151.RTLCOLL.pas), DRagLint.V151.RTLCOLL.TV151RTLCOLLRules.CheckProject (DRagLint.V151.RTLCOLL.pas)</para>
+/// <para>Returns: TFile.ReadAllText(APath, TEncoding.ANSI); ''</para>
+/// <para>Catches: EArgumentException (swallowed); EDirectoryNotFoundException (swallowed); EFileNotFoundException (swallowed); EFOpenError (swallowed); EInOutError (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReadSourceText(const APath: string): string;
 
 /// <summary>dictionary-get-without-check: a read of Dict[Key] / Dict.Items[Key] with no key guard in the routine.</summary>
 /// <param name="AMasked">Masked source.</param>
 /// <returns>One hit per routine and dictionary (the first unguarded read); repeats of the same pattern add noise.</returns>
-/// <remarks>Only names this file declares as TDictionary, TObjectDictionary, TSortedDictionary,
+/// <remarks>
+/// Only names this file declares as TDictionary, TObjectDictionary, TSortedDictionary,
 /// IDictionary (or an alias / descendant declared in the file) count. A routine is guarded for a name when it
 /// calls ContainsKey, TryGetValue, TryAdd, ExtractPair, enumerates Keys / Values / the dictionary, adds to it
-/// before the read, or handles EKeyNotFoundException / EListError. A write target (Dict[Key] := ...) is not a read.</remarks>
+/// before the read, or handles EKeyNotFoundException / EListError. A write target (Dict[Key] := ...) is not a read.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.RTLCOLL.TV151RTLCOLLRules.CheckFile (DRagLint.V151.RTLCOLL.pas)</para>
+/// <para>Calls: CharInSet, ContainsText, Copy, DRagLint.V151.RTLCOLL.Support.BaseTypeName, DRagLint.V151.RTLCOLL.Support.Esc, DRagLint.V151.RTLCOLL.Support.Hit, DRagLint.V151.RTLCOLL.Support.MatchClose, DRagLint.V151.RTLCOLL.Support.TScan.Body, DRagLint.V151.RTLCOLL.Support.TScan.Create, DRagLint.V151.RTLCOLL.Support.TScan.Qualifies, DRagLint.V151.RTLCOLL.Support.TScan.RangeIndex, IntToStr, LowerCase, Trim</para>
+/// <para>Returns: nil</para>
+/// <para>Complexity: 20 (cyclomatic, outer body), 60 lines (full implementation)</para>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.BaseTypeName"/>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.Esc"/>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.Hit"/>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.MatchClose"/>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.TScan.Body"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindDictionaryGetWithoutCheck(const AMasked: string): TArray<TRtlCollHit>;
 
 /// <summary>stringlist-objects-leak: AddObject / InsertObject / Objects[i] := stores a freshly created object into a
 /// string list that does not own its objects.</summary>
 /// <param name="AMasked">Masked source.</param>
 /// <returns>One hit per storing call.</returns>
-/// <remarks>The list must be created in this file. Silent when OwnsObjects is set (Create(True) or
+/// <remarks>
+/// The list must be created in this file. Silent when OwnsObjects is set (Create(True) or
 /// OwnsObjects := True), when the file frees its Objects[] or hands the list to a Free/Clear/Destroy/Dispose/Release
-/// routine, and for a local that is freed in the routine.</remarks>
+/// routine, and for a local that is freed in the routine.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.RTLCOLL.TV151RTLCOLLRules.CheckFile (DRagLint.V151.RTLCOLL.pas)</para>
+/// <para>Calls: ContainsText, DRagLint.V151.RTLCOLL.Support.Esc, DRagLint.V151.RTLCOLL.Support.Hit, DRagLint.V151.RTLCOLL.Support.IsFreshCreateExpr, DRagLint.V151.RTLCOLL.Support.IsUnownedList, DRagLint.V151.RTLCOLL.Support.SplitArgs, DRagLint.V151.RTLCOLL.Support.TScan.Body, DRagLint.V151.RTLCOLL.Support.TScan.Create, DRagLint.V151.RTLCOLL.Support.TScan.RangeIndex, SameText</para>
+/// <para>Returns: nil</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 45 lines (full implementation)</para>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.Esc"/>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.Hit"/>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.IsFreshCreateExpr"/>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.IsUnownedList"/>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.SplitArgs"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindStringListObjectsLeak(const AMasked: string): TArray<TRtlCollHit>;
 
 /// <summary>stringlist-unsorted: Find, or a Duplicates assignment, on a list that is created but never sorted.</summary>
 /// <param name="AMasked">Masked source.</param>
 /// <returns>One hit per Find call / Duplicates assignment.</returns>
-/// <remarks>Silent when the file sets Sorted := True, calls Sort or CustomSort, assigns the list from another one,
-/// or wraps it in a with statement.</remarks>
+/// <remarks>
+/// Silent when the file sets Sorted := True, calls Sort or CustomSort, assigns the list from another one,
+/// or wraps it in a with statement.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.RTLCOLL.TV151RTLCOLLRules.CheckFile (DRagLint.V151.RTLCOLL.pas)</para>
+/// <para>Calls: ContainsText, DRagLint.V151.RTLCOLL.Support.Esc, DRagLint.V151.RTLCOLL.Support.Hit, DRagLint.V151.RTLCOLL.Support.TScan.Create, DRagLint.V151.RTLCOLL.Support.TScan.CreatedIn, DRagLint.V151.RTLCOLL.Support.TScan.Qualifies, DRagLint.V151.RTLCOLL.Support.TScan.RangeIndex, DRagLint.V151.RTLCOLL.Support.TScan.ScopeText, StartsText</para>
+/// <para>Returns: nil</para>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.Esc"/>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.Hit"/>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.TScan.Create"/>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.TScan.CreatedIn"/>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.TScan.Qualifies"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindStringListUnsorted(const AMasked: string): TArray<TRtlCollHit>;
 
 /// <summary>null-compare: a comparison "= Null" or "&lt;&gt; Null" (either operand order).</summary>
 /// <param name="AMasked">Masked source.</param>
 /// <returns>One hit per comparison.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.RTLCOLL.TV151RTLCOLLRules.CheckFile (DRagLint.V151.RTLCOLL.pas)</para>
+/// <para>Calls: ContainsText, DRagLint.V151.RTLCOLL.Support.Hit</para>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.Hit"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindNullCompare(const AMasked: string): TArray<TRtlCollHit>;
 
 /// <summary>registry-hklm-write: a registry object rooted at HKEY_LOCAL_MACHINE that is written in the same routine,
 /// or a Win32 Reg* write call given HKEY_LOCAL_MACHINE.</summary>
 /// <param name="AMasked">Masked source.</param>
 /// <returns>One hit per routine and registry object, at the first write.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.RTLCOLL.TV151RTLCOLLRules.CheckFile (DRagLint.V151.RTLCOLL.pas)</para>
+/// <para>Calls: ContainsText, DRagLint.V151.RTLCOLL.Support.Esc, DRagLint.V151.RTLCOLL.Support.Hit, DRagLint.V151.RTLCOLL.Support.Slice, DRagLint.V151.RTLCOLL.Support.SplitRoutines</para>
+/// <para>Returns: nil</para>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.Esc"/>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.Hit"/>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.Slice"/>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.SplitRoutines"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindRegistryHklmWrite(const AMasked: string): TArray<TRtlCollHit>;
 
 /// <summary>Position of the first call to Random / RandomRange / RandomFrom, or -1.</summary>
 /// <param name="AMasked">Masked source.</param>
 /// <returns>Offset of the call, or -1 when the text has none.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.RTLCOLL.TV151RTLCOLLRules.CheckProject (DRagLint.V151.RTLCOLL.pas)</para>
+/// <para>Calls: ContainsText, Copy, DRagLint.V151.RTLCOLL.Support.InSet</para>
+/// <para>Returns: -1; M.Index - 1</para>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.InSet"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindFirstRandomCall(const AMasked: string): Integer;
 
 /// <summary>True when the masked text calls Randomize or assigns RandSeed.</summary>
 /// <param name="AMasked">Masked source.</param>
+/// <returns><!-- drag-lint:auto type -->Boolean</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.RTLCOLL.TV151RTLCOLLRules.CheckProject (DRagLint.V151.RTLCOLL.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SeedsRandom(const AMasked: string): Boolean;
 
 /// <summary>now-for-elapsed-time: Now (or Time) taken into a local and subtracted from a later Now in the same routine.</summary>
 /// <param name="AMasked">Masked source.</param>
 /// <returns>One hit per elapsed-time computation.</returns>
-/// <remarks>Covers "Now - Start" and the DateUtils *Between(Now, Start) family. Both operands must be in one routine,
-/// so an age computation against a stored timestamp stays silent.</remarks>
+/// <remarks>
+/// Covers "Now - Start" and the DateUtils *Between(Now, Start) family. Both operands must be in one routine,
+/// so an age computation against a stored timestamp stays silent.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.RTLCOLL.TV151RTLCOLLRules.CheckFile (DRagLint.V151.RTLCOLL.pas)</para>
+/// <para>Calls: ContainsText, DRagLint.V151.RTLCOLL.Support.Esc, DRagLint.V151.RTLCOLL.Support.Hit, DRagLint.V151.RTLCOLL.Support.Slice, DRagLint.V151.RTLCOLL.Support.SplitRoutines, LowerCase, SameText</para>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.Esc"/>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.Hit"/>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.Slice"/>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.SplitRoutines"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindNowForElapsedTime(const AMasked: string): TArray<TRtlCollHit>;
 
 implementation
@@ -333,24 +446,11 @@ begin
   Result:= Result + [Trim(Copy(AText, Start + 1, Close - 1 - Start))];
 end;
 
-function RoutineAt(const ARanges: TArray<TRtlRange>; AOffset: Integer): TRtlRange;
-begin
-  Result.First:= 0;
-  Result.Last := MaxInt;
-  for var R: TRtlRange in ARanges do
-    if (AOffset >= R.First) and (AOffset < R.Last) then Exit(R);
-end;
-
 function Slice(const AText: string; const ARange: TRtlRange): string;
 begin
   var Last: Integer:= ARange.Last;
   if Last > Length(AText) then Last:= Length(AText);
   Result:= Copy(AText, ARange.First + 1, Last - ARange.First);
-end;
-
-function HasWord(const AText, AWord: string): Boolean;
-begin
-  Result:= TRegEx.IsMatch(AText, '(?<![\w.])' + AWord + '\b', [roIgnoreCase]);
 end;
 
 function Esc(const AName: string): string;

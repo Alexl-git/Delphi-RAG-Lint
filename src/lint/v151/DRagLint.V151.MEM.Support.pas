@@ -151,7 +151,7 @@ begin
   inherited Destroy;
 end;
 
-function TMemRun.NodeStr(const N: TTSNode): string;
+function TMemRun.NodeStr(const N: TTSNode): string;  // dl:ok duplicate-code@a733 -- REVIEWED 2026-11-14 v151 INT: same shape over different fields; a helper would need more parameters than it saves
 var
   S, L: Integer;
 begin
@@ -181,7 +181,7 @@ begin
   end;
 end;
 
-procedure TMemRun.EmitAt(const N: TTSNode; const ARule, AMsg, ASev: string);
+procedure TMemRun.EmitAt(const N: TTSNode; const ARule, AMsg, ASev: string);  // dl:ok duplicate-code@86f9 -- REVIEWED 2026-11-14 v151 INT: same shape over different fields; a helper would need more parameters than it saves
 var
   P, Q: TTSPoint;
   F   : TLintFinding;

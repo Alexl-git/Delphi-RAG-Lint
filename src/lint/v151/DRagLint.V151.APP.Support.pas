@@ -28,6 +28,12 @@ const
 
 type
   /// <summary>One identifier-like word of the masked source.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppChecks.AsmWithoutWin64Variant (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppSrc.BuildTokens (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppSrc.Create (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppSrc.ParseRoutine (DRagLint.V151.APP.Support.pas)</para>
+  /// <para>Used in units: DRagLint.V151.APP.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TAppTok = record
     Text  : string;
     Low   : string;
@@ -36,12 +42,24 @@ type
   end;
 
   /// <summary>One compiler directive `{$...}` found in the raw source.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppSrc.BuildBlocks (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppSrc.Create (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppSrc.HasX64Directive (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppSrc.Mask (DRagLint.V151.APP.Support.pas)</para>
+  /// <para>Used in units: DRagLint.V151.APP.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TAppDirective = record
     Pos : Integer;
     Text: string;  // upper case, trimmed, without braces, starts with '$'
   end;
 
   /// <summary>One conditional-compilation block, from its opening directive to its closing one.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.APP.Support.pas) ?, DRagLint.V151.APP.Support.TAppSrc.BranchArch (DRagLint.V151.APP.Support.pas) ?, DRagLint.V151.APP.Support.TAppSrc.BuildBlocks (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppSrc.Create (DRagLint.V151.APP.Support.pas) ?, DRagLint.V151.APP.Support.TAppSrc.Enclosing (DRagLint.V151.APP.Support.pas) ? (+2 more)</para>
+  /// <para>Used in units: DRagLint.V151.APP.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TAppCondBlock = record
     StartPos: Integer;
     ElsePos : Integer;  // first $ELSE / $ELSEIF, or 0
@@ -51,6 +69,12 @@ type
   end;
 
   /// <summary>One routine implementation found in the masked source.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.APP.Support.pas) ?, DRagLint.V151.APP.Support.TAppChecks.UiCallInConsoleOrService (DRagLint.V151.APP.Support.pas) ?, DRagLint.V151.APP.Support.TAppSrc.BodyOf (DRagLint.V151.APP.Support.pas) ?, DRagLint.V151.APP.Support.TAppSrc.Create (DRagLint.V151.APP.Support.pas) ?, DRagLint.V151.APP.Support.TAppSrc.ParseRoutine (DRagLint.V151.APP.Support.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.V151.APP.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TAppRoutine = record
     Name     : string;  // as written, e.g. 'TImportTests.LoadEmpty'
     HeaderPos: Integer;
@@ -59,12 +83,23 @@ type
   end;
 
   /// <summary>Which processor a conditional-compilation branch is written for.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppChecks.AsmWithoutWin64Variant (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppSrc.BranchArch (DRagLint.V151.APP.Support.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TAppArch = (aaNone, aaX86, aaX64);
 
   /// <summary>A source file prepared for the lane's text rules.</summary>
-  /// <remarks>Immutable after Create. Masked has exactly the length of the raw text:
+  /// <remarks>
+  /// Immutable after Create. Masked has exactly the length of the raw text:
   /// comments, string literals and directives become spaces, line breaks are kept,
-  /// so an offset in Masked is an offset in the raw text.</remarks>
+  /// so an offset in Masked is an offset in the raw text.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.APP.Support.pas) ?, DRagLint.V151.APP.Support.MakeFinding (DRagLint.V151.APP.Support.pas) ?, DRagLint.V151.APP.Support.TAppChecks.TlsVerificationDisabled (DRagLint.V151.APP.Support.pas) ?, DRagLint.V151.APP.Support.TAppChecks.UiCallInConsoleOrService (DRagLint.V151.APP.Support.pas) ?, DRagLint.V151.APP.TV151APPRules.CheckFile (DRagLint.V151.APP.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.V151.APP, DRagLint.V151.APP.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TAppSrc = class  // dl:ok high-response@2221 -- REVIEWED 2026-11-14 v151 INT: one scanner class holding the per-rule checks of one lane; a split is beyond 1.51
   strict private
     FRaw        : string;
@@ -74,32 +109,281 @@ type
     FToks       : TList<TAppTok>;
     FRoutines   : TList<TAppRoutine>;
     FBlocks     : TList<TAppCondBlock>;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.APP.Support.TAppSrc.Create (DRagLint.V151.APP.Support.pas)</para>
+    /// <para>Calls: Copy, DRagLint.V151.APP.Support.TAppSrc.Mask.Blank, Trim, UpperCase</para>
+    /// <para>Complexity: 30 (cyclomatic, outer body), 92 lines (full implementation)</para>
+    /// <para>Reads: FRaw, FLineStarts, FDirs   Writes: FLineStarts, FMasked</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.Mask.Blank"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BodyOf"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BranchArch"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildBlocks"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildTokens"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Mask;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.APP.Support.TAppSrc.Create (DRagLint.V151.APP.Support.pas)</para>
+    /// <para>Calls: CharInSet, Copy, DRagLint.V151.APP.Support.IsIdentChar, DRagLint.V151.APP.Support.IsIdentStart, LowerCase</para>
+    /// <para>Reads: FMasked, FToks</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.IsIdentChar"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.IsIdentStart"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BodyOf"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BranchArch"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildBlocks"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure BuildTokens;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.APP.Support.TAppSrc.Create (DRagLint.V151.APP.Support.pas)</para>
+    /// <para>Calls: Copy, Default, Pos, Trim</para>
+    /// <para>Complexity: 13 (cyclomatic, outer body), 52 lines (full implementation)</para>
+    /// <para>Reads: FDirs, FBlocks   Writes: FBlocks</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BodyOf"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BranchArch"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildTokens"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.ColOf"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure BuildBlocks;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.APP.Support.TAppSrc.Create (DRagLint.V151.APP.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.APP.Support.TAppSrc.IsRoutineStart, DRagLint.V151.APP.Support.TAppSrc.IsTypeBodyStart, DRagLint.V151.APP.Support.TAppSrc.ParseRoutine, DRagLint.V151.APP.Support.TAppSrc.SkipTypeBody</para>
+    /// <para>Reads: FToks</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.IsRoutineStart"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.IsTypeBodyStart"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.ParseRoutine"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.SkipTypeBody"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BodyOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure FindRoutines;
+    /// <param name="APos"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto type -->Integer</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.APP.Support.TAppSrc.ParseRoutine (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppSrc.SkipTypeBody (DRagLint.V151.APP.Support.pas)</para>
+    /// <para>Calls: CharInSet</para>
+    /// <para>Reads: FMasked</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BodyOf"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BranchArch"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildBlocks"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildTokens"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.ColOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function NextNonWs(APos: Integer): Integer;
+    /// <param name="APos"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->Char -- Observed: FMasked[P].</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.APP.Support.TAppSrc.IsRoutineStart (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppSrc.IsTypeBodyStart (DRagLint.V151.APP.Support.pas)</para>
+    /// <para>Calls: CharInSet</para>
+    /// <para>Reads: FMasked</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BodyOf"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BranchArch"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildBlocks"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildTokens"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.ColOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function PrevCh(APos: Integer): Char;
+    /// <param name="AIdx"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: (Low = 'procedure') or (Low =
+    /// 'function') or (Low = 'constructor') or (Low = 'destructor').</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.APP.Support.TAppSrc.FindRoutines (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppSrc.ParseRoutine (DRagLint.V151.APP.Support.pas)</para>
+    /// <para>Calls: CharInSet, DRagLint.V151.APP.Support.TAppSrc.PrevCh</para>
+    /// <para>Reads: FToks</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.PrevCh"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BodyOf"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BranchArch"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildBlocks"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildTokens"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsRoutineStart(AIdx: Integer): Boolean;
+    /// <param name="AIdx"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: (Low = 'class') or (Low =
+    /// 'record') or (Low = 'object') or (Low = 'interface') or (Low = 'dispinterface');
+    /// PrevCh(P) = '='.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.APP.Support.TAppSrc.FindRoutines (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppSrc.ParseRoutine (DRagLint.V151.APP.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.APP.Support.TAppSrc.PrevCh</para>
+    /// <para>Reads: FToks</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.PrevCh"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BodyOf"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BranchArch"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildBlocks"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildTokens"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsTypeBodyStart(AIdx: Integer): Boolean;
+    /// <param name="AIdx"><!-- drag-lint:auto type -->var Integer</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.APP.Support.TAppSrc.FindRoutines (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppSrc.ParseRoutine (DRagLint.V151.APP.Support.pas)</para>
+    /// <para>Calls: Copy, DRagLint.V151.APP.Support.IsIdentChar, DRagLint.V151.APP.Support.TAppSrc.NextNonWs, LowerCase</para>
+    /// <para>Complexity: 22 (cyclomatic, outer body), 49 lines (full implementation)</para>
+    /// <para>Reads: FToks, FMasked</para>
+    /// <para>Mutates: AIdx (var)</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.IsIdentChar"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.NextNonWs"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BodyOf"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BranchArch"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildBlocks"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure SkipTypeBody(var AIdx: Integer);
+    /// <param name="AIdx"><!-- drag-lint:auto type -->var Integer</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.APP.Support.TAppSrc.FindRoutines (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppSrc.ParseRoutine (DRagLint.V151.APP.Support.pas)</para>
+    /// <para>Calls: CharInSet, Copy, Default, DRagLint.V151.APP.Support.IsIdentChar, DRagLint.V151.APP.Support.TAppSrc.IsRoutineStart, DRagLint.V151.APP.Support.TAppSrc.IsTypeBodyStart, DRagLint.V151.APP.Support.TAppSrc.NextNonWs, DRagLint.V151.APP.Support.TAppSrc.ParseRoutine, DRagLint.V151.APP.Support.TAppSrc.SkipTypeBody, Pos</para>
+    /// <para>Complexity: 28 (cyclomatic, outer body), 69 lines (full implementation)</para>
+    /// <para>Reads: FToks, FMasked, FRoutines</para>
+    /// <para>Recursive</para>
+    /// <para>Mutates: AIdx (var)</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.IsIdentChar"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.IsRoutineStart"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.IsTypeBodyStart"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.NextNonWs"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.SkipTypeBody"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure ParseRoutine(var AIdx: Integer);
   public
     /// <summary>Prepares ARaw: masks it and builds the token, routine and conditional tables.</summary>
     /// <param name="ARaw">The source text as read from disk.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.APP.TV151APPRules.CheckFile (DRagLint.V151.APP.pas)</para>
+    /// <para>Calls: DRagLint.V151.APP.Support.TAppSrc.BuildBlocks, DRagLint.V151.APP.Support.TAppSrc.BuildTokens, DRagLint.V151.APP.Support.TAppSrc.FindRoutines, DRagLint.V151.APP.Support.TAppSrc.Mask</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FRaw, FDirs, FToks, FRoutines, FBlocks</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildBlocks"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildTokens"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.FindRoutines"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.Mask"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BodyOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(const ARaw: string);
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FBlocks, FRoutines, FToks, FDirs</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BodyOf"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BranchArch"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildBlocks"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildTokens"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.ColOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>1-based line of an offset.</summary>
+    /// <param name="APos"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->Integer -- Observed: Lo + 1.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.APP.Support.MakeFinding (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppSrc.ColOf (DRagLint.V151.APP.Support.pas)</para>
+    /// <para>Reads: FLineStarts</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BodyOf"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BranchArch"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildBlocks"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildTokens"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.ColOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function LineOf(APos: Integer): Integer;
     /// <summary>1-based column of an offset.</summary>
+    /// <param name="APos"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->Integer -- Observed: APos -
+    /// FLineStarts[LineOf(APos) - 1] + 1.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.APP.Support.MakeFinding (DRagLint.V151.APP.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.APP.Support.TAppSrc.LineOf</para>
+    /// <para>Reads: FLineStarts</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.LineOf"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BodyOf"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BranchArch"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildBlocks"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildTokens"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ColOf(APos: Integer): Integer;
     /// <summary>The conditional blocks that contain an offset, outermost first.</summary>
+    /// <param name="APos"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TAppCondBlock&gt;</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.APP.Support.TAppChecks.AsmWithoutWin64Variant (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppChecks.WritelnInGuiApp (DRagLint.V151.APP.Support.pas)</para>
+    /// <para>Reads: FBlocks</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BodyOf"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BranchArch"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildBlocks"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildTokens"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.ColOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Enclosing(APos: Integer): TArray<TAppCondBlock>;
     /// <summary>The architecture a block's branch at an offset is written for.</summary>
+    /// <param name="ABlock"><!-- drag-lint:auto type -->const TAppCondBlock</param>
+    /// <param name="APos"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->TAppArch -- Observed: aaX64.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.APP.Support.TAppChecks.AsmWithoutWin64Variant (DRagLint.V151.APP.Support.pas)</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BodyOf"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildBlocks"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildTokens"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.ColOf"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function BranchArch(const ABlock: TAppCondBlock; APos: Integer): TAppArch;
     /// <summary>True when any directive of the file names a 64-bit target.</summary>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.APP.Support.TAppChecks.AsmWithoutWin64Variant (DRagLint.V151.APP.Support.pas)</para>
+    /// <para>Reads: FDirs</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BodyOf"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BranchArch"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildBlocks"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildTokens"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.ColOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function HasX64Directive: Boolean;
     /// <summary>The body text (masked) of a routine.</summary>
+    /// <param name="ARoutine"><!-- drag-lint:auto type -->const TAppRoutine</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: Copy(FMasked,
+    /// ARoutine.BodyPos, ARoutine.BodyEnd - ARoutine.BodyPos).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.APP.Support.TAppChecks.DunitxTestWithoutAssert (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppChecks.UiCallInConsoleOrService (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppChecks.WritelnInGuiApp (DRagLint.V151.APP.Support.pas)</para>
+    /// <para>Calls: Copy</para>
+    /// <para>Reads: FMasked</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BranchArch"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildBlocks"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BuildTokens"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.ColOf"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function BodyOf(const ARoutine: TAppRoutine): string;
     property Raw: string read FRaw;
     property Masked: string read FMasked;
@@ -110,28 +394,151 @@ type
   end;
 
   /// <summary>The lane's seven checks. Each appends findings for ONE rule to AOut.</summary>
-  /// <remarks>Stateless; all methods are pure functions of the prepared source.</remarks>
+  /// <remarks>
+  /// Stateless; all methods are pure functions of the prepared source.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.V151.APP.TV151APPRules.CheckFile (DRagLint.V151.APP.pas)</para>
+  /// <para>Used in units: DRagLint.V151.APP</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TAppChecks = class
   public
     /// <summary>Certificate checks that are switched off: empty VerifyMode, accept-everything verify handlers, ignore-certificate flags.</summary>
+    /// <param name="ASrc"><!-- drag-lint:auto type -->const TAppSrc</param>
+    /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AOut"><!-- drag-lint:auto type -->TList&lt;TLintFinding&gt;</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.APP.TV151APPRules.CheckFile (DRagLint.V151.APP.pas)</para>
+    /// <para>Calls: DRagLint.V151.APP.Support.MakeFinding</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.MakeFinding"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.AsmWithoutWin64Variant"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.ContractUnitDeclaresClass"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.DunitxTestWithoutAssert"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.UiCallInConsoleOrService"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure TlsVerificationDisabled(const ASrc: TAppSrc; const APath: string; AOut: TList<TLintFinding>); static;
     /// <summary>A dialog call in a console program or in a method of a Windows service class.</summary>
+    /// <param name="ASrc"><!-- drag-lint:auto type -->const TAppSrc</param>
+    /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AOut"><!-- drag-lint:auto type -->TList&lt;TLintFinding&gt;</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.APP.TV151APPRules.CheckFile (DRagLint.V151.APP.pas)</para>
+    /// <para>Calls: Copy, DRagLint.V151.APP.Support.TAppChecks.UiCallInConsoleOrService.Report, DRagLint.V151.APP.Support.TAppSrc.BodyOf, LowerCase, MakeFinding, Pos</para>
+    /// <para>Complexity: 13 (cyclomatic, outer body), 59 lines (full implementation)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.UiCallInConsoleOrService.Report"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BodyOf"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.AsmWithoutWin64Variant"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.ContractUnitDeclaresClass"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.DunitxTestWithoutAssert"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure UiCallInConsoleOrService(const ASrc: TAppSrc; const APath: string; AOut: TList<TLintFinding>); static;
     /// <summary>A [Test] / [TestCase] method that checks nothing, directly or through the routines of the same file.</summary>
+    /// <param name="ASrc"><!-- drag-lint:auto type -->const TAppSrc</param>
+    /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AOut"><!-- drag-lint:auto type -->TList&lt;TLintFinding&gt;</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.APP.TV151APPRules.CheckFile (DRagLint.V151.APP.pas)</para>
+    /// <para>Calls: Copy, DRagLint.V151.APP.Support.MakeFinding, DRagLint.V151.APP.Support.TAppChecks.DunitxTestWithoutAssert.IsAssertWord, DRagLint.V151.APP.Support.TAppSrc.BodyOf, LastDelimiter, LowerCase, SameText</para>
+    /// <para>Complexity: 16 (cyclomatic, outer body), 85 lines (full implementation)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.MakeFinding"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.DunitxTestWithoutAssert.IsAssertWord"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BodyOf"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.AsmWithoutWin64Variant"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.ContractUnitDeclaresClass"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure DunitxTestWithoutAssert(const ASrc: TAppSrc; const APath: string; AOut: TList<TLintFinding>); static;
     /// <summary>A unit named like a contract unit (Intf, Interfaces, Contracts) that declares a class.</summary>
+    /// <param name="ASrc"><!-- drag-lint:auto type -->const TAppSrc</param>
+    /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AOut"><!-- drag-lint:auto type -->TList&lt;TLintFinding&gt;</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.APP.TV151APPRules.CheckFile (DRagLint.V151.APP.pas)</para>
+    /// <para>Calls: Copy, DRagLint.V151.APP.Support.MakeFinding, LastDelimiter</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.MakeFinding"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.AsmWithoutWin64Variant"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.DunitxTestWithoutAssert"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.TlsVerificationDisabled"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.UiCallInConsoleOrService"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure ContractUnitDeclaresClass(const ASrc: TAppSrc; const APath: string; AOut: TList<TLintFinding>); static;
     /// <summary>DES, 3DES, RC2, RC4 and ECB-mode ciphers.</summary>
+    /// <param name="ASrc"><!-- drag-lint:auto type -->const TAppSrc</param>
+    /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AOut"><!-- drag-lint:auto type -->TList&lt;TLintFinding&gt;</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.APP.TV151APPRules.CheckFile (DRagLint.V151.APP.pas)</para>
+    /// <para>Calls: DRagLint.V151.APP.Support.MakeFinding</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.MakeFinding"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.AsmWithoutWin64Variant"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.ContractUnitDeclaresClass"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.DunitxTestWithoutAssert"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.TlsVerificationDisabled"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure WeakCipher(const ASrc: TAppSrc; const APath: string; AOut: TList<TLintFinding>); static;
     /// <summary>An asm block that has no 64-bit variant in the file.</summary>
+    /// <param name="ASrc"><!-- drag-lint:auto type -->const TAppSrc</param>
+    /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AOut"><!-- drag-lint:auto type -->TList&lt;TLintFinding&gt;</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.APP.TV151APPRules.CheckFile (DRagLint.V151.APP.pas)</para>
+    /// <para>Calls: DRagLint.V151.APP.Support.MakeFinding, DRagLint.V151.APP.Support.TAppSrc.BranchArch, DRagLint.V151.APP.Support.TAppSrc.Enclosing, DRagLint.V151.APP.Support.TAppSrc.HasX64Directive</para>
+    /// <para>Complexity: 11 (cyclomatic, outer body), 36 lines (full implementation)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.MakeFinding"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BranchArch"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.Enclosing"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.HasX64Directive"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.ContractUnitDeclaresClass"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure AsmWithoutWin64Variant(const ASrc: TAppSrc; const APath: string; AOut: TList<TLintFinding>); static;
     /// <summary>Write / WriteLn to the console from a program or unit that has no console.</summary>
+    /// <param name="ASrc"><!-- drag-lint:auto type -->const TAppSrc</param>
+    /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AOut"><!-- drag-lint:auto type -->TList&lt;TLintFinding&gt;</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.APP.TV151APPRules.CheckFile (DRagLint.V151.APP.pas)</para>
+    /// <para>Calls: DRagLint.V151.APP.Support.MakeFinding, DRagLint.V151.APP.Support.TAppSrc.BodyOf, DRagLint.V151.APP.Support.TAppSrc.Enclosing, Trim</para>
+    /// <para>Complexity: 14 (cyclomatic, outer body), 36 lines (full implementation)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.MakeFinding"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BodyOf"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.Enclosing"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.AsmWithoutWin64Variant"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.ContractUnitDeclaresClass"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure WritelnInGuiApp(const ASrc: TAppSrc; const APath: string; AOut: TList<TLintFinding>); static;
   end;
 
 /// <summary>Reads a source file for the lane's rules.</summary>
 /// <param name="APath">Path of the .pas / .dpr file.</param>
 /// <returns>The file text; '' when it cannot be read.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.APP.TV151APPRules.CheckFile (DRagLint.V151.APP.pas)</para>
+/// <para>Returns: TFile.ReadAllText(APath); ''</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReadAppSource(const APath: string): string;
 
 implementation
@@ -143,7 +550,6 @@ uses
 const
   OPENER_WORDS = ',begin,case,try,asm,record,';
   DIRECTIVE_WORDS = ',overload,inline,stdcall,cdecl,register,safecall,virtual,override,reintroduce,static,deprecated,platform,dynamic,final,';
-  VAR_SECTION_WORDS = ',var,const,type,label,resourcestring,threadvar,';
   ARCH64_RE = '\b(CPUX64|WIN64|CPU64BITS|CPU64)\b';
   ARCH32_RE = '\b(CPUX86|CPU386|WIN32|CPU32BITS)\b';
 

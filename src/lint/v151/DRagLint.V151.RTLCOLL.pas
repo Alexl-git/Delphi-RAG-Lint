@@ -48,7 +48,7 @@ implementation
 
 uses
   System.IOUtils
-  , DRagLint.V151.RTLCOLL.Support
+  , DRagLint.V151.RTLCOLL.Support  // dl:ok uses-global-census@2049 -- REVIEWED 2026-11-14 v151 INT: a frame lane unit reads only the rule-id consts of its own Support unit; the census is the intended shape
   ;
 
 const
