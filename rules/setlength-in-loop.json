@@ -1,0 +1,8 @@
+{
+  "id": "setlength-in-loop",
+  "category": "complexity",
+  "severity": "warning",
+  "message": "SetLength(A, Length(A) + 1) in a loop reallocates and copies the array on every iteration; size it once up front or grow it in larger steps.",
+  "warn_capture": "warn",
+  "require_ancestor": ["for", "while", "repeat", "foreach"]
+}

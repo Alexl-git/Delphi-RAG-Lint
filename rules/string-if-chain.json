@@ -1,0 +1,9 @@
+{
+  "id": "string-if-chain",
+  "category": "refactoring",
+  "severity": "hint",
+  "enabled": false,
+  "message": "An if/else-if chain compares the same string against three or more literals; a lookup (TDictionary, IndexText + case) reads and extends better.",
+  "warn_capture": "warn",
+  "exclude_if_preceded_by": ["\\belse\\s*$"]
+}

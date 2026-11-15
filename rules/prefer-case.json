@@ -1,0 +1,9 @@
+{
+  "id": "prefer-case",
+  "category": "refactoring",
+  "severity": "hint",
+  "enabled": false,
+  "message": "An if/else-if chain compares the same name with three or more ordinal constants; a case statement states this directly.",
+  "warn_capture": "warn",
+  "exclude_if_preceded_by": ["\\belse\\s*$"]
+}

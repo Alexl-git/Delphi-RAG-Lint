@@ -1,0 +1,18 @@
+{
+  "id": "v151-sty-rules",
+  "title": "Style, loop and ordering rules",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.51.0-alpha",
+  "summary": "Eleven lint rules for begin/end bracketing, if-chains that want a lookup, loops that reallocate, list repaints, bad loop bounds and method body order; five are on by default",
+  "intro": "Read this when you want lint to flag loop and layout habits that cost time or hide bugs. Run drag-lint lint <unit.pas> or lint-all; the style rules (missing-begin-end, redundant-begin-end, prefer-case, string-if-chain, method-order, processmessages-in-handler) are off by default and are switched on with --rule <id> or the enabled list of the lint config. boolean-assign-if has a safe autofix.",
+  "wikiPage": "v151-style-loop-rules",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint"
+    }
+  ],
+  "audience": "both"
+}
