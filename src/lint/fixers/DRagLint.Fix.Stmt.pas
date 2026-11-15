@@ -1709,13 +1709,8 @@ end;
 
 { S without any whitespace, lower case: the comparable form of a condition }
 function Squash(const S: string): string;
-var
-  C: Char;
 begin
-  Result:= '';
-  for C in S do
-    if C > ' ' then Result:= Result + C;
-  Result:= LowerCase(Result);
+  Result:= LowerCase(TRegEx.Replace(S, '[\x00-\x20]', ''));
 end;
 
 { the source text between (AStartRow, AStartCol) and (AEndRow, AEndCol), 0-based byte columns on 7-bit rows }
@@ -1749,7 +1744,7 @@ end;
   the chain stays the else) or ` else if C then S` (the chain's end) therefore
   changes nothing. Declines on a comment, a directive or non-ASCII text in the
   cut, or any other shape. }
-function FixRepeatedElseIf(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
+function FixRepeatedElseIf(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@f5cb -- REVIEWED 2026-11-14: a fixer declines (Exit) on every source shape it was not written for; guard clauses by design
 var
   Fx                                : TFx    ;
   C, IfN, G, Top, Cur, DefProc, Els : TTSNode;
@@ -1863,7 +1858,7 @@ end;
   name from a `A, B: T` list, or the section it leaves empty) changes nothing.
   Declines on interface-section names (other units may name them), types,
   managed or unknown var types, and shared lines. }
-function FixUnusedGlobal(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
+function FixUnusedGlobal(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@a355 -- REVIEWED 2026-11-14: a fixer declines (Exit) on every source shape it was not written for; guard clauses by design
 var
   Fx              : TFx            ;
   N, D, Sec, Ty, T: TTSNode        ;
@@ -1884,8 +1879,7 @@ begin
   if TRegEx.IsMatch(ALines.Text, '[{(]\*?\$I(NCLUDE)?\s', [roIgnoreCase]) then Exit;
   if TRegEx.Matches(ALines.Text, '(?<![\w&])' + TRegEx.Escape(Nm) + '(?!\w)', [roIgnoreCase]).Count <> 1 then Exit;
   Ty:= D.ChildByField('type');
-  if D.NodeType = 'declVar' then
-    if Ty.IsNull or not MatchStr(LowerCase(Trim(Fx.Txt(Ty))), UNMANAGED_TYPES) then Exit;
+  if (D.NodeType = 'declVar') and (Ty.IsNull or not MatchStr(LowerCase(Trim(Fx.Txt(Ty))), UNMANAGED_TYPES)) then Exit;
   Names:= nil;
   for I:= 0 to D.NamedChildCount - 1 do
     if (D.NamedChild(I).NodeType = 'identifier') and (Ty.IsNull or (D.NamedChild(I).StartByte < Ty.StartByte)) then
@@ -1897,8 +1891,7 @@ begin
     { `A, B: T`: cut the name with the comma that joins it to its neighbour }
     T:= if K = 0 then Names[1] else Names[K - 1];
     if (Row(T) <> Row(N)) or not Fx.Clean(Row(N), Row(N)) then Exit;
-    if K = 0 then Result:= [CutSpan(Fx, Row(N), Col(N), Row(T), Col(T))]
-    else Result:= [CutSpan(Fx, Row(T), ECol(T), Row(N), ECol(N))];
+    Result:= [if K = 0 then CutSpan(Fx, Row(N), Col(N), Row(T), Col(T)) else CutSpan(Fx, Row(T), ECol(T), Row(N), ECol(N))];
     Exit;
   end;
   { the only declaration of its section takes the section keyword with it }

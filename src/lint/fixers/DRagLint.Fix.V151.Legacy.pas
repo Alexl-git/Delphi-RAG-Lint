@@ -50,19 +50,23 @@ end;
 
 { the deepest named node of ARoot holding the 0-based point (ARow, ACol) }
 function NodeAtPoint(const ARoot: TTSNode; ARow, ACol: Integer): TTSNode;
+const
+  ROW_SHIFT = 32;  { a point as one ordered Int64: row in the high half, column in the low half }
 var
   I    : Integer;
   Ch   : TTSNode;
   Found: Boolean;
+  P    : Int64  ;
 begin
+  P:= (Int64(ARow) shl ROW_SHIFT) or Cardinal(ACol);
   Result:= ARoot;
   repeat
     Found:= False;
     for I:= 0 to Result.NamedChildCount - 1 do
     begin
       Ch:= Result.NamedChild(I);
-      if ((Integer(Ch.StartPoint.Row) < ARow) or ((Integer(Ch.StartPoint.Row) = ARow) and (Integer(Ch.StartPoint.Column) <= ACol)))
-         and ((Integer(Ch.EndPoint.Row) > ARow) or ((Integer(Ch.EndPoint.Row) = ARow) and (Integer(Ch.EndPoint.Column) > ACol))) then
+      if (((Int64(Ch.StartPoint.Row) shl ROW_SHIFT) or Ch.StartPoint.Column) <= P)
+         and (((Int64(Ch.EndPoint.Row) shl ROW_SHIFT) or Ch.EndPoint.Column) > P) then
       begin
         Result:= Ch;
         Found := True;
@@ -167,7 +171,7 @@ end;
   field stays reachable as before and the local's uses still reach the local.
   A PARAMETER is declined: its name is part of the routine's signature (the
   interface declaration, named arguments, documentation). }
-function FixLocalShadowsField(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
+function FixLocalShadowsField(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@3e5a -- REVIEWED 2026-11-14: a fixer declines (Exit) on every source shape it was not written for; guard clauses by design
 var
   M         : TMatch     ;
   Nm, NewNm : string     ;
