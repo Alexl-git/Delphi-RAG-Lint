@@ -113,3 +113,12 @@ property-accessor-name
 line-too-long
 destructor-not-nil-safe
 field-free-without-nil
+repeated-else-if-condition
+with-hides-outer-symbol
+dead-store-before-out-arg
+identifier-case-mismatch
+is-always-true
+unused-global
+local-shadows-field
+nested-with
+with-statement
