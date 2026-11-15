@@ -144,6 +144,7 @@
   "dump-refs": "dump-refs",
   "editor-exception-facts": "editor-exception-facts",
   "effect-free-in-loop-invariant": "effect-free-in-loop-invariant",
+  "exception-and-inherited-rules": "v151-exc-rules",
   "exception-facts": "exception-facts",
   "extract-interface": "extract-interface",
   "extract-method": "extract-method",

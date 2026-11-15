@@ -3311,6 +3311,34 @@
       }
     },
     {
+      "id": "v151-exc-rules",
+      "title": "Exception and inherited lint rules",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.50.0-alpha",
+      "summary": "Lint rules for exception handlers and inherited calls: shadowed handlers, hand-freed exceptions, wrong or missing inherited, Destroy for Free",
+      "intro": "Read this to see what each exception and inherited rule reports, which ship ON or OFF, and why inherited-order is OFF by default.",
+      "wikiPage": "exception-and-inherited-rules",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint"
+        },
+        {
+          "type": "cli",
+          "verb": "lint-all"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-14",
+        "by": "ENGINE",
+        "build": "1.50.0-alpha",
+        "surfaceHash": "2c19b642e8fb3929f18b3f4a4b5067702af6518dc27d0ffe0d644ff5550bd8c8"
+      }
+    },
+    {
       "id": "exceptions-sync",
       "title": "exceptions-sync",
       "group": "linting",
@@ -15230,6 +15258,26 @@
         "wikiAnchor": "deprecated-rtl-function"
       },
       {
+        "id": "rule.destroy-called-directly",
+        "title": "destroy-called-directly",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Destroy called instead of Free (bug-patterns, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule destroy-called-directly"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "destroy-called-directly"
+      },
+      {
         "id": "rule.destructor-without-override",
         "title": "destructor-without-override",
         "group": "linting",
@@ -15910,6 +15958,26 @@
         "wikiAnchor": "enum-read-inside-with"
       },
       {
+        "id": "rule.except-handler-order",
+        "title": "except-handler-order",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "A later exception handler is shadowed by an earlier one (bug-patterns, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule except-handler-order"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "except-handler-order"
+      },
+      {
         "id": "rule.exception-constructed-but-not-raised",
         "title": "exception-constructed-but-not-raised",
         "group": "linting",
@@ -15948,6 +16016,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "exception-escapes-thread"
+      },
+      {
+        "id": "rule.exception-freed",
+        "title": "exception-freed",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Exception object freed by hand in its handler (bug-patterns, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule exception-freed"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "exception-freed"
       },
       {
         "id": "rule.exception-text-in-response",
@@ -16970,6 +17058,66 @@
         "wikiAnchor": "inherited-bare"
       },
       {
+        "id": "rule.inherited-order",
+        "title": "inherited-order",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Destructor calls inherited before freeing its members (bug-patterns, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule inherited-order"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "inherited-order"
+      },
+      {
+        "id": "rule.inherited-without-ancestor",
+        "title": "inherited-without-ancestor",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "inherited in a method no ancestor declares (bug-patterns, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule inherited-without-ancestor"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "inherited-without-ancestor"
+      },
+      {
+        "id": "rule.inherited-wrong-method",
+        "title": "inherited-wrong-method",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Override calls inherited of a different method (bug-patterns, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule inherited-wrong-method"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "inherited-wrong-method"
+      },
+      {
         "id": "rule.init-order-hazard",
         "title": "init-order-hazard",
         "group": "linting",
@@ -17690,6 +17838,26 @@
         "wikiAnchor": "message-chain"
       },
       {
+        "id": "rule.message-handler-without-inherited",
+        "title": "message-handler-without-inherited",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Message handler without inherited or default handler (bug-patterns, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule message-handler-without-inherited"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "message-handler-without-inherited"
+      },
+      {
         "id": "rule.method-could-be-static",
         "title": "method-could-be-static",
         "group": "linting",
@@ -17848,6 +18016,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "missing-doc"
+      },
+      {
+        "id": "rule.missing-inherited-call",
+        "title": "missing-inherited-call",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Component hook override without inherited (bug-patterns, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule missing-inherited-call"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "missing-inherited-call"
       },
       {
         "id": "rule.missing-inherited-ctor",
@@ -18288,6 +18476,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "overflow-before-widening"
+      },
+      {
+        "id": "rule.override-only-inherited",
+        "title": "override-only-inherited",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Override that only calls inherited (dead-code, hint)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule override-only-inherited"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "override-only-inherited"
       },
       {
         "id": "rule.overwrite-before-read",

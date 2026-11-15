@@ -46,17 +46,43 @@ type
 
 implementation
 
-{ The lane's helpers live in DRagLint.V151.EXC.Support; name it in an
-  implementation uses clause here once it declares something. }
+uses
+  DRagLint.V151.EXC.Support
+  , DRagLint.Diagnostics.ParseCache
+  ;
 
 class procedure TV151EXCRules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
-  { no rules yet }
+  ADecls.Add(V151Rule('except-handler-order', 'bug-patterns', 'warning', 'A later exception handler is shadowed by an earlier one'));
+  ADecls.Add(V151Rule('exception-freed', 'bug-patterns', 'warning', 'Exception object freed by hand in its handler'));
+  // OFF by default: 4 of 5 findings over the CLIENT/SERVER/LOADER/YADF copies were TThread descendants, where inherited Destroy
+  // must run first (it waits for Execute). Tighten later: exempt classes with a TThread ancestor, then turn ON.
+  ADecls.Add(V151Rule('inherited-order', 'bug-patterns', 'warning', 'Destructor calls inherited before freeing its members', False));
+  ADecls.Add(V151Rule('inherited-wrong-method', 'bug-patterns', 'warning', 'Override calls inherited of a different method'));
+  ADecls.Add(V151Rule('message-handler-without-inherited', 'bug-patterns', 'warning', 'Message handler without inherited or default handler'));
+  ADecls.Add(V151Rule('inherited-without-ancestor', 'bug-patterns', 'warning', 'inherited in a method no ancestor declares'));
+  ADecls.Add(V151Rule('override-only-inherited', 'dead-code', 'hint', 'Override that only calls inherited'));
+  ADecls.Add(V151Rule('destroy-called-directly', 'bug-patterns', 'warning', 'Destroy called instead of Free'));
+  ADecls.Add(V151Rule('missing-inherited-call', 'bug-patterns', 'warning', 'Component hook override without inherited'));
 end;
 
 class function TV151EXCRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+var
+  PF  : TParsedFile;
+  Run : TExcRun;
+  Ctx : TV151FileCtx;
 begin
   Result:= nil;
+  PF:= TAstParseCache.Get(ACtx.Path);
+  if PF.Tree = nil then Exit;
+  Ctx:= ACtx;
+  Run:= TExcRun.Create(ACtx.Path, PF.Src, ACtx.Store, ACtx.LibStore, ACtx.FileId,
+    function(S: string): Boolean begin Result:= Ctx.Wants(S); end);
+  try
+    Result:= Run.Run(PF.Tree.RootNode);
+  finally
+    Run.Free;
+  end;
 end;
 
 class function TV151EXCRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;

@@ -1,0 +1,14 @@
+# Hits: Loaded without inherited (45), CreateParams without inherited (94), inherited Laden in Speichern (52),
+# Rest only calls inherited (56), bare inherited in a new method (63), WM_SIZE handler without inherited (72),
+# destructor calling inherited first (89).
+# Silent: inherited Rest in Plain (68 named, new method with named target), WM_PAINT with inherited (77), WM_MOVE answering Result (82).
+missing-inherited-call 45
+missing-inherited-call 94
+inherited-wrong-method 52
+override-only-inherited 56
+inherited-without-ancestor 63
+message-handler-without-inherited 72
+inherited-order 89
+!inherited-without-ancestor 68
+!message-handler-without-inherited 77
+!message-handler-without-inherited 82
