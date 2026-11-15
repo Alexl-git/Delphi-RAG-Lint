@@ -25,14 +25,14 @@ follow the `--plan` playbook (measured below), but that is optional.
 5. A refused group: `drag-lint cycles --db <db> --plan > cycle-plan.md` prints the by-hand playbook.
 ## Running it from the CLI
 ```
-drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--hub] [--plan [--hub-surface [--apply]] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--format json|text]
+drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--hub] [--plan [--no-hub-surface | --hub-surface [--apply]] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--format json|text]
 ```
 `--edges` and `--causes` add detail to the cycle report; `--hub` tells a star from a
 tangle: per group the hub units (a unit whose removal leaves the rest acyclic), the uses
 edges and reference weights on each side, whether cutting one side alone breaks the group,
 what the spokes take from the hub (globals with the member names read through them,
 routines), what the hub takes from the spokes, and the dead `uses` inside the group
-(read-only, no planner; JSON adds `hubs[]` and `zero_ref_edges` per group); `--plan --hub-surface` plans recipe R3 for such a star with one hub read through one global: a new leaf unit `<Hub>.Hub` holding an interface with one property per field and one method per method the spokes read through the global, the hub class implementing it with an AfterConstruction / BeforeDestruction hand-over, and a receiver-only rewrite in each spoke (`frmMain.edtX` becomes `MainHub.edtX`); `Inc` / `Dec` of an integer field becomes an assignment; `Assigned(<global>)` becomes `Assigned(MainHub)` and any other bare use of the global (passed as a value, compared with nil, cast) becomes `MainHubAsForm`, a nil-safe function in `<Hub>.Hub` over the interface's `AsForm` property, typed with the hub class's one library class ancestor (`TForm`, `TdxRibbonForm`, `TComponent`; phase P4, 1.49); `with <global> do` (with-member), a write to the global or a designer field, `FreeAndNil` / `CreateForm` / `@` of the global or another var-parameter use, or an ancestor's member the platform library does not declare, refuses only that spoke; a free routine of the hub that a spoke still calls goes through an R1 pointer in `<Hub>.Hub` (`<Name>Ptr`, assigned in the hub's initialization; a call from the spoke's initialization keeps that spoke's edge); the dry run is the normal playbook with R3 and the `--hub` block in place of Part A for a hub-shaped group (a group R3 refuses gets one note line and the planner's plan), and `--causes --format json --hub-surface` gives R3's `fix` object (`part: r3`) for such a group without running the planner; OFF by default, `--apply` writes one group (`.BCK<n>` backups) and runs no compile gate yet (build after it); `--plan` produces the
+(read-only, no planner; JSON adds `hubs[]` and `zero_ref_edges` per group); `--plan` (since 1.51 without a switch, when the recipe predicts that the group breaks; `--no-hub-surface` = the planner's own plan for every group) and `--plan --hub-surface` (by name: also a group R3 cannot break, a note per group it refuses, and what `--apply` and the `--causes --format json` fix object need) plan recipe R3 for such a star with one hub read through one global: a new leaf unit `<Hub>.Hub` holding an interface with one property per field and one method per method the spokes read through the global, the hub class implementing it with an AfterConstruction / BeforeDestruction hand-over, and a receiver-only rewrite in each spoke (`frmMain.edtX` becomes `MainHub.edtX`); `Inc` / `Dec` of an integer field becomes an assignment; `Assigned(<global>)` becomes `Assigned(MainHub)` and any other bare use of the global (passed as a value, compared with nil, cast) becomes `MainHubAsForm`, a nil-safe function in `<Hub>.Hub` over the interface's `AsForm` property, typed with the hub class's one library class ancestor (`TForm`, `TdxRibbonForm`, `TComponent`; phase P4, 1.49); `with <global> do` (with-member), a write to the global or a designer field, `FreeAndNil` / `CreateForm` / `@` of the global or another var-parameter use, or an ancestor's member the platform library does not declare, refuses only that spoke; a free routine of the hub that a spoke still calls goes through an R1 pointer in `<Hub>.Hub` (`<Name>Ptr`, assigned in the hub's initialization; a call from the spoke's initialization keeps that spoke's edge); the dry run is the normal playbook with R3 and the `--hub` block in place of Part A for a hub-shaped group (a group R3 refuses gets one note line and the planner's plan), and `--causes --format json --hub-surface` gives R3's `fix` object (`part: r3`) for such a group without running the planner; `--apply` needs the switch by name, writes one group (`.BCK<n>` backups) and runs no compile gate yet (build after it); `--plan` produces the
 refactoring playbook; `--f2047` narrows the report to the interface-only cycles
 the compiler rejects with F2047 (`--unit <stem>` limits it to one unit's cycle);
 `--format` selects `json` or `text` output. `--fix` makes the edits
@@ -61,6 +61,29 @@ optional Part B names the edge that can be cut next; re-running `--plan` after
 Part A prints it as the same kind of steps. When no edge can be cut mechanically
 (it carries a routine, or a class whose bodies use the cycle), the playbook says
 so and gives the standard remedy instead of guessing.
+
+### A star around one hub: the hub surface comes first (since 1.51)
+
+A group with exactly one hub unit that the others read through one global instance (a main form that
+creates every data module and is read by each of them) is planned differently. Since 1.51 `--plan` asks
+the hub-surface recipe (R3) first, without a switch: when R3 predicts that the group breaks, the group's
+section is headed `hub-shaped -- recipe R3 in place of Part A / Part B` and holds the `--hub` block and
+the R3 plan (the new `<Hub>.Hub` unit in full, the hub edits, the spokes rewritten); its last lines name
+the command that writes it (`cycles --plan --hub-surface --cycle <n> --apply`) and the way back.
+Every other group -- no single hub, or a hub R3 cannot cut completely -- gets the plan described above,
+byte for byte what `--no-hub-surface` prints.
+
+* `--no-hub-surface`: the planner's own plan for every group.
+* `--hub-surface`: R3 by name. It also shows R3 for a group it cannot break (with what keeps the group)
+  and one note per group it refuses. Writing (`--apply`) and the `--causes --format json` fix object
+  need it: `cycles --fix` cannot run R3 yet, so the default fix object does not offer it.
+
+Why the default changed: the recipe was applied to a copy of a 78-unit application (one main form, 76
+units reading it through its global at 1665 places, 10 free routines of the hub called from the spokes).
+77 files were rewritten and one unit added; the project then built with 0 errors and the same warnings
+as before, and after a re-index `cycles` reported no circular dependency. R3 runs no compile gate of
+its own yet: build the project after `--apply`; the `.BCK<n>` files beside each written file are the
+way back.
 
 ## Worked example, and whether a model can follow it
 

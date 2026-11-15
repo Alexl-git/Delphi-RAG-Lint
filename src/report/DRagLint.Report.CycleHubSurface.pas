@@ -12,7 +12,9 @@ unit DRagLint.Report.CycleHubSurface;
 /// procedural type `T&lt;Name&gt;Ptr` and variable `&lt;Name&gt;Ptr` there, `&lt;Name&gt;Ptr := &lt;Name&gt;;`
 /// in the hub's initialization, the spoke's calls through the pointer; the routine's body stays in the
 /// hub. A spoke that no longer names anything else of the hub drops it from its uses: that uses edge is cut.</summary>
-/// <remarks>OFF by default: nothing runs without `--hub-surface`. The dry run writes nothing;
+/// <remarks>Since 1.51 (phase P6) the `cycles --plan` dry run asks this recipe first without the switch,
+/// for a group it predicts to break (`--no-hub-surface` = the planner's plan); writing and the
+/// `--causes --format json` fix object still need `--hub-surface` by name. The dry run writes nothing;
 /// `--apply` writes the new unit, the hub and the rewritten spokes (.BCK&lt;n&gt; backups unless
 /// `--no-backup`) and runs NO compile gate (149): build the project after it. Refusals are per
 /// member and per spoke, so one unsupported member leaves only the spokes that read it untouched.
@@ -73,11 +75,14 @@ function RunHubSurface(const pStore: ISymbolStore; const pSccs: TList<TArray<str
 /// <param name="pGroup">The group's lower-case unit stems.</param>
 /// <param name="pIndex">1-based group number.</param>
 /// <param name="pGraph">The uses graph.</param>
-/// <param name="pOut">Receives the lines; when False only a one-line note naming R3's refusal (the planner's plan follows it).</param>
-/// <returns>True when R3 planned the group (one hub, one global, at least one spoke).</returns>
+/// <param name="pOut">Receives the lines; when False and pAsked, only a one-line note naming R3's refusal (the planner's plan follows it); when False and not pAsked, nothing.</param>
+/// <param name="pAsked">True = `--hub-surface` was given: every group R3 plans is taken, a refusal is noted.
+/// False = the default dry run (1.51, phase P6): a group is taken only when R3 predicts that it BREAKS; any other
+/// group adds no line, so its plan is byte-identical to `--no-hub-surface`.</param>
+/// <returns>True when R3 planned the group (one hub, one global, at least one spoke) and, when not pAsked, predicts that the group breaks.</returns>
 /// <remarks>Writes nothing (a dry run); a group R3 refuses gets nothing here and the planner as before.</remarks>
 function HubSurfaceGroupLines(const pStore, pLibrary: ISymbolStore; const pGroup: TArray<string>; pIndex: Integer;
-  const pGraph: TCycleGraph; const pOut: TStrings): Boolean;
+  const pGraph: TCycleGraph; const pOut: TStrings; pAsked: Boolean = True): Boolean;
 
 /// <summary>Hub-SCC phase P6 prep: the `cycles --causes --format json --hub-surface` fix object of ONE
 /// group when R3 plans it (the planner's TCycleFixHook): `available` = the prediction breaks the group,
@@ -1639,17 +1644,17 @@ begin
 end;
 
 function HubSurfaceGroupLines(const pStore, pLibrary: ISymbolStore; const pGroup: TArray<string>; pIndex: Integer;
-  const pGraph: TCycleGraph; const pOut: TStrings): Boolean;
+  const pGraph: TCycleGraph; const pOut: TStrings; pAsked: Boolean): Boolean;
 var
   Planner: THubSurfacePlanner;
 begin
   Planner:= THubSurfacePlanner.Create(pStore, pLibrary, pGraph);
   try
     var Plan:= Planner.PlanGroup(pGroup, pIndex);
-    Result:= (Plan.Refusal = '') and (Length(Plan.Spokes) > 0);
+    Result:= (Plan.Refusal = '') and (Length(Plan.Spokes) > 0) and (pAsked or Plan.Breaks);
     if not Result then
     begin
-      if Plan.Refusal <> '' then pOut.Add(Format('- group %d: hub-surface recipe R3 refused: %s -- %s; the planner''s plan follows', [pIndex, Plan.Refusal, Plan.Why]));
+      if pAsked and (Plan.Refusal <> '') then pOut.Add(Format('- group %d: hub-surface recipe R3 refused: %s -- %s; the planner''s plan follows', [pIndex, Plan.Refusal, Plan.Why]));
       Exit;
     end;
     pOut.Add(Format('## Group %d (%d units): hub-shaped -- recipe R3 in place of Part A / Part B (--hub-surface)', [pIndex, Length(pGroup)]));
@@ -1657,6 +1662,7 @@ begin
     pOut.Add('');
     RenderGroup(Plan, pOut);
     pOut.Add(Format('- dry run: nothing written (write it: cycles --plan --hub-surface --cycle %d --apply)', [pIndex]));
+    if not pAsked then pOut.Add('- the planner''s own plan for this group (Part A / Part B): cycles --plan --no-hub-surface');
     pOut.Add('');
   finally
     Planner.Free;
