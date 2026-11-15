@@ -1801,6 +1801,12 @@ begin
   end;
   if not Fx.Clean(SR, ER) then Exit;
   Cut:= SpanText(Fx, SR, SC, ER, EC);
+  { the chain's end: the grammar ends the if node AFTER its ';', which separates it from the next statement }
+  if Cut.EndsWith(';') and (IfN.NodeType = 'if') then
+  begin
+    Dec(EC);
+    Cut:= SpanText(Fx, SR, SC, ER, EC);
+  end;
   if Cut.Contains('{') or Cut.Contains('(*') or Cut.Contains('//') then Exit;
   Result:= [CutSpan(Fx, SR, SC, ER, EC)];
 end;

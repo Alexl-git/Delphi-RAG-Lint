@@ -7,7 +7,9 @@
     tests\autofix\v151-FIX-OLD-<case>\case.txt              line 1: the rule id; line 2 (optional): the number
                                                             of findings that legitimately remain (declined shapes)
                                                             line 3 (optional): extra lint arguments, space-separated; the token
-                                                            lint-all drives the case through lint-all (project rules)
+                                                            lint-all drives the case through lint-all (project rules);
+                                                            the token library becomes --library-db <LibraryDb> (the
+                                                            unwith route needs TObject's members; SKIP when missing)
   Shared project: tests\autofix\v151-FIX-OLD\template\FoDemo.dpr + FoDemo.dproj (uses FoUnit).
 
   Per case, on a scratch copy:
@@ -24,7 +26,8 @@
 param(
   [string]$Exe    = "$PSScriptRoot\..\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$Filter = '*',
-  [string]$Rsvars = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
+  [string]$Rsvars = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat',
+  [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite'
 )
 $ErrorActionPreference = 'Continue'
 $env:DRAGLINT_RENAME_TEST_UNGATED = '1'   # the rename proof's test seam: these fixtures have no library
@@ -64,6 +67,10 @@ foreach ($c in $cases) {
   $rule  = $spec[0].Trim()
   $leave = if ($spec.Count -gt 1 -and $spec[1].Trim() -ne '') { [int]$spec[1] } else { 0 }
   $extra = if ($spec.Count -gt 2 -and $spec[2].Trim() -ne '') { @($spec[2].Trim() -split ' ') } else { @() }
+  if ($extra -contains 'library') {
+    if (-not (Test-Path $LibraryDb)) { Write-Host "SKIP $($c.Name): no platform library ($LibraryDb)" -ForegroundColor Yellow; continue }
+    $extra = @($extra | Where-Object { $_ -ne 'library' }) + @('--library-db', $LibraryDb)
+  }
   Write-Host "case $($c.Name) ($rule, leaves $leave)"
   $d = Join-Path $Tmp $c.Name
   [IO.Directory]::CreateDirectory($d) | Out-Null
