@@ -59,6 +59,10 @@ $runStarts = @($lines | Select-String -Pattern '^function Run: Integer;')
 Check 'found the Run implementation' ($runStarts.Count -ge 2) "matches=$($runStarts.Count)"
 if ($runStarts.Count -lt 2) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 $runFrom = $runStarts[-1].LineNumber
+# 1.51: the dispatch body moved into RunCommand (Run, after it, only adds the closed-stdout
+# verdict), so the scan starts at RunCommand when it exists and still reads to the unit's end.
+$cmdStart = @($lines | Select-String -Pattern '^function RunCommand\(')
+if ($cmdStart.Count -ge 1) { $runFrom = $cmdStart[-1].LineNumber }
 $body = $lines[($runFrom - 1)..($lines.Count - 1)]
 
 # Writes that are legitimately stdout: they belong to a COMMAND'S OUTPUT, and
