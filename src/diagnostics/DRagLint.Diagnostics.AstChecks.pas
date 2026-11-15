@@ -2460,9 +2460,9 @@ var
       var NmN: TTSNode:= Hdr.ChildByField('name');
       if (not NmN.IsNull) and (NmN.NodeType = 'genericDot') then
         HookName:= SrcText(NmN.ChildByField('rhs'), Src);
+      { BeforeDestruction leaves IsCtor False: the dtor id below }
       if SameText(HookName, 'AfterConstruction') then IsCtor:= True
-      else if SameText(HookName, 'BeforeDestruction') then IsDtor:= True
-      else Exit;
+      else if not SameText(HookName, 'BeforeDestruction') then Exit;
     end;
     Body:= ADefProc.ChildByField('body');
     if Body.IsNull then Exit;
@@ -3815,8 +3815,9 @@ var
           two-argument form only asks and keeps no reference. }
         var SupEnt: TTSNode:= N.ChildByField('entity');
         var SupArgs: TTSNode:= N.ChildByField('args');
+        const SUPPORTS_OUT_FORM_ARGS = 3; { Supports(Instance, IID, out Intf) }
         if (not SupEnt.IsNull) and (SupEnt.NodeType = 'identifier') and SameText(NodeStr(SupEnt), 'Supports')
-           and (not SupArgs.IsNull) and (SupArgs.NamedChildCount = 3) then
+           and (not SupArgs.IsNull) and (SupArgs.NamedChildCount = SUPPORTS_OUT_FORM_ARGS) then
         begin
           Src2:= SupArgs.NamedChild(0);
           if Src2.NodeType = 'identifier' then

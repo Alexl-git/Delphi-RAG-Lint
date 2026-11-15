@@ -754,12 +754,11 @@ var
     if N.IsNull then Exit;
     if (N.NodeType = 'declConst') or (N.NodeType = 'constInline') then
     begin
-      if N.NodeType = 'declConst' then ValN:= N.ChildByField('defaultValue')
-      else ValN:= N.ChildByField('value');
+      ValN:= if N.NodeType = 'declConst' then N.ChildByField('defaultValue') else N.ChildByField('value');
       ValTxt:= Trim(NodeStr(ValN));
       if ValTxt.StartsWith('=') then ValTxt:= Trim(Copy(ValTxt, 2, MaxInt));
       Mark(N.ChildByField('name'), (ValTxt = '0')
-        or (ValTxt.StartsWith('0.') and (Copy(ValTxt, 3, MaxInt).Trim(['0']) = '')));
+        or (ValTxt.StartsWith('0.') and (ValTxt.Substring(2).Trim(['0']) = '')));
     end
     else if (N.NodeType = 'declVar') or (N.NodeType = 'declField') or (N.NodeType = 'declArg') then
     begin
@@ -1964,8 +1963,8 @@ var
       var DzOp : TTSNode:= N.ChildByField('operator');
       var DzRhs: TTSNode:= N.ChildByField('rhs');
       var DzIsZero: Boolean:= False;
-      if (not DzOp.IsNull) and (DzOp.NodeType = 'kFdiv') and (not DzRhs.IsNull)
-         and (DzRhs.NodeType = 'identifier')
+      var DzIsFloatDiv: Boolean:= (not DzOp.IsNull) and (DzOp.NodeType = 'kFdiv');
+      if DzIsFloatDiv and (not DzRhs.IsNull) and (DzRhs.NodeType = 'identifier')
          and ZeroConsts.TryGetValue(LowerCase(Trim(NodeStr(DzRhs))), DzIsZero) and DzIsZero then
         EmitAt(N, 'division-by-zero-literal',
           Format('Division by the constant %s, which is zero -- the result is INF / NaN, or an EZeroDivide '
