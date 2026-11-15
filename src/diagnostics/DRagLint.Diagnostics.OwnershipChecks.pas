@@ -72,12 +72,18 @@ const
   RULE_MISMATCH= 'mismatched-alloc-free'   ;
   RULE_FOT     = 'freeonterminate-then-wait';
   RULE_PAIR    = 'begin-end-pair-not-in-finally';
-  PAIR_COUNT   = 7;
+  PAIR_COUNT   = 11;
+  { Index 6 is the transaction pair (a Rollback in an except also closes it); index 10 is the
+    Screen.Cursor pair, which is an ASSIGNMENT pair (busy cursor ... crDefault), not a call pair --
+    its names below are for the message only and never match a call. }
   PAIR_BEGIN: array[0..PAIR_COUNT - 1] of string = (
-    'beginupdate', 'disablecontrols', 'beginread', 'beginwrite', 'locklist', 'lock', 'starttransaction');
+    'beginupdate', 'disablecontrols', 'beginread', 'beginwrite', 'locklist', 'lock', 'starttransaction',
+    'acquire', 'enter', 'disablealign', 'Screen.Cursor := <busy cursor>');
   PAIR_END  : array[0..PAIR_COUNT - 1] of string = (
-    'endupdate', 'enablecontrols', 'endread', 'endwrite', 'unlocklist', 'unlock', 'commit');
+    'endupdate', 'enablecontrols', 'endread', 'endwrite', 'unlocklist', 'unlock', 'commit',
+    'release', 'leave', 'enablealign', 'Screen.Cursor := crDefault');
   PAIR_TRANSACTION = 6;
+  PAIR_SCREEN      = 10;
   FAM_MEM = 'mem';
   FAM_NEW = 'new';
   FAM_STR = 'str';
@@ -1004,8 +1010,10 @@ procedure TOwnershipScan.CheckPairs(const ARoutine: TTSNode);
 var
   Locals, All: TDictionary<string, string>;
   Dots       : TList<TTSNode>;
+  Asgs       : TList<TTSNode>;
   Calls      : TList<TPairCall>;
   D          : TTSNode;
+  Rhs        : string;
   Nm         : string;
   I, K       : Integer;
   PC         : TPairCall;
@@ -1019,7 +1027,7 @@ var
     J: Integer;
   begin
     Result:= -1;
-    for J:= 0 to PAIR_COUNT - 1 do
+    for J:= 0 to PAIR_SCREEN - 1 do
       if (AIsBegin and (PAIR_BEGIN[J] = AName)) or ((not AIsBegin) and (PAIR_END[J] = AName)) then Exit(J);
     if (not AIsBegin) and (AName = 'rollback') then Result:= PAIR_TRANSACTION;
   end;
@@ -1070,9 +1078,24 @@ begin
   Locals:= TDictionary<string, string>.Create;
   All   := TDictionary<string, string>.Create;
   Dots  := TList<TTSNode>.Create;
+  Asgs  := TList<TTSNode>.Create;
   Calls := TList<TPairCall>.Create;
   try
     LocalsOf(ARoutine, Locals, All);
+    Gather(ARoutine, ['assignment'], Asgs);
+    for D in Asgs do
+    begin
+      if Canon(NodeStr(D.ChildByField('lhs'))) <> 'screen.cursor' then Continue;
+      Rhs:= LowerCase(Trim(NodeStr(D.ChildByField('rhs'))));
+      PC:= Default(TPairCall);
+      PC.Node:= D;
+      PC.Recv:= 'screen';
+      PC.Idx := PAIR_SCREEN;
+      if (Rhs = 'crhourglass') or (Rhs = 'crsqlwait') or (Rhs = 'crappstart') then PC.IsBegin:= True
+      else if Rhs <> 'crdefault' then Continue;
+      Context(D, PC.InFin, PC.InExc);
+      Calls.Add(PC);
+    end;
     Gather(ARoutine, ['exprDot'], Dots);
     for D in Dots do
     begin
@@ -1118,6 +1141,7 @@ begin
     end;
   finally
     Calls.Free;
+    Asgs.Free;
     Dots.Free;
     All.Free;
     Locals.Free;

@@ -18,3 +18,11 @@ constant-index-out-of-range 73
 !constant-index-out-of-range 74
 # non-hit: inline var shadows the field of the same name
 !constant-index-out-of-range 80
+# WID-CF widening (v151)
+constant-index-out-of-range 97
+!constant-index-out-of-range 98
+constant-index-out-of-range 99
+!constant-index-out-of-range 100
+constant-index-out-of-range 101
+!constant-index-out-of-range 102
+!constant-index-out-of-range 109
