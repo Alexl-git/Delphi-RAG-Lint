@@ -2,7 +2,8 @@
 
 Newest first, one line per handoff: `date | stream | one-line state | status | file`.
 
-- 2026-11-14 | engine | 1.51 run mid-way: INT 92f715c49 (22 merged, 371 rules); 7 MERGE-READY waiting; 8 lanes running; owner REBOOT (pwsh wedged) | open | [HANDOFF-2026-11-14-engine-151-run-prereboot.md](HANDOFF-2026-11-14-engine-151-run-prereboot.md)
+- 2026-11-15 | engine | 1.51.0-alpha DEPLOYED + re-parse green (local main d5ff2569c, unpushed; 423/341/125); owner: Part A6, IDE test, release go | open | [HANDOFF-2026-11-15-engine-151-deployed-reparsed.md](HANDOFF-2026-11-15-engine-151-deployed-reparsed.md)
+- 2026-11-14 | engine | 1.51 run mid-way: INT 92f715c49 (22 merged, 371 rules); 7 MERGE-READY waiting; 8 lanes running; owner REBOOT (pwsh wedged) | closed (run complete 11-15) | [HANDOFF-2026-11-14-engine-151-run-prereboot.md](HANDOFF-2026-11-14-engine-151-run-prereboot.md)
 - 2026-11-13 | engine | 1.50.0-alpha RELEASED (b7c801c47); 1.51.0 run planned (lanes/v151/PLAN.md, 45 lanes), not dispatched | open | [HANDOFF-2026-11-13-engine-150-released-151-run-planned.md](HANDOFF-2026-11-13-engine-150-released-151-run-planned.md)
 - 2026-11-13 | engine | 1.50 deployed + re-parsed (pe 0 on 37 DBs), installer built; owner IDE test next; 1.50.1 draft C:\TEMP\claude\lanes\1501\PLAN-DRAFT.md | closed | [HANDOFF-2026-11-13-engine-150-deployed-reparsed-1501-plan](HANDOFF-2026-11-13-engine-150-deployed-reparsed-1501-plan.md)
 - 2026-11-12 | engine | 1.50 final 0cb50cf9c; next: installer + page update + library re-parse (owner go) | closed 11-13 (done) | [HANDOFF-2026-11-12-engine-150-final-installer-reparse-next](HANDOFF-2026-11-12-engine-150-final-installer-reparse-next.md)
