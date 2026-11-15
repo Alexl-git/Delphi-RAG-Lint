@@ -40,6 +40,10 @@ type
     NoCompile: Boolean;
     /// <summary>--format json.</summary>
     Json: Boolean;
+    /// <summary>--retype-consumer &lt;Routine&gt;.&lt;param&gt;: the second step, after the interface exists and the project is
+    /// re-indexed. The one parameter, typed as the class, is retyped to the interface the class implements; nothing is
+    /// extracted. '' = extract.</summary>
+    RetypeConsumer: string;
   end;
 
 /// <summary>Runs the verb: prints the plan and, with --apply, writes through ApplyThroughScratch.</summary>
@@ -55,7 +59,18 @@ type
 /// property-specifier, no-such-member. Refused whole, in this order: include-file, stale-file, outside-roots, class-helper,
 /// generic-class, nested-class, ifdef-in-class, type-on-same-line, name-taken, unresolved-ancestor, no-iinterface,
 /// no-used-members. The GUID is a hash of the unit, the interface and its members, so the plan shows the bytes --apply
-/// writes.</remarks>
+/// writes.
+/// With RetypeConsumer the run retypes ONE parameter instead (P22, lane v151 REPARENT): from the class to the interface
+/// the class or an ancestor lists (--name picks one). The proof is a lifetime proof plus a use proof. Lifetime: the
+/// class's IInterface must never count references -- the chain reaches TSingletonImplementation, TNoRefCountObject or
+/// TComponent, or a project class whose own _AddRef body is `Result:= -1` -- because a caller passes an object reference
+/// and the compiler's hidden interface temporary would otherwise free that caller's instance at count 0, which no build
+/// shows. Use: in the body every occurrence of the parameter is `p.Member` with Member in the interface, `p = nil`,
+/// `p &lt;&gt; nil` or `Assigned(p)`. Callers are not edited: an object converts to an interface it implements. Refused,
+/// in this order: param-not-class, include-file, stale-file, outside-roots, var-param, param-group, virtual-method,
+/// overloaded, no-body, no-iinterface / unresolved-ancestor / lifetime-refcounted / lifetime-unknown, not-implemented,
+/// interface-ambiguous, method-resolution, reimplemented, use-not-interface, header-shape. --retype-consumer with
+/// --members or --reparent-interfaced is exit 2: one step per run.</remarks>
 function RunExtractInterface(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;
   const pOpts: TExtractInterfaceOptions): Integer;
 
@@ -80,6 +95,11 @@ const
   CKnownInterfaced: array[0..4] of string = ('TInterfacedObject', 'TComponent', 'TAggregatedObject', 'TContainedObject',
     'TInterfacedPersistent');
   CIUnknownMembers: array[0..2] of string = ('QueryInterface', '_AddRef', '_Release');
+  { --retype-consumer: RTL bases whose _AddRef / _Release never free the instance (TComponent: while no VCLComObject) }
+  CNoRefCount: array[0..2] of string = ('TSingletonImplementation', 'TNoRefCountObject', 'TComponent');
+  { ... and the ones that count, themselves or through a controller / owner interface }
+  CRefCounted: array[0..3] of string = ('TInterfacedObject', 'TAggregatedObject', 'TContainedObject', 'TInterfacedPersistent');
+  CRoutineKinds = '''procedure'', ''function'', ''method'', ''constructor'', ''destructor''';
 
 type
   TClassRow = record
@@ -114,6 +134,12 @@ type
     LeftKind: string;
   end;
 
+  { one line of a --retype-consumer edit, whole, before and after }
+  TRetypeEdit = record
+    Line: Integer;
+    Before, After: string;
+  end;
+
   TIfacePlan = record
     ClassQName, FilePath, IfaceName, Guid, RefusalKind, RefusalReason: string;
     Line: Integer;
@@ -123,6 +149,10 @@ type
     Members, LeftOut: TArray<TPlannedMember>;
     NewText: string;         // the whole file after the edit; '' on a refusal
     Enc: TEncoding;
+    { --retype-consumer only }
+    Retype: Boolean;
+    Consumer, Param, Lifetime: string;
+    Edits: TArray<TRetypeEdit>;
   end;
 
   TIfacePlanner = class  // dl:ok high-response@e0ef -- one planner class holds one proof and its connections; the split would hide the order of the refusals
@@ -153,6 +183,15 @@ type
     function PropertyFits(const pM: TMemberRow; const pUse: TUseCount; out pAccessors: TArray<TMemberRow>; out pDecl: string): Boolean;
     procedure Build(const pInGoes: TArray<TMemberRow>; const pProps: TArray<string>);
     procedure Choose(const pUsed: TDictionary<string, TUseCount>);
+    function ResolveClass(const pName: string; out pRow: TClassRow; out pConn: TFDConnection): Boolean;
+    function QuietAddRef(pConn: TFDConnection; const pRow: TClassRow; out pDeclares: Boolean): Boolean;
+    function LifetimeVerdict(out pWhy: string): string;
+    function PickInterface(out pIfaceId: Int64; out pKind, pReason: string): string;
+    function InterfaceMembers(pIfaceId: Int64): TArray<string>;
+    function MapsInterface(const pIface: string): string;
+    function ReimplementedBy(const pIface: string): string;
+    function ForeignUse(pSrc: TMaskedSource; pFrom, pTo: Integer; const pParam: string; const pMembers: TArray<string>): Integer;
+    procedure PlanRetype(out pError: string);
   public
     constructor Create(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>; const pOpts: TExtractInterfaceOptions);
     destructor Destroy; override;
@@ -887,6 +926,528 @@ begin
   Build(InGoes, Props);
 end;
 
+// The offset of the first `;` outside parentheses and brackets of pMasked in [pFrom, pTo); 0 when there is none.
+function MaskedHeaderEnd(const pMasked: string; pFrom, pTo: Integer): Integer;
+begin
+  Result:= 0;
+  var Depth:= 0;
+  for var I:= pFrom to pTo - 1 do
+    case pMasked[I] of
+      '(', '[': Inc(Depth);
+      ')', ']': Dec(Depth);
+      ';': if Depth = 0 then Exit(I);
+    end;
+end;
+
+// How often `pParam: <pType>` (the type optionally unit-qualified) stands in pMasked[pFrom, pTo); pAt / pLen span the
+// type text of the last one.
+function ParamTypeSpan(const pMasked: string; pFrom, pTo: Integer; const pParam, pType: string; out pAt, pLen: Integer): Integer;
+begin
+  Result:= 0;
+  pAt:= 0;
+  pLen:= 0;
+  if pTo <= pFrom then Exit;
+  for var M in TRegEx.Matches(Copy(pMasked, pFrom, pTo - pFrom),
+    '\b' + TRegEx.Escape(pParam) + '\s*:\s*((?:\w+\s*\.\s*)*' + TRegEx.Escape(pType) + ')\b', [roIgnoreCase]) do
+  begin
+    Inc(Result);
+    pAt:= pFrom + M.Groups[1].Index - 1;
+    pLen:= M.Groups[1].Length;
+  end;
+end;
+
+// The class of that name in the project index, else in a library index; pConn is the index it came from.
+function TIfacePlanner.ResolveClass(const pName: string; out pRow: TClassRow; out pConn: TFDConnection): Boolean;
+begin
+  pRow:= Default(TClassRow);
+  pConn:= nil;
+  for var C in [FConn] + FLibs do
+  begin
+    var Found:= Rows(C, 's.name = :n COLLATE NOCASE', pName);
+    if Length(Found) > 0 then
+    begin
+      pRow:= Found[0];
+      pConn:= C;
+      Exit(True);
+    end;
+  end;
+  Result:= False;
+end;
+
+// pDeclares: the class declares _AddRef itself. True when that _AddRef's body is `Result:= -1` and nothing else.
+function TIfacePlanner.QuietAddRef(pConn: TFDConnection; const pRow: TClassRow; out pDeclares: Boolean): Boolean;
+begin
+  Result:= False;
+  pDeclares:= False;
+  var Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= pConn;
+    Q.SQL.Text:= 'SELECT COALESCE(s.impl_start_line, 0) AS a, COALESCE(s.impl_end_line, 0) AS b, f.path FROM symbols s ' +
+      'JOIN files f ON f.id = s.file_id WHERE s.parent_id = :p AND s.name = ''_AddRef'' COLLATE NOCASE';
+    Q.ParamByName('p').AsLargeInt:= pRow.Id;
+    Q.Open;
+    if Q.Eof then Exit;
+    pDeclares:= True;
+    var A:= Q.FieldByName('a').AsInteger;
+    var B:= Q.FieldByName('b').AsInteger;
+    var Path:= Q.FieldByName('path').AsString;
+    if (A = 0) or (B < A) or not TFile.Exists(Path) then Exit;
+    var Src:= TMaskedSource.Create(Path);
+    try
+      var From:= Src.OffsetOf(A, 1);
+      var Upto:= Src.LineEnd(B);
+      var H:= MaskedHeaderEnd(Src.Masked, From, Upto);
+      if H > 0 then
+        Result:= TRegEx.IsMatch(Copy(Src.Masked, H + 1, Upto - H - 1),
+          '^\s*(\w+\s*;\s*)*begin\s+Result\s*:=\s*-1\s*;?\s*end\s*;\s*$', [roIgnoreCase]);
+    finally
+      Src.Free;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+
+// '' when the class's IInterface never counts references (pWhy says why); else the refusal's kind, pWhy its reason.
+function TIfacePlanner.LifetimeVerdict(out pWhy: string): string;  // dl:ok too-many-exit-points -- one exit per verdict, met in chain order: the exits are the contract
+begin
+  var Row:= FClass;
+  var Conn:= FConn;
+  for var Depth:= 0 to CMaxChain do
+  begin
+    var Declares: Boolean;
+    var Quiet:= QuietAddRef(Conn, Row, Declares);
+    if Declares then
+    begin
+      if Quiet then
+      begin
+        pWhy:= Row.Name + '._AddRef returns -1: no interface reference frees the instance';
+        Exit('');
+      end;
+      pWhy:= Row.Name + ' declares an _AddRef whose body is not `Result:= -1`: nothing proves an interface temporary leaves the instance alive';
+      Exit('lifetime-unknown');
+    end;
+    var Entries:= HeritageList(Row.Heritage);
+    if (Length(Entries) = 0) or SameText(Entries[0], 'TObject') then
+    begin
+      pWhy:= 'no class of the chain implements IInterface: extract the interface first (--reparent-interfaced=norefcount), re-index';
+      Exit('no-iinterface');
+    end;
+    if MatchText(Entries[0], CNoRefCount) then
+    begin
+      pWhy:= Entries[0] + ' does not count references' + (if SameText(Entries[0], 'TComponent') then ' (while the component has no VCLComObject)' else '');
+      Exit('');
+    end;
+    if MatchText(Entries[0], CRefCounted) then
+    begin
+      pWhy:= Entries[0] + ' counts references: the interface temporary made from a caller''s object reference would free that ' +
+        'caller''s instance at count 0, and no build shows it; reparent to TSingletonImplementation or TNoRefCountObject first';
+      Exit('lifetime-refcounted');
+    end;
+    if not ResolveClass(Entries[0], Row, Conn) then
+    begin
+      pWhy:= Entries[0] + ' is in no index given: --library-db / --platform name the platform library';
+      Exit('unresolved-ancestor');
+    end;
+  end;
+  pWhy:= Format('the chain is deeper than %d classes', [CMaxChain]);
+  Result:= 'unresolved-ancestor';
+end;
+
+// The interface to retype to: --name, else the default name, else the one project interface the chain lists.
+function TIfacePlanner.PickInterface(out pIfaceId: Int64; out pKind, pReason: string): string;
+begin
+  Result:= '';
+  pIfaceId:= 0;
+  pKind:= '';
+  pReason:= '';
+  var Names: TArray<string>:= nil;
+  var Ids: TArray<Int64>:= nil;
+  var Row:= FClass;
+  var Conn:= FConn;
+  var Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT id FROM symbols WHERE kind = ''interface'' AND name = :n COLLATE NOCASE';
+    for var Depth:= 0 to CMaxChain do
+    begin
+      var Entries:= HeritageList(Row.Heritage);
+      for var E in Entries do
+      begin
+        if MatchText(E, ['IInterface', 'IUnknown']) or MatchText(E, Names) then Continue;
+        Q.Close;
+        Q.ParamByName('n').AsWideString:= E;
+        Q.Open;
+        if not Q.Eof then
+        begin
+          Names:= Names + [E];
+          Ids:= Ids + [Q.Fields[0].AsLargeInt];
+        end;
+      end;
+      if (Length(Entries) = 0) or not ResolveClass(Entries[0], Row, Conn) then Break;
+    end;
+  finally
+    Q.Free;
+  end;
+  var Want:= FOpts.IfaceName;
+  if Want = '' then Want:= 'I' + (if StartsText('T', FClass.Name) then Copy(FClass.Name, 2, MaxInt) else FClass.Name);
+  for var I:= 0 to High(Names) do
+    if SameText(Names[I], Want) then
+    begin
+      pIfaceId:= Ids[I];
+      Exit(Names[I]);
+    end;
+  if FOpts.IfaceName <> '' then
+  begin
+    pKind:= 'not-implemented';
+    pReason:= Format('neither %s nor an ancestor lists %s', [FClass.Name, FOpts.IfaceName]);
+  end
+  else if Length(Names) = 1 then
+  begin
+    pIfaceId:= Ids[0];
+    Result:= Names[0];
+  end
+  else if Length(Names) = 0 then
+  begin
+    pKind:= 'not-implemented';
+    pReason:= Format('%s lists no interface declared in the project: run extract-interface on it first, then re-index', [FClass.Name]);
+  end
+  else
+  begin
+    pKind:= 'interface-ambiguous';
+    pReason:= Format('the chain lists %s: pass --name', [String.Join(', ', Names)]);
+  end;
+end;
+
+// The member names of an interface and of the interfaces it extends.
+function TIfacePlanner.InterfaceMembers(pIfaceId: Int64): TArray<string>;
+begin
+  Result:= nil;
+  var Id:= pIfaceId;
+  var Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    for var Depth:= 0 to CMaxChain do
+    begin
+      Q.SQL.Text:= 'SELECT name FROM symbols WHERE parent_id = :p';
+      Q.ParamByName('p').AsLargeInt:= Id;
+      Q.Open;
+      while not Q.Eof do
+      begin
+        Result:= Result + [Q.Fields[0].AsString];
+        Q.Next;
+      end;
+      Q.Close;
+      Q.SQL.Text:= 'SELECT COALESCE(heritage, '''') FROM symbols WHERE id = :p';
+      Q.ParamByName('p').AsLargeInt:= Id;
+      Q.Open;
+      var Parents:= HeritageList(Q.Fields[0].AsString);
+      Q.Close;
+      if Length(Parents) = 0 then Break;
+      Q.SQL.Text:= 'SELECT id FROM symbols WHERE kind = ''interface'' AND name = :n COLLATE NOCASE';
+      Q.ParamByName('n').AsWideString:= Parents[0];
+      Q.Open;
+      if Q.Eof then Break;
+      Id:= Q.Fields[0].AsLargeInt;
+      Q.Close;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+
+// The class of the project chain that maps a method of the interface to another name (`procedure IFoo.Bar = Baz;`); ''.
+function TIfacePlanner.MapsInterface(const pIface: string): string;
+begin
+  Result:= '';
+  var Row:= FClass;
+  var Conn:= FConn;
+  for var Depth:= 0 to CMaxChain do
+  begin
+    if (Conn = FConn) and TFile.Exists(Row.Path) then
+    begin
+      var Src:= TMaskedSource.Create(Row.Path);
+      try
+        var A:= Src.OffsetOf(Row.StartLine, Row.StartCol);
+        var B:= Src.OffsetOf(Row.EndLine, Row.EndCol);
+        if TRegEx.IsMatch(Copy(Src.Masked, A, B - A), '\b(procedure|function)\s+' + TRegEx.Escape(pIface) + '\s*\.\s*\w+\s*=', [roIgnoreCase]) then
+          Exit(Row.Name);
+      finally
+        Src.Free;
+      end;
+    end;
+    var Entries:= HeritageList(Row.Heritage);
+    if (Length(Entries) = 0) or not ResolveClass(Entries[0], Row, Conn) then Break;
+  end;
+end;
+
+// A descendant of the class that lists the interface again (its own methods then implement it); ''.
+function TIfacePlanner.ReimplementedBy(const pIface: string): string;
+begin
+  Result:= '';
+  var Kids:= Descendants;
+  var Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT name, COALESCE(heritage, '''') AS h FROM symbols WHERE id = :p';
+    for var Id in Kids.Keys do
+    begin
+      Q.Close;
+      Q.ParamByName('p').AsLargeInt:= Id;
+      Q.Open;
+      if not Q.Eof and MatchText(pIface, HeritageList(Q.FieldByName('h').AsString)) then Exit(Q.FieldByName('name').AsString);
+    end;
+  finally
+    Q.Free;
+    Kids.Free;
+  end;
+end;
+
+// 0 when every occurrence of the parameter in pSrc.Masked[pFrom, pTo) is `p.Member` with Member in pMembers, a nil test or
+// Assigned(p); else the offset of the first one that is not.
+function TIfacePlanner.ForeignUse(pSrc: TMaskedSource; pFrom, pTo: Integer; const pParam: string; const pMembers: TArray<string>): Integer;
+begin
+  Result:= 0;
+  var Body:= Copy(pSrc.Masked, pFrom, pTo - pFrom);
+  for var M in TRegEx.Matches(Body, '\b' + TRegEx.Escape(pParam) + '\b', [roIgnoreCase]) do
+  begin
+    var Before:= TrimRight(Copy(Body, 1, M.Index - 1));
+    var After:= Copy(Body, M.Index + M.Length, MaxInt);
+    if EndsStr('.', Before) then Continue; { X.p: a member of something else }
+    var Member:= TRegEx.Match(After, '^\s*\.\s*(\w+)');
+    if Member.Success then
+    begin
+      if MatchText(Member.Groups[1].Value, pMembers) then Continue;
+    end
+    else if TRegEx.IsMatch(After, '^\s*(=|<>)\s*nil\b', [roIgnoreCase]) or TRegEx.IsMatch(Before, '\bnil\s*(=|<>)$', [roIgnoreCase]) or
+      (TRegEx.IsMatch(Before, '\bAssigned\s*\($', [roIgnoreCase]) and TRegEx.IsMatch(After, '^\s*\)')) then Continue;
+    Exit(pFrom + M.Index - 1);
+  end;
+end;
+
+procedure TIfacePlanner.PlanRetype(out pError: string);  // dl:ok too-many-exit-points -- one guard per named refusal, in the documented order: the exits are the contract
+begin
+  pError:= '';
+  FPlan.Retype:= True;
+  var Spec:= Trim(FOpts.RetypeConsumer);
+  var Dot:= LastDelimiter('.', Spec);
+  if (Dot <= 1) or (Dot = Length(Spec)) then
+  begin
+    pError:= CVerb + ' --retype-consumer takes <Routine>.<param>, e.g. TFoo.Bar.pItem';
+    Exit;
+  end;
+  var RoutineRef:= Copy(Spec, 1, Dot - 1);
+  FPlan.Consumer:= RoutineRef;
+  FPlan.Param:= Copy(Spec, Dot + 1, MaxInt);
+  { the routine: by its qualified name or a dotted tail of it }
+  var QNames: TArray<string>:= nil;
+  var RId: Int64:= 0;
+  var RDir:= '';
+  var RVirt:= False;
+  var RPath:= '';
+  var RStartLine:= 0;
+  var RStartCol:= 0;
+  var REndLine:= 0;
+  var REndCol:= 0;
+  var RImplStart:= 0;
+  var RImplEnd:= 0;
+  var Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT s.id, s.qualified_name, COALESCE(s.directives, '''') AS d, COALESCE(s.is_virtual, 0) AS v, s.start_line, ' +
+      's.start_col, s.end_line, s.end_col, COALESCE(s.impl_start_line, 0) AS isl, COALESCE(s.impl_end_line, 0) AS iel, f.path ' +
+      'FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.kind IN (' + CRoutineKinds + ') AND s.name = :n COLLATE NOCASE ' +
+      'ORDER BY s.id';
+    Q.ParamByName('n').AsWideString:= Leaf(RoutineRef);
+    Q.Open;
+    var QNameField:= Q.FieldByName('qualified_name');
+    var DirField:= Q.FieldByName('d');
+    while not Q.Eof do
+    begin
+      var QN:= QNameField.AsString;
+      if SameText(QN, RoutineRef) or EndsText('.' + RoutineRef, QN) then
+      begin
+        QNames:= QNames + [QN];
+        if Length(QNames) = 1 then
+        begin
+          { the first match; with more than one the run refuses (overloaded) or fails (ambiguous) below }
+          RId:= Q.Fields[0].AsLargeInt;
+          RDir:= DirField.AsString;
+          RVirt:= Q.Fields[3].AsInteger <> 0;
+          RStartLine:= Q.Fields[4].AsInteger;
+          RStartCol:= Q.Fields[5].AsInteger;
+          REndLine:= Q.Fields[6].AsInteger;
+          REndCol:= Q.Fields[7].AsInteger;
+          RImplStart:= Q.Fields[8].AsInteger;
+          RImplEnd:= Q.Fields[9].AsInteger;
+          RPath:= Q.Fields[10].AsString;
+        end
+        else if ContainsText(DirField.AsString, 'overload') then RDir:= RDir + ' overload';
+      end;
+      Q.Next;
+    end;
+    if Length(QNames) = 0 then
+    begin
+      pError:= Format('%s: the index has no routine %s', [CVerb, RoutineRef]);
+      Exit;
+    end;
+    for var N in QNames do
+      if not SameText(N, QNames[0]) then
+      begin
+        pError:= Format('%s: %s names more than one routine, qualify it: %s, %s', [CVerb, RoutineRef, QNames[0], N]);
+        Exit;
+      end;
+    FPlan.Consumer:= QNames[0];
+    Q.Close;
+    Q.SQL.Text:= 'SELECT COALESCE(signature, '''') FROM symbols WHERE parent_id = :r AND kind = ''param'' AND name = :n COLLATE NOCASE';
+    Q.ParamByName('r').AsLargeInt:= RId;
+    Q.ParamByName('n').AsWideString:= FPlan.Param;
+    Q.Open;
+    if Q.Eof then
+    begin
+      pError:= Format('%s: %s has no parameter %s', [CVerb, FPlan.Consumer, FPlan.Param]);
+      Exit;
+    end;
+    FPlan.HeritageBefore:= Q.Fields[0].AsString; { the parameter's declared type }
+  finally
+    Q.Free;
+  end;
+  FPlan.FilePath:= RPath;
+  FPlan.Line:= RStartLine;
+  if not SameText(Leaf(FPlan.HeritageBefore), FClass.Name) then
+  begin
+    Refuse('param-not-class', Format('%s is typed %s, not %s', [FPlan.Param, FPlan.HeritageBefore, FClass.Name]));
+    Exit;
+  end;
+  if not MatchText(ExtractFileExt(RPath), ['.pas', '.dpr', '.dpk']) then
+  begin
+    Refuse('include-file', 'an include file compiles in every unit that includes it');
+    Exit;
+  end;
+  if not TFile.Exists(RPath) or not IsFileCurrent(FStore, RPath) then
+  begin
+    Refuse('stale-file', 'the file changed since it was indexed; re-index');
+    Exit;
+  end;
+  if (FOpts.Project <> '') and not FOwn.IsOurs(RPath) then
+  begin
+    Refuse('outside-roots', 'the file lies outside the project''s own roots');
+    Exit;
+  end;
+  var Src:= TMaskedSource.Create(RPath);
+  try
+    var DeclFrom:= Src.OffsetOf(RStartLine, RStartCol);
+    var DeclTo:= Src.OffsetOf(REndLine, REndCol);
+    var DeclHead:= MaskedHeaderEnd(Src.Masked, DeclFrom, DeclTo);
+    if DeclHead = 0 then DeclHead:= DeclTo;
+    var Head:= Copy(Src.Masked, DeclFrom, DeclHead - DeclFrom);
+    var PEsc:= TRegEx.Escape(FPlan.Param);
+    if TRegEx.IsMatch(Head, '\b(var|out)\s+(\w+\s*,\s*)*' + PEsc + '\b', [roIgnoreCase]) then
+    begin
+      Refuse('var-param', 'a var or out parameter needs each caller''s variable to be of the interface type');
+      Exit;
+    end;
+    if TRegEx.IsMatch(Head, '(,\s*' + PEsc + '\s*[:,])|(\b' + PEsc + '\s*,)', [roIgnoreCase]) then
+    begin
+      Refuse('param-group', Format('%s shares its type with another parameter; give it a declaration of its own first', [FPlan.Param]));
+      Exit;
+    end;
+    if RVirt or TRegEx.IsMatch(RDir, '\b(virtual|dynamic|override|abstract|message)\b', [roIgnoreCase]) then
+    begin
+      Refuse('virtual-method', 'an override and its base keep one signature: retype them together by hand');
+      Exit;
+    end;
+    if (Length(QNames) > 1) or ContainsText(RDir, 'overload') then
+    begin
+      Refuse('overloaded', 'the retype could change which overload a caller''s call resolves to');
+      Exit;
+    end;
+    if (RImplStart = 0) or (RImplEnd < RImplStart) then
+    begin
+      Refuse('no-body', 'the index has no body for the routine (external or forward only): nothing proves its uses');
+      Exit;
+    end;
+    var Why: string;
+    var Life:= LifetimeVerdict(Why);
+    FPlan.Lifetime:= Why;
+    if Life <> '' then
+    begin
+      Refuse(Life, Why);
+      Exit;
+    end;
+    var IfaceId: Int64;
+    var Kind, Reason: string;
+    var Iface:= PickInterface(IfaceId, Kind, Reason);
+    if Iface = '' then
+    begin
+      Refuse(Kind, Reason);
+      Exit;
+    end;
+    FPlan.IfaceName:= Iface;
+    var Mapper:= MapsInterface(Iface);
+    if Mapper <> '' then
+    begin
+      Refuse('method-resolution', Format('%s maps a method of %s to another name: a call through the interface would reach another method', [Mapper, Iface]));
+      Exit;
+    end;
+    var Again:= ReimplementedBy(Iface);
+    if Again <> '' then
+    begin
+      Refuse('reimplemented', Format('the descendant %s lists %s again: for its instances a call through the interface reaches its own methods, a call on the class does not', [Again, Iface]));
+      Exit;
+    end;
+    var ImplFrom:= Src.OffsetOf(RImplStart, 1);
+    var ImplTo:= Src.LineEnd(RImplEnd);
+    var ImplHead:= MaskedHeaderEnd(Src.Masked, ImplFrom, ImplTo);
+    if ImplHead = 0 then
+    begin
+      Refuse('header-shape', 'the implementation''s header has no end');
+      Exit;
+    end;
+    var Bad:= ForeignUse(Src, ImplHead + 1, ImplTo, FPlan.Param, InterfaceMembers(IfaceId));
+    if Bad > 0 then
+    begin
+      var L:= Src.LineOf(Bad);
+      var LineText:= Trim(Copy(Src.Text, Src.OffsetOf(L, 1), Src.LineEnd(L) - Src.OffsetOf(L, 1)));
+      Refuse('use-not-interface', Format('line %d: %s -- only %s.<member of %s>, a nil test and Assigned(%s) are proved', [L, LineText, FPlan.Param, Iface, FPlan.Param]));
+      Exit;
+    end;
+    { the edits: the declaration's header, and the implementation's when it repeats the parameter list }
+    var At1, Len1, At2, Len2: Integer;
+    if ParamTypeSpan(Src.Masked, DeclFrom, DeclHead, FPlan.Param, FClass.Name, At1, Len1) <> 1 then
+    begin
+      Refuse('header-shape', Format('the declaration does not read `%s: %s` exactly once', [FPlan.Param, FClass.Name]));
+      Exit;
+    end;
+    var Spans: TArray<TPoint>:= [TPoint.Create(At1, Len1)];
+    var Again2:= ParamTypeSpan(Src.Masked, ImplFrom, ImplHead, FPlan.Param, FClass.Name, At2, Len2);
+    if Again2 > 1 then
+    begin
+      Refuse('header-shape', Format('the implementation''s header reads `%s: %s` more than once', [FPlan.Param, FClass.Name]));
+      Exit;
+    end;
+    if (Again2 = 1) and (At2 > At1) then Spans:= Spans + [TPoint.Create(At2, Len2)]
+    else if (Again2 = 1) and (At2 < At1) then Spans:= [TPoint.Create(At2, Len2)] + Spans;
+    var NewText:= Src.Text;
+    for var I:= High(Spans) downto 0 do
+      NewText:= Copy(NewText, 1, Spans[I].X - 1) + Iface + Copy(NewText, Spans[I].X + Spans[I].Y, MaxInt);
+    for var S in Spans do
+    begin
+      var E:= Default(TRetypeEdit);
+      E.Line:= Src.LineOf(S.X);
+      var LineFrom:= Src.OffsetOf(E.Line, 1);
+      E.Before:= Copy(Src.Text, LineFrom, Src.LineEnd(E.Line) - LineFrom);
+      E.After:= Copy(Src.Text, LineFrom, S.X - LineFrom) + Iface + Copy(Src.Text, S.X + S.Y, Src.LineEnd(E.Line) - S.X - S.Y);
+      FPlan.Edits:= FPlan.Edits + [E];
+    end;
+    FPlan.HeritageAfter:= Iface;
+    FPlan.NewText:= NewText;
+    FPlan.Enc:= Src.Enc;
+  finally
+    Src.Free;
+  end;
+end;
+
 function TIfacePlanner.Run(out pError: string): TIfacePlan;
 begin
   pError:= '';
@@ -906,6 +1467,11 @@ begin
   FPlan.ClassQName:= FClass.QName;
   FPlan.FilePath  := FClass.Path;
   FPlan.Line      := FClass.StartLine;
+  if FOpts.RetypeConsumer <> '' then
+  begin
+    PlanRetype(pError);
+    Exit(FPlan);
+  end;
   if RefuseClass then Exit(FPlan);
   FMembers:= ReadMembers;
   var Used:= ComputeUses;
@@ -941,6 +1507,24 @@ begin
     J.AddPair('file', pPlan.FilePath);
     J.AddPair('line', TJSONNumber.Create(pPlan.Line));
     J.AddPair('interface', pPlan.IfaceName);
+    if pPlan.Retype then
+    begin
+      J.AddPair('mode', 'retype-consumer');
+      J.AddPair('consumer', pPlan.Consumer);
+      J.AddPair('param', pPlan.Param);
+      J.AddPair('param_type', pPlan.HeritageBefore);
+      J.AddPair('lifetime', pPlan.Lifetime);
+      var Es:= TJSONArray.Create;
+      J.AddPair('edits', Es);
+      for var E in pPlan.Edits do
+      begin
+        var O:= TJSONObject.Create;
+        O.AddPair('line', TJSONNumber.Create(E.Line));
+        O.AddPair('before', E.Before);
+        O.AddPair('after', E.After);
+        Es.AddElement(O);
+      end;
+    end;
     if pPlan.RefusalKind <> '' then
     begin
       var R:= TJSONObject.Create;
@@ -948,7 +1532,7 @@ begin
       R.AddPair('reason', pPlan.RefusalReason);
       J.AddPair('refusal', R);
     end
-    else
+    else if not pPlan.Retype then
     begin
       J.AddPair('guid', pPlan.Guid);
       J.AddPair('text', pPlan.Text);
@@ -979,14 +1563,30 @@ end;
 
 procedure PrintText(const pPlan: TIfacePlan; pApply, pRan: Boolean; const pGate: TGateOutcome);
 begin
-  if pPlan.RefusalKind <> '' then
+  if pPlan.Retype then
+  begin
+    if pPlan.RefusalKind <> '' then
+      Writeln(Format('extract-interface: retype %s.%s refused: %s -- %s', [pPlan.Consumer, pPlan.Param, pPlan.RefusalKind, pPlan.RefusalReason]))
+    else
+    begin
+      Writeln(Format('extract-interface: retype %s.%s: %s -> %s; lifetime: %s%s', [pPlan.Consumer, pPlan.Param, pPlan.HeritageBefore,
+        pPlan.IfaceName, pPlan.Lifetime, if pApply then '' else ' (plan; add --apply --project <X.dproj> to write)']));
+      for var E in pPlan.Edits do
+      begin
+        Writeln(Format('%s:%d', [pPlan.FilePath, E.Line]));
+        Writeln('- ' + E.Before);
+        Writeln('+ ' + E.After);
+      end;
+    end;
+  end
+  else if pPlan.RefusalKind <> '' then
     Writeln(Format('extract-interface: %s refused: %s -- %s', [pPlan.ClassQName, pPlan.RefusalKind, pPlan.RefusalReason]))
   else
     Writeln(Format('extract-interface: %s -> %s: %d member(s), %d left out%s', [pPlan.ClassQName, pPlan.IfaceName, Length(pPlan.Members), Length(pPlan.LeftOut),
       if pApply then '' else ' (plan; add --apply --project <X.dproj> to write)']));
   for var M in pPlan.Members do Writeln(Format('member   %-24s %-9s uses=%d %s', [M.Name, M.Kind, M.Uses_, M.FirstUse]));
   for var M in pPlan.LeftOut do Writeln(Format('left out %-24s %s -- %s', [M.Name, M.LeftKind, M.Reason]));
-  if pPlan.RefusalKind = '' then
+  if (pPlan.RefusalKind = '') and not pPlan.Retype then
   begin
     Writeln(Format('%s:%d', [pPlan.FilePath, pPlan.Line]));
     Write(pPlan.Text);
@@ -1010,6 +1610,8 @@ begin
   if pOpts.ClassRef = '' then Exit(Fail(CVerb + ' needs --class <name>'));
   if pOpts.Apply and pOpts.NoCompile then Exit(Fail(CVerb + ' --apply cannot take --no-compile: every applied rewrite is built'));
   if pOpts.Apply and (pOpts.Project = '') then Exit(Fail(CVerb + ' --apply needs --project <X.dproj>: the gates build it'));
+  if (pOpts.RetypeConsumer <> '') and ((pOpts.Members <> '') or pOpts.Reparent) then
+    Exit(Fail(CVerb + ' --retype-consumer is a step of its own: extract (and reparent) first, re-index, then retype'));
   if pStore is not TSQLiteSymbolStore then Exit(Fail(CVerb + ' needs a SQLite index'));
   Result:= CExitOk;
   var Plan: TIfacePlan;
@@ -1029,7 +1631,8 @@ begin
     begin
       var Args:= Default(TOneFileApplyArgs);
       Args.Verb:= CVerb;
-      Args.HeaderTail:= Format('%s on %s', [Plan.IfaceName, Plan.ClassQName]);
+      Args.HeaderTail:= if Plan.Retype then Format('retype %s.%s to %s', [Plan.Consumer, Plan.Param, Plan.IfaceName])
+        else Format('%s on %s', [Plan.IfaceName, Plan.ClassQName]);
       Args.Project:= pOpts.Project;
       Args.Platform:= pOpts.Platform;
       Args.RsVars:= pOpts.RsVars;
@@ -1038,6 +1641,8 @@ begin
       Args.FilePath:= Plan.FilePath;
       Gate:= ApplyOneFileThroughScratch((pStore as TSQLiteSymbolStore).GetConnection, Args, EncodeSource(Plan.NewText, Plan.Enc));
       Ran:= True;
+      { P14: what the builds said, on stderr so a --format json document stays clean }
+      for var Line in GateMessageReport(Gate) do Writeln(ErrOutput, Line);
       if not Gate.Applied then Result:= if Gate.RollbackFailed then CExitError else CExitRefused;
     end;
   if pOpts.Json then PrintJson(Plan, Ran, Gate) else PrintText(Plan, pOpts.Apply, Ran, Gate);
