@@ -58,6 +58,9 @@ const
   CRefuseDfmNotRewritten = 'dfm-not-rewritten';
   /// <summary>A text form file names a published property, or a component where nothing can tell which one is meant.</summary>
   CRefuseDfmNameUnbound = 'dfm-name-unbound';
+  /// <summary>A string literal in the code is the component's name (`FindComponent('Name')`, `'Form.Name'`): the
+  /// streaming and the RTTI find a component by that text at run time, and a string is no compile error.</summary>
+  CRefuseNameInString = 'name-in-string';
   /// <summary>The new name is already a member in the class family, or a unit-level symbol.</summary>
   CRefuseNewNameCollides = 'new-name-collides';
   /// <summary>The new name is declared in the library the renamed symbol would hide or meet.</summary>
@@ -158,7 +161,9 @@ type
 /// A published field of a form class is a component: its name in the owning form's and descendants' text .dfm
 /// (`object Name: TType`, `inherited Name: TType`, `Prop = Name`, `Prop = Owner.Name`) is an edit. Another form's
 /// own component of that name is another symbol's. What cannot be told apart (under an `inline`, inside a list, a form
-/// whose root class is not indexed, an enum value of the same name) refuses as CRefuseDfmNameUnbound.</remarks>
+/// whose root class is not indexed, an enum value of the same name) refuses as CRefuseDfmNameUnbound. A string literal
+/// in any indexed source file that is the component's name, or ends in `.Name`, refuses as CRefuseNameInString
+/// (`FindComponent('Name')` compiles either way and finds nothing after the rename); a comment never refuses.</remarks>
 function ProveRename(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;
   const pQName, pNewName: string): TRenameProof;
 
@@ -370,6 +375,8 @@ type
     procedure ScanDfmNames(const pPath, pText: string);
     procedure ScanDfmComponent(const pPath, pText: string; pInstances: TStringList);
     function OwnerInstances: TStringList;
+    procedure RefuseUnbound(const pPath: string; pLine, pAt: Integer; pInInline, pRootKnown: Boolean);
+    procedure CheckNameInStrings;
     procedure CheckDfmNames;
   public
     constructor Create(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>; const pQName, pNewName: string);
@@ -1853,6 +1860,21 @@ begin
   end;
 end;
 
+{ Refuses one undecided dfm-name-unbound occurrence, with the message that says WHY it is undecided (frame, unindexed root, other). }
+procedure TProver.RefuseUnbound(const pPath: string; pLine, pAt: Integer; pInInline, pRootKnown: Boolean);
+begin
+  if pInInline then
+    Refuse(CRefuseDfmNameUnbound, pPath, pLine, pAt,
+      Format('this form names "%s" inside an embedded frame (`inline`): a host form''s override of a frame''s ' +
+        'component is not proved; rename it by hand in the frame and in every host form', [FOld]))
+  else if not pRootKnown then
+    Refuse(CRefuseDfmNameUnbound, pPath, pLine, pAt,
+      Format('this form names "%s" and its root class is not in the index, so nothing tells whose component it ' +
+        'is: index the form''s unit, or fix it by hand', [FOld]))
+  else
+    Refuse(CRefuseDfmNameUnbound, pPath, pLine, pAt,
+      Format('this form names "%s" where nothing tells which component it means: fix it by hand', [FOld]));
+end;
 procedure TProver.ScanFile(pFileId: Int64; const pPath: string);
 var
   Text: string;
@@ -2047,9 +2069,7 @@ var
       Undecided:= pInstances.IndexOf(Copy(Value, 1, Length(Value) - Length(FOld) - 1)) < 0;
       IsEdit:= not Undecided;
     end;
-    if Undecided then
-      Refuse(CRefuseDfmNameUnbound, pPath, pLine, pAt,
-        Format('this form names "%s" where nothing tells which component it means: fix it by hand', [FOld]))
+    if Undecided then RefuseUnbound(pPath, pLine, pAt, InInline, RootKnown)
     else if IsEdit then
     begin
       AddEdit(pPath, pLine, pAt);
@@ -2125,6 +2145,53 @@ begin
   end;
 end;
 
+{ A component is also found by its name as text: FindComponent('Name'), FieldAddress('Name'), a 'Form.Name' path. A string
+  is no compile error, so a literal that is the old name, or ends in '.' + the old name, refuses (P16). Comments are
+  skipped; a literal that only contains the name inside other text ('BtnGo stays') is a caption, not a lookup. }
+procedure TProver.CheckNameInStrings;
+begin
+  var Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT path FROM files';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      var Path:= Q.Fields[0].AsString;
+      Q.Next;
+      if not IsSourceFile(Path) or not TFile.Exists(Path) then Continue;
+      var Text: string;
+      TTextFileFormat.ReadFile(Path, Text);
+      if not ContainsText(Text, FOld) then Continue;
+      var I:= 1;
+      var Line:= 1;
+      var LineStart:= 1;
+      while I <= Length(Text) do
+      begin
+        var Next:= SkipNonIdent(Text, I);
+        if Next <= I then Next:= I + 1;
+        if Text[I] = '''' then
+        begin
+          var Lit:= Copy(Text, I + 1, Next - I - 2);
+          if SameText(Lit, FOld) or EndsText('.' + FOld, Lit) then
+            Refuse(CRefuseNameInString, Path, Line, I - LineStart + 1,
+              Format('the string ''%s'' names the component "%s"; a lookup by name (FindComponent, FieldAddress) ' +
+                'still compiles after the rename and finds nothing: change or remove it by hand first', [Lit, FOld]));
+        end;
+        for var K:= I to Next - 1 do
+          if (K <= Length(Text)) and (Text[K] = #10) then
+          begin
+            Inc(Line);
+            LineStart:= K + 1;
+          end;
+        I:= Next;
+      end;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+
 { A published field or property named in a text form. A field is a component and its form is rewritten; a property's name
   in a form is not, and a form that no longer loads is no compile error. Binary and unindexed forms: SkippedDfmNotes. }
 procedure TProver.CheckDfmNames;
@@ -2144,6 +2211,7 @@ begin
       if not Component or ContainsText(Note, CBinaryDfmNote) then
         Refuse(CRefuseDfmNotRewritten, FStore.GetFilePath(S.FileId), S.Line, 0, Note);
   if not Streamed then Exit;
+  if Component then CheckNameInStrings;
   var Instances: TStringList:= nil;
   if Component then Instances:= OwnerInstances;
   var Q:= TFDQuery.Create(nil);

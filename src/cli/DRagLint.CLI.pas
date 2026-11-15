@@ -26824,6 +26824,7 @@ begin
   Opts.NoBackup        := AArgs.NoBackup;
   Opts.AlsoProjects    := pReach.AlsoProjects;
   var Gate:= ApplyRenameGated(pProof.Edits, Opts);
+  for var GateLine in GateMessageReport(Gate) do Writeln(ErrOutput, GateLine); { P16: what the two builds said, as lint --fix prints it }
   if not Gate.Applied then
   begin
     Writeln(CRefused + 'refused [' + Gate.Refusal + ']: ' + Gate.Detail);
