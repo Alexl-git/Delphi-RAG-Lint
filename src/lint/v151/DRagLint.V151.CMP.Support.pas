@@ -35,12 +35,12 @@ type
   /// arguments and unit qualifiers cut off).</remarks>
   TCmpClass = class
   public
-    Name   : string;
-    Display: string;
-    Node   : TTSNode;
-    Parents: TArray<string>;
-    Fields : TDictionary<string, string>;
-    Props  : TList<TCmpProp>;
+    Name   : string;  // dl:ok public-field@bc8e -- REVIEWED 2026-11-14 v151 CMP: plain data holder private to the CMP lane (only DRagLint.V151.CMP uses it)
+    Display: string;  // dl:ok public-field@316a -- REVIEWED 2026-11-14 v151 CMP: plain data holder private to the CMP lane (only DRagLint.V151.CMP uses it)
+    Node   : TTSNode;  // dl:ok public-field@4d6f -- REVIEWED 2026-11-14 v151 CMP: plain data holder private to the CMP lane (only DRagLint.V151.CMP uses it)
+    Parents: TArray<string>;  // dl:ok public-field@2d0d -- REVIEWED 2026-11-14 v151 CMP: plain data holder private to the CMP lane (only DRagLint.V151.CMP uses it)
+    Fields : TDictionary<string, string>;  // dl:ok public-field@2071 -- REVIEWED 2026-11-14 v151 CMP: plain data holder private to the CMP lane (only DRagLint.V151.CMP uses it)
+    Props  : TList<TCmpProp>;  // dl:ok public-field@943f -- REVIEWED 2026-11-14 v151 CMP: plain data holder private to the CMP lane (only DRagLint.V151.CMP uses it)
     /// <summary>Creates the empty model.</summary>
     constructor Create;
     /// <summary>Frees the collections.</summary>
@@ -191,6 +191,7 @@ end;
 
 function CmpIntLiteral(const AText: string; out AValue: Int64): Boolean;
 begin
+  AValue:= 0;
   var S: string:= Trim(AText);
   var Neg: Boolean:= False;
   if (S <> '') and CharInSet(S[1], ['-', '+']) then
@@ -221,23 +222,31 @@ end;
 
 { ------------------------------------------------------------ resources }
 
+const
+  RES_ORDINAL_MARK = $FFFF;   { a .res name / type field holding an ordinal starts with this word }
+
+function ReadLE16(const B: TBytes; APos: Integer): Word;
+begin
+  Move(B[APos], Result, SizeOf(Result));   { Win32/Win64 are little-endian, as .res is }
+end;
+
 { One name or type field of a .res entry header: $FFFF + ordinal, or a
   zero-terminated UTF-16 string. Advances APos; AName is '' for an ordinal. }
 function ReadResId(const B: TBytes; var APos: Integer; out AName: string): Boolean;
 begin
   AName:= '';
   if APos + 2 > Length(B) then Exit(False);
-  if (B[APos] = $FF) and (B[APos + 1] = $FF) then
+  if ReadLE16(B, APos) = RES_ORDINAL_MARK then
   begin
-    Inc(APos, 4);
+    Inc(APos, SizeOf(Cardinal));   { the $FFFF mark + the 16-bit ordinal }
     Exit(APos <= Length(B));
   end;
   var SB: TStringBuilder:= TStringBuilder.Create;
   try
     while APos + 1 < Length(B) do
     begin
-      var W: Word:= B[APos] or (Word(B[APos + 1]) shl 8);
-      Inc(APos, 2);
+      var W: Word:= ReadLE16(B, APos);
+      Inc(APos, SizeOf(Word));
       if W = 0 then
       begin
         AName:= SB.ToString;
@@ -253,7 +262,7 @@ end;
 
 function ReadLE32(const B: TBytes; APos: Integer): Cardinal;
 begin
-  Result:= B[APos] or (Cardinal(B[APos + 1]) shl 8) or (Cardinal(B[APos + 2]) shl 16) or (Cardinal(B[APos + 3]) shl 24);
+  Move(B[APos], Result, SizeOf(Result));   { Win32/Win64 are little-endian, as .res is }
 end;
 
 function ResNamesOfBinary(const B: TBytes): TArray<string>;
@@ -270,7 +279,7 @@ begin
   while Ofs + MIN_HEADER <= Length(B) do
   begin
     DataSize  := ReadLE32(B, Ofs);
-    HeaderSize:= ReadLE32(B, Ofs + 4);
+    HeaderSize:= ReadLE32(B, Ofs + SizeOf(Cardinal));
     if (HeaderSize < MIN_HEADER) or (Int64(Ofs) + HeaderSize + DataSize > Length(B)) then Exit;
     Next:= Ofs + Integer(HeaderSize) + Integer(DataSize);
     if Next mod ALIGN <> 0 then Next:= Next + ALIGN - Next mod ALIGN;

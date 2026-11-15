@@ -439,7 +439,7 @@ begin
 end;
 
 { A comparable key for a literal: n:<int>, b:true, i:<name>, s:<sorted members>, c:<text>; '' otherwise. }
-function TCmpRun.LitKey(const N: TTSNode): string;
+function TCmpRun.LitKey(const N: TTSNode): string;  // dl:ok too-many-exit-points@0986 -- REVIEWED 2026-11-14 v151 CMP: LitKey dispatches on the node type, one Exit per literal kind
 var
   V: Int64;
 begin
@@ -453,20 +453,20 @@ begin
   end;
   if T = 'literalNumber' then
   begin
-    if CmpIntLiteral(Txt(X), V) then Exit('n:' + IntToStr(V));
+    if CmpIntLiteral(Txt(X), V) then Exit('n:' + IntToStr(V));  // dl:ok hardcoded-absolute-path@7c4c -- REVIEWED 2026-11-14 v151 CMP: a LitKey kind prefix (n: / i: / c: / s:), not a drive path -- rule false positive
     Exit('');
   end;
   if (T = 'kTrue') or ((T = 'identifier') and (Low(X) = 'true')) then Exit('b:true');
   if (T = 'kFalse') or ((T = 'identifier') and (Low(X) = 'false')) then Exit('b:false');
-  if T = 'identifier' then Exit('i:' + Low(X));
-  if T = 'literalString' then Exit('c:' + Txt(X));
+  if T = 'identifier' then Exit('i:' + Low(X));  // dl:ok hardcoded-absolute-path@3bf5 -- REVIEWED 2026-11-14 v151 CMP: a LitKey kind prefix (n: / i: / c: / s:), not a drive path -- rule false positive
+  if T = 'literalString' then Exit('c:' + Txt(X));  // dl:ok hardcoded-absolute-path@1b55 -- REVIEWED 2026-11-14 v151 CMP: a LitKey kind prefix (n: / i: / c: / s:), not a drive path -- rule false positive
   if T = 'exprBrackets' then
   begin
     var L: TStringList:= TStringList.Create;
     try
       for var I: Integer:= 0 to X.NamedChildCount - 1 do L.Add(Low(X.NamedChild(I)));
       L.Sort;
-      Result:= 's:' + L.CommaText;
+      Result:= 's:' + L.CommaText;  // dl:ok hardcoded-absolute-path@35c1 -- REVIEWED 2026-11-14 v151 CMP: a LitKey kind prefix (n: / i: / c: / s:), not a drive path -- rule false positive
     finally
       L.Free;
     end;
@@ -745,7 +745,7 @@ begin
     Inits.Free;
   end;
   { Never written at all: the field starts at 0 / False. }
-  if (Field = '') or not ((Def = 'b:true') or (StartsStr('n:', Def) and (Def <> 'n:0'))) then Exit;
+  if (Field = '') or not ((Def = 'b:true') or (StartsStr('n:', Def) and (Def <> 'n:0'))) then Exit;  // dl:ok hardcoded-absolute-path@c786 -- REVIEWED 2026-11-14 v151 CMP: a LitKey kind prefix (n: / i: / c: / s:), not a drive path -- rule false positive
   var Assigns: TList<TTSNode>:= TList<TTSNode>.Create;
   try
     for var D: TTSNode in FDefs do
@@ -794,10 +794,9 @@ var
     begin
       var Arg: string:= Trim(M.Groups[1].Value);
       if Arg = '' then Continue;
-      if Arg[1] = '''' then Arg:= Copy(Arg, 2, Pos('''', Copy(Arg, 2, MaxInt)) - 1)
-      else Arg:= Arg.Split([' ', #9])[0];
+      Arg:= if Arg[1] = '''' then Copy(Arg, 2, Pos('''', Copy(Arg, 2, MaxInt)) - 1) else Arg.Split([' ', #9])[0];
       Arg:= StringReplace(Arg, '*', ABase, []);
-      if ExtractFileExt(Arg) = '' then Arg:= Arg + '.res';
+      if ExtractFileExt(Arg) = '' then Arg:= Arg + '.res';  // dl:ok concat-in-loop@8b09 -- REVIEWED 2026-11-14 v151 CMP: a handful of resource files / one suffix per directive, not an accumulating string
       if AOnlyDcr and not SameText(ExtractFileExt(Arg), '.dcr') then Continue;
       if not TPath.IsPathRooted(Arg) then Arg:= TPath.Combine(ADir, Arg);
       Files.Add(Arg);
@@ -816,9 +815,9 @@ begin
     try
       for var Dpk: string in TDirectory.GetFiles(Dir, '*.dpk') do
         AddDirectives(TFile.ReadAllText(Dpk), Dir, ChangeFileExt(ExtractFileName(Dpk), ''), True);
-    except
-      on EInOutError do ;
-      on EDirectoryNotFoundException do ;
+    except  // dl:ok try-except-swallowed@9320 -- REVIEWED 2026-11-14 v151 CMP: a folder that cannot be listed has no .dpk to read; the remaining resource files still count
+      on EInOutError do ;  // dl:ok empty-on-handler@59cd -- REVIEWED 2026-11-14 v151 CMP: a folder that cannot be listed has no .dpk to read; the remaining resource files still count
+      on EDirectoryNotFoundException do ;  // dl:ok empty-on-handler@eda5 -- REVIEWED 2026-11-14 v151 CMP: a folder that cannot be listed has no .dpk to read; the remaining resource files still count
     end;
     for var F: string in Files do
     begin
@@ -826,7 +825,7 @@ begin
       if (not TFile.Exists(Path)) and SameText(ExtractFileExt(Path), '.res') then Path:= ChangeFileExt(Path, '.rc');
       if not TFile.Exists(Path) then Continue;
       AAnyFile:= True;
-      Result:= Result + CmpResourceNames(Path);
+      Result:= Result + CmpResourceNames(Path);  // dl:ok concat-in-loop@e6dd -- REVIEWED 2026-11-14 v151 CMP: a handful of resource files / one suffix per directive, not an accumulating string
     end;
   finally
     Files.Free;
@@ -1291,7 +1290,7 @@ begin
   Result:= False;
 end;
 
-procedure TCmpRun.CheckFreeWhileHeld(const ADef: TTSNode);
+procedure TCmpRun.CheckFreeWhileHeld(const ADef: TTSNode);  // dl:ok cyclomatic-complexity@0a66 -- REVIEWED 2026-11-14 v151 CMP: one walk over a routine body that shares its local state; splitting it would pass that state through every helper
 var
   C, M, T: string;
 begin
@@ -1455,17 +1454,17 @@ begin
   end;
 end;
 
-class function TV151CMPRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV151CMPRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@e459 -- REVIEWED 2026-11-14 v151 CMP: signature fixed by the v151 lane frame hook; this lane has no DFM / raw-byte / project check
 begin
   Result:= nil;
 end;
 
-class function TV151CMPRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;
+class function TV151CMPRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;  // dl:ok unused-parameter@11f9 -- REVIEWED 2026-11-14 v151 CMP: signature fixed by the v151 lane frame hook; this lane has no DFM / raw-byte / project check
 begin
   Result:= nil;
 end;
 
-class function TV151CMPRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
+class function TV151CMPRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@c7aa -- REVIEWED 2026-11-14 v151 CMP: signature fixed by the v151 lane frame hook; this lane has no DFM / raw-byte / project check
 begin
   Result:= nil;
 end;
