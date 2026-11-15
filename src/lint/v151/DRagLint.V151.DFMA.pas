@@ -187,7 +187,7 @@ begin
     for var I:= 1 to High(ADfm.Nodes) do
     begin
       var N: TDfmNode:= ADfm.Nodes[I];
-      if not (N.Kind in [dnkObject, dnkInline]) or N.InInline or (N.Name = '') then Continue;
+      if (N.Kind not in [dnkObject, dnkInline]) or N.InInline or (N.Name = '') then Continue;
       if Known.Contains(LowerCase(N.Name)) then Continue;
       Result:= Result + [MakeFinding(RULE_OBJECT_WITHOUT_FIELD, ADfm.Path, N.Line, N.Col, SEV_HINT,
         Format('Form object %s: %s has no field in %s -- code cannot reach it by name and the designer will add '
@@ -341,7 +341,7 @@ begin
     var Dfm: TDfmHead:= LoadDfmHead(TPath.ChangeExtension(PasPath, '.dfm'));
     if not Dfm.Ok or not SameText(Dfm.RootClass, Parent) then Exit;
     if AAncestor = '' then AAncestor:= Parent;
-    Result:= Result + Dfm.Handlers;
+    Result:= Result + Dfm.Handlers;  // dl:ok concat-in-loop@1395 -- REVIEWED 2026-11-14 v151 DFM-A: dynamic-array append of a few findings/handlers per form, not a string
     if Dfm.RootKind <> dnkInherited then Exit;
     FromUnit:= LoadPasSummary(PasPath);
     if not FromUnit.Ok then Exit;
@@ -530,7 +530,7 @@ begin
       begin
         var V: string:= P.Value;
         var Dot: Integer:= Pos('.', V);
-        if (Dot <= 1) or (Pos(' ', V) > 0) or CharInSet(V[1], ['0'..'9', '-', '[', '''', '#', '$']) then Continue;
+        if (Dot <= 1) or V.Contains(' ') or CharInSet(V[1], ['0'..'9', '-', '[', '''', '#', '$']) then Continue;
         var Module: string:= Copy(V, 1, Dot - 1);
         if not IsPascalIdent(Module) then Continue;
         if SameText(Module, ADfm.Nodes[0].Name) or (ADfm.IndexOfName(Module) >= 0) then Continue;
@@ -552,7 +552,7 @@ end;
 class function TV151DFMARules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
 begin
   Result:= nil;
-  if not (ACtx.Wants(RULE_FIELD_TYPE_MISMATCH) or ACtx.Wants(RULE_FIELD_WITHOUT_OBJECT)
+  if not (ACtx.Wants(RULE_FIELD_TYPE_MISMATCH) or ACtx.Wants(RULE_FIELD_WITHOUT_OBJECT)  // dl:ok boolean-expression-complexity@a34f -- REVIEWED 2026-11-14 v151 DFM-A: flat list of rule ids / creation hooks, each named once
     or ACtx.Wants(RULE_OBJECT_WITHOUT_FIELD) or ACtx.Wants(RULE_RESOURCE_MISSING)
     or ACtx.Wants(RULE_HANDLER_NO_INHERITED) or ACtx.Wants(RULE_SELF_FREE_IN_HANDLER)
     or ACtx.Wants(RULE_HOST_UNIT_MISSING)) then Exit;
@@ -591,8 +591,8 @@ begin
         var Ent: TTSNode:= N.ChildByField('entity');
         var Args: TTSNode:= N.ChildByField('args');
         var EntText: string:= AUnit.Text(Ent);
-        if not Args.IsNull and (Args.NamedChildCount >= 1) and SameText(AUnit.Text(Args.NamedChild(0)), AVar) then
-          if SameText(EntText, 'Assigned') or (SameText(EntText, 'FreeAndNil') and (N.StartByte < ABefore)) then Hit:= True;
+        var FirstArgIsVar: Boolean:= not Args.IsNull and (Args.NamedChildCount >= 1) and SameText(AUnit.Text(Args.NamedChild(0)), AVar);
+        if FirstArgIsVar and (SameText(EntText, 'Assigned') or (SameText(EntText, 'FreeAndNil') and (N.StartByte < ABefore))) then Hit:= True;
       end
       else if T = 'exprBinary' then
       begin
@@ -633,7 +633,7 @@ begin
   Result:= (Idx >= 0) and (AUnit.Classes[Idx].FieldIndex(AName) >= 0);
 end;
 
-function CheckAutocreateAndManual(const ACtx: TV151FileCtx; const AUnit: TPasUnit; const ADpr: TDprInfo): TArray<TLintFinding>;
+function CheckAutocreateAndManual(const ACtx: TV151FileCtx; const AUnit: TPasUnit; const ADpr: TDprInfo): TArray<TLintFinding>;  // dl:ok too-many-exit-points@4614 -- REVIEWED 2026-11-14 v151 DFM-A: one guard clause per rule precondition; splitting scatters them
 var
   Hits: TList<TLintFinding>;
 begin
@@ -671,7 +671,7 @@ begin
   end;
 end;
 
-function CheckAccessBeforeCreate(const ACtx: TV151FileCtx; const AUnit: TPasUnit; const ADpr: TDprInfo): TArray<TLintFinding>;
+function CheckAccessBeforeCreate(const ACtx: TV151FileCtx; const AUnit: TPasUnit; const ADpr: TDprInfo): TArray<TLintFinding>;  // dl:ok too-many-exit-points@aa11 -- REVIEWED 2026-11-14 v151 DFM-A: one guard clause per rule precondition; splitting scatters them
 var
   Hits: TList<TLintFinding>;
 begin
@@ -693,7 +693,7 @@ begin
       for var R in AUnit.Routines do
       begin
         if not SameText(R.OwnerClass, Cls) or R.Body.IsNull then Continue;
-        var IsCreation: Boolean:= R.IsCtor or SameText(R.Name, 'AfterConstruction')
+        var IsCreation: Boolean:= R.IsCtor or SameText(R.Name, 'AfterConstruction')  // dl:ok boolean-expression-complexity@27e6 -- REVIEWED 2026-11-14 v151 DFM-A: flat list of rule ids / creation hooks, each named once
           or ((OnCreate <> '') and SameText(R.Name, OnCreate))
           or ((OnCreate = '') and (SameText(R.Name, 'FormCreate') or SameText(R.Name, 'DataModuleCreate')));
         if not IsCreation then Continue;
@@ -812,11 +812,11 @@ begin
   begin
     var Path: string:= FindUnitFile(UName, AUnit.Path, ACtx.Store);
     if (Path = '') or SameText(Path, AUnit.Path) then Continue;
-    Result:= Result + ForeignFormsOf(ACtx, Path);
+    Result:= Result + ForeignFormsOf(ACtx, Path);  // dl:ok concat-in-loop@4cea -- REVIEWED 2026-11-14 v151 DFM-A: dynamic-array append of a few findings/handlers per form, not a string
   end;
 end;
 
-function CheckForeignFormAccess(const ACtx: TV151FileCtx; const AUnit: TPasUnit): TArray<TLintFinding>;
+function CheckForeignFormAccess(const ACtx: TV151FileCtx; const AUnit: TPasUnit): TArray<TLintFinding>;  // dl:ok too-many-exit-points@4acc -- REVIEWED 2026-11-14 v151 DFM-A: one guard clause per rule precondition; splitting scatters them
 var
   Hits: TList<TLintFinding>;
 begin
@@ -883,12 +883,12 @@ begin
   if WantForeign then Result:= Result + CheckForeignFormAccess(ACtx, U);
 end;
 
-class function TV151DFMARules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;
+class function TV151DFMARules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;  // dl:ok unused-parameter@215e -- REVIEWED 2026-11-14 v151 DFM-A: signature fixed by the TV151 lane interface; this lane has no raw-byte or project check
 begin
   Result:= nil;
 end;
 
-class function TV151DFMARules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
+class function TV151DFMARules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@fca7 -- REVIEWED 2026-11-14 v151 DFM-A: signature fixed by the TV151 lane interface; this lane has no raw-byte or project check
 begin
   Result:= nil;
 end;

@@ -284,7 +284,7 @@ begin
   Result.Message  := AMessage;
 end;
 
-function ContainsText_(const AList: TArray<string>; const AName: string): Boolean;
+function ListHasName(const AList: TArray<string>; const AName: string): Boolean;
 begin
   Result:= False;
   for var S in AList do
@@ -348,7 +348,13 @@ end;
 
 { ---- .dfm scanner ---- }
 
-function LoadDfm(const APath: string): TDfmDoc;
+const
+  { Filer signature that starts a binary form file. }
+  BINARY_DFM_SIG: array[0..3] of Byte = (Ord('T'), Ord('P'), Ord('F'), Ord('0'));
+  { First byte of a resource-wrapped binary form file. }
+  RES_HEADER_FIRST_BYTE = $FF;
+
+function LoadDfm(const APath: string): TDfmDoc;  // dl:ok deep-nesting@90b5, cyclomatic-complexity@ced4, cognitive-complexity@6926 -- REVIEWED 2026-11-14 v151 DFM-A: single-pass scanner / node-kind walker; a split would thread its state through every helper
 var
   Raw    : TBytes;
   Lines  : TArray<string>;
@@ -371,12 +377,12 @@ begin
   if (APath = '') or not FileExists(APath) then Exit;
   try
     Raw:= TFile.ReadAllBytes(APath);
-  except
+  except  // dl:ok bare-except@8f3b, try-except-swallowed@8f3b -- REVIEWED 2026-11-14 v151 DFM-A: unreadable or unparseable file means the rule stays silent: no finding beats a false finding
     Exit;
   end;
   { A binary form file starts with the filer signature TPF0 (or a resource header). }
-  if (Length(Raw) >= 4) and (Raw[0] = Ord('T')) and (Raw[1] = Ord('P')) and (Raw[2] = Ord('F')) and (Raw[3] = Ord('0')) then Exit;
-  if (Length(Raw) > 0) and (Raw[0] = $FF) then Exit;
+  if (Length(Raw) >= Length(BINARY_DFM_SIG)) and CompareMem(@Raw[0], @BINARY_DFM_SIG[0], Length(BINARY_DFM_SIG)) then Exit;
+  if (Length(Raw) > 0) and (Raw[0] = RES_HEADER_FIRST_BYTE) then Exit;
   Lines:= DfmNavLinesFromBytes(Raw);
   Nodes:= TList<TDfmNode>.Create;
   Props:= TObjectList<TList<TDfmProp>>.Create(True);
@@ -487,12 +493,12 @@ end;
 
 function TPasClass.HasMethod(const AName: string): Boolean;
 begin
-  Result:= ContainsText_(Methods, AName);
+  Result:= ListHasName(Methods, AName);
 end;
 
 function TPasRoutine.HasLocal(const AName: string): Boolean;
 begin
-  Result:= ContainsText_(Locals, AName);
+  Result:= ListHasName(Locals, AName);
 end;
 
 function TPasUnit.Text(const N: TTSNode): string;
@@ -700,7 +706,7 @@ begin
   Routines.Add(R);
 end;
 
-procedure TPasBuilder.Walk(const N: TTSNode; AInInterface, AInImpl: Boolean);
+procedure TPasBuilder.Walk(const N: TTSNode; AInInterface, AInImpl: Boolean);  // dl:ok deep-nesting@dd0f -- REVIEWED 2026-11-14 v151 DFM-A: single-pass scanner / node-kind walker; a split would thread its state through every helper
 var
   T: string;
 begin
@@ -768,7 +774,7 @@ begin
   if (APath = '') or not FileExists(APath) then Exit;
   try
     PF:= TAstParseCache.Get(APath);
-  except
+  except  // dl:ok bare-except@8f3b, try-except-swallowed@8f3b -- REVIEWED 2026-11-14 v151 DFM-A: unreadable or unparseable file means the rule stays silent: no finding beats a false finding
     Exit;
   end;
   if PF.Tree = nil then Exit;
@@ -791,7 +797,7 @@ begin
     if GPasSummary.TryGetValue(Key, Result) then Exit;
     try
       Src:= EnsureUtf8Bytes(TFile.ReadAllBytes(APath));
-    except
+    except  // dl:ok bare-except@e880 -- REVIEWED 2026-11-14 v151 DFM-A: unreadable or unparseable file means the rule stays silent: no finding beats a false finding
       Src:= nil;
     end;
     Tree:= nil;
@@ -916,7 +922,7 @@ end;
 
 function TDprInfo.HasUnit(const AUnit: string): Boolean;
 begin
-  Result:= ContainsText_(Units, AUnit) or ContainsText_(Units, LastSegment(AUnit));
+  Result:= ListHasName(Units, AUnit) or ListHasName(Units, LastSegment(AUnit));
 end;
 
 function TDprInfo.CreateIndexOfClass(const AClass: string): Integer;
@@ -1049,7 +1055,7 @@ begin
     AInfo.Path:= APath;
     GDprCache.AddOrSetValue(Key, AInfo);
     Result:= True;
-  except
+  except  // dl:ok bare-except@c2fd -- REVIEWED 2026-11-14 v151 DFM-A: unreadable or unparseable file means the rule stays silent: no finding beats a false finding
     AInfo:= Default(TDprInfo);
   end;
 end;
