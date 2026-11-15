@@ -50,3 +50,4 @@
 ## Next session
 Owner is testing in RAD Studio. Wait for results in OWNER-LIVE-RESULTS.md / Part Q answers; then release on the owner's go
 (push main, tag v1.51.0-alpha, commit BPLs, CHANGELOG date, GitHub release, website + intro, AI article), CONVERTER re-pin.
+* CLEANUP DONE: C: free 40.8 -> 145.4 GB (~105 GB). Skipped (tracked edits, owner to review): v151/APP/wt, v151/INT/wt2, v151/TXT/wt (branches lane/v151-APP + -TXT kept), 151/GD/wt, 152/MS/wt, 152/OPS2/wt (untracked only, needs --force); wave 150 skipped (written <24 h, 9.4 GB). 3 old stashes kept.
