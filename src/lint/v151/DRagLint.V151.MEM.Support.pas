@@ -289,6 +289,7 @@ function TMemRun.IsManagedType(const AType: string; ADepth: Integer): Boolean;
 var
   T: string;
   P: Integer;
+  D: TTSNode;
 begin
   Result:= False;
   T:= AType;
@@ -307,9 +308,9 @@ begin
       Result:= IsManagedType(Copy(T, P + Length(']of'), MaxInt), ADepth + 1);
     Exit;
   end;
-  if (Pos('<', T) > 0) or (Pos('(', T) > 0) then Exit;
-  if FTypeDecls.ContainsKey(T) then
-    Exit(IsManagedTypeNode(FTypeDecls[T], ADepth + 1));
+  if T.Contains('<') or T.Contains('(') then Exit;
+  if FTypeDecls.TryGetValue(T, D) then
+    Exit(IsManagedTypeNode(D, ADepth + 1));
   Result:= StoreTypeManaged(T, ADepth + 1);
 end;
 
@@ -329,10 +330,8 @@ function TMemRun.IsManagedTypeNode(const ADecl: TTSNode; ADepth: Integer): Boole
       begin
         if IsManagedType(LowerText(C.ChildByField('type')), ADepth + 1) then Exit(True);
       end
-      else if MatchStr(C.NodeType, ['declVariant', 'declVariantClause', 'declSection']) then
-      begin
-        if FieldsManaged(C) then Exit(True);
-      end;
+      else if MatchStr(C.NodeType, ['declVariant', 'declVariantClause', 'declSection']) and FieldsManaged(C) then
+        Exit(True);
     end;
   end;
 
@@ -379,7 +378,7 @@ function TMemRun.StoreTypeManaged(const AName: string; ADepth: Integer): Boolean
     Seen:= False;
     for S in Rows do
     begin
-      if not (S.Kind in [skRecord, skInterface, skClass, skEnum, skTypeAlias]) then Continue;
+      if not (S.Kind in [skRecord, skInterface, skClass, skEnum, skTypeAlias]) then Continue; // dl:ok nonminimal-bool -- a set test has no <> form
       case S.Kind of
         skInterface: One:= True;
         skRecord:
@@ -474,6 +473,7 @@ var
   Args: TArray<TTSNode>;
 begin
   Result:= False;
+  AArg:= Default(TTSNode);
   Nm:= CallName(N);
   if AWideOnly then
   begin
@@ -501,6 +501,7 @@ var
   A: TTSNode;
   I: Integer;
 begin
+  ACast:= Default(TTSNode);
   if IsPCharCast(N, A) and IsTemporaryString(A) then
   begin
     ACast:= N;
@@ -695,10 +696,10 @@ var
   Args: TArray<TTSNode>;
   Why : string;
 begin
-  if MatchStr(AName, ['createprocess', 'createprocessw']) then Idx:= 1
-  else if MatchStr(AName, ['createprocessasuser', 'createprocessasuserw']) then Idx:= 2
-  else if AName = 'createprocesswithtokenw' then Idx:= 3
-  else if AName = 'createprocesswithlogonw' then Idx:= 5
+  if MatchStr(AName, ['createprocess', 'createprocessw']) then Idx:= 1 // dl:ok magic-literal -- Win32 API argument position / count
+  else if MatchStr(AName, ['createprocessasuser', 'createprocessasuserw']) then Idx:= 2 // dl:ok magic-literal -- Win32 API argument position / count
+  else if AName = 'createprocesswithtokenw' then Idx:= 3 // dl:ok magic-literal -- Win32 API argument position / count
+  else if AName = 'createprocesswithlogonw' then Idx:= 5 // dl:ok magic-literal -- Win32 API argument position / count
   else Exit;
   Args:= CallArgs(N);
   if Length(Args) <= Idx then Exit;
@@ -727,13 +728,14 @@ begin
     IsMem:= True;
   end
   else Exit;
+  { TFile.Move, Stream.FillChar ...: a method of the same name is not the RTL routine }
+  if N.ChildByField('entity').NodeType <> 'identifier' then Exit;
   Args:= CallArgs(N);
   R:= EnclosingRoutine(N);
   for I in Targets do
   begin
     if I >= Length(Args) then Continue;
     A:= Args[I];
-    X:= '';
     if IsMem then
     begin
       if not DeclTypeOf(A, T) then Continue;
@@ -783,23 +785,28 @@ begin
   if IsMethod then
   begin
     if not MatchStr(AName, ['read', 'write', 'readbuffer', 'writebuffer']) then Exit;
-    CountIdx:= 1; BufIdx:= [0];
+    CountIdx:= 1;
+    BufIdx:= [0];
   end
   else if MatchStr(AName, ['move', 'copymemory', 'movememory', 'comparemem']) then
   begin
-    CountIdx:= 2; BufIdx:= [0, 1];
+    CountIdx:= 2;
+    BufIdx:= [0, 1];
   end
   else if MatchStr(AName, ['fillchar', 'zeromemory']) then
   begin
-    CountIdx:= 1; BufIdx:= [0];
+    CountIdx:= 1;
+    BufIdx:= [0];
   end
   else if MatchStr(AName, ['blockread', 'blockwrite', 'readfile', 'writefile']) then
   begin
-    CountIdx:= 2; BufIdx:= [1];
+    CountIdx:= 2;
+    BufIdx:= [1];
   end
   else if MatchStr(AName, ['getmem', 'reallocmem']) then
   begin
-    CountIdx:= 1; BufIdx:= [0];
+    CountIdx:= 1;
+    BufIdx:= [0];
   end
   else Exit;
   Args:= CallArgs(N);
@@ -911,6 +918,7 @@ var
   function ReleaseFor(const AFn: string; out ARelease: string): Boolean;
   begin
     Result:= True;
+    ARelease:= '';
     if MatchStr(AFn, ['createfile', 'createfilew', 'createfilea', 'createevent', 'createeventw', 'createeventa',
       'createeventex', 'createmutex', 'createmutexw', 'createmutexa', 'createsemaphore', 'createsemaphorew',
       'createsemaphorea', 'createwaitabletimer', 'openprocess', 'openthread', 'openevent', 'openeventw',
@@ -1063,13 +1071,13 @@ var
         Disp:= NodeStr(N.ChildByField('entity'));
         if (Nm = 'getmem') or ((Nm = 'new') and (Length(Args) = 1)) then
           AddAlloc(N, Args[0], Disp, RULE_RAWLEAK)
-        else if MatchStr(Nm, ['regopenkeyex', 'regopenkeyexw', 'regopenkeyexa']) and (Length(Args) = 5) then
+        else if MatchStr(Nm, ['regopenkeyex', 'regopenkeyexw', 'regopenkeyexa']) and (Length(Args) = 5) then // dl:ok magic-literal -- Win32 API argument position / count
           AddAllocHandle(N, Args[4], Disp, 'RegCloseKey')
-        else if MatchStr(Nm, ['regcreatekeyex', 'regcreatekeyexw', 'regcreatekeyexa']) and (Length(Args) = 9) then
+        else if MatchStr(Nm, ['regcreatekeyex', 'regcreatekeyexw', 'regcreatekeyexa']) and (Length(Args) = 9) then // dl:ok magic-literal -- Win32 API argument position / count
           AddAllocHandle(N, Args[7], Disp, 'RegCloseKey')
-        else if MatchStr(Nm, ['regopenkey', 'regcreatekey']) and (Length(Args) = 3) then
+        else if MatchStr(Nm, ['regopenkey', 'regcreatekey']) and (Length(Args) = 3) then // dl:ok magic-literal -- Win32 API argument position / count
           AddAllocHandle(N, Args[2], Disp, 'RegCloseKey')
-        else if (Nm = 'findfirst') and (Length(Args) = 3) then
+        else if (Nm = 'findfirst') and (Length(Args) = 3) then // dl:ok magic-literal -- Win32 API argument position / count
           AddAllocHandle(N, Args[2], Disp, 'FindClose');
       end;
     end;
@@ -1084,7 +1092,7 @@ var
     if AAlloc.Rule = RULE_RAWLEAK then
     begin
       if MatchStr(ACallName, RAW_RELEASE) then Exit(True);
-      if (ACallName = 'reallocmem') and (Length(AArgs) = 2) and (LowerText(AArgs[1]) = '0') then Exit(True);
+      if (ACallName = 'reallocmem') and (Length(AArgs) = 2) and (LowerText(AArgs[1]) = '0') then Exit(True); // dl:ok magic-literal -- ReallocMem(P, 0) is the documented release form
     end
     else if ContainsText(AAlloc.Release, ACallName) then
       Exit(True);

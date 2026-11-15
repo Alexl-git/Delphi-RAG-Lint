@@ -1,0 +1,18 @@
+{
+  "id": "v151-mem-rules",
+  "title": "Memory and string-pointer lint rules (PChar, raw memory, leaks, byte counts)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.50.0-alpha",
+  "summary": "Eight single-file lint rules plus one widened rule: Char and temporaries cast to PChar, @S[1], read-only CreateProcess command lines, raw memory over managed types, raw-memory and handle leaks, character counts used as byte counts, Ansi APIs fed Unicode strings",
+  "intro": "Read this to see what each memory and string-pointer rule reports, which ship ON and what keeps them silent.",
+  "wikiPage": "memory-string-pointer-rules",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-all"
+    }
+  ],
+  "audience": "both"
+}
