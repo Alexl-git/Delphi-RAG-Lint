@@ -20,10 +20,5 @@
       "example": "drag-lint lint-all --db <project.sqlite> --rule writeln-in-gui-app"
     }
   ],
-  "audience": "both",
-  "verified": {
-    "date": "2026-11-14",
-    "by": "alexanderl",
-    "build": "1.50.0-alpha"
-  }
+  "audience": "both"
 }
