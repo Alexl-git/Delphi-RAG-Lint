@@ -1,0 +1,33 @@
+{
+  "id": "compiler-message-passthrough",
+  "title": "Compiler messages: pass-through and overlap with our rules",
+  "group": "compiler",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.51.0-alpha",
+  "summary": "Every Delphi compiler message (hint, warning, error) is stored per project and passed through to the editor under its own code; our rules that cover the same ground stay, and the docs state where each goes beyond the message",
+  "intro": "Read this to see how compiler messages reach you and how they relate to drag-lint's own rules. Run a build through refresh-findings or the run_compile_check tool; the messages are stored with their codes, listed by query hints and published to the editor with source dcc. A rule such as unused-local or used-before-assignment overlaps a compiler message and stays, because it runs without a build and goes further in places; the wiki page says where.",
+  "wikiPage": "compiler-messages",
+  "surfaces": [
+    {
+      "type": "mcp",
+      "tool": "run_compile_check"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"],
+  "questions": [
+    {
+      "ask": "Which compiler messages does drag-lint keep and show?",
+      "command": "drag-lint query hints --db <file.sqlite>"
+    },
+    {
+      "ask": "How do I refresh the stored compiler messages of a project?",
+      "command": "drag-lint refresh-findings --project <X.dproj>"
+    },
+    {
+      "ask": "How do compiler messages and drag-lint findings reach the editor together?",
+      "command": "drag-lint lsp --proxy --merge-diagnostics"
+    }
+  ]
+}
