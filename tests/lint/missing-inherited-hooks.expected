@@ -1,0 +1,3 @@
+# AfterConstruction (15) and BeforeDestruction (20) without inherited.
+missing-inherited-ctor 15
+missing-inherited-dtor 20

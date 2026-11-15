@@ -1,0 +1,3 @@
+# Supports(X, IFoo, I) then X.Free (32); I := X then X.DisposeOf (43).
+interface-object-mixing 32
+interface-object-mixing 43
