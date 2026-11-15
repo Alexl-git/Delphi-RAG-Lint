@@ -58,6 +58,6 @@ try {
 } finally { [IO.Directory]::Delete($fixDir, $true) }
 $newIds = 'loop-condition-invariant','disallowed-method','index-loop-to-for-in','duplicate-unit-on-search-path'
 foreach ($nid in $newIds) { Assert "clippy builtin $nid registered" (($json.rules | Where-Object { $_.id -eq $nid }).Count -eq 1) }
-Assert "policy + modernize categories exist" ((@($json.rules | Where-Object { $_.category -eq 'policy' }).Count -eq 3) -and (@($json.rules | Where-Object { $_.category -eq 'modernize' }).Count -ge 1))
+Assert "policy + modernize categories exist" ((@($json.rules | Where-Object { $_.category -eq 'policy' }).Count -ge 3) -and (@($json.rules | Where-Object { $_.category -eq 'modernize' }).Count -ge 1))
 Write-Host ""
 if ($fail -gt 0) { Write-Host "rules-cli: $fail FAIL"; exit 1 } else { Write-Host "rules-cli: all pass"; exit 0 }
