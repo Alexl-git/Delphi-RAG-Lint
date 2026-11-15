@@ -14,7 +14,7 @@
 param(
   [string]$Exe = "third_party\dll-win64\drag-lint.exe",
   [int]$ExpectTotal = 317,
-  [int]$ExpectFixable = 110,
+  [int]$ExpectFixable = 119,   # FRAME 110 + FIX-OLD 9
   [int]$ExpectOn = 263
 )
 $ErrorActionPreference = "Stop"
