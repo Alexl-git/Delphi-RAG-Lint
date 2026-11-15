@@ -1,0 +1,2 @@
+# a directive in any branch of conditional compilation counts as included
+!form-resource-missing

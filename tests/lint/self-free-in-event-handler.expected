@@ -1,0 +1,5 @@
+# Free, Self.Destroy and FreeAndNil(<own global>) in a handler
+self-free-in-event-handler 26
+self-free-in-event-handler 27
+self-free-in-event-handler 28
+# with-block, anonymous method, a control's Free, Release, and DoWork (no handler) stay silent
