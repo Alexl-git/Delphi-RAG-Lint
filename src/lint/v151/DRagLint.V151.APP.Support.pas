@@ -890,7 +890,8 @@ begin
     FirstArg:= Trim(M.Groups[2].Value);
     // a file / stream target: the first argument is a declared text file variable
     if (FirstArg <> '') and TRegEx.IsMatch(FirstArg, '^\w+$') and
-       TRegEx.IsMatch(ASrc.Masked, '\b' + FirstArg + '\b\s*(?:,\s*\w+\s*)*:\s*(?:System\.)?(?:TextFile|Text|TStreamWriter|TTextWriter|TStringWriter)\b', [roIgnoreCase]) then Continue;
+       (TRegEx.IsMatch(FirstArg, '(?:File|Log|Txt|Writer|Stream)$', [roIgnoreCase]) or
+        TRegEx.IsMatch(ASrc.Masked, '\b' + FirstArg + '\b\s*(?:,\s*\w+\s*)*:\s*(?:System\.)?(?:TextFile|Text|TStreamWriter|TTextWriter|TStringWriter)\b', [roIgnoreCase])) then Continue;
     Skip:= False;
     Blocks:= ASrc.Enclosing(M.Index + 1);
     for B in Blocks do

@@ -9,6 +9,7 @@ type
   TMainForm = class(TForm)
     procedure Log(const S: string);
     procedure ToFile(const S: string);
+    procedure ToOuterLog(const S: string);
   end;
 
 implementation
@@ -27,6 +28,11 @@ begin
   Rewrite(F);
   Writeln(F, S);
   CloseFile(F);
+end;
+
+procedure TMainForm.ToOuterLog(const S: string);
+begin
+  Writeln(ExitLogFile, S);
 end;
 
 end.
