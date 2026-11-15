@@ -49,6 +49,7 @@ function NextId: Integer;
 procedure Log(A: Integer);
 procedure Mutate(var A: Integer);
 procedure Driver(pIn: Integer; var pRef: Integer);
+procedure NamedArgLabel(pDisp: OleVariant);
 
 const
   CK = 7;
@@ -318,6 +319,25 @@ begin
   B.Free;
   C.Free;
   O.Free;
+end;
+
+procedure NamedArgLabel(pDisp: OleVariant);
+var
+  I, Limit, R: Integer;
+begin
+  Limit:= 5;
+  R:= 0;
+  for I:= 0 to 3 do
+  begin
+    pDisp.Exec(Limit := I);
+    R:= R + Sq(Limit);                         { LI-TRIGGER-12: a named-argument label is not a write }
+  end;
+  for I:= 0 to 3 do
+  begin
+    pDisp.Exec(Limit := Limit);
+    R:= R + Sq(Limit);                         { LI-CONTROL-21: the argument value IS the local }
+  end;
+  pDisp.Done(R);
 end;
 
 end.

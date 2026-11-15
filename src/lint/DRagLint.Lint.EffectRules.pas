@@ -935,6 +935,11 @@ end;
 procedure MarkAll(const N: TTSNode; const ASrc: TBytes; AOut: TDictionary<string, Boolean>);
 begin
   if N.IsNull then Exit;
+  if N.NodeType = 'exprArgNamed' then  // the label of Foo(Name := Value) is not a store
+  begin
+    MarkAll(ArgValueNode(N), ASrc, AOut);
+    Exit;
+  end;
   if N.NodeType = 'identifier' then AOut.AddOrSetValue(LowerCase(NodeText(N, ASrc)), True);
   for var I:= 0 to N.NamedChildCount - 1 do MarkAll(N.NamedChild(I), ASrc, AOut);
 end;
@@ -1116,6 +1121,7 @@ begin
   if N.IsNull or AChanges.Rejected then Exit;
   var T: string:= N.NodeType;
   if (T = 'with') or (T = 'asm') then AChanges.Rejected:= True
+  else if T = 'exprArgNamed' then WalkLoop(ArgValueNode(N), ASrc, ALocals, AChanges)  // the label is not a name
   else if T = 'assignment' then
   begin
     var Lhs: TTSNode:= N.ChildByField('lhs');
@@ -1181,6 +1187,7 @@ begin
   Result:= True;
   if N.IsNull then Exit;
   var T: string:= N.NodeType;
+  if T = 'exprArgNamed' then Exit(ReadsNoState(ArgValueNode(N), ASrc, ALocals));  // the label is not a read
   if (T = 'exprDot') or (T = 'exprSubscript') or (T = 'with') or (T = 'asm') or HasAddressOf(N) then Exit(False);
   if (T = 'exprUnary') and not MatchStr(OperatorOf(N), ['kNot', 'kSub', 'kAdd']) then Exit(False);
   if T = 'identifier' then
