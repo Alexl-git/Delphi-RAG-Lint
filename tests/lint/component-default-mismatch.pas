@@ -5,7 +5,8 @@ unit component_default_mismatch;
   to another literal of the same kind, and when a non-zero / True default is
   never set by anything but the setter. Silent: equal values ($10 = 16), a
   default of 0, a field set by a helper the constructor calls, a conditional
-  assignment, a different kind of literal. (+) must fire, (-) must not. }
+  assignment, a different kind of literal, a value set through the property
+  name (ByName := 2) rather than the field. (+) must fire, (-) must not. }
 
 interface
 
@@ -27,7 +28,9 @@ type
     FViaInit: Integer;
     FCond: Integer;
     FMixed: Integer;
+    FByName: Integer;
     procedure SetNever(AValue: Integer);
+    procedure SetByName(AValue: Integer);
     procedure InitDefaults;
   public
     constructor Create(AOwner: TComponent); override;
@@ -44,6 +47,7 @@ type
     property Mixed: Integer read FMixed write FMixed default 1; { (-) }
     property Color default clWhite; { (+) }
     property ParentColor default False; { (-) }
+    property ByName: Integer read FByName write SetByName default 2; { (-) }
   end;
 
 implementation
@@ -61,6 +65,7 @@ begin
   Color := clBlack;
   ParentColor := False;
   FMixed := MIXED_START;
+  ByName := 2;
   InitDefaults;
   if AOwner = nil then
     FCond := 4;
@@ -69,6 +74,11 @@ end;
 procedure TDefaults.InitDefaults;
 begin
   FViaInit := 7;
+end;
+
+procedure TDefaults.SetByName(AValue: Integer);
+begin
+  FByName := AValue;
 end;
 
 procedure TDefaults.SetNever(AValue: Integer);

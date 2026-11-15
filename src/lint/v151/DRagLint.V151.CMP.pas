@@ -51,14 +51,17 @@ const
   /// (`*` = the unit name, no extension = .res), the unit's sibling .dcr, the .dcr files the
   /// .dpk files in the unit's folder include, and the .rc script next to a .res that does not
   /// exist. A class is satisfied by a resource named like the class in upper case, or that name
-  /// followed by `_` or a digit (size variants). Silent: classes passed to RegisterNoIcon.</remarks>
+  /// followed by `_` or a digit (size variants). Silent: classes passed to RegisterNoIcon. OFF by default:
+  /// cosmetic, and true by definition on a project that ships no .dcr at all.</remarks>
   CMP_PALETTE_ICON_RULE = 'component-palette-icon';
   /// <summary>Rule id: a property setter changes a field that Paint reads but never repaints.</summary>
   /// <remarks>Fires at the assignment to the field, in a class that implements Paint in this unit,
   /// when the field is read by Paint (or a method of the class Paint calls) and the setter, with
   /// the class methods it calls (three levels), names nothing that repaints or notifies:
   /// Invalidate, Repaint, Refresh, Redraw, Change(d), Update, Realign, RecreateWnd, Paint,
-  /// Layout, Resize, Adjust, SetBounds, Notify, or `inherited`.</remarks>
+  /// Layout, Resize, Adjust, SetBounds, Notify, or `inherited`. OFF by default: on a VCL
+  /// sample 4 of 6 findings were false (the value is forwarded to child controls that repaint
+  /// themselves, a timer interval, a caller that repaints, a non-control style-hook class).</remarks>
   CMP_SETTER_INVALIDATE_RULE = 'component-setter-without-invalidate';
   /// <summary>Rule id: a drawing call in a paint / draw / resize routine uses a fixed pixel value.</summary>
   /// <remarks>Fires once per call of Rect, Bounds, Point, FillRect, Rectangle, RoundRect, Ellipse,
@@ -751,8 +754,9 @@ begin
       if (not DefNames(D, C, M)) or (C <> AClass.Name) or (M = AProp.Setter) then Continue;
       Assigns.Clear;
       CmpCollect(D, 'assignment', Assigns);
+      { Through the field, or through the property name (the setter then writes the field). }
       for var A: TTSNode in Assigns do
-        if AssignKey(A.ChildByField('lhs')) = Field then Exit;
+        if MatchStr(AssignKey(A.ChildByField('lhs')), [Field, AProp.Name]) then Exit;
       { Passed by reference (FillChar, Read(F), an out argument) also writes it. }
       var Ids: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
       try
@@ -1422,9 +1426,9 @@ begin
   ADecls.Add(V151Rule(CMP_DEFAULT_MISMATCH_RULE, 'bug-patterns', SEV_WARNING,
     'Property default value differs from the value the constructor sets -- forms that kept the default load the wrong value'));
   ADecls.Add(V151Rule(CMP_PALETTE_ICON_RULE, 'other', SEV_HINT,
-    'Registered component has no palette bitmap in the .dcr / .res the unit includes'));
+    'Registered component has no palette bitmap in the .dcr / .res the unit includes', False));
   ADecls.Add(V151Rule(CMP_SETTER_INVALIDATE_RULE, 'bug-patterns', SEV_HINT,
-    'Property setter changes a field Paint reads but never calls Invalidate -- the control shows the old value'));
+    'Property setter changes a field Paint reads but never calls Invalidate -- the control shows the old value', False));
   ADecls.Add(V151Rule(CMP_FIXED_PIXELS_RULE, 'platform', SEV_HINT,
     'Drawing call in a paint / resize routine uses a fixed pixel value -- too small above 96 dpi', False));
   ADecls.Add(V151Rule(CMP_HARDCODED_COLOR_RULE, 'platform', SEV_HINT,
