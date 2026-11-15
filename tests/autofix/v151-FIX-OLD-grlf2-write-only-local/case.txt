@@ -1,0 +1,2 @@
+write-only-local
+0

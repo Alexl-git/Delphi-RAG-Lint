@@ -1,0 +1,2 @@
+dead-store-before-out-arg
+0

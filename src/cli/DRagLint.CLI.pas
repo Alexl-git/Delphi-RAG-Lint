@@ -1192,6 +1192,8 @@ const
   UNIT_NOT_IN_LIBRARY_RULE_ID = 'unit-not-in-library';
   REDUNDANT_CAST_RULE_ID = 'redundant-cast';
   WITH_STATEMENT_RULE_ID = 'with-statement';
+  { v151 FIX-OLD: the with rules whose --fix-rule runs the proven unwith (compile gate + after re-index proof) }
+  UNWITH_FIX_RULE_IDS: array[0..2] of string = (WITH_STATEMENT_RULE_ID, 'nested-with', 'with-hides-outer-symbol');
 
 { Forward: DoLint and DoLintAll run unit-not-in-library; it is implemented beside
   DoReconcileProject, whose analysis it reuses. }
@@ -18105,7 +18107,7 @@ var
 begin
   if not ExplicitDbsExist(AArgs, 'lint') then Exit(2);
   if AArgs.Fix and SameText(AArgs.FixRule, REDUNDANT_CAST_RULE_ID) then Exit(DoRedundantCastFix(AArgs));
-  if AArgs.Fix and SameText(AArgs.FixRule, WITH_STATEMENT_RULE_ID) then Exit(DoUnwithFix(AArgs));
+  if AArgs.Fix and MatchText(AArgs.FixRule, UNWITH_FIX_RULE_IDS) then Exit(DoUnwithFix(AArgs));
   if AArgs.CompileGate then
   begin
     if not AArgs.Fix then
