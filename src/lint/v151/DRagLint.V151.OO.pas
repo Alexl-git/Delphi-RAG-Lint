@@ -48,7 +48,6 @@ implementation
 
 uses
   System.StrUtils
-  , DRagLint.Core.Interfaces // dl:ok unused-unit-in-uses -- REVIEWED 2026-11-14 v151 OO: TLintFinding arrives via this unit (frame convention); removal not compile-verified
   , DRagLint.V151.OO.Support
   ;
 
@@ -76,19 +75,19 @@ begin
     end);
 end;
 
-class function TV151OORules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>; // dl:ok unused-parameter -- REVIEWED 2026-11-14 v151 OO: fixed frame hook signature, OO has no DFM rule
+class function TV151OORules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>; // dl:ok unused-parameter@2fae -- REVIEWED 2026-11-14 v151 OO: fixed frame hook signature, OO has no DFM rule
 begin
   Result:= nil;
 end;
 
-class function TV151OORules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>; // dl:ok unused-parameter -- REVIEWED 2026-11-14 v151 OO: fixed frame hook signature, OO has no raw-byte rule
+class function TV151OORules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>; // dl:ok unused-parameter@1d14 -- REVIEWED 2026-11-14 v151 OO: fixed frame hook signature, OO has no raw-byte rule
 begin
   Result:= nil;
 end;
 
 class function TV151OORules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
 const
-  MAX_INTERFACES = 1000000; // dl:ok unreadable-literal -- REVIEWED 2026-11-14 v151 OO: sanity cap, not a magnitude to read
+  MAX_INTERFACES = 1000000; // dl:ok unreadable-literal@bfe1 -- REVIEWED 2026-11-14 v151 OO: sanity cap, not a magnitude to read
 begin
   Result:= nil;
   if (ACtx.Store = nil) or not ACtx.Wants(DUP_GUID_RULE) then Exit;

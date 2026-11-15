@@ -146,17 +146,6 @@ type
     function UsesNames: TArray<string>;
   end;
 
-/// <summary>Builds a finding anchored to tokens AFirst..ALast.</summary>
-/// <param name="AScan">The scan the token indexes belong to.</param>
-/// <param name="ARuleId">Declared rule id.</param>
-/// <param name="APath">File path for the finding.</param>
-/// <param name="AFirst">First token.</param>
-/// <param name="ALast">Last token.</param>
-/// <param name="ASeverity">hint | info | warning | error.</param>
-/// <param name="AMessage">Message text.</param>
-/// <returns>The finding.</returns>
-function ThrFinding(const AScan: TThrScan; const ARuleId, APath: string; AFirst, ALast: Integer;
-  const ASeverity, AMessage: string): TLintFinding;
 
 /// <summary>`TThread.CreateAnonymousThread(...)` whose thread is never started.</summary>
 /// <param name="AScan">Scan of the file.</param>
@@ -1413,7 +1402,7 @@ begin
       for Sub in TDirectory.GetDirectories(Dir) do
       begin
         if Length(Dpks) > 40 then Break;  // dl:ok large-magic-number@ce2f, magic-literal@ce2f -- REVIEWED 2026-11-13 v151 THR-A: bounded directory scan, documented in the routine
-        Dpks:= Dpks + TDirectory.GetFiles(Sub, '*.dpk');  // dl:ok concat-in-loop@d2d6 -- REVIEWED 2026-11-13 v151 THR-A: short lists (a handful of items); a builder would add noise
+        Dpks:= Dpks + TDirectory.GetFiles(Sub, '*.dpk');
       end;
     except  // dl:ok bare-except@53e7 -- REVIEWED 2026-11-13 v151 THR-A: an unreadable or unlistable file means no package or source facts, so no finding is the right result
       Dpks:= nil;

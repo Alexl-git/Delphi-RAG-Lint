@@ -146,7 +146,6 @@ uses
   , System.IOUtils
   , System.RegularExpressions
   , TreeSitter
-  , DRagLint.Core.Interfaces
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Lint.RefTypeRules
   , DRagLint.V151.CMP.Support
@@ -825,7 +824,7 @@ begin
       if (not TFile.Exists(Path)) and SameText(ExtractFileExt(Path), '.res') then Path:= ChangeFileExt(Path, '.rc');
       if not TFile.Exists(Path) then Continue;
       AAnyFile:= True;
-      Result:= Result + CmpResourceNames(Path);  // dl:ok concat-in-loop@e6dd -- REVIEWED 2026-11-14 v151 CMP: a handful of resource files / one suffix per directive, not an accumulating string
+      Result:= Result + CmpResourceNames(Path);
     end;
   finally
     Files.Free;

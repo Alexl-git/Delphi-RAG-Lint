@@ -365,6 +365,7 @@ var
   I: Integer;
 begin
   Result:= False;
+  AValue:= 0;
   for I:= 0 to FScopes.Count - 1 do
     if FScopes[I].ContainsKey(AName) then Exit;
   Result:= FConsts.TryGetValue(AName, AValue) and (not FConstBad.ContainsKey(AName));

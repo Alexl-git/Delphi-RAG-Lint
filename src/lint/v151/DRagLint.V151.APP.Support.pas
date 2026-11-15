@@ -152,7 +152,7 @@ begin
   try
     Result:= TFile.ReadAllText(APath);
   except
-    Result:= '';
+    on Exception do Result:= '';  { unreadable file: nothing to lint }
   end;
 end;
 
@@ -591,15 +591,9 @@ begin
   Neg   := ABlock.Negated or TRegEx.IsMatch(ABlock.Cond, '\bNOT\b');
   if Then64 = Then32 then Exit(aaNone);  // names neither, or both
   if Neg then
-  begin
     Then64:= not Then64;
-    Then32:= not Then32;
-  end;
   if (ABlock.ElsePos > 0) and (APos > ABlock.ElsePos) then
-  begin
     Then64:= not Then64;
-    Then32:= not Then32;
-  end;
   if Then64 then Result:= aaX64 else Result:= aaX86;
 end;
 
@@ -853,7 +847,6 @@ begin
         Inner:= I;
         Break;
       end;
-    Fire:= False;
     if Inner >= 0 then
     begin
       Arch:= ASrc.BranchArch(Blocks[Inner], T.Pos);

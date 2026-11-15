@@ -15,7 +15,6 @@ uses
   , System.Classes
   , System.Generics.Collections
   , TreeSitter
-  , TreeSitterLib
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   ;

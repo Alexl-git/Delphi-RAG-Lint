@@ -77,7 +77,6 @@ uses
   System.StrUtils
   , System.IOUtils
   , TreeSitter
-  , DRagLint.Core.Interfaces
   , DRagLint.V151.DFMA.Support
   ;
 
@@ -370,7 +369,7 @@ begin
     var Dfm: TDfmHead:= LoadDfmHead(TPath.ChangeExtension(PasPath, '.dfm'));
     if not Dfm.Ok or not SameText(Dfm.RootClass, Parent) then Exit;
     if AAncestor = '' then AAncestor:= Parent;
-    Result:= Result + Dfm.Handlers;  // dl:ok concat-in-loop@1395 -- REVIEWED 2026-11-14 v151 DFM-A: dynamic-array append of a few findings/handlers per form, not a string
+    Result:= Result + Dfm.Handlers;
     if Dfm.RootKind <> dnkInherited then Exit;
     FromUnit:= LoadPasSummary(PasPath);
     if not FromUnit.Ok then Exit;
@@ -841,7 +840,7 @@ begin
   begin
     var Path: string:= FindUnitFile(UName, AUnit.Path, ACtx.Store);
     if (Path = '') or SameText(Path, AUnit.Path) then Continue;
-    Result:= Result + ForeignFormsOf(ACtx, Path);  // dl:ok concat-in-loop@4cea -- REVIEWED 2026-11-14 v151 DFM-A: dynamic-array append of a few findings/handlers per form, not a string
+    Result:= Result + ForeignFormsOf(ACtx, Path);
   end;
 end;
 

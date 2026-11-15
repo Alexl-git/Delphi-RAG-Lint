@@ -229,6 +229,7 @@ var
   I, J, N: Integer;
   W: string;
 begin
+  ASnippet:= '';
   N:= Length(AText);
   I:= AStart;
   while (I <= N) and CharInSet(AText[I], ['/', '*', '!', ' ', #9]) do Inc(I);
