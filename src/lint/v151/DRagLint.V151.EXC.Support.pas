@@ -910,7 +910,7 @@ end;
 { inherited-without-ancestor: bare inherited in a plain new method no ancestor declares. }
 procedure TExcRun.CheckNoAncestor(const ADef: TTSNode; const AInfo: TExcMethodInfo; const AClass: string);
 var
-  Body, Ign: TTSNode;
+  Body    : TTSNode;
   Stmts    : TList<TTSNode>;
   S        : TTSNode;
   Vis      : string;
@@ -931,7 +931,6 @@ begin
     Stmts.Free;
   end;
   if not Found then Exit;
-  Ign:= Default(TTSNode);
   if AncestorMember(AClass, AInfo.Name, Vis) <> 0 then Exit;
   EmitAt(Bare, 'inherited-without-ancestor',
     Format('"inherited" in "%s" does nothing: no ancestor of %s declares a method of that name (forgotten override?)',
