@@ -1,0 +1,27 @@
+{
+  "id": "v151-dfma-rules",
+  "title": "Form and unit consistency rules",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.50.0-alpha",
+  "summary": "Lint rules comparing a form unit with its .dfm and .dpr: fields vs objects, form resource, inherited handlers, self-free, auto-created forms",
+  "intro": "Read this when a form loads with a nil field, raises EResNotFound, loses an ancestor's event handler or ends up with two instances: these rules read the .pas, its sibling .dfm and the .dpr together and say which file to change.",
+  "wikiPage": "form-unit-consistency-rules",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint"
+    },
+    {
+      "type": "cli",
+      "verb": "lint-all"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-13",
+    "by": "alexanderl",
+    "build": "1.50.0-alpha"
+  }
+}

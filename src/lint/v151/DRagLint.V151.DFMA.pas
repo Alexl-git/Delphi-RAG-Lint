@@ -330,7 +330,7 @@ begin
       begin
         var Cand: string:= FindUnitFile(U, FromUnit.Path, nil);
         if Cand = '' then Continue;
-        var CU: TPasUnit:= LoadPas(Cand);
+        var CU: TPasUnit:= LoadPasSummary(Cand);
         if CU.Ok and (CU.ClassIndex(Parent) >= 0) then
         begin
           PasPath:= Cand;
@@ -338,12 +338,12 @@ begin
         end;
       end;
     if (PasPath = '') or SameText(PasPath, AUnit.Path) then Exit;
-    var Dfm: TDfmDoc:= LoadDfm(TPath.ChangeExtension(PasPath, '.dfm'));
-    if Dfm.IsEmpty or not SameText(Dfm.Nodes[0].CompClass, Parent) then Exit;
+    var Dfm: TDfmHead:= LoadDfmHead(TPath.ChangeExtension(PasPath, '.dfm'));
+    if not Dfm.Ok or not SameText(Dfm.RootClass, Parent) then Exit;
     if AAncestor = '' then AAncestor:= Parent;
-    Result:= Result + Dfm.HandlerNames;
-    if Dfm.Nodes[0].Kind <> dnkInherited then Exit;
-    FromUnit:= LoadPas(PasPath);
+    Result:= Result + Dfm.Handlers;
+    if Dfm.RootKind <> dnkInherited then Exit;
+    FromUnit:= LoadPasSummary(PasPath);
     if not FromUnit.Ok then Exit;
     var Idx: Integer:= FromUnit.ClassIndex(Parent);
     if Idx < 0 then Exit;
@@ -755,38 +755,64 @@ type
 
 /// Global form / frame variables declared in the interface of the units AUnit uses (only
 /// units with a sibling text .dfm whose root class is the variable's class and is not a data module).
-function ForeignForms(const ACtx: TV151FileCtx; const AUnit: TPasUnit): TArray<TForeignForm>;
+var
+  GForeignLock : TObject;
+  GForeignCache: TDictionary<string, TArray<TForeignForm>>;   // lower-case unit path -> its form globals
+
+/// The global form / frame variables declared in the interface of the unit at APath (a sibling
+/// text .dfm whose root class is the variable's class and is not a data module). Cached per
+/// path for the process: a lint-all asks the same used units again for every unit.
+function ForeignFormsOf(const ACtx: TV151FileCtx; const APath: string): TArray<TForeignForm>;
 var
   Complete, Left: Boolean;
+begin
+  var Key: string:= LowerCase(APath);
+  TMonitor.Enter(GForeignLock);
+  try
+    if GForeignCache.TryGetValue(Key, Result) then Exit;
+    Result:= nil;
+    var Dfm: TDfmHead:= LoadDfmHead(TPath.ChangeExtension(APath, '.dfm'));
+    if Dfm.Ok then
+    begin
+      var OU: TPasUnit:= LoadPasSummary(APath);
+      var Idx: Integer:= if OU.Ok then OU.ClassIndex(Dfm.RootClass) else -1;
+      if Idx >= 0 then
+      begin
+        var Chain: TArray<string>:= ClassChain(OU.Classes[Idx].Name, OU, ACtx.Store, ACtx.LibStore, Complete, Left);
+        var IsForm: Boolean:= Dfm.ClientSized;
+        for var A in Chain do
+          if SameText(A, 'TDataModule') then IsForm:= False
+          else if SameText(A, 'TCustomForm') or SameText(A, 'TCustomFrame') then IsForm:= True;
+        if IsForm then
+          for var V in OU.Vars do
+          begin
+            if not V.InInterface or not SameText(V.TypeName, OU.Classes[Idx].Name) then Continue;
+            var FF: TForeignForm;
+            FF.VarName:= V.Name;
+            FF.ClassName:= OU.Classes[Idx].Name;
+            FF.UnitName:= OU.UnitName;
+            FF.Fields:= nil;
+            for var F in OU.Classes[Idx].Fields do
+              if F.IsPublished then FF.Fields:= FF.Fields + [LowerCase(F.Name)];   { controls, not private state }
+            Result:= Result + [FF];
+          end;
+      end;
+    end;
+    GForeignCache.AddOrSetValue(Key, Result);
+  finally
+    TMonitor.Exit(GForeignLock);
+  end;
+end;
+
+/// Global form / frame variables of the units AUnit uses (see ForeignFormsOf).
+function ForeignForms(const ACtx: TV151FileCtx; const AUnit: TPasUnit): TArray<TForeignForm>;
 begin
   Result:= nil;
   for var UName in AUnit.IntfUses + AUnit.ImplUses do
   begin
     var Path: string:= FindUnitFile(UName, AUnit.Path, ACtx.Store);
     if (Path = '') or SameText(Path, AUnit.Path) then Continue;
-    var Dfm: TDfmDoc:= LoadDfm(TPath.ChangeExtension(Path, '.dfm'));
-    if Dfm.IsEmpty then Continue;
-    var OU: TPasUnit:= LoadPas(Path);
-    if not OU.Ok then Continue;
-    var Idx: Integer:= OU.ClassIndex(Dfm.Nodes[0].CompClass);
-    if Idx < 0 then Continue;
-    var Chain: TArray<string>:= ClassChain(OU.Classes[Idx].Name, OU, ACtx.Store, ACtx.LibStore, Complete, Left);
-    var IsForm: Boolean:= Dfm.RootHasProp('ClientWidth') or Dfm.RootHasProp('ClientHeight');
-    for var A in Chain do
-      if SameText(A, 'TDataModule') then IsForm:= False
-      else if SameText(A, 'TCustomForm') or SameText(A, 'TCustomFrame') then IsForm:= True;
-    if not IsForm then Continue;
-    for var V in OU.Vars do
-    begin
-      if not V.InInterface or not SameText(V.TypeName, OU.Classes[Idx].Name) then Continue;
-      var FF: TForeignForm;
-      FF.VarName:= V.Name;
-      FF.ClassName:= OU.Classes[Idx].Name;
-      FF.UnitName:= OU.UnitName;
-      FF.Fields:= nil;
-      for var F in OU.Classes[Idx].Fields do FF.Fields:= FF.Fields + [LowerCase(F.Name)];
-      Result:= Result + [FF];
-    end;
+    Result:= Result + ForeignFormsOf(ACtx, Path);
   end;
 end;
 
@@ -866,5 +892,13 @@ class function TV151DFMARules.CheckProject(const ACtx: TV151ProjectCtx): TArray<
 begin
   Result:= nil;
 end;
+
+initialization
+  GForeignLock:= TObject.Create;
+  GForeignCache:= TDictionary<string, TArray<TForeignForm>>.Create;
+
+finalization
+  GForeignCache.Free;
+  GForeignLock.Free;
 
 end.

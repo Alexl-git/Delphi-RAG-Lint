@@ -161,6 +161,32 @@ function LoadDfm(const APath: string): TDfmDoc;
 /// <returns>Ok = False when the file cannot be parsed.</returns>
 function LoadPas(const APath: string): TPasUnit;
 
+/// <summary>The declarations (classes, unit-level variables, uses clauses) of ANOTHER unit:
+/// parsed with a private parser whose tree is freed at once, and cached per path for the
+/// process, so a lint-all over thousands of units does not keep thousands of trees.</summary>
+/// <param name="APath">The source file.</param>
+/// <returns>Ok = False when unreadable; Routines, Src and RawSrc are always empty.</returns>
+/// <remarks>Thread-safe (one lock). The text is not preprocessed: the parser keeps the first
+/// branch of a conditional, as the grammar does.</remarks>
+function LoadPasSummary(const APath: string): TPasUnit;
+
+type
+  /// <summary>What the rules read from ANOTHER unit's form file: its root and its handler names.</summary>
+  TDfmHead = record
+    Ok         : Boolean;
+    RootName   : string;
+    RootClass  : string;
+    RootKind   : TDfmNodeKind;
+    Handlers   : TArray<string>;   // lower-case
+    ClientSized: Boolean;          // the root sets ClientWidth / ClientHeight (a form)
+  end;
+
+/// <summary>The root and handler names of a form file, cached per path for the process.</summary>
+/// <param name="APath">The .dfm.</param>
+/// <returns>Ok = False for a missing, binary or unreadable form file.</returns>
+/// <remarks>Thread-safe (one lock).</remarks>
+function LoadDfmHead(const APath: string): TDfmHead;
+
 /// <summary>Line (1-based) of a node.</summary>
 function NodeLine(const N: TTSNode): Integer;
 /// <summary>Column (1-based) of a node.</summary>
@@ -209,6 +235,8 @@ uses
   , System.RegularExpressions
   , DRagLint.Parser.DfmNav
   , DRagLint.Diagnostics.ParseCache
+  , DRagLint.Core.Encoding
+  , DRagLint.Parser.Delphi13
   ;
 
 const
@@ -218,6 +246,8 @@ var
   GLock    : TObject;
   GDprCache: TDictionary<string, TDprInfo>;   // lower-case .dpr path -> parsed
   GStoreDpr: TDictionary<Pointer, TArray<string>>;  // store -> its .dpr paths
+  GPasSummary: TDictionary<string, TPasUnit>;       // lower-case full path -> declarations
+  GDfmHeads  : TDictionary<string, TDfmHead>;       // lower-case full path -> root + handlers
 
 { ---- small helpers ---- }
 
@@ -727,10 +757,11 @@ begin
   for var I:= 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I), AInInterface, AInImpl);
 end;
 
+function BuildPas(const APath: string; const ASrc, ARawSrc: TBytes; const ATree: TTSTree): TPasUnit; forward;
+
 function LoadPas(const APath: string): TPasUnit;
 var
   PF: TParsedFile;
-  B : TPasBuilder;
 begin
   Result:= Default(TPasUnit);
   Result.Path:= APath;
@@ -741,10 +772,103 @@ begin
     Exit;
   end;
   if PF.Tree = nil then Exit;
+  Result:= BuildPas(APath, PF.Src, PF.RawSrc, PF.Tree);
+end;
+
+function LoadPasSummary(const APath: string): TPasUnit;
+var
+  Key   : string;
+  Src   : TBytes;
+  Parser: TTSParser;
+  Tree  : TTSTree;
+begin
+  Result:= Default(TPasUnit);
+  Result.Path:= APath;
+  if (APath = '') or not FileExists(APath) then Exit;
+  Key:= LowerCase(TPath.GetFullPath(APath));
+  TMonitor.Enter(GLock);
+  try
+    if GPasSummary.TryGetValue(Key, Result) then Exit;
+    try
+      Src:= EnsureUtf8Bytes(TFile.ReadAllBytes(APath));
+    except
+      Src:= nil;
+    end;
+    Tree:= nil;
+    if Length(Src) > 0 then
+    begin
+      Parser:= TTSParser.Create;
+      try
+        Parser.Language:= tree_sitter_delphi13;
+        Tree:= Parser.Parse(
+          function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+          var
+            Remaining: Integer;
+          begin
+            Remaining:= Length(Src) - Integer(AByteIndex);
+            if Remaining <= 0 then
+            begin
+              ABytesRead:= 0;
+              Exit(nil);
+            end;
+            Result:= Copy(Src, AByteIndex, Remaining);
+            ABytesRead:= Remaining;
+          end, TTSInputEncoding.TSInputEncodingUTF8);
+      finally
+        Parser.Free;
+      end;
+    end;
+    if Tree <> nil then
+      try
+        Result:= BuildPas(APath, Src, Src, Tree);
+      finally
+        Tree.Free;
+      end;
+    { the nodes died with the tree; keep only the declarations }
+    Result.Routines:= nil;
+    Result.Src:= nil;
+    Result.RawSrc:= nil;
+    GPasSummary.AddOrSetValue(Key, Result);
+  finally
+    TMonitor.Exit(GLock);
+  end;
+end;
+
+function LoadDfmHead(const APath: string): TDfmHead;
+var
+  Key: string;
+begin
+  Result:= Default(TDfmHead);
+  if APath = '' then Exit;
+  Key:= LowerCase(TPath.GetFullPath(APath));
+  TMonitor.Enter(GLock);
+  try
+    if GDfmHeads.TryGetValue(Key, Result) then Exit;
+    var D: TDfmDoc:= LoadDfm(APath);
+    if not D.IsEmpty then
+    begin
+      Result.Ok:= True;
+      Result.RootName:= D.Nodes[0].Name;
+      Result.RootClass:= D.Nodes[0].CompClass;
+      Result.RootKind:= D.Nodes[0].Kind;
+      Result.Handlers:= D.HandlerNames;
+      Result.ClientSized:= D.RootHasProp('ClientWidth') or D.RootHasProp('ClientHeight');
+    end;
+    GDfmHeads.AddOrSetValue(Key, Result);
+  finally
+    TMonitor.Exit(GLock);
+  end;
+end;
+
+function BuildPas(const APath: string; const ASrc, ARawSrc: TBytes; const ATree: TTSTree): TPasUnit;
+var
+  B : TPasBuilder;
+begin
+  Result:= Default(TPasUnit);
   B:= Default(TPasBuilder);
   B.U.Path:= APath;
-  B.U.Src:= PF.Src;
-  B.U.RawSrc:= PF.RawSrc;
+  B.U.Src:= ASrc;
+  B.U.RawSrc:= ARawSrc;
   B.U.UnitName:= TPath.GetFileNameWithoutExtension(APath);
   B.Classes:= TList<TPasClass>.Create;
   B.Vars:= TList<TPasVar>.Create;
@@ -752,7 +876,7 @@ begin
   B.IUses:= TList<string>.Create;
   B.MUses:= TList<string>.Create;
   try
-    B.Walk(PF.Tree.RootNode, False, False);
+    B.Walk(ATree.RootNode, False, False);
     B.U.Classes:= B.Classes.ToArray;
     B.U.Vars:= B.Vars.ToArray;
     B.U.Routines:= B.Routines.ToArray;
@@ -1071,8 +1195,12 @@ initialization
   GLock:= TObject.Create;
   GDprCache:= TDictionary<string, TDprInfo>.Create;
   GStoreDpr:= TDictionary<Pointer, TArray<string>>.Create;
+  GPasSummary:= TDictionary<string, TPasUnit>.Create;
+  GDfmHeads:= TDictionary<string, TDfmHead>.Create;
 
 finalization
+  GDfmHeads.Free;
+  GPasSummary.Free;
   GStoreDpr.Free;
   GDprCache.Free;
   GLock.Free;
