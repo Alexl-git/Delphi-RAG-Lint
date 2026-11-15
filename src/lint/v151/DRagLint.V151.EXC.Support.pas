@@ -601,7 +601,6 @@ var
   Sy    : TSymbol;
   Cls   : TSymbol;
   Anc   : TTypeAncestor;
-  M     : TSymbol;
   St    : ISymbolStore;
   Todo  : TList<TPair<ISymbolStore, Int64>>;
   I     : Integer;
@@ -626,7 +625,11 @@ begin
   if FStore = nil then Exit;
   Seen:= False;
   for Sy in FStore.FindSymbolsByExactName(AClassOrig) do
-    if Sy.Kind = skClass then begin Cls:= Sy; Seen:= True; Break; end;
+    if Sy.Kind = skClass then begin
+      Cls:= Sy;
+      Seen:= True;
+      Break;
+    end;
   if not Seen then Exit;
   Todo:= TList<TPair<ISymbolStore, Int64>>.Create;
   try
@@ -639,7 +642,10 @@ begin
       end
       else if SameText(Anc.Name, 'TObject') then
       begin
-        if MatchText(AMethod, OBJECT_METHODS) then begin AVis:= 'public'; Exit(1); end;
+        if MatchText(AMethod, OBJECT_METHODS) then begin
+          AVis:= 'public';
+          Exit(1);
+        end;
       end
       else
       begin
@@ -648,7 +654,11 @@ begin
         Seen:= False;
         Lib:= FLib.FindSymbolsByExactName(Anc.Name);
         for Fresh in Lib do
-          if Fresh.Kind = skClass then begin Todo.Add(TPair<ISymbolStore, Int64>.Create(FLib, Fresh.Id)); Seen:= True; Break; end;
+          if Fresh.Kind = skClass then begin
+            Todo.Add(TPair<ISymbolStore, Int64>.Create(FLib, Fresh.Id));
+            Seen:= True;
+            Break;
+          end;
         if not Seen then Exit(-1);
         for var LA in FLib.GetTransitiveAncestors(Fresh.Id) do
           if LA.Resolved and (LA.SymbolId > 0) then
@@ -657,7 +667,10 @@ begin
           end
           else if SameText(LA.Name, 'TObject') then
           begin
-            if MatchText(AMethod, OBJECT_METHODS) then begin AVis:= 'public'; Exit(1); end;
+            if MatchText(AMethod, OBJECT_METHODS) then begin
+              AVis:= 'public';
+              Exit(1);
+            end;
           end
           else Exit(-1);
       end;
@@ -689,13 +702,19 @@ begin
   begin
     if Length(Cls.Parents) = 0 then
     begin
-      if MatchText(AMethod, OBJECT_METHODS) then begin AVis:= 'public'; Exit(1); end;
+      if MatchText(AMethod, OBJECT_METHODS) then begin
+        AVis:= 'public';
+        Exit(1);
+      end;
       Exit(0);
     end;
     Par:= Cls.Parents[0];
     if Par = 'tobject' then
     begin
-      if MatchText(AMethod, OBJECT_METHODS) then begin AVis:= 'public'; Exit(1); end;
+      if MatchText(AMethod, OBJECT_METHODS) then begin
+        AVis:= 'public';
+        Exit(1);
+      end;
       Exit(0);
     end;
     if not FClasses.TryGetValue(Par, Cls) then
@@ -704,7 +723,10 @@ begin
       if Result < 0 then Result:= StoreMember(Par, AMethod, AVis);
       Exit;
     end;
-    if Cls.Methods.TryGetValue(AMethod, MI) then begin AVis:= MI.Vis; Exit(1); end;
+    if Cls.Methods.TryGetValue(AMethod, MI) then begin
+      AVis:= MI.Vis;
+      Exit(1);
+    end;
     Inc(Depth);
   end;
   Result:= -1;
@@ -842,7 +864,10 @@ begin
       end;
       Free:= False;
       for J:= I + 1 to Stmts.Count - 1 do
-        if ContainsFreeOfMember(Stmts[J]) then begin Free:= True; Break; end;
+        if ContainsFreeOfMember(Stmts[J]) then begin
+          Free:= True;
+          Break;
+        end;
       if Free then
         EmitAt(Stmts[I], 'inherited-order',
           'In a destructor inherited runs before the members are freed: call inherited last, after the cleanup',
@@ -926,7 +951,11 @@ begin
   Stmts:= BodyStatements(Body);
   try
     for S in Stmts do
-      if IsBareInherited(S) then begin Bare:= S; Found:= True; Break; end;
+      if IsBareInherited(S) then begin
+        Bare:= S;
+        Found:= True;
+        Break;
+      end;
   finally
     Stmts.Free;
   end;

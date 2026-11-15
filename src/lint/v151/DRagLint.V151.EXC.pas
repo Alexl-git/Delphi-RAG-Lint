@@ -55,7 +55,9 @@ class procedure TV151EXCRules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
   ADecls.Add(V151Rule('except-handler-order', 'bug-patterns', 'warning', 'A later exception handler is shadowed by an earlier one'));
   ADecls.Add(V151Rule('exception-freed', 'bug-patterns', 'warning', 'Exception object freed by hand in its handler'));
-  ADecls.Add(V151Rule('inherited-order', 'bug-patterns', 'warning', 'Destructor calls inherited before freeing its members'));
+  // OFF by default: 4 of 5 findings over the CLIENT/SERVER/LOADER/YADF copies were TThread descendants, where inherited Destroy
+  // must run first (it waits for Execute). Tighten later: exempt classes with a TThread ancestor, then turn ON.
+  ADecls.Add(V151Rule('inherited-order', 'bug-patterns', 'warning', 'Destructor calls inherited before freeing its members', False));
   ADecls.Add(V151Rule('inherited-wrong-method', 'bug-patterns', 'warning', 'Override calls inherited of a different method'));
   ADecls.Add(V151Rule('message-handler-without-inherited', 'bug-patterns', 'warning', 'Message handler without inherited or default handler'));
   ADecls.Add(V151Rule('inherited-without-ancestor', 'bug-patterns', 'warning', 'inherited in a method no ancestor declares'));
