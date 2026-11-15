@@ -7,7 +7,7 @@
     * an interface's GUID clause is its signature (literal kept verbatim);
     * `noreturn` is in a routine's directives;
     * is-never-true fires on every sealed shape: plain, nested, forward-declared as the tested
-      value (line 45, the forward row as the is-target, is a known gap: see lane EXT REPORT); and stays silent with the rule off (positive control).
+      value, line 45 included (the forward row as the is-target, closed by lane INC's RP-SEALED-forward); and stays silent with the rule off (positive control).
   Usage: pwsh -File tests\autotest\run_v151_EXT_facts.ps1 [-Exe <drag-lint.exe>]
 #>
 param([string]$Exe = "third_party\dll-win64\drag-lint.exe")
@@ -41,7 +41,7 @@ Check 'sealed recorded: plain, generic, nested, full row of the forward' ($seale
 
 $raw = & $exePath lint-all --db $db --rule is-never-true --json 2>$null | Out-String
 $lines = @(($raw | ConvertFrom-Json) | Where-Object { $_.file_path -like '*uSealShapes.pas' } | ForEach-Object { $_.start_line } | Sort-Object) -join ','
-Check 'is-never-true fires on the sealed shapes (41-44; 45 is the known forward-row gap)' ($lines -eq '41,42,43,44') "got [$lines]"
+Check 'is-never-true fires on the sealed shapes (41-45; 45 = forward row, closed by INC)' ($lines -eq '41,42,43,44,45') "got [$lines]"
 
 $off = & $exePath lint-all --db $db --json 2>$null | Out-String
 $offN = @(($off | ConvertFrom-Json) | Where-Object { $_.rule -eq 'is-never-true' }).Count
