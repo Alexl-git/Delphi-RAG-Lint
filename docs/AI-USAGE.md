@@ -1523,6 +1523,29 @@ only edit is non-ASCII punctuation mapped to ASCII (em dash -> `--`, middle dot 
 arrow -> `->`; in one placeholder menu path the top level reads `<Top>` instead of the plugin's name, so the docs-sync menu-path check does not read the example as a real caption). The live rules are now in: `~/.claude/CLAUDE.md` (drag-lint index, shell /
 approval), `C:\Projects\CLAUDE.md` (shared Delphi context) and this repo's `CLAUDE.md`.
 
+### 2026-11-14 -- MCP first, post-edit lint, conservative usage numbers (lane CLAUDE-INT)
+
+* **MCP first.** `.mcp.json` at the repo root registers the deployed `drag-lint serve --db
+  src\cli\_D-RAG\drag-lint.sqlite` for Claude Code. `serve` opens every store read-only
+  (`TSQLiteSymbolStore.Create(.., AReadOnly=True)`); measured: sha256 + size + mtime of the DB and its
+  -wal/-shm identical before/after a scripted initialize / tools/list / find_symbol / find_callers
+  session. The global drag-lint block now names the MCP tools first and keeps the CLI for find-unit,
+  `query --text`, outline, reindex and lint-all (no MCP tool yet). `draglint-first.js` names the MCP
+  tools first in every deny when the session's tree has such a `.mcp.json`, and counts an
+  `mcp__drag-lint__*` call as an index call. Tool descriptions that say WHEN to use each tool:
+  branch `feat/mcp-descriptions` (engine change, 1.51.x, not deployed).
+* **Post-edit lint.** `hooks\draglint-post-edit.js` (PostToolUse Edit|Write|MultiEdit): `lint <file>
+  --db <projectDb> --json`, findings on the CHANGED lines only, 20 s cap, silent on any error;
+  `DRAGLINT_POST_EDIT_OFF=1`. `lint --db` was measured not to write the DB.
+* **Conservative numbers** (owner: "better have a pleasant surprise"). The usage log claimed 41.9 M
+  tokens avoided vs 3.0 M used; the old rule credited a whole-file read (bytes / 4) as the
+  counterfactual. New rule: grep = matched lines x 25 + one 200-line slice per unit needed; read = the
+  slice that would have been read; both capped at 6 k; new column `est_method` (`cons-v1`). Legacy rows
+  are capped at 1.5 k (grep) / 3 k (read) by `tools\draglint-usage-report.cjs`: 1.93 M avoided vs
+  2.97 M used on the 896 rows that logged both -- break-even or slightly negative on tokens; the case
+  for the index is resolved callers and closure completeness, not token count. Policy:
+  `docs\INBOX-claude-mcp-integration-152.md` section 2.
+
 ### From `C:\Projects\CLAUDE.md` -- drag-lint, gap reporting, shell rule (pre-trim lines 5-80)
 
 ##### Delphi code search -- drag-lint FIRST, Grep second (GLOBAL RULE -- READ FIRST)

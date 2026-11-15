@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "drag-lint": {
+      "type": "stdio",
+      "command": "C:\\Projects\\Delphi-RAG-lint\\third_party\\dll-win64\\drag-lint.exe",
+      "args": ["serve", "--db", "C:\\Projects\\Delphi-RAG-lint\\src\\cli\\_D-RAG\\drag-lint.sqlite"],
+      "env": {}
+    }
+  }
+}
