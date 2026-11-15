@@ -3,7 +3,7 @@
 
   An initialization section reaches a file, the registry, the network, a database or a dialog. RUN 1:
   exactly the TRIGGER lines, one per section; a routine nobody calls, TPath string work and a
-  finalization stay silent. RUN 2: plain lint-all, the rule ships ON. RUN 3: the section of uHiChain
+  finalization stay silent. RUN 2: plain lint-all, the rule ships ON. RUN 4: an index built with the library follows its call bindings. RUN 3: the section of uHiChain
   stops calling Boot, so the same routine is unreachable and the finding goes: the WALK fires it, not
   the name in the file.
 
@@ -71,6 +71,22 @@ try {
   $off = RuleFindings $db @('--library-db', $libDb)
   Check 'RUN 2 plain lint-all: the rule ships ON' ($off.Count -eq $hits.Count -and $hits.Count -gt 0) "$($off.Count) finding(s)"
 
+  # RUN 4 (v151 HEAVYLIB): an index built WITH the library records where a call into it binds
+  # (refs.external_target). The walk follows that binding: a method called on a variable, and a
+  # member of a heavy library type called on a parameter, both fire. RUN 1 above is the control:
+  # the same units in an index without the binding stay silent.
+  $dbX = Join-Path $scratch 'x.sqlite'
+  & $exePath index $src --db $dbX --library-db $libDb 2>&1 | Out-Null
+  $bound = RuleFindings $dbX @('--rule', $Rule, '--library-db', $libDb)
+  $libVar = LineOf (Join-Path $src 'uHiLibVar.pas') 'TRIGGER-LIBVAR'
+  $owner  = LineOf (Join-Path $src 'uHiLibOwner.pas') 'TRIGGER-OWNER'
+  Check 'RUN 4 a library method called on a variable fires at the section call, naming the library routine' (@($bound | Where-Object { $_.file_path -like '*uHiLibVar.pas' -and [int]$_.start_line -eq $libVar -and $_.message -match 'registry \(HiLibUnit\.HiLibStep\)' }).Count -eq 1) "$($bound.Count) total"
+  Check 'RUN 4 a member of a heavy library type fires by its owner type' (@($bound | Where-Object { $_.file_path -like '*uHiLibOwner.pas' -and [int]$_.start_line -eq $owner -and $_.message -match 'registry \(HiLibStore\.TRegistry\.OpenKey\)' }).Count -eq 1) ''
+  Check 'RUN 4 a quiet library routine still stays silent' (@($bound | Where-Object { $_.file_path -like '*uHiLibQuiet.pas' }).Count -eq 0) ''
+  Check 'RUN 4 five findings in all' ($bound.Count -eq 5) "$($bound.Count) finding(s)"
+  $unbound = RuleFindings $dbX @('--rule', $Rule)
+  Check 'RUN 4 control: without the library index both stay silent' (@($unbound | Where-Object { $_.file_path -like '*uHiLibVar.pas' -or $_.file_path -like '*uHiLibOwner.pas' }).Count -eq 0) ''
+
   $f = Join-Path $src 'uHiChain.pas'
   $t = [IO.File]::ReadAllText($f).Replace("  Boot; // TRIGGER-CHAIN", "  // no call")
   [IO.File]::WriteAllText($f, $t, [Text.Encoding]::ASCII)
@@ -80,4 +96,4 @@ try {
 } finally {
   if (Test-Path $scratch) { [System.IO.Directory]::Delete($scratch, $true) }
 }
-if ($script:fail) { Write-Host 'FAIL'; exit 1 } else { Write-Host 'PASS'; exit 0 }
+if ($script:fail) { Write-Host 'FAIL'; exit 1 } else { Write-Host 'PASS'; exit 0 }
