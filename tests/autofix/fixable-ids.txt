@@ -122,3 +122,4 @@ unused-global
 local-shadows-field
 nested-with
 with-statement
+boolean-assign-if
