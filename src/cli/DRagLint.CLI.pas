@@ -6759,6 +6759,52 @@ end;
 
 const INDEXER_FP_KEY  = INDEXER_FINGERPRINT_META_KEY; { one spelling, in Core.Model; the LSP reads the same key }
 
+{ E-BIND-LIB-EFFECTS (v151 LIBFX): the library whose summaries the purity stage takes for
+  library-bound calls. ON by default: the first library named in this DB's own external_stores
+  meta (the stores its call edges, hence every external_target, were resolved against) that
+  exists and opens. DRAGLINT_LIBRARY_EFFECTS=0 turns it off for the run; any other value names
+  the library DB itself (measurements); DRAGLINT_LIBRARY_EFFECTS_TRUST=1 is the measurement-only
+  unsound arm. Set for this one Run and cleared after it, so an `index --all` or a --watch tick
+  never carries one project's library into another's verdicts. }
+function PurityLibraryPath(const AStore: ISymbolStore): string;
+begin
+  Result:= GetEnvironmentVariable('DRAGLINT_LIBRARY_EFFECTS');
+  if Result = '0' then Exit('');
+  if Result <> '' then Exit;
+  var Stored: string:= AStore.GetMetaValue('external_stores');
+  if Stored = '' then Exit;
+  var Json: TJSONValue:= TJSONObject.ParseJSONValue(Stored);
+  try
+    if Json is TJSONArray then
+      for var Item: TJSONValue in TJSONArray(Json) do
+      begin
+        var P: string:= '';
+        if (Item is TJSONObject) and Item.TryGetValue<string>('path', P) and FileExists(P) then Exit(P);
+      end;
+  finally
+    Json.Free;
+  end;
+end;
+
+procedure RunPurityStage(const AStore: ISymbolStore);
+begin
+  var LibPath: string:= PurityLibraryPath(AStore);
+  if LibPath <> '' then
+  begin
+    var Ok: Boolean;
+    var Lib: ISymbolStore:= OpenReadOnlyStore(LibPath, Ok, True);
+    if Ok then TPurityStage.LibraryEffects:= Lib
+    else Writeln(ErrOutput, 'NOTE: purity: the library for effects could not be opened: ', LibPath);
+    TPurityStage.LibraryEffectsTrustFree:= GetEnvironmentVariable('DRAGLINT_LIBRARY_EFFECTS_TRUST') = '1';
+  end;
+  try
+    TPurityStage.Run(AStore);
+  finally
+    TPurityStage.LibraryEffects:= nil;
+    TPurityStage.LibraryEffectsTrustFree:= False;
+  end;
+end;
+
 { The identity of what this build DERIVES from parses it already holds --
   call_edges, type_ancestors, type_helpers, unit_uses targets.
 
@@ -6775,22 +6821,6 @@ const INDEXER_FP_KEY  = INDEXER_FINGERPRINT_META_KEY; { one spelling, in Core.Mo
   recorded there. Adding it here would invalidate on a change that cannot alter
   a derived edge. The schema is included because a schema migration can change
   the shape of the very tables this pass writes. }
-{ E-BIND-LIB-EFFECTS, OFF by default: DRAGLINT_LIBRARY_EFFECTS=<library.sqlite> turns it on for
-  this run; DRAGLINT_LIBRARY_EFFECTS_TRUST=1 is the measurement-only unsound arm. }
-procedure RunPurityStage(const AStore: ISymbolStore);
-begin
-  var LibPath: string:= GetEnvironmentVariable('DRAGLINT_LIBRARY_EFFECTS');
-  if (LibPath <> '') and (TPurityStage.LibraryEffects = nil) then
-  begin
-    var Ok: Boolean;
-    var Lib: ISymbolStore:= OpenReadOnlyStore(LibPath, Ok, True);
-    if Ok then TPurityStage.LibraryEffects:= Lib
-    else Writeln(ErrOutput, 'NOTE: purity: the library for effects could not be opened: ', LibPath);
-    TPurityStage.LibraryEffectsTrustFree:= GetEnvironmentVariable('DRAGLINT_LIBRARY_EFFECTS_TRUST') = '1';
-  end;
-  TPurityStage.Run(AStore);
-end;
-
 function ResolverFingerprint(const AStore: ISymbolStore): string;
 var
   Found, Expected: Integer;

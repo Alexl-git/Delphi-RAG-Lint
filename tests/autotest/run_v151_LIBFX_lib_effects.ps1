@@ -1,12 +1,15 @@
 <#
   run_v151_LIBFX_lib_effects.ps1 -- E-BIND-LIB-EFFECTS: the purity stage takes a
   library routine's stored effect summary for a call whose resolved
-  external_target names it, when DRAGLINT_LIBRARY_EFFECTS names the library DB.
+  external_target names it. ON by default: the library comes from the DB's own
+  external_stores meta (what --library-db bound the edges against);
+  DRAGLINT_LIBRARY_EFFECTS=0 turns it off for one run.
 
   Fixture: tests\autotest\fixtures\v151-LIBFX\lib-effects\
     lib\LibFxLib.pas   indexed as a folder into lib.sqlite
-    proj\LibFxUse.pas  indexed with --library-db lib.sqlite, once with the
-                       switch unset (OFF) and once set (ON)
+    proj\LibFxUse.pas  indexed with --library-db lib.sqlite, once with
+                       DRAGLINT_LIBRARY_EFFECTS=0 (OFF) and once with
+                       it unset (ON, the default)
 
     c1  OFF: Wrap stays the bare unbound `?` and side-effect-in-short-circuit
         is silent (positive control: the switch, not the fixture, makes c2)
@@ -68,9 +71,9 @@ Push-Location $env:TEMP
 try {
   & $exePath index (Join-Path $WorkDir 'lib') --db $lib *> $null
 
-  $env:DRAGLINT_LIBRARY_EFFECTS = $null
+  $env:DRAGLINT_LIBRARY_EFFECTS = '0'
   & $exePath index (Join-Path $WorkDir 'proj') --db $dbOff --library-db $lib *> $null
-  $env:DRAGLINT_LIBRARY_EFFECTS = $lib
+  $env:DRAGLINT_LIBRARY_EFFECTS = $null
   $logOn = (& $exePath index (Join-Path $WorkDir 'proj') --db $dbOn --library-db $lib 2>&1) -join "`n"
   $env:DRAGLINT_LIBRARY_EFFECTS = $null
 

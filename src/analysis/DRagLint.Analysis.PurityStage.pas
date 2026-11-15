@@ -61,12 +61,17 @@ type
     /// pass over the refs of every file plus the fixpoint, which visits each
     /// routine once per change of a callee it depends on.</remarks>
     class function Run(const AStore: ISymbolStore): TPurityStats; static;
-    /// <summary>OFF switch of E-BIND-LIB-EFFECTS: nil (the default) means a library-bound
-    /// call is an unbound `?`, as ever. Set, a call whose stored external_target names a
-    /// non-virtual library routine takes that routine's stored summary.</summary>
+    /// <summary>E-BIND-LIB-EFFECTS: the library store whose summaries library-bound calls take.
+    /// nil means a library-bound call is an unbound `?`. Set, a call whose stored external_target
+    /// names a non-virtual library routine takes that routine's stored summary, `h` excluded
+    /// (a library routine freeing its own temporaries is not an effect on the caller).</summary>
     /// <remarks>Every library summary also keeps `?`, unless LibraryEffectsTrustFree: the
-    /// library is parsed shallow (no read/write refs), so its effect_free = 1 proves nothing.
-    /// Read-only use of the store; set before Run, from the same thread.</remarks>
+    /// library is parsed shallow (no read/write refs), so its effect_free = 1 proves nothing and
+    /// a project routine never becomes effect-free through a library callee. A virtual or
+    /// interface member stays `?` (the override is not the body we see). The CLI sets it before
+    /// each Run (by default from the DB's external_stores) and clears it after; read-only use of
+    /// the store, same thread. Measured on four project DBs: no rule count changed
+    /// (tests\autotest\run_v151_LIBFX_lib_effects.ps1 holds the behaviour).</remarks>
     class var LibraryEffects: ISymbolStore;
     /// <summary>Takes a library verdict at face value, effect_free = 1 included. Measurement
     /// only: it is unsound on a shallow library (TDataSet.Open reads effect-free).</summary>
@@ -1172,7 +1177,7 @@ begin
   Changed:= False;
   for var S: TSymbol in Lib.FindSymbolsByQualifiedName(AQName) do
   begin
-    if not (S.Kind in ROUTINE_KINDS) then Continue;
+    if S.Kind not in ROUTINE_KINDS then Continue;
     if S.IsVirtual or (Lib.GetSymbolById(S.ParentId).Kind = skInterface) then Virt:= True;
     Result.IsMember:= Result.IsMember or (S.ParentId > 0);
     if S.Kind = skConstructor then
