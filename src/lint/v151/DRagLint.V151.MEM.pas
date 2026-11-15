@@ -106,17 +106,17 @@ begin
   end;
 end;
 
-class function TV151MEMRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV151MEMRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@51ad -- REVIEWED 2026-11-14 v151 MEM: signature fixed by the v151 lane frame hook; this lane has no DFM / raw-byte / project check
 begin
   Result:= nil;
 end;
 
-class function TV151MEMRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;
+class function TV151MEMRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;  // dl:ok unused-parameter@808e -- REVIEWED 2026-11-14 v151 MEM: signature fixed by the v151 lane frame hook; this lane has no DFM / raw-byte / project check
 begin
   Result:= nil;
 end;
 
-class function TV151MEMRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
+class function TV151MEMRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@0db8 -- REVIEWED 2026-11-14 v151 MEM: signature fixed by the v151 lane frame hook; this lane has no DFM / raw-byte / project check
 begin
   Result:= nil;
 end;

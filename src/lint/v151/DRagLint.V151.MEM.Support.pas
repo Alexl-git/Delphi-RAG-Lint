@@ -23,7 +23,7 @@ type
   /// <summary>One run of the MEM rules over one parsed file.</summary>
   /// <remarks>Create, Run once, Free. Not thread-safe; the owner is TV151MEMRules.CheckFile.
   /// The stores may be nil: type questions then fall back to the file alone.</remarks>
-  TMemRun = class
+  TMemRun = class  // dl:ok high-response@413b -- REVIEWED 2026-11-14 v151 MEM: one walker per file run; the rules share its AST helpers and per-run state, splitting it would only pass that state around
   strict private
     FFile        : string;
     FSrc         : TBytes;
@@ -285,7 +285,7 @@ end;
 
 { A type whose values hold a reference the compiler counts or finalizes: long strings, variants,
   interfaces, dynamic arrays, and records / static arrays that contain one. Unknown -> False. }
-function TMemRun.IsManagedType(const AType: string; ADepth: Integer): Boolean;
+function TMemRun.IsManagedType(const AType: string; ADepth: Integer): Boolean;  // dl:ok too-many-exit-points@b191 -- REVIEWED 2026-11-14 v151 MEM: recursive type classifier; each guard clause answers one type shape, the early exits are the readable form
 var
   T: string;
   P: Integer;
@@ -315,7 +315,7 @@ begin
 end;
 
 { ADecl is a declType node of this file. }
-function TMemRun.IsManagedTypeNode(const ADecl: TTSNode; ADepth: Integer): Boolean;
+function TMemRun.IsManagedTypeNode(const ADecl: TTSNode; ADepth: Integer): Boolean;  // dl:ok too-many-exit-points@96fc -- REVIEWED 2026-11-14 v151 MEM: recursive type classifier; each guard clause answers one type shape, the early exits are the readable form
 
   function FieldsManaged(const N: TTSNode): Boolean;
   var
@@ -378,7 +378,7 @@ function TMemRun.StoreTypeManaged(const AName: string; ADepth: Integer): Boolean
     Seen:= False;
     for S in Rows do
     begin
-      if not (S.Kind in [skRecord, skInterface, skClass, skEnum, skTypeAlias]) then Continue; // dl:ok nonminimal-bool -- a set test has no <> form
+      if not (S.Kind in [skRecord, skInterface, skClass, skEnum, skTypeAlias]) then Continue; // dl:ok nonminimal-bool@ae29 -- a set test has no <> form
       case S.Kind of
         skInterface: One:= True;
         skRecord:
@@ -696,10 +696,10 @@ var
   Args: TArray<TTSNode>;
   Why : string;
 begin
-  if MatchStr(AName, ['createprocess', 'createprocessw']) then Idx:= 1 // dl:ok magic-literal -- Win32 API argument position / count
-  else if MatchStr(AName, ['createprocessasuser', 'createprocessasuserw']) then Idx:= 2 // dl:ok magic-literal -- Win32 API argument position / count
-  else if AName = 'createprocesswithtokenw' then Idx:= 3 // dl:ok magic-literal -- Win32 API argument position / count
-  else if AName = 'createprocesswithlogonw' then Idx:= 5 // dl:ok magic-literal -- Win32 API argument position / count
+  if MatchStr(AName, ['createprocess', 'createprocessw']) then Idx:= 1
+  else if MatchStr(AName, ['createprocessasuser', 'createprocessasuserw']) then Idx:= 2
+  else if AName = 'createprocesswithtokenw' then Idx:= 3 // dl:ok magic-literal@4b49 -- Win32 API argument position / count
+  else if AName = 'createprocesswithlogonw' then Idx:= 5 // dl:ok magic-literal@5fd8 -- Win32 API argument position / count
   else Exit;
   Args:= CallArgs(N);
   if Length(Args) <= Idx then Exit;
@@ -746,7 +746,7 @@ begin
     begin
       if not DeclTypeOf(A, T) then Continue;
       { the host wrong-size-memory-op already reports FillChar(V, SizeOf(V), ..) over a directly managed V }
-      if (Length(Targets) = 1) and (Length(Args) > 1) and (CallName(Args[1]) = 'sizeof') and
+      if (Length(Targets) = 1) and (Length(Args) > 1) and (CallName(Args[1]) = 'sizeof') and  // dl:ok boolean-expression-complexity@2e39 -- REVIEWED 2026-11-14 v151 MEM: one exemption shape (SetLength(X, SizeOf(X)) on a managed array/string) spelled as its three conditions
          (LowerText(Args[1].ChildByField('args')) = LowerText(A)) and
          (IsLongString(T) or StartsStr('tarray<', T) or (T = 'tbytes')) then Continue;
       X:= T;
@@ -771,7 +771,7 @@ begin
   end;
 end;
 
-procedure TMemRun.CheckCharCount(const N: TTSNode; const AName: string);
+procedure TMemRun.CheckCharCount(const N: TTSNode; const AName: string);  // dl:ok too-many-exit-points@ab9b -- REVIEWED 2026-11-14 v151 MEM: one guard clause per non-defect shape of the char-count call  // dl:ok cyclomatic-complexity@83b9 -- REVIEWED 2026-11-14 v151 MEM: the decision list IS the rule (API x argument x declared type); split helpers would each need the same call context
 var
   Args     : TArray<TTSNode>;
   CountIdx : Integer;
@@ -870,7 +870,7 @@ begin
   if E.NodeType = 'exprDot' then E:= E.ChildByField('rhs');
   if not IsIdent(E) then Exit;
   Nm:= NodeStr(E);
-  if (Length(Nm) < 3) or (Nm[Length(Nm)] <> 'A') or not CharInSet(Nm[Length(Nm) - 1], ['a'..'z', '0'..'9']) then Exit;
+  if (Length(Nm) < 3) or (Nm[Length(Nm)] <> 'A') or not CharInSet(Nm[Length(Nm) - 1], ['a'..'z', '0'..'9']) then Exit;  // dl:ok magic-literal@511d -- REVIEWED 2026-11-14 v151 MEM: shortest Ansi-suffixed API name: a letter, a lower-case/digit, the A suffix
   for A in CallArgs(N) do
   begin
     if not (IsPCharCast(A, X) and (CallName(A) = 'pansichar')) then Continue;
@@ -1071,13 +1071,13 @@ var
         Disp:= NodeStr(N.ChildByField('entity'));
         if (Nm = 'getmem') or ((Nm = 'new') and (Length(Args) = 1)) then
           AddAlloc(N, Args[0], Disp, RULE_RAWLEAK)
-        else if MatchStr(Nm, ['regopenkeyex', 'regopenkeyexw', 'regopenkeyexa']) and (Length(Args) = 5) then // dl:ok magic-literal -- Win32 API argument position / count
-          AddAllocHandle(N, Args[4], Disp, 'RegCloseKey')
-        else if MatchStr(Nm, ['regcreatekeyex', 'regcreatekeyexw', 'regcreatekeyexa']) and (Length(Args) = 9) then // dl:ok magic-literal -- Win32 API argument position / count
-          AddAllocHandle(N, Args[7], Disp, 'RegCloseKey')
-        else if MatchStr(Nm, ['regopenkey', 'regcreatekey']) and (Length(Args) = 3) then // dl:ok magic-literal -- Win32 API argument position / count
+        else if MatchStr(Nm, ['regopenkeyex', 'regopenkeyexw', 'regopenkeyexa']) and (Length(Args) = 5) then // dl:ok magic-literal@7ae6 -- Win32 API argument position / count
+          AddAllocHandle(N, Args[4], Disp, 'RegCloseKey')  // dl:ok magic-literal@ac81 -- REVIEWED 2026-11-14 v151 MEM: Win32 API argument position (phkResult of RegOpenKeyEx)
+        else if MatchStr(Nm, ['regcreatekeyex', 'regcreatekeyexw', 'regcreatekeyexa']) and (Length(Args) = 9) then // dl:ok magic-literal@da5c -- Win32 API argument position / count
+          AddAllocHandle(N, Args[7], Disp, 'RegCloseKey')  // dl:ok magic-literal@8a19 -- REVIEWED 2026-11-14 v151 MEM: Win32 API argument position (phkResult of RegCreateKeyEx)
+        else if MatchStr(Nm, ['regopenkey', 'regcreatekey']) and (Length(Args) = 3) then // dl:ok magic-literal@09e2 -- Win32 API argument position / count
           AddAllocHandle(N, Args[2], Disp, 'RegCloseKey')
-        else if (Nm = 'findfirst') and (Length(Args) = 3) then // dl:ok magic-literal -- Win32 API argument position / count
+        else if (Nm = 'findfirst') and (Length(Args) = 3) then // dl:ok magic-literal@0cca -- Win32 API argument position / count
           AddAllocHandle(N, Args[2], Disp, 'FindClose');
       end;
     end;
@@ -1092,7 +1092,7 @@ var
     if AAlloc.Rule = RULE_RAWLEAK then
     begin
       if MatchStr(ACallName, RAW_RELEASE) then Exit(True);
-      if (ACallName = 'reallocmem') and (Length(AArgs) = 2) and (LowerText(AArgs[1]) = '0') then Exit(True); // dl:ok magic-literal -- ReallocMem(P, 0) is the documented release form
+      if (ACallName = 'reallocmem') and (Length(AArgs) = 2) and (LowerText(AArgs[1]) = '0') then Exit(True);
     end
     else if ContainsText(AAlloc.Release, ACallName) then
       Exit(True);
@@ -1102,7 +1102,7 @@ var
   end;
 
   { True when the occurrence O of the variable releases it or hands it on. }
-  function ReleasedOrEscapes(const O: TTSNode; const AAlloc: TAlloc): Boolean;
+  function ReleasedOrEscapes(const O: TTSNode; const AAlloc: TAlloc): Boolean;  // dl:ok too-many-exit-points@c094 -- REVIEWED 2026-11-14 v151 MEM: escape walker; each exit is one way the allocation is released or escapes, guard clauses read better than a flag
   var
     P, Child, Args: TTSNode;
     Nm, Pre: string;
@@ -1151,8 +1151,8 @@ var
     I: Integer;
   begin
     if N.IsNull then Exit(False);
-    if IsIdent(N) and (LowerCase(NodeStr(N)) = AAlloc.Name) and (N.StartByte <> AAlloc.VarNode.StartByte) then
-      if ReleasedOrEscapes(N, AAlloc) then Exit(True);
+    if IsIdent(N) and (LowerCase(NodeStr(N)) = AAlloc.Name) and (N.StartByte <> AAlloc.VarNode.StartByte) and
+       ReleasedOrEscapes(N, AAlloc) then Exit(True);
     for I:= 0 to N.NamedChildCount - 1 do
       if Handled(N.NamedChild(I), AAlloc) then Exit(True);
     Result:= False;
