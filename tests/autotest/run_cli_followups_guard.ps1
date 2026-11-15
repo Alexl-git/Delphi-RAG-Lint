@@ -5,8 +5,10 @@
     Q  #5      IndexSectionCommand quotes a section name that holds a literal `"`
                (resolve-dbs never-built NOTE: --only "P\"Q", not --only P"Q).
     L  #5      ResolveLibraryDb finds the library by section KIND, not by the file-name prefix
-               `library-`: a PROJECT whose DB is library-app.sqlite is not the library. Observed by
+               `library`: a PROJECT whose DB is libraryapp.sqlite is not the library. Observed by
                the stale-library warning of lint-project, which names the REAL library DB.
+               (1.51 STRAY / OQ14 refuses a library-*.sqlite as a project DB at index time, so the
+               fixture name dropped its hyphen: libraryapp -> libraryapp; the kind-not-name rule stands.)
     M  #4b-2   a project registered only in a LOCAL .drag-lint.json beside it resolves for a read
                (lint-all --project) run from ANOTHER cwd -- the write (index --project) already walked
                from the project folder.
@@ -78,27 +80,27 @@ New-Item -ItemType Directory -Path "$l\proj", "$l\lib" | Out-Null
 $lExe = New-Engine "$l\eng" @{
   settings = @{ defaultPlatform = 'Win64'; maxJobs = 1 }
   indexes  = @{ sections = @(
-    @{ name = 'P-App';   include = @('..\proj\library-app.dpr') },
+    @{ name = 'P-App';   include = @('..\proj\libraryapp.dpr') },
     @{ name = 'Library'; db = 'library-{platform}.sqlite'; source = 'registry-libraries'; platforms = @('Win64') } ) } }
-Write-Ascii "$l\proj\library-app.dpr" "program App;`nuses uMain in 'uMain.pas';`nbegin`nend.`n"
+Write-Ascii "$l\proj\libraryapp.dpr" "program App;`nuses uMain in 'uMain.pas';`nbegin`nend.`n"
 Write-Ascii "$l\proj\uMain.pas" "unit uMain;`n`ninterface`n`nimplementation`n`nend.`n"
 Write-Ascii "$l\lib\uLibOnly.pas" "unit uLibOnly;`n`ninterface`n`nimplementation`n`nend.`n"
 $libDb = "$l\eng\library-Win64.sqlite"
 Push-Location $l
 try {
   & $lExe index "$l\lib" --db $libDb 2>&1 | Out-Null
-  & $lExe index --project "$l\proj\library-app.dpr" 2>&1 | Out-Null
+  & $lExe index --project "$l\proj\libraryapp.dpr" 2>&1 | Out-Null
 } finally { Pop-Location }
-$ownDb = "$l\proj\_D-RAG\library-app.sqlite"
-Check 'L0 precondition: the project DB is named library-* and the real library DB exists' `
+$ownDb = "$l\proj\_D-RAG\libraryapp.sqlite"
+Check 'L0 precondition: the project DB is named library* and the real library DB exists' `
       ((Test-Path $ownDb) -and (Test-Path $libDb)) "$ownDb | $libDb"
 # Make the REAL library unreadable: the only run that can then name it is one that picked it.
 Write-Ascii $libDb "this is not a database`n"
-$r = Run $l $lExe @('lint-project', '--project', "$l\proj\library-app.dpr", '--quiet')
+$r = Run $l $lExe @('lint-project', '--project', "$l\proj\libraryapp.dpr", '--quiet')
 Check 'L1 the library is the Library SECTION (its DB is named in the degrade warning), not the library-* project DB' `
       (($r.Out -match 'warning: library DB \S*library-Win64\.sqlite unreadable') -and ($r.Out -match 'continuing without it')) $r.Out
 Check 'L2 control: the project DB is intact and was not reported as the failing library' `
-      ($r.Out -notmatch 'library-app\.sqlite: ') $r.Out
+      ($r.Out -notmatch 'libraryapp\.sqlite: ') $r.Out
 
 # ---- M: a project registered only in a local .drag-lint.json, read from ANOTHER cwd --------
 $m = Join-Path $WorkDir 'm'

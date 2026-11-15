@@ -576,7 +576,11 @@ function Get-CliVerbFlagMap {
   #
   # Matched on NoComments: the verb name is a STRING LITERAL, so the
   # strings-blanked projection has nothing left to match.
-  $run = Get-RoutineSpanRange -Code $res.Code -Name 'Run'
+  # 1.51: the verb dispatch moved from Run into RunCommand (Run now wraps it with the closed-stdout
+  # exit check), so the dispatcher is RunCommand when it exists, else Run (older trees).
+  $dispName = 'RunCommand'
+  $run = Get-RoutineSpanRange -Code $res.Code -Name $dispName
+  if (-not $run) { $dispName = 'Run'; $run = Get-RoutineSpanRange -Code $res.Code -Name 'Run' }
   if (-not $run) { throw 'the Run dispatcher implementation was not found in the lexed source' }
   $runBeg = $run.Index
   $runEnd = $run.Index + $run.Length
@@ -596,7 +600,7 @@ function Get-CliVerbFlagMap {
       $dispatch[$verb] = New-Object System.Collections.Generic.HashSet[string]
       $armReads[$verb] = New-Object System.Collections.Generic.HashSet[string]
     }
-    foreach ($c in (Get-ArgsCallees -Span $span -Self 'Run')) { [void]$dispatch[$verb].Add($c) }
+    foreach ($c in (Get-ArgsCallees -Span $span -Self $dispName)) { [void]$dispatch[$verb].Add($c) }
     foreach ($m in [regex]::Matches($span, '(?<![A-Za-z0-9_.])Args\.([A-Za-z_][A-Za-z0-9_]*)')) {
       [void]$armReads[$verb].Add($m.Groups[1].Value)
     }
@@ -635,7 +639,7 @@ function Get-CliVerbFlagMap {
   foreach ($m in [regex]::Matches($preSpan, '(?<![A-Za-z0-9_.])Args\.([A-Za-z_][A-Za-z0-9_]*)')) {
     [void]$global.Add($m.Groups[1].Value)
   }
-  foreach ($c in (Get-ArgsCallees -Span $preSpan -Self 'Run')) {
+  foreach ($c in (Get-ArgsCallees -Span $preSpan -Self $dispName)) {
     foreach ($f in (Get-Closure -Start $c -Routines $routines)) { [void]$global.Add($f) }
   }
   # REFUSAL-ONLY fields. Run reads these before dispatch only to REFUSE a bad
@@ -783,7 +787,11 @@ function Get-CliVerbSubcommandMap {
   }
 
   # --- verb -> dispatch arm -> entry routines --------------------------------
-  $run = Get-RoutineSpanRange -Code $res.Code -Name 'Run'
+  # 1.51: the verb dispatch moved from Run into RunCommand (Run now wraps it with the closed-stdout
+  # exit check), so the dispatcher is RunCommand when it exists, else Run (older trees).
+  $dispName = 'RunCommand'
+  $run = Get-RoutineSpanRange -Code $res.Code -Name $dispName
+  if (-not $run) { $dispName = 'Run'; $run = Get-RoutineSpanRange -Code $res.Code -Name 'Run' }
   if (-not $run) { throw 'the Run dispatcher implementation was not found in the lexed source' }
   $runBeg = $run.Index
   $runEnd = $run.Index + $run.Length
@@ -797,7 +805,7 @@ function Get-CliVerbSubcommandMap {
     $to   = if ($a + 1 -lt $armHits.Count) { $armHits[$a + 1].Index } else { $runEnd }
     $span = $res.Code.Substring($from, $to - $from)
     if (-not $dispatch.Contains($verb)) { $dispatch[$verb] = New-Object System.Collections.Generic.HashSet[string] }
-    foreach ($c in (Get-ArgsCallees -Span $span -Self 'Run')) { [void]$dispatch[$verb].Add($c) }
+    foreach ($c in (Get-ArgsCallees -Span $span -Self $dispName)) { [void]$dispatch[$verb].Add($c) }
     # A one-line arm may compare SubCommand inline rather than in a Do<Verb>.
     foreach ($m in $subRx.Matches($res.NoComments.Substring($from, $to - $from))) {
       if (-not $perRoutine.ContainsKey("Run:$verb")) { $perRoutine["Run:$verb"] = New-Object System.Collections.Generic.HashSet[string] }

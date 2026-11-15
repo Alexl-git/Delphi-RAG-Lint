@@ -3818,7 +3818,7 @@ begin
             symbol: no locals, no enclosing routine for the refs of its body. Emit it as a
             parentless method named by its full dotted header; the resolver hangs it under
             the host's class. Fragment top level only (AParentSymbolIdx < 0). }
-          if (AParentSymbolIdx < 0) and (Pos('.', HdrName) > 0) and not PendingRoutineDeclExists(AState, HdrName) then
+          if (AParentSymbolIdx < 0) and HdrName.Contains('.') and not PendingRoutineDeclExists(AState, HdrName) then
             WalkDeclProc(HdrNode, AState, -1, Copy(HdrName, 1, LastDelimiter('.', HdrName) - 1), True);
           { v9: record this routine's body span on its symbol (decl or the
             impl-only one just emitted above). v(ADP1 Bug B): pass the impl

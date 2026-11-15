@@ -5,7 +5,7 @@ breaking changes** until v2.0.
 
 ## v1.51.0-alpha -- date TBD
 
-Wave v151 (39 lanes). 423 rules (was 317): 343 enabled by default (was 263), 125 with an auto-fix (was 113),
+Wave v151 (39 lanes). 423 rules (was 317): 341 enabled by default (was 263), 125 with an auto-fix (was 113),
 310 built-in and 113 external `.scm`. One re-parse: extractor 1.38.0 -> 1.39.0-alpha, resolver 1.26.0 -> 1.27.0-alpha.
 
 ### Breaking

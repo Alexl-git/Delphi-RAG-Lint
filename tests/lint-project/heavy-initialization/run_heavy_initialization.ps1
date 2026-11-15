@@ -84,7 +84,11 @@ try {
   Check 'RUN 4 a member of a heavy library type fires by its owner type' (@($bound | Where-Object { $_.file_path -like '*uHiLibOwner.pas' -and [int]$_.start_line -eq $owner -and $_.message -match 'registry \(HiLibStore\.TRegistry\.OpenKey\)' }).Count -eq 1) ''
   Check 'RUN 4 a quiet library routine still stays silent' (@($bound | Where-Object { $_.file_path -like '*uHiLibQuiet.pas' }).Count -eq 0) ''
   Check 'RUN 4 five findings in all' ($bound.Count -eq 5) "$($bound.Count) finding(s)"
-  $unbound = RuleFindings $dbX @('--rule', $Rule)
+  # v151 INT: --library-db none, not an omitted flag. Without it lint-all takes the MANIFEST's platform library
+  # (drag-lint.json beside the exe), and a heavy TYPE (TRegistry) is matched by its qualified name in any library,
+  # so uHiLibOwner fired on the battery engine (its manifest names library-Win32) while the lane's private engine
+  # had none. The control is about the slot being EMPTY; say so.
+  $unbound = RuleFindings $dbX @('--rule', $Rule, '--library-db', 'none')
   Check 'RUN 4 control: without the library index both stay silent' (@($unbound | Where-Object { $_.file_path -like '*uHiLibVar.pas' -or $_.file_path -like '*uHiLibOwner.pas' }).Count -eq 0) ''
 
   $f = Join-Path $src 'uHiChain.pas'

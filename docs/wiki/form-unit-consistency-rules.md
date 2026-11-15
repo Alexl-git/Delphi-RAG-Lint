@@ -7,7 +7,7 @@ They run in `lint <file.pas>` (the sibling `.dfm` with the same base name is rea
 | Rule | Default | What it reports |
 |---|---|---|
 | `form-field-without-object` | see below | a published field of the form class with no object of that name in the form file: it stays nil after loading |
-| `form-object-without-field` | see below | an object (or frame instance) of the form file with no field in the form class or its ancestors |
+| `form-object-without-field` | off (hint; `--enable form-object-without-field`) -- DevExpress bar and layout items carry no field by design | an object (or frame instance) of the form file with no field in the form class or its ancestors |
 | `form-field-type-mismatch` | see below | a published field whose class is not the class of the form object, nor an ancestor of it |
 | `form-resource-missing` | see below | the unit declares the form file's root class but includes no `{$R *.dfm}`: creating the form raises EResNotFound |
 | `inherited-form-handler-without-inherited` | see below | an inherited form re-declares a handler that an ancestor form file assigns, under the same name, without calling `inherited` |

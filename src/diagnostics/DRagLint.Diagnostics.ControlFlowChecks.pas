@@ -587,8 +587,21 @@ begin
       'repeat ... until False loop has no Break, Exit, raise or Halt -- it can never end', 'warning');
 end;
 
-{ for-bound-modified-in-body: the loop variable or a plain-identifier bound is changed in the body. }
+{ for-bound-modified-in-body: the loop variable or a plain-identifier bound is changed in the body.
+  A bound that contains a call (Length(A), High(A), List.Count) is skipped: an element write
+  A[I] := .. in the body is no change of the bound, and the root-name match cannot tell them apart. }
 procedure TCfRun.CheckFor(const N: TTSNode);
+
+  function HasCall(const X: TTSNode): Boolean;
+  var
+    K: Integer;
+  begin
+    if X.NodeType = 'exprCall' then Exit(True);
+    for K:= 0 to X.NamedChildCount - 1 do
+      if HasCall(X.NamedChild(K)) then Exit(True);
+    Result:= False;
+  end;
+
 var
   Start, EndE, Body: TTSNode;
   Loopvar          : string;
@@ -605,7 +618,7 @@ begin
   Bounds:= TDictionary<string, Boolean>.Create;
   try
     if Loopvar <> '' then Names.AddOrSetValue(Loopvar, True);
-    if CollectCondIdents(EndE, Bounds) then
+    if (not HasCall(EndE)) and CollectCondIdents(EndE, Bounds) then
       for Nm in Bounds.Keys do Names.AddOrSetValue(Nm, True);
     { Same shape as the invariant rule: assignments, address-of, with. A call that merely
       receives the name is NOT a finding here (Inc / Dec are handled below). }

@@ -45,7 +45,9 @@ drag-lint lint-all --db <project.sqlite> --rule dataset-edit-without-post
 drag-lint lint-all --db <project.sqlite> --enable sql-select-star  (a rule that ships OFF)
 ```
 
-### dataset-edit-without-post (warning)
+### dataset-edit-without-post (warning, OFF by default)
+
+Ships OFF since 1.51: on the measured projects every hit was a change handler that leaves the edit open for a later Post by design. Turn it on with `--enable dataset-edit-without-post`.
 `Q.Edit`, `Q.Append` or `Q.Insert` (no arguments) starts a record change, the same routine then writes a field of that dataset (`Q.FieldByName('A').AsInteger := 1`, `Q.Fields[0].AsString := ..`, or the same inside `with Q do`), and it never calls `Post`, `Cancel`, `CheckBrowseMode` or a cursor move on `Q`. The edit is lost, or it is posted by accident when the cursor moves.
 * Not reported: a routine that only calls `Edit` (the Save button's handler posts), a dataset passed on to another routine, a `Post` / `Cancel` on the same dataset anywhere after the edit, `Next` / `Prior` / `First` / `Last` / `Locate` (they post on their own).
 

@@ -92,7 +92,8 @@ begin
   ADecls.Add(V151Rule(RULE_FIELD_WITHOUT_OBJECT, 'bug-patterns', SEV_WARNING,
     'A published field of the form class has no object of that name in the form file -- it stays nil after the form loads'));
   ADecls.Add(V151Rule(RULE_OBJECT_WITHOUT_FIELD, 'bug-patterns', SEV_HINT,
-    'An object of the form file has no field in the form class -- code cannot reach it by name and the designer re-adds the field'));
+    'An object of the form file has no field in the form class -- code cannot reach it by name and the designer re-adds the field',
+    False));  // OFF (v151 FP re-measure: 99 CLIENT hints, DevExpress bar / layout items have no field by design)
   ADecls.Add(V151Rule(RULE_RESOURCE_MISSING, 'bug-patterns', SEV_WARNING,
     'The unit declares the class of its form file but includes no form resource ({$R *.dfm}) -- creating the form raises EResNotFound'));
   ADecls.Add(V151Rule(RULE_HANDLER_NO_INHERITED, 'bug-patterns', SEV_WARNING,

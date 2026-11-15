@@ -3,3 +3,8 @@ filename-compare-case 12
 filename-compare-case 13
 filename-compare-case 14
 filename-compare-case 15
+# v151 INT: non-hit pins (run_rule_fixture_positive_control P3 needs >= 1 hit AND >= 1 non-hit per rule; the near-miss lines above stay silent)
+!filename-compare-case 20
+!filename-compare-case 21
+!filename-compare-case 22
+!filename-compare-case 23

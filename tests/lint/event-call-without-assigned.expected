@@ -1,2 +1,5 @@
 # unguarded call at line 22; both guarded forms must not fire
 event-call-without-assigned 22
+# v151 INT: non-hit pins (run_rule_fixture_positive_control P3 needs >= 1 hit AND >= 1 non-hit per rule; the near-miss lines above stay silent)
+!event-call-without-assigned 28
+!event-call-without-assigned 34

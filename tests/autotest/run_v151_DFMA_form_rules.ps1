@@ -52,6 +52,7 @@ $ON_FOREIGN = @('--enable', 'foreign-form-control-access')
 # ---- 1. lint, no index ----
 $child = Join-Path $fx 'inherit\UChildForm.pas'
 $f = Get-Findings @('lint', $child, '--json')
+# positive-control: inherited-form-handler-without-inherited
 Assert "lint: inherited-form-handler-without-inherited at UChildForm.pas:21" (Has $f 'inherited-form-handler-without-inherited' 21 'UChildForm.pas')
 Assert "lint: only that handler fires (got $(CountOf $f 'inherited-form-handler-without-inherited'))" ((CountOf $f 'inherited-form-handler-without-inherited') -eq 1)
 $f = Get-Findings @('lint', $child, '--json', '--disable', 'inherited-form-handler-without-inherited')
@@ -59,10 +60,13 @@ Assert "control: --disable removes it" (-not (Has $f 'inherited-form-handler-wit
 
 $main = Join-Path $fx 'proj\UMain.pas'
 $f = Get-Findings (@('lint', $main, '--json') + $ON_FOREIGN)
+# positive-control: form-access-before-create
 Assert "lint: form-access-before-create at UMain.pas:30" (Has $f 'form-access-before-create' 30 'UMain.pas')
 Assert "lint: one form-access-before-create (got $(CountOf $f 'form-access-before-create'))" ((CountOf $f 'form-access-before-create') -eq 1)
+# positive-control: form-autocreate-and-manual
 Assert "lint: form-autocreate-and-manual at UMain.pas:37" (Has $f 'form-autocreate-and-manual' 37 'UMain.pas')
 Assert "lint: one form-autocreate-and-manual (got $(CountOf $f 'form-autocreate-and-manual'))" ((CountOf $f 'form-autocreate-and-manual') -eq 1)
+# positive-control: foreign-form-control-access
 Assert "lint: foreign-form-control-access at UMain.pas:52" (Has $f 'foreign-form-control-access' 52 'UMain.pas')
 Assert "lint: one foreign-form-control-access (got $(CountOf $f 'foreign-form-control-access'))" ((CountOf $f 'foreign-form-control-access') -eq 1)
 Assert "lint: UMain.dfm reference to dmMain is covered by uses UDm" (@($f | Where-Object { $_.rule -eq 'unit-missing-from-uses' -and ([string]$_.file_path).EndsWith('UMain.dfm') }).Count -eq 0)

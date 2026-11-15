@@ -180,9 +180,15 @@ $catTxt  = if (Test-Path $catalog) { [System.IO.File]::ReadAllText($catalog) } e
 $cliTxt  = if (Test-Path $cli)     { [System.IO.File]::ReadAllText($cli)     } else { '' }
 $lspTxt  = if (Test-Path $lsp)     { [System.IO.File]::ReadAllText($lsp)     } else { '' }
 
+# v151 FRAME turned the const into a same-named FUNCTION (core const + the provider
+# rows registered OFF), so every consumer compiles unchanged. The one definition is
+# now the core const BUILTIN_RULES_OFF_BY_DEFAULT_CORE plus that function; both must
+# exist and the function must return the core list (not a hand-written copy).
 Check 'BUILTIN_RULES_OFF_BY_DEFAULT is declared in the rule catalog' `
-  ($catTxt -match 'BUILTIN_RULES_OFF_BY_DEFAULT\s*:\s*TArray<string>\s*=') `
-  "src\lint\DRagLint.Lint.RuleCatalog.pas"
+  (($catTxt -match 'BUILTIN_RULES_OFF_BY_DEFAULT_CORE\s*:\s*TArray<string>\s*=') -and
+   ($catTxt -match 'function BUILTIN_RULES_OFF_BY_DEFAULT\s*:\s*TArray<string>;') -and
+   ($catTxt -match 'Result\s*:=\s*BUILTIN_RULES_OFF_BY_DEFAULT_CORE\s*\+\s*GProviderOff\s*;')) `
+  "src\lint\DRagLint.Lint.RuleCatalog.pas (const _CORE + function returning _CORE + GProviderOff)"
 Check 'the LSP consumes it' ($lspTxt -match 'BUILTIN_RULES_OFF_BY_DEFAULT') `
   ($(($lspTxt -split "`r?`n" | Where-Object { $_ -match 'BUILTIN_RULES_OFF_BY_DEFAULT' } | Select-Object -First 1).Trim()))
 Check 'the CLI consumes it' ($cliTxt -match 'BUILTIN_RULES_OFF_BY_DEFAULT') `
@@ -215,7 +221,8 @@ Check 'the CLI verbs loop over the shared constants instead (scan is not vacuous
 # as ON that every lint verb hides. nil-comparison was exactly that.
 Write-Host ''
 Write-Host 'CATALOGUE: `rules --json` agrees with the engine' -ForegroundColor Cyan
-$ids = @([regex]::Match($catTxt, "BUILTIN_RULES_OFF_BY_DEFAULT\s*:\s*TArray<string>\s*=\s*\[(?<b>[^\]]*)\]").Groups['b'].Value |
+# v151 FRAME: the literal list is the _CORE const (the same-named function adds provider rows)
+$ids = @([regex]::Match($catTxt, "BUILTIN_RULES_OFF_BY_DEFAULT_CORE\s*:\s*TArray<string>\s*=\s*\[(?<b>[^\]]*)\]").Groups['b'].Value |
          ForEach-Object { [regex]::Matches($_, "'([a-z0-9\-]+)'") } | ForEach-Object { $_.Groups[1].Value })
 Check 'the constant parsed out of the catalog source is non-empty' ($ids.Count -ge 10) "ids=$($ids.Count)"
 $catalogJson = (& $Exe rules --json 2>$null) -join "`n" | ConvertFrom-Json

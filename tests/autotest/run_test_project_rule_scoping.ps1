@@ -153,6 +153,10 @@ try {
 # A guard that greps a whole lint report cannot survive any rule gaining a
 # severity tier. Filter to the rule under test, then match.
 $proc = (($procAll -split "`n") | Where-Object { $_ -match 'unsafe-shellexecute' }) -join "`n"
+# Same rule for SECTION 1 (v151 INT): v151 added dunitx-test-without-assert, which QUOTES the
+# test method name of every [Test] / [TestCase] without an assertion, so a whole-report grep for
+# 'Widget_does_the_thing' matched that finding, not method-pascalcase. Filter to the rule under test.
+$naming = (($naming -split "`n") | Where-Object { $_ -match 'method-pascalcase' }) -join "`n"
 
 Write-Host ''
 Write-Host 'SECTION 1 -- method-pascalcase must not fire on DUnitX test methods' -ForegroundColor Cyan

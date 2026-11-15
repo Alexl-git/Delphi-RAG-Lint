@@ -1,3 +1,7 @@
 # Edit1: TMyEditA, but the form file creates a TMyEditB (a sibling class)
 form-field-type-mismatch 16
 # Edit2 (TEdit field, TMyEditA object: a descendant), Edit3 (same class) and Edit4 (qualified, same) are fine
+# v151 INT: non-hit pins (run_rule_fixture_positive_control P3 needs >= 1 hit AND >= 1 non-hit per rule; the near-miss lines above stay silent)
+!form-field-type-mismatch 17
+!form-field-type-mismatch 18
+!form-field-type-mismatch 19

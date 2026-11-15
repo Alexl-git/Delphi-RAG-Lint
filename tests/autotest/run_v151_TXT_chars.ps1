@@ -40,6 +40,7 @@ try {
   # bidi: U+202E (E2 80 AE) in a comment on line 4, col 4 ("// " then the mark)
   $bidi = Put 'bidi.pas' (JoinB @((Asc $head), (Asc '// '), [byte[]](0xE2,0x80,0xAE), (Asc "`r`n"), (Asc $tail)))
   $f = Lint $bidi
+  # positive-control: bidi-control
   Check 'bidi-control fires at line 4 col 4' (Has $f 'bidi-control' 4 4)
   Check 'bidi-control: only that rule' ((Count $f 'invisible-char') -eq 0 -and (Count $f 'control-char') -eq 0)
   Check 'bidi-control: --disable removes it (positive control)' ((Count (Lint $bidi @('--disable','bidi-control')) 'bidi-control') -eq 0)
@@ -50,6 +51,7 @@ try {
   # invisible: U+200B in a string, col counts code points
   $inv = Put 'inv.pas' (JoinB @((Asc $head), (Asc "const C = 'a"), [byte[]](0xE2,0x80,0x8B), (Asc "b';`r`n"), (Asc $tail)))
   $f = Lint $inv
+  # positive-control: invisible-char
   Check 'invisible-char fires at line 4 col 13' (Has $f 'invisible-char' 4 13)
   Check 'invisible-char: --disable removes it' ((Count (Lint $inv @('--disable','invisible-char')) 'invisible-char') -eq 0)
   # an ordinary accented letter is not invisible; a non-BOM FEFF mid-file is
@@ -63,6 +65,7 @@ try {
   # control: NUL inside a string
   $nul = Put 'nul.pas' (JoinB @((Asc $head), (Asc "const C = 'a"), [byte[]](0x00), (Asc "b';`r`n"), (Asc $tail)))
   $f = Lint $nul
+  # positive-control: control-char
   Check 'control-char fires on NUL at line 4 col 13' (Has $f 'control-char' 4 13)
   Check 'control-char: --disable removes it' ((Count (Lint $nul @('--disable','control-char')) 'control-char') -eq 0)
   # form feed, tab and a trailing Ctrl-Z are tolerated
@@ -100,6 +103,7 @@ try {
   $diff = Join-Path $hd 'sub\diff.pas'
   [IO.File]::WriteAllBytes($diff, (JoinB @((Asc "{ Acme Corp`r`n  Licence: public }`r`n"), (Asc $head), (Asc $tail))))
   Check 'file-header: matching header (trailing blanks ignored) is clean' ((Count (Lint $good @('--enable','file-header')) 'file-header') -eq 0)
+  # positive-control: file-header
   Check 'file-header: missing header -> line 1' (Has (Lint $miss @('--enable','file-header')) 'file-header' 1)
   Check 'file-header: different second line -> line 2' (Has (Lint $diff @('--enable','file-header')) 'file-header' 2)
   Check 'file-header: --disable removes it (positive control)' ((Count (Lint $miss @('--enable','file-header','--disable','file-header')) 'file-header') -eq 0)

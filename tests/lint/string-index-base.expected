@@ -2,3 +2,9 @@ string-index-base 15
 string-index-base 16
 string-index-base 17
 string-index-base 18
+# v151 INT: non-hit pins (run_rule_fixture_positive_control P3 needs >= 1 hit AND >= 1 non-hit per rule; the near-miss lines above stay silent)
+!string-index-base 27
+!string-index-base 28
+!string-index-base 29
+!string-index-base 30
+!string-index-base 31

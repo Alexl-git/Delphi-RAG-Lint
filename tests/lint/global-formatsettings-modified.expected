@@ -1,3 +1,6 @@
 global-formatsettings-modified 21
 global-formatsettings-modified 22
 global-formatsettings-modified 36
+# v151 INT: non-hit pins (run_rule_fixture_positive_control P3 needs >= 1 hit AND >= 1 non-hit per rule; the near-miss lines above stay silent)
+!global-formatsettings-modified 30
+!global-formatsettings-modified 31

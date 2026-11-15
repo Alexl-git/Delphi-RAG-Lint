@@ -29,6 +29,7 @@ function Findings([string]$Case, [string[]]$Extra) {
 try {
   $u = Findings 'unseeded' @('--enable', 'random-without-randomize')
   Check 'unseeded: exactly one finding' ($u.Count -eq 1)
+  # positive-control: random-without-randomize
   Check 'unseeded: at uDice.pas:11' (($u.Count -eq 1) -and ($u[0].file_path -match 'uDice\.pas$') -and ([int]$u[0].start_line -eq 11))
   $s = Findings 'seeded' @('--enable', 'random-without-randomize')
   Check 'seeded (Randomize in another unit): silent' ($s.Count -eq 0)

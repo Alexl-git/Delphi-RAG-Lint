@@ -1,2 +1,6 @@
 # Preis is a Double money amount (line 8); Menge, Gewicht, Netto (Currency) must not fire
 money-as-float 8
+# v151 INT: non-hit pins (run_rule_fixture_positive_control P3 needs >= 1 hit AND >= 1 non-hit per rule; the near-miss lines above stay silent)
+!money-as-float 7
+!money-as-float 10
+!money-as-float 11

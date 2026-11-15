@@ -68,6 +68,10 @@ const
     away from the CLI banner again -- see DRAGLINT_VERSION. }
   VERSION = DRAGLINT_VERSION;
 
+/// <summary>Runs the command line and returns the process exit code. A run that
+/// would exit 0 exits 3 (FATAL EInOutError on stderr) when its stdout pipe was
+/// closed by the reader before the end, even if no write reported the failure;
+/// lsp and serve excepted (stdout is their transport).</summary>
 /// <returns><!-- drag-lint:auto -->Integer -- Observed: 0; 2; DoIndexAll(Args);
 /// DoIndex(Args); DoWarmRuleCache(Args); DoQuery (Args).</returns>
 /// <remarks>
@@ -845,7 +849,7 @@ const
   /// tests\autotest\run_help_env_table.ps1: every quoted 'DRAGLINT_*' literal
   /// under src\ must be a Name here and --help must print every Name. A new
   /// variable is added HERE in the same change, or that guard fails.</remarks>
-  ENV_VARS_HELP: array[0..76] of TEnvVarHelp = (
+  ENV_VARS_HELP: array[0..78] of TEnvVarHelp = (
     (Name: 'DRAGLINT_BUSY_TIMEOUT_MS';                Purpose: 'writer busy timeout in ms (overrides the built-in default; a non-negative integer)'),
     (Name: 'DRAGLINT_CHARTS_ALLOW_LIVE_DB';           Purpose: 'charts: lets CloneDb accept a non-clone (live) database'),
     (Name: 'DRAGLINT_CHARTS_DIR';                     Purpose: 'charts: folder of the charts scripts'),
@@ -869,6 +873,8 @@ const
     (Name: 'DRAGLINT_GATE_TEST_BREAK';                Purpose: 'test hook: breaks the compile gate'),
     (Name: 'DRAGLINT_INDEX_TEST_FAIL_FILE';           Purpose: 'test hook: index fails on the named file'),
     (Name: 'DRAGLINT_LAYOUT';                         Purpose: 'installed-layout switch (unset = the default layout)'),
+    (Name: 'DRAGLINT_LIBRARY_EFFECTS';                Purpose: 'purity stage: 0 = no library effect summaries for the run; a path = that library DB (measurements); unset = the first opening external_stores library'),
+    (Name: 'DRAGLINT_LIBRARY_EFFECTS_TRUST';          Purpose: 'purity stage: 1 = trust library summaries unsoundly (measurement-only arm)'),
     (Name: 'DRAGLINT_LIBRARY_POLL_MS';                Purpose: '--wait-library poll interval in ms (default 30000)'),
     (Name: 'DRAGLINT_LSP_REINDEX_EXE';                Purpose: 'test hook: the exe the LSP reindex runs'),
     (Name: 'DRAGLINT_LSP_TEST_MARK_INCOMPLETE';       Purpose: 'test hook: LSP marks its answer incomplete'),
@@ -40395,7 +40401,9 @@ begin
   Writeln('library:  ', if LibDir = '' then '(the manifest''s outDir decides)' else LibDir);
 end;
 
-function Run: Integer;
+{ The whole command line run; Run below adds the closed-stdout verdict.
+  pCommand receives the parsed verb (empty when ParseArgs never returned). }
+function RunCommand(var pCommand: string): Integer;
 const
   SELFTEST_SCHEMA_DB_ARG = 3; // ParamStr index of the DB path after --selftest-schema <sub>
 var
@@ -40432,6 +40440,7 @@ begin
   SetTargetCompilerVersion(CompilerVersionOfStudioRoot(TStudioEnv.RootOrEmpty));
   try
     Args:= ParseArgs;
+    pCommand:= Args.Command;
     if not ApplyPreprocessCompilerVersion(Args) then Exit(2);
     SetRunTargetCompilerArg(Args.TargetCompiler);
     if Args.ShowHelp then
@@ -40938,6 +40947,48 @@ begin
     end;
   end; // try
 end; // function
+
+{ True when stdout is a pipe whose reader has closed it. Flushes Output first
+  (a failed flush is itself the answer), then probes with a ZERO-byte
+  WriteFile: on an open pipe it succeeds, on a closed one it fails with
+  ERROR_NO_DATA (232). A file or console stdout is never "closed". }
+function StdoutReaderGone: Boolean;
+var
+  Written: DWORD;
+  Probe: Byte;
+begin
+  try
+    Flush(Output);
+  except
+    on EInOutError do Exit(True);
+  end;
+  if GetFileType(TTextRec(Output).Handle) <> FILE_TYPE_PIPE then Exit(False);
+  Probe:= 0;
+  Result:= not WriteFile(TTextRec(Output).Handle, Probe, 0, Written, nil);
+end;
+
+function Run: Integer;
+const
+  EXIT_FATAL = 3; // the code of every top-level FATAL (dpr handler)
+var
+  Command: string;
+begin
+  Command:= '';
+  Result:= RunCommand(Command);
+  { A CLOSED STDOUT PIPE STAYS A FATAL 3 (owner ruling 2026-10-30), also when
+    no write FAILED: Windows can report a pending WriteFile on the pipe as fully
+    written although its reader closed the pipe meanwhile (v151: `rules` wrote
+    16384 + 12174 bytes, the second "succeeded" after the reader read 64 chars
+    and closed; 5671 bytes in its place fail with 109). With nothing written
+    after it, no EInOutError ever fired and a truncated run exited 0. lsp and
+    serve own stdout as their transport; a client that hangs up is their
+    normal end, not a truncated run. }
+  if (Result = 0) and not MatchText(Command, ['lsp', 'serve']) and StdoutReaderGone then
+  begin
+    Writeln(ErrOutput, 'FATAL: EInOutError: I/O error ', ERROR_NO_DATA, ' (stdout was closed by its reader before the run ended)');
+    Result:= EXIT_FATAL;
+  end;
+end;
 
 initialization
 

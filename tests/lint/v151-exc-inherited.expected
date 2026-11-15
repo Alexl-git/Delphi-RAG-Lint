@@ -12,3 +12,12 @@ inherited-order 89
 !inherited-without-ancestor 68
 !message-handler-without-inherited 77
 !message-handler-without-inherited 82
+# v151 INT: non-hit pins (run_rule_fixture_positive_control P3 needs >= 1 hit AND >= 1 non-hit per rule; the near-miss lines above stay silent)
+!missing-inherited-call 56
+!missing-inherited-call 87
+!inherited-wrong-method 58
+!inherited-wrong-method 79
+!override-only-inherited 33
+!override-only-inherited 87
+!inherited-order 58
+!inherited-order 79

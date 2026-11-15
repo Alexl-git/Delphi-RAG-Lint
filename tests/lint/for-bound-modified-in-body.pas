@@ -63,4 +63,14 @@ begin
     WriteLn(I);
 end;
 
+function NoHit4(N: Integer): TArray<Integer>;
+var
+  I: Integer;
+begin
+  { FP shape: an element write under a Length() bound does not change the bound }
+  SetLength(Result, N);
+  for I := 0 to Length(Result) - 1 do
+    Result[I] := I;
+end;
+
 end.

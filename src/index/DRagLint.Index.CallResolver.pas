@@ -5267,7 +5267,7 @@ begin
   { v151 INC: a method body written in a single-host include (`procedure THost.Run;`) hangs
     under the class of its host, so its body sees the class members and the host unit. }
   var HL: TList<TIncludeHostRow>;
-  if (Result.ParentId <= 0) and (Result.Kind in [skMethod, skConstructor, skDestructor]) and (Pos('.', Result.QualifiedName) > 0)
+  if (Result.ParentId <= 0) and (Result.Kind in [skMethod, skConstructor, skDestructor]) and Result.QualifiedName.Contains('.')
      and FIncHosts.TryGetValue(Result.FileId, HL) and (HL.Count = 1) then
     Result.ParentId:= IncludeMethodOwner(HL[0].HostUnitId, Result.QualifiedName);
   FRows.Symbols.Add(AId, Result);

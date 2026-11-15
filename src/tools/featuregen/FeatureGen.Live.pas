@@ -856,17 +856,19 @@ begin
       end;
       ArgsCallees(lSpan, lName, lSet);
     end;
-    // the Run dispatcher: first header named Run whose span has a body
+    // the dispatcher: first header named Run or RunCommand whose span has a body AND an Args.Command arm.
+    // v151 INT: Run became a thin wrapper (closed-stdout verdict) around RunCommand, which now holds the
+    // verb arms; matching Run alone harvested 0 subcommands.
     lFound := False;
     lRunBeg := 0;
     lRunEnd := 0;
     for h := 0 to lHeaders.Count - 1 do
     begin
-      if not SameText(lHeaders[h].Groups[1].Value, 'Run') then
+      if not (SameText(lHeaders[h].Groups[1].Value, 'Run') or SameText(lHeaders[h].Groups[1].Value, 'RunCommand')) then
         Continue;
       lFrom := lHeaders[h].Index;
       lTo := (if h + 1 < lHeaders.Count then lHeaders[h + 1].Index else Length(lRes.Code) + 1);
-      if HasBody(Copy(lRes.Code, lFrom, lTo - lFrom)) then
+      if HasBody(Copy(lRes.Code, lFrom, lTo - lFrom)) and TRegEx.IsMatch(Copy(lRes.NoComments, lFrom, lTo - lFrom), 'Args\.Command\s*=') then
       begin
         lFound := True;
         lRunBeg := lFrom;

@@ -1,3 +1,6 @@
 # GetName (line 21) and SetName (line 26) only move FName; GetCity / SetCity do real work
 trivial-accessor 21
 trivial-accessor 26
+# v151 INT: non-hit pins (run_rule_fixture_positive_control P3 needs >= 1 hit AND >= 1 non-hit per rule; the near-miss lines above stay silent)
+!trivial-accessor 31
+!trivial-accessor 36
