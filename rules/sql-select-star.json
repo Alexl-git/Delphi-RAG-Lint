@@ -1,0 +1,8 @@
+{
+  "id": "sql-select-star",
+  "severity": "info",
+  "category": "structure",
+  "message": "SELECT * returns whatever columns the table has today -- name the columns you need.",
+  "warn_capture": "warn",
+  "enabled": false
+}

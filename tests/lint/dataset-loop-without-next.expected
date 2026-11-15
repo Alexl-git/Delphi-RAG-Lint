@@ -1,0 +1,20 @@
+# Hits: a while-not-Eof / repeat-until-Eof loop whose body never advances the dataset (12, 32, 38),
+# and a Continue that runs before the loop's Next (23); all reported under loop-condition-invariant.
+# Non-hits: Next before the Continue (118, 124), Next / Delete present, Break leaves the loop, Next in a finally, the dataset handed to
+# another routine, Continue after the Next.
+loop-condition-invariant 12
+loop-condition-invariant 23
+loop-condition-invariant 32
+loop-condition-invariant 38
+!loop-condition-invariant 45
+!loop-condition-invariant 54
+!loop-condition-invariant 60
+!loop-condition-invariant 70
+!loop-condition-invariant 79
+!loop-condition-invariant 84
+!loop-condition-invariant 90
+!loop-condition-invariant 94
+!loop-condition-invariant 104
+!loop-condition-invariant 110
+!loop-condition-invariant 118
+!loop-condition-invariant 124
