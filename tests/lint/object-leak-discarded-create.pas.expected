@@ -1,0 +1,17 @@
+# v151 WID-FLOW: a class constructed as a statement and never stored
+object-leak 70
+# literal arguments cannot take ownership of the new object
+object-leak 71
+object-leak 72
+# a thread class: the self-freeing thread idiom
+!object-leak 73
+# a component: the owner frees it
+!object-leak 74
+# a non-literal argument may link the new object into a structure
+!object-leak 75
+# a record constructor allocates nothing
+!object-leak 76
+# an exception constructed and dropped belongs to exception-constructed-but-not-raised
+!object-leak 77
+# stored and freed -> fine
+!object-leak 78

@@ -2453,10 +2453,14 @@ begin
   if ANode.IsNull then Exit;
   Inner := ANode;
   if (Inner.NodeType = 'statement') and (Inner.NamedChildCount > 0) then Inner := Inner.NamedChild(0);
+  { v151 WID-FLOW: a direct `.Destroy` frees exactly like `.Free` (minus the
+    nil test) and leaves the pointer dangling, so `X.Destroy; X.Free;` is a
+    double free. Only this double-free detector learns it; DetectFreedVar
+    (doc facts, escape lattice) is unchanged. }
   if Inner.NodeType = 'exprDot' then
   begin
     M := NodeText(Inner.ChildByField('rhs'), ASrc);
-    if (M = 'free') or (M = 'disposeof') then
+    if (M = 'free') or (M = 'disposeof') or (M = 'destroy') then
     begin
       AKind := fkRawFree; { raw .Free / .DisposeOf: object freed, pointer left dangling }
       Exit(FreedOperandVar(Inner.ChildByField('lhs'), ASrc, AVars));
@@ -2468,7 +2472,7 @@ begin
     if (not Ent.IsNull) and (Ent.NodeType = 'exprDot') then
     begin
       M := NodeText(Ent.ChildByField('rhs'), ASrc);
-      if (M = 'free') or (M = 'disposeof') then
+      if (M = 'free') or (M = 'disposeof') or (M = 'destroy') then
       begin
         AKind := fkRawFree;
         Exit(FreedOperandVar(Ent.ChildByField('lhs'), ASrc, AVars));

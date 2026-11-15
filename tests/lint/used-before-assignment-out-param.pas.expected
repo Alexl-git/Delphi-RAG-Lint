@@ -1,0 +1,15 @@
+# v151 WID-FLOW: an out parameter read before the routine stores to it
+used-before-assignment 31
+# stored first -> fine
+!used-before-assignment 38
+# a managed out parameter is cleared by the compiler on entry -> defined
+!used-before-assignment 44
+# assigned on one path only -> the may-arm (warning)
+used-before-assignment 52
+# FillChar / SizeOf are the usual way to initialise an out record
+!used-before-assignment 57
+!used-before-assignment 58
+# passed on as an out argument, then read -> defined by the call
+!used-before-assignment 64
+# a var parameter carries the caller's value -> never reported
+!used-before-assignment 69

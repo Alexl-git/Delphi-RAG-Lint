@@ -1,0 +1,6 @@
+# v151 WID-FLOW: a value parameter written and never read (reported at its declaration)
+write-only-local 15
+# read before the store -> the parameter is used
+!write-only-local 20
+# out / var parameters carry the store back to the caller
+!write-only-local 26
