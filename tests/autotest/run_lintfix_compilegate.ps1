@@ -9,8 +9,9 @@
   `Take(AWalk)` = E2010, the project no longer builds).
     a  bad fix + gate: exit 1, REFUSED on stderr, GfUnit.pas byte-identical.
     b  good fix + gate: exit 0, line 27 is `Take(P);`, line 35 untouched, the written project builds.
-    c  POSITIVE CONTROL: the same bad fix WITHOUT --compile-gate writes `Take(AWalk);` (exit 0): the guard fails
-       if the fix stops being a breaking one or the gate is on by default.
+    c  POSITIVE CONTROL: the same bad fix with --no-compile-gate writes `Take(AWalk);` (exit 0): the guard fails
+       if the fix stops being a breaking one. (Since 1.51 the gate is ON by default with a .dproj: v151 GATE,
+       tests\autotest\run_v151_GATE_compile_gate.ps1.)
     d  --json path: bad fix + gate: exit 1, bytes identical.
     e  --compile-gate without --project <X.dproj>, and without --fix: exit 2, nothing written.
   Needs dcc: SKIPs (exit 0) when rsvars.bat is missing. Run against the 1.46.0 engine: a is the RED (the flag is unknown).
@@ -68,9 +69,9 @@ try {
   [IO.File]::WriteAllText($bat, "@echo off`r`ncall `"$Rsvars`"`r`ncd /D `"$($B.Dir)`"`r`nmsbuild /t:Build /p:Config=Debug /p:Platform=Win64 /v:minimal GfDemo.dproj`r`n", [Text.Encoding]::ASCII)
   $p = Start-Process -Wait -PassThru -NoNewWindow -FilePath cmd.exe -ArgumentList '/c', $bat -RedirectStandardOutput (Join-Path $Tmp 'b.out')
   Check 'b4 written project builds' ($p.ExitCode -eq 0) "msbuild exit $($p.ExitCode)"
-  # c: positive control, no gate = the break is written
+  # c: positive control, gate opted out = the break is written
   $Cc = New-Case 'c'
-  $r = Fix $Cc 35 @('--project', $Cc.Proj)
+  $r = Fix $Cc 35 @('--project', $Cc.Proj, '--no-compile-gate')
   Check 'c1 control exit 0' ($r.Code -eq 0) "exit $($r.Code) $($r.Out)"
   Check 'c2 control wrote the breaking fix' ((LineOf $Cc.Unit 35) -eq 'Take(AWalk);') (LineOf $Cc.Unit 35)
   # e: usage errors

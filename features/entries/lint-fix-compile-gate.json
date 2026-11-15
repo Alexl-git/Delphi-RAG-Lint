@@ -5,15 +5,15 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.50.0-alpha",
-  "summary": "lint --fix --apply --project X.dproj --compile-gate writes the fixes only if the project still builds; a fix that breaks the compile is refused and rolled back",
-  "intro": "Read this before letting lint --fix write into a project you cannot afford to break. With --compile-gate the project builds before and after the write and any compile error rolls every file back. Opt-in: without the flag nothing builds, except a naming rename (field/param/local/const prefix or casing fixes), which is always written through the gate when --project names a .dproj.",
+  "summary": "lint --fix --apply --project X.dproj writes the fixes through the compile gate by default (1.51): build 1 keeps every message and stops on an error, build 2 rolls back on an error, and the warnings / hints the fix added are reported",
+  "intro": "Read this before letting lint --fix write into a project you cannot afford to break. When --project names an existing .dproj the project builds before and after the write (the default since 1.51; --compile-gate forces it, --no-compile-gate opts out except for naming renames). An error in build 1 stops the run, an error in build 2 rolls every file back, and stderr lists the counts of both builds, every error line and the warnings / hints the fix added.",
   "wikiPage": "lint-fix-compile-gate",
   "surfaces": [
     {
       "type": "cli",
       "verb": "lint",
-      "example": "drag-lint lint --in <f.pas> --db <db> --fix --apply --project <X.dproj> --compile-gate",
-      "usage": "drag-lint lint --in <f.pas> --db <db> --fix --apply --project <X.dproj> --compile-gate [--fix-line <L> --fix-rule <id>] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]",
+      "example": "drag-lint lint --in <f.pas> --db <db> --fix --apply --project <X.dproj>",
+      "usage": "drag-lint lint --in <f.pas> --db <db> --fix --apply --project <X.dproj> [--compile-gate | --no-compile-gate] [--fix-line <L> --fix-rule <id>] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]",
       "flags": [
         {
           "name": "--in",
@@ -35,6 +35,9 @@
         },
         {
           "name": "--compile-gate"
+        },
+        {
+          "name": "--no-compile-gate"
         },
         {
           "name": "--fix-line",
@@ -60,7 +63,7 @@
           "arg": "<s>"
         }
       ],
-      "help": ["  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply [--no-backup]] [--project <X.dproj> --compile-gate [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]   (AUTOFIX one file; --apply keeps a .bak beside each file it writes unless --no-backup)"]
+      "help": ["  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply [--no-backup]] [--project <X.dproj> [--compile-gate | --no-compile-gate] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]   (AUTOFIX one file; --apply keeps a .bak beside each file it writes unless --no-backup)"]
     }
   ],
   "audience": "both",
@@ -72,6 +75,14 @@
     {
       "ask": "Why did lint --fix --apply refuse my fix?",
       "command": "drag-lint lint --in <f.pas> --db <db> --fix --apply --project <X.dproj> --compile-gate"
+    },
+    {
+      "ask": "Which new warnings or hints did my fix add?",
+      "command": "drag-lint lint --in <f.pas> --db <db> --fix --apply --project <X.dproj>"
+    },
+    {
+      "ask": "How do I write a fix without building the project?",
+      "command": "drag-lint lint --in <f.pas> --db <db> --fix --apply --project <X.dproj> --no-compile-gate"
     }
   ],
   "access": "cli-only",

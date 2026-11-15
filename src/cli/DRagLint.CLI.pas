@@ -531,7 +531,8 @@ type
     FixCycleGiven  : Boolean; // --cycle was on the command line (so 0 / junk is an error, not 'absent')
     FixPart        : string ; // --part a|b|all (cycles --fix)
     NoCompile      : Boolean; // --no-compile (cycles --fix: skip the baseline build)
-    CompileGate    : Boolean; // --compile-gate (lint --fix --apply: write through the --project build gate; opt-in)
+    CompileGate    : Boolean; // --compile-gate (lint --fix --apply: write through the --project build gate; the default with a .dproj since 1.51)
+    NoCompileGate  : Boolean; // --no-compile-gate (lint --fix --apply --project <X.dproj>: write unbuilt; naming renames stay gated)
     ShadowOut      : string ; // --shadow-out <dir> (cycles --fix, debug: where the shadow tree is staged)
     CycleRsVars    : string ; // --rsvars <rsvars.bat> (cycles --fix: the Studio build environment, for a Studio the registry does not name)
     CycleBuildTimeout: string ; // --build-timeout <s> (cycles --fix: whole seconds one build may take; '' / 0 = no limit, the default)
@@ -1976,6 +1977,7 @@ begin
     end
     else if A = '--no-compile' then Result.NoCompile:= True
     else if A = '--compile-gate' then Result.CompileGate:= True
+    else if A = '--no-compile-gate' then Result.NoCompileGate:= True
     else if (A = '--shadow-out') and (i < ParamCount) then
     begin
       Inc(i);
@@ -15892,6 +15894,11 @@ begin
     if SameText(AArgs.Format, 'sarif') then Writeln(ErrOutput, '--fix does not support SARIF output; using text output.');
 
     { --compile-gate writes through a build of the --project .dproj (lint, lint-all, lint-project, check-ast share this writer). }
+    if AArgs.CompileGate and AArgs.NoCompileGate then
+    begin
+      Writeln(ErrOutput, 'ERROR: --compile-gate and --no-compile-gate contradict each other: pass one');
+      Exit(2);
+    end;
     if AArgs.CompileGate and AArgs.Apply and ((not SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj')) or (not TFile.Exists(AArgs.ProjectPath))) then
     begin
       Writeln(ErrOutput, 'ERROR: --fix --apply --compile-gate needs --project <X.dproj>: the compile gate builds it');
@@ -16182,12 +16189,16 @@ begin
     end;
     if AArgs.Apply then GuardRenameWrites(AArgs, Rename, FixCount);
     Edits:= Edits + Rename.Edits;
-    { A naming rename edits a declaration and every use: with a --project .dproj it is written through the compile gate
-      even without --compile-gate (148 RN; 146 r2 left it proof-only). The other fixers keep R3's opt-in. }
+    { P14 (v151 GATE): with --project naming an existing .dproj every write goes through the compile gate BY DEFAULT.
+      --no-compile-gate writes unbuilt -- except a naming rename, which edits a declaration and every use and is
+      always built (148 RN). Without a .dproj nothing builds, as before. }
+    var GateProjectKnown: Boolean:= SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') and TFile.Exists(AArgs.ProjectPath);
     var GateWrite: Boolean:= AArgs.CompileGate
-      or ((NamingRenames + Rename.Applied > 0) and SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') and TFile.Exists(AArgs.ProjectPath));
+      or (GateProjectKnown and ((not AArgs.NoCompileGate) or (NamingRenames + Rename.Applied > 0)));
     if GateWrite and AArgs.Apply and not AArgs.CompileGate then
-      Writeln(ErrOutput, 'drag-lint: note: naming renames are written through the compile gate of ' + ExtractFileName(AArgs.ProjectPath));
+      Writeln(ErrOutput, if AArgs.NoCompileGate
+        then 'drag-lint: note: naming renames are written through the compile gate of ' + ExtractFileName(AArgs.ProjectPath) + ' even with --no-compile-gate'
+        else 'drag-lint: note: --fix --apply writes through the compile gate of ' + ExtractFileName(AArgs.ProjectPath) + ' (--no-compile-gate writes unbuilt)');
     { ONE PASS NEVER WRITES MIXED BYTES: a finding whose edits overlap an earlier
       finding's (two rules rewriting one span) is withheld WHOLE and reported
       deferred; the next --fix pass re-lints and applies it.
@@ -17848,8 +17859,10 @@ end;
 /// <param name="ATouched">Files written; 0 when refused.</param>
 /// <returns>True when the project builds with the edits applied (and they are on disk); False when refused, the
 /// reason is on stderr and nothing is changed.</returns>
-/// <remarks>Used only when --apply AND --project are given. Without --project the verb writes as it always did, with
-/// no build: the gate is opt-in because a verb that never needed a project must keep working without one.</remarks>
+/// <remarks>Used only when --apply AND --project are given (lint --fix: by default when --project names an existing
+/// .dproj, unless --no-compile-gate). Without --project the verb writes as it always did, with no build: a verb that
+/// never needed a project must keep working without one. Writes GateMessageReport to stderr (P14): the error, warning
+/// and hint counts of build 1 and build 2, every error line, and the warnings and hints build 2 added.</remarks>
 function ApplyEditsGated(const AEdits: TArray<TTextEdit>; const AVerb: string; const AArgs: TArgs; out ATouched: Integer): Boolean;
 begin
   ATouched:= 0;
@@ -17896,6 +17909,8 @@ begin
   Req.Header  := Format('[%s] %s --apply: %d edit(s)', [FormatDateTime('yyyy-mm-dd hh:nn:ss', Now), AVerb, Length(AEdits)]);
   Req.LogDir  := FreshScratchName('_build');
   var Gate:= ApplyGated(Req);
+  { P14: the counts of both builds, every error, and the warnings / hints the write added }
+  for var Line in GateMessageReport(Gate) do Writeln(ErrOutput, Line);
   try
     if not GScratchCited and TDirectory.Exists(Req.LogDir) then TDirectory.Delete(Req.LogDir, True);  // dl:ok taint-path-traversal@c08a -- LogDir is FreshScratchName's: a folder this run made under C:\TEMP
   except

@@ -548,7 +548,7 @@ begin
   Writeln('       see wiki page: lazy-init');
   Writeln('  drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>]');
   Writeln('       see wiki page: Copy-Diagnostics-Current-File');
-  Writeln('  drag-lint lint --in <f.pas> --db <db> --fix --apply --project <X.dproj> --compile-gate [--fix-line <L> --fix-rule <id>] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]');
+  Writeln('  drag-lint lint --in <f.pas> --db <db> --fix --apply --project <X.dproj> [--compile-gate | --no-compile-gate] [--fix-line <L> --fix-rule <id>] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]');
   Writeln('       see wiki page: lint-fix-compile-gate');
   Writeln('  drag-lint lint --fix --fix-rule redundant-cast --db <db> [--project <X.dproj> --apply] [--in <f.pas>] [--fix-line <L>] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--format json]');
   Writeln('       see wiki page: redundant-cast-fix');
