@@ -1,0 +1,8 @@
+{
+  "id": "missing-begin-end",
+  "category": "refactoring",
+  "severity": "hint",
+  "enabled": false,
+  "message": "The body of this if/else/for/while/with is a single statement without begin..end; bracket it so a later added statement stays inside the branch.",
+  "warn_capture": "b"
+}

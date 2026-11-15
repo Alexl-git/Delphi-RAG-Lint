@@ -46,17 +46,76 @@ type
 
 implementation
 
-{ The lane's helpers live in DRagLint.V151.STY.Support; name it in an
-  implementation uses clause here once it declares something. }
+uses
+  System.IOUtils
+  , DRagLint.V151.STY.Support
+  ;
+
+const
+  RULE_METHOD_ORDER = 'method-order';
+  RULE_PROCMSG      = 'processmessages-in-handler';
+
+{ The single-pattern rules of this lane (missing-begin-end, redundant-begin-end, prefer-case,
+  string-if-chain, setlength-in-loop, missing-begin-update, boolean-assign-if, loop-off-by-one and the
+  loop form of processmessages-in-loop) are rules\<id>.scm files and need no registration here. }
 
 class procedure TV151STYRules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
-  { no rules yet }
+  ADecls.Add(V151Rule(RULE_METHOD_ORDER, 'structure', 'hint',
+    'Method bodies are not in the order of the class declaration', False));
+  { companion of the scm rule processmessages-in-loop: the same call directly in an event handler (OFF: arguable) }
+  ADecls.Add(V151Rule(RULE_PROCMSG, 'bug-patterns', 'info',
+    'Application.ProcessMessages directly in an event handler', False));
 end;
 
 class function TV151STYRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+var
+  Masked : string;
+  Hit    : TStyOrderHit;
+  Line   : Integer;
+  F      : TLintFinding;
+  Res    : TList<TLintFinding>;
 begin
   Result:= nil;
+  if not (ACtx.Wants(RULE_METHOD_ORDER) or ACtx.Wants(RULE_PROCMSG)) then Exit;
+  if (ACtx.Path = '') or not TFile.Exists(ACtx.Path) then Exit;
+  Masked:= StyMaskSource(TFile.ReadAllText(ACtx.Path));
+  Res:= TList<TLintFinding>.Create;
+  try
+    if ACtx.Wants(RULE_METHOD_ORDER) then
+      for Hit in StyFindMethodOrder(Masked) do
+      begin
+        F:= Default(TLintFinding);
+        F.RuleId   := RULE_METHOD_ORDER;
+        F.FilePath := ACtx.Path;
+        F.StartLine:= Hit.Line;
+        F.StartCol := 1;
+        F.EndLine  := Hit.Line;
+        F.EndCol   := 1;
+        F.Severity := 'hint';
+        F.Message  := 'Body of ' + Hit.TypeName + '.' + Hit.MethodName
+          + ' is out of order: method bodies should follow the order of the class declaration.';
+        Res.Add(F);
+      end;
+    if ACtx.Wants(RULE_PROCMSG) then
+      for Line in StyFindHandlerProcessMessages(Masked) do
+      begin
+        F:= Default(TLintFinding);
+        F.RuleId   := RULE_PROCMSG;
+        F.FilePath := ACtx.Path;
+        F.StartLine:= Line;
+        F.StartCol := 1;
+        F.EndLine  := Line;
+        F.EndCol   := 1;
+        F.Severity := 'warning';
+        F.Message  := 'Application.ProcessMessages inside an event handler lets the handler (or the form) be re-entered; '
+          + 'move the long work to a thread or a timer.';
+        Res.Add(F);
+      end;
+    Result:= Res.ToArray;
+  finally
+    Res.Free;
+  end;
 end;
 
 class function TV151STYRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;

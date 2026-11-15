@@ -1,0 +1,11 @@
+{
+  "id": "boolean-assign-if",
+  "category": "refactoring",
+  "severity": "info",
+  "message": "if/else only assigns True and False to the same variable; assign the condition directly (V := Cond, or V := not Cond).",
+  "warn_capture": "warn",
+  "fix": [
+    { "when_capture": "c1", "replace": "{t1} := {c1};" },
+    { "when_capture": "c2", "replace": "{t3} := not ({c2});" }
+  ]
+}
