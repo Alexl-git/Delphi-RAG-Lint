@@ -59,7 +59,10 @@ function CollectFinalizationAfterDependency(const AStore: ISymbolStore): TArray<
 /// and that every process using the unit pays for at start.</summary>
 /// <param name="AStore">The project index; nil yields no findings.</param>
 /// <param name="ALibraryStore">The platform library index, or nil. A call the project index leaves unresolved is
-/// followed into the library when exactly one library routine of that name lives in a unit the calling file uses.</param>
+/// followed into the library routine the index bound it to (refs.external_target, e.g. a method called on a
+/// variable) when exactly one library symbol has that qualified name; otherwise when exactly one library routine of
+/// that name lives in a unit the calling file uses. A bound target, or a visited library routine, whose qualified
+/// name has a heavy TYPE segment (TRegistry, TIniFile, THTTPClient ...) shows that category by itself.</param>
 /// <returns>One 'heavy-initialization' hint per section, anchored at the call or reference that starts
 /// the first path; the message names each category and a routine that shows it.</returns>
 /// <remarks>Not thread-safe. Evidence is positive only: the section's refs and the reached routines'
@@ -946,6 +949,22 @@ begin
     else '';
 end;
 
+{ What a qualified name shows by its owner: a dotted segment that is a heavy TYPE ('HiLibStore.TRegistry.OpenKey'
+  is registry). '' for nothing. Member and bare names are not matched here: only HeavyCategoryOfRef judges those. }
+function HeavyCategoryOfQName(const AQName: string): string;
+begin
+  Result:= '';
+  for var Seg in AQName.Split(['.']) do
+  begin
+    Result:=
+      if MatchText(Seg, HEAVY_TYPES_FILE) then CATEGORY_FILE
+      else if MatchText(Seg, HEAVY_TYPES_REGISTRY) then CATEGORY_REGISTRY
+      else if MatchText(Seg, HEAVY_TYPES_NETWORK) then CATEGORY_NETWORK
+      else '';
+    if Result <> '' then Exit;
+  end;
+end;
+
 { The heavy categories a LIBRARY routine reaches (its own refs, its facts, its certain call edges, depth-bounded):
   category -> the qualified name of the library routine that shows it. Memoised per library symbol. }
 procedure LibraryHeavy(const ALib: ISymbolStore; ARootId: Int64; AWitness: TDictionary<string, string>;
@@ -994,6 +1013,8 @@ begin
       Inc(Head);
       var Sym: TSymbol:= ALib.GetSymbolById(Cur.Key);
       if Sym.Id = 0 then Continue;
+      var OwnCategory: string:= HeavyCategoryOfQName(Sym.QualifiedName);
+      if OwnCategory <> '' then Note(OwnCategory, Sym.QualifiedName);
       for var R in RefsOfLib(Sym) do
       begin
         var Category: string:= HeavyCategoryOfRef(R);
@@ -1027,11 +1048,36 @@ var
   LibMemo   : TObjectDictionary<Int64, TDictionary<string, string>>;
   LibRefs   : TObjectDictionary<Int64, TList<TReference>>;
   LibTarget : TDictionary<string, Int64>;
+  Bound     : TDictionary<Int64, string>;
 
   { The one library routine an unresolved call names: same name, in a unit the calling file uses, and (with a
     receiver) the same type or unit. 0 when none or when the name is ambiguous. }
-  function LibraryTarget(const ACaller: TSymbol; const AReference: TReference): Int64;
+  function LibraryTarget(const ACaller: TSymbol; const AReference: TReference; const ABound: string): Int64;
   begin
+    if ABound <> '' then
+    begin
+      { The index bound the call (refs.external_target): take the ONE library symbol of exactly that name. }
+      var BoundKey: string:= 'T|' + LowerCase(ABound);
+      if LibTarget.TryGetValue(BoundKey, Result) then
+      begin
+        if Result <> 0 then Exit;
+      end
+      else
+      begin
+        Result:= 0;
+        var BoundHits: Integer:= 0;
+        var Dot: Integer:= LastDelimiter('.', ABound);
+        for var S in ALibraryStore.FindSymbolsByExactName(Copy(ABound, Dot + 1, MaxInt)) do
+          if SameText(S.QualifiedName, ABound) then
+          begin
+            Inc(BoundHits);
+            Result:= S.Id;
+          end;
+        if BoundHits <> 1 then Result:= 0;
+        LibTarget.Add(BoundKey, Result);
+        if Result <> 0 then Exit;
+      end;
+    end;
     var Key: string:= Format('%d|%s|%s', [ACaller.FileId, LowerCase(AReference.ReceiverText), LowerCase(AReference.NameText)]);
     if LibTarget.TryGetValue(Key, Result) then Exit;
     Result:= 0;
@@ -1049,9 +1095,10 @@ var
     LibTarget.Add(Key, Result);
   end;
 
-  procedure NoteLibrary(const ACaller: TSymbol; const AReference: TReference; const AAt: TReference);
+  procedure NoteLibrary(const ACaller: TSymbol; const AReference: TReference; const ABound: string;
+    const AAt: TReference);
   begin
-    var Target: Int64:= LibraryTarget(ACaller, AReference);
+    var Target: Int64:= LibraryTarget(ACaller, AReference, ABound);
     if Target = 0 then Exit;
     var Found: TDictionary<string, string>;
     if not LibMemo.TryGetValue(Target, Found) then
@@ -1068,11 +1115,24 @@ var
       end;
   end;
 
-  procedure Note(const ACategory: string; const AVia: TSymbol; const AAt: TReference);
+  procedure NoteVia(const ACategory, AVia: string; const AAt: TReference);
   begin
     if Witness.ContainsKey(ACategory) then Exit;
-    Witness.Add(ACategory, AVia.QualifiedName);
+    Witness.Add(ACategory, AVia);
     if Anchor.StartLine = 0 then Anchor:= AAt;
+  end;
+
+  procedure Note(const ACategory: string; const AVia: TSymbol; const AAt: TReference);
+  begin
+    NoteVia(ACategory, AVia.QualifiedName, AAt);
+  end;
+
+  { refs.id -> refs.external_target of the routine-bound calls ASymbolId makes that have no call edge. }
+  procedure LoadBound(ASymbolId: Int64);
+  begin
+    Bound.Clear;
+    for var B in AStore.GetUnresolvedCallsFromSymbol(ASymbolId) do
+      if (B.ExternalTarget <> '') and (B.ExternalKind = '') then Bound.AddOrSetValue(B.Id, B.ExternalTarget);
   end;
 
 begin
@@ -1084,6 +1144,7 @@ begin
   LibMemo:= TObjectDictionary<Int64, TDictionary<string, string>>.Create([doOwnsValues]);
   LibRefs:= TObjectDictionary<Int64, TList<TReference>>.Create([doOwnsValues]);
   LibTarget:= TDictionary<string, Int64>.Create;
+  Bound:= TDictionary<Int64, string>.Create;
   try
     for var Pair in Graph.Units do
     begin
@@ -1093,13 +1154,21 @@ begin
       var IsSection: Boolean:= True;
       for var Item in Graph.Reach(Pair.Value.InitId) do
       begin
+        if ALibraryStore <> nil then LoadBound(Item.Key.Id);
         for var R in Graph.RefsOf(Item.Key) do
         begin
           var Category: string:= HeavyCategoryOfRef(R);
           if Category = '' then
           begin
             if (ALibraryStore <> nil) and ((R.Kind = REF_CALL) or (R.Kind = REF_MEMBER)) and not Graph.HasEdge(Item.Key.Id, R.Id) then
-              NoteLibrary(Item.Key, R, if IsSection then R else Item.Value);
+            begin
+              var Target: string;
+              if not Bound.TryGetValue(R.Id, Target) then Target:= '';
+              var At: TReference:= if IsSection then R else Item.Value;
+              var TargetCategory: string:= HeavyCategoryOfQName(Target);
+              if TargetCategory <> '' then NoteVia(TargetCategory, Target, At);
+              NoteLibrary(Item.Key, R, Target, At);
+            end;
             Continue;
           end;
           if IsSection then Note(Category, Item.Key, R) else Note(Category, Item.Key, Item.Value);
@@ -1140,6 +1209,7 @@ begin
     end;
     Result:= Findings.ToArray;
   finally
+    Bound.Free;
     LibTarget.Free;
     LibRefs.Free;
     LibMemo.Free;
