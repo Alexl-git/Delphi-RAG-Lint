@@ -1009,7 +1009,7 @@ begin
 end;
 
 // '' when the class's IInterface never counts references (pWhy says why); else the refusal's kind, pWhy its reason.
-function TIfacePlanner.LifetimeVerdict(out pWhy: string): string;  // dl:ok too-many-exit-points -- one exit per verdict, met in chain order: the exits are the contract
+function TIfacePlanner.LifetimeVerdict(out pWhy: string): string;  // dl:ok too-many-exit-points@5dcd -- REVIEWED 2026-11-14: one exit per verdict, met in chain order: the exits are the contract
 begin
   var Row:= FClass;
   var Conn:= FConn;
@@ -1225,7 +1225,7 @@ begin
   end;
 end;
 
-procedure TIfacePlanner.PlanRetype(out pError: string);  // dl:ok too-many-exit-points -- one guard per named refusal, in the documented order: the exits are the contract
+procedure TIfacePlanner.PlanRetype(out pError: string);  // dl:ok too-many-exit-points@925f, cyclomatic-complexity@197d -- REVIEWED 2026-11-14: one guard per named refusal, in the documented order: the exits are the contract
 begin
   pError:= '';
   FPlan.Retype:= True;
@@ -1251,6 +1251,7 @@ begin
   var REndCol:= 0;
   var RImplStart:= 0;
   var RImplEnd:= 0;
+  var RSiblingOverload:= False;
   var Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
@@ -1262,6 +1263,15 @@ begin
     Q.Open;
     var QNameField:= Q.FieldByName('qualified_name');
     var DirField:= Q.FieldByName('d');
+    var RIdField:= Q.FieldByName('id');
+    var RVirtField:= Q.FieldByName('v');
+    var RStartLineField:= Q.FieldByName('start_line');
+    var RStartColField:= Q.FieldByName('start_col');
+    var REndLineField:= Q.FieldByName('end_line');
+    var REndColField:= Q.FieldByName('end_col');
+    var RImplStartField:= Q.FieldByName('isl');
+    var RImplEndField:= Q.FieldByName('iel');
+    var RPathField:= Q.FieldByName('path');
     while not Q.Eof do
     begin
       var QN:= QNameField.AsString;
@@ -1271,21 +1281,22 @@ begin
         if Length(QNames) = 1 then
         begin
           { the first match; with more than one the run refuses (overloaded) or fails (ambiguous) below }
-          RId:= Q.Fields[0].AsLargeInt;
+          RId:= RIdField.AsLargeInt;
           RDir:= DirField.AsString;
-          RVirt:= Q.Fields[3].AsInteger <> 0;
-          RStartLine:= Q.Fields[4].AsInteger;
-          RStartCol:= Q.Fields[5].AsInteger;
-          REndLine:= Q.Fields[6].AsInteger;
-          REndCol:= Q.Fields[7].AsInteger;
-          RImplStart:= Q.Fields[8].AsInteger;
-          RImplEnd:= Q.Fields[9].AsInteger;
-          RPath:= Q.Fields[10].AsString;
+          RVirt:= RVirtField.AsInteger <> 0;
+          RStartLine:= RStartLineField.AsInteger;
+          RStartCol:= RStartColField.AsInteger;
+          REndLine:= REndLineField.AsInteger;
+          REndCol:= REndColField.AsInteger;
+          RImplStart:= RImplStartField.AsInteger;
+          RImplEnd:= RImplEndField.AsInteger;
+          RPath:= RPathField.AsString;
         end
-        else if ContainsText(DirField.AsString, 'overload') then RDir:= RDir + ' overload';
+        else if ContainsText(DirField.AsString, 'overload') then RSiblingOverload:= True;
       end;
       Q.Next;
     end;
+    if RSiblingOverload then RDir:= RDir + ' overload';
     if Length(QNames) = 0 then
     begin
       pError:= Format('%s: the index has no routine %s', [CVerb, RoutineRef]);
