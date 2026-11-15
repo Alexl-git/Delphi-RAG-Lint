@@ -96,4 +96,4 @@ try {
 } finally {
   if (Test-Path $scratch) { [System.IO.Directory]::Delete($scratch, $true) }
 }
-if ($script:fail) { Write-Host 'FAIL'; exit 1 } else { Write-Host 'PASS'; exit 0 }
+if ($script:fail) { Write-Host 'FAIL'; exit 1 } else { Write-Host 'PASS'; exit 0 }

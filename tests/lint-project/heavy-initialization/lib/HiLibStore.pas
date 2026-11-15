@@ -7,11 +7,6 @@ unit HiLibStore;
 interface
 
 type
-  THiLibStore = class
-  public
-    procedure Load;
-  end;
-
   { Stands in for a heavy RTL type: a member of a type with this name counts as registry work
     by the name of its owner, whatever its body holds. }
   TRegistry = class
@@ -19,8 +14,13 @@ type
     procedure OpenKey;
   end;
 
-{ The shared registry object: a project reaches TRegistry.OpenKey without naming the type. }
-function HiLibReg: TRegistry;
+  THiLibStore = class
+  public
+    { The store's registry object: a project reaches TRegistry.OpenKey through it (Store.Reg.OpenKey)
+      without naming the type; only the binding says Reg is a TRegistry. }
+    Reg: TRegistry;
+    procedure Load;
+  end;
 
 implementation
 
@@ -34,11 +34,6 @@ end;
 
 procedure TRegistry.OpenKey;
 begin
-end;
-
-function HiLibReg: TRegistry;
-begin
-  Result:= nil;
 end;
 
 end.
