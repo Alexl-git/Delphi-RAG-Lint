@@ -375,6 +375,7 @@ type
     procedure ScanDfmNames(const pPath, pText: string);
     procedure ScanDfmComponent(const pPath, pText: string; pInstances: TStringList);
     function OwnerInstances: TStringList;
+    procedure RefuseUnbound(const pPath: string; pLine, pAt: Integer; pInInline, pRootKnown: Boolean);
     procedure CheckNameInStrings;
     procedure CheckDfmNames;
   public
@@ -1859,6 +1860,21 @@ begin
   end;
 end;
 
+{ Refuses one undecided dfm-name-unbound occurrence, with the message that says WHY it is undecided (frame, unindexed root, other). }
+procedure TProver.RefuseUnbound(const pPath: string; pLine, pAt: Integer; pInInline, pRootKnown: Boolean);
+begin
+  if pInInline then
+    Refuse(CRefuseDfmNameUnbound, pPath, pLine, pAt,
+      Format('this form names "%s" inside an embedded frame (`inline`): a host form''s override of a frame''s ' +
+        'component is not proved; rename it by hand in the frame and in every host form', [FOld]))
+  else if not pRootKnown then
+    Refuse(CRefuseDfmNameUnbound, pPath, pLine, pAt,
+      Format('this form names "%s" and its root class is not in the index, so nothing tells whose component it ' +
+        'is: index the form''s unit, or fix it by hand', [FOld]))
+  else
+    Refuse(CRefuseDfmNameUnbound, pPath, pLine, pAt,
+      Format('this form names "%s" where nothing tells which component it means: fix it by hand', [FOld]));
+end;
 procedure TProver.ScanFile(pFileId: Int64; const pPath: string);
 var
   Text: string;
@@ -2053,17 +2069,7 @@ var
       Undecided:= pInstances.IndexOf(Copy(Value, 1, Length(Value) - Length(FOld) - 1)) < 0;
       IsEdit:= not Undecided;
     end;
-    if Undecided and InInline then
-      Refuse(CRefuseDfmNameUnbound, pPath, pLine, pAt,
-        Format('this form names "%s" inside an embedded frame (`inline`): a host form''s override of a frame''s ' +
-          'component is not proved; rename it by hand in the frame and in every host form', [FOld]))
-    else if Undecided and not RootKnown then
-      Refuse(CRefuseDfmNameUnbound, pPath, pLine, pAt,
-        Format('this form names "%s" and its root class is not in the index, so nothing tells whose component it ' +
-          'is: index the form''s unit, or fix it by hand', [FOld]))
-    else if Undecided then
-      Refuse(CRefuseDfmNameUnbound, pPath, pLine, pAt,
-        Format('this form names "%s" where nothing tells which component it means: fix it by hand', [FOld]))
+    if Undecided then RefuseUnbound(pPath, pLine, pAt, InInline, RootKnown)
     else if IsEdit then
     begin
       AddEdit(pPath, pLine, pAt);
