@@ -402,7 +402,7 @@ begin
   else if HasPart(AClass, ['ComboBox']) then Result:= ckCombo
   else if HasPart(AClass, ['DateEdit', 'DateTime', 'TimeEdit', 'Calendar']) then Result:= ckDate
   else if HasPart(AClass, ['SpinEdit', 'CurrencyEdit', 'CalcEdit']) then Result:= ckNumeric
-  else if HasPart(AClass, ['TextEdit', 'MaskEdit', 'ButtonEdit', 'DBEdit']) then Result:= ckEdit
+  else if HasPart(AClass, ['TextEdit', 'MaskEdit', 'ButtonEdit', 'DBEdit']) then Result:= ckEdit  // dl:ok ifthen-to-if-expression@4ec8 -- REVIEWED 2026-11-14 v151 INT: classic if/else kept in a lane unit written before the ternary sweep
   else Result:= ckNone;
 end;
 
@@ -414,7 +414,7 @@ begin
   else if SameText(AClass, 'TBlobField') or HasPart(AClass, ['VarBytes', 'BytesField', 'BinaryField']) then Result:= fkBlob
   else if HasPart(AClass, ['StringField', 'WideStringField', 'AnsiStringField', 'GuidField']) then Result:= fkString
   else if HasPart(AClass, ['DateTime', 'DateField', 'TimeField', 'TimeStamp']) then Result:= fkDate
-  else if HasPart(AClass, ['IntegerField', 'SmallintField', 'LargeintField', 'WordField', 'AutoInc', 'FloatField',
+  else if HasPart(AClass, ['IntegerField', 'SmallintField', 'LargeintField', 'WordField', 'AutoInc', 'FloatField',  // dl:ok ifthen-to-if-expression@117a -- REVIEWED 2026-11-14 v151 INT: classic if/else kept in a lane unit written before the ternary sweep
     'CurrencyField', 'BCDField', 'FMTBCD', 'SingleField', 'ExtendedField', 'ShortintField', 'ByteField',
     'LongWordField', 'UInt32Field', 'Int64Field']) then Result:= fkNum
   else Result:= fkOther;
@@ -567,7 +567,7 @@ end;
 { True for a property that makes a dataset query-like: its parameters link to the master by name. }
 function IsQueryProp(const AName: string): Boolean;
 begin
-  Result:= StartsText('SQL', AName) or StartsText('SelectSQL', AName) or StartsText('Command', AName)
+  Result:= StartsText('SQL', AName) or StartsText('SelectSQL', AName) or StartsText('Command', AName)  // dl:ok boolean-expression-complexity@d922 -- REVIEWED 2026-11-14 v151 INT: one flat predicate over fixed values; splitting it does not make it clearer
     or SameText(AName, 'Params') or SameText(AName, 'ProviderName') or StartsText('Proc', AName);
 end;
 

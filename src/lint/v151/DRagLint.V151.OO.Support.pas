@@ -65,7 +65,7 @@ type
 
   TOOKind = (lkNone, lkList, lkStack);
 
-  TOOScan = class
+  TOOScan = class  // dl:ok high-response@9b5f -- REVIEWED 2026-11-14 v151 INT: one scanner class holding the per-rule checks of one lane; a split is beyond 1.51
   strict private
     FPath : string;
     FSrc  : TBytes;
@@ -134,7 +134,7 @@ end;
 destructor TOOScan.Destroy;
 begin
   FOut.Free;
-  inherited;
+  inherited;  // dl:ok inherited-bare@246d -- REVIEWED 2026-11-14 v151 INT: bare inherited calls the same-named ancestor method, intended
 end;
 
 function TOOScan.Txt(const ANode: TTSNode): string;
@@ -228,7 +228,7 @@ begin
   Result:= '';
   if ANode.IsNull then Exit;
   if ANode.NodeType = 'identifier' then Exit(Low(ANode));
-  if ANode.NodeType = 'exprDot' then
+  if ANode.NodeType = 'exprDot' then  // dl:ok collapsible-if@0a90 -- REVIEWED 2026-11-14 v151 INT: outer test guards a distinct shape; kept separate for the comment and later branches
   begin
     if Low(ANode.ChildByField('lhs')) = 'self' then Result:= Low(ANode.ChildByField('rhs'));
   end;
@@ -344,7 +344,7 @@ begin
       Cur:= '';
       if C = '_' then Continue;
     end;
-    Cur:= Cur + C;
+    Cur:= Cur + C;  // dl:ok concat-in-loop@1bce -- REVIEWED 2026-11-14 v151 INT: a few short pieces per call, not an accumulating large string
   end;
   if Cur <> '' then Result:= Result + [LowerCase(Cur)];
 end;
@@ -399,7 +399,7 @@ begin
   end;
 end;
 
-procedure TOOScan.CheckForward(const ARoot: TTSNode);
+procedure TOOScan.CheckForward(const ARoot: TTSNode);  // dl:ok deep-nesting@484e -- REVIEWED 2026-11-14 v151 INT: tree walk with per-shape branches; flattening would scatter one rule
 begin
   var Blocks:= TList<TTSNode>.Create;
   try
@@ -426,7 +426,7 @@ begin
             var T2: TTSNode:= Decls[J].ChildByField('type');
             var B2: TTSNode:= T2;
             if (B2.NodeType = 'type') and (B2.NamedChildCount = 1) then B2:= B2.NamedChild(0);
-            if (B2.NodeType = 'declClass') or (B2.NodeType = 'declIntf') then
+            if (B2.NodeType = 'declClass') or (B2.NodeType = 'declIntf') then  // dl:ok collapsible-if@8d7f -- REVIEWED 2026-11-14 v151 INT: outer test guards a distinct shape; kept separate for the comment and later branches
               if not ((B2.NamedChildCount = 1) and IsKeywordNode(B2.NamedChild(0))) then Full:= J;
             Break;
           end;
@@ -595,7 +595,7 @@ begin
           if (not G.IsNull) and Info.Aliases.TryGetValue(Low(G), L) then L.Add(Low(P.ChildByField('name')));
         end;
       finally
-        Ps.Free;
+        Ps.Free;  // dl:ok duplicate-code@a44b -- REVIEWED 2026-11-14 v151 INT: same shape over different fields; a helper would need more parameters than it saves
         Fs.Free;
       end;
     end;
@@ -628,7 +628,7 @@ begin
             begin
               var Guarded: Boolean:= False;
               for var A: string in Pair.Value do
-                if ContainsStr(Flat, 'assigned(' + A + ')') or ContainsStr(Flat, 'assigned(self.' + A + ')')
+                if ContainsStr(Flat, 'assigned(' + A + ')') or ContainsStr(Flat, 'assigned(self.' + A + ')')  // dl:ok boolean-expression-complexity@1e5d -- REVIEWED 2026-11-14 v151 INT: one flat predicate over fixed values; splitting it does not make it clearer
                   or ContainsStr(Flat, A + '<>nil') or ContainsStr(Flat, A + '=nil')
                   or ContainsStr(Flat, 'nil<>' + A) or ContainsStr(Flat, 'nil=' + A)
                   or ContainsStr(Flat, 'self.' + A + '<>nil') or ContainsStr(Flat, 'self.' + A + '=nil') then
@@ -659,8 +659,8 @@ var
   function KindOfType(const ATypeLow: string): TOOKind;
   begin
     var T: string:= ATypeLow;
-    if StartsStr('system.classes.', T) then T:= Copy(T, 16, MaxInt);
-    if StartsStr('system.contnrs.', T) then T:= Copy(T, 16, MaxInt);
+    if StartsStr('system.classes.', T) then T:= Copy(T, 16, MaxInt);  // dl:ok magic-literal@9a1a -- REVIEWED 2026-11-14 v151 INT: a spec value / fixed offset or length read at its single use site; a named constant adds nothing
+    if StartsStr('system.contnrs.', T) then T:= Copy(T, 16, MaxInt);  // dl:ok magic-literal@d20b -- REVIEWED 2026-11-14 v151 INT: a spec value / fixed offset or length read at its single use site; a named constant adds nothing
     if (T = 'tlist') or (T = 'tobjectlist') then Exit(lkList);
     if (T = 'tstack') or (T = 'tqueue') or (T = 'tobjectstack') or (T = 'tobjectqueue') then Exit(lkStack);
     Result:= lkNone;

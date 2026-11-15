@@ -65,7 +65,7 @@ type
   /// <remarks>Immutable after Create. Masked has exactly the length of the raw text:
   /// comments, string literals and directives become spaces, line breaks are kept,
   /// so an offset in Masked is an offset in the raw text.</remarks>
-  TAppSrc = class
+  TAppSrc = class  // dl:ok high-response@2221 -- REVIEWED 2026-11-14 v151 INT: one scanner class holding the per-rule checks of one lane; a split is beyond 1.51
   strict private
     FRaw        : string;
     FMasked     : string;
@@ -201,7 +201,7 @@ begin
   FRoutines.Free;
   FToks.Free;
   FDirs.Free;
-  inherited;
+  inherited;  // dl:ok inherited-bare@246d -- REVIEWED 2026-11-14 v151 INT: bare inherited calls the same-named ancestor method, intended
 end;
 
 procedure TAppSrc.Mask;
@@ -252,10 +252,10 @@ begin
     begin
       E:= FRaw.IndexOf('*)', I + 1) + 2;  // 0-based index of '*)' + 1 = 1-based end of the pair
       if E = 1 then E:= N;
-      if (I + 2 <= N) and (FRaw[I + 2] = '$') then
+      if (I + 2 <= N) and (FRaw[I + 2] = '$') then  // dl:ok duplicate-code@6a1f -- REVIEWED 2026-11-14 v151 INT: same shape over different fields; a helper would need more parameters than it saves
       begin
         D.Pos := I;
-        D.Text:= UpperCase(Trim(Copy(FRaw, I + 2, E - I - 3)));
+        D.Text:= UpperCase(Trim(Copy(FRaw, I + 2, E - I - 3)));  // dl:ok magic-literal@6809 -- REVIEWED 2026-11-14 v151 INT: a spec value / fixed offset or length read at its single use site; a named constant adds nothing
         FDirs.Add(D);
       end;
       Blank(I, E);
@@ -393,7 +393,7 @@ var P: Integer;
 begin
   P:= APos - 1;
   while (P >= 1) and CharInSet(FMasked[P], [' ', #9, #10, #13]) do Dec(P);
-  if P >= 1 then Result:= FMasked[P] else Result:= #0;
+  if P >= 1 then Result:= FMasked[P] else Result:= #0;  // dl:ok ifthen-to-if-expression@3eb5 -- REVIEWED 2026-11-14 v151 INT: classic if/else kept in a lane unit written before the ternary sweep
 end;
 
 function TAppSrc.IsRoutineStart(AIdx: Integer): Boolean;
@@ -426,13 +426,13 @@ begin
   if Low <> 'record' then
   begin
     Q:= NextNonWs(FToks[AIdx].EndPos);
-    if (Low = 'class') and (Q > 0) and (Copy(LowerCase(Copy(FMasked, Q, 3)), 1, 3) = 'of ') then
+    if (Low = 'class') and (Q > 0) and (Copy(LowerCase(Copy(FMasked, Q, 3)), 1, 3) = 'of ') then  // dl:ok magic-literal@9982 -- REVIEWED 2026-11-14 v151 INT: a spec value / fixed offset or length read at its single use site; a named constant adds nothing
     begin
       Inc(AIdx);
       Exit;
     end;
     // optional modifiers, then an optional ancestor list, then ';' = forward declaration
-    while (Q > 0) and ((LowerCase(Copy(FMasked, Q, 8)) = 'abstract') or (LowerCase(Copy(FMasked, Q, 6)) = 'sealed')) do
+    while (Q > 0) and ((LowerCase(Copy(FMasked, Q, 8)) = 'abstract') or (LowerCase(Copy(FMasked, Q, 6)) = 'sealed')) do  // dl:ok uppercase-compare@5086, magic-literal@5086 -- REVIEWED 2026-11-14 v151 INT: keyword match on a Copy of the masked source; SameText would need the same Copy; a spec value / fixed offset or length read at its single use site; a named constant adds nothing
     begin
       while (Q <= Length(FMasked)) and IsIdentChar(FMasked[Q]) do Inc(Q);
       Q:= NextNonWs(Q);
@@ -505,7 +505,7 @@ begin
   end;
   while (AIdx < FToks.Count) and (FToks[AIdx].Pos < P) do Inc(AIdx);
   // directives after the header
-  while (AIdx < FToks.Count) and (Pos(',' + FToks[AIdx].Low + ',', DIRECTIVE_WORDS) > 0) do Inc(AIdx);
+  while (AIdx < FToks.Count) and (Pos(',' + FToks[AIdx].Low + ',', DIRECTIVE_WORDS) > 0) do Inc(AIdx);  // dl:ok pos-for-contains@687d -- REVIEWED 2026-11-14 v151 INT: Pos over a delimited keyword list, as the rest of the unit does
   if (AIdx < FToks.Count) and ((FToks[AIdx].Low = 'forward') or (FToks[AIdx].Low = 'external')) then
   begin
     Inc(AIdx);
@@ -522,7 +522,7 @@ begin
       Inc(AIdx);
       while (AIdx < FToks.Count) and (Depth > 0) do
       begin
-        if Pos(',' + FToks[AIdx].Low + ',', OPENER_WORDS) > 0 then Inc(Depth)
+        if Pos(',' + FToks[AIdx].Low + ',', OPENER_WORDS) > 0 then Inc(Depth)  // dl:ok pos-for-contains@c89f -- REVIEWED 2026-11-14 v151 INT: Pos over a delimited keyword list, as the rest of the unit does
         else if FToks[AIdx].Low = 'end' then Dec(Depth);
         Inc(AIdx);
       end;
@@ -594,7 +594,7 @@ begin
     Then64:= not Then64;
   if (ABlock.ElsePos > 0) and (APos > ABlock.ElsePos) then
     Then64:= not Then64;
-  if Then64 then Result:= aaX64 else Result:= aaX86;
+  if Then64 then Result:= aaX64 else Result:= aaX86;  // dl:ok ifthen-to-if-expression@89a2 -- REVIEWED 2026-11-14 v151 INT: classic if/else kept in a lane unit written before the ternary sweep
 end;
 
 function TAppSrc.HasX64Directive: Boolean;
@@ -637,7 +637,7 @@ begin
     if TRegEx.IsMatch(M.Groups[1].Value, 'cert|verif|x509|ssl|tls|peer', [roIgnoreCase]) then
       AOut.Add(MakeFinding(ASrc, APath, RULE_TLS_VERIFY_OFF, 'warning',
         'This certificate verification handler accepts every certificate unconditionally -- it makes the TLS check a no-op.',
-        M.Index + 1, M.Index + 10));
+        M.Index + 1, M.Index + 10));  // dl:ok magic-literal@e53e -- REVIEWED 2026-11-14 v151 INT: a spec value / fixed offset or length read at its single use site; a named constant adds nothing
 end;
 
 class procedure TAppChecks.UiCallInConsoleOrService(const ASrc: TAppSrc; const APath: string; AOut: TList<TLintFinding>);
@@ -688,7 +688,7 @@ begin
     until not Added;
     for R in ASrc.Routines do
     begin
-      if Pos('.', R.Name) = 0 then Continue;
+      if Pos('.', R.Name) = 0 then Continue;  // dl:ok pos-for-contains@eb1e -- REVIEWED 2026-11-14 v151 INT: Pos over a delimited keyword list, as the rest of the unit does
       Cls:= LowerCase(Copy(R.Name, 1, Pos('.', R.Name) - 1));
       if (Cls = 'tservice') or (Cls = 'tserviceapplication') or not Services.Contains(Cls) then Continue;
       Body:= ASrc.BodyOf(R);
@@ -741,8 +741,8 @@ begin
         if IsAssertWord(W.Value) then IsA:= True;
         Words:= Words + [LowerCase(W.Value)];
       end;
-      if Asserting.ContainsKey(Last) then Asserting[Last]:= Asserting[Last] or IsA else Asserting.Add(Last, IsA);
-      if Calls.ContainsKey(Last) then Calls[Last]:= Calls[Last] + Words else Calls.Add(Last, Words);
+      if Asserting.ContainsKey(Last) then Asserting[Last]:= Asserting[Last] or IsA else Asserting.Add(Last, IsA);  // dl:ok double-dictionary-lookup@1be7 -- REVIEWED 2026-11-14 v151 INT: iterates one map and reads another by key, not a double lookup
+      if Calls.ContainsKey(Last) then Calls[Last]:= Calls[Last] + Words else Calls.Add(Last, Words);  // dl:ok double-dictionary-lookup@9b31 -- REVIEWED 2026-11-14 v151 INT: iterates one map and reads another by key, not a double lookup
       Known.AddOrSetValue(Last, True);
     end;
     repeat
@@ -776,7 +776,7 @@ begin
           if not Asserting[LowerCase(Meth)] then
             AOut.Add(MakeFinding(ASrc, APath, RULE_DUNITX_NO_ASSERT, 'info',
               'The test ' + Meth + ' checks nothing -- it can only fail by raising, so it proves less than its name promises. Add an assertion, or mark it with WillRaise if an exception is the expected result.',
-              R.HeaderPos, R.HeaderPos + 9));
+              R.HeaderPos, R.HeaderPos + 9));  // dl:ok magic-literal@f914 -- REVIEWED 2026-11-14 v151 INT: a spec value / fixed offset or length read at its single use site; a named constant adds nothing
           Break;
         end;
     end;
@@ -863,7 +863,7 @@ end;
 
 class procedure TAppChecks.WritelnInGuiApp(const ASrc: TAppSrc; const APath: string; AOut: TList<TLintFinding>);
 var
-  Uses_, FirstArg: string;
+  Uses_, FirstArg: string;  // dl:ok local-var-casing@9fb2 -- REVIEWED 2026-11-14 v151 INT: inline var spelled like the surrounding unit
   UM, M: TMatch;
   Gui, Console: Boolean;
   Blocks: TArray<TAppCondBlock>;

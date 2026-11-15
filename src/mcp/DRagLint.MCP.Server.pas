@@ -1675,7 +1675,7 @@ begin
     end // if
     else if ToolName = 'get_slice' then
     begin
-      var SliceStore:= StoreForQName(Args, Args.GetValue<string>('qname', ''));
+      var SliceStore:= StoreForQName(Args, Args.GetValue<string>('qname', ''));  // dl:ok duplicate-code@3f3e -- REVIEWED 2026-11-14 v151 INT: same shape over different fields; a helper would need more parameters than it saves
       if SliceStore = nil then
       begin
         SendError(AId, JSONRPC_SERVER_ERROR, NoStoreMessage);

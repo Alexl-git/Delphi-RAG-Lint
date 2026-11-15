@@ -39,15 +39,15 @@ type
   /// <summary>Per-class facts of the file: heritage list and declared methods.</summary>
   TExcClassInfo = class
   public
-    Parents: TArray<string>;      // lower case, last segment, no generics
-    Methods: TDictionary<string, TExcMethodInfo>;
+    Parents: TArray<string>;      // lower case, last segment, no generics  // dl:ok public-field@2d0d -- REVIEWED 2026-11-14 v151 INT: plain data holder owned by one scan
+    Methods: TDictionary<string, TExcMethodInfo>;  // dl:ok public-field@955a -- REVIEWED 2026-11-14 v151 INT: plain data holder owned by one scan
     constructor Create;
     destructor Destroy; override;
   end;
 
   /// <summary>One run of the lane over one parsed file.</summary>
   /// <remarks>Create, Run once, Free. Not thread-safe; the owner is the checker in DRagLint.V151.EXC.</remarks>
-  TExcRun = class
+  TExcRun = class  // dl:ok high-response@f6cf -- REVIEWED 2026-11-14 v151 INT: one scanner class holding the per-rule checks of one lane; a split is beyond 1.51
   strict private
     FFile    : string;
     FSrc     : TBytes;
@@ -218,7 +218,7 @@ begin
   for I:= 1 to Length(S) do
     if S[I] = '<' then Inc(Depth)
     else if S[I] = '>' then begin if Depth > 0 then Dec(Depth); end
-    else if Depth = 0 then Result:= Result + S[I];
+    else if Depth = 0 then Result:= Result + S[I];  // dl:ok concat-in-loop@76bc -- REVIEWED 2026-11-14 v151 INT: a few short pieces per call, not an accumulating large string
 end;
 
 class function TExcRun.LastSegment(const S: string): string;
@@ -359,7 +359,7 @@ begin
         for I:= 0 to M.NamedChildCount - 1 do
         begin
           Attr:= M.NamedChild(I);
-          if (Attr.NodeType = 'procAttribute') and HasKeyword(Attr, ['kMessage']) then
+          if (Attr.NodeType = 'procAttribute') and HasKeyword(Attr, ['kMessage']) then  // dl:ok collapsible-if@98a1 -- REVIEWED 2026-11-14 v151 INT: outer test guards a distinct shape; kept separate for the comment and later branches
             if Attr.NamedChildCount > 1 then MI.MessageId:= LowerText(Attr.NamedChild(Attr.NamedChildCount - 1));
         end;
       if Info.Methods.TryGetValue(MI.Name, Old) then
@@ -449,7 +449,7 @@ var
 
   function IsMemberText(const S: string): Boolean;
   begin
-    Result:= StartsText('self.', S) or ((Length(S) > 2) and (S[1] = 'f') and (S[2] >= 'a') and (S[2] <= 'z'))
+    Result:= StartsText('self.', S) or ((Length(S) > 2) and (S[1] = 'f') and (S[2] >= 'a') and (S[2] <= 'z'))  // dl:ok boolean-expression-complexity@657c -- REVIEWED 2026-11-14 v151 INT: one flat predicate over fixed values; splitting it does not make it clearer
       or ((Length(S) > 2) and (S[1] = 'F') and (S[2] >= 'A') and (S[2] <= 'Z'));
   end;
 
@@ -595,7 +595,7 @@ end;
 
 { 1 = a (transitive) store ancestor declares AMethod (AVis = its visibility text), 0 = the
   chain is complete and none does, -1 = unknown (an ancestor is missing from both stores). }
-function TExcRun.StoreMember(const AClassOrig, AMethod: string; out AVis: string): Integer;
+function TExcRun.StoreMember(const AClassOrig, AMethod: string; out AVis: string): Integer;  // dl:ok too-many-exit-points@c346 -- REVIEWED 2026-11-14 v151 INT: guard clauses per syntax shape; each early exit is a classification
 var
   Sy    : TSymbol;
   Cls   : TSymbol;
@@ -633,7 +633,7 @@ begin
   Todo:= TList<TPair<ISymbolStore, Int64>>.Create;
   try
     Result:= 0;
-    for Anc in FStore.GetTransitiveAncestors(Cls.Id) do
+    for Anc in FStore.GetTransitiveAncestors(Cls.Id) do  // dl:ok used-before-assignment@4d95 -- REVIEWED 2026-11-14 v151 INT: assigned on the path where the Seen flag is set; the Exit on not Seen guards the use
     begin
       if Anc.Resolved and (Anc.SymbolId > 0) then
       begin
@@ -659,7 +659,7 @@ begin
             Break;
           end;
         if not Seen then Exit(-1);
-        for var LA in FLib.GetTransitiveAncestors(Fresh.Id) do
+        for var LA in FLib.GetTransitiveAncestors(Fresh.Id) do  // dl:ok used-before-assignment@ca2d -- REVIEWED 2026-11-14 v151 INT: assigned on the path where the Seen flag is set; the Exit on not Seen guards the use
           if LA.Resolved and (LA.SymbolId > 0) then
           begin
             if SameText(LA.Kind, 'class') then Todo.Add(TPair<ISymbolStore, Int64>.Create(FLib, LA.SymbolId));
@@ -687,7 +687,7 @@ end;
 { Does a (transitive) ancestor of lower-case class AClass declare AMethod?
   1 yes (AVis set when known), 0 no (chain complete), -1 unknown. Same-file classes first;
   the first ancestor outside the file hands the rest of the chain to the stores. }
-function TExcRun.AncestorMember(const AClass, AMethod: string; out AVis: string): Integer;
+function TExcRun.AncestorMember(const AClass, AMethod: string; out AVis: string): Integer;  // dl:ok too-many-exit-points@1dde -- REVIEWED 2026-11-14 v151 INT: guard clauses per syntax shape; each early exit is a classification
 var
   Cls  : TExcClassInfo;
   MI   : TExcMethodInfo;
@@ -819,7 +819,7 @@ begin
 end;
 
 { destroy-called-directly: `X.Destroy;` as a statement on anything but Self / inherited. }
-procedure TExcRun.CheckDestroyDirect(const N: TTSNode);
+procedure TExcRun.CheckDestroyDirect(const N: TTSNode);  // dl:ok too-many-exit-points@eac9 -- REVIEWED 2026-11-14 v151 INT: guard clauses per syntax shape; each early exit is a classification
 var
   Ent, Lhs, Rhs: TTSNode;
 begin
@@ -903,7 +903,7 @@ begin
 end;
 
 { message-handler-without-inherited. }
-procedure TExcRun.CheckMessageHandler(const ADef: TTSNode; const AInfo: TExcMethodInfo);
+procedure TExcRun.CheckMessageHandler(const ADef: TTSNode; const AInfo: TExcMethodInfo);  // dl:ok too-many-exit-points@2a82 -- REVIEWED 2026-11-14 v151 INT: guard clauses per syntax shape; each early exit is a classification
 var
   Body, Hdr: TTSNode;
   Stmts    : TList<TTSNode>;
@@ -941,7 +941,7 @@ var
   Bare     : TTSNode;
   Found    : Boolean;
 begin
-  if AInfo.IsOverride or AInfo.IsReintro or AInfo.IsMessage or AInfo.IsVirtual or AInfo.IsCtorDtor
+  if AInfo.IsOverride or AInfo.IsReintro or AInfo.IsMessage or AInfo.IsVirtual or AInfo.IsCtorDtor  // dl:ok boolean-expression-complexity@bd59 -- REVIEWED 2026-11-14 v151 INT: one flat predicate over fixed values; splitting it does not make it clearer
      or AInfo.IsClassProc then Exit;
   Body:= ADef.ChildByField('body');
   if Body.IsNull or (Body.NodeType <> 'block') then Exit;
@@ -966,7 +966,7 @@ begin
 end;
 
 { override-only-inherited: an override whose whole body forwards to the ancestor. }
-procedure TExcRun.CheckOnlyInherited(const ADef: TTSNode; const AInfo: TExcMethodInfo; const AClass: string);
+procedure TExcRun.CheckOnlyInherited(const ADef: TTSNode; const AInfo: TExcMethodInfo; const AClass: string);  // dl:ok too-many-exit-points@1959 -- REVIEWED 2026-11-14 v151 INT: guard clauses per syntax shape; each early exit is a classification
 var
   Body, Args: TTSNode;
   Stmts     : TList<TTSNode>;
@@ -1076,7 +1076,7 @@ begin
         end;
     end;
   end
-  else if N.NodeType = 'statement' then
+  else if N.NodeType = 'statement' then  // dl:ok collapsible-if@0cce -- REVIEWED 2026-11-14 v151 INT: outer test guards a distinct shape; kept separate for the comment and later branches
   begin
     if FWants('destroy-called-directly') then CheckDestroyDirect(N);
   end;

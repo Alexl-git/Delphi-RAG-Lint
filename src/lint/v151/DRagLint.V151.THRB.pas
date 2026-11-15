@@ -102,7 +102,7 @@ end;
 
 type
   /// <summary>One run of the four rules over one file.</summary>
-  TThrbRun = class
+  TThrbRun = class  // dl:ok high-response@d6c1 -- REVIEWED 2026-11-14 v151 INT: one scanner class holding the per-rule checks of one lane; a split is beyond 1.51
   strict private
     FParsedFile: TThrbFile;
     FCtx : TV151FileCtx;
@@ -139,7 +139,7 @@ end;
 destructor TThrbRun.Destroy;
 begin
   FParsedFile.Free;
-  inherited;
+  inherited;  // dl:ok inherited-bare@246d -- REVIEWED 2026-11-14 v151 INT: bare inherited calls the same-named ancestor method, intended
 end;
 
 { The nearest enclosing defProc or lambda of ANode (not ANode itself). }

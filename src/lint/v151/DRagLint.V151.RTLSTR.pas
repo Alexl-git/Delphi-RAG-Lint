@@ -49,27 +49,27 @@ implementation
 { The lane's helpers live in DRagLint.V151.RTLSTR.Support; name it in an
   implementation uses clause here once it declares something. }
 
-class procedure TV151RTLSTRRules.Catalog(const ADecls: TList<TV151RuleDecl>);
+class procedure TV151RTLSTRRules.Catalog(const ADecls: TList<TV151RuleDecl>);  // dl:ok unused-parameter@6cb4 -- REVIEWED 2026-11-14 v151 INT: fixed TV151 frame hook signature; this lane has no rule on that hook
 begin
   { no rules yet }
 end;
 
-class function TV151RTLSTRRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV151RTLSTRRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@9656 -- REVIEWED 2026-11-14 v151 INT: fixed TV151 frame hook signature; this lane has no rule on that hook
 begin
   Result:= nil;
 end;
 
-class function TV151RTLSTRRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV151RTLSTRRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@e499 -- REVIEWED 2026-11-14 v151 INT: fixed TV151 frame hook signature; this lane has no rule on that hook
 begin
   Result:= nil;
 end;
 
-class function TV151RTLSTRRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;
+class function TV151RTLSTRRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;  // dl:ok unused-parameter@0501 -- REVIEWED 2026-11-14 v151 INT: fixed TV151 frame hook signature; this lane has no rule on that hook
 begin
   Result:= nil;
 end;
 
-class function TV151RTLSTRRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
+class function TV151RTLSTRRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@d7a3 -- REVIEWED 2026-11-14 v151 INT: fixed TV151 frame hook signature; this lane has no rule on that hook
 begin
   Result:= nil;
 end;

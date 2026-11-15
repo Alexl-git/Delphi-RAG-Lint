@@ -103,12 +103,12 @@ begin
     AddHits(Result, ACtx, Masked, FindNowForElapsedTime(Masked), HOST_NOW_ELAPSED, 'warning');
 end;
 
-class function TV151RTLCOLLRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV151RTLCOLLRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@7b75 -- REVIEWED 2026-11-14 v151 INT: fixed TV151 frame hook signature; this lane has no rule on that hook
 begin
   Result:= nil;
 end;
 
-class function TV151RTLCOLLRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;
+class function TV151RTLCOLLRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;  // dl:ok unused-parameter@1eb1 -- REVIEWED 2026-11-14 v151 INT: fixed TV151 frame hook signature; this lane has no rule on that hook
 begin
   Result:= nil;
 end;

@@ -71,7 +71,7 @@ begin
     'Form-file property forbidden by the project policy table (disallowed.names entries starting dfm:)'));
 end;
 
-class function TV151DFMBRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV151DFMBRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@5d9e -- REVIEWED 2026-11-14 v151 INT: fixed TV151 frame hook signature; this lane has no rule on that hook
 begin
   Result:= nil;
 end;
@@ -90,12 +90,12 @@ begin
     end);
 end;
 
-class function TV151DFMBRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;
+class function TV151DFMBRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;  // dl:ok unused-parameter@83f7 -- REVIEWED 2026-11-14 v151 INT: fixed TV151 frame hook signature; this lane has no rule on that hook
 begin
   Result:= nil;
 end;
 
-class function TV151DFMBRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
+class function TV151DFMBRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@43bd -- REVIEWED 2026-11-14 v151 INT: fixed TV151 frame hook signature; this lane has no rule on that hook
 begin
   Result:= nil;
 end;

@@ -125,7 +125,7 @@ var
   M: TMatch;
 begin
   M:= TRegEx.Match(AMasked, '(?im)^[ \t]*implementation\b');
-  if M.Success then Result:= M.Index + M.Length else Result:= 0;
+  if M.Success then Result:= M.Index + M.Length else Result:= 0;  // dl:ok ifthen-to-if-expression@d1e1 -- REVIEWED 2026-11-14 v151 INT: classic if/else kept in a lane unit written before the ternary sweep
 end;
 
 { Index of the K-th (1-based) declaration named AKey in ADecls, or -1. }
@@ -180,7 +180,7 @@ begin
   end;
 end;
 
-function StyFindMethodOrder(const AMasked: string): TArray<TStyOrderHit>;
+function StyFindMethodOrder(const AMasked: string): TArray<TStyOrderHit>;  // dl:ok deep-nesting@c037 -- REVIEWED 2026-11-14 v151 INT: tree walk with per-shape branches; flattening would scatter one rule
 const
   RE_TYPE = '(?im)^[ \t]*([A-Za-z_]\w*)(?:<[^>]*>)?[ \t]*=[ \t]*(?:packed[ \t]+)?(class|record|object)\b(?![ \t]*(?:of\b|;))';
   RE_BODY = '(?im)^[ \t]*(?:class[ \t]+)?(?:procedure|function|constructor|destructor)[ \t]+([A-Za-z_]\w*)(?:<[^>]*>)?\.([A-Za-z_]\w*)(?![\w.])';
@@ -284,7 +284,7 @@ begin
     begin
       if not TRegEx.IsMatch(Heads[I].Value, RE_SENDER) then Continue;
       SegStart:= Heads[I].Index + Heads[I].Length;
-      if I + 1 < Heads.Count then SegEnd:= Heads[I + 1].Index else SegEnd:= Length(AMasked);
+      if I + 1 < Heads.Count then SegEnd:= Heads[I + 1].Index else SegEnd:= Length(AMasked);  // dl:ok ifthen-to-if-expression@41ae -- REVIEWED 2026-11-14 v151 INT: classic if/else kept in a lane unit written before the ternary sweep
       Seg:= Copy(AMasked, SegStart + 1, SegEnd - SegStart);
       PM:= TRegEx.Match(Seg, RE_PM);
       while PM.Success do

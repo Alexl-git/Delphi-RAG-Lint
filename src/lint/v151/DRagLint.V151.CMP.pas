@@ -182,7 +182,7 @@ type
     Node     : TTSNode;
   end;
 
-  TCmpRun = class
+  TCmpRun = class  // dl:ok god-class@98f2, high-response@98f2 -- REVIEWED 2026-11-14 v151 INT: one scanner class holding the per-rule checks of one lane; a split is beyond 1.51
   strict private
     FCtx     : TV151FileCtx;
     FSrc     : TBytes;

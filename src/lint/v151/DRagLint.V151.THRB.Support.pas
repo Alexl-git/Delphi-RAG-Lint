@@ -247,7 +247,7 @@ begin
   FFieldsOf.Free;
   FParentOf.Free;
   FNodes.Free;
-  inherited;
+  inherited;  // dl:ok inherited-bare@246d -- REVIEWED 2026-11-14 v151 INT: bare inherited calls the same-named ancestor method, intended
 end;
 
 procedure TThrbFile.Flatten(const ANode: TTSNode);

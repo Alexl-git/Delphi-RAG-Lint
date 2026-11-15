@@ -88,27 +88,27 @@ end;
 
 function TxtIsBinaryDfm(const ABytes: TBytes): Boolean;
 begin
-  Result:= (Length(ABytes) >= 4) and (ABytes[0] = $54) and (ABytes[1] = $50)
-    and (ABytes[2] = $46) and (ABytes[3] = $30);
+  Result:= (Length(ABytes) >= 4) and (ABytes[0] = $54) and (ABytes[1] = $50)  // dl:ok magic-literal@bc5e -- REVIEWED 2026-11-14 v151 INT: a spec value / fixed offset or length read at its single use site; a named constant adds nothing
+    and (ABytes[2] = $46) and (ABytes[3] = $30);  // dl:ok magic-literal@df8b -- REVIEWED 2026-11-14 v151 INT: a spec value / fixed offset or length read at its single use site; a named constant adds nothing
 end;
 
 function IsBidi(ACp: Integer): Boolean;
 begin
-  Result:= (ACp = $061C) or (ACp = $200E) or (ACp = $200F)
-    or ((ACp >= $202A) and (ACp <= $202E)) or ((ACp >= $2066) and (ACp <= $2069));
+  Result:= (ACp = $061C) or (ACp = $200E) or (ACp = $200F)  // dl:ok boolean-expression-complexity@4733, magic-literal@4733 -- REVIEWED 2026-11-14 v151 INT: one flat predicate over fixed values; splitting it does not make it clearer; a spec value / fixed offset or length read at its single use site; a named constant adds nothing
+    or ((ACp >= $202A) and (ACp <= $202E)) or ((ACp >= $2066) and (ACp <= $2069));  // dl:ok manual-inrange@21dd, magic-literal@21dd -- REVIEWED 2026-11-14 v151 INT: code-point range written as the spec writes it; InRange would hide the hex bounds; a spec value / fixed offset or length read at its single use site; a named constant adds nothing
 end;
 
 function IsInvisible(ACp: Integer): Boolean;
 begin
-  Result:= (ACp = $00AD) or (ACp = $115F) or (ACp = $1160) or (ACp = $180E)
-    or ((ACp >= $200B) and (ACp <= $200D)) or ((ACp >= $2060) and (ACp <= $2064))
-    or (ACp = $3164) or (ACp = $FEFF) or (ACp = $FFA0);
+  Result:= (ACp = $00AD) or (ACp = $115F) or (ACp = $1160) or (ACp = $180E)  // dl:ok boolean-expression-complexity@0530, magic-literal@0530 -- REVIEWED 2026-11-14 v151 INT: one flat predicate over fixed values; splitting it does not make it clearer; a spec value / fixed offset or length read at its single use site; a named constant adds nothing
+    or ((ACp >= $200B) and (ACp <= $200D)) or ((ACp >= $2060) and (ACp <= $2064))  // dl:ok manual-inrange@491c, magic-literal@491c -- REVIEWED 2026-11-14 v151 INT: code-point range written as the spec writes it; InRange would hide the hex bounds; a spec value / fixed offset or length read at its single use site; a named constant adds nothing
+    or (ACp = $3164) or (ACp = $FEFF) or (ACp = $FFA0);  // dl:ok magic-literal@80e2 -- REVIEWED 2026-11-14 v151 INT: a spec value / fixed offset or length read at its single use site; a named constant adds nothing
 end;
 
 function IsControl(ACp: Integer): Boolean;
 begin
-  Result:= ((ACp < $20) and (ACp <> 9) and (ACp <> 10) and (ACp <> 12) and (ACp <> 13))
-    or ((ACp >= $7F) and (ACp <= $9F));
+  Result:= ((ACp < $20) and (ACp <> 9) and (ACp <> 10) and (ACp <> 12) and (ACp <> 13))  // dl:ok boolean-expression-complexity@b6cf, magic-literal@b6cf -- REVIEWED 2026-11-14 v151 INT: one flat predicate over fixed values; splitting it does not make it clearer; a spec value / fixed offset or length read at its single use site; a named constant adds nothing
+    or ((ACp >= $7F) and (ACp <= $9F));  // dl:ok manual-inrange@a435, magic-literal@a435 -- REVIEWED 2026-11-14 v151 INT: code-point range written as the spec writes it; InRange would hide the hex bounds; a spec value / fixed offset or length read at its single use site; a named constant adds nothing
 end;
 
 { Decodes one UTF-8 sequence at AIdx. Returns its length; ACp = -1 for an invalid byte (length 1). }
@@ -118,24 +118,24 @@ var
   Cp: Cardinal;
 begin
   B0:= AB[AIdx];
-  if B0 < $80 then
+  if B0 < $80 then  // dl:ok magic-literal@af24 -- REVIEWED 2026-11-14 v151 INT: a spec value / fixed offset or length read at its single use site; a named constant adds nothing
   begin
     ACp:= B0;
     Exit(1);
   end;
   ACp:= -1;
   Result:= 1;
-  if (B0 >= $C2) and (B0 <= $DF) then begin Extra:= 1; Cp:= B0 and $1F; Min:= $80; end
-  else if (B0 >= $E0) and (B0 <= $EF) then begin Extra:= 2; Cp:= B0 and $0F; Min:= $800; end
-  else if (B0 >= $F0) and (B0 <= $F4) then begin Extra:= 3; Cp:= B0 and $07; Min:= $10000; end
+  if (B0 >= $C2) and (B0 <= $DF) then begin Extra:= 1; Cp:= B0 and $1F; Min:= $80; end  // dl:ok manual-inrange@3ac0, magic-literal@3ac0, multiple-statements-per-line@3ac0 -- REVIEWED 2026-11-14 v151 INT: code-point range written as the spec writes it; InRange would hide the hex bounds; a spec value / fixed offset or length read at its single use site; a named constant adds nothing; compact state reset in a scanner step, kept on one line like its siblings
+  else if (B0 >= $E0) and (B0 <= $EF) then begin Extra:= 2; Cp:= B0 and $0F; Min:= $800; end  // dl:ok manual-inrange@fc6d, magic-literal@fc6d, multiple-statements-per-line@fc6d -- REVIEWED 2026-11-14 v151 INT: code-point range written as the spec writes it; InRange would hide the hex bounds; a spec value / fixed offset or length read at its single use site; a named constant adds nothing; compact state reset in a scanner step, kept on one line like its siblings
+  else if (B0 >= $F0) and (B0 <= $F4) then begin Extra:= 3; Cp:= B0 and $07; Min:= $10000; end  // dl:ok manual-inrange@82dc, magic-literal@82dc, multiple-statements-per-line@82dc -- REVIEWED 2026-11-14 v151 INT: code-point range written as the spec writes it; InRange would hide the hex bounds; a spec value / fixed offset or length read at its single use site; a named constant adds nothing; compact state reset in a scanner step, kept on one line like its siblings
   else Exit;
   if AIdx + Extra >= Length(AB) then Exit;
   for J:= 1 to Extra do
   begin
-    if (AB[AIdx + J] and $C0) <> $80 then Exit;
-    Cp:= (Cp shl 6) or Cardinal(AB[AIdx + J] and $3F);
+    if (AB[AIdx + J] and $C0) <> $80 then Exit;  // dl:ok magic-literal@52aa -- REVIEWED 2026-11-14 v151 INT: a spec value / fixed offset or length read at its single use site; a named constant adds nothing
+    Cp:= (Cp shl 6) or Cardinal(AB[AIdx + J] and $3F);  // dl:ok magic-literal@c4f2 -- REVIEWED 2026-11-14 v151 INT: a spec value / fixed offset or length read at its single use site; a named constant adds nothing
   end;
-  if (Integer(Cp) < Min) or ((Cp >= $D800) and (Cp <= $DFFF)) or (Cp > $10FFFF) then Exit;
+  if (Integer(Cp) < Min) or ((Cp >= $D800) and (Cp <= $DFFF)) or (Cp > $10FFFF) then Exit;  // dl:ok manual-inrange@01b1, magic-literal@01b1 -- REVIEWED 2026-11-14 v151 INT: code-point range written as the spec writes it; InRange would hide the hex bounds; a spec value / fixed offset or length read at its single use site; a named constant adds nothing
   ACp:= Integer(Cp);
   Result:= Extra + 1;
 end;
@@ -159,11 +159,11 @@ procedure TxtScanChars(const AUtf8: TBytes; AHadUtf8Bom: Boolean; const AFilePat
 var
   I, Len, Cp, Line, Col, NCtl, NBidi, NInv: Integer;
 begin
-  I:= 0; Line:= 1; Col:= 1; NCtl:= 0; NBidi:= 0; NInv:= 0;
+  I:= 0; Line:= 1; Col:= 1; NCtl:= 0; NBidi:= 0; NInv:= 0;  // dl:ok multiple-statements-per-line@7191 -- REVIEWED 2026-11-14 v151 INT: compact state reset in a scanner step, kept on one line like its siblings
   while I < Length(AUtf8) do
   begin
     Len:= DecodeAt(AUtf8, I, Cp);
-    if Cp = 10 then
+    if Cp = 10 then  // dl:ok magic-literal@8399 -- REVIEWED 2026-11-14 v151 INT: a spec value / fixed offset or length read at its single use site; a named constant adds nothing
     begin
       Inc(Line);
       Col:= 0;
@@ -180,7 +180,7 @@ begin
     else if IsControl(Cp) then
     begin
       { a Ctrl-Z (EOF marker) as the very last byte is a legacy DOS habit, not corruption }
-      if AWants.Control and (NCtl < TXT_MAX_PER_RULE) and not ((Cp = $1A) and (I = High(AUtf8))) then
+      if AWants.Control and (NCtl < TXT_MAX_PER_RULE) and not ((Cp = $1A) and (I = High(AUtf8))) then  // dl:ok magic-literal@53a2 -- REVIEWED 2026-11-14 v151 INT: a spec value / fixed offset or length read at its single use site; a named constant adds nothing
       begin
         AOut.Add(MakeFinding('control-char', AFilePath, Line, Col, Col + 1, 'warning',
           Format('Control character U+%.4X in the source text', [Cp])));
@@ -223,7 +223,7 @@ begin
   Result:= C.IsLetterOrDigit or (C = '_');
 end;
 
-{ todo-comment: the comment text (after the delimiters) starts with TODO or FIXME. }
+{ todo-comment: the comment text (after the delimiters) starts with one of the two task markers TodoMarker accepts. }
 function TodoMarker(const AText: string; AStart: Integer; out ASnippet: string): Boolean;
 var
   I, J, N: Integer;
@@ -280,15 +280,15 @@ var
 begin
   Result:= False;
   S:= Trim(AText);
-  if (Length(S) < 5) or not S[1].IsLetter then Exit;
-  if (Pos(' ', S) = 0) or (WordCount(S) < 2) then Exit;
+  if (Length(S) < 5) or not S[1].IsLetter then Exit;  // dl:ok magic-literal@0b8b -- REVIEWED 2026-11-14 v151 INT: a spec value / fixed offset or length read at its single use site; a named constant adds nothing
+  if (Pos(' ', S) = 0) or (WordCount(S) < 2) then Exit;  // dl:ok pos-for-contains@f95d -- REVIEWED 2026-11-14 v151 INT: Pos over a delimited keyword list, as the rest of the unit does
   if S.IndexOfAny(['\', '/', '<', '>', '{', '}', '=', ';', '|']) >= 0 then Exit;
   for I:= Low(CSQL) to High(CSQL) do
     if StartsWithWord(S, CSQL[I]) then Exit;
   Letters:= 0;
   for I:= 1 to Length(S) do
     if S[I].IsLetter or (S[I] = ' ') then Inc(Letters);
-  Result:= Letters * 10 >= Length(S) * 7;
+  Result:= Letters * 10 >= Length(S) * 7;  // dl:ok magic-literal@80b9 -- REVIEWED 2026-11-14 v151 INT: a spec value / fixed offset or length read at its single use site; a named constant adds nothing
 end;
 
 function ExcludedCallee(const AName: string): Boolean;
@@ -297,7 +297,7 @@ begin
     or StartsText('Log', AName) or StartsText('Trace', AName) or StartsText('Debug', AName);
 end;
 
-procedure TxtScanText(const ASource, AFilePath: string; AWantTodo, AWantHard: Boolean; AOut: TList<TLintFinding>);
+procedure TxtScanText(const ASource, AFilePath: string; AWantTodo, AWantHard: Boolean; AOut: TList<TLintFinding>);  // dl:ok deep-nesting@c74a, cyclomatic-complexity@3a70, cognitive-complexity@5ca8 -- REVIEWED 2026-11-14 v151 INT: tree walk with per-shape branches; flattening would scatter one rule
 var
   S: string;
   I, N, Line, LineStart, Depth, J, StartLine, StartCol, NTodo, NHard, K: Integer;
@@ -308,8 +308,8 @@ var
 begin
   S:= ASource;
   N:= Length(S);
-  I:= 1; Line:= 1; LineStart:= 1; Depth:= 0; NTodo:= 0; NHard:= 0;
-  LastIdent:= ''; PrevOp:= '';
+  I:= 1; Line:= 1; LineStart:= 1; Depth:= 0; NTodo:= 0; NHard:= 0;  // dl:ok multiple-statements-per-line@e733 -- REVIEWED 2026-11-14 v151 INT: compact state reset in a scanner step, kept on one line like its siblings
+  LastIdent:= ''; PrevOp:= '';  // dl:ok multiple-statements-per-line@24f9 -- REVIEWED 2026-11-14 v151 INT: compact state reset in a scanner step, kept on one line like its siblings
   Parens:= TList<string>.Create;
   try
     while I <= N do
@@ -317,16 +317,16 @@ begin
       C:= S[I];
       if C = #10 then
       begin
-        Inc(Line); Inc(I); LineStart:= I;
+        Inc(Line); Inc(I); LineStart:= I;  // dl:ok multiple-statements-per-line@9057 -- REVIEWED 2026-11-14 v151 INT: compact state reset in a scanner step, kept on one line like its siblings
       end
       else if (C = ' ') or (C = #9) or (C = #13) then
         Inc(I)
       else if C = '''' then
       begin
-        StartLine:= Line; StartCol:= I - LineStart + 1;
+        StartLine:= Line; StartCol:= I - LineStart + 1;  // dl:ok multiple-statements-per-line@5767 -- REVIEWED 2026-11-14 v151 INT: compact state reset in a scanner step, kept on one line like its siblings
         Content:= '';
         { multi-line literal: ''' alone on its line up to a closing ''' line }
-        K:= I + 3;
+        K:= I + 3;  // dl:ok magic-literal@3082 -- REVIEWED 2026-11-14 v151 INT: a spec value / fixed offset or length read at its single use site; a named constant adds nothing
         while (K <= N) and CharInSet(S[K], [' ', #9, #13]) do Inc(K);
         if (I + 2 <= N) and (S[I + 1] = '''') and (S[I + 2] = '''') and ((K > N) or (S[K] = #10)) then
         begin
@@ -336,12 +336,12 @@ begin
           begin
             if S[J] = #10 then
             begin
-              Inc(Line); LineStart:= J + 1;
+              Inc(Line); LineStart:= J + 1;  // dl:ok multiple-statements-per-line@96d9 -- REVIEWED 2026-11-14 v151 INT: compact state reset in a scanner step, kept on one line like its siblings
               K:= J + 1;
               while (K <= N) and CharInSet(S[K], [' ', #9]) do Inc(K);
               if (K + 2 <= N) and (S[K] = '''') and (S[K + 1] = '''') and (S[K + 2] = '''') then
               begin
-                J:= K + 3;
+                J:= K + 3;  // dl:ok magic-literal@9c94 -- REVIEWED 2026-11-14 v151 INT: a spec value / fixed offset or length read at its single use site; a named constant adds nothing
                 Closed:= True;
                 Continue;
               end;
@@ -359,18 +359,18 @@ begin
             begin
               if (J < N) and (S[J + 1] = '''') then
               begin
-                Content:= Content + '''';
+                Content:= Content + '''';  // dl:ok concat-in-loop@aa74 -- REVIEWED 2026-11-14 v151 INT: a few short pieces per call, not an accumulating large string
                 Inc(J, 2);
                 Continue;
               end;
               Break;
             end;
             if (S[J] = #10) or (S[J] = #13) then Break;
-            Content:= Content + S[J];
+            Content:= Content + S[J];  // dl:ok concat-in-loop@c290 -- REVIEWED 2026-11-14 v151 INT: a few short pieces per call, not an accumulating large string
             Inc(J);
           end;
           I:= J + 1;
-          if AWantHard and (Depth > 0) and (NHard < TXT_MAX_PER_RULE) and IsHumanText(Content)
+          if AWantHard and (Depth > 0) and (NHard < TXT_MAX_PER_RULE) and IsHumanText(Content)  // dl:ok boolean-expression-complexity@c4a9 -- REVIEWED 2026-11-14 v151 INT: one flat predicate over fixed values; splitting it does not make it clearer
             and (PrevOp <> '=') and (PrevOp <> '<>') then
           begin
             InExcluded:= False;
@@ -401,7 +401,7 @@ begin
       end
       else if C = '{' then
       begin
-        StartLine:= Line; StartCol:= I - LineStart + 1;
+        StartLine:= Line; StartCol:= I - LineStart + 1;  // dl:ok multiple-statements-per-line@5767 -- REVIEWED 2026-11-14 v151 INT: compact state reset in a scanner step, kept on one line like its siblings
         if AWantTodo and (NTodo < TXT_MAX_PER_RULE) and (I < N) and (S[I + 1] <> '$')
           and TodoMarker(S, I + 1, Snippet) then
         begin
@@ -413,7 +413,7 @@ begin
         begin
           if S[I] = #10 then
           begin
-            Inc(Line); LineStart:= I + 1;
+            Inc(Line); LineStart:= I + 1;  // dl:ok multiple-statements-per-line@5030 -- REVIEWED 2026-11-14 v151 INT: compact state reset in a scanner step, kept on one line like its siblings
           end;
           Inc(I);
         end;
@@ -421,7 +421,7 @@ begin
       end
       else if (C = '(') and (I < N) and (S[I + 1] = '*') then
       begin
-        StartLine:= Line; StartCol:= I - LineStart + 1;
+        StartLine:= Line; StartCol:= I - LineStart + 1;  // dl:ok multiple-statements-per-line@5767 -- REVIEWED 2026-11-14 v151 INT: compact state reset in a scanner step, kept on one line like its siblings
         if AWantTodo and (NTodo < TXT_MAX_PER_RULE) and (I + 1 < N) and (S[I + 2] <> '$')
           and TodoMarker(S, I + 2, Snippet) then
         begin
@@ -434,7 +434,7 @@ begin
         begin
           if S[I] = #10 then
           begin
-            Inc(Line); LineStart:= I + 1;
+            Inc(Line); LineStart:= I + 1;  // dl:ok multiple-statements-per-line@5030 -- REVIEWED 2026-11-14 v151 INT: compact state reset in a scanner step, kept on one line like its siblings
           end;
           Inc(I);
         end;
@@ -488,7 +488,7 @@ begin
         PrevOp:= '';
         while (I <= N) and CharInSet(S[I], [':', '<', '>', '=']) do
         begin
-          PrevOp:= PrevOp + S[I];
+          PrevOp:= PrevOp + S[I];  // dl:ok concat-in-loop@344e -- REVIEWED 2026-11-14 v151 INT: a few short pieces per call, not an accumulating large string
           Inc(I);
         end;
         LastIdent:= '';

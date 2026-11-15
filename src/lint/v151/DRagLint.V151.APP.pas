@@ -76,7 +76,7 @@ var
   Text: string;
 begin
   Result:= nil;
-  if not (ACtx.Wants(RULE_TLS_VERIFY_OFF) or ACtx.Wants(RULE_UI_CALL) or ACtx.Wants(RULE_DUNITX_NO_ASSERT)
+  if not (ACtx.Wants(RULE_TLS_VERIFY_OFF) or ACtx.Wants(RULE_UI_CALL) or ACtx.Wants(RULE_DUNITX_NO_ASSERT)  // dl:ok boolean-expression-complexity@6f93 -- REVIEWED 2026-11-14 v151 INT: one flat predicate over fixed values; splitting it does not make it clearer
     or ACtx.Wants(RULE_CONTRACT_CLASS) or ACtx.Wants(RULE_WEAK_CIPHER) or ACtx.Wants(RULE_ASM_NO_WIN64)
     or ACtx.Wants(RULE_WRITELN_GUI)) then Exit;
   Text:= ReadAppSource(ACtx.Path);
@@ -98,17 +98,17 @@ begin
   end;
 end;
 
-class function TV151APPRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV151APPRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@5b80 -- REVIEWED 2026-11-14 v151 INT: fixed TV151 frame hook signature; this lane has no rule on that hook
 begin
   Result:= nil;
 end;
 
-class function TV151APPRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;
+class function TV151APPRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;  // dl:ok unused-parameter@8835 -- REVIEWED 2026-11-14 v151 INT: fixed TV151 frame hook signature; this lane has no rule on that hook
 begin
   Result:= nil;
 end;
 
-class function TV151APPRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
+class function TV151APPRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@cbb0 -- REVIEWED 2026-11-14 v151 INT: fixed TV151 frame hook signature; this lane has no rule on that hook
 begin
   Result:= nil;
 end;

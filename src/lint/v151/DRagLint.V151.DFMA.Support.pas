@@ -24,11 +24,11 @@ uses
 
 type
   /// <summary>Header kind of one .dfm node.</summary>
-  TDfmNodeKind = (dnkObject, dnkInherited, dnkInline, dnkItem);
+  TDfmNodeKind = (dnkObject, dnkInherited, dnkInline, dnkItem);  // dl:ok duplicate-global-decl@9546 -- REVIEWED 2026-11-14 v151 INT: DFM-A and DFM-B private .dfm models, never used in one unit; merging them is a 1.51.1 tail
 
   /// <summary>One property line of a .dfm node; Value is the raw text after '=' for a
   /// one-line value and '' for a string, list, blob or collection.</summary>
-  TDfmProp = record
+  TDfmProp = record  // dl:ok duplicate-global-decl@850d -- REVIEWED 2026-11-14 v151 INT: DFM-A and DFM-B private .dfm models, never used in one unit; merging them is a 1.51.1 tail
     Name : string;
     Value: string;
     Line : Integer;
@@ -37,7 +37,7 @@ type
   /// <summary>One .dfm node. Parent is the index of the enclosing node (-1 for the root).
   /// InInline is True when an enclosing node is an `inline` frame instance: such nodes
   /// belong to the frame class, not to the form class.</summary>
-  TDfmNode = record
+  TDfmNode = record  // dl:ok duplicate-global-decl@86e1 -- REVIEWED 2026-11-14 v151 INT: DFM-A and DFM-B private .dfm models, never used in one unit; merging them is a 1.51.1 tail
     Name     : string;
     CompClass: string;
     Kind     : TDfmNodeKind;

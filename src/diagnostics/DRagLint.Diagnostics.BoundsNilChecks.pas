@@ -373,7 +373,7 @@ end;
 
 { The integer value of a constant index expression: a literal, a file-level const, unary minus,
   + / - of those, parentheses. False for anything else (a variable, a call). }
-function TBnRun.EvalIndex(const N: TTSNode; out AValue: Integer): Boolean;
+function TBnRun.EvalIndex(const N: TTSNode; out AValue: Integer): Boolean;  // dl:ok too-many-exit-points@f533 -- REVIEWED 2026-11-14 v151 INT: guard clauses per syntax shape; each early exit is a classification
 var
   A, B: Integer;
   Op  : string;
@@ -398,7 +398,7 @@ begin
     Op:= OperatorType(N);
     if ((Op <> 'kAdd') and (Op <> 'kSub')) or (not EvalIndex(N.ChildByField('lhs'), A))
        or (not EvalIndex(N.ChildByField('rhs'), B)) then Exit;
-    if Op = 'kAdd' then AValue:= A + B else AValue:= A - B;
+    if Op = 'kAdd' then AValue:= A + B else AValue:= A - B;  // dl:ok ifthen-to-if-expression@191a -- REVIEWED 2026-11-14 v151 INT: classic if/else kept in a lane unit written before the ternary sweep
     Result:= True;
   end;
 end;

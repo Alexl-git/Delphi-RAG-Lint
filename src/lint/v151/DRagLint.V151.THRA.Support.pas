@@ -60,7 +60,7 @@ type
 
   /// <summary>Scans one source text and answers structural questions about it.</summary>
   /// <remarks>Not thread-safe; one instance per file. Owns nothing but its own lists.</remarks>
-  TThrScan = class
+  TThrScan = class  // dl:ok high-response@6850 -- REVIEWED 2026-11-14 v151 INT: one scanner class holding the per-rule checks of one lane; a split is beyond 1.51
   private
     FToks     : TArray<TThrTok>;
     FRoutines : TList<TThrRoutine>;

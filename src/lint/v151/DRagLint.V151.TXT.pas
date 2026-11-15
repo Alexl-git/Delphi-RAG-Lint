@@ -69,12 +69,12 @@ begin
     'String literal with text for people in a statement: use a resourcestring', False));
 end;
 
-class function TV151TXTRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV151TXTRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@b0e1 -- REVIEWED 2026-11-14 v151 INT: fixed TV151 frame hook signature; this lane has no rule on that hook
 begin
   Result:= nil;
 end;
 
-class function TV151TXTRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV151TXTRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@353b -- REVIEWED 2026-11-14 v151 INT: fixed TV151 frame hook signature; this lane has no rule on that hook
 begin
   Result:= nil;
 end;
@@ -96,7 +96,7 @@ begin
   Found:= TList<TLintFinding>.Create;
   try
     Utf8:= EnsureUtf8Bytes(ABytes);
-    HadBom:= (Length(ABytes) >= 3) and (ABytes[0] = $EF) and (ABytes[1] = $BB) and (ABytes[2] = $BF);
+    HadBom:= (Length(ABytes) >= 3) and (ABytes[0] = $EF) and (ABytes[1] = $BB) and (ABytes[2] = $BF);  // dl:ok magic-literal@8821 -- REVIEWED 2026-11-14 v151 INT: a spec value / fixed offset or length read at its single use site; a named constant adds nothing
     if Wants.Control or Wants.Bidi or Wants.Invis then
       TxtScanChars(Utf8, HadBom, AFilePath, Wants, Found);
     if IsPas and (ACtx.Wants('todo-comment') or ACtx.Wants('hardcoded-string') or ACtx.Wants('file-header')) then
@@ -113,7 +113,7 @@ begin
   end;
 end;
 
-class function TV151TXTRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
+class function TV151TXTRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@7dc0 -- REVIEWED 2026-11-14 v151 INT: fixed TV151 frame hook signature; this lane has no rule on that hook
 begin
   Result:= nil;
 end;
