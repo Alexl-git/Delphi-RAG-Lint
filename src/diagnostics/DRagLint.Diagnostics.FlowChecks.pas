@@ -3324,6 +3324,7 @@ const
   SL_UNKNOWN = 0; { the name is not declared as a member anywhere we can see }
   SL_FIELD   = 1; { every declaration seen is a field / field-backed property }
   SL_UNSAFE  = 2; { some declaration is a method-backed property, a routine, ... }
+  SL_MAX_CHAIN = 32; { in-unit ancestor hops before a (cyclic) chain is given up }
 
 type
   /// <summary>Member and class facts THIS unit declares, for the v151
@@ -3336,6 +3337,7 @@ type
     FMethods: TDictionary<string, Boolean>;
     procedure Note(const AName: string; AKind: Integer);
     procedure Walk(const N: TTSNode; const ASrc: TBytes);
+    procedure NoteClass(const N: TTSNode; const ASrc: TBytes);
   public
     constructor Create(const ARoot: TTSNode; const ASrc: TBytes);
     destructor Destroy; override;
@@ -3363,12 +3365,8 @@ begin
     a property may be declared above the field it writes. }
   for P in FPropSetters do
   begin
-    K := SL_UNSAFE;
-    if (P.Value <> '') and FMembers.TryGetValue(P.Value, K) and (K = SL_FIELD)
-       and not FMethods.ContainsKey(P.Value) then
-      K := SL_FIELD
-    else
-      K := SL_UNSAFE;
+    K := if (P.Value <> '') and FMembers.TryGetValue(P.Value, K) and (K = SL_FIELD)
+            and not FMethods.ContainsKey(P.Value) then SL_FIELD else SL_UNSAFE;
     Note(P.Key, K);
   end;
 end;
@@ -3379,7 +3377,7 @@ begin
   FParents.Free;
   FPropSetters.Free;
   FMethods.Free;
-  inherited;
+  inherited Destroy;
 end;
 
 procedure TSlUnitFacts.Note(const AName: string; AKind: Integer);
@@ -3393,7 +3391,7 @@ end;
 procedure TSlUnitFacts.Walk(const N: TTSNode; const ASrc: TBytes);
 var
   I: Integer;
-  C, Nm, Cls, Par: TTSNode;
+  C, Nm: TTSNode;
   S, Prev: string;
 begin
   if N.IsNull then Exit;
@@ -3427,40 +3425,47 @@ begin
     if not Nm.IsNull then
     begin
       S := LowerCase(Trim(NodeStr(Nm, ASrc)));
-      if Pos('.', S) > 0 then S := Copy(S, LastDelimiter('.', S) + 1, MaxInt);
+      if S.Contains('.') then S := Copy(S, LastDelimiter('.', S) + 1, MaxInt);
       FMethods.AddOrSetValue(S, True);
       Note(S, SL_UNSAFE);
     end;
   end;
   if N.NodeType = 'declType' then
-  begin
-    Nm := N.ChildByField('name');
-    C := N.ChildByField('type');
-    Cls := Default(TTSNode);
-    if (not C.IsNull) and (C.NodeType = 'declClass') then Cls := C
-    else if not C.IsNull then
-      for I := 0 to C.NamedChildCount - 1 do
-        if C.NamedChild(I).NodeType = 'declClass' then Cls := C.NamedChild(I);
-    { a record / object type is a declClass too: only `class` counts }
-    if not Cls.IsNull then
-    begin
-      Par := Default(TTSNode);
-      for I := 0 to Cls.ChildCount - 1 do
-        if Cls.Child(I).NodeType = 'kClass' then Par := Cls.Child(I);
-      if Par.IsNull then Cls := Default(TTSNode);
-    end;
-    if (not Nm.IsNull) and (not Cls.IsNull) then
-    begin
-      Par := Cls.ChildByField('parent');
-      S := '';
-      if not Par.IsNull then S := LowerCase(Trim(NodeStr(Par, ASrc)));
-      { `TObjectList<TFoo>` -> tobjectlist, `System.Classes.TThread` -> tthread }
-      if Pos('<', S) > 0 then S := Trim(Copy(S, 1, Pos('<', S) - 1));
-      if Pos('.', S) > 0 then S := Copy(S, LastDelimiter('.', S) + 1, MaxInt);
-      FParents.AddOrSetValue(LowerCase(Trim(NodeStr(Nm, ASrc))), S);
-    end;
-  end;
+    NoteClass(N, ASrc);
   for I := 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I), ASrc);
+end;
+
+{ The `class` body a declType declares, or a null node (a record / object
+  type is a declClass too: only `class` counts). }
+function SlClassBody(const ATypeN: TTSNode): TTSNode;
+var I: Integer; IsCls: Boolean;
+begin
+  Result := Default(TTSNode);
+  if ATypeN.IsNull then Exit;
+  if ATypeN.NodeType = 'declClass' then Result := ATypeN
+  else
+    for I := 0 to ATypeN.NamedChildCount - 1 do
+      if ATypeN.NamedChild(I).NodeType = 'declClass' then Result := ATypeN.NamedChild(I);
+  if Result.IsNull then Exit;
+  IsCls := False;
+  for I := 0 to Result.ChildCount - 1 do
+    if Result.Child(I).NodeType = 'kClass' then IsCls := True;
+  if not IsCls then Result := Default(TTSNode);
+end;
+
+procedure TSlUnitFacts.NoteClass(const N: TTSNode; const ASrc: TBytes);
+var Nm, Cls, Par: TTSNode; S: string;
+begin
+  Nm := N.ChildByField('name');
+  Cls := SlClassBody(N.ChildByField('type'));
+  if Nm.IsNull or Cls.IsNull then Exit;
+  Par := Cls.ChildByField('parent');
+  S := '';
+  if not Par.IsNull then S := LowerCase(Trim(NodeStr(Par, ASrc)));
+  { `TObjectList<TFoo>` -> tobjectlist, `System.Classes.TThread` -> tthread }
+  if S.Contains('<') then S := Trim(Copy(S, 1, Pos('<', S) - 1));
+  if S.Contains('.') then S := Copy(S, LastDelimiter('.', S) + 1, MaxInt);
+  FParents.AddOrSetValue(LowerCase(Trim(NodeStr(Nm, ASrc))), S);
 end;
 
 function TSlUnitFacts.MemberKind(const ALowerName: string): Integer;
@@ -3504,7 +3509,7 @@ end;
   `Self.FA` -> [fa], `P^.X` -> [p, ^, x], `R.Inner.X` -> [r, inner, x].
   A leading `Self` is dropped. Empty for any other shape (a call, an index,
   a cast, an `inherited` ...), which every caller treats as "decline". }
-function SlPathSegments(const N: TTSNode; const ASrc: TBytes): TArray<string>;
+function SlPathSegments(const N: TTSNode; const ASrc: TBytes): TArray<string>;  // dl:ok too-many-exit-points -- REVIEWED 2026-11-14: one Exit per accepted node shape plus the declines; a guard ladder
 var L, R: TArray<string>; Op: TTSNode;
 begin
   Result := nil;
@@ -3599,18 +3604,14 @@ end;
 
 { A member path for a message: [p, ^, x] -> p^.x }
 function SlPathDisplay(const ASegs: TArray<string>): string;
-var K: Integer;
 begin
-  Result := '';
-  for K := 0 to High(ASegs) do
-    if (K = 0) or (ASegs[K] = '^') then Result := Result + ASegs[K]
-    else Result := Result + '.' + ASegs[K];
+  Result := string.Join('.', ASegs).Replace('.^', '^');
 end;
 
 { The noun a used-before-assignment message uses for AVar. }
 function UbaNoun(const AVar: TRoutineVar): string;
 begin
-  if AVar.Kind = vkParamOut then Result := 'Out parameter' else Result := 'Local';
+  Result := if AVar.Kind = vkParamOut then 'Out parameter' else 'Local';
 end;
 
 class function TFlowChecker.Check(const AFile: string; const AStore: ISymbolStore;
@@ -3679,7 +3680,7 @@ var
     lifetime is managed elsewhere -- a thread (the self-freeing idiom), a
     component (an owner), an exception (exception-constructed-but-not-raised
     reports it) or a reference-counted object. Unknown -> False. }
-  function SlLeakingClass(const ATypeName: string): Boolean;
+  function SlLeakingClass(const ATypeName: string): Boolean;  // dl:ok too-many-exit-points -- REVIEWED 2026-11-14: each Exit is one way the leak is not proven (managed ancestor, unknown chain)
   const
     MANAGED: array[0..3] of string = ('tthread', 'tcomponent', 'exception', 'tinterfacedobject');
   var
@@ -3704,8 +3705,8 @@ var
         for M in MANAGED do if Par = M then Exit;
         Cls := Par;
         Inc(Guard);
-      until (not SlFacts.ClassParent(Cls, Par)) or (Guard > 32);
-      if Guard > 32 then Exit;
+      until (not SlFacts.ClassParent(Cls, Par)) or (Guard > SL_MAX_CHAIN);
+      if Guard > SL_MAX_CHAIN then Exit;
       { Cls is now an ancestor this unit does not declare: the index decides }
     end;
     { 2. the index: a class symbol, no managed ancestor in either store }
@@ -4032,7 +4033,7 @@ var
                   cleared by the compiler on entry and is skipped below with
                   the managed locals. var / const / value parameters carry the
                   caller's value and are never candidates. }
-                if not (V.Kind in [vkLocal, vkParamOut]) then Continue;
+                if V.Kind not in [vkLocal, vkParamOut] then Continue;
                 if IsManagedType(V.TypeText, AStore, AFileId) then Continue;
                 if not CurMust[RIx] then
                 begin
@@ -4373,7 +4374,7 @@ var
                 { v151 WID-FLOW: a by-value parameter is the routine's own copy;
                   a store to it that no later code reads is as dead as a
                   local's. var / out / const parameters are never candidates. }
-                if (Tgt >= 0) and (Vars.Get(Tgt).Kind in [vkLocal, vkParamValue])
+                if (Tgt >= 0) and (Vars.Get(Tgt).Kind in [vkLocal, vkParamValue])  // dl:ok boolean-expression-complexity -- REVIEWED 2026-11-14: pre-existing condition; each conjunct is one documented suppression
                    and ReadAny[Tgt] and (not Live[Tgt])
                    { A CAPTURED local is read where liveness cannot look. The CFG
                      deliberately does not descend into a nested routine (see
