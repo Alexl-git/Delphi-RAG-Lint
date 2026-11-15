@@ -405,7 +405,12 @@ begin
     Result:= CollectCondIdents(ArgValueNode(N), ANames)  // the label is no read of a same-named local
   else if T = 'exprCall' then
     Result:= IsPureCondCall(N) and CollectCondIdents(N.ChildByField('args'), ANames)  // a read-only RTL call adds only its arguments
-  else if (T = 'exprArgs') or (T = 'exprBinary') or (T = 'exprUnary') or (T = 'exprParens')  // dl:ok boolean-expression-complexity@eef4 -- REVIEWED 2026-10-27: flat node-type whitelist, each operand independent
+  else if T = 'exprArgs' then
+  begin
+    for I:= 0 to N.NamedChildCount - 1 do
+      if not CollectCondIdents(N.NamedChild(I), ANames) then Exit(False);
+  end
+  else if (T = 'exprBinary') or (T = 'exprUnary') or (T = 'exprParens')  // dl:ok boolean-expression-complexity@eef4 -- REVIEWED 2026-10-27: flat node-type whitelist, each operand independent
           or (T = 'literalNumber') or (T = 'literalString') or IsTrivia(N) then
   begin
     for I:= 0 to N.NamedChildCount - 1 do
