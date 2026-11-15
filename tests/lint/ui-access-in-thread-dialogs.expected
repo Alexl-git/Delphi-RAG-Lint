@@ -1,0 +1,7 @@
+# ShowMessage (17), MessageDlg (18), .ShowModal (19), .Invalidate (20) fire.
+# FLog.ShowMessageText (21) and ShowMessage inside Synchronize (25) do not:
+# checked in ui-access-in-thread-dialogs-clean.
+ui-access-in-thread 17
+ui-access-in-thread 18
+ui-access-in-thread 19
+ui-access-in-thread 20

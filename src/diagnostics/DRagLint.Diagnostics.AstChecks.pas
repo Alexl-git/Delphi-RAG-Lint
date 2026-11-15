@@ -231,7 +231,9 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function CheckCodeAfterExit(const AFile: string): TArray<TLintFinding>;
-      /// <summary>Flags a constructor or destructor whose body never calls 'inherited'.</summary>
+      /// <summary>Flags a constructor or destructor whose body never calls 'inherited', and (v151) an
+      /// AfterConstruction / BeforeDestruction implementation that never calls it (reported under the
+      /// ctor / dtor id respectively).</summary>
       /// <param name="AFile">Path to the .pas/.inc source file to scan; must exist.</param>
       /// <returns>Findings tagged 'missing-inherited-ctor' / 'missing-inherited-dtor'; empty if none.</returns>
       /// <remarks>
@@ -447,7 +449,8 @@ type
       /// reaches, through base types declared in the same file, a name containing 'Thread'; and a lambda
       /// passed to TThread.CreateAnonymousThread, TTask.Run/Create/Future or TParallel.For, as written.
       /// Only strong UI members: assignment to '.Caption'; '.SetFocus', '.Repaint', '.BringToFront',
-      /// '.SendToBack', '.ProcessMessages'. The arguments of Synchronize/Queue/ForceQueue and any other
+      /// '.SendToBack', '.ProcessMessages'; (v151) '.ShowModal', '.Invalidate' and the bare dialog calls
+      /// ShowMessage / ShowMessageFmt / MessageDlg / MessageDlgPos. The arguments of Synchronize/Queue/ForceQueue and any other
       /// nested anonymous method are skipped. Pure AST; no DB. Never raises. With an index,
       /// ui-access-in-thread-typed answers the same question on the receiver's static type.
       /// <!-- drag-lint:auto BEGIN -->
@@ -2446,16 +2449,39 @@ var
       else if Kind = 'kDestructor' then IsDtor:= True
       else if Kind = 'kClass' then Exit; { class constructor/destructor -> no inherited }
     end;
-    if not (IsCtor or IsDtor) then Exit;
+    { v151: AfterConstruction / BeforeDestruction are the construction and
+      destruction hooks of TObject; an override that skips inherited skips the
+      ancestor's part (a form's OnCreate / OnDestroy, a component's loading
+      state). Reported under the ctor / dtor ids; the fixers decline them (they
+      only act on a constructor / destructor keyword). }
+    var HookName: string:= '';
+    if not (IsCtor or IsDtor) then
+    begin
+      var NmN: TTSNode:= Hdr.ChildByField('name');
+      if (not NmN.IsNull) and (NmN.NodeType = 'genericDot') then
+        HookName:= SrcText(NmN.ChildByField('rhs'), Src);
+      { BeforeDestruction leaves IsCtor False: the dtor id below }
+      if SameText(HookName, 'AfterConstruction') then IsCtor:= True
+      else if not SameText(HookName, 'BeforeDestruction') then Exit;
+    end;
     Body:= ADefProc.ChildByField('body');
     if Body.IsNull then Exit;
     if Body.NodeType = 'asm' then Exit;
     { F1: a delegating constructor leaves ancestor init to its target }
-    if HasInherited(Body) or (IsCtor and DelegatesToOwnCtor(Body)) then Exit;
+    if HasInherited(Body) or (IsCtor and (HookName = '') and DelegatesToOwnCtor(Body)) then Exit;
+    { a hook that runs its own reference count (the TInterfacedObject idiom, copied
+      into a class with another ancestor) replaces TObject's empty hook on purpose }
+    if (HookName <> '') and ContainsText(SrcText(Body, Src), 'RefCount') then Exit;
     P:= Hdr.StartPoint;
     F:= Default(TLintFinding);
     F.Severity:= 'warning';
-    if IsCtor then
+    if HookName <> '' then
+    begin
+      F.RuleId := if IsCtor then 'missing-inherited-ctor' else 'missing-inherited-dtor';
+      F.Message:= Format('%s override does not call inherited -- the ancestor''s part of the object''s '
+        + '%s is skipped', [HookName, if IsCtor then 'construction' else 'destruction']);
+    end
+    else if IsCtor then
     begin
       F.RuleId := 'missing-inherited-ctor';
       F.Message:= 'Constructor does not call inherited -- ancestor initialization may be skipped';
@@ -3781,6 +3807,27 @@ var
               Aliased.AddOrSetValue(Xn, NodeStr(Src2));
           end;
         end;
+      end
+      else if N.NodeType = 'exprCall' then
+      begin
+        { v151: Supports(X, IFoo, I) hands out a counted interface reference to the
+          object X just like `I := X as IFoo` does. Three arguments only: the
+          two-argument form only asks and keeps no reference. }
+        var SupEnt: TTSNode:= N.ChildByField('entity');
+        var SupArgs: TTSNode:= N.ChildByField('args');
+        const SUPPORTS_OUT_FORM_ARGS = 3; { Supports(Instance, IID, out Intf) }
+        if (not SupEnt.IsNull) and (SupEnt.NodeType = 'identifier') and SameText(NodeStr(SupEnt), 'Supports')
+           and (not SupArgs.IsNull) and (SupArgs.NamedChildCount = SUPPORTS_OUT_FORM_ARGS) then
+        begin
+          Src2:= SupArgs.NamedChild(0);
+          if Src2.NodeType = 'identifier' then
+          begin
+            Xn:= LowerCase(NodeStr(Src2));
+            if TypeMap.TryGetValue(Xn, TX) and LooksLikeClassType(TX) and (not TypeTextIsInterface(TX))
+               and not IsNonRefCounted(Src2) then
+              Aliased.AddOrSetValue(Xn, NodeStr(Src2));
+          end;
+        end;
       end;
       for I:= 0 to N.ChildCount - 1 do ScanAlias(N.Child(I));
     end;
@@ -3798,7 +3845,8 @@ var
         Lhs:= N.ChildByField('lhs');
         Rhs:= N.ChildByField('rhs');
         if (not Lhs.IsNull) and (not Rhs.IsNull) and (Lhs.NodeType = 'identifier')
-           and (Rhs.NodeType = 'identifier') and SameText(NodeStr(Rhs), 'Free') then
+           and (Rhs.NodeType = 'identifier')
+           and (SameText(NodeStr(Rhs), 'Free') or SameText(NodeStr(Rhs), 'DisposeOf')) then { v151: DisposeOf }
           if not FreedAt.ContainsKey(LowerCase(NodeStr(Lhs))) then
             FreedAt.Add(LowerCase(NodeStr(Lhs)), N);
       end
@@ -4908,7 +4956,21 @@ var
       begin
         Mname:= NodeStr(Rhs);
         if SameText(Mname, 'SetFocus') or SameText(Mname, 'Repaint') or SameText(Mname, 'BringToFront')
-          or SameText(Mname, 'SendToBack') or SameText(Mname, 'ProcessMessages') then Flag(N, Mname);
+          or SameText(Mname, 'SendToBack') or SameText(Mname, 'ProcessMessages')
+          { v151: a modal form and a window invalidation are UI work as well }
+          or SameText(Mname, 'ShowModal') or SameText(Mname, 'Invalidate') then Flag(N, Mname);
+      end;
+    end
+    else if N.NodeType = 'exprCall' then
+    begin
+      { v151: the Dialogs helpers open a modal window on the calling thread.
+        Bare calls only -- a qualified X.ShowMessage is somebody else's method. }
+      Lhs:= N.ChildByField('entity');
+      if (not Lhs.IsNull) and (Lhs.NodeType = 'identifier') then
+      begin
+        Mname:= NodeStr(Lhs);
+        if SameText(Mname, 'ShowMessage') or SameText(Mname, 'ShowMessageFmt')
+          or SameText(Mname, 'MessageDlg') or SameText(Mname, 'MessageDlgPos') then Flag(N, Mname);
       end;
     end;
     for I:= 0 to N.ChildCount - 1 do WalkExec(N.Child(I));
