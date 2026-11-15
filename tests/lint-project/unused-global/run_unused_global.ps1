@@ -6,7 +6,7 @@
   project (any file). Interface classes are public API and never reported.
 
     RUN 1  lint-all (ON by default)  -> exactly the TRIGGER-* lines; every CONTROL-* silent
-    RUN 2  --rule / --disable        -> the same 7 / none
+    RUN 2  --rule / --disable        -> the same 8 / none
     RUN 3  scratch copy with the only uses removed (nested routine, initialization,
            typed-const initializer, other unit) -> those four CONTROL symbols fire
            (positive control: the single use drives the silence)
@@ -53,23 +53,24 @@ function At($Set, [int]$L) { return @($Set | Where-Object { [int]$_.start_line -
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 $triggers = @('TRIGGER-INTF-CONST', 'TRIGGER-INTF-VAR', 'TRIGGER-INTF-TYPE', 'TRIGGER-IMPL-CONST',
-              'TRIGGER-IMPL-VAR', 'TRIGGER-IMPL-TYPE', 'TRIGGER-IMPL-RECORD')
+              'TRIGGER-IMPL-VAR', 'TRIGGER-IMPL-TYPE', 'TRIGGER-IMPL-RECORD', 'TRIGGER-IMPL-ROUTINE')
 $controls = @('CONTROL-INTF-OTHERUNIT', 'CONTROL-INTF-OWNIMPL', 'CONTROL-INTF-CLASS', 'CONTROL-IMPL-NESTED',
               'CONTROL-IMPL-INIT', 'CONTROL-IMPL-VIATYPED', 'CONTROL-IMPL-READ', 'CONTROL-IMPL-VARREAD',
-              'CONTROL-IMPL-RECUSED')
+              'CONTROL-IMPL-RECUSED', 'CONTROL-IMPL-ROUTINE-CALLED', 'CONTROL-IMPL-ROUTINE-ADDR',
+              'CONTROL-IMPL-ROUTINE-FORWARD', 'CONTROL-INTF-ROUTINE')
 
 # RUN 1 -- default lint-all: ON by default
 $all = Parse-Findings (& $exePath lint-all --db $db --format json 2>$null)
 Check 'run 1 is not vacuous (lint-all returned findings)' ($all.Count -gt 0) "total=$($all.Count)"
 $a = @($all | Where-Object { $_.rule -eq $Rule })
 $a | ForEach-Object { Write-Host ("    {0}:{1} {2}" -f (Split-Path $_.file_path -Leaf), $_.start_line, $_.message) }
-Check 'run 1 ON by default: exactly 7 findings' ($a.Count -eq 7) "count=$($a.Count)"
+Check 'run 1 ON by default: exactly 8 findings' ($a.Count -eq 8) "count=$($a.Count)"
 foreach ($t in $triggers) { $l = LineOf $t; Check "$t fires" ((At $a $l).Count -eq 1) "line=$l" }
 foreach ($c in $controls) { $l = LineOf $c; Check "$c stays silent" ((At $a $l).Count -eq 0) "line=$l" }
 
 # RUN 2 -- --rule narrows to the rule; --disable turns it off
 $r2 = Parse-Findings (& $exePath lint-all --db $db --format json --rule $Rule 2>$null)
-Check 'run 2 --rule: same 7 findings' (@($r2 | Where-Object { $_.rule -eq $Rule }).Count -eq 7)
+Check 'run 2 --rule: same 8 findings' (@($r2 | Where-Object { $_.rule -eq $Rule }).Count -eq 8)
 $r2d = Parse-Findings (& $exePath lint-all --db $db --format json --disable $Rule 2>$null)
 Check 'run 2 --disable: no finding of the rule' (@($r2d | Where-Object { $_.rule -eq $Rule }).Count -eq 0) "total=$($r2d.Count)"
 
@@ -83,11 +84,12 @@ $sc = Join-Path $scratch 'src\uUnusedGlobal.pas'
 Swap $sc 'VImplUsed:= CImplNested;' 'VImplUsed:= 0;'
 Swap $sc 'VImplUsed:= CImplInit;' 'VImplUsed:= 0;'
 Swap $sc '(CBase, 6)' '(5, 6)'
+Swap $sc '  ImplRoutineCalled;' '  ;'
 Swap (Join-Path $scratch 'src\uUnusedGlobalUser.pas') 'N:= GIntfOtherUnit;' 'N:= 0;'
 & $exePath index (Join-Path $scratch 'src') --db $db 2>&1 | Out-Null
 $r3 = Parse-Findings (& $exePath lint-all --db $db --format json --rule $Rule 2>$null)
 $c3 = @($r3 | Where-Object { $_.rule -eq $Rule })
-foreach ($c in @('CONTROL-IMPL-NESTED', 'CONTROL-IMPL-INIT', 'CONTROL-IMPL-VIATYPED', 'CONTROL-INTF-OTHERUNIT')) {
+foreach ($c in @('CONTROL-IMPL-NESTED', 'CONTROL-IMPL-INIT', 'CONTROL-IMPL-VIATYPED', 'CONTROL-INTF-OTHERUNIT', 'CONTROL-IMPL-ROUTINE-CALLED')) {
   Check "run 3 lone use removed -> $c fires" ((At $c3 (LineOf $c)).Count -eq 1)
 }
 Check 'run 3 still-used symbols stay silent' ((At $c3 (LineOf 'CONTROL-IMPL-READ')).Count -eq 0 -and (At $c3 (LineOf 'CONTROL-INTF-OWNIMPL')).Count -eq 0)

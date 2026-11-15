@@ -43,9 +43,29 @@ type
     Y: Integer;
   end;
 
-procedure RunGlobals;
+function ImplRoutineUnused: Integer;    // TRIGGER-IMPL-ROUTINE
+begin
+  Result:= 1;
+end;
+
+procedure ImplRoutineCalled;           // CONTROL-IMPL-ROUTINE-CALLED
+begin
+end;
+
+procedure ImplRoutineAddr;             // CONTROL-IMPL-ROUTINE-ADDR (named only as a procedure value)
+begin
+end;
+
+procedure ImplFwd; forward;            // CONTROL-IMPL-ROUTINE-FORWARD (forward + body, called)
+
+procedure ImplFwd;
+begin
+end;
+
+procedure RunGlobals;                  // CONTROL-INTF-ROUTINE (the interface declares it)
 var
   R: TImplRecUsed;
+  P: procedure;
 
   procedure Nested;
   begin
@@ -56,6 +76,10 @@ begin
   R.Y:= CPlain + CTyped[0] + GIntfOwnImpl;
   VImplUsed:= VImplUsed + R.Y;
   Nested;
+  ImplRoutineCalled;
+  P:= ImplRoutineAddr;
+  P;
+  ImplFwd;
 end;
 
 initialization
