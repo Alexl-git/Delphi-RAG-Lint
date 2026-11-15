@@ -46,30 +46,73 @@ type
 
 implementation
 
-{ The lane's helpers live in DRagLint.V151.THRA.Support; name it in an
-  implementation uses clause here once it declares something. }
+uses
+  System.IOUtils
+  , DRagLint.V151.THRA.Support
+  ;
+
+const
+  RULE_ANON    = 'anonymous-thread-not-started';
+  RULE_SYNC    = 'synchronize-in-destructor';
+  RULE_LOOP    = 'thread-loop-without-terminated';
+  RULE_UAF     = 'thread-use-after-free-on-terminate';
+  RULE_TVAR    = 'threadvar-managed';
+  RULE_QUEUE   = 'queue-nil-in-package';
+  RULE_FOT_HOST= 'freeonterminate-then-wait';
 
 class procedure TV151THRARules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
-  { no rules yet }
+  ADecls.Add(V151Rule(RULE_ANON, 'bug-patterns', 'warning', 'Anonymous thread is created but never started'));
+  ADecls.Add(V151Rule(RULE_SYNC, 'bug-patterns', 'warning', 'Synchronize called from the destructor of a thread class'));
+  ADecls.Add(V151Rule(RULE_LOOP, 'bug-patterns', 'warning', 'Loop in a thread''s Execute path never tests Terminated'));
+  ADecls.Add(V151Rule(RULE_UAF, 'bug-patterns', 'warning', 'Thread used after Start although it frees itself on termination'));
+  ADecls.Add(V151Rule(RULE_TVAR, 'bug-patterns', 'warning', 'threadvar of a managed type is never finalized'));
+  ADecls.Add(V151Rule(RULE_QUEUE, 'bug-patterns', 'warning', 'TThread.Queue(nil, ...) in a package unit'));
+  ADecls.Add(V151Host(RULE_FOT_HOST));
 end;
 
 class function TV151THRARules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+var
+  Src: string;
+  Scan: TThrScan;
+  Found: TList<TLintFinding>;
+begin
+  Result:= nil;
+  if not (ACtx.Wants(RULE_ANON) or ACtx.Wants(RULE_SYNC) or ACtx.Wants(RULE_LOOP) or ACtx.Wants(RULE_UAF)  // dl:ok boolean-expression-complexity@3a78 -- REVIEWED 2026-11-13 v151 THR-A: flat lookahead over adjacent tokens; splitting it would hide the pattern
+    or ACtx.Wants(RULE_TVAR) or ACtx.Wants(RULE_QUEUE) or ACtx.Wants(RULE_FOT_HOST)) then Exit;
+  try
+    Src:= TFile.ReadAllText(ACtx.Path);
+  except  // dl:ok bare-except@8f3b, try-except-swallowed@8f3b -- REVIEWED 2026-11-13 v151 THR-A: an unreadable or unlistable file means no package or source facts, so no finding is the right result
+    Exit;
+  end;
+  Scan:= TThrScan.Create(Src, ACtx.Store, ACtx.FileId);
+  Found:= TList<TLintFinding>.Create;
+  try
+    if ACtx.Wants(RULE_ANON) then ThrCheckAnonymousNotStarted(Scan, ACtx.Path, Found);
+    if ACtx.Wants(RULE_SYNC) then ThrCheckSynchronizeInDestructor(Scan, ACtx.Path, Found);
+    if ACtx.Wants(RULE_LOOP) then ThrCheckLoopWithoutTerminated(Scan, ACtx.Path, Found);
+    if ACtx.Wants(RULE_UAF) then ThrCheckUseAfterFreeOnTerminate(Scan, ACtx.Path, Found);
+    if ACtx.Wants(RULE_TVAR) then ThrCheckThreadvarManaged(Scan, ACtx.Path, Found);
+    if ACtx.Wants(RULE_QUEUE) then ThrCheckQueueNilInPackage(Scan, ACtx.Path, Found);
+    if ACtx.Wants(RULE_FOT_HOST) then ThrCheckFreeAndNilOnFreeOnTerminate(Scan, ACtx.Path, RULE_FOT_HOST, Found);
+    Result:= Found.ToArray;
+  finally
+    Found.Free;
+    Scan.Free;
+  end;
+end;
+
+class function TV151THRARules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@2c91 -- REVIEWED 2026-11-13 v151 THR-A: the lane entry point signature is fixed by TV151Dispatch; this lane has nothing to check here
 begin
   Result:= nil;
 end;
 
-class function TV151THRARules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV151THRARules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;  // dl:ok unused-parameter@591a -- REVIEWED 2026-11-13 v151 THR-A: the lane entry point signature is fixed by TV151Dispatch; this lane has nothing to check here
 begin
   Result:= nil;
 end;
 
-class function TV151THRARules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;
-begin
-  Result:= nil;
-end;
-
-class function TV151THRARules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
+class function TV151THRARules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@d468 -- REVIEWED 2026-11-13 v151 THR-A: the lane entry point signature is fixed by TV151Dispatch; this lane has nothing to check here
 begin
   Result:= nil;
 end;
