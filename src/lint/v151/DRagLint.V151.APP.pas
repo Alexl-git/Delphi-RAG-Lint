@@ -14,6 +14,7 @@ uses
   , DRagLint.V151.Api
   ;
 
+
 type
   /// <summary>Checker entry points of v151 lane APP; every method is called by TV151Dispatch.</summary>
   /// <remarks>Stateless; class methods only. A method that has nothing to check returns nil.
@@ -46,17 +47,55 @@ type
 
 implementation
 
-{ The lane's helpers live in DRagLint.V151.APP.Support; name it in an
-  implementation uses clause here once it declares something. }
+uses
+  DRagLint.V151.APP.Support
+  ;
 
 class procedure TV151APPRules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
-  { no rules yet }
+  ADecls.Add(V151Rule(RULE_TLS_VERIFY_OFF, 'security', 'warning',
+    'TLS certificate verification is switched off'));
+  ADecls.Add(V151Rule(RULE_UI_CALL, 'bug-patterns', 'warning',
+    'Dialog call in a console program or a Windows service'));
+  ADecls.Add(V151Rule(RULE_DUNITX_NO_ASSERT, 'other', 'info',
+    'DUnitX test method that checks nothing'));
+  ADecls.Add(V151Rule(RULE_CONTRACT_CLASS, 'policy', 'info',
+    'Contract unit (Intf / Interfaces / Contracts) declares a class', False));
+  ADecls.Add(V151Rule(RULE_WEAK_CIPHER, 'security', 'warning',
+    'Broken cipher or mode (DES, 3DES, RC2, RC4, ECB)'));
+  ADecls.Add(V151Rule(RULE_ASM_NO_WIN64, 'platform', 'warning',
+    'asm block without a 64-bit variant'));
+  ADecls.Add(V151Rule(RULE_WRITELN_GUI, 'platform', 'warning',
+    'Write / WriteLn in a program without a console'));
 end;
 
 class function TV151APPRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+var
+  Src: TAppSrc;
+  Acc: TList<TLintFinding>;
+  Text: string;
 begin
   Result:= nil;
+  if not (ACtx.Wants(RULE_TLS_VERIFY_OFF) or ACtx.Wants(RULE_UI_CALL) or ACtx.Wants(RULE_DUNITX_NO_ASSERT)
+    or ACtx.Wants(RULE_CONTRACT_CLASS) or ACtx.Wants(RULE_WEAK_CIPHER) or ACtx.Wants(RULE_ASM_NO_WIN64)
+    or ACtx.Wants(RULE_WRITELN_GUI)) then Exit;
+  Text:= ReadAppSource(ACtx.Path);
+  if Text = '' then Exit;
+  Src:= TAppSrc.Create(Text);
+  Acc:= TList<TLintFinding>.Create;
+  try
+    if ACtx.Wants(RULE_TLS_VERIFY_OFF)   then TAppChecks.TlsVerificationDisabled(Src, ACtx.Path, Acc);
+    if ACtx.Wants(RULE_UI_CALL)          then TAppChecks.UiCallInConsoleOrService(Src, ACtx.Path, Acc);
+    if ACtx.Wants(RULE_DUNITX_NO_ASSERT) then TAppChecks.DunitxTestWithoutAssert(Src, ACtx.Path, Acc);
+    if ACtx.Wants(RULE_CONTRACT_CLASS)   then TAppChecks.ContractUnitDeclaresClass(Src, ACtx.Path, Acc);
+    if ACtx.Wants(RULE_WEAK_CIPHER)      then TAppChecks.WeakCipher(Src, ACtx.Path, Acc);
+    if ACtx.Wants(RULE_ASM_NO_WIN64)     then TAppChecks.AsmWithoutWin64Variant(Src, ACtx.Path, Acc);
+    if ACtx.Wants(RULE_WRITELN_GUI)      then TAppChecks.WritelnInGuiApp(Src, ACtx.Path, Acc);
+    Result:= Acc.ToArray;
+  finally
+    Acc.Free;
+    Src.Free;
+  end;
 end;
 
 class function TV151APPRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
