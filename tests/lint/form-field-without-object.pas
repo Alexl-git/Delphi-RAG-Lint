@@ -3,13 +3,14 @@ unit FormFieldWithoutObject;
 interface
 
 uses
-  Vcl.Forms, Vcl.StdCtrls;
+  System.Classes, Vcl.Forms, Vcl.StdCtrls;
 
 type
   TFieldNoObjForm = class(TForm)
     Edit1: TEdit;
     btnGone: TButton;
     lblKept: TLabel;
+    LineBuf: TStringList;
     procedure Edit1Change(Sender: TObject);
   private
     FCache: TButton;
@@ -29,6 +30,7 @@ implementation
 procedure TFieldNoObjForm.Edit1Change(Sender: TObject);
 begin
   FCache:= btnGone;
+  LineBuf:= TStringList.Create;
 end;
 
 end.

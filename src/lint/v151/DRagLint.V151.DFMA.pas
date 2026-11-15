@@ -142,21 +142,50 @@ end;
   form-field-without-object / form-object-without-field / form-field-type-mismatch
   --------------------------------------------------------------------------- }
 
-/// Published fields of the root class with no node of that name anywhere in the form file.
-/// A field of a frame instance's inner control is not a field of the form, so every node
-/// counts, inline or not.
+/// Lower-cased names the unit's routines assign (`X := ...` or `Self.X := ...`).
+function AssignedNames(const AUnit: TPasUnit): THashSet<string>;
+begin
+  var Names: THashSet<string>:= THashSet<string>.Create;
+  for var R in AUnit.Routines do
+    WalkNodes(R.Body, False,
+      function(const N: TTSNode): Boolean
+      begin
+        Result:= True;
+        if N.NodeType <> 'assignment' then Exit;
+        var L: TTSNode:= N.ChildByField('lhs');
+        if L.NodeType = 'exprDot' then
+        begin
+          if not SameText(AUnit.Text(L.ChildByField('lhs')), 'Self') then Exit;
+          L:= L.ChildByField('rhs');
+        end;
+        if L.NodeType = 'identifier' then Names.Add(LowerCase(AUnit.Text(L)));
+      end);
+  Result:= Names;
+end;
+
+/// Published fields of the root class with no node of that name anywhere in the form file
+/// and no assignment in the unit (a code-owned published field is not nil). A field of a
+/// frame instance's inner control is not a field of the form, so every node counts,
+/// inline or not.
 function CheckFieldsWithoutObject(const ACtx: TV151FileCtx; const AUnit: TPasUnit; const ADfm: TDfmDoc;
   ACls: Integer): TArray<TLintFinding>;
 begin
   Result:= nil;
-  for var F in AUnit.Classes[ACls].Fields do
-  begin
-    if not F.IsPublished then Continue;
-    if ADfm.IndexOfName(F.Name) >= 0 then Continue;
-    Result:= Result + [MakeFinding(RULE_FIELD_WITHOUT_OBJECT, ACtx.Path, F.Line, F.Col, SEV_WARNING,
-      Format('Published field %s: %s of %s has no object named %s in %s -- it stays nil after the form loads. '
-        + 'Add the component on the form or move the field out of the published section.',
-        [F.Name, F.TypeName, AUnit.Classes[ACls].Name, F.Name, TPath.GetFileName(ADfm.Path)]))];
+  var Assigned_: THashSet<string>:= nil;
+  try
+    for var F in AUnit.Classes[ACls].Fields do
+    begin
+      if not F.IsPublished then Continue;
+      if ADfm.IndexOfName(F.Name) >= 0 then Continue;
+      if Assigned_ = nil then Assigned_:= AssignedNames(AUnit);
+      if Assigned_.Contains(LowerCase(F.Name)) then Continue;
+      Result:= Result + [MakeFinding(RULE_FIELD_WITHOUT_OBJECT, ACtx.Path, F.Line, F.Col, SEV_WARNING,
+        Format('Published field %s: %s of %s has no object named %s in %s -- it stays nil after the form loads. '
+          + 'Add the component on the form or move the field out of the published section.',
+          [F.Name, F.TypeName, AUnit.Classes[ACls].Name, F.Name, TPath.GetFileName(ADfm.Path)]))];
+    end;
+  finally
+    Assigned_.Free;
   end;
 end;
 
