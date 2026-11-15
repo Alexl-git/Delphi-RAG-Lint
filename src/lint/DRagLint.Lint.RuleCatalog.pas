@@ -98,8 +98,13 @@ const
                                   dl:ok would report at once. Opt in per project.
 
     Every one of them is opt-in, unchanged: `--rule <id>` on the CLI, or
-    "enabled":["<id>"] in drag-lint-lint.json, which ShouldKeep honours. }
-  BUILTIN_RULES_OFF_BY_DEFAULT: TArray<string> = [
+    "enabled":["<id>"] in drag-lint-lint.json, which ShouldKeep honours.
+
+    v151 (lane FRAME): this const is the CORE list only. Every consumer reads the
+    FUNCTION BUILTIN_RULES_OFF_BY_DEFAULT (same name, so no call site changed), which
+    returns this list plus every provider row (RegisterProviderRules) declared OFF:
+    one source of truth for ShouldKeep, DefaultDisabled, rules --json and the LSP. }
+  BUILTIN_RULES_OFF_BY_DEFAULT_CORE: TArray<string> = [
     'function-result-ignored', 'unsafe-typecast-without-is', 'exhaustive-enum-case',
     'interface-object-mixing', 'multiple-statements-per-line', 'magic-literal',
     'boolean-flag-parameter', 'commented-out-code', 'string-equality-comparison',
@@ -408,6 +413,22 @@ procedure RegisterSidecarFixRule(const AId: string; ARisky: Boolean);
 /// </remarks>
 function IsSidecarFixRule(const AId: string; out ARisky: Boolean): Boolean;
 
+/// <summary>The per-file rules that ship OFF by default: the core list plus every
+/// provider row registered with DefaultEnabled = False.</summary>
+/// <returns>Rule ids; the core ids first, then the provider ids in registration order.</returns>
+/// <remarks>Was a const array until v151; kept under the SAME name so every
+/// consumer (MatchText, for-in, array +) compiles unchanged and cannot drift from
+/// the catalog. Constant after unit initialization; thread-safe to read.</remarks>
+function BUILTIN_RULES_OFF_BY_DEFAULT: TArray<string>;  // dl:ok method-pascalcase@246e -- REVIEWED 2026-11-13 v151 FRAME: keeps the former const name so every consumer compiles unchanged
+
+/// <summary>Adds rule rows that TRuleCatalog.BuiltinRegistry appends after its own.</summary>
+/// <param name="ARows">Catalog rows; Source should be 'builtin'. A row whose
+/// DefaultEnabled is False joins BUILTIN_RULES_OFF_BY_DEFAULT.</param>
+/// <remarks>Call ONLY from a unit's initialization section (the v151 dispatcher,
+/// DRagLint.V151.Dispatch, is the one caller): the lists are not locked, they are
+/// read-only once the program body runs. An id that is already a built-in is a
+/// registration bug; BuildCatalog keeps the first row only.</remarks>
+procedure RegisterProviderRules(const ARows: TArray<TRuleInfo>);
 
 implementation
 
@@ -417,6 +438,22 @@ uses
 var
   { id -> risky. Guarded by TMonitor on itself; created in initialization. }
   GSidecarFixes: TDictionary<string, Boolean>;
+  { v151 provider rows (RegisterProviderRules) and the OFF ids among them; written
+    only during unit initialization. }
+  GProviderRows: TArray<TRuleInfo>;
+  GProviderOff : TArray<string>;
+
+function BUILTIN_RULES_OFF_BY_DEFAULT: TArray<string>;  // dl:ok method-pascalcase@246e -- REVIEWED 2026-11-13 v151 FRAME: keeps the former const name so every consumer compiles unchanged
+begin
+  Result:= BUILTIN_RULES_OFF_BY_DEFAULT_CORE + GProviderOff;
+end;
+
+procedure RegisterProviderRules(const ARows: TArray<TRuleInfo>);
+begin
+  GProviderRows:= GProviderRows + ARows;
+  for var R: TRuleInfo in ARows do
+    if not R.DefaultEnabled then GProviderOff:= GProviderOff + [R.Id];
+end;
 
 procedure RegisterSidecarFixRule(const AId: string; ARisky: Boolean);
 var
@@ -794,7 +831,7 @@ begin
     B('enum-ordinal-persisted', 'project-wide', 'warning', 'An enum whose ordinal crosses a stream / pipe / dataset / registry boundary (an ordinal cast TEnum(x) or Ord(v) in a routine that also calls a sink from rules\enum-persist-sinks.txt) has values with implicit ordinals -- inserting or reordering a value silently changes stored data; pin each value (= N)'); { ON by default (owner ruling 2026-10-25, lane X6): 3 findings on ORM3, 0 on DataCopy; fully pinned enums never fire }
     { --- lane B-ENUM (INBOX-lint-rules-from-new-facts-2026-09-23 rules 2 + 3) --- }
     B('enum-ordinal-cast', 'bug-patterns', 'warning', 'A hard-coded enum ordinal -- a literal cast to an enum type TEnum(5), an enum''s ordinal compared with a literal (Ord(X) = 3), or case Ord(X) of with literal labels; inserting or reordering a value silently changes the meaning. Ord() against Ord(), a negative sentinel TEnum(-1) and an enum whose values are all pinned (= N) are exempt; one dl:ok on the enum TYPE line reviews every cast of it'); { ON by default (B-ENUM 2026-10-28): 11 findings, 11/11 true positives -- 10 on ORM3 CLIENT (TContrMode(0..4) in uPLANLIST), 1 on the engine tree (TSQueryError(0)); pinned TCommandID (Ord(ACmd) >= 200) and TDocCommentKind(-1) sentinels exempt by design }
-    B('unused-global', 'project-wide', 'hint', 'A unit-level const, var or type (interface or implementation section) that no ref names -- implementation-section ones are unit-private so the check is exact; interface-section const/var/type need no ref in ANY file. Name-keyed and conservative; ON by default; an interface symbol of a unit other projects list (dl:shared header or a manifest project whose index holds the unit) is reported only when none of them names it, and not at all when one of their indexes is missing or stale'); { 1.40 lane unusedg; SHARED-UNIT-SCOPE 1.41 }
+    B('unused-global', 'project-wide', 'hint', 'A unit-level const, var or type (interface or implementation section), or an implementation-only free function / procedure (1.51), that no ref names -- implementation-section ones are unit-private so the check is exact; interface-section const/var/type need no ref in ANY file. Name-keyed and conservative; ON by default; an interface symbol of a unit other projects list (dl:shared header or a manifest project whose index holds the unit) is reported only when none of them names it, and not at all when one of their indexes is missing or stale'); { 1.40 lane unusedg; SHARED-UNIT-SCOPE 1.41 }
     B('unused-enum-value', 'project-wide', 'hint', 'An enum value nothing in the project names, in an enum type with no implicit use (Low/High, Succ/Pred, casts, Ord, RTTI, a streamed property) -- one finding per value, the decision per type. A filler value named for its own ordinal (Dummy0 at 0) is exempt; one dl:ok on the TYPE line reviews every value'); { ON by default (ENUMRULES 2026-10-28, owner): B-ENUM measured 0 on ORM3 CLIENT and the engine tree (every candidate type has a real implicit use); filler padding and type-level dl:ok keep the owner's DB-ordinal enums silent }
     { --- owner request #5b (1.40 lane flow) --- }
     B('read-never-assigned', 'project-wide', 'warning', 'A field or global variable is read but nothing in the project assigns or creates it -- every read sees 0 / nil / empty. Writes through a hard cast T(X).F, an out / var argument, SetLength / Inc, a property write accessor, with, @, an initialiser, absolute or an initialization section count; published, default-section (DFM-streamed) and record fields and typed constants are never reported'); { ON by default (1.40 lane flow, 2026-11-01): 0 findings on the engine src\cli, DataCopy, Loader2025, YADF, MigrationAssistant and TableTools indexes -- the raw candidates are all DFM-streamed, initialised or written through TInterlocked / an indexer }
@@ -947,6 +984,8 @@ begin
     B('taint-path-traversal', 'security', 'warning', 'Tainted data reaches a file-system path sink -- a catalogued source flows across routines into a file / directory API (CWE-22)');
     { lane INC3: the preprocessor's IF symbol table (DRagLint.Diagnostics.PpChecks) }
     B('pp-unresolved-if', 'bug-patterns', 'hint', '$IF names a constant the index cannot resolve -- the directive was taken as False, so the wrong branch (and include) may be indexed');
+    { v151 (lane FRAME): rows registered by RegisterProviderRules -- the v151 rule lanes, via DRagLint.V151.Dispatch }
+    L.AddRange(GProviderRows);
     Result:= L.ToArray;
   finally
     L.Free;

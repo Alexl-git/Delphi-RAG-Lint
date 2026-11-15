@@ -1,0 +1,8 @@
+{
+  "id": "processmessages-in-loop",
+  "category": "bug-patterns",
+  "severity": "warning",
+  "message": "Application.ProcessMessages inside a loop lets other handlers (including this one) run mid-loop; move the work to a thread or use a timer, or guard against re-entry.",
+  "warn_capture": "warn",
+  "require_ancestor": ["for", "while", "repeat", "foreach"]
+}

@@ -1,0 +1,7 @@
+{
+  "id": "string-index-base",
+  "severity": "warning",
+  "category": "bug-patterns",
+  "message": "String positions are 1-based: Copy/Delete/Insert with index 0 starts before the first character, and Pos never returns -1 (it returns 0 for not found), so a comparison with -1 is always the same answer. Use 1 as the first index and compare Pos with 0.",
+  "warn_capture": "warn"
+}

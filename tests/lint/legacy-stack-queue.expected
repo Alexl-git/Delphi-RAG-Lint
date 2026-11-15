@@ -1,0 +1,4 @@
+# cast of Pop at line 25; the generic stack (line 26) must not fire
+legacy-stack-queue 25
+# v151 INT: non-hit pins (run_rule_fixture_positive_control P3 needs >= 1 hit AND >= 1 non-hit per rule; the near-miss lines above stay silent)
+!legacy-stack-queue 26

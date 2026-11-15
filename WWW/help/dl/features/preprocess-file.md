@@ -4,10 +4,10 @@ title: preprocess-file
 summary: Diagnostic that prints a file's {$IFDEF}-resolved source to stdout under a given define set
 product: DL
 group: compiler
-order: 90010
+order: 90011
 since: 0.92.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.51.0-alpha
 ---
 
 # preprocess-file

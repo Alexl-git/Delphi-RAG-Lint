@@ -1,0 +1,7 @@
+{
+  "id": "path-concat-without-delimiter",
+  "severity": "warning",
+  "category": "bug-patterns",
+  "message": "A folder name without trailing path delimiter is joined to a file or folder name with +, giving a name with the delimiter missing (Dir + 'file.txt' reads 'Dirfile.txt'). Use TPath.Combine(Dir, Name) or IncludeTrailingPathDelimiter(Dir) + Name.",
+  "warn_capture": "warn"
+}

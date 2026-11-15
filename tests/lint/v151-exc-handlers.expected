@@ -1,0 +1,13 @@
+# Hits: Exception before EConvertError (17), EExternal before EAccessViolation (43),
+# E.Free (56), FreeAndNil(E) (67), X.Destroy (88).
+# Silent: unrelated siblings then the general handler last (27-31), another object freed (79), X.Free (93).
+except-handler-order 17
+except-handler-order 43
+exception-freed 56
+exception-freed 67
+destroy-called-directly 88
+!except-handler-order 27
+!except-handler-order 29
+!except-handler-order 31
+!exception-freed 80
+!destroy-called-directly 93

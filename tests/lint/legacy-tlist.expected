@@ -1,0 +1,6 @@
+# casts at lines 26, 27, 28; the generic list (line 29) must not fire
+legacy-tlist 26
+legacy-tlist 27
+legacy-tlist 28
+# v151 INT: non-hit pins (run_rule_fixture_positive_control P3 needs >= 1 hit AND >= 1 non-hit per rule; the near-miss lines above stay silent)
+!legacy-tlist 29

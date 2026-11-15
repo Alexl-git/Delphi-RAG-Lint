@@ -1,0 +1,11 @@
+# Free, Self.Destroy and FreeAndNil(<own global>) in a handler
+self-free-in-event-handler 26
+self-free-in-event-handler 27
+self-free-in-event-handler 28
+# with-block, anonymous method, a control's Free, Release, and DoWork (no handler) stay silent
+# v151 INT: non-hit pins (run_rule_fixture_positive_control P3 needs >= 1 hit AND >= 1 non-hit per rule; the near-miss lines above stay silent)
+!self-free-in-event-handler 36
+!self-free-in-event-handler 40
+!self-free-in-event-handler 43
+!self-free-in-event-handler 44
+!self-free-in-event-handler 49

@@ -7,7 +7,7 @@ group: editor-integration
 order: 110023
 since: 0.4.0-alpha
 status: shipped
-updated: 1.48.0-alpha
+updated: 1.51.0-alpha
 ---
 
 # serve
@@ -47,6 +47,16 @@ the RAD Studio IDE, it is `lsp` instead.
 ```text
 drag-lint serve --db <file.sqlite>
 ```
+
+### Which databases it serves (1.51)
+
+Every database it is given is opened: repeated `--db` as given, or with no
+`--db` the project's own index plus every library section of the platform.
+Other projects' indexes in the manifest are not served (stderr says how many),
+and the served list is printed on stderr. `find_symbol` searches all of them,
+project first; the declaration tools (`get_symbol_doc`, `get_surface`,
+`get_slice`, `get_context_bundle`) answer from the first database that declares
+the name; the call-graph tools stay on the first database.
 
 ### What it needs
 

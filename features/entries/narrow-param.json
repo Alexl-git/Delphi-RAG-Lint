@@ -13,7 +13,7 @@
       "type": "cli",
       "verb": "narrow-param",
       "example": "drag-lint narrow-param --routine <QName> --plan --db <db>",
-      "usage": "drag-lint narrow-param (--routine <QName> [--param <name>] | --all) (--plan | --apply --project <X.dproj>) --db <db> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]",
+      "usage": "drag-lint narrow-param (--routine <QName> [--param <name>] | --all) (--plan | --apply --project <X.dproj>) --db <db> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--show-bound] [--json|--format json]",
       "flags": [
         {
           "name": "--routine",
@@ -63,18 +63,21 @@
           "arg": "<db>"
         },
         {
+          "name": "--show-bound"
+        },
+        {
           "name": "--format",
           "arg": "json"
         }
       ],
-      "help": ["  drag-lint narrow-param (--routine <QName> [--param <name>] | --all) (--plan | --apply --project <X.dproj>) --db <db> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]   - retype a class parameter to the deepest ancestor its uses need: static proof, every refusal named, --apply through the compile gate"]
+      "help": ["  drag-lint narrow-param (--routine <QName> [--param <name>] | --all) (--plan | --apply --project <X.dproj>) --db <db> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--show-bound] [--json|--format json]   - retype a class parameter to the deepest ancestor its uses need: static proof, every refusal named, --apply through the compile gate"]
     }
   ],
   "audience": "both",
   "verified": {
-    "date": "2026-11-09",
+    "date": "2026-11-14",
     "by": "ENGINE",
-    "build": "1.50.0-alpha",
-    "surfaceHash": "b490a52384bb1cb7fb000bf7cc26c2dcfdf39c0accb20e5489fe4195dd66e2e0"
+    "build": "1.51.0-alpha",
+    "surfaceHash": "784b27b33ecdaddb5f47a51ff08ffe78033e768a302cc2829a6add2553f145c8"
   }
 }

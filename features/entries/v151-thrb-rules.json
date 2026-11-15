@@ -1,0 +1,24 @@
+{
+  "id": "v151-thrb-rules",
+  "title": "Thread race and blocking rules",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.51.0-alpha",
+  "summary": "Four lint rules: racing writes in parallel bodies, non-atomic global increments in threads, unbounded waits in forms, lost task exceptions",
+  "intro": "Read this when you want lint to catch data races between threads, a frozen window, or an exception lost inside a TTask. Run `drag-lint lint <unit.pas>` or `lint-all`; each rule is selectable with --rule. With an index the rules also recognise thread, form and frame classes whose ancestor lives in another unit.",
+  "wikiPage": "v151-thread-race-rules",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-14",
+    "by": "ENGINE",
+    "build": "1.51.0-alpha",
+    "surfaceHash": "de319179f8b6b2ffbdba5a675a1f550133807d68a0339e632b8014cd5442cafc"
+  }
+}

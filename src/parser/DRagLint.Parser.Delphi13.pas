@@ -1840,7 +1840,12 @@ begin
   if TypeName = '' then Exit;
   if AParentQualifiedName <> '' then QName:= AParentQualifiedName + '.' + TypeName
   else QName:= TypeName;
-  Idx:= AState.Emit(skInterface, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, '', '', HeritageTextOf(TypeNode, AState.Source), False, False, '', '', True, GenParams);
+  { v151 EXT: the GUID clause, verbatim between its brackets (a quoted literal or a constant's
+    name), is the interface's signature -- the fact a cross-unit duplicate-GUID rule reads.
+    '' when the interface has none. }
+  var GuidNode:= TypeNode.ChildByField('guid');
+  var GuidText:= if GuidNode.IsNull then '' else NodeText(GuidNode, AState.Source).Trim(['[', ']', ' ', #9, #13, #10]);
+  Idx:= AState.Emit(skInterface, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, GuidText, '', HeritageTextOf(TypeNode, AState.Source), False, False, '', '', True, GenParams);
   { All interface members are public. }
   OldVis:= AState.CurrentVisibility;
   var OldVisExp: Boolean:= AState.CurrentVisExplicit;
@@ -1963,6 +1968,59 @@ begin
   Result:= Trim(Result);
 end; // function
 
+{ v151 GR11 (grammar v1.4.11, code-page string types). `TAnsi1252 = type AnsiString(1252);`
+  is kType + ONE node declStringCodePage(base: identifier, codePage: literalNumber | identifier);
+  before v1.4.11 the same text was kType + loose siblings. Either way no handler claimed the base:
+  TryWalkOtherTypeDecl took the kType keyword as the `type` field and stored the signature 'type',
+  and the base and a constant code page emitted no ref at all.
+  Emits skTypeAlias with the BASE type as its signature -- the same signature `type AnsiString`
+  without a code page gets, so alias chasing reaches the string intrinsic -- a type_use ref for
+  the base, and a read ref for a code page given by a constant (`AnsiString(CP_UTF8)`), gated
+  like every other usage ref. The code page itself is not stored. Always returns True once a
+  base was found: nothing else claims this shape. }
+function TryWalkCodePageString(const ADeclTypeNode, ACodePageNode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string): Boolean;
+begin
+  Result:= False;
+  var BaseNode:= ACodePageNode.ChildByField('base');
+  var NameNode:= ADeclTypeNode.ChildByField('name');
+  if BaseNode.IsNull or NameNode.IsNull then Exit;
+  var TypeName:= NodeText(NameNode, AState.Source);
+  var BaseName:= NodeText(BaseNode, AState.Source);
+  if (TypeName = '') or (BaseName = '') then Exit;
+  var QName:= if AParentQualifiedName <> '' then AParentQualifiedName + '.' + TypeName else TypeName;
+  AState.Emit(skTypeAlias, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, BaseName);
+  AState.EmitRef('type_use', BaseName, BaseNode);
+  var CodePage:= ACodePageNode.ChildByField('codePage');
+  if AState.EmitUsageRefs and (not CodePage.IsNull) and (CodePage.NodeType = 'identifier') then
+    AState.EmitRef('read', NodeText(CodePage, AState.Source), CodePage);
+  Result:= True;
+end; // function
+
+// v151 GR11 (grammar v1.4.11, issue 4). With the THEN branch of a conditional class header
+// active -- IFDEF X: `TFoo = class(TOther);`, ELSE: `TFoo = class(TBase)`, then after the
+// ENDIF `protected ... end;` -- the members follow a complete short class and the grammar
+// parses them as a classBodyOrphan SIBLING of that declType. (Line comments on purpose: a
+// directive written with its braces inside a brace comment ends the comment early.)
+// Their class is the one declared just before them: the closest preceding declType sibling
+// (directive and comment nodes skipped), if the walk already emitted it as a class or record.
+// Returns its index in AState.Symbols, or -1 (no declType before it, or that one is not a
+// class / record) -- the caller then walks the members as before.
+function ClassBodyOrphanOwner(const AOrphanNode: TTSNode; const AState: TWalkState; const AParentQualifiedName: string): Integer;
+begin
+  Result:= -1;
+  var Prev:= AOrphanNode.PrevNamedSibling;
+  while (not Prev.IsNull) and (Prev.NodeType <> 'declType') and (Prev.NodeType <> 'classBodyOrphan') do Prev:= Prev.PrevNamedSibling;
+  if Prev.IsNull or (Prev.NodeType <> 'declType') then Exit;
+  var NameNode:= Prev.ChildByField('name');
+  if NameNode.IsNull then Exit;
+  var TypeName, GenParams: string;
+  SplitGenericName(NodeText(NameNode, AState.Source), TypeName, GenParams);
+  if TypeName = '' then Exit;
+  var QName:= if AParentQualifiedName <> '' then AParentQualifiedName + '.' + TypeName else TypeName;
+  for var i:= AState.Symbols.Count - 1 downto 0 do
+    if (AState.Symbols[i].Kind in [skClass, skRecord]) and SameText(AState.Symbols[i].QualifiedName, QName) then Exit(i);
+end; // function
+
 // INBOX 2.11 (converter-editor team, 2026-08-02): a STRONG / distinct type alias
 // -- `TFileName = type string;`, `TDate = type TDateTime;` -- was never indexed.
 // Same defect class as 2.1: parsed cleanly, claimed by no handler, no row written.
@@ -2014,7 +2072,8 @@ begin
     { The section keyword of `type ... = ...` is a child of declTypes, not of
       declType, so a kType HERE only ever means the strong-alias form. }
     if Child.NodeType = 'kType' then HasTypeKeyword:= True
-    else if Child.NodeType = 'type' then WrapNode:= Child; { keep the LAST }
+    else if Child.NodeType = 'type' then WrapNode:= Child { keep the LAST }
+    else if Child.NodeType = 'declStringCodePage' then Exit(TryWalkCodePageString(ADeclTypeNode, Child, AState, AParentSymbolIdx, AParentQualifiedName));
   end;
   if not HasTypeKeyword then Exit;
   if WrapNode.IsNull then Exit;
@@ -2953,6 +3012,24 @@ begin
   Result:= Result + '|' + LowerCase(Rest);
 end; // function
 
+{ v151 INC: True when a routine declaration named ADottedName (as SetRoutineImplRange
+  matches it: same last segment, qualified name equal or ending in '.' + the name) still
+  waits for its body. False means a body here would have no symbol. }
+function PendingRoutineDeclExists(const AState: TWalkState; const ADottedName: string): Boolean;
+var
+  LastSeg: string;
+begin
+  Result := False;
+  LastSeg:= Copy(ADottedName, LastDelimiter('.', ADottedName) + 1, MaxInt);
+  for var i:= 0 to AState.Symbols.Count - 1 do
+  begin
+    var Sym:= AState.Symbols[i];
+    if (Sym.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) and (Sym.ImplStartLine = 0)
+       and SameText(Sym.Name, LastSeg)
+       and (SameText(Sym.QualifiedName, ADottedName) or Sym.QualifiedName.EndsWith('.' + ADottedName, True)) then Exit(True);
+  end;
+end;
+
 procedure SetRoutineImplRange(const AState: TWalkState; const AName: string; AStartLine, AEndLine: Integer; const ASignature: string);
 var
   i          : Integer;
@@ -3233,7 +3310,10 @@ begin
   end; // while
 
   if Length(Links) = 0 then Exit;
-  Outcome:= ClassifyDiChain(Links, Binding, ResIntf, UnresMethod);
+  { v151 EXT: the chain's root receiver (`GlobalContainer`, `FContainer`, `LookupCache`) tells a
+    container call from any other method that happens to be named Register. }
+  var Receiver: string:= if (not Cur.IsNull) and (Cur.NodeType = 'identifier') then NodeText(Cur, AState.Source) else '';
+  Outcome:= ClassifyDiChain(Links, Binding, ResIntf, UnresMethod, Receiver);
   case Outcome of
     dioRegister:
     begin
@@ -3251,45 +3331,6 @@ begin
     dioUnresolved: AState.EmitRef('di-unresolved', UnresMethod, AExpr);
   end; // case
 end; // begin
-
-{ 152c RINC2 (a): an include FRAGMENT (no unit around it) is parsed by the grammar's
-  `_definitions` root, which has no interface-style bare routine header -- `procedure P;`
-  with no body is only valid there with `forward` / `external`. Error recovery still
-  reduces most bare headers to a declProc inside an ERROR node, but the LAST one before
-  EOF, when it has no arguments, no result and no directive (`type TFoo = class end;`
-  then `procedure P;`), stays three loose tokens: kProcedure / kFunction, identifier,
-  `;`. That routine had no symbol, so every ref to it stayed unbound. This emits it from
-  those tokens (span: keyword .. `;`), at the fragment's top level only -- inside a unit
-  (AParentSymbolIdx >= 0) a broken header is left to the parse error, as before. The
-  grammar case for the real fix is lanes\152\RINC2\GRAMMAR-CASE.md. }
-procedure EmitLooseRoutineHeaders(const AErr: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer;
-  const AParentQualifiedName: string);
-const
-  HEADER_TOKENS = 3; { keyword, name, ';' }
-var
-  Kw, NameTok, Semi: TTSNode;
-  RoutineName: string;
-  Idx: Integer;
-  Sym: TSymbol;
-begin
-  if AParentSymbolIdx >= 0 then Exit;
-  for var i:= 0 to AErr.ChildCount - HEADER_TOKENS do
-  begin
-    Kw:= AErr.Child(i);
-    if (Kw.NodeType <> 'kProcedure') and (Kw.NodeType <> 'kFunction') then Continue;
-    NameTok:= AErr.Child(i + 1);
-    Semi   := AErr.Child(i + 2);
-    if (NameTok.NodeType <> 'identifier') or (Semi.NodeType <> ';') then Continue;
-    RoutineName:= NodeText(NameTok, AState.Source);
-    Idx:= AState.Emit(if Kw.NodeType = 'kFunction' then skFunction else skProcedure, RoutineName,
-      if AParentQualifiedName <> '' then AParentQualifiedName + '.' + RoutineName else RoutineName,
-      AParentSymbolIdx, Semi);
-    Sym:= AState.Symbols[Idx];
-    Sym.StartLine:= Integer(Kw.StartPoint.row   ) + 1;
-    Sym.StartCol := Integer(Kw.StartPoint.column) + 1;
-    AState.Symbols[Idx]:= Sym;
-  end;
-end;
 
 procedure Walk(const ANode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string);
 var
@@ -3431,6 +3472,30 @@ begin
     Exit;
   end; // if
 
+  // v151 GR11: members after a complete short class (classBodyOrphan, grammar v1.4.11) belong
+  // to that class: walked under it, its declaration span widened to their `end;`, visibility
+  // saved and restored exactly as TryWalkClassOrRecord does. Without an owner they fall
+  // through to the default recurse, as before.
+  if NodeType = 'classBodyOrphan' then
+  begin
+    var OrphanOwner:= ClassBodyOrphanOwner(ANode, AState, AParentQualifiedName);
+    if OrphanOwner >= 0 then
+    begin
+      var OwnerSym:= AState.Symbols[OrphanOwner];
+      OwnerSym.EndLine:= Integer(ANode.EndPoint.row   ) + 1;
+      OwnerSym.EndCol := Integer(ANode.EndPoint.column) + 1;
+      AState.Symbols[OrphanOwner]:= OwnerSym;
+      var OrphanOldVis:= AState.CurrentVisibility;
+      var OrphanOldVisExp:= AState.CurrentVisExplicit;
+      AState.CurrentVisibility := 'public';
+      AState.CurrentVisExplicit:= False;
+      for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, OrphanOwner, OwnerSym.QualifiedName);
+      AState.CurrentVisibility := OrphanOldVis;
+      AState.CurrentVisExplicit:= OrphanOldVisExp;
+      Exit;
+    end;
+  end;
+
   // declType wrapping a class/record/interface/enum declaration. Try each
   // shape in order; the first matching handler returns true and we're done.
   if NodeType = 'declType' then
@@ -3488,7 +3553,6 @@ begin
   // declProc: emit a method (when inside class/record/interface) or a free
   // proc/func otherwise. Then walk children so typerefs in args + return
   // type emit type_use refs.
-  if NodeType = 'ERROR' then EmitLooseRoutineHeaders(ANode, AState, AParentSymbolIdx, AParentQualifiedName); { 152c RINC2 (a) }
 
   if NodeType = 'declProc' then
   begin
@@ -3749,6 +3813,13 @@ begin
           begin
             WalkDeclProc(HdrNode, AState, AParentSymbolIdx, AParentQualifiedName, False);
           end;
+          { v151 INC: a METHOD body in an include fragment (`procedure THost.Run;` in a .inc
+            whose class lives in the host unit) has no declaration in this file, so it had no
+            symbol: no locals, no enclosing routine for the refs of its body. Emit it as a
+            parentless method named by its full dotted header; the resolver hangs it under
+            the host's class. Fragment top level only (AParentSymbolIdx < 0). }
+          if (AParentSymbolIdx < 0) and HdrName.Contains('.') and not PendingRoutineDeclExists(AState, HdrName) then
+            WalkDeclProc(HdrNode, AState, -1, Copy(HdrName, 1, LastDelimiter('.', HdrName) - 1), True);
           { v9: record this routine's body span on its symbol (decl or the
             impl-only one just emitted above). v(ADP1 Bug B): pass the impl
             header's own signature (built by the same ProcSignatureOf that

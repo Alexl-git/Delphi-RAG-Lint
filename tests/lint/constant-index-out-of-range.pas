@@ -79,4 +79,34 @@ begin
   var FCells := LoadCells;
   FCells[20] := 1;
 end;
+
+{ WID-CF widening: named const index / bound, array and string type aliases }
+const
+  WideLast = 3;
+
+type
+  TWideFour = array[0..WideLast] of Integer;
+  TWideName = string;
+
+var
+  WideCells: TWideFour;
+  WideName : TWideName;
+
+procedure WideNamedConst;
+begin
+  WideCells[WideLast + 1] := 1; {HIT}
+  WideCells[WideLast] := 1; {OK}
+  WideCells[4] := 1; {HIT}
+  WideCells[WideLast - 3] := 1; {OK}
+  WideName[0] := 'x'; {HIT}
+  WideName[1] := 'x'; {OK}
+end;
+
+procedure WideShadowedConst;
+const
+  WideLast = 9;
+begin
+  WideCells[WideLast] := 1; {OK}
+end;
+
 end.

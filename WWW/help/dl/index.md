@@ -78,7 +78,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | Feature | What it does | Since |
 | --- | --- | --- |
 | [Ancestor not in project (lint rule)](features/ancestor-not-in-project.md) | Project-wide lint rule (error): a form, frame or data module whose ancestor class is declared in no project unit and not in the platform library | 1.42.0-alpha |
-| [Autofix for fixable rules](features/autofix-wave.md) | lint --fix repairs findings of the 110 fixable rules; --json reports per finding whether it was applied; lint accepts a folder | 1.37.0-alpha |
+| [Autofix for fixable rules](features/autofix-wave.md) | lint --fix repairs findings of the 125 fixable rules; --json reports per finding whether it was applied; lint accepts a folder | 1.37.0-alpha |
 | [Compliance labels (CWE, CERT, MISRA)](features/compliance-labels.md) | Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field | 1.37.0-alpha |
 | [Copy All Diagnostics](features/copy-all-diagnostics.md) | Puts every lint finding for the current unit onto the clipboard, starting from the Structure form | 0.1.0-alpha |
 | [Copy Diagnostics (Current File)](features/copy-diagnostics-current-file.md) | Puts the current file's lint findings onto the clipboard | 0.1.0-alpha |
@@ -112,7 +112,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Read but never assigned (lint rule)](features/read-never-assigned.md) | Project-wide lint rule: a field or global that is read but that nothing in the project assigns or creates | 1.40.0-alpha |
 | [Lint rules on the static type of a reference](features/ref-type-rules.md) | Lint rules on ref_types: is-always-true, is-never-true, argument-narrows, UI access from a thread, quit from a thread; sharper redundant-cast and unsafe casts | 1.44.1-alpha |
 | [Rescan this unit](features/rescan-this-unit.md) | Re-indexes the active project and re-lints the current unit on demand, so the Diagnostics panel drops findings already fixed | 1.28.3-alpha |
-| [RTTI unavailable (lint rule)](features/rtti-unavailable.md) | Project lint rule, OFF by default: declarations that lose classic or extended RTTI (enums without type info, record properties, narrowing directives) | 1.50.0-alpha |
+| [RTTI unavailable (lint rule)](features/rtti-unavailable.md) | Project lint rule, OFF by default: declarations that lose classic or extended RTTI (typeless enums, record properties, narrowing directives, published generics) | 1.50.0-alpha |
 | [Run AST Checks](features/run-ast-checks.md) | Runs drag-lint's AST-level checks against a file | 0.31.0-alpha |
 | [Run Diagnostics (didSave)](features/run-diagnostics-didsave.md) | Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification | 0.22.0-alpha |
 | [Run Lint All (Full Report)](features/run-lint-all-full-report.md) | Runs the whole rule catalog against a project's indexed code and reports every surviving finding -- the overall project health check | 0.61.0-alpha |
@@ -121,6 +121,23 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Target compiler (--target-compiler)](features/target-compiler.md) | Names the Delphi the code is for: lint drops advice needing a newer compiler; index parses `VER<N>0` / `CompilerVersion` branches for it | 1.38.0-alpha |
 | [Type-level dl:ok review](features/type-level-review-marker.md) | One dl:ok on an enum type declaration reviews every unused-enum-value or enum-ordinal-cast finding of that type, in any unit | 1.38.0-alpha |
 | [type-name-prefix: expected letter from the ancestor chain](features/type-name-prefix-origin.md) | type-name-prefix picks E or T from the ancestor chain (project, then library index); untraceable ancestors are an index gap; autofix uses the finding's letter | 1.31.4-alpha |
+| [Application-level lint rules](features/v151-app-rules.md) | Whole-program lint rules: TLS checks off, UI calls in console/service apps, DUnitX tests without asserts, weak ciphers, asm without Win64, GUI WriteLn | 1.51.0-alpha |
+| [Component-authoring lint rules](features/v151-cmp-rules.md) | Lint rules for component and IDE-expert code: FreeNotification, property defaults, palette bitmaps, repainting setters, DPI, OTA notifiers | 1.51.0-alpha |
+| [Form and unit consistency rules](features/v151-dfma-rules.md) | Lint rules comparing a form unit with its .dfm and .dpr: fields vs objects, form resource, inherited handlers, self-free, auto-created forms | 1.51.0-alpha |
+| [Form-file data-binding rules](features/v151-dfmb-rules.md) | Six lint rules check the text .dfm beside a unit: bad data links, duplicate bindings, field-type mismatches, unreachable required fields | 1.51.0-alpha |
+| [Dataset and transaction lint rules](features/v151-ds-rules.md) | Lint checks: dataset edited but never posted, SELECT * in SQL text, transaction committed but never rolled back, dataset loop that never advances | 1.51.0-alpha |
+| [Exception and inherited lint rules](features/v151-exc-rules.md) | Lint rules for exception handlers and inherited calls: shadowed handlers, hand-freed exceptions, wrong or missing inherited, Destroy for Free | 1.51.0-alpha |
+| [Memory and string-pointer lint rules (PChar, raw memory, leaks, byte counts)](features/v151-mem-rules.md) | Eight memory lint rules, one widened: PChar of Char or temporaries, @S[1], read-only CreateProcess lines, raw memory over managed types, leaks, chars as bytes | 1.51.0-alpha |
+| [Object-model lint rules (Equals/hash, events, GUIDs, exports)](features/v151-oo-rules.md) | Ten single-file lint rules: Equals/GetHashCode, event calls, duplicate GUIDs, DLL exports, money as float, default params, accessors, forwards, legacy lists | 1.51.0-alpha |
+| [RTL collection and environment lint rules](features/v151-rtl-coll-rules.md) | Lint checks for dictionary reads without a key check, string-list leaks, Null compares, HKLM writes, Random without Randomize and Now used as a stopwatch | 1.51.0-alpha |
+| [RTL string and path lint rules](features/v151-rtl-str-rules.md) | Seven lint rules for RTL string, path and conversion mistakes: swapped Pos arguments, StrictDelimiter, FormatSettings writes, path joins, file-name compares | 1.51.0-alpha |
+| [Style, loop and ordering rules](features/v151-sty-rules.md) | Eleven style and loop lint rules (begin/end, if-chains, SetLength and repaint in loops, loop bounds, method order); five are on by default | 1.51.0-alpha |
+| [Thread lifetime lint rules (v151 THR-A)](features/v151-thr-a-rules.md) | Six thread-lifetime lint rules (anonymous thread, Synchronize in destructor, Terminated, FreeOnTerminate, threadvar, Queue nil) plus FreeAndNil coverage | 1.51.0-alpha |
+| [Thread race and blocking rules](features/v151-thrb-rules.md) | Four lint rules: racing writes in parallel bodies, non-atomic global increments in threads, unbounded waits in forms, lost task exceptions | 1.51.0-alpha |
+| [Text rules: bidi, invisible, control chars, TODO, header, strings](features/v151-txt-rules.md) | Six raw-text lint rules: bidi-control, invisible-char, control-char, todo-comment, file-header, hardcoded-string | 1.51.0-alpha |
+| [Typing and ownership lint rules (casts, Self as interface, destructors)](features/v151-typ-rules.md) | Five rules: unrelated class casts, Self as interface during construction, nil-unsafe destructors, Free without nil, unclear field ownership | 1.51.0-alpha |
+| [Wider built-in rules (1.51)](features/v151-wid-ast-rules.md) | Six built-in rules read more constructs: code-page and label exemptions, named zero constants, implied else-if, thread dialogs, Supports aliases | 1.51.0-alpha |
+| [Wider scm rules and three new fixers](features/v151-wid-scm-rules.md) | Seven built-in rules read more constructs; empty-finally, format-string-not-formatted and shared-marker-legacy-shape gain autofixes | 1.51.0-alpha |
 | [warm-rule-cache](features/warm-rule-cache.md) | Fills the lint rule cache for a project index; index runs warm it, or start it in the background (--rule-cache-warm) | 1.39.0-alpha |
 
 ## Documentation
@@ -155,7 +172,7 @@ Rename, extract, safe delete, uses cleanup and code stubs.
 | [Extract an interface from the members used (scratch + compile gate)](features/extract-interface.md) | Declares an interface from the members of a class the project uses and adds it to the class; --apply through a scratch build and the compile gate | 1.50.0-alpha |
 | [extract-method](features/extract-method.md) | Pulls a run of statements out of a routine into a new method | 0.85.0-alpha |
 | [Prepare heavy initialization for lazy loading (first phase)](features/lazy-init.md) | Names what an initialization section does; --apply moves its body verbatim into a run-once routine, through a scratch build and the compile gate | 1.50.0-alpha |
-| [Lint --fix through the compile gate](features/lint-fix-compile-gate.md) | lint --fix --apply --project X.dproj --compile-gate writes the fixes only if the project still builds; a fix that breaks the compile is refused and rolled back | 1.50.0-alpha |
+| [Lint --fix through the compile gate](features/lint-fix-compile-gate.md) | lint --fix --apply --project X.dproj goes through the compile gate by default (1.51): an error stops or rolls back the fix; new warnings / hints are reported | 1.50.0-alpha |
 | [Narrow parameter types (compile-gated)](features/narrow-param.md) | Retypes a class-typed parameter to the deepest ancestor that declares every member the routine uses, when a static proof holds, through the compile gate | 1.44.1-alpha |
 | [Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor](features/quick-fix-add-unit-for-inline-hint-h2443-at-cursor.md) | The same idea as the undeclared-identifier quick-fix, but for compiler hint H2443 -- an inline routine whose declaring unit is not in scope | 1.2.0-alpha |
 | [Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)](features/quick-fix-add-unit-for-undeclared-at-cursor-ctrl-alt-u.md) | Finds which unit declares the identifier under the caret and adds that unit to the current unit's uses clause | 0.47.0-alpha |
@@ -255,6 +272,7 @@ Compile, fold compiler output into findings, preprocess.
 | [compile-check](features/compile-check.md) | Runs a compiler-backed check against a single Delphi project (.dproj) or source file (.pas) and reports the result | 0.26.0-alpha |
 | [Compile Dependents](features/compile-dependents.md) | Check the units that depend on the one being edited now, instead of waiting for the automatic quiet-period pass (lint-tree tier 3) | 1.11.0-alpha |
 | [Compile & Diagnose](features/compile-diagnose.md) | Compiles a project or unit and folds the compiler's errors and warnings into drag-lint findings | 0.26.0-alpha |
+| [Compiler messages: pass-through and overlap with our rules](features/compiler-message-passthrough.md) | Every Delphi compiler message (hint, warning, error) is stored per project and passed through under its own code; overlapping rules say where they go further | 1.51.0-alpha |
 | [Full Compile Sweep](features/full-compile-sweep.md) | Recompiles every unit of a project (a forced full build, refresh-findings --full) and refreshes its stored compiler findings | 1.2.0-alpha |
 | [ghost-check](features/ghost-check.md) | Compiles a project with one or more units' content temporarily replaced by their unsaved editor buffers, then restores the original files unchanged | 1.8.0-alpha |
 | [ghost-recover](features/ghost-recover.md) | Scans a project's hidden D-RAG folder for recovery journals left behind when a ghost-check overlay was interrupted by a crash | 0.64.1-alpha |

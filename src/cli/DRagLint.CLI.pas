@@ -68,6 +68,10 @@ const
     away from the CLI banner again -- see DRAGLINT_VERSION. }
   VERSION = DRAGLINT_VERSION;
 
+/// <summary>Runs the command line and returns the process exit code. A run that
+/// would exit 0 exits 3 (FATAL EInOutError on stderr) when its stdout pipe was
+/// closed by the reader before the end, even if no write reported the failure;
+/// lsp and serve excepted (stdout is their transport).</summary>
 /// <returns><!-- drag-lint:auto -->Integer -- Observed: 0; 2; DoIndexAll(Args);
 /// DoIndex(Args); DoWarmRuleCache(Args); DoQuery (Args).</returns>
 /// <remarks>
@@ -251,6 +255,8 @@ uses
   , DRagLint.Diagnostics.LifetimeShapeChecks // dl:unit DRagLint.Diagnostics.LifetimeShapeChecks accepted -- the three *_RULE ids name the gate list; they travel with TLifetimeShapeChecker, the checker this unit calls
   , DRagLint.Diagnostics.CloneChecks
   , DRagLint.Diagnostics.ParseCache
+  , DRagLint.V151.Api       { v151 lane FRAME: TV151FileCtx / TV151ProjectCtx }
+  , DRagLint.V151.Dispatch  { v151 lane FRAME: the one entry to the v151 rule lanes }
   , DRagLint.Diagnostics.FlowChecks
   , DRagLint.Analysis   .DataFlow  { DataFlowStats -- the solver iteration counters }
   , DRagLint.Workspace  .Config
@@ -524,12 +530,14 @@ type
     Plan           : Boolean; // --plan (cycles: emit a followable markdown refactoring playbook)
     F2047          : Boolean; // --f2047 (cycles: only the interface-only cycles dcc rejects, N-09)
     Hub            : Boolean; // --hub (cycles: hub analysis per group, spec 2026-11-08-hub-scc-phased P1)
-    HubSurface     : Boolean; // --hub-surface (cycles --plan: recipe R3, spec 2026-11-08-hub-scc-phased P2; OFF by default)
+    HubSurface     : Boolean; // --hub-surface (cycles: recipe R3 asked for by name, spec 2026-11-08-hub-scc-phased P2; needed for --apply and for --causes --format json)
+    NoHubSurface   : Boolean; // --no-hub-surface (cycles --plan: the planner's own plan for every group; since 1.51 the dry run asks R3 first, phase P6)
     FixCycle       : Integer; // --cycle <n> (cycles --fix: the 1-based group to plan)
     FixCycleGiven  : Boolean; // --cycle was on the command line (so 0 / junk is an error, not 'absent')
     FixPart        : string ; // --part a|b|all (cycles --fix)
     NoCompile      : Boolean; // --no-compile (cycles --fix: skip the baseline build)
-    CompileGate    : Boolean; // --compile-gate (lint --fix --apply: write through the --project build gate; opt-in)
+    CompileGate    : Boolean; // --compile-gate (lint --fix --apply: write through the --project build gate; the default with a .dproj since 1.51)
+    NoCompileGate  : Boolean; // --no-compile-gate (lint --fix --apply --project <X.dproj>: write unbuilt; naming renames stay gated)
     ShadowOut      : string ; // --shadow-out <dir> (cycles --fix, debug: where the shadow tree is staged)
     CycleRsVars    : string ; // --rsvars <rsvars.bat> (cycles --fix: the Studio build environment, for a Studio the registry does not name)
     CycleBuildTimeout: string ; // --build-timeout <s> (cycles --fix: whole seconds one build may take; '' / 0 = no limit, the default)
@@ -541,10 +549,12 @@ type
     FixRule      : string ; // --fix-rule <id> ('' = all rules)
     NpRoutine    : string ; // narrow-param --routine <QName>
     NpParam      : string ; // narrow-param --param <name>
+    NpShowBound  : Boolean; // narrow-param --show-bound
     EiClass      : string ; // extract-interface --class <name>
     EiMembers    : string ; // extract-interface --members <a,b>
     EiReparent   : Boolean; // extract-interface --reparent-interfaced
     EiNoRefCount : Boolean; // extract-interface --reparent-interfaced=norefcount
+    EiRetype     : string ; // extract-interface --retype-consumer <Routine>.<param> (v151 REPARENT, P22)
     LiDefer      : Boolean; // lazy-init --defer (lane 147 G3P)
     FixNaming    : Boolean; // --fix-naming (batch --fix: explicit consent to the opt-in naming fixes)
     { --stand-in-for <realpath>: analyse THIS file's text, but answer as though
@@ -839,7 +849,7 @@ const
   /// tests\autotest\run_help_env_table.ps1: every quoted 'DRAGLINT_*' literal
   /// under src\ must be a Name here and --help must print every Name. A new
   /// variable is added HERE in the same change, or that guard fails.</remarks>
-  ENV_VARS_HELP: array[0..76] of TEnvVarHelp = (
+  ENV_VARS_HELP: array[0..78] of TEnvVarHelp = (
     (Name: 'DRAGLINT_BUSY_TIMEOUT_MS';                Purpose: 'writer busy timeout in ms (overrides the built-in default; a non-negative integer)'),
     (Name: 'DRAGLINT_CHARTS_ALLOW_LIVE_DB';           Purpose: 'charts: lets CloneDb accept a non-clone (live) database'),
     (Name: 'DRAGLINT_CHARTS_DIR';                     Purpose: 'charts: folder of the charts scripts'),
@@ -863,6 +873,8 @@ const
     (Name: 'DRAGLINT_GATE_TEST_BREAK';                Purpose: 'test hook: breaks the compile gate'),
     (Name: 'DRAGLINT_INDEX_TEST_FAIL_FILE';           Purpose: 'test hook: index fails on the named file'),
     (Name: 'DRAGLINT_LAYOUT';                         Purpose: 'installed-layout switch (unset = the default layout)'),
+    (Name: 'DRAGLINT_LIBRARY_EFFECTS';                Purpose: 'purity stage: 0 = no library effect summaries for the run; a path = that library DB (measurements); unset = the first opening external_stores library'),
+    (Name: 'DRAGLINT_LIBRARY_EFFECTS_TRUST';          Purpose: 'purity stage: 1 = trust library summaries unsoundly (measurement-only arm)'),
     (Name: 'DRAGLINT_LIBRARY_POLL_MS';                Purpose: '--wait-library poll interval in ms (default 30000)'),
     (Name: 'DRAGLINT_LSP_REINDEX_EXE';                Purpose: 'test hook: the exe the LSP reindex runs'),
     (Name: 'DRAGLINT_LSP_TEST_MARK_INCOMPLETE';       Purpose: 'test hook: LSP marks its answer incomplete'),
@@ -1187,6 +1199,8 @@ const
   UNIT_NOT_IN_LIBRARY_RULE_ID = 'unit-not-in-library';
   REDUNDANT_CAST_RULE_ID = 'redundant-cast';
   WITH_STATEMENT_RULE_ID = 'with-statement';
+  { v151 FIX-OLD: the with rules whose --fix-rule runs the proven unwith (compile gate + after re-index proof) }
+  UNWITH_FIX_RULE_IDS: array[0..2] of string = (WITH_STATEMENT_RULE_ID, 'nested-with', 'with-hides-outer-symbol');
 
 { Forward: DoLint and DoLintAll run unit-not-in-library; it is implemented beside
   DoReconcileProject, whose analysis it reuses. }
@@ -1973,6 +1987,7 @@ begin
     end
     else if A = '--no-compile' then Result.NoCompile:= True
     else if A = '--compile-gate' then Result.CompileGate:= True
+    else if A = '--no-compile-gate' then Result.NoCompileGate:= True
     else if (A = '--shadow-out') and (i < ParamCount) then
     begin
       Inc(i);
@@ -2010,6 +2025,11 @@ begin
       Inc(i);
       Result.EiMembers:= ParamStr(i);
     end
+    else if (A = '--retype-consumer') and (Result.Command = 'extract-interface') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.EiRetype:= ParamStr(i);
+    end
     else if A = '--reparent-interfaced' then Result.EiReparent:= True
     else if A = '--reparent-interfaced=norefcount' then
     begin
@@ -2027,6 +2047,7 @@ begin
       Inc(i);
       Result.NpParam:= ParamStr(i);
     end
+    else if A = '--show-bound' then Result.NpShowBound:= True
     else if A = '--fix-naming' then Result.FixNaming:= True
     else if (A = '--stand-in-for') and (i < ParamCount) then begin Inc(i); Result.StandInFor:= ParamStr(i); end
     else if A = '--project-rules' then Result.ProjectRules:= True
@@ -2050,6 +2071,7 @@ begin
     else if A = '--f2047'         then Result.F2047          := True
     else if A = '--hub'           then Result.Hub            := True
     else if A = '--hub-surface'   then Result.HubSurface     := True
+    else if A = '--no-hub-surface' then Result.NoHubSurface  := True
     else if A = '--apply'         then Result.Apply          := True
     else if A = '--fix'           then Result.Fix            := True
     else if A = '--remove-unused' then Result.RemoveUnused   := True
@@ -2471,6 +2493,7 @@ const
 function ProjectTagFor(const AStore: ISymbolStore; const ADbPath: string; const AArgs: TArgs): string; forward;
 
 function ResolverFingerprint(const AStore: ISymbolStore): string; forward;
+procedure RunPurityStage(const AStore: ISymbolStore); forward;
 
 { The version limb of a stored fingerprint whose FIRST limb is `<APrefix><ver>`
   (`v=` for the indexer, `r=` for the resolver), or '' when the stamp is absent
@@ -5296,7 +5319,7 @@ begin
       were re-derived -- and ALSO when a per-file reindex recreated symbol_facts
       rows with NULL verdicts while the calls pass was skipped (PurityNeedsRun). }
     if RanCalls or Store.PurityNeedsRun then
-      Stage('  ', 'purity', procedure begin TPurityStage.Run(Store); end)
+      Stage('  ', 'purity', procedure begin RunPurityStage(Store); end)
     else
       Writeln('  stage: purity -- skipped, calls did not run and every routine already carries a verdict.');
     { xj-5: concept-search table; incremental, backfills from existing rows (no re-parse). }
@@ -6758,6 +6781,52 @@ end;
 
 const INDEXER_FP_KEY  = INDEXER_FINGERPRINT_META_KEY; { one spelling, in Core.Model; the LSP reads the same key }
 
+{ E-BIND-LIB-EFFECTS (v151 LIBFX): the library whose summaries the purity stage takes for
+  library-bound calls. ON by default: the first library named in this DB's own external_stores
+  meta (the stores its call edges, hence every external_target, were resolved against) that
+  exists and opens. DRAGLINT_LIBRARY_EFFECTS=0 turns it off for the run; any other value names
+  the library DB itself (measurements); DRAGLINT_LIBRARY_EFFECTS_TRUST=1 is the measurement-only
+  unsound arm. Set for this one Run and cleared after it, so an `index --all` or a --watch tick
+  never carries one project's library into another's verdicts. }
+function PurityLibraryPath(const AStore: ISymbolStore): string;
+begin
+  Result:= GetEnvironmentVariable('DRAGLINT_LIBRARY_EFFECTS');
+  if Result = '0' then Exit('');
+  if Result <> '' then Exit;
+  var Stored: string:= AStore.GetMetaValue('external_stores');
+  if Stored = '' then Exit;
+  var Json: TJSONValue:= TJSONObject.ParseJSONValue(Stored);
+  try
+    if Json is TJSONArray then
+      for var Item: TJSONValue in TJSONArray(Json) do
+      begin
+        var P: string:= '';
+        if (Item is TJSONObject) and Item.TryGetValue<string>('path', P) and FileExists(P) then Exit(P);
+      end;
+  finally
+    Json.Free;
+  end;
+end;
+
+procedure RunPurityStage(const AStore: ISymbolStore);
+begin
+  var LibPath: string:= PurityLibraryPath(AStore);
+  if LibPath <> '' then
+  begin
+    var Ok: Boolean;
+    var Lib: ISymbolStore:= OpenReadOnlyStore(LibPath, Ok, True);
+    if Ok then TPurityStage.LibraryEffects:= Lib
+    else Writeln(ErrOutput, 'NOTE: purity: the library for effects could not be opened: ', LibPath);
+    TPurityStage.LibraryEffectsTrustFree:= GetEnvironmentVariable('DRAGLINT_LIBRARY_EFFECTS_TRUST') = '1';
+  end;
+  try
+    TPurityStage.Run(AStore);
+  finally
+    TPurityStage.LibraryEffects:= nil;
+    TPurityStage.LibraryEffectsTrustFree:= False;
+  end;
+end;
+
 { The identity of what this build DERIVES from parses it already holds --
   call_edges, type_ancestors, type_helpers, unit_uses targets.
 
@@ -7209,33 +7278,80 @@ begin
   end;
 end;
 
-/// <summary>Drops every path that lies under one of the --exclude-under roots.</summary>
-/// <param name="APaths">Scope list (files or folders) a project index is about to walk.</param>
-/// <param name="ARoots">The --exclude-under values; empty means keep everything.</param>
-/// <returns>APaths without the entries under an excluded root (case-insensitive, whole path segments).</returns>
-/// <remarks>E-UNWITH-EXCLUDE: the folder walk asks the indexer's exclude roots, but a project scope list is
-/// FILES handed to IndexFile, which never does, so the flag was accepted and ignored for `index --project`.
-/// Both sides are normalised (`/` -> `\`, a relative root expanded against the current directory): 152b R16
-/// found `--exclude-under C:/x/ext` matching nothing, because the closure lists `C:\x\ext\U.pas` -- the walk
-/// pruned, the closure unit stayed. Pinned by run_index_exclude_under_slash_forms.ps1.</remarks>
-function DropUnderExcludeRoots(const APaths, ARoots: TArray<string>): TArray<string>;
+/// <summary>Returns every path that lies under one of the --exclude-under roots.</summary>
+/// <param name="APaths">Scope list (files) a project index is about to walk.</param>
+/// <param name="ARoots">The --exclude-under values; empty means no path is under one.</param>
+/// <returns>The entries of APaths under an excluded root (case-insensitive, whole path segments).</returns>
+/// <remarks>v151 EXCL (owner OQ4): a project's members are its listed units plus every non-library unit
+/// reached through `uses`; folder location counts for platform libraries only. So `index --project` no longer
+/// DROPS these paths (E-UNWITH-EXCLUDE did): DoIndex keeps them and names them in a note. Both sides are
+/// normalised (`/` -> `\`, a relative root expanded against the current directory), as 152b R16 required.
+/// Pinned by run_index_exclude_under_slash_forms.ps1 and run_v151_EXCL_closure_links.ps1.</remarks>
+function PathsUnderExcludeRoots(const APaths, ARoots: TArray<string>): TArray<string>;
 begin
-  Result:= APaths;
+  Result:= [];
   if Length(ARoots) = 0 then Exit;
   var Norm: TArray<string>:= [];
   for var R in ARoots do
     if R <> '' then
       Norm:= Norm + [LowerCase(IncludeTrailingPathDelimiter(ExcludeTrailingPathDelimiter(
         ExpandFileName(R.Replace('/', '\')))))];
-  Result:= [];
   for var P in APaths do
   begin
     var L: string:= LowerCase(P.Replace('/', '\'));
     var Hit: Boolean:= False;
     for var N in Norm do
       if StartsStr(N, L) then Hit:= True;
-    if not Hit then Result:= Result + [P];
+    if Hit then Result:= Result + [P];
   end;
+end;
+
+/// <summary>Every folder a LIBRARY section of AManifest indexes, for every platform the
+/// section expands to, as absolute paths (STRAY, OQ14).</summary>
+/// <param name="AManifest">The manifest this run loaded.</param>
+/// <returns>The library roots; empty when the manifest has no library section.</returns>
+/// <remarks>Keyed on the section KIND (smLibrary), like LibrarySectionDbs.</remarks>
+function LibrarySectionRoots(const AManifest: TIndexManifest): TArray<string>;
+var
+  Resolver: DRagLint.Project.Resolver.TProjectResolver;
+  PS      : TPlanSection;
+begin
+  Result:= nil;
+  Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
+  try
+    for PS in ResolvePlan(AManifest, nil, Resolver).Items do
+      if PS.Mode = smLibrary then Result:= Result + PS.Roots;
+  finally
+    Resolver.Free;
+  end; // try
+end;
+
+/// <summary>The library root that contains AFile, or '' when none does (STRAY, OQ14).</summary>
+/// <param name="ARoots">From LibrarySectionRoots.</param>
+/// <param name="AFile">The project file (.dproj / .dpr / .dpk) a project index was asked for.</param>
+/// <returns>The first containing library root, as given; '' when the file lies under none.</returns>
+function LibraryRootContaining(const ARoots: TArray<string>; const AFile: string): string;
+begin
+  Result:= '';
+  var L: string:= LowerCase(ExpandFileName(AFile).Replace('/', '\'));
+  for var R: string in ARoots do
+  begin
+    if R = '' then Continue;
+    var Norm: string:= LowerCase(IncludeTrailingPathDelimiter(ExcludeTrailingPathDelimiter(
+      ExpandFileName(R.Replace('/', '\')))));
+    if StartsStr(Norm, L) then Exit(R);
+  end;
+end;
+
+/// <summary>True when ADb is a library database: a library section of the manifest names it,
+/// or its file name is `library-*.sqlite` (STRAY, OQ14).</summary>
+/// <param name="ALibraryDbs">From LibrarySectionDbs.</param>
+/// <param name="ADb">The database path a project index would write.</param>
+/// <returns>True for a library database.</returns>
+function IsLibraryDbForProjectRefusal(const ALibraryDbs: TArray<string>; const ADb: string): Boolean;
+begin
+  var Nm: string:= LowerCase(ExtractFileName(ADb));
+  Result:= IsLibrarySectionDb(ALibraryDbs, ADb) or (StartsStr('library-', Nm) and EndsStr('.sqlite', Nm));
 end;
 
 function DoIndex(const AArgs: TArgs): Integer;
@@ -7302,7 +7418,29 @@ begin
       IdxArgs.DbFromConfig:= False;
     end;
   end;
+  { STRAY (OQ14): a project may not live under a library root -- the library index already walks
+    that folder, so a second project index of it would double-count it. Refused before any write. }
+  var IsProjectTarget: Boolean:= (AArgs.ProjectPath <> '') or MatchText(ExtractFileExt(IndexTarget), ['.dpr', '.dproj', '.dpk']);
+  if IsProjectTarget then
+  begin
+    var LibRoot: string:= LibraryRootContaining(LibrarySectionRoots(TargetManifest), IndexTarget);
+    if LibRoot <> '' then
+    begin
+      Writeln(ErrOutput, 'ERROR: index: the project ', ExpandFileName(IndexTarget), ' lies under the library root ', LibRoot, '.');
+      Writeln(ErrOutput, '       A project may not live in a library folder (known limitation). Move the project out of that folder,');
+      Writeln(ErrOutput, '       or remove the folder from the manifest''s library section, then index it again.');
+      Exit(2);
+    end;
+  end;
   var ResolvedDb: string:= ResolveIndexDb(IdxArgs, IndexTarget, TargetManifest);
+  { STRAY (OQ14): a library database is never the write target of a PROJECT index. }
+  if IsProjectTarget and (ResolvedDb <> '') and
+     IsLibraryDbForProjectRefusal(LibrarySectionDbs(TargetManifest), ResolvedDb) then
+  begin
+    Writeln(ErrOutput, 'ERROR: index: ', ResolvedDb, ' is a library database and cannot hold a project index.');
+    Writeln(ErrOutput, '       Pass the project''s own database: drag-lint resolve-dbs --project <x.dproj>  (or --db <Project>.sqlite).');
+    Exit(2);
+  end;
   if ResolvedDb = '' then
   begin
     { A project target's refusal (two claimants, or no manifest) was already
@@ -7625,7 +7763,21 @@ begin
           sibling .dfm and the project file(s). See its remarks for why both are
           load-bearing. }
         Folders:= ExpandProjectScope(AArgs.ProjectPath, CR.Files);
-        Folders:= DropUnderExcludeRoots(Folders, AArgs.ExcludeUnder); { E-UNWITH-EXCLUDE }
+        { v151 EXCL (owner OQ4): a project index never drops a closure unit. --exclude-under prunes
+          library (folder) walks only; a closure unit under such a root stays and is named here. }
+        var KeptUnder: TArray<string>:= PathsUnderExcludeRoots(Folders, AArgs.ExcludeUnder);
+        if Length(KeptUnder) > 0 then
+        begin
+          Writeln(Format('  NOTE: --exclude-under prunes library walks only; a project index keeps every ' +
+            'compile-closure unit. Kept %d file(s) under an excluded root:', [Length(KeptUnder)]));
+          for var K: string in KeptUnder do Writeln('    ', K);
+        end;
+        { v151 EXCL (owner OQ4): closure units the project files do not list are members all the same;
+          say so now, so they are added (lint --rule unit-not-in-dpr, reconcile-project --apply). }
+        if SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') then
+          for var PF: TLintFinding in DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(
+            AArgs.ProjectPath, CR.Files, False) do
+            Writeln(Format('  unit-not-in-dpr: %s', [PF.Message]));
 
         { FAIL LOUDLY. A project that resolves to nothing must NOT fall back to
           a folder walk -- that fallback is the defect above returning -- and
@@ -8131,7 +8283,7 @@ begin
       Before CommitIndexerFingerprint on purpose: an interrupted purity pass must
       leave the stamp absent so the next run repeats it. }
     if RanCalls or Store.PurityNeedsRun then
-      Stage('', 'purity', procedure begin TPurityStage.Run(Store); end)
+      Stage('', 'purity', procedure begin RunPurityStage(Store); end)
     else
       Writeln('stage: purity -- skipped, calls did not run and every routine already carries a verdict.');
     { xj-5: concept-search table; incremental, backfills from existing rows (no re-parse). }
@@ -8294,7 +8446,7 @@ begin
   { Purity v2 -- same gate as the DoIndex site: after the edges, or when a
     per-file reindex left NULL verdicts behind a skipped calls pass. }
   if RanCalls or Store.PurityNeedsRun then
-    Stage('  ', 'purity', procedure begin TPurityStage.Run(Store); end)
+    Stage('  ', 'purity', procedure begin RunPurityStage(Store); end)
   else
     Writeln('  stage: purity -- skipped, calls did not run and every routine already carries a verdict.');
   { xj-5: concept-search table; incremental, backfills from existing rows (no re-parse). }
@@ -13464,33 +13616,89 @@ end; // function
   Defined beside the LINT_GATE_* consts. }
 function IsClosureDependentMarkerRule(const ARule: string): Boolean; forward;
 
-/// <summary>True when line ALine of ALines is the `on ... do` line of an EMPTY
-///  exception handler and the `do` is followed only by a `//` comment.</summary>
-/// <param name="ALines">The file's lines, 0-based.</param>
-/// <param name="ALine">1-based line that carries the marker.</param>
-/// <returns>True when the code before the comment ends in `do` and the next code
-///  line (blank and `//` lines skipped) opens with `;`, `end` or `else`.</returns>
-/// <remarks>rules\empty-on-handler.scm anchors on `do` being the handler's LAST
-///  child; a comment between `do` and the separating `;` is a child too, so the
-///  dl:ok comment ITSELF stops the rule firing (INBOX review-marker-unused-on-
-///  handler, wave 152b). Same loop as COMMENT_SENSITIVE, but position dependent:
-///  a comment AFTER the `;` leaves the rule live, which is why the 2026-08-12
-///  probe measured "not comment-sensitive". Only this shape is exempt from
-///  review-marker-unused; a marker anywhere else is still reported.</remarks>
-function IsCommentSilencedEmptyHandler(const ALines: TArray<string>; ALine: Integer): Boolean;
+/// <summary>The rule ids a `// drag-lint:ignore &lt;id&gt; ...` directive names that
+///  are not in the catalogue -- the directive suppresses nothing for them.</summary>
+/// <param name="ALineText">One source line, without its terminator.</param>
+/// <param name="AIsKnown">Catalogue lookup, case-insensitive.</param>
+/// <returns>The unknown ids in written order; empty when the line carries no
+///  directive, the directive is bare, or every id it names is known.</returns>
+/// <remarks>Host rule review-marker-malformed, widened in v151 RMU (an unknown id
+///  in a dl:ok was reported, the same mistake in the legacy directive was not).
+///  Only the unambiguous shape is read: the tag must OPEN the `//` comment, so a
+///  comment that merely mentions the directive is prose. The list is read token
+///  by token (space, comma, tab): a known id continues it, an unknown id WITH a
+///  hyphen is reported, and any other token (`--`, a reason word, `&lt;rule-id&gt;`)
+///  ends it, because what follows is prose. The two catalogue ids without a
+///  hyphen are known and continue the list. Suppression
+///  (TReviewMarkers.IgnoreDirectiveCovers) is unchanged; this only reports.</remarks>
+function UnknownIgnoreDirectiveIds(const ALineText: string; const AIsKnown: TFunc<string, Boolean>): TArray<string>;
 const
-  HANDLER_DO_COMMENT = '\bon\b.*\bdo\s*//';
-  EMPTY_BODY_NEXT    = '^\s*(;|end\b|else\b)';
+  IGNORE_TAG    = 'drag-lint:ignore';
+  HYPHENATED_ID = '^[a-z][a-z0-9]*(-[a-z0-9]+)+$';
 begin
-  Result:= False;
-  if (ALine < 1) or (ALine > Length(ALines)) then Exit;
-  if not TRegEx.IsMatch(ALines[ALine - 1], HANDLER_DO_COMMENT, [roIgnoreCase]) then Exit;
-  for var I: Integer:= ALine to High(ALines) do
+  Result:= nil;
+  { The FIRST `//`, as IgnoreDirectiveCovers reads it; a `//` inside a string
+    literal earlier on the line makes this miss the directive -- the safe side. }
+  var CStart: Integer:= Pos('//', ALineText);
+  if CStart = 0 then Exit;
+  var Body: string:= TrimLeft(Copy(ALineText, CStart + 2, MaxInt));
+  if not StartsText(IGNORE_TAG, Body) then Exit;
+  for var Tok: string in Copy(Body, Length(IGNORE_TAG) + 1, MaxInt).Split([' ', ',', #9],
+    TStringSplitOptions.ExcludeEmpty) do
   begin
-    var T: string:= Trim(ALines[I]);
-    if (T = '') or T.StartsWith('//') then Continue;
-    Exit(TRegEx.IsMatch(T, EMPTY_BODY_NEXT, [roIgnoreCase]));
+    if AIsKnown(Tok) then Continue;
+    if not TRegEx.IsMatch(Tok, HYPHENATED_ID, [roIgnoreCase]) then Break;
+    Result:= Result + [Tok];
   end;
+end; // function
+
+/// <summary>The catalogue id closest to a mistyped one, for a "did you mean"
+///  hint on review-marker-malformed.</summary>
+/// <param name="AId">The id the marker names; not in the catalogue.</param>
+/// <param name="AKnown">Every catalogue id, lowercase.</param>
+/// <returns>The single nearest id within edit distance 2 (insert, delete,
+///  substitute; case-insensitive), or '' when none is that close or two tie --
+///  a guess between two rules would mislead.</returns>
+/// <remarks>Ids shorter than 5 characters get no suggestion: at distance 2
+///  almost anything is near them.</remarks>
+function NearestRuleId(const AId: string; const AKnown: TArray<string>): string;
+const
+  MAX_DIST = 2;
+  MIN_LEN  = 5;
+var
+  Prev, Cur: TArray<Integer>;
+begin
+  Result:= '';
+  var Id: string:= LowerCase(AId);
+  if Length(Id) < MIN_LEN then Exit;
+  var Best: Integer:= MAX_DIST + 1;
+  var Tie: Boolean:= False;
+  for var K: string in AKnown do
+  begin
+    if Abs(Length(K) - Length(Id)) > MAX_DIST then Continue;
+    SetLength(Prev, Length(K) + 1);
+    SetLength(Cur, Length(K) + 1);
+    for var J: Integer:= 0 to Length(K) do Prev[J]:= J;
+    for var I: Integer:= 1 to Length(Id) do
+    begin
+      Cur[0]:= I;
+      for var J: Integer:= 1 to Length(K) do
+        Cur[J]:= Min(Min(Prev[J] + 1, Cur[J - 1] + 1), Prev[J - 1] + Ord(Id[I] <> K[J]));
+      var Swap: TArray<Integer>:= Prev;
+      Prev:= Cur;
+      Cur:= Swap;
+    end;
+    var D: Integer:= Prev[Length(K)];
+    if D < Best then
+    begin
+      Best:= D;
+      Result:= K;
+      Tie:= False;
+    end
+    else if (D = Best) and (D <= MAX_DIST) then
+      Tie:= True;
+  end;
+  if Tie then Result:= '';
 end; // function
 
 { Drops findings whose source line records them as reviewed, and reports review
@@ -13565,6 +13773,8 @@ const
     a COMMENT, so appending a marker comment changes the very text the rule
     reads. }
   COMMENT_SENSITIVE: array[0..2] of string = ('empty-except', 'empty-case-branch', 'commented-out-code');
+  { Cheap pre-test for UnknownIgnoreDirectiveIds; lowercase. }
+  IGNORE_DIRECTIVE_TAG = 'drag-lint:ignore';
   { The rules whose findings carry a TYPE scope (TLintFinding.ScopeFile/ScopeLine),
     and the shape of the enum declaration line their type-level marker sits on. }
   TYPE_SCOPE_RULES: array[0..1] of string = ('unused-enum-value', 'enum-ordinal-cast');
@@ -13943,9 +14153,10 @@ begin
       measured. Some rules treat a comment as content, so writing the marker is
       itself enough to stop the rule firing. Probe of the empty-* family
       (2026-08-12): empty-except and empty-case-branch both go 1 -> 0 findings
-      when ANY trailing comment is added; empty-on-handler does not when the
-      comment follows the `;`, but DOES when it sits between `do` and the `;`
-      (wave 152b, IsCommentSilencedEmptyHandler). Reporting
+      when ANY trailing comment is added. empty-on-handler is NOT in the list:
+      a comment between `do` and the `;` used to silence it too, which was a
+      defect of its .scm, fixed there in v151 RMU (INBOX review-marker-unused-
+      on-handler), not exempted here. Reporting
       those as "unused" would create a loop with no exit -- mark the finding, the
       comment silences the rule, the hint says remove the marker, removing it
       brings the finding back. Marking such a finding is in fact the remedy the
@@ -13987,6 +14198,14 @@ begin
           end;
           Result:= Known.ContainsKey(LowerCase(AId));
         end;
+      { " Did you mean "x"?" for a mistyped id, or '' -- see NearestRuleId. Only
+        ever called after IsKnownRule, so Known is built. }
+      var DidYouMean: TFunc<string, string>:=
+        function(AId: string): string
+        begin
+          var Near: string:= NearestRuleId(AId, Known.Keys.ToArray);
+          Result:= if Near = '' then '' else Format(' Did you mean "%s"?', [Near]);
+        end;
       for var SF: string in AScannedFiles do
       begin
         Lines:= LinesOf(SF);
@@ -14003,6 +14222,14 @@ begin
         var InBlock: TArray<Boolean>:= TReviewMarkers.BlockOpenAtLineStart(Lines);
         for var LN: Integer:= 1 to Length(Lines) do
         begin
+          { An unknown id in the legacy directive suppresses nothing for that id,
+            exactly like one in a dl:ok -- same host rule (v151 RMU). }
+          if ((LN > Length(CanBear)) or CanBear[LN - 1])
+             and LowerCase(Lines[LN - 1]).Contains(IGNORE_DIRECTIVE_TAG) then
+            for var BadId: string in UnknownIgnoreDirectiveIds(Lines[LN - 1], IsKnownRule) do
+              EmitHint(SF, LN, 'review-marker-malformed',
+                Format('drag-lint:ignore names "%s", which is not a rule id -- it suppresses NOTHING for it.%s '
+                     + 'Name rule ids only, or use `dl:ok <rule-id> -- <reason>`.', [BadId, DidYouMean(BadId)]));
           if Pos(REVIEW_MARK, LowerCase(Lines[LN - 1])) = 0 then Continue; { cheap reject }
           var Live: TArray<TReviewMarker>:= nil;
           if (LN > Length(CanBear)) or CanBear[LN - 1] then Live:= TReviewMarkers.Parse(Lines[LN - 1]);
@@ -14067,9 +14294,10 @@ begin
                   tests\autotest\run_marker_malformed_advises_every_form.ps1:
                   every form named here is exercised there, and an accepted form
                   missing from here FAILS that suite. }
-                Format('dl:ok names "%s", which is not a rule id -- this marker suppresses NOTHING. '
+                Format('dl:ok names "%s", which is not a rule id -- this marker suppresses NOTHING.%s '
                      + 'Write `dl:ok <rule-id>`, `dl:ok <rule-id>@<hash>`, `dl:ok <rule-id> -- <reason>` '
-                     + 'or `dl:ok <rule-id>: <reason>`, or run `drag-lint allow` to format it.', [M.RuleId]));
+                     + 'or `dl:ok <rule-id>: <reason>`, or run `drag-lint allow` to format it.',
+                     [M.RuleId, DidYouMean(M.RuleId)]));
               Continue;
             end;
             { review-marker-reason-unreviewed (OFF by default; owner ruling OWN-7).
@@ -14097,9 +14325,6 @@ begin
             end;
             if StampMsg <> '' then EmitHint(SF, LN, 'review-marker-reason-unreviewed', StampMsg);
             if MatchStr(LowerCase(M.RuleId), COMMENT_SENSITIVE) then Continue;
-            { empty-on-handler is comment-sensitive only when the marker sits
-              between `do` and the `;` -- see IsCommentSilencedEmptyHandler. }
-            if SameText(M.RuleId, 'empty-on-handler') and IsCommentSilencedEmptyHandler(Lines, LN) then Continue;
             { A placeholder @hash that no finding claimed. With a finding on the
               line the suppression path above has already said so (and Accounted
               the marker); without one this would otherwise read as
@@ -15732,6 +15957,11 @@ begin
     if SameText(AArgs.Format, 'sarif') then Writeln(ErrOutput, '--fix does not support SARIF output; using text output.');
 
     { --compile-gate writes through a build of the --project .dproj (lint, lint-all, lint-project, check-ast share this writer). }
+    if AArgs.CompileGate and AArgs.NoCompileGate then
+    begin
+      Writeln(ErrOutput, 'ERROR: --compile-gate and --no-compile-gate contradict each other: pass one');
+      Exit(2);
+    end;
     if AArgs.CompileGate and AArgs.Apply and ((not SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj')) or (not TFile.Exists(AArgs.ProjectPath))) then
     begin
       Writeln(ErrOutput, 'ERROR: --fix --apply --compile-gate needs --project <X.dproj>: the compile gate builds it');
@@ -16022,12 +16252,16 @@ begin
     end;
     if AArgs.Apply then GuardRenameWrites(AArgs, Rename, FixCount);
     Edits:= Edits + Rename.Edits;
-    { A naming rename edits a declaration and every use: with a --project .dproj it is written through the compile gate
-      even without --compile-gate (148 RN; 146 r2 left it proof-only). The other fixers keep R3's opt-in. }
+    { P14 (v151 GATE): with --project naming an existing .dproj every write goes through the compile gate BY DEFAULT.
+      --no-compile-gate writes unbuilt -- except a naming rename, which edits a declaration and every use and is
+      always built (148 RN). Without a .dproj nothing builds, as before. }
+    var GateProjectKnown: Boolean:= SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') and TFile.Exists(AArgs.ProjectPath);
     var GateWrite: Boolean:= AArgs.CompileGate
-      or ((NamingRenames + Rename.Applied > 0) and SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') and TFile.Exists(AArgs.ProjectPath));
+      or (GateProjectKnown and ((not AArgs.NoCompileGate) or (NamingRenames + Rename.Applied > 0)));
     if GateWrite and AArgs.Apply and not AArgs.CompileGate then
-      Writeln(ErrOutput, 'drag-lint: note: naming renames are written through the compile gate of ' + ExtractFileName(AArgs.ProjectPath));
+      Writeln(ErrOutput, if AArgs.NoCompileGate
+        then 'drag-lint: note: naming renames are written through the compile gate of ' + ExtractFileName(AArgs.ProjectPath) + ' even with --no-compile-gate'
+        else 'drag-lint: note: --fix --apply writes through the compile gate of ' + ExtractFileName(AArgs.ProjectPath) + ' (--no-compile-gate writes unbuilt)');
     { ONE PASS NEVER WRITES MIXED BYTES: a finding whose edits overlap an earlier
       finding's (two rules rewriting one span) is withheld WHOLE and reported
       deferred; the next --fix pass re-lints and applies it.
@@ -16489,7 +16723,7 @@ const
     'type-name-prefix', 'field-name-prefix', 'param-name-prefix', 'method-pascalcase', 'const-casing',
     'local-var-casing', 'unit-name-matches-file', 'reserved-word-casing', 'hungarian-or-short-identifier',
     'local-field-prefix', 'confusable-identifier');
-  LINT_GATE_DEAD_CODE: array[0..25] of string = (
+  LINT_GATE_DEAD_CODE: array[0..26] of string = (
     'unused-parameter', 'identical-then-else', 'referenced-never-set', 'redundant-parentheses',
     'commented-out-code', 'function-result-ignored', 'destructor-without-override',
     'case-with-too-few-branches', 'boolean-expression-complexity', 'exception-constructed-but-not-raised',
@@ -16497,7 +16731,7 @@ const
     'unit-too-large', 'weak-random-for-security', 'create-inside-try', 'insecure-temp-file',
     'multiple-statements-per-line', 'magic-literal', 'boolean-flag-parameter', 'message-chain',
     'public-writable-field', 'loop-control-flag', 'default-encoding-io', 'doc-orphan-block',
-    'line-too-long');
+    'line-too-long', 'division-by-zero-literal');
   { RunDocDrift splits one analysis over three ids (DocRules.IsDocDriftFamily). }
   LINT_GATE_DOC_DRIFT: array[0..2] of string = ('doc-drift', 'doc-param-no-description', 'doc-param-not-in-signature');
   { Clippy-parity wave (L0): one gate per new checker unit. A lane that adds an
@@ -17663,6 +17897,8 @@ begin
   Opts.NoBackup    := AArgs.NoBackup;
   Opts.NoCompile   := AArgs.NoCompile;
   Opts.Json        := AArgs.AsJson or SameText(AArgs.Format, 'json');
+  Opts.ShowBound   := AArgs.NpShowBound;
+  Opts.OwnDir      := AnchorDirForDb(AArgs.DbPath); { no --project: the DB's own project bounds the plan }
   if not ExplicitDbsExist(AArgs, 'narrow-param') then Exit(2);
   if NoDbResolved(AArgs.DbPath, 'narrow-param') then Exit(2);
   var Ok: Boolean;
@@ -17686,8 +17922,10 @@ end;
 /// <param name="ATouched">Files written; 0 when refused.</param>
 /// <returns>True when the project builds with the edits applied (and they are on disk); False when refused, the
 /// reason is on stderr and nothing is changed.</returns>
-/// <remarks>Used only when --apply AND --project are given. Without --project the verb writes as it always did, with
-/// no build: the gate is opt-in because a verb that never needed a project must keep working without one.</remarks>
+/// <remarks>Used only when --apply AND --project are given (lint --fix: by default when --project names an existing
+/// .dproj, unless --no-compile-gate). Without --project the verb writes as it always did, with no build: a verb that
+/// never needed a project must keep working without one. Writes GateMessageReport to stderr (P14): the error, warning
+/// and hint counts of build 1 and build 2, every error line, and the warnings and hints build 2 added.</remarks>
 function ApplyEditsGated(const AEdits: TArray<TTextEdit>; const AVerb: string; const AArgs: TArgs; out ATouched: Integer): Boolean;
 begin
   ATouched:= 0;
@@ -17734,6 +17972,8 @@ begin
   Req.Header  := Format('[%s] %s --apply: %d edit(s)', [FormatDateTime('yyyy-mm-dd hh:nn:ss', Now), AVerb, Length(AEdits)]);
   Req.LogDir  := FreshScratchName('_build');
   var Gate:= ApplyGated(Req);
+  { P14: the counts of both builds, every error, and the warnings / hints the write added }
+  for var Line in GateMessageReport(Gate) do Writeln(ErrOutput, Line);
   try
     if not GScratchCited and TDirectory.Exists(Req.LogDir) then TDirectory.Delete(Req.LogDir, True);  // dl:ok taint-path-traversal@c08a -- LogDir is FreshScratchName's: a folder this run made under C:\TEMP
   except
@@ -17764,6 +18004,7 @@ begin
   Opts.IfaceName   := AArgs.Name;
   Opts.Reparent    := AArgs.EiReparent;
   Opts.NoRefCount  := AArgs.EiNoRefCount;
+  Opts.RetypeConsumer:= AArgs.EiRetype;
   Opts.Project     := AArgs.ProjectPath;
   Opts.Platform    := AArgs.CheckPlatform;
   Opts.RsVars      := AArgs.CycleRsVars;
@@ -17879,7 +18120,7 @@ var
 begin
   if not ExplicitDbsExist(AArgs, 'lint') then Exit(2);
   if AArgs.Fix and SameText(AArgs.FixRule, REDUNDANT_CAST_RULE_ID) then Exit(DoRedundantCastFix(AArgs));
-  if AArgs.Fix and SameText(AArgs.FixRule, WITH_STATEMENT_RULE_ID) then Exit(DoUnwithFix(AArgs));
+  if AArgs.Fix and MatchText(AArgs.FixRule, UNWITH_FIX_RULE_IDS) then Exit(DoUnwithFix(AArgs));
   if AArgs.CompileGate then
   begin
     if not AArgs.Fix then
@@ -18427,7 +18668,8 @@ begin
           or LintRuleWants(NarrowRule, ['type-name-prefix', MISSING_USES_RULE])
           or LintRuleWants(NarrowRule, LINT_GATE_TYPE_AWARE) or LintRuleWants(NarrowRule, LINT_GATE_DEAD_CODE)
           or LintRuleWants(NarrowRule, LINT_GATE_EXPR) or LintRuleWants(NarrowRule, LINT_GATE_CONCURRENCY)
-          or LintRuleWants(NarrowRule, LINT_GATE_EXCEPTION_THREAD) or LintRuleWants(NarrowRule, ['dataset-open-without-close'])) then
+          or LintRuleWants(NarrowRule, LINT_GATE_EXCEPTION_THREAD) or LintRuleWants(NarrowRule, ['dataset-open-without-close'])
+          or TV151Dispatch.Wants(NarrowRule)) then
       begin
         var FlowLibDb: string := LintLibraryDb(AArgs);
         { A STALE library index degrades to project-only exactly like an
@@ -18692,6 +18934,12 @@ begin
         for F in TLifetimeShapeChecker.Check(EffPath, FlowStore, FlowFid,
             (NarrowRule = IDENTIFIER_CASE_MISMATCH_RULE) or Cfg.ShouldKeep(IDENTIFIER_CASE_MISMATCH_RULE, {ADefaultDisabled=}True)) do
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      { v151 lane FRAME: the v151 rule lanes (DRagLint.V151.Dispatch) -- .pas, its raw
+        bytes and its sibling .dfm. Wants is False while no lane declares a rule. }
+      TraceLintChecker('v151');
+      if TV151Dispatch.Wants(NarrowRule) then
+        for F in TV151Dispatch.CheckFile(TV151FileCtx.Make(EffPath, Cfg, FlowStore, FlowFid, FlowLibStore, NarrowRule)) do
+          if (NarrowRule = '') or SameText(NarrowRule, F.RuleId) then Findings:= Findings + [F];
       { v0.77: clone / duplicate-code detection (#6) -- within-file (single-file lint).
         lint-all uses CheckProject instead (LATER task) so within-file clones are
         not double-reported. }
@@ -22521,6 +22769,46 @@ begin
   Result:= 1;
 end;
 
+{ v151 DOCU5 (owner ruling OQ5): the stamp (mtime + size) of a file says "unchanged"
+  but the facts the index stored for it disagree with the text (DocFilesDisagreeingWithSource:
+  a same-size edit with the mtime put back, a restore, a sync tool). Such a file is invisible
+  to ChangedFilePaths, so neither the stale-fact refusal nor the stale-anchor retry sees it.
+  Rescan BOTH sides -- the documented file and every file its facts were read from -- with
+  --force-reparse (the stamp fast path would skip them), say so on stderr as a WARN, and
+  re-open AStore so the caller runs on the fresh rows. Returns True when it rescanned;
+  False (nothing touched) when every stamp-clean file agrees with its source. }
+function RescanTamperedFacts(const AArgs: TArgs; var AStore: ISymbolStore; const AOwnFile: string): Boolean;
+begin
+  Result:= False;
+  var Files: TArray<string>:= nil;
+  if AOwnFile <> '' then Files:= [AOwnFile];
+  for var R: string in SourceFilesRead do
+    if (AOwnFile = '') or not SameText(ExpandFileName(R), ExpandFileName(AOwnFile)) then Files:= Files + [R];
+  var Bad: TArray<string>:= DocFilesDisagreeingWithSource(AStore, Files);
+  if Length(Bad) = 0 then Exit;
+  if AOwnFile = '' then Files:= Bad; { batch run: no single documented file -- rescan just the files that disagree }
+  var Named: string:= '';
+  for var I: Integer:= 0 to Min(High(Bad), 2) do
+    Named:= Named + (if Named = '' then '' else ', ') + Bad[I];
+  Writeln(ErrOutput, Format('doc: WARN -- %d file(s) (%s) look unchanged by timestamp and size, but the facts stored for them ' +
+    'disagree with the source text. Rescanning %d file(s) (the documented file and the files its facts were read from), then running.',
+    [Length(Bad), Named, Length(Files)]));
+  for var F: string in Files do
+  begin
+    if not TFile.Exists(F) then Continue;
+    var IndexArgs: TArgs:= AArgs;
+    IndexArgs.IndexAll     := False;
+    IndexArgs.ForceReparse := True;
+    IndexArgs.Path         := ExpandFileName(F);
+    if DoIndex(IndexArgs) <> 0 then
+      Writeln(ErrOutput, 'doc: WARN -- the rescan of ' + F + ' FAILED; the facts for it may still be stale.');
+  end;
+  var Ok: Boolean;
+  var Fresh: ISymbolStore:= OpenReadOnlyStore(AArgs.DbPath, Ok);
+  if Ok then AStore:= Fresh;
+  Result:= True;
+end;
+
 // v(ADP3 T3d2 D6): shared strip-reporting path for the three call sites that
 // each independently built the same '--strip' JSON object / 'stripped: N
 // tags, M blocks...' text (DoDocumentUnit, ReportDocBatch,
@@ -22650,6 +22938,11 @@ begin
   Opts.IncludeAccessors:= AArgs.DocIncludeAccessors; // ADP1 T2: --include-accessors disables the trivial-accessor skip for this run.
   ResetSourceFilesRead; // 152b DOCU: record what the facts read, then refuse on stale text
   Res:= TDocBatch.DocumentUnit(Store, AArgs.DocUnit, Opts);
+  if RescanTamperedFacts(AArgs, Store, AArgs.DocUnit) then // v151 DOCU5 (OQ5)
+  begin
+    ResetSourceFilesRead;
+    Res:= TDocBatch.DocumentUnit(Store, AArgs.DocUnit, Opts);
+  end;
   var StaleSrc: TArray<string>:= StaleFactSources(Store, AArgs.DocUnit);
   if Length(StaleSrc) > 0 then Exit(ReportStaleFactSources(StaleSrc, AArgs.DbPath));
 
@@ -22860,7 +23153,13 @@ begin
   Opts.DocumentThirdParty:= AArgs.DocumentThirdParty; // restore the pre-fix whole-closure behaviour, including vendored source.
 
   // Step 2: document --apply (shifts lines, which makes index stale)
+  ResetSourceFilesRead; // v151 DOCU5 (OQ5)
   Res:= TDocBatch.DocumentProject(Store, AArgs.ProjectPath, Opts);
+  if RescanTamperedFacts(AArgs, Store, '') then
+  begin
+    ResetSourceFilesRead;
+    Res:= TDocBatch.DocumentProject(Store, AArgs.ProjectPath, Opts);
+  end;
   Result:= ReportDocBatch(AArgs, Res, 'project', AArgs.ProjectPath);
 
   // ADP1: Step 3 (if --reindex + --apply): reindex AFTER document to re-freshen
@@ -22914,7 +23213,13 @@ begin
   Opts.Handles:= LoadDocHandlesOptions; // gap 3: manifest docs.dialog_routines / docs.max_handles for the 'Catches:' line.
   Opts.IncludeAccessors:= AArgs.DocIncludeAccessors; // ADP1 T2: --include-accessors disables the trivial-accessor skip for this run.
   TSharedFacts.MigrateLegacyPure:= AArgs.DocMigratePure; // 2026-09-23: --migrate-pure regenerates a stored legacy `Pure` line.
+  ResetSourceFilesRead; // v151 DOCU5 (OQ5)
   Res:= TDocBatch.DocumentAll(Store, Opts);
+  if RescanTamperedFacts(AArgs, Store, '') then
+  begin
+    ResetSourceFilesRead;
+    Res:= TDocBatch.DocumentAll(Store, Opts);
+  end;
   Result:= ReportDocBatch(AArgs, Res, 'scope', 'all');
 end; // function
 
@@ -23391,6 +23696,13 @@ begin
     AArgs.DocSince, AArgs.DocBaseDir, OpenExtraStores(AArgs), LoadDocMaxReturnCases, LoadDocMaxCallers,
     LoadDocComplexityMin); // gap 3: manifest docs.dialog_routines / max_handles for 'Catches:'. ADF T5: --since (git <since> date) + --base-dir repo root; multi-db: other resolved --db's searched for callers; Task 10: manifest docs.max_return_cases cap; ADP1 T1: manifest docs.max_callers cap; ADP2 T3: manifest docs.complexity_min threshold.
 
+  if (Res.Action <> DRagLint.Doc.Document.daNotFound) and RescanTamperedFacts(AArgs, Store, Res.FilePath) then // v151 DOCU5 (OQ5)
+  begin
+    ResetSourceFilesRead;
+    Res:= DRagLint.Doc.Document.TDocumenter.BuildFor(Store, AArgs.QName, LoadDocHandlesOptions, AArgs.DocSeeAlso,
+      AArgs.DocSince, AArgs.DocBaseDir, OpenExtraStores(AArgs), LoadDocMaxReturnCases, LoadDocMaxCallers,
+      LoadDocComplexityMin);
+  end;
   if Res.Action = DRagLint.Doc.Document.daNotFound then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
   { 152b DOCU: as DoDocumentUnit -- facts read from a callee file rewritten since indexing are refused. }
   var StaleQ: TArray<string>:= StaleFactSources(Store, Res.FilePath);
@@ -25490,6 +25802,9 @@ begin
         if LintRuleWants(Nr, LINT_GATE_LIFETIME_SHAPE) then
           for F in TLifetimeShapeChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath),
               (Nr = IDENTIFIER_CASE_MISMATCH_RULE) or Cfg.ShouldKeep(IDENTIFIER_CASE_MISMATCH_RULE, {ADefaultDisabled=}True)) do Findings:= Findings + [F];
+        { v151 lane FRAME: the v151 rule lanes, per file (same hook as DoLint). }
+        if TV151Dispatch.Wants(Nr) then
+          for F in TV151Dispatch.CheckFile(TV151FileCtx.Make(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath), LibStore, Nr)) do Findings:= Findings + [F];
         ScanMark(35);  // dl:ok magic-literal@4d39, large-magic-number@4d39 -- REVIEWED 2026-11-09 PF2: profiler scan-slot id of the SCAN_NAMES table, not a quantity
       except
         on E: Exception do Writeln(ErrOutput, Format('lint-all: skip %s (%s: %s)', [ExtractFileName(PasPath), E.ClassName, E.Message]));
@@ -25815,6 +26130,9 @@ begin
   LintPhase('doc-drift');
   if LintRuleWants(Nr, LINT_GATE_DOC_DRIFT) then
     Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store, DocRenderOptionsFor(AArgs, ProjectDb));
+  { v151 lane FRAME: the v151 rule lanes' project-wide checks, once per run. }
+  if TV151Dispatch.Wants(Nr) then
+    Findings:= Findings + TV151Dispatch.CheckProject(TV151ProjectCtx.Make(Store, LibStore, Cfg, Nr, FilePaths, AArgs.ProjectPath));
   { v0.77: cross-file + within-file clone detection (#6). Runs ONLY here in
     lint-all (never the per-file Check) so within-file clones are reported once. }
   LintPhase('duplicate-code');
@@ -26519,6 +26837,7 @@ begin
   Opts.NoBackup        := AArgs.NoBackup;
   Opts.AlsoProjects    := pReach.AlsoProjects;
   var Gate:= ApplyRenameGated(pProof.Edits, Opts);
+  for var GateLine in GateMessageReport(Gate) do Writeln(ErrOutput, GateLine); { P16: what the two builds said, as lint --fix prints it }
   if not Gate.Applied then
   begin
     Writeln(CRefused + 'refused [' + Gate.Refusal + ']: ' + Gate.Detail);
@@ -28267,7 +28586,15 @@ begin
       Exit(ReportF2047);
     end;
 
-    { --hub-surface (spec 2026-11-08-hub-scc-phased P2): recipe R3 in place of the planner, OFF by default }
+    { --hub-surface (spec 2026-11-08-hub-scc-phased P2): recipe R3 in place of the planner. Phase P6 (lane v151 I10,
+      after the Loader apply built with 0 errors): the --plan dry run asks R3 first WITHOUT the switch, for a group R3
+      predicts to break; --no-hub-surface gives the planner's plan. Writing (--apply) and the --causes --format json
+      fix object still need the switch by name: --fix cannot run R3 yet, so the default fix object must not offer it. }
+    if AArgs.HubSurface and AArgs.NoHubSurface then
+    begin
+      Writeln(ErrOutput, 'ERROR: cycles --hub-surface and --no-hub-surface exclude each other');
+      Exit(2);
+    end;
     if AArgs.HubSurface then
     begin
       { lane 149 CYA (P6 prep): --plan dry run = the planner with R3 asked first per group; --causes --format json = R3's
@@ -28352,11 +28679,14 @@ begin
         var PlanLines:= TStringList.Create;
         try
           var GroupHook: TCycleGroupHook:= nil;
-          if AArgs.HubSurface then
+          if not AArgs.NoHubSurface then
+          begin
+            var HubAsked:= AArgs.HubSurface;  // False = the 1.51 default: only a group R3 predicts to break, no refusal note
             GroupHook:= function(pIndex: Integer; const pOut: TStrings): Boolean
               begin
-                Result:= HubSurfaceGroupLines(Store, LibStore, Sccs[pIndex - 1], pIndex, Graph, pOut);
+                Result:= HubSurfaceGroupLines(Store, LibStore, Sccs[pIndex - 1], pIndex, Graph, pOut, HubAsked);
               end;
+          end;
           RenderCyclePlaybook(Store, AArgs.DbPath, Sccs, Graph, PlanLines, LibStore, AArgs.ProjectPath, GroupHook);
           for var PlanLine in PlanLines do Writeln(PlanLine);
         finally
@@ -38644,7 +38974,7 @@ begin
             RunLinkStages('  ', Store, Indexer2); { B-24: the one stage list (facts-inherited was missing here) }
             Stage('  ', 'calls',        procedure begin Store.ResolveCallTargets; end);
             Stage('  ', 'dispatch',     procedure begin Store.ResolveDispatch; end);     { 2026-10-26: derived from the edges just written }
-            Stage('  ', 'purity',       procedure begin TPurityStage.Run(Store); end);   { Purity v2: verdicts follow the edges; no gate, this block already runs only when files were scanned }
+            Stage('  ', 'purity',       procedure begin RunPurityStage(Store); end);   { Purity v2: verdicts follow the edges; no gate, this block already runs only when files were scanned }
             Stage('  ', 'search',       procedure begin Store.BuildSymbolSearch; end);   { xj-5: concept-search table, incremental }
           end;
 
@@ -40071,7 +40401,9 @@ begin
   Writeln('library:  ', if LibDir = '' then '(the manifest''s outDir decides)' else LibDir);
 end;
 
-function Run: Integer;
+{ The whole command line run; Run below adds the closed-stdout verdict.
+  pCommand receives the parsed verb (empty when ParseArgs never returned). }
+function RunCommand(var pCommand: string): Integer;
 const
   SELFTEST_SCHEMA_DB_ARG = 3; // ParamStr index of the DB path after --selftest-schema <sub>
 var
@@ -40108,6 +40440,7 @@ begin
   SetTargetCompilerVersion(CompilerVersionOfStudioRoot(TStudioEnv.RootOrEmpty));
   try
     Args:= ParseArgs;
+    pCommand:= Args.Command;
     if not ApplyPreprocessCompilerVersion(Args) then Exit(2);
     SetRunTargetCompilerArg(Args.TargetCompiler);
     if Args.ShowHelp then
@@ -40508,11 +40841,31 @@ begin
         one. Conservative fix, behaviour unchanged: serve the first, hand the server only that one, and say
         once -- on stderr, never the JSON-RPC stdout -- how to choose. Lazy-opening or refusing without a
         scope would break MCP configs that rely on the current pick. An explicit --db list is untouched. }
+      { v151 SERVE (OQ3, owner): serve uses ALL RELEVANT databases -- the first one (the project's
+        own index) plus EVERY library section of the platform -- and the server opens each of them.
+        Other projects' indexes the manifest also lists stay out (authoritative set = project DB +
+        platform library, owner 2026-08-13), and that is said once on stderr. An explicit --db list
+        is served as given; --project already resolves to exactly project + libraries. }
       if (Length(Args.DbPaths) = 0) and (Length(DbList) > 1) then
       begin
-        Writeln(ErrOutput, Format('drag-lint serve: NOTE -- no --db given; the manifest resolved %d databases and serve uses only the FIRST (%s). ' +
-          'Pass --db <file.sqlite> (or --project) to choose.', [Length(DbList), DbList[0]]));
-        DbList:= [DbList[0]];
+        var ServeLibs: TArray<string>:= nil;
+        try
+          ServeLibs:= LibrarySectionDbs(LoadManifestForProject(ExtractFilePath(ParamStr(0)), Args.ProjectPath));
+        except
+          on E: Exception do
+          begin
+            ServeLibs:= nil; // without the manifest's library list only the first DB is served -- and that is said
+            Writeln(ErrOutput, 'drag-lint serve: NOTE -- the manifest could not be read again (' + E.Message + '); serving only the first database.');
+          end;
+        end;
+        var ServeKept: TArray<string>:= [DbList[0]];
+        for var I:= 1 to High(DbList) do
+          if IsLibrarySectionDb(ServeLibs, DbList[I]) then ServeKept:= ServeKept + [DbList[I]];
+        if Length(ServeKept) < Length(DbList) then
+          Writeln(ErrOutput, Format('drag-lint serve: NOTE -- no --db given; serving the FIRST (%s) and its %d library section(s); ' +
+            '%d other database(s) of the manifest are not served. Pass --db <file.sqlite> (or --project) to choose.',
+            [DbList[0], Length(ServeKept) - 1, Length(DbList) - Length(ServeKept)]));
+        DbList:= ServeKept;
       end;
       for var ServeDb in DbList do SizeGuardCheck(ServeDb, ServeSGMB, Args.Force32);
       { Before Create, not after: TSQLiteSymbolStore opens the path for write, and
@@ -40594,6 +40947,48 @@ begin
     end;
   end; // try
 end; // function
+
+{ True when stdout is a pipe whose reader has closed it. Flushes Output first
+  (a failed flush is itself the answer), then probes with a ZERO-byte
+  WriteFile: on an open pipe it succeeds, on a closed one it fails with
+  ERROR_NO_DATA (232). A file or console stdout is never "closed". }
+function StdoutReaderGone: Boolean;
+var
+  Written: DWORD;
+  Probe: Byte;
+begin
+  try
+    Flush(Output);
+  except
+    on EInOutError do Exit(True);
+  end;
+  if GetFileType(TTextRec(Output).Handle) <> FILE_TYPE_PIPE then Exit(False);
+  Probe:= 0;
+  Result:= not WriteFile(TTextRec(Output).Handle, Probe, 0, Written, nil);
+end;
+
+function Run: Integer;
+const
+  EXIT_FATAL = 3; // the code of every top-level FATAL (dpr handler)
+var
+  Command: string;
+begin
+  Command:= '';
+  Result:= RunCommand(Command);
+  { A CLOSED STDOUT PIPE STAYS A FATAL 3 (owner ruling 2026-10-30), also when
+    no write FAILED: Windows can report a pending WriteFile on the pipe as fully
+    written although its reader closed the pipe meanwhile (v151: `rules` wrote
+    16384 + 12174 bytes, the second "succeeded" after the reader read 64 chars
+    and closed; 5671 bytes in its place fail with 109). With nothing written
+    after it, no EInOutError ever fired and a truncated run exited 0. lsp and
+    serve own stdout as their transport; a client that hangs up is their
+    normal end, not a truncated run. }
+  if (Result = 0) and not MatchText(Command, ['lsp', 'serve']) and StdoutReaderGone then
+  begin
+    Writeln(ErrOutput, 'FATAL: EInOutError: I/O error ', ERROR_NO_DATA, ' (stdout was closed by its reader before the run ended)');
+    Result:= EXIT_FATAL;
+  end;
+end;
 
 initialization
 

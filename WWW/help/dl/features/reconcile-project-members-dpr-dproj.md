@@ -7,7 +7,7 @@ group: refactoring
 order: 50013
 since: 1.18.0-alpha
 status: shipped
-updated: 1.47.0-alpha
+updated: 1.51.0-alpha
 ---
 
 # Reconcile Project Members (.dpr/.dproj)
@@ -95,6 +95,22 @@ each unit is reported exactly once.
 ```text
 drag-lint lint-all --db <db> --project <App.dproj> --rule unit-not-in-library
 ```
+
+Since 1.51 `unit-not-in-dpr` also reports a project-local unit that no `uses`
+clause reaches but the program still links: a closure `.dfm` streams a class
+only that unit declares (the finding is anchored on the `.dfm` line), code names
+it qualified (`Unit.Ident`, string literals ignored), or `GetClass` /
+`FindClass('TName')` looks its class up by name. A unit with none of these links
+is not reported. The message names the uses and project entries to add.
+```text
+drag-lint lint-all --db <db> --project <App.dproj> --rule unit-not-in-dpr
+```
+
+`index --project <App.dproj>` reports the same gap at index time: it prints one
+`unit-not-in-dpr:` line per compile-closure unit the `.dpr` / `.dproj` does not
+list, and `--exclude-under` no longer drops such a unit (it prunes library walks
+only and names the kept files). The fix is this verb's `--apply`, or an edit by
+hand.
 
 ### What it needs
 Optional. An index is not required to run this command, but pass `--db` to

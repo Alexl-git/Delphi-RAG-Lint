@@ -1,0 +1,4 @@
+# TNode forward (line 6) has no use before its declaration; TNeeded forward (line 11) is used by TUser
+unneeded-forward-declaration 6
+# v151 INT: non-hit pins (run_rule_fixture_positive_control P3 needs >= 1 hit AND >= 1 non-hit per rule; the near-miss lines above stay silent)
+!unneeded-forward-declaration 11

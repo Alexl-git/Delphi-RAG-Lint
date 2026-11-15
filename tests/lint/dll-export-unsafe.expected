@@ -1,0 +1,5 @@
+# KundeName has no calling convention (export line 19); stdcall / cdecl exports are fine
+dll-export-unsafe 19
+# v151 INT: non-hit pins (run_rule_fixture_positive_control P3 needs >= 1 hit AND >= 1 non-hit per rule; the near-miss lines above stay silent)
+!dll-export-unsafe 20
+!dll-export-unsafe 21

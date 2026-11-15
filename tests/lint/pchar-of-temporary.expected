@@ -1,0 +1,6 @@
+# 22 concat stored, 23 IntToStr stored, 24 concat stored in a field, 25 ExtractFilePath stored, 26 PostMessage
+pchar-of-temporary 22
+pchar-of-temporary 23
+pchar-of-temporary 24
+pchar-of-temporary 25
+pchar-of-temporary 26

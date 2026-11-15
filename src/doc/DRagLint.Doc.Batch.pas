@@ -277,6 +277,19 @@ type
       const AOptions: TDocBatchOptions): TDocBatchResult;
   end;
 
+/// <summary>OQ5 (v151 DOCU5): the files among AFiles whose stored facts disagree
+/// with the source although the stamp (mtime + size) says they are unchanged.</summary>
+/// <param name="AStore">The index the facts were read from; nil returns nil.</param>
+/// <param name="AFiles">Candidate paths: the documented file plus every file its
+/// facts were read from. Files the index does not hold are ignored.</param>
+/// <returns>Paths (as given) where an interface-section symbol's stored name is not
+/// on its stored start line. Files whose stamp already changed are NOT returned:
+/// the stale-fact refusal and the stale-anchor retry own that case.</returns>
+/// <remarks>Read-only. A same-size edit with the mtime put back (tampering, a
+/// restore, a sync tool) is the case this exists for. Caller rescans and warns.</remarks>
+function DocFilesDisagreeingWithSource(const AStore: ISymbolStore;
+  const AFiles: TArray<string>): TArray<string>;
+
 implementation
 
 uses
@@ -287,7 +300,8 @@ uses
   DRagLint.Index.Closure, DRagLint.Project.Resolver, DRagLint.Project.TargetStudio,
   { Ownership for DocumentProject -- the same declaration lint-all reads, so the
     two commands cannot disagree about which files belong to the project. }
-  DRagLint.Project.OwnRoots;
+  DRagLint.Project.OwnRoots,
+  System.IOUtils, DRagLint.Index.Freshness;
 
 // A declaration whose doc-comment we generate: routines/methods/ctors/dtors and
 // declared types. Fields, consts, vars, enum values, unit/program markers and
@@ -649,5 +663,36 @@ begin
     Paths.Free;
   end;
 end;
+
+function DocFilesDisagreeingWithSource(const AStore: ISymbolStore;
+  const AFiles: TArray<string>): TArray<string>;
+var
+  Changed: TArray<string>;
+begin
+  Result:= nil;
+  if AStore = nil then Exit;
+  Changed:= ChangedFilePaths(AStore);
+  for var F: string in AFiles do
+  begin
+    var Skip: Boolean:= False;
+    for var C: string in Changed do
+      if SameText(ExpandFileName(C), ExpandFileName(F)) then Skip:= True;
+    if Skip then Continue;
+    var Syms: TArray<TSymbol>:= AStore.FindSymbolsByFile(F);
+    if Length(Syms) = 0 then Continue; { not indexed, or nothing public: no facts to disagree }
+    if not TFile.Exists(F) then Continue; { gone from disk: no source text to compare }
+    var Lines: TArray<string>:= TFile.ReadAllLines(F);  // dl:ok taint-path-traversal@4432 -- REVIEWED 2026-11-14 v151 INT: the path is an indexed source file of the user own index; a local CLI reading its inputs
+    for var S: TSymbol in Syms do
+    begin
+      if not SameText(S.Section, 'interface') then Continue;
+      if (S.Name = '') or (S.StartLine < 1) then Continue;
+      if (S.StartLine > Length(Lines)) or not ContainsText(Lines[S.StartLine - 1], S.Name) then
+      begin
+        Result:= Result + [F];
+        Break;
+      end;
+    end;
+  end;
+end; // function
 
 end.

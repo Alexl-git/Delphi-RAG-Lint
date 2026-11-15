@@ -243,8 +243,30 @@ $builtins = @($json.rules | Where-Object { $_.source -eq 'builtin' })
 # 220 -> 221 (2026-11-08, 1.47 wave 148 lane PQ, OFF): quit-from-thread
 # 221 -> 222 (2026-11-11, 152b lane RTTI, OFF): rtti-unavailable
 # 222 -> 223 (2026-11-12, 152c lane INCR, ON): cycle-edge-in-include
-$ExpectedBuiltins = 223
-Assert ("built-in rule count = {0} (118 + doc-orphan-block + stat-gated-destructive + global-only-uses-edge + duplicate-global-decl + uses-global-census + with-hides-outer-symbol + review-marker-malformed + hardcoded-absolute-path + dfm-property-not-declared + dependent-project-not-recompiled + discarded-effect-free-result + query-name-with-effect + enum-read-inside-with + assert-with-side-effect + ifdef-undefined-symbol + review-marker-placeholder-hash + review-marker-reason-unreviewed + cycle-participant-unit + confusable-identifier + line-too-long + enum-bare-read-scoped + platform-divergent-define + enum-ordinal-persisted + 49 gaps-wave built-ins + ancestor-not-in-project + 6 wave-3 rules); got {1}" -f $ExpectedBuiltins, $builtins.Count) ($builtins.Count -eq $ExpectedBuiltins)
+# 223 -> 310 (2026-11-15, wave v151 / 1.51.0-alpha, 87 built-ins from the 39 lanes; = rules --json source=builtin vs 1.50 base):
+#   anonymous-thread-not-started, asm-without-win64-variant, bidi-control, blocking-call-in-main-thread,
+#   char-count-as-bytes, component-default-mismatch, component-fixed-pixels, component-hardcoded-color,
+#   component-missing-free-notification, component-palette-icon, component-setter-without-invalidate,
+#   contract-unit-declares-class, control-char, control-fixed-bounds, createprocess-readonly-commandline,
+#   dataset-edit-without-post, default-parameter, destroy-called-directly, destructor-not-nil-safe,
+#   dfm-circular-datasource, dfm-control-field-type-mismatch, dfm-duplicate-binding, dfm-master-without-fields,
+#   dfm-required-field-without-control, dictionary-get-without-check, disallowed-dfm-property, dll-export-unsafe,
+#   dunitx-test-without-assert, duplicate-interface-guid, equals-without-gethashcode, event-call-without-assigned,
+#   except-handler-order, exception-freed, field-free-without-nil, field-ownership-unclear, file-header,
+#   foreign-form-control-access, form-access-before-create, form-autocreate-and-manual, form-field-type-mismatch,
+#   form-field-without-object, form-object-without-field, form-resource-missing, handle-leak, hardcoded-string,
+#   inherited-form-handler-without-inherited, inherited-order, inherited-without-ancestor, inherited-wrong-method,
+#   invisible-char, legacy-stack-queue, legacy-tlist, managed-type-raw-memory, message-handler-without-inherited,
+#   method-order, missing-inherited-call, money-as-float, null-compare, ota-notifier-not-removed,
+#   override-only-inherited, parallel-for-shared-write, pchar-of-temporary, processmessages-in-handler,
+#   queue-nil-in-package, random-without-randomize, raw-memory-leak, registry-hklm-write,
+#   self-as-interface-in-constructor, self-free-in-event-handler, stringlist-objects-leak, stringlist-unsorted,
+#   synchronize-in-destructor, task-exception-unobserved, thread-loop-without-terminated, thread-unsafe-increment,
+#   thread-use-after-free-on-terminate, threadvar-managed, tls-verification-disabled, todo-comment,
+#   transaction-without-rollback, trivial-accessor, ui-call-in-console-or-service, unneeded-forward-declaration,
+#   unrelated-class-cast, weak-cipher, write-only-property, writeln-in-gui-app
+$ExpectedBuiltins = 310
+Assert ("built-in rule count = {0} (118 + doc-orphan-block + stat-gated-destructive + global-only-uses-edge + duplicate-global-decl + uses-global-census + with-hides-outer-symbol + review-marker-malformed + hardcoded-absolute-path + dfm-property-not-declared + dependent-project-not-recompiled + discarded-effect-free-result + query-name-with-effect + enum-read-inside-with + assert-with-side-effect + ifdef-undefined-symbol + review-marker-placeholder-hash + review-marker-reason-unreviewed + cycle-participant-unit + confusable-identifier + line-too-long + enum-bare-read-scoped + platform-divergent-define + enum-ordinal-persisted + 49 gaps-wave built-ins + ancestor-not-in-project + 6 wave-3 rules + 87 wave-v151 built-ins); got {1}" -f $ExpectedBuiltins, $builtins.Count) ($builtins.Count -eq $ExpectedBuiltins)
 
 $docBuiltins = @($builtins | Where-Object { $_.category -eq 'documentation' })
 Assert ("exactly 5 documentation-category built-ins; got {0}" -f $docBuiltins.Count) ($docBuiltins.Count -eq 5)

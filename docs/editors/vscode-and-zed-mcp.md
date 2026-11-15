@@ -40,11 +40,14 @@ project folder -- still live under `C:\Projects\.drag-lint\`:
 Run `drag-lint resolve-dbs --platform <p>` for the authoritative list, or
 `resolve-dbs --project <x.dproj>` / `--in <x.pas>` to resolve one target.
 
-> **Multi-DB:** `query` accepts repeated `--db`. **`serve` does NOT** -- verified
-> 2026-08-30. It accepts repeated `--db`, opens only the FIRST, and answers every
-> request from that one. Since 2026-08-30 it says so: passing more than one
-> prints a warning to stderr naming each ignored database. Use one DB per server
-> entry.
+> **Multi-DB (1.51):** `serve` opens EVERY database it is given -- repeated `--db`,
+> or with no `--db` the project's index plus every library section of the platform
+> (other projects' indexes in the manifest are not served; stderr says how many).
+> The first database answers the call-graph tools (`find_callers`, `get_impact`,
+> ...); `find_symbol` searches all of them, and the declaration tools
+> (`get_symbol_doc`, `get_surface`, `get_slice`, `get_context_bundle`) answer from
+> the first database that declares the qname. The served list is printed on stderr.
+> Until 1.50 `serve` opened only the first and named the others as ignored.
 
 ## VS Code
 

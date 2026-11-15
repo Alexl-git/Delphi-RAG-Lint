@@ -1,0 +1,4 @@
+# float division by a zero constant: unit const (13), typed const (19),
+# routine-local const (19, second operand)
+division-by-zero-literal 13
+division-by-zero-literal 19

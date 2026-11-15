@@ -1,0 +1,7 @@
+unchecked-conversion 20
+unchecked-conversion 21
+unchecked-conversion 22
+# v151 INT: non-hit pins (run_rule_fixture_positive_control P3 needs >= 1 hit AND >= 1 non-hit per rule; the near-miss lines above stay silent)
+!unchecked-conversion 29
+!unchecked-conversion 30
+!unchecked-conversion 32

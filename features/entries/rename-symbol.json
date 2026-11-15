@@ -69,12 +69,16 @@
     {
       "ask": "Can I preview a rename before it writes anything?",
       "command": "drag-lint rename --kind symbol --name <QName> --to <New> --db <db> --plan"
+    },
+    {
+      "ask": "How do I rename a component on a form, in its .dfm and in the code together?",
+      "command": "drag-lint rename --kind symbol --name <Unit>.<TFormClass>.<Component> --to <New> --db <db> --project <X.dproj> --apply"
     }
   ],
   "verified": {
-    "date": "2026-11-07",
+    "date": "2026-11-14",
     "by": "ENGINE",
-    "build": "1.46.0-alpha",
+    "build": "1.51.0-alpha",
     "surfaceHash": "2ad7b9ef33864a962ae7322cd83bce57a429f1a62803c79ae4b6101492e32595"
   }
 }

@@ -494,6 +494,10 @@ type
   /// </remarks>
   TCallResolver = class
   strict private type
+    /// <summary>v151 INC (OQ18): a ref binder AcrossHosts runs once per host.</summary>
+    TRefIdFn   = function(const ARef: TReference; out AReason: string): Int64 of object;
+    /// <summary>v151 INC (OQ18): an edge binder AcrossHostsEdge runs once per host.</summary>
+    TRefEdgeFn = function(const ARef: TReference; out AReason: string): TCallEdge of object;
     /// <summary>D13: the scope facts of ONE enclosing routine that the write
     /// pass consults for every write inside it, computed once per pass.</summary>
     /// <remarks>
@@ -571,6 +575,10 @@ type
     FFileScope  : TObjectDictionary<Int64, TList<Int64>>;
     // 152c RINC: code-include file id -> the host it belongs to (an interface site wins).
     FIncHost    : TDictionary<Int64, TIncludeHostRow>;
+    // v151 INC (OQ18): code-include file id -> EVERY host that includes it as code.
+    FIncHosts   : TObjectDictionary<Int64, TList<TIncludeHostRow>>;
+    // v151 INC (OQ18): the host a multi-host include ref is being resolved for (IncFileId = 0: none).
+    FCurHost    : TIncludeHostRow;
     // Cache of a routine/type symbol's direct children, keyed by symbol id, so a
     // per-ref field/method scan does not re-hit the DB for the same enclosing
     // symbol repeatedly across a whole-DB pass.
@@ -1309,9 +1317,54 @@ type
     /// <param name="ADeclFileId">files.id of the declaration.</param>
     /// <param name="ARefFileId">files.id of the referencing file.</param>
     /// <returns>True on the ref's own-unit rung (both sections visible).</returns>
-    /// <remarks>A ref INSIDE an include sees the include's own declarations (same file); it does
-    /// not gain its host's (UnitFileOfDecl maps the declaration side only).</remarks>
+    /// <remarks>A ref INSIDE an include sees the include's own declarations (same file) and,
+    /// v151 INC (OQ18), its host unit's (RefUnitFile maps the ref side) -- for a multi-host
+    /// include only during the per-host pass (FCurHost).</remarks>
     function DeclInRefUnit(ADeclFileId, ARefFileId: Int64): Boolean;
+    /// <summary>v151 INC (OQ18): the unit file whose scope a ref in ARefFileId resolves in --
+    /// the host of a code include, else ARefFileId itself.</summary>
+    /// <param name="ARefFileId">files.id of the referencing file.</param>
+    /// <returns>The single host of an include; for an include with several hosts, the host of
+    /// the current per-host pass (FCurHost) and outside one ARefFileId (no scope: unbound, as
+    /// before); ARefFileId for every other file.</returns>
+    function RefUnitFile(ARefFileId: Int64): Int64;
+    /// <summary>v151 INC: the type a method body written in an include belongs to -- the
+    /// dotted qualifier of AQualifiedName (`THost` / `TOuter.TInner`) looked up from the host unit.</summary>
+    /// <param name="AHostUnitId">symbols.id of the host unit.</param>
+    /// <param name="AQualifiedName">The header name of the body, e.g. `THost.Run`.</param>
+    /// <returns>The class / record symbol id; 0 when a segment is not a type of the host.</returns>
+    function IncludeMethodOwner(AHostUnitId: Int64; const AQualifiedName: string): Int64;
+    /// <summary>v151 INC (OQ18): True when ARef sits in a code include that SEVERAL units include
+    /// and no per-host pass is running -- the ref must be resolved once per host.</summary>
+    /// <param name="ARef">FileId is consulted.</param>
+    /// <returns>True outside a per-host pass for an include with two or more hosts.</returns>
+    function MultiHostRef(const ARef: TReference): Boolean;
+    /// <summary>v151 INC (OQ18): resolves ARef once per host of its include and keeps the
+    /// answer only when EVERY host gives the same one.</summary>
+    /// <param name="ARef">A ref inside a multi-host code include.</param>
+    /// <param name="AFn">The binder (re-entered with FCurHost set).</param>
+    /// <param name="AReason">The common decline reason, or 'include-hosts-disagree'.</param>
+    /// <returns>The symbol every host binds; 0 when one host declines or two hosts differ.</returns>
+    /// <remarks>The refs table holds ONE target per ref (call_edges.ref_id is its key), so N
+    /// differing bindings cannot be stored: a ref whose hosts disagree stays unbound -- short,
+    /// never wrong. The counters of the binder count the ref once per host.</remarks>
+    function AcrossHosts(const ARef: TReference; AFn: TRefIdFn; out AReason: string): Int64;
+    /// <summary>v151 INC (OQ18): AcrossHosts for an edge binder; hosts agree when the target and
+    /// the receiver type are the same.</summary>
+    /// <param name="ARef">A ref inside a multi-host code include.</param>
+    /// <param name="AFn">The binder (re-entered with FCurHost set).</param>
+    /// <param name="AReason">The common decline reason, or 'include-hosts-disagree'.</param>
+    /// <returns>The common edge; on disagreement the edge of the first host with TargetSymbolId 0.</returns>
+    function AcrossHostsEdge(const ARef: TReference; AFn: TRefEdgeFn; out AReason: string): TCallEdge;
+    /// <summary>v151 INC (OQ18): AcrossHostsEdge for ResolveOne (no reason out).</summary>
+    /// <param name="ACallRef">A call ref inside a multi-host code include.</param>
+    /// <returns>The common edge; on disagreement the edge of the first host with TargetSymbolId 0.</returns>
+    function AcrossHostsCall(const ACallRef: TReference): TCallEdge;
+    /// <summary>v151 INC (OQ18): ResolveOne in the shape of TRefEdgeFn (AReason is always empty).</summary>
+    /// <param name="ARef">The call ref.</param>
+    /// <param name="AReason">Always empty.</param>
+    /// <returns>ResolveOne(ARef).</returns>
+    function ResolveOneWithReason(const ARef: TReference; out AReason: string): TCallEdge;
     /// <summary>152c RINC: True when ASym is declared at the top level of a unit -- its parent
     /// is the unit symbol, or it is a parentless declaration of a code include (the host's).</summary>
     /// <param name="ASym">A full symbol row (SymbolById).</param>
@@ -1615,7 +1668,12 @@ type
     /// Signatures DIFFER also yield Default(TSymbol): two sibling
     /// 'for var Item in A' / 'for var Item in B' loops share one qualified
     /// name, and typing the receiver from whichever row came first would be a
-    /// guess. Same-signature duplicates still match (they type the same).</summary>
+    /// guess. Same-signature duplicates still match (they type the same).
+    /// v151 INC: a one-line forward (`TFoo = class;` / `IFoo = interface;`: class or
+    /// interface kind, no heritage, start line = end line, no members) that a LATER
+    /// same-kind sibling of the same name completes answers that later declaration --
+    /// the forward and the full declaration are one type, and only the full row carries
+    /// its modifiers (`sealed`), heritage and members.</summary>
     /// <param name="AParentId"><!-- drag-lint:auto type -->Int64</param>
     /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AKinds"><!-- drag-lint:auto type -->const TSymbolKindSet</param>
@@ -1637,6 +1695,13 @@ type
     /// </remarks>
     function FindChildOfKind(AParentId: Int64; const AName: string; const AKinds: TSymbolKindSet;
       ADeclineOnConflict: Boolean = False): TSymbol;
+    /// <summary>v151 INC: True when ASym has the shape of a forward type declaration --
+    /// class or interface kind, no heritage, start line = end line, no members.</summary>
+    /// <param name="ASym">A symbol row (a child of a unit or type).</param>
+    /// <returns>True for `TFoo = class;` / `IFoo = interface;`.</returns>
+    /// <remarks>Shape only: a one-line `TFoo = class end;` also answers True; callers use it
+    /// only together with a LATER same-name sibling, which only a forward can have.</remarks>
+    function IsOneLineForward(const ASym: TSymbol): Boolean;
     /// <summary>E-BIND-NEAREST-WINS: removes from an inheritance-chain candidate
     /// list what the compiler's own lookup could not reach, so the nearest
     /// override binds 'certain' instead of 'ambiguous'.</summary>
@@ -4658,6 +4723,7 @@ begin
   FParenlessStats:= Default(TParenlessResolveStats);
   FFileScope  := TObjectDictionary<Int64, TList<Int64>>.Create([doOwnsValues]);
   FIncHost    := TDictionary<Int64, TIncludeHostRow>.Create;
+  FIncHosts   := TObjectDictionary<Int64, TList<TIncludeHostRow>>.Create([doOwnsValues]);
   FChildCache := TObjectDictionary<Int64, TList<TSymbol>>.Create([doOwnsValues]);
   FLineCache  := TObjectDictionary<Int64, TStringList>.Create([doOwnsValues]);
   FStaleFiles := TDictionary<Int64, Boolean>.Create;
@@ -4740,6 +4806,7 @@ begin
   FChildCache.Free;
   FFileScope .Free;
   FIncHost.Free;
+  FIncHosts.Free;
   FNameToUnitValues.Free;
   FNameToEnumValues.Free;
   FNameToRoutines.Free;
@@ -4821,6 +4888,13 @@ procedure TCallResolver.BuildIncludeScope;
     AMap[Lc].Add(ASym);
   end;
 
+  function HasHost(AList: TList<TIncludeHostRow>; AHostFileId: Int64): Boolean;
+  begin
+    Result:= False;
+    for var R: TIncludeHostRow in AList do
+      if R.HostFileId = AHostFileId then Exit(True);
+  end;
+
 var
   H, Prev: TIncludeHostRow;
   IntfInc: TObjectDictionary<Int64, TList<Int64>>;
@@ -4836,6 +4910,8 @@ begin
       if not FIncHost.TryGetValue(H.IncFileId, Prev)
          or (SameText(H.Section, 'interface') and not SameText(Prev.Section, 'interface')) then
         FIncHost.AddOrSetValue(H.IncFileId, H);
+      if not FIncHosts.ContainsKey(H.IncFileId) then FIncHosts.Add(H.IncFileId, TList<TIncludeHostRow>.Create);
+      if not HasHost(FIncHosts[H.IncFileId], H.HostFileId) then FIncHosts[H.IncFileId].Add(H);
       AddEdge(H.HostFileId, H.IncFileId);
       if not SameText(H.Section, 'interface') then Continue;
       if not IntfInc.ContainsKey(H.HostFileId) then IntfInc.Add(H.HostFileId, TList<Int64>.Create);
@@ -4860,6 +4936,7 @@ begin
     var C: TSymbol:= S;
     C.ParentId:= H.HostUnitId;
     C.Section := H.Section;
+    FRows.Symbols.Remove(S.Id); { v151 INC: re-read through SymbolById with the include hosts known }
     if C.Kind in [skProcedure, skFunction] then AddCand(FNameToRoutines, C)
     else if C.Kind in [skConstDecl, skVarDecl] then AddCand(FNameToUnitValues, C);
   end;
@@ -4873,9 +4950,117 @@ begin
   if FIncHost.TryGetValue(AFileId, H) then Result:= H.HostFileId;
 end;
 
+function TCallResolver.IncludeMethodOwner(AHostUnitId: Int64; const AQualifiedName: string): Int64;
+begin
+  Result:= AHostUnitId;
+  var Segs: TArray<string>:= AQualifiedName.Split(['.']);
+  for var I: Integer:= 0 to High(Segs) - 1 do
+  begin
+    if Result <= 0 then Exit(0);
+    Result:= FindChildOfKind(Result, Segs[I], [skClass, skRecord]).Id;
+  end;
+  if Result = AHostUnitId then Result:= 0;
+end;
+
+function TCallResolver.MultiHostRef(const ARef: TReference): Boolean;
+var
+  L: TList<TIncludeHostRow>;
+begin
+  Result:= (FCurHost.IncFileId = 0) and (FIncHosts.Count > 0) and FIncHosts.TryGetValue(ARef.FileId, L) and (L.Count > 1);
+end;
+
+function TCallResolver.AcrossHosts(const ARef: TReference; AFn: TRefIdFn; out AReason: string): Int64;
+var
+  Id : Int64 ;
+  Why: string;
+begin
+  Result := 0;
+  AReason:= '';
+  var First: Boolean:= True;
+  try
+    for var H: TIncludeHostRow in FIncHosts[ARef.FileId] do
+    begin
+      FCurHost:= H;
+      Id:= AFn(ARef, Why);
+      if First then
+      begin
+        Result := Id;
+        AReason:= Why;
+        First  := False;
+      end
+      else if Id <> Result then
+      begin
+        Result := 0;
+        AReason:= 'include-hosts-disagree';
+        Exit;
+      end;
+    end;
+  finally
+    FCurHost:= Default(TIncludeHostRow);
+  end;
+end;
+
+function TCallResolver.AcrossHostsEdge(const ARef: TReference; AFn: TRefEdgeFn; out AReason: string): TCallEdge;
+var
+  E  : TCallEdge;
+  Why: string   ;
+begin
+  Result := Default(TCallEdge);
+  AReason:= '';
+  var First: Boolean:= True;
+  try
+    for var H: TIncludeHostRow in FIncHosts[ARef.FileId] do
+    begin
+      FCurHost:= H;
+      E:= AFn(ARef, Why);
+      if First then
+      begin
+        Result := E;
+        AReason:= Why;
+        First  := False;
+      end
+      else if (E.TargetSymbolId <> Result.TargetSymbolId) or (E.ReceiverTypeSymbolId <> Result.ReceiverTypeSymbolId)
+              or not SameText(E.ExternalTarget, Result.ExternalTarget) then
+      begin
+        Result.TargetSymbolId      := 0;
+        Result.ReceiverTypeSymbolId:= 0;
+        Result.ExternalTarget      := '';
+        Result.ExternalKind        := '';
+        AReason:= 'include-hosts-disagree';
+        Exit;
+      end;
+    end;
+  finally
+    FCurHost:= Default(TIncludeHostRow);
+  end;
+end;
+
+function TCallResolver.ResolveOneWithReason(const ARef: TReference; out AReason: string): TCallEdge;
+begin
+  AReason:= '';
+  Result := ResolveOne(ARef);
+end;
+
+function TCallResolver.AcrossHostsCall(const ACallRef: TReference): TCallEdge;
+var
+  Why: string;
+begin
+  Result:= AcrossHostsEdge(ACallRef, ResolveOneWithReason, Why);
+end;
+
+function TCallResolver.RefUnitFile(ARefFileId: Int64): Int64;
+var
+  L: TList<TIncludeHostRow>;
+begin
+  Result:= ARefFileId;
+  if (FIncHosts.Count = 0) or not FIncHosts.TryGetValue(ARefFileId, L) then Exit;
+  if FCurHost.IncFileId = ARefFileId then Result:= FCurHost.HostFileId
+  else if L.Count = 1 then Result:= L[0].HostFileId;
+end;
+
 function TCallResolver.DeclInRefUnit(ADeclFileId, ARefFileId: Int64): Boolean;
 begin
-  Result:= (ADeclFileId = ARefFileId) or (UnitFileOfDecl(ADeclFileId) = ARefFileId);
+  Result:= (ADeclFileId = ARefFileId) or (UnitFileOfDecl(ADeclFileId) = RefUnitFile(ARefFileId));
 end;
 
 function TCallResolver.IsUnitLevelDecl(const ASym: TSymbol): Boolean;
@@ -4890,6 +5075,13 @@ var
 begin
   Result:= (ADeclFile = ACandFile);
   if Result then Exit;
+  { v151 INC (OQ18): text inside a code include sees what its host sees. }
+  var Host: Int64:= RefUnitFile(ADeclFile);
+  if Host <> ADeclFile then
+  begin
+    if Host = ACandFile then Exit(True);
+    ADeclFile:= Host;
+  end;
   if FFileScope.TryGetValue(ADeclFile, L) then Result:= L.IndexOf(ACandFile) >= 0;
 end;
 
@@ -5072,6 +5264,12 @@ begin
   var H: TIncludeHostRow;
   if (Result.ParentId <= 0) and (Result.Section = '') and FIncHost.TryGetValue(Result.FileId, H) then
     Result.Section:= H.Section;
+  { v151 INC: a method body written in a single-host include (`procedure THost.Run;`) hangs
+    under the class of its host, so its body sees the class members and the host unit. }
+  var HL: TList<TIncludeHostRow>;
+  if (Result.ParentId <= 0) and (Result.Kind in [skMethod, skConstructor, skDestructor]) and Result.QualifiedName.Contains('.')
+     and FIncHosts.TryGetValue(Result.FileId, HL) and (HL.Count = 1) then
+    Result.ParentId:= IncludeMethodOwner(HL[0].HostUnitId, Result.QualifiedName);
   FRows.Symbols.Add(AId, Result);
 end;
 
@@ -5168,10 +5366,24 @@ begin
   for S in Kids do
     if (S.Kind in AKinds) and SameText(S.Name, AName) then
     begin
-      if not ADeclineOnConflict then Exit(S);
-      if Result.Id = 0 then Result:= S
+      if not ADeclineOnConflict then
+      begin
+        if Result.Id = 0 then Result:= S
+        else if (S.Kind = Result.Kind) and (S.StartLine > Result.StartLine) then Exit(S); { v151 INC: the completing declaration }
+        if not IsOneLineForward(Result) then Exit;
+      end
+      else if Result.Id = 0 then Result:= S
       else if Result.Signature <> S.Signature then Exit(Default(TSymbol));
     end;
+end;
+
+function TCallResolver.IsOneLineForward(const ASym: TSymbol): Boolean;
+var
+  Kids: TList<TSymbol>;
+begin
+  if (ASym.Kind not in [skClass, skInterface]) or (Trim(ASym.Heritage) <> '') or (ASym.StartLine <> ASym.EndLine) then Exit(False);
+  Kids  := ChildrenOf(ASym.Id);
+  Result:= (Kids = nil) or (Kids.Count = 0);
 end;
 
 { Declared in the interface (DocInsight there); moved here from DispatchResolver by rb5-ovl. }
@@ -6253,6 +6465,7 @@ var
   ClassShadows: Boolean                ;
   OwnerOk     : Boolean                ;
 begin
+  if MultiHostRef(ARef) then Exit(AcrossHosts(ARef, ResolveEnumValueRead, AReason)); { v151 INC (OQ18) }
   Result := 0;
   AReason:= '';
   if ARef.NameText = '' then Exit;
@@ -7901,6 +8114,7 @@ var
   WithKind: TWithMemberKind;
   ByWith  : Boolean        ;
 begin
+  if MultiHostRef(ARef) then Exit(AcrossHostsEdge(ARef, ResolveParenlessRead, AReason)); { v151 INC (OQ18) }
   Result      := Default(TCallEdge);
   Result.RefId:= ARef.Id;
   { The site's own text decides three of the rules, so a line that does not
@@ -8005,6 +8219,7 @@ var
   Scratch: TList<TSymbol> ;
   ByWith : Boolean        ;
 begin
+  if MultiHostRef(ARef) then Exit(AcrossHostsEdge(ARef, ResolveBareMemberRead, AReason)); { v151 INC (OQ18) }
   Result      := Default(TCallEdge);
   Result.RefId:= ARef.Id;
   WType       := 0;
@@ -9691,6 +9906,7 @@ var
   ClassId: Int64          ;
   ViaSelf: Boolean        ;
 begin
+  if MultiHostRef(ARef) then Exit(AcrossHosts(ARef, ResolveWriteRef, AReason)); { v151 INC (OQ18) }
   Result := 0;
   AReason:= '';
   Verd   := wvNone;
@@ -9772,6 +9988,7 @@ var
   Acc    : TSymbol;
   ClassId: Int64  ;
 begin
+  if MultiHostRef(ARef) then Exit(AcrossHostsEdge(ARef, ResolveWriteEdge, AReason)); { v151 INC (OQ18) }
   Result               := Default(TCallEdge);
   Result.RefId         := ARef.Id;
   Result.TargetSymbolId:= ResolveWriteRef(ARef, AReason);
@@ -10914,6 +11131,8 @@ var
       var IncH: TIncludeHostRow;
       if (OwnerId <= 0) and FIncHost.TryGetValue(T.FileId, IncH) then OwnerId:= IncH.HostUnitId;  { 152c RINC }
       if (T.Kind not in TYPE_LIKE) or (OwnerId <= 0) then Continue;
+      { v151 INC: a forward and the declaration that completes it are one type -- count the full one. }
+      if (T.ParentId > 0) and IsOneLineForward(T) and (FindChildOfKind(T.ParentId, T.Name, [T.Kind]).Id <> T.Id) then Continue;
       var Owner: TSymbol:= SymbolById(OwnerId);
       if (Owner.ParentId > 0) or not (SameText(Owner.Name, AQualifier) or EndsText('.' + AQualifier, Owner.Name)) then
         Continue;
@@ -10926,6 +11145,7 @@ var
   end;
 
 begin
+  if MultiHostRef(ARef) then Exit(AcrossHosts(ARef, LookupTypeName, AReason)); { v151 INC (OQ18) }
   var PfMark: Int64:= ProfBegin(cpsLookupTypeName); { 151 PF: DRAGLINT_PROFILE_CALLS }
   try
   Result := 0;
@@ -11060,6 +11280,7 @@ var
   Lc     : string         ;
   Parent : Int64          ;
 begin
+  if MultiHostRef(ARef) then Exit(AcrossHosts(ARef, ResolveBareValueRead, AReason)); { v151 INC (OQ18) }
   Result := 0;
   AReason:= BareReadSite(ARef, Lines, Rcv);
   if (AReason = '') and (Rcv <> '') then AReason:= 'qualified'
@@ -11298,6 +11519,7 @@ var
   ArgsKnown: Boolean   ;
   RcvType : TRcvTypeText;
 begin
+  if MultiHostRef(ACallRef) then Exit(AcrossHostsCall(ACallRef)); { v151 INC (OQ18) }
   Result:= Default(TCallEdge);
   Result.RefId:= ACallRef.Id;
   Result.TargetSymbolId      := 0;

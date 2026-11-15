@@ -1,0 +1,10 @@
+# v151 WID-FLOW: a by-value parameter stored to and never read afterwards
+# never read at all -> write-only-local reports it instead
+!overwrite-before-read 18
+overwrite-before-read 23
+!overwrite-before-read 24
+# clamping a parameter and then reading it is the normal idiom -> fine
+!overwrite-before-read 31
+# a var parameter's stores reach the caller -> never reported
+!overwrite-before-read 37
+!overwrite-before-read 38

@@ -87,9 +87,16 @@ const
 /// otherwise ''.</param>
 /// <param name="AUnresolvedMethod">The DI method name when the result is
 /// dioUnresolved; otherwise ''.</param>
+/// <param name="AReceiver">The chain's root receiver identifier (`GlobalContainer`,
+/// `FContainer`); '' when the chain does not start at a plain identifier.</param>
 /// <returns>The classification outcome.</returns>
 /// <remarks>
 /// Pure and side-effect free. Method-name matching is case-insensitive.
+/// A registration verb alone is not a DI call (v151 EXT): dioUnresolved needs DI evidence --
+/// a link with generic type arguments, a Spring fluent link (Implements, As, AsSingleton,
+/// AsSingletonPerThread, AsTransient, AsPooled, InjectConstructor, InjectProperty,
+/// InjectField, InjectMethod), or a receiver or link whose name contains `Container`.
+/// `Cache.Register(K, V)` is dioNone.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Parser.Delphi13.TryEmitSpringDI (DRagLint.Parser.Delphi13.pas)</para>
 /// <para>Calls: Default, DRagLint.Parser.SpringDI.FindLink, DRagLint.Parser.SpringDI.FirstDiRegistrationVerb, DRagLint.Parser.SpringDI.HasLink</para>
@@ -103,7 +110,7 @@ const
 /// </remarks>
 function ClassifyDiChain(const AChain: TArray<TDiChainLink>;
   out ABinding: TDiBinding; out AResolveInterface: string;
-  out AUnresolvedMethod: string): TDiOutcome;
+  out AUnresolvedMethod: string; const AReceiver: string = ''): TDiOutcome;
 
 implementation
 
@@ -149,9 +156,30 @@ begin
   Result := '';
 end;
 
+// v151 EXT: evidence that a chain carrying a registration verb is a container call.
+function HasDiEvidence(const AChain: TArray<TDiChainLink>; const AReceiver: string): Boolean;
+const
+  CONTAINER_WORD = 'container';
+  FLUENT: array[0..9] of string = (
+    'Implements', 'As', 'AsSingleton', 'AsSingletonPerThread', 'AsTransient', 'AsPooled',
+    'InjectConstructor', 'InjectProperty', 'InjectField', 'InjectMethod');
+var
+  L: TDiChainLink;
+  F: string;
+begin
+  if AReceiver.ToLower.Contains(CONTAINER_WORD) then Exit(True);
+  for L in AChain do
+  begin
+    if (L.TypeArg <> '') or L.MethodName.ToLower.Contains(CONTAINER_WORD) then Exit(True);
+    for F in FLUENT do
+      if SameText(L.MethodName, F) then Exit(True);
+  end;
+  Result := False;
+end;
+
 function ClassifyDiChain(const AChain: TArray<TDiChainLink>;
   out ABinding: TDiBinding; out AResolveInterface: string;
-  out AUnresolvedMethod: string): TDiOutcome;
+  out AUnresolvedMethod: string; const AReceiver: string): TDiOutcome;
 var
   RegLink, IntfLink, ResLink: TDiChainLink;
   Verb: string;
@@ -194,7 +222,7 @@ begin
   // RegisterFactory, DelegateTo, bare Register, or RegisterType with no
   // Implements/As). Flagged so coverage gaps are measurable, not silently lost.
   Verb := FirstDiRegistrationVerb(AChain);
-  if Verb <> '' then
+  if (Verb <> '') and HasDiEvidence(AChain, AReceiver) then
   begin
     AUnresolvedMethod := Verb;
     Exit(dioUnresolved);

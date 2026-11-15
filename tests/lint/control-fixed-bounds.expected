@@ -1,0 +1,12 @@
+# Generated from the (+) / (-) markers of control-fixed-bounds.pas: (+) must fire, (-) must not.
+control-fixed-bounds 35
+control-fixed-bounds 36
+control-fixed-bounds 37
+control-fixed-bounds 38
+!control-fixed-bounds 39
+!control-fixed-bounds 40
+!control-fixed-bounds 41
+!control-fixed-bounds 42
+!control-fixed-bounds 43
+control-fixed-bounds 44
+control-fixed-bounds 49

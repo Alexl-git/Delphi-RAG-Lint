@@ -1,0 +1,3 @@
+delimited-text-without-strict 10
+# v151 INT: non-hit pins (run_rule_fixture_positive_control P3 needs >= 1 hit AND >= 1 non-hit per rule; the near-miss lines above stay silent)
+!delimited-text-without-strict 31

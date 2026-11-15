@@ -1,0 +1,8 @@
+path-concat-without-delimiter 12
+path-concat-without-delimiter 15
+# v151 INT: non-hit pins (run_rule_fixture_positive_control P3 needs >= 1 hit AND >= 1 non-hit per rule; the near-miss lines above stay silent)
+!path-concat-without-delimiter 27
+!path-concat-without-delimiter 28
+!path-concat-without-delimiter 29
+!path-concat-without-delimiter 31
+!path-concat-without-delimiter 40

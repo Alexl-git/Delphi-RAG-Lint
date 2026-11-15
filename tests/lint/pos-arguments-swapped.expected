@@ -1,0 +1,12 @@
+# swapped: a variable searched inside a one-char literal, or inside a longer literal while it is a declared string
+pos-arguments-swapped 12
+pos-arguments-swapped 13
+pos-arguments-swapped 14
+pos-arguments-swapped 15
+pos-arguments-swapped 16
+# v151 INT: non-hit pins (run_rule_fixture_positive_control P3 needs >= 1 hit AND >= 1 non-hit per rule; the near-miss lines above stay silent)
+!pos-arguments-swapped 21
+!pos-arguments-swapped 22
+!pos-arguments-swapped 23
+!pos-arguments-swapped 24
+!pos-arguments-swapped 25

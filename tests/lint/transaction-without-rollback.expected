@@ -1,0 +1,11 @@
+# Hits: StartTransaction and Commit in one routine that handles exceptions (a try..except at or after the start), no Rollback on that connection or transaction
+# anywhere in it (19), or a Rollback that belongs to another connection (31). Not a hit: no try..except at all (12), the exception goes to the caller.
+# Non-hits: Rollback in the except part, in a finally, through the Transaction object, and a
+# routine that only starts the transaction (the caller commits or rolls back).
+!transaction-without-rollback 12
+transaction-without-rollback 19
+transaction-without-rollback 31
+!transaction-without-rollback 43
+!transaction-without-rollback 58
+!transaction-without-rollback 71
+!transaction-without-rollback 84

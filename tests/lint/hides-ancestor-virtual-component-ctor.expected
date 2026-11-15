@@ -1,0 +1,5 @@
+# Generated from the (+) / (-) markers of hides-ancestor-virtual-component-ctor.pas: (+) must fire, (-) must not.
+hides-ancestor-virtual 22
+!hides-ancestor-virtual 27
+!hides-ancestor-virtual 32
+!hides-ancestor-virtual 37

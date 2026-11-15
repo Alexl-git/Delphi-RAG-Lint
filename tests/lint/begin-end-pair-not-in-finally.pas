@@ -56,4 +56,59 @@ begin
   AList.BeginUpdate; {OK}
 end;
 
+
+{ WID-CF widening: Acquire/Release, Enter/Leave, DisableAlign/EnableAlign, Screen.Cursor }
+procedure WideAcquire(ASem: TSemaphore);
+begin
+  ASem.Acquire; {HIT}
+  DoWork;
+  ASem.Release;
+end;
+
+procedure WideAcquireOk(ASem: TSemaphore);
+begin
+  ASem.Acquire; {OK}
+  try
+    DoWork;
+  finally
+    ASem.Release;
+  end;
+end;
+
+procedure WideEnter(ACs: TCriticalSection);
+begin
+  ACs.Enter; {HIT}
+  DoWork;
+  ACs.Leave;
+end;
+
+procedure WideAlign(APanel: TPanel);
+begin
+  APanel.DisableAlign; {HIT}
+  DoWork;
+  APanel.EnableAlign;
+end;
+
+procedure WideCursor;
+begin
+  Screen.Cursor := crHourGlass; {HIT}
+  DoWork;
+  Screen.Cursor := crDefault;
+end;
+
+procedure WideCursorOk;
+begin
+  Screen.Cursor := crHourGlass; {OK}
+  try
+    DoWork;
+  finally
+    Screen.Cursor := crDefault;
+  end;
+end;
+
+procedure WideCursorOtherMethod;
+begin
+  Screen.Cursor := crHourGlass; {OK}
+end;
+
 end.

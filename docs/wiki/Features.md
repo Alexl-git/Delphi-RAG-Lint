@@ -134,50 +134,56 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**317 rules. 110 have an auto-fix. 263 are on by default.** 223 are built-in checks; 94 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**423 rules. 125 have an auto-fix. 341 are on by default.** 310 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
-| bug-patterns | 88 | 33 |
-| complexity | 13 | 2 |
-| data-flow | 12 | 2 |
-| dead-code | 19 | 15 |
+| bug-patterns | 153 | 37 |
+| complexity | 15 | 2 |
+| data-flow | 12 | 3 |
+| dead-code | 21 | 15 |
 | documentation | 5 | 4 |
 | firedac | 3 | 3 |
 | metrics | 8 | - |
-| modernize | 4 | 4 |
-| naming | 14 | 9 |
-| other | 12 | 3 |
-| platform | 10 | 4 |
-| policy | 3 | - |
-| project-wide | 51 | 6 |
-| refactoring | 20 | 8 |
-| resource-lifetime | 16 | 7 |
+| modernize | 6 | 4 |
+| naming | 14 | 10 |
+| other | 16 | 4 |
+| platform | 16 | 4 |
+| policy | 6 | - |
+| project-wide | 51 | 8 |
+| refactoring | 26 | 9 |
+| resource-lifetime | 22 | 9 |
 | review-markers | 5 | 2 |
-| security | 22 | 2 |
-| structure | 12 | 6 |
-| **Total** | **317** | **110** |
+| security | 27 | 2 |
+| structure | 17 | 9 |
+| **Total** | **423** | **125** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
 | [Ancestor not in project (lint rule)](ancestor-not-in-project) | `lint-all` |  |
+| [Application-level lint rules](application-level-rules) | `lint`; `lint-all` |  |
 | [Autofix for fixable rules](autofix-wave) | `lint` |  |
 | [Compliance labels (CWE, CERT, MISRA)](compliance-labels) | `rules`; `lint-all` |  |
+| [Component-authoring lint rules](component-authoring-rules) | `lint`; `lint-all` |  |
 | [Copy All Diagnostics](Copy-All-Diagnostics) | Structure form: Copy All Diagnostics; `lint` |  |
 | [Copy Diagnostics (Current File)](Copy-Diagnostics-Current-File) | About window: Copy Diagnostics (Current File); `lint` |  |
 | [Copy Selected Diagnostics](Copy-Selected-Diagnostics) | Structure form: Copy |  |
 | [Cycle edge written in an include (lint rule)](cycle-edge-in-include) | `lint-all`; `lint` |  |
 | [Data module reaching a global form (lint rule)](datamodule-form-global) | `lint-all` |  |
 | [Data-flow rules that know a parameter's mode](flow-out-arg-rules) | `lint-all` |  |
+| [Dataset and transaction lint rules](dataset-rules-v151) | `lint` |  |
 | [Downgrade fixes (compat rules)](compat-downgrade-fixes) | `lint` | planned |
 | [drag-lint: Project Rules](drag-lint-Project-Rules) | Project Manager: drag-lint: Project Rules; `rules` |  |
 | [Effect-free call in a loop that could move out (lint rule)](effect-free-in-loop-invariant) | `lint-all` |  |
+| [Exception and inherited lint rules](exception-and-inherited-rules) | `lint`; `lint-all` |  |
 | [exceptions-sync](Features) | `exceptions-sync` |  |
 | [Finalization reaching a unit already finalized (lint rule)](finalization-after-dependency) | `lint-all` |  |
 | [Fix all in project](Fix-all-in-project) | Structure form: Fix all in project; `lint-all` |  |
 | [Fix all in unit](Fix-all-in-unit) | Structure form: Fix all in unit; `lint` |  |
 | [Fix all reliability (1.31.3)](Fix-all-reliability) | Structure form: Fix all in unit; `lint` |  |
 | [Fix it](Fix-it) | Structure form: Fix it; `lint`; `uses-fix` |  |
+| [Form and unit consistency rules](form-unit-consistency-rules) | `lint`; `lint-all` |  |
+| [Form-file data-binding rules](v151-dfm-binding-rules) | `lint` |  |
 | [Format Whole Project with YADF](Format-Whole-Project-with-YADF) | drag-lint > Format Whole Project with YADF...; `format`; `index` |  |
 | [Format with YADF](Format-with-YADF) | drag-lint > Format with YADF; `format` |  |
 | [Gap-wave lint rules](gap-wave-rules) | `rules` |  |
@@ -188,24 +194,35 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Interfaced object set to nil (lint rule)](interfaced-object-nil-leak) | `lint-all` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
 | [Lint rules on the static type of a reference](ref-type-rules) | `lint-all` |  |
-| [Lint rules](rules) | 317 rules, 110 fixable; `rules` |  |
+| [Lint rules](rules) | 423 rules, 125 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
+| [Memory and string-pointer lint rules (PChar, raw memory, leaks, byte counts)](memory-string-pointer-rules) | `lint-all` |  |
+| [Object-model lint rules (Equals/hash, events, GUIDs, exports)](object-model-rules) | `lint-all` |  |
 | [Opaque to analysis (lint rule)](opaque-to-analysis) | `lint-all` |  |
 | [Parameter type too wide (lint rule)](parameter-type-too-wide) | `lint-all` |  |
 | [Read but never assigned (lint rule)](read-never-assigned) | `lint-all` |  |
 | [Rename across every project that compiles a shared unit](Multi-Project-Rename) | `lint`; Structure form: Fix it; Structure form: Fix all in unit |  |
 | [Rescan this unit](Rescan-this-unit) | Structure form: Rescan this unit; `index` |  |
+| [RTL collection and environment lint rules](v151-rtl-collection-rules) | `lint`; `lint-all` |  |
+| [RTL string and path lint rules](v151-rtlstr-rules) | `lint` | experimental |
 | [RTTI unavailable (lint rule)](rtti-unavailable) | `lint-all` |  |
 | [Run AST Checks](Run-AST-Checks) | About window: Run AST Checks; `check-ast` |  |
 | [Run Diagnostics (didSave)](Run-Diagnostics-didSave) | About window: Run Diagnostics (didSave) |  |
 | [Run Lint All (Full Report)](Run-Lint-All-Full-Report) | drag-lint > Code Quality > Run Lint All (Full Report)...; `lint-all` |  |
 | [Stream buffer used after free (lint rule)](stream-buffer-after-free) | `lint-all` |  |
+| [Style, loop and ordering rules](v151-style-loop-rules) | `lint` |  |
 | [Taint analysis (SQL, command, path)](taint-analysis) | `lint-all` |  |
 | [Target compiler (--target-compiler)](target-compiler) | `lint`; `lint-all`; `rules`; `index`; `lsp workspace/executeCommand`; drag-lint > Code Quality > Run Lint All (Full Report)... |  |
+| [Text rules: bidi, invisible, control chars, TODO, header, strings](text-rules) | `lint-all` |  |
+| [Thread lifetime lint rules (v151 THR-A)](v151-thr-a-rules) | `lint`; `lint-all` |  |
+| [Thread race and blocking rules](v151-thread-race-rules) | `lint` |  |
 | [Type-level dl:ok review](Type-Level-Review-Marker) | procedure: `docs\wiki\Type-Level-Review-Marker.md` |  |
 | [type-name-prefix: expected letter from the ancestor chain](Type-Name-Prefix-Origin) | `lint`; `lint-all`; `lint` |  |
+| [Typing and ownership lint rules (casts, Self as interface, destructors)](typing-and-ownership-rules) | `lint-all`; `lint` |  |
 | [warm-rule-cache](warm-rule-cache) | `warm-rule-cache` |  |
+| [Wider built-in rules (1.51)](v151-wid-ast-rules) | `lint` |  |
+| [Wider scm rules and three new fixers](v151-wid-scm-rules) | `lint` |  |
 
 ## Documentation
 
@@ -341,6 +358,7 @@ Compile, fold compiler output into findings, preprocess.
 | [Compile Buffer (unsaved)](Compile-Buffer-unsaved) | drag-lint > Compile Buffer (unsaved) |  |
 | [Compile Dependents](Features) | drag-lint > Compile Dependents |  |
 | [compile-check](compile-check) | `compile-check` |  |
+| [Compiler messages: pass-through and overlap with our rules](compiler-messages) | `mcp run_compile_check` |  |
 | [Full Compile Sweep](Full-Compile-Sweep) | drag-lint > Full Compile Sweep; `refresh-findings` |  |
 | [ghost-check](ghost-check) | `ghost-check`; drag-lint > Compile Buffer (unsaved) |  |
 | [ghost-recover](ghost-recover) | `ghost-recover`; About window: Recover Buffer-Compile Files |  |

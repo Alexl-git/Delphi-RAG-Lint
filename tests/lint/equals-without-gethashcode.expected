@@ -1,0 +1,7 @@
+# Equals alone (line 8), GetHashCode alone (line 13); the pair and a two-argument Equals must not fire
+equals-without-gethashcode 8
+equals-without-gethashcode 13
+# v151 INT: non-hit pins (run_rule_fixture_positive_control P3 needs >= 1 hit AND >= 1 non-hit per rule; the near-miss lines above stay silent)
+!equals-without-gethashcode 18
+!equals-without-gethashcode 19
+!equals-without-gethashcode 24

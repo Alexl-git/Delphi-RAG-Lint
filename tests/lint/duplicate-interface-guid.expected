@@ -1,0 +1,5 @@
+# second interface with the same GUID (case-insensitive) at line 12; IOther is unique
+duplicate-interface-guid 12
+# v151 INT: non-hit pins (run_rule_fixture_positive_control P3 needs >= 1 hit AND >= 1 non-hit per rule; the near-miss lines above stay silent)
+!duplicate-interface-guid 17
+!duplicate-interface-guid 22

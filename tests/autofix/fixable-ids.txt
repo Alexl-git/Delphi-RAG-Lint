@@ -6,7 +6,9 @@ dfm-password-edit-unmasked
 copy-paste-assignment
 doc-drift
 empty-conditional
+empty-finally
 field-name-prefix
+format-string-not-formatted
 interface-without-guid
 identical-then-else
 local-field-prefix
@@ -24,6 +26,7 @@ redundant-not-not
 redundant-parentheses
 reserved-word-casing
 self-assignment
+shared-marker-legacy-shape
 type-name-prefix
 unit-missing-from-uses
 unused-local
@@ -108,3 +111,15 @@ empty-procedure-body
 classname-string-compare
 property-accessor-name
 line-too-long
+destructor-not-nil-safe
+field-free-without-nil
+repeated-else-if-condition
+with-hides-outer-symbol
+dead-store-before-out-arg
+identifier-case-mismatch
+is-always-true
+unused-global
+local-shadows-field
+nested-with
+with-statement
+boolean-assign-if

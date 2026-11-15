@@ -1,0 +1,24 @@
+{
+  "id": "v151-wid-ast-rules",
+  "title": "Wider built-in rules (1.51)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.51.0-alpha",
+  "summary": "Six built-in rules read more constructs: code-page and label exemptions, named zero constants, implied else-if, thread dialogs, Supports aliases",
+  "intro": "Read this when you want to know which constructs six built-in lint rules newly report or exempt in version 1.51.",
+  "wikiPage": "v151-wid-ast-rules",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-14",
+    "by": "ENGINE",
+    "build": "1.51.0-alpha",
+    "surfaceHash": "de319179f8b6b2ffbdba5a675a1f550133807d68a0339e632b8014cd5442cafc"
+  }
+}

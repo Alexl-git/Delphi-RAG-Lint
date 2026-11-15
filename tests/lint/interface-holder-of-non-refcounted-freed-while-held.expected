@@ -1,0 +1,6 @@
+# Generated from the (+) / (-) markers of interface-holder-of-non-refcounted-freed-while-held.pas: (+) must fire, (-) must not.
+interface-holder-of-non-refcounted 56
+!interface-holder-of-non-refcounted 69
+interface-holder-of-non-refcounted 80
+!interface-holder-of-non-refcounted 91
+!interface-holder-of-non-refcounted 100

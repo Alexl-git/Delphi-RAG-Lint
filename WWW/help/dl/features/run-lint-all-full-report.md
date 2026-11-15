@@ -7,7 +7,7 @@ group: linting
 order: 30039
 since: 0.61.0-alpha
 status: shipped
-updated: 1.50.0-alpha
+updated: 1.51.0-alpha
 ---
 
 # Run Lint All (Full Report)
@@ -56,8 +56,8 @@ Full flag list: [lint-all in the CLI reference](../cli.md#lint-all).
 
 ## Details
 
-Runs the full rule catalog (317 rules, 263 on by default across 18 categories,
-110 auto-fixable) against a project's indexed code and reports every surviving
+Runs the full rule catalog (423 rules, 341 on by default across 18 categories,
+125 auto-fixable) against a project's indexed code and reports every surviving
 finding. Reach for it as the overall project health check.
 
 ### Running it from the CLI

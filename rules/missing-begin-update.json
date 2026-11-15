@@ -1,0 +1,9 @@
+{
+  "id": "missing-begin-update",
+  "category": "complexity",
+  "severity": "hint",
+  "message": "Items are added to a visual list in a loop without BeginUpdate; wrap the loop in BeginUpdate / try..finally EndUpdate to avoid a repaint per item.",
+  "warn_capture": "warn",
+  "require_ancestor": ["for", "while", "repeat", "foreach"],
+  "exclude_if_preceded_by": ["\\bBeginUpdate\\b", "\\bDisableControls\\b"]
+}

@@ -13,7 +13,8 @@ unit DRagLint.Lint.UnusedGlobal;
 
     * IMPLEMENTATION-section const / var / type / class / record / interface:
       unit-private, so the per-unit check is exact -- a finding when nothing in
-      the declaring file names it.
+      the declaring file names it. Since 1.51 (WID-PROJ) also an implementation-only
+      free function / procedure (one the interface does not declare).
     * INTERFACE-section const / var / type (alias): a finding when nothing in
       ANY indexed file names it. Classes, records and enums declared in the
       interface are public API (RTTI, streaming, other projects) and are left
@@ -54,7 +55,8 @@ const
 /// another project is skipped for interface symbols (the 1.40 behaviour).</param>
 /// <returns>One 'unused-global' hint per unit-level const / var / type nothing
 /// names: implementation-section declarations (const, var, type alias, class,
-/// record, interface) when nothing in the declaring file names them; interface
+/// record, interface; since 1.51 also free functions / procedures the interface does not declare)
+/// when nothing in the declaring file names them; interface
 /// section declarations (const, var, type alias) when nothing in any file does,
 /// unless another project that lists the unit names them (see AShared). Anchored at the declaration.</returns>
 /// <remarks>
@@ -95,6 +97,8 @@ const
   BOTH_KINDS: array[0..2] of string = ('const', 'var', 'type');
   { kinds checked in the implementation section only (unit-private types) }
   IMPL_KINDS: array[0..2] of string = ('class', 'record', 'interface');
+  { free routines checked in the implementation section only, when the interface does not declare them (1.51 WID-PROJ) }
+  ROUTINE_KINDS: array[0..1] of string = ('function', 'procedure');
   { an unreadable file counts as this many mentions of every suspect: an unopened file is not evidence of absence }
   UNREADABLE_HITS = 1000;
 
@@ -117,6 +121,36 @@ var
         KindOf.AddOrSetValue(S.Id, AKind);
         CandNames.AddOrSetValue(LowerCase(S.Name), True);
       end;
+  end;
+
+  { Implementation-only free routines: a routine the interface also declares is
+    public API (unused-public-symbol's domain); a forward declaration and its body
+    are one candidate (the first seen). }
+  procedure AddRoutineCandidates;
+  var
+    Public, Seen: TDictionary<string, Boolean>;
+  begin
+    Public:= TDictionary<string, Boolean>.Create;
+    Seen  := TDictionary<string, Boolean>.Create;
+    try
+      for var K in ROUTINE_KINDS do
+        for var S in AStore.FindSymbolsByKind(K, False, MaxInt) do
+          if SameText(S.Section, SECTION_INTF) then Public.AddOrSetValue(IntToStr(S.FileId) + '|' + LowerCase(S.Name), True);
+      for var K in ROUTINE_KINDS do
+        for var S in AStore.FindSymbolsByKind(K, False, MaxInt) do
+        begin
+          var Key: string:= IntToStr(S.FileId) + '|' + LowerCase(S.Name);
+          if (not UnitIds.ContainsKey(S.ParentId)) or (not SameText(S.Section, SECTION_IMPL)) or
+             Public.ContainsKey(Key) or Seen.ContainsKey(Key) then Continue;
+          Seen.Add(Key, True);
+          Cands.Add(S);
+          KindOf.AddOrSetValue(S.Id, K);
+          CandNames.AddOrSetValue(LowerCase(S.Name), True);
+        end;
+    finally
+      Seen.Free;
+      Public.Free;
+    end;
   end;
 
   procedure ScanFile(AFileId: Int64);
@@ -228,6 +262,7 @@ begin
       AddCandidates(K, SECTION_IMPL);
     end;
     for var K in IMPL_KINDS do AddCandidates(K, SECTION_IMPL);
+    AddRoutineCandidates;
     if Cands.Count = 0 then Exit;
     for var Fi in AStore.GetAllFileIds do ScanFile(Fi);
 

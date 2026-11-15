@@ -9,6 +9,27 @@ product: DL
 
 drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.com](https://www.htrmicronite.com)), our quality and production-control software.
 
+## 1.51.0-alpha
+
+* [Compiler messages: pass-through and overlap with our rules](features/compiler-message-passthrough.md) -- Every Delphi compiler message (hint, warning, error) is stored per project and passed through under its own code; overlapping rules say where they go further.
+* [Application-level lint rules](features/v151-app-rules.md) -- Whole-program lint rules: TLS checks off, UI calls in console/service apps, DUnitX tests without asserts, weak ciphers, asm without Win64, GUI WriteLn.
+* [Component-authoring lint rules](features/v151-cmp-rules.md) -- Lint rules for component and IDE-expert code: FreeNotification, property defaults, palette bitmaps, repainting setters, DPI, OTA notifiers.
+* [Form and unit consistency rules](features/v151-dfma-rules.md) -- Lint rules comparing a form unit with its .dfm and .dpr: fields vs objects, form resource, inherited handlers, self-free, auto-created forms.
+* [Form-file data-binding rules](features/v151-dfmb-rules.md) -- Six lint rules check the text .dfm beside a unit: bad data links, duplicate bindings, field-type mismatches, unreachable required fields.
+* [Dataset and transaction lint rules](features/v151-ds-rules.md) -- Lint checks: dataset edited but never posted, SELECT * in SQL text, transaction committed but never rolled back, dataset loop that never advances.
+* [Exception and inherited lint rules](features/v151-exc-rules.md) -- Lint rules for exception handlers and inherited calls: shadowed handlers, hand-freed exceptions, wrong or missing inherited, Destroy for Free.
+* [Memory and string-pointer lint rules (PChar, raw memory, leaks, byte counts)](features/v151-mem-rules.md) -- Eight memory lint rules, one widened: PChar of Char or temporaries, @S[1], read-only CreateProcess lines, raw memory over managed types, leaks, chars as bytes.
+* [Object-model lint rules (Equals/hash, events, GUIDs, exports)](features/v151-oo-rules.md) -- Ten single-file lint rules: Equals/GetHashCode, event calls, duplicate GUIDs, DLL exports, money as float, default params, accessors, forwards, legacy lists.
+* [RTL collection and environment lint rules](features/v151-rtl-coll-rules.md) -- Lint checks for dictionary reads without a key check, string-list leaks, Null compares, HKLM writes, Random without Randomize and Now used as a stopwatch.
+* [RTL string and path lint rules](features/v151-rtl-str-rules.md) -- Seven lint rules for RTL string, path and conversion mistakes: swapped Pos arguments, StrictDelimiter, FormatSettings writes, path joins, file-name compares.
+* [Style, loop and ordering rules](features/v151-sty-rules.md) -- Eleven style and loop lint rules (begin/end, if-chains, SetLength and repaint in loops, loop bounds, method order); five are on by default.
+* [Thread lifetime lint rules (v151 THR-A)](features/v151-thr-a-rules.md) -- Six thread-lifetime lint rules (anonymous thread, Synchronize in destructor, Terminated, FreeOnTerminate, threadvar, Queue nil) plus FreeAndNil coverage.
+* [Thread race and blocking rules](features/v151-thrb-rules.md) -- Four lint rules: racing writes in parallel bodies, non-atomic global increments in threads, unbounded waits in forms, lost task exceptions.
+* [Text rules: bidi, invisible, control chars, TODO, header, strings](features/v151-txt-rules.md) -- Six raw-text lint rules: bidi-control, invisible-char, control-char, todo-comment, file-header, hardcoded-string.
+* [Typing and ownership lint rules (casts, Self as interface, destructors)](features/v151-typ-rules.md) -- Five rules: unrelated class casts, Self as interface during construction, nil-unsafe destructors, Free without nil, unclear field ownership.
+* [Wider built-in rules (1.51)](features/v151-wid-ast-rules.md) -- Six built-in rules read more constructs: code-page and label exemptions, named zero constants, implied else-if, thread dialogs, Supports aliases.
+* [Wider scm rules and three new fixers](features/v151-wid-scm-rules.md) -- Seven built-in rules read more constructs; empty-finally, format-string-not-formatted and shared-marker-legacy-shape gain autofixes.
+
 ## 1.50.0-alpha
 
 * [arch-diagram](features/arch-diagram.md) -- Draws one self-contained HTML layer diagram of a project's units by folder, with the layers measured from the uses clauses.
@@ -18,8 +39,8 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 * [Extract an interface from the members used (scratch + compile gate)](features/extract-interface.md) -- Declares an interface from the members of a class the project uses and adds it to the class; --apply through a scratch build and the compile gate.
 * [manifest where / migrate (installed layout v2)](features/installed-layout-v2.md) -- Shows which drag-lint.json this engine reads and why; moves the exe-side one to %APPDATA% once (renamed, never deleted). Installed layout v2, off by default.
 * [Prepare heavy initialization for lazy loading (first phase)](features/lazy-init.md) -- Names what an initialization section does; --apply moves its body verbatim into a run-once routine, through a scratch build and the compile gate.
-* [Lint --fix through the compile gate](features/lint-fix-compile-gate.md) -- lint --fix --apply --project X.dproj --compile-gate writes the fixes only if the project still builds; a fix that breaks the compile is refused and rolled back.
-* [RTTI unavailable (lint rule)](features/rtti-unavailable.md) -- Project lint rule, OFF by default: declarations that lose classic or extended RTTI (enums without type info, record properties, narrowing directives).
+* [Lint --fix through the compile gate](features/lint-fix-compile-gate.md) -- lint --fix --apply --project X.dproj goes through the compile gate by default (1.51): an error stops or rolls back the fix; new warnings / hints are reported.
+* [RTTI unavailable (lint rule)](features/rtti-unavailable.md) -- Project lint rule, OFF by default: declarations that lose classic or extended RTTI (typeless enums, record properties, narrowing directives, published generics).
 * [uses-recover](features/uses-recover.md) -- Recovers the uses edges of units that ship without source, from the vendor's .hpp headers and a dcc map; never reads a .dcu; --apply stores them in the index.
 
 ## 1.46.0-alpha
@@ -80,7 +101,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 1.37.0-alpha
 
-* [Autofix for fixable rules](features/autofix-wave.md) -- lint --fix repairs findings of the 110 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
+* [Autofix for fixable rules](features/autofix-wave.md) -- lint --fix repairs findings of the 125 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
 * [Compliance labels (CWE, CERT, MISRA)](features/compliance-labels.md) -- Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field.
 * [Gap-wave lint rules](features/gap-wave-rules.md) -- About 50 new lint rules (bug patterns, dead code, data flow, platform, structure) added in the 1.37.0 gap wave.
 * [Include-file indexing and IF evaluation](features/inc-indexing.md) -- Include files are indexed under the active build, value defines and IF expressions are evaluated, and an undecidable IF is reported as a pp-unresolved-if hint.

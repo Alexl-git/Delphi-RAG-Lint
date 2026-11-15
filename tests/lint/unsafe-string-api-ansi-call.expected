@@ -1,0 +1,3 @@
+# 11 MessageBoxA, 12 LoadLibraryA fed PAnsiChar(AnsiString(<string>))
+unsafe-string-api 11
+unsafe-string-api 12

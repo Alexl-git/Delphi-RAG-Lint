@@ -1,0 +1,15 @@
+# v151 WID-FLOW: a field freed twice in a row -> the second free is reported
+double-free 32
+!double-free 31
+double-free 38
+!double-free 37
+# FreeAndNil leaves nil behind; Free on nil is a no-op
+!double-free 44
+# reassigned between the frees
+!double-free 51
+# two different fields
+!double-free 57
+# Destroy frees like Free: Destroy then Free is a double free
+double-free 66
+# a single Destroy is not a double free (destroy-called-directly is a style matter)
+!double-free 74

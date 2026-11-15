@@ -1,0 +1,8 @@
+{
+  "disallowed": {
+    "names": [
+      { "name": "dfm:TButton.Cursor", "reason": "use the default cursor" },
+      { "name": "dfm:*.ParentFont=False" }
+    ]
+  }
+}

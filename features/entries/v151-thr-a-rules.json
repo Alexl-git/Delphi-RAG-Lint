@@ -1,0 +1,30 @@
+{
+  "id": "v151-thr-a-rules",
+  "title": "Thread lifetime lint rules (v151 THR-A)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.51.0-alpha",
+  "summary": "Six thread-lifetime lint rules (anonymous thread, Synchronize in destructor, Terminated, FreeOnTerminate, threadvar, Queue nil) plus FreeAndNil coverage",
+  "intro": "Read this to see which thread-lifetime mistakes drag-lint reports per file, what each rule does not flag, and how package membership of a unit is decided.",
+  "wikiPage": "v151-thr-a-rules",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "drag-lint lint <unit.pas> --rule threadvar-managed"
+    },
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "example": "drag-lint lint-all --db <project.sqlite> --rule thread-loop-without-terminated"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-14",
+    "by": "ENGINE",
+    "build": "1.51.0-alpha",
+    "surfaceHash": "274839f13d00cd88a96a34c1f16b90d87bc39c6d2c163b291492016dc2ed6a12"
+  }
+}

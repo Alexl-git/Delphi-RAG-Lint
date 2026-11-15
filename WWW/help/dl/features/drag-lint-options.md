@@ -7,7 +7,7 @@ group: editor-integration
 order: 110004
 since: 0.95.0-alpha
 status: shipped
-updated: 1.50.0-alpha
+updated: 1.51.0-alpha
 ---
 
 # drag-lint Options
@@ -39,8 +39,8 @@ The equivalent standalone command, with the same catalog:
 ```text
 drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]
 ```
-As loaded by this dialog, the catalog has 317 rules, 110 of them fixable,
-263 on by default, across 18 categories.
+As loaded by this dialog, the catalog has 423 rules, 125 of them fixable,
+341 on by default, across 18 categories.
 
 ### What it needs
 Not documented as needing an index -- the feature map marks this row's
@@ -50,8 +50,8 @@ database.
 
 ### Example
 Illustrative only: opening drag-lint > drag-lint Options... shows the
-full 317-rule catalog, grouped by its 18 categories, with a toggle per
-rule and a marker for which of the 110 fixable rules have an auto-fix.
+full 423-rule catalog, grouped by its 18 categories, with a toggle per
+rule and a marker for which of the 125 fixable rules have an auto-fix.
 
 ### Inline markers and severity icons (on by default)
 The editor shows a coloured marker in the gutter for each finding, and a

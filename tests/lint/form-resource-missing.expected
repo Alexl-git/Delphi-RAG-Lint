@@ -1,0 +1,2 @@
+# the form file's root class is declared here, but every {$R *.dfm} is commented out
+form-resource-missing 9

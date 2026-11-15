@@ -20,7 +20,7 @@
         }
       ],
       "helpOrder": 22,
-      "help": ["  drag-lint serve              --db <file.sqlite> [--json]   (MCP stdio server)"]
+      "help": ["  drag-lint serve              --db <file.sqlite> [--json]   (MCP stdio server; --db repeatable, every one is opened; none = project + every library section)"]
     }
   ],
   "audience": "both",
@@ -37,9 +37,9 @@
     "by": "ENGINE"
   },
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-11-14",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
-    "surfaceHash": "ba0b26b250f717eb61594a7b86015fc124397f5edd4676a6c2bc28756958ed76"
+    "build": "1.51.0-alpha",
+    "surfaceHash": "fa96c66270070b9a25eef4c41eceb5ff347dd0b7d32bba5f00d9fdbb851acda7"
   }
 }

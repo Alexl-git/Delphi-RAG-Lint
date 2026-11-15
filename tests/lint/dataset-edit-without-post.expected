@@ -1,0 +1,16 @@
+# Hits: Edit / Append / Insert (no arguments) on a dataset, the routine then writes a field of
+# that dataset and never calls Post, Cancel or CheckBrowseMode on it (12, 18, 27, 34).
+# Non-hits: Post / Cancel / CheckBrowseMode present (also through with), Edit with no field
+# write, a list Insert(0, 'x'), a Post on ANOTHER dataset does not excuse the first (34 is a hit).
+dataset-edit-without-post 12
+dataset-edit-without-post 18
+dataset-edit-without-post 27
+dataset-edit-without-post 34
+!dataset-edit-without-post 36
+!dataset-edit-without-post 43
+!dataset-edit-without-post 50
+!dataset-edit-without-post 64
+!dataset-edit-without-post 72
+!dataset-edit-without-post 80
+!dataset-edit-without-post 85
+!dataset-edit-without-post 91

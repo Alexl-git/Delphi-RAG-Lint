@@ -1,0 +1,4 @@
+# grammar v1.4.11+ shapes: code page (6), label decl (11), goto target (15),
+# statement label (17) -- none is a magic number. Needs the v1.4.11+ grammar
+# (parser-error on older grammars).
+!magic-literal

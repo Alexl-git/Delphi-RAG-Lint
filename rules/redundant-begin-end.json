@@ -1,0 +1,8 @@
+{
+  "id": "redundant-begin-end",
+  "category": "refactoring",
+  "severity": "hint",
+  "enabled": false,
+  "message": "begin..end around a single statement; the brackets can be removed.",
+  "warn_capture": "warn"
+}

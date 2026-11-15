@@ -312,6 +312,10 @@ type
     /// <summary>Lane CYC3: the init-order proof line of a routine-call inversion whose call runs from the consumer's
     /// initialization section ('' otherwise); JSON `init_order`, written only when not empty.</summary>
     InitOrder: string;
+    /// <summary>Lane FINPROOF: the finalization-order proof line of a routine-call inversion whose call runs from the
+    /// consumer's finalization section while the declaring unit's finalization can be seen ('' otherwise); JSON
+    /// `final_order`, written only when not empty.</summary>
+    FinalOrder: string;
   end;
 
   /// <summary>What a `Fix it` block (text) or `fix` object (JSON) says about one circular group.</summary>
@@ -963,6 +967,7 @@ type
     CtorName    : string; // B8: the constructor the consumers call through the pointer; '' = no inversion
     CtorSig     : string; // B8: its parameter list verbatim, parentheses included; '' = none
     CtorProof   : string; // lane CYC3: the init-order proof line when the call runs from an initialization section
+    CtorFinProof: string; // lane FINPROOF: the finalization-order proof line when the call runs from a finalization section
   end;
 
   TConsumer = record
@@ -3651,15 +3656,13 @@ begin
     Why:= InitOrderVerdict(FStore, InitOrderWhy(pF.Lines, Ref, pF.UnitName), pF.UnitName, UnitNameOfStem(pItem.Stem),
       FInPartB, Proof);
     if Why = '' then pItem.CtorProof:= Proof;
-    var Fin:= 0;
-    for var I:= High(pF.Lines) downto 0 do
-      if SameText(Trim(CodePart(pF.Lines[I])), 'finalization') then
-      begin
-        Fin:= I + 1;
-        Break;
-      end;
-    if (Why = '') and (Fin > 0) and (pLine > Fin) then
-      Why:= Format('the call at line %d runs in the finalization section of `%s`', [pLine, pF.UnitName]);
+    { lane FINPROOF: the same finalization-order gate as a routine-call inversion (it used to refuse every call
+      written in the finalization section, and missed a routine that section names) }
+    var FinProof:= '';
+    if Why = '' then
+      Why:= FinalOrderVerdict(Self, pF.Lines, Ref, pF.UnitName, pItem.Sym.FileId, FInPartB,
+        FinProof);
+    if Why = '' then pItem.CtorFinProof:= FinProof;
   end;
   if Why <> '' then
   begin
@@ -6024,6 +6027,7 @@ begin
         'runs the same constructor with the same arguments and its initialization assigns the pointer.',
         [pItem.Sym.Name, pItem.CtorName, CCtorFuncPrefix, CCtorPtrSuffix, ExtractFileName(PathOf(pItem.Sym.FileId))]);
     if pItem.CtorProof <> '' then EmitFmt('   - %s', [pItem.CtorProof]);
+    if pItem.CtorFinProof <> '' then EmitFmt('   - %s', [pItem.CtorFinProof]);
     for var Fid in pItem.CutFids do
     begin
       Lines.Clear;
@@ -6699,6 +6703,7 @@ const
     Result.Chosen  := pChosen;
     Result.Metaclass:= (pEv.Recipe = crRoutineInversion) and (pEv.Steps.ClassTypeName <> '');
     Result.InitOrder:= if pEv.Recipe = crRoutineInversion then pEv.Steps.InitOrderProof else '';
+    Result.FinalOrder:= if pEv.Recipe = crRoutineInversion then pEv.Steps.FinalOrderProof else '';
   end;
 
 begin
@@ -7453,12 +7458,14 @@ end;
 
 { 150-CY-7b: the steps of the metaclass hand-over of pEv, or pWhy = '<kind> -- <reason>'. Every ref of the edge must be
   TX as a whole argument of a call; the formal parameter type at that position (every declaration of the callee in the
-  project index and the platform library agreeing) types the variable; the call must not run in A's initialization. }
+  project index and the platform library agreeing) types the variable; the call must not run in A's initialization, nor in its finalization once the class's unit may be finalized first
+  (lane FINPROOF). }
 function TCyclePlanner.MetaclassSteps(const pEv: TEdgeEval; out pWhy: string): TRecipeSteps;
 begin
   Result:= Default(TRecipeSteps);
   pWhy  := '';
   var Proof := '';
+  var FinProof:= '';
   var S     := pEv.Surface;
   var TX    := S.ClassNames[0];
   var A     := GetFile(FidOfStem(S.FromStem));
@@ -7489,6 +7496,10 @@ begin
     begin
       var IoWhy:= InitOrderVerdict(FStore, InitOrderWhy(A.Lines, R, A.UnitName), A.UnitName, B.UnitName, S.Predicted, Proof);
       if IoWhy <> '' then pWhy:= 'init-order -- ' + IoWhy;
+      { lane FINPROOF: a class passed from the finalization section may reach the class's unit after it is finalized }
+      var FoWhy:= if IoWhy = '' then FinalOrderVerdict(Self, A.Lines, R, A.UnitName, B.Fid, S.Predicted,
+        FinProof) else '';
+      if FoWhy <> '' then pWhy:= 'finalization-order -- ' + FoWhy;
     end;
     if pWhy <> '' then Break;
     Formal:= Typ;
@@ -7525,6 +7536,7 @@ begin
   Result.VarDecl      := Inv.VarDecl;
   Result.ClassTypeName:= TX;
   Result.InitOrderProof:= Proof;
+  Result.FinalOrderProof:= FinProof;
   Result.LeafUses     := LeafUses;
   Result.Routines     := [Inv];
   Result.Edits        := Edits + [Assign];
@@ -7805,6 +7817,7 @@ begin
           'of these calls and does not name the routine that makes them. NOT checked: an initialization section of ' +
           'another unit that reaches them through a call chain.', [ExtractFileName(PathOf(FInversion.ConsumerFid)),
           FInversion.PtrVar, FInversion.ClassTypeName, string.Join(', ', Calls.ToArray)]);
+      if FInversion.FinalOrderProof <> '' then EmitFmt('- %s', [FInversion.FinalOrderProof]);
       if FInversion.RegisterDecl then
         EmitFmt('- `%s` joins the program''s uses (`%s`) so it stays linked and its initialization assigns `%s`.',
           [Decl, ExtractFileName(PathOf(FProjectFid)), FInversion.PtrVar]);
@@ -7851,12 +7864,15 @@ begin
         EmitFmt('- `%s` calls `%s` instead of `%s` (line %s); its initialization section reaches the call.',
           [ExtractFileName(PathOf(FInversion.ConsumerFid)), R.PtrVar, R.Name, string.Join(', ', Calls.ToArray)]);
         EmitFmt('- %s', [FInversion.InitOrderProof]);
-        Continue;
-      end;
-      EmitFmt('- `%s` calls `%s` instead of `%s` (line %s). Checked: its own initialization section ' +
-        'makes none of these calls and does not name the routine that makes them. NOT checked: an ' +
-        'initialization section of another unit that reaches them through a call chain.',
-        [ExtractFileName(PathOf(FInversion.ConsumerFid)), R.PtrVar, R.Name, string.Join(', ', Calls.ToArray)]);
+      end
+      else
+        EmitFmt('- `%s` calls `%s` instead of `%s` (line %s). Checked: its own initialization section ' +
+          'makes none of these calls and does not name the routine that makes them. NOT checked: an ' +
+          'initialization section of another unit that reaches them through a call chain.',
+          [ExtractFileName(PathOf(FInversion.ConsumerFid)), R.PtrVar, R.Name, string.Join(', ', Calls.ToArray)]);
+      { lane FINPROOF: a call from the finalization section that is safe only by the program order }
+      if FInversion.FinalOrderProof <> '' then
+        EmitFmt('- %s', [FInversion.FinalOrderProof]);
     end;
     if FInversion.RegisterDecl then
       EmitFmt('- `%s` joins the program''s uses (`%s`) so it stays linked and its initialization assigns `%s`: ' +
@@ -8670,6 +8686,7 @@ procedure AddCycleFixHints(const pIn: TCycleFixHintInput; const pGroups: TJSONAr
     Result.AddPair('recipe', pEdge.Recipe);
     if pWithChosen then Result.AddPair('chosen', TJSONBool.Create(pEdge.Chosen));
     if pEdge.InitOrder <> '' then Result.AddPair('init_order', pEdge.InitOrder);
+    if pEdge.FinalOrder <> '' then Result.AddPair('final_order', pEdge.FinalOrder);
   end;
 
 var

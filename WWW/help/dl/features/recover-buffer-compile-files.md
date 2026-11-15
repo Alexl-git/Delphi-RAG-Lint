@@ -4,10 +4,10 @@ title: Recover Buffer-Compile Files
 summary: Restores any file left holding unsaved-buffer content after a Compile Buffer (unsaved) run was interrupted (for example by a crash)
 product: DL
 group: compiler
-order: 90012
+order: 90013
 since: 0.47.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.51.0-alpha
 ---
 
 # Recover Buffer-Compile Files

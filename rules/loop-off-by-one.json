@@ -1,0 +1,7 @@
+{
+  "id": "loop-off-by-one",
+  "category": "bug-patterns",
+  "severity": "warning",
+  "message": "For-loop bound runs one past the last valid index (High/Length/Count used as an upper index, or counting down from the count).",
+  "warn_capture": "warn"
+}

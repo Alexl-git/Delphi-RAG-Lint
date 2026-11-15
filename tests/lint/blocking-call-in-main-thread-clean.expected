@@ -1,0 +1,2 @@
+# Not a form unit: blocking waits in a non-UI unit must not fire
+!blocking-call-in-main-thread

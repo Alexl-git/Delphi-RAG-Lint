@@ -1,0 +1,5 @@
+# default value at line 5; Plain has none
+default-parameter 5
+# v151 INT: non-hit pins (run_rule_fixture_positive_control P3 needs >= 1 hit AND >= 1 non-hit per rule; the near-miss lines above stay silent)
+!default-parameter 6
+!default-parameter 14

@@ -4,10 +4,10 @@ title: Import Build Log
 summary: Parses an external dcc or msbuild build log and folds its errors and warnings into drag-lint's stored findings
 product: DL
 group: compiler
-order: 90009
+order: 90010
 since: 0.8.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.51.0-alpha
 ---
 
 # Import Build Log

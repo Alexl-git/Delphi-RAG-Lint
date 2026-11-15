@@ -3,4 +3,4 @@
 ((exprBinary
   operator: [(kDiv) (kFdiv) (kMod)]
   rhs: (literalNumber) @z) @warn
-  (#match? @z "^0(\\.0*)?$"))
+  (#match? @z "^([$]0+|0+(\\.0*)?)$"))

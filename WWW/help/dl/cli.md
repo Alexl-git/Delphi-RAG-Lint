@@ -427,7 +427,7 @@ Described in:
 Finds uses cycles among indexed units and, on request, proposes a followable refactoring plan to break them.
 
 ```text
-drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--hub] [--plan [--hub-surface [--apply]] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --hub = per group its hub units (removal leaves the rest acyclic): edges, ref weights and surfaces per side, dead uses; read-only, no planner; --f2047 = only the interface-only cycles dcc rejects with F2047, each edge with its forcing symbols and the next --plan / --fix commands; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a "Fix it" block per group naming the exact --fix dry-run and --apply commands; --fix = the mechanical fix of one group, see the cycles-fix entry)
+drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--hub] [--plan [--no-hub-surface | --hub-surface [--apply]] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --hub = per group its hub units (removal leaves the rest acyclic): edges, ref weights and surfaces per side, dead uses; read-only, no planner; --f2047 = only the interface-only cycles dcc rejects with F2047, each edge with its forcing symbols and the next --plan / --fix commands; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a "Fix it" block per group naming the exact --fix dry-run and --apply commands; --fix = the mechanical fix of one group, see the cycles-fix entry)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -437,6 +437,7 @@ drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--hub] [--plan [--hub-
 | `--causes` |  |  |  |
 | `--hub` |  |  |  |
 | `--hub-surface` |  |  |  |
+| `--no-hub-surface` |  |  |  |
 | `--plan` |  |  |  |
 | `--project` | `<X.dproj>` |  |  |
 | `--f2047` |  |  |  |
@@ -665,7 +666,7 @@ Described in:
 Declares an interface from the members of a class the project uses and adds it to the class; --apply through a scratch build and the compile gate.
 
 ```text
-drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced[=norefcount]] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]
+drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced[=norefcount]] [--retype-consumer <Routine>.<param>] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -674,6 +675,7 @@ drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>
 | `--members` | `<a,b>` |  |  |
 | `--name` | `<IFoo>` |  |  |
 | `--reparent-interfaced[=norefcount]` |  |  |  |
+| `--retype-consumer` | `<Routine>.<param>` |  |  |
 | `--plan` |  |  |  |
 | `--apply` |  |  |  |
 | `--project` | `<X.dproj>` |  |  |
@@ -1166,7 +1168,7 @@ Described in [link-orm](features/link-orm.md).
 
 ### lint
 
-lint --fix repairs findings of the 110 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
+lint --fix repairs findings of the 125 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
 
 ```text
 drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]
@@ -1190,6 +1192,7 @@ drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--j
 | `--apply` |  |  |  |
 | `--project` | `<X.dproj>` |  |  |
 | `--compile-gate` |  |  |  |
+| `--no-compile-gate` |  |  |  |
 | `--fix-line` | `<L>` |  |  |
 | `--fix-rule` | `<id>` |  |  |
 | `--no-backup` |  |  |  |
@@ -1215,6 +1218,20 @@ Described in:
 * [type-name-prefix: expected letter from the ancestor chain](features/type-name-prefix-origin.md)
 * [Missing unit in uses (unit-missing-from-uses)](features/unit-missing-from-uses.md)
 * [unwith](features/unwith.md)
+* [Application-level lint rules](features/v151-app-rules.md)
+* [Component-authoring lint rules](features/v151-cmp-rules.md)
+* [Form and unit consistency rules](features/v151-dfma-rules.md)
+* [Form-file data-binding rules](features/v151-dfmb-rules.md)
+* [Dataset and transaction lint rules](features/v151-ds-rules.md)
+* [Exception and inherited lint rules](features/v151-exc-rules.md)
+* [RTL collection and environment lint rules](features/v151-rtl-coll-rules.md)
+* [RTL string and path lint rules](features/v151-rtl-str-rules.md)
+* [Style, loop and ordering rules](features/v151-sty-rules.md)
+* [Thread lifetime lint rules (v151 THR-A)](features/v151-thr-a-rules.md)
+* [Thread race and blocking rules](features/v151-thrb-rules.md)
+* [Typing and ownership lint rules (casts, Self as interface, destructors)](features/v151-typ-rules.md)
+* [Wider built-in rules (1.51)](features/v151-wid-ast-rules.md)
+* [Wider scm rules and three new fixers](features/v151-wid-scm-rules.md)
 
 ### lint-all
 
@@ -1267,6 +1284,16 @@ Described in:
 * [Taint analysis (SQL, command, path)](features/taint-analysis.md)
 * [Target compiler (--target-compiler)](features/target-compiler.md)
 * [type-name-prefix: expected letter from the ancestor chain](features/type-name-prefix-origin.md)
+* [Application-level lint rules](features/v151-app-rules.md)
+* [Component-authoring lint rules](features/v151-cmp-rules.md)
+* [Form and unit consistency rules](features/v151-dfma-rules.md)
+* [Exception and inherited lint rules](features/v151-exc-rules.md)
+* [Memory and string-pointer lint rules (PChar, raw memory, leaks, byte counts)](features/v151-mem-rules.md)
+* [Object-model lint rules (Equals/hash, events, GUIDs, exports)](features/v151-oo-rules.md)
+* [RTL collection and environment lint rules](features/v151-rtl-coll-rules.md)
+* [Thread lifetime lint rules (v151 THR-A)](features/v151-thr-a-rules.md)
+* [Text rules: bidi, invisible, control chars, TODO, header, strings](features/v151-txt-rules.md)
+* [Typing and ownership lint rules (casts, Self as interface, destructors)](features/v151-typ-rules.md)
 
 ### lint-project
 
@@ -1443,7 +1470,7 @@ Described in [migrate-dbs](features/migrate-dbs.md).
 Retypes a class-typed parameter to the deepest ancestor that declares every member the routine uses, when a static proof holds, through the compile gate.
 
 ```text
-drag-lint narrow-param (--routine <QName> [--param <name>] | --all) (--plan | --apply --project <X.dproj>) --db <db> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]
+drag-lint narrow-param (--routine <QName> [--param <name>] | --all) (--plan | --apply --project <X.dproj>) --db <db> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--show-bound] [--json|--format json]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1461,6 +1488,7 @@ drag-lint narrow-param (--routine <QName> [--param <name>] | --all) (--plan | --
 | `--build-timeout` | `<s>` |  |  |
 | `--no-compile` |  |  |  |
 | `--library-db` | `<db>` |  |  |
+| `--show-bound` |  |  |  |
 | `--format` | `json` |  |  |
 
 Described in [Narrow parameter types (compile-gated)](features/narrow-param.md).

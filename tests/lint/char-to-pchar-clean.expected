@@ -1,0 +1,2 @@
+# string, string(C), Pointer, @array, a record field (type not shown), undeclared: silent
+!char-to-pchar

@@ -1,0 +1,25 @@
+# v151 WID-FLOW: straight-line member stores. A field stored twice in a row,
+# the second value a plain literal / local, loses the first value unread.
+overwrite-before-read 52
+!overwrite-before-read 53
+# a property whose write specifier is the field itself behaves as the field
+overwrite-before-read 58
+# a member reached through an explicit pointer dereference
+overwrite-before-read 64
+# Self-qualified field; the second value is a local, which cannot raise
+overwrite-before-read 73
+!overwrite-before-read 74
+# the field is read between the two stores -> not dead
+!overwrite-before-read 79
+!overwrite-before-read 81
+# a property with a SETTER method: the setter may act on every store
+!overwrite-before-read 86
+# the second store reads the field itself
+!overwrite-before-read 92
+# the second store calls a routine: it can raise (leaving the first value
+# visible to the caller) or read the field through Self
+!overwrite-before-read 98
+# the second store is conditional
+!overwrite-before-read 104
+# locals keep their existing liveness-based report (control: still fires)
+overwrite-before-read 113

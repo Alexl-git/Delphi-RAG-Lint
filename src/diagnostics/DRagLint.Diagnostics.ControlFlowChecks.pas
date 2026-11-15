@@ -70,6 +70,13 @@ const
     'odd', 'min', 'max', 'copy', 'pos', 'uppercase', 'lowercase', 'trim'
   );
 
+  { RTL routines that only READ their arguments and have no side effect; a loop condition may call
+    them and still count as invariant when its variables are (loop-condition-invariant). }
+  COND_PURE_ROUTINES: array[0..14] of string = (
+    'length', 'ord', 'chr', 'abs', 'sqr', 'odd', 'min', 'max', 'assigned', 'high', 'low', 'pos', 'trim',
+    'lowercase', 'uppercase'
+  );
+
 type
   { One walk over one parsed file. Private to this unit. }
   TCfRun = class
@@ -94,7 +101,9 @@ type
     function MentionsAny(const N: TTSNode; ANames: TDictionary<string, Boolean>): Boolean;
     function BodyModifies(const N: TTSNode; ANames: TDictionary<string, Boolean>; AStrictCalls: Boolean): Boolean;
     function BodyIncDec(const N: TTSNode; ANames: TDictionary<string, Boolean>): Boolean;
+    function IsPureCondCall(const N: TTSNode): Boolean;
     function CollectCondIdents(const N: TTSNode; ANames: TDictionary<string, Boolean>): Boolean;
+    procedure CheckInvariantCond(const N, ACond, ABody: TTSNode; AIsRepeat: Boolean);
     procedure CollectLocals(const N: TTSNode);
     procedure CountProcs(const N: TTSNode);
     function ProcKey(const AHeader: TTSNode; out AMethod: string): string;
@@ -291,6 +300,7 @@ var
 begin
   Result:= False;
   if N.IsNull then Exit;
+  if N.NodeType = 'exprArgNamed' then Exit(MentionsAny(ArgValueNode(N), ANames));  // the label is not a read
   if (N.NodeType = 'identifier') and ANames.ContainsKey(LowerCase(Trim(Txt(N)))) then Exit(True);
   for I:= 0 to N.NamedChildCount - 1 do
     if MentionsAny(N.NamedChild(I), ANames) then Exit(True);
@@ -367,6 +377,21 @@ end;
 { Collects the identifiers of a side-effect-free condition into ANames. Returns False
   as soon as the condition holds anything but identifiers, literals and operators
   (calls, member access, subscripts and so on may read changing state). }
+{ True for a call of a bare-identifier RTL routine that only reads its arguments (COND_PURE_ROUTINES). }
+function TCfRun.IsPureCondCall(const N: TTSNode): Boolean;
+var
+  Ent : TTSNode;
+  Name: string;
+  Pure: string;
+begin
+  Result:= False;
+  Ent:= N.ChildByField('entity');
+  if Ent.IsNull or (Ent.NodeType <> 'identifier') then Exit;
+  Name:= LowerCase(Trim(Txt(Ent)));
+  for Pure in COND_PURE_ROUTINES do
+    if Pure = Name then Exit(True);
+end;
+
 function TCfRun.CollectCondIdents(const N: TTSNode; ANames: TDictionary<string, Boolean>): Boolean;
 var
   I: Integer;
@@ -376,6 +401,15 @@ begin
   T:= N.NodeType;
   if T = 'identifier' then
     ANames.AddOrSetValue(LowerCase(Trim(Txt(N))), True)
+  else if T = 'exprArgNamed' then
+    Result:= CollectCondIdents(ArgValueNode(N), ANames)  // the label is no read of a same-named local
+  else if T = 'exprCall' then
+    Result:= IsPureCondCall(N) and CollectCondIdents(N.ChildByField('args'), ANames)  // a read-only RTL call adds only its arguments
+  else if T = 'exprArgs' then
+  begin
+    for I:= 0 to N.NamedChildCount - 1 do
+      if not CollectCondIdents(N.NamedChild(I), ANames) then Exit(False);
+  end
   else if (T = 'exprBinary') or (T = 'exprUnary') or (T = 'exprParens')  // dl:ok boolean-expression-complexity@eef4 -- REVIEWED 2026-10-27: flat node-type whitelist, each operand independent
           or (T = 'literalNumber') or (T = 'literalString') or IsTrivia(N) then
   begin
@@ -496,9 +530,6 @@ end;
 procedure TCfRun.CheckWhile(const N: TTSNode);
 var
   Cond, Body: TTSNode;
-  Names     : TDictionary<string, Boolean>;
-  Nm        : string;
-  AllLocal  : Boolean;
 begin
   Cond:= N.ChildByField('condition');
   Body:= N.ChildByField('body');
@@ -510,16 +541,28 @@ begin
         'while True loop has no Break, Exit, raise or Halt -- it can never end', 'warning');
     Exit;
   end;
-  if FNested or HasExit(Body, 0) then Exit;
+  CheckInvariantCond(N, Cond, Body, False);
+end;
+
+{ loop-condition-invariant for while (AIsRepeat False) and repeat ... until (True): the condition reads
+  only routine locals / parameters (and read-only RTL calls over them) that the body never changes. }
+procedure TCfRun.CheckInvariantCond(const N, ACond, ABody: TTSNode; AIsRepeat: Boolean);
+var
+  Names   : TDictionary<string, Boolean>;
+  Nm      : string;
+  AllLocal: Boolean;
+begin
+  if FNested or HasExit(ABody, 0) then Exit;
   Names:= TDictionary<string, Boolean>.Create;
   try
-    if (not CollectCondIdents(Cond, Names)) or (Names.Count = 0) then Exit;
+    if (not CollectCondIdents(ACond, Names)) or (Names.Count = 0) then Exit;
     AllLocal:= True;
     for Nm in Names.Keys do
       if not FLocals.ContainsKey(Nm) then AllLocal:= False;
-    if AllLocal and (not BodyModifies(Body, Names, True)) then
+    if AllLocal and (not BodyModifies(ABody, Names, True)) then
       EmitAt(N, 'loop-condition-invariant',
-        'Loop condition only reads variables the loop body never changes -- the loop never ends or never runs',
+        if AIsRepeat then 'Until condition only reads variables the loop body never changes -- the loop never ends or runs just once'
+        else 'Loop condition only reads variables the loop body never changes -- the loop never ends or never runs',
         'warning');
   finally
     Names.Free;
@@ -533,14 +576,32 @@ var
 begin
   Cond:= N.ChildByField('condition');
   Body:= N.ChildByField('body');
-  if Cond.IsNull or (Cond.NodeType <> 'kFalse') then Exit;
+  if Cond.IsNull or Body.IsNull then Exit;
+  if Cond.NodeType <> 'kFalse' then
+  begin
+    CheckInvariantCond(N, Cond, Body, True);
+    Exit;
+  end;
   if not HasExit(Body, 0) then
     EmitAt(N, 'infinite-loop-no-exit',
       'repeat ... until False loop has no Break, Exit, raise or Halt -- it can never end', 'warning');
 end;
 
-{ for-bound-modified-in-body: the loop variable or a plain-identifier bound is changed in the body. }
+{ for-bound-modified-in-body: the loop variable or a plain-identifier bound is changed in the body.
+  A bound that contains a call (Length(A), High(A), List.Count) is skipped: an element write
+  A[I] := .. in the body is no change of the bound, and the root-name match cannot tell them apart. }
 procedure TCfRun.CheckFor(const N: TTSNode);
+
+  function HasCall(const X: TTSNode): Boolean;
+  var
+    K: Integer;
+  begin
+    if X.NodeType = 'exprCall' then Exit(True);
+    for K:= 0 to X.NamedChildCount - 1 do
+      if HasCall(X.NamedChild(K)) then Exit(True);
+    Result:= False;
+  end;
+
 var
   Start, EndE, Body: TTSNode;
   Loopvar          : string;
@@ -557,7 +618,7 @@ begin
   Bounds:= TDictionary<string, Boolean>.Create;
   try
     if Loopvar <> '' then Names.AddOrSetValue(Loopvar, True);
-    if CollectCondIdents(EndE, Bounds) then
+    if (not HasCall(EndE)) and CollectCondIdents(EndE, Bounds) then
       for Nm in Bounds.Keys do Names.AddOrSetValue(Nm, True);
     { Same shape as the invariant rule: assignments, address-of, with. A call that merely
       receives the name is NOT a finding here (Inc / Dec are handled below). }

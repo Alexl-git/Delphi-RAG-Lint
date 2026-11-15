@@ -44,9 +44,11 @@
   lint-all's output and break the "--fix --json returns exactly 2" assertion below.
   This suite tests AUTOFIX behavior, not the doc rules (those have their own
   coverage in tests\autodoc\run_missing_doc.ps1 / run_doc_drift_rule.ps1), so we
-  scope every lint-all --fix invocation with --disable missing-doc,doc-drift.
+  scope every lint-all --fix invocation with --disable missing-doc,doc-drift,unused-global.
   The --disable doc-drift is load-bearing (ON by default); --disable missing-doc
   is now belt-and-braces (OFF by default) but stays for clarity + defence in depth.
+  1.51: unused-global became fixable (the fixture's unit-level decls are unused), so it
+  would add one object per file to --fix --json; it is disabled for the same reason.
   The count is then GENUINELY 2 (the 2 fixable autofix edits), not a loosened
   assertion. Disabled findings are dropped by FinalizeAndOutput's ShouldKeep
   filter BEFORE the --fix block builds edits, so the fixable set is unaffected.
@@ -92,7 +94,7 @@ try {
   Reset-Fixture
   $beforeA = [IO.File]::ReadAllBytes($targetA)
   $beforeB = [IO.File]::ReadAllBytes($targetB)
-  $pv = & $exePath lint-all --db $db --fix --disable missing-doc,doc-drift --output $report 2>$null | Out-String
+  $pv = & $exePath lint-all --db $db --fix --disable missing-doc,doc-drift,unused-global --output $report 2>$null | Out-String
 
   Check 'preview: summary reports 2 fixable finding(s)' ($pv -match 'autofix: 2 fixable finding\(s\) -- pass --apply to write')
   Check 'preview: dry-run names unita.pas'              ($pv -match 'unita\.pas')
@@ -111,7 +113,7 @@ try {
   # lint-all prints a "scanning N .pas file(s)" preamble line to stdout before the
   # JSON (same contract run_store_tests.ps1 relies on), so slice from the first '['.
   Reset-Fixture
-  $raw = & $exePath lint-all --db $db --fix --json --disable missing-doc,doc-drift --output $report 2>$null | Out-String
+  $raw = & $exePath lint-all --db $db --fix --json --disable missing-doc,doc-drift,unused-global --output $report 2>$null | Out-String
   $arr = $null
   $b = $raw.IndexOf('[')
   if ($b -ge 0) { try { $arr = ($raw.Substring($b) | ConvertFrom-Json) } catch { $arr = $null } }
@@ -132,7 +134,7 @@ try {
 
   # --- 3) APPLY (--fix --apply): BOTH units fixed, N=2 across 2 files, .baks written ---
   Reset-Fixture
-  $ap = & $exePath lint-all --db $db --fix --apply --disable missing-doc,doc-drift --output $report 2>$null | Out-String
+  $ap = & $exePath lint-all --db $db --fix --apply --disable missing-doc,doc-drift,unused-global --output $report 2>$null | Out-String
 
   Check 'apply: summary reports applied 2 edit(s) across 2 file(s)' ($ap -match 'autofix: applied 2 edit\(s\) across 2 file\(s\) \(\.bak written\)')
 

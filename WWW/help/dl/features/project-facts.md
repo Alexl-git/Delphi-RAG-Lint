@@ -4,10 +4,10 @@ title: project-facts
 summary: "Report what the build does: defines that are on and what sets each, imports, output paths and packages"
 product: DL
 group: compiler
-order: 90011
+order: 90012
 since: 1.20.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.51.0-alpha
 ---
 
 # project-facts

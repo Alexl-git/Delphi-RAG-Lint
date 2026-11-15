@@ -36,11 +36,12 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 # Parked gaps measured 2026-10-27 (L0): ids with no hit+non-hit pair in tests\lint\*.expected. Project-wide / store-only
 # rules are covered by their own tests\autotest\run_*.ps1 runner; the rest are legacy gaps owed a fixture. The list may only
 # shrink (P4 fails an entry that gained a fixture).
+# v151 INT: deprecated-rtl-function, review-marker-malformed and unsafe-string-api gained tests\lint hit + non-hit fixtures in v151 -> removed (P4).
 $Allowlist = @(
     'abstract-method-instantiation', 'boolean-comparison-true',
     'case-magic-numbers', 'circular-uses', 'classname-string-compare',
     'confusable-identifier', 'const-casing', 'cycle-participant-unit', 'deep-inheritance',
-    'deep-nesting', 'dependent-project-not-recompiled', 'deprecated-rtl-function',
+    'deep-nesting', 'dependent-project-not-recompiled',
     'dfm-event-handler-missing', 'dfm-password-edit-unmasked', 'dfm-property-not-declared',
     'discarded-effect-free-result', 'doc-drift', 'doc-orphan-block',
     'doc-param-no-description', 'doc-param-not-in-signature', 'duplicate-global-decl',
@@ -52,10 +53,10 @@ $Allowlist = @(
     'layering-violation', 'line-too-long', 'local-field-prefix', 'low-cohesion', 'method-too-long',
     'middle-man', 'missing-doc', 'nested-with', 'outputdebugstring', 'parser-error',
     'query-name-with-effect',
-    'repeated-type-switch', 'review-marker-malformed', 'review-marker-placeholder-hash',
+    'repeated-type-switch', 'review-marker-placeholder-hash',
     'review-marker-reason-unreviewed', 'review-marker-stale', 'review-marker-unused',
     'stat-gated-destructive', 'too-many-children', 'too-many-locals', 'unbalanced-begin-end',
-    'unit-not-in-dpr', 'unit-not-in-library', 'unit-too-large', 'unsafe-string-api', 'unused-local',
+    'unit-not-in-dpr', 'unit-not-in-library', 'unit-too-large', 'unused-local',
     'unused-private-member', 'unused-public-symbol', 'unused-unit-in-uses', 'uses-movable-to-implementation',
     'virtual-never-overridden',
     'used-unit-not-resolvable', 'uses-global-census', 'with-hides-outer-symbol', 'with-statement',
@@ -110,6 +111,16 @@ $OwnRunner = @{
     'argument-narrows'          = 'tests\lint-project\ref-type-rules\run_ref_type_rules.ps1'
     'is-always-true'            = 'tests\lint-project\ref-type-rules\run_ref_type_rules.ps1'
     'is-never-true'             = 'tests\lint-project\ref-type-rules\run_ref_type_rules.ps1'
+    # v151 built-ins whose fixture is a byte-level or form+DFM project, so their own runner holds hit + non-hit:
+    'bidi-control'              = 'tests\autotest\run_v151_TXT_chars.ps1'
+    'invisible-char'            = 'tests\autotest\run_v151_TXT_chars.ps1'
+    'control-char'              = 'tests\autotest\run_v151_TXT_chars.ps1'
+    'file-header'               = 'tests\autotest\run_v151_TXT_chars.ps1'
+    'inherited-form-handler-without-inherited' = 'tests\autotest\run_v151_DFMA_form_rules.ps1'
+    'form-access-before-create' = 'tests\autotest\run_v151_DFMA_form_rules.ps1'
+    'form-autocreate-and-manual'= 'tests\autotest\run_v151_DFMA_form_rules.ps1'
+    'foreign-form-control-access' = 'tests\autotest\run_v151_DFMA_form_rules.ps1'
+    'random-without-randomize'  = 'tests\autotest\run_v151_RTL-COLL_random-without-randomize.ps1'
 }
 function HasOwnRunner([string]$Id, [hashtable]$Map = $OwnRunner) {
   if (-not $Map.ContainsKey($Id)) { return $false }

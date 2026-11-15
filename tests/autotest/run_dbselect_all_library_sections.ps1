@@ -14,9 +14,9 @@
   library sections for Win64 (Library -> library-Win64.sqlite, LibExtra -> libextra-Win64.sqlite).
   LibOneRoutine lives only in the first library, LibTwoOnlyRoutine only in the second.
 
-  MCP (`serve`) is NOT a consumer of this list: with no --db it opens only the FIRST resolved
-  DB (its own stderr NOTE says so) and reads a library only through a per-call library_db
-  argument, so it is out of O4's reach by design (REPORT: DBS, owner question).
+  MCP (`serve`) also consumes this list since 1.51 (lane v151 SERVE, OQ3): with no --db it
+  serves the first resolved DB plus every library section of the platform; its own guard is
+  run_v151_SERVE_all_dbs.ps1, so this guard does not exercise serve.
   The LSP also reads %LOCALAPPDATA%\drag-lint\context-defaults.json, whose library outranks the
   manifest's: the guard points DRAGLINT_CONTEXT_DEFAULTS at an empty private file.
 

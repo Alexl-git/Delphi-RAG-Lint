@@ -101,7 +101,7 @@ const
   STRING_TYPES: array[0..4] of string = (
     'string', 'unicodestring', 'ansistring', 'rawbytestring', 'widestring');
   CAST_NAMES: array[0..3] of string = ('pchar', 'pansichar', 'pwidechar', 'pointer');
-  ARRAY_TYPE_PATTERN = '^(?:packed\s+)?array\s*\[\s*(-?\d+)\s*\.\.\s*(-?\d+)\s*\]\s*of\b';
+  ARRAY_TYPE_PATTERN = '^(?:packed\s+)?array\s*\[\s*(-?\w+)\s*\.\.\s*(-?\w+)\s*\]\s*of\b';
 
 type
   { What a declaration says about one name, as far as the rules care. }
@@ -133,6 +133,10 @@ type
     FFindings: TList<TLintFinding>;
     FGlobals : TDictionary<string, TDeclInfo>;
     FScopes  : TObjectList<TDictionary<string, TDeclInfo>>;
+    FConsts  : TDictionary<string, Integer>;      { file-level integer consts with a literal value }
+    FConstBad: TDictionary<string, Boolean>;      { const names declared twice with different values }
+    FAliases : TDictionary<string, TDeclInfo>;    { file-level type aliases of a string or array[lo..hi] }
+    FAliasBad: TDictionary<string, Boolean>;
     function Txt(const N: TTSNode): string;
     function IsTrivia(const N: TTSNode): Boolean;
     procedure EmitAt(const ANode: TTSNode; const ARuleId, AMessage, ASeverity: string);
@@ -144,6 +148,10 @@ type
     procedure AddDecl(ADict: TDictionary<string, TDeclInfo>; const AName: string; const AInfo: TDeclInfo; AMergeAmbig: Boolean);
     procedure RecordDecl(const ADecl: TTSNode; ADict: TDictionary<string, TDeclInfo>; AMergeAmbig: Boolean);
     procedure CollectGlobals(const N: TTSNode);
+    procedure CollectNamed(const N: TTSNode);
+    function ConstValue(const AName: string; out AValue: Integer): Boolean;
+    function BoundValue(const AToken: string; out AValue: Integer): Boolean;
+    function EvalIndex(const N: TTSNode; out AValue: Integer): Boolean;
     function BuildScope(const AProc: TTSNode): TDictionary<string, TDeclInfo>;
     function Lookup(const AName: string; out AInfo: TDeclInfo): Boolean;
     procedure CheckSubscript(const N: TTSNode);
@@ -174,10 +182,18 @@ begin
   FFindings:= TList<TLintFinding>.Create;
   FGlobals := TDictionary<string, TDeclInfo>.Create;
   FScopes  := TObjectList<TDictionary<string, TDeclInfo>>.Create(True);
+  FConsts  := TDictionary<string, Integer>.Create;
+  FConstBad:= TDictionary<string, Boolean>.Create;
+  FAliases := TDictionary<string, TDeclInfo>.Create;
+  FAliasBad:= TDictionary<string, Boolean>.Create;
 end;
 
 destructor TBnRun.Destroy;
 begin
+  FAliasBad.Free;
+  FAliases.Free;
+  FConstBad.Free;
+  FConsts.Free;
   FScopes.Free;
   FGlobals.Free;
   FFindings.Free;
@@ -259,6 +275,7 @@ var
   T: string;
   M: TMatch;
   S: string;
+  Alias: TDeclInfo;
 begin
   ALo:= 0;
   AHi:= -1;
@@ -266,12 +283,123 @@ begin
   T:= LowerCase(Trim(ATypeText));
   for S in STRING_TYPES do
     if T = S then Exit(dkString);
-  M:= TRegEx.Match(T, ARRAY_TYPE_PATTERN);
-  if M.Success then
+  if FAliases.TryGetValue(T, Alias) and (not FAliasBad.ContainsKey(T)) then
   begin
-    ALo:= StrToIntDef(M.Groups[1].Value, 0);
-    AHi:= StrToIntDef(M.Groups[2].Value, -1);
-    Result:= dkArray;
+    ALo:= Alias.Lo;
+    AHi:= Alias.Hi;
+    Exit(Alias.Kind);
+  end;
+  M:= TRegEx.Match(T, ARRAY_TYPE_PATTERN);
+  if M.Success and BoundValue(M.Groups[1].Value, ALo) and BoundValue(M.Groups[2].Value, AHi) then
+    Result:= dkArray
+  else
+  begin
+    ALo:= 0;
+    AHi:= -1;
+  end;
+end;
+
+{ An array bound token: a decimal literal, or a file-level integer const (a named bound). }
+function TBnRun.BoundValue(const AToken: string; out AValue: Integer): Boolean;
+var
+  Neg: Boolean;
+  Tok: string;
+begin
+  Neg:= (AToken <> '') and (AToken[1] = '-');
+  Tok:= AToken;
+  if Neg then Delete(Tok, 1, 1);
+  Result:= TryStrToInt(Tok, AValue);
+  if (not Result) and FConsts.TryGetValue(Tok, AValue) and (not FConstBad.ContainsKey(Tok)) then Result:= True;
+  if Result and Neg then AValue:= -AValue;
+end;
+
+{ File-level consts with an integer literal value and type aliases of string / array[lo..hi]: the
+  names constant-index-out-of-range can resolve. A name declared twice with a different meaning is
+  recorded as bad and stays silent. Runs before CollectGlobals so the shapes are known. }
+procedure TBnRun.CollectNamed(const N: TTSNode);
+var
+  T, Nm    : string;
+  I, V     : Integer;
+  Val, Typ : TTSNode;
+  Info, Old: TDeclInfo;
+begin
+  if N.IsNull then Exit;
+  T:= N.NodeType;
+  if (T = 'defProc') or (T = 'lambda') then Exit;
+  if T = 'declConst' then
+  begin
+    Val:= N.ChildByField('defaultValue');
+    Nm := LowerCase(Txt(N.ChildByField('name')));
+    if (not Val.IsNull) and (Nm <> '') and (Val.NamedChildCount >= 1) and (Val.NamedChild(Val.NamedChildCount - 1).NodeType = 'literalNumber') then
+    begin
+      if TryStrToInt(Txt(Val.NamedChild(Val.NamedChildCount - 1)), V) and ((not FConsts.TryGetValue(Nm, I)) or (I = V)) then FConsts.AddOrSetValue(Nm, V)
+      else FConstBad.AddOrSetValue(Nm, True);
+    end
+    else if Nm <> '' then
+      FConstBad.AddOrSetValue(Nm, True);
+    Exit;
+  end;
+  if T = 'declType' then
+  begin
+    Typ:= N.ChildByField('type');
+    Nm := LowerCase(Txt(N.ChildByField('name')));
+    if (not Typ.IsNull) and (Nm <> '') then
+    begin
+      Info:= Default(TDeclInfo);
+      Info.Kind:= ClassifyType(Txt(Typ), Info.Lo, Info.Hi);
+      if Info.Kind = dkOther then FAliasBad.AddOrSetValue(Nm, True)
+      else if FAliases.TryGetValue(Nm, Old) and ((Old.Kind <> Info.Kind) or (Old.Lo <> Info.Lo) or (Old.Hi <> Info.Hi)) then
+        FAliasBad.AddOrSetValue(Nm, True)
+      else FAliases.AddOrSetValue(Nm, Info);
+    end
+    else if Nm <> '' then
+      FAliasBad.AddOrSetValue(Nm, True);
+    Exit;
+  end;
+  for I:= 0 to N.ChildCount - 1 do CollectNamed(N.Child(I));
+end;
+
+{ A file-level const by name; a routine-local declaration of the same name shadows it. }
+function TBnRun.ConstValue(const AName: string; out AValue: Integer): Boolean;
+var
+  I: Integer;
+begin
+  Result:= False;
+  AValue:= 0;
+  for I:= 0 to FScopes.Count - 1 do
+    if FScopes[I].ContainsKey(AName) then Exit;
+  Result:= FConsts.TryGetValue(AName, AValue) and (not FConstBad.ContainsKey(AName));
+end;
+
+{ The integer value of a constant index expression: a literal, a file-level const, unary minus,
+  + / - of those, parentheses. False for anything else (a variable, a call). }
+function TBnRun.EvalIndex(const N: TTSNode; out AValue: Integer): Boolean;  // dl:ok too-many-exit-points@f533 -- REVIEWED 2026-11-14 v151 INT: guard clauses per syntax shape; each early exit is a classification
+var
+  A, B: Integer;
+  Op  : string;
+begin
+  Result:= False;
+  AValue:= 0;
+  if N.IsNull then Exit;
+  if N.NodeType = 'literalNumber' then
+    Exit(TRegEx.IsMatch(Txt(N), '^-?\d{1,9}$') and TryStrToInt(Txt(N), AValue));
+  if N.NodeType = 'identifier' then
+    Exit(ConstValue(LowerCase(Txt(N)), AValue));
+  if (N.NodeType = 'exprParens') and (N.NamedChildCount = 1) then
+    Exit(EvalIndex(N.NamedChild(0), AValue));
+  if N.NodeType = 'exprUnary' then
+  begin
+    if (OperatorType(N) <> 'kSub') or (not EvalIndex(N.ChildByField('operand'), A)) then Exit;
+    AValue:= -A;
+    Exit(True);
+  end;
+  if N.NodeType = 'exprBinary' then
+  begin
+    Op:= OperatorType(N);
+    if ((Op <> 'kAdd') and (Op <> 'kSub')) or (not EvalIndex(N.ChildByField('lhs'), A))
+       or (not EvalIndex(N.ChildByField('rhs'), B)) then Exit;
+    if Op = 'kAdd' then AValue:= A + B else AValue:= A - B;  // dl:ok ifthen-to-if-expression@191a -- REVIEWED 2026-11-14 v151 INT: classic if/else kept in a lane unit written before the ternary sweep
+    Result:= True;
   end;
 end;
 
@@ -426,29 +554,17 @@ end;
 
 procedure TBnRun.CheckSubscript(const N: TTSNode);
 var
-  Ent, Args, Arg, Opd: TTSNode;
-  Name, Lit: string;
+  Ent, Args, Arg: TTSNode;
+  Name: string;
   Info: TDeclInfo;
   Idx: Integer;
-  Neg: Boolean;
 begin
   Ent:= N.ChildByField('entity');
   Args:= N.ChildByField('args');
   if Ent.IsNull or Args.IsNull or (Ent.NodeType <> 'identifier') then Exit;
   if Args.NamedChildCount <> 1 then Exit;
   Arg:= Args.NamedChild(0);
-  Neg:= False;
-  if (Arg.NodeType = 'exprUnary') and (OperatorType(Arg) = 'kSub') then
-  begin
-    Opd:= Arg.ChildByField('operand');
-    Neg:= True;
-    Arg:= Opd;
-  end;
-  if Arg.IsNull or (Arg.NodeType <> 'literalNumber') then Exit;
-  Lit:= Txt(Arg);
-  if not TRegEx.IsMatch(Lit, '^-?\d{1,9}$') then Exit;
-  Idx:= StrToInt(Lit);
-  if Neg then Idx:= -Idx;
+  if Arg.IsNull or (not EvalIndex(Arg, Idx)) then Exit;
   Name:= LowerCase(Txt(Ent));
   if not Lookup(Name, Info) then Exit;
   case Info.Kind of
@@ -825,6 +941,7 @@ end;
 
 function TBnRun.Run(const ARoot: TTSNode): TArray<TLintFinding>;
 begin
+  CollectNamed(ARoot);
   CollectGlobals(ARoot);
   Visit(ARoot);
   Result:= FFindings.ToArray;

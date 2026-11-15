@@ -1,0 +1,9 @@
+package Pkg;
+
+requires
+  rtl;
+
+contains
+  PkgUnit in 'PkgUnit.pas';
+
+end.
