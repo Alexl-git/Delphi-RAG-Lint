@@ -249,7 +249,7 @@ constructor TMaskedSource.Create(const pPath: string);
 begin
   inherited Create;
   Path:= pPath;
-  Text:= DecodeSource(TFile.ReadAllBytes(pPath), Enc);
+  Text:= DecodeSource(TFile.ReadAllBytes(pPath), Enc);  // dl:ok taint-path-traversal@f6f6 -- REVIEWED 2026-11-16: pPath is a unit of the user's own index (its files table), read with the user's rights; same verdict as the live markers at :1186 / :1265
   Scan;
 end;
 
@@ -499,7 +499,7 @@ end;
 
 function IsFileCurrent(const pStore: ISymbolStore; const pPath: string): Boolean;
 begin
-  Result:= pStore.FileIsUpToDate(pPath, FileMTimeUnix(pPath), THashSHA2.GetHashString(TEncoding.ANSI.GetString(TFile.ReadAllBytes(pPath))));
+  Result:= pStore.FileIsUpToDate(pPath, FileMTimeUnix(pPath), THashSHA2.GetHashString(TEncoding.ANSI.GetString(TFile.ReadAllBytes(pPath))));  // dl:ok taint-path-traversal@a85d -- REVIEWED 2026-11-16: pPath is a unit of the user's own index (its files table), read with the user's rights; same verdict as the live markers at :1186 / :1265
 end;
 
 function TCastPlanner.StampOk(const pPath: string): Boolean;

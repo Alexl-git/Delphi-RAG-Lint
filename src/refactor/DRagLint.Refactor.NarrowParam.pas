@@ -412,7 +412,7 @@ begin
   end;
 end;
 
-function TNarrowPlanner.CheckRoutine(const pR: TRoutineRow; const pParam: TParamRow; out pVerdict: TVerdict): Boolean;  // dl:ok deep-nesting@3d4c, too-many-exit-points@ccb3 -- the guard list of the refusals; a split would hide their order
+function TNarrowPlanner.CheckRoutine(const pR: TRoutineRow; const pParam: TParamRow; out pVerdict: TVerdict): Boolean;  // dl:ok too-many-exit-points@ccb3 -- the guard list of the refusals; a split would hide their order
 begin
   Result:= False;
   pVerdict:= Default(TVerdict);

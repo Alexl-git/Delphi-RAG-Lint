@@ -748,7 +748,9 @@
 #   Superseded: 1.27.0-alpha|680ea959bc13d8daeb3ed39b727d0cf7931b6d82dac50f793bd29ef41d9d091a
 #   2026-11-16 v1511 INT re-pin (same unreleased 1.28.0 bump): WriteRefHostBindings (INC2, writes ref_host_bindings) added to the manifest; the extractor guard lists it as notEmit.
 #   Superseded: 1.28.0-alpha|b11323cef92717f9031132c3050f44b1f36a90d1738570e461ae7218ad023e14
-1.28.0-alpha|f3bfe9e1da0fe2545303f8c3a4b638baae9bb5b4215690068468c1c3065cea00
+#   2026-11-16 v1511 INT step-8 re-pin (same unreleased 1.28.0 bump, no resolve change): CallResolver <param>/<returns> tags on LibraryScopeType / ProjectDeclaresBare + 3 dl:ok re-stamps; Storage.SQLite ResolveCallTargets dl:ok re-stamp (comment-only).
+#   Superseded: 1.28.0-alpha|f3bfe9e1da0fe2545303f8c3a4b638baae9bb5b4215690068468c1c3065cea00
+1.28.0-alpha|410fd719d2f898902aba78cf597491ddc419374ba35749888eb336205083fa0e
 #   2026-11-06 int2: hash moved WITHOUT a bump from 631322c4: the dl:ok comment on ResolveCallTargets re-stamped by the lint sweep, no code change.
 # superseded: 1.19.0-alpha|e4c14c16d87b21940e6ce6017456b8446a5cc516e342b72b816e3e161612ecba
 #   2026-11-06 1.19.0 -> 1.20.0-alpha (lanes facts + rename): ref_types (static type of a reference), ref_receivers (receiver link of a ref), references in initialization / finalization attributed to the section symbol. Additive, no SCHEMA_VERSION move. Remedy: index --all --resolve-only.

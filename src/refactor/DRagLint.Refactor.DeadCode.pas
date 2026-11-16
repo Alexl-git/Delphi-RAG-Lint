@@ -24,14 +24,14 @@ type
       /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
       /// <param name="AKind"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AIncludePrivate"><!-- drag-lint:auto type -->Boolean</param>
-      /// <returns><!-- drag-lint:auto -->TArray&lt;TSymbol&gt; -- Observed:
-      /// AStore.FindSymbolsWithNoCallers(AKind, AIncludePrivate).</returns>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;TSymbol&gt; -- Observed: Kept.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoFindDeadCode (DRagLint.CLI.pas)</para>
-      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsWithNoCallers</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsWithNoCallers, DRagLint.Core.Interfaces.ISymbolStore.FindUsersOfUnit, LowerCase</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsWithNoCallers"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindUsersOfUnit"/>
       /// <seealso cref="DRagLint.Refactor.DeadCode.TDeadCodeFinder.RenderText"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>

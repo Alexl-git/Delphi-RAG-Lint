@@ -8,7 +8,7 @@ interface
 
 type
   /// <summary>Header kind of one .dfm node.</summary>
-  TDfmNodeKind = (dnkObject, dnkInherited, dnkInline, dnkItem);
+  TDfmNodeKind = (dnkObject, dnkInherited, dnkInline, dnkItem);  // dl:ok duplicate-global-decl@9546 -- REVIEWED 2026-11-16: Convert.DfmReemit keeps its own copy until the 1.52 consolidation (V151F T01 FOUND); the lint unit must not depend on the converter's unit
 
   /// <summary>One property line of a .dfm node; Value is the raw text after '=' for a
   /// one-line value and '' for a string, list, blob or collection.</summary>
@@ -27,7 +27,7 @@ type
   /// <summary>One .dfm node. Parent is the index of the enclosing node (-1 for the root).
   /// InInline is True when an enclosing node is an `inline` frame instance: such nodes
   /// belong to the frame class, not to the form class.</summary>
-  TDfmNode = record
+  TDfmNode = record  // dl:ok duplicate-global-decl@86e1 -- REVIEWED 2026-11-16: Convert.DfmReemit keeps its own copy until the 1.52 consolidation (V151F T01 FOUND); the lint unit must not depend on the converter's unit
     Name     : string;
     CompClass: string;
     Kind     : TDfmNodeKind;

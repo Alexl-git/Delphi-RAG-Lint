@@ -174,12 +174,12 @@ end;
   IsUnderscoreAccessor('Setup_Form')=False. }
 function IsUnderscoreAccessor(const AName: string): Boolean;
 const
-  cAccessorPrefixLen = 3; { length of 'Get' / 'Set' }
+  ACCESSOR_PREFIX_LEN = 3; { length of 'Get' / 'Set' }
 begin
-  Result:= (Length(AName) > cAccessorPrefixLen)
+  Result:= (Length(AName) > ACCESSOR_PREFIX_LEN)
     and (StartsText('Get', AName) or StartsText('Set', AName))
-    and (Pos('_', AName) > cAccessorPrefixLen)
-    and (not CharInSet(AName[cAccessorPrefixLen + 1], ['a'..'z']));
+    and (Pos('_', AName) > ACCESSOR_PREFIX_LEN)
+    and (not CharInSet(AName[ACCESSOR_PREFIX_LEN + 1], ['a'..'z']));
 end;
 { The identifier written right after 'class(' in AClassText -- a declClass
   node's text, 'class(EDatabaseError)' -> 'EDatabaseError'; a unit qualifier

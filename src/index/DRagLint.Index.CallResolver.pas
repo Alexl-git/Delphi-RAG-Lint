@@ -1194,11 +1194,16 @@ type
     /// <summary>1.51.1 (B02 / B04 / B06): the first library ancestor name of the class enclosing
     /// AEnclosingSymbolId (TObject for a complete class chain); '' outside a class. The scope
     /// type the library oracle is asked with, as BindExternally computes it.</summary>
+    /// <param name="AEnclosingSymbolId">Symbol id of the routine or member the reference sits in.</param>
+    /// <returns>The library ancestor name, or '' when the site is not inside a class.</returns>
     function LibraryScopeType(AEnclosingSymbolId: Int64): string;
     /// <summary>1.51.1 (B02 / B04 / B06): True when THIS index declares the bare name AName where
     /// ASite can see it by name -- a type, an enum value, a unit-level value or routine anywhere in the index, a
     /// local / nested routine of an enclosing routine, or a member on the enclosing class chain.
     /// Such a name is the project's and is never answered from a library.</summary>
+    /// <param name="ASite">The reference whose scope decides visibility.</param>
+    /// <param name="AName">The bare identifier as written at the site.</param>
+    /// <returns>True when the project declares AName visibly from ASite.</returns>
     function ProjectDeclaresBare(const ASite: TReference; const AName: string): Boolean;
     /// <summary>1.51.1 B06: the result type name of the LIBRARY unit-level function the bare name
     /// AName stands for at ASite (`HiLibReg` in `HiLibReg.OpenKey`, `HiLibReg().OpenKey`,
@@ -6558,7 +6563,7 @@ begin
   end;
 end;
 
-function TCallResolver.ResolveEnumValueRead(const ARef: TReference; out AReason: string): Int64;  // dl:ok too-many-exit-points@b863 -- REVIEWED 2026-10-26 (E14 added the scoped exit; first reviewed 2026-09-23): each exit is a DISTINCT outcome the caller and the counters must tell apart -- not a candidate name, a with member (1.8.0, R7), scoped (E14), not visible, ambiguous, shadowed (a/b), shadowed (c), bound. Every one sets AReason and increments its own counter before leaving; merging them behind a single exit would put six reasons through one assignment and is exactly how a decline becomes unauditable.
+function TCallResolver.ResolveEnumValueRead(const ARef: TReference; out AReason: string): Int64;  // dl:ok too-many-exit-points@f25d -- REVIEWED 2026-11-16 (re-stamped after 1.51.1 RES; E14 added the scoped exit; first reviewed 2026-09-23): each exit is a DISTINCT outcome the caller and the counters must tell apart -- not a candidate name, a with member (1.8.0, R7), scoped (E14), not visible, ambiguous, shadowed (a/b), shadowed (c), bound. Every one sets AReason and increments its own counter before leaving; merging them behind a single exit would put six reasons through one assignment and is exactly how a decline becomes unauditable.
 
   { R1: a value declared in AFileId / ASection is visible from ARef's file when
     it is the SAME file (both sections of one's own unit are in scope), or it is
@@ -9033,7 +9038,7 @@ end;
 // cast, selector chain, unit-qualified type, local/field/Result, function result, ordinary name, ...) answers
 // and leaves; the body is the old TypeReceiver unchanged, renamed so TypeReceiver can apply the implicit
 // dereference once. One exit would thread a found flag through a dozen rungs whose order IS the contract.
-function TCallResolver.TypeReceiverCore(const ACallRef: TReference; const AReceiverExpr: string;  // dl:ok too-many-exit-points@ac4c, cyclomatic-complexity@a5c1, method-too-long@3516, cognitive-complexity@e04a -- the receiver-kind LADDER: one exit per rung, the rung order IS the contract (review history in the comment above)
+function TCallResolver.TypeReceiverCore(const ACallRef: TReference; const AReceiverExpr: string;  // dl:ok too-many-exit-points@ac4c, cyclomatic-complexity@3d5e, method-too-long@193e, cognitive-complexity@55ae -- the receiver-kind LADDER: one exit per rung, the rung order IS the contract (review history in the comment above)
   out AText: TRcvTypeText): Int64;
 var
   Encl    : TSymbol;
@@ -10826,7 +10831,7 @@ begin
   end;
 end;
 
-function TCallResolver.DecideInlineInitType(const ADecl: TSymbol): string;  // dl:ok too-many-exit-points@352d, cyclomatic-complexity@2550 -- one Exit per initializer form (for-in, as, index, call), each a decision with its own result
+function TCallResolver.DecideInlineInitType(const ADecl: TSymbol): string;  // dl:ok too-many-exit-points@352d, cyclomatic-complexity@3663 -- one Exit per initializer form (for-in, as, index, call), each a decision with its own result
 var
   Lines: TStringList;
   IsFor: Boolean    ;

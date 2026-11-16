@@ -10558,7 +10558,7 @@ var
     if not LineCache.TryGetValue(AFile, Result) then
     begin
       { B07: decode through EnsureUtf8Bytes -- a BOM file with a stray ANSI byte must not die in the strict UTF-8 reader. }
-      if TFile.Exists(AFile) then Result:= TEncoding.UTF8.GetString(EnsureUtf8Bytes(TFile.ReadAllBytes(AFile))).Replace(#13#10, #10).Split([#10]) else SetLength(Result, 0);
+      if TFile.Exists(AFile) then Result:= TEncoding.UTF8.GetString(EnsureUtf8Bytes(TFile.ReadAllBytes(AFile))).Replace(#13#10, #10).Split([#10]) else SetLength(Result, 0);  // dl:ok taint-path-traversal@8858 -- REVIEWED 2026-11-16: reads a file the caller named on the command line or in its own manifest; a CLI reading what its user points it at is the feature, not a traversal
       LineCache.Add(AFile, Result);
     end;
   end;
@@ -13998,7 +13998,7 @@ end;
 /// and the next lint fills lazily); 2 without a --db that exists.</returns>
 /// <remarks>What an index run starts in the background (with --detached, which
 /// also sends the output to NUL); by hand it is the synchronous warm.</remarks>
-function DoWarmRuleCache(const AArgs: TArgs): Integer;  // dl:ok deep-nesting@d5cd -- REVIEWED 2026-11-04: the depth is the inline watcher thread with its wait loop; it captures five locals of this one lifetime and is read top to bottom
+function DoWarmRuleCache(const AArgs: TArgs): Integer;
 begin
   if (AArgs.DbPath = '') or not TFile.Exists(AArgs.DbPath) then
   begin
