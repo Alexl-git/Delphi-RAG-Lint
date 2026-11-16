@@ -605,7 +605,9 @@ $effectiveTimeout = $(if ($Jobs -gt 1) { $TimeoutSec * 2 } else { $TimeoutSec })
 # checks are untouched. doctests_v021: passes alone, ~1060 s under load (the default
 # 600 s killed it as a TIMEOUT on a busy box). 1.42 int1 battery (2026-11-03): doctests_v021
 # took 2016 s and fix_fixtures 577 s of 600 under load -- floors raised to ~1.5x / 2x those.
-$RunnerBudgetSec = @{ 'run_doctests_v021.ps1' = 3000; 'run_lint_tests.ps1' = 1200; 'run_fix_fixtures.ps1' = 1200 }
+$RunnerBudgetSec = @{ 'run_doctests_v021.ps1' = 3000; 'run_lint_tests.ps1' = 1200; 'run_fix_fixtures.ps1' = 1200; 'run_docregions_equivalence.ps1' = 2400 }
+# run_docregions_equivalence: 14 engine runs per project over a copy of a real DB; measured standalone 2026-11-16
+# 627 s for TableTools370P ALONE (DataCopy + YADF took the first ~550 s of the 600 s default) -> floor 2400 s.
 
 # --- Run ------------------------------------------------------------------
 $results = New-Object System.Collections.Generic.List[object]
