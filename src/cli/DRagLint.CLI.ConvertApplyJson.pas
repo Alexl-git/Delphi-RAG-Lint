@@ -8,8 +8,7 @@ unit DRagLint.CLI.ConvertApplyJson;
 interface
 
 uses
-  System.JSON, DRagLint.CLI.Common, DRagLint.Convert.Rules, DRagLint.Convert.Apply, DRagLint.Convert.UnitRules,
-  DRagLint.Convert.UsesReconcile, DRagLint.Refactor.TextEdit;
+  System.JSON, DRagLint.CLI.Common, DRagLint.Convert.Rules, DRagLint.Convert.Apply, DRagLint.Refactor.TextEdit;
 
 type
 
@@ -153,9 +152,9 @@ function ConvertApplyComponentPart(const ARules: TConversionRuleSet; const ADfmP
 implementation
 
 uses
-  Winapi.Windows, System.SysUtils, System.Classes, System.IOUtils, System.NetEncoding, System.DateUtils,
-  System.Generics.Collections, System.SyncObjs, FireDAC.Stan.Async, FireDAC.Stan.Param, FireDAC.DApt,
-  TreeSitter, DRagLint.CLI.Convert;
+  DRagLint.Convert.UnitRules, DRagLint.Convert.UsesReconcile, Winapi.Windows, System.SysUtils, System.Classes,
+  System.IOUtils, System.NetEncoding, System.DateUtils, System.Generics.Collections, System.SyncObjs,
+  FireDAC.Stan.Async, FireDAC.Stan.Param, FireDAC.DApt, TreeSitter, DRagLint.CLI.Convert;
 
 procedure PrintApplyReport(const AReport: TApplyReport; AEditCount: Integer; const AVerb: string);
 
