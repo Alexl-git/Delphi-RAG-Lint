@@ -759,6 +759,8 @@ begin
 end;
 
 const
+  { 1.51.1 EXT: how deep a property specifier path is followed; real ones have 2-3 parts. }
+  MAX_SPEC_PATH_DEPTH = 16;
   { E-PARSER-NOREFS: the receiver of inherited X. The resolver starts X's lookup at the
     PARENT of the enclosing class, so a nearer X (a nested routine, the class's own) never
     answers. A bare inherited; writes no name and gets no row. }
@@ -813,6 +815,94 @@ begin
     end
     else if C.NodeType <> ',' then Break;
   end;
+end;
+
+{ 1.51.1 EXT (B26): a dotted or indexed property specifier -- `read FRec.X`,
+  `write FRec.Sub.Y`, `read FArr[0].X`. Walk emits its names as it does inside a
+  routine: the root a 'read', each member a 'member-access' whose receiver is the
+  text before the dot. A class body has no enclosing routine, so the resolver's
+  ladder never ran and every one of them stayed unbound. Re-tag them as the
+  declaration names they are, on the refs Walk added since AMark:
+    the root          -> REF_KIND_PROP_SPEC, receiver = the owner's qualified name
+                         (what a bare `read FCount` gets);
+    Root.A, Root.A.B  -> REF_KIND_REC_FIELD, receiver = OwnerLeaf.Root[.A]: the
+                         field path the resolver walks for a record constant.
+  A path that is not identifiers and dots all the way (a subscript, a call) keeps
+  the members as Walk emitted them; its root is still re-tagged.
+  Every ref on the token is re-tagged except a second one of the same new kind,
+  which cannot happen today (one 'read' per root, one 'member-access' per member). }
+procedure RetagPropertySpecPaths(const ANode: TTSNode; const AState: TWalkState; const AOwnerQName: string; AMark: Integer);
+var
+  OwnerLeaf: string;
+
+  procedure Retag(const AIdent: TTSNode; const AKind, AReceiver: string);
+  begin
+    var Line:= Integer(AIdent.StartPoint.row) + 1;
+    var Col := Integer(AIdent.StartPoint.column) + 1;
+    for var i:= AMark to AState.References.Count - 1 do
+    begin
+      var R:= AState.References[i];
+      if (R.StartLine <> Line) or (R.StartCol <> Col) then Continue;
+      R.Kind        := AKind;
+      R.ReceiverText:= AReceiver;
+      AState.References[i]:= R;
+    end;
+  end;
+
+  { Is AExpr Ident or Ident.Ident...? Re-tags it on the way; APath = OwnerLeaf.Ident... }
+  function PureChain(const AExpr: TTSNode; ADepth: Integer; out APath: string): Boolean;
+  begin
+    APath := '';
+    Result:= False;
+    if AExpr.IsNull or (ADepth > MAX_SPEC_PATH_DEPTH) then Exit;
+    if AExpr.NodeType = 'identifier' then
+    begin
+      Retag(AExpr, REF_KIND_PROP_SPEC, AOwnerQName);
+      APath:= OwnerLeaf + '.' + NodeText(AExpr, AState.Source);
+      Exit(True);
+    end;
+    if AExpr.NodeType <> 'exprDot' then Exit;
+    var R:= AExpr.ChildByField('rhs');
+    if R.IsNull or (R.NodeType <> 'identifier') then Exit;
+    var LhsPath: string;
+    if not PureChain(AExpr.ChildByField('lhs'), ADepth + 1, LhsPath) then Exit;
+    Retag(R, REF_KIND_REC_FIELD, LhsPath);
+    APath:= LhsPath + '.' + NodeText(R, AState.Source);
+    Result:= True;
+  end;
+
+  { The leftmost identifier of a path with a subscript, a call or a dereference in it. }
+  function RootOf(const AExpr: TTSNode): TTSNode;
+  begin
+    Result:= AExpr;
+    for var Depth:= 0 to MAX_SPEC_PATH_DEPTH do
+    begin
+      if Result.IsNull or (Result.NodeType = 'identifier') then Exit;
+      var NT:= Result.NodeType;
+      if NT = 'exprDot' then Result:= Result.ChildByField('lhs')
+      else if (NT = 'exprSubscript') or (NT = 'exprCall') then Result:= Result.ChildByField('entity')
+      else if NT = 'exprDeref' then Result:= Result.ChildByField('operand')
+      else Break;
+    end;
+    Result:= Default(TTSNode);
+  end;
+
+  procedure Spec(const AField: string);
+  begin
+    var N:= ANode.ChildByField(AField);
+    if N.IsNull or (N.NodeType = 'identifier') or N.HasError then Exit; { a bare name is EmitPropertySpecRefs' }
+    var Path: string;
+    if PureChain(N, 0, Path) then Exit;
+    var Root:= RootOf(N);
+    if (not Root.IsNull) and (Root.NodeType = 'identifier') then Retag(Root, REF_KIND_PROP_SPEC, AOwnerQName);
+  end;
+
+begin
+  if (AOwnerQName = '') or (AMark >= AState.References.Count) then Exit;
+  OwnerLeaf:= AOwnerQName.Substring(AOwnerQName.LastIndexOf('.') + 1);
+  Spec('getter');
+  Spec('setter');
+  Spec('stored');
 end;
 
 { E-PARSER-NOREFS: the record a field of a record constant belongs to, as text the
@@ -907,6 +997,7 @@ procedure Walk(const ANode: TTSNode; const AState: TWalkState; AParentSymbolIdx:
     (typerefDot lhs: .. operator: (kDot) rhs: id)      A.B.C.TFoo
     (typerefTpl entity: <any of the above>
                 (kLt) args: (typerefArgs <any of the above>...) (kGt))
+    (typerefPtr operator: (kHat) operand: <any of the above>)   ^TFoo
 
   DELIBERATELY NOT HANDLED: genericTpl / genericArgs / genericArg. That family
   is the type-PARAMETER DECLARATION (`TBox<T> = class`, `function F<T>`) -- those
@@ -955,6 +1046,15 @@ begin
   begin
     for i:= 0 to ANode.NamedChildCount - 1 do
       EmitTypeExprRefs(ANode.NamedChild(i), AState, ADepth + 1);
+    Exit;
+  end;
+
+  { 1.51.1 EXT (B26): `^TFoo` is (typerefPtr operator: (kHat) operand: <type>). The base
+    type is used as much as in `array of TFoo`; without this arm a rename of TFoo missed
+    every `PFoo = ^TFoo` and the type read as used nowhere when only its pointer was. }
+  if NT = 'typerefPtr' then
+  begin
+    EmitTypeExprRefs(ANode.ChildByField('operand'), AState, ADepth + 1);
     Exit;
   end;
   // anything else: silently ignored, matching the original `else Exit`
@@ -3646,8 +3746,10 @@ begin
       end;
     end;
     EmitPropertySpecRefs(ANode, AState, AParentQualifiedName); { E-PARSER-NOREFS }
+    var SpecMark:= AState.References.Count;
     // Walk children so the property's type emits a type_use ref.
     for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
+    RetagPropertySpecPaths(ANode, AState, AParentQualifiedName, SpecMark); { 1.51.1 EXT }
     Exit;
   end; // if
 
