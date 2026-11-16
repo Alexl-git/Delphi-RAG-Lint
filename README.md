@@ -294,8 +294,8 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 * `lint <file>` is a strict **subset** of `lint-all`: project-wide rules
   (unused-public-symbol, unused-unit-in-uses, the uses-edge and duplicate-global
   rules) can only fire in `lint-all`. Never report "clean" from a per-file run.
-* `context` wants the **fully qualified** name - `Unit.TType.Member`. It is about
-  60x leaner than reading the source files; add `--full-surface` only when the
+* `context` wants the **fully qualified** name - `Unit.TType.Member`. It returns the
+  relevant slice instead of whole source files; add `--full-surface` only when the
   task is about a form's components, DFM or event wiring.
 * A `note: N of M indexed file(s) changed since this index was built` line means
   **reindex first**. The answer may be stale.
@@ -1059,7 +1059,7 @@ Win64 build.
 | `impact --qname <q>` | Blast radius: callers/units affected by a change, per depth level; an interface method also lists its implementors (`implementors`, `via_dispatch` in JSON). `--all-projects` asks every manifest database instead of one (project DBs answer callers and implementors, the library declarations), with a line for each section that could not answer; a project the manifest does not name is not seen | `--depth N`, `--all-projects`, `--platform`, `--config` |
 | `surface --qname <q>` | Public interface (declaration lines) of a class/record | `--include-impl`, `--all-visibility` |
 | `slice --qname <q>` | Minimal self-contained call-slice reachable from a symbol | |
-| [`context`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/context) `--task "verb qname"` | Compact context bundle for AI prompts -- doc + surface + body + callers, ~10-60x leaner than the source | `--max-callers N`, `--context N`, `--no-docs`, `--max-body-tokens N` (whole-type body cap, default 20000; 0 = every body; a capped type's surface drops the docs of the omitted members) |
+| [`context`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/context) `--task "verb qname"` | Compact context bundle for AI prompts -- doc + surface + body + resolved callers in one answer, instead of opening each unit | `--max-callers N`, `--context N`, `--no-docs`, `--max-body-tokens N` (whole-type body cap, default 20000; 0 = every body; a capped type's surface drops the docs of the omitted members) |
 | [`bench-context`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/bench-context) | Benchmark context-bundle throughput | `--n N` |
 | `wiring --qname <IIntf\|TForm>` | Spring4D DI edges (impl + lifetime + resolve-sites) and DFM event handlers | `--coverage` (unresolved DI registrations) |
 
