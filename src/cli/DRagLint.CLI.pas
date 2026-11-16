@@ -280,7 +280,8 @@ uses
   , DRagLint.MCP       .ClientConfig { RunMcpConfigVerbFromCommandLine: the `mcp-config` verb }
   , DRagLint.CLI.Common { TArgs + the shared store / lock / database-resolution helpers (v1511 SPLIT) }
   , DRagLint.CLI.ConsumerDbs { ResolveConsumerDbs + platform detection + project index auto-create (v1511 SPLIT) }
-  , DRagLint.CLI.Convert { proptree / convert-* / glyph-vacuum verbs (v1511 SPLIT) }
+  , DRagLint.CLI.Convert { proptree / convert-validate / -reemit / -scaffold / glyph-vacuum verbs (v1511 SPLIT) }
+  , DRagLint.CLI.ConvertApply { convert-apply verb (v1511 SPLIT) }
   , DRagLint.CLI.Compare { compare verb (v1511 SPLIT) }
   , DRagLint.CLI.MigrateDbs { migrate-dbs verb + the manifest pair rule (v1511 SPLIT) }
   , DRagLint.CLI.Workspace { workspace / forms-csv / menu-tree / menu-drift verbs (v1511 SPLIT) }
