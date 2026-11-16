@@ -67,6 +67,10 @@ type
     /// must not abort a result the user waits for). Checked by ResolveSelection; passed on to the --part all
     /// child runs. Test runners and unattended scripts pass an explicit value.</summary>
     BuildTimeout: string;
+    /// <summary>--hub-surface (lane v1511 CYC, T06): the group's plan is recipe R3 (DRagLint.Report.CycleHubSurface)
+    /// instead of the planner, through the same compile gate; refused with --part. False = the planner (the default,
+    /// owner question O11: not flipped).</summary>
+    HubSurface: Boolean;
   end;
 
   /// <summary>The gate's stand-down exception, under the name this verb's handlers and doc-comments use.</summary>
@@ -433,7 +437,8 @@ uses
   System.StrUtils, System.RegularExpressions, System.Diagnostics, System.Math, Winapi.Windows,
   DRagLint.CLI.LibraryReady,    // PlatformOfDproj: the project's active Platform (ruling a3)
   DRagLint.Core.ControlChannel, // lane X-BT: the stand-down request (Cancel) the run listens for
-  DRagLint.Core.Model;          // DRAGLINT_VERSION / DRAGLINT_EXTRACTOR_VERSION, what the channel's `status` reports
+  DRagLint.Core.Model,          // DRAGLINT_VERSION / DRAGLINT_EXTRACTOR_VERSION, what the channel's `status` reports
+  DRagLint.Report.CycleHubSurface; // lane v1511 CYC: --hub-surface runs recipe R3 (HubSurfaceRewrite) through the gate
 
 const
   CExitMechanical = 0;
@@ -2572,6 +2577,192 @@ begin
   end;
 end;
 
+{ ---- --hub-surface: recipe R3 through the compile gate (lane v1511 CYC, T06) ----------------------------- }
+
+const
+  CKindR3Stays = 'hub-surface-group-stays'; // R3 plans the group but the prediction keeps a cycle
+  CPartR3      = 'r3';                       // cycle-fix/1 `part` of an R3 group (as the --causes json fix object)
+  CBreakStray  = '  CycleFixTestBreak !';    // the stray line of DRAGLINT_CYCLEFIX_BREAK=3, as BrokenLines puts it
+
+// The `cycles` output predicted once R3 breaks group pSelf (1-based): every other group as DoCycles prints it.
+function R3Predicted(const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; pSelf: Integer): string;
+begin
+  var L: TArray<string>:= nil;
+  if pSccs.Count <= 1 then L:= [CCycleNone]
+  else
+  begin
+    L:= [Format(CCycleCountFmt, [pSccs.Count - 1])];
+    for var I:= 0 to pSccs.Count - 1 do
+      if I <> pSelf - 1 then
+        L:= L + [Format(CCycleGroupFmt, [Length(pSccs[I]), string.Join(' <-> ', pSccs[I]),
+          (if IntfEdgeCount(pSccs[I], pGraph, True) > 0 then CCycleTagInterface else CCycleTagImplOnly)])];
+    L:= L + [CCycleEdgesHint];
+  end;
+  Result:= string.Join(#10, L);
+end;
+
+// The plan view the gate's shared steps read (MechanisabilityGate, StaleRefusals, WriteAll, CompileAfter, VerifyAfter,
+// CycleToJson): R3 has no moves and no anchored edits -- whole files, staged as bytes by StageR3.
+function R3View(const pRw: THubSurfaceRewrite; const pGroup: TArray<string>; pIndex: Integer; const pGraph: TCycleGraph;
+  const pPredicted: string): TCyclePlanView;
+begin
+  Result:= Default(TCyclePlanView);
+  Result.CycleIndex:= pIndex;
+  Result.Units     := pGroup;
+  Result.HasIntf   := IntfEdgeCount(pGroup, pGraph, True) > 0;
+  Result.Part      := if Result.HasIntf then 'A' else 'B';
+  Result.Recipe    := 'hub-surface';
+  Result.Mechanical:= pRw.Planned and pRw.Breaks;
+  Result.Predicted := pPredicted;
+  if not pRw.Planned then Exit;
+  Result.TouchedPaths:= pRw.Paths;
+  var N: TPlanNewUnit;
+  N.UnitName:= pRw.NewUnit;
+  N.Path    := pRw.NewPath;
+  N.Text    := nil;
+  Result.NewUnits:= [N];
+end;
+
+// R3's group-level refusals: refused by the recipe, or planned but the group stays.
+function R3Refusals(const pRw: THubSurfaceRewrite): TArray<TRefusal>;
+begin
+  Result:= nil;
+  if not pRw.Planned then Result:= Result + [MakeRefusal(pRw.Refusal, '', '', pRw.Why, 0)]
+  else if not pRw.Breaks then
+    Result:= Result + [MakeRefusal(CKindR3Stays, '', '', pRw.Why + ' (the planner''s own fix: drop --hub-surface)', 0)];
+end;
+
+// Stages R3's bytes in the shadow tree (what WriteAll copies into the project). pBreak = DRAGLINT_CYCLEFIX_BREAK
+// (BreakSeam: a project under TEMP only); mode 3 puts a stray line no repair covers into the new unit.
+function StageR3(const pRw: THubSurfaceRewrite; const pProjectDir, pShadowDir: string; pBreak: Integer): TArray<TRefusal>;
+begin
+  Result:= nil;
+  if TFile.Exists(pRw.NewPath) then Exit(Result + [AnchorRefusal(pRw.NewPath, 'the new unit''s file already exists', 0)]);
+  for var I:= 0 to High(pRw.Paths) do
+  begin
+    var S:= ShadowPathOf(pShadowDir, pProjectDir, pRw.Paths[I]);
+    ForceDirectories(ExtractFilePath(S));
+    TFile.WriteAllBytes(S, pRw.Contents[I]);
+  end;
+  var Bytes:= pRw.NewContent;
+  if pBreak = CBreakNoRepair then
+  begin
+    var Text:= TEncoding.ANSI.GetString(Bytes);
+    var At:= Pos(#13#10'interface'#13#10, Text);
+    if At > 0 then Insert(CBreakStray + #13#10, Text, At + Length(#13#10'interface'#13#10));
+    Bytes:= TEncoding.ANSI.GetBytes(Text);
+  end;
+  var NewShadow:= ShadowPathOf(pShadowDir, pProjectDir, pRw.NewPath);
+  ForceDirectories(ExtractFilePath(NewShadow));
+  TFile.WriteAllBytes(NewShadow, Bytes);
+end;
+
+// `cycles --fix --hub-surface`: RunCycleFixGroups with recipe R3 in place of the planner. Same flags, same baseline gate,
+// same shadow, same --apply (ApplyGroup: WriteAll under backups, build after the edit, roll back, re-index, verify),
+// same cycle-fix/1 document with `part` "r3" and `recipe` "hub-surface". A scan (no --cycle / --unit) takes the first
+// group R3 breaks.
+function RunHubSurfaceFix(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
+  const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pLibStore: ISymbolStore): Integer;
+var
+  Own       : TOwnRoots;
+  Only      : Integer;
+  Gate      : TGateReport;
+  Applied   : TApplyReport;
+  Cycles    : TJSONArray;
+  Playbook  : TStringList;
+  Summary   : TStringList;
+  Planned   : TList<Integer>;
+  Chosen    : Boolean;
+  ShadowUsed: string;
+begin
+  var Problem:= ResolveSelection(pOpts, pSccs, Own, Only);
+  if (Problem = '') and (pOpts.Part <> '') then
+    Problem:= 'cycles --fix --hub-surface plans recipe R3 for the whole group: --part does not combine with it';
+  if Problem <> '' then
+  begin
+    ReportError(pOpts, Problem);
+    Exit(CExitError);
+  end;
+  var Probe: Boolean;
+  var ProbeTree, ProbeLines: string;
+  var Brk:= AnnounceSeams(pOpts, Probe, ProbeTree, ProbeLines);
+  if not PassBaselineGate(pOpts, pSccs.Count > 0, Gate) then Exit(CExitRefused);
+  var ProjectDir:= ExtractFilePath(ExpandFileName(pOpts.Project));
+  var ShadowDir := if pOpts.ShadowOut <> '' then IncludeTrailingPathDelimiter(ExpandFileName(pOpts.ShadowOut)) else DefaultShadowDir;
+  Chosen    := False;
+  ShadowUsed:= '';
+  Applied   := NoApply;
+  Cycles  := TJSONArray.Create;
+  Playbook:= TStringList.Create;
+  Summary := TStringList.Create;
+  Planned := TList<Integer>.Create;
+  try
+    for var I:= 1 to pSccs.Count do
+    begin
+      if (Only > 0) and (I <> Only) then Continue;
+      Gate.After      := Default(TCompileAfterResult);
+      Gate.AfterStatus:= CStatusSkipped;
+      Gate.AfterFiles := 0;
+      var Rw  := HubSurfaceRewrite(pStore, pLibStore, pSccs[I - 1], I, pGraph);
+      var View:= R3View(Rw, pSccs[I - 1], I, pGraph, R3Predicted(pSccs, pGraph, I));
+      var Verdict:= R3Refusals(Rw);
+      if Length(Verdict) = 0 then Verdict:= MechanisabilityGate(View, Own) + StaleRefusals(pStore, View);
+      if Length(Verdict) = 0 then Verdict:= BaselineGroupRefusals(Gate, View, pOpts.Project);
+      if Length(Verdict) = 0 then Verdict:= StageR3(Rw, ProjectDir, ShadowDir, Brk);
+      if Length(Verdict) = 0 then ShadowUsed:= ShadowDir;
+      if (Length(Verdict) = 0) and pOpts.Apply then Applied:= ApplyGroup(View, pOpts, ProjectDir, ShadowDir, pStore, Gate);
+      var Report:= if Applied.Ran then Applied else NoApply;
+      var Obj:= CycleToJson(View, Verdict + Report.Refusals, pGraph, Gate, Report);
+      Obj.RemovePair('part').Free;
+      Obj.AddPair('part', CPartR3);
+      Cycles.AddElement(Obj);
+      Planned.Add(I);
+      Chosen:= Length(Verdict) = 0;
+      if (not pOpts.Json) and ((Only > 0) or Chosen) then Playbook.AddStrings(Rw.Lines);
+      if not (Chosen and pOpts.Json) then AddGroupLines(pOpts, View, Verdict, Only > 0, Applied, ShadowDir, Summary);
+      if Chosen then Break;
+    end;
+    Result:= if Chosen or (pSccs.Count = 0) then CExitMechanical else CExitRefused;
+    if Applied.Ran then Result:= Applied.ExitCode;
+    if pOpts.Json then
+    begin
+      var Doc:= NewRunDoc(pOpts);
+      try
+        Doc.AddPair('cycles', Cycles);
+        Cycles:= nil;
+        if ShadowUsed <> '' then
+        begin
+          Doc.AddPair('shadow', ShadowUsed);
+          Doc.AddPair('shadow_kept', TJSONBool.Create((pOpts.ShadowOut <> '') or GScratchCited));
+        end;
+        Doc.AddPair('baseline', BaselineToJson(Gate));
+        Doc.AddPair('refusals', TJSONArray.Create);
+        if Applied.Error <> '' then Doc.AddPair('error', Applied.Error);
+        Doc.AddPair('ok', TJSONBool.Create(Result = CExitMechanical));
+        Doc.AddPair('exit_code', TJSONNumber.Create(Result));
+        Writeln(Doc.ToJSON);
+      finally
+        Doc.Free;
+      end;
+    end
+    else
+    begin
+      if pSccs.Count = 0 then Writeln(CCycleNone);
+      for var Line in Playbook do Writeln(Line);
+      for var Line in Summary do Writeln(ShadowLineAtExit(Line, pOpts));
+      if (pSccs.Count > 0) and (Only = 0) and not Chosen then Writeln(CVerdictRefused);
+      WriteNotPlanned(Only, pSccs.Count, Planned);
+      var Timing:= TimingLine(Gate);
+      if Timing <> '' then Writeln(Timing);
+    end;
+  finally
+    Planned.Free;
+    Summary.Free;
+    Playbook.Free;
+    Cycles.Free;
+  end;
+end;
+
 function RunCycleFix(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pLibStore: ISymbolStore): Integer;
 begin
@@ -2586,8 +2777,9 @@ begin
     try
       if RerunAfterReindex(Opts, pStore, Result) then Exit;
       try
-        Result:= if SameText(Opts.Part, CPartAll) then RunAllSelected(Opts, pSccs, pGraph)
-                 else RunCycleFixGroups(Opts, pStore, pSccs, pGraph, pLibStore);
+        if Opts.HubSurface then Result:= RunHubSurfaceFix(Opts, pStore, pSccs, pGraph, pLibStore)
+        else if SameText(Opts.Part, CPartAll) then Result:= RunAllSelected(Opts, pSccs, pGraph)
+        else Result:= RunCycleFixGroups(Opts, pStore, pSccs, pGraph, pLibStore);
       finally
         DeleteDefaultScratch(Opts, Result);
       end;

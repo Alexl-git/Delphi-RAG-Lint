@@ -8715,6 +8715,15 @@ begin
       var HookFix: TJSONObject;
       if Assigned(pIn.FixHook) and pIn.FixHook(I, HookFix) then
       begin
+        { lane v1511 CYC (T06): a hub-surface (R3) object names the GATED commands -- `cycles --fix --hub-surface`
+          builds before and after the write and rolls back -- not the ungated `cycles --plan --hub-surface --apply` }
+        if HookFix.GetValue<string>('recipe', '') = 'hub-surface' then
+        begin
+          HookFix.RemovePair('dry_run').Free;
+          HookFix.RemovePair('apply').Free;
+          HookFix.AddPair('dry_run', FixCommandText(pIn.FixProject, pIn.DbPath, I, False).Replace('cycles --fix ', 'cycles --fix --hub-surface '));
+          HookFix.AddPair('apply', FixCommandText(pIn.FixProject, pIn.DbPath, I, True).Replace('cycles --fix ', 'cycles --fix --hub-surface '));
+        end;
         (pGroups.Items[I - 1] as TJSONObject).AddPair('fix', HookFix);  { hub-SCC P6 prep: no planner for this group }
         Continue;
       end;
