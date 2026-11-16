@@ -597,6 +597,9 @@ uses
   , DragLint.Plugin.ManifestPaths { PluginManifestWriteTarget -- layout v2 phase 3 }
   ;
 
+const
+  LABEL_ROW_H = 16; { height of one text row of the Lint rules group's blurb }
+
 { Minimal .dfm resource for the BASE frame class (TDLPageFrame). TCustomFrame.Create
   streams a per-class resource via InitInheritedComponent(Self, TFrame) and raises
   EResNotFound when none exists (frames, unlike forms, have no CreateNew to skip
@@ -1043,7 +1046,7 @@ begin
   FGrpRules:= DLNewGroup(Self, 'Lint rules', Y, GH + 34 + EH + 4);
   GY:= GH - 4;
   DLNewLabel(FGrpRules,
-    'The full list of lint rules -- enable/disable, severity, and auto-fix --', LM, GY); Inc(GY, 16);
+    'The full list of lint rules -- enable/disable, severity, and auto-fix --', LM, GY); Inc(GY, LABEL_ROW_H);
   DLNewLabel(FGrpRules,
     'is edited per project on the drag-lint dock''s Lint Options tab.', LM, GY); Inc(GY, 22);
   FBtnEditRules:= TButton.Create(FGrpRules);

@@ -175,6 +175,9 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure BtnSaveClick    (Sender: TObject);
+    { B-OWN2: any editable control (auto-fix box, param editor, preset) marks the page unsaved. }
+    procedure MarkDirty;
+    procedure ControlChanged(Sender: TObject);
     /// <summary><!-- drag-lint:auto sum -->---- category header OnClick: toggle all rule
     /// boxes in the group ----</summary>
     /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
@@ -1151,7 +1154,8 @@ begin
     if MessageDlg('Lint Options has unsaved changes. Save them now?',
          mtConfirmation, [mbYes, mbNo], 0) = mrYes then Save;
   except
-    on Exception do ; { teardown must never raise }
+    on E: Exception do
+      OutputDebugString(PChar('drag-lint LintOptions teardown: ' + E.Message)); // dl:ok outputdebugstring@67d3 -- teardown cannot raise or prompt; the debugger channel is the only safe sink
   end;
   FRun.Free;  { abandons the run in flight: its answer never reaches a dead frame }
   FAutoFixCBs.Free;
@@ -1612,6 +1616,7 @@ begin
         AutoFixCB.Caption := 'auto-fix';
         AutoFixCB.Checked := not FCfg.IsAutoFixOff(Rule.Id); // every fix is on by default (1.37.0); unchecked = autofix_off
         AutoFixCB.Anchors := [akTop, akRight];
+        AutoFixCB.OnClick := ControlChanged;
         FAutoFixCBs.AddOrSetValue(Rule.Id, AutoFixCB);
       end;
 
@@ -1649,6 +1654,7 @@ begin
           SpnEdt.MinValue:= 0;
           SpnEdt.MaxValue:= 9999;
           SpnEdt.Value   := DefVal;
+          SpnEdt.OnChange:= ControlChanged;
           Inc(GrpY, PEH + 4);
 
           PE.Ctrl:= SpnEdt;
@@ -1664,6 +1670,7 @@ begin
           StrEdt.Height  := EH;
           StrEdt.Text    := LoadParamInitText(FCfg, Param);
           StrEdt.Anchors := [akLeft, akTop, akRight];
+          StrEdt.OnChange:= ControlChanged;
           Inc(GrpY, PEH + 4);
 
           { One of the 8 preset-bundle params (Task 7): register for
@@ -1770,8 +1777,8 @@ begin
       '%d rules across %d categories, %d enabled',
       [TotalRules, Cats.Count, EnabledCount]);
     if FDirty then FLblCounts.Caption:= FLblCounts.Caption + ' (unsaved)';
-    if FDirty then FBtnSave.Caption:= 'Save *' else FBtnSave.Caption:= 'Save';
-    if FDirty then FBtnSave.Font.Style:= [fsBold] else FBtnSave.Font.Style:= [];
+    FBtnSave.Caption:= if FDirty then 'Save *' else 'Save';
+    FBtnSave.Font.Style:= if FDirty then [fsBold] else [];
   finally
     Cats.Free;
   end;
@@ -2447,6 +2454,7 @@ begin
   if FCboPreset = nil then Exit;
   if FCboPreset.ItemIndex <> CustomIndex then
     ApplyPreset(FCboPreset.ItemIndex); { Custom: no-op by design }
+  MarkDirty;
   UpdatePresetButtons;
 end;
 
@@ -2460,6 +2468,7 @@ end;
 /// other.</summary>
 procedure TLintOptionsFrame.NamingFieldChanged(Sender: TObject);
 begin
+  MarkDirty;
   if FApplyingPreset then Exit;
   DetectAndSetPreset;
   UpdatePresetButtons;
@@ -2540,6 +2549,18 @@ begin
        mtConfirmation, [mbYes, mbNo], 0) <> mrYes) then Exit;
   FDirty:= False;
   ReloadCatalogAndConfig;
+end;
+
+procedure TLintOptionsFrame.MarkDirty;
+begin
+  if not FHasData then Exit;
+  FDirty:= True;
+  UpdateCountsLabel;
+end;
+
+procedure TLintOptionsFrame.ControlChanged(Sender: TObject);
+begin
+  MarkDirty;
 end;
 
 procedure TLintOptionsFrame.BtnSaveClick(Sender: TObject);
