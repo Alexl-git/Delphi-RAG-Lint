@@ -62,6 +62,9 @@ function IsValidUtf8(const ABytes: TBytes): Boolean;
 
 implementation
 
+const
+  CP_ANSI_LATIN = 1252; { Windows-1252, the ANSI fallback for bytes that are not valid UTF-8 }
+
 { Strict UTF-8 validation: an explicit continuation-byte walk with the RFC 3629
   bounds (max U+10FFFF, no overlong forms, no surrogate code points D800..DFFF).
   Returns True iff every byte belongs to a well-formed UTF-8 sequence. No
@@ -146,6 +149,17 @@ begin
   begin
     SetLength(Result, N - 3);
     if N - 3 > 0 then Move(ABytes[3], Result[0], N - 3);
+    { A BOM file can still carry a stray ANSI byte (B07): fall back to CP1252 for the remainder. }
+    if not IsValidUtf8(Result) then
+    begin
+      Enc:= TEncoding.GetEncoding(CP_ANSI_LATIN);
+      try
+        S:= Enc.GetString(Result);
+      finally
+        Enc.Free;
+      end;
+      Result:= TEncoding.UTF8.GetBytes(S);
+    end;
     Exit;
   end;
 

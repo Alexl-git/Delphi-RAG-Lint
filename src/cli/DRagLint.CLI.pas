@@ -13861,7 +13861,8 @@ var
   begin
     if not LineCache.TryGetValue(AFile, Result) then
     begin
-      if TFile.Exists(AFile) then Result:= TFile.ReadAllLines(AFile) else SetLength(Result, 0);
+      { B07: decode through EnsureUtf8Bytes -- a BOM file with a stray ANSI byte must not die in the strict UTF-8 reader. }
+      if TFile.Exists(AFile) then Result:= TEncoding.UTF8.GetString(EnsureUtf8Bytes(TFile.ReadAllBytes(AFile))).Replace(#13#10, #10).Split([#10]) else SetLength(Result, 0);
       LineCache.Add(AFile, Result);
     end;
   end;
@@ -16863,7 +16864,7 @@ begin
       { Read EXACTLY as ApplyLineMarkers' LinesOf does -- same call, same
         encoding detection -- so this scan and the marker pass cannot disagree
         about what a file says; a file that pass cannot read fails the run there. }
-      for var Line: string in TFile.ReadAllLines(Path) do
+      for var Line: string in TEncoding.UTF8.GetString(EnsureUtf8Bytes(TFile.ReadAllBytes(Path))).Replace(#13#10, #10).Split([#10]) do
       begin
         var Low: string:= LowerCase(Line);
         if Pos('dl:ok', Low) > 0 then

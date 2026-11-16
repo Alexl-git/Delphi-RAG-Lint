@@ -11,6 +11,7 @@ uses
   System.SysUtils
   , System.Generics.Collections
   , DRagLint.Core.Model
+  , DRagLint.Core.Encoding
   , DRagLint.V151.Api
   ;
 
@@ -79,7 +80,7 @@ begin
   Result:= nil;
   if not (ACtx.Wants(RULE_METHOD_ORDER) or ACtx.Wants(RULE_PROCMSG)) then Exit;
   if (ACtx.Path = '') or not TFile.Exists(ACtx.Path) then Exit;
-  Masked:= StyMaskSource(TFile.ReadAllText(ACtx.Path));
+  Masked:= StyMaskSource(TEncoding.UTF8.GetString(EnsureUtf8Bytes(TFile.ReadAllBytes(ACtx.Path))));
   Res:= TList<TLintFinding>.Create;
   try
     if ACtx.Wants(RULE_METHOD_ORDER) then
