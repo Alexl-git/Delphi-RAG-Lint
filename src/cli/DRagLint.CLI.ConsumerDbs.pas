@@ -54,12 +54,9 @@ function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>;
 implementation
 
 uses
-  System.SysUtils, System.Generics.Collections, DRagLint.Core.Model, DRagLint.Core.Interfaces, Winapi.Windows,
-  System.Classes, System.IOUtils, DRagLint.CLI.LibraryMarker, DRagLint.Core.Versions, System.NetEncoding,
-  System.StrUtils, System.DateUtils, System.Diagnostics, System.SyncObjs, System.Math, System.Character,
-  Data.DB, FireDAC.Stan.Async, FireDAC.DApt, DRagLint.Lint.RuleCache, DRagLint.Storage.SQLite,
-  DRagLint.Storage.Schema, DRagLint.Storage.FileMembership, DRagLint.Core.ControlChannel,
-  DRagLint.Project.Resolver, DRagLint.Index.Plan, DRagLint.Index.DbSelect, DRagLint.Index.Freshness;
+  System.SysUtils, System.Generics.Collections, Winapi.Windows, System.Classes, System.IOUtils,
+  System.NetEncoding, System.DateUtils, System.SyncObjs, System.Math, System.Character, FireDAC.Stan.Async,
+  FireDAC.DApt, DRagLint.Storage.FileMembership, DRagLint.Project.Resolver, DRagLint.Index.DbSelect;
 
 function DetectPlatformFromDproj(const AManifest: TIndexManifest; const ACwd: string): string;
 var

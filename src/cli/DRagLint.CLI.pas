@@ -99,13 +99,10 @@ uses
   , DRagLint.Core.CliError
 , DRagLint.Core.Encoding { EnsureUtf8Bytes -- ApplyLineMarkers reads a file the way the rules did }
   , DRagLint.Lint.MarkerHash { MarkerVerdict / ExpectedHash -- ApplyLineMarkers: versioned routine-metric markers (v1511 Y4) }
-  , DRagLint.Query.Implementors { implementors verb (interface report, 1.40) }
-  , DRagLint.Query.CrossImpact { impact --all-projects (1.43) }
   , DRagLint.Query.SyntaxCountVerb { syntax-count verb (GAP-SYNTAXQ, 1.42) }
   , DRagLint.CLI.UsesRecover { uses-recover verb (148 HP): own flags, read-only }
   , DRagLint.Query.IdentWords { SelfTestIdentWords -- selftest ident-words (concept search, XERJ item 5) }
   , DRagLint.Core.OutputEncoding { --output-encoding / "outputEncoding": stdout + stderr bytes (2026-10-26) }  // dl:unit DRagLint.Core.OutputEncoding accepted -- the flag name, config key and value list are the CLI surface of that unit; ParseArgs and the config reader use all three
-  , Winapi.ShellAPI
   , DRagLint.Lint.MissingUses { unit-missing-from-uses (lint <file> / lint-all) } // dl:unit DRagLint.Lint.MissingUses accepted -- MISSING_USES_RULE is the rule id the checker reports under, so the id travels with TMissingUsesChecker
   , System.SysUtils
   , System.Classes
@@ -163,11 +160,8 @@ uses
   , DRagLint.Parser .DFM
   , DRagLint.Parser .Sql
   , DRagLint.Parser .Markdown
-  , DRagLint.Query.TextNodes
   , DRagLint.Sql    .FbSnapshot
   , DRagLint.Sql    .OrmLinker
-  , DRagLint.Sql    .Guarded   { TSqlGuard: the authorizer + time cap behind `sql` }
-  , DRagLint.Core   .EngineHold { the sentinel behind `ide-release` }
   , DRagLint.Core   .UsageLog   { RecordUsage + BuildGainReport behind `gain` }
   , DRagLint.Core   .ControlChannel // dl:unit DRagLint.Core.ControlChannel accepted -- the wire constants travel with the pipe: the channel behind `shutdown`, and the lsp-only gate
   , DRagLint.Core   .StudioEnv  { TStudioEnv: the ONLY source of a RAD Studio path }
@@ -195,17 +189,11 @@ uses
   , DRagLint.Project.OwnRoots
   , DRagLint.Project.Facts
   , DRagLint.Project.DefineProfile
-  , DRagLint.FormsMap
-  , DRagLint.MenuTree
-  , DRagLint.MenuTree.Dfm
-  , DRagLint.MenuDrift
   , DRagLint.MCP        .Server
   , DRagLint.LSP        .Server
   , DRagLint.LSP        .Proxy   // v1.7 Task 1: `lsp --proxy` relay in front of DelphiLSP
   , Vcl.Graphics // v0.95 Task 1: clBlack/clRed for DoContrastSelfTest
-  , DRagLint.Hover      .Renderer
   , DRagLint.Hover      .Returns
-  , DRagLint.Hover      .Contrast
   , DRagLint.Context    .Bundler
   , DRagLint.Resolver   .TypeAt
   , DRagLint.Refactor   .Rename
@@ -224,16 +212,13 @@ uses
   , DRagLint.Doc        .SymbolFacts
   , DRagLint.Doc        .SharedFacts { TSharedFacts.ProjectTag / MigrateLegacyPure }
   , DRagLint.Doc        .ProjectTags { ForgetTags / ListTags -- doc-forget }
-  , DRagLint.Doc        .Wiki   { TWikiParser -- the dl:wiki concept blocks behind `wiki` }
   , DRagLint.Refactor   .DeadCode
   , DRagLint.Refactor   .TestStub
   , DRagLint.Refactor   .ExtractMethod
   , DRagLint.CLI.Unwith
   , DRagLint.Query.ExceptionFacts
-  , DRagLint.Charts.ArchDiagram
   , DRagLint.Refactor.CompileGate
   , DRagLint.Refactor   .EnumHelper
-  , DRagLint.Format     .Yadf
   , DRagLint.Diagnostics.CompileCheck
   , DRagLint.Diagnostics.AstChecks
   , DRagLint.Diagnostics.NamingChecks
@@ -260,7 +245,6 @@ uses
   , DRagLint.V151.Dispatch  { v151 lane FRAME: the one entry to the v151 rule lanes }
   , DRagLint.Diagnostics.FlowChecks
   , DRagLint.Analysis   .DataFlow  { DataFlowStats -- the solver iteration counters }
-  , DRagLint.Workspace  .Config
   , DRagLint.Index      .Manifest
   , DRagLint.Index      .ManifestWrite
   , DRagLint.Index      .Glob
@@ -273,7 +257,6 @@ uses
   , DRagLint.Index      .Freshness { ProbeIndexFreshness -- the 2026-08-13 staleness ruling }
   , DRagLint.Index      .Coverage
   , DRagLint.Index      .CallResolver
-  , DRagLint.Wiring
   , DRagLint.Output.Sarif
   , DRagLint.Output.ExitCode
   , DRagLint.Lint  .Baseline
@@ -284,32 +267,15 @@ uses
   , DRagLint.Preprocess
   , DRagLint.Preprocess.Profile
   , DRagLint.Report    .Deps
-  , DRagLint.Report    .RCallTree
   , DRagLint.Report    .Overview
   , DRagLint.Report    .CycleHub  // cycles --hub (spec 2026-11-08-hub-scc-phased P1)
   , DRagLint.Report    .CycleHubSurface // cycles --plan --hub-surface (spec 2026-11-08-hub-scc-phased P2)
   , DRagLint.Report    .CyclePlan // dl:unit DRagLint.Report.CyclePlan accepted -- the report's line formats travel with the playbook that predicts them, so the predicted output cannot drift from what cycles prints
   , DRagLint.CLI       .CycleFix
   , DRagLint.Convert   .PropTree
-  , DRagLint.Convert   .PropCache
-  , DRagLint.Convert   .Rules
-  , DRagLint.Convert   .CastLib
-  , DRagLint.Convert   .GlyphVacuum
-  , DRagLint.Convert   .DfmReemit
-  , DRagLint.Convert   .Apply
-  , DRagLint.Convert   .Backup
   , DRagLint.Convert   .UnitRules
-  , DRagLint.Convert   .UsesReconcile
   , DRagLint.Query     .Callers    { v(hover bundle): shared with the LSP -- find-callers renders from it }
-  , DRagLint.Query     .HoverModel { v(hover bundle): shared with the LSP -- hover --format json builds from it }
-  , DRagLint.Charts    .ReportHeader { charts step 1: `compare` -- ParseCommandLine for --command / --question }
-  , DRagLint.Charts    .Adapters     { DetectFormat / TChartsFormat -- `compare --show` and the snapshot-only path }
-  , DRagLint.Charts    .Producer     // dl:unit DRagLint.Charts.Producer accepted -- IReportProducer / TProduceOptions; the producer exit-code constant travels with the seam it belongs to
-  , DRagLint.Charts    .Producer.Delphi { ProducerForCompare: the producer `compare` reruns a question with }
   , DRagLint.Charts    .AskVerb      { RunAskVerbFromCommandLine: the `ask` verb }
-  , DRagLint.Charts    .Snapshot     // dl:unit DRagLint.Charts.Snapshot accepted -- ResolveSnapshotDir / SaveSnapshot for `compare --save`; the three extension constants name the formats it writes
-  , DRagLint.Charts    .Compare      // dl:unit DRagLint.Charts.Compare accepted -- RunCompare + the request/result records; the exit-code constants travel with it and `compare` uses only the two refusal codes it prints itself
-  , DRagLint.Charts    .Render       { RenderCompareText / Json / Html, RenderReportHtml, OpenInBrowser }
   , DRagLint.Core      .ProtocolReg  { RunProtocolVerbFromCommandLine: the `protocol` verb }
   , DRagLint.MCP       .ClientConfig { RunMcpConfigVerbFromCommandLine: the `mcp-config` verb }
   , DRagLint.CLI.Common { TArgs + the shared store / lock / database-resolution helpers (v1511 SPLIT) }
@@ -631,6 +597,7 @@ end;
 procedure SizeGuardCheck(const ADbPath: string; ASizeGuardMB: Integer; AForce32: Boolean); forward;
 function DoUnwith(const AArgs: TArgs): Integer; forward;
 function ApplyEditsGated(const AEdits: TArray<TTextEdit>; const AVerb: string; const AArgs: TArgs; out ATouched: Integer; const AAlsoProjects: TArray<string> = nil): Boolean; forward;
+procedure WarmRuleCache(const AProjectDb, ALibraryDb: string); forward;
 procedure WarmRuleCacheAfterIndex(const AProjectDb, ALibraryDb: string); forward;
 function RuleCacheLibraryDb(const AArgs: TArgs): string; forward;
 { Forward: DoLint needs the project's scoped closure for unit-not-in-dpr's third

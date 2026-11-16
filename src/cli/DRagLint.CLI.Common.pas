@@ -593,13 +593,13 @@ const
 /// proptree's progress lines are only emitted while the tree builds).</remarks>
 procedure WriteStdoutDocument(const ADoc: string);
 
-/// <summary>The version limb of a stored fingerprint whose FIRST limb is `<APrefix><ver>`, or ''.</summary>
+/// <summary>The version limb of a stored fingerprint whose FIRST limb is `&lt;APrefix&gt;&lt;ver&gt;`, or ''.</summary>
 /// <param name="AFingerprint">The stored stamp, e.g. `v=1.39.0-alpha;...`.</param>
 /// <param name="APrefix">`v=` (indexer) or `r=` (resolver).</param>
 /// <returns>The version text, or '' when the stamp is absent or not in that form.</returns>
 function FingerprintVersionLimb(const AFingerprint, APrefix: string): string;
 
-/// <summary>The `r=` limb of a stored resolver fingerprint (`r=<ver>;schema=N`), or ''.</summary>
+/// <summary>The `r=` limb of a stored resolver fingerprint (`r=&lt;ver&gt;;schema=N`), or ''.</summary>
 /// <param name="AFingerprint">The stored resolver fingerprint.</param>
 /// <returns>The resolver version, or ''.</returns>
 function ResolverVersionOfFingerprint(const AFingerprint: string): string;
@@ -623,7 +623,7 @@ function IndexRemedyFor(const AStore: ISymbolStore; const ADbPath: string; AReso
 /// <returns>The store; never nil on a successful open -- check AOk.</returns>
 function OpenReadOnlyStore(const ADbPath: string; out AOk: Boolean; AQuiet: Boolean = False): ISymbolStore;
 
-/// <summary>Takes `<db>.indexing.lock` for ADbPath: one index run per database, refused at the start (Gitea drag-lint#17).</summary>
+/// <summary>Takes `&lt;db&gt;.indexing.lock` for ADbPath: one index run per database, refused at the start (Gitea drag-lint#17).</summary>
 /// <param name="ADbPath">The database an index run writes.</param>
 /// <param name="AQuiet">True: no refusal line.</param>
 /// <param name="AVerb">The verb named in the refusal.</param>
@@ -768,20 +768,20 @@ function LibrarySectionDbs(const AManifest: TIndexManifest): TArray<string>;
 /// <returns>True for a library-section database.</returns>
 function IsLibrarySectionDb(const ALibraryDbs: TArray<string>; const ADb: string): Boolean;
 
-/// <summary>The resolver fingerprint of AStore, `r=<resolver version>;schema=<expected schema>`: would this build DERIVE different edges?</summary>
+/// <summary>The resolver fingerprint of AStore, `r=&lt;resolver version&gt;;schema=&lt;expected schema&gt;`: would this build DERIVE different edges?</summary>
 /// <param name="AStore">The index.</param>
 /// <returns>The fingerprint text.</returns>
 function ResolverFingerprint(const AStore: ISymbolStore): string;
 
 /// <summary>Stops the previous background rule-cache warm of a database, named by AMarker; only a process running THIS engine's image is stopped.</summary>
-/// <param name="AMarker">`<db>.rule-cache-warm.pid`.</param>
+/// <param name="AMarker">`&lt;db&gt;.rule-cache-warm.pid`.</param>
 procedure StopStaleWarm(const AMarker: string);
 
-/// <summary>Runs `<this exe> index --project <P> --db <D>` as a CHILD process for ARx (C9); never raises.</summary>
+/// <summary>Runs `&lt;this exe&gt; index --project &lt;P&gt; --db &lt;D&gt;` as a CHILD process for ARx (C9); never raises.</summary>
 /// <param name="ARx">From ReindexPreview with Status 'dry-run'; ends 'done' or 'failed' (the exit code in Reason).</param>
 procedure RefreshProjectIndex(var ARx: TUsesReindex);
 
-/// <summary>An incremental `index --project <AProjectFile> --db <ADbPath>` in a CHILD engine, never the folder form.</summary>
+/// <summary>An incremental `index --project &lt;AProjectFile&gt; --db &lt;ADbPath&gt;` in a CHILD engine, never the folder form.</summary>
 /// <param name="AProjectFile">The .dproj to index.</param>
 /// <param name="ADbPath">Its project index.</param>
 /// <param name="AVerb">The caller named in the failure line.</param>
@@ -883,11 +883,10 @@ function FirstProjectDb(const AArgs: TArgs; const ADbs: TArray<string>): string;
 implementation
 
 uses
-  Winapi.Windows, System.Classes, System.IOUtils, DRagLint.CLI.LibraryMarker, DRagLint.Core.Versions,
-  System.NetEncoding, System.StrUtils, System.DateUtils, System.Diagnostics, System.SyncObjs, System.Math,
-  System.Character, Data.DB, FireDAC.Stan.Async, FireDAC.DApt, DRagLint.Lint.RuleCache,
-  DRagLint.Storage.SQLite, DRagLint.Storage.Schema, DRagLint.Storage.FileMembership,
-  DRagLint.Core.ControlChannel, DRagLint.Project.Resolver, DRagLint.Index.DbSelect, DRagLint.Index.Freshness;
+  Winapi.Windows, System.IOUtils, DRagLint.CLI.LibraryMarker, DRagLint.Core.Versions, System.NetEncoding,
+  System.StrUtils, System.DateUtils, System.Diagnostics, System.SyncObjs, System.Math, Data.DB,
+  FireDAC.Stan.Async, FireDAC.DApt, DRagLint.Lint.RuleCache, DRagLint.Storage.SQLite, DRagLint.Storage.Schema,
+  DRagLint.Core.ControlChannel, DRagLint.Project.Resolver, DRagLint.Index.Freshness;
 
 const
   STDOUT_DOCUMENT_BUFFER = 1 shl 20; // 1 MiB: TFDQuery depth 5 (37 MB) is ~36 WriteFile calls, not ~290,000
