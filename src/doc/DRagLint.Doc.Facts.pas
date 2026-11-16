@@ -3703,6 +3703,17 @@ var
   Cand: string;
 begin
   if AFacts.HarvestedSummary = '' then Exit;
+  { 1.51.1 Y10 (DOC-10): not on a `dl:shared` unit. Condition 2 below -- "the
+    name RESOLVES in the index" -- asks the CURRENT project's index, and a shared
+    unit is rendered by several. YADF.Options.SharedAppDataIniPath's comment
+    opens "... used by YADF.exe, YADFOT.bpl, and YADFSetup.exe": `YADFSetup`
+    resolves (to the program) only in YADFSetup's index, so YADFSetup demoted the
+    summary that YADF and YADFOT promoted, and every run undid the last one.
+    There is no project-independent answer to "is this name foreign", so on a
+    shared unit the harvested summary is kept by every project (the
+    SharedFacts rule: fail toward PRESERVING). The cost: a misplaced comment on
+    a shared unit is no longer demoted. }
+  if TSharedUnit.IsShared(AStore.GetFilePath(ASym.FileId)) then Exit;
   for Cand in FirstSentenceIdents(AFacts.HarvestedSummary) do
   begin
     if not NamesForeignSymbol(AStore, ASym, Cand) then Continue;
