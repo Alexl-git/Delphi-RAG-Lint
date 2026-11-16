@@ -451,6 +451,7 @@ uses
   , DRagLint.Lint.QueryRules { TQueryTypeOracleScope -- the .scm rules' type oracle (O2) }
   , DRagLint.Core.LiveDocs  { v(live-buffer): unsaved editor text, consulted before disk }
   , DRagLint.Lint.RuleCatalog  { BUILTIN_RULES_OFF_BY_DEFAULT -- the CLI's default-off set }
+  , DRagLint.Lint.MarkerHash   { MarkerVerdict: legacy + versioned metric markers (v1511 Y4) }
   , System.Math                { Max: the H2 doc-comment marker span }
   , DRagLint.Core.UsesInsert   { TUsesSection / SectionWord: unit-missing-from-uses data }
   , DRagLint.Lint.MissingUses  { unit-missing-from-uses: findings + their uses edits } // dl:unit DRagLint.Lint.MissingUses accepted -- MISSING_USES_RULE is the rule id the checker reports under, so the id travels with TMissingUsesChecker
@@ -1117,6 +1118,26 @@ begin
   end;
 end;
 
+{ The hash TReviewMarkers.Suppresses must be handed for finding F on AMarkLines[..AHi]
+  so it decides as DRagLint.CLI.ApplyLineMarkers does (v1511 Y4): the first marker for
+  the rule on a line whose MarkerVerdict is not mvStale (a legacy 1.51.0 marker, a
+  current v2 one, or a re-measured one) is answered with its OWN hash, so Suppresses'
+  equality holds; otherwise the expected hash, which matches no stale marker. }
+function VerifiedMarkerHash(const F: TLintFinding; const AMarkLines: TArray<string>; AHi: Integer): string;
+begin
+  Result:= MarkerExpectedHash(AMarkLines, F.RuleId, F.StartLine, F.Metric);
+  if (F.StartLine < 1) or (F.StartLine > Length(AMarkLines)) then Exit;
+  var Hi: Integer:= if (AHi > F.StartLine) and (AHi <= Length(AMarkLines)) then AHi else F.StartLine;
+  for var ML: Integer:= F.StartLine to Hi do
+    for var M: TReviewMarker in TReviewMarkers.Parse(AMarkLines[ML - 1]) do
+    begin
+      if not SameText(M.RuleId, F.RuleId) then Continue;
+      if (M.Hash <> '') and
+         (MarkerVerdict(AMarkLines, F.RuleId, M.Hash, F.StartLine, F.Metric) <> mvStale) then Exit(M.Hash);
+      Break; { first marker for the rule on this line decides it, as in Suppresses }
+    end;
+end;
+
 { True when a marker reviews finding F of AFile (AMarkLines, its buffer): the C2
   predicate TReviewMarkers.Suppresses on the finding's own span (H2: a /// block
   is reviewed on its declaration), or -- ENUMRULES 2026-10-28 -- a dl:ok on the
@@ -1126,9 +1147,9 @@ end;
   window hash. }
 function MarkerReviews(const F: TLintFinding; const AFile: string; const AMarkLines: TArray<string>): Boolean;
 begin
-  if TReviewMarkers.Suppresses(AMarkLines, F.RuleId, F.StartLine,
-       Max(F.EndLine, DocCommentMarkerLine(AMarkLines, F.StartLine)),
-       MarkerExpectedHash(AMarkLines, F.RuleId, F.StartLine, F.Metric)) then Exit(True);
+  var Hi: Integer:= Max(F.EndLine, DocCommentMarkerLine(AMarkLines, F.StartLine));
+  if TReviewMarkers.Suppresses(AMarkLines, F.RuleId, F.StartLine, Hi,
+       VerifiedMarkerHash(F, AMarkLines, Hi)) then Exit(True);
   Result:= False;
   if (F.ScopeLine <= 0) or (F.ScopeFile = '') then Exit;
   var SLines: TArray<string>:= if SameText(F.ScopeFile, AFile) then AMarkLines else TLiveDocuments.ReadLines(F.ScopeFile);
@@ -1386,9 +1407,9 @@ begin
         a dl:ok duplicate-code on the anchor suppresses, and so does one on the
         PARTNER site (RelatedLine), verified against the partner's own window. }
       if Length(MarkLines) = 0 then MarkLines:= TLiveDocuments.ReadLines(AFile);
-      if TReviewMarkers.Suppresses(MarkLines, F.RuleId, F.StartLine,
-           Max(F.EndLine, DocCommentMarkerLine(MarkLines, F.StartLine)), { H2: /// -> its declaration }
-           MarkerExpectedHash(MarkLines, F.RuleId, F.StartLine, F.Metric)) then Continue;
+      var DiagMarkHi: Integer:= Max(F.EndLine, DocCommentMarkerLine(MarkLines, F.StartLine)); { H2: /// -> its declaration }
+      if TReviewMarkers.Suppresses(MarkLines, F.RuleId, F.StartLine, DiagMarkHi,
+           VerifiedMarkerHash(F, MarkLines, DiagMarkHi)) then Continue; { v1511 Y4: verdict, not equality }
       if (F.RelatedLine > 0) and (F.RelatedFile <> '') then
       begin
         if SameText(F.RelatedFile, AFile) then RLines:= MarkLines
@@ -1622,7 +1643,7 @@ begin
         var DData := Diag.GetValue('data') as TJSONObject;
         var DMetric := if DData <> nil then DData.GetValue('metric') else nil;
         if DMetric = nil then Continue;
-        MarkHash:= DRagLint.Lint.RuleCatalog.MetricHash(MarkHash, StrToIntDef(DMetric.Value, 0));
+        MarkHash:= DRagLint.Lint.MarkerHash.ExpectedHash(Lines.ToStringArray, DiagCode, DiagLine, StrToIntDef(DMetric.Value, 0)); { v1511 Y4: stamp a v2 marker }
       end;
       NewLineText:= TReviewMarkers.InsertInto(LineText, DiagCode, DiagMsg, MarkHash);
       if NewLineText = LineText then Continue; { no change }

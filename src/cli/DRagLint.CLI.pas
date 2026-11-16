@@ -35964,7 +35964,7 @@ begin
     for var MF: TLintFinding in MetricFindings do
       if (MF.StartLine = AArgs.FixLine) and SameText(MF.RuleId, AArgs.FixRule) then
       begin
-        WinHash:= DRagLint.Lint.RuleCatalog.MetricHash(WinHash, MF.Metric);
+        WinHash:= DRagLint.Lint.MarkerHash.ExpectedHash(WinLines, MF.RuleId, MF.StartLine, MF.Metric); { v1511 Y4: stamp a v2 marker }
         FoundMetric:= True;
         Break;
       end;
