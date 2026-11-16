@@ -1,0 +1,4 @@
+# Y2: FiveAndExpr (line 11) is 5 deep -- the if-expression is not a level
+!deep-nesting 11
+# positive control: SixIfs (line 24) still fires
+deep-nesting 24

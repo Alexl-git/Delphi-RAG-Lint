@@ -1,0 +1,2 @@
+# R8 positive control: same shape, no .dfm beside the unit -> still flagged
+mutable-global-variable 10

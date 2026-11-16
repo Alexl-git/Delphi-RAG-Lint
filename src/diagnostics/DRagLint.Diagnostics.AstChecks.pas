@@ -2698,7 +2698,7 @@ var
     cannot begin at the same row and column, and TTSNode exposes no equality
     operator. The same chain-walking shape is already used by
     DeadCodeChecks' repeated-else-if-condition check. }
-  function MaxNest(const N: TTSNode; ADepth: Integer): Integer;
+  function MaxNest(const N: TTSNode; ADepth: Integer; AInExpr: Boolean): Integer;
   var
     I, D, M    : Integer;
     Inc1       : Integer;
@@ -2723,11 +2723,34 @@ var
       GRAMMAR v1.4.4 (PR #2, wave 147): a STATEMENT if-with-else now parses as
       ifElse (prec.dynamic), exprIf is left to the if-EXPRESSION. Both count,
       so trees from either grammar measure the same; run_deep_nesting_else_forms
-      went RED on the v1.4.4 DLL with exprIf alone. }
+      went RED on the v1.4.4 DLL with exprIf alone.
+      1.51.1 (Y2, docs\INBOX-yadf-fp-hunt-151.md FP-2): CONTROL STATEMENTS only. An
+      exprIf inside an expression (`X:= if A then 1 else 2`, an argument) is the
+      Delphi 13 conditional expression -- it has no statement body and is not a
+      level. AInExpr is set once the walk descends through an assignment or any
+      expr* node that is not itself a statement-level exprIf, so a statement
+      exprIf of a pre-v1.4.4 tree still counts.
+      1.51.1 (Y3, FP-3): try..finally is resource protection (the house standard
+      requires it for every resource) and is not a level; try..except still is,
+      as in Sonar's cognitive complexity (catch counts, finally does not). }
     Inc1:= 0;
-    if (N.NodeType = 'if') or (N.NodeType = 'exprIf') or (N.NodeType = 'ifElse') or (N.NodeType = 'while') or
-      (N.NodeType = 'for') or (N.NodeType = 'repeat') or (N.NodeType = 'case') or
-      (N.NodeType = 'with') or (N.NodeType = 'try') then Inc1:= 1;
+    if MatchStr(N.NodeType, ['if', 'ifElse', 'while', 'for', 'repeat', 'case', 'with']) then
+      Inc1:= 1
+    else if (N.NodeType = 'exprIf') and not AInExpr then
+      Inc1:= 1
+    else if N.NodeType = 'try' then
+      for I:= 0 to N.ChildCount - 1 do
+        if N.Child(I).NodeType = 'kExcept' then
+        begin
+          Inc1:= 1;
+          Break;
+        end;
+    { A block / statement list resets the flag: an anonymous method's body sits
+      inside an expression but its statements are real control flow. }
+    var KidsInExpr: Boolean:= AInExpr or (N.NodeType = 'assignment') or
+      ((Inc1 = 0) and N.NodeType.StartsWith('expr'));
+    if (N.NodeType = 'block') or (N.NodeType = 'statements') or (N.NodeType = 'statement') then
+      KidsInExpr:= False;
 
     { The else BRANCH is the child immediately after the kElse keyword --
       exprIf's children are positional (kIf, cond, kThen, then, kElse, else) and
@@ -2750,7 +2773,7 @@ var
       if (I = ElseIdx) and (not C.IsNull) and
          ((C.NodeType = 'if') or (C.NodeType = 'exprIf') or (C.NodeType = 'ifElse')) then
         ChildDepth:= ADepth;   { chain continuation -- same logical level }
-      D:= MaxNest(C, ChildDepth);
+      D:= MaxNest(C, ChildDepth, KidsInExpr);
       if D > M then M:= D;
     end;
     Result:= M;
@@ -2814,7 +2837,7 @@ var
       Lines:= Integer(Body.EndPoint.Row) - Integer(Body.StartPoint.Row) + 1;
       if (AMaxLines > 0) and (Lines > AMaxLines) then
         Emit('method-too-long', Format('Routine %s body is %d lines (max %d) -- consider breaking it up', [Name, Lines, AMaxLines]), Lines);
-      Nest:= MaxNest(Body, 0);
+      Nest:= MaxNest(Body, 0, False);
       if (AMaxNesting > 0) and (Nest > AMaxNesting) then
         Emit('deep-nesting', Format('Routine %s nests control structures %d deep (max %d) -- flatten with early exits or sub-routines', [Name, Nest, AMaxNesting]), Nest);
     end;
@@ -5996,6 +6019,7 @@ var
   Src     : TBytes;
   PF      : TParsedFile;
   Findings: TList<TLintFinding>;
+  DfmRootName, DfmRootType: string;   { #0 = not read yet; '' = no .dfm; '?' = header unreadable }
 
   function NodeStr(const ANode: TTSNode): string;
   var B: TBytes;
@@ -6052,6 +6076,58 @@ var
     end;
   end;
 
+  { 1.51.1 R8 (docs\INBOX-orm3-fp-hunt-151.md RESULT-A, ~58% of the CLIENT sample): True for
+    the IDE form variable of a form unit -- `frmX: TfrmX` where the unit has a .dfm beside it whose
+    root object is `object frmX: TfrmX` (or inherited / inline). That variable is the designer's
+    contract (Application.CreateForm fills it), not designed shared state. A binary .dfm (no text
+    header) is matched by the naming convention instead: type = 'T' + variable name. No .dfm, or
+    a variable of another type in the same unit: False, reported as before. }
+  function IsDfmFormVariable(const AVarName, ATypeName: string): Boolean;
+  var
+    Line, Kw, Rest: string;
+    Colon, Sp     : Integer;
+    Rd            : TStreamReader;
+  begin
+    Result:= False;
+    if DfmRootName = #0 then
+    begin
+      DfmRootName:= '';
+      DfmRootType:= '';
+      var DfmPath: string:= ChangeFileExt(AFile, '.dfm');
+      if FileExists(DfmPath) then
+      begin
+        DfmRootName:= '?';   { exists; '?' = binary or unreadable header }
+        Line:= '';
+        try
+          Rd:= TStreamReader.Create(DfmPath, TEncoding.ANSI, True);
+          try
+            while (Line = '') and not Rd.EndOfStream do Line:= Trim(Rd.ReadLine);
+          finally
+            Rd.Free;
+          end;
+        except
+          on EStreamError do Line:= '';   { locked / unreadable: fall back to the naming match }
+        end;
+        Sp:= Pos(' ', Line);
+        Colon:= Pos(':', Line);
+        if (Sp > 0) and (Colon > Sp) then
+        begin
+          Kw:= LowerCase(Copy(Line, 1, Sp - 1));
+          Rest:= Trim(Copy(Line, Colon + 1, MaxInt));
+          if MatchStr(Kw, ['object', 'inherited', 'inline']) then
+          begin
+            DfmRootName:= Trim(Copy(Line, Sp + 1, Colon - Sp - 1));
+            Sp:= Pos(' ', Rest);
+            DfmRootType:= if Sp > 0 then Copy(Rest, 1, Sp - 1) else Rest;
+          end;
+        end;
+      end;
+    end;
+    if DfmRootName = '' then Exit;
+    if DfmRootName = '?' then Exit(SameText(ATypeName, 'T' + AVarName));
+    Result:= SameText(AVarName, DfmRootName) and SameText(ATypeName, DfmRootType);
+  end;
+
   { Find every unit-scope declVars -> declVar and emit one finding per declared identifier.
     Exits on defProc/defFunc so locals/params are excluded. 'const' sections are declConst
     nodes (not declVars), so they are never visited here. }
@@ -6084,6 +6160,7 @@ var
           VarName:= NodeStr(NameId);
           if VarName = '' then Continue;
           P:= NameId.StartPoint;
+          if IsDfmFormVariable(VarName, Trim(NodeStr(DVType))) then Continue;
           if WrittenOnlyInInitialization(VarName, Integer(P.Row) + 1) then Continue;
           F:= Default(TLintFinding);
           F.RuleId  := 'mutable-global-variable';
@@ -6110,6 +6187,7 @@ begin
   PF:= TAstParseCache.Get(AFile);
   if PF.Tree = nil then Exit;
   Src:= PF.Src;
+  DfmRootName:= #0;
   Findings:= TList<TLintFinding>.Create;
   try
     CheckGlobalVarDecls(PF.Tree.RootNode);
@@ -7522,6 +7600,13 @@ var
       if Seen.ContainsKey(Key) then Continue;
       Seen.Add(Key, True);
       Txt:= UnquoteLiteral(NodeStr(Orphans[I]));
+      { 1.51.1 B15: a bare two-character drive root ('n:', 'i:', 'c:') that reaches
+        NO sink is a key prefix or a format fragment (`Exit('n:' + IntToStr(V))`,
+        `StartsStr('n:', Def)`), not a location -- five such literals needed dl:ok
+        markers in DRagLint.V151.CMP.pas. With no sink evidence and nothing under
+        the root there is nothing to review. The same literal reaching a sink
+        still reports (sink tier, Report), and 'C:\x' orphans still report here. }
+      if Length(Txt) = 2 then Continue;
       F:= Default(TLintFinding);
       F.RuleId   := 'hardcoded-absolute-path';
       F.Severity := 'info';

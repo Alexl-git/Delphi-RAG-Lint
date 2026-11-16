@@ -1,0 +1,4 @@
+# B18a: a plain procedure whose NAME ends in StreamWriter is not file I/O
+!default-encoding-io 21
+# positive control: TStreamWriter.Create without an encoding still fires
+default-encoding-io 22

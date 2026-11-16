@@ -1,0 +1,4 @@
+# B19: FReplaced is written through a hard cast of another variable
+!referenced-never-set 8
+# positive control: FNever is read and never written
+referenced-never-set 9
