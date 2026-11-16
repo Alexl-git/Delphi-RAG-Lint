@@ -42,7 +42,9 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Repo = "$PSScriptRoot\..\.."
+  [string]$Repo = "$PSScriptRoot\..\..",
+  # Accepted so the battery can pass -Exe uniformly; this guard is a pure source scan and runs no engine.
+  [string]$Exe = ""
 )
 $ErrorActionPreference = 'Stop'
 $script:fail = $false

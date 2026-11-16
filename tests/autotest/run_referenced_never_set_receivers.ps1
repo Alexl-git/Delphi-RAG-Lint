@@ -25,7 +25,7 @@
 # Usage: pwsh -File tests/autotest/run_referenced_never_set_receivers.ps1 [-Exe <path>]
 [CmdletBinding()]
 param(
-    [string] $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+    [string] $Exe = $(. "$PSScriptRoot\lib\FreshEngineExe.ps1"; Get-FreshEngineExe),
     [string] $RulesDir = "$PSScriptRoot\..\..\rules",
     [string] $WorkDir = "$env:TEMP\drag-lint-refnever-receivers-$PID"
 )
