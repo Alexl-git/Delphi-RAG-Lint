@@ -515,6 +515,40 @@ begin
   Result:= False;
 end;
 
+// v1.51.1 R7: the names ONE <param name="..."> tag covers. A tag may group the
+// way the signature does (`S, WordDelims`) and may carry a var/const/out/in
+// qualifier (`var Pos`): each comma-separated part is one name, qualifier dropped.
+function DocParamTagNames(const ATagName: string): TArray<string>;
+var
+  Parts: TArray<string>;
+  Acc  : TList<string> ;
+  P, W : string        ;
+  I    : Integer       ;
+begin
+  Acc:= TList<string>.Create;
+  try
+    Parts:= ATagName.Split([',']);
+    for P in Parts do
+    begin
+      W:= Trim(P);
+      I:= Pos(' ', W);
+      if (I > 0) and MatchText(Copy(W, 1, I - 1), ['var', 'const', 'out', 'in']) then W:= Trim(Copy(W, I + 1, MaxInt));
+      if W <> '' then Acc.Add(W);
+    end;
+    Result:= Acc.ToArray;
+  finally
+    Acc.Free;
+  end;
+end;
+
+// True when ANY name covered by a <param> tag named ATagName is AName.
+function DocParamCovers(const ATagName, AName: string): Boolean;
+var N: string;
+begin
+  for N in DocParamTagNames(ATagName) do
+    if SameText(N, AName) then Exit(True);
+  Result:= False;
+end;
 // BOUNDED heuristic support: True when ADesc reads as INPUT-ONLY -- the FIRST
 // word is exactly 'input' or 'in' (whole word, case-insensitive) AND no later
 // whole word marks an output direction ('out', 'output', 'returns', 'returned',
@@ -1197,9 +1231,11 @@ begin
 
       // --- 1. ddParamRenamedOrRemoved: a documented <param> not in the sig. ----
       for DP in ADoc.Params do
-        if (Trim(DP.Name) <> '') and (not NameInArray(DP.Name, SigNames)) then
-          Findings.Add(MakeFinding(ddParamRenamedOrRemoved,
-            Format('documented param "%s" not in signature', [DP.Name]), False, DocLine));
+        if Trim(DP.Name) <> '' then
+          for N in DocParamTagNames(DP.Name) do
+            if not NameInArray(N, SigNames) then
+              Findings.Add(MakeFinding(ddParamRenamedOrRemoved,
+                Format('documented param "%s" not in signature', [N]), False, DocLine));
 
       // --- 2. ddParamMissing: a sig param with no <param> tag. ----------------
       // v(ADP3 T3): REPORT-ONLY, not Fixable, as of this task -- the auto-fix
@@ -1243,7 +1279,7 @@ begin
         begin
           var Documented: Boolean:= False;
           for DP in ADoc.Params do
-            if SameText(DP.Name, N) then begin Documented:= True; Break; end;
+            if DocParamCovers(DP.Name, N) then begin Documented:= True; Break; end;
           if not Documented then
             Findings.Add(MakeFinding(ddParamMissing,
               Format('signature param "%s" has no <param> tag', [N]), False, DocLine));
@@ -1267,7 +1303,7 @@ begin
       // both would name one stale tag twice.
       for N in SigNames do
         for DP in ADoc.Params do
-          if SameText(DP.Name, N) and (TDocRegions.StripForDisplay(DP.Desc) = '') then
+          if DocParamCovers(DP.Name, N) and (TDocRegions.StripForDisplay(DP.Desc) = '') then
             Findings.Add(MakeFinding(ddParamNoDescription,
               Format('param "%s" has a <param> tag but no description', [N]), False, DocLine));
 
@@ -1279,7 +1315,7 @@ begin
         if GroupIsVolatile(Groups[GIdx]) then
           for var GN in GroupParamNames(Groups[GIdx]) do
             for DP in ADoc.Params do
-              if SameText(DP.Name, GN) and DescReadsInputOnly(DP.Desc) then
+              if DocParamCovers(DP.Name, GN) and DescReadsInputOnly(DP.Desc) then
                 Findings.Add(MakeFinding(ddParamVolatileMode,
                   Format('var/out param "%s" documented as input-only', [GN]), False, DocLine));
 

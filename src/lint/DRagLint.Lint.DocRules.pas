@@ -267,6 +267,7 @@ uses
   System.Math,        { Min -- the stale-callee note }
   { DRagLint.Doc.Facts is in the INTERFACE uses -- TDocFactsRenderOptions appears
     in the signatures below, and it also supplies DocFactsBuildProfile here. }
+  System.Classes, System.StrUtils, System.IOUtils,
   DRagLint.Doc.Drift, DRagLint.Doc.Document,
   DRagLint.Index.Freshness; { ChangedFilePaths -- see StaleCalleeReads }
 
@@ -332,15 +333,123 @@ begin
   Result:= SameText(Trim(ASym.Section), 'interface');
 end;
 
+{ v1.51.1 R2: missing-doc is for API a reader must be told about. Three shapes
+  are plumbing whose contract is stated elsewhere, and are skipped:
+  (1) the getter/setter of a DOCUMENTED property of the same class (the doc sits
+      on the property; found by the Get<X>/Set<X> naming convention);
+  (2) an `override` (the base declaration owns the contract);
+  (3) a method the .dfm binds to an event (a published handler, not API).
+  Guard: tests\autodoc\run_v1511_DOCLINT_missingdoc.ps1. }
+function IsRoutineKind(AKind: TSymbolKind): Boolean;
+begin
+  Result:= AKind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor];
+end;
+
+function IsAccessorOfDocumentedProperty(const AStore: ISymbolStore; const ASym: TSymbol): Boolean;
+const
+  PREFIX_LEN = 3; { 'Get' / 'Set' }
+var
+  PropName: string ;
+  Prop    : TSymbol;
+begin
+  Result:= False;
+  if (ASym.ParentId <= 0) or (Length(ASym.Name) <= PREFIX_LEN) then Exit;
+  if not (SameText(Copy(ASym.Name, 1, PREFIX_LEN), 'Get') or SameText(Copy(ASym.Name, 1, PREFIX_LEN), 'Set')) then Exit;
+  PropName:= Copy(ASym.Name, PREFIX_LEN + 1, MaxInt);
+  Prop    := AStore.FindChildSymbolByName(ASym.ParentId, PropName);
+  Result  := (Prop.Id > 0) and (Prop.Kind = skProperty) and (AStore.GetSymbolDoc(Prop.Id).RawBlock <> '');
+end;
+
+function DeclIsOverride(const AFilePath: string; ALine: Integer): Boolean;
+const
+  MAX_DECL_LINES = 6;
+var
+  Lines: TStringList;
+  Text : string     ;
+  I    : Integer    ;
+  Depth: Integer    ;
+  C    : Char       ;
+  Tail : string     ;
+  Segs : TArray<string>;
+  W    : string     ;
+begin
+  Result:= False;
+  if (AFilePath = '') or (ALine <= 0) or not FileExists(AFilePath) then Exit;
+  Lines:= TStringList.Create;
+  try
+    try
+      Lines.LoadFromFile(AFilePath);
+    except
+      Exit;
+    end;
+    Text:= '';
+    for I:= ALine - 1 to Min(Lines.Count - 1, ALine - 2 + MAX_DECL_LINES) do
+      Text:= Text + ' ' + Lines[I];
+  finally
+    Lines.Free;
+  end;
+  Depth:= 0;
+  Tail := '';
+  for I:= 1 to Length(Text) do
+  begin
+    C:= Text[I];
+    if C = '(' then Inc(Depth)
+    else if C = ')' then Dec(Depth)
+    else if (C = ';') and (Depth <= 0) then
+    begin
+      Tail:= Copy(Text, I, MaxInt);
+      Break;
+    end;
+  end;
+  { directives follow the first top-level ';': `; override;` }
+  if Tail = '' then Exit;
+  { Tail = ';' + the text after it. Walk the single-word segments (the directive
+    list `; virtual; override;`) and stop at the first segment holding a space --
+    that is the NEXT declaration, whose `override` is not this one's. }
+  Segs:= Tail.Split([';']);
+  for I:= 1 to High(Segs) do
+  begin
+    W:= Trim(Segs[I]);
+    if W = '' then Break;
+    if Pos(' ', W) > 0 then Break;
+    if SameText(W, 'override') then Exit(True);
+  end;
+end;
+
+function DfmBoundHandlers(const AStore: ISymbolStore): TDictionary<string, Boolean>;
+var
+  Fid : Int64          ;
+  Lit : TStringLiteral ;
+  Prop: string         ;
+  P   : Integer        ;
+  H   : string         ;
+begin
+  Result:= TDictionary<string, Boolean>.Create;
+  for Fid in AStore.GetAllFileIds do
+  begin
+    if not SameText(ExtractFileExt(AStore.GetFilePath(Fid)), '.dfm') then Continue;
+    for Lit in AStore.GetLiteralsByKind(Fid, 'dfm-prop') do
+    begin
+      Prop:= Lit.OwnerName;
+      P   := LastDelimiter('.', Prop);
+      if P > 0 then Prop:= Copy(Prop, P + 1, MaxInt);
+      if (Length(Prop) <= 2) or not Prop.StartsWith('On') or not CharInSet(Prop[3], ['A'..'Z']) then Continue;
+      H:= Trim(Lit.Text);
+      if (H <> '') and not SameText(H, 'nil') then Result.AddOrSetValue(LowerCase(H), True);
+    end;
+  end;
+end;
 class function TDocLintRules.RunMissingDoc(const AStore: ISymbolStore; AFileId: Int64 = 0): TArray<TLintFinding>;
 var
   Findings: TList<TLintFinding>;
   Syms    : TArray<TSymbol>    ;
   Sym     : TSymbol            ;
   F       : TLintFinding        ;
+  Handlers: TDictionary<string, Boolean>;
 begin
   Result:= nil;
   if AStore = nil then Exit;
+  Handlers:= nil;
   Findings:= TList<TLintFinding>.Create;
   try
     { kind='' -> every kind; filter down to the documentable subset below so we
@@ -353,6 +462,13 @@ begin
       if (AFileId > 0) and (Sym.FileId <> AFileId) then Continue;
       if not IsDocumentableKind(Sym.Kind) then Continue;
       if SameText(Trim(Sym.Section), 'implementation') then Continue;
+      if IsRoutineKind(Sym.Kind) then
+      begin
+        if IsAccessorOfDocumentedProperty(AStore, Sym) then Continue;
+        if DeclIsOverride(AStore.GetFilePath(Sym.FileId), Sym.StartLine) then Continue;
+        if Handlers = nil then Handlers:= DfmBoundHandlers(AStore);
+        if Handlers.ContainsKey(LowerCase(Sym.Name)) then Continue;
+      end;
       F:= Default(TLintFinding);
       F.RuleId  := 'missing-doc';
       F.Severity:= 'warning';
@@ -369,6 +485,7 @@ begin
     end;
     Result:= Findings.ToArray;
   finally
+    Handlers.Free;
     Findings.Free;
   end;
 end;
