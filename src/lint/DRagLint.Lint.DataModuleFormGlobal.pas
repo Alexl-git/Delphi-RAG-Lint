@@ -33,7 +33,10 @@ const
 /// the first reference; the message counts the references.</returns>
 /// <remarks>
 /// Not thread-safe. A form variable named only inside an inactive {$IFDEF} branch has no
-/// ref and is not reported.
+/// ref and is not reported. T10 (v1511, measured on a Loader2025 copy): 75 findings with the platform
+/// library and 0 without is BY DESIGN, not a defect -- the only form there descends from TdxRibbonForm,
+/// which only the library can classify as a form; a run whose library lacks it cannot see the form
+/// variable. All 75 are real data-module reaches into frmLoader2019_Main.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
 /// <para>Calls: Default, DRagLint.Lint.DataModuleFormGlobal.CollectDataModuleFormGlobal.LoadFormVars, DRagLint.Lint.DataModuleFormGlobal.CollectDataModuleFormGlobal.LoadModules, DRagLint.Lint.DataModuleFormGlobal.CollectDataModuleFormGlobal.ScanModule, Format, IsFormType, LowerCase, Trim, VarVisibleFrom</para>
