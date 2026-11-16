@@ -1,0 +1,7 @@
+# lowercase f prefix must NOT fire
+!field-name-prefix 6
+!field-name-prefix 7
+# missing prefix MUST fire
+field-name-prefix 8
+# plain word starting with f MUST fire
+field-name-prefix 9
