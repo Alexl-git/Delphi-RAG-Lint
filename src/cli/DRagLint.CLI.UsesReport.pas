@@ -119,7 +119,7 @@ var
     Dot : Integer;
   begin
     Base:= APath;
-    while Length(Base) > 0 do
+    while Base <> '' do
     begin
       if CharInSet(Base[Length(Base)], ['\','/']) then begin Delete(Base, Length(Base), 1); Break; end;
       Break;

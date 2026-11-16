@@ -27,7 +27,7 @@ function DoArchDiagram(const AArgs: TArgs): Integer;
 /// <returns>0; 2 without two --db or when one is missing.</returns>
 function DoDiff(const AArgs: TArgs): Integer;
 
-/// <summary>drag-lint todos: the TODO / FIXME / HACK / XXX / REVIEW / NOTE comments of the .pas / .dpr / .dpk files, with file:line:col and an optional author tag; no index needed.</summary>
+/// <summary>`drag-lint todos`: the task-marker comments of the .pas / .dpr / .dpk files (the six tags are listed beside the implementation), with file:line:col and an optional author tag; no index needed.</summary>
 /// <param name="AArgs">The path to scan and --json.</param>
 /// <returns>0 on success; nonzero on a usage error.</returns>
 function DoTodos(const AArgs: TArgs): Integer;
