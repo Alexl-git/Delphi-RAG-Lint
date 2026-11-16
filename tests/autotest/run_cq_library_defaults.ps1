@@ -20,9 +20,11 @@
 #>
 [CmdletBinding()]
 param(
+  [switch]$KeepWorkDir,
   [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
-  [string]$WorkDir = "C:\TEMP\claude\lanes\150\CQ\scratch\cqlib_$PID"
+  [string]$WorkDir = "$([IO.Path]::GetTempPath())drag-lint-cqlib-$PID"
 )
+. "$PSScriptRoot\lib\WorkDirCleanup.ps1"
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 . "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG3: no machine drag-lint.json
 $ErrorActionPreference = 'Stop'; $script:fail = $false
@@ -108,6 +110,6 @@ try {
   Check 'B1  default (no --library-db): NOTE names the manifest library db' ($dflt.Err -match 'NOTE:.*manifest platform library' -and $dflt.Err -match [regex]::Escape('library-Win32.sqlite')) $dflt.Err
   Check 'B2  default plan has the same fixes as the explicit --library-db plan' ((& $nf $dflt) -eq (& $nf $expl)) "default=$(& $nf $dflt) explicit=$(& $nf $expl)"
   Check 'B3  CONTROL: --library-db none refuses the library class cast (fewer fixes)' ((& $nf $none) -ge 0 -and (& $nf $none) -lt (& $nf $expl)) "none=$(& $nf $none) explicit=$(& $nf $expl)"
-} finally { Pop-Location }
+} finally { Pop-Location; Remove-WorkDir $WorkDir -Keep:$KeepWorkDir }
 if ($script:fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green; exit 0

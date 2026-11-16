@@ -19,7 +19,7 @@
   Exit code: 0 on full pass, 1 on any failure.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = $(. "$PSScriptRoot\lib\FreshEngineExe.ps1"; Get-FreshEngineExe))
 $ErrorActionPreference = 'Continue'
 # E-RENAME-OTHER-PATHS: a naming fix now runs the rename proof, and these fixtures have no library: the proof's own test seam.
 $env:DRAGLINT_RENAME_TEST_UNGATED = '1'

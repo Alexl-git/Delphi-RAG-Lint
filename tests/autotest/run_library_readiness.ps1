@@ -22,10 +22,7 @@ param([string]$Exe = '')
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d=''){ Write-Host ("[{0}] {1} {2}" -f (@('FAIL','PASS')[[int]$ok]),$n,$d) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
 function Write-Ascii([string]$Path,[string]$Body){ [IO.File]::WriteAllText($Path, ($Body -replace "`r?`n","`r`n"), [Text.Encoding]::ASCII) }
-if (-not $Exe) {
-  $Exe = Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe'
-  if (-not (Test-Path $Exe)) { $Exe = Join-Path $PSScriptRoot '..\..\third_party\dll-win64\drag-lint.exe' }
-}
+if (-not $Exe) { . (Join-Path $PSScriptRoot 'lib\FreshEngineExe.ps1'); $Exe = Get-FreshEngineExe }
 $exeSrc = (Resolve-Path $Exe).Path; $exeSrcDir = Split-Path -Parent $exeSrc
 $fixDir = (Resolve-Path (Join-Path $PSScriptRoot '..\callresolve\fixtures\xtyped')).Path
 $py = (Get-Command python -ErrorAction Stop).Source

@@ -127,7 +127,7 @@
 
   IT COMPARES A BUILT ARTIFACT AGAINST SOURCE, AND THAT IS A REAL BOUND
   ---------------------------------------------------------------------
-  `--help` comes from the -Exe engine (default src\cli\Win64\Debug\drag-lint.exe);
+  `--help` comes from the -Exe engine (default: this tree's fresh Debug build, else FATAL "build first / pass -Exe" -- lib\FreshEngineExe.ps1);
   the accepted-verb list
   comes from src\cli\DRagLint.CLI.pas ON DISK. Those are two different points in
   time. Edit PrintHelp and do not rebuild, and check 1 reads the OLD help against
@@ -169,7 +169,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string] $Exe  = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string] $Exe  = $(. "$PSScriptRoot\lib\FreshEngineExe.ps1"; Get-FreshEngineExe),
   [string] $Repo = "$PSScriptRoot\..\.."
 )
 

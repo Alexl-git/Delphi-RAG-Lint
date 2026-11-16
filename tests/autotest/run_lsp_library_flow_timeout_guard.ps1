@@ -28,12 +28,14 @@
 #>
 [CmdletBinding()]
 param(
+  [switch]$KeepWorkDir,
   [string]$Exe         = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$RulesDir    = "$PSScriptRoot\..\..\rules",
   [string]$WorkDir     = "C:\TEMP\draglint_lsp_lib_flow_$PID",
   [string]$LibraryDb   = '',
   [string]$LibraryUnit = ''
 )
+. "$PSScriptRoot\lib\WorkDirCleanup.ps1"
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){ if($d){Write-Host "      $d" -ForegroundColor DarkGray}; $script:fail=$true } }
@@ -147,4 +149,5 @@ if ($fail) { Write-Host 'RESULT: FAIL' -ForegroundColor Red; exit 1 } else { Wri
 }
 finally {
   Pop-Location -ErrorAction SilentlyContinue
+  Remove-WorkDir $WorkDir -Keep:$KeepWorkDir
 }

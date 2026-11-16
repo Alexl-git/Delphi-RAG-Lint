@@ -10,9 +10,11 @@
 #>
 [CmdletBinding()]
 param(
+  [switch]$KeepWorkDir,
   [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$WorkDir = "$env:TEMP\drag-lint-corruptlib-$PID"
 )
+. "$PSScriptRoot\lib\WorkDirCleanup.ps1"
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 . "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG3: no machine drag-lint.json
 $ErrorActionPreference = 'Stop'
@@ -21,6 +23,7 @@ if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -Foreground
 $Exe = (Resolve-Path $Exe).Path
 if (Test-Path $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 New-Item -ItemType Directory -Path $WorkDir | Out-Null
+try {
 $fx   = New-G8Scratch 'dup-unit' $WorkDir
 $proj = Join-Path $WorkDir 'proj.sqlite'
 $good = Join-Path $WorkDir 'library-Win64.sqlite'
@@ -76,3 +79,4 @@ Check 'control lint-project: same warning text' ($lp.Out -match $warnRx)
 if ($script:Failed) { Write-Host 'run_lintall_corrupt_library: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'run_lintall_corrupt_library: PASS' -ForegroundColor Green
 exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:$KeepWorkDir }

@@ -19,7 +19,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe       = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
+  [string]$Exe       = $(. "$PSScriptRoot\lib\FreshEngineExe.ps1"; Get-FreshEngineExe),
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-b1-dcc-$PID",
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite',
   # Off by default (152b): the platform library is READ in place via --library-db, never copied (the DB is ~3.5 GB;
