@@ -17,7 +17,7 @@ const
   /// This unit is the right home because it is the one both sides already use:
   /// DRagLint.LSP.Server uses Core.Model, and CLI uses LSP.Server, so a
   /// constant here reaches both with no new dependency and no cycle.</remarks>
-  DRAGLINT_VERSION = '1.51.0-alpha';
+  DRAGLINT_VERSION = '1.51.1-alpha';
 
   /// <summary>The identity of what this build EXTRACTS from a byte sequence.
   /// Part of the indexer fingerprint; <see cref="DRAGLINT_VERSION"/> is not.
@@ -288,7 +288,18 @@ const
       read, and a DI Register call no longer emits an unresolved fact (lane EXT).
     * include fragments: method bodies inside a code include are emitted as symbols, refs inside an
       include are bound in the host scope (lane INC; the b87964a0e workaround is gone). }
-  DRAGLINT_EXTRACTOR_VERSION = '1.39.0-alpha';
+  { 1.39.0 -> 1.40.0 (2026-11-16, 1.51.1, lane/v1511-int -- ONE bump for wave v1511):
+    * Parser.Delphi13: type_use for a pointer base type, a generic constraint, a generic method
+      implementation header's class and the owner / arguments of TBox<T>.TInner; a dotted or indexed
+      property specifier binds (property-spec root, record-field members); the constant of a message /
+      dispid directive is read (lane EXT B26).
+    * reading: a UTF-8-BOM file with an invalid byte is transcoded as CP1252 instead of failing the
+      file (EnsureUtf8Bytes, lane ENC B07).
+    * storage schema 26: ref_host_bindings keeps one binding per host for a ref inside an include
+      several units include (lane INC2 B10; the resolver bump fills it).
+    * grammar unchanged (tree-sitter-delphi13 v1.4.12, see the 1.39.0 entry; D04). B27 (Inline /
+      Library as identifiers) was not delivered by the TS session -> 1.51.2. }
+  DRAGLINT_EXTRACTOR_VERSION = '1.40.0-alpha';
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
   /// Deliberately SEPARATE from <see cref="DRAGLINT_EXTRACTOR_VERSION"/>.</summary>
@@ -548,7 +559,12 @@ const
   /// DRAGLINT_LIBRARY_EFFECTS=0 opts out); refs inside a code include bind in each host scope and
   /// are kept only when every host agrees, and a forward type ref binds the completing declaration
   /// (lane INC).</para>
-  DRAGLINT_RESOLVER_VERSION = '1.27.0-alpha';
+  /// <para>1.27.0-alpha -&gt; 1.28.0-alpha (2026-11-16, 1.51.1, rides the 1.40.0 extractor
+  /// re-parse): a ref inside an include shared by several hosts keeps one binding per host in
+  /// ref_host_bindings, and an include method body binds its members per host (lane INC2 B10);
+  /// reads of library symbols resolve library-first (ResolveLibraryReadRefs), paren-less library
+  /// calls and function-result receivers bind (lane RES B02 / B04 / B06).</para>
+  DRAGLINT_RESOLVER_VERSION = '1.28.0-alpha';
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
   /// the ghost-compile journal that first created the folder.</summary>

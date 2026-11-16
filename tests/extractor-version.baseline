@@ -1229,4 +1229,6 @@
 #   Superseded: 1.38.0-alpha|5b50c8c17fc03077dcd99d62af88f5a83f4a4dcdb496ebae9610c96175df8f8f
 #   2026-11-15 v151 INT FINAL-B2 re-pin (same unreleased 1.39.0 bump, no extraction change): Parser.Delphi13 HdrName.Contains('.') for Pos('.', HdrName) > 0 (pos-for-contains lint fix, identical semantics).
 #   Superseded: 1.39.0-alpha|f466ac45151df3318cab05f9b65b1f7ba33808f5e811c23fb7eca8c717195ad3
-1.39.0-alpha|13e8365ff504d45111a175814464426ee134285acf129c95f8ac8cd04cf97c56
+#   2026-11-16 v1511 INT bump 1.39.0 -> 1.40.0 (ONE bump for wave v1511): EXT B26 Parser.Delphi13 type_use / property-specifier / message-dispid refs; ENC B07 EnsureUtf8Bytes on the indexer read path; INC2 B10 schema 26 ref_host_bindings; RES surface-hash movement covered. Grammar unchanged (v1.4.12); B27 -> 1.51.2.
+#   Superseded: 1.39.0-alpha|13e8365ff504d45111a175814464426ee134285acf129c95f8ac8cd04cf97c56
+1.40.0-alpha|c9905d6ba7c05bc1e3c13c1676b657a9fccfd339b47bbad3ebfab8f993accb11
