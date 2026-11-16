@@ -265,7 +265,7 @@ begin
 end;
 
 initialization
-  BuildLanes;  // dl:ok heavy-initialization@6546 -- REVIEWED 2026-11-14 v151 INT: BuildLanes passes the lanes' Check* hooks as method references (no parentheses); nothing runs them at init -- the rule reads the references as calls
+  BuildLanes;
   BuildDecls;
   RegisterProviderRules(TV151Dispatch.CatalogRows);
 
