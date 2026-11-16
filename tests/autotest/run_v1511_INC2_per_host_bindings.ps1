@@ -17,7 +17,7 @@
         Helper call and FCount write -> each host's own TWork member; the header qualifier TWork;
         the cLimit read and the gTotal write -> each host's own unit const / var.
         refs.symbol_id stays NULL where the hosts differ (one target per ref, never a guess).
-    A   hosts agree: UProc keeps refs.symbol_id AND has one row per host.
+    A   hosts agree: UProc keeps refs.symbol_id and has NO row (rows exist only while the ref is unbound).
     C   controls: the single-host include writes no row; no row names a dead symbol or a
         file that is not a host of the ref's include.
     R   readers: find-callers --name Emit reports the site `exact` (was name-only);
@@ -120,7 +120,8 @@ function Check-PerHost([string]$Tag, [string]$Db, [string]$ClashB) {
     Check "$Tag B gTotal write (unit var), host $hostLeaf -> its own var"    ((HostTarget $rows 'gTotal' 'write' 16 $hostLeaf) -like "$hostLeaf`:*") (HostTarget $rows 'gTotal' 'write' 16 $hostLeaf)
   }
   Check "$Tag A UProc keeps refs.symbol_id (hosts agree)" ((RefSymbol $Db 'UProc' 4) -eq 'PhU.pas:5') (RefSymbol $Db 'UProc' 4)
-  Check "$Tag A UProc has one row per host, same target" (((HostTarget $rows 'UProc' 'call' 4 'PhA.pas') -eq 'PhU.pas:5') -and ((HostTarget $rows 'UProc' 'call' 4 'PhB.pas') -eq 'PhU.pas:5'))
+  Check "$Tag A UProc has NO row (the ref carries the one binding)" (@($rows | Where-Object { $_.name -eq 'UProc' }).Count -eq 0)
+  Check "$Tag A every row belongs to a ref that is unbound on the ref" ((Invoke-Rows $Db "SELECT hb.ref_id FROM ref_host_bindings hb JOIN refs r ON r.id = hb.ref_id WHERE r.symbol_id IS NOT NULL").Count -eq 0)
   Check "$Tag C the single-host include writes no row" (@($rows | Where-Object { $_.name -eq 'SOnly' }).Count -eq 0)
   Check "$Tag C SOnly (single host) is bound on the ref" ((Invoke-Rows $Db "SELECT r.id FROM refs r WHERE r.name_text = 'SOnly' AND r.kind = 'call' AND r.symbol_id IS NOT NULL").Count -eq 1)
   Check "$Tag C no row names a dead symbol" (@($rows | Where-Object { $_.target -ne '' -and $_.live -ne 1 }).Count -eq 0)

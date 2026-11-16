@@ -3391,7 +3391,9 @@ type
       /// <param name="ARows">TCallResolver.HostBindings of this pass; SymbolId 0 is stored NULL.</param>
       /// <returns>The number of rows written; 0 without the table.</returns>
       /// <remarks>Called inside the calls pass's transaction, after its last stream; the rows of
-      /// the refs this pass re-resolves were deleted with their call_edges.</remarks>
+      /// the refs this pass re-resolves were deleted with their call_edges. A row is written only
+      /// for a ref whose refs.symbol_id the pass left NULL: where the hosts agree the ref itself
+      /// carries the one binding, so the table holds exactly what refs.symbol_id cannot.</remarks>
       function WriteRefHostBindings(const ARows: TArray<TRefHostBinding>): Integer;
       /// <summary>1.51.1 INC2: implements ISymbolStore.GetHostBoundRefIds.</summary>
       /// <param name="ASymbolId">symbols.id of the target.</param>
@@ -5849,7 +5851,9 @@ begin
   Ins:= TFDQuery.Create(nil);
   try
     Ins.Connection:= FConn;
-    Ins.SQL.Text  := 'INSERT OR REPLACE INTO ref_host_bindings(ref_id, host_file_id, symbol_id) VALUES (:rid, :hid, :sid)';
+    { Only for a ref the pass left unbound: where the hosts agree, refs.symbol_id IS every host's binding. }
+    Ins.SQL.Text  := 'INSERT OR REPLACE INTO ref_host_bindings(ref_id, host_file_id, symbol_id) ' +
+                     'SELECT :rid, :hid, :sid WHERE EXISTS (SELECT 1 FROM refs WHERE id = :rid AND symbol_id IS NULL)';
     Ins.ParamByName('rid').DataType:= ftLargeint;
     Ins.ParamByName('hid').DataType:= ftLargeint;
     Ins.ParamByName('sid').DataType:= ftLargeint;
@@ -5861,7 +5865,7 @@ begin
       if B.SymbolId > 0 then Ins.ParamByName('sid').AsLargeInt:= B.SymbolId
       else Ins.ParamByName('sid').Clear;
       Ins.ExecSQL;
-      Inc(Result);
+      Inc(Result, Ins.RowsAffected);
     end;
   finally
     Ins.Free;
@@ -7441,7 +7445,8 @@ begin
     code include that several units include. refs.symbol_id / call_edges hold ONE target per ref, so
     such a ref stays NULL there when its hosts differ; here every host has its own row (symbol_id
     NULL = that host gave no certain answer). Written by the calls pass (WriteRefHostBindings) for
-    every multi-host include ref at least one host binds, also when the hosts agree. ADDITIVE and
+    every multi-host include ref that is unbound on the ref and that at least one host binds; a
+    ref whose hosts agree has NO row (refs.symbol_id is every host's binding). ADDITIVE and
     probed for by its readers (HasRefHostBindings). SET NULL on the symbol, like refs.symbol_id: a
     reindex of the HOST removes the target while the include's ref row stays. Both FK child columns
     outside the key have an index. }
@@ -10036,7 +10041,7 @@ begin
     { 1.51.1 INC2 (B10, owner ruling OQ18): a ref inside a multi-host code include that THIS host
       binds to the symbol while another host binds it elsewhere -- refs.symbol_id is NULL and no
       call_edges / member_accesses row exists (one target per ref), so no arm above reports it.
-      `r.symbol_id IS NULL` keeps an agreeing ref (already reported above) from a second row.
+      `r.symbol_id IS NULL` is the table's own invariant, restated so a stale row cannot double a site.
       Mode as the arms above: '' for a routine target (a call), else read / write by the kind. }
     if HasRefHostBindings then
       HostArm:=
@@ -12845,8 +12850,8 @@ begin
       else if R.SymbolId <> 0 then R.Resolution:= RESOLUTION_EXACT
       else
       begin
-        { 1.51.1 INC2 (B10): bound under EVERY host of its include (to differing targets, or
-          refs.symbol_id would be set) = a reference the resolver bound; a host that declined
+        { 1.51.1 INC2 (B10): bound under EVERY host of its include (rows exist only while
+          refs.symbol_id is NULL) = a reference the resolver bound; a host that declined
           keeps the row name-only. }
         var HostF: TField:= Q.FindField('host_rows');
         if (HostF <> nil) and (HostF.AsInteger > 0) and (Q.FieldByName('host_unbound').AsInteger = 0) then

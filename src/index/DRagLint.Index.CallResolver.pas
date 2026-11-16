@@ -466,7 +466,8 @@ type
   /// <summary>v1511 INC2 (B10, owner ruling OQ18): the binding of ONE ref for ONE host of the
   /// code include it is written in -- a row of ref_host_bindings.</summary>
   /// <remarks>Produced only for a ref inside an include that several units include as code.
-  /// SymbolId = 0: that host gave no certain answer (stored as NULL).</remarks>
+  /// SymbolId = 0: that host gave no certain answer (stored as NULL). Stored only while
+  /// refs.symbol_id is NULL: where the hosts agree the ref itself carries the binding.</remarks>
   TRefHostBinding = record
     /// <summary>refs.id of the ref inside the include.</summary>
     RefId     : Int64;
@@ -1368,9 +1369,9 @@ type
     /// <returns>The symbol every host binds; 0 when one host declines or two hosts differ.</returns>
     /// <remarks>The refs table holds ONE target per ref (call_edges.ref_id is its key): a ref
     /// whose hosts disagree keeps refs.symbol_id unbound -- short, never wrong -- and, v1511 INC2
-    /// (B10), EVERY host's own answer is noted (NoteHostBinding) for ref_host_bindings, also
-    /// when the hosts agree. Every host is asked; the counters of the binder count the ref once
-    /// per host.</remarks>
+    /// (B10), EVERY host's own answer is noted (NoteHostBinding) for ref_host_bindings (the
+    /// store keeps the rows of a ref that ends the pass unbound). Every host is asked; the
+    /// counters of the binder count the ref once per host.</remarks>
     function AcrossHosts(const ARef: TReference; AFn: TRefIdFn; out AReason: string): Int64;
     /// <summary>v1511 INC2 (B10): records what one host binds a multi-host include ref to.</summary>
     /// <param name="ARefId">refs.id; a ref without an id (0) is not recorded.</param>

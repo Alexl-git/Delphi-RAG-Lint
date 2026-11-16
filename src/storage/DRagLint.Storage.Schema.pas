@@ -54,7 +54,8 @@ const
     inside a code include that several units include keeps one binding PER HOST). ADDITIVE,
     created by Migrate and probed by its readers (HasRefHostBindings), so SCHEMA_READ_MIN stays
     23: an older index reads as before (such a ref is unbound where its hosts differ). Written
-    by the calls pass only; filled by the next resolve of the include's refs. }
+    by the calls pass only, for refs it leaves unbound on the ref; filled by the next resolve
+    of the include's refs. }
   SCHEMA_VERSION = 26;
 
   /// <summary>The oldest stored schema_version this engine READS without migrating
