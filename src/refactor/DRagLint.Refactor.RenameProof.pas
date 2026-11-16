@@ -351,6 +351,7 @@ type
     function IsSpecifierToken(const pText: string; pStart: Integer): Boolean;
     function DecideInherited(pFileId: Int64; pLine: Integer; out pKind, pWhy: string): TChainVerdict;
     function DecideOutsideElement(const pType: string; out pKind, pWhy: string): TChainVerdict;
+    function DecideCast(const pType: string; pFromFile: Int64; out pKind, pWhy: string): TChainVerdict;
     function IsDeclArgName(const pPath: string; pLine, pByteCol: Integer; out pRoutineLine: Integer): Boolean;
     function InScope(pFileId: Int64; pLine: Integer): Boolean;
     function IsTargetsOwnHeader(pRoutineLine: Integer): Boolean;
@@ -1624,6 +1625,58 @@ begin
   Result:= (pText <> '') and IsValidIdent(pText);
 end;
 
+{ B01 (1.51.1): the head of a hard cast `TEdit(FControls[i])` -- a bare identifier whose parenthesis closes at the very
+  end of the receiver text. '' for anything else (`A.B(x)`, `F(x).G(y)`, `T(x)[i]`). A routine call has the same
+  shape: DecideCast tells the two apart. Quoted text is skipped, so `T(Find(')'))` closes where it should. }
+function HardCastHead(const pText: string): string;
+begin
+  Result:= '';
+  var Open:= Pos('(', pText);
+  if (Open < 2) or not pText.EndsWith(')') then Exit;
+  var Head:= Copy(pText, 1, Open - 1);
+  if not IsPlainTypeName(Head) then Exit;
+  var Depth:= 0;
+  var InQuote:= False;
+  for var I:= Open to Length(pText) do
+  begin
+    var C:= pText[I];
+    if C = '''' then InQuote:= not InQuote
+    else if not InQuote and (C = '(') then Inc(Depth)
+    else if not InQuote and (C = ')') then
+    begin
+      Dec(Depth);
+      if Depth = 0 then Exit(if I = Length(pText) then Head else '');
+    end;
+  end;
+end;
+
+{ B01 (1.51.1): a receiver `T(x)` whose head T is a TYPE gives the member its static type: a project type walks its
+  chain, a library or built-in type is decided as an outside element type. A head that names a routine anywhere (the
+  project or a library) is a call whose result type the index does not hold: undecided, as before. }
+function TProver.DecideCast(const pType: string; pFromFile: Int64; out pKind, pWhy: string): TChainVerdict;
+const
+  CRoutineKinds = '''function'', ''procedure'', ''method'', ''constructor'', ''destructor''';
+begin
+  pKind:= '';
+  pWhy := '';
+  if (Length(ReadSyms('name = :n COLLATE NOCASE AND kind IN (' + CRoutineKinds + ')', pType)) > 0)
+    or LibAny('SELECT 1 FROM symbols WHERE name = :n COLLATE NOCASE AND kind IN (' + CRoutineKinds + ') LIMIT 1', pType) then // dl:ok sql-injection-concat@8081 -- every concatenated part is a constant of this unit; the name is a parameter
+  begin
+    pKind:= CRefuseReceiverUntyped;
+    pWhy := Format('the receiver "%s(...)" may call a routine named %s, whose result type the index does not hold', [pType, pType]);
+    Exit(cvUndecided);
+  end;
+  var Types:= ReadSyms('name = :n COLLATE NOCASE AND kind IN (' + CTypeKinds + ')', pType);
+  if Length(Types) = 1 then Exit(DecideChain(Types[0].Id, pFromFile, pKind, pWhy));
+  if Length(Types) > 1 then
+  begin
+    pKind:= CRefuseAmbiguousType;
+    pWhy := Format('the cast type "%s" means more than one project type', [pType]);
+    Exit(cvUndecided);
+  end;
+  Result:= DecideOutsideElement(pType, pKind, pWhy);
+end;
+
 { 150 RF (146 b1): `property P: Integer read FRec.Count write FRec.Count` -- the head FRec of a DOTTED specifier sits in no routine, so the
   resolver typed nothing. The proof types it itself: FRec is a field of the property's class (or of a project ancestor)
   and its declared type is one project type. Returns that type's id, 0 when anything is not exactly that. }
@@ -1722,7 +1775,8 @@ begin
     if FTargetInLib then Refuse(CRefuseAmbiguousType, pTok.Path, pTok.Line, pTok.Col, Prefix + Format('%s is in the library too, so a library record field does not rule it out', [FQName]))
     else Inc(FOther);
   end
-  else if (pRow.ReceiverType <= 0) and (SpecType <= 0) and (pRow.ElementText = '') and not IsPlainTypeName(pRow.ReceiverTypeText) then
+  else if (pRow.ReceiverType <= 0) and (SpecType <= 0) and (pRow.ElementText = '') and not IsPlainTypeName(pRow.ReceiverTypeText)
+    and (HardCastHead(pRow.ReceiverText) = '') then
     Refuse(CRefuseReceiverUntyped, pTok.Path, pTok.Line, pTok.Col,
       Prefix + Format('the receiver "%s" has no static type in the index', [pRow.ReceiverText]))
   else
@@ -1731,6 +1785,8 @@ begin
       like a library element type. }
     var Verdict:= if pRow.ReceiverType > 0 then DecideChain(pRow.ReceiverType, pTok.FileId, Kind, Why)
                   else if SpecType > 0 then DecideChain(SpecType, pTok.FileId, Kind, Why)
+                  else if (pRow.ElementText = '') and not IsPlainTypeName(pRow.ReceiverTypeText)
+                    then DecideCast(HardCastHead(pRow.ReceiverText), pTok.FileId, Kind, Why)
                   else DecideOutsideElement(if pRow.ElementText <> '' then pRow.ElementText else pRow.ReceiverTypeText, Kind, Why);
     case Verdict of
       cvTarget:
