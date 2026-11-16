@@ -7981,6 +7981,7 @@ begin
     var ParsedBeforeTick: Integer:= Indexer.ParsedFiles;
     var SkippedBeforeTick: Integer:= Indexer.SkippedUpToDate;  // cumulative like ParsedFiles; the Done line reports this tick's delta
     var FailedBeforeTick: Integer:= Indexer.FailedFiles;       // F1: same delta rule as SkippedBeforeTick
+    var ParseErrBeforeTick: Integer:= Indexer.ParseErrorFiles; // v1511 D02: same delta rule
     if AArgs.Watch then Writeln(Format('[%s] Indexing tick (interval=%ds)...', [FormatDateTime('hh:nn:ss', NowLocal), Interval]))
     else if not AArgs.ResolveOnly then Writeln('Indexing...');
     { --resolve-only: re-derive the edges from parses the index ALREADY holds,
@@ -8358,9 +8359,13 @@ begin
       nothing done"). Guarded by tests\autotest\run_index_file_failure_exit.ps1. }
     var TickFailed: Integer:= Indexer.FailedFiles - FailedBeforeTick;
     var FailedNote: string:= if TickFailed > 0 then Format(', %d file(s) FAILED to index', [TickFailed]) else '';
+    { v1511 D02: parse-errors= (files whose tree had ERROR/MISSING nodes this tick), LAST
+      on the line as on the manifest-section summary, so every 'Done. Files: N,' and
+      'skipped M up-to-date' parser keeps matching. }
+    var ParseErrNote: string:= Format(', parse-errors=%d', [Indexer.ParseErrorFiles - ParseErrBeforeTick]);
     if Indexer.SkippedUpToDate - SkippedBeforeTick > 0 then Writeln(Format(
-        'Done. Files: %d, Symbols: %d, Refs: %d, skipped %d up-to-date%s, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Indexer.SkippedUpToDate - SkippedBeforeTick, FailedNote, Elapsed]))
-    else Writeln(Format('Done. Files: %d, Symbols: %d, Refs: %d%s, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, FailedNote, Elapsed]));
+        'Done. Files: %d, Symbols: %d, Refs: %d, skipped %d up-to-date%s, %.2fs%s', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Indexer.SkippedUpToDate - SkippedBeforeTick, FailedNote, Elapsed, ParseErrNote]))
+    else Writeln(Format('Done. Files: %d, Symbols: %d, Refs: %d%s, %.2fs%s', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, FailedNote, Elapsed, ParseErrNote]));
     if AArgs.ProjectPath <> '' then WriteIndexStudioSummary(IdxStudio, AArgs.AsJson, Store);
     AnyFileFailed:= AnyFileFailed or (TickFailed > 0);
     if not AArgs.Watch then Break;
@@ -14877,8 +14882,8 @@ end; // function
 /// <param name="AArgs">Parsed args; --config / the machine manifest select the name-to-DB map.</param>
 /// <param name="APrimaryDb">The store this run reports from; never returned as its own peer.</param>
 /// <param name="AFilePaths">The files this run scans.</param>
-/// <returns>Existing DB paths, distinct, in first-seen order; empty when --rule narrows the run
-/// to a non-marker rule, no unit qualifies, or the manifest resolves no name.</returns>
+/// <returns>Existing DB paths, distinct, in first-seen order; empty when --rule (one id or a
+/// comma list) narrows the run to non-marker rules, no unit qualifies, or the manifest resolves no name.</returns>
 /// <remarks>A name the manifest cannot resolve, or whose DB file is missing, is simply not a
 /// peer: the marker then keeps the skip because fewer DBs scanned it than its header lists --
 /// never "no finding there". Costs one header read per scanned file that mentions dl:ok.</remarks>
@@ -14889,7 +14894,10 @@ var
   Wanted: TDictionary<string, Boolean>;
 begin
   Result:= nil;
-  if (AArgs.Rule <> '') and not ContainsText(AArgs.Rule, 'review-marker') then Exit;
+  { v1511 B16: a --rule a,b list (RuleList) narrows like one id -- before, a list derived
+    every peer and ran a whole lint-all on each. }
+  var Narrow: string:= if AArgs.RuleList <> '' then AArgs.RuleList else AArgs.Rule;
+  if (Narrow <> '') and not ContainsText(Narrow, 'review-marker') then Exit;
   { A peer run (MARKER_ACCOUNT_ENV set by its parent) must not derive peers of its own: --config carries over, so it would recurse without end. }
   if GetEnvironmentVariable(MARKER_ACCOUNT_ENV) <> '' then Exit;
   Names:= TDictionary<string, string>.Create;
@@ -14959,7 +14967,10 @@ begin
   if Length(Peers) = 0 then Exit;
   Result:= TMarkerUnion.Create;
   CommonArgs:= '--json --quiet';
-  AddFlag('--rule', AArgs.Rule);
+  { v1511 B16: a --rule a,b list lives in RuleList (Rule is ''), so the peers were
+    handed only --enable a,b and each ran a WHOLE lint-all -- the 520 s of the list
+    run. The list goes on as --rule; the child's dispatch re-validates and narrows it. }
+  AddFlag('--rule', if AArgs.RuleList <> '' then AArgs.RuleList else AArgs.Rule);
   AddFlag('--enable', AArgs.Enable);
   AddFlag('--disable', AArgs.Disable);
   AddFlag('--config', AArgs.ConfigPath);
@@ -16536,9 +16547,10 @@ begin
       or (SameText(AStandard, 'misra') and (Length(R.Compliance.Misra) > 0)) then Result:= Result + [R];
 end;
 
-/// <summary>`drag-lint rules [--json] [--category &lt;name&gt;] [--rules-dir &lt;dir&gt;]` --
-/// emit the full rule catalog (built-ins + external .scm). Default = grouped text
-/// table; --json = the structured catalog + summary.</summary>
+/// <summary>`drag-lint rules [--json] [--category &lt;name&gt;] [--rule &lt;id&gt;[,&lt;id&gt;]] [--rules-dir &lt;dir&gt;]` --
+/// emit the full rule catalog (built-ins + external .scm), or only the --rule ids.
+/// Default = grouped text table; --json = the structured catalog + summary.</summary>
+/// <returns>0; 2 for an unknown --rule id or a bad --standard.</returns>
 function DoRules(const AArgs: TArgs): Integer;
 var
   Cat   : TArray<TRuleInfo>     ;
@@ -16567,6 +16579,24 @@ begin
   begin
     if not MatchText(AArgs.RuleStandard, ['cwe', 'cert', 'misra']) then begin Writeln(ErrOutput, 'drag-lint: --standard must be cwe, cert or misra'); Exit(2); end;
     Cat:= ComplianceFilter(Cat, AArgs.RuleStandard);
+  end;
+  { v1511 R9: --rule <id> / --rule a,b filters the catalog (it was ignored and the whole
+    list printed). One id is validated as lint does (unknown = exit 2, `help` lists the
+    ids); a list arrives already validated, in RuleList (main dispatch, wave 148 RO). }
+  var RuleIds: TArray<string>:= nil;
+  if AArgs.Rule <> '' then
+  begin
+    var RuleExit: Integer;
+    if LintRuleArgAnswered(AArgs, False, RuleExit) then Exit(RuleExit);
+    RuleIds:= [AArgs.Rule];
+  end
+  else if AArgs.RuleList <> '' then RuleIds:= AArgs.RuleList.Split([',']);
+  if Length(RuleIds) > 0 then
+  begin
+    var Kept: TArray<TRuleInfo>:= nil;
+    for R in Cat do
+      if MatchText(R.Id, RuleIds) then Kept:= Kept + [R];
+    Cat:= Kept;
   end;
   Sum:= TRuleCatalog.Summarize(Cat);
 
@@ -16779,13 +16809,34 @@ begin
                         'unit-not-in-dpr', 'unit-not-in-library']);
 end;
 { True when a lint run with --rule ARule needs a checker that emits AIds: always
-  for a run with no --rule, otherwise only when ARule is one of them. }
+  for a run with no --rule, otherwise only when ARule is one of them. v1511 B16:
+  ARule may be a comma list (lint-all --rule a,b) -- then any listed id counts. }
 function LintRuleWants(const ARule: string; const AIds: array of string): Boolean;
 begin
   if ARule = '' then Exit(True);
-  for var Id: string in AIds do
-    if SameText(Id, ARule) then Exit(True);
+  for var Want: string in ARule.Split([',']) do
+    for var Id: string in AIds do
+      if SameText(Id, Want) then Exit(True);
   Result:= False;
+end;
+
+{ v1511 B16: the id to hand a pass that takes ONE narrowing rule id ('' = all of its
+  rules), for a run narrowed to ARule. A single id (or '') is returned as is; for a
+  comma list, the one listed id among AIds, else '' -- the pass then runs all its
+  rules and the report filter (RuleList) keeps the listed ones. Call it only where
+  LintRuleWants(ARule, AIds) is True. }
+function LintSubRule(const ARule: string; const AIds: array of string): string;
+begin
+  if not ARule.Contains(',') then Exit(ARule);
+  Result:= '';
+  var Hits: Integer:= 0;
+  for var Want: string in ARule.Split([',']) do
+    if MatchText(Want, AIds) then
+    begin
+      Inc(Hits);
+      Result:= Want;
+    end;
+  if Hits <> 1 then Result:= '';
 end;
 
 { True when at least one taint rule survives this run's config (--disable, the
@@ -17424,7 +17475,9 @@ end;
   checker and is narrowed only at report time. }
 function LintNarrowRule(const ARule: string): string;
 begin
-  Result:= if StartsText('review-marker-', ARule) then '' else ARule;
+  Result:= ARule;
+  for var Id: string in ARule.Split([',']) do { v1511 B16: a lint-all --rule list too }
+    if StartsText('review-marker-', Trim(Id)) then Exit('');
 end;
 
 /// <summary>The rule ids a `lint` run does not evaluate the way lint-all does, so
@@ -19221,6 +19274,17 @@ begin
     (run_flag_verb_map caught the note pointing them at a flag they lack). }
   if AArgs.Fix and AArgs.Apply and (not AArgs.ProjectRules) then
     Writeln(ErrOutput, 'drag-lint: note: --fix --apply without --project-rules: doc-drift/missing-doc findings are not produced, so no doc fixes are applied.');
+  { v1511 R10: a one-file --fix was silent that some rules are judged only by lint-all, so
+    neither their findings nor a review-marker-unused on a dl:ok naming them is fixed by
+    this run. Same list the marker judgement withholds (LintUnjudgedMarkerRules). }
+  if AArgs.Fix and not AArgs.Quiet then
+  begin
+    var LintAllOnly: TArray<string>:= LintUnjudgedMarkerRules(AArgs, FlowStoreSeen and (not FlowIsLibrary));
+    if Length(LintAllOnly) > 0 then
+      Writeln(ErrOutput, Format('drag-lint: note: --fix on one file does not fix the %d rule(s) only lint-all judges ' +
+        '(%s), nor review-marker-unused on a dl:ok naming one of them -- run lint-all --fix for those.',
+        [Length(LintAllOnly), string.Join(', ', LintAllOnly)]));
+  end;
 
   Result:= FinalizeAndOutput(
     AArgs, Findings, DefDisabled,
@@ -22231,7 +22295,9 @@ end;
 /// <summary>drag-lint info [--json] -- prints engine self-info: version, build
 /// date (from the exe's own file timestamp), MIT license, description,
 /// tree-sitter ABI numbers AND the on-disk stamp of each loaded grammar DLL,
-/// capabilities (FTS5, CLI verb count), the exe path, and the build platform.
+/// the extractor and resolver versions, the grammar DLLs' content identity (text
+/// form; v1511 D01), capabilities (FTS5, CLI verb count), the exe path, and the
+/// build platform.
 /// Each repeatable --db adds that index's staleness verdict (see
 /// ComputeInfoIndexVerdict) -- an `indexes` array under --json, and an
 /// `index: <path>  verdict: <v>` line (plus an indented `remedy:` line when one
@@ -22467,6 +22533,12 @@ begin
     Writeln('tree-sitter ABI: delphi13 ', TsDelphi, ' / dfm ', TsDfm, '   (ABI, NOT a grammar version)');
     Writeln('  delphi13 dll: ', TsDelphiDll);
     Writeln('  dfm      dll: ', TsDfmDll);
+    { v1511 D01: the text form had lost what --json carries (extractor / resolver), and
+      nothing printed the grammar DLLs' content identity -- the value an index records
+      (GRAMMAR_DLLS_META_KEY) and the only grammar "version" the DLLs expose. }
+    Writeln('extractor: ', DRAGLINT_EXTRACTOR_VERSION);
+    Writeln('resolver: ', DRAGLINT_RESOLVER_VERSION);
+    Writeln('grammar dlls: ', LoadedGrammarDllsIdentity, '   (content identity: size:sha256-16 per DLL)');
     Writeln('capabilities: FTS5=', BoolToStr(Fts5, True), ', CLI verbs=', CLI_VERB_COUNT);
     Writeln('exe: ', ExePath, '   platform: ', Plat);
     { 1.20.4: --db was honoured by --json only, so the text form silently
@@ -25616,7 +25688,22 @@ begin
     so a one-rule question cost a whole lint-all. Nr is '' for a review-marker
     rule, which is computed from every other rule's findings (LintNarrowRule);
     the report is still filtered to AArgs.Rule in FinalizeAndOutput. }
-  var Nr: string:= LintNarrowRule(AArgs.Rule);
+  { v1511 B16: a --rule a,b list (RuleList; main dispatch clears Rule) narrows execution
+    too -- before, Nr was '' for a list and every checker ran (520 s vs 3 s on YADF).
+    Passes that take ONE id get LintSubRule(Nr, <their ids>). }
+  var Nr: string:= LintNarrowRule(if AArgs.RuleList <> '' then AArgs.RuleList else AArgs.Rule);
+  var V151Ids: TArray<string>:= TV151Dispatch.RuleIds;
+  var V151Wanted: Boolean:= (Length(V151Ids) > 0) and LintRuleWants(Nr, V151Ids);
+  { A list naming SEVERAL v151 ids runs the dispatch once per id, each narrowed to its
+    lane, keeping only that id's findings: narrowed to '' every v151 lane ran (121 s of
+    the 125 s list run on YADF vs 5.8 s for one id). }
+  var V151Runs: TArray<string>:= [LintSubRule(Nr, V151Ids)];
+  if Nr.Contains(',') and (V151Runs[0] = '') then
+  begin
+    V151Runs:= nil;
+    for var V151Id: string in Nr.Split([',']) do
+      if MatchText(V151Id, V151Ids) then V151Runs:= V151Runs + [V151Id];
+  end;
   if not AArgs.NoPreprocess then InstallLintIncludeContexts(Store, FilePaths, AArgs.ProjectPath);
   { PF E-LINTALL-SLOWER: which OFF flow passes this run keeps, read once for the per-file loop. }
   var FlowKeep: TFunc<string, Boolean>:= RuleKeptByRun(AArgs, Cfg, MarkedRuleIds(FilePaths));
@@ -25803,8 +25890,10 @@ begin
           for F in TLifetimeShapeChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath),
               (Nr = IDENTIFIER_CASE_MISMATCH_RULE) or Cfg.ShouldKeep(IDENTIFIER_CASE_MISMATCH_RULE, {ADefaultDisabled=}True)) do Findings:= Findings + [F];
         { v151 lane FRAME: the v151 rule lanes, per file (same hook as DoLint). }
-        if TV151Dispatch.Wants(Nr) then
-          for F in TV151Dispatch.CheckFile(TV151FileCtx.Make(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath), LibStore, Nr)) do Findings:= Findings + [F];
+        if V151Wanted then
+          for var V151Nr: string in V151Runs do
+            for F in TV151Dispatch.CheckFile(TV151FileCtx.Make(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath), LibStore, V151Nr)) do
+              if (Length(V151Runs) = 1) or SameText(F.RuleId, V151Nr) then Findings:= Findings + [F];
         ScanMark(35);  // dl:ok magic-literal@4d39, large-magic-number@4d39 -- REVIEWED 2026-11-09 PF2: profiler scan-slot id of the SCAN_NAMES table, not a quantity
       except
         on E: Exception do Writeln(ErrOutput, Format('lint-all: skip %s (%s: %s)', [ExtractFileName(PasPath), E.ClassName, E.Message]));
@@ -26085,11 +26174,12 @@ begin
       OptIn:= OptIn + ['read-never-assigned'];
     { --rule <id> opts <id> in, as it does for lint and lint-project (D4). }
     if AArgs.Rule <> '' then OptIn:= OptIn + [AArgs.Rule];
+    if AArgs.RuleList <> '' then OptIn:= OptIn + AArgs.RuleList.Split([',']); { v1511 B16: each listed id, as one }
     { D17: entered only when --rule can be one of its ids, and HANDED the
       rule so it narrows inside -- the same two halves `lint` uses. }
     if LintRuleWants(Nr, LINT_GATE_PROJECT_RULES) then
       Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
-        Store, Nr, MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), LibStore, OptIn, 0, nil,
+        Store, LintSubRule(Nr, LINT_GATE_PROJECT_RULES), MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), LibStore, OptIn, 0, nil,
         MakeSiblingProjectLister(AArgs));
     { E18 T16: a circular-uses message ends in a `cycles --fix` pointer; --project names the real
       project in it instead of the placeholder (the stem stays the finding's anchor unit). }
@@ -26113,11 +26203,11 @@ begin
     ComputeAllFanIn. }
   LintPhase('class-metrics');
   if LintRuleWants(Nr, LINT_GATE_CLASS_METRICS) then
-    Findings:= Findings + DRagLint.Lint.ClassMetrics.TClassMetrics.Run(Store, Cfg, Nr,
+    Findings:= Findings + DRagLint.Lint.ClassMetrics.TClassMetrics.Run(Store, Cfg, LintSubRule(Nr, LINT_GATE_CLASS_METRICS),
       {AOnlyFileId=}0, RuleKeptByRun(AArgs, Cfg, MarkedRuleIds(FilePaths)));  { taint wave T2: store-backed interprocedural taint over every file of the index }
   LintPhase('taint');
   if LintRuleWants(Nr, LINT_GATE_TAINT) and TaintWanted(RuleKeptByRun(AArgs, Cfg, MarkedRuleIds(FilePaths))) then
-    Findings:= Findings + RunTaintRules(Store, LibStore, Store.GetAllFileIds, Cfg, Nr, '');
+    Findings:= Findings + RunTaintRules(Store, LibStore, Store.GetAllFileIds, Cfg, LintSubRule(Nr, LINT_GATE_TAINT), '');
   { ADF Task 7: missing-doc -- store-backed (symbol_docs join), so it can only
     run where a store is open; ON by default (see RuleCatalog). }
   LintPhase('missing-doc');
@@ -26131,8 +26221,10 @@ begin
   if LintRuleWants(Nr, LINT_GATE_DOC_DRIFT) then
     Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store, DocRenderOptionsFor(AArgs, ProjectDb));
   { v151 lane FRAME: the v151 rule lanes' project-wide checks, once per run. }
-  if TV151Dispatch.Wants(Nr) then
-    Findings:= Findings + TV151Dispatch.CheckProject(TV151ProjectCtx.Make(Store, LibStore, Cfg, Nr, FilePaths, AArgs.ProjectPath));
+  if V151Wanted then
+    for var V151Nr: string in V151Runs do
+      for var PF: TLintFinding in TV151Dispatch.CheckProject(TV151ProjectCtx.Make(Store, LibStore, Cfg, V151Nr, FilePaths, AArgs.ProjectPath)) do
+        if (Length(V151Runs) = 1) or SameText(PF.RuleId, V151Nr) then Findings:= Findings + [PF];
   { v0.77: cross-file + within-file clone detection (#6). Runs ONLY here in
     lint-all (never the per-file Check) so within-file clones are reported once. }
   LintPhase('duplicate-code');
@@ -26409,6 +26501,8 @@ begin
           means "not asked", and "none detected" would be the same lie. }
         else if (AArgs.Rule <> '') and not SameText(AArgs.Rule, 'circular-uses') then
           OL.AppendLine(Format('  NOT REPORTED -- this run was narrowed to --rule %s. This is NOT "none found".', [AArgs.Rule]))
+        else if (AArgs.RuleList <> '') and not MatchText('circular-uses', AArgs.RuleList.Split([','])) then { v1511 B16 }
+          OL.AppendLine(Format('  NOT REPORTED -- this run was narrowed to --rule %s. This is NOT "none found".', [AArgs.RuleList]))
         else if Length(CycF) = 0 then
           OL.AppendLine(Format('  none detected across %d file(s) scanned.', [Length(FilePaths)]))
         else
