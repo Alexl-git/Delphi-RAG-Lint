@@ -28,6 +28,8 @@ function PluginLogPathIn(const pLocalAppData, pFileName: string): string;
 /// folder can be found at all -- callers skip the write then, rather than log to
 /// '\drag-lint\logs' on the current drive root.</returns>
 /// <remarks>
+/// When the environment variable DRAGLINT_PLUGIN_LOG_DIR is set (read once at
+/// load) the log goes to that folder instead -- for test drivers (H06).
 /// Creates the logs folder when missing; a failure to create it is
 /// not raised -- the caller's own write then fails, and every log writer in
 /// the plugin is already best-effort.
@@ -62,6 +64,9 @@ var
     threads may both call ForceDirectories once. }
   GLocalAppData: string  = '';
   GLogDirReady : Boolean = False;
+  { H06: DRAGLINT_PLUGIN_LOG_DIR redirects every plugin log (test drivers must not
+    write the owner's %LOCALAPPDATA% logs). Resolved once with GLocalAppData. }
+  GLogDirOverride: string = '';
 
 function ResolveLocalAppData: string;
 begin
@@ -80,6 +85,12 @@ end;
 
 function PluginLogPath(const pFileName: string): string;
 begin
+  if GLogDirOverride <> '' then
+  begin
+    Result:= IncludeTrailingPathDelimiter(GLogDirOverride) + pFileName;
+    if not GLogDirReady then GLogDirReady:= ForceDirectories(GLogDirOverride);
+    Exit;
+  end;
   if GLocalAppData = '' then Exit('');
   Result:= PluginLogPathIn(GLocalAppData, pFileName);
   if not GLogDirReady then GLogDirReady:= ForceDirectories(ExtractFilePath(Result));
@@ -87,5 +98,6 @@ end;
 
 initialization
   GLocalAppData:= ResolveLocalAppData;
+  GLogDirOverride:= GetEnvironmentVariable('DRAGLINT_PLUGIN_LOG_DIR');
 
 end.
