@@ -2276,6 +2276,48 @@ begin
   Result:= pLine + (if GScratchCited then ' (kept: this run cites a file in its scratch)' else ' (deleted at exit; --shadow-out keeps it)');
 end;
 
+// The end of one `cycles --fix` run, the planner's (RunCycleFixGroups) or R3's (RunHubSurfaceFix): the exit code, then
+// the cycle-fix/1 document (it takes pCycles over: nil on return) or the text lines.
+function FinishFixRun(const pOpts: TCycleFixOptions; pGroups, pOnly: Integer; pChosen: Boolean; var pCycles: TJSONArray;
+  const pShadowUsed: string; const pGate: TGateReport; const pApplied: TApplyReport; pPlaybook, pSummary: TStrings;
+  pPlanned: TList<Integer>): Integer;
+begin
+  Result:= if pChosen or (pGroups = 0) then CExitMechanical else CExitRefused;
+  if pApplied.Ran then Result:= pApplied.ExitCode;
+  if pOpts.Json then
+  begin
+    var Doc:= NewRunDoc(pOpts);
+    try
+      Doc.AddPair('cycles', pCycles);
+      pCycles:= nil;
+      if pShadowUsed <> '' then
+      begin
+        Doc.AddPair('shadow', pShadowUsed);
+        { F5: the default shadow is deleted at exit unless the run cites a file in its scratch; --shadow-out is kept }
+        Doc.AddPair('shadow_kept', TJSONBool.Create((pOpts.ShadowOut <> '') or GScratchCited));
+      end;
+      Doc.AddPair('baseline', BaselineToJson(pGate));
+      Doc.AddPair('refusals', TJSONArray.Create);
+      if pApplied.Error <> '' then Doc.AddPair('error', pApplied.Error);
+      Doc.AddPair('ok', TJSONBool.Create(Result = CExitMechanical));
+      Doc.AddPair('exit_code', TJSONNumber.Create(Result));
+      Writeln(Doc.ToJSON);
+    finally
+      Doc.Free;
+    end;
+  end
+  else
+  begin
+    if pGroups = 0 then Writeln(CCycleNone);
+    for var Line in pPlaybook do Writeln(Line);
+    for var Line in pSummary do Writeln(ShadowLineAtExit(Line, pOpts));
+    if (pGroups > 0) and (pOnly = 0) and not pChosen then Writeln(CVerdictRefused);
+    WriteNotPlanned(pOnly, pGroups, pPlanned);
+    var Timing:= TimingLine(pGate);
+    if Timing <> '' then Writeln(Timing);
+  end;
+end;
+
 function RunCycleFixGroups(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pLibStore: ISymbolStore): Integer;
 var
@@ -2369,40 +2411,7 @@ begin
       ReportError(pOpts, BadPart);
       Exit(CExitError);
     end;
-    Result:= if Chosen or (pSccs.Count = 0) then CExitMechanical else CExitRefused;
-    if Applied.Ran then Result:= Applied.ExitCode;
-    if pOpts.Json then
-    begin
-      var Doc:= NewRunDoc(pOpts);
-      try
-        Doc.AddPair('cycles', Cycles);
-        Cycles:= nil;
-        if ShadowUsed <> '' then
-        begin
-          Doc.AddPair('shadow', ShadowUsed);
-          { F5: the default shadow is deleted at exit unless the run cites a file in its scratch; --shadow-out is kept }
-          Doc.AddPair('shadow_kept', TJSONBool.Create((pOpts.ShadowOut <> '') or GScratchCited));
-        end;
-        Doc.AddPair('baseline', BaselineToJson(Gate));
-        Doc.AddPair('refusals', TJSONArray.Create);
-        if Applied.Error <> '' then Doc.AddPair('error', Applied.Error);
-        Doc.AddPair('ok', TJSONBool.Create(Result = CExitMechanical));
-        Doc.AddPair('exit_code', TJSONNumber.Create(Result));
-        Writeln(Doc.ToJSON);
-      finally
-        Doc.Free;
-      end;
-    end
-    else
-    begin
-      if pSccs.Count = 0 then Writeln(CCycleNone);
-      for var Line in Playbook do Writeln(Line);
-      for var Line in Summary do Writeln(ShadowLineAtExit(Line, pOpts));
-      if (pSccs.Count > 0) and (Only = 0) and not Chosen then Writeln(CVerdictRefused);
-      WriteNotPlanned(Only, pSccs.Count, Planned);
-      var Timing:= TimingLine(Gate);
-      if Timing <> '' then Writeln(Timing);
-    end;
+    Result:= FinishFixRun(pOpts, pSccs.Count, Only, Chosen, Cycles, ShadowUsed, Gate, Applied, Playbook, Summary, Planned);
   finally
     Planned.Free;
     Summary.Free;
@@ -2722,39 +2731,7 @@ begin
       if not (Chosen and pOpts.Json) then AddGroupLines(pOpts, View, Verdict, Only > 0, Applied, ShadowDir, Summary);
       if Chosen then Break;
     end;
-    Result:= if Chosen or (pSccs.Count = 0) then CExitMechanical else CExitRefused;
-    if Applied.Ran then Result:= Applied.ExitCode;
-    if pOpts.Json then
-    begin
-      var Doc:= NewRunDoc(pOpts);
-      try
-        Doc.AddPair('cycles', Cycles);
-        Cycles:= nil;
-        if ShadowUsed <> '' then
-        begin
-          Doc.AddPair('shadow', ShadowUsed);
-          Doc.AddPair('shadow_kept', TJSONBool.Create((pOpts.ShadowOut <> '') or GScratchCited));
-        end;
-        Doc.AddPair('baseline', BaselineToJson(Gate));
-        Doc.AddPair('refusals', TJSONArray.Create);
-        if Applied.Error <> '' then Doc.AddPair('error', Applied.Error);
-        Doc.AddPair('ok', TJSONBool.Create(Result = CExitMechanical));
-        Doc.AddPair('exit_code', TJSONNumber.Create(Result));
-        Writeln(Doc.ToJSON);
-      finally
-        Doc.Free;
-      end;
-    end
-    else
-    begin
-      if pSccs.Count = 0 then Writeln(CCycleNone);
-      for var Line in Playbook do Writeln(Line);
-      for var Line in Summary do Writeln(ShadowLineAtExit(Line, pOpts));
-      if (pSccs.Count > 0) and (Only = 0) and not Chosen then Writeln(CVerdictRefused);
-      WriteNotPlanned(Only, pSccs.Count, Planned);
-      var Timing:= TimingLine(Gate);
-      if Timing <> '' then Writeln(Timing);
-    end;
+    Result:= FinishFixRun(pOpts, pSccs.Count, Only, Chosen, Cycles, ShadowUsed, Gate, Applied, Playbook, Summary, Planned);
   finally
     Planned.Free;
     Summary.Free;

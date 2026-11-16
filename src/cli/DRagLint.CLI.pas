@@ -28601,7 +28601,7 @@ begin
         fix object without the planner for a group R3 plans; --apply = R3 writes one group (below) }
       var HubJson:= SameText(AArgs.Format, 'json');
       { lane v1511 CYC (T06): --fix --hub-surface = R3 through the compile gate (DRagLint.CLI.CycleFix.RunHubSurfaceFix) }
-      if (not AArgs.Fix) and ((HubJson and (AArgs.Plan or not AArgs.Causes)) or ((not HubJson) and not AArgs.Plan)) then  // dl:ok boolean-expression-complexity@ca40 -- one dispatch condition over the verb flags
+      if (not AArgs.Fix) and ((HubJson and (AArgs.Plan or not AArgs.Causes)) or ((not HubJson) and not AArgs.Plan)) then  // dl:ok boolean-expression-complexity@b7e3 -- one dispatch condition over the verb flags (re-reviewed v1511 CYC: --fix now passes)
       begin
         Writeln(ErrOutput, 'ERROR: cycles --hub-surface needs --plan (text; --apply writes one group), --causes --format json or --fix (R3 through the compile gate)');
         Exit(2);
