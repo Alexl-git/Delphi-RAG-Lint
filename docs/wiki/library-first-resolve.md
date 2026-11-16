@@ -50,4 +50,21 @@ flips `pending` to `bound`. Only writers touch the marker; readers never write i
 Once the library is ready: `drag-lint index --project <X.dproj> --resolve-only` (the NOTE prints
 the exact command). Check with `drag-lint info --db <file>`: verdict `current`.
 
+## What binds to the library (1.51.1)
+
+Besides calls and member accesses, the resolve pass binds these to `refs.external_target`:
+
+| Source | Bound to | `refs.external_kind` |
+|---|---|---|
+| a bare read of a library var / const / inherited field or property: `Application` in a `.dpr` main block | `Vcl.Forms.Application` | `value` |
+| a bare read of a library function that needs no argument: `if AFlag and GetTickCount64 > T then` | the function; purity takes its effect summary as for a call | `parenless-call` |
+| a library routine named as a value: `@LibFn`, a procedural argument | the routine (identity, not a call) | `proc-value` |
+| a member called on a library function's result: `Printer.Canvas`, `LibFn().M`, `var R := LibFn; R.M` | the member of the function's declared result type | (as for any call) |
+
+A read stays unbound when the project declares the name where the site can see it (a type, an enum
+value, a unit-level declaration anywhere in the index, a local, a member of the enclosing class),
+when an enclosing `with` target may supply it, when two used library units declare it, or when it
+names an overloaded function not every overload of which can be called without arguments. Library
+enum values (`alClient`) are not bound. All of it needs the library store: without `--library-db`
+(or the section's library) the targets are NULL, and a resolve pass run without it clears them.
 See also: [[Index-DB-Schema]] (`schema_meta` keys), [[info]].
