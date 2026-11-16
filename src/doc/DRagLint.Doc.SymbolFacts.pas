@@ -721,8 +721,15 @@ begin
   Result:= GFieldTypes;
 end;
 
+{ Declared below the ProcsForFile memo it clears. }
+procedure ResetProcsForFileCache; forward;
+
 procedure ResetSymbolFactsFileCaches;
 begin
+  { 1.51.1 Y10: the defProc memo is keyed on (path, tree POINTER); once
+    TAstParseCache.Clear frees the tree, a re-parse of the same path can be
+    allocated at the same address and be answered with the freed tree's nodes. }
+  ResetProcsForFileCache;
   if GUiTypeCache <> nil then GUiTypeCache.Clear;
   GUiTypeCacheFileId:= -1;
   GUiTypeCachePath  := '';
@@ -3367,6 +3374,13 @@ begin
   GProcsCacheFile:= AFilePath;
   GProcsCacheTree:= Pointer(APF.Tree);
   Result         := GProcsCache;
+end;
+
+procedure ResetProcsForFileCache;
+begin
+  GProcsCacheFile:= '';
+  GProcsCacheTree:= nil;
+  GProcsCache    := nil;
 end;
 
 { PERF INSTRUMENTATION (2026-09-28) -- the indexer's INDEX PROFILE reports the

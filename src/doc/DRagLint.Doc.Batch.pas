@@ -206,6 +206,10 @@ type
     /// <returns>Aggregated edits + DeclCount (public decls seen, after the accessor filter) + DocCount (decls contributing an edit) + AccessorsSkipped.</returns>
     /// <remarks>
     /// Not thread-safe; call from the owning thread only.
+    /// Every entry point (this one, DocumentProject, DocumentAll) ends by
+    /// clearing TAstParseCache and the symbol-facts memos (1.51.1 Y10): the
+    /// caller applies the edits to the very files whose trees the pass cached,
+    /// and an in-process reindex must parse the edited text, not the cached one.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.Doc.Batch.AggregateOverFiles (DRagLint.Doc.Batch.pas)</para>
     /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Doc.Batch.HasManagedBlock, DRagLint.Doc.Batch.IsDocumentableKind, DRagLint.Doc.Batch.IsTrivialAccessor, DRagLint.Doc.Document.TDocumenter.BuildForSymbol, DRagLint.Doc.Strip.TDocStripper.StripFile, Format, SameText, Writeln</para>
@@ -301,7 +305,27 @@ uses
   { Ownership for DocumentProject -- the same declaration lint-all reads, so the
     two commands cannot disagree about which files belong to the project. }
   DRagLint.Project.OwnRoots,
-  System.IOUtils, DRagLint.Index.Freshness;
+  System.IOUtils, DRagLint.Index.Freshness,
+  { 1.51.1 Y10: ReleaseDocParseCaches -- the batch's parse trees must not outlive it. }
+  DRagLint.Diagnostics.ParseCache, DRagLint.Doc.SymbolFacts;
+
+{ 1.51.1 Y10 (DOC-10, "autodoc oscillates between two projects that share a
+  unit"): every batch entry point ends by dropping the process-global parse
+  caches it filled. The document pass reads the trees of the units it renders
+  (exception facts: TAstParseCache.Get), and TAstParseCache is keyed on the PATH
+  alone. The CLI then APPLIES the edits -- rewriting exactly those files -- and
+  `--reindex` (or the DOCU5 tamper rescan) re-indexes them IN THE SAME PROCESS:
+  the indexer's facts pass got the PRE-EDIT tree back, matched no routine's
+  ImplStartLine, and wrote every symbol_facts row of the file empty (measured:
+  45/45 rows of YADF.Options.pas under YADFOT). The next dry run of that project
+  rendered blocks without the Touches/Mutates/Complexity lines the other
+  project's index holds, and each project rewrote what the other just wrote.
+  The cost is a re-parse on the next use, once per batch. }
+procedure ReleaseDocParseCaches;
+begin
+  TAstParseCache.Clear;
+  ResetSymbolFactsFileCaches;
+end;
 
 // A declaration whose doc-comment we generate: routines/methods/ctors/dtors and
 // declared types. Fields, consts, vars, enum values, unit/program markers and
@@ -363,7 +387,10 @@ begin
   Result := (ASym.ImplEndLine - ASym.ImplStartLine) <= AMaxLines;
 end;
 
-class function TDocBatch.DocumentUnit(const AStore: ISymbolStore;
+{ The body of TDocBatch.DocumentUnit, without the cache release, so a batch over
+  many files (AggregateOverFiles) keeps the trees shared between units and
+  releases them once, at its end. }
+function DocumentOneUnit(const AStore: ISymbolStore;
   const AUnitFile: string; const AOptions: TDocBatchOptions): TDocBatchResult;
 var
   Syms   : TArray<TSymbol>   ;
@@ -496,6 +523,16 @@ begin
   end;
 end;
 
+class function TDocBatch.DocumentUnit(const AStore: ISymbolStore;
+  const AUnitFile: string; const AOptions: TDocBatchOptions): TDocBatchResult;
+begin
+  try
+    Result:= DocumentOneUnit(AStore, AUnitFile, AOptions);
+  finally
+    ReleaseDocParseCaches; { Y10: see ReleaseDocParseCaches }
+  end; // try
+end;
+
 // Document each file in AFiles (via DocumentUnit) and aggregate the per-file
 // edits + DeclCount/DocCount sums into one TDocBatchResult. Each edit already
 // carries its own file path (edits target multiple files), so the aggregate
@@ -528,7 +565,7 @@ begin
         Inc(ExcludedCount);
         Continue;
       end;
-      Sub := TDocBatch.DocumentUnit(AStore, F, AOptions);
+      Sub := DocumentOneUnit(AStore, F, AOptions);
       Inc(Result.DeclCount, Sub.DeclCount);
       Inc(Result.DocCount , Sub.DocCount );
       Inc(Result.AccessorsSkipped, Sub.AccessorsSkipped); // ADP1 T2
@@ -546,6 +583,7 @@ begin
       Writeln(ErrOutput, Format('doc: %d file(s) skipped by exclude_paths.', [ExcludedCount]));
   finally
     Collected.Free;
+    ReleaseDocParseCaches; { Y10: one release per batch, after the last unit }
   end;
 end;
 
@@ -568,7 +606,11 @@ begin
   Result:= AFiles;
   if AOptions.DocumentThirdParty then Exit;
 
-  Own:= TOwnRoots.Load(ExtractFilePath(AProjectFile));
+  { ExpandFileName FIRST (1.51.1 Y9): a RELATIVE --project ("YADF.dproj", run
+    from the project folder) has ExtractFilePath = '', which TOwnRoots.Load
+    reads as "no anchor" -- inactive, every file ours, excludeRoots ignored,
+    and vendored source written. }
+  Own:= TOwnRoots.Load(ExtractFilePath(ExpandFileName(AProjectFile)));
   if not Own.Active then Exit;
 
   { exclude_paths is deliberately NOT checked here. It is not an ownership
