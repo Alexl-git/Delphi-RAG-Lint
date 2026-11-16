@@ -568,7 +568,11 @@ begin
   Result:= AFiles;
   if AOptions.DocumentThirdParty then Exit;
 
-  Own:= TOwnRoots.Load(ExtractFilePath(AProjectFile));
+  { ExpandFileName FIRST (1.51.1 Y9): a RELATIVE --project ("YADF.dproj", run
+    from the project folder) has ExtractFilePath = '', which TOwnRoots.Load
+    reads as "no anchor" -- inactive, every file ours, excludeRoots ignored,
+    and vendored source written. }
+  Own:= TOwnRoots.Load(ExtractFilePath(ExpandFileName(AProjectFile)));
   if not Own.Active then Exit;
 
   { exclude_paths is deliberately NOT checked here. It is not an ownership
