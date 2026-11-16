@@ -433,7 +433,6 @@ procedure RegisterProviderRules(const ARows: TArray<TRuleInfo>);
 implementation
 
 uses
-  DRagLint.Lint.ReviewMarker,
   DRagLint.Lint.MarkerHash; { ExpectedHash: MarkerExpectedHash delegates (v1511 Y4); it never calls back }
 
 var

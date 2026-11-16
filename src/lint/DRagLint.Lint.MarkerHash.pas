@@ -76,7 +76,7 @@ uses
   System.Hash,
   System.Generics.Collections,
   DRagLint.Lint.ReviewMarker,
-  DRagLint.Lint.RuleCatalog;
+  DRagLint.Lint.RuleCatalog;  // dl:ok circular-uses@cc45 -- implementation-section only, by design (v1511 Y4 HANDOVER): RuleCatalog.MarkerExpectedHash delegates to MarkerHash.ExpectedHash; MarkerHash.LegacyExpectedHash never calls back
 
 type
   TAlgoVersion = record
