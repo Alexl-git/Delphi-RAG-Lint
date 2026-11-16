@@ -611,6 +611,11 @@ $RunnerBudgetSec = @{ 'run_doctests_v021.ps1' = 3000; 'run_lint_tests.ps1' = 120
 $results = New-Object System.Collections.Generic.List[object]
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 
+# H01 growth guard hook: snapshot the watched TEMP work dirs now, compare at the end (autotest\run_battery_temp_growth_guard.ps1).
+$growthSnap = Join-Path ([IO.Path]::GetTempPath()) ('battery-growth-' + $PID + '.txt')
+$growthGuard = Join-Path $PSScriptRoot 'autotest\run_battery_temp_growth_guard.ps1'
+& pwsh -NoProfile -File $growthGuard -Snapshot $growthSnap | Out-Null
+
 # --- Progress heartbeat ----------------------------------------------------
 # See -HeartbeatMin. Three pieces: a loud START banner, a periodic beat while a
 # slow runner blocks the loop, and a loud END banner in the summary.
@@ -939,7 +944,11 @@ Write-Host ("  results: {0}" -f $csv)
 # "is it finished?". It is the LAST thing printed, so it is what a returning
 # reader sees at the bottom of the scrollback, and it states the verdict in a
 # word rather than leaving it to be inferred from three counts.
-$green = ($fail.Count -eq 0 -and $timeout.Count -eq 0)
+$growthOut = (& pwsh -NoProfile -File $growthGuard -Compare $growthSnap 2>&1 | Out-String)
+$growthOk = ($LASTEXITCODE -eq 0)
+Write-Host $growthOut.TrimEnd()
+if (Test-Path -LiteralPath $growthSnap) { [IO.File]::Delete($growthSnap) }
+$green = ($fail.Count -eq 0 -and $timeout.Count -eq 0 -and $growthOk)
 Write-BatteryBanner `
   $(if (-not $green) { 'BATTERY FINISHED -- RED' } elseif ($skip.Count -gt 0) { "BATTERY FINISHED -- GREEN, $($skip.Count) SKIPPED" } else { 'BATTERY FINISHED -- ALL GREEN' }) `
   $(if ($green) { 'Green' } else { 'Red' }) `

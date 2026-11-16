@@ -59,6 +59,8 @@ if ($buildOut -notmatch 'BUILD_EXITCODE=0') {
 $exe = Join-Path $WorkDir ([System.IO.Path]::GetFileNameWithoutExtension($DprName) + '.exe')
 if (-not (Test-Path $exe)) { Write-Host "FATAL: exe not produced: $exe" -ForegroundColor Red; exit 2 }
 
+# H06: the plugin's log writer honours DRAGLINT_PLUGIN_LOG_ROOT -- never write the owner's %LOCALAPPDATA%\drag-lint\logs.
+$env:DRAGLINT_PLUGIN_LOG_ROOT = Join-Path $WorkDir 'plog'
 $out = & $exe 2>&1 | Out-String
 $rc  = $LASTEXITCODE
 Write-Host $out.TrimEnd()

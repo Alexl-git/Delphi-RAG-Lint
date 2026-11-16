@@ -76,6 +76,10 @@ begin
     on E: Exception do Result:= '';
   end;
   if Result = '' then Result:= GetEnvironmentVariable('LOCALAPPDATA');
+  { Test seam (v1511 H06): a test driver points the log root at a private dir so the
+    battery never writes the owner's %LOCALAPPDATA%\drag-lint\logs. Unset in the IDE. }
+  if GetEnvironmentVariable('DRAGLINT_PLUGIN_LOG_ROOT') <> '' then
+    Result:= GetEnvironmentVariable('DRAGLINT_PLUGIN_LOG_ROOT');
 end;
 
 function PluginLogPath(const pFileName: string): string;

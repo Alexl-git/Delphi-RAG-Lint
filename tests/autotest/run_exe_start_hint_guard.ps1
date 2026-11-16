@@ -7,15 +7,18 @@
 #>
 [CmdletBinding()]
 param(
+  [switch]$KeepWorkDir,
   [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$WorkDir = "$env:TEMP\drag-lint-exehint-$PID"
 )
+. "$PSScriptRoot\lib\WorkDirCleanup.ps1"
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'g8-common.ps1')
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 $Exe = (Resolve-Path $Exe).Path
 if (Test-Path $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 New-Item -ItemType Directory -Path $WorkDir | Out-Null
+try {
 $bare = Join-Path $WorkDir 'bare'
 New-Item -ItemType Directory -Path $bare | Out-Null
 Copy-Item $Exe (Join-Path $bare 'drag-lint.exe') -Force   # deliberately NO dlls beside it
@@ -51,3 +54,4 @@ Check 'helper: ordinary exit code gives no hint (negative control)' ((Get-ExeSta
 if ($script:Failed) { Write-Host 'run_exe_start_hint_guard: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'run_exe_start_hint_guard: PASS' -ForegroundColor Green
 exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:$KeepWorkDir }

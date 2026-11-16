@@ -63,7 +63,9 @@ try {
   # The harness bounds every blocking call itself; this outer limit only guards
   # against a harness bug turning the battery into a hang.
   $outFile = Join-Path $WorkDir 'out.txt'
-  $proc = Start-Process $exe -RedirectStandardOutput $outFile -RedirectStandardError "$outFile.err" -NoNewWindow -PassThru
+  # H06: the plugin's log writer honours DRAGLINT_PLUGIN_LOG_ROOT -- never write the owner's %LOCALAPPDATA%\drag-lint\logs.
+$env:DRAGLINT_PLUGIN_LOG_ROOT = Join-Path $WorkDir 'plog'
+$proc = Start-Process $exe -RedirectStandardOutput $outFile -RedirectStandardError "$outFile.err" -NoNewWindow -PassThru
   if (-not $proc.WaitForExit(120000)) { $proc.Kill(); Check 'harness finished within 120 s' $false 'killed' }
   $out = Get-Content $outFile -Raw
   Write-Host $out.TrimEnd()

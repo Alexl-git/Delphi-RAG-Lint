@@ -3,7 +3,7 @@
   A machine drag-lint.json beside the exe names the real platform libraries and outranks a
   guard's fixtures. Get-HermeticEngine returns $Exe untouched when no drag-lint.json sits
   beside it; otherwise it returns an engine copy WITHOUT the manifest (exe, dlls, rules\)
-  in %TEMP%\drag-lint-hermetic\<key>, cached by exe size+mtime + rules\ count/size/newest mtime, shared by every guard
+  in %TEMP%\drag-lint-hermetic\<key>, cached by exe size+mtime + rules\ count/size/newest mtime, shared by every guard (keeps the newest 3 keys, H01)
   (built in a private dir, then moved into place, so parallel guards do not race).
 #>
 function Get-HermeticEngine {
@@ -28,5 +28,11 @@ function Get-HermeticEngine {
     ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $tmp }
   if (Test-Path -LiteralPath (Join-Path $dir 'rules')) { Copy-Item -LiteralPath (Join-Path $dir 'rules') -Destination $tmp -Recurse }
   try { [IO.Directory]::Move($tmp, $dest) } catch { [IO.Directory]::Delete($tmp, $true) }
+  # H01: every engine rebuild adds a ~100 MB key dir; keep the newest 3 (by creation), evict the rest.
+  # A dir still in use by a running guard is locked: the delete fails and is skipped, never thrown.
+  @(Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike 'tmp-*' } |
+    Sort-Object CreationTimeUtc -Descending | Select-Object -Skip 3) | ForEach-Object {
+      try { [IO.Directory]::Delete($_.FullName, $true) } catch { $null = $_ }
+    }
   return $out
 }
