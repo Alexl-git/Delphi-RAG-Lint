@@ -693,6 +693,7 @@ procedure TNarrowPlanner.Decide(const pR: TRoutineRow; const pParam: TParamRow);
 var
   V: TVerdict;
 begin
+  if TakeStandDown then raise ECompileGateCancelled.Create('cancelled'); // B25: shutdown / Cancel stops the plan
   if not TRegEx.IsMatch(pParam.TypeText, '^[A-Za-z_&][A-Za-z0-9_.]*$') then Exit; { not a plain type name: no candidate }
   var Named:= ClassesNamed(Leaf(pParam.TypeText));
   if Length(Named) = 0 then Exit; { not a class: scalars, records and interfaces are not candidates }
@@ -1140,9 +1141,17 @@ begin
   var Plan: TNarrowPlan;
   var NoRoutine: Boolean;
   try
-    Plan:= Planner.Run(NoRoutine);
-  finally
-    Planner.Free;
+    try
+      Plan:= Planner.Run(NoRoutine);
+    finally
+      Planner.Free;
+    end;
+  except
+    on ECompileGateCancelled do
+    begin
+      SayError('cancelled: a stand-down request stopped the plan; nothing written');
+      Exit(CExitRefused);
+    end;
   end;
   if NoRoutine then
   begin

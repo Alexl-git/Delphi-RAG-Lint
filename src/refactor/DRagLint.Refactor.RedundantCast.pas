@@ -802,6 +802,7 @@ procedure TCastPlanner.Decide(pFileId: Int64; const pPath: string; pLine, pCol: 
 const
   CTypeKinds: array[0..4] of string = ('class', 'record', 'interface', 'enum', 'type');
 begin
+  if TakeStandDown then raise ECompileGateCancelled.Create('cancelled'); // B25: shutdown / Cancel stops the plan
   var Site:= Default(TCastSite);
   Site.FilePath:= pPath;
   Site.Line    := pLine;
@@ -1237,6 +1238,11 @@ begin
     begin
       SayError(E.Message);
       Exit(CExitError);
+    end;
+    on ECompileGateCancelled do
+    begin
+      SayError('cancelled: a stand-down request stopped the plan; nothing written');
+      Exit(CExitRefused);
     end;
   end;
   if pOpts.Apply and (Length(Plan.Fixes) > 0) then
