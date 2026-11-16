@@ -90,14 +90,12 @@ function DoConvertApply(const AArgs: TArgs): Integer;
 implementation
 
 uses
-  DRagLint.Core.Model, DRagLint.CLI.ConsumerDbs, DRagLint.Core.FileTime, Winapi.Windows,
-  DRagLint.Core.OutputEncoding, System.SysUtils, System.Classes, System.IOUtils, DRagLint.Core.Versions,
-  System.NetEncoding, System.JSON, System.StrUtils, System.DateUtils, System.Generics.Collections,
-  System.Generics.Defaults, System.Diagnostics, System.SyncObjs, System.Math, System.Character, Data.DB,
-  FireDAC.Comp.Client, FireDAC.Stan.Async, FireDAC.Stan.Param, FireDAC.DApt, TreeSitter,
-  DRagLint.Core.Interfaces, DRagLint.Refactor.TextEdit, DRagLint.Convert.PropTree, DRagLint.Convert.PropCache,
-  DRagLint.Convert.Rules, DRagLint.Convert.CastLib, DRagLint.Convert.GlyphVacuum, DRagLint.Convert.DfmReemit,
-  DRagLint.Convert.Apply, DRagLint.Convert.Backup, DRagLint.Convert.UnitRules, DRagLint.Convert.UsesReconcile,
+  DRagLint.Core.Model, DRagLint.CLI.ConsumerDbs, DRagLint.Core.FileTime, Winapi.Windows, System.SysUtils,
+  System.Classes, System.IOUtils, DRagLint.Core.Versions, System.NetEncoding, System.JSON, System.StrUtils,
+  System.DateUtils, System.Generics.Collections, System.Generics.Defaults, System.SyncObjs, System.Math,
+  System.Character, Data.DB, FireDAC.Comp.Client, FireDAC.Stan.Async, FireDAC.Stan.Param, FireDAC.DApt,
+  TreeSitter, DRagLint.Core.Interfaces, DRagLint.Refactor.TextEdit, DRagLint.Convert.Rules,
+  DRagLint.Convert.CastLib, DRagLint.Convert.Apply, DRagLint.Convert.Backup, DRagLint.Convert.UnitRules,
   DRagLint.CLI.Convert, DRagLint.CLI.ConvertApplyJson;
 
 { 1.20.6 (Task 2, T2b): the From/To classes of EVERY #convert block,

@@ -181,14 +181,11 @@ function ProgressJsonStr(const S: string): string;
 implementation
 
 uses
-  DRagLint.Core.Model, DRagLint.CLI.ConsumerDbs, DRagLint.Core.FileTime, Winapi.Windows,
-  DRagLint.Core.OutputEncoding, System.SysUtils, System.Classes, System.IOUtils, DRagLint.Core.Versions,
-  System.NetEncoding, System.StrUtils, System.DateUtils, System.Generics.Collections,
-  System.Generics.Defaults, System.Diagnostics, System.SyncObjs, System.Math, System.Character, Data.DB,
-  FireDAC.Comp.Client, FireDAC.Stan.Async, FireDAC.Stan.Param, FireDAC.DApt, TreeSitter,
-  DRagLint.Core.Interfaces, DRagLint.Refactor.TextEdit, DRagLint.Convert.PropTree, DRagLint.Convert.PropCache,
-  DRagLint.Convert.CastLib, DRagLint.Convert.GlyphVacuum, DRagLint.Convert.DfmReemit, DRagLint.Convert.Apply,
-  DRagLint.Convert.Backup, DRagLint.Convert.UnitRules, DRagLint.Convert.UsesReconcile;
+  DRagLint.CLI.ConsumerDbs, Winapi.Windows, DRagLint.Core.OutputEncoding, System.SysUtils, System.Classes,
+  System.IOUtils, System.NetEncoding, System.StrUtils, System.DateUtils, System.Generics.Collections,
+  System.Diagnostics, System.SyncObjs, System.Math, Data.DB, FireDAC.Stan.Async, FireDAC.Stan.Param,
+  FireDAC.DApt, TreeSitter, DRagLint.Core.Interfaces, DRagLint.Convert.PropTree, DRagLint.Convert.PropCache,
+  DRagLint.Convert.CastLib, DRagLint.Convert.GlyphVacuum, DRagLint.Convert.DfmReemit, DRagLint.Convert.Apply;
 
 /// <summary>The tree-expansion depth of proptree / convert-scaffold:
 /// --depth N &gt; the --rules book's '#depth N' &gt; DEFAULT_TREE_DEPTH (5).</summary>

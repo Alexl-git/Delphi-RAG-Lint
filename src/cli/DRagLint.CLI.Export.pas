@@ -170,7 +170,7 @@ var
   procedure FlushBlock;
   begin
     if Names.Count = 0 then Exit;
-    EnumShortName:= LastSegment(LastEnum, '.');
+    EnumShortName:= LastSegmentAfter(LastEnum, '.');
     FlatName:= StringReplace(LastEnum, '.', '_', [rfReplaceAll]);
     AOut.WriteLine(Format('  %s_Names: array[%s] of string = (%s);', [FlatName, EnumShortName, string.Join(', ', Names.ToStringArray)]));
     Names.Clear;

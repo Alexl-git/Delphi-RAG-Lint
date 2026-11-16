@@ -819,7 +819,7 @@ procedure ReportCap(AOmitted, ACap: Integer; AAtLeast: Boolean; const AFlag: str
 /// <param name="S">A dotted / separated name.</param>
 /// <param name="ASep">The separator.</param>
 /// <returns>The last segment.</returns>
-function LastSegment(const S: string; ASep: Char): string;
+function LastSegmentAfter(const S: string; ASep: Char): string;
 
 /// <summary>Prints a "not found" diagnostic: to stderr under --json (stdout must stay parseable JSON), to stdout otherwise.</summary>
 /// <param name="AArgs">Parsed arguments; AsJson selects the stream.</param>
@@ -1783,7 +1783,7 @@ begin
   else Writeln(CapOmittedNote(AOmitted, ACap, AAtLeast, AFlag, ARerun));
 end; // procedure
 
-function LastSegment(const S: string; ASep: Char): string;
+function LastSegmentAfter(const S: string; ASep: Char): string;
 var
   DotPos: Integer;
 begin

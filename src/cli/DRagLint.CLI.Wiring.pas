@@ -331,7 +331,7 @@ begin
   if Depth <= 0 then begin Writeln(AArgs.QName); Writeln('  (depth 0 returns nothing)'); Exit (1 ); end;
   // Use the bare name (last segment) as the target for the CTE ref lookup,
   // since refs store the bare identifier name, not the qualified name.
-  TargetName:= LastSegment(AArgs.QName, '.');
+  TargetName:= LastSegmentAfter(AArgs.QName, '.');
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
   if (not RoOk) and StaleDbRefusesRun(AArgs, 'impact', AArgs.DbPath) then Exit(2);
