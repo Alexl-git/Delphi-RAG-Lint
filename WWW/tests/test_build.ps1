@@ -27,7 +27,7 @@ Assert-True ([IO.File]::ReadAllText("$out\robots.txt").Contains('Sitemap: https:
 $dlp = [IO.File]::ReadAllText("$out\downloads\index.html")
 Assert-True ($dlp.Contains('href="https://github.com/Alexl-git/YADF/releases/latest"')) 'download link'
 Assert-True ($dlp.Contains('v1.2.3-alpha')) 'version on downloads'
-Assert-True ($idx.Contains('<nav class="menu"><a href="/products/">Products</a><a href="/articles/">')) 'Products first in the menu'
+Assert-True ($idx.Contains('<nav class="menu"><a href="/products/dl/">Delphi-RAG-Lint</a><a href="/products/yadf/">YADF</a><a href="/articles/">')) 'one menu entry per product, first in the menu'
 Assert-True (Test-Path "$out\products\index.html") 'products index exists'
 Assert-True ([IO.File]::ReadAllText("$out\products\index.html").Contains('href="/products/yadf/"')) 'products index lists yadf'
 Assert-True ($dlp.Contains('<h2><a href="/products/dl/">DL (drag-lint)</a></h2>')) 'downloads name links to product page'

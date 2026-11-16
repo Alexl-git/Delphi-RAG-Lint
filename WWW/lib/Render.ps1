@@ -45,7 +45,9 @@ function Get-ShortName($Product) { if ($Product.short) { $Product.short } else {
 
 function New-Menu($Config) {
     $m = $Config.micronite
-    '<nav class="menu"><a href="/products/">Products</a><a href="/articles/">Articles</a><a href="/downloads/">Downloads</a>' +
+    # One menu entry per product (owner 2026-11-16: two products, so no Products menu); /products/ still exists.
+    $prod = ($Config.products | ForEach-Object { $label = if ($_.menu) { $_.menu } else { $_.name }; "<a href=""/products/$($_.id)/"">$(ConvertTo-HtmlText $label)</a>" }) -join ''
+    "<nav class=""menu"">$prod" + '<a href="/articles/">Articles</a><a href="/downloads/">Downloads</a>' +
     '<a href="/help/">Help</a><a href="/community/">Community</a>' +
     "<a class=""htr"" href=""$($m.url)"">$(ConvertTo-HtmlText $m.name)</a></nav>"
 }
