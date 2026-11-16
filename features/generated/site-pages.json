@@ -40,8 +40,8 @@
     "version": "1.38.0-alpha"
   },
   "features/autofix-wave.md": {
-    "hash": "289cef3ebbf68aa2060d33021111567423fb44cf88e33c5c42eee19dd2574268",
-    "version": "1.51.0-alpha"
+    "hash": "5ef3a1864af7ffc5c1ea580b5acda89dc4931526b79c4081154d3e0ea69aeaa0",
+    "version": "1.51.1-alpha"
   },
   "features/bench-context.md": {
     "hash": "40753857e02ca31b5cba13964e0852b48e63f39e75e8aaae79ad9869e80a73fb",
@@ -300,8 +300,8 @@
     "version": "1.35.1-alpha"
   },
   "features/drag-lint-options.md": {
-    "hash": "7eabed467e9c296cf2ede48bb56d99e7cf8e53d321c47d25584b748ddb517ae0",
-    "version": "1.51.0-alpha"
+    "hash": "6099e69128e3fd1539f007c188a6f19d79d4b52581326746ab34217887f9278c",
+    "version": "1.51.1-alpha"
   },
   "features/drag-lint-panel-dockable.md": {
     "hash": "37fbcfa09e39665b420b70b6c797da7549c6ee454223fa9fb6f09a895c8c606f",
@@ -408,16 +408,16 @@
     "version": "1.50.0-alpha"
   },
   "features/fix-all-in-unit.md": {
-    "hash": "2d1cc39fa78a513fceb6665d33efaf1260e2a6164e93aad82bebf4483bfcdc60",
-    "version": "1.51.0-alpha"
+    "hash": "8baf8fefa66f90b034b3f134b7c36f52fc37158220af6b0ca2cd189d66cef097",
+    "version": "1.51.1-alpha"
   },
   "features/fix-all-reliability.md": {
     "hash": "6509af32fad84b3d950a3ba494545d5246e40a85466ed6dcbe65d86cc7b298fc",
     "version": "1.50.0-alpha"
   },
   "features/fix-it.md": {
-    "hash": "c4a2e7e8eaa029a389088740d3d77858d0e36faad898ea5a4397e95fedbbe712",
-    "version": "1.51.0-alpha"
+    "hash": "e9c3ddd4b01439de6b3008d4d2ce32031e2ff29e916e5b7d7e7a921dc9a7f469",
+    "version": "1.51.1-alpha"
   },
   "features/flow-out-arg-rules.md": {
     "hash": "85c8035cafafe5351dd16c54c66e78df9bdc165bbb77d70ffec4b03316f0abcb",
@@ -572,8 +572,8 @@
     "version": "1.50.0-alpha"
   },
   "features/lint-rules.md": {
-    "hash": "fd4f5544c0660f7888bd3d698a14c187e34684a366c91b206a82f95f0463334d",
-    "version": "1.51.0-alpha"
+    "hash": "bcb4a6b899e20a0af882dbb5644da578d706e9c9fb46f53b2491d97fceb09373",
+    "version": "1.51.1-alpha"
   },
   "features/lint-tree.md": {
     "hash": "186c44dbb032a50a44478b4c17bfd65b96b532934edb68dbd81d69729dd21c14",
@@ -784,8 +784,8 @@
     "version": "1.50.0-alpha"
   },
   "features/run-lint-all-full-report.md": {
-    "hash": "09dbdaef5389e8dd55cf67a289615bda87d0aa24499fd2f4f1778b3d0f08a964",
-    "version": "1.51.0-alpha"
+    "hash": "508f4e905d9fbcaed2c43eb3ad95ed016167a73578d8789f96179665fb6ed039",
+    "version": "1.51.1-alpha"
   },
   "features/safe-delete.md": {
     "hash": "206de3a35bc87cece09a694906dace50f4b16d16567ba9a6cb9006c1a21ea909",
@@ -1011,12 +1011,16 @@
     "hash": "016076c3c7432a5bd728368daf11ddf477ce2b541b30ddac8c1292460d037ac4",
     "version": "1.51.1-alpha"
   },
+  "features/v152-index-possibly-out-of-range.md": {
+    "hash": "4ff3b1b60f738048dd84f5d40427040d9b69a80f1d829f57ecb37795b1ecebbb",
+    "version": "1.51.1-alpha"
+  },
   "features/vscode-extension.md": {
     "hash": "aba4ac6318c27cf183931716983269e75d96b591c3af73c1668305ef4fdfaee1",
     "version": "1.48.0-alpha"
   },
   "features/warm-rule-cache.md": {
-    "hash": "9cc98e3d1cc3d93b5eff200c7af56d852790a52a3df1c78a7d4c272cc5c965d6",
+    "hash": "38db21f668080894be815640a1d379654bf70b12a3e4fa574eeef0716da0a085",
     "version": "1.51.1-alpha"
   },
   "features/wiki-blocks-authoring.md": {

@@ -7,7 +7,7 @@ group: linting
 order: 30016
 since: 0.1.0-alpha
 status: shipped
-updated: 1.51.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # Fix it
@@ -73,7 +73,7 @@ either (a stale owning index is reported `index=stale`, not reindexed). With
 [Multi-Project-Rename](multi-project-rename.md)).
 
 Only rules marked fixable can be auto-fixed. `drag-lint rules --json`
-reports a `fixable` field per rule; 125 of the 423 rules are fixable.
+reports a `fixable` field per rule; 126 of the 424 rules are fixable.
 
 ### Unused units (`unused-unit-in-uses`)
 

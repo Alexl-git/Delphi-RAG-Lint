@@ -1,0 +1,24 @@
+{
+  "id": "v152-index-possibly-out-of-range",
+  "title": "Array index possibly out of range lint rule (index-possibly-out-of-range)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.52.0-alpha",
+  "summary": "Warns on the write of an array index that no dominating guard bounds on both sides before the access; opt-in InRange guard autofix",
+  "intro": "Read this to see when index-possibly-out-of-range warns, what counts as a guard, and how its opt-in autofix inserts an InRange check.",
+  "wikiPage": "index-possibly-out-of-range",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-16",
+    "by": "ENGINE",
+    "build": "1.51.1-alpha",
+    "surfaceHash": "de319179f8b6b2ffbdba5a675a1f550133807d68a0339e632b8014cd5442cafc"
+  }
+}

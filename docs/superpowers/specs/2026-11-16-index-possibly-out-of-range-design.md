@@ -126,3 +126,21 @@ early `Exit` and early `raise` guards; `n := Calc` never indexing; `A[3]`; `S[i]
 guarded parameter.
 Fix: the `Calc` case gains the guard line and the uses entries; a second lint of the fixed file
 gives zero findings for the rule and zero edits; `if x then A[i] := 1` gets no edit.
+
+## As built (reconcile, 2026-11-16)
+
+Additions found necessary by the first FP measurement on CLIENT / SERVER / YADF copies; each has a
+fixture case:
+- **Short-circuit guards**: in `X and A[i]` the facts of X hold for the right side; in
+  `X or A[i]` the facts of `not X`. (`while (i < Length(A)) and (A[i] <> 0)` is the commonest
+  scan loop.) The wrong order `while (A[i] = 0) and (i <= 8)` still reports.
+- **If-expressions**: `if i < Length(A) then A[i] else 0` guards like the statement form.
+- **Length alias**: a local written exactly once as `n := Length(A)` / `High(A)` / `Low(A)`
+  stands for the call in a guard (`while i < n`).
+- **Grow-on-demand**: an earlier `if i >= Length(A) then SetLength(A, ...)` proves the upper side.
+- **Reaching writes only**: provenance counts the writes before the access and those inside the
+  outermost loop around it; a later reuse of the variable (`i := Pos(...)` after the scan) no
+  longer breaks it.
+- The autofix is a per-file fixer (RegisterFileFixer, risky) so the uses edits are emitted once.
+- Messages: `'<i>' is written here and reaches A[i] at line N with no guard ... (in <Routine>;
+  fix raises <Class> at line K)` or `(...; no autofix: ...)`; the hint starts `Parameter '<i>'`.
