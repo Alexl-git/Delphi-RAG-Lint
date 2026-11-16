@@ -308,44 +308,56 @@ var
     end;
   end;
 
-  { B14: the ITask a TTask.Run call returns is observed when the call is chained into .Wait / .Result, or is
-    assigned to a variable the same routine later Waits (T.Wait), reads (T.Result) or passes to
-    TTask.WaitForAll / WaitForAny -- the exception then surfaces in the caller. }
-  function TaskObserved(const ACall: TTSNode): Boolean;
+  { B14: a variable the routine later Waits (T.Wait), reads (T.Result) or passes to TTask.WaitForAll / WaitForAny. }
+  function TargetObserved(const AAssign: TTSNode; const ATarget: string): Boolean;
   var
-    Par, Proc, N: TTSNode;
-    CallTxt, Target, Ent: string;
+    Proc, N: TTSNode;
+    Ent, Txt: string;
+    WaitsAll: Boolean;
     All: TList<TTSNode>;
   begin
     Result:= False;
-    Par:= ACall.Parent;
-    if Par.IsNull then Exit;
-    CallTxt:= Canon(NodeStr(ACall));
-    if StartsText(CallTxt + '.', Canon(NodeStr(Par))) then
-      Exit(StartsText(CallTxt + '.wait', Canon(NodeStr(Par))) or StartsText(CallTxt + '.result', Canon(NodeStr(Par))));
-    if Par.NodeType <> 'assignment' then Exit;
-    Target:= Canon(NodeStr(Par.ChildByField('lhs')));
-    if Pos('[', Target) > 0 then Target:= Copy(Target, 1, Pos('[', Target) - 1);
-    if Target = '' then Exit;
-    Proc:= Par.Parent;
+    Proc:= AAssign.Parent;
     while (not Proc.IsNull) and (Proc.NodeType <> 'defProc') do Proc:= Proc.Parent;
     if Proc.IsNull then Exit;
     All:= Nodes(Proc.ChildByField('body'));
     try
       for N in All do
       begin
-        if N.StartByte <= Par.StartByte then Continue;
-        if N.NodeType = 'exprCall' then
-        begin
-          Ent:= Canon(NodeStr(N.ChildByField('entity')));
-          if StartsText(Target + '.wait', Ent) then Exit(True);
-          if (EndsText('.waitforall', Ent) or EndsText('.waitforany', Ent))
-            and HasWord(Canon(NodeStr(N)), Target) then Exit(True);
-        end
-        else if (N.NodeType = 'exprDot') and StartsText(Target + '.result', Canon(NodeStr(N))) then Exit(True);
+        if N.StartByte <= AAssign.StartByte then Continue;
+        Ent:= Canon(NodeStr(N.ChildByField('entity')));
+        Txt:= Canon(NodeStr(N));
+        WaitsAll:= (N.NodeType = 'exprCall') and (EndsText('.waitforall', Ent) or EndsText('.waitforany', Ent));
+        Result:= (WaitsAll and HasWord(Txt, ATarget)) or StartsText(ATarget + '.wait', Txt)
+          or StartsText(ATarget + '.result', Txt);
+        if Result then Break;
       end;
     finally
       All.Free;
+    end;
+  end;
+
+  { B14: the ITask a TTask.Run call returns is observed when the call is chained into .Wait / .Result, or is
+    assigned to a variable the same routine later observes -- the exception then surfaces in the caller. }
+  function TaskObserved(const ACall: TTSNode): Boolean;
+  var
+    Par: TTSNode;
+    CallTxt, ParTxt, Target: string;
+    K: Integer;
+  begin
+    Result:= False;
+    Par:= ACall.Parent;
+    if Par.IsNull then Exit;
+    CallTxt:= Canon(NodeStr(ACall));
+    ParTxt := Canon(NodeStr(Par));
+    if StartsText(CallTxt + '.', ParTxt) then
+      Result:= StartsText(CallTxt + '.wait', ParTxt) or StartsText(CallTxt + '.result', ParTxt)
+    else if Par.NodeType = 'assignment' then
+    begin
+      Target:= Canon(NodeStr(Par.ChildByField('lhs')));
+      K:= Target.IndexOf('[');
+      if K >= 0 then Target:= Copy(Target, 1, K);
+      Result:= (Target <> '') and TargetObserved(Par, Target);
     end;
   end;
 
