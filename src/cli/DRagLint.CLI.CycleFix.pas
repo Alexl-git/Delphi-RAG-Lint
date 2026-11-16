@@ -2278,7 +2278,7 @@ end;
 
 // The end of one `cycles --fix` run, the planner's (RunCycleFixGroups) or R3's (RunHubSurfaceFix): the exit code, then
 // the cycle-fix/1 document (it takes pCycles over: nil on return) or the text lines.
-function FinishFixRun(const pOpts: TCycleFixOptions; pGroups, pOnly: Integer; pChosen: Boolean; var pCycles: TJSONArray;
+function FinishFixRun(const pOpts: TCycleFixOptions; pGroups, pOnly: Integer; pChosen: Boolean; var pCycles: TJSONArray;  // dl:ok too-many-parameters@1222 -- implementation-private tail of the two run loops (planner, R3); the parameters are exactly their locals, a record would only re-pack them
   const pShadowUsed: string; const pGate: TGateReport; const pApplied: TApplyReport; pPlaybook, pSummary: TStrings;
   pPlanned: TList<Integer>): Integer;
 begin
@@ -2596,17 +2596,13 @@ const
 // The `cycles` output predicted once R3 breaks group pSelf (1-based): every other group as DoCycles prints it.
 function R3Predicted(const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; pSelf: Integer): string;
 begin
-  var L: TArray<string>:= nil;
-  if pSccs.Count <= 1 then L:= [CCycleNone]
-  else
-  begin
-    L:= [Format(CCycleCountFmt, [pSccs.Count - 1])];
-    for var I:= 0 to pSccs.Count - 1 do
-      if I <> pSelf - 1 then
-        L:= L + [Format(CCycleGroupFmt, [Length(pSccs[I]), string.Join(' <-> ', pSccs[I]),
-          (if IntfEdgeCount(pSccs[I], pGraph, True) > 0 then CCycleTagInterface else CCycleTagImplOnly)])];
-    L:= L + [CCycleEdgesHint];
-  end;
+  if pSccs.Count <= 1 then Exit(CCycleNone);
+  var L: TArray<string>:= [Format(CCycleCountFmt, [pSccs.Count - 1])];
+  for var I:= 0 to pSccs.Count - 1 do
+    if I <> pSelf - 1 then
+      L:= L + [Format(CCycleGroupFmt, [Length(pSccs[I]), string.Join(' <-> ', pSccs[I]),
+        (if IntfEdgeCount(pSccs[I], pGraph, True) > 0 then CCycleTagInterface else CCycleTagImplOnly)])];
+  L:= L + [CCycleEdgesHint];
   Result:= string.Join(#10, L);
 end;
 

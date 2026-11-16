@@ -28655,7 +28655,7 @@ begin
       end;
       if AArgs.Fix then
       begin
-        var FixOpts: TCycleFixOptions;
+        var FixOpts:= Default(TCycleFixOptions);
         FixOpts.Project  := AArgs.ProjectPath;
         FixOpts.Db       := AArgs.DbPath;
         FixOpts.Platform := AArgs.CheckPlatform;
