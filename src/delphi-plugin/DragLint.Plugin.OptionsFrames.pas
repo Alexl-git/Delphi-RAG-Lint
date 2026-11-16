@@ -378,7 +378,7 @@ type
     FGrpRules    : TGroupBox;
     FBtnEditRules: TButton;
     /// <summary>Opens the drag-lint dock focused on the "Lint Options" tab, where
-    /// the full 165+ rule catalog (enable/disable, severity, auto-fix) is edited
+    /// the full rule catalog (enable/disable, severity, auto-fix) is edited
     /// per project. The catalog is too large/dynamic for the Options dialog, so
     /// this button routes users to the dock surface (same target as the Project
     /// Manager "drag-lint: Project Rules..." right-click).</summary>
@@ -1039,11 +1039,11 @@ begin
   FEdMaxReturnCases.Value   := 20;
   FEdMaxReturnCases.Anchors := [akTop, akRight];
 
-  { --- Lint rules (routes to the dock; the 165+ catalog is per-project) --- }
+  { --- Lint rules (routes to the dock; the rule catalog is per-project) --- }
   FGrpRules:= DLNewGroup(Self, 'Lint rules', Y, GH + 34 + EH + 4);
   GY:= GH - 4;
   DLNewLabel(FGrpRules,
-    'The full list of 165+ lint rules -- enable/disable, severity, and auto-fix --', LM, GY); Inc(GY, 16);
+    'The full list of lint rules -- enable/disable, severity, and auto-fix --', LM, GY); Inc(GY, 16);
   DLNewLabel(FGrpRules,
     'is edited per project on the drag-lint dock''s Lint Options tab.', LM, GY); Inc(GY, 22);
   FBtnEditRules:= TButton.Create(FGrpRules);
@@ -1052,7 +1052,7 @@ begin
   FBtnEditRules.Top    := GY;
   FBtnEditRules.Width  := 180;
   FBtnEditRules.Height := EH;
-  FBtnEditRules.Caption:= 'Edit lint rules (165+)...';
+  FBtnEditRules.Caption:= 'Edit lint rules...';
   FBtnEditRules.OnClick:= BtnEditRulesClick;
 end; // procedure
 
@@ -1233,7 +1233,7 @@ end;
 
 procedure TDLLinterOptionsFrame.BtnEditRulesClick(Sender: TObject);
 begin
-  { The 165+ rule catalog is per-project and lives on the dock's Lint Options
+  { The rule catalog is per-project and lives on the dock's Lint Options
     tab -- open it there (same surface as the Project Rules right-click). }
   ShowDragLintDockLintOptions;
 end;
