@@ -28601,9 +28601,10 @@ begin
       { lane 149 CYA (P6 prep): --plan dry run = the planner with R3 asked first per group; --causes --format json = R3's
         fix object without the planner for a group R3 plans; --apply = R3 writes one group (below) }
       var HubJson:= SameText(AArgs.Format, 'json');
-      if AArgs.Fix or (HubJson and (AArgs.Plan or not AArgs.Causes)) or ((not HubJson) and not AArgs.Plan) then  // dl:ok boolean-expression-complexity@ca40 -- one dispatch condition over the verb flags
+      { lane v1511 CYC (T06): --fix --hub-surface = R3 through the compile gate (DRagLint.CLI.CycleFix.RunHubSurfaceFix) }
+      if (not AArgs.Fix) and ((HubJson and (AArgs.Plan or not AArgs.Causes)) or ((not HubJson) and not AArgs.Plan)) then  // dl:ok boolean-expression-complexity@b7e3 -- one dispatch condition over the verb flags (re-reviewed v1511 CYC: --fix now passes)
       begin
-        Writeln(ErrOutput, 'ERROR: cycles --hub-surface needs --plan (text; --apply writes one group) or --causes --format json, and does not combine with --fix yet');
+        Writeln(ErrOutput, 'ERROR: cycles --hub-surface needs --plan (text; --apply writes one group), --causes --format json or --fix (R3 through the compile gate)');
         Exit(2);
       end;
     end;
@@ -28655,7 +28656,7 @@ begin
       end;
       if AArgs.Fix then
       begin
-        var FixOpts: TCycleFixOptions;
+        var FixOpts:= Default(TCycleFixOptions);
         FixOpts.Project  := AArgs.ProjectPath;
         FixOpts.Db       := AArgs.DbPath;
         FixOpts.Platform := AArgs.CheckPlatform;
@@ -28673,6 +28674,7 @@ begin
         FixOpts.LibraryDbs:= AArgs.LibraryDbs;
         FixOpts.RulesDir  := AArgs.RulesDir;
         FixOpts.Json     := SameText(AArgs.Format, 'json');
+        FixOpts.HubSurface:= AArgs.HubSurface;
         FixCode:= RunCycleFix(FixOpts, Store, Sccs, Graph, LibStore);
       end
       else
