@@ -1,0 +1,29 @@
+{
+  "id": "v1511-ext-fixes",
+  "title": "References for declaration positions",
+  "group": "indexing",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.51.0-alpha",
+  "summary": "The index keeps a reference for pointer base types, generic constraints, generic method headers, dotted property specifiers and message constants",
+  "intro": "Read this to see which declaration positions hold a reference a rename or usages can find, the kind each gets, and the positions that still hold none.",
+  "wikiPage": "index-declaration-refs",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "index",
+      "example": "drag-lint index --project <file.dproj> --db <file.sqlite>"
+    },
+    {
+      "type": "cli",
+      "verb": "usages",
+      "example": "drag-lint usages --name <QualifiedName> --db <file.sqlite>"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-16",
+    "by": "alexanderl",
+    "build": "1.51.0-alpha"
+  }
+}

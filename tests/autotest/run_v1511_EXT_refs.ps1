@@ -12,7 +12,15 @@
     S2  both Title members of that specifier are bound to TExtBox.Title;
     S3  a three-part path `read FBox.Origin.PosX` binds Origin to TExtBox.Origin and PosX to TExtPoint.PosX;
     S4  the root of an indexed specifier `read FPair[0].Title` is a property-spec ref bound to TExtHolder.FPair;
-    S5  no specifier path leaves a second ref on the same token (one row per token and kind).
+    S5  no specifier path leaves a second ref on the same token (one row per token and kind);
+    G1  a generic constraint `TExtBoxG<T: TExtItem> = class` emits a type_use bound to TExtItem;
+    G2  a generic method implementation header `function TExtBoxG<T>.GetAt` emits the type_use of its
+        class qualifier, as `procedure TExtLeaf.OldRun` always did (bound to TExtBoxG);
+    G3  `lInner: TExtBoxG<TExtLeaf>.TInnerG`: the generic owner of a nested type and its argument
+        emit type_use refs (TExtBoxG, TExtLeaf), not only the leaf TInnerG;
+    G4  NEGATIVE: the type parameters T / K of those declarations and headers emit no type_use at
+        their declaring token (`<T: TExtItem>`, `<T>.GetAt`, `Fill<K: TExtOther>`, `Fill<K>(`);
+    D1  `message WM_EXT_PROBE` emits a read ref bound to the constant.
 
   HELD from 1.51.0 (regression pins for the B26 list and the B01 extractor half; GREEN on base too --
   they are the POSITIVE CONTROLS: the queries can see a bound ref):
@@ -103,6 +111,24 @@ Check 'S4 indexed specifier root is a bound property-spec ref' ((AllBound $r 1 '
 $specLines = @('property BoxTitle: string read FBox.Title write FBox.Title;', 'property OriginX: Integer read FBox.Origin.PosX;', 'property FirstTitle: string read FPair[0].Title;') | ForEach-Object { Get-Line 'uExtShapes.pas' $_ }
 $dups = @($all | Where-Object { $_.path -like '*\uExtShapes.pas' -and $specLines -contains $_.line } | Group-Object line, col, kind | Where-Object { $_.Count -gt 1 })
 Check 'S5 one ref per specifier token and kind' ($dups.Count -eq 0) (@($dups | ForEach-Object { $_.Name }) -join ' | ')
+
+$r = Refs 'uExtDecls.pas' 'TExtBoxG<T: TExtItem> = class' 'TExtItem' 'type_use'
+Check 'G1 generic constraint emits a bound type_use' (AllBound $r 1 'uExtDefs.TExtItem') (Show $r)
+$r1 = Refs 'uExtDecls.pas' 'function TExtBoxG<T>.GetAt(const pIdx: Integer): Integer;' 'TExtBoxG' 'type_use'
+$r2 = Refs 'uExtDecls.pas' 'procedure TExtBoxG<T>.Fill<K>(const pKey: K);' 'TExtBoxG' 'type_use'
+$r3 = Refs 'uExtDecls.pas' 'procedure TExtLeaf.OldRun;' 'TExtLeaf' 'type_use'
+Check 'G2 generic implementation header emits its class qualifier' ((AllBound $r1 1 'uExtDecls.TExtBoxG') -and (AllBound $r2 1 'uExtDecls.TExtBoxG') -and (AllBound $r3 1 'uExtDecls.TExtLeaf')) ((Show $r1) + ' / ' + (Show $r2) + ' / ' + (Show $r3))
+$r1 = Refs 'uExtDecls.pas' 'lInner: TExtBoxG<TExtLeaf>.TInnerG;' 'TExtBoxG' 'type_use'
+$r2 = Refs 'uExtDecls.pas' 'lInner: TExtBoxG<TExtLeaf>.TInnerG;' 'TExtLeaf' 'type_use'
+$r3 = Refs 'uExtDecls.pas' 'lInner: TExtBoxG<TExtLeaf>.TInnerG;' 'TInnerG' 'type_use'
+Check 'G3 generic owner of a nested type emits owner and argument' ((AllBound $r1 1 'uExtDecls.TExtBoxG') -and (AllBound $r2 1 'uExtDecls.TExtLeaf') -and ($r3.Count -eq 1)) ((Show $r1) + ' / ' + (Show $r2) + ' / ' + (Show $r3))
+$declLines = @('TExtBoxG<T: TExtItem> = class', 'function TExtBoxG<T>.GetAt(const pIdx: Integer): Integer;', 'procedure Fill<K: TExtOther>(const pKey: K);', 'procedure TExtBoxG<T>.Fill<K>(const pKey: K);') | ForEach-Object { Get-Line 'uExtDecls.pas' $_ }
+$tp = @($all | Where-Object { $_.path -like '*uExtDecls.pas' -and $declLines -contains $_.line -and $_.name -eq 'T' })
+$kp = @($all | Where-Object { $_.path -like '*uExtDecls.pas' -and $declLines -contains $_.line -and $_.name -eq 'K' })
+$kUse = @($kp | Where-Object { $_.kind -eq 'type_use' })
+Check 'G4 type parameters emit no ref where they are declared' (($tp.Count -eq 0) -and ($kUse.Count -eq 2) -and ($kp.Count -eq 2)) ((Show $tp) + ' / ' + (Show $kp))
+$r = Refs 'uExtDecls.pas' 'procedure WMProbe(var pMsg: TExtMsg); message WM_EXT_PROBE;' 'WM_EXT_PROBE' 'read'
+Check 'D1 message directive constant emits a bound read' (AllBound $r 1 'uExtDecls.WM_EXT_PROBE') (Show $r)
 
 # ---- held from 1.51.0 (positive controls) ----
 $r1 = Refs 'uExtProbe.pas' 'Result := MakeItem().Count;' 'Count'
