@@ -66,6 +66,7 @@ const
   SPACES_RE         = '\s+';
   SEARCH_LINE_GROUP = 3;
   LEGACY_TAIL_GROUP = 3;   // shared-marker-legacy-shape: the optional trailing `// note` group
+  PAST_CR_COL       = 2;   // EndCol of a comment node that carries the CR: Length(line) + 2
 
 { ---- shared helpers ---- }
 
@@ -89,13 +90,19 @@ begin
   Result.ExpectText:= AExpect;
 end;
 
-{ The text of the finding's own single-line span ('' when it is not one). }
+{ The text of the finding's own single-line span ('' when it is not one). A comment node on a CRLF file
+  ends one column past the line text (it carries the CR); that one column is clamped, any larger overshoot
+  still declines. }
 function SpanText(const AFinding: TLintFinding; const ALine: string): string;
+var
+  EndCol: Integer;
 begin
   Result:= '';
+  EndCol:= AFinding.EndCol;
+  if EndCol = Length(ALine) + PAST_CR_COL then EndCol:= Length(ALine) + 1; // the CR of a CRLF row
   if (AFinding.StartLine <> AFinding.EndLine) or (AFinding.StartCol < 1) or
-     (AFinding.EndCol <= AFinding.StartCol) or (AFinding.EndCol > Length(ALine) + 1) then Exit;
-  Result:= Copy(ALine, AFinding.StartCol, AFinding.EndCol - AFinding.StartCol);
+     (EndCol <= AFinding.StartCol) or (EndCol > Length(ALine) + 1) then Exit;
+  Result:= Copy(ALine, AFinding.StartCol, EndCol - AFinding.StartCol);
 end;
 
 { Leading whitespace of ALine. }

@@ -2,5 +2,9 @@
   "id": "inherited-bare",
   "severity": "info",
   "message": "Bare 'inherited' call - verify it invokes the intended ancestor method",
-  "warn_capture": "warn"
+  "warn_capture": "warn",
+  "exclude_if_preceded_by": [
+    "\\b(?:procedure|destructor|function)\\s+(?:\\w+\\.)?(?:Destroy|Assign|AssignTo)\\b",
+    "\\b(?:then|else)\\s+$"
+  ]
 }

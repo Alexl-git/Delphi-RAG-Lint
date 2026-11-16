@@ -1,0 +1,10 @@
+# v1511 Y1/R6: case labels (case-magic-numbers reports them), enum ordinal values and dispid ids are not
+# reported by large-magic-number. The arm body and plain code literal still are.
+!large-magic-number 6
+!large-magic-number 7
+!large-magic-number 11
+!large-magic-number 12
+!large-magic-number 13
+!large-magic-number 21
+!large-magic-number 22
+large-magic-number 24
