@@ -76,6 +76,9 @@ $lines = @(
   'function CellValue(AView: Integer): Double;', 'begin', '  Result:= 0;', 'end;', '',
   'procedure TFx.StoredLayout;', 'begin', 'end;', '', 'end.')
 [IO.File]::WriteAllText($src, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
+$srcB = Join-Path $WorkDir 'doclint1511b.pas'
+$lb = @('unit doclint1511b;', '', 'interface', 'type', '  /// <summary>Other.</summary>', '  TOther = class', '  public', '    procedure btnGoClick(Sender: TObject);', '  end;', '', 'implementation', '', 'procedure TOther.btnGoClick(Sender: TObject);', 'begin', 'end;', '', 'end.')
+[IO.File]::WriteAllText($srcB, (($lb -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 $dl = @('object Holder: THolder', '  OnClick = btnGoClick', 'end')
 [IO.File]::WriteAllText($dfm, (($dl -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 
@@ -94,6 +97,8 @@ try {
   Check 'R2+ CONTROL: PlainNoDoc still missing-doc' (@(At $rows 'missing-doc' 21).Count -ge 1) $la
   Check 'R2c: dfm-bound btnGoClick not missing-doc' (@(At $rows 'missing-doc' 22).Count -eq 0)
   $r7 = @($rows | Where-Object { $_.rule -in @('doc-param-not-in-signature', 'doc-drift') -and $_.message -match 'WordDelims|Pos|"S"' })
+  $o = @($rows | Where-Object { $_.rule -eq 'missing-doc' -and $_.start_line -eq 8 -and $_.file_path -like '*doclint1511b.pas' })
+  Check 'R2c+ CONTROL: same-named handler in an unrelated unit (no .dfm) still missing-doc' ($o.Count -ge 1) $la
   Check 'R7: grouped / var-prefixed tags raise nothing' ($r7.Count -eq 0) ($r7 | ConvertTo-Json -Compress)
   $g = @($rows | Where-Object { $_.rule -eq 'doc-param-not-in-signature' -and $_.message -match 'AGone' })
   Check 'R7+ CONTROL: true orphan AGone still an error' ($g.Count -ge 1) $la

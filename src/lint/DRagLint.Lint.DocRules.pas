@@ -435,7 +435,7 @@ begin
       if P > 0 then Prop:= Copy(Prop, P + 1, MaxInt);
       if (Length(Prop) <= 2) or not Prop.StartsWith('On') or not CharInSet(Prop[3], ['A'..'Z']) then Continue;
       H:= Trim(Lit.Text);
-      if (H <> '') and not SameText(H, 'nil') then Result.AddOrSetValue(LowerCase(H), True);
+      if (H <> '') and not SameText(H, 'nil') then Result.AddOrSetValue(LowerCase(AStore.GetFilePath(Fid)) + '|' + LowerCase(H), True);
     end;
   end;
 end;
@@ -467,7 +467,7 @@ begin
         if IsAccessorOfDocumentedProperty(AStore, Sym) then Continue;
         if DeclIsOverride(AStore.GetFilePath(Sym.FileId), Sym.StartLine) then Continue;
         if Handlers = nil then Handlers:= DfmBoundHandlers(AStore);
-        if Handlers.ContainsKey(LowerCase(Sym.Name)) then Continue;
+        if Handlers.ContainsKey(LowerCase(ChangeFileExt(AStore.GetFilePath(Sym.FileId), '.dfm')) + '|' + LowerCase(Sym.Name)) then Continue;
       end;
       F:= Default(TLintFinding);
       F.RuleId  := 'missing-doc';
