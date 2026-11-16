@@ -160,6 +160,7 @@ uses
   DRagLint.V151.APP in '..\lint\v151\DRagLint.V151.APP.pas',
   DRagLint.V151.CMP.Support in '..\lint\v151\DRagLint.V151.CMP.Support.pas',
   DRagLint.V151.CMP in '..\lint\v151\DRagLint.V151.CMP.pas',
+  DRagLint.V151.Dfm.Common in '..\lint\v151\DRagLint.V151.Dfm.Common.pas',
   DRagLint.V151.DFMA.Support in '..\lint\v151\DRagLint.V151.DFMA.Support.pas',
   DRagLint.V151.DFMA in '..\lint\v151\DRagLint.V151.DFMA.pas',
   DRagLint.V151.DFMB.Support in '..\lint\v151\DRagLint.V151.DFMB.Support.pas',

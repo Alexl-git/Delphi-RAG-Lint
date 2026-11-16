@@ -328,6 +328,7 @@
         <DCCReference Include="..\lint\v151\DRagLint.V151.APP.pas"/>
         <DCCReference Include="..\lint\v151\DRagLint.V151.CMP.Support.pas"/>
         <DCCReference Include="..\lint\v151\DRagLint.V151.CMP.pas"/>
+        <DCCReference Include="..\lint\v151\DRagLint.V151.Dfm.Common.pas"/>
         <DCCReference Include="..\lint\v151\DRagLint.V151.DFMA.Support.pas"/>
         <DCCReference Include="..\lint\v151\DRagLint.V151.DFMA.pas"/>
         <DCCReference Include="..\lint\v151\DRagLint.V151.DFMB.Support.pas"/>
