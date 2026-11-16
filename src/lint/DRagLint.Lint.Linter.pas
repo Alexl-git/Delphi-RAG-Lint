@@ -263,8 +263,9 @@ type
       /// --stand-in-for.
       /// </remarks>
       property WalkFilter: TPredicate<string> read FWalkFilter write FWalkFilter;
-      /// <summary>Narrows EXECUTION to one rule id: when non-empty, only the
-      /// .scm query rule with this id and the built-in walk that emits it run,
+      /// <summary>Narrows EXECUTION to one rule id, or to a comma list of ids (v1511 B16,
+      /// lint-all --rule a,b): when non-empty, only the .scm query rules with these ids and
+      /// the built-in walks that emit them run,
       /// and a file none of them wants is not even parsed. Empty (the default)
       /// runs everything.</summary>
       /// <remarks>
@@ -864,7 +865,10 @@ end;
 
 function TLinter.Wants(const ARuleId: string): Boolean;
 begin
-  Result:= (FOnlyRuleId = '') or SameText(FOnlyRuleId, ARuleId);
+  if FOnlyRuleId = '' then Exit(True);
+  for var Id: string in FOnlyRuleId.Split([',']) do { v1511 B16: a comma list of ids }
+    if SameText(Trim(Id), ARuleId) then Exit(True);
+  Result:= False;
 end;
 
 function TLinter.CheckFileImpl( const AFilePath: string): TArray<TLintFinding>;
