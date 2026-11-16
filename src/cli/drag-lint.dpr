@@ -452,6 +452,8 @@ uses
   DRagLint.CLI.CallGraph in 'DRagLint.CLI.CallGraph.pas',
   DRagLint.CLI.Wiring in 'DRagLint.CLI.Wiring.pas',
   DRagLint.CLI.Format in 'DRagLint.CLI.Format.pas',
+  DRagLint.CLI.ConvertApplyJson in 'DRagLint.CLI.ConvertApplyJson.pas',
+  DRagLint.CLI.ConvertApply in 'DRagLint.CLI.ConvertApply.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

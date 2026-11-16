@@ -418,6 +418,8 @@
         <DCCReference Include="DRagLint.CLI.CallGraph.pas"/>
         <DCCReference Include="DRagLint.CLI.Wiring.pas"/>
         <DCCReference Include="DRagLint.CLI.Format.pas"/>
+        <DCCReference Include="DRagLint.CLI.ConvertApplyJson.pas"/>
+        <DCCReference Include="DRagLint.CLI.ConvertApply.pas"/>
         <DCCReference Include="DRagLint.CLI.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
