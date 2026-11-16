@@ -6,3 +6,5 @@
 !inherited-bare 48
 !inherited-bare 58
 inherited-bare 63
+inherited-bare 69
+# 69: a bare inherited after a plain "then" in an ordinary method is a real smell and stays reported (positive control).

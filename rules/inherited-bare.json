@@ -5,6 +5,6 @@
   "warn_capture": "warn",
   "exclude_if_preceded_by": [
     "\\b(?:procedure|destructor|function)\\s+(?:\\w+\\.)?(?:Destroy|Assign|AssignTo)\\b",
-    "\\b(?:then|else)\\s+$"
+    "\\bis\\s+[\\w.]+\\s*\\)\\s*then\\s+$"
   ]
 }

@@ -65,7 +65,10 @@ end;
 
 procedure TDerived.Other(pSrc: TObject);
 begin
-  Paint;
+  if pSrc = nil then
+    inherited
+  else
+    Paint;
 end;
 
 end.
