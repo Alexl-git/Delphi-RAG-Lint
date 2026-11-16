@@ -28590,7 +28590,8 @@ begin
     { --hub-surface (spec 2026-11-08-hub-scc-phased P2): recipe R3 in place of the planner. Phase P6 (lane v151 I10,
       after the Loader apply built with 0 errors): the --plan dry run asks R3 first WITHOUT the switch, for a group R3
       predicts to break; --no-hub-surface gives the planner's plan. Writing (--apply) and the --causes --format json
-      fix object still need the switch by name: --fix cannot run R3 yet, so the default fix object must not offer it. }
+      fix object still need the switch by name. Since 1.51.1 (lane v1511 CYC, T06) --fix --hub-surface runs R3 through
+      the compile gate; the default is not flipped (O11), so the default fix object still does not offer R3. }
     if AArgs.HubSurface and AArgs.NoHubSurface then
     begin
       Writeln(ErrOutput, 'ERROR: cycles --hub-surface and --no-hub-surface exclude each other');
