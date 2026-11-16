@@ -1,0 +1,4 @@
+# type-library unit: method-pascalcase suppressed for the whole file
+!method-pascalcase 5
+!method-pascalcase 6
+!method-pascalcase 9
