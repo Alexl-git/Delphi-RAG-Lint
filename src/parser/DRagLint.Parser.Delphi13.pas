@@ -759,6 +759,8 @@ begin
 end;
 
 const
+  { 1.51.1 EXT: how deep a property specifier path is followed; real ones have 2-3 parts. }
+  MAX_SPEC_PATH_DEPTH = 16;
   { E-PARSER-NOREFS: the receiver of inherited X. The resolver starts X's lookup at the
     PARENT of the enclosing class, so a nearer X (a nested routine, the class's own) never
     answers. A bare inherited; writes no name and gets no row. }
@@ -813,6 +815,94 @@ begin
     end
     else if C.NodeType <> ',' then Break;
   end;
+end;
+
+{ 1.51.1 EXT (B26): a dotted or indexed property specifier -- `read FRec.X`,
+  `write FRec.Sub.Y`, `read FArr[0].X`. Walk emits its names as it does inside a
+  routine: the root a 'read', each member a 'member-access' whose receiver is the
+  text before the dot. A class body has no enclosing routine, so the resolver's
+  ladder never ran and every one of them stayed unbound. Re-tag them as the
+  declaration names they are, on the refs Walk added since AMark:
+    the root          -> REF_KIND_PROP_SPEC, receiver = the owner's qualified name
+                         (what a bare `read FCount` gets);
+    Root.A, Root.A.B  -> REF_KIND_REC_FIELD, receiver = OwnerLeaf.Root[.A]: the
+                         field path the resolver walks for a record constant.
+  A path that is not identifiers and dots all the way (a subscript, a call) keeps
+  the members as Walk emitted them; its root is still re-tagged.
+  Every ref on the token is re-tagged except a second one of the same new kind,
+  which cannot happen today (one 'read' per root, one 'member-access' per member). }
+procedure RetagPropertySpecPaths(const ANode: TTSNode; const AState: TWalkState; const AOwnerQName: string; AMark: Integer);
+var
+  OwnerLeaf: string;
+
+  procedure Retag(const AIdent: TTSNode; const AKind, AReceiver: string);
+  begin
+    var Line:= Integer(AIdent.StartPoint.row) + 1;
+    var Col := Integer(AIdent.StartPoint.column) + 1;
+    for var i:= AMark to AState.References.Count - 1 do
+    begin
+      var R:= AState.References[i];
+      if (R.StartLine <> Line) or (R.StartCol <> Col) then Continue;
+      R.Kind        := AKind;
+      R.ReceiverText:= AReceiver;
+      AState.References[i]:= R;
+    end;
+  end;
+
+  { Is AExpr Ident or Ident.Ident...? Re-tags it on the way; APath = OwnerLeaf.Ident... }
+  function PureChain(const AExpr: TTSNode; ADepth: Integer; out APath: string): Boolean;
+  begin
+    APath := '';
+    Result:= False;
+    if AExpr.IsNull or (ADepth > MAX_SPEC_PATH_DEPTH) then Exit;
+    if AExpr.NodeType = 'identifier' then
+    begin
+      Retag(AExpr, REF_KIND_PROP_SPEC, AOwnerQName);
+      APath:= OwnerLeaf + '.' + NodeText(AExpr, AState.Source);
+      Exit(True);
+    end;
+    if AExpr.NodeType <> 'exprDot' then Exit;
+    var R:= AExpr.ChildByField('rhs');
+    if R.IsNull or (R.NodeType <> 'identifier') then Exit;
+    var LhsPath: string;
+    if not PureChain(AExpr.ChildByField('lhs'), ADepth + 1, LhsPath) then Exit;
+    Retag(R, REF_KIND_REC_FIELD, LhsPath);
+    APath:= LhsPath + '.' + NodeText(R, AState.Source);
+    Result:= True;
+  end;
+
+  { The leftmost identifier of a path with a subscript, a call or a dereference in it. }
+  function RootOf(const AExpr: TTSNode): TTSNode;
+  begin
+    Result:= AExpr;
+    for var Depth:= 0 to MAX_SPEC_PATH_DEPTH do
+    begin
+      if Result.IsNull or (Result.NodeType = 'identifier') then Exit;
+      var NT:= Result.NodeType;
+      if NT = 'exprDot' then Result:= Result.ChildByField('lhs')
+      else if (NT = 'exprSubscript') or (NT = 'exprCall') then Result:= Result.ChildByField('entity')
+      else if NT = 'exprDeref' then Result:= Result.ChildByField('operand')
+      else Break;
+    end;
+    Result:= Default(TTSNode);
+  end;
+
+  procedure Spec(const AField: string);
+  begin
+    var N:= ANode.ChildByField(AField);
+    if N.IsNull or (N.NodeType = 'identifier') or N.HasError then Exit; { a bare name is EmitPropertySpecRefs' }
+    var Path: string;
+    if PureChain(N, 0, Path) then Exit;
+    var Root:= RootOf(N);
+    if (not Root.IsNull) and (Root.NodeType = 'identifier') then Retag(Root, REF_KIND_PROP_SPEC, AOwnerQName);
+  end;
+
+begin
+  if (AOwnerQName = '') or (AMark >= AState.References.Count) then Exit;
+  OwnerLeaf:= AOwnerQName.Substring(AOwnerQName.LastIndexOf('.') + 1);
+  Spec('getter');
+  Spec('setter');
+  Spec('stored');
 end;
 
 { E-PARSER-NOREFS: the record a field of a record constant belongs to, as text the
@@ -907,6 +997,7 @@ procedure Walk(const ANode: TTSNode; const AState: TWalkState; AParentSymbolIdx:
     (typerefDot lhs: .. operator: (kDot) rhs: id)      A.B.C.TFoo
     (typerefTpl entity: <any of the above>
                 (kLt) args: (typerefArgs <any of the above>...) (kGt))
+    (typerefPtr operator: (kHat) operand: <any of the above>)   ^TFoo
 
   DELIBERATELY NOT HANDLED: genericTpl / genericArgs / genericArg. That family
   is the type-PARAMETER DECLARATION (`TBox<T> = class`, `function F<T>`) -- those
@@ -939,6 +1030,10 @@ begin
     Rhs:= ANode.ChildByField('rhs');
     if (not Rhs.IsNull) and (NodeText(Rhs, AState.Source) <> '') then
       AState.EmitRef('type_use', NodeText(Rhs, AState.Source), Rhs);
+    { 1.51.1 EXT (B26): `TBox<TItem>.TInner` -- a lhs that is a generic instantiation is a
+      type and so are its arguments. A plain lhs stays unread: `Unit.TFoo` and `TOuter.TInner`
+      are the same tree, and a unit name is no type. }
+    if ANode.ChildByField('lhs').NodeType = 'typerefTpl' then EmitTypeExprRefs(ANode.ChildByField('lhs'), AState, ADepth + 1);
     Exit;
   end;
 
@@ -957,6 +1052,11 @@ begin
       EmitTypeExprRefs(ANode.NamedChild(i), AState, ADepth + 1);
     Exit;
   end;
+
+  { 1.51.1 EXT (B26): `^TFoo` is (typerefPtr operator: (kHat) operand: <type>). The base
+    type is used as much as in `array of TFoo`; without this arm a rename of TFoo missed
+    every `PFoo = ^TFoo` and the type read as used nowhere when only its pointer was. }
+  if NT = 'typerefPtr' then EmitTypeExprRefs(ANode.ChildByField('operand'), AState, ADepth + 1);
   // anything else: silently ignored, matching the original `else Exit`
 end; // procedure
 
@@ -973,6 +1073,43 @@ begin
   if ANode.NamedChildCount = 0 then Exit;
   EmitTypeExprRefs(ANode.NamedChild(0), AState, 0);
 end; // procedure
+
+{ 1.51.1 EXT (B26): the constraint types of a generic declaration's name --
+  `TBox<T: TBase; K: IFoo, constructor> = class`. The genericArg family DECLARES T and K,
+  which is why EmitTypeExprRefs leaves it alone; a constraint is a typeref inside it and
+  a use like any other. Without this a rename of TBase missed every `<T: TBase>`. }
+procedure EmitGenericConstraintRefs(const AName: TTSNode; const AState: TWalkState; ADepth: Integer);
+begin
+  if AName.IsNull or (ADepth > MAX_SPEC_PATH_DEPTH) then Exit;
+  for var i:= 0 to AName.NamedChildCount - 1 do
+  begin
+    var C:= AName.NamedChild(i);
+    if C.NodeType = 'typeref' then EmitTypeUseReference(C, AState)
+    else EmitGenericConstraintRefs(C, AState, ADepth + 1);
+  end;
+end;
+
+{ 1.51.1 EXT (B26): the class a method implementation header is qualified by, as a type_use:
+  `TFoo.Run` (the only shape read until now), `TFoo<T>.Run`, and the OUTERMOST class of
+  `TOuter.TInner.Run`. An inner segment gets no row: a nested class is not found by its
+  bare name, and a row bound to another unit's TInner is worse than none. <T> declares. }
+procedure EmitHeaderQualifierRef(const AQualifier: TTSNode; const AState: TWalkState);
+begin
+  var N:= AQualifier;
+  for var Depth:= 0 to MAX_SPEC_PATH_DEPTH do
+  begin
+    if N.IsNull then Exit;
+    var NT:= N.NodeType;
+    if NT = 'identifier' then
+    begin
+      AState.EmitRef('type_use', NodeText(N, AState.Source), N);
+      Exit;
+    end;
+    if NT = 'genericTpl' then N:= N.ChildByField('entity')
+    else if NT = 'genericDot' then N:= N.ChildByField('lhs')
+    else Exit;
+  end;
+end;
 
 procedure EmitCallReference(const ANode: TTSNode; const AState: TWalkState);
 var
@@ -1354,6 +1491,7 @@ begin
     nothing: its own node already reads through the arms above. }
   else if (NT = 'exprParens') or (NT = 'exprBrackets') or (NT = 'case') or (NT = 'caseLabel')
        or (NT = 'procExternal')
+       or (NT = 'procAttribute') { 1.51.1 EXT (B26): `message WM_X`, `dispid cId` -- the constant is a direct identifier }
        or (NT = 'range') or (NT = 'declString') or (NT = 'subrangeType')
        or (NT = 'defaultValue') or (NT = 'arrInitializer') then
     ReadAllDirectIdents
@@ -3513,6 +3651,9 @@ begin
     for i:= 0 to ANode.NamedChildCount - 1 do
       if ANode.NamedChild(i).NodeType = 'rttiAttributes' then
         Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
+    { 1.51.1 EXT (B26): same reason, the name's generic constraints -- no Try* handler walks the name. }
+    var TypeNameNode:= ANode.ChildByField('name');
+    if (not TypeNameNode.IsNull) and (TypeNameNode.NodeType = 'genericTpl') then EmitGenericConstraintRefs(TypeNameNode, AState, 0);
 
     if TryWalkInterface    (ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit;
     if TryWalkHelper       (ANode, AState, AParentSymbolIdx, AParentQualifiedName) then Exit; { v15: declHelper is distinct from declClass -- must be tried first or its target typeref gets grabbed by TryWalkAlias }
@@ -3646,8 +3787,10 @@ begin
       end;
     end;
     EmitPropertySpecRefs(ANode, AState, AParentQualifiedName); { E-PARSER-NOREFS }
+    var SpecMark:= AState.References.Count;
     // Walk children so the property's type emits a type_use ref.
     for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
+    RetagPropertySpecPaths(ANode, AState, AParentQualifiedName, SpecMark); { 1.51.1 EXT }
     Exit;
   end; // if
 
@@ -3789,12 +3932,10 @@ begin
           // Walk() already emits type_use for every typeref it reaches (and
           // recurses into generics), so routing args/return through it is the
           // DRY way to cover grouped/generic param types too.
-          if HdrNameNode.NodeType = 'genericDot' then
-          begin
-            var QualNode:= HdrNameNode.ChildByField('lhs');
-            if (not QualNode.IsNull) and (QualNode.NodeType = 'identifier') then
-              AState.EmitRef('type_use', NodeText(QualNode, AState.Source), QualNode);
-          end;
+          { 1.51.1 EXT: a generic method's name may be a genericTpl around the dotted name. }
+          var HdrDotted:= HdrNameNode;
+          if HdrDotted.NodeType = 'genericTpl' then HdrDotted:= HdrDotted.ChildByField('entity');
+          if (not HdrDotted.IsNull) and (HdrDotted.NodeType = 'genericDot') then EmitHeaderQualifierRef(HdrDotted.ChildByField('lhs'), AState);
           { MERGE 2026-10-15: upstream's Ref-gap F (extractor 1.21.0 / 1.21.1) added the
             same emission for implementation-only free routines and for nested
             routines, after WalkDeclProc. This walk subsumes both, so theirs was
