@@ -143,12 +143,15 @@ begin
   Result:= Copy(AName, 1, PLen) = APrefix;
 end;
 
-{ True when AName carries the field prefix APrefix compared CASE-INSENSITIVELY
-  (Pascal is case-insensitive, so fFLDRID is a legitimate "f" backing field of
-  the same convention as FFldRid) and has at least one more character after it.
-  Used only by field-name-prefix. An empty APrefix returns False.
+{ True when AName carries the field prefix APrefix and has at least one more
+  character after it. An exact-case prefix always matches. A prefix that differs
+  only in case (Pascal is case-insensitive: fFLDRID is a legitimate "f" backing
+  field of the same convention as FFldRid) must be followed by a non-lowercase
+  character, so a plain word that merely starts with the letter (filter, ff_tb)
+  is still reported. Used only by field-name-prefix. An empty APrefix returns False.
   Examples: FieldHasPrefix('fFLDRID','F')=True; FieldHasPrefix('FName','F')=True;
-  FieldHasPrefix('Name','F')=False; FieldHasPrefix('F','F')=False. }
+  FieldHasPrefix('Name','F')=False; FieldHasPrefix('F','F')=False;
+  FieldHasPrefix('filter','F')=False. }
 function FieldHasPrefix(const AName, APrefix: string): Boolean;
 var
   PLen: Integer;
@@ -157,20 +160,26 @@ begin
   PLen:= Length(APrefix);
   if PLen = 0 then Exit;
   if Length(AName) <= PLen then Exit;
-  Result:= SameText(Copy(AName, 1, PLen), APrefix);
+  if not SameText(Copy(AName, 1, PLen), APrefix) then Exit;
+  Result:= (Copy(AName, 1, PLen) = APrefix) or (not CharInSet(AName[PLen + 1], ['a'..'z']));
 end;
 
 { True when AName is a Get/Set accessor whose remainder contains an underscore
   (GetATTR_SYSTID, Set_INIFile): the remainder is a DB column or a type-library
   member name the author cannot rename, so method-pascalcase does not apply.
+  The character right after Get/Set must be '_' or non-lowercase, so Setup_Form
+  and Getter_x (ordinary methods) are still reported.
   Examples: IsUnderscoreAccessor('GetATTR_SYSTID')=True;
-  IsUnderscoreAccessor('Set_INIFile')=True; IsUnderscoreAccessor('get_x')=False
-  is True too (case-insensitive Get/Set); IsUnderscoreAccessor('do_it')=False. }
+  IsUnderscoreAccessor('Set_INIFile')=True; IsUnderscoreAccessor('do_it')=False;
+  IsUnderscoreAccessor('Setup_Form')=False. }
 function IsUnderscoreAccessor(const AName: string): Boolean;
+const
+  cAccessorPrefixLen = 3; { length of 'Get' / 'Set' }
 begin
-  Result:= (Length(AName) > 3)
+  Result:= (Length(AName) > cAccessorPrefixLen)
     and (StartsText('Get', AName) or StartsText('Set', AName))
-    and (Pos('_', AName) > 3);
+    and (Pos('_', AName) > cAccessorPrefixLen)
+    and (not CharInSet(AName[cAccessorPrefixLen + 1], ['a'..'z']));
 end;
 { The identifier written right after 'class(' in AClassText -- a declClass
   node's text, 'class(EDatabaseError)' -> 'EDatabaseError'; a unit qualifier

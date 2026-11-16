@@ -1,3 +1,5 @@
 !method-pascalcase 6
 !method-pascalcase 7
 method-pascalcase 8
+# Setup_ is not Get/Set + name: MUST fire
+method-pascalcase 9
