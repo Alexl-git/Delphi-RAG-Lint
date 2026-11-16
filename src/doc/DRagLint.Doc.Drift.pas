@@ -1279,7 +1279,11 @@ begin
         begin
           var Documented: Boolean:= False;
           for DP in ADoc.Params do
-            if DocParamCovers(DP.Name, N) then begin Documented:= True; Break; end;
+            if DocParamCovers(DP.Name, N) then
+            begin
+              Documented:= True;
+              Break;
+            end;
           if not Documented then
             Findings.Add(MakeFinding(ddParamMissing,
               Format('signature param "%s" has no <param> tag', [N]), False, DocLine));

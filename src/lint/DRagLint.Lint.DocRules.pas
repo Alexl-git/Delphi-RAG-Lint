@@ -433,7 +433,7 @@ begin
       Prop:= Lit.OwnerName;
       P   := LastDelimiter('.', Prop);
       if P > 0 then Prop:= Copy(Prop, P + 1, MaxInt);
-      if (Length(Prop) <= 2) or not Prop.StartsWith('On') or not CharInSet(Prop[3], ['A'..'Z']) then Continue;
+      if (Length(Prop) <= Length('On')) or not Prop.StartsWith('On') or not CharInSet(Prop[Length('On') + 1], ['A'..'Z']) then Continue;
       H:= Trim(Lit.Text);
       if (H <> '') and not SameText(H, 'nil') then Result.AddOrSetValue(LowerCase(AStore.GetFilePath(Fid)) + '|' + LowerCase(H), True);
     end;
