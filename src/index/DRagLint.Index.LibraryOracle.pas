@@ -576,6 +576,11 @@ type
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BindHead"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
+    /// <summary>1.51.1 (B02 / B04 / B06): the library unit-level var, const, function or
+    /// procedure a bare AName stands for.</summary>
+    /// <returns>How many visible declarations carry the name (ACand set only for exactly 1); 0
+    /// also when a visible library TYPE has the name. AOwnUses decide first, as in BindBare.</returns>
+    function BareUnitLevel(const AName: string; const AUsesUnits, AOwnUses: TArray<string>; out ACand: TLibCand): Integer;
     function Count(const AResult, AReason: string): string;
   public
     /// <param name="AStores">The open extra stores; the oracle does not own them.</param>
@@ -722,6 +727,38 @@ type
     /// </remarks>
     function BindBare(const AName: string; const AUsesUnits: TArray<string>; const AScopeType: string;
       out AReason: string; const AOwnUses: TArray<string> = nil): string;
+    /// <summary>1.51.1 B02 / B04: what a BARE name that is READ stands for in the library -- a
+    /// member the enclosing class inherits from AScopeType (field, property or method), else
+    /// exactly one library unit-level var, const, function or procedure of the name whose unit
+    /// the file uses (`Application`, a paren-less `GetTickCount`).</summary>
+    /// <param name="AName">The identifier read.</param>
+    /// <param name="AUsesUnits">As for Bind; the System unit is always visible.</param>
+    /// <param name="AScopeType">The enclosing class's first library ancestor name, or ''.</param>
+    /// <param name="AKind">The kind of the declaration bound; meaningful only for a non-empty result.</param>
+    /// <param name="ASignatures">The signature of every interface-section row of the bound name (one
+    /// per overload); of every row when none is in an interface section; empty for an empty result.</param>
+    /// <param name="AOwnUses">As for BindBare: the reading file's own uses decide first.</param>
+    /// <returns>The qualified name, or '' when no store is open, a visible library TYPE has the
+    /// name (the read names the type), or the visible declarations of the name are none or
+    /// several.</returns>
+    /// <remarks>Never counted into Stats: the `receivers:` line describes the calls stream only.
+    /// Enum values are not unit-level declarations and are not bound.</remarks>
+    function BindBareRead(const AName: string; const AUsesUnits: TArray<string>; const AScopeType: string;
+      out AKind: TSymbolKind; out ASignatures: TArray<string>; const AOwnUses: TArray<string> = nil): string;
+    /// <summary>1.51.1 B06: the declared result type text of the ONE library unit-level
+    /// FUNCTION a bare name stands for (`HiLibReg` in `HiLibReg.OpenKey`, `var R := HiLibReg`).</summary>
+    /// <param name="AName">The function name as written, without arguments.</param>
+    /// <param name="AUsesUnits">As for Bind.</param>
+    /// <param name="AScopeType">The enclosing class's first library ancestor name, or ''. A member
+    /// of that name it declares is nearer than any unit-level function: the answer is ''.</param>
+    /// <param name="AOwnUses">As for BindBare.</param>
+    /// <returns>The type text as the library declares it; '' when the name is not exactly one
+    /// visible library function, a visible library type or value shares the name, or its
+    /// overloads disagree on the result type.</returns>
+    /// <remarks>The text names a type in the LIBRARY unit's scope; the caller looks it up by
+    /// name from the project file, so a type name two visible units declare stays undecided.</remarks>
+    function RoutineResultText(const AName: string; const AUsesUnits: TArray<string>; const AScopeType: string;
+      const AOwnUses: TArray<string> = nil): string;
     /// <summary>True only when the library PROVES that a type named ATypeText cannot supply
     /// AMember, so a `with` target descending from it does not hide an outer AMember.</summary>
     /// <param name="ATypeText">The ancestor's name as the project wrote it; generics and unit
@@ -825,6 +862,15 @@ function IsRootAncestorName(const AName: string): Boolean;
 const
   /// <summary>The class every class with no written parent descends from.</summary>
   IMPLICIT_ROOT_CLASS = 'TObject';
+  /// <summary>1.51.1 B02: refs.external_kind of a `read` ref bound to a library var, const,
+  /// field or property -- external_target names a VALUE, not a routine.</summary>
+  EXTERNAL_KIND_VALUE          = 'value';
+  /// <summary>1.51.1 B04: refs.external_kind of a `read` ref that CALLS the library function
+  /// external_target names, written without parentheses.</summary>
+  EXTERNAL_KIND_PARENLESS_CALL = 'parenless-call';
+  /// <summary>1.51.1 B04: refs.external_kind of a `read` ref that names a library routine as a
+  /// VALUE (`@F`, a procedural argument): its identity, not a call.</summary>
+  EXTERNAL_KIND_PROC_VALUE     = 'proc-value';
 
 implementation
 
@@ -1674,6 +1720,92 @@ begin
   end
   else if Hits = 0 then AReason:= R_NO_MEMBER;
   Result:= Count(Result, AReason);
+end;
+
+function TLibraryOracle.BareUnitLevel(const AName: string; const AUsesUnits, AOwnUses: TArray<string>;
+  out ACand: TLibCand): Integer;
+var
+  Named: TArray<TLibCand>;
+
+  function CountVisible(const AVisible: TArray<string>; out AHit: TLibCand): Integer;
+  begin
+    Result:= 0;
+    AHit  := Default(TLibCand);
+    for var C: TLibCand in Named do
+      if InUses(C.UnitStem, AVisible) then
+      begin
+        Inc(Result);
+        AHit:= C;
+      end;
+  end;
+
+begin
+  ACand:= Default(TLibCand);
+  var Visible: TArray<string>:= AUsesUnits + ['system', 'sysinit'];
+  { A visible TYPE of the name: the name stands for the type, which is not bound here. }
+  if Length(VisibleOf(Cached(FTypes, AName, TYPE_KINDS, True), Visible)) > 0 then Exit(0);
+  Named := Cached(FRoutines, AName, ROUTINE_KINDS, False) + Cached(FValues, AName, VALUE_KINDS, False);
+  Result:= 0;
+  if AOwnUses <> nil then Result:= CountVisible(AOwnUses + ['system', 'sysinit'], ACand);
+  if Result = 0 then Result:= CountVisible(Visible, ACand);
+  if Result <> 1 then ACand:= Default(TLibCand);
+end;
+
+function TLibraryOracle.BindBareRead(const AName: string; const AUsesUnits: TArray<string>;
+  const AScopeType: string; out AKind: TSymbolKind; out ASignatures: TArray<string>;
+  const AOwnUses: TArray<string>): string;
+var
+  C  : TLibCand;
+  Hit: TSymbol ;
+  Why: string  ;
+begin
+  Result     := '';
+  AKind      := Default(TSymbolKind);
+  ASignatures:= [];
+  if Length(FStores) = 0 then Exit;
+  { The enclosing class's library ancestor first, as BindBare does: an inherited member is
+    nearer than any unit-level name. }
+  if (AScopeType <> '') and PickType(AScopeType, AUsesUnits + ['system', 'sysinit'], C, Why)
+     and DeclaringMember(C, AName, Hit) then
+  begin
+    AKind      := Hit.Kind;
+    ASignatures:= [Hit.Signature];
+    Exit(Hit.QualifiedName);
+  end;
+  if BareUnitLevel(AName, AUsesUnits, AOwnUses, C) <> 1 then Exit;
+  AKind:= C.Kind;
+  { The interface rows are the declarations (default values, overloads); a body may repeat a
+    signature without them or omit it. Without any (a unit read short) every row counts. }
+  var Bodies: TArray<string>:= [];
+  for var Id: Int64 in C.Ids do
+  begin
+    var S: TSymbol:= FStores[C.Store].GetSymbolById(Id);
+    if SameText(S.Section, 'interface') then ASignatures:= ASignatures + [S.Signature]
+    else Bodies:= Bodies + [S.Signature];
+  end;
+  if Length(ASignatures) = 0 then ASignatures:= Bodies;
+  Result:= C.QName;end;
+
+function TLibraryOracle.RoutineResultText(const AName: string; const AUsesUnits: TArray<string>;
+  const AScopeType: string; const AOwnUses: TArray<string>): string;
+var
+  C  : TLibCand;
+  Hit: TSymbol ;
+  Why: string  ;
+begin
+  Result:= '';
+  if Length(FStores) = 0 then Exit;
+  if (AScopeType <> '') and PickType(AScopeType, AUsesUnits + ['system', 'sysinit'], C, Why)
+     and DeclaringMember(C, AName, Hit) then Exit;
+  if (BareUnitLevel(AName, AUsesUnits, AOwnUses, C) <> 1) or (C.Kind <> skFunction) then Exit;
+  for var Id: Int64 in C.Ids do
+  begin
+    { A body written without its signature has no type text: the declaration decides. }
+    var Text: string:= MemberTypeText(FStores[C.Store].GetSymbolById(Id));
+    if Text = '' then Continue;
+    if Result = '' then Result:= Text
+    else if not SameText(Result, Text) then Exit('');
+  end;
 end;
 
 end.

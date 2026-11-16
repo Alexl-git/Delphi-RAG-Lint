@@ -87,7 +87,8 @@ uses
   System.Math,
   System.StrUtils,
   DRagLint.Core.ControlChannel, { BeatStep / BeatProgress: the stage's progress }
-  DRagLint.Core.FileTime;
+  DRagLint.Core.FileTime,
+  DRagLint.Index.LibraryOracle; { EXTERNAL_KIND_PARENLESS_CALL (1.51.1 B04) }
 
 const
   KIND_TEXT_TYPE      = 'type';
@@ -1218,7 +1219,12 @@ begin
       if R.ExternalTarget <> '' then FLibTargets.AddOrSetValue(R.Id, R.ExternalTarget);
   end;
   var Target: string;
-  if not FLibTargets.TryGetValue(ARef.Id, Target) then Exit(False);
+  if not FLibTargets.TryGetValue(ARef.Id, Target) then
+  begin
+    { 1.51.1 B04: a paren-less library call is a `read` ref; it carries its own target. }
+    if ARef.ExternalKind <> EXTERNAL_KIND_PARENLESS_CALL then Exit(False);
+    Target:= ARef.ExternalTarget;
+  end;
   var C: TLibCallee:= LibCallee(Target);
   Result:= C.Usable;
   if not Result then Exit;
@@ -1391,9 +1397,13 @@ begin
         end
         else if R.Kind = REF_KIND_READ then
         begin
+          { 1.51.1 B04: a bare read the index bound to a LIBRARY function as a paren-less call
+            (`if AFlag and BumpCounter then`) is a call -- the library summary, or unbound `?`. }
+          if R.ExternalKind = EXTERNAL_KIND_PARENLESS_CALL then
+            CallRef(AIndex, R, ALines, Sum, Changed, UseList)
           { FIX-3 part 2: a paren-less read of a procedural-type variable runs
             whatever it holds -- an unknown callee. }
-          if IsProcTypedTarget(R.SymbolId) and IsImplicitProcCall(ALines, R) then
+          else if IsProcTypedTarget(R.SymbolId) and IsImplicitProcCall(ALines, R) then
             Sum.AddFlag(efUnknown, 'reads procedural variable ' + R.NameText + ' (implicit call, target not followed)', Changed);
         end
         else if R.Kind = REF_KIND_MEMBER then
