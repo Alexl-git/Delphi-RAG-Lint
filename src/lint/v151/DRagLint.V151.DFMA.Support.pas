@@ -20,50 +20,10 @@ uses
   , TreeSitter
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
+  , DRagLint.V151.Dfm.Common
   ;
 
 type
-  /// <summary>Header kind of one .dfm node.</summary>
-  /// <remarks>
-  /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.V151.DFMA.Support.pas)</para>
-  /// <!-- drag-lint:auto END -->
-  /// </remarks>
-  TDfmNodeKind = (dnkObject, dnkInherited, dnkInline, dnkItem);  // dl:ok duplicate-global-decl@9546 -- REVIEWED 2026-11-14 v151 INT: DFM-A and DFM-B private .dfm models, never used in one unit; merging them is a 1.51.1 tail
-
-  /// <summary>One property line of a .dfm node; Value is the raw text after '=' for a
-  /// one-line value and '' for a string, list, blob or collection.</summary>
-  /// <remarks>
-  /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.V151.DFMA.Support.pas) ?, DRagLint.V151.DFMA.Support.LoadDfm (DRagLint.V151.DFMA.Support.pas)</para>
-  /// <para>Used in units: DRagLint.V151.DFMA.Support, DRagLint.V151.DFMB.Support</para>
-  /// <!-- drag-lint:auto END -->
-  /// </remarks>
-  TDfmProp = record  // dl:ok duplicate-global-decl@850d -- REVIEWED 2026-11-14 v151 INT: DFM-A and DFM-B private .dfm models, never used in one unit; merging them is a 1.51.1 tail
-    Name : string;
-    Value: string;
-    Line : Integer;
-  end;
-
-  /// <summary>One .dfm node. Parent is the index of the enclosing node (-1 for the root).
-  /// InInline is True when an enclosing node is an `inline` frame instance: such nodes
-  /// belong to the frame class, not to the form class.</summary>
-  /// <remarks>
-  /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.V151.DFMA.Support.pas) ?, DRagLint.V151.DFMA.CheckFieldTypes (DRagLint.V151.DFMA.pas) ?, DRagLint.V151.DFMA.CheckObjectsWithoutField (DRagLint.V151.DFMA.pas) ?, DRagLint.V151.DFMA.Support.LoadDfm (DRagLint.V151.DFMA.Support.pas)</para>
-  /// <para>Used in units: DRagLint.Convert.DfmReemit, DRagLint.Convert.GlyphVacuum, DRagLint.V151.DFMA, DRagLint.V151.DFMA.Support</para>
-  /// <!-- drag-lint:auto END -->
-  /// </remarks>
-  TDfmNode = record  // dl:ok duplicate-global-decl@86e1 -- REVIEWED 2026-11-14 v151 INT: DFM-A and DFM-B private .dfm models, never used in one unit; merging them is a 1.51.1 tail
-    Name     : string;
-    CompClass: string;
-    Kind     : TDfmNodeKind;
-    Line     : Integer;
-    Col      : Integer;
-    Parent   : Integer;
-    InInline : Boolean;
-    Props    : TArray<TDfmProp>;
-  end;
 
   /// <summary>A text .dfm as a node list in file order; node 0 is the root.</summary>
   /// <remarks>

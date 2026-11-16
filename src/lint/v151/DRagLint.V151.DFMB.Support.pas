@@ -13,27 +13,10 @@ uses
   , System.Generics.Defaults
   , DRagLint.Core.Model
   , DRagLint.Lint.Config
+  , DRagLint.V151.Dfm.Common
   ;
 
 type
-  /// <summary>One property line of a form-file object.</summary>
-  /// <remarks>
-  /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.V151.DFMB.Support.pas), DRagLint.V151.DFMB.Support.CheckDisallowed (DRagLint.V151.DFMB.Support.pas), DRagLint.V151.DFMB.Support.TDfmModel.Parse (DRagLint.V151.DFMB.Support.pas), DRagLint.V151.DFMB.Support.TDfmObj.Create (DRagLint.V151.DFMB.Support.pas)</para>
-  /// <para>Used in units: DRagLint.V151.DFMA.Support, DRagLint.V151.DFMB.Support</para>
-  /// <!-- drag-lint:auto END -->
-  /// </remarks>
-  TDfmProp = record
-    /// <summary>Property name, dotted for sub-properties (DataBinding.DataField).</summary>
-    Name : string;
-    /// <summary>Raw value text; continuation lines are joined with LF.</summary>
-    Value: string;
-    /// <summary>1-based line of the property name.</summary>
-    Line : Integer;
-    /// <summary>1-based column of the property name.</summary>
-    Col  : Integer;
-  end;
-
   /// <summary>One object / inherited / inline block of a text form file.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->

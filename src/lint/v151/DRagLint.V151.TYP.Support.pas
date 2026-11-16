@@ -147,6 +147,7 @@ type
     function StatementsOf(const N: TTSNode): TArray<TTSNode>;
     function TryParts(const ATry: TTSNode; out ATryStmts, AFinStmts: TArray<TTSNode>;
       out AIsFinally: Boolean): Boolean;
+    function IsGuardedByIs(const N, AOperand: TTSNode; const AType: string): Boolean;
     procedure CheckCasts(const ARoutine: TTSNode);
     procedure CheckSelfInterface(const ARoutine: TTSNode);
     function SelfPassedAsInterface(const N: TTSNode; const ALocals: TDictionary<string, string>;
@@ -823,6 +824,37 @@ end;
 
 { ---- unrelated-class-cast -------------------------------------------------- }
 
+{ Is N inside an if / ifElse whose condition holds "<operand> is <AType>"? The `is` test of the
+  same type makes the hard cast safe (Y7). }
+function TTypScan.IsGuardedByIs(const N, AOperand: TTSNode; const AType: string): Boolean;
+var
+  P, Cond, B: TTSNode;
+  Bins      : TList<TTSNode>;
+  Opd       : string;
+begin
+  Result:= False;
+  Opd:= LowerCase(Trim(NodeStr(AOperand)));
+  P:= N.Parent;
+  while not P.IsNull do
+  begin
+    if (P.NodeType = 'if') or (P.NodeType = 'ifElse') then
+    begin
+      Cond:= P.ChildByField('condition');
+      Bins:= TList<TTSNode>.Create;
+      try
+        if not Cond.IsNull then Gather(Cond, ['exprBinary'], Bins);
+        for B in Bins do
+          if SameText(Trim(NodeStr(B.ChildByField('operator'))), 'is')
+             and (LowerCase(Trim(NodeStr(B.ChildByField('lhs')))) = Opd)
+             and (LeafType(NodeStr(B.ChildByField('rhs'))) = AType) then Exit(True);
+      finally
+        Bins.Free;
+      end;
+    end;
+    P:= P.Parent;
+  end;
+end;
+
 procedure TTypScan.CheckCasts(const ARoutine: TTSNode);
 var
   Calls : TList<TTSNode>;
@@ -848,6 +880,7 @@ begin
       if (S = '') or (S = T) or (S = 'tobject') or (TypeKind(S) <> 1) then Continue;
       if (Related(S, T) <> 0) or (Related(T, S) <> 0) then Continue;
       if IsHackOf(T, S) or IsHackOf(S, T) then Continue;
+      if IsGuardedByIs(N, Args.NamedChild(0), T) then Continue;
       Emit(RULE_UNRELATED_CAST, 'warning', N,
         Format('%s(%s) casts a %s to %s, but neither class descends from the other -- the object is read with a ' +
           'foreign layout; check the type with "as" or "is", or fix the variable''s type',
