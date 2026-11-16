@@ -12,7 +12,7 @@ interface
 
 uses
   System.SysUtils, System.Generics.Collections, System.JSON,
-  DRagLint.Core.Model, DRagLint.Core.Interfaces, DRagLint.Index.Manifest;
+  DRagLint.Core.Model, DRagLint.Core.Interfaces, DRagLint.Index.Manifest, DRagLint.Index.Plan;
 
 type
   TArgs = record
@@ -821,6 +821,65 @@ procedure ReportCap(AOmitted, ACap: Integer; AAtLeast: Boolean; const AFlag: str
 /// <returns>The last segment.</returns>
 function LastSegment(const S: string; ASep: Char): string;
 
+/// <summary>Prints a "not found" diagnostic: to stderr under --json (stdout must stay parseable JSON), to stdout otherwise.</summary>
+/// <param name="AArgs">Parsed arguments; AsJson selects the stream.</param>
+/// <param name="AMsg">The diagnostic line.</param>
+procedure ReportNotFound(const AArgs: TArgs; const AMsg: string);
+
+/// <summary>Refuses a WRITING verb whose database came only from a "db" key of a
+/// .drag-lint.json found by walking up from the CWD, when the target it writes for is
+/// not under that file's folder (1.40 CFG-DBREDIRECT; INBOX 2026-09-29 4b-1).</summary>
+/// <param name="AVerb">The verb, for the message.</param>
+/// <param name="AArgs">The parsed arguments; DbFromConfig / DbConfigFile say where the db came from.</param>
+/// <param name="ATarget">The project or folder the verb writes for; '' when it has none
+/// (then a config db is never accepted: a destructive verb must act on a database the
+/// user named).</param>
+/// <returns>True when the verb must stop (the ERROR is already on stderr; exit 2).</returns>
+/// <remarks>`index` has its own, softer rule (it ignores the key with a WARNING and goes on);
+/// these verbs have no fallback database, so they stop. --db on the command line always wins.</remarks>
+function ConfigDbRedirectsWrite(const AVerb: string; const AArgs: TArgs; const ATarget: string): Boolean;
+
+/// <summary>The command that builds one plan section's database, as the
+/// resolve-dbs never-built NOTE advises it.</summary>
+/// <param name="AItem">The plan item whose DbPath has never been built.</param>
+/// <param name="AConfigPath">The --config the caller named, or '' for the
+/// default manifest lookup; carried into the advice so it reads the same manifest.</param>
+/// <returns>"drag-lint index --all --only &lt;Name&gt;", plus " --platform
+/// &lt;P&gt;" when the item is a per-platform (library) expansion and
+/// " --config &lt;path&gt;" when one was given.</returns>
+/// <remarks>--only matches the SECTION name. The advice used to guess it from the
+/// DB file's base name, which is wrong for a library ("library-Win64" vs the
+/// section "Library") and for a project section ("Foo" for a section "P-Foo"
+/// whose DB is _D-RAG\Foo.sqlite): both advised commands exited 2.</remarks>
+function IndexSectionCommand(const AItem: TPlanSection; const AConfigPath: string): string;
+
+/// <summary>Splits a consumer DB list into the PROJECT store and the platform
+/// LIBRARY store.</summary>
+/// <param name="AArgs">Parsed args; an explicit --db list changes the rule.</param>
+/// <param name="ADbs">The list, normally ResolveConsumerDbs(AArgs).</param>
+/// <param name="AProjectDb">Receives the project store, or '' when there is none.</param>
+/// <param name="ALibraryDb">Receives the first existing library-section DB, or ''.</param>
+/// <remarks>
+/// <para>Manifest-resolved list: the project store is the first EXISTING DB
+/// that is not a library section's. A --project with no index of its own gets
+/// a library-only list from ResolveConsumerDbs, and before 1.20.4 the "first
+/// existing" rule then took the platform library as the project store --
+/// exceptions-sync --apply would have harvested RTL/VCL raise sites into the
+/// user's unit.</para>
+/// <para>Explicit --db list: the first existing DB, whatever it is. The user
+/// named it; that is the documented meaning of `--db &lt;proj&gt; --db &lt;lib&gt;`.</para>
+/// <para>A manifest that fails to load classifies nothing as a library, and
+/// says so on stderr.</para>
+/// </remarks>
+procedure SplitConsumerDbs(const AArgs: TArgs; const ADbs: TArray<string>; out AProjectDb, ALibraryDb: string);
+
+/// <summary>The PROJECT store of a consumer DB list: see SplitConsumerDbs.</summary>
+/// <param name="AArgs">Parsed args.</param>
+/// <param name="ADbs">The list, normally ResolveConsumerDbs(AArgs).</param>
+/// <returns>The project store, or '' -- a verb that writes source from it must
+/// then refuse and name --db.</returns>
+function FirstProjectDb(const AArgs: TArgs; const ADbs: TArray<string>): string;
+
 implementation
 
 uses
@@ -828,8 +887,7 @@ uses
   System.NetEncoding, System.StrUtils, System.DateUtils, System.Diagnostics, System.SyncObjs, System.Math,
   System.Character, Data.DB, FireDAC.Stan.Async, FireDAC.DApt, DRagLint.Lint.RuleCache,
   DRagLint.Storage.SQLite, DRagLint.Storage.Schema, DRagLint.Storage.FileMembership,
-  DRagLint.Core.ControlChannel, DRagLint.Project.Resolver, DRagLint.Index.Plan, DRagLint.Index.DbSelect,
-  DRagLint.Index.Freshness;
+  DRagLint.Core.ControlChannel, DRagLint.Project.Resolver, DRagLint.Index.DbSelect, DRagLint.Index.Freshness;
 
 const
   STDOUT_DOCUMENT_BUFFER = 1 shl 20; // 1 MiB: TFDQuery depth 5 (37 MB) is ~36 WriteFile calls, not ~290,000
@@ -1733,6 +1791,66 @@ begin
   DotPos:= LastDelimiter(ASep, S);
   if DotPos > 0 then Result:= Copy(S, DotPos + 1, MaxInt)
   else Result:= S;
+end;
+
+procedure ReportNotFound(const AArgs: TArgs; const AMsg: string);
+begin
+  ReportNotFoundFor(AArgs.AsJson, AMsg);
+end; // procedure
+
+function ConfigDbRedirectsWrite(const AVerb: string; const AArgs: TArgs; const ATarget: string): Boolean;
+begin
+  Result:= False;
+  if not AArgs.DbFromConfig then Exit;
+  if ATarget <> '' then
+  begin
+    var CfgDir: string:= IncludeTrailingPathDelimiter(TPath.GetFullPath(ExtractFilePath(AArgs.DbConfigFile)));
+    if IncludeTrailingPathDelimiter(TPath.GetFullPath(ATarget)).StartsWith(CfgDir, True) then Exit;
+  end;
+  Writeln(ErrOutput, Format('ERROR: %s: refusing to write the database named by the "db" key of %s -- ' +
+    'that file''s tree does not own this target. Pass --db <file.sqlite> to choose the database.',
+    [AVerb, AArgs.DbConfigFile]));
+  Result:= True;
+end;
+
+function IndexSectionCommand(const AItem: TPlanSection; const AConfigPath: string): string;
+begin
+  Result:= 'drag-lint index --all --only ' + (if AItem.Name.Contains(' ') or AItem.Name.Contains('"') then '"' + AItem.Name.Replace('"', '\"') + '"' else AItem.Name);
+  if AItem.Platform <> '' then Result:= Result + ' --platform ' + AItem.Platform;
+  if AConfigPath <> '' then Result:= Result + ' --config ' + AnsiQuotedStr(TPath.GetFullPath(AConfigPath), '"');
+end;
+
+procedure SplitConsumerDbs(const AArgs: TArgs; const ADbs: TArray<string>; out AProjectDb, ALibraryDb: string);
+var
+  LibDbs: TArray<string>;
+begin
+  AProjectDb:= '';
+  ALibraryDb:= '';
+  LibDbs    := nil;
+  try
+    LibDbs:= LibrarySectionDbs(TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir));
+  except
+    on E: Exception do
+    begin
+      LibDbs:= nil;
+      Writeln(ErrOutput, Format('NOTE: could not load the manifest (%s: %s); no database is treated as the library.',
+                                [E.ClassName, E.Message]));
+    end;
+  end; // try
+  for var D: string in ADbs do
+  begin
+    if not TFile.Exists(D) then Continue;
+    var IsLib: Boolean:= IsLibrarySectionDb(LibDbs, D);
+    if (ALibraryDb = '') and IsLib then ALibraryDb:= D;
+    if (AProjectDb = '') and ((Length(AArgs.DbPaths) > 0) or not IsLib) then AProjectDb:= D;
+  end;
+end;
+
+function FirstProjectDb(const AArgs: TArgs; const ADbs: TArray<string>): string;
+var
+  LibDb: string;
+begin
+  SplitConsumerDbs(AArgs, ADbs, Result, LibDb);
 end;
 
 end.
