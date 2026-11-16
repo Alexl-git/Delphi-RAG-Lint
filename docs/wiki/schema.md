@@ -31,6 +31,8 @@ without a re-parse.
 
 `ref_element_types(ref_id, type_symbol_id, type_qname)` holds the static type of a subscripted receiver: for `A[i].Bar`, the type of `A[i]` on Bar's row, since `A[i]` has no ref. Arrays, `TList` / `TObjectList` / `IList` / `IReadOnlyList` elements and `TDictionary` / `TObjectDictionary` / `IDictionary` values, through aliases, read in the unit that wrote the type. `type_symbol_id` is NULL for a type the project does not declare (`string`). No row: the chain could not type it. Additive, written with `ref_types`, read by `rename`'s proof. A class or record with an `indexed default` property (see `symbols.directives`) types `A[i]` as that property's type; a class whose heritage is one of those lists types it as the list's element (1.47).
 
+`ref_host_bindings(ref_id, host_file_id, symbol_id)` (schema 26, 1.51.1) holds one binding per host for a ref written inside a code include that several units include: `refs.symbol_id` has room for one target, so it stays NULL where the hosts differ and each host's own target is here. `symbol_id` is NULL for a host that gave no certain answer; rows exist for every such ref at least one host binds, also when the hosts agree. Written by the resolve pass; read by `find-callers` and `usages`. See [[inc-indexing]].
+
 A property's symbols.directives is indexed for an array property (`property Items[I: Integer]: T`) and indexed default for the class's default property; a delegating property keeps implements I1,I2; '' otherwise (extractor 1.47). The signature stays the element type.
 
 `ref_types` holds the static type of a reference, at most one row per `refs` row

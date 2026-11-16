@@ -463,6 +463,19 @@ type
     Via         : string;
   end;
 
+  /// <summary>v1511 INC2 (B10, owner ruling OQ18): the binding of ONE ref for ONE host of the
+  /// code include it is written in -- a row of ref_host_bindings.</summary>
+  /// <remarks>Produced only for a ref inside an include that several units include as code.
+  /// SymbolId = 0: that host gave no certain answer (stored as NULL).</remarks>
+  TRefHostBinding = record
+    /// <summary>refs.id of the ref inside the include.</summary>
+    RefId     : Int64;
+    /// <summary>files.id of the host unit the binding holds for.</summary>
+    HostFileId: Int64;
+    /// <summary>symbols.id the ref names when compiled into that host; 0 = unbound there.</summary>
+    SymbolId  : Int64;
+  end;
+
   /// <summary>Item 4: per-run receiver counters, printed on the calls stage's
   /// `receivers:` ResolveLog line.</summary>
   /// <remarks>
@@ -498,6 +511,11 @@ type
     TRefIdFn   = function(const ARef: TReference; out AReason: string): Int64 of object;
     /// <summary>v151 INC (OQ18): an edge binder AcrossHostsEdge runs once per host.</summary>
     TRefEdgeFn = function(const ARef: TReference; out AReason: string): TCallEdge of object;
+    /// <summary>v1511 INC2: the key of FHostBindings -- one ref under one host.</summary>
+    TRefHostKey = record
+      RefId     : Int64;
+      HostFileId: Int64;
+    end;
     /// <summary>D13: the scope facts of ONE enclosing routine that the write
     /// pass consults for every write inside it, computed once per pass.</summary>
     /// <remarks>
@@ -579,6 +597,9 @@ type
     FIncHosts   : TObjectDictionary<Int64, TList<TIncludeHostRow>>;
     // v151 INC (OQ18): the host a multi-host include ref is being resolved for (IncFileId = 0: none).
     FCurHost    : TIncludeHostRow;
+    // v1511 INC2 (B10): (ref, host) -> the symbol that host binds (0 = it declined), collected by
+    // the per-host passes of every stream; the store persists it as ref_host_bindings.
+    FHostBindings: TDictionary<TRefHostKey, Int64>;
     // Cache of a routine/type symbol's direct children, keyed by symbol id, so a
     // per-ref field/method scan does not re-hit the DB for the same enclosing
     // symbol repeatedly across a whole-DB pass.
@@ -1345,16 +1366,27 @@ type
     /// <param name="AFn">The binder (re-entered with FCurHost set).</param>
     /// <param name="AReason">The common decline reason, or 'include-hosts-disagree'.</param>
     /// <returns>The symbol every host binds; 0 when one host declines or two hosts differ.</returns>
-    /// <remarks>The refs table holds ONE target per ref (call_edges.ref_id is its key), so N
-    /// differing bindings cannot be stored: a ref whose hosts disagree stays unbound -- short,
-    /// never wrong. The counters of the binder count the ref once per host.</remarks>
+    /// <remarks>The refs table holds ONE target per ref (call_edges.ref_id is its key): a ref
+    /// whose hosts disagree keeps refs.symbol_id unbound -- short, never wrong -- and, v1511 INC2
+    /// (B10), EVERY host's own answer is noted (NoteHostBinding) for ref_host_bindings, also
+    /// when the hosts agree. Every host is asked; the counters of the binder count the ref once
+    /// per host.</remarks>
     function AcrossHosts(const ARef: TReference; AFn: TRefIdFn; out AReason: string): Int64;
+    /// <summary>v1511 INC2 (B10): records what one host binds a multi-host include ref to.</summary>
+    /// <param name="ARefId">refs.id; a ref without an id (0) is not recorded.</param>
+    /// <param name="AHostFileId">files.id of the host of the current per-host pass.</param>
+    /// <param name="ASymbolId">The symbol that host binds, 0 when it declined.</param>
+    /// <remarks>Several streams may offer the same unbound ref: per (ref, host) the FIRST
+    /// non-zero answer is kept, the order a single-host ref is bound in.</remarks>
+    procedure NoteHostBinding(ARefId, AHostFileId, ASymbolId: Int64);
     /// <summary>v151 INC (OQ18): AcrossHosts for an edge binder; hosts agree when the target and
     /// the receiver type are the same.</summary>
     /// <param name="ARef">A ref inside a multi-host code include.</param>
     /// <param name="AFn">The binder (re-entered with FCurHost set).</param>
     /// <param name="AReason">The common decline reason, or 'include-hosts-disagree'.</param>
     /// <returns>The common edge; on disagreement the edge of the first host with TargetSymbolId 0.</returns>
+    /// <remarks>v1511 INC2 (B10): each host's target is noted for ref_host_bindings when its
+    /// edge is certain (an ambiguous edge is no binding).</remarks>
     function AcrossHostsEdge(const ARef: TReference; AFn: TRefEdgeFn; out AReason: string): TCallEdge;
     /// <summary>v151 INC (OQ18): AcrossHostsEdge for ResolveOne (no reason out).</summary>
     /// <param name="ACallRef">A call ref inside a multi-host code include.</param>
@@ -3680,6 +3712,13 @@ type
 
     /// <summary>Per-run counters of the `with` scope, across every stream.</summary>
     /// <remarks>Cumulative over the resolver's lifetime.</remarks>
+    /// <summary>v1511 INC2 (B10, owner ruling OQ18): the per-host bindings this run collected
+    /// for refs inside code includes that several units include.</summary>
+    /// <returns>One element per (ref, host) of every ref at least one host bound; a host that
+    /// declined has SymbolId 0. Empty when no multi-host include ref was resolved.</returns>
+    /// <remarks>Read by the calls pass after its last stream, in the same transaction that
+    /// wrote refs.symbol_id. Order is not defined.</remarks>
+    function HostBindings: TArray<TRefHostBinding>;
     property WithStats: TWithScopeStats read FWith.Stats;
 
     /// <summary>D13 (2026-09-23, resolver 1.8.0-alpha): the declaration a bare
@@ -4724,6 +4763,7 @@ begin
   FFileScope  := TObjectDictionary<Int64, TList<Int64>>.Create([doOwnsValues]);
   FIncHost    := TDictionary<Int64, TIncludeHostRow>.Create;
   FIncHosts   := TObjectDictionary<Int64, TList<TIncludeHostRow>>.Create([doOwnsValues]);
+  FHostBindings:= TDictionary<TRefHostKey, Int64>.Create;
   FChildCache := TObjectDictionary<Int64, TList<TSymbol>>.Create([doOwnsValues]);
   FLineCache  := TObjectDictionary<Int64, TStringList>.Create([doOwnsValues]);
   FStaleFiles := TDictionary<Int64, Boolean>.Create;
@@ -4807,6 +4847,7 @@ begin
   FFileScope .Free;
   FIncHost.Free;
   FIncHosts.Free;
+  FHostBindings.Free;
   FNameToUnitValues.Free;
   FNameToEnumValues.Free;
   FNameToRoutines.Free;
@@ -4977,26 +5018,69 @@ begin
   Result := 0;
   AReason:= '';
   var First: Boolean:= True;
+  var Agree: Boolean:= True;
   try
     for var H: TIncludeHostRow in FIncHosts[ARef.FileId] do
     begin
       FCurHost:= H;
       Id:= AFn(ARef, Why);
+      NoteHostBinding(ARef.Id, H.HostFileId, Id);
       if First then
       begin
         Result := Id;
         AReason:= Why;
         First  := False;
       end
-      else if Id <> Result then
+      else if Agree and (Id <> Result) then
       begin
+        { v1511 INC2: no Exit -- every host is still asked, its own answer goes to the side table. }
+        Agree  := False;
         Result := 0;
         AReason:= 'include-hosts-disagree';
-        Exit;
       end;
     end;
   finally
     FCurHost:= Default(TIncludeHostRow);
+  end;
+end;
+
+procedure TCallResolver.NoteHostBinding(ARefId, AHostFileId, ASymbolId: Int64);
+var
+  Key: TRefHostKey;
+  Old: Int64      ;
+begin
+  if ARefId <= 0 then Exit;
+  Key.RefId     := ARefId;
+  Key.HostFileId:= AHostFileId;
+  { The first stream that binds the ref for this host wins, as it does for a single-host ref. }
+  if FHostBindings.TryGetValue(Key, Old) and ((Old > 0) or (ASymbolId <= 0)) then Exit;
+  FHostBindings.AddOrSetValue(Key, ASymbolId);
+end;
+
+function TCallResolver.HostBindings: TArray<TRefHostBinding>;
+var
+  ByRef: TDictionary<Int64, Boolean>;
+  B    : TRefHostBinding;
+  N    : Integer;
+begin
+  ByRef:= TDictionary<Int64, Boolean>.Create;
+  try
+    for var P: TPair<TRefHostKey, Int64> in FHostBindings do
+      if P.Value > 0 then ByRef.AddOrSetValue(P.Key.RefId, True);
+    SetLength(Result, FHostBindings.Count);
+    N:= 0;
+    for var P: TPair<TRefHostKey, Int64> in FHostBindings do
+    begin
+      if not ByRef.ContainsKey(P.Key.RefId) then Continue;
+      B.RefId     := P.Key.RefId;
+      B.HostFileId:= P.Key.HostFileId;
+      B.SymbolId  := P.Value;
+      Result[N]:= B;
+      Inc(N);
+    end;
+    SetLength(Result, N);
+  finally
+    ByRef.Free;
   end;
 end;
 
@@ -5008,26 +5092,36 @@ begin
   Result := Default(TCallEdge);
   AReason:= '';
   var First: Boolean:= True;
+  var Agree: Boolean:= True;
   try
     for var H: TIncludeHostRow in FIncHosts[ARef.FileId] do
     begin
       FCurHost:= H;
       E:= AFn(ARef, Why);
+      { v1511 INC2: only an answer that would earn refs.symbol_id is a per-host binding. }
+      NoteHostBinding(ARef.Id, H.HostFileId,
+        if (E.Confidence = '') or SameText(E.Confidence, 'certain') then E.TargetSymbolId else 0);
       if First then
       begin
         Result := E;
         AReason:= Why;
         First  := False;
       end
-      else if (E.TargetSymbolId <> Result.TargetSymbolId) or (E.ReceiverTypeSymbolId <> Result.ReceiverTypeSymbolId)
-              or not SameText(E.ExternalTarget, Result.ExternalTarget) then
+      else if Agree and ((E.TargetSymbolId <> Result.TargetSymbolId) or (E.ReceiverTypeSymbolId <> Result.ReceiverTypeSymbolId)
+              or not SameText(E.ExternalTarget, Result.ExternalTarget)) then
       begin
+        { v1511 INC2: no Exit -- every host is still asked, its own answer goes to the side table. }
+        Agree:= False;
         Result.TargetSymbolId      := 0;
         Result.ReceiverTypeSymbolId:= 0;
         Result.ExternalTarget      := '';
         Result.ExternalKind        := '';
+        { A member edge without a target must not reach WriteMemberAccess (symbol id 0 breaks its foreign key). }
+        Result.MemberMode          := '';
+        Result.AccessorSymbolId    := 0;
+        Result.AccessorKind        := '';
+        Result.ValueOnly           := False;
         AReason:= 'include-hosts-disagree';
-        Exit;
       end;
     end;
   finally
@@ -5258,19 +5352,26 @@ end;
 
 function TCallResolver.SymbolById(AId: Int64): TSymbol;
 begin
-  if FRows.Symbols.TryGetValue(AId, Result) then Exit;
-  Result:= FStore.GetSymbolById(AId);
-  { 152c RINC: a top-level declaration of a code include carries its host's section. }
-  var H: TIncludeHostRow;
-  if (Result.ParentId <= 0) and (Result.Section = '') and FIncHost.TryGetValue(Result.FileId, H) then
-    Result.Section:= H.Section;
-  { v151 INC: a method body written in a single-host include (`procedure THost.Run;`) hangs
-    under the class of its host, so its body sees the class members and the host unit. }
-  var HL: TList<TIncludeHostRow>;
-  if (Result.ParentId <= 0) and (Result.Kind in [skMethod, skConstructor, skDestructor]) and Result.QualifiedName.Contains('.')
-     and FIncHosts.TryGetValue(Result.FileId, HL) and (HL.Count = 1) then
-    Result.ParentId:= IncludeMethodOwner(HL[0].HostUnitId, Result.QualifiedName);
-  FRows.Symbols.Add(AId, Result);
+  if not FRows.Symbols.TryGetValue(AId, Result) then
+  begin
+    Result:= FStore.GetSymbolById(AId);
+    { 152c RINC: a top-level declaration of a code include carries its host's section. }
+    var H: TIncludeHostRow;
+    if (Result.ParentId <= 0) and (Result.Section = '') and FIncHost.TryGetValue(Result.FileId, H) then
+      Result.Section:= H.Section;
+    { v151 INC: a method body written in a single-host include (`procedure THost.Run;`) hangs
+      under the class of its host, so its body sees the class members and the host unit. }
+    var HL: TList<TIncludeHostRow>;
+    if (Result.ParentId <= 0) and (Result.Kind in [skMethod, skConstructor, skDestructor]) and Result.QualifiedName.Contains('.')
+       and FIncHosts.TryGetValue(Result.FileId, HL) and (HL.Count = 1) then
+      Result.ParentId:= IncludeMethodOwner(HL[0].HostUnitId, Result.QualifiedName);
+    FRows.Symbols.Add(AId, Result);
+  end;
+  { v1511 INC2 (B10): in a multi-host include the same body belongs to the class of the host
+    of the current per-host pass. Never cached: the row cache has one entry per symbol. }
+  if (FCurHost.IncFileId <> 0) and (Result.FileId = FCurHost.IncFileId) and (Result.ParentId <= 0)
+     and (Result.Kind in [skMethod, skConstructor, skDestructor]) and Result.QualifiedName.Contains('.') then
+    Result.ParentId:= IncludeMethodOwner(FCurHost.HostUnitId, Result.QualifiedName);
 end;
 
 function TCallResolver.AncestorsOf(ATypeId: Int64): TArray<TTypeAncestor>;
@@ -9718,11 +9819,13 @@ var
   A    : TTypeAncestor;
   Depth: Integer      ;
 begin
-  if FWriteScopes.TryGetValue(AEnclosingSymbolId, Result) then Exit;
+  { v1511 INC2 (B10): during a per-host pass the owning class depends on the host, so the
+    per-routine cache is neither read nor filled. }
+  if (FCurHost.IncFileId = 0) and FWriteScopes.TryGetValue(AEnclosingSymbolId, Result) then Exit;
   Result:= Default(TWriteScope);
   if AEnclosingSymbolId > 0 then
   begin
-    S:= FStore.GetSymbolById(AEnclosingSymbolId);
+    S:= SymbolById(AEnclosingSymbolId);
     { The routine and the routines around it -- the levels LexicalParenlessLookup
       climbs, and the function names whose RESULT a write may assign. The walk ends at
       the first non-routine parent, which is the owning type when there is one
@@ -9734,7 +9837,7 @@ begin
       Result.Chain:= Result.Chain + [S.Id];
       if S.Kind in [skFunction, skMethod] then Result.FnNames:= Result.FnNames + '|' + LowerCase(S.Name);
       if S.ParentId <= 0 then S:= Default(TSymbol)
-      else S:= FStore.GetSymbolById(S.ParentId);
+      else S:= SymbolById(S.ParentId);
     end;
     Result.FnNames:= Result.FnNames + '|';
     if (S.Id > 0) and (S.Kind in TYPE_KINDS) then
@@ -9744,7 +9847,7 @@ begin
         if A.Resolved and (A.SymbolId > 0) then Result.ClassChain:= Result.ClassChain + [A.SymbolId];
     end;
   end;
-  FWriteScopes.Add(AEnclosingSymbolId, Result);
+  if FCurHost.IncFileId = 0 then FWriteScopes.Add(AEnclosingSymbolId, Result);
 end;
 
 { Inserts AValue into AValues kept NEAREST-LAST-DECLARED first: before the first
