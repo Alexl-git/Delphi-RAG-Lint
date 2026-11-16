@@ -8362,7 +8362,7 @@ begin
     { v1511 D02: parse-errors= (files whose tree had ERROR/MISSING nodes this tick), LAST
       on the line as on the manifest-section summary, so every 'Done. Files: N,' and
       'skipped M up-to-date' parser keeps matching. }
-    var ParseErrNote: string:= Format(', parse-errors=%d', [Indexer.ParseErrorFiles - ParseErrBeforeTick]);
+    var ParseErrNote: string:= ', parse-errors=' + IntToStr(Indexer.ParseErrorFiles - ParseErrBeforeTick);
     if Indexer.SkippedUpToDate - SkippedBeforeTick > 0 then Writeln(Format(
         'Done. Files: %d, Symbols: %d, Refs: %d, skipped %d up-to-date%s, %.2fs%s', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Indexer.SkippedUpToDate - SkippedBeforeTick, FailedNote, Elapsed, ParseErrNote]))
     else Writeln(Format('Done. Files: %d, Symbols: %d, Refs: %d%s, %.2fs%s', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, FailedNote, Elapsed, ParseErrNote]));
