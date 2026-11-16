@@ -291,6 +291,8 @@ function NameCallersForName(const AStore: ISymbolStore; const AName: string; ACo
 /// <remarks>
 /// A qualified query drops UNBOUND refs: an unbound `X.Streaming`
 /// cannot be attributed to TJob rather than to any other Streaming.
+/// 1.51.1 INC2 (B10): a ref inside a multi-host code include that one host binds to a queried
+/// declaration (ISymbolStore.GetHostBoundRefIds) IS kept, with that declaration as SymbolId.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoUsages (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleUsages (DRagLint.LSP.Server.pas)</para>
 /// <para>Calls: Copy, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Query.Callers.DropMemberAccessUnderCall, LastDelimiter</para>
@@ -832,16 +834,33 @@ begin
   DotAt:= LastDelimiter('.', AName);
   if DotAt = 0 then Exit(DropMemberAccessUnderCall(AStore.FindCallersByName(AName)));
   Kept:= TList<TReference>.Create;
+  { 1.51.1 INC2 (B10): refs.id -> the declaration one host of its include binds it to, for a ref
+    whose hosts differ (SymbolId 0 on the row). }
+  var HostBound: TDictionary<Int64, Int64>:= TDictionary<Int64, Int64>.Create;
   try
+    for var D in ADecls do
+      for var RefId: Int64 in AStore.GetHostBoundRefIds(D.Id) do HostBound.AddOrSetValue(RefId, D.Id);
     for var R in AStore.FindCallersByName(Copy(AName, DotAt + 1, MaxInt)) do
+    begin
+      var HostDecl: Int64;
+      if (R.SymbolId = 0) and HostBound.TryGetValue(R.Id, HostDecl) then
+      begin
+        var HR: TReference:= R;
+        HR.SymbolId  := HostDecl;
+        HR.Resolution:= RESOLUTION_EXACT;
+        Kept.Add(HR);
+        Continue;
+      end;
       for var D in ADecls do
         if (R.SymbolId <> 0) and (R.SymbolId = D.Id) then
         begin
           Kept.Add(R);
           Break;
         end;
+    end;
     Result:= DropMemberAccessUnderCall(Kept.ToArray);
   finally
+    HostBound.Free;
     Kept.Free;
   end;
 end; // function
