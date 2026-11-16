@@ -14,7 +14,7 @@
 # Usage: pwsh -File run_v1511_CYC_loader_gate.ps1 -Exe <drag-lint.exe> -LibraryDb <library-Win32 COPY> [-WorkDir <dir>] [-KeepWorkDir]
 param(
   [string]$Exe       = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
-  [string]$LoaderSrc = 'C:\TEMP\claude\lanes\v151\I10\loader-base',
+  [string]$LoaderSrc = (Join-Path 'C:\' 'TEMP\claude\lanes\v151\I10\loader-base'),
   [string]$LibraryDb = '',
   [string]$WorkDir   = "$env:TEMP\drag-lint-v1511-cyc-loader-$PID",
   [string]$RsVars    = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat',

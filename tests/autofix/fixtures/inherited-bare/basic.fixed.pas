@@ -28,7 +28,7 @@ end;
 
 destructor TBase.Destroy;
 begin
-  inherited Destroy;
+  inherited;
 end;
 
 procedure TBase.Run(const A: Integer; var B: string; C: Integer);
@@ -48,7 +48,7 @@ end;
 
 destructor TFoo.Destroy;
 begin
-  inherited Destroy;
+  inherited;
 end;
 
 procedure TFoo.Run(const A: Integer; var B: string; C: Integer);

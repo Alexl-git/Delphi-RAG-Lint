@@ -15,7 +15,7 @@
 #>
 param(
   [string]$Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe'),
-  [string]$Db  = 'C:\TEMP\claude\lanes\v1511\_dbs\YADF.sqlite',
+  [string]$Db  = (Join-Path 'C:\' 'TEMP\claude\lanes\v1511\_dbs\YADF.sqlite'),
   [string]$RuleA = 'dictionary-get-without-check',
   [string]$RuleB = 'threadvar-managed'
 )
