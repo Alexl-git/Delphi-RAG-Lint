@@ -9837,8 +9837,7 @@ begin
       Inc(Depth);
       Result.Chain:= Result.Chain + [S.Id];
       if S.Kind in [skFunction, skMethod] then Result.FnNames:= Result.FnNames + '|' + LowerCase(S.Name);
-      if S.ParentId <= 0 then S:= Default(TSymbol)
-      else S:= SymbolById(S.ParentId);
+      S:= if S.ParentId <= 0 then Default(TSymbol) else SymbolById(S.ParentId);
     end;
     Result.FnNames:= Result.FnNames + '|';
     if (S.Id > 0) and (S.Kind in TYPE_KINDS) then

@@ -9261,7 +9261,7 @@ begin
   { and the member accesses the same pass wrote -- same lifetime as the edges }
   if HasMemberAccesses then FConn.ExecSQL('DELETE FROM member_accesses');
   { 1.51.1 INC2: and the per-host bindings of the same pass -- same lifetime as the edges }
-  if HasRefHostBindings then FConn.ExecSQL('DELETE FROM ref_host_bindings');
+  if HasRefHostBindings then FConn.ExecSQL('DELETE FROM ref_host_bindings');  // dl:ok sql-update-delete-without-where@5ff7 -- REVIEWED 2026-11-16: a whole-database pass rewrites every row of this derived table, like call_edges above
 end;
 
 { The kinds a call receiver's type can resolve TO, spelled as the stored kind
@@ -10043,8 +10043,8 @@ begin
       call_edges / member_accesses row exists (one target per ref), so no arm above reports it.
       `r.symbol_id IS NULL` is the table's own invariant, restated so a stale row cannot double a site.
       Mode as the arms above: '' for a routine target (a call), else read / write by the kind. }
-    if HasRefHostBindings then
-      HostArm:=
+    HostArm:=
+      if HasRefHostBindings then
         'UNION ALL ' +
         'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, r.start_col, ''certain'' AS confidence, ' +
         'CASE WHEN r.kind = ''write'' THEN ''write'' ' +
@@ -10056,8 +10056,7 @@ begin
         'JOIN files f ON f.id = r.file_id ' +
         'WHERE hb.symbol_id = :x AND r.symbol_id IS NULL AND r.kind IN (''call'', ''read'', ''member-access'', ''write'') ' +
         'AND NOT EXISTS (SELECT 1 FROM call_edges ce3 WHERE ce3.ref_id = r.id) '
-    else
-      HostArm:= '';
+      else '';
 
     { 152b O6F: one prepared statement per shape for the store's lifetime (see CachedQuery). }
     Q:= CachedQuery(
@@ -12794,15 +12793,16 @@ begin
         ', (SELECT COUNT(*) FROM ref_host_bindings hb WHERE hb.ref_id = refs.id) AS host_rows' +
         ', (SELECT COUNT(*) FROM ref_host_bindings hb WHERE hb.ref_id = refs.id AND hb.symbol_id IS NULL) AS host_unbound'
       else '';
-    if HasMemberAccesses then
-      Q.SQL.Text:= 'SELECT refs.*, ma.mode AS access_mode, ce.confidence AS edge_conf' + HostCols + ' FROM refs ' +
-                   'LEFT JOIN member_accesses ma ON ma.ref_id = refs.id ' +
-                   'LEFT JOIN call_edges ce ON ce.ref_id = refs.id ' +
-                   'WHERE refs.name_text = :name COLLATE NOCASE ORDER BY refs.file_id, refs.start_line'
-    else
-      Q.SQL.Text:= 'SELECT refs.*, ce.confidence AS edge_conf' + HostCols + ' FROM refs ' +
-                   'LEFT JOIN call_edges ce ON ce.ref_id = refs.id ' +
-                   'WHERE refs.name_text = :name COLLATE NOCASE ORDER BY refs.file_id, refs.start_line';
+    Q.SQL.Text:=
+      if HasMemberAccesses then
+        'SELECT refs.*, ma.mode AS access_mode, ce.confidence AS edge_conf' + HostCols + ' FROM refs ' +
+        'LEFT JOIN member_accesses ma ON ma.ref_id = refs.id ' +
+        'LEFT JOIN call_edges ce ON ce.ref_id = refs.id ' +
+        'WHERE refs.name_text = :name COLLATE NOCASE ORDER BY refs.file_id, refs.start_line'
+      else
+        'SELECT refs.*, ce.confidence AS edge_conf' + HostCols + ' FROM refs ' +
+        'LEFT JOIN call_edges ce ON ce.ref_id = refs.id ' +
+        'WHERE refs.name_text = :name COLLATE NOCASE ORDER BY refs.file_id, refs.start_line';
     Q.ParamByName('name').AsWideString:= ACalleeName;
     Q.Open;
     while not Q.Eof do
@@ -12854,9 +12854,9 @@ begin
           refs.symbol_id is NULL) = a reference the resolver bound; a host that declined
           keeps the row name-only. }
         var HostF: TField:= Q.FindField('host_rows');
-        if (HostF <> nil) and (HostF.AsInteger > 0) and (Q.FieldByName('host_unbound').AsInteger = 0) then
-          R.Resolution:= RESOLUTION_EXACT
-        else R.Resolution:= RESOLUTION_NAME_ONLY;
+        R.Resolution:=
+          if (HostF <> nil) and (HostF.AsInteger > 0) and (Q.FieldByName('host_unbound').AsInteger = 0) then RESOLUTION_EXACT
+          else RESOLUTION_NAME_ONLY;
       end;
       List.Add(R);
       Q.Next;

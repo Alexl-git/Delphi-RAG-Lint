@@ -842,10 +842,11 @@ begin
       for var RefId: Int64 in AStore.GetHostBoundRefIds(D.Id) do HostBound.AddOrSetValue(RefId, D.Id);
     for var R in AStore.FindCallersByName(Copy(AName, DotAt + 1, MaxInt)) do
     begin
-      if (R.SymbolId = 0) and HostBound.ContainsKey(R.Id) then
+      var HostDecl: Int64;
+      if (R.SymbolId = 0) and HostBound.TryGetValue(R.Id, HostDecl) then
       begin
         var HR: TReference:= R;
-        HR.SymbolId  := HostBound[R.Id];
+        HR.SymbolId  := HostDecl;
         HR.Resolution:= RESOLUTION_EXACT;
         Kept.Add(HR);
         Continue;
