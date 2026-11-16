@@ -11,6 +11,11 @@ Six built-in rules read more of the source in 1.51, and three rules gained an au
 * `classname-string-compare` also reports `ClassNameIs('TFoo')`, a bare `ClassName` and a literal on the left.
 * `division-by-zero-literal` also reports `$0` and `00`.
 
+## 1.51.1
+* `division-by-zero-literal` is float-only: `X / 0` and `X / 0.0` are reported; `div 0` / `mod 0` are dcc E2098 compile errors and are not.
+* `large-magic-number` also exempts case labels, enum ordinals in a type declaration, `dispid N`, array subscripts (`Params[3]`, `Fields[2]`) and the first argument of `Reg(<int>, 'NAME')`.
+* `inherited-bare` is not reported in Destroy / Assign / AssignTo or as the `if not (X is T) then inherited else` fallback.
+
 ## New fixers
 ```
 drag-lint lint --in <file.pas> --fix --fix-rule empty-finally --apply

@@ -4,7 +4,7 @@
   "group": "indexing",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "1.51.0-alpha",
+  "since": "1.51.1-alpha",
   "summary": "The index keeps a reference for pointer base types, generic constraints, generic method headers, dotted property specifiers and message constants",
   "intro": "Read this to see which declaration positions hold a reference a rename or usages can find, the kind each gets, and the positions that still hold none.",
   "wikiPage": "index-declaration-refs",
@@ -23,7 +23,8 @@
   "audience": "both",
   "verified": {
     "date": "2026-11-16",
-    "by": "alexanderl",
-    "build": "1.51.0-alpha"
+    "by": "ENGINE",
+    "build": "1.51.1-alpha",
+    "surfaceHash": "eca8ed8a4adfae845a225cd724506909d5969c4e370a32b9a9c990efc53cc6fd"
   }
 }

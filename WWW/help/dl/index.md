@@ -26,6 +26,9 @@ Build and maintain the per-project and library indexes.
 | [schema](features/schema.md) | Prints the live schema of an index database: schemaversion, every table and column, and row counts | 0.95.0-alpha |
 | [Show Resolved DBs (debug)](features/show-resolved-dbs-debug.md) | Prints which database(s) drag-lint would actually use for a given project, file, or platform, without running a real query | 0.60.0-alpha |
 | [Library path of the project's Delphi](features/target-bds-library-path.md) | index reads the library path, IDE variables and $(BDS) from the BDS key of the project's target; a missing key falls back to 37.0 with a one-line note | 1.42.0-alpha |
+| [References for declaration positions](features/v1511-ext-fixes.md) | The index keeps a reference for pointer base types, generic constraints, generic method headers, dotted property specifiers and message constants | 1.51.1-alpha |
+| [Per-host bindings for refs in a shared include](features/v1511-inc2-fixes.md) | A ref inside an include that several units include keeps one binding per host (table ref_host_bindings, schema 26); find-callers and usages read it | 1.51.1-alpha |
+| [Library bindings for bare reads, paren-less calls and function-result receivers](features/v1511-res-fixes.md) | Bare reads of library vars (Application), paren-less library calls and members on a library function result bind to refs.external_target | 1.51.1-alpha |
 
 ## Search and navigation
 
@@ -138,6 +141,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Typing and ownership lint rules (casts, Self as interface, destructors)](features/v151-typ-rules.md) | Five rules: unrelated class casts, Self as interface during construction, nil-unsafe destructors, Free without nil, unclear field ownership | 1.51.0-alpha |
 | [Wider built-in rules (1.51)](features/v151-wid-ast-rules.md) | Six built-in rules read more constructs: code-page and label exemptions, named zero constants, implied else-if, thread dialogs, Supports aliases | 1.51.0-alpha |
 | [Wider scm rules and three new fixers](features/v151-wid-scm-rules.md) | Seven built-in rules read more constructs; empty-finally, format-string-not-formatted and shared-marker-legacy-shape gain autofixes | 1.51.0-alpha |
+| [CLI fixes in 1.51.1](features/v1511-cli-fixes.md) | lint-all --rule a,b runs only those rules, a DB copy stays on the copy; rules --rule; info versions; index parse-errors; resolve-only warning | 1.51.1-alpha |
 | [warm-rule-cache](features/warm-rule-cache.md) | Fills the lint rule cache for a project index; index runs warm it, or start it in the background (--rule-cache-warm) | 1.39.0-alpha |
 
 ## Documentation
@@ -247,6 +251,7 @@ Call graphs, dependency reports, dead code, tester spreadsheets.
 | [Show Wiring (Spring4D DI + DFM events)](features/show-wiring-spring4d-di-dfm-events.md) | Surfaces bindings the compiler does not make obvious: Spring4D container registrations and DFM event hookups for a type | 0.21.0-alpha |
 | [Top Symbols (fan-in)](features/top-symbols-fan-in.md) | Ranks indexed symbols by fan-in -- how many places reference them | 0.6.0-alpha |
 | [Uses Report (CSV)](features/uses-report-csv.md) | Exports the project's unit-dependency data as a CSV file | 0.40.5-alpha |
+| [Cycles fix through recipe R3 (hub surface, compile-gated)](features/v1511-cyc-fixes.md) | cycles --fix --hub-surface writes recipe R3 through the compile gate: build before and after, rollback, re-index and verify | 1.51.1-alpha |
 
 ## Diagrams and charts
 

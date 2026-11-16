@@ -7,7 +7,7 @@ group: linting
 order: 30003
 since: 1.37.0-alpha
 status: shipped
-updated: 1.42.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # Compliance labels (CWE, CERT, MISRA)
@@ -19,7 +19,7 @@ Read this when you must show which lint rules map to CWE, CERT or MISRA, or rest
 ## How to run it
 
 ```text
-drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance` and needs_compiler / compat_since / target_active; --standard lists only rules labelled under it)
+drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rule <id>[,<id>]] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance` and needs_compiler / compat_since / target_active; --standard lists only rules labelled under it; --rule <id>[,<id>] lists only those rules, an unknown id is exit 2)
 ```
 
 Example:
@@ -31,7 +31,7 @@ drag-lint rules --standard cwe
 Full flag list: [rules in the CLI reference](../cli.md#rules).
 
 ```text
-drag-lint lint-all [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]
+drag-lint lint-all [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]
 ```
 
 Example:

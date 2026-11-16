@@ -20,5 +20,11 @@
       "example": "drag-lint usages --name <Unit.X> --db <file.sqlite> --json"
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-16",
+    "by": "ENGINE",
+    "build": "1.51.1-alpha",
+    "surfaceHash": "8eba24cd68da577b824152e7ab06616349f1972968ea4e8d7e8b90bd1e0bd904"
+  }
 }

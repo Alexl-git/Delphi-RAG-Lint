@@ -7,7 +7,7 @@ group: maintenance
 order: 120001
 since: 0.15.0-alpha
 status: shipped
-updated: 1.38.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # About and Status
@@ -19,7 +19,7 @@ Read this when hover or go-to-definition seems to answer from the wrong place, o
 ## How to run it
 
 ```text
-drag-lint info [--json] [--db <file.sqlite>]... (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only)
+drag-lint info [--json] [--db <file.sqlite>]... (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only; the text form prints extractor:, resolver: and grammar dlls: (size:sha256-16 per DLL) lines as --json does -- 1.51.0 printed only the ABI line)
 ```
 
 Full flag list: [info in the CLI reference](../cli.md#info).

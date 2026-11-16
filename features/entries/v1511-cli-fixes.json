@@ -1,0 +1,45 @@
+{
+  "id": "v1511-cli-fixes",
+  "title": "CLI fixes in 1.51.1",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.51.1-alpha",
+  "summary": "lint-all --rule a,b runs only those rules, a DB copy stays on the copy; rules --rule; info versions; index parse-errors; resolve-only warning",
+  "intro": "Read this when a lint-all --rule run is slow or reaches other databases, when rules or info does not print what you expect, or when you look for the parse-error count of an index run.",
+  "wikiPage": "v1511-cli-fixes",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "example": "drag-lint lint-all --db <file.sqlite> --rule <id>,<id>"
+    },
+    {
+      "type": "cli",
+      "verb": "rules",
+      "example": "drag-lint rules --rule <id>[,<id>] --json"
+    },
+    {
+      "type": "cli",
+      "verb": "info",
+      "example": "drag-lint info --db <file.sqlite>"
+    },
+    {
+      "type": "cli",
+      "verb": "index",
+      "example": "drag-lint index --project <X.dproj> --db <file.sqlite>"
+    },
+    {
+      "type": "cli",
+      "verb": "find-deadcode",
+      "example": "drag-lint find-deadcode --db <file.sqlite>"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-16",
+    "by": "ENGINE",
+    "build": "1.51.1-alpha",
+    "surfaceHash": "36d2387a0abf8a7d32ec27af8027cedd5ba36af61fed98ecaae92f3aa8ac6359"
+  }
+}

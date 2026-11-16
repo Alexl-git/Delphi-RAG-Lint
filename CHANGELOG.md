@@ -3,6 +3,127 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## v1.51.1-alpha -- date TBD
+
+Bug-fix release (wave v1511, 25 lanes). 423 rules, 341 enabled by default, 125 with an auto-fix (unchanged; no
+default flipped). One re-parse: extractor 1.39.0 -> 1.40.0-alpha, resolver 1.27.0 -> 1.28.0-alpha, index schema
+25 -> 26 (additive). Grammar unchanged (tree-sitter-delphi13 v1.4.12).
+
+### Upgrade notes
+- Re-parse every index once (`index --project <X.dproj> --db <db> --rebuild`, libraries via
+  `tools\reparse-libraries.ps1`): B26 / B07 change what is extracted, and only a re-resolve fills the new
+  `ref_host_bindings` table (B10). A v25 index still opens (`SCHEMA_READ_MIN` 23).
+- Review markers stamped by 1.51.1 (`allow`, the IDE / LSP quick fix) carry a v2 metric hash (Y4): an older engine
+  (1.51.0 and before) reads them as `review-marker-stale`. Forward-only; markers stamped by 1.51.0 keep verifying.
+
+### Index, extractor and resolver (one re-parse)
+- B26: references for a pointer base type, a generic constraint, a generic method implementation header's class,
+  the owner / arguments of `TBox<T>.TInner`, dotted or indexed property specifiers (property-spec root,
+  record-field members) and the constant of a `message` / `dispid` directive (EXT).
+- B10 / O13: a ref inside an include that several units include keeps one binding per host (`ref_host_bindings`,
+  schema 26); `find-callers` reports it exact, `find-callers --resolved` and qualified `usages` list it under each
+  declaration; a method body in a shared include binds its members per host. Fixes a 1.51.0 index FATAL (FOREIGN
+  KEY constraint failed) when the hosts of a member / unit-var write in a shared include disagree (INC2).
+- B02 / B04 / B06: library-first resolve of reads -- `Application` in a `.dpr` main block binds to
+  `Vcl.Forms.Application`; a paren-less library call read binds as a call (call edge, purity and LIBFX see it); a
+  member on a library function result or an inferred inline var gets its `external_target` (RES).
+- B07: a UTF-8-BOM file with an invalid byte is read as CP1252 instead of dying with a FATAL EEncodingError, in
+  `lint` and in the indexer (ENC).
+
+### Rules -- false positives and misses fixed
+- Y2 / Y3: `deep-nesting` counts CONTROL statements only (if, case, loops, with, try..except); an if-EXPRESSION and
+  try..finally are not levels (AST).
+- R8: `mutable-global-variable` skips the IDE form variable of a form unit (`frmX: TfrmX`, the `.dfm` root) (AST).
+- B15: `hardcoded-absolute-path` ignores 2-char strings such as `'n:'`; the 5 `dl:ok` that hid it are gone (AST).
+- B18a / B19 (`default-encoding-io` name match, `referenced-never-set` cast write) and B18b (`read-never-assigned`
+  out / var argument): verified already fixed in 1.51.0, fixtures added (AST, PROJ).
+- R1: `field-name-prefix` compares the prefix case-insensitively (`fFLDRID` passes; CLIENT 2140 -> 69). R4:
+  `method-pascalcase` exempts Get/Set accessors named after a DB column with `_` and `*_TLB.pas` imports
+  (742 -> 292) (NAMING).
+- R2: `missing-doc` skips the Get<X> / Set<X> accessors of a documented property X in the same class, `override`
+  methods and event handlers bound by the unit's own `.dfm` (CLIENT 11957 -> 5813). R7: a grouped
+  `<param name="A, B">` is two names and anchors on the routine the comment precedes. B20 (DUnitX attribute
+  argument read as a parameter) not reproducible on 1.51.0; regression assertion added (DOCLINT).
+- B13: `division-by-zero-literal` is float-only (`div 0` / `mod 0` are dcc E2098). Y1 / R6: `large-magic-number`
+  exempts case labels, enum ordinals in a type declaration, `dispid N`, array subscripts (`Params[3]`) and the
+  first argument of `Reg(<int>, ..)` (YADF 97 -> 4, CLIENT 1186 -> 322). R3: `inherited-bare` exempts bare
+  `inherited;` in Destroy / Assign / AssignTo and the `if not (X is T) then inherited else` fallback
+  (CLIENT 486 -> 36). B12: the comment fixer's span clamp is defensive (no observable change) (SCM).
+- R5: `uses-movable-to-implementation` no longer fires on a unit name that collides with another symbol
+  (CLIENT 289 -> 147). T10: `datamodule-form-global` needs the library for TdxRibbonForm; stays OFF (PROJ).
+- B14: `exception-escapes-thread` treats a `TTask.Run` whose ITask is `.Wait`ed / `WaitForAll`ed in the same
+  routine as observed (THR).
+- B08: `finalization-after-dependency` / `init-order-hazard` follow a call through a unit-level procedural
+  variable. B05: `heavy-initialization` counts a paren-less method reference as a call only when it is bound as
+  one (INIT).
+- Y7: `unrelated-class-cast` is silent when either class chain is unresolved or under an `is` test of the same
+  type. T01: one shared `TDfmNode` / `TDfmProp` (`DRagLint.V151.Dfm.Common`). T03: `form-object-without-field`
+  skips TdxBar* / TdxLayout* objects with no name-reachable use. T04: `dataset-edit-without-post` skips an Edit
+  whose dataset FIELD is posted in another routine of the class (parameters and locals are not matched)
+  (V151F, V151F2).
+- B24: `redundant-cast` reports `TcxCustomEditProperties(AProperties)` on a var parameter of that exact type (CAST).
+- B22 (`component-default-mismatch`) verified already fixed; T05: `component-setter-without-invalidate` and
+  `component-fixed-pixels` stay OFF (CMP).
+
+### CLI
+- B16: `lint-all --rule a,b` runs ONLY the named rules and derives no `--shared-db` peers (YADF copy: 1025.8 s ->
+  13.6 s; the "silently []" note was not reproducible -- the time was the peer runs) (CLI).
+- F1: `lint-all --db <copy>` on a DB the manifest does not register skips the dl:shared marker-peer pass (one
+  stderr note) and resolves sibling DBs to same-named copies beside `--db`; a copy no longer opens the REAL sibling
+  DBs. `--shared-db` still runs (CLI).
+- F3: `index --resolve-only` on a DB resolved against a library, with no library store attached, warns that the
+  external targets will be cleared (CLI).
+- B03: `find-deadcode` no longer lists every used unit of a library project as dead (CLI).
+- D01: `info` (text) prints the extractor, resolver and grammar-DLL lines again (1.51.0 printed only the ABI line).
+  D02: the `index --project` / `index <dir>` Done line ends in `, parse-errors=N`. D03: an index that does not
+  cover the asked path answers exit 2 "does not cover" (documented) (CLI, INT).
+- R9: `rules --rule <id>[,<id>]` lists only those rules (unknown id: exit 2). R10: a single-file `lint --fix` notes
+  that lint-all-only rules (review-marker-unused, ...) are not checked by it (CLI).
+- T06 / CYC: `cycles --fix --hub-surface` runs recipe R3 through the compile gate (baseline build, write under
+  backups, build after the edit, rollback, re-index + verify; cycle-fix/1 part r3, recipe hub-surface, refusal
+  hub-surface-group-stays); `cycles --causes --format json --hub-surface` names the gated commands. The hub-surface
+  default is not flipped (O11).
+- T09: `lint --fix --apply` naming renames build EVERY owner project of the plan through the compile gate
+  (`--project`, or the project of a DB at `<dir>\_D-RAG`); a `--db`-only run (the IDE form) is gated by the DB's
+  project instead of being written unbuilt (RENAME).
+- B01: `rename` decides a member on a hard-cast receiver `TEdit(x).Text` by the cast type (YADFOT
+  `YADF.Tokens.TToken.Text`: 9 -> 0 receiver-untyped) (RENAME, EXT).
+- B23: `SyncForwardHeaders` qualify-by-class was already fixed in 1.46 (cded68332); guard added (RENAME).
+- B25: `narrow-param` and `redundant-cast` listen on the control channel on plan runs too; `shutdown --all` stops
+  them (exit 1) (CAST).
+- Y4: review markers survive an engine metric-algorithm change -- a routine whose text is unchanged is re-measured
+  under the new algorithm instead of reported stale; growth under the same algorithm still re-opens it
+  (`DRagLint.Lint.MarkerHash`, v2 hash) (MARK).
+- Y9: `document --project` with a relative project path honours `excludeRoots` (vendored code is not written;
+  `--document-third-party` stays the opt-in). Y10: a unit shared by several projects converges -- `--apply
+  --reindex` no longer reads a stale parse cache, and the harvested summary of a dl:shared unit is kept in every
+  project (YADF 3 projects x 2 rounds: 0 pending). B21 (orphan param tag whitespace) verified already fixed
+  (DOCAPPLY).
+- T07: `DRagLint.CLI.pas` split into 19 `DRagLint.CLI.<Family>.pas` units (41008 -> 29113 lines, back under the
+  indexer's 2048 KB limit); `--help` and `rules --json` byte-identical (SPLIT).
+
+### IDE plugin
+- B-OWN1: the Options page button reads "Edit lint rules..." (no hard-coded rule count). B-OWN2: the Lint Options
+  tab updates the enabled count on every toggle, shows "(unsaved)" and a bold "Save *" until saved, and asks before
+  closing with unsaved changes. H06: the plugin log folder follows `DRAGLINT_PLUGIN_LOG_DIR` (PLUG).
+
+### Tests, tools and docs
+- H01 / H06: leaking guards remove their work dirs and use a private plugin log dir; battery-level temp growth
+  guard. H02: `run_docs_sync_guard.ps1` without `-Exe` fails on a stale tree instead of reading an old exe.
+  H03 / H04: cyclefix_b1 / cyclefix_c1 cleanup and output-dir fixes (HYG).
+- U1 / T11: `tools\draglint-usage-append.cjs` (one validating writer for the usage log) and the report's
+  malformed-row classes; guard `run_usage_log_contract_guard.ps1` (TOOLS).
+- featuregen: the subcommand harvest reads every `src\cli\DRagLint.CLI*.pas` unit (after T07 it missed
+  `export` / `workspace` subcommands) (INT).
+- Q1 (VS Code quick fix returns a WorkspaceEdit) and T09 LSP part verified, no change (LSP). B09 / B11 / T12
+  verified closed, B17 not reproduced, T08 explained (VERIFY). T02 noise audit of 11 high-volume rules (NOISE).
+- D04: `Core.Model` records grammar v1.4.12 as current (1.39.0 entry). D06: `HelpText.pas` carries the GENERATED
+  banner. D07: no featuregen docs-check allow row matches nothing.
+
+### Not in 1.51.1 (moved to 1.51.2)
+- B27: the grammar still accepts `Inline` / `Library` as identifiers (tree-sitter session, low).
+- `index --resolve-only` on a DB copy without a library store still clears `external_target` (now warned, F3).
+
 ## v1.51.0-alpha -- date TBD
 
 Wave v151 (39 lanes). 423 rules (was 317): 341 enabled by default (was 263), 125 with an auto-fix (was 113),

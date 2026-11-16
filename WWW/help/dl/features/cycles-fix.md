@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70007
 since: 1.33.0-alpha
 status: shipped
-updated: 1.51.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # Cycles fix (mechanical, compile-gated)
@@ -143,14 +143,22 @@ byte for byte what `--no-hub-surface` prints.
 * `--no-hub-surface`: the planner's own plan for every group.
 * `--hub-surface`: R3 by name. It also shows R3 for a group it cannot break (with what keeps the group)
   and one note per group it refuses. Writing (`--apply`) and the `--causes --format json` fix object
-  need it: `cycles --fix` cannot run R3 yet, so the default fix object does not offer it.
+  need it; the default fix object stays the planner's (the default is not flipped, owner question O11).
+* `cycles --fix --hub-surface` (since 1.51.1): R3 through the compile gate, as the planner's fix -- the
+  project is built before the edit, the files are written under `.BCK<n>` backups, the project is built
+  again, and a failed build rolls every file back byte-identically (the new `<Hub>.Hub` unit is removed).
+  Then the project is re-indexed and `cycles` must match the prediction. The `cycle-fix/1` document
+  says `part` `r3` and `recipe` `hub-surface`; a group R3 plans but cannot break is refused
+  `hub-surface-group-stays`, one it does not plan keeps R3's reason (`not-hub-shaped`, ...). `--part`
+  does not combine with it. The `--causes --format json --hub-surface` fix object names these gated
+  commands. The new unit is not added to the `.dpr` / `.dproj`: it sits beside the hub, where dcc finds it.
 
 Why the default changed: the recipe was applied to a copy of a 78-unit application (one main form, 76
 units reading it through its global at 1665 places, 10 free routines of the hub called from the spokes).
 77 files were rewritten and one unit added; the project then built with 0 errors and the same warnings
-as before, and after a re-index `cycles` reported no circular dependency. R3 runs no compile gate of
-its own yet: build the project after `--apply`; the `.BCK<n>` files beside each written file are the
-way back.
+as before, and after a re-index `cycles` reported no circular dependency. `cycles --plan --hub-surface --apply`
+runs no compile gate: build the project after it (the `.BCK<n>` files beside each written file are the way
+back), or use `cycles --fix --hub-surface --apply`, which does.
 
 ### Worked example, and whether a model can follow it
 

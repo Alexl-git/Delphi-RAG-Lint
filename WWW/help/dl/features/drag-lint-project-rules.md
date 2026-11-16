@@ -7,7 +7,7 @@ group: linting
 order: 30009
 since: 0.95.0-alpha
 status: shipped
-updated: 1.50.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # drag-lint: Project Rules
@@ -27,6 +27,7 @@ Full flag list: [rules in the CLI reference](../cli.md#rules).
 | `--json` |  |  |  |
 | `--category` | `<name>` |  |  |
 | `--standard` | `cwe\|cert\|misra` |  |  |
+| `--rule` | `<id>[,<id>]` |  |  |
 | `--rules-dir` | `<dir>` |  |  |
 
 ## Where to click

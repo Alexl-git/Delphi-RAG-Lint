@@ -9,6 +9,14 @@ product: DL
 
 drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.com](https://www.htrmicronite.com)), our quality and production-control software.
 
+## 1.51.1-alpha
+
+* [CLI fixes in 1.51.1](features/v1511-cli-fixes.md) -- lint-all --rule a,b runs only those rules, a DB copy stays on the copy; rules --rule; info versions; index parse-errors; resolve-only warning.
+* [Cycles fix through recipe R3 (hub surface, compile-gated)](features/v1511-cyc-fixes.md) -- cycles --fix --hub-surface writes recipe R3 through the compile gate: build before and after, rollback, re-index and verify.
+* [References for declaration positions](features/v1511-ext-fixes.md) -- The index keeps a reference for pointer base types, generic constraints, generic method headers, dotted property specifiers and message constants.
+* [Per-host bindings for refs in a shared include](features/v1511-inc2-fixes.md) -- A ref inside an include that several units include keeps one binding per host (table ref_host_bindings, schema 26); find-callers and usages read it.
+* [Library bindings for bare reads, paren-less calls and function-result receivers](features/v1511-res-fixes.md) -- Bare reads of library vars (Application), paren-less library calls and members on a library function result bind to refs.external_target.
+
 ## 1.51.0-alpha
 
 * [Compiler messages: pass-through and overlap with our rules](features/compiler-message-passthrough.md) -- Every Delphi compiler message (hint, warning, error) is stored per project and passed through under its own code; overlapping rules say where they go further.
