@@ -1,5 +1,7 @@
 # drag-lint
 
+> **As of 2026-11-16 this GitHub page is no longer kept up to date, except for Releases, bug reports (Issues), pull requests and the Discussions forum. Current documentation, instructions and articles are at [www.delphi-rag-lint.com](https://www.delphi-rag-lint.com).**
+
 [![Release](https://img.shields.io/github/v/release/Alexl-git/Delphi-RAG-Lint?include_prereleases)](https://github.com/Alexl-git/Delphi-RAG-Lint/releases)
 [![License](https://img.shields.io/github/license/Alexl-git/Delphi-RAG-Lint)](LICENSE)
 [![Website](https://img.shields.io/static/v1?label=website&message=delphi-rag-lint.com&color=blue)](https://www.delphi-rag-lint.com)
@@ -15,12 +17,12 @@
 > [Issue](https://github.com/Alexl-git/Delphi-RAG-Lint/issues) with ideas, bugs,
 > or "I wish it could...". Not yet recommended for unattended/production use.
 
-A symbol-aware retrieval + lint + refactoring + IDE-integration tool for Delphi.
+A Delphi code index + linter + refactorer (current release 1.51.0-alpha: 423 lint rules, 341 on by default, 125 auto-fixable) that AI assistants and the IDE query instead of grepping.
 Pure Object Pascal at runtime -- no Python, Node, or Rust. No cloud AI.
 
 **Use it as:** CLI tool &middot; LSP server (Zed / VS Code) &middot; MCP server (Claude / Cursor) &middot; RAD Studio 13 plugin.
 
-**Driving it from an AI agent? See [docs/AI-USAGE.md](docs/AI-USAGE.md)** -- copy-paste instructions so your AI uses drag-lint over CLI or MCP (and reads ~10-60x fewer tokens than opening whole units).
+**Driving it from an AI agent? See [docs/AI-USAGE.md](docs/AI-USAGE.md)** -- copy-paste instructions so your AI uses drag-lint over CLI or MCP (resolved callers and impact, instead of grepping and opening whole units).
 
 > **What it does today, and what is coming -- the feature list.**
 > A single readable document covering every capability by area (indexing, search,
@@ -1605,7 +1607,7 @@ the PowerShell battery.
 ## Version history
 
 See [CHANGELOG.md](CHANGELOG.md) for the detailed history. The current release is
-**v1.31.7-alpha**; development continues daily.
+**v1.51.0-alpha**; development continues daily.
 
 ---
 
