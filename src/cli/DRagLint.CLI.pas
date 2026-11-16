@@ -98,6 +98,7 @@ uses
   , DRagLint.Lint.MarkerUnion { lint-all --shared-db: the marker evidence of several project indexes }  // dl:ok uses-global-census@bdba -- MARKER_ACCOUNT_ENV is the one name parent and child share; the const is the contract
   , DRagLint.Core.CliError
 , DRagLint.Core.Encoding { EnsureUtf8Bytes -- ApplyLineMarkers reads a file the way the rules did }
+  , DRagLint.Lint.MarkerHash { MarkerVerdict / ExpectedHash -- ApplyLineMarkers: versioned routine-metric markers (v1511 Y4) }
   , DRagLint.Query.Implementors { implementors verb (interface report, 1.40) }
   , DRagLint.Query.CrossImpact { impact --all-projects (1.43) }
   , DRagLint.Query.SyntaxCountVerb { syntax-count verb (GAP-SYNTAXQ, 1.42) }
@@ -13992,7 +13993,7 @@ begin
                 the normalized line is one invariant token, so the hash could never
                 go stale and the marker verified forever however the handler was
                 rewritten. See docs\INBOX-bare-except-marker-hash-is-now-constant.md. }
-              Want:= DRagLint.Lint.RuleCatalog.MarkerExpectedHash(Lines, F.RuleId, F.StartLine, F.Metric);
+              Want:= DRagLint.Lint.MarkerHash.ExpectedHash(Lines, F.RuleId, F.StartLine, F.Metric);
               { A WHOLE-ROUTINE METRIC REVIEW IS BOUND TO ITS NUMBER (T3).
 
                 For these seven rules the hash above is not enough on its own:
@@ -14016,7 +14017,10 @@ begin
                   Format('dl:ok marker for "%s" carries no @hash, so it cannot be checked against the code -- re-mark it as %s@%s.',
                          [M.RuleId, M.RuleId, Want]), M.RuleId);
               end
-              else if SameText(M.Hash, Want) then
+              else if DRagLint.Lint.MarkerHash.MarkerVerdict(Lines, F.RuleId, M.Hash, F.StartLine, F.Metric) <> mvStale then
+                { Verified, or re-measured: the routine is unchanged and only the engine's
+                  measure-algorithm version moved (Y4, DRagLint.Lint.MarkerHash). A legacy
+                  (1.51.0) marker is checked exactly as before. }
                 Suppressed:= True
               else if TReviewMarkers.IsPlaceholderHash(M.Hash) or TReviewMarkers.IsMalformedHash(M.Hash) then
                 { A HASH THAT WAS NEVER COMPUTED. Checked only after the real hash
