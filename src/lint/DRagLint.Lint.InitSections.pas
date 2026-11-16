@@ -191,6 +191,29 @@ type
     FromLine, FromCol, ToLine, ToCol: Integer;
   end;
 
+  TInitGraph = class;
+
+  { 1.51.1 B08: the unit-level procedural variables an edgeless call can name, and the routines the
+    initialization sections assign them. Read once, on first need; owned by its TInitGraph. }
+  TProcVarIndex = class
+  private
+    FGraph  : TInitGraph;
+    FVars   : TObjectDictionary<string, TDictionary<string, Int64>>;
+    FTargets: TDictionary<Int64, TArray<Int64>>;
+    FLoaded : Boolean;
+    function UnitVars(const AKey: string): TDictionary<string, Int64>;
+    function ByUses(AFileId: Int64; const ALowerName: string): Int64;
+    procedure LoadTargets;
+  public
+    constructor Create(AGraph: TInitGraph);
+    destructor Destroy; override;
+    { The unit-level variable an edgeless call names: bound by the ref, or declared by the caller's unit, by
+      exactly one unit it uses, or by the unit a qualifier names; 0 when none or shadowed by a local. }
+    function VarOf(const ACaller: TSymbol; const AReference: TReference): Int64;
+    { The project routines the initialization sections assign to AVarId. }
+    function Targets(AVarId: Int64): TArray<Int64>;
+  end;
+
   { The index read once, for the rules of this unit: units, uses, refs by enclosing symbol, call edges. }
   TInitGraph = class  // dl:ok high-response@a5ce -- REVIEWED 2026-11-05: one read-once cache over the store for the four rules of this unit; its methods are short readers, and splitting it would only spread the shared maps
   private
@@ -207,6 +230,7 @@ type
     FOwnNames  : TObjectDictionary<Int64, TDictionary<string, Boolean>>;
     FLiveRefs  : TDictionary<Int64, TArray<TReference>>;
     FClosureRef: TDictionary<Int64, Boolean>;
+    FProcVars  : TProcVarIndex;
     procedure LoadUnits;
     function UsesOfFile(AFileId: Int64): TArray<string>;
     procedure LoadRefsOfFile(AFileId: Int64);
@@ -230,6 +254,10 @@ type
     /// method's body is left out, since passing a closure does not call it.</summary>
     function RefsOf(const ASym: TSymbol): TArray<TReference>;
     /// <summary>The certain, resolved call edges out of ASymbolId.</summary>
+    /// <remarks>1.51.1 B05: an edge whose ref is a member access naming a routine as a VALUE is left out --
+    /// `Lane(TFoo.Check)` passes the method, it does not run it. A member access counts as a value when no call
+    /// ref shares its site and the routine cannot be called bare there: its address is taken (`@`), it needs an
+    /// argument, or it is a procedure (a procedure call statement carries its own call ref).</remarks>
     function EdgesOf(ASymbolId: Int64): TArray<TCallEdge>;
     /// <summary>True when the project index resolved the reference to a certain call edge.</summary>
     function HasEdge(ASymbolId, ARefId: Int64): Boolean;
@@ -247,6 +275,10 @@ type
     function LineText(AFileId: Int64; ALine, ACount: Integer): string;
     /// <summary>Every routine reachable from ASectionId by certain call edges, breadth first, the section
     /// itself first (its anchor is empty); each with the ref in the section that starts its path.</summary>
+    /// <remarks>1.51.1 B08: a call with no edge that names a unit-level procedural variable (declared by the
+    /// caller's unit, or by exactly one unit it uses) reaches every project routine an initialization section
+    /// assigns to that variable (`P := R` / `P := @R`): the shape `cycles --fix` writes for a routine-call
+    /// inversion.</remarks>
     function Reach(ASectionId: Int64): TArray<TPair<TSymbol, TReference>>;
     property Units: TDictionary<string, TUnitNode> read FUnits;
     property ByFile: TDictionary<Int64, string> read FByFile;
@@ -384,11 +416,13 @@ begin
   FOwnNames  := TObjectDictionary<Int64, TDictionary<string, Boolean>>.Create([doOwnsValues]);
   FLiveRefs  := TDictionary<Int64, TArray<TReference>>.Create;
   FClosureRef:= TDictionary<Int64, Boolean>.Create;
+  FProcVars  := TProcVarIndex.Create(Self);
   LoadUnits;
 end;
 
 destructor TInitGraph.Destroy;
 begin
+  FProcVars.Free;
   FClosureRef.Free;
   FLiveRefs.Free;
   FOwnNames.Free;
@@ -531,15 +565,174 @@ begin
   FLiveRefs.Add(ASym.Id, Result);
 end;
 
+{ True when the routine's parameter list has one parameter without a default: it cannot be called bare. }
+function NeedsArgument(const ASignature: string): Boolean;
+begin
+  Result:= False;
+  var Sig: string:= Trim(ASignature);
+  if not Sig.StartsWith('(') then Exit;
+  var Depth: Integer:= 0;
+  var PartStart: Integer:= 2;
+  for var I:= 1 to Length(Sig) do
+  begin
+    if Sig[I] = '(' then Inc(Depth)
+    else if Sig[I] = ')' then Dec(Depth);
+    if ((Depth = 1) and (Sig[I] = ';')) or (Depth = 0) then
+    begin
+      var Part: string:= Trim(Copy(Sig, PartStart, I - PartStart));
+      if (Part <> '') and not Part.Contains('=') then Exit(True);
+      PartStart:= I + 1;
+      if Depth = 0 then Break;
+    end;
+  end;
+end;
+
+{ True when the routine returns a value: a ':' after its parameter list (or with none). }
+function ReturnsValue(const ASignature: string): Boolean;
+begin
+  var Sig: string:= Trim(ASignature);
+  if not Sig.StartsWith('(') then Exit(Sig.StartsWith(':'));
+  var Depth: Integer:= 0;
+  for var I:= 1 to Length(Sig) do
+  begin
+    if Sig[I] = '(' then Inc(Depth)
+    else if Sig[I] = ')' then Dec(Depth);
+    if Depth = 0 then Exit(Trim(Copy(Sig, I + 1, MaxInt)).StartsWith(':'));
+  end;
+  Result:= False;
+end;
+
+{ 1.51.1 B05: the edge's ref names a routine as a VALUE -- see TInitGraph.EdgesOf. }
+function IsValueUse(AGraph: TInitGraph; const ALive: TArray<TReference>; const AEdge: TCallEdge): Boolean;
+begin
+  Result:= False;
+  var Ref: TReference:= Default(TReference);
+  for var R in ALive do
+    if R.Id = AEdge.RefId then Ref:= R;
+  if Ref.Kind <> REF_MEMBER then Exit;
+  for var R in ALive do
+    if (R.Kind = REF_CALL) and (R.StartLine = Ref.StartLine) and (R.StartCol = Ref.StartCol) then Exit;
+  var Target: TSymbol:= AGraph.Symbol(AEdge.TargetSymbolId);
+  { A property accessor bound through the property's name runs on every access: only the routine's own name. }
+  if not ((Target.Kind in [skProcedure, skFunction, skMethod]) and SameText(Target.Name, Ref.NameText)) then Exit;
+  var Before: string:= TrimRight(Copy(AGraph.LineText(Ref.FileId, Ref.StartLine, 1), 1, Ref.StartCol - 1));
+  if EndsStr('.', Before) then Before:= TrimRight(Copy(Before, 1, Length(Before) - 1));
+  if (Ref.ReceiverText <> '') and EndsText(Ref.ReceiverText, Before) then
+    Before:= TrimRight(Copy(Before, 1, Length(Before) - Length(Ref.ReceiverText)));
+  Result:= EndsStr('@', Before) or NeedsArgument(Target.Signature) or not ReturnsValue(Target.Signature);
+end;
+
 function TInitGraph.EdgesOf(ASymbolId: Int64): TArray<TCallEdge>;
 begin
   if FEdges.TryGetValue(ASymbolId, Result) then Exit;
-  RefsOf(Symbol(ASymbolId));
+  var Live: TArray<TReference>:= RefsOf(Symbol(ASymbolId));
   Result:= nil;
   for var E in FStore.GetCallEdgesFromSymbol(ASymbolId) do
-    if (E.TargetSymbolId > 0) and (E.Confidence = CONFIDENCE_CERTAIN) and not FClosureRef.ContainsKey(E.RefId) then
+    if (E.TargetSymbolId > 0) and (E.Confidence = CONFIDENCE_CERTAIN) and not FClosureRef.ContainsKey(E.RefId)
+       and not IsValueUse(Self, Live, E) then
       Result:= Result + [E];
   FEdges.Add(ASymbolId, Result);
+end;
+
+constructor TProcVarIndex.Create(AGraph: TInitGraph);
+begin
+  inherited Create;
+  FGraph  := AGraph;
+  FVars   := TObjectDictionary<string, TDictionary<string, Int64>>.Create([doOwnsValues]);
+  FTargets:= TDictionary<Int64, TArray<Int64>>.Create;
+end;
+
+destructor TProcVarIndex.Destroy;
+begin
+  FTargets.Free;
+  FVars.Free;
+  inherited Destroy;
+end;
+
+function TProcVarIndex.UnitVars(const AKey: string): TDictionary<string, Int64>;
+begin
+  if FVars.TryGetValue(AKey, Result) then Exit;
+  Result:= TDictionary<string, Int64>.Create;
+  FVars.Add(AKey, Result);
+  var Node: TUnitNode;
+  if not FGraph.Units.TryGetValue(AKey, Node) then Exit;
+  for var Ch in FGraph.Store.FindAllChildSymbols(Node.UnitId) do
+    if Ch.Kind = skVarDecl then Result.AddOrSetValue(LowerCase(Ch.Name), Ch.Id);
+end;
+
+{ The one unit AFileId uses that declares the variable; 0 when none or more than one. }
+function TProcVarIndex.ByUses(AFileId: Int64; const ALowerName: string): Int64;
+begin
+  Result:= 0;
+  var Hits: Integer:= 0;
+  for var Dep in FGraph.UsesOfFile(AFileId) do
+  begin
+    var Id: Int64;
+    if UnitVars(Dep).TryGetValue(ALowerName, Id) then
+    begin
+      Inc(Hits);
+      Result:= Id;
+    end;
+  end;
+  if Hits <> 1 then Result:= 0;
+end;
+
+function TProcVarIndex.VarOf(const ACaller: TSymbol; const AReference: TReference): Int64;
+begin
+  if AReference.SymbolId > 0 then
+    Exit(if FGraph.Symbol(AReference.SymbolId).Kind = skVarDecl then AReference.SymbolId else 0);
+  Result:= 0;
+  var Name: string:= LowerCase(AReference.NameText);
+  var Qual: string:= LowerCase(AReference.ReceiverText);
+  var Own : string;
+  if Qual <> '' then
+  begin
+    { `uB.GProc(..)`: only a unit-name qualifier names a unit-level variable. }
+    if FGraph.Units.ContainsKey(Qual) and not UnitVars(Qual).TryGetValue(Name, Result) then Result:= 0;
+  end
+  else if FGraph.ByFile.TryGetValue(ACaller.FileId, Own) then
+  begin
+    { A local or parameter of the caller of that name shadows any unit-level variable. }
+    var Shadowed: Boolean:= False;
+    for var Ch in FGraph.Store.FindAllChildSymbols(ACaller.Id) do
+      if LowerCase(Ch.Name) = Name then Shadowed:= True;
+    if not Shadowed and not UnitVars(Own).TryGetValue(Name, Result) then Result:= ByUses(ACaller.FileId, Name);
+  end;
+end;
+
+{ Each initialization section's `P := R` / `P := @R`: the write ref binds P, and the ONE ref after it on that
+  line that binds a project routine is R. }
+procedure TProcVarIndex.LoadTargets;
+begin
+  FLoaded:= True;
+  for var Pair in FGraph.Units do
+  begin
+    if Pair.Value.InitId = 0 then Continue;
+    var Refs: TArray<TReference>:= FGraph.RefsOf(FGraph.Symbol(Pair.Value.InitId));
+    for var W in Refs do
+    begin
+      if (W.Kind <> REF_WRITE) or (W.SymbolId <= 0) or (FGraph.Symbol(W.SymbolId).Kind <> skVarDecl) then Continue;
+      var Routine: Int64:= 0;
+      var Hits: Integer:= 0;
+      for var R in Refs do
+        if (R.StartLine = W.StartLine) and (R.StartCol > W.StartCol) and (R.Kind <> REF_WRITE) and (R.SymbolId > 0)
+           and (FGraph.Symbol(R.SymbolId).Kind in [skProcedure, skFunction, skMethod]) then
+        begin
+          Inc(Hits);
+          Routine:= R.SymbolId;
+        end;
+      if Hits <> 1 then Continue;
+      var List: TArray<Int64>;
+      if not FTargets.TryGetValue(W.SymbolId, List) then List:= nil;
+      FTargets.AddOrSetValue(W.SymbolId, List + [Routine]);
+    end;
+  end;
+end;
+
+function TProcVarIndex.Targets(AVarId: Int64): TArray<Int64>;
+begin
+  if not FLoaded then LoadTargets;
+  if not FTargets.TryGetValue(AVarId, Result) then Result:= nil;
 end;
 
 function TInitGraph.HasEdge(ASymbolId, ARefId: Int64): Boolean;
@@ -636,6 +829,20 @@ begin
           Done.Add(E.TargetSymbolId, True);
           Items.Add(TPair<TSymbol, TReference>.Create(Symbol(E.TargetSymbolId), Anchor));
         end;
+      end;
+      { B08: a call through a unit-level procedural variable reaches what the initialization sections assign it. }
+      for var R in RefsOf(Item.Key) do
+      begin
+        if (R.Kind <> REF_CALL) or HasEdge(Item.Key.Id, R.Id) then Continue;
+        var VarId: Int64:= FProcVars.VarOf(Item.Key, R);
+        if VarId = 0 then Continue;
+        var Anchor: TReference:= if Item.Key.Id = ASectionId then R else Item.Value;
+        for var T in FProcVars.Targets(VarId) do
+          if not Done.ContainsKey(T) then
+          begin
+            Done.Add(T, True);
+            Items.Add(TPair<TSymbol, TReference>.Create(Symbol(T), Anchor));
+          end;
       end;
     end;
     Result:= Items.ToArray;
