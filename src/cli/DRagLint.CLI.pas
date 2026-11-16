@@ -17969,8 +17969,8 @@ begin
   var Ok: Boolean;
   var Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
   if not Ok then Exit(2);
-  { E-NARROW-CHANNEL: an --apply run listens, so shutdown / Cancel stop its build and roll it back. }
-  if Opts.Apply then OpenGateStandDown('redundant-cast', AArgs.DbPath);
+  { E-NARROW-CHANNEL + B25 (1.51.1): every run listens, plan runs too; shutdown / Cancel stop the planner or the gate build and roll back. }
+  OpenGateStandDown('redundant-cast', AArgs.DbPath);
   try
     Result:= RunRedundantCastFix(Store, RefactorLibraries(AArgs), Opts);
   finally
@@ -18000,8 +18000,8 @@ begin
   var Ok: Boolean;
   var Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
   if not Ok then Exit(2);
-  { E-NARROW-CHANNEL: an --apply run listens, so shutdown / Cancel stop its build and roll it back. }
-  if Opts.Apply then OpenGateStandDown('narrow-param', AArgs.DbPath);
+  { E-NARROW-CHANNEL + B25 (1.51.1): every run listens, plan runs too; shutdown / Cancel stop the planner or the gate build and roll back. }
+  OpenGateStandDown('narrow-param', AArgs.DbPath);
   try
     Result:= RunNarrowParam(Store, RefactorLibraries(AArgs), Opts);
   finally
