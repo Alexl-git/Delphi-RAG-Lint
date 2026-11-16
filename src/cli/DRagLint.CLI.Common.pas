@@ -788,6 +788,22 @@ procedure RefreshProjectIndex(var ARx: TUsesReindex);
 /// <returns>True when the child exited 0; on failure the reason goes to stderr.</returns>
 function ReindexOwnerProject(const AProjectFile, ADbPath: string; const AVerb: string = 'rename'): Boolean;
 
+const
+  { Milliseconds per second: proptree / convert progress, the shutdown and ide-release waits, the child re-index. }
+  MS_PER_SECOND = 1000;
+
+/// <summary>Prints a "not found" diagnostic: to stderr when the verb was asked for JSON (stdout must stay parseable), to stdout otherwise.</summary>
+/// <param name="AJson">The verb's own JSON test -- AsJson, SameText(Format, 'json'), or both, whichever the verb accepts.</param>
+/// <param name="AMsg">The diagnostic line.</param>
+/// <remarks>The caller passes the test so each verb reads only the output flags it documents (run_flag_verb_map.ps1 attributes a field read to every verb that reaches it).</remarks>
+procedure ReportNotFoundFor(AJson: Boolean; const AMsg: string);
+
+/// <summary>Opens ADbPath WRITABLE with the same schema-current guard as OpenReadOnlyStore (proptree's write-back).</summary>
+/// <param name="ADbPath">The index to open.</param>
+/// <param name="AOk">False when the open failed or the schema is behind (line on stderr).</param>
+/// <returns>The store, or nil when the writable open threw (the caller falls back to read-only).</returns>
+function OpenWritableStore(const ADbPath: string; out AOk: Boolean): ISymbolStore;
+
 implementation
 
 uses
@@ -1641,6 +1657,36 @@ begin
   Result:= Rx.Status = 'done';
   { 149 IC: AVerb names the caller -- the auto-create path printed 'rename:' too (148 IX). }
   if not Result then Writeln(ErrOutput, 'drag-lint: ' + AVerb + ': reindex failed -- ' + Rx.Reason);
+end;
+
+procedure ReportNotFoundFor(AJson: Boolean; const AMsg: string);
+begin
+  if AJson then Writeln(ErrOutput, AMsg) else Writeln(AMsg);
+end; // procedure
+
+// WRITABLE open (same schema-current guard as OpenReadOnlyStore). Used by
+// proptree's default (automatic) write-back so a type recovered by the lazy
+// ancestry-bridge is memoized back into the index. Exception-safe: a writable
+// open that throws (read-only file, exclusive lock) returns AOk=False + nil so
+// the caller can fall back to a read-only open -- the ancestry RESOLUTION still
+// works, only the (best-effort) memoization is skipped. NOTE: a normal proptree
+// query now opens writable by default; --no-write-back forces read-only.
+function OpenWritableStore(const ADbPath: string; out AOk: Boolean): ISymbolStore;
+var
+  Found   : Integer;
+  Expected: Integer;
+begin
+  AOk:= False;
+  try
+    Result:= TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}False);
+  except
+    Result:= nil; Exit; // writable open failed (locked / read-only file) -> caller falls back
+  end;
+  if Result.IsSchemaCurrent(Found, Expected) then AOk:= True
+  { ErrOutput for the same reason as OpenReadOnlyStore's twin above: proptree
+    opens WRITABLE by default, so this -- not that one -- is the line a stale
+    `proptree --db <old>` actually printed, and it printed it onto stdout. }
+  else begin AOk:= False; Writeln(ErrOutput, Format('index schema v%d < v%d: run "drag-lint index <dir> --db <db>" to migrate', [Found, Expected])); end;
 end;
 
 end.
