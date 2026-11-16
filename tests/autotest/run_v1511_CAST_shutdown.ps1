@@ -8,9 +8,14 @@ function Test-One([string]$Name, [string[]]$VerbArgs) {
   $log = Join-Path $env:TEMP ("cast-shutdown-$Name-" + [guid]::NewGuid().ToString('N') + '.log')
   $p = Start-Process -FilePath $Engine -ArgumentList $VerbArgs -PassThru -NoNewWindow -RedirectStandardOutput $log -RedirectStandardError "$log.err"
   try {
-    Start-Sleep -Seconds 3
-    if ($p.HasExited) { Write-Host "SKIP ${Name}: run ended before the shutdown (too fast to test)"; return }
-    & $Engine shutdown --db $DbPath --wait 30 *> $null
+    # Send the shutdown as soon as the control channel is up: retry every 0.5 s until an engine holds the DB.
+    $reached = $false
+    for ($i = 0; $i -lt 120 -and -not $p.HasExited; $i++) {
+      $out = (& $Engine shutdown --db $DbPath --wait 30 2>&1 | Out-String)
+      if ($out -notmatch 'no running drag-lint engine') { $reached = $true; break }
+      Start-Sleep -Milliseconds 500
+    }
+    if (-not $reached) { Write-Host "FAIL ${Name}:  run ended before the shutdown could reach it (inconclusive: use a larger DB copy); SKIP is not PASS"; $script:fail++; return }
     $stopped = $p.WaitForExit(40000)
     if ($stopped -and $p.ExitCode -eq 1) { Write-Host "PASS ${Name}:  stopped by shutdown, exit 1" }
     else { Write-Host "FAIL ${Name}:  stopped=$stopped exit=$(if ($stopped) { $p.ExitCode } else { 'running' })"; $script:fail++ }

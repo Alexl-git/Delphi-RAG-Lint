@@ -689,7 +689,7 @@ begin
   FRefused.Add(S);
 end;
 
-procedure TNarrowPlanner.Decide(const pR: TRoutineRow; const pParam: TParamRow);  // dl:ok cyclomatic-complexity@3d98, too-many-exit-points@0beb -- one branch per named refusal, documented on the public function
+procedure TNarrowPlanner.Decide(const pR: TRoutineRow; const pParam: TParamRow);  // dl:ok cyclomatic-complexity@1034, too-many-exit-points@0beb -- one branch per named refusal, documented on the public function
 var
   V: TVerdict;
 begin
@@ -1090,7 +1090,7 @@ begin
     Writeln(Format('refused  %s:%d  %s  %s: %s  %s -- %s', [S.FilePath, S.Line, S.Routine, S.Param, S.FromType, S.Kind, S.Reason]));
 end;
 
-function RunNarrowParam(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;  // dl:ok too-many-exit-points@8d31 -- one guard per named refusal, in the documented order: the exits are the contract
+function RunNarrowParam(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;  // dl:ok too-many-exit-points@fd3e -- one guard per named refusal, in the documented order: the exits are the contract
   const pOpts: TNarrowParamOptions): Integer;
 var
   Gate: TGateOutcome;
