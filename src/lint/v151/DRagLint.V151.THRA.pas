@@ -48,6 +48,7 @@ implementation
 
 uses
   System.IOUtils
+  , DRagLint.Core.Encoding
   , DRagLint.V151.THRA.Support
   ;
 
@@ -81,7 +82,7 @@ begin
   if not (ACtx.Wants(RULE_ANON) or ACtx.Wants(RULE_SYNC) or ACtx.Wants(RULE_LOOP) or ACtx.Wants(RULE_UAF)  // dl:ok boolean-expression-complexity@3a78 -- REVIEWED 2026-11-13 v151 THR-A: flat lookahead over adjacent tokens; splitting it would hide the pattern
     or ACtx.Wants(RULE_TVAR) or ACtx.Wants(RULE_QUEUE) or ACtx.Wants(RULE_FOT_HOST)) then Exit;
   try
-    Src:= TFile.ReadAllText(ACtx.Path);
+    Src:= TEncoding.UTF8.GetString(EnsureUtf8Bytes(TFile.ReadAllBytes(ACtx.Path)));
   except  // dl:ok bare-except@8f3b, try-except-swallowed@8f3b -- REVIEWED 2026-11-13 v151 THR-A: an unreadable or unlistable file means no package or source facts, so no finding is the right result
     Exit;
   end;

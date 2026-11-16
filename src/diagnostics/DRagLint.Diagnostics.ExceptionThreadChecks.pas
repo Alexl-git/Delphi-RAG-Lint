@@ -291,6 +291,76 @@ var
         'terminates the thread silently (or the process); catch it and report it', [NodeStr(NameN.ChildByField('lhs'))]));
   end;
 
+  { True when AText holds AWord as a whole identifier (case already folded by the caller). }
+  function HasWord(const AText, AWord: string): Boolean;
+  var
+    P, Q: Integer;
+  begin
+    Result:= False;
+    if AWord = '' then Exit;
+    P:= Pos(AWord, AText);
+    while P > 0 do
+    begin
+      Q:= P + Length(AWord);
+      if ((P = 1) or (not CharInSet(AText[P - 1], ['a'..'z', '0'..'9', '_'])))
+        and ((Q > Length(AText)) or (not CharInSet(AText[Q], ['a'..'z', '0'..'9', '_']))) then Exit(True);
+      P:= PosEx(AWord, AText, P + 1);
+    end;
+  end;
+
+  { B14: a variable the routine later Waits (T.Wait), reads (T.Result) or passes to TTask.WaitForAll / WaitForAny. }
+  function TargetObserved(const AAssign: TTSNode; const ATarget: string): Boolean;
+  var
+    Proc, N: TTSNode;
+    Ent, Txt: string;
+    WaitsAll: Boolean;
+    All: TList<TTSNode>;
+  begin
+    Result:= False;
+    Proc:= AAssign.Parent;
+    while (not Proc.IsNull) and (Proc.NodeType <> 'defProc') do Proc:= Proc.Parent;
+    if Proc.IsNull then Exit;
+    All:= Nodes(Proc.ChildByField('body'));
+    try
+      for N in All do
+      begin
+        if N.StartByte <= AAssign.StartByte then Continue;
+        Ent:= Canon(NodeStr(N.ChildByField('entity')));
+        Txt:= Canon(NodeStr(N));
+        WaitsAll:= (N.NodeType = 'exprCall') and (EndsText('.waitforall', Ent) or EndsText('.waitforany', Ent));
+        Result:= (WaitsAll and HasWord(Txt, ATarget)) or StartsText(ATarget + '.wait', Txt)
+          or StartsText(ATarget + '.result', Txt);
+        if Result then Break;
+      end;
+    finally
+      All.Free;
+    end;
+  end;
+
+  { B14: the ITask a TTask.Run call returns is observed when the call is chained into .Wait / .Result, or is
+    assigned to a variable the same routine later observes -- the exception then surfaces in the caller. }
+  function TaskObserved(const ACall: TTSNode): Boolean;
+  var
+    Par: TTSNode;
+    CallTxt, ParTxt, Target: string;
+    K: Integer;
+  begin
+    Result:= False;
+    Par:= ACall.Parent;
+    if Par.IsNull then Exit;
+    CallTxt:= Canon(NodeStr(ACall));
+    ParTxt := Canon(NodeStr(Par));
+    if StartsText(CallTxt + '.', ParTxt) then
+      Result:= StartsText(CallTxt + '.wait', ParTxt) or StartsText(CallTxt + '.result', ParTxt)
+    else if Par.NodeType = 'assignment' then
+    begin
+      Target:= Canon(NodeStr(Par.ChildByField('lhs')));
+      K:= Target.IndexOf('[');
+      if K >= 0 then Target:= Copy(Target, 1, K);
+      Result:= (Target <> '') and TargetObserved(Par, Target);
+    end;
+  end;
+
   procedure CheckAsyncLambda(const ALambda: TTSNode);
   var
     Args, Call: TTSNode;
@@ -300,6 +370,7 @@ var
     Call:= Args.Parent;
     if Call.IsNull or (Call.NodeType <> 'exprCall') then Exit;
     if not InList(Canon(NodeStr(Call.ChildByField('entity'))), GUARDED_CALLS) then Exit;
+    if (Canon(NodeStr(Call.ChildByField('entity'))) = 'ttask.run') and TaskObserved(Call) then Exit;
     if not Guarded(ALambda.ChildByField('body')) then
       Emit(ALambda, RULE_THREAD, Format('anonymous method passed to %s has no top-level try..except -- an exception ' +
         'escaping it is lost or kills the worker; catch it inside', [NodeStr(Call.ChildByField('entity'))]));
