@@ -1,0 +1,10 @@
+# v1511 R3: a bare 'inherited' in Destroy (25, 42), in Assign / AssignTo (48, 58: the 'if .. then inherited else' /
+# 'else inherited' fallback) is the correct idiom and is not reported. Paint (63) is a bare call in an ordinary method
+# and stays reported.
+!inherited-bare 25
+!inherited-bare 42
+!inherited-bare 48
+!inherited-bare 58
+inherited-bare 63
+inherited-bare 69
+# 69: a bare inherited after a plain "then" in an ordinary method is a real smell and stays reported (positive control).

@@ -1,0 +1,8 @@
+# v1511 NOISE handover: integer subscripts (Params[34], Fields[35], Items[36]) and the first argument of Reg(<int>, 'NAME')
+# are not magic numbers. Positive control: a large literal in arithmetic (18) still fires.
+!large-magic-number 13
+!large-magic-number 14
+!large-magic-number 15
+!large-magic-number 16
+!large-magic-number 17
+large-magic-number 18

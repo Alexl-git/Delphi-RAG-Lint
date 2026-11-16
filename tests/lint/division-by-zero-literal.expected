@@ -1,4 +1,8 @@
-# 'X div 0' (11) and 'X mod 0' (12) fire; 'X div 2' (13) must not
-division-by-zero-literal 11
-division-by-zero-literal 12
+# v1511 B13: 'X div 0' (11) and 'X mod 0' (12) are dcc E2098 (compiler error) -- the rule must NOT duplicate them.
+# Float / integer-promoted 'D / 0' (14) and 'D / 0.0' (15) fire; 'X div 2' (13) and 'D / 2' (16) must not.
+!division-by-zero-literal 11
+!division-by-zero-literal 12
 !division-by-zero-literal 13
+division-by-zero-literal 14
+division-by-zero-literal 15
+!division-by-zero-literal 16
