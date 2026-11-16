@@ -838,6 +838,19 @@ type
       procedure ResolveValueReadRefs(AResolver: TCallResolver;
         const AScopeWhere, AStaleWhere: string;
         out ACandidates, ABound: Int64);
+      /// <summary>1.51.1 B02 / B04: the calls stage's library-read stream. Offers every `read`
+      /// ref that is still unbound and whose name no type, unit-level declaration or enum value of
+      /// this index carries (a member / parameter / local of the name is decided per site) to
+      /// TCallResolver.ResolveLibraryRead and stores its answer on refs.external_target /
+      /// refs.external_kind ('value', 'parenless-call', 'proc-value').</summary>
+      /// <param name="AResolver">The pass's resolver, maps already built. Owned by the caller.</param>
+      /// <param name="AScopeWhere">The scoped pass's `refs` predicate, '' on a whole-DB pass.</param>
+      /// <param name="AStaleWhere">The stale-file exclusion, '' when no file is stale.</param>
+      /// <remarks>Runs after every project read stream, inside the pass's transaction. First
+      /// clears what an earlier pass wrote on the reads in scope, so a library that is no longer
+      /// attached leaves no stale target. The counts are the resolver's LibReadStats. A library
+      /// target never gets a call_edges row: the name on the ref is the edge.</remarks>
+      procedure ResolveLibraryReadRefs(AResolver: TCallResolver; const AScopeWhere, AStaleWhere: string);
       /// <summary>B-31 (2026-10-23): the calls stage's SEVENTH stream. Offers
       /// every `type_use` ref spelled like an indexed type to
       /// TCallResolver.ResolveTypeUse and sets refs.symbol_id to the type when
@@ -12613,6 +12626,12 @@ begin
       var RcvF: TField:= Q.FindField('receiver_text');
       if (RcvF <> nil) and not RcvF.IsNull then R.ReceiverText:= RcvF.AsString
       else R.ReceiverText:= '';
+      { 1.51.1 B04: the library binding rides along (a paren-less library call is a `read`
+        whose external_kind says so). FindField: an older DB reads ''. }
+      var ExtF: TField:= Q.FindField('external_target');
+      if (ExtF <> nil) and not ExtF.IsNull then R.ExternalTarget:= ExtF.AsString;
+      var XkF: TField:= Q.FindField('external_kind');
+      if (XkF <> nil) and not XkF.IsNull then R.ExternalKind:= XkF.AsString;
       List.Add(R);
       Q.Next;
     end;
@@ -18038,6 +18057,89 @@ begin
   end;
 end;
 
+{ 1.51.1 B02 / B04: the library-read stream. The contract lives on the declaration. }
+procedure TSQLiteSymbolStore.ResolveLibraryReadRefs(AResolver: TCallResolver;
+  const AScopeWhere, AStaleWhere: string);
+const
+  { The candidates: a `read` no project stream bound, spelled like no declaration of this index
+    that a bare name can reach from ANY file -- a type, a unit-level value or routine, an enum
+    value: such a name is the project's, whatever declined it. A member, parameter or local of
+    the name counts only where the site can see it, which the resolver decides per site
+    (ORM3 declares a property APPLICATION on four classes; `Application` elsewhere is the VCL's). }
+  LIBREAD_UNIVERSE = 'refs.kind = ''read'' AND refs.symbol_id IS NULL AND refs.name_text COLLATE NOCASE NOT IN ' +
+                     '(SELECT name FROM symbols WHERE name IS NOT NULL AND kind NOT IN (''property'', ''field'', ' +
+                     '''method'', ''constructor'', ''destructor'', ''param'', ''local_var'', ''component''))';
+  { What this stream wrote on an earlier pass: no other writer puts a target on a `read`. }
+  LIBREAD_WRITTEN  = 'refs.kind = ''read'' AND refs.external_target IS NOT NULL';
+var
+  Suffix : string    ;
+  Q      : TFDQuery  ;
+  Upd    : TFDQuery  ;
+  Ref    : TReference;
+  Target : string    ;
+  XKind  : string    ;
+  Seen   : Int64     ;
+  FldId  : TField    ;
+  FldFile: TField    ;
+  FldName: TField    ;
+  FldEncl: TField    ;
+  FldLine: TField    ;
+  FldCol : TField    ;
+begin
+  Suffix:= '';
+  if AScopeWhere <> '' then Suffix:= Suffix + ' AND (' + AScopeWhere + ')';
+  if AStaleWhere <> '' then Suffix:= Suffix + ' AND (' + AStaleWhere + ')';
+  FConn.ExecSQL('UPDATE refs SET external_target = NULL, external_kind = NULL WHERE ' + LIBREAD_WRITTEN + Suffix);  // dl:ok sql-injection-concat@0037 -- REVIEWED 2026-11-16 (1.51.1 RES): Suffix is SQL this pass BUILT (MaterializeResolveScope's and the stale prescan's refs predicates), never user text -- the construction ResolveValueReadRefs uses; a temp-table name and an IN-list cannot be parameters.
+  Seen:= 0;
+  Q  := TFDQuery.Create(nil);
+  Upd:= TFDQuery.Create(nil);
+  try
+    Upd.Connection:= FConn;
+    Upd.SQL.Text  := 'UPDATE refs SET external_target = :x, external_kind = :k WHERE id = :id';
+    { DataType before Prepare: FireDAC cannot infer it from the SQL (see ResolveCallTargets). }
+    Upd.ParamByName('x' ).DataType:= ftString;
+    Upd.ParamByName('k' ).DataType:= ftString;
+    Upd.ParamByName('id').DataType:= ftLargeint;
+    Upd.Prepare;
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT refs.id, refs.file_id, refs.name_text, refs.enclosing_symbol_id, ' +
+                   'refs.start_line, refs.start_col FROM refs WHERE ' + LIBREAD_UNIVERSE + Suffix;
+    BeatStreamOpen(FConn, Q, 'resolve library-reads');
+    FldId  := Q.FieldByName('id'                 );
+    FldFile:= Q.FieldByName('file_id'            );
+    FldName:= Q.FieldByName('name_text'          );
+    FldEncl:= Q.FieldByName('enclosing_symbol_id');
+    FldLine:= Q.FieldByName('start_line'         );
+    FldCol := Q.FieldByName('start_col'          );
+    while not Q.Eof do
+    begin
+      Ref          := Default(TReference);
+      Ref.Id       := FldId  .AsLargeInt;
+      Ref.FileId   := FldFile.AsLargeInt;
+      Ref.Kind     := 'read';
+      Ref.NameText := FldName.AsString;
+      if not FldEncl.IsNull then Ref.EnclosingSymbolId:= FldEncl.AsLargeInt;
+      Ref.StartLine:= FldLine.AsInteger;
+      Ref.StartCol := FldCol .AsInteger;
+      Target:= AResolver.ResolveLibraryRead(Ref, XKind);
+      if Target <> '' then
+      begin
+        Upd.ParamByName('x' ).AsWideString:= Target;
+        Upd.ParamByName('k' ).AsWideString:= XKind;
+        Upd.ParamByName('id').AsLargeInt  := Ref.Id;
+        Upd.ExecSQL;
+      end;
+      Inc(Seen);
+      if Seen mod STREAM_BEAT_EVERY = 0 then BeatProgress(Seen);
+      Q.Next;
+    end;
+    Q.Close;
+  finally
+    Upd.Free;
+    Q.Free;
+  end;
+end;
+
 { B-31 + X6: the loop the identity-only streams share. The contract lives on the declaration. }
 procedure TSQLiteSymbolStore.BindRefStream(const AUniverse, AKind, ASuffix: string;
   ABind: TRefBindFn; out ACandidates, ABound: Int64);
@@ -19316,6 +19418,9 @@ begin
       PfMark:= Resolver.ProfBegin(cpsStreamTypeRead); { 151 PF }
       ResolveTypeReadRefs(Resolver, ScopeWhere, StaleWhere, TReadCandidates, TReadBound);
       Resolver.ProfEnd(cpsStreamTypeRead, PfMark);
+      { 1.51.1 B02 / B04: the library-read stream, after every project read stream -- it only
+        sees a `read` none of them bound and whose name the project does not declare. }
+      ResolveLibraryReadRefs(Resolver, ScopeWhere, StaleWhere);
       { 2026-09-23 (D13, resolver 1.8.0-alpha): the FIFTH stream -- bare writes,
         identity only. Same transaction, same all-or-nothing lifetime. }
       TMark:= TStopwatch.GetTimeStamp;
@@ -19531,6 +19636,13 @@ begin
        Resolver.ValueReadStats.Member, Resolver.ValueReadStats.Ambiguous, Resolver.ValueReadStats.NotFound,
        Resolver.ValueReadStats.Routine, Resolver.ValueReadStats.Qualified, Resolver.ValueReadStats.Unlisted,
        Resolver.ValueReadStats.Unreadable]));
+    { 1.51.1 B02 / B04. The library-read stream. }
+    ResolveLog(Format('calls      library-reads: %d of %d bare read(s) bound to a library declaration; ' +
+      'value %d, parenless-call %d, proc-value %d',
+      [Resolver.LibReadStats.Values + Resolver.LibReadStats.Calls + Resolver.LibReadStats.ProcValues,
+       Resolver.LibReadStats.Values + Resolver.LibReadStats.Calls + Resolver.LibReadStats.ProcValues +
+       Resolver.LibReadStats.Declined,
+       Resolver.LibReadStats.Values, Resolver.LibReadStats.Calls, Resolver.LibReadStats.ProcValues]));
     { B-31 (2026-10-23). The type_use stream, every decline by reason. }
     ResolveLog(Format('calls      type-uses: %d of %d type_use ref(s) bound; declined generic %d, qualified %d, ' +
       'unlisted %d, ambiguous %d, not-found %d, unreadable %d',

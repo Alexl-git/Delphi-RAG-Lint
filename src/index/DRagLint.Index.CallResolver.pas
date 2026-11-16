@@ -365,6 +365,21 @@ type
     Unreadable: Int64;
   end;
 
+  /// <summary>1.51.1 B02 / B04: counters of the library-read pass
+  /// (TCallResolver.ResolveLibraryRead), in refs.</summary>
+  /// <remarks>Values + Calls + ProcValues = the reads bound; Declined is every other read the
+  /// pass was asked about (a declined read stores nothing).</remarks>
+  TLibReadStats = record
+    /// <summary>Bound to a library var, const, field or property (external_kind 'value').</summary>
+    Values    : Int64;
+    /// <summary>Bound to a library function as a paren-less CALL ('parenless-call').</summary>
+    Calls     : Int64;
+    /// <summary>Bound to a library routine named as a value ('proc-value').</summary>
+    ProcValues: Int64;
+    /// <summary>Left unbound: qualified, under a with, declared by the project, not visible in
+    /// exactly one used library unit, or not decidable as a call.</summary>
+    Declined  : Int64;
+  end;
   /// <summary>B-31: per-run counters of the type_use pass, printed on the calls
   /// stage's `type-uses:` ResolveLog line.</summary>
   /// <remarks>
@@ -641,7 +656,8 @@ type
     FWriteScopes: TDictionary<Int64, TWriteScope>;
     // B-28: counters of the bare value-read pass.
     FValueReadStats: TValueReadStats;
-    // B-28: routine id -> '|name|...|' its text declares as a const or an
+    // 1.51.1 B02 / B04: counters of the library-read pass.
+    FLibReadStats: TLibReadStats;    // B-28: routine id -> '|name|...|' its text declares as a const or an
     // inline const/var, lowercased; built on first use (LocalDeclNamesOf).
     FLocalDecls: TDictionary<Int64, string>;
     /// <summary>1.43: per untyped inline var, by symbol id, the type its initializer decided; '' declined.</summary>
@@ -1175,7 +1191,24 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function InitBareResultText(const ASite: TReference; const AHead: string; out AFile, AScope: Int64): string;
-    /// <summary>1.43 (recv2): whether a routine enclosing ASite declares AName itself.</summary>
+    /// <summary>1.51.1 (B02 / B04 / B06): the first library ancestor name of the class enclosing
+    /// AEnclosingSymbolId (TObject for a complete class chain); '' outside a class. The scope
+    /// type the library oracle is asked with, as BindExternally computes it.</summary>
+    function LibraryScopeType(AEnclosingSymbolId: Int64): string;
+    /// <summary>1.51.1 (B02 / B04 / B06): True when THIS index declares the bare name AName where
+    /// ASite can see it by name -- a type, an enum value, a unit-level value or routine anywhere in the index, a
+    /// local / nested routine of an enclosing routine, or a member on the enclosing class chain.
+    /// Such a name is the project's and is never answered from a library.</summary>
+    function ProjectDeclaresBare(const ASite: TReference; const AName: string): Boolean;
+    /// <summary>1.51.1 B06: the result type name of the LIBRARY unit-level function the bare name
+    /// AName stands for at ASite (`HiLibReg` in `HiLibReg.OpenKey`, `HiLibReg().OpenKey`,
+    /// `var R := HiLibReg`).</summary>
+    /// <param name="ASite">The reading site: file, enclosing symbol, line and column.</param>
+    /// <param name="AName">One identifier, as written.</param>
+    /// <returns>The leaf type name; '' with no library store, when the project declares the name
+    /// (ProjectDeclaresBare), a `with` target may supply it, the library does not answer with
+    /// exactly one function (TLibraryOracle.RoutineResultText), or the result type is generic.</returns>
+    function LibraryFunctionResultText(const ASite: TReference; const AName: string): string;    /// <summary>1.43 (recv2): whether a routine enclosing ASite declares AName itself.</summary>
     /// <param name="ASite">FileId, EnclosingSymbolId, StartLine and StartCol are consulted.</param>
     /// <param name="AName">The identifier.</param>
     /// <returns>True for a local, parameter, local const or type, or nested routine of the name.</returns>
@@ -3874,7 +3907,24 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function ResolveBareValueRead(const ARef: TReference; out AReason: string): Int64;
-    /// <summary>B9 F1 (resolver 1.20.0-alpha): the static type of a reference,
+    /// <summary>1.51.1 B02 / B04: binds a bare `read` ref no project stream bound to the LIBRARY
+    /// declaration its name stands for.</summary>
+    /// <param name="ARef">A `read` ref with no receiver; Id, FileId, NameText, EnclosingSymbolId,
+    /// StartLine and StartCol set.</param>
+    /// <param name="AExternalKind">refs.external_kind for a bound read: EXTERNAL_KIND_VALUE (a var,
+    /// const, inherited field or property -- `Application`), EXTERNAL_KIND_PARENLESS_CALL (a
+    /// function callable without arguments, read where its RESULT is used: a call), or
+    /// EXTERNAL_KIND_PROC_VALUE (a routine named as a value: `@F`, a procedural target).</param>
+    /// <returns>The library qualified name for refs.external_target; '' when declined: no library
+    /// store, a ref inside an include with several hosts, a receiver or `Self`, an enclosing
+    /// `with` target that may supply the name, a project declaration of the name
+    /// (ProjectDeclaresBare), no single visible library declaration
+    /// (TLibraryOracle.BindBareRead), or a routine that is neither callable bare nor provably
+    /// named as a value.</returns>
+    /// <remarks>A library target has no call_edges row (the FK is into this DB): the name on the
+    /// ref IS the edge. Counted into LibReadStats. Reads the site's source line; a stale file
+    /// declines.</remarks>
+    function ResolveLibraryRead(const ARef: TReference; out AExternalKind: string): string;    /// <summary>B9 F1 (resolver 1.20.0-alpha): the static type of a reference,
     /// from what this pass already knows about it. No new inference.</summary>
     /// <param name="ARef">The ref after the call streams: SymbolId is its certain
     /// binding, ReceiverText its receiver.</param>
@@ -3935,6 +3985,9 @@ type
     /// <remarks>Cumulative over the resolver's lifetime.</remarks>
     property ValueReadStats: TValueReadStats read FValueReadStats;
 
+    /// <summary>1.51.1 B02 / B04: per-run counters of the library-read pass.</summary>
+    /// <remarks>Cumulative over the resolver's lifetime.</remarks>
+    property LibReadStats: TLibReadStats read FLibReadStats;
     /// <summary>B-31 (2026-10-23): the type a `type_use` ref names -- certain or
     /// nothing.</summary>
     /// <param name="ARef">The type_use ref. FileId, NameText, StartLine, StartCol
@@ -9071,7 +9124,12 @@ begin
     Result:= ResolveTypeNameToSymbol(CastType, ACallRef.FileId);
     AText.Text:= if Result > 0 then NormalizeTypeLeaf(CastType) else '';
     if (Result = 0) and AReceiverExpr.StartsWith(CastType + '(', True) and IsIdentChain([CastType]) then
+    begin
       Result:= TypeOfFunctionResult(ACallRef, CastType, AText.Text);
+      { 1.51.1 B06: no project function of the name -- a LIBRARY function's declared result
+        (`HiLibReg().OpenKey`), by name for the oracle. }
+      if (Result = 0) and (AText.Text = '') then AText.Text:= LibraryFunctionResultText(ACallRef, CastType);
+    end;
     { T-11: `O.Mk('a')` also reads as a cast to `O.Mk`; when that names no type
       and no function, kind 12 below types it as a call on O. }
     if Result > 0 then Exit;
@@ -9325,6 +9383,9 @@ begin
   // can name) -> Result stays 0 (leave unresolved). Item 4: when nothing in this
   // index even names its type, the identifier goes to the library oracle as a
   // HEAD -- a library type, global, or inherited member.
+  { 1.51.1 B06: a paren-less LIBRARY function as the receiver (`HiLibReg.OpenKey`) is typed by
+    its declared result; only a name the library does not answer that way stays a head. }
+  if AText.Text = '' then AText.Text:= LibraryFunctionResultText(ACallRef, AReceiverExpr);
   if AText.Text = '' then AText.Head:= AReceiverExpr;
   finally
     ProfEnd(cpsTypeReceiverCore, PfMark);
@@ -10816,7 +10877,20 @@ begin
   var Subscripted: string;
   if ParseIndexInit(Lines, ADecl, Subscripted, Site.StartLine, Site.StartCol) then
     Exit(ValueElementTypeText(Site, Subscripted, False));
-  if not ParseInlineInit(Lines, ADecl, Init) then Exit;
+  if not ParseInlineInit(Lines, ADecl, Init) then
+  begin
+    { 1.51.1 B06: `var R := LibFn;` -- a lone identifier is no chain for ParseInlineInit; a
+      library function of the name gives its declared result. }
+    var Semi: Integer:= Pos(';', DefRhs);
+    var Lone: string:= if Semi > 1 then Trim(Copy(DefRhs, 1, Semi - 1)) else '';
+    if IsValidIdent(Lone) then
+    begin
+      Site.StartLine:= ADecl.StartLine;
+      Site.StartCol := AssignAt + Length(':=');
+      Result:= LibraryFunctionResultText(Site, Lone);
+    end;
+    Exit;
+  end;
   Site.StartLine        := Init.Line;
   Site.StartCol         := Init.Col;
   if (Init.Member <> '') and not InlineInitHeadIsValue(Site, Init.Head) then
@@ -10840,6 +10914,10 @@ begin
        and (CollectionElementOfText(Text, FromFile, FromScope, ADecl.FileId, ADecl.ParentId) <> '') then
       Result:= Text;
   end;
+  { 1.51.1 B06: `var R := LibFn;` / `var R := LibFn(..);` -- nothing in this index types the
+    bare initializer: a library function's declared result, by name. }
+  if (Result = '') and (Init.Member = '') then
+    Result:= LibraryFunctionResultText(Site, Init.Head);
   finally
     ProfEnd(cpsDecideInlineInitType, PfMark);
   end;
@@ -12237,6 +12315,125 @@ begin
   end;
 end;
 
+function TCallResolver.LibraryScopeType(AEnclosingSymbolId: Int64): string;
+var
+  ClassId: Int64;
+begin
+  Result:= '';
+  if AEnclosingSymbolId <= 0 then Exit;
+  EnclosingClassChainDeclares(AEnclosingSymbolId, '', ClassId);
+  if ClassId <= 0 then Exit;
+  Result:= FirstUnresolvedAncestorName(ClassId);
+  { A class whose chain is complete ends at the root no ancestor row records. }
+  if (Result = '') and (SymbolById(ClassId).Kind = skClass) then Result:= IMPLICIT_ROOT_CLASS;
+end;
+
+function TCallResolver.ProjectDeclaresBare(const ASite: TReference; const AName: string): Boolean;
+var
+  ClassId: Int64;
+begin
+  var Lc: string:= LowerCase(AName);
+  Result:= FNameToCands.ContainsKey(Lc) or FNameToUnitValues.ContainsKey(Lc) or FNameToRoutines.ContainsKey(Lc)
+    or FNameToEnumValues.ContainsKey(Lc);
+  if Result or (ASite.EnclosingSymbolId <= 0) then Exit;
+  Result:= RoutineDeclaresName(ASite, AName)
+    or EnclosingClassChainDeclares(ASite.EnclosingSymbolId, AName, ClassId);
+end;
+
+function TCallResolver.LibraryFunctionResultText(const ASite: TReference; const AName: string): string;
+var
+  Handled: Boolean;
+begin
+  Result:= '';
+  if (Length(FExtraStores) = 0) or not IsValidIdent(AName) or ProjectDeclaresBare(ASite, AName) then Exit;
+  if ASite.EnclosingSymbolId > 0 then
+  begin
+    var Saved: TWithScopeStats:= FWith.Stats;
+    TypeReceiverThroughWith(ASite, AName, Handled);
+    FWith.Stats:= Saved;
+    if Handled then Exit;
+  end;
+  var Text: string:= FOracle.RoutineResultText(AName, FileUsesUnits(ASite.FileId),
+    LibraryScopeType(ASite.EnclosingSymbolId), FileOwnUses(ASite.FileId));
+  { A generic result (`TList<TFoo>`) would lose its arguments as a leaf name: declined. }
+  if not Text.Contains('<') then Result:= NormalizeTypeLeaf(Text);
+end;
+
+function TCallResolver.ResolveLibraryRead(const ARef: TReference; out AExternalKind: string): string;
+var
+  Lines  : TStringList    ;
+  Rcv    : string         ;
+  WType  : Int64          ;
+  WKind  : TWithMemberKind;
+  Kind   : TSymbolKind    ;
+  Sigs   : TArray<string> ;
+  Forms  : TArray<string> ;
+  Probe  : TSymbol        ;
+  AllBare: Boolean        ;
+  Seen   : Boolean        ;
+begin
+  Result       := '';
+  AExternalKind:= '';
+  { Every decline below leaves the ref as it was; MultiHostRef: an include with several hosts
+    has no single uses clause to decide a library name on (the include-host lane's rows). }
+  Lines:= nil;
+  Kind := Default(TSymbolKind);
+  Sigs := [];
+  var Open: Boolean:= (Length(FExtraStores) > 0) and not MultiHostRef(ARef) and IsValidIdent(ARef.NameText);
+  Open:= Open and not SameText(ARef.NameText, 'Result') and not SameText(ARef.NameText, 'Self');
+  Open:= Open and (BareReadSite(ARef, Lines, Rcv) = '') and (Rcv = '');
+  Open:= Open and (WithScopeAt(ARef, ARef.StartLine, ARef.StartCol, ARef.NameText, WType, WKind) = wvNone);
+  if Open and not ProjectDeclaresBare(ARef, ARef.NameText) then
+    Result:= FOracle.BindBareRead(ARef.NameText, FileUsesUnits(ARef.FileId),
+      LibraryScopeType(ARef.EnclosingSymbolId), Kind, Sigs, FileOwnUses(ARef.FileId));
+  if Result = '' then
+  begin
+    Inc(FLibReadStats.Declined);
+    Exit;
+  end;
+  if Kind in [skVarDecl, skConstDecl, skField, skProperty] then
+  begin
+    AExternalKind:= EXTERNAL_KIND_VALUE;
+    Inc(FLibReadStats.Values);
+    Exit;
+  end;
+  if Kind in [skProcedure, skFunction, skMethod] then
+  begin
+    { The distinct written signatures: one per overload. }
+    Forms:= [];
+    for var S: string in Sigs do
+    begin
+      Seen:= False;
+      for var F: string in Forms do Seen:= Seen or SameText(F, S);
+      if not Seen then Forms:= Forms + [S];
+    end;
+    if Length(Forms) = 0 then Forms:= [''];
+    { The rules of ResolveParenlessRead: EVERY overload callable bare -> a call, unless the site
+      takes the routine as a value; ONE routine not callable bare -> its identity, when it is a
+      procedure or the site is a procedure-value site; anything else is not decidable here. }
+    AllBare:= True;
+    Probe  := Default(TSymbol);
+    Probe.Kind:= Kind;
+    for var F: string in Forms do
+    begin
+      Probe.Signature:= F;
+      AllBare:= AllBare and IsParenlessCallable(Probe);
+    end;
+    var RetType: string:= SignatureReturnType(Forms[0]);
+    if AllBare then
+      AExternalKind:= if ParenlessIsProcValue(ARef, Lines, '', RetType) then EXTERNAL_KIND_PROC_VALUE
+                      else EXTERNAL_KIND_PARENLESS_CALL
+    else if (Length(Forms) = 1) and ((RetType = '') or ParenlessIsProcValue(ARef, Lines, '', RetType)) then
+      AExternalKind:= EXTERNAL_KIND_PROC_VALUE;
+  end;
+  if AExternalKind = '' then
+  begin
+    Result:= '';
+    Inc(FLibReadStats.Declined);
+  end
+  else if AExternalKind = EXTERNAL_KIND_PARENLESS_CALL then Inc(FLibReadStats.Calls)
+  else Inc(FLibReadStats.ProcValues);
+end;
 function TCallResolver.LookupLibraryTypeHelper(const ACallRef: TReference; const ATypeText: string;
   AArgCount: Integer; AArgsKnown: Boolean; out AConfidence: string): Int64;
 var
