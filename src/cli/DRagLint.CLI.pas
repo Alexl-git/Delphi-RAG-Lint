@@ -1174,7 +1174,7 @@ procedure SizeGuardCheck(const ADbPath: string; ASizeGuardMB: Integer; AForce32:
 function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>; forward;
 function DoUnwith(const AArgs: TArgs): Integer; forward;
 function DoImplementors(const AArgs: TArgs): Integer; forward;
-function ApplyEditsGated(const AEdits: TArray<TTextEdit>; const AVerb: string; const AArgs: TArgs; out ATouched: Integer): Boolean; forward;
+function ApplyEditsGated(const AEdits: TArray<TTextEdit>; const AVerb: string; const AArgs: TArgs; out ATouched: Integer; const AAlsoProjects: TArray<string> = nil): Boolean; forward;
 procedure AutoCreateMissingProjectDb(const AArgs: TArgs; const AProjDb: string); forward;
 function ManifestStartDir(const AProjectPath: string): string; forward;
 function LoadManifestForProject(const AEngineDir, AProjectPath: string): TIndexManifest; forward;
@@ -15531,6 +15531,16 @@ type
     Refusal: string;              // single fix only: why nothing was renamed
   end;
 
+{ T09 (1.51.1): the .dproj a `lint --fix --apply` compile gate builds. --project when it names an existing .dproj;
+  else, for a run that renames, the project of a DB at <folder>\_D-RAG\<base>.sqlite (the IDE passes --db only) --
+  a naming rename edits a declaration and every use, so it is built whenever a project can be found, as
+  `rename --apply` is. '' = no gate unless --compile-gate. }
+function NamingFixGateProject(const AArgs: TArgs; ARenaming: Boolean): string;
+begin
+  Result:= if SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') and TFile.Exists(AArgs.ProjectPath) then AArgs.ProjectPath else '';
+  if (Result = '') and (AArgs.ProjectPath = '') and ARenaming then Result:= ProjectOfDb(AArgs.DbPath);
+end;
+
 { The text of one rename-project line's index= value. }
 function RenameIndexText(const AReport: TOwnerReport): string;
 begin
@@ -16256,13 +16266,24 @@ begin
     { P14 (v151 GATE): with --project naming an existing .dproj every write goes through the compile gate BY DEFAULT.
       --no-compile-gate writes unbuilt -- except a naming rename, which edits a declaration and every use and is
       always built (148 RN). Without a .dproj nothing builds, as before. }
-    var GateProjectKnown: Boolean:= SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') and TFile.Exists(AArgs.ProjectPath);
+    { T09 (1.51.1): a naming rename with only --db is gated by the DB's own project, and a rename in a unit other
+      projects compile builds every one of them (NamingFixGateProject, NamingGateAlsoProjects). }
+    var GateArgs:= AArgs;
+    GateArgs.ProjectPath:= NamingFixGateProject(AArgs, NamingRenames + Rename.Applied > 0);
+    var GateProjectKnown: Boolean:= GateArgs.ProjectPath <> '';
+    if not GateProjectKnown then GateArgs.ProjectPath:= AArgs.ProjectPath;
     var GateWrite: Boolean:= AArgs.CompileGate
       or (GateProjectKnown and ((not AArgs.NoCompileGate) or (NamingRenames + Rename.Applied > 0)));
+    var GateNotes: TArray<string>;
+    var GateAlso: TArray<string>:= NamingGateAlsoProjects(Rename.Plans, GateArgs.ProjectPath, GateNotes);
     if GateWrite and AArgs.Apply and not AArgs.CompileGate then
       Writeln(ErrOutput, if AArgs.NoCompileGate
-        then 'drag-lint: note: naming renames are written through the compile gate of ' + ExtractFileName(AArgs.ProjectPath) + ' even with --no-compile-gate'
-        else 'drag-lint: note: --fix --apply writes through the compile gate of ' + ExtractFileName(AArgs.ProjectPath) + ' (--no-compile-gate writes unbuilt)');
+        then 'drag-lint: note: naming renames are written through the compile gate of ' + ExtractFileName(GateArgs.ProjectPath) + ' even with --no-compile-gate'
+        else 'drag-lint: note: --fix --apply writes through the compile gate of ' + ExtractFileName(GateArgs.ProjectPath) + ' (--no-compile-gate writes unbuilt)');
+    if GateWrite and (Length(GateAlso) > 0) then
+      Writeln(ErrOutput, 'drag-lint: note: the compile gate also builds ' + string.Join(', ', GateAlso) + ' -- they compile the renamed unit(s)');
+    if GateWrite then
+      for var GN in GateNotes do Writeln(ErrOutput, 'drag-lint: note: ' + GN);
     { ONE PASS NEVER WRITES MIXED BYTES: a finding whose edits overlap an earlier
       finding's (two rules rewriting one span) is withheld WHOLE and reported
       deferred; the next --fix pass re-lints and applies it.
@@ -16331,7 +16352,7 @@ begin
           if GateWrite then
           begin
             var GateTouched: Integer;
-            if not ApplyEditsGated(Edits, 'lint --fix', AArgs, GateTouched) then GateRefused:= True;
+            if not ApplyEditsGated(Edits, 'lint --fix', GateArgs, GateTouched, GateAlso) then GateRefused:= True;
           end
           else TTextEditApplier.Apply(Edits, not AArgs.NoBackup);
         end;
@@ -16425,7 +16446,7 @@ begin
       if GateWrite then
       begin
         ApplySkipped:= 0;
-        if not ApplyEditsGated(Edits, 'lint --fix', AArgs, Touched) then Exit(1);
+        if not ApplyEditsGated(Edits, 'lint --fix', GateArgs, Touched, GateAlso) then Exit(1);
       end
       else Touched:= TTextEditApplier.Apply(Edits, not AArgs.NoBackup, ApplySkipped);
       { Report EDITS WRITTEN, not fixable FINDINGS. FixCount counts findings and
@@ -17921,13 +17942,15 @@ end;
 /// <param name="AArgs">Parsed CLI args: --project (the .dproj the gate builds), --platform, --rsvars,
 /// --build-timeout, --no-backup.</param>
 /// <param name="ATouched">Files written; 0 when refused.</param>
+/// <param name="AAlsoProjects">T09 (1.51.1): the other .dproj files that compile the edited units (a naming rename in a
+/// shared unit); each is built before and after too. nil = --project only.</param>
 /// <returns>True when the project builds with the edits applied (and they are on disk); False when refused, the
 /// reason is on stderr and nothing is changed.</returns>
 /// <remarks>Used only when --apply AND --project are given (lint --fix: by default when --project names an existing
 /// .dproj, unless --no-compile-gate). Without --project the verb writes as it always did, with no build: a verb that
 /// never needed a project must keep working without one. Writes GateMessageReport to stderr (P14): the error, warning
 /// and hint counts of build 1 and build 2, every error line, and the warnings and hints build 2 added.</remarks>
-function ApplyEditsGated(const AEdits: TArray<TTextEdit>; const AVerb: string; const AArgs: TArgs; out ATouched: Integer): Boolean;
+function ApplyEditsGated(const AEdits: TArray<TTextEdit>; const AVerb: string; const AArgs: TArgs; out ATouched: Integer; const AAlsoProjects: TArray<string>): Boolean;
 begin
   ATouched:= 0;
   var Req:= Default(TGateRequest);
@@ -17967,6 +17990,7 @@ begin
   var Secs:= StrToIntDef(AArgs.CycleBuildTimeout, 0);
   GBuildTimeoutMs:= if Secs <= 0 then INFINITE else Cardinal(Secs) * MSecsPerSec;
   Req.Project := ExpandFileName(AArgs.ProjectPath);
+  Req.AlsoProjects:= AAlsoProjects;
   Req.Platform:= AArgs.CheckPlatform;
   Req.Verb    := AVerb;
   Req.NoBackup:= AArgs.NoBackup;
