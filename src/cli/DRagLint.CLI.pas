@@ -388,7 +388,7 @@ type
       Rule holds one id, so the earlier one used to be dropped in silence; Run
       refuses the command line instead (exit 2). '' otherwise. }
     RuleConflict    : string        ;
-    RuleList        : string        ; // --rule a,b: the ids the report is limited to; Rule is '' then
+    RuleList        : string        ; // --rule a,b: the ids the run is narrowed to (execution and report; v1511 B16); Rule is '' then
     ProjectPath     : string        ;
     RulesDir        : string        ; // --rules-dir <path>: external .scm rules location (default <exe-dir>\rules)
     RuleCategory    : string        ; // --category <name>: filter `rules` output
@@ -1225,6 +1225,9 @@ function MakeSiblingStoreResolver(const AArgs: TArgs;
   const AKeepAlive: TList<ISymbolStore>;
   const AOwned: TObjectList<TObject>): DRagLint.Lint.SharedScope.TSiblingStoreResolver; forward;
 procedure LoadSiblingNameToDb(const AArgs: TArgs; const ANameToDb: TDictionary<string, string>); forward;
+procedure LoadManifestNameToDb(const AArgs: TArgs; const ANameToDb: TDictionary<string, string>); forward;
+function PrimaryDbRegistered(const AArgs: TArgs; const ANameToDb: TDictionary<string, string>): Boolean; forward;
+procedure PeerTrace(const ALine: string); forward;
 function MakeSiblingProjectLister(const AArgs: TArgs): DRagLint.Lint.SharedScope.TSiblingProjectLister; forward;
 
 var
@@ -8272,6 +8275,11 @@ begin
       RunLibs:= OpenLibraryStores(AArgs);
       if Length(RunLibs) = 0 then
         RunLibs:= ManifestLibraryStores(LibRun.Wanted, AArgs.CheckPlatform, IdxDproj, ResolvedDb, Store, IdxResolveGate);
+      { v1511 F3: a DB resolved against a library before (external_stores meta) re-resolved
+        with none -- typically a copy outside the manifest -- loses every external_target.
+        Say so; the behaviour is unchanged. }
+      if (Length(RunLibs) = 0) and (Store.GetMetaValue('external_stores') <> '') then
+        Writeln(ErrOutput, 'WARNING: index: no library store attached: external targets will be cleared; pass --library-db <library.sqlite>.');
       Stage('', 'calls', procedure begin ResolveCallsClearingFirst(Store, ClearEdgesInPass, RunLibs); end); { v14 (D5) + v21 cross-DB }
       Stage('', 'dispatch', procedure begin Store.ResolveDispatch(RunLibs); end); { 2026-10-26: libraries only recognise a library `class of` param type }
     end
@@ -8365,7 +8373,7 @@ begin
     var ParseErrNote: string:= ', parse-errors=' + IntToStr(Indexer.ParseErrorFiles - ParseErrBeforeTick);
     if Indexer.SkippedUpToDate - SkippedBeforeTick > 0 then Writeln(Format(
         'Done. Files: %d, Symbols: %d, Refs: %d, skipped %d up-to-date%s, %.2fs%s', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Indexer.SkippedUpToDate - SkippedBeforeTick, FailedNote, Elapsed, ParseErrNote]))
-    else Writeln(Format('Done. Files: %d, Symbols: %d, Refs: %d%s, %.2fs%s', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, FailedNote, Elapsed, ParseErrNote]));
+    else Writeln(Format('Done. Files: %d, Symbols: %d, Refs: %d%s, %.2fs%s', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, FailedNote, Elapsed, ParseErrNote]));  // dl:ok locale-sensitive-conversion@f9e5 -- REVIEWED 2026-11-16 v1511 D02: the Done line's %.2f elapsed is pre-existing (its sibling above is identical); this change only appended ParseErrNote
     if AArgs.ProjectPath <> '' then WriteIndexStudioSummary(IdxStudio, AArgs.AsJson, Store);
     AnyFileFailed:= AnyFileFailed or (TickFailed > 0);
     if not AArgs.Watch then Break;
@@ -14883,7 +14891,8 @@ end; // function
 /// <param name="APrimaryDb">The store this run reports from; never returned as its own peer.</param>
 /// <param name="AFilePaths">The files this run scans.</param>
 /// <returns>Existing DB paths, distinct, in first-seen order; empty when --rule (one id or a
-/// comma list) narrows the run to non-marker rules, no unit qualifies, or the manifest resolves no name.</returns>
+/// comma list) narrows the run to non-marker rules, the --db is not the DB the manifest
+/// registers (a copy: v1511 F1, the pass is skipped with a stderr note), no unit qualifies, or the manifest resolves no name.</returns>
 /// <remarks>A name the manifest cannot resolve, or whose DB file is missing, is simply not a
 /// peer: the marker then keeps the skip because fewer DBs scanned it than its header lists --
 /// never "no finding there". Costs one header read per scanned file that mentions dl:ok.</remarks>
@@ -14913,7 +14922,18 @@ begin
       for var PName: string in Listed do Wanted.AddOrSetValue(LowerCase(PName), True);
     end;
     if Wanted.Count = 0 then Exit;
-    LoadSiblingNameToDb(AArgs, Names);
+    LoadManifestNameToDb(AArgs, Names);
+    { v1511 F1: on a --db the manifest does not register (a copy), the peers it names are
+      the REAL sibling DBs and each would get a whole lint-all: skip the pass. --shared-db
+      (explicit peers, e.g. the sibling copies) still runs; RunMarkerPeers never gets here. }
+    if not PrimaryDbRegistered(AArgs, Names) then
+    begin
+      PeerTrace('peers-skipped ' + APrimaryDb);
+      Writeln(ErrOutput, 'lint-all: peer DBs skipped: --db ' + APrimaryDb + ' is not the registered project DB, so the ' +
+        'manifest''s sibling DBs are not opened; markers on dl:shared units stay unjudged. Pass --shared-db <db> per ' +
+        'sibling copy to judge them.');
+      Exit;
+    end;
     var Primary: string:= LowerCase(ExpandFileName(APrimaryDb));
     for var Key: string in Wanted.Keys do
     begin
@@ -14993,6 +15013,7 @@ begin
       'draglint-marker-account-' + TGUID.NewGuid.ToString + '.tsv');
     var ChildExit: Cardinal;
     SetEnvironmentVariable(MARKER_ACCOUNT_ENV, PChar(AccountFile));
+    PeerTrace('peer ' + FullPeer);
     try
       var Started: Boolean:= RunSelfSilently('lint-all --db ' + Quoted(Peer) + ' ' + CommonArgs, ChildExit);
       if not (Started and (ChildExit <= EXIT_FINDINGS_SURVIVED) and Result.AddPeerAccount(AccountFile, Peer)) then
@@ -36886,6 +36907,55 @@ end; // function
   check". Shared by MakeSiblingStoreResolver and MakeSiblingProjectLister (1.41). }
 procedure LoadSiblingNameToDb(const AArgs: TArgs; const ANameToDb: TDictionary<string, string>);
 begin
+  LoadManifestNameToDb(AArgs, ANameToDb);
+  if PrimaryDbRegistered(AArgs, ANameToDb) then Exit;
+  { v1511 F1: --db is not the DB the manifest registers (a lane / test COPY): the
+    manifest's DBs are the REAL sibling indexes, which a run on a copy must never open.
+    Each one is replaced by the file of the same name beside the --db copy when one
+    exists (a copy set like v1511\_dbs\ keeps its answers), else dropped -- the rules
+    read a missing sibling as "could not check". }
+  var CopyDir: string:= ExtractFilePath(ExpandFileName(AArgs.DbPath));
+  for var Key: string in ANameToDb.Keys.ToArray do
+  begin
+    var Cand: string:= TPath.Combine(CopyDir, ExtractFileName(ANameToDb[Key]));
+    if SameText(Cand, ExpandFileName(AArgs.DbPath)) or not TFile.Exists(Cand) then Cand:= '';
+    PeerTrace('sibling-remap ' + ANameToDb[Key] + ' -> ' + (if Cand = '' then '(none)' else Cand));
+    ANameToDb[Key]:= Cand;
+  end;
+end;
+
+/// <summary>v1511 F1: True when the run's primary --db is a DB the manifest registers
+/// for some project, or when no --db was given (the default scheme picked a registered
+/// one).</summary>
+/// <param name="AArgs">Parsed args; DbPath (the first --db) is read.</param>
+/// <param name="ANameToDb">The manifest's name -> DB map (LoadManifestNameToDb).</param>
+/// <returns>False for a copy, or any DB the manifest does not name.</returns>
+function PrimaryDbRegistered(const AArgs: TArgs; const ANameToDb: TDictionary<string, string>): Boolean;
+begin
+  if AArgs.DbPath = '' then Exit(True);
+  var Primary: string:= ExpandFileName(AArgs.DbPath);
+  for var Db: string in ANameToDb.Values do
+    if SameText(ExpandFileName(Db), Primary) then Exit(True);
+  Result:= False;
+end;
+
+/// <summary>v1511 F1 test hook: appends one line to the file named by the
+/// DRAGLINT_PEER_TRACE environment variable (unset = no-op): every sibling remap,
+/// sibling store open, marker peer run and skipped peer pass.</summary>
+/// <param name="ALine">The event, e.g. 'peer &lt;db&gt;'.</param>
+procedure PeerTrace(const ALine: string);
+begin
+  var TracePath: string:= GetEnvironmentVariable('DRAGLINT_PEER_TRACE');
+  if TracePath = '' then Exit;
+  try
+    TFile.AppendAllText(TracePath, ALine + sLineBreak, TEncoding.UTF8);
+  except  // dl:ok try-except-swallowed@e230 -- a test trace that cannot be written must not fail the lint run
+  end;
+end;
+
+{ The manifest's lowercased section name -> DB path, as configured (no copy remap). }
+procedure LoadManifestNameToDb(const AArgs: TArgs; const ANameToDb: TDictionary<string, string>);
+begin
   try
     var Manifest: TIndexManifest:=
       if AArgs.WorkspaceConfig <> '' then
@@ -36981,6 +37051,7 @@ begin
       if Opened.TryGetValue(LowerCase(AProjectName), St) then Exit(St);
       if not NameToDb.TryGetValue(LowerCase(AProjectName), DbPath) then Exit;
       if not TFile.Exists(DbPath) then Exit;
+      PeerTrace('sibling-open ' + DbPath);
       St:= OpenReadOnlyStore(DbPath, RoOk);
       if not RoOk then St:= nil;
       Opened.AddOrSetValue(LowerCase(AProjectName), St);
