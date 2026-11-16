@@ -804,6 +804,23 @@ procedure ReportNotFoundFor(AJson: Boolean; const AMsg: string);
 /// <returns>The store, or nil when the writable open threw (the caller falls back to read-only).</returns>
 function OpenWritableStore(const ADbPath: string; out AOk: Boolean): ISymbolStore;
 
+/// <summary>The one place a capped list says so (XERJ item 2): a text note, or `omitted` / `cap` keys in AJson.</summary>
+/// <param name="AOmitted">Rows the cap hid (a lower bound when AAtLeast).</param>
+/// <param name="ACap">The cap in force.</param>
+/// <param name="AAtLeast">True when the reader fetched cap + 1, so AOmitted is a lower bound.</param>
+/// <param name="AFlag">The flag that raises the cap, named in the note.</param>
+/// <param name="ARerun">The value the note suggests for AFlag.</param>
+/// <param name="AJson">When given, receives the keys (always, 0 included) instead of a text note.</param>
+/// <param name="AAsJsonStream">True: the text note goes to STDERR (stdout is a bare JSON array).</param>
+/// <remarks>The exit code is never touched here.</remarks>
+procedure ReportCap(AOmitted, ACap: Integer; AAtLeast: Boolean; const AFlag: string; ARerun: Integer; AJson: TJSONObject; AAsJsonStream: Boolean);
+
+/// <summary>The text after the last ASep in S (all of S when ASep does not occur).</summary>
+/// <param name="S">A dotted / separated name.</param>
+/// <param name="ASep">The separator.</param>
+/// <returns>The last segment.</returns>
+function LastSegment(const S: string; ASep: Char): string;
+
 implementation
 
 uses
@@ -1687,6 +1704,35 @@ begin
     opens WRITABLE by default, so this -- not that one -- is the line a stale
     `proptree --db <old>` actually printed, and it printed it onto stdout. }
   else begin AOk:= False; Writeln(ErrOutput, Format('index schema v%d < v%d: run "drag-lint index <dir> --db <db>" to migrate', [Found, Expected])); end;
+end;
+
+{ XERJ item 2: the one place a capped list says so. AOmitted is the number of
+  rows the cap hid (a lower bound when AAtLeast: the reader fetched cap + 1).
+  AJson, when given, receives `omitted` and `cap` keys (always, 0 included, so
+  a consumer can read them unconditionally). Without it the note is a text line
+  -- on STDERR when the verb's stdout is a bare JSON array (AAsJsonStream), so
+  the array stays parseable. The exit code is never touched here. }
+procedure ReportCap(AOmitted, ACap: Integer; AAtLeast: Boolean; const AFlag: string; ARerun: Integer; AJson: TJSONObject; AAsJsonStream: Boolean);
+begin
+  if AJson <> nil then
+  begin
+    AJson.AddPair('omitted', TJSONNumber.Create(Max(0, AOmitted)));
+    AJson.AddPair('cap'    , TJSONNumber.Create(ACap));
+    if AAtLeast and (AOmitted > 0) then AJson.AddPair('omitted_is_lower_bound', TJSONBool.Create(True));
+    Exit;
+  end;
+  if AOmitted <= 0 then Exit;
+  if AAsJsonStream then Writeln(ErrOutput, CapOmittedNote(AOmitted, ACap, AAtLeast, AFlag, ARerun))
+  else Writeln(CapOmittedNote(AOmitted, ACap, AAtLeast, AFlag, ARerun));
+end; // procedure
+
+function LastSegment(const S: string; ASep: Char): string;
+var
+  DotPos: Integer;
+begin
+  DotPos:= LastDelimiter(ASep, S);
+  if DotPos > 0 then Result:= Copy(S, DotPos + 1, MaxInt)
+  else Result:= S;
 end;
 
 end.
