@@ -379,7 +379,7 @@ begin
   try
     try
       Lines.LoadFromFile(AFilePath);
-    except
+    except  // dl:ok bare-except@8f3b, try-except-swallowed@8f3b -- REVIEWED 2026-11-16: tolerant probe by contract; an unreadable file means no override can be proven, so the routine is not skipped (never an error)
       Exit;
     end;
     Text:= '';
@@ -411,7 +411,7 @@ begin
   begin
     W:= Trim(Segs[I]);
     if W = '' then Break;
-    if Pos(' ', W) > 0 then Break;
+    if W.Contains(' ') then Break;
     if SameText(W, 'override') then Exit(True);
   end;
 end;
