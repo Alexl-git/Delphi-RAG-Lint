@@ -59,6 +59,16 @@
         "command": "dragLint.selectProject",
         "title": "Select Project",
         "category": "drag-lint"
+      },
+      {
+        "command": "dragLint.fixFinding",
+        "title": "Fix with drag-lint",
+        "category": "drag-lint"
+      },
+      {
+        "command": "dragLint.fixAllInFile",
+        "title": "Fix all fixable with drag-lint",
+        "category": "drag-lint"
       }
     ],
     "languages": [
@@ -96,7 +106,8 @@
     "configurationDefaults": {
       "[pascal]": {
         "editor.codeActionsOnSave": {
-          "source.addMissingImports": "explicit"
+          "source.addMissingImports": "explicit",
+          "source.fixAll.drag-lint": "never"
         }
       }
     },
@@ -191,6 +202,36 @@
           "markdownDescription": "Build configuration (e.g. `Debug`, `Release`). Empty = the project default."
         }
       }
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "dragLint.fixFinding",
+          "when": "editorLangId == pascal",
+          "group": "1_modification@90"
+        },
+        {
+          "command": "dragLint.fixAllInFile",
+          "when": "editorLangId == pascal",
+          "group": "1_modification@91"
+        }
+      ],
+      "problems/context": [
+        {
+          "command": "dragLint.fixFinding",
+          "group": "navigation@90"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "dragLint.fixFinding",
+          "when": "editorLangId == pascal"
+        },
+        {
+          "command": "dragLint.fixAllInFile",
+          "when": "editorLangId == pascal"
+        }
+      ]
     }
   },
   "dependencies": {
