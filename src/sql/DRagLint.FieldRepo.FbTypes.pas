@@ -27,7 +27,7 @@ type
 /// <summary>Every entry of the TableTools dictionaries, in key order.</summary>
 /// <returns>20 entries: codes 7, 8, 10, 12, 13, 14, 16, 23..29, 35, 37, 261 and the
 /// sub_type-1 keys of 14, 37 and 261.</returns>
-function FbTypeEntries: TArray<TFbTypeEntry>;  // dl:ok unused-public-symbol -- consumed by SchemaSeedTests and lane TTGEN
+function FbTypeEntries: TArray<TFbTypeEntry>;  // dl:ok unused-public-symbol@0d37 -- consumed by SchemaSeedTests and lane TTGEN
 
 /// <summary>The TField accessor TableTools writes into FIELD_AS_TYPE ('AsInteger' ...).</summary>
 /// <param name="pType">RDB$FIELD_TYPE.</param>
@@ -105,36 +105,36 @@ end;
 { Finds the entry for (pType, pSubType); False for any sub_type other than 0 / 1. }
 function FindEntry(pType, pSubType: Integer; out pEntry: TFbTypeEntry): Boolean;
 var
-  vKey: Integer;
-  vEntry: TFbTypeEntry;
+  Key: Integer;
+  Item: TFbTypeEntry;
 begin
   Result := False;
   pEntry := Default(TFbTypeEntry);
   if (pSubType <> 0) and (pSubType <> 1) then
     Exit;
-  vKey := if pSubType = 1 then pType + FB_SUBTYPE_ADD else pType;
-  for vEntry in FbTypeEntries do
-    if vEntry.Key = vKey then
+  Key := if pSubType = 1 then pType + FB_SUBTYPE_ADD else pType;
+  for Item in FbTypeEntries do
+    if Item.Key = Key then
     begin
-      pEntry := vEntry;
+      pEntry := Item;
       Exit(True);
     end;
 end;
 
 function TryFbFieldAccessor(pType, pSubType: Integer; out pAccessor: string): Boolean;
 var
-  vEntry: TFbTypeEntry;
+  Item: TFbTypeEntry;
 begin
-  Result := FindEntry(pType, pSubType, vEntry);
-  pAccessor := vEntry.Accessor;
+  Result := FindEntry(pType, pSubType, Item);
+  pAccessor := Item.Accessor;
 end;
 
 function TryFbFieldVarType(pType, pSubType, pLength: Integer; out pVarType: string): Boolean;
 var
-  vEntry: TFbTypeEntry;
+  Item: TFbTypeEntry;
 begin
-  Result := FindEntry(pType, pSubType, vEntry);
-  pVarType := vEntry.VarType;
+  Result := FindEntry(pType, pSubType, Item);
+  pVarType := Item.VarType;
   if Result and (pType = FB_TYPE_CHAR) and (pSubType = 1) and (pLength = 1) then
     pVarType := 'Byte';
 end;

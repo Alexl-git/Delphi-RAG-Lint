@@ -77,19 +77,19 @@ type
 /// the non-calculated, non-lookup fields in FIELD_NAME order; an existing row (matched by
 /// UPDATE_TABLE_NAME) keeps its DS_ID, UPDATE_ONLY_MODIFIED_FIELDS and CONDITIONS and is
 /// rewritten only when its generated text changed; a new row gets MAX(DS_ID) + 1.</remarks>
-function RunSchemaSeed(pTarget: TFDConnection; const pSources: TSchemaSources;
-  pMode: TSchemaSeedMode; pDryRun: Boolean; pStampUtc: TDateTime): TSchemaSeedResult;  // dl:ok unused-public-symbol -- consumed by lane TTE (CLI.Repo) and SchemaSeedTests
+function RunSchemaSeed(pTarget: TFDConnection; const pSources: TSchemaSources;  // dl:ok unused-public-symbol@d7b0 -- consumed by lane TTE (CLI.Repo) and SchemaSeedTests
+  pMode: TSchemaSeedMode; pDryRun: Boolean; pStampUtc: TDateTime): TSchemaSeedResult;
 
 /// <summary>Opens the four schema queries on a live Firebird connection.</summary>
 /// <param name="pFb">An open Firebird connection; only SELECTs on RDB$ tables run.</param>
 /// <returns>Open datasets owned by the caller; release them with FreeSchemaSources.</returns>
 /// <exception cref="EFDDBEngineException">Raised by FireDAC when a query fails; the
 /// datasets opened so far are freed first.</exception>
-function OpenSchemaSources(pFb: TFDConnection): TSchemaSources;  // dl:ok unused-public-symbol -- consumed by lane TTE (CLI.Repo)
+function OpenSchemaSources(pFb: TFDConnection): TSchemaSources;  // dl:ok unused-public-symbol@0b64 -- consumed by lane TTE (CLI.Repo)
 
 /// <summary>Frees the datasets of pSources and sets them to nil.</summary>
 /// <param name="pSources">Sources from OpenSchemaSources; nil members are skipped.</param>
-procedure FreeSchemaSources(var pSources: TSchemaSources);  // dl:ok unused-public-symbol -- consumed by lane TTE (CLI.Repo)
+procedure FreeSchemaSources(var pSources: TSchemaSources);  // dl:ok unused-public-symbol@9833 -- consumed by lane TTE (CLI.Repo)
 
 implementation
 
@@ -139,6 +139,13 @@ const
   { Generated columns of DL_DATASETS_INFO compared on refresh (DESCRIPTION is not). }
   DS_COLS: array[0..6] of string = ('SELECT_SQL', 'INSERT_SQL', 'UPDATE_SQL', 'DELETE_SQL',
     'REFRESH_SQL', 'NAME_GENERATOR', 'KEY_FIELD');
+  GEN_SELECT = 0;
+  GEN_INSERT = 1;
+  GEN_UPDATE = 2;
+  GEN_DELETE = 3;
+  GEN_REFRESH = 4;
+  GEN_NAME_GENERATOR = 5;
+  GEN_KEY_FIELD = 6;
 
   SQL_FIELDS =
     'SELECT TRIM(F.RDB$RELATION_NAME) AS TABLE_NAME, TRIM(F.RDB$FIELD_NAME) AS FIELD_NAME, ' +
@@ -168,7 +175,7 @@ const
 
 type
   { One seed / refresh run: the source maps plus the result being built. }
-  TSeedRun = class
+  TSeedRun = class  // dl:ok high-response@a9ca -- one object per run: the three passes share one transaction's maps and result
   strict private
     FConn: TFDConnection;
     FSrc: TSchemaSources;
@@ -225,7 +232,7 @@ end;
 function DefaultValOf(const pSource: string): string;
 begin
   Result := pSource;
-  if Pos(DEFAULT_PREFIX, Result) > 0 then
+  if Result.Contains(DEFAULT_PREFIX) then
     Result := Copy(Result, Length(DEFAULT_PREFIX) + 1);
 end;
 
@@ -376,7 +383,8 @@ begin
   Q := TFDQuery.Create(nil);
   try
     Q.Connection := FConn;
-    Q.Open('SELECT ' + Cols + 'CAST("CUSTOM_TYPE" AS INTEGER), CAST("ISENUM" AS INTEGER), "ENUMTYPE" ' +
+    Q.Open(
+      'SELECT ' + Cols + 'CAST("CUSTOM_TYPE" AS INTEGER), CAST("ISENUM" AS INTEGER), "ENUMTYPE" ' +  // dl:ok path-traversal@c160 -- SQL text, not a path: identifiers go through QuoteRepoIdent
       'FROM ' + QuoteRepoIdent(FIELDS_TABLE) + ' WHERE "TABLE_NAME" = :T AND "FIELD_NAME" = :F',
       [pTable, pField]);
     SetLength(pOld, Length(SCHEMA_COLS));
@@ -444,16 +452,17 @@ begin
     else
       Names := Names + (if i = 0 then '' else ', ') + QuoteRepoIdent(SCHEMA_COLS[i]) + ' = :P' + IntToStr(i);
   end;
-  if pIsNew then
-    { TableTools new-row values for the hand-maintained columns; the rest take the DDL defaults }
-    Sql := 'INSERT INTO ' + QuoteRepoIdent(FIELDS_TABLE) + ' (' + Names +
+  { a new row gets the TableTools new-row values for the hand-maintained columns; the rest
+    take the DDL defaults }
+  Sql := if pIsNew then
+    'INSERT INTO ' + QuoteRepoIdent(FIELDS_TABLE) + ' (' + Names +
       '"TABLE_NAME", "FIELD_NAME", "DISPLAY_LABEL", "VISIBLE", "DISPLAY_FORMAT", "EDIT_FORMAT", ' +
       '"DISPLAY_WIDTH", "BG_COLOR", "FG_COLOR", "ALIGNMENT", "CUSTOM_TYPE", "ISCALCULATED", ' +
       '"ISLOOKUP", "DESTTABLE", "SOURCEKEY", "DESTKEY", "DESTVALUE") VALUES (' + Marks +
       ':T, :F, '''', 0, '''', '''', 0, 0, 0, ' + IntToStr(ALIGNMENT_NEW_ROW) +
       ', 0, 0, 0, '''', '''', '''', '''')'
   else
-    Sql := 'UPDATE ' + QuoteRepoIdent(FIELDS_TABLE) + ' SET ' + Names +
+    'UPDATE ' + QuoteRepoIdent(FIELDS_TABLE) + ' SET ' + Names +
       ' WHERE "TABLE_NAME" = :T AND "FIELD_NAME" = :F';
   FConn.ExecSQL(Sql, Params, Types);
 end;
@@ -461,6 +470,7 @@ end;
 procedure TSeedRun.UpdateFields(var pRes: TSchemaSeedResult);
 var
   Src: TDataSet;
+  DefaultField: TField;
   Table, Field, Accessor, VarType, Seq, EnumType: string;
   FbType, FbSub, FbLen: Integer;
   OldVals, NewVals: TArray<Variant>;
@@ -470,6 +480,7 @@ var
   i: Integer;
 begin
   Src := FSrc.Fields;
+  DefaultField := Src.FieldByName('DEFAULT_SOURCE');
   Src.First;
   while not Src.Eof do
   begin
@@ -491,7 +502,7 @@ begin
     else if TryFbFieldVarType(FbType, FbSub, FbLen, VarType) then
       NewVals[COL_VAR_TYPE] := VarType;
     if VarIsNull(NewVals[COL_DEFAULTVAL]) then
-      NewVals[COL_DEFAULTVAL] := Fit(DefaultValOf(Src.FieldByName('DEFAULT_SOURCE').AsString),
+      NewVals[COL_DEFAULTVAL] := Fit(DefaultValOf(DefaultField.AsString),
         Table, Field, COL_DEFAULTVAL);
     NewVals[COL_FIELD_SIZE] := FbLen;
     NewVals[COL_STRING_SIZE] := IntOf(Src, 'CHARACTER_LEN');
@@ -559,7 +570,8 @@ begin
   Q := TFDQuery.Create(nil);
   try
     Q.Connection := FConn;
-    Q.Open('SELECT rowid, TRIM("TABLE_NAME"), TRIM("FIELD_NAME") FROM ' + QuoteRepoIdent(FIELDS_TABLE) +
+    Q.Open(
+      'SELECT rowid, TRIM("TABLE_NAME"), TRIM("FIELD_NAME") FROM ' + QuoteRepoIdent(FIELDS_TABLE) +  // dl:ok path-traversal@366d -- SQL text, not a path: identifiers go through QuoteRepoIdent
       ' WHERE "ISCALCULATED" = 0 AND "ISLOOKUP" = 0 AND ' + SQL_NOT_SYSTEM + ' ORDER BY 2, 3');
     while not Q.Eof do
     begin
@@ -661,16 +673,19 @@ begin
           JoinNames(Pk, ' AND ', '', '%s=:OLD_%s');
       Gen := [
         'SELECT ' + string.Join(', ', AllFields) + ' FROM ' + Table,
-        'INSERT INTO ' + Table + ' (' + string.Join(', ', AllFields) + ') VALUES (' +
+        'INSERT INTO ' + Table + ' (' +  // dl:ok sql-injection-concat@18a9 -- generated SQL TEXT stored as data (DL_DATASETS_INFO), never executed here; Table comes from the schema
+          string.Join(', ', AllFields) + ') VALUES (' +
           JoinNames(AllFields, ', ', ':', '') + ')',
         UpdateSql,
-        'DELETE FROM ' + Table + ' WHERE ' + JoinNames(Pk, ' AND ', '', '%s=:OLD_%s'),
+        'DELETE FROM ' + Table + ' WHERE ' +  // dl:ok sql-injection-concat@9f1a -- generated SQL TEXT stored as data (DL_DATASETS_INFO), never executed here; Table comes from the schema
+          JoinNames(Pk, ' AND ', '', '%s=:OLD_%s'),
         'SELECT ' + string.Join(', ', AllFields) + ' FROM ' + Table + ' WHERE ' +
           JoinNames(Pk, ' AND ', '', '%s=:%s'),
         NameGen,
         KeyField];
 
-      Q.Open('SELECT "DS_ID", "SELECT_SQL", "INSERT_SQL", "UPDATE_SQL", "DELETE_SQL", "REFRESH_SQL", ' +
+      Q.Open(
+        'SELECT "DS_ID", "SELECT_SQL", "INSERT_SQL", "UPDATE_SQL", "DELETE_SQL", "REFRESH_SQL", ' +  // dl:ok path-traversal@1e3d -- SQL text, not a path: identifiers go through QuoteRepoIdent
         '"NAME_GENERATOR", "KEY_FIELD" FROM ' + QuoteRepoIdent(DATASETS_TABLE) +
         ' WHERE TRIM("UPDATE_TABLE_NAME") = :T ORDER BY "DS_ID" LIMIT 1', [Table]);
       if Q.Eof then
@@ -680,7 +695,7 @@ begin
           '"SELECT_SQL", "INSERT_SQL", "UPDATE_SQL", "DELETE_SQL", "REFRESH_SQL", "NAME_GENERATOR", ' +
           '"KEY_FIELD", "UPDATE_TABLE_NAME", "UPDATE_ONLY_MODIFIED_FIELDS", "CONDITIONS") VALUES ' +
           '(:ID, :DE, :S1, :S2, :S3, :S4, :S5, :NG, :KF, :T, 1, '''')',
-          [NextId, Description, Gen[0], Gen[1], Gen[2], Gen[3], Gen[4], Gen[5], Gen[6], Table],
+          [NextId, Description, Gen[GEN_SELECT], Gen[GEN_INSERT], Gen[GEN_UPDATE], Gen[GEN_DELETE], Gen[GEN_REFRESH], Gen[GEN_NAME_GENERATOR], Gen[GEN_KEY_FIELD], Table],
           [ftInteger, ftWideString, ftWideMemo, ftWideMemo, ftWideMemo, ftWideMemo, ftWideMemo,
           ftWideString, ftWideString, ftWideString]);
         FDiff.Add(Format('+ DATASET %s DS_ID=%d', [Table, NextId]));
@@ -699,7 +714,7 @@ begin
         FConn.ExecSQL('UPDATE ' + QuoteRepoIdent(DATASETS_TABLE) + ' SET "DESCRIPTION" = :DE, ' +
           '"SELECT_SQL" = :S1, "INSERT_SQL" = :S2, "UPDATE_SQL" = :S3, "DELETE_SQL" = :S4, ' +
           '"REFRESH_SQL" = :S5, "NAME_GENERATOR" = :NG, "KEY_FIELD" = :KF WHERE "DS_ID" = :ID',
-          [Description, Gen[0], Gen[1], Gen[2], Gen[3], Gen[4], Gen[5], Gen[6], DsId],
+          [Description, Gen[GEN_SELECT], Gen[GEN_INSERT], Gen[GEN_UPDATE], Gen[GEN_DELETE], Gen[GEN_REFRESH], Gen[GEN_NAME_GENERATOR], Gen[GEN_KEY_FIELD], DsId],
           [ftWideString, ftWideMemo, ftWideMemo, ftWideMemo, ftWideMemo, ftWideMemo,
           ftWideString, ftWideString, ftInteger]);
         FDiff.Add(Format('~ DATASET %s DS_ID=%d', [Table, DsId]));
@@ -741,7 +756,7 @@ begin
         pTarget.Rollback
       else
         pTarget.Commit;
-    except  // dl:ok bare-except -- rollback then re-raise, nothing swallowed
+    except  // dl:ok bare-except@46a7 -- rollback then re-raise, nothing swallowed
       pTarget.Rollback;
       raise;
     end;
@@ -758,9 +773,9 @@ function OpenSchemaSources(pFb: TFDConnection): TSchemaSources;
     try
       Result.Connection := pFb;
       Result.FetchOptions.Unidirectional := False;
-      Result.Open(pSql);
+      Result.Open(pSql);  // dl:ok dataset-open-without-close@9c7f -- the open dataset IS the result; FreeSchemaSources releases it
       Result.FetchAll;
-    except  // dl:ok bare-except -- free the half-built query, then re-raise
+    except  // dl:ok bare-except@041e -- free the half-built query, then re-raise
       Result.Free;
       raise;
     end;
@@ -773,7 +788,7 @@ begin
     Result.RelationFields := OpenQuery(SQL_RELATION_FIELDS);
     Result.PrimaryKeys := OpenQuery(SQL_PRIMARY_KEYS);
     Result.Generators := OpenQuery(SQL_GENERATORS);
-  except  // dl:ok bare-except -- free the queries opened so far, then re-raise
+  except  // dl:ok bare-except@92a7 -- free the queries opened so far, then re-raise
     FreeSchemaSources(Result);
     raise;
   end;
