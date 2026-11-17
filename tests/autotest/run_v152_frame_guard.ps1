@@ -17,9 +17,9 @@
 param(
   [string]$Exe = "third_party\dll-win64\drag-lint.exe",
   [string]$Repo = "",
-  [int]$ExpectTotal = 423,
-  [int]$ExpectFixable = 125,
-  [int]$ExpectOn = 341
+  [int]$ExpectTotal = 424,   # INT: +1 index-possibly-out-of-range (IDXRANGE2)
+  [int]$ExpectFixable = 126,
+  [int]$ExpectOn = 342
 )
 $ErrorActionPreference = "Stop"
 $repo = if ($Repo -ne "") { (Resolve-Path $Repo).Path } else { (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path }
