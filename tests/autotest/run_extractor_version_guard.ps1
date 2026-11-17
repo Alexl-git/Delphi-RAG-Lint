@@ -102,7 +102,8 @@ $emitRoutines = @('UpsertSymbol','UpsertReference','UpsertDiBinding','UpsertStri
                   'PutDataFlows',   # 2026-10-27 taint T0: data_flows rows (per-routine facts, file tx)
                   'PutFileFacts',   # 2026-11-09 149 EX2: file_includes / dfm_objects / pp_regions rows (file tx); 150 PP: + pp_directives
                   'PutProjectSettings',   # 2026-11-09 150 EX3: project_settings rows of a .dpr / .dpk (file tx)
-                  'PutDfmNav')   # 2026-11-10 150 Y2: dfm_nav_nodes / dfm_nav_props rows of a .dfm (file tx)
+                  'PutDfmNav',   # 2026-11-10 150 Y2: dfm_nav_nodes / dfm_nav_props rows of a .dfm (file tx)
+                  'PutIncVariants')   # 2026-11-17 152 EXTINC: inc_variants rows, one per distinct inclusion context of an .inc (file tx)
 $notEmit      = @('UpsertCallEdge','WriteExternalStores','WriteRefHostBindings')   # resolver surface (resolver-surface.txt); WriteExternalStores = schema_meta.external_stores, written by the resolve pass (R2, 2026-10-28); WriteRefHostBindings = ref_host_bindings, written after the calls pass from Resolver.HostBindings (INC2 B10, 1.51.1)
 $HdrRx  = [regex]'^(?i)(function|procedure|constructor|destructor)\s+([A-Za-z0-9_]+\.)?([A-Za-z0-9_]+)'
 $ImplRx = [regex]'^(?i)implementation\s*$'
