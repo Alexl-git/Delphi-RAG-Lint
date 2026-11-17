@@ -144,3 +144,36 @@ fixture case:
 - The autofix is a per-file fixer (RegisterFileFixer, risky) so the uses edits are emitted once.
 - Messages: `'<i>' is written here and reaches A[i] at line N with no guard ... (in <Routine>;
   fix raises <Class> at line K)` or `(...; no autofix: ...)`; the hint starts `Parameter '<i>'`.
+
+## Owner rulings round 6 + ORM3 batch 3 (lane IDXRANGE2, 2026-11-17) -- OVERRIDE the text above
+
+- **C3 default ON.** The InRange + `<exception_class>` fix is MANUAL ONLY: `MarkFixManualOnly`
+  (DRagLint.Lint.Autofix); a batch `--fix` (no `--fix-rule`, i.e. fix-all in a unit / project) withholds it
+  with a stderr note; `--fix-rule index-possibly-out-of-range` (the IDE's Fix it) applies it; `rules --json`
+  carries `fix_manual_only: true`. The user edits the inserted message text afterwards.
+- **Symbolic bounds.** Bounds are `count(Base) + Off` (Base `len:a`, `cnt:b`, `id:n`, or constant): SetLength
+  size expressions (`High(D) - Low(D) + 3` = `len:d + 2`), static bounds, `X.Count`, unwritten names, Length
+  aliases. A field / global array uses the size every SetLength of the FILE agrees on (`X.Count`, `Length(X)`,
+  constant; any assignment / Delete / Insert = unknown).
+- **C1 parallel arrays.** Silent when the other collection's bound is PROVEN within this array's (same SetLength
+  count, static bounds within, same SetLength source, or every local caller sizing the parameter array from the
+  guarded count). Otherwise a WARNING naming the bound (`bounded only by Names.Count ...`); a `for` loop running
+  to another collection's bound now reports on the `for` line (was a silent v1 cut); a parameter checked against
+  another collection is a warning, not a hint.
+- **C2 unchecked index parameter.** Cleared when EVERY local call passes an index proven in range (the caller's
+  guards / provenance / for bounds, or a literal within a static array). Only routines whose every name use in the
+  file is a plain call: one definition, no declaration (interface, class member, forward), not a method, never
+  passed as a value. Depth 1 (a caller's own parameters are not traced further).
+- **C2 external callers -- DESIGN ONLY, later lane.** IDE right-click "Verify all callers" on the hint: the engine
+  runs the C2 proof over every caller in the project index (find-callers --resolved, each caller's unit parsed);
+  on success it writes `// dl:ok-range@<hash> <ISO8601> verified N callers` at the routine and a matching marker at
+  each caller line. The hash covers the routine signature + the guarded access line and, per caller, the call
+  line; a later edit of either changes the hash, the marker reads stale (review-marker-stale) and the finding
+  returns. Second right-click: "Insert range check" = the manual fix above for the parameter.
+- **ORM3 batch 3.** (1) wrong-order `while A[i] and (i <= G) do Inc(i)` reads at most G + 1 -- in range when the
+  SetLength gives slack (BASICSF:1394 FP), TP otherwise; (2) uINSPRSLT:5575 TP: the second array read after the
+  loop (`NssDistConvert[i]`, 0..4) -- fixture positive control; the real site needs the cross-unit const (open);
+  (3) Exit-capped step: `Inc(j); if j > High(sa) - 1 then begin ...; Exit end` caps j, the then-branch sees cap + 1;
+  with the local callers' least static length (GAGEFRM2:417 FP; a 1-slot caller is a TP); (4) one step per trip of
+  a `for` whose trip count is within the array (Blueprint4:1722 FP); (5) an index read from a lookup
+  (`GetValueOrDefault`, `Items[]`, `Map[k]`) is a HINT -- its value range is invisible (uJobList:997 / uJobList2:704).
