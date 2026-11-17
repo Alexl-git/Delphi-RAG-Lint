@@ -4,7 +4,11 @@ unit DRagLint.CLI.CheckInit;
   Scaffold created by lane FRAME: DRagLint.CLI.pas parses the flags and calls
   RunCheckInit in ONE dispatch line; everything else lives here. Lane HBSKEL
   owns this unit (its signature is the FRAME contract: changing it needs a
-  HANDOVER to the CLI.pas dispatch line). }
+  HANDOVER to the CLI.pas dispatch line).
+
+  HBSKEL: usage guards, DB guards, the answer through Render. The answer itself
+  comes from the HANDOVER statement in RunCheckInit; until lane HBSOLVER exports CheckInit from
+  DRagLint.Query.HappensBefore it is the scaffold answer (HbNotImplementedAnswer). }
 
 interface
 
@@ -12,13 +16,17 @@ interface
 /// [--json] [--explain] [--max-routines N]`.</summary>
 /// <param name="pTarget">Positional QName (or --qname); '' when only --at names the target.</param>
 /// <param name="pAt">--at value `file:line[:col]`, '' when absent.</param>
-/// <param name="pDbPath">--db value, '' when absent (the verb resolves or refuses).</param>
-/// <param name="pProject">--project value, '' when absent.</param>
-/// <param name="pJson">--json (or --format json).</param>
-/// <param name="pExplain">--explain: add roots and reasons to the answer.</param>
-/// <param name="pMaxRoutines">--max-routines N; 0 = the verb's default budget.</param>
+/// <param name="pDbPath">--db value (or the resolved project DB), '' when none.</param>
+/// <param name="pProject">--project value, '' when absent; named in the no-DB message only.</param>
+/// <param name="pJson">--json (or --format json): stdout is one JSON document.</param>
+/// <param name="pExplain">--explain: the text output adds roots and per-use reasons.</param>
+/// <param name="pMaxRoutines">--max-routines N; 0 = HB_DEFAULT_MAX_ROUTINES; negative (the parser's
+/// value for a non-number) is a usage error.</param>
 /// <returns>Process exit code: 0 all SET, 1 some MAY-BE-UNSET or NEVER-SET, 2 usage or other error.</returns>
-/// <remarks>FRAME stub: prints `check-init: not implemented (1.52 scaffold)` on stderr and returns 2.</remarks>
+/// <remarks>Read-only. Every error goes to stderr with exit 2 and NOTHING on stdout, so a --json
+/// consumer never parses a half document. Usage errors: neither QName nor --at; a malformed --at;
+/// a bad --max-routines; no DB; a DB that does not exist or whose schema is too old to read; an
+/// unknown / ambiguous target or a --at that names another variable (EHbUsage from the engine).</remarks>
 function RunCheckInit(const pTarget, pAt, pDbPath, pProject: string; pJson, pExplain: Boolean;
   pMaxRoutines: Integer): Integer;
 
@@ -26,13 +34,95 @@ implementation
 
 uses
   System.SysUtils
+, System.IOUtils
+, DRagLint.Core.Interfaces
+, DRagLint.Storage.SQLite
+, DRagLint.Storage.Schema
+, DRagLint.Query.HappensBefore.Types
+, DRagLint.Query.HappensBefore.Render
   ;
 
-function RunCheckInit(const pTarget, pAt, pDbPath, pProject: string; pJson, pExplain: Boolean;  // dl:ok unused-parameter@f4ff -- REVIEWED 2026-11-17 v152 FRAME: FRAME verb-unit contract signature; the stub ignores its inputs, the owning lane's implementation reads every one
-  pMaxRoutines: Integer): Integer;  // dl:ok unused-parameter@9133 -- REVIEWED 2026-11-17 v152 FRAME: FRAME verb-unit contract signature; the stub ignores its inputs, the owning lane's implementation reads every one
+const
+  VERB_NAME = 'check-init';
+
+function UsageError(const pMsg: string): Integer;
 begin
-  Writeln(ErrOutput, 'check-init: not implemented (1.52 scaffold)');
+  Writeln(ErrOutput, 'ERROR: ', VERB_NAME, ': ', pMsg);
+  Writeln(ErrOutput, '       usage: drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> '
+    + '[--json] [--explain] [--max-routines N]');
+  Flush(ErrOutput);
   Result:= 2;
+end;
+
+{ True when pDbPath is an existing index whose schema this engine can read; reports on stderr. }
+function DbUsable(const pDbPath, pProject: string): Boolean;
+var
+  Found, Expected: Integer;
+begin
+  Result:= False;
+  if pDbPath = '' then
+  begin
+    Writeln(ErrOutput, 'ERROR: ', VERB_NAME, ': no --db was given and no project database resolves here'
+      + (if pProject <> '' then ' (--project ' + pProject + ')' else '') + '.');
+    Writeln(ErrOutput, '       Run "drag-lint resolve-dbs" to list the configured databases,');
+    Writeln(ErrOutput, '       or pass --db <file.sqlite> explicitly.');
+    Exit;
+  end;
+  if not TFile.Exists(pDbPath) then
+  begin
+    Writeln(ErrOutput, Format('ERROR: %s: --db does not exist: %s', [VERB_NAME, pDbPath]));
+    Writeln(ErrOutput, '       Find it:  drag-lint resolve-dbs --project <x.dproj>   (or --in <x.pas>)');
+    Exit;
+  end;
+  var Store: ISymbolStore:= TSQLiteSymbolStore.Create(pDbPath, {AReadOnly=}True);
+  Store.IsSchemaCurrent(Found, Expected);
+  Result:= IsSchemaReadable(Found);
+  if not Result then
+  begin
+    Writeln(ErrOutput, Format('ERROR: %s: the --db is at an OLD SCHEMA (v%d): %s', [VERB_NAME, Found, pDbPath]));
+    Writeln(ErrOutput, '       A stale index is not authoritative. Nothing was answered.');
+    Writeln(ErrOutput, Format('       Migrate it: drag-lint index --project <x.dproj> --db "%s"', [pDbPath]));
+  end;
+end;
+
+function RunCheckInit(const pTarget, pAt, pDbPath, pProject: string; pJson, pExplain: Boolean;
+  pMaxRoutines: Integer): Integer;
+var
+  AtSite: THbSite;
+begin
+  AtSite:= Default(THbSite);
+  if (pTarget = '') and (pAt = '') then
+    Exit(UsageError('needs a target: <QName> (e.g. UnitA.GCache, UnitA.TFoo.FBar) or --at <file>:<line>[:<col>]'));
+  if (pAt <> '') and not HbParseAt(pAt, AtSite) then
+    Exit(UsageError(Format('--at must be <file>:<line>[:<col>] with line and col >= 1, got "%s"', [pAt])));
+  if pMaxRoutines < 0 then
+    Exit(UsageError('--max-routines needs a whole number >= 0 (0 = the default budget)'));
+  if not DbUsable(pDbPath, pProject) then
+  begin
+    Flush(ErrOutput);
+    Exit(2);
+  end;
+  var Answer: THbAnswer;
+  try
+    { HANDOVER (lane HBSOLVER, applied by INT): replace the next statement with
+        var Opts:= Default(THbOptions);
+        Opts.MaxRoutines:= if pMaxRoutines = 0 then HB_DEFAULT_MAX_ROUTINES else pMaxRoutines;
+        Opts.Explain:= pExplain;
+        Answer:= CheckInit(pDbPath, pTarget, pAt, Opts);
+      and add DRagLint.Query.HappensBefore to the implementation uses. }
+    Answer:= HbNotImplementedAnswer(pTarget, AtSite);
+  except
+    on E: EHbUsage do
+    begin
+      Writeln(ErrOutput, 'ERROR: ', VERB_NAME, ': ', E.Message);
+      for var C in E.Candidates do Writeln(ErrOutput, '       candidate: ', C);
+      Flush(ErrOutput);
+      Exit(2);
+    end;
+  end;
+  if pJson then Writeln(HbAnswerJson(Answer))
+  else WriteHbAnswer(Answer, pExplain);
+  Result:= HbExitCode(Answer);
 end;
 
 end.
