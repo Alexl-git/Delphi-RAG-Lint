@@ -27,7 +27,7 @@ type
   /// <summary>One .dfm node. Parent is the index of the enclosing node (-1 for the root).
   /// InInline is True when an enclosing node is an `inline` frame instance: such nodes
   /// belong to the frame class, not to the form class.</summary>
-  TDfmNode = record  // dl:ok duplicate-global-decl@86e1 -- REVIEWED 2026-11-16: Convert.DfmReemit keeps its own copy until the 1.52 consolidation (V151F T01 FOUND); the lint unit must not depend on the converter's unit
+  TDfmNode = record
     Name     : string;
     CompClass: string;
     Kind     : TDfmNodeKind;

@@ -387,7 +387,7 @@ type
   /// The non-Text fields are best-effort context, NOT guaranteed populated:
   /// which ones carry a value depends on Kind. Line is a 1-based line in
   /// FilePath and is 0 when unknown -- notably for anything derived from the
-  /// DFM re-emit, because TDfmNode carries no line number, so such items can
+  /// DFM re-emit, because TReemitDfmNode carries no line number, so such items can
   /// only be anchored to the instance's object-block header line. RuleLine is
   /// the 1-based line in the rules file that produced the item, or 0.
   /// <!-- drag-lint:auto BEGIN -->
@@ -7202,7 +7202,7 @@ var
 
   // Folds one instance's re-emit report into ReemitNotes, giving each entry the
   // kind its SOURCE array implies rather than one inferred from its prose.
-  // ABlockLine is the instance's .dfm object-block header line: TDfmNode carries
+  // ABlockLine is the instance's .dfm object-block header line: TReemitDfmNode carries
   // no line number, so it is the most precise anchor a re-emit-derived item can
   // have. The prose is byte-identical to what this used to add inline.
   procedure FoldReemitReport(const AReport: TReemitReport; ABlockLine: Integer);
