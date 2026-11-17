@@ -41,6 +41,8 @@ function Code([string]$text) {
 
 $hookUnit = 'DragLint.Plugin.EditorLocalMenu'
 $stubs = @('CheckInit', 'DisableRule', 'IdxRange', 'FixMarker', 'FieldRepo', 'ExtractConst')
+# rows whose unit needs the IDE (ToolsAPI) and cannot compile headless: id -> unit; their shape is read from the source
+$ideOnly = @{ 'fix-marker' = 'FixMarker' }  # VSFIX made Cmd.FixMarker a real command (ToolsAPI, Plugin.Editor)
 # id -> surfaces|needs (the PLUGCTX defaults; an owning lane that changes its row updates this map)
 $expect = [ordered]@{
   'check-init'       = 'main+editor|cnSymbol'
@@ -84,7 +86,7 @@ Ok "hook unit wired; $($stubs.Count) stubs set Surfaces + Needs"
 $rs = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 if (-not (Test-Path $rs)) { Write-Host "FATAL: rsvars not found: $rs" -ForegroundColor Red; exit 2 }
 New-Item -ItemType Directory -Force (Join-Path $WorkDir 'dcu') | Out-Null
-$units = @('DragLint.Plugin.Cmd152') + ($stubs | ForEach-Object { "DragLint.Plugin.Cmd.$_" })
+$units = @('DragLint.Plugin.Cmd152') + ($stubs | Where-Object { $_ -notin $ideOnly.Values } | ForEach-Object { "DragLint.Plugin.Cmd.$_" })
 $usesList = ($units | ForEach-Object { "  $_ in '$plug\$_.pas'" }) -join ",`r`n"
 $dpr = @"
 program CtxCheck;
@@ -215,6 +217,14 @@ $rows = @(& $exe --table | Where-Object { $_ } | ForEach-Object {
 $rows | ForEach-Object { Write-Host ("  {0,-17} {1,-24} visible={2}  {3}" -f $_.Id, $_.Shape, $_.Visible, $_.Path) }
 foreach ($k in $expect.Keys) {
   $r = $rows | Where-Object Id -eq $k
+  if (-not $r -and $ideOnly.ContainsKey($k)) {
+    $src = Code ([IO.File]::ReadAllText((Join-Path $plug "DragLint.Plugin.Cmd.$($ideOnly[$k]).pas")))
+    $sm = [regex]::Match($src, 'Command\.Surfaces\s*:=\s*\[([^\]]*)\]'); $nm = [regex]::Match($src, 'Command\.Needs\s*:=\s*(cn\w+)')
+    $surf = @($sm.Groups[1].Value -split ',' | ForEach-Object { switch ($_.Trim()) { 'csMainMenu' { 'main' } 'csEditorContext' { 'editor' } default { $_.Trim() } } }) -join '+'
+    $shape = "$surf|$($nm.Groups[1].Value)"
+    if ($shape -ne $expect[$k]) { Bad "$k (source, IDE-only unit) is $shape, expected $($expect[$k])" } else { Ok "$k (source, IDE-only unit) $shape" }
+    continue
+  }
   if (-not $r) { Bad "table lacks $k"; continue }
   if ($r.Shape -ne $expect[$k]) { Bad "$k is $($r.Shape), expected $($expect[$k])" }
 }
