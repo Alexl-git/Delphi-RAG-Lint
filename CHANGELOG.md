@@ -65,6 +65,15 @@ default flipped). One re-parse: extractor 1.39.0 -> 1.40.0-alpha, resolver 1.27.
 - B22 (`component-default-mismatch`) verified already fixed; T05: `component-setter-without-invalidate` and
   `component-fixed-pixels` stay OFF (CMP).
 
+### Performance
+- SCM / BATFIX: `exclude_if_preceded_by` reads only the last 512 bytes of the enclosing routine for a pattern ending
+  in `$` (the `large-magic-number` `dispid` exclusion made a 10000-line unit take 74 s to open; now 17 s).
+- TLSPERF: `tls-verification-disabled` scans the handler structurally instead of a backtracking regex, and accepts
+  more disabling forms; new phase-budget runner `run_v1511_lint_phase_budget.ps1` holds every rule phase to a budget.
+- PERF2: `field-free-without-nil` builds one identifier index per scan instead of re-walking every routine body per
+  candidate (was cubic); `dictionary-get-without-check` searches each dictionary name literally and anchors the
+  pattern at each hit (~115 ms per name on a 1.1 MB unit before). Same findings, same order. `lint-all` on a large
+  project: 3183 s vs > 5880 s for 1.51.0 at the same machine load.
 ### CLI
 - B16: `lint-all --rule a,b` runs ONLY the named rules and derives no `--shared-db` peers (YADF copy: 1025.8 s ->
   13.6 s; the "silently []" note was not reproducible -- the time was the peer runs) (CLI).
