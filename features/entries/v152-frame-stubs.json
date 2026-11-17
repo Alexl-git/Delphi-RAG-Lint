@@ -5,18 +5,10 @@
   "owner": "ENGINE",
   "status": "internal",
   "since": "1.51.1-alpha",
-  "summary": "check-init, explain and repo are accepted by the 1.52 CLI frame and do nothing useful yet; their own entries replace this one",
-  "intro": "Read this when check-init, explain or repo answers that it is not implemented yet.",
+  "summary": "repo is accepted by the 1.52 CLI frame and does nothing useful yet; its own entry replaces this one",
+  "intro": "Read this when repo answers that it is not implemented yet.",
   "wikiPage": "v152-frame-stubs",
   "surfaces": [
-    {
-      "type": "cli",
-      "verb": "check-init"
-    },
-    {
-      "type": "cli",
-      "verb": "explain"
-    },
     {
       "type": "cli",
       "verb": "repo"
