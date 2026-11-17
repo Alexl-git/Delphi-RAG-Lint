@@ -4,10 +4,10 @@ title: manifest where / migrate (installed layout v2)
 summary: Shows which drag-lint.json this engine reads and why; moves the exe-side one to %APPDATA% once (renamed, never deleted). Installed layout v2, off by default
 product: DL
 group: maintenance
-order: 120009
+order: 120010
 since: 1.50.0-alpha
 status: shipped
-updated: 1.50.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # manifest where / migrate (installed layout v2)

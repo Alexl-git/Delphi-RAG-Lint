@@ -498,6 +498,14 @@ begin
   Writeln('  drag-lint overview           --db <file.sqlite>    [--max-rows N] [--json]   (ONE bounded first-turn call: freshness, counts per kind, units by layer, top fan-in, entry points, forms; a capped section says how many it omitted)');
   Writeln('  drag-lint manifest where [--manifest <path>] [--json]   (read-only: which drag-lint.json, log folder and library folder this engine resolves, and each lookup rung. Order: explicit DRAGLINT_MANIFEST / --manifest, then with DRAGLINT_LAYOUT=v2 the file in %APPDATA%\drag-lint, then beside the exe. Creates, moves and renames nothing)');
   Writeln('  drag-lint manifest migrate [--apply] [--dry-run] [--json]   (one-time, installed layout v2 phase 2: without --apply (or with --dry-run, which overrides --apply) plans and touches nothing; with --apply and DRAGLINT_LAYOUT=v2 writes %APPDATA%\drag-lint\drag-lint.json with outDir and relative includes made absolute, so every DB stays put, then RENAMES the exe-side file to drag-lint.json.migrated-<date>. Never deletes, never overwrites. Exit 0 done / would / nothing to do, 2 refused, 1 failed)');
+  Writeln('  drag-lint repo init           (--repo <file> | --project <project file>)   (create an empty field repository; exit 1 when the file exists)');
+  Writeln('  drag-lint repo info           (--repo <file> | --project <project file>) [--json]   (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)');
+  Writeln('  drag-lint repo import-fb      --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--replace]   (copy the FIB$ registry tables; read-only on Firebird; --replace writes a before-import text backup first; exit 1 failure, 2 schema drift)');
+  Writeln('  drag-lint repo seed-fb        --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--dry-run]   (fill an EMPTY repository from the Firebird schema; read-only on Firebird)');
+  Writeln('  drag-lint repo refresh-schema --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--dry-run]   (re-read the Firebird schema into a filled repository, keep hand-edited columns, mark vanished columns; --dry-run prints the diff only)');
+  Writeln('  drag-lint repo backup         (--repo <file> | --project <project file>) [--output <file>]   (write the diffable text backup; default <repo>.txt)');
+  Writeln('  drag-lint repo restore        --in <backup file> (--repo <file> | --project <project file>) [--replace]   (create the repository when missing; a malformed backup prints "line <n>: ..." and exits 2, nothing changed)');
+  Writeln('  drag-lint repo gen-memtable   --in <csv file> [--name <Name>] [--output <file>]   (Pascal source that builds the fields of a TFDMemTable from a field-definition CSV; exit 2 on a bad CSV)');
   Writeln('  drag-lint bookmarks --in <file.pas|dir> [--name <code>] [--format text|json] [--json] (list / find the // dl:bk<N> and // dl:bk:<CODE> comment anchors; read-only; exit 3 = none)');
   Writeln('       see wiki page: bookmarks');
   Writeln('  drag-lint bookmarks-restore --from <sidecar.json> [--apply] [--json|--format json] (puts the anchors a bookmarks-strip removed back, byte-identical when the file is unchanged; a file with an anchor it cannot place is left untouched; dry run without --apply; exit 4 = some unplaced)');
@@ -1499,6 +1507,18 @@ begin
   begin
     Writeln('  drag-lint manifest where [--manifest <path>] [--json]   (read-only: which drag-lint.json, log folder and library folder this engine resolves, and each lookup rung. Order: explicit DRAGLINT_MANIFEST / --manifest, then with DRAGLINT_LAYOUT=v2 the file in %APPDATA%\drag-lint, then beside the exe. Creates, moves and renames nothing)');
     Writeln('  drag-lint manifest migrate [--apply] [--dry-run] [--json]   (one-time, installed layout v2 phase 2: without --apply (or with --dry-run, which overrides --apply) plans and touches nothing; with --apply and DRAGLINT_LAYOUT=v2 writes %APPDATA%\drag-lint\drag-lint.json with outDir and relative includes made absolute, so every DB stays put, then RENAMES the exe-side file to drag-lint.json.migrated-<date>. Never deletes, never overwrites. Exit 0 done / would / nothing to do, 2 refused, 1 failed)');
+    Exit;
+  end;
+  if pVerb = 'repo' then
+  begin
+    Writeln('  drag-lint repo init           (--repo <file> | --project <project file>)   (create an empty field repository; exit 1 when the file exists)');
+    Writeln('  drag-lint repo info           (--repo <file> | --project <project file>) [--json]   (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)');
+    Writeln('  drag-lint repo import-fb      --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--replace]   (copy the FIB$ registry tables; read-only on Firebird; --replace writes a before-import text backup first; exit 1 failure, 2 schema drift)');
+    Writeln('  drag-lint repo seed-fb        --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--dry-run]   (fill an EMPTY repository from the Firebird schema; read-only on Firebird)');
+    Writeln('  drag-lint repo refresh-schema --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--dry-run]   (re-read the Firebird schema into a filled repository, keep hand-edited columns, mark vanished columns; --dry-run prints the diff only)');
+    Writeln('  drag-lint repo backup         (--repo <file> | --project <project file>) [--output <file>]   (write the diffable text backup; default <repo>.txt)');
+    Writeln('  drag-lint repo restore        --in <backup file> (--repo <file> | --project <project file>) [--replace]   (create the repository when missing; a malformed backup prints "line <n>: ..." and exits 2, nothing changed)');
+    Writeln('  drag-lint repo gen-memtable   --in <csv file> [--name <Name>] [--output <file>]   (Pascal source that builds the fields of a TFDMemTable from a field-definition CSV; exit 2 on a bad CSV)');
     Exit;
   end;
   Result := False;

@@ -216,7 +216,6 @@ Write-Host '-- check 1: verbs' -ForegroundColor Cyan
 # and must be deleted, and an entry that HAS since been documented is stale too.
 $UndocumentedOnPurpose = [ordered]@{
   'check-init'          = '1.52 verb, status internal until lane HBDOCS ships it (features\entries\check-init.json); remove then.'
-  'repo'                = '1.52 verb family (lane TTE); remove when field-repository.json is generated into --help.'
   'selftest'            = 'umbrella self-test dispatcher (manifest-merge / glob / closure / dbselect / drift / ...). 35 references under tests\. Not a user verb.'
   'contrast-selftest'   = 'self-test for the hover contrast computation; driven by a runner under tests\.'
   'doc-facts-selftest'  = 'self-test for the doc-facts renderer; driven by runners under tests\.'
@@ -1177,8 +1176,6 @@ $FlagUndocumentedOnPurpose = [ordered]@{
   '--at'              = '(a) check-init flag; that verb is itself exempt'
   '--explain'         = '(a) check-init flag; that verb is itself exempt'
   '--max-routines'    = '(a) check-init flag; that verb is itself exempt'
-  '--repo'            = '(a) repo flag; that verb is itself exempt'
-  '--replace'         = '(a) repo flag; that verb is itself exempt'
   '--reason'          = '(a) rules disable flag (lane DISRULE); remove when its entry is generated'
   '--expr'            = '(a) dump-pp-eval expression; that verb is itself exempt'
   '--from-block'      = '(a) convert-reemit input; that verb is itself exempt'

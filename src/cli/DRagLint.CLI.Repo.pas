@@ -123,39 +123,6 @@ begin
   Writeln(ErrOutput, 'repo ', pVerb, ': ', E.Message);
 end;
 
-{ Opens a Firebird connection from a "Key=Value;..." string (DriverID=FB and
-  CharacterSet=UTF8 are added when absent). pDatabase receives the Database value only. }
-function OpenFbConnection(const pConnectionString: string; out pDatabase: string): TFDConnection;
-var
-  Params: TStringList;
-  Pair: string;
-  EqPos: Integer;
-begin
-  Result:= TFDConnection.Create(nil);
-  try
-    Params:= TStringList.Create;
-    try
-      for Pair in pConnectionString.Split([';'], TStringSplitOptions.ExcludeEmpty) do
-      begin
-        EqPos:= Pos('=', Pair);
-        if EqPos > 0 then
-          Params.Add(Trim(Copy(Pair, 1, EqPos - 1)) + '=' + Trim(Copy(Pair, EqPos + 1, MaxInt)));
-      end;
-      if Params.IndexOfName('DriverID') = -1 then Params.Add('DriverID=FB');
-      if Params.IndexOfName('CharacterSet') = -1 then Params.Add('CharacterSet=UTF8');
-      pDatabase:= Params.Values['Database'];
-      Result.Params.Assign(Params);
-    finally
-      Params.Free;
-    end;
-    Result.LoginPrompt:= False;
-    Result.Open;
-  except  // dl:ok bare-except@041e -- frees the connection and re-raises the original exception
-    Result.Free;
-    raise;
-  end;
-end;
-
 { Best-effort removal of a scratch file: a file that is already gone is not an error. }
 procedure RemoveFile(const pFile: string);
 begin
@@ -267,7 +234,7 @@ begin
       Writeln('before-import backup: ', Backup);
     end;
     Stats:= ImportFromFirebird(pConnection, Conn, pReplace);
-    Fb:= OpenFbConnection(pConnection, Database);
+    Fb:= OpenSourceConnection(pConnection, Database);
     try
       for Stat in Stats do
       begin
@@ -324,7 +291,7 @@ begin
   end;
   Conn:= OpenOrCreateRepo(pPath);
   try
-    Fb:= OpenFbConnection(pConnection, Database);
+    Fb:= OpenSourceConnection(pConnection, Database);
     try
       Sources:= OpenSchemaSources(Fb);
       try

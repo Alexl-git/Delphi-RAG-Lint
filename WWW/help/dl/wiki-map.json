@@ -156,6 +156,7 @@
   "extract-interface": "extract-interface",
   "extract-method": "extract-method",
   "fb-snapshot": "fb-snapshot",
+  "field-repository": "field-repository",
   "finalization-after-dependency": "finalization-after-dependency",
   "find-callees": "find-callees",
   "find-unit": "find-unit",

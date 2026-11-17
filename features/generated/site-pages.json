@@ -383,6 +383,10 @@
     "hash": "2399ba03ebf5888ef976db1f01bf19fd902f1e177290c9d6dc71ac98f995e7ab",
     "version": "1.35.1-alpha"
   },
+  "features/field-repository.md": {
+    "hash": "99045b30f7c6eb0422fa52f74c83326b8ac43035c1fdd4bfd9a39adfbc3e7350",
+    "version": "1.51.1-alpha"
+  },
   "features/finalization-after-dependency.md": {
     "hash": "972e4389ee21de714c8d5152af686ac1211852880019cb14769afb8569529321",
     "version": "1.51.1-alpha"
@@ -528,8 +532,8 @@
     "version": "1.51.0-alpha"
   },
   "features/info.md": {
-    "hash": "656fdb2f9ad2118de588e553e0d283dff058811580b4d0ffa677cddaa63601d7",
-    "version": "1.49.0-alpha"
+    "hash": "76089631f140848836e120b3f3a15b24b8647f34f0a06544a94e9719d5a912d4",
+    "version": "1.51.1-alpha"
   },
   "features/init-order-hazard.md": {
     "hash": "744b2201b04b7276832793b8143eafa1988116291d3f012d8cd8a4ae2d44170b",
@@ -544,8 +548,8 @@
     "version": "1.51.1-alpha"
   },
   "features/installed-layout-v2.md": {
-    "hash": "4274e1d3f173eee7714393cf222a8bb9928baeb5d7c5bda8dcedbe4cf9ccc1ee",
-    "version": "1.50.0-alpha"
+    "hash": "58569da221e0e18ced050726da54782e2f6e845a07e9bd6fda260a19de9127d6",
+    "version": "1.51.1-alpha"
   },
   "features/interface-implementors.md": {
     "hash": "aca5d389b4c46454918d9a5a844eef2d5e99bcb2d4a8b3e29f28b7a4fe94099e",
@@ -560,8 +564,8 @@
     "version": "1.50.0-alpha"
   },
   "features/library-drift-check.md": {
-    "hash": "94107837a3d362099fcc5e10b2476a890e0f8405bada744bec6b512e7349f201",
-    "version": "1.46.0-alpha"
+    "hash": "fcdce8d3bb5e66de2394a1677a10d7c246945d726cde75bf472c1472a9f8e69c",
+    "version": "1.51.1-alpha"
   },
   "features/link-orm.md": {
     "hash": "e4523fc54e909cb792afb2bcce22b0f013eaa1ee5d4ce56c6238b45249efb8c2",
@@ -608,8 +612,8 @@
     "version": "1.51.1-alpha"
   },
   "features/maintenance.md": {
-    "hash": "33cc043464d8c690af286cdfbacf5cc319cd22df63eab2f54abc873123c7062a",
-    "version": "1.46.0-alpha"
+    "hash": "267923f99980ed6d17b2f803df6a9dfa0b31b7fd1fd0ccafd5c7a2e8e454969e",
+    "version": "1.51.1-alpha"
   },
   "features/mcp-config-writer.md": {
     "hash": "b1d301647916d401f68f9de6d66dfde734b1ad828e642a7b5b393fb47f48d653",
@@ -644,8 +648,8 @@
     "version": "1.51.1-alpha"
   },
   "features/open-plugin-log.md": {
-    "hash": "1a844169cccbc2e326abab2d710e544d2befd385026faeff43fe72f081c4c8ab",
-    "version": "1.46.0-alpha"
+    "hash": "948c4f5d9696a750f3825dc36bf4e28b0ff86e6c3312de36a43f051de1143f4f",
+    "version": "1.51.1-alpha"
   },
   "features/outline.md": {
     "hash": "6f7c7a0a3ee4c137b0b3dcdd6d18a454ec54dccc3c6047425da054cd8fd3767f",
@@ -848,12 +852,12 @@
     "version": "1.46.0-alpha"
   },
   "features/shutdown.md": {
-    "hash": "9f2836d9016c11ea612f5029843e8219274a5d4df2628a8521783b40f3fe0f8b",
-    "version": "1.46.0-alpha"
+    "hash": "51cec0b20907e6f2c60fdd24255d54625aa38e11c4ca7a619869b278b4b17f7f",
+    "version": "1.51.1-alpha"
   },
   "features/sql.md": {
-    "hash": "c22c533b02cf5745b6701226fa1020ecc9ae6188fff3e42e82c04ea987828141",
-    "version": "1.50.0-alpha"
+    "hash": "31aa16b61e9d0cb7542ba7d0ce40852d0e88a1e574d07181af5ff7bc07a62e85",
+    "version": "1.51.1-alpha"
   },
   "features/stream-buffer-after-free.md": {
     "hash": "d178a3252ba44235bed223e3218473ca6a99a6f0113070cb3357ca7b6bf7e98f",

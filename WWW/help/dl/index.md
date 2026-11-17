@@ -350,6 +350,7 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [dump-call-edges](features/dump-call-edges.md) | Diagnostic that dumps every resolved call edge in the index as refid\|targetqname\|confidence rows | 0.91.0-alpha |
 | [dump-refs](features/dump-refs.md) | Diagnostic that dumps every ref in a file together with its enclosingsymbolid attribution | 0.82.0-alpha |
 | [Feature registry](features/feature-registry.md) | The machine-checked master list of every feature, and the generator of the index pages | 1.22.0-alpha |
+| [Field repository](features/field-repository.md) | Keeps the TableTools field registry in one SQLite file per database, filled from Firebird (read-only), with a diffable text backup | 1.52.0-alpha |
 | [info](features/info.md) | Prints engine self-info: version, build date, license (MIT), tree-sitter details, and capabilities | 0.19.0-alpha |
 | [manifest where / migrate (installed layout v2)](features/installed-layout-v2.md) | Shows which drag-lint.json this engine reads and why; moves the exe-side one to %APPDATA% once (renamed, never deleted). Installed layout v2, off by default | 1.50.0-alpha |
 | [Library Drift Check](features/library-drift-check.md) | Flags registered library roots that have source on disk but nothing in the index | 0.47.0-alpha |

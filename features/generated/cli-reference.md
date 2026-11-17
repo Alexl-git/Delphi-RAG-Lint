@@ -1809,6 +1809,28 @@ drag-lint rename --kind symbol --name <QName> --to <New> [--json|--plan|--apply|
 
 Described in [Rename Symbol](../../docs/wiki/Rename-Symbol.md).
 
+### repo
+
+Keeps the TableTools field registry in one SQLite file per database, filled from Firebird (read-only), with a diffable text backup.
+
+```text
+drag-lint repo <init|info|import-fb|seed-fb|refresh-schema|backup|restore|gen-memtable> (--repo <file> | --project <project file>) [--connection "<Firebird connection string>"] [--in <file>] [--output <file>] [--name <Name>] [--replace] [--dry-run] [--json]   (the field repository: one SQLite file per database; Firebird is only read)
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--connection` | `<Firebird connection string>` |  |  |
+| `--dry-run` |  |  |  |
+| `--in` | `<backup file>` |  |  |
+| `--json` |  |  |  |
+| `--name` | `<Name>` |  |  |
+| `--output` | `<file>` |  |  |
+| `--project` | `<project file>` |  |  |
+| `--replace` |  |  |  |
+| `--repo` | `<file>` |  |  |
+
+Described in [Field repository](../../docs/wiki/field-repository.md).
+
 ### resolve-dbs
 
 Prints which database(s) drag-lint would actually use for a given project, file, or platform, without running a real query.

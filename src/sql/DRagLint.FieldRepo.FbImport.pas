@@ -56,6 +56,14 @@ function ImportTableFromDataSet(pSource: TDataSet; pTarget: TFDConnection;  // d
 function ImportFromFirebird(const pConnectionString: string; pTarget: TFDConnection;  // dl:ok unused-public-symbol@2f94 -- public API; callers arrive with lane TTE (repo import-fb)
   pReplace: Boolean): TArray<TRepoImportStat>;
 
+/// <summary>Opens a Firebird connection from a 'Key=Value;...' string.</summary>
+/// <param name="pConnectionString">FireDAC-style list separated by ';'; DriverID=FB and
+/// CharacterSet=UTF8 are added when absent.</param>
+/// <param name="pDatabase">Receives the Database value only (never the password).</param>
+/// <returns>An OPEN connection; the caller owns Close/Free.</returns>
+/// <exception cref="EFDDBEngineException">The server refuses the connection (the half-made connection is freed).</exception>
+function OpenSourceConnection(const pConnectionString: string; out pDatabase: string): TFDConnection;
+
 implementation
 
 uses

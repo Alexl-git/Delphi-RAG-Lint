@@ -58,6 +58,8 @@ resolver 1.28.0 -> 1.29.0-alpha.
   424 rules, 342 enabled by default, 126 with an auto-fix.
 
 ### Added
+- `repo` verb family (field repository, text backup, Firebird import/seed/refresh): `init`, `info`, `import-fb`, `seed-fb`,
+  `refresh-schema`, `backup`, `restore`, `gen-memtable`; the other `gen-*` / `*-orm` subs answer "not available" in 1.52.
 - `explain <rule-id>`: meaning, why it matters, example, default, fixable, suppress; text or `--json`; an unknown id
   lists the nearest ids and exits 2.
 - New tests\autotest\run_dfm_grammar_corpus_ab.ps1: corpus A/B for the tree-sitter-dfm grammar.

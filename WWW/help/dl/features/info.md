@@ -4,10 +4,10 @@ title: info
 summary: "Prints engine self-info: version, build date, license (MIT), tree-sitter details, and capabilities"
 product: DL
 group: maintenance
-order: 120008
+order: 120009
 since: 0.19.0-alpha
 status: shipped
-updated: 1.49.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # info
