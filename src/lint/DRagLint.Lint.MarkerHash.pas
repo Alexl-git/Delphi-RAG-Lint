@@ -34,8 +34,37 @@ interface
 type
   /// <summary>The outcome of checking one `dl:ok` hash against a finding.</summary>
   /// <remarks>mvRemeasured suppresses like mvVerified: the routine is unchanged
-  /// since the review and only the engine's measure-algorithm version moved.</remarks>
-  TMarkerVerdict = (mvVerified, mvRemeasured, mvStale);
+  /// since the review and only the engine's measure-algorithm version moved.
+  /// mvLegacy (v152 MARK, ruling B3) also suppresses: a routine-metric marker
+  /// stamped under the 1.51.0 "v1" header|metric hash that still matches. Callers
+  /// that only ask "is it stale" compare against mvStale and need no change;
+  /// callers that report (the CLI lint hint) treat mvRemeasured and mvLegacy
+  /// alike via NeedsRestampHint.</remarks>
+  TMarkerVerdict = (mvVerified, mvRemeasured, mvLegacy, mvStale);
+
+const
+  /// <summary>Rule id of the hint emitted when a still-valid marker was
+  /// re-measured under the v2 hash (default ON, severity hint).</summary>
+  RULE_MARKER_REMEASURED = 'review-marker-remeasured';
+
+/// <summary>Whether a verdict that suppressed a finding deserves the
+/// `review-marker-remeasured` hint.</summary>
+/// <param name="AVerdict">The result of MarkerVerdict.</param>
+/// <returns>True for mvRemeasured and mvLegacy: the marker still answers for the
+/// code but was not stamped under the current hash. False for mvVerified and
+/// mvStale (stale has its own review-marker-stale hint).</returns>
+function NeedsRestampHint(AVerdict: TMarkerVerdict): Boolean;
+
+/// <summary>The message of the `review-marker-remeasured` hint.</summary>
+/// <param name="ARuleId">The marker's rule id.</param>
+/// <param name="AVerdict">mvRemeasured or mvLegacy; selects the cause wording.</param>
+/// <param name="AFindingLine">1-based anchor line of the suppressed finding, for the
+/// re-stamp command.</param>
+/// <returns>One ASCII line naming the rule, why it was re-measured and the
+/// command that re-stamps it (`allow --fix-line N --fix-rule R`).</returns>
+/// <remarks>Pure.</remarks>
+function RemeasuredHintText(const ARuleId: string; AVerdict: TMarkerVerdict;
+  AFindingLine: Integer): string;
 
 /// <summary>The hash a NEW `dl:ok` should carry for a finding (what `allow`
 /// writes).</summary>
@@ -378,12 +407,31 @@ begin
            BodyPart(Window, RoutineBodyHash(ALines, Anchor), Version);
 end;
 
+function NeedsRestampHint(AVerdict: TMarkerVerdict): Boolean;
+begin
+  Result:= AVerdict in [mvRemeasured, mvLegacy];
+end;
+
+function RemeasuredHintText(const ARuleId: string; AVerdict: TMarkerVerdict;
+  AFindingLine: Integer): string;
+begin
+  var Cause: string:= if AVerdict = mvLegacy
+    then 'was stamped under the 1.51.0 hash'
+    else 'was stamped under an older measure algorithm';
+  Result:= Format('dl:ok marker for "%s" %s; re-measured under the v2 hash and still valid (finding stays suppressed). ' +
+                  'Re-stamp it with: allow --fix-line %d --fix-rule %s',
+                  [ARuleId, Cause, AFindingLine, ARuleId]);
+end;
+
 function MarkerVerdict(const ALines: TArray<string>; const ARuleId, AMarkerHash: string;
   AStartLine, AMetric: Integer): TMarkerVerdict;
 begin
-  var Hash  : string := LowerCase(AMarkerHash);
+  var Hash : string := LowerCase(AMarkerHash);
   var Metric: Integer:= CurrentMetric(ARuleId, AMetric);
-  if Hash = LegacyExpectedHash(ALines, ARuleId, AStartLine, Metric) then Exit(mvVerified);
+  if Hash = LegacyExpectedHash(ALines, ARuleId, AStartLine, Metric) then
+    { A non-metric rule's current hash IS the legacy one: verified. For a routine-metric
+      rule the current hash is v2, so a legacy match was re-measured (B3 hint). }
+    Exit(if IsRoutineMetricRule(ARuleId) then mvLegacy else mvVerified);
   if (not IsRoutineMetricRule(ARuleId)) or (Length(Hash) <> HASH_DIGITS) then Exit(mvStale);
   var Anchor : Integer:= DocCommentMarkerLine(ALines, AStartLine);
   var Window : string := TReviewMarkers.HashWindow(ALines, Anchor - 1);
