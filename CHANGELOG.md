@@ -13,6 +13,7 @@ Hotfix release. No re-parse: extractor, resolver, grammar and rule counts unchan
   started freeing its services. At IDE shutdown the unsaved changes are now discarded without a prompt (one
   OutputDebugString line); Save on the tab (now "Save *" while unsaved) is the way to keep them. Reload still asks
   first. Decision in `DragLint.Plugin.UnsavedPolicy` (tests\UnsavedPolicyTests.dpr, 11 checks).
+- RPT: the drag-lint > Reports menu items did nothing in the IDE (the click handler read the question from the sender Tag and returned silently). The question index is now bound at menu-build time; every click logs a Reports: line and every early stop logs or shows why. Tests: TReportClickTests (4), ReportTextTests 45/45.
 
 ## v1.51.1-alpha -- date TBD
 
