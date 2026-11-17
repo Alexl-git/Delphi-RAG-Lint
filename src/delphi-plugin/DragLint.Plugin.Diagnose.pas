@@ -651,9 +651,9 @@ end;
   precisely when it mattered. }
 function DiagRelatedTools: TDiagLines;
 var
-  Bpl, Dir, Exe, Ver: string;
+  Bpl, Exe, Ver, BplVer: string;
 
-  procedure AddTool(const ACaption, APath: string);
+  procedure AddTool(const ACaption, APath: string; const AExpectVer: string);
   var
     V: string;
   begin
@@ -668,6 +668,9 @@ var
     V:= FileVersionOf(APath);
     if V = '' then
       Add(Result, Line(ACaption, '(no version resource)   ' + APath, dsWarn))
+    else if (AExpectVer <> '') and (V <> AExpectVer) then
+      Add(Result, Line(ACaption, V + '   ' + APath + '   (differs from the loaded YADFOT package, '
+                                 + AExpectVer + ')', dsWarn))
     else
       Add(Result, Line(ACaption, V + '   ' + APath, dsOk));
   end;
@@ -680,18 +683,21 @@ begin
     Add(Result, Line('YADFOT (IDE wizard)', 'not registered with this IDE', dsInfo));
     Exit;
   end;
-  AddTool('YADFOT (IDE wizard)', Bpl);
+  AddTool('YADFOT (IDE wizard)', Bpl, '');
 
-  Dir:= ExtractFilePath(Bpl);
-  Exe:= Dir + 'YADF.exe';
-  AddTool('YADF', Exe);
-  AddTool('YADFSetup', Dir + 'YADFSetup.exe');
+  { The exes are looked for beside the BPL, then the repo's Win64\Release and
+    Win64\Debug EXE folders (the IDE is 32-bit, the exes Win64-only), then PATH.
+    The version is compared with the LOADED BPL's; no network call is made here
+    (the About dialog's update check compares with the latest GitHub release). }
+  BplVer:= FileVersionOf(Bpl);
+  Exe   := FindYadfTool(Bpl, 'YADF.exe');
+  AddTool('YADF', Exe, BplVer);
+  AddTool('YADFSetup', FindYadfTool(Bpl, 'YADFSetup.exe'), BplVer);
 
   Ver:= FileVersionOf(Exe);
   if Ver <> '' then
     Add(Result, Line('YADF releases', 'github.com/Alexl-git/YADF', dsInfo));
 end;
-
 function DiagVersions: TDiagLines;
 var
   ModName : string;
