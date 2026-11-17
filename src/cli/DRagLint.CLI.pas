@@ -140,6 +140,7 @@ uses
   , DRagLint.Lint.RuleCache // dl:unit DRagLint.Lint.RuleCache accepted -- CACHED_RULES travels with the cache that defines which rules it may hold, so lint and the indexer warm cannot drift apart
   , DRagLint.Lint.UsesAudit { TUsesAuditor -- the uses-audit core shared with the uses-movable-to-implementation rule (G8) }
   , DRagLint.Index.LibraryOracle { TLibraryOracle -- find-callees binds a value receiver typed by name to a library routine (item 4) }
+  , DRagLint.Fix.V151.Legacy { SetFixWithLibrary (152 FIXLIB) }
   , DRagLint.Lint.Autofix   { IsFixableRule & co. + BuildAutofixEdits -- the autofix registry (lane A0) }
   , DRagLint.Refactor.RedundantCast { lane 144 item 1: the gated redundant-cast fix }
   , DRagLint.Refactor.NarrowParam   { lane 144 item 2: narrow-param }
@@ -12797,11 +12798,15 @@ begin
     var FixCount: Integer                                               ;
     { lane A5B: the store-backed registered fixers (DRagLint.Fix.Store) read the run's store }
     SetAutofixStore(AStore);
+    { 152 FIXLIB (B9h): the with fixer resolves a class target through the platform library, as unwith does }
+    var FixLibs: TArray<ISymbolStore>:= RefactorLibraries(AArgs);
+    if Length(FixLibs) > 0 then SetFixWithLibrary(FixLibs[0]);
     var Edits: TArray<TTextEdit>:= BuildAutofixEdits(Targeted, FixCount);
     if AutofixTargetSkipped > 0 then
       Writeln(ErrOutput, Format('drag-lint: %d fix(es) skipped (target-compiler) -- the fix emits syntax newer than %s; the finding stays.',
         [AutofixTargetSkipped, CompilerDisplayName(ActiveTargetCompiler)]));
     SetAutofixStore(nil);
+    SetFixWithLibrary(nil);
     { Naming edits dropped by BuildNamingFixEdits' stale-position guard (the
       recorded site no longer holds the identifier being renamed). Declared out
       here so the autofix summary below can report it -- an invisible skip is
