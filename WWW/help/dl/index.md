@@ -29,6 +29,7 @@ Build and maintain the per-project and library indexes.
 | [References for declaration positions](features/v1511-ext-fixes.md) | The index keeps a reference for pointer base types, generic constraints, generic method headers, dotted property specifiers and message constants | 1.51.1-alpha |
 | [Per-host bindings for refs in a shared include](features/v1511-inc2-fixes.md) | A ref inside an include that several units include keeps one binding per host (table ref_host_bindings, schema 26); find-callers and usages read it | 1.51.1-alpha |
 | [Library bindings for bare reads, paren-less calls and function-result receivers](features/v1511-res-fixes.md) | Bare reads of library vars (Application), paren-less library calls and members on a library function result bind to refs.external_target | 1.51.1-alpha |
+| [Resolver fixes in 1.52](features/v152-extr-resolve.md) | Generic receivers (`TObjectList<T>.Create`) typed; index --resolve-only without a library keeps the last library bindings | 1.51.1-alpha |
 
 ## Search and navigation
 

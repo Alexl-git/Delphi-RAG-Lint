@@ -86,6 +86,7 @@ Build and maintain the per-project and library indexes.
 | [Rebuild Index for This Project](Rebuild-Index-for-This-Project) | drag-lint > Index & Maintenance > Rebuild Index for This Project; `index` |  |
 | [References for declaration positions](index-declaration-refs) | `index`; `usages` |  |
 | [register-project](Features) | `register-project` |  |
+| [Resolver fixes in 1.52](library-first-resolve) | `index` |  |
 | [schema](schema) | `schema` |  |
 | [Show Resolved DBs (debug)](Show-Resolved-DBs-debug) | drag-lint > Index & Maintenance > Show Resolved DBs (debug)...; `resolve-dbs` |  |
 

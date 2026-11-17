@@ -88,7 +88,7 @@
     "version": "1.46.0-alpha"
   },
   "features/circular-uses-report-cycles-fix-plan.md": {
-    "hash": "5973ae1365225350c9d7d2e6bf6aaf836a57dea11a846ad24c5fbaf4d574227b",
+    "hash": "52ec73501b2a09e808ab030e1a51ab4f8d1453ed6f12f390db64c8f1fdf8b112",
     "version": "1.51.1-alpha"
   },
   "features/class-surface.md": {
@@ -248,7 +248,7 @@
     "version": "1.51.1-alpha"
   },
   "features/cycles-fix.md": {
-    "hash": "f8ff5b1540ed7c4f22ada92ed5c234913efc91f0a420c74aa49d96c6a4b3ce67",
+    "hash": "7d1f1b2f865fae6694e89c250405547a3b51fa131da8590472f5565287cfaa83",
     "version": "1.51.1-alpha"
   },
   "features/datamodule-form-global.md": {
@@ -992,11 +992,11 @@
     "version": "1.51.1-alpha"
   },
   "features/v1511-cli-fixes.md": {
-    "hash": "b9b5584f8919a51e6a5967e38b51b5c49e076dd4b39f7333350a496a97974a5d",
+    "hash": "525c3c1ea59e949071e726516b1e3d217292ed4335516bf07521fc38c1d1ce67",
     "version": "1.51.1-alpha"
   },
   "features/v1511-cyc-fixes.md": {
-    "hash": "2e5a2e1d6d00aa94603cac2d662f4803499d6e08b58c3d9748d22220fa70c392",
+    "hash": "05bb7a028f32c9ae9ccdae3f71cb04ee13df36bba9ca1df9b65d8d2d16306794",
     "version": "1.51.1-alpha"
   },
   "features/v1511-ext-fixes.md": {
@@ -1008,7 +1008,11 @@
     "version": "1.51.1-alpha"
   },
   "features/v1511-res-fixes.md": {
-    "hash": "016076c3c7432a5bd728368daf11ddf477ce2b541b30ddac8c1292460d037ac4",
+    "hash": "ab360c6c09e29621cc9797666ba5e72041a208c919a56614a8583323b4ef9e49",
+    "version": "1.51.1-alpha"
+  },
+  "features/v152-extr-resolve.md": {
+    "hash": "8d83f0b6b4cf91a6f2976f642040bdb92e38e85db0f671376b35c698bc751b48",
     "version": "1.51.1-alpha"
   },
   "features/vscode-extension.md": {

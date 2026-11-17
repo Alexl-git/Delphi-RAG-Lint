@@ -10,6 +10,10 @@ resolver 1.28.0 -> 1.29.0-alpha.
 
 ### Breaking
 
+- `cycles`: the hub-surface recipe (R3) is now the DEFAULT for `--fix`, `--plan --apply` and `--causes --format json`
+  wherever R3 breaks the group (B9b); `--no-hub-surface` restores the 1.51 planner default. `--fix` / `--plan --apply`
+  without `--cycle` take the first group R3 breaks. R3 refuses a hub field passed to a var / out parameter at plan time.
+
 ### Fixed
 - Resolver (EXTR): generic type receivers (`TObjectList<T>.Create`) are typed and bound; a `Name(...)` receiver keeps
   its type text only when it reads as a type; `index --resolve-only` without a library store KEEPS the library

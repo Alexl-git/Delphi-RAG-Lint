@@ -128,7 +128,7 @@ try {
   Check 'f6 --part with --hub-surface: exit 2' ($q.Exit -eq 2) "exit=$($q.Exit) $($q.Out) $($q.Err)"
 
   $Ctl = New-Proj 'hubsurface' 'HubSurface'
-  $d = Invoke-Fix $Ctl @('--cycle', '1', '--format', 'json', '--no-compile')
+  $d = Invoke-Fix $Ctl @('--cycle', '1', '--format', 'json', '--no-compile', '--no-hub-surface')
   $dc = if ($d.Doc) { @($d.Doc.cycles)[0] } else { $null }
   Check 'f7 control (O11 not flipped): --fix without the switch is the planner''s, not r3' (($null -ne $dc) -and ($dc.part -ne 'r3') -and ($dc.recipe -ne 'hub-surface')) "exit=$($d.Exit) $($d.Out)"
 

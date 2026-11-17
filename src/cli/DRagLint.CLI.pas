@@ -23241,9 +23241,10 @@ begin
 
     { --hub-surface (spec 2026-11-08-hub-scc-phased P2): recipe R3 in place of the planner. Phase P6 (lane v151 I10,
       after the Loader apply built with 0 errors): the --plan dry run asks R3 first WITHOUT the switch, for a group R3
-      predicts to break; --no-hub-surface gives the planner's plan. Writing (--apply) and the --causes --format json
-      fix object still need the switch by name. Since 1.51.1 (lane v1511 CYC, T06) --fix --hub-surface runs R3 through
-      the compile gate; the default is not flipped (O11), so the default fix object still does not offer R3. }
+      predicts to break; --no-hub-surface gives the planner's plan. Since 1.51.1 (lane v1511 CYC, T06) --fix
+      --hub-surface runs R3 through the compile gate. Since 1.52 (owner ruling B9b, lane v152 HUB) the same default
+      holds for writing (--plan --apply), --fix and the --causes --format json fix object: R3 for a group it breaks
+      (R3DefaultGroup), the planner for every other group; --no-hub-surface = the planner everywhere. }
     if AArgs.HubSurface and AArgs.NoHubSurface then
     begin
       Writeln(ErrOutput, 'ERROR: cycles --hub-surface and --no-hub-surface exclude each other');
@@ -23261,17 +23262,27 @@ begin
         Exit(2);
       end;
     end;
-    if AArgs.HubSurface and AArgs.Plan and AArgs.Apply then
+    { 1.52 (owner ruling B9b, lane v152 HUB): --plan --apply without a switch writes R3 for a group R3 predicts to
+      break (R3DefaultGroup, the group --fix takes); any other group: the old default, nothing written }
+    var HubApplyGroup:= 0;
+    var HubApplyLib: ISymbolStore:= nil;
+    var HubLibFailed:= False;
+    var HubLibMessage:= '';
+    if AArgs.Plan and AArgs.Apply and not AArgs.NoHubSurface then
+    begin
+      { lane 149 CYA: the platform library types an ancestor's member (`frmMain.Invalidate`); without it that member stays refused }
+      HubApplyLib:= OpenPlanLibrary(HubLibFailed, HubLibMessage);
+      if not AArgs.HubSurface then
+        HubApplyGroup:= R3DefaultGroup(Store, HubApplyLib, Sccs, CycGraph, (if AArgs.FixCycleGiven then AArgs.FixCycle else 0), AArgs.GhostUnit);
+    end;
+    if (AArgs.HubSurface or (HubApplyGroup > 0)) and AArgs.Plan and AArgs.Apply then
     begin
       var HubOpts:= Default(THubSurfaceOptions);
       HubOpts.Apply     := AArgs.Apply;
       HubOpts.NoBackup  := AArgs.NoBackup;
-      HubOpts.CycleIndex:= if AArgs.FixCycleGiven then AArgs.FixCycle else 0;
+      HubOpts.CycleIndex:= if AArgs.FixCycleGiven then AArgs.FixCycle else HubApplyGroup;
       HubOpts.UnitStem  := LowerCase(AArgs.GhostUnit);
-      { lane 149 CYA: the platform library types an ancestor's member (`frmMain.Invalidate`); without it that member stays refused }
-      var HubLibFailed: Boolean;
-      var HubLibMessage: string;
-      HubOpts.LibraryStore:= OpenPlanLibrary(HubLibFailed, HubLibMessage);
+      HubOpts.LibraryStore:= HubApplyLib;
       if HubLibFailed then Writeln(ErrOutput, 'drag-lint: note: cycles --hub-surface: ', HubLibMessage, ' -- ancestor members stay refused');
       var HubLines:= TStringList.Create;
       try
@@ -23328,6 +23339,7 @@ begin
         FixOpts.RulesDir  := AArgs.RulesDir;
         FixOpts.Json     := SameText(AArgs.Format, 'json');
         FixOpts.HubSurface:= AArgs.HubSurface;
+        FixOpts.NoHubSurface:= AArgs.NoHubSurface;
         FixCode:= RunCycleFix(FixOpts, Store, Sccs, Graph, LibStore);
       end
       else
@@ -23395,15 +23407,10 @@ begin
           HintIn.FixProject:= AArgs.ProjectPath;
           HintIn.Unavailable:= (if JsonLibFailed then 'library unavailable: ' + (if JsonLibMessage <> '' then JsonLibMessage else 'the platform library could not be opened') else '');
           HintIn.FixHook:= nil;
-          if AArgs.HubSurface then
-          begin
-            var HubLibStore:= HintIn.LibStore;
-            var HubDbPath  := AArgs.DbPath;
-            HintIn.FixHook:= function(pIndex: Integer; out pFix: TJSONObject): Boolean
-              begin
-                Result:= HubSurfaceFixJson(Store, HubLibStore, Sccs[pIndex - 1], pIndex, EdgeGraph, HubDbPath, pFix);
-              end;
-          end;
+          { 1.52 (owner ruling B9b): R3's fix object by default for a group R3 breaks; --hub-surface also for one it
+            cannot break; --no-hub-surface = the planner's object for every group }
+          if not AArgs.NoHubSurface then
+            HintIn.FixHook:= HubSurfaceFixHook(Store, HintIn.LibStore, Sccs, EdgeGraph, AArgs.DbPath, AArgs.HubSurface);
           AddCycleFixHints(HintIn, JArr);
         end;
         Writeln(JArr.ToJson);
