@@ -394,6 +394,7 @@ type
       FClientTarget   : string;
       FTargetGate     : TTargetRuleGate;
       FPublishedTarget: TDictionary<string, Integer>;    { lower(path) -> CompilerVersion }
+      FFixDiags       : TDictionary<string, string>;     { 1.52 VSFIX: lower(path) -> JSON of the diagnostics last published, for the file-wide fix-all code actions }
       { Yield (INBOX-ide-hang-on-slow-engine section 2): messages read while a
         long request yielded, to be dispatched by Run before its next read, in
         arrival order. FInputEnded: such a read hit EOF / a cancelled read. }
@@ -2383,6 +2384,11 @@ uses
   ;
 
 const
+  { 1.52 VSFIX: the whole-file fix, a source action so editor.codeActionsOnSave can name it. }
+  FIX_ALL_KIND = 'source.fixAll.drag-lint';
+  FIX_TITLE_PREFIX = 'Fix: ';
+  { Edit key = line * stride + character; a source line never reaches the stride. }
+  EDIT_KEY_STRIDE = 100000;
   { C1/C12/C13: the budget for the out-of-process `lint --json` that --full-rules
     runs on each didOpen/didSave is DRagLint.Core.LintBudget.LintChildTimeoutMs --
     the same function the IDE plugin's live runner asks, so the two cannot drift. }
@@ -2687,6 +2693,7 @@ begin
   FReindexThreads:= TObjectList<TThread>.Create({AOwnsObjects=}True);
   FOpenDocs      := TDictionary<string, string>.Create;
   FPublishedTarget:= TDictionary<string, Integer>.Create;
+  FFixDiags      := TDictionary<string, string>.Create;
   FProxyPaths    := TList<string>.Create;
   FPending := TObjectList<TJSONObject>.Create({AOwnsObjects=}True);
 
@@ -2730,6 +2737,7 @@ begin
   FReindex.Free;
   FOpenDocs.Free;
   FPublishedTarget.Free;
+  FFixDiags.Free;
   FStopEvent.Free;
   FProxyPaths.Free;
   FWorkLock.Free;
@@ -3010,6 +3018,7 @@ begin
     var CaKinds: TJSONArray:= TJSONArray.Create;
     CaKinds.Add('quickfix');
     for var OnSaveKind: string in KINDS_ON_SAVE do CaKinds.Add(OnSaveKind);
+    CaKinds.Add(FIX_ALL_KIND); { 1.52 VSFIX }
     var CaProvider: TJSONObject:= TJSONObject.Create;
     CaProvider.AddPair('codeActionKinds', CaKinds);
     Caps.AddPair('codeActionProvider'     , CaProvider);
@@ -6357,6 +6366,113 @@ begin
     if SameText(V.Value, AKind) or StartsText(V.Value + '.', AKind) then Exit(True);
 end;
 
+{ Position of a TextEdit as one comparable number; AEnd picks range.end over range.start. }
+function FixEditKey(const AEdit: TJSONObject; AEnd: Boolean): Int64;
+begin
+  Result:= 0;
+  var Side: string:= if AEnd then 'end' else 'start';
+  var L: Integer;
+  var C: Integer;
+  if AEdit.TryGetValue<Integer>('range.' + Side + '.line', L) and AEdit.TryGetValue<Integer>('range.' + Side + '.character', C) then
+    Result:= Int64(L) * EDIT_KEY_STRIDE + C;
+end;
+
+{ The TextEdit array of a fix action's WorkspaceEdit (not owned) and the URI it targets. }
+function FixActionEdits(const AAction: TJSONValue; out AUri: string): TJSONArray;
+begin
+  Result:= nil;
+  AUri:= '';
+  var Edit: TJSONValue:= TJSONObject(AAction).GetValue('edit');
+  if Edit is not TJSONObject then Exit;
+  var Changes: TJSONValue:= TJSONObject(Edit).GetValue('changes');
+  if (Changes is not TJSONObject) or (TJSONObject(Changes).Count = 0) then Exit;
+  AUri:= TJSONObject(Changes).Pairs[0].JsonString.Value;
+  if TJSONObject(Changes).Pairs[0].JsonValue is TJSONArray then Result:= TJSONArray(TJSONObject(Changes).Pairs[0].JsonValue);
+end;
+
+{ 1.52 VSFIX: the "fix all" code actions, merged from the per-finding "Fix: <rule>" actions of the
+  WHOLE file (AFileFix) -- the client's context.diagnostics is range-filtered, so it cannot be the source.
+  AHitFix = the per-finding actions of the requested range. Offers, only when AHitFix is not empty or
+  AOnlyFixAll (the client asked for the source kind):
+    "drag-lint: fix all <rule> in file" (quickfix) for each hit rule the file holds 2+ times;
+    "drag-lint: fix all fixable in file" (source.fixAll.drag-lint).
+  Overlapping edits are dropped, first wins. Caller owns the returned array. }
+function BuildFixAllActions(const AFileFix, AHitFix: TJSONArray; AOnlyFixAll: Boolean): TJSONArray;
+
+  function MergedAction(const ATitle, AKind, ARuleTitle: string): TJSONObject;
+  var
+    Picked: TList<TJSONObject>;
+    Uri   : string;
+  begin
+    Result:= nil;
+    Picked:= TList<TJSONObject>.Create; { elements belong to AFileFix }
+    try
+      for var A: TJSONValue in AFileFix do
+      begin
+        var Title: string;
+        if (ARuleTitle <> '') and not (A.TryGetValue<string>('title', Title) and (Title = ARuleTitle)) then Continue;
+        var ActUri: string;
+        var Edits: TJSONArray:= FixActionEdits(A, ActUri);
+        if Edits = nil then Continue;
+        Uri:= ActUri;
+        for var E: TJSONValue in Edits do
+          if E is TJSONObject then
+          begin
+            var At: Integer:= 0;
+            while (At < Picked.Count) and (FixEditKey(Picked[At], False) <= FixEditKey(TJSONObject(E), False)) do Inc(At);
+            Picked.Insert(At, TJSONObject(E));
+          end;
+      end;
+      if Picked.Count = 0 then Exit;
+      var Merged: TJSONArray:= TJSONArray.Create;
+      var LastEnd: Int64:= -1;
+      for var E: TJSONObject in Picked do
+      begin
+        if FixEditKey(E, False) < LastEnd then Continue; { overlaps the edit before it }
+        Merged.AddElement(E.Clone as TJSONValue);
+        LastEnd:= FixEditKey(E, True);
+      end;
+      var Changes: TJSONObject:= TJSONObject.Create;
+      Changes.AddPair(Uri, Merged);
+      var WEdit: TJSONObject:= TJSONObject.Create;
+      WEdit.AddPair('changes', Changes);
+      Result:= TJSONObject.Create;
+      Result.AddPair('title', ATitle);
+      Result.AddPair('kind' , AKind);
+      Result.AddPair('edit' , WEdit);
+    finally
+      Picked.Free;
+    end;
+  end;
+
+begin
+  Result:= TJSONArray.Create;
+  if (AFileFix = nil) or (AFileFix.Count = 0) then Exit;
+  if ((AHitFix = nil) or (AHitFix.Count = 0)) and not AOnlyFixAll then Exit;
+  var Seen: TStringList:= TStringList.Create;
+  try
+    if AHitFix <> nil then
+      for var H: TJSONValue in AHitFix do
+      begin
+        var HitTitle: string;
+        if not H.TryGetValue<string>('title', HitTitle) or (Seen.IndexOf(HitTitle) >= 0) then Continue;
+        Seen.Add(HitTitle);
+        var InFile: Integer:= 0;
+        for var A: TJSONValue in AFileFix do
+        begin
+          var Title: string;
+          if A.TryGetValue<string>('title', Title) and (Title = HitTitle) then Inc(InFile);
+        end;
+        if InFile < 2 then Continue;
+        var RuleAll: TJSONObject:= MergedAction('drag-lint: fix all ' + Copy(HitTitle, Length(FIX_TITLE_PREFIX) + 1, MaxInt) + ' in file', 'quickfix', HitTitle);
+        if RuleAll <> nil then Result.AddElement(RuleAll);
+      end;
+  finally
+    Seen.Free;
+  end;
+  var FixAll: TJSONObject:= MergedAction('drag-lint: fix all fixable in file', FIX_ALL_KIND, '');
+  if FixAll <> nil then Result.AddElement(FixAll);
+end;
 function TLSPServer.BuildRemoveUnusedSourceAction(const APath, ABufferText: string): TJSONObject;
 begin
   Result:= nil;
@@ -6503,6 +6619,34 @@ begin
       var FixActs: TJSONArray:= TLspCompletion.BuildFixActions(Path, StartLine, EndLine, Diags);
       try
         for var J:= 0 to FixActs.Count - 1 do Actions.AddElement(FixActs.Items[J].Clone as TJSONValue);
+        { 1.52 VSFIX: "fix all" actions. Offered when the range hits a fixable finding or the client asks for
+        source.fixAll; they need the FILE's findings, which the range-filtered context cannot give: the
+        set last published (cached by PublishDiagnostics, so no child lint runs here). A stale cached
+        span is dropped by BuildFixActions' ExpectText guard. }
+        var AskedFixAll: Boolean:= CodeActionKindRequested(Context, FIX_ALL_KIND);
+        var CachedJson: string;
+        if ((FixActs.Count > 0) or AskedFixAll) and FFixDiags.TryGetValue(LowerCase(Path), CachedJson) then
+        begin
+          var FileDiags: TJSONValue:= TJSONObject.ParseJSONValue(CachedJson);
+          try
+            if FileDiags is TJSONArray then
+            begin
+              var FileFix: TJSONArray:= TLspCompletion.BuildFixActions(Path, 1, MaxInt, TJSONArray(FileDiags));
+              try
+                var AllActs: TJSONArray:= BuildFixAllActions(FileFix, FixActs, AskedFixAll);
+                try
+                  for var J:= 0 to AllActs.Count - 1 do Actions.AddElement(AllActs.Items[J].Clone as TJSONValue);
+                finally
+                  AllActs.Free;
+                end;
+              finally
+                FileFix.Free;
+              end;
+            end;
+          finally
+            FileDiags.Free;
+          end;
+        end;
       finally
         FixActs.Free;
       end;
@@ -6609,6 +6753,7 @@ begin
         (Diags.Items[K] as TJSONObject).RemovePair('source').Free;
         (Diags.Items[K] as TJSONObject).AddPair('source', 'drag-lint (unowned)');
       end;
+  FFixDiags.AddOrSetValue(LowerCase(Path), Diags.ToJSON); { 1.52 VSFIX: fix-all reads the file-wide set a range-filtered context cannot give }
   Notif:= TJSONObject.Create;
   try
     Notif.AddPair('jsonrpc', '2.0'                            );

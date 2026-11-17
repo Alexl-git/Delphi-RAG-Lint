@@ -696,6 +696,13 @@ function activate(context) {
   }));
   context.subscriptions.push(commands.registerCommand('dragLint.updateEngine', updateEngineNow));
   context.subscriptions.push(commands.registerCommand('dragLint.refreshProblems', refreshProblems));
+  // "Fix with drag-lint": both commands ask the LSP server for its own code actions (Fix: <rule>,
+  // kind quickfix, and the whole-file fix, kind source.fixAll.drag-lint) and apply the first one.
+  // Registered before the exe check, like the others: they are no-ops until a server answers.
+  context.subscriptions.push(commands.registerCommand('dragLint.fixFinding', () =>
+    commands.executeCommand('editor.action.codeAction', { kind: 'quickfix', apply: 'first' })));
+  context.subscriptions.push(commands.registerCommand('dragLint.fixAllInFile', () =>
+    commands.executeCommand('editor.action.codeAction', { kind: 'source.fixAll.drag-lint', apply: 'first' })));
   // Colour commands are registered before the exe check too: they read the
   // registry and touch no engine, so they must keep working on a machine where
   // the server path is wrong.
