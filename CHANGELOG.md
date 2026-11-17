@@ -4,7 +4,6 @@ All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
 ## v1.52.0-alpha -- date TBD
-## v1.52.0-alpha -- date TBD
 
 In integration (lane/v152-int). One re-parse for the whole 1.52 bundle: extractor 1.40.0 -> 1.41.0-alpha,
 resolver 1.28.0 -> 1.29.0-alpha.
@@ -16,6 +15,7 @@ resolver 1.28.0 -> 1.29.0-alpha.
   without `--cycle` take the first group R3 breaks. R3 refuses a hub field passed to a var / out parameter at plan time.
 
 ### Fixed
+- control-char: an invalid byte in a UTF-8-BOM file is reported again (the CP1252 fallback hid it).
 - Resolver (EXTR): generic type receivers (`TObjectList<T>.Create`) are typed and bound; a `Name(...)` receiver keeps
   its type text only when it reads as a type; `index --resolve-only` without a library store KEEPS the library
   bindings (calls, member accesses, library reads) of the last library run instead of clearing them, warns
@@ -44,6 +44,9 @@ resolver 1.28.0 -> 1.29.0-alpha.
   a batch `--fix` withholds it with a stderr note, `--fix-rule index-possibly-out-of-range` (the IDE's Fix it)
   applies it; `rules --json` carries the new field `fix_manual_only: true`.
   424 rules, 342 enabled by default, 126 with an auto-fix.
+
+### Added
+- New tests\autotest\run_dfm_grammar_corpus_ab.ps1: corpus A/B for the tree-sitter-dfm grammar.
 
 ## v1.51.1-alpha -- date TBD
 
