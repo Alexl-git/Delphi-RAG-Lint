@@ -1,4 +1,4 @@
-# drag-lint extract-method e2e: dry-run / --json / --apply / refuse, plus
+# drag-lint extract-method e2e: dry-run / --json / --apply --no-compile-gate / refuse, plus
 # compile-verification of the applied result (mirrors run_rename_param.ps1
 # for the single-file --file style and run_buildlocal_tests.ps1 for the
 # dcc64 compile-check invocation).
@@ -38,7 +38,7 @@ if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
 New-Item -ItemType Directory -Path $tmp | Out-Null
 Copy-Item $basic (Join-Path $tmp "Basic.pas")
 $t = Join-Path $tmp "Basic.pas"
-& $exe extract-method --file $t --from-line 8 --to-line 9 --name Extracted --apply --no-backup 2>$null | Out-Null
+& $exe extract-method --file $t --from-line 8 --to-line 9 --name Extracted --apply --no-compile-gate --no-backup 2>$null | Out-Null
 $after = Get-Content $t -Raw
 Assert "apply inserted the new method"     ($after -match 'procedure Extracted\(a: Integer\)')
 Assert "apply replaced the run with a call" ($after -match 'Extracted\(a\);')
@@ -51,7 +51,7 @@ if (Test-Path $tmp2) { Remove-Item $tmp2 -Recurse -Force }
 New-Item -ItemType Directory -Path $tmp2 | Out-Null
 Copy-Item $basic (Join-Path $tmp2 "Basic.pas")
 $t2 = Join-Path $tmp2 "Basic.pas"
-& $exe extract-method --file $t2 --from-line 8 --to-line 9 --name Extracted --apply 2>$null | Out-Null
+& $exe extract-method --file $t2 --from-line 8 --to-line 9 --name Extracted --apply --no-compile-gate 2>$null | Out-Null
 Assert "apply without --no-backup writes a .bak" (Test-Path "$t2.bak")
 
 # ----- CARRIED FIXTURE #1: a run-defined local read AFTER the selection.
@@ -76,7 +76,7 @@ if (Test-Path $tmp3) { Remove-Item $tmp3 -Recurse -Force }
 New-Item -ItemType Directory -Path $tmp3 | Out-Null
 Copy-Item $multiVar (Join-Path $tmp3 "MultiVar.pas")
 $t3 = Join-Path $tmp3 "MultiVar.pas"
-& $exe extract-method --file $t3 --from-line 10 --to-line 12 --name Inner --apply --no-backup 2>$null | Out-Null
+& $exe extract-method --file $t3 --from-line 10 --to-line 12 --name Inner --apply --no-compile-gate --no-backup 2>$null | Out-Null
 $after3 = Get-Content $t3 -Raw
 Assert "carried#2: orphan 'var' keyword removed from caller" `
     (-not ([regex]::Match($after3, 'procedure P\(a: Integer\);\s*var\s*begin')).Success)

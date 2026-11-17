@@ -18488,7 +18488,8 @@ end; // function
 /// NoBackup, AsJson, EnumMethodsStr (--methods), EnumToString (--tostring).</param>
 /// <returns>0 when Action=ehaBuilt (preview, --json, or --apply all succeed);
 /// 1 when the enum resolves but Build refuses (ehaExists/ehaNoImplSection) or
-/// AEnumQName does not resolve (ehaNotFound); 2 on a usage/db error.</returns>
+/// AEnumQName does not resolve (ehaNotFound) or the compile gate refuses; 2 on a usage/db error or when --apply
+/// finds no project to build (REFUSED (no-project); --no-compile-gate writes unbuilt).</returns>
 /// <remarks>Idempotent: once the generated helper is indexed, a second
 /// --apply run resolves Action=ehaExists and makes no edit (Build never
 /// overwrites a hand-written or previously-generated helper). Refusal reasons
@@ -18538,12 +18539,19 @@ begin
   var GateRefused:= False;
   if Applied then
   begin
+    { 1.52 GATE2: gated by default, as extract-method (ResolveFixerGate). }
     var Touched: Integer;
-    if AArgs.ProjectPath <> '' then
+    var GateArgs:= AArgs;
+    var GateMsg: string;
+    var Verdict:= ResolveFixerGate('create-enum-helper', AArgs.ProjectPath, AArgs.DbPath, Res.FilePath,
+      AArgs.NoCompileGate, GateArgs.ProjectPath, GateMsg);
+    Writeln(ErrOutput, GateMsg);
+    if Verdict = fgvRefused then Exit(2);
+    if Verdict = fgvGated then
     begin
       OpenGateStandDown('create-enum-helper', AArgs.DbPath);
       try
-        Applied:= ApplyEditsGated(Res.Edits, 'create-enum-helper', AArgs, Touched);
+        Applied:= ApplyEditsGated(Res.Edits, 'create-enum-helper', GateArgs, Touched);
       finally
         CloseGateStandDown;
       end;
@@ -18866,10 +18874,18 @@ begin
     Writeln(Format('Dry run: extract "%s". Pass --apply to write.', [AArgs.Name]));
     Exit(0);
   end;
+  { 1.52 GATE2: the compile gate is the default -- --project, the DB's project, or the project that names the unit;
+    none = REFUSED (no-project), exit 2; --no-compile-gate writes unbuilt. }
   var Touched: Integer;
-  if AArgs.ProjectPath <> '' then
+  var GateArgs:= AArgs;
+  var GateMsg: string;
+  var Verdict:= ResolveFixerGate('extract-method', AArgs.ProjectPath, AArgs.DbPath, AArgs.InFile, AArgs.NoCompileGate,
+    GateArgs.ProjectPath, GateMsg);
+  Writeln(ErrOutput, GateMsg);
+  if Verdict = fgvRefused then Exit(2);
+  if Verdict = fgvGated then
   begin
-    if not ApplyEditsGated(Edits, 'extract-method', AArgs, Touched) then Exit(1);
+    if not ApplyEditsGated(Edits, 'extract-method', GateArgs, Touched) then Exit(1);
   end
   else Touched:= TTextEditApplier.Apply(Edits, not AArgs.NoBackup);
   Writeln(Format('Applied: extracted "%s" (%d file).', [AArgs.Name, Touched]));

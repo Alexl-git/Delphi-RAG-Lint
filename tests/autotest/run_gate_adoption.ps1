@@ -7,7 +7,8 @@
   the run with exit 1 (before this lane: no channel, shutdown found nothing, the run went on).
   E-UNWITH-LINTFIX: `lint --fix --fix-rule with-statement` is `unwith` (no --apply = --plan; --apply needs --project).
   E-COMPILEGATE-ADOPT: `extract-method` and `create-enum-helper` write through the gate when --project is given
-  (a project that does not build is refused with nothing written); without --project they write as they always did.
+  (a project that does not build is refused with nothing written). 1.52 GATE2: the gate is the default (--project, the
+  DB's project or the project that names the unit; run_v152_GATE2_fixers.ps1); --no-compile-gate writes unbuilt.
 
   The stand-down halves use a FAKE rsvars.bat (--rsvars): it calls the real one and, only once a .BCK backup
   exists in the project folder (the after-build), parks in a ping on a loopback address nobody else pings, so the
@@ -137,16 +138,16 @@ try {
   Check 'G2 gated, project does not build: exit 1, REFUSED (dirty-baseline)' (($LASTEXITCODE -eq 1) -and ($dErr -match 'REFUSED \(dirty-baseline\)')) "exit $LASTEXITCODE; $dErr"
   Check 'G3 nothing was written' ((Tree-Hash $D.Dir) -ceq $dBefore)
   # control: no --project on the same project = the old, ungated write
-  $null = & $Exe @em --file $D.Basic 2>$null
-  Check 'G4 control: without --project the same run writes (opt-in gate)' (($LASTEXITCODE -eq 0) -and ([IO.File]::ReadAllText($D.Basic) -match 'procedure Extracted'))
+  $null = & $Exe @em --file $D.Basic --no-compile-gate 2>$null
+  Check 'G4 control: --no-compile-gate writes unbuilt (1.52 GATE2: the gate is the default)' (($LASTEXITCODE -eq 0) -and ([IO.File]::ReadAllText($D.Basic) -match 'procedure Extracted'))
 
   $E = New-Gated 'e1' $true
   $eBefore = Tree-Hash $E.Dir
   $eErr = (& $Exe create-enum-helper --qname Basic.TColor --db $E.Db --library-db none --project $E.Proj --rsvars $Rsvars --apply 2>&1 | Out-String)
   Check 'E1 control: the enum is found and a helper is planned' ($eErr -notmatch 'not_found|REFUSED: .*not found') $eErr
   Check 'E2 gated, project does not build: exit 1, REFUSED (dirty-baseline), nothing written' (($LASTEXITCODE -eq 1) -and ($eErr -match 'REFUSED \(dirty-baseline\)') -and ((Tree-Hash $E.Dir) -ceq $eBefore)) "exit $LASTEXITCODE; $eErr"
-  $null = & $Exe create-enum-helper --qname Basic.TColor --db $E.Db --library-db none --apply 2>$null
-  Check 'E3 control: without --project the helper is written' (($LASTEXITCODE -eq 0) -and ((Tree-Hash $E.Dir) -cne $eBefore))
+  $null = & $Exe create-enum-helper --qname Basic.TColor --db $E.Db --library-db none --apply --no-compile-gate 2>$null
+  Check 'E3 control: --no-compile-gate writes the helper unbuilt (1.52 GATE2)' (($LASTEXITCODE -eq 0) -and ((Tree-Hash $E.Dir) -cne $eBefore))
 }
 finally {
   Stop-Parked

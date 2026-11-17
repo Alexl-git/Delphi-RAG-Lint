@@ -114,7 +114,7 @@ $json1 = & $exe create-enum-helper --qname TColor --db $dbSimple --json 2>$null 
 Assert "create-enum-helper json: action=built"      ($json1.action -eq 'built')
 Assert "create-enum-helper json: qname/file present" ($json1.qname -eq 'TColor' -and $null -ne $json1.file)
 Assert "create-enum-helper json: edits count = 2"    ($json1.edits -eq 2)
-Assert "create-enum-helper json: applied=false (no --apply)" ($json1.applied -eq $false)
+Assert "create-enum-helper json: applied=false (no --apply --no-compile-gate)" ($json1.applied -eq $false)
 
 # ----- dry-run (no --json): preview shows the helper decl -----
 $dry1 = (& $exe create-enum-helper --qname TColor --db $dbSimple 2>$null) -join "`n"
@@ -127,7 +127,7 @@ Copy-Item (Join-Path $dir "simple.pas") $applyDir
 $applyPas = Join-Path $applyDir "simple.pas"
 $dbApply  = Join-Path $WorkDir "apply_simple.sqlite"
 & $exe index $applyPas --db $dbApply 2>&1 | Out-Null
-& $exe create-enum-helper --qname TColor --db $dbApply --apply --no-backup 2>$null | Out-Null
+& $exe create-enum-helper --qname TColor --db $dbApply --apply --no-compile-gate --no-backup 2>$null | Out-Null
 Assert "create-enum-helper apply: exit 0" ($LASTEXITCODE -eq 0)
 $appliedSrc = Get-Content $applyPas -Raw
 Assert "create-enum-helper apply: decl inserted"  ($appliedSrc -match 'TColorHelper = record helper for TColor')
@@ -137,7 +137,7 @@ Assert "create-enum-helper apply result compiles (dcc64)" (Test-Compiles $applyP
 # ----- idempotency: reindex the applied file, run again -> action=exists, NO change -----
 & $exe index $applyPas --db $dbApply 2>&1 | Out-Null
 $beforeSecondRun = Get-Content $applyPas -Raw
-$json2 = & $exe create-enum-helper --qname TColor --db $dbApply --apply --no-backup --json 2>$null | ConvertFrom-Json
+$json2 = & $exe create-enum-helper --qname TColor --db $dbApply --apply --no-compile-gate --no-backup --json 2>$null | ConvertFrom-Json
 Assert "idempotent 2nd run: action=exists"   ($json2.action -eq 'exists')
 Assert "idempotent 2nd run: applied=false"   ($json2.applied -eq $false)
 Assert "idempotent 2nd run: nonzero exit"    ($LASTEXITCODE -ne 0)
@@ -259,7 +259,7 @@ Assert "case3 negative_ordinal: FromByte selector widened to Integer (E1012 fix)
     ($negDry -match '(?s)FromByte\(const AValue: Byte\): TTEST;\s*begin\s*case Integer\(AValue\) of')
 Assert "case3 negative_ordinal: FromInteger keeps the plain selector" `
     ($negDry -match '(?s)FromInteger\(const AValue: Integer\): TTEST;\s*begin\s*case AValue of')
-& $exe create-enum-helper --qname TTEST --db $dbNeg --apply --no-backup --tostring case 2>$null | Out-Null
+& $exe create-enum-helper --qname TTEST --db $dbNeg --apply --no-compile-gate --no-backup --tostring case 2>$null | Out-Null
 Assert "case3 negative_ordinal: applied result (--tostring case) compiles (dcc64)" (Test-Compiles $negPas)
 $negApplied = Get-Content $negPas -Raw
 Assert "case3 negative_ordinal: applied text has no ShortInt variant" (-not ($negApplied -match 'ShortInt'))
@@ -306,7 +306,7 @@ New-Item -ItemType Directory $placeSrcDir | Out-Null
 Copy-Item (Join-Path $dir "interface_only.pas") (Join-Path $placeSrcDir "InterfaceOnly.pas")
 $placePas = Join-Path $placeSrcDir "InterfaceOnly.pas"
 & $exe index $placeSrcDir --db $dbPlace 2>&1 | Out-Null
-& $exe create-enum-helper --qname TSignal --db $dbPlace --apply --no-backup 2>$null | Out-Null
+& $exe create-enum-helper --qname TSignal --db $dbPlace --apply --no-compile-gate --no-backup 2>$null | Out-Null
 $placedSrc = Get-Content $placePas -Raw
 Assert "case9 placement: decl inserted immediately after enum decl (same type section)" `
     ($placedSrc -match '(?s)TSignal = \(sgRed, sgYellow, sgGreen\);\s*\r?\n\s*\r?\n\s*TSignalHelper = record helper for TSignal')
@@ -340,7 +340,7 @@ Copy-Item (Join-Path $dir "RoundTripSimple.dpr") $gateDir
 $gatePas = Join-Path $gateDir "simple.pas"
 $dbGate  = Join-Path $WorkDir "gate_simple.sqlite"
 & $exe index $gatePas --db $dbGate 2>&1 | Out-Null
-& $exe create-enum-helper --qname TColor --db $dbGate --apply --no-backup 2>$null | Out-Null
+& $exe create-enum-helper --qname TColor --db $dbGate --apply --no-compile-gate --no-backup 2>$null | Out-Null
 Assert "case8 gate: create-enum-helper apply exit 0" ($LASTEXITCODE -eq 0)
 Assert "case8 gate: applied simple.pas compiles standalone (dcc64)" (Test-Compiles $gatePas)
 
@@ -382,7 +382,7 @@ Copy-Item (Join-Path $dir "RoundTripImplUses.dpr") $implUsesDir
 $implUsesPas = Join-Path $implUsesDir "HasImplUses.pas"
 $dbImplUses  = Join-Path $WorkDir "gate_has_impl_uses.sqlite"
 & $exe index $implUsesPas --db $dbImplUses 2>&1 | Out-Null
-& $exe create-enum-helper --qname TShade --db $dbImplUses --apply --no-backup 2>$null | Out-Null
+& $exe create-enum-helper --qname TShade --db $dbImplUses --apply --no-compile-gate --no-backup 2>$null | Out-Null
 Assert "has_impl_uses gate: create-enum-helper apply exit 0" ($LASTEXITCODE -eq 0)
 $implUsesApplied = Get-Content $implUsesPas -Raw
 Assert "has_impl_uses gate: System.TypInfo merged into the EXISTING uses clause" `
@@ -432,7 +432,7 @@ $ordinalsDefaultPas = Join-Path $ordinalsDefaultDir "ExplicitOrdinals.pas"
 $dbOrdinalsDefault  = Join-Path $WorkDir "gate_ordinals_default.sqlite"
 & $exe index $ordinalsDefaultPas --db $dbOrdinalsDefault 2>&1 | Out-Null
 # NOTE: no --tostring flag here at all -- this is the point of the gate.
-& $exe create-enum-helper --qname TSpec --db $dbOrdinalsDefault --apply --no-backup 2>$null | Out-Null
+& $exe create-enum-helper --qname TSpec --db $dbOrdinalsDefault --apply --no-compile-gate --no-backup 2>$null | Out-Null
 Assert "ordinals-default gate: create-enum-helper apply exit 0" ($LASTEXITCODE -eq 0)
 $ordinalsDefaultApplied = Get-Content $ordinalsDefaultPas -Raw
 Assert "ordinals-default gate: auto-fell-back to case-mode (no GetEnumName in applied text)" `
@@ -484,7 +484,7 @@ $multiLineDefaultPas = Join-Path $multiLineDefaultDir "MultiLineOrdinals.pas"
 $dbMultiLineDefault  = Join-Path $WorkDir "gate_multiline_default.sqlite"
 & $exe index $multiLineDefaultPas --db $dbMultiLineDefault 2>&1 | Out-Null
 # NOTE: no --tostring flag here at all -- this is the point of the gate.
-& $exe create-enum-helper --qname TStage --db $dbMultiLineDefault --apply --no-backup 2>$null | Out-Null
+& $exe create-enum-helper --qname TStage --db $dbMultiLineDefault --apply --no-compile-gate --no-backup 2>$null | Out-Null
 Assert "multiline-default gate: create-enum-helper apply exit 0" ($LASTEXITCODE -eq 0)
 $multiLineDefaultApplied = Get-Content $multiLineDefaultPas -Raw
 Assert "multiline-default gate: auto-fell-back to case-mode (no GetEnumName in applied text)" `
