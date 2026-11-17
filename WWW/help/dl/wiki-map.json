@@ -172,6 +172,7 @@
   "inc-indexing": "inc-indexing",
   "index-build-config": "index-build-config",
   "index-declaration-refs": "v1511-ext-fixes",
+  "index-possibly-out-of-range": "v152-index-possibly-out-of-range",
   "info": "info",
   "init-order-hazard": "init-order-hazard",
   "init-verb": "init-wiring",

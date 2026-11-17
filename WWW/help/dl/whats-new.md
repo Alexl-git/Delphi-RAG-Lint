@@ -9,6 +9,10 @@ product: DL
 
 drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.com](https://www.htrmicronite.com)), our quality and production-control software.
 
+## 1.52.0-alpha
+
+* [Array index possibly out of range lint rule (index-possibly-out-of-range)](features/v152-index-possibly-out-of-range.md) -- Warns (default ON) on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only.
+
 ## 1.51.1-alpha
 
 * [CLI fixes in 1.51.1](features/v1511-cli-fixes.md) -- lint-all --rule a,b runs only those rules, a DB copy stays on the copy; rules --rule; info versions; index parse-errors; resolve-only warning.
@@ -16,6 +20,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 * [References for declaration positions](features/v1511-ext-fixes.md) -- The index keeps a reference for pointer base types, generic constraints, generic method headers, dotted property specifiers and message constants.
 * [Per-host bindings for refs in a shared include](features/v1511-inc2-fixes.md) -- A ref inside an include that several units include keeps one binding per host (table ref_host_bindings, schema 26); find-callers and usages read it.
 * [Library bindings for bare reads, paren-less calls and function-result receivers](features/v1511-res-fixes.md) -- Bare reads of library vars (Application), paren-less library calls and members on a library function result bind to refs.external_target.
+* [Resolver fixes in 1.52](features/v152-extr-resolve.md) -- Generic receivers (`TObjectList<T>.Create`) typed; index --resolve-only without a library keeps the last library bindings.
 
 ## 1.51.0-alpha
 
@@ -109,7 +114,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 1.37.0-alpha
 
-* [Autofix for fixable rules](features/autofix-wave.md) -- lint --fix repairs findings of the 125 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
+* [Autofix for fixable rules](features/autofix-wave.md) -- lint --fix repairs findings of the 126 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
 * [Compliance labels (CWE, CERT, MISRA)](features/compliance-labels.md) -- Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field.
 * [Gap-wave lint rules](features/gap-wave-rules.md) -- About 50 new lint rules (bug patterns, dead code, data flow, platform, structure) added in the 1.37.0 gap wave.
 * [Include-file indexing and IF evaluation](features/inc-indexing.md) -- Include files are indexed under the active build, value defines and IF expressions are evaluated, and an undecidable IF is reported as a pp-unresolved-if hint.

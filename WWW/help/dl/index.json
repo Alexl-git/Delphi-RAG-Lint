@@ -168,6 +168,18 @@
     "verb": "usages"
   },
   {
+    "id": "v152-extr-resolve",
+    "title": "Resolver fixes in 1.52",
+    "summary": "Generic receivers (`TObjectList<T>.Create`) typed; index --resolve-only without a library keeps the last library bindings",
+    "group": "indexing",
+    "order": 10015,
+    "since": "1.51.1-alpha",
+    "file": "features/v152-extr-resolve.md",
+    "menus": [],
+    "context": [],
+    "verb": "index"
+  },
+  {
     "id": "call-path",
     "title": "call-path",
     "summary": "Finds the shortest resolved call path from one symbol to another",
@@ -626,7 +638,7 @@
   {
     "id": "autofix-wave",
     "title": "Autofix for fixable rules",
-    "summary": "lint --fix repairs findings of the 125 fixable rules; --json reports per finding whether it was applied; lint accepts a folder",
+    "summary": "lint --fix repairs findings of the 126 fixable rules; --json reports per finding whether it was applied; lint accepts a folder",
     "group": "linting",
     "order": 30002,
     "since": "1.37.0-alpha",
@@ -1356,11 +1368,23 @@
     "verb": "lint-all"
   },
   {
+    "id": "v152-index-possibly-out-of-range",
+    "title": "Array index possibly out of range lint rule (index-possibly-out-of-range)",
+    "summary": "Warns (default ON) on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only",
+    "group": "linting",
+    "order": 30063,
+    "since": "1.52.0-alpha",
+    "file": "features/v152-index-possibly-out-of-range.md",
+    "menus": [],
+    "context": [],
+    "verb": "lint"
+  },
+  {
     "id": "warm-rule-cache",
     "title": "warm-rule-cache",
     "summary": "Fills the lint rule cache for a project index; index runs warm it, or start it in the background (--rule-cache-warm)",
     "group": "linting",
-    "order": 30063,
+    "order": 30064,
     "since": "1.39.0-alpha",
     "file": "features/warm-rule-cache.md",
     "menus": [],

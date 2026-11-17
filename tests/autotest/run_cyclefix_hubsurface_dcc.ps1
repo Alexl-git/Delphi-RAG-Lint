@@ -250,7 +250,7 @@ try {
   Push-Location $WorkDir
   try {
     $js = ($null | & $Exe cycles --causes --format json --hub-surface --db $P0.Db --library-db none 2>$null | Out-String); $jsCode = $LASTEXITCODE
-    $jd = ($null | & $Exe cycles --causes --format json --db $P0.Db --library-db none 2>$null | Out-String)
+    $jd = ($null | & $Exe cycles --causes --format json --no-hub-surface --db $P0.Db --library-db none 2>$null | Out-String)
     $null | & $Exe cycles --format json --hub-surface --db $P0.Db --library-db none *> $null; $badCode = $LASTEXITCODE
   } finally { Pop-Location }
   $fx = $null; try { $fx = ($js | ConvertFrom-Json)[0].fix } catch { }
@@ -268,7 +268,7 @@ try {
     $wd = ($null | & $Exe cycles --plan --db $W.Db --library-db none 2>&1 | Out-String)
     $wo = ($null | & $Exe cycles --plan --no-hub-surface --db $W.Db --library-db none 2>&1 | Out-String)
     $null | & $Exe cycles --plan --hub-surface --no-hub-surface --db $P0.Db --library-db none *> $null; $bothCode = $LASTEXITCODE
-    $ap = ($null | & $Exe cycles --plan --apply --cycle 1 --db $P0.Db --library-db none 2>&1 | Out-String)
+    $ap = ($null | & $Exe cycles --plan --apply --cycle 1 --no-hub-surface --db $P0.Db --library-db none 2>&1 | Out-String)
   } finally { Pop-Location }
   Check 'd1 default, a knot R3 refuses: no note, byte-identical to --no-hub-surface' (($kd -eq $ko) -and ($kd -notmatch 'recipe R3') -and ($kd -match '## Cycle 1:')) $kd
   $wh = (Get-HubPlan $W).Out

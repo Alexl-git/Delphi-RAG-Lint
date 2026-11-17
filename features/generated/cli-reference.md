@@ -420,7 +420,7 @@ Described in:
 Finds uses cycles among indexed units and, on request, proposes a followable refactoring plan to break them.
 
 ```text
-drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--hub] [--plan [--no-hub-surface | --hub-surface [--apply]] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--hub-surface] [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --hub = per group its hub units (removal leaves the rest acyclic): edges, ref weights and surfaces per side, dead uses; read-only, no planner; --f2047 = only the interface-only cycles dcc rejects with F2047, each edge with its forcing symbols and the next --plan / --fix commands; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a "Fix it" block per group naming the exact --fix dry-run and --apply commands; --fix = the mechanical fix of one group, see the cycles-fix entry)
+drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--hub] [--plan [--no-hub-surface | --hub-surface] [--apply] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--hub-surface | --no-hub-surface] [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --hub = per group its hub units (removal leaves the rest acyclic): edges, ref weights and surfaces per side, dead uses; read-only, no planner; --f2047 = only the interface-only cycles dcc rejects with F2047, each edge with its forcing symbols and the next --plan / --fix commands; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a "Fix it" block per group naming the exact --fix dry-run and --apply commands; --fix = the mechanical fix of one group, see the cycles-fix entry)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1072,6 +1072,7 @@ Described in:
 * [CLI fixes in 1.51.1](../../docs/wiki/v1511-cli-fixes.md)
 * [References for declaration positions](../../docs/wiki/index-declaration-refs.md)
 * [Library bindings for bare reads, paren-less calls and function-result receivers](../../docs/wiki/library-first-resolve.md)
+* [Resolver fixes in 1.52](../../docs/wiki/library-first-resolve.md)
 
 ### info
 
@@ -1169,7 +1170,7 @@ Described in [link-orm](../../docs/wiki/link-orm.md).
 
 ### lint
 
-lint --fix repairs findings of the 125 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
+lint --fix repairs findings of the 126 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
 
 ```text
 drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]
@@ -1233,6 +1234,7 @@ Described in:
 * [Typing and ownership lint rules (casts, Self as interface, destructors)](../../docs/wiki/typing-and-ownership-rules.md)
 * [Wider built-in rules (1.51)](../../docs/wiki/v151-wid-ast-rules.md)
 * [Wider scm rules and three new fixers](../../docs/wiki/v151-wid-scm-rules.md)
+* [Array index possibly out of range lint rule (index-possibly-out-of-range)](../../docs/wiki/index-possibly-out-of-range.md)
 
 ### lint-all
 

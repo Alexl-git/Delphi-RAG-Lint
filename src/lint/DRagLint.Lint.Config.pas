@@ -280,6 +280,12 @@ type
     /// works without the user editing the generated file -- which they must
     /// never have to do, because the block is rewritten on every run.</remarks>
     ExceptionsRoot: string;
+    /// <summary>The exception class the index-possibly-out-of-range autofix raises, from
+    /// "params" -> "index-possibly-out-of-range" -> "exception_class". EMPTY when not
+    /// configured; the rule then uses EArgumentOutOfRangeException.</summary>
+    /// <remarks>Validated as a (dotted) Pascal identifier on load; anything else raises
+    /// ELintConfigError, because the text is pasted into source by the fix.</remarks>
+    IndexGuardExceptionClass: string;
     /// <summary>Conditional symbols the ifdef-undefined-symbol rule treats as
     /// defined, from the top-level "ifdef_allow" string array. For defines set
     /// in third-party .inc files the project never includes directly (a
@@ -1063,6 +1069,17 @@ begin
   end;
   if AObj.GetValue('naming') is TJSONObject then
     ApplyNamingObject(AObj.GetValue('naming') as TJSONObject);
+  { string rule params (1.52 IDXRANGE): params -> <rule id> -> <name>. Only the index guard's class today. }
+  if (AObj.GetValue('params') is TJSONObject) and ((AObj.GetValue('params') as TJSONObject).GetValue('index-possibly-out-of-range') is TJSONObject) then
+  begin
+    var IxObj: TJSONObject:= (AObj.GetValue('params') as TJSONObject).GetValue('index-possibly-out-of-range') as TJSONObject;
+    if IxObj.GetValue('exception_class') <> nil then
+    begin
+      if not IsValidIdent(IxObj.GetValue('exception_class').Value, True) then
+        raise ELintConfigError.Create('config: params.index-possibly-out-of-range.exception_class must be a Pascal class name');
+      IndexGuardExceptionClass:= IxObj.GetValue('exception_class').Value;
+    end;
+  end;
   { taint wave T2: the `taint` object is merged by TTaintRules.LoadConfig }
   if AObj.GetValue('taint') is TJSONObject then
     TaintJson:= TaintJson + [AObj.GetValue('taint').ToJSON];

@@ -17,7 +17,7 @@
 > [Issue](https://github.com/Alexl-git/Delphi-RAG-Lint/issues) with ideas, bugs,
 > or "I wish it could...". Not yet recommended for unattended/production use.
 
-A Delphi code index + linter + refactorer (current release 1.51.0-alpha: 423 lint rules, 341 on by default, 125 auto-fixable) that AI assistants and the IDE query instead of grepping.
+A Delphi code index + linter + refactorer (current release 1.51.0-alpha: 424 lint rules, 342 on by default, 126 auto-fixable) that AI assistants and the IDE query instead of grepping.
 Pure Object Pascal at runtime -- no Python, Node, or Rust. No cloud AI.
 
 **Use it as:** CLI tool &middot; LSP server (Zed / VS Code) &middot; MCP server (Claude / Cursor) &middot; RAD Studio 13 plugin.
@@ -883,9 +883,9 @@ be written and writes nothing. This verb replaces `Register-DragLintProtocol.ps1
 <!-- dl:registry:begin feature-summary -->
 | Group | Features | Wiki |
 |---|---:|---|
-| [Indexing](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#indexing) | 14 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#indexing) |
+| [Indexing](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#indexing) | 15 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#indexing) |
 | [Search and navigation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#search-and-navigation) | 37 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#search-and-navigation) |
-| [Linting](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#linting) | 64 (+ 423 rules, 125 fixable) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#linting) |
+| [Linting](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#linting) | 65 (+ 424 rules, 126 fixable) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#linting) |
 | [Documentation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#documentation) | 12 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#documentation) |
 | [Refactoring and code generation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#refactoring-and-code-generation) | 21 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#refactoring-and-code-generation) |
 | [Component conversion](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#component-conversion) | 25 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#component-conversion) |
@@ -1065,8 +1065,8 @@ Win64 build.
 
 #### Lint
 
-**423 rules across 18 categories -- 310 built-in + 113 external `.scm`, 341
-enabled by default, 125 with an auto-fix.**
+**424 rules across 18 categories -- 311 built-in + 113 external `.scm`, 342
+enabled by default, 126 with an auto-fix.**
 
 | Command | What it does | Notable flags |
 |---|---|---|
@@ -1332,11 +1332,11 @@ CLI-only verbs).
 | `run_ast_checks` | Compiler-less AST diagnostics on a file (unbalanced begin/end, undeclared identifiers) |
 | `run_compile_check` | Spawn dcc/msbuild against a file or project; return H/W/E/F diagnostics as JSON |
 
-### Lint rule pack (423 rules)
+### Lint rule pack (424 rules)
 
 Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
-external `.scm`). As of v1.51.1-alpha: **423 rules across 18 categories -- 310
-built-in and 113 external `.scm`, 341 enabled by default, and 125 with an
+external `.scm`). As of v1.51.1-alpha: **424 rules across 18 categories -- 311
+built-in and 113 external `.scm`, 342 enabled by default, and 126 with an
 auto-fix.** The table below is a small sample of the built-in rules:
 
 | Rule id | Severity | Description |

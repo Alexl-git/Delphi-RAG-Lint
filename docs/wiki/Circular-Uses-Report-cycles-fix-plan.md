@@ -75,8 +75,12 @@ byte for byte what `--no-hub-surface` prints.
 
 * `--no-hub-surface`: the planner's own plan for every group.
 * `--hub-surface`: R3 by name. It also shows R3 for a group it cannot break (with what keeps the group)
-  and one note per group it refuses. Writing (`--apply`) and the `--causes --format json` fix object
-  need it; the default fix object stays the planner's (the default is not flipped, owner question O11).
+  and one note per group it refuses.
+* Since 1.52 (owner ruling B9b) the same default holds for writing (`--plan --apply`), for `cycles --fix`
+  and for the `--causes --format json` fix object: R3 for a group it predicts to break, the planner for
+  every other group, byte for byte what `--no-hub-surface` gives. Without `--cycle` / `--unit`, `--fix`
+  and `--plan --apply` take the first group R3 breaks. `--no-hub-surface` restores the old default
+  everywhere (`--plan --apply --no-hub-surface` writes nothing).
 * `cycles --fix --hub-surface` (since 1.51.1): R3 through the compile gate, as the planner's fix -- the
   project is built before the edit, the files are written under `.BCK<n>` backups, the project is built
   again, and a failed build rolls every file back byte-identically (the new `<Hub>.Hub` unit is removed).
@@ -89,8 +93,8 @@ byte for byte what `--no-hub-surface` prints.
 Why the default changed: the recipe was applied to a copy of a 78-unit application (one main form, 76
 units reading it through its global at 1665 places, 10 free routines of the hub called from the spokes).
 77 files were rewritten and one unit added; the project then built with 0 errors and the same warnings
-as before, and after a re-index `cycles` reported no circular dependency. `cycles --plan --hub-surface --apply`
-runs no compile gate: build the project after it (the `.BCK<n>` files beside each written file are the way
+as before, and after a re-index `cycles` reported no circular dependency. `cycles --plan --apply`
+writes without a compile gate: build the project after it (the `.BCK<n>` files beside each written file are the way
 back), or use `cycles --fix --hub-surface --apply`, which does.
 
 ## Worked example, and whether a model can follow it

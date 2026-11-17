@@ -6814,10 +6814,10 @@ begin
       if Length(RunLibs) = 0 then
         RunLibs:= ManifestLibraryStores(LibRun.Wanted, AArgs.CheckPlatform, IdxDproj, ResolvedDb, Store, IdxResolveGate);
       { v1511 F3: a DB resolved against a library before (external_stores meta) re-resolved
-        with none -- typically a copy outside the manifest -- loses every external_target.
-        Say so; the behaviour is unchanged. }
+        with none -- typically a copy outside the manifest. 1.52 EXTR: the library bindings of the last
+        library run are KEPT (not refreshed); say so. }
       if (Length(RunLibs) = 0) and (Store.GetMetaValue('external_stores') <> '') then
-        Writeln(ErrOutput, 'WARNING: index: no library store attached: external targets will be cleared; pass --library-db <library.sqlite>.');
+        Writeln(ErrOutput, 'WARNING: index: no library store attached: library bindings are kept from the last library run, not refreshed; pass --library-db <library.sqlite>.');
       Stage('', 'calls', procedure begin ResolveCallsClearingFirst(Store, ClearEdgesInPass, RunLibs); end); { v14 (D5) + v21 cross-DB }
       Stage('', 'dispatch', procedure begin Store.ResolveDispatch(RunLibs); end); { 2026-10-26: libraries only recognise a library `class of` param type }
     end
@@ -12757,16 +12757,25 @@ begin
         'use "autofix_off": [...] to exclude a rule.');
     var Braked: TArray<TLintFinding>:= nil;
     var BrakedIds: TArray<string>:= nil;
+    var ManualIds: TArray<string>:= nil;
     for F in Targeted do
       if Cfg.IsAutoFixOff(F.RuleId) and not ((AArgs.FixLine > 0) and SameText(AArgs.FixRule, F.RuleId)) then
       begin
         if not MatchText(F.RuleId, BrakedIds) then BrakedIds:= BrakedIds + [F.RuleId];
+      end
+      { 1.52 IDXRANGE2 (owner C3): a manual-only fix needs --fix-rule naming its rule }
+      else if IsFixManualOnly(F.RuleId) and not SameText(AArgs.FixRule, F.RuleId) then
+      begin
+        if not MatchText(F.RuleId, ManualIds) then ManualIds:= ManualIds + [F.RuleId];
       end
       else Braked:= Braked + [F];
     Targeted:= Braked;
     if Length(BrakedIds) > 0 then
       Writeln(ErrOutput, Format('drag-lint: note: %d rule(s) here are not fixed because "autofix_off" lists them: %s.',
         [Length(BrakedIds), string.Join(', ', BrakedIds)]));
+    if Length(ManualIds) > 0 then
+      Writeln(ErrOutput, Format('drag-lint: note: %d rule(s) here have a manual only fix, applied only with --fix-rule <id> (the IDE''s Fix it): %s.',
+        [Length(ManualIds), string.Join(', ', ManualIds)]));
 
     { lane 144 item 1: the one fix that needs the compile gate is not part of a batch }
     var GatedCasts: Integer:= 0;
@@ -13384,6 +13393,8 @@ begin
         O.AddPair('fixable', TJSONBool.Create(IsFixableRule(R.Id)));
         { true: the fix runs only when "autofix": [...] opts the rule in }
         O.AddPair('fix_opt_in', TJSONBool.Create(False)); // deprecated: every fix is on by default (1.37.0); emitted for the IDE plugin
+        { 1.52 IDXRANGE2: true = the fix runs only when --fix-rule names the rule (never in a batch fix) }
+        O.AddPair('fix_manual_only', TJSONBool.Create(IsFixManualOnly(R.Id)));
         AddParamsJson(O, R.Params);
         O.AddPair('compliance', ComplianceToJson(R.Compliance, True));
         { 1.38 two-way modernize: the gate's inputs, and whether the rule runs by
@@ -13550,8 +13561,9 @@ const
   { Gap-rules wave (G0): one gate per new checker unit; same rule as above. }
   LINT_GATE_OWNERSHIP: array[0..4] of string = (
     'field-created-not-freed', 'free-of-owned-item', 'mismatched-alloc-free', 'freeonterminate-then-wait', 'begin-end-pair-not-in-finally');
-  LINT_GATE_BOUNDS_NIL: array[0..3] of string = (
-    'nil-check-after-dereference', 'address-of-local-returned', 'constant-index-out-of-range', 'copy-paste-assignment');
+  LINT_GATE_BOUNDS_NIL: array[0..4] of string = (
+    'nil-check-after-dereference', 'address-of-local-returned', 'constant-index-out-of-range', 'copy-paste-assignment',
+    'index-possibly-out-of-range');
   LINT_GATE_EXCEPTION_THREAD: array[0..3] of string = (
     'exception-escapes-thread', 'raise-in-destructor', 'network-client-without-timeout', 'closure-captures-loop-local');
   LINT_GATE_DECL_PARITY: array[0..7] of string = (
@@ -23241,9 +23253,10 @@ begin
 
     { --hub-surface (spec 2026-11-08-hub-scc-phased P2): recipe R3 in place of the planner. Phase P6 (lane v151 I10,
       after the Loader apply built with 0 errors): the --plan dry run asks R3 first WITHOUT the switch, for a group R3
-      predicts to break; --no-hub-surface gives the planner's plan. Writing (--apply) and the --causes --format json
-      fix object still need the switch by name. Since 1.51.1 (lane v1511 CYC, T06) --fix --hub-surface runs R3 through
-      the compile gate; the default is not flipped (O11), so the default fix object still does not offer R3. }
+      predicts to break; --no-hub-surface gives the planner's plan. Since 1.51.1 (lane v1511 CYC, T06) --fix
+      --hub-surface runs R3 through the compile gate. Since 1.52 (owner ruling B9b, lane v152 HUB) the same default
+      holds for writing (--plan --apply), --fix and the --causes --format json fix object: R3 for a group it breaks
+      (R3DefaultGroup), the planner for every other group; --no-hub-surface = the planner everywhere. }
     if AArgs.HubSurface and AArgs.NoHubSurface then
     begin
       Writeln(ErrOutput, 'ERROR: cycles --hub-surface and --no-hub-surface exclude each other');
@@ -23261,17 +23274,27 @@ begin
         Exit(2);
       end;
     end;
-    if AArgs.HubSurface and AArgs.Plan and AArgs.Apply then
+    { 1.52 (owner ruling B9b, lane v152 HUB): --plan --apply without a switch writes R3 for a group R3 predicts to
+      break (R3DefaultGroup, the group --fix takes); any other group: the old default, nothing written }
+    var HubApplyGroup:= 0;
+    var HubApplyLib: ISymbolStore:= nil;
+    var HubLibFailed:= False;
+    var HubLibMessage:= '';
+    if AArgs.Plan and AArgs.Apply and not AArgs.NoHubSurface then
+    begin
+      { lane 149 CYA: the platform library types an ancestor's member (`frmMain.Invalidate`); without it that member stays refused }
+      HubApplyLib:= OpenPlanLibrary(HubLibFailed, HubLibMessage);
+      if not AArgs.HubSurface then
+        HubApplyGroup:= R3DefaultGroup(Store, HubApplyLib, Sccs, CycGraph, (if AArgs.FixCycleGiven then AArgs.FixCycle else 0), AArgs.GhostUnit);
+    end;
+    if (AArgs.HubSurface or (HubApplyGroup > 0)) and AArgs.Plan and AArgs.Apply then
     begin
       var HubOpts:= Default(THubSurfaceOptions);
       HubOpts.Apply     := AArgs.Apply;
       HubOpts.NoBackup  := AArgs.NoBackup;
-      HubOpts.CycleIndex:= if AArgs.FixCycleGiven then AArgs.FixCycle else 0;
+      HubOpts.CycleIndex:= if AArgs.FixCycleGiven then AArgs.FixCycle else HubApplyGroup;
       HubOpts.UnitStem  := LowerCase(AArgs.GhostUnit);
-      { lane 149 CYA: the platform library types an ancestor's member (`frmMain.Invalidate`); without it that member stays refused }
-      var HubLibFailed: Boolean;
-      var HubLibMessage: string;
-      HubOpts.LibraryStore:= OpenPlanLibrary(HubLibFailed, HubLibMessage);
+      HubOpts.LibraryStore:= HubApplyLib;
       if HubLibFailed then Writeln(ErrOutput, 'drag-lint: note: cycles --hub-surface: ', HubLibMessage, ' -- ancestor members stay refused');
       var HubLines:= TStringList.Create;
       try
@@ -23328,6 +23351,7 @@ begin
         FixOpts.RulesDir  := AArgs.RulesDir;
         FixOpts.Json     := SameText(AArgs.Format, 'json');
         FixOpts.HubSurface:= AArgs.HubSurface;
+        FixOpts.NoHubSurface:= AArgs.NoHubSurface;
         FixCode:= RunCycleFix(FixOpts, Store, Sccs, Graph, LibStore);
       end
       else
@@ -23395,15 +23419,10 @@ begin
           HintIn.FixProject:= AArgs.ProjectPath;
           HintIn.Unavailable:= (if JsonLibFailed then 'library unavailable: ' + (if JsonLibMessage <> '' then JsonLibMessage else 'the platform library could not be opened') else '');
           HintIn.FixHook:= nil;
-          if AArgs.HubSurface then
-          begin
-            var HubLibStore:= HintIn.LibStore;
-            var HubDbPath  := AArgs.DbPath;
-            HintIn.FixHook:= function(pIndex: Integer; out pFix: TJSONObject): Boolean
-              begin
-                Result:= HubSurfaceFixJson(Store, HubLibStore, Sccs[pIndex - 1], pIndex, EdgeGraph, HubDbPath, pFix);
-              end;
-          end;
+          { 1.52 (owner ruling B9b): R3's fix object by default for a group R3 breaks; --hub-surface also for one it
+            cannot break; --no-hub-surface = the planner's object for every group }
+          if not AArgs.NoHubSurface then
+            HintIn.FixHook:= HubSurfaceFixHook(Store, HintIn.LibStore, Sccs, EdgeGraph, AArgs.DbPath, AArgs.HubSurface);
           AddCycleFixHints(HintIn, JArr);
         end;
         Writeln(JArr.ToJson);

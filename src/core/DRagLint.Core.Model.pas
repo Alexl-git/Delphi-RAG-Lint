@@ -299,7 +299,7 @@ const
       several units include (lane INC2 B10; the resolver bump fills it).
     * grammar unchanged (tree-sitter-delphi13 v1.4.12, see the 1.39.0 entry; D04). B27 (Inline /
       Library as identifiers) was not delivered by the TS session -> 1.51.2. }
-  DRAGLINT_EXTRACTOR_VERSION = '1.40.0-alpha';
+  DRAGLINT_EXTRACTOR_VERSION = '1.41.0-alpha';
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
   /// Deliberately SEPARATE from <see cref="DRAGLINT_EXTRACTOR_VERSION"/>.</summary>
@@ -564,7 +564,7 @@ const
   /// ref_host_bindings, and an include method body binds its members per host (lane INC2 B10);
   /// reads of library symbols resolve library-first (ResolveLibraryReadRefs), paren-less library
   /// calls and function-result receivers bind (lane RES B02 / B04 / B06).</para>
-  DRAGLINT_RESOLVER_VERSION = '1.28.0-alpha';
+  DRAGLINT_RESOLVER_VERSION = '1.29.0-alpha';
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
   /// the ghost-compile journal that first created the folder.</summary>
@@ -3015,6 +3015,10 @@ const
   REF_KIND_HANDLE     = 'handle';
   /// <summary>See REF_KIND_RAISE.</summary>
   REF_KIND_HANDLE_ALL = 'handle-all';
+  /// <summary>1.52 EXTP: a receiver a member write goes THROUGH (`edtF1.DataBinding.DataField := X` gives
+  /// edtF1 and DataBinding one such ref each; the written member and a leading Self get none). The resolver
+  /// binds it to the symbol of the read / member-access ref on the same token; usages counts it as a write.</summary>
+  REF_KIND_WRITE_THROUGH = 'write-through';
   /// <summary>E-IS-NEVER-TRUE: symbols.directives of a class declared `class sealed`; '' on any
   /// other class. A sealed class has no descendants, so what it does not implement nobody below it
   /// can, the fact is-never-true stands on.</summary>

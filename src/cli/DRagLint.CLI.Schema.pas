@@ -88,7 +88,7 @@ var
         treatment symbols.kind gets below. }
       AValues:= 'attribute,call,di-resolve,di-unresolved,event-binding,'
               + 'handle,handle-all,member-access,property-spec,raise,raise-expr,read,record-field,reraise,'
-              + 'sql_table_ref,type_use,write';
+              + 'sql_table_ref,type_use,write,write-through';
     end
     else if Key = 'symbols.kind' then
     begin

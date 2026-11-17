@@ -117,6 +117,16 @@ enum values (`alClient`) are not bound. All of it needs the library store: witho
 (or the section's library) the targets are NULL, and a resolve pass run without it clears them.
 See also: Index-DB-Schema (`schema_meta` keys), [info](info.md).
 
+### Resolver fixes (1.52)
+
+- A generic type receiver is typed: `TObjectList<TFoo>.Create` binds to the project type when the generic head is
+  the project's, else to the library by name plus generic arguments (`TArray<..>` excluded).
+- A `Name(...)` receiver keeps `Name` as its type text only when it reads as a type (a built-in, or T/I/E/P plus a
+  capital); `Copy(...)` and `StyleServices(...)` give an empty type text.
+- `index --resolve-only` with no library store attached KEEPS the library bindings (calls, member accesses and
+  library reads) of the last library run and warns `library bindings are kept from the last library run, not
+  refreshed`; the `external_stores` key is marked partial so the next library run resolves whole.
+
 ---
 
 [All features](../index.md) | [CLI reference](../cli.md) | [IDE menus](../ide.md)

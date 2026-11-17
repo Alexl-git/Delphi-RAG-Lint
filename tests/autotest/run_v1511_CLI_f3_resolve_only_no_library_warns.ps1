@@ -46,8 +46,8 @@ try {
   $e2 = Join-Path $scratch 'c2.err'
   & $exePath index --project (Join-Path $scratch 'p\P.dpr') --db $c2 --resolve-only 1>$null 2> $e2
   $err2 = [IO.File]::ReadAllText($e2)
-  Check 'case: the run without a library clears the targets (behaviour pinned, unchanged)' ((ExtCount $c2) -eq 0) "n=$(ExtCount $c2)"
-  Check 'case: stderr warns "no library store attached ... pass --library-db"' ($err2 -match 'no library store attached: external targets will be cleared; pass --library-db') $err2
+  Check 'case: the run without a library KEEPS the stored targets (1.52 EXTR; 1.51.1 cleared them)' ((ExtCount $c2) -eq $n0) "n=$(ExtCount $c2) want $n0"
+  Check 'case: stderr warns "no library store attached ... pass --library-db"' ($err2 -match 'no library store attached: library bindings are kept from the last library run, not refreshed; pass --library-db') $err2
 } finally {
   if (Test-Path -LiteralPath $scratch) { [IO.Directory]::Delete($scratch, $true) }
 }

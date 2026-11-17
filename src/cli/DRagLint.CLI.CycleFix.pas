@@ -68,9 +68,12 @@ type
     /// child runs. Test runners and unattended scripts pass an explicit value.</summary>
     BuildTimeout: string;
     /// <summary>--hub-surface (lane v1511 CYC, T06): the group's plan is recipe R3 (DRagLint.Report.CycleHubSurface)
-    /// instead of the planner, through the same compile gate; refused with --part. False = the planner (the default,
-    /// owner question O11: not flipped).</summary>
+    /// instead of the planner, through the same compile gate, also for a group R3 cannot break (refused
+    /// hub-surface-group-stays); refused with --part. False and NoHubSurface False = the default (1.52, owner ruling
+    /// B9b): R3 for a group it predicts to BREAK (R3DefaultGroup), the planner for every other group.</summary>
     HubSurface: Boolean;
+    /// <summary>--no-hub-surface (1.52, lane v152 HUB): the planner for every group -- the default before 1.52.</summary>
+    NoHubSurface: Boolean;
   end;
 
   /// <summary>The gate's stand-down exception, under the name this verb's handlers and doc-comments use.</summary>
@@ -428,6 +431,36 @@ function RunCycleFix(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure ReportCycleFixError(const pOpts: TCycleFixOptions; const pMessage: string);
+
+/// <summary>The hub-surface default (1.52, owner ruling B9b): the group that recipe R3 takes when the user names
+/// neither --hub-surface nor --no-hub-surface -- the chosen group when R3 predicts that it BREAKS, or, with no
+/// choice, the first group R3 breaks.</summary>
+/// <param name="pStore">The index; read only.</param>
+/// <param name="pLibStore">The platform library or nil (ancestor members), as the R3 run itself gets it.</param>
+/// <param name="pSccs">The circular groups (ComputeSccs).</param>
+/// <param name="pGraph">The uses graph the groups came from.</param>
+/// <param name="pCycleIndex">1-based group (--cycle); 0 = no --cycle.</param>
+/// <param name="pUnitStem">The --unit stem, any case; '' = none.</param>
+/// <returns>The 1-based group R3 breaks; 0 = none (a group it does not plan, one it plans but cannot break, an
+/// unknown --cycle / --unit): the caller keeps the planner, byte for byte what --no-hub-surface prints.</returns>
+/// <remarks>Plans R3 per group (HubSurfaceRewrite) until one breaks; reads the sources, writes nothing. Shared by
+/// `cycles --fix` (RunCycleFix) and `cycles --plan --apply` (DoCycles), so both take the same group.</remarks>
+function R3DefaultGroup(const pStore, pLibStore: ISymbolStore; const pSccs: TList<TArray<string>>;
+  const pGraph: TCycleGraph; pCycleIndex: Integer; const pUnitStem: string): Integer;
+
+/// <summary>The `cycles --causes --format json` fix hook of recipe R3 (AddCycleFixHints' TCycleFixHook): R3's
+/// fix object in place of the planner's for a group R3 plans.</summary>
+/// <param name="pStore">The index; read only.</param>
+/// <param name="pLibStore">The platform library or nil.</param>
+/// <param name="pSccs">The circular groups; must outlive the hook.</param>
+/// <param name="pGraph">The uses graph.</param>
+/// <param name="pDbPath">The index path quoted in the commands.</param>
+/// <param name="pAsked">True = --hub-surface by name: every group R3 plans gets R3's object (also one it cannot
+/// break, `available` false). False = the 1.52 default: only a group R3 predicts to break; any other group keeps
+/// the planner's object, byte for byte what --no-hub-surface prints.</param>
+/// <returns>The hook; the fix object it hands out is owned by the caller.</returns>
+function HubSurfaceFixHook(const pStore, pLibStore: ISymbolStore; const pSccs: TList<TArray<string>>;
+  const pGraph: TCycleGraph; const pDbPath: string; pAsked: Boolean): TCycleFixHook;
 
 implementation
 
@@ -1351,9 +1384,15 @@ begin
     end;
 end;
 
+// `  - <kind>: <symbol> <file>:<line> -- <reason>`; a part the refusal does not have is left out (lane v152 HUB,
+// 1.51.1 website review #2): no `:0` for a refusal without a line, no `:  :0` for one that names no place at all.
 function RefusalLine(const pR: TRefusal): string;
 begin
-  Result:= Format('  - %s: %s %s:%d -- %s', [pR.Kind, pR.Symbol, pR.FilePath, pR.Line, pR.Reason]);
+  var Place:= pR.Symbol;
+  if pR.FilePath <> '' then
+    Place:= Trim(Place + ' ' + pR.FilePath + (if pR.Line > 0 then ':' + IntToStr(pR.Line) else ''));
+  Result:= if Place = '' then Format('  - %s -- %s', [pR.Kind, pR.Reason])
+           else Format('  - %s: %s -- %s', [pR.Kind, Place, pR.Reason]);
 end;
 
 function StringsToJson(const pItems: TArray<string>): TJSONArray;
@@ -2634,7 +2673,7 @@ begin
   Result:= nil;
   if not pRw.Planned then Result:= Result + [MakeRefusal(pRw.Refusal, '', '', pRw.Why, 0)]
   else if not pRw.Breaks then
-    Result:= Result + [MakeRefusal(CKindR3Stays, '', '', pRw.Why + ' (the planner''s own fix: drop --hub-surface)', 0)];
+    Result:= Result + [MakeRefusal(CKindR3Stays, '', '', pRw.Why + ' (the planner''s own fix: --no-hub-surface)', 0)];
 end;
 
 // Stages R3's bytes in the shadow tree (what WriteAll copies into the project). pBreak = DRAGLINT_CYCLEFIX_BREAK
@@ -2736,12 +2775,46 @@ begin
   end;
 end;
 
+function R3DefaultGroup(const pStore, pLibStore: ISymbolStore; const pSccs: TList<TArray<string>>;
+  const pGraph: TCycleGraph; pCycleIndex: Integer; const pUnitStem: string): Integer;
+begin
+  Result:= 0;
+  var Stem:= LowerCase(pUnitStem);
+  for var I:= 1 to pSccs.Count do
+  begin
+    if (pCycleIndex > 0) and (I <> pCycleIndex) then Continue;
+    if (Stem <> '') and (IndexStr(Stem, pSccs[I - 1]) < 0) then Continue;
+    var Rw:= HubSurfaceRewrite(pStore, pLibStore, pSccs[I - 1], I, pGraph);
+    if Rw.Planned and Rw.Breaks then Exit(I);
+    if (pCycleIndex > 0) or (Stem <> '') then Exit;  { the chosen group only: R3 does not break it }
+  end;
+end;
+
+function HubSurfaceFixHook(const pStore, pLibStore: ISymbolStore; const pSccs: TList<TArray<string>>;
+  const pGraph: TCycleGraph; const pDbPath: string; pAsked: Boolean): TCycleFixHook;
+begin
+  Result:= function(pIndex: Integer; out pFix: TJSONObject): Boolean
+    begin
+      Result:= HubSurfaceFixJson(pStore, pLibStore, pSccs[pIndex - 1], pIndex, pGraph, pDbPath, pFix);
+      if Result and not pAsked and not pFix.GetValue<Boolean>('available', False) then
+      begin
+        FreeAndNil(pFix);
+        Result:= False;  { the default: a group R3 cannot break keeps the planner's object }
+      end;
+    end;
+end;
+
 function RunCycleFix(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pLibStore: ISymbolStore): Integer;
 begin
   Result:= CExitError; { the exit code the kept-scratch note prints when an exception leaves this code }
   var Opts: TCycleFixOptions:= pOpts;
   Opts.Platform:= CycleFixPlatform(pOpts); { ruling a3: every build, child run and JSON echo use ONE platform }
+  { 1.52 (owner ruling B9b): neither switch = R3 for a group it breaks, the planner for every other group; --part
+    always names the planner's parts }
+  if (not Opts.HubSurface) and (not Opts.NoHubSurface) and (Opts.Part = '') then
+    Opts.HubSurface:= R3DefaultGroup(pStore, pLibStore, pSccs, pGraph,
+      (if Opts.CycleGiven then Opts.CycleIndex else 0), Opts.UnitStem) > 0;
   var Ctl:= StartStandDownChannel(Opts);
   GStandDown  := Ctl;
   GCancelTaken:= False;
