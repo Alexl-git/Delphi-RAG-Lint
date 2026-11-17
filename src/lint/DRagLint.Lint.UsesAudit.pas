@@ -53,7 +53,9 @@ type
   /// <remarks>
   /// Reusable across many files of the same store: the stem-to-file map and the
   /// symbol-name-to-defining-units cache are built once and shared. Only project units that
-  /// are in the index are audited (never RTL / library uses). Not thread-safe; the store must
+  /// are in the index are audited (never RTL / library uses). A reference credits a unit only through
+  /// a symbol the unit EXPORTS (top-level interface name, enum value), the same notion the rule
+  /// unused-unit-in-uses uses; a same-named class member elsewhere credits nothing. Not thread-safe; the store must
   /// outlive the auditor, which does not own it.
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: DRagLint.CLI.DoUsesAudit (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.CollectUsesMovableToImplementation (DRagLint.Lint.ProjectRules.pas)</para>
@@ -83,6 +85,7 @@ type
     /// </remarks>
     function UnitsCredited(const ARef: TReference): TArray<string>;
     function UnitsDefining(const AName: string): TArray<string>;
+    function IsExportOfItsUnit(const ASym: TSymbol): Boolean;
   public
     /// <summary>Builds the stem-to-file map from the store.</summary>
     /// <param name="AStore">An open store; must not be nil.</param>
@@ -221,7 +224,30 @@ begin
   Result:= UnitsDefining(ARef.NameText);
 end;
 
-{ distinct indexed-unit stems that define a symbol named AName (cached) }
+{ 1.52 USESAUD: does a unit EXPORT this symbol? Same notion as the rule unused-unit-in-uses: a top-level
+  interface declaration (or a top-level declaration of an include, which has no parent), or an enum value of
+  one. A class / record MEMBER, a local, a parameter and an implementation-section helper are not exports --
+  a unit that merely declares a field `Format` must not stay alive for every unbound `Format(...)` call
+  (docs\INBOX-uses-audit-undercount.md: 5 unused reported where the rule reports 186). }
+function TUsesAuditor.IsExportOfItsUnit(const ASym: TSymbol): Boolean;
+var
+  Par: TSymbol;
+  Gra: TSymbol;
+begin
+  if (ASym.Kind = skLocalVar) or (ASym.Kind = skParam) then Exit(False);
+  if ASym.ParentId <= 0 then Exit(True);
+  Par:= FStore.GetSymbolById(ASym.ParentId);
+  if Par.Id <> ASym.ParentId then Exit(True);
+  if Par.Kind = skUnit then Exit(SameText(ASym.Section, 'interface'));
+  if (Par.Kind = skEnum) and (ASym.Kind = skEnumValue) then
+  begin
+    Gra:= FStore.GetSymbolById(Par.ParentId);
+    Exit((Par.ParentId <= 0) or ((Gra.Id = Par.ParentId) and (Gra.Kind = skUnit) and SameText(Par.Section, 'interface')));
+  end;
+  Result:= False;
+end;
+
+{ distinct indexed-unit stems that EXPORT a symbol named AName (cached) }
 
 function TUsesAuditor.UnitsDefining(const AName: string): TArray<string>;
 var
@@ -234,7 +260,7 @@ begin
   try
     for Sm in FStore.FindSymbolsByExactName(AName) do
     begin
-      if (Sm.Kind = skLocalVar) or (Sm.Kind = skParam) then Continue;
+      if not IsExportOfItsUnit(Sm) then Continue;
       St:= StemOf(FStore.GetFilePath(Sm.FileId));
       if (St <> '') and not Us.Contains(St) then Us.Add(St);
     end;
