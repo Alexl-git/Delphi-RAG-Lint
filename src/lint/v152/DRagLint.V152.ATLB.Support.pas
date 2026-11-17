@@ -1,10 +1,259 @@
 unit DRagLint.V152.ATLB.Support;
 
 { Wave v152 lane ATLB -- helpers of DRagLint.V152.ATLB (private to the lane).
-  Scaffold created EMPTY by lane FRAME; lane ATLB owns it. }
+
+  member-could-be-private (survey row 19): a PUBLIC member of a class whose every
+  reference in the index sits in the file that declares it. Delphi's `private` is
+  visible to the whole unit, so such a member can leave the public section without
+  breaking a caller the index can see. The rule is deliberately conservative: it
+  stays silent whenever it cannot prove the narrowing safe.
+
+  Exemptions (silent): published members and the unlabelled section of a class
+  (VisExplicit = False); virtual / dynamic / override / abstract / message /
+  reintroduce / external routines; constructors and destructors; members of
+  helpers; members whose name an interface of the class declares, or any class
+  whose interface list holds an ancestor that does not resolve (unsure); members
+  carrying an attribute (RTTI may read them); members with no reference at all
+  (dead-code rules own that); a name referenced from a second file (another unit,
+  or a form file); members of a unit that lists more than one project in its
+  `dl:shared` header (a sibling project's index is not open here). }
 
 interface
 
+uses
+  System.SysUtils
+  , System.Generics.Collections
+  , DRagLint.Core.Model
+  , DRagLint.Core.Interfaces
+  ;
+
+type
+  /// <summary>Evaluates the member-could-be-private rule over one project index.</summary>
+  /// <remarks>Stateless; class methods only. Reads the store, never writes it.</remarks>
+  TMemberPrivacy = class
+  public
+    /// <summary>Finds public members that no file but their own declaring file references.</summary>
+    /// <param name="AStore">Project index (not nil).</param>
+    /// <param name="ALibStore">Library index used to resolve interface ancestors; may be nil.</param>
+    /// <param name="ARuleId">Rule id to stamp on each finding.</param>
+    /// <returns>One hint per candidate member; nil when none.</returns>
+    /// <remarks>Cost: one GetReferencesFromFile per indexed file. Meant for lint-all only.</remarks>
+    class function Find(const AStore, ALibStore: ISymbolStore; const ARuleId: string): TArray<TLintFinding>; static;
+  end;
+
 implementation
+
+uses
+  System.Classes
+  , System.IOUtils
+  , DRagLint.Lint.SharedUnit
+  ;
+
+const
+  EXEMPT_DIRECTIVES: array[0..8] of string =
+    ('virtual', 'dynamic', 'override', 'abstract', 'message', 'reintroduce', 'external', 'export', 'static');
+  MAX_IFACE_DEPTH = 4;
+
+function HeritageNames(const AHeritage: string): TArray<string>;
+begin
+  Result:= nil;
+  var Depth: Integer:= 0;
+  var Cur  : string:= '';
+  for var Ch: Char in AHeritage do
+    if Ch = '<' then Inc(Depth)
+    else if Ch = '>' then Dec(Depth)
+    else if (Ch = ',') and (Depth = 0) then
+    begin
+      Result:= Result + [Cur];
+      Cur:= '';
+    end
+    else if Depth = 0 then Cur:= Cur + Ch;
+  Result:= Result + [Cur];
+  for var I: Integer:= 0 to High(Result) do
+  begin
+    var N: string:= Trim(Result[I]);
+    var P: Integer:= N.LastDelimiter('.');
+    if P >= 0 then N:= N.Substring(P + 1);
+    Result[I]:= N;
+  end;
+end;
+
+function LooksLikeInterface(const AName: string): Boolean;
+begin
+  Result:= (Length(AName) > 1) and (AName[1] = 'I') and CharInSet(AName[2], ['A'..'Z']);
+end;
+
+function FindType(const AStore, ALibStore: ISymbolStore; const AName: string; out ASym: TSymbol;
+  out AOwner: ISymbolStore): Boolean;
+begin
+  Result:= False;
+  AOwner:= nil;
+  for var Pass: Integer:= 0 to 1 do
+  begin
+    var St: ISymbolStore:= (if Pass = 0 then AStore else ALibStore);
+    if St = nil then Continue;
+    for var S: TSymbol in St.FindSymbolsByExactName(AName) do
+      if S.Kind in [skClass, skInterface, skRecord] then
+      begin
+        ASym  := S;
+        AOwner:= St;
+        Exit(True);
+      end;
+  end;
+end;
+
+{ Adds the member names of interface AName (and its ancestors) to ANames. False = unsure. }
+function CollectInterface(const AStore, ALibStore: ISymbolStore; const AName: string;
+  const ANames: TDictionary<string, Boolean>; ADepth: Integer): Boolean;
+var
+  T    : TSymbol;
+  Owner: ISymbolStore;
+begin
+  Result:= False;
+  if ADepth > MAX_IFACE_DEPTH then Exit;
+  if not FindType(AStore, ALibStore, AName, T, Owner) or (T.Kind <> skInterface) then Exit;
+  for var C: TSymbol in Owner.FindAllChildSymbols(T.Id) do
+    ANames.AddOrSetValue(LowerCase(C.Name), True);
+  Result:= True;
+  if Trim(T.Heritage) = '' then Exit;
+  for var A: string in HeritageNames(T.Heritage) do
+    if (A <> '') and not SameText(A, 'IInterface') and not SameText(A, 'IUnknown') then
+      if not CollectInterface(AStore, ALibStore, A, ANames, ADepth + 1) then Result:= False;
+end;
+
+{ Fills ANames with the member names the class's interfaces declare. False = a
+  heritage entry that looks like an interface did not resolve: the caller skips the class. }
+function InterfaceNamesOf(const AStore, ALibStore: ISymbolStore; const AClass: TSymbol;
+  const ANames: TDictionary<string, Boolean>): Boolean;
+var
+  T    : TSymbol;
+  Owner: ISymbolStore;
+begin
+  Result:= True;
+  if Trim(AClass.Heritage) = '' then Exit;
+  for var H: string in HeritageNames(AClass.Heritage) do
+  begin
+    if H = '' then Continue;
+    if FindType(AStore, ALibStore, H, T, Owner) then
+    begin
+      if T.Kind = skInterface then
+        if not CollectInterface(AStore, ALibStore, H, ANames, 0) then Result:= False;
+    end
+    else if LooksLikeInterface(H) then Result:= False;
+  end;
+end;
+
+function HasAttributeAbove(const ALines: TArray<string>; ALine: Integer): Boolean;
+begin
+  Result:= False;
+  if (ALine < 1) or (ALine > Length(ALines)) then Exit;
+  { The symbol may start AT its attribute line ([Attr] procedure X;) or one line below it. }
+  if Trim(ALines[ALine - 1]).StartsWith('[') then Exit(True);
+  var I: Integer:= ALine - 2;
+  while (I >= 0) and (Trim(ALines[I]) = '') do Dec(I);
+  if I < 0 then Exit;
+  var L: string:= Trim(ALines[I]);
+  Result:= (L <> '') and (L[1] = '[') ;
+end;
+
+function HasExemptDirective(const ASym: TSymbol): Boolean;
+begin
+  Result:= ASym.IsVirtual;
+  if Result then Exit;
+  var Words: TArray<string>:= (LowerCase(ASym.Directives) + ' ' + LowerCase(ASym.Modifiers)).Split([' ']);
+  for var W: string in Words do
+    for var D: string in EXEMPT_DIRECTIVES do
+      if W = D then Exit(True);
+end;
+
+class function TMemberPrivacy.Find(const AStore, ALibStore: ISymbolStore; const ARuleId: string): TArray<TLintFinding>;
+var
+  RefFile  : TDictionary<string, Int64>;
+  FileLines: TDictionary<Int64, TArray<string>>;
+  Shared   : TDictionary<Int64, Boolean>;
+  Parents  : TDictionary<Int64, TSymbol>;
+  IfaceOf  : TDictionary<Int64, TDictionary<string, Boolean>>;
+  Prev     : Int64;
+begin
+  Result:= nil;
+  RefFile  := TDictionary<string, Int64>.Create;
+  FileLines:= TDictionary<Int64, TArray<string>>.Create;
+  Shared   := TDictionary<Int64, Boolean>.Create;
+  Parents  := TDictionary<Int64, TSymbol>.Create;
+  IfaceOf  := TDictionary<Int64, TDictionary<string, Boolean>>.Create;
+  try
+    for var FileId: Int64 in AStore.GetAllFileIds do
+      for var R: TReference in AStore.GetReferencesFromFile(FileId) do
+      begin
+        var Key: string:= LowerCase(R.NameText);
+        if not RefFile.TryGetValue(Key, Prev) then RefFile.Add(Key, FileId)
+        else if Prev <> FileId then RefFile.AddOrSetValue(Key, -1);
+      end;
+    for var FileId: Int64 in AStore.GetAllFileIds do
+    begin
+      var Path: string:= AStore.GetFilePath(FileId);
+      if not SameText(ExtractFileExt(Path), '.pas') then Continue;
+      for var Sym: TSymbol in AStore.FindSymbolsByFile(Path) do
+      begin
+        if not (Sym.Kind in [skMethod, skFunction, skProcedure, skField]) then Continue;
+        if (Sym.ParentId <= 0) or (Trim(LowerCase(Sym.Modifiers)) <> 'public') or not Sym.VisExplicit then Continue;
+        if HasExemptDirective(Sym) then Continue;
+        if not RefFile.TryGetValue(LowerCase(Sym.Name), Prev) or (Prev <> Sym.FileId) then Continue;
+        var Cls: TSymbol;
+        if not Parents.TryGetValue(Sym.ParentId, Cls) then
+        begin
+          Cls:= AStore.GetSymbolById(Sym.ParentId);
+          Parents.Add(Sym.ParentId, Cls);
+        end;
+        if (Cls.Id <> Sym.ParentId) or not (Cls.Kind in [skClass, skRecord]) or Cls.IsHelper then Continue;
+        var Names: TDictionary<string, Boolean>;
+        if not IfaceOf.TryGetValue(Cls.Id, Names) then
+        begin
+          Names:= TDictionary<string, Boolean>.Create;
+          IfaceOf.Add(Cls.Id, Names);
+          if not InterfaceNamesOf(AStore, ALibStore, Cls, Names) then Names.AddOrSetValue('*', True);
+        end;
+        if Names.ContainsKey('*') or Names.ContainsKey(LowerCase(Sym.Name)) then Continue;
+        var IsShared: Boolean;
+        if not Shared.TryGetValue(FileId, IsShared) then
+        begin
+          IsShared:= Length(TSharedUnit.ProjectsOf(Path)) > 1;
+          Shared.Add(FileId, IsShared);
+        end;
+        if IsShared then Continue;
+        var Lines: TArray<string>;
+        if not FileLines.TryGetValue(FileId, Lines) then
+        begin
+          try
+            Lines:= TFile.ReadAllLines(Path);
+          except
+            Lines:= nil;
+          end;
+          FileLines.Add(FileId, Lines);
+        end;
+        if (Lines = nil) or HasAttributeAbove(Lines, Sym.StartLine) then Continue;
+        var F: TLintFinding:= Default(TLintFinding);
+        F.RuleId    := ARuleId;
+        F.Severity  := 'hint';
+        F.FileId    := FileId;
+        F.FilePath  := Path;
+        F.StartLine := Sym.StartLine;
+        F.StartCol  := Sym.StartCol;
+        F.EndLine   := Sym.EndLine;
+        F.EndCol    := Sym.EndCol;
+        F.SymbolName:= Sym.Name;
+        F.Message   := Format('Public member %s.%s is only referenced inside its own unit -- it could be private', [Cls.Name, Sym.Name]);
+        Result:= Result + [F];
+      end;
+    end;
+  finally
+    for var D: TDictionary<string, Boolean> in IfaceOf.Values do D.Free;
+    IfaceOf.Free;
+    Parents.Free;
+    Shared.Free;
+    FileLines.Free;
+    RefFile.Free;
+  end;
+end;
 
 end.
