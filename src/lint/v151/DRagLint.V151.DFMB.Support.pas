@@ -253,6 +253,7 @@ implementation
 uses
   System.IOUtils
   , System.StrUtils
+  , System.RegularExpressions
   ;
 
 { ---------------------------------------------------------------- model }
@@ -670,7 +671,89 @@ begin
   end;
 end;
 
-procedure CheckDupBinding(const AModel: TDfmModel; const ACfg: TLintConfig; const AFile: string; AOut: TFindingList);
+/// <summary>Blanks comments and string literals of Pascal source (same length, newlines kept).</summary>
+/// <param name="ASrc">Pascal unit text.</param>
+/// <returns>The text with every comment and string body replaced by spaces.</returns>
+function BlankPasNoise(const ASrc: string): string;
+var
+  I, N: Integer;
+  C   : Char;
+begin
+  Result:= ASrc;
+  N:= Length(Result);
+  I:= 1;
+  while I <= N do
+  begin
+    C:= Result[I];
+    if C = '''' then
+    begin
+      Result[I]:= ' ';
+      Inc(I);
+      while (I <= N) and (Result[I] <> '''') and (Result[I] <> #10) do
+      begin
+        Result[I]:= ' ';
+        Inc(I);
+      end;
+      if (I <= N) and (Result[I] = '''') then
+      begin
+        Result[I]:= ' ';
+        Inc(I);
+      end;
+    end
+    else if (C = '/') and (I < N) and (Result[I + 1] = '/') then
+      while (I <= N) and (Result[I] <> #10) do
+      begin
+        Result[I]:= ' ';
+        Inc(I);
+      end
+    else if C = '{' then
+    begin
+      while (I <= N) and (Result[I] <> '}') do
+      begin
+        if Result[I] <> #10 then Result[I]:= ' ';
+        Inc(I);
+      end;
+      if I <= N then Result[I]:= ' ';
+      Inc(I);
+    end
+    else if (C = '(') and (I < N) and (Result[I + 1] = '*') then
+    begin
+      while (I < N) and not ((Result[I] = '*') and (Result[I + 1] = ')')) do
+      begin
+        if Result[I] <> #10 then Result[I]:= ' ';
+        Inc(I);
+      end;
+      if I < N then
+      begin
+        Result[I]:= ' ';
+        Result[I + 1]:= ' ';
+      end;
+      Inc(I, 2);
+    end
+    else
+      Inc(I);
+  end;
+end;
+
+/// <summary>Collects the components whose DataField the owning unit assigns in code.</summary>
+/// <param name="ADfmPath">Path of the form file; the paired unit is the same base name with .pas.</param>
+/// <returns>Lower-case component names assigned as Comp.DataField:= or Comp.DataBinding.DataField:=; empty when there is no paired unit.</returns>
+/// <remarks>Reads only the paired unit's own source (comments and strings blanked); an assignment in any other unit is deliberately not seen.</remarks>
+function CodeBoundFields(const ADfmPath: string): TDictionary<string, Boolean>;
+var
+  PasPath: string;
+  M      : TMatch;
+begin
+  Result:= TDictionary<string, Boolean>.Create;
+  PasPath:= ChangeFileExt(ADfmPath, '.pas');
+  if not TFile.Exists(PasPath) then Exit;
+  for M in TRegEx.Matches(BlankPasNoise(TFile.ReadAllText(PasPath, TEncoding.ANSI)),
+    '\b([A-Za-z_]\w*)\s*\.\s*(?:DataBinding\s*\.\s*)?DataField\s*:=', [roIgnoreCase]) do
+    Result.AddOrSetValue(LowerCase(M.Groups[1].Value), True);
+end;
+
+procedure CheckDupBinding(const AModel: TDfmModel; const ACfg: TLintConfig; const AFile: string;
+  const ACodeBound: TDictionary<string, Boolean>; AOut: TFindingList);
 var
   First: TDictionary<string, TDfmObj>;
   O, F : TDfmObj;
@@ -683,6 +766,7 @@ begin
       if CtlKindOf(O.ClsName) = ckNone then Continue;
       if BindSource(O) = '' then Continue;
       if BindField(O) = '' then Continue;
+      if ACodeBound.ContainsKey(LowerCase(O.ObjName)) then Continue;
       if IsTrue(O.Val('ReadOnly')) or IsTrue(O.Val('Properties.ReadOnly')) or not VisibleChain(O) then Continue;
       Key:= LowerCase(BindSource(O)) + '|' + LowerCase(BindField(O));
       if First.TryGetValue(Key, F) then
@@ -949,6 +1033,7 @@ class function TDfmBChecker.Run(const ACfg: TLintConfig; const ADfmPath: string;
 var
   Model: TDfmModel;
   Found : TFindingList;
+  CodeBound: TDictionary<string, Boolean>;
 begin
   Result:= nil;
   if not TFile.Exists(ADfmPath) then Exit;
@@ -956,7 +1041,15 @@ begin
   Found:= TFindingList.Create;
   try
     if AWants(RULE_CIRCULAR) then CheckCircular(Model, ACfg, ADfmPath, Found);
-    if AWants(RULE_DUPBIND) then CheckDupBinding(Model, ACfg, ADfmPath, Found);
+    if AWants(RULE_DUPBIND) then
+    begin
+      CodeBound:= CodeBoundFields(ADfmPath);
+      try
+        CheckDupBinding(Model, ACfg, ADfmPath, CodeBound, Found);
+      finally
+        CodeBound.Free;
+      end;
+    end;
     if AWants(RULE_MASTER) then CheckMasterFields(Model, ACfg, ADfmPath, Found);
     if AWants(RULE_TYPEMISM) then CheckTypeMismatch(Model, ACfg, ADfmPath, Found);
     if AWants(RULE_REQUIRED) then CheckRequired(Model, ACfg, ADfmPath, Found);
