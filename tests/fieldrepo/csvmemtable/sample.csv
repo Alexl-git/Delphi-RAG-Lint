@@ -1,0 +1,9 @@
+FieldName,FieldType,Size,FieldKind,LookupDataset,KeyFields,LookupKeyFields,LookupResultField
+ID,Integer,,Data,,,,
+FirstName,String,50,Data,,,,
+LastName,String,50,Data,,,,
+BirthDate,Date,,Data,,,,
+FullName,String,100,Calculated,,,,
+Age,Integer,,Calculated,,,,
+IsAdult,Boolean,,Calculated,,,,
+BirthYear,Integer,,Calculated,,,,

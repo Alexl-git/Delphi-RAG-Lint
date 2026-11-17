@@ -1,0 +1,62 @@
+procedure CreateSampleFields(pMemTable: TFDMemTable);
+var
+  lDef: TFieldDef;
+  lField: TField;
+begin
+  pMemTable.Close;
+  pMemTable.FieldDefs.Clear;
+  pMemTable.Fields.Clear;
+
+  lDef := pMemTable.FieldDefs.AddFieldDef;
+  lDef.Name := 'ID';
+  lDef.DataType := ftInteger;
+  lField := lDef.CreateField(pMemTable);
+  lField.FieldKind := fkData;
+
+  lDef := pMemTable.FieldDefs.AddFieldDef;
+  lDef.Name := 'FirstName';
+  lDef.DataType := ftString;
+  lDef.Size := 50;
+  lField := lDef.CreateField(pMemTable);
+  lField.FieldKind := fkData;
+
+  lDef := pMemTable.FieldDefs.AddFieldDef;
+  lDef.Name := 'LastName';
+  lDef.DataType := ftString;
+  lDef.Size := 50;
+  lField := lDef.CreateField(pMemTable);
+  lField.FieldKind := fkData;
+
+  lDef := pMemTable.FieldDefs.AddFieldDef;
+  lDef.Name := 'BirthDate';
+  lDef.DataType := ftDate;
+  lField := lDef.CreateField(pMemTable);
+  lField.FieldKind := fkData;
+
+  lDef := pMemTable.FieldDefs.AddFieldDef;
+  lDef.Name := 'FullName';
+  lDef.DataType := ftString;
+  lDef.Size := 100;
+  lField := lDef.CreateField(pMemTable);
+  lField.FieldKind := fkCalculated;
+
+  lDef := pMemTable.FieldDefs.AddFieldDef;
+  lDef.Name := 'Age';
+  lDef.DataType := ftInteger;
+  lField := lDef.CreateField(pMemTable);
+  lField.FieldKind := fkCalculated;
+
+  lDef := pMemTable.FieldDefs.AddFieldDef;
+  lDef.Name := 'IsAdult';
+  lDef.DataType := ftBoolean;
+  lField := lDef.CreateField(pMemTable);
+  lField.FieldKind := fkCalculated;
+
+  lDef := pMemTable.FieldDefs.AddFieldDef;
+  lDef.Name := 'BirthYear';
+  lDef.DataType := ftInteger;
+  lField := lDef.CreateField(pMemTable);
+  lField.FieldKind := fkCalculated;
+
+  pMemTable.CreateDataSet;
+end;
