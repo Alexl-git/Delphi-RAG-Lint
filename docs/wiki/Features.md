@@ -138,11 +138,11 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**423 rules. 125 have an auto-fix. 341 are on by default.** 310 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**424 rules. 126 have an auto-fix. 342 are on by default.** 311 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
-| bug-patterns | 153 | 37 |
+| bug-patterns | 154 | 38 |
 | complexity | 15 | 2 |
 | data-flow | 12 | 3 |
 | dead-code | 21 | 15 |
@@ -160,12 +160,13 @@ Rules, autofix, suppression markers and project-wide checks.
 | review-markers | 5 | 2 |
 | security | 27 | 2 |
 | structure | 17 | 9 |
-| **Total** | **423** | **125** |
+| **Total** | **424** | **126** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
 | [Ancestor not in project (lint rule)](ancestor-not-in-project) | `lint-all` |  |
 | [Application-level lint rules](application-level-rules) | `lint`; `lint-all` |  |
+| [Array index possibly out of range lint rule (index-possibly-out-of-range)](index-possibly-out-of-range) | `lint` |  |
 | [Autofix for fixable rules](autofix-wave) | `lint` |  |
 | [CLI fixes in 1.51.1](v1511-cli-fixes) | `lint-all`; `rules`; `info`; `index`; `find-deadcode` |  |
 | [Compliance labels (CWE, CERT, MISRA)](compliance-labels) | `rules`; `lint-all` |  |
@@ -199,7 +200,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Interfaced object set to nil (lint rule)](interfaced-object-nil-leak) | `lint-all` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
 | [Lint rules on the static type of a reference](ref-type-rules) | `lint-all` |  |
-| [Lint rules](rules) | 423 rules, 125 fixable; `rules` |  |
+| [Lint rules](rules) | 424 rules, 126 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
 | [Memory and string-pointer lint rules (PChar, raw memory, leaks, byte counts)](memory-string-pointer-rules) | `lint-all` |  |

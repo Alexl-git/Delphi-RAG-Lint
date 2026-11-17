@@ -560,6 +560,8 @@ begin
   Writeln('       see wiki page: redundant-cast-fix');
   Writeln('  drag-lint lint --fix --fix-rule with-statement --db <db> [--in <f.pas> [--fix-line <L>]] [--apply --project <X.dproj>] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <db>|none] [--no-backup] [--json]');
   Writeln('       see wiki page: unwith');
+  Writeln('  drag-lint lint <file.pas> [--rule index-possibly-out-of-range] [--fix --fix-rule index-possibly-out-of-range [--apply]] (default ON, category bug-patterns, warning; hint on an unguarded parameter or a lookup-derived index; param exception_class; the autofix is manual only: a batch --fix withholds it, --fix-rule applies it; rules --json carries fix_manual_only: true)');
+  Writeln('       see wiki page: index-possibly-out-of-range');
   Writeln('  drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]');
   Writeln('       ^ A second --db is the library slot, not another project: to judge a dl:ok on a dl:shared unit use --shared-db.');
   Writeln('       ^ `--library-db <lib>` names the library slot too and wins over a second --db and the manifest; a missing file refuses (exit 2), `none` means no library. Without a library, a type whose ancestry lives there stays unknown and the type-aware rules stay silent on it.');

@@ -82,7 +82,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | Feature | What it does | Since |
 | --- | --- | --- |
 | [Ancestor not in project (lint rule)](features/ancestor-not-in-project.md) | Project-wide lint rule (error): a form, frame or data module whose ancestor class is declared in no project unit and not in the platform library | 1.42.0-alpha |
-| [Autofix for fixable rules](features/autofix-wave.md) | lint --fix repairs findings of the 125 fixable rules; --json reports per finding whether it was applied; lint accepts a folder | 1.37.0-alpha |
+| [Autofix for fixable rules](features/autofix-wave.md) | lint --fix repairs findings of the 126 fixable rules; --json reports per finding whether it was applied; lint accepts a folder | 1.37.0-alpha |
 | [Compliance labels (CWE, CERT, MISRA)](features/compliance-labels.md) | Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field | 1.37.0-alpha |
 | [Copy All Diagnostics](features/copy-all-diagnostics.md) | Puts every lint finding for the current unit onto the clipboard, starting from the Structure form | 0.1.0-alpha |
 | [Copy Diagnostics (Current File)](features/copy-diagnostics-current-file.md) | Puts the current file's lint findings onto the clipboard | 0.1.0-alpha |
@@ -143,6 +143,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Wider built-in rules (1.51)](features/v151-wid-ast-rules.md) | Six built-in rules read more constructs: code-page and label exemptions, named zero constants, implied else-if, thread dialogs, Supports aliases | 1.51.0-alpha |
 | [Wider scm rules and three new fixers](features/v151-wid-scm-rules.md) | Seven built-in rules read more constructs; empty-finally, format-string-not-formatted and shared-marker-legacy-shape gain autofixes | 1.51.0-alpha |
 | [CLI fixes in 1.51.1](features/v1511-cli-fixes.md) | lint-all --rule a,b runs only those rules, a DB copy stays on the copy; rules --rule; info versions; index parse-errors; resolve-only warning | 1.51.1-alpha |
+| [Array index possibly out of range lint rule (index-possibly-out-of-range)](features/v152-index-possibly-out-of-range.md) | Warns (default ON) on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only | 1.52.0-alpha |
 | [warm-rule-cache](features/warm-rule-cache.md) | Fills the lint rule cache for a project index; index runs warm it, or start it in the background (--rule-cache-warm) | 1.39.0-alpha |
 
 ## Documentation

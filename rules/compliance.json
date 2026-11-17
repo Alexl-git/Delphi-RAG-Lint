@@ -49,6 +49,7 @@
   "const-casing": {},
   "constant-condition": {"cwe": ["CWE-570", "CWE-571"], "misra": ["MISRA-C-2012-R14.3"]},
   "constant-index-out-of-range": {"cwe": ["CWE-787", "CWE-125"], "cert": ["ARR30-C"], "misra": ["MISRA-C-2012-R18.1"], "weak": ["MISRA-C-2012-R18.1"]},
+  "index-possibly-out-of-range": {"cwe": ["CWE-129", "CWE-125", "CWE-787"], "cert": ["ARR30-C"]},
   "constructor-call-on-instance": {"cwe": ["CWE-401"], "weak": ["CWE-401"]},
   "contract-unit-declares-class": {},
   "control-char": {},

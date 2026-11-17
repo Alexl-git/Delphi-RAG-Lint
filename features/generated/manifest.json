@@ -3028,13 +3028,54 @@
       }
     },
     {
+      "id": "v152-index-possibly-out-of-range",
+      "title": "Array index possibly out of range lint rule (index-possibly-out-of-range)",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "Warns (default ON) on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only",
+      "intro": "Read this to see when index-possibly-out-of-range warns, how it treats another collection's bound and index parameters, and how its manual-only autofix inserts an InRange check.",
+      "wikiPage": "index-possibly-out-of-range",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint",
+          "usage": "drag-lint lint <file.pas> [--rule index-possibly-out-of-range] [--fix --fix-rule index-possibly-out-of-range [--apply]] (default ON, category bug-patterns, warning; hint on an unguarded parameter or a lookup-derived index; param exception_class; the autofix is manual only: a batch --fix withholds it, --fix-rule applies it; rules --json carries fix_manual_only: true)",
+          "flags": [
+            {
+              "name": "--rule",
+              "arg": "<id>"
+            },
+            {
+              "name": "--fix"
+            },
+            {
+              "name": "--fix-rule",
+              "arg": "<id>"
+            },
+            {
+              "name": "--apply"
+            }
+          ]
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-17",
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "de319179f8b6b2ffbdba5a675a1f550133807d68a0339e632b8014cd5442cafc"
+      }
+    },
+    {
       "id": "autofix-wave",
       "title": "Autofix for fixable rules",
       "group": "linting",
       "owner": "ENGINE",
       "status": "shipped",
       "since": "1.37.0-alpha",
-      "summary": "lint --fix repairs findings of the 125 fixable rules; --json reports per finding whether it was applied; lint accepts a folder",
+      "summary": "lint --fix repairs findings of the 126 fixable rules; --json reports per finding whether it was applied; lint accepts a folder",
       "intro": "Read this when you want drag-lint to repair findings instead of only reporting them. A dry run shows the edits, --apply writes them, and the JSON result says for each finding whether a fix was applied.",
       "wikiPage": "autofix-wave",
       "surfaces": [
@@ -18621,6 +18662,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "index-loop-to-for-in"
+      },
+      {
+        "id": "rule.index-possibly-out-of-range",
+        "title": "index-possibly-out-of-range",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Array index written with no guard bounding it to the array's range before the access -- ERangeError is only the last resort (bug-patterns, warning, fixable)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule index-possibly-out-of-range"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "index-possibly-out-of-range"
       },
       {
         "id": "rule.indexof-result-unchecked",
