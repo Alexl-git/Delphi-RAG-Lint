@@ -2111,6 +2111,15 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function MemberAccessMode(const ARef: TReference): string;
+    /// <summary>1.52 EXTGAPS: is ARef (a member-access naming routine ATargetId) the WHOLE
+    /// right-hand side of an assignment -- `X := Recv.Name;` with no argument list -- and
+    /// ATargetId a procedure (no result)? Then the site takes the routine's address (an event /
+    /// method-pointer binding), it does not call it.</summary>
+    /// <param name="ARef">The member-access ref (receiver_text set by the parser).</param>
+    /// <param name="ATargetId">The routine rung 3 bound it to.</param>
+    /// <returns>False when the source line is unavailable, the ref spans lines, the target is a
+    /// function / constructor / destructor, or the text around the ref is anything else.</returns>
+    function IsAddressTakenProcedure(const ARef: TReference; ATargetId: Int64): Boolean;
     /// <summary>The one child of AParentId named AName (of a kind in AKinds)
     /// that a property accessor clause can mean. One candidate, or several
     /// with one signature, is that candidate (first-match, as before). An
@@ -9586,7 +9595,9 @@ end;
 
 function TCallResolver.LookupMemberOnType(ATypeSymbolId: Int64; const AMemberName: string): TSymbol;
 const
-  MEMBER_KINDS: TSymbolKindSet = [skProperty, skField];
+  { skVarDecl: 1.52 EXTGAPS -- a CLASS VAR (`class var CInstances`) is a var child of its type;
+    `TEvgCfg.CInstances` stayed unbound while the bare name inside a method resolved. }
+  MEMBER_KINDS: TSymbolKindSet = [skProperty, skField, skVarDecl];
 var
   A: TTypeAncestor;
 begin
@@ -9626,6 +9637,44 @@ begin
     if (Length(Anc) > 0) and (Anc[0].Ordinal = 0) and Anc[0].Resolved and (Anc[0].SymbolId > 0)
        and (SymbolById(Anc[0].SymbolId).Kind <> skInterface) then Cur:= Anc[0].SymbolId;
   end;
+end;
+
+function TCallResolver.IsAddressTakenProcedure(const ARef: TReference; ATargetId: Int64): Boolean;
+var
+  Lines : TStringList;
+  Line  : string;
+  Before: string;
+  After : string;
+  Sym   : TSymbol;
+  Sig   : string;
+  P     : Integer;
+  Depth : Integer;
+begin
+  Result:= False;
+  Sym:= SymbolById(ATargetId);
+  if not (Sym.Kind in [skProcedure, skMethod]) then Exit;
+  { a function has a result type: ':' after the parameter list (or a bare ': T') }
+  Sig:= Sym.Signature;
+  Depth:= 0;
+  for P:= 1 to Length(Sig) do
+    if Sig[P] = '(' then Inc(Depth)
+    else if Sig[P] = ')' then Dec(Depth)
+    else if (Sig[P] = ':') and (Depth = 0) then Exit;
+  if (ARef.StartLine <> ARef.EndLine) or (ARef.StartCol < 1) then Exit;
+  Lines:= LinesOf(ARef.FileId);
+  if (Lines = nil) or (ARef.StartLine < 1) or (ARef.StartLine > Lines.Count) then Exit;
+  Line:= Lines[ARef.StartLine - 1];
+  if ARef.StartCol + Length(ARef.NameText) - 1 > Length(Line) then Exit;
+  { left: `<target> :=` then the receiver chain `Recv.`, nothing else }
+  Before:= TrimRight(Copy(Line, 1, ARef.StartCol - 1));
+  if not Before.EndsWith('.') then Exit;
+  Before:= TrimRight(Copy(Before, 1, Length(Before) - 1));
+  if (ARef.ReceiverText = '') or not EndsText(ARef.ReceiverText, Before) then Exit;
+  Before:= TrimRight(Copy(Before, 1, Length(Before) - Length(ARef.ReceiverText)));
+  if not Before.EndsWith(':=') then Exit;
+  { right: the statement ends -- no argument list, no further member, no operator }
+  After:= TrimLeft(Copy(Line, ARef.StartCol + Length(ARef.NameText), MaxInt));
+  Result:= (After = '') or After.StartsWith(';') or StartsText('end', After) or StartsText('else', After);
 end;
 
 function TCallResolver.MemberAccessMode(const ARef: TReference): string;
@@ -12050,6 +12099,12 @@ begin
     begin
       Result.TargetSymbolId:= Target;
       Result.Confidence    := Conf;
+      { 1.52 EXTGAPS (HBROOTS item 5): `H.OnEvt := H.Handler` names a PROCEDURE without calling
+        it -- a procedure has no value, so as the whole right-hand side of `:=` it is its address
+        (an event binding). Identity only (ValueOnly): refs.symbol_id, no call edge. A function
+        stays a call (its value is the common reading). }
+      if SameText(ACallRef.Kind, 'member-access') and IsAddressTakenProcedure(ACallRef, Target) then
+        Result.ValueOnly:= True;
       Exit;
     end;
     { 3b. PROPERTY / FIELD (2026-09-16, property-refs-resolve). A member-access

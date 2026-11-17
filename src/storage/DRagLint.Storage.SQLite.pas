@@ -2974,6 +2974,12 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetReferencesFromFile(AFileId: Int64): TArray<TReference>                     ;
+      /// <summary>The narrowest ref covering (ALine, ACol); see ISymbolStore.FindReferenceAt.</summary>
+      /// <param name="AFileId">The file.</param>
+      /// <param name="ALine">1-based line.</param>
+      /// <param name="ACol">1-based column.</param>
+      /// <returns>The ref, Id = 0 when none covers the position.</returns>
+      function FindReferenceAt(AFileId: Int64; ALine, ACol: Integer): TReference;
       /// <param name="AFileIds"><!-- drag-lint:auto type -->const TArray&lt;Int64&gt;</param>
       /// <param name="ALowerNames"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
       /// <returns><!-- drag-lint:auto -->TArray&lt;TReference&gt; -- Observed: nil;
@@ -12816,6 +12822,44 @@ begin
   end; // try
 end; // function
 
+function TSQLiteSymbolStore.FindReferenceAt(AFileId: Int64; ALine, ACol: Integer): TReference;
+var
+  Q: TFDQuery;
+begin
+  Result:= Default(TReference);
+  if AFileId <= 0 then Exit;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    { One line only (a multi-line ref is not an identifier under a cursor); the narrowest span
+      wins so `A.B` never answers the receiver for the member. idx_refs_file narrows first. }
+    Q.SQL.Text:= 'SELECT * FROM refs WHERE file_id = :fid AND start_line = :ln AND end_line = :ln'
+               + ' AND start_col <= :c AND end_col > :c ORDER BY end_col - start_col, id LIMIT 1';
+    Q.ParamByName('fid').AsLargeInt:= AFileId;
+    Q.ParamByName('ln' ).AsInteger := ALine;
+    Q.ParamByName('c'  ).AsInteger := ACol;
+    Q.Open;
+    if Q.Eof then Exit;
+    Result.Id:= Q.FieldByName('id').AsLargeInt;
+    if not Q.FieldByName('symbol_id').IsNull then Result.SymbolId:= Q.FieldByName('symbol_id').AsLargeInt;
+    Result.FileId   := AFileId;
+    Result.Kind     := Q.FieldByName('kind'      ).AsString;
+    Result.NameText := Q.FieldByName('name_text' ).AsString;
+    Result.StartLine:= Q.FieldByName('start_line').AsInteger;
+    Result.StartCol := Q.FieldByName('start_col' ).AsInteger;
+    Result.EndLine  := Q.FieldByName('end_line'  ).AsInteger;
+    Result.EndCol   := Q.FieldByName('end_col'   ).AsInteger;
+    var RcvF: TField:= Q.FindField('receiver_text');
+    if (RcvF <> nil) and not RcvF.IsNull then Result.ReceiverText:= RcvF.AsString;
+    var ExtF: TField:= Q.FindField('external_target');
+    if (ExtF <> nil) and not ExtF.IsNull then Result.ExternalTarget:= ExtF.AsString;
+    var XkF: TField:= Q.FindField('external_kind');
+    if (XkF <> nil) and not XkF.IsNull then Result.ExternalKind:= XkF.AsString;
+  finally
+    Q.Free;
+  end; // try
+end; // function
+
 function TSQLiteSymbolStore.FindReferencesTo( ASymbolId: Int64): TArray<TReference>;
 var
   Q   : TFDQuery         ;
@@ -13036,7 +13080,8 @@ begin
         R.Resolution:= (if SameText(EdgeF.AsString, 'ambiguous') then RESOLUTION_AMBIGUOUS else RESOLUTION_EXACT)
       else if (ExtF <> nil) and not ExtF.IsNull and (ExtF.AsString <> '') then
       begin
-        R.Resolution:= RESOLUTION_EXTERNAL;
+        R.Resolution    := RESOLUTION_EXTERNAL;
+        R.ExternalTarget:= ExtF.AsString; { 1.52 EXTGAPS: usages --name <library qname> }
         var XkF: TField:= Q.FindField('external_kind'); // D08 / D10: what the external name is
         if (XkF <> nil) and not XkF.IsNull then R.ExternalKind:= XkF.AsString;
       end

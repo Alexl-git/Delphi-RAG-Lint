@@ -287,7 +287,9 @@ function NameCallersForName(const AStore: ISymbolStore; const AName: string; ACo
 /// <returns>A bare name: every ref whose name_text matches, kind-blind (the
 /// historical behaviour). A qualified name: the refs named by its LAST segment
 /// that the resolver bound to one of ADecls -- refs.name_text never carries a
-/// dot, so matching the dotted string answered 0 for everything.</returns>
+/// dot, so matching the dotted string answered 0 for everything -- plus (1.52 EXTGAPS) the
+/// unbound refs whose external_target IS AName (a library symbol a project index never
+/// declares, e.g. Vcl.Forms.Application).</returns>
 /// <remarks>
 /// A qualified query drops UNBOUND refs: an unbound `X.Streaming`
 /// cannot be attributed to TJob rather than to any other Streaming.
@@ -868,6 +870,14 @@ begin
         HR.SymbolId  := HostDecl;
         HR.Resolution:= RESOLUTION_EXACT;
         Kept.Add(HR);
+        Continue;
+      end;
+      { 1.52 EXTGAPS (D7b): a project index holds no library declaration, so `usages --name
+        Vcl.Forms.Application` found 0 while 261 refs carry that very external_target. A ref the
+        resolver bound to the library name IS a usage of it. }
+      if (R.SymbolId = 0) and SameText(R.ExternalTarget, AName) then
+      begin
+        Kept.Add(R);
         Continue;
       end;
       for var D in ADecls do
