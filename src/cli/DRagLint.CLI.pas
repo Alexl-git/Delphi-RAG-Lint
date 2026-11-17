@@ -14817,6 +14817,21 @@ begin
     end);
 end;
 
+/// <summary>1.52 D1 "Disable in this unit": drops the findings whose rule the project lint config
+/// excludes in the finding's unit (`"rule_overrides": { "<rule>": { "exclude_units": [...] } }`).</summary>
+/// <param name="ACfg">The run's lint config; no rule_overrides keeps every finding.</param>
+/// <param name="AFindings">The lint / lint-all findings.</param>
+/// <returns>AFindings without those for which ACfg.IsRuleExcludedInUnit(RuleId, FilePath) is True;
+/// a finding without a file path is always kept.</returns>
+/// <remarks>Shared by DoLint and DoLintAll so both paths honour the same unit scope.</remarks>
+function DropUnitExcludedFindings(const ACfg: TLintConfig; const AFindings: TArray<TLintFinding>): TArray<TLintFinding>;
+begin
+  if Length(ACfg.RuleOverrides) = 0 then Exit(AFindings);
+  Result:= nil;
+  for var F: TLintFinding in AFindings do
+    if (F.FilePath = '') or not ACfg.IsRuleExcludedInUnit(F.RuleId, F.FilePath) then Result:= Result + [F];
+end;
+
 function DoLint(const AArgs: TArgs): Integer;
 var
   Linter      : DRagLint.Lint.Linter.TLinter;
@@ -15804,6 +15819,7 @@ begin
                   and SameText(TPath.GetFullPath(F.FilePath), TPath.GetFullPath(EffPath))) then FragKept:= FragKept + [F];
         Findings:= FragKept;
       end;
+      Findings:= DropUnitExcludedFindings(Cfg, Findings);   { 1.52 D1 unit-scope rule_overrides }
       { Free cached tree after single-file lint }
       TraceLintChecker('after-checkers');
       DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
@@ -20885,6 +20901,7 @@ begin
     configured glob. Pinned by
     tests\autotest\run_lintall_project_rules_honour_exclude_paths.ps1. }
   Findings:= DropUsesFragmentParseErrors(Store, Findings);   { 152c lane INCR (M4) }
+  Findings:= DropUnitExcludedFindings(Cfg, Findings);         { 1.52 D1 unit-scope rule_overrides }
   LintPhase(Format('exclude_paths filter (%d findings)', [Length(Findings)]));
   begin
     var ExclMemo: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
