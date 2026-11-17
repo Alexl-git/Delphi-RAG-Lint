@@ -11,7 +11,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 1.52.0-alpha
 
-* [Array index possibly out of range lint rule (index-possibly-out-of-range)](features/v152-index-possibly-out-of-range.md) -- Warns on the write of an array index that no dominating guard bounds on both sides before the access; opt-in InRange guard autofix.
+* [Array index possibly out of range lint rule (index-possibly-out-of-range)](features/v152-index-possibly-out-of-range.md) -- Warns (default ON) on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only.
 
 ## 1.51.1-alpha
 

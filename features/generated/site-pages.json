@@ -300,7 +300,7 @@
     "version": "1.35.1-alpha"
   },
   "features/drag-lint-options.md": {
-    "hash": "6099e69128e3fd1539f007c188a6f19d79d4b52581326746ab34217887f9278c",
+    "hash": "be90b3ab73663dc22c6dab11fd9d21989c6d11cfe333d111769ca31ad21586a7",
     "version": "1.51.1-alpha"
   },
   "features/drag-lint-panel-dockable.md": {
@@ -572,7 +572,7 @@
     "version": "1.50.0-alpha"
   },
   "features/lint-rules.md": {
-    "hash": "bcb4a6b899e20a0af882dbb5644da578d706e9c9fb46f53b2491d97fceb09373",
+    "hash": "02c196a0c6567f297b32a769e49823378f21f71ddee1c7cda5eb1283ff8f8887",
     "version": "1.51.1-alpha"
   },
   "features/lint-tree.md": {
@@ -784,7 +784,7 @@
     "version": "1.50.0-alpha"
   },
   "features/run-lint-all-full-report.md": {
-    "hash": "508f4e905d9fbcaed2c43eb3ad95ed016167a73578d8789f96179665fb6ed039",
+    "hash": "57b2d7d24689817a21ae6a2578682b506f43b5172fa70edb89d2b9c848707981",
     "version": "1.51.1-alpha"
   },
   "features/safe-delete.md": {
@@ -1012,7 +1012,7 @@
     "version": "1.51.1-alpha"
   },
   "features/v152-index-possibly-out-of-range.md": {
-    "hash": "4ff3b1b60f738048dd84f5d40427040d9b69a80f1d829f57ecb37795b1ecebbb",
+    "hash": "0016349dee2aa630492342dea17a5cc1cb406172ca429e9dd7820d1202c2b0ae",
     "version": "1.51.1-alpha"
   },
   "features/vscode-extension.md": {

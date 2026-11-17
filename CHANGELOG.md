@@ -6,14 +6,21 @@ breaking changes** until v2.0.
 ## v1.52.0-alpha -- unreleased
 
 ### New rules
-- `index-possibly-out-of-range` (bug-patterns, default OFF, lane IDXRANGE): an array index that
+- `index-possibly-out-of-range` (bug-patterns, default ON, lanes IDXRANGE + IDXRANGE2): an array index that
   no dominating guard (for over the bounds, if / while condition, `InRange`, an earlier
   Exit / raise guard) bounds on BOTH sides before `A[idx]` -- reported on the write of the index
   (warning; an unguarded parameter is a hint on the access). A subrange type is not a guard.
-  Risky autofix: inserts `if not InRange(i, Low(A), High(A)) then raise <class>.CreateFmt(...)`
-  before the access and adds System.Math / System.SysUtils; the class is the new config param
-  `params.index-possibly-out-of-range.exception_class` (default EArgumentOutOfRangeException).
-  424 rules, 341 enabled by default, 126 with an auto-fix.
+  Bounds are symbolic (`count(Base) + Off`: SetLength sizes, static bounds, `X.Count`, Length aliases).
+  C1: an index checked against ANOTHER collection's bound (`count + offset`) is silent only when that bound
+  is proven within this array's, else a warning naming it; a `for` over another collection's bound now
+  reports. C2: an unchecked index parameter is cleared when every local caller passes an index proven in
+  range (plain-call routines only, depth 1). An index read from a lookup (`GetValueOrDefault`, `Items[]`,
+  `Map[k]`) is a hint. C3: the autofix (inserts `if not InRange(i, Low(A), High(A)) then raise
+  <class>.CreateFmt(...)` and adds System.Math / System.SysUtils; class = param
+  `params.index-possibly-out-of-range.exception_class`, default EArgumentOutOfRangeException) is MANUAL ONLY:
+  a batch `--fix` withholds it with a stderr note, `--fix-rule index-possibly-out-of-range` (the IDE's Fix it)
+  applies it; `rules --json` carries the new field `fix_manual_only: true`.
+  424 rules, 342 enabled by default, 126 with an auto-fix.
 ## v1.51.1-alpha -- date TBD
 
 Bug-fix release (wave v1511, 25 lanes). 423 rules, 341 enabled by default, 125 with an auto-fix (unchanged; no

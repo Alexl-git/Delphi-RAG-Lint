@@ -6,9 +6,9 @@ subrange-typed index does not help either -- it only moves the range error to th
 This rule warns where an array index can leave the array's bounds BEFORE the runtime check
 fires, and points at the line that made it so: the write of the index, not the access.
 
-Default **OFF**, category `bug-patterns`, severity `warning` (`hint` for an unguarded
-parameter). Enable it with `"enabled": ["index-possibly-out-of-range"]` in the lint config, or
-name it: `drag-lint lint <file> --rule index-possibly-out-of-range`.
+Default **ON**, category `bug-patterns`, severity `warning` (`hint` for an unguarded
+parameter). Disable it with `"disabled": ["index-possibly-out-of-range"]` in the lint config; run only it with
+`drag-lint lint <file> --rule index-possibly-out-of-range`.
 
 ## What it reports
 
@@ -46,7 +46,20 @@ For each `A[idx]` where `A` is a static `array[lo..hi]`, a dynamic or open array
 
 A write between the guard and the access cancels the guard.
 
-## Autofix (risky, opt-in)
+## Symbolic bounds and other collections (1.52, IDXRANGE2)
+
+Bounds are `count(Base) + Off`: SetLength size expressions, static bounds, `X.Count`, Length aliases.
+A field or global array uses the size every SetLength in the file agrees on.
+
+- **Parallel arrays (C1):** an index guarded against another collection (`i < Names.Count`) is silent only when
+  that bound is proven within this array's (same SetLength count, static bounds within, or every local caller
+  sizing the parameter array from the guarded count); otherwise a warning names the bound. A `for` running
+  to another collection's bound reports on the `for` line.
+- **Index parameters (C2):** cleared when EVERY local call passes an index proven in range (depth 1; only
+  routines whose every use in the file is a plain call).
+- **Lookups:** an index read from `GetValueOrDefault`, `Items[]` or `Map[k]` is a hint (its range is invisible).
+
+## Autofix (risky, MANUAL ONLY)
 
 `drag-lint lint --in <f.pas> --fix --fix-rule index-possibly-out-of-range [--apply]` inserts,
 on its own line before the statement holding the access, at its indentation:
@@ -64,6 +77,7 @@ is the rule param `exception_class`:
 
 An access inside a condition or a one-statement branch (`if X then A[i] := 1`) gets no edit --
 the message says `no autofix` -- because an inserted line would change what the branch guards.
-The fix is flagged risky: it changes behaviour (a raise instead of a range error or overrun).
+The fix is flagged risky and manual-only (`fix_manual_only: true` in `rules --json`): it changes behaviour (a raise instead of a range error or overrun), so a batch `--fix` (no `--fix-rule`) withholds it with a stderr note;
+only `--fix-rule index-possibly-out-of-range` (the IDE's Fix it) applies it. Edit the inserted message text afterwards.
 
 Spec: `docs\superpowers\specs\2026-11-16-index-possibly-out-of-range-design.md`.
