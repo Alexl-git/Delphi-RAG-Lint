@@ -6,14 +6,16 @@
 # the same table must FAIL, proving the check can fail. Missing inputs SKIP (exit 77).
 param(
   [string]$Exe = 'third_party\dll-win64\drag-lint.exe',
-  [string]$Source = 'C:\TEMP\claude\lanes\v1511\INT\wt\src\storage\DRagLint.Storage.SQLite.pas',
-  [string]$DbPath = 'C:\TEMP\claude\lanes\v1511\INT\scratch\int-final.sqlite',
+  [string]$Source = '',
+  [string]$DbPath = $env:DL_V1511_DB,
   [double]$MaxPhaseSeconds = 15,
   [double]$MaxTotalSeconds = 60
 )
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 if (-not [IO.Path]::IsPathRooted($Exe)) { $Exe = Join-Path $repo $Exe }
+if (-not $Source) { $Source = Join-Path $repo 'src\storage\DRagLint.Storage.SQLite.pas' }
+if (-not $DbPath) { Write-Host 'SKIP: no -DbPath and DL_V1511_DB unset'; exit 77 }
 foreach ($p in @($Exe, $Source, $DbPath)) {
   if (-not (Test-Path -LiteralPath $p)) { Write-Host "SKIP: not found: $p"; exit 77 }
 }

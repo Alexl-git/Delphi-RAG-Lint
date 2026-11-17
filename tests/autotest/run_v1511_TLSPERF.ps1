@@ -5,13 +5,15 @@
 # Missing inputs SKIP (exit 77, battery-safe): the Source/DB are large and never guessed.
 param(
   [string]$Exe = 'third_party\dll-win64\drag-lint.exe',
-  [string]$Source = 'C:\TEMP\claude\lanes\v1511\INT\wt\src\storage\DRagLint.Storage.SQLite.pas',
-  [string]$DbPath = 'C:\TEMP\claude\lanes\v1511\INT\scratch\int-final.sqlite',
+  [string]$Source = '',
+  [string]$DbPath = $env:DL_V1511_DB,
   [double]$MaxSeconds = 10
 )
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 if (-not [IO.Path]::IsPathRooted($Exe)) { $Exe = Join-Path $repo $Exe }
+if (-not $Source) { $Source = Join-Path $repo 'src\storage\DRagLint.Storage.SQLite.pas' }
+if (-not $DbPath) { Write-Host 'SKIP: no -DbPath and DL_V1511_DB unset'; exit 77 }
 foreach ($p in @($Exe, $Source, $DbPath)) {
   if (-not (Test-Path -LiteralPath $p)) { Write-Host "SKIP: not found: $p"; exit 77 }
 }
