@@ -33,7 +33,8 @@ tree had ERROR or MISSING nodes.
 ## index --resolve-only without the library
 A database resolved against a platform library and re-resolved with no library store attached prints
 `WARNING: index: no library store attached: external targets will be cleared; pass --library-db <library.sqlite>.`
-The targets are still cleared (1.51.2 may keep them).
+The targets are still cleared in 1.51.1. Since 1.52 the run KEEPS the library bindings of the last library run and
+the warning reads `WARNING: index: no library store attached: library bindings are kept from the last library run, not refreshed; pass --library-db <library.sqlite>.`
 
 ## find-deadcode on a library project
 `find-deadcode` no longer lists every used unit of a library project as dead.

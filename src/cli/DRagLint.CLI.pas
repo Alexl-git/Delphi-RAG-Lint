@@ -6814,10 +6814,10 @@ begin
       if Length(RunLibs) = 0 then
         RunLibs:= ManifestLibraryStores(LibRun.Wanted, AArgs.CheckPlatform, IdxDproj, ResolvedDb, Store, IdxResolveGate);
       { v1511 F3: a DB resolved against a library before (external_stores meta) re-resolved
-        with none -- typically a copy outside the manifest -- loses every external_target.
-        Say so; the behaviour is unchanged. }
+        with none -- typically a copy outside the manifest. 1.52 EXTR: the library bindings of the last
+        library run are KEPT (not refreshed); say so. }
       if (Length(RunLibs) = 0) and (Store.GetMetaValue('external_stores') <> '') then
-        Writeln(ErrOutput, 'WARNING: index: no library store attached: external targets will be cleared; pass --library-db <library.sqlite>.');
+        Writeln(ErrOutput, 'WARNING: index: no library store attached: library bindings are kept from the last library run, not refreshed; pass --library-db <library.sqlite>.');
       Stage('', 'calls', procedure begin ResolveCallsClearingFirst(Store, ClearEdgesInPass, RunLibs); end); { v14 (D5) + v21 cross-DB }
       Stage('', 'dispatch', procedure begin Store.ResolveDispatch(RunLibs); end); { 2026-10-26: libraries only recognise a library `class of` param type }
     end

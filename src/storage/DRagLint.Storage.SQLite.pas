@@ -12632,6 +12632,9 @@ begin
       if (ExtF <> nil) and not ExtF.IsNull then R.ExternalTarget:= ExtF.AsString;
       var XkF: TField:= Q.FindField('external_kind');
       if (XkF <> nil) and not XkF.IsNull then R.ExternalKind:= XkF.AsString;
+      { 1.52 EXTR H2: the receiver's type text rides along too (same FindField guard). }
+      var RttF: TField:= Q.FindField('receiver_type_text');
+      if (RttF <> nil) and not RttF.IsNull then R.ReceiverTypeText:= RttF.AsString;
       List.Add(R);
       Q.Next;
     end;
@@ -18086,6 +18089,9 @@ var
   FldLine: TField    ;
   FldCol : TField    ;
 begin
+  { 1.52 EXTR H1: a no-library pass keeps the library reads of the last library run -- the bulk
+    UPDATE below would clear every one of them with nothing to put back. }
+  if (AResolver = nil) or not AResolver.HasLibraryStore then Exit;
   Suffix:= '';
   if AScopeWhere <> '' then Suffix:= Suffix + ' AND (' + AScopeWhere + ')';
   if AStaleWhere <> '' then Suffix:= Suffix + ' AND (' + AStaleWhere + ')';
@@ -18559,8 +18565,9 @@ const
 begin
   if Length(AExtraStores) = 0 then
   begin
-    if not AScoped then FConn.ExecSQL('DELETE FROM schema_meta WHERE key = ''external_stores''')
-    else
+    { 1.52 EXTR H4: an unscoped pass without stores used to delete the key; since the rows now
+      keep their stored library targets (KeepStoredExternal, ResolveLibraryReadRefs) the key is
+      marked partial instead, exactly like the scoped case below. AScoped is kept for callers. }
     begin
       { 149 IC, the history hole: a scoped pass WITHOUT stores re-resolved some refs with no
         library, so the key no longer describes every row. Mark it partial (readers that only

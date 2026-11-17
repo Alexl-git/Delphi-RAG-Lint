@@ -3,6 +3,19 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## v1.52.0-alpha -- date TBD
+
+In integration (lane/v152-int). One re-parse for the whole 1.52 bundle: extractor 1.40.0 -> 1.41.0-alpha,
+resolver 1.28.0 -> 1.29.0-alpha.
+
+### Breaking
+
+### Fixed
+- Resolver (EXTR): generic type receivers (`TObjectList<T>.Create`) are typed and bound; a `Name(...)` receiver keeps
+  its type text only when it reads as a type; `index --resolve-only` without a library store KEEPS the library
+  bindings (calls, member accesses, library reads) of the last library run instead of clearing them, warns
+  "library bindings are kept from the last library run, not refreshed" and marks `external_stores` partial.
+
 ## v1.51.1-alpha -- date TBD
 
 Bug-fix release (wave v1511, 25 lanes). 423 rules, 341 enabled by default, 125 with an auto-fix (unchanged; no
