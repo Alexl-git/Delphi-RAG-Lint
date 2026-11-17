@@ -30,8 +30,8 @@ uses
   System.SysUtils
   ;
 
-function RunRuleScope(const pAction, pRuleId, pScope, pFile: string; pLine: Integer;
-  const pReason, pProject, pConfigPath: string; pJson: Boolean): Integer;
+function RunRuleScope(const pAction, pRuleId, pScope, pFile: string; pLine: Integer;  // dl:ok too-many-parameters@c2ad, unused-parameter@797f -- REVIEWED 2026-11-17 v152 FRAME: one positional per CLI flag keeps the CLI.pas dispatch a single line with no options builder there (FRAME contract, TT plan section 6 E1 shape); unused: the stub ignores its inputs, the owning lane's implementation reads every one
+  const pReason, pProject, pConfigPath: string; pJson: Boolean): Integer;  // dl:ok unused-parameter@e510 -- REVIEWED 2026-11-17 v152 FRAME: FRAME verb-unit contract signature; the stub ignores its inputs, the owning lane's implementation reads every one
 begin
   Writeln(ErrOutput, 'rules ' + pAction + ': not implemented (1.52 scaffold)');
   Result:= 2;

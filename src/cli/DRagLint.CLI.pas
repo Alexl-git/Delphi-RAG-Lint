@@ -1621,7 +1621,7 @@ begin
     else if A = '--since' then Result.DocSince:= True
     else if A = '--migrate-pure' then Result.DocMigratePure:= True
     { 1.52 FRAME F2: flags of check-init, repo, explain and rules disable / enable (verbs in their own units) }
-    else if (A = '--scope') and (Result.Command = 'rules') and (i < ParamCount) then
+    else if (A = '--scope') and (Result.Command = 'rules') and (i < ParamCount) then  // dl:ok duplicate-code@e071 -- REVIEWED 2026-11-17 v152 FRAME: the ParseArgs one-value flag arm shape every sibling arm repeats; folding it is a ParseArgs refactor, not this lane
     begin
       Inc(i);
       Result.RuleScope:= ParamStr(i);

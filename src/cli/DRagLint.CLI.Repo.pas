@@ -30,8 +30,8 @@ uses
   System.SysUtils
   ;
 
-function RunRepoVerb(const pSub, pRepo, pProject, pConnection, pInFile, pOutFile: string;
-  pReplace, pJson: Boolean): Integer;
+function RunRepoVerb(const pSub, pRepo, pProject, pConnection, pInFile, pOutFile: string;  // dl:ok too-many-parameters@96de, unused-parameter@b395 -- REVIEWED 2026-11-17 v152 FRAME: one positional per CLI flag keeps the CLI.pas dispatch a single line with no options builder there (FRAME contract, TT plan section 6 E1 shape); unused: the stub ignores its inputs, the owning lane's implementation reads every one
+  pReplace, pJson: Boolean): Integer;  // dl:ok unused-parameter@d7d1 -- REVIEWED 2026-11-17 v152 FRAME: FRAME verb-unit contract signature; the stub ignores its inputs, the owning lane's implementation reads every one
 begin
   Writeln(ErrOutput, 'repo: not implemented (1.52 scaffold)');
   Result:= 1;

@@ -28,8 +28,8 @@ uses
   System.SysUtils
   ;
 
-function RunCheckInit(const pTarget, pAt, pDbPath, pProject: string; pJson, pExplain: Boolean;
-  pMaxRoutines: Integer): Integer;
+function RunCheckInit(const pTarget, pAt, pDbPath, pProject: string; pJson, pExplain: Boolean;  // dl:ok unused-parameter@f4ff -- REVIEWED 2026-11-17 v152 FRAME: FRAME verb-unit contract signature; the stub ignores its inputs, the owning lane's implementation reads every one
+  pMaxRoutines: Integer): Integer;  // dl:ok unused-parameter@9133 -- REVIEWED 2026-11-17 v152 FRAME: FRAME verb-unit contract signature; the stub ignores its inputs, the owning lane's implementation reads every one
 begin
   Writeln(ErrOutput, 'check-init: not implemented (1.52 scaffold)');
   Result:= 2;

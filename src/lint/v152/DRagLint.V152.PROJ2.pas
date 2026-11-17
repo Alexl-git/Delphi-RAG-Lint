@@ -50,27 +50,27 @@ implementation
 { The lane's helpers live in DRagLint.V152.PROJ2.Support; name it in an
   implementation uses clause here once it declares something. }
 
-class procedure TV152PROJ2Rules.Catalog(const ADecls: TList<TV151RuleDecl>);
+class procedure TV152PROJ2Rules.Catalog(const ADecls: TList<TV151RuleDecl>);  // dl:ok unused-parameter@461b -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)
 begin
   { no rules yet }
 end;
 
-class function TV152PROJ2Rules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV152PROJ2Rules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@008a -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)
 begin
   Result:= nil;
 end;
 
-class function TV152PROJ2Rules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV152PROJ2Rules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@1ce2 -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)
 begin
   Result:= nil;
 end;
 
-class function TV152PROJ2Rules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;
+class function TV152PROJ2Rules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;  // dl:ok unused-parameter@1db0 -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)
 begin
   Result:= nil;
 end;
 
-class function TV152PROJ2Rules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
+class function TV152PROJ2Rules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@6383 -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)
 begin
   Result:= nil;
 end;

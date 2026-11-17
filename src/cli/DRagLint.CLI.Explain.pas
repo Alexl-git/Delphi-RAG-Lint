@@ -22,7 +22,7 @@ uses
   System.SysUtils
   ;
 
-function RunExplain(const pRuleId, pRulesDir: string; pJson: Boolean): Integer;
+function RunExplain(const pRuleId, pRulesDir: string; pJson: Boolean): Integer;  // dl:ok unused-parameter@59ed -- REVIEWED 2026-11-17 v152 FRAME: FRAME verb-unit contract signature; the stub ignores its inputs, the owning lane's implementation reads every one
 begin
   Writeln(ErrOutput, 'explain: not implemented (1.52 scaffold)');
   Result:= 2;
