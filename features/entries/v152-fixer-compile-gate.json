@@ -1,0 +1,69 @@
+{
+  "id": "v152-fixer-compile-gate",
+  "title": "extract-method and create-enum-helper through the compile gate by default",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.52.0-alpha",
+  "summary": "extract-method --apply and create-enum-helper --apply build the project before and after the write by default: the project comes from --project, the database's own project or the project that names the unit; none found = REFUSED (no-project); --no-compile-gate writes unbuilt",
+  "intro": "Read this when extract-method or create-enum-helper refuses with REFUSED (no-project) or (dirty-baseline), or when you want to know which project they build. Since 1.52 --apply goes through the compile gate without --project: the project is --project, else the project a DB at `<dir>\\_D-RAG\\<base>.sqlite` belongs to, else the nearest .dproj (walking up from the unit's folder) whose .dproj / .dpr names the unit. A project that does not build is refused with nothing written; a fix that breaks the build is rolled back. When no project is found the write is refused (exit 2); --no-compile-gate writes unbuilt, as before 1.52.",
+  "wikiPage": "fixer-compile-gate",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "extract-method",
+      "example": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> --apply",
+      "usage": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> --apply [--project <X.dproj> | --no-compile-gate] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-backup]",
+      "flags": [
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--project",
+          "arg": "<X.dproj>"
+        },
+        {
+          "name": "--no-compile-gate"
+        }
+      ]
+    },
+    {
+      "type": "cli",
+      "verb": "create-enum-helper",
+      "example": "drag-lint create-enum-helper --qname <TEnum> --db <db> --apply",
+      "usage": "drag-lint create-enum-helper --qname <TEnum> --db <db> --apply [--project <X.dproj> | --no-compile-gate] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-backup]",
+      "flags": [
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--project",
+          "arg": "<X.dproj>"
+        },
+        {
+          "name": "--no-compile-gate"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "questions": [
+    {
+      "ask": "Why did extract-method refuse with REFUSED (no-project)?",
+      "command": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> --apply --project <X.dproj>"
+    },
+    {
+      "ask": "How do I extract a method without building the project?",
+      "command": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> --apply --no-compile-gate"
+    },
+    {
+      "ask": "Which project does create-enum-helper build before it writes?",
+      "command": "drag-lint create-enum-helper --qname <TEnum> --db <db> --apply"
+    }
+  ],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-11-17",
+    "by": "ENGINE"
+  }
+}

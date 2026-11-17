@@ -242,7 +242,43 @@ type
   function ResolveExtractSelection(const AFile: string; AFromLine, AToLine: Integer;
     out ASel: TExtractSelection; out ARefuse: string): TExtractOutcome;
 
+const
+  /// <summary>Refusal name (REFUSED (no-project)) of a gated fixer's --apply when no project builds the unit.</summary>
+  CFixerGateNoProject = 'no-project';
+
+type
+  /// <summary>How a gated fixer (extract-method, create-enum-helper) writes on --apply: fgvGated through the
+  /// compile gate of a project, fgvUnbuilt without a build (the explicit --no-compile-gate opt-out), fgvRefused
+  /// not at all (no project builds the edited unit).</summary>
+  TFixerGateVerdict = (fgvGated, fgvUnbuilt, fgvRefused);
+
+  /// <summary>Picks the project the compile gate of a gated fixer builds (E-COMPILEGATE-ADOPT-FIXERS, 1.52 GATE2):
+  /// extract-method and create-enum-helper write through the gate BY DEFAULT, not only when --project is typed.</summary>
+  /// <param name="pVerb">The verb, for the messages (extract-method, create-enum-helper).</param>
+  /// <param name="pProject">--project as given (or from the project config); '' when absent.</param>
+  /// <param name="pDbPath">--db as given; '' when absent.</param>
+  /// <param name="pFile">The unit the fix edits; '' skips the walk.</param>
+  /// <param name="pNoCompileGate">--no-compile-gate: write unbuilt.</param>
+  /// <param name="pGateProject">The .dproj to build; '' unless the result is fgvGated.</param>
+  /// <param name="pMessage">One stderr line: the note naming the project and how it was found (fgvGated), the
+  /// unbuilt note (fgvUnbuilt), or the refusal, starting "REFUSED (no-project)" and naming --project and
+  /// --no-compile-gate (fgvRefused).</param>
+  /// <returns>fgvUnbuilt when pNoCompileGate. Else fgvGated with the first of: pProject; the database's own project
+  /// (a DB at &lt;dir&gt;\_D-RAG\&lt;base&gt;.sqlite belongs to an existing &lt;dir&gt;\&lt;base&gt;.dproj); the
+  /// nearest project of the unit (walking up from its folder, the one .dproj whose text, or whose .dpr / .dpk, names
+  /// the unit's file). fgvRefused when none is found, or when the nearest folder with a match holds two or more.</returns>
+  /// <remarks>Never builds or writes; reads only project files. The unit is matched by FILE NAME in the project text
+  /// (DCCReference / "in '...'"), so a same-named unit of another folder can match: the gate then builds a project the
+  /// edit does not reach, which still refuses a project that does not build. Runner:
+  /// tests\autotest\run_v152_GATE2_fixers.ps1.</remarks>
+  function ResolveFixerGate(const pVerb, pProject, pDbPath, pFile: string; pNoCompileGate: Boolean;
+    out pGateProject, pMessage: string): TFixerGateVerdict;
+
 implementation
+
+uses
+  System.IOUtils
+  ;
 
 { ---------------------------------------------------------------------------
   Helpers
@@ -1913,6 +1949,99 @@ end;
 class function TExtractMethodRefactoring.RenderDryRun(const AEdits: TArray<TTextEdit>): string;
 begin
   Result:= TTextEditApplier.RenderDryRun(AEdits);
+end;
+
+{ ---------------------------------------------------------------------------
+  Compile-gate project of a gated fixer (1.52 GATE2)
+  --------------------------------------------------------------------------- }
+
+{ True when pText (a .dproj / .dpr / .dpk) names the unit file pFileName after a path separator or a quote. }
+function ProjectTextNamesUnit(const pText, pFileName: string): Boolean;
+begin
+  var T:= pText.ToLower;
+  var N:= pFileName.ToLower;
+  Result:= T.Contains('\' + N) or T.Contains('/' + N) or T.Contains('''' + N) or T.Contains('"' + N);
+end;
+
+{ True when the .dproj pDproj, or its .dpr / .dpk, names pFileName. An unreadable project file raises (the verb
+  then ends before anything is written). }
+function ProjectNamesUnit(const pDproj, pFileName: string): Boolean;
+begin
+  Result:= False;
+  for var F in [pDproj, ChangeFileExt(pDproj, '.dpr'), ChangeFileExt(pDproj, '.dpk')] do
+    if TFile.Exists(F) and ProjectTextNamesUnit(TFile.ReadAllText(F), pFileName) then Exit(True);
+end;
+
+{ The nearest .dproj naming pFile, walking up from its folder to the root. '' when none; pAmbiguousDir = the first
+  folder holding two or more. }
+function NearestProjectOf(const pFile: string; out pAmbiguousDir: string): string;
+begin
+  Result:= '';
+  pAmbiguousDir:= '';
+  var Name:= ExtractFileName(pFile);
+  var Dir:= ExtractFilePath(ExpandFileName(pFile));
+  while Dir <> '' do
+  begin
+    var Hits: TArray<string>:= [];
+    if TDirectory.Exists(Dir) then
+      for var P in TDirectory.GetFiles(Dir, '*.dproj') do  // dl:ok taint-path-traversal@d2a4 -- the folders of the user's own unit and its parents, read for *.dproj names only; nothing is written there
+        if ProjectNamesUnit(P, Name) then Hits:= Hits + [P];
+    if Length(Hits) = 1 then Exit(Hits[0]);
+    if Length(Hits) > 1 then
+    begin
+      pAmbiguousDir:= Dir;
+      Exit;
+    end;
+    var Up:= ExtractFilePath(ExcludeTrailingPathDelimiter(Dir));
+    if SameText(IncludeTrailingPathDelimiter(Up), Dir) then Break;
+    Dir:= IncludeTrailingPathDelimiter(Up);
+  end;
+end;
+
+{ The project a DB at its proper place belongs to: <dir>\_D-RAG\<base>.sqlite -> an existing <dir>\<base>.dproj. }
+function DbOwnProject(const pDbPath: string): string;
+begin
+  Result:= '';
+  if pDbPath = '' then Exit;
+  var DbDir:= ExcludeTrailingPathDelimiter(ExtractFilePath(ExpandFileName(pDbPath)));
+  if not SameText(ExtractFileName(DbDir), '_D-RAG') then Exit;
+  var Sibling:= TPath.Combine(ExtractFilePath(DbDir), ChangeFileExt(ExtractFileName(pDbPath), '.dproj'));
+  if TFile.Exists(Sibling) then Result:= Sibling;
+end;
+
+function ResolveFixerGate(const pVerb, pProject, pDbPath, pFile: string; pNoCompileGate: Boolean;
+  out pGateProject, pMessage: string): TFixerGateVerdict;
+begin
+  pGateProject:= '';
+  if pNoCompileGate then
+  begin
+    pMessage:= pVerb + ': note: --no-compile-gate: written without a build';
+    Exit(fgvUnbuilt);
+  end;
+  var How:= '--project';
+  var Ambiguous:= '';
+  pGateProject:= pProject;
+  if pGateProject = '' then
+  begin
+    pGateProject:= DbOwnProject(pDbPath);
+    How:= 'the database''s project';
+  end;
+  if (pGateProject = '') and (pFile <> '') then
+  begin
+    pGateProject:= NearestProjectOf(pFile, Ambiguous);
+    How:= 'the project that names ' + ExtractFileName(pFile);
+  end;
+  if pGateProject = '' then
+  begin
+    var Why:= if Ambiguous <> '' then 'more than one project in ' + Ambiguous + ' names ' + ExtractFileName(pFile)
+      else 'no project builds ' + pFile;
+    pMessage:= Format('REFUSED (%s): %s --apply: %s -- pass --project <X.dproj>, or --no-compile-gate to write unbuilt; nothing written',
+      [CFixerGateNoProject, pVerb, Why]);
+    Exit(fgvRefused);
+  end;
+  pMessage:= Format('%s: note: --apply writes through the compile gate of %s (%s; --no-compile-gate writes unbuilt)',
+    [pVerb, ExtractFileName(pGateProject), How]);
+  Result:= fgvGated;
 end;
 
 end.
