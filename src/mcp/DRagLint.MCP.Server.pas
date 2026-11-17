@@ -545,6 +545,8 @@ uses
   , DRagLint.Doc.Regions
   , DRagLint.Query.Implementors { get_implementors (interface report, 1.40) }
   , DRagLint.Query.ExceptionFacts { get_exception_facts (wave 148 D1) }
+  , DRagLint.Query.HappensBefore.Types { check_init (1.52 HBMCP): the answer contract }
+  , DRagLint.Query.HappensBefore.Render { check_init: the same JSON as `check-init --json` }
   , DRagLint.Query.Callers   { Gitea #31: the CLI's resolved callers and name filters }
   , DRagLint.Index.Freshness { Gitea #34: the freshness note of the store a tool reads }
   ;
@@ -859,6 +861,16 @@ begin
         + '"name":{"type":"string","description":"An exception type, bare or qualified"},'
         + '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' + '}}'));
 
+  { 1.52 HBMCP: the happens-before verdict, the same answer and JSON as `check-init --json`. }
+  Tools.AddElement(ToolDescriptor(
+      'check_init', 'Is a unit variable or field set before it is used: the verdict SET, NEVER-SET or MAY-BE-UNSET for one '
+        + 'variable (target, qualified) or for the variable at a source position (at, file:line[:col]), with the routines '
+        + 'and events that set it and the reason for each use. Read-only. Returns the JSON of drag-lint check-init --json.',
+      '{"type":"object","properties":{' + '"target":{"type":"string","description":"Qualified variable or field (e.g. UnitA.GCache, UnitA.TFoo.FBar)"},'
+        + '"at":{"type":"string","description":"file:line[:col] of a use; used when target is absent"},'
+        + '"explain":{"type":"boolean","description":"Add the roots and per-use reasons (optional, default false)"},'
+        + '"max_routines":{"type":"integer","description":"Most routines analysed; 0 or absent = the default budget"},'
+        + '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' + '}}'));
   Tools.AddElement(ToolDescriptor(
       'get_implementors', 'The interface report: for an interface, the classes implementing it (directly, '
         + 'through a derived interface, inherited from an ancestor class, or by implements delegation); for an '
@@ -1599,6 +1611,52 @@ begin
       end;
       ResolveStore(Args); { sets FCallNote: the freshness note of the store this answer reads }
       ResultText:= ExceptionFactsJson(ExceptionFactsOf(ExDb, ExTarget, ExName));
+    end // if
+    else if ToolName = 'check_init' then
+    begin
+      var CiTarget: string:= '';
+      var CiAt    : string:= '';
+      if Args.GetValue('target') <> nil then CiTarget:= Args.GetValue('target').Value;
+      if Args.GetValue('at') <> nil then CiAt:= Args.GetValue('at').Value;
+      var CiAtSite: THbSite:= Default(THbSite);
+      if (CiTarget = '') and (CiAt = '') then
+      begin
+        SendError(AId, JSONRPC_INVALID_PARAMS, 'check_init requires target or at');
+        Exit;
+      end;
+      if (CiAt <> '') and not HbParseAt(CiAt, CiAtSite) then
+      begin
+        SendError(AId, JSONRPC_INVALID_PARAMS, 'check_init: at must be file:line[:col] with line and col >= 1');
+        Exit;
+      end;
+      var CiMax:= 0;
+      if Args.GetValue('max_routines') <> nil then CiMax:= StrToIntDef(Args.GetValue('max_routines').Value, -1);
+      if CiMax < 0 then
+      begin
+        SendError(AId, JSONRPC_INVALID_PARAMS, 'check_init: max_routines needs a whole number >= 0');
+        Exit;
+      end;
+      var CiStore:= ResolveStore(Args); { sets FCallNote; the same read-only store every other tool reads }
+      if CiStore = nil then
+      begin
+        SendError(AId, JSONRPC_SERVER_ERROR, NoStoreMessage);
+        Exit;
+      end;
+      try
+        { HANDOVER (lane HBSOLVER, applied by INT): the same replacement as in DRagLint.CLI.CheckInit.RunCheckInit:
+            var CiOpts:= Default(THbOptions);
+            CiOpts.MaxRoutines:= if CiMax = 0 then HB_DEFAULT_MAX_ROUTINES else CiMax;
+            CiOpts.Explain:= (Args.GetValue('explain') <> nil) and SameText(Args.GetValue('explain').Value, 'true');
+            ResultText:= HbAnswerJson(CheckInit(CiDb, CiTarget, CiAt, CiOpts));
+          with CiDb the db path as in get_exception_facts, and DRagLint.Query.HappensBefore in uses. }
+        ResultText:= HbAnswerJson(HbNotImplementedAnswer(CiTarget, CiAtSite));
+      except
+        on E: EHbUsage do
+        begin
+          SendError(AId, JSONRPC_INVALID_PARAMS, 'check_init: ' + E.Message);
+          Exit;
+        end;
+      end;
     end // if
     else if ToolName = 'get_implementors' then
     begin
