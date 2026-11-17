@@ -4,7 +4,7 @@ title: Heavy work in an initialization section (lint rule)
 summary: "Project lint rule: an initialization section reaches the file system, the registry, the network, a database or a dialog"
 product: DL
 group: linting
-order: 30022
+order: 30023
 since: 1.44.1-alpha
 status: shipped
 updated: 1.51.1-alpha

@@ -281,6 +281,56 @@ $nowDocumented = @($UndocumentedOnPurpose.Keys | Where-Object { $helpVerbs -cont
 Check 'no $UndocumentedOnPurpose entry has since been documented' ($nowDocumented.Count -eq 0) `
   $(if ($nowDocumented.Count -gt 0) { "now in --help, drop the entry: $($nowDocumented -join ' ')" } else { '' })
 
+# --- 1c2: no verb is described twice ----------------------------------------
+# 1.52 INT: `drag-lint cycles --db ...` printed TWO lines -- the frozen block of one registry
+# entry and the blockless usage of a second entry for the same verb (one had --hub, the
+# other --ctor-wide). A second line for the same verb + first argument whose flag set
+# overlaps the first by >= 85 % (Jaccard) is that defect; real variants (index --all vs
+# index --project, lint <path> vs lint --in) overlap far less.
+function Get-DuplicateHelpLines([string]$HelpText) {
+  $rows = foreach ($l in ($HelpText -split "`r?`n")) {
+    if ($l -match '^\s{2}drag-lint\s+([a-z][a-z0-9-]*)\s+(\S+)') {
+      [pscustomobject]@{
+        Key   = "$($Matches[1]) $($Matches[2])"
+        Flags = @([regex]::Matches($l, '--[a-z][a-z0-9-]*') | ForEach-Object Value | Sort-Object -Unique)
+      }
+    }
+  }
+  foreach ($grp in @($rows | Group-Object Key | Where-Object Count -gt 1)) {
+    $g = @($grp.Group)
+    for ($i = 0; $i -lt $g.Count; $i++) {
+      for ($j = $i + 1; $j -lt $g.Count; $j++) {
+        $common = @($g[$i].Flags | Where-Object { $g[$j].Flags -contains $_ }).Count
+        $union  = @(($g[$i].Flags + $g[$j].Flags) | Sort-Object -Unique).Count
+        if (($union -gt 0) -and (($common / $union) -ge 0.85)) { $grp.Name; break }
+      }
+    }
+  }
+}
+# Pre-existing near-duplicates (frozen block + blockless surface of a second entry), measured
+# 2026-11-17 on lane/v152-int. Merge each pair into one registry surface, then drop it here.
+$DuplicateHelpOnPurpose = [ordered]@{
+  'document --qname'          = 'block (documentation) + blockless surface of a second entry; merge in a follow-up'
+  'extract-method --in'       = 'block + GATE2 blockless surface (--no-compile-gate placement differs); merge in a follow-up'
+  'format <file>'             = 'block + blockless surface, text identical up to spacing; merge in a follow-up'
+  'reverse-calltree --qname'  = 'block + blockless surface (second adds --output); merge in a follow-up'
+  'rules [--json]'            = 'block + blockless surface (block adds --rule); merge in a follow-up'
+}
+# POSITIVE CONTROL: the detector must flag a planted copy of a real line, and must NOT flag
+# two real variants of one verb.
+$ctlDup = @(Get-DuplicateHelpLines ("  drag-lint cycles --db <f> [--edges] [--causes] [--hub] [--plan] [--apply] [--fix] [--format]`n" +
+                                     "  drag-lint cycles --db <f> [--edges] [--causes] [--hub] [--plan] [--apply] [--fix] [--format] [--ctor-wide]`n" +
+                                     "  drag-lint index --all [--only <s>]`n  drag-lint index --all [--rebuild] [--force]"))
+Check 'CONTROL D1 a planted near-duplicate verb line is flagged (and only it)' `
+  (($ctlDup.Count -eq 1) -and ($ctlDup[0] -eq 'cycles --db')) "($($ctlDup -join '; '))"
+$dupLines = @(Get-DuplicateHelpLines $helpText | Sort-Object -Unique)
+$dupNew   = @($dupLines | Where-Object { -not $DuplicateHelpOnPurpose.Contains($_) })
+Check 'no verb has two near-identical --help lines' ($dupNew.Count -eq 0) `
+  $(if ($dupNew.Count -gt 0) { "duplicated: $($dupNew -join ' | ') -- one registry surface per verb line" } else { "($($DuplicateHelpOnPurpose.Count) known, listed)" })
+$dupStale = @($DuplicateHelpOnPurpose.Keys | Where-Object { $dupLines -notcontains $_ })
+Check 'every $DuplicateHelpOnPurpose entry still duplicates' ($dupStale.Count -eq 0) `
+  $(if ($dupStale.Count -gt 0) { "fixed, drop the entry: $($dupStale -join ' | ')" } else { '' })
+
 # --- 1d: the live probe, covering the dispatch scan's blind spot ------------
 $probeDir = Join-Path ([System.IO.Path]::GetTempPath()) ('draglint-docs-guard-' + [Guid]::NewGuid().ToString('N'))
 [System.IO.Directory]::CreateDirectory($probeDir) | Out-Null

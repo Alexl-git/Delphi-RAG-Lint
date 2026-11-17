@@ -4,7 +4,7 @@ title: Memory and string-pointer lint rules (PChar, raw memory, leaks, byte coun
 summary: "Eight memory lint rules, one widened: PChar of Char or temporaries, @S[1], read-only CreateProcess lines, raw memory over managed types, leaks, chars as bytes"
 product: DL
 group: linting
-order: 30052
+order: 30053
 since: 1.51.0-alpha
 status: shipped
 updated: 1.51.1-alpha

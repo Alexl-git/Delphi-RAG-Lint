@@ -4,7 +4,7 @@ title: Target compiler (--target-compiler)
 summary: "Names the Delphi the code is for: lint drops advice needing a newer compiler; index parses `VER<N>0` / `CompilerVersion` branches for it"
 product: DL
 group: linting
-order: 30043
+order: 30044
 since: 1.38.0-alpha
 status: shipped
 updated: 1.51.1-alpha

@@ -933,6 +933,64 @@
       }
     },
     {
+      "id": "check-init",
+      "title": "check-init",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "internal",
+      "since": "1.52.0-alpha",
+      "summary": "Answers whether a variable or field is set before a given use on every execution (SET / NEVER-SET / MAY-BE-UNSET)",
+      "intro": "Ask it before adding an Assigned guard or reordering initialization: it names the writers of a unit variable, class var or field and says whether one of them runs before the use on every path. Exit 0 = all SET, 1 = some MAY-BE-UNSET or NEVER-SET, 2 = error. Internal until the 1.52 engine lanes land.",
+      "wikiPage": "Maintenance",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "check-init",
+          "example": "drag-lint check-init UnitA.GCache --db <db> --json",
+          "usage": "drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--explain] [--max-routines N]",
+          "flags": [
+            {
+              "name": "--at",
+              "arg": "<file>:<line>[:<col>]"
+            },
+            {
+              "name": "--db",
+              "arg": "<db>"
+            },
+            {
+              "name": "--json"
+            },
+            {
+              "name": "--explain"
+            },
+            {
+              "name": "--max-routines",
+              "arg": "N"
+            }
+          ]
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"],
+      "questions": [
+        {
+          "ask": "Is this variable set before it is read here, on every execution?",
+          "command": "drag-lint check-init <QName> --at <file>:<line>:<col> --db <db>"
+        },
+        {
+          "ask": "Which routines or events set this field?",
+          "command": "drag-lint check-init <Unit.TClass.FField> --db <db> --json"
+        }
+      ],
+      "notes": "internal: 1.52 lane HBSKEL scaffold (contract, verb, rendering); the solver lanes fill the answer, HBDOCS ships it (status, wiki page check-init, help). Plan docs\\superpowers\\plans\\2026-11-17-happens-before-phase1.md; guard tests\\autotest\\run_check_init_surface.ps1",
+      "verified": {
+        "date": "2026-11-17",
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "3df48080662e1015a8ffa07ee61258ec6d572996411e58b9f5c083bd4edebdf5"
+      }
+    },
+    {
       "id": "class-surface",
       "title": "Class Surface",
       "group": "search-navigation",
@@ -2979,18 +3037,10 @@
       "owner": "ENGINE",
       "status": "internal",
       "since": "1.51.1-alpha",
-      "summary": "check-init, explain and repo are accepted by the 1.52 CLI frame and do nothing useful yet; their own entries replace this one",
-      "intro": "Read this when check-init, explain or repo answers that it is not implemented yet.",
+      "summary": "repo is accepted by the 1.52 CLI frame and does nothing useful yet; its own entry replaces this one",
+      "intro": "Read this when repo answers that it is not implemented yet.",
       "wikiPage": "v152-frame-stubs",
       "surfaces": [
-        {
-          "type": "cli",
-          "verb": "check-init"
-        },
-        {
-          "type": "cli",
-          "verb": "explain"
-        },
         {
           "type": "cli",
           "verb": "repo"
@@ -2999,8 +3049,9 @@
       "audience": "both",
       "verified": {
         "date": "2026-11-17",
-        "by": "alexanderl",
-        "build": "1.51.1-alpha"
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "46d9af584aae05297e68c6622b6d4ebdefce2409a00b4a595ebd23e095728001"
       }
     },
     {
@@ -3715,6 +3766,57 @@
         "by": "ENGINE",
         "build": "1.50.0-alpha",
         "surfaceHash": "6c846729f767fec67c376ee12be3025c72d27bfaef5b725ee7866b0df4216218"
+      }
+    },
+    {
+      "id": "explain",
+      "title": "explain",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "Explains one lint rule in plain words: what it means, why it matters, a bad and a good example, its default, whether it can be fixed, and how to suppress it",
+      "intro": "Read this when a finding names a rule id and you want to know what it is for before you fix it or suppress it: explain prints the meaning, the reason, an example, the default, fixability and the exact suppress line, as text or JSON.",
+      "wikiPage": "explain",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "explain",
+          "usage": "drag-lint explain <rule-id> [--json] [--rules-dir <dir>]   (what one lint rule means, why it matters, bad / good example, default, fixable, and how to suppress it; an unknown id lists the nearest ids and exits 2)",
+          "flags": [
+            {
+              "name": "--json"
+            },
+            {
+              "name": "--rules-dir",
+              "arg": "<dir>"
+            }
+          ],
+          "helpOrder": 49,
+          "help": ["  drag-lint explain <rule-id> [--json] [--rules-dir <dir>]   (what one lint rule means, why it matters, bad / good example, default, fixable, and how to suppress it; an unknown id lists the nearest ids and exits 2)"]
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "What does this rule mean and how do I silence it?",
+          "command": "drag-lint explain <rule-id>"
+        },
+        {
+          "ask": "Give me the explanation as data.",
+          "command": "drag-lint explain <rule-id> --json"
+        }
+      ],
+      "access": "repo-tooling",
+      "accessReviewed": {
+        "date": "2026-11-17",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-11-17",
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "32782a37a7c3aeebf9b31f3885cfd677a2fdf05a3ce8b4cbf2918a1542bcf85e"
       }
     },
     {
@@ -9704,7 +9806,7 @@
         {
           "type": "cli",
           "verb": "cycles",
-          "usage": "drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--hub] [--plan [--no-hub-surface | --hub-surface] [--apply] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--hub-surface | --no-hub-surface] [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --hub = per group its hub units (removal leaves the rest acyclic): edges, ref weights and surfaces per side, dead uses; read-only, no planner; --f2047 = only the interface-only cycles dcc rejects with F2047, each edge with its forcing symbols and the next --plan / --fix commands; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group naming the exact --fix dry-run and --apply commands; --fix = the mechanical fix of one group, see the cycles-fix entry)",
+          "usage": "drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--hub] [--plan [--no-hub-surface | --hub-surface] [--apply] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--hub-surface | --no-hub-surface] [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--ctor-wide] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --hub = per group its hub units (removal leaves the rest acyclic): edges, ref weights and surfaces per side, dead uses; read-only, no planner; --f2047 = only the interface-only cycles dcc rejects with F2047, each edge with its forcing symbols and the next --plan / --fix commands; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group naming the exact --fix dry-run and --apply commands; --ctor-wide = the wider constructor-inversion whitelist for --plan / --fix (off by default); --fix = the mechanical fix of one group, see the cycles-fix entry)",
           "flags": [
             {
               "name": "--db",
@@ -9789,7 +9891,7 @@
             }
           ],
           "helpOrder": 68,
-          "help": ["  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--hub] [--plan [--no-hub-surface | --hub-surface] [--apply] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--hub-surface | --no-hub-surface] [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>]   (circular unit deps; --hub = per group its hub units (removal leaves the rest acyclic): edges, ref weights and surfaces per side, dead uses; read-only, no planner; --f2047 = only the interface-only cycles dcc rejects with F2047: units, each interface edge with the symbols forcing it, and the next --plan / --fix commands; --unit <stem> (the name in dcc's message) narrows it, a unit in no such cycle is exit 0 with a note; --format json = [{units[],edges[{from,to,symbols[]}],plan,fix}]; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\\TEMP\\draglint_cyclefix_<pid>\\, deleted at exit unless a message of the run cites a file in it, then kept and named on stderr; --shadow-out names another, never deleted) and builds the project (msbuild /p:Config=Debug for --platform, default the project's active platform, else win32) unless --no-compile, exit 0 mechanical / 1 refused / 2 error; --apply writes it (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 written and verified (or written with --no-reindex, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified / 2 error: a write or build failed part-way (rolled back, project not changed, or the rollback failure is named) or bad flags; a rollback restores the sources, not the DCUs the failed build wrote: rebuild after a rollback; --apply --no-compile is exit 2; --rsvars <path> = the Studio build environment the compile gate calls (default: the Studio the registry or BDS names; forwarded to every --part all iteration; a missing file is exit 2); --build-timeout <s> = whole seconds one build may take (default 0 = no limit; forwarded to every --part all iteration; anything but a whole number >= 0 is exit 2); a stand-down request (drag-lint shutdown --db <db>, or the IDE's Cancel) kills the build, rolls an --apply back and exits 1 (\"cancelled -- rolled back\"); --part all needs --apply, refuses --no-reindex; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest's library for the build platform: --platform, else the --project's active platform, else win32; --library-db none = no library); --rules-dir is forwarded to every --part all iteration; --plan --hub-surface = recipe R3 for a group with exactly one hub read through one global (spec P2): a new leaf unit <Hub>.Hub with an interface of the members the spokes read through the global, the hub class implements it, receiver-only rewrite in the spokes, the hub's free routines through R1 pointers in <Hub>.Hub; the dry run is the playbook with R3 + the --hub block in place of Part A for such a group -- without the switch when R3 predicts that the group breaks (since 1.51 the --plan dry run; since 1.52 also --plan --apply, --fix and the --causes --format json fix object; --no-hub-surface = the planner for every group, the default before 1.52; --hub-surface = R3 also for a group it cannot break) --, --causes --format json gives R3's fix{part:r3} without the planner and names the gated cycles --fix --hub-surface dry-run / --apply commands; --fix with R3 (1.51.1) writes one group through the same compile gate as --fix: baseline build, write under .BCK<n> backups, build after the edit, rollback on a new error, re-index + verify (cycle-fix/1 part r3, recipe hub-surface; refusal hub-surface-group-stays); --plan --apply writes ONE group (.BCK<n> backups unless --no-backup) without a compile gate: build after it, or use --fix, which gates the same edit; --format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge's surface: members read, writes, construction, class methods, routine + signature types)"]
+          "help": ["  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--hub] [--plan [--no-hub-surface | --hub-surface] [--apply] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--hub-surface | --no-hub-surface] [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--ctor-wide] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>]   (circular unit deps; --hub = per group its hub units (removal leaves the rest acyclic): edges, ref weights and surfaces per side, dead uses; read-only, no planner; --f2047 = only the interface-only cycles dcc rejects with F2047: units, each interface edge with the symbols forcing it, and the next --plan / --fix commands; --unit <stem> (the name in dcc's message) narrows it, a unit in no such cycle is exit 0 with a note; --format json = [{units[],edges[{from,to,symbols[]}],plan,fix}]; --ctor-wide = the wider constructor-inversion whitelist for --plan / --fix (off by default); --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\\TEMP\\draglint_cyclefix_<pid>\\, deleted at exit unless a message of the run cites a file in it, then kept and named on stderr; --shadow-out names another, never deleted) and builds the project (msbuild /p:Config=Debug for --platform, default the project's active platform, else win32) unless --no-compile, exit 0 mechanical / 1 refused / 2 error; --apply writes it (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 written and verified (or written with --no-reindex, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified / 2 error: a write or build failed part-way (rolled back, project not changed, or the rollback failure is named) or bad flags; a rollback restores the sources, not the DCUs the failed build wrote: rebuild after a rollback; --apply --no-compile is exit 2; --rsvars <path> = the Studio build environment the compile gate calls (default: the Studio the registry or BDS names; forwarded to every --part all iteration; a missing file is exit 2); --build-timeout <s> = whole seconds one build may take (default 0 = no limit; forwarded to every --part all iteration; anything but a whole number >= 0 is exit 2); a stand-down request (drag-lint shutdown --db <db>, or the IDE's Cancel) kills the build, rolls an --apply back and exits 1 (\"cancelled -- rolled back\"); --part all needs --apply, refuses --no-reindex; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest's library for the build platform: --platform, else the --project's active platform, else win32; --library-db none = no library); --rules-dir is forwarded to every --part all iteration; --plan --hub-surface = recipe R3 for a group with exactly one hub read through one global (spec P2): a new leaf unit <Hub>.Hub with an interface of the members the spokes read through the global, the hub class implements it, receiver-only rewrite in the spokes, the hub's free routines through R1 pointers in <Hub>.Hub; the dry run is the playbook with R3 + the --hub block in place of Part A for such a group -- without the switch when R3 predicts that the group breaks (since 1.51 the --plan dry run; since 1.52 also --plan --apply, --fix and the --causes --format json fix object; --no-hub-surface = the planner for every group, the default before 1.52; --hub-surface = R3 also for a group it cannot break) --, --causes --format json gives R3's fix{part:r3} without the planner and names the gated cycles --fix --hub-surface dry-run / --apply commands; --fix with R3 (1.51.1) writes one group through the same compile gate as --fix: baseline build, write under .BCK<n> backups, build after the edit, rollback on a new error, re-index + verify (cycle-fix/1 part r3, recipe hub-surface; refusal hub-surface-group-stays); --plan --apply writes ONE group (.BCK<n> backups unless --no-backup) without a compile gate: build after it, or use --fix, which gates the same edit; --format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge's surface: members read, writes, construction, class methods, routine + signature types)"]
         }
       ],
       "audience": "both",
@@ -9812,7 +9914,7 @@
         "date": "2026-11-17",
         "by": "ENGINE",
         "build": "1.51.1-alpha",
-        "surfaceHash": "7a4fd6b8b6fab859aa5a55d41b215af026bc3752477eeb8b9989430050ad3b9f"
+        "surfaceHash": "1683810a3b815b523e41edaea7df3ca889d4ddc899c9731d82c8f0e0cff534fc"
       }
     },
     {
@@ -9934,7 +10036,6 @@
           "type": "cli",
           "verb": "cycles",
           "example": "drag-lint cycles --fix --project <X.dproj> --db <file.sqlite>",
-          "usage": "drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--hub-surface | --no-hub-surface] [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--ctor-wide] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\\TEMP\\draglint_cyclefix_<pid>\\, deleted at exit unless a message of the run cites a file in it, then kept and named on stderr; --shadow-out names another, never deleted) and builds the project (msbuild /p:Config=Debug for --platform, default the project's active platform, else win32) unless --no-compile, exit 0 mechanical / 1 refused / 2 error; --apply writes it (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 written and verified (or written with --no-reindex, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified / 2 error: a write or build failed part-way (rolled back, project not changed, or the rollback failure is named) or bad flags; a rollback restores the sources, not the DCUs the failed build wrote: rebuild after a rollback; --apply --no-compile is exit 2; --rsvars <path> = the Studio build environment the compile gate calls (default: the Studio the registry or BDS names; forwarded to every --part all iteration; a missing file is exit 2); --build-timeout <s> = whole seconds one build may take (default 0 = no limit; forwarded to every --part all iteration; anything but a whole number >= 0 is exit 2); a stand-down request (drag-lint shutdown --db <db>, or the IDE's Cancel) kills the build, rolls an --apply back and exits 1 (\"cancelled -- rolled back\"); --part all needs --apply, refuses --no-reindex; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest's library for the build platform: --platform, else the --project's active platform, else win32; --library-db none = no library); --rules-dir is forwarded to every --part all iteration; --format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge's surface: members read, writes, construction, class methods, routine + signature types; since 1.52 --fix takes recipe R3 (hub-surface, 1.51.1) for a group R3 predicts to break, through the same compile gate (cycle-fix/1 part r3), and the planner for every other group; --hub-surface = R3 by name, also for a group it cannot break (refusal hub-surface-group-stays); --no-hub-surface = the planner for every group, the default before 1.52)",
           "flags": [
             {
               "name": "--db",
@@ -10092,7 +10193,7 @@
         "date": "2026-11-17",
         "by": "ENGINE",
         "build": "1.51.1-alpha",
-        "surfaceHash": "fc9f774faa288b8c119fb9aa8f725371cfe51ec2d5c3ea1dcec7fd9fbf993cfd"
+        "surfaceHash": "c022f1d761fe0143d41e1a72cd0946cbaed676a1a81c429a97b4278d05233ca9"
       }
     },
     {

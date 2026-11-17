@@ -4,7 +4,7 @@ title: Style, loop and ordering rules
 summary: Eleven style and loop lint rules (begin/end, if-chains, SetLength and repaint in loops, loop bounds, method order); five are on by default
 product: DL
 group: linting
-order: 30056
+order: 30057
 since: 1.51.0-alpha
 status: shipped
 updated: 1.51.1-alpha

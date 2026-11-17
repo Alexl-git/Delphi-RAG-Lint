@@ -41,5 +41,11 @@
   "accessReviewed": {
     "date": "2026-11-17",
     "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-11-17",
+    "by": "ENGINE",
+    "build": "1.51.1-alpha",
+    "surfaceHash": "32782a37a7c3aeebf9b31f3885cfd677a2fdf05a3ce8b4cbf2918a1542bcf85e"
   }
 }

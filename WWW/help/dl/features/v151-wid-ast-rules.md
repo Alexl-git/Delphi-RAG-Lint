@@ -4,7 +4,7 @@ title: Wider built-in rules (1.51)
 summary: "Six built-in rules read more constructs: code-page and label exemptions, named zero constants, implied else-if, thread dialogs, Supports aliases"
 product: DL
 group: linting
-order: 30061
+order: 30062
 since: 1.51.0-alpha
 status: shipped
 updated: 1.51.1-alpha

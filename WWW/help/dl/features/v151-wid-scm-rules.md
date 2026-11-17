@@ -4,7 +4,7 @@ title: Wider scm rules and three new fixers
 summary: Seven built-in rules read more constructs; empty-finally, format-string-not-formatted and shared-marker-legacy-shape gain autofixes
 product: DL
 group: linting
-order: 30062
+order: 30063
 since: 1.51.0-alpha
 status: shipped
 updated: 1.51.1-alpha

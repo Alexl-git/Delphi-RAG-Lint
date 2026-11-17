@@ -4,7 +4,7 @@ title: Data-flow rules that know a parameter's mode
 summary: "Three OFF rules: a local that only receives out arguments, a store overwritten by an out argument, a local passed by value to a method before it is assigned"
 product: DL
 group: linting
-order: 30017
+order: 30018
 since: 1.46.0-alpha
 status: shipped
 updated: 1.51.1-alpha

@@ -152,6 +152,7 @@
   "effect-free-in-loop-invariant": "effect-free-in-loop-invariant",
   "exception-and-inherited-rules": "v151-exc-rules",
   "exception-facts": "exception-facts",
+  "explain": "explain",
   "extract-interface": "extract-interface",
   "extract-method": "extract-method",
   "fb-snapshot": "fb-snapshot",

@@ -4,7 +4,7 @@ title: review-marker-remeasured hint
 summary: "A dl:ok on a routine-metric rule stamped under an older hash still suppresses its finding; a hint names the allow command that re-stamps it"
 product: DL
 group: linting
-order: 30036
+order: 30037
 since: 1.51.1-alpha
 status: shipped
 updated: 1.51.1-alpha

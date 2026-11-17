@@ -97,6 +97,7 @@ Find symbols, callers, callees, text and types in the index.
 | Feature | Surfaces | Status |
 |---|---|---|
 | [call-path](call-path) | `call-path`; drag-lint > Uses & Dependencies > Call Path Between Two Routines... |  |
+| [check-init](Maintenance) | `check-init` | internal |
 | [Class Surface](Class-Surface) | drag-lint > Inspect Symbol > Class Surface...; `surface` |  |
 | [Compiler Hints](Compiler-Hints) | drag-lint > Code Quality > Compiler Hints...; `query hints` |  |
 | [context](context) | `context` |  |
@@ -164,7 +165,7 @@ Rules, autofix, suppression markers and project-wide checks.
 
 | Feature | Surfaces | Status |
 |---|---|---|
-| [1.52 verbs in development](v152-frame-stubs) | `check-init`; `explain`; `repo` | internal |
+| [1.52 verbs in development](v152-frame-stubs) | `repo` | internal |
 | [Ancestor not in project (lint rule)](ancestor-not-in-project) | `lint-all` |  |
 | [Application-level lint rules](application-level-rules) | `lint`; `lint-all` |  |
 | [Array index possibly out of range lint rule (index-possibly-out-of-range)](index-possibly-out-of-range) | `lint` |  |
@@ -184,6 +185,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Effect-free call in a loop that could move out (lint rule)](effect-free-in-loop-invariant) | `lint-all` |  |
 | [Exception and inherited lint rules](exception-and-inherited-rules) | `lint`; `lint-all` |  |
 | [exceptions-sync](Features) | `exceptions-sync` |  |
+| [explain](explain) | `explain` |  |
 | [Finalization reaching a unit already finalized (lint rule)](finalization-after-dependency) | `lint-all` |  |
 | [Fix all in project](Fix-all-in-project) | Structure form: Fix all in project; `lint-all` |  |
 | [Fix all in unit](Fix-all-in-unit) | Structure form: Fix all in unit; `lint` |  |

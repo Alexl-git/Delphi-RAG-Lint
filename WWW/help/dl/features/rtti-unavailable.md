@@ -4,7 +4,7 @@ title: RTTI unavailable (lint rule)
 summary: "Project lint rule, OFF by default: declarations that lose classic or extended RTTI (typeless enums, record properties, narrowing directives, published generics)"
 product: DL
 group: linting
-order: 30037
+order: 30038
 since: 1.50.0-alpha
 status: shipped
 updated: 1.51.1-alpha

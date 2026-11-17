@@ -17,7 +17,8 @@
   "audience": "both",
   "verified": {
     "date": "2026-11-17",
-    "by": "alexanderl",
-    "build": "1.51.1-alpha"
+    "by": "ENGINE",
+    "build": "1.51.1-alpha",
+    "surfaceHash": "46d9af584aae05297e68c6622b6d4ebdefce2409a00b4a595ebd23e095728001"
   }
 }

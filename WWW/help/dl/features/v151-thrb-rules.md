@@ -4,7 +4,7 @@ title: Thread race and blocking rules
 summary: "Four lint rules: racing writes in parallel bodies, non-atomic global increments in threads, unbounded waits in forms, lost task exceptions"
 product: DL
 group: linting
-order: 30058
+order: 30059
 since: 1.51.0-alpha
 status: shipped
 updated: 1.51.1-alpha

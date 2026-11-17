@@ -4,7 +4,7 @@ title: Fix it
 summary: Applies the fix for the single lint finding on a Structure-tree node; an unused unit is removed or moved to implementation by compiling
 product: DL
 group: linting
-order: 30016
+order: 30017
 since: 0.1.0-alpha
 status: shipped
 updated: 1.51.1-alpha

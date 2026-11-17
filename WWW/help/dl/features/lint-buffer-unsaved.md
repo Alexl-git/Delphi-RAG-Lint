@@ -4,10 +4,10 @@ title: Lint Buffer (Unsaved)
 summary: Lints the current editor buffer's in-memory content, including unsaved edits, without writing it to disk first
 product: DL
 group: linting
-order: 30026
+order: 30027
 since: 0.1.0-alpha
 status: shipped
-updated: 1.50.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # Lint Buffer (Unsaved)

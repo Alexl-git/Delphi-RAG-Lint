@@ -51,7 +51,8 @@
   "notes": "internal: 1.52 lane HBSKEL scaffold (contract, verb, rendering); the solver lanes fill the answer, HBDOCS ships it (status, wiki page check-init, help). Plan docs\\superpowers\\plans\\2026-11-17-happens-before-phase1.md; guard tests\\autotest\\run_check_init_surface.ps1",
   "verified": {
     "date": "2026-11-17",
-    "by": "alexanderl",
-    "build": "1.51.1-alpha"
+    "by": "ENGINE",
+    "build": "1.51.1-alpha",
+    "surfaceHash": "3df48080662e1015a8ffa07ee61258ec6d572996411e58b9f5c083bd4edebdf5"
   }
 }
