@@ -39,4 +39,29 @@ begin
   Flags := SECURITY_FLAG_IGNORE_UNKNOWN_CA;
 end;
 
+function VerifyCertOwnName(ACert: TObject): Boolean;
+begin
+  VerifyCertOwnName := True;
+end;
+
+function VerifyCertExit(ACert: TObject): Boolean;
+begin
+  Exit(True);
+end;
+
+function VerifyCertNoSemi(ACert: TObject): Boolean;
+begin
+  Result := True
+end;
+
+function VerifyCertReal(ACert: TObject): Boolean;
+begin
+  Result := ACert <> nil;
+end;
+
+function Foo: Boolean;
+begin
+  Foo := True;
+end;
+
 end.
