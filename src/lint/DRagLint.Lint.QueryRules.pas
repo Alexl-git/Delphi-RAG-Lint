@@ -251,7 +251,8 @@ type
       /// the enclosing routine (defProc) up to the picked node, or the file start when
       /// the match is outside a routine. Each brace-wrapped capture name becomes the
       /// regex-escaped text of capture @name, so the pattern can insist on the SAME array
-      /// the match named.</summary>
+      /// the match named. A pattern ending in an unescaped $ (end-anchored) is matched against
+      /// only the last 512 bytes of the window, so the check stays linear per file.</summary>
       /// <param name="APicked"><!-- drag-lint:auto type -->const TTSNode</param>
       /// <param name="ACaptures"><!-- drag-lint:auto type -->const TTSQueryCaptureArray</param>
       /// <param name="ASource"><!-- drag-lint:auto type -->const TBytes</param>
@@ -801,6 +802,13 @@ var
   Cap     : TTSQueryCapture;
   CapName : string ;
   Bound   : Boolean;
+  TailWindow : string ;
+  TailB      : Integer;
+  EndAnchored: Boolean;
+const
+  CEndAnchoredTailBytes = 512;
+  CUtf8ContMask         = $C0; // a UTF-8 continuation byte is 10xxxxxx: never start the tail mid-character
+  CUtf8ContBits         = $80;
 begin
   Result:= False;
   if Length(FExcludePrecededBy) = 0 then Exit;
@@ -816,9 +824,24 @@ begin
     Cur:= Cur.Parent;
   end;
   if Integer(APicked.StartByte) <= StartB then Exit;
-  Window:= TEncoding.UTF8.GetString(ASource, StartB, Integer(APicked.StartByte) - StartB);
+  Window:= '';
+  TailWindow:= '';
   for Pat in FExcludePrecededBy do
   begin
+    { An END-anchored pattern (`...$`) describes the text right before the node, so it
+      reads only the last CEndAnchoredTailBytes of the window. Decoding and scanning the
+      whole routine once per match was quadratic for a rule that fires on every literal
+      (large-magic-number's dispid exclusion: 10000-line open 16 s -> 74 s, v1511 BATFIX). }
+    EndAnchored:= Pat.EndsWith('$') and not Pat.EndsWith('\$');
+    if EndAnchored and (TailWindow = '') then
+    begin
+      TailB:= Integer(APicked.StartByte) - CEndAnchoredTailBytes;
+      if TailB < StartB then TailB:= StartB;
+      while (TailB < Integer(APicked.StartByte)) and ((ASource[TailB] and CUtf8ContMask) = CUtf8ContBits) do Inc(TailB);
+      TailWindow:= TEncoding.UTF8.GetString(ASource, TailB, Integer(APicked.StartByte) - TailB);
+    end
+    else if not EndAnchored and (Window = '') then
+      Window:= TEncoding.UTF8.GetString(ASource, StartB, Integer(APicked.StartByte) - StartB);
     Expanded:= Pat;
     for Cap in ACaptures do
     begin
@@ -826,7 +849,7 @@ begin
       Expanded:= StringReplace(Expanded, '{' + CapName + '}', TRegEx.Escape(Trim(NodeText(Cap.node, ASource))), [rfReplaceAll, rfIgnoreCase]);
     end;
     Bound:= not TRegEx.IsMatch(Expanded, '\{[A-Za-z0-9_]+\}');
-    if Bound and TRegEx.IsMatch(Window, Expanded, [roIgnoreCase]) then Exit(True);
+    if Bound and TRegEx.IsMatch(if EndAnchored then TailWindow else Window, Expanded, [roIgnoreCase]) then Exit(True);
   end;
 end;
 
