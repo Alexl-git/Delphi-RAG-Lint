@@ -12,6 +12,7 @@ uses
   System.SysUtils
   , System.Generics.Collections
   , DRagLint.Core.Model
+  , DRagLint.Lint.Config
   , DRagLint.V151.Api
   ;
 
@@ -45,10 +46,66 @@ type
     class function CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>; static;
   end;
 
+const
+  /// <summary>File name of the shipped exempt-class list, read from the rules folder beside the exe.</summary>
+  FORM_OBJECT_EXEMPT_FILE = 'form-object-without-field.exempt.txt';
+
+/// <summary>Parses the text of an exempt-class list (PLAN 1.52 D3).</summary>
+/// <param name="AText">One class name per line; a line starting with # (after trimming) is a comment; blank lines are skipped.</param>
+/// <returns>The class names, trimmed, in file order.</returns>
+function V152ParseExemptList(const AText: string): TArray<string>;
+
+/// <summary>The classes form-object-without-field never reports for one run.</summary>
+/// <param name="ACfg">The run configuration: its "exempt_classes" always count; the shipped list
+/// rules\form-object-without-field.exempt.txt beside the exe counts unless "use_default_list" is false.</param>
+/// <returns>Class names, possibly with a trailing * wildcard; empty when nothing is exempt.</returns>
+/// <remarks>A missing shipped file is an empty list, never an error. Reads one small file per call.</remarks>
+function V152FormObjectExemptList(const ACfg: TLintConfig): TArray<string>;
+
+/// <summary>Whether a form object class is on an exempt list.</summary>
+/// <param name="AList">Entries from V152FormObjectExemptList.</param>
+/// <param name="AClass">Class name of the form object; a unit-qualified name is reduced to its last segment.</param>
+/// <returns>True when an entry equals the class (case-insensitive) or, with a trailing *, is its prefix.</returns>
+function V152IsExemptClass(const AList: TArray<string>; const AClass: string): Boolean;
+
 implementation
 
-{ The lane's helpers live in DRagLint.V152.DEFAULTS.Support; name it in an
-  implementation uses clause here once it declares something. }
+uses
+  System.IOUtils
+  , System.StrUtils
+  ;
+
+function V152ParseExemptList(const AText: string): TArray<string>;
+begin
+  Result:= nil;
+  for var L: string in AText.Split([#10]) do
+  begin
+    var T: string:= Trim(L);
+    if (T <> '') and (T[1] <> '#') then Result:= Result + [T];
+  end;
+end;
+
+function V152FormObjectExemptList(const ACfg: TLintConfig): TArray<string>;
+begin
+  Result:= ACfg.FormObjectExemptClasses;
+  if not ACfg.FormObjectUseDefaultList then Exit;
+  var Path: string:= TPath.Combine(TPath.GetDirectoryName(ParamStr(0)), 'rules\' + FORM_OBJECT_EXEMPT_FILE);
+  if TFile.Exists(Path) then Result:= Result + V152ParseExemptList(TFile.ReadAllText(Path, TEncoding.ANSI));
+end;
+
+function V152IsExemptClass(const AList: TArray<string>; const AClass: string): Boolean;
+begin
+  var C: string:= AClass;
+  var P: Integer:= LastDelimiter('.', C);
+  if P > 0 then C:= Copy(C, P + 1, MaxInt);
+  for var E: string in AList do
+    if EndsStr('*', E) then
+    begin
+      if StartsText(Copy(E, 1, Length(E) - 1), C) then Exit(True);
+    end
+    else if SameText(E, C) then Exit(True);
+  Result:= False;
+end;
 
 class procedure TV152DEFAULTSRules.Catalog(const ADecls: TList<TV151RuleDecl>);  // dl:ok unused-parameter@a143 -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)
 begin

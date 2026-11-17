@@ -79,6 +79,7 @@ uses
   , System.RegularExpressions
   , TreeSitter
   , DRagLint.V151.DFMA.Support
+  , DRagLint.V152.DEFAULTS
   , DRagLint.V151.Dfm.Common
   ;
 
@@ -95,7 +96,7 @@ begin
     'A published field of the form class has no object of that name in the form file -- it stays nil after the form loads'));
   ADecls.Add(V151Rule(RULE_OBJECT_WITHOUT_FIELD, 'bug-patterns', SEV_HINT,
     'An object of the form file has no field in the form class -- code cannot reach it by name and the designer re-adds the field',
-    False));  // OFF (v151 FP re-measure: 99 CLIENT hints, DevExpress bar / layout items have no field by design)
+    True));  // ON (v152 DEFAULTS C6: DevExpress sub-objects without a field are exempted by rules\form-object-without-field.exempt.txt + project exempt_classes)
   ADecls.Add(V151Rule(RULE_RESOURCE_MISSING, 'bug-patterns', SEV_WARNING,
     'The unit declares the class of its form file but includes no form resource ({$R *.dfm}) -- creating the form raises EResNotFound'));
   ADecls.Add(V151Rule(RULE_HANDLER_NO_INHERITED, 'bug-patterns', SEV_WARNING,
@@ -105,7 +106,7 @@ begin
   ADecls.Add(V151Rule(RULE_ACCESS_BEFORE_CREATE, 'bug-patterns', SEV_WARNING,
     'The creation code of an auto-created form or data module reads the global variable of a module the .dpr creates later -- it is still nil'));
   ADecls.Add(V151Rule(RULE_FOREIGN_FORM_ACCESS, 'structure', SEV_HINT,
-    'Code reaches a control of another unit''s form through its global variable (Form2.Edit1) -- the units are coupled to the form layout', False));
+    'Code reaches a control of another unit''s form through its global variable (Form2.Edit1) -- the units are coupled to the form layout', True));  // ON (v152 DEFAULTS B9g)
   ADecls.Add(V151Rule(RULE_SELF_FREE_IN_HANDLER, 'bug-patterns', SEV_WARNING,
     'A form frees itself in its own event handler -- the VCL still uses the object after the handler returns; use Release'));
   ADecls.Add(V151Host(RULE_HOST_UNIT_MISSING));
@@ -218,6 +219,7 @@ begin
   try
     for var F in Cls.Fields do Known.Add(LowerCase(F.Name));
     var Chain: TArray<string>:= ClassChain(Cls.Name, AUnit, ACtx.Store, ACtx.LibStore, Complete, Left);
+    var Exempt: TArray<string>:= V152FormObjectExemptList(ACtx.Cfg);
     for var A in Chain do
     begin
       var Idx: Integer:= AUnit.ClassIndex(A);
@@ -233,6 +235,7 @@ begin
       var N: TDfmNode:= ADfm.Nodes[I];
       if (N.Kind not in [dnkObject, dnkInline]) or N.InInline or (N.Name = '') then Continue;
       if Known.Contains(LowerCase(N.Name)) then Continue;
+      if V152IsExemptClass(Exempt, N.CompClass) then Continue;  { v152 D3: shipped + project exempt-class list }
       { T03: a DevExpress bar / layout object is built by the designer without a field by design;
         it matters only when the unit's source mentions its name (FindComponent('name') and the like) }
       if IsBarOrLayoutClass(N.CompClass) and not NameUsedIn(AUnit, N.Name) then Continue;

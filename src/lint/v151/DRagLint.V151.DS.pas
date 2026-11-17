@@ -52,7 +52,7 @@ uses
 class procedure TV151DSRules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
   ADecls.Add(V151Rule('dataset-edit-without-post', 'bug-patterns', 'warning', 'Dataset Edit/Append/Insert whose record is changed but never posted or cancelled',
-    False));  // OFF (v151 FP re-measure: 2/2 CLIENT hits are change handlers that leave the edit open for a later Post by design; tighten later)
+    True));  // ON (v152 DEFAULTS C5: re-measure clean after the v1511 T04 cross-routine Post fix, 0 hits on CLIENT / SERVER / YADF / Loader)
   ADecls.Add(V151Host('loop-condition-invariant'));
   ADecls.Add(V151Rule('transaction-without-rollback', 'bug-patterns', 'warning', 'Transaction is started and committed but never rolled back'));
 end;
