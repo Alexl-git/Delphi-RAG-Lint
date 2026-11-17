@@ -180,6 +180,21 @@ $q = & $Exe sql --db $db --query ("select count(*) from refs r join symbols s on
                                   "join files f on f.id = r.file_id where f.path like '%uScUse.pas' " +
                                   "and s.qualified_name in ('uScTypes.TScScoped.csTwo', 'uScTypes.TScInc.ciTwo')") 2>&1 | Out-String
 Check 'L11/L14 qualified scoped values are bound (both)' ($q -match '(?m)^\s*2\s*$') ($q.Trim() -replace '\s+', ' ')
+# 150-RB2-b (v152 VOPEN): a qualified SCOPED value read (rung 3c) is a use edge -- a
+# member_accesses 'read' row whose receiver is the enum -- and the store counts it on the
+# enum-values line as Shape B (WrittenValues), not as a call edge. The two row checks are
+# RED on the 2026-11-07 engine (identity only, no row); the Shape B count is a CONTROL
+# (green on both: the count predates the row).
+$ma = & $Exe sql --db $db --query ("select 'L' || r.start_line || '|' || r.name_text || '|' || m.mode || '|' || " +
+                                   "coalesce(t.qualified_name, 'NULL') from refs r join files f on f.id = r.file_id " +
+                                   "join member_accesses m on m.ref_id = r.id " +
+                                   "left join symbols t on t.id = m.receiver_type_symbol_id " +
+                                   "where f.path like '%uScUse.pas' and r.start_line in (11, 14)") 2>&1 | Out-String
+Check 'L11 TScScoped.csTwo -> member_accesses read, receiver uScTypes.TScScoped' ($ma -match '(?m)^\s*L11\|csTwo\|read\|uScTypes\.TScScoped\s*$') ($ma.Trim() -replace '\s+', ' ')
+Check 'L14 TScInc.ciTwo -> member_accesses read, receiver uScTypes.TScInc' ($ma -match '(?m)^\s*L14\|ciTwo\|read\|uScTypes\.TScInc\s*$') ($ma.Trim() -replace '\s+', ' ')
+$evAll = (@(($idxOut -split "`r?`n") | Where-Object { $_ -match 'enum-values:' }) -join ' ')
+$gotQual = if ($evAll -match '(\d+) qualified bound \(Shape B\)') { [int]$Matches[1] } else { -1 }
+Check 'WrittenValues: the store counts both qualified reads as Shape B (2), resolver and store agree' (($gotQual -eq 2) -and ($evAll -match 'resolver and store agree')) ("qualified=$gotQual line=$evAll")
 
 Write-Host ''
 Write-Host 'NO WRONG EDGE' -ForegroundColor Cyan

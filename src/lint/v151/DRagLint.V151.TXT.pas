@@ -53,6 +53,9 @@ uses
   , DRagLint.V151.TXT.Support
   ;
 
+const
+  UTF8_BOM_LEN = 3; { EF BB BF }
+
 class procedure TV151TXTRules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
   ADecls.Add(V151Rule('bidi-control', 'security', 'warning',
@@ -95,8 +98,11 @@ begin
   Wants.Invis  := ACtx.Wants('invisible-char');
   Found:= TList<TLintFinding>.Create;
   try
-    Utf8:= EnsureUtf8Bytes(ABytes);
     HadBom:= (Length(ABytes) >= 3) and (ABytes[0] = $EF) and (ABytes[1] = $BB) and (ABytes[2] = $BF);  // dl:ok magic-literal@8821 -- REVIEWED 2026-11-14 v151 INT: a spec value / fixed offset or length read at its single use site; a named constant adds nothing
+    { v152 VOPEN: a UTF-8 BOM file is scanned on its RAW bytes after the BOM. EnsureUtf8Bytes
+      re-reads a BOM file with an invalid byte as CP1252 (B07), which turns that byte into a
+      valid character and hid the invalid-UTF-8 control-char finding. }
+    Utf8:= if HadBom then Copy(ABytes, UTF8_BOM_LEN, MaxInt) else EnsureUtf8Bytes(ABytes);
     if Wants.Control or Wants.Bidi or Wants.Invis then
       TxtScanChars(Utf8, HadBom, AFilePath, Wants, Found);
     if IsPas and (ACtx.Wants('todo-comment') or ACtx.Wants('hardcoded-string') or ACtx.Wants('file-header')) then
