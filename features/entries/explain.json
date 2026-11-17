@@ -1,0 +1,45 @@
+{
+  "id": "explain",
+  "title": "explain",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.52.0-alpha",
+  "summary": "Explains one lint rule in plain words: what it means, why it matters, a bad and a good example, its default, whether it can be fixed, and how to suppress it",
+  "intro": "Read this when a finding names a rule id and you want to know what it is for before you fix it or suppress it: explain prints the meaning, the reason, an example, the default, fixability and the exact suppress line, as text or JSON.",
+  "wikiPage": "explain",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "explain",
+      "usage": "drag-lint explain <rule-id> [--json] [--rules-dir <dir>]   (what one lint rule means, why it matters, bad / good example, default, fixable, and how to suppress it; an unknown id lists the nearest ids and exits 2)",
+      "flags": [
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--rules-dir",
+          "arg": "<dir>"
+        }
+      ],
+      "helpOrder": 49,
+      "help": ["  drag-lint explain <rule-id> [--json] [--rules-dir <dir>]   (what one lint rule means, why it matters, bad / good example, default, fixable, and how to suppress it; an unknown id lists the nearest ids and exits 2)"]
+    }
+  ],
+  "audience": "both",
+  "questions": [
+    {
+      "ask": "What does this rule mean and how do I silence it?",
+      "command": "drag-lint explain <rule-id>"
+    },
+    {
+      "ask": "Give me the explanation as data.",
+      "command": "drag-lint explain <rule-id> --json"
+    }
+  ],
+  "access": "repo-tooling",
+  "accessReviewed": {
+    "date": "2026-11-17",
+    "by": "ENGINE"
+  }
+}
