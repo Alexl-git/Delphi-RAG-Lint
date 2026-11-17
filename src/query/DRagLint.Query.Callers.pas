@@ -826,13 +826,32 @@ begin
   end;
 end; // function
 
+{ E-RENAME-RESIDUE (1.52, lane RENFACT): the implicit sites of a DEFAULT property among ADecls -- `Bag[0]`
+  reads TBag.Items without naming it, so no name lookup finds it. The resolver bound each such subscript's
+  index-access ref to the property; this keeps exactly those. Empty when no declaration is a property. }
+function DefaultIndexRefsOf(const AStore: ISymbolStore; const ADecls: TArray<TSymbol>): TArray<TReference>;
+begin
+  Result:= nil;
+  var AnyProp: Boolean:= False;
+  for var D: TSymbol in ADecls do AnyProp:= AnyProp or (D.Kind = skProperty);
+  if not AnyProp then Exit;
+  for var R: TReference in AStore.FindCallersByName(REF_NAME_INDEX_ACCESS) do
+    if SameText(R.Kind, REF_KIND_INDEX_ACCESS) and (R.SymbolId > 0) then
+      for var D: TSymbol in ADecls do
+        if R.SymbolId = D.Id then
+        begin
+          Result:= Result + [R];
+          Break;
+        end;
+end; // function
+
 function UsageRefsForName(const AStore: ISymbolStore; const AName: string; const ADecls: TArray<TSymbol>): TArray<TReference>;
 var
   DotAt: Integer;
   Kept : TList<TReference>;
 begin
   DotAt:= LastDelimiter('.', AName);
-  if DotAt = 0 then Exit(DropMemberAccessUnderCall(AStore.FindCallersByName(AName)));
+  if DotAt = 0 then Exit(DropMemberAccessUnderCall(AStore.FindCallersByName(AName)) + DefaultIndexRefsOf(AStore, ADecls));
   Kept:= TList<TReference>.Create;
   { 1.51.1 INC2 (B10): refs.id -> the declaration one host of its include binds it to, for a ref
     whose hosts differ (SymbolId 0 on the row). }
@@ -858,7 +877,7 @@ begin
           Break;
         end;
     end;
-    Result:= DropMemberAccessUnderCall(Kept.ToArray);
+    Result:= DropMemberAccessUnderCall(Kept.ToArray) + DefaultIndexRefsOf(AStore, ADecls);
   finally
     HostBound.Free;
     Kept.Free;
@@ -868,7 +887,7 @@ end; // function
 /// <summary>Private (1.42: callers go through UsageBucketIn). The `usages` bucket a reference belongs to.</summary>
 /// <param name="ARef">A reference from UsageRefsForName.</param>
 /// <returns>'reads' | 'writes' | 'calls' | 'types' | 'attributes' | 'events' |
-/// 'raises' | 'handles'. A 'member-access' ref goes by its AccessMode
+/// 'raises' | 'handles'. A 'member-access' or (1.52) 'index-access' ref goes by its AccessMode
 /// (member_accesses.mode): 'read' -> 'reads', 'write' -> 'writes'; one with no
 /// mode, and every unknown kind, stays in 'calls' as before. The exception facts
 /// (1.36.0): raise / raise-expr / reraise -> 'raises', handle / handle-all ->
@@ -887,8 +906,8 @@ begin
   else if ARef.Kind = 'event-binding' then Result:= 'events'
   else if (ARef.Kind = REF_KIND_RAISE) or (ARef.Kind = REF_KIND_RAISE_EXPR) or (ARef.Kind = REF_KIND_RERAISE) then Result:= 'raises'
   else if (ARef.Kind = REF_KIND_HANDLE) or (ARef.Kind = REF_KIND_HANDLE_ALL) then Result:= 'handles'
-  else if (ARef.Kind = 'member-access') and (ARef.AccessMode = 'read' ) then Result:= 'reads'
-  else if (ARef.Kind = 'member-access') and (ARef.AccessMode = 'write') then Result:= 'writes'
+  else if ((ARef.Kind = 'member-access') or (ARef.Kind = REF_KIND_INDEX_ACCESS)) and (ARef.AccessMode = 'read' ) then Result:= 'reads'
+  else if ((ARef.Kind = 'member-access') or (ARef.Kind = REF_KIND_INDEX_ACCESS)) and (ARef.AccessMode = 'write') then Result:= 'writes'
   else Result:= 'calls'; { call + anything else }
 end; // function
 

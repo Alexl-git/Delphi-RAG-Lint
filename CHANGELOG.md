@@ -24,6 +24,12 @@ resolver 1.28.0 -> 1.29.0-alpha.
   symbol of the read on the same token; `usages` counts it under writes (ORM3: `usages --name edtF1` shows the write).
   `on E:` emits a write at E; anonymous-method parameters are `param` symbols. REAL BUG: a `class constructor Create`
   next to `constructor Create(..)` (or class / instance `Destroy`) swapped bodies and put locals on the wrong routine.
+- Extractor (RENFACT, E-RENAME-RESIDUE): a default array property reached without its name (`Bag[0]`, `Bag[0]:= X`,
+  `Self[0]`, `Shelf.Bag[0]`, `Rack[0][0]`, an interface's `Row[3]`) is now a fact: every subscript records an
+  `index-access` ref (name `[]`) and the resolver binds it to the default property with its read / write mode and
+  accessor. `usages`, `find-callers` of the getter / setter and unused-public-symbol count the implicit sites;
+  rename never edits one. Arrays, strings, library types and an indexed property's own index stay unbound.
+  Guard `tests\autotest\run_v152_RENFACT.ps1`.
 - Internal (INITAPI): InitSections exports ProgramInitOrders and InitializesBefore (yes / no / config-dependent init
   order per program). A conditional uses entry before the first active one now makes the order config-dependent, so a
   cycles --fix init-order proof refuses it.
