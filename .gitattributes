@@ -58,3 +58,7 @@ tests/**                linguist-detectable=false
 src/tools/*/tests/**    linguist-detectable=false
 charts/src/**           linguist-detectable=false
 WWW/tests/**            linguist-detectable=false
+
+# Field-repository text-backup fixtures: byte-exact CRLF, asserted by run_fieldrepo_textbackup.ps1.
+# Last so it wins over *.txt text above.
+tests/fixtures/fieldrepo/*.txt -text
