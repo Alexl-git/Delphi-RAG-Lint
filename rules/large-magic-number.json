@@ -4,6 +4,6 @@
   "message": "Integer literal -- consider naming the constant",
   "warn_capture": "magic",
   "exclude_if_ancestor": ["declConst", "constInline", "declStringCodePage", "declLabel", "label", "goto", "declArray", "caseLabel", "declEnumValue", "declProp", "exprSubscript"],
-  "exclude_if_preceded_by": ["(?:^|[^A-Za-z0-9_])dispid\\s+$"],
+  "exclude_if_preceded_by": ["(?:^|[^A-Za-z0-9_])dispid\\s+$", "(?:^|[^A-Za-z0-9_.\\])])[A-Za-z_][A-Za-z0-9_]*(?:\\[[^\\]\\r\\n]*\\])?(?:\\.[A-Za-z_][A-Za-z0-9_]*(?:\\[[^\\]\\r\\n]*\\])?)+\\s*:=\\s*$", "\\.Read(?:Integer|Int64|Float|Cardinal)\\s*\\([^;()]*'[^'\\r\\n]*'\\s*,\\s*$"],
   "exclude_if_argument_of": ["EncodeDate", "EncodeTime", "EncodeDateTime", "Reg"]
 }
