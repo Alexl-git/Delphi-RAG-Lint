@@ -507,7 +507,8 @@ type
     InitOrderProof: string;
     /// <summary>R1 (lane FINPROOF): the proof line when a call run from the consumer's finalization section is safe
     /// although the declaring unit's finalization can be seen, because that unit is finalized after the consumer in
-    /// every program of the index (FinalOrderVerdict); '' otherwise.</summary>
+    /// every program of the index, or (lane FINCUT, ruling B9a) because the cut leaves an order in which it is
+    /// already finalized first unchanged (FinalOrderVerdict); '' otherwise.</summary>
     FinalOrderProof: string;
     /// <summary>R1 (plan B3): every routine inverted, in first-call order; one entry for a single
     /// routine, which then repeats RoutineId .. VarDecl. The singular fields always name the first.</summary>
@@ -1120,7 +1121,12 @@ function InitOrderVerdict(const pStore: ISymbolStore; const pWhy, pFromUnit, pDe
 /// Safe when finalizing the declaring unit cannot be seen (no statement in its finalization section and no
 /// unit-level variable of a type that needs finalization), or when the declaring unit is finalized AFTER the
 /// consumer: finalization runs in the exact reverse of the initialization order, so that holds when
-/// DRagLint.Lint.InitSections.ProveInitOrderInversion proves the declaring unit initializes first.</summary>
+/// DRagLint.Lint.InitSections.ProveInitOrderInversion proves the declaring unit initializes first. Lane FINCUT
+/// (1.52, ruling B9a): also safe -- in the sense that the cut changes nothing -- when the consumer ALREADY
+/// initializes before the declaring unit in every program (DRagLint.Lint.InitSections.InitializesBefore answers
+/// ioaBefore): the consumer then reaches its uses entry of the declaring unit while that unit is still being visited,
+/// so the entry the cut removes is one the order skips, and the cut moves no unit; the declaring unit is finalized
+/// first before the cut and after it, and the proof line says the call keeps running after it.</summary>
 /// <param name="pSource">The index access.</param>
 /// <param name="pLines">The consumer's source lines.</param>
 /// <param name="pRef">The call: its line and the routine that holds it.</param>
@@ -1128,12 +1134,15 @@ function InitOrderVerdict(const pStore: ISymbolStore; const pWhy, pFromUnit, pDe
 /// <param name="pDeclFid">The declaring unit's file id; its file name gives the unit name the texts use.</param>
 /// <param name="pPredicted">True on the graph predicted after Part A: never proved, the reason says it is
 /// re-checked.</param>
-/// <param name="pProof">Receives the "finalization order:" proof line when the call is safe only by the order;
+/// <param name="pProof">Receives the "finalization order:" proof line when the call is safe only by the order
+/// ("finalization order: `B` is finalized after `A`: ...") or the order is unchanged by the cut ("finalization
+/// order: unchanged by the cut: `B` is finalized before `A` with the cycle as written and after the cut: ...");
 /// left alone otherwise.</param>
-/// <returns>'' when the call is safe; else the refusal reason (kind finalization-order). When the consumer no
-/// longer reaches the declaring unit after the cut (always so in a two-unit cycle) the declaring unit is certainly
-/// finalized first and the reason says so; otherwise it says the unit MAY be finalized first and why the order is
-/// not proved.</returns>
+/// <returns>'' when the call is safe or the order is unchanged by the cut; else the refusal reason (kind
+/// finalization-order). When the consumer no longer reaches the declaring unit after the cut (always so in a
+/// two-unit cycle) and does not already initialize first, the declaring unit is certainly finalized first after the
+/// cut and the reason says so; otherwise it says the unit MAY be finalized first and why the order is not proved
+/// (an order resting on a conditional or include-borne uses entry names that entry).</returns>
 /// <remarks>Not thread-safe; reads the index only for a call the section runs. The proof is a sound subset with
 /// default refuse (see ProveInitOrderInversion); the check reads the declaring unit only, not what the routine
 /// calls.</remarks>
@@ -2138,7 +2147,24 @@ begin
   if pPredicted then Exit(Maybe + CRecheck);
   var Proof:= ProveInitOrderInversion(pSource.Store, pFromUnit, DeclUnit);
   if not Proof.Proved then
+  begin
+    { Lane FINCUT (ruling B9a): the consumer already initializes first in every program. In the depth-first
+      post-order a unit placed before the declaring unit reaches its uses entry of it while that unit is still
+      being visited, so the order skips the entry the cut removes and the cut moves no unit. }
+    var Same:= InitializesBefore(pSource.Store, '', pFromUnit, DeclUnit);
+    case Same.Answer of
+      ioaBefore:
+        begin
+          pProof:= Format('finalization order: unchanged by the cut: `%s` is finalized before `%s` with the cycle as ' +
+            'written and after the cut: %s, and %s; the order skips the uses entry the cut removes, so the cut moves ' +
+            'no unit. The call already runs after `%s` is finalized, after which %s: the cut keeps that behaviour, it ' +
+            'does not change it.', [DeclUnit, pFromUnit, CReverse, Same.Text, DeclUnit, Seen]);
+          Exit;
+        end;
+      ioaConfigDependent: Exit(Maybe + '; ' + CReverse + ', and ' + Same.Text);
+    end;
     Exit(if Proof.Text.StartsWith(CNoPath) then Certain else Maybe + '; ' + CReverse + ', and ' + Proof.Text);
+  end;
   var Body:= Proof.Text;
   if Body.StartsWith(CInitHead) then Body:= Body.Substring(Length(CInitHead));
   var Tail:= Body.IndexOf(CInitTail);
