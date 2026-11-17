@@ -26,9 +26,9 @@
 #>
 [CmdletBinding()]
 param(
-  # 149 RQ item 2: defaults so the battery can run this unattended. Old = the DEPLOYED engine (this tree, else the main
-  # tree via the git common dir); New = this tree's Debug build. Same file for both = vacuous -> FATAL below.
-  [string]$OldExe = $(foreach ($c in @(("$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe"), (Join-Path (Split-Path -Parent (& git -C $PSScriptRoot rev-parse --path-format=absolute --git-common-dir 2>$null)) 'third_party\dll-win64\drag-lint.exe'))) { if (Test-Path -LiteralPath $c) { $c; break } }),
+  # 152 TESTS: -OldExe is MANDATORY -- an archived engine built BEFORE the split (e.g. C:\TEMP\claude\archive\engine-pre-split\drag-lint.exe).
+  # No default: the deployed engine tracks the tree and turns this runner into a self-comparison. New = this tree's Debug build.
+  [Parameter(Mandatory)][string]$OldExe,
   [string]$NewExe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$WorkDir = "$env:TEMP\drag-lint-docregions-eq-$PID",
   [string[]]$Projects = @(
@@ -44,6 +44,8 @@ function Check($n, $ok, $d = '') {
   if (-not $ok) { $script:Failed = $true }
 }
 foreach ($e in $OldExe, $NewExe) { if (-not (Test-Path $e)) { Write-Host "FATAL: exe not found: $e"; exit 2 } }
+function Sha([string]$f) { [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([IO.File]::ReadAllBytes((Resolve-Path $f).Path))) }
+if ((Sha $OldExe) -eq (Sha $NewExe)) { Write-Host "FATAL: OldExe and NewExe are byte-identical (a self-comparison cannot fail): $OldExe"; exit 2 }
 if ((Resolve-Path $OldExe).Path -eq (Resolve-Path $NewExe).Path) { Write-Host "FATAL: OldExe and NewExe are the same file (a self-comparison cannot fail): $OldExe"; exit 2 }
 [IO.Directory]::CreateDirectory($WorkDir) | Out-Null
 

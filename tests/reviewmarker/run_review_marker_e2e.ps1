@@ -9,8 +9,9 @@
 # somebody has since edited, which is a real defect hidden behind an old
 # signature -- strictly worse than never having marked it.
 
+param([Parameter(Mandatory)][string]$Exe)   # 152 TESTS: no default engine
 $ErrorActionPreference = 'Stop'
-$exe = Join-Path $PSScriptRoot '..\..\third_party\dll-win64\drag-lint.exe'
+$exe = $Exe
 if (-not (Test-Path $exe)) { Write-Output "review-marker-e2e: FATAL -- no exe at $exe"; exit 1 }
 
 $tmp  = Join-Path $env:TEMP ("dl-marker-e2e-" + $PID)

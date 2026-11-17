@@ -76,7 +76,8 @@ try {
 
   # invalid UTF-8: only reported when the file declares UTF-8 with a BOM
   $bad = Put 'bad.pas' (JoinB @([byte[]](0xEF,0xBB,0xBF), (Asc $head), (Asc '// x'), [byte[]](0xE9), (Asc "y`r`n"), (Asc $tail)))
-  # KNOWN (FOUND TXT-1): the engine dies with FATAL EEncodingError on a BOM + invalid-UTF-8 file BEFORE any lane hook runs\r\n  # (also on the 1.50 engine), so the invalid-byte branch of control-char is unreachable until that is fixed.\r\n  # The check flips to a real assertion the day the crash is fixed: it passes when the finding appears OR when the engine still dies.\r\n  $badOut = (& $exePath lint $bad --json 2>&1 | Out-String)\r\n  Check 'BOM + invalid byte E9 -> control-char line 4 (or the known FATAL, FOUND TXT-1)' ((Has (Lint $bad) 'control-char' 4) -or ($badOut -match 'FATAL: EEncodingError'))
+  # 152 TESTS: hard assertion (was a comment-swallowed soft check, FOUND TXT-1): a UTF-8 BOM file with an invalid byte reports control-char.
+  Check 'BOM + invalid byte E9 -> control-char line 4' (Has (Lint $bad) 'control-char' 4)
   $ansi = Put 'ansi.pas' (JoinB @((Asc $head), (Asc '// caf'), [byte[]](0xE9), (Asc "`r`n"), (Asc $tail)))
   Check 'no BOM, byte E9 = legacy ANSI -> no control-char' ((Count (Lint $ansi) 'control-char') -eq 0)
   # UTF-16 LE with BOM: NUL bytes are the encoding, not corruption

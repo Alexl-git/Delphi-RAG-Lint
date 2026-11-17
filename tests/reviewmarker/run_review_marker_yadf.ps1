@@ -16,8 +16,9 @@
 # Skips (exit 2) rather than fails when YADF is not built: this repo does not own
 # YADF's build, and a missing sibling tool is not a drag-lint regression.
 
+param([Parameter(Mandatory)][string]$Exe)   # 152 TESTS: no default engine
 $ErrorActionPreference = 'Stop'
-$exe  = Join-Path $PSScriptRoot '..\..\third_party\dll-win64\drag-lint.exe'
+$exe  = $Exe
 $yadf = 'C:\Projects\YADF\Win64\Debug\EXE\YADF.exe'
 
 if (-not (Test-Path $exe))  { Write-Output "review-marker-yadf: FATAL -- no drag-lint at $exe"; exit 1 }
