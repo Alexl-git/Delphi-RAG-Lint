@@ -29,6 +29,9 @@ type
     NoBackup: Boolean;
     /// <summary>--json.</summary>
     Json: Boolean;
+    /// <summary>--exclude-under (repeatable): a project-wide run leaves out every file under one of these folders, so a
+    /// generated region (DB-RAD) is never planned or rewritten. An explicit --in file is never excluded. [] = none.</summary>
+    ExcludeUnder: TArray<string>;
   end;
 
 /// <summary>Runs `unwith`: the verdict on every with statement in scope, then (with Apply) the gated rewrite.</summary>
@@ -46,6 +49,15 @@ uses
   DRagLint.Diagnostics.ParseCache, DRagLint.Refactor.Unwith;
 
 function RunUnwith(const pOpts: TUnwithRunOptions; const pStore, pLib: ISymbolStore): Integer;
+
+  function IsExcluded(const pPath: string): Boolean;
+  begin
+    Result:= False;
+    var L:= LowerCase(pPath.Replace('/', '\'));
+    for var R: string in pOpts.ExcludeUnder do
+      if (R <> '') and StartsStr(LowerCase(IncludeTrailingPathDelimiter(ExpandFileName(R.Replace('/', '\')))), L) then Exit(True);
+  end;
+
 var
   Plans: TArray<TUnwithFilePlan>;
   ByKind: TDictionary<string, Integer>;
@@ -133,7 +145,7 @@ begin
       for var Id: Int64 in pStore.GetAllFileIds do
       begin
         var P:= pStore.GetFilePath(Id);
-        if MatchText(ExtractFileExt(P), ['.pas', '.dpr']) and TFile.Exists(P) then Files:= Files + [P];
+        if MatchText(ExtractFileExt(P), ['.pas', '.dpr']) and TFile.Exists(P) and not IsExcluded(P) then Files:= Files + [P];
       end;
     for var F: string in Files do
     begin

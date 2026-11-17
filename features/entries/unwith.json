@@ -12,7 +12,7 @@
     {
       "type": "cli",
       "verb": "unwith",
-      "usage": "drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--build-config <c>] [--no-preprocess] [--json|--format json] - remove with blocks, proved binding by binding",
+      "usage": "drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--exclude-under <dir>]... [--no-backup] [--build-config <c>] [--no-preprocess] [--json|--format json] - remove with blocks, proved binding by binding",
       "flags": [
         {
           "name": "--db",
@@ -53,6 +53,10 @@
           "arg": "<L>|none"
         },
         {
+          "name": "--exclude-under",
+          "arg": "<dir>"
+        },
+        {
           "name": "--no-backup"
         },
         {
@@ -60,7 +64,7 @@
         }
       ],
       "helpOrder": 62,
-      "help": ["  drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--build-config <c>] [--no-preprocess] [--json|--format json]  - remove with blocks, proved binding by binding"]
+      "help": ["  drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--exclude-under <dir>]... [--no-backup] [--build-config <c>] [--no-preprocess] [--json|--format json]  - remove with blocks, proved binding by binding"]
     },
     {
       "type": "cli",

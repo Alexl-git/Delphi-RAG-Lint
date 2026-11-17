@@ -8,13 +8,16 @@ names still compiles, and then reads the wrong thing.
 
 ```
 drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>)
-                 [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--json]
+                 [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--exclude-under <dir>]... [--no-backup] [--json]
 ```
 
 `--plan` writes nothing: for every `with` in the file (or, without `--in`, the project) it prints `candidate` or
 `refused <kind>: <why>`; with `--in` also what each identifier becomes and what it binds to today. `--apply` writes the
 candidates. Exit codes: 0 plan printed or applied; 1 the `--line` with refused, nothing to apply, or the gate or the proof
 refused and rolled back; 2 a usage error or a failed rollback.
+
+`--exclude-under <dir>` (repeatable) leaves every file under that folder out of a project-wide run, for example a generated
+region that a regenerate would put the `with` back into. A file named with `--in` is never excluded.
 
 Nested `with`: the innermost goes first; the outer refuses `inner-with-first`. Reindex and run again.
 
