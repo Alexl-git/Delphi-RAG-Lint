@@ -1,0 +1,1 @@
+{ "enabled": ["deep-nesting", "mutable-global-variable", "default-encoding-io", "referenced-never-set", "hardcoded-absolute-path"] }

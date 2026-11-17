@@ -1,6 +1,6 @@
 {
   "id": "division-by-zero-literal",
   "severity": "warning",
-  "message": "Division/modulo by a literal zero -- always raises a runtime division error.",
+  "message": "Float division by a literal zero (X / 0, X / 0.0) -- always raises EZeroDivide at runtime",
   "warn_capture": "warn"
 }

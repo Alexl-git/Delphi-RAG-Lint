@@ -26,6 +26,9 @@ Write-Host '== default-engine fallback guard ==' -ForegroundColor Cyan
 $tmp = Join-Path $env:TEMP "dl-default-engine-fallback-$PID"
 $tests = Join-Path $tmp 'tests\autotest'
 [void][IO.Directory]::CreateDirectory($tests)
+# The runners' -Exe defaults dot-source lib\FreshEngineExe.ps1 from their own $PSScriptRoot, which is $tests here.
+[void][IO.Directory]::CreateDirectory((Join-Path $tests 'lib'))
+Copy-Item -LiteralPath (Join-Path $Repo 'tests\autotest\lib\FreshEngineExe.ps1') -Destination (Join-Path $tests 'lib\FreshEngineExe.ps1')
 $deployed = Join-Path $tmp 'third_party\dll-win64\drag-lint.exe'
 $built = Join-Path $tmp 'src\cli\Win64\Debug\drag-lint.exe'
 function Set-Stub([string]$Path, [bool]$On) {
@@ -47,6 +50,20 @@ try {
     $expr = Get-ExeDefault $s.FullName
     if (-not $expr) { continue }
     $sb = [scriptblock]::Create('param($PSScriptRoot) ' + $expr)
+    if ($expr -match 'Get-FreshEngineExe') {
+      # v1511 HYG H02 contract: the tree's own build or FATAL exit 2 -- NEVER the deployed engine.
+      # `exit` inside the default would end this guard, so the no-build states run in a child pwsh.
+      Set-Stub $deployed $false; Set-Stub $built $true
+      $onlyBuilt = & $sb $psr
+      $childFile = Join-Path $tmp 'fresh-probe.ps1'; [IO.File]::WriteAllText($childFile, 'param($r) & { param($PSScriptRoot) ' + $expr + ' } $r')
+      Set-Stub $built $false
+      $nb = & pwsh -NoProfile -File $childFile $psr 2>&1 | Out-String; $nbCode = $LASTEXITCODE
+      Set-Stub $deployed $true
+      $dp = & pwsh -NoProfile -File $childFile $psr 2>&1 | Out-String; $dpCode = $LASTEXITCODE
+      $okFresh = ($onlyBuilt -like '*src\cli\Win64\Debug\drag-lint.exe') -and ($nbCode -eq 2) -and ($dpCode -eq 2) -and $nb.Contains('no build of this tree') -and $dp.Contains('no build of this tree')
+      if (-not $okFresh) { $bad += $s.Name }
+      continue
+    }
     Set-Stub $deployed $false; Set-Stub $built $false
     $none = & $sb $psr
     Set-Stub $built $true

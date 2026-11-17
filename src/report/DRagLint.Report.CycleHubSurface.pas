@@ -16,14 +16,16 @@ unit DRagLint.Report.CycleHubSurface;
 /// for a group it predicts to break (`--no-hub-surface` = the planner's plan); writing and the
 /// `--causes --format json` fix object still need `--hub-surface` by name. The dry run writes nothing;
 /// `--apply` writes the new unit, the hub and the rewritten spokes (.BCK&lt;n&gt; backups unless
-/// `--no-backup`) and runs NO compile gate (149): build the project after it. Refusals are per
+/// `--no-backup`) and runs NO compile gate (149): build the project after it. Since 1.51.1 (lane v1511 CYC)
+/// `cycles --fix --hub-surface` writes the same bytes (HubSurfaceRewrite) THROUGH the compile gate: baseline build,
+/// write under backups, build after the edit, roll back on failure, re-index and verify. Refusals are per
 /// member and per spoke, so one unsupported member leaves only the spokes that read it untouched.
 /// Not thread-safe; reads the index and the sources, owns everything it allocates.</remarks>
 
 interface
 
 uses
-  System.Classes, System.Generics.Collections, System.JSON,
+  System.SysUtils, System.Classes, System.Generics.Collections, System.JSON,
   DRagLint.Core.Interfaces, DRagLint.Report.CyclePlan;
 
 type
@@ -41,6 +43,35 @@ type
     /// through the global (`frmMain.Invalidate`, TControl's) is on the surface only when the
     /// library declares it (lane 149 CYA); without one it stays refused member-unsupported.</summary>
     LibraryStore: ISymbolStore;
+  end;
+
+  /// <summary>Recipe R3's rewrite of ONE group as whole-file contents (lane v1511 CYC, T06): what
+  /// `cycles --fix --hub-surface` stages, writes under backups and builds through the compile gate.</summary>
+  /// <remarks>Every byte array is the file's full new content in its own source encoding (the surface unit
+  /// in the hub's), exactly what `cycles --plan --hub-surface --apply` would write. Owns no object.</remarks>
+  THubSurfaceRewrite = record
+    /// <summary>True when R3 planned the group: no group refusal and at least one spoke.</summary>
+    Planned: Boolean;
+    /// <summary>True when the prediction says the group breaks (no cycle left among its units).</summary>
+    Breaks: Boolean;
+    /// <summary>The group refusal kind (not-hub-shaped, outside-roots, ...); '' when planned.</summary>
+    Refusal: string;
+    /// <summary>Why the group was refused, or why it stays; '' otherwise.</summary>
+    Why: string;
+    /// <summary>The spoke-&gt;hub edges left after the plan.</summary>
+    EdgesLeft: Integer;
+    /// <summary>The existing files R3 rewrites: the hub, then every rewritten spoke.</summary>
+    Paths: TArray<string>;
+    /// <summary>Their new contents, index for index with Paths.</summary>
+    Contents: TArray<TBytes>;
+    /// <summary>The new surface unit's name (`&lt;HubUnit&gt;.Hub`).</summary>
+    NewUnit: string;
+    /// <summary>The new surface unit's path, beside the hub.</summary>
+    NewPath: string;
+    /// <summary>The new surface unit's content.</summary>
+    NewContent: TBytes;
+    /// <summary>The plan as `cycles --plan --hub-surface` renders it (markdown lines).</summary>
+    Lines: TArray<string>;
   end;
 
 /// <summary>Plans recipe R3 for the circular groups and, with Apply, writes one of them.</summary>
@@ -86,7 +117,8 @@ function HubSurfaceGroupLines(const pStore, pLibrary: ISymbolStore; const pGroup
 
 /// <summary>Hub-SCC phase P6 prep: the `cycles --causes --format json --hub-surface` fix object of ONE
 /// group when R3 plans it (the planner's TCycleFixHook): `available` = the prediction breaks the group,
-/// `part` = "r3", `recipe` = "hub-surface", the dry-run / apply commands, one edge per cut spoke->hub
+/// `part` = "r3", `recipe` = "hub-surface", the dry-run / apply commands (since 1.51.1 AddCycleFixHints replaces
+/// them with the gated `cycles --fix --hub-surface --project ...` ones), one edge per cut spoke->hub
 /// edge, `reason` = '' or what keeps the group.</summary>
 /// <param name="pStore">The index; read only.</param>
 /// <param name="pLibrary">The platform library or nil.</param>
@@ -99,10 +131,23 @@ function HubSurfaceGroupLines(const pStore, pLibrary: ISymbolStore; const pGroup
 function HubSurfaceFixJson(const pStore, pLibrary: ISymbolStore; const pGroup: TArray<string>; pIndex: Integer;
   const pGraph: TCycleGraph; const pDbPath: string; out pFix: TJSONObject): Boolean;
 
+/// <summary>Plans recipe R3 for ONE group and returns its rewrite as whole-file contents, writing nothing
+/// (lane v1511 CYC, T06: the input of `cycles --fix --hub-surface`).</summary>
+/// <param name="pStore">The index; read only.</param>
+/// <param name="pLibrary">The platform library or nil (ancestor members).</param>
+/// <param name="pGroup">The group's lower-case unit stems.</param>
+/// <param name="pIndex">1-based group number.</param>
+/// <param name="pGraph">The uses graph.</param>
+/// <returns>The rewrite; Paths / Contents / NewContent are filled only when Planned.</returns>
+/// <remarks>The same plan and the same bytes as `cycles --plan --hub-surface --apply` for that group. Reads the
+/// sources; writes nothing.</remarks>
+function HubSurfaceRewrite(const pStore, pLibrary: ISymbolStore; const pGroup: TArray<string>; pIndex: Integer;
+  const pGraph: TCycleGraph): THubSurfaceRewrite;
+
 implementation
 
 uses
-  System.SysUtils, System.StrUtils, System.Math, System.IOUtils, System.RegularExpressions, System.Generics.Defaults,
+  System.StrUtils, System.Math, System.IOUtils, System.RegularExpressions, System.Generics.Defaults,
   DRagLint.Core.Model, DRagLint.Report.CycleHub;
 
 const
@@ -218,6 +263,7 @@ type
     destructor Destroy; override;
     function PlanGroup(const pGroup: TArray<string>; pIndex: Integer): THubGroupPlan;
     function Write(const pPlan: THubGroupPlan; pNoBackup: Boolean; out pMessage: string): Boolean;
+    function EncodingOf(const pPath: string): TEncoding;
   end;
 
 { --- text helpers --------------------------------------------------------------------------- }
@@ -1413,10 +1459,6 @@ var
     while TFile.Exists(pPath + '.BCK' + IntToStr(N)) do Inc(N);
     TFile.Copy(pPath, pPath + '.BCK' + IntToStr(N));
   end;
-  function EncodingOf(const pPath: string): TEncoding;
-  begin
-    if not FEncodings.TryGetValue(pPath, Result) then Result:= TEncoding.ANSI;
-  end;
 begin
   Files:= TDictionary<string, string>.Create;
   try
@@ -1443,6 +1485,12 @@ begin
   finally
     Files.Free;
   end;
+end;
+
+{ the source encoding ReadText found for pPath; ANSI for a file it did not read }
+function THubSurfacePlanner.EncodingOf(const pPath: string): TEncoding;
+begin
+  if not FEncodings.TryGetValue(pPath, Result) then Result:= TEncoding.ANSI;
 end;
 
 { --- rendering -------------------------------------------------------------------------------- }
@@ -1701,6 +1749,52 @@ begin
       end;
     pFix.AddPair('reason', if Plan.Breaks then '' else Format('the group stays -- %d spoke->hub edges remain', [Plan.EdgesLeft]));
   finally
+    Planner.Free;
+  end;
+end;
+
+function HubSurfaceRewrite(const pStore, pLibrary: ISymbolStore; const pGroup: TArray<string>; pIndex: Integer;
+  const pGraph: TCycleGraph): THubSurfaceRewrite;
+var
+  Planner: THubSurfacePlanner;
+  Lines  : TStringList;
+begin
+  Result:= Default(THubSurfaceRewrite);
+  Planner:= THubSurfacePlanner.Create(pStore, pLibrary, pGraph);
+  Lines  := TStringList.Create;
+  try
+    var Plan:= Planner.PlanGroup(pGroup, pIndex);
+    RenderGroup(Plan, Lines);
+    Result.Lines    := Lines.ToStringArray;
+    Result.Refusal  := Plan.Refusal;
+    Result.Why      := Plan.Why;
+    Result.EdgesLeft:= Plan.EdgesLeft;
+    Result.Planned  := (Plan.Refusal = '') and (Length(Plan.Spokes) > 0);
+    if not Result.Planned then
+    begin
+      if Result.Refusal = '' then
+      begin
+        Result.Refusal:= 'not-hub-shaped';
+        Result.Why    := 'no spoke reads the hub global';
+      end;
+      Exit;
+    end;
+    Result.Breaks:= Plan.Breaks;
+    if not Plan.Breaks then Result.Why:= Format('the group stays -- %d spoke->hub edges remain', [Plan.EdgesLeft]);
+    { the same files, in the same encodings, as Write }
+    Result.Paths   := [Plan.HubPath];
+    Result.Contents:= [EncodeSource(Plan.HubNewText, Planner.EncodingOf(Plan.HubPath))];
+    for var S in Plan.Spokes do
+      if S.Refusal = '' then
+      begin
+        Result.Paths   := Result.Paths + [S.Path];
+        Result.Contents:= Result.Contents + [EncodeSource(S.NewText, Planner.EncodingOf(S.Path))];
+      end;
+    Result.NewUnit   := Plan.SurfaceUnit;
+    Result.NewPath   := Plan.SurfacePath;
+    Result.NewContent:= EncodeSource(Plan.SurfaceText, Planner.EncodingOf(Plan.HubPath));
+  finally
+    Lines.Free;
     Planner.Free;
   end;
 end;

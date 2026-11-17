@@ -93,6 +93,7 @@ type
     { top bar }
     FPanelTop  : TPanel   ;
     FLblCounts : TLabel   ;
+    FDirty     : Boolean  ;   { True after a rule toggle until Save (B-OWN2) }
     FBtnReload : TButton  ;
     FBtnSave   : TButton  ;
     FLblProfile: TLabel   ;
@@ -174,6 +175,9 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure BtnSaveClick    (Sender: TObject);
+    { B-OWN2: any editable control (auto-fix box, param editor, preset) marks the page unsaved. }
+    procedure MarkDirty;
+    procedure ControlChanged(Sender: TObject);
     /// <summary><!-- drag-lint:auto sum -->---- category header OnClick: toggle all rule
     /// boxes in the group ----</summary>
     /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
@@ -636,6 +640,7 @@ uses
   , Vcl.ComCtrls
   , Vcl.Samples.Spin
   , Vcl.Dialogs
+  , Vcl.Graphics
   , ToolsAPI
 
   , DragLint.Plugin.Settings
@@ -1130,6 +1135,7 @@ begin
   FCatalogJSON:= '';
   FRun        := TCliRunSlot.Create;
   FHasData    := False;
+  FDirty      := False;
   FProfile    := '';
   FCfg        := TLintConfig.Load('', '');  { default no-op config }
   FAutoFixCBs := TDictionary<string, TCheckBox>.Create;
@@ -1142,6 +1148,15 @@ destructor TLintOptionsFrame.Destroy;
 begin
   { Only holds references to VCL-owned checkboxes/edits; free the maps, not
     the controls themselves (owned by Self / their parent GroupBox). }
+  { B-OWN2: no Cancel is possible while the frame is being destroyed, so ask Yes/No. }
+  if FDirty and FHasData then
+  try
+    if MessageDlg('Lint Options has unsaved changes. Save them now?',
+         mtConfirmation, [mbYes, mbNo], 0) = mrYes then Save;
+  except
+    on E: Exception do
+      OutputDebugString(PChar('drag-lint LintOptions teardown: ' + E.Message)); // dl:ok outputdebugstring@67d3 -- teardown cannot raise or prompt; the debugger channel is the only safe sink
+  end;
   FRun.Free;  { abandons the run in flight: its answer never reaches a dead frame }
   FAutoFixCBs.Free;
   FNamingEditors.Free;
@@ -1296,6 +1311,11 @@ var
   j       : Integer    ;
 begin
   RuleCB:= TCheckBox(Sender);
+  if FHasData then
+  begin
+    FDirty:= True;          { B-OWN2: live count + unsaved marker on every toggle }
+    UpdateCountsLabel;
+  end;
   { Walk siblings to find the category header checkbox (carries TCatTag) }
   Prnt:= RuleCB.Parent;
   if Prnt = nil then Exit;
@@ -1596,6 +1616,7 @@ begin
         AutoFixCB.Caption := 'auto-fix';
         AutoFixCB.Checked := not FCfg.IsAutoFixOff(Rule.Id); // every fix is on by default (1.37.0); unchecked = autofix_off
         AutoFixCB.Anchors := [akTop, akRight];
+        AutoFixCB.OnClick := ControlChanged;
         FAutoFixCBs.AddOrSetValue(Rule.Id, AutoFixCB);
       end;
 
@@ -1633,6 +1654,7 @@ begin
           SpnEdt.MinValue:= 0;
           SpnEdt.MaxValue:= 9999;
           SpnEdt.Value   := DefVal;
+          SpnEdt.OnChange:= ControlChanged;
           Inc(GrpY, PEH + 4);
 
           PE.Ctrl:= SpnEdt;
@@ -1648,6 +1670,7 @@ begin
           StrEdt.Height  := EH;
           StrEdt.Text    := LoadParamInitText(FCfg, Param);
           StrEdt.Anchors := [akLeft, akTop, akRight];
+          StrEdt.OnChange:= ControlChanged;
           Inc(GrpY, PEH + 4);
 
           { One of the 8 preset-bundle params (Task 7): register for
@@ -1688,6 +1711,7 @@ begin
     UpdatePresetButtons;
 
     FHasData:= True;
+    FDirty  := False;
     UpdateCountsLabel;
 
   finally
@@ -1714,6 +1738,8 @@ begin
   if not FHasData or (FCatalogJSON = '') then
   begin
     FLblCounts.Caption:= 'Not loaded';
+    FBtnSave.Caption:= 'Save';
+    FBtnSave.Font.Style:= [];
     Exit;
   end;
   Rules:= ParseCatalog(FCatalogJSON);
@@ -1750,6 +1776,9 @@ begin
     FLblCounts.Caption:= Format(
       '%d rules across %d categories, %d enabled',
       [TotalRules, Cats.Count, EnabledCount]);
+    if FDirty then FLblCounts.Caption:= FLblCounts.Caption + ' (unsaved)';
+    FBtnSave.Caption:= if FDirty then 'Save *' else 'Save';
+    FBtnSave.Font.Style:= if FDirty then [fsBold] else [];
   finally
     Cats.Free;
   end;
@@ -1902,6 +1931,7 @@ begin
     ReloadProfileList;                                  { include a newly-typed name }
     FCboProfile.ItemIndex:= FCboProfile.Items.IndexOf(Target);
   end;
+  FDirty:= False;
   UpdateCountsLabel;
 end;
 
@@ -2424,6 +2454,7 @@ begin
   if FCboPreset = nil then Exit;
   if FCboPreset.ItemIndex <> CustomIndex then
     ApplyPreset(FCboPreset.ItemIndex); { Custom: no-op by design }
+  MarkDirty;
   UpdatePresetButtons;
 end;
 
@@ -2437,6 +2468,7 @@ end;
 /// other.</summary>
 procedure TLintOptionsFrame.NamingFieldChanged(Sender: TObject);
 begin
+  MarkDirty;
   if FApplyingPreset then Exit;
   DetectAndSetPreset;
   UpdatePresetButtons;
@@ -2513,7 +2545,22 @@ end;
 
 procedure TLintOptionsFrame.BtnReloadClick(Sender: TObject);
 begin
+  if FDirty and (MessageDlg('Discard the unsaved changes and reload?',
+       mtConfirmation, [mbYes, mbNo], 0) <> mrYes) then Exit;
+  FDirty:= False;
   ReloadCatalogAndConfig;
+end;
+
+procedure TLintOptionsFrame.MarkDirty;
+begin
+  if not FHasData then Exit;
+  FDirty:= True;
+  UpdateCountsLabel;
+end;
+
+procedure TLintOptionsFrame.ControlChanged(Sender: TObject);
+begin
+  MarkDirty;
 end;
 
 procedure TLintOptionsFrame.BtnSaveClick(Sender: TObject);

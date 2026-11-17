@@ -18,7 +18,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe       = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
+  [string]$Exe       = $(. "$PSScriptRoot\lib\FreshEngineExe.ps1"; Get-FreshEngineExe),
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-c1-dcc-$PID",
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite',
   [switch]$KeepWorkDir
@@ -71,8 +71,16 @@ function Invoke-Build([string]$Dproj) {
     ('msbuild /t:Build /p:Config=Debug /p:Platform=Win64 /v:minimal "{0}" > "{1}" 2>&1' -f $Dproj, $log),
     ('>> "{0}" echo BUILD_EXITCODE=%ERRORLEVEL%' -f $log))
   [IO.File]::WriteAllText($bat, (($lines -join "`r`n") + "`r`n"), $Ascii)
-  Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -NoNewWindow -Wait | Out-Null
-  $text = if (Test-Path $log) { [IO.File]::ReadAllText($log) } else { '' }
+  # H04: F2039 ("could not create output file") is the demo exe/dcu held by a scanner or a just-exited
+  # run under machine load -- environmental, fails identically on 1.50. Retry the build; if it persists,
+  # SKIP with the named reason instead of a product FAIL (exit 0 runs the finally cleanup).
+  for ($try = 1; $try -le 3; $try++) {
+    Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -NoNewWindow -Wait | Out-Null
+    $text = if (Test-Path $log) { [IO.File]::ReadAllText($log) } else { '' }
+    if ($text -notmatch '\bF2039\b') { break }
+    if ($try -eq 3) { Write-Host "SKIP: dcc F2039 (output file locked, environmental) after 3 builds: $dir" -ForegroundColor Yellow; exit 0 }
+    Start-Sleep -Seconds 5
+  }
   $errors = @([regex]::Matches($text, '(?m)^.*\b(error|fatal) [EF]\d{4}\b.*$') | ForEach-Object { $_.Value.Trim() } | Select-Object -Unique)
   return @{ Ok = ($text -match 'BUILD_EXITCODE=0') -and ($errors.Count -eq 0); Errors = ($errors -join ' | ') }
 }
@@ -144,7 +152,8 @@ try {
   $outC = Invoke-Program (Join-Path $cast.Edit 'MemberWrite.dproj')
   Check 'pc2 its stdout DIFFERS from the untouched build (the compare has teeth)' (($outC -ne '<no exe>') -and ($outC -cne $cast.Out0)) ''
 } finally {
-  if (-not $KeepWorkDir -and (Test-Path -LiteralPath $WorkDir)) { [IO.Directory]::Delete($WorkDir, $true) }
+  . "$PSScriptRoot\lib\WorkDirCleanup.ps1"
+  Remove-WorkDir $WorkDir -Keep:$KeepWorkDir   # retries a locked demo exe, then warns (H03 shape)
 }
 $Stamp1 = Get-LibStamp
 Check 'z1 the real library DBs are unchanged (size + mtime)' ($Stamp0 -eq $Stamp1) "before [$Stamp0] after [$Stamp1]"

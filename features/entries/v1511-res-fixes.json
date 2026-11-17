@@ -1,0 +1,30 @@
+{
+  "id": "v1511-res-fixes",
+  "title": "Library bindings for bare reads, paren-less calls and function-result receivers",
+  "group": "indexing",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.51.1-alpha",
+  "summary": "Bare reads of library vars (Application), paren-less library calls and members on a library function result bind to refs.external_target",
+  "intro": "Read this when usages shows a library name such as Application as name-only, when a paren-less call of a library function is missing from purity or caller answers, or when a member called on a library function's result (Printer.Canvas, a var inferred from it) has no library target. Since 1.51.1 the resolve pass binds all three and marks a read with refs.external_kind value, parenless-call or proc-value.",
+  "wikiPage": "library-first-resolve",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "usages",
+      "example": "drag-lint usages --name Application --db <file.sqlite> --library-db <lib.sqlite> --json"
+    },
+    {
+      "type": "cli",
+      "verb": "index",
+      "example": "drag-lint index --project <X.dproj> --db <file.sqlite> --library-db <lib.sqlite>"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-16",
+    "by": "ENGINE",
+    "build": "1.51.1-alpha",
+    "surfaceHash": "081a201e58569266645b45a617accdfd5f2194fc680d09f7062a124ce7c3e8bc"
+  }
+}

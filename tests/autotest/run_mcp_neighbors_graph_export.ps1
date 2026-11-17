@@ -71,7 +71,9 @@ try {
   $d = (& $Exe graph --db $Db 2>$null | Out-String)
   # 3e MUST-FIX (x3 finding): the json edge writer used a local escaper whose backslash replace was a no-op. A unit name
   # cannot hold a backslash on Windows, so no fixture can reach it: this reads the source. RED on the old code.
-  $cli = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\..\src\cli\DRagLint.CLI.pas'))
+  # v1511 SPLIT moved the graph verb to DRagLint.CLI.Graph.pas: read every CLI unit (DRagLint.CLI*.pas), not one.
+  $cli = (Get-ChildItem (Join-Path $PSScriptRoot '..\..\src\cli') -Filter 'DRagLint.CLI*.pas' | Sort-Object Name |
+    ForEach-Object { [IO.File]::ReadAllText($_.FullName) }) -join "`r`n"
   $edgeLine = [regex]::Match($cli, '(?m)^.*"from":"%s","to":"%s","weight":%d.*$').Value
   Check '3e json edges go through JsonEscape' (($edgeLine -match 'JsonEscape\(FromUnit\), JsonEscape\(ToUnit\)') -and ($cli -notmatch 'function JsonEsc\(')) "line=$edgeLine"
   Check 'CONTROL dot default starts with the generated comment and digraph' ($d -match 'digraph DragLintDeps')

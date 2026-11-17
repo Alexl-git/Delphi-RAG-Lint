@@ -334,3 +334,8 @@ src/storage/DRagLint.Storage.SQLite.pas::ExtraStoresDeclineReason
 src/storage/DRagLint.Storage.SQLite.pas::PersistArgUses
 src/query/DRagLint.Query.Callers.pas::LocateArgument
 src/query/DRagLint.Query.Callers.pas::ParamModeAt
+# v1511 RES (B02): library-first resolve of reads -- writes refs.external_target for reads of
+# library symbols, one call after ResolveTypeReadRefs.
+src/storage/DRagLint.Storage.SQLite.pas::ResolveLibraryReadRefs
+# v1511 INC2 (B10): writes ref_host_bindings from Resolver.HostBindings after the last calls stream.
+src/storage/DRagLint.Storage.SQLite.pas::WriteRefHostBindings

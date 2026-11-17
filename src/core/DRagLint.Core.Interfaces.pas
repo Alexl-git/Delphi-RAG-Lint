@@ -709,6 +709,15 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FindCallersByName(const ACalleeName: string): TArray<TReference>              ;
+    /// <summary>1.51.1 INC2 (B10, owner ruling OQ18): the refs bound to ASymbolId PER HOST only --
+    /// written inside a code include that several units include, where this symbol is what one
+    /// host binds while refs.symbol_id is NULL because another host binds elsewhere
+    /// (ref_host_bindings, schema 26).</summary>
+    /// <param name="ASymbolId">symbols.id of the target.</param>
+    /// <returns>refs.id values, ascending; empty when there are none or the index predates the table.</returns>
+    /// <remarks>A ref whose hosts agree is NOT listed: it carries refs.symbol_id like any other
+    /// bound ref. FindCallersByName returns such a per-host ref with SymbolId 0.</remarks>
+    function GetHostBoundRefIds(ASymbolId: Int64): TArray<Int64>;
     /// <summary>For each name, the number of DISTINCT call sites FindCallersByName would
     /// return for it, counted in ONE query per call instead of one materialised row set
     /// per name.</summary>

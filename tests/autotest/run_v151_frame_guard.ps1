@@ -65,7 +65,22 @@ Assert "OFF list is one function over core + provider rows" ($cat -match 'functi
 $cli = [IO.File]::ReadAllText((Join-Path $repo 'src\cli\DRagLint.CLI.pas'))
 Assert "CLI calls TV151Dispatch.CheckFile twice (lint, lint-all loop)" (([regex]::Matches($cli, 'TV151Dispatch\.CheckFile\(')).Count -eq 2)
 Assert "CLI calls TV151Dispatch.CheckProject once (lint-all)" (([regex]::Matches($cli, 'TV151Dispatch\.CheckProject\(')).Count -eq 1)
-Assert "every v151 call is gated by TV151Dispatch.Wants" (([regex]::Matches($cli, 'TV151Dispatch\.Wants\(')).Count -ge 3)
+# Each CheckFile/CheckProject call must sit under a gate within the 3 lines above it:
+# `if TV151Dispatch.Wants(..)` (one --rule id) or `if V151Wanted` (lint-all since
+# v1511 CLI B16, where --rule may be a list), and V151Wanted must itself be derived
+# from the dispatch's own id list. Counting Wants( alone misread the B16 form.
+$cliLines = $cli -split "`r?`n"
+$ungated = @()
+for ($i = 0; $i -lt $cliLines.Count; $i++) {
+  if ($cliLines[$i] -match 'TV151Dispatch\.Check(File|Project)\(') {
+    $above = ($cliLines[[Math]::Max(0, $i - 3)..($i - 1)] -join "`n")
+    if ($above -notmatch '\bif\s+(TV151Dispatch\.Wants\(|V151Wanted\b)') { $ungated += ($i + 1) }
+  }
+}
+$wantedDerived = ($cli -match 'V151Ids:\s*TArray<string>:=\s*TV151Dispatch\.RuleIds;') -and
+                 ($cli -match 'V151Wanted:\s*Boolean:=\s*\(Length\(V151Ids\) > 0\) and LintRuleWants\(Nr, V151Ids\);')
+Assert "every v151 call is gated by TV151Dispatch.Wants or V151Wanted (ungated lines: $($ungated -join ', '))" ($ungated.Count -eq 0)
+Assert "V151Wanted is derived from TV151Dispatch.RuleIds" $wantedDerived
 
 if ($fail -gt 0) { Write-Host "run_v151_frame_guard: $fail FAILED" -ForegroundColor Red; exit 1 }
 Write-Host "run_v151_frame_guard: all passed"

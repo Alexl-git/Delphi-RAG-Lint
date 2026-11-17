@@ -172,7 +172,7 @@ implementation
 uses
   System.IOUtils, System.JSON, System.StrUtils, System.RegularExpressions, System.Hash, System.Math, Winapi.Windows,
   System.Generics.Collections, System.Generics.Defaults,
-  FireDAC.Comp.Client,
+  FireDAC.Comp.Client, FireDAC.Phys.SQLiteWrapper,
   DRagLint.Core.FileTime, DRagLint.Project.OwnRoots, DRagLint.Report.CyclePlan, DRagLint.Refactor.CompileGate,
   DRagLint.Storage.SQLite;
 
@@ -236,6 +236,8 @@ type
       pTypeId, pEnclosing: Int64);
     procedure ReadCastRows;
     procedure ReadUntypedCalls;
+    procedure ReadAllRows;
+    procedure StandDownProbe(pDb: TSQLiteDatabase; var pCancel: Boolean);
     procedure Refuse(const pSite: TCastSite; const pKind, pReason: string);
   public
     constructor Create(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>; const pOpts: TRedundantCastOptions);
@@ -249,7 +251,7 @@ constructor TMaskedSource.Create(const pPath: string);
 begin
   inherited Create;
   Path:= pPath;
-  Text:= DecodeSource(TFile.ReadAllBytes(pPath), Enc);
+  Text:= DecodeSource(TFile.ReadAllBytes(pPath), Enc);  // dl:ok taint-path-traversal@f6f6 -- REVIEWED 2026-11-16: pPath is a unit of the user's own index (its files table), read with the user's rights; same verdict as the live markers at :1186 / :1265
   Scan;
 end;
 
@@ -499,7 +501,7 @@ end;
 
 function IsFileCurrent(const pStore: ISymbolStore; const pPath: string): Boolean;
 begin
-  Result:= pStore.FileIsUpToDate(pPath, FileMTimeUnix(pPath), THashSHA2.GetHashString(TEncoding.ANSI.GetString(TFile.ReadAllBytes(pPath))));
+  Result:= pStore.FileIsUpToDate(pPath, FileMTimeUnix(pPath), THashSHA2.GetHashString(TEncoding.ANSI.GetString(TFile.ReadAllBytes(pPath))));  // dl:ok taint-path-traversal@a85d -- REVIEWED 2026-11-16: pPath is a unit of the user's own index (its files table), read with the user's rights; same verdict as the live markers at :1186 / :1265
 end;
 
 function TCastPlanner.StampOk(const pPath: string): Boolean;
@@ -797,11 +799,12 @@ begin
   Result:= One <> '';
 end;
 
-procedure TCastPlanner.Decide(pFileId: Int64; const pPath: string; pLine, pCol: Integer; const pName: string;  // dl:ok cyclomatic-complexity@a24b, too-many-exit-points@6420 -- one branch per named refusal, documented on the public function
+procedure TCastPlanner.Decide(pFileId: Int64; const pPath: string; pLine, pCol: Integer; const pName: string;  // dl:ok cyclomatic-complexity@4f22, too-many-exit-points@6420 -- one branch per named refusal, documented on the public function
   pTypeId, pEnclosing: Int64);
 const
   CTypeKinds: array[0..4] of string = ('class', 'record', 'interface', 'enum', 'type');
 begin
+  if TakeStandDown then raise ECompileGateCancelled.Create('cancelled'); // B25: shutdown / Cancel stops the plan
   var Site:= Default(TCastSite);
   Site.FilePath:= pPath;
   Site.Line    := pLine;
@@ -1065,6 +1068,49 @@ begin
   end;
 end;
 
+// SQLite's progress callback, on the main thread inside a running SELECT: a pending stand-down is taken and interrupts it.
+procedure TCastPlanner.StandDownProbe(pDb: TSQLiteDatabase; var pCancel: Boolean);
+begin
+  pCancel:= TakeStandDown;
+end;
+
+// CAST2 (1.51.1): Decide alone polls too rarely. ReadUntypedCalls' self-join runs ~2 min on a 300 MB index, longer
+// than `shutdown --wait`, and the listener withdraws a request nobody took; so every SELECT here polls through
+// SQLite's progress callback and an interrupted one surfaces as the cancel, never as an SQL error.
+procedure TCastPlanner.ReadAllRows;
+const
+  CProbeOps = 1000; // SQLite VM steps between two polls: microseconds, as in DRagLint.Sql.Guarded
+begin
+  var Native: TSQLiteDatabase:= nil;
+  var Obj: TObject:= TObject(FConn.CliObj);
+  if Obj is TSQLiteDatabase then Native:= TSQLiteDatabase(Obj);
+  var PrevProbe: TSQLiteDatabaseProgressEvent:= nil;
+  var PrevOps:= 0;
+  if Native <> nil then
+  begin
+    PrevProbe:= Native.OnProgress;
+    PrevOps  := Native.ProgressNOpers;
+    Native.ProgressNOpers:= CProbeOps;
+    Native.OnProgress    := StandDownProbe;
+  end;
+  try
+    try
+      ReadCastRows;
+      ReadUntypedCalls;
+    except
+      on E: Exception do
+        if (E is not ECompileGateCancelled) and TakeStandDown then raise ECompileGateCancelled.Create('cancelled')
+        else raise;
+    end;
+  finally
+    if Native <> nil then
+    begin
+      Native.OnProgress    := PrevProbe;
+      Native.ProgressNOpers:= PrevOps;
+    end;
+  end;
+end;
+
 function TCastPlanner.Run: TCastPlan;
 begin
   var Q:= TFDQuery.Create(nil);
@@ -1076,8 +1122,7 @@ begin
   finally
     Q.Free;
   end;
-  ReadCastRows;
-  ReadUntypedCalls;
+  ReadAllRows;
   Result.Fixes      := FFixes.ToArray;
   Result.Refused    := FRefused.ToArray;
   Result.NotIdentity:= FNotIdent;
@@ -1237,6 +1282,11 @@ begin
     begin
       SayError(E.Message);
       Exit(CExitError);
+    end;
+    on ECompileGateCancelled do
+    begin
+      SayError('cancelled: a stand-down request stopped the plan; nothing written');
+      Exit(CExitRefused);
     end;
   end;
   if pOpts.Apply and (Length(Plan.Fixes) > 0) then

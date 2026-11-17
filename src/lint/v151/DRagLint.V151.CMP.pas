@@ -452,20 +452,20 @@ begin
   end;
   if T = 'literalNumber' then
   begin
-    if CmpIntLiteral(Txt(X), V) then Exit('n:' + IntToStr(V));  // dl:ok hardcoded-absolute-path@7c4c -- REVIEWED 2026-11-14 v151 CMP: a LitKey kind prefix (n: / i: / c: / s:), not a drive path -- rule false positive
+    if CmpIntLiteral(Txt(X), V) then Exit('n:' + IntToStr(V));
     Exit('');
   end;
   if (T = 'kTrue') or ((T = 'identifier') and (Low(X) = 'true')) then Exit('b:true');
   if (T = 'kFalse') or ((T = 'identifier') and (Low(X) = 'false')) then Exit('b:false');
-  if T = 'identifier' then Exit('i:' + Low(X));  // dl:ok hardcoded-absolute-path@3bf5 -- REVIEWED 2026-11-14 v151 CMP: a LitKey kind prefix (n: / i: / c: / s:), not a drive path -- rule false positive
-  if T = 'literalString' then Exit('c:' + Txt(X));  // dl:ok hardcoded-absolute-path@1b55 -- REVIEWED 2026-11-14 v151 CMP: a LitKey kind prefix (n: / i: / c: / s:), not a drive path -- rule false positive
+  if T = 'identifier' then Exit('i:' + Low(X));
+  if T = 'literalString' then Exit('c:' + Txt(X));
   if T = 'exprBrackets' then
   begin
     var L: TStringList:= TStringList.Create;
     try
       for var I: Integer:= 0 to X.NamedChildCount - 1 do L.Add(Low(X.NamedChild(I)));
       L.Sort;
-      Result:= 's:' + L.CommaText;  // dl:ok hardcoded-absolute-path@35c1 -- REVIEWED 2026-11-14 v151 CMP: a LitKey kind prefix (n: / i: / c: / s:), not a drive path -- rule false positive
+      Result:= 's:' + L.CommaText;
     finally
       L.Free;
     end;
@@ -744,7 +744,7 @@ begin
     Inits.Free;
   end;
   { Never written at all: the field starts at 0 / False. }
-  if (Field = '') or not ((Def = 'b:true') or (StartsStr('n:', Def) and (Def <> 'n:0'))) then Exit;  // dl:ok hardcoded-absolute-path@c786 -- REVIEWED 2026-11-14 v151 CMP: a LitKey kind prefix (n: / i: / c: / s:), not a drive path -- rule false positive
+  if (Field = '') or not ((Def = 'b:true') or (StartsStr('n:', Def) and (Def <> 'n:0'))) then Exit;
   var Assigns: TList<TTSNode>:= TList<TTSNode>.Create;
   try
     for var D: TTSNode in FDefs do

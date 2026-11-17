@@ -1087,6 +1087,7 @@ var
   lHasDesigner: Boolean;
   lHelp: TLiveHelp;
   lCli, lMenu, lRx, lS, lRt, lElse, lCore, lSchemaPas, lPack, lChart, lBlock, lF: string;
+  lFamily: string;
   lList, lSeen: TList<string>;
   lM: TMatch;
   lQ: TReportQuestion;
@@ -1111,6 +1112,10 @@ begin
   if Length(HelpVerbs) <= MIN_HELP_VERBS then
     raise EFeatureGenLive.CreateFmt('live surface: --help yielded %d verb(s); expected > 20 -- the harvest is broken, not the CLI', [Length(HelpVerbs)]);
   lCli := ReadText(TPath.Combine(pRepo, 'src\cli\DRagLint.CLI.pas'));
+  // v1511 SPLIT moved verb families (export, workspace, ...) into src\cli\DRagLint.CLI.<Family>.pas:
+  // their subcommand arms live there now, so the subcommand harvest reads every CLI unit.
+  for lFamily in TDirectory.GetFiles(TPath.Combine(pRepo, 'src\cli'), 'DRagLint.CLI.*.pas') do
+    lCli := lCli + CRLF + ReadText(lFamily);
   DispatchVerbs := SortUniqueText(Matches1(lCli, 'Args\.Command\s*=\s*''([a-z][a-z0-9-]*)'''));
   if Length(DispatchVerbs) <= MIN_DISPATCH_VERBS then
     raise EFeatureGenLive.CreateFmt('live surface: dispatch scan yielded %d verb(s); expected > 20', [Length(DispatchVerbs)]);

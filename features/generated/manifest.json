@@ -1,8 +1,8 @@
 {
-  "product": "1.51.0-alpha",
-  "extractor": "1.39.0-alpha",
-  "resolver": "1.27.0-alpha",
-  "schema": 25,
+  "product": "1.51.1-alpha",
+  "extractor": "1.40.0-alpha",
+  "resolver": "1.28.0-alpha",
+  "schema": 26,
   "groups": [
     {
       "id": "indexing",
@@ -185,7 +185,7 @@
             }
           ],
           "helpOrder": 1,
-          "help": ["  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...] [--wait-library <min>] [--require-library] [--stall-exit-min <min>] [--target-compiler <ver|auto>]", "                               --library-db (v21, repeatable): consult another index for calls THIS one cannot resolve.", "                               A hit is recorded by qualified NAME on refs.external_target -- never as a call_edges row,", "                               because target_symbol_id is a NOT NULL FK into this db. A LOCAL answer always wins (the", "                               cross-DB rung runs last), so adding a library can never change an edge that already existed.", "                               Answers only when exactly ONE type and ONE member match; absence beats a guess.", "                               A value receiver typed by NAME binds too (S.Read with S: TStream -> System.Classes.TStream.Read; refs.receiver_type_text", "                               records the type). Without the flag, a manifest section opts in with \"libraryResolve\": true (default false):", "                               index --all / index --project then open the platform library for the resolve pass only.", "                               WALK SCOPING (any index run): [--exclude-under <dir>]... [--include-only <glob>]...", "                               [--max-file-kb N] [--no-use-ignore] [--no-sql-ms] [--deep|--shallow]", "                               --exclude-under and --include-only are repeatable and prune the walk;", "                               under --project, --exclude-under never drops a compile-closure unit (it names one it kept).", "                               index --project refuses (exit 2) a .dproj under a library-section root, and a library database (library-*.sqlite or a library section's db) as its --db.", "                               --max-file-kb skips a file larger than N KB. --no-use-ignore opts OUT of the", "                               .gitignore / .hgignore pattern files, which are honoured by default. A folder", "                               holding a .scanignore MARKER file (contents never read) is always pruned with", "                               its subtree; --no-use-ignore does not change that. --no-sql-ms indexes EVERY", "                               .sql file, not just the MS*.sql migration scripts CREATE EXCEPTION text is read", "                               from by default. --deep also records usage refs (--shallow is the default).", "  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--no-preprocess] [--dry-run] [--watch [--interval N]] [--wait-library <min>] [--require-library] [--stall-exit-min <min>] [--target-compiler <ver|auto>]", "                               [--rule-cache-warm background|wait|off]   after a project index (also each project", "                               section of index --all) the `lint <file>` rule cache is warmed: wait (the default)", "                               in this run; background = in a DETACHED process, so the run returns at once (the", "                               warm recomputes the whole-project rules -- minutes on a large project); off = not at", "                               all. DRAGLINT_RULE_CACHE_WARM=<mode> sets the default. A background warm keeps the", "                               index OPEN until it ends, so a script that deletes the index right after should keep", "                               wait; a newer background warm of the same index stops the older one.", "  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths)", "  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)", "  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run [--json]] [--jobs <n>] [--wait-library <min>] [--require-library] [--stall-exit-min <min>] [--rule-cache-warm background|wait|off] [--target-compiler <ver|auto>]", "                               --wait-library <min>: when the platform library a libraryResolve section binds against is NOT READY (rebuilding, built by an older extractor, schema old, never completed), probe every 30 s up to `min` minutes, then continue; --require-library: a not-ready library is ERROR, exit 2. Default: continue, mark the run pending and say so. The library line is printed before the walk; the platform comes from --platform, the project DB, then the .dproj.", "                               SCAN TYPE is DECLARED BY THE TARGET, not by a flag. --project <.dproj|.dpr|.dpk>", "                               (or a .dpr/.dproj manifest include) indexes the COMPILE CLOSURE: the project", "                               members, the project-local units they transitively use, each one's sibling", "                               .dfm, its {$I} includes, and the project file -- and NOTHING else. A loose", "                               .pas nobody references, and anything on a Delphi Library/Browsing path, stay", "                               OUT. A FOLDER target indexes the whole tree instead.", "                               The scope (closure files, or library folders) is printed CAPPED at 20", "                               entries plus the count; --dry-run lists every entry and indexes nothing.", "                               MODE is CHOSEN PER RUN. [--recompile] (DEFAULT) updates the index in place;", "                               [--rebuild] first empties it of source, then walks. It deletes ROWS, not the", "                               .sqlite: schema, migrations and settings survive and no open handle is", "                               dropped. Implies --force-reparse. The two are mutually exclusive, and BOTH", "                               apply to index --all: each manifest section honours the mode it was given.", "                               [--force-reparse]: re-parse every walked file even when", "                               path+mtime+sha are unchanged. Needed once per DB after an engine upgrade that", "                               extracts something new -- see INBOX 2.3.", "                               EVERY walk SWEEPS, and both halves delete symbols/refs/uses/docs with the", "                               file: PRUNE drops indexed files that left the DISK; EVICTION drops files that", "                               STILL EXIST and left the SCOPE -- a unit dropped from the .dproj, a copy under", "                               an ignored folder, a tree a new [--exclude] now covers. Rows that outlive", "                               their scope make every reference-derived answer (find-callers,", "                               unused-public-symbol, doc facts) wrong. Bounded to the roots THIS run walked,", "                               so indexing one project never purges another's rows from a shared DB, and", "                               reported only when there is something to report. [--prune] forces the sweep", "                               for a single-FILE walk, which does not sweep by default. [--no-prune] is the", "                               one \"delete nothing\" switch, and it is a DRY LOOK: both sweeps are still", "                               COMPUTED and REPORTED as \"would remove\" (count + a capped sample of paths),", "                               nothing is deleted. Take it before a big run. Applies to index --all too.", "                               A MALFORMED MANIFEST REFUSES the write (exit 2) -- beside the exe, a local", "                               .drag-lint.json, or --config -- naming the file, the key path and both types", "                               (\"indexes: expected object, got array\"). Read verbs only warn.", "                               A POSITIONAL .dpr/.dproj/.dpk beats the \"project\" key of the defaults file (one stderr note names the override); an explicit --project beats both.", "                               --use-ignore is the default and is accepted so older scripts still parse; --dir <path> is the same as the positional <path>.", "                               EXIT 1 when any file FAILED to store (an ERROR line on stderr names it and the file keeps its old rows) and, for index --all, when any section failed."]
+          "help": ["  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...] [--wait-library <min>] [--require-library] [--stall-exit-min <min>] [--target-compiler <ver|auto>]", "                               --library-db (v21, repeatable): consult another index for calls THIS one cannot resolve.", "                               A hit is recorded by qualified NAME on refs.external_target -- never as a call_edges row,", "                               because target_symbol_id is a NOT NULL FK into this db. A LOCAL answer always wins (the", "                               cross-DB rung runs last), so adding a library can never change an edge that already existed.", "                               Answers only when exactly ONE type and ONE member match; absence beats a guess.", "                               A value receiver typed by NAME binds too (S.Read with S: TStream -> System.Classes.TStream.Read; refs.receiver_type_text", "                               records the type). Without the flag, a manifest section opts in with \"libraryResolve\": true (default false):", "                               index --all / index --project then open the platform library for the resolve pass only.", "                               WALK SCOPING (any index run): [--exclude-under <dir>]... [--include-only <glob>]...", "                               [--max-file-kb N] [--no-use-ignore] [--no-sql-ms] [--deep|--shallow]", "                               --exclude-under and --include-only are repeatable and prune the walk;", "                               under --project, --exclude-under never drops a compile-closure unit (it names one it kept).", "                               index --project refuses (exit 2) a .dproj under a library-section root, and a library database (library-*.sqlite or a library section's db) as its --db.", "                               --max-file-kb skips a file larger than N KB. --no-use-ignore opts OUT of the", "                               .gitignore / .hgignore pattern files, which are honoured by default. A folder", "                               holding a .scanignore MARKER file (contents never read) is always pruned with", "                               its subtree; --no-use-ignore does not change that. --no-sql-ms indexes EVERY", "                               .sql file, not just the MS*.sql migration scripts CREATE EXCEPTION text is read", "                               from by default. --deep also records usage refs (--shallow is the default).", "  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--no-preprocess] [--dry-run] [--watch [--interval N]] [--wait-library <min>] [--require-library] [--stall-exit-min <min>] [--target-compiler <ver|auto>]", "                               [--rule-cache-warm background|wait|off]   after a project index (also each project", "                               section of index --all) the `lint <file>` rule cache is warmed: wait (the default)", "                               in this run; background = in a DETACHED process, so the run returns at once (the", "                               warm recomputes the whole-project rules -- minutes on a large project); off = not at", "                               all. DRAGLINT_RULE_CACHE_WARM=<mode> sets the default. A background warm keeps the", "                               index OPEN until it ends, so a script that deletes the index right after should keep", "                               wait; a newer background warm of the same index stops the older one.", "                               The Done line ends in , parse-errors=N (files parsed this run whose syntax tree had ERROR / MISSING nodes), like the section line (1.51.1).", "  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths)", "  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)", "  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run [--json]] [--jobs <n>] [--wait-library <min>] [--require-library] [--stall-exit-min <min>] [--rule-cache-warm background|wait|off] [--target-compiler <ver|auto>]", "                               --wait-library <min>: when the platform library a libraryResolve section binds against is NOT READY (rebuilding, built by an older extractor, schema old, never completed), probe every 30 s up to `min` minutes, then continue; --require-library: a not-ready library is ERROR, exit 2. Default: continue, mark the run pending and say so. The library line is printed before the walk; the platform comes from --platform, the project DB, then the .dproj.", "                               SCAN TYPE is DECLARED BY THE TARGET, not by a flag. --project <.dproj|.dpr|.dpk>", "                               (or a .dpr/.dproj manifest include) indexes the COMPILE CLOSURE: the project", "                               members, the project-local units they transitively use, each one's sibling", "                               .dfm, its {$I} includes, and the project file -- and NOTHING else. A loose", "                               .pas nobody references, and anything on a Delphi Library/Browsing path, stay", "                               OUT. A FOLDER target indexes the whole tree instead.", "                               The scope (closure files, or library folders) is printed CAPPED at 20", "                               entries plus the count; --dry-run lists every entry and indexes nothing.", "                               MODE is CHOSEN PER RUN. [--recompile] (DEFAULT) updates the index in place;", "                               [--rebuild] first empties it of source, then walks. It deletes ROWS, not the", "                               .sqlite: schema, migrations and settings survive and no open handle is", "                               dropped. Implies --force-reparse. The two are mutually exclusive, and BOTH", "                               apply to index --all: each manifest section honours the mode it was given.", "                               [--force-reparse]: re-parse every walked file even when", "                               path+mtime+sha are unchanged. Needed once per DB after an engine upgrade that", "                               extracts something new -- see INBOX 2.3.", "                               EVERY walk SWEEPS, and both halves delete symbols/refs/uses/docs with the", "                               file: PRUNE drops indexed files that left the DISK; EVICTION drops files that", "                               STILL EXIST and left the SCOPE -- a unit dropped from the .dproj, a copy under", "                               an ignored folder, a tree a new [--exclude] now covers. Rows that outlive", "                               their scope make every reference-derived answer (find-callers,", "                               unused-public-symbol, doc facts) wrong. Bounded to the roots THIS run walked,", "                               so indexing one project never purges another's rows from a shared DB, and", "                               reported only when there is something to report. [--prune] forces the sweep", "                               for a single-FILE walk, which does not sweep by default. [--no-prune] is the", "                               one \"delete nothing\" switch, and it is a DRY LOOK: both sweeps are still", "                               COMPUTED and REPORTED as \"would remove\" (count + a capped sample of paths),", "                               nothing is deleted. Take it before a big run. Applies to index --all too.", "                               A MALFORMED MANIFEST REFUSES the write (exit 2) -- beside the exe, a local", "                               .drag-lint.json, or --config -- naming the file, the key path and both types", "                               (\"indexes: expected object, got array\"). Read verbs only warn.", "                               A POSITIONAL .dpr/.dproj/.dpk beats the \"project\" key of the defaults file (one stderr note names the override); an explicit --project beats both.", "                               --use-ignore is the default and is accepted so older scripts still parse; --dir <path> is the same as the positional <path>.", "                               EXIT 1 when any file FAILED to store (an ERROR line on stderr names it and the file keeps its old rows) and, for index --all, when any section failed."]
         },
         {
           "type": "cli",
@@ -316,6 +316,36 @@
       }
     },
     {
+      "id": "v1511-res-fixes",
+      "title": "Library bindings for bare reads, paren-less calls and function-result receivers",
+      "group": "indexing",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.51.1-alpha",
+      "summary": "Bare reads of library vars (Application), paren-less library calls and members on a library function result bind to refs.external_target",
+      "intro": "Read this when usages shows a library name such as Application as name-only, when a paren-less call of a library function is missing from purity or caller answers, or when a member called on a library function's result (Printer.Canvas, a var inferred from it) has no library target. Since 1.51.1 the resolve pass binds all three and marks a read with refs.external_kind value, parenless-call or proc-value.",
+      "wikiPage": "library-first-resolve",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "usages",
+          "example": "drag-lint usages --name Application --db <file.sqlite> --library-db <lib.sqlite> --json"
+        },
+        {
+          "type": "cli",
+          "verb": "index",
+          "example": "drag-lint index --project <X.dproj> --db <file.sqlite> --library-db <lib.sqlite>"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-16",
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "081a201e58569266645b45a617accdfd5f2194fc680d09f7062a124ce7c3e8bc"
+      }
+    },
+    {
       "id": "target-bds-library-path",
       "title": "Library path of the project's Delphi",
       "group": "indexing",
@@ -397,6 +427,36 @@
         "by": "ENGINE",
         "build": "1.35.0-alpha",
         "surfaceHash": "b943b9ca28fd5ea4f705191a583b6381d139bbbac048916d79e87219465d5130"
+      }
+    },
+    {
+      "id": "v1511-inc2-fixes",
+      "title": "Per-host bindings for refs in a shared include",
+      "group": "indexing",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.51.1-alpha",
+      "summary": "A ref inside an include that several units include keeps one binding per host (table ref_host_bindings, schema 26); find-callers and usages read it",
+      "intro": "Read this when the same .inc is compiled into several units and a name in it means a different declaration in each. The resolver binds such a ref once per host and stores every host's target, so find-callers and usages list the site under each declaration instead of leaving it name-only.",
+      "wikiPage": "inc-indexing",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "query",
+          "example": "drag-lint query find-callers --name <X> --resolved --db <file.sqlite>"
+        },
+        {
+          "type": "cli",
+          "verb": "usages",
+          "example": "drag-lint usages --name <Unit.X> --db <file.sqlite> --json"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-16",
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "8eba24cd68da577b824152e7ab06616349f1972968ea4e8d7e8b90bd1e0bd904"
       }
     },
     {
@@ -586,6 +646,36 @@
         "by": "ENGINE",
         "build": "1.42.0-alpha",
         "surfaceHash": "79de4a889871bdf79d85cf50190c3c8326d0e4b7d78b5843bf65d046e68dcd73"
+      }
+    },
+    {
+      "id": "v1511-ext-fixes",
+      "title": "References for declaration positions",
+      "group": "indexing",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.51.1-alpha",
+      "summary": "The index keeps a reference for pointer base types, generic constraints, generic method headers, dotted property specifiers and message constants",
+      "intro": "Read this to see which declaration positions hold a reference a rename or usages can find, the kind each gets, and the positions that still hold none.",
+      "wikiPage": "index-declaration-refs",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "index",
+          "example": "drag-lint index --project <file.dproj> --db <file.sqlite>"
+        },
+        {
+          "type": "cli",
+          "verb": "usages",
+          "example": "drag-lint usages --name <QualifiedName> --db <file.sqlite>"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-16",
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "eca8ed8a4adfae845a225cd724506909d5969c4e370a32b9a9c990efc53cc6fd"
       }
     },
     {
@@ -2939,6 +3029,51 @@
       }
     },
     {
+      "id": "v1511-cli-fixes",
+      "title": "CLI fixes in 1.51.1",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.51.1-alpha",
+      "summary": "lint-all --rule a,b runs only those rules, a DB copy stays on the copy; rules --rule; info versions; index parse-errors; resolve-only warning",
+      "intro": "Read this when a lint-all --rule run is slow or reaches other databases, when rules or info does not print what you expect, or when you look for the parse-error count of an index run.",
+      "wikiPage": "v1511-cli-fixes",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "example": "drag-lint lint-all --db <file.sqlite> --rule <id>,<id>"
+        },
+        {
+          "type": "cli",
+          "verb": "rules",
+          "example": "drag-lint rules --rule <id>[,<id>] --json"
+        },
+        {
+          "type": "cli",
+          "verb": "info",
+          "example": "drag-lint info --db <file.sqlite>"
+        },
+        {
+          "type": "cli",
+          "verb": "index",
+          "example": "drag-lint index --project <X.dproj> --db <file.sqlite>"
+        },
+        {
+          "type": "cli",
+          "verb": "find-deadcode",
+          "example": "drag-lint find-deadcode --db <file.sqlite>"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-16",
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "36d2387a0abf8a7d32ec27af8027cedd5ba36af61fed98ecaae92f3aa8ac6359"
+      }
+    },
+    {
       "id": "compliance-labels",
       "title": "Compliance labels (CWE, CERT, MISRA)",
       "group": "linting",
@@ -3330,7 +3465,7 @@
         {
           "type": "cli",
           "verb": "rules",
-          "usage": "drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)",
+          "usage": "drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rule <id>[,<id>]] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it; --rule <id>[,<id>] lists only those rules, an unknown id is exit 2)",
           "flags": [
             {
               "name": "--json"
@@ -3344,12 +3479,16 @@
               "arg": "cwe|cert|misra"
             },
             {
+              "name": "--rule",
+              "arg": "<id>[,<id>]"
+            },
+            {
               "name": "--rules-dir",
               "arg": "<dir>"
             }
           ],
           "helpOrder": 14,
-          "help": ["  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]]   - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance` and needs_compiler / compat_since / target_active; --standard lists only rules labelled under it)"]
+          "help": ["  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rule <id>[,<id>]] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]]   - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance` and needs_compiler / compat_since / target_active; --standard lists only rules labelled under it; --rule <id>[,<id>] lists only those rules, an unknown id is exit 2)"]
         }
       ],
       "audience": "both",
@@ -3527,7 +3666,7 @@
         {
           "type": "cli",
           "verb": "lint-all",
-          "usage": "drag-lint lint-all [--profile <name>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]",
+          "usage": "drag-lint lint-all [--profile <name>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]",
           "flags": [
             {
               "name": "--db",
@@ -3579,7 +3718,7 @@
             }
           ],
           "helpOrder": 19,
-          "help": ["  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]", "                               --output <file>: the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).", "                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)", "                               --rule <id>: report ONLY that rule (one id per run; a comma list or a second, different --rule exits 2); naming an OFF-by-default rule opts it in", "                               for the run (no --enable needed) -- the same contract as lint and lint-project.", "                               --quiet: suppress per-file progress lines written to stderr", "                               --project <.dproj|.dpr>: report ONLY on the units that project compiles", "                               (its compile closure + their .dfm siblings). Use it when one folder holds", "                               several projects, or when the DB spans more than the project you are reviewing.", "                               taint-sql-injection / taint-command-injection / taint-path-traversal (store-backed): walk the index's data_flows", "                               facts from a catalogued source to a sink; catalogues rules\\taint-sources|sinks|propagators.json, extended by the", "                               \"taint\" object of drag-lint-lint.json: sources sinks propagators sanitizers disable max_depth lib_depth max_rounds", "                               follow_ambiguous weak_receiver_regex weak_severity_drop max_paths_per_sink second_order.", "                               --fix [--apply]: AUTOFIX every fixable finding across the whole project.", "                               DRY RUN WITHOUT --apply. This is what the Structure form's right-click", "                               \"Fix all in project\" runs. It can rewrite many files at once -- dry-run first."]
+          "help": ["  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]", "                               --output <file>: the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).", "                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)", "                               --rule <id>[,<id>...]: RUN and report ONLY those rules (1.51.1: a comma list narrows execution and derives no --shared-db peers, as one id does); naming an OFF-by-default rule opts it in", "                               for the run (no --enable needed) -- the same contract as lint and lint-project.", "                               --quiet: suppress per-file progress lines written to stderr", "                               on a --db the manifest does not register (a copy), the dl:shared marker-peer pass is skipped with one stderr note and sibling DBs resolve to same-named copies beside --db (else could not check); --shared-db <db> still runs (1.51.1).", "                               --project <.dproj|.dpr>: report ONLY on the units that project compiles", "                               (its compile closure + their .dfm siblings). Use it when one folder holds", "                               several projects, or when the DB spans more than the project you are reviewing.", "                               taint-sql-injection / taint-command-injection / taint-path-traversal (store-backed): walk the index's data_flows", "                               facts from a catalogued source to a sink; catalogues rules\\taint-sources|sinks|propagators.json, extended by the", "                               \"taint\" object of drag-lint-lint.json: sources sinks propagators sanitizers disable max_depth lib_depth max_rounds", "                               follow_ambiguous weak_receiver_regex weak_severity_drop max_paths_per_sink second_order.", "                               --fix [--apply]: AUTOFIX every fixable finding across the whole project.", "                               DRY RUN WITHOUT --apply. This is what the Structure form's right-click", "                               \"Fix all in project\" runs. It can rewrite many files at once -- dry-run first."]
         }
       ],
       "audience": "both",
@@ -9331,7 +9470,7 @@
         {
           "type": "cli",
           "verb": "cycles",
-          "usage": "drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--hub] [--plan [--no-hub-surface | --hub-surface [--apply]] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --hub = per group its hub units (removal leaves the rest acyclic): edges, ref weights and surfaces per side, dead uses; read-only, no planner; --f2047 = only the interface-only cycles dcc rejects with F2047, each edge with its forcing symbols and the next --plan / --fix commands; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group naming the exact --fix dry-run and --apply commands; --fix = the mechanical fix of one group, see the cycles-fix entry)",
+          "usage": "drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--hub] [--plan [--no-hub-surface | --hub-surface [--apply]] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--hub-surface] [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --hub = per group its hub units (removal leaves the rest acyclic): edges, ref weights and surfaces per side, dead uses; read-only, no planner; --f2047 = only the interface-only cycles dcc rejects with F2047, each edge with its forcing symbols and the next --plan / --fix commands; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group naming the exact --fix dry-run and --apply commands; --fix = the mechanical fix of one group, see the cycles-fix entry)",
           "flags": [
             {
               "name": "--db",
@@ -9416,7 +9555,7 @@
             }
           ],
           "helpOrder": 68,
-          "help": ["  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--hub] [--plan [--no-hub-surface | --hub-surface [--apply]] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>]   (circular unit deps; --hub = per group its hub units (removal leaves the rest acyclic): edges, ref weights and surfaces per side, dead uses; read-only, no planner; --f2047 = only the interface-only cycles dcc rejects with F2047: units, each interface edge with the symbols forcing it, and the next --plan / --fix commands; --unit <stem> (the name in dcc's message) narrows it, a unit in no such cycle is exit 0 with a note; --format json = [{units[],edges[{from,to,symbols[]}],plan,fix}]; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\\TEMP\\draglint_cyclefix_<pid>\\, deleted at exit unless a message of the run cites a file in it, then kept and named on stderr; --shadow-out names another, never deleted) and builds the project (msbuild /p:Config=Debug for --platform, default the project's active platform, else win32) unless --no-compile, exit 0 mechanical / 1 refused / 2 error; --apply writes it (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 written and verified (or written with --no-reindex, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified / 2 error: a write or build failed part-way (rolled back, project not changed, or the rollback failure is named) or bad flags; a rollback restores the sources, not the DCUs the failed build wrote: rebuild after a rollback; --apply --no-compile is exit 2; --rsvars <path> = the Studio build environment the compile gate calls (default: the Studio the registry or BDS names; forwarded to every --part all iteration; a missing file is exit 2); --build-timeout <s> = whole seconds one build may take (default 0 = no limit; forwarded to every --part all iteration; anything but a whole number >= 0 is exit 2); a stand-down request (drag-lint shutdown --db <db>, or the IDE's Cancel) kills the build, rolls an --apply back and exits 1 (\"cancelled -- rolled back\"); --part all needs --apply, refuses --no-reindex; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest's library for the build platform: --platform, else the --project's active platform, else win32; --library-db none = no library); --rules-dir is forwarded to every --part all iteration; --plan --hub-surface = recipe R3 for a group with exactly one hub read through one global (spec P2): a new leaf unit <Hub>.Hub with an interface of the members the spokes read through the global, the hub class implements it, receiver-only rewrite in the spokes, the hub's free routines through R1 pointers in <Hub>.Hub; the dry run is the playbook with R3 + the --hub block in place of Part A for such a group -- since 1.51 without the switch when R3 predicts that the group breaks (--no-hub-surface = the planner plans every group) --, --causes --format json --hub-surface gives R3's fix{part:r3} without the planner; --apply writes ONE group (.BCK<n> backups unless --no-backup) and runs no compile gate yet: build after it; --format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge's surface: members read, writes, construction, class methods, routine + signature types)"]
+          "help": ["  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--hub] [--plan [--no-hub-surface | --hub-surface [--apply]] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--hub-surface] [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>]   (circular unit deps; --hub = per group its hub units (removal leaves the rest acyclic): edges, ref weights and surfaces per side, dead uses; read-only, no planner; --f2047 = only the interface-only cycles dcc rejects with F2047: units, each interface edge with the symbols forcing it, and the next --plan / --fix commands; --unit <stem> (the name in dcc's message) narrows it, a unit in no such cycle is exit 0 with a note; --format json = [{units[],edges[{from,to,symbols[]}],plan,fix}]; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\\TEMP\\draglint_cyclefix_<pid>\\, deleted at exit unless a message of the run cites a file in it, then kept and named on stderr; --shadow-out names another, never deleted) and builds the project (msbuild /p:Config=Debug for --platform, default the project's active platform, else win32) unless --no-compile, exit 0 mechanical / 1 refused / 2 error; --apply writes it (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 written and verified (or written with --no-reindex, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified / 2 error: a write or build failed part-way (rolled back, project not changed, or the rollback failure is named) or bad flags; a rollback restores the sources, not the DCUs the failed build wrote: rebuild after a rollback; --apply --no-compile is exit 2; --rsvars <path> = the Studio build environment the compile gate calls (default: the Studio the registry or BDS names; forwarded to every --part all iteration; a missing file is exit 2); --build-timeout <s> = whole seconds one build may take (default 0 = no limit; forwarded to every --part all iteration; anything but a whole number >= 0 is exit 2); a stand-down request (drag-lint shutdown --db <db>, or the IDE's Cancel) kills the build, rolls an --apply back and exits 1 (\"cancelled -- rolled back\"); --part all needs --apply, refuses --no-reindex; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest's library for the build platform: --platform, else the --project's active platform, else win32; --library-db none = no library); --rules-dir is forwarded to every --part all iteration; --plan --hub-surface = recipe R3 for a group with exactly one hub read through one global (spec P2): a new leaf unit <Hub>.Hub with an interface of the members the spokes read through the global, the hub class implements it, receiver-only rewrite in the spokes, the hub's free routines through R1 pointers in <Hub>.Hub; the dry run is the playbook with R3 + the --hub block in place of Part A for such a group -- since 1.51 without the switch when R3 predicts that the group breaks (--no-hub-surface = the planner plans every group) --, --causes --format json --hub-surface gives R3's fix{part:r3} without the planner and names the gated cycles --fix --hub-surface dry-run / --apply commands; --fix --hub-surface (1.51.1) writes R3 for one group through the same compile gate as --fix: baseline build, write under .BCK<n> backups, build after the edit, rollback on a new error, re-index + verify (cycle-fix/1 part r3, recipe hub-surface; refusal hub-surface-group-stays); --apply writes ONE group (.BCK<n> backups unless --no-backup) and runs no compile gate yet: build after it; --format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge's surface: members read, writes, construction, class methods, routine + signature types)"]
         }
       ],
       "audience": "both",
@@ -9561,7 +9700,7 @@
           "type": "cli",
           "verb": "cycles",
           "example": "drag-lint cycles --fix --project <X.dproj> --db <file.sqlite>",
-          "usage": "drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--ctor-wide] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\\TEMP\\draglint_cyclefix_<pid>\\, deleted at exit unless a message of the run cites a file in it, then kept and named on stderr; --shadow-out names another, never deleted) and builds the project (msbuild /p:Config=Debug for --platform, default the project's active platform, else win32) unless --no-compile, exit 0 mechanical / 1 refused / 2 error; --apply writes it (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 written and verified (or written with --no-reindex, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified / 2 error: a write or build failed part-way (rolled back, project not changed, or the rollback failure is named) or bad flags; a rollback restores the sources, not the DCUs the failed build wrote: rebuild after a rollback; --apply --no-compile is exit 2; --rsvars <path> = the Studio build environment the compile gate calls (default: the Studio the registry or BDS names; forwarded to every --part all iteration; a missing file is exit 2); --build-timeout <s> = whole seconds one build may take (default 0 = no limit; forwarded to every --part all iteration; anything but a whole number >= 0 is exit 2); a stand-down request (drag-lint shutdown --db <db>, or the IDE's Cancel) kills the build, rolls an --apply back and exits 1 (\"cancelled -- rolled back\"); --part all needs --apply, refuses --no-reindex; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest's library for the build platform: --platform, else the --project's active platform, else win32; --library-db none = no library); --rules-dir is forwarded to every --part all iteration; --format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge's surface: members read, writes, construction, class methods, routine + signature types)",
+          "usage": "drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--hub] [--plan [--no-hub-surface | --hub-surface [--apply]] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--hub-surface] [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--ctor-wide] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\\TEMP\\draglint_cyclefix_<pid>\\, deleted at exit unless a message of the run cites a file in it, then kept and named on stderr; --shadow-out names another, never deleted) and builds the project (msbuild /p:Config=Debug for --platform, default the project's active platform, else win32) unless --no-compile, exit 0 mechanical / 1 refused / 2 error; --apply writes it (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 written and verified (or written with --no-reindex, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified / 2 error: a write or build failed part-way (rolled back, project not changed, or the rollback failure is named) or bad flags; a rollback restores the sources, not the DCUs the failed build wrote: rebuild after a rollback; --apply --no-compile is exit 2; --rsvars <path> = the Studio build environment the compile gate calls (default: the Studio the registry or BDS names; forwarded to every --part all iteration; a missing file is exit 2); --build-timeout <s> = whole seconds one build may take (default 0 = no limit; forwarded to every --part all iteration; anything but a whole number >= 0 is exit 2); a stand-down request (drag-lint shutdown --db <db>, or the IDE's Cancel) kills the build, rolls an --apply back and exits 1 (\"cancelled -- rolled back\"); --part all needs --apply, refuses --no-reindex; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest's library for the build platform: --platform, else the --project's active platform, else win32; --library-db none = no library); --rules-dir is forwarded to every --part all iteration; --format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge's surface: members read, writes, construction, class methods, routine + signature types; --fix --hub-surface (1.51.1) = recipe R3 (hub-surface) for one group through the same compile gate, cycle-fix/1 part r3, refusal hub-surface-group-stays)",
           "flags": [
             {
               "name": "--db",
@@ -9714,6 +9853,31 @@
         "by": "ENGINE",
         "build": "1.51.0-alpha",
         "surfaceHash": "4eb35ccb6e537d7a30eddb36dc701c08d719573531f8e62de72357743f42c475"
+      }
+    },
+    {
+      "id": "v1511-cyc-fixes",
+      "title": "Cycles fix through recipe R3 (hub surface, compile-gated)",
+      "group": "graphs-reports",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.51.1-alpha",
+      "summary": "cycles --fix --hub-surface writes recipe R3 through the compile gate: build before and after, rollback, re-index and verify",
+      "intro": "Read this when a circular group is a star around one hub form and you want the hub-surface recipe (R3) written with the same safety as the planner's fix: the project is built before and after the edit and rolled back byte-identically if it does not compile. The default stays the planner (owner question O11); --hub-surface asks for R3 by name.",
+      "wikiPage": "Circular-Uses-Report-cycles-fix-plan",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "cycles",
+          "example": "--fix --hub-surface --project <X.dproj> --db <db> --cycle <n> [--apply]"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-16",
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "9c86d75bae90d9b13eaa47268bcc5495eff6ab2734473b8412d4ea00e0d0924c"
       }
     },
     {
@@ -12779,7 +12943,7 @@
             }
           ],
           "helpOrder": 25,
-          "help": ["  drag-lint lsp                --db <file.sqlite>    (LSP stdio server) [--stdio] [--parent-pid <n>] [--clientProcessId <n>] [--target-compiler <ver|auto>]", "                               --stdio and --clientProcessId are accepted and IGNORED -- editor clients pass them;", "                               stdio is the only transport, and --parent-pid is the shutdown watch that DOES act.", "                               in lsp mode the engine also listens on a per-user maintenance pipe -- see `drag-lint shutdown`.", "                               --proxy [--delphi-lsp <path>] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-definition] [--merge-navigation] [--merge-budget-ms <n>] [--delphi-lsp-bits 32|64]: relay in front of RAD Studio's DelphiLSP,", "                               so registering drag-lint as the Code Insight server keeps the compiler front end.", "                               --trace appends every relayed LSP message to <file> with a direction tag (C>S / S>C); off by default.", "                               --merge-diagnostics: append drag-lint's lint findings to DelphiLSP's publishDiagnostics (one notification, source-tagged); OFF by default.", "                               --merge-completion: union drag-lint's completion items into DelphiLSP's reply, keyed on (label, kind); DelphiLSP's items first; OFF by default.", "                               --merge-hover: append drag-lint's hover facts to DelphiLSP's hover after a --- rule, or answer with them alone when DelphiLSP has none; OFF by default.", "                               --merge-definition: drag-lint's definition when DelphiLSP's is null or empty; answer references and workspace/symbol in the proxy (DelphiLSP has neither); OFF by default.", "                               --merge-navigation: answer type and call hierarchy, typeDefinition, documentHighlight and foldingRange in the proxy, for each of those providers DelphiLSP does not advertise; OFF by default.", "                               --merge-budget-ms <n>: per-frame budget for a merge handler; over budget forwards DelphiLSP's bytes untouched (default 300).", "                               --delphi-lsp-bits 32|64: which DelphiLSP the proxy spawns (64 = bin64\\DelphiLSP.exe, the default; 32 = bin\\DelphiLSP.exe); --delphi-lsp <path> wins over it.", "                               --full-rules: run the FULL rule set (built-ins included) out-of-process on every didSave and publish the complete finding set; OFF by default -- costs one `lint` run per save, reported on stderr.", "  drag-lint index <dir> --db <file.sqlite> --resolve-only   (re-derive call edges / ancestry / helpers / purity verdicts from the STORED parses; skips the walk entirely --", "                               the cheap remedy when resolver_fingerprint says the edges are stale, since no parse became wrong)", "                               ONLY safe if no source changed since the parse: a changed file is WITHHELD, and after the clear this pass runs it HAS NO EDGES OR MEMBER ACCESSES until a plain index", "                               it writes edges INSIDE this one index only -- no cross-store edges are written (measured", "                               2026-09-22: 0 refs.external_target in every project DB; re-resolving the libraries under", "                               resolver 1.5.1 added 13 intra-library edges per platform, and nothing across stores)", "  drag-lint index --project <file.dproj> --db <file.sqlite> --resolve-only   (the same, for a PROJECT database -- the form", "                               to type there: without --resolve-only the <dir> form above widens a project DB into a folder DB)", "  drag-lint index --all --resolve-only   (the same, across every manifest section -- the only command that reaches them all;", "                               use it to repair indexes stamped by a build that skipped the pass, which no later build can detect)", "                               library-first resolve: a section with libraryResolve whose platform library is not READY (missing, rebuilding, stale extractor) is resolved without it; the run marks the DB pending (schema_meta library_resolve_state) and says on stderr that the result is INCOMPLETE. The next index run re-resolves it once the library is ready, no flag needed."]
+          "help": ["  drag-lint lsp                --db <file.sqlite>    (LSP stdio server) [--stdio] [--parent-pid <n>] [--clientProcessId <n>] [--target-compiler <ver|auto>]", "                               --stdio and --clientProcessId are accepted and IGNORED -- editor clients pass them;", "                               stdio is the only transport, and --parent-pid is the shutdown watch that DOES act.", "                               in lsp mode the engine also listens on a per-user maintenance pipe -- see `drag-lint shutdown`.", "                               --proxy [--delphi-lsp <path>] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-definition] [--merge-navigation] [--merge-budget-ms <n>] [--delphi-lsp-bits 32|64]: relay in front of RAD Studio's DelphiLSP,", "                               so registering drag-lint as the Code Insight server keeps the compiler front end.", "                               --trace appends every relayed LSP message to <file> with a direction tag (C>S / S>C); off by default.", "                               --merge-diagnostics: append drag-lint's lint findings to DelphiLSP's publishDiagnostics (one notification, source-tagged); OFF by default.", "                               --merge-completion: union drag-lint's completion items into DelphiLSP's reply, keyed on (label, kind); DelphiLSP's items first; OFF by default.", "                               --merge-hover: append drag-lint's hover facts to DelphiLSP's hover after a --- rule, or answer with them alone when DelphiLSP has none; OFF by default.", "                               --merge-definition: drag-lint's definition when DelphiLSP's is null or empty; answer references and workspace/symbol in the proxy (DelphiLSP has neither); OFF by default.", "                               --merge-navigation: answer type and call hierarchy, typeDefinition, documentHighlight and foldingRange in the proxy, for each of those providers DelphiLSP does not advertise; OFF by default.", "                               --merge-budget-ms <n>: per-frame budget for a merge handler; over budget forwards DelphiLSP's bytes untouched (default 300).", "                               --delphi-lsp-bits 32|64: which DelphiLSP the proxy spawns (64 = bin64\\DelphiLSP.exe, the default; 32 = bin\\DelphiLSP.exe); --delphi-lsp <path> wins over it.", "                               --full-rules: run the FULL rule set (built-ins included) out-of-process on every didSave and publish the complete finding set; OFF by default -- costs one `lint` run per save, reported on stderr.", "  drag-lint index <dir> --db <file.sqlite> --resolve-only   (re-derive call edges / ancestry / helpers / purity verdicts from the STORED parses; skips the walk entirely --", "                               the cheap remedy when resolver_fingerprint says the edges are stale, since no parse became wrong)", "                               ONLY safe if no source changed since the parse: a changed file is WITHHELD, and after the clear this pass runs it HAS NO EDGES OR MEMBER ACCESSES until a plain index", "                               it writes edges INSIDE this one index only -- no cross-store edges are written (measured", "                               2026-09-22: 0 refs.external_target in every project DB; re-resolving the libraries under", "                               resolver 1.5.1 added 13 intra-library edges per platform, and nothing across stores)", "  drag-lint index --project <file.dproj> --db <file.sqlite> --resolve-only   (the same, for a PROJECT database -- the form", "                               to type there: without --resolve-only the <dir> form above widens a project DB into a folder DB)", "                               a DB resolved against a library and re-resolved with no library store attached warns on stderr (WARNING: index: no library store attached: external targets will be cleared; pass --library-db <library.sqlite>) and still clears them (1.51.1).", "  drag-lint index --all --resolve-only   (the same, across every manifest section -- the only command that reaches them all;", "                               use it to repair indexes stamped by a build that skipped the pass, which no later build can detect)", "                               library-first resolve: a section with libraryResolve whose platform library is not READY (missing, rebuilding, stale extractor) is resolved without it; the run marks the DB pending (schema_meta library_resolve_state) and says on stderr that the result is INCOMPLETE. The next index run re-resolves it once the library is ready, no flag needed."]
         }
       ],
       "audience": "both",
@@ -13448,7 +13612,7 @@
         {
           "type": "cli",
           "verb": "info",
-          "usage": "drag-lint info [--json] [--db <file.sqlite>]... (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only)",
+          "usage": "drag-lint info [--json] [--db <file.sqlite>]... (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only; the text form prints extractor:, resolver: and grammar dlls: (size:sha256-16 per DLL) lines as --json does -- 1.51.0 printed only the ABI line)",
           "flags": [
             {
               "name": "--json"
@@ -14103,7 +14267,7 @@
         {
           "type": "cli",
           "verb": "info",
-          "usage": "drag-lint info [--json] [--db <file.sqlite>]... (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only)",
+          "usage": "drag-lint info [--json] [--db <file.sqlite>]... (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only; the text form prints extractor:, resolver: and grammar dlls: (size:sha256-16 per DLL) lines as --json does -- 1.51.0 printed only the ABI line)",
           "flags": [
             {
               "name": "--json"
@@ -14114,7 +14278,7 @@
             }
           ],
           "helpOrder": 49,
-          "help": ["  drag-lint info [--json] [--db <file.sqlite>]...      (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only)", "                               each --db adds an `indexes` entry (--json): stored fingerprints, indexer_stale / resolver_stale, a verdict", "                               (current | resolve-owed | library-resolve-owed | reparse-owed | index-newer | missing | unreadable) and the remedy. Keyed lookups, no COUNT.", "                               grammar_dlls (--json: grammar_dlls_stored / grammar_dlls_loaded / grammar_dlls_differ; text: a `grammar: DIFFERS` block): the index was parsed with other tree-sitter DLLs than this engine loads; the verdict is unchanged, the remedy is index --rebuild.", "                               text form: one \"index: <path>  verdict: <v>\" line per --db, then \"  remedy: ...\" when one is owed.", "                               library-resolve-owed: the DB was resolved without its platform library (marker schema_meta library_resolve_state = pending); --json adds library_resolve {state, reason, since_unix, library_state}, the text form a library_resolve line."]
+          "help": ["  drag-lint info [--json] [--db <file.sqlite>]...      (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only; the text form prints extractor:, resolver: and grammar dlls: (size:sha256-16 per DLL) lines as --json does -- 1.51.0 printed only the ABI line)", "                               each --db adds an `indexes` entry (--json): stored fingerprints, indexer_stale / resolver_stale, a verdict", "                               (current | resolve-owed | library-resolve-owed | reparse-owed | index-newer | missing | unreadable) and the remedy. Keyed lookups, no COUNT.", "                               grammar_dlls (--json: grammar_dlls_stored / grammar_dlls_loaded / grammar_dlls_differ; text: a `grammar: DIFFERS` block): the index was parsed with other tree-sitter DLLs than this engine loads; the verdict is unchanged, the remedy is index --rebuild.", "                               text form: one \"index: <path>  verdict: <v>\" line per --db, then \"  remedy: ...\" when one is owed.", "                               library-resolve-owed: the DB was resolved without its platform library (marker schema_meta library_resolve_state = pending); --json adds library_resolve {state, reason, since_unix, library_state}, the text form a library_resolve line."]
         }
       ],
       "audience": "both",
@@ -16495,7 +16659,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Division/modulo by a literal zero -- always raises a runtime division error (bug-patterns, warning)",
+        "summary": "Float division by a literal zero (X / 0, X / 0.0) -- always raises EZeroDivide at runtime (bug-patterns, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {

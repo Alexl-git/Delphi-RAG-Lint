@@ -132,6 +132,42 @@
     "verb": "index"
   },
   {
+    "id": "v1511-ext-fixes",
+    "title": "References for declaration positions",
+    "summary": "The index keeps a reference for pointer base types, generic constraints, generic method headers, dotted property specifiers and message constants",
+    "group": "indexing",
+    "order": 10012,
+    "since": "1.51.1-alpha",
+    "file": "features/v1511-ext-fixes.md",
+    "menus": [],
+    "context": [],
+    "verb": "index"
+  },
+  {
+    "id": "v1511-inc2-fixes",
+    "title": "Per-host bindings for refs in a shared include",
+    "summary": "A ref inside an include that several units include keeps one binding per host (table ref_host_bindings, schema 26); find-callers and usages read it",
+    "group": "indexing",
+    "order": 10013,
+    "since": "1.51.1-alpha",
+    "file": "features/v1511-inc2-fixes.md",
+    "menus": [],
+    "context": [],
+    "verb": "query"
+  },
+  {
+    "id": "v1511-res-fixes",
+    "title": "Library bindings for bare reads, paren-less calls and function-result receivers",
+    "summary": "Bare reads of library vars (Application), paren-less library calls and members on a library function result bind to refs.external_target",
+    "group": "indexing",
+    "order": 10014,
+    "since": "1.51.1-alpha",
+    "file": "features/v1511-res-fixes.md",
+    "menus": [],
+    "context": [],
+    "verb": "usages"
+  },
+  {
     "id": "call-path",
     "title": "call-path",
     "summary": "Finds the shortest resolved call path from one symbol to another",
@@ -1308,11 +1344,23 @@
     "verb": "lint"
   },
   {
+    "id": "v1511-cli-fixes",
+    "title": "CLI fixes in 1.51.1",
+    "summary": "lint-all --rule a,b runs only those rules, a DB copy stays on the copy; rules --rule; info versions; index parse-errors; resolve-only warning",
+    "group": "linting",
+    "order": 30062,
+    "since": "1.51.1-alpha",
+    "file": "features/v1511-cli-fixes.md",
+    "menus": [],
+    "context": [],
+    "verb": "lint-all"
+  },
+  {
     "id": "warm-rule-cache",
     "title": "warm-rule-cache",
     "summary": "Fills the lint rule cache for a project index; index runs warm it, or start it in the background (--rule-cache-warm)",
     "group": "linting",
-    "order": 30062,
+    "order": 30063,
     "since": "1.39.0-alpha",
     "file": "features/warm-rule-cache.md",
     "menus": [],
@@ -2278,6 +2326,18 @@
     "menus": ["drag-lint > Uses & Dependencies > Uses Report (CSV)..."],
     "context": [],
     "verb": "uses-report"
+  },
+  {
+    "id": "v1511-cyc-fixes",
+    "title": "Cycles fix through recipe R3 (hub surface, compile-gated)",
+    "summary": "cycles --fix --hub-surface writes recipe R3 through the compile gate: build before and after, rollback, re-index and verify",
+    "group": "graphs-reports",
+    "order": 70024,
+    "since": "1.51.1-alpha",
+    "file": "features/v1511-cyc-fixes.md",
+    "menus": [],
+    "context": [],
+    "verb": "cycles"
   },
   {
     "id": "ask",

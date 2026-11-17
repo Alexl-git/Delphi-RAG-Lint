@@ -424,6 +424,27 @@ function PlanMultiProjectRename(const ADiscovery: TOwnerDiscovery;
 /// </remarks>
 function RenameAcrossOwners(const AOwners: TRenameOwnersRequest; const AProof: TRenameProof): TRenameReach;
 
+/// <summary>T09 (1.51.1): the other projects the compile gate must build for a `lint --fix` naming rename planned
+/// across owners -- every project owner of every applied plan, as RenameAcrossOwners widens `rename --apply`.</summary>
+/// <param name="APlans">The plans PlanMultiProjectRename returned; only rdApply plans count.</param>
+/// <param name="APrimaryProject">The project the gate builds anyway (its .dproj); never listed again, whether an owner
+/// names it by its .dproj or its .dpr.</param>
+/// <param name="ANotes">Out: one line per owner that cannot be built -- a folder index, or a .dpr with no .dproj
+/// beside it -- for the caller to print.</param>
+/// <returns>The .dproj files to build besides APrimaryProject, each once, in plan order. An owner the manifest names
+/// by its .dpr is built through the .dproj beside it.</returns>
+/// <remarks>Pure but for FileExists on a .dpr owner's .dproj. A library owner never reaches an applied plan (it drops
+/// the target), so none is listed. Pinned by tests\autotest\run_v1511_RENAME_t09_gate.ps1.</remarks>
+function NamingGateAlsoProjects(const APlans: TArray<TTargetPlan>; const APrimaryProject: string;
+  out ANotes: TArray<string>): TArray<string>;
+
+/// <summary>T09 (1.51.1): the project a DB at its proper place belongs to -- &lt;folder&gt;\_D-RAG\&lt;base&gt;.sqlite
+/// is &lt;folder&gt;\&lt;base&gt;.dproj's -- for a caller given only --db, as the IDE passes it.</summary>
+/// <param name="ADbPath">The index file.</param>
+/// <returns>The .dproj when it exists; '' when the DB sits anywhere else or no such project exists.</returns>
+/// <remarks>Reads only the file system. The same rule `rename --apply` uses (DRagLint.CLI.RenameGateProject).</remarks>
+function ProjectOfDb(const ADbPath: string): string;
+
 /// <summary>The text a `rename-project:` line prints for AFreshness.</summary>
 /// <param name="AFreshness">The owner's freshness.</param>
 /// <returns>'fresh', 'reindexed', 'stale' or 'unverified'.</returns>
@@ -1549,6 +1570,49 @@ begin
     Seen.Free;
     Edits.Free;
   end; // try
+end; // function
+
+function NamingGateAlsoProjects(const APlans: TArray<TTargetPlan>; const APrimaryProject: string;
+  out ANotes: TArray<string>): TArray<string>;
+begin
+  Result:= nil;
+  ANotes:= nil;
+  var Primary:= ChangeFileExt(ExpandFileName(APrimaryProject), '.dproj');
+  var Seen:= TDictionary<string, Boolean>.Create;
+  try
+    Seen.Add(LowerCase(Primary), True);
+    for var TP in APlans do
+    begin
+      if TP.Decision <> rdApply then Continue;
+      for var R in TP.Owners do
+      begin
+        if R.Owner.Kind <> okProject then Continue;
+        if R.Owner.ProjectFile = '' then
+        begin
+          var FolderNote:= ProjectReason(R.Owner, 'a folder index has no project to build');
+          if not MatchText(FolderNote, ANotes) then ANotes:= ANotes + [FolderNote];
+          Continue;
+        end;
+        var Dproj:= ChangeFileExt(ExpandFileName(R.Owner.ProjectFile), '.dproj');
+        if Seen.ContainsKey(LowerCase(Dproj)) then Continue;
+        Seen.Add(LowerCase(Dproj), True);
+        if FileExists(Dproj) then Result:= Result + [Dproj]
+        else ANotes:= ANotes + [ProjectReason(R.Owner, 'no .dproj beside ' + ExtractFileName(R.Owner.ProjectFile) + ', so the gate cannot build it')];
+      end; // for
+    end; // for
+  finally
+    Seen.Free;
+  end; // try
+end; // function
+
+function ProjectOfDb(const ADbPath: string): string;
+begin
+  Result:= '';
+  if ADbPath = '' then Exit;
+  var DbDir:= ExcludeTrailingPathDelimiter(ExtractFilePath(ExpandFileName(ADbPath)));
+  if not SameText(ExtractFileName(DbDir), '_D-RAG') then Exit;
+  var Candidate:= TPath.Combine(ExtractFilePath(DbDir), ChangeFileExt(ExtractFileName(ADbPath), '.dproj'));
+  if FileExists(Candidate) then Result:= Candidate;
 end; // function
 
 end.

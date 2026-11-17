@@ -433,7 +433,7 @@ procedure RegisterProviderRules(const ARows: TArray<TRuleInfo>);
 implementation
 
 uses
-  DRagLint.Lint.ReviewMarker;
+  DRagLint.Lint.MarkerHash; { ExpectedHash: MarkerExpectedHash delegates (v1511 Y4); it never calls back }
 
 var
   { id -> risky. Guarded by TMonitor on itself; created in initialization. }
@@ -501,8 +501,10 @@ end;
 function MarkerExpectedHash(const ALines: TArray<string>; const ARuleId: string;
   AStartLine, AMetric: Integer): string;
 begin
-  Result:= TReviewMarkers.HashWindow(ALines, DocCommentMarkerLine(ALines, AStartLine) - 1);
-  if IsRoutineMetricRule(ARuleId) then Result:= MetricHash(Result, AMetric);
+  { v1511 Y4: the versioned hash for a routine-metric rule, the 1.51.0 hash for every
+    other rule. A VERIFIER must not compare this for equality -- use
+    DRagLint.Lint.MarkerHash.MarkerVerdict, or every legacy metric marker reads stale. }
+  Result:= DRagLint.Lint.MarkerHash.ExpectedHash(ALines, ARuleId, AStartLine, AMetric);
 end;
 
 function DocCommentMarkerLine(const ALines: TArray<string>; ALine: Integer): Integer;

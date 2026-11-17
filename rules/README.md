@@ -69,8 +69,7 @@ the rule id, warn capture name = `warn`).
 | `warn_capture` | `warn` | Which capture the finding is pinned to. |
 | `enabled` | `true` | `false` ships the rule OFF; `--enable <id>` turns it back on. |
 | `exclude_if_ancestor` | none | Node kinds; a match is DROPPED when the picked node has an ancestor of any listed kind. |
-| `exclude_if_preceded_by` | none | Regexes (case-insensitive); `{name}` is replaced by the regex-escaped text of capture `@name`. A match is DROPPED when a regex matches the source text of the enclosing routine before the picked node. A pattern naming a capture the match did not bind never excludes. Example: `off-by-one-count` skips `for i := 0 to Length(A)` after `SetLength(X, Length(A) + 1)`. |
-| `exclude_if_preceded_by` | none | Regexes (case-insensitive); `{name}` is replaced by the regex-escaped text of capture `@name`. A match is DROPPED when a regex matches the source text of the enclosing routine before the picked node. A pattern naming a capture the match did not bind never excludes. Example: `off-by-one-count` skips `for i := 0 to Length(A)` after `SetLength(X, Length(A) + 1)`. |
+| `exclude_if_preceded_by` | none | Regexes (case-insensitive); `{name}` is replaced by the regex-escaped text of capture `@name`. A match is DROPPED when a regex matches the source text of the enclosing routine before the picked node (a pattern ending in `$` reads only the last 512 bytes of it). A pattern naming a capture the match did not bind never excludes. Example: `off-by-one-count` skips `for i := 0 to Length(A)` after `SetLength(X, Length(A) + 1)`. |
 | `require_ancestor` | none | Node kinds; a match COUNTS ONLY inside one of them. |
 | `require_file_text` | none | Substrings; the rule does not run at all against a file whose text contains NONE of them. Case-insensitive, matched against the whole file. |
 | `needs_compiler` | `0` | (1.38.0) The oldest CompilerVersion (37 = Delphi 13, 36 = 12, 35 = 11, 33 = 10.3, 24 = XE3 ...) that accepts what the rule advises. Under `--target-compiler` / config `target_compiler` older than this the rule reports nothing. The same key on ONE entry of `fix` gates only that pattern: a match whose first applicable entry is gated is dropped (`nonminimal-bool`'s `not in` entry, `pos-for-contains`'s `Contains` entries). `0` = any compiler. |
@@ -134,7 +133,7 @@ Works for both external `.scm` rules and the built-in checks.
 | `goto-statement` | warning | `goto` statement is generally considered harmful |
 | `with-statement` | info | `with` statement makes symbol scope ambiguous |
 | `empty-procedure-body` | info | Empty `procedure`/`function` body (begin..end with no statements) |
-| `large-magic-number` | info | Numeric literal not in the common-constants allow-list |
+| `large-magic-number` | info | Numeric literal not in the common-constants allow-list; case labels, enum ordinals in a type declaration, `dispid N`, array subscripts (`Params[3]`) and the first argument of `Reg(<int>, ..)` are exempt (1.51.1) |
 | `string-equality-comparison` | info | **Off by default** (opt in via `--rule` or config `"enabled"`). `=` comparison on expressions ? fires on all `=` binary expressions until type-resolution is plumbed in (v0.19+) |
 
 ## Shipped rules (v0.31)
@@ -158,7 +157,7 @@ Works for both external `.scm` rules and the built-in checks.
 |---------|----------|-------------|
 | `boolean-comparison-true` | info | `X = True` or `X = False` -- redundant boolean comparison |
 | `redundant-as-tobject` | info | `(X as TObject)` -- every Delphi object is already a TObject |
-| `inherited-bare` | info | Bare `inherited;` call -- verify it invokes the intended ancestor method |
+| `inherited-bare` | info | Bare `inherited;` call -- verify it invokes the intended ancestor method; not reported in Destroy / Assign / AssignTo or as the `if not (X is T) then inherited else` fallback (1.51.1) |
 
 ## Shipped rules (v0.47 -- lint expansion, Wave 1)
 
@@ -186,7 +185,7 @@ Each has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_test
 | `sql-injection-concat` | warning | SQL string literal concatenated with a variable -- injection risk (CWE-89) |
 | `hardcoded-credential` | warning | secret-named variable OR const set to a string literal -- hardcoded credential (CWE-798) |
 | `comparison-same-operands` | warning | `X = X` / `X < X` -- both operands identical, result is constant (likely a typo) |
-| `division-by-zero-literal` | warning | `X div 0` / `X / 0` / `X mod 0` -- always raises a runtime division error |
+| `division-by-zero-literal` | warning | Float division by a literal zero (`X / 0`, `X / 0.0`) -- always raises EZeroDivide; `div 0` / `mod 0` are compile errors (dcc E2098) and are not reported (1.51.1) |
 | `empty-case-branch` | info | `1: ;` -- case branch with a label but no statement |
 | `not-comparison-precedence` | warning | `not A = B` parses as `(not A) = B` -- write `not (A = B)` |
 | `redundant-not-not` | info | `not not X` -- redundant double negation, simplify to `X` |
@@ -263,7 +262,13 @@ Pascal (`src/diagnostics/DRagLint.Diagnostics.AstChecks.pas`) and run from `drag
   silently discards the in-flight exception (companion to `raise-in-finally`).
 - **`too-many-parameters`** / **`too-many-locals`** / **`method-too-long`** / **`deep-nesting`** (info):
   routine size/complexity metrics with conservative defaults (params > 7, locals > 25, body > 120
-  lines, nesting > 5). Use `--disable <id>` to turn any off.
+  lines, nesting > 5). Use `--disable <id>` to turn any off. `deep-nesting` counts CONTROL statements only:
+  if, case, loops, with, try..except; an if-EXPRESSION and try..finally are not levels (1.51.1).
+- **`mutable-global-variable`**: the IDE form variable of a form unit (name / type = the `.dfm` root
+  object, `frmX: TfrmX`) is not reported (1.51.1).
+- **`missing-doc`**: not reported on the Get<X> / Set<X> accessors of a documented property X of the same
+  class, on methods declared `override`, or on event handlers bound by the unit's own `.dfm` (1.51.1);
+  undocumented properties and same-named handlers in unrelated units still fire.
 
 - **`float-equality-comparison`** (warning) / **`freeandnil-on-interface`** (warning): type-aware
   checks using a lightweight per-file name-to-type map (`=`/`<>` on float operands; `FreeAndNil`

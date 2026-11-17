@@ -76,8 +76,10 @@ implementation
 uses
   System.StrUtils
   , System.IOUtils
+  , System.RegularExpressions
   , TreeSitter
   , DRagLint.V151.DFMA.Support
+  , DRagLint.V151.Dfm.Common
   ;
 
 const
@@ -191,6 +193,19 @@ end;
 
 /// `object` and `inline` nodes (not inherited, not inside an inline frame, not collection
 /// items, not unnamed, not the root) whose name is not a field of the root class or of a class it inherits from.
+/// True for a DevExpress bar (TdxBar*) or layout (TdxLayout*) class name.
+function IsBarOrLayoutClass(const AClass: string): Boolean;
+begin
+  var C: string:= LastSegment(AClass);
+  Result:= StartsText('TdxBar', C) or StartsText('TdxLayout', C);
+end;
+
+/// True when the unit's source holds AName as a whole word (a name-reachable use).
+function NameUsedIn(const AUnit: TPasUnit; const AName: string): Boolean;
+begin
+  Result:= TRegEx.IsMatch(TEncoding.UTF8.GetString(AUnit.Src), '\b' + TRegEx.Escape(AName) + '\b', [roIgnoreCase]);
+end;
+
 function CheckObjectsWithoutField(const ACtx: TV151FileCtx; const AUnit: TPasUnit; const ADfm: TDfmDoc;
   ACls: Integer): TArray<TLintFinding>;
 var
@@ -218,6 +233,9 @@ begin
       var N: TDfmNode:= ADfm.Nodes[I];
       if (N.Kind not in [dnkObject, dnkInline]) or N.InInline or (N.Name = '') then Continue;
       if Known.Contains(LowerCase(N.Name)) then Continue;
+      { T03: a DevExpress bar / layout object is built by the designer without a field by design;
+        it matters only when the unit's source mentions its name (FindComponent('name') and the like) }
+      if IsBarOrLayoutClass(N.CompClass) and not NameUsedIn(AUnit, N.Name) then Continue;
       Result:= Result + [MakeFinding(RULE_OBJECT_WITHOUT_FIELD, ADfm.Path, N.Line, N.Col, SEV_HINT,
         Format('Form object %s: %s has no field in %s -- code cannot reach it by name and the designer will add '
           + '"%s: %s;" the next time the form is saved.', [N.Name, N.CompClass, Cls.Name, N.Name, N.CompClass]))];

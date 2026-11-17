@@ -143,6 +143,44 @@ begin
   Result:= Copy(AName, 1, PLen) = APrefix;
 end;
 
+{ True when AName carries the field prefix APrefix and has at least one more
+  character after it. An exact-case prefix always matches. A prefix that differs
+  only in case (Pascal is case-insensitive: fFLDRID is a legitimate "f" backing
+  field of the same convention as FFldRid) must be followed by a non-lowercase
+  character, so a plain word that merely starts with the letter (filter, ff_tb)
+  is still reported. Used only by field-name-prefix. An empty APrefix returns False.
+  Examples: FieldHasPrefix('fFLDRID','F')=True; FieldHasPrefix('FName','F')=True;
+  FieldHasPrefix('Name','F')=False; FieldHasPrefix('F','F')=False;
+  FieldHasPrefix('filter','F')=False. }
+function FieldHasPrefix(const AName, APrefix: string): Boolean;
+var
+  PLen: Integer;
+begin
+  Result:= False;
+  PLen:= Length(APrefix);
+  if PLen = 0 then Exit;
+  if Length(AName) <= PLen then Exit;
+  if not SameText(Copy(AName, 1, PLen), APrefix) then Exit;
+  Result:= (Copy(AName, 1, PLen) = APrefix) or (not CharInSet(AName[PLen + 1], ['a'..'z']));
+end;
+
+{ True when AName is a Get/Set accessor whose remainder contains an underscore
+  (GetATTR_SYSTID, Set_INIFile): the remainder is a DB column or a type-library
+  member name the author cannot rename, so method-pascalcase does not apply.
+  The character right after Get/Set must be '_' or non-lowercase, so Setup_Form
+  and Getter_x (ordinary methods) are still reported.
+  Examples: IsUnderscoreAccessor('GetATTR_SYSTID')=True;
+  IsUnderscoreAccessor('Set_INIFile')=True; IsUnderscoreAccessor('do_it')=False;
+  IsUnderscoreAccessor('Setup_Form')=False. }
+function IsUnderscoreAccessor(const AName: string): Boolean;
+const
+  ACCESSOR_PREFIX_LEN = 3; { length of 'Get' / 'Set' }
+begin
+  Result:= (Length(AName) > ACCESSOR_PREFIX_LEN)
+    and (StartsText('Get', AName) or StartsText('Set', AName))
+    and (Pos('_', AName) > ACCESSOR_PREFIX_LEN)
+    and (not CharInSet(AName[ACCESSOR_PREFIX_LEN + 1], ['a'..'z']));
+end;
 { The identifier written right after 'class(' in AClassText -- a declClass
   node's text, 'class(EDatabaseError)' -> 'EDatabaseError'; a unit qualifier
   (Data.DB.EDatabaseError) is dropped. '' when the class names no ancestor
@@ -517,6 +555,10 @@ var
     external header -- renaming them breaks the mapping. Saved/restored around
     declType recursion. }
   InRecordDecl: Boolean;
+  { True when the file is a type-library import (*_TLB.pas): its member names
+    come from the COM type library and are not renamable, so method-pascalcase
+    is suppressed for the whole unit. }
+  IsTypeLibraryUnit: Boolean;
   { confusable-identifier: every const and var of the CURRENT scope, as
     (Message = name, StartLine, StartCol, EndCol). The unit/class level is
     compared once the walk is done; a defProc swaps in its own list and compares
@@ -1022,7 +1064,7 @@ var
         if not NameNode.IsNull then
         begin
           TypeName:= Trim(NodeStr(NameNode));
-          if (TypeName <> '') and (not StartsWithPrefix(TypeName, ANaming.FieldPrefix)) then
+          if (TypeName <> '') and (not FieldHasPrefix(TypeName, ANaming.FieldPrefix)) then
             EmitAt(NameNode, 'field-name-prefix',
               Format('Private field "%s" should start with the "%s" prefix',
                 [TypeName, ANaming.FieldPrefix]));
@@ -1067,6 +1109,8 @@ var
         begin
           if (not MatchesCase(MethName, ANaming.MethodCase))
             and (not IsShortAllCaps(MethName))
+            and (not IsUnderscoreAccessor(MethName))
+            and (not IsTypeLibraryUnit)
             and (not HasTestAttribute(N)) then
             EmitAt(NameNode, 'method-pascalcase',
               Format('Method "%s" should be %s', [MethName, ANaming.MethodCase]));
@@ -1143,6 +1187,8 @@ var
                 authoritative check for them. }
               if (not MatchesCase(SimpleName, ANaming.MethodCase))
                 and (not IsShortAllCaps(SimpleName))
+                and (not IsUnderscoreAccessor(SimpleName))
+                and (not IsTypeLibraryUnit)
                 and (not HasTestAttribute(N)) then
                 EmitAt(NameNode, 'method-pascalcase',
                   Format('Method "%s" should be %s', [SimpleName, ANaming.MethodCase]));
@@ -1322,6 +1368,7 @@ begin
   InPrivateSection          := False; { ... which is never private, so F is not required there }
   InProcBody                := False; { not inside a routine body at the root level }
   CurSectionSkipsMethodCase := False; { root-level routines are always checked }
+  IsTypeLibraryUnit:= EndsText('_TLB.pas', AFile);
   try
     Visit(PF.Tree.RootNode);
     Raw:= Findings.ToArray + ConfusableFindings(AFile, Decls.ToArray);

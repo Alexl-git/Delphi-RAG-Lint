@@ -1,0 +1,6 @@
+# B15: bare 2-char drive roots used as key prefixes (no sink) are not paths
+!hardcoded-absolute-path 18
+!hardcoded-absolute-path 23
+# positive controls: sink path and orphan complete path still fire
+hardcoded-absolute-path 29
+hardcoded-absolute-path 35

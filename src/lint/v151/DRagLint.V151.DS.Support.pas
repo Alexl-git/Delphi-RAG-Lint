@@ -71,6 +71,10 @@ type
     FWanted  : TFunc<string, Boolean>;
     FFindings: TList<TLintFinding>;
     FWith    : TList<string>;
+    FPosted  : TDictionary<string, Integer>;  { receiver -> routines of the unit that Post / Cancel it }
+    FDecl    : TDictionary<string, Boolean>;  { parameters and locals of the routine being checked }
+    procedure PreScanPosts(const N: TTSNode);
+    procedure CollectDecls(const N: TTSNode);
     function Txt(const N: TTSNode): string;
     function Norm(const N: TTSNode): string;
     function WithTop: string;
@@ -202,10 +206,14 @@ begin
   FWanted  := AWanted;
   FFindings:= TList<TLintFinding>.Create;
   FWith    := TList<string>.Create;
+  FPosted  := TDictionary<string, Integer>.Create;
+  FDecl    := TDictionary<string, Boolean>.Create;
 end;
 
 destructor TDsAnalysis.Destroy;
 begin
+  FPosted.Free;
+  FDecl.Free;
   FWith.Free;
   FFindings.Free;
   inherited Destroy;
@@ -583,6 +591,8 @@ var
   A    : TDsAssign;
   Done : Boolean;
   Wrote: Boolean;
+  Own  : Boolean;
+  Cnt  : Integer;
 begin
   for C in AFacts.Calls do
   begin
@@ -593,8 +603,14 @@ begin
       if (A.Pos > C.Pos) and IsFieldWrite(A, C.Recv) then Wrote:= True;
     if not Wrote then Continue;
     Done:= AFacts.Args.ContainsKey(C.Recv);
+    Own:= False;
     for F in AFacts.Calls do
+    begin
       if (F.Pos > C.Pos) and (F.Recv = C.Recv) and InSet(F.Meth, FINISH_METHODS) then Done:= True;
+      if (F.Recv = C.Recv) and InSet(F.Meth, FINISH_METHODS) then Own:= True;
+    end;
+    { T04: a change handler may leave the edit open for a Post / Cancel in another routine of the unit --\r\n      only for a name that denotes the same object there (field / global), never this routine's own parameter or local }
+    if (not Done) and (not FDecl.ContainsKey(C.Recv)) and FPosted.TryGetValue(C.Recv, Cnt) and (Cnt - Ord(Own) > 0) then Done:= True;
     if not Done then
       Emit(C.Node, RULE_EDIT, Format('%s.%s starts a record change that is never posted: the routine writes fields but calls neither Post nor Cancel on "%s"', [C.Recv, C.Meth, C.Recv]));
   end;
@@ -628,11 +644,41 @@ begin
   end;
 end;
 
+{ Gathers the lower-cased names of the parameters and locals declared in one routine (not in nested routines). }
+procedure TDsAnalysis.CollectDecls(const N: TTSNode);
+var
+  I, J: Integer;
+  Ch  : TTSNode;
+  Lim : Cardinal;
+  Typ : TTSNode;
+begin
+  if N.IsNull then Exit;
+  if (N.NodeType = 'declVar') or (N.NodeType = 'declArg') then
+  begin
+    Typ:= N.ChildByField('type');
+    Lim:= if Typ.IsNull then High(Cardinal) else Typ.StartByte;
+    for J:= 0 to N.NamedChildCount - 1 do
+    begin
+      Ch:= N.NamedChild(J);
+      if (Ch.NodeType = 'identifier') and (Ch.StartByte < Lim) then FDecl.AddOrSetValue(Norm(Ch), True);
+    end;
+    Exit;
+  end;
+  for I:= 0 to N.NamedChildCount - 1 do
+  begin
+    Ch:= N.NamedChild(I);
+    if (Ch.NodeType = 'block') or (Ch.NodeType = 'defProc') then Continue;
+    CollectDecls(Ch);
+  end;
+end;
+
 procedure TDsAnalysis.AnalyzeRoutine(const N: TTSNode);
 var
   Facts: TDsFacts;
 begin
   Facts:= TDsFacts.Create;
+  FDecl.Clear;
+  CollectDecls(N);
   try
     Collect(N.ChildByField('body'), Facts, False);
     if FWanted(RULE_EDIT) then CheckEdits(Facts);
@@ -680,8 +726,40 @@ begin
   end;
 end;
 
+{ Counts, per receiver, the routines of the file that call Post / Cancel / ... on it (T04). }
+procedure TDsAnalysis.PreScanPosts(const N: TTSNode);
+var
+  I    : Integer;
+  Facts: TDsFacts;
+  C    : TDsCall;
+  Seen : TList<string>;
+  Cnt  : Integer;
+begin
+  if N.IsNull then Exit;
+  if N.NodeType = 'defProc' then
+  begin
+    Facts:= TDsFacts.Create;
+    Seen := TList<string>.Create;
+    try
+      Collect(N.ChildByField('body'), Facts, False);
+      for C in Facts.Calls do
+        if (C.Recv <> '') and InSet(C.Meth, FINISH_METHODS) and (not Seen.Contains(C.Recv)) then
+        begin
+          Seen.Add(C.Recv);
+          if not FPosted.TryGetValue(C.Recv, Cnt) then Cnt:= 0;
+          FPosted.AddOrSetValue(C.Recv, Cnt + 1);
+        end;
+    finally
+      Seen.Free;
+      Facts.Free;
+    end;
+  end;
+  for I:= 0 to N.NamedChildCount - 1 do PreScanPosts(N.NamedChild(I));
+end;
+
 function TDsAnalysis.Run(const ARoot: TTSNode): TArray<TLintFinding>;
 begin
+  if FWanted(RULE_EDIT) then PreScanPosts(ARoot);
   Visit(ARoot);
   Result:= FFindings.ToArray;
 end;

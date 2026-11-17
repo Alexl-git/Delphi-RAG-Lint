@@ -81,6 +81,7 @@ type
     /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.Create"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
+    function UnitsCredited(const ARef: TReference): TArray<string>;
     function UnitsDefining(const AName: string): TArray<string>;
   public
     /// <summary>Builds the stem-to-file map from the store.</summary>
@@ -200,7 +201,28 @@ begin
   Result:= FIndexedUnits.TryGetValue(StemOf(APath), AFileId);
 end;
 
+{ v1511 PROJ R5: the unit stems a reference credits. A reference the resolver bound to a symbol
+  credits ONLY that symbol's unit (a local / parameter credits none). An unbound reference falls back
+  to the name match -- never through a local / parameter of another unit, which only shares the name. }
+function TUsesAuditor.UnitsCredited(const ARef: TReference): TArray<string>;
+var
+  Sm: TSymbol;
+begin
+  if ARef.SymbolId > 0 then
+  begin
+    Sm:= FStore.GetSymbolById(ARef.SymbolId);
+    if Sm.Id = ARef.SymbolId then
+    begin
+      Result:= nil;
+      if (Sm.Kind <> skLocalVar) and (Sm.Kind <> skParam) then Result:= TArray<string>.Create(StemOf(FStore.GetFilePath(Sm.FileId)));
+      Exit;
+    end;
+  end;
+  Result:= UnitsDefining(ARef.NameText);
+end;
+
 { distinct indexed-unit stems that define a symbol named AName (cached) }
+
 function TUsesAuditor.UnitsDefining(const AName: string): TArray<string>;
 var
   Sm: TSymbol      ;
@@ -212,6 +234,7 @@ begin
   try
     for Sm in FStore.FindSymbolsByExactName(AName) do
     begin
+      if (Sm.Kind = skLocalVar) or (Sm.Kind = skParam) then Continue;
       St:= StemOf(FStore.GetFilePath(Sm.FileId));
       if (St <> '') and not Us.Contains(St) then Us.Add(St);
     end;
@@ -263,7 +286,7 @@ begin
     end;
 
     for R in FStore.GetReferencesFromFile(AFileId) do
-      for U in UnitsDefining(R.NameText) do
+      for U in UnitsCredited(R) do
       begin
         if SameText(U, ThisStem) then Continue;
         if R.StartLine < ImplLine then RefIntf.AddOrSetValue(U, True)

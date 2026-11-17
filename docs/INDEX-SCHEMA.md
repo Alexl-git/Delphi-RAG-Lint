@@ -6,10 +6,11 @@ uses-clauses, type ancestry, DI bindings, and more). It is written for anyone
 building a tool OTHER than drag-lint itself that wants to read this database
 directly.
 
-Current schema version at time of writing: **25** (`SCHEMA_VERSION` in
-`src/storage/DRagLint.Storage.Schema.pas`, verified 2026-11-11 against the
-constant AND against the guard fixture index `run_file_facts_v25_tables.ps1` builds).
+Current schema version at time of writing: **26** (`SCHEMA_VERSION` in
+`src/storage/DRagLint.Storage.Schema.pas`, verified 2026-11-16 against the
+constant; v25 tables as built by `run_file_facts_v25_tables.ps1`).
 Recent additive changes:
+**v26 (1.51.1, extractor 1.40 / resolver 1.28, lane INC2 B10) added `ref_host_bindings(ref_id, host_file_id, symbol_id)`** -- one binding per host for a ref written inside a code include that several units include: `refs.symbol_id` stays NULL where the hosts disagree and each host's own target is here (`symbol_id` NULL = that host gave no certain answer); written by the resolve pass, read by `find-callers` and `usages`; additive, `SCHEMA_READ_MIN` stays 23; columns in `docs\wiki\schema.md`;
 **v25 (extractor 1.36, wave 151) added `dfm_properties` and `comment_facts`, additive and probed per table** -- every property assignment of a text `.dfm` (`object_ordinal` -> `dfm_objects`, `value_text` / `value_kind`, span) and every comment of a Pascal source file (kind, text, offsets, `anchor_kind`, `anchor_symbol_id`); a v23 / v24 index still reads (`SCHEMA_READ_MIN` 23) with the text fallback; columns in `docs\wiki\Index-DB-Schema.md`;
 **Extractor 1.35 (wave 149) added three file-fact tables, additive and probed, no schema bump** -- `file_includes` (the include
 directives a file resolved, with host section and whether one stands in a uses

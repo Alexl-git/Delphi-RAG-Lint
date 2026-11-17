@@ -8,9 +8,10 @@
   has its own positive control: fed the 1.42 shape (projects beside the libraries)
   it must report a violation.
 #>
-param([string]$Scratch = '')
+param([string]$Scratch = '', [switch]$KeepWorkDir)
 
 $ErrorActionPreference = 'Stop'
+. "$PSScriptRoot\lib\WorkDirCleanup.ps1"
 $repo = (Resolve-Path "$PSScriptRoot\..\..").Path
 $runner = Join-Path $repo 'tools\reparse-libraries.ps1'
 if ($Scratch -eq '') { $Scratch = Join-Path ([IO.Path]::GetTempPath()) "reparse_guard_$PID" }
@@ -149,6 +150,7 @@ try {
   if (-not $busy.HasExited) { & taskkill /PID $busy.Id /T /F 2>&1 | Out-Null }
 }
 
+Remove-WorkDir $Scratch -Keep:$KeepWorkDir
 "run_reparse_libraries_guard: $passes passed, $fails failed"
 if ($fails -gt 0) { exit 1 }
 exit 0

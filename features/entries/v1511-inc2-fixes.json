@@ -1,0 +1,30 @@
+{
+  "id": "v1511-inc2-fixes",
+  "title": "Per-host bindings for refs in a shared include",
+  "group": "indexing",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.51.1-alpha",
+  "summary": "A ref inside an include that several units include keeps one binding per host (table ref_host_bindings, schema 26); find-callers and usages read it",
+  "intro": "Read this when the same .inc is compiled into several units and a name in it means a different declaration in each. The resolver binds such a ref once per host and stores every host's target, so find-callers and usages list the site under each declaration instead of leaving it name-only.",
+  "wikiPage": "inc-indexing",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "query",
+      "example": "drag-lint query find-callers --name <X> --resolved --db <file.sqlite>"
+    },
+    {
+      "type": "cli",
+      "verb": "usages",
+      "example": "drag-lint usages --name <Unit.X> --db <file.sqlite> --json"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-16",
+    "by": "ENGINE",
+    "build": "1.51.1-alpha",
+    "surfaceHash": "8eba24cd68da577b824152e7ab06616349f1972968ea4e8d7e8b90bd1e0bd904"
+  }
+}

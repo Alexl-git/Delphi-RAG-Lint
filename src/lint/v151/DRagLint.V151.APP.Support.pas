@@ -1020,12 +1020,16 @@ end;
 
 class procedure TAppChecks.TlsVerificationDisabled(const ASrc: TAppSrc; const APath: string; AOut: TList<TLintFinding>);
 const
-  HANDLER_RE =
-    '\b(?:procedure|function)\b((?:(?!\bbegin\b|\b(?:procedure|function)\b)[\s\S]){0,400}?)\)?\s*(?::\s*Boolean)?\s*;\s*' +
-    '(?:(?:stdcall|cdecl|register|safecall|inline|overload|virtual|override)\s*;\s*)*' +
-    'begin\s*(?:(?:Result|Accepted|AAccepted|IsValid|AIsValid|Valid|AValid|AOk|Ok)\s*:=\s*True\s*;\s*)+end\b';
+  CERT_WORDS_RE = 'cert|verif|x509|ssl|tls|peer';
+  HEADER_RE =
+    '\A((?:(?!\bbegin\b|\b(?:procedure|function)\b)[\s\S]){0,400}?)\)?\s*(?::\s*Boolean)?\s*;\s*' +
+    '(?:(?:stdcall|cdecl|register|safecall|inline|overload|virtual|override)\s*;\s*)*\z';
+  ACCEPT_LHS = 'Result|Accepted|AAccepted|IsValid|AIsValid|Valid|AValid|AOk|Ok';
 var
-  M: TMatch;
+  M, H: TMatch;
+  R: TAppRoutine;
+  KwLen: Integer;
+  Header, Body, Stmt, OwnName: string;
 begin
   for M in TRegEx.Matches(ASrc.Masked, '\bVerifyMode\s*:=\s*\[\s*\]', [roIgnoreCase]) do
     AOut.Add(MakeFinding(ASrc, APath, RULE_TLS_VERIFY_OFF, 'warning',
@@ -1039,13 +1043,28 @@ begin
     AOut.Add(MakeFinding(ASrc, APath, RULE_TLS_VERIFY_OFF, 'warning',
       'Certificate verification is switched off by this assignment -- the server certificate is no longer checked.',
       M.Index + 1, M.Index + 1 + M.Length));
-  for M in TRegEx.Matches(ASrc.Masked, HANDLER_RE, [roIgnoreCase]) do
-    if TRegEx.IsMatch(M.Groups[1].Value, 'cert|verif|x509|ssl|tls|peer', [roIgnoreCase]) then
-      AOut.Add(MakeFinding(ASrc, APath, RULE_TLS_VERIFY_OFF, 'warning',
-        'This certificate verification handler accepts every certificate unconditionally -- it makes the TLS check a no-op.',
-        M.Index + 1, M.Index + 10));  // dl:ok magic-literal@e53e -- REVIEWED 2026-11-14 v151 INT: a spec value / fixed offset or length read at its single use site; a named constant adds nothing
+  // Structural scan over the parsed routines: a handler is a procedure/function whose header names a certificate
+  // and whose whole body only returns True (Result / Accepted / ... / the routine's own name := True, Exit(True);
+  // the last statement may omit its semicolon). A file that never says cert/verif/x509/ssl/tls/peer cannot hold one.
+  if TRegEx.IsMatch(ASrc.Masked, CERT_WORDS_RE, [roIgnoreCase]) then
+    for R in ASrc.Routines do
+    begin
+      KwLen:= 0;
+      while IsIdentChar(ASrc.Masked[R.HeaderPos + KwLen]) do Inc(KwLen);
+      if not (SameText(Copy(ASrc.Masked, R.HeaderPos, KwLen), 'procedure') or SameText(Copy(ASrc.Masked, R.HeaderPos, KwLen), 'function')) then Continue;
+      Header:= Copy(ASrc.Masked, R.HeaderPos + KwLen, R.BodyPos - R.HeaderPos - KwLen);
+      H:= TRegEx.Match(Header, HEADER_RE, [roIgnoreCase]);
+      if not H.Success or not TRegEx.IsMatch(H.Groups[1].Value, CERT_WORDS_RE, [roIgnoreCase]) then Continue;
+      OwnName:= R.Name;
+      if Pos('.', OwnName) > 0 then OwnName:= Copy(OwnName, LastDelimiter('.', OwnName) + 1, MaxInt);
+      Stmt:= '(?:(?:' + ACCEPT_LHS + '|' + TRegEx.Escape(OwnName) + ')\s*:=\s*True|Exit\s*\(\s*True\s*\))';
+      Body:= ASrc.BodyOf(R);
+      if TRegEx.IsMatch(Body, '\Abegin\s*(?:' + Stmt + '\s*;\s*)*' + Stmt + '\s*;?\s*end\z', [roIgnoreCase]) then
+        AOut.Add(MakeFinding(ASrc, APath, RULE_TLS_VERIFY_OFF, 'warning',
+          'This certificate verification handler accepts every certificate unconditionally -- it makes the TLS check a no-op.',
+          R.HeaderPos + 1, R.HeaderPos + 10));  // dl:ok magic-literal@1581 -- REVIEWED 2026-11-14 v151 INT: a spec value / fixed offset or length read at its single use site; a named constant adds nothing
+    end;
 end;
-
 class procedure TAppChecks.UiCallInConsoleOrService(const ASrc: TAppSrc; const APath: string; AOut: TList<TLintFinding>);
 const
   CALL_RE =

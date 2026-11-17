@@ -232,6 +232,7 @@ uses
   System.IOUtils
   , System.StrUtils
   , System.RegularExpressions
+  , System.Character
   ;
 
 const
@@ -592,6 +593,58 @@ end;
 
 { ------------------------------------------------- dictionary-get-without-check }
 
+{ Index (1-based) and length of every match of APattern -- '(?<![\w.])(?:Self\s*\.\s*)?<name>...' -- in
+  AMasked, in the order TRegEx.Matches would give them. A match always contains <name>, so only its
+  occurrences (found by literal search in ALower) and a 'Self.' just before them are tried, each with a
+  \G-anchored copy of the pattern, instead of running the pattern at every position of the file; a name
+  that is not plain ASCII falls back to TRegEx.Matches. }
+function NameMatches(const AMasked, ALower, AName, APattern: string): TArray<TPair<Integer, Integer>>;
+const
+  MAX_ASCII = 127;
+  SELF_WORD = 'self';
+begin
+  Result:= nil;
+  var Ascii: Boolean:= AName <> '';
+  for var C: Char in AName do
+    if Ord(C) > MAX_ASCII then Ascii:= False;
+  if not Ascii then
+  begin
+    for var M: TMatch in TRegEx.Matches(AMasked, APattern, [roIgnoreCase]) do
+      Result:= Result + [TPair<Integer, Integer>.Create(M.Index, M.Length)];
+    Exit;
+  end;
+  var Anchored: TRegEx:= TRegEx.Create('\G' + APattern, [roIgnoreCase]);
+  var NextAllowed: Integer:= 1;
+  var Q: Integer:= PosEx(LowerCase(AName), ALower, 1);
+  while Q > 0 do
+  begin
+    { candidate starts, leftmost first: the 'Self' of a 'Self . name', then the name itself }
+    var Starts: TArray<Integer>:= [Q];
+    var P: Integer:= Q - 1;
+    while (P >= 1) and ((AMasked[P] <= ' ') or AMasked[P].IsWhiteSpace) do Dec(P);
+    if (P >= 1) and (AMasked[P] = '.') then
+    begin
+      Dec(P);
+      while (P >= 1) and ((AMasked[P] <= ' ') or AMasked[P].IsWhiteSpace) do Dec(P);
+      if (P >= Length(SELF_WORD)) and (Copy(ALower, P - Length(SELF_WORD) + 1, Length(SELF_WORD)) = SELF_WORD) then
+        Starts:= [P - Length(SELF_WORD) + 1, Q];
+    end;
+    var Found: Boolean:= False;
+    for var S: Integer in Starts do
+      if (not Found) and (S >= NextAllowed) then
+      begin
+        var M: TMatch:= Anchored.Match(AMasked, S);
+        if M.Success and (M.Index = S) then
+        begin
+          Result:= Result + [TPair<Integer, Integer>.Create(M.Index, M.Length)];
+          NextAllowed:= M.Index + M.Length;
+          Found:= True;
+        end;
+      end;
+    Q:= PosEx(LowerCase(AName), ALower, Q + 1);
+  end;
+end;
+
 function FindDictionaryGetWithoutCheck(const AMasked: string): TArray<TRtlCollHit>;
 var
   Scan: TScan;
@@ -615,13 +668,13 @@ begin
       if Scan.Targets.Contains(LowerCase(BaseTypeName(M.Groups[2].Value))) then
         for var Nm: string in M.Groups[1].Value.Split([',']) do
           if not Names.Contains(LowerCase(Trim(Nm))) then Names.Add(LowerCase(Trim(Nm)));
+    var Lower: string:= LowerCase(AMasked);
     for var Nm: string in Names do
     begin
       var N: string:= Esc(Nm);
-      var Re: TRegEx:= TRegEx.Create('(?<![\w.])(?:Self\s*\.\s*)?' + N + '\s*(?:\.\s*Items\s*)?\[', [roIgnoreCase]);
-      for var M: TMatch in Re.Matches(AMasked) do
+      for var M: TPair<Integer, Integer> in NameMatches(AMasked, Lower, Nm, '(?<![\w.])(?:Self\s*\.\s*)?' + N + '\s*(?:\.\s*Items\s*)?\[') do
       begin
-        var Open: Integer:= M.Index - 1 + M.Length - 1;
+        var Open: Integer:= M.Key - 1 + M.Value - 1;
         var Close: Integer:= MatchClose(AMasked, Open);
         if Close < 0 then Continue;
         // a write target is not a read
@@ -629,10 +682,10 @@ begin
         while (After < Length(AMasked)) and CharInSet(AMasked[After + 1], [' ', #9, #13, #10]) do Inc(After);
         if Copy(AMasked, After + 1, 2) = ':=' then Continue;
         if TRegEx.IsMatch(Copy(AMasked, After + 1, COMPOUND_OP_LEN), '^(\+|-|\*|/)=') then Continue;
-        var Idx: Integer:= Scan.RangeIndex(M.Index - 1);
+        var Idx: Integer:= Scan.RangeIndex(M.Key - 1);
         if not Scan.Qualifies(Idx, Nm) then Continue;
         var Body: string:= Scan.Body(Idx);
-        var Before: string:= Copy(Body, 1, M.Index - 1 - Scan.Ranges[Idx].First);
+        var Before: string:= Copy(Body, 1, M.Key - 1 - Scan.Ranges[Idx].First);
         if TRegEx.IsMatch(Body, '(?<![\w.])(?:Self\s*\.\s*)?' + N + '\s*\.\s*(ContainsKey|TryGetValue|TryAdd|ExtractPair|Keys|Values|ToArray)\b', [roIgnoreCase]) then Continue;
         if TRegEx.IsMatch(Body, '\bin\s+(?:Self\s*\.\s*)?' + N + '\b', [roIgnoreCase]) then Continue;
         if TRegEx.IsMatch(Before, '(?<![\w.])(?:Self\s*\.\s*)?' + N + '\s*\.\s*(Add|AddOrSetValue)\s*\(', [roIgnoreCase]) then Continue;
@@ -642,8 +695,8 @@ begin
         var Key: string:= IntToStr(Idx) + '|' + LowerCase(Nm);
         if Reported.Contains(Key) then Continue;
         Reported.Add(Key);
-        Result:= Result + [Hit(RULE_DICT_GET, M.Index - 1, Close - (M.Index - 1),
-          'Dictionary read ' + Trim(Copy(AMasked, M.Index, Close - M.Index + 1)) +
+        Result:= Result + [Hit(RULE_DICT_GET, M.Key - 1, Close - (M.Key - 1),
+          'Dictionary read ' + Trim(Copy(AMasked, M.Key, Close - M.Key + 1)) +
           ' raises EListError / EKeyNotFoundException when the key is missing, and no ContainsKey / TryGetValue guards it in this routine -- use TryGetValue, or ContainsKey first')];
       end;
     end;

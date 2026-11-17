@@ -420,7 +420,7 @@ Described in:
 Finds uses cycles among indexed units and, on request, proposes a followable refactoring plan to break them.
 
 ```text
-drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--hub] [--plan [--no-hub-surface | --hub-surface [--apply]] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --hub = per group its hub units (removal leaves the rest acyclic): edges, ref weights and surfaces per side, dead uses; read-only, no planner; --f2047 = only the interface-only cycles dcc rejects with F2047, each edge with its forcing symbols and the next --plan / --fix commands; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a "Fix it" block per group naming the exact --fix dry-run and --apply commands; --fix = the mechanical fix of one group, see the cycles-fix entry)
+drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--hub] [--plan [--no-hub-surface | --hub-surface [--apply]] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--hub-surface] [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --hub = per group its hub units (removal leaves the rest acyclic): edges, ref weights and surfaces per side, dead uses; read-only, no planner; --f2047 = only the interface-only cycles dcc rejects with F2047, each edge with its forcing symbols and the next --plan / --fix commands; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a "Fix it" block per group naming the exact --fix dry-run and --apply commands; --fix = the mechanical fix of one group, see the cycles-fix entry)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -454,6 +454,7 @@ Described in:
 
 * [Circular Uses Report (cycles + fix plan)](../../docs/wiki/Circular-Uses-Report-cycles-fix-plan.md)
 * [Cycles fix (mechanical, compile-gated)](../../docs/wiki/Circular-Uses-Report-cycles-fix-plan.md)
+* [Cycles fix through recipe R3 (hub surface, compile-gated)](../../docs/wiki/Circular-Uses-Report-cycles-fix-plan.md)
 
 ### deps-report
 
@@ -753,7 +754,10 @@ drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db P
 | `--include-private` |  |  |  |
 | `--db` | `PATH` |  |  |
 
-Described in [Find Dead Code](../../docs/wiki/Find-Dead-Code.md).
+Described in:
+
+* [Find Dead Code](../../docs/wiki/Find-Dead-Code.md)
+* [CLI fixes in 1.51.1](../../docs/wiki/v1511-cli-fixes.md)
 
 ### find-unit
 
@@ -1065,13 +1069,16 @@ Described in:
 * [Rescan this unit](../../docs/wiki/Rescan-this-unit.md)
 * [Library path of the project's Delphi](../../docs/wiki/target-bds-library-path.md)
 * [Target compiler (--target-compiler)](../../docs/wiki/target-compiler.md)
+* [CLI fixes in 1.51.1](../../docs/wiki/v1511-cli-fixes.md)
+* [References for declaration positions](../../docs/wiki/index-declaration-refs.md)
+* [Library bindings for bare reads, paren-less calls and function-result receivers](../../docs/wiki/library-first-resolve.md)
 
 ### info
 
 The plugin's status window -- versions, connection health, and which indexes are actually in use.
 
 ```text
-drag-lint info [--json] [--db <file.sqlite>]... (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only)
+drag-lint info [--json] [--db <file.sqlite>]... (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only; the text form prints extractor:, resolver: and grammar dlls: (size:sha256-16 per DLL) lines as --json does -- 1.51.0 printed only the ABI line)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1083,6 +1090,7 @@ Described in:
 
 * [About and Status](../../docs/wiki/About-and-Status.md)
 * [info](../../docs/wiki/info.md)
+* [CLI fixes in 1.51.1](../../docs/wiki/v1511-cli-fixes.md)
 
 ### init
 
@@ -1231,7 +1239,7 @@ Described in:
 Project-wide lint rule (error): a form, frame or data module whose ancestor class is declared in no project unit and not in the platform library.
 
 ```text
-drag-lint lint-all [--profile <name>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]
+drag-lint lint-all [--profile <name>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1287,6 +1295,7 @@ Described in:
 * [Thread lifetime lint rules (v151 THR-A)](../../docs/wiki/v151-thr-a-rules.md)
 * [Text rules: bidi, invisible, control chars, TODO, header, strings](../../docs/wiki/text-rules.md)
 * [Typing and ownership lint rules (casts, Self as interface, destructors)](../../docs/wiki/typing-and-ownership-rules.md)
+* [CLI fixes in 1.51.1](../../docs/wiki/v1511-cli-fixes.md)
 
 ### lint-project
 
@@ -1696,6 +1705,7 @@ Described in:
 * [query typecat](../../docs/wiki/query-typecat.md)
 * [query unit-usage](../../docs/wiki/query-unit-usage.md)
 * [Symbol Search](../../docs/wiki/Symbol-Search.md)
+* [Per-host bindings for refs in a shared include](../../docs/wiki/inc-indexing.md)
 
 ### reconcile-project
 
@@ -1822,7 +1832,7 @@ Described in:
 Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field.
 
 ```text
-drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)
+drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rule <id>[,<id>]] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it; --rule <id>[,<id>] lists only those rules, an unknown id is exit 2)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1830,6 +1840,7 @@ drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rule
 | `--json` |  |  |  |
 | `--category` | `<name>` |  |  |
 | `--standard` | `cwe\|cert\|misra` |  |  |
+| `--rule` | `<id>[,<id>]` |  |  |
 | `--rules-dir` | `<dir>` |  |  |
 
 Described in:
@@ -1839,6 +1850,7 @@ Described in:
 * [Gap-wave lint rules](../../docs/wiki/gap-wave-rules.md)
 * [Lint rules](../../docs/wiki/rules.md)
 * [Target compiler (--target-compiler)](../../docs/wiki/target-compiler.md)
+* [CLI fixes in 1.51.1](../../docs/wiki/v1511-cli-fixes.md)
 
 ### safe-delete
 
@@ -2097,6 +2109,9 @@ Described in:
 
 * [Find Usages](../../docs/wiki/Find-Usages-context.md)
 * [usages](../../docs/wiki/usages.md)
+* [References for declaration positions](../../docs/wiki/index-declaration-refs.md)
+* [Per-host bindings for refs in a shared include](../../docs/wiki/inc-indexing.md)
+* [Library bindings for bare reads, paren-less calls and function-result receivers](../../docs/wiki/library-first-resolve.md)
 
 ### uses-audit
 

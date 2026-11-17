@@ -1,0 +1,25 @@
+{
+  "id": "v1511-cyc-fixes",
+  "title": "Cycles fix through recipe R3 (hub surface, compile-gated)",
+  "group": "graphs-reports",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.51.1-alpha",
+  "summary": "cycles --fix --hub-surface writes recipe R3 through the compile gate: build before and after, rollback, re-index and verify",
+  "intro": "Read this when a circular group is a star around one hub form and you want the hub-surface recipe (R3) written with the same safety as the planner's fix: the project is built before and after the edit and rolled back byte-identically if it does not compile. The default stays the planner (owner question O11); --hub-surface asks for R3 by name.",
+  "wikiPage": "Circular-Uses-Report-cycles-fix-plan",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "cycles",
+      "example": "--fix --hub-surface --project <X.dproj> --db <db> --cycle <n> [--apply]"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-16",
+    "by": "ENGINE",
+    "build": "1.51.1-alpha",
+    "surfaceHash": "9c86d75bae90d9b13eaa47268bcc5495eff6ab2734473b8412d4ea00e0d0924c"
+  }
+}

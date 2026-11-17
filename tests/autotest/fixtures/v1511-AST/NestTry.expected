@@ -1,0 +1,4 @@
+# Y3: TwoFinally (line 11) is 4 deep -- try..finally is not a level
+!deep-nesting 11
+# positive control: TwoExcept (line 31) still fires
+deep-nesting 31

@@ -47,6 +47,23 @@ function conservative(row) {
   return Math.min(row.claimed, cap);
 }
 
+// Class of a row the parser cannot use (U1). Order matters: most specific first.
+function classify(line, c) {
+  if (/^usage\s/i.test(line)) return 'prefixed';
+  if (line.slice(1).search(/\d{4}-\d{2}-\d{2}T\d{2}:/) >= 0 && /^\d{4}-/.test(line)) return 'concatenated';
+  if (!/^\d{4}-\d{2}/.test(line)) return 'split';
+  if (c.length === 4 || c.length === 3) return '4-field';
+  if (c.length > 7 || c.length < 3) return 'column-count';
+  return 'non-numeric';
+}
+
+// A row written by hand as 'ts report <what> <units> <avoided> report <used>' has 'report' in
+// BOTH col 2 and col 6, which shifts every column (the 2026-09-29 rows). Repair in memory only.
+function unshift(c) {
+  if (c.length === 7 && c[1] === 'report' && c[5] === 'report') return [c[0], c[2], c[3], c[4], c[5], c[6]];
+  return null;
+}
+
 function blank() { return { rows: 0, claimed: 0, cons: 0, used: 0, pairedRows: 0, pairedCons: 0, pairedClaimed: 0 }; }
 
 function add(b, r) {
@@ -59,12 +76,20 @@ function main() {
   const text = fs.readFileSync(args.log, 'utf8');
   const rows = [];
   let skipped = 0;
+  let repaired = 0;
+  const byClass = {};
   for (const line of text.split(/\r?\n/)) {
     if (!line.trim() || line.startsWith('#')) continue;
-    const c = line.split('\t');
-    if (c.length < 4 || c.length > 7) { skipped++; continue; }
-    const claimed = num(c[3]);
-    if (claimed === null || !/^\d{4}-\d{2}/.test(c[0])) { skipped++; continue; }
+    let c = line.split('\t');
+    const fixed = unshift(c);
+    if (fixed) { c = fixed; repaired++; }
+    const claimed = c.length >= 4 && c.length <= 7 ? num(c[3]) : null;
+    if (claimed === null || !/^\d{4}-\d{2}/.test(c[0])) {
+      skipped++;
+      const k = classify(line, c);
+      byClass[k] = (byClass[k] || 0) + 1;
+      continue;
+    }
     const tool = (c[4] || '').trim().toLowerCase() || 'unspecified';
     const used = c.length >= 6 ? num(c[5]) : null;
     const method = (c[6] || '').trim() || 'legacy';
@@ -81,7 +106,7 @@ function main() {
     add(byMonth[r.month] = byMonth[r.month] || blank(), r);
   }
   if (args.json) {
-    process.stdout.write(JSON.stringify({ method: METHOD_LINE, caps: CAP, skipped, total, byTool, byMonth }, null, 2) + '\n');
+    process.stdout.write(JSON.stringify({ method: METHOD_LINE, caps: CAP, skipped, skippedByClass: byClass, repaired, total, byTool, byMonth }, null, 2) + '\n');
     return;
   }
   const k = (n) => (n / 1000).toFixed(1).padStart(9) + 'k';
@@ -92,7 +117,9 @@ function main() {
   out.push('HEADLINE (rows that logged both sides, n=' + total.pairedRows + '): conservative avoided ' +
     k(total.pairedCons).trim() + ' vs used ' + k(total.used).trim() + ' -> net ' + k(total.pairedCons - total.used).trim());
   out.push('all rows (n=' + total.rows + '): conservative avoided ' + k(total.cons).trim() +
-    '; as logged (inflated) ' + k(total.claimed).trim() + '; malformed rows skipped: ' + skipped);
+    '; as logged (inflated) ' + k(total.claimed).trim() + '; malformed rows skipped: ' + skipped +
+    (skipped ? ' (' + Object.keys(byClass).sort().map((k) => k + '=' + byClass[k]).join(', ') + ')' : '') +
+    '; shifted rows repaired: ' + repaired);
   const table = (title, obj) => {
     out.push('');
     out.push(title.padEnd(12) + '     rows   paired  cons.avoided          used     net(paired)  as-logged(inflated)');

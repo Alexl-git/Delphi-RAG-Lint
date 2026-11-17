@@ -179,7 +179,9 @@ Refused 'r1' 'RnTypes.TKid.AfterConstruction' 'Born' 'override-of-library'
 Write-Host 'What cannot be proved refuses' -ForegroundColor Cyan
 # r2 was refused [receiver-untyped] until wave 146: `Xs[0].Kind` on a TList<TTwoB> now binds (run_rename_element_type.ps1).
 Sound 'r2' 'RnTypes.TTwoB.Kind' 'Sort' { param($p) Check 'r2 the element read is rewritten' ((Text-Of $p.Use).Contains('Xs[0].Sort')) }
-Refused 'r3' 'RnTypes.TTwoB.Capacity' 'Room' 'receiver-untyped'
+# r3 was refused [receiver-untyped] until 1.51.1 (B01): the hard cast `TStringList(P).Capacity` now gives its receiver the cast type,
+# a library class, so the site is another symbol's. The routine-call shape still refuses: run_v1511_RENAME_b01_cast.ps1 b2.
+Sound 'r3' 'RnTypes.TTwoB.Capacity' 'Room' { param($p) Check 'r3 the hard cast to a library type is another symbol: TStringList(P).Capacity untouched' ((Text-Of $p.Use).Contains('TStringList(P).Capacity')) }
 Refused 'r4' 'RnTypes.TTwoB.Zeta' 'Theta' 'no-ref-occurrence'
 Refused 'r5' 'RnTypes.TTwoA.Count' 'Helper' 'capture-bare'
 Refused 'r6' 'RnTypes.Compute' 'Tally' 'shadowed-at-site'

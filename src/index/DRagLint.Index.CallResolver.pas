@@ -365,6 +365,21 @@ type
     Unreadable: Int64;
   end;
 
+  /// <summary>1.51.1 B02 / B04: counters of the library-read pass
+  /// (TCallResolver.ResolveLibraryRead), in refs.</summary>
+  /// <remarks>Values + Calls + ProcValues = the reads bound; Declined is every other read the
+  /// pass was asked about (a declined read stores nothing).</remarks>
+  TLibReadStats = record
+    /// <summary>Bound to a library var, const, field or property (external_kind 'value').</summary>
+    Values    : Int64;
+    /// <summary>Bound to a library function as a paren-less CALL ('parenless-call').</summary>
+    Calls     : Int64;
+    /// <summary>Bound to a library routine named as a value ('proc-value').</summary>
+    ProcValues: Int64;
+    /// <summary>Left unbound: qualified, under a with, declared by the project, not visible in
+    /// exactly one used library unit, or not decidable as a call.</summary>
+    Declined  : Int64;
+  end;
   /// <summary>B-31: per-run counters of the type_use pass, printed on the calls
   /// stage's `type-uses:` ResolveLog line.</summary>
   /// <remarks>
@@ -463,6 +478,20 @@ type
     Via         : string;
   end;
 
+  /// <summary>v1511 INC2 (B10, owner ruling OQ18): the binding of ONE ref for ONE host of the
+  /// code include it is written in -- a row of ref_host_bindings.</summary>
+  /// <remarks>Produced only for a ref inside an include that several units include as code.
+  /// SymbolId = 0: that host gave no certain answer (stored as NULL). Stored only while
+  /// refs.symbol_id is NULL: where the hosts agree the ref itself carries the binding.</remarks>
+  TRefHostBinding = record
+    /// <summary>refs.id of the ref inside the include.</summary>
+    RefId     : Int64;
+    /// <summary>files.id of the host unit the binding holds for.</summary>
+    HostFileId: Int64;
+    /// <summary>symbols.id the ref names when compiled into that host; 0 = unbound there.</summary>
+    SymbolId  : Int64;
+  end;
+
   /// <summary>Item 4: per-run receiver counters, printed on the calls stage's
   /// `receivers:` ResolveLog line.</summary>
   /// <remarks>
@@ -498,6 +527,11 @@ type
     TRefIdFn   = function(const ARef: TReference; out AReason: string): Int64 of object;
     /// <summary>v151 INC (OQ18): an edge binder AcrossHostsEdge runs once per host.</summary>
     TRefEdgeFn = function(const ARef: TReference; out AReason: string): TCallEdge of object;
+    /// <summary>v1511 INC2: the key of FHostBindings -- one ref under one host.</summary>
+    TRefHostKey = record
+      RefId     : Int64;
+      HostFileId: Int64;
+    end;
     /// <summary>D13: the scope facts of ONE enclosing routine that the write
     /// pass consults for every write inside it, computed once per pass.</summary>
     /// <remarks>
@@ -579,6 +613,9 @@ type
     FIncHosts   : TObjectDictionary<Int64, TList<TIncludeHostRow>>;
     // v151 INC (OQ18): the host a multi-host include ref is being resolved for (IncFileId = 0: none).
     FCurHost    : TIncludeHostRow;
+    // v1511 INC2 (B10): (ref, host) -> the symbol that host binds (0 = it declined), collected by
+    // the per-host passes of every stream; the store persists it as ref_host_bindings.
+    FHostBindings: TDictionary<TRefHostKey, Int64>;
     // Cache of a routine/type symbol's direct children, keyed by symbol id, so a
     // per-ref field/method scan does not re-hit the DB for the same enclosing
     // symbol repeatedly across a whole-DB pass.
@@ -619,7 +656,8 @@ type
     FWriteScopes: TDictionary<Int64, TWriteScope>;
     // B-28: counters of the bare value-read pass.
     FValueReadStats: TValueReadStats;
-    // B-28: routine id -> '|name|...|' its text declares as a const or an
+    // 1.51.1 B02 / B04: counters of the library-read pass.
+    FLibReadStats: TLibReadStats;    // B-28: routine id -> '|name|...|' its text declares as a const or an
     // inline const/var, lowercased; built on first use (LocalDeclNamesOf).
     FLocalDecls: TDictionary<Int64, string>;
     /// <summary>1.43: per untyped inline var, by symbol id, the type its initializer decided; '' declined.</summary>
@@ -1153,7 +1191,29 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function InitBareResultText(const ASite: TReference; const AHead: string; out AFile, AScope: Int64): string;
-    /// <summary>1.43 (recv2): whether a routine enclosing ASite declares AName itself.</summary>
+    /// <summary>1.51.1 (B02 / B04 / B06): the first library ancestor name of the class enclosing
+    /// AEnclosingSymbolId (TObject for a complete class chain); '' outside a class. The scope
+    /// type the library oracle is asked with, as BindExternally computes it.</summary>
+    /// <param name="AEnclosingSymbolId">Symbol id of the routine or member the reference sits in.</param>
+    /// <returns>The library ancestor name, or '' when the site is not inside a class.</returns>
+    function LibraryScopeType(AEnclosingSymbolId: Int64): string;
+    /// <summary>1.51.1 (B02 / B04 / B06): True when THIS index declares the bare name AName where
+    /// ASite can see it by name -- a type, an enum value, a unit-level value or routine anywhere in the index, a
+    /// local / nested routine of an enclosing routine, or a member on the enclosing class chain.
+    /// Such a name is the project's and is never answered from a library.</summary>
+    /// <param name="ASite">The reference whose scope decides visibility.</param>
+    /// <param name="AName">The bare identifier as written at the site.</param>
+    /// <returns>True when the project declares AName visibly from ASite.</returns>
+    function ProjectDeclaresBare(const ASite: TReference; const AName: string): Boolean;
+    /// <summary>1.51.1 B06: the result type name of the LIBRARY unit-level function the bare name
+    /// AName stands for at ASite (`HiLibReg` in `HiLibReg.OpenKey`, `HiLibReg().OpenKey`,
+    /// `var R := HiLibReg`).</summary>
+    /// <param name="ASite">The reading site: file, enclosing symbol, line and column.</param>
+    /// <param name="AName">One identifier, as written.</param>
+    /// <returns>The leaf type name; '' with no library store, when the project declares the name
+    /// (ProjectDeclaresBare), a `with` target may supply it, the library does not answer with
+    /// exactly one function (TLibraryOracle.RoutineResultText), or the result type is generic.</returns>
+    function LibraryFunctionResultText(const ASite: TReference; const AName: string): string;    /// <summary>1.43 (recv2): whether a routine enclosing ASite declares AName itself.</summary>
     /// <param name="ASite">FileId, EnclosingSymbolId, StartLine and StartCol are consulted.</param>
     /// <param name="AName">The identifier.</param>
     /// <returns>True for a local, parameter, local const or type, or nested routine of the name.</returns>
@@ -1345,16 +1405,27 @@ type
     /// <param name="AFn">The binder (re-entered with FCurHost set).</param>
     /// <param name="AReason">The common decline reason, or 'include-hosts-disagree'.</param>
     /// <returns>The symbol every host binds; 0 when one host declines or two hosts differ.</returns>
-    /// <remarks>The refs table holds ONE target per ref (call_edges.ref_id is its key), so N
-    /// differing bindings cannot be stored: a ref whose hosts disagree stays unbound -- short,
-    /// never wrong. The counters of the binder count the ref once per host.</remarks>
+    /// <remarks>The refs table holds ONE target per ref (call_edges.ref_id is its key): a ref
+    /// whose hosts disagree keeps refs.symbol_id unbound -- short, never wrong -- and, v1511 INC2
+    /// (B10), EVERY host's own answer is noted (NoteHostBinding) for ref_host_bindings (the
+    /// store keeps the rows of a ref that ends the pass unbound). Every host is asked; the
+    /// counters of the binder count the ref once per host.</remarks>
     function AcrossHosts(const ARef: TReference; AFn: TRefIdFn; out AReason: string): Int64;
+    /// <summary>v1511 INC2 (B10): records what one host binds a multi-host include ref to.</summary>
+    /// <param name="ARefId">refs.id; a ref without an id (0) is not recorded.</param>
+    /// <param name="AHostFileId">files.id of the host of the current per-host pass.</param>
+    /// <param name="ASymbolId">The symbol that host binds, 0 when it declined.</param>
+    /// <remarks>Several streams may offer the same unbound ref: per (ref, host) the FIRST
+    /// non-zero answer is kept, the order a single-host ref is bound in.</remarks>
+    procedure NoteHostBinding(ARefId, AHostFileId, ASymbolId: Int64);
     /// <summary>v151 INC (OQ18): AcrossHosts for an edge binder; hosts agree when the target and
     /// the receiver type are the same.</summary>
     /// <param name="ARef">A ref inside a multi-host code include.</param>
     /// <param name="AFn">The binder (re-entered with FCurHost set).</param>
     /// <param name="AReason">The common decline reason, or 'include-hosts-disagree'.</param>
     /// <returns>The common edge; on disagreement the edge of the first host with TargetSymbolId 0.</returns>
+    /// <remarks>v1511 INC2 (B10): each host's target is noted for ref_host_bindings when its
+    /// edge is certain (an ambiguous edge is no binding).</remarks>
     function AcrossHostsEdge(const ARef: TReference; AFn: TRefEdgeFn; out AReason: string): TCallEdge;
     /// <summary>v151 INC (OQ18): AcrossHostsEdge for ResolveOne (no reason out).</summary>
     /// <param name="ACallRef">A call ref inside a multi-host code include.</param>
@@ -3680,6 +3751,13 @@ type
 
     /// <summary>Per-run counters of the `with` scope, across every stream.</summary>
     /// <remarks>Cumulative over the resolver's lifetime.</remarks>
+    /// <summary>v1511 INC2 (B10, owner ruling OQ18): the per-host bindings this run collected
+    /// for refs inside code includes that several units include.</summary>
+    /// <returns>One element per (ref, host) of every ref at least one host bound; a host that
+    /// declined has SymbolId 0. Empty when no multi-host include ref was resolved.</returns>
+    /// <remarks>Read by the calls pass after its last stream, in the same transaction that
+    /// wrote refs.symbol_id. Order is not defined.</remarks>
+    function HostBindings: TArray<TRefHostBinding>;
     property WithStats: TWithScopeStats read FWith.Stats;
 
     /// <summary>D13 (2026-09-23, resolver 1.8.0-alpha): the declaration a bare
@@ -3834,7 +3912,24 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function ResolveBareValueRead(const ARef: TReference; out AReason: string): Int64;
-    /// <summary>B9 F1 (resolver 1.20.0-alpha): the static type of a reference,
+    /// <summary>1.51.1 B02 / B04: binds a bare `read` ref no project stream bound to the LIBRARY
+    /// declaration its name stands for.</summary>
+    /// <param name="ARef">A `read` ref with no receiver; Id, FileId, NameText, EnclosingSymbolId,
+    /// StartLine and StartCol set.</param>
+    /// <param name="AExternalKind">refs.external_kind for a bound read: EXTERNAL_KIND_VALUE (a var,
+    /// const, inherited field or property -- `Application`), EXTERNAL_KIND_PARENLESS_CALL (a
+    /// function callable without arguments, read where its RESULT is used: a call), or
+    /// EXTERNAL_KIND_PROC_VALUE (a routine named as a value: `@F`, a procedural target).</param>
+    /// <returns>The library qualified name for refs.external_target; '' when declined: no library
+    /// store, a ref inside an include with several hosts, a receiver or `Self`, an enclosing
+    /// `with` target that may supply the name, a project declaration of the name
+    /// (ProjectDeclaresBare), no single visible library declaration
+    /// (TLibraryOracle.BindBareRead), or a routine that is neither callable bare nor provably
+    /// named as a value.</returns>
+    /// <remarks>A library target has no call_edges row (the FK is into this DB): the name on the
+    /// ref IS the edge. Counted into LibReadStats. Reads the site's source line; a stale file
+    /// declines.</remarks>
+    function ResolveLibraryRead(const ARef: TReference; out AExternalKind: string): string;    /// <summary>B9 F1 (resolver 1.20.0-alpha): the static type of a reference,
     /// from what this pass already knows about it. No new inference.</summary>
     /// <param name="ARef">The ref after the call streams: SymbolId is its certain
     /// binding, ReceiverText its receiver.</param>
@@ -3895,6 +3990,9 @@ type
     /// <remarks>Cumulative over the resolver's lifetime.</remarks>
     property ValueReadStats: TValueReadStats read FValueReadStats;
 
+    /// <summary>1.51.1 B02 / B04: per-run counters of the library-read pass.</summary>
+    /// <remarks>Cumulative over the resolver's lifetime.</remarks>
+    property LibReadStats: TLibReadStats read FLibReadStats;
     /// <summary>B-31 (2026-10-23): the type a `type_use` ref names -- certain or
     /// nothing.</summary>
     /// <param name="ARef">The type_use ref. FileId, NameText, StartLine, StartCol
@@ -4724,6 +4822,7 @@ begin
   FFileScope  := TObjectDictionary<Int64, TList<Int64>>.Create([doOwnsValues]);
   FIncHost    := TDictionary<Int64, TIncludeHostRow>.Create;
   FIncHosts   := TObjectDictionary<Int64, TList<TIncludeHostRow>>.Create([doOwnsValues]);
+  FHostBindings:= TDictionary<TRefHostKey, Int64>.Create;
   FChildCache := TObjectDictionary<Int64, TList<TSymbol>>.Create([doOwnsValues]);
   FLineCache  := TObjectDictionary<Int64, TStringList>.Create([doOwnsValues]);
   FStaleFiles := TDictionary<Int64, Boolean>.Create;
@@ -4807,6 +4906,7 @@ begin
   FFileScope .Free;
   FIncHost.Free;
   FIncHosts.Free;
+  FHostBindings.Free;
   FNameToUnitValues.Free;
   FNameToEnumValues.Free;
   FNameToRoutines.Free;
@@ -4977,26 +5077,69 @@ begin
   Result := 0;
   AReason:= '';
   var First: Boolean:= True;
+  var Agree: Boolean:= True;
   try
     for var H: TIncludeHostRow in FIncHosts[ARef.FileId] do
     begin
       FCurHost:= H;
       Id:= AFn(ARef, Why);
+      NoteHostBinding(ARef.Id, H.HostFileId, Id);
       if First then
       begin
         Result := Id;
         AReason:= Why;
         First  := False;
       end
-      else if Id <> Result then
+      else if Agree and (Id <> Result) then
       begin
+        { v1511 INC2: no Exit -- every host is still asked, its own answer goes to the side table. }
+        Agree  := False;
         Result := 0;
         AReason:= 'include-hosts-disagree';
-        Exit;
       end;
     end;
   finally
     FCurHost:= Default(TIncludeHostRow);
+  end;
+end;
+
+procedure TCallResolver.NoteHostBinding(ARefId, AHostFileId, ASymbolId: Int64);
+var
+  Key: TRefHostKey;
+  Old: Int64      ;
+begin
+  if ARefId <= 0 then Exit;
+  Key.RefId     := ARefId;
+  Key.HostFileId:= AHostFileId;
+  { The first stream that binds the ref for this host wins, as it does for a single-host ref. }
+  if FHostBindings.TryGetValue(Key, Old) and ((Old > 0) or (ASymbolId <= 0)) then Exit;
+  FHostBindings.AddOrSetValue(Key, ASymbolId);
+end;
+
+function TCallResolver.HostBindings: TArray<TRefHostBinding>;
+var
+  ByRef: TDictionary<Int64, Boolean>;
+  B    : TRefHostBinding;
+  N    : Integer;
+begin
+  ByRef:= TDictionary<Int64, Boolean>.Create;
+  try
+    for var P: TPair<TRefHostKey, Int64> in FHostBindings do
+      if P.Value > 0 then ByRef.AddOrSetValue(P.Key.RefId, True);
+    SetLength(Result, FHostBindings.Count);
+    N:= 0;
+    for var P: TPair<TRefHostKey, Int64> in FHostBindings do
+    begin
+      if not ByRef.ContainsKey(P.Key.RefId) then Continue;
+      B.RefId     := P.Key.RefId;
+      B.HostFileId:= P.Key.HostFileId;
+      B.SymbolId  := P.Value;
+      Result[N]:= B;
+      Inc(N);
+    end;
+    SetLength(Result, N);
+  finally
+    ByRef.Free;
   end;
 end;
 
@@ -5008,26 +5151,36 @@ begin
   Result := Default(TCallEdge);
   AReason:= '';
   var First: Boolean:= True;
+  var Agree: Boolean:= True;
   try
     for var H: TIncludeHostRow in FIncHosts[ARef.FileId] do
     begin
       FCurHost:= H;
       E:= AFn(ARef, Why);
+      { v1511 INC2: only an answer that would earn refs.symbol_id is a per-host binding. }
+      NoteHostBinding(ARef.Id, H.HostFileId,
+        if (E.Confidence = '') or SameText(E.Confidence, 'certain') then E.TargetSymbolId else 0);
       if First then
       begin
         Result := E;
         AReason:= Why;
         First  := False;
       end
-      else if (E.TargetSymbolId <> Result.TargetSymbolId) or (E.ReceiverTypeSymbolId <> Result.ReceiverTypeSymbolId)
-              or not SameText(E.ExternalTarget, Result.ExternalTarget) then
+      else if Agree and ((E.TargetSymbolId <> Result.TargetSymbolId) or (E.ReceiverTypeSymbolId <> Result.ReceiverTypeSymbolId)
+              or not SameText(E.ExternalTarget, Result.ExternalTarget)) then
       begin
+        { v1511 INC2: no Exit -- every host is still asked, its own answer goes to the side table. }
+        Agree:= False;
         Result.TargetSymbolId      := 0;
         Result.ReceiverTypeSymbolId:= 0;
         Result.ExternalTarget      := '';
         Result.ExternalKind        := '';
+        { A member edge without a target must not reach WriteMemberAccess (symbol id 0 breaks its foreign key). }
+        Result.MemberMode          := '';
+        Result.AccessorSymbolId    := 0;
+        Result.AccessorKind        := '';
+        Result.ValueOnly           := False;
         AReason:= 'include-hosts-disagree';
-        Exit;
       end;
     end;
   finally
@@ -5258,19 +5411,26 @@ end;
 
 function TCallResolver.SymbolById(AId: Int64): TSymbol;
 begin
-  if FRows.Symbols.TryGetValue(AId, Result) then Exit;
-  Result:= FStore.GetSymbolById(AId);
-  { 152c RINC: a top-level declaration of a code include carries its host's section. }
-  var H: TIncludeHostRow;
-  if (Result.ParentId <= 0) and (Result.Section = '') and FIncHost.TryGetValue(Result.FileId, H) then
-    Result.Section:= H.Section;
-  { v151 INC: a method body written in a single-host include (`procedure THost.Run;`) hangs
-    under the class of its host, so its body sees the class members and the host unit. }
-  var HL: TList<TIncludeHostRow>;
-  if (Result.ParentId <= 0) and (Result.Kind in [skMethod, skConstructor, skDestructor]) and Result.QualifiedName.Contains('.')
-     and FIncHosts.TryGetValue(Result.FileId, HL) and (HL.Count = 1) then
-    Result.ParentId:= IncludeMethodOwner(HL[0].HostUnitId, Result.QualifiedName);
-  FRows.Symbols.Add(AId, Result);
+  if not FRows.Symbols.TryGetValue(AId, Result) then
+  begin
+    Result:= FStore.GetSymbolById(AId);
+    { 152c RINC: a top-level declaration of a code include carries its host's section. }
+    var H: TIncludeHostRow;
+    if (Result.ParentId <= 0) and (Result.Section = '') and FIncHost.TryGetValue(Result.FileId, H) then
+      Result.Section:= H.Section;
+    { v151 INC: a method body written in a single-host include (`procedure THost.Run;`) hangs
+      under the class of its host, so its body sees the class members and the host unit. }
+    var HL: TList<TIncludeHostRow>;
+    if (Result.ParentId <= 0) and (Result.Kind in [skMethod, skConstructor, skDestructor]) and Result.QualifiedName.Contains('.')
+       and FIncHosts.TryGetValue(Result.FileId, HL) and (HL.Count = 1) then
+      Result.ParentId:= IncludeMethodOwner(HL[0].HostUnitId, Result.QualifiedName);
+    FRows.Symbols.Add(AId, Result);
+  end;
+  { v1511 INC2 (B10): in a multi-host include the same body belongs to the class of the host
+    of the current per-host pass. Never cached: the row cache has one entry per symbol. }
+  if (FCurHost.IncFileId <> 0) and (Result.FileId = FCurHost.IncFileId) and (Result.ParentId <= 0)
+     and (Result.Kind in [skMethod, skConstructor, skDestructor]) and Result.QualifiedName.Contains('.') then
+    Result.ParentId:= IncludeMethodOwner(FCurHost.HostUnitId, Result.QualifiedName);
 end;
 
 function TCallResolver.AncestorsOf(ATypeId: Int64): TArray<TTypeAncestor>;
@@ -6403,7 +6563,7 @@ begin
   end;
 end;
 
-function TCallResolver.ResolveEnumValueRead(const ARef: TReference; out AReason: string): Int64;  // dl:ok too-many-exit-points@b863 -- REVIEWED 2026-10-26 (E14 added the scoped exit; first reviewed 2026-09-23): each exit is a DISTINCT outcome the caller and the counters must tell apart -- not a candidate name, a with member (1.8.0, R7), scoped (E14), not visible, ambiguous, shadowed (a/b), shadowed (c), bound. Every one sets AReason and increments its own counter before leaving; merging them behind a single exit would put six reasons through one assignment and is exactly how a decline becomes unauditable.
+function TCallResolver.ResolveEnumValueRead(const ARef: TReference; out AReason: string): Int64;  // dl:ok too-many-exit-points@f25d -- REVIEWED 2026-11-16 (re-stamped after 1.51.1 RES; E14 added the scoped exit; first reviewed 2026-09-23): each exit is a DISTINCT outcome the caller and the counters must tell apart -- not a candidate name, a with member (1.8.0, R7), scoped (E14), not visible, ambiguous, shadowed (a/b), shadowed (c), bound. Every one sets AReason and increments its own counter before leaving; merging them behind a single exit would put six reasons through one assignment and is exactly how a decline becomes unauditable.
 
   { R1: a value declared in AFileId / ASection is visible from ARef's file when
     it is the SAME file (both sections of one's own unit are in scope), or it is
@@ -8878,7 +9038,7 @@ end;
 // cast, selector chain, unit-qualified type, local/field/Result, function result, ordinary name, ...) answers
 // and leaves; the body is the old TypeReceiver unchanged, renamed so TypeReceiver can apply the implicit
 // dereference once. One exit would thread a found flag through a dozen rungs whose order IS the contract.
-function TCallResolver.TypeReceiverCore(const ACallRef: TReference; const AReceiverExpr: string;  // dl:ok too-many-exit-points@ac4c, cyclomatic-complexity@a5c1, method-too-long@3516, cognitive-complexity@e04a -- the receiver-kind LADDER: one exit per rung, the rung order IS the contract (review history in the comment above)
+function TCallResolver.TypeReceiverCore(const ACallRef: TReference; const AReceiverExpr: string;  // dl:ok too-many-exit-points@ac4c, cyclomatic-complexity@3d5e, method-too-long@193e, cognitive-complexity@55ae -- the receiver-kind LADDER: one exit per rung, the rung order IS the contract (review history in the comment above)
   out AText: TRcvTypeText): Int64;
 var
   Encl    : TSymbol;
@@ -8969,7 +9129,12 @@ begin
     Result:= ResolveTypeNameToSymbol(CastType, ACallRef.FileId);
     AText.Text:= if Result > 0 then NormalizeTypeLeaf(CastType) else '';
     if (Result = 0) and AReceiverExpr.StartsWith(CastType + '(', True) and IsIdentChain([CastType]) then
+    begin
       Result:= TypeOfFunctionResult(ACallRef, CastType, AText.Text);
+      { 1.51.1 B06: no project function of the name -- a LIBRARY function's declared result
+        (`HiLibReg().OpenKey`), by name for the oracle. }
+      if (Result = 0) and (AText.Text = '') then AText.Text:= LibraryFunctionResultText(ACallRef, CastType);
+    end;
     { T-11: `O.Mk('a')` also reads as a cast to `O.Mk`; when that names no type
       and no function, kind 12 below types it as a call on O. }
     if Result > 0 then Exit;
@@ -9223,6 +9388,9 @@ begin
   // can name) -> Result stays 0 (leave unresolved). Item 4: when nothing in this
   // index even names its type, the identifier goes to the library oracle as a
   // HEAD -- a library type, global, or inherited member.
+  { 1.51.1 B06: a paren-less LIBRARY function as the receiver (`HiLibReg.OpenKey`) is typed by
+    its declared result; only a name the library does not answer that way stays a head. }
+  if AText.Text = '' then AText.Text:= LibraryFunctionResultText(ACallRef, AReceiverExpr);
   if AText.Text = '' then AText.Head:= AReceiverExpr;
   finally
     ProfEnd(cpsTypeReceiverCore, PfMark);
@@ -9718,11 +9886,13 @@ var
   A    : TTypeAncestor;
   Depth: Integer      ;
 begin
-  if FWriteScopes.TryGetValue(AEnclosingSymbolId, Result) then Exit;
+  { v1511 INC2 (B10): during a per-host pass the owning class depends on the host, so the
+    per-routine cache is neither read nor filled. }
+  if (FCurHost.IncFileId = 0) and FWriteScopes.TryGetValue(AEnclosingSymbolId, Result) then Exit;
   Result:= Default(TWriteScope);
   if AEnclosingSymbolId > 0 then
   begin
-    S:= FStore.GetSymbolById(AEnclosingSymbolId);
+    S:= SymbolById(AEnclosingSymbolId);
     { The routine and the routines around it -- the levels LexicalParenlessLookup
       climbs, and the function names whose RESULT a write may assign. The walk ends at
       the first non-routine parent, which is the owning type when there is one
@@ -9733,8 +9903,7 @@ begin
       Inc(Depth);
       Result.Chain:= Result.Chain + [S.Id];
       if S.Kind in [skFunction, skMethod] then Result.FnNames:= Result.FnNames + '|' + LowerCase(S.Name);
-      if S.ParentId <= 0 then S:= Default(TSymbol)
-      else S:= FStore.GetSymbolById(S.ParentId);
+      S:= if S.ParentId <= 0 then Default(TSymbol) else SymbolById(S.ParentId);
     end;
     Result.FnNames:= Result.FnNames + '|';
     if (S.Id > 0) and (S.Kind in TYPE_KINDS) then
@@ -9744,7 +9913,7 @@ begin
         if A.Resolved and (A.SymbolId > 0) then Result.ClassChain:= Result.ClassChain + [A.SymbolId];
     end;
   end;
-  FWriteScopes.Add(AEnclosingSymbolId, Result);
+  if FCurHost.IncFileId = 0 then FWriteScopes.Add(AEnclosingSymbolId, Result);
 end;
 
 { Inserts AValue into AValues kept NEAREST-LAST-DECLARED first: before the first
@@ -10662,7 +10831,7 @@ begin
   end;
 end;
 
-function TCallResolver.DecideInlineInitType(const ADecl: TSymbol): string;  // dl:ok too-many-exit-points@352d, cyclomatic-complexity@2550 -- one Exit per initializer form (for-in, as, index, call), each a decision with its own result
+function TCallResolver.DecideInlineInitType(const ADecl: TSymbol): string;  // dl:ok too-many-exit-points@352d, cyclomatic-complexity@3663 -- one Exit per initializer form (for-in, as, index, call), each a decision with its own result
 var
   Lines: TStringList;
   IsFor: Boolean    ;
@@ -10713,7 +10882,20 @@ begin
   var Subscripted: string;
   if ParseIndexInit(Lines, ADecl, Subscripted, Site.StartLine, Site.StartCol) then
     Exit(ValueElementTypeText(Site, Subscripted, False));
-  if not ParseInlineInit(Lines, ADecl, Init) then Exit;
+  if not ParseInlineInit(Lines, ADecl, Init) then
+  begin
+    { 1.51.1 B06: `var R := LibFn;` -- a lone identifier is no chain for ParseInlineInit; a
+      library function of the name gives its declared result. }
+    var Semi: Integer:= Pos(';', DefRhs);
+    var Lone: string:= if Semi > 1 then Trim(Copy(DefRhs, 1, Semi - 1)) else '';
+    if IsValidIdent(Lone) then
+    begin
+      Site.StartLine:= ADecl.StartLine;
+      Site.StartCol := AssignAt + Length(':=');
+      Result:= LibraryFunctionResultText(Site, Lone);
+    end;
+    Exit;
+  end;
   Site.StartLine        := Init.Line;
   Site.StartCol         := Init.Col;
   if (Init.Member <> '') and not InlineInitHeadIsValue(Site, Init.Head) then
@@ -10737,6 +10919,10 @@ begin
        and (CollectionElementOfText(Text, FromFile, FromScope, ADecl.FileId, ADecl.ParentId) <> '') then
       Result:= Text;
   end;
+  { 1.51.1 B06: `var R := LibFn;` / `var R := LibFn(..);` -- nothing in this index types the
+    bare initializer: a library function's declared result, by name. }
+  if (Result = '') and (Init.Member = '') then
+    Result:= LibraryFunctionResultText(Site, Init.Head);
   finally
     ProfEnd(cpsDecideInlineInitType, PfMark);
   end;
@@ -12134,6 +12320,125 @@ begin
   end;
 end;
 
+function TCallResolver.LibraryScopeType(AEnclosingSymbolId: Int64): string;
+var
+  ClassId: Int64;
+begin
+  Result:= '';
+  if AEnclosingSymbolId <= 0 then Exit;
+  EnclosingClassChainDeclares(AEnclosingSymbolId, '', ClassId);
+  if ClassId <= 0 then Exit;
+  Result:= FirstUnresolvedAncestorName(ClassId);
+  { A class whose chain is complete ends at the root no ancestor row records. }
+  if (Result = '') and (SymbolById(ClassId).Kind = skClass) then Result:= IMPLICIT_ROOT_CLASS;
+end;
+
+function TCallResolver.ProjectDeclaresBare(const ASite: TReference; const AName: string): Boolean;
+var
+  ClassId: Int64;
+begin
+  var Lc: string:= LowerCase(AName);
+  Result:= FNameToCands.ContainsKey(Lc) or FNameToUnitValues.ContainsKey(Lc) or FNameToRoutines.ContainsKey(Lc)
+    or FNameToEnumValues.ContainsKey(Lc);
+  if Result or (ASite.EnclosingSymbolId <= 0) then Exit;
+  Result:= RoutineDeclaresName(ASite, AName)
+    or EnclosingClassChainDeclares(ASite.EnclosingSymbolId, AName, ClassId);
+end;
+
+function TCallResolver.LibraryFunctionResultText(const ASite: TReference; const AName: string): string;
+var
+  Handled: Boolean;
+begin
+  Result:= '';
+  if (Length(FExtraStores) = 0) or not IsValidIdent(AName) or ProjectDeclaresBare(ASite, AName) then Exit;
+  if ASite.EnclosingSymbolId > 0 then
+  begin
+    var Saved: TWithScopeStats:= FWith.Stats;
+    TypeReceiverThroughWith(ASite, AName, Handled);
+    FWith.Stats:= Saved;
+    if Handled then Exit;
+  end;
+  var Text: string:= FOracle.RoutineResultText(AName, FileUsesUnits(ASite.FileId),
+    LibraryScopeType(ASite.EnclosingSymbolId), FileOwnUses(ASite.FileId));
+  { A generic result (`TList<TFoo>`) would lose its arguments as a leaf name: declined. }
+  if not Text.Contains('<') then Result:= NormalizeTypeLeaf(Text);
+end;
+
+function TCallResolver.ResolveLibraryRead(const ARef: TReference; out AExternalKind: string): string;
+var
+  Lines  : TStringList    ;
+  Rcv    : string         ;
+  WType  : Int64          ;
+  WKind  : TWithMemberKind;
+  Kind   : TSymbolKind    ;
+  Sigs   : TArray<string> ;
+  Forms  : TArray<string> ;
+  Probe  : TSymbol        ;
+  AllBare: Boolean        ;
+  Seen   : Boolean        ;
+begin
+  Result       := '';
+  AExternalKind:= '';
+  { Every decline below leaves the ref as it was; MultiHostRef: an include with several hosts
+    has no single uses clause to decide a library name on (the include-host lane's rows). }
+  Lines:= nil;
+  Kind := Default(TSymbolKind);
+  Sigs := [];
+  var Open: Boolean:= (Length(FExtraStores) > 0) and not MultiHostRef(ARef) and IsValidIdent(ARef.NameText);
+  Open:= Open and not SameText(ARef.NameText, 'Result') and not SameText(ARef.NameText, 'Self');
+  Open:= Open and (BareReadSite(ARef, Lines, Rcv) = '') and (Rcv = '');
+  Open:= Open and (WithScopeAt(ARef, ARef.StartLine, ARef.StartCol, ARef.NameText, WType, WKind) = wvNone);
+  if Open and not ProjectDeclaresBare(ARef, ARef.NameText) then
+    Result:= FOracle.BindBareRead(ARef.NameText, FileUsesUnits(ARef.FileId),
+      LibraryScopeType(ARef.EnclosingSymbolId), Kind, Sigs, FileOwnUses(ARef.FileId));
+  if Result = '' then
+  begin
+    Inc(FLibReadStats.Declined);
+    Exit;
+  end;
+  if Kind in [skVarDecl, skConstDecl, skField, skProperty] then
+  begin
+    AExternalKind:= EXTERNAL_KIND_VALUE;
+    Inc(FLibReadStats.Values);
+    Exit;
+  end;
+  if Kind in [skProcedure, skFunction, skMethod] then
+  begin
+    { The distinct written signatures: one per overload. }
+    Forms:= [];
+    for var S: string in Sigs do
+    begin
+      Seen:= False;
+      for var F: string in Forms do Seen:= Seen or SameText(F, S);
+      if not Seen then Forms:= Forms + [S];
+    end;
+    if Length(Forms) = 0 then Forms:= [''];
+    { The rules of ResolveParenlessRead: EVERY overload callable bare -> a call, unless the site
+      takes the routine as a value; ONE routine not callable bare -> its identity, when it is a
+      procedure or the site is a procedure-value site; anything else is not decidable here. }
+    AllBare:= True;
+    Probe  := Default(TSymbol);
+    Probe.Kind:= Kind;
+    for var F: string in Forms do
+    begin
+      Probe.Signature:= F;
+      AllBare:= AllBare and IsParenlessCallable(Probe);
+    end;
+    var RetType: string:= SignatureReturnType(Forms[0]);
+    if AllBare then
+      AExternalKind:= if ParenlessIsProcValue(ARef, Lines, '', RetType) then EXTERNAL_KIND_PROC_VALUE
+                      else EXTERNAL_KIND_PARENLESS_CALL
+    else if (Length(Forms) = 1) and ((RetType = '') or ParenlessIsProcValue(ARef, Lines, '', RetType)) then
+      AExternalKind:= EXTERNAL_KIND_PROC_VALUE;
+  end;
+  if AExternalKind = '' then
+  begin
+    Result:= '';
+    Inc(FLibReadStats.Declined);
+  end
+  else if AExternalKind = EXTERNAL_KIND_PARENLESS_CALL then Inc(FLibReadStats.Calls)
+  else Inc(FLibReadStats.ProcValues);
+end;
 function TCallResolver.LookupLibraryTypeHelper(const ACallRef: TReference; const ATypeText: string;
   AArgCount: Integer; AArgsKnown: Boolean; out AConfidence: string): Int64;
 var

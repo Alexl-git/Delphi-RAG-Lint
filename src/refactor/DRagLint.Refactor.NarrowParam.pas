@@ -412,7 +412,7 @@ begin
   end;
 end;
 
-function TNarrowPlanner.CheckRoutine(const pR: TRoutineRow; const pParam: TParamRow; out pVerdict: TVerdict): Boolean;  // dl:ok deep-nesting@3d4c, too-many-exit-points@ccb3 -- the guard list of the refusals; a split would hide their order
+function TNarrowPlanner.CheckRoutine(const pR: TRoutineRow; const pParam: TParamRow; out pVerdict: TVerdict): Boolean;  // dl:ok too-many-exit-points@ccb3 -- the guard list of the refusals; a split would hide their order
 begin
   Result:= False;
   pVerdict:= Default(TVerdict);
@@ -689,10 +689,11 @@ begin
   FRefused.Add(S);
 end;
 
-procedure TNarrowPlanner.Decide(const pR: TRoutineRow; const pParam: TParamRow);  // dl:ok cyclomatic-complexity@3d98, too-many-exit-points@0beb -- one branch per named refusal, documented on the public function
+procedure TNarrowPlanner.Decide(const pR: TRoutineRow; const pParam: TParamRow);  // dl:ok cyclomatic-complexity@1034, too-many-exit-points@0beb -- one branch per named refusal, documented on the public function
 var
   V: TVerdict;
 begin
+  if TakeStandDown then raise ECompileGateCancelled.Create('cancelled'); // B25: shutdown / Cancel stops the plan
   if not TRegEx.IsMatch(pParam.TypeText, '^[A-Za-z_&][A-Za-z0-9_.]*$') then Exit; { not a plain type name: no candidate }
   var Named:= ClassesNamed(Leaf(pParam.TypeText));
   if Length(Named) = 0 then Exit; { not a class: scalars, records and interfaces are not candidates }
@@ -1089,7 +1090,7 @@ begin
     Writeln(Format('refused  %s:%d  %s  %s: %s  %s -- %s', [S.FilePath, S.Line, S.Routine, S.Param, S.FromType, S.Kind, S.Reason]));
 end;
 
-function RunNarrowParam(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;  // dl:ok too-many-exit-points@8d31 -- one guard per named refusal, in the documented order: the exits are the contract
+function RunNarrowParam(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;  // dl:ok too-many-exit-points@fd3e -- one guard per named refusal, in the documented order: the exits are the contract
   const pOpts: TNarrowParamOptions): Integer;
 var
   Gate: TGateOutcome;
@@ -1140,9 +1141,17 @@ begin
   var Plan: TNarrowPlan;
   var NoRoutine: Boolean;
   try
-    Plan:= Planner.Run(NoRoutine);
-  finally
-    Planner.Free;
+    try
+      Plan:= Planner.Run(NoRoutine);
+    finally
+      Planner.Free;
+    end;
+  except
+    on ECompileGateCancelled do
+    begin
+      SayError('cancelled: a stand-down request stopped the plan; nothing written');
+      Exit(CExitRefused);
+    end;
   end;
   if NoRoutine then
   begin

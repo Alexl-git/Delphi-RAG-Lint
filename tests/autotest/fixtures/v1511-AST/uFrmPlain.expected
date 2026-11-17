@@ -1,0 +1,4 @@
+# R8: the IDE form variable of a form unit with a .dfm is not flagged
+!mutable-global-variable 13
+# positive control: an ordinary global in the same unit still is
+mutable-global-variable 14

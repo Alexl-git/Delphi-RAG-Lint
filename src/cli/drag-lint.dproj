@@ -152,6 +152,7 @@
         <DCCReference Include="..\lint\DRagLint.Lint.Config.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.Compliance.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.RuleCatalog.pas"/>
+        <DCCReference Include="..\lint\DRagLint.Lint.MarkerHash.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.TargetCompiler.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.Baseline.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.QueryRules.pas"/>
@@ -328,6 +329,7 @@
         <DCCReference Include="..\lint\v151\DRagLint.V151.APP.pas"/>
         <DCCReference Include="..\lint\v151\DRagLint.V151.CMP.Support.pas"/>
         <DCCReference Include="..\lint\v151\DRagLint.V151.CMP.pas"/>
+        <DCCReference Include="..\lint\v151\DRagLint.V151.Dfm.Common.pas"/>
         <DCCReference Include="..\lint\v151\DRagLint.V151.DFMA.Support.pas"/>
         <DCCReference Include="..\lint\v151\DRagLint.V151.DFMA.pas"/>
         <DCCReference Include="..\lint\v151\DRagLint.V151.DFMB.Support.pas"/>
@@ -399,6 +401,25 @@
         <DCCReference Include="DRagLint.CLI.LibraryReady.pas"/>
         <DCCReference Include="DRagLint.CLI.HelpText.pas"/>
         <DCCReference Include="DRagLint.CLI.LibraryMarker.pas"/>
+        <DCCReference Include="DRagLint.CLI.Common.pas"/>
+        <DCCReference Include="DRagLint.CLI.ConsumerDbs.pas"/>
+        <DCCReference Include="DRagLint.CLI.Convert.pas"/>
+        <DCCReference Include="DRagLint.CLI.Compare.pas"/>
+        <DCCReference Include="DRagLint.CLI.MigrateDbs.pas"/>
+        <DCCReference Include="DRagLint.CLI.Workspace.pas"/>
+        <DCCReference Include="DRagLint.CLI.Sql.pas"/>
+        <DCCReference Include="DRagLint.CLI.Wiki.pas"/>
+        <DCCReference Include="DRagLint.CLI.Shutdown.pas"/>
+        <DCCReference Include="DRagLint.CLI.Schema.pas"/>
+        <DCCReference Include="DRagLint.CLI.Export.pas"/>
+        <DCCReference Include="DRagLint.CLI.UsesReport.pas"/>
+        <DCCReference Include="DRagLint.CLI.Graph.pas"/>
+        <DCCReference Include="DRagLint.CLI.Hover.pas"/>
+        <DCCReference Include="DRagLint.CLI.CallGraph.pas"/>
+        <DCCReference Include="DRagLint.CLI.Wiring.pas"/>
+        <DCCReference Include="DRagLint.CLI.Format.pas"/>
+        <DCCReference Include="DRagLint.CLI.ConvertApplyJson.pas"/>
+        <DCCReference Include="DRagLint.CLI.ConvertApply.pas"/>
         <DCCReference Include="DRagLint.CLI.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>

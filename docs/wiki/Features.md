@@ -77,11 +77,14 @@ Build and maintain the per-project and library indexes.
 | [Auto-Document Whole Project](Auto-Document-Whole-Project) | drag-lint > Generate & Export > Auto-Document Whole Project...; `index`; `document` |  |
 | [Include-file indexing and IF evaluation](inc-indexing) | `index` |  |
 | [Index a project against its active build config](index-build-config) | `index` |  |
+| [Library bindings for bare reads, paren-less calls and function-result receivers](library-first-resolve) | `usages`; `index` |  |
 | [Library path of the project's Delphi](target-bds-library-path) | `index`; `reconcile-project` |  |
 | [migrate-dbs](migrate-dbs) | `migrate-dbs`; drag-lint > Index & Maintenance > Migrate Index DBs to _D-RAG... |  |
+| [Per-host bindings for refs in a shared include](inc-indexing) | `query`; `usages` |  |
 | [pp-profile](pp-profile) | `pp-profile` |  |
 | [purge-locals](purge-locals) | `purge-locals`; drag-lint > Index & Maintenance > Shrink Index (purge locals)... |  |
 | [Rebuild Index for This Project](Rebuild-Index-for-This-Project) | drag-lint > Index & Maintenance > Rebuild Index for This Project; `index` |  |
+| [References for declaration positions](index-declaration-refs) | `index`; `usages` |  |
 | [register-project](Features) | `register-project` |  |
 | [schema](schema) | `schema` |  |
 | [Show Resolved DBs (debug)](Show-Resolved-DBs-debug) | drag-lint > Index & Maintenance > Show Resolved DBs (debug)...; `resolve-dbs` |  |
@@ -163,6 +166,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Ancestor not in project (lint rule)](ancestor-not-in-project) | `lint-all` |  |
 | [Application-level lint rules](application-level-rules) | `lint`; `lint-all` |  |
 | [Autofix for fixable rules](autofix-wave) | `lint` |  |
+| [CLI fixes in 1.51.1](v1511-cli-fixes) | `lint-all`; `rules`; `info`; `index`; `find-deadcode` |  |
 | [Compliance labels (CWE, CERT, MISRA)](compliance-labels) | `rules`; `lint-all` |  |
 | [Component-authoring lint rules](component-authoring-rules) | `lint`; `lint-all` |  |
 | [Copy All Diagnostics](Copy-All-Diagnostics) | Structure form: Copy All Diagnostics; `lint` |  |
@@ -317,6 +321,7 @@ Call graphs, dependency reports, dead code, tester spreadsheets.
 | [Circular Uses Report (cycles + fix plan)](Circular-Uses-Report-cycles-fix-plan) | drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)...; `cycles` |  |
 | [Code-built menu tree and registry drift](Menu-Tree) | `menu-tree`; `menu-drift` |  |
 | [Cycles fix (mechanical, compile-gated)](Circular-Uses-Report-cycles-fix-plan) | `cycles`; drag-lint > Uses & Dependencies > Fix Circular Uses Mechanically (dry run)...; View > Tool Windows > drag-lint > Uses & Deps > This project -- Circular uses (cycles --fix); Structure form: Fix this cycle (dry run)...; Structure form: Apply cycle fix...; `charts\src\Emit-Cycles.ps1` |  |
+| [Cycles fix through recipe R3 (hub surface, compile-gated)](Circular-Uses-Report-cycles-fix-plan) | `cycles` |  |
 | [deps-report](deps-report) | `deps-report`; drag-lint > Uses & Dependencies > Dependency Report (third-party rollup)... |  |
 | [Export Enums (Delphi const)](Export-Enums-Delphi-const) | drag-lint > Generate & Export > Export Enums (Delphi const)...; `export enums` |  |
 | [Export Graph (DOT)](Export-Graph-DOT) | drag-lint > Generate & Export > Export Graph (DOT)...; `graph` |  |

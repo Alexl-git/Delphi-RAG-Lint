@@ -231,6 +231,7 @@ type
       FHasFileFacts          : Integer      ; { 149 EX2: -1 unprobed, 0 absent, 1 present -- see HasFileFacts }
       FHasPpDirectives       : Integer      ; { 150 PP: -1 unprobed, 0 absent, 1 present -- see HasPpDirectives }
       FHasDfmNav             : Integer      ; { 150 Y2: -1 unprobed, 0 absent, 1 present -- see HasDfmNav }
+      FHasRefHostBindings    : Integer      ; { 1.51.1 INC2: -1 unprobed, 0 absent, 1 present -- see HasRefHostBindings }
       FHasDfmProps           : Integer      ; { 151 ST: -1 unprobed, 0 absent, 1 present -- see HasDfmProperties }
       FHasCommentFacts       : Integer      ; { 151 ST: -1 unprobed, 0 absent, 1 present -- see HasCommentFacts }
       FQFileFacts            : array[0..11] of TFDQuery; { 149 EX2: 3 deletes + 3 inserts (150 PP: + pp_directives delete / insert; 151 ST: + dfm_properties, comment_facts), prepared on first use (FF_* in PutFileFacts) }  // dl:ok referenced-never-set@9274 -- FP: the array ELEMENTS are assigned in PutFileFacts.Prepared (FQFileFacts[AIdx]:= Result)
@@ -837,6 +838,19 @@ type
       procedure ResolveValueReadRefs(AResolver: TCallResolver;
         const AScopeWhere, AStaleWhere: string;
         out ACandidates, ABound: Int64);
+      /// <summary>1.51.1 B02 / B04: the calls stage's library-read stream. Offers every `read`
+      /// ref that is still unbound and whose name no type, unit-level declaration or enum value of
+      /// this index carries (a member / parameter / local of the name is decided per site) to
+      /// TCallResolver.ResolveLibraryRead and stores its answer on refs.external_target /
+      /// refs.external_kind ('value', 'parenless-call', 'proc-value').</summary>
+      /// <param name="AResolver">The pass's resolver, maps already built. Owned by the caller.</param>
+      /// <param name="AScopeWhere">The scoped pass's `refs` predicate, '' on a whole-DB pass.</param>
+      /// <param name="AStaleWhere">The stale-file exclusion, '' when no file is stale.</param>
+      /// <remarks>Runs after every project read stream, inside the pass's transaction. First
+      /// clears what an earlier pass wrote on the reads in scope, so a library that is no longer
+      /// attached leaves no stale target. The counts are the resolver's LibReadStats. A library
+      /// target never gets a call_edges row: the name on the ref is the edge.</remarks>
+      procedure ResolveLibraryReadRefs(AResolver: TCallResolver; const AScopeWhere, AStaleWhere: string);
       /// <summary>B-31 (2026-10-23): the calls stage's SEVENTH stream. Offers
       /// every `type_use` ref spelled like an indexed type to
       /// TCallResolver.ResolveTypeUse and sets refs.symbol_id to the type when
@@ -3380,6 +3394,24 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function HasDfmNav: Boolean;
+      /// <summary>1.51.1 INC2 (B10): True when this DB carries ref_host_bindings (schema 26).
+      /// Probed once per store; an older read-only index answers False and every reader then
+      /// behaves as it did before the table existed.</summary>
+      /// <returns>True when the table exists.</returns>
+      function HasRefHostBindings: Boolean;
+      /// <summary>1.51.1 INC2 (B10, owner ruling OQ18): persists the per-host bindings the calls
+      /// pass collected for refs inside multi-host code includes.</summary>
+      /// <param name="ARows">TCallResolver.HostBindings of this pass; SymbolId 0 is stored NULL.</param>
+      /// <returns>The number of rows written; 0 without the table.</returns>
+      /// <remarks>Called inside the calls pass's transaction, after its last stream; the rows of
+      /// the refs this pass re-resolves were deleted with their call_edges. A row is written only
+      /// for a ref whose refs.symbol_id the pass left NULL: where the hosts agree the ref itself
+      /// carries the one binding, so the table holds exactly what refs.symbol_id cannot.</remarks>
+      function WriteRefHostBindings(const ARows: TArray<TRefHostBinding>): Integer;
+      /// <summary>1.51.1 INC2: implements ISymbolStore.GetHostBoundRefIds.</summary>
+      /// <param name="ASymbolId">symbols.id of the target.</param>
+      /// <returns>refs.id of every ref bound to it per host only; empty without the table.</returns>
+      function GetHostBoundRefIds(ASymbolId: Int64): TArray<Int64>;
       /// <summary>150 Y2: implements ISymbolStore.PutDfmNav.</summary>
       /// <param name="AToken">The open file tx of the .dfm.</param>
       /// <param name="ANodes">dfm_nav_nodes rows.</param>
@@ -5304,6 +5336,7 @@ begin
   FHasFileFacts     := -1; { 149 EX2: probed lazily -- see HasFileFacts }
   FHasPpDirectives  := -1; { 150 PP: probed lazily -- see HasPpDirectives }
   FHasDfmNav        := -1; { 150 Y2: probed lazily -- see HasDfmNav }
+  FHasRefHostBindings:= -1; { 1.51.1 INC2: probed lazily -- see HasRefHostBindings }
   FHasDfmProps      := -1; { 151 ST: probed lazily -- see HasDfmProperties }
   FHasCommentFacts  := -1; { 151 ST: probed lazily -- see HasCommentFacts }
   FLateAncCache  := TDictionary<string, TSymbol>.Create;
@@ -5812,6 +5845,71 @@ begin
   if FHasDfmNav < 0 then
     FHasDfmNav:= if TableExists('dfm_nav_nodes') and TableExists('dfm_nav_props') then 1 else 0;
   Result:= FHasDfmNav = 1;
+end;
+
+function TSQLiteSymbolStore.HasRefHostBindings: Boolean;
+begin
+  if FHasRefHostBindings < 0 then
+    FHasRefHostBindings:= if TableExists('ref_host_bindings') then 1 else 0;
+  Result:= FHasRefHostBindings = 1;
+end;
+
+function TSQLiteSymbolStore.WriteRefHostBindings(const ARows: TArray<TRefHostBinding>): Integer;
+var
+  Ins: TFDQuery;
+  B  : TRefHostBinding;
+begin
+  Result:= 0;
+  if (Length(ARows) = 0) or not HasRefHostBindings then Exit;
+  Ins:= TFDQuery.Create(nil);
+  try
+    Ins.Connection:= FConn;
+    { Only for a ref the pass left unbound: where the hosts agree, refs.symbol_id IS every host's binding. }
+    Ins.SQL.Text  := 'INSERT OR REPLACE INTO ref_host_bindings(ref_id, host_file_id, symbol_id) ' +
+                     'SELECT :rid, :hid, :sid WHERE EXISTS (SELECT 1 FROM refs WHERE id = :rid AND symbol_id IS NULL)';
+    Ins.ParamByName('rid').DataType:= ftLargeint;
+    Ins.ParamByName('hid').DataType:= ftLargeint;
+    Ins.ParamByName('sid').DataType:= ftLargeint;
+    Ins.Prepare;
+    for B in ARows do
+    begin
+      Ins.ParamByName('rid').AsLargeInt:= B.RefId;
+      Ins.ParamByName('hid').AsLargeInt:= B.HostFileId;
+      if B.SymbolId > 0 then Ins.ParamByName('sid').AsLargeInt:= B.SymbolId
+      else Ins.ParamByName('sid').Clear;
+      Ins.ExecSQL;
+      Inc(Result, Ins.RowsAffected);
+    end;
+  finally
+    Ins.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetHostBoundRefIds(ASymbolId: Int64): TArray<Int64>;
+var
+  Q   : TFDQuery;
+  List: TList<Int64>;
+begin
+  Result:= nil;
+  if not HasRefHostBindings then Exit;
+  List:= TList<Int64>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT hb.ref_id FROM ref_host_bindings hb JOIN refs r ON r.id = hb.ref_id ' +
+                 'WHERE hb.symbol_id = :sid AND r.symbol_id IS NULL ORDER BY hb.ref_id';
+    Q.ParamByName('sid').AsLargeInt:= ASymbolId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      List.Add(Q.Fields[0].AsLargeInt);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end;
 end;
 
 procedure TSQLiteSymbolStore.PutDfmNav(const AToken: TFileTxToken; const ANodes: TArray<TDfmNavNodeRow>;
@@ -7356,6 +7454,22 @@ begin
           '  ref_id          INTEGER PRIMARY KEY REFERENCES refs(id) ON DELETE CASCADE,' +
           '  receiver_ref_id INTEGER NOT NULL REFERENCES refs(id) ON DELETE CASCADE)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_ref_receivers_receiver ON ref_receivers(receiver_ref_id)');
+  { 1.51.1 lane INC2 (B10, owner ruling OQ18; schema 26): one binding PER HOST for a ref written inside a
+    code include that several units include. refs.symbol_id / call_edges hold ONE target per ref, so
+    such a ref stays NULL there when its hosts differ; here every host has its own row (symbol_id
+    NULL = that host gave no certain answer). Written by the calls pass (WriteRefHostBindings) for
+    every multi-host include ref that is unbound on the ref and that at least one host binds; a
+    ref whose hosts agree has NO row (refs.symbol_id is every host's binding). ADDITIVE and
+    probed for by its readers (HasRefHostBindings). SET NULL on the symbol, like refs.symbol_id: a
+    reindex of the HOST removes the target while the include's ref row stays. Both FK child columns
+    outside the key have an index. }
+  TryExec('CREATE TABLE IF NOT EXISTS ref_host_bindings (' +
+          '  ref_id       INTEGER NOT NULL REFERENCES refs(id) ON DELETE CASCADE,' +
+          '  host_file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,' +
+          '  symbol_id    INTEGER REFERENCES symbols(id) ON DELETE SET NULL,' +
+          '  PRIMARY KEY (ref_id, host_file_id))');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_ref_host_bindings_symbol ON ref_host_bindings(symbol_id)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_ref_host_bindings_host ON ref_host_bindings(host_file_id)');
   { E-RENAME-ELEMENT-TYPE (wave 146): the static type of a subscripted receiver, `A[i]` in `A[i].X`, which has
     no ref of its own, written by ResolveRefTypes. ADDITIVE and probed for by its reader (rename's proof), as ref_types. }
   TryExec('CREATE TABLE IF NOT EXISTS ref_element_types (' +
@@ -9159,6 +9273,8 @@ begin
   FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE symbol_id IS NOT NULL');
   { and the member accesses the same pass wrote -- same lifetime as the edges }
   if HasMemberAccesses then FConn.ExecSQL('DELETE FROM member_accesses');
+  { 1.51.1 INC2: and the per-host bindings of the same pass -- same lifetime as the edges }
+  if HasRefHostBindings then FConn.ExecSQL('DELETE FROM ref_host_bindings');  // dl:ok sql-update-delete-without-where@5ff7 -- REVIEWED 2026-11-16: a whole-database pass rewrites every row of this derived table, like call_edges above
 end;
 
 { The kinds a call receiver's type can resolve TO, spelled as the stored kind
@@ -9865,6 +9981,7 @@ var
   MemberArm: string           ; { the member_accesses UNION arm, '' on a DB without the table }
   ValueArm : string           ; { the bound-USAGE UNION arm (enum reads, bound bare writes) }
   NoMemberAccess: string      ; { ValueArm's member_accesses exclusion, '' without the table }
+  HostArm  : string           ; { 1.51.1 INC2: the ref_host_bindings UNION arm, '' without the table }
   Owned    : Boolean          ; { 152b O6F: Q is a fresh query to free, not the cached statement }
 begin
   List:= TList<TResolvedCaller>.Create;
@@ -9934,6 +10051,25 @@ begin
       'WHERE r.symbol_id = :x AND r.kind IN (''read'', ''member-access'', ''write'') ' +
       'AND NOT EXISTS (SELECT 1 FROM call_edges ce2 WHERE ce2.ref_id = r.id) ' +
       NoMemberAccess;
+    { 1.51.1 INC2 (B10, owner ruling OQ18): a ref inside a multi-host code include that THIS host
+      binds to the symbol while another host binds it elsewhere -- refs.symbol_id is NULL and no
+      call_edges / member_accesses row exists (one target per ref), so no arm above reports it.
+      `r.symbol_id IS NULL` is the table's own invariant, restated so a stale row cannot double a site.
+      Mode as the arms above: '' for a routine target (a call), else read / write by the kind. }
+    HostArm:=
+      if HasRefHostBindings then
+        'UNION ALL ' +
+        'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, r.start_col, ''certain'' AS confidence, ' +
+        'CASE WHEN r.kind = ''write'' THEN ''write'' ' +
+        'WHEN (SELECT t.kind FROM symbols t WHERE t.id = :x) IN (''procedure'',''function'',''method'',''constructor'',''destructor'') THEN '''' ' +
+        'ELSE ''read'' END AS mode, '''' AS arg_use ' +
+        'FROM ref_host_bindings hb ' +
+        'JOIN refs r ON r.id = hb.ref_id ' +
+        'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
+        'JOIN files f ON f.id = r.file_id ' +
+        'WHERE hb.symbol_id = :x AND r.symbol_id IS NULL AND r.kind IN (''call'', ''read'', ''member-access'', ''write'') ' +
+        'AND NOT EXISTS (SELECT 1 FROM call_edges ce3 WHERE ce3.ref_id = r.id) '
+      else '';
 
     { 152b O6F: one prepared statement per shape for the store's lifetime (see CachedQuery). }
     Q:= CachedQuery(
@@ -9957,6 +10093,7 @@ begin
         MemberArm so the first two arms' row order is untouched; the ORDER BY
         below is what actually fixes the output order. }
       ValueArm +
+      HostArm +
       // D5 fast-follow (T7): confidence is TEXT ('certain' | 'ambiguous'), and a
       // plain 'ORDER BY ce.confidence DESC' only puts 'certain' first because
       // 'c' > 'a' lexically -- an accident of English spelling, not an intended
@@ -12489,6 +12626,12 @@ begin
       var RcvF: TField:= Q.FindField('receiver_text');
       if (RcvF <> nil) and not RcvF.IsNull then R.ReceiverText:= RcvF.AsString
       else R.ReceiverText:= '';
+      { 1.51.1 B04: the library binding rides along (a paren-less library call is a `read`
+        whose external_kind says so). FindField: an older DB reads ''. }
+      var ExtF: TField:= Q.FindField('external_target');
+      if (ExtF <> nil) and not ExtF.IsNull then R.ExternalTarget:= ExtF.AsString;
+      var XkF: TField:= Q.FindField('external_kind');
+      if (XkF <> nil) and not XkF.IsNull then R.ExternalKind:= XkF.AsString;
       List.Add(R);
       Q.Next;
     end;
@@ -12662,15 +12805,23 @@ begin
       lives only in member_accesses, so `usages` filed every `X.Field` under
       calls. ref_id is that table's PRIMARY KEY, so the LEFT JOIN cannot add
       or drop a row -- every other caller sees the same rows as before. }
-    if HasMemberAccesses then
-      Q.SQL.Text:= 'SELECT refs.*, ma.mode AS access_mode, ce.confidence AS edge_conf FROM refs ' +
-                   'LEFT JOIN member_accesses ma ON ma.ref_id = refs.id ' +
-                   'LEFT JOIN call_edges ce ON ce.ref_id = refs.id ' +
-                   'WHERE refs.name_text = :name COLLATE NOCASE ORDER BY refs.file_id, refs.start_line'
-    else
-      Q.SQL.Text:= 'SELECT refs.*, ce.confidence AS edge_conf FROM refs ' +
-                   'LEFT JOIN call_edges ce ON ce.ref_id = refs.id ' +
-                   'WHERE refs.name_text = :name COLLATE NOCASE ORDER BY refs.file_id, refs.start_line';
+    { 1.51.1 INC2 (B10): host_rows / host_unbound of a ref inside a multi-host code include --
+      scalar subqueries on the side table's key, so they cannot add or drop a row either. }
+    var HostCols: string:=
+      if HasRefHostBindings then
+        ', (SELECT COUNT(*) FROM ref_host_bindings hb WHERE hb.ref_id = refs.id) AS host_rows' +
+        ', (SELECT COUNT(*) FROM ref_host_bindings hb WHERE hb.ref_id = refs.id AND hb.symbol_id IS NULL) AS host_unbound'
+      else '';
+    Q.SQL.Text:=
+      if HasMemberAccesses then
+        'SELECT refs.*, ma.mode AS access_mode, ce.confidence AS edge_conf' + HostCols + ' FROM refs ' +
+        'LEFT JOIN member_accesses ma ON ma.ref_id = refs.id ' +
+        'LEFT JOIN call_edges ce ON ce.ref_id = refs.id ' +
+        'WHERE refs.name_text = :name COLLATE NOCASE ORDER BY refs.file_id, refs.start_line'
+      else
+        'SELECT refs.*, ce.confidence AS edge_conf' + HostCols + ' FROM refs ' +
+        'LEFT JOIN call_edges ce ON ce.ref_id = refs.id ' +
+        'WHERE refs.name_text = :name COLLATE NOCASE ORDER BY refs.file_id, refs.start_line';
     Q.ParamByName('name').AsWideString:= ACalleeName;
     Q.Open;
     while not Q.Eof do
@@ -12716,7 +12867,16 @@ begin
         if (XkF <> nil) and not XkF.IsNull then R.ExternalKind:= XkF.AsString;
       end
       else if R.SymbolId <> 0 then R.Resolution:= RESOLUTION_EXACT
-      else R.Resolution:= RESOLUTION_NAME_ONLY;
+      else
+      begin
+        { 1.51.1 INC2 (B10): bound under EVERY host of its include (rows exist only while
+          refs.symbol_id is NULL) = a reference the resolver bound; a host that declined
+          keeps the row name-only. }
+        var HostF: TField:= Q.FindField('host_rows');
+        R.Resolution:=
+          if (HostF <> nil) and (HostF.AsInteger > 0) and (Q.FieldByName('host_unbound').AsInteger = 0) then RESOLUTION_EXACT
+          else RESOLUTION_NAME_ONLY;
+      end;
       List.Add(R);
       Q.Next;
     end; // while
@@ -17897,6 +18057,89 @@ begin
   end;
 end;
 
+{ 1.51.1 B02 / B04: the library-read stream. The contract lives on the declaration. }
+procedure TSQLiteSymbolStore.ResolveLibraryReadRefs(AResolver: TCallResolver;
+  const AScopeWhere, AStaleWhere: string);
+const
+  { The candidates: a `read` no project stream bound, spelled like no declaration of this index
+    that a bare name can reach from ANY file -- a type, a unit-level value or routine, an enum
+    value: such a name is the project's, whatever declined it. A member, parameter or local of
+    the name counts only where the site can see it, which the resolver decides per site
+    (ORM3 declares a property APPLICATION on four classes; `Application` elsewhere is the VCL's). }
+  LIBREAD_UNIVERSE = 'refs.kind = ''read'' AND refs.symbol_id IS NULL AND refs.name_text COLLATE NOCASE NOT IN ' +
+                     '(SELECT name FROM symbols WHERE name IS NOT NULL AND kind NOT IN (''property'', ''field'', ' +
+                     '''method'', ''constructor'', ''destructor'', ''param'', ''local_var'', ''component''))';
+  { What this stream wrote on an earlier pass: no other writer puts a target on a `read`. }
+  LIBREAD_WRITTEN  = 'refs.kind = ''read'' AND refs.external_target IS NOT NULL';
+var
+  Suffix : string    ;
+  Q      : TFDQuery  ;
+  Upd    : TFDQuery  ;
+  Ref    : TReference;
+  Target : string    ;
+  XKind  : string    ;
+  Seen   : Int64     ;
+  FldId  : TField    ;
+  FldFile: TField    ;
+  FldName: TField    ;
+  FldEncl: TField    ;
+  FldLine: TField    ;
+  FldCol : TField    ;
+begin
+  Suffix:= '';
+  if AScopeWhere <> '' then Suffix:= Suffix + ' AND (' + AScopeWhere + ')';
+  if AStaleWhere <> '' then Suffix:= Suffix + ' AND (' + AStaleWhere + ')';
+  FConn.ExecSQL('UPDATE refs SET external_target = NULL, external_kind = NULL WHERE ' + LIBREAD_WRITTEN + Suffix);  // dl:ok sql-injection-concat@0037 -- REVIEWED 2026-11-16 (1.51.1 RES): Suffix is SQL this pass BUILT (MaterializeResolveScope's and the stale prescan's refs predicates), never user text -- the construction ResolveValueReadRefs uses; a temp-table name and an IN-list cannot be parameters.
+  Seen:= 0;
+  Q  := TFDQuery.Create(nil);
+  Upd:= TFDQuery.Create(nil);
+  try
+    Upd.Connection:= FConn;
+    Upd.SQL.Text  := 'UPDATE refs SET external_target = :x, external_kind = :k WHERE id = :id';
+    { DataType before Prepare: FireDAC cannot infer it from the SQL (see ResolveCallTargets). }
+    Upd.ParamByName('x' ).DataType:= ftString;
+    Upd.ParamByName('k' ).DataType:= ftString;
+    Upd.ParamByName('id').DataType:= ftLargeint;
+    Upd.Prepare;
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT refs.id, refs.file_id, refs.name_text, refs.enclosing_symbol_id, ' +
+                   'refs.start_line, refs.start_col FROM refs WHERE ' + LIBREAD_UNIVERSE + Suffix;
+    BeatStreamOpen(FConn, Q, 'resolve library-reads');
+    FldId  := Q.FieldByName('id'                 );
+    FldFile:= Q.FieldByName('file_id'            );
+    FldName:= Q.FieldByName('name_text'          );
+    FldEncl:= Q.FieldByName('enclosing_symbol_id');
+    FldLine:= Q.FieldByName('start_line'         );
+    FldCol := Q.FieldByName('start_col'          );
+    while not Q.Eof do
+    begin
+      Ref          := Default(TReference);
+      Ref.Id       := FldId  .AsLargeInt;
+      Ref.FileId   := FldFile.AsLargeInt;
+      Ref.Kind     := 'read';
+      Ref.NameText := FldName.AsString;
+      if not FldEncl.IsNull then Ref.EnclosingSymbolId:= FldEncl.AsLargeInt;
+      Ref.StartLine:= FldLine.AsInteger;
+      Ref.StartCol := FldCol .AsInteger;
+      Target:= AResolver.ResolveLibraryRead(Ref, XKind);
+      if Target <> '' then
+      begin
+        Upd.ParamByName('x' ).AsWideString:= Target;
+        Upd.ParamByName('k' ).AsWideString:= XKind;
+        Upd.ParamByName('id').AsLargeInt  := Ref.Id;
+        Upd.ExecSQL;
+      end;
+      Inc(Seen);
+      if Seen mod STREAM_BEAT_EVERY = 0 then BeatProgress(Seen);
+      Q.Next;
+    end;
+    Q.Close;
+  finally
+    Upd.Free;
+    Q.Free;
+  end;
+end;
+
 { B-31 + X6: the loop the identity-only streams share. The contract lives on the declaration. }
 procedure TSQLiteSymbolStore.BindRefStream(const AUniverse, AKind, ASuffix: string;
   ABind: TRefBindFn; out ACandidates, ABound: Int64);
@@ -18575,7 +18818,7 @@ begin
                 [FScopeTypesBefore.Count, FScopeTypesAfter.Count]));
 end;
 
-procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);  // dl:ok method-too-long@55f3, deep-nesting@6ffc, cyclomatic-complexity@c205, cognitive-complexity@dc23 -- one transaction over one resolver with shared maps; a split is its own change with its own re-resolve measurement, and lane facts (1.44) added only two calls, three counters and two log lines here
+procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);  // dl:ok method-too-long@da57, cyclomatic-complexity@4368, cognitive-complexity@ae53 -- REVIEWED 2026-11-16 (1.51.1 INC2 added the ref_host_bindings deletes and one write call): one transaction over one resolver with shared maps; a split is its own change with its own re-resolve measurement, and lane facts (1.44) added only two calls, three counters and two log lines here
 { v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
   (wipe the table, resolve in memory, batch-write in one transaction). Builds one
   TCallResolver (its name/scope maps cost O(symbols) to build ONCE), then streams
@@ -18961,6 +19204,11 @@ begin
         FConn.ExecSQL('DELETE FROM member_accesses WHERE ref_id IN ' +
                       '(SELECT refs.id FROM refs WHERE (' + ScopeWhere + ')' +
                       IfThen(StaleWhere <> '', ' AND (' + StaleWhere + ')', '') + ')');
+        { 1.51.1 INC2: the per-host bindings of the refs this pass re-resolves }
+        if HasRefHostBindings then
+          FConn.ExecSQL('DELETE FROM ref_host_bindings WHERE ref_id IN ' +
+                        '(SELECT refs.id FROM refs WHERE (' + ScopeWhere + ')' +
+                        IfThen(StaleWhere <> '', ' AND (' + StaleWhere + ')', '') + ')');
       end
       else if StaleWhere <> '' then
       begin
@@ -18968,6 +19216,9 @@ begin
                       '(SELECT refs.id FROM refs WHERE ' + StaleWhere + ')');
         FConn.ExecSQL('DELETE FROM member_accesses WHERE ref_id IN ' +
                       '(SELECT refs.id FROM refs WHERE ' + StaleWhere + ')');
+        if HasRefHostBindings then
+          FConn.ExecSQL('DELETE FROM ref_host_bindings WHERE ref_id IN ' +
+                        '(SELECT refs.id FROM refs WHERE ' + StaleWhere + ')');
       end
       else
         ClearCallEdges; // rebuild every edge each run (like ResolveAncestry's DELETE)
@@ -19167,6 +19418,9 @@ begin
       PfMark:= Resolver.ProfBegin(cpsStreamTypeRead); { 151 PF }
       ResolveTypeReadRefs(Resolver, ScopeWhere, StaleWhere, TReadCandidates, TReadBound);
       Resolver.ProfEnd(cpsStreamTypeRead, PfMark);
+      { 1.51.1 B02 / B04: the library-read stream, after every project read stream -- it only
+        sees a `read` none of them bound and whose name the project does not declare. }
+      ResolveLibraryReadRefs(Resolver, ScopeWhere, StaleWhere);
       { 2026-09-23 (D13, resolver 1.8.0-alpha): the FIFTH stream -- bare writes,
         identity only. Same transaction, same all-or-nothing lifetime. }
       TMark:= TStopwatch.GetTimeStamp;
@@ -19195,6 +19449,10 @@ begin
       Resolver.ProfEnd(cpsStreamRefReceivers, PfMark);
       if Resolver.ProfileOn then
         for var PfLine: string in Resolver.ProfileLines do ResolveLog('calls      profile: ' + PfLine);
+      { 1.51.1 INC2 (B10): after the LAST stream -- any of them may have bound a multi-host include ref. }
+      var HostRows: Integer:= WriteRefHostBindings(Resolver.HostBindings);
+      if HostRows > 0 then
+        ResolveLog(Format('calls      include hosts: %d per-host binding row(s) written for refs in multi-host includes', [HostRows]));
       FConn.Commit;
     except
       on E: Exception do
@@ -19378,6 +19636,13 @@ begin
        Resolver.ValueReadStats.Member, Resolver.ValueReadStats.Ambiguous, Resolver.ValueReadStats.NotFound,
        Resolver.ValueReadStats.Routine, Resolver.ValueReadStats.Qualified, Resolver.ValueReadStats.Unlisted,
        Resolver.ValueReadStats.Unreadable]));
+    { 1.51.1 B02 / B04. The library-read stream. }
+    ResolveLog(Format('calls      library-reads: %d of %d bare read(s) bound to a library declaration; ' +
+      'value %d, parenless-call %d, proc-value %d',
+      [Resolver.LibReadStats.Values + Resolver.LibReadStats.Calls + Resolver.LibReadStats.ProcValues,
+       Resolver.LibReadStats.Values + Resolver.LibReadStats.Calls + Resolver.LibReadStats.ProcValues +
+       Resolver.LibReadStats.Declined,
+       Resolver.LibReadStats.Values, Resolver.LibReadStats.Calls, Resolver.LibReadStats.ProcValues]));
     { B-31 (2026-10-23). The type_use stream, every decline by reason. }
     ResolveLog(Format('calls      type-uses: %d of %d type_use ref(s) bound; declined generic %d, qualified %d, ' +
       'unlisted %d, ambiguous %d, not-found %d, unreadable %d',

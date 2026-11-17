@@ -7,7 +7,7 @@ group: search-navigation
 order: 20021
 since: 0.1.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # query find-callers
@@ -105,7 +105,10 @@ receiver the index cannot type). Nothing is stored for it; it is read from
 `call_edges` and `refs`. Text output ends `N callers (9 exact, 1 ambiguous, 2
 name-only)` and marks non-exact rows `[name-only]` / `[ambiguous]`. `context`
 JSON gains a `caller_resolution` count object. Guard
-`tests\autotest\run_resolution_kind.ps1`.
+`tests\autotest\run_resolution_kind.ps1`. Since 1.51.1 a site inside
+an include that several units include is `exact` when every host binds it, also
+when the hosts bind different declarations (`ref_host_bindings`, see
+[inc-indexing](inc-indexing.md)); `--resolved` lists it under each of them.
 
 **One known wrong-bind risk, on BARE enum reads only.** Inside a `with`
 whose target the index cannot type (since resolver 1.8.0-alpha the `with` scope

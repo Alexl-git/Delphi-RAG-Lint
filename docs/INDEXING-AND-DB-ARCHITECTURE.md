@@ -1,7 +1,7 @@
 # drag-lint indexing & database architecture
 
-**Applies to:** drag-lint **1.14.0-alpha** · index **schema_version 25** ·
-extractor **1.17.0-alpha** · tree-sitter grammars delphi13 **14** / dfm **14**.
+**Applies to:** drag-lint **1.14.0-alpha** ? index **schema_version 26** ?
+extractor **1.17.0-alpha** ? tree-sitter grammars delphi13 **14** / dfm **14**.
 Header re-verified 2026-09-17 against `SCHEMA_VERSION` and
 `DRAGLINT_EXTRACTOR_VERSION` in source, and the version stamps THROUGHOUT this
 document were corrected the same day: the body and the diagram below both used
@@ -53,14 +53,14 @@ The write path is owned exclusively by `drag-lint index`.
         |
         v   tree-sitter parse (delphi13 / dfm grammars)  +  resolve passes
         |
-  ┌─────────────────────┐        ┌──────────────────────────────────────┐
-  │  drag-lint index     │  ───►  │  <name>.sqlite  (schema_version 22)  │
-  │  (the ONLY writer)   │        │  symbols·refs·call_edges·unit_uses·  │
-  └─────────────────────┘        │  type_ancestors·di_bindings·FTS·...  │
-                                  └──────────────────────────────────────┘
-        ▲                                        │  read-only
-        │ manifest picks which trees             ▼
-   drag-lint.json (named-DB config)      query · lsp · serve · lint · graph
+  ???????????????????????        ????????????????????????????????????????
+  ?  drag-lint index     ?  ????  ?  <name>.sqlite  (schema_version 22)  ?
+  ?  (the ONLY writer)   ?        ?  symbols?refs?call_edges?unit_uses?  ?
+  ???????????????????????        ?  type_ancestors?di_bindings?FTS?...  ?
+                                  ????????????????????????????????????????
+        ?                                        ?  read-only
+        ? manifest picks which trees             ?
+   drag-lint.json (named-DB config)      query ? lsp ? serve ? lint ? graph
 ```
 
 Key properties:
@@ -91,10 +91,10 @@ Key properties:
 > **beside each project's own `.dproj`**: `<project folder>\_D-RAG\<project
 > file base name>.sqlite` (e.g. `C:\Projects\YADF\_D-RAG\YADF.sqlite`,
 > `C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite`). The `_D-RAG` folder
-> also holds that project's `drag-lint-project.json` (ownership roots, §1a) and
+> also holds that project's `drag-lint-project.json` (ownership roots, ?1a) and
 > its ghost-compile recovery journal. Only DBs with **no owning project folder**
 > stay in the shared location: `C:\Projects\.drag-lint\library-{platform}.sqlite`
-> (§3's `Library` section) and `C:\Projects\DB\SQL\drag-lint-sql.sqlite` (a
+> (?3's `Library` section) and `C:\Projects\DB\SQL\drag-lint-sql.sqlite` (a
 > folder-scan `SQL` section with its own absolute `db` path). All 27 project DBs
 > that existed under the shared folder were migrated and verified row-identical
 > at the new path; nothing else about the DB format or contents changed.
@@ -134,7 +134,7 @@ own) while dropping the 76 `PDFlibPas` ones.
    methods, properties, fields, consts, enum values, and (schema v14+) params
    and locals. Stored in `symbols`. Since schema v17, a `property` symbol also
    stamps `prop_access` (`ro`/`rw`/`wo`) captured from its own `read`/`write`
-   accessor clause -- see §6.
+   accessor clause -- see ?6.
 3. **Extract references** -- every read/write/call/type-use of a symbol, into
    `refs`. Call sites that resolve to a target become `call_edges`.
 4. **Extract structure** -- `unit_uses` (every uses-clause entry),
@@ -145,7 +145,7 @@ own) while dropping the 76 `PDFlibPas` ones.
    `string_literals` + the **FTS5** tables (unicode61 + trigram), powering
    `query --text`. Also `symbol_trigrams` for fuzzy name search.
 6. **Compiler findings** (optional) -- `compiler_findings` holds dcc/msbuild
-   errors/warnings/hints per file, kept fresh by `refresh-findings` (see §5).
+   errors/warnings/hints per file, kept fresh by `refresh-findings` (see ?5).
 
 After the per-file pass, **resolve passes** run across the whole DB to turn
 name-based refs into resolved `call_edges` and to attribute refs to their
