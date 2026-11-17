@@ -745,10 +745,7 @@ begin
   if Length(Result) > RECEIVER_TEXT_MAX then Result:= '';
 end;
 
-const
-  { 1.52 EXTP: the kind of a receiver a member write goes THROUGH. HANDOVER: belongs beside the
-    other REF_KIND_* constants in DRagLint.Core.Model (INT). }
-  REF_KIND_WRITE_THROUGH = 'write-through';
+{ 1.52 EXTP: REF_KIND_WRITE_THROUGH lives in DRagLint.Core.Model beside the other REF_KIND_* constants. }
 
 { 1.52 EXTP (ORM3 batch 3 item 2, Blueprint4.pas:1016): `edtF1.DataBinding.DataField := X` changes the
   object edtF1 holds, yet edtF1 carried only a read and DataBinding only a member-access, so

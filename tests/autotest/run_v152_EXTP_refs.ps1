@@ -120,13 +120,13 @@ $script:Pending = 0
 # W1b / W5 need the INT HANDOVER hunks (resolver binding, usages bucket; EXTP REPORT.md H2/H3). Until they land
 # the unbound / 'calls' state prints PENDING-HANDOVER; any OTHER state fails. INT makes both hard checks.
 if (($w1Root.Count -eq 1) -and ($w1Root[0].target -eq 'uPProbe.TPProbe.edtF1')) { Check 'W1b write-through of the root is bound to the field' $true }
-elseif (($w1Root.Count -eq 1) -and ([string]::IsNullOrEmpty($w1Root[0].target))) { Pending 'W1b write-through of the root is bound to the field' (Show $w1Root) }
+elseif (($w1Root.Count -eq 1) -and ([string]::IsNullOrEmpty($w1Root[0].target))) { Check 'W1b write-through of the root is bound to the field' $false (Show $w1Root) }
 else { Check 'W1b write-through of the root is bound to the field' $false (Show $w1Root) }
 $uText = (& $exePath usages --name edtF1 --db $db 2>$null) -join "`n"
 $uW = [regex]::Match($uText, 'writes: (\d+)'); $uC = [regex]::Match($uText, 'calls: (\d+)')
 Write-Host "      raw usages: $(($uText -split "`n" | Where-Object { $_ -match 'reads:' }) -join '')"
 if ($uW.Success -and ([int]$uW.Groups[1].Value -ge 1) -and ([int]$uC.Groups[1].Value -eq 0)) { Check 'W5 usages --name edtF1 reports the write through the chain' $true }
-elseif ($uW.Success -and ([int]$uW.Groups[1].Value -eq 0) -and ([int]$uC.Groups[1].Value -ge 1)) { Pending 'W5 usages --name edtF1 reports the write through the chain' 'write-through still in the calls bucket' }
+elseif ($uW.Success -and ([int]$uW.Groups[1].Value -eq 0) -and ([int]$uC.Groups[1].Value -ge 1)) { Check 'W5 usages --name edtF1 reports the write through the chain' $false 'write-through still in the calls bucket' }
 else { Check 'W5 usages --name edtF1 reports the write through the chain' $false $uText }
 
 $w2Line = 'Self.edtF2.DataBinding.DataField := pName;'

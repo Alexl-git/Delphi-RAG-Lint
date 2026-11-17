@@ -19435,6 +19435,16 @@ begin
       ResolveWriteRefs(Resolver, ScopeWhere, StaleWhere, WriteCandidates, WriteBound);
       Resolver.ProfEnd(cpsStreamWrite, PfMark);
       TWrites:= (TStopwatch.GetTimeStamp - TMark) / TStopwatch.Frequency;
+      { 1.52 EXTP H3: a write-through ref takes the symbol the read / member-access ref on the SAME
+        token was bound to by the streams above (no binding of its own; NULL when that one is unbound). }
+      begin
+        var WtSuffix: string:= '';
+        if ScopeWhere <> '' then WtSuffix:= WtSuffix + ' AND (' + ScopeWhere + ')';
+        if StaleWhere <> '' then WtSuffix:= WtSuffix + ' AND (' + StaleWhere + ')';
+        FConn.ExecSQL('UPDATE refs SET symbol_id = (SELECT r2.symbol_id FROM refs r2 WHERE r2.file_id = refs.file_id ' +
+          'AND r2.start_line = refs.start_line AND r2.start_col = refs.start_col AND r2.kind IN (''read'', ''member-access'') ' +
+          'AND r2.symbol_id IS NOT NULL ORDER BY r2.id LIMIT 1) WHERE refs.kind = ''' + REF_KIND_WRITE_THROUGH + '''' + WtSuffix);  // dl:ok sql-injection-concat -- REVIEWED 2026-11-17 (1.52 INT): WtSuffix is SQL this pass BUILT (the same ScopeWhere / StaleWhere predicates ResolveLibraryReadRefs appends), never user text
+      end;
       { 150-RS2 (2): after every member_accesses writer, before the derived streams. }
       var ArgCandidates, ArgStored: Int64;
       PfMark:= Resolver.ProfBegin(cpsStreamArgUses); { 151 PF }

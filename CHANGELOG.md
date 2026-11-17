@@ -15,6 +15,13 @@ resolver 1.28.0 -> 1.29.0-alpha.
   its type text only when it reads as a type; `index --resolve-only` without a library store KEEPS the library
   bindings (calls, member accesses, library reads) of the last library run instead of clearing them, warns
   "library bindings are kept from the last library run, not refreshed" and marks `external_stores` partial.
+- Extractor (EXTP): `A.B.C := X` gives the root and every intermediate member a `write-through` ref, bound to the
+  symbol of the read on the same token; `usages` counts it under writes (ORM3: `usages --name edtF1` shows the write).
+  `on E:` emits a write at E; anonymous-method parameters are `param` symbols. REAL BUG: a `class constructor Create`
+  next to `constructor Create(..)` (or class / instance `Destroy`) swapped bodies and put locals on the wrong routine.
+- Internal (INITAPI): InitSections exports ProgramInitOrders and InitializesBefore (yes / no / config-dependent init
+  order per program). A conditional uses entry before the first active one now makes the order config-dependent, so a
+  cycles --fix init-order proof refuses it.
 
 ## v1.51.1-alpha -- date TBD
 
