@@ -334,7 +334,7 @@ type
       /// repeats none). Shadowing nested routines, qualified members (X.Name) on
       /// both exprDot and genericDot rhs sides, and with-statement members are
       /// conservatively skipped. Empty array if no param/local decl is found at that
-      /// position. Pure AST -- no symbol store.
+      /// position, or when ACol names two locals (BuildLocalScan's AColumnNote). Pure AST -- no symbol store.
       /// Known limitation (deliberate conservative choice): occurrences inside a
       /// with block are skipped entirely. A nested routine's forward header is not
       /// followed; the compile gate reports it.</summary>
@@ -368,10 +368,14 @@ type
       /// target may declare the name, which pure AST cannot tell (RenameProof asks the index).</param>
       /// <param name="ANewNameSites">Out: bare occurrences of ANewName in the routine. Each would bind to the
       /// renamed local afterwards, and dcc accepts that when the types agree.</param>
+      /// <param name="AColumnNote">Out: '' unless ACol is ambiguous (see remarks); then why, and the result is empty.</param>
       /// <returns>What BuildLocal returns.</returns>
       /// <remarks>
       /// Pure AST. ACol is either the identifier's UTF-8 byte column (a lint finding's) or its character
-      /// column; byte wins. Every returned Col is a character column, as StaleEditReason and Apply expect.
+      /// column. When a non-ASCII character sits before it on the line, the two readings can name two identifiers:
+      /// the one that is a parameter or local of its routine is taken (byte when neither is); when BOTH are, the
+      /// result is empty and AColumnNote says so -- a guess would rename the wrong local (1.52 RENRES).
+      /// Every returned Col is a character column, as StaleEditReason and Apply expect.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal (DRagLint.Refactor.Rename.pas), DRagLint.Refactor.RenameProof.ProveLocalRename (DRagLint.Refactor.RenameProof.pas)</para>
       /// <para>Calls: AddEdit, ArgsSig, Copy, Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.EnclosingProc, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.FindIdentAt, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.NStr, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.SyncForwardHeaders, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.Walk (+19 more)</para>
@@ -385,7 +389,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function BuildLocalScan(const AFile: string; ALine, ACol: Integer; const ANewName: string;
-        out AWithSites, ANewNameSites: TArray<TRenameEdit>): TArray<TRenameEdit>;
+        out AWithSites, ANewNameSites: TArray<TRenameEdit>; out AColumnNote: string): TArray<TRenameEdit>;
   end;
 
 /// <summary>True when AName sits at 1-based ACol of ALine as a whole identifier, case-insensitive.</summary>
@@ -1078,12 +1082,13 @@ class function TRenameRefactoring.BuildLocal(const AFile: string; ALine, ACol: I
   const ANewName: string): TArray<TRenameEdit>;
 var
   WithSites, NewSites: TArray<TRenameEdit>;
+  ColumnNote: string;
 begin
-  Result:= BuildLocalScan(AFile, ALine, ACol, ANewName, WithSites, NewSites);
+  Result:= BuildLocalScan(AFile, ALine, ACol, ANewName, WithSites, NewSites, ColumnNote);
 end;
 
 class function TRenameRefactoring.BuildLocalScan(const AFile: string; ALine, ACol: Integer; const ANewName: string;
-  out AWithSites, ANewNameSites: TArray<TRenameEdit>): TArray<TRenameEdit>;
+  out AWithSites, ANewNameSites: TArray<TRenameEdit>; out AColumnNote: string): TArray<TRenameEdit>;
 var
   PF       : TParsedFile        ;
   Src      : TBytes             ;
@@ -1365,6 +1370,20 @@ var
     Visit(ARoot, '');
   end;
 
+  { True when AId names a parameter or a local of the routine around it: a reading of ACol that a rename could mean. }
+  function DeclaresHere(const AId: TTSNode): Boolean;
+  begin
+    var Proc:= EnclosingProc(Integer(AId.StartByte), PF.Tree.RootNode, Default(TTSNode));
+    if Proc.IsNull then Exit(False);
+    var Saved:= Target;
+    Target:= Trim(NStr(AId));
+    try
+      Result:= (Target <> '') and NestedRedeclares(Proc);
+    finally
+      Target:= Saved;
+    end;
+  end;
+
 var
   IdNode  : TTSNode;
   Dedup   : TDictionary<string, Boolean>;
@@ -1376,13 +1395,29 @@ begin
   Result:= nil;
   AWithSites:= nil;
   ANewNameSites:= nil;
+  AColumnNote:= '';
   WithDepth:= 0;
   PF:= TAstParseCache.Get(AFile);
   if PF.Tree = nil then Exit;
   Src:= PF.Src;
 
   IdNode:= FindIdentAt(PF.Tree.RootNode, False);
-  if IdNode.IsNull then IdNode:= FindIdentAt(PF.Tree.RootNode, True);
+  var CharNode:= FindIdentAt(PF.Tree.RootNode, True);
+  if IdNode.IsNull then IdNode:= CharNode
+  else if not CharNode.IsNull and (CharNode.StartByte <> IdNode.StartByte) then
+  begin
+    { Before a non-ASCII character the byte and the character reading of ACol name two identifiers. }
+    var ByByte:= DeclaresHere(IdNode);
+    var ByChar:= DeclaresHere(CharNode);
+    if ByByte and ByChar then
+    begin
+      AColumnNote:= Format('column %d names "%s" as a UTF-8 byte column and "%s" as a character column; ' +
+        'both are locals of the routine, so nothing tells which is meant: give the column of an occurrence on a line ' +
+        'with no non-ASCII text before it', [ACol, Trim(NStr(IdNode)), Trim(NStr(CharNode))]);
+      Exit;
+    end;
+    if ByChar and not ByByte then IdNode:= CharNode;
+  end;
   if IdNode.IsNull then Exit;
   Target:= Trim(NStr(IdNode));
   if Target = '' then Exit;

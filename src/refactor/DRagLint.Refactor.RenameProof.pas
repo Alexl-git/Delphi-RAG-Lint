@@ -85,6 +85,8 @@ const
   CRefuseWithNeedsIndex = 'with-needs-index';
   /// <summary>The routine already uses the local's new name.</summary>
   CRefuseCaptureLocal = 'capture-local';
+  /// <summary>A local rename's --col names one local as a UTF-8 byte column and another as a character column.</summary>
+  CRefuseColumnAmbiguous = 'column-ambiguous';
   /// <summary>--apply without --project: nothing could gate the write.</summary>
   CRefuseNoProject = 'no-project';
   /// <summary>--apply with --no-compile: the gate is not optional.</summary>
@@ -160,8 +162,9 @@ type
 /// name, and any bare occurrence of the new name in those lines refuses as CRefuseCaptureLocal. No library is needed.
 /// A published field of a form class is a component: its name in the owning form's and descendants' text .dfm
 /// (`object Name: TType`, `inherited Name: TType`, `Prop = Name`, `Prop = Owner.Name`) is an edit. Another form's
-/// own component of that name is another symbol's. What cannot be told apart (under an `inline`, inside a list, a form
-/// whose root class is not indexed, an enum value of the same name) refuses as CRefuseDfmNameUnbound. A string literal
+/// own component of that name is another symbol's. An item of a `Prop = ( ... )` list is a value like `Prop = Name`
+/// (1.52). What cannot be told apart (under an `inline`, an `Owner.Name` list item, a form whose root class is not
+/// indexed, an enum value of the same name) refuses as CRefuseDfmNameUnbound. A string literal
 /// in any indexed source file that is the component's name, or ends in `.Name`, refuses as CRefuseNameInString
 /// (`FindComponent('Name')` compiles either way and finds nothing after the rename); a comment never refuses.</remarks>
 function ProveRename(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;
@@ -172,9 +175,10 @@ function ProveRename(const pStore: ISymbolStore; const pLibraries: TArray<ISymbo
 /// <param name="pStore">The index, or nil: without one an occurrence under a `with` refuses.</param>
 /// <param name="pFile">The source file.</param>
 /// <param name="pLine">1-based line of the declaration identifier.</param>
-/// <param name="pCol">1-based column of the declaration identifier.</param>
+/// <param name="pCol">1-based column of the declaration identifier: its UTF-8 byte column or its character column.</param>
 /// <param name="pNewName">The new name.</param>
-/// <returns>The proof; Found = False when no local is declared there.</returns>
+/// <returns>The proof; Found = False when no local is declared there. When pCol read as bytes and read as characters
+/// names two different locals, Found = True, no edit and one CRefuseColumnAmbiguous refusal.</returns>
 function ProveLocalRename(const pStore: ISymbolStore; const pFile: string; pLine, pCol: Integer;
   const pNewName: string): TRenameProof;
 
@@ -2101,8 +2105,8 @@ const
   CValueSep = ' = ';
 var
   S, Value: string;
-  Colon, Eq: Integer;
-  IsHeader, InInline, RootKnown, Mine, IsEnum: Boolean;
+  Colon, Eq, ListFrom: Integer;
+  IsHeader, InInline, RootKnown, Mine, IsEnum, InList, ListLine: Boolean;
 
   { One token of the old name at pAt of line pLine. }
   procedure Decide(pLine, pAt: Integer);
@@ -2113,6 +2117,15 @@ var
     begin
       Undecided:= (pAt < Colon) and (InInline or not RootKnown);
       IsEdit:= (pAt < Colon) and Mine and not Undecided;
+    end
+    else if ListLine and (pAt >= ListFrom) then
+    begin
+      { an item of a `( ... )` list names a component of the form, as `Prop = Name` does; `Owner.Name` stays undecided }
+      if not ((pAt >= 2) and (S[pAt - 1] = '.')) then
+      begin
+        Undecided:= InInline or not RootKnown or (Mine and IsEnum);
+        IsEdit:= Mine and not Undecided;
+      end;
     end
     else if (Eq > 0) and (pAt < Eq) then Undecided:= False { a property's own name }
     else if (Eq > 0) and (SameText(Value, FOld) or StartsText(FOld + '.', Value)) then
@@ -2147,6 +2160,7 @@ begin
     var Depth:= 0;
     var InlineAt:= 0;
     var InBlob:= False;
+    InList:= False;
     for var L:= 0 to Lines.Count - 1 do
     begin
       S:= Lines[L];
@@ -2173,6 +2187,16 @@ begin
       InInline:= InlineAt > 0;
       Eq:= if IsHeader then 0 else Pos(CValueSep, S);
       Value:= if Eq > 0 then Trim(Copy(S, Eq + Length(CValueSep), MaxInt)) else '';
+      { `Prop = (` opens a list (a one-line `Prop = (A B)` closes it at once); its items run to the line ending in `)` }
+      ListLine:= InList;
+      ListFrom:= 1;
+      if InList then InList:= not EndsStr(')', T)
+      else if not IsHeader and (Eq > 0) and StartsStr('(', Value) then
+      begin
+        ListLine:= True;
+        ListFrom:= Eq + Length(CValueSep);
+        InList:= not EndsStr(')', Value);
+      end;
       var At:= 1;
       var InStr:= False;
       while At <= Length(S) do
@@ -2391,9 +2415,23 @@ function ProveLocalRename(const pStore: ISymbolStore; const pFile: string; pLine
   const pNewName: string): TRenameProof;
 var
   WithSites, NewSites: TArray<TRenameEdit>;
+  ColumnNote: string;
 begin
   Result:= Default(TRenameProof);
-  var Base:= TRenameRefactoring.BuildLocalScan(pFile, pLine, pCol, pNewName, WithSites, NewSites);
+  var Base:= TRenameRefactoring.BuildLocalScan(pFile, pLine, pCol, pNewName, WithSites, NewSites, ColumnNote);
+  if ColumnNote <> '' then
+  begin
+    { found, and refused: the place is known, which local is meant is not }
+    Result.Found:= True;
+    var R: TRenameRefusal;
+    R.Kind:= CRefuseColumnAmbiguous;
+    R.FilePath:= pFile;
+    R.Line:= pLine;
+    R.Col:= pCol;
+    R.Why:= ColumnNote;
+    Result.Refusals:= [R];
+    Exit;
+  end;
   Result.Found:= Length(Base) > 0;
   if not Result.Found then Exit;
   var Edits:= TList<TRenameEdit>.Create;
