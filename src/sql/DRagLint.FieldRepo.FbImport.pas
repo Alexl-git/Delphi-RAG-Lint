@@ -242,7 +242,7 @@ begin
       Params.Free;
     end;
     Result.LoginPrompt := False;
-    Result.Open;
+    Result.Open;  // dl:ok dataset-open-without-close@f8d5 -- returns the OPEN connection; the caller owns Close/Free
   except  // dl:ok bare-except@041e -- frees the connection and re-raises the original exception
     Result.Free;
     raise;
