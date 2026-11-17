@@ -27,6 +27,11 @@ resolver 1.28.0 -> 1.29.0-alpha.
 - Internal (INITAPI): InitSections exports ProgramInitOrders and InitializesBefore (yes / no / config-dependent init
   order per program). A conditional uses entry before the first active one now makes the order config-dependent, so a
   cycles --fix init-order proof refuses it.
+- Indexer (EXTINC, owner ruling B9i): an include is parsed once per DISTINCT define context of its inclusions (each
+  host's own defines; equal contexts share one parse). Rows every context has are written once; the others carry
+  `inc_variant` = their context and resolve under that context's hosts only, so `find-callers` no longer reports a
+  call from an {$IFDEF} branch the host never compiles. Index schema 26 -> 27 (additive: `inc_variants`,
+  `symbols.inc_variant` / `refs.inc_variant`); filled by the 1.52 re-parse.
 
 ### New rules
 - `index-possibly-out-of-range` (bug-patterns, default ON, lanes IDXRANGE + IDXRANGE2): an array index that
