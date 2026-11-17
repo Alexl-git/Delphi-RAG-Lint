@@ -193,6 +193,31 @@ type
     AllTerms     : Boolean;
   end;
 
+  /// <summary>1.52 EXTINC (owner ruling B9i, schema 27): one inclusion of an include file -- the
+  /// host that includes it and the define context it is parsed in there (an inc_variants row).</summary>
+  /// <remarks>An include is parsed once per DISTINCT context; hosts whose context bytes are equal
+  /// share one Variant (1-based within the include). A symbols / refs row of the include carries
+  /// inc_variant = 0 when every variant has it, else the one variant that has it.</remarks>
+  TIncVariantRow = record
+    /// <summary>files.path of the host unit (absolute).</summary>
+    HostPath: string;
+    /// <summary>1-based variant number within the include file.</summary>
+    Variant : Integer;
+    /// <summary>SHA-256 of the context bytes (the include as the host's preprocess left it);
+    /// '' when the host has no stored row yet.</summary>
+    CtxSha  : string;
+  end;
+
+  /// <summary>1.52 EXTINC (schema 27): a variant-tagged row of an include and one host it
+  /// belongs to -- read by the resolver, which resolves the row under those hosts only.</summary>
+  TIncVariantHost = record
+    /// <summary>refs.id or symbols.id of the tagged row.</summary>
+    RowId     : Int64;
+    /// <summary>files.id of the include.</summary>
+    IncFileId : Int64;
+    /// <summary>files.id of a host whose context has the row.</summary>
+    HostFileId: Int64;
+  end;
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.BuildFindings (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.BuildIndexSide (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.CollectUnchecked (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.NameIsAmbiguous (DRagLint.Analysis.LintTree.pas) (+832 more)</para>
@@ -3086,6 +3111,41 @@ type
     /// <remarks>Read once per resolve by TCallResolver.BuildMaps; the include's routines and
     /// const / var join the unit-level candidate maps as members of their host.</remarks>
     function GetIncludeTopLevelSymbols: TArray<TSymbol>;
+    /// <summary>1.52 EXTINC (owner ruling B9i, schema 27): replaces the inc_variants rows of the
+    /// include file in AToken with ARows -- which host includes it in which define context.</summary>
+    /// <param name="AToken">The include's open file tx; supplies file_id.</param>
+    /// <param name="ARows">One row per (host, variant); a host path with no files row is skipped.
+    /// Empty clears the include's rows (an include parsed without host context).</param>
+    /// <remarks>Called inside the file tx. A no-op when the index predates the table.</remarks>
+    procedure PutIncVariants(const AToken: TFileTxToken; const ARows: TArray<TIncVariantRow>);
+    /// <summary>1.52 EXTINC: every current host of an include (file_includes) with the context
+    /// hash stored for it by the include's last parse.</summary>
+    /// <param name="AIncPath">Absolute path of the include (compared case-insensitively).</param>
+    /// <returns>One row per (host, stored variant); CtxSha '' for a host with no stored row.
+    /// Variant is the stored variant (0 when none).</returns>
+    /// <remarks>Lets an incremental run re-parse the include in the contexts of hosts it skipped.</remarks>
+    function GetIncVariantHosts(const AIncPath: string): TArray<TIncVariantRow>;
+    /// <summary>1.52 EXTINC: tags a just-written symbol of an include as present in one define
+    /// context only (symbols.inc_variant).</summary>
+    /// <param name="AToken">The include's open file tx.</param>
+    /// <param name="ASymbolId">symbols.id returned by UpsertSymbol.</param>
+    /// <param name="AVariant">1-based variant number; 0 is the default and needs no call.</param>
+    procedure TagSymbolIncVariant(const AToken: TFileTxToken; ASymbolId: Int64; AVariant: Integer);
+    /// <summary>1.52 EXTINC: tags the reference written by the LAST UpsertReference call as
+    /// present in one define context only (refs.inc_variant).</summary>
+    /// <param name="AToken">The include's open file tx.</param>
+    /// <param name="AVariant">1-based variant number.</param>
+    /// <remarks>Must follow its UpsertReference directly (it keys on last_insert_rowid()).</remarks>
+    procedure TagLastRefIncVariant(const AToken: TFileTxToken; AVariant: Integer);
+    /// <summary>1.52 EXTINC: every variant-tagged ref of an include with each host of its variant.</summary>
+    /// <returns>One row per (ref, host); empty when no include has more than one define context
+    /// or the index predates schema 27.</returns>
+    /// <remarks>Read once per resolve by TCallResolver.BuildMaps.</remarks>
+    function GetIncVariantRefHosts: TArray<TIncVariantHost>;
+    /// <summary>1.52 EXTINC: every variant-tagged symbol of an include with each host of its variant.</summary>
+    /// <returns>One row per (symbol, host); empty as for GetIncVariantRefHosts.</returns>
+    /// <remarks>Read once per resolve by TCallResolver.BuildMaps.</remarks>
+    function GetIncVariantSymbolHosts: TArray<TIncVariantHost>;
     /// <summary>150 EX3: replaces one setting's project_settings rows of the file in
     /// AToken (a .dpr / .dpk) with AValues, one row per value in order (ordinal 0..).</summary>
     /// <param name="AToken">The open file tx; supplies file_id.</param>
@@ -3361,6 +3421,11 @@ type
     // producers DRagLint.Parser.DFMProps / DRagLint.Index.CommentFacts.
     DfmProperties: TArray<TDfmPropertyRow>;
     CommentFacts : TArray<TCommentFactRow>;
+    // 1.52 EXTINC (B9i, schema 27): filled by the indexer when an include is parsed in more than
+    // one define context; parallel to Symbols / References, 0 = in every context, k = context k
+    // only. nil (every parser, every other file) = all 0.
+    SymIncVariants: TArray<Integer>;
+    RefIncVariants: TArray<Integer>;
   end;
 
   /// <remarks>

@@ -45,8 +45,10 @@ function Invoke-Json([string[]]$CliArgs) {
 }
 # Symbols named $Name declared in the include $IncLeaf: their signatures, sorted.
 function IncSigs([string]$Db, [string]$Name, [string]$IncLeaf) {
-  $s = @(Invoke-Json @('query', '--name', $Name, '--db', $Db, '--exact', '--json') |
-    Where-Object { $_ -and $_.name -eq $Name -and (Split-Path ([string]$_.file) -Leaf) -eq $IncLeaf })
+  # Assign first: Invoke-Json returns ,@(rows), which a direct pipe hands on as ONE object
+  # (two rows then read as one signature "Integer Double").
+  $rows = Invoke-Json @('query', '--name', $Name, '--db', $Db, '--exact', '--json')
+  $s = @($rows | Where-Object { $_ -and $_.name -eq $Name -and (Split-Path ([string]$_.file) -Leaf) -eq $IncLeaf })
   return ,@($s | ForEach-Object { [string]$_.signature } | Sort-Object)
 }
 # find-callers --resolved text: "  <Target>:" then "    <Caller>  (<path>:<line>)  [...]" lines.

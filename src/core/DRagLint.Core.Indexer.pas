@@ -50,6 +50,23 @@ type
     Diags  : TArray<string>;
   end;
 
+  /// <summary>1.52 EXTINC (owner ruling B9i): one inclusion of an include met while a host was
+  /// parsed this run -- the host and the include's bytes as the host's preprocess left them.</summary>
+  /// <remarks>A value type held in TIndexer.FIncContexts.</remarks>
+  TIncInclusion = record
+    HostPath: string;
+    Bytes   : TBytes;
+  end;
+
+  /// <summary>1.52 EXTINC: one DISTINCT define context of an include -- its bytes, their SHA-256
+  /// and every host whose inclusion produced them (the include is parsed once per context).</summary>
+  /// <remarks>A value type; built per include parse by TIndexer.CollectIncVariants.</remarks>
+  TIncVariantCtx = record
+    Bytes: TBytes;
+    Sha  : string;
+    Hosts: TArray<string>;
+  end;
+
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore (DRagLint.LSP.Server.pas)</para>
@@ -84,7 +101,7 @@ type
       FPreprocessFellBack: Boolean                         ; { PP-Task-9: one-shot fallback-log latch }
       FIncludeContext : Boolean                            ; { lane INC: parse an .inc from its host's include site }
       FIncSearchPaths : TArray<string>                     ; { lane INC: the build's search path for include resolution }
-      FIncContexts    : TDictionary<string, TBytes>        ; { lane INC: lowercase .inc path -> host-context bytes, first host wins }
+      FIncContexts    : TObjectDictionary<string, TList<TIncInclusion>>; { 1.52 EXTINC: lowercase .inc path -> EVERY inclusion met this run }
       FForceReparse   : Boolean                            ; { INBOX 2.3: bypass the incremental skip for this whole run }
       { PER-FILE RESUME (INBOX-index-runs-are-not-resumable). '' = off.
 
@@ -171,6 +188,23 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure RememberIncludeSites(const AHostPath: string; const ASites: TArray<TPPIncludeSite>);
+      /// <summary>1.52 EXTINC (owner ruling B9i): the distinct define contexts an include is parsed in --
+      /// the inclusions met this run plus, for hosts the run skipped as up to date, the contexts the
+      /// index stored for them (a skipped host whose stored context is not among them is
+      /// preprocessed again to get its bytes).</summary>
+      /// <param name="AIncPath">The include file.</param>
+      /// <param name="ARun">Its inclusions met this run; nil when no host was parsed.</param>
+      /// <param name="AStoredValid">True when the include's own bytes are those of its last parse, so a
+      /// stored context hash still names the bytes a skipped host would produce.</param>
+      /// <returns>One entry per distinct context, ordered by its first host path; hosts with
+      /// equal bytes share an entry.</returns>
+      function CollectIncVariants(const AIncPath: string; const ARun: TList<TIncInclusion>; AStoredValid: Boolean): TArray<TIncVariantCtx>;
+      /// <summary>1.52 EXTINC: the include's bytes as AHostPath's preprocess leaves them, one entry
+      /// per inclusion of AIncKey in that host.</summary>
+      /// <param name="AHostPath">A host the run did not parse.</param>
+      /// <param name="AIncKey">Lowercase full path of the include.</param>
+      /// <returns>The context bytes; empty when the host cannot be read or preprocessed.</returns>
+      function HostIncContexts(const AHostPath, AIncKey: string): TArray<TBytes>;
       /// <param name="AExtension"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->IParser -- Observed: nil.</returns>
       /// <remarks>
@@ -695,6 +729,7 @@ uses
   , System.RegularExpressions      { 150 EX3: ReadDprojUnitScopes }
   , DRagLint.Preprocess.Lexer      { 150 PP: LexDirectives for the pp_directives rows }
   , System.Math                    { 150 PP: InRange }
+  , System.Generics.Defaults      { 1.52 EXTINC: TComparer for the include variants' order }
   ;
 
 /// <summary>150 EX3: the unit scopes a .dproj names in its `&lt;DCC_Namespace&gt;`
@@ -863,7 +898,7 @@ begin
   FPreprocessEnabled := False;
   FPreprocessFellBack:= False;
   FIncludeContext    := False;
-  FIncContexts       := TDictionary<string, TBytes>.Create;
+  FIncContexts       := TObjectDictionary<string, TList<TIncInclusion>>.Create([doOwnsValues]);
   { v0.45: default filter preserves prior behaviour -- only MS*.SQL indexed. }
   FWalkFilter:= TWalkFilter.Create;
   FTestFailFileName:= GetEnvironmentVariable('DRAGLINT_INDEX_TEST_FAIL_FILE');
@@ -1132,7 +1167,15 @@ begin
     for Site in ASites do
     begin
       var Key: string:= LowerCase(TPath.GetFullPath(Site.Path));
-      if not FIncContexts.ContainsKey(Key) then FIncContexts.Add(Key, Site.Resolved);
+      { 1.52 EXTINC (B9i): every inclusion is kept -- the include is parsed in each distinct context. }
+      if Length(Site.Resolved) > 0 then
+      begin
+        var Inc_: TIncInclusion;
+        Inc_.HostPath:= AHostPath;
+        Inc_.Bytes   := Site.Resolved;
+        if not FIncContexts.ContainsKey(Key) then FIncContexts.Add(Key, TList<TIncInclusion>.Create);
+        FIncContexts[Key].Add(Inc_);
+      end;
       // Case-insensitive: one file spelled JEDI.inc and JEDI.INC is one include.
       if not Seen.Contains(Key) then
       begin
@@ -1144,6 +1187,105 @@ begin
   finally
     Seen.Free;
     Paths.Free;
+  end;
+end;
+
+function IncCtxSha(const ABytes: TBytes): string; forward;
+
+function TIndexer.HostIncContexts(const AHostPath, AIncKey: string): TArray<TBytes>;
+var
+  PpRep: TPPReport;
+begin
+  Result:= nil;
+  try
+    var PpOpts: TPPOptions:= TPPOptionsDefault;
+    PpOpts.Profile    := FProfile;
+    PpOpts.IncludeMode:= 'defines-only';
+    PpOpts.BaseDir    := TPath.GetDirectoryName(AHostPath);
+    PpOpts.SearchPaths:= FIncSearchPaths;
+    PreprocessReport(EnsureUtf8Bytes(TFile.ReadAllBytes(AHostPath)), PpOpts, PpRep);
+    for var Site: TPPIncludeSite in PpRep.Sites do
+      if (Length(Site.Resolved) > 0) and SameText(TPath.GetFullPath(Site.Path), AIncKey) then
+        Result:= Result + [Site.Resolved];
+  except
+    on E: Exception do
+    begin
+      LogPreprocessFallbackOnce(AHostPath, E); { the host keeps no context for this include }
+      Result:= nil;
+    end;
+  end;
+end;
+
+function TIndexer.CollectIncVariants(const AIncPath: string; const ARun: TList<TIncInclusion>;
+  AStoredValid: Boolean): TArray<TIncVariantCtx>;
+var
+  L      : TList<TIncVariantCtx>;
+  BySha  : TDictionary<string, Integer>;
+  Seen   : TDictionary<string, Boolean>;
+
+  procedure AddCtx(const AHost: string; const ABytes: TBytes);
+  var
+    Idx: Integer;
+    C  : TIncVariantCtx;
+  begin
+    var Sha: string:= IncCtxSha(ABytes);
+    if not BySha.TryGetValue(Sha, Idx) then
+    begin
+      C.Bytes:= ABytes;
+      C.Sha  := Sha;
+      C.Hosts:= nil;
+      Idx:= L.Add(C);
+      BySha.Add(Sha, Idx);
+    end;
+    C:= L[Idx];
+    for var H: string in C.Hosts do
+      if SameText(H, AHost) then Exit;
+    C.Hosts:= C.Hosts + [AHost];
+    L[Idx]:= C;
+  end;
+
+begin
+  L    := TList<TIncVariantCtx>.Create;
+  BySha:= TDictionary<string, Integer>.Create;
+  Seen := TDictionary<string, Boolean>.Create;
+  try
+    if ARun <> nil then
+      for var R: TIncInclusion in ARun do
+      begin
+        Seen.AddOrSetValue(LowerCase(R.HostPath), True);
+        AddCtx(R.HostPath, R.Bytes);
+      end;
+    var IncKey: string:= LowerCase(TPath.GetFullPath(AIncPath));
+    var Preprocessed: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+    try
+      for var Row: TIncVariantRow in FStore.GetIncVariantHosts(AIncPath) do
+      begin
+        var Lc: string:= LowerCase(Row.HostPath);
+        if Seen.ContainsKey(Lc) or not TFile.Exists(Row.HostPath) then Continue; { this run's own view wins }
+        var Idx: Integer;
+        if AStoredValid and (Row.CtxSha <> '') and BySha.TryGetValue(Row.CtxSha, Idx) then
+        begin
+          AddCtx(Row.HostPath, L[Idx].Bytes); { same context as one already in hand: no preprocess }
+          Continue;
+        end;
+        if Preprocessed.ContainsKey(Lc) then Continue;
+        Preprocessed.Add(Lc, True);
+        for var B: TBytes in HostIncContexts(Row.HostPath, IncKey) do AddCtx(Row.HostPath, B);
+      end;
+    finally
+      Preprocessed.Free;
+    end;
+    { Deterministic variant numbers: ordered by each context's first host path. }
+    L.Sort(TComparer<TIncVariantCtx>.Construct(
+      function(const A, B: TIncVariantCtx): Integer
+      begin
+        Result:= CompareText(A.Hosts[0], B.Hosts[0]);
+      end));
+    Result:= L.ToArray;
+  finally
+    Seen.Free;
+    BySha.Free;
+    L.Free;
   end;
 end;
 
@@ -1392,6 +1534,195 @@ begin
   end;
 end; // function
 
+{ 1.52 EXTINC (owner ruling B9i): SHA-256 of one define context of an include. }
+function IncCtxSha(const ABytes: TBytes): string;
+begin
+  var H: THashSHA2:= THashSHA2.Create;
+  H.Update(ABytes);
+  Result:= H.HashAsString;
+end;
+
+{ 1.52 EXTINC: what makes two parses' symbols "the same row": kind, names, signature, span. }
+function IncSymKey(const S: TSymbol): string;
+begin
+  Result:= Format('%d|%s|%s|%d:%d-%d:%d|%d', [Ord(S.Kind), S.QualifiedName, S.Signature,
+    S.StartLine, S.StartCol, S.EndLine, S.EndCol, S.ImplStartLine]);
+end;
+
+{ 1.52 EXTINC: what makes two parses' references "the same row". }
+function IncRefKey(const R: TReference): string;
+begin
+  Result:= Format('%s|%s|%d:%d-%d:%d|%s', [R.Kind, R.NameText, R.StartLine, R.StartCol, R.EndLine, R.EndCol, R.ReceiverText]);
+end;
+
+{ 1.52 EXTINC: per parse, each row's key with its occurrence number (two equal rows in one parse
+  stay two rows); ACount gets how many parses have each key. }
+function IncKeysOf(const AKeys: TArray<string>; ACount: TDictionary<string, Integer>): TArray<string>;
+var
+  Occ: TDictionary<string, Integer>;
+  N  : Integer;
+begin
+  SetLength(Result, Length(AKeys));
+  Occ:= TDictionary<string, Integer>.Create;
+  try
+    for var I: Integer:= 0 to High(AKeys) do
+    begin
+      if not Occ.TryGetValue(AKeys[I], N) then N:= 0;
+      Occ.AddOrSetValue(AKeys[I], N + 1);
+      Result[I]:= AKeys[I] + '#' + IntToStr(N);
+      if not ACount.TryGetValue(Result[I], N) then N:= 0;
+      ACount.AddOrSetValue(Result[I], N + 1);
+    end;
+  finally
+    Occ.Free;
+  end;
+end;
+
+{ 1.52 EXTINC: merges the parses of one include in its N define contexts into AMerged. A symbol /
+  ref every parse has is written once (variant 0, from the first parse); any other is written from
+  the parse that has it, tagged with that parse's 1-based variant. In-array parent indices are
+  remapped onto the merged array. Everything else (chunks, literals, uses ...) stays the first
+  parse's; diagnostics are the union. }
+procedure MergeIncVariantParses(const AParses: TArray<TParseResult>; var AMerged: TParseResult);
+var
+  SymCount, RefCount, Shared: TDictionary<string, Integer>;
+  SymKeys, RefKeys: TArray<TArray<string>>;
+  MapIdx  : TArray<TArray<Integer>>;
+  Syms    : TList<TSymbol>;
+  SymVar  : TList<Integer>;
+  SrcK    : TList<Integer>;
+  Refs    : TList<TReference>;
+  RefVar  : TList<Integer>;
+  Diags   : TList<string>;
+  Raw     : TArray<string>;
+  N, K, I : Integer;
+begin
+  N:= Length(AParses);
+  SymCount:= TDictionary<string, Integer>.Create;
+  RefCount:= TDictionary<string, Integer>.Create;
+  Shared  := TDictionary<string, Integer>.Create;
+  Syms    := TList<TSymbol>.Create;
+  SymVar  := TList<Integer>.Create;
+  SrcK    := TList<Integer>.Create;
+  Refs    := TList<TReference>.Create;
+  RefVar  := TList<Integer>.Create;
+  Diags   := TList<string>.Create;
+  try
+    SetLength(SymKeys, N);
+    SetLength(RefKeys, N);
+    SetLength(MapIdx, N);
+    for K:= 0 to N - 1 do
+    begin
+      SetLength(Raw, Length(AParses[K].Symbols));
+      for I:= 0 to High(Raw) do Raw[I]:= IncSymKey(AParses[K].Symbols[I]);
+      SymKeys[K]:= IncKeysOf(Raw, SymCount);
+      SetLength(Raw, Length(AParses[K].References));
+      for I:= 0 to High(Raw) do Raw[I]:= IncRefKey(AParses[K].References[I]);
+      RefKeys[K]:= IncKeysOf(Raw, RefCount);
+    end;
+    for K:= 0 to N - 1 do
+    begin
+      SetLength(MapIdx[K], Length(AParses[K].Symbols));
+      for I:= 0 to High(AParses[K].Symbols) do
+      begin
+        var Everywhere: Boolean:= SymCount[SymKeys[K][I]] = N;
+        if Everywhere and (K > 0) then
+        begin
+          MapIdx[K][I]:= Shared[SymKeys[K][I]];
+          Continue;
+        end;
+        MapIdx[K][I]:= Syms.Add(AParses[K].Symbols[I]);
+        SrcK.Add(K);
+        SymVar.Add(if Everywhere then 0 else K + 1);
+        if Everywhere then Shared.Add(SymKeys[K][I], MapIdx[K][I]);
+      end;
+      for I:= 0 to High(AParses[K].References) do
+      begin
+        var Everywhere: Boolean:= RefCount[RefKeys[K][I]] = N;
+        if Everywhere and (K > 0) then Continue;
+        Refs.Add(AParses[K].References[I]);
+        RefVar.Add(if Everywhere then 0 else K + 1);
+      end;
+      for var D: string in AParses[K].Diagnostics do
+        if not Diags.Contains(D) then Diags.Add(D);
+    end;
+    { Parent indices point into the parse the row came from; remap them onto the merged array. }
+    for I:= 0 to Syms.Count - 1 do
+    begin
+      var S: TSymbol:= Syms[I];
+      K:= SrcK[I];
+      if (S.ParentId >= 0) and (S.ParentId <= High(MapIdx[K])) then S.ParentId:= MapIdx[K][Integer(S.ParentId)]
+      else S.ParentId:= -1;
+      Syms[I]:= S;
+    end;
+    AMerged:= AParses[0];
+    AMerged.Symbols       := Syms.ToArray;
+    AMerged.SymIncVariants:= SymVar.ToArray;
+    AMerged.References    := Refs.ToArray;
+    AMerged.RefIncVariants:= RefVar.ToArray;
+    AMerged.Diagnostics   := Diags.ToArray;
+  finally
+    Diags.Free;
+    RefVar.Free;
+    Refs.Free;
+    SrcK.Free;
+    SymVar.Free;
+    Syms.Free;
+    Shared.Free;
+    RefCount.Free;
+    SymCount.Free;
+  end;
+end;
+
+{ 1.52 EXTINC: parses the include in its 2nd..Nth define context and merges every parse into
+  AParseRes (the parse of the first context). }
+procedure ParseIncVariants(const AParser: IParser; const AFilePath: string;
+  const AVars: TArray<TIncVariantCtx>; var AParseRes: TParseResult);
+var
+  Parses: TArray<TParseResult>;
+begin
+  SetLength(Parses, Length(AVars));
+  Parses[0]:= AParseRes;
+  for var K: Integer:= 1 to High(AVars) do
+    Parses[K]:= AParser.Parse(EnsureUtf8Bytes(AVars[K].Bytes), AFilePath);
+  MergeIncVariantParses(Parses, AParseRes);
+end;
+
+{ 1.52 EXTINC: the inc_variants rows of an include -- one per (host, 1-based variant). }
+function IncVariantRows(const AVars: TArray<TIncVariantCtx>): TArray<TIncVariantRow>;
+var
+  R: TIncVariantRow;
+begin
+  Result:= nil;
+  for var K: Integer:= 0 to High(AVars) do
+    for var H: string in AVars[K].Hosts do
+    begin
+      R.HostPath:= H;
+      R.Variant := K + 1;
+      R.CtxSha  := AVars[K].Sha;
+      Result:= Result + [R];
+    end;
+end;
+
+{ 1.52 EXTINC: per variant 1..ANumVars, the line -> enclosing-routine map built from the routines
+  of that variant (and the shared ones) only; nil when the parse has no tagged symbol. Index 0 unused. }
+function IncVariantEnclosingMaps(const AParseRes: TParseResult; ANumVars: Integer;
+  const AIdxToId: TDictionary<Integer, Int64>; ALineCount: Integer): TArray<TArray<Int64>>;
+var
+  Syms: TArray<TSymbol>;
+begin
+  Result:= nil;
+  if (ANumVars < 2) or (Length(AParseRes.SymIncVariants) = 0) then Exit;
+  SetLength(Result, ANumVars + 1);
+  for var V: Integer:= 1 to ANumVars do
+  begin
+    Syms:= Copy(AParseRes.Symbols);
+    for var I: Integer:= 0 to High(Syms) do
+      if (AParseRes.SymIncVariants[I] <> 0) and (AParseRes.SymIncVariants[I] <> V) then Syms[I].ImplStartLine:= 0;
+    Result[V]:= BuildEnclosingLineMap(Syms, AIdxToId, ALineCount);
+  end;
+end;
+
 const
   /// Cell value of BuildContainingLineMap: two symbols tie for the line, ask SQL.
   CContainingAmbiguous = -1;
@@ -1600,10 +1931,11 @@ begin
   Mtime:= FileMTimeUnix(AFilePath);
   var MayResume: Boolean:= (FResumeFingerprint <> '') and
                            SameStr(FStore.FileIndexedFingerprint(AFilePath), FResumeFingerprint);
-  var IncCtx: TBytes:= nil;
-  var HasIncCtx: Boolean:= FIncludeContext and FPreprocessEnabled
-    and SameText(ExtractFileExt(AFilePath), '.inc')
-    and FIncContexts.TryGetValue(LowerCase(TPath.GetFullPath(AFilePath)), IncCtx);
+  var IncRun: TList<TIncInclusion>:= nil;
+  var IncVars: TArray<TIncVariantCtx>:= nil; { 1.52 EXTINC: the include's distinct define contexts }
+  var IsCtxInc: Boolean:= FIncludeContext and FPreprocessEnabled and SameText(ExtractFileExt(AFilePath), '.inc');
+  var HasIncCtx: Boolean:= IsCtxInc
+    and FIncContexts.TryGetValue(LowerCase(TPath.GetFullPath(AFilePath)), IncRun) and (IncRun.Count > 0);
   if (not HasIncCtx) and ((not FForceReparse) or MayResume)
     and FStore.FileStampIsCurrent(AFilePath, Mtime, TFile.GetSize(AFilePath))
     and not FStore.IncludeOriginsChanged(AFilePath) then
@@ -1680,13 +2012,16 @@ begin
   // symbol/ref span the parser emits still maps 1:1 back to the original file
   // with NO source map. A per-file exception must NOT hard-fail the whole run:
   // log once, then index the RAW UTF-8 for that file (pre-Task-9 behaviour).
-  if HasIncCtx then
+  { 1.52 EXTINC (owner ruling B9i): every distinct context of the include -- this run's inclusions
+    and the stored ones of hosts the run skipped; also when only the include itself changed. }
+  if IsCtxInc then IncVars:= CollectIncVariants(AFilePath, IncRun, FStore.FileShaMatches(AFilePath, Sha));
+  if Length(IncVars) > 0 then
   begin
     { Lane INC: the host's view of this include. Same length as the raw .inc
       (offset identity), so every span is an .inc position; transcoded like the
       raw bytes are when the .inc is not UTF-8. No sites: an .inc is never a
       host, and its nested includes were reported by the host's own run. }
-    ParseBytes:= EnsureUtf8Bytes(IncCtx);
+    ParseBytes:= EnsureUtf8Bytes(IncVars[0].Bytes); { the first context; the others below }
     IncSites  := nil;
   end
   // E-PARITY-GRAPHIFY: Markdown is prose -- an IFDEF directive in it is text, and
@@ -1742,6 +2077,7 @@ begin
   Inc(GProfPre, ProfNow - TPre);
   var TProf: Int64:= ProfNow;
   ParseRes:= Parser.Parse(ParseBytes, AFilePath);
+  if Length(IncVars) > 1 then ParseIncVariants(Parser, AFilePath, IncVars, ParseRes); { 1.52 EXTINC }
   // 149 EX2 (F6): the conditional branches the preprocess walked, as pp_regions rows.
   SetLength(ParseRes.PpRegions, Length(PpRegions));
   for I:= 0 to High(PpRegions) do
@@ -1811,6 +2147,7 @@ begin
     // v0.16: clear stale doc rows for this file before emitting fresh ones
     // (OpenFileTx already cleared symbols and refs).
     FStore.DeleteFileDocs(Token.FileId);
+    if IsCtxInc then FStore.PutIncVariants(Token, IncVariantRows(IncVars)); { 1.52 EXTINC }
     Inc(GProfOpenTx, ProfNow - TProf);
     IdxToId:= TDictionary<Integer, Int64>.Create;
     DfFieldsByParent:= nil; { taint T1: built lazily by the facts loop, freed below }
@@ -1836,6 +2173,7 @@ begin
           else Sym.ParentId:= -1;
           NewSymId:= FStore.UpsertSymbol(Token, Sym);
           IdxToId.Add(I, NewSymId);
+          if I < Length(ParseRes.SymIncVariants) then FStore.TagSymbolIncVariant(Token, NewSymId, ParseRes.SymIncVariants[I]);
           // v0.16: associate doc comment region to this symbol.
           // Task 13: AllowBlankLineGap and CaptureLooseComments come from
           // .drag-lint.json "docs" section via FDocConfig.
@@ -1880,6 +2218,8 @@ begin
         // inserting the same row volume into SQLite costs ~0.1%. The map is
         // O(sum of routine body lengths) to build and O(1) per ref.
         EnclosingByLine:= BuildEnclosingLineMap(ParseRes.Symbols, IdxToId, Length(SourceLines) + 2);
+        { 1.52 EXTINC: a ref of one define context is enclosed by a routine of that context. }
+        var VarEncl: TArray<TArray<Int64>>:= IncVariantEnclosingMaps(ParseRes, Length(IncVars), IdxToId, Length(SourceLines) + 2);
         for I:= 0 to High(ParseRes.References) do
         begin
           var Ref := ParseRes.References[I];
@@ -1889,7 +2229,11 @@ begin
             { Out of the mapped range (a ref past the last source line -- should not
               happen, but the old path handled any line, so keep that contract). }
             Ref.EnclosingSymbolId:= ResolveEnclosingSymbolId(ParseRes.Symbols, IdxToId, Ref.StartLine);
+          var RefVar: Integer:= if I < Length(ParseRes.RefIncVariants) then ParseRes.RefIncVariants[I] else 0;
+          if (RefVar > 0) and (RefVar <= High(VarEncl)) and (Ref.StartLine >= 0) and (Ref.StartLine <= High(VarEncl[RefVar])) then
+            Ref.EnclosingSymbolId:= VarEncl[RefVar][Ref.StartLine];
           FStore.UpsertReference(Token, Ref);
+          FStore.TagLastRefIncVariant(Token, RefVar);
         end;
         Inc(GProfRefs, ProfNow - TProf);
         TProf:= ProfNow;
