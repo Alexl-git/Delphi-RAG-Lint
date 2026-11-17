@@ -101,12 +101,12 @@ procedure BuildReportsMenu(pParent: TMenuItem; const pAddItem: TReportsAddItem;
 /// TMenuItem(Sender).Tag and return silently).
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
-/// <para>Calls: DragLint.Plugin.Reports.ChooseTargetThen, DragLint.Plugin.Reports.EnqueueReport, DragLint.Plugin.Reports.PromptSecondRoutine, DragLint.Plugin.Reports.ResolveRunTools, DragLint.Plugin.ReportText.BuildAskCmdLine, DragLint.Plugin.ReportText.QuestionTakesSecondRoutine, TMenuItem</para>
+/// <para>Calls: DragLint.Plugin.LspClient.DebugLog, DragLint.Plugin.Reports.ChooseTargetThen, DragLint.Plugin.Reports.EnqueueReport, DragLint.Plugin.Reports.PromptSecondRoutine, DragLint.Plugin.Reports.ResolveRunTools, DragLint.Plugin.ReportText.BuildAskCmdLine, DragLint.Plugin.ReportText.QuestionTakesSecondRoutine, DragLint.Plugin.ReportText.ReportClickQuestion, Format, ShowMessage</para>
+/// <seealso cref="DragLint.Plugin.LspClient.DebugLog"/>
 /// <seealso cref="DragLint.Plugin.Reports.ChooseTargetThen"/>
 /// <seealso cref="DragLint.Plugin.Reports.EnqueueReport"/>
 /// <seealso cref="DragLint.Plugin.Reports.PromptSecondRoutine"/>
 /// <seealso cref="DragLint.Plugin.Reports.ResolveRunTools"/>
-/// <seealso cref="DragLint.Plugin.ReportText.BuildAskCmdLine"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure InvokeReportQuestionAt(Sender: TObject; pIndex: Integer);

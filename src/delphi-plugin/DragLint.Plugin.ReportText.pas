@@ -47,7 +47,7 @@ type
   /// <summary>One question of `drag-lint ask` as the menu offers it.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DragLint.Plugin.ReportText.pas) ?, DragLint.Plugin.Reports.PromptSecondRoutine (DragLint.Plugin.Reports.pas) ?, DragLint.Plugin.Reports.PromptTarget (DragLint.Plugin.Reports.pas) ?, DragLint.Plugin.ReportText.FindReportQuestion (DragLint.Plugin.ReportText.pas), DragLint.Plugin.ReportText.FormatReportAsDocInsight (DragLint.Plugin.ReportText.pas) ? (+2 more)</para>
+  /// <para>Used by: declaration (DragLint.Plugin.ReportText.pas) ?, DragLint.Plugin.Reports.PromptTarget (DragLint.Plugin.Reports.pas) ?, DragLint.Plugin.ReportText.FindReportQuestion (DragLint.Plugin.ReportText.pas), DragLint.Plugin.ReportText.FormatReportAsDocInsight (DragLint.Plugin.ReportText.pas) ?, DragLint.Plugin.ReportText.ReportClickQuestion (DragLint.Plugin.ReportText.pas) (+3 more)</para>
   /// <para>Used in units: DragLint.Plugin.Reports, DragLint.Plugin.ReportText</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -280,7 +280,7 @@ function QuestionTakesFormControl(const pQuestionId: string): Boolean;
 /// <remarks>
 /// The caret supplies routine A only; the menu prompts for B.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.Reports.InvokeReportQuestion (DragLint.Plugin.Reports.pas)</para>
+/// <para>Called from: DragLint.Plugin.Reports.InvokeReportQuestionAt (DragLint.Plugin.Reports.pas)</para>
 /// <para>Calls: SameText</para>
 /// <para>Returns: SameText(pQuestionId, 'path')</para>
 /// <!-- drag-lint:auto END -->
@@ -314,6 +314,12 @@ function IsValidReportTarget(const pTarget: string): Boolean;
 /// range, so a click in the IDE's main menu did nothing and logged nothing. The
 /// index is now bound to the click handler itself, so neither the Sender's class
 /// nor the item's Tag can change or drop the question.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Reports.InvokeReportQuestionAt (DragLint.Plugin.Reports.pas)</para>
+/// <para>Calls: Default, Format, InRange</para>
+/// <para>Returns: InRange(pBoundIndex, Low(REPORT_QUESTIONS), High(REPORT_QUESTIONS))</para>
+/// <para>Mutates: pProblem (out), pQuestion (out)</para>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function ReportClickQuestion(pSender: TObject; pBoundIndex: Integer; out pQuestion: TReportQuestion;
   out pProblem: string): Boolean;
@@ -338,7 +344,7 @@ function ReportClickQuestion(pSender: TObject; pBoundIndex: Integer; out pQuesti
 /// Ask-Report.ps1 are needed here: the engine answers every question
 /// in-process (all 26 since the CHARTS port).
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.Reports.InvokeReportQuestion (DragLint.Plugin.Reports.pas)</para>
+/// <para>Called from: DragLint.Plugin.Reports.InvokeReportQuestionAt (DragLint.Plugin.Reports.pas)</para>
 /// <para>Calls: DragLint.Plugin.ReportText.QuoteCmdArg, Format, Trim</para>
 /// <seealso cref="DragLint.Plugin.ReportText.QuoteCmdArg"/>
 /// <!-- drag-lint:auto END -->
