@@ -62,78 +62,78 @@ end;
 
 function GenMemTableFromCsv(const pCsvText: string; const pName: string): string;
 var
-  lLines, lOut: TStringList;
-  lParts: TArray<string>;
-  lLine, lType, lKind: string;
-  lSize: Integer;
+  Lines, OutText: TStringList;
+  Parts: TArray<string>;
+  Line, FieldType, FieldKind: string;
+  FieldSize: Integer;
 begin
   if not IsIdent(pName) then
     raise ECsvMemTableError.CreateFmt('Invalid routine name: %s', [pName]);
-  lLines := TStringList.Create;
-  lOut := TStringList.Create;
+  Lines := TStringList.Create;
+  OutText := TStringList.Create;
   try
-    lLines.Text := pCsvText;
-    lOut.Add(Format('procedure Create%sFields(pMemTable: TFDMemTable);', [pName]));
-    lOut.Add('var');
-    lOut.Add('  lDef: TFieldDef;');
-    lOut.Add('  lField: TField;');
-    lOut.Add('begin');
-    lOut.Add('  pMemTable.Close;');
-    lOut.Add('  pMemTable.FieldDefs.Clear;');
-    lOut.Add('  pMemTable.Fields.Clear;');
-    for lLine in lLines do
+    Lines.Text := pCsvText;
+    OutText.Add(Format('procedure Create%sFields(pMemTable: TFDMemTable);', [pName]));
+    OutText.Add('var');
+    OutText.Add('  lDef: TFieldDef;');
+    OutText.Add('  lField: TField;');
+    OutText.Add('begin');
+    OutText.Add('  pMemTable.Close;');
+    OutText.Add('  pMemTable.FieldDefs.Clear;');
+    OutText.Add('  pMemTable.Fields.Clear;');
+    for Line in Lines do
     begin
-      lParts := lLine.Split([',']);
-      if (Length(lParts) < CMinCols) or SameText(lParts[0].Trim, 'FieldName') then
+      Parts := Line.Split([',']);
+      if (Length(Parts) < CMinCols) or SameText(Parts[0].Trim, 'FieldName') then
         Continue;
-      lType := lParts[1].Trim;
-      if GetEnumValue(TypeInfo(TFieldType), 'ft' + lType) < 0 then
-        raise ECsvMemTableError.CreateFmt('Unknown FieldType: %s', [lType]);
-      lSize := StrToIntDef(lParts[CColSize].Trim, 0);
-      lKind := lParts[CColKind].Trim;
-      lOut.Add('');
-      lOut.Add('  lDef := pMemTable.FieldDefs.AddFieldDef;');
-      lOut.Add('  lDef.Name := ' + Q(lParts[0].Trim) + ';');
-      lOut.Add('  lDef.DataType := ft' + lType + ';');
-      if lSize > 0 then
-        lOut.Add('  lDef.Size := ' + IntToStr(lSize) + ';');
-      lOut.Add('  lField := lDef.CreateField(pMemTable);');
-      if SameText(lKind, 'Calculated') then
-        lOut.Add('  lField.FieldKind := fkCalculated;')
-      else if SameText(lKind, 'Lookup') then
+      FieldType := Parts[1].Trim;
+      if GetEnumValue(TypeInfo(TFieldType), 'ft' + FieldType) < 0 then
+        raise ECsvMemTableError.CreateFmt('Unknown FieldType: %s', [FieldType]);
+      FieldSize := StrToIntDef(Parts[CColSize].Trim, 0);
+      FieldKind := Parts[CColKind].Trim;
+      OutText.Add('');
+      OutText.Add('  lDef := pMemTable.FieldDefs.AddFieldDef;');
+      OutText.Add('  lDef.Name := ' + Q(Parts[0].Trim) + ';');
+      OutText.Add('  lDef.DataType := ft' + FieldType + ';');
+      if FieldSize > 0 then
+        OutText.Add('  lDef.Size := ' + IntToStr(FieldSize) + ';');
+      OutText.Add('  lField := lDef.CreateField(pMemTable);');
+      if SameText(FieldKind, 'Calculated') then
+        OutText.Add('  lField.FieldKind := fkCalculated;')
+      else if SameText(FieldKind, 'Lookup') then
       begin
-        lOut.Add('  lField.FieldKind := fkLookup;');
-        if Length(lParts) >= CLookupCols then
+        OutText.Add('  lField.FieldKind := fkLookup;');
+        if Length(Parts) >= CLookupCols then
         begin
-          lOut.Add('  lField.LookupDataset := pMemTable.Owner.FindComponent(' + Q(lParts[CColDataset].Trim) + ') as TDataSet;');
-          lOut.Add('  lField.KeyFields := ' + Q(lParts[CColKeyFields].Trim) + ';');
-          lOut.Add('  lField.LookupKeyFields := ' + Q(lParts[CColLookupKeys].Trim) + ';');
-          lOut.Add('  lField.LookupResultField := ' + Q(lParts[CColResult].Trim) + ';');
+          OutText.Add('  lField.LookupDataset := pMemTable.Owner.FindComponent(' + Q(Parts[CColDataset].Trim) + ') as TDataSet;');
+          OutText.Add('  lField.KeyFields := ' + Q(Parts[CColKeyFields].Trim) + ';');
+          OutText.Add('  lField.LookupKeyFields := ' + Q(Parts[CColLookupKeys].Trim) + ';');
+          OutText.Add('  lField.LookupResultField := ' + Q(Parts[CColResult].Trim) + ';');
         end;
       end
       else
-        lOut.Add('  lField.FieldKind := fkData;');
+        OutText.Add('  lField.FieldKind := fkData;');
     end;
-    lOut.Add('');
-    lOut.Add('  pMemTable.CreateDataSet;');
-    lOut.Add('end;');
-    Result := lOut.Text;
+    OutText.Add('');
+    OutText.Add('  pMemTable.CreateDataSet;');
+    OutText.Add('end;');
+    Result := OutText.Text;
   finally
-    lOut.Free;
-    lLines.Free;
+    OutText.Free;
+    Lines.Free;
   end;
 end;
 
 function GenMemTableFromCsvFile(const pCsvFile: string; const pName: string): string;
 var
-  lList: TStringList;
+  List: TStringList;
 begin
-  lList := TStringList.Create;
+  List := TStringList.Create;
   try
-    lList.LoadFromFile(pCsvFile);
-    Result := GenMemTableFromCsv(lList.Text, pName);
+    List.LoadFromFile(pCsvFile);
+    Result := GenMemTableFromCsv(List.Text, pName);
   finally
-    lList.Free;
+    List.Free;
   end;
 end;
 

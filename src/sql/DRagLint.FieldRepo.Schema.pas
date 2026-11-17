@@ -16,15 +16,15 @@ uses
 
 const
   /// <summary>Schema version of the repository; mirrored in PRAGMA user_version and DL_META.</summary>
-  cRepoSchemaVersion = 1;  // dl:ok const-casing@35cd
+  REPO_SCHEMA_VERSION = 1;
   /// <summary>SQLite application_id of a field repository ('DLFR').</summary>
-  cRepoApplicationId = $444C4652;  // dl:ok const-casing@510d
+  REPO_APPLICATION_ID = $444C4652;
   /// <summary>File extension of a repository file.</summary>
-  cRepoFileExt = '.dlrepo';  // dl:ok const-casing@3824
+  REPO_FILE_EXT = '.dlrepo';
   /// <summary>Folder (next to the project file) that holds the default repository.</summary>
-  cRepoFolderName = '_DL-REPO';  // dl:ok const-casing@1611
+  REPO_FOLDER_NAME = '_DL-REPO';
   /// <summary>Name of the key/value table with repository metadata.</summary>
-  cRepoMetaTable = 'DL_META';  // dl:ok const-casing@79ca
+  REPO_META_TABLE = 'DL_META';
 
 type
   /// <summary>Base class of every repository error (missing / existing file, unknown table).</summary>
@@ -96,7 +96,7 @@ function QuoteRepoIdent(const pName: string): string;  // dl:ok unused-public-sy
 function RepoTableDdl(const pTable: TRepoTable): string;  // dl:ok unused-public-symbol@5822
 
 /// <summary>Default repository path of a project: the project folder, then
-/// cRepoFolderName, then the project base name with cRepoFileExt.</summary>
+/// REPO_FOLDER_NAME, then the project base name with REPO_FILE_EXT.</summary>
 /// <param name="pProjectFile">Full path of the project file.</param>
 /// <returns>For C:\P\App.dproj: C:\P\_DL-REPO\App.dlrepo.</returns>
 function DefaultRepoPath(const pProjectFile: string): string;  // dl:ok unused-public-symbol@4257
@@ -162,7 +162,7 @@ uses
   FireDAC.DApt;
 
 const
-  cMaxByte = 255;  // dl:ok const-casing@1455
+  MAX_BYTE = 255;
 
 function Col(const pName: string; pKind: TRepoColKind; pMaxLen: Integer; pNotNull: Boolean;
   const pDefault: string; pPk: Integer): TRepoColumn;
@@ -204,7 +204,7 @@ end;
 
 function MetaTable: TRepoTable;
 begin
-  Result := MakeTable(cRepoMetaTable, '', [
+  Result := MakeTable(REPO_META_TABLE, '', [
     Str('META_KEY', 63, True, 1),  // dl:ok large-magic-number@d89d, magic-literal@d89d
     Str('META_VALUE', 1000)]);  // dl:ok magic-literal@cc89
 end;
@@ -297,46 +297,46 @@ end;
 
 function TRepoTable.PkColumns: TArray<TRepoColumn>;
 var
-  vList: TList<TRepoColumn>;  // dl:ok local-var-casing@3c54
-  vCol: TRepoColumn;  // dl:ok local-var-casing@9a72
-  vOrder: Integer;  // dl:ok local-var-casing@331f
+  List: TList<TRepoColumn>;
+  ColItem: TRepoColumn;
+  Order: Integer;
 begin
-  vList := TList<TRepoColumn>.Create;
+  List := TList<TRepoColumn>.Create;
   try
-    for vOrder := 1 to Length(Columns) do
-      for vCol in Columns do
-        if vCol.PkOrder = vOrder then
-          vList.Add(vCol);
-    Result := vList.ToArray;
+    for Order := 1 to Length(Columns) do
+      for ColItem in Columns do
+        if ColItem.PkOrder = Order then
+          List.Add(ColItem);
+    Result := List.ToArray;
   finally
-    vList.Free;
+    List.Free;
   end;
 end;
 
 function TRepoTable.FindColumn(const pName: string; out pColumn: TRepoColumn): Boolean;
 var
-  vCol: TRepoColumn;  // dl:ok local-var-casing@9a72
+  ColItem: TRepoColumn;
 begin
   Result := False;
   pColumn := Default(TRepoColumn);
-  for vCol in Columns do
-    if SameText(vCol.Name, pName) then
+  for ColItem in Columns do
+    if SameText(ColItem.Name, pName) then
     begin
-      pColumn := vCol;
+      pColumn := ColItem;
       Exit(True);
     end;
 end;
 
 function FindRepoTable(const pName: string; out pTable: TRepoTable): Boolean;
 var
-  vTab: TRepoTable;  // dl:ok local-var-casing@6bed
+  Tab: TRepoTable;
 begin
   Result := False;
   pTable := Default(TRepoTable);
-  for vTab in RepoTables do
-    if SameText(vTab.Name, pName) then
+  for Tab in RepoTables do
+    if SameText(Tab.Name, pName) then
     begin
-      pTable := vTab;
+      pTable := Tab;
       Exit(True);
     end;
 end;
@@ -348,17 +348,17 @@ end;
 
 function ColumnDdl(const pCol: TRepoColumn; pInlinePk: Boolean): string;
 var
-  vQ: string;  // dl:ok local-var-casing@3f14
+  Q: string;
 begin
-  vQ := QuoteRepoIdent(pCol.Name);
+  Q := QuoteRepoIdent(pCol.Name);
   case pCol.Kind of
-    rckString:   Result := vQ + ' VARCHAR(' + IntToStr(pCol.MaxLen) + ')';
-    rckInteger:  Result := vQ + ' INTEGER';
-    rckSmallint: Result := vQ + ' SMALLINT';
-    rckBoolean:  Result := vQ + ' BOOLEAN';
-    rckText:     Result := vQ + ' TEXT';
+    rckString:   Result := Q + ' VARCHAR(' + IntToStr(pCol.MaxLen) + ')';
+    rckInteger:  Result := Q + ' INTEGER';
+    rckSmallint: Result := Q + ' SMALLINT';
+    rckBoolean:  Result := Q + ' BOOLEAN';
+    rckText:     Result := Q + ' TEXT';
   else
-    Result := vQ + ' SMALLINT';
+    Result := Q + ' SMALLINT';
   end;
   if pCol.NotNull then
     Result := Result + ' NOT NULL';
@@ -367,44 +367,44 @@ begin
   if pCol.DefaultSql <> '' then
     Result := Result + ' DEFAULT ' + pCol.DefaultSql;
   if pCol.Kind = rckString then
-    Result := Result + ' CHECK (length(' + vQ + ') <= ' + IntToStr(pCol.MaxLen) + ')';
+    Result := Result + ' CHECK (length(' + Q + ') <= ' + IntToStr(pCol.MaxLen) + ')';
   if pCol.Kind = rckByte then
-    Result := Result + ' CHECK (' + vQ + ' BETWEEN 0 AND ' + IntToStr(cMaxByte) + ')';
+    Result := Result + ' CHECK (' + Q + ' BETWEEN 0 AND ' + IntToStr(MAX_BYTE) + ')';
 end;
 
 function RepoTableDdl(const pTable: TRepoTable): string;
 var
-  vPk: TArray<TRepoColumn>;  // dl:ok local-var-casing@34ef
-  vInline: Boolean;  // dl:ok local-var-casing@a011
-  vCol: TRepoColumn;  // dl:ok local-var-casing@9a72
-  vParts: TStringList;  // dl:ok local-var-casing@f49c
-  vKeys: string;  // dl:ok local-var-casing@2d73
-  vI: Integer;  // dl:ok local-var-casing@5821
+  Pk: TArray<TRepoColumn>;
+  InlineVal: Boolean;
+  ColItem: TRepoColumn;
+  Parts: TStringList;
+  Keys: string;
+  I: Integer;
 begin
-  vPk := pTable.PkColumns;
-  vInline := (Length(vPk) = 1) and (vPk[0].Kind = rckInteger);
-  vParts := TStringList.Create;
+  Pk := pTable.PkColumns;
+  InlineVal := (Length(Pk) = 1) and (Pk[0].Kind = rckInteger);
+  Parts := TStringList.Create;
   try
-    for vCol in pTable.Columns do
-      vParts.Add(ColumnDdl(vCol, vInline and (vCol.PkOrder = 1)));
-    if (Length(vPk) > 0) and not vInline then
+    for ColItem in pTable.Columns do
+      Parts.Add(ColumnDdl(ColItem, InlineVal and (ColItem.PkOrder = 1)));
+    if (Length(Pk) > 0) and not InlineVal then
     begin
-      vKeys := '';
-      for vI := 0 to High(vPk) do
-        vKeys := vKeys + (if vI > 0 then ', ' else '') + QuoteRepoIdent(vPk[vI].Name);
-      vParts.Add('PRIMARY KEY (' + vKeys + ')');
+      Keys := '';
+      for I := 0 to High(Pk) do
+        Keys := Keys + (if I > 0 then ', ' else '') + QuoteRepoIdent(Pk[I].Name);
+      Parts.Add('PRIMARY KEY (' + Keys + ')');
     end;
     Result := 'CREATE TABLE ' + QuoteRepoIdent(pTable.Name) + ' (' + sLineBreak + '  '
-      + string.Join(',' + sLineBreak + '  ', vParts.ToStringArray) + sLineBreak + ')';
+      + string.Join(',' + sLineBreak + '  ', Parts.ToStringArray) + sLineBreak + ')';
   finally
-    vParts.Free;
+    Parts.Free;
   end;
 end;
 
 function DefaultRepoPath(const pProjectFile: string): string;
 begin
-  Result := TPath.Combine(TPath.Combine(ExtractFilePath(pProjectFile), cRepoFolderName),
-    TPath.GetFileNameWithoutExtension(pProjectFile) + cRepoFileExt);
+  Result := TPath.Combine(TPath.Combine(ExtractFilePath(pProjectFile), REPO_FOLDER_NAME),
+    TPath.GetFileNameWithoutExtension(pProjectFile) + REPO_FILE_EXT);
 end;
 
 function NewConnection(const pFileName, pOpenMode: string): TFDConnection;
@@ -420,7 +420,7 @@ begin
     Result.Params.Values['ForeignKeys'] := 'On';
     Result.Params.Values['StringFormat'] := 'Unicode';
     Result.Connected := True;
-  except  // dl:ok bare-except@041e
+  except  // dl:ok bare-except@041e -- cleanup then re-raise, nothing swallowed
     Result.Free;
     raise;
   end;
@@ -428,81 +428,81 @@ end;
 
 procedure CreateRepository(const pFileName: string);
 var
-  vConn: TFDConnection;  // dl:ok local-var-casing@d2a6
-  vTab: TRepoTable;  // dl:ok local-var-casing@6bed
+  Conn: TFDConnection;
+  Tab: TRepoTable;
 begin
   if TFile.Exists(pFileName) then
     raise ERepoError.CreateFmt('Repository already exists: %s', [pFileName]);
   TDirectory.CreateDirectory(ExtractFilePath(ExpandFileName(pFileName)));
-  vConn := NewConnection(pFileName, 'CreateUTF8');
+  Conn := NewConnection(pFileName, 'CreateUTF8');
   try
-    vConn.ExecSQL('PRAGMA application_id = ' + IntToStr(cRepoApplicationId));
-    vConn.ExecSQL('PRAGMA user_version = ' + IntToStr(cRepoSchemaVersion));
-    vConn.ExecSQLScalar('PRAGMA journal_mode = DELETE');
-    vConn.StartTransaction;
+    Conn.ExecSQL('PRAGMA application_id = ' + IntToStr(REPO_APPLICATION_ID));
+    Conn.ExecSQL('PRAGMA user_version = ' + IntToStr(REPO_SCHEMA_VERSION));
+    Conn.ExecSQLScalar('PRAGMA journal_mode = DELETE');
+    Conn.StartTransaction;
     try
-      for vTab in RepoTables do
-        vConn.ExecSQL(RepoTableDdl(vTab));
-      SetRepoMeta(vConn, 'schema_version', IntToStr(cRepoSchemaVersion));
-      vConn.Commit;
-    except  // dl:ok bare-except@72e8
-      vConn.Rollback;
+      for Tab in RepoTables do
+        Conn.ExecSQL(RepoTableDdl(Tab));
+      SetRepoMeta(Conn, 'schema_version', IntToStr(REPO_SCHEMA_VERSION));
+      Conn.Commit;
+    except  // dl:ok bare-except@72e8 -- cleanup then re-raise, nothing swallowed
+      Conn.Rollback;
       raise;
     end;
   finally
-    vConn.Free;
+    Conn.Free;
   end;
 end;
 
 procedure ValidateColumns(pConnection: TFDConnection; const pTable: TRepoTable);
 var
-  vQ: TFDQuery;  // dl:ok local-var-casing@25c6
-  vSeen: TStringList;  // dl:ok local-var-casing@62f3
-  vCol: TRepoColumn;  // dl:ok local-var-casing@9a72
-  vName: string;  // dl:ok local-var-casing@2388
-  vNameField: TField;  // dl:ok local-var-casing@47b2
+  Q: TFDQuery;
+  Seen: TStringList;
+  ColItem: TRepoColumn;
+  Name: string;
+  NameField: TField;
 begin
-  vSeen := TStringList.Create;
-  vQ := TFDQuery.Create(nil);
+  Seen := TStringList.Create;
+  Q := TFDQuery.Create(nil);
   try
-    vSeen.CaseSensitive := False;
-    vQ.Connection := pConnection;
-    vQ.Open('PRAGMA table_info(' + QuoteRepoIdent(pTable.Name) + ')');  // dl:ok path-traversal@8fac
-    vNameField := vQ.FieldByName('name');
-    while not vQ.Eof do
+    Seen.CaseSensitive := False;
+    Q.Connection := pConnection;
+    Q.Open('PRAGMA table_info(' + QuoteRepoIdent(pTable.Name) + ')');  // dl:ok path-traversal@8fac -- SQL text, not a path: the identifier goes through QuoteRepoIdent
+    NameField := Q.FieldByName('name');
+    while not Q.Eof do
     begin
-      vName := vNameField.AsString;
-      vSeen.Add(vName);
-      if not pTable.FindColumn(vName, vCol) then
-        raise ERepoSchemaError.CreateFmt('Unexpected column %s.%s', [pTable.Name, vName]);
-      vQ.Next;
+      Name := NameField.AsString;
+      Seen.Add(Name);
+      if not pTable.FindColumn(Name, ColItem) then
+        raise ERepoSchemaError.CreateFmt('Unexpected column %s.%s', [pTable.Name, Name]);
+      Q.Next;
     end;
-    if vSeen.Count = 0 then
+    if Seen.Count = 0 then
       raise ERepoSchemaError.CreateFmt('Missing table %s', [pTable.Name]);
-    for vCol in pTable.Columns do
-      if vSeen.IndexOf(vCol.Name) < 0 then
-        raise ERepoSchemaError.CreateFmt('Missing column %s.%s', [pTable.Name, vCol.Name]);
+    for ColItem in pTable.Columns do
+      if Seen.IndexOf(ColItem.Name) < 0 then
+        raise ERepoSchemaError.CreateFmt('Missing column %s.%s', [pTable.Name, ColItem.Name]);
   finally
-    vQ.Free;
-    vSeen.Free;
+    Q.Free;
+    Seen.Free;
   end;
 end;
 
 procedure ValidateRepository(pConnection: TFDConnection);
 var
-  vId, vVer: Integer;  // dl:ok local-var-casing@be7e
-  vTab: TRepoTable;  // dl:ok local-var-casing@6bed
+  Id, Ver: Integer;
+  Tab: TRepoTable;
 begin
-  vId := pConnection.ExecSQLScalar('PRAGMA application_id');
-  if vId <> cRepoApplicationId then
+  Id := pConnection.ExecSQLScalar('PRAGMA application_id');
+  if Id <> REPO_APPLICATION_ID then
     raise ERepoSchemaError.CreateFmt('Not a field repository: application_id is %d, expected %d',
-      [vId, cRepoApplicationId]);
-  vVer := pConnection.ExecSQLScalar('PRAGMA user_version');
-  if vVer <> cRepoSchemaVersion then
+      [Id, REPO_APPLICATION_ID]);
+  Ver := pConnection.ExecSQLScalar('PRAGMA user_version');
+  if Ver <> REPO_SCHEMA_VERSION then
     raise ERepoSchemaError.CreateFmt('Unsupported repository schema: user_version is %d, expected %d',
-      [vVer, cRepoSchemaVersion]);
-  for vTab in RepoTables do
-    ValidateColumns(pConnection, vTab);
+      [Ver, REPO_SCHEMA_VERSION]);
+  for Tab in RepoTables do
+    ValidateColumns(pConnection, Tab);
 end;
 
 function OpenRepository(const pFileName: string; pReadOnly: Boolean): TFDConnection;
@@ -512,7 +512,7 @@ begin
   Result := NewConnection(pFileName, if pReadOnly then 'ReadOnly' else 'ReadWrite');
   try
     ValidateRepository(Result);
-  except  // dl:ok bare-except@041e
+  except  // dl:ok bare-except@041e -- cleanup then re-raise, nothing swallowed
     Result.Free;
     raise;
   end;
@@ -520,40 +520,40 @@ end;
 
 function RepoRowCount(pConnection: TFDConnection; const pTableName: string): Integer;
 var
-  vTab: TRepoTable;  // dl:ok local-var-casing@6bed
+  Tab: TRepoTable;
 begin
-  if not FindRepoTable(pTableName, vTab) then
+  if not FindRepoTable(pTableName, Tab) then
     raise ERepoError.CreateFmt('Not a repository table: %s', [pTableName]);
-  Result := pConnection.ExecSQLScalar('SELECT COUNT(*) FROM ' + QuoteRepoIdent(vTab.Name));
+  Result := pConnection.ExecSQLScalar('SELECT COUNT(*) FROM ' + QuoteRepoIdent(Tab.Name));
 end;
 
 function RepoIsEmpty(pConnection: TFDConnection): Boolean;
 var
-  vTab: TRepoTable;  // dl:ok local-var-casing@6bed
+  Tab: TRepoTable;
 begin
   Result := True;
-  for vTab in RepoTables do
-    if (not SameText(vTab.Name, cRepoMetaTable)) and (RepoRowCount(pConnection, vTab.Name) > 0) then
+  for Tab in RepoTables do
+    if (not SameText(Tab.Name, REPO_META_TABLE)) and (RepoRowCount(pConnection, Tab.Name) > 0) then
       Exit(False);
 end;
 
 procedure SetRepoMeta(pConnection: TFDConnection; const pKey, pValue: string);
 begin
-  pConnection.ExecSQL('INSERT OR REPLACE INTO ' + QuoteRepoIdent(cRepoMetaTable)
+  pConnection.ExecSQL('INSERT OR REPLACE INTO ' + QuoteRepoIdent(REPO_META_TABLE)
     + ' ("META_KEY", "META_VALUE") VALUES (:k, :v)', [pKey, pValue]);
 end;
 
 function GetRepoMeta(pConnection: TFDConnection; const pKey: string): string;
 var
-  vQ: TFDQuery;  // dl:ok local-var-casing@25c6
+  Q: TFDQuery;
 begin
-  vQ := TFDQuery.Create(nil);
+  Q := TFDQuery.Create(nil);
   try
-    vQ.Connection := pConnection;
-    vQ.Open('SELECT "META_VALUE" FROM ' + QuoteRepoIdent(cRepoMetaTable) + ' WHERE "META_KEY" = :k', [pKey]);  // dl:ok path-traversal@9483
-    Result := if vQ.Eof then '' else vQ.Fields[0].AsString;
+    Q.Connection := pConnection;
+    Q.Open('SELECT "META_VALUE" FROM ' + QuoteRepoIdent(REPO_META_TABLE) + ' WHERE "META_KEY" = :k', [pKey]);  // dl:ok path-traversal@9483 -- SQL text, not a path: the identifier goes through QuoteRepoIdent
+    Result := if Q.Eof then '' else Q.Fields[0].AsString;
   finally
-    vQ.Free;
+    Q.Free;
   end;
 end;
 

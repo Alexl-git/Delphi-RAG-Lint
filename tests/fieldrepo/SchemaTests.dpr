@@ -161,9 +161,9 @@ begin
   vConn := OpenRepository(vFile, True);
   try
     Check('3a CreateRepository + OpenRepository(read-only) succeed', vConn.Connected);
-    Check('3b application_id reads back', ScalarInt(vConn, 'PRAGMA application_id') = cRepoApplicationId);
-    Check('3c user_version reads back', ScalarInt(vConn, 'PRAGMA user_version') = cRepoSchemaVersion);
-    Check('3d schema_version in DL_META', GetRepoMeta(vConn, 'schema_version') = IntToStr(cRepoSchemaVersion));
+    Check('3b application_id reads back', ScalarInt(vConn, 'PRAGMA application_id') = REPO_APPLICATION_ID);
+    Check('3c user_version reads back', ScalarInt(vConn, 'PRAGMA user_version') = REPO_SCHEMA_VERSION);
+    Check('3d schema_version in DL_META', GetRepoMeta(vConn, 'schema_version') = IntToStr(REPO_SCHEMA_VERSION));
   finally
     vConn.Free;
   end;
