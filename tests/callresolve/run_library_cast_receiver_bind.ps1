@@ -135,7 +135,16 @@ $db0 = Join-Path $WorkDir 'NoLib.sqlite'
 & $Exe index --project (Join-Path $WorkDir 'App.dpr') --db $db0 --library-db none 2>&1 | Out-Null
 Push-Location $WorkDir
 try { $o0 = ($null | & $Exe rename --kind symbol --name 'uC.TMine.Text' --to Caption2 --db $db0 --library-db $LibraryDb --plan 2>&1 | Out-String); $code0 = $LASTEXITCODE } finally { Pop-Location }
-Check 'N1  DB resolved without a library: rename --plan refuses receiver-untyped (negative control)' (($o0 -match 'receiver-untyped') -and ($o0 -match 'not proved')) (($o0 -split "`r?`n" | Where-Object { $_ -match 'undecided|not proved' }) -join ' | ')
+# v1511 RENAME B01 (e9245a7ea) changed the second half on purpose: the proof now decides an UNBOUND member on a
+# hard-cast receiver by the cast type, so the no-library DB no longer refuses. N1 pins both halves: the DB really
+# holds no external target for E1-E3 (the YADF mechanism is still reproduced), and the plan decides the two Text
+# refs by the receiver's static type rather than by a binding.
+$dbSave = $db; $db = $db0
+$n0 = Sql ("SELECT r.name_text FROM refs r JOIN files f ON f.id = r.file_id WHERE r.kind = 'member-access' " +
+           "AND r.name_text IN ('Text','Checked') AND r.external_target IS NULL AND f.path LIKE '%\uC.pas'")
+$db = $dbSave
+Check 'N0  DB resolved without a library: E1-E3 carry no external target (negative control)' ($n0.Count -eq 3) "unbound=$($n0.Count)"
+Check 'N1  ... and rename --plan decides them by the cast type (RENAME B01), not by a binding' (($code0 -eq 0) -and ($o0 -match '2 unbound ref\(s\) decided by the receiver''s static type') -and ($o0 -match 'undecided: 0')) (($o0 -split "`r?`n" | Where-Object { $_ -match 'decided|not proved' }) -join ' | ')
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green; exit 0

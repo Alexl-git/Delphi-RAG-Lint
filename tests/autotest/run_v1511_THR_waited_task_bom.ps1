@@ -4,7 +4,7 @@
 # Usage: pwsh -File tests/autotest/run_v1511_THR_waited_task_bom.ps1 -Exe <exe> -DbPath <db copy>
 [CmdletBinding()]
 param(
-    [string] $Exe,
+    [string] $Exe = (Join-Path $PSScriptRoot '..\..\third_party\dll-win64\drag-lint.exe'),
     [string] $DbPath
 )
 $ErrorActionPreference = 'Continue'
@@ -13,10 +13,12 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail='') {
     Write-Host ("  [{0}] {1} {2}" -f $(if ($Ok) {'PASS'} else {'FAIL'}), $Name, $Detail)
     if (-not $Ok) { $script:Failed = $true }
 }
-if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe"; exit 2 }
+# No -DbPath: lint the loose file with no --db (read-only; the battery passes neither flag).
+$DbArgs = if ($DbPath) { @('--db', $DbPath) } else { @() }
+if (-not $Exe -or -not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe"; exit 2 }
 $Fix = Join-Path $PSScriptRoot 'fixtures\v1511-THR'
 function Lines([string]$File, [string]$Rule, [string[]]$Extra) {
-    $raw = (& $Exe lint $File --rule $Rule --db $DbPath --json @Extra 2>$null) -join "`n"
+    $raw = (& $Exe lint $File --rule $Rule @DbArgs --json @Extra 2>$null) -join "`n"
     $arr = @()
     if ($raw.Trim().StartsWith("[")) { try { $arr = @($raw | ConvertFrom-Json) } catch { } }
     return @($arr | ForEach-Object { [int]$_.start_line })
