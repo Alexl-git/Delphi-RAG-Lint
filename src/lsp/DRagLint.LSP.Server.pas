@@ -6370,7 +6370,7 @@ end;
 function FixEditKey(const AEdit: TJSONObject; AEnd: Boolean): Int64;
 begin
   Result:= 0;
-  var Side: string:= IfThen(AEnd, 'end', 'start');
+  var Side: string:= if AEnd then 'end' else 'start';
   var L: Integer;
   var C: Integer;
   if AEdit.TryGetValue<Integer>('range.' + Side + '.line', L) and AEdit.TryGetValue<Integer>('range.' + Side + '.character', C) then
