@@ -129,6 +129,8 @@ foreach ($plat in 'win64','win32') {
     if (Test-Path $src) { Copy-Item $src (Join-Path $stg "docs") }
     else { Write-Host "  WARNING: docs\$a is missing -- not in this release" -ForegroundColor Yellow }
   }
+  # Wiki-blocks authoring guide (1.52): user-facing, so it ships in both archives.
+  Copy-Item (Join-Path $repo "docs\wiki\Wiki-Blocks-Authoring.md") (Join-Path $stg "docs")
   Copy-Item (Join-Path $repo "docs\lint\REPORT-1-delphi-lint-landscape.md") (Join-Path $stg "docs\lint")
   Copy-Item (Join-Path $repo "docs\lint\REPORT-2-draglint-implementation-plan.md") (Join-Path $stg "docs\lint")
 
