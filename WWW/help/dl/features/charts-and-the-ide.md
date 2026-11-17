@@ -7,14 +7,14 @@ group: diagrams-charts
 order: 80004
 since: 1.20.1-alpha
 status: shipped
-updated: 1.43.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # Charts and the IDE
 
 Ask a chart question, open the answer, read a round-trip trace, jump to RAD Studio.
 
-Read this when you first ask a chart question: how to ask one from drag-lint > Reports or with drag-lint ask, where the answer lands, how to read a round-trip trace, and the one-time draglint:// registration that makes a chart row open its line in RAD Studio. Needs a fresh project index, and Graphviz for the pictures (the installer brings it).
+Read this when you first ask a chart question: how to ask one from drag-lint > Reports or with drag-lint ask, where the answer lands, how to read a round-trip trace (zoom, pan and the amber unresolved steps), and the one-time draglint:// registration that makes a chart row open its line in RAD Studio. Needs a fresh project index, and Graphviz for the pictures (the installer brings it).
 
 ## Where to click
 
@@ -181,7 +181,7 @@ inside RAD Studio**. The IDE's docked graph window
 (drag-lint > drag-lint Graph (dockable)) hosts the separate call-graph viewer,
 `drag_lint_graph.exe`; it does not open chart folders.
 
-The page shows the chart as a fixed picture, with no pan or zoom controls of its own. Use the browser's zoom and scroll bars, or open `graph.pdf`.
+Every page that embeds the chart opens it **fit to width** and has its own controls: the mouse wheel zooms at the cursor, dragging pans, the **Fit**, **100%**, **+** and **-** buttons set the zoom, and key **0** fits again. A drag never opens a link; a plain click on a row still opens its line in the IDE. The page is plain inline script, so it works offline from a temp folder. Steps where the trace **stops** (and `dangling:` notes) are drawn in amber with a dashed outline and edge, their lines in the text trace are highlighted, and a legend above the picture (`unresolved: the trace stops here -- <reason>`) lists them; click one, or the `N unresolved` count in the END TRACE line, to jump to it. `graph.pdf` stays a fixed picture.
 
 ### Jumping from a chart into RAD Studio
 
@@ -336,7 +336,7 @@ them.
 
 ### Not yet
 
-* **No chart viewer inside RAD Studio, and no built-in pan or zoom.** Charts open in a browser as a fixed picture.
+* **No chart viewer inside RAD Studio.** Charts open in a browser page (with its own pan and zoom), not in an IDE window.
 * **`round-trip` as a chart.** It answers in text today; a picture drawn from
   that text is the next step.
 

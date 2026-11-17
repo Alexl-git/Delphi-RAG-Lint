@@ -253,11 +253,12 @@ const
     '<style>' + LF +
     '  :root{--bg:#F6F7F9;--panel:#fff;--ink:#131820;--muted:#5B6674;--line:#DDE2E8;' + LF +
     '        --accent:#0F766E;--accent-soft:#E2F1EF;--warn:#9A5408;--warn-soft:#FBF0E0;' + LF +
+    '        --unres:#D97706;--unres-soft:#FEF3C7;' + LF +
     '        --mono:''Cascadia Mono'',Consolas,monospace;' + LF +
     '        --sans:''Segoe UI'',system-ui,sans-serif;}' + LF +
     '  @media (prefers-color-scheme:dark){:root{--bg:#0E1319;--panel:#151C24;--ink:#E6EBF1;' + LF +
     '        --muted:#96A2B1;--line:#293441;--accent:#4FD1C0;--accent-soft:#12312D;' + LF +
-    '        --warn:#E0A458;--warn-soft:#33260F;}}' + LF +
+    '        --warn:#E0A458;--warn-soft:#33260F;--unres:#F59E0B;--unres-soft:#3A2A08;}}' + LF +
     '  *{box-sizing:border-box}' + LF +
     '  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 var(--sans);}' + LF +
     '  header{padding:20px 24px;border-bottom:1px solid var(--line);}' + LF +
@@ -277,6 +278,25 @@ const
     '  .note{margin:18px 0 0;border-left:4px solid var(--warn);background:var(--warn-soft);' + LF +
     '        padding:14px 18px;border-radius:0 8px 8px 0;font-size:14px;}' + LF +
     '  .note b{color:var(--warn);}' + LF +
+    '  .zbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:0 0 10px;font:12.5px var(--mono);color:var(--muted);}' + LF +
+    '  .zbar button{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:3px 10px;cursor:pointer;}' + LF +
+    '  .zbar button:hover{border-color:var(--accent);color:var(--accent);}' + LF +
+    '  .zbar .zhint{margin-left:auto;}' + LF +
+    '  .zview{position:relative;overflow:hidden;border:1px solid var(--line);border-radius:6px;cursor:grab;background:var(--panel);touch-action:none;}' + LF +
+    '  .zview.drag{cursor:grabbing;}' + LF +
+    '  .zview svg{position:absolute;left:0;top:0;max-width:none;height:auto;transform-origin:0 0;}' + LF +
+    '  .zlegend{display:none;margin:0 0 10px;font:12.5px/1.5 var(--mono);color:var(--muted);}' + LF +
+    '  .zlegend.on{display:block;}' + LF +
+    '  .zsw{display:inline-block;width:14px;height:10px;border:2px dashed var(--unres);background:var(--unres-soft);vertical-align:middle;margin-right:6px;}' + LF +
+    '  .zlegend a{color:var(--unres);cursor:pointer;text-decoration:underline;margin-right:14px;}' + LF +
+    '  .unres [stroke]:not([stroke="none"]){stroke:var(--unres)!important;stroke-width:3!important;stroke-dasharray:8,4!important;}' + LF +
+    '  .unres polygon:first-of-type,.unres polygon[fill="#fff1f1"]{fill:var(--unres-soft)!important;}' + LF +
+    '  .unres-edge path{stroke:var(--unres)!important;stroke-width:2.5!important;stroke-dasharray:8,4!important;}' + LF +
+    '  .unres-edge polygon{stroke:var(--unres)!important;fill:var(--unres)!important;}' + LF +
+    '  .unres.hit polygon{stroke-width:6!important;}' + LF +
+    '  .unres-line{background:var(--unres-soft);border-left:3px solid var(--unres);margin-left:-8px;padding-left:5px;display:inline-block;}' + LF +
+    '  .unres-line.hit{outline:2px solid var(--unres);}' + LF +
+    '  .unres-jump{color:var(--unres);font-weight:600;cursor:pointer;text-decoration:underline;}' + LF +
     '  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);' + LF +
     '         background:var(--ink);color:var(--bg);font-family:var(--mono);font-size:13px;' + LF +
     '         padding:11px 16px;border-radius:8px;max-width:min(92vw,720px);' + LF +
@@ -325,6 +345,143 @@ const
     '    var what = href;' + LF +
     '    if (m) { try { what = decodeURIComponent(m[1]) + '':'' + m[2]; } catch (e) { what = m[1] + '':'' + m[2]; } }' + LF +
     '    toast(''opening '' + what + '' in the IDE -- if nothing opens, register the handler once: drag-lint protocol register'');' + LF +
+    '  });' + LF +
+    '})();' + LF +
+    '(function () {' + LF +
+    '  var stage = document.querySelector(''.stage'');' + LF +
+    '  var svg = stage && stage.querySelector(''svg'');' + LF +
+    '  if (!svg) return;' + LF +
+    '  var vb = (svg.getAttribute(''viewBox'') || '''').split(/[ ,]+/).map(parseFloat);' + LF +
+    '  var bw = vb.length === 4 && vb[2] > 0 ? vb[2] : (parseFloat(svg.getAttribute(''width'')) || 1000);' + LF +
+    '  var bh = vb.length === 4 && vb[3] > 0 ? vb[3] : (parseFloat(svg.getAttribute(''height'')) || 600);' + LF +
+    '  var bar = document.createElement(''div''); bar.className = ''zbar'';' + LF +
+    '  bar.innerHTML = ''<button type="button" data-zoom="fit">Fit</button><button type="button" data-zoom="100">100%</button>'' +' + LF +
+    '    ''<button type="button" data-zoom="in">+</button><button type="button" data-zoom="out">-</button>'' +' + LF +
+    '    ''<span id="zpct"></span><span class="zhint">wheel = zoom at cursor, drag = pan, 0 = fit</span>'';' + LF +
+    '  var legend = document.createElement(''div''); legend.className = ''zlegend''; legend.id = ''zlegend'';' + LF +
+    '  legend.innerHTML = ''<span class="zsw"></span>unresolved: the trace stops here -- <span id="zwhy"></span>'';' + LF +
+    '  var view = document.createElement(''div''); view.className = ''zview'';' + LF +
+    '  svg.parentNode.insertBefore(bar, svg); svg.parentNode.insertBefore(legend, svg); svg.parentNode.insertBefore(view, svg);' + LF +
+    '  view.appendChild(svg);' + LF +
+    '  svg.removeAttribute(''width''); svg.removeAttribute(''height'');' + LF +
+    '  svg.style.width = bw + ''px''; svg.style.height = bh + ''px'';' + LF +
+    '  var k = 1, tx = 0, ty = 0, moved = false, KMIN = 0.02, KMAX = 8;' + LF +
+    '  function apply() {' + LF +
+    '    svg.style.transform = ''translate('' + tx + ''px,'' + ty + ''px) scale('' + k + '')'';' + LF +
+    '    document.getElementById(''zpct'').textContent = Math.round(k * 100) + ''%'';' + LF +
+    '  }' + LF +
+    '  function zoomAt(f, cx, cy) {' + LF +
+    '    var nk = Math.min(KMAX, Math.max(KMIN, k * f)); f = nk / k;' + LF +
+    '    tx = cx - (cx - tx) * f; ty = cy - (cy - ty) * f; k = nk; apply();' + LF +
+    '  }' + LF +
+    '  function fitWidth() {' + LF +
+    '    var w = view.clientWidth || stage.clientWidth || bw;' + LF +
+    '    k = Math.min(1, w / bw); tx = 0; ty = 0;' + LF +
+    '    view.style.height = Math.max(240, Math.min(bh * k, window.innerHeight * 0.78)) + ''px'';' + LF +
+    '    apply();' + LF +
+    '  }' + LF +
+    '  function centreOn(el) {' + LF +
+    '    var r = el.getBoundingClientRect(), v = view.getBoundingClientRect();' + LF +
+    '    tx += (v.left + v.width / 2) - (r.left + r.width / 2); ty += (v.top + v.height / 2) - (r.top + r.height / 2); apply();' + LF +
+    '  }' + LF +
+    '  bar.addEventListener(''click'', function (ev) {' + LF +
+    '    var b = ev.target.closest(''button''); if (!b) return;' + LF +
+    '    var z = b.getAttribute(''data-zoom''), cx = view.clientWidth / 2, cy = view.clientHeight / 2;' + LF +
+    '    if (z === ''fit'') fitWidth();' + LF +
+    '    else if (z === ''100'') zoomAt(1 / k, cx, cy);' + LF +
+    '    else if (z === ''in'') zoomAt(1.25, cx, cy);' + LF +
+    '    else if (z === ''out'') zoomAt(0.8, cx, cy);' + LF +
+    '  });' + LF +
+    '  view.addEventListener(''wheel'', function (ev) {' + LF +
+    '    ev.preventDefault();' + LF +
+    '    var v = view.getBoundingClientRect();' + LF +
+    '    zoomAt(ev.deltaY < 0 ? 1.15 : 1 / 1.15, ev.clientX - v.left, ev.clientY - v.top);' + LF +
+    '  }, { passive: false });' + LF +
+    '  var sx = 0, sy = 0, ox = 0, oy = 0, down = false;' + LF +
+    '  view.addEventListener(''mousedown'', function (ev) {' + LF +
+    '    if (ev.button !== 0) return;' + LF +
+    '    down = true; moved = false; sx = ev.clientX; sy = ev.clientY; ox = tx; oy = ty;' + LF +
+    '  });' + LF +
+    '  window.addEventListener(''mousemove'', function (ev) {' + LF +
+    '    if (!down) return;' + LF +
+    '    var dx = ev.clientX - sx, dy = ev.clientY - sy;' + LF +
+    '    if (!moved && Math.abs(dx) + Math.abs(dy) < 5) return;' + LF +
+    '    moved = true; view.classList.add(''drag''); tx = ox + dx; ty = oy + dy; apply();' + LF +
+    '  });' + LF +
+    '  window.addEventListener(''mouseup'', function () { down = false; view.classList.remove(''drag''); });' + LF +
+    '  // a drag must not fire the link under the cursor: swallow the click that ends a drag (capture, before the toast handler)' + LF +
+    '  stage.addEventListener(''click'', function (ev) {' + LF +
+    '    if (moved) { ev.stopPropagation(); ev.preventDefault(); moved = false; }' + LF +
+    '  }, true);' + LF +
+    '  document.addEventListener(''keydown'', function (ev) {' + LF +
+    '    if (ev.key === ''0'' && !ev.ctrlKey && !ev.metaKey && !ev.altKey) fitWidth();' + LF +
+    '  });' + LF +
+    '  window.addEventListener(''resize'', function () { if (k <= 1) fitWidth(); });' + LF +
+    '  fitWidth();' + LF +
+    '  // unresolved: a step that STOPS, or a "dangling:" note -- node, edge into it, text line, legend, END TRACE jump' + LF +
+    '  var RE_STOP = /^\[(\d+)\]\s+(?:(?:USER|CLIENT|SERVER|DATABASE)\s+)?STOPS\s+(.*)$/;' + LF +
+    '  var hits = [], ids = {};' + LF +
+    '  function why(t) { t = t.replace(/\s+@\S+:\d+.*$/, '''').replace(/\s+--\s.*$/, ''''); return t.length > 110 ? t.slice(0, 107) + ''...'' : t; }' + LF +
+    '  var nodes = svg.querySelectorAll(''g.node'');' + LF +
+    '  for (var i = 0; i < nodes.length; i++) {' + LF +
+    '    var as = nodes[i].querySelectorAll(''a''), found = null;' + LF +
+    '    for (var j = 0; j < as.length && !found; j++) {' + LF +
+    '      var t = as[j].getAttribute(''xlink:title'') || as[j].getAttribute(''title'') || '''';' + LF +
+    '      var m = RE_STOP.exec(t);' + LF +
+    '      if (m) found = { n: m[1], why: why(m[2]) };' + LF +
+    '      else if (/dangling:/i.test(t)) found = { n: ''dangling'', why: why(t.replace(/^.*?dangling:\s*/i, '''')) };' + LF +
+    '    }' + LF +
+    '    if (!found) continue;' + LF +
+    '    nodes[i].classList.add(''unres''); found.el = nodes[i]; hits.push(found);' + LF +
+    '    var ti = nodes[i].querySelector(''title''); if (ti) ids[ti.textContent] = 1;' + LF +
+    '  }' + LF +
+    '  var edges = svg.querySelectorAll(''g.edge'');' + LF +
+    '  for (var e = 0; e < edges.length; e++) {' + LF +
+    '    var et = edges[e].querySelector(''title''), p = et ? et.textContent.split(''->'') : [];' + LF +
+    '    if (p.length === 2 && ids[p[1]]) edges[e].classList.add(''unres-edge'');' + LF +
+    '  }' + LF +
+    '  var pre = stage.querySelector(''pre'');' + LF +
+    '  if (pre) {' + LF +
+    '    var lines = pre.innerHTML.split(''\n'');' + LF +
+    '    for (var l = 0; l < lines.length; l++) {' + LF +
+    '      var mm = /^\[(\d+)\]\s+(?:(?:USER|CLIENT|SERVER|DATABASE)\s+)?STOPS\s/.exec(lines[l]);' + LF +
+    '      if (mm || /dangling:/i.test(lines[l])) {' + LF +
+    '        var no = mm ? mm[1] : ''dangling'';' + LF +
+    '        lines[l] = ''<span class="unres-line" data-n="'' + no + ''">'' + lines[l] + ''</span>'';' + LF +
+    '      } else if (/^END TRACE /.test(lines[l])) {' + LF +
+    '        lines[l] = lines[l].replace(/(\d+) unresolved/, function (all, c) {' + LF +
+    '          return c === ''0'' ? all : ''<a class="unres-jump">'' + all + ''</a>'';' + LF +
+    '        });' + LF +
+    '      }' + LF +
+    '    }' + LF +
+    '    pre.innerHTML = lines.join(''\n'');' + LF +
+    '  }' + LF +
+    '  var shown = 0;' + LF +
+    '  function flash(el) { el.classList.add(''hit''); setTimeout(function () { el.classList.remove(''hit''); }, 2400); }' + LF +
+    '  function jump(idx) {' + LF +
+    '    var h = hits[idx % hits.length]; centreOn(h.el); flash(h.el);' + LF +
+    '    var ln = pre && pre.querySelector(''.unres-line[data-n="'' + h.n + ''"]''); if (ln) flash(ln);' + LF +
+    '  }' + LF +
+    '  function jumpNext() { if (hits.length) { jump(shown); shown++; } }' + LF +
+    '  if (hits.length) {' + LF +
+    '    legend.classList.add(''on'');' + LF +
+    '    var out = [];' + LF +
+    '    for (var q = 0; q < hits.length; q++) out.push(''<a data-i="'' + q + ''">'' + (isNaN(hits[q].n) ? ''dangling: '' : ''['' + hits[q].n + ''] '') + hits[q].why.replace(/&/g, ''&amp;'').replace(/</g, ''&lt;'') + ''</a>'');' + LF +
+    '    document.getElementById(''zwhy'').innerHTML = out.join('' '');' + LF +
+    '    legend.addEventListener(''click'', function (ev) {' + LF +
+    '      var a = ev.target.closest(''a[data-i]''); if (!a) return;' + LF +
+    '      var idx = parseInt(a.getAttribute(''data-i''), 10); shown = idx + 1;' + LF +
+    '      if (k < 0.6) zoomAt(0.6 / k, view.clientWidth / 2, view.clientHeight / 2);' + LF +
+    '      jump(idx);' + LF +
+    '    });' + LF +
+    '  }' + LF +
+    '  // END TRACE count, in the picture and in the text, jumps to the next unresolved step' + LF +
+    '  stage.addEventListener(''click'', function (ev) {' + LF +
+    '    var a = ev.target.closest(''a.unres-jump''), tx2 = ev.target.closest(''text'');' + LF +
+    '    if (a || (tx2 && /^END TRACE/.test(tx2.textContent) && /unresolved/.test(tx2.textContent))) {' + LF +
+    '      if (k < 0.6) zoomAt(0.6 / k, view.clientWidth / 2, view.clientHeight / 2);' + LF +
+    '      jumpNext();' + LF +
+    '    }' + LF +
     '  });' + LF +
     '})();' + LF +
     '</script>';

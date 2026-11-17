@@ -80,8 +80,8 @@
     "version": "1.43.0-alpha"
   },
   "features/charts-and-the-ide.md": {
-    "hash": "43847246ae2d0eae4930f0923d08db9b0b791afbc0d9a459191ddbadfb470a43",
-    "version": "1.43.0-alpha"
+    "hash": "14c0baaef38036fe5223e7b4300e8866e0b83a33645264fcbdbfe97fed1b4e1b",
+    "version": "1.51.1-alpha"
   },
   "features/circular-dependency-report.md": {
     "hash": "f4c4f9918a419c9623b9b10de2d6c7694d0205282586bb63de9d38598ed3baec",
