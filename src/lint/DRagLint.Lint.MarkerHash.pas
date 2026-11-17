@@ -429,12 +429,9 @@ begin
   var Hash : string := LowerCase(AMarkerHash);
   var Metric: Integer:= CurrentMetric(ARuleId, AMetric);
   if Hash = LegacyExpectedHash(ALines, ARuleId, AStartLine, Metric) then
-  begin
     { A non-metric rule's current hash IS the legacy one: verified. For a routine-metric
       rule the current hash is v2, so a legacy match was re-measured (B3 hint). }
-    if IsRoutineMetricRule(ARuleId) then Exit(mvLegacy);
-    Exit(mvVerified);
-  end;
+    Exit(if IsRoutineMetricRule(ARuleId) then mvLegacy else mvVerified);
   if (not IsRoutineMetricRule(ARuleId)) or (Length(Hash) <> HASH_DIGITS) then Exit(mvStale);
   var Anchor : Integer:= DocCommentMarkerLine(ALines, AStartLine);
   var Window : string := TReviewMarkers.HashWindow(ALines, Anchor - 1);
