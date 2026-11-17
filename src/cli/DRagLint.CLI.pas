@@ -282,6 +282,10 @@ uses
   , DRagLint.CLI.ConsumerDbs { ResolveConsumerDbs + platform detection + project index auto-create (v1511 SPLIT) }
   , DRagLint.CLI.Convert { proptree / convert-validate / -reemit / -scaffold / glyph-vacuum verbs (v1511 SPLIT) }
   , DRagLint.CLI.ConvertApply { convert-apply verb (v1511 SPLIT) }
+  , DRagLint.CLI.CheckInit { check-init verb (1.52 FRAME; lane HBSKEL) }
+  , DRagLint.CLI.Repo { repo verb family (1.52 FRAME; lane TTE) }
+  , DRagLint.CLI.Explain { explain verb (1.52 FRAME; lane EXPLAIN) }
+  , DRagLint.CLI.RuleScope { rules disable / enable (1.52 FRAME; lane DISRULE) }
   , DRagLint.CLI.Compare { compare verb (v1511 SPLIT) }
   , DRagLint.CLI.MigrateDbs { migrate-dbs verb + the manifest pair rule (v1511 SPLIT) }
   , DRagLint.CLI.Workspace { workspace / forms-csv / menu-tree / menu-drift verbs (v1511 SPLIT) }
@@ -976,7 +980,10 @@ begin
 
   // Optional subcommand: ParamStr(2) if it doesn't start with '--'.
   i:= 2;
-  if MatchText(Result.Command, ['query', 'export', 'workspace', 'selftest', 'manifest']) and (ParamCount >= 2) then
+  { 1.52 FRAME: check-init <QName>, repo <sub-verb>, explain <rule-id>, rules disable|enable (only
+    those two words: every other `rules` argument keeps its old meaning) }
+  if (MatchText(Result.Command, ['query', 'export', 'workspace', 'selftest', 'manifest', 'check-init', 'repo', 'explain'])
+      or ((Result.Command = 'rules') and MatchText(ParamStr(2), ['disable', 'enable']))) and (ParamCount >= 2) then
   begin
     A:= ParamStr(2);
     { `not StartsWith('--')` is what made `drag-lint query -h` take '-h' as the
@@ -1613,6 +1620,34 @@ begin
     end
     else if A = '--since' then Result.DocSince:= True
     else if A = '--migrate-pure' then Result.DocMigratePure:= True
+    { 1.52 FRAME F2: flags of check-init, repo, explain and rules disable / enable (verbs in their own units) }
+    else if (A = '--scope') and (Result.Command = 'rules') and (i < ParamCount) then  // dl:ok duplicate-code@e071 -- REVIEWED 2026-11-17 v152 FRAME: the ParseArgs one-value flag arm shape every sibling arm repeats; folding it is a ParseArgs refactor, not this lane
+    begin
+      Inc(i);
+      Result.RuleScope:= ParamStr(i);
+    end
+    else if (A = '--reason') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.Reason:= ParamStr(i);
+    end
+    else if (A = '--at') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.At:= ParamStr(i);
+    end
+    else if A = '--explain' then Result.HbExplain:= True
+    else if (A = '--max-routines') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.MaxRoutines:= StrToIntDef(ParamStr(i), -1);
+    end
+    else if (A = '--repo') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.RepoPath:= ParamStr(i);
+    end
+    else if A = '--replace' then Result.Replace:= True
     else if (A = '--scope') and (i < ParamCount) then
     begin
       Inc(i);
@@ -28906,7 +28941,11 @@ begin
     end
     else if Args.Command = 'warm-rule-cache' then Result:= DoWarmRuleCache(Args)
     else if Args.Command = 'query'             then Result:= DoQuery           (Args)
+    else if (Args.Command = 'rules') and MatchText(Args.SubCommand, ['disable', 'enable']) then Result:= RunRuleScope(LowerCase(Args.SubCommand), Args.Rule, Args.RuleScope, Args.InFile, Args.RefLine, Args.Reason, Args.ProjectPath, Args.ConfigPath, Args.AsJson or SameText(Args.Format, 'json')) { 1.52 FRAME: DRagLint.CLI.RuleScope }
     else if Args.Command = 'rules'             then Result:= DoRules           (Args)
+    else if Args.Command = 'check-init'        then Result:= RunCheckInit(if Args.SubCommand <> '' then Args.SubCommand else Args.QName, Args.At, Args.DbPath, Args.ProjectPath, Args.AsJson or SameText(Args.Format, 'json'), Args.HbExplain, Args.MaxRoutines) { 1.52 FRAME: DRagLint.CLI.CheckInit }
+    else if Args.Command = 'repo'              then Result:= RunRepoVerb(Args.SubCommand, Args.RepoPath, Args.ProjectPath, Args.FbConnection, Args.InFile, Args.Output, Args.Replace, Args.AsJson or SameText(Args.Format, 'json')) { 1.52 FRAME: DRagLint.CLI.Repo }
+    else if Args.Command = 'explain'           then Result:= RunExplain(if Args.SubCommand <> '' then Args.SubCommand else Args.Rule, Args.RulesDir, Args.AsJson or SameText(Args.Format, 'json')) { 1.52 FRAME: DRagLint.CLI.Explain }
     else if Args.Command = 'lint'              then Result:= DoLint            (Args)
     else if Args.Command = 'allow'             then Result:= DoAllow           (Args)
     else if Args.Command = 'export'            then Result:= DoExport          (Args)

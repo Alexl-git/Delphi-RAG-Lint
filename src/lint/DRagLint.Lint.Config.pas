@@ -32,6 +32,9 @@ const
   /// generated unit that does not compile is the one failure this feature
   /// cannot survive.</remarks>
   DEFAULT_EXCEPTIONS_ROOT = 'Exception';
+  /// <summary>Per-rule, per-file runtime budget in milliseconds when the config has no
+  /// "rule_time_budget_ms" key (PLAN 1.52 D9; lane BUDGET enforces it).</summary>
+  DEFAULT_RULE_TIME_BUDGET_MS = 2000;
 
 type
   /// <summary>Raised by TLintConfig.Load when a config key is present but malformed
@@ -62,6 +65,27 @@ type
     /// <summary>Case-insensitive path globs (as exclude_paths); a file matching any
     /// is exempt from this entry only.</summary>
     Exempt: TArray<string>;
+  end;
+
+  /// <summary>One entry of the "rule_overrides" config block (PLAN 1.52 D1, "Disable rule"
+  /// in this unit / in this project): "rule_overrides": { "&lt;rule-id&gt;": { "exclude_units":
+  /// ["UnitName"], "enabled": false, "reason": "...", "date": "yyyy-mm-dd" } }.</summary>
+  /// <remarks>Plain value record. RuleId is never empty. HasEnabled = False when the entry
+  /// names no "enabled" key (then Enabled is meaningless). Written by `rules disable` /
+  /// `rules enable` (DRagLint.CLI.RuleScope) and the IDE's Disable rule command.</remarks>
+  TRuleOverride = record
+    /// <summary>The rule id the entry is keyed by (case as written).</summary>
+    RuleId      : string;
+    /// <summary>Unit names (no path, no extension) in which the rule is silent.</summary>
+    ExcludeUnits: TArray<string>;
+    /// <summary>True when the entry has an "enabled" key.</summary>
+    HasEnabled  : Boolean;
+    /// <summary>The "enabled" value; False = disabled in this project.</summary>
+    Enabled     : Boolean;
+    /// <summary>The one-line reason the user gave; '' when absent.</summary>
+    Reason      : string;
+    /// <summary>The date the entry was written (yyyy-mm-dd); '' when absent.</summary>
+    Date        : string;
   end;
 
   /// <summary>Configurable naming conventions read from the drag-lint-lint.json
@@ -203,6 +227,11 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure ApplyConfigObject(const AObj: TJSONObject; AReplace: Boolean);
+    /// <summary>Parses the 1.52 keys "rule_overrides", "form_object_without_field" and
+    /// "rule_time_budget_ms" (PLAN section 5 D1 / D3 / D9).</summary>
+    /// <param name="AObj">Top-level or profile object.</param>
+    /// <exception cref="ELintConfigError">A key is present with the wrong JSON shape.</exception>
+    procedure ApplyV152Keys(const AObj: TJSONObject);
     /// <summary>Parses the "disallowed" block into DisallowedMethods / Types / Names.</summary>
     /// <param name="ABlock">The "disallowed" JSON object.</param>
     /// <param name="AReplace">True for a profile (lists replaced), False to append.</param>
@@ -274,10 +303,45 @@ type
     /// top-level value, so a "legacy" profile can pin 12 while the top level
     /// stays 13.</remarks>
     TargetCompiler: string;
+    /// <summary>The "rule_overrides" block (PLAN 1.52 D1), one entry per rule id, file order.</summary>
+    /// <remarks>An entry with "enabled": false also lands in the disabled list (and true in the
+    /// enabled list), so ShouldKeep honours project scope with no further wiring; unit scope is
+    /// asked per finding through IsRuleExcludedInUnit. A profile appends its entries.</remarks>
+    RuleOverrides: TArray<TRuleOverride>;
+    /// <summary>"form_object_without_field" -> "exempt_classes" (PLAN 1.52 D3): class names
+    /// the rule never reports; a trailing '*' is the only wildcard. Empty when absent.</summary>
+    FormObjectExemptClasses: TArray<string>;
+    /// <summary>True when "form_object_without_field" -> "use_default_list" is false: the
+    /// shipped rules\form-object-without-field.exempt.txt is then ignored.</summary>
+    /// <remarks>Stored negated so an unloaded (Default) config keeps the list ON.</remarks>
+    FormObjectNoDefaultList: Boolean;
+    /// <summary>True when the config gave "rule_time_budget_ms" (PLAN 1.52 D9).</summary>
+    RuleTimeBudgetSet: Boolean;
+    /// <summary>The "rule_time_budget_ms" value as given (0 = budget off); read it through
+    /// RuleTimeBudgetMs, which applies the default when the key is absent.</summary>
+    RuleTimeBudgetRaw: Integer;
     /// <summary>True when Load found a profile named AProfile under "profiles" in the
     /// config file. A built-in compliance profile name applies only when this is False
     /// (a user-defined profile of the same name wins).</summary>
-    UserProfileFound: Boolean;    /// <summary>True when AFilePath matches any glob in AGlobs (case-insensitive;
+    UserProfileFound: Boolean;
+    /// <summary>The per-rule, per-file runtime budget (PLAN 1.52 D9).</summary>
+    /// <returns>"rule_time_budget_ms" when given (0 = off), else DEFAULT_RULE_TIME_BUDGET_MS.</returns>
+    function RuleTimeBudgetMs: Integer;
+    /// <summary>Whether form-object-without-field also reads the shipped exempt-class list.</summary>
+    /// <returns>False only when the config says "use_default_list": false.</returns>
+    function FormObjectUseDefaultList: Boolean;
+    /// <summary>Unit-scope "Disable rule" (PLAN 1.52 D1): is ARuleId silenced in this unit?</summary>
+    /// <param name="ARuleId">Rule id of the finding (case-insensitive).</param>
+    /// <param name="AUnitOrPath">A unit name or a file path; the path is reduced to its
+    /// base name without extension before the case-insensitive compare.</param>
+    /// <returns>True when a "rule_overrides" entry for ARuleId lists the unit in "exclude_units".</returns>
+    function IsRuleExcludedInUnit(const ARuleId, AUnitOrPath: string): Boolean;
+    /// <summary>The "rule_overrides" entry of one rule (for `rules --json` disabled_by).</summary>
+    /// <param name="ARuleId">Rule id (case-insensitive).</param>
+    /// <param name="AOverride">The entry when found; Default otherwise.</param>
+    /// <returns>True when the config has an entry for ARuleId.</returns>
+    function FindRuleOverride(const ARuleId: string; out AOverride: TRuleOverride): Boolean;
+    /// <summary>True when AFilePath matches any glob in AGlobs (case-insensitive;
     /// '/' and '\' equivalent). The matcher behind IsPathExcluded and the
     /// per-entry "except" lists.</summary>
     /// <param name="AFilePath">Full path of the file.</param>
@@ -1014,6 +1078,94 @@ begin
     if ExcObj.GetValue('root') <> nil then ExceptionsRoot:= ExcObj.GetValue('root').Value
     else ExceptionsRoot:= DEFAULT_EXCEPTIONS_ROOT;
   end;
+  ApplyV152Keys(AObj);
+end;
+
+procedure TLintConfig.ApplyV152Keys(const AObj: TJSONObject);
+{ 1.52 FRAME F2: the PLAN section 5 keys (D1 rule_overrides, D3 form_object_without_field,
+  D9 rule_time_budget_ms). A malformed value raises ELintConfigError, as "disallowed" does:
+  a silently ignored "Disable rule" entry would look like a rule that ignores its config. }
+const
+  KEY_OVERRIDES = 'rule_overrides';
+  KEY_FORM_OBJ  = 'form_object_without_field';
+  KEY_BUDGET    = 'rule_time_budget_ms';
+begin
+  if AObj.GetValue(KEY_OVERRIDES) <> nil then
+  begin
+    if AObj.GetValue(KEY_OVERRIDES) is not TJSONObject then
+      raise ELintConfigError.Create('config: "' + KEY_OVERRIDES + '" must be an object of rule id -> entry');
+    for var Pair: TJSONPair in (AObj.GetValue(KEY_OVERRIDES) as TJSONObject) do
+    begin
+      if Pair.JsonValue is not TJSONObject then
+        raise ELintConfigError.Create('config: "' + KEY_OVERRIDES + '.' + Pair.JsonString.Value + '" must be an object');
+      var O: TJSONObject:= Pair.JsonValue as TJSONObject;
+      var R: TRuleOverride:= Default(TRuleOverride);
+      R.RuleId:= Trim(Pair.JsonString.Value);
+      if O.GetValue('exclude_units') is TJSONArray then
+        for var V: TJSONValue in (O.GetValue('exclude_units') as TJSONArray) do
+          if Trim(V.Value) <> '' then R.ExcludeUnits:= R.ExcludeUnits + [Trim(V.Value)];
+      if O.GetValue('enabled') is TJSONBool then
+      begin
+        R.HasEnabled:= True;
+        R.Enabled   := (O.GetValue('enabled') as TJSONBool).AsBoolean;
+        if R.Enabled then FEnabled:= FEnabled + [R.RuleId] else FDisabled:= FDisabled + [R.RuleId];
+      end;
+      if O.GetValue('reason') <> nil then R.Reason:= O.GetValue('reason').Value;
+      if O.GetValue('date') <> nil then R.Date:= O.GetValue('date').Value;
+      if R.RuleId <> '' then RuleOverrides:= RuleOverrides + [R];
+    end;
+  end;
+  if AObj.GetValue(KEY_FORM_OBJ) is TJSONObject then
+  begin
+    var F: TJSONObject:= AObj.GetValue(KEY_FORM_OBJ) as TJSONObject;
+    if F.GetValue('exempt_classes') is TJSONArray then
+      for var V: TJSONValue in (F.GetValue('exempt_classes') as TJSONArray) do
+        if Trim(V.Value) <> '' then FormObjectExemptClasses:= FormObjectExemptClasses + [Trim(V.Value)];
+    if F.GetValue('use_default_list') is TJSONBool then
+      FormObjectNoDefaultList:= not (F.GetValue('use_default_list') as TJSONBool).AsBoolean;
+  end;
+  if AObj.GetValue(KEY_BUDGET) <> nil then
+  begin
+    var Ms: Integer:= StrToIntDef(AObj.GetValue(KEY_BUDGET).Value, -1);
+    if Ms < 0 then
+      raise ELintConfigError.Create('config: "' + KEY_BUDGET + '" must be a non-negative integer (0 = off)');
+    RuleTimeBudgetSet:= True;
+    RuleTimeBudgetRaw:= Ms;
+  end;
+end;
+
+function TLintConfig.RuleTimeBudgetMs: Integer;
+begin
+  Result:= if RuleTimeBudgetSet then RuleTimeBudgetRaw else DEFAULT_RULE_TIME_BUDGET_MS;
+end;
+
+function TLintConfig.FormObjectUseDefaultList: Boolean;
+begin
+  Result:= not FormObjectNoDefaultList;
+end;
+
+function TLintConfig.IsRuleExcludedInUnit(const ARuleId, AUnitOrPath: string): Boolean;
+begin
+  var UnitName: string:= ExtractFileName(AUnitOrPath);  // a dotted unit name has no path and keeps its dots
+  var Ext: string:= ExtractFileExt(UnitName);
+  if SameText(Ext, '.pas') or SameText(Ext, '.dfm') then UnitName:= ChangeFileExt(UnitName, '');
+  for var R: TRuleOverride in RuleOverrides do
+    if SameText(R.RuleId, ARuleId) then
+      for var U: string in R.ExcludeUnits do
+        if SameText(U, UnitName) then Exit(True);
+  Result:= False;
+end;
+
+function TLintConfig.FindRuleOverride(const ARuleId: string; out AOverride: TRuleOverride): Boolean;
+begin
+  AOverride:= Default(TRuleOverride);
+  for var R: TRuleOverride in RuleOverrides do
+    if SameText(R.RuleId, ARuleId) then
+    begin
+      AOverride:= R;
+      Exit(True);
+    end;
+  Result:= False;
 end;
 
 class function TLintConfig.Load(const APath, AProfile: string): TLintConfig;
