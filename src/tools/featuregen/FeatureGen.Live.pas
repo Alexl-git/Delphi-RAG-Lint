@@ -1084,7 +1084,7 @@ const
     '\bCaption:\s*''([^'']+)''',
     '\brtk\w+\s*:\s*Result\s*:=\s*''([^'']+)''');
 var
-  lHasDesigner: Boolean;
+  lHasDesigner, lHasEditorMenu: Boolean;
   lHelp: TLiveHelp;
   lCli, lMenu, lRx, lS, lRt, lElse, lCore, lSchemaPas, lPack, lChart, lBlock, lF: string;
   lFamily: string;
@@ -1172,6 +1172,10 @@ begin
     ContextHosts := ['Structure form', 'Project Manager', 'Form Designer']
   else
     ContextHosts := ['Structure form', 'Project Manager'];
+  // 'Editor' (the code editor's right-click submenu, 1.52 lane PLUGCTX) joins only when its hook unit exists, as above.
+  lHasEditorMenu := TFile.Exists(TPath.Combine(pRepo, 'src\delphi-plugin\DragLint.Plugin.EditorLocalMenu.pas'));
+  if lHasEditorMenu then
+    ContextHosts := ContextHosts + ['Editor'];
   lList := TList<string>.Create;
   try
     for lS in Matches1(ReadText(TPath.Combine(pRepo, 'src\delphi-plugin\DragLint.Plugin.StructureForm.pas')), 'AddPopupItem\(\s*\w+\s*,\s*''([^'']+)''') do
@@ -1190,7 +1194,27 @@ begin
         lList.Add(DropAccelerator(lS));
       ContextCaptions.Add('Form Designer', SortUniqueText(lList.ToArray));
     end;
-  finally
+    // the editor right-click submenu: its caption, then 'submenu > caption' for every VISIBLE 1.52 command-table row
+    // whose Surfaces include csEditorContext (DragLint.Plugin.Cmd.X units; a hidden row is not on the live menu)
+    if lHasEditorMenu then
+    begin
+      lList.Clear;
+      lRt := '';
+      for lS in Matches1(ReadText(TPath.Combine(pRepo, 'src\delphi-plugin\DragLint.Plugin.EditorLocalMenu.pas')), 'EDITOR_SUBMENU_CAPTION\s*=\s*''([^'']+)''') do
+        lRt := DropAccelerator(lS);
+      if lRt <> '' then
+      begin
+        lList.Add(lRt);
+        for lF in TDirectory.GetFiles(TPath.Combine(pRepo, 'src\delphi-plugin'), 'DragLint.Plugin.Cmd.*.pas') do
+        begin
+          lS := ReadText(lF);
+          if TRegEx.IsMatch(lS, 'Command\.Surfaces\s*:=\s*\[[^\]]*\bcsEditorContext\b') and TRegEx.IsMatch(lS, 'Command\.Visible\s*:=\s*True\b') then
+            for lElse in Matches1(lS, 'Command\.Caption\s*:=\s*''([^'']+)''') do
+              lList.Add(lRt + ' > ' + DropAccelerator(lElse));
+        end;
+      end;
+      ContextCaptions.Add('Editor', SortUniqueText(lList.ToArray));
+    end;  finally
     lList.Free;
   end;
   for lH in ContextHosts do

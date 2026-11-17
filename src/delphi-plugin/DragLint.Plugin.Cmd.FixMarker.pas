@@ -32,6 +32,8 @@ begin
   Command.Caption:= 'Fix with drag-lint (finding at cursor)';
   Command.Visible:= False;
   Command.Click:= InvokeFixMarker;
+  Command.Surfaces:= [csMainMenu, csEditorContext];
+  Command.Needs:= cnFinding;
   RegisterCmd152(Command);
 end;
 

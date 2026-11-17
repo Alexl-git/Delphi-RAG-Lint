@@ -32,6 +32,8 @@ begin
   Command.Caption:= 'Verify All Callers Pass an In-Range Index...';
   Command.Visible:= False;
   Command.Click:= InvokeIdxRange;
+  Command.Surfaces:= [csMainMenu, csEditorContext];
+  Command.Needs:= cnFinding;
   RegisterCmd152(Command);
 end;
 

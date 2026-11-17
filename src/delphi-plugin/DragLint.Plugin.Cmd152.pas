@@ -18,8 +18,15 @@ unit DragLint.Plugin.Cmd152;
     Visible in its own unit. A submenu created here is visible only when at
     least one of its rows is.
 
-  No ToolsAPI here: tests\plugin\run_v152_PLUGFRAME_cmdtable.ps1 compiles this
-  unit and the six stubs into a console program. }
+  ONE TABLE, TWO SURFACES (lane PLUGCTX).
+    Each row names the surfaces it appears on: the drag-lint main menu
+    (BuildCmd152Menu) and/or the code editor's right-click menu, under one
+    "drag-lint" submenu (DragLint.Plugin.EditorLocalMenu). Needs says what the
+    caret must be on for the item to be enabled there.
+
+  No ToolsAPI here: tests\plugin\run_v152_PLUGFRAME_cmdtable.ps1 and
+  run_v152_PLUGCTX_menu.ps1 compile this unit and the six stubs into a console
+  program. }
 
 interface
 
@@ -28,10 +35,25 @@ uses
 
 type
   /// <summary>The click handler of one 1.52 command.</summary>
-  /// <param name="Sender">The clicked TMenuItem.</param>
+  /// <param name="Sender">The clicked TMenuItem (main menu) or the TAction
+  /// behind the clicked item (editor right-click menu).</param>
   /// <remarks>Assignment-compatible with Editor's TMenuProc, so the host
   /// factory can hand it straight to AddWrappedItem.</remarks>
   TCmd152Click = procedure(Sender: TObject);
+
+  /// <summary>Where a 1.52 command is offered.</summary>
+  /// <remarks>csMainMenu = the drag-lint main menu; csEditorContext = the
+  /// code editor's right-click menu, submenu "drag-lint".</remarks>
+  TCmd152Surface = (csMainMenu, csEditorContext);
+
+  /// <summary>The surfaces of one row; never empty.</summary>
+  TCmd152Surfaces = set of TCmd152Surface;
+
+  /// <summary>What the caret must be on for the command to be enabled in
+  /// the editor right-click menu.</summary>
+  /// <remarks>cnNothing = always enabled; cnSymbol = an identifier under the
+  /// caret; cnFinding = a drag-lint finding on the caret line.</remarks>
+  TCmd152Needs = (cnNothing, cnSymbol, cnFinding);
 
   /// <summary>One row of the 1.52 command table.</summary>
   /// <remarks>
@@ -58,6 +80,10 @@ type
     Visible: Boolean;
     /// <summary>The click handler; must not be nil.</summary>
     Click: TCmd152Click;
+    /// <summary>Main menu and/or editor right-click; must not be empty.</summary>
+    Surfaces: TCmd152Surfaces;
+    /// <summary>Caret context the editor item needs to be enabled.</summary>
+    Needs: TCmd152Needs;
   end;
 
   /// <summary>The host's item factory: creates one clickable item, wires its
@@ -71,9 +97,9 @@ type
 
 /// <summary>Adds one row to the 1.52 command table.</summary>
 /// <param name="pCommand">The row. Id must be non-empty and unique; Click
-/// must be assigned.</param>
-/// <exception cref="EArgumentException">Raised on an empty or duplicate Id or a
-/// nil Click.</exception>
+/// must be assigned; Surfaces must not be empty.</param>
+/// <exception cref="EArgumentException">Raised on an empty or duplicate Id, a
+/// nil Click or empty Surfaces.</exception>
 /// <remarks>Called from the initialization section of each
 /// DragLint.Plugin.Cmd.X unit, i.e. on package load, before Register runs.
 /// Not thread-safe; main thread only.</remarks>
@@ -84,10 +110,33 @@ procedure RegisterCmd152(const pCommand: TCmd152Command);
 /// registry.</returns>
 function Cmd152Table: TArray<TCmd152Command>;
 
-/// <summary>Creates one menu item per row under pRoot, hidden when the row is
-/// not Visible.</summary>
+/// <summary>The rows offered on one surface, in table order.</summary>
+/// <param name="pTable">The rows (normally Cmd152Table).</param>
+/// <param name="pSurface">The surface asked for.</param>
+/// <returns>Every row whose Surfaces contain pSurface.</returns>
+function Cmd152OnSurface(const pTable: TArray<TCmd152Command>;
+  pSurface: TCmd152Surface): TArray<TCmd152Command>;
+
+/// <summary>Whether a row's editor item is enabled for the caret
+/// context.</summary>
+/// <param name="pCommand">The row.</param>
+/// <param name="pHasSymbol">An identifier is under the caret.</param>
+/// <param name="pHasFinding">A drag-lint finding is on the caret line.</param>
+/// <returns>True for cnNothing; else the matching flag.</returns>
+function Cmd152Enabled(const pCommand: TCmd152Command; pHasSymbol, pHasFinding: Boolean): Boolean;
+
+/// <summary>The full right-click menu path of a row, as feature-registry
+/// surfaces spell it.</summary>
+/// <param name="pCommand">The row.</param>
+/// <returns>'Editor context > drag-lint > ' + the caption, hotkey ampersands
+/// removed; '' when the row is not on csEditorContext.</returns>
+function Cmd152EditorPath(const pCommand: TCmd152Command): string;
+
+/// <summary>Creates one menu item per csMainMenu row under pRoot, hidden when
+/// the row is not Visible.</summary>
 /// <param name="pRoot">The drag-lint root menu item.</param>
-/// <param name="pTable">The rows to place, in order (normally Cmd152Table).</param>
+/// <param name="pTable">The rows to place, in order (normally Cmd152Table);
+/// rows without csMainMenu are skipped.</param>
 /// <param name="pAddItem">The host's item factory (see TCmd152AddItem).</param>
 /// <remarks>Main thread only. Visible items and their order are untouched
 /// when every row is hidden. A submenu created here gets Visible = True only
@@ -124,6 +173,7 @@ const
   PATH_SEP = '>';
   INDENT_STEP = '  ';
   HIDDEN_SUFFIX = ' [hidden]';
+  EDITOR_PATH_PREFIX = 'Editor context > drag-lint > ';
 
 var
   GCommands: TList<TCmd152Command>;
@@ -133,6 +183,8 @@ begin
   if Trim(pCommand.Id) = '' then raise EArgumentException.Create('RegisterCmd152: empty Id');
   if not Assigned(pCommand.Click) then
     raise EArgumentException.CreateFmt('RegisterCmd152: %s has no Click', [pCommand.Id]);
+  if pCommand.Surfaces = [] then
+    raise EArgumentException.CreateFmt('RegisterCmd152: %s has no Surfaces', [pCommand.Id]);
   for var Cmd in GCommands do
     if SameText(Cmd.Id, pCommand.Id) then
       raise EArgumentException.CreateFmt('RegisterCmd152: duplicate Id %s', [pCommand.Id]);
@@ -147,6 +199,28 @@ begin
     begin
       Result:= CompareText(pLeft.Id, pRight.Id);
     end));
+end;
+
+function Cmd152OnSurface(const pTable: TArray<TCmd152Command>;
+  pSurface: TCmd152Surface): TArray<TCmd152Command>;
+begin
+  Result:= nil;
+  for var Cmd in pTable do
+    if pSurface in Cmd.Surfaces then Result:= Result + [Cmd];
+end;
+
+function Cmd152Enabled(const pCommand: TCmd152Command; pHasSymbol, pHasFinding: Boolean): Boolean;
+begin
+  case pCommand.Needs of
+    cnSymbol : Result:= pHasSymbol;
+    cnFinding: Result:= pHasFinding;
+    else Result:= True;
+  end;
+end;
+
+function Cmd152EditorPath(const pCommand: TCmd152Command): string;
+begin
+  Result:= if csEditorContext in pCommand.Surfaces then EDITOR_PATH_PREFIX + StripHotkey(pCommand.Caption) else '';
 end;
 
 { Child of pParent whose caption equals pCaption, hotkey ampersands ignored. }
@@ -191,7 +265,7 @@ begin
   if (pRoot = nil) or not Assigned(pAddItem) then Exit;
   var Created: TList<TMenuItem>:= TList<TMenuItem>.Create;
   try
-    for var Cmd in pTable do
+    for var Cmd in Cmd152OnSurface(pTable, csMainMenu) do
     begin
       var Parent: TMenuItem:= EnsurePath(pRoot, Cmd.ParentPath, Created);
       var After: TMenuItem:= nil;

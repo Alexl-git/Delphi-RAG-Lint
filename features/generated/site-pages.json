@@ -323,6 +323,10 @@
     "hash": "72c2b513d489200927e34db0f9378ba1eb6ff6a54223568c1931460b40a1c56d",
     "version": "1.35.1-alpha"
   },
+  "features/editor-context-menu.md": {
+    "hash": "cb557efc81994c01af8991c61cac7485bd469e6f7f26f91d718e6ace569a73aa",
+    "version": "1.51.1-alpha"
+  },
   "features/editor-exception-facts.md": {
     "hash": "e9bdbc3d76480f40c07968f2f64aff51ecaab93b134a3f470bf9fdadb4c3d40d",
     "version": "1.50.0-alpha"

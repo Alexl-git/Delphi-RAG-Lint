@@ -819,6 +819,7 @@ uses
   , DragLint.Plugin.ExeResolver
   , DragLint.Plugin.Reports
   , DragLint.Plugin.Cmd152
+  , DragLint.Plugin.EditorLocalMenu
   , DragLint.Plugin.ConvertLaunch
   , DragLint.Plugin.Bookmarks // dl:unit DragLint.Plugin.Bookmarks accepted -- GBookmarkNavigate / GBookmarkPick are the hooks this unit assigns at wizard init, the GButterflyNav pattern
   , DragLint.Plugin.CycleFix // dl:unit DragLint.Plugin.CycleFix accepted -- CYCLE_FIX_TIMEOUT_MS is the one plugin cycle-fix time limit; a second copy here is what let it drift (see StructureForm)
@@ -7731,6 +7732,8 @@ begin
   RegisterProjectNotifier;
   RegisterDragLintKeystrokes;
   RegisterDragLintEditViewNotifier;
+  { 1.52 (lane PLUGCTX): the editor right-click submenu, from the Cmd152 table. }
+  RegisterDragLintEditorLocalMenu;
   { v0.40.7: dwell tracker re-enabled with the 1600 ms threshold (was 600 ms)
     and the singleton guard, so it fires only on deliberate dwells and never
     competes with an already-visible popup. Menu InvokeHover does the richer
@@ -7917,6 +7920,8 @@ begin
         StopHoverTracker;
         TDStep('-> UnregisterDragLintEditViewNotifier (NO try/except)');
         UnregisterDragLintEditViewNotifier;
+        TDStep('-> UnregisterDragLintEditorLocalMenu');
+        UnregisterDragLintEditorLocalMenu;
         TDStep('-> UnregisterDragLintKeystrokes (NO try/except)');
         UnregisterDragLintKeystrokes;
         TDStep('-> UnregisterProjectNotifier (NO try/except)');
