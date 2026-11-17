@@ -164,6 +164,7 @@ Rules, autofix, suppression markers and project-wide checks.
 
 | Feature | Surfaces | Status |
 |---|---|---|
+| [1.52 verbs in development](v152-frame-stubs) | `check-init`; `explain`; `repo` | internal |
 | [Ancestor not in project (lint rule)](ancestor-not-in-project) | `lint-all` |  |
 | [Application-level lint rules](application-level-rules) | `lint`; `lint-all` |  |
 | [Array index possibly out of range lint rule (index-possibly-out-of-range)](index-possibly-out-of-range) | `lint` |  |
