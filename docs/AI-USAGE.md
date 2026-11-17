@@ -1148,7 +1148,7 @@ Register it with Claude Code / VS Code / Cursor instead of editing their config 
 `drag-lint mcp-config --all [--db <index>] [--dry-run]` (merged, backed up, idempotent; see the
 Servers table in section 2), or `drag-lint init --project <X.dproj>` to register + index + wire in one go.
 It speaks **JSON-RPC 2.0 over stdio**. The MCP surface is a **curated subset**
-of the CLI -- exactly **18 tools**:
+of the CLI -- exactly **19 tools**:
 
 > **Like the CLI's read verbs**, the server opens every index READ-ONLY (the
 > `--db` of `serve` and a per-call `"db"` argument alike) and never migrates it:
@@ -1190,6 +1190,7 @@ of the CLI -- exactly **18 tools**:
 | `rename_symbol` | rename across the index (writes files) |
 | `run_ast_checks` | syntax check without the compiler |
 | `run_compile_check` | real compiler diagnostics |
+| `check_init` | init-before-use verdict for a unit variable or field: SET / NEVER-SET / MAY-BE-UNSET (scaffold until the happens-before solver lands) |
 
 > **MCP is a subset -- shell out to the CLI for the rest.** The newer
 > analysis/report and docs verbs are **CLI-only**, *not* exposed as MCP tools:

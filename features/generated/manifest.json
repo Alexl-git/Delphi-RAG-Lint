@@ -944,6 +944,10 @@
       "wikiPage": "Maintenance",
       "surfaces": [
         {
+          "type": "mcp",
+          "tool": "check_init"
+        },
+        {
           "type": "cli",
           "verb": "check-init",
           "example": "drag-lint check-init UnitA.GCache --db <db> --json",
@@ -987,7 +991,7 @@
         "date": "2026-11-17",
         "by": "ENGINE",
         "build": "1.51.1-alpha",
-        "surfaceHash": "3df48080662e1015a8ffa07ee61258ec6d572996411e58b9f5c083bd4edebdf5"
+        "surfaceHash": "b93f9f033241d3efbaeef9744c07302e8aaf8f8d9ccbdbc2e751876ec6b3c780"
       }
     },
     {
@@ -13371,8 +13375,8 @@
       "owner": "ENGINE",
       "status": "shipped",
       "since": "0.4.0-alpha",
-      "summary": "Exposes the index to MCP clients as 18 tools",
-      "intro": "The drag-lint MCP server lets an MCP client (an AI assistant) query the index and run checks through 18 tools. It opens every index read-only (an old schema is refused, never migrated), find_callers answers from the call graph, a tool that fails answers isError instead of ending the server, and a stale index adds a freshness note.",
+      "summary": "Exposes the index to MCP clients as 19 tools",
+      "intro": "The drag-lint MCP server lets an MCP client (an AI assistant) query the index and run checks through 19 tools. It opens every index read-only (an old schema is refused, never migrated), find_callers answers from the call graph, a tool that fails answers isError instead of ending the server, and a stale index adds a freshness note.",
       "wikiPage": "Register-MCP-Server",
       "surfaces": [
         {
@@ -13461,9 +13465,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-11-09",
+        "date": "2026-11-17",
         "by": "ENGINE",
-        "build": "1.50.0-alpha",
+        "build": "1.51.1-alpha",
         "surfaceHash": "54238dbe14546a9adc7642ae77efcf4256ccccd619a32b671fa068c1022aa2c1"
       }
     },

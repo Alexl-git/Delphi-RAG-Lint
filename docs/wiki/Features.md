@@ -97,7 +97,7 @@ Find symbols, callers, callees, text and types in the index.
 | Feature | Surfaces | Status |
 |---|---|---|
 | [call-path](call-path) | `call-path`; drag-lint > Uses & Dependencies > Call Path Between Two Routines... |  |
-| [check-init](Maintenance) | `check-init` | internal |
+| [check-init](Maintenance) | `mcp check_init`; `check-init` | internal |
 | [Class Surface](Class-Surface) | drag-lint > Inspect Symbol > Class Surface...; `surface` |  |
 | [Compiler Hints](Compiler-Hints) | drag-lint > Code Quality > Compiler Hints...; `query hints` |  |
 | [context](context) | `context` |  |

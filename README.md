@@ -831,9 +831,9 @@ Or add it to your MCP config by hand (e.g. `~/.claude/claude_desktop_config.json
 }
 ```
 
-18 tools are then available to Claude: `find_symbol`, `find_callers`,
+19 tools are then available to Claude: `find_symbol`, `find_callers`,
 `get_symbol_doc`, `get_context_bundle`, `rename_symbol`, `run_compile_check`,
-and more (see [MCP tools](#mcp-tools-18) below).
+and more (see [MCP tools](#mcp-tools-19) below).
 
 ### Click-to-source links (draglint://)
 
@@ -1305,7 +1305,7 @@ A verb's usage line names the canonical flag only. Each alias is accepted wherev
 
 <!-- dl:registry:end flag-aliases -->
 
-### MCP tools (18)
+### MCP tools (19)
 
 Verified against `src\mcp\DRagLint.MCP.Server.pas` (`HandleToolsList`) -- this
 is the complete set the server registers; it does not expose `import_log`,
@@ -1332,6 +1332,7 @@ CLI-only verbs).
 | `rename_symbol` | Preview (`dry_run`) or apply a cross-unit rename of a symbol |
 | `run_ast_checks` | Compiler-less AST diagnostics on a file (unbalanced begin/end, undeclared identifiers) |
 | `run_compile_check` | Spawn dcc/msbuild against a file or project; return H/W/E/F diagnostics as JSON |
+| `check_init` | Is a unit variable or field set before it is used: SET, NEVER-SET or MAY-BE-UNSET (scaffold answer in 1.52 until the happens-before solver lands) |
 
 ### Lint rule pack (425 rules)
 

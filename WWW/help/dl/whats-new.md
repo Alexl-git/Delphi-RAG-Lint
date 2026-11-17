@@ -532,7 +532,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 0.4.0-alpha
 
-* [MCP server](features/mcp-server.md) -- Exposes the index to MCP clients as 18 tools.
+* [MCP server](features/mcp-server.md) -- Exposes the index to MCP clients as 19 tools.
 * [serve](features/serve.md) -- Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index.
 
 ## 0.2.0-alpha

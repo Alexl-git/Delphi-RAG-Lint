@@ -10,6 +10,10 @@
   "wikiPage": "Maintenance",
   "surfaces": [
     {
+      "type": "mcp",
+      "tool": "check_init"
+    },
+    {
       "type": "cli",
       "verb": "check-init",
       "example": "drag-lint check-init UnitA.GCache --db <db> --json",
@@ -53,6 +57,6 @@
     "date": "2026-11-17",
     "by": "ENGINE",
     "build": "1.51.1-alpha",
-    "surfaceHash": "3df48080662e1015a8ffa07ee61258ec6d572996411e58b9f5c083bd4edebdf5"
+    "surfaceHash": "b93f9f033241d3efbaeef9744c07302e8aaf8f8d9ccbdbc2e751876ec6b3c780"
   }
 }

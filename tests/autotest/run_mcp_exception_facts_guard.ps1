@@ -16,7 +16,7 @@
 param(
   [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$WorkDir = "$env:TEMP\drag-lint-mcp-exc-$PID",
-  [int]$ExpectedTools = 18
+  [int]$ExpectedTools = 19
 )
 try {
 $ErrorActionPreference = 'Stop'
