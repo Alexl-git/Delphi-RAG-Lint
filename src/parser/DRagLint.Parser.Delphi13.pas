@@ -745,6 +745,34 @@ begin
   if Length(Result) > RECEIVER_TEXT_MAX then Result:= '';
 end;
 
+const
+  { 1.52 EXTP: the kind of a receiver a member write goes THROUGH. HANDOVER: belongs beside the
+    other REF_KIND_* constants in DRagLint.Core.Model (INT). }
+  REF_KIND_WRITE_THROUGH = 'write-through';
+
+{ 1.52 EXTP (ORM3 batch 3 item 2, Blueprint4.pas:1016): `edtF1.DataBinding.DataField := X` changes the
+  object edtF1 holds, yet edtF1 carried only a read and DataBinding only a member-access, so
+  `usages --name edtF1` answered writes: 0. Every identifier of the RECEIVER chain of a written member
+  -- the root and each intermediate member, never the written member itself and never a leading Self
+  -- gets one extra ref of kind write-through beside the row it already has (read / member-access).
+  An intermediate carries the same receiver text as its member-access row. Only a pure dotted chain
+  of identifiers (IsDottedIdentChain); a call or indexed receiver is left alone. Guard:
+  tests\autotest\run_v152_EXTP_refs.ps1 (W1-W3). }
+procedure EmitWriteThroughRefs(const ALhs: TTSNode; const AState: TWalkState);
+begin
+  if ALhs.IsNull or (ALhs.NodeType <> 'exprDot') then Exit;
+  var Recv:= ALhs.ChildByField('lhs');
+  if not IsDottedIdentChain(Recv) then Exit;
+  while (not Recv.IsNull) and (Recv.NodeType = 'exprDot') do
+  begin
+    var Member:= Recv.ChildByField('rhs');
+    AState.EmitRef(REF_KIND_WRITE_THROUGH, NodeText(Member, AState.Source), Member, ReceiverTextOf(Recv, AState.Source));
+    Recv:= Recv.ChildByField('lhs');
+  end;
+  if (not Recv.IsNull) and not SameText(Trim(NodeText(Recv, AState.Source)), 'Self') then
+    AState.EmitRef(REF_KIND_WRITE_THROUGH, NodeText(Recv, AState.Source), Recv);
+end;
+
 { E-PARSER-NOREFS: is this node inherited X, or a dotted chain of identifier
   members rooted in one, inherited X.Y? inherited X(a).Y is IsCallRootedReceiver's. }
 function IsInheritedRootedReceiver(const ANode: TTSNode): Boolean;
@@ -1264,6 +1292,10 @@ begin
   if VarName = '' then Exit;
   RoutineQN:= AState.Symbols[AState.CurrentRoutineIdx].QualifiedName;
   AState.Emit(skLocalVar, VarName, RoutineQN + '.' + VarName, AState.CurrentRoutineIdx, ANode, NodeText(TypeRef, AState.Source));
+  { 1.52 EXTP: the E token itself is a write of E (the handler assigns it the exception object). The
+    symbol's range is the whole clause, so without this ref the token had no occurrence and a rename of
+    any other E refused with no-ref-occurrence (YADF TXTok.E). Guard: run_v152_EXTP_refs.ps1 E1/E2. }
+  AState.EmitRef('write', VarName, VarNode);
 end; // procedure
 
 procedure EmitHandlerReference(const ANode: TTSNode; const AState: TWalkState);
@@ -3168,7 +3200,13 @@ begin
   end;
 end;
 
-procedure SetRoutineImplRange(const AState: TWalkState; const AName: string; AStartLine, AEndLine: Integer; const ASignature: string);
+{ 1.52 EXTP: AIsClass = the implementation header starts with `class`. A declaration of the same
+  class-ness is preferred over the name order: `class constructor Create;` and
+  `constructor Create(pA: Integer)` (or `class destructor Destroy` and `destructor Destroy; override`)
+  share a name, and the empty / equal signature sent the class constructor's body to the instance
+  constructor and back (impl ranges swapped, locals parented to the wrong routine). Only when no
+  candidate of that class-ness waits does the old name-order match run. Guard: run_v152_EXTP_refs.ps1 C1. }
+procedure SetRoutineImplRange(const AState: TWalkState; const AName: string; AStartLine, AEndLine: Integer; const ASignature: string; AIsClass: Boolean);
 var
   i          : Integer;
   Sym        : TSymbol;
@@ -3176,6 +3214,17 @@ var
   ShapeKey   : string ;
   ShapeIdx   : Integer;
   FallbackIdx: Integer;
+  SameClass  : Boolean;
+
+  { A routine declaration named AName (same last segment, qualified name equal or ending in '.' + AName)
+    that still waits for its body. }
+  function Waiting(const ASym: TSymbol): Boolean;
+  begin
+    Result:= (ASym.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) and (ASym.ImplStartLine = 0)
+      and SameText(ASym.Name, LastSeg);
+    if Result then Result:= SameText(ASym.QualifiedName, AName) or ASym.QualifiedName.EndsWith('.' + AName, True);
+  end;
+
 begin
   if AName = '' then Exit;
   LastSeg:= AName;
@@ -3184,11 +3233,20 @@ begin
   if ASignature <> '' then ShapeKey:= ParamShapeKey(ASignature);
   ShapeIdx   := -1;
   FallbackIdx:= -1;
+  SameClass  := False;
   for i:= AState.Symbols.Count - 1 downto 0 do
   begin
     Sym:= AState.Symbols[i];
-    if (Sym.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) and (Sym.ImplStartLine = 0) and SameText(Sym.Name, LastSeg)
-       and (SameText(Sym.QualifiedName, AName) or Sym.QualifiedName.EndsWith('.' + AName, True)) then
+    if Waiting(Sym) and (Sym.IsClassMethod = AIsClass) then
+    begin
+      SameClass:= True;
+      Break;
+    end;
+  end;
+  for i:= AState.Symbols.Count - 1 downto 0 do
+  begin
+    Sym:= AState.Symbols[i];
+    if Waiting(Sym) and ((not SameClass) or (Sym.IsClassMethod = AIsClass)) then
     begin
       if (ASignature <> '') and SameText(Sym.Signature, ASignature) then
       begin
@@ -3353,6 +3411,10 @@ procedure EmitRoutineLocals(const ADefProcNode: TTSNode; const AState: TWalkStat
   begin
     if ANode.IsNull or (ADepth > MaxInlineDeclWalkDepth) then Exit;
     if ANode.NodeType = 'defProc' then Exit;
+    { 1.52 EXTP (Q-EXT1): an anonymous method's parameters are skParam symbols of the enclosing named
+      routine, like its locals above, so `O.Field` inside the lambda has a typed receiver and a rename
+      of pA reaches it. Guard: run_v152_EXTP_refs.ps1 A1/A2. }
+    if ANode.NodeType = 'lambda' then EmitRoutineParams(ANode, AState, ARoutineIdx, ARoutineQualifiedName);
     if IsInlineDecl(ANode.NodeType) or (ANode.NodeType = 'declVar') then
     begin
       EmitDeclVar(ANode);
@@ -3966,7 +4028,9 @@ begin
             header's own signature (built by the same ProcSignatureOf that
             produced the decl's stored Signature) so overloads disambiguate
             by signature, not just name -- see SetRoutineImplRange. }
-          if HdrName <> '' then SetRoutineImplRange(AState, HdrName, Integer(ANode.StartPoint.row) + 1, Integer(ANode.EndPoint.row) + 1, ProcSignatureOf(HdrNode, AState.Source));
+          if HdrName <> '' then
+            SetRoutineImplRange(AState, HdrName, Integer(ANode.StartPoint.row) + 1, Integer(ANode.EndPoint.row) + 1, ProcSignatureOf(HdrNode, AState.Source),
+              (HdrNode.ChildCount > 0) and (HdrNode.Child(0).NodeType = 'kClass'));
           { v14 (D5, Task 3) / v23: emit this routine's locals as skLocalVar
             symbols, parented to its (already-emitted) routine symbol, with the
             routine symbol's own unit-qualified name so the local's
@@ -4374,6 +4438,7 @@ begin
           SelfMemberLhs:= True;
         end;
       end;
+      EmitWriteThroughRefs(Lhs, AState); { 1.52 EXTP: `edtF1.DataBinding.DataField := v` }
       // Bug B fix: a bare-identifier RHS (`Result := maxItems;`) is a READ of
       // that symbol, but a lone identifier that IS the whole RHS hits no case
       // in the generic recurse below (it is neither exprDot/exprArgs/etc.), so
