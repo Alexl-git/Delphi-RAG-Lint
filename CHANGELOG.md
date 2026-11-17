@@ -3,7 +3,7 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
-## v1.51.2-alpha -- date TBD
+## v1.51.2-alpha -- 2026-11-17
 
 Hotfix release. No re-parse: extractor, resolver, grammar and rule counts unchanged.
 
