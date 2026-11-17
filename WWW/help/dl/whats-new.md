@@ -9,6 +9,10 @@ product: DL
 
 drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.com](https://www.htrmicronite.com)), our quality and production-control software.
 
+## 1.52.0-alpha
+
+* [Array index possibly out of range lint rule (index-possibly-out-of-range)](features/v152-index-possibly-out-of-range.md) -- Warns on the write of an array index that no dominating guard bounds on both sides before the access; opt-in InRange guard autofix.
+
 ## 1.51.1-alpha
 
 * [CLI fixes in 1.51.1](features/v1511-cli-fixes.md) -- lint-all --rule a,b runs only those rules, a DB copy stays on the copy; rules --rule; info versions; index parse-errors; resolve-only warning.
@@ -109,7 +113,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 1.37.0-alpha
 
-* [Autofix for fixable rules](features/autofix-wave.md) -- lint --fix repairs findings of the 125 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
+* [Autofix for fixable rules](features/autofix-wave.md) -- lint --fix repairs findings of the 126 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
 * [Compliance labels (CWE, CERT, MISRA)](features/compliance-labels.md) -- Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field.
 * [Gap-wave lint rules](features/gap-wave-rules.md) -- About 50 new lint rules (bug patterns, dead code, data flow, platform, structure) added in the 1.37.0 gap wave.
 * [Include-file indexing and IF evaluation](features/inc-indexing.md) -- Include files are indexed under the active build, value defines and IF expressions are evaluated, and an undecidable IF is reported as a pp-unresolved-if hint.

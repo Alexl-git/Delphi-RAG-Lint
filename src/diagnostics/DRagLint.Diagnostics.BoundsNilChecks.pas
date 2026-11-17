@@ -27,7 +27,15 @@ unit DRagLint.Diagnostics.BoundsNilChecks;
                            have p = q and the odd row repeats another row's q; a
                            2-row run is a hit only when the two lhs members are a
                            known axis pair (Left/Top, Width/Height, X/Y, Min/Max).
-                           hint. Fixable (risky): the odd rhs member becomes p. }
+                           hint. Fixable (risky): the odd rhs member becomes p.
+    index-possibly-out-of-range : OFF (1.52, spec 2026-11-16-index-possibly-out-of-range-design.md).
+                           A[idx] where A is a static or dynamic array and idx a routine local
+                           or parameter, with no dominating guard (for over the bounds, if /
+                           while condition, InRange, an earlier Exit/raise guard) and no write
+                           history bounding idx on BOTH sides. Reported on the nearest write of
+                           idx (warning); an unwritten parameter reports on the access (hint).
+                           A subrange type is not a guard. Fixable (risky): an InRange guard
+                           raising params.index-possibly-out-of-range.exception_class. }
 
 interface
 
@@ -41,9 +49,9 @@ type
   /// <summary>Checker for the BoundsNilChecks rules of the gap-rules wave (G5).</summary>
   /// <remarks>
   /// Stateless; thread-safe. Called from DoLint and DoLintAll behind
-  /// LintRuleWants(rule, LINT_GATE_BOUNDS_NIL). All four rules are emitted on every
+  /// LintRuleWants(rule, LINT_GATE_BOUNDS_NIL). All five rules are emitted on every
   /// call; the CLI filters by --rule and by the enabled set (copy-paste-assignment
-  /// is OFF by default).
+  /// and index-possibly-out-of-range are OFF by default).
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
   /// <para>Used in units: DRagLint.CLI</para>
@@ -53,7 +61,7 @@ type
   public
     /// <summary>Runs the BoundsNilChecks rules against one source file.</summary>
     /// <param name="AFile">Absolute path to the .pas/.inc source file.</param>
-    /// <param name="ACfg">Effective lint configuration (unused: the rules have no thresholds).</param>
+    /// <param name="ACfg">Effective lint configuration; only IndexGuardExceptionClass is read (the class the index-possibly-out-of-range fix raises).</param>
     /// <param name="AStore">Optional symbol store; nil when the run has no index (unused: store-free rules).</param>
     /// <param name="AFileId">File id within AStore (ignored when AStore is nil).</param>
     /// <returns>One finding per violation; empty when clean or unparsable. The CLI filters by --rule.</returns>
@@ -84,6 +92,8 @@ uses
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Refactor.TextEdit
   , DRagLint.Lint.Autofix
+  , System.StrUtils
+  , DRagLint.Core.LiveDocs
   ;
 
 const
@@ -93,6 +103,9 @@ const
   RULE_ADDR_LOCAL = 'address-of-local-returned';
   RULE_CONST_INDEX = 'constant-index-out-of-range';
   RULE_COPY_PASTE = 'copy-paste-assignment';
+  RULE_INDEX_RANGE = 'index-possibly-out-of-range';
+  DEFAULT_INDEX_GUARD_EXCEPTION = 'EArgumentOutOfRangeException';
+  DYN_ARRAY_TYPE_PATTERN = '^(?:packed\s+)?array\s+of\b|^tarray\s*<|^tbytes$';
   { Members whose call is not a use of the object for nil-check-after-dereference. }
   RELEASE_MEMBERS: array[0..3] of string = ('free', 'destroy', 'disposeof', 'release');
   { Axis-pair lhs members: a 2-row copy-paste run is a hit only for these. }
@@ -105,7 +118,7 @@ const
 
 type
   { What a declaration says about one name, as far as the rules care. }
-  TDeclKind = (dkOther, dkString, dkArray);
+  TDeclKind = (dkOther, dkString, dkArray, dkDynArray);
 
   TDeclInfo = record
     Kind   : TDeclKind;
@@ -125,6 +138,21 @@ type
     Q    : string;
   end;
 
+  { One A[idx] under analysis by index-possibly-out-of-range: what is being indexed, by what, the
+    writes of the index in the routine, and the sides proven so far. }
+  TIdxCtx = record
+    Access : TTSNode;
+    Idx    : string;            { lower-cased index name }
+    Arr    : string;            { lower-cased array name }
+    Info   : TDeclInfo;         { the array's shape }
+    IdxInfo: TDeclInfo;         { the index's declaration (IsParam) }
+    Writes : TList<TTSNode>;    { not owned }
+    Lo     : Boolean;           { lower side proven }
+    Hi     : Boolean;           { upper side proven }
+    Silent : Boolean;           { a v1 cut applies: no finding }
+    Loop   : TTSNode;           { innermost loop around the access }
+  end;
+
   { One walk over one parsed file. Private to this unit. }
   TBnRun = class
   strict private
@@ -137,6 +165,8 @@ type
     FConstBad: TDictionary<string, Boolean>;      { const names declared twice with different values }
     FAliases : TDictionary<string, TDeclInfo>;    { file-level type aliases of a string or array[lo..hi] }
     FAliasBad: TDictionary<string, Boolean>;
+    FExClass : string;                            { the exception class the index guard fix raises }
+    FLenAlias: TDictionary<string, string>;       { per routine: local written once as Length/High/Low(A) -> 'fn:a' }
     function Txt(const N: TTSNode): string;
     function IsTrivia(const N: TTSNode): Boolean;
     procedure EmitAt(const ANode: TTSNode; const ARuleId, AMessage, ASeverity: string);
@@ -167,18 +197,46 @@ type
     procedure FlushCopyRun(ARows: TList<TCopyRow>);
     function IsMemberCopy(const N: TTSNode): Boolean;
     procedure CheckCopyBlock(const ABlock: TTSNode);
+    function IsBoundedArray(const AName: string; out AInfo: TDeclInfo): Boolean;
+    function IsArrayFn(const N: TTSNode; const AFn, AArr: string): Boolean;
+    function IsLenMinus(const N: TTSNode; const AArr: string): Boolean;
+    function ProvesLower(const E: TTSNode; AStrict: Boolean; const AArr: string; const AInfo: TDeclInfo): Boolean;
+    function ProvesUpper(const E: TTSNode; AStrict: Boolean; const AArr: string; const AInfo: TDeclInfo): Boolean;
+    procedure CompareFacts(var ACtx: TIdxCtx; const E: TTSNode; ANegate: Boolean);
+    procedure CondFacts(var ACtx: TIdxCtx; const C: TTSNode; ANegate: Boolean);
+    function IsLeaveStmt(const N: TTSNode): Boolean;
+    function IsGrowOf(const N: TTSNode; const AArr: string): Boolean;
+    procedure CollectLenAliases(const ABody: TTSNode);
+    function AssignTarget(const AAssign: TTSNode): string;
+    function Mentions(const N: TTSNode; const AIdent: string): Boolean;
+    procedure CollectIdxWrites(const N: TTSNode; const AIdx: string; AList: TList<TTSNode>);
+    function WriteKeeps(const ACtx: TIdxCtx; const W: TTSNode; ALower: Boolean): Boolean;
+    function CaseOn(const ACase: TTSNode; const AIdx: string): Boolean;
+    function HoldsSince(const ACtx: TIdxCtx; AFrom: Cardinal): Boolean;
+    function FixAnchorLine(const AAccess: TTSNode): Integer;
+    procedure ProvenanceSides(var ACtx: TIdxCtx);
+    procedure ApplyBranch(var ACtx: TIdxCtx; const C, P: TTSNode);
+    procedure ApplyForBounds(var ACtx: TIdxCtx; const P: TTSNode);
+    procedure ApplyLoop(var ACtx: TIdxCtx; const C, P: TTSNode);
+    procedure ApplySiblings(var ACtx: TIdxCtx; const C: TTSNode);
+    procedure ClimbGuards(var ACtx: TIdxCtx);
+    procedure EmitIndexFinding(const AProc: TTSNode; const ACtx: TIdxCtx; AReported: TDictionary<string, Boolean>);
+    procedure CheckIndexAccess(const AProc: TTSNode; var ACtx: TIdxCtx; AReported: TDictionary<string, Boolean>);
+    procedure CheckIndexFlow(const AProc: TTSNode);
     procedure Visit(const N: TTSNode);
   public
-    constructor Create(const AFile: string; const ASrc: TBytes);
+    constructor Create(const AFile: string; const ASrc: TBytes; const AExClass: string);
     destructor Destroy; override;
     function Run(const ARoot: TTSNode): TArray<TLintFinding>;
   end;
 
-constructor TBnRun.Create(const AFile: string; const ASrc: TBytes);
+constructor TBnRun.Create(const AFile: string; const ASrc: TBytes; const AExClass: string);
 begin
   inherited Create;
   FFile:= AFile;
   FSrc := ASrc;
+  FExClass:= if AExClass <> '' then AExClass else DEFAULT_INDEX_GUARD_EXCEPTION;
+  FLenAlias:= TDictionary<string, string>.Create;
   FFindings:= TList<TLintFinding>.Create;
   FGlobals := TDictionary<string, TDeclInfo>.Create;
   FScopes  := TObjectList<TDictionary<string, TDeclInfo>>.Create(True);
@@ -190,6 +248,7 @@ end;
 
 destructor TBnRun.Destroy;
 begin
+  FLenAlias.Free;
   FAliasBad.Free;
   FAliases.Free;
   FConstBad.Free;
@@ -292,6 +351,12 @@ begin
   M:= TRegEx.Match(T, ARRAY_TYPE_PATTERN);
   if M.Success and BoundValue(M.Groups[1].Value, ALo) and BoundValue(M.Groups[2].Value, AHi) then
     Result:= dkArray
+  else if TRegEx.IsMatch(T, DYN_ARRAY_TYPE_PATTERN) then
+  begin
+    ALo:= 0;
+    AHi:= -1;
+    Result:= dkDynArray;
+  end
   else
   begin
     ALo:= 0;
@@ -608,7 +673,7 @@ begin
     if (Cast <> '') and (Name <> '') then
       for C in CAST_NAMES do
         if C = Cast then
-          Result:= ALocals.TryGetValue(Name, Info) and not Info.ByRef and (Info.Kind <> dkOther);
+          Result:= ALocals.TryGetValue(Name, Info) and not Info.ByRef and (Info.Kind in [dkString, dkArray]);
   end;
 end;
 
@@ -911,6 +976,651 @@ begin
   end;
 end;
 
+{ ---- index-possibly-out-of-range (1.52 IDXRANGE) ------------------------- }
+
+const
+  CMP_OPS    : array[0..3] of string = ('kLt', 'kGt', 'kLte', 'kGte');
+  CMP_MIRROR : array[0..3] of string = ('kGt', 'kLt', 'kGte', 'kLte');  { idx < X  ==  X > idx }
+  CMP_NEGATED: array[0..3] of string = ('kGte', 'kLte', 'kGt', 'kLt');  { not (idx < X)  ==  idx >= X }
+
+{ `idx <op> X` read as `X <op'> idx`: the mirrored comparison operator ('' for a non-comparison). }
+function MirrorOp(const AOp: string): string;
+var
+  I: Integer;
+begin
+  I:= IndexStr(AOp, CMP_OPS);
+  Result:= if I >= 0 then CMP_MIRROR[I] else '';
+end;
+
+{ The comparison operator of `not (idx <op> X)` ('' for a non-comparison). }
+function NegateOp(const AOp: string): string;
+var
+  I: Integer;
+begin
+  I:= IndexStr(AOp, CMP_OPS);
+  Result:= if I >= 0 then CMP_NEGATED[I] else '';
+end;
+
+{ True when AName resolves to an array whose bounds the rule can name: a static
+  array[lo..hi] or a dynamic / open array (bounds 0..High). }
+function TBnRun.IsBoundedArray(const AName: string; out AInfo: TDeclInfo): Boolean;
+begin
+  Result:= Lookup(AName, AInfo) and (not AInfo.Ambig) and (AInfo.Kind in [dkArray, dkDynArray]);
+end;
+
+{ N (parentheses peeled) is the call AFn(AArr) -- Low / High / Length of that array -- or a local
+  written once as that call (FLenAlias). }
+function TBnRun.IsArrayFn(const N: TTSNode; const AFn, AArr: string): Boolean;
+var
+  E, Args: TTSNode;
+begin
+  Result:= False;
+  E:= N;
+  while (not E.IsNull) and (E.NodeType = 'exprParens') and (E.NamedChildCount = 1) do E:= E.NamedChild(0);
+  if E.IsNull then Exit;
+  if E.NodeType = 'identifier' then
+    Exit(FLenAlias.ContainsKey(LowerCase(Txt(E))) and (FLenAlias[LowerCase(Txt(E))] = AFn + ':' + AArr));
+  if E.NodeType <> 'exprCall' then Exit;
+  Args:= E.ChildByField('args');
+  Result:= (BareIdent(E.ChildByField('entity')) = AFn) and (not Args.IsNull)
+    and (Args.NamedChildCount = 1) and (LowerCase(Trim(Txt(Args.NamedChild(0)))) = AArr);
+end;
+
+{ N is `Length(A) - k` (k >= 1) or `High(A) - k` (k >= 0): at most High(A). }
+function TBnRun.IsLenMinus(const N: TTSNode; const AArr: string): Boolean;
+var
+  K: Integer;
+  IsSub: Boolean;
+begin
+  IsSub:= (not N.IsNull) and (N.NodeType = 'exprBinary') and (OperatorType(N) = 'kSub');
+  if not (IsSub and EvalIndex(N.ChildByField('rhs'), K)) then Exit(False);
+  Result:= (IsArrayFn(N.ChildByField('lhs'), 'length', AArr) and (K >= 1))
+    or (IsArrayFn(N.ChildByField('lhs'), 'high', AArr) and (K >= 0));
+end;
+
+{ idx >= E (AStrict: idx > E) proves the lower side. }
+function TBnRun.ProvesLower(const E: TTSNode; AStrict: Boolean; const AArr: string; const AInfo: TDeclInfo): Boolean;
+var
+  V, Lo: Integer;
+begin
+  Lo:= if AInfo.Kind = dkArray then AInfo.Lo else 0;
+  Result:= IsArrayFn(E, 'low', AArr);
+  if (not Result) and EvalIndex(E, V) then
+    Result:= (V >= Lo) or (AStrict and (V + 1 >= Lo));
+end;
+
+{ idx <= E (AStrict: idx < E) proves the upper side. }
+function TBnRun.ProvesUpper(const E: TTSNode; AStrict: Boolean; const AArr: string; const AInfo: TDeclInfo): Boolean;
+var
+  V: Integer;
+begin
+  Result:= IsArrayFn(E, 'high', AArr) or IsLenMinus(E, AArr);
+  if (not Result) and AStrict then
+    Result:= IsArrayFn(E, 'length', AArr);
+  if (not Result) and (AInfo.Kind = dkArray) and EvalIndex(E, V) then
+    Result:= (V <= AInfo.Hi) or (AStrict and (V <= AInfo.Hi + 1));
+end;
+
+{ `idx <op> X` / `X <op> idx` (E a comparison): the side it proves, folded into ACtx. }
+procedure TBnRun.CompareFacts(var ACtx: TIdxCtx; const E: TTSNode; ANegate: Boolean);
+var
+  Other: TTSNode;
+  Op: string;
+begin
+  Op:= OperatorType(E);
+  if BareIdent(E.ChildByField('lhs')) = ACtx.Idx then
+    Other:= E.ChildByField('rhs')
+  else if BareIdent(E.ChildByField('rhs')) = ACtx.Idx then
+  begin
+    Other:= E.ChildByField('lhs');
+    Op:= MirrorOp(Op);
+  end
+  else
+    Exit;
+  if ANegate then Op:= NegateOp(Op);
+  if Op = 'kGte' then ACtx.Lo:= ACtx.Lo or ProvesLower(Other, False, ACtx.Arr, ACtx.Info)
+  else if Op = 'kGt' then ACtx.Lo:= ACtx.Lo or ProvesLower(Other, True, ACtx.Arr, ACtx.Info)
+  else if Op = 'kLte' then ACtx.Hi:= ACtx.Hi or ProvesUpper(Other, False, ACtx.Arr, ACtx.Info)
+  else if Op = 'kLt' then ACtx.Hi:= ACtx.Hi or ProvesUpper(Other, True, ACtx.Arr, ACtx.Info);
+end;
+
+{ The bound facts condition C proves about ACtx.Idx for ACtx.Arr (ANegate: the facts of `not C`). }
+procedure TBnRun.CondFacts(var ACtx: TIdxCtx; const C: TTSNode; ANegate: Boolean);
+const
+  INRANGE_ARGS = 3;
+var
+  E, Args: TTSNode;
+  Op: string;
+begin
+  E:= C;
+  while (not E.IsNull) and (E.NodeType = 'exprParens') and (E.NamedChildCount = 1) do E:= E.NamedChild(0);
+  if E.IsNull then Exit;
+  if (E.NodeType = 'exprUnary') and (OperatorType(E) = 'kNot') then
+    CondFacts(ACtx, E.ChildByField('operand'), not ANegate)
+  else if E.NodeType = 'exprCall' then
+  begin
+    Args:= E.ChildByField('args');
+    if (not ANegate) and (BareIdent(E.ChildByField('entity')) = 'inrange') and (not Args.IsNull)
+      and (Args.NamedChildCount = INRANGE_ARGS) and (BareIdent(Args.NamedChild(0)) = ACtx.Idx) then
+    begin
+      ACtx.Lo:= ACtx.Lo or ProvesLower(Args.NamedChild(1), False, ACtx.Arr, ACtx.Info);
+      ACtx.Hi:= ACtx.Hi or ProvesUpper(Args.NamedChild(2), False, ACtx.Arr, ACtx.Info);
+    end;
+  end
+  else if E.NodeType = 'exprBinary' then
+  begin
+    Op:= OperatorType(E);
+    if ((Op = 'kAnd') and not ANegate) or ((Op = 'kOr') and ANegate) then
+    begin
+      CondFacts(ACtx, E.ChildByField('lhs'), ANegate);
+      CondFacts(ACtx, E.ChildByField('rhs'), ANegate);
+    end
+    else
+      CompareFacts(ACtx, E, ANegate);
+  end;
+end;
+
+{ A then-branch that always leaves: raise / Exit / Continue / Break, or a block ending in one. }
+function TBnRun.IsLeaveStmt(const N: TTSNode): Boolean;
+var
+  I: Integer;
+begin
+  Result:= False;
+  if N.IsNull then Exit;
+  if N.NodeType = 'raise' then Exit(True);
+  if N.NodeType = 'block' then
+  begin
+    for I:= N.NamedChildCount - 1 downto 0 do
+      if not IsTrivia(N.NamedChild(I)) then Exit(IsLeaveStmt(N.NamedChild(I)));
+    Exit;
+  end;
+  Result:= TRegEx.IsMatch(LowerCase(Trim(Txt(N))), '^(exit|continue|break)\b');
+end;
+
+{ A then-branch that grows AArr: `SetLength(A, ...)`, or a block ending in one (the grow-on-demand
+  `if i >= Length(A) then SetLength(A, ...)` -- after it, i is below Length(A)). }
+function TBnRun.IsGrowOf(const N: TTSNode; const AArr: string): Boolean;
+var
+  I: Integer;
+begin
+  Result:= False;
+  if N.IsNull then Exit;
+  if N.NodeType = 'block' then
+  begin
+    for I:= N.NamedChildCount - 1 downto 0 do
+      if not IsTrivia(N.NamedChild(I)) then Exit(IsGrowOf(N.NamedChild(I), AArr));
+    Exit;
+  end;
+  { by text, like IsLeaveStmt: a statement wrapper node may sit between the branch and the call }
+  Result:= TRegEx.IsMatch(LowerCase(Trim(Txt(N))), '^setlength\s*\(\s*' + TRegEx.Escape(AArr) + '\s*,');
+end;
+
+{ The written identifier of an assignment's left side (also `for var i :=` / `var i :=`). }
+function TBnRun.AssignTarget(const AAssign: TTSNode): string;
+var
+  Lhs: TTSNode;
+  I  : Integer;
+begin
+  Result:= '';
+  Lhs:= AAssign.ChildByField('lhs');
+  if Lhs.IsNull then Exit;
+  if Lhs.NodeType = 'varAssignDef' then
+  begin
+    for I:= 0 to Lhs.ChildCount - 1 do
+      if Lhs.Child(I).NodeType = 'identifier' then Exit(LowerCase(Txt(Lhs.Child(I))));
+    Exit;
+  end;
+  Result:= BareIdent(Lhs);
+end;
+
+{ True when N's subtree names AIdent (any identifier node). }
+function TBnRun.Mentions(const N: TTSNode; const AIdent: string): Boolean;
+var
+  I: Integer;
+begin
+  Result:= False;
+  if N.IsNull then Exit;
+  if (N.NodeType = 'identifier') and SameText(Txt(N), AIdent) then Exit(True);
+  for I:= 0 to N.ChildCount - 1 do
+    if Mentions(N.Child(I), AIdent) then Exit(True);
+end;
+
+{ Every write of AIdx in the body: `idx := e`, `Inc(idx)`, `Dec(idx)`, `for idx in ...`. A
+  for-loop's own counter assignment is not a write here (the loop bounds it). Lambdas are skipped. }
+procedure TBnRun.CollectIdxWrites(const N: TTSNode; const AIdx: string; AList: TList<TTSNode>);
+var
+  T: string;
+  I: Integer;
+  Args: TTSNode;
+  IsForStart: Boolean;
+begin
+  if N.IsNull then Exit;
+  T:= N.NodeType;
+  if (T = 'lambda') or (T = 'defProc') then Exit;
+  IsForStart:= (not N.Parent.IsNull) and (N.Parent.NodeType = 'for') and (N.Parent.ChildByField('start') = N);
+  if (T = 'assignment') and (AssignTarget(N) = AIdx) and not IsForStart then
+    AList.Add(N)
+  else if T = 'exprCall' then
+  begin
+    Args:= N.ChildByField('args');
+    if ((BareIdent(N.ChildByField('entity')) = 'inc') or (BareIdent(N.ChildByField('entity')) = 'dec'))
+      and (not Args.IsNull) and (Args.NamedChildCount >= 1) and (BareIdent(Args.NamedChild(0)) = AIdx) then
+      AList.Add(N);
+  end
+  else if (T = 'foreach') and (BareIdent(N.ChildByField('iterator')) = AIdx) then
+    AList.Add(N);
+  for I:= 0 to N.ChildCount - 1 do CollectIdxWrites(N.Child(I), AIdx, AList);
+end;
+
+{ Does write W keep the lower (ALower) / upper side of ACtx.Idx within ACtx.Arr's range by itself? }
+function TBnRun.WriteKeeps(const ACtx: TIdxCtx; const W: TTSNode; ALower: Boolean): Boolean;
+var
+  Rhs: TTSNode;
+  K  : Integer;
+  Fn : string;
+begin
+  Result:= False;
+  if W.NodeType = 'exprCall' then
+  begin
+    Fn:= BareIdent(W.ChildByField('entity'));
+    Exit((ALower and (Fn = 'inc')) or ((not ALower) and (Fn = 'dec')));
+  end;
+  if W.NodeType <> 'assignment' then Exit;
+  Rhs:= W.ChildByField('rhs');
+  Result:= if ALower then ProvesLower(Rhs, False, ACtx.Arr, ACtx.Info) else ProvesUpper(Rhs, False, ACtx.Arr, ACtx.Info);
+  { idx := idx + k keeps the lower side, idx := idx - k the upper side (k >= 0) }
+  if (not Result) and (Rhs.NodeType = 'exprBinary') and (BareIdent(Rhs.ChildByField('lhs')) = ACtx.Idx)
+    and EvalIndex(Rhs.ChildByField('rhs'), K) and (K >= 0) then
+    Result:= (ALower and (OperatorType(Rhs) = 'kAdd')) or ((not ALower) and (OperatorType(Rhs) = 'kSub'));
+end;
+
+{ `case AIdx of`: the selector is the first non-keyword child. }
+function TBnRun.CaseOn(const ACase: TTSNode; const AIdx: string): Boolean;
+var
+  I: Integer;
+begin
+  Result:= False;
+  for I:= 0 to ACase.NamedChildCount - 1 do
+    if not IsTrivia(ACase.NamedChild(I)) then Exit(BareIdent(ACase.NamedChild(I)) = AIdx);
+end;
+
+{ True when no write of ACtx.Idx starts strictly between AFrom and the access (a guard still holds). }
+function TBnRun.HoldsSince(const ACtx: TIdxCtx; AFrom: Cardinal): Boolean;
+var
+  W: TTSNode;
+begin
+  Result:= True;
+  for W in ACtx.Writes do
+    if (W.StartByte > AFrom) and (W.StartByte < ACtx.Access.StartByte) then Exit(False);
+end;
+
+{ The line the autofix inserts its guard before: the access's own statement when that statement
+  is a direct member of a statement list and starts its line; 0 when the access sits in a
+  condition, a loop header or a one-statement branch (the insertion would change the meaning). }
+function TBnRun.FixAnchorLine(const AAccess: TTSNode): Integer;
+const
+  CONTROL: array[0..10] of string = ('if', 'ifElse', 'while', 'for', 'foreach', 'repeat', 'case',
+    'caseCase', 'try', 'with', 'exceptionHandler');
+  TAB_BYTE = 9;
+  LF_BYTE  = 10;
+var
+  C, P: TTSNode;
+  S: string;
+  B: Integer;
+begin
+  Result:= 0;
+  C:= AAccess;
+  while not C.IsNull do
+  begin
+    for S in CONTROL do
+      if C.NodeType = S then Exit;
+    P:= C.Parent;
+    if P.IsNull or (P.NodeType = 'defProc') or (P.NodeType = 'lambda') then Exit;
+    if (P.NodeType = 'block') or (P.NodeType = 'statements') then Break;
+    C:= P;
+  end;
+  if C.IsNull then Exit;
+  B:= Integer(C.StartByte) - 1;
+  while (B >= 0) and ((FSrc[B] = Ord(' ')) or (FSrc[B] = TAB_BYTE)) do Dec(B);
+  if (B >= 0) and (FSrc[B] <> LF_BYTE) then Exit;
+  Result:= Integer(C.StartPoint.Row) + 1;
+end;
+
+{ Provenance: a side holds when every write that can REACH the access keeps it -- earlier writes,
+  and later ones inside the outermost loop around it (they flow back on the next iteration).
+  Never for a parameter: its incoming value is unknown. }
+procedure TBnRun.ProvenanceSides(var ACtx: TIdxCtx);
+var
+  C, Outer, W: TTSNode;
+begin
+  ACtx.Lo:= False;
+  ACtx.Hi:= False;
+  if ACtx.IdxInfo.IsParam or (ACtx.Writes.Count = 0) then Exit;
+  Outer:= Default(TTSNode);
+  C:= ACtx.Access.Parent;
+  while (not C.IsNull) and (C.NodeType <> 'defProc') and (C.NodeType <> 'lambda') do
+  begin
+    if (C.NodeType = 'while') or (C.NodeType = 'repeat') or (C.NodeType = 'for') or (C.NodeType = 'foreach') then Outer:= C;
+    C:= C.Parent;
+  end;
+  ACtx.Lo:= True;
+  ACtx.Hi:= True;
+  for W in ACtx.Writes do
+    if (W.StartByte < ACtx.Access.StartByte) or ((not Outer.IsNull) and (W.StartByte < Outer.EndByte)) then
+    begin
+      ACtx.Lo:= ACtx.Lo and WriteKeeps(ACtx, W, True);
+      ACtx.Hi:= ACtx.Hi and WriteKeeps(ACtx, W, False);
+    end;
+end;
+
+{ C under a branching parent P: an if / if-expression branch, or the right side of a short-circuit. }
+procedure TBnRun.ApplyBranch(var ACtx: TIdxCtx; const C, P: TTSNode);
+var
+  ElseAt: Cardinal;
+  I: Integer;
+begin
+  if (P.NodeType = 'if') or (P.NodeType = 'ifElse') then
+  begin
+    if not HoldsSince(ACtx, P.ChildByField('condition').EndByte) then Exit;
+    if P.ChildByField('then') = C then CondFacts(ACtx, P.ChildByField('condition'), False)
+    else if P.ChildByField('else') = C then CondFacts(ACtx, P.ChildByField('condition'), True);
+  end
+  else if P.NodeType = 'exprIf' then
+  begin
+    if P.ChildByField('condition') = C then Exit;
+    { `if c then X else Y` as an expression: X sits before the kElse child, Y after it }
+    ElseAt:= P.EndByte;
+    for I:= 0 to P.ChildCount - 1 do
+      if P.Child(I).NodeType = 'kElse' then ElseAt:= P.Child(I).StartByte;
+    CondFacts(ACtx, P.ChildByField('condition'), C.StartByte > ElseAt);
+  end
+  else if (P.NodeType = 'exprBinary') and (P.ChildByField('rhs') = C) then
+  begin
+    { short-circuit: `X and A[i]` evaluates the right side only when X holds; `X or A[i]` only when it fails }
+    if OperatorType(P) = 'kAnd' then CondFacts(ACtx, P.ChildByField('lhs'), False)
+    else if OperatorType(P) = 'kOr' then CondFacts(ACtx, P.ChildByField('lhs'), True);
+  end;
+end;
+
+{ `for idx := s to/downto e` around the access: both sides when the bounds are recognised, else
+  silent (v1 cut: a for loop with other bounds). }
+procedure TBnRun.ApplyForBounds(var ACtx: TIdxCtx; const P: TTSNode);
+var
+  I: Integer;
+  IsDown, Bounded: Boolean;
+  StartE, EndE: TTSNode;
+begin
+  IsDown:= False;
+  for I:= 0 to P.ChildCount - 1 do
+    if P.Child(I).NodeType = 'kDownto' then IsDown:= True;
+  StartE:= P.ChildByField('start').ChildByField('rhs');
+  EndE  := P.ChildByField('end');
+  Bounded:= if IsDown then ProvesUpper(StartE, False, ACtx.Arr, ACtx.Info) and ProvesLower(EndE, False, ACtx.Arr, ACtx.Info)
+    else ProvesLower(StartE, False, ACtx.Arr, ACtx.Info) and ProvesUpper(EndE, False, ACtx.Arr, ACtx.Info);
+  ACtx.Lo:= ACtx.Lo or Bounded;
+  ACtx.Hi:= ACtx.Hi or Bounded;
+  ACtx.Silent:= ACtx.Silent or not Bounded;
+end;
+
+{ C under a loop P: the while condition, the for bounds, the repeat cut; records the innermost loop. }
+procedure TBnRun.ApplyLoop(var ACtx: TIdxCtx; const C, P: TTSNode);
+begin
+  if ACtx.Loop.IsNull then ACtx.Loop:= P;
+  if P.NodeType = 'while' then
+  begin
+    if (P.ChildByField('body') = C) and HoldsSince(ACtx, P.ChildByField('condition').EndByte) then
+      CondFacts(ACtx, P.ChildByField('condition'), False);
+  end
+  else if P.NodeType = 'repeat' then
+    ACtx.Silent:= ACtx.Silent or Mentions(P.ChildByField('condition'), ACtx.Idx)  { v1 cut: repeat conditions }
+  else if (P.NodeType = 'for') and (P.ChildByField('body') = C) and (AssignTarget(P.ChildByField('start')) = ACtx.Idx) then
+    ApplyForBounds(ACtx, P);
+end;
+
+{ Earlier statements of the list holding C: `if <fail> then Exit / raise / Continue / Break` and
+  the grow-on-demand `if i >= Length(A) then SetLength(A, ...)` guard; Assert is a v1 cut. }
+procedure TBnRun.ApplySiblings(var ACtx: TIdxCtx; const C: TTSNode);
+var
+  S, ThenN: TTSNode;
+begin
+  S:= C.PrevSibling;
+  while not S.IsNull do
+  begin
+    ThenN:= S.ChildByField('then');
+    if (S.NodeType = 'if') and (IsLeaveStmt(ThenN) or IsGrowOf(ThenN, ACtx.Arr)) and HoldsSince(ACtx, S.EndByte) then
+      CondFacts(ACtx, S.ChildByField('condition'), True)
+    else if (S.NodeType = 'exprCall') and (BareIdent(S.ChildByField('entity')) = 'assert') and Mentions(S, ACtx.Idx) then
+      ACtx.Silent:= True;
+    S:= S.PrevSibling;
+  end;
+end;
+
+{ Every dominating guard from the access up to its routine. }
+procedure TBnRun.ClimbGuards(var ACtx: TIdxCtx);
+var
+  C, P: TTSNode;
+  T: string;
+begin
+  C:= ACtx.Access;
+  P:= C.Parent;
+  while (not P.IsNull) and (P.NodeType <> 'defProc') and (P.NodeType <> 'lambda') do
+  begin
+    T:= P.NodeType;
+    if (T = 'if') or (T = 'ifElse') or (T = 'exprIf') or (T = 'exprBinary') then
+      ApplyBranch(ACtx, C, P)
+    else if (T = 'while') or (T = 'repeat') or (T = 'foreach') or (T = 'for') then
+      ApplyLoop(ACtx, C, P)
+    else if (T = 'case') and CaseOn(P, ACtx.Idx) then
+      ACtx.Silent:= True  { v1 cut: case ranges }
+    else if (T = 'block') or (T = 'statements') then
+      ApplySiblings(ACtx, C);
+    C:= P;
+    P:= C.Parent;
+  end;
+end;
+
+{ The finding for an unproven access: on the nearest preceding write (else a later write inside the
+  enclosing loop) as a warning, or on the access as a hint for an unwritten parameter. One finding
+  per write / per parameter (AReported). }
+procedure TBnRun.EmitIndexFinding(const AProc: TTSNode; const ACtx: TIdxCtx; AReported: TDictionary<string, Boolean>);
+const
+  MSG_BODY = ' reaches %s[%s] at line %d with no guard bounding it to %s''s range on both sides '
+    + '-- check it before the access; ERangeError is only the last resort (in %s; %s)';
+var
+  Report, W: TTSNode;
+  Key, Routine, Tail, Ent, Arg, Body: string;
+  Anchor: Integer;
+begin
+  Report:= Default(TTSNode);
+  for W in ACtx.Writes do
+    if (W.StartByte < ACtx.Access.StartByte) and (Report.IsNull or (W.StartByte > Report.StartByte)) then Report:= W;
+  if Report.IsNull and not ACtx.Loop.IsNull then
+    for W in ACtx.Writes do
+      if (W.StartByte > ACtx.Access.StartByte) and (W.EndByte <= ACtx.Loop.EndByte) and Report.IsNull then Report:= W;
+  if Report.IsNull and not ACtx.IdxInfo.IsParam then Exit;
+  Key:= if Report.IsNull then 'p' + ACtx.Idx else 'w' + IntToStr(Report.StartByte);
+  if AReported.ContainsKey(Key) then Exit;
+  AReported.Add(Key, True);
+  Ent:= Txt(ACtx.Access.ChildByField('entity'));
+  Arg:= Trim(Txt(ACtx.Access.ChildByField('args')));
+  Routine:= Trim(Txt(AProc.ChildByField('header').ChildByField('name')));
+  Anchor:= FixAnchorLine(ACtx.Access);
+  Tail:= if Anchor > 0 then Format('fix raises %s at line %d', [FExClass, Anchor])
+    else 'no autofix: the access sits in a condition or a one-statement branch';
+  Body:= Format(MSG_BODY, [Ent, Arg, Integer(ACtx.Access.StartPoint.Row) + 1, Ent, Routine, Tail]);
+  if Report.IsNull then
+    EmitAt(ACtx.Access, RULE_INDEX_RANGE, Format('Parameter ''%s''', [Arg]) + Body, 'hint')
+  else
+    EmitAt(Report, RULE_INDEX_RANGE, Format('''%s'' is written here and', [Arg]) + Body, 'warning');
+end;
+
+{ One access A[idx]: proves both sides or reports the write that made it unsafe. }
+procedure TBnRun.CheckIndexAccess(const AProc: TTSNode; var ACtx: TIdxCtx; AReported: TDictionary<string, Boolean>);
+begin
+  ProvenanceSides(ACtx);
+  ACtx.Silent:= False;
+  ACtx.Loop:= Default(TTSNode);
+  ClimbGuards(ACtx);
+  if ACtx.Silent or (ACtx.Lo and ACtx.Hi) then Exit;
+  EmitIndexFinding(AProc, ACtx, AReported);
+end;
+
+{ Locals of the body written exactly once, as `n := Length(A)` / `High(A)` / `Low(A)`: a bound on n
+  is then a bound on A. Any second write (assignment, Inc / Dec, for counter) disqualifies n. }
+procedure TBnRun.CollectLenAliases(const ABody: TTSNode);
+var
+  Writes: TDictionary<string, Integer>;
+  Cand  : TDictionary<string, string>;
+
+  { `Length(x)` / `High(x)` / `Low(x)` -> 'fn:x', else '' }
+  function BoundCallKey(const ARhs: TTSNode): string;
+  var
+    R, Args: TTSNode;
+    Fn: string;
+  begin
+    Result:= '';
+    R:= ARhs;
+    while (not R.IsNull) and (R.NodeType = 'exprParens') and (R.NamedChildCount = 1) do R:= R.NamedChild(0);
+    if R.IsNull or (R.NodeType <> 'exprCall') then Exit;
+    Fn:= BareIdent(R.ChildByField('entity'));
+    Args:= R.ChildByField('args');
+    if not ((Fn = 'length') or (Fn = 'high') or (Fn = 'low')) then Exit;
+    if (not Args.IsNull) and (Args.NamedChildCount = 1) and (BareIdent(Args.NamedChild(0)) <> '') then
+      Result:= Fn + ':' + BareIdent(Args.NamedChild(0));
+  end;
+
+  procedure Walk(const N: TTSNode);
+  var
+    I, C: Integer;
+    T, Nm, Key: string;
+    Args: TTSNode;
+  begin
+    if N.IsNull then Exit;
+    T:= N.NodeType;
+    if (T = 'lambda') or (T = 'defProc') then Exit;
+    Nm:= '';
+    if T = 'assignment' then
+    begin
+      Nm:= AssignTarget(N);
+      Key:= BoundCallKey(N.ChildByField('rhs'));
+      if (Nm <> '') and (Key <> '') then Cand.AddOrSetValue(Nm, Key);
+    end
+    else if (T = 'exprCall') and ((BareIdent(N.ChildByField('entity')) = 'inc') or (BareIdent(N.ChildByField('entity')) = 'dec')) then
+    begin
+      Args:= N.ChildByField('args');
+      if (not Args.IsNull) and (Args.NamedChildCount >= 1) then Nm:= BareIdent(Args.NamedChild(0));
+    end;
+    if Nm <> '' then
+    begin
+      if not Writes.TryGetValue(Nm, C) then C:= 0;
+      Writes.AddOrSetValue(Nm, C + 1);
+    end;
+    for I:= 0 to N.ChildCount - 1 do Walk(N.Child(I));
+  end;
+
+var
+  Pair: TPair<string, string>;
+  C: Integer;
+begin
+  FLenAlias.Clear;
+  Writes:= TDictionary<string, Integer>.Create;
+  Cand:= TDictionary<string, string>.Create;
+  try
+    Walk(ABody);
+    for Pair in Cand do
+      if Writes.TryGetValue(Pair.Key, C) and (C = 1) then FLenAlias.Add(Pair.Key, Pair.Value);
+  finally
+    Cand.Free;
+    Writes.Free;
+  end;
+end;
+
+{ Every A[idx] of one routine, where A is a bounded array and idx a routine local or parameter. }
+procedure TBnRun.CheckIndexFlow(const AProc: TTSNode);
+var
+  Body: TTSNode;
+  Locals: TDictionary<string, TDeclInfo>;
+  Accesses: TList<TTSNode>;
+  Writes: TList<TTSNode>;
+  Reported: TDictionary<string, Boolean>;
+  Unsafe: Boolean;
+
+  procedure Gather(const N: TTSNode);
+  var
+    I: Integer;
+  begin
+    if N.IsNull then Exit;
+    if (N.NodeType = 'lambda') or (N.NodeType = 'defProc') then Exit;
+    if (N.NodeType = 'with') or (N.NodeType = 'goto') then Unsafe:= True;
+    if N.NodeType = 'exprSubscript' then Accesses.Add(N);
+    for I:= 0 to N.ChildCount - 1 do Gather(N.Child(I));
+  end;
+
+  { a lambda in the body that names AIdx may write it }
+  function InLambda(const N: TTSNode; const AIdx: string): Boolean;
+  var
+    J: Integer;
+  begin
+    Result:= False;
+    if N.IsNull then Exit;
+    if N.NodeType = 'lambda' then Exit(Mentions(N, AIdx));
+    for J:= 0 to N.ChildCount - 1 do
+      if InLambda(N.Child(J), AIdx) then Exit(True);
+  end;
+
+  { a nested routine or a lambda that names AIdx may write it: the routine-local view is blind there }
+  function CapturedElsewhere(const AIdx: string): Boolean;
+  var
+    I: Integer;
+  begin
+    Result:= InLambda(Body, AIdx);
+    if not Result then
+      for I:= 0 to AProc.ChildCount - 1 do
+        if (AProc.Child(I).NodeType = 'defProc') and Mentions(AProc.Child(I), AIdx) then
+          Exit(True);
+  end;
+
+var
+  N, Args, IdxN: TTSNode;
+  Ctx: TIdxCtx;
+  V: Integer;
+begin
+  Body:= AProc.ChildByField('body');
+  if Body.IsNull then Exit;
+  Locals:= FScopes[FScopes.Count - 1];
+  Unsafe:= False;
+  Accesses:= TList<TTSNode>.Create;
+  Writes:= TList<TTSNode>.Create;
+  Reported:= TDictionary<string, Boolean>.Create;
+  try
+    Gather(Body);
+    if Unsafe then Exit;
+    CollectLenAliases(Body);
+    for N in Accesses do
+    begin
+      Args:= N.ChildByField('args');
+      if Args.IsNull or (Args.NamedChildCount <> 1) then Continue;
+      IdxN:= Args.NamedChild(0);
+      Ctx:= Default(TIdxCtx);
+      Ctx.Access:= N;
+      Ctx.Idx:= BareIdent(IdxN);
+      Ctx.Arr:= BareIdent(N.ChildByField('entity'));
+      if (Ctx.Idx = '') or (Ctx.Arr = '') or EvalIndex(IdxN, V) then Continue;
+      if not Locals.TryGetValue(Ctx.Idx, Ctx.IdxInfo) then Continue;   { v1 cut: field / global index }
+      if not IsBoundedArray(Ctx.Arr, Ctx.Info) then Continue;
+      if CapturedElsewhere(Ctx.Idx) then Continue;
+      Writes.Clear;
+      CollectIdxWrites(Body, Ctx.Idx, Writes);
+      Ctx.Writes:= Writes;
+      CheckIndexAccess(AProc, Ctx, Reported);
+    end;
+  finally
+    Reported.Free;
+    Writes.Free;
+    Accesses.Free;
+  end;
+end;
+
 { ---- the walk ------------------------------------------------------------ }
 
 procedure TBnRun.Visit(const N: TTSNode);
@@ -927,6 +1637,7 @@ begin
     FScopes.Add(BuildScope(N));
     Pushed:= True;
     CheckProc(N);
+    CheckIndexFlow(N);
   end
   else if (T = 'block') or (T = 'statements') then
   begin
@@ -949,7 +1660,7 @@ end;
 
 { ---- the checker entry point -------------------------------------------- }
 
-class function TBoundsNilChecker.Check(const AFile: string; const ACfg: TLintConfig;  // dl:ok unused-parameter@0855 -- REVIEWED 2026-10-27: signature fixed by the shared checker shape (LINT_GATE_BOUNDS_NIL call sites); the rules are threshold-free
+class function TBoundsNilChecker.Check(const AFile: string; const ACfg: TLintConfig;
   const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;  // dl:ok unused-parameter@255c -- signature fixed by the shared checker shape; the rules are store-free
 var
   PF : TParsedFile;
@@ -958,7 +1669,7 @@ begin
   Result:= nil;
   PF:= TAstParseCache.Get(AFile);
   if PF.Tree = nil then Exit;
-  Run:= TBnRun.Create(AFile, PF.Src);
+  Run:= TBnRun.Create(AFile, PF.Src, ACfg.IndexGuardExceptionClass);
   try
     Result:= Run.Run(PF.Tree.RootNode);
   finally
@@ -1004,7 +1715,78 @@ begin
   Result:= [E];
 end;
 
+{ ---- the index-possibly-out-of-range fixer ------------------------------- }
+
+{ Inserts `if not InRange(i, Low(A), High(A)) then raise <Ex>.CreateFmt(...)` on its own line
+  before each anchorable access the findings name, at that statement's indentation, and adds
+  System.Math / System.SysUtils to the uses clause when missing. Everything it needs is in the
+  finding message (`reaches A[i] at line N ... (in R; fix raises Ex at line K)`), so a cached
+  finding fixes the same way. A finding whose anchor line no longer contains `A[i` is skipped. }
+function FixIndexPossiblyOutOfRange(const APath: string; const AFindings: TArray<TLintFinding>; out AFixed: Integer): TArray<TTextEdit>;
+const
+  MSG_RE = 'reaches (\w+)\[(\w+)\] at line (\d+) .*\(in ([^;]*); fix raises ([\w.]+) at line (\d+)\)$';
+  G_ARR = 1;
+  G_IDX = 2;
+  G_ACCESS = 3;
+  G_ROUTINE = 4;
+  G_CLASS = 5;
+  G_ANCHOR = 6;
+var
+  Lines: TStringList;
+  M: TMatch;
+  Arr, Idx, Routine, ExClass, Indent, Text, Key: string;
+  AccessLine, Anchor, L: Integer;
+  Seen: TDictionary<string, Boolean>;
+  E: TTextEdit;
+  Found: Boolean;
+begin
+  Result:= nil;
+  AFixed:= 0;
+  Lines:= TStringList.Create;
+  Seen:= TDictionary<string, Boolean>.Create;
+  try
+    Lines.AddStrings(TLiveDocuments.ReadLines(APath));
+    for var F: TLintFinding in AFindings do
+    begin
+      if not SameText(F.RuleId, RULE_INDEX_RANGE) or not SameText(F.FilePath, APath) then Continue;
+      M:= TRegEx.Match(F.Message, MSG_RE);
+      if not M.Success then Continue;
+      Arr       := M.Groups[G_ARR].Value;
+      Idx       := M.Groups[G_IDX].Value;
+      AccessLine:= StrToIntDef(M.Groups[G_ACCESS].Value, 0);
+      Routine   := M.Groups[G_ROUTINE].Value;
+      ExClass   := M.Groups[G_CLASS].Value;
+      Anchor    := StrToIntDef(M.Groups[G_ANCHOR].Value, 0);
+      if (Anchor < 1) or (Anchor > Lines.Count) or (AccessLine < Anchor) or (AccessLine > Lines.Count) then Continue;
+      Found:= False;
+      for L:= Anchor to AccessLine do
+        if ContainsText(Lines[L - 1], Arr + '[' + Idx) then Found:= True;
+      if not Found then Continue;
+      Indent:= Copy(Lines[Anchor - 1], 1, Length(Lines[Anchor - 1]) - Length(TrimLeft(Lines[Anchor - 1])));
+      Text:= Format('%sif not InRange(%s, Low(%s), High(%s)) then raise %s.CreateFmt(''%s index %%d outside %%d..%%d in %s'', [%s, Low(%s), High(%s)]);',
+        [Indent, Idx, Arr, Arr, ExClass, Arr, Routine, Idx, Arr, Arr]);
+      Key:= IntToStr(Anchor) + #1 + LowerCase(Text);
+      Inc(AFixed);
+      if Seen.ContainsKey(Key) then Continue;
+      Seen.Add(Key, True);
+      E:= Default(TTextEdit);
+      E.FilePath:= APath;
+      E.Kind    := tekInsertLines;
+      E.Line    := Anchor - 1;      { insert AFTER line Anchor-1 = before the access's statement }
+      E.Text    := Text;
+      Result:= Result + [E];
+    end;
+    if Length(Result) = 0 then Exit;
+    if EnsureImplUses(APath, Lines, 'System.Math', E) then Result:= Result + [E];
+    if EnsureImplUses(APath, Lines, 'System.SysUtils', E) then Result:= Result + [E];
+  finally
+    Seen.Free;
+    Lines.Free;
+  end;
+end;
+
 initialization
   RegisterFixer(RULE_COPY_PASTE, FixCopyPasteAssignment, True);
+  RegisterFileFixer(RULE_INDEX_RANGE, FixIndexPossiblyOutOfRange, True);
 
 end.

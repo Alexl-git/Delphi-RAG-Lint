@@ -13515,8 +13515,9 @@ const
   { Gap-rules wave (G0): one gate per new checker unit; same rule as above. }
   LINT_GATE_OWNERSHIP: array[0..4] of string = (
     'field-created-not-freed', 'free-of-owned-item', 'mismatched-alloc-free', 'freeonterminate-then-wait', 'begin-end-pair-not-in-finally');
-  LINT_GATE_BOUNDS_NIL: array[0..3] of string = (
-    'nil-check-after-dereference', 'address-of-local-returned', 'constant-index-out-of-range', 'copy-paste-assignment');
+  LINT_GATE_BOUNDS_NIL: array[0..4] of string = (
+    'nil-check-after-dereference', 'address-of-local-returned', 'constant-index-out-of-range', 'copy-paste-assignment',
+    'index-possibly-out-of-range');
   LINT_GATE_EXCEPTION_THREAD: array[0..3] of string = (
     'exception-escapes-thread', 'raise-in-destructor', 'network-client-without-timeout', 'closure-captures-loop-local');
   LINT_GATE_DECL_PARITY: array[0..7] of string = (
