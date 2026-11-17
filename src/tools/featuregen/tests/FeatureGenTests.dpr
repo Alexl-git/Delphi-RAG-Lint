@@ -3513,6 +3513,7 @@ end;
 procedure TestMenuProse;
 var
   lNodes: TArray<TMenuNodeRow>;
+  lE: TJSONObject;
 
   function Count(const pText: string): Integer;
   begin
@@ -3537,6 +3538,18 @@ begin
   // positive controls: a stale path that starts at the root still fails, also behind the ide-menu: prefix
   Check('Menu.G4.PrefixedStaleFails', Count('ide-menu:drag-lint > NoSuchItem') = 1);
   Check('Menu.G4.RootedStaleAfterWindowsPathFails', Count('Apps > drag-lint > Uninstall, then drag-lint > NoSuchItem') = 1);
+  // v152 INT: an ide-context caption ('drag-lint > Fix ...' on the Editor menu) is checked by B/C against the context
+  // menu, never by G-4 against the main menu; its steps and the prose are still G-4 text
+  lE := JObj('{"surfaces":[{"type":"cli","verb":"x"},{"type":"ide-context","host":"Editor","caption":"drag-lint > Fix"}]}');
+  try
+    Check('Menu.G4.ContextCaptionSkipped', IsContextCaption(lE, 'surfaces[1].caption'));
+    Check('Menu.G4.ContextStepsJudged', not IsContextCaption(lE, 'surfaces[1].steps[0]'));
+    Check('Menu.G4.CliCaptionJudged', not IsContextCaption(lE, 'surfaces[0].caption'));
+    Check('Menu.G4.IntroJudged', not IsContextCaption(lE, 'intro'));
+    Check('Menu.G4.OutOfRangeJudged', not IsContextCaption(lE, 'surfaces[7].caption'));
+  finally
+    lE.Free;
+  end;
 end;
 
 procedure TestRuleCounts;
