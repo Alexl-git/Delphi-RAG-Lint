@@ -12722,16 +12722,25 @@ begin
         'use "autofix_off": [...] to exclude a rule.');
     var Braked: TArray<TLintFinding>:= nil;
     var BrakedIds: TArray<string>:= nil;
+    var ManualIds: TArray<string>:= nil;
     for F in Targeted do
       if Cfg.IsAutoFixOff(F.RuleId) and not ((AArgs.FixLine > 0) and SameText(AArgs.FixRule, F.RuleId)) then
       begin
         if not MatchText(F.RuleId, BrakedIds) then BrakedIds:= BrakedIds + [F.RuleId];
+      end
+      { 1.52 IDXRANGE2 (owner C3): a manual-only fix needs --fix-rule naming its rule }
+      else if IsFixManualOnly(F.RuleId) and not SameText(AArgs.FixRule, F.RuleId) then
+      begin
+        if not MatchText(F.RuleId, ManualIds) then ManualIds:= ManualIds + [F.RuleId];
       end
       else Braked:= Braked + [F];
     Targeted:= Braked;
     if Length(BrakedIds) > 0 then
       Writeln(ErrOutput, Format('drag-lint: note: %d rule(s) here are not fixed because "autofix_off" lists them: %s.',
         [Length(BrakedIds), string.Join(', ', BrakedIds)]));
+    if Length(ManualIds) > 0 then
+      Writeln(ErrOutput, Format('drag-lint: note: %d rule(s) here have a manual only fix, applied only with --fix-rule <id> (the IDE''s Fix it): %s.',
+        [Length(ManualIds), string.Join(', ', ManualIds)]));
 
     { lane 144 item 1: the one fix that needs the compile gate is not part of a batch }
     var GatedCasts: Integer:= 0;
@@ -13349,6 +13358,8 @@ begin
         O.AddPair('fixable', TJSONBool.Create(IsFixableRule(R.Id)));
         { true: the fix runs only when "autofix": [...] opts the rule in }
         O.AddPair('fix_opt_in', TJSONBool.Create(False)); // deprecated: every fix is on by default (1.37.0); emitted for the IDE plugin
+        { 1.52 IDXRANGE2: true = the fix runs only when --fix-rule names the rule (never in a batch fix) }
+        O.AddPair('fix_manual_only', TJSONBool.Create(IsFixManualOnly(R.Id)));
         AddParamsJson(O, R.Params);
         O.AddPair('compliance', ComplianceToJson(R.Compliance, True));
         { 1.38 two-way modernize: the gate's inputs, and whether the rule runs by

@@ -223,4 +223,303 @@ begin
   Result:= Result + i;
 end;
 
+{ ---- 1.52 lane IDXRANGE2: C1 parallel arrays (owner 2026-11-17) ---- }
+
+procedure OkParallelSetLength(const Names: TStrings);
+var
+  Values: TArray<Integer>;
+  i: Integer;
+begin
+  SetLength(Values, Names.Count);
+  for i:= 0 to Names.Count - 1 do
+    Values[i]:= i;
+end;
+
+procedure HitParallelUnsized(const Names: TStrings; var Values: TArray<Integer>);
+var
+  i: Integer;
+begin
+  for i:= 0 to Names.Count - 1 do
+    Values[i]:= i;
+end;
+
+procedure OkParallelStatic;
+var
+  Names: array[0..9] of string;
+  Values: array[0..9] of Integer;
+  i: Integer;
+begin
+  for i:= Low(Names) to High(Names) do
+    Values[i]:= Length(Names[i]);
+end;
+
+procedure HitParallelStaticSmaller;
+var
+  Names: array[0..9] of string;
+  Values: array[0..4] of Integer;
+  i: Integer;
+begin
+  for i:= Low(Names) to High(Names) do
+    Values[i]:= Length(Names[i]);
+end;
+
+procedure OkParallelSameSource(N: Integer);
+var
+  A, B: TArray<Integer>;
+  i: Integer;
+begin
+  SetLength(A, N);
+  SetLength(B, N);
+  for i:= 0 to High(B) do
+    A[i]:= B[i];
+end;
+
+procedure HitParallelDiffer(RowCount, ColCount: Integer);
+var
+  Rows, Cols: TArray<Integer>;
+  i: Integer;
+begin
+  SetLength(Rows, ColCount);
+  SetLength(Cols, RowCount);
+  for i:= 0 to High(Cols) do
+    Rows[i]:= i;
+end;
+
+procedure OkParallelWhile(const Names: TStrings);
+var
+  Values: TArray<Integer>;
+  i: Integer;
+begin
+  SetLength(Values, Names.Count);
+  i:= 0;
+  while i < Names.Count do
+  begin
+    Values[i]:= i;
+    Inc(i);
+  end;
+end;
+
+procedure MarkAll(const Toks: TStrings; var Marks: TArray<Boolean>);
+var
+  j: Integer;
+begin
+  j:= 0;
+  while j < Toks.Count do
+  begin
+    Marks[j]:= True;
+    Inc(j);
+  end;
+end;
+
+function MarksOf(const L: TStrings): TArray<Boolean>;
+begin
+  SetLength(Result, L.Count);
+  MarkAll(L, Result);
+end;
+
+procedure MarkSome(const Toks: TStrings; var Marks: TArray<Boolean>);
+var
+  j: Integer;
+begin
+  j:= 0;
+  while j < Toks.Count do
+  begin
+    Marks[j]:= True;
+    Inc(j);
+  end;
+end;
+
+procedure MarkSomeCaller(const L: TStrings);
+var
+  R: TArray<Boolean>;
+begin
+  SetLength(R, 3);
+  MarkSome(L, R);
+end;
+
+{ ---- C2 unchecked index parameter: local callers ---- }
+
+function ItemAt(const D: TArray<Integer>; Idx: Integer): Integer;
+begin
+  Result:= D[Idx];
+end;
+
+function SumAll(const D: TArray<Integer>): Integer;
+var
+  k: Integer;
+begin
+  Result:= 0;
+  for k:= 0 to High(D) do
+    Result:= Result + ItemAt(D, k);
+end;
+
+function ItemAt2(const D: TArray<Integer>; Idx: Integer): Integer;
+begin
+  Result:= D[Idx];
+end;
+
+function UseItemAt2(const D: TArray<Integer>): Integer;
+begin
+  Result:= ItemAt2(D, 0) + ItemAt2(D, Length(D));
+end;
+
+function TableAt(Idx: Integer): Integer;
+begin
+  Result:= GArr[Idx];
+end;
+
+function UseTableAt: Integer;
+var
+  k: Integer;
+begin
+  Result:= TableAt(3);
+  for k:= Low(GArr) to High(GArr) do
+    Result:= Result + TableAt(k);
+end;
+
+function ItemAt3(const D: TArray<Integer>; Idx: Integer): Integer;
+begin
+  Result:= D[Idx];
+end;
+
+procedure TakesAddress;
+var
+  P: Pointer;
+begin
+  P:= @ItemAt3;
+  if P = nil then Exit;
+end;
+
+{ ---- ORM3 batch 3 (2026-11-17) patterns ---- }
+
+procedure OkOverAllocated(const Data: array of Double);
+var
+  Used: array of Boolean;
+  J: Integer;
+begin
+  SetLength(Used, High(Data) - Low(Data) + 3);
+  J:= Low(Data);
+  while Used[J] and (J <= High(Data)) do
+    Inc(J);
+end;
+
+procedure HitExactAllocated(const Data: array of Double);
+var
+  Used: array of Boolean;
+  J: Integer;
+begin
+  SetLength(Used, High(Data) - Low(Data) + 1);
+  J:= Low(Data);
+  while Used[J] and (J <= High(Data)) do
+    Inc(J);
+end;
+
+procedure HitNssConvert(var N: Integer);
+const
+  NssConv: array[0..4] of Integer = (1, 2, 3, 4, 5);
+var
+  Hist: array[0..8] of Integer;
+  i: Integer;
+begin
+  i:= 0;
+  while (Hist[i] = 0) and (i <= 4) do Inc(i);
+  N:= NssConv[i];
+end;
+
+procedure SplitInto(const S: string; c: Char; var sa: array of string);
+var
+  i, j: Integer;
+begin
+  j:= Low(sa);
+  for i:= 1 to Length(S) do
+  begin
+    if S[i] <> c then
+      sa[j]:= sa[j] + S[i]
+    else
+    begin
+      Inc(j);
+      if j > High(sa) - 1 then
+      begin
+        sa[j]:= Copy(S, i + 1, MaxInt);
+        Exit;
+      end;
+    end;
+  end;
+end;
+
+procedure UseSplitInto(const S: string);
+var
+  Tokens: array[0..10] of string;
+begin
+  SplitInto(S, ',', Tokens);
+end;
+
+procedure SplitOne(const S: string; c: Char; var sa: array of string);
+var
+  i, j: Integer;
+begin
+  j:= Low(sa);
+  for i:= 1 to Length(S) do
+  begin
+    if S[i] <> c then
+      sa[j]:= sa[j] + S[i]
+    else
+    begin
+      Inc(j);
+      if j > High(sa) - 1 then
+      begin
+        sa[j]:= Copy(S, i + 1, MaxInt);
+        Exit;
+      end;
+    end;
+  end;
+end;
+
+procedure UseSplitOne(const S: string);
+var
+  One: array[0..0] of string;
+begin
+  SplitOne(S, ',', One);
+end;
+
+function LookupIndex(const Cols: TDictionary<string, Integer>; const Name: string): Integer;
+var
+  Picks: array[1..8] of Integer;
+  colidx: Integer;
+begin
+  Result:= 0;
+  colidx:= Cols.GetValueOrDefault(Name, -1);
+  if colidx > 0 then
+    Result:= Picks[colidx];
+end;
+
+procedure OkCountInvariant(ColCount: Integer; const Src: TArray<Integer>);
+var
+  Rows: TArray<Integer>;
+  RowCount: Integer;
+begin
+  SetLength(Rows, ColCount);
+  RowCount:= 0;
+  for var I: Integer:= 2 to ColCount - 1 do
+  begin
+    if Src[I] = 0 then Continue;
+    Rows[RowCount]:= I;
+    Inc(RowCount);
+  end;
+end;
+
+procedure HitCountInvariant(ColCount: Integer);
+var
+  Rows: TArray<Integer>;
+  RowCount: Integer;
+begin
+  SetLength(Rows, ColCount);
+  RowCount:= 0;
+  for var I: Integer:= 0 to ColCount do
+  begin
+    Rows[RowCount]:= I;
+    Inc(RowCount);
+  end;
+end;
+
 end.

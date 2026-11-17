@@ -1,4 +1,4 @@
-# OFF rule (config.json). Reported on the WRITE of the index, not the access.
+# Default ON since 1.52 lane IDXRANGE2 (config.json kept). Reported on the WRITE of the index, not the access.
 # hits: plain Calc (26), Inc before access inside a while (38), one-sided guard (50),
 #       subrange-typed index (60), unguarded parameter = hint on the access (66), unanchorable fix (161)
 index-possibly-out-of-range 26
@@ -30,7 +30,8 @@ index-possibly-out-of-range 209
 !index-possibly-out-of-range 146
 !index-possibly-out-of-range 147
 !index-possibly-out-of-range 152
-!index-possibly-out-of-range 154# refinements: Length alias n := Length(D) (169-175), short-circuit and (183-186), grow-on-demand SetLength (193-200)
+!index-possibly-out-of-range 154
+# refinements: Length alias n := Length(D) (169-175), short-circuit and (183-186), grow-on-demand SetLength (193-200)
 !index-possibly-out-of-range 169
 !index-possibly-out-of-range 170
 !index-possibly-out-of-range 171
@@ -49,3 +50,47 @@ index-possibly-out-of-range 209
 !index-possibly-out-of-range 219
 !index-possibly-out-of-range 221
 !index-possibly-out-of-range 222
+# C1 parallel arrays (owner 2026-11-17): silent when the other array's bound is proven within this one's --
+# SetLength from the same Count (234 235), static bounds within (252 253), same SetLength source (273 274),
+# while over the same Count (294 297), every local caller sizes Marks from Toks.Count (306 309)
+!index-possibly-out-of-range 234
+!index-possibly-out-of-range 235
+!index-possibly-out-of-range 252
+!index-possibly-out-of-range 253
+!index-possibly-out-of-range 273
+!index-possibly-out-of-range 274
+!index-possibly-out-of-range 294
+!index-possibly-out-of-range 297
+!index-possibly-out-of-range 306
+!index-possibly-out-of-range 309
+# ... and a WARNING when unproven: param array never sized (242, on the for), static array smaller (262),
+# sized from a different count (284), one local caller sizes Marks with 3 (324)
+index-possibly-out-of-range 242
+index-possibly-out-of-range 262
+index-possibly-out-of-range 284
+index-possibly-out-of-range 324
+# C2 unchecked index parameter: cleared when every local caller passes a proven value (344, 368);
+# a hint when one caller passes Length(D) (358) or the routine escapes as a value (382)
+!index-possibly-out-of-range 344
+!index-possibly-out-of-range 368
+index-possibly-out-of-range 358
+index-possibly-out-of-range 382
+# ORM3 batch 3 (2026-11-17): SetLength size expression with slack (401 403), the one-past read of a
+# wrong-order while is in range there; exact size overruns (412). TP uINSPRSLT:5575 shape: Hist[i] is in
+# range (424 silent) but NssConv[i] after the loop is not (425, on the Inc). Exit-capped Inc plus local
+# callers passing array[0..10] (433 440); a 1-slot caller overruns in the then-branch (468). Lookup index
+# = hint (491). Count invariant: one Inc per iteration of a for of <= Length(Rows) trips (502 507);
+# one trip too many (517).
+!index-possibly-out-of-range 401
+!index-possibly-out-of-range 403
+index-possibly-out-of-range 412
+!index-possibly-out-of-range 424
+index-possibly-out-of-range 425
+!index-possibly-out-of-range 433
+!index-possibly-out-of-range 440
+!index-possibly-out-of-range 461
+index-possibly-out-of-range 468
+index-possibly-out-of-range 491
+!index-possibly-out-of-range 502
+!index-possibly-out-of-range 507
+index-possibly-out-of-range 517

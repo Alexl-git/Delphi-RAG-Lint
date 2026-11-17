@@ -235,6 +235,21 @@ procedure RegisterFixer(const ARuleId: string; const AFixer: TFindingFixer; ARis
 /// </remarks>
 procedure RegisterFileFixer(const ARuleId: string; const AFixer: TFileFixer; ARisky: Boolean = False; ANeedsCompiler: Integer = 0);
 
+/// <summary>Marks ARuleId's fix as MANUAL ONLY (1.52 IDXRANGE2, owner C3 2026-11-17).</summary>
+/// <param name="ARuleId">The rule id; compared case-insensitively.</param>
+/// <remarks>
+/// A manual-only fix runs only when the request names the rule (`--fix-rule <id>`, the
+/// IDE's Fix it); a batch `--fix` without it (fix-all in a unit / project) withholds it
+/// and says so. `rules --json` reports it as fix_manual_only. Call it from a fixer unit's
+/// initialization; not thread-safe after start-up.
+/// </remarks>
+procedure MarkFixManualOnly(const ARuleId: string);
+
+/// <summary>True when ARuleId's fix was marked with MarkFixManualOnly.</summary>
+/// <param name="ARuleId">The rule id; compared case-insensitively.</param>
+/// <returns>False for an unknown id.</returns>
+function IsFixManualOnly(const ARuleId: string): Boolean;
+
 /// <summary>How many findings the LAST BuildAutofixEdits left unfixed because
 /// their fixer's ANeedsCompiler is newer than ActiveTargetCompiler.</summary>
 /// <returns>0 at the default target, and whenever no registered fixer is gated.</returns>
@@ -563,6 +578,19 @@ begin
   R.Risky  := ARisky;
   R.NeedsCompiler:= ANeedsCompiler;
   Fixers.AddOrSetValue(ARuleId, R);
+end;
+
+var
+  GManualOnlyFixes: TArray<string>;  { rule ids whose fix runs only when --fix-rule names them }
+
+procedure MarkFixManualOnly(const ARuleId: string);
+begin
+  if not MatchText(ARuleId, GManualOnlyFixes) then GManualOnlyFixes:= GManualOnlyFixes + [ARuleId];
+end;
+
+function IsFixManualOnly(const ARuleId: string): Boolean;
+begin
+  Result:= MatchText(ARuleId, GManualOnlyFixes);
 end;
 { The set of rule-ids that have a registered, mechanical, side-effect-free
   quick-fix. Single source of truth for both the rules-catalog 'fixable' flag
