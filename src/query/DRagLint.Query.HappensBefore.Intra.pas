@@ -1,11 +1,490 @@
 unit DRagLint.Query.HappensBefore.Intra;
 
 { drag-lint 1.52 -- lane HBINTRA: must-analysis inside one routine.
-  Scaffold created EMPTY by lane FRAME (listed in drag-lint.dpr / .dproj);
-  lane HBINTRA owns it. }
+  Scaffold created EMPTY by lane FRAME (listed in drag-lint.dpr / .dproj); lane HBINTRA owns it.
+
+  Plan docs\superpowers\plans\2026-11-17-happens-before-phase1.md, lane INTRA; spec
+  docs\superpowers\specs\2026-11-17-happens-before-design.md sec. 5.3. Truth table:
+  tests\autotest\run_check_init_intra.ps1 over tests\fixtures\happens-before\intra-shapes.
+
+  VERIFIED (plan step 2, against DRagLint.Analysis.Cfg as of 1.52):
+  * try..except: every handler block has an edge from the block BEFORE the try (B-30), from the try
+    entry block and from every non-divert block of the try body (C1). With meet = AND, the state at a
+    handler entry is therefore the try ENTRY state -- exactly the conservative rule of spec 5.3. A
+    handler that falls through is wired to the follow block, so the state after try..except is
+    AND(normal completion, handler exits); a diverting handler (raise / exit) is not wired. No extra
+    edge needed.
+  * try..finally: TCfg deliberately has NO exceptional edge into the finally (only normal completion,
+    or the try entry when the body always diverts). The state AFTER the finally is right as it is (only
+    a normal completion continues there), but a query INSIDE a finally body would read the
+    normal-path state, which is unsound: the finally also runs when the body raised before its marks.
+    Added here: a query inside the finally body of try T is ANDed with the state before T's first
+    item (the try entry). Conservative cost: a mark INSIDE the same finally, before the query, is
+    not credited (MAY, never a wrong SET).
+  * raise / Halt / Abort blocks (TCfgBlock.NoReturn) keep an edge to Exit; they are left out of the
+    meet at the normal exit.
+  Other cuts: a Skipped CFG (goto / label / asm) answers False everywhere; an item inside a `with`
+  (Opaque) never marks; a mark inside an anonymous-method body, the right operand of a short-circuit
+  `and` / `or`, or a branch of an `if` EXPRESSION never marks (it may not run); a query inside an
+  anonymous-method body is InClosure and False (judged as an escaped routine by the solver); an
+  unreachable block reads False. Columns are byte columns of the preprocessed UTF-8 source (equal to
+  character columns on ASCII lines). }
 
 interface
 
+uses
+  DRagLint.Core.Interfaces
+, DRagLint.Query.HappensBefore.Types
+  ;
+
+type
+  /// <summary>The answer for one QUERY site of <see cref="SolveRoutine"/>.</summary>
+  /// <remarks>Done is a MUST answer: False means "not proven", never "proven unset".</remarks>
+  THbQueryState = record
+    /// <summary>The query site as passed in.</summary>
+    Site: THbSite;
+    /// <summary>True = "A has completed" on EVERY path that reaches the site, just BEFORE the CFG
+    /// item that contains it (a mark in the same item does not count).</summary>
+    Done: Boolean;
+    /// <summary>False when no CFG item of the routine covers the site (Done is then False).</summary>
+    Located: Boolean;
+    /// <summary>True when the site lies inside an anonymous-method body: the enclosing routine does
+    /// not execute it, so Done is False and the caller judges it as an escaped routine.</summary>
+    InClosure: Boolean;
+  end;
+
+  /// <summary>Result of <see cref="SolveRoutine"/>: the bit before each query and at normal exit.</summary>
+  THbRoutineState = record
+    /// <summary>The routine asked about (symbols.id).</summary>
+    RoutineId: Int64;
+    /// <summary>False when the routine symbol, its file or its `defProc` could not be found; every
+    /// other field is then False.</summary>
+    Found: Boolean;
+    /// <summary>True when the CFG builder refused the routine (goto / label / asm): every bit is
+    /// False (reason code cfg-skipped).</summary>
+    CfgSkipped: Boolean;
+    /// <summary>One entry per QUERY, in the order of the pQueries argument.</summary>
+    Queries: TArray<THbQueryState>;
+    /// <summary>The bit at NORMAL exit (raise / Halt / Abort paths left out): MustA(routine) when
+    /// solved with pEntryDone = False. False when ExitReachable is False.</summary>
+    ExitDone: Boolean;
+    /// <summary>False when no path reaches the normal exit (the routine always raises).</summary>
+    ExitReachable: Boolean;
+  end;
+
+/// <summary>Forward must-analysis of "A has completed" inside one routine (spec 5.3): one boolean
+/// per CFG block, meet = AND, entry = pEntryDone; a CFG item whose span contains a MARK sets the bit.</summary>
+/// <param name="pStore">Open index; read only (symbol row and file path).</param>
+/// <param name="pRoutineId">symbols.id of the routine (procedure, function or method).</param>
+/// <param name="pMarks">Sites that perform A in this routine: a counting writer site, or a call site
+/// whose callee has MustA. Sites outside the routine body match no item and are ignored.</param>
+/// <param name="pQueries">Sites to judge (the use, or call sites on the way to the use).</param>
+/// <param name="pEntryDone">The bit on routine entry (False = MustA question).</param>
+/// <returns>The state just before each query and at normal exit; never raises for a missing
+/// routine (Found = False).</returns>
+/// <remarks>Parses through TAstParseCache (the cache owns the tree; not thread-safe, like the cache).
+/// Every doubt answers False: a wrong True is a wrong SET.</remarks>
+function SolveRoutine(const pStore: ISymbolStore; pRoutineId: Int64; const pMarks, pQueries: TArray<THbSite>;  // dl:ok unused-public-symbol@dc95 -- REVIEWED 2026-11-17 v152 HBINTRA: frozen check-init contract; the consumer is lane HBSOLVER (DRagLint.Query.HappensBefore.CheckInit), merged after this lane
+  pEntryDone: Boolean): THbRoutineState;
+
 implementation
+
+uses
+  System.SysUtils
+, System.Math
+, System.Generics.Collections
+, TreeSitter
+, DRagLint.Core.Model
+, DRagLint.Analysis.Cfg
+, DRagLint.Diagnostics.ParseCache
+  ;
+
+type
+  /// <summary>One occurrence of a CFG item: block index + item index (an item can occur in several
+  /// blocks when a finally body is copied onto an exit path).</summary>
+  TItemRef = record
+    Block: Integer;
+    Item: Integer;
+  end;
+
+  /// <summary>What a walk from a CFG item down to a site met on the way.</summary>
+  TSitePath = record
+    /// <summary>An anonymous-method body encloses the site.</summary>
+    InLambda: Boolean;
+    /// <summary>The site may not run when the item runs (short-circuit rhs, if-expression branch).</summary>
+    Guarded: Boolean;
+  end;
+
+  /// <summary>The solver for one routine CFG. Owns nothing: the CFG belongs to the caller.</summary>
+  TIntraSolver = class
+  strict private
+    FCfg: TCfg;
+    FSrc: TBytes;
+    FEntryDone: Boolean;
+    FReach: TArray<Boolean>;
+    FIn: TArray<Boolean>;
+    FOut: TArray<Boolean>;
+    FMarked: TArray<TArray<Boolean>>;
+    function NodeText(const pNode: TTSNode): string;
+    function Contains(const pNode: TTSNode; const pSite: THbSite): Boolean;
+    function SameNode(const pLeft, pRight: TTSNode): Boolean;
+    function GuardedChild(const pParent, pChild: TTSNode): Boolean;
+    procedure WalkTo(const pNode: TTSNode; const pSite: THbSite; pGuarded: Boolean; var pPath: TSitePath);
+    function PathTo(const pItem: TTSNode; const pSite: THbSite): TSitePath;
+    procedure ComputeReach;
+    procedure ApplyMarks(const pMarks: TArray<THbSite>);
+    procedure Solve;
+    function StateBefore(const pRef: TItemRef): Boolean;
+    function Occurrences(const pSite: THbSite): TArray<TItemRef>;
+    function TryEntryState(const pTryBody: TTSNode): Boolean;
+    procedure CollectFinallys(const pNode: TTSNode; pList: TList<TPair<TTSNode, TTSNode>>);
+  public
+    constructor Create(pCfg: TCfg; pEntryDone: Boolean);
+    procedure Run(const pMarks: TArray<THbSite>; var pState: THbRoutineState);
+  end;
+
+const
+  NODE_LAMBDA = 'lambda';
+  NODE_DEFPROC = 'defProc';
+
+{ TIntraSolver }
+
+constructor TIntraSolver.Create(pCfg: TCfg; pEntryDone: Boolean);
+begin
+  inherited Create;
+  FCfg:= pCfg;
+  FSrc:= pCfg.Src;
+  FEntryDone:= pEntryDone;
+end;
+
+function TIntraSolver.NodeText(const pNode: TTSNode): string;
+begin
+  Result:= '';
+  if pNode.IsNull or (Integer(pNode.EndByte) > Length(FSrc)) then Exit;
+  Result:= TEncoding.UTF8.GetString(FSrc, Integer(pNode.StartByte), Integer(pNode.EndByte - pNode.StartByte));
+end;
+
+function TIntraSolver.Contains(const pNode: TTSNode; const pSite: THbSite): Boolean;
+var
+  Row, Col, SR, SC, ER, EC: Integer;
+begin
+  Row:= pSite.Line - 1;
+  SR:= Integer(pNode.StartPoint.row);
+  ER:= Integer(pNode.EndPoint.row);
+  if pSite.Col <= 0 then Exit(InRange(Row, SR, ER));  { whole line: the node intersects it }
+  Col:= pSite.Col - 1;
+  SC:= Integer(pNode.StartPoint.column);
+  EC:= Integer(pNode.EndPoint.column);
+  var AfterStart:= (Row > SR) or ((Row = SR) and (Col >= SC));
+  var BeforeEnd:= (Row < ER) or ((Row = ER) and (Col < EC));
+  Result:= AfterStart and BeforeEnd;
+end;
+
+function TIntraSolver.SameNode(const pLeft, pRight: TTSNode): Boolean;
+begin
+  Result:= (not pLeft.IsNull) and (not pRight.IsNull) and (pLeft.StartByte = pRight.StartByte)
+    and (pLeft.EndByte = pRight.EndByte);
+end;
+
+function TIntraSolver.GuardedChild(const pParent, pChild: TTSNode): Boolean;
+begin
+  Result:= False;
+  if pParent.NodeType = 'exprBinary' then
+  begin
+    var Op:= Trim(NodeText(pParent.ChildByField('operator')));
+    if SameText(Op, 'and') or SameText(Op, 'or') then
+      Result:= SameNode(pChild, pParent.ChildByField('rhs'));
+  end
+  else if pParent.NodeType = 'exprIf' then
+    { only the condition always runs; no condition field -> every child is a branch (conservative) }
+    Result:= not SameNode(pChild, pParent.ChildByField('condition'));
+end;
+
+procedure TIntraSolver.WalkTo(const pNode: TTSNode; const pSite: THbSite; pGuarded: Boolean; var pPath: TSitePath);
+begin
+  if pNode.NodeType = NODE_LAMBDA then
+  begin
+    pPath.InLambda:= True;
+    Exit;
+  end;
+  for var I:= 0 to pNode.ChildCount - 1 do
+  begin
+    var C:= pNode.Child(I);
+    if not Contains(C, pSite) then Continue;
+    var G:= pGuarded or GuardedChild(pNode, C);
+    if G then pPath.Guarded:= True;
+    WalkTo(C, pSite, G, pPath);
+  end;
+end;
+
+function TIntraSolver.PathTo(const pItem: TTSNode; const pSite: THbSite): TSitePath;
+begin
+  Result:= Default(TSitePath);
+  WalkTo(pItem, pSite, False, Result);
+end;
+
+procedure TIntraSolver.ComputeReach;
+begin
+  SetLength(FReach, FCfg.Blocks.Count);
+  var Work:= TStack<Integer>.Create;
+  try
+    FReach[FCfg.EntryIdx]:= True;
+    Work.Push(FCfg.EntryIdx);
+    while Work.Count > 0 do
+      for var S in FCfg.Blocks[Work.Pop].Succ do
+        if not FReach[S] then
+        begin
+          FReach[S]:= True;
+          Work.Push(S);
+        end;
+  finally
+    Work.Free;
+  end;
+end;
+
+procedure TIntraSolver.ApplyMarks(const pMarks: TArray<THbSite>);
+begin
+  SetLength(FMarked, FCfg.Blocks.Count);
+  for var B:= 0 to FCfg.Blocks.Count - 1 do
+  begin
+    var Blk:= FCfg.Blocks[B];
+    SetLength(FMarked[B], Blk.Items.Count);
+    for var I:= 0 to Blk.Items.Count - 1 do
+    begin
+      var It:= Blk.Items[I];
+      if It.Opaque then Continue;  { inside `with`: the name may be a field of the with-entity }
+      for var M in pMarks do
+        if Contains(It.Node, M) then
+        begin
+          var P:= PathTo(It.Node, M);
+          if not (P.InLambda or P.Guarded) then
+          begin
+            FMarked[B][I]:= True;
+            Break;
+          end;
+        end;
+    end;
+  end;
+end;
+
+procedure TIntraSolver.Solve;
+begin
+  var N:= FCfg.Blocks.Count;
+  SetLength(FIn, N);
+  SetLength(FOut, N);
+  for var B:= 0 to N - 1 do
+  begin
+    FIn[B]:= FReach[B];   { greatest fixpoint: start at True on reachable blocks }
+    FOut[B]:= FReach[B];
+  end;
+  var Changed:= True;
+  while Changed do
+  begin
+    Changed:= False;
+    for var B:= 0 to N - 1 do
+    begin
+      if not FReach[B] then Continue;
+      var V: Boolean;
+      if B = FCfg.EntryIdx then V:= FEntryDone
+      else
+      begin
+        V:= True;
+        for var P in FCfg.Blocks[B].Pred do
+          if FReach[P] then V:= V and FOut[P];
+      end;
+      var O:= V;
+      for var Mk in FMarked[B] do O:= O or Mk;
+      if (V <> FIn[B]) or (O <> FOut[B]) then
+      begin
+        FIn[B]:= V;
+        FOut[B]:= O;
+        Changed:= True;
+      end;
+    end;
+  end;
+end;
+
+function TIntraSolver.StateBefore(const pRef: TItemRef): Boolean;
+begin
+  if not FReach[pRef.Block] then Exit(False);
+  Result:= FIn[pRef.Block];
+  for var I:= 0 to pRef.Item - 1 do Result:= Result or FMarked[pRef.Block][I];
+end;
+
+function TIntraSolver.Occurrences(const pSite: THbSite): TArray<TItemRef>;
+begin
+  var L:= TList<TItemRef>.Create;
+  try
+    for var B:= 0 to FCfg.Blocks.Count - 1 do
+      for var I:= 0 to FCfg.Blocks[B].Items.Count - 1 do
+        if Contains(FCfg.Blocks[B].Items[I].Node, pSite) then
+        begin
+          var R: TItemRef;
+          R.Block:= B;
+          R.Item:= I;
+          L.Add(R);
+        end;
+    Result:= L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
+function TIntraSolver.TryEntryState(const pTryBody: TTSNode): Boolean;
+var
+  FirstByte: UInt32;
+begin
+  Result:= True;
+  if pTryBody.IsNull then Exit;
+  FirstByte:= High(UInt32);
+  for var B:= 0 to FCfg.Blocks.Count - 1 do
+    for var It in FCfg.Blocks[B].Items do
+      if (It.Node.StartByte >= pTryBody.StartByte) and (It.Node.EndByte <= pTryBody.EndByte)
+        and (It.Node.StartByte < FirstByte) then FirstByte:= It.Node.StartByte;
+  if FirstByte = High(UInt32) then Exit;  { empty try body: the finally sees the pre-try state already }
+  for var B:= 0 to FCfg.Blocks.Count - 1 do
+    for var I:= 0 to FCfg.Blocks[B].Items.Count - 1 do
+      if FCfg.Blocks[B].Items[I].Node.StartByte = FirstByte then
+      begin
+        var R: TItemRef;
+        R.Block:= B;
+        R.Item:= I;
+        Result:= Result and StateBefore(R);
+      end;
+end;
+
+procedure TIntraSolver.CollectFinallys(const pNode: TTSNode; pList: TList<TPair<TTSNode, TTSNode>>);
+begin
+  for var I:= 0 to pNode.NamedChildCount - 1 do
+  begin
+    var C:= pNode.NamedChild(I);
+    if (C.NodeType = NODE_DEFPROC) or (C.NodeType = NODE_LAMBDA) then Continue;  { own routine }
+    if C.NodeType = 'try' then
+    begin
+      var Seen:= False;
+      for var J:= 0 to C.NamedChildCount - 1 do
+        if C.NamedChild(J).NodeType = 'kFinally' then Seen:= True
+        else if Seen and (C.NamedChild(J).NodeType = 'statements') then
+        begin
+          pList.Add(TPair<TTSNode, TTSNode>.Create(C.ChildByField('try'), C.NamedChild(J)));
+          Break;
+        end;
+    end;
+    CollectFinallys(C, pList);
+  end;
+end;
+
+procedure TIntraSolver.Run(const pMarks: TArray<THbSite>; var pState: THbRoutineState);
+begin
+  ComputeReach;
+  ApplyMarks(pMarks);
+  Solve;
+  var Body:= FCfg.RoutineNode.ChildByField('body');
+  if Body.IsNull then Body:= FCfg.RoutineNode;
+  var Finallys:= TList<TPair<TTSNode, TTSNode>>.Create;
+  try
+    CollectFinallys(Body, Finallys);
+    for var Q:= 0 to High(pState.Queries) do
+    begin
+      var Site:= pState.Queries[Q].Site;
+      var Refs:= Occurrences(Site);
+      if Length(Refs) = 0 then Continue;  { Located stays False, Done False }
+      pState.Queries[Q].Located:= True;
+      var Done:= True;
+      for var R in Refs do
+      begin
+        if PathTo(FCfg.Blocks[R.Block].Items[R.Item].Node, Site).InLambda then
+          pState.Queries[Q].InClosure:= True;
+        Done:= Done and StateBefore(R);
+      end;
+      for var F in Finallys do
+        if Contains(F.Value, Site) then Done:= Done and TryEntryState(F.Key);
+      pState.Queries[Q].Done:= Done and not pState.Queries[Q].InClosure;
+    end;
+  finally
+    Finallys.Free;
+  end;
+  var ExitDone:= True;
+  var AnyExit:= False;
+  for var P in FCfg.Blocks[FCfg.ExitIdx].Pred do
+    if FReach[P] and not FCfg.Blocks[P].NoReturn then
+    begin
+      AnyExit:= True;
+      ExitDone:= ExitDone and FOut[P];
+    end;
+  pState.ExitReachable:= AnyExit;
+  pState.ExitDone:= AnyExit and ExitDone;
+end;
+
+{ The `defProc` of the routine: the one starting on its implementation line, else the innermost
+  one whose rows cover that line. }
+function FindDefProc(const pRoot: TTSNode; const pSym: TSymbol): TTSNode;
+var
+  Line, BestSpan: Integer;
+begin
+  Result:= Default(TTSNode);
+  Line:= if pSym.ImplStartLine > 0 then pSym.ImplStartLine else pSym.StartLine;
+  if Line <= 0 then Exit;
+  BestSpan:= MaxInt;
+  var Found:= False;
+  for var P in CfgFindProcs(pRoot) do
+  begin
+    var SR:= Integer(P.StartPoint.row) + 1;
+    var ER:= Integer(P.EndPoint.row) + 1;
+    if SR = Line then Exit(P);
+    if InRange(Line, SR, ER) and (ER - SR < BestSpan) then
+    begin
+      BestSpan:= ER - SR;
+      Result:= P;
+      Found:= True;
+    end;
+  end;
+  if not Found then Result:= Default(TTSNode);
+end;
+
+{ The routine's `defProc` through the shared parse cache (pSrc = the parsed bytes); a null node when the
+  symbol, its file or its body is missing. }
+function LocateDefProc(const pStore: ISymbolStore; pRoutineId: Int64; out pSrc: TBytes): TTSNode;
+begin
+  Result:= Default(TTSNode);
+  pSrc:= nil;
+  if pStore = nil then Exit;
+  var Sym:= pStore.GetSymbolById(pRoutineId);
+  var Path:= if Sym.Id = 0 then '' else pStore.GetFilePath(Sym.FileId);
+  if (Path = '') or not FileExists(Path) then Exit;
+  var PF:= TAstParseCache.Get(Path);
+  if PF.Tree = nil then Exit;
+  pSrc:= PF.Src;
+  Result:= FindDefProc(PF.Tree.RootNode, Sym);
+end;
+
+function SolveRoutine(const pStore: ISymbolStore; pRoutineId: Int64; const pMarks, pQueries: TArray<THbSite>;
+  pEntryDone: Boolean): THbRoutineState;
+begin
+  Result:= Default(THbRoutineState);
+  Result.RoutineId:= pRoutineId;
+  SetLength(Result.Queries, Length(pQueries));
+  for var I:= 0 to High(pQueries) do Result.Queries[I].Site:= pQueries[I];
+  var Src: TBytes;
+  var Proc:= LocateDefProc(pStore, pRoutineId, Src);
+  if Proc.IsNull then Exit;
+  Result.Found:= True;
+  var Cfg:= TCfgBuilder.Build(Proc, Src, {APruneConstLoops=}True);
+  try
+    if Cfg.Skipped then
+    begin
+      Result.CfgSkipped:= True;
+      Exit;
+    end;
+    var Solver:= TIntraSolver.Create(Cfg, pEntryDone);
+    try
+      Solver.Run(pMarks, Result);
+    finally
+      Solver.Free;
+    end;
+  finally
+    Cfg.Free;
+  end;
+end;
 
 end.
