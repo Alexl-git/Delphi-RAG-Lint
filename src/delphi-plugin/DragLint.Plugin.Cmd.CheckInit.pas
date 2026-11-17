@@ -32,6 +32,8 @@ begin
   Command.Caption:= 'Check Initialization of Identifier at Cursor...';
   Command.Visible:= False;
   Command.Click:= InvokeCheckInit;
+  Command.Surfaces:= [csMainMenu, csEditorContext];
+  Command.Needs:= cnSymbol;
   RegisterCmd152(Command);
 end;
 

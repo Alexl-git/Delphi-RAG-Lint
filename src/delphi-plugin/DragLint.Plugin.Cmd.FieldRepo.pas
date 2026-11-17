@@ -32,6 +32,8 @@ begin
   Command.Caption:= 'Open Field Repository Editor...';
   Command.Visible:= False;
   Command.Click:= InvokeFieldRepo;
+  Command.Surfaces:= [csMainMenu];
+  Command.Needs:= cnNothing;
   RegisterCmd152(Command);
 end;
 

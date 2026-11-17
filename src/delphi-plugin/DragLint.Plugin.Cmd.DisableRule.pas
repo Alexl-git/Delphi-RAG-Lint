@@ -32,6 +32,8 @@ begin
   Command.Caption:= 'Disable Rule...';
   Command.Visible:= False;
   Command.Click:= InvokeDisableRule;
+  Command.Surfaces:= [csMainMenu, csEditorContext];
+  Command.Needs:= cnFinding;
   RegisterCmd152(Command);
 end;
 

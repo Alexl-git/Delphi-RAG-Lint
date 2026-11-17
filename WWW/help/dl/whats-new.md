@@ -11,6 +11,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 1.51.1-alpha
 
+* [Editor right-click submenu](features/editor-context-menu.md) -- The drag-lint submenu of the code editor's right-click menu: the 1.52 caret commands, enabled by what the caret is on.
 * [CLI fixes in 1.51.1](features/v1511-cli-fixes.md) -- lint-all --rule a,b runs only those rules, a DB copy stays on the copy; rules --rule; info versions; index parse-errors; resolve-only warning.
 * [Cycles fix through recipe R3 (hub surface, compile-gated)](features/v1511-cyc-fixes.md) -- cycles --fix --hub-surface writes recipe R3 through the compile gate: build before and after, rollback, re-index and verify.
 * [References for declaration positions](features/v1511-ext-fixes.md) -- The index keeps a reference for pointer base types, generic constraints, generic method headers, dotted property specifiers and message constants.

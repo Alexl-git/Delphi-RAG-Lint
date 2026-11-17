@@ -76,6 +76,7 @@ uses
   , DragLint.Plugin.Options
   , DragLint.Plugin.ProjectMenu
   , DragLint.Plugin.EditViewNotifier
+  , DragLint.Plugin.EditorLocalMenu
   , DragLint.Plugin.ProjectNotifier
   , DragLint.Plugin.SaveNotifier
   , DragLint.Plugin.OpenSourceServer
@@ -115,6 +116,7 @@ begin
   try ShutdownFanOut; except end;
   try UnregisterAllSaveNotifiers; except end;
   try UnregisterDragLintEditViewNotifier; except end;
+  UnregisterDragLintEditorLocalMenu;  { never raises: it catches and logs its own IDE-services failure }
   try UnregisterProjectNotifier; except end;
   try StopOpenSourceServer; except end;
   try UnregisterDragLintDock; except end;

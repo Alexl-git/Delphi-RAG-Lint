@@ -306,6 +306,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [drag-lint Graph (dockable)](features/drag-lint-graph-dockable.md) | Opens the drag-lint graph viewer as a dockable window inside the IDE, so it can sit beside Structure | 0.43.0-alpha |
 | [drag-lint Options](features/drag-lint-options.md) | The plugin's settings dialog for drag-lint: lets you browse and toggle the lint rule catalog | 0.95.0-alpha |
 | [drag-lint Panel (dockable)](features/drag-lint-panel-dockable.md) | Opens the main drag-lint dockable tool window inside the IDE | 0.42.0-alpha |
+| [Editor right-click submenu](features/editor-context-menu.md) | The drag-lint submenu of the code editor's right-click menu: the 1.52 caret commands, enabled by what the caret is on | 1.51.1-alpha |
 | [Exception facts in the editor](features/editor-exception-facts.md) | Hover, code lens and an MCP tool show which exception types a routine raises and handles | 1.50.0-alpha |
 | [Engine heartbeat: the IDE tells a busy engine from a stuck one](features/engine-heartbeat.md) | A running engine reports what it is doing, so the IDE kills only an engine whose status stopped moving | 1.40.0-alpha |
 | [Help line (DL page)](features/ide-help-line.md) | Type part of a feature name on the DL page, pick a match (with its menu path) and open that feature's help page at the configured help root | 1.33.0-alpha |

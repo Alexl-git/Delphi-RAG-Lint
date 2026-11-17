@@ -32,6 +32,8 @@ begin
   Command.Caption:= 'Extract Constant (literal at cursor)...';
   Command.Visible:= False;
   Command.Click:= InvokeExtractConst;
+  Command.Surfaces:= [csMainMenu, csEditorContext];
+  Command.Needs:= cnNothing;
   RegisterCmd152(Command);
 end;
 
