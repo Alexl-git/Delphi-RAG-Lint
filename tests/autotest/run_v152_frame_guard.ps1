@@ -72,6 +72,46 @@ foreach ($c in $cliUnits) {
 }
 Assert "all $($units.Count + $cliUnits.Count) v152 scaffold units exist and are in dpr + dproj ($($missing -join ', '))" ($missing.Count -eq 0)
 
+# 3. (F2) one provider mechanism: the v152 lanes sit in V151.Dispatch's BuildLanes
+$disp = Src 'src\lint\v151\DRagLint.V151.Dispatch.pas'
+$notWired = @()
+foreach ($l in $lanes) {
+  $c = "TV152${l}Rules"
+  $row = "Lane('$l',"
+  $hooks = "$c.Catalog, $c.CheckFile, $c.CheckDfm, $c.CheckRawBytes, $c.CheckProject)"
+  if (-not ($disp.Contains($row) -and $disp.Contains($hooks) -and $disp -match "DRagLint\.V152\.$l\b")) { $notWired += $l }
+}
+Assert "every v152 lane is a BuildLanes row of V151.Dispatch with its five hooks ($($notWired -join ', '))" ($notWired.Count -eq 0)
+$provCalls = @(Get-ChildItem (Join-Path $repo 'src') -Recurse -Filter *.pas | Where-Object { [IO.File]::ReadAllText($_.FullName) -match 'RegisterProviderRules\(' -and $_.Name -ne 'DRagLint.Lint.RuleCatalog.pas' })
+Assert "RegisterProviderRules is called from ONE unit, V151.Dispatch (got: $(($provCalls | ForEach-Object Name) -join ', '))" (($provCalls.Count -eq 1) -and ($provCalls[0].Name -eq 'DRagLint.V151.Dispatch.pas'))
+
+# 4. (F2) CLI.pas: one dispatch line per new verb, each calling its own unit
+$cli = Src 'src\cli\DRagLint.CLI.pas'
+$verbs = [ordered]@{
+  "Args.Command = 'check-init'" = 'RunCheckInit('
+  "Args.Command = 'repo'"       = 'RunRepoVerb('
+  "Args.Command = 'explain'"    = 'RunExplain('
+  "(Args.Command = 'rules') and MatchText(Args.SubCommand, ['disable', 'enable'])" = 'RunRuleScope('
+}
+foreach ($k in $verbs.Keys) {
+  $hits = @($cli -split "`r?`n" | Where-Object { $_.Contains($k) -and $_.Contains($verbs[$k]) })
+  Assert "CLI dispatch: $k -> $($verbs[$k]) on exactly one line (got $($hits.Count))" ($hits.Count -eq 1)
+}
+$ruleScopeIdx = $cli.IndexOf('RunRuleScope(LowerCase(Args.SubCommand)')
+$doRulesIdx = $cli.IndexOf("Args.Command = 'rules'             then Result:= DoRules")
+Assert "rules disable/enable is dispatched BEFORE the plain rules verb" (($ruleScopeIdx -gt 0) -and ($doRulesIdx -gt $ruleScopeIdx))
+foreach ($flag in '--at','--explain','--max-routines','--repo','--replace','--reason') {
+  Assert "ParseArgs knows $flag" ($cli.Contains("A = '$flag'"))
+}
+Assert "ParseArgs: --scope under `rules` goes to RuleScope" ($cli.Contains("(A = '--scope') and (Result.Command = 'rules')"))
+
+# 5. (F2) section-5 config keys are read by Lint.Config
+$cfg = Src 'src\lint\DRagLint.Lint.Config.pas'
+foreach ($key in 'rule_overrides','exclude_units','form_object_without_field','exempt_classes','use_default_list','rule_time_budget_ms') {
+  Assert "Lint.Config reads ""$key""" ($cfg.Contains("'$key'"))
+}
+Assert "DEFAULT_RULE_TIME_BUDGET_MS = 2000 (PLAN D9)" ($cfg -match 'DEFAULT_RULE_TIME_BUDGET_MS\s*=\s*2000;')
+
 if ($fail -gt 0) { Write-Host "run_v152_frame_guard: $fail FAILED" -ForegroundColor Red; exit 1 }
 Write-Host "run_v152_frame_guard: all passed"
 exit 0
