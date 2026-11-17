@@ -18962,6 +18962,7 @@ begin
   Opts.Db:= AArgs.DbPath;
   Opts.NoBackup:= AArgs.NoBackup;
   Opts.Json:= AArgs.AsJson or SameText(AArgs.Format, 'json');
+  Opts.ExcludeUnder:= AArgs.ExcludeUnder;
   Result:= RunUnwith(Opts, Store, Lib);
 end;
 
