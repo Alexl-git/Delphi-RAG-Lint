@@ -67,7 +67,7 @@ begin
       Result:= Result + [Cur];
       Cur:= '';
     end
-    else if Depth = 0 then Cur:= Cur + Ch;
+    else if Depth = 0 then Cur:= Cur + Ch;  // dl:ok concat-in-loop@1b88 -- REVIEWED 2026-11-17 v152 ATLB: one identifier-list string of a few dozen chars per class heritage
   Result:= Result + [Cur];
   for var I: Integer:= 0 to High(Result) do
   begin
@@ -87,6 +87,7 @@ function FindType(const AStore, ALibStore: ISymbolStore; const AName: string; ou
   out AOwner: ISymbolStore): Boolean;
 begin
   Result:= False;
+  ASym  := Default(TSymbol);
   AOwner:= nil;
   for var Pass: Integer:= 0 to 1 do
   begin
@@ -117,8 +118,8 @@ begin
   Result:= True;
   if Trim(T.Heritage) = '' then Exit;
   for var A: string in HeritageNames(T.Heritage) do
-    if (A <> '') and not SameText(A, 'IInterface') and not SameText(A, 'IUnknown') then
-      if not CollectInterface(AStore, ALibStore, A, ANames, ADepth + 1) then Result:= False;
+    if (A <> '') and not SameText(A, 'IInterface') and not SameText(A, 'IUnknown')
+      and not CollectInterface(AStore, ALibStore, A, ANames, ADepth + 1) then Result:= False;
 end;
 
 { Fills ANames with the member names the class's interfaces declare. False = a
@@ -136,8 +137,7 @@ begin
     if H = '' then Continue;
     if FindType(AStore, ALibStore, H, T, Owner) then
     begin
-      if T.Kind = skInterface then
-        if not CollectInterface(AStore, ALibStore, H, ANames, 0) then Result:= False;
+      if (T.Kind = skInterface) and not CollectInterface(AStore, ALibStore, H, ANames, 0) then Result:= False;
     end
     else if LooksLikeInterface(H) then Result:= False;
   end;
@@ -195,7 +195,7 @@ begin
       if not SameText(ExtractFileExt(Path), '.pas') then Continue;
       for var Sym: TSymbol in AStore.FindSymbolsByFile(Path) do
       begin
-        if not (Sym.Kind in [skMethod, skFunction, skProcedure, skField]) then Continue;
+        if Sym.Kind not in [skMethod, skFunction, skProcedure, skField] then Continue;
         if (Sym.ParentId <= 0) or (Trim(LowerCase(Sym.Modifiers)) <> 'public') or not Sym.VisExplicit then Continue;
         if HasExemptDirective(Sym) then Continue;
         if not RefFile.TryGetValue(LowerCase(Sym.Name), Prev) or (Prev <> Sym.FileId) then Continue;
@@ -205,7 +205,7 @@ begin
           Cls:= AStore.GetSymbolById(Sym.ParentId);
           Parents.Add(Sym.ParentId, Cls);
         end;
-        if (Cls.Id <> Sym.ParentId) or not (Cls.Kind in [skClass, skRecord]) or Cls.IsHelper then Continue;
+        if (Cls.Id <> Sym.ParentId) or (Cls.Kind not in [skClass, skRecord]) or Cls.IsHelper then Continue;
         var Names: TDictionary<string, Boolean>;
         if not IfaceOf.TryGetValue(Cls.Id, Names) then
         begin
@@ -227,6 +227,7 @@ begin
           try
             Lines:= TFile.ReadAllLines(Path);
           except
+            on Exception do
             Lines:= nil;
           end;
           FileLines.Add(FileId, Lines);

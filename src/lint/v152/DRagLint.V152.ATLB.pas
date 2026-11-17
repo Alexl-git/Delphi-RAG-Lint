@@ -48,8 +48,7 @@ type
 implementation
 
 uses
-  DRagLint.Core.Interfaces
-  , DRagLint.V152.ATLB.Support
+  DRagLint.V152.ATLB.Support
   ;
 
 const
