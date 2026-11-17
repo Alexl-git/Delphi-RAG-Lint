@@ -111,7 +111,8 @@ procedure CreateRepository(const pFileName: string);  // dl:ok unused-public-sym
 /// <summary>Opens an existing repository and validates it.</summary>
 /// <param name="pFileName">Repository file.</param>
 /// <param name="pReadOnly">True opens with OpenMode=ReadOnly.</param>
-/// <returns>A connected connection; the caller frees it.</returns>
+/// <returns>A connected connection; the caller frees it. Its FormatOptions.StrsTrim is
+/// False, so every dataset on it keeps trailing blanks.</returns>
 /// <exception cref="ERepoError">The file is missing (it is never created).</exception>
 /// <exception cref="ERepoSchemaError">The file is not a repository of this version.</exception>
 function OpenRepository(const pFileName: string; pReadOnly: Boolean): TFDConnection;  // dl:ok unused-public-symbol@f329
@@ -445,7 +446,7 @@ begin
         Conn.ExecSQL(RepoTableDdl(Tab));
       SetRepoMeta(Conn, 'schema_version', IntToStr(REPO_SCHEMA_VERSION));
       Conn.Commit;
-    except  // dl:ok bare-except@72e8 -- cleanup then re-raise, nothing swallowed
+    except  // dl:ok bare-except@05ca -- cleanup then re-raise, nothing swallowed
       Conn.Rollback;
       raise;
     end;
@@ -467,7 +468,7 @@ begin
   try
     Seen.CaseSensitive := False;
     Q.Connection := pConnection;
-    Q.Open('PRAGMA table_info(' + QuoteRepoIdent(pTable.Name) + ')');  // dl:ok path-traversal@8fac -- SQL text, not a path: the identifier goes through QuoteRepoIdent
+    Q.Open('PRAGMA table_info(' + QuoteRepoIdent(pTable.Name) + ')');  // dl:ok path-traversal@de2f -- SQL text, not a path: the identifier goes through QuoteRepoIdent
     NameField := Q.FieldByName('name');
     while not Q.Eof do
     begin
@@ -511,6 +512,9 @@ begin
     raise ERepoError.CreateFmt('Repository not found: %s', [pFileName]);
   Result := NewConnection(pFileName, if pReadOnly then 'ReadOnly' else 'ReadWrite');
   try
+    // Repository text is byte-exact (trailing blanks are data): every dataset on this
+    // connection inherits StrsTrim = False, so readers need not set it per query.
+    Result.FormatOptions.StrsTrim := False;
     ValidateRepository(Result);
   except  // dl:ok bare-except@041e -- cleanup then re-raise, nothing swallowed
     Result.Free;
@@ -550,7 +554,7 @@ begin
   Q := TFDQuery.Create(nil);
   try
     Q.Connection := pConnection;
-    Q.Open('SELECT "META_VALUE" FROM ' + QuoteRepoIdent(REPO_META_TABLE) + ' WHERE "META_KEY" = :k', [pKey]);  // dl:ok path-traversal@9483 -- SQL text, not a path: the identifier goes through QuoteRepoIdent
+    Q.Open('SELECT "META_VALUE" FROM ' + QuoteRepoIdent(REPO_META_TABLE) + ' WHERE "META_KEY" = :k', [pKey]);  // dl:ok path-traversal@7615 -- SQL text, not a path: the identifier goes through QuoteRepoIdent
     Result := if Q.Eof then '' else Q.Fields[0].AsString;
   finally
     Q.Free;

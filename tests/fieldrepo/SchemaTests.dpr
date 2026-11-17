@@ -87,6 +87,22 @@ begin
   Result := pConn.ExecSQLScalar(pSql);
 end;
 
+{ First column of the first row, read through a TFDQuery that inherits the
+  connection's FormatOptions (as every repository reader does). }
+function ScalarStr(pConn: TFDConnection; const pSql: string): string;
+var
+  vQuery: TFDQuery;
+begin
+  vQuery := TFDQuery.Create(nil);
+  try
+    vQuery.Connection := pConn;
+    vQuery.Open(pSql);
+    Result := if vQuery.Eof then '' else vQuery.Fields[0].AsString;
+  finally
+    vQuery.Free;
+  end;
+end;
+
 procedure TestContract;
 var
   vTabs: TArray<TRepoTable>;
@@ -164,6 +180,15 @@ begin
     Check('3b application_id reads back', ScalarInt(vConn, 'PRAGMA application_id') = REPO_APPLICATION_ID);
     Check('3c user_version reads back', ScalarInt(vConn, 'PRAGMA user_version') = REPO_SCHEMA_VERSION);
     Check('3d schema_version in DL_META', GetRepoMeta(vConn, 'schema_version') = IntToStr(REPO_SCHEMA_VERSION));
+  finally
+    vConn.Free;
+  end;
+  vConn := OpenRepository(vFile, False);
+  try
+    SetRepoMeta(vConn, 'trim_probe', 'x  ');
+    Check('3e OpenRepository keeps trailing blanks (StrsTrim off on the connection)',
+      ScalarStr(vConn, 'SELECT "META_VALUE" FROM "DL_META" WHERE "META_KEY" = ''trim_probe''') = 'x  ',
+      'got [' + ScalarStr(vConn, 'SELECT "META_VALUE" FROM "DL_META" WHERE "META_KEY" = ''trim_probe''') + ']');
   finally
     vConn.Free;
   end;
