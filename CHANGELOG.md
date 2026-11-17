@@ -15,6 +15,7 @@ resolver 1.28.0 -> 1.29.0-alpha.
   without `--cycle` take the first group R3 breaks. R3 refuses a hub field passed to a var / out parameter at plan time.
 
 ### Fixed
+- uses-audit now credits a unit only through symbols it exports (like unused-unit-in-uses); a same-named class member no longer hides an unused unit.
 - control-char: an invalid byte in a UTF-8-BOM file is reported again (the CP1252 fallback hid it).
 - Resolver (EXTR): generic type receivers (`TObjectList<T>.Create`) are typed and bound; a `Name(...)` receiver keeps
   its type text only when it reads as a type; `index --resolve-only` without a library store KEEPS the library
