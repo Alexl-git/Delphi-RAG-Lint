@@ -55,8 +55,16 @@ const
     created by Migrate and probed by its readers (HasRefHostBindings), so SCHEMA_READ_MIN stays
     23: an older index reads as before (such a ref is unbound where its hosts differ). Written
     by the calls pass only, for refs it leaves unbound on the ref; filled by the next resolve
-    of the include's refs. }
-  SCHEMA_VERSION = 26;
+    of the include's refs.
+    1.52 lane EXTINC (2026-11-17): 26 -> 27 for per-inclusion include parses (owner ruling B9i:
+    an .inc is parsed in each host's own define context, contexts need not agree): the table
+    inc_variants (include, host, variant, context hash) and the columns symbols.inc_variant /
+    refs.inc_variant (0 = in every context of the include, k = context k only). ADDITIVE:
+    created / ALTERed by Migrate (NOT NULL DEFAULT 0, so every existing row reads "every
+    context") and read only by the resolve pass, which runs on a migrated writer; probed by
+    HasIncVariants. SCHEMA_READ_MIN stays 23. Filled by the re-parse of the extractor bump
+    that ships with it (INT). }
+  SCHEMA_VERSION = 27;
 
   /// <summary>The oldest stored schema_version this engine READS without migrating
   /// (150 SC, docs\superpowers\specs\2026-11-09-schema-read-compat.md).</summary>

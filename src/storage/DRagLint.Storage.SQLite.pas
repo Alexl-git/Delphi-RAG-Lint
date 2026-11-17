@@ -232,6 +232,7 @@ type
       FHasPpDirectives       : Integer      ; { 150 PP: -1 unprobed, 0 absent, 1 present -- see HasPpDirectives }
       FHasDfmNav             : Integer      ; { 150 Y2: -1 unprobed, 0 absent, 1 present -- see HasDfmNav }
       FHasRefHostBindings    : Integer      ; { 1.51.1 INC2: -1 unprobed, 0 absent, 1 present -- see HasRefHostBindings }
+      FHasIncVariants        : Integer      ; { 1.52 EXTINC: -1 unprobed, 0 absent, 1 present -- see HasIncVariants }
       FHasDfmProps           : Integer      ; { 151 ST: -1 unprobed, 0 absent, 1 present -- see HasDfmProperties }
       FHasCommentFacts       : Integer      ; { 151 ST: -1 unprobed, 0 absent, 1 present -- see HasCommentFacts }
       FQFileFacts            : array[0..11] of TFDQuery; { 149 EX2: 3 deletes + 3 inserts (150 PP: + pp_directives delete / insert; 151 ST: + dfm_properties, comment_facts), prepared on first use (FF_* in PutFileFacts) }  // dl:ok referenced-never-set@9274 -- FP: the array ELEMENTS are assigned in PutFileFacts.Prepared (FQFileFacts[AIdx]:= Result)
@@ -3412,6 +3413,36 @@ type
       /// <param name="ASymbolId">symbols.id of the target.</param>
       /// <returns>refs.id of every ref bound to it per host only; empty without the table.</returns>
       function GetHostBoundRefIds(ASymbolId: Int64): TArray<Int64>;
+      /// <summary>1.52 EXTINC: True when this DB carries inc_variants (schema 27); probed once.</summary>
+      /// <returns>True when the table exists.</returns>
+      function HasIncVariants: Boolean;
+      /// <summary>1.52 EXTINC: implements ISymbolStore.PutIncVariants.</summary>
+      /// <param name="AToken">The include's open file tx.</param>
+      /// <param name="ARows">The include's (host, variant) rows; empty clears them.</param>
+      procedure PutIncVariants(const AToken: TFileTxToken; const ARows: TArray<TIncVariantRow>);
+      /// <summary>1.52 EXTINC: implements ISymbolStore.GetIncVariantHosts.</summary>
+      /// <param name="AIncPath">Absolute path of the include.</param>
+      /// <returns>The include's current hosts with their stored context hash.</returns>
+      function GetIncVariantHosts(const AIncPath: string): TArray<TIncVariantRow>;
+      /// <summary>1.52 EXTINC: implements ISymbolStore.TagSymbolIncVariant.</summary>
+      /// <param name="AToken">The include's open file tx.</param>
+      /// <param name="ASymbolId">symbols.id to tag.</param>
+      /// <param name="AVariant">1-based variant.</param>
+      procedure TagSymbolIncVariant(const AToken: TFileTxToken; ASymbolId: Int64; AVariant: Integer);
+      /// <summary>1.52 EXTINC: implements ISymbolStore.TagLastRefIncVariant.</summary>
+      /// <param name="AToken">The include's open file tx.</param>
+      /// <param name="AVariant">1-based variant.</param>
+      procedure TagLastRefIncVariant(const AToken: TFileTxToken; AVariant: Integer);
+      /// <summary>1.52 EXTINC: implements ISymbolStore.GetIncVariantRefHosts.</summary>
+      /// <returns>(ref, include, host) rows of variant-tagged refs.</returns>
+      function GetIncVariantRefHosts: TArray<TIncVariantHost>;
+      /// <summary>1.52 EXTINC: implements ISymbolStore.GetIncVariantSymbolHosts.</summary>
+      /// <returns>(symbol, include, host) rows of variant-tagged symbols.</returns>
+      function GetIncVariantSymbolHosts: TArray<TIncVariantHost>;
+      /// <summary>1.52 EXTINC: the (row, include, host) rows of one tagged table.</summary>
+      /// <param name="ATable">'refs' or 'symbols'.</param>
+      /// <returns>One row per (tagged row, host of its variant).</returns>
+      function ReadIncVariantHosts(const ATable: string): TArray<TIncVariantHost>;
       /// <summary>150 Y2: implements ISymbolStore.PutDfmNav.</summary>
       /// <param name="AToken">The open file tx of the .dfm.</param>
       /// <param name="ANodes">dfm_nav_nodes rows.</param>
@@ -5337,6 +5368,7 @@ begin
   FHasPpDirectives  := -1; { 150 PP: probed lazily -- see HasPpDirectives }
   FHasDfmNav        := -1; { 150 Y2: probed lazily -- see HasDfmNav }
   FHasRefHostBindings:= -1; { 1.51.1 INC2: probed lazily -- see HasRefHostBindings }
+  FHasIncVariants:= -1; { 1.52 EXTINC: probed lazily -- see HasIncVariants }
   FHasDfmProps      := -1; { 151 ST: probed lazily -- see HasDfmProperties }
   FHasCommentFacts  := -1; { 151 ST: probed lazily -- see HasCommentFacts }
   FLateAncCache  := TDictionary<string, TSymbol>.Create;
@@ -5910,6 +5942,129 @@ begin
     Q.Free;
     List.Free;
   end;
+end;
+
+function TSQLiteSymbolStore.HasIncVariants: Boolean;
+begin
+  if FHasIncVariants < 0 then
+    FHasIncVariants:= if TableExists('inc_variants') then 1 else 0;
+  Result:= FHasIncVariants = 1;
+end;
+
+procedure TSQLiteSymbolStore.PutIncVariants(const AToken: TFileTxToken; const ARows: TArray<TIncVariantRow>);
+var
+  Ins: TFDQuery;
+  R  : TIncVariantRow;
+begin
+  if not HasIncVariants then Exit;
+  FConn.ExecSQL('DELETE FROM inc_variants WHERE file_id = ?', [AToken.FileId]);
+  if Length(ARows) = 0 then Exit;
+  Ins:= TFDQuery.Create(nil);
+  try
+    Ins.Connection:= FConn;
+    { A host path with no files row is skipped (the SELECT yields nothing). }
+    Ins.SQL.Text:= 'INSERT OR IGNORE INTO inc_variants(file_id, host_file_id, variant, ctx_sha) ' +
+                   'SELECT :fid, f.id, :v, :sha FROM files f WHERE f.path = :hp COLLATE NOCASE LIMIT 1';
+    for R in ARows do
+    begin
+      Ins.ParamByName('fid').AsLargeInt  := AToken.FileId;
+      Ins.ParamByName('v'  ).AsInteger   := R.Variant;
+      Ins.ParamByName('sha').AsWideString:= R.CtxSha;
+      Ins.ParamByName('hp' ).AsWideString:= NormalizeStoredPath(R.HostPath);
+      Ins.ExecSQL;
+    end;
+  finally
+    Ins.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetIncVariantHosts(const AIncPath: string): TArray<TIncVariantRow>;
+var
+  Q: TFDQuery;
+  L: TList<TIncVariantRow>;
+  R: TIncVariantRow;
+begin
+  Result:= nil;
+  if not (HasIncVariants and HasFileFacts) then Exit;
+  L:= TList<TIncVariantRow>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT DISTINCT h.path, COALESCE(v.variant, 0), COALESCE(v.ctx_sha, '''') ' +
+                 'FROM file_includes fi JOIN files h ON h.id = fi.file_id ' +
+                 'LEFT JOIN files i ON i.path = :p COLLATE NOCASE ' +
+                 'LEFT JOIN inc_variants v ON v.file_id = i.id AND v.host_file_id = fi.file_id ' +
+                 'WHERE fi.inc_path = :p COLLATE NOCASE ORDER BY h.path';
+    Q.ParamByName('p').AsWideString:= NormalizeStoredPath(AIncPath);
+    Q.Open;
+    while not Q.Eof do
+    begin
+      R.HostPath:= Q.Fields[0].AsString;
+      R.Variant := Q.Fields[1].AsInteger;
+      R.CtxSha  := Q.Fields[2].AsString;
+      L.Add(R);
+      Q.Next;
+    end;
+    Result:= L.ToArray;
+  finally
+    Q.Free;
+    L.Free;
+  end;
+end;
+
+procedure TSQLiteSymbolStore.TagSymbolIncVariant(const AToken: TFileTxToken; ASymbolId: Int64; AVariant: Integer);
+begin
+  if (AVariant = 0) or not HasIncVariants then Exit;
+  FConn.ExecSQL('UPDATE symbols SET inc_variant = ? WHERE id = ? AND file_id = ?', [AVariant, ASymbolId, AToken.FileId]);
+end;
+
+procedure TSQLiteSymbolStore.TagLastRefIncVariant(const AToken: TFileTxToken; AVariant: Integer);
+begin
+  if (AVariant = 0) or not HasIncVariants then Exit;
+  { last_insert_rowid(): the refs row UpsertReference just wrote (a trigger's insert does not
+    leak out of it). }
+  FConn.ExecSQL('UPDATE refs SET inc_variant = ? WHERE id = last_insert_rowid() AND file_id = ?', [AVariant, AToken.FileId]);
+end;
+
+function TSQLiteSymbolStore.ReadIncVariantHosts(const ATable: string): TArray<TIncVariantHost>;
+var
+  Q: TFDQuery;
+  L: TList<TIncVariantHost>;
+  R: TIncVariantHost;
+begin
+  Result:= nil;
+  if not HasIncVariants then Exit;
+  L:= TList<TIncVariantHost>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    { Driven from inc_variants: only an include parsed in two or more contexts has tagged rows. }
+    Q.SQL.Text:= 'SELECT t.id, v.file_id, v.host_file_id FROM inc_variants v JOIN ' + ATable +
+                 ' t ON t.file_id = v.file_id AND t.inc_variant = v.variant ORDER BY t.id, v.host_file_id';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      R.RowId     := Q.Fields[0].AsLargeInt;
+      R.IncFileId := Q.Fields[1].AsLargeInt;
+      R.HostFileId:= Q.Fields[2].AsLargeInt;
+      L.Add(R);
+      Q.Next;
+    end;
+    Result:= L.ToArray;
+  finally
+    Q.Free;
+    L.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetIncVariantRefHosts: TArray<TIncVariantHost>;
+begin
+  Result:= ReadIncVariantHosts('refs');
+end;
+
+function TSQLiteSymbolStore.GetIncVariantSymbolHosts: TArray<TIncVariantHost>;
+begin
+  Result:= ReadIncVariantHosts('symbols');
 end;
 
 procedure TSQLiteSymbolStore.PutDfmNav(const AToken: TFileTxToken; const ANodes: TArray<TDfmNavNodeRow>;
@@ -7470,6 +7625,22 @@ begin
           '  PRIMARY KEY (ref_id, host_file_id))');
   TryExec('CREATE INDEX IF NOT EXISTS idx_ref_host_bindings_symbol ON ref_host_bindings(symbol_id)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_ref_host_bindings_host ON ref_host_bindings(host_file_id)');
+  { 1.52 lane EXTINC (owner ruling B9i; schema 27): an include is parsed once per DISTINCT define
+    context of its inclusions. inc_variants names the hosts of each context (variant 1..N, with the
+    SHA-256 of the context bytes, so an incremental run knows a skipped host's context); a symbols /
+    refs row of the include carries inc_variant 0 when every context has it, else the one context
+    that has it, and the resolver resolves it under that context's hosts only. ADDITIVE: the
+    columns default 0 (every existing row = every context), the table is probed (HasIncVariants).
+    host_file_id has its own index (FK child column outside the key's lead). }
+  TryExec('ALTER TABLE symbols ADD COLUMN inc_variant INTEGER NOT NULL DEFAULT 0');
+  TryExec('ALTER TABLE refs ADD COLUMN inc_variant INTEGER NOT NULL DEFAULT 0');
+  TryExec('CREATE TABLE IF NOT EXISTS inc_variants (' +
+          '  file_id      INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,' +
+          '  host_file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,' +
+          '  variant      INTEGER NOT NULL,' +
+          '  ctx_sha      TEXT    NOT NULL,' +
+          '  PRIMARY KEY (file_id, host_file_id, variant))');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_inc_variants_host ON inc_variants(host_file_id)');
   { E-RENAME-ELEMENT-TYPE (wave 146): the static type of a subscripted receiver, `A[i]` in `A[i].X`, which has
     no ref of its own, written by ResolveRefTypes. ADDITIVE and probed for by its reader (rename's proof), as ref_types. }
   TryExec('CREATE TABLE IF NOT EXISTS ref_element_types (' +

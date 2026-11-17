@@ -616,6 +616,11 @@ type
     // v1511 INC2 (B10): (ref, host) -> the symbol that host binds (0 = it declined), collected by
     // the per-host passes of every stream; the store persists it as ref_host_bindings.
     FHostBindings: TDictionary<TRefHostKey, Int64>;
+    // 1.52 EXTINC (B9i): a variant-tagged include ref -> the hosts of its define context only; a ref
+    // absent here resolves under every host of its include (FIncHosts).
+    FRefHosts   : TObjectDictionary<Int64, TList<TIncludeHostRow>>;
+    // 1.52 EXTINC: a variant-tagged include symbol -> the first host of its define context.
+    FSymHost    : TDictionary<Int64, Int64>;
     // Cache of a routine/type symbol's direct children, keyed by symbol id, so a
     // per-ref field/method scan does not re-hit the DB for the same enclosing
     // symbol repeatedly across a whole-DB pass.
@@ -1411,8 +1416,16 @@ type
     /// <summary>v151 INC (OQ18): True when ARef sits in a code include that SEVERAL units include
     /// and no per-host pass is running -- the ref must be resolved once per host.</summary>
     /// <param name="ARef">FileId is consulted.</param>
-    /// <returns>True outside a per-host pass for an include with two or more hosts.</returns>
+    /// <returns>True outside a per-host pass for an include with two or more hosts, or for a ref
+    /// of one define context of its include (1.52 EXTINC: resolved under that context's hosts only).</returns>
     function MultiHostRef(const ARef: TReference): Boolean;
+    /// <summary>1.52 EXTINC (B9i): the hosts ARef is resolved under -- those of its define context
+    /// for a variant-tagged include ref, else every host of its include.</summary>
+    /// <param name="ARef">An include ref (Id and FileId are consulted).</param>
+    /// <returns>The host rows; owned by the resolver.</returns>
+    function HostsOfRef(const ARef: TReference): TList<TIncludeHostRow>;
+    /// <summary>1.52 EXTINC: fills FRefHosts / FSymHost from the store's variant-tagged include rows.</summary>
+    procedure LoadIncVariantHosts;
     /// <summary>v151 INC (OQ18): resolves ARef once per host of its include and keeps the
     /// answer only when EVERY host gives the same one.</summary>
     /// <param name="ARef">A ref inside a multi-host code include.</param>
@@ -4843,6 +4856,8 @@ begin
   FIncHost    := TDictionary<Int64, TIncludeHostRow>.Create;
   FIncHosts   := TObjectDictionary<Int64, TList<TIncludeHostRow>>.Create([doOwnsValues]);
   FHostBindings:= TDictionary<TRefHostKey, Int64>.Create;
+  FRefHosts   := TObjectDictionary<Int64, TList<TIncludeHostRow>>.Create([doOwnsValues]);
+  FSymHost    := TDictionary<Int64, Int64>.Create;
   FChildCache := TObjectDictionary<Int64, TList<TSymbol>>.Create([doOwnsValues]);
   FLineCache  := TObjectDictionary<Int64, TStringList>.Create([doOwnsValues]);
   FStaleFiles := TDictionary<Int64, Boolean>.Create;
@@ -4954,6 +4969,8 @@ begin
   FIncHost.Free;
   FIncHosts.Free;
   FHostBindings.Free;
+  FRefHosts.Free;
+  FSymHost.Free;
   FNameToUnitValues.Free;
   FNameToEnumValues.Free;
   FNameToRoutines.Free;
@@ -5077,9 +5094,15 @@ begin
   finally
     IntfInc.Free;
   end;
+  LoadIncVariantHosts;
   for S in FStore.GetIncludeTopLevelSymbols do
   begin
     if not FIncHost.TryGetValue(S.FileId, H) then Continue;
+    var VarHost: Int64;
+    { 1.52 EXTINC: a declaration of one define context belongs to a host of that context. }
+    if FSymHost.TryGetValue(S.Id, VarHost) then
+      for var HR: TIncludeHostRow in FIncHosts[S.FileId] do
+        if HR.HostFileId = VarHost then H:= HR;
     var C: TSymbol:= S;
     C.ParentId:= H.HostUnitId;
     C.Section := H.Section;
@@ -5113,7 +5136,33 @@ function TCallResolver.MultiHostRef(const ARef: TReference): Boolean;
 var
   L: TList<TIncludeHostRow>;
 begin
-  Result:= (FCurHost.IncFileId = 0) and (FIncHosts.Count > 0) and FIncHosts.TryGetValue(ARef.FileId, L) and (L.Count > 1);
+  Result:= (FCurHost.IncFileId = 0) and (FIncHosts.Count > 0) and FIncHosts.TryGetValue(ARef.FileId, L)
+    and ((L.Count > 1) or FRefHosts.ContainsKey(ARef.Id));
+end;
+
+function TCallResolver.HostsOfRef(const ARef: TReference): TList<TIncludeHostRow>;
+begin
+  if not FRefHosts.TryGetValue(ARef.Id, Result) then Result:= FIncHosts[ARef.FileId];
+end;
+
+procedure TCallResolver.LoadIncVariantHosts;
+var
+  L: TList<TIncludeHostRow>;
+begin
+  FRefHosts.Clear;
+  FSymHost.Clear;
+  for var V: TIncVariantHost in FStore.GetIncVariantRefHosts do
+  begin
+    if not FIncHosts.TryGetValue(V.IncFileId, L) then Continue;
+    for var H: TIncludeHostRow in L do
+      if H.HostFileId = V.HostFileId then
+      begin
+        if not FRefHosts.ContainsKey(V.RowId) then FRefHosts.Add(V.RowId, TList<TIncludeHostRow>.Create);
+        FRefHosts[V.RowId].Add(H);
+      end;
+  end;
+  for var V: TIncVariantHost in FStore.GetIncVariantSymbolHosts do
+    if not FSymHost.ContainsKey(V.RowId) then FSymHost.Add(V.RowId, V.HostFileId);
 end;
 
 function TCallResolver.AcrossHosts(const ARef: TReference; AFn: TRefIdFn; out AReason: string): Int64;
@@ -5126,7 +5175,7 @@ begin
   var First: Boolean:= True;
   var Agree: Boolean:= True;
   try
-    for var H: TIncludeHostRow in FIncHosts[ARef.FileId] do
+    for var H: TIncludeHostRow in HostsOfRef(ARef) do
     begin
       FCurHost:= H;
       Id:= AFn(ARef, Why);
@@ -5200,7 +5249,7 @@ begin
   var First: Boolean:= True;
   var Agree: Boolean:= True;
   try
-    for var H: TIncludeHostRow in FIncHosts[ARef.FileId] do
+    for var H: TIncludeHostRow in HostsOfRef(ARef) do
     begin
       FCurHost:= H;
       E:= AFn(ARef, Why);
