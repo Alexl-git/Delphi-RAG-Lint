@@ -137,6 +137,7 @@ Source: "{#RepoRoot}\installer\drag-lint.starter.json"; DestDir: "{app}\bin"; De
 Source: "{#RepoRoot}\installer\drag-lint.starter.json"; DestDir: "{app}\bin"; DestName: "drag-lint.json"; Components: core; Flags: onlyifdoesntexist uninsneveruninstall; Permissions: users-modify; Check: IsAdminInstallMode
 #endif
 Source: "{#RepoRoot}\charts\report-pairs.example.json"; DestDir: "{app}"; Components: core; Flags: ignoreversion
+Source: "{#RepoRoot}\docs\wiki\Wiki-Blocks-Authoring.md"; DestDir: "{app}\docs"; Components: core; Flags: ignoreversion
 ; ---- optional tools ---------------------------------------------------------
 Source: "{#EngineDir}\drag-lint-open.exe"; DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
 Source: "{#EngineDir}\ConvRulesEditor.exe";  DestDir: "{app}\bin"; Components: convrules; Flags: ignoreversion
