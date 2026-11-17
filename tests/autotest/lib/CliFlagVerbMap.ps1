@@ -496,6 +496,30 @@ function Get-CliRoutineMap {
   return $routines
 }
 
+function Get-CliSplitUnitCode {
+<#
+  .SYNOPSIS
+    The lexed code of the units split out of DRagLint.CLI.pas (src\cli\DRagLint.CLI.*.pas), joined.
+  .DESCRIPTION
+    1.51 moved routines (ResolveConsumerDbs, ...) out of DRagLint.CLI.pas into sibling units. The
+    routine map is built from one text, so a moved routine vanished from it and the cross-verb DB
+    resolver check threw "not found". The split units' routines are appended to the map input;
+    a routine name present in both is merged by Get-CliRoutineMap. Comments and strings are blanked
+    exactly as for the main unit.
+  .PARAMETER CliPath
+    src\cli\DRagLint.CLI.pas
+#>
+  param([Parameter(Mandatory)][string]$CliPath)
+  $dir = Split-Path -Parent $CliPath
+  $sb = New-Object System.Text.StringBuilder
+  foreach ($f in @(Get-ChildItem -LiteralPath $dir -Filter 'DRagLint.CLI.*.pas' -File | Sort-Object Name)) {
+    $lex = ConvertTo-PascalProjections -Text ([IO.File]::ReadAllText($f.FullName))
+    $r   = Resolve-PascalConditionals -NoComments $lex.NoComments -Code $lex.Code
+    [void]$sb.Append("`n").Append($r.Code)
+  }
+  return $sb.ToString()
+}
+
 function Remove-RefusalOnlyReads {
 <#
   .SYNOPSIS
@@ -562,7 +586,7 @@ function Get-CliVerbFlagMap {
   }
 
   # --- routine -> reads / calls ---------------------------------------------
-  $routines = Get-CliRoutineMap -Code $res.Code
+  $routines = Get-CliRoutineMap -Code ($res.Code + (Get-CliSplitUnitCode -CliPath $CliPath))
 
   # --- verb -> its dispatch ARM ---------------------------------------------
   # An arm runs from its `Args.Command = '<verb>'` test to the next one, and is
@@ -814,7 +838,7 @@ function Get-CliVerbSubcommandMap {
     }
   }
 
-  $routines = Get-CliRoutineMap -Code $res.Code
+  $routines = Get-CliRoutineMap -Code ($res.Code + (Get-CliSplitUnitCode -CliPath $CliPath))
 
   # --- transitive closure, collecting subcommands instead of fields ----------
   function Get-SubClosure([string]$Start, $Routines, $PerRoutine) {

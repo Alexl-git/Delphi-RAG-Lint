@@ -167,7 +167,7 @@ function Get-AliasTokenRx([string]$Alias) {
 # lint-project / check-ast through the shared lint parse; those verbs now REFUSE it without --fix (exit 2,
 # run_lintfix_compilegate f) and it is not advertised in their blocks -- 3 cells of real surface. manifest
 # --dry-run and bookmarks-* --format were documented instead (3 verbs left the table).
-$BaselineCells = 104
+$BaselineCells = 101
 # 103/23 on 2026-10-29 (fix/help-out-json-138, replay of 909fc131): re-measured on main 0b8fcc65; cells unchanged, one verb left the table (24 -> 23).
 $BaselineVerbs = 23
 

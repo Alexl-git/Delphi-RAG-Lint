@@ -19,7 +19,10 @@
   Exit code: 0 on full pass, 1 on any failure.
 #>
 [CmdletBinding()]
-param([string]$Exe = $(. "$PSScriptRoot\lib\FreshEngineExe.ps1"; Get-FreshEngineExe))
+param(
+  [string]$Exe = $(. "$PSScriptRoot\lib\FreshEngineExe.ps1"; Get-FreshEngineExe),
+  [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win32.sqlite'
+)
 $ErrorActionPreference = 'Continue'
 # E-RENAME-OTHER-PATHS: a naming fix now runs the rename proof, and these fixtures have no library: the proof's own test seam.
 $env:DRAGLINT_RENAME_TEST_UNGATED = '1'
@@ -32,6 +35,11 @@ function WriteAscii($path, $text) {
   [IO.File]::WriteAllText($path, (($text -replace "`r`n", "`n") -replace "`n", "`r`n"), [Text.Encoding]::ASCII)
 }
 $ExeP = (Resolve-Path $Exe).Path
+# A naming fix runs the rename proof, which must see the platform library to prove the new name meets nothing
+# there (refused [no-library] otherwise). Since HYG H02 (47fe515fe) the default engine is the tree's fresh build,
+# which has no manifest beside it, so the library is passed explicitly (READ only). Missing = FATAL, never a skip.
+if (-not (Test-Path $LibraryDb)) { Write-Host "FATAL: platform library not found: $LibraryDb (pass -LibraryDb)" -ForegroundColor Red; exit 2 }
+$LibArgs = @('--library-db', $LibraryDb)
 
 Write-Host '== rules --json: fix_opt_in is false everywhere ==' -ForegroundColor Cyan
 $rules = @((& $ExeP rules --json 2>$null | ConvertFrom-Json).rules)
@@ -84,7 +92,7 @@ end.
 '@
   $d1 = NewProject 'OptIn' @{ 'uOptIn.pas' = $optIn }
   $u1 = Join-Path $d1 'uOptIn.pas'; $db1 = Join-Path $d1 'OptIn.sqlite'
-  $o = (& $ExeP lint --file $u1 --db $db1 --fix --apply 2>&1 | Out-String)
+  $o = (& $ExeP lint @LibArgs --file $u1 --db $db1 --fix --apply 2>&1 | Out-String)
   $a = Txt $u1
   Check 'D1 batch --fix --apply with a --db recases wrStr (decl AND use), no config, no flag' `
     (($a -cmatch '(?m)^\s*WrStr = ') -and ($a -cmatch 'Result:= WrStr;') -and ($a -cnotmatch '\bwrStr\b')) (Say $o 'autofix')
@@ -96,7 +104,7 @@ end.
   $cfg3 = Join-Path $d3 'drag-lint-lint.json'
   $pre3 = Txt $u3
   WriteAscii $cfg3 '{ "autofix_off": ["const-casing"] }'
-  $o = (& $ExeP lint --file $u3 --db $db3 --config $cfg3 --fix --apply 2>&1 | Out-String)
+  $o = (& $ExeP lint @LibArgs --file $u3 --db $db3 --config $cfg3 --fix --apply 2>&1 | Out-String)
   Check 'D3 "autofix_off": ["const-casing"] leaves wrStr alone' ((Txt $u3) -ceq $pre3) ''
   Check 'D3b ... and the file really still says wrStr' ((Txt $u3) -cmatch '\bwrStr\b') ''
 
@@ -105,7 +113,7 @@ end.
   $u4 = Join-Path $d4 'uOptIn.pas'; $db4 = Join-Path $d4 'Legacy.sqlite'
   $cfg4 = Join-Path $d4 'drag-lint-lint.json'
   WriteAscii $cfg4 '{ "autofix": ["method-pascalcase"] }'
-  $o = (& $ExeP lint --file $u4 --db $db4 --config $cfg4 --fix --fix-naming --apply 2>&1 | Out-String)
+  $o = (& $ExeP lint @LibArgs --file $u4 --db $db4 --config $cfg4 --fix --fix-naming --apply 2>&1 | Out-String)
   Check 'D4 legacy "autofix" does not gate: const-casing still applied' ((Txt $u4) -cmatch 'WrStr') ''
   Check 'D5 ... one stderr note names "autofix_off"' ($o -match '"autofix" no longer gates fixes' -and $o -match 'autofix_off') ''
 
@@ -138,7 +146,7 @@ end.
 '@
   $dfmText = "object frmMain: TfrmMain`n  Left = 0`n  object Button1: TButton`n    OnClick = buttonClick`n  end`nend`n"
   $d6 = NewProject 'FormText' @{ 'uForm.pas' = $form; 'uForm.dfm' = $dfmText }
-  $o = (& $ExeP lint --file (Join-Path $d6 'uForm.pas') --db (Join-Path $d6 'FormText.sqlite') --fix --apply 2>&1 | Out-String)
+  $o = (& $ExeP lint @LibArgs --file (Join-Path $d6 'uForm.pas') --db (Join-Path $d6 'FormText.sqlite') --fix --apply 2>&1 | Out-String)
   Check 'A1 text .dfm: the handler is renamed in the .pas AND the .dfm OnClick row (both change)' `
     (((Txt (Join-Path $d6 'uForm.pas')) -cmatch 'procedure ButtonClick') -and ((Txt (Join-Path $d6 'uForm.dfm')) -cmatch 'OnClick = ButtonClick')) (Say $o 'autofix')
 
@@ -147,7 +155,7 @@ end.
   $d7 = NewProject 'FormBin' @{ 'uForm.pas' = $form; 'uForm.dfm' = $bin }
   $p7 = Join-Path $d7 'uForm.pas'; $b7 = Join-Path $d7 'uForm.dfm'
   $pre = Txt $p7; $hb = (Get-FileHash $b7).Hash
-  $o = (& $ExeP lint --file $p7 --db (Join-Path $d7 'FormBin.sqlite') --fix --apply 2>&1 | Out-String)
+  $o = (& $ExeP lint @LibArgs --file $p7 --db (Join-Path $d7 'FormBin.sqlite') --fix --apply 2>&1 | Out-String)
   Check 'A2 binary .dfm referencing the handler: .pas AND .dfm are left unchanged' (((Txt $p7) -ceq $pre) -and ((Get-FileHash $b7).Hash -eq $hb)) ''
   Check 'A3 ... and the skip is counted: "skipped (dfm-referenced): 1"' ($o -match 'skipped \(dfm-referenced\): 1') (Say $o 'skipped|autofix')
 
@@ -187,7 +195,7 @@ end.
   $cfg8 = Join-Path $d8 'drag-lint-lint.json'
   WriteAscii $cfg8 '{ "naming": { "field_prefix": "F" } }'
   $u8 = Join-Path $d8 'uWith.pas'
-  $o = (& $ExeP lint --file $u8 --db (Join-Path $d8 'WithRead.sqlite') --config $cfg8 --rule field-name-prefix --fix --apply 2>&1 | Out-String)
+  $o = (& $ExeP lint @LibArgs --file $u8 --db (Join-Path $d8 'WithRead.sqlite') --config $cfg8 --rule field-name-prefix --fix --apply 2>&1 | Out-String)
   $a = Txt $u8
   Check 'B1 the field read bare inside `with` is NOT renamed' (($a -cmatch '\bclient: Integer') -and ($a -cmatch 'Result:= client \+ 1')) ''
   Check 'B2 ... the skip is counted: "skipped (with-block): 1"' ($o -match 'skipped \(with-block\): 1') (Say $o 'skipped|autofix')
@@ -200,13 +208,13 @@ end.
   $d9 = NewProject 'FormUnidx' @{ 'uForm.pas' = $form; 'uForm.dfm' = $dfmText; 'uChild.dfm' = $childDfm }
   $p9 = Join-Path $d9 'uForm.pas'; $c9 = Join-Path $d9 'uChild.dfm'
   $pre9 = Txt $p9; $preC9 = Txt $c9; $preD9 = Txt (Join-Path $d9 'uForm.dfm')
-  $o = (& $ExeP lint --file $p9 --db (Join-Path $d9 'FormUnidx.sqlite') --fix --apply 2>&1 | Out-String)
+  $o = (& $ExeP lint @LibArgs --file $p9 --db (Join-Path $d9 'FormUnidx.sqlite') --fix --apply 2>&1 | Out-String)
   Check 'U1 an unindexed text form names the handler: .pas, own .dfm and the other .dfm are all unchanged' `
     (((Txt $p9) -ceq $pre9) -and ((Txt $c9) -ceq $preC9) -and ((Txt (Join-Path $d9 'uForm.dfm')) -ceq $preD9)) (Say $o 'skipped|autofix')
   Check 'U2 ... and the skip is counted: "skipped (dfm-unindexed): 1"' ($o -match 'skipped \(dfm-unindexed\): 1') (Say $o 'skipped|autofix')
   $otherDfm = "inherited frmChild: TfrmMain`n  object Button2: TButton`n    OnClick = SomethingElse`n  end`nend`n"
   $d10 = NewProject 'FormUnidxCtl' @{ 'uForm.pas' = $form; 'uForm.dfm' = $dfmText; 'uChild.dfm' = $otherDfm }
-  $o = (& $ExeP lint --file (Join-Path $d10 'uForm.pas') --db (Join-Path $d10 'FormUnidxCtl.sqlite') --fix --apply 2>&1 | Out-String)
+  $o = (& $ExeP lint @LibArgs --file (Join-Path $d10 'uForm.pas') --db (Join-Path $d10 'FormUnidxCtl.sqlite') --fix --apply 2>&1 | Out-String)
   Check 'U3 CONTROL: a neighbouring form that does not name the handler does not block the rename' `
     (((Txt (Join-Path $d10 'uForm.pas')) -cmatch 'procedure ButtonClick') -and ((Txt (Join-Path $d10 'uForm.dfm')) -cmatch 'OnClick = ButtonClick') -and ($o -notmatch 'dfm-unindexed')) (Say $o 'skipped|autofix')
 
@@ -237,7 +245,7 @@ end.
   $cfg11 = Join-Path $d11 'drag-lint-lint.json'
   WriteAscii $cfg11 '{ "naming": { "field_prefix": "F" } }'
   $u11 = Join-Path $d11 'uBare.pas'
-  $o = (& $ExeP lint --file $u11 --db (Join-Path $d11 'BareRead.sqlite') --config $cfg11 --rule field-name-prefix --fix --apply 2>&1 | Out-String)
+  $o = (& $ExeP lint @LibArgs --file $u11 --db (Join-Path $d11 'BareRead.sqlite') --config $cfg11 --rule field-name-prefix --fix --apply 2>&1 | Out-String)
   $a = Txt $u11
   Check 'C1 the bare read in the class''s own method is renamed with the declaration' (($a -cmatch '\bFClient: Integer') -and ($a -cmatch 'Result:= FClient \+ 1;')) (Say $o 'autofix')
   Check 'C2 ... and the stale "may leave a bare field read" warning is gone' ($o -notmatch 'bare field read')

@@ -12,7 +12,17 @@
 param([string]$Log = '')
 $ErrorActionPreference = 'Continue'
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$explicitLog = [bool]$Log
 if (-not $Log) { $Log = Join-Path $root 'stats\draglint-usage.log' }
+# stats\ is untracked: a lane worktree has no live log. Fall back (READ-ONLY: the report only
+# reads it) to the main checkout's log, found through git's common dir, not a hard-coded path.
+if (-not $explicitLog -and -not (Test-Path $Log)) {
+  $common = (& git -C $root rev-parse --path-format=absolute --git-common-dir 2>$null)
+  if ($LASTEXITCODE -eq 0 -and $common) {
+    $mainLog = Join-Path (Split-Path -Parent $common) 'stats\draglint-usage.log'
+    if (Test-Path $mainLog) { Write-Host "note: worktree has no stats log; reading the main checkout's $mainLog"; $Log = $mainLog }
+  }
+}
 $report = Join-Path $root 'tools\draglint-usage-report.cjs'
 $append = Join-Path $root 'tools\draglint-usage-append.cjs'
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ('usage-guard-' + [Guid]::NewGuid().ToString('N'))
@@ -21,7 +31,11 @@ $fail = 0
 function Check($ok, $msg) { if ($ok) { Write-Host "PASS $msg" } else { Write-Host "FAIL $msg"; $script:fail++ } }
 
 # 1. live log
-if (-not (Test-Path $Log)) { Write-Host "FAIL live log missing: $Log (pass -Log)"; exit 1 }
+if (-not (Test-Path $Log)) {
+  if ($explicitLog) { Write-Host "FAIL live log missing: $Log (pass -Log)"; exit 1 }
+  # no checkout on this box has a live log (fresh clone): nothing to measure -> battery SKIP
+  Write-Host "SKIP live log missing: $Log and no main-checkout log (pass -Log)"; exit 77
+}
 $j = (& node $report --log $Log --json) | ConvertFrom-Json
 $bad = @($j.byTool.PSObject.Properties.Name | Where-Object { $_ -match '^\d+$' })
 Check ($bad.Count -eq 0) "live log: no numeric tool key (shifted rows repaired) (found: $($bad -join ','))"

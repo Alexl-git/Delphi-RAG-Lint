@@ -314,7 +314,7 @@ const
   /// tests\autotest\run_help_env_table.ps1: every quoted 'DRAGLINT_*' literal
   /// under src\ must be a Name here and --help must print every Name. A new
   /// variable is added HERE in the same change, or that guard fails.</remarks>
-  ENV_VARS_HELP: array[0..78] of TEnvVarHelp = (
+  ENV_VARS_HELP: array[0..81] of TEnvVarHelp = (
     (Name: 'DRAGLINT_BUSY_TIMEOUT_MS';                Purpose: 'writer busy timeout in ms (overrides the built-in default; a non-negative integer)'),
     (Name: 'DRAGLINT_CHARTS_ALLOW_LIVE_DB';           Purpose: 'charts: lets CloneDb accept a non-clone (live) database'),
     (Name: 'DRAGLINT_CHARTS_DIR';                     Purpose: 'charts: folder of the charts scripts'),
@@ -354,7 +354,9 @@ const
     (Name: 'DRAGLINT_NO_FILE_FACTS';                  Purpose: 'forces the text read of a .dfm instead of the stored file facts'),
     (Name: 'DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE';     Purpose: '1|on|yes|true switches off the scoped receiver closure of the resolve pass (A/B)'),
     (Name: 'DRAGLINT_NO_SCOPED_RESOLVE';              Purpose: 'any value switches the scoped resolve pass off (whole-database A/B)'),
-    (Name: 'DRAGLINT_PP_TABLE';                       Purpose: '0 = ifdef-undefined ignores the stored directive table'),
+    (Name: 'DRAGLINT_PEER_TRACE';                     Purpose: 'path of a file that receives a trace of every sibling remap (unset = no trace)'),
+    (Name: 'DRAGLINT_PLUGIN_LOG_DIR';                 Purpose: 'IDE plugin: redirects every plugin log to this folder (test drivers)'),
+    (Name: 'DRAGLINT_PP_TABLE';                      Purpose: '0 = ifdef-undefined ignores the stored directive table'),
     (Name: 'DRAGLINT_PP_TRACE';                       Purpose: 'preprocessor trace: 1/true/yes = a file under %TEMP%, else the named file'),
     (Name: 'DRAGLINT_PROFILE';                        Purpose: 'per-stage timings on stderr'),
     (Name: 'DRAGLINT_PROFILE_CALLS';                  Purpose: 'call-resolver profile sections on stderr'),
@@ -379,7 +381,8 @@ const
     (Name: 'DRAGLINT_TEST_HANG_STORE_CLOSE_MS';       Purpose: 'test hook: hangs the store close'),
     (Name: 'DRAGLINT_TEST_INDEX_FILE_DELAY_MS';       Purpose: 'test hook: delay per indexed file'),
     (Name: 'DRAGLINT_TEST_LINT_FILE_DELAY_MS';        Purpose: 'test hook: delay per linted file'),
-    (Name: 'DRAGLINT_TEST_REINDEX_TIMEOUT_MS';        Purpose: 'test hook: reindex timeout'),
+    (Name: 'DRAGLINT_TEST_METRIC_ALGO_BUMP';          Purpose: 'test hook: bumps the routine-metric marker hash version'),
+    (Name: 'DRAGLINT_TEST_REINDEX_TIMEOUT_MS';       Purpose: 'test hook: reindex timeout'),
     (Name: 'DRAGLINT_TEST_RESOLVE_DELAY_MS';          Purpose: 'test hook: delay in the resolve pass'),
     (Name: 'DRAGLINT_TEST_SCRATCH_PID';               Purpose: 'test hook: scratch-folder owner pid'),
     (Name: 'DRAGLINT_TEST_STORE_CLOSE_GRACE_MS';      Purpose: 'test hook: store-close grace period'),
