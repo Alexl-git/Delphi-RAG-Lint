@@ -128,8 +128,10 @@ const
     { 1.47 wave 148 lane PQ }
     'quit-from-thread',
     { 152b lane RTTI }
-    'rtti-unavailable'];
-    { index-possibly-out-of-range: default ON since 1.52 lane IDXRANGE2 (owner C3 2026-11-17) }
+    'rtti-unavailable',
+    { 1.52 IDXRANGE2: owner C3 ruled default ON, but the I4 FP gate failed
+      (6 FP / 12 samples) -> controller ruling: OFF in 1.52 until IDXRANGE2-FIN }
+    'index-possibly-out-of-range'];
 
   { THE WHOLE-ROUTINE METRIC RULES, in one place because the CHECKER and the
     `allow` WRITER must agree on the list or a marker is written under one hash
@@ -947,7 +949,7 @@ begin
     B('address-of-local-returned', 'bug-patterns', 'warning', 'Address of a local variable or by-value parameter is returned -- it dangles once the routine exits');
     B('constant-index-out-of-range', 'bug-patterns', 'warning', 'Literal index outside the declared array bounds (or S[0] on a 1-based string) -- range error or memory overrun');
     B('copy-paste-assignment', 'bug-patterns', 'hint', 'Run of similar assignments where one right-hand side repeats another -- likely a copy-paste typo', False);
-    B('index-possibly-out-of-range', 'bug-patterns', 'warning', 'Array index written with no guard bounding it to the array''s range before the access -- ERangeError is only the last resort', True,
+    B('index-possibly-out-of-range', 'bug-patterns', 'warning', 'Array index written with no guard bounding it to the array''s range before the access -- ERangeError is only the last resort', False,
       [MkParam('exception_class', 'string', 'EArgumentOutOfRangeException')]);
     B('exception-escapes-thread', 'bug-patterns', 'warning', 'Thread body has no top-level try..except -- an unhandled exception silently ends the thread');
     B('raise-in-destructor', 'bug-patterns', 'warning', 'raise inside a destructor -- an exception during cleanup aborts the rest of the teardown and leaks');

@@ -6,7 +6,7 @@ subrange-typed index does not help either -- it only moves the range error to th
 This rule warns where an array index can leave the array's bounds BEFORE the runtime check
 fires, and points at the line that made it so: the write of the index, not the access.
 
-Default **ON**, category `bug-patterns`, severity `warning` (`hint` for an unguarded
+Default **OFF** in 1.52 (the owner ruled ON; the false-positive gate measured 6 FP in 12 samples, so it ships OFF until the follow-up fixes those classes -- enable it with `--rule index-possibly-out-of-range` or `"enabled": ["index-possibly-out-of-range"]` in the config), category `bug-patterns`, severity `warning` (`hint` for an unguarded
 parameter). Disable it with `"disabled": ["index-possibly-out-of-range"]` in the lint config; run only it with
 `drag-lint lint <file> --rule index-possibly-out-of-range`.
 
