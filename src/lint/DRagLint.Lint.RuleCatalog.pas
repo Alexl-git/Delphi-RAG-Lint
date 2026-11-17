@@ -764,6 +764,7 @@ begin
       clean over it). ON, because it cannot flood: it needs a known rule id AND a
       hash no hash function produces, and in block comments only the all-zero
       form counts, so prose quoting the grammar stays silent. }
+    B('review-marker-remeasured', 'review-markers', 'hint', 'dl:ok marker still valid but stamped under the 1.51.0 hash or an older measure algorithm -- re-measured under the v2 hash; re-stamp with `allow`');
     B('review-marker-placeholder-hash', 'review-markers', 'hint', 'dl:ok carries a placeholder or malformed @hash (e.g. @0000) -- it suppresses nothing; re-record it with `allow`');
     { OWNER RULING OWN-7 (2026-09-23). The @hash covers CODE only, so a reason
       can go false without the marker ever going stale (INBOX B2). The optional

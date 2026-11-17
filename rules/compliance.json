@@ -320,6 +320,7 @@
   "reserved-word-casing": {},
   "review-marker-malformed": {},
   "review-marker-placeholder-hash": {},
+  "review-marker-remeasured": {},
   "review-marker-reason-unreviewed": {},
   "review-marker-stale": {},
   "review-marker-unused": {},

@@ -10728,6 +10728,9 @@ begin
                 body-span hash would do the latter, flagging a renamed local
                 across all 58 markers in this class for no reason. }
               var IsMetric: Boolean:= DRagLint.Lint.RuleCatalog.IsRoutineMetricRule(F.RuleId);
+              var Verdict: TMarkerVerdict:= mvStale;
+              if M.Hash <> '' then
+                Verdict:= DRagLint.Lint.MarkerHash.MarkerVerdict(Lines, F.RuleId, M.Hash, F.StartLine, F.Metric);
               if M.Hash = '' then
               begin
                 { Hand-written, no hash: honour it, but say that it cannot be
@@ -10737,11 +10740,18 @@ begin
                   Format('dl:ok marker for "%s" carries no @hash, so it cannot be checked against the code -- re-mark it as %s@%s.',
                          [M.RuleId, M.RuleId, Want]), M.RuleId);
               end
-              else if DRagLint.Lint.MarkerHash.MarkerVerdict(Lines, F.RuleId, M.Hash, F.StartLine, F.Metric) <> mvStale then
+              else if Verdict <> mvStale then
+              begin
                 { Verified, or re-measured: the routine is unchanged and only the engine's
                   measure-algorithm version moved (Y4, DRagLint.Lint.MarkerHash). A legacy
-                  (1.51.0) marker is checked exactly as before. }
-                Suppressed:= True
+                  (1.51.0) marker is checked exactly as before. v152 MARK (B3): a marker
+                  that answers but was stamped under the 1.51.0 hash or an older algorithm
+                  is also reported, once, as the hint review-marker-remeasured. }
+                Suppressed:= True;
+                if NeedsRestampHint(Verdict) then
+                  EmitHint(F.FilePath, ML, RULE_MARKER_REMEASURED,
+                    RemeasuredHintText(M.RuleId, Verdict, F.StartLine), M.RuleId);
+              end
               else if TReviewMarkers.IsPlaceholderHash(M.Hash) or TReviewMarkers.IsMalformedHash(M.Hash) then
                 { A HASH THAT WAS NEVER COMPUTED. Checked only after the real hash
                   failed to match, so a genuine @0000 (1 in 65536) still verifies.
