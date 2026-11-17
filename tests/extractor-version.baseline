@@ -1233,4 +1233,4 @@
 #   Superseded: 1.39.0-alpha|13e8365ff504d45111a175814464426ee134285acf129c95f8ac8cd04cf97c56
 #   2026-11-16 v1511 INT step-8 re-pin (same unreleased 1.40.0 bump, no extraction change): comment-only lint sweep in src\index (CallResolver doc tags, dl:ok re-stamps).
 #   Superseded: 1.40.0-alpha|c9905d6ba7c05bc1e3c13c1676b657a9fccfd339b47bbad3ebfab8f993accb11
-1.40.0-alpha|8c356834f496be4469ffbdd7acffd063294faa0349ab02844d0433cf7384cf2c
+1.41.0-alpha|6aacf0582e8582c1c0c28c9fcee88b11d7423129486830dcb120cadfc315d9ff
