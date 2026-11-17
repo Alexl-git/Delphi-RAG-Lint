@@ -565,7 +565,9 @@ const
     'drag-lint first: for any question about Delphi/Pascal code in this project (where a symbol is declared, '
     + 'who calls it, what a change would break, which unit to add to uses, what a message says), ask this server '
     + '(find_symbol, find_callers, get_neighbors, get_impact, get_context_bundle) BEFORE grepping or reading '
-    + 'whole files. If an answer looks short or empty, the index may be stale: say so and reindex rather than '
+    + 'whole files. Which unit to add to uses and message/caption/SQL text search have no tool here yet: use '
+    + 'the CLI (drag-lint find-unit --name X --in <file> --db <db>; drag-lint query --text "<phrase>" --db <db>). '
+    + 'If an answer looks short or empty, the index may be stale: say so and reindex rather than '
     + 'falling back to grep silently.';
 
 /// <summary>The get_neighbors answer: the call-graph neighbourhood of AQName as JSON.</summary>
@@ -794,13 +796,15 @@ begin
   Tools:= TJSONArray .Create;
 
   Tools.AddElement(ToolDescriptor(
-      'find_symbol', 'Find Delphi/Pascal symbols by exact name (with fuzzy fallback) or by ' + 'qualified name (e.g. UnitName.TClass.MethodName). Returns matching '
+      'find_symbol', 'USE FOR "where is X declared / what is its signature" -- instead of grep. '
+        + 'Find Delphi/Pascal symbols by exact name (with fuzzy fallback) or by ' + 'qualified name (e.g. UnitName.TClass.MethodName). Returns matching '
         + 'symbols with file:line:col.',
       '{"type":"object","properties":{' + '"name":{"type":"string","description":"Bare symbol name"},' + '"qname":{"type":"string","description":"Qualified name"}'
         + '},"additionalProperties":false}'));
 
   Tools.AddElement(ToolDescriptor(
-      'find_callers', 'Find the callers of a method/event-handler (bare or qualified name), resolved through the '
+      'find_callers', 'USE FOR "who calls Y" -- pass the BARE member name (Bar, not TFoo.Bar). '
+        + 'Find the callers of a method/event-handler (bare or qualified name), resolved through the '
         + 'call graph like `query find-callers --resolved`: one row per caller with file:line and confidence; a '
         + 'routine passed as a value is marked [callback]. Only when nothing resolves does it fall back to '
         + 'references by name (said so; may include homonyms). When context > 0 each result includes surrounding '
@@ -831,7 +835,7 @@ begin
         + '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' + '}}'));
 
   Tools.AddElement(ToolDescriptor(
-      'get_impact', 'Return the transitive blast-radius of a symbol: how many callers and ' + 'units are impacted at each depth level. Uses a recursive CTE over the '
+      'get_impact', 'USE FOR "what would a change to X break". Return the transitive blast-radius of a symbol: how many callers and ' + 'units are impacted at each depth level. Uses a recursive CTE over the '
         + 'refs table. Input: qualified name (last segment used for lookup) and ' + 'optional depth (default 3).',
       '{"type":"object","properties":{' + '"qname":{"type":"string","description":"Qualified symbol name (e.g. Unit.TClass.Method)"},'
         + '"depth":{"type":"integer","description":"Maximum recursion depth (optional, default 3)"},'
@@ -891,7 +895,8 @@ begin
 
   Tools.AddElement(ToolDescriptor(
       'get_context_bundle',
-      'Return a curated context bundle for a symbol as JSON: the summary counts plus the content -- doc, '
+      'USE FOR "modify / understand X without reading the whole file" -- the first call before editing a symbol. '
+        + 'Return a curated context bundle for a symbol as JSON: the summary counts plus the content -- doc, '
         + 'class surface, impl slice, callers with their context and the impact summary. Useful for preparing '
         + 'minimal AI-ready context for refactoring, inspection, or deletion tasks.',
       '{"type":"object","properties":{' + '"task":{"type":"string","description":"Task description (verb qname, e.g. \"modify Foo.Bar\")"},'
@@ -931,7 +936,7 @@ begin
 
   // v0.26: run dcc64/msbuild and return compiler findings as JSON.
   Tools.AddElement(ToolDescriptor(
-      'run_compile_check', 'Spawn dcc64 or msbuild against a .pas or .dproj file, parse the output ' + 'for H/W/E/F diagnostic lines, and return the findings as JSON. '
+      'run_compile_check', 'SLOW, NOT read-only: spawns a compiler; prefer the delphi-build recipe. Spawn dcc64 or msbuild against a .pas or .dproj file, parse the output ' + 'for H/W/E/F diagnostic lines, and return the findings as JSON. '
         + 'When db is supplied the findings are also stored in compiler_findings ' + 'for later LSP publishDiagnostics merging.',
       '{"type":"object","properties":{' + '"target":{"type":"string","description":"Absolute path to a .pas file or .dproj project"},'
         + '"msbuild_path":{"type":"string","description":"Absolute path to msbuild.exe (optional)"},'
