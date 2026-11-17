@@ -118,6 +118,13 @@ type
     FIntfs    : TDictionary<string, Boolean>;
     FReader   : TExprTypeReader;
     FKindMemo : TDictionary<string, Integer>;
+    { identifier index for ExemptFreeRoutines, built once on first use: lower-cased
+      identifier -> (routine index, occurrences in that routine's body); plus the
+      class and method name of each routine in FRoutines, by index }
+    FIdentIdx : TObjectDictionary<string, TList<TPair<Integer, Integer>>>;
+    FRtClass  : TArray<string>;
+    FRtMeth   : TArray<string>;
+    procedure BuildIdentIndex;
     function NodeStr(const N: TTSNode): string;
     function Canon(const AText: string): string;
     procedure Gather(const ARoot: TTSNode; const ATypes: array of string; const AList: TList<TTSNode>);
@@ -245,6 +252,7 @@ end;
 
 destructor TTypScan.Destroy;
 begin
+  FIdentIdx.Free;
   FReader.Free;
   FKindMemo.Free;
   FIntfs.Free;
@@ -1464,61 +1472,102 @@ end;
 { Methods of AClass in which a Free without nil is allowed: destructors,
   BeforeDestruction, *Destroy handlers, tear-down methods, and methods called only
   from these. }
+{ One walk over every routine body: the identifier index and the per-routine
+  class / method names ExemptFreeRoutines looks up. Keys are LowerCase (ASCII),
+  matching the SameText comparison against the lower-cased MethodOf. }
+procedure TTypScan.BuildIdentIndex;
+var
+  Ids   : TList<TTSNode>;
+  Counts: TDictionary<string, Integer>;
+  Occ   : TList<TPair<Integer, Integer>>;
+  I, Cnt: Integer;
+  Key   : string;
+begin
+  FIdentIdx:= TObjectDictionary<string, TList<TPair<Integer, Integer>>>.Create([doOwnsValues]);
+  SetLength(FRtClass, FRoutines.Count);
+  SetLength(FRtMeth, FRoutines.Count);
+  Ids:= TList<TTSNode>.Create;
+  Counts:= TDictionary<string, Integer>.Create;
+  try
+    for I:= 0 to FRoutines.Count - 1 do
+    begin
+      FRtClass[I]:= ClassOf(FRoutines[I]);
+      FRtMeth[I]:= MethodOf(FRoutines[I]);
+      Ids.Clear;
+      Counts.Clear;
+      Gather(BodyOf(FRoutines[I]), ['identifier'], Ids);
+      for var Id: TTSNode in Ids do
+      begin
+        Key:= LowerCase(Trim(NodeStr(Id)));
+        Cnt:= 0;
+        Counts.TryGetValue(Key, Cnt);
+        Counts.AddOrSetValue(Key, Cnt + 1);
+      end;
+      for var P: TPair<string, Integer> in Counts do
+      begin
+        if not FIdentIdx.TryGetValue(P.Key, Occ) then
+        begin
+          Occ:= TList<TPair<Integer, Integer>>.Create;
+          FIdentIdx.Add(P.Key, Occ);
+        end;
+        Occ.Add(TPair<Integer, Integer>.Create(I, P.Value));
+      end;
+    end;
+  finally
+    Counts.Free;
+    Ids.Free;
+  end;
+end;
+
 function TTypScan.ExemptFreeRoutines(const AClass: string): TDictionary<string, Boolean>;
 var
-  R, R2  : TTSNode;
+  R      : TTSNode;
   C      : TTypClass;
   Meth   : string;
   Changed: Boolean;
-  Ids    : TList<TTSNode>;
-  Id     : TTSNode;
+  Occ    : TList<TPair<Integer, Integer>>;
   Callers: Integer;
   Exempt : Integer;
+  I      : Integer;
 begin
+  if FIdentIdx = nil then BuildIdentIndex;
   Result:= TDictionary<string, Boolean>.Create;
   FClasses.TryGetValue(AClass, C);
-  for R in FRoutines do
+  for I:= 0 to FRoutines.Count - 1 do
   begin
-    if ClassOf(R) <> AClass then Continue;
-    Meth:= MethodOf(R);
+    if FRtClass[I] <> AClass then Continue;
+    R:= FRoutines[I];
+    Meth:= FRtMeth[I];
     { a close handler that sets Action := caFree hands the form to its destruction }
     if IsDtor(R) or (Meth = 'beforedestruction') or EndsText('destroy', Meth) or  // dl:ok boolean-expression-complexity@912e -- REVIEWED 2026-11-13 v151 TYP: the list of exempt routine kinds, each a named case in the rule doc
        ((C <> nil) and C.TearDowns.ContainsKey(Meth)) or ContainsStr(Canon(NodeStr(BodyOf(R))), 'action:=cafree') then
       Result.AddOrSetValue(Meth, True);
   end;
-  Ids:= TList<TTSNode>.Create;
-  try
-    repeat
-      Changed:= False;
-      for R in FRoutines do
+  { a method called only from exempt methods of the class is exempt too; the
+    identifier index replaces a walk of every routine body per candidate }
+  repeat
+    Changed:= False;
+    for I:= 0 to FRoutines.Count - 1 do
+    begin
+      if (FRtClass[I] <> AClass) or IsCtor(FRoutines[I]) then Continue;
+      Meth:= FRtMeth[I];
+      if Result.ContainsKey(Meth) then Continue;
+      Callers:= 0;
+      Exempt:= 0;
+      if FIdentIdx.TryGetValue(Meth, Occ) then
+        for var P: TPair<Integer, Integer> in Occ do
+        begin
+          if P.Key = I then Continue;
+          Inc(Callers, P.Value);
+          if (FRtClass[P.Key] = AClass) and Result.ContainsKey(FRtMeth[P.Key]) then Inc(Exempt, P.Value);
+        end;
+      if (Callers > 0) and (Callers = Exempt) then
       begin
-        if (ClassOf(R) <> AClass) or IsCtor(R) then Continue;
-        Meth:= MethodOf(R);
-        if Result.ContainsKey(Meth) then Continue;
-        Callers:= 0;
-        Exempt:= 0;
-        for R2 in FRoutines do
-        begin
-          if R2 = R then Continue;
-          Ids.Clear;
-          Gather(BodyOf(R2), ['identifier'], Ids);
-          for Id in Ids do
-            if SameText(Trim(NodeStr(Id)), Meth) then
-            begin
-              Inc(Callers);
-              if (ClassOf(R2) = AClass) and Result.ContainsKey(MethodOf(R2)) then Inc(Exempt);
-            end;
-        end;
-        if (Callers > 0) and (Callers = Exempt) then
-        begin
-          Result.AddOrSetValue(Meth, True);
-          Changed:= True;
-        end;
+        Result.AddOrSetValue(Meth, True);
+        Changed:= True;
       end;
-    until not Changed;
-  finally
-    Ids.Free;
-  end;
+    end;
+  until not Changed;
 end;
 
 procedure TTypScan.CheckFreeWithoutNil;
