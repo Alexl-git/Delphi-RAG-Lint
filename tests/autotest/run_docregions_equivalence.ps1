@@ -26,9 +26,9 @@
 #>
 [CmdletBinding()]
 param(
-  # 152 TESTS: -OldExe is MANDATORY -- an archived engine built BEFORE the split (e.g. C:\TEMP\claude\archive\engine-pre-split\drag-lint.exe).
-  # No default: the deployed engine tracks the tree and turns this runner into a self-comparison. New = this tree's Debug build.
-  [Parameter(Mandatory)][string]$OldExe,
+  # 152 TESTS: -OldExe = an ARCHIVED engine built BEFORE the split (or env DL_DOCREGIONS_OLD_EXE). No default to the deployed engine (it tracks
+  # the tree and turns this runner into a self-comparison): with neither given the runner SKIPs (exit 77). New = this tree's Debug build.
+  [string]$OldExe = $env:DL_DOCREGIONS_OLD_EXE,
   [string]$NewExe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$WorkDir = "$env:TEMP\drag-lint-docregions-eq-$PID",
   [string[]]$Projects = @(
@@ -43,6 +43,7 @@ function Check($n, $ok, $d = '') {
   Write-Host ("  [{0}] {1} {2}" -f $s, $n, $d)
   if (-not $ok) { $script:Failed = $true }
 }
+if ([string]::IsNullOrWhiteSpace($OldExe)) { Write-Host 'SKIP: run_docregions_equivalence: no archived old engine (-OldExe or DL_DOCREGIONS_OLD_EXE)'; exit 77 }
 foreach ($e in $OldExe, $NewExe) { if (-not (Test-Path $e)) { Write-Host "FATAL: exe not found: $e"; exit 2 } }
 function Sha([string]$f) { [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([IO.File]::ReadAllBytes((Resolve-Path $f).Path))) }
 if ((Sha $OldExe) -eq (Sha $NewExe)) { Write-Host "FATAL: OldExe and NewExe are byte-identical (a self-comparison cannot fail): $OldExe"; exit 2 }
