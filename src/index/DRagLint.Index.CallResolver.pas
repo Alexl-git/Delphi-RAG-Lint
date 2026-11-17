@@ -680,6 +680,20 @@ type
     FDprLoaded: Boolean;
     { D01: the project's helper rows per lower-cased library type name (type_helpers by name). }
     FLibTypeHelpers: TDictionary<string, TArray<THelperEdge>>;
+    { 1.52 EXTR (RES found): with NO library store, the stored library binding of the refs of ONE
+      file (ref id -> stored row), loaded on that file's first rung-5 miss; FKeptFileId names it. }
+    FKeptRefs  : TDictionary<Int64, TReference>;
+    FKeptFileId: Int64;
+
+    /// <summary>1.52 EXTR: a call ref no store can bind this run keeps the library binding an earlier
+    /// run wrote (refs.external_target / external_kind, and receiver_type_text when the stored row
+    /// carries it), instead of losing it, when this pass has NO library store.</summary>
+    /// <param name="ACallRef">The ref being resolved; Id and FileId are consulted.</param>
+    /// <param name="AEdge">The edge ResolveOne built; its external fields are filled when a stored
+    /// binding exists, untouched otherwise.</param>
+    /// <remarks>Only reached at rung 5 with TargetSymbolId = 0, so a local answer still wins and a
+    /// name the project now declares is never answered from the old library binding.</remarks>
+    procedure KeepStoredExternal(const ACallRef: TReference; var AEdge: TCallEdge);
 
     /// <summary>The type a bare type name at ARef names, by Delphi's scope order;
     /// the shared lookup behind ResolveTypeUse and ResolveEnumCast.</summary>
@@ -3497,6 +3511,12 @@ type
     /// </remarks>
     function ResolveOne(const ACallRef: TReference): TCallEdge;
 
+    /// <summary>1.52 EXTR: True when this pass consults at least one library (extra) store.</summary>
+    /// <returns>False for a pass without --library-db / libraryResolve: ResolveOne then keeps the
+    /// stored library binding of a call ref instead of clearing it, and the read-ref stream
+    /// (TSQLiteSymbolStore.ResolveLibraryReadRefs) is expected to leave its stored rows alone.</returns>
+    function HasLibraryStore: Boolean;
+
     /// <summary>E-PARSER-NOREFS: the type an `inherited` receiver starts at: the parent of the
     /// class around the enclosing routine, never that class, whatever a nearer scope declares.
     /// `inherited X` / `inherited X(..)` type as X on that parent.</summary>
@@ -4846,7 +4866,33 @@ begin
   FDprUses   := [];
   FDprLoaded := False;
   FLibTypeHelpers:= TDictionary<string, TArray<THelperEdge>>.Create;
+  FKeptRefs  := TDictionary<Int64, TReference>.Create;
+  FKeptFileId:= 0;
   BuildMaps;
+end;
+
+function TCallResolver.HasLibraryStore: Boolean;
+begin
+  Result:= Length(FExtraStores) > 0;
+end;
+
+procedure TCallResolver.KeepStoredExternal(const ACallRef: TReference; var AEdge: TCallEdge);
+var
+  Stored: TReference;
+begin
+  if HasLibraryStore or (ACallRef.Id <= 0) then Exit;
+  if FKeptFileId <> ACallRef.FileId then
+  begin
+    FKeptRefs.Clear;
+    FKeptFileId:= ACallRef.FileId;
+    for var R: TReference in FStore.GetReferencesFromFile(ACallRef.FileId) do
+      if R.ExternalTarget <> '' then FKeptRefs.AddOrSetValue(R.Id, R);
+  end;
+  if not FKeptRefs.TryGetValue(ACallRef.Id, Stored) then Exit;
+  AEdge.ExternalTarget:= Stored.ExternalTarget;
+  AEdge.ExternalKind  := Stored.ExternalKind;
+  if (AEdge.ReceiverTypeText = '') and (Stored.ReceiverTypeText <> '') then
+    AEdge.ReceiverTypeText:= Stored.ReceiverTypeText;
 end;
 
 const
@@ -4886,6 +4932,7 @@ end;
 
 destructor TCallResolver.Destroy;
 begin
+  FKeptRefs.Free;
   FLibTypeHelpers.Free;
   FFileUses.Free;
   FDeclFileUses.Free;
@@ -9029,6 +9076,54 @@ begin
   Result:= DerefPointerAlias(TypeReceiverCore(ACallRef, AReceiverExpr, AText));
 end;
 
+{ 1.52 EXTR (1512-RECV): True when AExpr is a GENERIC TYPE written as a receiver -- `TObjectList<TItem>`,
+  `System.Generics.Collections.TDictionary<string, Integer>` -- with nothing after the closing `>`.
+  ABase = the (dotted) name before `<`, AArgs = the whole `<...>` group. The angle brackets must
+  balance and the base must be a plain identifier chain, so an expression is never taken for a type. }
+function SplitGenericTypeReceiver(const AExpr: string; out ABase, AArgs: string): Boolean;
+var
+  Lt   : Integer;
+  Depth: Integer;
+begin
+  Result:= False;
+  ABase := '';
+  AArgs := '';
+  Lt:= Pos('<', AExpr);
+  if (Lt <= 1) or not AExpr.EndsWith('>') then Exit;
+  Depth:= 0;
+  for var I:= Lt to Length(AExpr) do
+  begin
+    if AExpr[I] = '<' then Inc(Depth)
+    else if AExpr[I] = '>' then
+    begin
+      Dec(Depth);
+      if (Depth = 0) and (I < Length(AExpr)) then Exit; // `A<B>.C<D>` / `A<B>(x)`: not one type
+    end
+    else if CharInSet(AExpr[I], ['(', ')', '[', ']', '^', '''']) then Exit;
+  end;
+  if Depth <> 0 then Exit;
+  var Base: string:= Trim(Copy(AExpr, 1, Lt - 1));
+  if (Base = '') or not IsIdentChain(Base.Split(['.'])) then Exit;
+  ABase := Base;
+  AArgs := Copy(AExpr, Lt, MaxInt);
+  Result:= True;
+end;
+
+{ 1.52 EXTR (1.51.1 EXT FOUND 5): may the head of a call-form receiver `Name(...)` that this index
+  cannot resolve be recorded as a hard-cast TYPE in refs.receiver_type_text? Only when the name reads as
+  a type: a built-in type (`Char(X)`, `Integer(P)`) or the T / I / E / P + capital convention
+  (`TFDQuery(DS)`, `PByte(P)`). A routine of an unknown unit (`StyleServices(Self)`) or an intrinsic
+  (`Copy(S, 1, 2)`) is omitted -- the safe direction: '' is "untyped", the name was a wrong type. }
+function CastHeadReadsAsType(const AName: string): Boolean;
+var
+  Leaf: string;
+begin
+  Leaf:= Copy(AName, LastDelimiter('.', AName) + 1, MaxInt);
+  if Length(Leaf) < 2 then Exit(False);
+  if ParamFamily(LowerCase(Leaf)) <> pfOther then Exit(True);
+  Result:= CharInSet(Leaf[1], ['T', 'I', 'E', 'P']) and CharInSet(Leaf[2], ['A'..'Z']);
+end;
+
 // (re-reviewed 2026-11-09 lane 150-RS1: +the KeepArgs nested helper and the kind-10 head-declaration carry,
 // bookkeeping only, no new rung; item 4, lane R4R: the out AText adds no rung and changes no answer -- each
 // existing rung writes the type text it already read before resolving it, and the added branches are that
@@ -9143,8 +9238,13 @@ begin
     { Item 4: a cast to a type this index does not hold (`TFDQuery(DS).Open`,
       `(S as TStringList).Add`) still names that type; a function of the name
       wrote its return type above. }
+    { 1.52 EXTR: `Name(...)` naming no type and no function this index or the library knows keeps
+      its name only when it reads as a type (CastHeadReadsAsType); `(X as T)` always names T. }
     if not ChainHandled then
-      AText.Text:= if FnText <> '' then FnText else NormalizeTypeLeaf(CastType);
+      AText.Text:= if FnText <> '' then FnText
+        else if not AReceiverExpr.StartsWith(CastType + '(', True) or CastHeadReadsAsType(CastType) then
+          NormalizeTypeLeaf(CastType)
+        else '';
     Exit;
   end;
 
@@ -9168,6 +9268,23 @@ begin
   //     tests\callresolve\run_local_read_chain_bind.ps1.
   if (Pos('[', AReceiverExpr) > 0) or (Pos('^', AReceiverExpr) > 0) then
     Exit(TypeOfSelectorChain(ACallRef, AReceiverExpr, AText));
+
+  // --- Kind 14 (1.52 EXTR, 1512-RECV): a GENERIC TYPE receiver -- `TObjectList<TItem>.Create(True)`,
+  //     `TExtrBag<Integer>.Create`. Before this rung the '<' made the identifier test below give up,
+  //     so the site was untyped and a library class constructor read as receiver-untyped. A project
+  //     generic types to its symbol; any other name rides to the library oracle by name with its
+  //     argument group, exactly as a local declared `L: TObjectList<TItem>` does (KeepArgs).
+  //     `TArray<T>` stays out: it has no class symbol, and BindExternally binds its `Create` to the
+  //     dynamic-array intrinsic from the untyped receiver. Pinned by run_v152_EXTR_resolve.ps1 g1/g2.
+  var GenBase, GenArgs: string;
+  if SplitGenericTypeReceiver(AReceiverExpr, GenBase, GenArgs)
+     and not SameText(NormalizeTypeLeaf(GenBase), 'TArray') then
+  begin
+    Result:= ResolveTypeNameToSymbol(GenBase, ACallRef.FileId);
+    AText.Text:= NormalizeTypeLeaf(GenBase);
+    if Result = 0 then AText.Args:= GenArgs;
+    Exit;
+  end;
 
   // --- Kind 7 (v20b): a UNIT-QUALIFIED TYPE receiver, 'Unit.TType.M' /
   //     'System.JSON.TJSONArray.Create'. Mandatory Delphi whenever two used units
@@ -11972,7 +12089,8 @@ begin
     finally
       FOracle.OwnUses:= nil;
     end;
-    if Result.ExternalTarget <> '' then Result.ExternalKind:= FOracle.LastKind; // D08 / D10 mark
+    if Result.ExternalTarget <> '' then Result.ExternalKind:= FOracle.LastKind // D08 / D10 mark
+    else KeepStoredExternal(ACallRef, Result); { 1.52 EXTR: no library store -> keep, never clear }
     { BindHead typed a head the project could not: that text is the fact now. }
     if (Result.ReceiverTypeText = '') and (RcvType.Text <> '') then
       Result.ReceiverTypeText:= RcvType.Text;
