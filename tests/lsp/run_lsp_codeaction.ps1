@@ -19,8 +19,9 @@
 # not fail under any circumstance, which this repo treats as worse than no check
 # at all -- the build's own exit code already covers it.
 
+param([Parameter(Mandatory)][string]$Exe)   # 152 TESTS: no default engine
 $ErrorActionPreference = 'Stop'
-$exe = Join-Path $PSScriptRoot '..\..\third_party\dll-win64\drag-lint.exe'
+$exe = $Exe
 
 if (-not (Test-Path $exe)) {
   Write-Output "lsp-codeaction: FATAL -- no drag-lint at $exe"

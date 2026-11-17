@@ -694,7 +694,7 @@ $RunOneText = @'
   $logFile = Join-Path $LogDir (($Rel -replace '[\\/]', '__') + '.log')
   $rsw = [System.Diagnostics.Stopwatch]::StartNew()
   $proc = Start-Process -FilePath 'pwsh' `
-            -ArgumentList @('-NoProfile', '-NonInteractive', '-File', $FullName) `
+            -ArgumentList (@('-NoProfile', '-NonInteractive', '-File', $FullName) + $(if ((Get-Content -LiteralPath $FullName -Raw) -match '\[Parameter\(Mandatory\)\]\[string\]\$Exe\b') { @('-Exe', (Join-Path $RepoRoot 'src\cli\Win64\Debug\drag-lint.exe')) } else { @() })) `
             -WorkingDirectory $RepoRoot -PassThru `
             -RedirectStandardOutput $logFile -RedirectStandardError ($logFile + '.err') `
             -WindowStyle Hidden
@@ -827,7 +827,7 @@ foreach ($r in $kept) {
   # known-hostile starting point. The driver supplies the hostility on purpose.
   # DO NOT "fix" this to C:\TEMP -- that would make the flake class invisible.
   $proc = Start-Process -FilePath 'pwsh' `
-            -ArgumentList @('-NoProfile', '-NonInteractive', '-File', $r.FullName) `
+            -ArgumentList (@('-NoProfile', '-NonInteractive', '-File', $r.FullName) + $(if ((Get-Content -LiteralPath $r.FullName -Raw) -match '\[Parameter\(Mandatory\)\]\[string\]\$Exe\b') { @('-Exe', (Join-Path $repoRoot 'src\cli\Win64\Debug\drag-lint.exe')) } else { @() })) `
             -WorkingDirectory $repoRoot -PassThru `
             -RedirectStandardOutput $logFile -RedirectStandardError ($logFile + '.err') `
             -WindowStyle Hidden

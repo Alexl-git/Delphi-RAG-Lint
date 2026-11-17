@@ -26,9 +26,9 @@
 #>
 [CmdletBinding()]
 param(
-  # 149 RQ item 2: defaults so the battery can run this unattended. Old = the DEPLOYED engine (this tree, else the main
-  # tree via the git common dir); New = this tree's Debug build. Same file for both = vacuous -> FATAL below.
-  [string]$OldExe = $(foreach ($c in @(("$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe"), (Join-Path (Split-Path -Parent (& git -C $PSScriptRoot rev-parse --path-format=absolute --git-common-dir 2>$null)) 'third_party\dll-win64\drag-lint.exe'))) { if (Test-Path -LiteralPath $c) { $c; break } }),
+  # 152 TESTS: -OldExe = an ARCHIVED engine built BEFORE the split (or env DL_DOCREGIONS_OLD_EXE). No default to the deployed engine (it tracks
+  # the tree and turns this runner into a self-comparison): with neither given the runner SKIPs (exit 77). New = this tree's Debug build.
+  [string]$OldExe = $env:DL_DOCREGIONS_OLD_EXE,
   [string]$NewExe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$WorkDir = "$env:TEMP\drag-lint-docregions-eq-$PID",
   [string[]]$Projects = @(
@@ -43,7 +43,10 @@ function Check($n, $ok, $d = '') {
   Write-Host ("  [{0}] {1} {2}" -f $s, $n, $d)
   if (-not $ok) { $script:Failed = $true }
 }
+if ([string]::IsNullOrWhiteSpace($OldExe)) { Write-Host 'SKIP: run_docregions_equivalence: no archived old engine (-OldExe or DL_DOCREGIONS_OLD_EXE)'; exit 77 }
 foreach ($e in $OldExe, $NewExe) { if (-not (Test-Path $e)) { Write-Host "FATAL: exe not found: $e"; exit 2 } }
+function Sha([string]$f) { [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([IO.File]::ReadAllBytes((Resolve-Path $f).Path))) }
+if ((Sha $OldExe) -eq (Sha $NewExe)) { Write-Host "FATAL: OldExe and NewExe are byte-identical (a self-comparison cannot fail): $OldExe"; exit 2 }
 if ((Resolve-Path $OldExe).Path -eq (Resolve-Path $NewExe).Path) { Write-Host "FATAL: OldExe and NewExe are the same file (a self-comparison cannot fail): $OldExe"; exit 2 }
 [IO.Directory]::CreateDirectory($WorkDir) | Out-Null
 

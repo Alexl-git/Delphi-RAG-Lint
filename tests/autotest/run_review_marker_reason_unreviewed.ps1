@@ -25,7 +25,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [Parameter(Mandatory)][string]$Exe,   # 152 TESTS: no default engine
   [string]$WorkDir = "$env:TEMP\drag-lint-marker-reason-unreviewed-$PID"
 )
 try {

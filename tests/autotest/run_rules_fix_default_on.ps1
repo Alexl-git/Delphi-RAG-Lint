@@ -34,6 +34,7 @@ function Check($n, $ok, $d = '') {
 function WriteAscii($path, $text) {
   [IO.File]::WriteAllText($path, (($text -replace "`r`n", "`n") -replace "`n", "`r`n"), [Text.Encoding]::ASCII)
 }
+. "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG3: no machine drag-lint.json
 $ExeP = (Resolve-Path $Exe).Path
 # A naming fix runs the rename proof, which must see the platform library to prove the new name meets nothing
 # there (refused [no-library] otherwise). Since HYG H02 (47fe515fe) the default engine is the tree's fresh build,

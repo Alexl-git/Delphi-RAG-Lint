@@ -12,7 +12,7 @@
   the two source-level facts about it are kept here.)
 #>
 [CmdletBinding()]
-param([string]$Repo = (Resolve-Path "$PSScriptRoot\..\..").Path)
+param([string]$Repo = (Resolve-Path "$PSScriptRoot\..\..").Path, [Parameter(Mandatory)][string]$Exe)   # 152 TESTS: -Exe, no default engine
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -85,7 +85,7 @@ $cmpA = Compare-HarvestSets 'ctl' @('a', 'b') @('a', 'b')
 $cmpB = Compare-HarvestSets 'ctl' @('a', 'b') @('a', 'c')
 Check 'POSITIVE CONTROL: the set comparison is equal for equal sets and names a seeded difference' ($cmpA.Equal -and (-not $cmpB.Equal) -and ($cmpB.OnlyPs -contains 'b') -and ($cmpB.OnlyPort -contains 'c'))
 . (Join-Path $Repo 'tools\featuregen-ensure.ps1')
-$engine = Join-Path $Repo 'third_party\dll-win64\drag-lint.exe'
+$engine = $Exe
 $fgExe = $null
 try { $fgExe = Get-FeatureGenExe -Repo $Repo } catch { Check 'featuregen.exe is available and current' $false $_.Exception.Message }
 if ($fgExe -and -not (Test-Path -LiteralPath $engine)) { Check 'engine available for the parity run' $false $engine; $fgExe = $null }
