@@ -588,6 +588,11 @@ type
     // FEnumStats.Bound because a unit var/const is not an enum value -- the
     // calls stage reconciles each against what it wrote.
     FUnitValueBound  : Int64;
+    // E-RENAME-RESIDUE (1.52): the default property TypeOfSelectorChain's LAST '[' selector took, and
+    // the type it was looked up on; 0 when that selector was not a default-property step. Read by
+    // ResolveIndexAccess right after the call, reset per selector.
+    FIndexDefaultProp : Int64;
+    FIndexDefaultOwner: Int64;
     // 151 PF: DRAGLINT_PROFILE_CALLS, read once in Create. Ticks count the outermost
     // entry of a slot only (recursion is not double-counted); hits count every entry.
     FProfileOn   : Boolean;
@@ -3595,6 +3600,16 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure ResolveDeclaredMember(const ARef: TReference; var AEdge: TCallEdge);
+    /// <summary>E-RENAME-RESIDUE (1.52, lane RENFACT): binds one REF_KIND_INDEX_ACCESS ref (`Bag[0]`) to the
+    /// DEFAULT array property its subscript reaches -- own, inherited or an interface's -- typing
+    /// `receiver[0]` through TypeOfSelectorChain, whose DefaultElement records the property it took.</summary>
+    /// <param name="ARef">The index-access ref; ReceiverText is the subscripted expression.</param>
+    /// <param name="AEdge">Filled with the property (certain), the read / write mode (write when `:=`
+    /// follows the bracket group), the accessor and the receiver's static type; left unbound for an
+    /// array, a string, a library type and an indexed property's own index.</param>
+    /// <remarks>The store writes refs.symbol_id plus a member_accesses row, and a call edge when the
+    /// accessor is a method -- exactly what a named `Bag.Items[0]` earns.</remarks>
+    procedure ResolveIndexAccess(const ARef: TReference; var AEdge: TCallEdge);
 
     /// <summary>Shape A (2026-09-23, enum-value-ref-binding): resolve a bare
     /// `read` ref that names an enum value, by NAME and SCOPE only -- rules
@@ -8718,6 +8733,8 @@ var
         for var P: TSymbol in Kids do
           if (P.Kind = skProperty) and SameText(P.Directives, PROPERTY_INDEXED_DIRECTIVE + ' ' + PROPERTY_DEFAULT_DIRECTIVE) then
           begin
+            FIndexDefaultProp := P.Id;   // 1.52 RENFACT: the property this subscript reaches
+            FIndexDefaultOwner:= AOwner;
             TypeText := Trim(P.Signature);
             TextFile := P.FileId;
             TextScope:= P.ParentId;
@@ -8915,13 +8932,17 @@ begin
   begin
     PrevText:= if TypeText <> '' then TypeText else if TypeId > 0 then SymbolById(TypeId).Name else '';
     Indexed := False;
+    FIndexDefaultProp:= 0;
     Ok:= ((SegIx = 0) and TypeCallHead(Segs[0]))
          or (SplitSelectorSegment(Segs[SegIx], Name, Sels)
              and (if SegIx = 0 then TypeHead(Name) else TypeMember(Name)));
     if (not Ok) and (SegIx > 0) and (PrevText <> '') then StopAt(SegIx);
     for var Sel: Char in Sels do
+    begin
+      FIndexDefaultProp:= 0; // 1.52 RENFACT: only the LAST selector's default-property step counts
       if Ok and Indexed and (Sel = '[') then Indexed:= False // the property's own index: its type IS the element
       else Ok:= Ok and ApplySelector(Sel);
+    end;
     Inc(SegIx);
   end;
   Result:= if Ok then CurrentTypeId else 0;
@@ -11820,6 +11841,64 @@ begin
   if Result <= 0 then AText.Text:= Leaf;
 end;
 
+procedure TCallResolver.ResolveIndexAccess(const ARef: TReference; var AEdge: TCallEdge);
+var
+  RcvText: TRcvTypeText;
+begin
+  AEdge.ReceiverText:= ARef.ReceiverText;
+  if ARef.ReceiverText = '' then Exit;
+  FIndexDefaultProp := 0;
+  FIndexDefaultOwner:= 0;
+  if SameText(ARef.ReceiverText, 'Self') then
+  begin
+    { `Self[0]`: TypeOfSelectorChain does not type a Self head, so read the enclosing class's chain here. }
+    var Owner: Int64:= SymbolById(ARef.EnclosingSymbolId).ParentId;
+    var Chain: TArray<Int64>:= [Owner];
+    for var A: TTypeAncestor in AncestorsOf(Owner) do
+      if A.Resolved and (A.SymbolId > 0) then Chain:= Chain + [A.SymbolId];
+    for var Id: Int64 in Chain do
+    begin
+      if (Id <= 0) or (FIndexDefaultProp > 0) then Break;
+      var Kids: TList<TSymbol>:= ChildrenOf(Id);
+      if Kids <> nil then
+        for var P: TSymbol in Kids do
+          if (P.Kind = skProperty) and SameText(P.Directives, PROPERTY_INDEXED_DIRECTIVE + ' ' + PROPERTY_DEFAULT_DIRECTIVE) then
+          begin
+            FIndexDefaultProp := P.Id;
+            FIndexDefaultOwner:= Owner;
+            Break;
+          end;
+    end;
+  end
+  else
+    TypeOfSelectorChain(ARef, ARef.ReceiverText + '[0]', RcvText);
+  var PropId: Int64:= FIndexDefaultProp;
+  FIndexDefaultProp:= 0;
+  if PropId <= 0 then Exit;
+  var Prop: TSymbol:= SymbolById(PropId);
+  if Prop.Id <= 0 then Exit;
+  AEdge.TargetSymbolId      := Prop.Id;
+  AEdge.Confidence          := 'certain';
+  AEdge.ReceiverTypeSymbolId:= FIndexDefaultOwner;
+  AEdge.ReceiverTypeText    := SymbolById(FIndexDefaultOwner).Name;
+  { The mode: `:=` right after the bracket group (EndCol is the column just past `]`) writes. }
+  AEdge.MemberMode:= 'read';
+  var Lines: TStringList:= LinesOf(ARef.FileId);
+  if (Lines <> nil) and (ARef.EndLine >= 1) and (ARef.EndLine <= Lines.Count) then
+  begin
+    var Line: string:= Lines[ARef.EndLine - 1];
+    var P: Integer:= Max(ARef.EndCol, 1);
+    while (P <= Length(Line)) and CharInSet(Line[P], [' ', #9]) do Inc(P);
+    if (P < Length(Line)) and (Line[P] = ':') and (Line[P + 1] = '=') then AEdge.MemberMode:= 'write';
+  end;
+  var Acc: TSymbol:= ResolveAccessor(Prop, AEdge.MemberMode);
+  if Acc.Id > 0 then
+  begin
+    AEdge.AccessorSymbolId:= Acc.Id;
+    AEdge.AccessorKind    := (if Acc.Kind = skField then 'field' else 'method');
+  end;
+end;
+
 procedure TCallResolver.ResolveDeclaredMember(const ARef: TReference; var AEdge: TCallEdge);
 var
   Text: TRcvTypeText;
@@ -11886,6 +11965,11 @@ begin
   if SameText(ACallRef.Kind, REF_KIND_PROP_SPEC) or SameText(ACallRef.Kind, REF_KIND_REC_FIELD) then
   begin
     ResolveDeclaredMember(ACallRef, Result);
+    Exit;
+  end;
+  if SameText(ACallRef.Kind, REF_KIND_INDEX_ACCESS) then
+  begin
+    ResolveIndexAccess(ACallRef, Result); // 1.52 RENFACT: `Bag[0]` -> the default property
     Exit;
   end;
 

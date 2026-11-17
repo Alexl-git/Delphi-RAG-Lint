@@ -3034,6 +3034,17 @@ const
   /// <remarks>Binds refs.symbol_id or refs.external_target only, like REF_KIND_PROP_SPEC.
   /// Emitted only by a deep (usage-ref) parse.</remarks>
   REF_KIND_REC_FIELD = 'record-field';
+  /// <summary>E-RENAME-RESIDUE (1.52, lane RENFACT): one subscript `X[...]`, name_text REF_NAME_INDEX_ACCESS,
+  /// receiver_text = the subscripted expression (`Bag`, `Shelf.Bag`, `Rack[0]`), span = the bracket group.</summary>
+  /// <remarks>The resolver binds it to the DEFAULT array property the subscript reaches -- `Bag[0]` is
+  /// TBag.Items without the name -- with a member_accesses row (read / write + accessor), so usages,
+  /// find-callers of the accessor and unused-public-symbol see the implicit site. An array, a string, a
+  /// library type and an indexed property's own index leave it unbound. Its name never matches an
+  /// identifier, so rename never edits one. Emitted only by a deep (usage-ref) parse. Pinned by
+  /// tests\autotest\run_v152_RENFACT.ps1.</remarks>
+  REF_KIND_INDEX_ACCESS = 'index-access';
+  /// <summary>The name_text of every REF_KIND_INDEX_ACCESS ref: not an identifier, by design.</summary>
+  REF_NAME_INDEX_ACCESS = '[]';
 
   /// <summary>The four values of the derived resolution key on caller / callee rows
   /// (XERJ item 3); see TReference.Resolution.</summary>

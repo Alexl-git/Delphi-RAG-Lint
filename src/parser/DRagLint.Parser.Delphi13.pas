@@ -770,6 +770,27 @@ begin
     AState.EmitRef(REF_KIND_WRITE_THROUGH, NodeText(Recv, AState.Source), Recv);
 end;
 
+{ E-RENAME-RESIDUE (1.52, lane RENFACT): the subscript ASub `X[...]` as one REF_KIND_INDEX_ACCESS ref --
+  name '[]', receiver = the entity X normalised like ReceiverTextOf, span from the bracket group (the
+  'args' field; the whole node when the grammar gives none) to the subscript's end. `Bag[0]` reaches
+  TBag.Items without naming it, so before this the site had no ref at all; the resolver decides which
+  subscripts reach a default property. Nothing when the entity is missing, is or holds an ERROR node,
+  or is too long to be a receiver. Pinned by tests\autotest\run_v152_RENFACT.ps1. }
+procedure EmitIndexAccessRef(const ASub: TTSNode; const AState: TWalkState);
+begin
+  var Entity:= ASub.ChildByField('entity');
+  if Entity.IsNull or Entity.IsError or Entity.HasError then Exit;
+  var Rcv: string:= NormaliseReceiverText(NodeText(Entity, AState.Source));
+  if (Rcv = '') or (Length(Rcv) > RECEIVER_TEXT_MAX) then Exit;
+  var Args:= ASub.ChildByField('args');
+  if Args.IsNull then Args:= ASub;
+  AState.EmitRef(REF_KIND_INDEX_ACCESS, REF_NAME_INDEX_ACCESS, ASub, Rcv);
+  var R: TReference:= AState.References.Last;
+  R.StartLine:= Integer(Args.StartPoint.row   ) + 1;
+  R.StartCol := Integer(Args.StartPoint.column) + 1;
+  AState.References[AState.References.Count - 1]:= R;
+end;
+
 { E-PARSER-NOREFS: is this node inherited X, or a dotted chain of identifier
   members rooted in one, inherited X.Y? inherited X(a).Y is IsCallRootedReceiver's. }
 function IsInheritedRootedReceiver(const ANode: TTSNode): Boolean;
@@ -4272,6 +4293,9 @@ begin
   // still recurses, so nested expressions are fully covered.
   if AState.EmitUsageRefs then
   begin
+    { E-RENAME-RESIDUE (1.52): every subscript gets its index-access ref; no Exit, the arms below and the
+      default recursion still see the node. }
+    if NodeType = 'exprSubscript' then EmitIndexAccessRef(ANode, AState);
     // Member access `obj.Member` -> the BASE identifier is a usage of `obj`
     // (the dxDBGrid1 case). The member itself is captured as call/type_use
     // elsewhere; we don't re-emit it here.
