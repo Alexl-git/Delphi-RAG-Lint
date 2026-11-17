@@ -7,7 +7,7 @@ group: refactoring
 order: 50006
 since: 0.85.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # extract-method
@@ -35,6 +35,7 @@ Full flag list: [extract-method in the CLI reference](../cli.md#extract-method).
 | `--json` |  |  |  |
 | `--apply` |  |  |  |
 | `--no-backup` |  |  |  |
+| `--no-compile-gate` |  |  |  |
 
 ## Where to click
 

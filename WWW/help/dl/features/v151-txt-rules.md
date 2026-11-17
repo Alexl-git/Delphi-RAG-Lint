@@ -4,7 +4,7 @@ title: "Text rules: bidi, invisible, control chars, TODO, header, strings"
 summary: "Six raw-text lint rules: bidi-control, invisible-char, control-char, todo-comment, file-header, hardcoded-string"
 product: DL
 group: linting
-order: 30058
+order: 30059
 since: 1.51.0-alpha
 status: shipped
 updated: 1.51.1-alpha

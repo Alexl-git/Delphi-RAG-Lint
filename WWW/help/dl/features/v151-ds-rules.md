@@ -4,10 +4,10 @@ title: Dataset and transaction lint rules
 summary: "Lint checks: dataset edited but never posted, SELECT * in SQL text, transaction committed but never rolled back, dataset loop that never advances"
 product: DL
 group: linting
-order: 30049
+order: 30050
 since: 1.51.0-alpha
 status: shipped
-updated: 1.51.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # Dataset and transaction lint rules

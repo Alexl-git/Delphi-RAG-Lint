@@ -4,10 +4,10 @@ title: RTL string and path lint rules
 summary: "Seven lint rules for RTL string, path and conversion mistakes: swapped Pos arguments, StrictDelimiter, FormatSettings writes, path joins, file-name compares"
 product: DL
 group: linting
-order: 30054
+order: 30055
 since: 1.51.0-alpha
 status: experimental
-updated: 1.51.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # RTL string and path lint rules

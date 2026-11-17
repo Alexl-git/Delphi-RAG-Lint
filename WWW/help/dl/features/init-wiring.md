@@ -4,10 +4,10 @@ title: "init: one command from a project to a wired AI client"
 summary: Registers a project in the manifest, indexes it, finds its index and wires Claude Code, VS Code and Cursor to serve it, in one command
 product: DL
 group: editor-integration
-order: 110011
+order: 110012
 since: 1.38.0-alpha
 status: shipped
-updated: 1.48.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # init: one command from a project to a wired AI client

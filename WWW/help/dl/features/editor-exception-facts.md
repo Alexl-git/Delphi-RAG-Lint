@@ -4,10 +4,10 @@ title: Exception facts in the editor
 summary: Hover, code lens and an MCP tool show which exception types a routine raises and handles
 product: DL
 group: editor-integration
-order: 110006
+order: 110007
 since: 1.50.0-alpha
 status: shipped
-updated: 1.50.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # Exception facts in the editor

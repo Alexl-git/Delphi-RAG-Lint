@@ -116,6 +116,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Read but never assigned (lint rule)](features/read-never-assigned.md) | Project-wide lint rule: a field or global that is read but that nothing in the project assigns or creates | 1.40.0-alpha |
 | [Lint rules on the static type of a reference](features/ref-type-rules.md) | Lint rules on ref_types: is-always-true, is-never-true, argument-narrows, UI access from a thread, quit from a thread; sharper redundant-cast and unsafe casts | 1.44.1-alpha |
 | [Rescan this unit](features/rescan-this-unit.md) | Re-indexes the active project and re-lints the current unit on demand, so the Diagnostics panel drops findings already fixed | 1.28.3-alpha |
+| [review-marker-remeasured hint](features/review-marker-remeasured.md) | A dl:ok on a routine-metric rule stamped under an older hash still suppresses its finding; a hint names the allow command that re-stamps it | 1.51.1-alpha |
 | [RTTI unavailable (lint rule)](features/rtti-unavailable.md) | Project lint rule, OFF by default: declarations that lose classic or extended RTTI (typeless enums, record properties, narrowing directives, published generics) | 1.50.0-alpha |
 | [Run AST Checks](features/run-ast-checks.md) | Runs drag-lint's AST-level checks against a file | 0.31.0-alpha |
 | [Run Diagnostics (didSave)](features/run-diagnostics-didsave.md) | Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification | 0.22.0-alpha |
@@ -143,7 +144,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Wider built-in rules (1.51)](features/v151-wid-ast-rules.md) | Six built-in rules read more constructs: code-page and label exemptions, named zero constants, implied else-if, thread dialogs, Supports aliases | 1.51.0-alpha |
 | [Wider scm rules and three new fixers](features/v151-wid-scm-rules.md) | Seven built-in rules read more constructs; empty-finally, format-string-not-formatted and shared-marker-legacy-shape gain autofixes | 1.51.0-alpha |
 | [CLI fixes in 1.51.1](features/v1511-cli-fixes.md) | lint-all --rule a,b runs only those rules, a DB copy stays on the copy; rules --rule; info versions; index parse-errors; resolve-only warning | 1.51.1-alpha |
-| [Array index possibly out of range lint rule (index-possibly-out-of-range)](features/v152-index-possibly-out-of-range.md) | Warns (default ON) on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only | 1.52.0-alpha |
+| [Array index possibly out of range lint rule (index-possibly-out-of-range)](features/v152-index-possibly-out-of-range.md) | Warns (OFF in 1.52) on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only | 1.52.0-alpha |
 | [warm-rule-cache](features/warm-rule-cache.md) | Fills the lint rule cache for a project index; index runs warm it, or start it in the background (--rule-cache-warm) | 1.39.0-alpha |
 
 ## Documentation
@@ -192,6 +193,8 @@ Rename, extract, safe delete, uses cleanup and code stubs.
 | [Uses Audit -- interface->impl moves + unused (this unit)](features/uses-audit-interface-impl-moves-unused-this-unit.md) | For one unit, reports which uses entries could move from the interface section to implementation, and which are unused entirely | 0.43.0-alpha |
 | [Uses Cleanup Preview (compiler-verified, this unit)](features/uses-cleanup-preview-compiler-verified-this-unit.md) | The removals a Uses Audit suggests, but verified by actually compiling | 0.43.0-alpha |
 | [Uses & Deps Tab](features/uses-deps-tab.md) | Open the Uses & Deps tab to review uses-clause fixes and apply them | 1.12.0-alpha |
+| [extract-method and create-enum-helper through the compile gate by default](features/v152-fixer-compile-gate.md) | extract-method / create-enum-helper --apply build the project before and after the write; no project found = REFUSED, --no-compile-gate writes unbuilt | 1.52.0-alpha |
+| [Fix with drag-lint (VS Code and RAD Studio)](features/v152-vsfix.md) | Fix the finding at the cursor, all of one rule, or every fixable finding in a file: VS Code code actions and menus, plus a RAD Studio menu entry | 1.52.0-alpha |
 
 ## Component conversion
 

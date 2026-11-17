@@ -5,8 +5,8 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.52.0-alpha",
-  "summary": "extract-method --apply and create-enum-helper --apply build the project before and after the write by default: the project comes from --project, the database's own project or the project that names the unit; none found = REFUSED (no-project); --no-compile-gate writes unbuilt",
-  "intro": "Read this when extract-method or create-enum-helper refuses with REFUSED (no-project) or (dirty-baseline), or when you want to know which project they build. Since 1.52 --apply goes through the compile gate without --project: the project is --project, else the project a DB at `<dir>\\_D-RAG\\<base>.sqlite` belongs to, else the nearest .dproj (walking up from the unit's folder) whose .dproj / .dpr names the unit. A project that does not build is refused with nothing written; a fix that breaks the build is rolled back. When no project is found the write is refused (exit 2); --no-compile-gate writes unbuilt, as before 1.52.",
+  "summary": "extract-method / create-enum-helper --apply build the project before and after the write; no project found = REFUSED, --no-compile-gate writes unbuilt",
+  "intro": "Read this when extract-method or create-enum-helper refuses with REFUSED (no-project) or (dirty-baseline), or when you want to know which project they build. Since 1.52 --apply goes through the compile gate without --project: the project is --project, else the project a DB at `<dir>\\_D-RAG\\<base>.sqlite` belongs to, else the nearest .dproj (walking up from the unit's folder) whose .dproj / .dpr names the unit. A project that does not build is refused; a fix that breaks the build is rolled back. No project = refused (exit 2).",
   "wikiPage": "fixer-compile-gate",
   "surfaces": [
     {
@@ -65,5 +65,11 @@
   "accessReviewed": {
     "date": "2026-11-17",
     "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-11-17",
+    "by": "ENGINE",
+    "build": "1.51.1-alpha",
+    "surfaceHash": "80cd3e623aff5e4de7070f83bb054f67e1405d8984724211a886e79d01d0aec8"
   }
 }

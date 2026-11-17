@@ -4,7 +4,7 @@ title: Typing and ownership lint rules (casts, Self as interface, destructors)
 summary: "Five rules: unrelated class casts, Self as interface during construction, nil-unsafe destructors, Free without nil, unclear field ownership"
 product: DL
 group: linting
-order: 30059
+order: 30060
 since: 1.51.0-alpha
 status: shipped
 updated: 1.51.1-alpha

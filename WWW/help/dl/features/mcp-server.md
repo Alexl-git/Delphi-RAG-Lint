@@ -4,10 +4,10 @@ title: MCP server
 summary: Exposes the index to MCP clients as 18 tools
 product: DL
 group: editor-integration
-order: 110020
+order: 110021
 since: 0.4.0-alpha
 status: shipped
-updated: 1.48.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # MCP server

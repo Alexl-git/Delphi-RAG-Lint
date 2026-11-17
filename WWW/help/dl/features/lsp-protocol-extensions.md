@@ -4,10 +4,10 @@ title: LSP protocol extensions
 summary: Answers outline, implementation, rename, lens, tokens, inlay hints, call and type hierarchy, type definition, highlights, folding and commands from the index
 product: DL
 group: editor-integration
-order: 110015
+order: 110016
 since: 1.33.0-alpha
 status: shipped
-updated: 1.48.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # LSP protocol extensions

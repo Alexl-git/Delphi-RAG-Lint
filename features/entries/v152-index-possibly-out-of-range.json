@@ -5,7 +5,7 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.52.0-alpha",
-  "summary": "Warns (default OFF in 1.52; enable with --rule or the config) on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only",
+  "summary": "Warns (OFF in 1.52) on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only",
   "intro": "Read this to see when index-possibly-out-of-range warns, how it treats another collection's bound and index parameters, and how its manual-only autofix inserts an InRange check.",
   "wikiPage": "index-possibly-out-of-range",
   "surfaces": [
@@ -36,6 +36,6 @@
     "date": "2026-11-17",
     "by": "ENGINE",
     "build": "1.51.1-alpha",
-    "surfaceHash": "de319179f8b6b2ffbdba5a675a1f550133807d68a0339e632b8014cd5442cafc"
+    "surfaceHash": "62e8dbbd3125f2c6150757c11dcbb8a97efffe58ea200fe039f636c533a12a7c"
   }
 }

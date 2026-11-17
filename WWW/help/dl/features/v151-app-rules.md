@@ -4,7 +4,7 @@ title: Application-level lint rules
 summary: "Whole-program lint rules: TLS checks off, UI calls in console/service apps, DUnitX tests without asserts, weak ciphers, asm without Win64, GUI WriteLn"
 product: DL
 group: linting
-order: 30045
+order: 30046
 since: 1.51.0-alpha
 status: shipped
 updated: 1.51.1-alpha

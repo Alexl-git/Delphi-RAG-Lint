@@ -11,11 +11,14 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 1.52.0-alpha
 
-* [Array index possibly out of range lint rule (index-possibly-out-of-range)](features/v152-index-possibly-out-of-range.md) -- Warns (default ON) on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only.
+* [extract-method and create-enum-helper through the compile gate by default](features/v152-fixer-compile-gate.md) -- extract-method / create-enum-helper --apply build the project before and after the write; no project found = REFUSED, --no-compile-gate writes unbuilt.
+* [Array index possibly out of range lint rule (index-possibly-out-of-range)](features/v152-index-possibly-out-of-range.md) -- Warns (OFF in 1.52) on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only.
+* [Fix with drag-lint (VS Code and RAD Studio)](features/v152-vsfix.md) -- Fix the finding at the cursor, all of one rule, or every fixable finding in a file: VS Code code actions and menus, plus a RAD Studio menu entry.
 
 ## 1.51.1-alpha
 
 * [Editor right-click submenu](features/editor-context-menu.md) -- The drag-lint submenu of the code editor's right-click menu: the 1.52 caret commands, enabled by what the caret is on.
+* [review-marker-remeasured hint](features/review-marker-remeasured.md) -- A dl:ok on a routine-metric rule stamped under an older hash still suppresses its finding; a hint names the allow command that re-stamps it.
 * [CLI fixes in 1.51.1](features/v1511-cli-fixes.md) -- lint-all --rule a,b runs only those rules, a DB copy stays on the copy; rules --rule; info versions; index parse-errors; resolve-only warning.
 * [Cycles fix through recipe R3 (hub surface, compile-gated)](features/v1511-cyc-fixes.md) -- cycles --fix --hub-surface writes recipe R3 through the compile gate: build before and after, rollback, re-index and verify.
 * [References for declaration positions](features/v1511-ext-fixes.md) -- The index keeps a reference for pointer base types, generic constraints, generic method headers, dotted property specifiers and message constants.

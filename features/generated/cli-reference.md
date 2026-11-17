@@ -393,7 +393,7 @@ Described in [convert-validate](../../docs/wiki/convert-validate.md).
 Generates a Byte-family record helper (ToByte/FromByte/ToInteger/ FromInteger/ToString/FromString) for an enum type.
 
 ```text
-drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--methods <csv>] [--tostring rtti|case] [--db PATH] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] - generate a Byte-family record helper for an enum
+drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--no-compile-gate] [--methods <csv>] [--tostring rtti|case] [--db PATH] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] - generate a Byte-family record helper for an enum
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -406,6 +406,7 @@ drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--met
 | `--apply` |  |  |  |
 | `--json` |  |  |  |
 | `--no-backup` |  |  |  |
+| `--no-compile-gate` |  |  |  |
 | `--methods` | `<csv>` |  |  |
 | `--tostring` |  |  |  |
 | `--db` | `PATH` |  |  |
@@ -414,6 +415,7 @@ Described in:
 
 * [create-enum-helper](../../docs/wiki/create-enum-helper.md)
 * [Create helper class](../../docs/wiki/Create-helper-class.md)
+* [extract-method and create-enum-helper through the compile gate by default](../../docs/wiki/fixer-compile-gate.md)
 
 ### cycles
 
@@ -689,7 +691,7 @@ Described in [Extract an interface from the members used (scratch + compile gate
 Pulls a run of statements out of a routine into a new method.
 
 ```text
-drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] - pull a statement run into a new method
+drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--no-compile-gate] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] - pull a statement run into a new method
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -705,8 +707,12 @@ drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--
 | `--json` |  |  |  |
 | `--apply` |  |  |  |
 | `--no-backup` |  |  |  |
+| `--no-compile-gate` |  |  |  |
 
-Described in [extract-method](../../docs/wiki/extract-method.md).
+Described in:
+
+* [extract-method](../../docs/wiki/extract-method.md)
+* [extract-method and create-enum-helper through the compile gate by default](../../docs/wiki/fixer-compile-gate.md)
 
 ### fb-snapshot
 
@@ -2065,7 +2071,7 @@ Described in [Type at Cursor](../../docs/wiki/Type-at-Cursor.md).
 Removes with blocks, proving every name binds to what it bound before.
 
 ```text
-drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--build-config <c>] [--no-preprocess] [--json|--format json] - remove with blocks, proved binding by binding
+drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--exclude-under <dir>]... [--no-backup] [--build-config <c>] [--no-preprocess] [--json|--format json] - remove with blocks, proved binding by binding
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -2080,6 +2086,7 @@ drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <
 | `--rsvars` | `<bat>` |  |  |
 | `--build-timeout` | `<s>` |  |  |
 | `--library-db` | `<L>\|none` |  |  |
+| `--exclude-under` | `<dir>` |  |  |
 | `--no-backup` |  |  |  |
 | `--json` |  |  |  |
 

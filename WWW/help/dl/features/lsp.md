@@ -4,10 +4,10 @@ title: lsp
 summary: Starts the LSP (Language Server Protocol) stdio server
 product: DL
 group: editor-integration
-order: 110013
+order: 110014
 since: 0.6.0-alpha
 status: shipped
-updated: 1.49.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # lsp

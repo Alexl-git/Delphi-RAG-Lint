@@ -4,7 +4,7 @@ title: CLI fixes in 1.51.1
 summary: lint-all --rule a,b runs only those rules, a DB copy stays on the copy; rules --rule; info versions; index parse-errors; resolve-only warning
 product: DL
 group: linting
-order: 30062
+order: 30063
 since: 1.51.1-alpha
 status: shipped
 updated: 1.51.1-alpha

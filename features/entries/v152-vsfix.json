@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "1.52.0-alpha",
   "summary": "Fix the finding at the cursor, all of one rule, or every fixable finding in a file: VS Code code actions and menus, plus a RAD Studio menu entry",
-  "intro": "Read this when you want drag-lint to apply its own deterministic fix instead of editing by hand. In VS Code, use the light bulb (Fix: <rule>, drag-lint: fix all <rule> in file, drag-lint: fix all fixable in file), right-click in the editor or on a Problems entry and choose Fix with drag-lint, or let editor.codeActionsOnSave run source.fixAll.drag-lint. In RAD Studio, put the caret on the finding and choose drag-lint > Code Quality > Fix with drag-lint (finding at cursor).",
+  "intro": "Read this when you want drag-lint to apply its own deterministic fix instead of editing by hand. In VS Code, use the light bulb (`Fix: <rule>`, `drag-lint: fix all <rule> in file`, `drag-lint: fix all fixable in file`), right-click in the editor or on a Problems entry and choose Fix with drag-lint, or let editor.codeActionsOnSave run source.fixAll.drag-lint. In RAD Studio, put the caret on the finding, right-click in the editor, open the drag-lint submenu and choose Fix with drag-lint (finding at cursor).",
   "wikiPage": "v152-vsfix",
   "surfaces": [
     {
@@ -14,9 +14,10 @@
       "method": "textDocument/codeAction"
     },
     {
-      "type": "ide-menu",
-      "path": "drag-lint > Code Quality > Fix with drag-lint (finding at cursor)",
-      "steps": ["Put the caret on a line that shows a drag-lint finding", "Choose drag-lint > Code Quality > Fix with drag-lint (finding at cursor)", "Answer Yes to apply the fix, No to preview it"]
+      "type": "ide-context",
+      "host": "Editor",
+      "caption": "drag-lint > Fix with drag-lint (finding at cursor)",
+      "steps": ["Put the caret on a line that shows a drag-lint finding", "Right-click in the editor, open the drag-lint submenu and choose Fix with drag-lint (finding at cursor)", "Answer Yes to apply the fix, No to preview it"]
     }
   ],
   "audience": "both",

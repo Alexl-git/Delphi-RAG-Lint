@@ -4,10 +4,10 @@ title: Form-file data-binding rules
 summary: "Six lint rules check the text .dfm beside a unit: bad data links, duplicate bindings, field-type mismatches, unreachable required fields"
 product: DL
 group: linting
-order: 30048
+order: 30049
 since: 1.51.0-alpha
 status: shipped
-updated: 1.51.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # Form-file data-binding rules

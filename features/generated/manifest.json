@@ -2,7 +2,7 @@
   "product": "1.51.1-alpha",
   "extractor": "1.41.0-alpha",
   "resolver": "1.29.0-alpha",
-  "schema": 26,
+  "schema": 27,
   "groups": [
     {
       "id": "indexing",
@@ -3065,14 +3065,14 @@
       "owner": "ENGINE",
       "status": "shipped",
       "since": "1.52.0-alpha",
-      "summary": "Warns (default ON) on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only",
+      "summary": "Warns (OFF in 1.52) on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only",
       "intro": "Read this to see when index-possibly-out-of-range warns, how it treats another collection's bound and index parameters, and how its manual-only autofix inserts an InRange check.",
       "wikiPage": "index-possibly-out-of-range",
       "surfaces": [
         {
           "type": "cli",
           "verb": "lint",
-          "usage": "drag-lint lint <file.pas> [--rule index-possibly-out-of-range] [--fix --fix-rule index-possibly-out-of-range [--apply]] (default ON, category bug-patterns, warning; hint on an unguarded parameter or a lookup-derived index; param exception_class; the autofix is manual only: a batch --fix withholds it, --fix-rule applies it; rules --json carries fix_manual_only: true)",
+          "usage": "drag-lint lint <file.pas> [--rule index-possibly-out-of-range] [--fix --fix-rule index-possibly-out-of-range [--apply]] (default OFF in 1.52, category bug-patterns, warning; hint on an unguarded parameter or a lookup-derived index; param exception_class; the autofix is manual only: a batch --fix withholds it, --fix-rule applies it; rules --json carries fix_manual_only: true)",
           "flags": [
             {
               "name": "--rule",
@@ -3096,7 +3096,7 @@
         "date": "2026-11-17",
         "by": "ENGINE",
         "build": "1.51.1-alpha",
-        "surfaceHash": "de319179f8b6b2ffbdba5a675a1f550133807d68a0339e632b8014cd5442cafc"
+        "surfaceHash": "62e8dbbd3125f2c6150757c11dcbb8a97efffe58ea200fe039f636c533a12a7c"
       }
     },
     {
@@ -5032,6 +5032,29 @@
       }
     },
     {
+      "id": "review-marker-remeasured",
+      "title": "review-marker-remeasured hint",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.51.1-alpha",
+      "summary": "A dl:ok on a routine-metric rule stamped under an older hash still suppresses its finding; a hint names the allow command that re-stamps it",
+      "intro": "Read this when lint shows review-marker-remeasured: the marker is still valid (routine unchanged, only the hash version moved) and one allow --apply re-stamps it.",
+      "wikiPage": "Review-Marker-Remeasured",
+      "surfaces": [
+        {
+          "type": "workflow",
+          "doc": "docs\\wiki\\Review-Marker-Remeasured.md"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-17",
+        "by": "alexanderl",
+        "build": "1.51.1-alpha"
+      }
+    },
+    {
       "id": "v151-rtl-coll-rules",
       "title": "RTL collection and environment lint rules",
       "group": "linting",
@@ -6789,7 +6812,7 @@
         {
           "type": "cli",
           "verb": "create-enum-helper",
-          "usage": "drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--methods <csv>] [--tostring rtti|case] [--db PATH] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] - generate a Byte-family record helper for an enum",
+          "usage": "drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--no-compile-gate] [--methods <csv>] [--tostring rtti|case] [--db PATH] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] - generate a Byte-family record helper for an enum",
           "flags": [
             {
               "name": "--project",
@@ -6821,6 +6844,9 @@
               "name": "--no-backup"
             },
             {
+              "name": "--no-compile-gate"
+            },
+            {
               "name": "--methods",
               "arg": "<csv>"
             },
@@ -6833,7 +6859,7 @@
             }
           ],
           "helpOrder": 57,
-          "help": ["  drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--methods <csv>] [--tostring rtti|case] [--db PATH] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]  - generate a Byte-family record helper for an enum", "     --methods tobyte,frombyte,tointeger,frominteger,tostring,fromstring (default: all 6); --tostring rtti (default, RTTI GetEnumName) or case (explicit case statement)", "     idempotent: a helper for the enum already indexed anywhere -> action=exists, no edit"]
+          "help": ["  drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--no-compile-gate] [--methods <csv>] [--tostring rtti|case] [--db PATH] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]  - generate a Byte-family record helper for an enum", "     --methods tobyte,frombyte,tointeger,frominteger,tostring,fromstring (default: all 6); --tostring rtti (default, RTTI GetEnumName) or case (explicit case statement)", "     idempotent: a helper for the enum already indexed anywhere -> action=exists, no edit"]
         },
         {
           "type": "ide-menu",
@@ -6949,6 +6975,81 @@
       }
     },
     {
+      "id": "v152-fixer-compile-gate",
+      "title": "extract-method and create-enum-helper through the compile gate by default",
+      "group": "refactoring",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "extract-method / create-enum-helper --apply build the project before and after the write; no project found = REFUSED, --no-compile-gate writes unbuilt",
+      "intro": "Read this when extract-method or create-enum-helper refuses with REFUSED (no-project) or (dirty-baseline), or when you want to know which project they build. Since 1.52 --apply goes through the compile gate without --project: the project is --project, else the project a DB at `<dir>\\_D-RAG\\<base>.sqlite` belongs to, else the nearest .dproj (walking up from the unit's folder) whose .dproj / .dpr names the unit. A project that does not build is refused; a fix that breaks the build is rolled back. No project = refused (exit 2).",
+      "wikiPage": "fixer-compile-gate",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "extract-method",
+          "example": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> --apply",
+          "usage": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> --apply [--project <X.dproj> | --no-compile-gate] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-backup]",
+          "flags": [
+            {
+              "name": "--apply"
+            },
+            {
+              "name": "--project",
+              "arg": "<X.dproj>"
+            },
+            {
+              "name": "--no-compile-gate"
+            }
+          ]
+        },
+        {
+          "type": "cli",
+          "verb": "create-enum-helper",
+          "example": "drag-lint create-enum-helper --qname <TEnum> --db <db> --apply",
+          "usage": "drag-lint create-enum-helper --qname <TEnum> --db <db> --apply [--project <X.dproj> | --no-compile-gate] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-backup]",
+          "flags": [
+            {
+              "name": "--apply"
+            },
+            {
+              "name": "--project",
+              "arg": "<X.dproj>"
+            },
+            {
+              "name": "--no-compile-gate"
+            }
+          ]
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "Why did extract-method refuse with REFUSED (no-project)?",
+          "command": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> --apply --project <X.dproj>"
+        },
+        {
+          "ask": "How do I extract a method without building the project?",
+          "command": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> --apply --no-compile-gate"
+        },
+        {
+          "ask": "Which project does create-enum-helper build before it writes?",
+          "command": "drag-lint create-enum-helper --qname <TEnum> --db <db> --apply"
+        }
+      ],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-11-17",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-11-17",
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "80cd3e623aff5e4de7070f83bb054f67e1405d8984724211a886e79d01d0aec8"
+      }
+    },
+    {
       "id": "extract-method",
       "title": "extract-method",
       "group": "refactoring",
@@ -6962,7 +7063,7 @@
         {
           "type": "cli",
           "verb": "extract-method",
-          "usage": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] - pull a statement run into a new method",
+          "usage": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--no-compile-gate] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] - pull a statement run into a new method",
           "flags": [
             {
               "name": "--in",
@@ -7004,10 +7105,13 @@
             },
             {
               "name": "--no-backup"
+            },
+            {
+              "name": "--no-compile-gate"
             }
           ],
           "helpOrder": 61,
-          "help": ["  drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]  - pull a statement run into a new method"]
+          "help": ["  drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--no-compile-gate] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]  - pull a statement run into a new method"]
         },
         {
           "type": "ide-menu",
@@ -7032,6 +7136,36 @@
         "by": "ENGINE",
         "build": "1.46.0-alpha",
         "surfaceHash": "d99567feb498e6f2a0adc2759a647f525cfc667d7d776caabe0b882c938e0f80"
+      }
+    },
+    {
+      "id": "v152-vsfix",
+      "title": "Fix with drag-lint (VS Code and RAD Studio)",
+      "group": "refactoring",
+      "owner": "LSP",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "Fix the finding at the cursor, all of one rule, or every fixable finding in a file: VS Code code actions and menus, plus a RAD Studio menu entry",
+      "intro": "Read this when you want drag-lint to apply its own deterministic fix instead of editing by hand. In VS Code, use the light bulb (`Fix: <rule>`, `drag-lint: fix all <rule> in file`, `drag-lint: fix all fixable in file`), right-click in the editor or on a Problems entry and choose Fix with drag-lint, or let editor.codeActionsOnSave run source.fixAll.drag-lint. In RAD Studio, put the caret on the finding, right-click in the editor, open the drag-lint submenu and choose Fix with drag-lint (finding at cursor).",
+      "wikiPage": "v152-vsfix",
+      "surfaces": [
+        {
+          "type": "lsp",
+          "method": "textDocument/codeAction"
+        },
+        {
+          "type": "ide-context",
+          "host": "Editor",
+          "caption": "drag-lint > Fix with drag-lint (finding at cursor)",
+          "steps": ["Put the caret on a line that shows a drag-lint finding", "Right-click in the editor, open the drag-lint submenu and choose Fix with drag-lint (finding at cursor)", "Answer Yes to apply the fix, No to preview it"]
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-17",
+        "by": "LSP",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "385756770e990c98bb4e3956a564952029cb8600537cbc43385b4c769ba12fba"
       }
     },
     {
@@ -7776,7 +7910,7 @@
         {
           "type": "cli",
           "verb": "unwith",
-          "usage": "drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--build-config <c>] [--no-preprocess] [--json|--format json] - remove with blocks, proved binding by binding",
+          "usage": "drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--exclude-under <dir>]... [--no-backup] [--build-config <c>] [--no-preprocess] [--json|--format json] - remove with blocks, proved binding by binding",
           "flags": [
             {
               "name": "--db",
@@ -7817,6 +7951,10 @@
               "arg": "<L>|none"
             },
             {
+              "name": "--exclude-under",
+              "arg": "<dir>"
+            },
+            {
               "name": "--no-backup"
             },
             {
@@ -7824,7 +7962,7 @@
             }
           ],
           "helpOrder": 62,
-          "help": ["  drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--build-config <c>] [--no-preprocess] [--json|--format json]  - remove with blocks, proved binding by binding"]
+          "help": ["  drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--exclude-under <dir>]... [--no-backup] [--build-config <c>] [--no-preprocess] [--json|--format json]  - remove with blocks, proved binding by binding"]
         },
         {
           "type": "cli",
@@ -9671,10 +9809,10 @@
         }
       ],
       "verified": {
-        "date": "2026-11-14",
+        "date": "2026-11-17",
         "by": "ENGINE",
-        "build": "1.51.0-alpha",
-        "surfaceHash": "3fed63661ec5185cb289f5da1232f7127bbcc92cf38c2a580f5f89fd5461850f"
+        "build": "1.51.1-alpha",
+        "surfaceHash": "7a4fd6b8b6fab859aa5a55d41b215af026bc3752477eeb8b9989430050ad3b9f"
       }
     },
     {
@@ -9951,10 +10089,10 @@
         }
       ],
       "verified": {
-        "date": "2026-11-14",
+        "date": "2026-11-17",
         "by": "ENGINE",
-        "build": "1.51.0-alpha",
-        "surfaceHash": "4eb35ccb6e537d7a30eddb36dc701c08d719573531f8e62de72357743f42c475"
+        "build": "1.51.1-alpha",
+        "surfaceHash": "fc9f774faa288b8c119fb9aa8f725371cfe51ec2d5c3ea1dcec7fd9fbf993cfd"
       }
     },
     {
@@ -21398,6 +21536,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "review-marker-reason-unreviewed"
+      },
+      {
+        "id": "rule.review-marker-remeasured",
+        "title": "review-marker-remeasured",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "dl:ok marker still valid but stamped under the 1.51.0 hash or an older measure algorithm -- re-measured under the v2 hash; re-stamp wi... (review-markers, hint)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule review-marker-remeasured"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "review-marker-remeasured"
       },
       {
         "id": "rule.review-marker-stale",

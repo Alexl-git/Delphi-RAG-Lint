@@ -15,4 +15,4 @@ Only the safe, buffer-checked fixes are offered here (mixed-case-hex, length-zer
 
 ## RAD Studio
 
-Put the caret on the finding's line, then `drag-lint > Code Quality > Fix with drag-lint (finding at cursor)`. Yes applies (all modules are saved first and the engine keeps a backup copy), No previews, Cancel does nothing.
+Put the caret on the finding's line, then right-click in the editor, open the drag-lint submenu and choose `Fix with drag-lint (finding at cursor)`. Yes applies (all modules are saved first and the engine keeps a backup copy), No previews, Cancel does nothing.

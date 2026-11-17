@@ -370,15 +370,15 @@ begin
   Writeln('       the DB base name for indexes built before 1.18.0); an entry goes when its set empties; untagged legacy entries keep the old rules');
   Writeln('  drag-lint doc-forget --scope <file.pas|dir> (--project <Tag> [--rename <Tag>=<New>] | --untagged | --list-tags) [--apply|--no-backup]   - reap project tags on inbound doc facts');
   Writeln('     --project removes that tag (entries whose set empties go); --rename <Tag>=<New> renames it and alone is enough (its left side names the tag; if --project is also given it must match); --untagged drops untagged entries in blocks that carry tags; --list-tags counts every tag in scope. Dry run unless --apply');
-  Writeln('  drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--methods <csv>] [--tostring rtti|case] [--db PATH] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]  - generate a Byte-family record helper for an enum');
+  Writeln('  drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--no-compile-gate] [--methods <csv>] [--tostring rtti|case] [--db PATH] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]  - generate a Byte-family record helper for an enum');
   Writeln('     --methods tobyte,frombyte,tointeger,frominteger,tostring,fromstring (default: all 6); --tostring rtti (default, RTTI GetEnumName) or case (explicit case statement)');
   Writeln('     idempotent: a helper for the enum already indexed anywhere -> action=exists, no edit');
   Writeln('  drag-lint helpers-of <T> [--json] --db <db>   - list record/class helper edges targeting type T anywhere in the index');
   Writeln('  drag-lint find-unit --name <Symbol> --in <file> [--json|--apply|--no-backup] --db <db>  - add the declaring unit to uses');
   Writeln('  drag-lint safe-delete --name <QName> [--json|--apply|--no-backup] --db <db>   - delete a symbol iff it has zero references');
-  Writeln('  drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]  - pull a statement run into a new method');
+  Writeln('  drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--no-compile-gate] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]  - pull a statement run into a new method');
   Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
-  Writeln('  drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--build-config <c>] [--no-preprocess] [--json|--format json]  - remove with blocks, proved binding by binding');
+  Writeln('  drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--exclude-under <dir>]... [--no-backup] [--build-config <c>] [--no-preprocess] [--json|--format json]  - remove with blocks, proved binding by binding');
   Writeln('  drag-lint compile-check <target.dproj|.pas> [--project <X.dproj>] [--db PATH] [--format json|text]   (no --db: caches only into the project''s unique manifest owner, else reports uncached; no index is required, the compile and report still run; exit 1 iff an Error finding)');
   Writeln('  drag-lint exception-facts (--target <routine> | --name <Type>) --db <db> [--json]   (which routine raises and handles which exception type; one row per site; no ancestry, no callers: ask exception-paths walks those)');
   Writeln('  drag-lint refresh-findings --project <X.dproj> [--db <db>] [--full] [--json]   (recompile stale units + refresh compiler_findings; >=2 stale -> full build; no --db = the project''s own DB)');
@@ -526,6 +526,8 @@ begin
   Writeln('       see wiki page: convert-apply-migrate');
   Writeln('  drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--methods <csv>] [--tostring rtti|case] [--db PATH] - generate a Byte-family record helper for an enum');
   Writeln('       see wiki page: Create-helper-class');
+  Writeln('  drag-lint create-enum-helper --qname <TEnum> --db <db> --apply [--project <X.dproj> | --no-compile-gate] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-backup]');
+  Writeln('       see wiki page: fixer-compile-gate');
   Writeln('  drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--hub-surface | --no-hub-surface] [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--ctor-wide] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\TEMP\draglint_cyclefix_<pid>\, deleted at exit unless a ' +
     'message of the run cites a file in it, then kept and named on stderr; --shadow-out names another, never deleted) and builds the project (msbuild /p:Config=Debug for --platform, default the project''s active platform, else win32) unless --no-compile, exit 0 mechanical / 1 refused / 2 error; --apply writes it (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 written and verified (or written with --no-reindex, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified / 2 error: a write or build failed part-way (rolled back, project not changed, or the rollback failure is named) or bad flags; a rollback restores the sources, not the DCUs the failed build wrote: rebuild ' +
     'after a rollback; --apply --no-compile is exit 2; --rsvars <path> = the Studio build environment the compile gate calls (default: the Studio the registry or BDS names; forwarded to every --part all iteration; a missing file is exit 2); --build-timeout <s> = whole seconds one build may take (default 0 = no limit; forwarded to every --part all iteration; anything but a whole number >= 0 is exit 2); a stand-down request (drag-lint shutdown --db <db>, or the IDE''s Cancel) kills the build, rolls an --apply back and exits 1 ("cancelled -- rolled back"); --part all needs --apply, refuses --no-reindex; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a "Fix it" block per group (the exact --fix dry-run and --apply commands; --project ' +
@@ -536,6 +538,8 @@ begin
   Writeln('       see wiki page: Document-it');
   Writeln('  drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced[=norefcount]] [--retype-consumer <Routine>.<param>] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]');
   Writeln('       see wiki page: extract-interface');
+  Writeln('  drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> --apply [--project <X.dproj> | --no-compile-gate] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-backup]');
+  Writeln('       see wiki page: fixer-compile-gate');
   Writeln('  drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff] (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5). Exit 0 also when YADF declines the file (its content guard leaves it unchanged; prints "Declined: <file>", not a failure))');
   Writeln('       see wiki page: Format-with-YADF');
   Writeln('  drag-lint gain [--since yyyy-mm-dd] [--json]');
@@ -560,7 +564,7 @@ begin
   Writeln('       see wiki page: redundant-cast-fix');
   Writeln('  drag-lint lint --fix --fix-rule with-statement --db <db> [--in <f.pas> [--fix-line <L>]] [--apply --project <X.dproj>] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <db>|none] [--no-backup] [--json]');
   Writeln('       see wiki page: unwith');
-  Writeln('  drag-lint lint <file.pas> [--rule index-possibly-out-of-range] [--fix --fix-rule index-possibly-out-of-range [--apply]] (default ON, category bug-patterns, warning; hint on an unguarded parameter or a lookup-derived index; param exception_class; the autofix is manual only: a batch --fix withholds it, --fix-rule applies it; rules --json carries fix_manual_only: true)');
+  Writeln('  drag-lint lint <file.pas> [--rule index-possibly-out-of-range] [--fix --fix-rule index-possibly-out-of-range [--apply]] (default OFF in 1.52, category bug-patterns, warning; hint on an unguarded parameter or a lookup-derived index; param exception_class; the autofix is manual only: a batch --fix withholds it, --fix-rule applies it; rules --json carries fix_manual_only: true)');
   Writeln('       see wiki page: index-possibly-out-of-range');
   Writeln('  drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]');
   Writeln('       ^ A second --db is the library slot, not another project: to judge a dl:ok on a dl:shared unit use --shared-db.');
@@ -1175,7 +1179,7 @@ begin
   end;
   if pVerb = 'create-enum-helper' then
   begin
-    Writeln('  drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--methods <csv>] [--tostring rtti|case] [--db PATH] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]  - generate a Byte-family record helper for an enum');
+    Writeln('  drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--no-compile-gate] [--methods <csv>] [--tostring rtti|case] [--db PATH] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]  - generate a Byte-family record helper for an enum');
     Writeln('     --methods tobyte,frombyte,tointeger,frominteger,tostring,fromstring (default: all 6); --tostring rtti (default, RTTI GetEnumName) or case (explicit case statement)');
     Writeln('     idempotent: a helper for the enum already indexed anywhere -> action=exists, no edit');
     Exit;
@@ -1197,7 +1201,7 @@ begin
   end;
   if pVerb = 'extract-method' then
   begin
-    Writeln('  drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]  - pull a statement run into a new method');
+    Writeln('  drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--no-compile-gate] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]  - pull a statement run into a new method');
     Exit;
   end;
   if pVerb = 'find-deadcode' then
@@ -1207,7 +1211,7 @@ begin
   end;
   if pVerb = 'unwith' then
   begin
-    Writeln('  drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--build-config <c>] [--no-preprocess] [--json|--format json]  - remove with blocks, proved binding by binding');
+    Writeln('  drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--exclude-under <dir>]... [--no-backup] [--build-config <c>] [--no-preprocess] [--json|--format json]  - remove with blocks, proved binding by binding');
     Exit;
   end;
   if pVerb = 'compile-check' then

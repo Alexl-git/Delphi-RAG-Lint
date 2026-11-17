@@ -4,7 +4,7 @@ title: Thread lifetime lint rules (v151 THR-A)
 summary: Six thread-lifetime lint rules (anonymous thread, Synchronize in destructor, Terminated, FreeOnTerminate, threadvar, Queue nil) plus FreeAndNil coverage
 product: DL
 group: linting
-order: 30056
+order: 30057
 since: 1.51.0-alpha
 status: shipped
 updated: 1.51.1-alpha
