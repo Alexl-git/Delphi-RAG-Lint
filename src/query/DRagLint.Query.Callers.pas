@@ -881,6 +881,7 @@ function UsageBucketOf(const ARef: TReference): string;
 begin
   if ARef.Kind      = 'read'          then Result:= 'reads'
   else if ARef.Kind = 'write'         then Result:= 'writes'
+  else if ARef.Kind = REF_KIND_WRITE_THROUGH then Result:= 'writes'   { 1.52 EXTP H2 }
   else if ARef.Kind = 'type_use'      then Result:= 'types'
   else if ARef.Kind = 'attribute'     then Result:= 'attributes'
   else if ARef.Kind = 'event-binding' then Result:= 'events'

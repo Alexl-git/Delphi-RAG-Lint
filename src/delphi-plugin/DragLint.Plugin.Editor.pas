@@ -818,6 +818,7 @@ uses
   , DragLint.Plugin.JobQueue
   , DragLint.Plugin.ExeResolver
   , DragLint.Plugin.Reports
+  , DragLint.Plugin.Cmd152
   , DragLint.Plugin.ConvertLaunch
   , DragLint.Plugin.Bookmarks // dl:unit DragLint.Plugin.Bookmarks accepted -- GBookmarkNavigate / GBookmarkPick are the hooks this unit assigns at wizard init, the GButterflyNav pattern
   , DragLint.Plugin.CycleFix // dl:unit DragLint.Plugin.CycleFix accepted -- CYCLE_FIX_TIMEOUT_MS is the one plugin cycle-fix time limit; a second copy here is what let it drift (see StructureForm)
@@ -7666,6 +7667,16 @@ begin
   AddWrappedItem(SubMaint, 'Library Drift Check...'      , InvokeLibraryDrift  );
   AddWrappedItem(SubMaint, 'Shrink Index (purge locals)...', InvokePurgeLocals );
   AddWrappedItem(SubMaint, 'Migrate Index DBs to _D-RAG...', InvokeMigrateDbs  );
+
+  { 1.52 command table (lane PLUGFRAME): each 1.52 command lives in its own
+    DragLint.Plugin.Cmd.<X> unit and is placed here, HIDDEN until its lane
+    enables it. Items go through AddWrappedItem, so GMenuItems / GWrappers
+    stay the one owner and teardown path. Do not add 1.52 items above. }
+  BuildCmd152Menu(RootMenu, Cmd152Table,
+    function(AParent: TMenuItem; const ACaption: string; AClick: TCmd152Click): TMenuItem
+    begin
+      Result:= AddWrappedItem(AParent, ACaption, AClick);
+    end);
 
   { ---- Compile & Analysis (daily use) ---- }
   AddSeparator(RootMenu);

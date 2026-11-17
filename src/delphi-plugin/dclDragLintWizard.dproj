@@ -176,6 +176,13 @@
         <DCCReference Include="..\charts\DRagLint.Charts.DocInsight.pas"/>
         <DCCReference Include="DragLint.Plugin.ReportText.pas"/>
         <DCCReference Include="DragLint.Plugin.Reports.pas"/>
+        <DCCReference Include="DragLint.Plugin.Cmd152.pas"/>
+        <DCCReference Include="DragLint.Plugin.Cmd.CheckInit.pas"/>
+        <DCCReference Include="DragLint.Plugin.Cmd.DisableRule.pas"/>
+        <DCCReference Include="DragLint.Plugin.Cmd.IdxRange.pas"/>
+        <DCCReference Include="DragLint.Plugin.Cmd.FixMarker.pas"/>
+        <DCCReference Include="DragLint.Plugin.Cmd.FieldRepo.pas"/>
+        <DCCReference Include="DragLint.Plugin.Cmd.ExtractConst.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

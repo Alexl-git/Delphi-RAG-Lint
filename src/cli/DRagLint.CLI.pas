@@ -282,6 +282,10 @@ uses
   , DRagLint.CLI.ConsumerDbs { ResolveConsumerDbs + platform detection + project index auto-create (v1511 SPLIT) }
   , DRagLint.CLI.Convert { proptree / convert-validate / -reemit / -scaffold / glyph-vacuum verbs (v1511 SPLIT) }
   , DRagLint.CLI.ConvertApply { convert-apply verb (v1511 SPLIT) }
+  , DRagLint.CLI.CheckInit { check-init verb (1.52 FRAME; lane HBSKEL) }
+  , DRagLint.CLI.Repo { repo verb family (1.52 FRAME; lane TTE) }
+  , DRagLint.CLI.Explain { explain verb (1.52 FRAME; lane EXPLAIN) }
+  , DRagLint.CLI.RuleScope { rules disable / enable (1.52 FRAME; lane DISRULE) }
   , DRagLint.CLI.Compare { compare verb (v1511 SPLIT) }
   , DRagLint.CLI.MigrateDbs { migrate-dbs verb + the manifest pair rule (v1511 SPLIT) }
   , DRagLint.CLI.Workspace { workspace / forms-csv / menu-tree / menu-drift verbs (v1511 SPLIT) }
@@ -976,7 +980,10 @@ begin
 
   // Optional subcommand: ParamStr(2) if it doesn't start with '--'.
   i:= 2;
-  if MatchText(Result.Command, ['query', 'export', 'workspace', 'selftest', 'manifest']) and (ParamCount >= 2) then
+  { 1.52 FRAME: check-init <QName>, repo <sub-verb>, explain <rule-id>, rules disable|enable (only
+    those two words: every other `rules` argument keeps its old meaning) }
+  if (MatchText(Result.Command, ['query', 'export', 'workspace', 'selftest', 'manifest', 'check-init', 'repo', 'explain'])
+      or ((Result.Command = 'rules') and MatchText(ParamStr(2), ['disable', 'enable']))) and (ParamCount >= 2) then
   begin
     A:= ParamStr(2);
     { `not StartsWith('--')` is what made `drag-lint query -h` take '-h' as the
@@ -1613,6 +1620,34 @@ begin
     end
     else if A = '--since' then Result.DocSince:= True
     else if A = '--migrate-pure' then Result.DocMigratePure:= True
+    { 1.52 FRAME F2: flags of check-init, repo, explain and rules disable / enable (verbs in their own units) }
+    else if (A = '--scope') and (Result.Command = 'rules') and (i < ParamCount) then  // dl:ok duplicate-code@e071 -- REVIEWED 2026-11-17 v152 FRAME: the ParseArgs one-value flag arm shape every sibling arm repeats; folding it is a ParseArgs refactor, not this lane
+    begin
+      Inc(i);
+      Result.RuleScope:= ParamStr(i);
+    end
+    else if (A = '--reason') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.Reason:= ParamStr(i);
+    end
+    else if (A = '--at') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.At:= ParamStr(i);
+    end
+    else if A = '--explain' then Result.HbExplain:= True
+    else if (A = '--max-routines') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.MaxRoutines:= StrToIntDef(ParamStr(i), -1);
+    end
+    else if (A = '--repo') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.RepoPath:= ParamStr(i);
+    end
+    else if A = '--replace' then Result.Replace:= True
     else if (A = '--scope') and (i < ParamCount) then
     begin
       Inc(i);
@@ -6779,10 +6814,10 @@ begin
       if Length(RunLibs) = 0 then
         RunLibs:= ManifestLibraryStores(LibRun.Wanted, AArgs.CheckPlatform, IdxDproj, ResolvedDb, Store, IdxResolveGate);
       { v1511 F3: a DB resolved against a library before (external_stores meta) re-resolved
-        with none -- typically a copy outside the manifest -- loses every external_target.
-        Say so; the behaviour is unchanged. }
+        with none -- typically a copy outside the manifest. 1.52 EXTR: the library bindings of the last
+        library run are KEPT (not refreshed); say so. }
       if (Length(RunLibs) = 0) and (Store.GetMetaValue('external_stores') <> '') then
-        Writeln(ErrOutput, 'WARNING: index: no library store attached: external targets will be cleared; pass --library-db <library.sqlite>.');
+        Writeln(ErrOutput, 'WARNING: index: no library store attached: library bindings are kept from the last library run, not refreshed; pass --library-db <library.sqlite>.');
       Stage('', 'calls', procedure begin ResolveCallsClearingFirst(Store, ClearEdgesInPass, RunLibs); end); { v14 (D5) + v21 cross-DB }
       Stage('', 'dispatch', procedure begin Store.ResolveDispatch(RunLibs); end); { 2026-10-26: libraries only recognise a library `class of` param type }
     end
@@ -14782,6 +14817,21 @@ begin
     end);
 end;
 
+/// <summary>1.52 D1 "Disable in this unit": drops the findings whose rule the project lint config
+/// excludes in the finding's unit (`"rule_overrides": { "<rule>": { "exclude_units": [...] } }`).</summary>
+/// <param name="ACfg">The run's lint config; no rule_overrides keeps every finding.</param>
+/// <param name="AFindings">The lint / lint-all findings.</param>
+/// <returns>AFindings without those for which ACfg.IsRuleExcludedInUnit(RuleId, FilePath) is True;
+/// a finding without a file path is always kept.</returns>
+/// <remarks>Shared by DoLint and DoLintAll so both paths honour the same unit scope.</remarks>
+function DropUnitExcludedFindings(const ACfg: TLintConfig; const AFindings: TArray<TLintFinding>): TArray<TLintFinding>;
+begin
+  if Length(ACfg.RuleOverrides) = 0 then Exit(AFindings);
+  Result:= nil;
+  for var F: TLintFinding in AFindings do
+    if (F.FilePath = '') or not ACfg.IsRuleExcludedInUnit(F.RuleId, F.FilePath) then Result:= Result + [F];
+end;
+
 function DoLint(const AArgs: TArgs): Integer;
 var
   Linter      : DRagLint.Lint.Linter.TLinter;
@@ -15769,6 +15819,7 @@ begin
                   and SameText(TPath.GetFullPath(F.FilePath), TPath.GetFullPath(EffPath))) then FragKept:= FragKept + [F];
         Findings:= FragKept;
       end;
+      Findings:= DropUnitExcludedFindings(Cfg, Findings);   { 1.52 D1 unit-scope rule_overrides }
       { Free cached tree after single-file lint }
       TraceLintChecker('after-checkers');
       DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
@@ -20850,6 +20901,7 @@ begin
     configured glob. Pinned by
     tests\autotest\run_lintall_project_rules_honour_exclude_paths.ps1. }
   Findings:= DropUsesFragmentParseErrors(Store, Findings);   { 152c lane INCR (M4) }
+  Findings:= DropUnitExcludedFindings(Cfg, Findings);         { 1.52 D1 unit-scope rule_overrides }
   LintPhase(Format('exclude_paths filter (%d findings)', [Length(Findings)]));
   begin
     var ExclMemo: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
@@ -28906,7 +28958,11 @@ begin
     end
     else if Args.Command = 'warm-rule-cache' then Result:= DoWarmRuleCache(Args)
     else if Args.Command = 'query'             then Result:= DoQuery           (Args)
+    else if (Args.Command = 'rules') and MatchText(Args.SubCommand, ['disable', 'enable']) then Result:= RunRuleScope(LowerCase(Args.SubCommand), Args.Rule, Args.RuleScope, Args.InFile, Args.RefLine, Args.Reason, Args.ProjectPath, Args.ConfigPath, Args.AsJson or SameText(Args.Format, 'json')) { 1.52 FRAME: DRagLint.CLI.RuleScope }
     else if Args.Command = 'rules'             then Result:= DoRules           (Args)
+    else if Args.Command = 'check-init'        then Result:= RunCheckInit(if Args.SubCommand <> '' then Args.SubCommand else Args.QName, Args.At, Args.DbPath, Args.ProjectPath, Args.AsJson or SameText(Args.Format, 'json'), Args.HbExplain, Args.MaxRoutines) { 1.52 FRAME: DRagLint.CLI.CheckInit }
+    else if Args.Command = 'repo'              then Result:= RunRepoVerb(Args.SubCommand, Args.RepoPath, Args.ProjectPath, Args.FbConnection, Args.InFile, Args.Output, Args.Replace, Args.AsJson or SameText(Args.Format, 'json')) { 1.52 FRAME: DRagLint.CLI.Repo }
+    else if Args.Command = 'explain'           then Result:= RunExplain(if Args.SubCommand <> '' then Args.SubCommand else Args.Rule, Args.RulesDir, Args.AsJson or SameText(Args.Format, 'json')) { 1.52 FRAME: DRagLint.CLI.Explain }
     else if Args.Command = 'lint'              then Result:= DoLint            (Args)
     else if Args.Command = 'allow'             then Result:= DoAllow           (Args)
     else if Args.Command = 'export'            then Result:= DoExport          (Args)

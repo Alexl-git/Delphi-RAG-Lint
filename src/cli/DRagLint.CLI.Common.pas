@@ -532,6 +532,17 @@ type
     UpdateDoc     : Boolean; // --update-doc (with --in/--line)
     SnapshotDir   : string ; // --snapshot-dir <dir>
     CompareOutRoot: string ; // --out-root <dir>  (compare: where the rerun's per-run bundle folder is made; '' = %TEMP%\drag-lint-reports)
+    // 1.52 FRAME F2: flags of the verbs check-init, repo, explain and rules disable / enable.
+    // The verb itself lives in its own unit (DRagLint.CLI.CheckInit / .Repo / .Explain / .RuleScope);
+    // --in/--file (InFile), --line (RefLine), --rule, --project, --config, --connection (FbConnection),
+    // --output, --rules-dir, --json and --format are the existing fields.
+    At          : string ; // --at <file>:<line>[:<col>]  (check-init target by position)
+    HbExplain   : Boolean; // --explain  (check-init: roots and reasons in the answer)
+    MaxRoutines : Integer; // --max-routines N  (check-init budget; 0 = absent / the verb's default, -1 = not a number)
+    RepoPath    : string ; // --repo <file.dlrepo>  (repo verbs; '' = derived from --project)
+    Replace     : Boolean; // --replace  (repo import-fb / restore)
+    RuleScope   : string ; // --scope line|unit|project  (rules disable / enable only; other verbs keep DocForgetScope)
+    Reason      : string ; // --reason "<text>"  (rules disable: stored beside the entry)
   end; // record
 
   /// <summary>The post-apply refresh of the unit's project index (C9,

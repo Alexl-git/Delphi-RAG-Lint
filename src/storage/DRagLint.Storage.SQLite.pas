@@ -12632,6 +12632,9 @@ begin
       if (ExtF <> nil) and not ExtF.IsNull then R.ExternalTarget:= ExtF.AsString;
       var XkF: TField:= Q.FindField('external_kind');
       if (XkF <> nil) and not XkF.IsNull then R.ExternalKind:= XkF.AsString;
+      { 1.52 EXTR H2: the receiver's type text rides along too (same FindField guard). }
+      var RttF: TField:= Q.FindField('receiver_type_text');
+      if (RttF <> nil) and not RttF.IsNull then R.ReceiverTypeText:= RttF.AsString;
       List.Add(R);
       Q.Next;
     end;
@@ -18086,6 +18089,9 @@ var
   FldLine: TField    ;
   FldCol : TField    ;
 begin
+  { 1.52 EXTR H1: a no-library pass keeps the library reads of the last library run -- the bulk
+    UPDATE below would clear every one of them with nothing to put back. }
+  if (AResolver = nil) or not AResolver.HasLibraryStore then Exit;
   Suffix:= '';
   if AScopeWhere <> '' then Suffix:= Suffix + ' AND (' + AScopeWhere + ')';
   if AStaleWhere <> '' then Suffix:= Suffix + ' AND (' + AStaleWhere + ')';
@@ -18559,8 +18565,9 @@ const
 begin
   if Length(AExtraStores) = 0 then
   begin
-    if not AScoped then FConn.ExecSQL('DELETE FROM schema_meta WHERE key = ''external_stores''')
-    else
+    { 1.52 EXTR H4: an unscoped pass without stores used to delete the key; since the rows now
+      keep their stored library targets (KeepStoredExternal, ResolveLibraryReadRefs) the key is
+      marked partial instead, exactly like the scoped case below. AScoped is kept for callers. }
     begin
       { 149 IC, the history hole: a scoped pass WITHOUT stores re-resolved some refs with no
         library, so the key no longer describes every row. Mark it partial (readers that only
@@ -19428,6 +19435,16 @@ begin
       ResolveWriteRefs(Resolver, ScopeWhere, StaleWhere, WriteCandidates, WriteBound);
       Resolver.ProfEnd(cpsStreamWrite, PfMark);
       TWrites:= (TStopwatch.GetTimeStamp - TMark) / TStopwatch.Frequency;
+      { 1.52 EXTP H3: a write-through ref takes the symbol the read / member-access ref on the SAME
+        token was bound to by the streams above (no binding of its own; NULL when that one is unbound). }
+      begin
+        var WtSuffix: string:= '';
+        if ScopeWhere <> '' then WtSuffix:= WtSuffix + ' AND (' + ScopeWhere + ')';
+        if StaleWhere <> '' then WtSuffix:= WtSuffix + ' AND (' + StaleWhere + ')';
+        FConn.ExecSQL('UPDATE refs SET symbol_id = (SELECT r2.symbol_id FROM refs r2 WHERE r2.file_id = refs.file_id ' +
+          'AND r2.start_line = refs.start_line AND r2.start_col = refs.start_col AND r2.kind IN (''read'', ''member-access'') ' +
+          'AND r2.symbol_id IS NOT NULL ORDER BY r2.id LIMIT 1) WHERE refs.kind = ''' + REF_KIND_WRITE_THROUGH + '''' + WtSuffix);  // dl:ok sql-injection-concat -- REVIEWED 2026-11-17 (1.52 INT): WtSuffix is SQL this pass BUILT (the same ScopeWhere / StaleWhere predicates ResolveLibraryReadRefs appends), never user text
+      end;
       { 150-RS2 (2): after every member_accesses writer, before the derived streams. }
       var ArgCandidates, ArgStored: Int64;
       PfMark:= Resolver.ProfBegin(cpsStreamArgUses); { 151 PF }

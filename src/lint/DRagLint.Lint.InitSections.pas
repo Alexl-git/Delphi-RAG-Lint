@@ -114,6 +114,66 @@ type
 /// net once a later uses change reverses a proved order.</remarks>
 function ProveInitOrderInversion(const AStore: ISymbolStore; const AConsumer, ADeclaring: string): TInitOrderProof;
 
+type
+  /// <summary>Lane INITAPI (1.52): one unit at its place in a program's initialization order.</summary>
+  TProgramInitUnit = record
+    Name   : string;  { as declared }
+    FileId : Int64;
+    UnitId : Int64;   { the unit symbol }
+    InitId : Int64;   { the initialization section symbol, 0 when the unit has none }
+    FinalId: Int64;   { the finalization section symbol, 0 when the unit has none }
+  end;
+
+  /// <summary>Lane INITAPI (1.52): the order one program initializes its units in -- the computed order of this
+  /// unit's header, the same one init-order-hazard and finalization-after-dependency walk.</summary>
+  /// <remarks>Units: first initialized first; finalization runs in reverse. Unreliable: some uses entry of the
+  /// program or of a unit in Units comes from an include or sits in a conditional region, so another
+  /// configuration may order the units differently; UnreliableReason names the first such site ('file:line').</remarks>
+  TProgramInitOrder = record
+    ProgramFileId   : Int64;
+    ProgramName     : string;  { the program file's name, e.g. 'App.dpr' }
+    ProgramBlockId  : Int64;   { the program symbol whose body is the main block, 0 when not indexed }
+    Units           : TArray<TProgramInitUnit>;
+    Unreliable      : Boolean;
+    UnreliableReason: string;
+  end;
+
+  /// <summary>Lane INITAPI (1.52, ruling B9a): the answer of InitializesBefore.</summary>
+  /// <remarks>ioaUnplaced: no program of the question places both units (unknown or ambiguous name, no program,
+  /// a package). ioaBefore: yes. ioaNotBefore: no (B first, or A = B). ioaConfigDependent: the answer of the
+  /// index's configuration rests on a conditional or include-borne uses entry.</remarks>
+  TInitOrderAnswer = (ioaUnplaced, ioaBefore, ioaNotBefore, ioaConfigDependent);
+
+  /// <summary>Lane INITAPI (1.52): the answer of InitializesBefore with its one-line evidence.</summary>
+  TInitOrderVerdict = record
+    Answer: TInitOrderAnswer;
+    Text  : string;
+  end;
+
+/// <summary>Lane INITAPI (1.52, happens-before lane ROOTS step 1): the initialization order of every program of
+/// the index, as the init-order rules compute it.</summary>
+/// <param name="AStore">The project index; nil yields none.</param>
+/// <returns>One entry per program file (a file with a program uses clause), in GetAllFileIds order; a unit no
+/// program reaches, or whose name the index holds twice, is in no entry.</returns>
+/// <remarks>Not thread-safe; reads the index once per call. Nothing is cached between calls.</remarks>
+function ProgramInitOrders(const AStore: ISymbolStore): TArray<TProgramInitOrder>;  // dl:ok unused-public-symbol@04c9 -- REVIEWED 2026-11-17: 1.52 API for lanes HBROOTS and FINCUT (merge after INITAPI); today only tests\fixtures\v152-initapi\InitApiHarness.dpr calls it
+
+/// <summary>Lane INITAPI (1.52, ruling B9a): does AUnitA initialize before AUnitB in AProgram?</summary>
+/// <param name="AStore">The project index; nil answers ioaUnplaced.</param>
+/// <param name="AProgram">The program file name ('App.dpr') or its base name ('App'), any case; '' asks every
+/// program of the index that places both units.</param>
+/// <param name="AUnitA">The unit asked about (any case).</param>
+/// <param name="AUnitB">The unit it is compared with (any case).</param>
+/// <returns>ioaBefore / ioaNotBefore with the positions as evidence ("in `App.dpr` `A` (position 1) ..."),
+/// ioaConfigDependent naming the deciding 'file:line', or ioaUnplaced with the reason. With AProgram = '':
+/// ioaBefore only when every program placing both says before; ioaConfigDependent when any of them is
+/// config-dependent; else ioaNotBefore naming a program where A does not come first.</returns>
+/// <remarks>Not thread-safe; reads the index once per call. Sound subset, default refuse: the deciding files are
+/// the program and every unit placed at or before the later of the two, plus every unit whose uses reach either
+/// (a DFS ancestor placed after them); a conditional or include-borne uses entry in any of them answers
+/// ioaConfigDependent. Without the pp_regions facts every answer is ioaConfigDependent.</remarks>
+function InitializesBefore(const AStore: ISymbolStore; const AProgram, AUnitA, AUnitB: string): TInitOrderVerdict;  // dl:ok unused-public-symbol@5b89 -- REVIEWED 2026-11-17: 1.52 API for lanes HBROOTS and FINCUT (merge after INITAPI); today only tests\fixtures\v152-initapi\InitApiHarness.dpr calls it
+
 implementation
 
 uses
@@ -128,6 +188,8 @@ uses
 
 const
   KIND_UNIT  = 'unit';
+  KIND_PROGRAM = 'program';
+  USES_KEYWORD_PATTERN = '(^|[^\w.])uses\b';
   REF_WRITE  = 'write';
   REF_CALL   = 'call';
   ALLOCATING_INTRINSICS: array[0..2] of string = ('New', 'GetMem', 'SetLength');
@@ -1556,8 +1618,9 @@ begin
 end;
 
 { Lane CYC3: 'file:line' of the first uses entry of AFileId that comes from an include or sits in a conditional
-  region (a pp_regions branch overlapping a uses clause, from its first entry to one line past its last, so an
-  inactive branch between or after the entries counts too); '' when there is none. }
+  region (a pp_regions branch overlapping a uses clause, from its `uses` keyword -- lane INITAPI; was its first
+  entry -- to one line past its last, so an inactive branch before, between or after the entries counts too); ''
+  when there is none. }
 function OrderDependsOnConfig(const AStore: ISymbolStore; AFileId: Int64): string;
 begin
   Result:= '';
@@ -1568,6 +1631,7 @@ begin
   if Length(Rows) = 0 then Exit;
   if not AStore.HasFileFacts then Exit(Format('%s (the index has no conditional-region facts: reindex)', [Name]));
   var Regions:= AStore.GetPpRegions(AFileId);
+  var Lines: TArray<string>:= nil;
   for var Sect:= Low(TUnitUseSection) to High(TUnitUseSection) do
   begin
     var Lo:= MaxInt;
@@ -1578,6 +1642,20 @@ begin
         Lo:= Min(Lo, R.StartLine);
         Hi:= Max(Hi, R.EndLine + 1);
       end;
+    // Lane INITAPI: a branch BEFORE the first active entry (an inactive IFDEF entry on its own line, then W) belongs
+    // to the clause too: widen Lo back to the line of the `uses` keyword.
+    if (Hi > 0) and (Length(Regions) > 0) then
+    begin
+      if Lines = nil then
+        try
+          Lines:= TFile.ReadAllLines(AStore.GetFilePath(AFileId));
+        except
+          on EInOutError do Lines:= nil;  { EFileNotFoundException / EDirectoryNotFoundException too }
+        end;
+      var L:= Min(Lo, Length(Lines));
+      while (L >= 1) and not TRegEx.IsMatch(Lines[L - 1], USES_KEYWORD_PATTERN, [roIgnoreCase]) do Dec(L);
+      if L >= 1 then Lo:= L;
+    end;
     for var G in Regions do
       if (Hi > 0) and (G.StartLine <= Hi) and (G.EndLine >= Lo) then Exit(Format('%s:%d', [Name, G.StartLine]));
   end;
@@ -1663,7 +1741,8 @@ begin
         for var Order in Orders do
           if Order[KB] > Order[KA] then
           begin
-            var Entry:= Roots[KA];
+            var Entry: string;
+            if not Roots.TryGetValue(KA, Entry) then Entry:= KB;
             var EntryNode: TUnitNode;
             if Graph.Units.TryGetValue(Entry, EntryNode) then Entry:= EntryNode.Name;
             Result.Text:= Format('in `%s` `%s` (position %d) initializes before `%s` (position %d)%s: list `%s` ' +
@@ -1696,6 +1775,163 @@ begin
       else 'init order: ' + First + (if Length(Programs) > 1 then Format(', and so in %d other programs',
       [Length(Programs) - 1]) else '') + '. This holds for this uses order; the lint rule `init-order-hazard` ' +
       'reports it if a later uses change reverses it.';
+  finally
+    Graph.Free;
+  end;
+end;
+
+{ Lane INITAPI: lower-case unit -> position, as a sorted unit list. }
+function UnitsInOrder(AOrder: TDictionary<string, Integer>): TArray<string>;
+begin
+  SetLength(Result, AOrder.Count);
+  for var Pair in AOrder do Result[Pair.Value]:= Pair.Key;
+end;
+
+{ Lane INITAPI: the program symbol of AFileId (its body is the main block), 0 when not indexed. }
+function ProgramBlockOf(AGraph: TInitGraph; AFileId: Int64): Int64;
+begin
+  Result:= 0;
+  for var S in AGraph.Store.FindSymbolsByKind(KIND_PROGRAM, False, MaxInt) do
+    if S.FileId = AFileId then Exit(S.Id);
+end;
+
+function ProgramInitOrders(const AStore: ISymbolStore): TArray<TProgramInitOrder>;
+begin
+  Result:= nil;
+  if AStore = nil then Exit;
+  var Graph: TInitGraph:= TInitGraph.Create(AStore);
+  try
+    for var P in Graph.ProgramFiles do
+    begin
+      var Entry: TProgramInitOrder:= Default(TProgramInitOrder);
+      Entry.ProgramFileId:= P;
+      Entry.ProgramName:= ExtractFileName(AStore.GetFilePath(P));
+      Entry.ProgramBlockId:= ProgramBlockOf(Graph, P);
+      Entry.UnreliableReason:= OrderDependsOnConfig(AStore, P);
+      var Order:= Graph.ComputeOrder(P);
+      try
+        for var Key in UnitsInOrder(Order) do
+        begin
+          var Node:= Graph.Units[Key];
+          var U: TProgramInitUnit:= Default(TProgramInitUnit);
+          U.Name   := Node.Name;
+          U.FileId := Node.FileId;
+          U.UnitId := Node.UnitId;
+          U.InitId := Node.InitId;
+          U.FinalId:= Node.FinalId;
+          Entry.Units:= Entry.Units + [U];
+          if Entry.UnreliableReason = '' then Entry.UnreliableReason:= OrderDependsOnConfig(AStore, Node.FileId);
+        end;
+      finally
+        Order.Free;
+      end;
+      Entry.Unreliable:= Entry.UnreliableReason <> '';
+      Result:= Result + [Entry];
+    end;
+  finally
+    Graph.Free;
+  end;
+end;
+
+{ Lane INITAPI: the answer for one program whose order places both units. The deciding files: the program, every
+  unit placed at or before the later of the two, and every unit whose uses reach either (a DFS ancestor of a unit
+  placed after them; a unit placed after both that reaches neither was entered after both were placed). }
+function AnswerInProgram(AGraph: TInitGraph; AProgram: Int64; AOrder: TDictionary<string, Integer>;
+  const KA, KB: string): TInitOrderVerdict;
+var
+  Reaches: TDictionary<string, Boolean>;
+begin
+  var Dpr:= ExtractFileName(AGraph.Store.GetFilePath(AProgram));
+  var PA:= AOrder[KA];
+  var PB:= AOrder[KB];
+  var Last:= Max(PA, PB);
+  Reaches:= TDictionary<string, Boolean>.Create;
+  try
+    { reverse reach: a unit of the order whose uses name a unit already known to reach KA or KB }
+    Reaches.Add(KA, True);
+    Reaches.AddOrSetValue(KB, True);
+    var Grew:= True;
+    while Grew do
+    begin
+      Grew:= False;
+      for var Pair in AOrder do
+        if not Reaches.ContainsKey(Pair.Key) then
+          for var Dep in AGraph.UsesOfFile(AGraph.Units[Pair.Key].FileId) do
+            if Reaches.ContainsKey(Dep) then
+            begin
+              Reaches.Add(Pair.Key, True);
+              Grew:= True;
+              Break;
+            end;
+    end;
+    var Site:= OrderDependsOnConfig(AGraph.Store, AProgram);
+    for var Key in UnitsInOrder(AOrder) do
+      if (Site = '') and ((AOrder[Key] <= Last) or Reaches.ContainsKey(Key)) then
+        Site:= OrderDependsOnConfig(AGraph.Store, AGraph.Units[Key].FileId);
+    var A:= AGraph.Units[KA].Name;
+    var B:= AGraph.Units[KB].Name;
+    if Site <> '' then
+    begin
+      Result.Answer:= ioaConfigDependent;
+      Result.Text:= Format('in `%s` the order of `%s` and `%s` depends on a conditional uses entry (`%s`)', [Dpr, A, B, Site]);
+      Exit;
+    end;
+    Result.Answer:= if PA < PB then ioaBefore else ioaNotBefore;
+    Result.Text:= Format('in `%s` `%s` (position %d) initializes %s `%s` (position %d)', [Dpr, A, PA + 1,
+      (if PA < PB then 'before' else if PA = PB then 'as' else 'after'), B, PB + 1]);
+  finally
+    Reaches.Free;
+  end;
+end;
+
+function InitializesBefore(const AStore: ISymbolStore; const AProgram, AUnitA, AUnitB: string): TInitOrderVerdict;
+begin
+  Result:= Default(TInitOrderVerdict);
+  Result.Text:= 'no store';
+  if AStore = nil then Exit;
+  var KA:= LowerCase(AUnitA);
+  var KB:= LowerCase(AUnitB);
+  var Graph: TInitGraph:= TInitGraph.Create(AStore);
+  try
+    if not Graph.Units.ContainsKey(KA) or not Graph.Units.ContainsKey(KB) then
+    begin
+      Result.Text:= Format('`%s` or `%s` has no single place in the initialization order (the index holds that unit ' +
+        'name twice, or not at all)', [AUnitA, AUnitB]);
+      Exit;
+    end;
+    var Answered:= False;
+    var NotBefore: TInitOrderVerdict:= Default(TInitOrderVerdict);
+    var Before: TInitOrderVerdict:= Default(TInitOrderVerdict);
+    var Count:= 0;
+    for var P in Graph.ProgramFiles do
+    begin
+      var FileName:= ExtractFileName(AStore.GetFilePath(P));
+      if (AProgram <> '') and not SameText(AProgram, FileName) and not SameText(AProgram, ChangeFileExt(FileName, ''))
+        then Continue;
+      var Order:= Graph.ComputeOrder(P);
+      try
+        if not (Order.ContainsKey(KA) and Order.ContainsKey(KB)) then Continue;
+        var V:= AnswerInProgram(Graph, P, Order, KA, KB);
+        Answered:= True;
+        Inc(Count);
+        case V.Answer of
+          ioaConfigDependent: Exit(V);
+          ioaNotBefore: if NotBefore.Answer = ioaUnplaced then NotBefore:= V;
+          ioaBefore: if Before.Answer = ioaUnplaced then Before:= V;
+        end;
+      finally
+        Order.Free;
+      end;
+    end;
+    if not Answered then
+    begin
+      Result.Text:= if AProgram = '' then Format('no program of the index initializes both `%s` and `%s`', [AUnitA, AUnitB])
+        else Format('no program `%s` of the index initializes both `%s` and `%s`', [AProgram, AUnitA, AUnitB]);
+      Exit;
+    end;
+    Result:= if NotBefore.Answer <> ioaUnplaced then NotBefore else Before;
+    if (Result.Answer = ioaBefore) and (Count > 1) then
+      Result.Text:= Result.Text + Format(', and so in %d other programs', [Count - 1]);
   finally
     Graph.Free;
   end;

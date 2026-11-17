@@ -1,0 +1,24 @@
+{
+  "id": "v152-extr-resolve",
+  "title": "Resolver fixes in 1.52",
+  "group": "indexing",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.51.1-alpha",
+  "summary": "Generic receivers (TObjectList<T>.Create) typed; index --resolve-only without a library keeps the last library bindings",
+  "intro": "Read this when find-callers misses a call on a generic list, or when an index --resolve-only run without --library-db used to lose every library binding.",
+  "wikiPage": "library-first-resolve",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "index",
+      "example": "drag-lint index --project <X.dproj> --db <file.sqlite> --resolve-only"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-17",
+    "by": "alexanderl",
+    "build": "1.51.1-alpha"
+  }
+}

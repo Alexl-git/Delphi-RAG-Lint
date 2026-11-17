@@ -1,10 +1,11 @@
 unit DRagLint.V151.Dispatch;
 
 { Wave v151 (1.51.0-alpha) lane FRAME: the ONE place that calls the fifteen v151
-  rule-lane units. The CLI hooks call only this unit; the catalog learns the v151
+  rule-lane units and (1.52 FRAME F2) the eleven v152 rule-lane units. The CLI hooks call only this unit; the catalog learns the v151
   rows through TRuleCatalog's provider list (RegisterProviderRules), filled in
   this unit's initialization. The lane order below is fixed and alphabetical:
-  APP CMP DFMA DFMB DS EXC MEM OO RTLCOLL RTLSTR STY THRA THRB TXT TYP.
+  APP CMP DFMA DFMB DS EXC MEM OO RTLCOLL RTLSTR STY THRA THRB TXT TYP, then the
+  v152 lanes APP2 ATLA ATLB DEFAULTS DOCPOL FPS PROJ2 PTW RTTI5 UNCONN XCONST.
   Owned by FRAME; a rule lane never edits it. }
 
 interface
@@ -79,6 +80,17 @@ uses
   , DRagLint.V151.THRB
   , DRagLint.V151.TXT
   , DRagLint.V151.TYP
+  , DRagLint.V152.APP2
+  , DRagLint.V152.ATLA
+  , DRagLint.V152.ATLB
+  , DRagLint.V152.DEFAULTS
+  , DRagLint.V152.DOCPOL
+  , DRagLint.V152.FPS
+  , DRagLint.V152.PROJ2
+  , DRagLint.V152.PTW
+  , DRagLint.V152.RTTI5
+  , DRagLint.V152.UNCONN
+  , DRagLint.V152.XCONST
   ;
 
 type
@@ -130,7 +142,19 @@ begin
     Lane('THRA',    TV151THRARules.Catalog,    TV151THRARules.CheckFile,    TV151THRARules.CheckDfm,    TV151THRARules.CheckRawBytes,    TV151THRARules.CheckProject),
     Lane('THRB',    TV151THRBRules.Catalog,    TV151THRBRules.CheckFile,    TV151THRBRules.CheckDfm,    TV151THRBRules.CheckRawBytes,    TV151THRBRules.CheckProject),
     Lane('TXT',     TV151TXTRules.Catalog,     TV151TXTRules.CheckFile,     TV151TXTRules.CheckDfm,     TV151TXTRules.CheckRawBytes,     TV151TXTRules.CheckProject),
-    Lane('TYP',     TV151TYPRules.Catalog,     TV151TYPRules.CheckFile,     TV151TYPRules.CheckDfm,     TV151TYPRules.CheckRawBytes,     TV151TYPRules.CheckProject)];
+    Lane('TYP',     TV151TYPRules.Catalog,     TV151TYPRules.CheckFile,     TV151TYPRules.CheckDfm,     TV151TYPRules.CheckRawBytes,     TV151TYPRules.CheckProject),
+    // v152 lanes (1.52.0-alpha, FRAME F2): same provider mechanism, alphabetical after the v151 block.
+    Lane('APP2',     TV152APP2Rules.Catalog, TV152APP2Rules.CheckFile, TV152APP2Rules.CheckDfm, TV152APP2Rules.CheckRawBytes, TV152APP2Rules.CheckProject),
+    Lane('ATLA',     TV152ATLARules.Catalog, TV152ATLARules.CheckFile, TV152ATLARules.CheckDfm, TV152ATLARules.CheckRawBytes, TV152ATLARules.CheckProject),
+    Lane('ATLB',     TV152ATLBRules.Catalog, TV152ATLBRules.CheckFile, TV152ATLBRules.CheckDfm, TV152ATLBRules.CheckRawBytes, TV152ATLBRules.CheckProject),
+    Lane('DEFAULTS', TV152DEFAULTSRules.Catalog, TV152DEFAULTSRules.CheckFile, TV152DEFAULTSRules.CheckDfm, TV152DEFAULTSRules.CheckRawBytes, TV152DEFAULTSRules.CheckProject),
+    Lane('DOCPOL',   TV152DOCPOLRules.Catalog, TV152DOCPOLRules.CheckFile, TV152DOCPOLRules.CheckDfm, TV152DOCPOLRules.CheckRawBytes, TV152DOCPOLRules.CheckProject),
+    Lane('FPS',      TV152FPSRules.Catalog, TV152FPSRules.CheckFile, TV152FPSRules.CheckDfm, TV152FPSRules.CheckRawBytes, TV152FPSRules.CheckProject),
+    Lane('PROJ2',    TV152PROJ2Rules.Catalog, TV152PROJ2Rules.CheckFile, TV152PROJ2Rules.CheckDfm, TV152PROJ2Rules.CheckRawBytes, TV152PROJ2Rules.CheckProject),
+    Lane('PTW',      TV152PTWRules.Catalog, TV152PTWRules.CheckFile, TV152PTWRules.CheckDfm, TV152PTWRules.CheckRawBytes, TV152PTWRules.CheckProject),
+    Lane('RTTI5',    TV152RTTI5Rules.Catalog, TV152RTTI5Rules.CheckFile, TV152RTTI5Rules.CheckDfm, TV152RTTI5Rules.CheckRawBytes, TV152RTTI5Rules.CheckProject),
+    Lane('UNCONN',   TV152UNCONNRules.Catalog, TV152UNCONNRules.CheckFile, TV152UNCONNRules.CheckDfm, TV152UNCONNRules.CheckRawBytes, TV152UNCONNRules.CheckProject),
+    Lane('XCONST',   TV152XCONSTRules.Catalog, TV152XCONSTRules.CheckFile, TV152XCONSTRules.CheckDfm, TV152XCONSTRules.CheckRawBytes, TV152XCONSTRules.CheckProject)];
 end;
 
 procedure BuildDecls;
