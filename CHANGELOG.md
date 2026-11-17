@@ -3,6 +3,17 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## v1.51.2-alpha -- date TBD
+
+Hotfix release. No re-parse: extractor, resolver, grammar and rule counts unchanged.
+
+### IDE plugin
+- N5: closing RAD Studio with unsaved changes on the dock's Lint Options tab no longer asks "Save them now?" late
+  and no longer flashes 5-6 IDE error boxes. 1.51.1 asked and saved from the frame's destructor, after the IDE had
+  started freeing its services. At IDE shutdown the unsaved changes are now discarded without a prompt (one
+  OutputDebugString line); Save on the tab (now "Save *" while unsaved) is the way to keep them. Reload still asks
+  first. Decision in `DragLint.Plugin.UnsavedPolicy` (tests\UnsavedPolicyTests.dpr, 11 checks).
+
 ## v1.51.1-alpha -- date TBD
 
 Bug-fix release (wave v1511, 25 lanes). 423 rules, 341 enabled by default, 125 with an auto-fix (unchanged; no

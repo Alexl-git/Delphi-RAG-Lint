@@ -644,6 +644,7 @@ uses
   , ToolsAPI
 
   , DragLint.Plugin.Settings
+  , DragLint.Plugin.UnsavedPolicy
   , DRagLint.Lint.ConfigWriter
   , DragLint.Plugin.ExeResolver
   
@@ -1148,15 +1149,11 @@ destructor TLintOptionsFrame.Destroy;
 begin
   { Only holds references to VCL-owned checkboxes/edits; free the maps, not
     the controls themselves (owned by Self / their parent GroupBox). }
-  { B-OWN2: no Cancel is possible while the frame is being destroyed, so ask Yes/No. }
-  if FDirty and FHasData then
-  try
-    if MessageDlg('Lint Options has unsaved changes. Save them now?',
-         mtConfirmation, [mbYes, mbNo], 0) = mrYes then Save;
-  except
-    on E: Exception do
-      OutputDebugString(PChar('drag-lint LintOptions teardown: ' + E.Message)); // dl:ok outputdebugstring@67d3 -- teardown cannot raise or prompt; the debugger channel is the only safe sink
-  end;
+  { N5 (1.51.2): the dock frame is destroyed while the IDE tears down. 1.51.1 asked
+    and saved here; the dialog came late and Save hit freed IDE services (5-6 error
+    boxes). At teardown: no UI, no save -- discard and log one line. }
+  if DecideUnsaved(FDirty, FHasData, upTeardown) = uaDiscard then
+    OutputDebugString(PChar(UnsavedDiscardLogLine('Lint Options')));  // dl:ok outputdebugstring@7c48 -- teardown cannot prompt or write files; the debugger channel is the only safe sink
   FRun.Free;  { abandons the run in flight: its answer never reaches a dead frame }
   FAutoFixCBs.Free;
   FNamingEditors.Free;
@@ -2545,7 +2542,7 @@ end;
 
 procedure TLintOptionsFrame.BtnReloadClick(Sender: TObject);
 begin
-  if FDirty and (MessageDlg('Discard the unsaved changes and reload?',
+  if (DecideUnsaved(FDirty, FHasData, upInteractive) = uaAsk) and (MessageDlg('Discard the unsaved changes and reload?',
        mtConfirmation, [mbYes, mbNo], 0) <> mrYes) then Exit;
   FDirty:= False;
   ReloadCatalogAndConfig;
