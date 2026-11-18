@@ -45,8 +45,34 @@ drag-lint repo gen-memtable   --in <csv file> [--name <Name>] [--output <file>]
 | `restore` | Reads a text backup into the repository, creating it when missing. A non-empty repository needs `--replace`. The whole file is validated first; a malformed file prints `line <n>: ...` and changes nothing (a missing repository is not left behind). | 0; 1; 2 malformed backup |
 | `gen-memtable` | Prints (or writes with `--output`) the Pascal source of `Create<Name>Fields`, a procedure that builds the fields of a `TFDMemTable` from a CSV (`FieldName,FieldType,Size,FieldKind,...`). `--name` defaults to `FDMemTable`. | 0; 1; 2 bad CSV |
 
-`gen-orm`, `update-orm` and `gen-dataservice` are reserved sub-verbs; they
-answer "not available in this build" and exit 1.
+## gen-orm, update-orm, gen-dataservice
+
+Ports of the TableTools ORM / DataService generators, fed by `DL_FIELDS_INFO` (rows with `FIELD_KIND = 1`).
+Every verb prints a dry-run diff (`new` / `changed` / `unchanged` per file, then the hunks) and writes only with
+`--apply` (7-bit ASCII; an existing file is first copied to `<file>.BCKn` unless `--no-backup`).
+
+| Sub-verb | Folders | What it writes |
+|---|---|---|
+| `gen-orm` | `--code-dir` | new `i<T>.PAS` + `u<T>.PAS` per table (`--table T,...`; empty = every table) |
+| `update-orm` | `--code-dir` [`--server-dir`] [`--client-dir`] | ONLY the lines inside the `{$REGION 'DB-RAD <id>'}` regions of the existing units; every other byte, line ends included, is kept. A missing file or a table without `FIELD_KIND = 1` rows is skipped and named |
+| `gen-dataservice` | `--server-dir` `--client-dir` | new `u<T>_SERVER.PAS` + `u<T>_CLIENT.PAS` and the two DI container units; prints `add to project:` per new file |
+
+`--save-form legacy|current` picks how region 9 (Save) binds its parameters. `legacy` (the default) is the form
+the ORM3 units carry (TableTools before 2026-05-19): the `FIELD_AS_TYPE` accessor (`.AsString`, `.AsInteger`, ...),
+`.AsString` for a `TStringList`, `.AsByte` for an enum, a timestamp without a NULL guard. `current` is TableTools
+2026-05-19: `.Value`, `.AsWideMemo` (FB-338), `Set1Byte` for an enum, `Clear` when the timestamp `Year = 0`.
+
+Golden (release gate): `tests\autotest\run_fieldrepo_ormgen_golden.ps1 -RequireForm -RepoFile <dev.dlrepo>` runs
+`update-orm` over a COPY of ORM3: 521 of 528 units come out the same ignoring blanks and case and nothing outside
+the regions moves; the 7 others are listed with their reason in `tests\fieldrepo\ormgen-golden-known-drift.txt`
+(schema drift, a hand-ported unit, a hand-edited region). Byte parity is not the gate: the ORM3 units were
+re-formatted after TableTools wrote them.
+
+IDE: **drag-lint > Field Repository > Generate / Update ORM Source...** (pick the `i/u` folder; table names =
+`gen-orm`, empty = `update-orm`, optionally with the `_SERVER` / `_CLIENT` folders) and **Generate DataService
+Units...** run the dry run, show its summary and write after **Yes**. **Param Array Assistant...** runs
+`gen-param-array --plan` on the unit in the active editor (optionally with `--prepare-queries`) and, after
+**Yes**, `--apply --project` through the compile gate.
 
 ## gen-param-array
 

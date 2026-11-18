@@ -152,9 +152,11 @@ resolver 1.28.0 -> 1.29.0-alpha.
   replaces Narrow / Wide).
 - `rules disable` / `rules enable` verbs and IDE "Disable Rule..." (DISRULE); `rules --json` carries `disabled_by`.
 - `repo` generators (TTA, TTB, TTC, TTCSV, TTPA, TTS, TTGEN, GENPAIMPL): schema, FB import / seed, text backup,
-  CSV -> FDMemTable, `gen-param-array` (print / `--plan` / `--apply`); `gen-orm`, `gen-dataservice`, `update-orm` are
-  internal (not byte-identical with ORM3 yet). IDE Field Repository submenu (Open editor, Refresh Schema, FDMemTable
-  from CSV) and the `dl-field-repo` grid editor (TTIDE, TTD).
+  CSV -> FDMemTable, `gen-param-array` (print / `--plan` / `--apply`, `--prepare-queries` = the IDE query preparation, U6);
+  `gen-orm`, `update-orm`, `gen-dataservice` public (B33: region 9 emits the ORM3 `FIELD_AS_TYPE` form by default,
+  `--save-form current` for the TableTools 2026-05-19 form; golden 521/528 same ignoring blanks/case, 7 listed drift).
+  IDE Field Repository submenu (Open editor, Refresh Schema, FDMemTable from CSV, ORM source, DataService units,
+  Param Array assistant) and the `dl-field-repo` grid editor (TTIDE, TTD).
 - IDE (PLUGCTX): editor-menu rows register through Surfaces=editor.
 - `repo` verb family (field repository, text backup, Firebird import/seed/refresh): `init`, `info`, `import-fb`, `seed-fb`,
   `refresh-schema`, `backup`, `restore`, `gen-memtable`; the other `gen-*` / `*-orm` subs answer "not available" in 1.52.

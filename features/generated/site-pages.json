@@ -84,7 +84,7 @@
     "version": "1.51.1-alpha"
   },
   "features/check-init.md": {
-    "hash": "e55ce69e98388a0ca23a5c7ace22ff58b8343931f4fdf7a72a31fc00176e47ba",
+    "hash": "7e72eba291e44688e117437e719b81f96fc71eaf94503c7ee4f712723cf362d2",
     "version": "1.52.0-alpha"
   },
   "features/circular-dependency-report.md": {
@@ -388,8 +388,8 @@
     "version": "1.35.1-alpha"
   },
   "features/field-repository.md": {
-    "hash": "dd8777b235946d035ec7ed5c0750b49f9fdf3bde0b207c67ef95c24722661801",
-    "version": "1.51.1-alpha"
+    "hash": "3e3ecf4a5f5404c9428d313c60ed39ab416eaccad0c95e2379979926341c0c4d",
+    "version": "1.52.0-alpha"
   },
   "features/finalization-after-dependency.md": {
     "hash": "76ca3ab6384a27dd1ecb82dcc439b667f5055d088a70921ad6f76df0006ec193",

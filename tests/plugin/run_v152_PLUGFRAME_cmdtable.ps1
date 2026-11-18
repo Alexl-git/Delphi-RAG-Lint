@@ -27,7 +27,7 @@
 [CmdletBinding()]
 param(
   [string]$BaseRef = '67823450c',
-  [string[]]$EnabledIds = @('field-repository', 'field-repository-02-refresh', 'field-repository-05-memtable', 'check-init'),   # TTIDE (INT 1.52); check-init enabled by HBIDE
+  [string[]]$EnabledIds = @('field-repository', 'field-repository-02-refresh', 'field-repository-03-orm', 'field-repository-04-dataservice', 'field-repository-05-memtable', 'field-repository-06-paramarray', 'check-init'),   # TTIDE (INT 1.52); 03/04/06 enabled by BK-TTFINISH (B33); check-init enabled by HBIDE
   [int]$ExactCount = 8,   # headless rows: check-init + idx-range + 6 field-repository; ToolsAPI units left out (H5)
   [string]$WorkDir = "$env:TEMP\drag-lint-v152-plugframe-$PID"
 )

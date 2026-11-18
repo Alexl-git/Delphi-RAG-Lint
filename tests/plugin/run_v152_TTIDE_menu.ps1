@@ -4,10 +4,10 @@
   WHAT IT COVERS.
     1. Headless (no ToolsAPI, console build of Cmd152 + Cmd.FieldRepo): the
        FULL menu tree has submenu "Field Repository" with all six items; the
-       VISIBLE tree shows exactly the three whose engine verb / editor ships
-       (Open editor, Refresh schema, FDMemTable from CSV) and hides the three
-       whose verb has not shipped (ORM source, DataService units, Param Array).
-       Positive control: the same table with every row switched on shows all six.
+       VISIBLE tree shows all six (1.52 BK-TTFINISH / B33: the ORM, DataService and
+       Param Array rows are unhidden now that their verbs ship; golden -RequireForm passes).
+       Positive control: the same table with every row switched off shows none.
+     1b. FieldRepoGenArgs / FieldRepoRunSummary (pure helpers of the three new rows).
     2. FieldRepoCommandLine quotes exe and arguments and carries the verb.
     3. features\entries\field-repository.json registers the six FULL ide-menu
        paths.
@@ -23,8 +23,9 @@ $fail = 0
 function Bad([string]$m) { Write-Host "FAIL: $m" -ForegroundColor Red; $script:fail++ }
 function Ok([string]$m)  { Write-Host "ok: $m" }
 
-$shown  = @('Open Field Repository Editor...', 'Refresh Schema from Database...', 'FDMemTable from CSV...')
-$hidden = @('Generate / Update ORM Source...', 'Generate DataService Units...', 'Param Array Assistant...')
+$shown  = @('Open Field Repository Editor...', 'Refresh Schema from Database...', 'FDMemTable from CSV...',
+            'Generate / Update ORM Source...', 'Generate DataService Units...', 'Param Array Assistant...')
+$hidden = @()
 
 $rs = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 if (-not (Test-Path $rs)) { Write-Host "FATAL: rsvars not found: $rs" -ForegroundColor Red; exit 2 }
@@ -85,11 +86,11 @@ begin
     Check(Pos('Open Field Repository Editor...', lVisible) > 0, 'Open editor visible');
     Check(Pos('Refresh Schema from Database...', lVisible) > 0, 'Refresh visible');
     Check(Pos('FDMemTable from CSV...', lVisible) > 0, 'FDMemTable visible');
-    Check(Pos('Generate / Update ORM Source...', lVisible) = 0, 'ORM hidden');
-    Check(Pos('Generate DataService Units...', lVisible) = 0, 'DataService hidden');
-    Check(Pos('Param Array Assistant...', lVisible) = 0, 'Param Array hidden');
-    { positive control: every row on shows all six }
-    for var i:= 0 to High(lMine) do lMine[i].Visible:= True;
+    Check(Pos('Generate / Update ORM Source...', lVisible) > 0, 'ORM visible');
+    Check(Pos('Generate DataService Units...', lVisible) > 0, 'DataService visible');
+    Check(Pos('Param Array Assistant...', lVisible) > 0, 'Param Array visible');
+    { positive control: every row off shows none }
+    for var i:= 0 to High(lMine) do lMine[i].Visible:= False;
     lRoot:= Fixture;
     try
       BuildCmd152Menu(lRoot, lMine, AddItem);
@@ -97,7 +98,13 @@ begin
     finally
       lRoot.Free;
     end;
-    Check(Pos('Param Array Assistant...', lVisible) > 0, 'control: switched-on row shows');
+    Check(Pos('Param Array Assistant...', lVisible) = 0, 'control: switched-off row hidden');
+    { 1b: generator arguments and the dry-run summary }
+    Check(FieldRepoGenArgs('C:\c d', '', '', '', False) = '--code-dir "C:\c d"', 'gen args code dir: ' + FieldRepoGenArgs('C:\c d', '', '', '', False));
+    Check(FieldRepoGenArgs('', 's', 'c', 'A,B', True) = '--server-dir "s" --client-dir "c" --table "A,B" --apply', 'gen args all: ' + FieldRepoGenArgs('', 's', 'c', 'A,B', True));
+    Check(FieldRepoRunSummary('changed x.pas'#13#10'--- a'#13#10'+++ b'#13#10'@@ line 3 @@'#13#10'-old'#13#10'+new'#13#10'repo update-orm: 0 new, 1 changed', 10) =
+      'changed x.pas'#13#10'repo update-orm: 0 new, 1 changed', 'summary drops diff lines');
+    Check(Pos('more lines', FieldRepoRunSummary('a'#13#10'b'#13#10'c', 2)) > 0, 'summary caps the line count');
     { command line }
     var s: string:= FieldRepoCommandLine('C:\x y\drag-lint.exe', 'refresh-schema', 'C:\p q\a.dproj', '--dry-run');
     Check(s = '"C:\x y\drag-lint.exe" repo refresh-schema --project "C:\p q\a.dproj" --dry-run', 'command line: ' + s);
