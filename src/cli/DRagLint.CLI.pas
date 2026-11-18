@@ -1181,6 +1181,7 @@ begin
       Inc(i) { every verb: applied by Run, before ParseArgs (ApplyManifestSwitch) }
     else if A = '--no-locals' then Result.NoLocals:= True
     else if A = '--lint-third-party' then Result.LintThirdParty:= True
+    else if A = '--no-stand-down' then Result.NoStandDown:= True
     else if A = '--no-budget' then Result.NoBudget:= True  { 1.52 BUDGET (D9): lint / lint-all without the per-rule time budget }
     else if (A = '--shared-db') and (i < ParamCount) then
     begin
@@ -1216,7 +1217,6 @@ begin
     end
     else if (A = '--enable') and (i < ParamCount) then begin Inc(i); Result.Enable:= ParamStr(i); end
     else if (A = '--profile') and (i < ParamCount) then begin Inc(i); Result.Profile:= ParamStr(i); end
-    else if A = '--no-stand-down' then Result.NoStandDown:= True
     else if (A = '--target-compiler') and (i < ParamCount) then
     begin
       Inc(i);
@@ -8407,6 +8407,8 @@ begin
 end;
 
 function DoQueryText(const AArgs: TArgs): Integer;
+const
+  TRIGRAM_MIN_CHARS = 3; // --substring floor: the trigram tokenizer cannot match a shorter needle
 var
   PathsToScan: TArray<string>         ;
   DbPath     : string                 ;
@@ -8463,8 +8465,12 @@ begin
     end;
   end;
   FetchLim:= if NearOn then NearFetchLimit else Lim + 1; { cap + 1: one extra row proves the cap hid something (XERJ item 2) }
-  if (Mode = 'substring') and (Length(Trim(AArgs.TextQuery)) < 3) then
-    Writeln('NOTE: --substring needs a query of at least 3 characters (trigram tokenizer); "' + AArgs.TextQuery + '" is too short - try --any-order for shorter terms.');
+  { B29: the floor applies to the text AFTER the enclosing Pascal quotes are stripped ('ok' is 2 characters, not 4). }
+  var ShortNeedle: string:= Trim(AArgs.TextQuery);
+  if (Length(ShortNeedle) >= 2) and ShortNeedle.StartsWith('''') and ShortNeedle.EndsWith('''') then
+    ShortNeedle:= Copy(ShortNeedle, 2, Length(ShortNeedle) - 2);
+  if (Mode = 'substring') and (Length(ShortNeedle) < TRIGRAM_MIN_CHARS) then
+    Writeln('NOTE: --substring needs a query of at least 3 characters (trigram tokenizer); "' + AArgs.TextQuery + '" is too short, so it is matched as a whole word instead.');
 
   PathsToScan:= ResolveConsumerDbs(AArgs);
   for DbPath in PathsToScan do

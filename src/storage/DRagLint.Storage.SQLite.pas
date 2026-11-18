@@ -11885,6 +11885,8 @@ end;
 
 function TSQLiteSymbolStore.SearchText(const AQuery: string; AMode: string; const ASource: string; ALimit: Integer;
   const AKind: string): TArray<TStringLitMatch>;
+const
+  TRIGRAM_MIN_CHARS = 3; // the trigram tokenizer indexes 3-character grams: a shorter needle can never match
 var
   Q   : TFDQuery              ;
   List: TList<TStringLitMatch>;
@@ -11913,6 +11915,9 @@ begin
     var Needle:= AQuery;
     if (Length(Needle) >= 2) and Needle.StartsWith('''') and Needle.EndsWith('''') then
       Needle:= StringReplace(Copy(Needle, 2, Length(Needle) - 2), '''''', '''', [rfReplaceAll]);
+    { B29: below 3 characters the trigram table cannot match anything; answer with the whole-word phrase match
+      (what `--text ok` without --substring does), the CLI prints the matching NOTE. }
+    if SameText(AMode, 'substring') and (Length(Needle) < TRIGRAM_MIN_CHARS) then AMode:= 'phrase';
     if SameText(AMode, 'substring') then
     begin
       if not FTrigramAvailable then
