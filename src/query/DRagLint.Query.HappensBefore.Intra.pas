@@ -33,7 +33,9 @@ unit DRagLint.Query.HappensBefore.Intra;
 interface
 
 uses
-  DRagLint.Core.Interfaces
+  System.SysUtils
+, TreeSitter
+, DRagLint.Core.Interfaces
 , DRagLint.Query.HappensBefore.Types
   ;
 
@@ -84,16 +86,35 @@ type
 /// routine (Found = False).</returns>
 /// <remarks>Parses through TAstParseCache (the cache owns the tree; not thread-safe, like the cache).
 /// Every doubt answers False: a wrong True is a wrong SET.</remarks>
-function SolveRoutine(const pStore: ISymbolStore; pRoutineId: Int64; const pMarks, pQueries: TArray<THbSite>;  // dl:ok unused-public-symbol@dc95 -- REVIEWED 2026-11-17 v152 HBINTRA: frozen check-init contract; the consumer is lane HBSOLVER (DRagLint.Query.HappensBefore.CheckInit), merged after this lane
+function SolveRoutine(const pStore: ISymbolStore; pRoutineId: Int64; const pMarks, pQueries: TArray<THbSite>;
   pEntryDone: Boolean): THbRoutineState;
+
+/// <summary>True when the source position pSite lies inside the span of pNode.</summary>
+/// <param name="pNode">Any tree-sitter node; a null node contains nothing useful (its span is 0..0).</param>
+/// <param name="pSite">1-based line and column; Col &lt;= 0 means "the whole line": the node only has to
+/// intersect that line.</param>
+/// <returns>True when the site is at or after the node start and before its end.</returns>
+function HbNodeContains(const pNode: TTSNode; const pSite: THbSite): Boolean;
+
+/// <summary>Walks from pItem down to the node that holds pSite and tells whether the site runs every
+/// time pItem runs.</summary>
+/// <param name="pSrc">The source bytes the tree was parsed from (operator text is read from them).</param>
+/// <param name="pItem">The statement / CFG item that contains the site.</param>
+/// <param name="pSite">The site to reach (1-based line, column).</param>
+/// <param name="pInLambda">Set to True when an anonymous-method body encloses the site; the walk stops
+/// there.</param>
+/// <returns>True when the site may NOT run when pItem runs: it sits under the right operand of a
+/// short-circuit `and` / `or`, or under an if-expression branch.</returns>
+/// <remarks>Shared by the CFG solver (SolveRoutine) and the top-level solver of
+/// DRagLint.Query.HappensBefore, so both apply the same cuts. Pure; no allocation beyond strings.</remarks>
+function HbSiteGuarded(const pSrc: TBytes; const pItem: TTSNode; const pSite: THbSite;
+  out pInLambda: Boolean): Boolean;
 
 implementation
 
 uses
-  System.SysUtils
-, System.Math
+  System.Math
 , System.Generics.Collections
-, TreeSitter
 , DRagLint.Core.Model
 , DRagLint.Analysis.Cfg
 , DRagLint.Diagnostics.ParseCache
@@ -125,11 +146,6 @@ type
     FIn: TArray<Boolean>;
     FOut: TArray<Boolean>;
     FMarked: TArray<TArray<Boolean>>;
-    function NodeText(const pNode: TTSNode): string;
-    function Contains(const pNode: TTSNode; const pSite: THbSite): Boolean;
-    function SameNode(const pLeft, pRight: TTSNode): Boolean;
-    function GuardedChild(const pParent, pChild: TTSNode): Boolean;
-    procedure WalkTo(const pNode: TTSNode; const pSite: THbSite; pGuarded: Boolean; var pPath: TSitePath);
     function PathTo(const pItem: TTSNode; const pSite: THbSite): TSitePath;
     procedure ComputeReach;
     procedure ApplyMarks(const pMarks: TArray<THbSite>);
@@ -157,14 +173,16 @@ begin
   FEntryDone:= pEntryDone;
 end;
 
-function TIntraSolver.NodeText(const pNode: TTSNode): string;
+{ site walk (exported: HbNodeContains, HbSiteGuarded) }
+
+function NodeText(const pSrc: TBytes; const pNode: TTSNode): string;
 begin
   Result:= '';
-  if pNode.IsNull or (Integer(pNode.EndByte) > Length(FSrc)) then Exit;
-  Result:= TEncoding.UTF8.GetString(FSrc, Integer(pNode.StartByte), Integer(pNode.EndByte - pNode.StartByte));
+  if pNode.IsNull or (Integer(pNode.EndByte) > Length(pSrc)) then Exit;
+  Result:= TEncoding.UTF8.GetString(pSrc, Integer(pNode.StartByte), Integer(pNode.EndByte - pNode.StartByte));
 end;
 
-function TIntraSolver.Contains(const pNode: TTSNode; const pSite: THbSite): Boolean;
+function HbNodeContains(const pNode: TTSNode; const pSite: THbSite): Boolean;
 var
   Row, Col, SR, SC, ER, EC: Integer;
 begin
@@ -180,18 +198,18 @@ begin
   Result:= AfterStart and BeforeEnd;
 end;
 
-function TIntraSolver.SameNode(const pLeft, pRight: TTSNode): Boolean;
+function SameNode(const pLeft, pRight: TTSNode): Boolean;
 begin
   Result:= (not pLeft.IsNull) and (not pRight.IsNull) and (pLeft.StartByte = pRight.StartByte)
     and (pLeft.EndByte = pRight.EndByte);
 end;
 
-function TIntraSolver.GuardedChild(const pParent, pChild: TTSNode): Boolean;
+function GuardedChild(const pSrc: TBytes; const pParent, pChild: TTSNode): Boolean;
 begin
   Result:= False;
   if pParent.NodeType = 'exprBinary' then
   begin
-    var Op:= Trim(NodeText(pParent.ChildByField('operator')));
+    var Op:= Trim(NodeText(pSrc, pParent.ChildByField('operator')));
     if SameText(Op, 'and') or SameText(Op, 'or') then
       Result:= SameNode(pChild, pParent.ChildByField('rhs'));
   end
@@ -200,7 +218,7 @@ begin
     Result:= not SameNode(pChild, pParent.ChildByField('condition'));
 end;
 
-procedure TIntraSolver.WalkTo(const pNode: TTSNode; const pSite: THbSite; pGuarded: Boolean; var pPath: TSitePath);
+procedure WalkTo(const pSrc: TBytes; const pNode: TTSNode; const pSite: THbSite; var pPath: TSitePath);
 begin
   if pNode.NodeType = NODE_LAMBDA then
   begin
@@ -210,17 +228,27 @@ begin
   for var I:= 0 to pNode.ChildCount - 1 do
   begin
     var C:= pNode.Child(I);
-    if not Contains(C, pSite) then Continue;
-    var G:= pGuarded or GuardedChild(pNode, C);
-    if G then pPath.Guarded:= True;
-    WalkTo(C, pSite, G, pPath);
+    if not HbNodeContains(C, pSite) then Continue;
+    if GuardedChild(pSrc, pNode, C) then pPath.Guarded:= True;
+    WalkTo(pSrc, C, pSite, pPath);
   end;
 end;
+
+function HbSiteGuarded(const pSrc: TBytes; const pItem: TTSNode; const pSite: THbSite;
+  out pInLambda: Boolean): Boolean;
+begin
+  var Path:= Default(TSitePath);
+  WalkTo(pSrc, pItem, pSite, Path);
+  pInLambda:= Path.InLambda;
+  Result:= Path.Guarded;
+end;
+
+{ TIntraSolver }
 
 function TIntraSolver.PathTo(const pItem: TTSNode; const pSite: THbSite): TSitePath;
 begin
   Result:= Default(TSitePath);
-  WalkTo(pItem, pSite, False, Result);
+  Result.Guarded:= HbSiteGuarded(FSrc, pItem, pSite, Result.InLambda);
 end;
 
 procedure TIntraSolver.ComputeReach;
@@ -254,7 +282,7 @@ begin
       var It:= Blk.Items[I];
       if It.Opaque then Continue;  { inside `with`: the name may be a field of the with-entity }
       for var M in pMarks do
-        if Contains(It.Node, M) then
+        if HbNodeContains(It.Node, M) then
         begin
           var P:= PathTo(It.Node, M);
           if not (P.InLambda or P.Guarded) then
@@ -317,7 +345,7 @@ begin
   try
     for var B:= 0 to FCfg.Blocks.Count - 1 do
       for var I:= 0 to FCfg.Blocks[B].Items.Count - 1 do
-        if Contains(FCfg.Blocks[B].Items[I].Node, pSite) then
+        if HbNodeContains(FCfg.Blocks[B].Items[I].Node, pSite) then
         begin
           var R: TItemRef;
           R.Block:= B;
@@ -398,7 +426,7 @@ begin
         Done:= Done and StateBefore(R);
       end;
       for var F in Finallys do
-        if Contains(F.Value, Site) then Done:= Done and TryEntryState(F.Key);
+        if HbNodeContains(F.Value, Site) then Done:= Done and TryEntryState(F.Key);
       pState.Queries[Q].Done:= Done and not pState.Queries[Q].InClosure;
     end;
   finally

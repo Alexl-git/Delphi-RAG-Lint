@@ -80,13 +80,7 @@ const
 /// MAY-BE-UNSET with limit instance-field-not-judged until the constructor model is wired in.
 /// An unresolved callee that receives the target adds the limit unknown-callee and its warning to
 /// Summary; such an answer is never NEVER-SET and never SET unless other writers prove it.</remarks>
-function CheckInit(const pDbPath, pTarget, pAt: string; const pOptions: THbOptions): THbAnswer;
-
-/// <summary>The warning text of the owner ruling for an argument passed to an unresolved callee.</summary>
-/// <param name="pCallee">The callee name as written at the call.</param>
-/// <param name="pArg">The target's name.</param>
-/// <returns>'&lt;Callee&gt;: source not available -- does it set &lt;Arg&gt; (by-ref unknown)?'</returns>
-function HbUnknownCalleeWarning(const pCallee, pArg: string): string;
+function CheckInit(const pDbPath, pTarget, pAt: string; const pOptions: THbOptions): THbAnswer;  // dl:ok unused-public-symbol@915c -- REVIEWED 2026-11-17 v152 HBSOLVER: check-init contract; consumers are the CLI verb and MCP tool, wired at INT (handover H-CLI) and the solve-driver fixture
 
 implementation
 
@@ -161,7 +155,7 @@ type
   end;
 
   /// <summary>The solver of one CheckInit call. Owns its caches; the index and store belong to CheckInit.</summary>
-  TSolver = class  // dl:ok high-response@0000 -- REVIEWED 2026-11-17 v152 HBSOLVER: one solve = one object; its RFC is the index queries every fixpoint step needs
+  TSolver = class  // dl:ok god-class@1457, high-response@1457 -- REVIEWED 2026-11-17 v152 HBSOLVER: one solve = one object holding the fixpoint caches; its RFC is the index queries each fixpoint step needs
   strict private
     FIndex: TChartsIndex;
     FStore: ISymbolStore;
@@ -191,6 +185,7 @@ type
     function CallsIn(pId: Int64): TArray<TCallSite>;
     function BasesOf(pId: Int64): TArray<Int64>;
     function OverridesOf(pId: Int64): TArray<Int64>;
+    function DispatchClosure(pId: Int64; const pSqlFmt: string): TArray<Int64>;
     function CallersOf(pId: Int64): TArray<TCallSite>;
     function CalleeSet(pId: Int64): TArray<Int64>;
     function CallCountsAsMark(const pSite: TCallSite): Boolean;
@@ -218,21 +213,23 @@ type
   end;
 
 const
-  NODE_LAMBDA = 'lambda';
   KIND_INIT = 'initialization';
   KIND_FINAL = 'finalization';
   KIND_PROGRAM = 'program';
   KIND_LIBRARY = 'library';
   CONF_CERTAIN = 'certain';
   REF_CALL = 'call';
-  DISPATCH_OVERRIDE = 'override';
   DIRECTIVE_ABSTRACT = 'abstract';
   CALLEE_LOOKBACK_LINES = 10;
+  { a section / main block sits at most this deep under the tree root }
+  TOP_CONTAINER_MAX_DEPTH = 3;
   WHY_PREFIX = 'why not SET: ';
 
 { ---------------------------------------------------------------------------------------------- }
 { small helpers                                                                                   }
 
+{ The warning text of the owner ruling for an argument passed to an unresolved callee:
+  '<Callee>: source not available -- does it set <Arg> (by-ref unknown)?' }
 function HbUnknownCalleeWarning(const pCallee, pArg: string): string;
 begin
   Result:= pCallee + ': source not available -- does it set ' + pArg + ' (by-ref unknown)?';
@@ -292,56 +289,11 @@ end;
 { ---------------------------------------------------------------------------------------------- }
 { top-level statement solve of an initialization / finalization section and of a program block   }
 
-function NodeContains(const pNode: TTSNode; const pSite: THbSite): Boolean;
-var
-  Row, Col, SR, SC, ER, EC: Integer;
-begin
-  Row:= pSite.Line - 1;
-  SR:= Integer(pNode.StartPoint.row);
-  ER:= Integer(pNode.EndPoint.row);
-  if pSite.Col <= 0 then Exit(InRange(Row, SR, ER));
-  Col:= pSite.Col - 1;
-  SC:= Integer(pNode.StartPoint.column);
-  EC:= Integer(pNode.EndPoint.column);
-  var AfterStart:= (Row > SR) or ((Row = SR) and (Col >= SC));
-  var BeforeEnd:= (Row < ER) or ((Row = ER) and (Col < EC));
-  Result:= AfterStart and BeforeEnd;
-end;
-
 function NodeText(const pSrc: TBytes; const pNode: TTSNode): string;
 begin
   Result:= '';
   if pNode.IsNull or (Integer(pNode.EndByte) > Length(pSrc)) then Exit;
   Result:= TEncoding.UTF8.GetString(pSrc, Integer(pNode.StartByte), Integer(pNode.EndByte - pNode.StartByte));
-end;
-
-function SameNode(const pLeft, pRight: TTSNode): Boolean;
-begin
-  Result:= (not pLeft.IsNull) and (not pRight.IsNull) and (pLeft.StartByte = pRight.StartByte)
-    and (pLeft.EndByte = pRight.EndByte);
-end;
-
-{ The same cuts as lane HBINTRA's PathTo: a site under a short-circuit right operand or an if-expression
-  branch may not run; a site in an anonymous method does not run with its statement. }
-procedure WalkGuards(const pSrc: TBytes; const pNode: TTSNode; const pSite: THbSite; var pGuarded, pLambda: Boolean);
-begin
-  if pNode.NodeType = NODE_LAMBDA then
-  begin
-    pLambda:= True;
-    Exit;
-  end;
-  for var I:= 0 to pNode.ChildCount - 1 do
-  begin
-    var C:= pNode.Child(I);
-    if not NodeContains(C, pSite) then Continue;
-    if pNode.NodeType = 'exprBinary' then
-    begin
-      var Op:= Trim(NodeText(pSrc, pNode.ChildByField('operator')));
-      if (SameText(Op, 'and') or SameText(Op, 'or')) and SameNode(C, pNode.ChildByField('rhs')) then pGuarded:= True;
-    end
-    else if (pNode.NodeType = 'exprIf') and not SameNode(C, pNode.ChildByField('condition')) then pGuarded:= True;
-    WalkGuards(pSrc, C, pSite, pGuarded, pLambda);
-  end;
 end;
 
 { The statements of a container (initialization / finalization / block / statements), keywords left out. }
@@ -364,15 +316,14 @@ begin
   var T:= pStmt.NodeType;
   if (T = 'assignment') or (T = 'statement') or (T = 'varDef') or (T = 'constInline') then
   begin
-    var G:= False;
-    var L:= False;
-    WalkGuards(pSrc, pStmt, pSite, G, L);
+    var L: Boolean;
+    var G:= HbSiteGuarded(pSrc, pStmt, pSite, L);
     Exit(not (G or L));
   end;
   if (T = 'block') or (T = 'statements') then
   begin
     for var C in StatementsOf(pStmt) do
-      if NodeContains(C, pSite) then Exit(MarkIsMust(pSrc, C, pSite));
+      if HbNodeContains(C, pSite) then Exit(MarkIsMust(pSrc, C, pSite));
     Exit(False);
   end;
   if T = 'try' then
@@ -384,7 +335,7 @@ begin
     for var I:= 0 to pStmt.NamedChildCount - 1 do
     begin
       var C:= pStmt.NamedChild(I);
-      if (C.NodeType = 'statements') and NodeContains(C, pSite) then Exit(MarkIsMust(pSrc, C, pSite));
+      if (C.NodeType = 'statements') and HbNodeContains(C, pSite) then Exit(MarkIsMust(pSrc, C, pSite));
     end;
   end;
   Result:= False;
@@ -406,7 +357,7 @@ var
 
   procedure Walk(const pNode: TTSNode; pDepth: Integer);
   begin
-    if pDepth > 3 then Exit;
+    if pDepth > TOP_CONTAINER_MAX_DEPTH then Exit;
     for var I:= 0 to pNode.NamedChildCount - 1 do
     begin
       var C:= pNode.NamedChild(I);
@@ -461,7 +412,7 @@ begin
   var ExitMust:= False;
   for var M in pMarks do
     for var K:= 0 to High(Stmts) do
-      if NodeContains(Stmts[K], M) then
+      if HbNodeContains(Stmts[K], M) then
       begin
         if MarkIsMust(Src, Stmts[K], M) then
         begin
@@ -474,12 +425,11 @@ begin
       end;
   for var Q:= 0 to High(Result.Queries) do
     for var K:= 0 to High(Stmts) do
-      if NodeContains(Stmts[K], Result.Queries[Q].Site) then
+      if HbNodeContains(Stmts[K], Result.Queries[Q].Site) then
       begin
         Result.Queries[Q].Located:= True;
-        var G:= False;
-        var L:= False;
-        WalkGuards(Src, Stmts[K], Result.Queries[Q].Site, G, L);
+        var L: Boolean;
+        HbSiteGuarded(Src, Stmts[K], Result.Queries[Q].Site, L);
         Result.Queries[Q].InClosure:= L;
         Result.Queries[Q].Done:= (not L) and (pEntry or (MustIdx < K));
         Break;
@@ -574,8 +524,8 @@ begin
       I.Line:= if Row.I('isl') > 0 then Row.I('isl') else Row.I('start_line');
       var Sig:= Row.S('sig');
       var Close:= LastDelimiter(')', Sig);
-      I.IsFunction:= (I.Kind = 'function') or ((I.Kind = 'method') and (Pos(':', Copy(Sig, Close + 1, MaxInt)) > 0));
-      I.IsAbstract:= Pos(DIRECTIVE_ABSTRACT, LowerCase(Row.S('dir'))) > 0;
+      I.IsFunction:= (I.Kind = 'function') or ((I.Kind = 'method') and Copy(Sig, Close + 1, MaxInt).Contains(':'));
+      I.IsAbstract:= LowerCase(Row.S('dir')).Contains(DIRECTIVE_ABSTRACT);
       FInfo.AddOrSetValue(I.Id, I);
     end;
   finally
@@ -631,18 +581,19 @@ function TSolver.CallsIn(pId: Int64): TArray<TCallSite>;
 begin
   if FCallsIn.TryGetValue(pId, Result) then Exit;
   var I:= Info(pId);
-  if (I.Kind = KIND_PROGRAM) or (I.Kind = KIND_LIBRARY) then
-    { the main block's refs carry no enclosing symbol }
-    Result:= ReadSites('(r.enclosing_symbol_id = ' + IntToStr(pId) + ' OR (r.enclosing_symbol_id IS NULL AND r.file_id = ' +
-      IntToStr(I.FileId) + '))')
+  { the main block's refs carry no enclosing symbol }
+  var IsMain:= (I.Kind = KIND_PROGRAM) or (I.Kind = KIND_LIBRARY);
+  Result:= ReadSites(if IsMain then
+    Format('(r.enclosing_symbol_id = %d OR (r.enclosing_symbol_id IS NULL AND r.file_id = %d))', [pId, I.FileId])
   else
-    Result:= ReadSites('r.enclosing_symbol_id = ' + IntToStr(pId));
+    Format('r.enclosing_symbol_id = %d', [pId]));
   FCallsIn.Add(pId, Result);
 end;
 
-function TSolver.BasesOf(pId: Int64): TArray<Int64>;
+{ The transitive closure of one dispatch_edges direction from pId, sorted, pId left out. pSqlFmt selects
+  the next ids as column x and takes the current id as its one %d (ids only: no text reaches the SQL). }
+function TSolver.DispatchClosure(pId: Int64; const pSqlFmt: string): TArray<Int64>;
 begin
-  if FBases.TryGetValue(pId, Result) then Exit;
   Result:= nil;
   var Seen:= THashSet<Int64>.Create;
   try
@@ -651,46 +602,11 @@ begin
     begin
       var Cur:= Work[High(Work)];
       SetLength(Work, Length(Work) - 1);
-      var R:= Rows('SELECT base_symbol_id AS b FROM dispatch_edges WHERE impl_symbol_id = ' + IntToStr(Cur) +
-        ' ORDER BY base_symbol_id');
+      var R:= Rows(Format(pSqlFmt, [Cur]));
       try
         for var Row in R do
         begin
-          var B:= Id64(Row, 'b');
-          if (B <> pId) and Seen.Add(B) then
-          begin
-            Result:= Result + [B];
-            Work:= Work + [B];
-          end;
-        end;
-      finally
-        R.Free;
-      end;
-    end;
-  finally
-    Seen.Free;
-  end;
-  TArray.Sort<Int64>(Result);
-  FBases.Add(pId, Result);
-end;
-
-function TSolver.OverridesOf(pId: Int64): TArray<Int64>;
-begin
-  if FOverrides.TryGetValue(pId, Result) then Exit;
-  Result:= nil;
-  var Seen:= THashSet<Int64>.Create;
-  try
-    var Work:= [pId];
-    while Work <> nil do
-    begin
-      var Cur:= Work[High(Work)];
-      SetLength(Work, Length(Work) - 1);
-      var R:= Rows('SELECT impl_symbol_id AS i FROM dispatch_edges WHERE kind = ''' + DISPATCH_OVERRIDE +
-        ''' AND base_symbol_id = ' + IntToStr(Cur) + ' ORDER BY impl_symbol_id');
-      try
-        for var Row in R do
-        begin
-          var X:= Id64(Row, 'i');
+          var X:= Id64(Row, 'x');
           if (X <> pId) and Seen.Add(X) then
           begin
             Result:= Result + [X];
@@ -705,6 +621,21 @@ begin
     Seen.Free;
   end;
   TArray.Sort<Int64>(Result);
+end;
+
+function TSolver.BasesOf(pId: Int64): TArray<Int64>;
+begin
+  if FBases.TryGetValue(pId, Result) then Exit;
+  Result:= DispatchClosure(pId,
+    'SELECT base_symbol_id AS x FROM dispatch_edges WHERE impl_symbol_id = %d ORDER BY base_symbol_id');
+  FBases.Add(pId, Result);
+end;
+
+function TSolver.OverridesOf(pId: Int64): TArray<Int64>;
+begin
+  if FOverrides.TryGetValue(pId, Result) then Exit;
+  Result:= DispatchClosure(pId,
+    'SELECT impl_symbol_id AS x FROM dispatch_edges WHERE kind = ''override'' AND base_symbol_id = %d ORDER BY impl_symbol_id');
   FOverrides.Add(pId, Result);
 end;
 
@@ -779,10 +710,9 @@ begin
     FBudgetSet.Add(pId);
   end;
   var I:= Info(pId);
-  if (I.Kind = KIND_INIT) or (I.Kind = KIND_FINAL) or (I.Kind = KIND_PROGRAM) or (I.Kind = KIND_LIBRARY) then
-    Result:= TopLevelSolve(I.FilePath, I.Kind, I.Line, pId, MarksOf(pId), QueriesOf(pId), pEntry)
-  else
-    Result:= SolveRoutine(FStore, pId, MarksOf(pId), QueriesOf(pId), pEntry);
+  var TopLevel:= (I.Kind = KIND_INIT) or (I.Kind = KIND_FINAL) or (I.Kind = KIND_PROGRAM) or (I.Kind = KIND_LIBRARY);
+  Result:= if TopLevel then TopLevelSolve(I.FilePath, I.Kind, I.Line, pId, MarksOf(pId), QueriesOf(pId), pEntry)
+    else SolveRoutine(FStore, pId, MarksOf(pId), QueriesOf(pId), pEntry);
   if Result.CfgSkipped then FSkipped.Add(pId);
 end;
 
@@ -1017,7 +947,7 @@ begin
   end;
 end;
 
-function TSolver.JudgeUse(const pProg: TProgramView; const pUse: THbSite): TUseInProgram;
+function TSolver.JudgeUse(const pProg: TProgramView; const pUse: THbSite): TUseInProgram;  // dl:ok cyclomatic-complexity@125b, cognitive-complexity@900b -- REVIEWED 2026-11-17 v152 HBSOLVER: one walk of spec 5.4 per use (root, hop, budget, closure cases); split pieces would share every local, so kept whole and covered by 18 verdict fixtures
 var
   Entry: Boolean;
   Note: string;
@@ -1290,10 +1220,7 @@ begin
       end;
     end;
     pAnswer.Verdict:= if AnyCounted then Headline else hvSet;
-    if JudgedPrograms.Count > 1 then
-    begin
-      if pAnswer.Verdict = hvMayBeUnset then AddReason(pAnswer.Reasons, hrMultiProgram);
-    end;
+    if (JudgedPrograms.Count > 1) and (pAnswer.Verdict = hvMayBeUnset) then AddReason(pAnswer.Reasons, hrMultiProgram);
     if FExhausted then AddReason(pAnswer.Reasons, hrBudget);
     { roots summary: the ordered chains of the programs, then the unordered roots met }
     for var P in FPrograms do
@@ -1342,16 +1269,16 @@ begin
         if not Lines.TryGetValue(W.Site.FileName, SL) then
         begin
           SL:= TStringList.Create;
-          if FileExists(W.Site.FileName) then SL.LoadFromFile(W.Site.FileName);
+          if FileExists(W.Site.FileName) then SL.LoadFromFile(W.Site.FileName);  // dl:ok taint-path-traversal@aae9 -- REVIEWED 2026-11-17 v152 HBSOLVER: the path is files.path from the project index, read only; the env-var chain is the DB location, not this path
           Lines.Add(W.Site.FileName, SL);
         end;
         var CallLine:= R[0].I('start_line');
         for var L:= CallLine to W.Site.Line do
-          if (L >= 1) and (L <= SL.Count) then
+          if InRange(L, 1, SL.Count) then
           begin
             var T:= LowerCase(SL[L - 1]);
-            if Pos(HB_MARKER_CALLEE_READS, T) > 0 then A.Marker:= HB_MARKER_CALLEE_READS
-            else if Pos(HB_MARKER_CALLEE_SETS, T) > 0 then A.Marker:= HB_MARKER_CALLEE_SETS;
+            if T.Contains(HB_MARKER_CALLEE_READS) then A.Marker:= HB_MARKER_CALLEE_READS
+            else if T.Contains(HB_MARKER_CALLEE_SETS) then A.Marker:= HB_MARKER_CALLEE_SETS;
           end;
         Result:= Result + [A];
       finally
@@ -1405,10 +1332,86 @@ end;
 { ---------------------------------------------------------------------------------------------- }
 { CheckInit                                                                                       }
 
+{ Unresolved callees (owner ruling): a dl:callee-reads marker drops the soft writer, dl:callee-sets makes it a
+  counting var-arg writer whose argument is no read; an unmarked one keeps the writer and adds a warning. }
+procedure ApplyCalleeMarkers(const pIndex: TChartsIndex; var pEvents: THbEvents; out pWarnings: TArray<string>);
+begin
+  pWarnings:= nil;
+  var Keep: TArray<THbWriter>:= nil;
+  var Args:= FindCalleeArgs(pIndex, pEvents);
+  for var I:= 0 to High(pEvents.Writers) do
+  begin
+    var W:= pEvents.Writers[I];
+    var Arg:= Default(TCalleeArg);
+    var Found:= False;
+    for var A in Args do
+      if A.WriterIdx = I then
+      begin
+        Arg:= A;
+        Found:= True;
+        Break;
+      end;
+    if Found and (Arg.Marker = HB_MARKER_CALLEE_READS) then Continue;
+    if Found and (Arg.Marker = HB_MARKER_CALLEE_SETS) then
+    begin
+      W.How:= hwVarArg;
+      W.Counts:= True;
+      var UseList: TArray<THbUse>:= nil;
+      for var U in pEvents.UseSites do
+        if not ((U.Site.Line = W.Site.Line) and (U.Site.Col = W.Site.Col)
+          and SameText(U.Site.FileName, W.Site.FileName)) then UseList:= UseList + [U];
+      pEvents.UseSites:= UseList;
+    end
+    else if Found then
+      pWarnings:= pWarnings + [HbUnknownCalleeWarning(Arg.Callee, LastPart(pEvents.Target.QName)) +
+        Format(' (%s:%d:%d)', [ExtractFileName(W.Site.FileName), W.Site.Line, W.Site.Col])];
+    Keep:= Keep + [W];
+  end;
+  pEvents.Writers:= Keep;
+end;
+
+{ Every use gets the same verdict and why (instance fields, NEVER-SET). }
+procedure AnswerEveryUse(var pAnswer: THbAnswer; const pEvents: THbEvents; pVerdict: THbVerdict; const pWhy: string);
+begin
+  for var U in pEvents.UseSites do
+  begin
+    var A:= Default(THbUseAnswer);
+    A.Site:= U.Site;
+    A.Verdict:= pVerdict;
+    A.Why:= WHY_PREFIX + pWhy;
+    if U.GuardedTest then A.Reasons:= [hrGuardedTest];
+    pAnswer.JudgedUses:= pAnswer.JudgedUses + [A];
+  end;
+end;
+
+{ The writer-kind reason codes on every MAY use: soft-writer, nil-write-only (dropped when only soft writers
+  exist and none of them writes nil). }
+procedure AddWriterReasons(const pEvents: THbEvents; var pAnswer: THbAnswer);
+begin
+  var AnyCounting:= False;
+  var AnySoft:= pEvents.IsPublished or pEvents.AbsoluteOverlay;
+  var AnyNil:= False;
+  for var W in pEvents.Writers do
+  begin
+    if W.Counts then AnyCounting:= True
+    else if W.How in [hwUnresolved, hwWithOpaque, hwAddressOf, hwDfmStream] then AnySoft:= True;
+    if W.How = hwAssignNil then AnyNil:= True;
+  end;
+  var NilOnly:= not AnyCounting and not (AnySoft and not AnyNil);
+  for var I:= 0 to High(pAnswer.JudgedUses) do
+  begin
+    if pAnswer.JudgedUses[I].Verdict <> hvMayBeUnset then Continue;
+    if AnySoft then AddReason(pAnswer.JudgedUses[I].Reasons, hrSoftWriter);
+    if NilOnly then AddReason(pAnswer.JudgedUses[I].Reasons, hrNilWriteOnly);
+    pAnswer.JudgedUses[I].Reasons:= SortedReasons(pAnswer.JudgedUses[I].Reasons);
+  end;
+end;
+
 function CheckInit(const pDbPath, pTarget, pAt: string; const pOptions: THbOptions): THbAnswer;
 var
   AtSite: THbSite;
   Blockers: TArray<THbReason>;
+  Warnings: TArray<string>;
 begin
   Result:= Default(THbAnswer);
   AtSite:= Default(THbSite);
@@ -1421,39 +1424,7 @@ begin
     var Store: ISymbolStore:= TSQLiteSymbolStore.Create(pDbPath, {AReadOnly=}True);
     var Events:= CollectEvents(Index, pTarget, AtSite);
     PlaceMainBlockSites(Index, Events);
-    { unresolved callees: a dl:callee-reads marker drops the writer, dl:callee-sets makes it count }
-    var Warnings: TArray<string>:= nil;
-    var Keep: TArray<THbWriter>:= nil;
-    var Args:= FindCalleeArgs(Index, Events);
-    for var I:= 0 to High(Events.Writers) do
-    begin
-      var W:= Events.Writers[I];
-      var Handled:= False;
-      for var A in Args do
-        if A.WriterIdx = I then
-        begin
-          Handled:= True;
-          if A.Marker = HB_MARKER_CALLEE_READS then Break;
-          if A.Marker = HB_MARKER_CALLEE_SETS then
-          begin
-            { recorded answer: a var-arg write, and the argument is no read (as for a resolved var param) }
-            W.How:= hwVarArg;
-            W.Counts:= True;
-            var UseList: TArray<THbUse>:= nil;
-            for var U in Events.UseSites do
-              if not ((U.Site.Line = W.Site.Line) and (U.Site.Col = W.Site.Col)
-                and SameText(U.Site.FileName, W.Site.FileName)) then UseList:= UseList + [U];
-            Events.UseSites:= UseList;
-          end
-          else
-            Warnings:= Warnings + [HbUnknownCalleeWarning(A.Callee, LastPart(Events.Target.QName)) +
-              Format(' (%s:%d:%d)', [ExtractFileName(W.Site.FileName), W.Site.Line, W.Site.Col])];
-          Keep:= Keep + [W];
-          Break;
-        end;
-      if not Handled then Keep:= Keep + [W];
-    end;
-    Events.Writers:= Keep;
+    ApplyCalleeMarkers(Index, Events, Warnings);
     Result.Target:= Events.Target;
     Result.Writers:= Events.Writers;
     Result.Scope:= if Events.Target.Kind = htkInstanceField then hsInstance else hsProgram;
@@ -1463,30 +1434,14 @@ begin
       Result.Verdict:= hvMayBeUnset;
       Result.Summary:= '(not proven: instance fields are judged by the constructor model, not in this build)';
       Result.Limits:= [HB_LIMIT_FIELDS_PENDING];
-      for var U in Events.UseSites do
-      begin
-        var A:= Default(THbUseAnswer);
-        A.Site:= U.Site;
-        A.Verdict:= hvMayBeUnset;
-        A.Why:= WHY_PREFIX + 'instance fields are not judged in this build';
-        if U.GuardedTest then A.Reasons:= [hrGuardedTest];
-        Result.JudgedUses:= Result.JudgedUses + [A];
-      end;
+      AnswerEveryUse(Result, Events, hvMayBeUnset, 'instance fields are not judged in this build');
     end
     else if HbIsNeverSet(Events, Blockers) then
     begin
       Result.Verdict:= hvNeverSet;
       Result.Proven:= True;
       Result.Summary:= 'no resolved writer, no soft writer, not published, no absolute overlay';
-      for var U in Events.UseSites do
-      begin
-        var A:= Default(THbUseAnswer);
-        A.Site:= U.Site;
-        A.Verdict:= hvNeverSet;
-        A.Why:= WHY_PREFIX + 'nothing ever writes it';
-        if U.GuardedTest then A.Reasons:= [hrGuardedTest];
-        Result.JudgedUses:= Result.JudgedUses + [A];
-      end;
+      AnswerEveryUse(Result, Events, hvNeverSet, 'nothing ever writes it');
     end
     else
     begin
@@ -1496,33 +1451,7 @@ begin
       finally
         Solver.Free;
       end;
-      var AnyCounting:= False;
-      var AnySoft:= False;
-      for var W in Events.Writers do
-        if W.Counts then AnyCounting:= True
-        else if W.How in [hwUnresolved, hwWithOpaque, hwAddressOf, hwDfmStream] then AnySoft:= True;
-      AnySoft:= AnySoft or Events.IsPublished or Events.AbsoluteOverlay;
-      for var I:= 0 to High(Result.JudgedUses) do
-        if Result.JudgedUses[I].Verdict = hvMayBeUnset then
-        begin
-          if AnySoft then AddReason(Result.JudgedUses[I].Reasons, hrSoftWriter);
-          if not AnyCounting then AddReason(Result.JudgedUses[I].Reasons, hrNilWriteOnly);
-          if not AnyCounting and AnySoft then
-          begin
-            { only soft writers: nothing can prove SET; drop the nil-only code unless nil writes exist }
-            var Nil_:= False;
-            for var W in Events.Writers do
-              if W.How = hwAssignNil then Nil_:= True;
-            if not Nil_ then
-            begin
-              var Kept: TArray<THbReason>:= nil;
-              for var R in Result.JudgedUses[I].Reasons do
-                if R <> hrNilWriteOnly then Kept:= Kept + [R];
-              Result.JudgedUses[I].Reasons:= Kept;
-            end;
-          end;
-          Result.JudgedUses[I].Reasons:= SortedReasons(Result.JudgedUses[I].Reasons);
-        end;
+      AddWriterReasons(Events, Result);
       Result.Proven:= Result.Verdict = hvSet;
       Result.Summary:= if Result.Verdict = hvSet then '(proven: every judged use runs after a counting writer)'
         else '(not proven)';
@@ -1532,9 +1461,7 @@ begin
       Result.Limits:= Result.Limits + [HB_LIMIT_UNKNOWN_CALLEE];
       if Result.Verdict <> hvSet then
       begin
-        var Text:= '';
-        for var S in Warnings do Text:= Text + (if Text = '' then '' else '; ') + S;
-        Result.Summary:= 'UNKNOWN-CALLEE: ' + Text;
+        Result.Summary:= 'UNKNOWN-CALLEE: ' + string.Join('; ', Warnings);
         Result.Proven:= False;
       end;
     end;
