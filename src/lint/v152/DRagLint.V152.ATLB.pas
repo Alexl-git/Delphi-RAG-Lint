@@ -49,6 +49,8 @@ implementation
 
 uses
   DRagLint.V152.ATLB.Support
+  , DRagLint.Core.Interfaces
+  , DRagLint.Lint.SharedScope  { 1.52 BK-XPROJ: a unit another project compiles is judged there too }
   ;
 
 const
@@ -81,7 +83,30 @@ begin
   if not ACtx.Wants(RULE_MEMBER_PRIVATE) then Exit;
   if not (SameText(ACtx.NarrowRule, RULE_MEMBER_PRIVATE) or ACtx.Cfg.IsEnabled(RULE_MEMBER_PRIVATE)) then Exit;
   if ACtx.Store = nil then Exit;
-  Result:= TMemberPrivacy.Find(ACtx.Store, ACtx.LibStore, RULE_MEMBER_PRIVATE);
+  { 1.52 BK-XPROJ (FPM finding): a member of a unit another project also compiles may be
+    called from that project (COMMON Pipes.Chunks WriteChunk from SERVER). The peer's index
+    answers; a peer that cannot answer withholds the finding (svUndecided). }
+  var Shared: TSharedScope:= TSharedScope.Create(ACtx.Store, ACtx.SiblingStore, ACtx.SiblingNames);
+  try
+    for var F: TLintFinding in TMemberPrivacy.Find(ACtx.Store, ACtx.LibStore, RULE_MEMBER_PRIVATE) do
+    begin
+      var Low : string:= LowerCase(F.SymbolName);
+      var Decl: string:= F.FilePath;
+      var Projs: string;
+      var Verdict: TSharedVerdict:= Shared.Judge(Decl,
+        function(const S: ISymbolStore): Boolean
+        begin
+          Result:= False;
+          for var R in S.FindRefsNamingInFiles(S.GetAllFileIds, [Low]) do
+            if not SameText(S.GetFilePath(R.FileId), Decl) then Exit(True);
+        end, Projs);
+      if Verdict = svUndecided then NoteUndecidedSite(Decl, F.StartLine, RULE_MEMBER_PRIVATE);
+      if Verdict in [svUsedElsewhere, svUndecided] then Continue;
+      Result:= Result + [F];
+    end;
+  finally
+    Shared.Free;
+  end;
 end;
 
 end.

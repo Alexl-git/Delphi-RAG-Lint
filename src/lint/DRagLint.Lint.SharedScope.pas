@@ -237,9 +237,32 @@ procedure NoteUndecidedSite(const AFile: string; ALine: Integer; const ARule: st
 /// </remarks>
 function IsUndecidedSite(const AFile: string; ALine: Integer; const ARule: string): Boolean;
 
+/// <summary>B16 (1.52 BK-XPROJ): adds the sibling indexes a run can find WITHOUT a manifest
+/// section, so a unit another project compiles is judged there too.</summary>
+/// <param name="APrimaryDb">The run's --db ('' = the manifest picked it).</param>
+/// <param name="AProjectPath">The run's --project ('' when none).</param>
+/// <param name="AIsCopy">True when APrimaryDb is not a DB the manifest registers.</param>
+/// <param name="ANameToDb">Lowercased project name -> DB path; an existing non-empty entry is
+/// never replaced.</param>
+/// <remarks>
+/// Two sources. (a) COPY: --db is a copy outside any `_D-RAG` folder -- every other
+/// `.sqlite` beside it is a candidate (a copy set keeps its peers together; v1511 F1 never
+/// opens a real DB from a copy run, and neither does this). (b) REAL: --db sits in its
+/// project's `_D-RAG` folder (or the run is not on a copy and names --project) -- every
+/// `.groupproj` in the project folder or up to two parents lists peer `.dproj` files, each
+/// one's index at `peer folder\_D-RAG\peer base name.sqlite` when that file exists. A
+/// candidate is only a candidate: TSharedScope still keeps a peer only when its index holds
+/// the unit's file, and judges only a fresh one. Reads directory listings and `.groupproj`
+/// text; opens no store. Exceptions from the file system are swallowed per entry.
+/// </remarks>
+procedure AddDiscoveredPeers(const APrimaryDb, AProjectPath: string; AIsCopy: Boolean;
+  const ANameToDb: TDictionary<string, string>);
+
 implementation
 
 uses
+  System.IOUtils,
+  System.RegularExpressions,
   DRagLint.Lint.SharedUnit,  { TSharedUnit.ProjectsOf -- the header-declared projects }
   DRagLint.Index.Freshness;  { ProbeIndexFreshness -- a stale sibling proves nothing }
 
@@ -272,6 +295,90 @@ begin
     Result:= GUndecided.ContainsKey(SiteKey(AFile, ALine, ARule));
   finally
     TMonitor.Exit(GUndecided);
+  end;
+end;
+
+const
+  DRAG_DIR = '_D-RAG';
+  GROUPPROJ_PARENT_LEVELS = 2;  { the project folder, its parent and grandparent }
+
+procedure AddPeer(const ANameToDb: TDictionary<string, string>; const AName, ADb: string);
+var
+  Cur: string;
+begin
+  if (AName = '') or (ADb = '') then Exit;
+  if ANameToDb.TryGetValue(LowerCase(AName), Cur) and (Cur <> '') then Exit;
+  for var Known: string in ANameToDb.Values do  { a manifest section already opens this DB }
+    if SameText(ExpandFileName(Known), ExpandFileName(ADb)) then Exit;
+  ANameToDb.AddOrSetValue(LowerCase(AName), ADb);
+end;
+
+procedure AddGroupPeers(const AGroupProj, AOwnBase, APrimary: string;
+  const ANameToDb: TDictionary<string, string>);
+var
+  Text: string;
+begin
+  try
+    Text:= TFile.ReadAllText(AGroupProj);
+  except  // dl:ok try-except-swallowed@2bb3 -- an unreadable .groupproj names no peer; the run judges as before
+    on E: Exception do Exit;
+  end;
+  for var M: TMatch in TRegEx.Matches(Text, '<Projects\s+Include="([^"]+)"', [roIgnoreCase]) do
+  begin
+    var Peer: string:= ExpandFileName(TPath.Combine(ExtractFilePath(AGroupProj), M.Groups[1].Value));
+    if not SameText(ExtractFileExt(Peer), '.dproj') then Continue;
+    var Base: string:= ChangeFileExt(ExtractFileName(Peer), '');
+    if SameText(Base, AOwnBase) then Continue;
+    var Db: string:= TPath.Combine(TPath.Combine(ExtractFilePath(Peer), DRAG_DIR), Base + '.sqlite');
+    if SameText(Db, APrimary) or not TFile.Exists(Db) then Continue;
+    AddPeer(ANameToDb, Base, Db);
+  end;
+end;
+
+{ The .groupproj files directly in ADir; empty when the folder cannot be listed. }
+function GroupProjsIn(const ADir: string): TArray<string>;
+begin
+  try
+    Result:= TDirectory.GetFiles(ADir, '*.groupproj');  // dl:ok taint-path-traversal@d6af -- ADir is the run's own --project / --db folder or a parent; only a listing is read
+  except  { a folder that cannot be listed names no peer }
+    on E: Exception do Result:= nil;
+  end;
+end;
+
+procedure AddDiscoveredPeers(const APrimaryDb, AProjectPath: string; AIsCopy: Boolean;
+  const ANameToDb: TDictionary<string, string>);
+var
+  Primary, DbDir, Dir, OwnBase: string;
+  InDRag: Boolean;
+begin
+  Primary:= if APrimaryDb = '' then '' else ExpandFileName(APrimaryDb);
+  DbDir  := if Primary = '' then '' else ExcludeTrailingPathDelimiter(ExtractFilePath(Primary));
+  InDRag := (DbDir <> '') and SameText(ExtractFileName(DbDir), DRAG_DIR);
+  { (a) a copy set: the other DBs beside the copy }
+  if AIsCopy and (DbDir <> '') and not InDRag and TDirectory.Exists(DbDir) then
+    for var Db: string in TDirectory.GetFiles(DbDir, '*.sqlite') do  // dl:ok taint-path-traversal@398e -- DbDir is the folder of the run's own --db; only a listing is read
+      if not SameText(Db, Primary) then AddPeer(ANameToDb, ChangeFileExt(ExtractFileName(Db), ''), Db);
+  { (b) a real DB: the peers the project group lists }
+  if AIsCopy and not InDRag then Exit;
+  if AProjectPath <> '' then
+  begin
+    Dir    := ExcludeTrailingPathDelimiter(ExtractFilePath(ExpandFileName(AProjectPath)));
+    OwnBase:= ChangeFileExt(ExtractFileName(AProjectPath), '');
+  end
+  else if InDRag then
+  begin
+    Dir    := ExtractFileDir(DbDir);
+    OwnBase:= ChangeFileExt(ExtractFileName(Primary), '');
+  end
+  else Exit;
+  for var Level: Integer:= 0 to GROUPPROJ_PARENT_LEVELS do
+  begin
+    if (Dir = '') or not TDirectory.Exists(Dir) then Break;
+    for var G: string in GroupProjsIn(Dir) do
+      AddGroupPeers(G, OwnBase, Primary, ANameToDb);
+    var Up: string:= ExtractFileDir(Dir);
+    if SameText(Up, Dir) then Break;
+    Dir:= Up;
   end;
 end;
 
@@ -375,6 +482,9 @@ begin
       Seen.Add(LowerCase(Trim(N)), True);
       St:= Open(N);
       if (St = nil) or (St.FindFileIdByPath(APath) <= 0) or IsSelf(St) then Continue;
+      { 1.52 BK-XPROJ: another DB of THIS project (an older copy beside a --db copy, the same
+        folder indexed twice) is not a sibling project -- its stale answer must not withhold. }
+      if (FStore <> nil) and SameText(St.GetMetaValue(META_PROJECT_TAG), FStore.GetMetaValue(META_PROJECT_TAG)) then Continue;
       Names.Add(Trim(N));
     end;
     FListing.AddOrSetValue(LowerCase(APath), Names.ToArray);

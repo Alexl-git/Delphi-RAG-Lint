@@ -1,0 +1,6 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Projects Include="App1\App1.dproj"><Dependencies/></Projects>
+    <Projects Include="App2\App2.dproj"><Dependencies/></Projects>
+  </ItemGroup>
+</Project>

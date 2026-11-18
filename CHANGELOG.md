@@ -107,6 +107,14 @@ resolver 1.28.0 -> 1.29.0-alpha.
   `inc_variant` = their context and resolve under that context's hosts only, so `find-callers` no longer reports a
   call from an {$IFDEF} branch the host never compiles. Index schema 26 -> 27 (additive: `inc_variants`,
   `symbols.inc_variant` / `refs.inc_variant`); filled by the 1.52 re-parse.
+- Cross-project peers without a manifest (BK-XPROJ, B16): `lint-all` now finds `--shared-db` peers no manifest
+  section names -- other `.sqlite` copies beside a `--db` copy, or the `.groupproj` peers (project folder and up to two
+  parents) of a DB in its `_D-RAG` folder. A DB with the same project tag is never a sibling. ORM3 SERVER
+  `unused-global` 381 -> 352 (5/5 sampled are used in CLIENT).
+- `lint-all --project` keeps project-composition findings on closure units outside the roots, with a note (BK-XPROJ,
+  B19); other rules stay scoped to the roots.
+- `member-could-be-private` is judged across projects through the shared scope (BK-XPROJ, FPM finding): a member used
+  only by a sibling project (ORM3 CLIENT `WriteChunk`) is no longer reported. CLIENT 103 -> 102.
 
 ### New rules
 - `index-possibly-out-of-range` (bug-patterns, default ON -- the six false-positive classes of the 6/12 FP gate fixed in lane BK-RULEFP: a guard kept across Inc, a parameter bound every local caller proves, `in` set clamps, a Length raise guard with a loop limit from an if-expression or another unit's const array, a dominating SetLength, for-in / non-constant-start count invariants -- lanes IDXRANGE + IDXRANGE2 + BK-RULEFP): an array index that
