@@ -120,7 +120,9 @@ type
     Verdict: THbVerdict;
     Reasons: TArray<THbReason>;
     Witness: TArray<THbHop>;
-    /// <summary>One line "why not SET: ..." for the text output; '' for a SET use.</summary>
+    /// <summary>One line "why not SET: ..." for the text output. A SET use carries '' unless it
+    /// relies on DFM handler order (reason relied-on-handler-order, HBEVORD): then the line names the
+    /// handler and why it runs after the writer.</summary>
     Why: string;
   end;
 

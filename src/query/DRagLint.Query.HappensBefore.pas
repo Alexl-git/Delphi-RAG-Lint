@@ -98,6 +98,7 @@ uses
 , DRagLint.Query.HappensBefore.Roots
 , DRagLint.Query.HappensBefore.Intra
 , DRagLint.Query.HappensBefore.Fields
+, DRagLint.Query.HappensBefore.Handlers
   ;
 
 type
@@ -149,6 +150,8 @@ type
     Witness: TArray<THbHop>;
     Reasons: TArray<THbReason>;
     Why: string;
+    /// <summary>For a Done use: the HbReliedText of every ordered handler root it relied on (ruling HB5).</summary>
+    Relied: string;
   end;
 
   /// <summary>The solver of one CheckInit call. Owns its caches; the index and store belong to CheckInit.</summary>
@@ -175,6 +178,10 @@ type
     FExhausted: Boolean;
     FUnorderedRoots: THashSet<Int64>;
     FMustFinal: Boolean;
+    FHandlers: THbHandlerOrderer;
+    FRunSites: TDictionary<Int64, THbSite>;
+    function HandlerOrder(const pProg: TProgramView; pId: Int64; out pOrder: THbHandlerOrder): Boolean;
+    function PrefixDone(const pProg: TProgramView): Boolean;
     function Rows(const pSql: string): TObjectList<TIndexRow>;
     function Info(pId: Int64): TRoutineInfo;
     procedure LoadInfos(const pIds: TArray<Int64>);
@@ -460,6 +467,8 @@ begin
   FSkipped:= THashSet<Int64>.Create;
   FUnorderedRoots:= THashSet<Int64>.Create;
   FClassifier:= THbEscapeClassifier.Create(pStore);
+  FHandlers:= THbHandlerOrderer.Create(pIndex);
+  FRunSites:= TDictionary<Int64, THbSite>.Create;
   for var W in FEvents.Writers do
     if W.Counts and (W.Site.RoutineId <> 0) then
     begin
@@ -478,6 +487,8 @@ end;
 
 destructor TSolver.Destroy;
 begin
+  FRunSites.Free;
+  FHandlers.Free;
   FClassifier.Free;
   FUnorderedRoots.Free;
   FSkipped.Free;
@@ -688,6 +699,9 @@ begin
   end;
   var U: TArray<THbSite>;
   if FUseSites.TryGetValue(pId, U) then Result:= Result + U;
+  { ruling HB5: the state just before Application.Run is the entry state of an ordered handler }
+  var Run: THbSite;
+  if FRunSites.TryGetValue(pId, Run) then Result:= Result + [Run];
 end;
 
 function TSolver.RawSolve(pId: Int64; pEntry: Boolean): THbRoutineState;
@@ -804,6 +818,9 @@ begin
         end;
         P.Unreliable:= C.Unreliable;
       end;
+    var Run: THbSite;
+    if (P.ProgramBlockId > 0) and FHandlers.RunSiteOf(P.ProgramBlockId, Run) then
+      FRunSites.AddOrSetValue(P.ProgramBlockId, Run);
     FPrograms:= FPrograms + [P];
   end;
   if FPrograms = nil then
@@ -859,6 +876,33 @@ begin
   var C:= FClassifier.ClassOf(pId);
   Result:= C <> hecNone;
   if Result then pNote:= 'escaped root (' + EscapeClassCode(C) + ')';
+  var O: THbHandlerOrder;
+  if (C = hecDfmEvent) and HandlerOrder(pProg, pId, O) then
+  begin
+    pEntry:= PrefixDone(pProg);
+    pNote:= Format('event handler (fired by %s), ordered after the program-block prefix of %s', [O.FiredBy, O.ProgramName]);
+  end;
+end;
+
+{ Ruling HB5: True when pId is a DFM event handler ordered after the program-block prefix of pProg. }
+function TSolver.HandlerOrder(const pProg: TProgramView; pId: Int64; out pOrder: THbHandlerOrder): Boolean;
+begin
+  pOrder:= Default(THbHandlerOrder);
+  if pProg.AllFiles or (pProg.ProgramBlockId = 0) or not FRunSites.ContainsKey(pProg.ProgramBlockId) then Exit(False);
+  pOrder:= FHandlers.OrderOf(pProg.ProgramBlockId, pId);
+  Result:= pOrder.Ordered;
+end;
+
+{ The state just before the top-level Application.Run of pProg's program block. }
+function TSolver.PrefixDone(const pProg: TProgramView): Boolean;
+var
+  Q: THbQueryState;
+begin
+  var Run: THbSite;
+  if not FRunSites.TryGetValue(pProg.ProgramBlockId, Run) then Exit(False);
+  var K:= ChainPos(pProg, pProg.ProgramBlockId);
+  var Entry:= (K >= 0) and ChainEntry(pProg, K);
+  Result:= StateAt(Solve(pProg.ProgramBlockId, Entry), Run.Line, Run.Col, Q) and Q.Done;
 end;
 
 function TSolver.RootReasons(const pProg: TProgramView; pRootId: Int64; out pWhy: string): TArray<THbReason>;
@@ -892,6 +936,20 @@ begin
     Exit;
   end;
   var C:= FClassifier.ClassOf(pRootId);
+  if C = hecDfmEvent then
+  begin
+    var O: THbHandlerOrder;
+    if HandlerOrder(pProg, pRootId, O) then
+    begin
+      AddReason(Result, hrReliedOnHandlerOrder);
+      pWhy:= HbPrefixMissText(O, LastPart(FEvents.Target.QName));
+      Exit;
+    end;
+    AddReason(Result, hrUnorderedRoot);
+    pWhy:= Format('root "%s" can run at any time (escaped: %s): %s', [I.QName, EscapeClassCode(C),
+      FHandlers.OrderOf(if pProg.AllFiles then 0 else pProg.ProgramBlockId, pRootId).WhyNot]);
+    Exit;
+  end;
   case C of
     hecAddressTaken:
       begin
@@ -1024,7 +1082,19 @@ begin
       Result.InClosure:= Q.InClosure;
       Result.Done:= Q.Done and not Q.InClosure;
     end;
-    if Result.Done then Exit;
+    if Result.Done then
+    begin
+      { ruling HB5: name every ordered handler root whose entry bit the proof used }
+      var Roots:= RootSet.ToArray;
+      TArray.Sort<Int64>(Roots);
+      for var R in Roots do
+      begin
+        var O: THbHandlerOrder;
+        if ED[R] and (FClassifier.ClassOf(R) = hecDfmEvent) and HandlerOrder(pProg, R, O) then
+          Result.Relied:= if Result.Relied = '' then HbReliedText(O) else Result.Relied + '; ' + HbReliedText(O);
+      end;
+      Exit;
+    end;
     { witness: BFS from U over callers whose call state is False, to the nearest unproven root }
     var Parent:= TDictionary<Int64, TCallSite>.Create;  { caller -> the call site that leads to its child }
     var ChildOf:= TDictionary<Int64, Int64>.Create;     { caller -> the routine it calls on the path }
@@ -1171,6 +1241,7 @@ begin
       var Bad: TUseInProgram;
       var HaveBad:= False;
       var Count:= 0;
+      var Relied:= '';
       for var P in FPrograms do
       begin
         var J:= JudgeUse(P, Use.Site);
@@ -1178,6 +1249,7 @@ begin
         Judged:= True;
         Inc(Count);
         JudgedPrograms.Add(P.Name);
+        if J.Done and (J.Relied <> '') then Relied:= if Relied = '' then J.Relied else Relied + '; ' + J.Relied;
         if (not J.Done) and not HaveBad then
         begin
           Bad:= J;
@@ -1198,7 +1270,14 @@ begin
         A.Reasons:= Bad.Reasons;
         A.Why:= WHY_PREFIX + Bad.Why;
         if Count > 1 then AddReason(A.Reasons, hrMultiProgram);
+      end
+      else if Relied <> '' then
+      begin
+        { ruling HB5: a SET that used the handler order says so and names the handler }
+        AddReason(A.Reasons, hrReliedOnHandlerOrder);
+        A.Why:= Relied;
       end;
+      if TArray.Contains<THbReason>(A.Reasons, hrReliedOnHandlerOrder) then AddReason(pAnswer.Reasons, hrReliedOnHandlerOrder);
       if FExhausted and (A.Verdict <> hvSet) then AddReason(A.Reasons, hrBudget);
       if FExhausted and (A.Verdict = hvSet) then
       begin
@@ -1452,6 +1531,8 @@ begin
       Result.Proven:= Result.Verdict = hvSet;
       Result.Summary:= if Result.Verdict = hvSet then '(proven: every judged use runs after a counting writer)'
         else '(not proven)';
+      if TArray.Contains<THbReason>(Result.Reasons, hrReliedOnHandlerOrder) then
+        Result.Summary:= Result.Summary + ' -- uses with relied-on-handler-order rely on event-handler order (ruling HB5, name heuristic)';
     end;
     if Warnings <> nil then
     begin
