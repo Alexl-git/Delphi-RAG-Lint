@@ -5240,7 +5240,18 @@ begin
   Result:= True;
 end; // function
 
-function TLSPServer.ComputeHoverAt(const APath: string; ALine, ACol: Integer; out AOut: THoverComputation): Boolean;  // dl:ok cyclomatic-complexity@22a3, cognitive-complexity@e6bb, method-too-long@ebc3, deep-nesting@5f57 -- REVIEWED S0: the hover RENDERING half of the former ComputeHover (54 before); the selection half moved to SelectSymbolAt, further splitting is out of S0 scope (re-reviewed A5 fix: now 35; still one rendering pass, a split stays out of scope here; 151 INT re-review: 37 / 270 lines after CF's one-TypeAt-per-hover reuse, same single pass)
+{ v152 BK-VSHOVER (B51): the check-init 'Init:' / 'Set by:' lines of a variable or field for the
+  markdown hover -- the same AttachHoverSetBy the hoverBundle model uses (cached per index file,
+  so the bundle's second call is free). Empty for any other symbol. Slow on a first solve: only
+  the whole / second-step hover calls it, never the fast step. }
+function HoverSetByLines(const AStore: ISymbolStore; const ASym: TSymbol): TArray<string>;
+begin
+  var Asm_: THoverAssembly:= Default(THoverAssembly);
+  AttachHoverSetBy(AStore, ASym, Asm_);
+  Result:= Asm_.FactLines;
+end;
+
+function TLSPServer.ComputeHoverAt(const APath: string; ALine, ACol: Integer; out AOut: THoverComputation): Boolean;  // dl:ok cyclomatic-complexity@df30, cognitive-complexity@b7e0, method-too-long@43f0 -- REVIEWED S0: the hover RENDERING half of the former ComputeHover (54 before); the selection half moved to SelectSymbolAt, further splitting is out of S0 scope (re-reviewed A5 fix: now 35; still one rendering pass, a split stays out of scope here; 151 INT re-review: 37 / 270 lines after CF's one-TypeAt-per-hover reuse, same single pass; 1.52 BK-VSHOVER re-review: 41 / 310 lines after ASYNC fast-step, HBHOVER and the Set by: lines, still one rendering pass; deep-nesting no longer fires)
 var
   Path    : string         ;
   Ident   : string         ;
@@ -5380,6 +5391,8 @@ begin
       var HovExc: TArray<string>:= ExceptionFactLines(HitStore, Sel); { D1: Raises:, after the doc-block facts }
       HovFactLines:= HovFactLines + HovExc;
       LapHoverTiming(HT, 'exceptions');
+      HovFactLines:= HovFactLines + HoverSetByLines(HitStore, Sel); { v152 BK-VSHOVER (B51): the writer list, as in the bundle }
+      LapHoverTiming(HT, 'set-by');
       { v152 ASYNC: kept for hoverBundle's model (built once per popup). }
       AOut.FactsReady    := True    ;
       AOut.FactsSymId    := Sel.Id  ;
@@ -5523,6 +5536,8 @@ begin
           var NdExc: TArray<string>:= ExceptionFactLines(HitStore, Filtered[0]); { D1: Raises: }
           NdLines:= NdLines + NdExc;
           LapHoverTiming(HT, 'exceptions');
+          NdLines:= NdLines + HoverSetByLines(HitStore, Filtered[0]); { v152 BK-VSHOVER (B51): the writer list, as in the bundle }
+          LapHoverTiming(HT, 'set-by');
           { v152 ASYNC: kept for hoverBundle's model (built once per popup). }
           AOut.FactsReady    := True          ;
           AOut.FactsSymId    := Filtered[0].Id;
@@ -5576,24 +5591,58 @@ end;
 procedure TLSPServer.HandleHover(const AId: TJSONValue; const AParams: TJSONObject);
 { A thin envelope over ComputeHover. Every rule about WHICH symbol a position
   means now lives in one place, so `draglint/hoverBundle` cannot describe a
-  different symbol than this reply does for the same cursor. }
+  different symbol than this reply does for the same cursor.
+
+  v152 BK-VSHOVER (B32): the same two-step deferral hoverBundle has (ASYNC), for
+  the VS Code client. After draglint/deferHover the first hover at that position
+  is the fast markdown with the DEFERRED_PLACEHOLDER line where the facts go; the
+  second hover there is the whole markdown, cancellable ($/cancelRequest or an
+  announcement elsewhere -> RequestCancelled). Unannounced hovers are whole. }
 var
-  HoverObj: TJSONObject     ;
-  Contents: TJSONObject     ;
-  Comp    : THoverComputation;
+  HoverObj : TJSONObject     ;
+  Contents : TJSONObject     ;
+  Comp     : THoverComputation;
+  Decision : TDeferredHoverDecision;
+  RunSerial: Integer         ;
+  Computed : Boolean         ;
+  KeyPath  : string          ;
+  KeyLine  : Integer         ;
+  KeyCol   : Integer         ;
 begin
-  if not ComputeHover(AParams, Comp) then
+  Decision := dhdFull;
+  RunSerial:= 0;
+  if PositionParams(AParams, KeyPath, KeyLine, KeyCol) then
   begin
-    SendResult(AId, nil); { result: null }
-    Exit;
+    var Key: string:= HoverKey(KeyPath, KeyLine, KeyCol);
+    Decision:= DeferredHover.Decide(Key);
+    if (Decision = dhdComplete) and (AId <> nil) then RunSerial:= DeferredHover.BeginComplete(AId.ToJSON, Key);
   end;
-  Comp.MdValue:= WithContextFooter(AParams, Comp.MdValue);
-  HoverObj:= TJSONObject.Create;
-  Contents:= TJSONObject.Create;
-  Contents.AddPair('kind'    , 'markdown' );
-  Contents.AddPair('value'   , Comp.MdValue);
-  HoverObj.AddPair('contents', Contents   );
-  SendResult(AId, HoverObj);
+  try
+    FHoverFastOnly:= Decision = dhdFast;
+    try
+      Computed:= ComputeHover(AParams, Comp);
+    finally
+      FHoverFastOnly:= False;
+    end;
+    if not Computed then
+    begin
+      SendResult(AId, nil); { result: null }
+      Exit;
+    end;
+    { The test switch's slow section stands where the whole answer's slow work
+      is; the fast step skips it. Both checks answer RequestCancelled themselves. }
+    if (Decision <> dhdFast) and not HoverSlowWork(AId, RunSerial) then Exit;
+    if not HoverStillWanted(AId, RunSerial) then Exit;
+    Comp.MdValue:= WithContextFooter(AParams, Comp.MdValue);
+    HoverObj:= TJSONObject.Create;
+    Contents:= TJSONObject.Create;
+    Contents.AddPair('kind'    , 'markdown' );
+    Contents.AddPair('value'   , Comp.MdValue);
+    HoverObj.AddPair('contents', Contents   );
+    SendResult(AId, HoverObj);
+  finally
+    if RunSerial <> 0 then DeferredHover.EndComplete(RunSerial);
+  end;
 end; // procedure
 
 function TLSPServer.ComputeHoverMarkdown(const APath: string; ALine0, ACol0: Integer): string;
@@ -6949,6 +6998,19 @@ begin
   end;
 end;
 
+{ v152 BK-VSHOVER (B43): the 'disable <rule> in this unit / project' actions go LAST. VS Code's
+  'Fix finding' (dragLint.fixFinding) applies the FIRST quickfix, and switching a rule off must
+  never be what a one-key fix does. Stable: the other actions keep their order. }
+procedure MoveDisableRuleActionsLast(const AActions: TJSONArray);
+begin
+  var Moved: TArray<TJSONValue>:= [];
+  for var I: Integer:= AActions.Count - 1 downto 0 do
+    if (AActions.Items[I] is TJSONObject) and
+       (TJSONObject(AActions.Items[I]).GetValue<string>('command.command', '') = 'drag-lint.disableRule') then
+      Moved:= [AActions.Remove(I)] + Moved;
+  for var V: TJSONValue in Moved do AActions.AddElement(V);
+end;
+
 procedure TLSPServer.HandleCodeAction(const AId: TJSONValue; const AParams: TJSONObject);
 var
   Reply    : TJSONObject;
@@ -7085,6 +7147,7 @@ begin
       finally
         FixActs.Free;
       end;
+      MoveDisableRuleActionsLast(Actions);
       Reply.AddPair('result', Actions);
     finally
       if Context = nil then Diags.Free; { only free if we built it; context owns it }

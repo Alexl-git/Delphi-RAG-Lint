@@ -1616,6 +1616,27 @@ begin
         still drag-lint's, so they still get the dl:ok action. }
       if (DSource = nil) or ((DSource.Value <> 'drag-lint') and (DSource.Value <> 'drag-lint (unowned)')) then Continue;
 
+      { 1.52 DISRULE H1 (PLAN 5 D1): "Disable rule" in this unit / project; the client asks the reason
+        and runs `rules disable`. Offered before the line-marker checks, so it also appears on a line
+        that is already reviewed. }
+      for var DScope: string in ['unit', 'project'] do
+      begin
+        var DA: TJSONObject:= TJSONObject.Create;
+        DA.AddPair('title', Format('drag-lint: disable %s in this %s...', [DiagCode, DScope]));
+        DA.AddPair('kind', 'quickfix');
+        var DC: TJSONObject:= TJSONObject.Create;
+        DC.AddPair('title', 'Disable rule');
+        DC.AddPair('command', 'drag-lint.disableRule');
+        var DArgs: TJSONArray:= TJSONArray.Create;
+        DArgs.Add(DiagCode);
+        DArgs.Add(DScope);
+        DArgs.Add(AFile);
+        DArgs.Add(DiagLine);
+        DC.AddPair('arguments', DArgs);
+        DA.AddPair('command', DC);
+        Result.AddElement(DA);
+      end;
+
       { Get the line text and create the marker. }
       if (DiagLine - 1) >= Lines.Count then Continue;
       { H2: a finding on a `///` line is marked on the declaration the block documents

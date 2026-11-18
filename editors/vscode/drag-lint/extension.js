@@ -11,8 +11,9 @@
 // advertising hover, definition, references, workspaceSymbol, completion and
 // signatureHelp.
 
-const { workspace, window, commands, languages, ConfigurationTarget, StatusBarAlignment, ThemeColor, Uri, Position, Range } = require('vscode');
+const { workspace, window, commands, languages, ConfigurationTarget, StatusBarAlignment, ThemeColor, Uri, Position, Range, Hover, MarkdownString } = require('vscode');
 const { LanguageClient, TransportKind, CloseAction, ErrorAction } = require('vscode-languageclient/node');
+const { execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const radcolors = require('./lib/radcolors');
@@ -21,6 +22,8 @@ const plannedstop = require('./lib/plannedstop');
 const serverargs = require('./lib/serverargs');
 const enginestale = require('./lib/enginestale');
 const exceptionfacts = require('./lib/exceptionfacts');
+const deferredhover = require('./lib/deferredhover');
+const disablerule = require('./lib/disablerule');
 
 // Set once in activate(). restartServer() and updateEngineNow() both need the
 // extension context to locate the private engine copy, and neither is called
@@ -387,7 +390,15 @@ function sharedClientChannel() {
   return clientChannel;
 }
 
+// v152 BK-VSHOVER (B32): the deferred hover's one slot (see lib/deferredhover.js),
+// shared by the LSP hover middleware (first step) and the companion provider
+// (second step). serverExe = the engine the client runs, for `rules disable`.
+const hoverSlot = deferredhover.createSlot();
+let serverExe = '';
+let lastCtx;
+
 function makeClient(exe) {
+  serverExe = exe;
   // No --db by default. drag-lint resolves databases from the drag-lint.json
   // sitting beside the exe, which is the same manifest the Delphi IDE reads --
   // so VS Code follows the project layout automatically instead of pinning a
@@ -437,6 +448,31 @@ function makeClient(exe) {
         const result = await next(command, args);
         if (exceptionfacts.isExceptionFactsCommand(command)) await showExceptionFacts(result);
         return result;
+      },
+      // v152 BK-VSHOVER (B32): announce the position, then ask. A 1.52 engine answers
+      // the FAST markdown (placeholder where the slow facts go), shown at once; the
+      // companion provider (registerDeferredHoverCompanion) asks again for the rest.
+      // An older engine answers whole and the companion adds nothing.
+      provideHover: async (document, position, token, next) => {
+        const uri = document.uri.toString();
+        const k = deferredhover.key(uri, position.line, position.character);
+        hoverSlot.reset(k);
+        if (client) client.sendNotification(deferredhover.DEFER_METHOD, { textDocument: { uri }, position: { line: position.line, character: position.character } });
+        let hover;
+        try {
+          hover = await next(document, position, token);
+        } catch (e) {
+          hoverSlot.settle(k, null);
+          throw e;
+        }
+        const text = deferredhover.hoverText(hover);
+        if (!hover || !deferredhover.isPartial(text)) {
+          hoverSlot.settle(k, null);
+          return hover;
+        }
+        const shown = deferredhover.fastPart(text);
+        hoverSlot.settle(k, { shown });
+        return new Hover(new MarkdownString(shown), hover.range);
       }
     }
   };
@@ -611,6 +647,7 @@ function updateContextVisibility() {
 }
 
 function showContext(ctx) {
+  lastCtx = ctx;
   if (!ctxStatus) return;
   const f = dlctx.formatStatus(ctx);
   ctxStatus.text = f.text;
@@ -658,6 +695,71 @@ async function selectProject() {
     value = sel[0].fsPath;
   }
   await applyContext({ project: value });
+}
+
+// v152 BK-VSHOVER (B32): the second half of the deferred hover. VS Code renders each
+// provider's part as it resolves, so this provider waits for the LSP middleware's
+// first step at the same position and, when that was partial, asks the same
+// position again (the engine's cancellable WHOLE answer) and shows only what the
+// fast part did not. Moving away cancels the token -> $/cancelRequest -> the engine
+// abandons the work. Registered before the client starts.
+function registerDeferredHoverCompanion(context) {
+  context.subscriptions.push(languages.registerHoverProvider({ scheme: 'file', language: 'pascal' }, {
+    async provideHover(document, position, token) {
+      // VS Code calls both providers in one synchronous pass; yield once so the
+      // middleware has opened this position's slot before we wait on it.
+      await new Promise((r) => setTimeout(r, 0));
+      const k = deferredhover.key(document.uri.toString(), position.line, position.character);
+      const first = await hoverSlot.wait(k, deferredhover.FIRST_STEP_WAIT_MS, () => token.isCancellationRequested);
+      if (!first || !client || token.isCancellationRequested) return null;
+      let res;
+      try {
+        res = await client.sendRequest('textDocument/hover', client.code2ProtocolConverter.asTextDocumentPositionParams(document, position), token);
+      } catch (e) {
+        return null; // RequestCancelled: the user moved on
+      }
+      const rest = deferredhover.remainder(first.shown, deferredhover.hoverText(res));
+      return rest ? new Hover(new MarkdownString(rest)) : null;
+    }
+  }));
+}
+
+// v152 BK-VSHOVER (B43, DISRULE H1): the engine's "drag-lint: disable <rule> in this
+// unit / project..." code action carries this command. Ask the reason, run
+// `drag-lint rules disable`, show the answer, re-lint the files with findings.
+async function disableRule(...args) {
+  const req = disablerule.fromCommandArgs(args);
+  if (!req) {
+    window.showWarningMessage('drag-lint: "Disable rule" is run from a drag-lint finding\'s quick fix (light bulb).');
+    return;
+  }
+  const where = req.scope === 'line' ? 'on this line' : 'in this ' + req.scope;
+  const reason = await window.showInputBox({
+    prompt: `drag-lint: why does ${req.rule} not apply ${where}? (saved with the override, with today's date)`,
+    placeHolder: 'reason (required)',
+    ignoreFocusOut: true,
+    validateInput: (v) => disablerule.reasonProblem(v, req.scope) || null
+  });
+  if (reason === undefined) return;
+  if (!serverExe || !fs.existsSync(serverExe)) {
+    window.showErrorMessage('drag-lint: engine not found; set "dragLint.serverPath".');
+    return;
+  }
+  const project = lastCtx && lastCtx.project ? String(lastCtx.project) : '';
+  const argv = disablerule.buildArgs(Object.assign({}, req, { reason, project: /\.dproj$/i.test(project) ? project : '' }));
+  log('disable rule: ' + argv.join(' '));
+  const { out, code } = await new Promise((resolve) => {
+    execFile(serverExe, argv, { cwd: path.dirname(req.file), windowsHide: true, timeout: 60000 }, (err, so, se) => {
+      resolve({ out: String(so || '') + String(se || ''), code: err ? (typeof err.code === 'number' ? err.code : 2) : 0 });
+    });
+  });
+  const r = disablerule.describeResult(out, code);
+  if (!r.ok) {
+    window.showErrorMessage('drag-lint: ' + r.message);
+    return;
+  }
+  window.showInformationMessage('drag-lint: ' + r.message);
+  await refreshProblems();
 }
 
 // DEC-14: opt-in staleness notice (dragLint.engineStaleNoticeMinutes, 0 = off).
@@ -728,6 +830,12 @@ function activate(context) {
   // the server path is wrong.
   context.subscriptions.push(commands.registerCommand('dragLint.applyRadStudioColours', applyRadStudioColours));
   context.subscriptions.push(commands.registerCommand('dragLint.generateTheme', generateThemeFile));
+  // v152 BK-VSHOVER: the disable-rule code action's command (B43) and the deferred
+  // hover's second step (B32). The companion is registered BEFORE the client starts:
+  // VS Code orders hover parts newest provider first, so the LSP's fast part shows
+  // above the companion's remainder.
+  context.subscriptions.push(commands.registerCommand(disablerule.COMMAND, disableRule));
+  registerDeferredHoverCompanion(context);
 
   // Fail LOUDLY and specifically. A language client that cannot spawn its
   // server otherwise just produces no hovers, which reads as "the index has

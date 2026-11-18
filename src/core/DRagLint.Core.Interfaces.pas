@@ -876,6 +876,13 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function GetFilePath(AFileId: Int64): string                                           ;
+    /// <summary>The index file this store reads (the connection's Database parameter).</summary>
+    /// <returns>The path as opened, or '' for a store with no file behind it (an in-memory
+    /// database). Callers that need the file itself (check-init, a write-time cache key)
+    /// test it with TFile.Exists.</returns>
+    /// <remarks>v152 BK-VSHOVER (B51): replaces the hover's RTTI read of the private
+    /// FConn field. Cheap, no query; safe from any thread that may use the store.</remarks>
+    function DbPath: string;
     /// <summary>Every stored doc block carrying the <c>dl:wiki</c> marker,
     /// joined to its owning symbol and file.</summary>
     /// <returns>Candidate rows ordered by file then line; empty is a normal

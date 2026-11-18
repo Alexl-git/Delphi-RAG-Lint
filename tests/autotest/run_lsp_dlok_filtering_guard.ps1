@@ -344,7 +344,13 @@ $nmReq = @{ jsonrpc='2.0'; id=2; method='textDocument/codeAction';
             params=@{ textDocument=@{ uri=('file:///' + ($nm -replace '\\', '/')) }; range=$nmDiag.range; context=@{ diagnostics=@($nmDiag) } } }
 $nmR = Invoke-Lsp $nm @($nmReq)
 $nmResp = @($nmR.Frames | Where-Object { $_.id -eq 2 }) | Select-Object -First 1
-Check 'metric rule without data.metric : NO action offered' ($null -ne $nmResp -and @($nmResp.result).Count -eq 0)
+# v152 BK-VSHOVER (B43): the refusal is the LINE marker. 'disable in this unit / project'
+# (command drag-lint.disableRule, no edit) stays offered -- the documented way out for a metric
+# rule (docs\wiki\v152-disable-rule.md "Limits").
+$nmActs = @($nmResp.result)
+$nmMark = @($nmActs | Where-Object { -not ($_.command -and $_.command.command -eq 'drag-lint.disableRule') })
+Check 'metric rule without data.metric : NO marker action offered' ($null -ne $nmResp -and $nmMark.Count -eq 0)
+Check 'metric rule without data.metric : unit + project disable still offered' (($nmActs.Count - $nmMark.Count) -eq 2)
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
 } finally {
