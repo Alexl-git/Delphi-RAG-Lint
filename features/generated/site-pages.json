@@ -392,7 +392,7 @@
     "version": "1.35.1-alpha"
   },
   "features/field-repository.md": {
-    "hash": "3e3ecf4a5f5404c9428d313c60ed39ab416eaccad0c95e2379979926341c0c4d",
+    "hash": "98c167a7bd4ad573a86733f938effd3382d9de1cd18dc69b1e8203ecbda6ecaa",
     "version": "1.52.0-alpha"
   },
   "features/finalization-after-dependency.md": {
@@ -1056,7 +1056,7 @@
     "version": "1.52.0-alpha"
   },
   "features/v152-disable-rule.md": {
-    "hash": "7f9f3a073b01a6145eecb1ac4cce277d5436d23e4c90bd9d94a6a851acf7e8b9",
+    "hash": "09f250c12a4cde3938338ac674709281639f2ead094248f893ef4b12d8de81be",
     "version": "1.52.0-alpha"
   },
   "features/v152-docpol.md": {
@@ -1072,8 +1072,8 @@
     "version": "1.51.1-alpha"
   },
   "features/v152-fixer-compile-gate.md": {
-    "hash": "bc236127aa7bbb3581bb7d9a98f7d114fd0d09bdbb4e8cfae7acfe86eb488405",
-    "version": "1.51.1-alpha"
+    "hash": "1b5a90dc03360719f3128d3dce36a17de60621efc9bb64cc0f4c7cba9b74d8cb",
+    "version": "1.52.0-alpha"
   },
   "features/v152-index-possibly-out-of-range.md": {
     "hash": "e3b2e7b6ff64dbedf0615304914dcdcccb068dd8b310d1de52aef04510ad2531",

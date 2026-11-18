@@ -183,7 +183,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Dataset and transaction lint rules](dataset-rules-v151) | `lint` |  |
 | [debug-display-placeholder + attribute-aware member-could-be-private](v152-attrrules) | `lint` |  |
 | [Default-on form, dataset and data-module rules](rule-defaults-152) | `lint`; `rules` |  |
-| [Disable rule (this line, this unit, this project)](v152-disable-rule) | `rules`; drag-lint > Code Quality > Disable Rule...; Editor: drag-lint > Disable Rule... |  |
+| [Disable rule (this line, this unit, this project)](v152-disable-rule) | `rules disable`; `rules enable`; `rules`; drag-lint > Code Quality > Disable Rule...; Editor: drag-lint > Disable Rule... |  |
 | [Downgrade fixes (compat rules)](compat-downgrade-fixes) | `lint` | planned |
 | [drag-lint: Project Rules](drag-lint-Project-Rules) | Project Manager: drag-lint: Project Rules; `rules` |  |
 | [Effect-free call in a loop that could move out (lint rule)](effect-free-in-loop-invariant) | `lint-all` |  |
@@ -456,7 +456,7 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [dump-refs](dump-refs) | `dump-refs` |  |
 | [Feature registry](Feature-Registry) | `tools\publish-release.ps1 -Version -DryRun`; procedure: `docs\wiki\Feature-Registry.md` |  |
 | [featuregen](featuregen) | `featuregen.exe`; `build\_build_featuregen_local.bat builds featuregen.exe from this checkout`; `tools\featuregen-gate.ps1 -Repo -Full`; procedure: `docs\wiki\featuregen.md` | internal |
-| [Field repository](field-repository) | drag-lint > Field Repository > Open Field Repository Editor...; drag-lint > Field Repository > Refresh Schema from Database...; drag-lint > Field Repository > FDMemTable from CSV...; drag-lint > Field Repository > Generate / Update ORM Source...; drag-lint > Field Repository > Generate DataService Units...; drag-lint > Field Repository > Param Array Assistant...; `repo` |  |
+| [Field repository](field-repository) | `repo init`; `repo info`; `repo import-fb`; `repo seed-fb`; `repo refresh-schema`; `repo backup`; `repo restore`; `repo gen-memtable`; `repo gen-param-array`; `repo gen-orm`; `repo update-orm`; `repo gen-dataservice`; drag-lint > Field Repository > Open Field Repository Editor...; drag-lint > Field Repository > Refresh Schema from Database...; drag-lint > Field Repository > FDMemTable from CSV...; drag-lint > Field Repository > Generate / Update ORM Source...; drag-lint > Field Repository > Generate DataService Units...; drag-lint > Field Repository > Param Array Assistant...; `repo` |  |
 | [info](info) | `info` |  |
 | [Library Drift Check](Library-Drift-Check) | drag-lint > Index & Maintenance > Library Drift Check...; `library-drift` |  |
 | [Maintenance](Maintenance) | procedure: `docs\wiki\Maintenance.md` |  |
