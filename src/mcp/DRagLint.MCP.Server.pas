@@ -547,6 +547,7 @@ uses
   , DRagLint.Query.ExceptionFacts { get_exception_facts (wave 148 D1) }
   , DRagLint.Query.HappensBefore.Types { check_init (1.52 HBMCP): the answer contract }
   , DRagLint.Query.HappensBefore.Render { check_init: the same JSON as `check-init --json` }
+, DRagLint.Query.HappensBefore { check_init (1.52 HBSOLVER): CheckInit, the solver }
   , DRagLint.Query.Callers   { Gitea #31: the CLI's resolved callers and name filters }
   , DRagLint.Index.Freshness { Gitea #34: the freshness note of the store a tool reads }
   ;
@@ -1643,13 +1644,14 @@ begin
         Exit;
       end;
       try
-        { HANDOVER (lane HBSOLVER, applied by INT): the same replacement as in DRagLint.CLI.CheckInit.RunCheckInit:
-            var CiOpts:= Default(THbOptions);
-            CiOpts.MaxRoutines:= if CiMax = 0 then HB_DEFAULT_MAX_ROUTINES else CiMax;
-            CiOpts.Explain:= (Args.GetValue('explain') <> nil) and SameText(Args.GetValue('explain').Value, 'true');
-            ResultText:= HbAnswerJson(CheckInit(CiDb, CiTarget, CiAt, CiOpts));
-          with CiDb the db path as in get_exception_facts, and DRagLint.Query.HappensBefore in uses. }
-        ResultText:= HbAnswerJson(HbNotImplementedAnswer(CiTarget, CiAtSite));
+        { 1.52 HBSOLVER H-CLI (applied by INT): the solver answers; the db path as in get_exception_facts. }
+        var CiDb: string:= '';
+        if Args.GetValue('db') <> nil then CiDb:= Args.GetValue('db').Value
+        else if Length(FDbPaths) > 0 then CiDb:= FDbPaths[0];
+        var CiOpts:= Default(THbOptions);
+        CiOpts.MaxRoutines:= if CiMax = 0 then HB_DEFAULT_MAX_ROUTINES else CiMax;
+        CiOpts.Explain:= (Args.GetValue('explain') <> nil) and SameText(Args.GetValue('explain').Value, 'true');
+        ResultText:= HbAnswerJson(CheckInit(CiDb, CiTarget, CiAt, CiOpts));
       except
         on E: EHbUsage do
         begin

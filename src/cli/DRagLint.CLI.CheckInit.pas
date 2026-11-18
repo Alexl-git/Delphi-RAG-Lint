@@ -7,8 +7,7 @@ unit DRagLint.CLI.CheckInit;
   HANDOVER to the CLI.pas dispatch line).
 
   HBSKEL: usage guards, DB guards, the answer through Render. The answer itself
-  comes from the HANDOVER statement in RunCheckInit; until lane HBSOLVER exports CheckInit from
-  DRagLint.Query.HappensBefore it is the scaffold answer (HbNotImplementedAnswer). }
+  comes from DRagLint.Query.HappensBefore.CheckInit (lane HBSOLVER, wired by INT 1.52). }
 
 interface
 
@@ -40,6 +39,7 @@ uses
 , DRagLint.Storage.Schema
 , DRagLint.Query.HappensBefore.Types
 , DRagLint.Query.HappensBefore.Render
+, DRagLint.Query.HappensBefore
   ;
 
 const
@@ -104,13 +104,11 @@ begin
   end;
   var Answer: THbAnswer;
   try
-    { HANDOVER (lane HBSOLVER, applied by INT): replace the next statement with
-        var Opts:= Default(THbOptions);
-        Opts.MaxRoutines:= if pMaxRoutines = 0 then HB_DEFAULT_MAX_ROUTINES else pMaxRoutines;
-        Opts.Explain:= pExplain;
-        Answer:= CheckInit(pDbPath, pTarget, pAt, Opts);
-      and add DRagLint.Query.HappensBefore to the implementation uses. }
-    Answer:= HbNotImplementedAnswer(pTarget, AtSite);
+    { 1.52 HBSOLVER H-CLI (applied by INT): the solver answers. }
+    var Opts:= Default(THbOptions);
+    Opts.MaxRoutines:= if pMaxRoutines = 0 then HB_DEFAULT_MAX_ROUTINES else pMaxRoutines;
+    Opts.Explain:= pExplain;
+    Answer:= CheckInit(pDbPath, pTarget, pAt, Opts);
   except
     on E: EHbUsage do
     begin

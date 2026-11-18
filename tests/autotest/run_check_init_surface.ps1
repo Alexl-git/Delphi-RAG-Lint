@@ -157,11 +157,13 @@ function Test-AtUse($Doc, [int]$Line, [int]$Col) {
 Check '--at: the judged use is file HbCfg.pas line 14 col 12' (Test-AtUse $atDoc 14 12) "uses=$(($atDoc.uses | ConvertTo-Json -Compress -Depth 5))"
 $codes = @($atDoc.uses | ForEach-Object { $_.reasons }) + @($atDoc.reasons)
 $bad = @($codes | Where-Object { $_ -and ($closed -cnotcontains $_) })
-Check '--at: every reason code is in the closed list' (($codes.Count -gt 0) -and ($bad.Count -eq 0)) "codes=$($codes -join ',') bad=$($bad -join ',')"
+# 1.52 INT (HBSOLVER wired): a SET answer carries no reason codes; any other verdict must carry one.
+Check '--at: every reason code is in the closed list' ((($codes.Count -gt 0) -or ($atDoc.verdict -eq 'SET')) -and ($bad.Count -eq 0)) "codes=$($codes -join ',') bad=$($bad -join ',')"
 $noCol = Run-Verb @('HbCfg.GCount', '--at', "${unitPath}:14", '--db', $db, '--json')
 $noColDoc = $null
 try { $noColDoc = $noCol.Out | ConvertFrom-Json } catch { $noColDoc = $null }
-Check '--at file:line (no col) is accepted' (($noCol.Exit -ne 2) -and (Test-AtUse $noColDoc 14 0)) "exit=$($noCol.Exit) err=[$($noCol.Err.Trim())]"
+# 1.52 INT (HBSOLVER wired): a line-only --at judges the one use on that line, at its real column (12).
+Check '--at file:line (no col) is accepted' (($noCol.Exit -ne 2) -and (Test-AtUse $noColDoc 14 12)) "exit=$($noCol.Exit) err=[$($noCol.Err.Trim())]"
 $atOnly = Run-Verb @('--at', "${unitPath}:14:12", '--db', $db, '--json')
 Check '--at alone names the target (exit 0 or 1)' (($atOnly.Exit -eq 0) -or ($atOnly.Exit -eq 1)) "exit=$($atOnly.Exit) err=[$($atOnly.Err.Trim())]"
 
