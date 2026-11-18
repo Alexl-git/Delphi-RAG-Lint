@@ -215,7 +215,7 @@ begin
   Writeln('  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>]   (record a dl:ok review of ONE finding; dry-run without --apply; the lint options decide which findings the line has)');
   Writeln('  drag-lint shared-unit        --in <file.pas> [--add-project <name>] [--apply] [--json]   (read/extend the dl:shared marker; dry-run without --apply)');
   Writeln('  drag-lint lint-project --db <file.sqlite> [--library-db <lib.sqlite>|none] [--profile <name>] [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value|unused-global|help] [--layers <f.json>] [--json] [--output <f>]');
-  Writeln('  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]');
+  Writeln('  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-stand-down]');
   Writeln('                               --output <file>: the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).');
   Writeln('                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)');
   Writeln('                               --rule <id>[,<id>...]: RUN and report ONLY those rules (1.51.1: a comma list narrows execution and derives no --shared-db peers, as one id does); naming an OFF-by-default rule opts it in');
@@ -570,7 +570,7 @@ begin
   Writeln('       see wiki page: unwith');
   Writeln('  drag-lint lint <file.pas> [--rule index-possibly-out-of-range] [--fix --fix-rule index-possibly-out-of-range [--apply]] (default OFF in 1.52, category bug-patterns, warning; hint on an unguarded parameter or a lookup-derived index; param exception_class; the autofix is manual only: a batch --fix withholds it, --fix-rule applies it; rules --json carries fix_manual_only: true)');
   Writeln('       see wiki page: index-possibly-out-of-range');
-  Writeln('  drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]');
+  Writeln('  drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-stand-down]');
   Writeln('       ^ A second --db is the library slot, not another project: to judge a dl:ok on a dl:shared unit use --shared-db.');
   Writeln('       ^ `--library-db <lib>` names the library slot too and wins over a second --db and the manifest; a missing file refuses (exit 2), `none` means no library. Without a library, a type whose ancestry lives there stays unknown and the type-aware rules stay silent on it.');
   Writeln('       ^ lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all.');
@@ -875,7 +875,7 @@ begin
   end;
   if pVerb = 'lint-all' then
   begin
-    Writeln('  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]');
+    Writeln('  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-stand-down]');
     Writeln('                               --output <file>: the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).');
     Writeln('                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)');
     Writeln('                               --rule <id>[,<id>...]: RUN and report ONLY those rules (1.51.1: a comma list narrows execution and derives no --shared-db peers, as one id does); naming an OFF-by-default rule opts it in');

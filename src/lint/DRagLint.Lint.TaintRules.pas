@@ -462,6 +462,8 @@ type
     FProjNames   : TDictionary<string, Boolean>;
     FTypeIs      : TDictionary<string, Boolean>;
     FF1Types     : TDictionary<Int64, string>;
+    FLibCands    : TDictionary<string, TArray<TSymbol>>; { 1.52 B18: library routines with a body, by exact call name }
+    FLibParents  : TDictionary<string, TArray<string>>;  { 1.52 B18: their owners' names, aligned with FLibCands }
     FF1Query     : TFDQuery;
     FF1Probed    : Boolean;
     FF1Ready     : Boolean;
@@ -484,6 +486,7 @@ type
     function  ArgRowsAt(AStore: Integer; const X: TSymbol; AFileId: Int64; ALine, ACol: Integer;
                         const AIdx: TArray<Integer>): TArray<TDataFlowRow>;
     function  ProjectHasRoutine(const AName: string): Boolean;
+    function  LibRoutinesNamed(const AName, ARecvType: string): TArray<TSymbol>;
     function  IsRoutine(const S: TSymbol): Boolean;
     function  DeclaredTypeOf(AStore: Integer; const X: TSymbol; const AIdent: string): string;
     function  TypeIs(AStore: Integer; AFileId: Int64; const AType, AWanted: string): Boolean;
@@ -917,6 +920,8 @@ begin
   FProjNames   := TDictionary<string, Boolean>.Create;
   FTypeIs      := TDictionary<string, Boolean>.Create;
   FF1Types     := TDictionary<Int64, string>.Create;
+  FLibCands    := TDictionary<string, TArray<TSymbol>>.Create;
+  FLibParents  := TDictionary<string, TArray<string>>.Create;
   if FCfg.WeakReceiverRegex <> '' then FWeakRegex:= TRegEx.Create(FCfg.WeakReceiverRegex, [roIgnoreCase]);
 end;
 
@@ -937,6 +942,8 @@ begin
   FProjNames.Free;
   FTypeIs.Free;
   FF1Types.Free;
+  FLibCands.Free;
+  FLibParents.Free;
   FF1Query.Free;
   FTypeReader.Free;
   inherited Destroy;
@@ -1115,6 +1122,39 @@ begin
       Break;
     end;
   FProjNames.Add(K, Result);
+end;
+
+{ 1.52 B18: the library routines with a body named AName and, when more than one
+  answers and the receiver's type is known, those owned by that type -- the same
+  answer the inline lookup gave, cached per name (the library store is read-only
+  for the run). Without the cache every unresolved call named Create re-read its
+  ~19k library rows and their owners: 55-77 s of a YADF lint-all's taint pass. }
+function TTaintWalker.LibRoutinesNamed(const AName, ARecvType: string): TArray<TSymbol>;
+var
+  All    : TArray<TSymbol>;
+  Owners : TArray<string>;
+  S      : TSymbol;
+  I      : Integer;
+  Wanted : string;
+begin
+  if not FLibCands.TryGetValue(AName, All) then
+  begin
+    All:= nil;
+    for S in FStores[STORE_LIB].FindSymbolsByExactName(AName) do
+      if IsRoutine(S) and (S.ImplStartLine > 0) then All:= All + [S];
+    FLibCands.Add(AName, All);
+  end;
+  if (Length(All) <= 1) or (ARecvType = '') then Exit(All);
+  if not FLibParents.TryGetValue(AName, Owners) then
+  begin
+    SetLength(Owners, Length(All));
+    for I:= 0 to High(All) do Owners[I]:= Sym(STORE_LIB, All[I].ParentId).Name;
+    FLibParents.Add(AName, Owners);
+  end;
+  Result:= nil;
+  Wanted:= LastSeg(ARecvType);
+  for I:= 0 to High(All) do
+    if SameText(Owners[I], Wanted) then Result:= Result + [All[I]];
 end;
 
 { The declared type of an identifier at a site in routine X: a local or parameter
@@ -1577,7 +1617,6 @@ var
   Cand   : TArray<TSymbol>;
   TStore : Integer;
   T      : TSymbol;
-  S      : TSymbol;
   Sub    : TSummary;
   Arg    : TSummary;
   P      : Integer;
@@ -1595,17 +1634,8 @@ begin
   begin
     { no project binding: the library by name (a unique routine with a body, or the
       one owned by the receiver's type) }
-    Cand:= nil;
-    for S in FStores[STORE_LIB].FindSymbolsByExactName(R.Name) do
-      if IsRoutine(S) and (S.ImplStartLine > 0) then Cand:= Cand + [S];
-    if (Length(Cand) > 1) and (R.RecvType <> '') then
-    begin
-      Targets:= Cand;
-      Cand:= nil;
-      for S in Targets do
-        if SameText(Sym(STORE_LIB, S.ParentId).Name, LastSeg(R.RecvType)) then Cand:= Cand + [S];
-      Targets:= nil;
-    end;
+    Cand:= LibRoutinesNamed(R.Name, R.RecvType);
+
     if Length(Cand) = 1 then
     begin
       Targets:= Cand;

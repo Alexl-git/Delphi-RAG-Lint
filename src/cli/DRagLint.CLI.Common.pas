@@ -129,6 +129,7 @@ type
     ConfigPath   : string ; // --config <file>: drag-lint-lint.json override path
     Enable       : string ; // --enable id1,id2: re-include disabled/off-by-default rules
     Profile      : string ; // --profile <name>: merge a named enable/disable set
+    NoStandDown  : Boolean; // --no-stand-down (1.52 B17): lint-all opens no stand-down channel, so a measurement run is never cut to PARTIAL
     TargetCompiler: string ; // --target-compiler <ver|auto> (1.38): lint / lint-all / rules; '' = config, then 37
     // v0.16: query find flags
     DocTag     : string ;
