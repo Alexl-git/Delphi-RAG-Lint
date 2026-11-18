@@ -128,8 +128,8 @@ try { $doc = $r.Out | ConvertFrom-Json } catch { $doc = $null }
 Check 'answer: exit is 0 or 1, never 2' (($r.Exit -eq 0) -or ($r.Exit -eq 1)) "exit=$($r.Exit) err=[$($r.Err.Trim())]"
 Check 'answer: stdout is one JSON document' ($null -ne $doc)
 Check 'answer: every top-level key of spec 2.1' (Test-Keys $doc $keys) "have=$(@($doc.PSObject.Properties.Name) -join ',')"
-$verdicts = @('SET', 'NEVER-SET', 'MAY-BE-UNSET')
-Check 'answer: verdict is one of the three literals' ($verdicts -ccontains $doc.verdict) "verdict=$($doc.verdict)"
+$verdicts = @('SET', 'NEVER-SET', 'MAY-BE-UNSET', 'UNKNOWN-CALLEE')
+Check 'answer: verdict is one of the four literals' ($verdicts -ccontains $doc.verdict) "verdict=$($doc.verdict)"
 $wantExit = if ($doc.verdict -ceq 'SET') { 0 } else { 1 }
 Check 'answer: exit agrees with the verdict (HB7)' ($r.Exit -eq $wantExit) "verdict=$($doc.verdict) exit=$($r.Exit)"
 Check 'answer: target has qname/kind/file/line/type/zero_value' (Test-Keys $doc.target @('qname', 'kind', 'file', 'line', 'type', 'zero_value'))
@@ -146,7 +146,7 @@ $closed = @('unordered-root', 'escaped-routine', 'writer-conditional', 'writer-l
   'callee-not-must', 'indirect-call', 'virtual-fanout', 'interface-call', 'soft-writer', 'nil-write-only',
   'ctor-misses-field', 'no-declared-ctor', 'subclass-ctor-skips', 'virtual-call-in-ancestor-ctor', 'self-escapes-in-ctor',
   'unreliable-order', 'multi-program', 'writer-on-thread', 'cfg-skipped', 'budget', 'index-incomplete',
-  'relied-on-handler-order', 'receiver-unproven', 'guarded-test')
+  'relied-on-handler-order', 'receiver-unproven', 'guarded-test', 'unknown-callee')
 $atDoc = $null
 try { $atDoc = $raw.Out | ConvertFrom-Json } catch { $atDoc = $null }
 Check '--at: answer is JSON, exit 0 or 1' (($null -ne $atDoc) -and (($raw.Exit -eq 0) -or ($raw.Exit -eq 1))) "exit=$($raw.Exit)"

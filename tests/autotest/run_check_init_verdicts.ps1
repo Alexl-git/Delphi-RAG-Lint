@@ -87,8 +87,8 @@ $Cases = @(
       'srRec.pas#USE-LOOP=SET||') }
   @{ Name = 'recursion base MAY';    Fix = 'solve-recursion';         Target = 'srRec.GBad';    Verdict = 'MAY-BE-UNSET'; Exit = 1; Uses = @(
       'srRec.pas#USE-BAD=MAY-BE-UNSET|callee-not-must|SolveRecursion > srRec.UseBad > srRec.UseBad') }
-  @{ Name = 'unknown callee';        Fix = 'solve-unknown';           Target = 'suData.GUnk';   Verdict = 'MAY-BE-UNSET'; Exit = 1; Limit = 'unknown-callee';
-     Summary = 'UNKNOWN-CALLEE: FillExternal: source not available -- does it set GUnk (by-ref unknown)?*'; Uses = @(
+  @{ Name = 'unknown callee';        Fix = 'solve-unknown';           Target = 'suData.GUnk';   Verdict = 'UNKNOWN-CALLEE'; Exit = 1; Limit = 'unknown-callee'; Reason = 'unknown-callee';
+     Summary = 'FillExternal: source not available -- does it set GUnk (by-ref unknown)?*'; Uses = @(
       'SolveUnknown.dpr#CALL-UNKNOWN=MAY-BE-UNSET|soft-writer|SolveUnknown > SolveUnknown',
       'suData.pas#USE-UNK=MAY-BE-UNSET|soft-writer|SolveUnknown > suData.UseAll > suData.UseAll') }
   @{ Name = 'callee-reads marker';   Fix = 'solve-unknown';           Target = 'suData.GRead';  Verdict = 'NEVER-SET';    Exit = 1; NoLimit = 'unknown-callee'; Uses = @(
@@ -98,6 +98,22 @@ $Cases = @(
       'suData.pas#USE-SETS=SET||') }
   @{ Name = 'RTL exempt';            Fix = 'solve-unknown';           Target = 'suData.GExempt'; Verdict = 'NEVER-SET';   Exit = 1; NoLimit = 'unknown-callee'; Uses = @(
       'SolveUnknown.dpr#USE-EXEMPT=NEVER-SET||') }
+  # H-CONFIG: the per-callee answer recorded once per project in _D-RAG\drag-lint-project.json
+  # ("checkInit": {"callees": {...}}); the fixture's DB sits in its _D-RAG folder so the anchor is found.
+  @{ Name = 'config reads';          Fix = 'solve-config';            Target = 'scfgData.GCfgRead'; Verdict = 'NEVER-SET'; Exit = 1; NoLimit = 'unknown-callee'; NoReason = 'unknown-callee'; Uses = @(
+      'SolveConfig.dpr#CALL-READ=NEVER-SET||',
+      'scfgData.pas#USE-READ=NEVER-SET||') }
+  @{ Name = 'config sets';           Fix = 'solve-config';            Target = 'scfgData.GCfgSet'; Verdict = 'SET';        Exit = 0; NoLimit = 'unknown-callee'; Uses = @(
+      'scfgData.pas#USE-SET=SET||') }
+  @{ Name = 'config QName key needs the qualifier'; Fix = 'solve-config'; Target = 'scfgData.GCfgNone'; Verdict = 'UNKNOWN-CALLEE'; Exit = 1; Limit = 'unknown-callee'; Reason = 'unknown-callee';
+     Summary = 'OtherExternal: source not available -- does it set GCfgNone (by-ref unknown)?*'; Uses = @(
+      'SolveConfig.dpr#CALL-NONE=MAY-BE-UNSET|soft-writer|*',
+      'scfgData.pas#USE-NONE=MAY-BE-UNSET|soft-writer|*') }
+  @{ Name = 'config bad value ignored'; Fix = 'solve-config';         Target = 'scfgData.GCfgBogus'; Verdict = 'UNKNOWN-CALLEE'; Exit = 1; Limit = 'unknown-callee'; Uses = @(
+      'SolveConfig.dpr#CALL-BOGUS=MAY-BE-UNSET|soft-writer|*',
+      'scfgData.pas#USE-BOGUS=MAY-BE-UNSET|soft-writer|*') }
+  @{ Name = 'line marker beats config'; Fix = 'solve-config';         Target = 'scfgData.GCfgMark'; Verdict = 'SET';       Exit = 0; NoLimit = 'unknown-callee'; Uses = @(
+      'scfgData.pas#USE-MARK=SET||') }
 )
 
 function MarkerLine([string]$Dir, [string]$File, [string]$Marker) {
@@ -113,6 +129,8 @@ function Compare-Case($Case, $Json, [string]$Dir) {
   if ($Json.verdict -cne $Case.Verdict) { $bad += "verdict expected $($Case.Verdict) got $($Json.verdict)" }
   if ($Case.Limit -and -not (@($Json.limits) -contains $Case.Limit)) { $bad += "limits lack $($Case.Limit): [$(@($Json.limits) -join ',')]" }
   if ($Case.NoLimit -and (@($Json.limits) -contains $Case.NoLimit)) { $bad += "limits hold $($Case.NoLimit)" }
+  if ($Case.Reason -and -not (@($Json.reasons) -contains $Case.Reason)) { $bad += "reasons lack $($Case.Reason): [$(@($Json.reasons) -join ',')]" }
+  if ($Case.NoReason -and (@($Json.reasons) -contains $Case.NoReason)) { $bad += "reasons hold $($Case.NoReason)" }
   if ($Case.Summary -and -not ($Json.summary -like $Case.Summary)) { $bad += "summary [$($Json.summary)]" }
   if ($Case.Exhausted -and -not $Json.budget.exhausted) { $bad += 'budget.exhausted is false' }
   if (@($Json.uses).Count -ne $Case.Uses.Count) { $bad += "uses expected $($Case.Uses.Count) got $(@($Json.uses).Count)" }
@@ -172,8 +190,9 @@ try {
   foreach ($fx in @($Cases | ForEach-Object { $_.Fix } | Sort-Object -Unique)) {
     $d = Join-Path $WorkDir "fx\$fx"
     New-Item -ItemType Directory -Path $d -Force | Out-Null
-    Copy-Item -Path (Join-Path $FixRoot "$fx\*") -Destination $d -Force
-    $db = Join-Path $WorkDir "$fx.sqlite"
+    Copy-Item -Path (Join-Path $FixRoot "$fx\*") -Destination $d -Recurse -Force
+    # A fixture with a _D-RAG folder (project config) keeps its DB there: the engine finds the anchor by it.
+    $db = if (Test-Path -LiteralPath (Join-Path $d '_D-RAG')) { Join-Path $d "_D-RAG\$fx.sqlite" } else { Join-Path $WorkDir "$fx.sqlite" }
     $null = & $Exe index $d --db $db 2>&1
     Check "index $fx (exit 0)" ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
     $dbs[$fx] = $db; $dirsOf[$fx] = $d
