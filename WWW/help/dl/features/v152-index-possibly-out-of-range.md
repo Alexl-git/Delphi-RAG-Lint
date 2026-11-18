@@ -4,7 +4,7 @@ title: Array index possibly out of range lint rule (index-possibly-out-of-range)
 summary: Warns on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only
 product: DL
 group: linting
-order: 30069
+order: 30070
 since: 1.52.0-alpha
 status: shipped
 updated: 1.52.0-alpha

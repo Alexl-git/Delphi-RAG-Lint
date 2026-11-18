@@ -81,8 +81,7 @@ $Allowlist += @('side-effect-in-short-circuit', 'property-getter-with-effect', '
 $Allowlist += @('ui-access-in-thread-typed')
 # quit-from-thread -> tests\lint-project\quit-from-thread\run_quit_from_thread.ps1 (same walk as ui-access-in-thread-typed, needs a library DB; 1.47 wave 148 lane PQ)
 $Allowlist += @('quit-from-thread')
-# by-value-arg-before-assignment -> tests\autotest\run_flow_out_arg_rules.ps1 (the mode comes from ref_types, so it needs an index; 1.46 lane t1)
-$Allowlist += @('by-value-arg-before-assignment')
+# by-value-arg-before-assignment: folded into used-before-assignment in 1.52 EX1 (guard tests\autotest\run_v152_BK-OWNGATED.ps1); id removed.
 # The clippy-parity wave is fully fixtured (tests\lint) and integrated; the list is kept empty so a future wave can reuse it.
 $Pending = @()
 

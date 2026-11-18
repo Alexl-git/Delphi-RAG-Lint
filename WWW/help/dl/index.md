@@ -85,6 +85,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | --- | --- | --- |
 | [Ancestor not in project (lint rule)](features/ancestor-not-in-project.md) | Project-wide lint rule (error): a form, frame or data module whose ancestor class is declared in no project unit and not in the platform library | 1.42.0-alpha |
 | [Autofix for fixable rules](features/autofix-wave.md) | lint --fix repairs findings of the 131 fixable rules; --json reports per finding whether it was applied; lint accepts a folder | 1.37.0-alpha |
+| [Complexity counts the if-expression](features/complexity-if-expression.md) | cyclomatic-complexity, cognitive-complexity and the autodoc Complexity fact count a Delphi 13 if-expression as a decision point | 1.52.0-alpha |
 | [Compliance labels (CWE, CERT, MISRA)](features/compliance-labels.md) | Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field | 1.37.0-alpha |
 | [Copy All Diagnostics](features/copy-all-diagnostics.md) | Puts every lint finding for the current unit onto the clipboard, starting from the Structure form | 0.1.0-alpha |
 | [Copy Diagnostics (Current File)](features/copy-diagnostics-current-file.md) | Puts the current file's lint findings onto the clipboard | 0.1.0-alpha |
@@ -100,7 +101,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Fix all in unit](features/fix-all-in-unit.md) | Applies autofixes for every fixable finding in the current unit, starting from the Structure form | 0.1.0-alpha |
 | [Fix all reliability (1.31.3)](features/fix-all-reliability.md) | Fix all no longer drops every rename for library-root members, shows a wait cursor and refuses a second fix, and keeps E-prefixed exception classes | 1.31.3-alpha |
 | [Fix it](features/fix-it.md) | Applies the fix for the single lint finding on a Structure-tree node; an unused unit is removed or moved to implementation by compiling | 0.1.0-alpha |
-| [Data-flow rules that know a parameter's mode](features/flow-out-arg-rules.md) | Three OFF rules: a local that only receives out arguments, a store overwritten by an out argument, a local passed by value to a method before it is assigned | 1.46.0-alpha |
+| [Data-flow rules that know a parameter's mode](features/flow-out-arg-rules.md) | Two OFF out-argument rules; since 1.52 a local passed by value to a method before assignment reports under the default used-before-assignment | 1.46.0-alpha |
 | [Format Whole Project with YADF](features/format-whole-project-with-yadf.md) | Runs YADF formatting across a project's files, with indexing involved as part of the same action | 0.1.0-alpha |
 | [Format with YADF](features/format-with-yadf.md) | Reformats one Pascal unit by driving the external YADF formatter | 0.16.0-alpha |
 | [Gap-wave lint rules](features/gap-wave-rules.md) | About 50 new lint rules (bug patterns, dead code, data flow, platform, structure) added in the 1.37.0 gap wave | 1.37.0-alpha |

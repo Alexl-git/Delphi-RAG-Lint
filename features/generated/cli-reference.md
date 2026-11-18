@@ -1321,6 +1321,7 @@ drag-lint lint-all [--profile <name>] [--db <file.sqlite>] [--project <.dproj>] 
 Described in:
 
 * [Ancestor not in project (lint rule)](../../docs/wiki/ancestor-not-in-project.md)
+* [Complexity counts the if-expression](../../docs/wiki/complexity-if-expression.md)
 * [Compliance labels (CWE, CERT, MISRA)](../../docs/wiki/compliance-labels.md)
 * [Cycle edge written in an include (lint rule)](../../docs/wiki/cycle-edge-in-include.md)
 * [Data module reaching a global form (lint rule)](../../docs/wiki/datamodule-form-global.md)

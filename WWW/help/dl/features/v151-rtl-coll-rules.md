@@ -4,7 +4,7 @@ title: RTL collection and environment lint rules
 summary: Lint checks for dictionary reads without a key check, string-list leaks, Null compares, HKLM writes, Random without Randomize and Now used as a stopwatch
 product: DL
 group: linting
-order: 30055
+order: 30056
 since: 1.51.0-alpha
 status: shipped
 updated: 1.51.1-alpha

@@ -4,7 +4,7 @@ title: Reserved words as names, implicit package imports, contract-unit globs
 summary: reserved-word-identifier and implicit-package-import rules; contractUnits globs in drag-lint.json for contract-unit-declares-class
 product: DL
 group: linting
-order: 30065
+order: 30066
 since: 1.52.0-alpha
 status: shipped
 updated: 1.51.1-alpha

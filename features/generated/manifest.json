@@ -3318,6 +3318,30 @@
       }
     },
     {
+      "id": "complexity-if-expression",
+      "title": "Complexity counts the if-expression",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "cyclomatic-complexity, cognitive-complexity and the autodoc Complexity fact count a Delphi 13 if-expression as a decision point",
+      "intro": "Read this to see why a routine with if-expressions now scores higher, and what happens to dl:ok markers granted for the old score.",
+      "wikiPage": "complexity-if-expression",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-18",
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "b47eb66bf0cb814b73ab6883a63435ae8219a7ec857a578350c86dfa85120e65"
+      }
+    },
+    {
       "id": "compliance-labels",
       "title": "Compliance labels (CWE, CERT, MISRA)",
       "group": "linting",
@@ -3622,8 +3646,8 @@
       "owner": "ENGINE",
       "status": "shipped",
       "since": "1.46.0-alpha",
-      "summary": "Three OFF rules: a local that only receives out arguments, a store overwritten by an out argument, a local passed by value to a method before it is assigned",
-      "intro": "Read this to see what write-only-local, overwrite-before-read and used-before-assignment cannot see, and the three OFF rules that report it.",
+      "summary": "Two OFF out-argument rules; since 1.52 a local passed by value to a method before assignment reports under the default used-before-assignment",
+      "intro": "Read this to see what write-only-local, overwrite-before-read and used-before-assignment cannot see, the two OFF rules that report the out shapes, and the by-value arm folded into used-before-assignment in 1.52.",
       "wikiPage": "flow-out-arg-rules",
       "surfaces": [
         {
@@ -3633,10 +3657,10 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-07",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.46.0-alpha",
-        "surfaceHash": "c86e88b99bad3d1352c6b7e19e7394f26a185b860c009bb97ac366379a830ab4"
+        "build": "1.51.1-alpha",
+        "surfaceHash": "b47eb66bf0cb814b73ab6883a63435ae8219a7ec857a578350c86dfa85120e65"
       }
     },
     {
@@ -16379,26 +16403,6 @@
         "wikiAnchor": "boolean-result-returned-directly"
       },
       {
-        "id": "rule.by-value-arg-before-assignment",
-        "title": "by-value-arg-before-assignment",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Local passed by value or const to a method before it is assigned; the parameter mode comes from the receiver's static type (ref_types) (data-flow, error)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule by-value-arg-before-assignment"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "by-value-arg-before-assignment"
-      },
-      {
         "id": "rule.case-magic-numbers",
         "title": "case-magic-numbers",
         "group": "linting",
@@ -24245,7 +24249,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Variable used before assignment (data-flow, error)",
+        "summary": "Variable used before assignment; with an index (ref_types) also a local passed by value or const to a method before it is assigned (1.52 E... (data-flow, error)",
         "wikiPage": "rules",
         "surfaces": [
           {

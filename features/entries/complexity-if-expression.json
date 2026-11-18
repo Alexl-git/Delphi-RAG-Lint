@@ -1,0 +1,24 @@
+{
+  "id": "complexity-if-expression",
+  "title": "Complexity counts the if-expression",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.52.0-alpha",
+  "summary": "cyclomatic-complexity, cognitive-complexity and the autodoc Complexity fact count a Delphi 13 if-expression as a decision point",
+  "intro": "Read this to see why a routine with if-expressions now scores higher, and what happens to dl:ok markers granted for the old score.",
+  "wikiPage": "complexity-if-expression",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-all"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-18",
+    "by": "ENGINE",
+    "build": "1.51.1-alpha",
+    "surfaceHash": "b47eb66bf0cb814b73ab6883a63435ae8219a7ec857a578350c86dfa85120e65"
+  }
+}

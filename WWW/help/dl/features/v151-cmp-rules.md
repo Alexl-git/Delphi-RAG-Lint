@@ -4,7 +4,7 @@ title: Component-authoring lint rules
 summary: "Lint rules for component and IDE-expert code: FreeNotification, property defaults, palette bitmaps, repainting setters, DPI, OTA notifiers"
 product: DL
 group: linting
-order: 30048
+order: 30049
 since: 1.51.0-alpha
 status: shipped
 updated: 1.51.1-alpha

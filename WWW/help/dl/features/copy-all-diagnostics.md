@@ -4,10 +4,10 @@ title: Copy All Diagnostics
 summary: Puts every lint finding for the current unit onto the clipboard, starting from the Structure form
 product: DL
 group: linting
-order: 30004
+order: 30005
 since: 0.1.0-alpha
 status: shipped
-updated: 1.43.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # Copy All Diagnostics

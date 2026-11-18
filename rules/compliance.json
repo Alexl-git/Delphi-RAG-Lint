@@ -19,7 +19,6 @@
   "boolean-expression-complexity": {"cwe": ["CWE-1120"], "weak": ["CWE-1120"]},
   "boolean-flag-parameter": {},
   "boolean-result-returned-directly": {"cwe": ["CWE-1041"]},
-  "by-value-arg-before-assignment": {"cwe": ["CWE-457"]},
   "case-magic-numbers": {"cwe": ["CWE-1106"]},
   "case-same-branches": {"cwe": ["CWE-1041"]},
   "case-with-too-few-branches": {"misra": ["MISRA-C-2012-R16.6"]},

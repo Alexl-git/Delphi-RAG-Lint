@@ -18,6 +18,17 @@ resolver 1.28.0 -> 1.29.0-alpha.
 
 ### Changed
 
+- `by-value-arg-before-assignment` (OFF since 1.46) is FOLDED into the ON rule `used-before-assignment` (lane BK-OWNGATED,
+  EX1, owner ruling 2026-11-18): `G.Take(X)` / `G.TakeC(X)` with X unassigned now reports by default under
+  `used-before-assignment` (error definite, warning possible). The old id is removed from the catalogue (434 rules,
+  321 built-in); a config or `dl:ok` naming it no longer matches anything. `lint-all` runs the by-value replay pass
+  whenever `used-before-assignment` is kept (1.47 PF had skipped it for the OFF id). Wiki `flow-out-arg-rules`.
+- `cyclomatic-complexity`, `cognitive-complexity` and the autodoc `Complexity:` fact count an if-EXPRESSION
+  (`X := if C then A else B`) as a decision point (lane BK-OWNGATED, GA-1, owner ruling 2026-11-18); cognitive scores
+  its `else if` arm as the hybrid +1. Routines using if-expressions score higher and autodoc Complexity lines move;
+  both rules' marker measure-algorithm version 1 -> 2, so a v2-stamped marker on an unchanged routine is re-measured, not stale;
+  a LEGACY 1.51.0-stamped marker on a routine whose score moved goes review-marker-stale (re-stamp with allow --fix-line).
+  Wiki `complexity-if-expression`. Guard `tests\autotest\run_v152_BK-OWNGATED.ps1`.
 - Default flips (owner D7 + DEFAULTS + DOCPOL + PROJ2 + UNCONN + PTW + MARK): ON by default: `datamodule-form-global`
   (warning, lint-all), `foreign-form-control-access` (hint), `dataset-edit-without-post` (warning),
   `form-object-without-field` (hint), `doc-placeholder` (hint), `parameter-type-too-wide` (warning, fixable),

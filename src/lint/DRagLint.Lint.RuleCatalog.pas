@@ -57,9 +57,11 @@ const
                                   ordinary.
       interface-object-mixing     first-cut same-routine dual-handle heuristic.
       is-never-true               1.46: OFF per its row; its sealed half needs re-parsed DBs.
-      local-only-out-arg, dead-store-before-out-arg, by-value-arg-before-assignment
+      local-only-out-arg, dead-store-before-out-arg
                                   1.46: OFF until the owner rules on the counts; spec
-                                  2026-11-06-liveness-out-args-by-value.
+                                  2026-11-06-liveness-out-args-by-value. (The third,
+                                  by-value-arg-before-assignment, folded into the ON
+                                  used-before-assignment in 1.52 EX1.)
       multiple-statements-per-line pure style.
       magic-literal               medium-FP; floods legacy code.
       boolean-flag-parameter      a common, deliberate idiom here.
@@ -123,7 +125,7 @@ const
     'is-never-true',
     { 1.46 lane t4: parameter-type-too-wide ships ON since 1.52 (lane PTW, ruling B7) }
     { 1.46 lane t1 }
-    'local-only-out-arg', 'dead-store-before-out-arg', 'by-value-arg-before-assignment',
+    'local-only-out-arg', 'dead-store-before-out-arg',
     { 1.47 wave 148 lane PQ }
     'quit-from-thread',
     { 152b lane RTTI }
@@ -679,14 +681,13 @@ begin
     B('redundant-cast',        'dead-code', 'hint',    'Cast of a value to the type it already has (no-op); with a 1.44 index (ref_types) also T(a.b), T(F(x)) and x as T, and the index overrules the per-file type map');
 
     { --- data-flow --- }
-    B('used-before-assignment','data-flow', 'error',   'Variable used before assignment');
+    B('used-before-assignment','data-flow', 'error',   'Variable used before assignment; with an index (ref_types) also a local passed by value or const to a method before it is assigned (1.52 EX1: folded in from by-value-arg-before-assignment)');
     B('function-result-not-set','data-flow','warning', 'Function Result not assigned on every path');
     B('out-param-not-set',     'data-flow', 'warning', 'out parameter not assigned on every path');
     B('overwrite-before-read', 'data-flow', 'warning', 'Value overwritten before it is read');
     B('write-only-local',      'data-flow', 'info',    'Local assigned but never read');
     B('local-only-out-arg', 'data-flow', 'info', 'Local that only receives out arguments and is read nowhere; the out mode comes from the signature, or from the receiver''s static type (ref_types) on a method', False); { OFF: 1.46 lane t1 }
     B('dead-store-before-out-arg', 'data-flow', 'warning', 'Value overwritten by an out argument before it is read; the out mode comes from the signature, or from the receiver''s static type (ref_types) on a method', False); { OFF: 1.46 lane t1 }
-    B('by-value-arg-before-assignment', 'data-flow', 'error', 'Local passed by value or const to a method before it is assigned; the parameter mode comes from the receiver''s static type (ref_types)', False); { OFF: 1.46 lane t1 }
     B('loop-var-after-loop',   'data-flow', 'warning', 'Loop variable used after the loop');
     B('object-leak',           'data-flow', 'info',    'Created object may leak (not freed on every path)');
     B('not-assigned-interface','data-flow', 'warning', 'Interface variable dereferenced before assignment (nil interface call)');
