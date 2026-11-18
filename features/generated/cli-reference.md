@@ -234,6 +234,24 @@ drag-lint check-ast <file> [--profile <name>] [--db PATH] [--library-db <lib.sql
 
 Described in [Run AST Checks](../../docs/wiki/Run-AST-Checks.md).
 
+### check-init
+
+Answers whether a variable or field is set before a given use on every execution (SET / NEVER-SET / MAY-BE-UNSET).
+
+```text
+drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--explain] [--max-routines N]
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--at` | `<file>:<line>[:<col>]` |  |  |
+| `--db` | `<db>` |  |  |
+| `--json` |  |  |  |
+| `--explain` |  |  |  |
+| `--max-routines` | `N` |  |  |
+
+Described in [check-init](../../docs/wiki/check-init.md).
+
 ### check-unit
 
 The whole-unit form of the undeclared-identifier quick-fix: resolves every unresolved name in a unit at once and adds the units that declare them.
@@ -1094,6 +1112,7 @@ Described in:
 * [References for declaration positions](../../docs/wiki/index-declaration-refs.md)
 * [Library bindings for bare reads, paren-less calls and function-result receivers](../../docs/wiki/library-first-resolve.md)
 * [Resolver fixes in 1.52](../../docs/wiki/library-first-resolve.md)
+* [Per-rule time budget in the rule frame (rule-skipped-budget)](../../docs/wiki/rule-time-budget.md)
 
 ### info
 
@@ -1191,7 +1210,7 @@ Described in [link-orm](../../docs/wiki/link-orm.md).
 
 ### lint
 
-lint --fix repairs findings of the 126 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
+lint --fix repairs findings of the 130 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
 
 ```text
 drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]
@@ -1226,6 +1245,10 @@ drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--j
 | `--profile` | `<name>` |  |  |
 | `--target-compiler` | `<ver\|auto>` |  |  |
 | `--output` | `<file>` |  |  |
+| `--col` | `<c>` |  |  |
+| `--name` | `<ident>` |  |  |
+| `--config` | `<file>` |  |  |
+| `--no-budget` |  |  |  |
 
 Described in:
 
@@ -1258,8 +1281,13 @@ Described in:
 * [Typing and ownership lint rules (casts, Self as interface, destructors)](../../docs/wiki/typing-and-ownership-rules.md)
 * [Wider built-in rules (1.51)](../../docs/wiki/v151-wid-ast-rules.md)
 * [Wider scm rules and three new fixers](../../docs/wiki/v151-wid-scm-rules.md)
+* [Reserved words as names, implicit package imports, contract-unit globs](../../docs/wiki/v152-atla-rules.md)
 * [Default-on form, dataset and data-module rules](../../docs/wiki/rule-defaults-152.md)
+* [Extract constant (manual fix for magic literals)](../../docs/wiki/v152-extract-constant.md)
 * [Array index possibly out of range lint rule (index-possibly-out-of-range)](../../docs/wiki/index-possibly-out-of-range.md)
+* [Per-rule time budget in the rule frame (rule-skipped-budget)](../../docs/wiki/rule-time-budget.md)
+* [parameter-type-too-wide ON by default, with an autofix](../../docs/wiki/v152-ptw.md)
+* [Lint rules unconnected-control and hanging-handler](../../docs/wiki/v152-unconn-rules.md)
 
 ### lint-all
 
@@ -1285,7 +1313,9 @@ drag-lint lint-all [--profile <name>] [--db <file.sqlite>] [--project <.dproj>] 
 | `--fix` |  |  |  |
 | `--fix-naming` |  |  |  |
 | `--apply` |  |  |  |
+| `--no-stand-down` |  | measurement runs: open no stand-down channel, so a maintenance stand-down from another process cannot cut the run to PARTIAL (exit 4) |  |
 | `--shared-db` | `<db>` | another project index, repeatable: evidence for a closure-dependent dl:ok on a dl:shared unit |  |
+| `--no-budget` |  |  |  |
 
 Described in:
 
@@ -1323,7 +1353,12 @@ Described in:
 * [Text rules: bidi, invisible, control chars, TODO, header, strings](../../docs/wiki/text-rules.md)
 * [Typing and ownership lint rules (casts, Self as interface, destructors)](../../docs/wiki/typing-and-ownership-rules.md)
 * [CLI fixes in 1.51.1](../../docs/wiki/v1511-cli-fixes.md)
+* [Reserved words as names, implicit package imports, contract-unit globs](../../docs/wiki/v152-atla-rules.md)
 * [member-could-be-private lint rule (lane ATLB)](../../docs/wiki/v152-atlb-rules.md)
+* [Documentation policy: missing-doc covers all real code, doc-placeholder, doc-malformed-summary](../../docs/wiki/v152-docpol.md)
+* [Per-rule time budget in the rule frame (rule-skipped-budget)](../../docs/wiki/rule-time-budget.md)
+* [unit-used-by-no-unit rule; unit-not-in-dpr outside the project roots](../../docs/wiki/v152-proj2.md)
+* [parameter-type-too-wide ON by default, with an autofix](../../docs/wiki/v152-ptw.md)
 
 ### lint-project
 
@@ -1907,6 +1942,11 @@ drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rule
 | `--rules-dir` | `<dir>` |  |  |
 | `--target-compiler` | `<ver\|auto>` |  |  |
 | `--project` | `<.dproj>` |  |  |
+| `--scope` | `line\|unit\|project` |  |  |
+| `--in` | `<F>` |  |  |
+| `--line` | `<N>` |  |  |
+| `--reason` | `<text>` |  |  |
+| `--config` | `<drag-lint-lint.json>` |  |  |
 
 Described in:
 
@@ -1917,6 +1957,7 @@ Described in:
 * [Target compiler (--target-compiler)](../../docs/wiki/target-compiler.md)
 * [CLI fixes in 1.51.1](../../docs/wiki/v1511-cli-fixes.md)
 * [Default-on form, dataset and data-module rules](../../docs/wiki/rule-defaults-152.md)
+* [Disable rule (this line, this unit, this project)](../../docs/wiki/v152-disable-rule.md)
 
 ### safe-delete
 

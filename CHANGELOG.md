@@ -53,7 +53,7 @@ resolver 1.28.0 -> 1.29.0-alpha.
   `symbols.inc_variant` / `refs.inc_variant`); filled by the 1.52 re-parse.
 
 ### New rules
-- `index-possibly-out-of-range` (bug-patterns, default OFF in 1.52 -- the FP gate measured 6/12 -- lanes IDXRANGE + IDXRANGE2): an array index that
+- `index-possibly-out-of-range` (bug-patterns, default ON -- the six false-positive classes of the 6/12 FP gate fixed in lane BK-RULEFP: a guard kept across Inc, a parameter bound every local caller proves, `in` set clamps, a Length raise guard with a loop limit from an if-expression or another unit's const array, a dominating SetLength, for-in / non-constant-start count invariants -- lanes IDXRANGE + IDXRANGE2 + BK-RULEFP): an array index that
   no dominating guard (for over the bounds, if / while condition, `InRange`, an earlier
   Exit / raise guard) bounds on BOTH sides before `A[idx]` -- reported on the write of the index
   (warning; an unguarded parameter is a hint on the access). A subrange type is not a guard.

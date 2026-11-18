@@ -962,12 +962,23 @@
       "title": "check-init",
       "group": "search-navigation",
       "owner": "ENGINE",
-      "status": "internal",
+      "status": "shipped",
       "since": "1.52.0-alpha",
       "summary": "Answers whether a variable or field is set before a given use on every execution (SET / NEVER-SET / MAY-BE-UNSET)",
-      "intro": "Ask it before adding an Assigned guard or reordering initialization: it names the writers of a unit variable, class var or field and says whether one of them runs before the use on every path. Exit 0 = all SET, 1 = some MAY-BE-UNSET or NEVER-SET, 2 = error. Internal until the 1.52 engine lanes land.",
-      "wikiPage": "Maintenance",
+      "intro": "Ask it before adding an Assigned guard or reordering initialization: it names the writers of a unit variable, class var or field and says whether one of them runs before the use on every path, with the reason code and the witness when it cannot prove it. Exit 0 = all SET, 1 = some MAY-BE-UNSET or NEVER-SET, 2 = error.",
+      "wikiPage": "check-init",
       "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Analyze > Check Initialization of Identifier at Cursor...",
+          "steps": ["Put the caret on a unit variable, class var or field (a use of it) in the code editor", "Choose drag-lint > Analyze > Check Initialization of Identifier at Cursor...", "The Messages window shows the verdict (SET / NEVER-SET / MAY-BE-UNSET / UNKNOWN-CALLEE), one line per judged use with its witness hops, and one line per writer; double-click a line to jump there"]
+        },
+        {
+          "type": "ide-context",
+          "host": "Editor",
+          "caption": "drag-lint > Check Initialization of Identifier at Cursor...",
+          "steps": ["Right-click on a variable or field in the code editor", "Open the drag-lint submenu and choose Check Initialization of Identifier at Cursor...", "Read the verdict, uses, witness hops and writers in the Messages window; double-click a line to jump there"]
+        },
         {
           "type": "mcp",
           "tool": "check_init"
@@ -1011,12 +1022,12 @@
           "command": "drag-lint check-init <Unit.TClass.FField> --db <db> --json"
         }
       ],
-      "notes": "internal: 1.52 lane HBSKEL scaffold (contract, verb, rendering); the solver lanes fill the answer, HBDOCS ships it (status, wiki page check-init, help). Plan docs\\superpowers\\plans\\2026-11-17-happens-before-phase1.md; guard tests\\autotest\\run_check_init_surface.ps1",
+      "notes": "Shipped 1.52 (lanes HBSKEL, HBSOLVER, HBFIELDS, HBEVORD, HBDOCS). receiver-unproven (HBRECV) is reserved, not produced. Plan docs\\superpowers\\plans\\2026-11-17-happens-before-phase1.md; guard tests\\autotest\\run_check_init_surface.ps1",
       "verified": {
-        "date": "2026-11-17",
+        "date": "2026-11-18",
         "by": "ENGINE",
         "build": "1.51.1-alpha",
-        "surfaceHash": "b93f9f033241d3efbaeef9744c07302e8aaf8f8d9ccbdbc2e751876ec6b3c780"
+        "surfaceHash": "5ef1b73b1907ab6e2f54654132091f0d6d49097faa5b6ec6cb84b24936760215"
       }
     },
     {
@@ -1444,7 +1455,7 @@
         "date": "2026-11-18",
         "by": "ENGINE",
         "build": "1.51.1-alpha",
-        "surfaceHash": "60f16b744ada69b4bbcedf498d8c00667b126111d0e1805d0dd34a3030206cd3"
+        "surfaceHash": "8e6042913e725f2729344084e87784ac244f370736b7796af7a18f9a0c2d31fd"
       }
     },
     {
@@ -3197,14 +3208,14 @@
       "owner": "ENGINE",
       "status": "shipped",
       "since": "1.52.0-alpha",
-      "summary": "Warns (OFF in 1.52) on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only",
+      "summary": "Warns on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only",
       "intro": "Read this to see when index-possibly-out-of-range warns, how it treats another collection's bound and index parameters, and how its manual-only autofix inserts an InRange check.",
       "wikiPage": "index-possibly-out-of-range",
       "surfaces": [
         {
           "type": "cli",
           "verb": "lint",
-          "usage": "drag-lint lint <file.pas> [--rule index-possibly-out-of-range] [--fix --fix-rule index-possibly-out-of-range [--apply]] (default OFF in 1.52, category bug-patterns, warning; hint on an unguarded parameter or a lookup-derived index; param exception_class; the autofix is manual only: a batch --fix withholds it, --fix-rule applies it; rules --json carries fix_manual_only: true)",
+          "usage": "drag-lint lint <file.pas> [--rule index-possibly-out-of-range] [--fix --fix-rule index-possibly-out-of-range [--apply]] (default ON, category bug-patterns, warning; hint on an unguarded parameter or a lookup-derived index; param exception_class; the autofix is manual only: a batch --fix withholds it, --fix-rule applies it; rules --json carries fix_manual_only: true)",
           "flags": [
             {
               "name": "--rule",
@@ -3424,7 +3435,7 @@
             }
           ],
           "helpOrder": 15,
-          "help": ["  drag-lint lint  <path>       [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>|help] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]", "                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks, and the project", "                               rules for this file, incl. the ON opt-in discarded-effect-free-result; the OFF opt-in ones run only under --rule)", "                               <path> may be a FOLDER: every scanned .pas/.inc/.dpr gets the same checks as lint <file> (their union)", "                               [--output <file>]: with --json or --format sarif the document is written to the file instead of stdout (a note on stderr).", "                               [--project-rules]  (also run doc-drift/missing-doc for this file -- OFF by default:", "                               they rebuild facts PER DECL, ~16ms each, and can exceed the IDE's 8s budget)", "                               [--stand-in-for <realpath>]  (analyse <path>'s TEXT as though it were <realpath>:", "                               for editor buffers snapshotted to a temp file -- fixes store membership, file id,", "                               unit-name and the reported path)", "  drag-lint lint  --project <file.dproj> [--build-config <name>] [--rule unit-not-in-dpr|unit-not-in-library|help] [--json]", "  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply [--no-backup]]   (AUTOFIX one file; --apply keeps a .bak beside each file it writes unless --no-backup)", "                               DRY RUN WITHOUT --apply: it reports what it would change and writes no source file.", "                               --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to", "                               apply every fixable finding in the file. Only rules whose catalog entry has", "                               \"fixable\": true are ever applied -- see `drag-lint rules --json`.", "                               --fix-naming: kept for compatibility, a no-op since 1.37.0 -- every fix, the naming renames (across", "                               every owning project) included, is ON by default; only \"autofix_off\": [...] in drag-lint-lint.json withholds one;", "                               with it the run still prints \"rename-local: <N>\" (stderr) for the single-project renames.", "                               This is what the IDE Structure form's right-click Fix it / Fix all in unit run."]
+          "help": ["  drag-lint lint  <path>       [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>|help] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>] [--no-budget]", "                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks, and the project", "                               rules for this file, incl. the ON opt-in discarded-effect-free-result; the OFF opt-in ones run only under --rule)", "                               <path> may be a FOLDER: every scanned .pas/.inc/.dpr gets the same checks as lint <file> (their union)", "                               [--output <file>]: with --json or --format sarif the document is written to the file instead of stdout (a note on stderr).", "                               [--project-rules]  (also run doc-drift/missing-doc for this file -- OFF by default:", "                               they rebuild facts PER DECL, ~16ms each, and can exceed the IDE's 8s budget)", "                               [--stand-in-for <realpath>]  (analyse <path>'s TEXT as though it were <realpath>:", "                               for editor buffers snapshotted to a temp file -- fixes store membership, file id,", "                               unit-name and the reported path)", "  drag-lint lint  --project <file.dproj> [--build-config <name>] [--rule unit-not-in-dpr|unit-not-in-library|help] [--json]", "  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply [--no-backup]]   (AUTOFIX one file; --apply keeps a .bak beside each file it writes unless --no-backup)", "                               DRY RUN WITHOUT --apply: it reports what it would change and writes no source file.", "                               --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to", "                               apply every fixable finding in the file. Only rules whose catalog entry has", "                               \"fixable\": true are ever applied -- see `drag-lint rules --json`.", "                               --fix-naming: kept for compatibility, a no-op since 1.37.0 -- every fix, the naming renames (across", "                               every owning project) included, is ON by default; only \"autofix_off\": [...] in drag-lint-lint.json withholds one;", "                               with it the run still prints \"rename-local: <N>\" (stderr) for the single-project renames.", "                               This is what the IDE Structure form's right-click Fix it / Fix all in unit run."]
         }
       ],
       "audience": "both",
@@ -3757,6 +3768,94 @@
         "by": "ENGINE",
         "build": "1.51.1-alpha",
         "surfaceHash": "22743ed9ce2e81c23136637b5acbbc1c496ee7349a885bdd48c0dd8cee50de46"
+      }
+    },
+    {
+      "id": "v152-disable-rule",
+      "title": "Disable rule (this line, this unit, this project)",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "Silence one lint rule for a line (dl:ok marker), a unit or the project (rule_overrides in drag-lint-lint.json), with a reason and date; rules enable undoes it",
+      "intro": "Read this when a finding is right for most of the code but not here: disable the rule for this line, this unit or this project from the RAD Studio editor's right-click menu or with rules disable, and undo it with rules enable. Unit and project scope never write into the source.",
+      "wikiPage": "v152-disable-rule",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "rules",
+          "usage": "drag-lint rules disable|enable --rule <id> --scope line|unit|project [--in <F> --line <N>] --reason \"<text>\" [--project <.dproj>] [--config <drag-lint-lint.json>] [--json]   (line = a dl:ok marker on the line; unit / project = rule_overrides in the project lint config, with reason and date; enable undoes one disable)",
+          "flags": [
+            {
+              "name": "--rule",
+              "arg": "<id>"
+            },
+            {
+              "name": "--scope",
+              "arg": "line|unit|project"
+            },
+            {
+              "name": "--in",
+              "arg": "<F>"
+            },
+            {
+              "name": "--line",
+              "arg": "<N>"
+            },
+            {
+              "name": "--reason",
+              "arg": "<text>"
+            },
+            {
+              "name": "--project",
+              "arg": "<.dproj>"
+            },
+            {
+              "name": "--config",
+              "arg": "<drag-lint-lint.json>"
+            },
+            {
+              "name": "--json"
+            }
+          ],
+          "help": ["  drag-lint rules disable|enable --rule <id> --scope line|unit|project [--in <F> --line <N>] --reason \"<text>\" [--project <.dproj>] [--config <drag-lint-lint.json>] [--json]   (line = a dl:ok marker on the line; unit / project = rule_overrides in the project lint config, with reason and date; enable undoes one disable)"]
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Code Quality > Disable Rule...",
+          "steps": ["Put the caret on a line that shows a drag-lint finding", "Choose drag-lint > Code Quality > Disable Rule...", "Pick Disable here (this line), Disable in this unit or Disable in this project", "Type a one-line reason and press OK"]
+        },
+        {
+          "type": "ide-context",
+          "host": "Editor",
+          "caption": "drag-lint > Disable Rule...",
+          "steps": ["Put the caret on a line that shows a drag-lint finding", "Right-click in the editor, open the drag-lint submenu and choose Disable Rule...", "Pick Disable here (this line), Disable in this unit or Disable in this project", "Type a one-line reason and press OK"]
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "Silence one rule on this line only, with a reason.",
+          "command": "drag-lint rules disable --rule <id> --scope line --in <U.pas> --line <N> --reason \"<why>\""
+        },
+        {
+          "ask": "Silence one rule in one unit without touching the source.",
+          "command": "drag-lint rules disable --rule <id> --scope unit --in <U.pas> --reason \"<why>\""
+        },
+        {
+          "ask": "Turn one rule off for the whole project.",
+          "command": "drag-lint rules disable --rule <id> --scope project --project <App.dproj> --reason \"<why>\""
+        },
+        {
+          "ask": "Undo a disable.",
+          "command": "drag-lint rules enable --rule <id> --scope line|unit|project [--in <U.pas> --line <N>] [--project <App.dproj>]"
+        }
+      ],
+      "verified": {
+        "date": "2026-11-17",
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "ee74bfd4bee5146e02c67338d68de51d94da8cc682b39aa1f3ea6d3177107c33"
       }
     },
     {
@@ -4108,7 +4207,7 @@
             }
           ],
           "helpOrder": 19,
-          "help": ["  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output|--report <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]", "                               --output <file> (alias --report): the text report goes to the file (default lint-report-YYYYMMDD.txt beside --project, else beside the DB); with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).", "                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)", "                               --rule <id>[,<id>...]: RUN and report ONLY those rules (1.51.1: a comma list narrows execution and derives no --shared-db peers, as one id does); naming an OFF-by-default rule opts it in", "                               for the run (no --enable needed) -- the same contract as lint and lint-project.", "                               --quiet: suppress per-file progress lines written to stderr", "                               on a --db the manifest does not register (a copy), the dl:shared marker-peer pass is skipped with one stderr note and sibling DBs resolve to same-named copies beside --db (else could not check); --shared-db <db> still runs (1.51.1).", "                               --project <.dproj|.dpr>: report ONLY on the units that project compiles", "                               (its compile closure + their .dfm siblings). Use it when one folder holds", "                               several projects, or when the DB spans more than the project you are reviewing.", "                               taint-sql-injection / taint-command-injection / taint-path-traversal (store-backed): walk the index's data_flows", "                               facts from a catalogued source to a sink; catalogues rules\\taint-sources|sinks|propagators.json, extended by the", "                               \"taint\" object of drag-lint-lint.json: sources sinks propagators sanitizers disable max_depth lib_depth max_rounds", "                               follow_ambiguous weak_receiver_regex weak_severity_drop max_paths_per_sink second_order.", "                               --fix [--apply]: AUTOFIX every fixable finding across the whole project.", "                               DRY RUN WITHOUT --apply. This is what the Structure form's right-click", "                               \"Fix all in project\" runs. It can rewrite many files at once -- dry-run first."]
+          "help": ["  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output|--report <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget]", "                               --output <file> (alias --report): the text report goes to the file (default lint-report-YYYYMMDD.txt beside --project, else beside the DB); with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).", "                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)", "                               --rule <id>[,<id>...]: RUN and report ONLY those rules (1.51.1: a comma list narrows execution and derives no --shared-db peers, as one id does); naming an OFF-by-default rule opts it in", "                               for the run (no --enable needed) -- the same contract as lint and lint-project.", "                               --quiet: suppress per-file progress lines written to stderr", "                               on a --db the manifest does not register (a copy), the dl:shared marker-peer pass is skipped with one stderr note and sibling DBs resolve to same-named copies beside --db (else could not check); --shared-db <db> still runs (1.51.1).", "                               --project <.dproj|.dpr>: report ONLY on the units that project compiles", "                               (its compile closure + their .dfm siblings). Use it when one folder holds", "                               several projects, or when the DB spans more than the project you are reviewing.", "                               taint-sql-injection / taint-command-injection / taint-path-traversal (store-backed): walk the index's data_flows", "                               facts from a catalogued source to a sink; catalogues rules\\taint-sources|sinks|propagators.json, extended by the", "                               \"taint\" object of drag-lint-lint.json: sources sinks propagators sanitizers disable max_depth lib_depth max_rounds", "                               follow_ambiguous weak_receiver_regex weak_severity_drop max_paths_per_sink second_order.", "                               --fix [--apply]: AUTOFIX every fixable finding across the whole project.", "                               DRY RUN WITHOUT --apply. This is what the Structure form's right-click", "                               \"Fix all in project\" runs. It can rewrite many files at once -- dry-run first."]
         }
       ],
       "audience": "both",
@@ -4854,6 +4953,30 @@
       }
     },
     {
+      "id": "v152-unconn-rules",
+      "title": "Lint rules unconnected-control and hanging-handler",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "Warns on a form control that nothing wires and on an event-handler-shaped method that no form binds and no code assigns or calls",
+      "intro": "Read this to see which controls and handlers the two form rules report, what counts as a connection, and how the index widens the evidence beyond the unit.",
+      "wikiPage": "v152-unconn-rules",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "drag-lint lint <file.pas> --rule unconnected-control,hanging-handler --db <index.sqlite>"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-17",
+        "by": "alexanderl",
+        "build": "1.51.1-alpha"
+      }
+    },
+    {
       "id": "lint-rules",
       "title": "Lint rules",
       "group": "linting",
@@ -5158,7 +5281,7 @@
       "owner": "ENGINE",
       "status": "shipped",
       "since": "1.46.0-alpha",
-      "summary": "Project lint rule, OFF by default: a class-typed parameter that an ancestor type could carry, proved by the narrow-param plan",
+      "summary": "Project lint rule, ON by default since 1.52 (warning, with an autofix): a class-typed parameter that an ancestor type could carry, proved by the narrow-param plan",
       "intro": "Read this to see what parameter-type-too-wide reports and how it relates to narrow-param. It runs in lint-all and lint-project over a project index.",
       "wikiPage": "parameter-type-too-wide",
       "surfaces": [
@@ -5174,6 +5297,112 @@
         "by": "ENGINE",
         "build": "1.46.0-alpha",
         "surfaceHash": "c86e88b99bad3d1352c6b7e19e7394f26a185b860c009bb97ac366379a830ab4"
+      }
+    },
+    {
+      "id": "v152-ptw",
+      "title": "parameter-type-too-wide ON by default, with an autofix",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "parameter-type-too-wide ships ON as a warning in lint-all / lint-project and gets an autofix that retypes the parameter to the proved ancestor through the compile gate",
+      "intro": "Read this when lint-all reports parameter-type-too-wide and you want to fix it, or want to know why a similar routine is not reported. The rule reports a class-typed parameter whose routine uses only members an ancestor declares; it skips library code, overrides and virtual methods, interface methods, published and form-bound event handlers and routines taken as a method pointer. The fix re-proves the finding, retypes both routine headers, adds the ancestor's unit to uses when needed, and with --compile-gate keeps the edit only when the project still builds.",
+      "wikiPage": "v152-ptw",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "example": "drag-lint lint-all --db <project.sqlite> --rule parameter-type-too-wide"
+        },
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "drag-lint lint <unit.pas> --db <project.sqlite> --rule parameter-type-too-wide --fix --fix-rule parameter-type-too-wide --apply --project <X.dproj> --compile-gate",
+          "usage": "drag-lint lint <unit.pas> --db <db> --rule parameter-type-too-wide --fix --fix-rule parameter-type-too-wide [--fix-line <n>] --apply --project <X.dproj> [--compile-gate | --no-compile-gate] [--library-db <lib>] [--no-backup]",
+          "flags": [
+            {
+              "name": "--fix-rule",
+              "arg": "parameter-type-too-wide"
+            },
+            {
+              "name": "--fix-line",
+              "arg": "<n>"
+            },
+            {
+              "name": "--compile-gate"
+            }
+          ]
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "Which parameters in my project could take a narrower type?",
+          "command": "drag-lint lint-all --db <project.sqlite> --rule parameter-type-too-wide"
+        },
+        {
+          "ask": "How do I narrow one reported parameter and keep the project building?",
+          "command": "drag-lint lint <unit.pas> --db <project.sqlite> --rule parameter-type-too-wide --fix --fix-rule parameter-type-too-wide --fix-line <n> --apply --project <X.dproj> --compile-gate"
+        },
+        {
+          "ask": "Why is my event handler not reported by parameter-type-too-wide?",
+          "command": "drag-lint narrow-param --routine <QName> --plan --db <project.sqlite>"
+        }
+      ],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-11-17",
+        "by": "ENGINE"
+      }
+    },
+    {
+      "id": "v152-per-rule-budget",
+      "title": "Per-rule time budget in the rule frame (rule-skipped-budget)",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "A v151/v152 rule slower than rule_time_budget_ms (2000 ms) on a file is skipped there with one rule-skipped-budget note; index warns near the parse limit",
+      "intro": "Read this when a lint run shows a rule-skipped-budget note, when you want to change or turn off the per-rule time budget, or when index warns that a unit is near the parse limit.",
+      "wikiPage": "rule-time-budget",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint",
+          "usage": "drag-lint lint <file.pas> [--config <lint.json>] [--no-budget] (lint config key rule_time_budget_ms, default 2000 ms per rule per file, 0 = off; --no-budget or DRAGLINT_NO_BUDGET=1 = off; an overrunning rule is skipped for the file with one rule-skipped-budget note: category other, info, on)",
+          "flags": [
+            {
+              "name": "--config",
+              "arg": "<file>"
+            },
+            {
+              "name": "--no-budget"
+            }
+          ]
+        },
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "usage": "drag-lint lint-all --db <file.sqlite> [--no-budget] (same budget; one \"rule budget:\" note line lists the skipped rules of the run)",
+          "flags": [
+            {
+              "name": "--no-budget"
+            }
+          ]
+        },
+        {
+          "type": "cli",
+          "verb": "index",
+          "usage": "drag-lint index --project <X.dproj> --db <file.sqlite> (prints a WARN line for a unit within 10% below settings.maxParseFileKB, default 2048 KB)"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-17",
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "64ada12f82122fda3d58a94be503c63f416b6084b863cc9b213ca279b3c6c49b"
       }
     },
     {
@@ -5588,7 +5817,7 @@
         {
           "type": "cli",
           "verb": "lint-all",
-          "usage": "drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output|--report <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]",
+          "usage": "drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output|--report <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget] [--no-stand-down]",
           "flags": [
             {
               "name": "--db",
@@ -5625,6 +5854,10 @@
             },
             {
               "name": "--no-preprocess"
+            },
+            {
+              "name": "--no-stand-down",
+              "summary": "measurement runs: open no stand-down channel, so a maintenance stand-down from another process cannot cut the run to PARTIAL (exit 4)"
             },
             {
               "name": "--shared-db",
@@ -6111,6 +6344,41 @@
         "by": "ENGINE",
         "build": "1.51.0-alpha",
         "surfaceHash": "4cd8494f26078b818944a48e30ae21b811bc3d61b156974a04490a796c867192"
+      }
+    },
+    {
+      "id": "v152-proj2",
+      "title": "unit-used-by-no-unit rule; unit-not-in-dpr outside the project roots",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "Warns (ON) on a unit only the .dpr lists that nothing reaches; a form counts only when opened. unit-not-in-dpr also reports shared-folder units",
+      "intro": "Read this to see when unit-used-by-no-unit warns, which self-registering units it leaves alone, why a form with an initialization section still fires, and how lint-all --project now reports shared-folder units missing from the project files.",
+      "wikiPage": "v152-proj2",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "usage": "drag-lint lint-all --db <file.sqlite> [--project <file.dproj>] [--rule unit-used-by-no-unit|unit-not-in-dpr] (unit-used-by-no-unit: default ON, category project-wide, warning, lint-all only; exempt: initialization section or container registration, a form only when the program code or a FindClass('TName') string opens it; unit-not-in-dpr: closure units outside the project roots reported on the .dpr, with --project)",
+          "flags": [
+            {
+              "name": "--rule",
+              "arg": "<id>"
+            },
+            {
+              "name": "--project",
+              "arg": "<file.dproj>"
+            }
+          ]
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-17",
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "2d0c23565c009383cfcd928a0869cb75532a87f1d17ce233d0603d793354b85c"
       }
     },
     {
@@ -6702,13 +6970,17 @@
         {
           "ask": "How do I document every public declaration of the project?",
           "command": "drag-lint document --project <p.dproj> --apply"
+        },
+        {
+          "ask": "document --project warns or refuses because files it reads facts from changed since indexing -- what now?",
+          "command": "drag-lint document --project <p.dproj> --apply --reindex"
         }
       ],
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
-        "surfaceHash": "ca0c5daf49b9c71753c73c96c5fc474b4ef19e81e432084d1d2a396e3548b15f"
+        "build": "1.51.1-alpha",
+        "surfaceHash": "732a633c865239c7c3f7fcf11b5b05e3844bead505ae17120dad6e4ea47ad8bd"
       }
     },
     {
@@ -6835,6 +7107,35 @@
         "build": "1.36.0-alpha",
         "surfaceHash": "ff5d4373a045f82f9c96f5283a5102ad2255f57f6709969e5cb7e2f5fbd70209"
       }
+    },
+    {
+      "id": "v152-docpol",
+      "title": "Documentation policy: missing-doc covers all real code, doc-placeholder, doc-malformed-summary",
+      "group": "documentation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "missing-doc now asks for a doc comment on a DFM-bound handler that has code (empty handlers stay exempt); new rule doc-placeholder (ON, hint) flags a template summary (Summary here ...) that does not count as documented; new rule doc-malformed-summary (OFF, hint) flags a summary that opens like a declaration",
+      "intro": "Read this to see which declarations missing-doc expects a doc comment on after 1.52 (a bound Button1Click with code now needs one, an empty one does not), and how doc-placeholder and doc-malformed-summary catch summaries that are not descriptions.",
+      "wikiPage": "v152-docpol",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "usage": "drag-lint lint-all --db <db> [--rule missing-doc|doc-placeholder|doc-malformed-summary] (documentation rules: missing-doc OFF by default, document all real code, an empty DFM-bound handler is exempt; doc-placeholder ON hint; doc-malformed-summary OFF hint)",
+          "flags": [
+            {
+              "name": "--db",
+              "arg": "<db>"
+            },
+            {
+              "name": "--rule",
+              "arg": "<id>"
+            }
+          ]
+        }
+      ],
+      "audience": "both"
     },
     {
       "id": "effect-summary-legend",
@@ -17545,6 +17846,26 @@
         "wikiAnchor": "doc-drift"
       },
       {
+        "id": "rule.doc-malformed-summary",
+        "title": "doc-malformed-summary",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Doc summary opens like a declaration (procedure Foo(...)) instead of a description (documentation, hint)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule doc-malformed-summary"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "doc-malformed-summary"
+      },
+      {
         "id": "rule.doc-orphan-block",
         "title": "doc-orphan-block",
         "group": "linting",
@@ -17603,6 +17924,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "doc-param-not-in-signature"
+      },
+      {
+        "id": "rule.doc-placeholder",
+        "title": "doc-placeholder",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Doc summary is a template placeholder (Summary here ...), not a description (documentation, hint)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule doc-placeholder"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "doc-placeholder"
       },
       {
         "id": "rule.double-dictionary-lookup",
@@ -19083,6 +19424,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "handle-leak"
+      },
+      {
+        "id": "rule.hanging-handler",
+        "title": "hanging-handler",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Event-handler-shaped method bound in no form file and assigned or called nowhere in code (dead-code, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule hanging-handler"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "hanging-handler"
       },
       {
         "id": "rule.hardcoded-absolute-path",
@@ -21311,7 +21672,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "A class-typed parameter whose routine uses only members an ancestor of the declared type already declares, proved by the narrow-param pl... (project-wide, hint)",
+        "summary": "A class-typed parameter whose routine uses only members an ancestor of the declared type already declares, proved by the nar... (project-wide, warning, fixable)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -22263,6 +22624,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "rtti-unavailable"
+      },
+      {
+        "id": "rule.rule-skipped-budget",
+        "title": "rule-skipped-budget",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "A rule exceeded its per-file time budget and was skipped for this file (other, info)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule rule-skipped-budget"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "rule-skipped-budget"
       },
       {
         "id": "rule.self-as-interface-in-constructor",
@@ -23285,6 +23666,26 @@
         "wikiAnchor": "unconditional-recursion"
       },
       {
+        "id": "rule.unconnected-control",
+        "title": "unconnected-control",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Control with a default event that has no event, no Action, no binding and no code reference (dead-code, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule unconnected-control"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "unconnected-control"
+      },
+      {
         "id": "rule.undocumented-check-suppression",
         "title": "undocumented-check-suppression",
         "group": "linting",
@@ -23403,6 +23804,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "unit-too-large"
+      },
+      {
+        "id": "rule.unit-used-by-no-unit",
+        "title": "unit-used-by-no-unit",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Unit is listed only by the program file and nothing reaches it (no uses, no reference, no self-registration) (project-wide, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule unit-used-by-no-unit"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "unit-used-by-no-unit"
       },
       {
         "id": "rule.unneeded-forward-declaration",
