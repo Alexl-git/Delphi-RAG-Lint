@@ -220,7 +220,11 @@ function SortUniqueText(const pItems: TArray<string>): TArray<string>;
 /// <param name="pOut">Receives verb -> sorted subcommands; verbs with none are not added. Not cleared first.</param>
 /// <exception cref="EFeatureGenLive">The Run dispatcher implementation is not found.</exception>
 /// <remarks>Comments, string literals (for the span scan) and inactive Win64 conditional branches are
-/// blanked first; a subcommand belongs to every verb whose dispatch closure reaches its routine.</remarks>
+/// blanked first; a subcommand belongs to every verb whose dispatch closure reaches its routine.
+/// A subcommand is a literal compared with Args.SubCommand (`=`, `<>`, SameText / MatchText / IndexText),
+/// or with the FIRST parameter of a routine handed Args.SubCommand as its first argument (repo ->
+/// RunRepoVerb(pSub, ...)), followed into callees that receive that parameter first in turn (1.52 B25).
+/// A sub passed in any other argument position is not followed.</remarks>
 procedure HarvestSubcommandMap(const pCliText: string; const pOut: TDictionary<string, TArray<string>>);
 
 implementation
@@ -799,9 +803,50 @@ begin
   Result := TRegEx.IsMatch(pSpan, '(?m)^begin\b', [roIgnoreCase, roMultiLine]);
 end;
 
+const
+  { Args.SubCommand / AArgs.SubCommand as an operand (a qualified Foo.Args is not one). }
+  ARGS_SUB_RE = '(?:\bAArgs|(?<![A-Za-z0-9_.])Args)\.SubCommand\b';
+  { An optional case fold around the operand: LowerCase(Args.SubCommand). }
+  CASE_WRAP_RE = '(?:(?:Ansi)?(?:LowerCase|UpperCase)\s*\(\s*|Trim\s*\(\s*)?';
+  { How far past a routine header its parameter list is looked for. }
+  HEADER_PARAM_SCAN = 400;
+
+{ The sub-verb literals ('x' or ['x', 'y']) of pList: lower-case dashed words only. }
+function SubLiterals(const pList: string): TArray<string>;
+var
+  lM: TMatch;
+begin
+  Result := nil;
+  for lM in TRegEx.Matches(pList, '''([a-z0-9][a-z0-9-]*)''') do
+    Result := Result + [lM.Groups[1].Value];
+end;
+
+{ B25: the literals pSpan compares the operand pOperandRe with: `= 'x'`, `<> 'x'`, and the first
+  argument of SameText / MatchText / IndexText (Ansi- forms too). }
+function ComparedLiterals(const pSpan, pOperandRe: string): TArray<string>;
+var
+  lM: TMatch;
+begin
+  Result := nil;
+  for lM in TRegEx.Matches(pSpan, '(?:Ansi)?(?:Same|Match|Index)Text\s*\(\s*' + CASE_WRAP_RE + pOperandRe
+    + '\s*\)?\s*,\s*(\[[^\]]*\]|''[^'']*'')', [roIgnoreCase]) do
+    Result := Result + SubLiterals(lM.Groups[1].Value); // dl:ok concat-in-loop@7f8a -- REVIEWED 2026-11-18 v152 BK-TOOLING2: TArray<string> concat, not a string; a handful of sub-verb literals per CLI routine
+  for lM in TRegEx.Matches(pSpan, pOperandRe + '\s*(?:=|<>)\s*(''[^'']*'')', [roIgnoreCase]) do
+    Result := Result + SubLiterals(lM.Groups[1].Value); // dl:ok concat-in-loop@7f8a -- REVIEWED 2026-11-18 v152 BK-TOOLING2: TArray<string> concat, not a string; a handful of sub-verb literals per CLI routine
+end;
+
+{ B25: the routines pSpan hands the operand pOperandRe to as their FIRST argument (case fold allowed). }
+function FirstArgCallees(const pSpan, pOperandRe: string): TArray<string>;
+var
+  lM: TMatch;
+begin
+  Result := nil;
+  for lM in TRegEx.Matches(pSpan, '(?<![A-Za-z0-9_.])([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*' + CASE_WRAP_RE + pOperandRe, [roIgnoreCase]) do
+    Result := Result + [lM.Groups[1].Value];
+end;
+
 procedure HarvestSubcommandMap(const pCliText: string; const pOut: TDictionary<string, TArray<string>>);
 const
-  SUB_RE = '(?:\bAArgs|(?<![A-Za-z0-9_.])Args)\.SubCommand\s*(?:=|<>)\s*''([a-z0-9][a-z0-9-]*)''';
   HEADER_RE = '^(?:procedure|function)\s+([A-Za-z_][A-Za-z0-9_]*)';
 var
   lRes: TPascalProjections;
@@ -817,6 +862,22 @@ var
   lTodo: TStack<string>;
   lFound: Boolean;
   lArr: TArray<string>;
+  lFirst: TDictionary<string, string>;
+  lSpanFrom, lSpanTo: TDictionary<string, Integer>;
+  lMarked: TStrSet;
+  lWork: TStack<string>;
+  lSeeds: TList<string>;
+  lPm: TMatch;
+  lLit, lOp: string;
+
+  procedure MarkSub(const pRoutine: string);
+  begin
+    if not lMarked.ContainsKey(pRoutine) then
+    begin
+      lMarked.Add(pRoutine, True);
+      lWork.Push(pRoutine);
+    end;
+  end;
 
   procedure AddSub(const pRoutine, pSub: string);
   var
@@ -836,6 +897,12 @@ begin
   lRoutines := TObjectDictionary<string, TStrSet>.Create([doOwnsValues], TIStringComparer.Ordinal);
   lDispatch := TObjectDictionary<string, TStrSet>.Create([doOwnsValues], TIStringComparer.Ordinal);
   lVerbOrder := TList<string>.Create;
+  lFirst := TDictionary<string, string>.Create(TIStringComparer.Ordinal);
+  lSpanFrom := TDictionary<string, Integer>.Create(TIStringComparer.Ordinal);
+  lSpanTo := TDictionary<string, Integer>.Create(TIStringComparer.Ordinal);
+  lMarked := TStrSet.Create(TIStringComparer.Ordinal);
+  lWork := TStack<string>.Create;
+  lSeeds := TList<string>.Create;
   try
     lHeaders := TRegEx.Matches(lRes.Code, HEADER_RE, [roMultiLine]);
     // routine -> subcommand literals in its own span; routine -> callees (Get-CliRoutineMap)
@@ -847,8 +914,17 @@ begin
       lSpan := Copy(lRes.Code, lFrom, lTo - lFrom);
       if not HasBody(lSpan) then
         Continue;
-      for lM in TRegEx.Matches(Copy(lRes.NoComments, lFrom, lTo - lFrom), SUB_RE) do
-        AddSub(lName, lM.Groups[1].Value);
+      for lLit in ComparedLiterals(Copy(lRes.NoComments, lFrom, lTo - lFrom), ARGS_SUB_RE) do
+        AddSub(lName, lLit);
+      for lC in FirstArgCallees(lSpan, ARGS_SUB_RE) do
+        lSeeds.Add(lName + #9 + lC);
+      lPm := TRegEx.Match(Copy(lRes.Code, lFrom + lHeaders[h].Length, HEADER_PARAM_SCAN), '^\s*\(\s*(?:(?:const|var|out)\s+)?([A-Za-z_][A-Za-z0-9_]*)', [roIgnoreCase]);
+      if lPm.Success and not lFirst.ContainsKey(lName) then
+      begin
+        lFirst.Add(lName, lPm.Groups[1].Value);
+        lSpanFrom.Add(lName, lFrom);
+        lSpanTo.Add(lName, lTo);
+      end;
       if not lRoutines.TryGetValue(lName, lSet) then
       begin
         lSet := TStrSet.Create;
@@ -896,8 +972,41 @@ begin
         lVerbOrder.Add(lVerb);
       end;
       ArgsCallees(lSpan, 'Run', lSet);
-      for lM in TRegEx.Matches(Copy(lRes.NoComments, lFrom, lTo - lFrom), SUB_RE) do
-        AddSub('Run:' + lVerb, lM.Groups[1].Value);
+      for lLit in ComparedLiterals(Copy(lRes.NoComments, lFrom, lTo - lFrom), ARGS_SUB_RE) do
+        AddSub('Run:' + lVerb, lLit);
+      for lC in FirstArgCallees(lSpan, ARGS_SUB_RE) do
+        if lFirst.ContainsKey(lC) then
+        begin
+          lSet.AddOrSetValue(lC, True);
+          MarkSub(lC);
+        end;
+    end;
+    // B25: routines handed the sub (first argument) from a routine body; then follow each one's
+    // first parameter into its comparisons and into the callees it hands that parameter to first.
+    for lEntry in lSeeds do
+    begin
+      lR := lEntry.Split([#9])[0];
+      lC := lEntry.Split([#9])[1];
+      if lFirst.ContainsKey(lC) and not SameText(lC, lR) then
+      begin
+        lRoutines[lR].AddOrSetValue(lC, True);
+        MarkSub(lC);
+      end;
+    end;
+    while lWork.Count > 0 do
+    begin
+      lR := lWork.Pop;
+      lFrom := lSpanFrom[lR];
+      lTo := lSpanTo[lR];
+      lOp := '(?<![A-Za-z0-9_.])' + lFirst[lR] + '\b(?!\s*\.)';
+      for lLit in ComparedLiterals(Copy(lRes.NoComments, lFrom, lTo - lFrom), lOp) do
+        AddSub(lR, lLit);
+      for lC in FirstArgCallees(Copy(lRes.Code, lFrom, lTo - lFrom), lOp) do
+        if lFirst.ContainsKey(lC) and not SameText(lC, lR) then
+        begin
+          lRoutines[lR].AddOrSetValue(lC, True);
+          MarkSub(lC);
+        end;
     end;
     // verb -> transitive closure of subcommands
     for lVerb in SortUniqueText(lVerbOrder.ToArray) do
@@ -940,6 +1049,12 @@ begin
       end;
     end;
   finally
+    lSeeds.Free;
+    lWork.Free;
+    lMarked.Free;
+    lSpanTo.Free;
+    lSpanFrom.Free;
+    lFirst.Free;
     lVerbOrder.Free;
     lDispatch.Free;
     lRoutines.Free;

@@ -12,6 +12,16 @@
     {
       "type": "cli",
       "verb": "rules",
+      "sub": "disable"
+    },
+    {
+      "type": "cli",
+      "verb": "rules",
+      "sub": "enable"
+    },
+    {
+      "type": "cli",
+      "verb": "rules",
       "usage": "drag-lint rules disable|enable --rule <id> --scope line|unit|project [--in <F> --line <N>] --reason \"<text>\" [--project <.dproj>] [--config <drag-lint-lint.json>] [--json]   (line = a dl:ok marker on the line; unit / project = rule_overrides in the project lint config, with reason and date; enable undoes one disable)",
       "flags": [
         {

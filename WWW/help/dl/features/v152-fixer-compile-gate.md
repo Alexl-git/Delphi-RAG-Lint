@@ -7,7 +7,7 @@ group: refactoring
 order: 50023
 since: 1.52.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # extract-method and create-enum-helper through the compile gate by default
@@ -19,7 +19,7 @@ Read this when extract-method or create-enum-helper refuses with REFUSED (no-pro
 ## How to run it
 
 ```text
-drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> --apply [--project <X.dproj> | --no-compile-gate] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-backup]
+drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--no-compile-gate] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] - pull a statement run into a new method
 ```
 
 Example:
