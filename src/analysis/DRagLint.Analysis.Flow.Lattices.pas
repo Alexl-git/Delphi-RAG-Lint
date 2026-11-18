@@ -1315,7 +1315,16 @@ function TRoutineVarTable.IndexOfAt(const ALowerName: string; APos: Integer): In
 var I, BestStart: Integer; V: TRoutineVar;
 begin
   Result := IndexOf(ALowerName);
-  if (Result < 0) or not FMultiDecl.ContainsKey(ALowerName) then Exit;
+  if Result < 0 then Exit;
+  if not FMultiDecl.ContainsKey(ALowerName) then
+  begin
+    { B02: a name declared ONCE, by an inline `var`, is that local only inside its scope. A read
+      before the declaration (the `E` of `on E: Exception do` ahead of a later `var E := ..`) is
+      another binding, not a use of this unassigned local. }
+    V := FVars[Result];
+    if (V.ScopeEnd > 0) and ((APos < V.ScopeStart) or (APos >= V.ScopeEnd)) then Result := -1;
+    Exit;
+  end;
   BestStart := -1;
   for I := 0 to FVars.Count - 1 do
   begin

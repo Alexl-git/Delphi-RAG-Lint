@@ -254,6 +254,9 @@ uses
   System.IOUtils
   , System.StrUtils
   , System.RegularExpressions
+  , TreeSitter
+  , DRagLint.Core.Encoding
+  , DRagLint.LSP.SyntaxTree
   ;
 
 { ---------------------------------------------------------------- model }
@@ -671,87 +674,54 @@ begin
   end;
 end;
 
-/// <summary>Blanks comments and string literals of Pascal source (same length, newlines kept).</summary>
-/// <param name="ASrc">Pascal unit text.</param>
-/// <returns>The text with every comment and string body replaced by spaces.</returns>
-function BlankPasNoise(const ASrc: string): string;
+/// <summary>Adds to AOut the component named by the target of every `Comp.DataField := ..` /
+/// `Comp.DataBinding.DataField := ..` (optionally `Self.`-qualified) assignment under ANode.</summary>
+/// <param name="ANode">Subtree to walk; a null node is ignored.</param>
+/// <param name="ASrc">The UTF-8 bytes the tree was parsed from.</param>
+/// <param name="AOut">Receives lower-case component names.</param>
+/// <remarks>The target is read from the assignment node, so comments and strings never match, and a
+/// target qualified by another object (`Other.edtB.DataField`) is not this form's edtB.</remarks>
+procedure CollectDataFieldTargets(const ANode: TTSNode; const ASrc: TBytes; AOut: TDictionary<string, Boolean>);
 var
-  I, N: Integer;
-  C   : Char;
+  I  : Integer;
+  Lhs: TTSNode;
+  M  : TMatch;
 begin
-  Result:= ASrc;
-  N:= Length(Result);
-  I:= 1;
-  while I <= N do
+  if ANode.IsNull then Exit;
+  if ANode.NodeType = 'assignment' then
   begin
-    C:= Result[I];
-    if C = '''' then
+    Lhs:= ANode.ChildByField('lhs');
+    if not Lhs.IsNull then
     begin
-      Result[I]:= ' ';
-      Inc(I);
-      while (I <= N) and (Result[I] <> '''') and (Result[I] <> #10) do
-      begin
-        Result[I]:= ' ';
-        Inc(I);
-      end;
-      if (I <= N) and (Result[I] = '''') then
-      begin
-        Result[I]:= ' ';
-        Inc(I);
-      end;
-    end
-    else if (C = '/') and (I < N) and (Result[I + 1] = '/') then
-      while (I <= N) and (Result[I] <> #10) do
-      begin
-        Result[I]:= ' ';
-        Inc(I);
-      end
-    else if C = '{' then
-    begin
-      while (I <= N) and (Result[I] <> '}') do
-      begin
-        if Result[I] <> #10 then Result[I]:= ' ';
-        Inc(I);
-      end;
-      if I <= N then Result[I]:= ' ';
-      Inc(I);
-    end
-    else if (C = '(') and (I < N) and (Result[I + 1] = '*') then
-    begin
-      while (I < N) and not ((Result[I] = '*') and (Result[I + 1] = ')')) do
-      begin
-        if Result[I] <> #10 then Result[I]:= ' ';
-        Inc(I);
-      end;
-      if I < N then
-      begin
-        Result[I]:= ' ';
-        Result[I + 1]:= ' ';
-      end;
-      Inc(I, 2);
-    end
-    else
-      Inc(I);
+      M:= TRegEx.Match(TEncoding.UTF8.GetString(ASrc, Integer(Lhs.StartByte), Integer(Lhs.EndByte - Lhs.StartByte)),
+        '^\s*(?:Self\s*\.\s*)?([A-Za-z_]\w*)\s*\.\s*(?:DataBinding\s*\.\s*)?DataField\s*$', [roIgnoreCase]);
+      if M.Success then AOut.AddOrSetValue(LowerCase(M.Groups[1].Value), True);
+    end;
   end;
+  for I:= 0 to ANode.NamedChildCount - 1 do CollectDataFieldTargets(ANode.NamedChild(I), ASrc, AOut);
 end;
 
 /// <summary>Collects the components whose DataField the owning unit assigns in code.</summary>
 /// <param name="ADfmPath">Path of the form file; the paired unit is the same base name with .pas.</param>
-/// <returns>Lower-case component names assigned as Comp.DataField:= or Comp.DataBinding.DataField:=; empty when there is no paired unit.</returns>
-/// <remarks>Reads only the paired unit's own source (comments and strings blanked); an assignment in any other unit is deliberately not seen.</remarks>
+/// <returns>Lower-case component names assigned as Comp.DataField:= or Comp.DataBinding.DataField:= (bare or Self.-qualified); empty when there is no paired unit.</returns>
+/// <remarks>Reads only the paired unit's own source, through its syntax tree; an assignment in any other unit is deliberately not seen.</remarks>
 function CodeBoundFields(const ADfmPath: string): TDictionary<string, Boolean>;
 var
   PasPath: string;
-  M      : TMatch;
+  Src    : TBytes;
+  Tree   : TTSTree;
 begin
   Result:= TDictionary<string, Boolean>.Create;
   PasPath:= ChangeFileExt(ADfmPath, '.pas');
   if not TFile.Exists(PasPath) then Exit;
-  for M in TRegEx.Matches(BlankPasNoise(TFile.ReadAllText(PasPath, TEncoding.ANSI)),
-    '\b([A-Za-z_]\w*)\s*\.\s*(?:DataBinding\s*\.\s*)?DataField\s*:=', [roIgnoreCase]) do
-    Result.AddOrSetValue(LowerCase(M.Groups[1].Value), True);
+  Src:= EnsureUtf8Bytes(TFile.ReadAllBytes(PasPath));
+  Tree:= ParseDelphiUtf8(Src, PasPath);
+  try
+    if Tree <> nil then CollectDataFieldTargets(Tree.RootNode, Src, Result);
+  finally
+    Tree.Free;
+  end;
 end;
-
 procedure CheckDupBinding(const AModel: TDfmModel; const ACfg: TLintConfig; const AFile: string;
   const ACodeBound: TDictionary<string, Boolean>; AOut: TFindingList);
 var
