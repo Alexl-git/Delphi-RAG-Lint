@@ -327,7 +327,7 @@ begin
   if (T = 'block') or (T = 'statements') then
   begin
     for var C in StatementsOf(pStmt) do
-      if HbNodeContains(C, pSite) then Exit(MarkIsMust(pSrc, C, pSite));
+      if HbNodeContains(pSrc, C, pSite) then Exit(MarkIsMust(pSrc, C, pSite));
     Exit(False);
   end;
   if T = 'try' then
@@ -339,7 +339,7 @@ begin
     for var I:= 0 to pStmt.NamedChildCount - 1 do
     begin
       var C:= pStmt.NamedChild(I);
-      if (C.NodeType = 'statements') and HbNodeContains(C, pSite) then Exit(MarkIsMust(pSrc, C, pSite));
+      if (C.NodeType = 'statements') and HbNodeContains(pSrc, C, pSite) then Exit(MarkIsMust(pSrc, C, pSite));
     end;
   end;
   Result:= False;
@@ -416,7 +416,7 @@ begin
   var ExitMust:= False;
   for var M in pMarks do
     for var K:= 0 to High(Stmts) do
-      if HbNodeContains(Stmts[K], M) then
+      if HbNodeContains(Src, Stmts[K], M) then
       begin
         if MarkIsMust(Src, Stmts[K], M) then
         begin
@@ -429,7 +429,7 @@ begin
       end;
   for var Q:= 0 to High(Result.Queries) do
     for var K:= 0 to High(Stmts) do
-      if HbNodeContains(Stmts[K], Result.Queries[Q].Site) then
+      if HbNodeContains(Src, Stmts[K], Result.Queries[Q].Site) then
       begin
         Result.Queries[Q].Located:= True;
         var L: Boolean;
