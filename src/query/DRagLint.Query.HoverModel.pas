@@ -62,6 +62,24 @@ type
     CalledFromLine: string;
   end;
 
+  /// <summary>An optional hover section the caller can leave out (v152: the fast first step of a
+  /// deferred hover skips the slow ones).</summary>
+  /// <remarks>hskImplementors = the 'Implemented by:' line (ImplementingMethodsOf; seconds on an
+  /// interface method with many implementors -- ASYNC's measurement). hskSetBy = the check-init writer
+  /// list (ruling HB2), which is computed only together with the facts anyway.</remarks>
+  THoverSkip = (hskImplementors, hskSetBy);
+  /// <summary>The sections AssembleHover leaves out; [] (the default) computes all of them.</summary>
+  THoverSkips = set of THoverSkip;
+
+const
+  /// <summary>Default check-init budget (most CFGs built) for the hover's 'Set by:' section; a tenth
+  /// of check-init's own default so a hover stays fast. Override: environment variable
+  /// DRAGLINT_HOVER_SETBY_MAX_ROUTINES (a whole number &gt;= 1).</summary>
+  HOVER_SETBY_MAX_ROUTINES = 200;
+
+  /// <summary>Writer rows the hover card shows before 'Set by: and N more' (plan D5).</summary>
+  HOVER_SETBY_ROWS = 5;
+
 /// <summary>Assembles the structured hover model for one indexed symbol,
 /// together with the fact lines and mined returns that render with it.</summary>
 /// <param name="AStore">The store that OWNS <paramref name="ASym"/>. Passing a
@@ -76,12 +94,16 @@ type
 /// as extra stores, so 'Used in:' / 'Used in (via property X):' carry a use that lives only in
 /// another DB (as `document --db A --db B` writes it). nil = the owning store only (the old
 /// answer). Never pass a platform library: the callers filter it out.</param>
+/// <param name="ASkip">v152: sections to leave out. hskImplementors drops the 'Implemented by:'
+/// line (ImplLines stays empty); hskSetBy drops the check-init writer list. [] = everything.</param>
 /// <returns>A populated assembly; a zeroed one when AStore is nil.</returns>
 /// <remarks>
 /// Reads the symbol's implementation span through TLiveDocuments, so
 /// an editor's UNSAVED buffer is mined when one is registered and the file on
 /// disk otherwise. The disk path is byte-for-byte the read the CLI has always
 /// done (ANSI), which is what lets the CLI keep emitting identical JSON.
+/// v152 HBHOVER (ruling HB2): with AWithFacts, a unit variable / class var / field also gets the
+/// check-init writer list (AttachHoverSetBy): Model.SetByJson plus 'Init:' / 'Set by:' fact lines.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas)</para>
 /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Doc.Facts.FormatHoverCalledFromLine, DRagLint.Doc.Facts.TDocFactsBuilder.Build, DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines, DRagLint.Doc.Regions.TDocRegions.FormatUsedInLines (+15 more)</para>
@@ -95,7 +117,28 @@ type
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function AssembleHover(const AStore: ISymbolStore; const ASym: TSymbol;
-  AWithFacts: Boolean = True; const AExtraStores: TArray<ISymbolStore> = nil): THoverAssembly;
+  AWithFacts: Boolean = True; const AExtraStores: TArray<ISymbolStore> = nil;
+  ASkip: THoverSkips = []): THoverAssembly;
+
+/// <summary>Adds the check-init writer list of ASym (ruling HB2: which routines / events set this
+/// variable) to an assembly: Model.SetByJson and the 'Init:' / 'Set by:' lines appended to FactLines.</summary>
+/// <param name="AStore">The SQLite store that owns ASym (its index file is what check-init reads).
+/// Any other store (an editor's in-memory buffer) adds nothing.</param>
+/// <param name="ASym">The hovered symbol. Only a variable or field is answered; check-init refuses
+/// a local, a parameter, a record field ... and then nothing is added.</param>
+/// <param name="AAsm">The assembly to extend; FactLines is appended to, never replaced.</param>
+/// <remarks>
+/// <para>The JSON `set_by` object: state (listed | never-set | budget-exceeded | error), verdict
+/// (SET, NEVER-SET, MAY-BE-UNSET, UNKNOWN-CALLEE), proven, summary, writers (byte-equal to
+/// `check-init --json` writers), shown (rows on the card), budget {routines, ms, exhausted, max}.</para>
+/// <para>Budget: HOVER_SETBY_MAX_ROUTINES CFGs (env DRAGLINT_HOVER_SETBY_MAX_ROUTINES overrides).
+/// Exhausted -&gt; state budget-exceeded: the writers are still complete (they are events, not the
+/// solve); only the verdict is unproven.</para>
+/// <para>Cached per index file + write time + QName + budget, so a re-hover is free and a reindex
+/// recomputes. Thread-safe: one lock serialises CheckInit (whose parse cache is not thread-safe)
+/// and the cache. LSP: call it in the deferred second step only (it can take a solve).</para>
+/// </remarks>
+procedure AttachHoverSetBy(const AStore: ISymbolStore; const ASym: TSymbol; var AAsm: THoverAssembly);  // dl:ok unused-public-symbol -- REVIEWED 2026-11-18 v152 HBHOVER: public for the LSP hoverBundle Reuse branch (HANDOVER to INT), which skips AssembleHover's facts
 
 implementation
 
@@ -104,6 +147,14 @@ uses
   System.RegularExpressions    ,
   System.Math                  ,
   System.StrUtils              ,
+  System.JSON                  ,
+  System.Rtti                  ,
+  System.IOUtils               ,
+  System.Generics.Collections  ,
+  FireDAC.Comp.Client          ,
+  DRagLint.Query.HappensBefore        ,
+  DRagLint.Query.HappensBefore.Types  ,
+  DRagLint.Query.HappensBefore.Render ,
   DRagLint.Core .LiveDocs ,
   DRagLint.Hover.Returns  ,
   DRagLint.Doc  .Facts    ,
@@ -166,8 +217,156 @@ begin
   Result:= '';
 end;
 
+{ v152 HBHOVER -- the 'Set by:' section (ruling HB2 second half). }
+
+type
+  /// <summary>One cached set-by answer: the JSON object and the card lines built from it.</summary>
+  TSetByEntry = record
+    Json : string;
+    Lines: TArray<string>;
+  end;
+
+var
+  { Guarded by GSetByLock: CheckInit's parse cache is not thread-safe, and the LSP may hover from
+    more than one thread. Created in initialization, freed in finalization. }
+  GSetByLock : TObject;
+  GSetByCache: TDictionary<string, TSetByEntry>;
+
+const
+  /// <summary>Entries kept before the cache is emptied (a hover session touches far fewer).</summary>
+  SETBY_CACHE_CAP = 512;
+
+{ The index file behind a SQLite store. ISymbolStore has no path accessor and the hover callers do
+  not pass one, so it is read from the store's private FireDAC connection (field FConn) through
+  RTTI -- fields carry RTTI at every visibility by default. Any other store (the LSP's in-memory
+  buffer store) answers '', which simply means "no set-by section". }
+function StoreDbPath(const AStore: ISymbolStore): string;
+begin
+  Result:= '';
+  var Obj: TObject:= AStore as TObject;
+  var Ctx: TRttiContext;
+  var Fld: TRttiField:= Ctx.GetType(Obj.ClassType).GetField('FConn');
+  if Fld = nil then Exit;
+  var Conn: TObject:= Fld.GetValue(Obj).AsObject;
+  if Conn is TFDConnection then Result:= TFDConnection(Conn).Params.Values['Database'];
+end;
+
+function SetByMaxRoutines: Integer;
+begin
+  Result:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_HOVER_SETBY_MAX_ROUTINES'), 0);
+  if Result < 1 then Result:= HOVER_SETBY_MAX_ROUTINES;
+end;
+
+{ One card row per writer: 'Set by: Unit.Routine (File.pas:12, assign; fired by Form.Btn.OnClick)'. }
+function SetByRow(const pW: TJSONObject): string;
+begin
+  var Routine: string:= pW.GetValue<string>('routine', '');
+  var FileName: string:= ExtractFileName(pW.GetValue<string>('file', ''));
+  var Where: string:= Format('%s:%d', [FileName, pW.GetValue<Integer>('line', 0)]);
+  var Detail: string:= Where + ', ' + pW.GetValue<string>('how', '');
+  if not pW.GetValue<Boolean>('counts', True) then Detail:= Detail + ', not counted';
+  var FiredBy: string:= pW.GetValue<string>('fired_by', '');
+  var CallerCount: Integer:= pW.GetValue<Integer>('callers.count', 0);
+  if FiredBy <> '' then Detail:= Detail + '; fired by ' + FiredBy
+  else if CallerCount > 0 then
+  begin
+    var Top: TJSONArray:= pW.GetValue<TJSONArray>('callers.top', nil);
+    var Names: string:= '';
+    if Top <> nil then
+      for var K:= 0 to Top.Count - 1 do Names:= Names + IfThen(K = 0, ': ', ', ') + Top.Items[K].Value;
+    Detail:= Detail + Format('; called from %d%s', [CallerCount, Names]);
+  end;
+  Result:= 'Set by: ' + IfThen(Routine <> '', Routine, Where) + ' (' + Detail + ')';
+end;
+
+{ The set-by JSON object and card lines from one check-init answer (see AttachHoverSetBy). }
+function BuildSetBy(const pAnswer: THbAnswer; pMax: Integer): TSetByEntry;
+begin
+  Result:= Default(TSetByEntry);
+  var Ans: TJSONObject:= TJSONObject.ParseJSONValue(HbAnswerJson(pAnswer)) as TJSONObject;
+  try
+    var Writers: TJSONArray:= Ans.GetValue<TJSONArray>('writers');
+    var State: string:=
+      if pAnswer.Budget.Exhausted then 'budget-exceeded'
+      else if Writers.Count = 0 then 'never-set'
+      else 'listed';
+    var Shown: Integer:= Min(Writers.Count, HOVER_SETBY_ROWS);
+    var Obj: TJSONObject:= TJSONObject.Create;
+    try
+      Obj.AddPair('state', State);
+      Obj.AddPair('verdict', VerdictCode(pAnswer.Verdict));
+      Obj.AddPair('proven', TJSONBool.Create(pAnswer.Proven));
+      Obj.AddPair('summary', pAnswer.Summary);
+      Obj.AddPair('writers', Writers.Clone as TJSONArray);
+      Obj.AddPair('shown', TJSONNumber.Create(Shown));
+      var Bud: TJSONObject:= Ans.GetValue<TJSONObject>('budget').Clone as TJSONObject;
+      Bud.AddPair('max', TJSONNumber.Create(pMax));
+      Obj.AddPair('budget', Bud);
+      Result.Json:= Obj.ToJSON;
+    finally
+      Obj.Free;
+    end;
+
+    var Head: string:= 'Init: ' + VerdictCode(pAnswer.Verdict);
+    if pAnswer.Summary <> '' then
+      Head:= Head + IfThen(pAnswer.Summary.StartsWith('('), ' ', ' -- ') + pAnswer.Summary;
+    Result.Lines:= [Head];
+    if Writers.Count = 0 then Result.Lines:= Result.Lines + ['Set by: never set (no writer in the index)'];
+    for var K:= 0 to Shown - 1 do Result.Lines:= Result.Lines + [SetByRow(Writers.Items[K] as TJSONObject)];
+    if Writers.Count > Shown then
+      Result.Lines:= Result.Lines + [Format('Set by: and %d more (check-init %s lists all)',
+        [Writers.Count - Shown, pAnswer.Target.QName])];
+    if pAnswer.Budget.Exhausted then
+      Result.Lines:= Result.Lines + [Format('Set by: budget exceeded after %d routines -- the writers are complete, the verdict is not proven',
+        [pAnswer.Budget.Routines])];
+  finally
+    Ans.Free;
+  end;
+end;
+
+procedure AttachHoverSetBy(const AStore: ISymbolStore; const ASym: TSymbol; var AAsm: THoverAssembly);
+begin
+  if (AStore = nil) or (ASym.Kind not in [skVarDecl, skField]) then Exit;
+  var DbPath: string:= StoreDbPath(AStore);
+  if (DbPath = '') or not TFile.Exists(DbPath) then Exit;
+  var MaxR: Integer:= SetByMaxRoutines;
+  var Key: string:= Format('%s|%s|%s|%d', [LowerCase(DbPath),
+    FormatDateTime('yyyymmddhhnnsszzz', TFile.GetLastWriteTime(DbPath)), ASym.QualifiedName, MaxR]);
+  var Entry: TSetByEntry;
+  TMonitor.Enter(GSetByLock);
+  try
+    if not GSetByCache.TryGetValue(Key, Entry) then
+    begin
+      var Opt: THbOptions:= Default(THbOptions);
+      Opt.MaxRoutines:= MaxR;
+      try
+        Entry:= BuildSetBy(CheckInit(DbPath, ASym.QualifiedName, '', Opt), MaxR);
+      except
+        { A local, a parameter, a record field, an ambiguous name: check-init has no answer, and
+          the hover has no section (cached, so a re-hover does not ask again). }
+        on EHbUsage do Entry:= Default(TSetByEntry);
+        { Anything else is a defect in the solve; the hover must still appear, so it is shown as
+          the section's state instead of breaking the popup. }
+        on E: Exception do
+        begin
+          Entry.Json := Format('{"state":"error","summary":"%s","writers":[]}', [JsonEscape(E.Message)]);
+          Entry.Lines:= ['Set by: not computed (' + E.Message + ')'];
+        end;
+      end;
+      if GSetByCache.Count >= SETBY_CACHE_CAP then GSetByCache.Clear;
+      GSetByCache.Add(Key, Entry);
+    end;
+  finally
+    TMonitor.Exit(GSetByLock);
+  end;
+  if Entry.Json = '' then Exit;
+  AAsm.Model.SetByJson:= Entry.Json;
+  AAsm.FactLines:= AAsm.FactLines + Entry.Lines;
+end;
+
 function AssembleHover(const AStore: ISymbolStore; const ASym: TSymbol;
-  AWithFacts: Boolean; const AExtraStores: TArray<ISymbolStore>): THoverAssembly;
+  AWithFacts: Boolean; const AExtraStores: TArray<ISymbolStore>;
+  ASkip: THoverSkips): THoverAssembly;
 var
   Doc     : TParsedDoc      ;
   Rhs     : TArray<string>  ;
@@ -325,7 +524,10 @@ begin
   end;
   { C22: an interface METHOD names its answering methods (ImplementingMethodsOf, the
     LSP implementation / code-lens primitive). [] for any other symbol. }
-  var Answering: TArray<TSymbol>:= ImplementingMethodsOf(AStore, ASym);
+  { v152 (ASYNC's measurement): the fast first step of a deferred hover passes hskImplementors --
+    this lookup cost 1.6 / 7.4 s on two interface methods with many implementors. }
+  var Answering: TArray<TSymbol>:= nil;
+  if hskImplementors not in ASkip then Answering:= ImplementingMethodsOf(AStore, ASym);
   if Length(Answering) > 0 then
   begin
     var Line: string:= '';
@@ -335,6 +537,17 @@ begin
     Result.ImplLines:= TArray<string>.Create('Implemented by: ' + Line);
     if AWithFacts then Result.FactLines:= Result.FactLines + Result.ImplLines;
   end;
+  { v152 HBHOVER (ruling HB2): which routines / events set this variable. Only with the facts: the
+    plain format and the fast first step of a deferred hover never pay for a solve. }
+  if AWithFacts and (hskSetBy not in ASkip) then AttachHoverSetBy(AStore, ASym, Result);
 end; // function
+
+initialization
+  GSetByLock := TObject.Create;
+  GSetByCache:= TDictionary<string, TSetByEntry>.Create;
+
+finalization
+  GSetByCache.Free;
+  GSetByLock.Free;
 
 end.
