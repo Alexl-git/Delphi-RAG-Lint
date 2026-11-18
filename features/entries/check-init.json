@@ -12,7 +12,13 @@
     {
       "type": "ide-menu",
       "path": "drag-lint > Analyze > Check Initialization of Identifier at Cursor...",
-      "steps": ["Put the caret on a unit variable, class var or field in the editor", "Choose drag-lint > Analyze > Check Initialization of Identifier at Cursor...", "Read the verdict, the writers and the reason for each use"]
+      "steps": ["Put the caret on a unit variable, class var or field (a use of it) in the code editor", "Choose drag-lint > Analyze > Check Initialization of Identifier at Cursor...", "The Messages window shows the verdict (SET / NEVER-SET / MAY-BE-UNSET / UNKNOWN-CALLEE), one line per judged use with its witness hops, and one line per writer; double-click a line to jump there"]
+    },
+    {
+      "type": "ide-context",
+      "host": "Editor",
+      "caption": "drag-lint > Check Initialization of Identifier at Cursor...",
+      "steps": ["Right-click on a variable or field in the code editor", "Open the drag-lint submenu and choose Check Initialization of Identifier at Cursor...", "Read the verdict, uses, witness hops and writers in the Messages window; double-click a line to jump there"]
     },
     {
       "type": "mcp",
