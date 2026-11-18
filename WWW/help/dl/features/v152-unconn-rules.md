@@ -4,10 +4,10 @@ title: Lint rules unconnected-control and hanging-handler
 summary: Warns on a form control that nothing wires and on an event-handler-shaped method that no form binds and no code assigns or calls
 product: DL
 group: linting
-order: 30073
+order: 30074
 since: 1.52.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Lint rules unconnected-control and hanging-handler

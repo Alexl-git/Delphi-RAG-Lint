@@ -1,6 +1,7 @@
 unit DRagLint.V152.ATLB;
 
 { Wave v152 (1.52.0-alpha) lane ATLB -- gap-matrix rules set B (component-create-without-override, debug-display-placeholder, member-could-be-private).
+  debug-display-placeholder landed in 1.52 lane BK-ATTRRULES (B48) on the attributes index fact (B09).
   Scaffold created EMPTY by lane FRAME; lane ATLB owns this unit, its
   DRagLint.V152.ATLB.Support helpers and DRagLint.Fix.V152.ATLB. Called only by
   DRagLint.V151.Dispatch (the ONE provider mechanism; v152 lanes reuse the
@@ -55,16 +56,22 @@ uses
 
 const
   RULE_MEMBER_PRIVATE = 'member-could-be-private';
+  RULE_DEBUG_DISPLAY  = 'debug-display-placeholder';  { 1.52 BK-ATTRRULES (B48), on the attributes fact }
 
 class procedure TV152ATLBRules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
   ADecls.Add(V151Rule(RULE_MEMBER_PRIVATE, 'project-wide', 'hint',
     'Public member is only referenced inside its own unit; it could be private', False));
+  ADecls.Add(V151Rule(RULE_DEBUG_DISPLAY, 'bug-patterns', 'warning',
+    'DebuggerDisplay attribute placeholder names no member of the decorated type', False));
 end;
 
-class function TV152ATLBRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@ec1f -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)
+class function TV152ATLBRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
 begin
   Result:= nil;
+  if not ACtx.Wants(RULE_DEBUG_DISPLAY) then Exit;
+  if not (SameText(ACtx.NarrowRule, RULE_DEBUG_DISPLAY) or ACtx.Cfg.IsEnabled(RULE_DEBUG_DISPLAY)) then Exit;
+  Result:= TDebugDisplayCheck.Check(ACtx.Store, ACtx.LibStore, ACtx.FileId, ACtx.Path, RULE_DEBUG_DISPLAY);
 end;
 
 class function TV152ATLBRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@8d01 -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)

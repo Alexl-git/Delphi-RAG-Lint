@@ -140,11 +140,11 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**435 rules. 131 have an auto-fix. 355 are on by default.** 322 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**436 rules. 131 have an auto-fix. 355 are on by default.** 323 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
-| bug-patterns | 155 | 40 |
+| bug-patterns | 156 | 40 |
 | complexity | 15 | 2 |
 | data-flow | 12 | 3 |
 | dead-code | 23 | 15 |
@@ -162,7 +162,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | review-markers | 6 | 2 |
 | security | 27 | 2 |
 | structure | 18 | 9 |
-| **Total** | **435** | **131** |
+| **Total** | **436** | **131** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -180,6 +180,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Data module reaching a global form (lint rule)](datamodule-form-global) | `lint-all` |  |
 | [Data-flow rules that know a parameter's mode](flow-out-arg-rules) | `lint-all` |  |
 | [Dataset and transaction lint rules](dataset-rules-v151) | `lint` |  |
+| [debug-display-placeholder + attribute-aware member-could-be-private](v152-attrrules) | `lint` |  |
 | [Default-on form, dataset and data-module rules](rule-defaults-152) | `lint`; `rules` |  |
 | [Disable rule (this line, this unit, this project)](v152-disable-rule) | `rules`; drag-lint > Code Quality > Disable Rule...; Editor: drag-lint > Disable Rule... |  |
 | [Downgrade fixes (compat rules)](compat-downgrade-fixes) | `lint` | planned |
@@ -206,7 +207,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
 | [Lint rules on the static type of a reference](ref-type-rules) | `lint-all` |  |
 | [Lint rules unconnected-control and hanging-handler](v152-unconn-rules) | `lint` |  |
-| [Lint rules](rules) | 435 rules, 131 fixable; `rules` |  |
+| [Lint rules](rules) | 436 rules, 131 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
 | [member-could-be-private lint rule (lane ATLB)](v152-atlb-rules) | `lint-all` |  |

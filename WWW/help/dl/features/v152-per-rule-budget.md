@@ -4,10 +4,10 @@ title: Per-rule time budget in the rule frame (rule-skipped-budget)
 summary: A v151/v152 rule slower than rule_time_budget_ms (2000 ms) on a file is skipped there with one rule-skipped-budget note; index warns near the parse limit
 product: DL
 group: linting
-order: 30070
+order: 30071
 since: 1.52.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Per-rule time budget in the rule frame (rule-skipped-budget)

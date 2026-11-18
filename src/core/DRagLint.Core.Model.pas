@@ -1630,6 +1630,7 @@ type
   /// </remarks>
   TAttributeRow = record
     SymbolIdx: Integer;
+    SymbolId : Int64  ; { 1.52 BK-ATTRRULES: set by ISymbolStore.GetAttributes (0 = NULL); unused on the write side }
     Name     : string ;
     ArgText  : string ;
     Line     : Integer;

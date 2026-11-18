@@ -16,7 +16,7 @@ It stays silent whenever it cannot prove the narrowing safe:
 | virtual, dynamic, override, abstract, message, reintroduce, external routines | called through dispatch |
 | constructors, destructors, members of a helper | called through the type name / not owned |
 | the name is also declared by an interface of the class, or an interface ancestor does not resolve | interface implementation |
-| the member carries an attribute (`[Attr]`) | RTTI may read it |
+| the member carries an attribute (`[Attr]`; read from the attributes index fact, see [v152-attrrules](v152-attrrules)) | RTTI may read it |
 | no reference at all | dead code is the business of `unused-public-symbol` |
 | the name is referenced from a second file (another unit, a form file) | used elsewhere |
 | the unit lists more than one project in its `dl:shared` header | a sibling project's index is not open in the run |
@@ -32,7 +32,6 @@ W1010, already reported by `hides-ancestor-virtual`. No new id. The fixture
 `tests\lint\hides-ancestor-virtual-component-ctor.pas` and `tests\autotest\run_v152_ATLB.ps1`
 prove it fires on that shape (positive control: the rule disabled).
 
-## debug-display-placeholder: not implemented
+## debug-display-placeholder: implemented in 1.52 BK-ATTRRULES
 
-It cannot be checked with today's index (no attribute facts); see
-`docs\INBOX-debug-display-placeholder-needs-index-fact.md`.
+It landed on the attributes index fact; see [v152-attrrules](v152-attrrules).

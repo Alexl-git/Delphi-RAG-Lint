@@ -4,10 +4,10 @@ title: Disable rule (this line, this unit, this project)
 summary: "Silence one lint rule for a line (dl:ok marker), a unit or the project (rule_overrides in drag-lint-lint.json), with a reason and date; rules enable undoes it"
 product: DL
 group: linting
-order: 30068
+order: 30069
 since: 1.52.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Disable rule (this line, this unit, this project)

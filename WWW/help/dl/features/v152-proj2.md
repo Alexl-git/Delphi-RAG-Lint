@@ -4,10 +4,10 @@ title: unit-used-by-no-unit rule; unit-not-in-dpr outside the project roots
 summary: Warns (ON) on a unit only the .dpr lists that nothing reaches; a form counts only when opened. unit-not-in-dpr also reports shared-folder units
 product: DL
 group: linting
-order: 30071
+order: 30072
 since: 1.52.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # unit-used-by-no-unit rule; unit-not-in-dpr outside the project roots
