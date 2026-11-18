@@ -108,7 +108,8 @@ type
     /// when the editor sent one, else from disk.</summary>
     /// <param name="APath">The local path.</param>
     /// <param name="ALine0">0-based line.</param>
-    /// <param name="ACol0">0-based column.</param>
+    /// <param name="ACol0">0-based CHARACTER (UTF-16) column -- the LSP client's unit and, since 1.52, the index's;
+    /// mapped to the tree's UTF-8 byte column inside (1.52 COLS).</param>
     /// <returns>The identifier text; '' when the cursor is not on one.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -127,7 +128,7 @@ type
     /// DedupAndPreferSource when nothing narrowed.</summary>
     /// <param name="APath">The local path.</param>
     /// <param name="ALine0">0-based line.</param>
-    /// <param name="ACol0">0-based column.</param>
+    /// <param name="ACol0">0-based CHARACTER (UTF-16) column, as IdentifierAtPosition (1.52 COLS).</param>
     /// <param name="ASym">Receives the symbol; valid only on True.</param>
     /// <param name="AStore">Receives the store ASym belongs to; valid only on
     /// True. Further queries about ASym must go to THIS store.</param>

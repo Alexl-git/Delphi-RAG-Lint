@@ -342,7 +342,9 @@ function BuildNamingFixEdits(const AStore: ISymbolStore; const ALibraries: TArra
 /// <!-- drag-lint:auto -->Reads AFile's ALine (1-based) and returns the substring at 1-based
 /// columns [AStartCol, AEndCol) (exclusive end), matching TLintFinding.StartCol/EndCol's convention
 /// (see DRagLint.Diagnostics.NamingChecks.EmitAt). Empty string on any out-of-range condition.
-/// ANSI-decoded like the rest of the refactor engines.
+/// 1.52 COLS: AStartCol is the checker's tree-sitter UTF-8 BYTE column and AEndCol - AStartCol the name's
+/// length in characters; the line is decoded as the parser saw it (EnsureUtf8Bytes), so a non-ASCII
+/// character earlier on the line of a Windows-1252 or UTF-8 file no longer shifts the span.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.NamingFixIdentifier (DRagLint.CLI.pas), DRagLint.Refactor.NamingFix.BuildNamingTargets (DRagLint.Refactor.NamingFix.pas)</para>
 /// <para>Calls: Copy</para>
@@ -359,9 +361,11 @@ uses
   System.StrUtils,
   System.IOUtils,
   System.Classes,
+  System.Math,
   System.Generics.Collections,
   System.RegularExpressions,
   TreeSitter,
+  DRagLint.Core.Encoding, { 1.52 COLS: finding byte columns -> index character columns }
   DRagLint.Diagnostics.ParseCache,
   DRagLint.Refactor.Rename,
   DRagLint.Refactor.RenameProof;
@@ -462,32 +466,52 @@ begin
   Result := APrefix + UpperCase(AOldName[1]) + Copy(AOldName, 2, MaxInt);
 end;
 
-{ Reads AFile's ALine (1-based) and returns the substring at 1-based columns
-  [AStartCol, AEndCol) (exclusive end), matching TLintFinding.StartCol/EndCol's
-  convention (see DRagLint.Diagnostics.NamingChecks.EmitAt). Empty string on any
-  out-of-range condition. ANSI-decoded like the rest of the refactor engines. }
+{ 1.52 COLS: line ALine (1-based) of AFile as the parser saw it (EnsureUtf8Bytes, decoded), and the 1-based
+  CHARACTER column of the 1-based tree-sitter BYTE column AByteCol on it -- a naming finding carries the
+  checker's byte column, the index (since 1.52 EXTGAPS2) character columns. False when the file or line is
+  not there. }
+function FindingLine(const AFile: string; ALine, AByteCol: Integer; out AText: string; out ACharCol: Integer): Boolean;
+const
+  LF = 10;
+  CR = 13;
+begin
+  AText:= '';
+  ACharCol:= AByteCol;
+  if (ALine < 1) or (AByteCol < 1) or not TFile.Exists(AFile) then Exit(False);
+  var Src: TBytes:= EnsureUtf8Bytes(TFile.ReadAllBytes(AFile));  // dl:ok taint-path-traversal@7233 -- reads the source file a lint finding names (an indexed unit the caller already linted); the env var only locates the user's own manifest
+  var Start: Integer:= 0;
+  var Ln: Integer:= 1;
+  while (Ln < ALine) and (Start < Length(Src)) do
+  begin
+    if Src[Start] = LF then Inc(Ln);
+    Inc(Start);
+  end;
+  if Ln < ALine then Exit(False);
+  var Stop: Integer:= Start;
+  while (Stop < Length(Src)) and (Src[Stop] <> LF) do Inc(Stop);
+  if (Stop > Start) and (Src[Stop - 1] = CR) then Dec(Stop);
+  AText:= TEncoding.UTF8.GetString(Src, Start, Stop - Start);
+  if Start + AByteCol - 1 <= Stop then
+    ACharCol:= Utf8ByteColToCharCol(Src, Cardinal(Start + AByteCol - 1), Cardinal(AByteCol - 1)) + 1;
+  Result:= True;
+end;
+
+{ Reads AFile's ALine (1-based) and returns the identifier the finding at [AStartCol, AEndCol) names:
+  AStartCol is the checker's tree-sitter BYTE column, AEndCol - AStartCol the name's length in
+  characters (DRagLint.Diagnostics.NamingChecks.EmitAt). Empty string on any out-of-range condition. }
 function ReadIdentifierAt(const AFile: string; ALine, AStartCol, AEndCol: Integer): string;
 var
-  Lines : TStringList;
-  LnText: string;
-  Len   : Integer;
+  LnText : string;
+  CharCol: Integer;
+  Len    : Integer;
 begin
   Result:= '';
-  if not TFile.Exists(AFile) then Exit;
-  if (ALine < 1) or (AStartCol < 1) or (AEndCol <= AStartCol) then Exit;
-  Lines:= TStringList.Create;
-  try
-    Lines.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(AFile));
-    if ALine > Lines.Count then Exit;
-    LnText:= Lines[ALine - 1];
-    if AStartCol > Length(LnText) then Exit;
-    Len:= AEndCol - AStartCol;
-    if AStartCol + Len - 1 > Length(LnText) then Len:= Length(LnText) - AStartCol + 1;
-    if Len <= 0 then Exit;
-    Result:= Copy(LnText, AStartCol, Len);
-  finally
-    Lines.Free;
-  end;
+  if AEndCol <= AStartCol then Exit;
+  if not FindingLine(AFile, ALine, AStartCol, LnText, CharCol) then Exit;
+  if CharCol > Length(LnText) then Exit;
+  Len:= Min(AEndCol - AStartCol, Length(LnText) - CharCol + 1);
+  if Len <= 0 then Exit;
+  Result:= Copy(LnText, CharCol, Len);
 end;
 
 { The symbol declared at (AFilePath, ALine, ACol), or a zeroed TSymbol (Id = 0)
@@ -512,17 +536,25 @@ end;
   bit-for-bit unchanged; the line-only fallback is the one that exists solely to
   absorb StartCol drift (e.g. a method decl whose store StartCol is the
   `procedure` keyword, not the identifier) and so is the one that needs a leash.
-  An empty AExpectedName disables the fallback entirely. }
+  An empty AExpectedName disables the fallback entirely.
+
+  1.52 COLS: ACol is the finding's tree-sitter BYTE column; the store's StartCol
+  is a CHARACTER column, so the exact match compares the converted column (else a
+  non-ASCII character earlier on the line sent every such finding to the
+  fallback, which picks the FIRST same-named symbol on the line). }
 function ResolveSymbolAt(const AStore: ISymbolStore; const AFilePath: string;
   ALine, ACol: Integer; const AExpectedName: string): TSymbol;
 var
-  Syms: TArray<TSymbol>;
-  Sym : TSymbol;
+  Syms   : TArray<TSymbol>;
+  Sym    : TSymbol;
+  LnText : string;
+  CharCol: Integer;
 begin
   Result:= Default(TSymbol);
+  if not FindingLine(AFilePath, ALine, ACol, LnText, CharCol) then CharCol:= ACol;
   Syms:= AStore.FindSymbolsByFile(AFilePath);
   for Sym in Syms do
-    if (Sym.StartLine = ALine) and (Sym.StartCol = ACol) then Exit(Sym);
+    if (Sym.StartLine = ALine) and (Sym.StartCol = CharCol) then Exit(Sym);
   { Fall back to a line-only match (defensive -- covers any StartCol drift
     between the naming checker's node position and the indexer's decl position),
     but ONLY for a symbol that actually bears the name being renamed. }
@@ -900,15 +932,22 @@ var
   Edits: TList<TTextEdit>;
   Cache: TDictionary<string, TStringList>;
 
-  { ANSI-decoded lines of APath, read AT MOST ONCE per file (mirrors
-    BuildAutofixEdits' LinesFor). An unreadable/absent file yields an empty
-    list, which makes every span check on it fail -- i.e. skip, not write. }
+  { Lines of APath decoded as TTextEditApplier decodes them (TTextFileFormat: UTF-8
+    when the bytes are valid UTF-8, else ANSI -- 1.52 COLS: was always ANSI, which
+    split each non-ASCII character of a UTF-8 file into two columns), read AT MOST
+    ONCE per file. An unreadable/absent file yields an empty list, which makes
+    every span check on it fail -- i.e. skip, not write. }
   function LinesFor(const APath: string): TStringList;
   begin
     if not Cache.TryGetValue(APath, Result) then
     begin
       Result:= TStringList.Create;
-      if TFile.Exists(APath) then Result.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(APath));
+      if TFile.Exists(APath) then
+      begin
+        var Text: string;
+        TTextFileFormat.ReadFile(APath, Text);
+        Result.Text:= Text;
+      end;
       Cache.Add(APath, Result);
     end;
   end;
@@ -1006,7 +1045,10 @@ var
   end;
 
 var
-  F: TLintFinding;
+  F         : TLintFinding;
+  FindLn    : string;
+  FindCol   : Integer; { the finding's start as a CHARACTER column of the decoded line (1.52 COLS) }
+  FindEndCol: Integer;
 begin
   ASkipped:= 0;
   ARefusal:= '';
@@ -1014,13 +1056,17 @@ begin
   if (ATarget.Status <> tsReady) or (ANewName = '') then Exit;
   if (ATarget.Scope = nsGlobal) and (AStore = nil) then Exit;
   F:= ATarget.Finding;
+  { 1.52 COLS: the finding carries the checker's tree-sitter BYTE column; the edits, the span guard and the
+    applier count characters. BuildLocal (tree-based) keeps the byte column. }
+  if not FindingLine(F.FilePath, F.StartLine, F.StartCol, FindLn, FindCol) then FindCol:= F.StartCol;
+  FindEndCol:= FindCol + (F.EndCol - F.StartCol);
 
   Edits:= TList<TTextEdit>.Create;
   Cache:= TDictionary<string, TStringList>.Create;
   try
     if ATarget.Scope = nsLocal then
       EmitRenameEdits(TRenameRefactoring.BuildLocal(F.FilePath, F.StartLine, F.StartCol, ANewName),
-        F.StartLine, F.StartCol, F.EndCol, ATarget.OldName)
+        F.StartLine, FindCol, FindEndCol, ATarget.OldName)
     else if SameText(F.RuleId, 'property-accessor-name') then
     begin
       { The finding sits on the PROPERTY line, which the refs table does not
@@ -1046,7 +1092,7 @@ begin
         var PE: TRenameEdit;
         PE.FilePath:= F.FilePath;
         PE.Line    := F.StartLine;
-        PE.Col     := F.StartCol;
+        PE.Col     := FindCol;
         PE.OldName := ATarget.OldName;
         PE.NewName := ANewName;
         REs:= REs + [PE];
@@ -1058,12 +1104,12 @@ begin
         Build also covers the symbol's separate implementation-section header
         (Type.OldName) itself, so no local workaround is needed here. }
       EmitRenameEdits(TRenameRefactoring.Build(AStore, ATarget.QName, ANewName),
-        ATarget.SymLine, F.StartCol, F.EndCol, ATarget.OldName);
+        ATarget.SymLine, FindCol, FindEndCol, ATarget.OldName);
     { The edit set above only answers "is the index stale here". A name that changes more than case is written from the
       proof or not at all: the proof's columns are the identifier tokens', so no finding span overrides them. }
     if (ASkipped = 0) and (Edits.Count > 0) and not SameText(ATarget.OldName, ANewName) then
     begin
-      var Proof: TRenameProof:= if ATarget.Scope = nsLocal then ProveLocalRename(AStore, F.FilePath, F.StartLine, F.StartCol, ANewName)
+      var Proof: TRenameProof:= if ATarget.Scope = nsLocal then ProveLocalRename(AStore, F.FilePath, F.StartLine, FindCol, ANewName)
                                 else ProveRename(AStore, ALibraries, ATarget.QName, ANewName);
       Edits.Clear;
       if Length(Proof.Refusals) > 0 then

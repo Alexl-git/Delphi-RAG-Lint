@@ -3138,6 +3138,23 @@ begin
   Result:= TEncoding.UTF8.GetString(ASource, StartIdx, Len);
 end;
 
+{ 1.52 COLS: the 0-based tree-sitter BYTE column of the 0-based CHARACTER (UTF-16) column AChar0 on the 0-based line
+  ALine0 of the UTF-8 buffer ASource. AChar0 unchanged when the line is past the buffer's end. }
+function ByteCol0Of(const ASource: TBytes; ALine0, AChar0: Integer): Integer;
+const
+  LF = 10;
+begin
+  var Start: Integer:= 0;
+  var Ln: Integer:= 0;
+  while (Ln < ALine0) and (Start < Length(ASource)) do
+  begin
+    if ASource[Start] = LF then Inc(Ln);
+    Inc(Start);
+  end;
+  if Ln < ALine0 then Exit(AChar0);
+  Result:= Utf8CharColToByteCol(ASource, Start, AChar0 + 1) - 1;
+end;
+
 function TLSPServer.IdentifierAtPosition(const APath: string; ALine, ACol: Integer): string;
 var
   Tree  : TTSTree  ;
@@ -3155,24 +3172,26 @@ begin
   var FromOverlay: Boolean;
   Source:= TLiveDocuments.ReadBytes(APath, FromOverlay);
   if not FromOverlay then Source:= EnsureUtf8Bytes(Source);
+  { 1.52 COLS: ACol is a CHARACTER (UTF-16) column -- the client's and the index's unit; the tree counts bytes. }
+  var Col: Integer:= ByteCol0Of(Source, ALine, ACol);
   // C15: the C9 preprocessed parse (inactive IFDEF branches blanked, length-preserving, so
   // Source still slices the identifier text) with a bounded read callback.
   Tree:= IdentTreeFor(Source, APath);  { 151 CF: cached; owned by the server, not freed here }
   if Tree = nil then Exit;
   begin
-    Node:= FindSmallestNamedAt(Tree.RootNode, ALine, ACol);
+    Node:= FindSmallestNamedAt(Tree.RootNode, ALine, Col);
     if Node.IsNull then Exit;
     // Prefer an identifier-shaped node. If the smallest enclosing is e.g.
     // a `genericDot` (qualified name like Foo.Bar), drill into its rhs.
     if Node.NodeType = 'genericDot' then
     begin
       var Rhs:= Node.ChildByField('rhs');
-      if (not Rhs.IsNull) and ContainsPosition(Rhs, ALine, ACol) then Node:= Rhs;
+      if (not Rhs.IsNull) and ContainsPosition(Rhs, ALine, Col) then Node:= Rhs;
     end
     else if Node.NodeType = 'exprDot' then
     begin
       var Rhs:= Node.ChildByField('rhs');
-      if (not Rhs.IsNull) and ContainsPosition(Rhs, ALine, ACol) then Node:= Rhs;
+      if (not Rhs.IsNull) and ContainsPosition(Rhs, ALine, Col) then Node:= Rhs;
     end;
     if (Node.NodeType <> 'identifier') and (Node.NodeType <> 'moduleName') then
     begin
@@ -3184,7 +3203,7 @@ begin
         for var I:= 0 to ChildIt.NamedChildCount - 1 do
         begin
           var C:= ChildIt.NamedChild(I);
-          if ContainsPosition(C, ALine, ACol) then
+          if ContainsPosition(C, ALine, Col) then
           begin
             ChildIt:= C;
             Found  := True;
