@@ -12,7 +12,8 @@ uses
   System.SysUtils
   , System.Classes
   , System.StrUtils
-  , DRagLint.FieldRepo.ParamArray in '..\..\src\sql\DRagLint.FieldRepo.ParamArray.pas';
+  , DRagLint.FieldRepo.ParamArray in '..\..\src\sql\DRagLint.FieldRepo.ParamArray.pas'
+  , DRagLint.FieldRepo.ParamArray.Prepare in '..\..\src\sql\DRagLint.FieldRepo.ParamArray.Prepare.pas';
 
 const
   GOLDEN: array[0..46] of string = (
@@ -362,12 +363,257 @@ begin
   Check('markers: MISSING PARAMS alone counts', PABlockHasMarkers('x'#13#10'// MISSING PARAMS'#13#10));
 end;
 
+procedure RunPrepareTests;
+const
+  PREP_DFM =
+    'object frmLoad: TfrmLoad'#13#10 +
+    '  Left = 0'#13#10 +
+    '  Caption = ''Load'''#13#10 +
+    '  object tblFOLDERS: TTable'#13#10 +
+    '    TableName = ''FOLDERS'''#13#10 +
+    '    object tblFOLDERSID: TIntegerField'#13#10 +
+    '      FieldName = ''ID'''#13#10 +
+    '    end'#13#10 +
+    '    object tblFOLDERSNAME: TStringField'#13#10 +
+    '      FieldName = ''NAME'''#13#10 +
+    '      Size = 40'#13#10 +
+    '    end'#13#10 +
+    '  end'#13#10 +
+    '  object qryFOLDERS: TFDQuery'#13#10 +
+    '    AutoCalcFields = False'#13#10 +
+    '    CachedUpdates = True'#13#10 +
+    '    Connection = dmMain.IBD'#13#10 +
+    '    SchemaAdapter = SA1'#13#10 +
+    '    UpdateObject = updFOLDERS'#13#10 +
+    '    SQL.Strings = ('#13#10 +
+    '      ''/* load */ SELECT ID, NAME'''#13#10 +
+    '      ''FROM FOLDERS'')'#13#10 +
+    '    Left = 32'#13#10 +
+    '    Top = 48'#13#10 +
+    '    object qryFOLDERSID: TIntegerField'#13#10 +
+    '      FieldName = ''ID'''#13#10 +
+    '      Origin = ''ID'''#13#10 +
+    '    end'#13#10 +
+    '    object qryFOLDERSNAME: TStringField'#13#10 +
+    '      FieldName = ''NAME'''#13#10 +
+    '      Size = 40'#13#10 +
+    '    end'#13#10 +
+    '  end'#13#10 +
+    '  object qryProc: TFDQuery'#13#10 +
+    '    UpdateObject = updFOLDERS'#13#10 +
+    '    SQL.Strings = ('#13#10 +
+    '      ''EXECUTE PROCEDURE P_X'')'#13#10 +
+    '    Left = 32'#13#10 +
+    '    Top = 96'#13#10 +
+    '  end'#13#10 +
+    '  object updFOLDERS: TFDUpdateSQL'#13#10 +
+    '    InsertSQL.Strings = ('#13#10 +
+    '      ''INSERT INTO FOLDERS (ID, NAME)'''#13#10 +
+    '      ''VALUES (:NEW_ID, :NEW_NAME)'')'#13#10 +
+    '    ModifySQL.Strings = ('#13#10 +
+    '      ''UPDATE FOLDERS SET NAME = :NEW_NAME WHERE ID = :OLD_ID'')'#13#10 +
+    '    Left = 64'#13#10 +
+    '    Top = 48'#13#10 +
+    '  end'#13#10 +
+    '  object SA1: TFDSchemaAdapter'#13#10 +
+    '    Left = 96'#13#10 +
+    '    Top = 48'#13#10 +
+    '  end'#13#10 +
+    'end'#13#10;
+
+  PREP_DFM_EXPECTED =
+    'object frmLoad: TfrmLoad'#13#10 +
+    '  Left = 0'#13#10 +
+    '  Caption = ''Load'''#13#10 +
+    '  object tblFOLDERS: TTable'#13#10 +
+    '    TableName = ''FOLDERS'''#13#10 +
+    '    object tblFOLDERSID: TIntegerField'#13#10 +
+    '      FieldName = ''ID'''#13#10 +
+    '    end'#13#10 +
+    '    object tblFOLDERSNAME: TStringField'#13#10 +
+    '      FieldName = ''NAME'''#13#10 +
+    '      Size = 40'#13#10 +
+    '    end'#13#10 +
+    '  end'#13#10 +
+    '  object qryFOLDERS: TFDQuery'#13#10 +
+    '    AutoCalcFields = False'#13#10 +
+    '    ObjectView = False'#13#10 +
+    '    Connection = dmMain.IBD'#13#10 +
+    '    SQL.Strings = ('#13#10 +
+    '      ''INSERT INTO FOLDERS (ID, NAME)'''#13#10 +
+    '      ''VALUES (:NEW_ID, :NEW_NAME)'')'#13#10 +
+    '    Left = 32'#13#10 +
+    '    Top = 48'#13#10 +
+    '    ParamData = <'#13#10 +
+    '      item'#13#10 +
+    '        Name = ''NEW_ID'''#13#10 +
+    '        DataType = ftInteger'#13#10 +
+    '        ParamType = ptInput'#13#10 +
+    '      end'#13#10 +
+    '      item'#13#10 +
+    '        Name = ''NEW_NAME'''#13#10 +
+    '        DataType = ftString'#13#10 +
+    '        ParamType = ptInput'#13#10 +
+    '        Size = 40'#13#10 +
+    '      end>'#13#10 +
+    '  end'#13#10 +
+    '  object qryProc: TFDQuery'#13#10 +
+    '    UpdateObject = ZZZupdFOLDERS'#13#10 +
+    '    SQL.Strings = ('#13#10 +
+    '      ''EXECUTE PROCEDURE P_X'')'#13#10 +
+    '    Left = 32'#13#10 +
+    '    Top = 96'#13#10 +
+    '  end'#13#10 +
+    '  object ZZZupdFOLDERS: TFDUpdateSQL'#13#10 +
+    '    InsertSQL.Strings = ('#13#10 +
+    '      ''INSERT INTO FOLDERS (ID, NAME)'''#13#10 +
+    '      ''VALUES (:NEW_ID, :NEW_NAME)'')'#13#10 +
+    '    ModifySQL.Strings = ('#13#10 +
+    '      ''UPDATE FOLDERS SET NAME = :NEW_NAME WHERE ID = :OLD_ID'')'#13#10 +
+    '    Left = 64'#13#10 +
+    '    Top = 48'#13#10 +
+    '  end'#13#10 +
+    '  object ZZZSA1: TFDSchemaAdapter'#13#10 +
+    '    Left = 96'#13#10 +
+    '    Top = 48'#13#10 +
+    '  end'#13#10 +
+    'end'#13#10;
+
+  PREP_PAS =
+    'unit uLoad;'#13#10#13#10 +
+    'interface'#13#10#13#10 +
+    'type'#13#10 +
+    '  TfrmLoad = class(TForm)'#13#10 +
+    '    tblFOLDERS: TTable;'#13#10 +
+    '    tblFOLDERSID: TIntegerField;'#13#10 +
+    '    tblFOLDERSNAME: TStringField;'#13#10 +
+    '    qryFOLDERS: TFDQuery;'#13#10 +
+    '    qryFOLDERSID: TIntegerField;'#13#10 +
+    '    qryFOLDERSNAME: TStringField;'#13#10 +
+    '    qryProc: TFDQuery;'#13#10 +
+    '    updFOLDERS: TFDUpdateSQL;'#13#10 +
+    '    SA1: TFDSchemaAdapter;'#13#10 +
+    '  private'#13#10 +
+    '    FCount: Integer;'#13#10 +
+    '  end;'#13#10#13#10 +
+    'implementation'#13#10#13#10 +
+    '{$R *.dfm}'#13#10#13#10 +
+    'end.'#13#10;
+
+  PREP_PAS_EXPECTED =
+    'unit uLoad;'#13#10#13#10 +
+    'interface'#13#10#13#10 +
+    'type'#13#10 +
+    '  TfrmLoad = class(TForm)'#13#10 +
+    '    tblFOLDERS: TTable;'#13#10 +
+    '    tblFOLDERSID: TIntegerField;'#13#10 +
+    '    tblFOLDERSNAME: TStringField;'#13#10 +
+    '    qryFOLDERS: TFDQuery;'#13#10 +
+    '    qryProc: TFDQuery;'#13#10 +
+    '    ZZZupdFOLDERS: TFDUpdateSQL;'#13#10 +
+    '    ZZZSA1: TFDSchemaAdapter;'#13#10 +
+    '  private'#13#10 +
+    '    FCount: Integer;'#13#10 +
+    '  end;'#13#10#13#10 +
+    'implementation'#13#10#13#10 +
+    '{$R *.dfm}'#13#10#13#10 +
+    'end.'#13#10;
+
+  { a SELECT query with no update object / schema adapter, ObjectView already written, a
+    comment line and a continued string item before the SELECT }
+  BARE_DFM =
+    'object frmB: TfrmB'#13#10 +
+    '  object qB: TFDQuery'#13#10 +
+    '    ObjectView = True'#13#10 +
+    '    CachedUpdates = False'#13#10 +
+    '    SQL.Strings = ('#13#10 +
+    '      ''-- it''''s a comment'''#13#10 +
+    '      '#13#10 +
+    '        ''sel'' +'#13#10 +
+    '        ''ect * FROM T'')'#13#10 +
+    '  end'#13#10 +
+    'end'#13#10;
+
+  BARE_DFM_EXPECTED =
+    'object frmB: TfrmB'#13#10 +
+    '  object qB: TFDQuery'#13#10 +
+    '    ObjectView = False'#13#10 +
+    '    SQL.Strings = ('#13#10 +
+    '      ''-- it''''s a comment'''#13#10 +
+    '      '#13#10 +
+    '        ''sel'' +'#13#10 +
+    '        ''ect * FROM T'')'#13#10 +
+    '  end'#13#10 +
+    'end'#13#10;
+
+  DIFF_OLD = 'a'#13#10'b'#13#10'c'#13#10'd'#13#10;
+  DIFF_NEW = 'a'#13#10'B'#13#10'c'#13#10'd'#13#10'e'#13#10;
+  DIFF_EXPECTED =
+    '--- a/x.dfm'#13#10 +
+    '+++ b/x.dfm'#13#10 +
+    '@@ -2,1 +2,1 @@'#13#10 +
+    '-b'#13#10 +
+    '+B'#13#10 +
+    '@@ -4,0 +5,1 @@'#13#10 +
+    '+e'#13#10;
+var
+  LPrep, LAgain: TPAPrepareResult;
+  LQ, LT: string;
+  LSrc, LDst: TPAColumns;
+  LCollide: string;
+begin
+  LPrep := PAPrepareQueries(PREP_DFM, PREP_PAS, '');
+  Check('prepare: changed', LPrep.Changed);
+  Check('prepare: dfm rewrite (golden)', LPrep.Dfm = PREP_DFM_EXPECTED, FirstDiff(PREP_DFM_EXPECTED, LPrep.Dfm));
+  Check('prepare: pas field declarations (golden)', LPrep.Pas = PREP_PAS_EXPECTED, FirstDiff(PREP_PAS_EXPECTED, LPrep.Pas));
+  Check('prepare: one query prepared', (Length(LPrep.Queries) = 1) and (LPrep.Queries[0] = 'qryFOLDERS'));
+  Check('prepare: two renames', Length(LPrep.Renamed) = 2, IntToStr(Length(LPrep.Renamed)));
+  Check('prepare: two persistent fields removed', Length(LPrep.RemovedFields) = 2, IntToStr(Length(LPrep.RemovedFields)));
+  Check('prepare: no warnings', Length(LPrep.Warnings) = 0, string.Join(' | ', LPrep.Warnings));
+  Check('prepare: discovery sees the INSERT params',
+    PADiscoverFromDfm(LPrep.Dfm, LQ, LT, LSrc, LDst) and (LQ = 'qryFOLDERS') and (Length(LDst) = 2));
+  Check('prepare: param names and types come from the removed fields',
+    (Length(LDst) = 2) and (LDst[0].Name = 'NEW_ID') and (LDst[0].DataType = pftInteger) and (LDst[1].DataType = pftString));
+  Check('prepare: unprepared DFM has no parameterised query (control)',
+    not PADiscoverFromDfm(PREP_DFM, LQ, LT, LSrc, LDst));
+  LAgain := PAPrepareQueries(LPrep.Dfm, LPrep.Pas, '');
+  Check('prepare: idempotent (INSERT SQL is not prepared again)',
+    (not LAgain.Changed) and (LAgain.Dfm = LPrep.Dfm) and (LAgain.Pas = LPrep.Pas));
+  LAgain := PAPrepareQueries(PREP_DFM, PREP_PAS, 'qryProc');
+  Check('prepare: --query naming a non-SELECT query changes nothing',
+    (not LAgain.Changed) and (LAgain.Dfm = PREP_DFM));
+  LAgain := PAPrepareQueries(PREP_DFM, PREP_PAS, 'QRYFOLDERS');
+  Check('prepare: --query is case-insensitive', LAgain.Dfm = PREP_DFM_EXPECTED);
+
+  LAgain := PAPrepareQueries(BARE_DFM, '', '');
+  Check('prepare: bare SELECT -> ObjectView False, CachedUpdates line dropped, SQL kept',
+    LAgain.Dfm = BARE_DFM_EXPECTED, FirstDiff(BARE_DFM_EXPECTED, LAgain.Dfm));
+  Check('prepare: missing update object / schema adapter are warnings',
+    (Length(LAgain.Warnings) = 2) and ContainsText(LAgain.Warnings[0], 'Update Object is not assigned')
+      and ContainsText(LAgain.Warnings[1], 'Schema Adapter is not assigned'), string.Join(' | ', LAgain.Warnings));
+
+  LCollide := StringReplace(PREP_DFM, '  object SA1: TFDSchemaAdapter',
+    '  object ZZZSA1: TFDSchemaAdapter'#13#10'  end'#13#10'  object SA1: TFDSchemaAdapter', []);
+  LAgain := PAPrepareQueries(LCollide, PREP_PAS, '');
+  Check('prepare: rename onto an existing name is skipped with a warning',
+    ContainsText(string.Join(' | ', LAgain.Warnings), 'ZZZSA1') and ContainsStr(LAgain.Dfm, '  object SA1: TFDSchemaAdapter')
+      and not ContainsStr(LAgain.Dfm, 'SchemaAdapter = SA1'), string.Join(' | ', LAgain.Warnings));
+
+  Check('diff: zero-context unified hunks', PAUnifiedDiff('x.dfm', DIFF_OLD, DIFF_NEW) = DIFF_EXPECTED,
+    PAUnifiedDiff('x.dfm', DIFF_OLD, DIFF_NEW));
+  Check('diff: identical texts -> empty', PAUnifiedDiff('x.dfm', DIFF_OLD, DIFF_OLD) = '');
+  Check('diff: prepare diff names both files',
+    ContainsStr(PAUnifiedDiff('uLoad.dfm', PREP_DFM, LPrep.Dfm), '+    ObjectView = False') and
+    ContainsStr(PAUnifiedDiff('uLoad.dfm', PREP_DFM, LPrep.Dfm), '-    CachedUpdates = True'));
+end;
+
 begin
   GPass := 0;
   GFail := 0;
   try
     RunTests;
     RunNamedTests;
+    RunPrepareTests;
   except
     on E: Exception do
     begin

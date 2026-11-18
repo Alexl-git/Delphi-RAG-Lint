@@ -12,7 +12,8 @@ unit DRagLint.FieldRepo.ParamArray;
 
   Differences from the IDE assistant, on purpose:
   - the IDE-only preparation of the query (swap in the UpdateSQL insert text, rename the
-    update object / schema adapter) is not done; the DFM is never rewritten;
+    update object / schema adapter) is not done HERE; it is the opt-in
+    DRagLint.FieldRepo.ParamArray.Prepare (CLI --prepare-queries), run before discovery;
   - whitespace is normalised (two-space indent, no trailing blanks, no tabs);
   - the loader-form lines (progress, NRECS, Commit) of the original are emitted only when
     TPAOptions.ProgressForm is set;
