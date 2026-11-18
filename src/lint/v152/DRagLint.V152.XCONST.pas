@@ -1,7 +1,11 @@
 unit DRagLint.V152.XCONST;
 
 { Wave v152 (1.52.0-alpha) lane XCONST -- extract-constant autofix for magic literals (ruling B4 part 2).
-  Scaffold created EMPTY by lane FRAME; lane XCONST owns this unit, its
+  Declares the ON-DEMAND rule extract-constant (OFF by default): it reports exactly ONE
+  finding, the number or string literal at --fix-line [--col], and only in a run that asks
+  for its fix (--fix-rule extract-constant). That is how the IDE's "Extract Constant (literal
+  at cursor)" reaches a literal no other rule flags (a string). The fix itself is
+  DRagLint.Fix.V152.XCONST. Scaffold created by lane FRAME; lane XCONST owns this unit, its
   DRagLint.V152.XCONST.Support helpers and DRagLint.Fix.V152.XCONST. Called only by
   DRagLint.V151.Dispatch (the ONE provider mechanism; v152 lanes reuse the
   DRagLint.V151.Api types). How-to: C:\TEMP\claude\lanes\v152\FRAME\HOWTO-RULE-LANE.md. }
@@ -47,17 +51,49 @@ type
 
 implementation
 
-{ The lane's helpers live in DRagLint.V152.XCONST.Support; name it in an
-  implementation uses clause here once it declares something. }
+uses
+  System.Classes
+  , DRagLint.Refactor.TextEdit
+  , DRagLint.V152.XCONST.Support
+  ;
 
-class procedure TV152XCONSTRules.Catalog(const ADecls: TList<TV151RuleDecl>);  // dl:ok unused-parameter@efd5 -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)
+const
+  XC_RULE_ID = 'extract-constant';
+
+class procedure TV152XCONSTRules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
-  { no rules yet }
+  ADecls.Add(V151Rule(XC_RULE_ID, 'refactoring', 'hint',
+    'Extract the literal at --fix-line / --col into a named constant (on demand: reports only when its fix is asked for)', False));
 end;
 
-class function TV152XCONSTRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@e69c -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)
+class function TV152XCONSTRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
 begin
   Result:= nil;
+  if not ACtx.Wants(XC_RULE_ID) or not SameText(XcCmdLineValue('--fix-rule'), XC_RULE_ID) then Exit;
+  var Line: Integer:= StrToIntDef(XcCmdLineValue('--fix-line'), 0);
+  if Line <= 0 then Exit;
+  var Text: string;
+  TTextFileFormat.ReadFile(ACtx.Path, Text);
+  var Lines: TStringList:= TStringList.Create;
+  try
+    Lines.Text:= Text;
+    var Toks: TArray<TXcToken>:= XcTokenize(Lines);
+    var K: Integer:= XcLiteralAt(Toks, Line, StrToIntDef(XcCmdLineValue('--col'), 0));
+    if K < 0 then Exit;
+    var F: TLintFinding:= Default(TLintFinding);
+    F.RuleId   := XC_RULE_ID;
+    F.FileId   := ACtx.FileId;
+    F.FilePath := ACtx.Path;
+    F.StartLine:= Toks[K].Line;
+    F.StartCol := Toks[K].Col;
+    F.EndLine  := Toks[K].Line;
+    F.EndCol   := Toks[K].EndCol;
+    F.Severity := 'hint';
+    F.Message  := Format('Literal %s can be extracted into a named constant', [Toks[K].Text]);
+    Result:= [F];
+  finally
+    Lines.Free;
+  end;
 end;
 
 class function TV152XCONSTRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@d3a2 -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)

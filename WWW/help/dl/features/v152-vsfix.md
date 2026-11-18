@@ -4,7 +4,7 @@ title: Fix with drag-lint (VS Code and RAD Studio)
 summary: "Fix the finding at the cursor, all of one rule, or every fixable finding in a file: VS Code code actions and menus, plus a RAD Studio menu entry"
 product: DL
 group: refactoring
-order: 50023
+order: 50024
 since: 1.52.0-alpha
 status: shipped
 updated: 1.51.1-alpha

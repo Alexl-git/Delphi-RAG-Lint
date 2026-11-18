@@ -4,7 +4,7 @@ title: extract-method and create-enum-helper through the compile gate by default
 summary: extract-method / create-enum-helper --apply build the project before and after the write; no project found = REFUSED, --no-compile-gate writes unbuilt
 product: DL
 group: refactoring
-order: 50022
+order: 50023
 since: 1.52.0-alpha
 status: shipped
 updated: 1.51.1-alpha

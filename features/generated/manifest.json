@@ -3137,7 +3137,7 @@
       "owner": "ENGINE",
       "status": "shipped",
       "since": "1.37.0-alpha",
-      "summary": "lint --fix repairs findings of the 126 fixable rules; --json reports per finding whether it was applied; lint accepts a folder",
+      "summary": "lint --fix repairs findings of the 130 fixable rules; --json reports per finding whether it was applied; lint accepts a folder",
       "intro": "Read this when you want drag-lint to repair findings instead of only reporting them. A dry run shows the edits, --apply writes them, and the JSON result says for each finding whether a fix was applied.",
       "wikiPage": "autofix-wave",
       "surfaces": [
@@ -7194,6 +7194,67 @@
         "by": "ENGINE",
         "build": "1.51.0-alpha",
         "surfaceHash": "4ad9edae89b45df697219294293408755b5619b9531ad80e44179a9e14bcfe28"
+      }
+    },
+    {
+      "id": "v152-extract-constant",
+      "title": "Extract constant (manual fix for magic literals)",
+      "group": "refactoring",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "Turns one number or string literal into a named constant and replaces every occurrence in the unit; manual fix of the magic-literal rules",
+      "intro": "Read this when a literal should become a named constant. Give the line (and the column when the line holds several literals) and the name; without --name the plan proposes one. Occurrences inside other const declarations, attributes, uses clauses, or in a context of a different declared type are left and listed on stderr. The fix is risky and manual only: a batch --fix never applies it.",
+      "wikiPage": "v152-extract-constant",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "drag-lint lint --in <F> --db <db> --enable extract-constant --fix --fix-rule extract-constant --fix-line <n> --col <c> --name <ident> --apply",
+          "usage": "drag-lint lint --in <F> [--db <db>] --enable <rule> --fix --fix-rule <rule> --fix-line <n> [--col <c>] [--name <ident>] [--apply] [--project <X.dproj>] - extract the literal at line n (column c) into a named constant and replace every occurrence in the unit; <rule> = extract-constant (any number or string literal, OFF by default, reports only when its fix is asked for), magic-literal, large-magic-number or case-magic-numbers; risky, manual only (a batch --fix withholds it); report on stderr",
+          "flags": [
+            {
+              "name": "--fix-rule",
+              "arg": "<rule>"
+            },
+            {
+              "name": "--fix-line",
+              "arg": "<n>"
+            },
+            {
+              "name": "--col",
+              "arg": "<c>"
+            },
+            {
+              "name": "--name",
+              "arg": "<ident>"
+            },
+            {
+              "name": "--apply"
+            },
+            {
+              "name": "--project",
+              "arg": "<X.dproj>"
+            }
+          ]
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Extract Constant (literal at cursor)...",
+          "steps": ["Put the caret on a number or string literal in the editor", "drag-lint > Extract Constant (literal at cursor)...", "Edit the proposed name in the prompt and press OK; the engine report (replaced and left occurrences) is shown"]
+        },
+        {
+          "type": "ide-context",
+          "host": "Editor",
+          "caption": "drag-lint > Extract Constant (literal at cursor)...",
+          "steps": ["Put the caret on a number or string literal", "Right-click in the editor, open the drag-lint submenu and choose Extract Constant (literal at cursor)...", "Edit the proposed name in the prompt and press OK"]
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-17",
+        "by": "alexanderl",
+        "build": "1.51.1-alpha"
       }
     },
     {
@@ -15826,7 +15887,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Case label is a literal -- consider naming the constant (bug-patterns, info)",
+        "summary": "Case label is a literal -- consider naming the constant (bug-patterns, info, fixable)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -17940,6 +18001,26 @@
         "wikiAnchor": "exhaustive-enum-case"
       },
       {
+        "id": "rule.extract-constant",
+        "title": "extract-constant",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Extract the literal at --fix-line / --col into a named constant (on demand: reports only when its fix is asked for) (refactoring, hint, fixable)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule extract-constant"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "extract-constant"
+      },
+      {
         "id": "rule.fan-in",
         "title": "fan-in",
         "group": "linting",
@@ -19686,7 +19767,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Integer literal -- consider naming the constant (bug-patterns, info)",
+        "summary": "Integer literal -- consider naming the constant (bug-patterns, info, fixable)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -20086,7 +20167,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Unexplained numeric literal -- extract a named constant (refactoring, hint)",
+        "summary": "Unexplained numeric literal -- extract a named constant (refactoring, hint, fixable)",
         "wikiPage": "rules",
         "surfaces": [
           {

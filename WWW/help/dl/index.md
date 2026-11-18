@@ -82,7 +82,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | Feature | What it does | Since |
 | --- | --- | --- |
 | [Ancestor not in project (lint rule)](features/ancestor-not-in-project.md) | Project-wide lint rule (error): a form, frame or data module whose ancestor class is declared in no project unit and not in the platform library | 1.42.0-alpha |
-| [Autofix for fixable rules](features/autofix-wave.md) | lint --fix repairs findings of the 126 fixable rules; --json reports per finding whether it was applied; lint accepts a folder | 1.37.0-alpha |
+| [Autofix for fixable rules](features/autofix-wave.md) | lint --fix repairs findings of the 130 fixable rules; --json reports per finding whether it was applied; lint accepts a folder | 1.37.0-alpha |
 | [Compliance labels (CWE, CERT, MISRA)](features/compliance-labels.md) | Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field | 1.37.0-alpha |
 | [Copy All Diagnostics](features/copy-all-diagnostics.md) | Puts every lint finding for the current unit onto the clipboard, starting from the Structure form | 0.1.0-alpha |
 | [Copy Diagnostics (Current File)](features/copy-diagnostics-current-file.md) | Puts the current file's lint findings onto the clipboard | 0.1.0-alpha |
@@ -195,6 +195,7 @@ Rename, extract, safe delete, uses cleanup and code stubs.
 | [Uses Audit -- interface->impl moves + unused (this unit)](features/uses-audit-interface-impl-moves-unused-this-unit.md) | For one unit, reports which uses entries could move from the interface section to implementation, and which are unused entirely | 0.43.0-alpha |
 | [Uses Cleanup Preview (compiler-verified, this unit)](features/uses-cleanup-preview-compiler-verified-this-unit.md) | The removals a Uses Audit suggests, but verified by actually compiling | 0.43.0-alpha |
 | [Uses & Deps Tab](features/uses-deps-tab.md) | Open the Uses & Deps tab to review uses-clause fixes and apply them | 1.12.0-alpha |
+| [Extract constant (manual fix for magic literals)](features/v152-extract-constant.md) | Turns one number or string literal into a named constant and replaces every occurrence in the unit; manual fix of the magic-literal rules | 1.52.0-alpha |
 | [extract-method and create-enum-helper through the compile gate by default](features/v152-fixer-compile-gate.md) | extract-method / create-enum-helper --apply build the project before and after the write; no project found = REFUSED, --no-compile-gate writes unbuilt | 1.52.0-alpha |
 | [Fix with drag-lint (VS Code and RAD Studio)](features/v152-vsfix.md) | Fix the finding at the cursor, all of one rule, or every fixable finding in a file: VS Code code actions and menus, plus a RAD Studio menu entry | 1.52.0-alpha |
 
