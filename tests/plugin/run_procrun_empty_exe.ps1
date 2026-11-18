@@ -13,10 +13,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Dpr     = "$PSScriptRoot\..\ProcRunEmptyExeTests.dpr",
+  [string]$Dpr     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-procrun-emptyexe-build-$PID",
-  [string]$SrcDir = "$PSScriptRoot\..\..\src\delphi-plugin"
+  [string]$SrcDir = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Dpr) { $Dpr = "$PSScriptRoot\..\ProcRunEmptyExeTests.dpr" }
+if (-not $SrcDir) { $SrcDir = "$PSScriptRoot\..\..\src\delphi-plugin" }
 try {
 $ErrorActionPreference = 'Stop'
 

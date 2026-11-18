@@ -9,9 +9,12 @@
 # Usage: pwsh -File tests/autotest/run_v152_FPS.ps1 -Exe <exe> [-Work <scratch dir>]
 [CmdletBinding()]
 param(
-    [string] $Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe'),
+    [string] $Exe = '',
     [string] $Work = (Join-Path ([IO.Path]::GetTempPath()) "dl-v152-fps-$PID")
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe') }
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {

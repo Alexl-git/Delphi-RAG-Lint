@@ -11,8 +11,11 @@
 #               missing handler must stay SILENT (negative control for the unresolved-ancestor gate).
 # Usage: pwsh -File tests/autotest/run_dfm_event_handler_missing.ps1 [-Exe <path>]
 [CmdletBinding()]
-param([string]$Exe = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1"),
+param([string]$Exe = '',
       [string]$WorkDir = "$env:TEMP\drag-lint-g8-ehm-$PID")
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1") }
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\g8-common.ps1"
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }

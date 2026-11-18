@@ -4,9 +4,12 @@
 # Usage: pwsh -File tests/autotest/run_v1511_THR_waited_task_bom.ps1 -Exe <exe> -DbPath <db copy>
 [CmdletBinding()]
 param(
-    [string] $Exe = (Join-Path $PSScriptRoot '..\..\third_party\dll-win64\drag-lint.exe'),
+    [string] $Exe = '',
     [string] $DbPath
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = (Join-Path $PSScriptRoot '..\..\third_party\dll-win64\drag-lint.exe') }
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail='') {

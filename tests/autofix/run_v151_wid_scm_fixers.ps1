@@ -6,7 +6,10 @@
   Usage: pwsh -File tests\autofix\run_v151_wid_scm_fixers.ps1 [-Exe path\to\drag-lint.exe]
 #>
 [CmdletBinding()]
-param([string]$Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe'))
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe') }
 $ErrorActionPreference = 'Stop'
 $Exe = (Resolve-Path $Exe).Path
 $scratch = Join-Path ([IO.Path]::GetTempPath()) "v151_wid_scm_fix_$PID"

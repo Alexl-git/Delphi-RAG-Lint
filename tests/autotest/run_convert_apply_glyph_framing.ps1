@@ -35,9 +35,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",   # worktree-local build, like mcp_protocol / docs_sync
+  [string]$Exe     = '',   # worktree-local build, like mcp_protocol / docs_sync
   [string]$WorkDir = "C:\TEMP\draglint_convert_glyph_framing_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $script:fail = $false

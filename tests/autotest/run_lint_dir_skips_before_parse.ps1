@@ -36,7 +36,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   # NOT "..._skip": the assertion below searches for the engine's `SKIP <path>`
   # line, and a WorkDir containing "skip" put that word into every path the
   # engine printed. The guard then matched its own directory name and reported
@@ -45,6 +45,9 @@ param(
   [string]$WorkDir = "$env:TEMP\draglint_dir_preparse_scope_$PID",
   [switch]$Quiet
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false

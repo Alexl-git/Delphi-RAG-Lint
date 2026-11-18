@@ -19,9 +19,12 @@
 # Usage: pwsh -File tests/autotest/run_typeat_index_first.ps1 [-Exe <path>]
 [CmdletBinding()]
 param(
-    [string] $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+    [string] $Exe = '',
     [string] $WorkDir = "$env:TEMP\drag-lint-typeat-index-first-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false

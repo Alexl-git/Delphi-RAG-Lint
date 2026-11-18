@@ -17,8 +17,11 @@
   Each case also checks the rule FIRES (positive control), so a silent rule
   cannot pass it. Exit 0 = all pass.
 #>
-param([string]$Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe'),
+param([string]$Exe = '',
       [string]$WorkDir = (Join-Path $env:TEMP ('draglint-store-fix-negatives-' + $PID)))
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe') }
 $ErrorActionPreference = 'Continue'
 $exePath = (Resolve-Path $Exe).Path
 $fail = 0; $pass = 0

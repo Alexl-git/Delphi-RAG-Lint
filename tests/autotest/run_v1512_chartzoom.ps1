@@ -3,8 +3,11 @@
 # (plus "dangling:" notes) are drawn in their own colour with a legend and a jump from the END TRACE count.
 # The page is static HTML + inline JS, so the checks read the generated index.html; a positive control pins that
 # the page really embeds the chart. Offline: no http(s) reference may appear in the page script.
-param([string] $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+param([string] $Exe = '',
       [string] $Dot = 'C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail='') {

@@ -20,11 +20,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe       = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
+  [string]$Exe       = '',
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-w6m-$PID",
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite',
   [string]$Only      = ''   # a regex over the section tags (c6, c2, c7i ...); '' = every section
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }) }
 function Want([string]$Tag) { return ($Only -eq '') -or ($Tag -match $Only) }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false

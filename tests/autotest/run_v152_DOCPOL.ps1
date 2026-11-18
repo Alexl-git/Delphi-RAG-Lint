@@ -11,9 +11,12 @@
 # Fixtures: tests\lint\missing-doc-bound-handler.pas/.dfm, tests\lint\doc-placeholder.pas (copied to a scratch dir).
 # Usage: pwsh -File run_v152_DOCPOL.ps1 -Exe <drag-lint.exe>
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-v152-docpol-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false; $script:Passed = 0
 function Check($n, $ok, $d = '') {

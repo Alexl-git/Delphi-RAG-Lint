@@ -6,7 +6,10 @@
   through --rules-dir. Controls: C1 the rule fires (so --rules-dir is honoured by the runner); C2 a bogus id is
   still malformed (the reporter is on); C3 without --rules-dir the copy has no rules (the setup is a real test).
 #>
-param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $bad = $false
 function Check([string]$N, [bool]$Ok) { if ($Ok) { Write-Host "  ok   $N" } else { $script:bad = $true; Write-Host "  FAIL $N" -ForegroundColor Red } }

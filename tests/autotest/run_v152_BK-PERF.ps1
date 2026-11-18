@@ -4,9 +4,12 @@
 #        the same run WITHOUT the flag still stands down with exit 4.
 # Usage: run_v152_BK-PERF.ps1 [-Exe <drag-lint.exe>] [-WorkDir <dir>]
 param(
-  [string]$Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe'),
+  [string]$Exe = '',
   [string]$WorkDir = (Join-Path $env:TEMP ('dl-bkperf-' + [Guid]::NewGuid().ToString('N').Substring(0, 8)))
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe') }
 $ErrorActionPreference = 'Stop'
 $Exe = (Resolve-Path $Exe).Path
 New-Item -ItemType Directory -Force $WorkDir | Out-Null

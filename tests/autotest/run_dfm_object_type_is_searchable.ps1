@@ -32,7 +32,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1"))
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1") }
 
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){ if($d){Write-Host "      $d" -ForegroundColor DarkGray}; $script:fail=$true } }

@@ -16,9 +16,14 @@
        a duplicate: no warning for it in the unmodified rules dir
   Runs a COPY of the engine in scratch; never touches the real rules dir.
 #>
-param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
-      [string]$Companions = "$PSScriptRoot\..\..\third_party\dll-win64",
-      [string]$Rules = "$PSScriptRoot\..\..\rules")
+param([string]$Exe = '',
+      [string]$Companions = '',
+      [string]$Rules = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
+if (-not $Companions) { $Companions = "$PSScriptRoot\..\..\third_party\dll-win64" }
+if (-not $Rules) { $Rules = "$PSScriptRoot\..\..\rules" }
 $ErrorActionPreference = 'Stop'
 $script:fail = 0
 function Check($name, $ok, $detail) {

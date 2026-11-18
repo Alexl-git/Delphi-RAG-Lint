@@ -15,11 +15,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$Corpus  = 'C:\Projects\Loader2019',
   [string]$WorkDir = "$env:TEMP\drag-lint-genpa-golden-$PID",
   [string]$ProgressForm = 'frmLoader2019_Main'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 1 }
 if (-not (Test-Path "$Corpus\Loader2019.dproj")) { Write-Host "FATAL: corpus not found: $Corpus" -ForegroundColor Red; exit 1 }

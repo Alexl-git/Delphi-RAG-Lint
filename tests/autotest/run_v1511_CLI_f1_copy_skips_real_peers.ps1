@@ -16,9 +16,12 @@
   Usage: pwsh -File tests\autotest\run_v1511_CLI_f1_copy_skips_real_peers.ps1 [-Exe <exe>] [-YadfDb <copy.sqlite>]
 #>
 param(
-  [string]$Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe'),
+  [string]$Exe = '',
   [string]$YadfDb = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe') }
 $ErrorActionPreference = 'Stop'
 $exePath = (Resolve-Path $Exe).Path
 $scratch = Join-Path $env:TEMP ("v1511_cli_f1_" + $PID)

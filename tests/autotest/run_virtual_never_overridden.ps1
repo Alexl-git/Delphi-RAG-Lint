@@ -10,8 +10,11 @@
 # Fix (risky): deletes the `virtual;` / `dynamic;` directive; expected\uV.fixed.pas is hand-written.
 # Usage: pwsh -File tests/autotest/run_virtual_never_overridden.ps1 [-Exe <path>]
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+param([string]$Exe = '',
       [string]$WorkDir = "$env:TEMP\drag-lint-g8-vno-$PID")
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\g8-common.ps1"
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }

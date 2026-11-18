@@ -10,9 +10,12 @@
 # Usage: pwsh -File tests/autotest/run_naming_synth.ps1
 [CmdletBinding()]
 param(
-    [string] $DprojDir = "$PSScriptRoot\fixtures\namesynth",
+    [string] $DprojDir = '',
     [string] $WorkDir  = "$env:TEMP\drag-lint-naming-synth-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $DprojDir) { $DprojDir = "$PSScriptRoot\fixtures\namesynth" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false

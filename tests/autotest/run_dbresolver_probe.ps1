@@ -11,9 +11,12 @@
 # Usage: pwsh -File tests/autotest/run_dbresolver_probe.ps1
 [CmdletBinding()]
 param(
-    [string] $DprojDir = "$PSScriptRoot\fixtures\dbprobe",
+    [string] $DprojDir = '',
     [string] $WorkDir  = "$env:TEMP\drag-lint-dbresolver-probe-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $DprojDir) { $DprojDir = "$PSScriptRoot\fixtures\dbprobe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false

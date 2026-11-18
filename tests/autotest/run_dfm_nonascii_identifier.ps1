@@ -23,9 +23,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_dfm_nonascii_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 # 150 HG: the engine is asked for --output-encoding utf8, and its stdout is decoded as UTF-8 EXPLICITLY by

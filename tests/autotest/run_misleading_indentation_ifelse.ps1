@@ -4,7 +4,10 @@
   line 56 (indented under an if..else) must fire, line 61 (aligned) must not. Positive controls: line 11 (plain
   `if`) fires, so the rule is on; line 61 silent shows the check is not a blanket.
 #>
-param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $bad = $false
 function Check([string]$N, [bool]$Ok) { if ($Ok) { Write-Host "  ok   $N" } else { $script:bad = $true; Write-Host "  FAIL $N" -ForegroundColor Red } }

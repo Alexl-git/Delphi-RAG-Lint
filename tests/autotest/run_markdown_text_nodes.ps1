@@ -12,7 +12,10 @@
 # controls that hold on both engines (walks never admit .md; lint never anchors
 # a finding in a .md) -- they would fail if the walk exclusion or a lint path
 # that reads every file were broken.
-param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: engine not found: $Exe"; exit 2 }
 

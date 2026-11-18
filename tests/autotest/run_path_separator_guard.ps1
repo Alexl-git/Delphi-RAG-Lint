@@ -44,7 +44,10 @@
   A comparison (SameText(LeafDir, 'dll-win64')) is NOT a concatenation and is
   deliberately not matched -- check 1 requires a '+' immediately before.
 #>
-param([string]$Repo = "$PSScriptRoot\..\..")
+param([string]$Repo = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Repo) { $Repo = "$PSScriptRoot\..\.." }
 
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {

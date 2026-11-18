@@ -18,11 +18,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$PluginDir  = "$PSScriptRoot\..\..\src\delphi-plugin",
-  [string]$FixtureDir = "$PSScriptRoot\..\fixtures\cyclefix",
+  [string]$PluginDir  = '',
+  [string]$FixtureDir = '',
   [switch]$KeepScratch,
   [string]$WorkDir    = "$env:TEMP\drag-lint-cyclefix-summary-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $PluginDir) { $PluginDir = "$PSScriptRoot\..\..\src\delphi-plugin" }
+if (-not $FixtureDir) { $FixtureDir = "$PSScriptRoot\..\fixtures\cyclefix" }
 function Remove-Scratch {
   if ($script:Failed -and $KeepScratch) { Write-Host "scratch kept: $WorkDir" -ForegroundColor Yellow; return }
   Set-Location -LiteralPath $env:TEMP

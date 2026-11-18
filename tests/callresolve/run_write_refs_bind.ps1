@@ -49,7 +49,10 @@
   FAIL check, and KEEP the scratch dir C:\TEMP\draglint_write_refs_bind_<PID> (disable the finally cleanup).
 #>
 [CmdletBinding()]
-param([string]$Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe'))
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe') }
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: no engine at $Exe -- pass -Exe <drag-lint.exe>"; exit 2 }
 . "$PSScriptRoot\..\autotest\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG2: no machine drag-lint.json
 try {

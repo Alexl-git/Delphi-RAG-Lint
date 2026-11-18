@@ -19,7 +19,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe       = $(. "$PSScriptRoot\lib\FreshEngineExe.ps1"; Get-FreshEngineExe),
+  [string]$Exe       = '',
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-b1-dcc-$PID",
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite',
   # Off by default (152b): the platform library is READ in place via --library-db, never copied (the DB is ~3.5 GB;
@@ -28,6 +28,9 @@ param(
   [switch]$CopyLibrary,
   [switch]$KeepWorkDir
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(. "$PSScriptRoot\lib\FreshEngineExe.ps1"; Get-FreshEngineExe) }
 $ErrorActionPreference = 'Stop'
 $RsVars = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 if (-not (Test-Path $RsVars)) { Write-Host 'SKIP: RAD Studio not installed' -ForegroundColor Yellow; exit 0 }

@@ -18,13 +18,17 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe         = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe         = '',
   [string]$BaselineExe = '',
-  [string]$OffBaseline = "$PSScriptRoot\fixtures\lsp\c1-off-baseline.txt",
+  [string]$OffBaseline = '',
   [switch]$CaptureOffBaseline,
   [switch]$AllowChildExeSkip, # only for an OLD engine (pre lane S): one that ignores DRAGLINT_FULLRULES_CHILD_EXE SKIPs instead of FAILing
   [string]$WorkDir     = "$env:TEMP\drag-lint-lsp-fr-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
+if (-not $OffBaseline) { $OffBaseline = "$PSScriptRoot\fixtures\lsp\c1-off-baseline.txt" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false

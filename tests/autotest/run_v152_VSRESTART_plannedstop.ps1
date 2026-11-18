@@ -7,7 +7,10 @@
   gate in both stop paths and that the engine LSP exits 0 on shutdown/EOF (static check of the Run loop).
 #>
 [CmdletBinding()]
-param([string]$Dir = "$PSScriptRoot\..\..\editors\vscode\drag-lint")
+param([string]$Dir = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Dir) { $Dir = "$PSScriptRoot\..\..\editors\vscode\drag-lint" }
 $ErrorActionPreference = 'Stop'
 $fail = 0
 function Check($n, $ok) { if ($ok) { Write-Host "  [PASS] $n" -ForegroundColor Green } else { Write-Host "  [FAIL] $n" -ForegroundColor Red; $script:fail++ } }

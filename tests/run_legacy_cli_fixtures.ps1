@@ -70,12 +70,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe = '',
   # LEGACY-CLI-FIX (1.42 guards2): was 120. T53_parser_error lints a 7-line file; measured 39 s..207 s wall (95-rule compile + LintFile
   # CPU-bound) while a re-parse and 12 lane engines pinned the box, so 120 s cut off a working lint. 300 s still fails a real hang
   # (T37 speaks MCP over stdin; the TIMEOUT branch below is the positive control and is unchanged).
   [int]   $PerFixtureTimeoutSec = 300
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {

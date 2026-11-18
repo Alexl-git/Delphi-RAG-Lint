@@ -12,9 +12,12 @@
   docs\wiki\target-bds-library-path.md, "Not tested here".
 #>
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe = '',
   [string]$Scratch = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Continue'
 $Exe = (Resolve-Path $Exe).Path
 if ($Scratch -eq '') { $Scratch = Join-Path ([IO.Path]::GetTempPath()) ("dl-gh13-" + [Guid]::NewGuid().ToString('N')) }

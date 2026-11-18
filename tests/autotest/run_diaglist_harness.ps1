@@ -19,9 +19,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$FixtureDir = "$PSScriptRoot\fixtures\diaglist",
+  [string]$FixtureDir = '',
   [string]$WorkDir    = "$env:TEMP\drag-lint-diaglist-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $FixtureDir) { $FixtureDir = "$PSScriptRoot\fixtures\diaglist" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {

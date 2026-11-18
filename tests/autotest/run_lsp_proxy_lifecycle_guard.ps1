@@ -41,10 +41,14 @@
 
 [CmdletBinding()]
 param(
-  [string]$Exe     = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1"),
-  [string]$Stub    = "$PSScriptRoot\fixtures\lspproxy\Win64\Debug\LspStubServer.exe",
+  [string]$Exe     = '',
+  [string]$Stub    = '',
   [string]$WorkDir = "$env:TEMP\draglint_lspproxy_lifecycle_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1") }
+if (-not $Stub) { $Stub = "$PSScriptRoot\fixtures\lspproxy\Win64\Debug\LspStubServer.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'

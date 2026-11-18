@@ -39,10 +39,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$RealDb  = "$PSScriptRoot\..\..\src\cli\_D-RAG\drag-lint.sqlite",
+  [string]$Exe     = '',
+  [string]$RealDb  = '',
   [string]$WorkDir = "$env:TEMP\draglint_no_default_db_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $RealDb) { $RealDb = "$PSScriptRoot\..\..\src\cli\_D-RAG\drag-lint.sqlite" }
 try {
 
 $ErrorActionPreference = 'Stop'

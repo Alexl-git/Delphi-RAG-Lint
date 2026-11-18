@@ -28,14 +28,13 @@
 [CmdletBinding()]
 param(
   [string]  $BaseDll,
-  [string]  $LaneDll   = "$PSScriptRoot\..\..\third_party\dll-win64\tree-sitter-dfm.dll",
-  [string]  $CoreDll   = "$PSScriptRoot\..\..\third_party\dll-win64\tree-sitter.dll",
+  [string]  $LaneDll   = '',
+  [string]  $CoreDll   = '',
   [string[]]$Roots     = @('C:\Program Files (x86)\Embarcadero\Studio\37.0\source',
                            'C:\Program Files (x86)\DevExpress\VCL',
                            'C:\Users\Public\Documents\Embarcadero\Studio\37.0\Samples'),
   [string]  $Manifest  = '',
-  [string[]]$ControlDfm = @("$PSScriptRoot\..\fixtures\dfm-nonascii\FormAnsi.dfm",
-                            "$PSScriptRoot\..\fixtures\dfm-nonascii\FormUtf8.dfm"),
+  [string[]]$ControlDfm = @(),
   [switch]  $NoControl,
   [string]  $OutDir    = "C:\TEMP\draglint_dfm_corpus_ab_$PID",
   # worker mode (internal): parse -WorkList with -WorkDll, write -WorkOut
@@ -43,6 +42,11 @@ param(
   [string]  $WorkList  = '',
   [string]  $WorkOut   = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $LaneDll) { $LaneDll = "$PSScriptRoot\..\..\third_party\dll-win64\tree-sitter-dfm.dll" }
+if (-not $CoreDll) { $CoreDll = "$PSScriptRoot\..\..\third_party\dll-win64\tree-sitter.dll" }
+if (-not $ControlDfm) { $ControlDfm = @("$PSScriptRoot\..\fixtures\dfm-nonascii\FormAnsi.dfm", "$PSScriptRoot\..\fixtures\dfm-nonascii\FormUtf8.dfm") }
 $ErrorActionPreference = 'Stop'
 
 $csharp = @'

@@ -19,9 +19,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$EngineDir = "$PSScriptRoot\..\..\src\cli\Win64\Debug",
+  [string]$EngineDir = '',
   [string]$RsVars    = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $EngineDir) { $EngineDir = "$PSScriptRoot\..\..\src\cli\Win64\Debug" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false; $script:Passed = 0; $script:FailCount = 0
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {

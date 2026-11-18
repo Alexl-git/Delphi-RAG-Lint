@@ -19,9 +19,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Dir = "$PSScriptRoot\..\..\src\delphi-plugin",
+  [string]$Dir = '',
   [string]$Exe = ''   # accepted for battery uniformity; static guard
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Dir) { $Dir = "$PSScriptRoot\..\..\src\delphi-plugin" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {

@@ -9,9 +9,12 @@
 # Usage: pwsh -File tests/autotest/run_members.ps1
 [CmdletBinding()]
 param(
-    [string] $DprojDir = "$PSScriptRoot\fixtures\members",
+    [string] $DprojDir = '',
     [string] $WorkDir  = "$env:TEMP\drag-lint-members-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $DprojDir) { $DprojDir = "$PSScriptRoot\fixtures\members" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false

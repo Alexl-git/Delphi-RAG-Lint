@@ -26,11 +26,14 @@
      Needs dcc; T SKIPs without rsvars.bat. A and L need no dcc (plans only).
 #>
 param(
-  [string]$Exe              = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe              = '',
   [string]$Rsvars           = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat',
   [int]   $SlowSeconds      = 15,  # each build's silent, idle pre-build step
   [int]   $MaxSilentSeconds = 12   # the gate's progress line comes every 10 s
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Continue'  # native stderr must not terminate; every call is checked by exit code
 $script:Passed = 0; $script:FailCount = 0
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {

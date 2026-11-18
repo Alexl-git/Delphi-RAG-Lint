@@ -14,7 +14,10 @@
 
   Usage: pwsh -File tests\autotest\run_installed_layout_sqlite.ps1 [-EngineDir <dir>]
 #>
-param([string] $EngineDir = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug'))
+param([string] $EngineDir = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $EngineDir) { $EngineDir = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug') }
 $ErrorActionPreference = 'Stop'
 $EngineDir = [IO.Path]::GetFullPath($EngineDir)
 $fail = 0

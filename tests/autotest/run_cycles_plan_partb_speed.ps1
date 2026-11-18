@@ -16,7 +16,7 @@
   pwsh 7 only (Windows PowerShell 5 dies on the engine's stderr banner).
 #>
 param(
-  [string]$Exe      = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe      = '',
   [string]$Db       = '',
   [string]$Project  = 'C:\Projects\Loader2019\Loader2025.dproj',
   [string]$LibDb    = 'C:\Projects\.drag-lint\library-Win32.sqlite',
@@ -24,6 +24,9 @@ param(
   [int]   $BudgetMs = 60000,
   [string]$WorkDir  = (Join-Path ([IO.Path]::GetTempPath()) 'dl-partb-speed')
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $fail = 0
 function Lane-Check([bool]$pOk, [string]$pWhat) {

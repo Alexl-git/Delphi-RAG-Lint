@@ -22,12 +22,16 @@
 # Usage: pwsh -File tests/autotest/run_menu_drift_guard.ps1 [-Exe <path>] [-PluginDb <db>]
 [CmdletBinding()]
 param(
-    [string] $Exe        = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-    [string] $FixtureDir = "$PSScriptRoot\..\fixtures\menutree",
+    [string] $Exe        = '',
+    [string] $FixtureDir = '',
     [string] $Repo       = '',
     [string] $PluginDb   = '',
     [string] $WorkDir    = "$env:TEMP\drag-lint-menu-drift-guard-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $FixtureDir) { $FixtureDir = "$PSScriptRoot\..\fixtures\menutree" }
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
 if (-not $Repo) { $Repo = "$PSScriptRoot\..\.." }

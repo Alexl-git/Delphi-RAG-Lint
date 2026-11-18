@@ -31,12 +31,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe       = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe") { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" } else { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }),
+  [string]$Exe       = '',
   [switch]$KeepScratch,
   [string]$WorkDir   = "$env:TEMP\drag-lint-cycle-examples-$PID",
   [switch]$Update,
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe") { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" } else { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }) }
 
 # E18 T13: removes this run's scratch (WorkDir) however the run ends; kept only on failure when
 # -KeepScratch is passed (the path is printed).
