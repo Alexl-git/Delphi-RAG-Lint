@@ -222,7 +222,8 @@ type
     WeakReceiverRegex: string;
     /// <summary>JSON weak_severity_drop: a weak finding is one severity lower (default True).</summary>
     WeakSeverityDrop: Boolean;
-    /// <summary>JSON max_paths_per_sink: findings per sink before "+N more paths" (default 3).</summary>
+    /// <summary>JSON max_paths_per_sink: accepted for old configs and IGNORED since 1.52 (TAINTDEDUP):
+    /// a sink site reports one finding and keeps every path (TLintFinding.Paths).</summary>
     MaxPathsPerSink : Integer;
     /// <summary>JSON second_order: enable Enabled=False (TField/TDataSet) sources (default False).</summary>
     SecondOrder     : Boolean;
@@ -329,8 +330,9 @@ type
       /// there; the walk may leave the scope and the project).</param>
       /// <param name="ACfg">The merged configuration.</param>
       /// <param name="AStats">Counters for the trace line; zeroed on entry.</param>
-      /// <returns>One finding per (sink site, source site) -- at most ACfg.MaxPathsPerSink per sink
-      /// and rule, the last one's message ending in "+N more paths" when more were found --
+      /// <returns>ONE finding per sink site and rule (file, line, col, rule; TAINTDEDUP 1.52) -- the
+      /// best path (certain before weak, then shortest) in Message and Path, the message ending
+      /// "(N sources, M paths)" and Paths holding every distinct path when more than one reached it --
       /// RuleId one of TAINT_RULE_*, Message starting with TAINT_MSG_PREFIX, Path = source
       /// -> hops -> sink, SymbolName = the sink's routine.</returns>
       /// <remarks>
@@ -420,6 +422,16 @@ type
   TSummary = record
     Hits  : TArray<THit>;
     Params: TArray<Integer>;
+  end;
+
+  { One sink site and rule (file, line, col, rule): the hits of every argument row at that
+    call, merged so the site reports ONE finding (TAINTDEDUP 1.52). }
+  TSinkSite = record
+    X       : TSymbol;
+    Row     : TDataFlowRow;
+    Rule    : string;
+    WeakSink: Boolean;
+    Hits    : TArray<THit>;
   end;
 
   TMemoEntry = record
@@ -1956,21 +1968,30 @@ begin
   if FChanged then Inc(FStats.PartialKeys);
 end;
 
-{ The findings of one sink site and rule: certain before weak, shorter paths first,
-  at most MaxPathsPerSink, the last one naming how many more there were. }
+{ The ONE finding of a sink site and rule (TAINTDEDUP 1.52; nil when no hit): the best path --
+  certain before weak, then shorter -- names the message, which ends "(N sources, M paths)"
+  when more than one distinct path reaches the site; Paths keeps every distinct path. }
 function TTaintWalker.Findings(const X: TSymbol; const ARow: TDataFlowRow; const ARule: string; AWeakSink: Boolean;
                                const AHits: TArray<THit>): TArray<TLintFinding>;
 var
-  Hits : TArray<THit>;
-  J    : Integer;
-  F    : TLintFinding;
-  Weak : Boolean;
-  L    : TLintLocation;
-  Names: string;
-  Prev : string;
-  Hops : Integer;
+  Hits   : TArray<THit>;
+  Uniq   : TArray<THit>;
+  Seen   : TDictionary<string, Boolean>;
+  Sources: TDictionary<string, Boolean>;
+  H      : THit;
+  F      : TLintFinding;
+  Weak   : Boolean;
+  L      : TLintLocation;
+  Sink   : TLintLocation;
+  Names  : string;
+  Prev   : string;
+  PathKey: string;
+  Parts  : TArray<string>;
+  K      : Integer;
+  Hops   : Integer;
 begin
   Result:= nil;
+  if AHits = nil then Exit;
   Hits:= Copy(AHits);
   TArray.Sort<THit>(Hits, TComparer<THit>.Construct(
     function(const A, B: THit): Integer
@@ -1979,9 +2000,22 @@ begin
       if Result = 0 then Result:= Length(A.Path) - Length(B.Path);
       if Result = 0 then Result:= CompareStr(A.Key, B.Key);
     end));
-  for J:= 0 to High(Hits) do
-  begin
-    if J >= FCfg.MaxPathsPerSink then Break;
+  { distinct paths (the argument rows of one call often walk the same hops) and source sites }
+  Uniq:= nil;
+  Seen:= TDictionary<string, Boolean>.Create;
+  Sources:= TDictionary<string, Boolean>.Create;
+  try
+    for H in Hits do
+    begin
+      SetLength(Parts, Length(H.Path));
+      for K:= 0 to High(H.Path) do
+        Parts[K]:= Format('%s|%d|%d|%s', [H.Path[K].FilePath, H.Path[K].Line, H.Path[K].Col, H.Path[K].Note]);
+      PathKey:= string.Join(';', Parts);
+      if Seen.ContainsKey(PathKey) then Continue;
+      Seen.Add(PathKey, True);
+      Sources.AddOrSetValue(H.Key, True);
+      Uniq:= Uniq + [H];
+    end;
     F:= Default(TLintFinding);
     F.RuleId    := ARule;
     F.FileId    := ARow.FileId;
@@ -1991,10 +2025,11 @@ begin
     F.EndLine   := ARow.DstLine;
     F.EndCol    := ARow.DstCol + Length(ARow.DstName);
     F.SymbolName:= X.Name;
-    Weak:= Hits[J].Weak or AWeakSink;
+    Weak:= Uniq[0].Weak or AWeakSink;
     F.Severity:= RuleBaseSeverity(ARule);
     if Weak and FCfg.WeakSeverityDrop then F.Severity:= DropSeverity(F.Severity);
-    F.Path:= Copy(Hits[J].Path) + [Loc(STORE_PROJECT, X, ARow.FileId, ARow.DstLine, ARow.DstCol, 'sink ' + ARow.DstName)];
+    Sink:= Loc(STORE_PROJECT, X, ARow.FileId, ARow.DstLine, ARow.DstCol, 'sink ' + ARow.DstName);
+    F.Path:= Copy(Uniq[0].Path) + [Sink];
     Names:= '';
     Prev := '';
     Hops := 0;
@@ -2006,11 +2041,18 @@ begin
         Inc(Hops);
       end;
     F.Message:= Format('%s %s from %s (%s) via %s (%d hops, %d via fields/globals%s) -- %s',
-      [TAINT_MSG_PREFIX, ARow.DstName, Hits[J].SrcName, Hits[J].SrcKind, Names, Hops - 1,
-       Hits[J].Fields, IfThen(Weak, ', weak'), RuleCweText(ARule)]);
-    if (J = FCfg.MaxPathsPerSink - 1) and (Length(Hits) > FCfg.MaxPathsPerSink) then
-      F.Message:= F.Message + Format(' (+%d more paths)', [Length(Hits) - FCfg.MaxPathsPerSink]);
-    Result:= Result + [F];
+      [TAINT_MSG_PREFIX, ARow.DstName, Uniq[0].SrcName, Uniq[0].SrcKind, Names, Hops - 1,
+       Uniq[0].Fields, IfThen(Weak, ', weak'), RuleCweText(ARule)]);
+    if Length(Uniq) > 1 then
+    begin
+      F.Message:= F.Message + Format(' (%d %s, %d paths)',
+        [Sources.Count, IfThen(Sources.Count = 1, 'source', 'sources'), Length(Uniq)]);
+      for H in Uniq do F.Paths:= F.Paths + [Copy(H.Path) + [Sink]];
+    end;
+    Result:= [F];
+  finally
+    Sources.Free;
+    Seen.Free;
   end;
 end;
 
@@ -2032,9 +2074,14 @@ var
   I, K    : Integer;
   Sum     : TSummary;
   Routines: Integer;
+  Sites   : TList<TSinkSite>;
+  SiteIdx : TDictionary<string, Integer>;
+  Site    : TSinkSite;
 begin
   Result  := nil;
   Routines:= 0;
+  Sites  := TList<TSinkSite>.Create;
+  SiteIdx:= TDictionary<string, Integer>.Create;
   Done:= TDictionary<string, Boolean>.Create;
   try
     for Fid in AScopeFileIds do
@@ -2080,12 +2127,34 @@ begin
             FCat:= RuleCategory(Rules[I]);
             Sum:= EvalSink(S, Group);
             Inc(FStats.Hits, Length(Sum.Hits));
-            Result:= Result + Findings(S, Row, Rules[I], WeakSink[I], Sum.Hits);
+            { TAINTDEDUP: every argument row of one call merges into ONE site per rule }
+            SiteKey:= Format('%d|%d|%d|%s', [Row.FileId, Row.DstLine, Row.DstCol, LowerCase(Rules[I])]);
+            if SiteIdx.TryGetValue(SiteKey, K) then
+            begin
+              Site:= Sites[K];
+              Site.Hits    := Site.Hits + Sum.Hits;
+              Site.WeakSink:= Site.WeakSink and WeakSink[I];
+              Sites[K]:= Site;
+            end
+            else
+            begin
+              Site:= Default(TSinkSite);
+              Site.X       := S;
+              Site.Row     := Row;
+              Site.Rule    := Rules[I];
+              Site.WeakSink:= WeakSink[I];
+              Site.Hits    := Sum.Hits;
+              SiteIdx.Add(SiteKey, Sites.Count);
+              Sites.Add(Site);
+            end;
           end;
         end;
       end;
     end;
+    for Site in Sites do Result:= Result + Findings(Site.X, Site.Row, Site.Rule, Site.WeakSink, Site.Hits);
   finally
+    Sites.Free;
+    SiteIdx.Free;
     Done.Free;
   end;
   if FCapHit then Inc(FStats.PartialKeys);

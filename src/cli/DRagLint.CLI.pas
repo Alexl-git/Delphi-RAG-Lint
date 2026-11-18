@@ -12694,6 +12694,23 @@ begin
     if Result and not IsUnderTemp(Ed.FilePath) then Result:= False;
 end;
 
+{ One taint path as the --json `path` array: hop 0 = source, last = sink. Shared by `path` and
+  each entry of `paths` (TAINTDEDUP 1.52). }
+function TaintPathToJson(const pPath: TArray<TLintLocation>): TJSONArray;
+begin
+  Result:= TJSONArray.Create;
+  for var Hop: TLintLocation in pPath do
+  begin
+    var JHop: TJSONObject:= TJSONObject.Create;
+    JHop.AddPair('file_path', Hop.FilePath);
+    JHop.AddPair('line'     , TJSONNumber.Create(Hop.Line));
+    JHop.AddPair('col'      , TJSONNumber.Create(Hop.Col ));
+    JHop.AddPair('routine'  , Hop.Routine);
+    JHop.AddPair('note'     , Hop.Note);
+    Result.AddElement(JHop);
+  end;
+end;
+
 function FinalizeAndOutput(const AArgs: TArgs; AFindings: TArray<TLintFinding>; const ADefaultDisabled: TArray<string>; const AEmitText: TProc<TArray<TLintFinding>>;
   const AStore: ISymbolStore = nil; const AScannedFiles: TArray<string> = nil;
   const APrimaryDb: string = ''; const AWalkSkipped: TArray<string> = nil;
@@ -13452,20 +13469,13 @@ begin
         var CompLb: TComplianceLabels;
         CompTbl.TryGet(F.RuleId, CompLb);
         if not CompLb.IsEmpty then JObj.AddPair('compliance', ComplianceToJson(CompLb, False));
-        if Length(F.Path) > 0 then
+        if Length(F.Path) > 0 then JObj.AddPair('path', TaintPathToJson(F.Path));
+        { TAINTDEDUP 1.52: every distinct path into this sink (shortest first) when there is more than one }
+        if Length(F.Paths) > 1 then
         begin
-          var JPath: TJSONArray:= TJSONArray.Create;
-          for var Hop: TLintLocation in F.Path do
-          begin
-            var JHop: TJSONObject:= TJSONObject.Create;
-            JHop.AddPair('file_path', Hop.FilePath);
-            JHop.AddPair('line'     , TJSONNumber.Create(Hop.Line));
-            JHop.AddPair('col'      , TJSONNumber.Create(Hop.Col ));
-            JHop.AddPair('routine'  , Hop.Routine);
-            JHop.AddPair('note'     , Hop.Note);
-            JPath.AddElement(JHop);
-          end;
-          JObj.AddPair('path', JPath);
+          var JPaths: TJSONArray:= TJSONArray.Create;
+          for var OnePath: TArray<TLintLocation> in F.Paths do JPaths.AddElement(TaintPathToJson(OnePath));
+          JObj.AddPair('paths', JPaths);
         end;
         JArr.AddElement(JObj);
       end;
