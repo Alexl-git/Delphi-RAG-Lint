@@ -20,7 +20,7 @@ Put the caret on the line that shows the finding, then either right-click in the
 
 ```
 drag-lint rules disable --rule empty-except --scope line --in Src\Unit1.pas --line 18 --reason "logged by the caller"
-drag-lint rules disable --rule empty-except --scope unit --in Src\Unit1.pas --reason "legacy unit, rewrite planned"
+drag-lint rules disable --rule empty-except --scope unit --in Src\Unit1.pas --reason "legacy unit, kept as is"
 drag-lint rules disable --rule empty-except --scope project --project App.dproj --reason "team ruling 2026-11"
 drag-lint rules enable  --rule empty-except --scope unit --in Src\Unit1.pas
 ```

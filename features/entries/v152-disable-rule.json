@@ -5,7 +5,7 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.52.0-alpha",
-  "summary": "Silence one lint rule for one line (a dl:ok marker), one unit or the whole project (an entry in the project's drag-lint-lint.json), always with a reason and a date; rules enable undoes it",
+  "summary": "Silence one lint rule for a line (dl:ok marker), a unit or the project (rule_overrides in drag-lint-lint.json), with a reason and date; rules enable undoes it",
   "intro": "Read this when a finding is right for most of the code but not here: disable the rule for this line, this unit or this project from the RAD Studio editor's right-click menu or with rules disable, and undo it with rules enable. Unit and project scope never write into the source.",
   "wikiPage": "v152-disable-rule",
   "surfaces": [
@@ -78,5 +78,11 @@
       "ask": "Undo a disable.",
       "command": "drag-lint rules enable --rule <id> --scope line|unit|project [--in <U.pas> --line <N>] [--project <App.dproj>]"
     }
-  ]
+  ],
+  "verified": {
+    "date": "2026-11-17",
+    "by": "ENGINE",
+    "build": "1.51.1-alpha",
+    "surfaceHash": "ee74bfd4bee5146e02c67338d68de51d94da8cc682b39aa1f3ea6d3177107c33"
+  }
 }
