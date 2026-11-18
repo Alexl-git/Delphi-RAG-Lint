@@ -13,6 +13,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 * [explain](features/explain.md) -- Explains one lint rule in plain words: what it means, why it matters, a bad and a good example, its default, whether it can be fixed, and how to suppress it.
 * [Field repository](features/field-repository.md) -- Keeps the TableTools field registry in one SQLite file per database, filled from Firebird (read-only), with a diffable text backup.
+* [member-could-be-private lint rule (lane ATLB)](features/v152-atlb-rules.md) -- Hints (OFF in 1.52) on a public class member referenced only inside its own unit; published, virtual, interface-implementing, attributed and shared-unit members stay silent.
 * [Default-on form, dataset and data-module rules](features/v152-defaults.md) -- Four lint rules on by default since 1.52 (form object/field, foreign form access, edit without post, data module form global); a shipped exempt-class list.
 * [extract-method and create-enum-helper through the compile gate by default](features/v152-fixer-compile-gate.md) -- extract-method / create-enum-helper --apply build the project before and after the write; no project found = REFUSED, --no-compile-gate writes unbuilt.
 * [Array index possibly out of range lint rule (index-possibly-out-of-range)](features/v152-index-possibly-out-of-range.md) -- Warns (OFF in 1.52) on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only.
@@ -440,9 +441,9 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 0.33.0-alpha
 
-* [Find Usages](features/find-usages.md) -- Lists every reference to the symbol under the editor caret across the indexed project.
+* [Find Usages](features/find-usages.md) -- Lists every reference to the symbol under the editor caret, in one of four scopes: this bound symbol (default), project, group or everywhere.
 * [Find Usages](features/find-usages-context.md) -- Lists references to the symbol represented by a Structure-tree node.
-* [usages](features/usages.md) -- Finds usage sites of a named symbol, with a choice of report width.
+* [usages](features/usages.md) -- Finds usage sites of a symbol in one of four scopes (this bound symbol, project, group, everywhere), with a choice of report width.
 
 ## 0.31.0-alpha
 

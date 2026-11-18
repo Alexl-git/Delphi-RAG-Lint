@@ -218,6 +218,7 @@ uses
   , DRagLint.Refactor   .ExtractMethod
   , DRagLint.CLI.Unwith
   , DRagLint.Query.ExceptionFacts
+  , DRagLint.Query.UsageScope { 1.52 FUSCOPE: usages --scope }
   , DRagLint.Refactor.CompileGate
   , DRagLint.Refactor   .EnumHelper
   , DRagLint.Diagnostics.CompileCheck
@@ -1126,6 +1127,17 @@ begin
     else if A = '--no-preprocess' then Result.NoPreprocess:= True { PP-Task-9: revert index to raw all-branch parsing }
     else if (A = '--build-config') and (i < ParamCount) then begin Inc(i); Result.BuildConfig:= ParamStr(i); end  // dl:ok multiple-statements-per-line@902e -- REVIEWED 2026-10-26: the ParseArgs one-line value-flag arm shape shared by every sibling arm
     else if (A = '--width') and (i < ParamCount) then begin Inc(i); Result.Width:= ParamStr(i); end
+    { 1.52 FUSCOPE: usages --scope / --group (before the generic --scope arm, which is doc forget's) }
+    else if (A = '--scope') and (Result.Command = 'usages') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.UsagesScope:= ParamStr(i);
+    end
+    else if (A = '--group') and (Result.Command = 'usages') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.UsagesGroup:= ParamStr(i);
+    end
     else if (A = '--project') and (i < ParamCount) then begin Inc(i); Result.ProjectPath:= ParamStr(i); Result.ProjectFromConfig:= False; end  // dl:ok multiple-statements-per-line@7a94 -- REVIEWED 2026-10-25: the ParseArgs one-line value-flag arm shape shared by every sibling arm; X-11 adds the config-flag reset to it
     else if (A = '--rules-dir') and (i < ParamCount) then begin Inc(i); Result.RulesDir:= ParamStr(i); end
     else if (A = '--category') and (i < ParamCount) then begin Inc(i); Result.RuleCategory:= ParamStr(i); end
@@ -10133,7 +10145,20 @@ const
   USAGES_FALLBACK_DEPTH = 4;
 begin
   if not ExplicitDbsExist(AArgs, 'usages') then Exit(2);
-  if AArgs.Name = '' then begin Writeln('Usage: drag-lint usages --name <X> ' + '[--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]'); Exit(2); end;
+  { 1.52 FUSCOPE: a position (--in F --line L [--col C]) names the symbol as well as --name does. }
+  var HasPosition: Boolean:= (AArgs.InFile <> '') and (AArgs.RefLine > 0);
+  if (AArgs.Name = '') and not HasPosition then
+  begin
+    Writeln('Usage: drag-lint usages --name <X> | --in <file> --line <L> [--col <C>] [--scope ' + UsageScopeChoices + '] [--group <x.groupproj>] ' +
+      '[--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]');
+    Exit(2);
+  end;
+  var Requested: TUsageScope:= USAGE_SCOPE_DEFAULT;
+  if (AArgs.UsagesScope <> '') and not TryParseUsageScope(AArgs.UsagesScope, Requested) then
+  begin
+    Writeln(ErrOutput, Format('usages: unknown --scope "%s"; use %s', [AArgs.UsagesScope, UsageScopeChoices]));
+    Exit(2);
+  end;
   Width:= LowerCase(AArgs.Width);
   if Width = '' then Width:= 'narrow';
 
@@ -10171,6 +10196,56 @@ begin
 
   if AArgs.UsagesRw then Exit(DoUsagesReadersWriters(AArgs, PathsToScan));
 
+  { 1.52 FUSCOPE: the identifier, what it is bound to, and the scope actually answered.
+    symbol (the default) = the declaration the position / a qualified name is bound to;
+    a bare name with no position binds nothing and is answered as scope project, said so. }
+  var QueryName: string:= AArgs.Name;
+  if (QueryName = '') and HasPosition then QueryName:= IdentifierAtFilePosition(AArgs.InFile, AArgs.RefLine, AArgs.RefCol);
+  if QueryName = '' then
+  begin
+    Writeln(ErrOutput, Format('usages: no identifier at %s:%d:%d', [AArgs.InFile, AArgs.RefLine, AArgs.RefCol]));
+    Exit(2);
+  end;
+  var Scope: TUsageScope:= Requested;
+  var ScopeNote: string:= '';
+  var Binding: TUsageBinding:= Default(TUsageBinding);
+  var BindDb: string:= '';
+  if Scope = usSymbol then
+  begin
+    if HasPosition then
+    begin
+      for DbPath in PathsToScan do
+        if TFile.Exists(DbPath) then
+        begin
+          BindDb:= DbPath;
+          Break;
+        end;
+      var BindOk: Boolean;
+      var BindStore: ISymbolStore:= OpenReadOnlyStore(BindDb, BindOk);
+      if BindOk and (BindStore <> nil) then
+        Binding:= BindUsageAt(BindStore, ExpandFileName(AArgs.InFile), Copy(QueryName, LastDelimiter('.', QueryName) + 1, MaxInt), AArgs.RefLine, AArgs.RefCol);
+      BindStore:= nil;
+      if Binding.Bound and not Binding.HasDecl then QueryName:= Binding.QName { a library target: the qualified path below }
+      else if not Binding.Bound then
+      begin
+        Scope:= usProject;
+        ScopeNote:= Format('nothing is bound at %s:%d; answered scope project (every "%s")', [AArgs.InFile, AArgs.RefLine, QueryName]);
+      end;
+    end
+    else if not QueryName.Contains('.') then
+    begin
+      Scope:= usProject;
+      ScopeNote:= USAGE_NOTE_BARE_NAME;
+    end;
+  end;
+  { The wider scopes match the NAME: a qualified --name keeps its last segment. }
+  if Scope <> usSymbol then QueryName:= Copy(QueryName, LastDelimiter('.', QueryName) + 1, MaxInt);
+  var GroupNote: string;
+  var ScanDbs: TArray<string>:= UsageScopeDbs(Scope, PathsToScan, AArgs.UsagesGroup, AArgs.CheckPlatform, GroupNote);
+  if GroupNote <> '' then Writeln(ErrOutput, 'usages: NOTE -- ', GroupNote);
+  { The bare-name answer is the historical one: its note goes in the document, not on stderr. }
+  if (ScopeNote <> '') and HasPosition then Writeln(ErrOutput, 'usages: NOTE -- ', ScopeNote);
+
   JRoot:= TJSONObject.Create;
   JDecls := TJSONArray.Create; JReads := TJSONArray.Create;
   JWrites:= TJSONArray.Create; JCalls := TJSONArray.Create;
@@ -10183,8 +10258,12 @@ begin
     the loop early. Attached-then-filled is fine: AddPair keeps the reference
     and AddElement on it afterwards lands in the document. Key order is the
     order of these AddPairs, unchanged from when they sat after the loop. }
-  JRoot.AddPair('name', AArgs.Name);
+  JRoot.AddPair('name', QueryName);
   JRoot.AddPair('width'       , Width  );
+  JRoot.AddPair('scope'       , USAGE_SCOPE_NAMES[Scope]); { 1.52 FUSCOPE: the scope ANSWERED }
+  if Scope <> Requested then JRoot.AddPair('scope_requested', USAGE_SCOPE_NAMES[Requested]);
+  if ScopeNote <> '' then JRoot.AddPair('scope_note', ScopeNote);
+  if Binding.Bound then JRoot.AddPair('bound', Binding.QName);
   JRoot.AddPair('declarations', JDecls );
   JRoot.AddPair('reads'       , JReads );
   JRoot.AddPair('writes'      , JWrites);
@@ -10195,10 +10274,14 @@ begin
   JRoot.AddPair('raises'      , JRaises);
   JRoot.AddPair('handles'     , JHandles);
   JRoot.AddPair('impact'      , JImpact);
+  var JDbs: TJSONArray:= TJSONArray.Create;
+  JRoot.AddPair('databases', JDbs); { 1.52 FUSCOPE: what the scope read }
   try
-    for DbPath in PathsToScan do
+    for DbPath in ScanDbs do
     begin
       if not TFile.Exists(DbPath) then Continue;
+      { symbol ids are per store: a declaration bound at a position is looked up in its own store only }
+      if (Scope = usSymbol) and Binding.HasDecl and not SameText(ExpandFileName(DbPath), ExpandFileName(BindDb)) then Continue;
       { OpenReadOnlyStore, NOT Create+Migrate. Until 2026-09-14 this loop opened
         every --db read-write and migrated it as a side effect of a read: a v12
         index handed to `usages` came back at the current schema, 31 tables and
@@ -10216,7 +10299,15 @@ begin
         Continue;
       end;
 
-      var Decls: TArray<TSymbol>:= Store.FindSymbolsByExactName(AArgs.Name);
+      JDbs.Add(DbPath);
+      var Decls: TArray<TSymbol>;
+      var Refs : TArray<TReference>;
+      if (Scope = usSymbol) and Binding.HasDecl then Refs:= BoundUsageRefs(Store, Binding, Decls)
+      else
+      begin
+        Decls:= Store.FindSymbolsByExactName(QueryName);
+        Refs := UsageRefsForName(Store, QueryName, Decls);
+      end;
       for S in Decls do
       begin
         DeclO:= TJSONObject.Create;
@@ -10228,10 +10319,10 @@ begin
         JDecls.AddElement(DeclO);
       end;
 
-      for R in UsageRefsForName(Store, AArgs.Name, Decls) do AddRefRow(GroupFor(R, Decls), Store.GetFilePath(R.FileId), R.StartLine, R.StartCol, R.Resolution);
+      for R in Refs do AddRefRow(GroupFor(R, Decls), Store.GetFilePath(R.FileId), R.StartLine, R.StartCol, R.Resolution);
 
       if (Width = 'wide') or (Width = 'very-wide') then
-        for L in Store.FindTransitiveCallers(AArgs.Name, Depth) do
+        for L in Store.FindTransitiveCallers(QueryName, Depth) do
         begin
           { TImpactLevel is an aggregate per transitive depth: how many distinct
             callers / units reference the symbol at that level. }
@@ -10274,7 +10365,9 @@ begin
     end
     else
     begin
-      Writeln(Format('usages of "%s" (width=%s)', [AArgs.Name, Width]));
+      Writeln(Format('usages of "%s" (width=%s)', [QueryName, Width]));
+      Writeln('  scope: ' + USAGE_SCOPE_NAMES[Scope] + (if Binding.Bound then ' (' + Binding.QName + ')' else '') +
+        (if Scope <> Requested then ' -- asked ' + USAGE_SCOPE_NAMES[Requested] + ': ' + ScopeNote else ''));
       Writeln(Format('  declarations: %d', [JDecls.Count]));
       Writeln(Format(
           '  reads: %d  writes: %d  calls: %d  types: %d  attributes: %d  events: %d  raises: %d  handles: %d',

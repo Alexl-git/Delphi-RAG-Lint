@@ -102,6 +102,7 @@ uses
   DRagLint.Query.Fuzzy in '..\query\DRagLint.Query.Fuzzy.pas',
   DRagLint.Query.IdentWords in '..\query\DRagLint.Query.IdentWords.pas',
   DRagLint.Query.Callers in '..\query\DRagLint.Query.Callers.pas',
+  DRagLint.Query.UsageScope in '..\query\DRagLint.Query.UsageScope.pas',
   DRagLint.Query.ExceptionFacts in '..\query\DRagLint.Query.ExceptionFacts.pas',
   DRagLint.Query.Implementors in '..\query\DRagLint.Query.Implementors.pas',
   DRagLint.Query.CrossImpact in '..\query\DRagLint.Query.CrossImpact.pas',

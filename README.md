@@ -258,6 +258,7 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
   The 0-caller hint says so and names the bare name. A property getter/setter (`GetFoo`) is also 0 in the plain form -- the default
   stays name-based -- and its hint points at `usages --rw`, which lists the readers and writers of a member, plain backing fields included (`find-callers --resolved` still reaches it through the property).
   `usages` counts a qualified call `FHost.Feed(x)` once (it used to count the stored call + member-access pair twice).
+  `usages --scope symbol|project|group|everywhere` (1.52): the default `symbol` answers the declaration a position (`--in F --line L --col C`) or a qualified name is bound to, in this project; `project` every object of the name in this project (a bare `--name` with no position), `group` the name in every project of `--group <x.groupproj>`, `everywhere` the name in every index the manifest knows. The IDE (Find Usages submenu + panel scope box), the LSP references (`dragLint.usagesScope`) and the MCP `find_usages` tool use the same four words.
 * `find-callers` also reports interface dispatch (RB-5): a method reached only THROUGH an interface method it implements
   lists those sites as a separate `via <IFoo.Bar> dispatch` group; `--json` rows gain `via` (the interface method),
   `via_kind` (`interface`) and, when the `implements` edge is ambiguous, `via_edge`, all placed before `resolution`.
@@ -885,7 +886,7 @@ be written and writes nothing. This verb replaces `Register-DragLintProtocol.ps1
 |---|---:|---|
 | [Indexing](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#indexing) | 15 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#indexing) |
 | [Search and navigation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#search-and-navigation) | 38 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#search-and-navigation) |
-| [Linting](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#linting) | 68 (+ 425 rules, 126 fixable) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#linting) |
+| [Linting](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#linting) | 69 (+ 426 rules, 126 fixable) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#linting) |
 | [Documentation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#documentation) | 12 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#documentation) |
 | [Refactoring and code generation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#refactoring-and-code-generation) | 23 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#refactoring-and-code-generation) |
 | [Component conversion](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#component-conversion) | 25 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#component-conversion) |

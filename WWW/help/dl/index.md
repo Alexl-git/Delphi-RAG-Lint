@@ -46,7 +46,7 @@ Find symbols, callers, callees, text and types in the index.
 | [find-callees](features/find-callees.md) | Lists the resolved outgoing calls of one routine, plus the library-bound ones | 0.91.0-alpha |
 | [Find Undocumented (public)](features/find-undocumented-public.md) | Uses query find to list indexed symbols filtered by documentation state, kind, or visibility | 0.1.0-alpha |
 | [find-unit](features/find-unit.md) | Finds which indexed unit declares a symbol, and adds that unit to a file's uses clause | 0.69.0-alpha |
-| [Find Usages](features/find-usages.md) | Lists every reference to the symbol under the editor caret across the indexed project | 0.33.0-alpha |
+| [Find Usages](features/find-usages.md) | Lists every reference to the symbol under the editor caret, in one of four scopes: this bound symbol (default), project, group or everywhere | 0.33.0-alpha |
 | [Find Usages](features/find-usages-context.md) | Lists references to the symbol represented by a Structure-tree node | 0.33.0-alpha |
 | [Gain (counted savings)](features/gain-usage-log.md) | Sums the per-user usage log: tokens returned versus source bytes avoided, per verb and per day | 1.38.0-alpha |
 | [Go to Declaration](features/go-to-declaration.md) | Jumps the editor caret to the declaration of the symbol represented by a Structure-tree node | 0.43.0-alpha |
@@ -71,7 +71,7 @@ Find symbols, callers, callees, text and types in the index.
 | [Symbol Slice](features/symbol-slice.md) | Shows the slice of code relevant to one symbol: its declaration, body, and immediate context | 0.17.0-alpha |
 | [syntax-count](features/syntax-count.md) | Counts modern syntax in the parse of every unit, uncapped: Delphi 13 if-expressions, is not, not in; inline var/const; anonymous methods; multiline strings | 1.42.0-alpha |
 | [Type at Cursor](features/type-at-cursor.md) | Resolves the static type of the expression under the editor caret | 0.19.0-alpha |
-| [usages](features/usages.md) | Finds usage sites of a named symbol, with a choice of report width | 0.33.0-alpha |
+| [usages](features/usages.md) | Finds usage sites of a symbol in one of four scopes (this bound symbol, project, group, everywhere), with a choice of report width | 0.33.0-alpha |
 | [uses-recover](features/uses-recover.md) | Recovers the uses edges of units that ship without source, from the vendor's .hpp headers and a dcc map; never reads a .dcu; --apply stores them in the index | 1.50.0-alpha |
 | [wiki](features/wiki.md) | Looks up the dl:wiki concept topics a team has written into their own doc comments, and routes a human phrase to the code that implements it | 1.7.0-alpha |
 
@@ -145,6 +145,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Wider built-in rules (1.51)](features/v151-wid-ast-rules.md) | Six built-in rules read more constructs: code-page and label exemptions, named zero constants, implied else-if, thread dialogs, Supports aliases | 1.51.0-alpha |
 | [Wider scm rules and three new fixers](features/v151-wid-scm-rules.md) | Seven built-in rules read more constructs; empty-finally, format-string-not-formatted and shared-marker-legacy-shape gain autofixes | 1.51.0-alpha |
 | [CLI fixes in 1.51.1](features/v1511-cli-fixes.md) | lint-all --rule a,b runs only those rules, a DB copy stays on the copy; rules --rule; info versions; index parse-errors; resolve-only warning | 1.51.1-alpha |
+| [member-could-be-private lint rule (lane ATLB)](features/v152-atlb-rules.md) | Hints (OFF in 1.52) on a public class member referenced only inside its own unit; published, virtual, interface-implementing, attributed and shared-unit members stay silent | 1.52.0-alpha |
 | [Default-on form, dataset and data-module rules](features/v152-defaults.md) | Four lint rules on by default since 1.52 (form object/field, foreign form access, edit without post, data module form global); a shipped exempt-class list | 1.52.0-alpha |
 | [Array index possibly out of range lint rule (index-possibly-out-of-range)](features/v152-index-possibly-out-of-range.md) | Warns (OFF in 1.52) on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only | 1.52.0-alpha |
 | [warm-rule-cache](features/warm-rule-cache.md) | Fills the lint rule cache for a project index; index runs warm it, or start it in the background (--rule-cache-warm) | 1.39.0-alpha |

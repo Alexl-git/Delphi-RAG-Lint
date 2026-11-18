@@ -550,7 +550,95 @@ uses
 , DRagLint.Query.HappensBefore { check_init (1.52 HBSOLVER): CheckInit, the solver }
   , DRagLint.Query.Callers   { Gitea #31: the CLI's resolved callers and name filters }
   , DRagLint.Index.Freshness { Gitea #34: the freshness note of the store a tool reads }
+  , DRagLint.Query.UsageScope { find_usages (1.52 FUSCOPE): the four scopes, shared with the CLI and the LSP }
   ;
+
+/// <summary>The find_usages answer (1.52 FUSCOPE): the usages of a name or of the
+/// symbol at a position, in one of the four scopes, as text.</summary>
+/// <param name="AHome">The project's store; must not be nil.</param>
+/// <param name="AHomePath">Its database path ('' when unknown).</param>
+/// <param name="AName">The name; '' takes the identifier at AFile:ALine:ACol.</param>
+/// <param name="AFile">The source file of the position, or ''.</param>
+/// <param name="ALine">1-based line, 0 = no position.</param>
+/// <param name="ACol">1-based column, 0 = any on the line.</param>
+/// <param name="AScope">The scope asked for.</param>
+/// <param name="AGroup">The .groupproj scope group reads, or ''.</param>
+/// <param name="AOpen">Opens another database read-only; nil result = skipped.</param>
+/// <returns>A header naming the scope answered (and what it is bound to), a note when
+/// it is not the one asked, one line per declaration and per usage row
+/// (bucket file:line:col), and the databases read. Same rules as `usages --scope`.</returns>
+function UsagesText(const AHome: ISymbolStore; const AHomePath, AName, AFile: string; ALine, ACol: Integer;  // dl:ok too-many-parameters@3f3e -- REVIEWED 2026-11-18 FUSCOPE: the find_usages tool arguments one for one; a record would be filled at its single call site only
+  AScope: TUsageScope; const AGroup: string; const AOpen: TFunc<string, ISymbolStore>): string;
+begin
+  var Name: string:= AName;
+  var HasPos: Boolean:= (AFile <> '') and (ALine > 0);
+  if (Name = '') and HasPos then Name:= IdentifierAtFilePosition(AFile, ALine, ACol);
+  if Name = '' then Exit('find_usages: no name and no identifier at the position');
+  var Scope: TUsageScope:= AScope;
+  var Note: string:= '';
+  var B: TUsageBinding:= Default(TUsageBinding);
+  if Scope = usSymbol then
+  begin
+    if HasPos then
+    begin
+      B:= BindUsageAt(AHome, ExpandFileName(AFile), Copy(Name, LastDelimiter('.', Name) + 1, MaxInt), ALine, ACol);
+      if B.Bound and not B.HasDecl then Name:= B.QName
+      else if not B.Bound then
+      begin
+        Scope:= usProject;
+        Note:= Format('nothing is bound at %s:%d; answered scope project', [AFile, ALine]);
+      end;
+    end
+    else if not Name.Contains('.') then
+    begin
+      Scope:= usProject;
+      Note:= USAGE_NOTE_BARE_NAME;
+    end;
+  end;
+  if Scope <> usSymbol then Name:= Copy(Name, LastDelimiter('.', Name) + 1, MaxInt);
+  var Stores: TArray<ISymbolStore>:= [AHome];
+  var Paths : TArray<string>:= [AHomePath];
+  if Scope in [usGroup, usEverywhere] then
+  begin
+    var WideNote: string;
+    for var D: string in UsageScopeDbs(Scope, [AHomePath], AGroup, '', WideNote) do
+    begin
+      if SameText(D, ExpandFileName(AHomePath)) or not Assigned(AOpen) then Continue;
+      var Extra: ISymbolStore:= AOpen(D);
+      if Extra = nil then Continue;
+      Stores:= Stores + [Extra];
+      Paths := Paths + [D];
+    end;
+    if WideNote <> '' then Note:= WideNote;
+  end;
+  var SB: TStringBuilder:= TStringBuilder.Create;
+  try
+    SB.Append(Format('usages of "%s" -- scope %s', [Name, USAGE_SCOPE_NAMES[Scope]]));
+    if B.Bound then SB.Append(' (' + B.QName + ')');
+    SB.AppendLine;
+    if Note <> '' then SB.AppendLine('note: ' + Note + ' (asked ' + USAGE_SCOPE_NAMES[AScope] + ')');
+    for var I:= 0 to High(Stores) do
+    begin
+      var St: ISymbolStore:= Stores[I];
+      var Decls: TArray<TSymbol>;
+      var Refs : TArray<TReference>;
+      if (Scope = usSymbol) and B.HasDecl then Refs:= BoundUsageRefs(St, B, Decls)
+      else
+      begin
+        Decls:= St.FindSymbolsByExactName(Name);
+        Refs := UsageRefsForName(St, Name, Decls);
+      end;
+      for var D: TSymbol in Decls do
+        SB.AppendLine(Format('declaration %s  %s:%d', [D.QualifiedName, St.GetFilePath(D.FileId), D.StartLine]));
+      for var R: TReference in Refs do
+        SB.AppendLine(Format('%s  %s:%d:%d', [UsageBucketIn(R, Decls), St.GetFilePath(R.FileId), R.StartLine, R.StartCol]));
+    end;
+    SB.Append('databases: ' + string.Join('; ', Paths));
+    Result:= SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
 
 const
   { JSON-RPC 2.0 implementation-defined server error: the tool could not answer
@@ -815,6 +903,20 @@ begin
       '{"type":"object","properties":{' + '"name":{"type":"string","description":"Callee/handler name"},'
         + '"context":{"type":"integer","description":"Number of surrounding source lines to include (optional, default 0)"}' + '},"required":["name"],"additionalProperties":false}'
     ));
+
+  Tools.AddElement(ToolDescriptor(
+      'find_usages', 'USE FOR "where is X used" (reads, writes, calls, type uses, ...). Scope (same words as '
+        + '`usages --scope`): symbol (default) = the declaration a position (file/line/col) or a qualified name is '
+        + 'BOUND to, in this project; project = every object of the name in this project; group = the name in every '
+        + 'project of a .groupproj; everywhere = the name in every index the manifest knows. A bare name with no '
+        + 'position binds nothing and is answered as scope project (said so).',
+      '{"type":"object","properties":{' + '"name":{"type":"string","description":"Bare or qualified name (optional when file+line are given)"},'
+        + '"file":{"type":"string","description":"Source file of the position (optional)"},'
+        + '"line":{"type":"integer","description":"1-based line of the position (optional)"},'
+        + '"col":{"type":"integer","description":"1-based column of the position (optional)"},'
+        + '"scope":{"type":"string","enum":["symbol","project","group","everywhere"],"description":"Default symbol"},'
+        + '"group":{"type":"string","description":"The .groupproj scope group reads (optional)"},'
+        + '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' + '},"additionalProperties":false}'));
 
   Tools.AddElement(ToolDescriptor(
       'lint', 'Run the linter on a file or folder. Returns each finding with rule id, ' + 'severity, file:line:col, and message. Built-in rules + any *.scm rule '
@@ -1474,6 +1576,44 @@ begin
       var CtxLines:= 0;
       if Args.GetValue('context') <> nil then CtxLines:= StrToIntDef(Args.GetValue('context').Value, 0);
       ResultText:= FindCallersText(Name, CtxLines);
+    end // if
+    else if ToolName = 'find_usages' then
+    begin
+      var UStore:= ResolveStore(Args);
+      if UStore = nil then
+      begin
+        SendError(AId, JSONRPC_SERVER_ERROR, NoStoreMessage);
+        Exit;
+      end;
+      var UPath: string:= '';
+      if (Args <> nil) and (Args.GetValue('db') <> nil) then UPath:= Args.GetValue('db').Value
+      else if Length(FDbPaths) > 0 then UPath:= FDbPaths[0];
+      var UName : string:= Args.GetValue<string>('name' , '');
+      var UFile : string:= Args.GetValue<string>('file' , '');
+      var UGroup: string:= Args.GetValue<string>('group', '');
+      var ULine : Integer:= 0;
+      var UCol  : Integer:= 0;
+      if Args.GetValue('line') <> nil then ULine:= StrToIntDef(Args.GetValue('line').Value, 0);
+      if Args.GetValue('col' ) <> nil then UCol := StrToIntDef(Args.GetValue('col' ).Value, 0);
+      var UScope: TUsageScope:= USAGE_SCOPE_DEFAULT;
+      var UScopeWord: string:= Args.GetValue<string>('scope', '');
+      if (UScopeWord <> '') and not TryParseUsageScope(UScopeWord, UScope) then
+      begin
+        SendError(AId, JSONRPC_INVALID_PARAMS, 'find_usages: unknown scope "' + UScopeWord + '"; use ' + UsageScopeChoices);
+        Exit;
+      end;
+      if (UName = '') and ((UFile = '') or (ULine <= 0)) then
+      begin
+        SendError(AId, JSONRPC_INVALID_PARAMS, 'find_usages requires name, or file and line');
+        Exit;
+      end;
+      ResultText:= UsagesText(UStore, UPath, UName, UFile, ULine, UCol, UScope, UGroup,
+        function(pDb: string): ISymbolStore
+        var
+          OpenError: string;
+        begin
+          Result:= OpenStore(pDb, OpenError);
+        end);
     end // if
     else if ToolName = 'lint' then
     begin

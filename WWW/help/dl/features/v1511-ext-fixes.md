@@ -31,7 +31,7 @@ drag-lint index --project <file.dproj> --db <file.sqlite>
 Full flag list: [index in the CLI reference](../cli.md#index).
 
 ```text
-drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file> [--no-create]] [--library-db <lib.sqlite>]
+drag-lint usages --name <X> | --in <file> --line <L> [--col <C>] [--scope symbol|project|group|everywhere] [--group <x.groupproj>] [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file> [--no-create]] [--library-db <lib.sqlite>]
 ```
 
 Example:

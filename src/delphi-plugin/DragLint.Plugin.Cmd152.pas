@@ -84,6 +84,10 @@ type
     Surfaces: TCmd152Surfaces;
     /// <summary>Caret context the editor item needs to be enabled.</summary>
     Needs: TCmd152Needs;
+    /// <summary>1.52 FUSCOPE: the submenu under the editor right-click "drag-lint"
+    /// submenu the item sits in; '' (the default of an unset field) = directly in
+    /// "drag-lint", as before.</summary>
+    EditorParent: string;
   end;
 
   /// <summary>The host's item factory: creates one clickable item, wires its
@@ -128,8 +132,8 @@ function Cmd152Enabled(const pCommand: TCmd152Command; pHasSymbol, pHasFinding: 
 /// <summary>The full right-click menu path of a row, as feature-registry
 /// surfaces spell it.</summary>
 /// <param name="pCommand">The row.</param>
-/// <returns>'Editor context > drag-lint > ' + the caption, hotkey ampersands
-/// removed; '' when the row is not on csEditorContext.</returns>
+/// <returns>'Editor context > drag-lint > ' + (EditorParent + ' > ' when set) + the
+/// caption, hotkey ampersands removed; '' when the row is not on csEditorContext.</returns>
 function Cmd152EditorPath(const pCommand: TCmd152Command): string;
 
 /// <summary>Creates one menu item per csMainMenu row under pRoot, hidden when
@@ -220,7 +224,10 @@ end;
 
 function Cmd152EditorPath(const pCommand: TCmd152Command): string;
 begin
-  Result:= if csEditorContext in pCommand.Surfaces then EDITOR_PATH_PREFIX + StripHotkey(pCommand.Caption) else '';
+  if csEditorContext not in pCommand.Surfaces then Exit('');
+  Result:= EDITOR_PATH_PREFIX;
+  if pCommand.EditorParent <> '' then Result:= Result + StripHotkey(pCommand.EditorParent) + ' ' + PATH_SEP + ' ';
+  Result:= Result + StripHotkey(pCommand.Caption);
 end;
 
 { Child of pParent whose caption equals pCaption, hotkey ampersands ignored. }

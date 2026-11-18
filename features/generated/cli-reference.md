@@ -1323,6 +1323,7 @@ Described in:
 * [Text rules: bidi, invisible, control chars, TODO, header, strings](../../docs/wiki/text-rules.md)
 * [Typing and ownership lint rules (casts, Self as interface, destructors)](../../docs/wiki/typing-and-ownership-rules.md)
 * [CLI fixes in 1.51.1](../../docs/wiki/v1511-cli-fixes.md)
+* [member-could-be-private lint rule (lane ATLB)](../../docs/wiki/v152-atlb-rules.md)
 
 ### lint-project
 
@@ -2157,6 +2158,10 @@ drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--dep
 | `--in` | `<file>` |  |  |
 | `--library-db` | `<lib.sqlite>` |  |  |
 | `--no-create` |  |  |  |
+| `--scope` | `symbol\|project\|group\|everywhere` |  |  |
+| `--group` | `<x.groupproj>` |  |  |
+| `--line` | `<L>` |  |  |
+| `--col` | `<C>` |  |  |
 
 Described in:
 
