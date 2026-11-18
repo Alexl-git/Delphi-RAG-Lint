@@ -269,7 +269,8 @@ uses
     in the signatures below, and it also supplies DocFactsBuildProfile here. }
   System.Classes, System.StrUtils, System.IOUtils,
   DRagLint.Doc.Drift, DRagLint.Doc.Document,
-  DRagLint.Index.Freshness; { ChangedFilePaths -- see StaleCalleeReads }
+  DRagLint.Index.Freshness, { ChangedFilePaths -- see StaleCalleeReads }
+  DRagLint.V152.DOCPOL.Support; { MethodImplHasCode -- v1.52 B2 bound-handler policy }
 
 { Kinds CDD/DocInsight applies to: public/published types + routines +
   properties. Excludes containers (unit/program/package), fields (CDD scopes
@@ -338,7 +339,9 @@ end;
   (1) the getter/setter of a DOCUMENTED property of the same class (the doc sits
       on the property; found by the Get<X>/Set<X> naming convention);
   (2) an `override` (the base declaration owns the contract);
-  (3) a method the .dfm binds to an event (a published handler, not API).
+  (3) a method the .dfm binds to an event AND whose body is empty (v1.52 B2: a bound
+      handler WITH code is real code and needs a doc comment -- this REVERSES the
+      1.51.1 R2c skip for the non-empty case; an empty handler is still skipped).
   Guard: tests\autodoc\run_v1511_DOCLINT_missingdoc.ps1. }
 function IsRoutineKind(AKind: TSymbolKind): Boolean;
 begin
@@ -467,7 +470,8 @@ begin
         if IsAccessorOfDocumentedProperty(AStore, Sym) then Continue;
         if DeclIsOverride(AStore.GetFilePath(Sym.FileId), Sym.StartLine) then Continue;
         if Handlers = nil then Handlers:= DfmBoundHandlers(AStore);
-        if Handlers.ContainsKey(LowerCase(ChangeFileExt(AStore.GetFilePath(Sym.FileId), '.dfm')) + '|' + LowerCase(Sym.Name)) then Continue;
+        if Handlers.ContainsKey(LowerCase(ChangeFileExt(AStore.GetFilePath(Sym.FileId), '.dfm')) + '|' + LowerCase(Sym.Name))
+          and not MethodImplHasCode(AStore.GetFilePath(Sym.FileId), Sym.Name) then Continue;
       end;
       F:= Default(TLintFinding);
       F.RuleId  := 'missing-doc';
