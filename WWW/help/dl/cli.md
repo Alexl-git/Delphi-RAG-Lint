@@ -1826,11 +1826,24 @@ Described in [Rename Symbol](features/rename-symbol.md).
 Keeps the TableTools field registry in one SQLite file per database, filled from Firebird (read-only), with a diffable text backup.
 
 ```text
-drag-lint repo <init|info|import-fb|seed-fb|refresh-schema|backup|restore|gen-memtable> (--repo <file> | --project <project file>) [--connection "<Firebird connection string>"] [--in <file>] [--output <file>] [--name <Name>] [--replace] [--dry-run] [--json]   (the field repository: one SQLite file per database; Firebird is only read)
+drag-lint repo <init|info|import-fb|seed-fb|refresh-schema|backup|restore|gen-memtable|gen-param-array> (--repo <file> | --project <project file>) [--connection "<Firebird connection string>"] [--in <file>] [--output <file>] [--name <Name>] [--replace] [--dry-run] [--json]   (the field repository: one SQLite file per database; Firebird is only read; gen-param-array needs no repository)
 ```
 
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
+| `--all` |  |  |  |
+| `--apply` |  |  |  |
+| `--build-timeout` | `<s>` |  |  |
+| `--dfm` | `<file>` |  |  |
+| `--no-backup` |  |  |  |
+| `--only` | `<unit,...>` |  |  |
+| `--plan` |  |  |  |
+| `--platform` | `<p>` |  |  |
+| `--progress-form` | `<Form>` |  |  |
+| `--query` | `<Name>` |  |  |
+| `--rsvars` | `<bat>` |  |  |
+| `--step-size` | `<n>` |  |  |
+| `--table` | `<Name>` |  |  |
 | `--connection` | `<Firebird connection string>` |  |  |
 | `--dry-run` |  |  |  |
 | `--in` | `<backup file>` |  |  |

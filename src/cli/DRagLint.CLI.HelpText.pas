@@ -506,6 +506,7 @@ begin
   Writeln('  drag-lint repo backup         (--repo <file> | --project <project file>) [--output <file>]   (write the diffable text backup; default <repo>.txt)');
   Writeln('  drag-lint repo restore        --in <backup file> (--repo <file> | --project <project file>) [--replace]   (create the repository when missing; a malformed backup prints "line <n>: ..." and exits 2, nothing changed)');
   Writeln('  drag-lint repo gen-memtable   --in <csv file> [--name <Name>] [--output <file>]   (Pascal source that builds the fields of a TFDMemTable from a field-definition CSV; exit 2 on a bad CSV)');
+  Writeln('  drag-lint repo gen-param-array (--in <unit.pas> [--dfm <file>] | --project <X.dproj> --all [--only <unit,...>]) [--query <Name>] [--table <Name>] [--step-size <n>] [--progress-form <Form>] [--plan | --apply --project <X.dproj> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] [--json]   (FireDAC Array-DML loop from the unit''s DFM, inserted as a braced comment before the final end.; no flag prints the block, --plan the diff, --apply writes through ONE compile gate; exit 1 a unit refused or no block, 2 bad flags or a baseline that does not build)');
   Writeln('  drag-lint bookmarks --in <file.pas|dir> [--name <code>] [--format text|json] [--json] (list / find the // dl:bk<N> and // dl:bk:<CODE> comment anchors; read-only; exit 3 = none)');
   Writeln('       see wiki page: bookmarks');
   Writeln('  drag-lint bookmarks-restore --from <sidecar.json> [--apply] [--json|--format json] (puts the anchors a bookmarks-strip removed back, byte-identical when the file is unchanged; a file with an anchor it cannot place is left untouched; dry run without --apply; exit 4 = some unplaced)');
@@ -1523,6 +1524,7 @@ begin
     Writeln('  drag-lint repo backup         (--repo <file> | --project <project file>) [--output <file>]   (write the diffable text backup; default <repo>.txt)');
     Writeln('  drag-lint repo restore        --in <backup file> (--repo <file> | --project <project file>) [--replace]   (create the repository when missing; a malformed backup prints "line <n>: ..." and exits 2, nothing changed)');
     Writeln('  drag-lint repo gen-memtable   --in <csv file> [--name <Name>] [--output <file>]   (Pascal source that builds the fields of a TFDMemTable from a field-definition CSV; exit 2 on a bad CSV)');
+    Writeln('  drag-lint repo gen-param-array (--in <unit.pas> [--dfm <file>] | --project <X.dproj> --all [--only <unit,...>]) [--query <Name>] [--table <Name>] [--step-size <n>] [--progress-form <Form>] [--plan | --apply --project <X.dproj> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] [--json]   (FireDAC Array-DML loop from the unit''s DFM, inserted as a braced comment before the final end.; no flag prints the block, --plan the diff, --apply writes through ONE compile gate; exit 1 a unit refused or no block, 2 bad flags or a baseline that does not build)');
     Exit;
   end;
   Result := False;

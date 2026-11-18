@@ -120,6 +120,26 @@ function PATypeFromDfmToken(const pToken: string): TPAFieldType;
 function PADiscoverFromDfm(const pDfm: string; out pQueryName, pTableName: string;
   out pSrc, pDst: TPAColumns): Boolean;
 
+/// <summary>Like PADiscoverFromDfm, but a non-empty pWantQuery / pWantTable picks that exact
+/// component (case-insensitive) instead of the LAST parameterised query / LAST table.</summary>
+/// <param name="pDfm">Text-form DFM.</param>
+/// <param name="pWantQuery">TFDQuery component name, '' = the LAST query that has parameters.</param>
+/// <param name="pWantTable">TTable component name, '' = the LAST table.</param>
+/// <param name="pQueryName">Out: the query component name as declared in the DFM.</param>
+/// <param name="pTableName">Out: the table component name as declared in the DFM.</param>
+/// <param name="pSrc">Out: table fields in DFM order.</param>
+/// <param name="pDst">Out: query params in DFM order.</param>
+/// <returns>True when both components were found; a named component that is absent gives
+/// False (never a fallback to the heuristic).</returns>
+function PADiscoverNamed(const pDfm, pWantQuery, pWantTable: string; out pQueryName, pTableName: string;
+  out pSrc, pDst: TPAColumns): Boolean;
+
+/// <summary>True when a block holds any of the marker lines dcc rejects ('##### TYPE MISMATCH',
+/// '// MISSING PARAMS', '#### MISSING FIELDS').</summary>
+/// <param name="pBlock">Block from PABuildBlock.</param>
+/// <returns>True when at least one marker line is present.</returns>
+function PABlockHasMarkers(const pBlock: string): Boolean;
+
 /// <summary>Builds the Array-DML loop for one query/table pair (port of the assistant's
 /// block generator).</summary>
 /// <param name="pQueryName">TFDQuery component name.</param>
@@ -372,9 +392,32 @@ begin
     Result := Copy(Result, 2, Length(Result) - 2);
 end;
 
-function PADiscoverFromDfm(const pDfm: string; out pQueryName, pTableName: string; // dl:ok cyclomatic-complexity@bec1 -- REVIEWED 2026-11-17: one line-oriented DFM scanner; the branches are the DFM line kinds (object, item, end, property) sharing one scope stack
+{ Remembers the columns of a finished top-level TFDQuery / TTable under its upper-cased name. }
+procedure RememberComponent(const pScope: TDfmScope; const pQueryParams, pTableFields: TPAColumns;
+  const pQueries, pTables: TDictionary<string, TPAColumns>);
+begin
+  if SameText(pScope.ClassName, 'TFDQuery') then
+    pQueries.AddOrSetValue(UpperCase(pScope.Name), pQueryParams)
+  else if SameText(pScope.ClassName, 'TTable') then
+    pTables.AddOrSetValue(UpperCase(pScope.Name), pTableFields);
+end;
+
+{ A non-empty pWant replaces the heuristic pick with that exact component, or with nothing. }
+procedure PickNamed(const pWant: string; const pByName: TDictionary<string, TPAColumns>;
+  var pName: string; var pColumns: TPAColumns);
+begin
+  if pWant = '' then
+    Exit;
+  pName := '';
+  pColumns := nil;
+  if pByName.TryGetValue(UpperCase(pWant), pColumns) then
+    pName := pWant;
+end;
+
+function PADiscoverNamed(const pDfm, pWantQuery, pWantTable: string; out pQueryName, pTableName: string; // dl:ok cyclomatic-complexity@f8d0 -- REVIEWED 2026-11-18: one line-oriented DFM scanner; the branches are the DFM line kinds (object, item, end, property) sharing one scope stack
   out pSrc, pDst: TPAColumns): Boolean;
 var
+  LTablesByName, LQueriesByName: TDictionary<string, TPAColumns>;
   LLines: TStringList;
   LStack: TList<TDfmScope>;
   LScope: TDfmScope;
@@ -401,6 +444,8 @@ begin
   LParamType := pftUnknown;
   LLines := TStringList.Create;
   LStack := TList<TDfmScope>.Create;
+  LTablesByName := TDictionary<string, TPAColumns>.Create;
+  LQueriesByName := TDictionary<string, TPAColumns>.Create;
   try
     LLines.Text := pDfm;
     for LIdx := 0 to LLines.Count - 1 do
@@ -458,6 +503,8 @@ begin
             LGoodQuery := LScope.Name;
             LGoodParams := LQueryParams;
           end;
+          if (LScope.Kind = 'o') and (LStack.Count = DEPTH_COMPONENT) then
+            RememberComponent(LScope, LQueryParams, LTableFields, LQueriesByName, LTablesByName);
           LStack.Delete(LStack.Count - 1);
         end;
         Continue;
@@ -485,7 +532,11 @@ begin
           UnquoteValue(LVal), LFieldType);
       end;
     end;
+    PickNamed(pWantTable, LTablesByName, LCurTable, LTableFields);
+    PickNamed(pWantQuery, LQueriesByName, LGoodQuery, LGoodParams);
   finally
+    LQueriesByName.Free;
+    LTablesByName.Free;
     LStack.Free;
     LLines.Free;
   end;
@@ -497,6 +548,18 @@ begin
     pSrc := LTableFields;
     pDst := LGoodParams;
   end;
+end;
+
+function PADiscoverFromDfm(const pDfm: string; out pQueryName, pTableName: string;
+  out pSrc, pDst: TPAColumns): Boolean;
+begin
+  Result := PADiscoverNamed(pDfm, '', '', pQueryName, pTableName, pSrc, pDst);
+end;
+
+function PABlockHasMarkers(const pBlock: string): Boolean;
+begin
+  Result := ContainsStr(pBlock, '##### TYPE MISMATCH #####') or ContainsStr(pBlock, '// MISSING PARAMS')
+    or ContainsStr(pBlock, '#### MISSING FIELDS ####');
 end;
 
 { ---- block builder ---- }

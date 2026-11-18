@@ -860,7 +860,7 @@ begin
   Result:= SameText(ACommand, 'lsp') or SameText(ACommand, 'cycles') or SameText(ACommand, 'index')
     or SameText(ACommand, 'lint-all') or SameText(ACommand, 'warm-rule-cache')
     or SameText(ACommand, 'narrow-param') or SameText(ACommand, 'redundant-cast') or SameText(ACommand, 'create-enum-helper')
-    or SameText(ACommand, 'extract-interface') or SameText(ACommand, 'lazy-init');
+    or SameText(ACommand, 'extract-interface') or SameText(ACommand, 'lazy-init') or SameText(ACommand, 'repo gen-param-array');
 end;
 
 { ---- batch channel (DEC-13) ---------------------------------------------- }

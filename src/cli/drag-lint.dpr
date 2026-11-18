@@ -508,6 +508,7 @@ uses
   DRagLint.CLI.ConvertApply in 'DRagLint.CLI.ConvertApply.pas',
   DRagLint.CLI.CheckInit in 'DRagLint.CLI.CheckInit.pas',
   DRagLint.CLI.Repo in 'DRagLint.CLI.Repo.pas',
+  DRagLint.CLI.RepoParamArray in 'DRagLint.CLI.RepoParamArray.pas',
   DRagLint.CLI.Explain in 'DRagLint.CLI.Explain.pas',
   DRagLint.CLI.RuleScope in 'DRagLint.CLI.RuleScope.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
