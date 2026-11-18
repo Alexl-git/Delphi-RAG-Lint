@@ -26,6 +26,9 @@
     T4 $/cancelRequest of a running second step: -32800 within 300 ms.
     T5 an UNANNOUNCED ask elsewhere (the menu hover) during a second step does
        NOT abandon it: that step still delivers its whole result.
+    W1-W4 the plugin side, by source: the protocol constants agree with the
+       server's, the dwell announces before it asks, a partial answer is shown
+       uncached and re-asked, and a tick drops a second step the user left.
   Positive controls:
     P1 an unannounced ask is answered whole and takes the injected slow time --
        the slow switch is live, so T1 / T3 being fast is not vacuous.
@@ -278,6 +281,22 @@ end.
   $lsp.Send((J @{ jsonrpc = '2.0'; id = 2; method = 'shutdown'; params = @{} }))
   $null = WaitId 2 15000
   $lsp.Send((J @{ jsonrpc = '2.0'; method = 'exit'; params = @{} }))
+
+  # W: the RAD Studio plugin's side (source pins; the IDE is not driven here).
+  $root = (Resolve-Path "$PSScriptRoot\..\..").Path
+  $ht = [IO.File]::ReadAllText("$root\src\delphi-plugin\DragLint.Plugin.HoverTracker.pas")
+  $df = [IO.File]::ReadAllText("$root\src\lsp\DRagLint.LSP.Deferred.pas")
+  foreach ($c in 'DEFER_HOVER_METHOD', 'DEFERRED_PLACEHOLDER') {
+    $pat = "(?m)^\s*$c\s*=\s*'([^']*)';"
+    $a = [regex]::Match($ht, $pat); $b = [regex]::Match($df, $pat)
+    Check "W1 $c is the same text in the plugin and the server" ($a.Success -and $b.Success -and $a.Groups[1].Value -eq $b.Groups[1].Value) ("plugin=" + $a.Groups[1].Value + " server=" + $b.Groups[1].Value)
+  }
+  Check 'W2 the dwell announces before it asks (AnnounceDeferredHover precedes RequestHoverBundleAsync in OnTick)' `
+    ($ht -match '(?s)if FInflightAnnounced then AnnounceDeferredHover\(Client, Uri, CaretRow, CaretCol\);\s*FInflightId:= if HoverBundleUnsupported then RequestHoverTextAsync\(.*?else RequestHoverBundleAsync\(') ''
+  Check 'W3 a partial first answer is shown, NOT cached, and the same position asked again' `
+    ($ht -match '(?s)if WasFirst and \(AStatus = hvsOk\) and IsDeferredFirstAnswer\(AModel\) then\s*begin\s*if not GateAndShowInflight\(AMarkdown, AModel, ACallers\) then.*?FInflightId:= RequestHoverBundleAsync\(FInflightUri, FInflightRow, FInflightCol, OnHoverBundleAnswer\);.*?Exit;\s*end;\s*FInflightClient\s*:= nil;\s*FLastLspKey') ''
+  Check 'W4 every tick drops a second step the user moved on from (DropAbandonedSecondStep -> CancelInflight)' `
+    (($ht -match '(?s)GetCursorPos\(Pos\);\s*\{[^}]*\}\s*DropAbandonedSecondStep;') -and ($ht -match '(?s)procedure TDragLintHoverHelper\.DropAbandonedSecondStep;.*?CancelInflight;\s*end;')) ''
 }
 catch {
   Check "runner: $($_.Exception.Message)" $false
