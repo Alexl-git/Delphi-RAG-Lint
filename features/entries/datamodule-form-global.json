@@ -5,7 +5,7 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.42.0-alpha",
-  "summary": "Project lint rule, OFF by default: a data module unit reads or writes another unit's global form variable",
+  "summary": "Project lint rule, ON by default since 1.52: a data module unit reads or writes another unit's global form variable",
   "intro": "Read this to see what datamodule-form-global reports and what keeps a homonym out. It runs in lint-all and lint-project over a project index.",
   "wikiPage": "datamodule-form-global",
   "surfaces": [
@@ -17,9 +17,9 @@
   ],
   "audience": "both",
   "verified": {
-    "date": "2026-11-04",
+    "date": "2026-11-17",
     "by": "ENGINE",
-    "build": "1.42.0-alpha",
-    "surfaceHash": "360982a878a600caf0f2ca7a214d6b7f0220a387e74cda05b94c066a804901d1"
+    "build": "1.51.1-alpha",
+    "surfaceHash": "2d0c23565c009383cfcd928a0869cb75532a87f1d17ce233d0603d793354b85c"
   }
 }

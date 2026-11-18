@@ -119,7 +119,7 @@ const
     { 1.42 lane opaque }
     'opaque-to-analysis',
     { 1.42 lane ruleset: the old ROADMAP candidates }
-    'stream-buffer-after-free', 'interfaced-object-nil-leak', 'identifier-case-mismatch', 'datamodule-form-global',
+    'stream-buffer-after-free', 'interfaced-object-nil-leak', 'identifier-case-mismatch',
     'is-never-true',
     { 1.46 lane t4 }
     'parameter-type-too-wide',
@@ -970,7 +970,7 @@ begin
     B('stream-buffer-after-free', 'resource-lifetime', 'warning', 'Pointer into a memory stream buffer (S.Memory, @S.Bytes[n], Pointer(S.Bytes)) is used after the stream was freed -- it dangles. A TBytes copy of S.Bytes is reference-counted and stays silent', False);
     B('interfaced-object-nil-leak', 'resource-lifetime', 'warning', 'Object reference of a TInterfacedObject descendant is set to nil while it holds a fresh instance -- an object reference holds no count, so nil releases nothing and the instance leaks', False);
     B('identifier-case-mismatch', 'naming', 'info', 'A name is spelled in a different case from its declaration -- locals and parameters from the AST, bound refs from the index', False);
-    B('datamodule-form-global', 'project-wide', 'warning', 'A unit declaring a TDataModule descendant reaches another unit''s global form variable -- the data layer now needs that form to exist', False);
+    B('datamodule-form-global', 'project-wide', 'warning', 'A unit declaring a TDataModule descendant reaches another unit''s global form variable -- the data layer now needs that form to exist', True);
     B('parameter-type-too-wide', 'project-wide', 'hint', 'A class-typed parameter whose routine uses only members an ancestor of the declared type already declares, proved by the narrow-param plan (not virtual, overloaded, published or an interface method; every use is a member read or call or a nil test): it could be declared as that ancestor, so callers are not tied to the wider type. Reports exactly the fixes of narrow-param --all --plan; the refusals are not findings. OFF by default; one dl:ok on the routine line reviews it', False);
     B('global-set-in-initialization-never-freed', 'project-wide', 'hint', 'A unit''s initialization sets its own global to a new object and no source that names the variable frees it -- it lives to process exit and shows in every leak report');
     B('heavy-initialization', 'project-wide', 'hint', 'An initialization section reaches the file system, the registry, the network, a database or a dialog -- it can fail or block before the application has an exception handler or a window');

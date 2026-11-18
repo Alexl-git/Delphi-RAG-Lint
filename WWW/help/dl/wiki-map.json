@@ -218,6 +218,7 @@
   "redundant-cast-fix": "redundant-cast-fix",
   "ref-type-rules": "ref-type-rules",
   "rtti-unavailable": "rtti-unavailable",
+  "rule-defaults-152": "v152-defaults",
   "rules": "lint-rules",
   "safe-delete": "safe-delete",
   "schema": "schema",

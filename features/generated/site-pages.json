@@ -252,7 +252,7 @@
     "version": "1.51.1-alpha"
   },
   "features/datamodule-form-global.md": {
-    "hash": "1aebdf6e5dff10dc8bd4473df4fe0c87db3ebd69b52baddfe92687c19d56e6f0",
+    "hash": "a48f8dc1a6442696abf4ef068a33a7089b4bbf8c017227a8619b1da38fba88fa",
     "version": "1.51.1-alpha"
   },
   "features/deps-report.md": {
@@ -300,7 +300,7 @@
     "version": "1.35.1-alpha"
   },
   "features/drag-lint-options.md": {
-    "hash": "de4b3d9ec08d246886f13d6e45544ad7e7e50fe380d434a91caab53459aa12d3",
+    "hash": "22f2b0fefdceaa397be8cdfe5489ccc744e7d4482c58161786cf99d486fd8417",
     "version": "1.51.1-alpha"
   },
   "features/drag-lint-panel-dockable.md": {
@@ -584,7 +584,7 @@
     "version": "1.51.1-alpha"
   },
   "features/lint-rules.md": {
-    "hash": "a8c52646a0aae8686217e03a063dfd223af47a9b867084ec1717f8a636adbe26",
+    "hash": "d466559ba25e2b183aad6ee8b31399ccd2fc11de15400d8fd5bdbbfd3b444a91",
     "version": "1.51.1-alpha"
   },
   "features/lint-tree.md": {
@@ -800,7 +800,7 @@
     "version": "1.51.1-alpha"
   },
   "features/run-lint-all-full-report.md": {
-    "hash": "7e1770c29f2485bec2e5334c7b7b5e85883d6ee18a11d7d7df6e2d9f07c9fb79",
+    "hash": "b421e338481311c649bb27ca1b347729b8d6aa2814ad27c90719fcbb9adfa7a2",
     "version": "1.51.1-alpha"
   },
   "features/safe-delete.md": {
@@ -948,7 +948,7 @@
     "version": "1.51.1-alpha"
   },
   "features/v151-dfma-rules.md": {
-    "hash": "f88f4305702f02a57f05b76e137becccde0a176a8e3e9f823d60587a39d42208",
+    "hash": "6ed257a75d9993e31dc6d54e47d86473fb982c31ed0e1799fe60aa9f5abe6863",
     "version": "1.51.1-alpha"
   },
   "features/v151-dfmb-rules.md": {
@@ -1027,6 +1027,10 @@
     "hash": "ab360c6c09e29621cc9797666ba5e72041a208c919a56614a8583323b4ef9e49",
     "version": "1.51.1-alpha"
   },
+  "features/v152-defaults.md": {
+    "hash": "9a3545b0ec27e64ca3ab95487e19a63b821918e5be615d2f8bb29ef6c0e1c43a",
+    "version": "1.51.1-alpha"
+  },
   "features/v152-extr-resolve.md": {
     "hash": "8d83f0b6b4cf91a6f2976f642040bdb92e38e85db0f671376b35c698bc751b48",
     "version": "1.51.1-alpha"
@@ -1036,7 +1040,7 @@
     "version": "1.51.1-alpha"
   },
   "features/v152-index-possibly-out-of-range.md": {
-    "hash": "3d594d9606519b594124b807812b0b22e9624d87e980c859c78595718de04053",
+    "hash": "da664c8a1f4b71409260e344c3fc0b36792c1cc4ef5816a81b52c5fd5e4a0c97",
     "version": "1.51.1-alpha"
   },
   "features/v152-vsfix.md": {
@@ -1048,7 +1052,7 @@
     "version": "1.51.1-alpha"
   },
   "features/warm-rule-cache.md": {
-    "hash": "3b4d08cf1ade84df7292dc1e38c91e50276d721d11e4020d38d37665a42d6f75",
+    "hash": "58025975ffaf8cf6c41ace5749f0534fa7b15ec90cbc1cd53e68886cec41b160",
     "version": "1.51.1-alpha"
   },
   "features/wiki-blocks-authoring.md": {

@@ -18,7 +18,7 @@
     untouched: those are somebody else's artefacts, and the stage must never edit them.
     Copies, only when missing or older than the source: tree-sitter*.dll (from
     third_party\dll-win64), casts.castlib, sqlite3.dll (Studio 37.0 bin64).
-    Mirrors rules\*.scm|*.json|builtin-symbols.txt|enum-persist-sinks.txt into <exe-dir>\rules,
+    Mirrors rules\*.scm|*.json|builtin-symbols.txt|enum-persist-sinks.txt|form-object-without-field.exempt.txt into <exe-dir>\rules,
     deleting orphans (an orphan .scm would load beside its replacement under the same id).
   Returns $true when it staged (or found current), $false when -Exe is not a build output
   of this tree (nothing touched).
@@ -52,7 +52,7 @@ function Initialize-EngineCompanions {
   $rulesDst = Join-Path $exeDir 'rules'
   if (Test-Path -LiteralPath $rulesSrc) {
     [void](New-Item -ItemType Directory -Force -Path $rulesDst)
-    $want = @(Get-ChildItem -LiteralPath $rulesSrc -File | Where-Object { $_.Extension -in '.scm', '.json' -or $_.Name -in 'builtin-symbols.txt', 'enum-persist-sinks.txt' })
+    $want = @(Get-ChildItem -LiteralPath $rulesSrc -File | Where-Object { $_.Extension -in '.scm', '.json' -or $_.Name -in 'builtin-symbols.txt', 'enum-persist-sinks.txt', 'form-object-without-field.exempt.txt' })
     $wantNames = @($want | ForEach-Object { $_.Name })
     foreach ($old in (Get-ChildItem -LiteralPath $rulesDst -File | Where-Object { $_.Extension -in '.scm', '.json' -and $wantNames -notcontains $_.Name })) {
       [IO.File]::Delete($old.FullName)

@@ -19,7 +19,7 @@ param(
   [string]$Repo = "",
   [int]$ExpectTotal = 425,   # INT: +1 index-possibly-out-of-range (IDXRANGE2), +1 review-marker-remeasured (MARK)
   [int]$ExpectFixable = 126,
-  [int]$ExpectOn = 342   # 1.52: index-possibly-out-of-range OFF (FP gate), review-marker-remeasured ON
+  [int]$ExpectOn = 346   # 1.52: index-possibly-out-of-range OFF (FP gate), review-marker-remeasured ON; +4 DEFAULTS (3 lint + datamodule-form-global)
 )
 $ErrorActionPreference = "Stop"
 $repo = if ($Repo -ne "") { (Resolve-Path $Repo).Path } else { (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path }

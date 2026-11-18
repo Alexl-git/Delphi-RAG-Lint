@@ -20760,7 +20760,7 @@ begin
       OptIn:= OptIn + ['heavy-initialization'];
     if Cfg.ShouldKeep('global-set-in-initialization-never-freed', {ADefaultDisabled=}False) then   { 1.44 lane rulesf2 }
       OptIn:= OptIn + ['global-set-in-initialization-never-freed'];
-    if Cfg.ShouldKeep('datamodule-form-global', {ADefaultDisabled=}True) then   { 1.42 lane ruleset }
+    if Cfg.ShouldKeep('datamodule-form-global', {ADefaultDisabled=}False) then   { 1.42 lane ruleset }
       OptIn:= OptIn + ['datamodule-form-global'];
     if Cfg.ShouldKeep('rtti-unavailable', {ADefaultDisabled=}True) then   { 152b lane RTTI }
       OptIn:= OptIn + ['rtti-unavailable'];
@@ -21301,7 +21301,7 @@ begin
       OptIn2:= OptIn2 + ['heavy-initialization'];
     if LoadLintConfig(AArgs).ShouldKeep('global-set-in-initialization-never-freed', {ADefaultDisabled=}False) then   { 1.44 lane rulesf2 }
       OptIn2:= OptIn2 + ['global-set-in-initialization-never-freed'];
-    if LoadLintConfig(AArgs).ShouldKeep('datamodule-form-global', {ADefaultDisabled=}True) then   { 1.42 lane ruleset }
+    if LoadLintConfig(AArgs).ShouldKeep('datamodule-form-global', {ADefaultDisabled=}False) then   { 1.42 lane ruleset }
       OptIn2:= OptIn2 + ['datamodule-form-global'];
     if LoadLintConfig(AArgs).ShouldKeep('rtti-unavailable', {ADefaultDisabled=}True) then   { 152b lane RTTI }
       OptIn2:= OptIn2 + ['rtti-unavailable'];

@@ -139,7 +139,7 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**425 rules. 126 have an auto-fix. 342 are on by default.** 312 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**425 rules. 126 have an auto-fix. 346 are on by default.** 312 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
@@ -179,6 +179,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Data module reaching a global form (lint rule)](datamodule-form-global) | `lint-all` |  |
 | [Data-flow rules that know a parameter's mode](flow-out-arg-rules) | `lint-all` |  |
 | [Dataset and transaction lint rules](dataset-rules-v151) | `lint` |  |
+| [Default-on form, dataset and data-module rules](rule-defaults-152) | `lint`; `rules` |  |
 | [Downgrade fixes (compat rules)](compat-downgrade-fixes) | `lint` | planned |
 | [drag-lint: Project Rules](drag-lint-Project-Rules) | Project Manager: drag-lint: Project Rules; `rules` |  |
 | [Effect-free call in a loop that could move out (lint rule)](effect-free-in-loop-invariant) | `lint-all` |  |

@@ -3480,7 +3480,7 @@
       "owner": "ENGINE",
       "status": "shipped",
       "since": "1.42.0-alpha",
-      "summary": "Project lint rule, OFF by default: a data module unit reads or writes another unit's global form variable",
+      "summary": "Project lint rule, ON by default since 1.52: a data module unit reads or writes another unit's global form variable",
       "intro": "Read this to see what datamodule-form-global reports and what keeps a homonym out. It runs in lint-all and lint-project over a project index.",
       "wikiPage": "datamodule-form-global",
       "surfaces": [
@@ -3492,10 +3492,10 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-04",
+        "date": "2026-11-17",
         "by": "ENGINE",
-        "build": "1.42.0-alpha",
-        "surfaceHash": "360982a878a600caf0f2ca7a214d6b7f0220a387e74cda05b94c066a804901d1"
+        "build": "1.51.1-alpha",
+        "surfaceHash": "2d0c23565c009383cfcd928a0869cb75532a87f1d17ce233d0603d793354b85c"
       }
     },
     {
@@ -3545,6 +3545,117 @@
         "by": "ENGINE",
         "build": "1.51.0-alpha",
         "surfaceHash": "de319179f8b6b2ffbdba5a675a1f550133807d68a0339e632b8014cd5442cafc"
+      }
+    },
+    {
+      "id": "v152-defaults",
+      "title": "Default-on form, dataset and data-module rules",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "Four lint rules on by default since 1.52 (form object/field, foreign form access, edit without post, data module form global); a shipped exempt-class list",
+      "intro": "Read this when a form object without a field, a control reached through another form's global variable or a dataset left in edit mode now shows up without --enable, or when you need to silence a form object class (a third-party sub-object the designer creates without a field) for your project.",
+      "wikiPage": "rule-defaults-152",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint",
+          "usage": "drag-lint lint <path> [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>|help] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]",
+          "flags": [
+            {
+              "name": "--profile",
+              "arg": "<name>"
+            },
+            {
+              "name": "--target-compiler",
+              "arg": "<ver|auto>"
+            },
+            {
+              "name": "--rule",
+              "arg": "<id>"
+            },
+            {
+              "name": "--disable"
+            },
+            {
+              "name": "--rules-dir",
+              "arg": "<dir>"
+            },
+            {
+              "name": "--json"
+            },
+            {
+              "name": "--labels"
+            },
+            {
+              "name": "--no-preprocess"
+            },
+            {
+              "name": "--library-db",
+              "arg": "<lib.sqlite>"
+            },
+            {
+              "name": "--build-config",
+              "arg": "<name>"
+            },
+            {
+              "name": "--db",
+              "arg": "<index.sqlite>"
+            },
+            {
+              "name": "--output",
+              "arg": "<file>"
+            },
+            {
+              "name": "--project-rules"
+            },
+            {
+              "name": "--stand-in-for",
+              "arg": "<realpath>"
+            }
+          ]
+        },
+        {
+          "type": "cli",
+          "verb": "rules",
+          "usage": "drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rule <id>[,<id>]] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance` and needs_compiler / compat_since / target_active; --standard lists only rules labelled under it; --rule <id>[,<id>] lists only those rules, an unknown id is exit 2)",
+          "flags": [
+            {
+              "name": "--json"
+            },
+            {
+              "name": "--category",
+              "arg": "<name>"
+            },
+            {
+              "name": "--standard"
+            },
+            {
+              "name": "--rule",
+              "arg": "<id>"
+            },
+            {
+              "name": "--rules-dir",
+              "arg": "<dir>"
+            },
+            {
+              "name": "--target-compiler",
+              "arg": "<ver|auto>"
+            },
+            {
+              "name": "--project",
+              "arg": "<.dproj>"
+            }
+          ]
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-17",
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "22743ed9ce2e81c23136637b5acbbc1c496ee7349a885bdd48c0dd8cee50de46"
       }
     },
     {

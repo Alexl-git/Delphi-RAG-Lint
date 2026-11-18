@@ -1,12 +1,13 @@
 # Rules that are on by default since 1.52
 
-Three rules that were opt-in are now on in `lint`, `lint-all` and the editor. Each was re-measured on the CLIENT, SERVER, YADF and Loader indexes before the change.
+Four rules that were opt-in are now on (`datamodule-form-global` in `lint-all` only, it is project-wide; the other three in `lint`, `lint-all` and the editor). Each was re-measured on the CLIENT, SERVER, YADF and Loader indexes before the change.
 
 | Rule | Severity | What it reports |
 |---|---|---|
 | `form-object-without-field` | hint | an object of the form file with no field in the form class: code cannot reach it by name |
 | `foreign-form-control-access` | hint | code that reaches a control of another unit's form through its global variable (`Form2.Edit1`) |
 | `dataset-edit-without-post` | warning | `Edit` / `Append` / `Insert` whose record is changed but never posted or cancelled in the unit |
+| `datamodule-form-global` | warning | a unit declaring a `TDataModule` descendant reads or writes another unit's global form variable (lint-all) |
 
 Turn one off with `--disable <rule>` or `"disabled"` in the project lint config.
 

@@ -1230,6 +1230,9 @@ drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--j
 | `--rsvars` | `<bat>` |  |  |
 | `--build-timeout` | `<s>` |  |  |
 | `--no-compile` |  |  |  |
+| `--profile` | `<name>` |  |  |
+| `--target-compiler` | `<ver\|auto>` |  |  |
+| `--output` | `<file>` |  |  |
 
 Described in:
 
@@ -1262,6 +1265,7 @@ Described in:
 * [Typing and ownership lint rules (casts, Self as interface, destructors)](features/v151-typ-rules.md)
 * [Wider built-in rules (1.51)](features/v151-wid-ast-rules.md)
 * [Wider scm rules and three new fixers](features/v151-wid-scm-rules.md)
+* [Default-on form, dataset and data-module rules](features/v152-defaults.md)
 * [Array index possibly out of range lint rule (index-possibly-out-of-range)](features/v152-index-possibly-out-of-range.md)
 
 ### lint-all
@@ -1894,6 +1898,8 @@ drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rule
 | `--standard` | `cwe\|cert\|misra` |  |  |
 | `--rule` | `<id>[,<id>]` |  |  |
 | `--rules-dir` | `<dir>` |  |  |
+| `--target-compiler` | `<ver\|auto>` |  |  |
+| `--project` | `<.dproj>` |  |  |
 
 Described in:
 
@@ -1903,6 +1909,7 @@ Described in:
 * [Lint rules](features/lint-rules.md)
 * [Target compiler (--target-compiler)](features/target-compiler.md)
 * [CLI fixes in 1.51.1](features/v1511-cli-fixes.md)
+* [Default-on form, dataset and data-module rules](features/v152-defaults.md)
 
 ### safe-delete
 

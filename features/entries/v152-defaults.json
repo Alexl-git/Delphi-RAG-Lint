@@ -5,7 +5,7 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.52.0-alpha",
-  "summary": "form-object-without-field, foreign-form-control-access and dataset-edit-without-post are on by default; form-object-without-field skips a shipped list of DevExpress sub-object classes plus the project's own exempt classes",
+  "summary": "Four lint rules on by default since 1.52 (form object/field, foreign form access, edit without post, data module form global); a shipped exempt-class list",
   "intro": "Read this when a form object without a field, a control reached through another form's global variable or a dataset left in edit mode now shows up without --enable, or when you need to silence a form object class (a third-party sub-object the designer creates without a field) for your project.",
   "wikiPage": "rule-defaults-152",
   "surfaces": [
@@ -101,5 +101,11 @@
       ]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-17",
+    "by": "ENGINE",
+    "build": "1.51.1-alpha",
+    "surfaceHash": "22743ed9ce2e81c23136637b5acbbc1c496ee7349a885bdd48c0dd8cee50de46"
+  }
 }

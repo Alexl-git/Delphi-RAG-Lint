@@ -596,7 +596,7 @@ authoritative catalog; `rules\compliance.json` carries their CWE labels.
 | `tls-verification-disabled` | security | warning | ON | built-in | TLS certificate verification is switched off |
 | `weak-cipher` | security | warning | ON | built-in | Broken cipher or mode (DES, 3DES, RC2, RC4, ECB) |
 | `default-parameter` | structure | hint | OFF | built-in | Parameter with a default value |
-| `foreign-form-control-access` | structure | hint | OFF | built-in | Code reaches a control of another unit's form through its global variable (Form2.Edit1) -- the units are coupled to the form layout |
+| `foreign-form-control-access` | structure | hint | ON | built-in | Code reaches a control of another unit's form through its global variable (Form2.Edit1) -- the units are coupled to the form layout |
 | `method-order` | structure | hint | OFF | built-in | Method bodies are not in the order of the class declaration |
 | `sql-select-star` | structure | info | OFF | `.scm` | SELECT * returns whatever columns the table has today -- name the columns you need. |
 | `write-only-property` | structure | hint | OFF | built-in | Property has a write accessor but no read accessor |

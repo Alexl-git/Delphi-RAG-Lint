@@ -4862,7 +4862,7 @@ begin
     if WantRule(READ_NEVER_ASSIGNED_RULE) and OptedIn(READ_NEVER_ASSIGNED_RULE) then
       for var Rn in CollectReadNeverAssigned(AStore, ALibraryStore) do Findings.Add(Rn);
     Lap('read-never-assigned');
-    { datamodule-form-global (1.42 lane ruleset): OFF; whole-project by nature (both ends live in the index). }
+    { datamodule-form-global (1.42 lane ruleset; ON since 1.52 DEFAULTS): whole-project by nature (both ends live in the index). }
     if WantRule(INIT_ORDER_HAZARD_RULE) and OptedIn(INIT_ORDER_HAZARD_RULE) then
       for var Is_ in CollectInitOrderHazard(AStore) do Findings.Add(Is_);
     Lap('init-order-hazard');

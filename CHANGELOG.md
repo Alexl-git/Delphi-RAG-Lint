@@ -14,13 +14,14 @@ resolver 1.28.0 -> 1.29.0-alpha.
   wherever R3 breaks the group (B9b); `--no-hub-surface` restores the 1.51 planner default. `--fix` / `--plan --apply`
   without `--cycle` take the first group R3 breaks. R3 refuses a hub field passed to a var / out parameter at plan time.
 
+### Changed
+
+- lint defaults (DEFAULTS): `form-object-without-field`, `foreign-form-control-access`, `dataset-edit-without-post` and (lint-all) `datamodule-form-global` are on by default; a shipped exempt-class list `rules\form-object-without-field.exempt.txt` plus `form_object_without_field.exempt_classes` / `use_default_list` in the lint config.
+
 ### Fixed
-<<<<<<< HEAD
 - typeat / hover (EXTGAPS): a bare identifier answers from the ref the resolver bound at that position first, so `Application` in a .dpr names Vcl.Forms.Application, not a same-named class property of a used unit; `usages --name <library qname>` counts refs bound to that library symbol.
 - Index (EXTGAPS, rides the one 1.52 re-parse): a class var read through its class name (`TCfg.CInstances`) is bound; a .dpr main block gets data_flows rows; symbol_facts.dfm_event lists every control a shared handler is bound to; `H.OnEvt := H.Handler` (a procedure as the whole right-hand side) is an address-taken binding, not a call edge.
-=======
 - lint --fix (no --fix-rule) now resolves class with-blocks through the platform library.
->>>>>>> 3ae2b021a
 - uses-audit now credits a unit only through symbols it exports (like unused-unit-in-uses); a same-named class member no longer hides an unused unit.
 - control-char: an invalid byte in a UTF-8-BOM file is reported again (the CP1252 fallback hid it).
 - Resolver (EXTR): generic type receivers (`TObjectList<T>.Create`) are typed and bound; a `Name(...)` receiver keeps
