@@ -17,7 +17,7 @@
 param(
   [string]$Exe = "third_party\dll-win64\drag-lint.exe",
   [string]$Repo = "",
-  [int]$ExpectTotal = 425,   # INT: +1 index-possibly-out-of-range (IDXRANGE2), +1 review-marker-remeasured (MARK)
+  [int]$ExpectTotal = 426,   # INT: +1 member-could-be-private (ATLB, OFF), +1 index-possibly-out-of-range (IDXRANGE2), +1 review-marker-remeasured (MARK)
   [int]$ExpectFixable = 126,
   [int]$ExpectOn = 346   # 1.52: index-possibly-out-of-range OFF (FP gate), review-marker-remeasured ON; +4 DEFAULTS (3 lint + datamodule-form-global)
 )
