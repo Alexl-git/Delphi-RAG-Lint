@@ -117,6 +117,8 @@ uses
   , DragLint.Plugin.CliAsync
   , DragLint.Plugin.ExeResolver
   , DragLint.Plugin.UsagesQuery
+  , DragLint.Plugin.Theme       { ApplyIdeTheme / ThemedColor: follow the IDE light/dark theme }
+  , DragLint.Plugin.PlugUiCore   { UsageRowColors }
   ;
 
 { v0.40.5: local copy of the BPL build-stamp helper to avoid circular use
@@ -314,6 +316,13 @@ begin
   FLspWatch.Enabled := False;
   FLspWatch.Interval:= LSP_WATCH_MS;
   FLspWatch.OnTimer := LspWatchTick;
+
+  { N3 (1.52): follow the IDE light/dark theme like the other dock panels. }
+  ApplyIdeTheme(Self, TDragLintUsagesForm);
+  Color           := ThemedColor(clBtnFace);
+  FTree.Color     := ThemedColor(clWindow);
+  FTree.Font.Color:= ThemedColor(clWindowText);
+  FLblTitle.Font.Color:= ThemedColor(clWindowText);
 end; // constructor
 
 procedure TDragLintUsagesForm.FormClose(Sender: TObject; var Action: TCloseAction);
@@ -394,6 +403,9 @@ var
   P       : Integer       ;
   StartAt : Integer       ;
   Seg     : string        ;
+  BackC   : TColor        ;
+  TextC   : TColor        ;
+  MatchC  : TColor        ;
 begin
   DefaultDraw:= True;
   if Stage <> cdPrePaint then Exit;
@@ -411,16 +423,9 @@ begin
   Selected:= (cdsSelected in State) or (cdsMarked in State);
 
   Cv.Font.Assign(FTree.Font);
-  if Selected then
-  begin
-    Cv.Brush.Color:= clHighlight;
-    Cv.Font .Color:= clHighlightText;
-  end
-  else
-  begin
-    Cv.Brush.Color:= clWindow;
-    Cv.Font .Color:= clWindowText;
-  end;
+  UsageRowColors(Selected, ThemedColor, BackC, TextC, MatchC);  { IDE theme, not the Windows palette }
+  Cv.Brush.Color:= BackC;
+  Cv.Font .Color:= TextC;
   Cv.FillRect(R);
   Cv.Brush.Style:= bsClear;
 
@@ -437,7 +442,7 @@ begin
       if Seg <> '' then
       begin
         Cv.Font.Style:= [];
-        if not Selected then Cv.Font.Color:= clWindowText;
+        Cv.Font.Color:= TextC;
         Cv.TextOut(X, R.Top, Seg);
       end;
       Break;
@@ -448,7 +453,7 @@ begin
     begin
       Seg:= Copy(Txt, StartAt, P - StartAt);
       Cv.Font.Style:= [];
-      if not Selected then Cv.Font.Color:= clWindowText;
+      Cv.Font.Color:= TextC;
       Cv.TextOut(X, R.Top, Seg);
       Inc(X, Cv.TextWidth(Seg));
     end;
@@ -456,7 +461,7 @@ begin
     { the matched identifier: bold + amber (plain bold when selected) }
     Seg:= Copy(Txt, P, Length(Term));
     Cv.Font.Style:= [fsBold];
-    if not Selected then Cv.Font.Color:= TColor($004080FF) { amber/orange BGR };
+    Cv.Font.Color:= MatchC;  { amber, lightened/darkened to stay readable on the themed background }
     Cv.TextOut(X, R.Top, Seg);
     Inc(X, Cv.TextWidth(Seg));
 
