@@ -4,7 +4,7 @@ title: Fix all in project
 summary: Applies autofixes for every fixable finding across the whole project, starting from the Structure form
 product: DL
 group: linting
-order: 30014
+order: 30015
 since: 0.61.0-alpha
 status: shipped
 updated: 1.51.1-alpha

@@ -4,7 +4,7 @@ title: Run Diagnostics (didSave)
 summary: Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification
 product: DL
 group: linting
-order: 30040
+order: 30041
 since: 0.22.0-alpha
 status: shipped
 updated: 1.51.1-alpha

@@ -4,7 +4,7 @@ title: Parameter type too wide (lint rule)
 summary: "Project lint rule, ON since 1.52 (warning, autofix): a class-typed parameter that an ancestor type could carry, proved by the narrow-param plan"
 product: DL
 group: linting
-order: 30033
+order: 30034
 since: 1.46.0-alpha
 status: shipped
 updated: 1.51.1-alpha

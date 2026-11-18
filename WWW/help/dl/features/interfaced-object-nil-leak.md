@@ -4,7 +4,7 @@ title: Interfaced object set to nil (lint rule)
 summary: "Lint rule, OFF by default: an object reference to a TInterfacedObject descendant is set to nil while it holds a fresh instance, which leaks it"
 product: DL
 group: linting
-order: 30026
+order: 30027
 since: 1.42.0-alpha
 status: shipped
 updated: 1.51.1-alpha

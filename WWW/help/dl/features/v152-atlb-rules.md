@@ -4,7 +4,7 @@ title: member-could-be-private lint rule (lane ATLB)
 summary: Hint (OFF in 1.52) on a public member used only in its own unit; published, virtual, interface, attributed and shared-unit members stay silent
 product: DL
 group: linting
-order: 30066
+order: 30067
 since: 1.52.0-alpha
 status: shipped
 updated: 1.51.1-alpha

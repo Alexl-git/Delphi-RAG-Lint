@@ -64,8 +64,8 @@ type
     /// <param name="ALibStore">Optional library symbol store for cross-DB lookups; nil disables.</param>
     /// <param name="AKeep">Optional "is this rule id kept by the run" predicate (RuleKeptByRun).
     /// nil computes every rule, as before. When assigned, the out-arg liveness pass
-    /// (local-only-out-arg, dead-store-before-out-arg) and the by-value replay check
-    /// (by-value-arg-before-assignment) run only when one of their ids is kept; every
+    /// (local-only-out-arg, dead-store-before-out-arg) and the method by-value replay check
+    /// (used-before-assignment since 1.52 EX1) run only when one of their ids is kept; every
     /// other rule is computed regardless. Skipping changes no kept finding.</param>
     /// <returns>All flow findings for the file.</returns>
     /// <exception cref="EFlowOracleMismatch"><!-- drag-lint:auto exc -->via DRagLint.Diagnostics.FlowChecks.OracleCheck: %s: cached %s but a fresh computation says %s, for key "%s". The; via DRagLint.Diagnostics.FlowChecks.OracleCheckPM: oracle param-mode: cached mode %d but a fresh computation says %d, for</exception>
@@ -2050,7 +2050,7 @@ type
   /// type name with more than one declaration, an ancestry that cannot be followed to its end, a member
   /// that is not a method, a class helper with a method of that name, or overloads that do not all
   /// say the same at this position. pmConst means "by value or const", and is withheld for an untyped or
-  /// pointer-typed parameter; only by-value-arg-before-assignment asks for it, as a post-pass, because
+  /// pointer-typed parameter; only the method by-value arm of used-before-assignment asks for it, as a post-pass, because
   /// the extractor fingerprint covers Flow.Lattices (spec 2026-11-06-liveness-out-args-by-value).
   /// One instance per file; not thread-safe; owns a TExprTypeReader, so it must not outlive the store.</remarks>
   TMethodArgModes = class
@@ -3818,8 +3818,10 @@ var
     Scans  : TArgScanMemo; { per item of THIS routine }
     ObrReported: TArray<Integer>; { stores overwrite-before-read reported in this routine }
 
-    { by-value-arg-before-assignment. The lattice records no read of `G.Take(X)`: its mode dispatch
-      asks bare names only. Called on the state BEFORE this item's defs, as the rule above it. }
+    { used-before-assignment, method by-value arm (was the OFF id by-value-arg-before-assignment;
+      folded in 1.52 EX1, owner ruling 2026-11-18). The lattice records no read of `G.Take(X)`: its
+      mode dispatch asks bare names only. Called on the state BEFORE this item's defs, as the rule
+      above it; it skips a local the item already reads, so one line never carries the id twice. }
     procedure CheckByValueArgs(const AIt: TCfgItem);
     begin
       if AIt.Opaque then Exit;
@@ -3845,10 +3847,10 @@ var
         var Row: Integer:= Integer(AIt.Node.StartPoint.Row) + 1;
         var Col: Integer:= Integer(AIt.Node.StartPoint.Column) + 1;
         if CurMay[C] then
-          Emit('by-value-arg-before-assignment', 'warning',
+          Emit('used-before-assignment', 'warning',
             Format('Local "%s" may be passed by value to a method before it is assigned.', [Loc.Name]), Row, Col)
         else
-          Emit('by-value-arg-before-assignment', 'error',
+          Emit('used-before-assignment', 'error',
             Format('Local "%s" is passed by value to a method before it is assigned.', [Loc.Name]), Row, Col);
       end;
     end;
@@ -5173,7 +5175,7 @@ begin
   SlKinds := nil;
   { PF E-LINTALL-SLOWER: the two OFF out-arg/by-value passes cost lint-all on Micronite2027
     about 60 s (liveness window 1.5 -> 52 s, replay 1.8 -> 13 s); run them only when kept. }
-  WantByValue := (not Assigned(AKeep)) or AKeep('by-value-arg-before-assignment');
+  WantByValue := (not Assigned(AKeep)) or AKeep('used-before-assignment'); { 1.52 EX1 fold }
   WantOutArgs := (not Assigned(AKeep)) or AKeep('local-only-out-arg') or AKeep('dead-store-before-out-arg');
   ArgMode :=
     function(const ACall: TTSNode; AIndex, ACount: Integer): TParamMode

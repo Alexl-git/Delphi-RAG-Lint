@@ -12,6 +12,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 ## 1.52.0-alpha
 
 * [check-init](features/check-init.md) -- Answers whether a variable or field is set before a given use on every execution (SET / NEVER-SET / MAY-BE-UNSET).
+* [Complexity counts the if-expression](features/complexity-if-expression.md) -- cyclomatic-complexity, cognitive-complexity and the autodoc Complexity fact count a Delphi 13 if-expression as a decision point.
 * [explain](features/explain.md) -- Explains one lint rule in plain words: what it means, why it matters, a bad and a good example, its default, whether it can be fixed, and how to suppress it.
 * [Field repository](features/field-repository.md) -- Keeps the TableTools field registry in one SQLite file per database, filled from Firebird (read-only), with a diffable text backup.
 * [Reserved words as names, implicit package imports, contract-unit globs](features/v152-atla-rules.md) -- reserved-word-identifier and implicit-package-import rules; contractUnits globs in drag-lint.json for contract-unit-declares-class.
@@ -79,7 +80,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 * [bookmarks](features/bookmarks.md) -- Lists or finds the dl:bk comment-anchor bookmarks in a unit or a folder, and strips / restores them on request.
 * [Convert Components](features/convert-components.md) -- Opens ConvRulesEditor on the components selected in the form designer.
 * [exception-facts](features/exception-facts.md) -- Lists which routine raises and handles which exception type, by routine or by type.
-* [Data-flow rules that know a parameter's mode](features/flow-out-arg-rules.md) -- Three OFF rules: a local that only receives out arguments, a store overwritten by an out argument, a local passed by value to a method before it is assigned.
+* [Data-flow rules that know a parameter's mode](features/flow-out-arg-rules.md) -- Two OFF out-argument rules; since 1.52 a local passed by value to a method before assignment reports under the default used-before-assignment.
 * [MCP get_neighbors](features/mcp-get-neighbors.md) -- MCP tool: the call-graph neighbourhood of a symbol within 1..3 hops.
 * [Parameter type too wide (lint rule)](features/parameter-type-too-wide.md) -- Project lint rule, ON since 1.52 (warning, autofix): a class-typed parameter that an ancestor type could carry, proved by the narrow-param plan.
 

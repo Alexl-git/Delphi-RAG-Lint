@@ -4,7 +4,7 @@ title: Object-model lint rules (Equals/hash, events, GUIDs, exports)
 summary: "Ten single-file lint rules: Equals/GetHashCode, event calls, duplicate GUIDs, DLL exports, money as float, default params, accessors, forwards, legacy lists"
 product: DL
 group: linting
-order: 30054
+order: 30055
 since: 1.51.0-alpha
 status: shipped
 updated: 1.51.1-alpha

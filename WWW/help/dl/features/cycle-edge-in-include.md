@@ -4,7 +4,7 @@ title: Cycle edge written in an include (lint rule)
 summary: "Project lint rule: a uses entry or declaration a uses cycle runs through is written in an include, which cycles --fix never edits; write it in the .pas"
 product: DL
 group: linting
-order: 30007
+order: 30008
 since: 1.50.0-alpha
 status: shipped
 updated: 1.51.1-alpha

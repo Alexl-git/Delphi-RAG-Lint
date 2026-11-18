@@ -4,7 +4,7 @@ title: Initialization reaching a unit that initializes later (lint rule)
 summary: "Project lint rule: an initialization section reaches a global that a unit initializing later in the computed order sets in its own initialization"
 product: DL
 group: linting
-order: 30025
+order: 30026
 since: 1.44.1-alpha
 status: shipped
 updated: 1.51.1-alpha

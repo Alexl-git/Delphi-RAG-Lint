@@ -9564,11 +9564,13 @@ end; // function
 // rule (via TAstChecker.CyclomaticOf below) and the Auto-Document Complexity
 // fact (DRagLint.Doc.SymbolFacts) use the exact same formula and can never
 // diverge on what one routine's complexity is. Recursively counts
-// decision-point nodes -- if/ifElse/while/for/repeat/kAnd/kOr/caseCase --
+// decision-point nodes -- if/ifElse/exprIf/while/for/repeat/kAnd/kOr/caseCase --
 // under N, stopping at (not descending into) a nested defProc: a local
 // routine is counted separately, the next time it is visited on its own.
 // Node kinds verified against the grammar by
-// tests\lint\cyclomatic-complexity.pas/.expected.
+// tests\lint\cyclomatic-complexity.pas/.expected. exprIf (1.52 GA-1, owner ruling
+// 2026-11-18): since grammar v1.4.4 it is ONLY the if-EXPRESSION (X := if C then A
+// else B), a real decision point; guard tests\autotest\run_v152_BK-OWNGATED.ps1.
 function CyclomaticCountDecisions(const N: TTSNode): Integer;
 var
   I: Integer;
@@ -9578,8 +9580,8 @@ begin
   if N.IsNull then Exit;
   if N.NodeType = 'defProc' then Exit; { nested routine counted separately }
   K:= N.NodeType;
-  if (K = 'if') or (K = 'ifElse') or (K = 'while') or (K = 'for') or (K = 'repeat')
-     or (K = 'kAnd') or (K = 'kOr') or (K = 'caseCase') then Inc(Result);
+  if MatchStr(K, ['if', 'ifElse', 'exprIf', 'while', 'for', 'repeat', 'kAnd', 'kOr', 'caseCase']) then
+    Inc(Result);
   for I:= 0 to N.ChildCount - 1 do Result:= Result + CyclomaticCountDecisions(N.Child(I));
 end;
 
@@ -9896,7 +9898,9 @@ var
     each boolean operator (and/or/xor) adds 1 (no nesting). Nested routines are
     scored separately (recursion stops at a nested defProc). An `else if` is a
     hybrid increment: +1 with NO nesting increment (the Sonar spec), so a flat
-    N-arm ladder costs about N, not 1+2+..+N (INBOX-cognitive-else-if-chain). }
+    N-arm ladder costs about N, not 1+2+..+N (INBOX-cognitive-else-if-chain).
+    An if-EXPRESSION (exprIf, 1.52 GA-1) scores like the statement form, and its
+    else-if arm is the same hybrid increment. }
   function Score(const N: TTSNode; ANest: Integer; AElseIf: Boolean = False): Integer;
   var I: Integer; K: string; AfterElse: Boolean; C: TTSNode;
   begin
@@ -9904,8 +9908,7 @@ var
     if N.IsNull then Exit;
     K:= N.NodeType;
     if K = 'defProc' then Exit;
-    if (K = 'if') or (K = 'ifElse') or (K = 'while') or (K = 'for') or (K = 'repeat')
-       or (K = 'case') or (K = 'exceptionHandler') then
+    if MatchStr(K, ['if', 'ifElse', 'exprIf', 'while', 'for', 'repeat', 'case', 'exceptionHandler']) then
     begin
       Result:= 1 + (if AElseIf then 0 else ANest);
       AfterElse:= False;
@@ -9913,7 +9916,7 @@ var
       begin
         C:= N.Child(I);
         // else-if: same nesting as its parent if
-        Result:= Result + (if AfterElse and ((C.NodeType = 'if') or (C.NodeType = 'ifElse')) then Score(C, ANest, True) else Score(C, ANest + 1));
+        Result:= Result + (if AfterElse and MatchStr(C.NodeType, ['if', 'ifElse', 'exprIf']) then Score(C, ANest, True) else Score(C, ANest + 1));
         AfterElse:= C.NodeType = 'kElse';
       end;
       Exit;

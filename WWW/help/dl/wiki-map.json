@@ -108,6 +108,7 @@
   "compare": "compare",
   "compile-check": "compile-check",
   "compiler-messages": "compiler-message-passthrough",
+  "complexity-if-expression": "complexity-if-expression",
   "compliance-labels": "compliance-labels",
   "component-authoring-rules": "v151-cmp-rules",
   "concept-search": "concept-search",

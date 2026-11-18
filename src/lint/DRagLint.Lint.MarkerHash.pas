@@ -120,11 +120,13 @@ const
     if-expressions and try..finally no longer nest, try..except still does. A marker
     stamped by a 1.51.1 build without that change carries version 1 and is
     re-measured, not stale. Bump an entry whenever its checker, or a grammar
-    change, moves the value it reports for unchanged code. }
+    change, moves the value it reports for unchanged code.
+    cyclomatic-complexity 2 / cognitive-complexity 2 = 1.52 GA-1: an if-EXPRESSION
+    (exprIf) is a decision point (owner ruling 2026-11-18). }
   ALGO_VERSIONS: array[0..6] of TAlgoVersion = (
     (RuleId: 'too-many-exit-points' ; Version: 1),
-    (RuleId: 'cyclomatic-complexity'; Version: 1),
-    (RuleId: 'cognitive-complexity' ; Version: 1),
+    (RuleId: 'cyclomatic-complexity'; Version: 2),
+    (RuleId: 'cognitive-complexity' ; Version: 2),
     (RuleId: 'method-too-long'      ; Version: 1),
     (RuleId: 'too-many-locals'      ; Version: 1),
     (RuleId: 'too-many-parameters'  ; Version: 1),

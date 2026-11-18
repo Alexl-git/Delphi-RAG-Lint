@@ -4,7 +4,7 @@ title: explain
 summary: "Explains one lint rule in plain words: what it means, why it matters, a bad and a good example, its default, whether it can be fixed, and how to suppress it"
 product: DL
 group: linting
-order: 30012
+order: 30013
 since: 1.52.0-alpha
 status: shipped
 updated: 1.51.1-alpha

@@ -4,7 +4,7 @@ title: Data module reaching a global form (lint rule)
 summary: "Project lint rule, ON by default since 1.52: a data module unit reads or writes another unit's global form variable"
 product: DL
 group: linting
-order: 30008
+order: 30009
 since: 1.42.0-alpha
 status: shipped
 updated: 1.51.1-alpha

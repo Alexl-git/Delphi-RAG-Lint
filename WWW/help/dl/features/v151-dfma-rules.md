@@ -4,7 +4,7 @@ title: Form and unit consistency rules
 summary: "Lint rules comparing a form unit with its .dfm and .dpr: fields vs objects, form resource, inherited handlers, self-free, auto-created forms"
 product: DL
 group: linting
-order: 30049
+order: 30050
 since: 1.51.0-alpha
 status: shipped
 updated: 1.51.1-alpha
