@@ -502,6 +502,21 @@ type
 /// <returns>A reference-counted classifier; drop it when the query is done.</returns>
 function NewUseDirections(const AStore: ISymbolStore): IUseDirections;
 
+/// <summary>The setter echo rows the index cannot store: sites of a property whose WRITE
+/// accessor is ASetter that the index stores as a READ (through the property's read
+/// accessor) but that write it -- the whole argument of Inc/Dec or of an out / var parameter
+/// (1.52 B42). FindAccessorEchoUses lists only the rows stored against ASetter itself.</summary>
+/// <param name="AStore">The store ASetter comes from; must not be nil.</param>
+/// <param name="ASetter">A routine; a routine of no class, or of a class with no writable
+/// property, answers [] without reading a source file.</param>
+/// <param name="ADirs">The direction classifier of the query (NewUseDirections over AStore).</param>
+/// <returns>One TAccessorEchoUse per such site: MemberName = the property's name and
+/// Caller.Mode = 'write', the direction `usages --rw` gives the setter for it.</returns>
+/// <remarks>Reads the declaring file of ASetter once (the property's accessor names; see
+/// MemberUsersForName) and, through ADirs, the files of the stored-read sites.</remarks>
+function SetterArgWriteEchoes(const AStore: ISymbolStore; const ASetter: TSymbol;
+  const ADirs: IUseDirections): TArray<TAccessorEchoUse>;
+
 /// <summary>Is the identifier that starts at (ALine, ACol) a WHOLE argument of a call?
 /// The text half of the var / out / Inc-Dec argument classifier, shared with the calls
 /// pass that persists the mode (150-RS2 (2)).</summary>
@@ -1500,13 +1515,15 @@ var
     for var RC: TResolvedCaller in AStore.FindResolvedCallers(ASymbolId) do
     begin
       var Mode: string:= if RC.Mode <> '' then RC.Mode else AForce;
-      if (AOnly <> '') and (Mode <> AOnly) then Continue;
-      { A stored read that is really an Inc/Dec or var/out argument: see MemberUsersForName. }
+      { A stored read that is really an Inc/Dec or var/out argument: see MemberUsersForName.
+        1.52 B42: a setter's view (AOnly = write) classifies it too, so `Inc(C.Count)` through a
+        field-read property reaches the setter; a getter's view keeps the stored read as is. }
       var Use: TArgUse:= auNone;
-      if (AOnly = '') and (RC.Mode = MODE_READ) then Use:= Args.Classify(RC);
+      if ((AOnly = '') or (AOnly = MODE_WRITE)) and (RC.Mode = MODE_READ) then Use:= Args.Classify(RC);
       var Modes: TArray<string>:= ModesForUse(Use, Mode);
       for var M: string in Modes do
       begin
+        if (AOnly <> '') and (M <> AOnly) then Continue;
         var Key: string:= Format('%s:%d:%s', [LowerCase(RC.FullPath), RC.CallSiteLine, M]);
         if Seen.ContainsKey(Key) then Continue;
         Seen.Add(Key, True);
@@ -1651,6 +1668,37 @@ end;
 function NewUseDirections(const AStore: ISymbolStore): IUseDirections;
 begin
   Result:= TUseDirections.Create(AStore);
+end;
+
+function SetterArgWriteEchoes(const AStore: ISymbolStore; const ASetter: TSymbol;
+  const ADirs: IUseDirections): TArray<TAccessorEchoUse>;
+var
+  RName, WName: string;
+  Props: TArray<TSymbol>;
+begin
+  Result:= nil;
+  if (AStore = nil) or (ADirs = nil) or (ASetter.ParentId <= 0) then Exit;
+  Props:= nil;
+  for var C: TSymbol in AStore.FindAllChildSymbols(ASetter.ParentId) do
+    if (C.Kind = skProperty) and not SameText(C.PropAccess, 'ro') then Props:= Props + [C]; { a read-only property has no setter }
+  if Props = nil then Exit;
+  var Lines: TArray<string>:= ReadLinesOrNothing(AStore.GetFilePath(ASetter.FileId));
+  for var P: TSymbol in Props do
+  begin
+    DeclaredAccessors(Lines, P, RName, WName);
+    if not SameText(WName, ASetter.Name) then Continue;
+    for var RC: TResolvedCaller in AStore.FindResolvedCallers(P.Id) do
+    begin
+      if not SameText(RC.Mode, 'read') then Continue;
+      if not TArray.Contains<string>(ADirs.ModesOf(RC), 'write') then Continue;
+      var E: TAccessorEchoUse:= Default(TAccessorEchoUse);
+      E.MemberSymbolId:= P.Id;
+      E.MemberName    := P.Name;
+      E.Caller        := RC;
+      E.Caller.Mode   := 'write';
+      Result:= Result + [E];
+    end;
+  end;
 end;
 
 end.

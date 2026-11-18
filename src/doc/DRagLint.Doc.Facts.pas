@@ -1219,6 +1219,10 @@ var
     exactly what must be measured rather than assumed -- the previous four
     suspects were all obvious too. }
   GBOverloadTag, GCOverloadTag: Int64;
+  { 1.52 B42: the 'Used in:' direction pass (AddUseRows) and the setter arg-write echo
+    (AddArgWriteEchoes) -- both read source files through IUseDirections, once per
+    declaration (BK-USEEDGES left the cost unmeasured). Inside resolved-callers. }
+  GBUsedIn, GCUsedIn: Int64;
   { MEMO for OverloadArityTag, and the reason it exists is the measurement above:
     255.48 s of a 572 s ORM3 lint-all, 10.52 ms x 24,286 calls.
 
@@ -1429,6 +1433,7 @@ begin
                   '                                 rest-of-window %s'#13#10 +
                   '        overload-arity-tag %s (%d call(s), %s) -- inside ToFactRef,'#13#10 +
                   '          so it is charged to BOTH resolved-callers and rest-of-window'#13#10 +
+                  '        used-in directions %s (%d call(s), %s) -- inside resolved-callers'#13#10 +
                   '        seealso SPLIT -- %d declaration(s) entered the block'#13#10 +
                   '                         callees  %s (%d edge row(s), %d distinct target(s), %s)'#13#10 +
                   '                         siblings %s (%d row(s) MATERIALISED for %d distinct parent(s),'#13#10 +
@@ -1442,6 +1447,7 @@ begin
      S(GBUnresExtra  ), GCUnresExtra  , Per(GBUnresExtra  , GCUnresExtra  ),
      S(GBUnresolved - GBUnresGate - GBUnresPrimary - GBUnresExtra),
      S(GBOverloadTag), GCOverloadTag, Per(GBOverloadTag, GCOverloadTag),
+     S(GBUsedIn), GCUsedIn, Per(GBUsedIn, GCUsedIn),
      GCSeeDecl,
      S(GBSeeCallees), GCSeeCalleeRows, GSeeTargetSeen.Count, Per(GBSeeCallees, GCSeeCalleeRows),
      S(GBSeeSibs   ), GCSeeSibRows   , GSeeParentSeen.Count, GCSeeSibIter, Per(GBSeeSibs, GCSeeSibIter),
@@ -4470,6 +4476,7 @@ var
   var
     URow: TDocFactRef;
   begin
+    var T0: Int64:= BTick;
     var Dirs: IUseDirections:= NewUseDirections(AOwningStore);
     for var Row in ARows do
     begin
@@ -4479,6 +4486,8 @@ var
       URow.Mode:= if Length(Modes) > 1 then 'rw' else if SameText(Modes[0], 'write') then 'w' else 'r';
       UseRows.Add(URow);
     end;
+    Inc(GBUsedIn, BTick - T0);
+    Inc(GCUsedIn);
   end;
 
   // Wave 148 UP: accessor echo rows, bucketed by the accessed property's name.
@@ -4499,6 +4508,17 @@ var
       ERow.Mode:= if SameText(Echo.Caller.Mode, 'write') then 'w' else 'r';
       Bucket.Add(ERow);
     end;
+  end;
+
+  // 1.52 B42: a setter's echo rows the index stores against the READ accessor -- an
+  // Inc/Dec or out / var argument of a property whose read accessor is a field.
+  // Guard: tests\autotest\run_v152_BK-TAILS-LSP.ps1 (A1, A2).
+  procedure AddArgWriteEchoes(const AOwningStore: ISymbolStore; const ASetter: TSymbol);
+  begin
+    var T0: Int64:= BTick;
+    AddEchoRows(AOwningStore, SetterArgWriteEchoes(AOwningStore, ASetter, NewUseDirections(AOwningStore)));
+    Inc(GBUsedIn, BTick - T0);
+    Inc(GCUsedIn);
   end;
 
   // C14: True when ARC's receiver has a known type unrelated to ASym's class;
@@ -4637,7 +4657,10 @@ begin
     { Wave 148 UP (spec sec 8.1 bullet 2): a getter/setter's echo rows -- the
       property accesses that ran it. 'Called from:' is not changed by them. }
     if CanBeCallTarget(ASym.Kind) then
+    begin
       AddEchoRows(AStore, AStore.FindAccessorEchoUses(ASym.Id));
+      AddArgWriteEchoes(AStore, ASym);
+    end;
     Inc(GBResolved, BTick - TB0);
     TB0:= BTick;
     // Unverified name-match bucket: CALL-SITE refs whose name matches but that
@@ -4805,7 +4828,10 @@ begin
         if ASym.Kind in [skProperty, skField] then
           AddUseRows(ExStore, ResCallers);
         if CanBeCallTarget(ASym.Kind) then
+        begin
           AddEchoRows(ExStore, ExStore.FindAccessorEchoUses(ExSyms[0].Id));
+          AddArgWriteEchoes(ExStore, ExSyms[0]);
+        end;
       end;
 
       // AMBIGUITY GATE, and it matters MORE here than on the primary store: the

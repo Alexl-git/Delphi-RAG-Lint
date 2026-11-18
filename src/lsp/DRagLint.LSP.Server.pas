@@ -3581,6 +3581,23 @@ begin
         var Note: string;
         RefStores:= RefStores + ExtraScopeStores(FUsagesScope, Own, FUsagesGroup, Note);
         if Note <> '' then Writeln(ErrOutput, 'drag-lint LSP: references: ', Note);
+      end
+      else
+      begin
+        { INT8 (1.52): scope symbol / project answers from this project's index; a library
+          store's rows are not in it (`usages --scope project` drops library-*.sqlite the same
+          way). A loose file that no project store indexes keeps every store: "this project"
+          is undefined there, and its library declaration is what references must find. }
+        var ProjectStores: TArray<ISymbolStore>:= nil;
+        var Indexed: Boolean:= False;
+        for var St: ISymbolStore in RefStores do
+          if not IsLibraryDbPath(StorePathOf(St)) then
+          begin
+            ProjectStores:= ProjectStores + [St];
+            { the ephemeral store of a loose file (StoresForFile) is no project index }
+            if (St <> FEphemStore) and (St.FindFileIdByPath(Path) > 0) then Indexed:= True;
+          end;
+        if Indexed then RefStores:= ProjectStores;
       end;
       for var StIdx:= 0 to High(RefStores) do
       begin
@@ -6266,6 +6283,15 @@ begin
       var WideNote: string;
       ScanStores:= ScanStores + ExtraScopeStores(Scope, FStorePaths, GroupFile, WideNote);
       if WideNote <> '' then ScopeNote:= WideNote;
+    end
+    else if UsageScopeExcludesLibraries(Scope) then
+    begin
+      { INT8 (1.52): symbol / project = this project's index, no library-*.sqlite rows (the
+        CLI's UsageScopeDbs rule); every store a library -> all kept, as WithoutLibraryDbs does. }
+      var ProjectStores: TArray<ISymbolStore>:= nil;
+      for var PS: ISymbolStore in ScanStores do
+        if (PS <> nil) and ((PS = BindStore) or not IsLibraryDbPath(StorePathOf(PS))) then ProjectStores:= ProjectStores + [PS];
+      if ProjectStores <> nil then ScanStores:= ProjectStores;
     end;
 
     for St in ScanStores do
