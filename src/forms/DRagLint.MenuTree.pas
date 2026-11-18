@@ -1012,7 +1012,7 @@ type
   TWalkEnv = class;
 
   /// <summary>What an expression evaluates to, as far as menus care.</summary>
-  TMVKind = (mvNone, mvNil, mvNode, mvCaptions, mvHandler, mvProc, mvWrapper, mvForeign, mvLink);
+  TMVKind = (mvNone, mvNil, mvNode, mvCaptions, mvHandler, mvProc, mvWrapper, mvForeign, mvLink, mvRecord);
 
   TMValue = record
     Kind    : TMVKind;
@@ -1032,6 +1032,8 @@ type
     ProcRoutine: string;
     { mvLink: the TLinkState of a DevExpress item link (ItemLinks.Add / Insert(i)) }
     Link       : TObject;
+    { mvRecord: the TRecordValue of one registered table row (owned by TWalkCore.FRecVals) }
+    Rec        : TObject;
     { qualified class of the method whose frame evaluated Text ('' outside a
       method): a bare handler / routine name resolves in that class first }
     Cls        : string;
@@ -1062,6 +1064,22 @@ type
     { BeginGroup := True was seen: a separator before the item }
     property BeginGroup: Boolean read FBeginGroup write FBeginGroup;
     { file:line reported for the link }
+    property Site: string read FSite write FSite;
+  end;
+
+  { One row of a registered record table (1.52 Cmd152): the field values a
+    registration call passed, field name lower-case. Owned by TWalkCore.FRecVals;
+    values only reference it. }
+  TRecordValue = class
+  private
+    FFields: TDictionary<string, TMValue>;
+    FSite  : string;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    { lower field name -> value }
+    property Fields: TDictionary<string, TMValue> read FFields;
+    { file:line of the registration call that produced the row; '' for a working copy }
     property Site: string read FSite write FSite;
   end;
 
@@ -1146,6 +1164,31 @@ type
     FFieldOf   : TDictionary<string, Boolean>;
     { lower 'TClass.field|path' -> the code node a method of TClass stored in the field }
     FFieldNodes: TDictionary<string, TMenuNode>;
+    { registered record tables (1.52 Cmd152): every row value, the rows per record type,
+      the nodes built while a table loop ran, and the items a row hides (Visible = False) }
+    FRecVals   : TObjectList<TRecordValue>;
+    FTableRows : TDictionary<string, TArray<TRecordValue>>;
+    FTableDepth: Integer;
+    FTableNodes: TList<TMenuNode>;
+    FHidden    : TList<TMenuNode>;
+    function NewRecord(pFrom: TRecordValue): TRecordValue;
+    function RecordField(const pNode: TTSNode; const pFrame: TWalkFrame; out pValue: TMValue): Boolean;
+    function RecValueOf(const pNode: TTSNode; const pFrame: TWalkFrame): TMValue;
+    function IterableTypeText(const pIterable, pLoop: TTSNode; const pFrame: TWalkFrame): string;
+    function ElementRecordType(const pIterable, pLoop: TTSNode; const pFrame: TWalkFrame): string;
+    function RegistrationRoutines(const pType: string): TArray<string>;
+    function RegisteredRowArg(const pCall: TTSNode; const pFrame: TWalkFrame; const pRegNames: TArray<string>;
+      out pRow: TMValue): Boolean;
+    function RowOfRhs(const pRhs: TTSNode; const pFrame: TWalkFrame; const pRegNames: TArray<string>;
+      pRows: TList<TRecordValue>): TMValue;
+    procedure RunRecordBody(const pNode: TTSNode; const pFrame: TWalkFrame; const pRegNames: TArray<string>;
+      pRows: TList<TRecordValue>);
+    function TableRows(const pType: string): TArray<TRecordValue>;
+    function LoopVarName(const pIterator: TTSNode; const pFrame: TWalkFrame): string;
+    function ExpandSplit(const pIterable, pBody: TTSNode; const pVar: string; const pFrame: TWalkFrame): Boolean;
+    procedure StampRowSource(pRow: TRecordValue; pFrom: Integer);
+    function ExpandForEach(const pNode: TTSNode; const pFrame: TWalkFrame): Boolean;
+    procedure PruneTableNodes(pNode: TMenuNode);
     function ClassOfRoutine(const pQName: string): string;
     function IsClassField(const pCls, pName: string): Boolean;
     function FieldKey(const pCls, pName, pPath: string): string;
@@ -1300,6 +1343,20 @@ begin
   Result.Kind:= mvNone;
 end;
 
+{ TRecordValue }
+
+constructor TRecordValue.Create;
+begin
+  inherited Create;
+  FFields:= TDictionary<string, TMValue>.Create;
+end;
+
+destructor TRecordValue.Destroy;
+begin
+  FFields.Free;
+  inherited Destroy;
+end;
+
 { TWalkEnv / TWalkFile }
 
 constructor TWalkEnv.Create;
@@ -1352,6 +1409,10 @@ begin
   FClassOf   := TDictionary<string, string>.Create;
   FFieldOf   := TDictionary<string, Boolean>.Create;
   FFieldNodes:= TDictionary<string, TMenuNode>.Create;
+  FRecVals   := TObjectList<TRecordValue>.Create(True);
+  FTableRows := TDictionary<string, TArray<TRecordValue>>.Create;
+  FTableNodes:= TList<TMenuNode>.Create;
+  FHidden    := TList<TMenuNode>.Create;
   { spec 5: exit 2 when the project is not in the DB -- at least one indexed
     file must lie under the project's folder. }
   Dir:= IncludeTrailingPathDelimiter(ExtractFilePath(ExpandFileName(pProject)));
@@ -1368,6 +1429,10 @@ end;
 
 destructor TWalkCore.Destroy;
 begin
+  FHidden.Free;
+  FTableNodes.Free;
+  FTableRows.Free;
+  FRecVals.Free;
   FFieldNodes.Free;
   FFieldOf.Free;
   FClassOf.Free;
@@ -1862,6 +1927,13 @@ begin
     E   := pNode.ChildByField('entity');
     Args:= pNode.ChildByField('args');
     if E.NodeType <> 'identifier' then Exit;
+    { Trim(X) of a known caption is that caption, trimmed (Cmd152 EnsurePath levels) }
+    if SameText(Text(pFrame, E), 'Trim') and not Args.IsNull and (Args.NamedChildCount = 1) then
+    begin
+      A:= CaptionOf(Args.NamedChild(0), pFrame);
+      if (A.Kind = mvCaptions) and (Length(A.Captions) = 1) then Exit(Caps1([A.Captions[0].Trim], A.Conf));
+      Exit;
+    end;
     { Format('pattern', [...]) keeps the pattern }
     if SameText(Text(pFrame, E), 'Format') and not Args.IsNull and (Args.NamedChildCount > 0)
       and (Args.NamedChild(0).NodeType = 'literalString') then
@@ -1871,6 +1943,12 @@ begin
   end;
   if K = 'exprDot' then
   begin
+    { Row.Field of a registered table row bound by a loop }
+    if RecordField(pNode, pFrame, A) then
+    begin
+      if A.Kind = mvCaptions then Exit(A);
+      Exit;
+    end;
     { ARR[I].Field over a const array of records }
     E:= pNode.ChildByField('lhs');
     if (E.NodeType = 'exprSubscript') and (E.ChildByField('entity').NodeType = 'identifier')
@@ -1885,6 +1963,8 @@ var
 begin
   { a bound parameter / local passes through as bound (its text and file stay the call site's) }
   if (pNode.NodeType = 'identifier') and pFrame.Env.Vars.TryGetValue(LowerCase(Text(pFrame, pNode)), Result) then Exit;
+  { a field of a registered table row passes through as registered (caption, handler, path) }
+  if RecordField(pNode, pFrame, Result) then Exit;
   Result:= Eval(pNode, pFrame);
   if Result.Kind in [mvNode, mvProc, mvWrapper, mvHandler, mvCaptions, mvNil] then Exit;
   C:= CaptionOf(pNode, pFrame);
@@ -1948,6 +2028,8 @@ begin
   if K = 'exprCall' then Exit(EvalCall(pNode, pFrame));
   if K = 'exprDot' then
   begin
+    { Row.Field of a registered table row bound by a loop }
+    if RecordField(pNode, pFrame, Result) then Exit;
     L:= pNode.ChildByField('lhs');
     R:= Text(pFrame, pNode.ChildByField('rhs'));
     { dxBar: P.ItemLinks.Add / AddButton / AddSubItem written without parentheses }
@@ -2002,6 +2084,7 @@ begin
     '(^|\.)(TdxBarSubItem\.Create|AddSubItem)$', [roIgnoreCase]);
   FCreated.Add(N);
   if not Args.IsNull and (Args.NamedChildCount > 0) and (Args.NamedChild(0).NodeType = 'kNil') then FCreatedNil.Add(N);
+  if FTableDepth > 0 then FTableNodes.Add(N);
   Result:= NoValue;
   Result.Kind:= mvNode;
   Result.Node:= N;
@@ -2298,7 +2381,611 @@ begin
     pTarget.HasClick:= True;
     pTarget.Handler := HandlerOf(Eval(pRhs, pFrame));
   end
-  else if SameText(pProp, 'Enabled') and (pRhs.NodeType = 'kFalse') then pTarget.Disabled:= True;
+  else if SameText(pProp, 'Enabled') and (pRhs.NodeType = 'kFalse') then pTarget.Disabled:= True
+  { Item.Visible := Row.Visible of a registered row that is False: not on the live menu }
+  else if SameText(pProp, 'Visible') and RecordField(pRhs, pFrame, C) and (C.Kind = mvForeign) and SameText(C.Text, 'False') then
+    FHidden.Add(pTarget);
+end;
+
+{ ---- registered record tables (1.52 Cmd152, lane v152 INT-MENUTREE) ----
+  A program that registers its menu commands as RECORDS (RegisterCmd152(Row)
+  from each unit's initialization) and builds them in ONE loop
+  (for var Cmd in Cmd152OnSurface(pTable, csMainMenu) do .. Cmd.Caption ..)
+  is walked once per REGISTERED row: the rows are read statically from every
+  call of the record type's registration routine, and the loop variable is
+  bound to each row in turn. }
+
+{ A set-literal field of pRow ([csMainMenu, csEditorContext]) names pName. }
+function RowMentions(pRow: TRecordValue; const pName: string): Boolean;
+var
+  X: TMValue;
+begin
+  for X in pRow.Fields.Values do
+    if (X.Kind = mvForeign) and X.Text.StartsWith('[') and TRegEx.IsMatch(X.Text, '\b' + pName + '\b', [roIgnoreCase]) then
+      Exit(True);
+  Result:= False;
+end;
+
+function TWalkCore.NewRecord(pFrom: TRecordValue): TRecordValue;
+var
+  Pair: TPair<string, TMValue>;
+begin
+  Result:= TRecordValue.Create;
+  FRecVals.Add(Result);
+  if pFrom <> nil then
+    for Pair in pFrom.Fields do Result.Fields.Add(Pair.Key, Pair.Value);
+end;
+
+{ X.Field where X is bound to a table row: True, and the row's value of Field
+  (mvNone when the row never set it). }
+function TWalkCore.RecordField(const pNode: TTSNode; const pFrame: TWalkFrame; out pValue: TMValue): Boolean;
+var
+  L : TTSNode;
+  LV: TMValue;
+begin
+  pValue:= NoValue;
+  Result:= False;
+  if pNode.IsNull or (pNode.NodeType <> 'exprDot') or (pFrame.Env = nil) then Exit;
+  L:= pNode.ChildByField('lhs');
+  if (L.NodeType <> 'identifier') or not pFrame.Env.Vars.TryGetValue(LowerCase(Text(pFrame, L)), LV)
+    or (LV.Kind <> mvRecord) then Exit;
+  Result:= True;
+  if not TRecordValue(LV.Rec).Fields.TryGetValue(LowerCase(Text(pFrame, pNode.ChildByField('rhs'))), pValue) then
+    pValue:= NoValue;
+end;
+
+{ The value a registration statement stores in a row field: a bound parameter
+  as bound; a caption (literal, const, concatenation); True / False; else the
+  source text (a handler, an enum, a set literal) with its file. }
+function TWalkCore.RecValueOf(const pNode: TTSNode; const pFrame: TWalkFrame): TMValue;
+var
+  C: TMValue;
+begin
+  if (pNode.NodeType = 'identifier') and pFrame.Env.Vars.TryGetValue(LowerCase(Text(pFrame, pNode)), Result) then Exit;
+  Result:= NoValue;
+  Result.Kind:= mvForeign;
+  Result.Path:= pFrame.F.Path;
+  Result.Conf:= mcUnknown;
+  if pNode.NodeType = 'kTrue' then Result.Text:= 'True'
+  else if pNode.NodeType = 'kFalse' then Result.Text:= 'False'
+  else
+  begin
+    C:= CaptionOf(pNode, pFrame);
+    if C.Kind = mvCaptions then Exit(C);
+    Result.Text:= Text(pFrame, pNode);
+  end;
+end;
+
+{ The declared type text of a for-in collection: a called function's result
+  type, or the type of the enclosing routine's parameter; '' when unknown. }
+function TWalkCore.IterableTypeText(const pIterable, pLoop: TTSNode; const pFrame: TWalkFrame): string;
+var
+  Info  : TRoutineInfo;
+  QS    : TFDQuery;
+  P, Arg: TTSNode;
+  I, J  : Integer;
+  M     : TMatch;
+begin
+  Result:= '';
+  if (pIterable.NodeType = 'exprCall') and (pIterable.ChildByField('entity').NodeType = 'identifier') then
+  begin
+    Info:= ResolveRoutine(Text(pFrame, pIterable.ChildByField('entity')), pFrame.F.Path);
+    if not Info.Found then Exit;
+    QS:= Q('SELECT signature AS g FROM symbols WHERE qualified_name = :q COLLATE NOCASE AND impl_start_line > 0 LIMIT 1', [Info.QName]);
+    try
+      if not QS.Eof then
+      begin
+        M:= TRegEx.Match(QS.FieldByName('g').AsString, ':\s*([^:()]+?)\s*;?\s*$');
+        if M.Success then Result:= M.Groups[1].Value;
+      end;
+    finally
+      QS.Free;
+    end;
+    Exit;
+  end;
+  if pIterable.NodeType <> 'identifier' then Exit;
+  P:= pLoop.Parent;
+  while not P.IsNull and (P.NodeType <> 'defProc') do P:= P.Parent;
+  if not P.IsNull then P:= P.ChildByField('header');
+  if not P.IsNull then P:= P.ChildByField('args');
+  if P.IsNull then Exit;
+  for I:= 0 to P.NamedChildCount - 1 do
+  begin
+    Arg:= P.NamedChild(I);
+    if Arg.NodeType <> 'declArg' then Continue;
+    for J:= 0 to Arg.NamedChildCount - 1 do
+      if (Arg.NamedChild(J).NodeType = 'identifier') and SameText(Text(pFrame, Arg.NamedChild(J)), Text(pFrame, pIterable)) then
+        Result:= Text(pFrame, Arg.ChildByField('type'));
+  end;
+end;
+
+{ The record type T a for-in loop iterates (TArray<T> / array of T, see
+  IterableTypeText); '' when T is not a record the index knows. }
+function TWalkCore.ElementRecordType(const pIterable, pLoop: TTSNode; const pFrame: TWalkFrame): string;
+var
+  TypeText: string;
+  QS      : TFDQuery;
+  M       : TMatch;
+begin
+  Result:= '';
+  M:= TRegEx.Match(IterableTypeText(pIterable, pLoop, pFrame).Trim, '^(?:TArray\s*<\s*([\w.]+)\s*>|array\s+of\s+([\w.]+))$', [roIgnoreCase]);
+  if not M.Success then Exit;
+  TypeText:= if M.Groups[1].Success and (M.Groups[1].Value <> '') then M.Groups[1].Value else M.Groups[2].Value;
+  QS:= Q('SELECT 1 AS n FROM symbols WHERE name = :n COLLATE NOCASE AND kind = ''record'' LIMIT 1', [LastSegment(TypeText)]);
+  try
+    if not QS.Eof then Result:= LastSegment(TypeText);
+  finally
+    QS.Free;
+  end;
+end;
+
+{ The routines that register a row of record type pType: ONE parameter of that
+  type and a body that adds it to a list (X.Add(pRow)). }
+function TWalkCore.RegistrationRoutines(const pType: string): TArray<string>;
+var
+  QR  : TFDQuery;
+  M   : TMatch;
+  WF  : TWalkFile;
+  Proc: TTSNode;
+  Fr  : TWalkFrame;
+  Name, Path: string;
+  Line: Integer;
+  Cands: TList<TPair<string, string>>;
+  Cand : TPair<string, string>;
+  NFld, PFld, LFld, GFld: TField;
+begin
+  Result:= nil;
+  Cands:= TList<TPair<string, string>>.Create;
+  try
+    QR:= Q('SELECT s.name AS n, f.path AS p, s.impl_start_line AS l, s.signature AS g FROM symbols s JOIN files f ON f.id = s.file_id '
+      + 'WHERE s.kind = ''procedure'' AND s.impl_start_line > 0 AND s.signature LIKE :t ORDER BY s.id', ['%' + pType + '%']);
+    try
+      NFld:= QR.FieldByName('n');
+      PFld:= QR.FieldByName('p');
+      LFld:= QR.FieldByName('l');
+      GFld:= QR.FieldByName('g');
+      while not QR.Eof do
+      begin
+        M:= TRegEx.Match(GFld.AsString,
+          '^\(\s*(?:const\s+|constref\s+|var\s+)?(\w+)\s*:\s*' + TRegEx.Escape(pType) + '\s*\)$', [roIgnoreCase]);
+        if M.Success then
+          Cands.Add(TPair<string, string>.Create(NFld.AsString + '|' + M.Groups[1].Value, PFld.AsString + '|' + LFld.AsString));
+        QR.Next;
+      end;
+    finally
+      QR.Free;
+    end;
+    for Cand in Cands do
+    begin
+      Name:= Cand.Key.Split(['|'])[0];
+      Path:= Cand.Value.Split(['|'])[0];
+      Line:= StrToIntDef(Cand.Value.Split(['|'])[1], 0);
+      WF:= LoadFile(Path);
+      Proc:= FindDefProc(WF, Line);
+      if Proc.IsNull then Continue;
+      Fr:= Default(TWalkFrame);
+      Fr.F:= WF;
+      if TRegEx.IsMatch(Text(Fr, Proc.ChildByField('body')), '\.\s*Add\s*\(\s*' + Cand.Key.Split(['|'])[1] + '\s*\)', [roIgnoreCase]) then
+        Result:= Result + [Name];
+    end;
+  finally
+    Cands.Free;
+  end;
+end;
+
+{ Reg(X) where Reg registers rows and X is a bound row: True, and X's value. }
+function TWalkCore.RegisteredRowArg(const pCall: TTSNode; const pFrame: TWalkFrame; const pRegNames: TArray<string>;
+  out pRow: TMValue): Boolean;
+var
+  E, Args: TTSNode;
+begin
+  pRow:= NoValue;
+  Result:= False;
+  E   := pCall.ChildByField('entity');
+  Args:= pCall.ChildByField('args');
+  if (E.NodeType <> 'identifier') or (IndexText(Text(pFrame, E), pRegNames) < 0) then Exit;
+  if Args.IsNull or (Args.NamedChildCount <> 1) or (Args.NamedChild(0).NodeType <> 'identifier') then Exit;
+  Result:= pFrame.Env.Vars.TryGetValue(LowerCase(Text(pFrame, Args.NamedChild(0))), pRow) and (pRow.Kind = mvRecord);
+end;
+
+{ The row an assignment X := <rhs> starts: a copy of a bound row Y, an empty
+  Default(T), or the Result of a parameterless function (Row := BaseRow).
+  mvNone for any other right-hand side; a bound scalar comes back as bound. }
+function TWalkCore.RowOfRhs(const pRhs: TTSNode; const pFrame: TWalkFrame; const pRegNames: TArray<string>;
+  pRows: TList<TRecordValue>): TMValue;
+var
+  Callee: string;
+  Info  : TRoutineInfo;
+  WF    : TWalkFile;
+  Proc, Head: TTSNode;
+  Fr    : TWalkFrame;
+begin
+  Result:= NoValue;
+  Callee:= '';
+  if pRhs.NodeType = 'identifier' then Callee:= Text(pFrame, pRhs)
+  else if (pRhs.NodeType = 'exprCall') and (pRhs.ChildByField('entity').NodeType = 'identifier') then
+    Callee:= Text(pFrame, pRhs.ChildByField('entity'));
+  if Callee = '' then Exit;
+  if (pRhs.NodeType = 'identifier') and pFrame.Env.Vars.TryGetValue(LowerCase(Callee), Result) then
+  begin
+    if Result.Kind = mvRecord then Result.Rec:= NewRecord(TRecordValue(Result.Rec));
+    Exit;
+  end;
+  if SameText(Callee, 'Default') then
+  begin
+    Result.Kind:= mvRecord;
+    Result.Rec := NewRecord(nil);
+    Exit;
+  end;
+  Info:= ResolveRoutine(Callee, pFrame.F.Path);
+  if not Info.Found or (pFrame.Depth >= MAX_DEPTH) or FStack.Contains(LowerCase(Info.QName)) then Exit;
+  WF:= LoadFile(Info.Path);
+  Proc:= FindDefProc(WF, Info.Line);
+  Head:= if Proc.IsNull then Default(TTSNode) else Proc.ChildByField('header');
+  if Head.IsNull or not (Head.ChildByField('args').IsNull or (Head.ChildByField('args').NamedChildCount = 0)) then Exit;
+  Fr:= Default(TWalkFrame);
+  Fr.F    := WF;
+  Fr.Env  := NewEnv;
+  Fr.Depth:= pFrame.Depth + 1;
+  FStack.Add(LowerCase(Info.QName));
+  try
+    RunRecordBody(Proc.ChildByField('body'), Fr, pRegNames, pRows);
+  finally
+    FStack.Delete(FStack.Count - 1);
+  end;
+  if not Fr.Env.Vars.TryGetValue('result', Result) or (Result.Kind <> mvRecord) then Result:= NoValue;
+end;
+
+{ Runs a routine's statements in order over row values: X.F := v sets a field
+  (an unset local starts a row), X := <rhs> starts one (RowOfRhs), and a call of
+  a registration routine emits a copy of its row argument. Nothing here builds
+  menu nodes. }
+procedure TWalkCore.RunRecordBody(const pNode: TTSNode; const pFrame: TWalkFrame; const pRegNames: TArray<string>;
+  pRows: TList<TRecordValue>);
+var
+  K, Name: string;
+  I      : Integer;
+  L, R   : TTSNode;
+  V      : TMValue;
+  Rec    : TRecordValue;
+begin
+  if pNode.IsNull then Exit;
+  K:= pNode.NodeType;
+  if IsCompound(K) or (K = 'statement') then
+  begin
+    for I:= 0 to pNode.NamedChildCount - 1 do RunRecordBody(pNode.NamedChild(I), pFrame, pRegNames, pRows);
+    Exit;
+  end;
+  if K = 'exprCall' then
+  begin
+    if RegisteredRowArg(pNode, pFrame, pRegNames, V) then
+    begin
+      Rec:= NewRecord(TRecordValue(V.Rec));
+      Rec.Site:= Loc(pFrame, pNode);
+      pRows.Add(Rec);
+    end;
+    Exit;
+  end;
+  if K <> 'assignment' then Exit;
+  L:= pNode.ChildByField('lhs');
+  R:= pNode.ChildByField('rhs');
+  if (L.NodeType = 'exprDot') and (L.ChildByField('lhs').NodeType = 'identifier') then
+  begin
+    Name:= LowerCase(Text(pFrame, L.ChildByField('lhs')));
+    if not pFrame.Env.Vars.TryGetValue(Name, V) or (V.Kind <> mvRecord) then
+    begin
+      V:= NoValue;
+      V.Kind:= mvRecord;
+      V.Rec := NewRecord(nil);
+      pFrame.Env.Vars.AddOrSetValue(Name, V);
+    end;
+    TRecordValue(V.Rec).Fields.AddOrSetValue(LowerCase(Text(pFrame, L.ChildByField('rhs'))), RecValueOf(R, pFrame));
+    Exit;
+  end;
+  Name:= '';
+  if L.NodeType = 'identifier' then Name:= Text(pFrame, L)
+  else if L.NodeType = 'varAssignDef' then
+    for I:= 0 to L.NamedChildCount - 1 do
+      if L.NamedChild(I).NodeType = 'identifier' then
+      begin
+        Name:= Text(pFrame, L.NamedChild(I));
+        Break;
+      end;
+  if Name <> '' then
+  begin
+    V:= RowOfRhs(R, pFrame, pRegNames, pRows);
+    if V.Kind = mvNone then V:= RecValueOf(R, pFrame);
+    pFrame.Env.Vars.AddOrSetValue(LowerCase(Name), V);
+  end;
+end;
+
+{ Every row registered for record type pType, in registration order. A
+  registering routine with parameters (RegisterRow(pId, pCaption, ..)) runs
+  once per call of it, its parameters bound to that call's arguments (one hop). }
+function TWalkCore.TableRows(const pType: string): TArray<TRecordValue>;
+var
+  RegNames : TArray<string>;
+  RegName  : string;
+  Rows     : TList<TRecordValue>;
+  Seen     : TList<string>;
+  Site, CallSite: TPair<string, Integer>;
+  WF, CF   : TWalkFile;
+  Proc, CallProc, Call, Args: TTSNode;
+  Fr, CFr  : TWalkFrame;
+  Names    : TArray<string>;
+  ProcName : string;
+  SeenKey  : string;
+  I        : Integer;
+
+  function Sites(const pName: string): TArray<TPair<string, Integer>>;
+  var
+    QS        : TFDQuery;
+    PFld, LFld: TField;
+  begin
+    Result:= nil;
+    QS:= Q('SELECT DISTINCT f.path AS p, r.start_line AS l FROM refs r JOIN files f ON f.id = r.file_id '
+      + 'WHERE r.name_text = :n COLLATE NOCASE AND r.kind = ''call'' ORDER BY lower(f.path), r.start_line', [pName]);
+    try
+      PFld:= QS.FieldByName('p');
+      LFld:= QS.FieldByName('l');
+      while not QS.Eof do
+      begin
+        Result:= Result + [TPair<string, Integer>.Create(PFld.AsString, LFld.AsInteger)];
+        QS.Next;
+      end;
+    finally
+      QS.Free;
+    end;
+  end;
+
+  function ArgNames(const pProc: TTSNode; const pFr: TWalkFrame): TArray<string>;
+  var
+    A, D: TTSNode;
+    X, Y: Integer;
+  begin
+    Result:= nil;
+    A:= pProc.ChildByField('header');
+    if A.IsNull then Exit;
+    A:= A.ChildByField('args');
+    if A.IsNull then Exit;
+    for X:= 0 to A.NamedChildCount - 1 do
+    begin
+      D:= A.NamedChild(X);
+      if D.NodeType <> 'declArg' then Continue;
+      for Y:= 0 to D.NamedChildCount - 1 do
+        if D.NamedChild(Y).NodeType = 'identifier' then Result:= Result + [LowerCase(Text(pFr, D.NamedChild(Y)))];
+    end;
+  end;
+
+  function FindCall(const pIn: TTSNode; const pFr: TWalkFrame; const pName: string; pLine: Integer): TTSNode;
+  var
+    X: Integer;
+    E: TTSNode;
+  begin
+    Result:= Default(TTSNode);
+    if pIn.IsNull then Exit;
+    if (pIn.NodeType = 'exprCall') and (NodeLine(pIn) = pLine) then
+    begin
+      E:= pIn.ChildByField('entity');
+      if (E.NodeType = 'identifier') and SameText(Text(pFr, E), pName) then Exit(pIn);
+    end;
+    for X:= 0 to pIn.NamedChildCount - 1 do
+    begin
+      Result:= FindCall(pIn.NamedChild(X), pFr, pName, pLine);
+      if not Result.IsNull then Exit;
+    end;
+  end;
+
+begin
+  if FTableRows.TryGetValue(LowerCase(pType), Result) then Exit;
+  Result:= nil;
+  RegNames:= RegistrationRoutines(pType);
+  Rows:= TList<TRecordValue>.Create;
+  Seen:= TList<string>.Create;
+  try
+    for RegName in RegNames do
+      for Site in Sites(RegName) do
+      begin
+        WF:= LoadFile(Site.Key);
+        Proc:= FindDefProc(WF, Site.Value);
+        if Proc.IsNull then Continue;
+        SeenKey:= LowerCase(Site.Key) + '#' + IntToStr(Proc.StartByte);
+        if Seen.Contains(SeenKey) then Continue;
+        Seen.Add(SeenKey);
+        Fr:= Default(TWalkFrame);
+        Fr.F  := WF;
+        Fr.Env:= NewEnv;
+        Names:= ArgNames(Proc, Fr);
+        if Names = nil then
+        begin
+          RunRecordBody(Proc.ChildByField('body'), Fr, RegNames, Rows);
+          Continue;
+        end;
+        { one hop: run the routine once per call of it, parameters bound }
+        ProcName:= LastSegment(Text(Fr, Proc.ChildByField('header').ChildByField('name')));
+        for CallSite in Sites(ProcName) do
+        begin
+          CF:= LoadFile(CallSite.Key);
+          CallProc:= FindDefProc(CF, CallSite.Value);
+          CFr:= Default(TWalkFrame);
+          CFr.F  := CF;
+          CFr.Env:= NewEnv;
+          Call:= FindCall(CallProc, CFr, ProcName, CallSite.Value);
+          if Call.IsNull then Continue;
+          Args:= Call.ChildByField('args');
+          Fr.Env:= NewEnv;
+          for I:= 0 to High(Names) do
+            if not Args.IsNull and (I < Args.NamedChildCount) then
+              Fr.Env.Vars.AddOrSetValue(Names[I], RecValueOf(Args.NamedChild(I), CFr));
+          RunRecordBody(Proc.ChildByField('body'), Fr, RegNames, Rows);
+        end;
+      end;
+    Result:= Rows.ToArray;
+  finally
+    Seen.Free;
+    Rows.Free;
+  end;
+  FTableRows.Add(LowerCase(pType), Result);
+end;
+
+{ The variable a for-in loop binds (for X in / for var X in); '' when none. }
+function TWalkCore.LoopVarName(const pIterator: TTSNode; const pFrame: TWalkFrame): string;
+var
+  I: Integer;
+begin
+  Result:= '';
+  if pIterator.NodeType = 'identifier' then Result:= Text(pFrame, pIterator)
+  else if pIterator.NodeType = 'varAssignDef' then
+    for I:= 0 to pIterator.NamedChildCount - 1 do
+      if pIterator.NamedChild(I).NodeType = 'identifier' then Exit(Text(pFrame, pIterator.NamedChild(I)));
+end;
+
+{ for X in SplitString(S, Sep) over a known caption: the body once per
+  non-blank piece, X bound to it. False = not that shape. }
+function TWalkCore.ExpandSplit(const pIterable, pBody: TTSNode; const pVar: string; const pFrame: TWalkFrame): Boolean;
+var
+  E, Args: TTSNode;
+  S, Sep, V: TMValue;
+  Piece  : string;
+begin
+  Result:= False;
+  if pIterable.NodeType <> 'exprCall' then Exit;
+  E   := pIterable.ChildByField('entity');
+  Args:= pIterable.ChildByField('args');
+  if (E.NodeType <> 'identifier') or not SameText(Text(pFrame, E), 'SplitString') or Args.IsNull or (Args.NamedChildCount <> 2) then Exit;
+  S  := CaptionOf(Args.NamedChild(0), pFrame);
+  Sep:= CaptionOf(Args.NamedChild(1), pFrame);
+  if (S.Kind <> mvCaptions) or (Sep.Kind <> mvCaptions) or (Length(S.Captions) <> 1) or (Length(Sep.Captions) <> 1) then Exit;
+  if Sep.Captions[0] = '' then Exit;
+  for Piece in S.Captions[0].Split(Sep.Captions[0].ToCharArray) do
+    if Piece.Trim <> '' then
+    begin
+      V:= NoValue;
+      V.Kind    := mvCaptions;
+      V.Captions:= [Piece];
+      V.Conf    := S.Conf;
+      pFrame.Env.Vars.AddOrSetValue(pVar, V);
+      WalkStmt(pBody, pFrame);
+    end;
+  Result:= True;
+end;
+
+{ The clickable items a row's loop pass created (FTableNodes from pFrom on)
+  report where the row was registered, not the loop: an item whose caption is
+  one of the row's caption fields. }
+procedure TWalkCore.StampRowSource(pRow: TRecordValue; pFrom: Integer);
+var
+  J: Integer;
+  F: TMValue;
+begin
+  for J:= pFrom to FTableNodes.Count - 1 do
+    if FTableNodes[J].HasClick then
+      for F in pRow.Fields.Values do
+        if (F.Kind = mvCaptions) and (Length(F.Captions) = 1) and (F.Captions[0] = FTableNodes[J].Caption) then
+          FTableNodes[J].Source:= pRow.Site;
+end;
+
+{ for X in SplitString(..): see ExpandSplit. for X in <rows of a registered
+  record table>: the body once per row, X bound to it; a bare enum argument of
+  the collection call (Cmd152OnSurface(pTable, csMainMenu)) keeps only the rows
+  whose set field names it. False = neither shape (the loop is walked once, as
+  before). }
+function TWalkCore.ExpandForEach(const pNode: TTSNode; const pFrame: TWalkFrame): Boolean;
+var
+  Coll, Body, Args: TTSNode;
+  VarName, TypeName, Filter: string;
+  V      : TMValue;
+  Rows   : TArray<TRecordValue>;
+  Row    : TRecordValue;
+  Filters: TArray<string>;
+  I      : Integer;
+  Keep   : Boolean;
+
+  function AnyMentions(const pName: string): Boolean;
+  var
+    X: TRecordValue;
+  begin
+    for X in Rows do
+      if RowMentions(X, pName) then Exit(True);
+    Result:= False;
+  end;
+
+begin
+  Result:= False;
+  Coll:= pNode.ChildByField('iterable');
+  Body:= pNode.ChildByField('body');
+  VarName:= LowerCase(LoopVarName(pNode.ChildByField('iterator'), pFrame));
+  if (VarName = '') or Body.IsNull or Coll.IsNull then Exit;
+  if ExpandSplit(Coll, Body, VarName, pFrame) then Exit(True);
+  TypeName:= ElementRecordType(Coll, pNode, pFrame);
+  Rows:= if TypeName = '' then nil else TableRows(TypeName);
+  if Rows = nil then Exit;
+  Filters:= nil;
+  Args:= if Coll.NodeType = 'exprCall' then Coll.ChildByField('args') else Default(TTSNode);
+  if not Args.IsNull then
+    for I:= 0 to Args.NamedChildCount - 1 do
+      if (Args.NamedChild(I).NodeType = 'identifier') and not pFrame.Env.Vars.ContainsKey(LowerCase(Text(pFrame, Args.NamedChild(I))))
+        and AnyMentions(Text(pFrame, Args.NamedChild(I))) then
+        Filters:= Filters + [Text(pFrame, Args.NamedChild(I))];
+  Inc(FTableDepth);
+  try
+    for Row in Rows do
+    begin
+      Keep:= True;
+      for Filter in Filters do
+        if not RowMentions(Row, Filter) then Keep:= False;
+      if not Keep then Continue;
+      V:= NoValue;
+      V.Kind:= mvRecord;
+      V.Rec := Row;
+      pFrame.Env.Vars.AddOrSetValue(VarName, V);
+      I:= FTableNodes.Count;
+      WalkStmt(Body, pFrame);
+      StampRowSource(Row, I);
+    end;
+  finally
+    Dec(FTableDepth);
+  end;
+  Result:= True;
+end;
+
+{ After the walk (registered tables only): an item a row hides (Visible =
+  False) goes; a submenu a row created merges into an earlier sibling submenu of
+  the same caption (EnsurePath finds the existing one at run time); a submenu a
+  row created that is left empty goes. }
+procedure TWalkCore.PruneTableNodes(pNode: TMenuNode);
+var
+  I, J: Integer;
+  C, S: TMenuNode;
+begin
+  for I:= pNode.Children.Count - 1 downto 0 do
+    if FHidden.Contains(pNode.Children[I]) then pNode.Children.Delete(I);
+  I:= 0;
+  while I < pNode.Children.Count do
+  begin
+    C:= pNode.Children[I];
+    S:= nil;
+    if FTableNodes.Contains(C) and (C.Children.Count > 0) then
+      for J:= 0 to I - 1 do
+        if (pNode.Children[J].Children.Count > 0) and (pNode.Children[J].CaptionKey = C.CaptionKey) then
+        begin
+          S:= pNode.Children[J];
+          Break;
+        end;
+    if S = nil then
+    begin
+      Inc(I);
+      Continue;
+    end;
+    while C.Children.Count > 0 do S.AddChild(C.Children.Extract(C.Children[0]));
+    pNode.Children.Delete(I);
+  end;
+  for C in pNode.Children do PruneTableNodes(C);
+  for I:= pNode.Children.Count - 1 downto 0 do
+  begin
+    C:= pNode.Children[I];
+    if FTableNodes.Contains(C) and (C.Children.Count = 0) and not C.HasClick then pNode.Children.Delete(I);
+  end;
 end;
 
 procedure TWalkCore.WalkStmt(const pNode: TTSNode; const pFrame: TWalkFrame);  // dl:ok too-many-exit-points@cbf0, cyclomatic-complexity@33cb -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch
@@ -2311,6 +2998,7 @@ var
 begin
   if pNode.IsNull then Exit;
   K:= pNode.NodeType;
+  if (K = 'foreach') and ExpandForEach(pNode, pFrame) then Exit;
   if IsCompound(K) then
   begin
     for I:= 0 to pNode.NamedChildCount - 1 do WalkStmt(pNode.NamedChild(I), pFrame);
@@ -2666,6 +3354,11 @@ var
 begin
   GraftFieldRoots;
   FreeOrphans(True);
+  if FTableNodes.Count + FHidden.Count > 0 then
+  begin
+    for N in FTree.Roots do PruneTableNodes(N);
+    for N in FTree.External do PruneTableNodes(N);
+  end;
   for N in FTree.Roots do Settle(N);
   for N in FTree.External do Settle(N);
 end;
