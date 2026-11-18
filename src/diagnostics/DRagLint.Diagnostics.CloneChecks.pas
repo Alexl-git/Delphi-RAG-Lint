@@ -310,6 +310,7 @@ var
   procedure Match;
   var
     N, i, start, a, b, p, q, L, MaxBucket, cvA, cvB, k: Integer;
+    CodeEnd, CodeSemi: Integer; { interned codes of `end` / `;`; 0 (matches no token) when absent }
     NextBar  : TArray<Integer>;
     Base, PowW, h: UInt64;
     Buckets  : TDictionary<UInt64, TList<Integer>>;
@@ -320,6 +321,8 @@ var
   begin
     N := Toks.Count;
     if N < W then Exit;
+    if not Interner.TryGetValue(#3'end', CodeEnd) then CodeEnd := 0;
+    if not Interner.TryGetValue(#3';', CodeSemi) then CodeSemi := 0;
     Base := UInt64(1000003);
     PowW := 1;
     for i := 1 to W do PowW := PowW * Base; { Base^W (natural mod 2^64) }
@@ -375,6 +378,16 @@ var
                   and (Toks[a + L].Code > 0)
                   and (Toks[a + L].Code = Toks[b + L].Code) do
               Inc(L);
+            { v152 FPS: a match that starts on the closing `end` / `;` of a preceding,
+              different statement is anchored on that `end;` line. Those closers cannot
+              begin a statement, so snap both sides forward to the first real token. }
+            while (L > 0) and ((Toks[a].Code = CodeEnd) or (Toks[a].Code = CodeSemi)) do
+            begin
+              Inc(a);
+              Inc(b);
+              Dec(L);
+            end;
+            if L < W then Continue;
             if Abs(a - b) < L then Continue; { same-region overlap }
             cand.A := a; cand.B := b; cand.Len := L;
             Cands.Add(cand);

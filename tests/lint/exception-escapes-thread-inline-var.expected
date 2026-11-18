@@ -1,0 +1,5 @@
+# v152 FPS: inline var T := TTask.Run that is later Waited (20) or passed to WaitForAll (30) is quiet; un-waited inline twins (40, 50) still fire
+!exception-escapes-thread 20
+!exception-escapes-thread 30
+exception-escapes-thread 40
+exception-escapes-thread 50

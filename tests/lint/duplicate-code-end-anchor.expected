@@ -1,0 +1,3 @@
+# v152 FPS: the clone of the summing block is anchored on its first statement (36), not on the closing end; of the different statement before it (35)
+duplicate-code 36
+!duplicate-code 35
