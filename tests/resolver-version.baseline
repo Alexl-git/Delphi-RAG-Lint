@@ -760,7 +760,9 @@
 #   superseded: 1.29.0-alpha|47516a074b28f6f6bd81e6e569f421e6a443c3e4d329160e4b3c42b235b53398
 #   2026-11-18 v152 TAILS-ENG2 hash-only re-pin (rides the one 1.52 resolver bump 464d590a8; 1.52's one re-resolve is still ahead): ValueElementTypeText types `var B:= M[K]` through the project's OWN class default indexer (OwnIndexedElementText: generic type arguments put in for a property typed by a type parameter; non-generic class too).
 #   superseded: 1.29.0-alpha|06b469f9125d8767da803449d019b7dd5a99e7ca1153888722f1073c8ef79d3f
-1.29.0-alpha|a8ab681be986b6e73104e58bac9904438393df69f797f078166553b0ff355e0d
+#   2026-11-18 v152 INT13 hash-only re-pin (rides the one 1.52 bump 464d590a8): dl:ok marker COMMENT text re-stamped in hashed units (commit 12d7450b1: Storage.SQLite, Index.CallResolver, Preprocess.Decls and 7 non-hashed units); no code change, no parse/symbol/ref/edge change.
+# superseded: 1.29.0-alpha|a8ab681be986b6e73104e58bac9904438393df69f797f078166553b0ff355e0d
+1.29.0-alpha|80409115e20c50c5f78ad9ff42cfeb45b2620c9852d63a6d13e1f34b75c2b5b4
 #   2026-11-06 int2: hash moved WITHOUT a bump from 631322c4: the dl:ok comment on ResolveCallTargets re-stamped by the lint sweep, no code change.
 # superseded: 1.19.0-alpha|e4c14c16d87b21940e6ce6017456b8446a5cc516e342b72b816e3e161612ecba
 #   2026-11-06 1.19.0 -> 1.20.0-alpha (lanes facts + rename): ref_types (static type of a reference), ref_receivers (receiver link of a ref), references in initialization / finalization attributed to the section symbol. Additive, no SCHEMA_VERSION move. Remedy: index --all --resolve-only.

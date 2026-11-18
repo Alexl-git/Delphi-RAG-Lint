@@ -1066,7 +1066,7 @@ Win64 build.
 
 #### Lint
 
-**435 rules across 18 categories -- 322 built-in + 113 external `.scm`, 354
+**435 rules across 18 categories -- 322 built-in + 113 external `.scm`, 355
 enabled by default, 131 with an auto-fix.**
 
 | Command | What it does | Notable flags |

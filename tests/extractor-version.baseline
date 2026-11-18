@@ -1249,4 +1249,6 @@
 #   Superseded: 1.41.0-alpha|1dc37a0440723caf0306aa43b5444286ac0ddc709a5ac84a8e751463839cf957
 #   2026-11-18 v152 TAILS-ENG2 hash-only re-pin (rides the one 1.52 bump 464d590a8): CallResolver.OwnIndexedElementText -- the hashed resolver unit types `var B:= M[K]` through a project class's own default indexer; no parse, symbol or ref-row shape change.
 #   Superseded: 1.41.0-alpha|f2692a1010f977f7d45a99b9ac03c4f475e3a4ab615c8da91f4d3297fe90c243
-1.41.0-alpha|6592bae0fd934a01ff98bc72cfe1229febdd8f7eeb7c3e204e4c679829c8a69d
+#   2026-11-18 v152 INT13 hash-only re-pin (rides the one 1.52 bump 464d590a8): dl:ok marker COMMENT text re-stamped in hashed units (commit 12d7450b1: Storage.SQLite, Index.CallResolver, Preprocess.Decls and 7 non-hashed units); no code change, no parse/symbol/ref/edge change.
+#   Superseded: 1.41.0-alpha|6592bae0fd934a01ff98bc72cfe1229febdd8f7eeb7c3e204e4c679829c8a69d
+1.41.0-alpha|74f83e97094a724ce2c307a3813421135cdcfe8261f21ff52119e09f70f16231
