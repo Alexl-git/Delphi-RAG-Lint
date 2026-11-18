@@ -10228,7 +10228,7 @@ begin
         ScopeNote:= Format('nothing is bound at %s:%d; answered scope project (every "%s")', [AArgs.InFile, AArgs.RefLine, QueryName]);
       end;
     end
-    else if Pos('.', QueryName) = 0 then
+    else if not QueryName.Contains('.') then
     begin
       Scope:= usProject;
       ScopeNote:= USAGE_NOTE_BARE_NAME;

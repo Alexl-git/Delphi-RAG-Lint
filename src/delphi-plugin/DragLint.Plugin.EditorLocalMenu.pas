@@ -172,7 +172,7 @@ begin
       if SubIndex < 0 then
       begin
         var SubCategory: string:= MENU_CATEGORY + '.' + StringReplace(Rows[i].EditorParent, ' ', '', [rfReplaceAll]);
-        var SubAction: TAction:= TAction.Create(GActions);  // dl:ok object-leak@f5c0 -- owned by GActions (Create(GActions)); freed with it in UnregisterDragLintEditorLocalMenu
+        var SubAction: TAction:= TAction.Create(GActions); { owned by GActions; freed with it in UnregisterDragLintEditorLocalMenu }
         SubAction.ActionList:= GActions;
         SubAction.Category:= SubCategory;
         SubAction.Caption:= Rows[i].EditorParent;

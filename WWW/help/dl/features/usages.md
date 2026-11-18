@@ -1,20 +1,20 @@
 ---
 id: usages
 title: usages
-summary: Finds usage sites of a named symbol, with a choice of report width
+summary: Finds usage sites of a symbol in one of four scopes (this bound symbol, project, group, everywhere), with a choice of report width
 product: DL
 group: search-navigation
 order: 20035
 since: 0.33.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # usages
 
-Finds usage sites of a named symbol, with a choice of report width.
+Finds usage sites of a symbol in one of four scopes (this bound symbol, project, group, everywhere), with a choice of report width.
 
-Read this when you want every place a symbol is used: usages (also behind Find Usages in the IDE) lists the grouped usage sites of a named symbol, with a narrow, wide or very-wide report width.
+Read this when you want every place a symbol is used: usages (also behind Find Usages in the IDE) lists the grouped usage sites. --scope symbol (the default) answers the declaration a position (--in/--line/--col) or a qualified name is bound to; project, group and everywhere widen it to every object of that name in the project, the project group or every index.
 
 ## How to run it
 
@@ -35,6 +35,10 @@ Full flag list: [usages in the CLI reference](../cli.md#usages).
 | `--in` | `<file>` |  |  |
 | `--library-db` | `<lib.sqlite>` |  |  |
 | `--no-create` |  |  |  |
+| `--scope` | `symbol\|project\|group\|everywhere` |  |  |
+| `--group` | `<x.groupproj>` |  |  |
+| `--line` | `<L>` |  |  |
+| `--col` | `<C>` |  |  |
 
 ## Where to click
 
@@ -51,7 +55,7 @@ backs the "Usages" search kind in the Symbol Search dialog.
 
 ### Running it from the CLI
 ```text
-drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json] [--limit N]
+drag-lint usages --name <X> | --in <file> --line <L> [--col <C>] [--scope symbol|project|group|everywhere] [--group <x.groupproj>] [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json] [--limit N]
 ```
 `--limit N` keeps the first N rows of each JSON group and adds `"limit"` and
 `"totals"` (every group's full count); `declarations` is a group too, so it is capped like the others. Without it the document is unchanged.
@@ -63,6 +67,28 @@ drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--dep
 (`narrow`, `wide`, or `very-wide`). `--depth N` is in the usage line with no
 further description -- not documented. `--format json` is the only format the
 usage line lists.
+
+### Scope (`--scope`, 1.52)
+`--scope` picks which objects count (the same four words in the IDE, the LSP and the
+MCP `find_usages` tool):
+
+* `symbol` (the default) -- the declaration a position (`--in <file> --line <L> [--col <C>]`)
+  or a qualified `--name uJob.TJob.Run` is BOUND to, in this project. Same-named fields,
+  properties and routines elsewhere are left out.
+* `project` -- every object of that name in this project (the answer before 1.52).
+* `group` -- the name in every project of `--group <x.groupproj>` (each project's index:
+  the manifest's, else `<project folder>\_D-RAG\<name>.sqlite`).
+* `everywhere` -- the name in every index the manifest knows for the platform.
+
+A bare `--name X` with no position binds nothing, so it is answered as `project`, as
+before. The JSON says which scope it answered: `scope`, plus `scope_requested` and
+`scope_note` when that is not the one asked, `bound` (the bound qualified name) and
+`databases` (what was read). An unknown scope word exits 2.
+
+```text
+drag-lint usages --in src\uMain.pas --line 13 --col 5 --db <db> --json
+drag-lint usages --name Run --scope group --group C:\Projects\MyApp\MyApp.groupproj --db <db>
+```
 
 ### What it needs
 Optional, per the feature map's Index column.

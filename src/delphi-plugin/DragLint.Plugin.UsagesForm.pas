@@ -103,6 +103,7 @@ implementation
 uses
   System.JSON
   , System.StrUtils
+  , System.Math { InRange }
   , Vcl.Forms
   , Vcl.ComCtrls
   , Vcl.StdCtrls
@@ -146,7 +147,7 @@ const
 { The scope word of a combo index; 'symbol' for anything else. }
 function ScopeWordAt(AIndex: Integer): string;
 begin
-  Result:= if (AIndex >= Low(SCOPE_WORDS)) and (AIndex <= High(SCOPE_WORDS)) then SCOPE_WORDS[AIndex] else SCOPE_WORDS[0];
+  Result:= if InRange(AIndex, Low(SCOPE_WORDS), High(SCOPE_WORDS)) then SCOPE_WORDS[AIndex] else SCOPE_WORDS[0];
 end;
 
 { The combo index of a scope word; 0 (This symbol) for an unknown one. }
@@ -872,7 +873,7 @@ begin
     { 1.52 FUSCOPE: the scope the engine answered, when it is not the one asked, in the title. }
     FScopeNote:= '';
     FScopeDbCount:= 0;
-    if (Length(Output) > 0) and (Output[1] = '{') then
+    if (Output <> '') and (Output[1] = '{') then
     begin
       var Doc: TJSONValue:= TJSONObject.ParseJSONValue(Output);
       try

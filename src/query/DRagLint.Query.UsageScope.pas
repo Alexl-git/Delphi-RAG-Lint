@@ -118,11 +118,6 @@ function BoundUsageRefs(const AStore: ISymbolStore; const ABinding: TUsageBindin
 function UsageScopeDbs(AScope: TUsageScope; const AProjectDbs: TArray<string>;
   const AGroupFile, APlatform: string; out ANote: string): TArray<string>;
 
-/// <summary>The project files a .groupproj lists, absolute.</summary>
-/// <param name="AGroupFile">The .groupproj path.</param>
-/// <returns>Every Projects Include="..." value resolved against the group's
-/// folder, in file order; empty when the file is missing or lists none.</returns>
-function GroupProjectFiles(const AGroupFile: string): TArray<string>;
 
 implementation
 
@@ -207,7 +202,7 @@ function IdentifierAtFilePosition(const AFile: string; ALine1, ACol1: Integer): 
 begin
   Result:= '';
   if not TFile.Exists(AFile) then Exit;
-  var Lines: TArray<string>:= TFile.ReadAllLines(AFile);
+  var Lines: TArray<string>:= TFile.ReadAllLines(AFile);  // dl:ok taint-path-traversal@4ce1 -- REVIEWED 2026-11-18 FUSCOPE: reads the source file the user named (--in / the MCP file argument); reading it is the point
   if (ALine1 < 1) or (ALine1 > Length(Lines)) then Exit;
   var Text: string:= Lines[ALine1 - 1];
   var Col: Integer:= ACol1;
@@ -233,16 +228,17 @@ begin
     declaration whose qualified name carries no dot gets one, so it still takes that
     path; the external match cannot hit a leading-dot name. }
   var QName: string:= ABinding.QName;
-  if Pos('.', QName) = 0 then QName:= '.' + QName;
+  if not QName.Contains('.') then QName:= '.' + QName;
   Result:= UsageRefsForName(AStore, QName, ADecls);
 end;
 
+{ The project files a .groupproj lists, absolute, in file order; empty when the file is missing. }
 function GroupProjectFiles(const AGroupFile: string): TArray<string>;
 begin
   Result:= nil;
   if (AGroupFile = '') or not TFile.Exists(AGroupFile) then Exit;
   var Dir: string:= ExtractFilePath(ExpandFileName(AGroupFile));
-  var Text: string:= TFile.ReadAllText(AGroupFile);
+  var Text: string:= TFile.ReadAllText(AGroupFile);  // dl:ok taint-path-traversal@d6d4 -- REVIEWED 2026-11-18 FUSCOPE: reads the project group file the user named (--group / the IDE open group); reading it is the point
   for var M: TMatch in TRegEx.Matches(Text, '<Projects\s+Include="([^"]+)"', [roIgnoreCase]) do
     Result:= Result + [ExpandFileName(TPath.Combine(Dir, M.Groups[1].Value))];
 end;

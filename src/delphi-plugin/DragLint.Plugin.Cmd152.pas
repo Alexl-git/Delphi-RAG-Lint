@@ -224,7 +224,7 @@ end;
 
 function Cmd152EditorPath(const pCommand: TCmd152Command): string;
 begin
-  if not (csEditorContext in pCommand.Surfaces) then Exit('');
+  if csEditorContext not in pCommand.Surfaces then Exit('');
   Result:= EDITOR_PATH_PREFIX;
   if pCommand.EditorParent <> '' then Result:= Result + StripHotkey(pCommand.EditorParent) + ' ' + PATH_SEP + ' ';
   Result:= Result + StripHotkey(pCommand.Caption);

@@ -2181,7 +2181,13 @@ type
       /// settings object (initializationOptions or the didChangeConfiguration section).</summary>
       /// <param name="ASettings">The object; nil or keys absent leave the settings as they are.</param>
       procedure ApplyUsageSettings(const ASettings: TJSONObject);
-      /// <summary>What a registered LSP feature answers for a request, without
+      /// <summary>1.52 FUSCOPE: the stores scope group / everywhere adds to the open ones.</summary>
+      /// <param name="AScope">The scope; symbol and project add nothing.</param>
+      /// <param name="AOwnPaths">The databases already open for the question.</param>
+      /// <param name="AGroup">The .groupproj scope group reads.</param>
+      /// <param name="ANote">Receives DRagLint.Query.UsageScope.UsageScopeDbs's note.</param>
+      /// <returns>Every other database of the scope, opened read-only; one that fails to open is skipped.</returns>
+      function ExtraScopeStores(AScope: TUsageScope; const AOwnPaths: TArray<string>; const AGroup: string; out ANote: string): TArray<ISymbolStore>;      /// <summary>What a registered LSP feature answers for a request, without
       /// writing it anywhere: the merge proxy's way to serve a feature (stdout is
       /// the relay's, never this server's, in that mode).</summary>
       /// <param name="AMethod">The LSP method name.</param>
@@ -3484,15 +3490,7 @@ begin
         var Own: TArray<string>:= nil;
         for var St: ISymbolStore in RefStores do Own:= Own + [StorePathOf(St)];
         var Note: string;
-        for var D: string in UsageScopeDbs(FUsagesScope, Own, FUsagesGroup, '', Note) do
-        begin
-          var Known: Boolean:= False;
-          for var P: string in Own do
-            if SameText(ExpandFileName(P), D) then Known:= True;
-          if Known then Continue;
-          var Extra: ISymbolStore:= OpenReaderStore(D);
-          if Extra <> nil then RefStores:= RefStores + [Extra];
-        end;
+        RefStores:= RefStores + ExtraScopeStores(FUsagesScope, Own, FUsagesGroup, Note);
         if Note <> '' then Writeln(ErrOutput, 'drag-lint LSP: references: ', Note);
       end;
       for var StIdx:= 0 to High(RefStores) do
@@ -3552,8 +3550,21 @@ begin
   end;
 end;
 
-procedure TLSPServer.ApplyUsageSettings(const ASettings: TJSONObject);
+function TLSPServer.ExtraScopeStores(AScope: TUsageScope; const AOwnPaths: TArray<string>; const AGroup: string; out ANote: string): TArray<ISymbolStore>;
 begin
+  Result:= nil;
+  for var D: string in UsageScopeDbs(AScope, AOwnPaths, AGroup, '', ANote) do
+  begin
+    var Known: Boolean:= False;
+    for var P: string in AOwnPaths do
+      if SameText(ExpandFileName(P), D) then Known:= True;
+    if Known then Continue;
+    var Extra: ISymbolStore:= OpenReaderStore(D);
+    if Extra <> nil then Result:= Result + [Extra];
+  end;
+end;
+
+procedure TLSPServer.ApplyUsageSettings(const ASettings: TJSONObject);begin
   if ASettings = nil then Exit;
   var Scope: TUsageScope;
   var Word: string:= JsonStrOf(ASettings, 'usagesScope');
@@ -6010,7 +6021,7 @@ begin
   var Requested: TUsageScope:= USAGE_SCOPE_DEFAULT;
   if (ScopeWord <> '') and not TryParseUsageScope(ScopeWord, Requested) then
   begin
-    SendError(AId, -32602, 'draglint/usages: unknown "scope" ' + ScopeWord + '; use ' + UsageScopeChoices);
+    SendError(AId, LSP_ERR_INVALID_PARAMS, 'draglint/usages: unknown "scope" ' + ScopeWord + '; use ' + UsageScopeChoices);
     Exit;
   end;
 
@@ -6065,7 +6076,7 @@ begin
           ScopeNote:= Format('nothing is bound at %s:%d; answered scope project', [PosFile, PosLine]);
         end;
       end
-      else if Pos('.', Nm) = 0 then
+      else if not Nm.Contains('.') then
       begin
         Scope:= usProject;
         ScopeNote:= USAGE_NOTE_BARE_NAME;
@@ -6077,15 +6088,7 @@ begin
     if Scope in [usGroup, usEverywhere] then
     begin
       var WideNote: string;
-      for var D: string in UsageScopeDbs(Scope, FStorePaths, GroupFile, '', WideNote) do
-      begin
-        var Known: Boolean:= False;
-        for var P: string in FStorePaths do
-          if SameText(ExpandFileName(P), D) then Known:= True;
-        if Known then Continue;
-        var Extra: ISymbolStore:= OpenReaderStore(D);
-        if Extra <> nil then ScanStores:= ScanStores + [Extra];
-      end;
+      ScanStores:= ScanStores + ExtraScopeStores(Scope, FStorePaths, GroupFile, WideNote);
       if WideNote <> '' then ScopeNote:= WideNote;
     end;
 

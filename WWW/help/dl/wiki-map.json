@@ -245,6 +245,7 @@
   "v151-wid-ast-rules": "v151-wid-ast-rules",
   "v151-wid-scm-rules": "v151-wid-scm-rules",
   "v1511-cli-fixes": "v1511-cli-fixes",
+  "v152-atlb-rules": "v152-atlb-rules",
   "v152-vsfix": "v152-vsfix",
   "vscode-extension": "auto-uses-on-save",
   "warm-rule-cache": "warm-rule-cache",

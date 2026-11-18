@@ -566,7 +566,7 @@ uses
 /// <returns>A header naming the scope answered (and what it is bound to), a note when
 /// it is not the one asked, one line per declaration and per usage row
 /// (bucket file:line:col), and the databases read. Same rules as `usages --scope`.</returns>
-function UsagesText(const AHome: ISymbolStore; const AHomePath, AName, AFile: string; ALine, ACol: Integer;
+function UsagesText(const AHome: ISymbolStore; const AHomePath, AName, AFile: string; ALine, ACol: Integer;  // dl:ok too-many-parameters@3f3e -- REVIEWED 2026-11-18 FUSCOPE: the find_usages tool arguments one for one; a record would be filled at its single call site only
   AScope: TUsageScope; const AGroup: string; const AOpen: TFunc<string, ISymbolStore>): string;
 begin
   var Name: string:= AName;
@@ -588,7 +588,7 @@ begin
         Note:= Format('nothing is bound at %s:%d; answered scope project', [AFile, ALine]);
       end;
     end
-    else if Pos('.', Name) = 0 then
+    else if not Name.Contains('.') then
     begin
       Scope:= usProject;
       Note:= USAGE_NOTE_BARE_NAME;

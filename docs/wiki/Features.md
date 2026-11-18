@@ -103,7 +103,7 @@ Find symbols, callers, callees, text and types in the index.
 | [context](context) | `context` |  |
 | [exception-facts](exception-facts) | `exception-facts` |  |
 | [Find Undocumented (public)](Find-Undocumented-public) | drag-lint > Code Quality > Find Undocumented (public)...; `query find` |  |
-| [Find Usages](Find-Usages) | drag-lint > Find Usages... |  |
+| [Find Usages](Find-Usages) | drag-lint > Find Usages...; drag-lint > Find Usages > This symbol; drag-lint > Find Usages > Project; drag-lint > Find Usages > Group; drag-lint > Find Usages > Everywhere; Editor: drag-lint > Find Usages > This symbol; Editor: drag-lint > Find Usages > Project; Editor: drag-lint > Find Usages > Group; Editor: drag-lint > Find Usages > Everywhere |  |
 | [Find Usages](Find-Usages-context) | Structure form: Find Usages; `usages` |  |
 | [find-callees](find-callees) | `find-callees`; drag-lint > Uses & Dependencies > What This Routine Calls (callees)... |  |
 | [find-unit](find-unit) | `find-unit`; drag-lint > Uses & Dependencies > Find Unit for Symbol (add to uses)... |  |
@@ -139,7 +139,7 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**425 rules. 126 have an auto-fix. 346 are on by default.** 312 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**426 rules. 126 have an auto-fix. 346 are on by default.** 313 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
@@ -155,13 +155,13 @@ Rules, autofix, suppression markers and project-wide checks.
 | other | 16 | 4 |
 | platform | 16 | 4 |
 | policy | 6 | - |
-| project-wide | 51 | 8 |
+| project-wide | 52 | 8 |
 | refactoring | 26 | 9 |
 | resource-lifetime | 22 | 9 |
 | review-markers | 6 | 2 |
 | security | 27 | 2 |
 | structure | 17 | 9 |
-| **Total** | **425** | **126** |
+| **Total** | **426** | **126** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -203,9 +203,10 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Interfaced object set to nil (lint rule)](interfaced-object-nil-leak) | `lint-all` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
 | [Lint rules on the static type of a reference](ref-type-rules) | `lint-all` |  |
-| [Lint rules](rules) | 425 rules, 126 fixable; `rules` |  |
+| [Lint rules](rules) | 426 rules, 126 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
+| [member-could-be-private lint rule (lane ATLB)](v152-atlb-rules) | `lint-all` |  |
 | [Memory and string-pointer lint rules (PChar, raw memory, leaks, byte counts)](memory-string-pointer-rules) | `lint-all` |  |
 | [Object-model lint rules (Equals/hash, events, GUIDs, exports)](object-model-rules) | `lint-all` |  |
 | [Opaque to analysis (lint rule)](opaque-to-analysis) | `lint-all` |  |
