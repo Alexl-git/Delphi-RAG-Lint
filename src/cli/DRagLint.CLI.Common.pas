@@ -442,6 +442,8 @@ type
     // Task 5: lint-all ownership scope. --lint-third-party restores the pre-
     // Task-5 behaviour (every indexed .pas file, vendored code included).
     LintThirdParty: Boolean;
+    // 1.52 BUDGET (D9): lint / lint-all --no-budget -- no rule is skipped for exceeding rule_time_budget_ms.
+    NoBudget: Boolean;
     // lint-all --shared-db <db> (repeatable): other project indexes whose findings
     // count as evidence for a closure-dependent review marker on a shared unit.
     SharedDbs: TArray<string>;

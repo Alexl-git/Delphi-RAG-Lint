@@ -52,7 +52,10 @@ type
     NarrowRule: string;         // --rule of this run, '' = every rule
     /// <summary>True when this run reports ARuleId (no --rule, or --rule ARuleId).</summary>
     /// <param name="ARuleId">A rule id the lane is about to compute.</param>
-    /// <returns>False only when --rule names another rule.</returns>
+    /// <returns>False when --rule names another rule, or when ARuleId already overran the
+    /// per-rule time budget on this file (DRagLint.Core.LintBudget, 1.52 D9).</returns>
+    /// <remarks>Also marks the start of ARuleId's time slice for that budget: call it right
+    /// before computing the rule.</remarks>
     function Wants(const ARuleId: string): Boolean;
     /// <summary>Builds the context; finds the sibling .dfm itself.</summary>
     /// <param name="APath">The .pas file.</param>
@@ -120,6 +123,7 @@ implementation
 uses
   System.SysUtils
   , System.IOUtils
+  , DRagLint.Core.LintBudget
   ;
 
 function V151Rule(const AId, ACategory, ASeverity, ATitle: string; AEnabled: Boolean;
@@ -155,7 +159,8 @@ end;
 
 function TV151FileCtx.Wants(const ARuleId: string): Boolean;
 begin
-  Result:= (NarrowRule = '') or SameText(NarrowRule, ARuleId);
+  { 1.52 BUDGET: report the rule to the per-file budget; False once it overran on this file }
+  Result:= ((NarrowRule = '') or SameText(NarrowRule, ARuleId)) and RuleBudgetEnter(ARuleId);
 end;
 
 class function TV151FileCtx.Make(const APath: string; const ACfg: TLintConfig; const AStore: ISymbolStore;

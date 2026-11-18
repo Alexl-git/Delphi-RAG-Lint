@@ -244,6 +244,7 @@ uses
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.V151.Api       { v151 lane FRAME: TV151FileCtx / TV151ProjectCtx }
   , DRagLint.V151.Dispatch  { v151 lane FRAME: the one entry to the v151 rule lanes }
+  , DRagLint.Core.LintBudget  { 1.52 BUDGET: --no-budget, lint-all's rule-budget summary line }
   , DRagLint.Diagnostics.FlowChecks
   , DRagLint.Analysis   .DataFlow  { DataFlowStats -- the solver iteration counters }
   , DRagLint.Index      .Manifest
@@ -1165,6 +1166,7 @@ begin
       Inc(i) { every verb: applied by Run, before ParseArgs (ApplyManifestSwitch) }
     else if A = '--no-locals' then Result.NoLocals:= True
     else if A = '--lint-third-party' then Result.LintThirdParty:= True
+    else if A = '--no-budget' then Result.NoBudget:= True  { 1.52 BUDGET (D9): lint / lint-all without the per-rule time budget }
     else if (A = '--shared-db') and (i < ParamCount) then
     begin
       { lint-all only: a verb that accepted and ignored it would read as "judged". }
@@ -14888,6 +14890,7 @@ var
     start reporting markers in files the run deliberately does not report on. }
   ScannedFiles: TArray<string>              ;
 begin
+  SetRuleBudgetDisabled(AArgs.NoBudget);  { 1.52 BUDGET }
   if not ExplicitDbsExist(AArgs, 'lint') then Exit(2);
   if AArgs.Fix and SameText(AArgs.FixRule, REDUNDANT_CAST_RULE_ID) then Exit(DoRedundantCastFix(AArgs));
   if AArgs.Fix and MatchText(AArgs.FixRule, UNWITH_FIX_RULE_IDS) then Exit(DoUnwithFix(AArgs));
@@ -20125,6 +20128,8 @@ var
   end;
 
 begin
+  SetRuleBudgetDisabled(AArgs.NoBudget);  { 1.52 BUDGET }
+  RuleBudgetResetSummary;
   if RefuseCompileGateWithoutFix(AArgs, 'lint-all') then Exit(2);
   { wave 148 RO: an unknown --rule id was a silent empty report here (lint and lint-project already refuse it). }
   if AArgs.Rule <> '' then
@@ -21263,6 +21268,8 @@ begin
   finally
     MarkerUnion.Free;
   end;
+  { 1.52 BUDGET (D9): the rules the per-rule time budget skipped, once per run (each file also got a rule-skipped-budget note) }
+  if RuleBudgetSummaryLine <> '' then EmitNoteLine(AArgs, 'lint-all: ' + RuleBudgetSummaryLine);
   { 100% means FINISHED -- the report is written and every phase is done. It is
     emitted exactly once, here, so a reader (and the IDE bar) can treat it as a
     completion signal rather than as "the scan loop ended", which is what it

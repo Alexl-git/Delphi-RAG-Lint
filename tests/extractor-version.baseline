@@ -1239,4 +1239,6 @@
 #   Superseded: 1.41.0-alpha|58536b7f15bf9a9d5314198a1bb0c64597adff95a5f7316cee63cf19bc5c5a8f
 #   2026-11-17 v152 EXTGAPS2 hash-only re-pin (rides the one 1.52 bump 464d590a8; owner 2026-11-17: no second re-parse): HB6 exports entries are ref kind 'export' (no call edge); HB3 the calls pass adds data_flows global <- argout rows for var / out arguments; index columns are CHARACTER columns (Parser.Delphi13, DataFlowFacts, CallResolver with scopes, IncludeUses via Core.Encoding.Utf8ByteColToCharCol).
 #   Superseded: 1.41.0-alpha|26ea9f66463511be4f6e6c1dccad12f9a8d108b838918499c5cdf656792ed361
-1.41.0-alpha|7bc94a5d4f7222070abe38416c41f74acc22f98fd2490bd2d96bb6c5dad96ab1
+#   2026-11-18 v152 BUDGET hash-only re-pin (rides the one 1.52 bump 464d590a8): Core.Indexer gains one Writeln (near-parse-limit WARN) and one uses entry; extraction unchanged.
+#   Superseded: 1.41.0-alpha|7bc94a5d4f7222070abe38416c41f74acc22f98fd2490bd2d96bb6c5dad96ab1
+1.41.0-alpha|36a74ab7cdb38378d3ced0b2cb83153905ff40ae0a58eea35ce7390c277a6f3c

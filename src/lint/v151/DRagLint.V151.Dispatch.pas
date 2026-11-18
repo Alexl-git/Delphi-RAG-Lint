@@ -65,6 +65,7 @@ implementation
 uses
   System.Generics.Collections
   , System.IOUtils
+  , DRagLint.Core.LintBudget  // dl:unit DRagLint.Core.LintBudget accepted -- 1.52 BUDGET: the frame drives the per-rule budget clock and emits its rule-skipped-budget note, so the ids travel with the clock
   , DRagLint.V151.APP
   , DRagLint.V151.CMP
   , DRagLint.V151.DFMA
@@ -166,6 +167,8 @@ begin
   Seen:= TDictionary<string, Boolean>.Create;
   try
     for var E: TLaneEntry in GLanes do E.Catalog(L);
+    // 1.52 BUDGET (D7/D9): the frame's own note, emitted by CheckFile when a rule overran its budget
+    L.Add(V151Rule(RULE_SKIPPED_BUDGET_ID, 'other', 'info', RULE_SKIPPED_BUDGET_TITLE));
     GDecls:= L.ToArray;
     GIds:= nil;
     for var D: TV151RuleDecl in GDecls do
@@ -183,6 +186,52 @@ end;
 procedure LaneFailed(const ALane, AWhere, APath: string; E: Exception);
 begin
   Writeln(ErrOutput, Format('v151 lane %s: %s skipped for %s (%s: %s)', [ALane, AWhere, ExtractFileName(APath), E.ClassName, E.Message]));
+end;
+
+{ 1.52 BUDGET: one lane call under the per-rule budget. Skips the call when the lane key
+  already overran on this file; drops the findings of every rule (or of the whole call, for
+  the lane key) that overran on it. }
+function Budgeted(const ALane: string; const ACall: TFunc<TArray<TLintFinding>>): TArray<TLintFinding>;
+begin
+  Result:= nil;
+  if not RuleBudgetBeginCall(ALane) then Exit;
+  var Got: TArray<TLintFinding>;
+  try
+    Got:= ACall();
+  finally
+    RuleBudgetEndCall;
+  end;
+  if RuleBudgetIsSkipped(RULE_BUDGET_LANE_PREFIX + ALane) then Exit;
+  for var F: TLintFinding in Got do
+    if not RuleBudgetIsSkipped(F.RuleId) then Result:= Result + [F];
+end;
+
+{ 1.52 BUDGET: closes the file's budget; drops the findings of rules that overran after they
+  were collected and adds the file's one rule-skipped-budget note. }
+function CloseBudget(const ACtx: TV151FileCtx; ABudgetMs: Integer; const AFindings: TArray<TLintFinding>): TArray<TLintFinding>;
+begin
+  var Skips: TArray<TRuleBudgetSkip>:= RuleBudgetEndFile;
+  if Length(Skips) = 0 then Exit(AFindings);
+  Result:= nil;
+  for var F: TLintFinding in AFindings do
+  begin
+    var Dropped: Boolean:= False;
+    for var S: TRuleBudgetSkip in Skips do
+      if SameText(S.RuleId, F.RuleId) then Dropped:= True;
+    if not Dropped then Result:= Result + [F];
+  end;
+  if not ACtx.Wants(RULE_SKIPPED_BUDGET_ID) then Exit;
+  var N: TLintFinding:= Default(TLintFinding);
+  N.RuleId   := RULE_SKIPPED_BUDGET_ID;
+  N.FilePath := ACtx.Path;
+  N.FileId   := ACtx.FileId;
+  N.StartLine:= 1;
+  N.StartCol := 1;
+  N.EndLine  := 1;
+  N.EndCol   := 1;
+  N.Severity := 'info';
+  N.Message  := RuleBudgetNoteMessage(Skips, ABudgetMs);
+  Result:= Result + [N];
 end;
 
 { TV151Dispatch }
@@ -228,14 +277,20 @@ class function TV151Dispatch.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFi
 begin
   Result:= nil;
   if Length(GIds) = 0 then Exit;
-  for var E: TLaneEntry in GLanes do
-    try
-      Result:= Result + E.OnFile(ACtx);
-    except  // dl:ok try-except-swallowed@e084 -- REVIEWED 2026-11-13 v151 FRAME: logged to stderr by LaneFailed; one lane failing must not stop the others
-      on X: Exception do LaneFailed(E.Name, 'CheckFile', ACtx.Path, X);
-    end;
-  Result:= V151Narrow(Result, ACtx.NarrowRule) + CheckRawBytes(ACtx, ACtx.Path) + CheckDfm(ACtx);
-  if ACtx.DfmPath <> '' then Result:= Result + CheckRawBytes(ACtx, ACtx.DfmPath);
+  var BudgetMs: Integer:= RuleBudgetEffectiveMs(ACtx.Cfg.RuleTimeBudgetMs);
+  RuleBudgetBeginFile(BudgetMs);
+  try
+    for var E: TLaneEntry in GLanes do
+      try
+        Result:= Result + Budgeted(E.Name, function: TArray<TLintFinding> begin Result:= E.OnFile(ACtx); end);
+      except  // dl:ok try-except-swallowed@e084 -- REVIEWED 2026-11-13 v151 FRAME: logged to stderr by LaneFailed; one lane failing must not stop the others
+        on X: Exception do LaneFailed(E.Name, 'CheckFile', ACtx.Path, X);
+      end;
+    Result:= V151Narrow(Result, ACtx.NarrowRule) + CheckRawBytes(ACtx, ACtx.Path) + CheckDfm(ACtx);
+    if ACtx.DfmPath <> '' then Result:= Result + CheckRawBytes(ACtx, ACtx.DfmPath);
+  finally
+    Result:= CloseBudget(ACtx, BudgetMs, Result);
+  end;
 end;
 
 class function TV151Dispatch.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
@@ -244,7 +299,7 @@ begin
   if (Length(GIds) = 0) or (ACtx.DfmPath = '') then Exit;
   for var E: TLaneEntry in GLanes do
     try
-      Result:= Result + E.OnDfm(ACtx);
+      Result:= Result + Budgeted(E.Name, function: TArray<TLintFinding> begin Result:= E.OnDfm(ACtx); end);
     except  // dl:ok try-except-swallowed@a178 -- REVIEWED 2026-11-13 v151 FRAME: logged to stderr by LaneFailed; one lane failing must not stop the others
       on X: Exception do LaneFailed(E.Name, 'CheckDfm', ACtx.DfmPath, X);
     end;
@@ -268,7 +323,7 @@ begin
   end;
   for var E: TLaneEntry in GLanes do
     try
-      Result:= Result + E.OnBytes(ACtx, AFilePath, Bytes);
+      Result:= Result + Budgeted(E.Name, function: TArray<TLintFinding> begin Result:= E.OnBytes(ACtx, AFilePath, Bytes); end);
     except  // dl:ok try-except-swallowed@0740 -- REVIEWED 2026-11-13 v151 FRAME: logged to stderr by LaneFailed; one lane failing must not stop the others
       on X: Exception do LaneFailed(E.Name, 'CheckRawBytes', AFilePath, X);
     end;
