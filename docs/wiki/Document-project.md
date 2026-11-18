@@ -26,6 +26,17 @@ Documents every public declaration the project owns (scope: the compile
 closure restricted to the project's own roots). `--reindex` self-freshens
 the index afterward so hover/LSP are correct immediately.
 
+When a file the run reads facts from changed since it was indexed (for
+example another project's `--apply` rewrote a shared unit), the line
+ranges in the index cover other text and the facts would cite the wrong
+routines. A dry run then prints a `doc: WARN` on stderr naming those files
+and still shows the preview (`--json` carries `"staleFactSources": N`);
+`--apply` refuses and writes nothing until the index is fresh. Reindex, or
+use `--apply --reindex`, which reindexes before it documents.
+`document-all` behaves the same way. Under `--json`, stdout is one JSON
+document even when the run reindexes in-process (`--reindex`, the
+stale-anchor retry, the tamper rescan).
+
 ## What it needs
 
 Optional, per the feature map's Index column.
