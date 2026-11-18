@@ -2152,18 +2152,15 @@ begin
       post-order a unit placed before the declaring unit reaches its uses entry of it while that unit is still
       being visited, so the order skips the entry the cut removes and the cut moves no unit. }
     var Same:= InitializesBefore(pSource.Store, '', pFromUnit, DeclUnit);
-    case Same.Answer of
-      ioaBefore:
-        begin
-          pProof:= Format('finalization order: unchanged by the cut: `%s` is finalized before `%s` with the cycle as ' +
-            'written and after the cut: %s, and %s; the order skips the uses entry the cut removes, so the cut moves ' +
-            'no unit. The call already runs after `%s` is finalized, after which %s: the cut keeps that behaviour, it ' +
-            'does not change it.', [DeclUnit, pFromUnit, CReverse, Same.Text, DeclUnit, Seen]);
-          Exit;
-        end;
-      ioaConfigDependent: Exit(Maybe + '; ' + CReverse + ', and ' + Same.Text);
-    end;
-    Exit(if Proof.Text.StartsWith(CNoPath) then Certain else Maybe + '; ' + CReverse + ', and ' + Proof.Text);
+    if Same.Answer = ioaBefore then
+      pProof:= Format('finalization order: unchanged by the cut: `%s` is finalized before `%s` with the cycle as ' +
+        'written and after the cut: %s, and %s; the order skips the uses entry the cut removes, so the cut moves ' +
+        'no unit. The call already runs after `%s` is finalized, after which %s: the cut keeps that behaviour, it ' +
+        'does not change it.', [DeclUnit, pFromUnit, CReverse, Same.Text, DeclUnit, Seen])
+    else
+      Result:= if Same.Answer = ioaConfigDependent then Maybe + '; ' + CReverse + ', and ' + Same.Text
+        else if Proof.Text.StartsWith(CNoPath) then Certain else Maybe + '; ' + CReverse + ', and ' + Proof.Text;
+    Exit;
   end;
   var Body:= Proof.Text;
   if Body.StartsWith(CInitHead) then Body:= Body.Substring(Length(CInitHead));
