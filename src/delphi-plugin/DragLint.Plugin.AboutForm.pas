@@ -857,7 +857,7 @@ begin
       begin
         Bpl  := FindKnownPackagePath('YADFOT');
         Local:= '';
-        if Bpl <> '' then Local:= FileVersionOf(ExtractFilePath(Bpl) + 'YADF.exe');
+        if Bpl <> '' then Local:= FileVersionOf(FindYadfTool(Bpl, 'YADF.exe'));
       end;
 
       Tag:= FetchLatestReleaseTag(C.Repo, CHECK_TIMEOUT_MS, Err);
@@ -867,6 +867,8 @@ begin
       begin
         if IsUpdateAvailable(Tag, Local, Reason) then AnyNew:= True;
         SB.AppendLine(Format('%-12s %s', [C.DisplayName, Reason]));
+        if (Bpl <> '') and not SameText(C.DisplayName, 'drag-lint') then
+          SB.AppendLine(Format('%-12s   installed : %s', ['', FindYadfTool(Bpl, 'YADF.exe')]));
       end;
       SB.AppendLine(Format('%-12s   releases : %s', ['', C.ReleasesUrl]));
       SB.AppendLine(Format('%-12s   changelog: %s', ['', C.ChangelogUrl]));

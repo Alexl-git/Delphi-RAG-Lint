@@ -28,7 +28,7 @@ program UpdateCheckTests;
   update" passes every "does not claim a false update" assertion on its own.
   Every case below is therefore asserted in BOTH directions. }
 uses
-  System.SysUtils,
+  System.SysUtils, System.Classes,
   DragLint.Plugin.Updates in '..\src\delphi-plugin\DragLint.Plugin.Updates.pas';
 
 var
@@ -156,6 +156,62 @@ begin
   end;
 end;
 
+procedure TestResolveYadfTool;
+const
+  BPL32 = 'C:\Projects\YADF\Win32\Debug\EXE\YADFOT.bpl';
+  R64   = 'C:\Projects\YADF\Win64\Release\EXE\YADF.exe';
+  D64   = 'C:\Projects\YADF\Win64\Debug\EXE\YADF.exe';
+var
+  Files: TStringList;
+  Ex   : TPathExists;
+  Srch : TPathSearch;
+begin
+  Writeln;
+  Writeln('-- where YADF.exe / YADFSetup.exe are looked for --');
+  Files:= TStringList.Create;
+  try
+    Files.CaseSensitive:= False;
+    Ex   := function(const P: string): Boolean begin Result:= Files.IndexOf(P) >= 0; end;
+    Srch := function(const F: string): string
+            begin
+              if Files.IndexOf('D:\tools\' + F) >= 0 then Result:= 'D:\tools\' + F else Result:= '';
+            end;
+
+    Check('5a nothing anywhere -> empty', ResolveYadfTool(BPL32, 'YADF.exe', Ex, Srch) = '');
+
+    Files.Add('C:\Projects\YADF\Win32\Debug\EXE\YADF.exe');
+    Check('5b beside the BPL wins (release zip layout)',
+          ResolveYadfTool(BPL32, 'YADF.exe', Ex, Srch) = 'C:\Projects\YADF\Win32\Debug\EXE\YADF.exe');
+
+    Files.Clear;
+    Files.Add(D64);
+    Check('5c Win32 BPL dir -> repo Win64 Debug when no Release',
+          ResolveYadfTool(BPL32, 'YADF.exe', Ex, Srch) = D64);
+
+    Files.Add(R64);
+    Check('5d Release is preferred over Debug',
+          ResolveYadfTool(BPL32, 'YADF.exe', Ex, Srch) = R64);
+    Check('5e a Win64 BPL dir resolves the same repo layout',
+          ResolveYadfTool('C:\Projects\YADF\Win64\Debug\EXE\YADFOT-Win64.bpl', 'YADF.exe', Ex, Srch) <> '');
+
+    Files.Clear;
+    Files.Add('D:\tools\YADF.exe');
+    Check('5f PATH is the last resort',
+          ResolveYadfTool(BPL32, 'YADF.exe', Ex, Srch) = 'D:\tools\YADF.exe');
+    Check('5g a BPL outside the repo layout still falls to PATH',
+          ResolveYadfTool('C:\Program Files\YADF\YADFOT-Win32.bpl', 'YADF.exe', Ex, Srch) = 'D:\tools\YADF.exe');
+
+    Files.Clear;
+    Files.Add(D64);
+    Check('5h the exe name is honoured (YADFSetup not found when only YADF exists)',
+          ResolveYadfTool(BPL32, 'YADFSetup.exe', Ex, Srch) = '');
+    Check('5i no BPL registered -> PATH only',
+          ResolveYadfTool('', 'YADF.exe', Ex, Srch) = '');
+  finally
+    Files.Free;
+  end;
+end;
+
 begin
   try
     GPass:= 0; GFail:= 0;
@@ -163,6 +219,7 @@ begin
     TestCompare;
     TestIsUpdateAvailable;
     TestComponents;
+    TestResolveYadfTool;
     Writeln;
     Writeln(Format('%d passed, %d failed', [GPass, GFail]));
     if GFail > 0 then Halt(1);

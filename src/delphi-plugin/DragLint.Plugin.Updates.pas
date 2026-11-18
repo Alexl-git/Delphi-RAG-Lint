@@ -144,6 +144,33 @@ function FileVersionOf(const APath: string): string;
 /// </remarks>
 function FindKnownPackagePath(const ANameFragment: string): string;
 
+type
+  /// <summary>File-exists probe; injected so the resolver is testable without
+  /// the machine's folder layout.</summary>
+  TPathExists = reference to function(const APath: string): Boolean;
+  /// <summary>PATH probe: full path of AFileName on the search path, or ''.</summary>
+  TPathSearch = reference to function(const AFileName: string): string;
+
+/// <summary>Finds a YADF tool exe (YADF.exe, YADFSetup.exe) for the registered
+/// YADFOT package, first hit wins: (a) beside the BPL (release zip layout);
+/// (b) when the BPL dir is ...\Win32|Win64\&lt;Cfg&gt;\EXE\, the repo's
+/// Win64\Release\EXE\ then Win64\Debug\EXE\ (the IDE is 32-bit but the exes are
+/// Win64-only; Release is what ships on GitHub); (c) the PATH.</summary>
+/// <param name="ABplPath">Full path of the registered YADFOT*.bpl; '' skips (a) and (b).</param>
+/// <param name="AExeName">File name, e.g. 'YADF.exe'.</param>
+/// <param name="AExists">File-exists probe.</param>
+/// <param name="ASearch">PATH probe.</param>
+/// <returns>Full path of the exe, or '' when none was found.</returns>
+/// <remarks>Pure apart from the two probes; no registry, no disk access of its own.</remarks>
+function ResolveYadfTool(const ABplPath, AExeName: string;
+  const AExists: TPathExists; const ASearch: TPathSearch): string;
+
+/// <summary>ResolveYadfTool with the real FileExists and SearchPath.</summary>
+/// <param name="ABplPath">See ResolveYadfTool.</param>
+/// <param name="AExeName">See ResolveYadfTool.</param>
+/// <returns>Full path of the exe, or '' when none was found.</returns>
+function FindYadfTool(const ABplPath, AExeName: string): string;
+
 /// <summary>Latest release tag of ARepo from the GitHub API.</summary>
 /// <param name="ARepo"><!-- drag-lint:auto type -->const string</param>
 /// <param name="ATimeoutMs">Applied to both connect and response. The caller
@@ -329,6 +356,49 @@ begin
   end;
 end;
 
+function ResolveYadfTool(const ABplPath, AExeName: string;
+  const AExists: TPathExists; const ASearch: TPathSearch): string;
+var
+  Dir, Cur, Plat, Root: string;
+  Cand                : string;
+begin
+  Result:= '';
+  if ABplPath <> '' then
+  begin
+    Dir := IncludeTrailingPathDelimiter(ExtractFilePath(ABplPath));
+    Cand:= Dir + AExeName;
+    if AExists(Cand) then Exit(Cand);
+    { ...\Win32|Win64\<Cfg>\EXE\ : walk up EXE, <Cfg>, <Platform> to the repo root. }
+    Cur := ExcludeTrailingPathDelimiter(Dir);
+    Plat:= ExtractFileDir(ExtractFileDir(Cur));
+    if SameText(ExtractFileName(Cur), 'EXE')
+       and (SameText(ExtractFileName(Plat), 'Win32') or SameText(ExtractFileName(Plat), 'Win64')) then
+    begin
+      Root:= IncludeTrailingPathDelimiter(ExtractFileDir(Plat));
+      for Cand in [Root + 'Win64\Release\EXE\' + AExeName,
+                   Root + 'Win64\Debug\EXE\' + AExeName] do
+        if AExists(Cand) then Exit(Cand);
+    end;
+  end;
+  Result:= ASearch(AExeName);
+end;
+
+function FindYadfTool(const ABplPath, AExeName: string): string;
+begin
+  Result:= ResolveYadfTool(ABplPath, AExeName,
+    function(const P: string): Boolean
+    begin
+      Result:= FileExists(P);
+    end,
+    function(const F: string): string
+    var
+      Buf: array[0..MAX_PATH] of Char;
+      Fp : PChar;
+    begin
+      Fp:= nil;
+      Result:= if SearchPath(nil, PChar(F), nil, Length(Buf), Buf, Fp) > 0 then string(PChar(@Buf)) else '';
+    end);
+end;
 function FetchLatestReleaseTag(const ARepo: string; ATimeoutMs: Integer;
   out AError: string): string;
 var
