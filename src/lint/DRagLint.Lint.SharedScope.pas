@@ -258,6 +258,8 @@ function IsUndecidedSite(const AFile: string; ALine: Integer; const ARule: strin
 /// 1.52 BK-TAILS-ENG: a `.groupproj` peer whose index file does NOT exist is recorded as unindexed
 /// (its `.dproj` DCCReference entries and `.dpr` / `.dpk` `in '...'` paths are read); TSharedScope.Judge
 /// then answers svUndecided for every unit it lists and writes one stderr line per such peer.
+/// 1.52 TAILS-ENG2: the same for every unit in a folder the unindexed peer searches (its own folder and
+/// its `.dproj` DCC_UnitSearchPath) -- the peer may compile such a unit without listing it.
 /// </remarks>
 procedure AddDiscoveredPeers(const APrimaryDb, AProjectPath: string; AIsCopy: Boolean;
   const ANameToDb: TDictionary<string, string>);
@@ -269,7 +271,12 @@ uses
   System.RegularExpressions,
   DRagLint.Lint.SharedUnit,  { TSharedUnit.ProjectsOf -- the header-declared projects }
   DRagLint.Lint.ProjectChecks.Parse,  { ReadDCCReferences / FindSiblingProgramFile -- what an unindexed peer lists }
+  DRagLint.Index.Closure,  { TClosureResolver.ProjectSearchPaths -- the folders an unindexed peer searches }
   DRagLint.Index.Freshness;  { ProbeIndexFreshness -- a stale sibling proves nothing }
+
+const
+  { 1.52 TAILS-ENG2: GUnindexedPeerOf key prefix of a FOLDER an unindexed peer searches (vs a listed file) }
+  SEARCH_DIR_KEY = 'dir:';
 
 var
   GUndecided: TDictionary<string, Boolean>;
@@ -325,7 +332,11 @@ end;
 
 { 1.52 BK-TAILS-ENG: records every unit the unindexed peer ADproj LISTS -- its .dproj DCCReference entries
   and its .dpr / .dpk `in '...'` paths -- so TSharedScope reads a verdict on such a unit as undecidable.
-  A unit the peer reaches only through its search path is not seen (no index, no closure). }
+  1.52 TAILS-ENG2: also every folder it searches (its own folder + DCC_UnitSearchPath, via
+  TClosureResolver.ProjectSearchPaths): a unit in one of them MAY be compiled by the peer unlisted, so it
+  is undecidable too. Deliberately over-approximate (no closure walk without an index); not covered: a
+  unit reached through a library path / IDE-global search path or an environment macro the .dproj parse
+  does not expand. }
 procedure NoteUnindexedPeer(const ADproj: string);
 var
   Dir : string;
@@ -343,6 +354,9 @@ begin
   end;
   for var M: TMatch in TRegEx.Matches(Prog, '\bin\s+''([^'']+)''', [roIgnoreCase]) do
     Refs:= Refs + [M.Groups[1].Value];
+  { 1.52 TAILS-ENG2: the folders the compiler searches for this peer -- its own folder and its
+    DCC_UnitSearchPath. A unit there may be compiled by the peer without being listed. }
+  var SearchDirs: TArray<string>:= TClosureResolver.ProjectSearchPaths(ADproj);
   TMonitor.Enter(GUnindexedPeerOf);
   try
     for var Ref: string in Refs do
@@ -350,17 +364,27 @@ begin
       var Full: string:= LowerCase(ExpandFileName(TPath.Combine(Dir, Ref)));
       if not GUnindexedPeerOf.ContainsKey(Full) then GUnindexedPeerOf.Add(Full, ADproj);
     end;
+    for var SDir: string in SearchDirs do
+    begin
+      var Key: string:= SEARCH_DIR_KEY + LowerCase(ExcludeTrailingPathDelimiter(ExpandFileName(TPath.Combine(Dir, SDir))));
+      if not GUnindexedPeerOf.ContainsKey(Key) then GUnindexedPeerOf.Add(Key, ADproj);
+    end;
   finally
     TMonitor.Exit(GUnindexedPeerOf);
   end;
 end;
 
-{ The .dproj of an unindexed peer that lists APath; '' when none does. }
-function UnindexedPeerListing(const APath: string): string;
+{ The .dproj of an unindexed peer that lists APath, or (1.52 TAILS-ENG2) whose search path holds its
+  folder (AViaSearchPath); '' when none does. }
+function UnindexedPeerListing(const APath: string; out AViaSearchPath: Boolean): string;
 begin
+  AViaSearchPath:= False;
+  var Full: string:= LowerCase(ExpandFileName(StringReplace(APath, '/', '\', [rfReplaceAll])));
   TMonitor.Enter(GUnindexedPeerOf);
   try
-    if not GUnindexedPeerOf.TryGetValue(LowerCase(ExpandFileName(StringReplace(APath, '/', '\', [rfReplaceAll]))), Result) then Result:= '';
+    if GUnindexedPeerOf.TryGetValue(Full, Result) then Exit;
+    AViaSearchPath:= GUnindexedPeerOf.TryGetValue(SEARCH_DIR_KEY + ExcludeTrailingPathDelimiter(ExtractFilePath(Full)), Result);
+    if not AViaSearchPath then Result:= '';
   finally
     TMonitor.Exit(GUnindexedPeerOf);
   end;
@@ -576,10 +600,12 @@ begin
       undecidable as a header-named project whose index is missing (AddDiscoveredPeers records them). }
     if Why = '' then
     begin
-      var Peer: string:= UnindexedPeerListing(APath);
+      var ViaSearchPath: Boolean;
+      var Peer: string:= UnindexedPeerListing(APath, ViaSearchPath);
       if Peer <> '' then
       begin
-        Why:= Format('project %s lists the unit but has no index (%s)', [ChangeFileExt(ExtractFileName(Peer), ''), Peer]);
+        Why:= Format('project %s %s but has no index (%s)', [ChangeFileExt(ExtractFileName(Peer), ''),
+          (if ViaSearchPath then 'may compile the unit through its search path' else 'lists the unit'), Peer]);
         AnnounceUnindexedPeer(Peer);
       end;
     end;
