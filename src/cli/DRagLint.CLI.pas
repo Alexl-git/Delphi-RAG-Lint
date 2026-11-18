@@ -2933,7 +2933,7 @@ begin
   { dl:ok inherited-bare -- the standard destructor idiom. A bare `inherited` in
     a destructor is the ONLY correct form: naming Destroy explicitly would call
     it non-virtually and skip TThread's own teardown. }
-  inherited;  // dl:ok inherited-bare@246d
+  inherited;
 end;
 
 function TStageHeartbeat.ProgressSuffix: string;
@@ -13188,8 +13188,8 @@ begin
       for var GN in GateNotes do Writeln(ErrOutput, 'drag-lint: note: ' + GN);
     { 1.52 BK-GATE B23 (owner ruling 2026-11-18): with an index (--db) a fix that no project builds is REFUSED,
       not written unbuilt; --no-compile-gate is the explicit opt-out. A loose file with no index is unchanged. }
-    if AArgs.Apply and (not GateWrite) and (not AArgs.NoCompileGate) and (AArgs.DbPath <> '') and (Length(Edits) > 0)
-      and not FixEditsUnderTestSeam(Edits) then
+    var NoProjectCheck: Boolean:= AArgs.Apply and (not GateWrite) and (not AArgs.NoCompileGate);
+    if NoProjectCheck and (AArgs.DbPath <> '') and (Length(Edits) > 0) and not FixEditsUnderTestSeam(Edits) then
     begin
       var UnitProject, UnitMsg: string;
       var Seen:= TDictionary<string, Boolean>.Create;
