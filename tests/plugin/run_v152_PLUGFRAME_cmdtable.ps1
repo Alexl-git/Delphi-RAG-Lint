@@ -65,7 +65,8 @@ if ($LASTEXITCODE -ne 0 -or -not $base) { Bad "cannot read Editor.pas at $BaseRe
 else {
   $was = @($base | Where-Object { $_ -match $menuLine } | ForEach-Object { $_.Trim() })
   $now = @(($editor -split "`r?`n") | Where-Object { $_ -match $menuLine } | ForEach-Object { $_.Trim() } |
-           Where-Object { $_ -ne 'Result:= AddWrappedItem(AParent, ACaption, AClick);' })   # the hook's own factory line
+           Where-Object { $_ -ne 'Result:= AddWrappedItem(AParent, ACaption, AClick);' } |   # the hook's own factory line
+  Where-Object { $_ -ne "Form.Caption:= 'drag-lint Call Graph';" })   # BK-SCOPEUI B39: a progress FORM's caption, not a menu item
   # positive control: the extraction must see the real menu (dozens of lines), or the compare is vacuous
   if ($was.Count -lt 50) { Bad "menu-line extraction saw only $($was.Count) lines at $BaseRef" }
   elseif (Compare-Object $was $now -SyncWindow 0) {
