@@ -7,7 +7,7 @@ group: indexing
 order: 10015
 since: 1.51.1-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Custom attributes in the index
@@ -526,7 +526,7 @@ A `reraise`, and a `raise-expr` naming the handler variable, carry the type of t
 
 **data_flows.dst_kind** (`DF_DST_*`): `arg` (call argument), `write` (assignment to a member of
 a non-local), `result` (`Result :=`, `Exit(e)`), `field` (field of the owner or ancestor),
-`global` (unit variable; 1.52: also a unit variable passed to a var/out parameter of a resolved project routine, by the calls pass with `src_kind` `argout` and `dst_index` = the argument position), `outparam` (var/out parameter of this routine). index columns are 1-based CHARACTER (UTF-16 unit) columns since 1.52, not UTF-8 byte columns (.dfm rows excepted).
+`global` (unit variable; 1.52: also a unit variable passed to a var/out parameter of a resolved project routine, by the calls pass with `src_kind` `argout` and `dst_index` = the argument position), `outparam` (var/out parameter of this routine). index columns are 1-based CHARACTER (UTF-16 unit) columns since 1.52, not UTF-8 byte columns (.dfm rows too since 1.52 BK-COLS2; lint finding columns as well).
 **data_flows.src_kind** (`DF_SRC_*`): `param` (declared parameter), `ref` (a call result or a
 member/variable read that is not a local/param/field/global), `field`, `global`, `argout` (a
 variable passed at position `src_index` of an earlier call).

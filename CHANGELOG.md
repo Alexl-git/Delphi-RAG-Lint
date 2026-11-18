@@ -162,6 +162,19 @@ resolver 1.28.0 -> 1.29.0-alpha.
   lists the nearest ids and exits 2.
 - New tests\autotest\run_dfm_grammar_corpus_ab.ps1: corpus A/B for the tree-sitter-dfm grammar.
 
+## v1.51.2-alpha -- 2026-11-17
+
+Hotfix release. No re-parse: extractor, resolver, grammar and rule counts unchanged.
+
+### IDE plugin
+- N5: closing RAD Studio with unsaved changes on the dock's Lint Options tab no longer asks "Save them now?" late
+  and no longer flashes 5-6 IDE error boxes. 1.51.1 asked and saved from the frame's destructor, after the IDE had
+  started freeing its services. At IDE shutdown the unsaved changes are now discarded without a prompt (one
+  OutputDebugString line); Save on the tab (now "Save *" while unsaved) is the way to keep them. Reload still asks
+  first. Decision in `DragLint.Plugin.UnsavedPolicy` (tests\UnsavedPolicyTests.dpr, 11 checks).
+- RPT: the drag-lint > Reports menu items did nothing in the IDE (the click handler read the question from the sender Tag and returned silently). The question index is now bound at menu-build time; every click logs a Reports: line and every early stop logs or shows why. Tests: TReportClickTests (4), ReportTextTests 45/45.
+
+
 ## v1.51.1-alpha -- date TBD
 
 Bug-fix release (wave v1511, 25 lanes). 423 rules, 341 enabled by default, 125 with an auto-fix (unchanged; no

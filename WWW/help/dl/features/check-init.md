@@ -7,7 +7,7 @@ group: search-navigation
 order: 20002
 since: 1.52.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # check-init
@@ -275,7 +275,6 @@ sharp than it looks", never "wrong":
 | `instance-by-constructors` | a field answer rests on the constructor model, not on tracking each object |
 | `use-after-free-not-judged <file>:<line>` | names a `:= nil` / free writer of the field; a use after it is not judged |
 | `unknown-callee` | a call on the path has no source in the index; the summary starts `UNKNOWN-CALLEE:` and names it (does it set the target by reference?) |
-| `not-implemented` | only in an answer from a build without the solver |
 
 Not modelled (a verdict stays MAY, it is never wrongly SET in the test fixtures): `Self` handed
 out by a method called before the write; a use reached from a destructor's callees; an ancestor

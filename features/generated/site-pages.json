@@ -84,8 +84,8 @@
     "version": "1.51.1-alpha"
   },
   "features/check-init.md": {
-    "hash": "44172a285156a77900b206d456752569ff4750e106ca7bb54ca3b92cf7c899da",
-    "version": "1.51.1-alpha"
+    "hash": "e55ce69e98388a0ca23a5c7ace22ff58b8343931f4fdf7a72a31fc00176e47ba",
+    "version": "1.52.0-alpha"
   },
   "features/circular-dependency-report.md": {
     "hash": "f4c4f9918a419c9623b9b10de2d6c7694d0205282586bb63de9d38598ed3baec",
@@ -1040,8 +1040,8 @@
     "version": "1.51.1-alpha"
   },
   "features/v152-attributes-fact.md": {
-    "hash": "1e45fb1fd227f41e82d82753b78abd68cf5627e106d4ea54957c471074cf03f9",
-    "version": "1.51.1-alpha"
+    "hash": "8188d011a641ddaabc395229e4c9eada00504201e4ee55d75e590dc87fb97fe8",
+    "version": "1.52.0-alpha"
   },
   "features/v152-defaults.md": {
     "hash": "1021d40f069690c0166f1dd0b31a770aacdba647ce96c9890b572328a00fdb87",
