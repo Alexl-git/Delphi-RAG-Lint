@@ -139,11 +139,11 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**425 rules. 126 have an auto-fix. 342 are on by default.** 312 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**427 rules. 126 have an auto-fix. 344 are on by default.** 314 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
-| bug-patterns | 154 | 38 |
+| bug-patterns | 155 | 38 |
 | complexity | 15 | 2 |
 | data-flow | 12 | 3 |
 | dead-code | 21 | 15 |
@@ -160,8 +160,8 @@ Rules, autofix, suppression markers and project-wide checks.
 | resource-lifetime | 22 | 9 |
 | review-markers | 6 | 2 |
 | security | 27 | 2 |
-| structure | 17 | 9 |
-| **Total** | **425** | **126** |
+| structure | 18 | 9 |
+| **Total** | **427** | **126** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -202,7 +202,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Interfaced object set to nil (lint rule)](interfaced-object-nil-leak) | `lint-all` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
 | [Lint rules on the static type of a reference](ref-type-rules) | `lint-all` |  |
-| [Lint rules](rules) | 425 rules, 126 fixable; `rules` |  |
+| [Lint rules](rules) | 427 rules, 126 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
 | [Memory and string-pointer lint rules (PChar, raw memory, leaks, byte counts)](memory-string-pointer-rules) | `lint-all` |  |
@@ -212,6 +212,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Read but never assigned (lint rule)](read-never-assigned) | `lint-all` |  |
 | [Rename across every project that compiles a shared unit](Multi-Project-Rename) | `lint`; Structure form: Fix it; Structure form: Fix all in unit |  |
 | [Rescan this unit](Rescan-this-unit) | Structure form: Rescan this unit; `index` |  |
+| [Reserved words as names, implicit package imports, contract-unit globs](v152-atla-rules) | `lint`; `lint-all` |  |
 | [review-marker-remeasured hint](Review-Marker-Remeasured) | procedure: `docs\wiki\Review-Marker-Remeasured.md` |  |
 | [RTL collection and environment lint rules](v151-rtl-collection-rules) | `lint`; `lint-all` |  |
 | [RTL string and path lint rules](v151-rtlstr-rules) | `lint` | experimental |

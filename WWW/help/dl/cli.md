@@ -1262,6 +1262,7 @@ Described in:
 * [Typing and ownership lint rules (casts, Self as interface, destructors)](features/v151-typ-rules.md)
 * [Wider built-in rules (1.51)](features/v151-wid-ast-rules.md)
 * [Wider scm rules and three new fixers](features/v151-wid-scm-rules.md)
+* [Reserved words as names, implicit package imports, contract-unit globs](features/v152-atla-rules.md)
 * [Array index possibly out of range lint rule (index-possibly-out-of-range)](features/v152-index-possibly-out-of-range.md)
 
 ### lint-all
@@ -1326,6 +1327,7 @@ Described in:
 * [Text rules: bidi, invisible, control chars, TODO, header, strings](features/v151-txt-rules.md)
 * [Typing and ownership lint rules (casts, Self as interface, destructors)](features/v151-typ-rules.md)
 * [CLI fixes in 1.51.1](features/v1511-cli-fixes.md)
+* [Reserved words as names, implicit package imports, contract-unit globs](features/v152-atla-rules.md)
 
 ### lint-project
 
