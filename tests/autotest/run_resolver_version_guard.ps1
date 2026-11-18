@@ -40,7 +40,9 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Repo = "$PSScriptRoot\..\..")
+param([string]$Repo = "$PSScriptRoot\..\..",
+      # B46 (1.52): accepted and unused, so a battery that hands every runner -Exe can call this one; the guard reads source only.
+      [string]$Exe = '')
 
 $ErrorActionPreference = 'Stop'; $script:fail = $false
 function Check($n,$ok,$detail=''){

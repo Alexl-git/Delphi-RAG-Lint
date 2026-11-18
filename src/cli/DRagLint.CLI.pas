@@ -677,6 +677,8 @@ var
   N        : TJSONNumber;
   B        : TJSONBool  ;
 begin
+  { B28 (1.52): an engine whose own manifest says settings.ignoreLocalConfig reads no defaults file found by walking up from the CWD. }
+  if TManifestIO.IgnoresLocalConfig(ExtractFilePath(ParamStr(0))) then Exit;
   Dir      := GetCurrentDir;
   Candidate:= '';
   while Dir <> '' do
