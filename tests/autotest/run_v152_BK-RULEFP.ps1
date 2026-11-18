@@ -3,7 +3,7 @@
 # uBroadcastServer:373, Blueprint4.ViewModel:2009) plus Blueprint4.ViewModel:1722, each with a
 # positive control (a routine named *Bad that must still fire).
 # Fixture tests\lint\idxfp\ (two units: the foreign constant array of F3 comes from the index).
-# Also pins the rule's default: ON (owner C3; the FP gate classes fixed here).
+# Also pins the rule's default: OFF in 1.52 (lane FPM2 re-measure after this lane: 21 FP / 36).
 param(
   [string]$Exe = "third_party\dll-win64\drag-lint.exe"
 )
@@ -47,14 +47,14 @@ foreach ($r in 'MarkAfterBad', 'PickSxBad', 'NssFromBad', 'TryParseBad', 'Target
   Assert "positive control fires in $r" ($byRoutine.ContainsKey($r))
 }
 
-# default ON: no --rule, no config
+# default OFF in 1.52: no --rule, no config -> silent (positive control: the narrowed run above fires)
 $raw2 = & $exe lint $unit --db $db --json 2>$null
 $d = @()
 try { $d = @(($raw2 | ConvertFrom-Json) | Where-Object { $_ -and $_.rule -eq $rule }) } catch { $d = @() }
-Assert "default ON: the rule runs without a config (got $($d.Count), narrowed $($f.Count))" (($d.Count -eq $f.Count) -and ($f.Count -gt 0))
+Assert "default OFF: silent without a config (got $($d.Count), narrowed $($f.Count))" (($d.Count -eq 0) -and ($f.Count -gt 0))
 $rj = (& $exe rules --json 2>$null | ConvertFrom-Json).rules
 $ent = @($rj | Where-Object { $_.id -eq $rule })[0]
-Assert "rules --json: default_enabled true" ($ent -and $ent.default_enabled -eq $true)
+Assert "rules --json: default_enabled false" ($ent -and $ent.default_enabled -eq $false)
 
 try { [IO.Directory]::Delete($tmp, $true) } catch { }
 if ($fail -gt 0) { Write-Host "$fail FAIL" -ForegroundColor Red } else { Write-Host "all passed" }
