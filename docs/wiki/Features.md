@@ -98,7 +98,7 @@ Find symbols, callers, callees, text and types in the index.
 | Feature | Surfaces | Status |
 |---|---|---|
 | [call-path](call-path) | `call-path`; drag-lint > Uses & Dependencies > Call Path Between Two Routines... |  |
-| [check-init](Maintenance) | `mcp check_init`; `check-init` | internal |
+| [check-init](check-init) | drag-lint > Analyze > Check Initialization of Identifier at Cursor...; Editor: drag-lint > Check Initialization of Identifier at Cursor...; `mcp check_init`; `check-init` |  |
 | [Class Surface](Class-Surface) | drag-lint > Inspect Symbol > Class Surface...; `surface` |  |
 | [Compiler Hints](Compiler-Hints) | drag-lint > Code Quality > Compiler Hints...; `query hints` |  |
 | [context](context) | `context` |  |
@@ -140,29 +140,29 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**426 rules. 126 have an auto-fix. 346 are on by default.** 313 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**435 rules. 131 have an auto-fix. 354 are on by default.** 322 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
-| bug-patterns | 154 | 38 |
+| bug-patterns | 155 | 40 |
 | complexity | 15 | 2 |
 | data-flow | 12 | 3 |
-| dead-code | 21 | 15 |
-| documentation | 5 | 4 |
+| dead-code | 23 | 15 |
+| documentation | 7 | 4 |
 | firedac | 3 | 3 |
 | metrics | 8 | - |
 | modernize | 6 | 4 |
 | naming | 14 | 10 |
-| other | 16 | 4 |
+| other | 17 | 4 |
 | platform | 16 | 4 |
 | policy | 6 | - |
-| project-wide | 52 | 8 |
-| refactoring | 26 | 9 |
+| project-wide | 53 | 9 |
+| refactoring | 27 | 11 |
 | resource-lifetime | 22 | 9 |
 | review-markers | 6 | 2 |
 | security | 27 | 2 |
-| structure | 17 | 9 |
-| **Total** | **426** | **126** |
+| structure | 18 | 9 |
+| **Total** | **435** | **131** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -181,6 +181,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Data-flow rules that know a parameter's mode](flow-out-arg-rules) | `lint-all` |  |
 | [Dataset and transaction lint rules](dataset-rules-v151) | `lint` |  |
 | [Default-on form, dataset and data-module rules](rule-defaults-152) | `lint`; `rules` |  |
+| [Disable rule (this line, this unit, this project)](v152-disable-rule) | `rules`; drag-lint > Code Quality > Disable Rule...; Editor: drag-lint > Disable Rule... |  |
 | [Downgrade fixes (compat rules)](compat-downgrade-fixes) | `lint` | planned |
 | [drag-lint: Project Rules](drag-lint-Project-Rules) | Project Manager: drag-lint: Project Rules; `rules` |  |
 | [Effect-free call in a loop that could move out (lint rule)](effect-free-in-loop-invariant) | `lint-all` |  |
@@ -204,7 +205,8 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Interfaced object set to nil (lint rule)](interfaced-object-nil-leak) | `lint-all` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
 | [Lint rules on the static type of a reference](ref-type-rules) | `lint-all` |  |
-| [Lint rules](rules) | 426 rules, 126 fixable; `rules` |  |
+| [Lint rules unconnected-control and hanging-handler](v152-unconn-rules) | `lint` |  |
+| [Lint rules](rules) | 435 rules, 131 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
 | [member-could-be-private lint rule (lane ATLB)](v152-atlb-rules) | `lint-all` |  |
@@ -212,9 +214,12 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Object-model lint rules (Equals/hash, events, GUIDs, exports)](object-model-rules) | `lint-all` |  |
 | [Opaque to analysis (lint rule)](opaque-to-analysis) | `lint-all` |  |
 | [Parameter type too wide (lint rule)](parameter-type-too-wide) | `lint-all` |  |
+| [parameter-type-too-wide ON by default, with an autofix](v152-ptw) | `lint-all`; `lint` |  |
+| [Per-rule time budget in the rule frame (rule-skipped-budget)](rule-time-budget) | `lint`; `lint-all`; `index` |  |
 | [Read but never assigned (lint rule)](read-never-assigned) | `lint-all` |  |
 | [Rename across every project that compiles a shared unit](Multi-Project-Rename) | `lint`; Structure form: Fix it; Structure form: Fix all in unit |  |
 | [Rescan this unit](Rescan-this-unit) | Structure form: Rescan this unit; `index` |  |
+| [Reserved words as names, implicit package imports, contract-unit globs](v152-atla-rules) | `lint`; `lint-all` |  |
 | [review-marker-remeasured hint](Review-Marker-Remeasured) | procedure: `docs\wiki\Review-Marker-Remeasured.md` |  |
 | [RTL collection and environment lint rules](v151-rtl-collection-rules) | `lint`; `lint-all` |  |
 | [RTL string and path lint rules](v151-rtlstr-rules) | `lint` | experimental |
@@ -232,6 +237,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Type-level dl:ok review](Type-Level-Review-Marker) | procedure: `docs\wiki\Type-Level-Review-Marker.md` |  |
 | [type-name-prefix: expected letter from the ancestor chain](Type-Name-Prefix-Origin) | `lint`; `lint-all`; `lint` |  |
 | [Typing and ownership lint rules (casts, Self as interface, destructors)](typing-and-ownership-rules) | `lint-all`; `lint` |  |
+| [unit-used-by-no-unit rule; unit-not-in-dpr outside the project roots](v152-proj2) | `lint-all` |  |
 | [warm-rule-cache](warm-rule-cache) | `warm-rule-cache` |  |
 | [Wider built-in rules (1.51)](v151-wid-ast-rules) | `lint` |  |
 | [Wider scm rules and three new fixers](v151-wid-scm-rules) | `lint` |  |
@@ -252,6 +258,7 @@ DocInsight comments generated from the index, and drift detection.
 | [Document project](Document-project) | Structure form: Document project; `document` |  |
 | [Document unit](Document-unit) | Structure form: Document unit; `document` |  |
 | [document-all](document-all) | `document-all`; drag-lint > Generate & Export > Auto-Document Every Indexed Unit... |  |
+| [Documentation policy: missing-doc covers all real code, doc-placeholder, doc-malformed-summary](v152-docpol) | `lint-all` |  |
 | [Effect Summary Legend](Effect-Summary-Legend) | procedure: `docs\wiki\Effect-Summary-Legend.md`; drag-lint > Help > Effect Summary Legend |  |
 | [shared-unit](shared-unit) | `shared-unit` |  |
 
@@ -266,6 +273,7 @@ Rename, extract, safe delete, uses cleanup and code stubs.
 | [Create helper class](Create-helper-class) | Structure form: Create helper class; `create-enum-helper` |  |
 | [create-enum-helper](create-enum-helper) | `create-enum-helper`; drag-lint > Generate & Export > Enum Record Helper (symbol)... |  |
 | [Extract an interface from the members used (scratch + compile gate)](extract-interface) | `extract-interface` |  |
+| [Extract constant (manual fix for magic literals)](v152-extract-constant) | `lint`; drag-lint > Extract Constant (literal at cursor)...; Editor: drag-lint > Extract Constant (literal at cursor)... |  |
 | [extract-method and create-enum-helper through the compile gate by default](fixer-compile-gate) | `extract-method`; `create-enum-helper` |  |
 | [extract-method](extract-method) | `extract-method`; drag-lint > Extract Method (selection)... (Ctrl+Alt+M) |  |
 | [Fix with drag-lint (VS Code and RAD Studio)](v152-vsfix) | `lsp textDocument/codeAction`; Editor: drag-lint > Fix with drag-lint (finding at cursor) |  |

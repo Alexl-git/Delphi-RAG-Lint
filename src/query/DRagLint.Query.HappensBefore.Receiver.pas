@@ -570,6 +570,11 @@ function TRecvSolver.Solve(pId: Int64; const pMarks, pQueries: TArray<THbSite>; 
 begin
   Result:= Default(THbRoutineState);
   Result.RoutineId:= pId;
+  if HbTimeUp then
+  begin
+    FExhausted:= True;
+    Exit;
+  end;
   if not FSolved.Contains(pId) then
   begin
     if FSolved.Count >= FMax then
@@ -698,7 +703,7 @@ function TRecvSolver.FailNotSolved: TRecvResult;
 begin
   Result:= Default(TRecvResult);
   Result.Site:= '-';
-  Result.Why:= if FExhausted then 'the --max-routines budget ran out' else 'the routine could not be parsed';
+  Result.Why:= if FExhausted then HbBudgetWhy else 'the routine could not be parsed';
 end;
 
 function TRecvSolver.ProveUse(const pUse: THbUseAnswer): TRecvResult;

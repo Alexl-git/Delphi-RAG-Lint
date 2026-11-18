@@ -18,7 +18,7 @@ target: such a writer is listed as `assign-nil  (does not count)`.
 ## Running it
 
 ```
-drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--explain] [--max-routines N]
+drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--explain] [--max-routines N] [--max-seconds S]
 ```
 
 * `<QName>` is `Unit.GVar`, `Unit.TClass.ClassVar` or `Unit.TClass.FField`. With only `--at`, the
@@ -30,9 +30,14 @@ drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--
 * `--explain` adds the root chain and the `reasons:` line under every use.
 * `--max-routines N` caps the routines analysed (default 2000). When the cap is hit the answer is
   MAY-BE-UNSET with reason `budget` and `budget.exhausted` is true.
+* `--max-seconds S` caps the wall clock of one query (default 60; decimals allowed; `0` = no cap).
+  A query the cap stops is never SET: it answers MAY-BE-UNSET with reason `budget`, the limit
+  `stopped-after <S>s`, a summary starting `(stopped after S s`, and `budget.timed_out` and
+  `budget.exhausted` true. A large project's widely used global can take minutes uncapped
+  (measured: up to 11 min on a 2600-unit client), so the cap is on by default.
 * `--json` prints one object: `target`, `verdict`, `proven`, `scope`, `summary`, `reasons`,
   `uses[]` (`file`, `line`, `col`, `routine`, `verdict`, `reasons`, `why`, `witness[]`),
-  `writers[]` (`how`, `resolved`, `counts`, `fired_by`, `callers`), `roots`, `limits`, `budget`.
+  `writers[]` (`how`, `resolved`, `counts`, `fired_by`, `callers`), `roots`, `limits`, `budget` (`routines`, `ms`, `exhausted`, `max_s`, `timed_out`).
 * MCP: the tool `check_init` takes `target` or `at`, `explain`, `max_routines`, `db` and returns the
   same JSON.
 * IDE: Analyze > Check Initialization of Identifier at Cursor... (also in the editor context menu) runs the same engine on the identifier under the caret.
@@ -111,6 +116,17 @@ limits: instance-by-constructors
 [exit 1]
 ```
 
+Writers of a field include a write through a property whose write accessor IS the field
+(`property Number: Integer read FNumber write FNumber`; `Item.Number:= 5`), listed at the property
+write; a read of such a property (`read FNumber`) is a use of the field. A write through a setter
+method counts through the call to the setter. `X.Number:= ..` whose receiver type the index could
+not resolve is a soft writer (the field is then never NEVER-SET).
+
+A component field streamed from the form file is set by the inherited form constructor: its uses
+outside a constructor are judged as if a constructor set it (not when a constructor calls
+`CreateNew`). A read through ANOTHER object (`Other.FField`) is proven only by the constructor
+model; a write of Self earlier in the same routine does not count for it (`receiver-unproven`).
+
 A MAY answer for a field also lists the writer routines in the verdict line, each marked
 `(constructor)` or `(not called by every constructor)`, so you can see where the value comes from
 even when it is not proven.
@@ -140,14 +156,14 @@ has them in `reasons`). The list is closed and appended to only; tools branch on
 | `unreliable-order` | the initialization order depends on a conditional or include-borne `uses` entry |
 | `multi-program` | the target is judged in more than one program and not every one proves SET |
 | `cfg-skipped` | a routine on the path holds `goto`, a label or `asm` and was not analysed |
-| `budget` | the `--max-routines` cap ran out before the use was proven |
+| `budget` | the `--max-routines` cap or the `--max-seconds` wall-clock cap ran out before the use was proven |
 | `guarded-test` | the use is the operand of an `Assigned` / `<> nil` test (it is a guard, not a dereference) |
 | `relied-on-handler-order` | see below |
 
 Reserved in the contract but not produced by the engine yet: `interface-call`, `writer-on-thread`,
-`index-incomplete`, and `receiver-unproven` (receiver-aware ordering, a use of a field written by
-another method of the same object, is not part of this build: such a use is MAY-BE-UNSET with the
-writer routines listed).
+`index-incomplete`. `receiver-unproven`: the receiver-aware proof (a field written by another
+method of the same object) could not show the writer ran on the same object first, or the use reads
+the field through another object.
 
 ### `relied-on-handler-order`
 
@@ -187,6 +203,8 @@ sharp than it looks", never "wrong":
 | `instance-by-constructors` | a field answer rests on the constructor model, not on tracking each object |
 | `use-after-free-not-judged <file>:<line>` | names a `:= nil` / free writer of the field; a use after it is not judged |
 | `unknown-callee` | a call on the path has no source in the index; the summary starts `UNKNOWN-CALLEE:` and names it (does it set the target by reference?) |
+| `stopped-after <S>s` | the `--max-seconds` cap stopped the query; the verdict is never SET |
+| `no-judged-use` | the answer is SET over ZERO judged uses: nothing reads the target, so the SET says nothing about a read (the summary says so too) |
 | `not-implemented` | only in an answer from a build without the solver |
 
 Not modelled (a verdict stays MAY, it is never wrongly SET in the test fixtures): `Self` handed

@@ -544,6 +544,7 @@ type
     At          : string ; // --at <file>:<line>[:<col>]  (check-init target by position)
     HbExplain   : Boolean; // --explain  (check-init: roots and reasons in the answer)
     MaxRoutines : Integer; // --max-routines N  (check-init budget; 0 = absent / the verb's default, -1 = not a number)
+    MaxSeconds  : string ; // --max-seconds S  (check-init wall-clock cap, v152 HBFIX; '' = absent, validated by the verb)
     RepoPath    : string ; // --repo <file.dlrepo>  (repo verbs; '' = derived from --project)
     Replace     : Boolean; // --replace  (repo import-fb / restore)
     RuleScope   : string ; // --scope line|unit|project  (rules disable / enable only; other verbs keep DocForgetScope)

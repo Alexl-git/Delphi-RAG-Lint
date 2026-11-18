@@ -141,6 +141,8 @@ type
     FSelfWrites: TDictionary<Int64, TArray<THbSite>>;
     FSelfRefs: TDictionary<Int64, TArray<THbSite>>;
     FUses: TArray<THbUse>;
+    { v152 HBFIX: every ref of F (or write of a `write F` property) through a receiver other than Self }
+    FForeign: TArray<THbSite>;
     FMustF: THashSet<Int64>;
     FMustFinal: Boolean;
     FStates: TDictionary<Int64, THbRoutineState>;
@@ -169,6 +171,8 @@ type
     function ClassBlockers: TArray<TFieldBlocker>;
     function ReachBeforeWrite(const pUse: THbUse): TReachHit;
     function IsNilSafeFree(const pUse: THbUse): Boolean;
+    function IsForeignUse(const pUse: THbUse): Boolean;
+    function DfmStreamed: Boolean;
     function WriterRoutineNote: string;
   public
     constructor Create(const pIndex: TChartsIndex; const pStore: ISymbolStore; const pEvents: THbEvents;
@@ -183,6 +187,8 @@ const
   KIND_DTOR = 'destructor';
   RECEIVER_SELF = 'self';
   NAME_FREE = 'free';
+  NAME_CREATE_NEW = 'createnew';
+  HB_FOREIGN_WHY = 'read through another object: the writes of Self in this routine do not count';
   WHY_PREFIX = 'why not SET: ';
   { what a backward caller walk may visit, as a multiple of --max-routines }
   WALK_FACTOR = 4;
@@ -387,7 +393,9 @@ begin
       'JOIN ref_receivers rr ON rr.ref_id = r.id JOIN refs rv ON rv.id = rr.receiver_ref_id ' +
       'LEFT JOIN symbols e ON e.id = r.enclosing_symbol_id ' +
       'LEFT JOIN member_accesses m ON m.ref_id = r.id AND m.member_symbol_id = r.symbol_id ' +
-      'WHERE r.symbol_id = ' + IntToStr(FEvents.Target.SymbolId) + ' AND LOWER(rv.name_text) <> ''' +
+      'WHERE (r.symbol_id = ' + IntToStr(FEvents.Target.SymbolId) + ' OR r.id IN (SELECT pa.ref_id FROM ' +
+      'member_accesses pa WHERE pa.accessor_symbol_id = ' + IntToStr(FEvents.Target.SymbolId) +
+      ' AND pa.accessor_kind = ''field'' AND pa.mode IN (''write'', ''read''))) AND LOWER(rv.name_text) <> ''' +
       RECEIVER_SELF + ''' ORDER BY f.path, r.start_line, r.start_col, r.id');
     try
       for var Row in R do
@@ -417,6 +425,7 @@ begin
     end;
     FEvents.Writers:= pAnswer.Writers;
     FUses:= FEvents.UseSites;
+    FForeign:= Foreign.ToArray;
     for var W in FEvents.Writers do
     begin
       if not (W.Counts and W.Resolved and (W.How in [hwAssign, hwCreateInto, hwVarArg, hwOutArg])) then Continue;
@@ -545,6 +554,11 @@ begin
   if FMustFinal and FStates.TryGetValue(pId, Result) then Exit;
   Result:= Default(THbRoutineState);
   Result.RoutineId:= pId;
+  if HbTimeUp then
+  begin
+    FExhausted:= True;
+    Exit;
+  end;
   if not FSolved.Contains(pId) then
   begin
     if FSolved.Count >= FMax then
@@ -687,6 +701,14 @@ begin
   finally
     AllCtors.Free;
   end;
+  if DfmStreamed then
+  begin
+    { the streaming form constructor sets F: only the blockers that outrun it stand }
+    var Keep: TArray<TFieldBlocker>:= nil;
+    for var B in Result do
+      if B.Reason not in [hrCtorMissesField, hrNoDeclaredCtor, hrSubclassCtorSkips] then Keep:= Keep + [B];
+    Result:= Keep;
+  end;
   TArray.Sort<TFieldBlocker>(Result, TComparer<TFieldBlocker>.Construct(
     function(const pL, pR: TFieldBlocker): Integer
     begin
@@ -765,6 +787,36 @@ begin
   end;
 end;
 
+{ v152 HBFIX: the use reads F through another object (`Other.F`): Self's own writes and Self's
+  constructor state say nothing about it. }
+function TFieldSolver.IsForeignUse(const pUse: THbUse): Boolean;
+begin
+  Result:= False;
+  for var F in FForeign do
+    if SameSite(F, pUse.Site) then Exit(True);
+end;
+
+{ v152 HBFIX H2 (HBMEASURE F2): a counting DFM-stream writer means the inherited form constructor
+  streams F before any method of the instance runs -- the role a declaring constructor plays in the
+  constructor model. Not when a constructor of the family calls CreateNew (no streaming). }
+function TFieldSolver.DfmStreamed: Boolean;
+begin
+  Result:= False;
+  for var W in FEvents.Writers do
+    if (W.How = hwDfmStream) and W.Counts then Result:= True;
+  if not Result then Exit;
+  var Ctors: TArray<Int64>:= CtorsOf(FClassId);
+  for var D in FDescendants do Ctors:= Ctors + CtorsOf(D);
+  if Ctors = nil then Exit;
+  var R:= Rows('SELECT COUNT(*) AS n FROM refs r WHERE r.enclosing_symbol_id IN (' + IdList(Ctors) + ') ' +
+    'AND LOWER(r.name_text) = ''' + NAME_CREATE_NEW + '''');
+  try
+    Result:= (R.Count = 0) or (R[0].I('n') = 0);
+  finally
+    R.Free;
+  end;
+end;
+
 { 'writer routines: X (called by every constructor), Y (not called by every constructor)' over the
   routines that write F through Self. "Called" = reached from the constructor over call edges. }
 function TFieldSolver.WriterRoutineNote: string;
@@ -802,6 +854,16 @@ begin
     Result:= Result + (if Result = '' then '' else ', ') + Text;
   end;
   if Result <> '' then Result:= 'writer routines: ' + Result;
+end;
+
+{ Adds pReason to the use; the first reason added also sets the why line and the first witness hops. }
+procedure NoteReason(var pA: THbUseAnswer; var pFirst: TArray<THbHop>; pReason: THbReason; const pWhy: string;
+  const pHops: TArray<THbHop>);
+begin
+  AddReason(pA.Reasons, pReason);
+  if pA.Why <> '' then Exit;
+  pA.Why:= WHY_PREFIX + pWhy;
+  pFirst:= pHops;
 end;
 
 procedure TFieldSolver.Run(var pAnswer: THbAnswer);
@@ -842,7 +904,8 @@ begin
     UseHop.Col:= U.Site.Col;
     UseHop.Note:= 'reads ' + FFieldName;
     var First: TArray<THbHop>:= nil;
-    if IsCtorOf(U.Site.RoutineId, True) then
+    var Foreign:= IsForeignUse(U);
+    if IsCtorOf(U.Site.RoutineId, True) and not Foreign then
     begin
       if not DoneAt(Solve(U.Site.RoutineId), U.Site.Line, U.Site.Col) then
       begin
@@ -853,40 +916,26 @@ begin
     end
     else
     begin
-      for var B in ClassB do
-      begin
-        AddReason(A.Reasons, B.Reason);
-        if A.Why = '' then
-        begin
-          A.Why:= WHY_PREFIX + B.Why;
-          First:= [B.Hop];
-        end;
-      end;
+      for var B in ClassB do NoteReason(A, First, B.Reason, B.Why, [B.Hop]);
       var IsDtor:= FMethods.ContainsKey(U.Site.RoutineId) and (FMethods[U.Site.RoutineId].Kind = KIND_DTOR);
       if IsDtor and not IsNilSafeFree(U) then
-      begin
-        AddReason(A.Reasons, hrWriterConditional);
-        if A.Why = '' then
-        begin
-          A.Why:= WHY_PREFIX + 'the destructor also runs when a constructor raised before it set ' + FFieldName;
-          First:= [];
-        end;
-      end;
+        NoteReason(A, First, hrWriterConditional,
+          'the destructor also runs when a constructor raised before it set ' + FFieldName, []);
       var Hit:= ReachBeforeWrite(U);
-      if Hit.Found and not DoneAt(Solve(U.Site.RoutineId), U.Site.Line, U.Site.Col) then
+      if Hit.Found and (Foreign or not DoneAt(Solve(U.Site.RoutineId), U.Site.Line, U.Site.Col)) then
+        NoteReason(A, First, Hit.Reason, Hit.Why, [Hit.Hop]);
+      { v152 HBFIX: a read through another object is SET only by the per-instance constructor proof;
+        receiver-unproven also keeps the receiver proof (which reasons about Self) away from it }
+      if Foreign and (A.Reasons <> nil) then
       begin
-        AddReason(A.Reasons, Hit.Reason);
-        if A.Why = '' then
-        begin
-          A.Why:= WHY_PREFIX + Hit.Why;
-          First:= [Hit.Hop];
-        end;
+        AddReason(A.Reasons, hrReceiverUnproven);
+        A.Why:= A.Why + ' -- ' + HB_FOREIGN_WHY;
       end;
     end;
     if FExhausted then
     begin
       AddReason(A.Reasons, hrBudget);
-      if A.Why = '' then A.Why:= WHY_PREFIX + 'the --max-routines budget ran out';
+      if A.Why = '' then A.Why:= WHY_PREFIX + HbBudgetWhy;
     end;
     A.Verdict:= if A.Reasons = nil then hvSet else hvMayBeUnset;
     if A.Verdict <> hvSet then

@@ -64,7 +64,10 @@ type
 /// is the zero value of every type that accepts it). A var / out argument counts (as dcc's W1036
 /// does); the parameter mode comes from the callee's signature through the data_flows `arg` row,
 /// or from a list of RTL intrinsics for an unresolved callee; any other unresolved callee is a
-/// soft writer. A DFM-bound handler gets FiredBy (all bindings, ', '-joined) and CallerCount 0.</remarks>
+/// soft writer. A DFM-bound handler gets FiredBy (all bindings, ', '-joined) and CallerCount 0.
+/// v152 HBFIX: a property whose accessor IS the target field stands for the field -- `Obj.P := x`
+/// through `write F` is a counting writer, a read of P through `read F` is a use; an unresolved member
+/// write `X.F := ..` / `X.P := ..` (receiver type unknown) is a soft writer.</remarks>
 function CollectEvents(const pIndex: TChartsIndex; const pTarget: string; const pAt: THbSite): THbEvents;
 
 /// <summary>Whether the events allow the verdict NEVER-SET (spec 6.2, the parts the events decide).</summary>
@@ -138,6 +141,10 @@ type
     procedure CollectArguments;
     procedure CollectAddressAndAbsolute;
     procedure CollectUnresolved;
+    procedure AddSoftWriterRow(const pRow: TIndexRow);
+    function WriteNames: TArray<string>;
+    procedure CollectUnresolvedMemberWrites(const pUnitName: string);
+    procedure CollectPropertyWrites;
     procedure CollectDfmStream(var pEvents: THbEvents);
     procedure FillFiredByAndCallers;
     function FiredByOf(pRoutineId: Int64): string;
@@ -616,10 +623,15 @@ end;
 procedure TCollector.LoadReads;
 begin
   var R:= Rows('SELECT r.id, r.file_id AS fid, f.path, r.start_line AS ln, r.start_col AS col, ' +
-    'r.end_col AS ecol, COALESCE(r.enclosing_symbol_id, 0) AS enc, COALESCE(e.qualified_name, '''') AS encq ' +
+    'r.end_col AS ecol, COALESCE(r.enclosing_symbol_id, 0) AS enc, COALESCE(e.qualified_name, '''') AS encq, ' +
+    'CASE WHEN r.symbol_id = ' + IntToStr(FTargetId) + ' THEN 0 ELSE 1 END AS isprop ' +
     'FROM refs r JOIN files f ON f.id = r.file_id LEFT JOIN symbols e ON e.id = r.enclosing_symbol_id ' +
-    'WHERE r.symbol_id = ' + IntToStr(FTargetId) + ' AND r.kind IN (''read'', ''member-access'') ' +
-    'AND NOT ' + MEMBER_WRITE_SQL + ' ORDER BY f.path, r.start_line, r.start_col, r.id');
+    'WHERE (r.symbol_id = ' + IntToStr(FTargetId) + ' AND r.kind IN (''read'', ''member-access'') ' +
+    'AND NOT ' + MEMBER_WRITE_SQL + ') ' +
+    { v152 HBFIX: a read of a `read <field>` property reads the target }
+    'OR r.id IN (SELECT pa.ref_id FROM member_accesses pa WHERE pa.accessor_symbol_id = ' + IntToStr(FTargetId) +
+    ' AND pa.accessor_kind = ''field'' AND pa.mode = ''read'' AND pa.member_symbol_id <> ' + IntToStr(FTargetId) +
+    ') ORDER BY f.path, r.start_line, r.start_col, r.id');
   try
     for var Row in R do
     begin
@@ -632,6 +644,8 @@ begin
       Rd.EndCol:= Row.I('ecol');
       Rd.EnclosingId:= Id64(Row, 'enc');
       Rd.Enclosing:= Row.S('encq');
+      { v152 HBFIX: a property cannot be a var / out argument, so a property read is never one }
+      Rd.ArgHandled:= Row.I('isprop') <> 0;
       { one row per position: a read and a member-access of the same name are one use }
       var Dup:= False;
       for var Prev in FReads do
@@ -822,6 +836,14 @@ begin
     if TRegEx.IsMatch(SourceLine(pPath, L), '\bwith\b', [roIgnoreCase]) then Exit(True);
 end;
 
+{ A soft writer from a row with path, ln, col, enc, encq, fid, ist: with-opaque inside a with, else unresolved. }
+procedure TCollector.AddSoftWriterRow(const pRow: TIndexRow);
+begin
+  var How:= if IsInsideWith(pRow.S('path'), pRow.I('ist'), pRow.I('ln')) then hwWithOpaque else hwUnresolved;
+  AddWriter(MakeSite(pRow.S('path'), pRow.I('ln'), pRow.I('col'), Id64(pRow, 'enc'), pRow.S('encq'), Id64(pRow, 'fid')),
+    How, False, False);
+end;
+
 { Writes of the target's NAME that resolved to no symbol, in its own file or a file that uses its unit. }
 procedure TCollector.CollectUnresolved;
 begin
@@ -841,11 +863,79 @@ begin
     ' OR r.file_id IN (SELECT file_id FROM unit_uses WHERE target_file_id = ' + IntToStr(FTargetFileId) +
     ' OR unit_name = ' + Sq(UnitName) + ' COLLATE NOCASE)) ORDER BY f.path, r.start_line, r.start_col');
   try
+    for var Row in R do AddSoftWriterRow(Row);
+  finally
+    R.Free;
+  end;
+  if FTargetKind = 'field' then CollectUnresolvedMemberWrites(UnitName);
+end;
+
+{ v152 HBFIX H1: the names a member write of the target can carry -- the field's own name and every
+  property of its class whose `write` accessor is the field (read from the property-spec refs). }
+function TCollector.WriteNames: TArray<string>;
+begin
+  Result:= [FTargetName];
+  var R:= Rows('SELECT p.name AS pn, f.path, r.start_line AS ln, r.start_col AS col FROM refs r ' +
+    'JOIN symbols p ON p.file_id = r.file_id AND p.kind = ''property'' AND r.start_line BETWEEN p.start_line AND ' +
+    'p.end_line JOIN files f ON f.id = r.file_id WHERE r.kind = ''property-spec'' AND r.symbol_id = ' +
+    IntToStr(FTargetId) + ' ORDER BY p.id, r.start_col');
+  try
     for var Row in R do
     begin
-      var How:= if IsInsideWith(Row.S('path'), Row.I('ist'), Row.I('ln')) then hwWithOpaque else hwUnresolved;
-      AddWriter(MakeSite(Row.S('path'), Row.I('ln'), Row.I('col'), Id64(Row, 'enc'), Row.S('encq'), Id64(Row, 'fid')),
-        How, False, False);
+      var Before:= Copy(SourceLine(Row.S('path'), Row.I('ln')), 1, Row.I('col') - 1);
+      if TRegEx.IsMatch(Before, '\bwrite\s+$', [roIgnoreCase]) and
+        not TArray.Contains<string>(Result, Row.S('pn')) then Result:= Result + [Row.S('pn')];
+    end;
+  finally
+    R.Free;
+  end;
+end;
+
+{ v152 HBFIX H1: `X.Name := ..` whose member did not resolve (the receiver's type is unknown), Name being
+  the field or a `write <field>` property: it may write the target, so it is a soft writer (forbids
+  NEVER-SET, never helps prove SET). The `:=` is read from the source after the member name. }
+procedure TCollector.CollectUnresolvedMemberWrites(const pUnitName: string);
+begin
+  var Names:= '';
+  for var N in WriteNames do Names:= Names + (if Names = '' then '' else ', ') + Sq(N);
+  var R:= Rows('SELECT r.file_id AS fid, f.path, r.start_line AS ln, r.start_col AS col, r.end_line AS eln, ' +
+    'r.end_col AS ecol, COALESCE(r.enclosing_symbol_id, 0) AS enc, COALESCE(e.qualified_name, '''') AS encq, ' +
+    'COALESCE(e.impl_start_line, e.start_line, 0) AS ist FROM refs r JOIN files f ON f.id = r.file_id ' +
+    'LEFT JOIN symbols e ON e.id = r.enclosing_symbol_id WHERE r.kind = ''member-access'' AND ' +
+    'r.symbol_id IS NULL AND r.name_text COLLATE NOCASE IN (' + Names + ') AND (r.file_id = ' +
+    IntToStr(FTargetFileId) + ' OR r.file_id IN (SELECT file_id FROM unit_uses WHERE target_file_id = ' +
+    IntToStr(FTargetFileId) + ' OR unit_name = ' + Sq(pUnitName) + ' COLLATE NOCASE)) ' +
+    'ORDER BY f.path, r.start_line, r.start_col');
+  try
+    for var Row in R do
+    begin
+      var After:= Copy(SourceLine(Row.S('path'), Row.I('eln')), Row.I('ecol'), MaxInt);
+      if TRegEx.IsMatch(After, '^\s*:=') then AddSoftWriterRow(Row);
+    end;
+  finally
+    R.Free;
+  end;
+end;
+
+{ v152 HBFIX H1: a write of a property whose write accessor IS the target field (`property P read F
+  write F`; `Obj.P:= ..` or `P:= ..`) writes the target. The ref names the property, so
+  CollectAssignments never sees it. A setter METHOD needs nothing here: the call edge to the setter
+  carries the write. }
+procedure TCollector.CollectPropertyWrites;
+begin
+  var R:= Rows('SELECT r.file_id AS fid, f.path, r.start_line AS ln, r.start_col AS col, ' +
+    'r.end_line AS eln, r.end_col AS ecol, COALESCE(r.enclosing_symbol_id, 0) AS enc, ' +
+    'COALESCE(e.qualified_name, '''') AS encq FROM member_accesses m JOIN refs r ON r.id = m.ref_id ' +
+    'JOIN files f ON f.id = r.file_id LEFT JOIN symbols e ON e.id = r.enclosing_symbol_id ' +
+    'WHERE m.accessor_symbol_id = ' + IntToStr(FTargetId) + ' AND m.accessor_kind = ''field'' ' +
+    'AND m.mode = ''write'' AND m.member_symbol_id <> ' + IntToStr(FTargetId) +
+    ' ORDER BY f.path, r.start_line, r.start_col, r.id');
+  try
+    for var Row in R do
+    begin
+      var Site:= MakeSite(Row.S('path'), Row.I('ln'), Row.I('col'), Id64(Row, 'enc'), Row.S('encq'), Id64(Row, 'fid'));
+      var How:= AssignHow(Row.S('path'), Row.I('eln'), Row.I('ecol'));
+      AddWriter(Site, How, True, How <> hwAssignNil);
     end;
   finally
     R.Free;
@@ -992,6 +1082,7 @@ begin
   CollectArguments;
   CollectAddressAndAbsolute;
   CollectUnresolved;
+  CollectPropertyWrites;
   CollectDfmStream(Result);
   FillFiredByAndCallers;
   FWriters.Sort(TComparer<THbWriter>.Construct(
