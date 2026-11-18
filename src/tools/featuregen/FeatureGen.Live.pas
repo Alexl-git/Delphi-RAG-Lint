@@ -1023,6 +1023,44 @@ begin
   pLive.MenuSource := MENU_SOURCE_TREE;
 end;
 
+{ The editor right-click items one DragLint.Plugin.Cmd.X unit adds under pRoot ("drag-lint"): when the unit
+  sets a row's Surfaces to include csEditorContext and its Visible to True, every literal caption of a ROW VARIABLE
+  (one passed to RegisterCmd152, or the Result of a row-builder function), under the unit's EditorParent level
+  (literal or a const of the unit) when it sets one. Per unit, as before: a unit mixing editor and main-menu-only rows
+  lists all its row captions. A dialog's TD.Caption is not a row variable and is never listed. }
+function EditorCmdCaptions(const pSource, pRoot: string): TArray<string>;
+var
+  lVars: TArray<string>;
+  lM: TMatch;
+  lParent, lName: string;
+begin
+  Result := nil;
+  if not TRegEx.IsMatch(pSource, '\b\w+\.Surfaces\s*:=\s*\[[^\]]*\bcsEditorContext\b')
+    or not TRegEx.IsMatch(pSource, '\b\w+\.Visible\s*:=\s*True\b', [roIgnoreCase]) then
+    Exit;
+  lVars := ['Result'];
+  for lName in Matches1(pSource, '\bRegisterCmd152\s*\(\s*(\w+)\s*\)') do
+    lVars := lVars + [lName];
+  lParent := '';
+  lM := TRegEx.Match(pSource, '\b\w+\.EditorParent\s*:=\s*(?:''([^'']*)''|(\w+))');
+  if lM.Success then
+  begin
+    if lM.Groups[1].Success and (lM.Groups[1].Value <> '') then
+      lParent := lM.Groups[1].Value
+    else if (lM.Groups.Count > 2) and lM.Groups[2].Success then
+      for lName in Matches1(pSource, '\b' + lM.Groups[2].Value + '\s*=\s*''([^'']*)''') do
+        lParent := lName;
+  end;
+  for lM in TRegEx.Matches(pSource, '\b(\w+)\.Caption\s*:=\s*''([^'']+)''') do
+    for lName in lVars do
+      if SameText(lName, lM.Groups[1].Value) then
+      begin
+        Result := Result + [pRoot + ' > ' + (if lParent <> '' then DropAccelerator(lParent) + ' > ' else '')
+          + DropAccelerator(lM.Groups[2].Value)];
+        Break;
+      end;
+end;
+
 { Get-MenuSourceText: Editor.pas + AboutForm.pas + ReportText.pas, then every
   DragLint.Plugin.Cmd.*.pas (the 1.52 Cmd152 command units) in ordinal file-name order, concatenated.
   Parity: DocsSurfaceHarvest.ps1 Get-MenuSourceText reads the same files in the same order. }
@@ -1223,12 +1261,7 @@ begin
       begin
         lList.Add(lRt);
         for lF in TDirectory.GetFiles(TPath.Combine(pRepo, 'src\delphi-plugin'), 'DragLint.Plugin.Cmd.*.pas') do
-        begin
-          lS := ReadText(lF);
-          if TRegEx.IsMatch(lS, 'Command\.Surfaces\s*:=\s*\[[^\]]*\bcsEditorContext\b') and TRegEx.IsMatch(lS, 'Command\.Visible\s*:=\s*True\b') then
-            for lElse in Matches1(lS, 'Command\.Caption\s*:=\s*''([^'']+)''') do
-              lList.Add(lRt + ' > ' + DropAccelerator(lElse));
-        end;
+          lList.AddRange(EditorCmdCaptions(ReadText(lF), lRt));
       end;
       ContextCaptions.Add('Editor', SortUniqueText(lList.ToArray));
     end;  finally
