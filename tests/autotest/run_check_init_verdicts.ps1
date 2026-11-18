@@ -34,12 +34,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Repo    = (Resolve-Path "$PSScriptRoot\..\..").Path,
+  [string]$Repo    = '',
   [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-check-init-verdicts-$PID",
   [ValidateSet('auto', 'driver', 'cli')][string]$Mode = 'auto',
   [switch]$SkipBuild
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Repo) { $Repo = (Resolve-Path "$PSScriptRoot\..\..").Path }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {

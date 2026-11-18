@@ -429,12 +429,18 @@ Check 'RENAME: the message appears exactly ONCE in the block' ($chanCount -eq 1)
 Write-Host ''
 Write-Host 'CONTROLS 6,8 -- the CALL-SITE rewrite, which is a per-file `lint --fix`' -ForegroundColor Cyan
 $raisesPathA = Join-Path $projA 'src\uRaises.pas'
+# --no-compile-gate: since 1.52 (B23, BK-GATE 9a6259a0a) `lint --fix --apply` REFUSES a unit no
+# .dproj builds ("REFUSED (no-project) ... nothing written"), and this fixture deliberately has no
+# project. The flag is the documented way to write unbuilt; it opts out of the gate, not of the
+# rewrite under test, and run_v152_BK-GATE.ps1 owns the refusal itself (same fix as LSPCA #95).
 Push-Location C:\TEMP
 try {
   $fixOut = & $Exe lint $raisesPathA --db $dbA --config $cfgOn `
-                   --fix --fix-rule raise-bare-exception --apply 2>&1 | Out-String
+                   --fix --fix-rule raise-bare-exception --apply --no-compile-gate 2>&1 | Out-String
 } finally { Pop-Location }
 $src6 = [System.IO.File]::ReadAllText($raisesPathA)
+Check 'REWRITE: lint --fix --apply was not refused by the compile gate' `
+  ($fixOut -cnotmatch 'REFUSED \(') ("refusal: " + (($fixOut -split "`r?`n" | Where-Object { $_ -cmatch 'REFUSED \(' }) -join ' '))
 Check 'REWRITE: the renamed class is what the raise site now names' `
   ($src6 -match 'raise\s+EChannelBad\.Create\(') `
   'the rewrite must read the map from the UNIT, not re-derive a name'

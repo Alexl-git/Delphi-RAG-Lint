@@ -25,7 +25,7 @@
          [-SkipBuild] [-RequireParity] [-RequireForm] [-Work <dir>]
 #>
 [CmdletBinding()]
-param([string]$Repo = (Resolve-Path "$PSScriptRoot\..\..").Path,
+param([string]$Repo = '',
       [string]$RepoFile = '',
       [string]$Connection = $env:DL_TEST_FB_CONNECTION,
       [string]$Orm3 = 'C:\Projects\DB\ORM3',
@@ -33,6 +33,9 @@ param([string]$Repo = (Resolve-Path "$PSScriptRoot\..\..").Path,
       [switch]$SkipBuild,
       [switch]$RequireParity,
       [switch]$RequireForm)
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Repo) { $Repo = (Resolve-Path "$PSScriptRoot\..\..").Path }
 $ErrorActionPreference = 'Stop'
 Write-Host '== field repository ORM / DataService generator tests ==' -ForegroundColor Cyan
 $bat = Join-Path $Repo 'build\_build_fieldrepo_ormgen_tests_local.bat'

@@ -6,8 +6,11 @@
   overwrites it (the hazard the 1.21.1 hand publish hit; spec 15.6).
 #>
 [CmdletBinding()]
-param([string]$Repo = (Resolve-Path "$PSScriptRoot\..\..").Path,
+param([string]$Repo = '',
       [string]$WorkDir = "$env:TEMP\drag-lint-publish-release-$PID")
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Repo) { $Repo = (Resolve-Path "$PSScriptRoot\..\..").Path }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false

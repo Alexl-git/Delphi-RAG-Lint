@@ -10,7 +10,10 @@
   Run:  pwsh -File tests\autotest\run_deployed_engine_stage_guard.ps1
 #>
 [CmdletBinding()]
-param([string]$Repo = (Resolve-Path "$PSScriptRoot\..\..").Path)
+param([string]$Repo = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Repo) { $Repo = (Resolve-Path "$PSScriptRoot\..\..").Path }
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false

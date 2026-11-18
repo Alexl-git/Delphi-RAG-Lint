@@ -11,7 +11,10 @@
   regex is capable of finding the field when it exists.
 #>
 [CmdletBinding()]
-param([string]$RepoRoot = "$PSScriptRoot\..\..")
+param([string]$RepoRoot = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $RepoRoot) { $RepoRoot = "$PSScriptRoot\..\.." }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {

@@ -38,9 +38,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Repo = (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path))),
+  [string]$Repo = '',
   [int]$ToleranceMinutes = 5
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Repo) { $Repo = (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path))) }
 
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
