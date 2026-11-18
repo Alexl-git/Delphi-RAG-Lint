@@ -19,6 +19,7 @@ resolver 1.28.0 -> 1.29.0-alpha.
 - lint defaults (DEFAULTS): `form-object-without-field`, `foreign-form-control-access`, `dataset-edit-without-post` and (lint-all) `datamodule-form-global` are on by default; a shipped exempt-class list `rules\form-object-without-field.exempt.txt` plus `form_object_without_field.exempt_classes` / `use_default_list` in the lint config.
 
 ### Fixed
+- VS Code extension 1.6.5 (VSRESTART): "Restart Language Server" / "Update Engine Copy Now" no longer flood the drag-lint Output with `write EOF` / `Cannot call write after a stream was destroyed` / `Server process exited with code N` errors; a planned stop logs one "Server stopped for restart" line and does not spend the crash-restart budget. A real crash is still logged as before.
 - typeat / hover (EXTGAPS): a bare identifier answers from the ref the resolver bound at that position first, so `Application` in a .dpr names Vcl.Forms.Application, not a same-named class property of a used unit; `usages --name <library qname>` counts refs bound to that library symbol.
 - Index (EXTGAPS, rides the one 1.52 re-parse): a class var read through its class name (`TCfg.CInstances`) is bound; a .dpr main block gets data_flows rows; symbol_facts.dfm_event lists every control a shared handler is bound to; `H.OnEvt := H.Handler` (a procedure as the whole right-hand side) is an address-taken binding, not a call edge.
 - lint --fix (no --fix-rule) now resolves class with-blocks through the platform library.
