@@ -30,4 +30,4 @@ extract-constant:   left GfUnit.pas:31:11 -- a different type context: Double (t
 
 ## RAD Studio
 
-Put the caret on a number or string literal, then choose drag-lint > Extract Constant (literal at cursor)... (main menu, or the drag-lint submenu of the editor's right-click menu). All modules are saved, the engine computes the plan, and a prompt pre-filled with the proposed name opens. OK applies the extraction with that name and shows the engine's report; Cancel writes nothing.
+Put the caret on a number or string literal, then choose Extract Constant (literal at cursor)... from the drag-lint main menu or from the drag-lint submenu of the editor's right-click menu. All modules are saved, the engine computes the plan, and a prompt pre-filled with the proposed name opens. OK applies the extraction with that name and shows the engine's report; Cancel writes nothing.

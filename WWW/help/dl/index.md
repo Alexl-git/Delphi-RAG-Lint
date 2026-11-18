@@ -39,6 +39,7 @@ Find symbols, callers, callees, text and types in the index.
 | Feature | What it does | Since |
 | --- | --- | --- |
 | [call-path](features/call-path.md) | Finds the shortest resolved call path from one symbol to another | 0.91.0-alpha |
+| [check-init](features/check-init.md) | Answers whether a variable or field is set before a given use on every execution (SET / NEVER-SET / MAY-BE-UNSET) | 1.52.0-alpha |
 | [Class Surface](features/class-surface.md) | Shows the public surface of a class: its members and signatures, without the method bodies | 0.1.0-alpha |
 | [Compiler Hints](features/compiler-hints.md) | Uses query hints to surface compiler hint/warning findings that have been imported into the index, filtered by code or severity | 0.1.0-alpha |
 | [query --concept](features/concept-search.md) | Ranked BM25 concept search over identifier words and doc-comment prose | 1.38.0-alpha |
@@ -83,7 +84,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | Feature | What it does | Since |
 | --- | --- | --- |
 | [Ancestor not in project (lint rule)](features/ancestor-not-in-project.md) | Project-wide lint rule (error): a form, frame or data module whose ancestor class is declared in no project unit and not in the platform library | 1.42.0-alpha |
-| [Autofix for fixable rules](features/autofix-wave.md) | lint --fix repairs findings of the 130 fixable rules; --json reports per finding whether it was applied; lint accepts a folder | 1.37.0-alpha |
+| [Autofix for fixable rules](features/autofix-wave.md) | lint --fix repairs findings of the 131 fixable rules; --json reports per finding whether it was applied; lint accepts a folder | 1.37.0-alpha |
 | [Compliance labels (CWE, CERT, MISRA)](features/compliance-labels.md) | Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field | 1.37.0-alpha |
 | [Copy All Diagnostics](features/copy-all-diagnostics.md) | Puts every lint finding for the current unit onto the clipboard, starting from the Structure form | 0.1.0-alpha |
 | [Copy Diagnostics (Current File)](features/copy-diagnostics-current-file.md) | Puts the current file's lint findings onto the clipboard | 0.1.0-alpha |
@@ -114,7 +115,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [lint-tree](features/lint-tree.md) | Answers one question lint-all cannot: does an interface edit to this unit reach any dependent? | 1.11.0-alpha |
 | [Rename across every project that compiles a shared unit](features/multi-project-rename.md) | A naming fix on a unit several project indexes own renames it in every owner or in none, after an IDE confirmation listing the projects | 1.29.0-alpha |
 | [Opaque to analysis (lint rule)](features/opaque-to-analysis.md) | Project-wide lint rule (info, off by default): a routine whose non-library calls are mostly unresolvable, so impact and call trees are blind inside it | 1.42.0-alpha |
-| [Parameter type too wide (lint rule)](features/parameter-type-too-wide.md) | Project lint rule, OFF by default: a class-typed parameter that an ancestor type could carry, proved by the narrow-param plan | 1.46.0-alpha |
+| [Parameter type too wide (lint rule)](features/parameter-type-too-wide.md) | Project lint rule, ON since 1.52 (warning, autofix): a class-typed parameter that an ancestor type could carry, proved by the narrow-param plan | 1.46.0-alpha |
 | [Read but never assigned (lint rule)](features/read-never-assigned.md) | Project-wide lint rule: a field or global that is read but that nothing in the project assigns or creates | 1.40.0-alpha |
 | [Lint rules on the static type of a reference](features/ref-type-rules.md) | Lint rules on ref_types: is-always-true, is-never-true, argument-narrows, UI access from a thread, quit from a thread; sharper redundant-cast and unsafe casts | 1.44.1-alpha |
 | [Rescan this unit](features/rescan-this-unit.md) | Re-indexes the active project and re-lints the current unit on demand, so the Diagnostics panel drops findings already fixed | 1.28.3-alpha |
@@ -146,9 +147,15 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Wider built-in rules (1.51)](features/v151-wid-ast-rules.md) | Six built-in rules read more constructs: code-page and label exemptions, named zero constants, implied else-if, thread dialogs, Supports aliases | 1.51.0-alpha |
 | [Wider scm rules and three new fixers](features/v151-wid-scm-rules.md) | Seven built-in rules read more constructs; empty-finally, format-string-not-formatted and shared-marker-legacy-shape gain autofixes | 1.51.0-alpha |
 | [CLI fixes in 1.51.1](features/v1511-cli-fixes.md) | lint-all --rule a,b runs only those rules, a DB copy stays on the copy; rules --rule; info versions; index parse-errors; resolve-only warning | 1.51.1-alpha |
-| [member-could-be-private lint rule (lane ATLB)](features/v152-atlb-rules.md) | Hints (OFF in 1.52) on a public class member referenced only inside its own unit; published, virtual, interface-implementing, attributed and shared-unit members stay silent | 1.52.0-alpha |
+| [Reserved words as names, implicit package imports, contract-unit globs](features/v152-atla-rules.md) | reserved-word-identifier and implicit-package-import rules; contractUnits globs in drag-lint.json for contract-unit-declares-class | 1.52.0-alpha |
+| [member-could-be-private lint rule (lane ATLB)](features/v152-atlb-rules.md) | Hint (OFF in 1.52) on a public member used only in its own unit; published, virtual, interface, attributed and shared-unit members stay silent | 1.52.0-alpha |
 | [Default-on form, dataset and data-module rules](features/v152-defaults.md) | Four lint rules on by default since 1.52 (form object/field, foreign form access, edit without post, data module form global); a shipped exempt-class list | 1.52.0-alpha |
+| [Disable rule (this line, this unit, this project)](features/v152-disable-rule.md) | Silence one lint rule for a line (dl:ok marker), a unit or the project (rule_overrides in drag-lint-lint.json), with a reason and date; rules enable undoes it | 1.52.0-alpha |
 | [Array index possibly out of range lint rule (index-possibly-out-of-range)](features/v152-index-possibly-out-of-range.md) | Warns (OFF in 1.52) on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only | 1.52.0-alpha |
+| [Per-rule time budget in the rule frame (rule-skipped-budget)](features/v152-per-rule-budget.md) | A v151/v152 rule slower than rule_time_budget_ms (2000 ms) on a file is skipped there with one rule-skipped-budget note; index warns near the parse limit | 1.52.0-alpha |
+| [unit-used-by-no-unit rule; unit-not-in-dpr outside the project roots](features/v152-proj2.md) | Warns (ON) on a unit only the .dpr lists that nothing reaches; a form counts only when opened. unit-not-in-dpr also reports shared-folder units | 1.52.0-alpha |
+| [parameter-type-too-wide ON by default, with an autofix](features/v152-ptw.md) | parameter-type-too-wide ships ON as a warning in lint-all / lint-project with an autofix that retypes the parameter through the compile gate | 1.52.0-alpha |
+| [Lint rules unconnected-control and hanging-handler](features/v152-unconn-rules.md) | Warns on a form control that nothing wires and on an event-handler-shaped method that no form binds and no code assigns or calls | 1.52.0-alpha |
 | [warm-rule-cache](features/warm-rule-cache.md) | Fills the lint rule cache for a project index; index runs warm it, or start it in the background (--rule-cache-warm) | 1.39.0-alpha |
 
 ## Documentation
@@ -168,6 +175,7 @@ DocInsight comments generated from the index, and drift detection.
 | [Document unit](features/document-unit.md) | Generates or repairs managed DocInsight comments for every public declaration in the unit open in the active editor (facts-only) | 0.90.0-alpha |
 | [Effect Summary Legend](features/effect-summary-legend.md) | The purity analysis writes a short token string for every routine it judges -- symbolfacts.effectsummary in the index | 1.16.0-alpha |
 | [shared-unit](features/shared-unit.md) | Reads or extends the dl:shared marker on a unit, recording which projects share it | 1.10.0-alpha |
+| [Documentation policy: missing-doc, doc-placeholder, doc-malformed-summary](features/v152-docpol.md) | missing-doc covers DFM-bound handlers with code; doc-placeholder (ON, hint) flags template summaries; doc-malformed-summary (OFF) flags declaration-like ones | 1.52.0-alpha |
 | [dl:wiki concept blocks](features/wiki-blocks-authoring.md) | The format of a dl:wiki block -- the concept notes the wiki verb reads | 1.7.0-alpha |
 
 ## Refactoring and code generation

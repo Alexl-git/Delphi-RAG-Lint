@@ -1,10 +1,10 @@
 ---
 id: v152-atlb-rules
 title: member-could-be-private lint rule (lane ATLB)
-summary: Hints (OFF in 1.52) on a public class member referenced only inside its own unit; published, virtual, interface-implementing, attributed and shared-unit members stay silent
+summary: Hint (OFF in 1.52) on a public member used only in its own unit; published, virtual, interface, attributed and shared-unit members stay silent
 product: DL
 group: linting
-order: 30065
+order: 30066
 since: 1.52.0-alpha
 status: shipped
 updated: 1.51.1-alpha
@@ -12,14 +12,14 @@ updated: 1.51.1-alpha
 
 # member-could-be-private lint rule (lane ATLB)
 
-Hints (OFF in 1.52) on a public class member referenced only inside its own unit; published, virtual, interface-implementing, attributed and shared-unit members stay silent.
+Hint (OFF in 1.52) on a public member used only in its own unit; published, virtual, interface, attributed and shared-unit members stay silent.
 
 Read this to see when member-could-be-private reports a public member, which members it never touches, and why component-create-without-override was refused in favour of hides-ancestor-virtual.
 
 ## How to run it
 
 ```text
-drag-lint lint-all --db <db> [--rule member-could-be-private] (default OFF in 1.52, category project-wide, hint)
+drag-lint lint-all --rule member-could-be-private --db <db> (default OFF in 1.52; naming it with --rule runs it, category project-wide, hint)
 ```
 
 Full flag list: [lint-all in the CLI reference](../cli.md#lint-all).

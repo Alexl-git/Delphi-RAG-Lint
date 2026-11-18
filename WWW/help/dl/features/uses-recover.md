@@ -4,10 +4,10 @@ title: uses-recover
 summary: Recovers the uses edges of units that ship without source, from the vendor's .hpp headers and a dcc map; never reads a .dcu; --apply stores them in the index
 product: DL
 group: search-navigation
-order: 20036
+order: 20037
 since: 1.50.0-alpha
 status: shipped
-updated: 1.50.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # uses-recover

@@ -4,7 +4,7 @@ title: Default-on form, dataset and data-module rules
 summary: Four lint rules on by default since 1.52 (form object/field, foreign form access, edit without post, data module form global); a shipped exempt-class list
 product: DL
 group: linting
-order: 30066
+order: 30067
 since: 1.52.0-alpha
 status: shipped
 updated: 1.51.1-alpha
@@ -19,7 +19,7 @@ Read this when a form object without a field, a control reached through another 
 ## How to run it
 
 ```text
-drag-lint lint <path> [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>|help] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]
+drag-lint lint  <path>       [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>|help] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>] [--no-budget]
 ```
 
 Full flag list: [lint in the CLI reference](../cli.md#lint).

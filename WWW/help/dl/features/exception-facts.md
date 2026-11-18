@@ -4,10 +4,10 @@ title: exception-facts
 summary: Lists which routine raises and handles which exception type, by routine or by type
 product: DL
 group: search-navigation
-order: 20006
+order: 20007
 since: 1.46.0-alpha
 status: shipped
-updated: 1.49.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # exception-facts

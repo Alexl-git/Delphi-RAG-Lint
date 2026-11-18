@@ -12,7 +12,7 @@
     {
       "type": "cli",
       "verb": "lint",
-      "usage": "drag-lint lint <path> [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>|help] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]",
+      "usage": "drag-lint lint  <path>       [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>|help] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>] [--no-budget]",
       "flags": [
         {
           "name": "--profile",
@@ -103,9 +103,9 @@
   ],
   "audience": "both",
   "verified": {
-    "date": "2026-11-17",
+    "date": "2026-11-18",
     "by": "ENGINE",
     "build": "1.51.1-alpha",
-    "surfaceHash": "22743ed9ce2e81c23136637b5acbbc1c496ee7349a885bdd48c0dd8cee50de46"
+    "surfaceHash": "c5d96a075ccf964cd4812531d9d2bff6a7522e9b948592911e6dda021762d594"
   }
 }

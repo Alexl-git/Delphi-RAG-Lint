@@ -14,12 +14,12 @@ updated: 1.51.1-alpha
 
 reserved-word-identifier and implicit-package-import rules; contractUnits globs in drag-lint.json for contract-unit-declares-class.
 
-Read this to see what the two new 1.52 rules report, how contract units can be named by glob, and why noreturn-returns is not in 1.52.
+Read this to see what the two rules new in 1.52 report, how contract units can be named by glob, and why noreturn-returns is not in 1.52.
 
 ## How to run it
 
 ```text
-drag-lint lint <path> [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>|help] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]
+drag-lint lint <path> [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>|help] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>] [--no-budget]
 ```
 
 Example:
@@ -31,7 +31,7 @@ drag-lint lint <unit.pas> --rule reserved-word-identifier
 Full flag list: [lint in the CLI reference](../cli.md#lint).
 
 ```text
-drag-lint lint-all [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]
+drag-lint lint-all [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output|--report <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget]
 ```
 
 Example:
@@ -115,7 +115,7 @@ Turn the rule on with `--enable contract-unit-declares-class` or
 
 `noreturn-returns` (a `noreturn` routine that can return normally) needs the
 index to record which routines are `noreturn`, across units and the RTL. That
-is an indexer change and is planned for a later release.
+is an indexer change; this release does not ship the rule.
 
 ---
 

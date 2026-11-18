@@ -18,9 +18,58 @@ resolver 1.28.0 -> 1.29.0-alpha.
 
 ### Changed
 
-- lint defaults (DEFAULTS): `form-object-without-field`, `foreign-form-control-access`, `dataset-edit-without-post` and (lint-all) `datamodule-form-global` are on by default; a shipped exempt-class list `rules\form-object-without-field.exempt.txt` plus `form_object_without_field.exempt_classes` / `use_default_list` in the lint config.
+- Default flips (owner D7 + DEFAULTS + DOCPOL + PROJ2 + UNCONN + PTW + MARK): ON by default: `datamodule-form-global`
+  (warning, lint-all), `foreign-form-control-access` (hint), `dataset-edit-without-post` (warning),
+  `form-object-without-field` (hint), `doc-placeholder` (hint), `parameter-type-too-wide` (warning, fixable),
+  `unconnected-control` (warning), `hanging-handler` (warning), `unit-used-by-no-unit` (warning),
+  `reserved-word-identifier` (warning), `review-marker-remeasured` (hint). OFF by default: `doc-malformed-summary`,
+  `member-could-be-private` (new; OFF until a shared-unit FP is fixed), `index-possibly-out-of-range` (FP gate 6/12).
+  `missing-doc` now also reports DFM-bound handlers that have code (reverses the 1.51.1 skip; CLIENT +934). A shipped
+  exempt-class list `rules\form-object-without-field.exempt.txt` plus `form_object_without_field.exempt_classes` /
+  `use_default_list` in the lint config.
+- Default-rule findings 1.51.2 -> 1.52 (FPM re-measure, default rule set): CLIENT 19180 -> 23752, SERVER 16705 -> 20957,
+  LOADER 4437 -> 5135, YADF 477 -> 510.
+- `lint-all` speed and budget (BUDGET, BK-PERF, BK-CLISMALL): a per-rule lint time budget (`--no-budget` turns it off)
+  and a 10x faster RTL collection scan; the taint pass caches library routine lookups (YADF taint 42.2 -> 13.4 s,
+  lint-all 141.8 -> 107.0 s, outputs byte-identical); `lint-all --no-stand-down` skips the engine stand-down.
+- `lint-all` report file (SMALLS): written beside `--project`, else beside the DB (was the current directory);
+  `--report` is an alias of `--output`.
+- `cycles` finalization-order cut (FINCUT, B9a): planned when the consumer already initializes first in every program.
+- `ui-call-in-console-or-service` (APP2): follows calls across units from the closure of a `{$APPTYPE CONSOLE}` .dpr.
+- 'Used in:' (autodoc + hover) (BK-USEEDGES): Inc / Dec / var / out arguments are shown as [w] / [rw].
+- Hover (ASYNC): a fast "computing..." answer first, then the complete one; cancellable (CLIENT p50 376 -> 76 ms).
+- IDE Rules page (PLUGUI): search box with 250 ms debounce and wait cursor (423 rules: 25 s -> 2.5 s); the Find
+  Usages panel follows the IDE theme.
+- IDE Reports (REPPROG): all 27 Reports questions run under a progress window (marquee, elapsed seconds, Cancel);
+  Cancel stops only that report's child process tree.
+- Hover / autodoc `Init:` (HBHOVER): hover shows the check-init verdict (`Init: <VERDICT>`) and a `Set by:` writer list.
+- Engine tooling (BK-TOOLING): manifest setting `ignoreLocalConfig` (opt-in; skips the working-directory
+  .drag-lint.json walk); the encoding guard runs in 11-22 s (was 124 s).
+- Packaging (PACK, TTD): Wiki-Blocks-Authoring ships in the pack and installer; `dl-field-repo.exe` (field
+  repository grid editor) ships beside drag-lint.exe.
 
 ### Fixed
+- `lint` (FPS): three false positives fixed (`duplicate-code` end anchor, `exception-escapes-thread` with an inline
+  var, a reftype case).
+- `lint` (NOISE2): `large-magic-number` false positives cut (LOADER 37 -> 25, 0 new); `magic-literal` skips integer
+  subscripts, `Reg(id,'NAME')` and data rows of 6+ numeric arguments; `missing-begin-update` is silent when the
+  control is created in the same routine.
+- `document --project` (FINDOC2): a stale index is a dry-run warning (`staleFactSources` in JSON) and `--apply`
+  refuses; `document-all` / `--unit` honour ownRoots; `--apply --reindex --json` prints clean JSON on stdout
+  (incl. the retry path).
+- Compile gate (GATE2, BK-GATE): the gate fixers stand down correctly (`--no-compile-gate` documented for
+  extract-method / create-enum-helper); `extract-method` was missing from the stand-down channel (product bug); a
+  unit in no project is REFUSED with exit 2; the `.BCK` message names the cause.
+- `extract-constant` (XCONST): fixed, with an IDE command (editor menu).
+- `unwith` (UNWITH): `--exclude-under <dir>` (repeatable) skips the given directories.
+- VS Code (VSFIX): the marker quick fix is offered as a code action.
+- `usages` over LSP (N3WIDE): Wide and Narrow differ again (the impact group was added for very-wide only).
+- `query --substring` (BK-CLISMALL): a needle under 3 characters (after unquoting) falls back to whole-word; a
+  binary DFM gives one "Binary DFM -- not linted" warning instead of a parser error.
+- Index (BK-EXTRA, rides the one 1.52 re-parse): new `attributes` table (additive); `ref_receivers` rows for a
+  dereferenced receiver (`F()^.M`, `P^.M`).
+- YADF / YADFSetup lookup (YADFLOC): Release > Debug > PATH, with a version warning.
+- IDE Field Repository (TTIDE): Refresh Schema password is masked (SMALLS).
 - VS Code extension 1.6.5 (VSRESTART): "Restart Language Server" / "Update Engine Copy Now" no longer flood the drag-lint Output with `write EOF` / `Cannot call write after a stream was destroyed` / `Server process exited with code N` errors; a planned stop logs one "Server stopped for restart" line and does not spend the crash-restart budget. A real crash is still logged as before.
 - IDE Search page (BK-SCOPEUI B31): the Usages kind has the same four scopes as Find Usages (This symbol / Project / Group / Everywhere, advanced row) and the Location column shows the full path.
 - IDE Lint Options (B36): an unsaved rule toggle survives a search refill (it was rebuilt from the saved config and lost); a toggle on a rule the search hides is saved too.
@@ -72,9 +121,31 @@ resolver 1.28.0 -> 1.29.0-alpha.
   `params.index-possibly-out-of-range.exception_class`, default EArgumentOutOfRangeException) is MANUAL ONLY:
   a batch `--fix` withholds it with a stderr note, `--fix-rule index-possibly-out-of-range` (the IDE's Fix it)
   applies it; `rules --json` carries the new field `fix_manual_only: true`.
-  424 rules, 342 enabled by default, 126 with an auto-fix.
+- `member-could-be-private` (project-wide hint, default OFF, ATLB); two contract-glob rules (ATLA, declClass fix);
+  `unconnected-control` and `hanging-handler` (UNCONN, ON, warning, dead-code; CLIENT 100 + 22, 0 FP in samples);
+  `unit-used-by-no-unit` (PROJ2, ON, warning; CLIENT ~270) and `unit-not-in-dpr` findings anchored on the .dpr under
+  `--project`; `review-marker-remeasured` (MARK, hint); `parameter-type-too-wide` is ON and fixable (PTW);
+  `rtti-unavailable` sub-kind `anonymous-field-type` (RTTI5, OFF); `doc-placeholder` ON and `doc-malformed-summary`
+  OFF (DOCPOL).
+- 435 rules, 354 enabled by default, 131 with an auto-fix.
 
 ### Added
+- `check-init` (HBSKEL, HBEVENTS, HBINTRA, HBROOTS, HBSOLVER, HBFIELDS, HBTAIL, HBRECV, HBEVORD, HBDOCS, HBMCP, HBIDE,
+  HBHOVER): proves whether a field or global is set before it is used. Verdicts SET / NEVER-SET / MAY-BE-UNSET /
+  UNKNOWN-CALLEE (exit 1, reason `unknown-callee`); `drag-lint-project.json` `checkInit.callees` (reads | sets; a line
+  marker wins); reason `receiver-unproven` and "SET by receiver" when the writer runs on the same object (HBRECV);
+  DFM handler ordering, reason `relied-on-handler-order` (HBEVORD); MCP tool `check_init`; IDE command (drag-lint >
+  Analyze and the editor menu; async, results in Messages, UNKNOWN-CALLEE hint) and the hover `Init:` line (HBIDE,
+  HBHOVER). Wiki page `check-init.md`.
+- Find Usages scopes (FUSCOPE): symbol (default) / project / group / everywhere on the CLI (`usages --scope`,
+  `--group`, `--in --line --col`), LSP (`dragLint.usagesScope`), MCP `find_usages` and the IDE (submenu + panel combo,
+  replaces Narrow / Wide).
+- `rules disable` / `rules enable` verbs and IDE "Disable Rule..." (DISRULE); `rules --json` carries `disabled_by`.
+- `repo` generators (TTA, TTB, TTC, TTCSV, TTPA, TTS, TTGEN, GENPAIMPL): schema, FB import / seed, text backup,
+  CSV -> FDMemTable, `gen-param-array` (print / `--plan` / `--apply`); `gen-orm`, `gen-dataservice`, `update-orm` are
+  internal (not byte-identical with ORM3 yet). IDE Field Repository submenu (Open editor, Refresh Schema, FDMemTable
+  from CSV) and the `dl-field-repo` grid editor (TTIDE, TTD).
+- IDE (PLUGCTX): editor-menu rows register through Surfaces=editor.
 - `repo` verb family (field repository, text backup, Firebird import/seed/refresh): `init`, `info`, `import-fb`, `seed-fb`,
   `refresh-schema`, `backup`, `restore`, `gen-memtable`; the other `gen-*` / `*-orm` subs answer "not available" in 1.52.
 - `explain <rule-id>`: meaning, why it matters, example, default, fixable, suppress; text or `--json`; an unknown id

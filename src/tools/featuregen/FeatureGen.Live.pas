@@ -1131,13 +1131,14 @@ end;
 
 procedure TLiveSurface.Harvest(const pRepo, pEngine: string);
 const
-  CAPTION_RES: array[0..5] of string = (
+  CAPTION_RES: array[0..6] of string = (
     'AddWrappedItem\(\s*\w+\s*,\s*''([^'']+)''',
     'AddSectionHeader\(\s*\w+\s*,\s*''([^'']+)''',
     'Add(?:Proc)?Button\(\s*''([^'']+)''',
     '\.Caption\s*:=\s*''([^'']+)''',
     '\bCaption:\s*''([^'']+)''',
-    '\brtk\w+\s*:\s*Result\s*:=\s*''([^'']+)''');
+    '\brtk\w+\s*:\s*Result\s*:=\s*''([^'']+)''',
+    '\bRegisterRow\(\s*''[^'']*''\s*,\s*''([^'']+)''\s*,\s*True\b');  { 1.52 Cmd.FieldRepo rows; a hidden row (False) is not live }
 var
   lHasDesigner, lHasEditorMenu: Boolean;
   lHelp: TLiveHelp;

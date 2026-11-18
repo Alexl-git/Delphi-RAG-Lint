@@ -174,6 +174,7 @@ a kill only as the last resort:
    * `lint-all` stops between files, prints the findings so far marked PARTIAL
      on stderr, exits **4**; project-wide rules did not run.
    * `sql` does not listen: one guarded SELECT, a kill is harmless.
+   * `lint-all --no-stand-down` (1.52, B50) does not open the channel at all: a measurement run is never cut to PARTIAL by a peer's request, and the maintenance verb does not list it. `index` has no such flag.
 3. Anything still holding the image after the wait: `stage-engine.ps1` refuses
    when an `index` run is still alive (it did not comply), and otherwise kills
    only the processes running the target image, then retries the copy.

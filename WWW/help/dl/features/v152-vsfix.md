@@ -18,6 +18,10 @@ Read this when you want drag-lint to apply its own deterministic fix instead of 
 
 ## Where to click
 
+* RAD Studio main menu: **drag-lint > Code Quality > Fix with drag-lint (finding at cursor)**
+   1. Put the caret on a line that shows a drag-lint finding
+   2. Choose drag-lint > Code Quality > Fix with drag-lint (finding at cursor)
+   3. Answer Yes to apply the fix, No to preview it
 * Right-click in the Editor: **drag-lint > Fix with drag-lint (finding at cursor)**
    1. Put the caret on a line that shows a drag-lint finding
    2. Right-click in the editor, open the drag-lint submenu and choose Fix with drag-lint (finding at cursor)

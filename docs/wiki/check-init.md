@@ -4,13 +4,14 @@ Answers "is this variable or field set before it is used, on every execution?" f
 unit variable, class var or instance field.
 
 It reads the index (no new data is persisted) and names the writers, the use, and -- when it
-cannot prove the value is set -- the first reason why not. The answer is one of three verdicts:
+cannot prove the value is set -- the first reason why not. The answer is one of four verdicts:
 
 | Verdict | Meaning |
 |---|---|
 | `SET` | proven: every judged use runs after a writer that counts as initialization, on every path |
 | `NEVER-SET` | proven absence: no resolved writer, no soft writer, not published (streamed), no `absolute` overlay |
 | `MAY-BE-UNSET` | everything else. "Not proven safe" -- never a proof that a run is bad |
+| `UNKNOWN-CALLEE` | not SET, and a call on the path has no source in the index (it may set the target by reference); the headline names the callee, the judged uses stay `MAY-BE-UNSET` and carry reason `unknown-callee`. Record the answer once (see "Calls with no source" below) |
 
 `:= nil` (and `FreeAndNil`) is NOT an initialization of a class, interface, pointer or procedural
 target: such a writer is listed as `assign-nil  (does not count)`.
@@ -24,7 +25,7 @@ drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--
 * `<QName>` is `Unit.GVar`, `Unit.TClass.ClassVar` or `Unit.TClass.FField`. With only `--at`, the
   variable under that position is the target; a line-only `--at file:line` judges the use at its
   real column.
-* Exit 0: every judged use is SET. Exit 1: some use is MAY-BE-UNSET or NEVER-SET. Exit 2: usage or
+* Exit 0: every judged use is SET. Exit 1: the verdict is MAY-BE-UNSET, NEVER-SET or UNKNOWN-CALLEE. Exit 2: usage or
   other error (unknown or ambiguous target, bad `--at`, no `--db`, unreadable DB); the message goes
   to stderr and stdout stays empty, so a `--json` consumer never parses half a document.
 * `--explain` adds the root chain and the `reasons:` line under every use.
@@ -143,11 +144,43 @@ has them in `reasons`). The list is closed and appended to only; tools branch on
 | `budget` | the `--max-routines` cap ran out before the use was proven |
 | `guarded-test` | the use is the operand of an `Assigned` / `<> nil` test (it is a guard, not a dereference) |
 | `relied-on-handler-order` | see below |
+| `unknown-callee` | a call on the path has no source in the index and nobody recorded whether it reads or sets the target (headline `UNKNOWN-CALLEE`) |
+| `receiver-unproven` | an instance-field use the constructor model left MAY: the call that sets the field (Init) and the use (Run) could not be proven to run on the same object; the `why` names the first call site that broke the proof |
 
 Reserved in the contract but not produced by the engine yet: `interface-call`, `writer-on-thread`,
-`index-incomplete`, and `receiver-unproven` (receiver-aware ordering, a use of a field written by
-another method of the same object, is not part of this build: such a use is MAY-BE-UNSET with the
-writer routines listed).
+`index-incomplete`.
+
+### Receiver proof: `SET by receiver`
+
+When the constructor model leaves a field use MAY (`ctor-misses-field`, `no-declared-ctor`,
+`subclass-ctor-skips`), the engine checks whether the method that sets the field runs on the SAME
+object before the method that uses it. Proven receivers: a local variable, a value or const
+parameter, `Self` (up to 4 call levels), and a field of `Self` that every constructor of its owner
+creates and initializes. A proven use turns SET and says
+
+```
+SET by receiver: <writer> runs on <receiver> before <caller> calls on it at <file>:<line>
+```
+
+and the answer summary adds `(receiver-proven: ...)`. Anything else -- a unit or program variable,
+a var / out / constref parameter, a chain, a function result, `with`, a receiver handed out
+between the two calls, a use inside an anonymous method -- keeps the use MAY-BE-UNSET and adds
+`receiver-unproven`. A field receiver freed in the destructor (`FreeAndNil(FW)`) is unproven too.
+
+### Calls with no source: `checkInit.callees`
+
+A call whose callee has no source in the index (a DLL import, a library without source) may set
+the target through a var parameter. The engine cannot tell, so the answer is `UNKNOWN-CALLEE`.
+Record the answer once per project in `<anchor>\_D-RAG\drag-lint-project.json` (beside the DB):
+
+```json
+{ "checkInit": { "callees": { "ReadExternal": "reads", "LoadExternal": "sets" } } }
+```
+
+`reads` = the callee only reads the argument (no writer, no warning); `sets` = it writes it (a
+writer at the call). A dotless key matches the last part of the call; a dotted key matches only the
+exact call text. Any other value, a malformed file or no anchor = no answer. A line marker
+`// dl:callee-reads` or `// dl:callee-sets` on the call line wins over the project file.
 
 ### `relied-on-handler-order`
 

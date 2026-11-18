@@ -14,7 +14,7 @@ There is no machine-wide scope here: a rule that is wrong for every project is a
 
 ## RAD Studio
 
-Put the caret on the line that shows the finding, then either right-click in the editor and choose `drag-lint > Disable Rule...`, or use the main menu `drag-lint > Code Quality > Disable Rule...`. Pick one of the three command links (`Disable here (this line)`, `Disable in this unit`, `Disable in this project`), type a reason and press OK. Line scope saves all open files first, because the engine edits the file on disk. The engine's answer is shown in a message box.
+Put the caret on the line that shows the finding, then either right-click in the editor and choose `Disable Rule...` from its drag-lint submenu, or use the main menu `drag-lint > Code Quality > Disable Rule...`. Pick one of the three command links (`Disable here (this line)`, `Disable in this unit`, `Disable in this project`), type a reason and press OK. Line scope saves all open files first, because the engine edits the file on disk. The engine's answer is shown in a message box.
 
 ## Command line
 

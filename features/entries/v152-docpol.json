@@ -1,11 +1,11 @@
 {
   "id": "v152-docpol",
-  "title": "Documentation policy: missing-doc covers all real code, doc-placeholder, doc-malformed-summary",
+  "title": "Documentation policy: missing-doc, doc-placeholder, doc-malformed-summary",
   "group": "documentation",
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.52.0-alpha",
-  "summary": "missing-doc now asks for a doc comment on a DFM-bound handler that has code (empty handlers stay exempt); new rule doc-placeholder (ON, hint) flags a template summary (Summary here ...) that does not count as documented; new rule doc-malformed-summary (OFF, hint) flags a summary that opens like a declaration",
+  "summary": "missing-doc covers DFM-bound handlers with code; doc-placeholder (ON, hint) flags template summaries; doc-malformed-summary (OFF) flags declaration-like ones",
   "intro": "Read this to see which declarations missing-doc expects a doc comment on after 1.52 (a bound Button1Click with code now needs one, an empty one does not), and how doc-placeholder and doc-malformed-summary catch summaries that are not descriptions.",
   "wikiPage": "v152-docpol",
   "surfaces": [
@@ -25,5 +25,11 @@
       ]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-18",
+    "by": "ENGINE",
+    "build": "1.51.1-alpha",
+    "surfaceHash": "b47eb66bf0cb814b73ab6883a63435ae8219a7ec857a578350c86dfa85120e65"
+  }
 }

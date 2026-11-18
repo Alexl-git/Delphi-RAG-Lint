@@ -5,7 +5,7 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.37.0-alpha",
-  "summary": "lint --fix repairs findings of the 130 fixable rules; --json reports per finding whether it was applied; lint accepts a folder",
+  "summary": "lint --fix repairs findings of the 131 fixable rules; --json reports per finding whether it was applied; lint accepts a folder",
   "intro": "Read this when you want drag-lint to repair findings instead of only reporting them. A dry run shows the edits, --apply writes them, and the JSON result says for each finding whether a fix was applied.",
   "wikiPage": "autofix-wave",
   "surfaces": [
@@ -17,9 +17,9 @@
   ],
   "audience": "both",
   "verified": {
-    "date": "2026-11-14",
+    "date": "2026-11-18",
     "by": "ENGINE",
-    "build": "1.51.0-alpha",
-    "surfaceHash": "de319179f8b6b2ffbdba5a675a1f550133807d68a0339e632b8014cd5442cafc"
+    "build": "1.51.1-alpha",
+    "surfaceHash": "b4e0ea9ae96c0b3e6c9af7fd6c2fa5750a7de83e50ea8d9adf527c20397f05d5"
   }
 }

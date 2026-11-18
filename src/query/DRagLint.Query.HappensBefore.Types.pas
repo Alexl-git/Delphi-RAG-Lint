@@ -232,14 +232,6 @@ function HbWorseVerdict(pA, pB: THbVerdict): THbVerdict;
 /// not a number &gt;= 1.</returns>
 function HbParseAt(const pAt: string; out pSite: THbSite): Boolean;
 
-/// <summary>The scaffold answer every verb surface returns until the solver lane lands: verdict
-/// MAY-BE-UNSET, not proven, reason budget, limits ['not-implemented'].</summary>
-/// <param name="pTarget">The QName asked about ('' when only --at names it).</param>
-/// <param name="pAt">The parsed --at site, or a site with an empty FileName when there is none;
-/// when present it is the single judged use.</param>
-/// <returns>A complete answer (every field set) so renderers and drivers can be tested.</returns>
-function HbNotImplementedAnswer(const pTarget: string; const pAt: THbSite): THbAnswer;
-
 implementation
 
 const
@@ -329,28 +321,6 @@ begin
     pSite.Line:= N;
   end;
   Result:= (pSite.FileName <> '') and (pSite.Line >= 1);
-end;
-
-function HbNotImplementedAnswer(const pTarget: string; const pAt: THbSite): THbAnswer;
-begin
-  Result:= Default(THbAnswer);
-  Result.Target.QName:= pTarget;
-  Result.Target.Kind:= htkUnresolved;
-  Result.Scope:= hsProgram;
-  Result.Verdict:= hvMayBeUnset;
-  Result.Proven:= False;
-  Result.Summary:= '(not proven: the check-init engine is not implemented in this build)';
-  Result.Reasons:= [hrBudget];
-  Result.Limits:= [HB_LIMIT_NOT_IMPLEMENTED];
-  if pAt.FileName <> '' then
-  begin
-    var U:= Default(THbUseAnswer);
-    U.Site:= pAt;
-    U.Verdict:= hvMayBeUnset;
-    U.Reasons:= [hrBudget];
-    U.Why:= 'why not SET: the check-init engine is not implemented in this build';
-    Result.JudgedUses:= [U];
-  end;
 end;
 
 end.

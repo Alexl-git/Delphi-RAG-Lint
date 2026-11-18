@@ -4,10 +4,10 @@ title: context
 summary: Returns a compact context bundle for a symbol -- its doc comment, class surface (signatures), the target's own body, and a capped list of callers
 product: DL
 group: search-navigation
-order: 20005
+order: 20006
 since: 0.6.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # context

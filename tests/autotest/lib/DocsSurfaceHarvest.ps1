@@ -109,7 +109,8 @@ function Get-LiveMenuCaptions {
       "Add(?:Proc)?Button\(\s*'([^']+)'",
       "\.Caption\s*:=\s*'([^']+)'",
       "\bCaption:\s*'([^']+)'",                      # REPORT_QUESTIONS catalog rows
-      "\brtk\w+\s*:\s*Result\s*:=\s*'([^']+)'")) {   # ReportGroupCaption headers
+      "\brtk\w+\s*:\s*Result\s*:=\s*'([^']+)'",     # ReportGroupCaption headers
+      "\bRegisterRow\(\s*'[^']*'\s*,\s*'([^']+)'\s*,\s*True\b")) {   # 1.52 Cmd.FieldRepo rows (hidden = False, not live); parity: FeatureGen.Live CAPTION_RES
     foreach ($m in [regex]::Matches($menuSrc, $rx)) {
       # '&&' is the Delphi escape for a literal '&' in a caption; docs write one.
       [void]$liveCaptions.Add($m.Groups[1].Value.Replace('&&', '&').Trim())

@@ -21,23 +21,8 @@
     },
     {
       "type": "ide-menu",
-      "path": "drag-lint > Field Repository > Generate / Update ORM Source...",
-      "steps": ["Hidden until the ORM source generator verb ships"]
-    },
-    {
-      "type": "ide-menu",
-      "path": "drag-lint > Field Repository > Generate DataService Units...",
-      "steps": ["Hidden until the DataService generator verb ships"]
-    },
-    {
-      "type": "ide-menu",
       "path": "drag-lint > Field Repository > FDMemTable from CSV...",
-      "steps": ["Choose drag-lint > Field Repository > FDMemTable from CSV...", "Pick a field-definition CSV", "The Pascal source is written next to the CSV as <name>.memtable.pas"]
-    },
-    {
-      "type": "ide-menu",
-      "path": "drag-lint > Field Repository > Param Array Assistant...",
-      "steps": ["Hidden until the param-array verb ships"]
+      "steps": ["Choose drag-lint > Field Repository > FDMemTable from CSV...", "Pick a field-definition CSV", "The Pascal source is written next to the CSV as `<name>.memtable.pas`"]
     },
     {
       "type": "cli",
@@ -150,9 +135,9 @@
     }
   ],
   "verified": {
-    "date": "2026-11-17",
+    "date": "2026-11-18",
     "by": "ENGINE",
     "build": "1.51.1-alpha",
-    "surfaceHash": "40b7e284e4e7bb659e89be41a48946670b8575007e703d378493c6ba6364898d"
+    "surfaceHash": "4497fa27064b1585e6147ff49d85c53d2a4c65085555b3626e43db2819f79b26"
   }
 }

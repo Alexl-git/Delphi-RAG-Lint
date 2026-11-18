@@ -67,4 +67,4 @@ Turn the rule on with `--enable contract-unit-declares-class` or
 
 `noreturn-returns` (a `noreturn` routine that can return normally) needs the
 index to record which routines are `noreturn`, across units and the RTL. That
-is an indexer change and is planned for a later release.
+is an indexer change; this release does not ship the rule.

@@ -11,12 +11,21 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 1.52.0-alpha
 
+* [check-init](features/check-init.md) -- Answers whether a variable or field is set before a given use on every execution (SET / NEVER-SET / MAY-BE-UNSET).
 * [explain](features/explain.md) -- Explains one lint rule in plain words: what it means, why it matters, a bad and a good example, its default, whether it can be fixed, and how to suppress it.
 * [Field repository](features/field-repository.md) -- Keeps the TableTools field registry in one SQLite file per database, filled from Firebird (read-only), with a diffable text backup.
-* [member-could-be-private lint rule (lane ATLB)](features/v152-atlb-rules.md) -- Hints (OFF in 1.52) on a public class member referenced only inside its own unit; published, virtual, interface-implementing, attributed and shared-unit members stay silent.
+* [Reserved words as names, implicit package imports, contract-unit globs](features/v152-atla-rules.md) -- reserved-word-identifier and implicit-package-import rules; contractUnits globs in drag-lint.json for contract-unit-declares-class.
+* [member-could-be-private lint rule (lane ATLB)](features/v152-atlb-rules.md) -- Hint (OFF in 1.52) on a public member used only in its own unit; published, virtual, interface, attributed and shared-unit members stay silent.
 * [Default-on form, dataset and data-module rules](features/v152-defaults.md) -- Four lint rules on by default since 1.52 (form object/field, foreign form access, edit without post, data module form global); a shipped exempt-class list.
+* [Disable rule (this line, this unit, this project)](features/v152-disable-rule.md) -- Silence one lint rule for a line (dl:ok marker), a unit or the project (rule_overrides in drag-lint-lint.json), with a reason and date; rules enable undoes it.
+* [Documentation policy: missing-doc, doc-placeholder, doc-malformed-summary](features/v152-docpol.md) -- missing-doc covers DFM-bound handlers with code; doc-placeholder (ON, hint) flags template summaries; doc-malformed-summary (OFF) flags declaration-like ones.
+* [Extract constant (manual fix for magic literals)](features/v152-extract-constant.md) -- Turns one number or string literal into a named constant and replaces every occurrence in the unit; manual fix of the magic-literal rules.
 * [extract-method and create-enum-helper through the compile gate by default](features/v152-fixer-compile-gate.md) -- extract-method / create-enum-helper --apply build the project before and after the write; no project found = REFUSED, --no-compile-gate writes unbuilt.
 * [Array index possibly out of range lint rule (index-possibly-out-of-range)](features/v152-index-possibly-out-of-range.md) -- Warns (OFF in 1.52) on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only.
+* [Per-rule time budget in the rule frame (rule-skipped-budget)](features/v152-per-rule-budget.md) -- A v151/v152 rule slower than rule_time_budget_ms (2000 ms) on a file is skipped there with one rule-skipped-budget note; index warns near the parse limit.
+* [unit-used-by-no-unit rule; unit-not-in-dpr outside the project roots](features/v152-proj2.md) -- Warns (ON) on a unit only the .dpr lists that nothing reaches; a form counts only when opened. unit-not-in-dpr also reports shared-folder units.
+* [parameter-type-too-wide ON by default, with an autofix](features/v152-ptw.md) -- parameter-type-too-wide ships ON as a warning in lint-all / lint-project with an autofix that retypes the parameter through the compile gate.
+* [Lint rules unconnected-control and hanging-handler](features/v152-unconn-rules.md) -- Warns on a form control that nothing wires and on an event-handler-shaped method that no form binds and no code assigns or calls.
 * [Fix with drag-lint (VS Code and RAD Studio)](features/v152-vsfix.md) -- Fix the finding at the cursor, all of one rule, or every fixable finding in a file: VS Code code actions and menus, plus a RAD Studio menu entry.
 
 ## 1.51.1-alpha
@@ -72,7 +81,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 * [exception-facts](features/exception-facts.md) -- Lists which routine raises and handles which exception type, by routine or by type.
 * [Data-flow rules that know a parameter's mode](features/flow-out-arg-rules.md) -- Three OFF rules: a local that only receives out arguments, a store overwritten by an out argument, a local passed by value to a method before it is assigned.
 * [MCP get_neighbors](features/mcp-get-neighbors.md) -- MCP tool: the call-graph neighbourhood of a symbol within 1..3 hops.
-* [Parameter type too wide (lint rule)](features/parameter-type-too-wide.md) -- Project lint rule, OFF by default: a class-typed parameter that an ancestor type could carry, proved by the narrow-param plan.
+* [Parameter type too wide (lint rule)](features/parameter-type-too-wide.md) -- Project lint rule, ON since 1.52 (warning, autofix): a class-typed parameter that an ancestor type could carry, proved by the narrow-param plan.
 
 ## 1.44.1-alpha
 
@@ -123,7 +132,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 1.37.0-alpha
 
-* [Autofix for fixable rules](features/autofix-wave.md) -- lint --fix repairs findings of the 126 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
+* [Autofix for fixable rules](features/autofix-wave.md) -- lint --fix repairs findings of the 131 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
 * [Compliance labels (CWE, CERT, MISRA)](features/compliance-labels.md) -- Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field.
 * [Gap-wave lint rules](features/gap-wave-rules.md) -- About 50 new lint rules (bug patterns, dead code, data flow, platform, structure) added in the 1.37.0 gap wave.
 * [Include-file indexing and IF evaluation](features/inc-indexing.md) -- Include files are indexed under the active build, value defines and IF expressions are evaluated, and an undecidable IF is reported as a pp-unresolved-if hint.

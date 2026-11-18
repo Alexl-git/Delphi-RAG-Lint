@@ -4,7 +4,7 @@ title: Find Usages
 summary: "Lists every reference to the symbol under the editor caret, in one of four scopes: this bound symbol (default), project, group or everywhere"
 product: DL
 group: search-navigation
-order: 20010
+order: 20011
 since: 0.33.0-alpha
 status: shipped
 updated: 1.51.1-alpha

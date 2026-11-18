@@ -1173,7 +1173,6 @@ function Get-FlagSet([string]$Text, [string]$Rx) {
 # generated "Flag aliases:" section of --help, so no alias is undocumented, and
 # F1y below fails if one is ever exempted here again.
 $FlagUndocumentedOnPurpose = [ordered]@{
-  '--reason'          = '(a) rules disable flag (lane DISRULE); remove when its entry is generated'
   '--expr'            = '(a) dump-pp-eval expression; that verb is itself exempt'
   '--from-block'      = '(a) convert-reemit input; that verb is itself exempt'
   '--selftest-fts5'   = '(c) pre-dispatch self-test (Run, ParamStr(1)), driven by a runner under tests\'

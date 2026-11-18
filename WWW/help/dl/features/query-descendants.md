@@ -4,10 +4,10 @@ title: query descendants
 summary: "The reverse of query ancestors: lists every class that descends from a given ancestor, across all scanned databases"
 product: DL
 group: search-navigation
-order: 20020
+order: 20021
 since: 1.2.2-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # query descendants

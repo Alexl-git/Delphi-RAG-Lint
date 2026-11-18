@@ -4,7 +4,7 @@ title: usages
 summary: Finds usage sites of a symbol in one of four scopes (this bound symbol, project, group, everywhere), with a choice of report width
 product: DL
 group: search-navigation
-order: 20035
+order: 20036
 since: 0.33.0-alpha
 status: shipped
 updated: 1.51.1-alpha

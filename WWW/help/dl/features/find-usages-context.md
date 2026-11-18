@@ -4,10 +4,10 @@ title: Find Usages
 summary: Lists references to the symbol represented by a Structure-tree node
 product: DL
 group: search-navigation
-order: 20011
+order: 20012
 since: 0.33.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # Find Usages

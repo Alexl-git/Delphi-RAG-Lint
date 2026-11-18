@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "1.52.0-alpha",
   "summary": "reserved-word-identifier and implicit-package-import rules; contractUnits globs in drag-lint.json for contract-unit-declares-class",
-  "intro": "Read this to see what the two new 1.52 rules report, how contract units can be named by glob, and why noreturn-returns is not in 1.52.",
+  "intro": "Read this to see what the two rules new in 1.52 report, how contract units can be named by glob, and why noreturn-returns is not in 1.52.",
   "wikiPage": "v152-atla-rules",
   "surfaces": [
     {

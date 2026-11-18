@@ -11,6 +11,8 @@ The drag-lint menu tree in the RAD Studio IDE. Each item links to the feature it
 
 * drag-lint
   * [About](features/about-and-status.md)
+  * Analyze
+    * [Check Initialization of Identifier at Cursor...](features/check-init.md)
   * Bookmarks
     * [Go to Bookmark...](features/bookmarks-ide.md)
     * [List Bookmarks in This Unit...](features/bookmarks-ide.md)
@@ -19,8 +21,10 @@ The drag-lint menu tree in the RAD Studio IDE. Each item links to the feature it
   * Code Quality
     * [Allow a Finding on This Line...](features/allow.md)
     * [Compiler Hints...](features/compiler-hints.md)
+    * [Disable Rule...](features/v152-disable-rule.md)
     * [Find Dead Code...](features/find-dead-code.md)
     * [Find Undocumented (public)...](features/find-undocumented-public.md)
+    * [Fix with drag-lint (finding at cursor)](features/v152-vsfix.md)
     * [Project Structure Rules (god-class, layering...)...](features/lint-project.md)
     * Run Lint All (Full Report)...: [Run Lint All (Full Report)](features/run-lint-all-full-report.md), [Target compiler (--target-compiler)](features/target-compiler.md)
     * [Scan TODOs / FIXMEs...](features/scan-todos-fixmes.md)
@@ -35,6 +39,10 @@ The drag-lint menu tree in the RAD Studio IDE. Each item links to the feature it
   * [Convert Public Field to Property at Cursor](features/quick-fix-convert-public-field-to-property-at-cursor.md)
   * [Extract Constant (literal at cursor)...](features/v152-extract-constant.md)
   * [Extract Method (selection)... (Ctrl+Alt+M)](features/extract-method.md)
+  * Field Repository
+    * [FDMemTable from CSV...](features/field-repository.md)
+    * [Open Field Repository Editor...](features/field-repository.md)
+    * [Refresh Schema from Database...](features/field-repository.md)
   * Find Usages
     * [Everywhere](features/find-usages.md)
     * [Group](features/find-usages.md)

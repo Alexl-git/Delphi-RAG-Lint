@@ -14,6 +14,11 @@
       "method": "textDocument/codeAction"
     },
     {
+      "type": "ide-menu",
+      "path": "drag-lint > Code Quality > Fix with drag-lint (finding at cursor)",
+      "steps": ["Put the caret on a line that shows a drag-lint finding", "Choose drag-lint > Code Quality > Fix with drag-lint (finding at cursor)", "Answer Yes to apply the fix, No to preview it"]
+    },
+    {
       "type": "ide-context",
       "host": "Editor",
       "caption": "drag-lint > Fix with drag-lint (finding at cursor)",

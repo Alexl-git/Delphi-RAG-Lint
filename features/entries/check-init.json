@@ -48,7 +48,8 @@
           "name": "--max-routines",
           "arg": "N"
         }
-      ]
+      ],
+      "help": ["  drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--explain] [--max-routines N]   (is a variable or field set before every use? SET / NEVER-SET / MAY-BE-UNSET / UNKNOWN-CALLEE; exit 0 = all SET, 1 = otherwise, 2 = error)"]
     }
   ],
   "audience": "both",
@@ -68,6 +69,6 @@
     "date": "2026-11-18",
     "by": "ENGINE",
     "build": "1.51.1-alpha",
-    "surfaceHash": "5ef1b73b1907ab6e2f54654132091f0d6d49097faa5b6ec6cb84b24936760215"
+    "surfaceHash": "54c8ff2721b76e40248adf0d44557571c78136876e67c9560d1dc6e020296a8c"
   }
 }

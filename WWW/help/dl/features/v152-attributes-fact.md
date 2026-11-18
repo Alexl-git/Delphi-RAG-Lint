@@ -505,7 +505,7 @@ In a real index `local_var`/`param` dominate the row count (typed locals and par
 emitted so receivers can be typed), then `field` and `method`.
 
 **refs.kind** (curated in `DoSchema`; every literal passed to `EmitRef`/`AddRef`):
-`attribute call di-resolve di-unresolved event-binding handle handle-all member-access property-spec raise
+`attribute call di-resolve di-unresolved event-binding export handle handle-all member-access property-spec raise
 raise-expr read record-field reraise sql_table_ref type_use write`. Notes: a dotted call emits BOTH a
 `call` and a co-located `member-access` ref at the same span; only `call` is resolved to
 `call_edges`. This is BY DESIGN (150 EX3 item 5, measured): the `call` row is the call stream (binding, call edges,
@@ -515,6 +515,7 @@ the twin. Readers that count calls read the `call` row only, so nothing double-c
 `query find-callers` and `context` give 3 for `ISymbolStore.PutSymbolFacts` (3 `call` + 3 `member-access` rows).
 A new reader that counts refs at a span must filter by kind. `raise`/`raise-expr`/`reraise`/`handle`/`handle-all` are exception facts
 (deep parse only; never resolved); `event-binding` is a DFM event hookup (name = handler).
+`export` (1.52) is one `exports` clause entry: bound to the routine (`refs.symbol_id`), no call edge -- it names the routine, it does not call it.
 `property-spec` is a name a property's `read`/`write`/`stored` gives (receiver_text = the owner's qualified name), `record-field` a field name in a record constant
 (receiver_text = the path from the constant's type: `TBox.Pts[]`); both bind `refs.symbol_id` only (or `external_target`): no call edge, no `member_accesses` row.
 `inherited X` is a `call` (statement or arguments) or `member-access` (expression) with receiver_text `inherited`. `symbols.directives` holds `sealed` on a `class sealed`.
@@ -525,7 +526,7 @@ A `reraise`, and a `raise-expr` naming the handler variable, carry the type of t
 
 **data_flows.dst_kind** (`DF_DST_*`): `arg` (call argument), `write` (assignment to a member of
 a non-local), `result` (`Result :=`, `Exit(e)`), `field` (field of the owner or ancestor),
-`global` (unit variable), `outparam` (var/out parameter of this routine).
+`global` (unit variable; 1.52: also a unit variable passed to a var/out parameter of a resolved project routine, by the calls pass with `src_kind` `argout` and `dst_index` = the argument position), `outparam` (var/out parameter of this routine). index columns are 1-based CHARACTER (UTF-16 unit) columns since 1.52, not UTF-8 byte columns (.dfm rows excepted).
 **data_flows.src_kind** (`DF_SRC_*`): `param` (declared parameter), `ref` (a call result or a
 member/variable read that is not a local/param/field/global), `field`, `global`, `argout` (a
 variable passed at position `src_index` of an earlier call).

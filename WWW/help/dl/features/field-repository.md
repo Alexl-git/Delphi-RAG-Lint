@@ -53,7 +53,18 @@ Full flag list: [repo in the CLI reference](../cli.md#repo).
 
 ## Where to click
 
-No IDE surface: this feature runs from the CLI (see How to run it).
+* RAD Studio main menu: **drag-lint > Field Repository > Open Field Repository Editor...**
+   1. Open a project that has a field repository (fieldRepository key or the default file)
+   2. Choose drag-lint > Field Repository > Open Field Repository Editor...
+   3. The grid editor dl-field-repo.exe opens on that repository
+* RAD Studio main menu: **drag-lint > Field Repository > Refresh Schema from Database...**
+   1. Open a project with a field repository
+   2. Choose drag-lint > Field Repository > Refresh Schema from Database...
+   3. Enter the Firebird connection string; the output of drag-lint repo refresh-schema is shown
+* RAD Studio main menu: **drag-lint > Field Repository > FDMemTable from CSV...**
+   1. Choose drag-lint > Field Repository > FDMemTable from CSV...
+   2. Pick a field-definition CSV
+   3. The Pascal source is written next to the CSV as `<name>.memtable.pas`
 
 ## Details
 

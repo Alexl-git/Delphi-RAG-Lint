@@ -5,7 +5,7 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.52.0-alpha",
-  "summary": "parameter-type-too-wide ships ON as a warning in lint-all / lint-project and gets an autofix that retypes the parameter to the proved ancestor through the compile gate",
+  "summary": "parameter-type-too-wide ships ON as a warning in lint-all / lint-project with an autofix that retypes the parameter through the compile gate",
   "intro": "Read this when lint-all reports parameter-type-too-wide and you want to fix it, or want to know why a similar routine is not reported. The rule reports a class-typed parameter whose routine uses only members an ancestor declares; it skips library code, overrides and virtual methods, interface methods, published and form-bound event handlers and routines taken as a method pointer. The fix re-proves the finding, retypes both routine headers, adds the ancestor's unit to uses when needed, and with --compile-gate keeps the edit only when the project still builds.",
   "wikiPage": "v152-ptw",
   "surfaces": [
@@ -53,5 +53,11 @@
   "accessReviewed": {
     "date": "2026-11-17",
     "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-11-18",
+    "by": "ENGINE",
+    "build": "1.51.1-alpha",
+    "surfaceHash": "a9f2e970840854267896dd1535c929a877a8a368528e641d44496181d885d0e1"
   }
 }
