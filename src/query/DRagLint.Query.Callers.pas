@@ -480,6 +480,28 @@ function MemberUsersForName(const AStore: ISymbolStore; const AName: string): TA
 /// </remarks>
 function UnboundUsersForName(const AStore: ISymbolStore; const AName: string): TUnboundUsers;
 
+type
+  /// <summary>The direction(s) a moded member-access site is listed under, the way
+  /// `usages --rw` lists it.</summary>
+  /// <remarks>The index stores the whole argument of Inc/Dec and of a var / out
+  /// parameter as a READ; this folds those back the way MemberUsersForName does, so the
+  /// autodoc / hover 'Used in:' line (Doc.Facts) and `usages --rw` give one site one
+  /// direction. Caches source lines and verdicts for its lifetime: one per query, not
+  /// thread-safe.</remarks>
+  IUseDirections = interface
+    ['{6B0F2C9E-4C1D-4E7A-9A51-2D7C3E8B1F04}']
+    /// <summary>The directions of one resolved site.</summary>
+    /// <param name="ARC">A site with Mode, FullPath, CallSiteLine and CallSiteCol.</param>
+    /// <returns>['write'] for an Inc/Dec or out argument, ['read', 'write'] for a var
+    /// argument, else [ARC.Mode]. Only a stored 'read' is classified.</returns>
+    function ModesOf(const ARC: TResolvedCaller): TArray<string>;
+  end;
+
+/// <summary>A new IUseDirections over one store.</summary>
+/// <param name="AStore">The store the classified sites come from; must not be nil.</param>
+/// <returns>A reference-counted classifier; drop it when the query is done.</returns>
+function NewUseDirections(const AStore: ISymbolStore): IUseDirections;
+
 /// <summary>Is the identifier that starts at (ALine, ACol) a WHOLE argument of a call?
 /// The text half of the var / out / Inc-Dec argument classifier, shared with the calls
 /// pass that persists the mode (150-RS2 (2)).</summary>
@@ -1452,6 +1474,16 @@ begin
   FUse.Add(Key, Result);
 end;
 
+{ The directions a site is listed under, given its argument use and its stored mode. }
+function ModesForUse(AUse: TArgUse; const AMode: string): TArray<string>;
+begin
+  case AUse of
+    auIncDec, auOutArg: Result:= ['write'];
+    auVarArg          : Result:= ['read', 'write'];
+  else Result:= [AMode];
+  end;
+end;
+
 function MemberUsersForName(const AStore: ISymbolStore; const AName: string): TArray<TMemberUsers>;
 const
   MODE_READ  = 'read' ;
@@ -1472,12 +1504,7 @@ var
       { A stored read that is really an Inc/Dec or var/out argument: see MemberUsersForName. }
       var Use: TArgUse:= auNone;
       if (AOnly = '') and (RC.Mode = MODE_READ) then Use:= Args.Classify(RC);
-      var Modes: TArray<string>;
-      case Use of
-        auIncDec, auOutArg: Modes:= [MODE_WRITE];
-        auVarArg          : Modes:= [MODE_READ, MODE_WRITE];
-      else Modes:= [Mode];
-      end;
+      var Modes: TArray<string>:= ModesForUse(Use, Mode);
       for var M: string in Modes do
       begin
         var Key: string:= Format('%s:%d:%s', [LowerCase(RC.FullPath), RC.CallSiteLine, M]);
@@ -1591,5 +1618,39 @@ begin
     else if Bucket = 'calls' then Result.Other:= Result.Other + [R];
   end;
 end; // function
+
+type
+  { IUseDirections over the private TArgClassifier (1.52 BK-USEEDGES). }
+  TUseDirections = class(TInterfacedObject, IUseDirections)
+  strict private
+    FArgs: TArgClassifier;
+  public
+    constructor Create(const AStore: ISymbolStore);
+    destructor Destroy; override;
+    function ModesOf(const ARC: TResolvedCaller): TArray<string>;
+  end;
+
+constructor TUseDirections.Create(const AStore: ISymbolStore);
+begin
+  inherited Create;
+  FArgs:= TArgClassifier.Create(AStore);
+end;
+
+destructor TUseDirections.Destroy;
+begin
+  FArgs.Free;
+  inherited Destroy;
+end;
+
+function TUseDirections.ModesOf(const ARC: TResolvedCaller): TArray<string>;
+begin
+  var Use: TArgUse:= if SameText(ARC.Mode, 'read') then FArgs.Classify(ARC) else auNone;
+  Result:= ModesForUse(Use, ARC.Mode);
+end;
+
+function NewUseDirections(const AStore: ISymbolStore): IUseDirections;
+begin
+  Result:= TUseDirections.Create(AStore);
+end;
 
 end.
