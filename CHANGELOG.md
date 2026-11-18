@@ -34,8 +34,8 @@ resolver 1.28.0 -> 1.29.0-alpha.
   `form-object-without-field` (hint), `doc-placeholder` (hint), `parameter-type-too-wide` (warning, fixable),
   `unconnected-control` (warning), `hanging-handler` (warning), `unit-used-by-no-unit` (warning),
   `reserved-word-identifier` (warning), `review-marker-remeasured` (hint). OFF by default: `doc-malformed-summary`,
-  `member-could-be-private` (new; OFF until a shared-unit FP is fixed), `index-possibly-out-of-range` (FPM2
-  re-measure after BK-RULEFP: 21 FP / 36, stays OFF; FP classes in backlog IDXRANGE3).
+  `member-could-be-private` (new; OFF until a shared-unit FP is fixed). `index-possibly-out-of-range` is ON
+  (IDXRANGE3 fixed the FPM2 re-measure's FP classes, 0 FP / 12; see below).
   `missing-doc` now also reports DFM-bound handlers that have code (reverses the 1.51.1 skip; CLIENT +934). A shipped
   exempt-class list `rules\form-object-without-field.exempt.txt` plus `form_object_without_field.exempt_classes` /
   `use_default_list` in the lint config.
@@ -172,7 +172,7 @@ resolver 1.28.0 -> 1.29.0-alpha.
 - `debug-display-placeholder` (bug-patterns, default OFF, BK-ATTRRULES, B48): a `[DebuggerDisplay]`-style attribute
   placeholder that names no member of the class, read from the index's attributes table; `member-could-be-private`
   now reads attributes from that table too (a source scan is the fallback) and stays silent on attributed members.
-- 435 rules, 354 enabled by default, 131 with an auto-fix.
+- 435 rules, 355 enabled by default, 131 with an auto-fix.
 
 ### Added
 - `check-init` (HBSKEL, HBEVENTS, HBINTRA, HBROOTS, HBSOLVER, HBFIELDS, HBTAIL, HBRECV, HBEVORD, HBDOCS, HBMCP, HBIDE,

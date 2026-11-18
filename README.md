@@ -1343,7 +1343,7 @@ CLI-only verbs).
 
 Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
 external `.scm`). As of v1.52.0-alpha: **435 rules across 18 categories -- 322
-built-in and 113 external `.scm`, 354 enabled by default, and 131 with an
+built-in and 113 external `.scm`, 355 enabled by default, and 131 with an
 auto-fix.** The table below is a small sample of the built-in rules:
 
 | Rule id | Severity | Description |

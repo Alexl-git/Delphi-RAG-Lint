@@ -140,7 +140,7 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**434 rules. 131 have an auto-fix. 355 are on by default.** 321 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**435 rules. 131 have an auto-fix. 355 are on by default.** 322 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
@@ -162,7 +162,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | review-markers | 6 | 2 |
 | security | 27 | 2 |
 | structure | 18 | 9 |
-| **Total** | **434** | **131** |
+| **Total** | **435** | **131** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -208,7 +208,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
 | [Lint rules on the static type of a reference](ref-type-rules) | `lint-all` |  |
 | [Lint rules unconnected-control and hanging-handler](v152-unconn-rules) | `lint` |  |
-| [Lint rules](rules) | 434 rules, 131 fixable; `rules` |  |
+| [Lint rules](rules) | 435 rules, 131 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
 | [member-could-be-private lint rule (lane ATLB)](v152-atlb-rules) | `lint-all` |  |
