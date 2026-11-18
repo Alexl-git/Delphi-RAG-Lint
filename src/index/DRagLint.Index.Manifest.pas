@@ -524,6 +524,17 @@ type
   /// </remarks>
   TManifestIO = class
     public
+      /// <summary>True when the engine-side manifest (the one TInstalledLayout.ManifestLocation
+      /// finds for AEngineDir) carries <c>"settings": {"ignoreLocalConfig": true}</c>.</summary>
+      /// <param name="AEngineDir">Directory containing the drag-lint EXE.</param>
+      /// <returns>True = this engine reads NO <c>.drag-lint.json</c> found by walking up from the
+      /// working directory (neither the manifest merge in Load nor the CLI defaults); False when
+      /// the key is absent, false, not a boolean, or the manifest is missing or unreadable.</returns>
+      /// <remarks>B28 (1.52): a lane-private engine copy runs from a CWD under C:\Projects and used
+      /// to merge C:\Projects\.drag-lint.json (a "db" key there became an explicit --db). The key
+      /// is opt-in, so a deployed engine behaves exactly as before. Touches: file system.</remarks>
+      class function IgnoresLocalConfig(const AEngineDir: string): Boolean; static;
+
       /// <summary>Load and merge: reads the global config beside AEngineDir, then
       /// walks AStartDir up to the root looking for .drag-lint.json and merges it
       /// (local scalars override global when present; local GlobalExclude appends to global;
@@ -1599,6 +1610,25 @@ end;
 {  TManifestIO.Load                                                        }
 { ---------------------------------------------------------------------- }
 
+class function TManifestIO.IgnoresLocalConfig(const AEngineDir: string): Boolean;
+begin
+  Result:= False;
+  var Located:= TInstalledLayout.ManifestLocation(AEngineDir);
+  if not Located.Exists then Exit;
+  try
+    var Root:= TJSONObject.ParseJSONValue(TFile.ReadAllText(Located.Path));  // dl:ok taint-path-traversal@675e -- REVIEWED 2026-11-18 (BK-TOOLING B28): Located.Path is the engine's own manifest (the DRAGLINT_MANIFEST/--manifest file or the one beside the exe), the same file Load reads a few lines below
+    try
+      var JSettings:= if Root is TJSONObject then TJSONObject(Root).GetValue('settings') else nil;
+      var JKey:= if JSettings is TJSONObject then TJSONObject(JSettings).GetValue('ignoreLocalConfig') else nil;
+      Result:= (JKey is TJSONBool) and TJSONBool(JKey).AsBoolean;
+    finally
+      Root.Free;
+    end;
+  except
+    on E: Exception do Result:= False; // an unreadable manifest is reported by Load; the opt-in simply stays off
+  end;
+end;
+
 class function TManifestIO.Load(const AEngineDir, AStartDir: string): TIndexManifest;
 var
   GlobalPath    : string         ;
@@ -1673,7 +1703,7 @@ begin
 
   { Try local: walk AStartDir .. root for .drag-lint.json }
   LocalPath:= '';
-  Dir:= TPath.GetFullPath(AStartDir);
+  Dir:= if IgnoresLocalConfig(AEngineDir) then '' else TPath.GetFullPath(AStartDir);
   while Dir <> '' do
   begin
     var Candidate:= TPath.Combine(Dir, '.drag-lint.json');

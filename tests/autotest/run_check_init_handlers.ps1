@@ -31,7 +31,7 @@
 [CmdletBinding()]
 param(
   [string]$Repo    = (Resolve-Path "$PSScriptRoot\..\..").Path,
-  [string]$Exe     = '',
+  [string]$Exe     = $(. "$PSScriptRoot\lib\FreshEngineExe.ps1"; Get-FreshEngineExe),
   [string]$WorkDir = "$env:TEMP\drag-lint-check-init-handlers-$PID",
   [switch]$RequireHook
 )
@@ -44,7 +44,6 @@ function Check($n, $ok, $d = '') {
   if (-not $ok) { $script:Failed = $true }
 }
 Write-Host '== check-init HANDLERS (ruling HB5) ==' -ForegroundColor Cyan
-if ($Exe -eq '') { $Exe = Join-Path $Repo 'src\cli\Win64\Debug\drag-lint.exe' }
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 $Exe = (Resolve-Path -LiteralPath $Exe).Path
 $FixRoot = Join-Path $Repo 'tests\fixtures\happens-before'

@@ -22,7 +22,7 @@ uses
   System.Classes,
   System.UITypes,
   Vcl.Dialogs,
-  ToolsAPI,  // dl:ok used-unit-not-resolvable@2cd2 -- REVIEWED 2026-11-17: v152 DISRULE: ToolsAPI is the IDE's design-time unit (source\ToolsAPI), outside the library index; same finding on Cmd.FixMarker; index gap logged
+  ToolsAPI,
   DragLint.Plugin.Cmd152,
   DragLint.Plugin.DiagnosticCache,
   DragLint.Plugin.ExeResolver,
