@@ -90,11 +90,14 @@ function SolveRoutine(const pStore: ISymbolStore; pRoutineId: Int64; const pMark
   pEntryDone: Boolean): THbRoutineState;
 
 /// <summary>True when the source position pSite lies inside the span of pNode.</summary>
+/// <param name="pSrc">The source bytes the tree was parsed from.</param>
 /// <param name="pNode">Any tree-sitter node; a null node contains nothing useful (its span is 0..0).</param>
 /// <param name="pSite">1-based line and column; Col &lt;= 0 means "the whole line": the node only has to
 /// intersect that line.</param>
 /// <returns>True when the site is at or after the node start and before its end.</returns>
-function HbNodeContains(const pNode: TTSNode; const pSite: THbSite): Boolean;
+/// <remarks>pSrc = the bytes the tree was parsed from: node byte columns are mapped to the index's
+/// CHARACTER columns (1.52 EXTGAPS2) before they are compared with pSite.</remarks>
+function HbNodeContains(const pSrc: TBytes; const pNode: TTSNode; const pSite: THbSite): Boolean;
 
 /// <summary>Walks from pItem down to the node that holds pSite and tells whether the site runs every
 /// time pItem runs.</summary>
@@ -183,7 +186,7 @@ begin
   Result:= TEncoding.UTF8.GetString(pSrc, Integer(pNode.StartByte), Integer(pNode.EndByte - pNode.StartByte));
 end;
 
-function HbNodeContains(const pNode: TTSNode; const pSite: THbSite): Boolean;
+function HbNodeContains(const pSrc: TBytes; const pNode: TTSNode; const pSite: THbSite): Boolean;
 var
   Row, Col, SR, SC, ER, EC: Integer;
 begin
@@ -192,8 +195,8 @@ begin
   ER:= Integer(pNode.EndPoint.row);
   if pSite.Col <= 0 then Exit(InRange(Row, SR, ER));  { whole line: the node intersects it }
   Col:= pSite.Col - 1;
-  SC:= Utf8ByteColToCharCol(FSrc, pNode.StartByte, pNode.StartPoint.column); { 1.52 EXTGAPS2: sites carry index CHARACTER columns }
-  EC:= Utf8ByteColToCharCol(FSrc, pNode.EndByte, pNode.EndPoint.column);
+  SC:= Utf8ByteColToCharCol(pSrc, pNode.StartByte, pNode.StartPoint.column); { 1.52 EXTGAPS2: sites carry index CHARACTER columns }
+  EC:= Utf8ByteColToCharCol(pSrc, pNode.EndByte, pNode.EndPoint.column);
   var AfterStart:= (Row > SR) or ((Row = SR) and (Col >= SC));
   var BeforeEnd:= (Row < ER) or ((Row = ER) and (Col < EC));
   Result:= AfterStart and BeforeEnd;
@@ -229,7 +232,7 @@ begin
   for var I:= 0 to pNode.ChildCount - 1 do
   begin
     var C:= pNode.Child(I);
-    if not HbNodeContains(C, pSite) then Continue;
+    if not HbNodeContains(pSrc, C, pSite) then Continue;
     if GuardedChild(pSrc, pNode, C) then pPath.Guarded:= True;
     WalkTo(pSrc, C, pSite, pPath);
   end;
@@ -283,7 +286,7 @@ begin
       var It:= Blk.Items[I];
       if It.Opaque then Continue;  { inside `with`: the name may be a field of the with-entity }
       for var M in pMarks do
-        if HbNodeContains(It.Node, M) then
+        if HbNodeContains(FSrc, It.Node, M) then
         begin
           var P:= PathTo(It.Node, M);
           if not (P.InLambda or P.Guarded) then
@@ -346,7 +349,7 @@ begin
   try
     for var B:= 0 to FCfg.Blocks.Count - 1 do
       for var I:= 0 to FCfg.Blocks[B].Items.Count - 1 do
-        if HbNodeContains(FCfg.Blocks[B].Items[I].Node, pSite) then
+        if HbNodeContains(FSrc, FCfg.Blocks[B].Items[I].Node, pSite) then
         begin
           var R: TItemRef;
           R.Block:= B;
@@ -427,7 +430,7 @@ begin
         Done:= Done and StateBefore(R);
       end;
       for var F in Finallys do
-        if HbNodeContains(F.Value, Site) then Done:= Done and TryEntryState(F.Key);
+        if HbNodeContains(FSrc, F.Value, Site) then Done:= Done and TryEntryState(F.Key);
       pState.Queries[Q].Done:= Done and not pState.Queries[Q].InClosure;
     end;
   finally

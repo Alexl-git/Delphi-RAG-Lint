@@ -34,12 +34,16 @@ unit DRagLint.Query.HappensBefore;
   Owner ruling 2026-11-17 13:56 (unresolved callee): T passed to a callee with no resolved signature
   is not a silent soft writer. The answer carries the warning
   '<Callee>: source not available -- does it set <T> (by-ref unknown)?' at the call site, the verdict
-  can be neither SET (unless proven by other writers) nor NEVER-SET, and the limit code
-  `unknown-callee` marks the answer (the verdict literal UNKNOWN-CALLEE needs a THbVerdict member:
-  HANDOVER to Types / Render). The ~30 read-only RTL routines of the events lane stay exempt. The
+  can be neither SET (unless proven by other writers) nor NEVER-SET: the headline verdict is
+  UNKNOWN-CALLEE (answer reason unknown-callee, limit code `unknown-callee`; a judged use stays
+  MAY-BE-UNSET). The ~30 read-only RTL routines of the events lane stay exempt. The
   user records the answer once per call site with a line comment on the call line:
   `// dl:callee-reads` (the callee only reads T: no writer, no warning) or `// dl:callee-sets` (the
-  callee always sets T: a counting var-arg writer).
+  callee always sets T: a counting var-arg writer), or once per project in
+  <anchor>\_D-RAG\drag-lint-project.json, key checkInit.callees, name -> "reads" | "sets" (H-CONFIG).
+  A line marker wins over the project entry. A project key matches the name the call spells
+  (case-insensitive) or, when the key has no dot, the last part of a qualified call; a dotted key never
+  matches a call that spells less than it (the callee is unresolved, so a qualifier cannot be checked).
 
   Read-only; nothing is persisted (no extractor change). Every doubt answers MAY-BE-UNSET: a wrong
   SET costs more than a hundred MAY answers. }
@@ -74,9 +78,12 @@ const
 /// <remarks>Read-only. Not thread-safe (the shared parse cache). Deterministic: every set is walked in
 /// sorted order, so two runs give the same answer except Budget.Ms. Instance fields are answered
 /// by the constructor model (DRagLint.Query.HappensBefore.Fields.CheckInstanceField, spec 5.5).
-/// An unresolved callee that receives the target adds the limit unknown-callee and its warning to
-/// Summary; such an answer is never NEVER-SET and never SET unless other writers prove it.</remarks>
-function CheckInit(const pDbPath, pTarget, pAt: string; const pOptions: THbOptions): THbAnswer;  // dl:ok unused-public-symbol@915c -- REVIEWED 2026-11-17 v152 HBSOLVER: check-init contract; consumers are the CLI verb and MCP tool, wired at INT (handover H-CLI) and the solve-driver fixture
+/// An unresolved callee that receives the target adds the limit unknown-callee; unless other writers
+/// prove SET, the headline is UNKNOWN-CALLEE with reason unknown-callee and Summary = the warnings
+/// joined by '; '. The answer a user recorded (line marker, else the project's checkInit.callees in
+/// &lt;anchor&gt;\_D-RAG\drag-lint-project.json next to pDbPath) replaces the warning; a DB outside a
+/// _D-RAG folder or a missing / malformed file records nothing.</remarks>
+function CheckInit(const pDbPath, pTarget, pAt: string; const pOptions: THbOptions): THbAnswer;
 
 implementation
 
@@ -88,7 +95,11 @@ uses
 , System.Generics.Collections
 , System.Generics.Defaults
 , System.RegularExpressions
+, System.IOUtils
+, System.JSON
 , TreeSitter
+, DRagLint.Core.Model
+, DRagLint.Project.OwnRoots
 , DRagLint.Core.Interfaces
 , DRagLint.Storage.SQLite
 , DRagLint.Charts.Index
@@ -327,7 +338,7 @@ begin
   if (T = 'block') or (T = 'statements') then
   begin
     for var C in StatementsOf(pStmt) do
-      if HbNodeContains(C, pSite) then Exit(MarkIsMust(pSrc, C, pSite));
+      if HbNodeContains(pSrc, C, pSite) then Exit(MarkIsMust(pSrc, C, pSite));
     Exit(False);
   end;
   if T = 'try' then
@@ -339,7 +350,7 @@ begin
     for var I:= 0 to pStmt.NamedChildCount - 1 do
     begin
       var C:= pStmt.NamedChild(I);
-      if (C.NodeType = 'statements') and HbNodeContains(C, pSite) then Exit(MarkIsMust(pSrc, C, pSite));
+      if (C.NodeType = 'statements') and HbNodeContains(pSrc, C, pSite) then Exit(MarkIsMust(pSrc, C, pSite));
     end;
   end;
   Result:= False;
@@ -416,7 +427,7 @@ begin
   var ExitMust:= False;
   for var M in pMarks do
     for var K:= 0 to High(Stmts) do
-      if HbNodeContains(Stmts[K], M) then
+      if HbNodeContains(Src, Stmts[K], M) then
       begin
         if MarkIsMust(Src, Stmts[K], M) then
         begin
@@ -429,7 +440,7 @@ begin
       end;
   for var Q:= 0 to High(Result.Queries) do
     for var K:= 0 to High(Stmts) do
-      if HbNodeContains(Stmts[K], Result.Queries[Q].Site) then
+      if HbNodeContains(Src, Stmts[K], Result.Queries[Q].Site) then
       begin
         Result.Queries[Q].Located:= True;
         var L: Boolean;
@@ -1408,9 +1419,66 @@ end;
 { ---------------------------------------------------------------------------------------------- }
 { CheckInit                                                                                       }
 
+const
+  CFG_PROJECT_JSON = 'drag-lint-project.json';
+  CFG_KEY_CHECK_INIT = 'checkInit';
+  CFG_KEY_CALLEES = 'callees';
+  CFG_ANSWER_READS = 'reads';
+  CFG_ANSWER_SETS = 'sets';
+
+{ H-CONFIG: the per-callee answers recorded once per project, <anchor>\_D-RAG\drag-lint-project.json
+  "checkInit" > "callees" > name: "reads" | "sets", as lower-cased name -> the line marker it stands for.
+  No anchor (a DB outside _D-RAG), a missing or malformed file, or any other value records nothing:
+  the warning stays, the conservative side. Never raises. Caller frees the result. }
+function LoadCalleeAnswers(const pDbPath: string): TDictionary<string, string>;
+begin
+  Result:= TDictionary<string, string>.Create;
+  var Anchor:= AnchorDirForDb(pDbPath);
+  if Anchor = '' then Exit;
+  var CfgPath:= TPath.Combine(TPath.Combine(Anchor, DRAG_HOME_DIR), CFG_PROJECT_JSON);
+  if not TFile.Exists(CfgPath) then Exit;
+  try
+    var Val:= TJSONObject.ParseJSONValue(TFile.ReadAllText(CfgPath));
+    try
+      if Val is not TJSONObject then Exit;
+      var CheckInitObj:= TJSONObject(Val).GetValue(CFG_KEY_CHECK_INIT);
+      if CheckInitObj is not TJSONObject then Exit;
+      var Callees:= TJSONObject(CheckInitObj).GetValue(CFG_KEY_CALLEES);
+      if Callees is not TJSONObject then Exit;
+      for var P in TJSONObject(Callees) do
+      begin
+        if P.JsonValue is not TJSONString then Continue;
+        var Answer:= LowerCase(Trim(P.JsonValue.Value));
+        var Marker:= '';
+        if Answer = CFG_ANSWER_READS then Marker:= HB_MARKER_CALLEE_READS
+        else if Answer = CFG_ANSWER_SETS then Marker:= HB_MARKER_CALLEE_SETS;
+        var Key:= LowerCase(Trim(P.JsonString.Value));
+        if (Marker <> '') and (Key <> '') then Result.AddOrSetValue(Key, Marker);
+      end;
+    finally
+      Val.Free;
+    end;
+  except  // dl:ok try-except-swallowed@0ca9 -- REVIEWED 2026-11-18 v152 HBTAIL: a malformed project declaration records no answer (the warning stays, the conservative side); check-init must never fail on it
+    on Exception do Result.Clear;
+  end;
+end;
+
+{ The project answer for a call that spells pCallee: the key equal to it, else a dotless key equal to its
+  last part; '' when none. A dotted key never matches a call that spells less than it. }
+function ConfigMarker(const pAnswers: TDictionary<string, string>; const pCallee: string): string;
+begin
+  var Callee:= LowerCase(pCallee);
+  if pAnswers.TryGetValue(Callee, Result) then Exit;
+  var Bare:= LastPart(Callee);
+  if (Bare <> Callee) and pAnswers.TryGetValue(Bare, Result) then Exit;
+  Result:= '';
+end;
+
 { Unresolved callees (owner ruling): a dl:callee-reads marker drops the soft writer, dl:callee-sets makes it a
-  counting var-arg writer whose argument is no read; an unmarked one keeps the writer and adds a warning. }
-procedure ApplyCalleeMarkers(const pIndex: TChartsIndex; var pEvents: THbEvents; out pWarnings: TArray<string>);
+  counting var-arg writer whose argument is no read; an unmarked one keeps the writer and adds a warning.
+  No line marker -> the project's recorded answer (pAnswers, H-CONFIG). }
+procedure ApplyCalleeMarkers(const pIndex: TChartsIndex; const pAnswers: TDictionary<string, string>;
+  var pEvents: THbEvents; out pWarnings: TArray<string>);
 begin
   pWarnings:= nil;
   var Keep: TArray<THbWriter>:= nil;
@@ -1427,6 +1495,7 @@ begin
         Found:= True;
         Break;
       end;
+    if Found and (Arg.Marker = '') then Arg.Marker:= ConfigMarker(pAnswers, Arg.Callee);
     if Found and (Arg.Marker = HB_MARKER_CALLEE_READS) then Continue;
     if Found and (Arg.Marker = HB_MARKER_CALLEE_SETS) then
     begin
@@ -1500,7 +1569,12 @@ begin
     var Store: ISymbolStore:= TSQLiteSymbolStore.Create(pDbPath, {AReadOnly=}True);
     var Events:= CollectEvents(Index, pTarget, AtSite);
     PlaceMainBlockSites(Index, Events);
-    ApplyCalleeMarkers(Index, Events, Warnings);
+    var Answers:= LoadCalleeAnswers(pDbPath);
+    try
+      ApplyCalleeMarkers(Index, Answers, Events, Warnings);
+    finally
+      Answers.Free;
+    end;
     Result.Target:= Events.Target;
     Result.Writers:= Events.Writers;
     Result.Scope:= if Events.Target.Kind = htkInstanceField then hsInstance else hsProgram;
@@ -1539,7 +1613,10 @@ begin
       Result.Limits:= Result.Limits + [HB_LIMIT_UNKNOWN_CALLEE];
       if Result.Verdict <> hvSet then
       begin
-        Result.Summary:= 'UNKNOWN-CALLEE: ' + string.Join('; ', Warnings);
+        { H-VERDICT (owner ruling 2026-11-17 13:56): the variable's answer is UNKNOWN-CALLEE }
+        Result.Verdict:= hvUnknownCallee;
+        AddReason(Result.Reasons, hrUnknownCallee);
+        Result.Summary:= string.Join('; ', Warnings);
         Result.Proven:= False;
       end;
     end;
