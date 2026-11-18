@@ -58,6 +58,8 @@ type
     Deep            : Boolean       ; // v0.42: emit identifier usage refs
     DeepExplicit    : Boolean       ; // --deep/--shallow was given on the cmd line
     Width           : string        ; // v0.42: usages width narrow|wide|very-wide
+    UsagesScope     : string        ; // 1.52 FUSCOPE: usages --scope symbol|project|group|everywhere
+    UsagesGroup     : string        ; // 1.52 FUSCOPE: usages --group <x.groupproj> (scope group)
     Name            : string        ;
     QName           : string        ;
     OfName          : string        ; // v11 (M1): query ancestors --of <ancestor> (is-descendant check)

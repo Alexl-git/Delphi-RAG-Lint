@@ -103,7 +103,7 @@ Find symbols, callers, callees, text and types in the index.
 | [context](context) | `context` |  |
 | [exception-facts](exception-facts) | `exception-facts` |  |
 | [Find Undocumented (public)](Find-Undocumented-public) | drag-lint > Code Quality > Find Undocumented (public)...; `query find` |  |
-| [Find Usages](Find-Usages) | drag-lint > Find Usages... |  |
+| [Find Usages](Find-Usages) | drag-lint > Find Usages...; drag-lint > Find Usages > This symbol; drag-lint > Find Usages > Project; drag-lint > Find Usages > Group; drag-lint > Find Usages > Everywhere; Editor: drag-lint > Find Usages > This symbol; Editor: drag-lint > Find Usages > Project; Editor: drag-lint > Find Usages > Group; Editor: drag-lint > Find Usages > Everywhere; `mcp find_usages` |  |
 | [Find Usages](Find-Usages-context) | Structure form: Find Usages; `usages` |  |
 | [find-callees](find-callees) | `find-callees`; drag-lint > Uses & Dependencies > What This Routine Calls (callees)... |  |
 | [find-unit](find-unit) | `find-unit`; drag-lint > Uses & Dependencies > Find Unit for Symbol (add to uses)... |  |

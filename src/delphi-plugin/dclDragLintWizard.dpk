@@ -139,6 +139,7 @@ contains
   DragLint.Plugin.Cmd.IdxRange in 'DragLint.Plugin.Cmd.IdxRange.pas',
   DragLint.Plugin.Cmd.FixMarker in 'DragLint.Plugin.Cmd.FixMarker.pas',
   DragLint.Plugin.Cmd.FieldRepo in 'DragLint.Plugin.Cmd.FieldRepo.pas',
+  DragLint.Plugin.Cmd.FindUsagesScope in 'DragLint.Plugin.Cmd.FindUsagesScope.pas',
   DragLint.Plugin.Cmd.ExtractConst in 'DragLint.Plugin.Cmd.ExtractConst.pas',
   DragLint.Plugin.EditorLocalMenu in 'DragLint.Plugin.EditorLocalMenu.pas';
 

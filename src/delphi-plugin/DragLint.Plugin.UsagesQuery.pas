@@ -16,6 +16,16 @@ uses
 /// <returns>A new object; the caller owns it.</returns>
 function UsagesLspParams(const pName, pWidth: string): TJSONObject;
 
+/// <summary>The parameters of a scoped `draglint/usages` request (1.52 FUSCOPE).</summary>
+/// <param name="pName">The symbol; must not be empty.</param>
+/// <param name="pWidth">narrow, wide or very-wide.</param>
+/// <param name="pScope">symbol, project, group or everywhere; '' leaves the server default (symbol).</param>
+/// <param name="pFile">The source file of the position that binds scope symbol; '' = no position.</param>
+/// <param name="pLine">1-based line of the position.</param>
+/// <param name="pCol">1-based column of the position.</param>
+/// <returns>A new object (UsagesLspParams plus scope, file, line, col); the caller owns it.</returns>
+function UsagesLspScopedParams(const pName, pWidth, pScope, pFile: string; pLine, pCol: Integer): TJSONObject;
+
 /// <summary>Takes the usages document out of a JSON-RPC reply envelope.</summary>
 /// <param name="pReply">The whole envelope; nil is allowed.</param>
 /// <param name="pJson">The `result` object as text, which has the shape of
@@ -66,6 +76,18 @@ begin
   Result:= TJSONObject.Create;
   Result.AddPair('name' , pName );
   Result.AddPair('width', pWidth);
+end;
+
+function UsagesLspScopedParams(const pName, pWidth, pScope, pFile: string; pLine, pCol: Integer): TJSONObject;
+begin
+  Result:= UsagesLspParams(pName, pWidth);
+  if pScope <> '' then Result.AddPair('scope', pScope);
+  if (pFile <> '') and (pLine > 0) then
+  begin
+    Result.AddPair('file', pFile);
+    Result.AddPair('line', TJSONNumber.Create(pLine));
+    Result.AddPair('col' , TJSONNumber.Create(pCol ));
+  end;
 end;
 
 function UsagesFromReply(pReply: TJSONValue; out pJson: string): Boolean;

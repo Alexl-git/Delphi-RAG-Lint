@@ -1342,14 +1342,62 @@
       "owner": "ENGINE",
       "status": "shipped",
       "since": "0.33.0-alpha",
-      "summary": "Lists every reference to the symbol under the editor caret across the indexed project",
-      "intro": "Read this before changing or removing a symbol, to see every place it is used. With the caret on the symbol choose drag-lint > Find Usages... (Ctrl+Alt+F); the same list comes from the command line as `drag-lint usages --name <X> --db <db>`.",
+      "summary": "Lists every reference to the symbol under the editor caret, in one of four scopes: this bound symbol (default), project, group or everywhere",
+      "intro": "Read this before changing or removing a symbol, to see every place it is used. With the caret on the symbol choose drag-lint > Find Usages... (Ctrl+Alt+F): by default it lists the usages of exactly that object in this project. drag-lint > Find Usages > This symbol / Project / Group / Everywhere (also on the editor right-click drag-lint submenu) and the scope box on the results panel widen it to every object of the name in the project, the project group or every index; the same list comes from the command line as `drag-lint usages --scope <scope>`.",
       "wikiPage": "Find-Usages",
       "surfaces": [
         {
           "type": "ide-menu",
           "path": "drag-lint > Find Usages...",
           "steps": ["Needs an index of the project", "Put the editor caret on the symbol", "drag-lint > Find Usages..."]
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Find Usages > This symbol",
+          "steps": ["Needs an index of the project", "Put the editor caret on the symbol", "drag-lint > Find Usages > This symbol"]
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Find Usages > Project",
+          "steps": ["Needs an index of the project", "Put the editor caret on the symbol", "drag-lint > Find Usages > Project"]
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Find Usages > Group",
+          "steps": ["Needs an index of the project", "Put the editor caret on the symbol", "drag-lint > Find Usages > Group"]
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Find Usages > Everywhere",
+          "steps": ["Needs an index of the project", "Put the editor caret on the symbol", "drag-lint > Find Usages > Everywhere"]
+        },
+        {
+          "type": "ide-context",
+          "host": "Editor",
+          "caption": "drag-lint > Find Usages > This symbol",
+          "steps": ["Put the caret on the symbol", "Right-click in the code editor and open drag-lint > Find Usages", "Choose This symbol"]
+        },
+        {
+          "type": "ide-context",
+          "host": "Editor",
+          "caption": "drag-lint > Find Usages > Project",
+          "steps": ["Put the caret on the symbol", "Right-click in the code editor and open drag-lint > Find Usages", "Choose Project"]
+        },
+        {
+          "type": "ide-context",
+          "host": "Editor",
+          "caption": "drag-lint > Find Usages > Group",
+          "steps": ["Put the caret on the symbol", "Right-click in the code editor and open drag-lint > Find Usages", "Choose Group"]
+        },
+        {
+          "type": "ide-context",
+          "host": "Editor",
+          "caption": "drag-lint > Find Usages > Everywhere",
+          "steps": ["Put the caret on the symbol", "Right-click in the code editor and open drag-lint > Find Usages", "Choose Everywhere"]
+        },
+        {
+          "type": "mcp",
+          "tool": "find_usages"
         }
       ],
       "audience": "both",
@@ -1361,13 +1409,17 @@
         {
           "ask": "Who calls this routine?",
           "command": "drag-lint query find-callers --name <Bar> --db <db>"
+        },
+        {
+          "ask": "Why does Find Usages list only one of several same-named fields?",
+          "command": "The default scope is This symbol (the object under the caret); pick Project in the panel scope box for every object of the name: drag-lint usages --name <X> --scope project --db <db>"
         }
       ],
       "verified": {
-        "date": "2026-11-07",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.46.0-alpha",
-        "surfaceHash": "9002cd9fe23ab0cff78aa754409d8ffbf6c163a63c1816ac99ab8fba2fb3f61d"
+        "build": "1.51.1-alpha",
+        "surfaceHash": "60f16b744ada69b4bbcedf498d8c00667b126111d0e1805d0dd34a3030206cd3"
       }
     },
     {
@@ -2827,14 +2879,14 @@
       "owner": "ENGINE",
       "status": "shipped",
       "since": "0.33.0-alpha",
-      "summary": "Finds usage sites of a named symbol, with a choice of report width",
-      "intro": "Read this when you want every place a symbol is used: usages (also behind Find Usages in the IDE) lists the grouped usage sites of a named symbol, with a narrow, wide or very-wide report width.",
+      "summary": "Finds usage sites of a symbol in one of four scopes (this bound symbol, project, group, everywhere), with a choice of report width",
+      "intro": "Read this when you want every place a symbol is used: usages (also behind Find Usages in the IDE) lists the grouped usage sites. --scope symbol (the default) answers the declaration a position (--in/--line/--col) or a qualified name is bound to; project, group and everywhere widen it to every object of that name in the project, the project group or every index.",
       "wikiPage": "usages",
       "surfaces": [
         {
           "type": "cli",
           "verb": "usages",
-          "usage": "drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file> [--no-create]] [--library-db <lib.sqlite>]",
+          "usage": "drag-lint usages --name <X> | --in <file> --line <L> [--col <C>] [--scope symbol|project|group|everywhere] [--group <x.groupproj>] [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file> [--no-create]] [--library-db <lib.sqlite>]",
           "flags": [
             {
               "name": "--name",
@@ -2874,10 +2926,26 @@
             },
             {
               "name": "--no-create"
+            },
+            {
+              "name": "--scope",
+              "arg": "symbol|project|group|everywhere"
+            },
+            {
+              "name": "--group",
+              "arg": "<x.groupproj>"
+            },
+            {
+              "name": "--line",
+              "arg": "<L>"
+            },
+            {
+              "name": "--col",
+              "arg": "<C>"
             }
           ],
           "helpOrder": 5,
-          "help": ["  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file> [--no-create]] [--library-db <lib.sqlite>]", "                               grouped usage report; backs the IDE Symbol Search dialog's Usages view.", "                               --limit N keeps the first N rows of each JSON group (declarations included) and adds", "                               \"limit\" and \"totals\" (the full counts); without it nothing is capped.", "                               --rw: the users of a member split into readers and writers, one block per declaration: a property with its backing field and accessor methods, a field with its properties, a getter (reads) or setter (writes). Rows name the route (property, field, getter, setter, direct).", "                               With no --db, --in <file> finds the unit's project and its database. No DB: prints the index command, exits 2. Two projects list it: names both, exits 2. No project: a library unit on an assumed platform, unless it uses units the library lacks (names them, exits 2). With neither --db nor --in the verb exits 2."]
+          "help": ["  drag-lint usages             --name <X> | --in <file> --line <L> [--col <C>] [--scope symbol|project|group|everywhere] [--group <x.groupproj>] [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file> [--no-create]] [--library-db <lib.sqlite>]", "                               grouped usage report; backs the IDE Symbol Search dialog's Usages view.", "                               --scope (1.52): symbol (default) = the declaration --in/--line/--col or a qualified --name is BOUND to, in this project; project = every object of the name in this project; group = the name in every project of --group <x.groupproj>; everywhere = the name in every index the manifest knows. A bare --name with no position binds nothing and is answered as scope project (the JSON says scope, scope_note, databases).", "                               --limit N keeps the first N rows of each JSON group (declarations included) and adds", "                               \"limit\" and \"totals\" (the full counts); without it nothing is capped.", "                               --rw: the users of a member split into readers and writers, one block per declaration: a property with its backing field and accessor methods, a field with its properties, a getter (reads) or setter (writes). Rows name the route (property, field, getter, setter, direct).", "                               With no --db, --in <file> finds the unit's project and its database. No DB: prints the index command, exits 2. Two projects list it: names both, exits 2. No project: a library unit on an assumed platform, unless it uses units the library lacks (names them, exits 2). With neither --db nor --in the verb exits 2."]
         },
         {
           "type": "ide-menu",
@@ -2894,13 +2962,21 @@
         {
           "ask": "How do I get a wider or JSON report?",
           "command": "drag-lint usages --name <X> --width wide --json"
+        },
+        {
+          "ask": "Where is exactly the symbol at this position used, not its namesakes?",
+          "command": "drag-lint usages --in <file.pas> --line <L> --col <C> --db <path>"
+        },
+        {
+          "ask": "Where is this name used in every project of the group, or in every index?",
+          "command": "drag-lint usages --name <X> --scope group --group <x.groupproj> --db <path>  |  --scope everywhere"
         }
       ],
       "verified": {
-        "date": "2026-11-05",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.44.0-alpha",
-        "surfaceHash": "c97d58b4081d81db327f53d3bcbb62f517798c5ea98c1351b93be8fcc35047ed"
+        "build": "1.51.1-alpha",
+        "surfaceHash": "bdec881116c95e9b4ce1cde2ad4f9eb8b7debdacc629293c27a73b0d7be8baff"
       }
     },
     {

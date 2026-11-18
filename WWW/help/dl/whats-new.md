@@ -441,9 +441,9 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 0.33.0-alpha
 
-* [Find Usages](features/find-usages.md) -- Lists every reference to the symbol under the editor caret across the indexed project.
+* [Find Usages](features/find-usages.md) -- Lists every reference to the symbol under the editor caret, in one of four scopes: this bound symbol (default), project, group or everywhere.
 * [Find Usages](features/find-usages-context.md) -- Lists references to the symbol represented by a Structure-tree node.
-* [usages](features/usages.md) -- Finds usage sites of a named symbol, with a choice of report width.
+* [usages](features/usages.md) -- Finds usage sites of a symbol in one of four scopes (this bound symbol, project, group, everywhere), with a choice of report width.
 
 ## 0.31.0-alpha
 

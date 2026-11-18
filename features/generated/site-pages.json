@@ -412,8 +412,8 @@
     "version": "1.46.0-alpha"
   },
   "features/find-usages.md": {
-    "hash": "e69d6d6bf9b6e7fbc2fc0f502dfc3e55b4ed9c985487761c3e6a7ce38140ab78",
-    "version": "1.46.0-alpha"
+    "hash": "d4188bc58666c425f158d941e56e2cc914a7b17a217658f8559026838a979624",
+    "version": "1.51.1-alpha"
   },
   "features/fix-all-in-project.md": {
     "hash": "a903dd59b188e5d91eb9331694d283b17b97c5e58eadf8f63eaddfea2704fe27",
@@ -916,8 +916,8 @@
     "version": "1.51.1-alpha"
   },
   "features/usages.md": {
-    "hash": "f5dabc0c644c7f70a71a719d5a2fb74bcc9dcabc8326744816a03d8246c92037",
-    "version": "1.46.0-alpha"
+    "hash": "19e99e74dc2d3318ea16a97295026ed39fe47817aa58190b17884c306fd733bd",
+    "version": "1.51.1-alpha"
   },
   "features/uses-audit-interface-impl-moves-unused-this-unit.md": {
     "hash": "a0aa814e26a7e9f7db91203d9e415aa5416a31fc81821de9eeb76c09e48d1317",
@@ -1016,7 +1016,7 @@
     "version": "1.51.1-alpha"
   },
   "features/v1511-ext-fixes.md": {
-    "hash": "cd00506ec5b7f4f8fe0a0dca694d904f9cecdccc768201d548c642a6a0754a83",
+    "hash": "c1b6bed2511659fe771c8f057ee0a7e9d433a5630406f977f09aa95ffffd2a53",
     "version": "1.51.1-alpha"
   },
   "features/v1511-inc2-fixes.md": {
@@ -1024,7 +1024,11 @@
     "version": "1.51.1-alpha"
   },
   "features/v1511-res-fixes.md": {
-    "hash": "ab360c6c09e29621cc9797666ba5e72041a208c919a56614a8583323b4ef9e49",
+    "hash": "9777be4ff4eb8e20744ff721d5dc4041f3273073750f42d5c5fc2f875bb63a93",
+    "version": "1.51.1-alpha"
+  },
+  "features/v152-atlb-rules.md": {
+    "hash": "c9ddab85941b01fbc6d580ca98533c7611137f5b03bbc6872625184a3014faf1",
     "version": "1.51.1-alpha"
   },
   "features/v152-atlb-rules.md": {

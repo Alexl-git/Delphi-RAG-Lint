@@ -2178,6 +2178,10 @@ drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--dep
 | `--in` | `<file>` |  |  |
 | `--library-db` | `<lib.sqlite>` |  |  |
 | `--no-create` |  |  |  |
+| `--scope` | `symbol\|project\|group\|everywhere` |  |  |
+| `--group` | `<x.groupproj>` |  |  |
+| `--line` | `<L>` |  |  |
+| `--col` | `<C>` |  |  |
 
 Described in:
 

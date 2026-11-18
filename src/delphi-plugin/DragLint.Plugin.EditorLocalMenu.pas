@@ -157,17 +157,46 @@ begin
   Submenu.OnExecute:= GHandler.SubmenuExecute;
   Submenu.Visible:= False;
 
+  { 1.52 FUSCOPE: a row with an EditorParent sits one level deeper. Its parent action gets a
+    category of its own directly under MENU_CATEGORY (so the IDE nests it under the
+    "drag-lint" submenu action) and its children that category + '.Items' (so they nest
+    under it, the one action of that category). One parent action per distinct name. }
+  var SubCategories: TStringList:= TStringList.Create;
+  try
   for var i:= 0 to High(Rows) do
   begin
+    var Category: string:= ITEMS_CATEGORY;
+    if Rows[i].EditorParent <> '' then
+    begin
+      var SubIndex: Integer:= SubCategories.IndexOfName(Rows[i].EditorParent);
+      if SubIndex < 0 then
+      begin
+        var SubCategory: string:= MENU_CATEGORY + '.' + StringReplace(Rows[i].EditorParent, ' ', '', [rfReplaceAll]);
+        var SubAction: TAction:= TAction.Create(GActions); { owned by GActions; freed with it in UnregisterDragLintEditorLocalMenu }
+        SubAction.ActionList:= GActions;
+        SubAction.Category:= SubCategory;
+        SubAction.Caption:= Rows[i].EditorParent;
+        SubAction.DisableIfNoHandler:= False;
+        SubAction.OnExecute:= GHandler.SubmenuExecute;
+        SubAction.Visible:= False;
+        SubIndex:= SubCategories.Add(Rows[i].EditorParent + '=' + SubCategory);
+        SubCategories.Objects[SubIndex]:= SubAction;
+      end;
+      Category:= SubCategories.ValueFromIndex[SubIndex] + '.Items';
+      if Rows[i].Visible then TAction(SubCategories.Objects[SubIndex]).Visible:= True;
+    end;
     var Item: TAction:= TAction.Create(GActions);  // dl:ok object-leak@cef6 -- owned by GActions (Create(GActions)); freed with it in UnregisterDragLintEditorLocalMenu
     Item.ActionList:= GActions;
-    Item.Category:= ITEMS_CATEGORY;
+    Item.Category:= Category;
     Item.Caption:= Rows[i].Caption;
     Item.Tag:= i;
     Item.Visible:= Rows[i].Visible;
     Item.OnExecute:= GHandler.ItemExecute;
     Item.OnUpdate:= GHandler.ItemUpdate;
     if Rows[i].Visible then Submenu.Visible:= True;
+  end;
+  finally
+    SubCategories.Free;
   end;
 
   LocalMenu.RegisterActionList(GActions, MENU_CATEGORY, cEdMenuCatRefactor);

@@ -290,13 +290,13 @@
   {
     "id": "find-usages",
     "title": "Find Usages",
-    "summary": "Lists every reference to the symbol under the editor caret across the indexed project",
+    "summary": "Lists every reference to the symbol under the editor caret, in one of four scopes: this bound symbol (default), project, group or everywhere",
     "group": "search-navigation",
     "order": 20010,
     "since": "0.33.0-alpha",
     "file": "features/find-usages.md",
-    "menus": ["drag-lint > Find Usages..."],
-    "context": [],
+    "menus": ["drag-lint > Find Usages...", "drag-lint > Find Usages > This symbol", "drag-lint > Find Usages > Project", "drag-lint > Find Usages > Group", "drag-lint > Find Usages > Everywhere"],
+    "context": ["Editor > drag-lint > Find Usages > This symbol", "Editor > drag-lint > Find Usages > Project", "Editor > drag-lint > Find Usages > Group", "Editor > drag-lint > Find Usages > Everywhere"],
     "verb": ""
   },
   {
@@ -590,7 +590,7 @@
   {
     "id": "usages",
     "title": "usages",
-    "summary": "Finds usage sites of a named symbol, with a choice of report width",
+    "summary": "Finds usage sites of a symbol in one of four scopes (this bound symbol, project, group, everywhere), with a choice of report width",
     "group": "search-navigation",
     "order": 20035,
     "since": "0.33.0-alpha",
