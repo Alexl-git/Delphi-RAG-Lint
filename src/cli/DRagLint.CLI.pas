@@ -13176,6 +13176,32 @@ begin
       Writeln(ErrOutput, 'drag-lint: note: the compile gate also builds ' + string.Join(', ', GateAlso) + ' -- they compile the renamed unit(s)');
     if GateWrite then
       for var GN in GateNotes do Writeln(ErrOutput, 'drag-lint: note: ' + GN);
+    { 1.52 BK-GATE B23 (owner ruling 2026-11-18): with an index (--db) a fix that no project builds is REFUSED,
+      not written unbuilt; --no-compile-gate is the explicit opt-out. A loose file with no index is unchanged. }
+    if AArgs.Apply and (not GateWrite) and (not AArgs.NoCompileGate) and (AArgs.DbPath <> '') and (Length(Edits) > 0) then
+    begin
+      var UnitProject, UnitMsg: string;
+      var Seen:= TDictionary<string, Boolean>.Create;
+      try
+        for var Ed in Edits do
+          if Seen.TryAdd(LowerCase(Ed.FilePath), True) then
+          begin
+            if ResolveFixerGate('lint --fix', '', AArgs.DbPath, Ed.FilePath, False, UnitProject, UnitMsg) = fgvRefused then
+            begin
+              Writeln(ErrOutput, UnitMsg);
+              Exit(2);
+            end;
+            if not GateWrite then
+            begin
+              GateWrite:= True;
+              GateArgs.ProjectPath:= UnitProject;
+              Writeln(ErrOutput, UnitMsg);
+            end;
+          end;
+      finally
+        Seen.Free;
+      end;
+    end;
     { ONE PASS NEVER WRITES MIXED BYTES: a finding whose edits overlap an earlier
       finding's (two rules rewriting one span) is withheld WHOLE and reported
       deferred; the next --fix pass re-lints and applies it.
@@ -13349,7 +13375,7 @@ begin
       var Written: Integer:= Length(Edits) - ApplySkipped;
       if ApplySkipped > 0 then
         SkipSuffix:= Format(', %d %sskipped (stale index)', [NFSkippedTotal + ApplySkipped, IfThen(NFStaleTotal > 0, 'edit(s) ', '')]);
-      Writeln(Format('autofix: applied %d edit(s) across %d file(s)%s%s%s%s%s', [Written, Touched, StaleSuffix, SkipSuffix, DropSuffix, DeclineSuffix, IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
+      Writeln(Format('autofix: applied %d edit(s) across %d file(s)%s%s%s%s%s', [Written, Touched, StaleSuffix, SkipSuffix, DropSuffix, DeclineSuffix, (if AArgs.NoBackup then '' else if GateWrite then ' (.BCK backup written)' else ' (.bak written)')]));
     end
     else
     begin
@@ -18729,6 +18755,7 @@ begin
 
   Applied:= AArgs.Apply and (Res.Action = ehaBuilt) and (Length(Res.Edits) > 0);
   var GateRefused:= False;
+  var GatedWrite:= False;  { B22: the gate keeps .BCK<n> backups, not .bak }
   if Applied then
   begin
     { 1.52 GATE2: gated by default, as extract-method (ResolveFixerGate). }
@@ -18748,6 +18775,7 @@ begin
         CloseGateStandDown;
       end;
       GateRefused:= not Applied;
+      GatedWrite:= True;
     end
     else TTextEditApplier.Apply(Res.Edits, not AArgs.NoBackup);
   end;
@@ -18783,7 +18811,7 @@ begin
   end
   else
     Writeln(Format('create-enum-helper: %s helper built, %d edit(s) applied%s',
-      [Res.EnumName, Length(Res.Edits), IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
+      [Res.EnumName, Length(Res.Edits), (if AArgs.NoBackup then '' else if GatedWrite then ' (.BCK backup written)' else ' (.bak written)')]));
   Result:= 0;
 end; // function
 
@@ -19077,7 +19105,13 @@ begin
   if Verdict = fgvRefused then Exit(2);
   if Verdict = fgvGated then
   begin
-    if not ApplyEditsGated(Edits, 'extract-method', GateArgs, Touched) then Exit(1);
+    { 1.52 BK-GATE B21: `drag-lint shutdown --db` reaches the build this write waits on (rolled back, exit 1). }
+    OpenGateStandDown('extract-method', AArgs.DbPath);
+    try
+      if not ApplyEditsGated(Edits, 'extract-method', GateArgs, Touched) then Exit(1);
+    finally
+      CloseGateStandDown;
+    end;
   end
   else Touched:= TTextEditApplier.Apply(Edits, not AArgs.NoBackup);
   Writeln(Format('Applied: extracted "%s" (%d file).', [AArgs.Name, Touched]));
