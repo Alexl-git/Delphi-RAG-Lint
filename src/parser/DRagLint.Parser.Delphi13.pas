@@ -4772,6 +4772,140 @@ begin
   end;
 end;
 
+{ 1.52 BK-EXTRA (B09, owner ruling 2026-11-18): the attributes table. Every `rttiAttributes`
+  list (one node per `[...]`; the items are `identifier` for a bare attribute and `exprCall`
+  for one with arguments, see the rttiAttributes branch of Walk) gives one row per item.
+
+  WHICH SYMBOL IT DECORATES. The list hangs off the declaration node it decorates (declType,
+  declProc, declField, declArg, declProp ...). The target is the EARLIEST symbol that starts
+  inside that declaration, at or after the list -- or exactly at the declaration's own start,
+  which is where a routine / type / field symbol begins when the attribute precedes it (so a
+  second stacked list `[A] [B]` still reaches it). Members of a decorated class start later
+  than the class, so the class wins. Further names of the same declaration (`[Weak] A, B:
+  TObject`, `const [Ref] A, B`) share the target's parent, kind and line and get a row each.
+  No symbol (a local variable, an implementation-header parameter) = SymbolIdx -1.
+
+  A SEPARATE pass, not the Walk branch: that branch runs only on a deep scan (EmitUsageRefs),
+  and the fact must reach library indexes too. }
+function HarvestAttributes(const ARoot: TTSNode; const ASource: TBytes; const ASymbols: TArray<TSymbol>): TArray<TAttributeRow>;
+var
+  Acc: TList<TAttributeRow>;
+
+  function PosLE(AL1, AC1, AL2, AC2: Integer): Boolean;
+  begin
+    Result:= (AL1 < AL2) or ((AL1 = AL2) and (AC1 <= AC2));
+  end;
+
+  { A further name of the same declaration as ABest: same parent, kind and line, not before it. }
+  function IsSameDeclName(const ASym, ABest: TSymbol): Boolean;
+  begin
+    Result:= (ASym.ParentId = ABest.ParentId) and (ASym.Kind = ABest.Kind) and (ASym.StartLine = ABest.StartLine)
+      and (ASym.StartCol >= ABest.StartCol);
+  end;
+
+  function TargetsOf(const AList: TTSNode): TArray<Integer>;
+  var
+    Decl          : TTSNode;
+    P             : TTSPoint;
+    LL, LC, DL, DC: Integer;
+    EL, EC        : Integer;
+    I, Best       : Integer;
+  begin
+    Result:= nil;
+    Decl:= AList.Parent;
+    if Decl.IsNull then Exit;
+    P := AList.StartPoint;
+    LL:= Integer(P.Row) + 1;
+    LC:= Integer(P.Column) + 1;
+    P := Decl.StartPoint;
+    DL:= Integer(P.Row) + 1;
+    DC:= Integer(P.Column) + 1;
+    P := Decl.EndPoint;
+    EL:= Integer(P.Row) + 1;
+    EC:= Integer(P.Column) + 1;
+    Best:= -1;
+    for I:= 0 to High(ASymbols) do
+    begin
+      var SL: Integer:= ASymbols[I].StartLine;
+      var SC: Integer:= ASymbols[I].StartCol;
+      if not (PosLE(LL, LC, SL, SC) or ((SL = DL) and (SC = DC))) then Continue;
+      if not PosLE(SL, SC, EL, EC) then Continue;
+      if (Best < 0) or not PosLE(ASymbols[Best].StartLine, ASymbols[Best].StartCol, SL, SC) then Best:= I;
+    end;
+    if Best < 0 then Exit;
+    Result:= [Best];
+    for I:= 0 to High(ASymbols) do
+      if (I <> Best) and IsSameDeclName(ASymbols[I], ASymbols[Best]) and PosLE(ASymbols[I].StartLine, ASymbols[I].StartCol, EL, EC) then
+        Result:= Result + [I];
+  end;
+
+  procedure AddList(const AList: TTSNode);
+  var
+    I     : Integer;
+    Item  : TTSNode;
+    NameN : TTSNode;
+    Args  : string;
+    Row   : TAttributeRow;
+    P     : TTSPoint;
+    Target: TArray<Integer>;
+  begin
+    Target:= TargetsOf(AList);
+    if Target = nil then Target:= [-1];
+    for I:= 0 to AList.NamedChildCount - 1 do
+    begin
+      Item:= AList.NamedChild(I);
+      if Item.IsNull or (Item.NodeType = 'comment') then Continue;
+      NameN:= Item;
+      Args := '';
+      if Item.NodeType = 'exprCall' then
+      begin
+        NameN:= Item.ChildByField('entity');
+        if NameN.IsNull then NameN:= Item;
+        var ArgsN:= Item.ChildByField('args');
+        if not ArgsN.IsNull then
+        begin
+          Args:= Trim(NodeText(ArgsN, ASource));
+          if Args.StartsWith('(') and Args.EndsWith(')') then Args:= Trim(Copy(Args, 2, Length(Args) - 2));
+        end;
+      end;
+      Row:= Default(TAttributeRow);
+      Row.Name   := NodeText(NameN, ASource);
+      Row.ArgText:= Args;
+      P      := NameN.StartPoint;
+      Row.Line:= Integer(P.Row) + 1;
+      Row.Col := Integer(P.Column) + 1;
+      if Row.Name = '' then Continue;
+      for var T: Integer in Target do
+      begin
+        Row.SymbolIdx:= T;
+        Acc.Add(Row);
+      end;
+    end;
+  end;
+
+  procedure Visit(const N: TTSNode);
+  var
+    I: Integer;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'rttiAttributes' then
+    begin
+      AddList(N);
+      Exit;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
+  end;
+
+begin
+  Acc:= TList<TAttributeRow>.Create;
+  try
+    Visit(ARoot);
+    Result:= Acc.ToArray;
+  finally
+    Acc.Free;
+  end;
+end;
+
 /// <summary>Walks the parse tree collecting ERROR/MISSING node positions into ADiags (max AMaxErrors).</summary>
 /// <remarks>Only recurses into subtrees where HasError is set; exits early once the cap is reached.</remarks>
 procedure CollectParseErrors(const ARoot: TTSNode; const AFilePath: string; var ADiags: TArray<string>; AMaxErrors, ADepth: Integer);
@@ -4846,6 +4980,7 @@ begin
     Result.UsesEntries:= State.UsesEntries.ToArray;
     Result.DiBindings := State.DiBindings .ToArray;
     Result.Literals   := HarvestStringLiterals(Root, Source);
+    Result.Attributes := HarvestAttributes(Root, Source, Result.Symbols); { 1.52 BK-EXTRA (B09) }
     Result.ImplementationLine:= State.ImplementationLine; { N-06 }
   finally
     State.Free;

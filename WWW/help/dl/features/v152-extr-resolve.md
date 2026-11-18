@@ -4,7 +4,7 @@ title: Resolver fixes in 1.52
 summary: Generic receivers (`TObjectList<T>.Create`) typed; index --resolve-only without a library keeps the last library bindings
 product: DL
 group: indexing
-order: 10015
+order: 10016
 since: 1.51.1-alpha
 status: shipped
 updated: 1.51.1-alpha
@@ -103,7 +103,7 @@ when an enclosing `with` target may supply it, when two used library units decla
 names an overloaded function not every overload of which can be called without arguments. Library
 enum values (`alClient`) are not bound. All of it needs the library store: without `--library-db`
 (or the section's library) the targets are NULL, and a resolve pass run without it clears them.
-See also: Index-DB-Schema (`schema_meta` keys), [info](info.md).
+See also: [Index-DB-Schema](v152-attributes-fact.md) (`schema_meta` keys), [info](info.md).
 
 ### Resolver fixes (1.52)
 

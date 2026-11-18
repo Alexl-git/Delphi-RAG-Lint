@@ -168,11 +168,23 @@
     "verb": "usages"
   },
   {
+    "id": "v152-attributes-fact",
+    "title": "Custom attributes in the index",
+    "summary": "Every custom attribute is stored with its argument text and the symbol it decorates (table attributes), library indexes too",
+    "group": "indexing",
+    "order": 10015,
+    "since": "1.51.1-alpha",
+    "file": "features/v152-attributes-fact.md",
+    "menus": [],
+    "context": [],
+    "verb": "sql"
+  },
+  {
     "id": "v152-extr-resolve",
     "title": "Resolver fixes in 1.52",
     "summary": "Generic receivers (`TObjectList<T>.Create`) typed; index --resolve-only without a library keeps the last library bindings",
     "group": "indexing",
-    "order": 10015,
+    "order": 10016,
     "since": "1.51.1-alpha",
     "file": "features/v152-extr-resolve.md",
     "menus": [],

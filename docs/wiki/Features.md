@@ -75,6 +75,7 @@ Build and maintain the per-project and library indexes.
 | Feature | Surfaces | Status |
 |---|---|---|
 | [Auto-Document Whole Project](Auto-Document-Whole-Project) | drag-lint > Generate & Export > Auto-Document Whole Project...; `index`; `document` |  |
+| [Custom attributes in the index](Index-DB-Schema) | `sql` |  |
 | [Include-file indexing and IF evaluation](inc-indexing) | `index` |  |
 | [Index a project against its active build config](index-build-config) | `index` |  |
 | [Library bindings for bare reads, paren-less calls and function-result receivers](library-first-resolve) | `usages`; `index` |  |

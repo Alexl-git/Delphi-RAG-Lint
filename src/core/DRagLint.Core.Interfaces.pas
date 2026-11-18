@@ -2941,6 +2941,9 @@ type
     /// symbols.id just written; resolves TDfmObjectRow.SymbolIdx and
     /// TCommentFactRow.AnchorSymbolIdx (a missing entry stores NULL). May be nil
     /// when ADfmObjects and AComments are empty.</param>
+    /// <param name="AAttributes">1.52 BK-EXTRA (B09): the file's custom attributes;
+    /// written to the attributes table when HasAttributes. TAttributeRow.SymbolIdx
+    /// is resolved through ASymbolIds.</param>
     /// <remarks>
     /// Each optional table (pp_directives, dfm_properties, comment_facts) is
     /// probed on its own and skipped when absent, so a DB built before it existed
@@ -2961,7 +2964,8 @@ type
     procedure PutFileFacts(const AToken: TFileTxToken; const AIncludes: TArray<TFileIncludeRow>;
       const ADfmObjects: TArray<TDfmObjectRow>; const APpRegions: TArray<TPpRegionRow>;
       const APpDirectives: TArray<TPpDirectiveRow>; const ADfmProperties: TArray<TDfmPropertyRow>;
-      const AComments: TArray<TCommentFactRow>; const ASymbolIds: TDictionary<Integer, Int64>);
+      const AComments: TArray<TCommentFactRow>; const ASymbolIds: TDictionary<Integer, Int64>;
+      const AAttributes: TArray<TAttributeRow>);
     /// <summary>151 ST: True when this database has the dfm_properties table;
     /// probed once.</summary>
     /// <returns>False on a schema 23 / 24 DB opened read-only: readers then fall
@@ -3436,6 +3440,9 @@ type
     // only. nil (every parser, every other file) = all 0.
     SymIncVariants: TArray<Integer>;
     RefIncVariants: TArray<Integer>;
+    // 1.52 BK-EXTRA (B09): custom attributes and the symbol each decorates (attributes table),
+    // Delphi parser only; written by ISymbolStore.PutFileFacts.
+    Attributes: TArray<TAttributeRow>;
   end;
 
   /// <remarks>

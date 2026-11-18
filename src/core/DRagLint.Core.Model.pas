@@ -1616,6 +1616,26 @@ type
     AnchorSymbolId : Int64  ;
   end;
 
+  /// <summary>1.52 BK-EXTRA (B09, owner ruling 2026-11-18): one custom attribute
+  /// applied to a declaration -- a row of the attributes table.</summary>
+  /// <remarks>
+  /// Produced by the Delphi parser (HarvestAttributes) for every attribute of every
+  /// `[...]` list, deep scan or not. Name is the attribute as written (`Weak`,
+  /// `System.Weak`, `ComponentPlatforms`); ArgText is the text between the
+  /// parentheses, '' for a bare attribute. Line / Col are 1-based, of the name.
+  /// SymbolIdx indexes TParseResult.Symbols (-1 = no symbol: a local variable, an
+  /// unnamed declaration) and is mapped to attributes.symbol_id by the store. A
+  /// declaration that names several symbols (`[Weak] A, B: TObject`) gives one row
+  /// per symbol.
+  /// </remarks>
+  TAttributeRow = record
+    SymbolIdx: Integer;
+    Name     : string ;
+    ArgText  : string ;
+    Line     : Integer;
+    Col      : Integer;
+  end;
+
   /// <summary>v(ADP3 T14): one ORM dataset link -- a Delphi symbol tied by the
   /// orm-link pass to a Firebird relation, with that relation's leading columns
   /// in declaration order. Backs the doc/hover 'Dataset: qryFolders -&gt;

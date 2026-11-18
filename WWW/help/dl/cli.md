@@ -2029,6 +2029,7 @@ Described in:
 
 * [Output encoding (--output-encoding)](features/output-encoding.md)
 * [sql](features/sql.md)
+* [Custom attributes in the index](features/v152-attributes-fact.md)
 
 ### stop-now
 

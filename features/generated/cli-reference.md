@@ -2022,6 +2022,7 @@ Described in:
 
 * [Output encoding (--output-encoding)](../../docs/wiki/output-encoding.md)
 * [sql](../../docs/wiki/sql.md)
+* [Custom attributes in the index](../../docs/wiki/Index-DB-Schema.md)
 
 ### stop-now
 
