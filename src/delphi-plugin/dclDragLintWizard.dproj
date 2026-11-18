@@ -183,6 +183,7 @@
         <DCCReference Include="DragLint.Plugin.Cmd.FixMarker.pas"/>
         <DCCReference Include="DragLint.Plugin.Cmd.FieldRepo.pas"/>
         <DCCReference Include="DragLint.Plugin.Cmd.ExtractConst.pas"/>
+        <DCCReference Include="DragLint.Plugin.Cmd.FindUsagesScope.pas"/>
         <DCCReference Include="DragLint.Plugin.EditorLocalMenu.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
