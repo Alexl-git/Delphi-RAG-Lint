@@ -13395,11 +13395,17 @@ begin
   begin
     var Root: TJSONObject:= TJSONObject.Create;
     try
+      { 1.52 DISRULE H2: disabled_by = 'project' or 'unit:<u1,u2>' from the config's rule_overrides }
+      var RCfg: TLintConfig:= LoadLintConfig(AArgs);
       var Arr: TJSONArray:= TJSONArray.Create;
       for R in Cat do
       begin
         var O: TJSONObject:= TJSONObject.Create;
         O.AddPair('id'              , R.Id             );
+        var OV: TRuleOverride;
+        if RCfg.FindRuleOverride(R.Id, OV) then
+          if OV.HasEnabled and not OV.Enabled then O.AddPair('disabled_by', 'project')
+          else if Length(OV.ExcludeUnits) > 0 then O.AddPair('disabled_by', 'unit:' + string.Join(',', OV.ExcludeUnits));
         O.AddPair('category'        , R.Category       );
         O.AddPair('title'           , R.Title          );
         O.AddPair('default_severity', R.DefaultSeverity);

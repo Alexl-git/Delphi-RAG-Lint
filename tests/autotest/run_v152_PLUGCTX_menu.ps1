@@ -42,7 +42,7 @@ function Code([string]$text) {
 $hookUnit = 'DragLint.Plugin.EditorLocalMenu'
 $stubs = @('CheckInit', 'DisableRule', 'IdxRange', 'FixMarker', 'FieldRepo', 'ExtractConst')
 # rows whose unit needs the IDE (ToolsAPI) and cannot compile headless: id -> unit; their shape is read from the source
-$ideOnly = @{ 'fix-marker' = 'FixMarker' }  # VSFIX made Cmd.FixMarker a real command (ToolsAPI, Plugin.Editor)
+$ideOnly = @{ 'fix-marker' = 'FixMarker'; 'disable-rule' = 'DisableRule' }  # DISRULE H5: Cmd.DisableRule uses ToolsAPI; VSFIX made Cmd.FixMarker a real command (ToolsAPI, Plugin.Editor)
 # id -> surfaces|needs (the PLUGCTX defaults; an owning lane that changes its row updates this map)
 $expect = [ordered]@{
   'check-init'       = 'main+editor|cnSymbol'
