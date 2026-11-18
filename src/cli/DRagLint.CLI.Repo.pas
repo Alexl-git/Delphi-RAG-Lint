@@ -9,8 +9,10 @@ unit DRagLint.CLI.Repo;
 interface
 
 /// <summary>Runs `drag-lint repo &lt;sub-verb&gt; ...`: init, info, import-fb, seed-fb,
-/// refresh-schema, backup, restore, gen-memtable (PLAN D11). gen-param-array, gen-orm,
-/// update-orm and gen-dataservice are reserved: they report "not available" and return 1.</summary>
+/// refresh-schema, backup, restore, gen-memtable, gen-orm, update-orm, gen-dataservice (PLAN D11;
+/// the generator verbs take --code-dir / --server-dir / --client-dir / --table, print a dry-run
+/// diff and write only with --apply, --no-backup skips the .BCKn copy). gen-param-array is
+/// reserved: it reports "not available" and returns 1.</summary>
 /// <param name="pSub">The sub-verb (first positional after `repo`), '' when absent.</param>
 /// <param name="pRepo">--repo path, '' when absent (then the project decides the path).</param>
 /// <param name="pProject">--project value (a project file), '' when absent.</param>
@@ -46,7 +48,8 @@ uses
   DRagLint.FieldRepo.TextBackup,
   DRagLint.FieldRepo.FbImport,
   DRagLint.FieldRepo.SchemaSeed,
-  DRagLint.FieldRepo.CsvMemTable
+  DRagLint.FieldRepo.CsvMemTable,
+  DRagLint.FieldRepo.DataServiceGen
   ;
 
 const
@@ -63,7 +66,7 @@ const
   FB_IMPORT     = 0;
   FB_SEED       = 1;
   FB_REFRESH    = 2;
-  SUB_VERBS   = 'init, info, import-fb, seed-fb, refresh-schema, backup, restore, gen-memtable';
+  SUB_VERBS   = 'init, info, import-fb, seed-fb, refresh-schema, backup, restore, gen-memtable, gen-orm, update-orm, gen-dataservice';
 
 function CommandLineFlag(const pFlag: string): Boolean;
 var
@@ -398,6 +401,30 @@ begin
   Result:= EXIT_OK;
 end;
 
+{ 1.52 TTGEN: the three generator verbs; dry run (diff) unless --apply. }
+function RepoOrmVerb(const pSub, pPath: string): Integer;
+var
+  Opt: TOrmVerbOptions;
+  Lines: TStringList;
+begin
+  Opt:= Default(TOrmVerbOptions);
+  Opt.Sub:= pSub;
+  Opt.RepoPath:= pPath;
+  Opt.CodeDir:= CommandLineValue('--code-dir', '');
+  Opt.ServerDir:= CommandLineValue('--server-dir', '');
+  Opt.ClientDir:= CommandLineValue('--client-dir', '');
+  Opt.Tables:= CommandLineValue('--table', '');
+  Opt.Apply:= CommandLineFlag('--apply');
+  Opt.Backup:= not CommandLineFlag('--no-backup');
+  Lines:= TStringList.Create;
+  try
+    Result:= RunOrmGenVerb(Opt, Lines);
+    if Result = EXIT_OK then Write(Lines.Text) else Write(ErrOutput, Lines.Text);
+  finally
+    Lines.Free;
+  end;
+end;
+
 { The three verbs that read Firebird; they need --connection. }
 function RepoFbVerb(const pSub, pPath, pConnection: string; pReplace: Boolean): Integer;
 begin
@@ -420,6 +447,7 @@ begin
   Result:= EXIT_FAIL;
   if SameText(pSub, 'gen-memtable') then Exit(GenMemTable(pInFile, pOutFile));
   if not ResolveRepoPath(pRepo, pProject, Path) then Exit;
+  if MatchText(pSub, ['gen-orm', 'update-orm', 'gen-dataservice']) then Exit(RepoOrmVerb(pSub, Path));
   case IndexText(pSub, ['init', 'info', 'backup', 'restore']) of
     LOCAL_INIT: Result:= RepoInit(Path);
     LOCAL_INFO: Result:= RepoInfo(Path, pJson);
@@ -433,13 +461,13 @@ end;
 function IsImplementedSub(const pSub: string): Boolean;
 begin
   Result:= MatchText(pSub, ['init', 'info', 'import-fb', 'seed-fb', 'refresh-schema', 'backup',
-    'restore', 'gen-memtable']);
+    'restore', 'gen-memtable', 'gen-orm', 'update-orm', 'gen-dataservice']);
 end;
 
 function RunRepoVerb(const pSub, pRepo, pProject, pConnection, pInFile, pOutFile: string;  // dl:ok too-many-parameters@96de -- REVIEWED 2026-11-17 v152 TTE: one positional per CLI flag keeps the CLI.pas dispatch a single line with no options builder there (FRAME contract, TT plan section 6 E1 shape)
   pReplace, pJson: Boolean): Integer;
 begin
-  if MatchText(pSub, ['gen-param-array', 'gen-orm', 'update-orm', 'gen-dataservice']) then
+  if MatchText(pSub, ['gen-param-array']) then
   begin
     Writeln(ErrOutput, 'repo ', pSub, ': not available in this build');
     Exit(EXIT_FAIL);

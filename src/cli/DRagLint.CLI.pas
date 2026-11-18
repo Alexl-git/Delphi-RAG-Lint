@@ -1764,6 +1764,8 @@ begin
       Result.Path          := A;
       Result.PathFromConfig:= False;
     end
+    { 1.52 TTGEN: repo gen-orm / update-orm / gen-dataservice read these values with ParamStr (CLI.Repo) }
+    else if (Result.Command = 'repo') and MatchText(A, ['--code-dir', '--server-dir', '--client-dir', '--table']) and (i < ParamCount) then Inc(i)
     else raise Exception.Create(UNKNOWN_ARG_PREFIX + A);
     Inc(i);
   end; // while
