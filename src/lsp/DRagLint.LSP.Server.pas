@@ -3522,6 +3522,29 @@ begin
   end;
 end;
 
+{ 1.52 BK-SCOPEUI B47: one Location per call site. The name answer lists a member call
+  (A.Run) once as the call row and once as the member-access row -- two byte-identical
+  Locations, so Find All References showed every member call twice. Equal JSON is an
+  equal Location (uri + range), so the first one stays and later copies go. }
+procedure DedupeLocations(AArr: TJSONArray);
+begin
+  var Seen: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+  try
+    var I: Integer:= 0;
+    while I < AArr.Count do
+    begin
+      var Key: string:= AArr.Items[I].ToJSON;
+      if Seen.ContainsKey(Key) then AArr.Remove(I).Free
+      else
+      begin
+        Seen.Add(Key, True);
+        Inc(I);
+      end;
+    end;
+  finally
+    Seen.Free;
+  end;
+end;
 function TLSPServer.ComputeReferences(const APath: string; ALine0, ACol0: Integer; AIncludeDecl: Boolean): TJSONArray;
 var
   Arr        : TJSONArray        ;
@@ -3546,7 +3569,11 @@ begin
       var RefStores: TArray<ISymbolStore>:= StoresForFile(Path);
       { 1.52 FUSCOPE: scope symbol (the default) answers the symbol the position is
         BOUND to; nothing bound falls through to the name answer below (scope project). }
-      if (FUsagesScope = usSymbol) and AddBoundReferences(Arr, RefStores, Path, Ident, ALine0, ACol0, IncludeDecl) then Exit(Arr);
+      if (FUsagesScope = usSymbol) and AddBoundReferences(Arr, RefStores, Path, Ident, ALine0, ACol0, IncludeDecl) then
+      begin
+        DedupeLocations(Arr);
+        Exit(Arr);
+      end;
       if FUsagesScope in [usGroup, usEverywhere] then
       begin
         var Own: TArray<string>:= nil;
@@ -3579,6 +3606,7 @@ begin
     Arr.Free;
     raise;
   end; // try
+  DedupeLocations(Arr);
   Result:= Arr;
 end; // function
 

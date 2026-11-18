@@ -817,6 +817,8 @@ uses
   , DragLint.Plugin.CliAsync
   , DragLint.Plugin.JobQueue
   , DragLint.Plugin.ExeResolver
+  , DragLint.Plugin.ReportProgress
+  , DragLint.Plugin.Theme
   , DragLint.Plugin.Reports
   , DragLint.Plugin.Cmd152
   , DragLint.Plugin.EditorLocalMenu
@@ -5487,44 +5489,65 @@ begin
     end).Start;
 end;
 
-/// <summary>Shells reverse-calltree --format json twice (callers, then --direction
-/// callees) for AQName against ADb on a background thread, slices each stdout to
-/// its JSON object, then marshals onto the main thread via TThread.Queue to show
-/// the dock and call GDockFrame.PopulateButterfly with both slices. Factored out
-/// of InvokeButterfly so other entry points (e.g. the Structure form's context
-/// menu) can jump straight to the butterfly view without re-prompting for a
-/// qname. Safe with a nil GDockFrame (no-op) or empty/failed CLI output
-/// (PopulateButterfly renders "(0)" roots rather than erroring).</summary>
+/// <summary>Runs ONE engine command under the progress window (marquee, elapsed seconds,
+/// Cancel) of the Reports questions; the DB is held on the job queue so no reindex starts
+/// under it.</summary>
+/// <param name="ATitle">What is computed, shown in the window.</param>
+/// <param name="ACmd">Full command line.</param>
+/// <param name="ADb">The index the command reads; '' holds nothing.</param>
+/// <param name="ADone">Called once on the main thread with the exit code and stdout;
+/// never after Cancel or after closing the window.</param>
+/// <remarks>Main thread only. Cancel kills this command's child tree and nothing else.</remarks>
+procedure RunGraphStage(const ATitle, ACmd, ADb: string; const ADone: TCliRunDone);
+const
+  GRAPH_STALL_MS = 180000;
+var
+  Form: TDragLintReportProgressForm;
+begin
+  if ADb <> '' then JobQueue.HoldDb(ADb);
+  Form:= TDragLintReportProgressForm.CreateRun(Application, ATitle, ACmd, GRAPH_STALL_MS,
+    procedure(AExit: Integer; const AOut: string)
+    begin
+      if ADb <> '' then JobQueue.ReleaseDb(ADb);
+      ADone(AExit, AOut);
+    end,
+    procedure
+    begin
+      if ADb <> '' then JobQueue.ReleaseDb(ADb);
+    end);
+  Form.Caption:= 'drag-lint Call Graph';
+  ApplyIdeTheme(Form, TDragLintReportProgressForm);
+  Form.Show;
+end;
+
+/// <summary>Builds the butterfly call graph for AQName against ADb: reverse-calltree
+/// --format json twice (callers, then --direction callees), each under the progress
+/// window with Cancel (1.52 B39), then shows both slices in the dock's Call Graph tab via
+/// ShowDragLintDockButterfly. Factored out of InvokeButterfly so other entry points (e.g.
+/// the Structure form's context menu) can jump straight to the butterfly view without
+/// re-prompting for a qname.</summary>
+/// <remarks>Main thread only. Cancel at either stage shows nothing. A failed or empty
+/// command shows "(0)" roots rather than an error, as before.</remarks>
 procedure ShowButterflyForQName(const AQName, ADb: string);
 var
   CmdC, CmdF: string;
 begin
   CmdC:= Format('"%s" reverse-calltree --qname "%s" --db "%s" --depth 3 --format json', [DLExe64, AQName, ADb]);
   CmdF:= Format('"%s" reverse-calltree --qname "%s" --db "%s" --depth 3 --format json --direction callees', [DLExe64, AQName, ADb]);
-  DLT('menu', 'butterfly(async): ' + CmdC + ' | ' + CmdF);
-  TThread.CreateAnonymousThread(
-    procedure
-    var
-      CallersOut, CalleesOut: string;
+  DLT('menu', 'butterfly(progress): ' + CmdC + ' | ' + CmdF);
+  RunGraphStage(Format('Call graph %s -- callers', [AQName]), CmdC, ADb,
+    procedure(AExitC: Integer; const AOutC: string)
     begin
-      CallersOut:= ''; CalleesOut:= '';
-      try RunAndCaptureStdout(CmdC, CallersOut, 180000); except on E: Exception do CallersOut:= ''; end;
-      try RunAndCaptureStdout(CmdF, CalleesOut, 180000); except on E: Exception do CalleesOut:= ''; end;
-
-      var SC: string:= SliceJsonBracket(CallersOut, '{', '}');
-      var SF: string:= SliceJsonBracket(CalleesOut, '{', '}');
-      TThread.Queue(nil,
-        procedure
+      RunGraphStage(Format('Call graph %s -- callees', [AQName]), CmdF, ADb,
+        procedure(AExitF: Integer; const AOutF: string)
         begin
-          { TDragLintDockFrame/GDockFrame live in DockForm.pas's implementation
-            section and are not visible here -- ShowDragLintDockButterfly is the
-            interface-exported wrapper (mirrors ShowDragLintDockLintOptions) that
-            shows the dock and calls GDockFrame.PopulateButterfly internally. }
-          ShowDragLintDockButterfly(AQName, SC, SF);
+          { ShowDragLintDockButterfly is the interface-exported wrapper that shows the dock
+            and calls GDockFrame.PopulateButterfly (TDragLintDockFrame lives in DockForm.pas's
+            implementation section). }
+          ShowDragLintDockButterfly(AQName, SliceJsonBracket(AOutC, '{', '}'), SliceJsonBracket(AOutF, '{', '}'));
         end);
-    end).Start;
+    end);
 end;
-
 /// <summary>Builds the butterfly call graph (callers + callees) for the symbol
 /// under the caret (prompts for a qname) and shows it in the dock's Call Graph
 /// tab. Shells drag-lint reverse-calltree --format json twice (callers, then

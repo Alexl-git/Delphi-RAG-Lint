@@ -110,6 +110,7 @@ implementation
 uses
   System.SysUtils
   , System.Classes
+  , System.Generics.Collections
   , System.UITypes
   , Vcl.Forms
   , Vcl.Controls
@@ -163,7 +164,13 @@ type
     procedure DoClose(var Action: TCloseAction); override;
   public
     constructor CreateReport(AOwner: TComponent; const ACaption, AText: string);
+    destructor Destroy; override;
   end;
+
+var
+  { Every report text window still open: they have no owner (an Application-owned form would outlive
+    this package's code), so finalization frees them. Destroy removes each one. }
+  GReportTexts: TList<TDragLintReportTextForm> = nil;
 
 constructor TDragLintReportTextForm.CreateReport(AOwner: TComponent; const ACaption, AText: string);
 var
@@ -185,6 +192,7 @@ var
 
 begin
   inherited CreateNew(AOwner);
+  if GReportTexts <> nil then GReportTexts.Add(Self);
   Caption:= ACaption;
   BorderStyle:= bsSizeToolWin;
   Position:= poScreenCenter;
@@ -216,6 +224,12 @@ begin
   FMemo.Lines.Text:= AText;
 
   ApplyIdeTheme(Self, TDragLintReportTextForm);
+end;
+
+destructor TDragLintReportTextForm.Destroy;
+begin
+  if GReportTexts <> nil then GReportTexts.Remove(Self);
+  inherited Destroy;
 end;
 
 procedure TDragLintReportTextForm.DoClose(var Action: TCloseAction);
@@ -418,7 +432,7 @@ end;
 
 procedure ShowReportText(const pCaption, pText: string);
 begin
-  TDragLintReportTextForm.CreateReport(Application, pCaption, pText).Show;
+  TDragLintReportTextForm.CreateReport(nil, pCaption, pText).Show;
 end;
 
 function SectionReindexJob(const pExe, pSection: string): TDragLintJob;
@@ -586,8 +600,11 @@ begin
 end;
 
 initialization
+  GReportTexts:= TList<TDragLintReportTextForm>.Create;
 
 finalization
+  while (GReportTexts <> nil) and (GReportTexts.Count > 0) do GReportTexts.Last.Free;
+  FreeAndNil(GReportTexts);
   FreeAndNil(GCaretRun);
 
 end.

@@ -307,6 +307,45 @@ begin
   end;
 end;
 
+{ BK-SCOPEUI B44 (DISRULE H6): a dock Load -> Save used to copy every project-scope
+  rule_overrides "enabled": false entry into the top-level "disabled" array, so reverting the
+  override left the rule disabled by a second, invisible copy. }
+procedure TestRuleOverrideRoundTrip;
+var
+  Cfg : TLintConfig;
+  Path: string;
+  Raw : string;
+begin
+  Path:= TPath.Combine(TPath.GetTempPath, 'dl-ruleovr-test.json');
+  TFile.WriteAllText(Path,
+    '{ "disabled": ["plain-off"], "rule_overrides": { ' +
+    '"magic-number": { "enabled": false, "reason": "legacy", "date": "2026-11-18" }, ' +
+    '"deep-nesting": { "exclude_units": ["uOld"] } } }', TEncoding.ASCII);
+  try
+    Cfg:= TLintConfigWriter.LoadOrDefault(Path);
+    Check('O1 override still disables the rule', not Cfg.ShouldKeep('magic-number', False));
+    Check('O1b top-level disabled still disables', not Cfg.ShouldKeep('plain-off', False));
+    Check('O1c an unrelated rule is kept', Cfg.ShouldKeep('other-rule', False));
+    TLintConfigWriter.SaveToFile(Path, Cfg);
+    Raw:= TFile.ReadAllText(Path);
+    Check('O2 save writes the override id once (in rule_overrides), not again in "disabled"', Length(Raw.Split(['"magic-number"'])) = 2);
+    Cfg:= TLintConfigWriter.LoadOrDefault(Path);
+    Check('O2b reload: "disabled" holds only the top-level id', (Length(Cfg.DisabledIds) = 1) and (Cfg.DisabledIds[0] = 'plain-off'));
+    Check('O2c reload: the override block survives, entry intact', (Length(Cfg.RuleOverrides) = 2) and (Pos('legacy', Raw) > 0));
+    Check('O2d reload: the rule is still disabled by the override', not Cfg.ShouldKeep('magic-number', False));
+
+    Check('O3 revert reports it removed the entry', TLintConfigWriter.RevertRuleOverride(Path, 'magic-number'));
+    Cfg:= TLintConfigWriter.LoadOrDefault(Path);
+    Check('O3b after revert the rule runs again', Cfg.ShouldKeep('magic-number', False));
+    Check('O3c the other override stays', (Length(Cfg.RuleOverrides) = 1) and Cfg.IsRuleExcludedInUnit('deep-nesting', 'uOld'));
+    Check('O3d top-level disabled untouched by the revert', not Cfg.ShouldKeep('plain-off', False));
+    Check('O4 reverting an id with no override reports False', not TLintConfigWriter.RevertRuleOverride(Path, 'magic-number'));
+    Check('O5 reverting the last entry drops the block', TLintConfigWriter.RevertRuleOverride(Path, 'deep-nesting')
+      and (Pos('rule_overrides', TFile.ReadAllText(Path)) = 0));
+  finally
+    if TFile.Exists(Path) then TFile.Delete(Path);
+  end;
+end;
 begin
   GPass:= 0; GFail:= 0;
   try
@@ -316,6 +355,7 @@ begin
     TestIfdefAllow;
     TestNonAsciiEscaped;
     TestTargetCompiler;
+    TestRuleOverrideRoundTrip;
   except
     on E: Exception do begin Writeln('EXCEPTION ', E.ClassName, ': ', E.Message); Inc(GFail); end;
   end;
