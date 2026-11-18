@@ -250,15 +250,14 @@ try {
     $out2 = Invoke-Program $P
     Check 'g.1 the swapped program runs FP3A''s finalization after FP3B''s: the name is gone' (($out2 -cne $out0) -and ($out2 -match '(?m)\[b\] a stopped name=\r?$')) "leaf=$leaf out=[$out2]"
 
-    Write-Host '== B the other two orders refuse, naming both positions and the .dpr' -ForegroundColor Cyan
+    Write-Host '== B the other two orders: FP3A already initializes first, the cut leaves the order unchanged (1.52 B9a)' -ForegroundColor Cyan
     foreach ($first in 'FP3B', 'FP3C') {
       $order = @($first) + @($Units | Where-Object { $_ -ne $first })
       $P = New-Proj $order
       $plan = Get-Plan $P
       $pa = Get-Pos $P.Root 'FP3A'; $pb = Get-Pos $P.Root 'FP3B'
-      $m = [regex]::Match($plan, $RefusedRx)
-      $want = "$Order3, and in ``FinP3.dpr`` ``FP3A`` (position $pa) initializes before ``FP3B`` (position $pb): list ``FP3A`` before ``$first`` in the .dpr, or cut another edge"
-      Check "b.$first first: finalization-order refused, text says MAY and names .dpr + positions $pa / $pb + the entry" ($m.Success -and $m.Groups[1].Value.Contains('`FP3B` may be finalized first') -and $m.Groups[1].Value.Contains($want)) $plan
+      $want = "finalization order: unchanged by the cut: ``FP3B`` is finalized before ``FP3A`` with the cycle as written and after the cut: $Order3, and in ``FinP3.dpr`` ``FP3A`` (position $pa) initializes before ``FP3B`` (position $pb)"
+      Check "b.$first first: planned (lane FINCUT), the step says the order is unchanged and names .dpr + positions $pa / $pb" (($plan -match '(?m)^- `fp3a -> fp3b`: recipe: routine-call inversion -- \*\*cut by this plan\*\*') -and $plan.Contains($want) -and -not [regex]::IsMatch($plan, $RefusedRx)) $plan
     }
 
     Write-Host '== C a two-unit cycle: never provable, the old certain wording' -ForegroundColor Cyan
@@ -323,8 +322,7 @@ try {
       Check "$($v.Tag).2 applied through the compile gate, builds, stdout byte-identical" ($b0.Ok -and ($a.Exit -eq 0) -and ($a.Kinds.Count -eq 0) -and $b1.Ok -and ($out1 -ceq $out0) -and ($out0 -match $v.Out)) "exit=$($a.Exit) $($a.Reasons) b0=$($b0.Errors) b1=$($b1.Errors) before=[$out0] after=[$out1]"
       $P = New-Proj @('FP3B', 'FP3A', 'FP3C') $v.Patch
       $plan = Get-Plan $P
-      $m = [regex]::Match($plan, $v.Refused)
-      Check "$($v.Tag).3 FP3B first: refused, FP3B may be finalized first, the order is named" ($m.Success -and $m.Groups[1].Value.Contains('`FP3B` may be finalized first') -and $m.Groups[1].Value.Contains("$Order3, and in ``FinP3.dpr``")) $plan
+      Check "$($v.Tag).3 FP3B first: FP3A already initializes first, planned with the unchanged-order line (1.52 B9a)" ((-not [regex]::IsMatch($plan, $v.Refused)) -and ($plan -match ('(?m)^- `fp3a -> fp3b`: recipe: ' + $v.Recipe + ' -- \*\*cut by this plan\*\*')) -and $plan.Contains('finalization order: unchanged by the cut: `FP3B` is finalized before `FP3A`')) $plan
     }
   }
 } finally {
