@@ -111,6 +111,7 @@ Check '3 a current v2 marker: suppressed, no stale, no remeasured hint' ((-not $
 $Legacy = LegacyHash 6
 Probe $Legacy $false $false
 $r = Lint
+# positive-control: review-marker-remeasured
 Check '4 legacy (v1) marker, unchanged code: suppressed + exactly one hint' ((-not $r.Finding) -and (-not $r.Stale) -and ($r.Remeas -eq 1)) "hints=$($r.Remeas)"
 $Msg = $r.Raw
 Check '8 the hint names the rule and the re-stamp command' (($Msg -match 'deep-nesting') -and ($Msg -match 'allow --fix-line'))

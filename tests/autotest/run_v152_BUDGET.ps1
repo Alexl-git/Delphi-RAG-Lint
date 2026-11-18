@@ -63,6 +63,7 @@ try {
   $b2 = RunLint '{ "rule_time_budget_ms": 300 }' 'writeln-in-gui-app=900' ''
   Write-Host ('raw B2: ' + (($b2 | ForEach-Object { "$($_.rule)@$($_.start_line): $($_.message)" }) -join ' | '))
   $notes = @($b2 | Where-Object { $_.rule -eq 'rule-skipped-budget' })
+  # positive-control: rule-skipped-budget
   Check ($notes.Count -eq 1) "B2 exactly one rule-skipped-budget note (got $($notes.Count))"
   Check (($notes.Count -ge 1) -and ($notes[0].message -match 'writeln-in-gui-app') -and ($notes[0].message -match '300 ms')) 'B2 note names the rule and the budget'
   Check (($notes.Count -ge 1) -and ($notes[0].severity -eq 'info')) 'B2 note severity is info'

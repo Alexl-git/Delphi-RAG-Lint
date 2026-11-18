@@ -63,6 +63,7 @@ Assert "fixture folder indexed (exit $LASTEXITCODE)" (($LASTEXITCODE -eq 0) -and
 $f = Get-Findings @('lint-all', '--db', $db, '--rule', $rule, '--json')
 foreach ($u in 'UOwn.pas', 'UShared.pas') {
   $m = Markers (Join-Path $tmp $u); $g = Lines-Of $f $rule $u
+  # positive-control: member-could-be-private
   foreach ($l in $m.plus)  { Assert "$u`: $rule fires at line $l (got: $($g -join ','))" ($g -contains $l) }
   foreach ($l in $m.minus) { Assert "$u`: $rule silent at line $l" (-not ($g -contains $l)) }
 }

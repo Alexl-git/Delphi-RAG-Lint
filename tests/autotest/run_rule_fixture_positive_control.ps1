@@ -121,6 +121,14 @@ $OwnRunner = @{
     'form-autocreate-and-manual'= 'tests\autotest\run_v151_DFMA_form_rules.ps1'
     'foreign-form-control-access' = 'tests\autotest\run_v151_DFMA_form_rules.ps1'
     'random-without-randomize'  = 'tests\autotest\run_v151_RTL-COLL_random-without-randomize.ps1'
+    # v152 rules whose fixture is store-backed or a project, held by their lane runner (BK-VERIFY mapped them):
+    'doc-placeholder'           = 'tests\autotest\run_v152_DOCPOL.ps1'
+    'doc-malformed-summary'     = 'tests\autotest\run_v152_DOCPOL.ps1'
+    'rule-skipped-budget'       = 'tests\autotest\run_v152_BUDGET.ps1'
+    'member-could-be-private'   = 'tests\autotest\run_v152_ATLB.ps1'
+    'unit-used-by-no-unit'      = 'tests\autotest\run_v152_PROJ2.ps1'
+    'extract-constant'          = 'tests\autotest\run_v152_XCONST_fix.ps1'
+    'review-marker-remeasured'  = 'tests\autotest\run_v152_MARK_remeasured.ps1'
 }
 function HasOwnRunner([string]$Id, [hashtable]$Map = $OwnRunner) {
   if (-not $Map.ContainsKey($Id)) { return $false }

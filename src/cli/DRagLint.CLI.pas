@@ -12677,6 +12677,16 @@ begin
   Result.AddPair('weak' , Arr(ALabels.Weak ));
 end;
 
+// 1.52 BK-VERIFY: the rename test seam (DRAGLINT_RENAME_TEST_UNGATED=1, every edit under C:\TEMP / %TEMP% / the
+// system temp folder) also lifts the B23 no-project refusal: the seam exists for the guards older than the gate,
+// whose fixtures have no .dproj and do not compile. Off the seam B23 is unchanged.
+function FixEditsUnderTestSeam(const pEdits: TArray<TTextEdit>): Boolean;
+begin
+  Result:= GetEnvironmentVariable('DRAGLINT_RENAME_TEST_UNGATED') = '1';
+  for var Ed in pEdits do
+    if Result and not IsUnderTemp(Ed.FilePath) then Result:= False;
+end;
+
 function FinalizeAndOutput(const AArgs: TArgs; AFindings: TArray<TLintFinding>; const ADefaultDisabled: TArray<string>; const AEmitText: TProc<TArray<TLintFinding>>;
   const AStore: ISymbolStore = nil; const AScannedFiles: TArray<string> = nil;
   const APrimaryDb: string = ''; const AWalkSkipped: TArray<string> = nil;
@@ -13178,7 +13188,8 @@ begin
       for var GN in GateNotes do Writeln(ErrOutput, 'drag-lint: note: ' + GN);
     { 1.52 BK-GATE B23 (owner ruling 2026-11-18): with an index (--db) a fix that no project builds is REFUSED,
       not written unbuilt; --no-compile-gate is the explicit opt-out. A loose file with no index is unchanged. }
-    if AArgs.Apply and (not GateWrite) and (not AArgs.NoCompileGate) and (AArgs.DbPath <> '') and (Length(Edits) > 0) then
+    if AArgs.Apply and (not GateWrite) and (not AArgs.NoCompileGate) and (AArgs.DbPath <> '') and (Length(Edits) > 0)
+      and not FixEditsUnderTestSeam(Edits) then
     begin
       var UnitProject, UnitMsg: string;
       var Seen:= TDictionary<string, Boolean>.Create;

@@ -143,6 +143,7 @@ try {
   $r = Fix $B 'extract-constant' $LStr (@('--col', "$col", '--name', 'sGreeting', '--apply', '--project', $B.Proj) + $Gate)
   Write-Host ($r.Out.Trim() -split "`r?`n" | Select-String 'extract-constant' | Out-String)
   Check 'b1 exit 0' ($r.Code -eq 0) "exit $($r.Code) $($r.Out)"
+  # positive-control: extract-constant
   Check 'b2 one const declared' ((CountOf $B.Unit "sGreeting = 'hello big world';") -eq 1) ([IO.File]::ReadAllText($B.Unit))
   Check 'b3 every occurrence replaced' ((CountOf $B.Unit "'hello big world'") -eq 1) ([IO.File]::ReadAllText($B.Unit))
   Check 'b4 3 replaced reported' ($r.Out -match '3 occurrence\(s\) replaced') $r.Out

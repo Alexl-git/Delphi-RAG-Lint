@@ -73,7 +73,10 @@ Assert "lint: UMain.dfm reference to dmMain is covered by uses UDm" (@($f | Wher
 $f = Get-Findings @('lint', $main, '--json', '--disable', 'form-access-before-create,form-autocreate-and-manual')
 Assert "control: --disable removes form-access-before-create" (-not (Has $f 'form-access-before-create' 30 'UMain.pas'))
 Assert "control: --disable removes form-autocreate-and-manual" (-not (Has $f 'form-autocreate-and-manual' 37 'UMain.pas'))
-Assert "control: foreign-form-control-access is OFF by default" ((CountOf $f 'foreign-form-control-access') -eq 0)
+# 1.52 DEFAULTS (2235e5a17) turned foreign-form-control-access ON by default: the run without $ON_FOREIGN reports it too.
+Assert "default: foreign-form-control-access is ON by default (1.52 DEFAULTS)" ((CountOf $f 'foreign-form-control-access') -eq 1)
+$f = Get-Findings @('lint', $main, '--json', '--disable', 'foreign-form-control-access')
+Assert "control: --disable removes foreign-form-control-access" ((CountOf $f 'foreign-form-control-access') -eq 0)
 
 $orphan = Join-Path $fx 'proj\UOrphan.pas'
 $f = Get-Findings @('lint', $orphan, '--json')
