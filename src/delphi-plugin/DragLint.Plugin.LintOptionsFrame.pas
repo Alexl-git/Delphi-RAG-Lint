@@ -59,6 +59,7 @@ uses
   , Vcl.Forms
   , Vcl.ExtCtrls
   , Vcl.StdCtrls
+  , Vcl.Buttons
   , DRagLint.Lint.Config
   , DragLint.Plugin.CliAsync
   ;
@@ -117,6 +118,10 @@ type
     FLblSearchIcon: TLabel;      { magnifier glyph (Segoe MDL2 Assets) }
     FLblSearch    : TLabel;      { the word "Search" }
     FEdtSearch    : TEdit;       { search box }
+    FBtnSearchClear: TSpeedButton; { (x) clear button, visible only while the box has text }
+    FSearchTimer  : TTimer;      { debounce: refill only after SEARCH_DEBOUNCE_MS of quiet }
+    FRenderCount  : Integer;     { refills done -- test seam for the debounce check }
+    FCursorInRender: TCursor;    { Screen.Cursor seen inside the last refill -- test seam }
     { naming-convention preset combo (top of the "naming" category group).
       FNamingEditors maps naming param name -> its editor control (TEdit for
       every bundle-relevant param; all are string params) so ApplyPreset can
@@ -270,6 +275,12 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure RenderCatalog(const AJSON: string);
+    /// <summary>The unwrapped refill; RenderCatalog adds the wait cursor and the redraw/align lock.</summary>
+    procedure RenderCatalogCore(const AJSON: string);
+    /// <summary>Debounce timer: applies the search text once typing has paused.</summary>
+    procedure SearchTimerTick(Sender: TObject);
+    /// <summary>(x) button: empties the search box (the refill is debounced like typing).</summary>
+    procedure SearchClearClick(Sender: TObject);
     /// <param name="AExitCode"><!-- drag-lint:auto type -->Integer</param>
     /// <param name="AOutput"><!-- drag-lint:auto type -->const string</param>
     /// <remarks>
@@ -646,6 +657,7 @@ uses
   , DragLint.Plugin.Settings
   , DRagLint.Lint.ConfigWriter
   , DragLint.Plugin.ExeResolver
+  , DragLint.Plugin.PlugUiCore  { SEARCH_DEBOUNCE_MS, SearchRefillNeeded }
   
   , DRagLint.Core.JsonFile    { WriteJsonFileAtomic -- pretty, no BOM, atomic }
   ;
@@ -1113,13 +1125,28 @@ begin
     Result:= ContainsText(ARule.Id, ASearch) or ContainsText(ARule.Title, ASearch);
 end;
 
-/// <summary>OnChange handler for the search TEdit.  Updates FSearch and
-/// re-renders the catalog from the cached JSON without a CLI re-call.</summary>
+/// <summary>OnChange handler for the search TEdit.  Shows/hides the (x) button and
+/// (re)starts the debounce timer; the refill itself runs in SearchTimerTick, from the
+/// cached JSON without a CLI re-call.</summary>
 procedure TLintOptionsFrame.SearchChanged(Sender: TObject);
 begin
+  FBtnSearchClear.Visible:= FEdtSearch.Text <> '';
+  FSearchTimer.Enabled:= False;
+  FSearchTimer.Enabled:= True;  { restart: every keystroke / clear pushes the refill back }
+end;
+
+procedure TLintOptionsFrame.SearchTimerTick(Sender: TObject);
+begin
+  FSearchTimer.Enabled:= False;
+  if not SearchRefillNeeded(FSearch, FEdtSearch.Text, FHasData) then Exit;
   FSearch:= Trim(FEdtSearch.Text);
-  if FHasData then
-    RenderCatalog(FCatalogJSON);
+  RenderCatalog(FCatalogJSON);
+end;
+
+procedure TLintOptionsFrame.SearchClearClick(Sender: TObject);
+begin
+  FEdtSearch.Clear;
+  if FEdtSearch.CanFocus then FEdtSearch.SetFocus;
 end;
 
 { ============================================================
@@ -1166,6 +1193,9 @@ end;
 procedure TLintOptionsFrame.BuildControls;
 const
   PH = 34;   { top panel height }
+  CBS = 24;   { search (x) button size }
+  CBG = 2;    { gap between the search box and the (x) button }
+  GLYPH_CANCEL = $E711;  { Segoe MDL2 Assets 'Cancel' }
 begin
   Width := 500;
   Height:= 600;
@@ -1258,10 +1288,32 @@ begin
   FEdtSearch.Left     := FLblSearch.Left + 50;
   FEdtSearch.Top      := 3;
   FEdtSearch.Height   := 24;
-  FEdtSearch.Width    := FPanelSearch.Width - FEdtSearch.Left - 8;
+  FEdtSearch.Width    := FPanelSearch.Width - FEdtSearch.Left - 8 - CBS - CBG;
   FEdtSearch.Anchors  := [akLeft, akTop, akRight];
   FEdtSearch.TextHint := 'Search rules...';
   FEdtSearch.OnChange := SearchChanged;
+
+  { (x) clear button -- Segoe MDL2 Assets U+E711 (Cancel), via WideChar to keep the source 7-bit ASCII. }
+  FBtnSearchClear:= TSpeedButton.Create(Self);
+  FBtnSearchClear.Parent    := FPanelSearch;
+  FBtnSearchClear.Flat      := True;
+  FBtnSearchClear.Width     := CBS;
+  FBtnSearchClear.Height    := CBS;
+  FBtnSearchClear.Left      := FEdtSearch.Left + FEdtSearch.Width + CBG;
+  FBtnSearchClear.Top       := 3;
+  FBtnSearchClear.Anchors   := [akTop, akRight];
+  FBtnSearchClear.Font.Name := 'Segoe MDL2 Assets';
+  FBtnSearchClear.Font.Size := 9;
+  FBtnSearchClear.Caption   := WideChar(GLYPH_CANCEL);
+  FBtnSearchClear.Hint      := 'Clear the search';
+  FBtnSearchClear.ShowHint  := True;
+  FBtnSearchClear.Visible   := False;
+  FBtnSearchClear.OnClick   := SearchClearClick;
+
+  FSearchTimer:= TTimer.Create(Self);
+  FSearchTimer.Enabled := False;
+  FSearchTimer.Interval:= SEARCH_DEBOUNCE_MS;
+  FSearchTimer.OnTimer := SearchTimerTick;
 
   { --- Scrollable body --- }
   FScroll:= TScrollBox.Create(Self);
@@ -1362,6 +1414,27 @@ end;
 { ---- RenderCatalog: clear body, parse, build GroupBoxes + controls ---- }
 
 procedure TLintOptionsFrame.RenderCatalog(const AJSON: string);
+var
+  SavedCursor: TCursor;
+begin
+  { Rebuilding ~400 rules creates ~1500 controls; with the scroll box shown and aligning,
+    each one repaints / re-lays-out the whole box (27 s measured on the full list, ~4.6 s hidden). }
+  Inc(FRenderCount);
+  SavedCursor:= Screen.Cursor;
+  Screen.Cursor:= crHourGlass;
+  FCursorInRender:= Screen.Cursor;
+  FScroll.DisableAlign;
+  FScroll.Visible:= False;
+  try
+    RenderCatalogCore(AJSON);
+  finally
+    FScroll.Visible:= True;
+    FScroll.EnableAlign;
+    Screen.Cursor:= SavedCursor;
+  end;
+end;
+
+procedure TLintOptionsFrame.RenderCatalogCore(const AJSON: string);
 var
   Rules   : TCatalogRules;
   CatNames: TList<string>;
