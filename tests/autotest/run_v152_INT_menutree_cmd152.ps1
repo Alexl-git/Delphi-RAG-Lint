@@ -91,9 +91,15 @@ $dyn = @($rows.Keys | Where-Object { $_ -match '<dynamic: (Cmd\.|LevelName)' })
 Check 'no <dynamic: Cmd.* / LevelName> row is left' ($dyn.Count -eq 0) "($($dyn -join ' | '))"
 
 # ---- hidden rows (Visible = False) are not on the live menu ----
-foreach ($cap in @('Verify All Callers Pass an In-Range Index...', 'Param Array Assistant...', 'Generate / Update ORM Source...')) {
+foreach ($cap in @('Verify All Callers Pass an In-Range Index...')) {
     $hit = @($rows.Keys | Where-Object { $_.EndsWith(' > ' + $cap) })
     Check "hidden row absent: $cap" ($hit.Count -eq 0) "($($hit -join ' | '))"
+}
+# Positive control for the absence above: rows registered VISIBLE (1.52 TTFINISH made the ORM and Param Array rows
+# public) ARE on the live menu, so an absent hidden row is not a walk that saw nothing.
+foreach ($cap in @('Param Array Assistant...', 'Generate / Update ORM Source...')) {
+    $hit = @($rows.Keys | Where-Object { $_.EndsWith(' > ' + $cap) })
+    Check "visible row present: $cap" ($hit.Count -eq 1) "($($hit -join ' | '))"
 }
 
 # ---- one submenu per caption: rows find the existing submenu, they never duplicate it ----
@@ -119,7 +125,9 @@ if (-not $SkipFeatureGen) {
     $fg = Get-FeatureGenExe -Repo $repo
     $chk = & $fg check --level full --repo $repo --engine $Exe 2>&1 | Out-String
     $cLines = @($chk -split "`r?`n" | Where-Object { $_ -match '^\s*C: ' })
-    Check 'control: featuregen check C ran' ($cLines.Count -gt 0) "($($cLines.Count) C lines)"
+    # Control: since 1.52 TTFINISH no registered ide-menu path is hidden, so a clean registry prints NO C line; prove
+    # instead that check ran at full level AND read the live menu tree (its menu-tree NOTE lines come from that walk).
+    Check 'control: featuregen check full ran and read the menu tree' (($chk -match 'check \(full\): (PASS|FAIL)') -and ($chk -match '\[NOTE\] menu-tree: ')) "($($cLines.Count) C lines)"
     foreach ($s in @('This symbol', 'Project', 'Group', 'Everywhere')) {
         $bad = @($cLines | Where-Object { $_ -match [regex]::Escape("'drag-lint > Find Usages > $s'") })
         Check "featuregen: no C line for 'drag-lint > Find Usages > $s' (menu or Editor context)" ($bad.Count -eq 0) "($($bad.Count))"
