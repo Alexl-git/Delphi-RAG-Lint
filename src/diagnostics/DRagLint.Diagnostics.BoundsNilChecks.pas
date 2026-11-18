@@ -51,7 +51,7 @@ type
   /// Stateless; thread-safe. Called from DoLint and DoLintAll behind
   /// LintRuleWants(rule, LINT_GATE_BOUNDS_NIL). All five rules are emitted on every
   /// call; the CLI filters by --rule and by the enabled set (copy-paste-assignment
-  /// is OFF by default; index-possibly-out-of-range is ON since 1.52 BK-RULEFP).
+  /// is OFF by default; index-possibly-out-of-range is OFF in 1.52 after the FPM2 re-measure).
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
   /// <para>Used in units: DRagLint.CLI</para>
