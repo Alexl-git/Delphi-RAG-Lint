@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup><MainSource>App.dpr</MainSource><Config Condition="'$(Config)'==''">Debug</Config><Base>true</Base></PropertyGroup>
+  <PropertyGroup Condition="'$(Base)'!=''"><DCC_UnitSearchPath>..\shared;$(DCC_UnitSearchPath)</DCC_UnitSearchPath></PropertyGroup>
+  <ItemGroup>
+    <DelphiCompile Include="App.dpr"><MainSource>MainSource</MainSource></DelphiCompile>
+    <DCCReference Include="UMain.pas"><Form>MainForm</Form></DCCReference>
+    <DCCReference Include="UUsed.pas"/>
+    <DCCReference Include="UDiReg.pas"/>
+    <DCCReference Include="UDeadUnit.pas"/>
+    <DCCReference Include="UDeadForm.pas"><Form>DeadForm</Form></DCCReference>
+    <DCCReference Include="UDeadFormInit.pas"><Form>DeadFormInit</Form></DCCReference>
+    <DCCReference Include="UNamedForm.pas"><Form>NamedForm</Form></DCCReference>
+  </ItemGroup>
+</Project>

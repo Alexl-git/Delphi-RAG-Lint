@@ -39,20 +39,27 @@ type
     /// <param name="ABytes">The file content exactly as on disk.</param>
     /// <returns>Findings; nil when none.</returns>
     class function CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>; static;
-    /// <summary>Project-wide check, lint-all only, run once after the per-file loop.</summary>
+    /// <summary>Project-wide check, lint-all only, run once after the per-file loop: unit-used-by-no-unit (B9e)
+    /// and the outside-roots half of unit-not-in-dpr (O05).</summary>
     /// <param name="ACtx">The project; Store is not nil.</param>
     /// <returns>Findings; nil when none.</returns>
+    /// <remarks>The O05 half runs only with --project: an unscoped run already hands the host check every indexed file.</remarks>
     class function CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>; static;
   end;
 
 implementation
 
-{ The lane's helpers live in DRagLint.V152.PROJ2.Support; name it in an
-  implementation uses clause here once it declares something. }
+uses
+  DRagLint.V152.PROJ2.Support
+  ;
 
-class procedure TV152PROJ2Rules.Catalog(const ADecls: TList<TV151RuleDecl>);  // dl:ok unused-parameter@461b -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)
+class procedure TV152PROJ2Rules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
-  { no rules yet }
+  { Ruling B9e: ON, warning (plan D7). }
+  ADecls.Add(V151Rule(PROJ2_RULE_UNIT_USED_BY_NO_UNIT, 'project-wide', 'warning',
+    'Unit is listed only by the program file and nothing reaches it (no uses, no reference, no self-registration)'));
+  { O05: unit-not-in-dpr also covers closure units outside the walked roots. }
+  ADecls.Add(V151Host(PROJ2_RULE_UNIT_NOT_IN_DPR));
 end;
 
 class function TV152PROJ2Rules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@008a -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)
@@ -70,9 +77,13 @@ begin
   Result:= nil;
 end;
 
-class function TV152PROJ2Rules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@6383 -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)
+class function TV152PROJ2Rules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
 begin
   Result:= nil;
+  if ACtx.Wants(PROJ2_RULE_UNIT_USED_BY_NO_UNIT) then
+    Result:= Result + FindUnitsUsedByNoUnit(ACtx.Store);
+  if ACtx.Wants(PROJ2_RULE_UNIT_NOT_IN_DPR) then
+    Result:= Result + FindUnlistedClosureOutsideRoots(ACtx.Store, ACtx.ProjectPath, ACtx.FilePaths);
 end;
 
 end.
