@@ -183,8 +183,19 @@ begin
     vBody := RegionBody(vOut, '9');
     Check('L5 region 9 generator key gets NextID', vBody.StartsWith(
       '      if Obj.ID <= 0 then'#13#10'        Obj.ID:= NextID;'#13#10 +
-      '      QRYSave.Params[0].Value:= Obj.ID ;'#13#10), vBody);
-    Check('L6 region 9 enum param is Set1Byte', Pos('      Set1Byte(QRYSave.Params[2], Obj.STATUS.ToByte);', vBody) > 0, vBody);
+      '      QRYSave.Params[0].AsLargeInt:= Obj.ID ;'#13#10), vBody);
+    { B33 (1.52 BK-TTFINISH): the plain parameter binding uses the FIELD_AS_TYPE accessor, the
+      form the ORM3 units were generated with, not .Value }
+    Check('L5b region 9 plain param uses FIELD_AS_TYPE (old .AsString form)',
+      (Pos('      QRYSave.Params[1].AsString:= Obj.NAME ;', vBody) > 0) and (Pos('.Value:=', vBody) = 0), vBody);
+    Check('L6 region 9 enum param is AsByte (legacy form)', Pos('      QRYSave.Params[2].AsByte:= Obj.STATUS.ToByte ;', vBody) > 0, vBody);
+    { --save-form current: the TableTools 2026-05-19 forms }
+    vGen.SaveForm := osfCurrent;
+    vBody := RegionBody(vGen.UpdateRegions(vText, 'ORDERS', False, vCount), '9');
+    vGen.SaveForm := osfLegacy;
+    Check('L6b current form: .Value and Set1Byte',
+      (Pos('      QRYSave.Params[1].Value:= Obj.NAME ;', vBody) > 0) and
+      (Pos('      Set1Byte(QRYSave.Params[2], Obj.STATUS.ToByte);', vBody) > 0), vBody);
     { composite key without generator, '$' table }
     vText := Region('CL-NEXTID', '') + Region('9', '') + Region('2', '');
     vOut := vGen.UpdateRegions(vText, 'LINE$ITEM', True, vCount);
@@ -192,6 +203,11 @@ begin
     Check('L7 CL-NEXTID without generator', Pos('  // LINE_ITEM uses a composite key without a Firebird generator.', vBody) > 0, vBody);
     vBody := RegionBody(vOut, '9');
     Check('L8 region 9 non-generator keys validated', Pos('Cannot Save to LINE$ITEM', vBody) > 0, vBody);
+    Check('L8b TStringList param is AsString (legacy form)', Pos('].AsString:= Obj.MEMO.Text;', vBody) > 0, vBody);
+    vGen.SaveForm := osfCurrent;
+    vBody := RegionBody(vGen.UpdateRegions(vText, 'LINE$ITEM', True, vCount), '9');
+    vGen.SaveForm := osfLegacy;
+    Check('L8c TStringList param is AsWideMemo (current form)', Pos('].AsWideMemo:= Obj.MEMO.Text;', vBody) > 0, vBody);
     vBody := RegionBody(vOut, '2');
     Check('L9 region 2 interface form with DOC_SUMMARY lines', Pos('/// Line one'#13#10'/// Line two'#13#10, vBody) > 0, vBody);
     Check('L10 unknown table raises EOrmGenError', (function: Boolean

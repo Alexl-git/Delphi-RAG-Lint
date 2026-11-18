@@ -417,6 +417,14 @@ begin
   Opt.Tables:= CommandLineValue('--table', '');
   Opt.Apply:= CommandLineFlag('--apply');
   Opt.Backup:= not CommandLineFlag('--no-backup');
+  { B33 (1.52): region 9 binding form; legacy = the form the ORM3 units carry }
+  case IndexText(CommandLineValue('--save-form', 'legacy'), ['legacy', 'current']) of
+    0: Opt.SaveForm:= osfLegacy;
+    1: Opt.SaveForm:= osfCurrent;
+  else
+    Writeln(ErrOutput, 'repo ', pSub, ': --save-form takes legacy or current');
+    Exit(EXIT_FAIL);
+  end;
   Lines:= TStringList.Create;
   try
     Result:= RunOrmGenVerb(Opt, Lines);

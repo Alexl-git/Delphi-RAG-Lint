@@ -91,6 +91,13 @@ type
   /// regenerates the DB-RAD regions of existing ones.</summary>
   /// <remarks>Holds the field list of ONE table at a time (LoadTable); not thread-safe.
   /// Does not own the repository connection.</remarks>
+  /// <summary>How region 9 (Save, _SERVER unit) binds its query parameters.</summary>
+  /// <remarks>osfLegacy (the default, B33) = TableTools before 2026-05-19, the form the ORM3
+  /// units carry: the FIELD_AS_TYPE accessor, .AsString for a TStringList, .AsByte for an enum,
+  /// a timestamp without a NULL guard. osfCurrent = TableTools 2026-05-19: .Value, .AsWideMemo
+  /// (FB-338), Set1Byte for an enum, Clear when the timestamp Year = 0.</remarks>
+  TOrmSaveForm = (osfLegacy, osfCurrent);
+
   TOrmGenerator = class  // dl:ok high-response@ce3d -- REVIEWED 2026-11-17 v152 TTGEN: one method per TableTools section generator, kept 1:1 with the source it ports
   private
     FRepo: TFDConnection;
@@ -102,6 +109,7 @@ type
     FGenName: string;
     FLoadedTable: string;
     FGuidProvider: TFunc<TGUID>;
+    FSaveForm: TOrmSaveForm;
     function NewGuid: TGUID;
     function GetFieldName(const AName: string): string;
     function LocateField(const pKeyField: string): TOrmField;
@@ -179,6 +187,8 @@ type
       out pRegionCount: Integer): string;
     /// <summary>Supplies the GUID of a new interface; nil = CreateGUID. Tests pin it.</summary>
     property GuidProvider: TFunc<TGUID> read FGuidProvider write FGuidProvider;
+    /// <summary>Parameter binding form of region 9; osfLegacy unless set.</summary>
+    property SaveForm: TOrmSaveForm read FSaveForm write FSaveForm;
     /// <summary>Number of generator fields of the loaded table (0 when every row of the table
     /// has a FIELD_KIND other than 1).</summary>
     function FieldCount: Integer;
@@ -221,10 +231,11 @@ function IsOrmRegionEnd(const pLine: string): Boolean;  // dl:ok unused-public-s
 /// <param name="pClientDir">Folder of the _CLIENT units; '' = skip them.</param>
 /// <param name="pTables">Tables to update; empty = every repository table.</param>
 /// <param name="pSkipped">Receives one line per file that does not exist; not cleared.</param>
+/// <param name="pSaveForm">Region 9 parameter binding form (TOrmSaveForm).</param>
 /// <returns>One entry per existing file, in table order (i, u, _SERVER, _CLIENT).</returns>
 /// <exception cref="EOrmGenError">A named table is not in the repository.</exception>
 function PlanUpdateOrm(pRepo: TFDConnection; const pCodeDir, pServerDir, pClientDir: string;
-  const pTables: TArray<string>; pSkipped: TStrings): TArray<TOrmFileChange>;
+  const pTables: TArray<string>; pSkipped: TStrings; pSaveForm: TOrmSaveForm = osfLegacy): TArray<TOrmFileChange>;
 
 /// <summary>Plans writing one generated unit: compares the lines (joined with CRLF) with the
 /// current file.</summary>
@@ -2462,8 +2473,12 @@ begin
   begin
     if CurField.VAR_TYPE = STPicture then
       SectionCode.Add(Format('      TBlobField(QRYSave.Params[%d]).LoadFromStream(Obj.%s);', [I, CurField.GetCurrentFieldName]))
+    else if CurField.ISENUM and (FSaveForm = osfLegacy) then
+      SectionCode.Add(Format('      QRYSave.Params[%d].AsByte:= Obj.%s.ToByte ;', [I, CurField.GetCurrentFieldName]))
     else if CurField.ISENUM then
       SectionCode.Add(Format('      Set1Byte(QRYSave.Params[%d], Obj.%s.ToByte);', [I, CurField.GetCurrentFieldName]))
+    else if (CurField.VAR_TYPE.ToUpper = 'TSQLTIMESTAMP') and (FSaveForm = osfLegacy) then
+      SectionCode.Add(Format('      QRYSave.Params[%d].AsSQLTimeStamp:= Obj.%s;', [I, CurField.GetCurrentFieldName]))
     else if CurField.VAR_TYPE.ToUpper = 'TSQLTIMESTAMP' then
     begin
       SectionCode.Add(Format('      if Obj.%s.Year = 0 then QRYSave.Params[%d].Clear', [CurField.GetCurrentFieldName, I]));
@@ -2474,11 +2489,16 @@ begin
     else if CurField.VAR_TYPE.ToUpper = 'TBYTES' then
       SectionCode.Add(Format('      SetBytes(QRYSave.Params[%d], Obj.%s);', [I, CurField.GetCurrentFieldName]))
     else if CurField.VAR_TYPE.ToUpper = 'TSTRINGLIST' then
-      SectionCode.Add(Format('      QRYSave.Params[%d].AsWideMemo:= Obj.%s.Text;', [I, CurField.GetCurrentFieldName]))
+      SectionCode.Add(Format('      QRYSave.Params[%d].%s:= Obj.%s.Text;',
+        [I, if FSaveForm = osfLegacy then 'AsString' else 'AsWideMemo', CurField.GetCurrentFieldName]))
     else if CurField.VAR_TYPE.ToUpper = 'TPICTURE' then
       SectionCode.Add(Format('     SaveImageField(qrySave, QRYSave.Params[%d], Obj.%s);', [I, CurField.GetCurrentFieldName]))
     else if CurField.VAR_TYPE.ToUpper = 'TBCD' then
       SectionCode.Add(Format('      QRYSave.Params[%d].AsFMTBCD:= Obj.%s ;', [I, CurField.GetCurrentFieldName]))
+    else if FSaveForm = osfLegacy then
+      { B33 (1.52): the FIELD_AS_TYPE accessor (TableTools before 2026-05-19), the form every
+        ORM3 _SERVER unit carries, so update-orm leaves them unchanged }
+      SectionCode.Add(Format('      QRYSave.Params[%d].%s:= Obj.%s ;', [I, CurField.FIELD_AS_TYPE, CurField.GetCurrentFieldName]))
     else
       SectionCode.Add(Format('      QRYSave.Params[%d].Value:= Obj.%s ;', [I, CurField.GetCurrentFieldName]));
     Inc(I);
@@ -2678,7 +2698,7 @@ begin
 end;
 
 function PlanUpdateOrm(pRepo: TFDConnection; const pCodeDir, pServerDir, pClientDir: string;
-  const pTables: TArray<string>; pSkipped: TStrings): TArray<TOrmFileChange>;
+  const pTables: TArray<string>; pSkipped: TStrings; pSaveForm: TOrmSaveForm): TArray<TOrmFileChange>;
 var
   Gen: TOrmGenerator;
   L: TList<TOrmFileChange>;
@@ -2701,6 +2721,7 @@ var
 begin
   L:= TList<TOrmFileChange>.Create;
   Gen:= TOrmGenerator.Create(pRepo);
+  Gen.SaveForm:= pSaveForm;
   try
     for T in CheckedTables(Gen, pTables) do
     begin
