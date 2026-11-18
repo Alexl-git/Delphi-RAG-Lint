@@ -1,0 +1,11 @@
+# hanging-handler: a form method shaped like an event handler (Sender: TObject) that no form file binds
+# and no code assigns, passes or calls (v152 UNCONN, ruling B2)
+hanging-handler 34
+hanging-handler 54
+# silent twins: bound in the .dfm (OnClick, OnExit, OnCreate), assigned in code, called directly, no Sender parameter
+!hanging-handler 29
+!hanging-handler 39
+!hanging-handler 44
+!hanging-handler 49
+!hanging-handler 59
+!hanging-handler 65
