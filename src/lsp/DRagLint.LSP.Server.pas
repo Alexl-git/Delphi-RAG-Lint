@@ -5953,7 +5953,9 @@ begin
       end;
       for R in UsageRefsForName(St, Nm, Decls) do
         AddRefRow(GroupFor(R, Decls), St.GetFilePath(R.FileId), R.StartLine, R.StartCol, R.Resolution);
-      if Width = 'very-wide' then
+      { N3WIDE (1.52): 'wide' too, as the CLI verb -- testing 'very-wide' alone made the
+        IDE's Wide answer identical to Narrow (run_v152_N3WIDE.ps1). }
+      if (Width = 'wide') or (Width = 'very-wide') then
         for L in St.FindTransitiveCallers(Nm, Depth) do
         begin
           var IO_: TJSONObject:= TJSONObject.Create;
