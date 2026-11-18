@@ -71,6 +71,7 @@ try {
   $f = LintAll @('--rule', $RuleId)
   $u = UnitsOf $f $RuleId
   $f | Where-Object { $_.rule -eq $RuleId } | ForEach-Object { Write-Host ("    {0}:{1} {2}" -f $_.file_path, $_.start_line, $_.message) }
+  # positive-control: unit-used-by-no-unit
   Check 'F1 UDeadUnit fires'                         (@($u | Where-Object { $_ -eq 'UDeadUnit' }).Count -eq 1)     ($u -join ',')
   Check 'F2 UDeadForm (form nobody opens) fires'      (@($u | Where-Object { $_ -eq 'UDeadForm' }).Count -eq 1)     ($u -join ',')
   Check 'F3 UDeadFormInit (form + init, unopened) fires' (@($u | Where-Object { $_ -eq 'UDeadFormInit' }).Count -eq 1) ($u -join ',')

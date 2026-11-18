@@ -61,9 +61,11 @@ Check 'm3 control: unbound undocumented method fires' (Has $on 'missing-doc' 'mi
 $ph = LineOf 'doc-placeholder.pas' 'procedure Placeholder;'
 $rl = LineOf 'doc-placeholder.pas' 'procedure Real;'
 $mf = LineOf 'doc-placeholder.pas' 'procedure Malformed;'
+# positive-control: doc-placeholder
 Check 'p1 doc-placeholder fires on "Summary here ..."' (Has $off 'doc-placeholder' 'doc-placeholder.pas' $ph)
 Check 'p2 real summary silent for both rules' (-not (Has $on 'doc-placeholder' 'doc-placeholder.pas' $rl) -and -not (Has $on 'doc-malformed-summary' 'doc-placeholder.pas' $rl))
 Check 'p3 doc-malformed-summary OFF by default' (@($off | Where-Object { $_.rule -eq 'doc-malformed-summary' }).Count -eq 0)
+# positive-control: doc-malformed-summary
 Check 'p4 doc-malformed-summary fires once enabled' (Has $on 'doc-malformed-summary' 'doc-placeholder.pas' $mf)
 Check 'p5 placeholder is not reported as malformed' (-not (Has $on 'doc-malformed-summary' 'doc-placeholder.pas' $ph))
 

@@ -327,7 +327,9 @@ try {
   $p = Plan-Symbol 'FcMain.TFcForm.Weight' 'Heft'
   Check 'n2 a published property stays refused: [dfm-name-unbound]' ($p.Kinds -contains 'dfm-name-unbound') $p.Raw
   $p = Plan-Symbol 'FcList.TFcList.BtnI' 'BtnJ'
-  Check 'n3 a list value: [dfm-name-unbound]' ($p.Kinds -contains 'dfm-name-unbound') $p.Raw
+  # n3 moved from the negative controls in 1.52 RENRES (54ab94cc3): a plain `Prop = ( BtnI ... )` list item is
+  # decided like `Prop = BtnI`; the `Owner.Name` item that stays undecided is run_v152_RENRES.ps1 l4.
+  Check 'n3 a plain list value is a form edit, not refused' ($p.Json -and @($p.Json.refusals).Count -eq 0 -and @($p.Json.edits | Where-Object { $_.file -like '*FcList.dfm' -and $_.line -eq 3 }).Count -eq 1) $p.Raw
   [IO.File]::WriteAllText((Join-Path $Src 'Stray.dfm'), (Crlf "object Stray: TNobodyKnows`n  object BtnGo: TButton`n  end`nend`n"), $Ascii)
   Index-Fx
   $p = Plan-Symbol 'FcMain.TFcForm.BtnGo' 'BtnRun'

@@ -249,9 +249,12 @@ function BuildEnvBat: string;
 function RunBounded(const pWhat, pCmd, pOutFile: string; pTimeoutMs: Cardinal; out pTimedOut: Boolean;
   pEngineChild: Boolean = False): Integer;
 
-/// <summary>True when pPath lies under C:\TEMP or %TEMP%: the scope of every test seam.</summary>
+/// <summary>True when pPath lies under C:\TEMP, %TEMP% or the system temp folder (GetTempPath, which reads %TMP%
+/// first): the scope of every test seam.</summary>
 /// <param name="pPath">The path.</param>
-/// <returns>True under either root.</returns>
+/// <returns>True under any of the three roots.</returns>
+/// <remarks>1.52 BK-VERIFY: a runner that builds its fixture under [IO.Path]::GetTempPath() lands in %TMP%; with
+/// %TEMP% = C:\TEMP and %TMP% elsewhere the seam used to miss it.</remarks>
 function IsUnderTemp(const pPath: string): Boolean;
 
 /// <summary>The time limit of a build of pProject: --build-timeout (INFINITE = none, the default), or the test seam
@@ -500,7 +503,8 @@ begin
   var Full:= ExpandFileName(pPath);
   var Temp:= GetEnvironmentVariable('TEMP');
   Result:= StartsText('C:\TEMP\', Full) or // dl:ok hardcoded-absolute-path@485b -- the test seams' fixed scratch root (ruling T10)
-    ((Temp <> '') and StartsText(IncludeTrailingPathDelimiter(ExpandFileName(Temp)), Full));
+    ((Temp <> '') and StartsText(IncludeTrailingPathDelimiter(ExpandFileName(Temp)), Full)) or
+    StartsText(IncludeTrailingPathDelimiter(ExpandFileName(TPath.GetTempPath)), Full);
 end;
 
 // The time limit of a build of pProject: --build-timeout (INFINITE = none, the default), or the test seam

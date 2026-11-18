@@ -11,7 +11,8 @@
   fails; a proof handed no library refuses [no-library] instead of naming [new-name-in-library], so L2 and L3 also prove
   the LSP passes its library stores on. (No "no library" case: the LSP's context set finds the machine's platform library.)
   doIt -> DoIt keeps working over an inactive-branch token: a case-only rename cannot change a binding.
-  RED on 1.44.1. Compiles nothing. Works under %TEMP%, from an engine COPY with its own manifest.
+  RED on 1.44.1. Compiles nothing: every --apply says --no-compile-gate (1.52 BK-GATE B23 refuses an indexed fix no
+  .dproj builds, which made M1 pass vacuously). Works under %TEMP%, from an engine COPY with its own manifest.
 #>
 [CmdletBinding()]
 param([string]$EngineDir = "$PSScriptRoot\..\..\src\cli\Win64\Debug")
@@ -138,38 +139,38 @@ try {
 
   Write-Host 'lint --fix, single project' -ForegroundColor Cyan
   $r1 = New-Lab 'fieldfix'
-  $o = Run @('lint-all', '--db', "$r1\S.sqlite", '--config', "$r1\cfg.json", '--library-db', $Lib, '--rule', 'field-name-prefix', '--fix', '--apply', '--quiet')
+  $o = Run @('lint-all', '--db', "$r1\S.sqlite", '--config', "$r1\cfg.json", '--library-db', $Lib, '--rule', 'field-name-prefix', '--fix', '--apply', '--no-compile-gate', '--quiet')
   $t = Txt "$r1\S\uShape.pas"
   Check 'N1 Width is left whole: the declaration and both reads keep the old name' ($t -cmatch '    Width: Integer;' -and $t -cmatch 'Result:= Width \+ 1;' -and $t -cmatch 'Result:= Width;') $t
   Check 'N2 the run names why: skipped (not-proved), [no-ref-occurrence]' ($o -match 'not-proved' -and $o -match 'no-ref-occurrence') $o
   Check 'N3 control: Height -> FHeight everywhere in the same run' ($t -cmatch '    FHeight: Integer;' -and $t -cmatch 'Result:= FHeight;' -and $t -cnotmatch '\bHeight\b') $t
 
   $r2 = New-Lab 'paramfix'
-  $o = Run @('lint-all', '--db', "$r2\S.sqlite", '--config', "$r2\cfg.json", '--library-db', $Lib, '--rule', 'param-name-prefix', '--fix', '--apply', '--quiet')
+  $o = Run @('lint-all', '--db', "$r2\S.sqlite", '--config', "$r2\cfg.json", '--library-db', $Lib, '--rule', 'param-name-prefix', '--fix', '--apply', '--no-compile-gate', '--quiet')
   $t = Txt "$r2\S\uShape.pas"
   Check 'N4 x -> pX is refused: the routine reads the global pX, and it would compile' ($t -cmatch 'Result:= x \+ pX;' -and $t -cmatch 'UseCapture\(x: Integer\)') $t
   Check 'N5 the run names [capture-local]' ($o -match 'capture-local') $o
   Check 'N6 control: y -> pY in header, body and interface' ($t -cmatch 'Result:= pY;' -and ([regex]::Matches($t, 'UseClean\(pY: Integer\)')).Count -eq 2) $t
 
   $r3 = New-Lab 'casefix'
-  $o = Run @('lint-all', '--db', "$r3\S.sqlite", '--config', "$r3\cfg.json", '--library-db', $Lib, '--rule', 'method-pascalcase', '--fix', '--apply', '--quiet')
+  $o = Run @('lint-all', '--db', "$r3\S.sqlite", '--config', "$r3\cfg.json", '--library-db', $Lib, '--rule', 'method-pascalcase', '--fix', '--apply', '--no-compile-gate', '--quiet')
   $t = Txt "$r3\S\uShape.pas"
   Check 'N7 doIt -> DoIt is written over the inactive-branch token: case only, nothing to prove' ($t -cmatch 'procedure DoIt;' -and $t -cmatch 'procedure TShape\.DoIt;') $o
 
   $r4 = New-Lab 'fixline'
   $h = Txt "$r4\S\uShape.pas"
-  $o = Run @('lint', '--file', "$r4\S\uShape.pas", '--db', "$r4\S.sqlite", '--config', "$r4\cfg.json", '--library-db', $Lib, '--fix', '--fix-line', '8', '--fix-rule', 'field-name-prefix', '--apply')
+  $o = Run @('lint', '--file', "$r4\S\uShape.pas", '--db', "$r4\S.sqlite", '--config', "$r4\cfg.json", '--library-db', $Lib, '--fix', '--fix-line', '8', '--fix-rule', 'field-name-prefix', '--apply', '--no-compile-gate')
   Check 'N8 --fix-line (the IDE''s single fix): refused with the reason, nothing written' ($o -match 'autofix: rename refused' -and $o -match 'no-ref-occurrence' -and (Txt "$r4\S\uShape.pas") -ceq $h) $o
 
   Write-Host 'lint --fix, a unit two projects own' -ForegroundColor Cyan
   $r5 = New-Lab 'owners'
   $hs = (Txt "$r5\shared\uShared.pas") + (Txt "$r5\A\uA.pas") + (Txt "$r5\B\uB.pas")
-  $o = Run @('lint', '--file', "$r5\shared\uShared.pas", '--db', "$r5\A.sqlite", '--config', "$r5\cfg.json", '--library-db', $Lib, '--rule', 'const-casing', '--fix', '--apply')
+  $o = Run @('lint', '--file', "$r5\shared\uShared.pas", '--db', "$r5\A.sqlite", '--config', "$r5\cfg.json", '--library-db', $Lib, '--rule', 'const-casing', '--fix', '--apply', '--no-compile-gate')
   $now = (Txt "$r5\shared\uShared.pas") + (Txt "$r5\A\uA.pas") + (Txt "$r5\B\uB.pas")
   Check 'M1 the token in B''s inactive branch drops the rename in every project' ($now -ceq $hs) $o
   Check 'M2 the plan names project B and [no-ref-occurrence]' ($o -match 'dropped' -and $o -match 'project B: .*no-ref-occurrence') $o
   WriteAscii "$r5\B\uB.pas" @('unit uB;', '', 'interface', '', 'uses', '  uShared;', '', 'function Get: Integer;', '', 'implementation', '', 'function Get: Integer;', 'begin', '  Result:= My_Const;', 'end;', '', 'end.')
-  $o = Run @('lint', '--file', "$r5\shared\uShared.pas", '--db', "$r5\A.sqlite", '--config', "$r5\cfg.json", '--library-db', $Lib, '--rule', 'const-casing', '--fix', '--apply')
+  $o = Run @('lint', '--file', "$r5\shared\uShared.pas", '--db', "$r5\A.sqlite", '--config', "$r5\cfg.json", '--library-db', $Lib, '--rule', 'const-casing', '--fix', '--apply', '--no-compile-gate')
   $t = (Txt "$r5\shared\uShared.pas") + (Txt "$r5\A\uA.pas") + (Txt "$r5\B\uB.pas")
   Check 'M3 control: with B clean the rename lands in the unit and both projects' ($t -cnotmatch 'My_Const' -and ([regex]::Matches($t, 'MyConst')).Count -eq 3) $o
 } finally {

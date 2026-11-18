@@ -179,6 +179,7 @@ $appPas = Join-Path $projDir 'App.pas'
 $venPas = Join-Path $venDir  'Vendor.pas'
 Write-Ascii $appPas $App
 Write-Ascii $venPas $Vendor
+# The stub .dproj does not build: --apply below says --no-compile-gate (1.52 BK-GATE B23 gates through it otherwise).
 Write-Ascii (Join-Path $projDir 'App.dproj') '<Project/>'
 Write-Ascii (Join-Path $dragDir 'drag-lint-project.json') '{ "ownRoots": ["."] }'
 
@@ -204,7 +205,7 @@ Check 'no planned edit targets the vendored root' (-not ($dry -match 'Vendor\.pa
 Check 'the owned unit IS planned for repair' ($dry -match 'App\.pas') $dry
 
 # ------------------------------------------------------------------ apply ----
-$applyOut = & $Exe lint-all --db $db --output $rep --fix --apply 2>&1 | Out-String
+$applyOut = & $Exe lint-all --db $db --output $rep --fix --apply --no-compile-gate 2>&1 | Out-String
 
 $applied = -1; $touched = -1; $skipped = 0
 # Accept the pre-fix wording ("fix(es)") and the post-fix wording ("edit(s)") so
@@ -243,7 +244,7 @@ Check 'the stale fact is gone from the owned file' `
 # Reindex so the store matches what was just written, then re-run. A repair path
 # that has converged plans nothing and skips nothing.
 & $Exe index $projDir --db $db 2>&1 | Out-Null
-$second = & $Exe lint-all --db $db --output $rep --fix --apply 2>&1 | Out-String
+$second = & $Exe lint-all --db $db --output $rep --fix --apply --no-compile-gate 2>&1 | Out-String
 
 $secondSkipped = 0
 if ($second -match 'autofix: applied \d+ (?:fix\(es\)|edit\(s\)) across \d+ file\(s\)(?:, (\d+) skipped)?') {
