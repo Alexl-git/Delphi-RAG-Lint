@@ -306,14 +306,10 @@ function Get-DuplicateHelpLines([string]$HelpText) {
     }
   }
 }
-# Pre-existing near-duplicates (frozen block + blockless surface of a second entry), measured
-# 2026-11-17 on lane/v152-int. Merge each pair into one registry surface, then drop it here.
+# Near-duplicates kept on purpose: '<verb> <first token>' -> why. Empty since 1.52 B26 merged the five
+# pre-existing pairs (document --qname, extract-method --in, format <file>, reverse-calltree --qname,
+# rules [--json]) into one registry surface each.
 $DuplicateHelpOnPurpose = [ordered]@{
-  'document --qname'          = 'block (documentation) + blockless surface of a second entry; merge in a follow-up'
-  'extract-method --in'       = 'block + GATE2 blockless surface (--no-compile-gate placement differs); merge in a follow-up'
-  'format <file>'             = 'block + blockless surface, text identical up to spacing; merge in a follow-up'
-  'reverse-calltree --qname'  = 'block + blockless surface (second adds --output); merge in a follow-up'
-  'rules [--json]'            = 'block + blockless surface (block adds --rule); merge in a follow-up'
 }
 # POSITIVE CONTROL: the detector must flag a planted copy of a real line, and must NOT flag
 # two real variants of one verb.

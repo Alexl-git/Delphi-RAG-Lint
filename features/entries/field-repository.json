@@ -10,6 +10,66 @@
   "wikiPage": "field-repository",
   "surfaces": [
     {
+      "type": "cli",
+      "verb": "repo",
+      "sub": "init"
+    },
+    {
+      "type": "cli",
+      "verb": "repo",
+      "sub": "info"
+    },
+    {
+      "type": "cli",
+      "verb": "repo",
+      "sub": "import-fb"
+    },
+    {
+      "type": "cli",
+      "verb": "repo",
+      "sub": "seed-fb"
+    },
+    {
+      "type": "cli",
+      "verb": "repo",
+      "sub": "refresh-schema"
+    },
+    {
+      "type": "cli",
+      "verb": "repo",
+      "sub": "backup"
+    },
+    {
+      "type": "cli",
+      "verb": "repo",
+      "sub": "restore"
+    },
+    {
+      "type": "cli",
+      "verb": "repo",
+      "sub": "gen-memtable"
+    },
+    {
+      "type": "cli",
+      "verb": "repo",
+      "sub": "gen-param-array"
+    },
+    {
+      "type": "cli",
+      "verb": "repo",
+      "sub": "gen-orm"
+    },
+    {
+      "type": "cli",
+      "verb": "repo",
+      "sub": "update-orm"
+    },
+    {
+      "type": "cli",
+      "verb": "repo",
+      "sub": "gen-dataservice"
+    },
+    {
       "type": "ide-menu",
       "path": "drag-lint > Field Repository > Open Field Repository Editor...",
       "steps": ["Open a project that has a field repository (fieldRepository key or the default file)", "Choose drag-lint > Field Repository > Open Field Repository Editor...", "The grid editor dl-field-repo.exe opens on that repository"]

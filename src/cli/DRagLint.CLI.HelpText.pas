@@ -403,7 +403,7 @@ begin
   Writeln('  drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]   (interface->impl moves + unused units)');
   Writeln('  drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--platform win32|win64] [--apply] [--remove-unused] [--only <unit,...>] [--format json|text]   (compiler-verified uses cleanup; --format json lists every candidate with a status -- verified | skipped | deselected -- and --only restricts which are compiled and written, so a reviewed partial apply is expressible; a unit --only names that is in the uses clause but in no project index -- an RTL/VCL/library unit -- is decided by compiling too: removed when it has no initialization section (with --remove-unused), else moved to the implementation section, else skipped)');
   Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
-  Writeln('  drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff]   (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5))');
+  Writeln('  drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff]   (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5). Exit 0 also when YADF declines the file (its content guard leaves it unchanged; prints "Declined: <file>", not a failure))');
   Writeln('  drag-lint check-ast <file> [--profile <name>] [--db PATH] [--library-db <lib.sqlite>|none] [--rule <id>] [--format text|json] [--json] [--output <file>]');
   Writeln('  drag-lint dump-refs <file> --db PATH   (diagnostic: refs + enclosing_symbol_id attribution)');
   Writeln('  drag-lint doc-drift --qname X --db PATH [--json]   (diagnostic: deterministic doc-vs-code drift findings for one symbol)');
@@ -415,7 +415,7 @@ begin
   Writeln('  drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]   (shortest resolved call path A -> ... -> B; exit 1 = no path)');
   Writeln('                               a hop also follows an interface method to the methods that implement it (dispatch_edges implements; RB-5)');
   Writeln('  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json|--format text|json]   (N-deep resolved call tree; cycle-guarded; another --format exits 2 -- dot/mermaid: reverse-calltree)');
-  Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
+  Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] [--output F] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
   Writeln('  drag-lint proptree --qname <X> [--depth N] [--rules <file>] [--progress-interval S] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; depth = --depth N (an integer >= 1), else the --rules book''s #depth N (1..10), else 5 -- a K-segment path needs depth >= K-1; a bad --depth or #depth exits 2; --refs-as-leaves leaves TComponent-typed properties unexpanded (references, not owned sub-objects); types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query; --min-visibility filters ' +
     'emitted leaves by effective visibility, default = all, schema proptree/2; --progress-interval S: see PROGRESS below)');
   Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--glyph-stitch] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real --from/--to members, segment by segment with no depth limit (a published leaf; each hop published, or public and class-typed; private never) -- lazily, per class, no tree is built, so --depth and the book''s #depth are ignored here (and by the hidden convert-reemit), though a bad #depth (not 1..10, or a second one) is a line N error, and so is a From-only header (''#convert TFoo -> '' or ''#convert TFoo'': ''#convert TFoo has no To type''; ''#useswap X -> '': ''#useswap X has no replacement unit''); and a #link glyph expression (<FromPath> G[I/N], stitched G[1/6]G[2/6], ' +
@@ -542,14 +542,8 @@ begin
   Writeln('       see wiki page: Create-helper-class');
   Writeln('  drag-lint create-enum-helper --qname <TEnum> --db <db> --apply [--project <X.dproj> | --no-compile-gate] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-backup]');
   Writeln('       see wiki page: fixer-compile-gate');
-  Writeln('  drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment');
-  Writeln('       see wiki page: Document-it');
   Writeln('  drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced[=norefcount]] [--retype-consumer <Routine>.<param>] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]');
   Writeln('       see wiki page: extract-interface');
-  Writeln('  drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> --apply [--project <X.dproj> | --no-compile-gate] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-backup]');
-  Writeln('       see wiki page: fixer-compile-gate');
-  Writeln('  drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff] (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5). Exit 0 also when YADF declines the file (its content guard leaves it unchanged; prints "Declined: <file>", not a failure))');
-  Writeln('       see wiki page: Format-with-YADF');
   Writeln('  drag-lint gain [--since yyyy-mm-dd] [--json]');
   Writeln('       ^ tokens_returned is measured only for context and query --text; the other readers are estimated at 15 tokens per row');
   Writeln('       ^ The log is per user and best effort: an unwritable LOCALAPPDATA loses lines silently by design');
@@ -619,10 +613,6 @@ begin
   Writeln('       ^ The default RESTRICTS: a hit outside N hops is dropped, not demoted; --near-boost keeps it.');
   Writeln('       ^ A hop is one resolved call edge, callers and callees; --hops 4 is refused (use impact --depth).');
   Writeln('       see wiki page: query-text-near');
-  Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] [--output F] --db PATH [--db ...] (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
-  Writeln('       see wiki page: Reverse-Call-Tree-who-calls-this-N-deep');
-  Writeln('  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)');
-  Writeln('       see wiki page: rules');
   Writeln('  drag-lint rules disable|enable --rule <id> --scope line|unit|project [--in <F> --line <N>] --reason "<text>" [--project <.dproj>] [--config <drag-lint-lint.json>] [--json]   (line = a dl:ok marker on the line; unit / project = rule_overrides in the project lint config, with reason and date; enable undoes one disable)');
   Writeln('       see wiki page: v152-disable-rule');
   Writeln('  drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]');
@@ -1310,7 +1300,7 @@ begin
   end;
   if pVerb = 'format' then
   begin
-    Writeln('  drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff]   (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5))');
+    Writeln('  drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff]   (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5). Exit 0 also when YADF declines the file (its content guard leaves it unchanged; prints "Declined: <file>", not a failure))');
     Exit;
   end;
   if pVerb = 'check-ast' then
@@ -1358,7 +1348,7 @@ begin
   end;
   if pVerb = 'reverse-calltree' then
   begin
-    Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
+    Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] [--output F] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
     Exit;
   end;
   if pVerb = 'proptree' then

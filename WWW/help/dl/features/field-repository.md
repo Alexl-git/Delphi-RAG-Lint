@@ -7,7 +7,7 @@ group: maintenance
 order: 120008
 since: 1.52.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Field repository
@@ -17,6 +17,78 @@ Keeps the TableTools field registry in one SQLite file per database, filled from
 Read this when you want the TableTools field repository without Firebird tables or the TableTools IDE package. Run drag-lint repo init, then repo import-fb (Micronite) or repo seed-fb (any Firebird database), keep the text backup in version control with repo backup, and point several projects at one repository with the fieldRepository key. Firebird is never modified.
 
 ## How to run it
+
+```text
+drag-lint repo init (--repo <file> | --project <project file>) (create an empty field repository; exit 1 when the file exists)
+```
+
+Full flag list: [repo in the CLI reference](../cli.md#repo).
+
+```text
+drag-lint repo info (--repo <file> | --project <project file>) [--json] (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)
+```
+
+Full flag list: [repo in the CLI reference](../cli.md#repo).
+
+```text
+drag-lint repo import-fb --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--replace] (copy the FIB$ registry tables; read-only on Firebird; --replace writes a before-import text backup first; exit 1 failure, 2 schema drift)
+```
+
+Full flag list: [repo in the CLI reference](../cli.md#repo).
+
+```text
+drag-lint repo seed-fb --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--dry-run] (fill an EMPTY repository from the Firebird schema; read-only on Firebird)
+```
+
+Full flag list: [repo in the CLI reference](../cli.md#repo).
+
+```text
+drag-lint repo refresh-schema --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--dry-run] (re-read the Firebird schema into a filled repository, keep hand-edited columns, mark vanished columns; --dry-run prints the diff only)
+```
+
+Full flag list: [repo in the CLI reference](../cli.md#repo).
+
+```text
+drag-lint repo backup (--repo <file> | --project <project file>) [--output <file>] (write the diffable text backup; default <repo>.txt)
+```
+
+Full flag list: [repo in the CLI reference](../cli.md#repo).
+
+```text
+drag-lint repo restore --in <backup file> (--repo <file> | --project <project file>) [--replace] (create the repository when missing; a malformed backup prints "line <n>: ..." and exits 2, nothing changed)
+```
+
+Full flag list: [repo in the CLI reference](../cli.md#repo).
+
+```text
+drag-lint repo gen-memtable --in <csv file> [--name <Name>] [--output <file>] (Pascal source that builds the fields of a TFDMemTable from a field-definition CSV; exit 2 on a bad CSV)
+```
+
+Full flag list: [repo in the CLI reference](../cli.md#repo).
+
+```text
+drag-lint repo gen-param-array (--in <unit.pas> [--dfm <file>] | --project <X.dproj> --all [--only <unit,...>]) [--query <Name>] [--table <Name>] [--step-size <n>] [--progress-form <Form>] [--plan | --apply --project <X.dproj> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] [--json] (FireDAC Array-DML loop from the unit's DFM, inserted as a braced comment before the final end.; no flag prints the block, --plan the diff, --apply writes through ONE compile gate; exit 1 a unit refused or no block, 2 bad flags or a baseline that does not build)
+```
+
+Full flag list: [repo in the CLI reference](../cli.md#repo).
+
+```text
+drag-lint repo gen-orm
+```
+
+Full flag list: [repo in the CLI reference](../cli.md#repo).
+
+```text
+drag-lint repo update-orm
+```
+
+Full flag list: [repo in the CLI reference](../cli.md#repo).
+
+```text
+drag-lint repo gen-dataservice
+```
+
+Full flag list: [repo in the CLI reference](../cli.md#repo).
 
 ```text
 drag-lint repo <init|info|import-fb|seed-fb|refresh-schema|backup|restore|gen-memtable|gen-param-array> (--repo <file> | --project <project file>) [--connection "<Firebird connection string>"] [--in <file>] [--output <file>] [--name <Name>] [--replace] [--dry-run] [--json]   (the field repository: one SQLite file per database; Firebird is only read; gen-param-array needs no repository)

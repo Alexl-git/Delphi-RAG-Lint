@@ -7,7 +7,7 @@ group: linting
 order: 30068
 since: 1.52.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Disable rule (this line, this unit, this project)
@@ -17,6 +17,18 @@ Silence one lint rule for a line (dl:ok marker), a unit or the project (rule_ove
 Read this when a finding is right for most of the code but not here: disable the rule for this line, this unit or this project from the RAD Studio editor's right-click menu or with rules disable, and undo it with rules enable. Unit and project scope never write into the source.
 
 ## How to run it
+
+```text
+drag-lint rules disable
+```
+
+Full flag list: [rules in the CLI reference](../cli.md#rules).
+
+```text
+drag-lint rules enable
+```
+
+Full flag list: [rules in the CLI reference](../cli.md#rules).
 
 ```text
 drag-lint rules disable|enable --rule <id> --scope line|unit|project [--in <F> --line <N>] --reason "<text>" [--project <.dproj>] [--config <drag-lint-lint.json>] [--json]   (line = a dl:ok marker on the line; unit / project = rule_overrides in the project lint config, with reason and date; enable undoes one disable)

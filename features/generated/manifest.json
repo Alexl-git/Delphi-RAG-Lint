@@ -3789,6 +3789,16 @@
         {
           "type": "cli",
           "verb": "rules",
+          "sub": "disable"
+        },
+        {
+          "type": "cli",
+          "verb": "rules",
+          "sub": "enable"
+        },
+        {
+          "type": "cli",
+          "verb": "rules",
           "usage": "drag-lint rules disable|enable --rule <id> --scope line|unit|project [--in <F> --line <N>] --reason \"<text>\" [--project <.dproj>] [--config <drag-lint-lint.json>] [--json]   (line = a dl:ok marker on the line; unit / project = rule_overrides in the project lint config, with reason and date; enable undoes one disable)",
           "flags": [
             {
@@ -4573,7 +4583,7 @@
         {
           "type": "cli",
           "verb": "format",
-          "usage": "drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff] (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5))",
+          "usage": "drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff] (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5). Exit 0 also when YADF declines the file (its content guard leaves it unchanged; prints \"Declined: <file>\", not a failure))",
           "flags": [
             {
               "name": "--yadf-path",
@@ -4587,7 +4597,7 @@
             }
           ],
           "helpOrder": 72,
-          "help": ["  drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff]   (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5))"]
+          "help": ["  drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff]   (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5). Exit 0 also when YADF declines the file (its content guard leaves it unchanged; prints \"Declined: <file>\", not a failure))"]
         },
         {
           "type": "cli",
@@ -4995,7 +5005,7 @@
         {
           "type": "cli",
           "verb": "rules",
-          "usage": "drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)",
+          "usage": "drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rule <id>[,<id>]] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance` and needs_compiler / compat_since / target_active; --standard lists only rules labelled under it; --rule <id>[,<id>] lists only those rules, an unknown id is exit 2)",
           "flags": [
             {
               "name": "--json"
@@ -5013,7 +5023,7 @@
               "arg": "<dir>"
             }
           ],
-          "help": ["  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]]   - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance` and needs_compiler / compat_since / target_active; --standard lists only rules labelled under it)"]
+          "help": ["  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rule <id>[,<id>]] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]]   - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance` and needs_compiler / compat_since / target_active; --standard lists only rules labelled under it; --rule <id>[,<id>] lists only those rules, an unknown id is exit 2)"]
         }
       ],
       "audience": "both",
@@ -6894,7 +6904,7 @@
         {
           "type": "cli",
           "verb": "document",
-          "usage": "drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment",
+          "usage": "drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment",
           "flags": [
             {
               "name": "--qname",
@@ -6957,7 +6967,7 @@
         {
           "type": "cli",
           "verb": "document",
-          "usage": "drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment",
+          "usage": "drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment",
           "flags": [
             {
               "name": "--qname",
@@ -7020,7 +7030,7 @@
         {
           "type": "cli",
           "verb": "document",
-          "usage": "drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment",
+          "usage": "drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment",
           "flags": [
             {
               "name": "--qname",
@@ -7723,7 +7733,7 @@
           "type": "cli",
           "verb": "extract-method",
           "example": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> --apply",
-          "usage": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> --apply [--project <X.dproj> | --no-compile-gate] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-backup]",
+          "usage": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--no-compile-gate] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] - pull a statement run into a new method",
           "flags": [
             {
               "name": "--apply"
@@ -10279,7 +10289,7 @@
         {
           "type": "cli",
           "verb": "reverse-calltree",
-          "usage": "drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...] (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)",
+          "usage": "drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] [--output F] --db PATH [--db ...] (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)",
           "flags": [
             {
               "name": "--qname",
@@ -10304,7 +10314,7 @@
             }
           ],
           "helpOrder": 81,
-          "help": ["  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)"]
+          "help": ["  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] [--output F] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)"]
         }
       ],
       "audience": "both",
@@ -11451,7 +11461,7 @@
         {
           "type": "cli",
           "verb": "reverse-calltree",
-          "usage": "drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...] (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)",
+          "usage": "drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] [--output F] --db PATH [--db ...] (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)",
           "flags": [
             {
               "name": "--qname",
@@ -11637,7 +11647,7 @@
         {
           "type": "cli",
           "verb": "reverse-calltree",
-          "usage": "drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...] (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)",
+          "usage": "drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] [--output F] --db PATH [--db ...] (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)",
           "flags": [
             {
               "name": "--qname",
@@ -15267,6 +15277,66 @@
       "intro": "Read this when you want the TableTools field repository without Firebird tables or the TableTools IDE package. Run drag-lint repo init, then repo import-fb (Micronite) or repo seed-fb (any Firebird database), keep the text backup in version control with repo backup, and point several projects at one repository with the fieldRepository key. Firebird is never modified.",
       "wikiPage": "field-repository",
       "surfaces": [
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "init"
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "info"
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "import-fb"
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "seed-fb"
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "refresh-schema"
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "backup"
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "restore"
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "gen-memtable"
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "gen-param-array"
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "gen-orm"
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "update-orm"
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "gen-dataservice"
+        },
         {
           "type": "ide-menu",
           "path": "drag-lint > Field Repository > Open Field Repository Editor...",

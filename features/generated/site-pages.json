@@ -388,8 +388,8 @@
     "version": "1.35.1-alpha"
   },
   "features/field-repository.md": {
-    "hash": "dd8777b235946d035ec7ed5c0750b49f9fdf3bde0b207c67ef95c24722661801",
-    "version": "1.51.1-alpha"
+    "hash": "89137acf38a66f8287ebd5d7ac2a4a08d2e36b848d7112518bd88992469e41ee",
+    "version": "1.52.0-alpha"
   },
   "features/finalization-after-dependency.md": {
     "hash": "76ca3ab6384a27dd1ecb82dcc439b667f5055d088a70921ad6f76df0006ec193",
@@ -1048,8 +1048,8 @@
     "version": "1.51.1-alpha"
   },
   "features/v152-disable-rule.md": {
-    "hash": "c2bc9f8676b51e01a1136f58def6d4954acfef652804cd1e745f45d38117be76",
-    "version": "1.51.1-alpha"
+    "hash": "24c5bd38baeb2f71346c0a0f5cfa3fede8556f004a565e146d1856a3e5f3bbf4",
+    "version": "1.52.0-alpha"
   },
   "features/v152-docpol.md": {
     "hash": "d9b8ae61b573971da394f09a91a7057d9dff1659fcd9f4c352f2472fc23293a6",
@@ -1064,8 +1064,8 @@
     "version": "1.51.1-alpha"
   },
   "features/v152-fixer-compile-gate.md": {
-    "hash": "bc236127aa7bbb3581bb7d9a98f7d114fd0d09bdbb4e8cfae7acfe86eb488405",
-    "version": "1.51.1-alpha"
+    "hash": "1b5a90dc03360719f3128d3dce36a17de60621efc9bb64cc0f4c7cba9b74d8cb",
+    "version": "1.52.0-alpha"
   },
   "features/v152-index-possibly-out-of-range.md": {
     "hash": "32b1ced480881fdb4a6ec2ed0e3a04f4eacbe810566981aa958e935cb26cc376",
