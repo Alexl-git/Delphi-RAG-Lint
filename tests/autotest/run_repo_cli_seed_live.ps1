@@ -11,6 +11,9 @@
         the field count does not change (nothing new in the schema)
     S5  the stdout / stderr of every call never contains the Password value
 
+  SET UP (live run): copy a Firebird 4 database to a private folder, start/keep a local FB4 server, then
+    $env:DL_TEST_FB_CONNECTION = 'Database=localhost:<path-to-copy>.fdb;User_Name=<user>;Password=<pw>;DriverID=FB'
+  and put the folder holding fbclient.dll (64-bit) on PATH. Never point it at a production database.
   Run: pwsh -File tests\autotest\run_repo_cli_seed_live.ps1 -Exe <drag-lint.exe>
 #>
 [CmdletBinding()]
