@@ -12,7 +12,7 @@ unit DRagLint.CLI.CheckInit;
 interface
 
 /// <summary>Runs `drag-lint check-init &lt;QName&gt; [--at &lt;file&gt;:&lt;line&gt;[:&lt;col&gt;]] --db &lt;db&gt;
-/// [--json] [--explain] [--max-routines N]`.</summary>
+/// [--json] [--explain] [--max-routines N] [--max-seconds S]`.</summary>
 /// <param name="pTarget">Positional QName (or --qname); '' when only --at names the target.</param>
 /// <param name="pAt">--at value `file:line[:col]`, '' when absent.</param>
 /// <param name="pDbPath">--db value (or the resolved project DB), '' when none.</param>
@@ -21,13 +21,15 @@ interface
 /// <param name="pExplain">--explain: the text output adds roots and per-use reasons.</param>
 /// <param name="pMaxRoutines">--max-routines N; 0 = HB_DEFAULT_MAX_ROUTINES; negative (the parser's
 /// value for a non-number) is a usage error.</param>
+/// <param name="pMaxSeconds">--max-seconds S as typed ('' = absent = HB_DEFAULT_MAX_SECONDS): a number &gt;= 0,
+/// decimals allowed (invariant '.'); 0 = no wall-clock cap. Anything else is a usage error.</param>
 /// <returns>Process exit code: 0 all SET, 1 some MAY-BE-UNSET or NEVER-SET, 2 usage or other error.</returns>
 /// <remarks>Read-only. Every error goes to stderr with exit 2 and NOTHING on stdout, so a --json
 /// consumer never parses a half document. Usage errors: neither QName nor --at; a malformed --at;
-/// a bad --max-routines; no DB; a DB that does not exist or whose schema is too old to read; an
+/// a bad --max-routines or --max-seconds; no DB; a DB that does not exist or whose schema is too old to read; an
 /// unknown / ambiguous target or a --at that names another variable (EHbUsage from the engine).</remarks>
 function RunCheckInit(const pTarget, pAt, pDbPath, pProject: string; pJson, pExplain: Boolean;
-  pMaxRoutines: Integer): Integer;
+  pMaxRoutines: Integer; const pMaxSeconds: string): Integer;
 
 implementation
 
@@ -49,7 +51,7 @@ function UsageError(const pMsg: string): Integer;
 begin
   Writeln(ErrOutput, 'ERROR: ', VERB_NAME, ': ', pMsg);
   Writeln(ErrOutput, '       usage: drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> '
-    + '[--json] [--explain] [--max-routines N]');
+    + '[--json] [--explain] [--max-routines N] [--max-seconds S]');
   Flush(ErrOutput);
   Result:= 2;
 end;
@@ -85,8 +87,8 @@ begin
   end;
 end;
 
-function RunCheckInit(const pTarget, pAt, pDbPath, pProject: string; pJson, pExplain: Boolean;
-  pMaxRoutines: Integer): Integer;
+function RunCheckInit(const pTarget, pAt, pDbPath, pProject: string; pJson, pExplain: Boolean;  // dl:ok too-many-parameters@e0ca, too-many-exit-points@1aaa -- REVIEWED 2026-11-18 v152 HBFIX: the FRAME dispatch contract takes one parameter per check-init flag from one CLI.pas line; each Exit is a usage guard with its own message
+  pMaxRoutines: Integer; const pMaxSeconds: string): Integer;
 var
   AtSite: THbSite;
 begin
@@ -97,6 +99,10 @@ begin
     Exit(UsageError(Format('--at must be <file>:<line>[:<col>] with line and col >= 1, got "%s"', [pAt])));
   if pMaxRoutines < 0 then
     Exit(UsageError('--max-routines needs a whole number >= 0 (0 = the default budget)'));
+  var MaxS: Double:= 0;
+  if (pMaxSeconds <> '') and not (TryStrToFloat(pMaxSeconds, MaxS, TFormatSettings.Invariant) and (MaxS >= 0)) then
+    Exit(UsageError('--max-seconds needs a number >= 0 (0 = no wall-clock cap; default ' +
+      IntToStr(HB_DEFAULT_MAX_SECONDS) + ')'));
   if not DbUsable(pDbPath, pProject) then
   begin
     Flush(ErrOutput);
@@ -108,6 +114,8 @@ begin
     var Opts:= Default(THbOptions);
     Opts.MaxRoutines:= if pMaxRoutines = 0 then HB_DEFAULT_MAX_ROUTINES else pMaxRoutines;
     Opts.Explain:= pExplain;
+    { v152 HBFIX H3: absent = the default cap; an explicit 0 = no cap (THbOptions: negative) }
+    Opts.MaxSeconds:= if pMaxSeconds = '' then 0 else if MaxS <= 0 then -1 else MaxS;
     Answer:= CheckInit(pDbPath, pTarget, pAt, Opts);
   except
     on E: EHbUsage do

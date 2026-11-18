@@ -25,6 +25,17 @@ const
   /// <summary>The `limits[]` code a scaffold answer carries until the solver lane lands.</summary>
   HB_LIMIT_NOT_IMPLEMENTED = 'not-implemented';
 
+  /// <summary>Default `--max-seconds` wall-clock cap of one query (v152 HBFIX H3; HBMEASURE measured
+  /// up to 669 s for one CLIENT global).</summary>
+  HB_DEFAULT_MAX_SECONDS = 60;
+
+  /// <summary>The `limits[]` code of an answer the wall-clock cap stopped: `stopped-after <N>s`.</summary>
+  HB_LIMIT_STOPPED_AFTER = 'stopped-after';
+
+  /// <summary>The `limits[]` code of an answer with no judged use (v152 HBFIX, HBMEASURE F5): a SET
+  /// over zero uses is vacuous -- nothing reads the target, so nothing can read it unset.</summary>
+  HB_LIMIT_NO_JUDGED_USE = 'no-judged-use';
+
 type
   /// <summary>The verdicts of check-init (ruling HB2, plus the owner's UNKNOWN-CALLEE of 2026-11-17
   /// 13:56). Literals: VerdictCode.</summary>
@@ -145,8 +156,13 @@ type
     /// <summary>CFGs built.</summary>
     Routines: Integer;
     Ms: Int64;
-    /// <summary>True when --max-routines ran out; the verdict is then never a proof.</summary>
+    /// <summary>True when --max-routines ran out or the --max-seconds cap stopped the query; the
+    /// verdict is then never a proof.</summary>
     Exhausted: Boolean;
+    /// <summary>True when the --max-seconds wall-clock cap stopped the query (Exhausted is then True).</summary>
+    TimedOut: Boolean;
+    /// <summary>The cap in seconds that was in force; 0 = no cap.</summary>
+    MaxSeconds: Double;
   end;
 
   /// <summary>The whole check-init answer; Render turns it into JSON / text and an exit code.</summary>
@@ -176,6 +192,8 @@ type
     MaxRoutines: Integer;
     /// <summary>--explain: the text output adds roots and per-use reasons.</summary>
     Explain: Boolean;
+    /// <summary>--max-seconds wall-clock cap; 0 = HB_DEFAULT_MAX_SECONDS, negative = no cap.</summary>
+    MaxSeconds: Double;
   end;
 
   /// <summary>A usage error found while answering (unknown / ambiguous target, a --at that names a
@@ -232,7 +250,39 @@ function HbWorseVerdict(pA, pB: THbVerdict): THbVerdict;
 /// not a number &gt;= 1.</returns>
 function HbParseAt(const pAt: string; out pSite: THbSite): Boolean;
 
+/// <summary>Starts the wall-clock cap of the query on this thread (v152 HBFIX H3).</summary>
+/// <param name="pMaxSeconds">The cap in seconds; &lt;= 0 = no cap.</param>
+/// <remarks>Per thread (threadvar): one query at a time per thread. Every solver of check-init asks
+/// HbTimeUp before it builds a CFG and treats True like a spent --max-routines budget.</remarks>
+procedure HbStartClock(pMaxSeconds: Double);
+
+/// <summary>True once the cap started by HbStartClock has run out; latches HbTimedOut.</summary>
+/// <returns>False when no cap is in force.</returns>
+function HbTimeUp: Boolean;
+
+/// <summary>True when HbTimeUp answered True since the last HbStartClock.</summary>
+/// <returns>Whether the cap stopped the current query.</returns>
+function HbTimedOut: Boolean;
+
+/// <summary>The why text of a use the budget left unproven: 'stopped after N s (--max-seconds)' when the
+/// wall-clock cap ran out, else 'the --max-routines budget ran out'.</summary>
+/// <returns>The text, without the 'why not SET: ' prefix.</returns>
+function HbBudgetWhy: string;
+
+/// <summary>`N` of 'stopped after N s': the cap in force, formatted with up to three decimals.</summary>
+/// <returns>e.g. '60' or '0.001'; '0' when no cap is in force.</returns>
+function HbCapText: string;
+
 implementation
+
+uses
+  System.Diagnostics
+  ;
+
+threadvar
+  GHbDeadline: Int64;   { TStopwatch ticks; 0 = no cap }
+  GHbCapSeconds: Double;
+  GHbTimedOut: Boolean;
 
 const
   VERDICT_CODES: array[THbVerdict] of string = ('SET', 'NEVER-SET', 'MAY-BE-UNSET', 'UNKNOWN-CALLEE');
@@ -323,4 +373,35 @@ begin
   Result:= (pSite.FileName <> '') and (pSite.Line >= 1);
 end;
 
+procedure HbStartClock(pMaxSeconds: Double);
+begin
+  GHbTimedOut:= False;
+  GHbCapSeconds:= if pMaxSeconds > 0 then pMaxSeconds else 0;
+  GHbDeadline:= 0;
+  if pMaxSeconds > 0 then
+    GHbDeadline:= TStopwatch.GetTimeStamp + Round(pMaxSeconds * TStopwatch.Frequency);
+end;
+
+function HbTimeUp: Boolean;
+begin
+  if GHbTimedOut then Exit(True);
+  Result:= (GHbDeadline <> 0) and (TStopwatch.GetTimeStamp >= GHbDeadline);
+  if Result then GHbTimedOut:= True;
+end;
+
+function HbTimedOut: Boolean;
+begin
+  Result:= GHbTimedOut;
+end;
+
+function HbCapText: string;
+begin
+  Result:= FormatFloat('0.###', GHbCapSeconds, TFormatSettings.Invariant);
+end;
+
+function HbBudgetWhy: string;
+begin
+  Result:= if GHbTimedOut then 'stopped after ' + HbCapText + ' s (--max-seconds)'
+    else 'the --max-routines budget ran out';
+end;
 end.

@@ -1661,6 +1661,11 @@ begin
       Inc(i);
       Result.MaxRoutines:= StrToIntDef(ParamStr(i), -1);
     end
+    else if (A = '--max-seconds') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.MaxSeconds:= ParamStr(i);
+    end
     else if (A = '--repo') and (i < ParamCount) then
     begin
       Inc(i);
@@ -29311,7 +29316,7 @@ begin
     else if Args.Command = 'query'             then Result:= DoQuery           (Args)
     else if (Args.Command = 'rules') and MatchText(Args.SubCommand, ['disable', 'enable']) then Result:= RunRuleScope(LowerCase(Args.SubCommand), Args.Rule, Args.RuleScope, Args.InFile, Args.RefLine, Args.Reason, Args.ProjectPath, Args.ConfigPath, Args.AsJson or SameText(Args.Format, 'json')) { 1.52 FRAME: DRagLint.CLI.RuleScope }
     else if Args.Command = 'rules'             then Result:= DoRules           (Args)
-    else if Args.Command = 'check-init'        then Result:= RunCheckInit(if Args.SubCommand <> '' then Args.SubCommand else Args.QName, Args.At, Args.DbPath, Args.ProjectPath, Args.AsJson or SameText(Args.Format, 'json'), Args.HbExplain, Args.MaxRoutines) { 1.52 FRAME: DRagLint.CLI.CheckInit }
+    else if Args.Command = 'check-init'        then Result:= RunCheckInit(if Args.SubCommand <> '' then Args.SubCommand else Args.QName, Args.At, Args.DbPath, Args.ProjectPath, Args.AsJson or SameText(Args.Format, 'json'), Args.HbExplain, Args.MaxRoutines, Args.MaxSeconds) { 1.52 FRAME: DRagLint.CLI.CheckInit; v152 HBFIX --max-seconds }
     else if Args.Command = 'repo'              then Result:= RunRepoVerb(Args.SubCommand, Args.RepoPath, Args.ProjectPath, Args.FbConnection, Args.InFile, Args.Output, Args.Replace, Args.AsJson or SameText(Args.Format, 'json')) { 1.52 FRAME: DRagLint.CLI.Repo }
     else if Args.Command = 'explain'           then Result:= RunExplain(if Args.SubCommand <> '' then Args.SubCommand else Args.Rule, Args.RulesDir, Args.AsJson or SameText(Args.Format, 'json')) { 1.52 FRAME: DRagLint.CLI.Explain }
     else if Args.Command = 'lint'              then Result:= DoLint            (Args)

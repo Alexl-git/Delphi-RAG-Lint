@@ -12,7 +12,7 @@ uses
   ;
 
 /// <summary>The answer as one JSON document: {target, verdict, proven, scope, summary, reasons, uses,
-/// writers, roots, limits, budget}.</summary>
+/// writers, roots, limits, budget {routines, ms, exhausted, max_s, timed_out}}.</summary>
 /// <param name="pAnswer">The answer to render.</param>
 /// <returns>Compact JSON text (no trailing newline).</returns>
 /// <remarks>Every key is always present (empty arrays, 0, '' and false included) so tools never
@@ -138,6 +138,9 @@ begin
     Budget.AddPair('routines', TJSONNumber.Create(pAnswer.Budget.Routines));
     Budget.AddPair('ms', TJSONNumber.Create(pAnswer.Budget.Ms));
     Budget.AddPair('exhausted', TJSONBool.Create(pAnswer.Budget.Exhausted));
+    { v152 HBFIX H3: the wall-clock cap in force (0 = none) and whether it stopped the query }
+    Budget.AddPair('max_s', TJSONNumber.Create(pAnswer.Budget.MaxSeconds));
+    Budget.AddPair('timed_out', TJSONBool.Create(pAnswer.Budget.TimedOut));
     Result:= Root.ToJSON;
   finally
     Root.Free;

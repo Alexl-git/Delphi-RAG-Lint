@@ -71,8 +71,12 @@ const
 /// <param name="pTarget">QName or unique trailing part of a unit variable, class var or instance field;
 /// '' when only pAt names the target.</param>
 /// <param name="pAt">`file:line[:col]` of the one use to judge, '' to judge every use.</param>
-/// <param name="pOptions">MaxRoutines (0 = HB_DEFAULT_MAX_ROUTINES) and Explain.</param>
-/// <returns>A complete answer; Proven is True only for a SET or NEVER-SET backed by a proof.</returns>
+/// <param name="pOptions">MaxRoutines (0 = HB_DEFAULT_MAX_ROUTINES), MaxSeconds (0 =
+/// HB_DEFAULT_MAX_SECONDS, negative = no cap) and Explain.</param>
+/// <returns>A complete answer; Proven is True only for a SET or NEVER-SET backed by a proof. When the
+/// wall-clock cap runs out the answer is never SET: reason budget, limit `stopped-after &lt;N&gt;s`,
+/// Budget.TimedOut and Budget.Exhausted, Summary starting '(stopped after N s'. A SET over zero judged
+/// uses carries the limit no-judged-use and a summary that says so (it is vacuous).</returns>
 /// <exception cref="EHbUsage">Malformed pAt; unknown / ambiguous target; --at naming another variable
 /// (raised by the events lane, candidates attached).</exception>
 /// <remarks>Read-only. Not thread-safe (the shared parse cache). Deterministic: every set is walked in
@@ -720,9 +724,9 @@ function TSolver.RawSolve(pId: Int64; pEntry: Boolean): THbRoutineState;
 begin
   Result:= Default(THbRoutineState);
   Result.RoutineId:= pId;
-  if not FBudgetSet.Contains(pId) then
+  if (not FBudgetSet.Contains(pId)) or HbTimeUp then
   begin
-    if FBudgetSet.Count >= FMax then
+    if (FBudgetSet.Count >= FMax) or HbTimeUp then
     begin
       FExhausted:= True;
       var Q:= QueriesOf(pId);
@@ -1254,8 +1258,16 @@ begin
       var HaveBad:= False;
       var Count:= 0;
       var Relied:= '';
+      var Stopped:= False;
       for var P in FPrograms do
       begin
+        if HbTimeUp then
+        begin
+          { v152 HBFIX H3: the wall-clock cap ran out; the rest is not judged }
+          FExhausted:= True;
+          Stopped:= True;
+          Break;
+        end;
         var J:= JudgeUse(P, Use.Site);
         if not J.Judged then Continue;
         Judged:= True;
@@ -1268,7 +1280,12 @@ begin
           HaveBad:= True;
         end;
       end;
-      if not Judged then
+      if Stopped then
+      begin
+        A.Verdict:= hvMayBeUnset;
+        A.Why:= WHY_PREFIX + HbBudgetWhy;
+      end
+      else if not Judged then
       begin
         { no root reaches the use (or it has no routine): not proven }
         A.Verdict:= hvMayBeUnset;
@@ -1296,7 +1313,7 @@ begin
         { a proof that ran out of budget is no proof }
         A.Verdict:= hvMayBeUnset;
         AddReason(A.Reasons, hrBudget);
-        A.Why:= WHY_PREFIX + 'the --max-routines budget ran out';
+        A.Why:= WHY_PREFIX + HbBudgetWhy;
       end;
       if Use.GuardedTest then AddReason(A.Reasons, hrGuardedTest);
       A.Reasons:= SortedReasons(A.Reasons);
@@ -1342,6 +1359,16 @@ begin
     begin
       var W:= pEvents.Writers[I];
       if (W.How <> hwUnresolved) or W.Resolved then Continue;
+      var SL: TStringList;
+      if not Lines.TryGetValue(W.Site.FileName, SL) then
+      begin
+        SL:= TStringList.Create;
+        if FileExists(W.Site.FileName) then SL.LoadFromFile(W.Site.FileName);  // dl:ok taint-path-traversal@aae9 -- REVIEWED 2026-11-17 v152 HBSOLVER: the path is files.path from the project index, read only; the env-var chain is the DB location, not this path
+        Lines.Add(W.Site.FileName, SL);
+      end;
+      { v152 HBFIX: an unresolved `X.F := ..` / `F := ..` is an assignment, never an argument }
+      if InRange(W.Site.Line, 1, SL.Count) and (W.Site.Col >= 1) and
+        TRegEx.IsMatch(Copy(SL[W.Site.Line - 1], W.Site.Col, MaxInt), '^\w+\s*:=') then Continue;
       var R:= pIndex.Query('SELECT r.name_text, r.start_line, r.start_col FROM refs r JOIN files f ON f.id = r.file_id ' +
         'LEFT JOIN call_edges c ON c.ref_id = r.id WHERE f.path = ''' + TChartsIndex.SqlText(W.Site.FileName) +
         ''' AND r.kind = ''call'' AND r.symbol_id IS NULL AND c.ref_id IS NULL AND r.start_line BETWEEN ' +
@@ -1353,13 +1380,6 @@ begin
         var A:= Default(TCalleeArg);
         A.WriterIdx:= I;
         A.Callee:= R[0].S('name_text');
-        var SL: TStringList;
-        if not Lines.TryGetValue(W.Site.FileName, SL) then
-        begin
-          SL:= TStringList.Create;
-          if FileExists(W.Site.FileName) then SL.LoadFromFile(W.Site.FileName);  // dl:ok taint-path-traversal@aae9 -- REVIEWED 2026-11-17 v152 HBSOLVER: the path is files.path from the project index, read only; the env-var chain is the DB location, not this path
-          Lines.Add(W.Site.FileName, SL);
-        end;
         var CallLine:= R[0].I('start_line');
         for var L:= CallLine to W.Site.Line do
           if InRange(L, 1, SL.Count) then
@@ -1553,6 +1573,28 @@ begin
   end;
 end;
 
+{ v152 HBFIX: the wall-clock cap (H3: 'stopped-after <N>s', budget.timed_out, never SET) and the zero-use
+  SET (HBMEASURE F5: limit no-judged-use, the summary says the SET is vacuous). }
+procedure FinishLimits(var pAnswer: THbAnswer; pMaxSeconds: Double);
+begin
+  pAnswer.Budget.MaxSeconds:= if pMaxSeconds > 0 then pMaxSeconds else 0;
+  if HbTimedOut then
+  begin
+    pAnswer.Budget.TimedOut:= True;
+    pAnswer.Budget.Exhausted:= True;
+    if pAnswer.Verdict = hvSet then pAnswer.Verdict:= hvMayBeUnset;
+    pAnswer.Proven:= pAnswer.Proven and (pAnswer.Verdict = hvNeverSet);
+    AddReason(pAnswer.Reasons, hrBudget);
+    pAnswer.Limits:= pAnswer.Limits + [HB_LIMIT_STOPPED_AFTER + ' ' + HbCapText + 's'];
+    pAnswer.Summary:= '(stopped after ' + HbCapText + ' s (--max-seconds): not proven) ' + pAnswer.Summary;
+  end;
+  if (pAnswer.JudgedUses = nil) and (pAnswer.Verdict = hvSet) then
+  begin
+    pAnswer.Limits:= pAnswer.Limits + [HB_LIMIT_NO_JUDGED_USE];
+    pAnswer.Summary:= '(no judged use: nothing reads it, so no read can see it unset)';
+  end;
+end;
+
 function CheckInit(const pDbPath, pTarget, pAt: string; const pOptions: THbOptions): THbAnswer;
 var
   AtSite: THbSite;
@@ -1565,6 +1607,8 @@ begin
     raise EHbUsage.CreateCandidates(Format('--at must be <file>:<line>[:<col>], got "%s"', [pAt]), nil);
   var Watch:= TStopwatch.StartNew;
   var MaxR:= if pOptions.MaxRoutines > 0 then pOptions.MaxRoutines else HB_DEFAULT_MAX_ROUTINES;
+  var MaxS: Double:= if IsZero(pOptions.MaxSeconds) then HB_DEFAULT_MAX_SECONDS else pOptions.MaxSeconds;
+  HbStartClock(MaxS);
   var Index:= TChartsIndex.Create(pDbPath);
   try
     var Store: ISymbolStore:= TSQLiteSymbolStore.Create(pDbPath, {AReadOnly=}True);
@@ -1623,6 +1667,7 @@ begin
         Result.Proven:= False;
       end;
     end;
+    FinishLimits(Result, MaxS);
     Result.Reasons:= SortedReasons(Result.Reasons);
   finally
     Index.Free;
