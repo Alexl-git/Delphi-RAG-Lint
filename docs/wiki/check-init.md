@@ -39,9 +39,10 @@ drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--
 * `--json` prints one object: `target`, `verdict`, `proven`, `scope`, `summary`, `reasons`,
   `uses[]` (`file`, `line`, `col`, `routine`, `verdict`, `reasons`, `why`, `witness[]`),
   `writers[]` (`how`, `resolved`, `counts`, `fired_by`, `callers`), `roots`, `limits`, `budget` (`routines`, `ms`, `exhausted`, `max_s`, `timed_out`).
-* MCP: the tool `check_init` takes `target` or `at`, `explain`, `max_routines`, `db` and returns the
+* MCP: the tool `check_init` takes `target` or `at`, `explain`, `max_routines`, `max_seconds`, `db` and returns the
   same JSON.
 * IDE: Analyze > Check Initialization of Identifier at Cursor... (also in the editor context menu) runs the same engine on the identifier under the caret.
+* Hover: the `Set by:` section of a variable or field hover runs the same engine with a smaller budget -- 200 routines and 5 s wall clock (environment variables `DRAGLINT_HOVER_SETBY_MAX_ROUTINES` / `DRAGLINT_HOVER_SETBY_MAX_SECONDS`); a capped solve shows `budget exceeded`.
 
 ## An answer: a read that runs before its writer
 

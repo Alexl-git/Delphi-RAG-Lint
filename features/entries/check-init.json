@@ -28,7 +28,7 @@
       "type": "cli",
       "verb": "check-init",
       "example": "drag-lint check-init UnitA.GCache --db <db> --json",
-      "usage": "drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--explain] [--max-routines N]",
+      "usage": "drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--explain] [--max-routines N] [--max-seconds S]",
       "flags": [
         {
           "name": "--at",
@@ -47,9 +47,13 @@
         {
           "name": "--max-routines",
           "arg": "N"
+        },
+        {
+          "name": "--max-seconds",
+          "arg": "S"
         }
       ],
-      "help": ["  drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--explain] [--max-routines N]   (is a variable or field set before every use? SET / NEVER-SET / MAY-BE-UNSET / UNKNOWN-CALLEE; exit 0 = all SET, 1 = otherwise, 2 = error)"]
+      "help": ["  drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--explain] [--max-routines N] [--max-seconds S]   (is a variable or field set before every use? SET / NEVER-SET / MAY-BE-UNSET / UNKNOWN-CALLEE; exit 0 = all SET, 1 = otherwise, 2 = error)"]
     }
   ],
   "audience": "both",
@@ -64,11 +68,11 @@
       "command": "drag-lint check-init <Unit.TClass.FField> --db <db> --json"
     }
   ],
-  "notes": "Shipped 1.52 (lanes HBSKEL, HBSOLVER, HBFIELDS, HBEVORD, HBDOCS). receiver-unproven (HBRECV) is reserved, not produced. Plan docs\\superpowers\\plans\\2026-11-17-happens-before-phase1.md; guard tests\\autotest\\run_check_init_surface.ps1",
+  "notes": "Shipped 1.52 (lanes HBSKEL, HBSOLVER, HBFIELDS, HBEVORD, HBDOCS). HBFIX: receiver-unproven is produced (a read through another object), --max-seconds S wall-clock cap (default 60, 0 = off; MCP max_seconds, hover 5 s). Plan docs\\superpowers\\plans\\2026-11-17-happens-before-phase1.md; guard tests\\autotest\\run_check_init_surface.ps1",
   "verified": {
     "date": "2026-11-18",
     "by": "ENGINE",
-    "build": "1.51.1-alpha",
-    "surfaceHash": "54c8ff2721b76e40248adf0d44557571c78136876e67c9560d1dc6e020296a8c"
+    "build": "1.52.0-alpha",
+    "surfaceHash": "8ada1d337da6472ba00b52f94039bbc2a14733a4b5f80c179445488ad7976a67"
   }
 }

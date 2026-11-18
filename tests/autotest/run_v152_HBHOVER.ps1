@@ -15,6 +15,9 @@
     C  DRAGLINT_HOVER_SETBY_MAX_ROUTINES=1 on scData.GData: state = budget-exceeded, the md says
        "budget exceeded"; writers still equal check-init's (the events are complete, only the verdict
        is not). Control: A (no override) is NOT budget-exceeded.
+    C5 (INT11, HBFIX H3 in the hover) DRAGLINT_HOVER_SETBY_MAX_SECONDS=0.000001 on scData.GData: the
+       hover's wall-clock cap (default HOVER_SETBY_MAX_SECONDS = 5 s) stops the solve -> state
+       budget-exceeded, budget.timed_out true. Control: A (no override) is not timed out.
     D  suData.GUnk: verdict UNKNOWN-CALLEE in json and in the md line.
     E  a routine (scWork.Level1) has NO set_by key (control: A has one).
     F  md of scData.GData lists the writer routine on a "Set by:" line.
@@ -102,6 +105,11 @@ Check 'C1 budget-exceeded state' ((Has $hc 'set_by') -and ($hc.set_by.state -ceq
 Check 'C2 md says budget exceeded' ($mdc -match 'budget exceeded') ''
 Check 'C3 writers still equal check-init' ((Has $hc 'set_by') -and ((WritersText $hc.set_by.writers) -ceq (WritersText $ci.writers))) ''
 Check 'C4 control: no override is not budget-exceeded' ((Has $h 'set_by') -and ($h.set_by.state -cne 'budget-exceeded')) ''
+$env:DRAGLINT_HOVER_SETBY_MAX_SECONDS = '0.000001'
+try { $hs = HoverJson 'scData.GData' $cc } finally { $env:DRAGLINT_HOVER_SETBY_MAX_SECONDS = $null }
+Check 'C5 max-seconds cap: budget-exceeded' ((Has $hs 'set_by') -and ($hs.set_by.state -ceq 'budget-exceeded')) $(if (Has $hs 'set_by') { $hs.set_by.state })
+Check 'C5 max-seconds cap: budget.timed_out' ((Has $hs 'set_by') -and ($hs.set_by.budget.timed_out -eq $true)) $(if (Has $hs 'set_by') { $hs.set_by.budget | ConvertTo-Json -Compress })
+Check 'C5 control: no override is not timed out' ((Has $h 'set_by') -and ($h.set_by.budget.timed_out -ne $true)) ''
 
 # ---- D: UNKNOWN-CALLEE
 $hd = HoverJson 'suData.GUnk' $su

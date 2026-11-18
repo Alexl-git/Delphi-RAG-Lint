@@ -19,7 +19,7 @@ Ask it before adding an Assigned guard or reordering initialization: it names th
 ## How to run it
 
 ```text
-drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--explain] [--max-routines N]
+drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--explain] [--max-routines N] [--max-seconds S]
 ```
 
 Example:
@@ -39,6 +39,7 @@ Full flag list: [check-init in the CLI reference](../cli.md#check-init).
 | `--json` |  |  |  |
 | `--explain` |  |  |  |
 | `--max-routines` | `N` |  |  |
+| `--max-seconds` | `S` |  |  |
 
 ## Where to click
 
@@ -74,7 +75,7 @@ target: such a writer is listed as `assign-nil  (does not count)`.
 ### Running it
 
 ```text
-drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--explain] [--max-routines N]
+drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--explain] [--max-routines N] [--max-seconds S]
 ```
 
 * `<QName>` is `Unit.GVar`, `Unit.TClass.ClassVar` or `Unit.TClass.FField`. With only `--at`, the
@@ -86,12 +87,18 @@ drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--
 * `--explain` adds the root chain and the `reasons:` line under every use.
 * `--max-routines N` caps the routines analysed (default 2000). When the cap is hit the answer is
   MAY-BE-UNSET with reason `budget` and `budget.exhausted` is true.
+* `--max-seconds S` caps the wall clock of one query (default 60; decimals allowed; `0` = no cap).
+  A query the cap stops is never SET: it answers MAY-BE-UNSET with reason `budget`, the limit
+  `stopped-after <S>s`, a summary starting `(stopped after S s`, and `budget.timed_out` and
+  `budget.exhausted` true. A large project's widely used global can take minutes uncapped
+  (measured: up to 11 min on a 2600-unit client), so the cap is on by default.
 * `--json` prints one object: `target`, `verdict`, `proven`, `scope`, `summary`, `reasons`,
   `uses[]` (`file`, `line`, `col`, `routine`, `verdict`, `reasons`, `why`, `witness[]`),
-  `writers[]` (`how`, `resolved`, `counts`, `fired_by`, `callers`), `roots`, `limits`, `budget`.
-* MCP: the tool `check_init` takes `target` or `at`, `explain`, `max_routines`, `db` and returns the
+  `writers[]` (`how`, `resolved`, `counts`, `fired_by`, `callers`), `roots`, `limits`, `budget` (`routines`, `ms`, `exhausted`, `max_s`, `timed_out`).
+* MCP: the tool `check_init` takes `target` or `at`, `explain`, `max_routines`, `max_seconds`, `db` and returns the
   same JSON.
 * IDE: Analyze > Check Initialization of Identifier at Cursor... (also in the editor context menu) runs the same engine on the identifier under the caret.
+* Hover: the `Set by:` section of a variable or field hover runs the same engine with a smaller budget -- 200 routines and 5 s wall clock (environment variables `DRAGLINT_HOVER_SETBY_MAX_ROUTINES` / `DRAGLINT_HOVER_SETBY_MAX_SECONDS`); a capped solve shows `budget exceeded`.
 
 ### An answer: a read that runs before its writer
 
@@ -167,6 +174,17 @@ limits: instance-by-constructors
 [exit 1]
 ```
 
+Writers of a field include a write through a property whose write accessor IS the field
+(`property Number: Integer read FNumber write FNumber`; `Item.Number:= 5`), listed at the property
+write; a read of such a property (`read FNumber`) is a use of the field. A write through a setter
+method counts through the call to the setter. `X.Number:= ..` whose receiver type the index could
+not resolve is a soft writer (the field is then never NEVER-SET).
+
+A component field streamed from the form file is set by the inherited form constructor: its uses
+outside a constructor are judged as if a constructor set it (not when a constructor calls
+`CreateNew`). A read through ANOTHER object (`Other.FField`) is proven only by the constructor
+model; a write of Self earlier in the same routine does not count for it (`receiver-unproven`).
+
 A MAY answer for a field also lists the writer routines in the verdict line, each marked
 `(constructor)` or `(not called by every constructor)`, so you can see where the value comes from
 even when it is not proven.
@@ -196,7 +214,7 @@ has them in `reasons`). The list is closed and appended to only; tools branch on
 | `unreliable-order` | the initialization order depends on a conditional or include-borne `uses` entry |
 | `multi-program` | the target is judged in more than one program and not every one proves SET |
 | `cfg-skipped` | a routine on the path holds `goto`, a label or `asm` and was not analysed |
-| `budget` | the `--max-routines` cap ran out before the use was proven |
+| `budget` | the `--max-routines` cap or the `--max-seconds` wall-clock cap ran out before the use was proven |
 | `guarded-test` | the use is the operand of an `Assigned` / `<> nil` test (it is a guard, not a dereference) |
 | `relied-on-handler-order` | see below |
 | `unknown-callee` | a call on the path has no source in the index and nobody recorded whether it reads or sets the target (headline `UNKNOWN-CALLEE`) |
@@ -275,6 +293,8 @@ sharp than it looks", never "wrong":
 | `instance-by-constructors` | a field answer rests on the constructor model, not on tracking each object |
 | `use-after-free-not-judged <file>:<line>` | names a `:= nil` / free writer of the field; a use after it is not judged |
 | `unknown-callee` | a call on the path has no source in the index; the summary starts `UNKNOWN-CALLEE:` and names it (does it set the target by reference?) |
+| `stopped-after <S>s` | the `--max-seconds` cap stopped the query; the verdict is never SET |
+| `no-judged-use` | the answer is SET over ZERO judged uses: nothing reads the target, so the SET says nothing about a read (the summary says so too) |
 
 Not modelled (a verdict stays MAY, it is never wrongly SET in the test fixtures): `Self` handed
 out by a method called before the write; a use reached from a destructor's callees; an ancestor

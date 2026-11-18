@@ -246,7 +246,7 @@ Described in [Run AST Checks](features/run-ast-checks.md).
 Answers whether a variable or field is set before a given use on every execution (SET / NEVER-SET / MAY-BE-UNSET).
 
 ```text
-drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--explain] [--max-routines N]
+drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--explain] [--max-routines N] [--max-seconds S]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -256,6 +256,7 @@ drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--
 | `--json` |  |  |  |
 | `--explain` |  |  |  |
 | `--max-routines` | `N` |  |  |
+| `--max-seconds` | `S` |  |  |
 
 Described in [check-init](features/check-init.md).
 

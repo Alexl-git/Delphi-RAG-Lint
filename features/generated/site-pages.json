@@ -84,7 +84,7 @@
     "version": "1.51.1-alpha"
   },
   "features/check-init.md": {
-    "hash": "e55ce69e98388a0ca23a5c7ace22ff58b8343931f4fdf7a72a31fc00176e47ba",
+    "hash": "946d2aba8eec0c45cd481e8c839136f2a6bd0d534d49d3fe62fc160a054bdea7",
     "version": "1.52.0-alpha"
   },
   "features/circular-dependency-report.md": {

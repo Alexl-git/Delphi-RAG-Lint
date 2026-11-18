@@ -973,6 +973,7 @@ begin
         + '"at":{"type":"string","description":"file:line[:col] of a use; used when target is absent"},'
         + '"explain":{"type":"boolean","description":"Add the roots and per-use reasons (optional, default false)"},'
         + '"max_routines":{"type":"integer","description":"Most routines analysed; 0 or absent = the default budget"},'
+        + '"max_seconds":{"type":"number","description":"Wall-clock cap in seconds; absent = 60, 0 = no cap. A capped answer is never SET (budget.timed_out)"},'
         + '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' + '}}'));
   Tools.AddElement(ToolDescriptor(
       'get_implementors', 'The interface report: for an interface, the classes implementing it (directly, '
@@ -1777,6 +1778,14 @@ begin
         SendError(AId, JSONRPC_INVALID_PARAMS, 'check_init: max_routines needs a whole number >= 0');
         Exit;
       end;
+      { v152 HBFIX H3 (INT11): as check-init --max-seconds -- absent = the default cap, 0 = no cap. }
+      var CiMaxS: Double:= 0;
+      if (Args.GetValue('max_seconds') <> nil) and not (TryStrToFloat(Args.GetValue('max_seconds').Value, CiMaxS,
+        TFormatSettings.Invariant) and (CiMaxS >= 0)) then
+      begin
+        SendError(AId, JSONRPC_INVALID_PARAMS, 'check_init: max_seconds needs a number >= 0 (0 = no cap)');
+        Exit;
+      end;
       var CiStore:= ResolveStore(Args); { sets FCallNote; the same read-only store every other tool reads }
       if CiStore = nil then
       begin
@@ -1790,6 +1799,7 @@ begin
         else if Length(FDbPaths) > 0 then CiDb:= FDbPaths[0];
         var CiOpts:= Default(THbOptions);
         CiOpts.MaxRoutines:= if CiMax = 0 then HB_DEFAULT_MAX_ROUTINES else CiMax;
+        CiOpts.MaxSeconds:= if Args.GetValue('max_seconds') = nil then 0 else if CiMaxS <= 0 then -1 else CiMaxS;
         CiOpts.Explain:= (Args.GetValue('explain') <> nil) and SameText(Args.GetValue('explain').Value, 'true');
         ResultText:= HbAnswerJson(CheckInit(CiDb, CiTarget, CiAt, CiOpts));
       except

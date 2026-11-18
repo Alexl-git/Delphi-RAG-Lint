@@ -77,6 +77,11 @@ const
   /// DRAGLINT_HOVER_SETBY_MAX_ROUTINES (a whole number &gt;= 1).</summary>
   HOVER_SETBY_MAX_ROUTINES = 200;
 
+  /// <summary>Wall-clock cap in seconds (check-init --max-seconds) for the hover's 'Set by:' solve;
+  /// a hover must not wait the verb's 60 s default. A capped solve shows state budget-exceeded.
+  /// Override: environment variable DRAGLINT_HOVER_SETBY_MAX_SECONDS (a number &gt; 0).</summary>
+  HOVER_SETBY_MAX_SECONDS = 5;
+
   /// <summary>Writer rows the hover card shows before 'Set by: and N more' (plan D5).</summary>
   HOVER_SETBY_ROWS = 5;
 
@@ -131,7 +136,8 @@ function AssembleHover(const AStore: ISymbolStore; const ASym: TSymbol;
 /// <para>The JSON `set_by` object: state (listed | never-set | budget-exceeded | error), verdict
 /// (SET, NEVER-SET, MAY-BE-UNSET, UNKNOWN-CALLEE), proven, summary, writers (byte-equal to
 /// `check-init --json` writers), shown (rows on the card), budget {routines, ms, exhausted, max}.</para>
-/// <para>Budget: HOVER_SETBY_MAX_ROUTINES CFGs (env DRAGLINT_HOVER_SETBY_MAX_ROUTINES overrides).
+/// <para>Budget: HOVER_SETBY_MAX_ROUTINES CFGs (env DRAGLINT_HOVER_SETBY_MAX_ROUTINES overrides) and
+/// HOVER_SETBY_MAX_SECONDS wall clock (env DRAGLINT_HOVER_SETBY_MAX_SECONDS overrides).
 /// Exhausted -&gt; state budget-exceeded: the writers are still complete (they are events, not the
 /// solve); only the verdict is unproven.</para>
 /// <para>Cached per index file + write time + QName + budget, so a re-hover is free and a reindex
@@ -257,6 +263,12 @@ begin
   if Result < 1 then Result:= HOVER_SETBY_MAX_ROUTINES;
 end;
 
+function SetByMaxSeconds: Double;
+begin
+  if not TryStrToFloat(GetEnvironmentVariable('DRAGLINT_HOVER_SETBY_MAX_SECONDS'), Result,
+    TFormatSettings.Invariant) or (Result <= 0) then Result:= HOVER_SETBY_MAX_SECONDS;
+end;
+
 { One card row per writer: 'Set by: Unit.Routine (File.pas:12, assign; fired by Form.Btn.OnClick)'. }
 function SetByRow(const pW: TJSONObject): string;
 begin
@@ -316,7 +328,10 @@ begin
     if Writers.Count > Shown then
       Result.Lines:= Result.Lines + [Format('Set by: and %d more (check-init %s lists all)',
         [Writers.Count - Shown, pAnswer.Target.QName])];
-    if pAnswer.Budget.Exhausted then
+    if pAnswer.Budget.TimedOut then
+      Result.Lines:= Result.Lines + [Format('Set by: budget exceeded after %s s -- the writers are complete, the verdict is not proven',
+        [FloatToStr(pAnswer.Budget.MaxSeconds, TFormatSettings.Invariant)])]
+    else if pAnswer.Budget.Exhausted then
       Result.Lines:= Result.Lines + [Format('Set by: budget exceeded after %d routines -- the writers are complete, the verdict is not proven',
         [pAnswer.Budget.Routines])];
   finally
@@ -330,8 +345,10 @@ begin
   var DbPath: string:= StoreDbPath(AStore);
   if (DbPath = '') or not TFile.Exists(DbPath) then Exit;
   var MaxR: Integer:= SetByMaxRoutines;
-  var Key: string:= Format('%s|%s|%s|%d', [LowerCase(DbPath),
-    FormatDateTime('yyyymmddhhnnsszzz', TFile.GetLastWriteTime(DbPath)), ASym.QualifiedName, MaxR]);
+  var MaxS: Double:= SetByMaxSeconds;
+  var Key: string:= Format('%s|%s|%s|%d|%s', [LowerCase(DbPath),
+    FormatDateTime('yyyymmddhhnnsszzz', TFile.GetLastWriteTime(DbPath)), ASym.QualifiedName, MaxR,
+    FloatToStr(MaxS, TFormatSettings.Invariant)]);
   var Entry: TSetByEntry;
   TMonitor.Enter(GSetByLock);
   try
@@ -339,6 +356,7 @@ begin
     begin
       var Opt: THbOptions:= Default(THbOptions);
       Opt.MaxRoutines:= MaxR;
+      Opt.MaxSeconds:= MaxS;
       try
         Entry:= BuildSetBy(CheckInit(DbPath, ASym.QualifiedName, '', Opt), MaxR);
       except
