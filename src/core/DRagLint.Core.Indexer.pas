@@ -726,6 +726,7 @@ uses
   , DRagLint.Parser.DFMProps       { 151 ST: dfm_properties producer (lane Y2) }
   , DRagLint.Index.CommentFacts    { 151 ST: comment_facts producer (lane W1) }
   , DRagLint.Core.ControlChannel   { 1.40 heartbeat: BeatProgress per indexed file }
+  , DRagLint.Core.LintBudget       { 1.52 BUDGET: IsNearParseLimit / ParseLimitWarning }
   , System.RegularExpressions      { 150 EX3: ReadDprojUnitScopes }
   , DRagLint.Preprocess.Lexer      { 150 PP: LexDirectives for the pp_directives rows }
   , System.Math                    { 150 PP: InRange }
@@ -1917,6 +1918,7 @@ begin
       Writeln(Format('  SKIP %s: %d KB exceeds parse limit (%d KB)', [AFilePath, FileSize div 1024, FWalkFilter.MaxFileKB]));
       Exit;
     end;
+    if IsNearParseLimit(FileSize, FWalkFilter.MaxFileKB) then Writeln(ParseLimitWarning(AFilePath, FileSize, FWalkFilter.MaxFileKB));  { 1.52 BUDGET: warn within 10% of the limit }
   end;
   { STAMP FAST PATH (2026-10-14). The up-to-date test below needs the file's
     SHA, so every run read and hashed every file of the scope -- 1.3 s of a
