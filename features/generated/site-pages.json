@@ -920,8 +920,8 @@
     "version": "1.51.1-alpha"
   },
   "features/usages.md": {
-    "hash": "9af1049011ef0fceab3a24f3fa66dd8c06ae922f70daeb6d545b022c3c86242a",
-    "version": "1.51.1-alpha"
+    "hash": "4e26a5d696487b742df902dd7279a84c44603c690d83f8952baf1ddf5040f702",
+    "version": "1.52.0-alpha"
   },
   "features/uses-audit-interface-impl-moves-unused-this-unit.md": {
     "hash": "a0aa814e26a7e9f7db91203d9e415aa5416a31fc81821de9eeb76c09e48d1317",

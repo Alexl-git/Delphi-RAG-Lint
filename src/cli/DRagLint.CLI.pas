@@ -10230,7 +10230,7 @@ begin
   begin
     if HasPosition then
     begin
-      for DbPath in PathsToScan do
+      for DbPath in WithoutLibraryDbs(PathsToScan) do { INT8: bind in this project's index, not a library's }
         if TFile.Exists(DbPath) then
         begin
           BindDb:= DbPath;

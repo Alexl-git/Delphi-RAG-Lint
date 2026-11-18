@@ -1203,6 +1203,8 @@ type
     function Loc(const pFrame: TWalkFrame; const pNode: TTSNode): string;
     function NewEnv: TWalkEnv;
     function ResolveRoutine(const pName, pFromPath: string; const pCls: string = ''): TRoutineInfo;
+    function ReceiverOwner(const pLhs: TTSNode; const pFrame: TWalkFrame; out pKnown: Boolean): string;
+    function ResolveMember(const pName, pOwner: string): TRoutineInfo;
     function QualifyHandler(const pText, pFromPath: string; const pCls: string = ''): string;
     function ConstDecl(const pName, pFromPath: string; out pFile: TWalkFile): TTSNode;
     function IsMenuTypedForeign(const pIdent, pFromPath: string; pUnknown: Boolean = True): Boolean;
@@ -1663,6 +1665,88 @@ begin
     + 'WHERE s.name = :n COLLATE NOCASE AND s.impl_start_line > 0 AND s.kind IN (' + ROUTINE_KINDS + ') '
     + 'ORDER BY (lower(s.qualified_name) = :c) DESC, (lower(f.path) = :f) DESC, s.id LIMIT 1',
     [pName, LowerCase(pCls + '.' + pName), LowerCase(pFromPath)]);
+  try
+    if not QR.Eof then
+    begin
+      Result.Found:= True;
+      Result.QName:= QR.FieldByName('q').AsString;
+      Result.Path := QR.FieldByName('p').AsString;
+      Result.Line := QR.FieldByName('l').AsInteger;
+    end;
+  finally
+    QR.Free;
+  end;
+  FRoutines.Add(Key, Result);
+end;
+
+{ INT8 (1.52 BK-TAILS-LSP): the owner a dotted call `X.Name(..)` runs a member of, so the
+  walk does not take ANY routine called Name (`Parent.Remove(Item)` walked an unrelated
+  TBag.Remove). pKnown = False: the receiver cannot be typed here (an expression, an
+  unknown identifier, a generic type) -- the caller keeps the by-name lookup. pKnown = True
+  with '': the receiver is a menu node or of a type the index does not declare (the VCL's
+  TMenuItem): no project routine runs. Otherwise the qualified class / record / interface /
+  unit named by Self, the receiver's declared type, or the receiver itself. }
+function TWalkCore.ReceiverOwner(const pLhs: TTSNode; const pFrame: TWalkFrame; out pKnown: Boolean): string;
+var
+  QV, QT: TFDQuery;
+  Ident, TypeText: string;
+  V: TMValue;
+begin
+  Result:= '';
+  pKnown:= False;
+  if pLhs.NodeType <> 'identifier' then Exit;
+  Ident:= Text(pFrame, pLhs);
+  if SameText(Ident, 'Self') then
+  begin
+    pKnown:= pFrame.Cls <> '';
+    Exit(pFrame.Cls);
+  end;
+  if pFrame.Env.Vars.TryGetValue(LowerCase(Ident), V) and (V.Kind = mvNode) then
+  begin
+    pKnown:= True;
+    Exit;
+  end;
+  TypeText:= Ident; { a type or unit name used as the receiver (a class method, a unit routine) }
+  QV:= Q('SELECT s.signature AS g FROM symbols s JOIN files f ON f.id = s.file_id '
+    + 'WHERE s.name = :n COLLATE NOCASE AND s.kind IN (''field'',''var'',''local_var'',''component'',''param'') '
+    + 'ORDER BY (lower(f.path) = :f) DESC, (lower(s.qualified_name) = :c) DESC, s.id LIMIT 1',
+    [Ident, LowerCase(pFrame.F.Path), LowerCase(pFrame.Cls + '.' + Ident)]);
+  try
+    if not QV.Eof then TypeText:= QV.FieldByName('g').AsString.Trim;
+  finally
+    QV.Free;
+  end;
+  if not TRegEx.IsMatch(TypeText, '^[A-Za-z_][\w.]*$') then Exit;
+  pKnown:= True;
+  QT:= Q('SELECT s.qualified_name AS q FROM symbols s JOIN files f ON f.id = s.file_id '
+    + 'WHERE s.name = :n COLLATE NOCASE AND s.kind IN (''class'',''record'',''interface'',''unit'') '
+    + 'ORDER BY (lower(f.path) = :f) DESC, s.id LIMIT 1', [LastSegment(TypeText), LowerCase(pFrame.F.Path)]);
+  try
+    if not QT.Eof then Result:= QT.FieldByName('q').AsString;
+  finally
+    QT.Free;
+  end;
+end;
+
+{ The implemented routine pName of pOwner (a qualified class / record / interface / unit)
+  or, for a class, of its nearest indexed ancestor (type_ancestors). Not found = Found False. }
+function TWalkCore.ResolveMember(const pName, pOwner: string): TRoutineInfo;
+var
+  QR : TFDQuery;
+  Key: string;
+begin
+  Key:= LowerCase(pName + '|@' + pOwner);
+  if FRoutines.TryGetValue(Key, Result) then Exit;
+  Result:= Default(TRoutineInfo);
+  QR:= Q('WITH RECURSIVE anc(id, depth) AS ('
+    + 'SELECT id, 0 FROM symbols WHERE qualified_name = :o COLLATE NOCASE AND kind IN (''class'',''record'',''interface'',''unit'') '
+    + 'UNION SELECT ta.ancestor_symbol_id, anc.depth + 1 FROM type_ancestors ta JOIN anc ON ta.symbol_id = anc.id '
+    + 'WHERE ta.ancestor_symbol_id IS NOT NULL AND anc.depth < 32) '
+    + 'SELECT s.qualified_name AS q, f.path AS p, s.impl_start_line AS l FROM anc JOIN symbols c ON c.id = anc.id '
+    + 'JOIN symbols s ON s.name = :n COLLATE NOCASE AND lower(s.qualified_name) = lower(c.qualified_name) || ''.'' || lower(s.name) '
+    + 'JOIN files f ON f.id = s.file_id '
+    + 'WHERE s.impl_start_line > 0 AND s.kind IN (' + ROUTINE_KINDS + ') ORDER BY anc.depth, s.id LIMIT 1',
+    [pOwner, pName]);
   try
     if not QR.Eof then
     begin
@@ -2185,8 +2269,15 @@ begin
     Result.Path:= pFrame.F.Path;
     Exit;
   end;
-  { a bare call inside a method names a method of that class first }
-  Info:= ResolveRoutine(Name, pFrame.F.Path, if E.NodeType = 'identifier' then pFrame.Cls else '');
+  { a dotted call runs a member of its receiver's type (INT8): resolved by that owner,
+    never by the bare name when the receiver is typed }
+  var Known: Boolean:= False;
+  var Owner: string:= '';
+  if E.NodeType = 'exprDot' then Owner:= ReceiverOwner(E.ChildByField('lhs'), pFrame, Known);
+  { untyped: by name -- a bare call inside a method names a method of that class first }
+  Info:= if not Known then ResolveRoutine(Name, pFrame.F.Path, if E.NodeType = 'identifier' then pFrame.Cls else '')
+         else if Owner <> '' then ResolveMember(Name, Owner)
+         else Default(TRoutineInfo);
   if not Info.Found then Exit;
   Result:= InvokeRoutine(Info, Vals, if pFrame.Site <> '' then pFrame.Site else Loc(pFrame, pNode), pFrame.Derived, pFrame.Depth + 1);
 end;
