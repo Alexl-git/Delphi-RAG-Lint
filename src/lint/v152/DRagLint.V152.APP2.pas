@@ -47,12 +47,13 @@ type
 
 implementation
 
-{ The lane's helpers live in DRagLint.V152.APP2.Support; name it in an
-  implementation uses clause here once it declares something. }
+uses
+  DRagLint.V152.APP2.Support
+  ;
 
-class procedure TV152APP2Rules.Catalog(const ADecls: TList<TV151RuleDecl>);  // dl:ok unused-parameter@8dce -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)
+class procedure TV152APP2Rules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
-  { no rules yet }
+  ADecls.Add(V151Host(APP2_RULE_UI_CALL));
 end;
 
 class function TV152APP2Rules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@9953 -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)
@@ -70,9 +71,10 @@ begin
   Result:= nil;
 end;
 
-class function TV152APP2Rules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@1d9e -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)
+class function TV152APP2Rules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
 begin
   Result:= nil;
+  if ACtx.Wants(APP2_RULE_UI_CALL) then Result:= TApp2CrossUnit.Run(ACtx.FilePaths, ACtx.ProjectPath);
 end;
 
 end.
