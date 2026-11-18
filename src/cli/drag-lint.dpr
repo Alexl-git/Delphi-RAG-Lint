@@ -268,6 +268,7 @@ uses
   DRagLint.MCP.Server in '..\mcp\DRagLint.MCP.Server.pas',
   DRagLint.MCP.ClientConfig in '..\mcp\DRagLint.MCP.ClientConfig.pas',
   DRagLint.LSP.Server in '..\lsp\DRagLint.LSP.Server.pas',
+  DRagLint.LSP.Deferred in '..\lsp\DRagLint.LSP.Deferred.pas',
   DRagLint.Core.LiveDocs in '..\core\DRagLint.Core.LiveDocs.pas',
   DRagLint.LSP.Completion in '..\lsp\DRagLint.LSP.Completion.pas',
   DRagLint.LSP.Proxy in '..\lsp\DRagLint.LSP.Proxy.pas',

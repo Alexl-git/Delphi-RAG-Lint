@@ -2178,8 +2178,12 @@ var
   ResultVal: TJSONValue ;
   RObj     : TJSONObject;
   ErrVal   : TJSONValue ;
+  ErrCode  : Integer    ;
   JArr     : TJSONArray ;
   i        : Integer    ;
+const
+  { JSON-RPC "method not found": the only error that means "this engine has no hoverBundle". }
+  cMethodNotFound = -32601;
 begin
   Result:= hvsEmpty;
   AMarkdown:= '';
@@ -2189,9 +2193,16 @@ begin
   try
     if AResp is not TJSONObject then Exit;
 
-    { -32601 from an older engine: latch, and never ask again this session. }
+    { -32601 from an older engine: latch, and never ask again this session. Any other
+      error (e.g. -32800 cancelled) answers this hover only -- never latch on it (1.52 ASYNC). }
     if (AResp as TJSONObject).TryGetValue<TJSONValue>('error', ErrVal) and (ErrVal <> nil) then
     begin
+      if not ((ErrVal is TJSONObject) and (ErrVal as TJSONObject).TryGetValue<Integer>('code', ErrCode)
+              and (ErrCode = cMethodNotFound)) then
+      begin
+        DLT('hover', 'hoverBundle error reply (not -32601) -- this hover only, bundle stays on');
+        Exit(hvsEmpty);
+      end;
       FBundleUnsupported:= True;
       DLT('hover', 'hoverBundle unsupported by this engine -- plain hover for the rest of the session');
       Exit(hvsUnsupported);
