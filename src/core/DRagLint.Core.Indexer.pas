@@ -2104,7 +2104,7 @@ begin
     if (HostExt = '.pas') or (HostExt = '.dpr') or (HostExt = '.dpk') then
     begin
       // 149 EX2 (F4): drop the uses-list placeholders, record the include facts.
-      DropIncludePlaceholders(IncSites, IncInUses, ParseRes.UsesEntries);
+      DropIncludePlaceholders(IncSites, IncInUses, ParseBytes, ParseRes.UsesEntries);
       ParseRes.Includes:= BuildFileIncludeRows(IncSites, IncInUses, AFilePath, ParseRes.ImplementationLine);
       var IncRows: TArray<TUnitUse>:= ExtractIncludeUses(IncSites, Parser, AFilePath, ParseRes.ImplementationLine, IncInUses);
       if Length(IncRows) > 0 then ParseRes.UsesEntries:= ParseRes.UsesEntries + IncRows;

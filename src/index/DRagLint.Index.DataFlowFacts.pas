@@ -123,6 +123,7 @@ implementation
 
 uses
   System.Generics.Defaults
+  , DRagLint.Core.Encoding { 1.52 EXTGAPS2: data_flows positions are refs' CHARACTER columns }
   , DRagLint.Analysis.Cfg
   , DRagLint.Analysis.DataFlow
   , DRagLint.Analysis.Flow.Lattices
@@ -629,7 +630,7 @@ begin
       RV.Kind    := vkLocal;
       RV.TypeText:= Trim(Text(N.ChildByField('type')));
       RV.DeclLine:= Integer(IdN.StartPoint.Row) + 1;
-      RV.DeclCol := Integer(IdN.StartPoint.Column) + 1;
+      RV.DeclCol := Utf8ByteColToCharCol(FSrc, IdN.StartByte, IdN.StartPoint.Column) + 1;
       FVars.Add(RV);
     end;
   end;
@@ -832,7 +833,7 @@ begin
   for E in AV.May do
   begin
     T:= E shr 1;
-    AddRow(AKind, Integer(APos.StartPoint.Row) + 1, Integer(APos.StartPoint.Column) + 1, AIndex, AName, ARecv,
+    AddRow(AKind, Integer(APos.StartPoint.Row) + 1, Utf8ByteColToCharCol(FSrc, APos.StartByte, APos.StartPoint.Column) + 1, AIndex, AName, ARecv,
       T, (E and 1) = 1, FInsensitive or not SetHas(AV.Must, T));
   end;
 end;
@@ -862,7 +863,7 @@ begin
   if FRecording and (not ASite.IsNull) then
   begin
     L:= Integer(ASite.StartPoint.Row) + 1;
-    C:= Integer(ASite.StartPoint.Column) + 1;
+    C:= Utf8ByteColToCharCol(FSrc, ASite.StartByte, ASite.StartPoint.Column) + 1;
     if (FSiteLine[ASlot] = 0) or (L < FSiteLine[ASlot]) or ((L = FSiteLine[ASlot]) and (C < FSiteCol[ASlot])) then
     begin
       FSiteLine[ASlot]:= L;
@@ -920,7 +921,7 @@ begin
   if Slot >= 0 then Exit(ReadSlot(St, Slot));
   if FFields.ContainsKey(Nm) then Exit(TokVal(Tok(DF_SRC_FIELD, -1, 0, 0, Text(N))));
   if FGlobals.ContainsKey(Nm) then Exit(TokVal(Tok(DF_SRC_GLOBAL, -1, 0, 0, Text(N))));
-  Result:= TokVal(Tok(DF_SRC_REF, -1, Integer(N.StartPoint.Row) + 1, Integer(N.StartPoint.Column) + 1, Text(N)));
+  Result:= TokVal(Tok(DF_SRC_REF, -1, Integer(N.StartPoint.Row) + 1, Utf8ByteColToCharCol(FSrc, N.StartByte, N.StartPoint.Column) + 1, Text(N)));
 end;
 
 function TCollector.EvalDot(var St: TTaintVal; const N: TTSNode): TExprVal;  // dl:ok too-many-exit-points@49b8 -- one early Exit per receiver shape (Self, local, member ref)
@@ -935,7 +936,7 @@ begin
   begin
     if R.IsNull or (R.NodeType <> 'identifier') then Exit(Eval(St, R));
     if FFields.ContainsKey(LowerCase(Text(R))) then Exit(TokVal(Tok(DF_SRC_FIELD, -1, 0, 0, Text(R))));
-    Exit(TokVal(Tok(DF_SRC_REF, -1, Integer(R.StartPoint.Row) + 1, Integer(R.StartPoint.Column) + 1, Text(R))));
+    Exit(TokVal(Tok(DF_SRC_REF, -1, Integer(R.StartPoint.Row) + 1, Utf8ByteColToCharCol(FSrc, R.StartByte, R.StartPoint.Column) + 1, Text(R))));
   end;
   LV:= Eval(St, L);
   Member:= '';
@@ -946,7 +947,7 @@ begin
   if SlotOf(Base) >= 0 then Exit(LV);
   if (Member <> '') and RefShapeOk(L, SameText(Text(L), 'Self')) then
   begin
-    Result:= TokVal(Tok(DF_SRC_REF, -1, Integer(R.StartPoint.Row) + 1, Integer(R.StartPoint.Column) + 1, Text(R)));
+    Result:= TokVal(Tok(DF_SRC_REF, -1, Integer(R.StartPoint.Row) + 1, Utf8ByteColToCharCol(FSrc, R.StartByte, R.StartPoint.Column) + 1, Text(R)));
     BN:= LowerCase(Text(Base));
     if ((BN <> '') and (FFields.ContainsKey(BN) or FGlobals.ContainsKey(BN))) or IsHardCastRooted(L) then Result:= ExprUnion(Result, LV); { a cast keeps its operand's taint }
     Exit;
@@ -995,7 +996,7 @@ begin
   if Recv.IsNull and (Length(ArgVals) = 1) and InList(Callee, TAINT_TYPECASTS) then Exit(ArgVals[0]);
   if Recv.IsNull and (Callee = 'exit') then Exit;
   CallLine:= Integer(NameN.StartPoint.Row) + 1;
-  CallCol := Integer(NameN.StartPoint.Column) + 1;
+  CallCol := Utf8ByteColToCharCol(FSrc, NameN.StartByte, NameN.StartPoint.Column) + 1;
   for I:= 0 to High(ArgVals) do RecordDst(DF_DST_ARG, NameN, I, Text(NameN), RecvText, ArgVals[I]);
   { receive: X.Add(e) and friends }
   if (not Recv.IsNull) and InList(Callee, TAINT_RECEIVER_MUTATORS) then
@@ -1381,7 +1382,7 @@ begin
     if L = 0 then
     begin
       L:= Integer(FProc.StartPoint.Row) + 1;
-      C:= Integer(FProc.StartPoint.Column) + 1;
+      C:= Utf8ByteColToCharCol(FSrc, FProc.StartByte, FProc.StartPoint.Column) + 1;
     end;
     for E in St.May[S] do
     begin

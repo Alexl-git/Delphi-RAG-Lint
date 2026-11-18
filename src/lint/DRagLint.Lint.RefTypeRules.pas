@@ -208,6 +208,7 @@ implementation
 uses
   System.Generics.Collections
   , System.StrUtils
+  , DRagLint.Core.Encoding { 1.52 EXTGAPS2: Utf8ByteColToCharCol }
   , System.RegularExpressions
   , FireDAC.Comp.Client
   , FireDAC.Stan.Param
@@ -702,7 +703,7 @@ function TRefTypeScan.FactAt(const ANode: TTSNode; out AFact: TRefFact): Boolean
 begin
   AFact:= Default(TRefFact);
   Result:= (not ANode.IsNull)
-    and FRefs.TryGetValue(PosKey(Integer(ANode.StartPoint.Row) + 1, Integer(ANode.StartPoint.Column) + 1), AFact)
+    and FRefs.TryGetValue(PosKey(Integer(ANode.StartPoint.Row) + 1, Utf8ByteColToCharCol(FSrc, ANode.StartByte, ANode.StartPoint.Column) + 1), AFact)
     and (not AFact.Conflict)
     and SameText(AFact.Name, Text(ANode));
 end;

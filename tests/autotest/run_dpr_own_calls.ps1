@@ -5,7 +5,8 @@
   Fixture tests\fixtures\x4-dpr-calls-150 (folder index into a temp DB; `sql --json` rows are POSITIONAL):
     A1  X4Prog.dpr main block `X4ProgHelper(...)` (line 25)  -> bound to X4Prog.X4ProgHelper.
     A2  X4Lib.dpr  main block `X4LibAdd(1, 2)`    (line 23)  -> bound to X4Lib.X4LibAdd.
-    A3  X4Lib.dpr  exports    `X4LibAdd name ...` (line 20)  -> bound to X4Lib.X4LibAdd.
+    A3  X4Lib.dpr  exports    `X4LibAdd name ...` (line 20)  -> bound to X4Lib.X4LibAdd (1.52 EXTGAPS2: an 'export'
+        ref bound by refs.symbol_id, no call edge).
     A4  find-callers X4ProgHelper is an EXACT caller at X4Prog.dpr:25 (was [name-only]).
     B1  find-deadcode does not list the roots `X4Prog [program]` / `X4Lib [program]`.
     B2  find-deadcode does not list a routine the root calls (X4ProgHelper, X4ProgLocal, X4LibAdd).
@@ -55,7 +56,9 @@ Write-Host "== X4 .dpr own-routine calls + root liveness ($Exe)"
 
 $t = Target 'X4Prog.dpr' 25 'X4ProgHelper'; Check 'A1 program main-block call bound to X4Prog.X4ProgHelper' ($t -eq 'X4Prog.X4ProgHelper') "target=$t"
 $t = Target 'X4Lib.dpr'  23 'X4LibAdd';     Check 'A2 library main-block call bound to X4Lib.X4LibAdd'     ($t -eq 'X4Lib.X4LibAdd') "target=$t"
-$t = Target 'X4Lib.dpr'  20 'X4LibAdd';     Check 'A3 library exports entry bound to X4Lib.X4LibAdd'       ($t -eq 'X4Lib.X4LibAdd') "target=$t"
+$x = Rows ("SELECT s.qualified_name, (SELECT COUNT(*) FROM call_edges ce WHERE ce.ref_id=r.id) FROM refs r JOIN files f ON f.id=r.file_id " +
+           "LEFT JOIN symbols s ON s.id=r.symbol_id WHERE f.path LIKE '%\X4Lib.dpr' AND r.start_line=20 AND r.name_text='X4LibAdd' AND r.kind='export'")
+Check 'A3 library exports entry bound to X4Lib.X4LibAdd, no call edge' (($x.Count -eq 1) -and ($x[0][0] -eq 'X4Lib.X4LibAdd') -and ($x[0][1] -eq 0)) "rows=$($x.Count)"
 $fc = (& $Exe query find-callers --name X4ProgHelper --db $Db 2>$null) -join "`n"
 Check 'A4 find-callers X4ProgHelper: exact caller at X4Prog.dpr:25' (($fc -match 'X4Prog\.dpr:25:') -and ($fc -match '1 caller\(s\) \(1 exact\)')) ($fc -split "`n" | Select-Object -Last 1)
 

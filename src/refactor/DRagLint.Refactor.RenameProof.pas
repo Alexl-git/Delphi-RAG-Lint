@@ -228,6 +228,7 @@ uses
   Data.DB,
   FireDAC.Comp.Client,
   TreeSitter,
+  DRagLint.Core.Encoding, // 1.52 EXTGAPS2: Utf8ByteColToCharCol
   DRagLint.Diagnostics.ParseCache,
   DRagLint.Refactor.TextEdit,
   DRagLint.Storage.SQLite;
@@ -964,6 +965,7 @@ end;
 function TProver.InWith(const pPath: string; pLine, pByteCol: Integer): Boolean;
 var
   Spans: TArray<TWithSpan>;
+  Src: TBytes; { 1.52 EXTGAPS2: spans in CHARACTER columns, the token's index column }
 
   procedure Collect(const pNode: TTSNode);
   begin
@@ -972,9 +974,9 @@ var
     begin
       var S: TWithSpan;
       S.StartLine:= Integer(pNode.StartPoint.Row) + 1;
-      S.StartCol := Integer(pNode.StartPoint.Column) + 1;
+      S.StartCol := Utf8ByteColToCharCol(Src, pNode.StartByte, pNode.StartPoint.Column) + 1;
       S.EndLine  := Integer(pNode.EndPoint.Row) + 1;
-      S.EndCol   := Integer(pNode.EndPoint.Column) + 1;
+      S.EndCol   := Utf8ByteColToCharCol(Src, pNode.EndByte, pNode.EndPoint.Column) + 1;
       Spans:= Spans + [S];
     end;
     for var I:= 0 to pNode.NamedChildCount - 1 do Collect(pNode.NamedChild(I));
@@ -986,6 +988,7 @@ begin
   begin
     Spans:= nil;
     var PF:= TAstParseCache.Get(pPath);
+    Src:= PF.Src;
     if PF.Tree <> nil then Collect(PF.Tree.RootNode);
     FWithCache.Add(Key, Spans);
   end;
@@ -1047,6 +1050,7 @@ function TProver.IsDeclArgName(const pPath: string; pLine, pByteCol: Integer; ou
 var
   Found: Boolean;
   FoundLine: Integer;
+  Src: TBytes; { 1.52 EXTGAPS2: pByteCol is an index (character) column; node columns are bytes }
 
   procedure Walk(const pNode, pParent: TTSNode; pHeaderOf: Integer);
   begin
@@ -1054,7 +1058,7 @@ var
     var SL:= Integer(pNode.StartPoint.Row) + 1;
     var EL:= Integer(pNode.EndPoint.Row) + 1;
     if (pLine < SL) or (pLine > EL) then Exit;
-    if (pNode.NodeType = 'identifier') and (SL = pLine) and (Integer(pNode.StartPoint.Column) + 1 = pByteCol) then
+    if (pNode.NodeType = 'identifier') and (SL = pLine) and (Utf8ByteColToCharCol(Src, pNode.StartByte, pNode.StartPoint.Column) + 1 = pByteCol) then
     begin
       if pParent.IsNull or (pParent.NodeType <> 'declArg') then Exit;
       var TypeNode:= pParent.ChildByField('type');
@@ -1077,6 +1081,7 @@ begin
   Found:= False;
   FoundLine:= 0;
   var PF:= TAstParseCache.Get(pPath);
+  Src:= PF.Src;
   if PF.Tree <> nil then Walk(PF.Tree.RootNode, Default(TTSNode), 0);
   Result:= Found;
   pRoutineLine:= FoundLine;
@@ -1456,13 +1461,15 @@ end;
 { The token each symbol's declaration and implementation header sits on, per file: key 'line:charcol'. }
 procedure TProver.AddDeclTokens(const pSyms: TArray<TSymRow>; pFileId: Int64; pLines: TStringList; pMap: TDeclMap);
 begin
+  { 1.52 EXTGAPS2: a .pas index column is a CHARACTER column; only the DFM parser still stores bytes. }
+  var IsDfm: Boolean:= SameText(ExtractFileExt(FStore.GetFilePath(pFileId)), '.dfm');
   for var S in pSyms do
   begin
     if S.FileId <> pFileId then Continue;
     if InRange(S.Line, 1, pLines.Count) then
     begin
       var L:= pLines[S.Line - 1];
-      var C:= ByteColToCharCol(L, S.Col);
+      var C:= if IsDfm then ByteColToCharCol(L, S.Col) else S.Col;
       if not IsIdentAt(L, S.Name, C) then C:= NameAfterDeclKeywords(L, S.Name, C);
       if C > 0 then pMap.AddOrSetValue(Format('%d:%d', [S.Line, C]), S);
     end;
@@ -1997,7 +2004,8 @@ begin
           Tok.FileId := pFileId;
           Tok.Line   := Line;
           Tok.Col    := Start - LineStart + 1;
-          Tok.ByteCol:= TEncoding.UTF8.GetByteCount(Copy(Text, LineStart, Tok.Col - 1)) + 1;
+          { the INDEX column: characters for .pas (1.52 EXTGAPS2), UTF-8 bytes for the DFM parser }
+          Tok.ByteCol:= if SameText(ExtractFileExt(pPath), '.dfm') then TEncoding.UTF8.GetByteCount(Copy(Text, LineStart, Tok.Col - 1)) + 1 else Tok.Col;
           Tok.Text   := Text;
           Tok.Start  := Start;
           var P:= Start - 1;
@@ -2466,11 +2474,7 @@ begin
         var Target: Int64:= 0;
         var MemberNew: Boolean;
         var Q:= TFDQuery.Create(nil);
-        var SrcLines:= TStringList.Create; { Site.Col is a character column; refs.start_col is the parse's byte column }
         try
-          var SrcText: string;
-          TTextFileFormat.ReadFile(pFile, SrcText);
-          SrcLines.Text:= SrcText;
           Q.Connection:= Conn;
           Q.SQL.Text:= 'SELECT id FROM files WHERE path = :p COLLATE NOCASE';
           Q.ParamByName('p').AsWideString:= ExpandFileName(pFile);
@@ -2501,7 +2505,7 @@ begin
             Q.Close;
             Q.ParamByName('f').AsLargeInt:= Fid;
             Q.ParamByName('l').AsInteger:= Site.Line;
-            Q.ParamByName('c').AsInteger:= TEncoding.UTF8.GetByteCount(Copy(SrcLines[Site.Line - 1], 1, Site.Col - 1)) + 1;
+            Q.ParamByName('c').AsInteger:= Site.Col; { 1.52 EXTGAPS2: refs.start_col is a CHARACTER column, as Site.Col }
             Q.Open;
             var ToTarget:= False;
             var ToOther := False;
@@ -2527,7 +2531,6 @@ begin
               AddRefusal(CRefuseWithUndecided, Site, 'an occurrence under a `with` the resolver did not bind: the target''s surface is not known');
           end;
         finally
-          SrcLines.Free;
           Q.Free;
         end;
       end;

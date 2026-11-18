@@ -158,6 +158,9 @@ type
     Sites: TArray<TUnwithSite>;
     /// <summary>The bytes the file is to hold; nil when no site is a candidate.</summary>
     NewBytes: TBytes;
+    /// <summary>NewBytes in UTF-8 (the form the re-index parses): maps the re-indexed character columns back to
+    /// byte columns for the proof check (1.52 EXTGAPS2).</summary>
+    NewUtf8: TBytes;
     /// <summary>What --apply checks after the rewrite.</summary>
     Proof: TArray<TUnwithProofPoint>;
   end;
@@ -218,7 +221,7 @@ uses
   System.Classes, System.IOUtils, System.Math, System.StrUtils, System.Hash, System.Generics.Collections, System.Generics.Defaults,
   FireDAC.Comp.Client,
   TreeSitter,
-  DRagLint.Core.Model, DRagLint.Core.FileTime,
+  DRagLint.Core.Model, DRagLint.Core.FileTime, DRagLint.Core.Encoding,
   DRagLint.Diagnostics.ParseCache, DRagLint.Storage.SQLite,
   DRagLint.Refactor.TextEdit, DRagLint.Refactor.CompileGate;
 
@@ -371,11 +374,19 @@ begin
 end;
 
 /// <summary>The refs of one file by position, bound row preferred where two share one (`M.Free`: call + member-access).</summary>
-procedure LoadRowsOf(const pStore: ISymbolStore; pFileId: Int64; pRows: TRows; out pHasFacts: Boolean);
+/// <remarks>1.52 EXTGAPS2: index columns are CHARACTER columns; this unit keys by tree-sitter BYTE column, so each
+/// start_col is mapped back to its byte column on pBytes (the UTF-8 form the analysis parsed).</remarks>
+procedure LoadRowsOf(const pStore: ISymbolStore; pFileId: Int64; const pBytes: TBytes; pRows: TRows; out pHasFacts: Boolean);
+const
+  LF = 10;
 var
   Q: TFDQuery;
+  LineStarts: TArray<Integer>;
 begin
   pHasFacts:= False;
+  LineStarts:= [0];
+  for var I: Integer:= 0 to High(pBytes) do
+    if pBytes[I] = LF then LineStarts:= LineStarts + [I + 1];
   if pStore is not TSQLiteSymbolStore then Exit;
   Q:= TFDQuery.Create(nil);
   try
@@ -404,7 +415,9 @@ begin
       R.TypeSymbolId:= Q.FieldByName('type_symbol_id').AsLargeInt;
       R.TypeQName:= Q.FieldByName('type_qname').AsString;
       R.Via:= Q.FieldByName('via').AsString;
-      var Key:= PosKey(Q.FieldByName('start_line').AsInteger, Q.FieldByName('start_col').AsInteger);
+      var Ln: Integer:= Q.FieldByName('start_line').AsInteger;
+      var Key:= PosKey(Ln, if InRange(Ln, 1, Length(LineStarts)) then
+        Utf8CharColToByteCol(pBytes, LineStarts[Ln - 1], Q.FieldByName('start_col').AsInteger) else Q.FieldByName('start_col').AsInteger);
       var Old: TRow;
       if (not pRows.TryGetValue(Key, Old)) or RowIsBetter(R, Old) then pRows.AddOrSetValue(Key, R);
       Q.Next;
@@ -468,7 +481,7 @@ procedure TAnalyzer.LoadRows;
 var
   Has: Boolean;
 begin
-  LoadRowsOf(FStore, FFileId, FRows, Has);
+  LoadRowsOf(FStore, FFileId, FSrc, FRows, Has);
   if not Has then Refuse(CUwNoFacts, 'this DB holds no ref_types (F1): reindex it with this engine');
 end;
 
@@ -1486,6 +1499,7 @@ begin
     SetLength(NewRaw, Out1.Size);
     if Out1.Size > 0 then Move(Out1.Bytes[0], NewRaw[0], Out1.Size);
     pPlan.NewBytes:= pFmt.Encode(TEncoding.UTF8.GetString(NewRaw));
+    pPlan.NewUtf8 := NewRaw;
     { Map every proof point to its position after the rewrite. }
     var NewStarts: TList<Integer>:= TList<Integer>.Create;
     try
@@ -1588,7 +1602,7 @@ var
     var Fid:= pAfter.FindFileIdByPath(pPlan.FilePath);
     Rows:= TRows.Create;
     try
-      if Fid > 0 then LoadRowsOf(pAfter, Fid, Rows, Has);
+      if Fid > 0 then LoadRowsOf(pAfter, Fid, pPlan.NewUtf8, Rows, Has);
       for var PP: TUnwithProofPoint in pPlan.Proof do
       begin
         Inc(Result.ProofPoints);

@@ -2,9 +2,10 @@
   run_exports_clause_refs.ps1 -- wave 150 lane X1 (T2 FOUND): an `exports` clause emits a ref per entry.
 
   Fixture tests\fixtures\x1-exports-150 (folder index into a temp DB, then `sql --json`; rows are POSITIONAL):
-    E1  X1Lib.dpr `exports X1LibAdd name 'x1_lib_add', X1Twice index 2;` -> one 'call' ref per entry
-        (X1LibAdd at line 16, X1Twice at line 17).
-    E2  the X1Twice export ref is bound to uX1LibUnit.X1Twice (call_edges), so find-callers lists it.
+    E1  X1Lib.dpr `exports X1LibAdd name 'x1_lib_add', X1Twice index 2;` -> one 'export' ref per entry
+        (X1LibAdd at line 16, X1Twice at line 17). 1.52 EXTGAPS2 (HB6): kind 'export', was 'call'.
+    E2  the X1Twice export ref is bound to uX1LibUnit.X1Twice (refs.symbol_id) with NO call edge: an export
+        names the routine, it does not call it.
     E3  lint-all unused-public-symbol no longer flags X1Twice.
   RED on the 1.49.0-alpha base build: no ref at lines 16-17; unused-public-symbol flags X1Twice.
   POSITIVE CONTROL: X1Unused (declared, never exported, never called) is STILL flagged by
@@ -42,14 +43,14 @@ function Rows([string]$q) {
 Write-Host "== X1 exports clause refs ($Exe)"
 
 # rows: [0]=kind [1]=name_text [2]=start_line [3]=bound target qname or null
-$r = Rows ("SELECT r.kind, r.name_text, r.start_line, (SELECT s.qualified_name FROM call_edges ce JOIN symbols s ON s.id=ce.target_symbol_id WHERE ce.ref_id=r.id) " +
+$r = Rows ("SELECT r.kind, r.name_text, r.start_line, (SELECT s.qualified_name FROM symbols s WHERE s.id=r.symbol_id), (SELECT COUNT(*) FROM call_edges ce WHERE ce.ref_id=r.id) " +
            "FROM refs r JOIN files f ON f.id=r.file_id WHERE f.path LIKE '%\X1Lib.dpr' AND r.start_line IN (16,17) ORDER BY r.start_line")
 Check 'E1 two refs on the exports lines' ($r.Count -eq 2) "got $($r.Count) row(s)"
-$add = @($r | Where-Object { $_[1] -eq 'X1LibAdd' -and $_[2] -eq 16 -and $_[0] -eq 'call' })
-$twc = @($r | Where-Object { $_[1] -eq 'X1Twice'  -and $_[2] -eq 17 -and $_[0] -eq 'call' })
-Check 'E1 X1LibAdd export -> call ref at line 16' ($add.Count -eq 1)
-Check 'E1 X1Twice export -> call ref at line 17' ($twc.Count -eq 1)
-Check 'E2 X1Twice export bound to uX1LibUnit.X1Twice' ($twc.Count -eq 1 -and $twc[0][3] -eq 'uX1LibUnit.X1Twice') "target=$(if ($twc.Count) { $twc[0][3] })"
+$add = @($r | Where-Object { $_[1] -eq 'X1LibAdd' -and $_[2] -eq 16 -and $_[0] -eq 'export' })
+$twc = @($r | Where-Object { $_[1] -eq 'X1Twice'  -and $_[2] -eq 17 -and $_[0] -eq 'export' })
+Check 'E1 X1LibAdd export -> export ref at line 16' ($add.Count -eq 1)
+Check 'E1 X1Twice export -> export ref at line 17' ($twc.Count -eq 1)
+Check 'E2 X1Twice export bound to uX1LibUnit.X1Twice, no call edge' ($twc.Count -eq 1 -and $twc[0][3] -eq 'uX1LibUnit.X1Twice' -and $twc[0][4] -eq 0) "target=$(if ($twc.Count) { $twc[0][3] })"
 
 $u = Rows "SELECT COUNT(*) FROM refs WHERE name_text='X1Unused'"
 Check 'CONTROL X1Unused has no ref' ($u.Count -eq 1 -and $u[0][0] -eq 0)

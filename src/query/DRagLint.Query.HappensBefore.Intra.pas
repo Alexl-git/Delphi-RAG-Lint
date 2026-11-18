@@ -27,8 +27,8 @@ unit DRagLint.Query.HappensBefore.Intra;
   (Opaque) never marks; a mark inside an anonymous-method body, the right operand of a short-circuit
   `and` / `or`, or a branch of an `if` EXPRESSION never marks (it may not run); a query inside an
   anonymous-method body is InClosure and False (judged as an escaped routine by the solver); an
-  unreachable block reads False. Columns are byte columns of the preprocessed UTF-8 source (equal to
-  character columns on ASCII lines). }
+  unreachable block reads False. Columns are CHARACTER columns, the index's (1.52 EXTGAPS2: node byte
+  columns are mapped through Utf8ByteColToCharCol). }
 
 interface
 
@@ -114,6 +114,7 @@ implementation
 
 uses
   System.Math
+, DRagLint.Core.Encoding
 , System.Generics.Collections
 , DRagLint.Core.Model
 , DRagLint.Analysis.Cfg
@@ -191,8 +192,8 @@ begin
   ER:= Integer(pNode.EndPoint.row);
   if pSite.Col <= 0 then Exit(InRange(Row, SR, ER));  { whole line: the node intersects it }
   Col:= pSite.Col - 1;
-  SC:= Integer(pNode.StartPoint.column);
-  EC:= Integer(pNode.EndPoint.column);
+  SC:= Utf8ByteColToCharCol(FSrc, pNode.StartByte, pNode.StartPoint.column); { 1.52 EXTGAPS2: sites carry index CHARACTER columns }
+  EC:= Utf8ByteColToCharCol(FSrc, pNode.EndByte, pNode.EndPoint.column);
   var AfterStart:= (Row > SR) or ((Row = SR) and (Col >= SC));
   var BeforeEnd:= (Row < ER) or ((Row = ER) and (Col < EC));
   Result:= AfterStart and BeforeEnd;

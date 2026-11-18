@@ -46,7 +46,8 @@ uses
 function RemoveUsesEntry(const AFinding: TLintFinding; ALines: TStringList; AEdits: TList<TTextEdit>): Boolean;
 
 /// <summary>A copy of AFinding whose StartCol / EndCol count CHARACTERS of the decoded
-/// source line, as the text-edit applier does, instead of the UTF-8 BYTES the index stores.</summary>
+/// source line, as the text-edit applier does. Since 1.52 EXTGAPS2 a .pas index column already is one, so a .pas
+/// finding is returned unchanged; a .dfm finding (the DFM parser stores UTF-8 BYTES) is converted.</summary>
 /// <param name="AFinding">A finding on one line (StartLine); its columns are index columns.</param>
 /// <param name="ALines">The file as the applier decodes it (TTextFileFormat.ReadFile).</param>
 /// <returns>AFinding with character columns; unchanged when the line is out of range or pure ASCII.</returns>
@@ -71,7 +72,6 @@ uses
   , System.StrUtils
   , System.RegularExpressions
   , DRagLint.Lint.Autofix
-  , DRagLint.Convert.UsesReconcile
   ;
 
 const
@@ -139,9 +139,11 @@ end;
 function WithCharColumns(const AFinding: TLintFinding; ALines: TStrings): TLintFinding;
 begin
   Result:= AFinding;
+  if not SameText(ExtractFileExt(AFinding.FilePath), '.dfm') then Exit; { 1.52 EXTGAPS2: .pas columns are characters }
   if (AFinding.StartLine < 1) or (AFinding.StartLine > ALines.Count) or (AFinding.EndLine <> AFinding.StartLine) then Exit;
-  Result.StartCol:= CharColumn(ALines[AFinding.StartLine - 1], AFinding.StartCol);
-  Result.EndCol  := CharColumn(ALines[AFinding.StartLine - 1], AFinding.EndCol);
+  var Bytes: TBytes:= TEncoding.UTF8.GetBytes(ALines[AFinding.StartLine - 1]); { a .dfm column counts UTF-8 bytes }
+  Result.StartCol:= TEncoding.UTF8.GetCharCount(Bytes, 0, EnsureRange(AFinding.StartCol - 1, 0, Length(Bytes))) + 1;
+  Result.EndCol  := TEncoding.UTF8.GetCharCount(Bytes, 0, EnsureRange(AFinding.EndCol - 1, 0, Length(Bytes))) + 1;
 end;
 
 function IsUsesKeywordLine(const ALine: string): Boolean;

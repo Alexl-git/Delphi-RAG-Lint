@@ -7644,9 +7644,9 @@ begin
     if not Body.IsNull then
     begin
       St.BodyLine   := Integer(Body.StartPoint.row) + 1;
-      St.BodyCol    := Integer(Body.StartPoint.column) + 1;
+      St.BodyCol    := Utf8ByteColToCharCol(ASrc, Body.StartByte, Body.StartPoint.column) + 1; { 1.52 EXTGAPS2: refs columns are characters }
       St.BodyEndLine:= Integer(Body.EndPoint.row) + 1;
-      St.BodyEndCol := Integer(Body.EndPoint.column) + 1;
+      St.BodyEndCol := Utf8ByteColToCharCol(ASrc, Body.EndByte, Body.EndPoint.column) + 1;
     end;
     { The entities are the named children that are neither the body nor a
       keyword/comment -- `with A, B do` is ONE node with REPEATED entity
@@ -7659,9 +7659,9 @@ begin
       if (T = 'comment') or ((Length(T) > 1) and (T[1] = 'k') and CharInSet(T[2], ['A'..'Z'])) then Continue;
       E        := Default(TWithEntity);
       E.Line   := Integer(C.StartPoint.row) + 1;
-      E.Col    := Integer(C.StartPoint.column) + 1;
+      E.Col    := Utf8ByteColToCharCol(ASrc, C.StartByte, C.StartPoint.column) + 1;
       E.EndLine:= Integer(C.EndPoint.row) + 1;
-      E.EndCol := Integer(C.EndPoint.column) + 1;
+      E.EndCol := Utf8ByteColToCharCol(ASrc, C.EndByte, C.EndPoint.column) + 1;
       ReadWithEntity(C, ASrc, E);
       St.Entities:= St.Entities + [E];
     end;
@@ -12010,6 +12010,18 @@ begin
   FSiteShapesState:= 0;
 
   if ACallRef.NameText = '' then Exit;
+
+  { 1.52 EXTGAPS2 (HB6): an `exports` entry names a routine the way a bare / qualified call does,
+    so it binds by the call ladder -- but identity only (ValueOnly): refs.symbol_id, no call edge. }
+  if SameText(ACallRef.Kind, REF_KIND_EXPORT) then
+  begin
+    var AsCall: TReference:= ACallRef;
+    AsCall.Kind:= REF_KIND_CALL;
+    Result:= ResolveOne(AsCall);
+    Result.RefId    := ACallRef.Id;
+    Result.ValueOnly:= True;
+    Exit;
+  end;
 
   if SameText(ACallRef.Kind, REF_KIND_PROP_SPEC) or SameText(ACallRef.Kind, REF_KIND_REC_FIELD) then
   begin

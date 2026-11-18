@@ -18874,6 +18874,51 @@ begin
     AQ.Close;
   end;
 end;
+{ 1.52 EXTGAPS2: PersistArgUses' and PersistGlobalArgWrites' per-file callee query (LoadArgCalleeRows' AQ). }
+const
+  ARG_CALLEE_SQL = 'SELECT refs.symbol_id, (SELECT ce.target_symbol_id FROM call_edges ce WHERE ce.ref_id = refs.id ' +
+                   'AND ce.confidence = ''certain'') AS tgt, refs.start_line, refs.start_col, refs.name_text ' +
+                   'FROM refs WHERE refs.file_id = :f ORDER BY refs.id';
+
+{ 1.52 EXTGAPS2: the refs predicate both argument passes add: every row of a file that holds an in-scope ref,
+  minus the stale files. Built only from the resolve pass's own ScopeWhere / StaleWhere SQL. }
+function ArgPassFilter(const AScopeWhere, AStaleWhere: string): string;
+begin
+  Result:= '';
+  if AScopeWhere <> '' then
+    Result:= Result + ' AND refs.file_id IN (SELECT DISTINCT refs.file_id FROM refs WHERE ' + AScopeWhere + ')';
+  if AStaleWhere <> '' then Result:= Result + ' AND (' + AStaleWhere + ')';
+end;
+{ APath's source lines, read once per pass into ALines (nil when missing or unreadable). }
+function CachedSourceLines(ALines: TDictionary<string, TArray<string>>; const APath: string): TArray<string>;
+begin
+  if ALines.TryGetValue(APath, Result) then Exit;
+  Result:= nil;
+  try
+    if TFile.Exists(APath) then Result:= TFile.ReadAllLines(APath);
+  except
+    on E: EInOutError do Result:= nil;
+    on E: EEncodingError do Result:= nil;
+  end;
+  ALines.Add(APath, Result);
+end;
+
+{ The routine the callee ref at (ACL, ACC) named ACallee is bound to: its refs.symbol_id, else its certain
+  call edge; 0 when none. The replaced query's WHERE (start_line, start_col, name_text COLLATE NOCASE -- ASCII
+  folding, as SameText) and its first-hit loop, over the same rows in refs.id order. }
+function CalleeTargetAt(ARows: TDictionary<Int64, TArray<TArgCalleeRow>>; ACL, ACC: Integer; const ACallee: string): Int64;
+var
+  AtCallee: TArray<TArgCalleeRow>;
+begin
+  Result:= 0;
+  if not ARows.TryGetValue(ArgRowKey(ACL, ACC), AtCallee) then Exit;
+  for var Row: TArgCalleeRow in AtCallee do
+  begin
+    if not (Row.HasName and SameText(Row.Name, ACallee)) then Continue;
+    if Row.HasSymbol and (Row.SymbolId > 0) then Exit(Row.SymbolId);
+    if Row.HasTarget and (Row.Target <> 0) then Exit(Row.Target);
+  end;
+end;
 { 150-RS2 (2) / 150-RB2-a: persist the var / out ARGUMENT use of a member access. A
   member_accesses 'read' row with no accessor (a field, a unit / class var) that is the WHOLE
   argument of a var (read + write) or out (write) parameter of a resolved call gets
@@ -18902,10 +18947,7 @@ var
 begin
   ACandidates:= 0;
   AStored    := 0;
-  var Filter: string:= '';
-  if AScopeWhere <> '' then
-    Filter:= Filter + ' AND refs.file_id IN (SELECT DISTINCT refs.file_id FROM refs WHERE ' + AScopeWhere + ')';
-  if AStaleWhere <> '' then Filter:= Filter + ' AND (' + AStaleWhere + ')';
+  var Filter: string:= ArgPassFilter(AScopeWhere, AStaleWhere);
   Q    := TFDQuery.Create(nil);
   QTgt := TFDQuery.Create(nil);
   QSig := TFDQuery.Create(nil);
@@ -18915,9 +18957,7 @@ begin
   RowsFile:= 0;
   try
     QTgt.Connection:= AConn;
-    QTgt.SQL.Text  := 'SELECT refs.symbol_id, (SELECT ce.target_symbol_id FROM call_edges ce WHERE ce.ref_id = refs.id ' +
-                      'AND ce.confidence = ''certain'') AS tgt, refs.start_line, refs.start_col, refs.name_text ' +
-                      'FROM refs WHERE refs.file_id = :f ORDER BY refs.id';
+    QTgt.SQL.Text  := ARG_CALLEE_SQL;
     QSig.Connection:= AConn;
     QSig.SQL.Text  := 'SELECT signature FROM symbols WHERE id = :id';
     Upd.Connection := AConn;
@@ -18940,41 +18980,18 @@ begin
     while not Q.Eof do
     begin
       Inc(ACandidates);
-      var Path: string:= FPath.AsString;
-      var Src : TArray<string>;
-      if not Lines.TryGetValue(Path, Src) then
-      begin
-        Src:= nil;
-        try
-          if TFile.Exists(Path) then Src:= TFile.ReadAllLines(Path);
-        except
-          on E: EInOutError do Src:= nil;
-          on E: EEncodingError do Src:= nil;
-        end;
-        Lines.Add(Path, Src);
-      end;
+      var Src: TArray<string>:= CachedSourceLines(Lines, FPath.AsString);
       var Kind: string:= '';
       if (Length(Src) > 0) and LocateArgument(Src, FLine.AsInteger, FCol.AsInteger,
            Callee, CL, CC, Idx)
          and not ((Idx = 0) and (SameText(Callee, 'Inc') or SameText(Callee, 'Dec'))) then
       begin
-        var Target: Int64:= 0;
         if FFile.AsLargeInt <> RowsFile then
         begin
           RowsFile:= FFile.AsLargeInt;
           LoadArgCalleeRows(QTgt, RowsFile, Rows);
         end;
-        { The replaced query's WHERE (start_line, start_col, name_text COLLATE NOCASE -- ASCII
-          folding, as SameText) and its first-hit loop, over the same rows in refs.id order. }
-        var AtCallee: TArray<TArgCalleeRow>;
-        if Rows.TryGetValue(ArgRowKey(CL, CC), AtCallee) then
-          for var Row: TArgCalleeRow in AtCallee do
-          begin
-            if Target <> 0 then Break;
-            if not (Row.HasName and SameText(Row.Name, Callee)) then Continue;
-            if Row.HasSymbol and (Row.SymbolId > 0) then Target:= Row.SymbolId
-            else if Row.HasTarget then Target:= Row.Target;
-          end;
+        var Target: Int64:= CalleeTargetAt(Rows, CL, CC, Callee);
         if Target > 0 then
         begin
           QSig.ParamByName('id').AsLargeInt:= Target;
@@ -19000,6 +19017,120 @@ begin
     Rows.Free;
     Lines.Free;
     Upd.Free;
+    QSig.Free;
+    QTgt.Free;
+    Q.Free;
+  end;
+end;
+
+{ 1.52 EXTGAPS2 (HB3): a unit-level variable passed as the WHOLE argument of a var / out parameter
+  of a resolved PROJECT routine is written by that call -- the extractor cannot know the mode (the
+  callee may live in another unit), so this pass, after binding, adds the data_flows row the
+  extractor writes for `G := e`: dst_kind 'global' (dst_name = the name as written, position = the
+  argument's read ref), src_kind 'argout' (src_index = the argument position, src_line / src_col =
+  the call ref, src_name = the callee as written). dst_index = that same argument position is the
+  pass's MARK: an extractor 'global' row always has dst_index -1, so the pass deletes exactly its own
+  rows before it re-derives them. The callee and the mode come from PersistArgUses' machinery
+  (LocateArgument + the ref at the callee position + ParamModeAt). Not derived: a library callee
+  (no project signature -- FreeAndNil, Inc / Dec), a qualified `U.G` argument, a field. }
+procedure PersistGlobalArgWrites(AConn: TFDConnection; const AScopeWhere, AStaleWhere: string;
+  out ACandidates, AStored: Int64);
+var
+  Q    : TFDQuery;
+  QTgt : TFDQuery;
+  QSig : TFDQuery;
+  Ins  : TFDQuery;
+  Lines: TDictionary<string, TArray<string>>;
+  Rows : TDictionary<Int64, TArray<TArgCalleeRow>>;
+  RowsFile: Int64;
+  Callee: string;
+  CL, CC, Idx: Integer;
+begin
+  ACandidates:= 0;
+  AStored    := 0;
+  var Filter: string:= ArgPassFilter(AScopeWhere, AStaleWhere);
+  Q    := TFDQuery.Create(nil);
+  QTgt := TFDQuery.Create(nil);
+  QSig := TFDQuery.Create(nil);
+  Ins  := TFDQuery.Create(nil);
+  Lines:= TDictionary<string, TArray<string>>.Create;
+  Rows := TDictionary<Int64, TArray<TArgCalleeRow>>.Create;
+  RowsFile:= 0;
+  try
+    Q.Connection:= AConn;
+    Q.SQL.Text  := 'SELECT 1 FROM sqlite_master WHERE type = ''table'' AND name = ''data_flows''';
+    Q.Open;
+    var HasFlows: Boolean:= not Q.Eof;
+    Q.Close;
+    if not HasFlows then Exit;
+    { the pass's own rows (dst_index >= 0 on a 'global' row), in the files it re-derives }
+    var DelSql: string:= 'DELETE FROM data_flows WHERE dst_kind = :dk AND src_kind = :sk AND dst_index >= 0';
+    if Filter <> '' then DelSql:= DelSql + ' AND file_id IN (SELECT DISTINCT refs.file_id FROM refs WHERE 1 = 1' + Filter + ')';
+    AConn.ExecSQL(DelSql, [DF_DST_GLOBAL, DF_SRC_ARGOUT]);
+    QTgt.Connection:= AConn;
+    QTgt.SQL.Text  := ARG_CALLEE_SQL;
+    QSig.Connection:= AConn;
+    QSig.SQL.Text  := 'SELECT signature FROM symbols WHERE id = :id AND kind IN (''procedure'', ''function'', ''method'', ' +
+                      '''constructor'', ''destructor'')';
+    Ins.Connection := AConn;
+    Ins.SQL.Text   := 'INSERT INTO data_flows (file_id, symbol_id, owner_id, dst_kind, dst_line, dst_col, dst_index, ' +
+      'dst_name, dst_receiver, src_kind, src_index, src_line, src_col, src_name, via_local, cond) VALUES (:f, :s, ' +
+      'COALESCE((SELECT d.owner_id FROM data_flows d WHERE d.symbol_id = :s LIMIT 1), 0), ''' + DF_DST_GLOBAL +
+      ''', :dl, :dc, :ix, :dn, '''', ''' + DF_SRC_ARGOUT + ''', :ix, :cl, :cc, :cn, 0, 0)';
+    Q.SQL.Text:= 'SELECT refs.file_id, refs.start_line, refs.start_col, refs.name_text, refs.enclosing_symbol_id, f.path ' +
+                 'FROM refs JOIN symbols g ON g.id = refs.symbol_id JOIN symbols u ON u.id = g.parent_id ' +
+                 'JOIN files f ON f.id = refs.file_id ' +
+                 'WHERE refs.kind = ''read'' AND g.kind = ''var'' AND u.kind IN (''unit'', ''program'', ''library'', ''package'') ' +
+                 'AND refs.enclosing_symbol_id > 0' + Filter +
+                 ' ORDER BY refs.file_id, refs.start_line, refs.start_col';
+    Q.Open;
+    var FFile: TField:= Q.FieldByName('file_id');
+    var FLine: TField:= Q.FieldByName('start_line');
+    var FCol : TField:= Q.FieldByName('start_col');
+    var FName: TField:= Q.FieldByName('name_text');
+    var FEnc : TField:= Q.FieldByName('enclosing_symbol_id');
+    var FPath: TField:= Q.FieldByName('path');
+    while not Q.Eof do
+    begin
+      Inc(ACandidates);
+      var Src: TArray<string>:= CachedSourceLines(Lines, FPath.AsString);
+      if (Length(Src) > 0) and LocateArgument(Src, FLine.AsInteger, FCol.AsInteger, Callee, CL, CC, Idx) then
+      begin
+        if FFile.AsLargeInt <> RowsFile then
+        begin
+          RowsFile:= FFile.AsLargeInt;
+          LoadArgCalleeRows(QTgt, RowsFile, Rows);
+        end;
+        var Target: Int64:= CalleeTargetAt(Rows, CL, CC, Callee);
+        if Target > 0 then
+        begin
+          QSig.ParamByName('id').AsLargeInt:= Target;
+          QSig.Open;
+          var Mode: string:= if QSig.Eof then '' else ParamModeAt(QSig.Fields[0].AsString, Idx);
+          QSig.Close;
+          if (Mode = 'var') or (Mode = 'out') then
+          begin
+            Ins.ParamByName('f' ).AsLargeInt  := FFile.AsLargeInt;
+            Ins.ParamByName('s' ).AsLargeInt  := FEnc.AsLargeInt;
+            Ins.ParamByName('dl').AsInteger   := FLine.AsInteger;
+            Ins.ParamByName('dc').AsInteger   := FCol.AsInteger;
+            Ins.ParamByName('ix').AsInteger   := Idx;
+            Ins.ParamByName('dn').AsWideString:= FName.AsString;
+            Ins.ParamByName('cl').AsInteger   := CL;
+            Ins.ParamByName('cc').AsInteger   := CC;
+            Ins.ParamByName('cn').AsWideString:= Callee;
+            Ins.ExecSQL;
+            Inc(AStored);
+          end;
+        end;
+      end;
+      Q.Next;
+    end;
+    Q.Close;
+  finally
+    Rows.Free;
+    Lines.Free;
+    Ins.Free;
     QSig.Free;
     QTgt.Free;
     Q.Free;
@@ -19321,7 +19452,7 @@ begin
     Q.SQL.Text:=
       'SELECT id, symbol_id, file_id, kind, name_text, start_line, start_col, ' +
       '  end_line, end_col, enclosing_symbol_id, receiver_text FROM refs WHERE ' +
-      '(' + CallSiteRefKindSql('refs') + ' OR refs.kind IN (''member-access'', ''' + REF_KIND_PROP_SPEC + ''', ''' + REF_KIND_REC_FIELD + ''', ''' + REF_KIND_INDEX_ACCESS + '''))';
+      '(' + CallSiteRefKindSql('refs') + ' OR refs.kind IN (''member-access'', ''' + REF_KIND_PROP_SPEC + ''', ''' + REF_KIND_REC_FIELD + ''', ''' + REF_KIND_INDEX_ACCESS + ''', ''' + REF_KIND_EXPORT + '''))';
     { The scoped pass narrows the SAME universe rather than defining its own:
       widen the kind test above and the scoped path follows automatically. }
     if Scoped then Q.SQL.Text:= Q.SQL.Text + ' AND (' + ScopeWhere + ')';
@@ -19349,7 +19480,7 @@ begin
     try
       QStale.Connection:= FConn;
       QStale.SQL.Text  := 'SELECT DISTINCT file_id FROM refs WHERE ' +
-        '(' + CallSiteRefKindSql('refs') + ' OR refs.kind IN (''member-access'', ''' + REF_KIND_PROP_SPEC + ''', ''' + REF_KIND_REC_FIELD + ''', ''' + REF_KIND_INDEX_ACCESS + '''))';
+        '(' + CallSiteRefKindSql('refs') + ' OR refs.kind IN (''member-access'', ''' + REF_KIND_PROP_SPEC + ''', ''' + REF_KIND_REC_FIELD + ''', ''' + REF_KIND_INDEX_ACCESS + ''', ''' + REF_KIND_EXPORT + '''))';
       if Scoped then QStale.SQL.Text:= QStale.SQL.Text + ' AND (' + ScopeWhere + ')';
       QStale.Open;
       while not QStale.Eof do
@@ -19667,6 +19798,10 @@ begin
       PersistArgUses(FConn, ScopeWhere, StaleWhere, ArgCandidates, ArgStored);
       Resolver.ProfEnd(cpsStreamArgUses, PfMark);
       ResolveLog(Format('calls      arg-uses: %d of %d accessor-less member read(s) stored as a var / out argument', [ArgStored, ArgCandidates]));
+      { 1.52 EXTGAPS2 (HB3): after every binding stream -- it reads the bound callee of each argument. }
+      var GlobArgCandidates, GlobArgStored: Int64;
+      PersistGlobalArgWrites(FConn, ScopeWhere, StaleWhere, GlobArgCandidates, GlobArgStored);
+      ResolveLog(Format('calls      global arg-writes: %d of %d unit-variable read(s) written as a var / out argument', [GlobArgStored, GlobArgCandidates]));
       { B9 F1: the LAST stream, it reads what all the others wrote. }
       TMark:= TStopwatch.GetTimeStamp;
       { 149 IC round 3: the derived streams get a WIDER scope than the binding streams. }

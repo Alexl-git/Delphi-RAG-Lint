@@ -14,8 +14,8 @@ unit DRagLint.Query.HappensBefore.Roots;
 
   Blind spots (index shape, 1.52): a parameterless FUNCTION named without `@` on the right of `:=` gets the
   same read / member-access ref and certain call edge whether it is called or assigned as a method pointer,
-  so it is taken as a call. A procedure in that position can only be a value and is address-taken. The
-  `exports` clause carries no index fact: it is found in the source text. }
+  so it is taken as a call. A procedure in that position can only be a value and is address-taken. An
+  `exports` clause entry is a refs row of kind REF_KIND_EXPORT bound to the routine (1.52 EXTGAPS2; no call edge). }
 
 interface
 
@@ -79,12 +79,11 @@ type
     FAnswersLoaded: Boolean;
     FThreadsLoaded: Boolean;
     FFileIds: TDictionary<string, Int64>;
-    FFileTexts: TDictionary<string, string>;
     procedure LoadAnswers;
     function IsThreadClass(const pName: string): Boolean;
     function ParentClassOf(const pSym: TSymbol): TSymbol;
     function FileIdOf(const pPath: string): Int64;
-    function InExportsClause(const pPath: string; pLine, pCol: Integer): Boolean;
+    function IsExportedByClause(const pSym: TSymbol): Boolean;
     function IsCallRefAt(const pSym: TSymbol; const pCaller: TResolvedCaller): Boolean;
     function ScanCallers(const pSym: TSymbol; out pAddressTaken, pExported: Boolean): Boolean;
     function DeclaredClassOf(const pSym: TSymbol): THbEscapeClass;
@@ -104,7 +103,7 @@ type
     /// <remarks>A routine passed as a value (call_edges confidence 'callback', a bound non-call ref such as
     /// `@Proc`, or a call edge whose ref is no `call` ref, as the index records `OnX := H.Handler`) is
     /// hecAddressTaken. A routine named in an `exports` clause (or carrying the `export` directive) is
-    /// hecExported; the clause is found in the source file on disk. The leading unlabelled section of a class is treated as
+    /// hecExported; the clause entry is its REF_KIND_EXPORT ref (1.52). The leading unlabelled section of a class is treated as
     /// published (under $M+ it is; the index cannot tell $M+), which can only add escapes, never hide one.</remarks>
     function ClassOf(pRoutineId: Int64): THbEscapeClass;
   end;
@@ -139,8 +138,6 @@ implementation
 
 uses
   System.SysUtils
-, System.IOUtils
-, System.RegularExpressions
 , DRagLint.Lint.InitSections
 , DRagLint.Query.Implementors
   ;
@@ -203,12 +200,10 @@ begin
   FAnswers:= THashSet<Int64>.Create;
   FThreadClasses:= THashSet<string>.Create;
   FFileIds:= TDictionary<string, Int64>.Create;
-  FFileTexts:= TDictionary<string, string>.Create;
 end;
 
 destructor THbEscapeClassifier.Destroy;
 begin
-  FFileTexts.Free;
   FFileIds.Free;
   FThreadClasses.Free;
   FAnswers.Free;
@@ -262,29 +257,13 @@ begin
   FFileIds.Add(Key, Result);
 end;
 
-{ True when position pLine:pCol of pPath sits inside an `exports` clause: the last `exports` word before
-  it is not yet closed by a `;`. Reads the file on disk once (cached). A comment holding the word can only
-  add an escape, never hide one. }
-function THbEscapeClassifier.InExportsClause(const pPath: string; pLine, pCol: Integer): Boolean;
-var
-  Text: string;
+{ True when an `exports` clause names pSym: a REF_KIND_EXPORT ref bound to it (1.52 EXTGAPS2). Before 1.52
+  the entry was a 'call' ref with a call edge and this read the clause back from the source text. }
+function THbEscapeClassifier.IsExportedByClause(const pSym: TSymbol): Boolean;
 begin
   Result:= False;
-  var Key:= LowerCase(pPath);
-  if not FFileTexts.TryGetValue(Key, Text) then
-  begin
-    Text:= if TFile.Exists(pPath) then TFile.ReadAllText(pPath) else '';
-    FFileTexts.Add(Key, Text);
-  end;
-  var Lines:= Text.Split([#13#10, #10]);
-  if (pLine < 1) or (pLine > Length(Lines)) then Exit;
-  var Before: string:= '';
-  for var I:= 0 to pLine - 2 do Before:= Before + Lines[I] + ' ';
-  Before:= LowerCase(Before + Copy(Lines[pLine - 1], 1, pCol - 1));
-  var M:= TRegEx.Matches(Before, '\bexports\b');
-  if M.Count = 0 then Exit;
-  var Last:= M.Item[M.Count - 1];
-  Result:= not Copy(Before, Last.Index + Last.Length, MaxInt).Contains(';');
+  for var R: TReference in FStore.FindReferencesTo(pSym.Id) do
+    if SameText(R.Kind, REF_KIND_EXPORT) then Exit(True);
 end;
 
 { True when pSym returns a value: a function, or a method whose signature ends in `: <type>` after its
@@ -315,15 +294,14 @@ begin
 end;
 
 { True when some site calls pSym for real. pAddressTaken: some site names it as a value (a callback edge,
-  a bound non-call ref, or an edge on a non-call ref). pExported: some site is an `exports` clause entry. }
+  a bound non-call ref, or an edge on a non-call ref). pExported: an `exports` clause names it. }
 function THbEscapeClassifier.ScanCallers(const pSym: TSymbol; out pAddressTaken, pExported: Boolean): Boolean;
 begin
   Result:= False;
   pAddressTaken:= False;
-  pExported:= False;
+  pExported:= IsExportedByClause(pSym);
   for var R: TResolvedCaller in FStore.FindResolvedCallers(pSym.Id) do
     if (R.Mode <> '') or SameText(R.Confidence, CONFIDENCE_CALLBACK) then pAddressTaken:= True
-    else if (R.EnclosingSymbolId <= 0) and InExportsClause(R.FullPath, R.CallSiteLine, R.CallSiteCol) then pExported:= True
     else if IsCallRefAt(pSym, R) then Result:= True
     else pAddressTaken:= True;
 end;

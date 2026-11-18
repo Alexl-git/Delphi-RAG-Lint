@@ -413,8 +413,8 @@ function ReindexText(const APath, AText: string): TParseResult;
 /// <summary>The 1-based character column of an index (tree-sitter) column in
 /// ALine.</summary>
 /// <param name="ALine">The source line as read (a Delphi string).</param>
-/// <param name="AByteCol">A 1-based column as the index stores it: UTF-8
-/// BYTES, so each non-ASCII character before it adds one or more.</param>
+/// <param name="AByteCol">A 1-based column as the index stores it for a .pas file. Until 1.52 that was UTF-8
+/// BYTES; since 1.52 EXTGAPS2 it is already a CHARACTER column, so only the end clamp applies.</param>
 /// <returns>The 1-based character column in ALine; a column past the line's
 /// end maps to Length(ALine) + 1.</returns>
 /// <remarks>
@@ -784,11 +784,8 @@ end;
 
 
 function CharColumn(const ALine: string; AByteCol: Integer): Integer;
-var
-  Bytes: TBytes;
 begin
-  Bytes := TEncoding.UTF8.GetBytes(ALine);
-  Result:= TEncoding.UTF8.GetCharCount(Bytes, 0, EnsureRange(AByteCol - 1, 0, Length(Bytes))) + 1;
+  Result:= EnsureRange(AByteCol, 1, Length(ALine) + 1); { 1.52 EXTGAPS2: .pas index columns are characters }
 end;
 
 { Every name a ref of AParse names, with its first line, whether one
