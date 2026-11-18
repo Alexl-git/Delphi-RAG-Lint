@@ -7,7 +7,7 @@ group: linting
 order: 30075
 since: 1.39.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # warm-rule-cache

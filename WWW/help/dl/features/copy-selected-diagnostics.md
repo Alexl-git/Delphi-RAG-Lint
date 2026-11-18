@@ -7,7 +7,7 @@ group: linting
 order: 30007
 since: 1.28.3-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Copy Selected Diagnostics

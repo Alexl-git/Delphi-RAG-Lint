@@ -7,7 +7,7 @@ group: linting
 order: 30032
 since: 1.29.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Rename across every project that compiles a shared unit

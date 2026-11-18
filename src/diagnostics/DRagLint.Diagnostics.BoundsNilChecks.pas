@@ -28,7 +28,7 @@ unit DRagLint.Diagnostics.BoundsNilChecks;
                            2-row run is a hit only when the two lhs members are a
                            known axis pair (Left/Top, Width/Height, X/Y, Min/Max).
                            hint. Fixable (risky): the odd rhs member becomes p.
-    index-possibly-out-of-range : OFF (1.52, spec 2026-11-16-index-possibly-out-of-range-design.md).
+    index-possibly-out-of-range : ON (1.52 IDXRANGE3, spec 2026-11-16-index-possibly-out-of-range-design.md).
                            A[idx] where A is a static or dynamic array and idx a routine local
                            or parameter, with no dominating guard (for over the bounds, if /
                            while condition, InRange, an earlier Exit/raise guard) and no write
@@ -51,7 +51,7 @@ type
   /// Stateless; thread-safe. Called from DoLint and DoLintAll behind
   /// LintRuleWants(rule, LINT_GATE_BOUNDS_NIL). All five rules are emitted on every
   /// call; the CLI filters by --rule and by the enabled set (copy-paste-assignment
-  /// is OFF by default; index-possibly-out-of-range is OFF in 1.52 after the FPM2 re-measure).
+  /// is OFF by default; index-possibly-out-of-range is ON since 1.52 IDXRANGE3).
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
   /// <para>Used in units: DRagLint.CLI</para>

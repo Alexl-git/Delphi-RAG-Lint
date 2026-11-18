@@ -7,7 +7,7 @@ group: linting
 order: 30043
 since: 1.42.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Stream buffer used after free (lint rule)

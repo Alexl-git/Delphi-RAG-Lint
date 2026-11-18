@@ -6,6 +6,7 @@
 # constant cap on a fixed-size array, a float-derived index behind a range guard -- each with a
 # positive control (a routine named *Bad that must still fire).
 # Fixture tests\lint\idxfp3\ (two units: LibLock / LibLockShort come from the index).
+# Also pins the rule's default: ON again in 1.52 (re-measure on DB copies: YADF 0/12, CLIENT 0/12, SERVER 0/5).
 param(
   [string]$Exe = "third_party\dll-win64\drag-lint.exe"
 )
@@ -51,6 +52,15 @@ foreach ($r in 'Chain1Bad', 'WhileTopBad', 'WhileTopNoContinueBad', 'ChainResetB
                'GaussBad', 'GaussBad2') {
   Assert "positive control fires in $r" ($byRoutine.ContainsKey($r))
 }
+
+# default ON (owner C3, IDXRANGE3 re-measure 0 FP / 12): no --rule, no config -> the Bad routines still fire
+$raw2 = & $exe lint $unit --db $db --json 2>$null
+$d = @()
+try { $d = @(($raw2 | ConvertFrom-Json) | Where-Object { $_ -and $_.rule -eq $rule }) } catch { $d = @() }
+Assert "default ON: fires without --rule (got $($d.Count), narrowed $($f.Count))" (($d.Count -gt 0) -and ($d.Count -eq $f.Count))
+$rj = (& $exe rules --json 2>$null | ConvertFrom-Json).rules
+$ent = @($rj | Where-Object { $_.id -eq $rule })[0]
+Assert "rules --json: default_enabled true" ($ent -and $ent.default_enabled -eq $true)
 
 try { [IO.Directory]::Delete($tmp, $true) } catch { }
 if ($fail -gt 0) { Write-Host "$fail FAIL" -ForegroundColor Red } else { Write-Host "all passed" }

@@ -7,7 +7,7 @@ group: linting
 order: 30035
 since: 1.40.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Read but never assigned (lint rule)

@@ -7,7 +7,7 @@ group: linting
 order: 30036
 since: 1.44.1-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Lint rules on the static type of a reference

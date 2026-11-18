@@ -6,8 +6,8 @@ subrange-typed index does not help either -- it only moves the range error to th
 This rule warns where an array index can leave the array's bounds BEFORE the runtime check
 fires, and points at the line that made it so: the write of the index, not the access.
 
-Default **OFF** in 1.52 (owner ruling C3 = ON; lane BK-RULEFP fixed the six classes of the first 6/12 gate, but the FPM2 re-measure on ORM3 + YADF still found 21 FP in 36 samples -- short-circuit and while-top guards, SetLength(A, N) then an N-bound loop, a Length equality Exit, one-Inc-per-trip counters, constant-capped counters on fixed arrays -- so it ships OFF; enable it with `--rule index-possibly-out-of-range` or `"enabled": ["index-possibly-out-of-range"]` in the config), category `bug-patterns`, severity `warning` (`hint` for an unguarded
-parameter). Run only it with
+Default **ON** (owner ruling C3; the first false-positive gate measured 6 FP in 12 samples, fixed by lane BK-RULEFP; the FPM2 re-measure found 21 FP in 36, fixed by lane IDXRANGE3 and re-measured 0 FP: YADF 0/12, ORM3 CLIENT 0/12, ORM3 SERVER 0/5), category `bug-patterns`, severity `warning` (`hint` for an unguarded
+parameter). Disable it with `"disabled": ["index-possibly-out-of-range"]` in the lint config; run only it with
 `drag-lint lint <file> --rule index-possibly-out-of-range`.
 
 ## What it reports
@@ -58,6 +58,20 @@ A field or global array uses the size every SetLength in the file agrees on.
 - **Index parameters (C2):** cleared when EVERY local call passes an index proven in range (depth 1; only
   routines whose every use in the file is a plain call).
 - **Lookups:** an index read from `GetValueOrDefault`, `Items[]` or `Map[k]` is a hint (its range is invisible).
+
+## Value bounds, windows and sizes (1.52, IDXRANGE3)
+
+- **Value bounds:** the least / greatest value of the index from its writes in text order (a dominating
+  write resets, a conditional one joins, `Inc` in a `for` counts its trips, writes in a loop around the
+  access flow back), through chains of locals (`j := i + 1`, `i := j`), guards right after a write
+  (`P := Find(..); if P < 0 then Exit`), a for counter copied out of its loop, `Floor(Abs(x) * c + d)`
+  behind an `Abs(x) > k` Exit, a counter with a constant cap (`N := 0` plus N straight-line `Inc`).
+- **Windows:** from the SetLength that dominates the access to the end of the loops around it, a local, a
+  field path or `Length(X)` that nothing there changes reads as one value (`SetLength(A, N); while i < N`).
+- **Sizes:** `A := F(P)` / `F(P, A)` where F starts with `SetLength(Result or A, P.Count)` (this unit, or
+  another unit through `--db`); an array of the enclosing routine; two arrays sized by the same
+  expression in a row, or made equal by `if Length(A) <> Length(B) then Exit`; `SetLength(A, n + 1); A[n]`.
+- A write followed by `Exit` / `Continue`, or in the other branch of an if / else, does not undo a guard.
 
 ## Autofix (risky, MANUAL ONLY)
 

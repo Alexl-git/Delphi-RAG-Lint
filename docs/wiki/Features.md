@@ -140,13 +140,13 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**435 rules. 131 have an auto-fix. 354 are on by default.** 322 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**434 rules. 131 have an auto-fix. 355 are on by default.** 321 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
 | bug-patterns | 155 | 40 |
 | complexity | 15 | 2 |
-| data-flow | 12 | 3 |
+| data-flow | 11 | 3 |
 | dead-code | 23 | 15 |
 | documentation | 7 | 4 |
 | firedac | 3 | 3 |
@@ -162,7 +162,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | review-markers | 6 | 2 |
 | security | 27 | 2 |
 | structure | 18 | 9 |
-| **Total** | **435** | **131** |
+| **Total** | **434** | **131** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -171,6 +171,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Array index possibly out of range lint rule (index-possibly-out-of-range)](index-possibly-out-of-range) | `lint` |  |
 | [Autofix for fixable rules](autofix-wave) | `lint` |  |
 | [CLI fixes in 1.51.1](v1511-cli-fixes) | `lint-all`; `rules`; `info`; `index`; `find-deadcode` |  |
+| [Complexity counts the if-expression](complexity-if-expression) | `lint-all` |  |
 | [Compliance labels (CWE, CERT, MISRA)](compliance-labels) | `rules`; `lint-all` |  |
 | [Component-authoring lint rules](component-authoring-rules) | `lint`; `lint-all` |  |
 | [Copy All Diagnostics](Copy-All-Diagnostics) | Structure form: Copy All Diagnostics; `lint` |  |
@@ -206,7 +207,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
 | [Lint rules on the static type of a reference](ref-type-rules) | `lint-all` |  |
 | [Lint rules unconnected-control and hanging-handler](v152-unconn-rules) | `lint` |  |
-| [Lint rules](rules) | 435 rules, 131 fixable; `rules` |  |
+| [Lint rules](rules) | 434 rules, 131 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
 | [member-could-be-private lint rule (lane ATLB)](v152-atlb-rules) | `lint-all` |  |

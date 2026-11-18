@@ -7,7 +7,7 @@ group: linting
 order: 30027
 since: 1.42.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Interfaced object set to nil (lint rule)

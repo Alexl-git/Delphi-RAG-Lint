@@ -7,7 +7,7 @@ group: linting
 order: 30023
 since: 1.44.1-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Global set in initialization and never freed (lint rule)

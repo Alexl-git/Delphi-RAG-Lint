@@ -7,7 +7,7 @@ group: linting
 order: 30055
 since: 1.51.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Object-model lint rules (Equals/hash, events, GUIDs, exports)

@@ -7,7 +7,7 @@ group: linting
 order: 30034
 since: 1.46.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Parameter type too wide (lint rule)

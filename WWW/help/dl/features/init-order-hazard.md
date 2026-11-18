@@ -7,7 +7,7 @@ group: linting
 order: 30026
 since: 1.44.1-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Initialization reaching a unit that initializes later (lint rule)

@@ -7,7 +7,7 @@ group: linting
 order: 30054
 since: 1.51.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Memory and string-pointer lint rules (PChar, raw memory, leaks, byte counts)

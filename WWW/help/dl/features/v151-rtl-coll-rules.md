@@ -7,7 +7,7 @@ group: linting
 order: 30056
 since: 1.51.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # RTL collection and environment lint rules

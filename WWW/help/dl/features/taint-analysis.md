@@ -7,7 +7,7 @@ group: linting
 order: 30044
 since: 1.37.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Taint analysis (SQL, command, path)
