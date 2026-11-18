@@ -26,21 +26,27 @@ const
   HB_LIMIT_NOT_IMPLEMENTED = 'not-implemented';
 
 type
-  /// <summary>The three verdicts of check-init (ruling HB2). Literals: VerdictCode.</summary>
+  /// <summary>The verdicts of check-init (ruling HB2, plus the owner's UNKNOWN-CALLEE of 2026-11-17
+  /// 13:56). Literals: VerdictCode.</summary>
   /// <remarks>hvSet = proven: every write-before-use path holds. hvNeverSet = proven absence of any
   /// writer (spec 6.2). hvMayBeUnset = everything else, "not proven safe", never a proof of a bad run.
-  /// Ordinal order is the badness order used by HbWorseVerdict: hvSet best, hvMayBeUnset worst.</remarks>
-  THbVerdict = (hvSet, hvNeverSet, hvMayBeUnset);
+  /// hvUnknownCallee = a MAY-BE-UNSET whose doubt includes the target passed to a callee with no
+  /// source / no resolved signature (does it set it?); only the answer headline carries it, a judged
+  /// use stays MAY-BE-UNSET. Exit 1 like every verdict but SET.
+  /// Ordinal order is the badness order used by HbWorseVerdict: hvSet best, hvUnknownCallee worst.
+  /// Append only: renderers and tools index arrays by this type.</remarks>
+  THbVerdict = (hvSet, hvNeverSet, hvMayBeUnset, hvUnknownCallee);
 
   /// <summary>Closed list of reason codes (spec 6.4, plus HB3 receiver-unproven, HB5
-  /// relied-on-handler-order and the spec 5.1 guarded-test tag). Literals: ReasonCode.</summary>
+  /// relied-on-handler-order, the spec 5.1 guarded-test tag and the owner's unknown-callee: the answer
+  /// holds the target passed to a callee with no source). Literals: ReasonCode.</summary>
   /// <remarks>Append only; tools and the surface runner branch on the literals.</remarks>
   THbReason = (
     hrUnorderedRoot, hrEscapedRoutine, hrWriterConditional, hrWriterLaterUnit, hrWriterAfterUseSameRoutine,  // dl:ok unused-enum-value@75ab -- REVIEWED 2026-11-17 v152 HBSKEL: frozen check-init contract; the engine lanes (EVENTS, SOLVER, FIELDS, RECV, EVORD) name these values
     hrCalleeNotMust, hrIndirectCall, hrVirtualFanout, hrInterfaceCall, hrSoftWriter, hrNilWriteOnly,  // dl:ok unused-enum-value@c81b -- REVIEWED 2026-11-17 v152 HBSKEL: frozen check-init contract; the engine lanes (EVENTS, SOLVER, FIELDS, RECV, EVORD) name these values
     hrCtorMissesField, hrNoDeclaredCtor, hrSubclassCtorSkips, hrVirtualCallInAncestorCtor, hrSelfEscapesInCtor,  // dl:ok unused-enum-value@7be7 -- REVIEWED 2026-11-17 v152 HBSKEL: frozen check-init contract; the engine lanes (EVENTS, SOLVER, FIELDS, RECV, EVORD) name these values
     hrUnreliableOrder, hrMultiProgram, hrWriterOnThread, hrCfgSkipped, hrBudget, hrIndexIncomplete,  // dl:ok unused-enum-value@d3c3 -- REVIEWED 2026-11-17 v152 HBSKEL: frozen check-init contract; the engine lanes (EVENTS, SOLVER, FIELDS, RECV, EVORD) name these values
-    hrReliedOnHandlerOrder, hrReceiverUnproven, hrGuardedTest);  // dl:ok unused-enum-value@ac06 -- REVIEWED 2026-11-17 v152 HBSKEL: frozen check-init contract; the engine lanes (EVENTS, SOLVER, FIELDS, RECV, EVORD) name these values
+    hrReliedOnHandlerOrder, hrReceiverUnproven, hrGuardedTest, hrUnknownCallee);  // dl:ok unused-enum-value@ac06 -- REVIEWED 2026-11-17 v152 HBSKEL: frozen check-init contract; the engine lanes (EVENTS, SOLVER, FIELDS, RECV, EVORD) name these values
 
   /// <summary>How a writer writes the target (spec 5.1, plan D5). Literals: HowCode.</summary>
   /// <remarks>hwAssign .. hwDfmStream are resolved writes; hwAssignNil never counts as initialization
@@ -186,7 +192,8 @@ type
     property Candidates: TArray<string> read FCandidates;
   end;
 
-/// <summary>The verdict literal: SET, NEVER-SET or MAY-BE-UNSET (ruling HB2 / plan D4).</summary>
+/// <summary>The verdict literal: SET, NEVER-SET, MAY-BE-UNSET (ruling HB2 / plan D4) or
+/// UNKNOWN-CALLEE (owner ruling 2026-11-17 13:56).</summary>
 /// <param name="pVerdict">The verdict.</param>
 /// <returns>The literal used in JSON and text.</returns>
 function VerdictCode(pVerdict: THbVerdict): string;
@@ -212,11 +219,11 @@ function TargetKindCode(pKind: THbTargetKind): string;
 /// <returns>The literal.</returns>
 function ScopeCode(pScope: THbScope): string;
 
-/// <summary>The worse of two verdicts (hvSet &lt; hvNeverSet &lt; hvMayBeUnset).</summary>
+/// <summary>The worse of two verdicts (hvSet &lt; hvNeverSet &lt; hvMayBeUnset &lt; hvUnknownCallee).</summary>
 /// <param name="pA">First verdict.</param>
 /// <param name="pB">Second verdict.</param>
 /// <returns>The worse one.</returns>
-function HbWorseVerdict(pA, pB: THbVerdict): THbVerdict;  // dl:ok unused-public-symbol@45d5 -- REVIEWED 2026-11-17 v152 HBSKEL: frozen contract for lane HBSOLVER (headline = worst use verdict); first caller lands there
+function HbWorseVerdict(pA, pB: THbVerdict): THbVerdict;
 
 /// <summary>Parses `--at file:line[:col]`. A drive letter colon is part of the file name.</summary>
 /// <param name="pAt">The flag value, e.g. `C:\src\Boot.pas:41:12` or `Boot.pas:41`.</param>
@@ -236,13 +243,13 @@ function HbNotImplementedAnswer(const pTarget: string; const pAt: THbSite): THbA
 implementation
 
 const
-  VERDICT_CODES: array[THbVerdict] of string = ('SET', 'NEVER-SET', 'MAY-BE-UNSET');
+  VERDICT_CODES: array[THbVerdict] of string = ('SET', 'NEVER-SET', 'MAY-BE-UNSET', 'UNKNOWN-CALLEE');
   REASON_CODES: array[THbReason] of string = (
     'unordered-root', 'escaped-routine', 'writer-conditional', 'writer-later-unit', 'writer-after-use-same-routine',
     'callee-not-must', 'indirect-call', 'virtual-fanout', 'interface-call', 'soft-writer', 'nil-write-only',
     'ctor-misses-field', 'no-declared-ctor', 'subclass-ctor-skips', 'virtual-call-in-ancestor-ctor', 'self-escapes-in-ctor',
     'unreliable-order', 'multi-program', 'writer-on-thread', 'cfg-skipped', 'budget', 'index-incomplete',
-    'relied-on-handler-order', 'receiver-unproven', 'guarded-test');
+    'relied-on-handler-order', 'receiver-unproven', 'guarded-test', 'unknown-callee');
   HOW_CODES: array[THbWriterHow] of string = ('assign', 'assign-nil', 'var-arg', 'out-arg', 'create-into',
     'dfm-stream', 'unresolved', 'with-opaque', 'address-of');
   KIND_CODES: array[THbTargetKind] of string = ('unresolved', 'unit-variable', 'class-var', 'instance-field');

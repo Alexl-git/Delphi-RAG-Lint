@@ -1,0 +1,10 @@
+{
+  "checkInit": {
+    "callees": {
+      "ReadExternal": "reads",
+      "LoadExternal": "sets",
+      "Other.OtherExternal": "sets",
+      "BogusExternal": "maybe"
+    }
+  }
+}
