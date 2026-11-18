@@ -41,9 +41,9 @@
   "audience": "both",
   "related": ["autofix-wave", "compat-downgrade-fixes"],
   "verified": {
-    "date": "2026-11-05",
+    "date": "2026-11-18",
     "by": "ENGINE",
-    "build": "1.43.0-alpha",
-    "surfaceHash": "f7554479d437ae3944643487291327f5b17d22fff01963fb1b29494b4655802e"
+    "build": "1.52.0-alpha",
+    "surfaceHash": "7be37aec9068efc99cc8a8069bb0b2a6cbe0b2af295f0c6a99e9014a3876feb7"
   }
 }

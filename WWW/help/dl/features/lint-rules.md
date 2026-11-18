@@ -28,6 +28,9 @@ Full flag list: [rules in the CLI reference](../cli.md#rules).
 | `--category` | `<name>` |  |  |
 | `--standard` | `cwe\|cert\|misra` |  |  |
 | `--rules-dir` | `<dir>` |  |  |
+| `--project` | `<X.dproj>` |  |  |
+| `--rule` | `<id>` |  |  |
+| `--target-compiler` | `<ver\|auto>` |  |  |
 
 ## Where to click
 

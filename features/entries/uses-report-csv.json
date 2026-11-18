@@ -57,9 +57,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-11-18",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.52.0-alpha",
     "surfaceHash": "afc13cbba541c0ce9d159b0010daef7018426e2b740bbf5f4b3061f1693cb50f"
   }
 }

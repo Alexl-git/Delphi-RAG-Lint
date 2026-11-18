@@ -7,7 +7,7 @@ group: refactoring
 order: 50018
 since: 1.44.1-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # unwith
@@ -39,6 +39,9 @@ Full flag list: [lint in the CLI reference](../cli.md#lint).
 | `--exclude-under` | `<dir>` |  |  |
 | `--no-backup` |  |  |  |
 | `--json` |  |  |  |
+| `--build-config` | `<c>` |  |  |
+| `--no-preprocess` |  |  |  |
+| `--format` | `json` |  |  |
 | `--fix` |  |  |  |
 | `--fix-rule` | `with-statement` |  |  |
 | `--db` | `<db>` |  |  |

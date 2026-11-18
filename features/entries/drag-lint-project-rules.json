@@ -38,6 +38,14 @@
         {
           "name": "--rules-dir",
           "arg": "<dir>"
+        },
+        {
+          "name": "--project",
+          "arg": "<X.dproj>"
+        },
+        {
+          "name": "--target-compiler",
+          "arg": "<ver|auto>"
         }
       ],
       "helpOrder": 14,
@@ -56,9 +64,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-28",
+    "date": "2026-11-18",
     "by": "ENGINE",
-    "build": "1.36.0-alpha",
-    "surfaceHash": "b8b47d5c06426ec7495d792343905a86aa5149fc5385ac6de617d47ef742ac2f"
+    "build": "1.52.0-alpha",
+    "surfaceHash": "5efca92b9b4b603661cdf4bb84cdb3ee43edd50747d1726e07527bd4d605d0f9"
   }
 }

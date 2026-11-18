@@ -68,8 +68,8 @@
     "version": "1.44.1-alpha"
   },
   "features/callgraph.md": {
-    "hash": "47b82c5e3ba8d6976f7bf33f12d4f2c596c0289b5b08bf0c6d00a81dde54cbef",
-    "version": "1.46.0-alpha"
+    "hash": "35e206aa91bb9ad876fae9ea969b26bd6a71e543b637a6b0de6256260dc05f60",
+    "version": "1.52.0-alpha"
   },
   "features/chart-engine-dot-lookup.md": {
     "hash": "e9d939fca498ce46d2f201ab07f8de7446d8111976cfe0cfce76055d30ab1c89",
@@ -316,7 +316,7 @@
     "version": "1.35.1-alpha"
   },
   "features/drag-lint-project-rules.md": {
-    "hash": "46a0962de6fb8ae27f5039c51d58776051a8c4b1dffd50dd648f4adafe1ff1cd",
+    "hash": "0e480c435196a7a2bc4ba08e3163d97a9616b770be6b71585a551cdec70d0952",
     "version": "1.52.0-alpha"
   },
   "features/drag-lint.md": {
@@ -592,7 +592,7 @@
     "version": "1.52.0-alpha"
   },
   "features/lint-rules.md": {
-    "hash": "6f60eceb605e22766a4b6cefe507beea99127b331363b6638358a00c851af209",
+    "hash": "0dd6b69178f826129d3886b14fb422ba246695267c35eb75e15f6132433552bc",
     "version": "1.52.0-alpha"
   },
   "features/lint-tree.md": {
@@ -776,8 +776,8 @@
     "version": "1.38.0-alpha"
   },
   "features/rename-symbol.md": {
-    "hash": "be9e60c8d8dd4163e05faac4e2f51c50bf968072fbb65ef97287a8167b6e8846",
-    "version": "1.51.0-alpha"
+    "hash": "92f896367de57a1c0425957f12f70632753d98b728c6166d49e2cc184d0bb73e",
+    "version": "1.52.0-alpha"
   },
   "features/rescan-this-unit.md": {
     "hash": "f7c6b71edcec4128c4324e8770cca47077b5d539d15424c8ae013c31c01c1269",
@@ -920,8 +920,8 @@
     "version": "1.47.0-alpha"
   },
   "features/unwith.md": {
-    "hash": "ab1826324ae1212a9178f8373f79e68303bfc5c2f9a1014f98bf677edc61f49e",
-    "version": "1.51.1-alpha"
+    "hash": "b0e6111368bc294698acd25937ece4c09401ffdd140b54415c1c4414e5521140",
+    "version": "1.52.0-alpha"
   },
   "features/usages.md": {
     "hash": "9af1049011ef0fceab3a24f3fa66dd8c06ae922f70daeb6d545b022c3c86242a",

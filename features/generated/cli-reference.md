@@ -215,6 +215,7 @@ drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db P
 | `--depth` | `N` |  |  |
 | `--db` | `PATH` |  |  |
 | `--json` |  |  |  |
+| `--format` |  |  |  |
 
 Described in [callgraph](../../docs/wiki/callgraph.md).
 
@@ -1849,6 +1850,10 @@ drag-lint rename --kind symbol --name <QName> --to <New> [--json|--plan|--apply|
 | `--library-db` | `<lib>` |  |  |
 | `--no-backup` |  |  |  |
 | `--db` | `<db>` |  |  |
+| `--platform` | `<p>` |  |  |
+| `--rsvars` | `<bat>` |  |  |
+| `--build-timeout` | `<s>` |  |  |
+| `--no-compile` |  |  |  |
 
 Described in [Rename Symbol](../../docs/wiki/Rename-Symbol.md).
 
@@ -1960,8 +1965,8 @@ drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rule
 | `--standard` | `cwe\|cert\|misra` |  |  |
 | `--rule` | `<id>[,<id>]` |  |  |
 | `--rules-dir` | `<dir>` |  |  |
+| `--project` | `<X.dproj>` |  |  |
 | `--target-compiler` | `<ver\|auto>` |  |  |
-| `--project` | `<.dproj>` |  |  |
 | `--scope` | `line\|unit\|project` |  |  |
 | `--in` | `<F>` |  |  |
 | `--line` | `<N>` |  |  |
@@ -2209,6 +2214,9 @@ drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <
 | `--exclude-under` | `<dir>` |  |  |
 | `--no-backup` |  |  |  |
 | `--json` |  |  |  |
+| `--build-config` | `<c>` |  |  |
+| `--no-preprocess` |  |  |  |
+| `--format` | `json` |  |  |
 
 Described in [unwith](../../docs/wiki/unwith.md).
 
