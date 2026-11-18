@@ -73,8 +73,14 @@ type
     procedure Announce(const AKey: string);
     /// <summary>Decides how a hoverBundle at AKey is answered and advances
     /// the slot: announced -> dhdFast (armed); armed -> dhdComplete; anything
-    /// else -> dhdFull. A request for a different position supersedes the slot
-    /// (and abandons a running second step).</summary>
+    /// else -> dhdFull. A request for a different position forgets the slot
+    /// but does NOT abandon a running second step: only an announcement
+    /// (Announce) or CancelRequest does.</summary>
+    /// <remarks>Why: the client that announced cancels its own request before
+    /// it announces the next position, so the RequestCancelled reply reaches a
+    /// dropped callback. An unannounced request elsewhere (the menu hover)
+    /// says nothing about the announcing client, whose callback is still live
+    /// and would read the error reply as an engine without hoverBundle.</remarks>
     /// <param name="AKey">HoverKey of the request's position.</param>
     /// <returns>The decision for this request.</returns>
     function Decide(const AKey: string): TDeferredHoverDecision;
@@ -95,7 +101,7 @@ type
     /// <param name="AId">The cancelled request id, as JSON text.</param>
     procedure CancelRequest(const AId: string);
     /// <summary>True once run ASerial must stop: cancelled by id, superseded
-    /// by a hover at another position, or replaced by a newer run.</summary>
+    /// by an announcement of another position, or replaced by a newer run.</summary>
     /// <param name="ASerial">The serial BeginComplete returned.</param>
     /// <returns>Whether that computation was abandoned.</returns>
     function Abandoned(ASerial: Integer): Boolean;
@@ -178,7 +184,9 @@ end;
 
 function TDeferredHoverSlot.Decide(const AKey: string): TDeferredHoverDecision;
 begin
-  Supersede(AKey);
+  { No Supersede here: an UNANNOUNCED hover elsewhere (the menu hover) is not
+    the tracker moving on, and abandoning the tracker's run would answer its
+    still-live request with an error (see Announce). }
   Result:= dhdFull;
   if FKey <> AKey then
   begin

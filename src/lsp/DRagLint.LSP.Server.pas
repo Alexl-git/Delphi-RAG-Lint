@@ -78,6 +78,17 @@ type
     IsIntrinsic  : Boolean;
     IntrinsicName: string ;
     IntrinsicSig : string ;
+    /// <summary>v152 ASYNC: True when ComputeHoverAt already built the Phase-2
+    /// facts (Facts) and the Raises: lines (ExceptionLines) of the symbol
+    /// FactsSymId for the markdown, so hoverBundle reuses them instead of
+    /// building both a second time for the model.</summary>
+    /// <remarks>Valid only while FactsSymId = Sel.Id; False on the fast first
+    /// step of a deferred hover, on the owner-type floor and for overload
+    /// lists, where the markdown built no facts for Sel.</remarks>
+    FactsReady    : Boolean       ;
+    FactsSymId    : Int64         ;
+    Facts         : TDocFacts     ;
+    ExceptionLines: TArray<string>;
   end;
 
   /// <summary>Which indexed symbol a cursor position means, before anything
@@ -5224,8 +5235,14 @@ begin
       var HovCalledFrom: string:= FormatHoverCalledFromLine(HovFacts, Doc.RawBlock + Doc.Remarks);
       if HovCalledFrom <> '' then HovFactLines:= [HovCalledFrom] + HovFactLines;
       LapHoverTiming(HT, 'facts');
-      HovFactLines:= HovFactLines + ExceptionFactLines(HitStore, Sel); { D1: Raises:, after the doc-block facts }
+      var HovExc: TArray<string>:= ExceptionFactLines(HitStore, Sel); { D1: Raises:, after the doc-block facts }
+      HovFactLines:= HovFactLines + HovExc;
       LapHoverTiming(HT, 'exceptions');
+      { v152 ASYNC: kept for hoverBundle's model (built once per popup). }
+      AOut.FactsReady    := True    ;
+      AOut.FactsSymId    := Sel.Id  ;
+      AOut.Facts         := HovFacts;
+      AOut.ExceptionLines:= HovExc  ;
     end;
     MdValue:= DRagLint.Hover.Renderer.RenderHoverMarkdown(Sel, Doc, HovRhs, HovFactLines,
       FormatDeclaredType(DescribeDeclaredType(Sel, HitStore)));
@@ -5361,8 +5378,14 @@ begin
           var NdCalledFrom: string:= FormatHoverCalledFromLine(NdFacts, ''); { 150 LX2: no /// block here }
           if NdCalledFrom <> '' then NdLines:= [NdCalledFrom] + NdLines;
           LapHoverTiming(HT, 'facts');
-          NdLines:= NdLines + ExceptionFactLines(HitStore, Filtered[0]); { D1: Raises: }
+          var NdExc: TArray<string>:= ExceptionFactLines(HitStore, Filtered[0]); { D1: Raises: }
+          NdLines:= NdLines + NdExc;
           LapHoverTiming(HT, 'exceptions');
+          { v152 ASYNC: kept for hoverBundle's model (built once per popup). }
+          AOut.FactsReady    := True          ;
+          AOut.FactsSymId    := Filtered[0].Id;
+          AOut.Facts         := NdFacts       ;
+          AOut.ExceptionLines:= NdExc         ;
         end;
         if Length(NdLines) > 0 then
         begin
@@ -5392,6 +5415,8 @@ begin
   AOut.Store    := HitStore;
   AOut.Path     := APath   ;
   AOut.HasSymbol:= True    ;
+  { v152 ASYNC: facts built for another symbol than the subject are not reused. }
+  if AOut.FactsReady and (AOut.FactsSymId <> AOut.Sel.Id) then AOut.FactsReady:= False;
   Result:= True;
 end; // function
 
@@ -6203,13 +6228,28 @@ begin
     { v152 ASYNC: the first step skips the Phase-2 facts (AWithFacts False) and
       says where they will go. }
     var Fast     : Boolean       := Decision = dhdFast;
-    var Asm_     : THoverAssembly:= AssembleHover(Comp.Store, Comp.Sel, not Fast, HoverExtraStores(Comp.Path, Comp.Store)); { 149 LX: cross-DB uses }
+    { v152 ASYNC: the markdown above already built this symbol's facts and
+      Raises: lines (Comp.FactsReady) -- reuse them rather than paying the two
+      slowest fact queries twice per popup. The model's lines are AssembleHover's
+      AWithFacts branch over the SAME TDocFacts: Used in + Phase-2 + Implemented
+      by, and the Purity verdict; no 'Called from:' (the popup has its grid). }
+    var Reuse    : Boolean       := (not Fast) and Comp.FactsReady;
+    var Asm_     : THoverAssembly:= AssembleHover(Comp.Store, Comp.Sel, not (Fast or Reuse), HoverExtraStores(Comp.Path, Comp.Store)); { 149 LX: cross-DB uses }
+    if Reuse then
+    begin
+      Asm_.FactLines:= TDocRegions.FormatUsedInLines(Comp.Facts) +
+        TDocRegions.FormatPhase2FactLines(Comp.Facts, LoadDocComplexityMin) + Asm_.ImplLines;
+      Asm_.Model.EffectFree   := Comp.Facts.EffectFree   ;
+      Asm_.Model.EffectSummary:= Comp.Facts.EffectSummary;
+      Asm_.Model.EffectWitness:= Comp.Facts.EffectWitness;
+    end;
     LapHoverTiming(HT, 'bundle-assemble');
     if Fast then FactLines:= Asm_.FactLines + [DEFERRED_PLACEHOLDER]
     else
     begin
       if not HoverStillWanted(AId, RunSerial) then Exit;
-      FactLines:= Asm_.FactLines + ExceptionFactLines(Comp.Store, Comp.Sel); { D1: the popup's Raises: line }
+      if Reuse then FactLines:= Asm_.FactLines + Comp.ExceptionLines
+      else FactLines:= Asm_.FactLines + ExceptionFactLines(Comp.Store, Comp.Sel); { D1: the popup's Raises: line }
       LapHoverTiming(HT, 'bundle-exceptions');
     end;
     var ModelJson: string:= DRagLint.Hover.Renderer.RenderHoverJson(Asm_.Model, FactLines);
