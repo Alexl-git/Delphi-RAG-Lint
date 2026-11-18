@@ -13,6 +13,7 @@ uses
   , DRagLint.Core.Interfaces
   , DRagLint.Lint.Config
   , DRagLint.Lint.RuleCatalog
+  , DRagLint.Lint.SharedScope  { TSiblingStoreResolver / TSiblingProjectLister (1.52 BK-XPROJ) }
   ;
 
 type
@@ -80,6 +81,12 @@ type
     NarrowRule : string;
     FilePaths  : TArray<string>;
     ProjectPath: string;
+    /// <summary>Opens a sibling project's index by name (SHARED-UNIT-SCOPE); nil when the caller has none.</summary>
+    /// <remarks>1.52 BK-XPROJ: set by lint-all after Make, so a project-wide rule can judge a unit other projects also compile (TSharedScope). Make leaves it nil.</remarks>
+    SiblingStore: TSiblingStoreResolver;
+    /// <summary>Lists the sibling project names the run can ask; nil when the caller has none.</summary>
+    /// <remarks>1.52 BK-XPROJ: set together with SiblingStore. Make leaves it nil.</remarks>
+    SiblingNames: TSiblingProjectLister;
     /// <summary>True when this run reports ARuleId.</summary>
     /// <param name="ARuleId">A rule id the lane is about to compute.</param>
     /// <returns>False only when --rule names another rule.</returns>

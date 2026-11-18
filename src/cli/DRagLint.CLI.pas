@@ -19203,6 +19203,24 @@ begin
   else Result:= 1;
 end; // function
 
+const
+  { B19 (1.52 BK-XPROJ): appended to a project-composition finding kept outside the roots. }
+  OUTSIDE_ROOTS_NOTE = 'outside the project roots; kept because the finding is about the project''s composition';
+
+/// <summary>B19 (1.52 BK-XPROJ): True for the rules whose finding is about the PROJECT's
+/// composition -- what it lists, needs or cannot resolve -- rather than about the code of
+/// the unit it is anchored on.</summary>
+/// <param name="ARuleId">A finding's rule id; case-insensitive.</param>
+/// <returns>True for unit-not-in-dpr, unit-used-by-no-unit, ancestor-not-in-project,
+/// used-unit-not-resolvable, unit-not-in-library and dependent-project-not-recompiled.</returns>
+/// <remarks>lint-all --project keeps such a finding when its unit is in the project's
+/// closure but outside the project roots; every other rule stays scoped to the roots.</remarks>
+function IsProjectCompositionRule(const ARuleId: string): Boolean;
+begin
+  Result:= MatchText(ARuleId, ['unit-not-in-dpr', 'unit-used-by-no-unit', 'ancestor-not-in-project',
+    'used-unit-not-resolvable', 'unit-not-in-library', 'dependent-project-not-recompiled']);
+end;
+
 { Canonical comparison form for a scope-set path: absolute, all-backslash,
   lower-cased. Delphi paths are case-insensitive and the index stores them with
   backslashes, so anything else produces false misses. }
@@ -21014,9 +21032,25 @@ begin
     Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store, DocRenderOptionsFor(AArgs, ProjectDb));
   { v151 lane FRAME: the v151 rule lanes' project-wide checks, once per run. }
   if V151Wanted then
-    for var V151Nr: string in V151Runs do
-      for var PF: TLintFinding in TV151Dispatch.CheckProject(TV151ProjectCtx.Make(Store, LibStore, Cfg, V151Nr, FilePaths, AArgs.ProjectPath)) do
-        if (Length(V151Runs) = 1) or SameText(PF.RuleId, V151Nr) then Findings:= Findings + [PF];
+  begin
+    { 1.52 BK-XPROJ: the sibling resolver + lister reach the project-wide v151/v152 checks
+      (member-could-be-private judges a unit other projects compile through TSharedScope). }
+    var V151SibKeep : TList<ISymbolStore>:= TList<ISymbolStore>.Create;
+    var V151SibOwned: TObjectList<TObject>:= TObjectList<TObject>.Create(True);
+    try
+      for var V151Nr: string in V151Runs do
+      begin
+        var PCtx: TV151ProjectCtx:= TV151ProjectCtx.Make(Store, LibStore, Cfg, V151Nr, FilePaths, AArgs.ProjectPath);
+        PCtx.SiblingStore:= MakeSiblingStoreResolver(AArgs, V151SibKeep, V151SibOwned);
+        PCtx.SiblingNames:= MakeSiblingProjectLister(AArgs);
+        for var PF: TLintFinding in TV151Dispatch.CheckProject(PCtx) do
+          if (Length(V151Runs) = 1) or SameText(PF.RuleId, V151Nr) then Findings:= Findings + [PF];
+      end;
+    finally
+      V151SibKeep .Free;
+      V151SibOwned.Free;
+    end;
+  end;
   { v0.77: cross-file + within-file clone detection (#6). Runs ONLY here in
     lint-all (never the per-file Check) so within-file clones are reported once. }
   LintPhase('duplicate-code');
@@ -21178,7 +21212,22 @@ begin
           Keep:= Own.IsOurs(F.FilePath);
           OwnMemo.Add(F.FilePath, Keep);
         end;
-        if Keep then begin Ours[OursCount]:= F; Inc(OursCount); end;
+        { B19 (1.52 BK-XPROJ): a project-COMPOSITION finding (the project lists, needs or
+          cannot resolve this unit) is about the project, wherever the unit lies: kept when
+          the unit is in this --project's closure, and says so. }
+        if (not Keep) and (ScopeSet <> nil) and IsProjectCompositionRule(F.RuleId)
+           and ScopeSet.ContainsKey(ScopeKey(F.FilePath)) then
+        begin
+          Ours[OursCount]:= F;
+          if not ContainsText(F.Message, OUTSIDE_ROOTS_NOTE) then
+            Ours[OursCount].Message:= F.Message + ' (' + OUTSIDE_ROOTS_NOTE + ')';
+          Inc(OursCount);
+        end
+        else if Keep then
+        begin
+          Ours[OursCount]:= F;
+          Inc(OursCount);
+        end;
       end;
       SetLength(Ours, OursCount);
       Findings:= Ours;
@@ -26092,19 +26141,33 @@ end; // function
 procedure LoadSiblingNameToDb(const AArgs: TArgs; const ANameToDb: TDictionary<string, string>);
 begin
   LoadManifestNameToDb(AArgs, ANameToDb);
-  if PrimaryDbRegistered(AArgs, ANameToDb) then Exit;
-  { v1511 F1: --db is not the DB the manifest registers (a lane / test COPY): the
-    manifest's DBs are the REAL sibling indexes, which a run on a copy must never open.
-    Each one is replaced by the file of the same name beside the --db copy when one
-    exists (a copy set like v1511\_dbs\ keeps its answers), else dropped -- the rules
-    read a missing sibling as "could not check". }
-  var CopyDir: string:= ExtractFilePath(ExpandFileName(AArgs.DbPath));
-  for var Key: string in ANameToDb.Keys.ToArray do
+  var IsCopy: Boolean:= not PrimaryDbRegistered(AArgs, ANameToDb);
+  if IsCopy then
   begin
-    var Cand: string:= TPath.Combine(CopyDir, ExtractFileName(ANameToDb[Key]));
-    if SameText(Cand, ExpandFileName(AArgs.DbPath)) or not TFile.Exists(Cand) then Cand:= '';
-    PeerTrace('sibling-remap ' + ANameToDb[Key] + ' -> ' + (if Cand = '' then '(none)' else Cand));
-    ANameToDb[Key]:= Cand;
+    { v1511 F1: --db is not the DB the manifest registers (a lane / test COPY): the
+      manifest's DBs are the REAL sibling indexes, which a run on a copy must never open.
+      Each one is replaced by the file of the same name beside the --db copy when one
+      exists (a copy set like v1511\_dbs\ keeps its answers), else dropped -- the rules
+      read a missing sibling as "could not check". }
+    var CopyDir: string:= ExtractFilePath(ExpandFileName(AArgs.DbPath));
+    for var Key: string in ANameToDb.Keys.ToArray do
+    begin
+      var Cand: string:= TPath.Combine(CopyDir, ExtractFileName(ANameToDb[Key]));
+      if SameText(Cand, ExpandFileName(AArgs.DbPath)) or not TFile.Exists(Cand) then Cand:= '';
+      PeerTrace('sibling-remap ' + ANameToDb[Key] + ' -> ' + (if Cand = '' then '(none)' else Cand));
+      ANameToDb[Key]:= Cand;
+    end;
+  end;
+  { B16 (1.52 BK-XPROJ): the peers no manifest section names -- the copies beside a --db
+    copy, or the .groupproj peers of a DB in its own _D-RAG folder (AddDiscoveredPeers). }
+  var Before: TDictionary<string, string>:= TDictionary<string, string>.Create(ANameToDb);
+  try
+    AddDiscoveredPeers(AArgs.DbPath, AArgs.ProjectPath, IsCopy, ANameToDb);
+    for var Pair: TPair<string, string> in ANameToDb do
+      if not Before.ContainsKey(Pair.Key) or (Before[Pair.Key] <> Pair.Value) then
+        PeerTrace('sibling-discovered ' + Pair.Key + ' -> ' + Pair.Value);
+  finally
+    Before.Free;
   end;
 end;
 
