@@ -47,17 +47,78 @@ type
 
 implementation
 
-{ The lane's helpers live in DRagLint.V152.DOCPOL.Support; name it in an
-  implementation uses clause here once it declares something. }
+uses
+  DRagLint.V152.DOCPOL.Support
+  ;
 
-class procedure TV152DOCPOLRules.Catalog(const ADecls: TList<TV151RuleDecl>);  // dl:ok unused-parameter@2899 -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)
+const
+  RULE_PLACEHOLDER = 'doc-placeholder';
+  RULE_MALFORMED   = 'doc-malformed-summary';
+
+  DOC_KINDS: array[0..10] of TSymbolKind = (
+    skClass, skInterface, skRecord, skEnum,
+    skProcedure, skFunction, skMethod, skConstructor, skDestructor,
+    skProperty, skTypeAlias
+  );
+
+function IsDocKind(AKind: TSymbolKind): Boolean;
+var
+  K: TSymbolKind;
 begin
-  { no rules yet }
+  Result:= False;
+  for K in DOC_KINDS do
+    if K = AKind then Exit(True);
 end;
 
-class function TV152DOCPOLRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@ff0f -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)
+function MakeFinding(const ASym: TSymbol; const APath, ARuleId, ASeverity, AMsg: string): TLintFinding;
+begin
+  Result:= Default(TLintFinding);
+  Result.RuleId    := ARuleId;
+  Result.Severity  := ASeverity;
+  Result.Message   := AMsg;
+  Result.FilePath  := APath;
+  Result.StartLine := ASym.StartLine;
+  Result.StartCol  := ASym.StartCol;
+  Result.EndLine   := ASym.StartLine;
+  Result.EndCol    := ASym.StartCol + Length(ASym.Name);
+  Result.SymbolName:= ASym.Name;
+end;
+
+class procedure TV152DOCPOLRules.Catalog(const ADecls: TList<TV151RuleDecl>);
+begin
+  ADecls.Add(V151Rule(RULE_PLACEHOLDER, 'documentation', 'hint',
+    'Doc summary is a template placeholder (Summary here ...), not a description'));
+  ADecls.Add(V151Rule(RULE_MALFORMED, 'documentation', 'hint',
+    'Doc summary opens like a declaration (procedure Foo(...)) instead of a description', False));
+end;
+
+class function TV152DOCPOLRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+var
+  Findings: TList<TLintFinding>;
+  Sym     : TSymbol;
+  Summary : string;
 begin
   Result:= nil;
+  if ACtx.Store = nil then Exit;
+  if not (ACtx.Wants(RULE_PLACEHOLDER) or ACtx.Wants(RULE_MALFORMED)) then Exit;
+  Findings:= TList<TLintFinding>.Create;
+  try
+    for Sym in ACtx.Store.FindSymbolsByFile(ACtx.Path) do
+    begin
+      if not IsDocKind(Sym.Kind) then Continue;
+      Summary:= ACtx.Store.GetSymbolDoc(Sym.Id).Summary;
+      if Summary = '' then Continue;
+      if IsPlaceholderSummary(Summary) then
+        Findings.Add(MakeFinding(Sym, ACtx.Path, RULE_PLACEHOLDER, 'hint',
+          Format('Doc summary of ''%s'' is a template placeholder; it does not count as documented', [Sym.Name])))
+      else if SummaryOpensWithDeclaration(Summary) then
+        Findings.Add(MakeFinding(Sym, ACtx.Path, RULE_MALFORMED, 'hint',
+          Format('Doc summary of ''%s'' opens like a declaration; describe what it does instead', [Sym.Name])));
+    end;
+    if Findings.Count > 0 then Result:= Findings.ToArray;
+  finally
+    Findings.Free;
+  end;
 end;
 
 class function TV152DOCPOLRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@45b8 -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)
