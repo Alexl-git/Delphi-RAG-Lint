@@ -57,6 +57,10 @@
       "host": "Editor",
       "caption": "drag-lint > Find Usages > Everywhere",
       "steps": ["Put the caret on the symbol", "Right-click in the code editor and open drag-lint > Find Usages", "Choose Everywhere"]
+    },
+    {
+      "type": "mcp",
+      "tool": "find_usages"
     }
   ],
   "audience": "both",
@@ -78,6 +82,6 @@
     "date": "2026-11-18",
     "by": "ENGINE",
     "build": "1.51.1-alpha",
-    "surfaceHash": "60f16b744ada69b4bbcedf498d8c00667b126111d0e1805d0dd34a3030206cd3"
+    "surfaceHash": "8e6042913e725f2729344084e87784ac244f370736b7796af7a18f9a0c2d31fd"
   }
 }
