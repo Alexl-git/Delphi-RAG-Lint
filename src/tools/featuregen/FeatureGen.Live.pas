@@ -1023,13 +1023,30 @@ begin
   pLive.MenuSource := MENU_SOURCE_TREE;
 end;
 
-{ Get-MenuSourceText: Editor.pas + AboutForm.pas + ReportText.pas, concatenated. }
+{ Get-MenuSourceText: Editor.pas + AboutForm.pas + ReportText.pas, then every
+  DragLint.Plugin.Cmd.*.pas (the 1.52 Cmd152 command units) in ordinal file-name order, concatenated.
+  Parity: DocsSurfaceHarvest.ps1 Get-MenuSourceText reads the same files in the same order. }
 function MenuSourceText(const pRepo: string): string;
 var
   lF: string;
+  lNames: TArray<string>;
+  lCmd: TArray<string>;
+  lDir: string;
+  lI: Integer;
 begin
+  lNames := ['DragLint.Plugin.Editor.pas', 'DragLint.Plugin.AboutForm.pas', 'DragLint.Plugin.ReportText.pas'];
+  lDir := TPath.Combine(pRepo, 'src\delphi-plugin');
+  if TDirectory.Exists(lDir) then
+  begin
+    // TDirectory.GetFiles filters with TPath.MatchesPattern (no 8.3 '.pas*' widening), like the PS -like
+    lCmd := TDirectory.GetFiles(lDir, 'DragLint.Plugin.Cmd.*.pas');
+    for lI := 0 to High(lCmd) do
+      lCmd[lI] := TPath.GetFileName(lCmd[lI]);
+    TArray.Sort<string>(lCmd, TStringComparer.Ordinal);
+    lNames := lNames + lCmd;
+  end;
   Result := '';
-  for lF in ['DragLint.Plugin.Editor.pas', 'DragLint.Plugin.AboutForm.pas', 'DragLint.Plugin.ReportText.pas'] do
+  for lF in lNames do
     Result := Result + ReadText(TPath.Combine(pRepo, 'src\delphi-plugin\' + lF));  // dl:ok concat-in-loop@e2ec -- REVIEWED 2026-10-19: builds one small bounded text (tens of lines) whose bytes must match the PowerShell output; not a hot path
 end;
 

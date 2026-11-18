@@ -42,6 +42,8 @@ Check 'live captions harvested (>= 40)' ($caps.Count -ge 40) "($($caps.Count))"
 Check 'a real caption is present' ($caps.Contains('About')) "'About'"
 Check 'an invented caption is absent' (-not $caps.Contains('Zz Not A Real Menu Item'))
 Check 'a Reports catalog caption is present' ($caps.Contains('Who calls this routine...'))
+# 1.52 Cmd152 table: each command keeps its caption in its own DragLint.Plugin.Cmd.<Name>.pas unit.
+Check 'a Cmd152 command-unit caption is present (Cmd.FixMarker)' ($caps.Contains('Fix with drag-lint (finding at cursor)'))
 
 # --- dialog buttons are harvested APART from menu items ----------------------
 # A '.Caption :=' on a variable declared or created as a TButton / TBitBtn /

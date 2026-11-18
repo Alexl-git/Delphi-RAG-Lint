@@ -38,6 +38,16 @@ function Get-MenuSourceText {
   foreach ($p in @($editorPas, $aboutForm, $reportTxt)) {
     if (Test-Path -LiteralPath $p) { $menuSrc += (Get-Content -LiteralPath $p -Raw) }
   }
+  # 1.52 Cmd152 table: each command keeps its caption ('Command.Caption:= ...') in its own
+  # DragLint.Plugin.Cmd.<Name>.pas unit. Read them all, in ORDINAL file-name order --
+  # FeatureGen.Live.pas MenuSourceText reads the same set in the same order (parity).
+  $plugDir = Join-Path $Repo 'src\delphi-plugin'
+  if (Test-Path -LiteralPath $plugDir) {
+    [string[]]$cmdUnits = @(Get-ChildItem -LiteralPath $plugDir -File -Filter 'DragLint.Plugin.Cmd.*.pas' |
+      Where-Object { $_.Name -like 'DragLint.Plugin.Cmd.*.pas' } | ForEach-Object { $_.Name })
+    [Array]::Sort($cmdUnits, [StringComparer]::Ordinal)
+    foreach ($n in $cmdUnits) { $menuSrc += (Get-Content -LiteralPath (Join-Path $plugDir $n) -Raw) }
+  }
   return $menuSrc
 }
 
