@@ -1953,6 +1953,11 @@ type
       last = sink). Empty for every other rule (zeroed by Default). Serialised to `--format json` as
       `path` only when non-empty (T2) and to SARIF codeFlows (T3); never to the rule cache. }
     Path: TArray<TLintLocation>;
+    { TAINTDEDUP (1.52): a taint rule reports ONE finding per sink site (file, line, col, rule); when
+      more than one distinct path reaches it, Paths holds them ALL, shortest first (Paths[0] = Path),
+      each source-first and sink-last. Empty when there is one path (Path says it). Serialised to
+      `--format json` as `paths` only when it holds 2+ paths; never to the rule cache. }
+    Paths: TArray<TArray<TLintLocation>>;
 
     /// <summary>A finding positioned on a symbol's declaration name.</summary>
     /// <param name="pRuleId">Rule id the finding reports under.</param>

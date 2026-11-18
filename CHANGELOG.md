@@ -18,6 +18,7 @@ resolver 1.28.0 -> 1.29.0-alpha.
 
 ### Changed
 
+- Taint rules (`taint-sql-injection`, `taint-command-injection`, `taint-path-traversal`) report **ONE finding per sink site** (file + line + col + rule; lane TAINTDEDUP), not one per path: a `CreateProcess` reached by 4 paths was 3-4 Errors on one line. The message names the best path and ends `(N sources, M paths)` when more than one reaches the sink; `--format json` keeps `path` (best) and adds `paths` (every distinct path, best first). The old `(+N more paths)` tail and the `max_paths_per_sink` cap are gone (the key is accepted and ignored). `dl:ok` markers on the sink line keep working unchanged (the hash input has no message; no marker-algorithm bump). Runner `run_v152_TAINTDEDUP.ps1`.
 - `by-value-arg-before-assignment` (OFF since 1.46) is FOLDED into the ON rule `used-before-assignment` (lane BK-OWNGATED,
   EX1, owner ruling 2026-11-18): `G.Take(X)` / `G.TakeC(X)` with X unassigned now reports by default under
   `used-before-assignment` (error definite, warning possible). The old id is removed from the catalogue (with B48 debug-display-placeholder added: 435 rules,
