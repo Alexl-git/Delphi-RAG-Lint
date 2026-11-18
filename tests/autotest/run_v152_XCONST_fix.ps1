@@ -134,7 +134,7 @@ try {
   $impl = [array]::IndexOf($ls, 'implementation'); $decl = -1
   for ($i = 0; $i -lt $ls.Count; $i++) { if ($ls[$i] -match '^\s*cMaxCount = 5000;') { $decl = $i } }
   Check 'a11 placed in the implementation' (($impl -ge 0) -and ($decl -gt $impl)) "impl=$impl decl=$decl"
-  Check 'a12 no gate refusal' ($r.Out -notmatch 'REFUSED') $r.Out
+  Check 'a12 no gate refusal' ($r.Out -cnotmatch 'REFUSED') $r.Out
   Check 'a13 written project builds' ((Build $A) -eq 0)
 
   # b: string literal through the on-demand rule extract-constant, caret column given
