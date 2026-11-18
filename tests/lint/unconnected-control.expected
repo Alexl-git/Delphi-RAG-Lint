@@ -1,0 +1,21 @@
+# unconnected-control: a control with a default event, no event, no Action, no data/LiveBindings binding,
+# no ModalResult / BitBtn Kind, and no reference in code (v152 UNCONN, ruling B2 / D12)
+unconnected-control 17
+unconnected-control 21
+unconnected-control 23
+unconnected-control 28
+unconnected-control 30
+# silent twins: OnClick, Action, ModalResult, code reference, Checked read, LiveBindings Control,
+# FindComponent string, passive label, BitBtn Kind, menu item with sub-items, separator, menu Action
+!unconnected-control 16
+!unconnected-control 18
+!unconnected-control 19
+!unconnected-control 20
+!unconnected-control 22
+!unconnected-control 24
+!unconnected-control 25
+!unconnected-control 26
+!unconnected-control 27
+!unconnected-control 29
+!unconnected-control 31
+!unconnected-control 32

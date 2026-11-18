@@ -1,0 +1,2 @@
+# the form file itself: findings are reported on the .pas field line, so linting the .dfm stays silent
+!unconnected-control

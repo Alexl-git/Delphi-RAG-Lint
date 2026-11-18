@@ -1,0 +1,24 @@
+{
+  "id": "v152-unconn-rules",
+  "title": "Lint rules unconnected-control and hanging-handler",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.52.0-alpha",
+  "summary": "Warns on a form control that nothing wires and on an event-handler-shaped method that no form binds and no code assigns or calls",
+  "intro": "Read this to see which controls and handlers the two form rules report, what counts as a connection, and how the index widens the evidence beyond the unit.",
+  "wikiPage": "v152-unconn-rules",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "drag-lint lint <file.pas> --rule unconnected-control,hanging-handler --db <index.sqlite>"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-17",
+    "by": "alexanderl",
+    "build": "1.51.1-alpha"
+  }
+}
