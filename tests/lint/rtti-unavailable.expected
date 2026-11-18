@@ -1,0 +1,16 @@
+# sub-kind anonymous-field-type (v152 RTTI5); rule is OFF by default, the sibling .config.json enables it
+rtti-unavailable 24
+rtti-unavailable 25
+rtti-unavailable 26
+rtti-unavailable 27
+rtti-unavailable 28
+rtti-unavailable 35
+# non-hits: every CONTROL line
+!rtti-unavailable 20
+!rtti-unavailable 22
+!rtti-unavailable 31
+!rtti-unavailable 32
+!rtti-unavailable 33
+!rtti-unavailable 36
+!rtti-unavailable 40
+!rtti-unavailable 34
