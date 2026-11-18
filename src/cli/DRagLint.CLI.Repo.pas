@@ -9,7 +9,7 @@ unit DRagLint.CLI.Repo;
 interface
 
 /// <summary>Runs `drag-lint repo &lt;sub-verb&gt; ...`: init, info, import-fb, seed-fb,
-/// refresh-schema, backup, restore, gen-memtable (PLAN D11). gen-param-array, gen-orm,
+/// refresh-schema, backup, restore, gen-memtable, gen-param-array (PLAN D11; gen-param-array is\n/// DRagLint.CLI.RepoParamArray and needs no repository). gen-orm,
 /// update-orm and gen-dataservice are reserved: they report "not available" and return 1.</summary>
 /// <param name="pSub">The sub-verb (first positional after `repo`), '' when absent.</param>
 /// <param name="pRepo">--repo path, '' when absent (then the project decides the path).</param>
@@ -46,7 +46,8 @@ uses
   DRagLint.FieldRepo.TextBackup,
   DRagLint.FieldRepo.FbImport,
   DRagLint.FieldRepo.SchemaSeed,
-  DRagLint.FieldRepo.CsvMemTable
+  DRagLint.FieldRepo.CsvMemTable,
+  DRagLint.CLI.RepoParamArray
   ;
 
 const
@@ -63,7 +64,7 @@ const
   FB_IMPORT     = 0;
   FB_SEED       = 1;
   FB_REFRESH    = 2;
-  SUB_VERBS   = 'init, info, import-fb, seed-fb, refresh-schema, backup, restore, gen-memtable';
+  SUB_VERBS   = 'init, info, import-fb, seed-fb, refresh-schema, backup, restore, gen-memtable, gen-param-array';
 
 function CommandLineFlag(const pFlag: string): Boolean;
 var
@@ -439,7 +440,7 @@ end;
 function RunRepoVerb(const pSub, pRepo, pProject, pConnection, pInFile, pOutFile: string;  // dl:ok too-many-parameters@96de -- REVIEWED 2026-11-17 v152 TTE: one positional per CLI flag keeps the CLI.pas dispatch a single line with no options builder there (FRAME contract, TT plan section 6 E1 shape)
   pReplace, pJson: Boolean): Integer;
 begin
-  if MatchText(pSub, ['gen-param-array', 'gen-orm', 'update-orm', 'gen-dataservice']) then
+  if SameText(pSub, 'gen-param-array') then Exit(RunGenParamArray(pProject, pInFile, pJson)); // reads no repository: dispatched before ResolveRepoPath\n  if MatchText(pSub, ['gen-orm', 'update-orm', 'gen-dataservice']) then
   begin
     Writeln(ErrOutput, 'repo ', pSub, ': not available in this build');
     Exit(EXIT_FAIL);

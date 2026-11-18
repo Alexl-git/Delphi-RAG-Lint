@@ -310,11 +310,64 @@ begin
   Check('project: gate refusal leaves unit source', (LRes[0].Status = pasRefusedByGate) and (LRes[0].NewSource = FIXTURE_PAS));
 end;
 
+procedure RunNamedTests;
+const
+  MULTI_DFM =
+    'object frmX: TForm'#13#10 +
+    '  object tblA: TTable'#13#10 +
+    '    object tblAID: TIntegerField'#13#10 +
+    '      FieldName = ''ID'''#13#10 +
+    '    end'#13#10 +
+    '  end'#13#10 +
+    '  object tblB: TTable'#13#10 +
+    '    object tblBCODE: TStringField'#13#10 +
+    '      FieldName = ''CODE'''#13#10 +
+    '    end'#13#10 +
+    '  end'#13#10 +
+    '  object qOne: TFDQuery'#13#10 +
+    '    ParamData = <'#13#10 +
+    '      item'#13#10 +
+    '        Name = ''ID'''#13#10 +
+    '        DataType = ftInteger'#13#10 +
+    '      end>'#13#10 +
+    '  end'#13#10 +
+    '  object qTwo: TFDQuery'#13#10 +
+    '    ParamData = <'#13#10 +
+    '      item'#13#10 +
+    '        Name = ''CODE'''#13#10 +
+    '        DataType = ftString'#13#10 +
+    '      end>'#13#10 +
+    '  end'#13#10 +
+    'end'#13#10;
+var
+  LSrc, LDst: TPAColumns;
+  LQ, LT: string;
+begin
+  Check('named: exact pick of first table + first query',
+    PADiscoverNamed(MULTI_DFM, 'qOne', 'tblA', LQ, LT, LSrc, LDst) and (LQ = 'qOne') and (LT = 'tblA')
+      and (Length(LSrc) = 1) and (LSrc[0].FieldName = 'ID') and (Length(LDst) = 1) and (LDst[0].Name = 'ID'));
+  Check('named: other pair',
+    PADiscoverNamed(MULTI_DFM, 'qTwo', 'tblB', LQ, LT, LSrc, LDst) and (LSrc[0].FieldName = 'CODE')
+      and (LDst[0].Name = 'CODE'));
+  Check('named: names are case-insensitive', PADiscoverNamed(MULTI_DFM, 'QONE', 'TBLA', LQ, LT, LSrc, LDst));
+  Check('named: absent query is a miss, never a fallback',
+    not PADiscoverNamed(MULTI_DFM, 'qNope', 'tblA', LQ, LT, LSrc, LDst));
+  Check('named: absent table is a miss', not PADiscoverNamed(MULTI_DFM, 'qOne', 'tblNope', LQ, LT, LSrc, LDst));
+  Check('named: only the query named, table by the LAST-table heuristic',
+    PADiscoverNamed(MULTI_DFM, 'qOne', '', LQ, LT, LSrc, LDst) and (LT = 'tblB') and (LQ = 'qOne'));
+  Check('named: empty names = PADiscoverFromDfm',
+    PADiscoverNamed(MULTI_DFM, '', '', LQ, LT, LSrc, LDst) and (LQ = 'qTwo') and (LT = 'tblB'));
+  Check('markers: golden block has markers', PABlockHasMarkers(GoldenText));
+  Check('markers: clean text has none', not PABlockHasMarkers('  qIns.Execute(I);'#13#10));
+  Check('markers: MISSING PARAMS alone counts', PABlockHasMarkers('x'#13#10'// MISSING PARAMS'#13#10));
+end;
+
 begin
   GPass := 0;
   GFail := 0;
   try
     RunTests;
+    RunNamedTests;
   except
     on E: Exception do
     begin

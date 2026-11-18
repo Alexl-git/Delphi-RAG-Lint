@@ -45,8 +45,38 @@ drag-lint repo gen-memtable   --in <csv file> [--name <Name>] [--output <file>]
 | `restore` | Reads a text backup into the repository, creating it when missing. A non-empty repository needs `--replace`. The whole file is validated first; a malformed file prints `line <n>: ...` and changes nothing (a missing repository is not left behind). | 0; 1; 2 malformed backup |
 | `gen-memtable` | Prints (or writes with `--output`) the Pascal source of `Create<Name>Fields`, a procedure that builds the fields of a `TFDMemTable` from a CSV (`FieldName,FieldType,Size,FieldKind,...`). `--name` defaults to `FDMemTable`. | 0; 1; 2 bad CSV |
 
-`gen-param-array`, `gen-orm`, `update-orm` and `gen-dataservice` are reserved sub-verbs; they
+`gen-orm`, `update-orm` and `gen-dataservice` are reserved sub-verbs; they
 answer "not available in this build" and exit 1.
+
+## gen-param-array
+
+`drag-lint repo gen-param-array` ports the TableTools FireDAC Param Array assistant: it reads a unit's
+text DFM (the table's fields, the parameterised `TFDQuery`'s params with their types), matches params to
+fields by name and type, and produces the Array-DML loop (`Params.ArraySize`, one `Params[parX].AsY[I] :=
+tblZ...AsW` line per pair, `Execute(I)` every `STEPSIZE` rows). It needs no repository.
+
+| Call | What it does |
+|---|---|
+| `--in <unit.pas> [--dfm <file>]` | one unit; the DFM is `<unit>.dfm` beside it unless `--dfm` names it |
+| `--project <X.dproj> --all [--only a,b]` | every `u*` unit of the project (the exclusion list: `uFolderCheck`, `uCOMPGRP`, `uTestHelper`) |
+| no mode flag | prints the block (what the IDE assistant put on the clipboard) |
+| `--plan` | prints the unified diff per unit, writes nothing |
+| `--apply --project <X.dproj>` | inserts the block as a braced comment before the final `end.`, through ONE compile gate for the whole run (baseline build, all-or-nothing write under `.BCK<n>`, after build, rollback); a compile error retries once without the units dcc names |
+| `--query <Name>` / `--table <Name>` | pick the components by name; the default is the LAST parameterised query and the LAST table. A named component that is absent is exit 1, never a fallback |
+| `--step-size <n>` / `--progress-form <Form>` | `STEPSIZE` (default 20000); the loader-form progress lines of the original (default none) |
+| `--json` | `{mode, units:[{unit, status, query, table, matched, type_mismatch, missing_params, missing_fields, plan?, block?, error?}], gate?:{applied, refusal, detail, rolled_back}}` |
+
+Status words: `applied`, the plan-only word (a unit that would be written; see `--json`), `refused-by-gate`, `no-insert-point`, `no-block`, `excluded`,
+`binary-dfm`, `missing-dfm`; a binary or missing DFM is reported per unit, never skipped silently.
+Exit 0 = every processed unit is ready to write or written; 1 = a unit refused, no block (single unit), or the gate
+rolled back; 2 = bad flags, a write failure, or a baseline that does not build.
+
+The block is a fragment, not code: a column that does not match leaves a marker line (`##### TYPE
+MISMATCH #####`, `// MISSING PARAMS`, `#### MISSING FIELDS ####`) for a human to finish. In 1.52 it is
+therefore inserted as a comment, so the compile gate proves "the unit still builds" (and a block holding
+`}` is refused before any build); live insertion at a `// dl:param-array` marker follows in 1.52.1.
+The Loader2019 comparison is `tests\autotest\run_fieldrepo_paramarray_golden.ps1`: a report of assignment
+triples, not text equality.
 
 ## Text backup
 

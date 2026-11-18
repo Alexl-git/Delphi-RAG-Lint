@@ -4953,6 +4953,31 @@
       }
     },
     {
+      "id": "v152-atlb-rules",
+      "title": "member-could-be-private lint rule (lane ATLB)",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "Hints (OFF in 1.52) on a public class member referenced only inside its own unit; published, virtual, interface-implementing, attributed and shared-unit members stay silent",
+      "intro": "Read this to see when member-could-be-private reports a public member, which members it never touches, and why component-create-without-override was refused in favour of hides-ancestor-virtual.",
+      "wikiPage": "v152-atlb-rules",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "usage": "drag-lint lint-all --db <db> [--rule member-could-be-private] (default OFF in 1.52, category project-wide, hint)",
+          "flags": [
+            {
+              "name": "--rule",
+              "arg": "<id>"
+            }
+          ]
+        }
+      ],
+      "audience": "both"
+    },
+    {
       "id": "v151-mem-rules",
       "title": "Memory and string-pointer lint rules (PChar, raw memory, leaks, byte counts)",
       "group": "linting",
@@ -14724,8 +14749,56 @@
         {
           "type": "cli",
           "verb": "repo",
-          "usage": "drag-lint repo <init|info|import-fb|seed-fb|refresh-schema|backup|restore|gen-memtable> (--repo <file> | --project <project file>) [--connection \"<Firebird connection string>\"] [--in <file>] [--output <file>] [--name <Name>] [--replace] [--dry-run] [--json]   (the field repository: one SQLite file per database; Firebird is only read)",
+          "usage": "drag-lint repo <init|info|import-fb|seed-fb|refresh-schema|backup|restore|gen-memtable|gen-param-array> (--repo <file> | --project <project file>) [--connection \"<Firebird connection string>\"] [--in <file>] [--output <file>] [--name <Name>] [--replace] [--dry-run] [--json]   (the field repository: one SQLite file per database; Firebird is only read; gen-param-array needs no repository)",
           "flags": [
+            {
+              "name": "--all"
+            },
+            {
+              "name": "--apply"
+            },
+            {
+              "name": "--build-timeout",
+              "arg": "<s>"
+            },
+            {
+              "name": "--dfm",
+              "arg": "<file>"
+            },
+            {
+              "name": "--no-backup"
+            },
+            {
+              "name": "--only",
+              "arg": "<unit,...>"
+            },
+            {
+              "name": "--plan"
+            },
+            {
+              "name": "--platform",
+              "arg": "<p>"
+            },
+            {
+              "name": "--progress-form",
+              "arg": "<Form>"
+            },
+            {
+              "name": "--query",
+              "arg": "<Name>"
+            },
+            {
+              "name": "--rsvars",
+              "arg": "<bat>"
+            },
+            {
+              "name": "--step-size",
+              "arg": "<n>"
+            },
+            {
+              "name": "--table",
+              "arg": "<Name>"
+            },
             {
               "name": "--connection",
               "arg": "<Firebird connection string>"
@@ -14761,7 +14834,7 @@
             }
           ],
           "helpOrder": 110,
-          "help": ["  drag-lint repo init           (--repo <file> | --project <project file>)   (create an empty field repository; exit 1 when the file exists)", "  drag-lint repo info           (--repo <file> | --project <project file>) [--json]   (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)", "  drag-lint repo import-fb      --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--replace]   (copy the FIB$ registry tables; read-only on Firebird; --replace writes a before-import text backup first; exit 1 failure, 2 schema drift)", "  drag-lint repo seed-fb        --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--dry-run]   (fill an EMPTY repository from the Firebird schema; read-only on Firebird)", "  drag-lint repo refresh-schema --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--dry-run]   (re-read the Firebird schema into a filled repository, keep hand-edited columns, mark vanished columns; --dry-run prints the diff only)", "  drag-lint repo backup         (--repo <file> | --project <project file>) [--output <file>]   (write the diffable text backup; default <repo>.txt)", "  drag-lint repo restore        --in <backup file> (--repo <file> | --project <project file>) [--replace]   (create the repository when missing; a malformed backup prints \"line <n>: ...\" and exits 2, nothing changed)", "  drag-lint repo gen-memtable   --in <csv file> [--name <Name>] [--output <file>]   (Pascal source that builds the fields of a TFDMemTable from a field-definition CSV; exit 2 on a bad CSV)"]
+          "help": ["  drag-lint repo init           (--repo <file> | --project <project file>)   (create an empty field repository; exit 1 when the file exists)", "  drag-lint repo info           (--repo <file> | --project <project file>) [--json]   (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)", "  drag-lint repo import-fb      --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--replace]   (copy the FIB$ registry tables; read-only on Firebird; --replace writes a before-import text backup first; exit 1 failure, 2 schema drift)", "  drag-lint repo seed-fb        --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--dry-run]   (fill an EMPTY repository from the Firebird schema; read-only on Firebird)", "  drag-lint repo refresh-schema --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--dry-run]   (re-read the Firebird schema into a filled repository, keep hand-edited columns, mark vanished columns; --dry-run prints the diff only)", "  drag-lint repo backup         (--repo <file> | --project <project file>) [--output <file>]   (write the diffable text backup; default <repo>.txt)", "  drag-lint repo restore        --in <backup file> (--repo <file> | --project <project file>) [--replace]   (create the repository when missing; a malformed backup prints \"line <n>: ...\" and exits 2, nothing changed)", "  drag-lint repo gen-memtable   --in <csv file> [--name <Name>] [--output <file>]   (Pascal source that builds the fields of a TFDMemTable from a field-definition CSV; exit 2 on a bad CSV)", "  drag-lint repo gen-param-array (--in <unit.pas> [--dfm <file>] | --project <X.dproj> --all [--only <unit,...>]) [--query <Name>] [--table <Name>] [--step-size <n>] [--progress-form <Form>] [--plan | --apply --project <X.dproj> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] [--json]   (FireDAC Array-DML loop from the unit's DFM, inserted as a braced comment before the final end.; no flag prints the block, --plan the diff, --apply writes through ONE compile gate; exit 1 a unit refused or no block, 2 bad flags or a baseline that does not build)"]
         }
       ],
       "audience": "both",
@@ -14773,6 +14846,10 @@
         {
           "ask": "How do I keep it in version control?",
           "command": "drag-lint repo backup --repo <file> --output <file.txt>"
+        },
+        {
+          "ask": "How do I get the FireDAC Array-DML loop for a unit?",
+          "command": "drag-lint repo gen-param-array --in <unit.pas> --plan"
         },
         {
           "ask": "How do I see what is in it?",
@@ -20089,6 +20166,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "manual-inrange"
+      },
+      {
+        "id": "rule.member-could-be-private",
+        "title": "member-could-be-private",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Public member is only referenced inside its own unit; it could be private (project-wide, hint)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule member-could-be-private"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "member-could-be-private"
       },
       {
         "id": "rule.message-chain",

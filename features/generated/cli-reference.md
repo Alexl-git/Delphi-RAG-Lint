@@ -1323,6 +1323,7 @@ Described in:
 * [Text rules: bidi, invisible, control chars, TODO, header, strings](../../docs/wiki/text-rules.md)
 * [Typing and ownership lint rules (casts, Self as interface, destructors)](../../docs/wiki/typing-and-ownership-rules.md)
 * [CLI fixes in 1.51.1](../../docs/wiki/v1511-cli-fixes.md)
+* [member-could-be-private lint rule (lane ATLB)](../../docs/wiki/v152-atlb-rules.md)
 
 ### lint-project
 
@@ -1818,11 +1819,24 @@ Described in [Rename Symbol](../../docs/wiki/Rename-Symbol.md).
 Keeps the TableTools field registry in one SQLite file per database, filled from Firebird (read-only), with a diffable text backup.
 
 ```text
-drag-lint repo <init|info|import-fb|seed-fb|refresh-schema|backup|restore|gen-memtable> (--repo <file> | --project <project file>) [--connection "<Firebird connection string>"] [--in <file>] [--output <file>] [--name <Name>] [--replace] [--dry-run] [--json]   (the field repository: one SQLite file per database; Firebird is only read)
+drag-lint repo <init|info|import-fb|seed-fb|refresh-schema|backup|restore|gen-memtable|gen-param-array> (--repo <file> | --project <project file>) [--connection "<Firebird connection string>"] [--in <file>] [--output <file>] [--name <Name>] [--replace] [--dry-run] [--json]   (the field repository: one SQLite file per database; Firebird is only read; gen-param-array needs no repository)
 ```
 
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
+| `--all` |  |  |  |
+| `--apply` |  |  |  |
+| `--build-timeout` | `<s>` |  |  |
+| `--dfm` | `<file>` |  |  |
+| `--no-backup` |  |  |  |
+| `--only` | `<unit,...>` |  |  |
+| `--plan` |  |  |  |
+| `--platform` | `<p>` |  |  |
+| `--progress-form` | `<Form>` |  |  |
+| `--query` | `<Name>` |  |  |
+| `--rsvars` | `<bat>` |  |  |
+| `--step-size` | `<n>` |  |  |
+| `--table` | `<Name>` |  |  |
 | `--connection` | `<Firebird connection string>` |  |  |
 | `--dry-run` |  |  |  |
 | `--in` | `<backup file>` |  |  |
