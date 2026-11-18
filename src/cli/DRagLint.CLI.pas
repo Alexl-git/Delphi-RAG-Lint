@@ -17339,6 +17339,28 @@ begin
   end;
 end;
 
+{ 1.52 FINDOC2: runs the in-process DoIndex of a doc verb. DoIndex reports
+  stage: / Done. / rule-cache: lines on stdout, which broke the single-JSON-
+  document --json contract on every in-process reindex (the DOCU5 rescan, the
+  D-2 retry, --apply --reindex). Under a machine-readable format (decided by
+  AArgs, the doc verb's own args) stdout goes to NUL for the call, as
+  reconcile-project does; stderr is untouched. Returns DoIndex's exit code. }
+function DoIndexForDoc(const AArgs, AIndexArgs: TArgs): Integer;
+begin
+  if not IsMachineReadableOutput(AArgs) then Exit(DoIndex(AIndexArgs));
+  var SavedOut: TTextRec;
+  Flush(Output);
+  Move(TTextRec(Output), SavedOut, SizeOf(TTextRec));
+  AssignFile(Output, 'NUL');
+  Rewrite(Output);
+  try
+    Result:= DoIndex(AIndexArgs);
+  finally
+    CloseFile(Output);
+    Move(SavedOut, TTextRec(Output), SizeOf(TTextRec)); // restore stdout
+  end; // try
+end; // function
+
 // v(PHASE A2 + ruling D-2): the doc verbs' recovery step when the applier's
 // stale-anchor guard refused an edit.
 //
@@ -17363,7 +17385,8 @@ function ReindexAfterStaleAnchor(const AArgs: TArgs; const AFilePath: string): B
 var
   IndexArgs: TArgs;
 begin
-  Writeln('doc: the index disagrees with the file on where a declaration is -- reindexing and retrying once (ruling D-2).');
+  { 1.52 FINDOC2: EmitStatusLine -- stdout on the text path, stderr under --json. }
+  EmitStatusLine(AArgs, 'doc: the index disagrees with the file on where a declaration is -- reindexing and retrying once (ruling D-2).');
   IndexArgs         := AArgs;
   IndexArgs.IndexAll:= False;
   if AArgs.ProjectPath <> '' then IndexArgs.Path:= ''    // ProjectPath drives the closure
@@ -17374,9 +17397,9 @@ begin
   // is the endorsed incremental move: it cannot widen a scope and it leaves the
   // scan_type stamp alone. ExpandFileName: a bare `--unit foo.pas` is cwd-relative.
   else IndexArgs.Path:= ExpandFileName(AFilePath);
-  Result:= DoIndex(IndexArgs) = 0;
+  Result:= DoIndexForDoc(AArgs, IndexArgs) = 0;
   if not Result then
-    Writeln('doc: the reindex FAILED. Nothing was written at the unverified coordinate(s).');
+    EmitStatusLine(AArgs, 'doc: the reindex FAILED. Nothing was written at the unverified coordinate(s).');
 end;
 
 // Reports edits the stale-anchor guard dropped even after the D-2 retry. The
@@ -17456,6 +17479,9 @@ begin
   Writeln(ErrOutput, Format('doc: WARN -- %d file(s) (%s) look unchanged by timestamp and size, but the facts stored for them ' +
     'disagree with the source text. Rescanning %d file(s) (the documented file and the files its facts were read from), then running.',
     [Length(Bad), Named, Length(Files)]));
+  { 1.52 FINDOC: DoIndexForDoc keeps the in-process indexer's stdout lines out
+    of a --json document (DOCAPPLY FOUND: 60 such lines on a TableTools copy);
+    the WARN above and any failure stay on stderr. }
   for var F: string in Files do
   begin
     if not TFile.Exists(F) then Continue;
@@ -17463,7 +17489,7 @@ begin
     IndexArgs.IndexAll     := False;
     IndexArgs.ForceReparse := True;
     IndexArgs.Path         := ExpandFileName(F);
-    if DoIndex(IndexArgs) <> 0 then
+    if DoIndexForDoc(AArgs, IndexArgs) <> 0 then
       Writeln(ErrOutput, 'doc: WARN -- the rescan of ' + F + ' FAILED; the facts for it may still be stale.');
   end;
   var Ok: Boolean;
@@ -17588,6 +17614,8 @@ begin
   Opts:= Default(TDocBatchOptions);
   { exclude_paths, the OTHER half of ownership -- see TDocBatchOptions.IsExcluded. }
   Opts.IsExcluded:= DocExcludePredicate(AArgs);
+  Opts.DocumentThirdParty:= AArgs.DocumentThirdParty; { 1.52 FINDOC: ownRoots for --unit }
+  Opts.OwnAnchorDir:= AnchorDirForDb(AArgs.DbPath);
   // --stubs flips the facts-only default: on = keep pure all-TODO creates too.
   Opts.Stubs:= AArgs.DocStubs;
   Opts.IncludeSeeAlso:= AArgs.DocSeeAlso; // ADF T4: --seealso opts in <seealso> crefs.
@@ -17672,12 +17700,34 @@ end; // function
 // ('project' | 'all'); AScopeVal is the .dpr/.dproj path or '' for document-all.
 // Applies the aggregated per-file edits (TTextEditApplier groups+sorts per file)
 // unless dry-run, then prints the summary or the --json aggregate. Exit 0.
+// 1.52 FINDOC2 (DOCAPPLY FOUND 3 / FINDOC item 5): AStaleSrc = StaleFactSources
+// of the run -- files the facts were read from that changed since indexing
+// (e.g. another project's apply to a shared unit). Their indexed line ranges
+// cover other text, so the facts cite the wrong routines. --apply REFUSES
+// (ReportStaleFactSources, nothing written, as --unit / --qname do); a dry run
+// REPORTS it -- a WARN on stderr naming the files, the preview still rendered,
+// and the --json key staleFactSources -- because a preview writes nothing and
+// is how the user sees what the run would do. --apply --reindex reindexes
+// first, so it never sees a stale source.
 function ReportDocBatch(const AArgs: TArgs; const ARes: TDocBatchResult;
-  const AScope, AScopeVal: string): Integer;
+  const AScope, AScopeVal: string; const AStaleSrc: TArray<string>): Integer;
+const
+  MAX_NAMED = 3; { files named in the WARN; the count covers the rest }
 var
   O      : TJSONObject;
   Applied: Boolean    ;
 begin
+  if Length(AStaleSrc) > 0 then
+  begin
+    if AArgs.Apply then Exit(ReportStaleFactSources(AStaleSrc, AArgs.DbPath));
+    var Named: string:= '';
+    for var I: Integer:= 0 to Min(High(AStaleSrc), MAX_NAMED - 1) do
+      Named:= Named + (if Named = '' then '' else ', ') + AStaleSrc[I];
+    Writeln(ErrOutput, Format('doc: WARN -- %d file(s) this run reads facts from changed since it was indexed (%s). ' +
+      'This PREVIEW may cite the wrong routines; --apply refuses until the index is fresh: ' +
+      'drag-lint index --project <file.dproj> --db %s (or --apply --reindex).',
+      [Length(AStaleSrc), Named, AArgs.DbPath]));
+  end;
   Applied:= AArgs.Apply and (Length(ARes.Edits) > 0);
   // v(PHASE A2): the batch paths compute every edit from ONE snapshot, so a
   // stale-anchor refusal here does not mean "an earlier edit in this run moved
@@ -17718,6 +17768,7 @@ begin
       // some sites were refused -- without it the text path reports a refusal
       // and the machine path silently claims success. 0 on every healthy run.
       O.AddPair('staleAnchorsRefused', TJSONNumber.Create(BatchSkipped));
+      O.AddPair('staleFactSources', TJSONNumber.Create(Length(AStaleSrc))); // 1.52 FINDOC2: ADDITIVE, 0 on a fresh index
       Writeln(O.ToJson);
     finally
       O.Free;
@@ -17780,16 +17831,22 @@ begin
   // ADP1: Step 1 (if --reindex + --apply): reindex BEFORE document to ensure
   // --apply works on current line numbers. INCREMENTAL index auto-detects
   // stale/absent files, skips up-to-date, re-parses only those changed.
+  // 1.52 FINDOC2: the notes go through EmitNoteLine / EmitStatusLine and the
+  // indexer through DoIndexForDoc, so --json stdout stays ONE document.
   if AArgs.DocReindex and AArgs.Apply then
   begin
-    Writeln('Reindexing (INCREMENTAL): detecting stale/absent files...');
+    EmitNoteLine(AArgs, 'Reindexing (INCREMENTAL): detecting stale/absent files...');
     // Use a copy of AArgs for the index call. ProjectPath is preserved so
     // DoIndex can resolve the project's compilation closure folders.
     var IndexArgs: TArgs := AArgs;
     IndexArgs.IndexAll := False;  // incremental (default)
     IndexArgs.Path := '';  // clear Path; let ProjectPath drive the resolution
-    var IndexResult := DoIndex(IndexArgs);
-    if IndexResult <> 0 then begin Writeln('Reindex before document failed.'); Exit(IndexResult); end;
+    var IndexResult := DoIndexForDoc(AArgs, IndexArgs);
+    if IndexResult <> 0 then
+    begin
+      EmitStatusLine(AArgs, 'Reindex before document failed.');
+      Exit(IndexResult);
+    end;
   end;
 
   if not AArgs.DocStrip then
@@ -17823,19 +17880,25 @@ begin
     ResetSourceFilesRead;
     Res:= TDocBatch.DocumentProject(Store, AArgs.ProjectPath, Opts);
   end;
-  Result:= ReportDocBatch(AArgs, Res, 'project', AArgs.ProjectPath);
+  var StaleSrc: TArray<string>:= nil; // 1.52 FINDOC2: see ReportDocBatch
+  if not AArgs.DocStrip then StaleSrc:= StaleFactSources(Store, '');
+  Result:= ReportDocBatch(AArgs, Res, 'project', AArgs.ProjectPath, StaleSrc);
 
   // ADP1: Step 3 (if --reindex + --apply): reindex AFTER document to re-freshen
   // the index after the line-shifting edits. The index is now consistent with the
   // source files, so hover/lint/LSP work correctly immediately after.
   if AArgs.DocReindex and AArgs.Apply and (Result = 0) then
   begin
-    Writeln('Reindexing (INCREMENTAL): refreshing after line-shift edits...');
+    EmitNoteLine(AArgs, 'Reindexing (INCREMENTAL): refreshing after line-shift edits...');
     var IndexArgs: TArgs := AArgs;
     IndexArgs.IndexAll := False;  // incremental
     IndexArgs.Path := '';  // clear Path; let ProjectPath drive the resolution
-    var IndexResult := DoIndex(IndexArgs);
-    if IndexResult <> 0 then begin Writeln('Reindex after document failed.'); Exit(IndexResult); end;
+    var IndexResult := DoIndexForDoc(AArgs, IndexArgs);
+    if IndexResult <> 0 then
+    begin
+      EmitStatusLine(AArgs, 'Reindex after document failed.');
+      Exit(IndexResult);
+    end;
   end;
 end; // function
 
@@ -17864,6 +17927,8 @@ begin
   Opts:= Default(TDocBatchOptions);
   { exclude_paths, the OTHER half of ownership -- see TDocBatchOptions.IsExcluded. }
   Opts.IsExcluded:= DocExcludePredicate(AArgs);
+  Opts.DocumentThirdParty:= AArgs.DocumentThirdParty; { 1.52 FINDOC: ownRoots for document-all }
+  Opts.OwnAnchorDir:= AnchorDirForDb(AArgs.DbPath);
   Opts.Stubs:= AArgs.DocStubs;
   Opts.Strip:= AArgs.DocStrip; // v(ADP3 T2): --strip removes engine output instead.
   Opts.IncludeSeeAlso:= AArgs.DocSeeAlso; // ADF T4: --seealso opts in <seealso> crefs.
@@ -17883,7 +17948,10 @@ begin
     ResetSourceFilesRead;
     Res:= TDocBatch.DocumentAll(Store, Opts);
   end;
-  Result:= ReportDocBatch(AArgs, Res, 'scope', 'all');
+  // 1.52 FINDOC2: see ReportDocBatch. --strip reads no facts, so nothing is stale.
+  var StaleSrc: TArray<string>:= nil;
+  if not AArgs.DocStrip then StaleSrc:= StaleFactSources(Store, '');
+  Result:= ReportDocBatch(AArgs, Res, 'scope', 'all', StaleSrc);
 end; // function
 
 // v(ADP3 T2): `document --qname X --strip` -- strips the doc region(s)

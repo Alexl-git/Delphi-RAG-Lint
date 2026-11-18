@@ -144,6 +144,15 @@ type
     /// --lint-third-party does not defeat exclude_paths, so
     /// --document-third-party must not either.</remarks>
     IsExcluded: TFunc<string, Boolean>;
+    /// <summary>1.52 FINDOC: the folder whose _D-RAG\drag-lint-project.json
+    /// declares ownRoots / excludeRoots for the entry points that have no
+    /// project file -- DocumentAll and DocumentUnit. The caller resolves it from
+    /// the index (AnchorDirForDb). '' (the Default) means no anchor: filtering
+    /// off, every file ours, exactly as before.</summary>
+    /// <remarks>DocumentProject ignores it and anchors on its project file.
+    /// DocumentThirdParty opens it up, as it does for --project; IsExcluded
+    /// still applies on top.</remarks>
+    OwnAnchorDir: string;
   end;
 
   /// <summary>Aggregated batch result. Edits is the union of every kept
@@ -203,7 +212,10 @@ type
     /// <param name="AStore">Open symbol store to query; not owned. Must not be nil.</param>
     /// <param name="AUnitFile">Path (relative or absolute) to the unit's source file, as stored/resolvable in the index.</param>
     /// <param name="AOptions">Batch options; Stubs gates the facts-only filter, AccessorTrivialMaxLines/IncludeAccessors gate the trivial-accessor filter.</param>
-    /// <returns>Aggregated edits + DeclCount (public decls seen, after the accessor filter) + DocCount (decls contributing an edit) + AccessorsSkipped.</returns>
+    /// <returns>Aggregated edits + DeclCount (public decls seen, after the accessor filter) + DocCount (decls contributing an edit) + AccessorsSkipped.
+    /// An empty result (and a 'doc: ... third-party' line on stderr) when
+    /// AOptions.OwnAnchorDir declares ownRoots that do not hold AUnitFile and
+    /// AOptions.DocumentThirdParty is False (1.52 FINDOC).</returns>
     /// <remarks>
     /// Not thread-safe; call from the owning thread only.
     /// Every entry point (this one, DocumentProject, DocumentAll) ends by
@@ -262,7 +274,10 @@ type
     /// Does not write files; the caller applies the per-file edits.</summary>
     /// <param name="AStore">Open symbol store to query; not owned. Must not be nil.</param>
     /// <param name="AOptions">Batch options; Stubs gates the facts-only filter.</param>
-    /// <returns>Aggregated edits over the whole index + summed DeclCount/DocCount.</returns>
+    /// <returns>Aggregated edits over the whole index + summed DeclCount/DocCount.
+    /// Files outside the ownRoots declared at AOptions.OwnAnchorDir are left out
+    /// (each skipped root named once on stderr) unless
+    /// AOptions.DocumentThirdParty is True (1.52 FINDOC).</returns>
     /// <remarks>
     /// Not thread-safe; call from the owning thread only.
     /// <!-- drag-lint:auto BEGIN -->
@@ -527,6 +542,20 @@ class function TDocBatch.DocumentUnit(const AStore: ISymbolStore;
   const AUnitFile: string; const AOptions: TDocBatchOptions): TDocBatchResult;
 begin
   try
+    { 1.52 FINDOC: `document --unit` never went through FilterToOwnRoots, so a
+      vendored unit named on the command line was written although --project
+      skips it (DOCAPPLY FOUND: 212/300 decls on the YADF copy). Same declaration,
+      same escape hatch; the anchor comes from the index, as for lint-all. }
+    if (not AOptions.DocumentThirdParty) and (AOptions.OwnAnchorDir <> '') then
+    begin
+      var Own: TOwnRoots:= TOwnRoots.Load(AOptions.OwnAnchorDir);
+      if Own.Active and not Own.IsOurs(ExpandFileName(AUnitFile)) then
+      begin
+        Writeln(ErrOutput, Format('doc: %s skipped: outside the project''s ownRoots (third-party). ' +
+          'Use --document-third-party to include it.', [AUnitFile]));
+        Exit(Default(TDocBatchResult));
+      end;
+    end;
     Result:= DocumentOneUnit(AStore, AUnitFile, AOptions);
   finally
     ReleaseDocParseCaches; { Y10: see ReleaseDocParseCaches }
@@ -594,7 +623,7 @@ end;
   as lint-all reports them. Returns AFiles unchanged when the caller opted into
   third-party or when no declaration is active (an undeclared project keeps the
   pre-existing behaviour of its own folder, via TOwnRoots.Load's default). }
-function FilterToOwnRoots(const AFiles: TArray<string>; const AProjectFile: string;
+function FilterToOwnRoots(const AFiles: TArray<string>; const AAnchorDir: string;
   const AOptions: TDocBatchOptions): TArray<string>;
 var
   Own    : TOwnRoots               ;
@@ -606,11 +635,9 @@ begin
   Result:= AFiles;
   if AOptions.DocumentThirdParty then Exit;
 
-  { ExpandFileName FIRST (1.51.1 Y9): a RELATIVE --project ("YADF.dproj", run
-    from the project folder) has ExtractFilePath = '', which TOwnRoots.Load
-    reads as "no anchor" -- inactive, every file ours, excludeRoots ignored,
-    and vendored source written. }
-  Own:= TOwnRoots.Load(ExtractFilePath(ExpandFileName(AProjectFile)));
+  { '' = no anchor: TOwnRoots.Load reads it as inactive, every file ours. The
+    callers pass an absolute folder (DocumentProject: see the Y9 note there). }
+  Own:= TOwnRoots.Load(AAnchorDir);
   if not Own.Active then Exit;
 
   { exclude_paths is deliberately NOT checked here. It is not an ownership
@@ -679,7 +706,12 @@ begin
     checkout that is merely `uses`d is not on it, so it stays in the closure and
     was being edited. `lint-all` refuses to REPORT on such code; writing to it is
     strictly worse, so both read the same declaration. }
-  Result := AggregateOverFiles(AStore, FilterToOwnRoots(CR.Files, AProjectFile, AOptions), AOptions);
+  { ExpandFileName FIRST (1.51.1 Y9): a RELATIVE --project ("YADF.dproj", run
+    from the project folder) has ExtractFilePath = '', which TOwnRoots.Load
+    reads as "no anchor" -- inactive, every file ours, excludeRoots ignored,
+    and vendored source written. }
+  Result := AggregateOverFiles(AStore,
+    FilterToOwnRoots(CR.Files, ExtractFilePath(ExpandFileName(AProjectFile)), AOptions), AOptions);
 end;
 
 class function TDocBatch.DocumentAll(const AStore: ISymbolStore;
@@ -700,7 +732,9 @@ begin
       Path := AStore.GetFilePath(Id);
       if Path <> '' then Paths.Add(Path);
     end;
-    Result := AggregateOverFiles(AStore, Paths.ToArray, AOptions);
+    { 1.52 FINDOC: the same ownership filter as DocumentProject, anchored on
+      the index's own project folder (no project file here). }
+    Result := AggregateOverFiles(AStore, FilterToOwnRoots(Paths.ToArray, AOptions.OwnAnchorDir, AOptions), AOptions);
   finally
     Paths.Free;
   end;

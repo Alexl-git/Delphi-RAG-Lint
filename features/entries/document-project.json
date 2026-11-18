@@ -48,12 +48,16 @@
     {
       "ask": "How do I document every public declaration of the project?",
       "command": "drag-lint document --project <p.dproj> --apply"
+    },
+    {
+      "ask": "document --project warns or refuses because files it reads facts from changed since indexing -- what now?",
+      "command": "drag-lint document --project <p.dproj> --apply --reindex"
     }
   ],
   "verified": {
-    "date": "2026-10-26",
+    "date": "2026-11-18",
     "by": "ENGINE",
-    "build": "1.35.1-alpha",
-    "surfaceHash": "ca0c5daf49b9c71753c73c96c5fc474b4ef19e81e432084d1d2a396e3548b15f"
+    "build": "1.51.1-alpha",
+    "surfaceHash": "732a633c865239c7c3f7fcf11b5b05e3844bead505ae17120dad6e4ea47ad8bd"
   }
 }
