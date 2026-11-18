@@ -1716,11 +1716,14 @@ begin
   for EB in Bindings do
   begin
     Key:= LowerCase(EB.HandlerName);
-    // First wiring wins: deterministic (ExtractDfmEventBindings returns
-    // bindings in DOCUMENT order), matches this task's documented tie-break
-    // for the rare case of one handler shared by multiple controls/events.
-    if not GDfmCacheMap.ContainsKey(Key) then
-      GDfmCacheMap.Add(Key, EB.ObjectName + '.' + EB.EventProp);
+    // EVERY wiring, in DOCUMENT order (ExtractDfmEventBindings' order), joined
+    // ', ' -- 1.52 EXTGAPS: a handler shared by two controls kept only the first
+    // ('btnGo.OnClick'), so check-init could not see btnAgain.OnClick fire it.
+    // A repeat of the same Object.Event is not added twice.
+    var Wire: string:= EB.ObjectName + '.' + EB.EventProp;
+    var Prev: string;
+    if not GDfmCacheMap.TryGetValue(Key, Prev) then GDfmCacheMap.Add(Key, Wire)
+    else if not MatchText(Wire, Prev.Split([', '])) then GDfmCacheMap[Key]:= Prev + ', ' + Wire;
   end;
   Result:= GDfmCacheMap;
 end;

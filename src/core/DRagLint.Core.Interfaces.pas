@@ -938,6 +938,16 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function GetReferencesFromFile(AFileId: Int64): TArray<TReference>                     ; { v0.43: uses-audit }
+    /// <summary>The ref in AFileId whose name span covers (ALine, ACol) on one line -- the
+    /// indexed binding of the identifier under a cursor.</summary>
+    /// <param name="AFileId">The file; 0 or unknown returns Default(TReference).</param>
+    /// <param name="ALine">1-based line.</param>
+    /// <param name="ACol">1-based column (refs.start_col is 1-based, end_col exclusive).</param>
+    /// <returns>Id, SymbolId, Kind, NameText, span, ReceiverText, ExternalTarget and
+    /// ExternalKind of the narrowest covering ref; Id = 0 when no ref covers the position.</returns>
+    /// <remarks>1.52 EXTGAPS (D7b): typeat/hover answer a bare identifier from the resolver's
+    /// binding first, not from a by-name lookup. Read-only, one indexed query.</remarks>
+    function FindReferenceAt(AFileId: Int64; ALine, ACol: Integer): TReference;
     /// <summary>The refs in AFileIds whose NAME, or whose receiver's base type
     /// (the receiver text before any generic argument list), is one of
     /// ALowerNames -- compared ASCII-case-insensitively, as SameText compares.</summary>

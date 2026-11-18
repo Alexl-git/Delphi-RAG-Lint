@@ -2394,6 +2394,29 @@ begin
             FHeld.Add(H);
           end;
         end;
+        { 1.52 EXTGAPS (HBEVENTS gap 2): a .dpr's MAIN BLOCK gets data_flows rows too, under the
+          program symbol -- the facts loop above sees routines only, so `Fill(GDpr)` and
+          `Application.CreateForm(TMainForm, MainForm)` had no rows. Program-level vars are its
+          globals. Same tree as the facts pass (TAstParseCache, memoized per file). }
+        for I:= 0 to High(ParseRes.Symbols) do
+        begin
+          if ParseRes.Symbols[I].Kind <> skProgram then Continue;
+          if not IdxToId.TryGetValue(I, NewSymId) then Break;
+          var ProgPF:= TAstParseCache.Get(AFilePath);
+          if ProgPF.Tree = nil then Break;
+          var ProgSym: TSymbol:= ParseRes.Symbols[I];
+          ProgSym.Id      := NewSymId;
+          ProgSym.FileId  := Token.FileId;
+          ProgSym.ParentId:= -1;
+          var ProgGlobals: TArray<string>:= nil;
+          for var K:= 0 to High(ParseRes.Symbols) do
+            if (ParseRes.Symbols[K].Kind = skVarDecl) and (ParseRes.Symbols[K].ParentId = I) then
+              ProgGlobals:= ProgGlobals + [ParseRes.Symbols[K].Name];
+          if DfCallees = nil then DfCallees:= TDataFlowFacts.BuildCallees(ParseRes.Symbols);
+          FStore.PutDataFlows(Token, TDataFlowFacts.CollectMainBlock(ProgSym, ProgPF.Tree.RootNode, ProgPF.Src,
+            ProgGlobals, DfCallees));
+          Break;
+        end;
         Inc(GProfFacts, ProfNow - TProf);
         TProf:= ProfNow;
         if (FTestFailFileName <> '') and SameText(ExtractFileName(AFilePath), FTestFailFileName) then

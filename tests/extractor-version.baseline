@@ -1235,4 +1235,6 @@
 #   Superseded: 1.40.0-alpha|c9905d6ba7c05bc1e3c13c1676b657a9fccfd339b47bbad3ebfab8f993accb11
 #   2026-11-17 v152 INT hash-only re-pin after RENFACT (rides the one 1.52 bump 464d590a8): index-access refs bound to default properties.
 #   Superseded: 1.41.0-alpha|b33ebe861e2422ac18fe2375157eeafba720f874bbbd87fe86b9dc209f93736f
-1.41.0-alpha|58536b7f15bf9a9d5314198a1bb0c64597adff95a5f7316cee63cf19bc5c5a8f
+#   2026-11-17 v152 EXTGAPS hash-only re-pin (rides the one 1.52 bump 464d590a8; owner 2026-11-17: no second re-parse): Index.DataFlowFacts CollectMainBlock (.dpr main block data_flows), Core.Indexer calls it, Doc.SymbolFacts dfm_event joins every binding of a shared handler, CallResolver class var member + address-taken procedure RHS, Core.Interfaces/Storage FindReferenceAt (read-only).
+#   Superseded: 1.41.0-alpha|58536b7f15bf9a9d5314198a1bb0c64597adff95a5f7316cee63cf19bc5c5a8f
+1.41.0-alpha|26ea9f66463511be4f6e6c1dccad12f9a8d108b838918499c5cdf656792ed361

@@ -253,7 +253,8 @@ type
   public
     /// <summary>Build the CFG of the routine AProc (a `defProc`). Returns a CFG
     /// whose Skipped is True for goto/asm routines.</summary>
-    /// <param name="AProc">The `defProc` AST node.</param>
+    /// <param name="AProc">The `defProc` AST node, or (1.52 EXTGAPS) a program's main `block`
+    /// node, which is then its own body. Any other node yields an empty CFG.</param>
     /// <param name="ASrc">The unit's source bytes (for identifier text).</param>
     /// <param name="APruneConstLoops">True: while-True / until-False loops get no test-exit edge
     /// (see TCfg.PruneConstLoops). False (default) keeps the historic shape (refactorings).</param>
@@ -1561,8 +1562,12 @@ begin
   Result.RoutineNode := AProc;
   Result.Src := ASrc;
   Result.PruneConstLoops := APruneConstLoops;
-  if AProc.IsNull or (AProc.NodeType <> 'defProc') then Exit;
-  Body := AProc.ChildByField('body');
+  if AProc.IsNull then Exit;
+  { 1.52 EXTGAPS: a program's MAIN BLOCK (`begin ... end.` of a .dpr) is its own body -- the
+    data_flows pass hands the block node itself; every other caller hands a defProc. }
+  if AProc.NodeType = 'block' then Body := AProc
+  else if AProc.NodeType <> 'defProc' then Exit
+  else Body := AProc.ChildByField('body');
   if Body.IsNull then Exit;
   if RoutineHasGotoOrAsm(AProc) then begin Result.Skipped := True; Exit; end;
 

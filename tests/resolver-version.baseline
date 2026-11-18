@@ -752,7 +752,9 @@
 #   Superseded: 1.28.0-alpha|f3bfe9e1da0fe2545303f8c3a4b638baae9bb5b4215690068468c1c3065cea00
 #   2026-11-17 v152 INT hash-only re-pin after RENFACT (rides the one 1.52 bump 464d590a8): index-access refs bound to default properties.
 #   Superseded: 1.29.0-alpha|83b1d5cc255c14ced25683b1de3095d5e19024a3f0c6896d4b6956664e604225
-1.29.0-alpha|2e38a453d582cad0160480fbb7c1b8ead48ef4f2c85b54191922ba16c277b809
+#   2026-11-17 v152 EXTGAPS hash-only re-pin (rides the one 1.52 resolver bump 464d590a8): LookupMemberOnType takes a class var (skVarDecl); a procedure named as the whole RHS of := is address-taken (ValueOnly, no call edge).
+#   superseded: 1.29.0-alpha|2e38a453d582cad0160480fbb7c1b8ead48ef4f2c85b54191922ba16c277b809
+1.29.0-alpha|fea99f061d9ecda2f3b9e3478037f088d481b213a0e8e1af7e08e0fd39d0fed4
 #   2026-11-06 int2: hash moved WITHOUT a bump from 631322c4: the dl:ok comment on ResolveCallTargets re-stamped by the lint sweep, no code change.
 # superseded: 1.19.0-alpha|e4c14c16d87b21940e6ce6017456b8446a5cc516e342b72b816e3e161612ecba
 #   2026-11-06 1.19.0 -> 1.20.0-alpha (lanes facts + rename): ref_types (static type of a reference), ref_receivers (receiver link of a ref), references in initialization / finalization attributed to the section symbol. Additive, no SCHEMA_VERSION move. Remedy: index --all --resolve-only.

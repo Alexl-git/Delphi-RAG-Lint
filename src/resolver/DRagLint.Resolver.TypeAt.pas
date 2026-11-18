@@ -717,6 +717,48 @@ begin
   Result:= Resolve(TArray<ISymbolStore>.Create(AStore), AFile, ALine, ACol);
 end;
 
+{ 1.52 EXTGAPS (D7b): the resolver already bound the site under the cursor at index time -- ask
+  that ref before any by-NAME lookup. The by-name lookup accepts a symbol declared under a used
+  unit at ANY depth, so `Application` in a .dpr answered a class PROPERTY of a used unit
+  (iTOOLASSG.ImcTOOLASSG.APPLICATION) although the ref row says Vcl.Forms.Application. A bound
+  symbol_id answers with that symbol; an external_target with the library symbol of that name,
+  or -- no library store attached -- the name itself (Id 0: no doc is read for it). Leaves
+  AResult untouched when no ref named AResult.Token covers the position. }
+procedure BindFromIndexedRef(const AStores: TArray<ISymbolStore>; const APrimary: ISymbolStore;
+  AFileId: Int64; ALine, ACol: Integer; var AResult: TTypeAtResult);
+var
+  Ref: TReference;
+  StoreIdx: Integer;
+begin
+  Ref:= APrimary.FindReferenceAt(AFileId, ALine, ACol);
+  if (Ref.Id <= 0) or not SameText(Ref.NameText, AResult.Token) then Exit;
+  if Ref.SymbolId > 0 then
+  begin
+    var Bound: TSymbol:= APrimary.GetSymbolById(Ref.SymbolId);
+    if Bound.Id <= 0 then Exit;
+    AResult.Resolved          := Bound;
+    AResult.HasResolved       := True;
+    AResult.ResolvedStoreIndex:= StoreIndexOf(AStores, APrimary);
+    Exit;
+  end;
+  if Ref.ExternalTarget = '' then Exit;
+  for StoreIdx:= 0 to High(AStores) do
+  begin
+    var Hits: TArray<TSymbol>:= AStores[StoreIdx].FindSymbolsByQualifiedName(Ref.ExternalTarget);
+    if Length(Hits) > 0 then
+    begin
+      AResult.Resolved          := Hits[0];
+      AResult.HasResolved       := True;
+      AResult.ResolvedStoreIndex:= StoreIdx;
+      Exit;
+    end;
+  end;
+  AResult.Resolved.QualifiedName:= Ref.ExternalTarget;
+  AResult.Resolved.Name         := AResult.Token;
+  AResult.HasResolved           := True;
+  AResult.Note                  := 'library symbol (no library index attached)';
+end;
+
 class function TTypeAtResolver.Resolve(const AStores: TArray<ISymbolStore>; const AFile: string; ALine, ACol: Integer): TTypeAtResult;
 var
   Lines       : TArray<string>;
@@ -928,6 +970,9 @@ begin
       end;
     end;
 
+    { 1.52 EXTGAPS (D7b): the indexed binding first -- see BindFromIndexedRef. }
+    if (not Result.HasResolved) and (FileId > 0) then BindFromIndexedRef(AStores, Primary, FileId, ALine, ACol, Result);
+
     if not Result.HasResolved then
     begin
       { v(bare-ident uses scope): PREFER a candidate declared under a unit this
@@ -964,7 +1009,7 @@ begin
     end; // if not Result.HasResolved
   end; // else
 
-  if Result.HasResolved then
+  if Result.HasResolved and (Result.Resolved.Id > 0) then
   begin
     { Doc lives in the SAME store the symbol came from (ids are per-DB). }
     var DocStore: ISymbolStore:= Primary;

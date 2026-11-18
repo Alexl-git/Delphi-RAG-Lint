@@ -87,6 +87,24 @@ type
                              const AOwnerFields: TArray<string>;
                              const AGlobals: TArray<string>;
                              const ACallees: TDataFlowCallees): TArray<TDataFlowRow>; static;
+      /// <summary>The data_flows rows of a program's MAIN BLOCK (`begin ... end.` of a .dpr),
+      /// attributed to the program symbol.</summary>
+      /// <param name="AProgram">The skProgram symbol with its REAL identity (Id = symbols.id,
+      /// ParentId -1).</param>
+      /// <param name="ARoot">The file's tree root (the `program` / `library` node or its parent).</param>
+      /// <param name="ASrc">The UTF-8 source bytes ARoot indexes into.</param>
+      /// <param name="AGlobals">The program-level variable names, as declared.</param>
+      /// <param name="ACallees">As for Collect; nil = none known. Not owned.</param>
+      /// <returns>Collect's rows for the main block; nil when the root is no program or has no
+      /// main block.</returns>
+      /// <remarks>1.52 EXTGAPS (HBEVENTS gap 2): before, a .dpr main block had NO data_flows rows
+      /// -- `Fill(GDpr)` and `Application.CreateForm(TMainForm, MainForm)` were invisible to
+      /// check-init, which fell back to source text. The block node is handed to Collect as both
+      /// routine and body (TCfgBuilder.Build accepts a `block`); program-level vars are globals
+      /// (AGlobals), never locals. Never raises (Collect's own guard).</remarks>
+      class function CollectMainBlock(const AProgram: TSymbol; const ARoot: TTSNode; const ASrc: TBytes;
+                                      const AGlobals: TArray<string>;
+                                      const ACallees: TDataFlowCallees): TArray<TDataFlowRow>; static;
       /// <summary>The var/out masks of every routine ASymbols declares (parsed from
       /// TSymbol.Signature), for Collect.</summary>
       /// <param name="ASymbols">One file's parsed symbols; non-routine kinds are skipped.</param>
@@ -1464,6 +1482,34 @@ begin
   finally
     C.Free;
   end;
+end;
+
+class function TDataFlowFacts.CollectMainBlock(const AProgram: TSymbol; const ARoot: TTSNode; const ASrc: TBytes;
+                                               const AGlobals: TArray<string>;
+                                               const ACallees: TDataFlowCallees): TArray<TDataFlowRow>;
+var
+  Prog, Block: TTSNode;
+  I          : Integer;
+begin
+  Result:= nil;
+  if ARoot.IsNull then Exit;
+  Prog:= Default(TTSNode);
+  if (ARoot.NodeType = 'program') or (ARoot.NodeType = 'library') then Prog:= ARoot
+  else
+    for I:= 0 to ARoot.NamedChildCount - 1 do
+      if (ARoot.NamedChild(I).NodeType = 'program') or (ARoot.NamedChild(I).NodeType = 'library') then
+      begin
+        Prog:= ARoot.NamedChild(I);
+        Break;
+      end;
+  if Prog.IsNull then Exit;
+  { the main block is the program node's own `block` child (a nested routine's block hangs
+    under its defProc, never directly under the program) -- the last one, by position }
+  Block:= Default(TTSNode);
+  for I:= 0 to Prog.NamedChildCount - 1 do
+    if Prog.NamedChild(I).NodeType = 'block' then Block:= Prog.NamedChild(I);
+  if Block.IsNull then Exit;
+  Result:= Collect(AProgram, Block, Block, ASrc, nil, AGlobals, ACallees);
 end;
 
 class function TDataFlowFacts.BuildCallees(const ASymbols: TArray<TSymbol>): TDataFlowCallees;
