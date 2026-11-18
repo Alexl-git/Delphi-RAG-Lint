@@ -57,13 +57,13 @@ $Cases = @(
      Summary = '(every instance: all 3 constructors set it before they return)'; Uses = @(
       'fcData.pas#USE-LIST=SET||') }
   @{ Name = 'ctor half MAY';           Fix = 'fields-ctor';    Target = 'fcData.TBoth.FHalf';     Verdict = 'MAY-BE-UNSET'; Exit = 1; Uses = @(
-      'fcData.pas#USE-HALF=MAY-BE-UNSET|ctor-misses-field|fcData.TBoth.CreateFor > fcData.TBoth.Run') }
+      'fcData.pas#USE-HALF=MAY-BE-UNSET|ctor-misses-field,receiver-unproven|fcData.TBoth.CreateFor > fcData.TBoth.Run') }
   @{ Name = 'ctor helper SET';         Fix = 'fields-ctor';    Target = 'fcData.TBoth.FHelped';   Verdict = 'SET';          Exit = 0; Uses = @(
       'fcData.pas#USE-HELPED=SET||') }
   @{ Name = 'receiver Self SET';       Fix = 'fields-ctor';    Target = 'fcData.TPeer.FData';     Verdict = 'SET';          Exit = 0; Uses = @(
       'fcData.pas#USE-PEER=SET||') }
   @{ Name = 'receiver other MAY';      Fix = 'fields-ctor';    Target = 'fcData.TPeerBad.FData';  Verdict = 'MAY-BE-UNSET'; Exit = 1; Uses = @(
-      'fcData.pas#USE-PEERBAD=MAY-BE-UNSET|ctor-misses-field|fcData.TPeerBad.Create > fcData.TPeerBad.Show') }
+      'fcData.pas#USE-PEERBAD=MAY-BE-UNSET|ctor-misses-field,receiver-unproven|fcData.TPeerBad.Create > fcData.TPeerBad.Show') }
   @{ Name = 'read before write MAY';   Fix = 'fields-ctor';    Target = 'fcData.TEarly.FLog';     Verdict = 'MAY-BE-UNSET'; Exit = 1; Uses = @(
       'fcData.pas#USE-EARLY=MAY-BE-UNSET|writer-after-use-same-routine|fcData.TEarly.Create > fcData.TEarly.Peek') }
   @{ Name = 'write first SET';         Fix = 'fields-ctor';    Target = 'fcData.TEarly2.FLog';    Verdict = 'SET';          Exit = 0; Uses = @(
@@ -71,7 +71,7 @@ $Cases = @(
       'fcData.pas#USE-EARLY2=SET||') }
   @{ Name = 'init/run MAY';            Fix = 'fields-initrun'; Target = 'fiRunner.TRunner.FQueue'; Verdict = 'MAY-BE-UNSET'; Exit = 1;
      Summary = '*fiRunner.TRunner.Init (not called by every constructor)*'; Uses = @(
-      'fiRunner.pas#USE-RUN=MAY-BE-UNSET|ctor-misses-field|fiRunner.TRunner.Create > fiRunner.TRunner.Run') }
+      'fiRunner.pas#USE-RUN=MAY-BE-UNSET|ctor-misses-field,receiver-unproven|fiRunner.TRunner.Create > fiRunner.TRunner.Run') }
   @{ Name = 'init in ctor SET uses';   Fix = 'fields-initrun'; Target = 'fiRunner.TRunner2.FQueue'; Verdict = 'MAY-BE-UNSET'; Exit = 1; Limit = 'use-after-free-not-judged fiRunner.pas:70';
      Summary = '*fiRunner.TRunner2.Init (called by every constructor)*'; Uses = @(
       'fiRunner.pas#USE-DESTROY=MAY-BE-UNSET|writer-conditional|fiRunner.TRunner2.Destroy',
@@ -85,9 +85,9 @@ $Cases = @(
   @{ Name = 'subclass chains SET';     Fix = 'fields-subclass'; Target = 'fsTree.TParent.FName';  Verdict = 'SET';          Exit = 0; Uses = @(
       'fsTree.pas#USE-GOOD=SET||') }
   @{ Name = 'subclass skips MAY';      Fix = 'fields-subclass'; Target = 'fsTree.TParent2.FName'; Verdict = 'MAY-BE-UNSET'; Exit = 1; Uses = @(
-      'fsTree.pas#USE-SKIP=MAY-BE-UNSET|subclass-ctor-skips|fsTree.TSkip.CreateSkip > fsTree.TParent2.Show') }
+      'fsTree.pas#USE-SKIP=MAY-BE-UNSET|subclass-ctor-skips,receiver-unproven|fsTree.TSkip.CreateSkip > fsTree.TParent2.Show') }
   @{ Name = 'no ctor MAY';             Fix = 'fields-noctor';  Target = 'fnPlain.TPlain.FValue';  Verdict = 'MAY-BE-UNSET'; Exit = 1; Uses = @(
-      'fnPlain.pas#USE-NOCTOR=MAY-BE-UNSET|no-declared-ctor|fnPlain.TPlain > fnPlain.TPlain.Show') }
+      'fnPlain.pas#USE-NOCTOR=MAY-BE-UNSET|no-declared-ctor,receiver-unproven|fnPlain.TPlain > fnPlain.TPlain.Show') }
   @{ Name = 'no writer NEVER-SET';     Fix = 'fields-noctor';  Target = 'fnPlain.TPlain.FNever';  Verdict = 'NEVER-SET';    Exit = 1; Uses = @(
       'fnPlain.pas#USE-NEVER=NEVER-SET||') }
   @{ Name = 'declared ctor SET';       Fix = 'fields-noctor';  Target = 'fnPlain.TPlain2.FValue'; Verdict = 'SET';          Exit = 0; Uses = @(
@@ -97,7 +97,7 @@ $Cases = @(
   @{ Name = 'Self after write SET';    Fix = 'fields-escape';  Target = 'feEsc.TEsc2.FData';      Verdict = 'SET';          Exit = 0; Uses = @(
       'feEsc.pas#USE-ESC2=SET||') }
   @{ Name = 'overload ctor MAY';       Fix = 'fields-escape';  Target = 'feEsc.TOver.FN';         Verdict = 'MAY-BE-UNSET'; Exit = 1; Uses = @(
-      'feEsc.pas#USE-OVER=MAY-BE-UNSET|ctor-misses-field|feEsc.TOver.Create > feEsc.TOver.Show') }
+      'feEsc.pas#USE-OVER=MAY-BE-UNSET|ctor-misses-field,receiver-unproven|feEsc.TOver.Create > feEsc.TOver.Show') }
   @{ Name = 'no overload SET';         Fix = 'fields-escape';  Target = 'feEsc.TOver2.FN';        Verdict = 'SET';          Exit = 0; Uses = @(
       'feEsc.pas#USE-OVER2=SET||') }
 )

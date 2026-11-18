@@ -109,6 +109,7 @@ uses
 , DRagLint.Query.HappensBefore.Roots
 , DRagLint.Query.HappensBefore.Intra
 , DRagLint.Query.HappensBefore.Fields
+, DRagLint.Query.HappensBefore.Receiver
 , DRagLint.Query.HappensBefore.Handlers
   ;
 
@@ -1582,6 +1583,8 @@ begin
     begin
       { spec 5.5: the constructor model (lane HBFIELDS) }
       Result:= CheckInstanceField(Index, Store, Events, MaxR);
+      { lane HBRECV: Init/Run on the same object proves eligible MAY uses SET }
+      ApplyReceiverProof(Index, Store, Result, MaxR);
       { the answer's writers include the writes through another object the events lane read as uses }
       Events.Writers:= Result.Writers;
       AddWriterReasons(Events, Result);
