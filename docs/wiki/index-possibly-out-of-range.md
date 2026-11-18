@@ -6,8 +6,8 @@ subrange-typed index does not help either -- it only moves the range error to th
 This rule warns where an array index can leave the array's bounds BEFORE the runtime check
 fires, and points at the line that made it so: the write of the index, not the access.
 
-Default **ON** (owner ruling C3; the false-positive gate measured 6 FP in 12 samples and lane BK-RULEFP fixed those six classes before 1.52 shipped), category `bug-patterns`, severity `warning` (`hint` for an unguarded
-parameter). Disable it with `"disabled": ["index-possibly-out-of-range"]` in the lint config; run only it with
+Default **OFF** in 1.52 (owner ruling C3 = ON; lane BK-RULEFP fixed the six classes of the first 6/12 gate, but the FPM2 re-measure on ORM3 + YADF still found 21 FP in 36 samples -- short-circuit and while-top guards, SetLength(A, N) then an N-bound loop, a Length equality Exit, one-Inc-per-trip counters, constant-capped counters on fixed arrays -- so it ships OFF; enable it with `--rule index-possibly-out-of-range` or `"enabled": ["index-possibly-out-of-range"]` in the config), category `bug-patterns`, severity `warning` (`hint` for an unguarded
+parameter). Run only it with
 `drag-lint lint <file> --rule index-possibly-out-of-range`.
 
 ## What it reports
