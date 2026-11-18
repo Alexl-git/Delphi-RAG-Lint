@@ -1138,6 +1138,10 @@ uses
   // keeps paying for. CallResolver reaches only Core.Model / Core.Interfaces,
   // so this adds no cycle.
   DRagLint.Index.CallResolver,
+  // 1.52 BK-USEEDGES: NewUseDirections only, so 'Used in:' gives an Inc/Dec or var/out
+  // argument the direction `usages --rw` gives it. Query.Callers' interface reaches
+  // only Core.Model / Core.Interfaces: no cycle.
+  DRagLint.Query.Callers,
   // v(Q0, 2026-08-14): TSharedUnit.IsShared -- the `dl:shared` marker decides
   // whether an INBOUND list may be truncated (see UnitIsShared below and the two
   // cap sites in Build). Reaches only System units and Lint.ReviewMarker, so no
@@ -4458,15 +4462,21 @@ var
   // Wave 148 UP: the moded rows of ARows (member accesses, bound usages) as
   // 'Used in:' rows, Mode 'w' for a write and 'r' otherwise. AOwningStore is the
   // store the rows came from (ToFactRef's rule).
+  // 1.52 BK-USEEDGES: a stored read that is the whole argument of Inc/Dec or of an
+  // out parameter is a 'w', of a var parameter an 'rw' -- the directions `usages --rw`
+  // gives the same site (one TArgClassifier decides both).
+  // Guard: tests\autotest\run_v152_BK-USEEDGES_used_in_args.ps1.
   procedure AddUseRows(const AOwningStore: ISymbolStore; const ARows: TArray<TResolvedCaller>);
   var
     URow: TDocFactRef;
   begin
+    var Dirs: IUseDirections:= NewUseDirections(AOwningStore);
     for var Row in ARows do
     begin
       if Row.Mode = '' then Continue;
+      var Modes: TArray<string>:= Dirs.ModesOf(Row);
       URow:= ToFactRef(AOwningStore, Row);
-      URow.Mode:= if SameText(Row.Mode, 'write') then 'w' else 'r';
+      URow.Mode:= if Length(Modes) > 1 then 'rw' else if SameText(Modes[0], 'write') then 'w' else 'r';
       UseRows.Add(URow);
     end;
   end;

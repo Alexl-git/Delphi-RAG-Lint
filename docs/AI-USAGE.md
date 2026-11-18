@@ -608,7 +608,9 @@ define further codes.
 > the same list, so one cap governs both. A **property or field** with resolved
 > uses (wave 147, default ON) renders `Used in: Routine (file.pas) [r|w|rw]`
 > instead of `Used by:` -- one entry per routine, built from the resolved
-> member accesses only (no name-matched guesses), same cap; `hover` (md, json,
+> member accesses only (no name-matched guesses), same cap; since 1.52 the whole
+> argument of `Inc`/`Dec` or of an `out` parameter reads `[w]` and of a `var`
+> parameter `[rw]`, the directions `usages --rw` gives the same site; `hover` (md, json,
 > LSP) carries the same line. Since wave 148 the list also takes the resolved
 > uses recorded in every extra `--db` (looked up by full qualified name), and
 > a getter / setter keeps `Called from:` and adds `Used in (via property X):`
