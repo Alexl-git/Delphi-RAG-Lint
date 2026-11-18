@@ -10,7 +10,9 @@
   Contract pinned here:
     each allowlisted finding  -> one "Fix: <rule>" quickfix, on the requested line only;
     the bytes                 -> applying the action's edit to the file gives what
-                                 `lint --in <file> --fix --fix-line L --fix-rule R --apply` writes;
+                                 `lint --in <file> --fix --fix-line L --fix-rule R --apply --no-compile-gate` writes
+                                 (the fixture has no .dproj: since 1.52 B23 a gated --apply on a unit no
+                                 project builds is REFUSED (no-project), and the LSP edit is never gated);
     the action applied        -> the finding is gone on a re-lint;
     the BUFFER, not the disk  -> a didChange that moved the text: the edit targets the buffer's
                                  line; a buffer where the span no longer holds what the
@@ -135,7 +137,7 @@ foreach ($c in $cases) {
   $copy = Join-Path $cli 'uFx.pas'
   [IO.File]::WriteAllText($copy, $body, [Text.ASCIIEncoding]::new())
   $ea = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-  & $Exe lint --in $copy --db $db --fix --fix-line ($line + 1) --fix-rule $c.rule --apply --no-backup 2>&1 | Out-Null
+  & $Exe lint --in $copy --db $db --fix --fix-line ($line + 1) --fix-rule $c.rule --apply --no-backup --no-compile-gate 2>&1 | Out-Null
   $ErrorActionPreference = $ea
   $cliText = [IO.File]::ReadAllText($copy)
   Check "$($c.rule): byte-identical to lint --fix --apply" ($cliText -ceq $applied) ("cli=[$(($cliText -split "`r`n")[$line])] lsp=[$(($applied -split "`r`n")[$line])]")
