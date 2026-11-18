@@ -7,7 +7,7 @@ group: linting
 order: 30063
 since: 1.51.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Wider built-in rules (1.51)

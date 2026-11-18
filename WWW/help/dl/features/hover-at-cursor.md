@@ -7,14 +7,14 @@ group: search-navigation
 order: 20018
 since: 0.7.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Hover at Cursor
 
 Hover card for the symbol under the caret: signature, type, documentation, callers; an interface method also lists its implementers.
 
-Read this to check what a symbol is and who calls it without leaving the line you are on. With the caret on it choose drag-lint > Hover at Cursor (Ctrl+Alt+H); on the command line, hover --qname Foo.Bar gives the same card. The IDE never waits for the engine: the card appears when the answer arrives, and a busy engine shows 'drag-lint: engine busy' instead of freezing the editor, and an answer that arrives after that deadline is still delivered as a late result.
+Read this to check what a symbol is and who calls it without leaving the line you are on. Caret on it, drag-lint > Hover at Cursor (Ctrl+Alt+H); on the command line hover --qname Foo.Bar gives the same card. The IDE never waits: a busy engine shows 'drag-lint: engine busy' and a late answer is still delivered. VS Code 1.6.6 defers the slow part: signature and docs at once with 'computing...', then callers, the Init: verdict and the Set by: writers (cancelled when you move on).
 
 ## How to run it
 

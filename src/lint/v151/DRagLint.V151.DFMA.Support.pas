@@ -475,14 +475,16 @@ function LoadDfmHead(const APath: string): TDfmHead;
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function NodeLine(const N: TTSNode): Integer;
+
 /// <summary>Column (1-based CHARACTER column, 1.52 BK-COLS2) of a node of APath's tree.</summary>
 /// <param name="APath">The file N's tree was parsed from (TAstParseCache key).</param>
 /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
-/// <returns><!-- drag-lint:auto -->Integer -- Observed: Integer(N.StartPoint.column) + 1.</returns>
+/// <returns>Integer -- the 1-based character column of N's start, from TAstParseCache.CharCol (not the tree-sitter byte column).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.V151.DFMA.CheckAccessBeforeCreate (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.CheckAutocreateAndManual (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.CheckForeignFormAccess (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.CheckSelfFree (DRagLint.V151.DFMA.pas), DRagLint.V151.DFMA.Support.TPasBuilder.AddClass (DRagLint.V151.DFMA.Support.pas) (+2 more)</para>
-/// <para>Calls: Integer, TreeSitter.TTSNodeHelper.StartPoint</para>
+/// <para>Calls: DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol, TreeSitter.TTSNodeHelper.StartPoint</para>
+/// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol"/>
 /// <seealso cref="TreeSitter.TTSNodeHelper.StartPoint"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

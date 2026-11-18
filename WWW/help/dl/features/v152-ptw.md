@@ -4,7 +4,7 @@ title: parameter-type-too-wide ON by default, with an autofix
 summary: parameter-type-too-wide ships ON as a warning in lint-all / lint-project with an autofix that retypes the parameter through the compile gate
 product: DL
 group: linting
-order: 30073
+order: 30074
 since: 1.52.0-alpha
 status: shipped
 updated: 1.52.0-alpha

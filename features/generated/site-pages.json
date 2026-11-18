@@ -127,9 +127,13 @@
     "hash": "cd2f91b4e2ea737c88346c860b8f19014cf1efa96c160316d0d5260cb47b596e",
     "version": "1.52.0-alpha"
   },
+  "features/complexity-if-expression.md": {
+    "hash": "49276b45dc59b3e2c4f36178f92714d445514565f0c86dbe699409c7ccb696e7",
+    "version": "1.52.0-alpha"
+  },
   "features/compliance-labels.md": {
-    "hash": "fde11f26c800f381c015f96949eece0e958a1846013949d37141530e51c0e300",
-    "version": "1.51.1-alpha"
+    "hash": "2bdf7dd1844a6a615fd14f6b141d0ae5887c4c2173592d0213d4db146e1a90ea",
+    "version": "1.52.0-alpha"
   },
   "features/concept-search.md": {
     "hash": "b494e50f7deffdd2938eb8d96fa7d0b29092961b960e5d77785bfb55d2158d47",
@@ -228,16 +232,16 @@
     "version": "1.46.0-alpha"
   },
   "features/copy-all-diagnostics.md": {
-    "hash": "3a56578cde15c1e786c187b6489b122d46b5e7a989a17da3fa5a73e477efeae8",
-    "version": "1.43.0-alpha"
+    "hash": "1a45dae464a00730b652a3edf088d0a20f167a8ef30c48a72565f149d39fd24c",
+    "version": "1.52.0-alpha"
   },
   "features/copy-diagnostics-current-file.md": {
-    "hash": "668cc9cf61bae6f089365f944dbd5629d2c4d0d829b1da6193cc074c4c71dd15",
-    "version": "1.42.0-alpha"
+    "hash": "101428560e74467866b5de55ce11ee55261c8934c23ee7dce1a4e8f97d857317",
+    "version": "1.52.0-alpha"
   },
   "features/copy-selected-diagnostics.md": {
-    "hash": "3d2f61c98370977430e451ce4b7b69e50fa3e00777a107fbce498a9ac89ca593",
-    "version": "1.42.0-alpha"
+    "hash": "599a3847c57b88e0a92f1678ef4bd014998603741d94f22ee039246c829ba7ea",
+    "version": "1.52.0-alpha"
   },
   "features/create-enum-helper.md": {
     "hash": "f2951e5ffd6444d54f067bd43d3b9ec4b327fa88b0daed3193e81c92aa14f4a7",
@@ -248,16 +252,16 @@
     "version": "1.35.1-alpha"
   },
   "features/cycle-edge-in-include.md": {
-    "hash": "65cdd0e4817982d872f43633a1badcc5fa762e3e8c38c0fda3d98a7aa8918982",
-    "version": "1.51.1-alpha"
+    "hash": "1ba6354e79c557a2eb9cbcca30cfa1ef3d340131545a8e6b585429ca5aa7f422",
+    "version": "1.52.0-alpha"
   },
   "features/cycles-fix.md": {
     "hash": "7d1f1b2f865fae6694e89c250405547a3b51fa131da8590472f5565287cfaa83",
     "version": "1.51.1-alpha"
   },
   "features/datamodule-form-global.md": {
-    "hash": "8ce3879b624daa58f24c90cfac63f734868cfc0ab982656deba621b5a49a6232",
-    "version": "1.51.1-alpha"
+    "hash": "d62b30694a22ebc19bc68bd2df661ac48d244672a58554a679ccdc6d58d0e2f6",
+    "version": "1.52.0-alpha"
   },
   "features/deps-report.md": {
     "hash": "1e9390f3762d5354893d379c331bbb9b93c71e197bfd765337cb2756a04cd362",
@@ -304,7 +308,7 @@
     "version": "1.35.1-alpha"
   },
   "features/drag-lint-options.md": {
-    "hash": "8bdd6d89e8c3d3d63a30e7b4eb3eee3103fdeaa0d434fbf85e9cd01f23a8601d",
+    "hash": "a1947fb4cc9d101a341463e044fbcf46066794e1be6984feaa3d4271e6252d10",
     "version": "1.52.0-alpha"
   },
   "features/drag-lint-panel-dockable.md": {
@@ -312,8 +316,8 @@
     "version": "1.35.1-alpha"
   },
   "features/drag-lint-project-rules.md": {
-    "hash": "1b5cf6f5749b35ffc8168f25cdbbd307befafba8e48cca044d96aecc36b6dce4",
-    "version": "1.51.1-alpha"
+    "hash": "46a0962de6fb8ae27f5039c51d58776051a8c4b1dffd50dd648f4adafe1ff1cd",
+    "version": "1.52.0-alpha"
   },
   "features/drag-lint.md": {
     "hash": "f6b74c0a221339ad215ab7e195e45591e27e65c504747965050e44d00f3a7158",
@@ -336,8 +340,8 @@
     "version": "1.51.1-alpha"
   },
   "features/effect-free-in-loop-invariant.md": {
-    "hash": "04a31cd39493b8c63632affb160a423c7c0f2a65177208ce578cdd0102ced871",
-    "version": "1.50.0-alpha"
+    "hash": "13c33557ec0ae52e01bdc9be9e150ae5f8775ce8fc6fc5d381c19b7c4b58195d",
+    "version": "1.52.0-alpha"
   },
   "features/effect-summary-legend.md": {
     "hash": "cf5e3ef430d78b9ad8ca297cd2c4adb3f21f8c0af9578dae0f3453a7ee4863c0",
@@ -352,12 +356,12 @@
     "version": "1.51.1-alpha"
   },
   "features/exceptions-sync.md": {
-    "hash": "fc41373cf32885a2431aa88f5c82ee307498c77575b06e8554c45ba6d97ed746",
-    "version": "1.50.0-alpha"
+    "hash": "b5dcf316372322dd4e5b1aea8748cf1475f630ea5916534974ae39cc9c9a84d4",
+    "version": "1.52.0-alpha"
   },
   "features/explain.md": {
-    "hash": "d3c0367618907a5d067ff157554d85e05385631ab6d61811218d0ca727c784a1",
-    "version": "1.51.1-alpha"
+    "hash": "b727e63544ea87b5aae76658a8d11f9ddc6581cf00f8d9194fca5aab065fae51",
+    "version": "1.52.0-alpha"
   },
   "features/export-enums-delphi-const.md": {
     "hash": "a332589dd9d664d39fc53c8341629b3e414fb0b25c89998728578c22f5ba1be0",
@@ -388,12 +392,12 @@
     "version": "1.35.1-alpha"
   },
   "features/field-repository.md": {
-    "hash": "dd8777b235946d035ec7ed5c0750b49f9fdf3bde0b207c67ef95c24722661801",
-    "version": "1.51.1-alpha"
+    "hash": "3e3ecf4a5f5404c9428d313c60ed39ab416eaccad0c95e2379979926341c0c4d",
+    "version": "1.52.0-alpha"
   },
   "features/finalization-after-dependency.md": {
-    "hash": "76ca3ab6384a27dd1ecb82dcc439b667f5055d088a70921ad6f76df0006ec193",
-    "version": "1.51.1-alpha"
+    "hash": "c5d386cb5c8bc6783f1214f31227829d52d4840392b6fef7062ad50fc15bd9f1",
+    "version": "1.52.0-alpha"
   },
   "features/find-callees.md": {
     "hash": "dcd370cf5897088687a3bed5dd1972ddf6ed6f4b1036f9f3302666e92e8f2f6c",
@@ -420,32 +424,32 @@
     "version": "1.51.1-alpha"
   },
   "features/fix-all-in-project.md": {
-    "hash": "a903dd59b188e5d91eb9331694d283b17b97c5e58eadf8f63eaddfea2704fe27",
-    "version": "1.51.1-alpha"
+    "hash": "daf9eb4712fcc0385a211f9fc92303eb463bf51c45989d3a38b1089ad56ac1f7",
+    "version": "1.52.0-alpha"
   },
   "features/fix-all-in-unit.md": {
-    "hash": "3a45ddd57b550af7b247219c1a7c5a21a5b6cf6715cdafd6fd787819644194b6",
+    "hash": "925b884854832ae6b3a606e2838fc070b41a8371dd7aaa5f0b86e81372e82464",
     "version": "1.52.0-alpha"
   },
   "features/fix-all-reliability.md": {
-    "hash": "2bb1433698f1ec055a9056e65209ada71ea300648336e13d8c58d56fabd21f1c",
-    "version": "1.51.1-alpha"
+    "hash": "5cc8ab823f433fab9e134074266ffe3dd59f6611520d13f310aa145d9a614f32",
+    "version": "1.52.0-alpha"
   },
   "features/fix-it.md": {
-    "hash": "d62f0d49fa7199cfa4672f5540e6f6d5e83f0752a66f06a88588d6f7abc18ece",
+    "hash": "4dfad1e9f5804f1b5918ea75470925263183d1ae4a508236dc1634ac77e72d27",
     "version": "1.52.0-alpha"
   },
   "features/flow-out-arg-rules.md": {
-    "hash": "b1a2b4714a3c6b8eac4c947ebea2a64292176de30204740e4b5ea35fa689fdfa",
-    "version": "1.51.1-alpha"
+    "hash": "838f5e5c30b8e8954a7506d59f54e28a5b0e50191f83ec0b65d47fec86e410c0",
+    "version": "1.52.0-alpha"
   },
   "features/format-whole-project-with-yadf.md": {
-    "hash": "e14e5479f21d00cd630ad983cf448ecd0676d219f509748eb556153eeb46c13c",
-    "version": "1.51.1-alpha"
+    "hash": "4c8e0d86e793fe6bdae5ccc88557edcf1fce5aa6700f9a31e118ca6d159aa923",
+    "version": "1.52.0-alpha"
   },
   "features/format-with-yadf.md": {
-    "hash": "16babd418bc1ea9867e6bef6c71715a7737745c433c6c079637a03b4c56810aa",
-    "version": "1.51.1-alpha"
+    "hash": "62895909017b83e8e79e4707cd860b53b86af9e138be0207aa54721b4143d74e",
+    "version": "1.52.0-alpha"
   },
   "features/full-compile-sweep.md": {
     "hash": "57167a2876af610f2182a1786340c752287080df967f6dd59c3f8d8b57f319af",
@@ -456,8 +460,8 @@
     "version": "1.51.1-alpha"
   },
   "features/gap-wave-rules.md": {
-    "hash": "c1fe711f8dd0bbab60ca2242dbd3d178ddc6ea455321b62a518df7ae1e055d2e",
-    "version": "1.51.1-alpha"
+    "hash": "7a339316e9b4dcaf14a049b345ae75b4cfac15aaeb37ae702e31289684714864",
+    "version": "1.52.0-alpha"
   },
   "features/generate-test-helper-csv.md": {
     "hash": "6c5f33ff1ac2de53c8b391a24441fb084a9686f80849b2103e78cdf5352e3970",
@@ -472,8 +476,8 @@
     "version": "1.51.0-alpha"
   },
   "features/global-set-in-initialization-never-freed.md": {
-    "hash": "bc2518d7ffbf7f296d1e9d9511088a007aeac8d6d5120445723060899063c906",
-    "version": "1.51.1-alpha"
+    "hash": "270dd0ba1a3f7ca185562bc3747b348536a29d2b691bafa831689987a1c340d8",
+    "version": "1.52.0-alpha"
   },
   "features/glyph-vacuum.md": {
     "hash": "a75068ed80fdbff6e36ddd23539b88e85713bfc3fe108a518019c939a19e3b54",
@@ -492,16 +496,16 @@
     "version": "1.51.1-alpha"
   },
   "features/heavy-initialization.md": {
-    "hash": "d3c4492e9d0c9caf7cfd37404c4600531aa448ad1cb1194215618077bf53513b",
-    "version": "1.51.1-alpha"
+    "hash": "e5ce29720bad6146b68bf06743cdd3ca593dca85ca41af5c180562d34f14021b",
+    "version": "1.52.0-alpha"
   },
   "features/helpers-of.md": {
     "hash": "5bbb8c8710d39c18392d7bfd5f7f8867233013ee8ace6c6c87a0105edbeb25d2",
     "version": "1.51.1-alpha"
   },
   "features/hover-at-cursor.md": {
-    "hash": "31b49c4890e0b8cdc0af3fd004d05174109588edfabf214729680b579e25570d",
-    "version": "1.51.1-alpha"
+    "hash": "34517a3bb516802f710c7c861db181ee6d5eea195c95b5ac26d61da38def6b3a",
+    "version": "1.52.0-alpha"
   },
   "features/ide-help-line.md": {
     "hash": "1f68b20c2c8ceb8e2a6bd943fd79cc79f051ecf2bd29aef31f5e9de73e2b86ed",
@@ -516,8 +520,8 @@
     "version": "1.51.1-alpha"
   },
   "features/identifier-case-mismatch.md": {
-    "hash": "97b15bc6fdb02966b318eacc598ce85c55c721147c45ea61d54d63619df8a1aa",
-    "version": "1.51.1-alpha"
+    "hash": "44f0262dc7b09059802aefb4edf5ee77fe4aa22fc14b747ad44ae5c734fc45d1",
+    "version": "1.52.0-alpha"
   },
   "features/impact-blast-radius-symbol.md": {
     "hash": "7478bd8b776e41a70136d7b5f5f4334f478079cfedfca48f6556b745e84eb944",
@@ -540,8 +544,8 @@
     "version": "1.51.1-alpha"
   },
   "features/init-order-hazard.md": {
-    "hash": "cdaa46468ec112b2bfcd64646b553b5be69001e204a2db222db65605898b0bd6",
-    "version": "1.51.1-alpha"
+    "hash": "460d2f874a064c6aa94d2929eda10e93f19ba4b1fe806392eb5a5cf19c2c4c99",
+    "version": "1.52.0-alpha"
   },
   "features/init-wiring.md": {
     "hash": "207fbf83708c3205598e2a778b902f1d9cb364441f61278b114796b5c31a08ad",
@@ -560,8 +564,8 @@
     "version": "1.49.0-alpha"
   },
   "features/interfaced-object-nil-leak.md": {
-    "hash": "19272e38e6d543667e999c3ef661b1eafffbd565dd2ad0af1b98b8c7a9ed9b5e",
-    "version": "1.51.1-alpha"
+    "hash": "3ba7331e09fdc6a347963fa3dcf65a75ba4c1210b1d0605e8b62234fb324ebe6",
+    "version": "1.52.0-alpha"
   },
   "features/lazy-init.md": {
     "hash": "eda43363f10ac3bbefa0637d441dad25060d3e3ca6bd8732bc43417c2102c52e",
@@ -576,24 +580,24 @@
     "version": "1.35.1-alpha"
   },
   "features/lint-buffer-unsaved.md": {
-    "hash": "1754359d667d7be1c4f912bcda202f56430f2507a128f29a3103d059a0527008",
-    "version": "1.51.1-alpha"
+    "hash": "2092c9793daf871741a30b8ae72ebabcf5a71a3f7b411cfed80f97a16ea01477",
+    "version": "1.52.0-alpha"
   },
   "features/lint-fix-compile-gate.md": {
     "hash": "ab960901115195db293304c94882a4a7dbc99741fb75018fec63c3f7e5f60c2b",
     "version": "1.51.0-alpha"
   },
   "features/lint-project.md": {
-    "hash": "d1a3ca54f595bb0f1a9ed422572e3f8ac1bf1a3adb748b9ccd1069ae0a5e7057",
-    "version": "1.51.1-alpha"
+    "hash": "60930471308c8ab8c63a892ad661b2ac2a6280dc0b5af0c84ac97b75a00cdb9f",
+    "version": "1.52.0-alpha"
   },
   "features/lint-rules.md": {
-    "hash": "d654f2d00064ddb958667e89373dd99b45dfd85faeeb36e7c694d177bd754c93",
+    "hash": "98e2469a5e12e525e512c70ca9b502ba6596b7f3fe504477d04f509e96140197",
     "version": "1.52.0-alpha"
   },
   "features/lint-tree.md": {
-    "hash": "3d7c9131f7d43b6341133a953ccc5abbac7403883001b3bf6f964d50be2adbc8",
-    "version": "1.51.1-alpha"
+    "hash": "89ad8b05d99aae8d4bfc7dd1af52a5738a20f8f2912d9a9d2b3abf7c7eee2d14",
+    "version": "1.52.0-alpha"
   },
   "features/lsp-full-rules.md": {
     "hash": "934bb2ad395aa56d9815331d753cccbd381e5bccfddd4759d64f2e7dc9b3b0aa",
@@ -640,16 +644,16 @@
     "version": "1.38.0-alpha"
   },
   "features/multi-project-rename.md": {
-    "hash": "1671b5f02218fa4f8e977fa84f02b9c35fcf1c677b29de623d5abc243f1db7f2",
-    "version": "1.51.1-alpha"
+    "hash": "ed24b9327c19bb8c4dc4dbb151db71e53b1837fc0cb1e66f97a1d7979a8bca50",
+    "version": "1.52.0-alpha"
   },
   "features/narrow-param.md": {
     "hash": "53dda7746536b6c2a9f7fbc2584eb3114d33d2422d79df829c1b4cdbe1ab4705",
     "version": "1.51.1-alpha"
   },
   "features/opaque-to-analysis.md": {
-    "hash": "de76bca19b6ba0e6a51ff9cf3336b5e3d70e860bf22d8d8220d0e4349ef26c9c",
-    "version": "1.51.1-alpha"
+    "hash": "6e803aa941ec98f9b521b66865f8a1e928e374ce486db597ed8f75e60a415955",
+    "version": "1.52.0-alpha"
   },
   "features/open-plugin-log.md": {
     "hash": "948c4f5d9696a750f3825dc36bf4e28b0ff86e6c3312de36a43f051de1143f4f",
@@ -664,8 +668,8 @@
     "version": "1.51.1-alpha"
   },
   "features/parameter-type-too-wide.md": {
-    "hash": "07ff2e332b0eca5709531b33bb37f227fed4ba66ee77c3a5ed17e097dcc9cf55",
-    "version": "1.51.1-alpha"
+    "hash": "b9c98b0f8301677366cdc67a6fe6d4c8bfd9bd6604c0921749451fe0275c359d",
+    "version": "1.52.0-alpha"
   },
   "features/pp-profile.md": {
     "hash": "9e512a04f4b7af58e868fabaa122838ece3d205e1586deea49cf730c8d5560e8",
@@ -744,8 +748,8 @@
     "version": "1.47.0-alpha"
   },
   "features/read-never-assigned.md": {
-    "hash": "5091ee2c842c116b9e9493ae2d342bf64356488008426305563792b29bf9e557",
-    "version": "1.51.1-alpha"
+    "hash": "922051d12c72e8f7eadb35b11351128b97e495f5559b3f36fbebf9535d994146",
+    "version": "1.52.0-alpha"
   },
   "features/rebuild-index-for-this-project.md": {
     "hash": "bfc996f0656e128fab910b9570790481bebc28eeaba414004d6469a5e05ccb5f",
@@ -764,8 +768,8 @@
     "version": "1.51.1-alpha"
   },
   "features/ref-type-rules.md": {
-    "hash": "0ad51c4d2e9c1154d86c1de1888333322cf08cb457b6aa4d6663d25c07e31f05",
-    "version": "1.51.1-alpha"
+    "hash": "46e0a8d1ecb81c978e46f8d9ec1d349ca5dbd15d60cc00f7e7767c76adfbe956",
+    "version": "1.52.0-alpha"
   },
   "features/register-project.md": {
     "hash": "2d3c8aaa15034a76ce26de1fc2dfece7b44b764112c926f96368d3e8db59b775",
@@ -776,8 +780,8 @@
     "version": "1.51.0-alpha"
   },
   "features/rescan-this-unit.md": {
-    "hash": "86b8d7f67e78ddf6f25d1f8745e635120d111632610260fd8ddec83f705c7253",
-    "version": "1.51.1-alpha"
+    "hash": "f7c6b71edcec4128c4324e8770cca47077b5d539d15424c8ae013c31c01c1269",
+    "version": "1.52.0-alpha"
   },
   "features/reverse-call-tree-clickable-messages-window.md": {
     "hash": "7972967065dbebe3227b1b20374afe574ece7fcf898dfabf1d2ffe2886919edb",
@@ -788,23 +792,23 @@
     "version": "1.46.0-alpha"
   },
   "features/review-marker-remeasured.md": {
-    "hash": "5798cb2cee1310622fdac699dd7f3d517e13b85f77f442d22b8d9d6b489b567a",
-    "version": "1.51.1-alpha"
+    "hash": "06e8f6626c66189a1b8c40ed35cff70bb992db743621acbfe7fe91501c1ee632",
+    "version": "1.52.0-alpha"
   },
   "features/rtti-unavailable.md": {
-    "hash": "c13f4dee04f3a81b9f2037c0bae93984bf3b46f43613e1964fdfdc72682cb3b7",
-    "version": "1.51.1-alpha"
+    "hash": "f4ac1a92833f719e6b7757f2632e03efd3a14d675041faab02b1bfae5e5c3f36",
+    "version": "1.52.0-alpha"
   },
   "features/run-ast-checks.md": {
-    "hash": "14df79b4c79887a36d5e0a61544d220c239031709da95894254bee42d85cbcec",
-    "version": "1.51.1-alpha"
+    "hash": "a2cdd3b4d1720dfd8f89b5dccf6bf52e2ffbf8c93f7edda0d3b51c4bbd811156",
+    "version": "1.52.0-alpha"
   },
   "features/run-diagnostics-didsave.md": {
-    "hash": "d8699e3ee55b298fc61ebd528810cfa920731aa858f340241a62d807dc114f42",
-    "version": "1.51.1-alpha"
+    "hash": "20a4f8308c6d238e735e15056ce264f9f4c22fbfb87803d9cf39a28d2fbc2ae0",
+    "version": "1.52.0-alpha"
   },
   "features/run-lint-all-full-report.md": {
-    "hash": "3050d16432420061661c0d2caba364b541d1272ec93892be9965fef8bd466bc4",
+    "hash": "f340e67d61dfd5bd4b44c3e632721f824eaffcd669c9f127b6e15f0158182a5f",
     "version": "1.52.0-alpha"
   },
   "features/safe-delete.md": {
@@ -864,8 +868,8 @@
     "version": "1.51.1-alpha"
   },
   "features/stream-buffer-after-free.md": {
-    "hash": "02fae5e8cc6d54f801abfc28bcacc956e73883368ce2b4da68c8f9a794ca89cc",
-    "version": "1.51.1-alpha"
+    "hash": "c03acdacc6de9d03fa734a6fa2c32114205a2d5949faa65989b4443efc6f111b",
+    "version": "1.52.0-alpha"
   },
   "features/symbol-search.md": {
     "hash": "a4363ae61ea75df133386f02aaaac6e18a79afb8a4682baeaa63f614a9dfbccd",
@@ -880,16 +884,16 @@
     "version": "1.51.1-alpha"
   },
   "features/taint-analysis.md": {
-    "hash": "c4a85d527e6657351dd38ff638d2fc8a07ba9c994b9262f990025dc9eca80dcf",
-    "version": "1.51.1-alpha"
+    "hash": "5a80f572a26b6a97aafb1e37cbd3b01f694e918cab555243cfbf498e0c8c2a2c",
+    "version": "1.52.0-alpha"
   },
   "features/target-bds-library-path.md": {
     "hash": "eb174ea5dee975b29d8f22bb0603f439a9751e88e5b3d82f45a96d1ee8e2d6d3",
     "version": "1.43.0-alpha"
   },
   "features/target-compiler.md": {
-    "hash": "ba9091cfa75edb1c5d1a40831aeb54557aa96fa59807f9cc803c6f4a8e4802d7",
-    "version": "1.51.1-alpha"
+    "hash": "cb7f8c190806ef4f6f4b3c336a9f7a816cd171cdc1b16a88c9a52f8463ac5491",
+    "version": "1.52.0-alpha"
   },
   "features/top-symbols-fan-in.md": {
     "hash": "ac4495d8238e37409a318fd06d2f07729e034292bb7365abdcad29fe4d8226d8",
@@ -900,12 +904,12 @@
     "version": "1.51.1-alpha"
   },
   "features/type-level-review-marker.md": {
-    "hash": "1db23674bf59c9737c28d744a3caef762ef6fc7ae0fa13b39d8adc97db275249",
-    "version": "1.51.1-alpha"
+    "hash": "e306c3dc09e42e635ab90962f12bb47a8e0f3fc17ad7607a36ddfd5648f1b0f1",
+    "version": "1.52.0-alpha"
   },
   "features/type-name-prefix-origin.md": {
-    "hash": "6f0d7177090ac59a67cac5b855ce861a939b598295c5b426217f372601917d6a",
-    "version": "1.51.1-alpha"
+    "hash": "5295d2483fe77f218979723862404b284b4c69399efbddba0af777b4d3649f9a",
+    "version": "1.52.0-alpha"
   },
   "features/unit-missing-from-uses.md": {
     "hash": "7954659e493d34421b6e72716ee65d96f9508f73c8ad06e02b50d44b0e27bc5f",
@@ -944,76 +948,76 @@
     "version": "1.46.0-alpha"
   },
   "features/v151-app-rules.md": {
-    "hash": "5bbcea5f5c0a0b2e75856467aaced3a166448dafdf59d5f3522e00cde36d6f2d",
-    "version": "1.51.1-alpha"
+    "hash": "d92e63dea7b4454e293fa47433b994e21061c64fe2fd1b6b98232785fba6dd1f",
+    "version": "1.52.0-alpha"
   },
   "features/v151-cmp-rules.md": {
-    "hash": "97beba29859e98b49215ffd8bbe7d8a85985f5a71f0cd3fcbf54b7ba819e67b1",
-    "version": "1.51.1-alpha"
+    "hash": "5fe456fd302be7df4abe87fe3130d293cd9e2a1d5064930cffdb0c7e76dcf0d0",
+    "version": "1.52.0-alpha"
   },
   "features/v151-dfma-rules.md": {
-    "hash": "2228e3d240c2647a5e812fdedacfc6f2ecefdf2ae776256ab0aa0b1a3022f5c5",
-    "version": "1.51.1-alpha"
+    "hash": "6c73f23be53e9de463b49a15474f80be6dcfbcd79afe3d4ef5bbd4cd300cc6e5",
+    "version": "1.52.0-alpha"
   },
   "features/v151-dfmb-rules.md": {
-    "hash": "83affece5ea38fd4a78580fadf169576f3450f6d565017cf3d44b29512e37526",
-    "version": "1.51.1-alpha"
+    "hash": "f3486057e23b1c5141a17d924c2a2f1067b1b6f8f752af3db4d1de147dd3b321",
+    "version": "1.52.0-alpha"
   },
   "features/v151-ds-rules.md": {
-    "hash": "05fd940c4fbda8388ee9d11de56c54d98e42a57036e4aa893328dba53d548aaf",
-    "version": "1.51.1-alpha"
+    "hash": "2091b8d8738eaf359527ccb1e82755ef5ebbc2088d6a6bbde897909ddfd54fef",
+    "version": "1.52.0-alpha"
   },
   "features/v151-exc-rules.md": {
-    "hash": "fe3d5a6555bd44495daa55d06ea4f756325c2d88e0093dc0f0a85647e8960451",
-    "version": "1.51.1-alpha"
+    "hash": "16f24c7a04cbc1df7eb1678954d438e7b2354485455d24e6fb19a2a60a164357",
+    "version": "1.52.0-alpha"
   },
   "features/v151-mem-rules.md": {
-    "hash": "1c110ffd76a07cd2a8652cfdd0d12603326038d289234a269e5c5124027d057f",
-    "version": "1.51.1-alpha"
+    "hash": "07a0918feab6e2545786e2d77f65b7692eec64eebd9fddd12fa6e356e393342b",
+    "version": "1.52.0-alpha"
   },
   "features/v151-oo-rules.md": {
-    "hash": "e39bf1184f0142cb94aa56dbed898c359e745dd960ed210693ae6e1ff05ae031",
-    "version": "1.51.1-alpha"
+    "hash": "3a5d4e2bd0263d8964e58c3924c09433907c985cf68a17596f5f7e8fbd4d85db",
+    "version": "1.52.0-alpha"
   },
   "features/v151-rtl-coll-rules.md": {
-    "hash": "d99bcc2e9c153fac8033e6a8a887900f1316d0a23a293b092ab283b813d07b69",
-    "version": "1.51.1-alpha"
+    "hash": "e633fa469219df47a4e49f6e83ea54a533e0123fbc49088330fa87e024807ead",
+    "version": "1.52.0-alpha"
   },
   "features/v151-rtl-str-rules.md": {
-    "hash": "1f89eb9f566ed518c36f7347ca1be1222b5f28e8b2a323eabdcf19d001e3b28d",
-    "version": "1.51.1-alpha"
+    "hash": "58fbdae03347e3b176907dcf7ad722ed309a08a4115cb8089d858c2d3ffe0484",
+    "version": "1.52.0-alpha"
   },
   "features/v151-sty-rules.md": {
-    "hash": "0af1023d653b8584bf729b2bb9fc29ec00a7a1793e68fc350967c4e9cd26514c",
-    "version": "1.51.1-alpha"
+    "hash": "9e7dbc8d6d41886b30e695ef769ad2b9ab881c9c3b09fe7ee67a623ed4083b26",
+    "version": "1.52.0-alpha"
   },
   "features/v151-thr-a-rules.md": {
-    "hash": "cda7c8cc9b334e416914d75930683bec82caaab9d88424cf5c570f84ec1b1a1c",
-    "version": "1.51.1-alpha"
+    "hash": "5c15be6ba21894da76a161194ac83639ac89ab3f52c3a87ea3db36b6731f7378",
+    "version": "1.52.0-alpha"
   },
   "features/v151-thrb-rules.md": {
-    "hash": "cdaf6ba1be7d9a71fbfff5ee5ba8414956c8b4571c469cddd96eff7c676e2add",
-    "version": "1.51.1-alpha"
+    "hash": "f813740282c8cb40d48e66daa89edaa8a60129fbe5563c1048e560accd6fc64c",
+    "version": "1.52.0-alpha"
   },
   "features/v151-txt-rules.md": {
-    "hash": "dc92022613662af832a6a3d75975220d4cf1c8047746945a93c5fc9dff05db39",
-    "version": "1.51.1-alpha"
+    "hash": "4dfbdbd1c0e189f034841c1f8eee662ab84875d99c187034be8e5707afef04b5",
+    "version": "1.52.0-alpha"
   },
   "features/v151-typ-rules.md": {
-    "hash": "2ffe39c89f93a6d114ef20ec39f814f218bb315fde978f653df516fed4ce48e0",
-    "version": "1.51.1-alpha"
+    "hash": "f4b0b6d85a8d45eb2e455d2b311c93bbfd9c2e619b0c6a067f2742c32807fda9",
+    "version": "1.52.0-alpha"
   },
   "features/v151-wid-ast-rules.md": {
-    "hash": "af45844190e027d1bd8564dbacd3226792028e5ce887d601846e605497e31ba9",
-    "version": "1.51.1-alpha"
+    "hash": "e1f9a7e3578761e56bbe9a97f3b3adf4022dc5ccd87bee1d08935059328e4d6d",
+    "version": "1.52.0-alpha"
   },
   "features/v151-wid-scm-rules.md": {
-    "hash": "b45508f7d78dcf3aaaebd9be893cc7c49c34f556e9e0b84cffc6f66a6318d4e2",
-    "version": "1.51.1-alpha"
+    "hash": "fd60246a69b731a1cfe65e87a142fb4099ef2f356752a5671478ab8d7bac816b",
+    "version": "1.52.0-alpha"
   },
   "features/v1511-cli-fixes.md": {
-    "hash": "3f5a127574ccd76088737dd3a8e5d4d4372e361601776ff81fa96a696fbb12be",
-    "version": "1.51.1-alpha"
+    "hash": "f40b2043f5625c5675c337949be4123bdd32acb784e92e4f9b16aebf2d0cd011",
+    "version": "1.52.0-alpha"
   },
   "features/v1511-cyc-fixes.md": {
     "hash": "05bb7a028f32c9ae9ccdae3f71cb04ee13df36bba9ca1df9b65d8d2d16306794",
@@ -1032,11 +1036,11 @@
     "version": "1.51.1-alpha"
   },
   "features/v152-atla-rules.md": {
-    "hash": "68c19999cad7cf3f6f59c6da1690616b7af4b53d26144d038f00f63d47085926",
-    "version": "1.51.1-alpha"
+    "hash": "fc6fa5ea479a076c521d285287b78dc313eaa194a7b247e848397697796a76f1",
+    "version": "1.52.0-alpha"
   },
   "features/v152-atlb-rules.md": {
-    "hash": "b6793e118790ecefb0ea2ff537a334efac239d77de84caaac1943dc13d2a577e",
+    "hash": "3ed38bd83b047e22e10e3b5d3e1ad954d3b603709ddc846feff553ab6916c60a",
     "version": "1.52.0-alpha"
   },
   "features/v152-attributes-fact.md": {
@@ -1044,15 +1048,15 @@
     "version": "1.52.0-alpha"
   },
   "features/v152-attrrules.md": {
-    "hash": "9a0d6fb033b6ed1c87dd936585c71c704bdc4900afe1484f4b1834b5bfd971f8",
+    "hash": "e1f71e71d8e91e65056da1e73b1b535c196e8738dc82c706050efd1758fc7a06",
     "version": "1.52.0-alpha"
   },
   "features/v152-defaults.md": {
-    "hash": "6976a08129cec2bf29de295ccc3c10756b65f173f1416e624a28590f1679fb2d",
+    "hash": "bdc73212187bd67db31f3afcb393655bc7a9c85ab5de29006f544ef8a965fe72",
     "version": "1.52.0-alpha"
   },
   "features/v152-disable-rule.md": {
-    "hash": "0c62ff751b84af157515d71af59413a85fc09bc63bedfa8c4f499ae8d012674a",
+    "hash": "7f9f3a073b01a6145eecb1ac4cce277d5436d23e4c90bd9d94a6a851acf7e8b9",
     "version": "1.52.0-alpha"
   },
   "features/v152-docpol.md": {
@@ -1072,23 +1076,23 @@
     "version": "1.51.1-alpha"
   },
   "features/v152-index-possibly-out-of-range.md": {
-    "hash": "f1d36dfd83709aa7b86baaf3f508554963e3d4501b98836dd7ba73ba1da6cbfa",
+    "hash": "e3b2e7b6ff64dbedf0615304914dcdcccb068dd8b310d1de52aef04510ad2531",
     "version": "1.52.0-alpha"
   },
   "features/v152-per-rule-budget.md": {
-    "hash": "1db9c1029e6bfcb40fcc73bc07a54649d59815c6b0fcb1713dcb33fb2131e0ee",
+    "hash": "1b23e3c48d4dcb969e5485b3b65e9f7795f5bf124a2ba75026ad92190cd76194",
     "version": "1.52.0-alpha"
   },
   "features/v152-proj2.md": {
-    "hash": "35c9c64bcd3175123efb4bf72c3d465d322cf303be924906a6d29413464e4e66",
+    "hash": "ab86ca15b0c7690c4ddd81afe59bae083f378db27031b2caaa33a100552df76c",
     "version": "1.52.0-alpha"
   },
   "features/v152-ptw.md": {
-    "hash": "88e9b63ddc6607922360821e9f9c403644817b33f9232ee55e91b9dab5ade9dd",
+    "hash": "f3370c88430431428c243494704115cfcbfd9a149b95944d1dee9fb9f765bbeb",
     "version": "1.52.0-alpha"
   },
   "features/v152-unconn-rules.md": {
-    "hash": "d245365583996724ad1fbddf0d67cd34aa006a7f3462bc6fb6e1557a392853cd",
+    "hash": "a8f28538816fa732e7bf6c1ca6f3948ae0cfbf42e6979ae67e942a6aac736f7e",
     "version": "1.52.0-alpha"
   },
   "features/v152-vsfix.md": {
@@ -1100,7 +1104,7 @@
     "version": "1.51.1-alpha"
   },
   "features/warm-rule-cache.md": {
-    "hash": "6aea6011ea3bfcddd50b62f5aaedeba34800dd2df8a9add11e5d04af662ef47e",
+    "hash": "58c173dbf46f9b05ea6c454ca6828abff0771ed3502aaecf638c71075362a472",
     "version": "1.52.0-alpha"
   },
   "features/wiki-blocks-authoring.md": {

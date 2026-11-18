@@ -7,7 +7,7 @@ group: linting
 order: 30008
 since: 1.50.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Cycle edge written in an include (lint rule)

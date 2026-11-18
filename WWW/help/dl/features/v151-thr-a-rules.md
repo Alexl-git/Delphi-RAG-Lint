@@ -7,7 +7,7 @@ group: linting
 order: 30059
 since: 1.51.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Thread lifetime lint rules (v151 THR-A)

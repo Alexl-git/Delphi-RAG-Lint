@@ -7,7 +7,7 @@ group: linting
 order: 30057
 since: 1.51.0-alpha
 status: experimental
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # RTL string and path lint rules

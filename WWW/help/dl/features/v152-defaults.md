@@ -4,7 +4,7 @@ title: Default-on form, dataset and data-module rules
 summary: Four lint rules on by default since 1.52 (form object/field, foreign form access, edit without post, data module form global); a shipped exempt-class list
 product: DL
 group: linting
-order: 30068
+order: 30069
 since: 1.52.0-alpha
 status: shipped
 updated: 1.52.0-alpha

@@ -20,8 +20,8 @@ resolver 1.28.0 -> 1.29.0-alpha.
 
 - `by-value-arg-before-assignment` (OFF since 1.46) is FOLDED into the ON rule `used-before-assignment` (lane BK-OWNGATED,
   EX1, owner ruling 2026-11-18): `G.Take(X)` / `G.TakeC(X)` with X unassigned now reports by default under
-  `used-before-assignment` (error definite, warning possible). The old id is removed from the catalogue (434 rules,
-  321 built-in); a config or `dl:ok` naming it no longer matches anything. `lint-all` runs the by-value replay pass
+  `used-before-assignment` (error definite, warning possible). The old id is removed from the catalogue (with B48 debug-display-placeholder added: 435 rules,
+  322 built-in); a config or `dl:ok` naming it no longer matches anything. `lint-all` runs the by-value replay pass
   whenever `used-before-assignment` is kept (1.47 PF had skipped it for the OFF id). Wiki `flow-out-arg-rules`.
 - `cyclomatic-complexity`, `cognitive-complexity` and the autodoc `Complexity:` fact count an if-EXPRESSION
   (`X := if C then A else B`) as a decision point (lane BK-OWNGATED, GA-1, owner ruling 2026-11-18); cognitive scores
@@ -34,8 +34,8 @@ resolver 1.28.0 -> 1.29.0-alpha.
   `form-object-without-field` (hint), `doc-placeholder` (hint), `parameter-type-too-wide` (warning, fixable),
   `unconnected-control` (warning), `hanging-handler` (warning), `unit-used-by-no-unit` (warning),
   `reserved-word-identifier` (warning), `review-marker-remeasured` (hint). OFF by default: `doc-malformed-summary`,
-  `member-could-be-private` (new; OFF until a shared-unit FP is fixed). ON as well:
-  `index-possibly-out-of-range` (warning; BK-RULEFP fixed the FP classes of the 6/12 gate, sample 27 -> 16).
+  `member-could-be-private` (new; OFF until a shared-unit FP is fixed), `index-possibly-out-of-range` (FPM2
+  re-measure after BK-RULEFP: 21 FP / 36, stays OFF; FP classes in backlog IDXRANGE3).
   `missing-doc` now also reports DFM-bound handlers that have code (reverses the 1.51.1 skip; CLIENT +934). A shipped
   exempt-class list `rules\form-object-without-field.exempt.txt` plus `form_object_without_field.exempt_classes` /
   `use_default_list` in the lint config.
@@ -159,7 +159,10 @@ resolver 1.28.0 -> 1.29.0-alpha.
   `--project`; `review-marker-remeasured` (MARK, hint); `parameter-type-too-wide` is ON and fixable (PTW);
   `rtti-unavailable` sub-kind `anonymous-field-type` (RTTI5, OFF); `doc-placeholder` ON and `doc-malformed-summary`
   OFF (DOCPOL).
-- 435 rules, 355 enabled by default, 131 with an auto-fix.
+- `debug-display-placeholder` (bug-patterns, default OFF, BK-ATTRRULES, B48): a `[DebuggerDisplay]`-style attribute
+  placeholder that names no member of the class, read from the index's attributes table; `member-could-be-private`
+  now reads attributes from that table too (a source scan is the fallback) and stays silent on attributed members.
+- 435 rules, 354 enabled by default, 131 with an auto-fix.
 
 ### Added
 - `check-init` (HBSKEL, HBEVENTS, HBINTRA, HBROOTS, HBSOLVER, HBFIELDS, HBTAIL, HBRECV, HBEVORD, HBDOCS, HBMCP, HBIDE,
@@ -181,7 +184,14 @@ resolver 1.28.0 -> 1.29.0-alpha.
   Param Array assistant) and the `dl-field-repo` grid editor (TTIDE, TTD).
 - IDE (PLUGCTX): editor-menu rows register through Surfaces=editor.
 - `repo` verb family (field repository, text backup, Firebird import/seed/refresh): `init`, `info`, `import-fb`, `seed-fb`,
-  `refresh-schema`, `backup`, `restore`, `gen-memtable`; the other `gen-*` / `*-orm` subs answer "not available" in 1.52.
+  `refresh-schema`, `backup`, `restore`, `gen-memtable` (the `gen-orm` / `update-orm` / `gen-dataservice` /
+  `gen-param-array` generators: see the `repo` generators bullet above).
+- VS Code extension 1.6.6 (BK-VSHOVER, B32 + B51): deferred hover -- the fast part answers at once with
+  "computing...", the slow part follows and is cancellable (pre-1.52 engines answer whole); the markdown hover
+  carries `Init:` and the `Set by:` writer list ("and N more" past the cap).
+- "Disable rule" quick fix (BK-VSHOVER, B43): command `drag-lint.disableRule` asks for a reason and runs
+  `rules disable`; disable actions sort last in the quick-fix list (a metric rule offers no line action, only the
+  unit / project disable).
 - `explain <rule-id>`: meaning, why it matters, example, default, fixable, suppress; text or `--json`; an unknown id
   lists the nearest ids and exits 2.
 - New tests\autotest\run_dfm_grammar_corpus_ab.ps1: corpus A/B for the tree-sitter-dfm grammar.

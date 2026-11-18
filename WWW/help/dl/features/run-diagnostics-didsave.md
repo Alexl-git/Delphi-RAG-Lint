@@ -7,7 +7,7 @@ group: linting
 order: 30041
 since: 0.22.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Run Diagnostics (didSave)

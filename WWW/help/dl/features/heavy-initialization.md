@@ -7,7 +7,7 @@ group: linting
 order: 30024
 since: 1.44.1-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Heavy work in an initialization section (lint rule)

@@ -7,7 +7,7 @@ group: linting
 order: 30038
 since: 1.51.1-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # review-marker-remeasured hint

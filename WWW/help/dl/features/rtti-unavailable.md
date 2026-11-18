@@ -7,7 +7,7 @@ group: linting
 order: 30039
 since: 1.50.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # RTTI unavailable (lint rule)

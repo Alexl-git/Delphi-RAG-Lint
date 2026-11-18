@@ -7,7 +7,7 @@ group: linting
 order: 30029
 since: 0.48.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # lint-project

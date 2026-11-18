@@ -7,7 +7,7 @@ group: linting
 order: 30015
 since: 0.61.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Fix all in project

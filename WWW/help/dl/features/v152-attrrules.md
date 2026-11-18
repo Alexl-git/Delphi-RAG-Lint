@@ -4,7 +4,7 @@ title: debug-display-placeholder + attribute-aware member-could-be-private
 summary: Warning (OFF in 1.52) on a DebuggerDisplay placeholder naming no member; member-could-be-private reads attributes from the index
 product: DL
 group: linting
-order: 30067
+order: 30068
 since: 1.52.0-alpha
 status: shipped
 updated: 1.52.0-alpha
