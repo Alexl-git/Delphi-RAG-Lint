@@ -138,7 +138,7 @@ function AssembleHover(const AStore: ISymbolStore; const ASym: TSymbol;
 /// recomputes. Thread-safe: one lock serialises CheckInit (whose parse cache is not thread-safe)
 /// and the cache. LSP: call it in the deferred second step only (it can take a solve).</para>
 /// </remarks>
-procedure AttachHoverSetBy(const AStore: ISymbolStore; const ASym: TSymbol; var AAsm: THoverAssembly);  // dl:ok unused-public-symbol -- REVIEWED 2026-11-18 v152 HBHOVER: public for the LSP hoverBundle Reuse branch (HANDOVER to INT), which skips AssembleHover's facts
+procedure AttachHoverSetBy(const AStore: ISymbolStore; const ASym: TSymbol; var AAsm: THoverAssembly);
 
 implementation
 

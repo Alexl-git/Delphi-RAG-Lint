@@ -6424,11 +6424,13 @@ begin
       AWithFacts branch over the SAME TDocFacts: Used in + Phase-2 + Implemented
       by, and the Purity verdict; no 'Called from:' (the popup has its grid). }
     var Reuse    : Boolean       := (not Fast) and Comp.FactsReady;
-    var Asm_     : THoverAssembly:= AssembleHover(Comp.Store, Comp.Sel, not (Fast or Reuse), HoverExtraStores(Comp.Path, Comp.Store)); { 149 LX: cross-DB uses }
+    var Asm_     : THoverAssembly:= AssembleHover(Comp.Store, Comp.Sel, not (Fast or Reuse), HoverExtraStores(Comp.Path, Comp.Store),
+      if Fast then [hskImplementors, hskSetBy] else []); { 149 LX: cross-DB uses; 1.52 HBHOVER: the fast step skips the slow sections }
     if Reuse then
     begin
       Asm_.FactLines:= TDocRegions.FormatUsedInLines(Comp.Facts) +
         TDocRegions.FormatPhase2FactLines(Comp.Facts, LoadDocComplexityMin) + Asm_.ImplLines;
+      AttachHoverSetBy(Comp.Store, Comp.Sel, Asm_); { 1.52 HBHOVER: reused facts still carry set-by }
       Asm_.Model.EffectFree   := Comp.Facts.EffectFree   ;
       Asm_.Model.EffectSummary:= Comp.Facts.EffectSummary;
       Asm_.Model.EffectWitness:= Comp.Facts.EffectWitness;
