@@ -17,6 +17,7 @@ const fs = require('fs');
 const path = require('path');
 const radcolors = require('./lib/radcolors');
 const dlctx = require('./lib/context');
+const plannedstop = require('./lib/plannedstop');
 const serverargs = require('./lib/serverargs');
 const enginestale = require('./lib/enginestale');
 const exceptionfacts = require('./lib/exceptionfacts');
@@ -28,6 +29,11 @@ let extContext;
 let engineLog;
 
 let client;
+// 1.52 VSRESTART: open while WE stop the client on purpose (restart / engine-copy update), so the
+// old connection's teardown errors are not logged as faults. See lib/plannedstop.js.
+const stopGate = plannedstop.createGate();
+let clientChannel;
+const PLANNED_STOP_GRACE_MS = 3000;
 // Held so a restart can dispose the previous one. The LanguageClient does NOT
 // take ownership of a watcher handed to it via synchronize.fileEvents, so
 // building a fresh client per restart -- which is what the restart command does
@@ -57,6 +63,21 @@ const RESTART_WINDOW_MS = 3 * 60 * 1000;
 let restartTimes = [];
 
 function makeErrorHandler() {
+  return plannedstop.wrapErrorHandler(makeBudgetErrorHandler(), stopGate, { Continue: ErrorAction.Continue, DoNotRestart: CloseAction.DoNotRestart });
+}
+
+// Stops the running client on purpose. The gate stays open for a short grace period after stop()
+// resolves because the child's exit and the last write errors can still arrive just after it.
+async function stopClientPlanned() {
+  if (!client) return;
+  const old = client;
+  client = undefined;
+  stopGate.begin();
+  try { await old.stop(); } catch (e) { /* already gone */ }
+  setTimeout(() => stopGate.end(), PLANNED_STOP_GRACE_MS);
+}
+
+function makeBudgetErrorHandler() {
   return {
     error(error, message, count) {
       // A write error is what a replaced-binary EPIPE looks like. Keep going;
@@ -345,10 +366,7 @@ async function updateEngineNow() {
   if (!extContext) return;
   // The running server holds the copy, so it has to stop before the file can be
   // replaced. Same lock this whole mechanism is about, one level in.
-  if (client) {
-    try { await client.stop(); } catch (e) { /* already gone */ }
-    client = undefined;
-  }
+  await stopClientPlanned();
   const res = mirrorEngine(true);
   if (!res.exe) {
     window.showErrorMessage('drag-lint: could not update the engine copy -- ' + res.reason);
@@ -359,6 +377,14 @@ async function updateEngineNow() {
   }
   log('manual update: exe=' + res.exe + ' refreshed=' + res.refreshed + ' ' + res.reason);
   await restartServer();
+}
+
+// One Output channel for every client this window ever builds (the wrapper's dispose is a no-op).
+function sharedClientChannel() {
+  if (!clientChannel) {
+    clientChannel = plannedstop.wrapChannel(window.createOutputChannel('drag-lint'), stopGate);
+  }
+  return clientChannel;
 }
 
 function makeClient(exe) {
@@ -400,7 +426,7 @@ function makeClient(exe) {
 
   const clientOptions = {
     documentSelector: [{ scheme: 'file', language: 'pascal' }],
-    outputChannelName: 'drag-lint',
+    outputChannel: sharedClientChannel(),
     errorHandler: makeErrorHandler(),
     initializationOptions: dlctx.initOptions((k) => workspace.getConfiguration('dragLint').get(k)),
     synchronize: { configurationSection: 'dragLint', fileEvents: [manifestWatcher, sourceWatcher] },
@@ -469,15 +495,9 @@ async function restartServer() {
   // Build a FRESH client rather than calling client.restart(). Once the stock
   // policy has latched, the failure state lives in the client object, and the
   // whole point of this command is to be the way back from that.
-  if (client) {
-    try {
-      await client.stop();
-    } catch (e) {
-      // A server that is already gone cannot be stopped cleanly, which is
-      // precisely the case this command exists for.
-    }
-    client = undefined;
-  }
+  // A server that is already gone cannot be stopped cleanly, which is precisely the case this
+  // command exists for; stopClientPlanned swallows that.
+  await stopClientPlanned();
   restartTimes = [];
   client = makeClient(exe);
   await client.start();
