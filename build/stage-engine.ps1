@@ -156,8 +156,8 @@ if ((Test-Path -LiteralPath $FreshExe) -and -not (Test-PeImage $FreshExe)) {
 # and fall through exactly as before.
 if ($holders.Count -gt 0 -and (Test-Path -LiteralPath $FreshExe) -and ($ImageName -ieq 'drag-lint.exe')) {
   try {
-    $sd = (& $FreshExe shutdown @StandDownScope --wait $StandDownWaitSec 2>&1 | Out-String).Trim()
-    Write-Host ("  asked the running engines to stand down (shutdown {0} --wait {1}):" -f ($StandDownScope -join ' '), $StandDownWaitSec)
+    $sd = (& $FreshExe stop-now @StandDownScope --wait $StandDownWaitSec 2>&1 | Out-String).Trim()
+    Write-Host ("  asked the running engines to stand down (stop-now {0} --wait {1}):" -f ($StandDownScope -join ' '), $StandDownWaitSec)
     foreach ($ln in ($sd -split "`r?`n")) { if ($ln) { Write-Host ("    " + $ln) } }
   } catch {
     Write-Host "  channel stop failed: $($_.Exception.Message)" -ForegroundColor Yellow

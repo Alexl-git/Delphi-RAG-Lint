@@ -215,6 +215,7 @@ Write-Host '-- check 1: verbs' -ForegroundColor Cyan
 # ASSERTED below, both directions: an entry that is no longer accepted is stale
 # and must be deleted, and an entry that HAS since been documented is stale too.
 $UndocumentedOnPurpose = [ordered]@{
+  'shutdown'            = '1.52 Q15: hidden alias of stop-now (the autonomy guard matches the old name); accepted, not advertised.'
   'check-init'          = '1.52 verb, status internal until lane HBDOCS ships it (features\entries\check-init.json); remove then.'
   'selftest'            = 'umbrella self-test dispatcher (manifest-merge / glob / closure / dbselect / drift / ...). 35 references under tests\. Not a user verb.'
   'contrast-selftest'   = 'self-test for the hover contrast computation; driven by a runner under tests\.'

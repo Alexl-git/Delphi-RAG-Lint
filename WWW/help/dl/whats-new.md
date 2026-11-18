@@ -13,6 +13,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 * [explain](features/explain.md) -- Explains one lint rule in plain words: what it means, why it matters, a bad and a good example, its default, whether it can be fixed, and how to suppress it.
 * [Field repository](features/field-repository.md) -- Keeps the TableTools field registry in one SQLite file per database, filled from Firebird (read-only), with a diffable text backup.
+* [member-could-be-private lint rule (lane ATLB)](features/v152-atlb-rules.md) -- Hints (OFF in 1.52) on a public class member referenced only inside its own unit; published, virtual, interface-implementing, attributed and shared-unit members stay silent.
 * [Default-on form, dataset and data-module rules](features/v152-defaults.md) -- Four lint rules on by default since 1.52 (form object/field, foreign form access, edit without post, data module form global); a shipped exempt-class list.
 * [extract-method and create-enum-helper through the compile gate by default](features/v152-fixer-compile-gate.md) -- extract-method / create-enum-helper --apply build the project before and after the write; no project found = REFUSED, --no-compile-gate writes unbuilt.
 * [Array index possibly out of range lint rule (index-possibly-out-of-range)](features/v152-index-possibly-out-of-range.md) -- Warns (OFF in 1.52) on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only.
@@ -526,7 +527,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 * [Export Graph (DOT)](features/export-graph-dot.md) -- Uses graph to export the indexed call/reference graph in DOT format, whole or rooted at a name substring; json and html add the Markdown text nodes.
 * [Export to Obsidian](features/export-to-obsidian.md) -- Uses export obsidian to write the indexed project out as a set of Obsidian vault markdown pages.
 * [lsp](features/lsp.md) -- Starts the LSP (Language Server Protocol) stdio server.
-* [shutdown](features/shutdown.md) -- Ask running engines (lsp, cycles --fix, index, lint-all) to stand down cleanly, so an index can be rebuilt or an engine replaced.
+* [stop-now](features/shutdown.md) -- Ask running engines (lsp, cycles --fix, index, lint-all) to stand down cleanly, so an index can be rebuilt or an engine replaced.
 * [Top Symbols (fan-in)](features/top-symbols-fan-in.md) -- Ranks indexed symbols by fan-in -- how many places reference them.
 * [workspace add](features/workspace-add.md) -- Registers a project file into a .drag-lint-workspace.json workspace config, so multi-project workspace commands know about it.
 * [workspace index](features/workspace-index.md) -- Indexes every project registered in a .drag-lint-workspace.json workspace config in one pass.

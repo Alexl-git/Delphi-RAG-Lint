@@ -1075,7 +1075,7 @@ begin
 end;
 
 // CAST2 (1.51.1): Decide alone polls too rarely. ReadUntypedCalls' self-join runs ~2 min on a 300 MB index, longer
-// than `shutdown --wait`, and the listener withdraws a request nobody took; so every SELECT here polls through
+// than `stop-now --wait`, and the listener withdraws a request nobody took; so every SELECT here polls through
 // SQLite's progress callback and an interrupted one surfaces as the cancel, never as an SQL error.
 procedure TCastPlanner.ReadAllRows;
 const

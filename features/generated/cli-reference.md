@@ -1323,6 +1323,7 @@ Described in:
 * [Text rules: bidi, invisible, control chars, TODO, header, strings](../../docs/wiki/text-rules.md)
 * [Typing and ownership lint rules (casts, Self as interface, destructors)](../../docs/wiki/typing-and-ownership-rules.md)
 * [CLI fixes in 1.51.1](../../docs/wiki/v1511-cli-fixes.md)
+* [member-could-be-private lint rule (lane ATLB)](../../docs/wiki/v152-atlb-rules.md)
 
 ### lint-project
 
@@ -1969,24 +1970,6 @@ drag-lint shared-unit --in <file.pas> [--add-project <name>] [--apply] [--json] 
 
 Described in [shared-unit](../../docs/wiki/shared-unit.md).
 
-### shutdown
-
-Ask running engines (lsp, cycles --fix, index, lint-all) to stand down cleanly, so an index can be rebuilt or an engine replaced.
-
-```text
-drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force] (ask running engines to stand down: close every store, exit 0; `index` and `lint-all` runs exit 4)
-```
-
-| Flag | Argument | Meaning | Default |
-| --- | --- | --- | --- |
-| `--db` | `<file.sqlite>` |  |  |
-| `--wait` | `<sec>` |  |  |
-| `--dry-run` |  |  |  |
-| `--all` |  |  |  |
-| `--force` |  |  |  |
-
-Described in [shutdown](../../docs/wiki/Features.md).
-
 ### slice
 
 Shows the slice of code relevant to one symbol: its declaration, body, and immediate context.
@@ -2026,6 +2009,24 @@ Described in:
 
 * [Output encoding (--output-encoding)](../../docs/wiki/output-encoding.md)
 * [sql](../../docs/wiki/sql.md)
+
+### stop-now
+
+Ask running engines (lsp, cycles --fix, index, lint-all) to stand down cleanly, so an index can be rebuilt or an engine replaced.
+
+```text
+drag-lint stop-now [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force] (ask running engines to stand down: close every store, exit 0; `index` and `lint-all` runs exit 4)
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<file.sqlite>` |  |  |
+| `--wait` | `<sec>` |  |  |
+| `--dry-run` |  |  |  |
+| `--all` |  |  |  |
+| `--force` |  |  |  |
+
+Described in [stop-now](../../docs/wiki/Features.md).
 
 ### surface
 

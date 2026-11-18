@@ -92,10 +92,10 @@ a release step, a script that copies over `third_party\dll-win64\drag-lint.exe`
 
 ```text
 drag-lint ide-release --seconds 900      # the IDE plugin stops respawning for 15 min
-drag-lint shutdown --all --wait 30       # running lsp engines close every store and exit 0
+drag-lint stop-now --all --wait 30       # running lsp engines close every store and exit 0
 ```
 
-`shutdown` asks running `lsp` engines (over their per-user maintenance pipe) to
+`stop-now` (1.52; formerly `shutdown`, still accepted as a hidden alias) asks running `lsp` engines (over their per-user maintenance pipe) to
 stand down: close every store, exit 0. Its flags (`--db`, `--wait`, `--dry-run`,
 `--all`, `--force`) are on its `drag-lint --help` line. `ide-release --resume`
 lifts the hold early. Measured 2026-10-16: without this, a release pack lost the
@@ -162,7 +162,7 @@ Replacing a running engine -- the installer swapping an old install, or
 a kill only as the last resort:
 
 1. `drag-lint ide-release --seconds N` -- the IDE plugin stops respawning.
-2. The maintenance verb with `--all --wait 30` (see the shutdown feature page) --
+2. The maintenance verb with `--all --wait 30` (see the stop-now feature page) --
    every engine of this user that listens on the control channel is asked to
    stand down: `lsp`, `cycles --fix`, and (since DEC-13) the long one-shot runs
    `index` (single root, `--project`, `--all` with its `--jobs` pool) and `lint-all`.

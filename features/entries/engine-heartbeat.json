@@ -20,7 +20,7 @@
   "questions": [
     {
       "ask": "Why was my long index not killed by the IDE, and a frozen one was?",
-      "command": "drag-lint shutdown --dry-run"
+      "command": "drag-lint stop-now --dry-run"
     },
     {
       "ask": "What is the engine doing right now?",
@@ -28,7 +28,7 @@
     },
     {
       "ask": "Is my long index slow or stuck, and how far has it got?",
-      "command": "drag-lint shutdown --all --dry-run"
+      "command": "drag-lint stop-now --all --dry-run"
     }
   ],
   "access": "cli-only",

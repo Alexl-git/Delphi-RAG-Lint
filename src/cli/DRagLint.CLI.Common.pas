@@ -73,8 +73,8 @@ type
     Resume          : Boolean       ; // --resume: `ide-release` clears the hold instead of setting it
     StatusOnly      : Boolean       ; // --status: `ide-release` reports the hold without changing it
     GainSince       : string        ; // --since <yyyy-mm-dd>: `gain` skips usage-log lines older than this
-    WaitSeconds     : Integer       ; // --wait N: `shutdown` graceful deadline per engine (default 5)
-    ForceKill       : Boolean       ; // --force: `shutdown` escalates to TerminateProcess -- only after a refusal
+    WaitSeconds     : Integer       ; // --wait N: `stop-now` graceful deadline per engine (default 5)
+    ForceKill       : Boolean       ; // --force: `stop-now` escalates to TerminateProcess -- only after a refusal
     SqlQuery        : string        ; // --query "SELECT ...": the one statement `sql` runs
     TimeoutMs       : Integer       ; // --timeout-ms N: `sql` wall-clock cap (default 10000)
     { `wiki`: the three modes. Term is the human phrase to look up; the two

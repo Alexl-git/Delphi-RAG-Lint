@@ -460,8 +460,8 @@ left by an interrupted command (a pipeline cut short, e.g. by
 
 ```
 Get-Process drag-lint | Select-Object Id, StartTime, Path
-& $dl shutdown --dry-run      # lists the running `lsp` engines it would ask to stand down
-& $dl shutdown                # asks them to close every index and exit
+& $dl stop-now --dry-run      # lists the running `lsp` engines it would ask to stand down
+& $dl stop-now                # asks them to close every index and exit
 Stop-Process -Id <Id>         # a leftover that is not an lsp engine -- check Path and StartTime first
 ```
 

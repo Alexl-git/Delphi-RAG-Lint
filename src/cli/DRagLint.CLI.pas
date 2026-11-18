@@ -164,7 +164,7 @@ uses
   , DRagLint.Sql    .FbSnapshot
   , DRagLint.Sql    .OrmLinker
   , DRagLint.Core   .UsageLog   { RecordUsage + BuildGainReport behind `gain` }
-  , DRagLint.Core   .ControlChannel // dl:unit DRagLint.Core.ControlChannel accepted -- the wire constants travel with the pipe: the channel behind `shutdown`, and the lsp-only gate
+  , DRagLint.Core   .ControlChannel // dl:unit DRagLint.Core.ControlChannel accepted -- the wire constants travel with the pipe: the channel behind `stop-now`, and the lsp-only gate
   , DRagLint.Core   .StudioEnv  { TStudioEnv: the ONLY source of a RAD Studio path }
   , DRagLint.Lint   .Config
   , DRagLint.Lint   .RuleCatalog
@@ -14082,7 +14082,7 @@ begin
       on E: Exception do Marker:= ''; { an unwritable folder costs only the de-duplication }
     end;
   end;
-  { 1.39.1: listen for `shutdown` (and an index of this database, StopStaleWarm).
+  { 1.39.1: listen for `stop-now` (and an index of this database, StopStaleWarm).
     The warm has no safe point to wait for -- it only reads, and its result is
     disposable -- so the watcher takes a request at once and ends the process. }
   var Ctl    : TControlChannel:= nil;
@@ -29052,7 +29052,7 @@ begin
     else if Args.Command = 'ide-release'       then Result:= DoIdeRelease      (Args)
     else if Args.Command = 'manifest'          then Result:= DoManifest        (Args)
     else if Args.Command = 'project-context'   then Result:= DoProjectContext  (Args)
-    else if Args.Command = 'shutdown'          then Result:= DoShutdown        (Args)
+    else if (Args.Command = 'stop-now') or (Args.Command = 'shutdown') then Result:= DoShutdown (Args) { 'shutdown' = hidden alias (1.52 Q15: the autonomy guard matches the old name) }
     else if Args.Command = 'shared-unit'       then Result:= DoSharedUnit      (Args)
     else if Args.Command = 'bookmarks'         then Result:= DoBookmarks       (Args)
     else if Args.Command = 'bookmarks-strip'   then Result:= RunBookmarksStrip(Args.InFile, Args.Output, Args.Name, Args.Apply, Args.AsJson or SameText(Args.Format, 'json'))

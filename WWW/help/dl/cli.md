@@ -1330,6 +1330,7 @@ Described in:
 * [Text rules: bidi, invisible, control chars, TODO, header, strings](features/v151-txt-rules.md)
 * [Typing and ownership lint rules (casts, Self as interface, destructors)](features/v151-typ-rules.md)
 * [CLI fixes in 1.51.1](features/v1511-cli-fixes.md)
+* [member-could-be-private lint rule (lane ATLB)](features/v152-atlb-rules.md)
 
 ### lint-project
 
@@ -1976,24 +1977,6 @@ drag-lint shared-unit --in <file.pas> [--add-project <name>] [--apply] [--json] 
 
 Described in [shared-unit](features/shared-unit.md).
 
-### shutdown
-
-Ask running engines (lsp, cycles --fix, index, lint-all) to stand down cleanly, so an index can be rebuilt or an engine replaced.
-
-```text
-drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force] (ask running engines to stand down: close every store, exit 0; `index` and `lint-all` runs exit 4)
-```
-
-| Flag | Argument | Meaning | Default |
-| --- | --- | --- | --- |
-| `--db` | `<file.sqlite>` |  |  |
-| `--wait` | `<sec>` |  |  |
-| `--dry-run` |  |  |  |
-| `--all` |  |  |  |
-| `--force` |  |  |  |
-
-Described in [shutdown](features/shutdown.md).
-
 ### slice
 
 Shows the slice of code relevant to one symbol: its declaration, body, and immediate context.
@@ -2033,6 +2016,24 @@ Described in:
 
 * [Output encoding (--output-encoding)](features/output-encoding.md)
 * [sql](features/sql.md)
+
+### stop-now
+
+Ask running engines (lsp, cycles --fix, index, lint-all) to stand down cleanly, so an index can be rebuilt or an engine replaced.
+
+```text
+drag-lint stop-now [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force] (ask running engines to stand down: close every store, exit 0; `index` and `lint-all` runs exit 4)
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<file.sqlite>` |  |  |
+| `--wait` | `<sec>` |  |  |
+| `--dry-run` |  |  |  |
+| `--all` |  |  |  |
+| `--force` |  |  |  |
+
+Described in [stop-now](features/shutdown.md).
 
 ### surface
 

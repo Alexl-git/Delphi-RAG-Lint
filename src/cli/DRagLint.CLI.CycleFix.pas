@@ -394,7 +394,7 @@ function TamperAllowed(const pOpts: TCycleFixOptions): Boolean;
 /// (its code is the exit code; earlier iterations stay applied), when an iteration wrote nothing ("no edge is cuttable", exit 1)
 /// or after as many iterations as the group had edges (exit 1).
 /// CANCEL (lane X-BT): for the whole run the engine listens on the maintenance control channel
-/// (DRagLint.Core.ControlChannel; `drag-lint shutdown`, the IDE's Cancel). A stand-down request is taken while
+/// (DRagLint.Core.ControlChannel; `drag-lint stop-now`, the IDE's Cancel). A stand-down request is taken while
 /// the run waits on a child: a build or re-index child is killed, a child `cycles --fix` (--part all, the A1
 /// re-run) is asked to stand down in turn. After WriteAll every written file is rolled back (refusal
 /// `cancelled`, "cancelled -- rolled back"); before it nothing was written ("cancelled -- nothing written").
@@ -2588,7 +2588,7 @@ begin
   Result:= True;
 end;
 
-// Opens the run's control channel (ControlChannelEnabledFor('cycles')), so `drag-lint shutdown` and the IDE's
+// Opens the run's control channel (ControlChannelEnabledFor('cycles')), so `drag-lint stop-now` and the IDE's
 // Cancel can ask the run to stand down; nil when it could not listen (said on stderr: a cancel then kills).
 function StartStandDownChannel(const pOpts: TCycleFixOptions): TControlChannel;
 begin

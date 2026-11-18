@@ -26,7 +26,7 @@ unit DRagLint.Core.ControlChannel;
       grants the creating user only. A NULL DACL would grant Everyone. Remote
       clients are rejected at the pipe as well (PIPE_REJECT_REMOTE_CLIENTS).
     * It does ONE thing. Two messages exist -- `status` (describe yourself)
-      and `shutdown` (stand down) -- and `status` is there only so a
+      and `stop-now` (stand down) -- and `status` is there only so a
       maintenance tool can learn which engine holds which database before it
       asks. Nothing here runs a query, reindexes, or takes an argument that
       names work. A control channel that can do arbitrary work is the
@@ -250,7 +250,7 @@ function ControlAuditLogPath: string;
 const
   /// <summary>Leaf prefix of a heartbeat (status-only) pipe:
   /// <c>\\.\pipe\drag-lint-beat-&lt;sid&gt;-s&lt;session&gt;-p&lt;pid&gt;</c>. A DIFFERENT family from
-  /// CONTROL_PIPE_PREFIX on purpose: `shutdown --all` and the staging tools enumerate control pipes only, so a
+  /// CONTROL_PIPE_PREFIX on purpose: `stop-now --all` and the staging tools enumerate control pipes only, so a
   /// verb that merely reports progress never becomes a stand-down target.</summary>
   BEAT_PIPE_PREFIX = 'drag-lint-beat-';
   /// <summary>Argument of a <c>status</c> request that asks for the heartbeat field.</summary>
@@ -559,7 +559,7 @@ type
       /// warm-rule-cache); a `status role` request reports it. '' = not reported (the
       /// reply keeps its pre-1.39.1 shape).</param>
       /// <param name="AStatusOnly">1.40: True = the HEARTBEAT pipe (BeatPipeNameFor, not ControlPipeNameFor):
-      /// it answers `status` (with the beat field when asked) and nothing else -- a `shutdown` gets `unknown`
+      /// it answers `status` (with the beat field when asked) and nothing else -- a `stop-now` gets `unknown`
       /// and changes nothing.</param>
       /// <exception cref="EInvalidOperation">Not called on the main thread.</exception>
       /// <remarks>
