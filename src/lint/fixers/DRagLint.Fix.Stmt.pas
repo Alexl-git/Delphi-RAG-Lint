@@ -89,6 +89,7 @@ uses
   , DRagLint.Lint.TargetCompiler { INLINE_VAR_SINCE -- the 10.3 gate on the inline-var fixers }
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Diagnostics.AstChecks
+  , DRagLint.Core.Encoding { 1.52 BK-COLS2: EnsureUtf8Bytes -- lines decoded as the parser decodes them }
   ;
 
 const
@@ -121,6 +122,11 @@ type
 
 { ---- node geometry (0-based rows / columns) ---- }
 
+{ 1.52 BK-COLS2: the file the open TFx parsed (OpenFx sets it; one fix runs at a time). Col / ECol / NodeAt
+  count CHARACTER columns on it -- the unit a finding reports and Lines[] indexes -- not tree-sitter's bytes. }
+var
+  GFxPath: string;
+
 function Row(const N: TTSNode): Integer;
 begin
   Result:= Integer(N.StartPoint.Row);
@@ -133,12 +139,12 @@ end;
 
 function Col(const N: TTSNode): Integer;
 begin
-  Result:= Integer(N.StartPoint.Column);
+  Result:= TAstParseCache.CharCol(GFxPath, N.StartPoint) - 1;
 end;
 
 function ECol(const N: TTSNode): Integer;
 begin
-  Result:= Integer(N.EndPoint.Column);
+  Result:= TAstParseCache.CharCol(GFxPath, N.EndPoint) - 1;
 end;
 
 function SameNode(const A, B: TTSNode): Boolean;
@@ -316,6 +322,7 @@ begin
   AFx:= Default(TFx);
   AFx.Path := APath;
   AFx.Lines:= ALines;
+  GFxPath  := APath;
   PF:= TAstParseCache.Get(APath);
   Result:= (PF.Tree <> nil) and (ALines <> nil);
   if not Result then Exit;
@@ -406,12 +413,12 @@ var
 
   function StartsBy(const P: TTSPoint): Boolean;
   begin
-    Result:= (Integer(P.Row) < R) or ((Integer(P.Row) = R) and (Integer(P.Column) <= C));
+    Result:= (Integer(P.Row) < R) or ((Integer(P.Row) = R) and (TAstParseCache.CharCol(GFxPath, P) - 1 <= C));
   end;
 
   function EndsAfter(const P: TTSPoint): Boolean;
   begin
-    Result:= (Integer(P.Row) > R) or ((Integer(P.Row) = R) and (Integer(P.Column) > C));
+    Result:= (Integer(P.Row) > R) or ((Integer(P.Row) = R) and (TAstParseCache.CharCol(GFxPath, P) - 1 > C));
   end;
 
 begin
@@ -1019,7 +1026,7 @@ begin
   if not TFile.Exists(APath) then Exit;
   SL:= TStringList.Create;
   try
-    SL.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(APath));
+    SL.Text:= TEncoding.UTF8.GetString(EnsureUtf8Bytes(TFile.ReadAllBytes(APath))); { 1.52 BK-COLS2: character columns need the parser's decoding }
     if not OpenFx(APath, SL, Fx) then Exit;
     Edits:= nil;
     Synth:= nil;

@@ -72,7 +72,7 @@ type
       /// because tree-sitter decodes it as U+FFFD, not a letter.</param>
       /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
       /// <returns>Symbol names / qualified names / signatures are the identifier text
-      /// decoded from the UTF-8 node span (NodeText); columns are UTF-8 BYTE columns.</returns>
+      /// decoded from the UTF-8 node span (NodeText); columns are CHARACTER (UTF-16) columns since 1.52 BK-COLS2.</returns>
       /// <exception cref="ETreeSitterException"><!-- drag-lint:auto exc -->via TreeSitter.TTSParser.SetLanguage: Failed to set parser language to 0x%p</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -174,7 +174,7 @@ function ExtractDfmEventBindings(const ASource: TBytes): TArray<TDfmEventBinding
 /// character, '+' continuations joined); 'list', 'collection', 'item' and
 /// 'binary' rows carry '' (their content is in the child rows, a blob is never
 /// copied); any other kind its source text with CR LF / CR as #10. Positions are
-/// 1-based, columns in UTF-8 bytes. Empty for a binary .dfm.</returns>
+/// 1-based, columns in characters (UTF-16 units; 1.52 BK-COLS2 -- UTF-8 bytes before). Empty for a binary .dfm.</returns>
 /// <exception cref="ETreeSitterException">via TreeSitter.TTSParser.SetLanguage when the grammar DLL cannot be bound.</exception>
 /// <remarks>
 /// Objects nested INSIDE a collection item are not dfm_objects rows
@@ -327,9 +327,9 @@ begin
   if not ARangeNode.IsNull then
   begin
     Sym.StartLine:= Integer(ARangeNode.StartPoint.row   ) + 1;
-    Sym.StartCol := Integer(ARangeNode.StartPoint.column) + 1;
+    Sym.StartCol := Utf8ByteColToCharCol(Source, ARangeNode.StartByte, ARangeNode.StartPoint.column) + 1; { 1.52 BK-COLS2: character columns }
     Sym.EndLine  := Integer(ARangeNode.EndPoint  .row   ) + 1;
-    Sym.EndCol   := Integer(ARangeNode.EndPoint  .column) + 1;
+    Sym.EndCol   := Utf8ByteColToCharCol(Source, ARangeNode.EndByte, ARangeNode.EndPoint.column) + 1;
   end;
   Symbols.Add(Sym);
   Result:= Symbols.Count - 1;
@@ -345,9 +345,9 @@ begin
   Ref.NameText:= ANameText;
   Ref.SymbolId:= 0;
   Ref.StartLine:= Integer(ARangeNode.StartPoint.row   ) + 1;
-  Ref.StartCol := Integer(ARangeNode.StartPoint.column) + 1;
+  Ref.StartCol := Utf8ByteColToCharCol(Source, ARangeNode.StartByte, ARangeNode.StartPoint.column) + 1; { 1.52 BK-COLS2: character columns }
   Ref.EndLine  := Integer(ARangeNode.EndPoint  .row   ) + 1;
-  Ref.EndCol   := Integer(ARangeNode.EndPoint  .column) + 1;
+  Ref.EndCol   := Utf8ByteColToCharCol(Source, ARangeNode.EndByte, ARangeNode.EndPoint.column) + 1;
   References.Add(Ref);
 end;
 
@@ -376,9 +376,9 @@ begin
   Row.ObjKind   := if KindNode.IsNull then 'object' else LowerCase(NodeText(KindNode, AState.Source));
   Row.SymbolIdx := ASymbolIdx;
   Row.StartLine := Integer(ANode.StartPoint.row   ) + 1;
-  Row.StartCol  := Integer(ANode.StartPoint.column) + 1;
+  Row.StartCol  := Utf8ByteColToCharCol(AState.Source, ANode.StartByte, ANode.StartPoint.column) + 1; { 1.52 BK-COLS2: character columns }
   Row.EndLine   := Integer(ANode.EndPoint  .row   ) + 1;
-  Row.EndCol    := Integer(ANode.EndPoint  .column) + 1;
+  Row.EndCol    := Utf8ByteColToCharCol(AState.Source, ANode.EndByte, ANode.EndPoint.column) + 1;
   AState.DfmObjects.Add(Row);
 end;
 
@@ -498,9 +498,9 @@ var
 begin
   Row:= ARow;
   Row.StartLine    := Integer(AFirst.StartPoint.row   ) + 1;
-  Row.StartCol     := Integer(AFirst.StartPoint.column) + 1;
+  Row.StartCol     := Utf8ByteColToCharCol(AState.Source, AFirst.StartByte, AFirst.StartPoint.column) + 1; { 1.52 BK-COLS2: character columns }
   Row.EndLine      := Integer(ALast .EndPoint  .row   ) + 1;
-  Row.EndCol       := Integer(ALast .EndPoint  .column) + 1;
+  Row.EndCol       := Utf8ByteColToCharCol(AState.Source, ALast.EndByte, ALast.EndPoint.column) + 1;
   AState.DfmProps.Add(Row);
   Result:= AState.DfmProps.Count - 1;
 end;
@@ -538,7 +538,7 @@ begin
     begin
       Row:= AState.DfmProps[ItemIdx];
       Row.EndLine:= Integer(C.EndPoint.row   ) + 1;
-      Row.EndCol := Integer(C.EndPoint.column) + 1;
+      Row.EndCol := Utf8ByteColToCharCol(AState.Source, C.EndByte, C.EndPoint.column) + 1; { 1.52 BK-COLS2: character columns }
       AState.DfmProps[ItemIdx]:= Row;
       ItemIdx:= -1;
     end;
@@ -655,9 +655,9 @@ begin
     if Lit.Text <> '' then
     begin
       Lit.StartLine:= Integer(ValueNode.StartPoint.row   ) + 1;
-      Lit.StartCol := Integer(ValueNode.StartPoint.column) + 1;
+      Lit.StartCol := Utf8ByteColToCharCol(AState.Source, ValueNode.StartByte, ValueNode.StartPoint.column) + 1; { 1.52 BK-COLS2: character columns }
       Lit.EndLine  := Integer(ValueNode.EndPoint  .row   ) + 1;
-      Lit.EndCol   := Integer(ValueNode.EndPoint  .column) + 1;
+      Lit.EndCol   := Utf8ByteColToCharCol(AState.Source, ValueNode.EndByte, ValueNode.EndPoint.column) + 1;
       AState.Literals.Add(Lit);
     end;
   end
@@ -671,9 +671,9 @@ begin
     if Lit.Text <> '' then
     begin
       Lit.StartLine:= Integer(ValueNode.StartPoint.row   ) + 1;
-      Lit.StartCol := Integer(ValueNode.StartPoint.column) + 1;
+      Lit.StartCol := Utf8ByteColToCharCol(AState.Source, ValueNode.StartByte, ValueNode.StartPoint.column) + 1; { 1.52 BK-COLS2: character columns }
       Lit.EndLine  := Integer(ValueNode.EndPoint  .row   ) + 1;
-      Lit.EndCol   := Integer(ValueNode.EndPoint  .column) + 1;
+      Lit.EndCol   := Utf8ByteColToCharCol(AState.Source, ValueNode.EndByte, ValueNode.EndPoint.column) + 1;
       AState.Literals.Add(Lit);
     end;
   end;
@@ -728,9 +728,9 @@ begin
     TypeLit.OwnerName:= ObjName;
     TypeLit.Text     := ObjClass;
     TypeLit.StartLine:= Integer(ClassNode.StartPoint.row   ) + 1;
-    TypeLit.StartCol := Integer(ClassNode.StartPoint.column) + 1;
+    TypeLit.StartCol := Utf8ByteColToCharCol(AState.Source, ClassNode.StartByte, ClassNode.StartPoint.column) + 1; { 1.52 BK-COLS2: character columns }
     TypeLit.EndLine  := Integer(ClassNode.EndPoint  .row   ) + 1;
-    TypeLit.EndCol   := Integer(ClassNode.EndPoint  .column) + 1;
+    TypeLit.EndCol   := Utf8ByteColToCharCol(AState.Source, ClassNode.EndByte, ClassNode.EndPoint.column) + 1;
     AState.Literals.Add(TypeLit);
   end;
 

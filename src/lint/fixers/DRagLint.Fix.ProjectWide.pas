@@ -46,8 +46,8 @@ uses
 function RemoveUsesEntry(const AFinding: TLintFinding; ALines: TStringList; AEdits: TList<TTextEdit>): Boolean;
 
 /// <summary>A copy of AFinding whose StartCol / EndCol count CHARACTERS of the decoded
-/// source line, as the text-edit applier does. Since 1.52 EXTGAPS2 a .pas index column already is one, so a .pas
-/// finding is returned unchanged; a .dfm finding (the DFM parser stores UTF-8 BYTES) is converted.</summary>
+/// source line, as the text-edit applier does. Since 1.52 EXTGAPS2 a .pas index column already is one, and since
+/// 1.52 BK-COLS2 a .dfm index column and every lint finding column are too: AFinding is returned unchanged.</summary>
 /// <param name="AFinding">A finding on one line (StartLine); its columns are index columns.</param>
 /// <param name="ALines">The file as the applier decodes it (TTextFileFormat.ReadFile).</param>
 /// <returns>AFinding with character columns; unchanged when the line is out of range or pure ASCII.</returns>
@@ -138,12 +138,9 @@ end;
 
 function WithCharColumns(const AFinding: TLintFinding; ALines: TStrings): TLintFinding;
 begin
+  { 1.52 EXTGAPS2: .pas index columns are characters; 1.52 BK-COLS2: .dfm index columns and every lint
+    finding's columns are characters too, so nothing is left to convert. ALines stays for the callers. }
   Result:= AFinding;
-  if not SameText(ExtractFileExt(AFinding.FilePath), '.dfm') then Exit; { 1.52 EXTGAPS2: .pas columns are characters }
-  if (AFinding.StartLine < 1) or (AFinding.StartLine > ALines.Count) or (AFinding.EndLine <> AFinding.StartLine) then Exit;
-  var Bytes: TBytes:= TEncoding.UTF8.GetBytes(ALines[AFinding.StartLine - 1]); { a .dfm column counts UTF-8 bytes }
-  Result.StartCol:= TEncoding.UTF8.GetCharCount(Bytes, 0, EnsureRange(AFinding.StartCol - 1, 0, Length(Bytes))) + 1;
-  Result.EndCol  := TEncoding.UTF8.GetCharCount(Bytes, 0, EnsureRange(AFinding.EndCol - 1, 0, Length(Bytes))) + 1;
 end;
 
 function IsUsesKeywordLine(const ALine: string): Boolean;
@@ -487,7 +484,7 @@ begin
     begin
       if not SameText(F0.RuleId, RULE_ID) or not SameText(F0.FilePath, APath) then Continue;
       if (F0.StartLine < 1) or (F0.StartLine > ImplAt + 1) then Continue;      { only interface entries are movable }
-      F:= WithCharColumns(F0, Lines);                                      { index columns are UTF-8 bytes }
+      F:= WithCharColumns(F0, Lines);                                      { index columns are characters (1.52) }
       { a column-aligned dotted name (`DRagLint.Core    .Model`) is compared and moved compacted }
       Name:= StringReplace(Copy(Lines[F.StartLine - 1], F.StartCol, F.EndCol - F.StartCol), ' ', '', [rfReplaceAll]);
       { stale index: the span must still hold the unit the finding names (its message starts with it) }

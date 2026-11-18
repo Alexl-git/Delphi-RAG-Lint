@@ -3640,7 +3640,15 @@ var
   begin
     F := Default(TLintFinding);
     F.RuleId := ARule; F.Severity := ASev; F.Message := AMsg; F.FilePath := AFile;
-    F.StartLine := ALine; F.StartCol := ACol; F.EndLine := ALine; F.EndCol := ACol + 1;
+    { 1.52 BK-COLS2: every caller passes a tree-sitter BYTE column (node StartPoint / Lattices DeclCol);
+      the finding reports the CHARACTER column. }
+    var Pt: TTSPoint;
+    Pt.row:= Cardinal(if ALine > 0 then ALine - 1 else 0);
+    Pt.column:= Cardinal(if ACol > 0 then ACol - 1 else 0);
+    F.StartLine := ALine;
+    F.StartCol := if (ALine > 0) and (ACol > 0) then TAstParseCache.CharCol(AFile, Pt) else ACol;
+    F.EndLine := ALine;
+    F.EndCol := F.StartCol + 1;
     Findings.Add(F);
   end;
 

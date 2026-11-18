@@ -2382,9 +2382,9 @@ begin
         Finding.FilePath:= AFilePath;
         Finding.Message := FMessage;
         Finding.StartLine:= Integer(Picked.StartPoint.row   ) + 1;
-        Finding.StartCol := Integer(Picked.StartPoint.column) + 1;
+        Finding.StartCol := Utf8ByteColToCharCol(ASource, Picked.StartByte, Picked.StartPoint.column) + 1; { 1.52 BK-COLS2: character column }
         Finding.EndLine  := Integer(Picked.EndPoint  .row   ) + 1;
-        Finding.EndCol   := Integer(Picked.EndPoint  .column) + 1;
+        Finding.EndCol   := Utf8ByteColToCharCol(ASource, Picked.EndByte, Picked.EndPoint.column) + 1;
         if (Length(FFixes) > 0) and not AttachFix(Finding, Captures, ASource) then Continue;
         FoundList.Add(Finding);
       end; // while

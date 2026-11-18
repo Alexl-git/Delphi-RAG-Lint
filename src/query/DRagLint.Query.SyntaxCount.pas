@@ -180,7 +180,8 @@ function SyntaxCountToJson(const pReport: TSyntaxCountReport; pWithFiles, pWithH
 implementation
 
 uses
-  TreeSitter, DRagLint.Diagnostics.ParseCache;
+  TreeSitter, DRagLint.Diagnostics.ParseCache,
+  DRagLint.Core.Encoding; { 1.52 BK-COLS2: Utf8ByteColToCharCol }
 
 const
   CFeatureNames: array[TSyntaxFeature] of string = ('if-expr', 'is-not', 'not-in',
@@ -340,7 +341,7 @@ begin
           LHit.Feature:= LFeature;
           LHit.FilePath:= pFilePath;
           LHit.Line:= Integer(LNode.StartPoint.row) + 1;
-          LHit.Col:= Integer(LNode.StartPoint.column) + 1;
+          LHit.Col:= Utf8ByteColToCharCol(pSrc, LNode.StartByte, LNode.StartPoint.column) + 1; { 1.52 BK-COLS2: character column }
           pHits:= pHits + [LHit];
         end;
       end;

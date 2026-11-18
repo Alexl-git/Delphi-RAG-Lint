@@ -693,7 +693,7 @@ var
     D:= Default(TLintFinding);
     D.Message  := AName;
     D.StartLine:= Integer(ANameNode.StartPoint.Row) + 1;
-    D.StartCol := Integer(ANameNode.StartPoint.Column) + 1;
+    D.StartCol := TAstParseCache.CharCol(AFile, ANameNode.StartPoint); { 1.52 BK-COLS2: character column }
     D.EndLine  := D.StartLine;
     D.EndCol   := D.StartCol + Length(AName);
     Decls.Add(D);
@@ -712,7 +712,7 @@ var
     F.Message  := AMessage;
     F.FilePath := AFile;
     F.StartLine:= Integer(P.Row   ) + 1;
-    F.StartCol := Integer(P.Column) + 1;
+    F.StartCol := TAstParseCache.CharCol(F.FilePath, P); { 1.52 BK-COLS2: character column }
     F.EndLine  := F.StartLine;
     F.EndCol   := F.StartCol + Length(Trim(NodeStr(ANameNode)));
     Findings.Add(F);

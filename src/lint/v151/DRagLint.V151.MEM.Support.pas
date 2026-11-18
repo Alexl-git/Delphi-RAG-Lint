@@ -88,7 +88,8 @@ type
 implementation
 
 uses
-  System.StrUtils
+  DRagLint.Diagnostics.ParseCache { 1.52 BK-COLS2: TAstParseCache.CharCol }
+  , System.StrUtils
   , DRagLint.Lint.QueryRules { DeclaredTypeAt }
   ;
 
@@ -195,9 +196,9 @@ begin
   F.Message  := AMsg;
   F.FilePath := FFile;
   F.StartLine:= Integer(P.Row) + 1;
-  F.StartCol := Integer(P.Column) + 1;
+  F.StartCol := TAstParseCache.CharCol(F.FilePath, P); { 1.52 BK-COLS2: character column }
   F.EndLine  := Integer(Q.Row) + 1;
-  F.EndCol   := Integer(Q.Column) + 1;
+  F.EndCol   := TAstParseCache.CharCol(F.FilePath, Q); { 1.52 BK-COLS2: character column }
   FFindings.Add(F);
 end;
 

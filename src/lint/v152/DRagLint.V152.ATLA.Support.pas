@@ -133,9 +133,9 @@ begin
   Result.Severity := ASeverity;
   Result.FilePath := APath;
   Result.StartLine:= Integer(ANode.StartPoint.Row) + 1;
-  Result.StartCol := Integer(ANode.StartPoint.Column) + 1;
+  Result.StartCol := TAstParseCache.CharCol(Result.FilePath, ANode.StartPoint); { 1.52 BK-COLS2: character column }
   Result.EndLine  := Integer(ANode.EndPoint.Row) + 1;
-  Result.EndCol   := Integer(ANode.EndPoint.Column) + 1;
+  Result.EndCol   := TAstParseCache.CharCol(Result.FilePath, ANode.EndPoint); { 1.52 BK-COLS2: character column }
   Result.Message  := AMsg;
 end;
 

@@ -287,9 +287,9 @@ var
       [Ctx.Container, Ctx.LoopVar, Ctx.Container]);
     LF.FilePath := AFile;
     LF.StartLine:= Integer(F.StartPoint.Row) + 1;
-    LF.StartCol := Integer(F.StartPoint.Column) + 1;
+    LF.StartCol := TAstParseCache.CharCol(LF.FilePath, F.StartPoint); { 1.52 BK-COLS2: character column }
     LF.EndLine  := Integer(F.EndPoint.Row) + 1;
-    LF.EndCol   := Integer(F.EndPoint.Column) + 1;
+    LF.EndCol   := TAstParseCache.CharCol(LF.FilePath, F.EndPoint); { 1.52 BK-COLS2: character column }
     Findings:= Findings + [LF];
   end;
 

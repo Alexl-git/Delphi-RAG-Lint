@@ -399,7 +399,7 @@ begin
     var Site:= Default(THbSite);
     Site.FileName:= Result.Path;
     Site.Line:= Integer(L.Node.StartPoint.row) + 1;
-    Site.Col:= Integer(L.Node.StartPoint.column) + 1;
+    Site.Col:= TAstParseCache.CharCol(Result.Path, L.Node.StartPoint); { 1.52 BK-COLS2 (B45): sites carry CHARACTER columns, like the index }
     Site.Routine:= Result.Name;
     Site.RoutineId:= pProgramBlockId;
     if L.Must and RunRe.IsMatch(Flat) then

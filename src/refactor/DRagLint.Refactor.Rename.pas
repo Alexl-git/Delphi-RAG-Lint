@@ -422,17 +422,6 @@ function IsIdentAt(const ALine, AName: string; ACol: Integer): Boolean;
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function NameAfterDeclKeywords(const ALine, AName: string; ACol: Integer): Integer;
-/// <summary>An index column (1-based UTF-8 bytes) as a 1-based character column of the decoded line.</summary>
-/// <param name="ALine">The decoded line.</param>
-/// <param name="AByteCol">The index column.</param>
-/// <returns>The character column; identity on a pure-ASCII line.</returns>
-/// <remarks>
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Refactor.Rename.IndexColsToCharCols (DRagLint.Refactor.Rename.pas), DRagLint.Refactor.RenameProof.TProver.AddDeclTokens (DRagLint.Refactor.RenameProof.pas), DRagLint.Refactor.RenameProof.TProver.ProcessDfmRefs (DRagLint.Refactor.RenameProof.pas)</para>
-/// <para>Returns: AByteCol; Length(TEncoding.UTF8.GetString(Bytes, 0, AByteCol - 1)) + 1</para>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-function ByteColToCharCol(const ALine: string; AByteCol: Integer): Integer;
 /// <summary>Index just past the comment, string literal or numeric run that starts at APos.</summary>
 /// <param name="AText">The source text.</param>
 /// <param name="APos">1-based position.</param>
@@ -595,41 +584,6 @@ begin
   ACache.Add(UpperCase(APath), Result);
   TTextFileFormat.ReadFile(APath, Text);
   Result.Text:= Text;
-end;
-
-// An index column (1-based, in UTF-8 BYTES: the indexer parses the file
-// transcoded to UTF-8) as a 1-based CHARACTER column of ALine, the decoded
-// line. Identity on a pure-ASCII prefix; a column past the line's bytes keeps
-// its distance past the end.
-function ByteColToCharCol(const ALine: string; AByteCol: Integer): Integer;
-var
-  Bytes: TBytes;
-begin
-  Result:= AByteCol;
-  if AByteCol <= 1 then Exit;
-  Bytes:= TEncoding.UTF8.GetBytes(ALine);
-  if Length(Bytes) = Length(ALine) then Exit; { pure ASCII: bytes = chars }
-  if AByteCol - 1 >= Length(Bytes) then Exit(Length(ALine) + AByteCol - Length(Bytes));
-  Result:= Length(TEncoding.UTF8.GetString(Bytes, 0, AByteCol - 1)) + 1;
-end;
-
-// Every edit of AList carries an index column: rewrite a .dfm one (the DFM parser stores UTF-8 BYTE columns)
-// as a character column of its decoded line (W5-D). A .pas edit is left alone: since 1.52 EXTGAPS2 the
-// Delphi extractor stores CHARACTER columns, and converting one again would move it left.
-procedure IndexColsToCharCols(AList: TList<TRenameEdit>; ACache: TObjectDictionary<string, TStringList>);
-var
-  Lines: TStringList;
-  Edit : TRenameEdit;
-begin
-  for var I: Integer:= 0 to AList.Count - 1 do
-  begin
-    Edit:= AList[I];
-    if not SameText(ExtractFileExt(Edit.FilePath), '.dfm') then Continue;
-    Lines:= DecodedLines(ACache, Edit.FilePath);
-    if (Edit.Line < 1) or (Edit.Line > Lines.Count) then Continue;
-    Edit.Col:= ByteColToCharCol(Lines[Edit.Line - 1], Edit.Col);
-    AList[I]:= Edit;
-  end;
 end;
 
 // True when ABytes is a BINARY form file: a resource header (first byte $FF)
@@ -881,10 +835,8 @@ begin
       Edit.NewName:= ANewName;
       List.Add(Edit);
     end;
-    // .dfm index columns are UTF-8 byte columns (.pas ones are characters); every edit leaves Build with a
-    // CHARACTER column of the decoded file (W5-D). The impl-header edit below
-    // is computed on the decoded text, so it is added after this pass.
-    IndexColsToCharCols(List, Cache);
+    // Every index column is a CHARACTER column of the decoded file (.pas since 1.52 EXTGAPS2, .dfm since
+    // 1.52 BK-COLS2), so each edit already leaves Build with one (W5-D).
 
     // Implementation-section header (procedure TFoo.Bar;) -- NOT a decl symbol nor
     // a refs row, so neither branch above catches it. Emit it explicitly when the

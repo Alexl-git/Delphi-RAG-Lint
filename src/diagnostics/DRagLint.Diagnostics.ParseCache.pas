@@ -27,6 +27,10 @@ type
       between the two: the preprocessor is offset-preserving by construction. }
     RawSrc: TBytes;
     Tree  : TTSTree;
+    { 1.52 BK-COLS2: the byte offset of every line start in RawSrc, filled only when RawSrc holds a
+      byte >= $80 -- nil means pure ASCII, where a tree-sitter byte column IS the character column.
+      TAstParseCache.CharCol reads it. }
+    LineStarts: TArray<Integer>;
   end;
 
   /// <summary>Process-wide parse-once cache so the many TAstChecker rules reuse one
@@ -224,6 +228,26 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Get(const AFile: string): TParsedFile;
+    /// <summary>The 1-based CHARACTER (UTF-16) column of a tree-sitter point in AFile -- the column a
+    /// lint finding reports and every fixer, the LSP and the IDE count in.</summary>
+    /// <param name="AFile">The file the point's tree was parsed from (Get's key).</param>
+    /// <param name="APoint">A node's StartPoint or EndPoint: 0-based row, 0-based UTF-8 BYTE column.</param>
+    /// <returns>APoint.column + 1 on a pure-ASCII file (or one Get cannot read); fewer on a line whose
+    /// prefix holds a multi-byte character.</returns>
+    /// <remarks>1.52 BK-COLS2: tree-sitter reports byte columns, so every AST rule that copied
+    /// StartPoint.column into a finding moved its column right by one per extra byte of every non-ASCII
+    /// character earlier on the line. Counts on RawSrc (the bytes on disk, transcoded), so a directive the
+    /// preprocessor blanked still counts its real characters. Not thread-safe (the cache is not).
+    /// Pinned by tests\autotest\run_v152_BK-COLS2.ps1.</remarks>
+    class function CharCol(const AFile: string; const APoint: TTSPoint): Integer;
+    /// <summary>The inverse of CharCol: the 1-based UTF-8 BYTE column of the 1-based CHARACTER column ACharCol on
+    /// 1-based line ALine of AFile -- for code that walks the tree from a finding's position.</summary>
+    /// <param name="AFile">The file (Get's key).</param>
+    /// <param name="ALine">1-based line.</param>
+    /// <param name="ACharCol">1-based character column (a finding's StartCol).</param>
+    /// <returns>ACharCol on a pure-ASCII file or line prefix; larger past a multi-byte character.</returns>
+    /// <remarks>1.52 BK-COLS2. Not thread-safe (the cache is not).</remarks>
+    class function ByteCol(const AFile: string; ALine, ACharCol: Integer): Integer;
     /// <summary>Frees every cached tree and empties the cache. Call between files in a batch to bound
     /// memory, and once at the end of a single-file lint.</summary>
     /// <remarks>
@@ -256,6 +280,49 @@ uses
   the same reason; this now matches. Only TAstParseCache.Get uses it. }
 function tree_sitter_delphi13: PTSLanguage; cdecl; external 'tree-sitter-delphi13';
 
+{ 1.52 BK-COLS2: nil for pure-ASCII bytes (no column needs mapping), else the byte offset of each line start. }
+function LineStartsIfNonAscii(const ABytes: TBytes): TArray<Integer>;
+const
+  LF = 10;
+  HIGH_BIT = $80;
+begin
+  Result:= nil;
+  var HasHigh: Boolean:= False;
+  for var B: Byte in ABytes do
+    if B >= HIGH_BIT then
+    begin
+      HasHigh:= True;
+      Break;
+    end;
+  if not HasHigh then Exit;
+  var L: TList<Integer>:= TList<Integer>.Create;
+  try
+    L.Add(0);
+    for var I: Integer:= 0 to High(ABytes) do
+      if ABytes[I] = LF then L.Add(I + 1);
+    Result:= L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
+class function TAstParseCache.CharCol(const AFile: string; const APoint: TTSPoint): Integer;
+begin
+  Result:= Integer(APoint.column) + 1;
+  var PF: TParsedFile:= Get(AFile);
+  var Row: Integer:= Integer(APoint.row);
+  if (PF.LineStarts = nil) or (Row >= Length(PF.LineStarts)) then Exit;
+  Result:= Utf8ByteColToCharCol(PF.RawSrc, Cardinal(PF.LineStarts[Row]) + APoint.column, APoint.column) + 1;
+end;
+
+class function TAstParseCache.ByteCol(const AFile: string; ALine, ACharCol: Integer): Integer;
+begin
+  Result:= ACharCol;
+  var PF: TParsedFile:= Get(AFile);
+  if (PF.LineStarts = nil) or (ALine < 1) or (ALine > Length(PF.LineStarts)) then Exit;
+  Result:= Utf8CharColToByteCol(PF.RawSrc, PF.LineStarts[ALine - 1], ACharCol);
+end;
+
 class function TAstParseCache.Get(const AFile: string): TParsedFile;
 var
   Key   : string;
@@ -275,6 +342,7 @@ begin
     // downstream (all assume UTF-8), so transcoding here fixes them all.
     PF.RawSrc:= EnsureUtf8Bytes(TFile.ReadAllBytes(AFile));
     PF.Src   := PF.RawSrc;
+    PF.LineStarts:= LineStartsIfNonAscii(PF.RawSrc);
     { THE LINT WALK NOW PREPROCESSES, and before this it never did -- not "with
       the wrong defines", but not at all: Preprocess had three production
       callers and every one was on the index side. So `lint` parsed raw bytes

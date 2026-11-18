@@ -158,9 +158,9 @@ begin
   F.Severity := ASeverity;
   F.FilePath := FPath;
   F.StartLine:= Integer(ANode.StartPoint.Row) + 1;
-  F.StartCol := Integer(ANode.StartPoint.Column) + 1;
+  F.StartCol := TAstParseCache.CharCol(F.FilePath, ANode.StartPoint); { 1.52 BK-COLS2: character column }
   F.EndLine  := Integer(ANode.EndPoint.Row) + 1;
-  F.EndCol   := Integer(ANode.EndPoint.Column) + 1;
+  F.EndCol   := TAstParseCache.CharCol(F.FilePath, ANode.EndPoint); { 1.52 BK-COLS2: character column }
   F.Message  := AMsg;
   FOut.Add(F);
 end;

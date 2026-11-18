@@ -1241,4 +1241,6 @@
 #   Superseded: 1.41.0-alpha|26ea9f66463511be4f6e6c1dccad12f9a8d108b838918499c5cdf656792ed361
 #   2026-11-18 v152 BUDGET hash-only re-pin (rides the one 1.52 bump 464d590a8): Core.Indexer gains one Writeln (near-parse-limit WARN) and one uses entry; extraction unchanged.
 #   Superseded: 1.41.0-alpha|7bc94a5d4f7222070abe38416c41f74acc22f98fd2490bd2d96bb6c5dad96ab1
-1.41.0-alpha|08d85198df87a40e6e16fcf8e656f18f17586813d7ea363b5058b502b323ce33
+#   2026-11-18 v152 BK-COLS2 hash-only re-pin (rides the one 1.52 bump 464d590a8; owner 2026-11-17: no second re-parse): B41 the DFM parser stores CHARACTER (UTF-16) columns (symbols, refs, dfm_objects, dfm_properties, string_literals) instead of UTF-8 byte columns; Index unchanged otherwise. A DB parsed before 1.52 re-parses on the 1.52 bump anyway.
+#   Superseded: 1.41.0-alpha|08d85198df87a40e6e16fcf8e656f18f17586813d7ea363b5058b502b323ce33
+1.41.0-alpha|d91920cd6c34bbb007c5988afaafa002d5d0a50d987709e2c9a6585e28a9eff2

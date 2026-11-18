@@ -3463,7 +3463,7 @@ var
     Site.MethodKey:= AMethodKey;
     Site.FilePath := Path;
     Site.Line     := Integer(P.Row) + 1;
-    Site.Col      := Integer(P.Column) + 1;
+    Site.Col      := TAstParseCache.CharCol(Path, P); { 1.52 BK-COLS2: character column }
     Site.Original := AOriginal;
     Lst.Add(Site);
   end;

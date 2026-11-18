@@ -537,9 +537,9 @@ begin
     Finding.Message := Format('FieldByName() called %d time(s) inside this loop%s -- cache the TField reference(s) ' + 'in locals before the loop and reuse them', [Calls.Count, Detail]);
     Finding.FilePath := AFilePath;
     Finding.StartLine:= Integer(Anchor.StartPoint.row   ) + 1;
-    Finding.StartCol := Integer(Anchor.StartPoint.column) + 1;
+    Finding.StartCol := Utf8ByteColToCharCol(ASource, Anchor.StartByte, Anchor.StartPoint.column) + 1; { 1.52 BK-COLS2: character column }
     Finding.EndLine  := Integer(Anchor.EndPoint  .row   ) + 1;
-    Finding.EndCol   := Integer(Anchor.EndPoint  .column) + 1;
+    Finding.EndCol   := Utf8ByteColToCharCol(ASource, Anchor.EndByte, Anchor.EndPoint.column) + 1;
     AFindings.Add(Finding);
   finally
     Names.Free;
@@ -664,7 +664,7 @@ end; // procedure
 // the .scm rule uses for Pascal, so a real DFM problem is still caught. Mirrors
 // the ERROR/MISSING walk in TAstChecker.CheckSyntaxErrors (cap 100, no descent
 // into an error node, skip clean subtrees via HasError).
-procedure CollectDfmParseErrors(const ARoot: TTSNode; const AFilePath: string; AFindings: TList<TLintFinding>);
+procedure CollectDfmParseErrors(const ARoot: TTSNode; const ASource: TBytes; const AFilePath: string; AFindings: TList<TLintFinding>);
 
   procedure Visit(const N: TTSNode);
   var
@@ -682,7 +682,7 @@ procedure CollectDfmParseErrors(const ARoot: TTSNode; const AFilePath: string; A
       F.Message := 'Syntax error: parser failed to recognize this construct';
       F.FilePath:= AFilePath;
       F.StartLine:= Integer(P.Row   ) + 1;
-      F.StartCol := Integer(P.Column) + 1;
+      F.StartCol := Utf8ByteColToCharCol(ASource, N.StartByte, P.Column) + 1; { 1.52 BK-COLS2: character column }
       F.EndLine  := F.StartLine;
       F.EndCol   := F.StartCol + 1;
       AFindings.Add(F);
@@ -787,7 +787,7 @@ procedure CheckDfmCredentials(const ARoot: TTSNode; const ASource: TBytes; const
             F.Message := Format('Hardcoded credential in DFM: property "%s" assigns a literal string; move secrets out of the form resource', [PropName]);
             F.FilePath:= AFilePath;
             F.StartLine:= Integer(P.Row   ) + 1;
-            F.StartCol := Integer(P.Column) + 1;
+            F.StartCol := Utf8ByteColToCharCol(ASource, N.StartByte, P.Column) + 1; { 1.52 BK-COLS2: character column }
             F.EndLine  := F.StartLine;
             F.EndCol   := F.StartCol + 1;
             AFindings.Add(F);
@@ -970,7 +970,7 @@ begin
         that don't exist in the DFM grammar (and the queries are compiled against the
         Pascal language), so the only meaningful diagnostic is a genuine grammar error. }
     begin
-      if Wants('parser-error') then CollectDfmParseErrors(Tree.RootNode, AFilePath, Findings);
+      if Wants('parser-error') then CollectDfmParseErrors(Tree.RootNode, Source, AFilePath, Findings);
       if Wants('dfm-hardcoded-credential') then CheckDfmCredentials(Tree.RootNode, Source, AFilePath, Findings); // v0.76 #10
     end
     else
@@ -1153,7 +1153,7 @@ begin
               `raise` node, so this is that node's own start. }
             Site.FilePath:= AFilePath;
             Site.Line    := Integer(ANode.StartPoint.row   ) + 1;
-            Site.Col     := Integer(ANode.StartPoint.column) + 1;
+            Site.Col     := Utf8ByteColToCharCol(ASource, ANode.StartByte, ANode.StartPoint.column) + 1; { 1.52 BK-COLS2: character column }
             Site.Msg     := Msg;
             Site.Raw     := UnquotePascalString(FirstLiteralString(Args));
             FExcSites:= FExcSites + [Site];

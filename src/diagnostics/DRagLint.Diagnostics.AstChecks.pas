@@ -1376,7 +1376,7 @@ begin
   { Comments and string literals blanked to spaces -- same length, same line
     breaks, so the line/column arithmetic below is unaffected. Without this the
     regex reads prose as code; see MaskCommentsAndStrings. }
-  Source:= MaskCommentsAndStrings(TEncoding.Default.GetString(SrcBytes));
+  Source:= MaskCommentsAndStrings(TEncoding.UTF8.GetString(SrcBytes)); { 1.52 BK-COLS2: Src is UTF-8 -- decoding it as ANSI counted bytes }
 
   Findings:= TList<TLintFinding>.Create;
   Seen:= TDictionary<string, Boolean>.Create;
@@ -1453,7 +1453,7 @@ begin
   PF:= TAstParseCache.Get(AFile);
   if PF.Tree = nil then Exit;
   SrcBytes:= PF.Src;
-  Source:= TEncoding.Default.GetString(SrcBytes);
+  Source:= TEncoding.UTF8.GetString(SrcBytes); { 1.52 BK-COLS2: Src is UTF-8 -- decoding it as ANSI counted bytes }
   Len:= Length(Source);
 
   Depth            := 0;
@@ -1736,7 +1736,7 @@ var
         else F.Message:= 'Syntax error near here';
         F.FilePath:= AFile;
         F.StartLine:= ErrorLine;
-        F.StartCol := Integer(P.Column) + 1;
+        F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
         F.EndLine:= F.StartLine;
         F.EndCol:= F.StartCol + 1;
         Findings.Add(F);
@@ -1889,7 +1889,7 @@ var
               else F.Message:= Format( 'H2164 Variable ''%s'' is declared but never used', [DisplayName]);
               F.FilePath:= AFile;
               F.StartLine:= Integer(P.Row   ) + 1;
-              F.StartCol := Integer(P.Column) + 1;
+              F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
               F.EndLine:= F.StartLine;
               F.EndCol:= F.StartCol + Length(DisplayName);
               Findings.Add(F);
@@ -2117,7 +2117,7 @@ var
           begin
             { every name here is dead -> the whole declaration goes }
             AddDeleteKeepingDlComment(Section, Integer(DV.StartPoint.Row) + 1,
-              Integer(DV.EndPoint.Row) + 1, Integer(DV.EndPoint.Column));
+              Integer(DV.EndPoint.Row) + 1, TAstParseCache.CharCol(AFile, DV.EndPoint) - 1);
             Inc(SectFixed, FlagCount);
             AnyDeleted:= True;
             Continue;
@@ -2144,8 +2144,8 @@ var
           E.FilePath:= AFile;
           E.Kind    := tekReplaceInLine;
           E.Line    := Integer(Names[0].StartPoint.Row      ) + 1;
-          E.Col     := Integer(Names[0].StartPoint.Column   ) + 1;
-          E.EndCol  := Integer(Names[High(Names)].EndPoint.Column) + 1;
+          E.Col     := TAstParseCache.CharCol(AFile, Names[0].StartPoint); { 1.52 BK-COLS2: edits count characters }
+          E.EndCol  := TAstParseCache.CharCol(AFile, Names[High(Names)].EndPoint);
           E.Text    := Keep;
           Section.Add(E);
           Inc(SectFixed, FlagCount);
@@ -2177,7 +2177,7 @@ var
             end;
             if not Covered then
             begin
-              AddDeleteKeepingDlComment(Section, KwLine, KwLine, Integer(KwVar.EndPoint.Column));
+              AddDeleteKeepingDlComment(Section, KwLine, KwLine, TAstParseCache.CharCol(AFile, KwVar.EndPoint) - 1);
             end;
           end;
         end;
@@ -2250,7 +2250,7 @@ var
       F.Message := 'raise inside a finally block masks the exception currently propagating -- move it out of the finally';
       F.FilePath:= AFile;
       F.StartLine:= Integer(P.Row   ) + 1;
-      F.StartCol := Integer(P.Column) + 1;
+      F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
       F.EndLine:= F.StartLine;
       F.EndCol := F.StartCol + 5;
       Findings.Add(F);
@@ -2367,7 +2367,7 @@ var
           F.Message := 'Unreachable code: this statement follows an unconditional Exit/raise/Break/Continue/Halt';
           F.FilePath:= AFile;
           F.StartLine:= Integer(P.Row   ) + 1;
-          F.StartCol := Integer(P.Column) + 1;
+          F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
           F.EndLine:= F.StartLine;
           F.EndCol := F.StartCol + 1;
           Findings.Add(F);
@@ -2493,7 +2493,7 @@ var
     end;
     F.FilePath:= AFile;
     F.StartLine:= Integer(P.Row   ) + 1;
-    F.StartCol := Integer(P.Column) + 1;
+    F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
     F.EndLine:= F.StartLine;
     F.EndCol := F.StartCol + 5;
     Findings.Add(F);
@@ -2584,7 +2584,7 @@ var
       F.Message := 'Exit/Break/Continue/Halt in a finally block silently discards any exception currently propagating -- move it out of the finally';
       F.FilePath:= AFile;
       F.StartLine:= Integer(P.Row   ) + 1;
-      F.StartCol := Integer(P.Column) + 1;
+      F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
       F.EndLine:= F.StartLine;
       F.EndCol := F.StartCol + 1;
       Findings.Add(F);
@@ -2807,7 +2807,7 @@ var
       F.Metric  := AMetric;
       F.FilePath:= AFile;
       F.StartLine:= Integer(HP.Row   ) + 1;
-      F.StartCol := Integer(HP.Column) + 1;
+      F.StartCol := TAstParseCache.CharCol(AFile, HP); { 1.52 BK-COLS2: character column }
       F.EndLine:= F.StartLine;
       F.EndCol := F.StartCol + 1;
       Findings.Add(F);
@@ -3024,7 +3024,7 @@ var
     routine reads. False with no store, no table or no row: the map's answer stands. }
   function FactTypeOf(const AId: TTSNode; out ATypeLeaf: string): Boolean;
   begin
-    Result:= RefStaticTypeAt(AStore, AFileId, Integer(AId.StartPoint.Row) + 1, Integer(AId.StartPoint.Column) + 1, NodeStr(AId), ATypeLeaf);
+    Result:= RefStaticTypeAt(AStore, AFileId, Integer(AId.StartPoint.Row) + 1, TAstParseCache.CharCol(AFile, AId.StartPoint), NodeStr(AId), ATypeLeaf);
   end;
 
 
@@ -3376,7 +3376,7 @@ var
                   F.Message := Format('case on enum %s does not handle %s and has no else -- handle the missing value(s) or add an else', [Trim(T), Missing]);
                   F.FilePath:= AFile;
                   F.StartLine:= Integer(P.Row   ) + 1;
-                  F.StartCol := Integer(P.Column) + 1;
+                  F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
                   F.EndLine := F.StartLine;
                   F.EndCol  := F.StartCol + 4;
                   Findings.Add(F);
@@ -3408,7 +3408,7 @@ var
           F.Message := 'Floating-point values compared with = / <> -- rounding makes exact equality unreliable; use SameValue or an epsilon';
           F.FilePath:= AFile;
           F.StartLine:= Integer(P.Row   ) + 1;
-          F.StartCol := Integer(P.Column) + 1;
+          F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
           F.EndLine:= F.StartLine;
           F.EndCol := F.StartCol + 1;
           Findings.Add(F);
@@ -3426,7 +3426,7 @@ var
           F.Message := '''='' compares strings case-sensitively. Use SameText for case-insensitive comparison.';
           F.FilePath:= AFile;
           F.StartLine:= Integer(P.Row   ) + 1;
-          F.StartCol := Integer(P.Column) + 1;
+          F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
           F.EndLine:= F.StartLine;
           F.EndCol := F.StartCol + 1;
           Findings.Add(F);
@@ -3465,7 +3465,7 @@ var
                 F.Message := '''Length(X) = 0'' / ''> 0'' -- for strings prefer X = '''' / X <> '''' (clearer).';
                 F.FilePath:= AFile;
                 F.StartLine:= Integer(P.Row   ) + 1;
-                F.StartCol := Integer(P.Column) + 1;
+                F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
                 F.EndLine:= F.StartLine;
                 F.EndCol := F.StartCol + 1;
                 Findings.Add(F);
@@ -3493,7 +3493,7 @@ var
             F.Message := Format('FreeAndNil on interface-typed %s -- interfaces are reference-counted; assign nil instead of freeing', [NodeStr(A0)]);
             F.FilePath:= AFile;
             F.StartLine:= Integer(P.Row   ) + 1;
-            F.StartCol := Integer(P.Column) + 1;
+            F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
             F.EndLine:= F.StartLine;
             F.EndCol := F.StartCol + 1;
             Findings.Add(F);
@@ -3520,7 +3520,7 @@ var
               F.Message := Format('32-bit cast (%s) of pointer-typed %s -- truncates on Win64; use NativeInt/NativeUInt', [NodeStr(Entity), NodeStr(A0)]);
               F.FilePath:= AFile;
               F.StartLine:= Integer(P.Row   ) + 1;
-              F.StartCol := Integer(P.Column) + 1;
+              F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
               F.EndLine:= F.StartLine;
               F.EndCol := F.StartCol + 1;
               Findings.Add(F);
@@ -3555,7 +3555,7 @@ var
                 F.Message := Format('32-bit cast (%s) of NativeInt-sized %s -- truncates the high 32 bits on Win64; use NativeInt/NativeUInt or Int64.', [NodeStr(Entity), NodeStr(A0)]);
                 F.FilePath:= AFile;
                 F.StartLine:= Integer(P.Row   ) + 1;
-                F.StartCol := Integer(P.Column) + 1;
+                F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
                 F.EndLine := F.StartLine;
                 F.EndCol  := F.StartCol + Length(NodeStr(Entity));
                 Findings.Add(F);
@@ -3593,7 +3593,7 @@ var
               F.Message := Format('Redundant cast: %s is already of type %s', [NodeStr(A0), En]);
               F.FilePath:= AFile;
               F.StartLine:= Integer(P.Row   ) + 1;
-              F.StartCol := Integer(P.Column) + 1;
+              F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
               F.EndLine := F.StartLine;
               F.EndCol  := F.StartCol + Length(En);
               Findings.Add(F);
@@ -3634,7 +3634,7 @@ var
                 F.Message := Format('Unchecked hard cast %s(%s) -- no ''%s is %s'' guard; a wrong run-time type crashes or corrupts. Guard with ''is'' or use the ''as'' operator.', [Un, Xn, Xn, Un]);
                 F.FilePath:= AFile;
                 F.StartLine:= Integer(P.Row   ) + 1;
-                F.StartCol := Integer(P.Column) + 1;
+                F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
                 F.EndLine := F.StartLine;
                 F.EndCol  := F.StartCol + Length(Un);
                 Findings.Add(F);
@@ -3668,7 +3668,7 @@ var
                 F.Message := Format('%s(%s) narrows a Unicode string to Ansi -- characters outside the active code page are lost (W1057).', [NodeStr(Entity), NodeStr(A0)]);
                 F.FilePath:= AFile;
                 F.StartLine:= Integer(P.Row   ) + 1;
-                F.StartCol := Integer(P.Column) + 1;
+                F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
                 F.EndLine := F.StartLine;
                 F.EndCol  := F.StartCol + Length(NodeStr(Entity));
                 Findings.Add(F);
@@ -3735,7 +3735,7 @@ var
               F.Message := Format('%s.Create instantiates a class with unimplemented abstract method(s): %s -- calling one raises EAbstractError.', [ClsName, Unimpl]);
               F.FilePath:= AFile;
               F.StartLine:= Integer(P.Row   ) + 1;
-              F.StartCol := Integer(P.Column) + 1;
+              F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
               F.EndLine := F.StartLine;
               F.EndCol  := F.StartCol + Length(ClsName);
               Findings.Add(F);
@@ -3914,7 +3914,7 @@ var
           F.Message := Format('%s is both aliased into an interface (reference-counted lifetime) and manually freed in the same routine -- a dual handle risks a double free when the last interface reference drops. Keep it purely an object OR purely an interface.', [OrigName]);
           F.FilePath:= AFile;
           F.StartLine:= Integer(P.Row   ) + 1;
-          F.StartCol := Integer(P.Column) + 1;
+          F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
           F.EndLine := F.StartLine;
           F.EndCol  := F.StartCol + 1;
           Findings.Add(F);
@@ -4088,7 +4088,7 @@ var
         if ProvenNonString(TypeText) then
         begin
           P:= N.StartPoint;
-          NonString.AddOrSetValue(Format('%d:%d', [Integer(P.Row) + 1, Integer(P.Column) + 1]), True);
+          NonString.AddOrSetValue(Format('%d:%d', [Integer(P.Row) + 1, TAstParseCache.CharCol(AFile, P)]), True); { the findings' character column }
         end;
       end;
     end;
@@ -4219,7 +4219,7 @@ var
           else F.Message:= 'ExecSQL on a SELECT -- use Open to fetch the result set; ExecSQL discards it';
           F.FilePath:= AFile;
           F.StartLine:= Integer(P.Row   ) + 1;
-          F.StartCol := Integer(P.Column) + 1;
+          F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
           F.EndLine:= F.StartLine;
           F.EndCol := F.StartCol + 1;
           Findings.Add(F);
@@ -4398,7 +4398,7 @@ var
       F.Message := Format('Object %s is created and freed without try-finally -- it leaks if code in between raises; wrap creation and use in try..finally', [V]);
       F.FilePath:= AFile;
       F.StartLine:= Integer(P.Row   ) + 1;
-      F.StartCol := Integer(P.Column) + 1;
+      F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
       F.EndLine:= F.StartLine;
       F.EndCol := F.StartCol + 1;
       Findings.Add(F);
@@ -4586,7 +4586,7 @@ var
         N2.Path := APath;
         Pt:= NameN.StartPoint;
         N2.Line := Integer(Pt.Row) + 1;
-        N2.Col  := Integer(Pt.Column) + 1;
+        N2.Col  := TAstParseCache.CharCol(APath, Pt);
         N2.Holds:= Holds.ToArray;
       finally
         Holds.Free;
@@ -4782,7 +4782,7 @@ var
           F.Message := 'Use of an object after it was freed (dangling reference) -- nil it after Free, or use FreeAndNil';
           F.FilePath:= AFile;
           F.StartLine:= Integer(P.Row   ) + 1;
-          F.StartCol := Integer(P.Column) + 1;
+          F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
           F.EndLine:= F.StartLine;
           F.EndCol := F.StartCol + 1;
           Findings.Add(F);
@@ -4945,7 +4945,7 @@ var
     F.Message := Format('UI access (.%s) in thread code -- VCL/FMX is not thread-safe; wrap it in Synchronize/Queue', [AMember]);
     F.FilePath:= AFile;
     F.StartLine:= Integer(P.Row   ) + 1;
-    F.StartCol := Integer(P.Column) + 1;
+    F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
     F.EndLine:= F.StartLine;
     F.EndCol := F.StartCol + 1;
     Findings.Add(F);
@@ -5158,7 +5158,7 @@ var
             [VarName, NodeStr(DVType)]);
           F.FilePath := AFile;
           F.StartLine:= Integer(P.Row   ) + 1;
-          F.StartCol := Integer(P.Column) + 1;
+          F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
           F.EndLine  := F.StartLine;
           F.EndCol   := F.StartCol + Length(VarName);
           Findings.Add(F);
@@ -5643,7 +5643,7 @@ var
     end;
     P:= ANode.StartPoint;
     Result:= EnumRefs.TryGetValue(IntToStr(Integer(P.Row) + 1) + ':' +
-                                  IntToStr(Integer(P.Column) + 1), ARef);
+                                  IntToStr(TAstParseCache.CharCol(AFile, P)), ARef); { refs carry character columns }
   end;
 
   { A bare type name, or '' when the text is anything else -- an array, a
@@ -5800,7 +5800,7 @@ var
       F.Severity := 'warning';
       F.FilePath := AFile;
       F.StartLine:= Integer(P.Row   ) + 1;
-      F.StartCol := Integer(P.Column) + 1;
+      F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
       F.EndLine  := F.StartLine;
       F.EndCol   := F.StartCol + Length(Nm);
       F.Message  := Format(
@@ -5878,7 +5878,7 @@ var
       F.Severity := 'warning';
       F.FilePath := AFile;
       F.StartLine:= Integer(P.Row   ) + 1;
-      F.StartCol := Integer(P.Column) + 1;
+      F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
       F.EndLine  := F.StartLine;
       F.EndCol   := F.StartCol + Length(Nm);
       F.Message  := Format(
@@ -6170,7 +6170,7 @@ var
             [VarName]);
           F.FilePath := AFile;
           F.StartLine:= Integer(P.Row   ) + 1;
-          F.StartCol := Integer(P.Column) + 1;
+          F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
           F.EndLine  := F.StartLine;
           F.EndCol   := F.StartCol + Length(VarName);
           Findings.Add(F);
@@ -6338,7 +6338,7 @@ var
         F.Message := 'Function returns a value AND mutates state (writes a field) -- a Command-Query Separation violation. Split it into a pure query and a separate command.';
         F.FilePath:= AFile;
         F.StartLine:= Integer(P.Row   ) + 1;
-        F.StartCol := Integer(P.Column) + 1;
+        F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
         F.EndLine := F.StartLine;
         F.EndCol  := F.StartCol + 1;
         Findings.Add(F);
@@ -6867,7 +6867,7 @@ var
               F.Message := Format('%s called with a non-literal command argument -- a runtime-built command path is an injection risk (CWE-78). Validate or use a fixed literal.', [NodeStr(Ent)]);
             F.FilePath:= AFile;
             F.StartLine:= Integer(P.Row   ) + 1;
-            F.StartCol := Integer(P.Column) + 1;
+            F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
             F.EndLine:= F.StartLine;
             F.EndCol := F.StartCol + 1;
             Findings.Add(F);
@@ -6963,7 +6963,7 @@ var
             F.Message := 'Concatenated file path -- a user-controlled segment can escape the intended directory (path traversal, CWE-22). Validate or canonicalize the path.';
             F.FilePath:= AFile;
             F.StartLine:= Integer(P.Row   ) + 1;
-            F.StartCol := Integer(P.Column) + 1;
+            F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
             F.EndLine:= F.StartLine;
             F.EndCol := F.StartCol + 1;
             Findings.Add(F);
@@ -7557,7 +7557,7 @@ var
     if F.Severity = '' then F.Severity:= 'info';
     F.FilePath := AFile;
     F.StartLine:= Integer(P.Row   ) + 1;
-    F.StartCol := Integer(P.Column) + 1;
+    F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
     F.EndLine  := F.StartLine;
     F.EndCol   := F.StartCol + 1;
     Findings.Add(F);
@@ -7613,7 +7613,7 @@ var
       F.Message  := Format('Absolute path literal "%s" is not reached by any filesystem operation this checker models, so it is reported for REVIEW rather than as an established defect. If it does name a real location -- a folder probed on a test or customer machine, or a path handed to code not analysed here -- take the root from configuration, the environment, or a known-folder API. If it is inert, retire it or record a dl:ok review saying so.', [Txt]);
       F.FilePath := AFile;
       F.StartLine:= Integer(P.Row   ) + 1;
-      F.StartCol := Integer(P.Column) + 1;
+      F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
       F.EndLine  := F.StartLine;
       F.EndCol   := F.StartCol + 1;
       Findings.Add(F);
@@ -8219,7 +8219,7 @@ var
         F.Message := 'Loop body begins with Exit/Break/raise -- the loop runs at most once. Move the statement before the loop, or fix the loop logic.';
         F.FilePath:= AFile;
         F.StartLine:= Integer(P.Row   ) + 1;
-        F.StartCol := Integer(P.Column) + 1;
+        F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
         F.EndLine:= F.StartLine;
         F.EndCol := F.StartCol + 1;
         Findings.Add(F);
@@ -8338,7 +8338,7 @@ var
               F.Message := Format('Format string has %d specifier(s) but %d argument(s) were supplied.', [Length(Kinds), Length(Elems)]);
               F.FilePath:= AFile;
               F.StartLine:= Integer(P.Row   ) + 1;
-              F.StartCol := Integer(P.Column) + 1;
+              F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
               F.EndLine:= F.StartLine;
               F.EndCol := F.StartCol + 1;
               Findings.Add(F);
@@ -8364,7 +8364,7 @@ var
                 F.Message := Format('Argument %d is incompatible with format specifier "%%%s".', [J + 1, string(K)]);
                 F.FilePath:= AFile;
                 F.StartLine:= Integer(PE.Row   ) + 1;
-                F.StartCol := Integer(PE.Column) + 1;
+                F.StartCol := TAstParseCache.CharCol(AFile, PE); { 1.52 BK-COLS2: character column }
                 F.EndLine:= F.StartLine;
                 F.EndCol := F.StartCol + 1;
                 Findings.Add(F);
@@ -8897,7 +8897,7 @@ var
         F.Message := 'Exception silently swallowed -- add raise, logging, or Application.HandleException.';
         F.FilePath:= AFile;
         F.StartLine:= Integer(ExceptPt.Row   ) + 1;
-        F.StartCol := Integer(ExceptPt.Column) + 1;
+        F.StartCol := TAstParseCache.CharCol(AFile, ExceptPt); { 1.52 BK-COLS2: character column }
         F.EndLine:= F.StartLine;
         F.EndCol := F.StartCol + 6;
         Findings.Add(F);
@@ -9192,7 +9192,7 @@ var
               F.Message := Format('Dataset %s is opened without a matching Close in a finally block -- it leaks a server cursor on an exception path.', [Pair.Key]);
               F.FilePath:= AFile;
               F.StartLine:= Integer(Pair.Value.Row   ) + 1;
-              F.StartCol := Integer(Pair.Value.Column) + 1;
+              F.StartCol := TAstParseCache.CharCol(AFile, Pair.Value); { 1.52 BK-COLS2: character column }
               F.EndLine:= F.StartLine;
               F.EndCol := F.StartCol + 1;
               Findings.Add(F);
@@ -9412,7 +9412,7 @@ var
               F.Message := Format('Critical section %s is acquired without a matching Leave/Release (or TMonitor.Exit) in a finally block -- a lock leaked on an exception path deadlocks.', [LockName]);
               F.FilePath:= AFile;
               F.StartLine:= Integer(Pair.Value.Row   ) + 1;
-              F.StartCol := Integer(Pair.Value.Column) + 1;
+              F.StartCol := TAstParseCache.CharCol(AFile, Pair.Value); { 1.52 BK-COLS2: character column }
               F.EndLine:= F.StartLine;
               F.EndCol := F.StartCol + 1;
               Findings.Add(F);
@@ -9535,7 +9535,7 @@ var
         F.Metric  := NExit;   { binds a dl:ok review to the count it was granted for }
         F.FilePath:= AFile;
         F.StartLine:= Integer(P.Row   ) + 1;
-        F.StartCol := Integer(P.Column) + 1;
+        F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
         F.EndLine:= F.StartLine;
         F.EndCol := F.StartCol + 1;
         Findings.Add(F);
@@ -9709,7 +9709,7 @@ var
     F.Message := AMsg;
     F.FilePath:= AFile;
     F.StartLine:= Integer(P.Row) + 1;
-    F.StartCol := Integer(P.Column) + 1;
+    F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
     F.EndLine:= F.StartLine;
     F.EndCol := F.StartCol + 1;
     Findings.Add(F);
@@ -9858,7 +9858,7 @@ var
         F.Metric  := CC;      { binds a dl:ok review to the score it was granted for }
         F.FilePath:= AFile;
         F.StartLine:= Integer(P.Row   ) + 1;
-        F.StartCol := Integer(P.Column) + 1;
+        F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
         F.EndLine:= F.StartLine;
         F.EndCol := F.StartCol + 1;
         Findings.Add(F);
@@ -9946,7 +9946,7 @@ var
         F.Metric  := CC;      { binds a dl:ok review to the score it was granted for }
         F.FilePath:= AFile;
         F.StartLine:= Integer(P.Row   ) + 1;
-        F.StartCol := Integer(P.Column) + 1;
+        F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
         F.EndLine:= F.StartLine;
         F.EndCol := F.StartCol + 1;
         Findings.Add(F);
@@ -10087,7 +10087,7 @@ var
         F.Message := Format('Constructor calls virtual/dynamic method "%s" -- it dispatches to a descendant override whose fields are not yet initialised. Move the call out of the constructor or make the method non-virtual.', [NodeStr(Rhs)]);
         F.FilePath:= AFile;
         F.StartLine:= Integer(P.Row   ) + 1;
-        F.StartCol := Integer(P.Column) + 1;
+        F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
         F.EndLine:= F.StartLine;
         F.EndCol := F.StartCol + Length(NodeStr(Rhs));
         Findings.Add(F);
@@ -10106,7 +10106,7 @@ var
         F.Message := Format('Constructor calls virtual/dynamic method "%s" -- it dispatches to a descendant override whose fields are not yet initialised. Move the call out of the constructor or make the method non-virtual.', [NodeStr(M)]);
         F.FilePath:= AFile;
         F.StartLine:= Integer(P.Row   ) + 1;
-        F.StartCol := Integer(P.Column) + 1;
+        F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
         F.EndLine:= F.StartLine;
         F.EndCol := F.StartCol + Length(NodeStr(M));
         Findings.Add(F);
