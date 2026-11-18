@@ -55,10 +55,6 @@ const
   /// (owner ruling 2026-11-17: the variable's answer is UNKNOWN-CALLEE).</summary>
   HB_LIMIT_UNKNOWN_CALLEE = 'unknown-callee';
 
-  /// <summary>Limit code of an instance-field answer until the constructor model (lane HBFIELDS) is
-  /// wired in.</summary>
-  HB_LIMIT_FIELDS_PENDING = 'instance-field-not-judged';
-
   /// <summary>Line comment on a call line: the unresolved callee only READS the argument.</summary>
   HB_MARKER_CALLEE_READS = 'dl:callee-reads';
 
@@ -77,7 +73,7 @@ const
 /// (raised by the events lane, candidates attached).</exception>
 /// <remarks>Read-only. Not thread-safe (the shared parse cache). Deterministic: every set is walked in
 /// sorted order, so two runs give the same answer except Budget.Ms. Instance fields are answered
-/// MAY-BE-UNSET with limit instance-field-not-judged until the constructor model is wired in.
+/// by the constructor model (DRagLint.Query.HappensBefore.Fields.CheckInstanceField, spec 5.5).
 /// An unresolved callee that receives the target adds the limit unknown-callee and its warning to
 /// Summary; such an answer is never NEVER-SET and never SET unless other writers prove it.</remarks>
 function CheckInit(const pDbPath, pTarget, pAt: string; const pOptions: THbOptions): THbAnswer;  // dl:ok unused-public-symbol@915c -- REVIEWED 2026-11-17 v152 HBSOLVER: check-init contract; consumers are the CLI verb and MCP tool, wired at INT (handover H-CLI) and the solve-driver fixture
@@ -101,6 +97,7 @@ uses
 , DRagLint.Query.HappensBefore.Events
 , DRagLint.Query.HappensBefore.Roots
 , DRagLint.Query.HappensBefore.Intra
+, DRagLint.Query.HappensBefore.Fields
   ;
 
 type
@@ -1430,11 +1427,11 @@ begin
     Result.Scope:= if Events.Target.Kind = htkInstanceField then hsInstance else hsProgram;
     if Events.Target.Kind = htkInstanceField then
     begin
-      { HANDOVER (lane HBFIELDS): delegate to CheckInstanceField here }
-      Result.Verdict:= hvMayBeUnset;
-      Result.Summary:= '(not proven: instance fields are judged by the constructor model, not in this build)';
-      Result.Limits:= [HB_LIMIT_FIELDS_PENDING];
-      AnswerEveryUse(Result, Events, hvMayBeUnset, 'instance fields are not judged in this build');
+      { spec 5.5: the constructor model (lane HBFIELDS) }
+      Result:= CheckInstanceField(Index, Store, Events, MaxR);
+      { the answer's writers include the writes through another object the events lane read as uses }
+      Events.Writers:= Result.Writers;
+      AddWriterReasons(Events, Result);
     end
     else if HbIsNeverSet(Events, Blockers) then
     begin
