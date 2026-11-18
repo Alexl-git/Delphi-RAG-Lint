@@ -33,6 +33,7 @@ The drag-lint menu tree in the RAD Studio IDE. Each item links to the feature it
     * [Convert Selected Component(s)...](features/convert-components.md)
     * [Open Conversion Editor...](features/convert-components.md)
   * [Convert Public Field to Property at Cursor](features/quick-fix-convert-public-field-to-property-at-cursor.md)
+  * [Extract Constant (literal at cursor)...](features/v152-extract-constant.md)
   * [Extract Method (selection)... (Ctrl+Alt+M)](features/extract-method.md)
   * Find Usages...: [Find Usages](features/find-usages.md), [query find-callers](features/query-find-callers.md), [usages](features/usages.md)
   * [Format Whole Project with YADF...](features/format-whole-project-with-yadf.md)

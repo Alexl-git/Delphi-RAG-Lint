@@ -40,7 +40,7 @@
     "version": "1.38.0-alpha"
   },
   "features/autofix-wave.md": {
-    "hash": "5ef3a1864af7ffc5c1ea580b5acda89dc4931526b79c4081154d3e0ea69aeaa0",
+    "hash": "f9bf3ba84e747cb22fc3f51c97936ac9fe4785bafef91aebc62bf59a8f0d0975",
     "version": "1.51.1-alpha"
   },
   "features/bench-context.md": {
@@ -300,7 +300,7 @@
     "version": "1.35.1-alpha"
   },
   "features/drag-lint-options.md": {
-    "hash": "de4b3d9ec08d246886f13d6e45544ad7e7e50fe380d434a91caab53459aa12d3",
+    "hash": "f33f06669140f094009a9cade483fd3fe59d1c84f409072ea9c870299c140614",
     "version": "1.51.1-alpha"
   },
   "features/drag-lint-panel-dockable.md": {
@@ -420,7 +420,7 @@
     "version": "1.51.1-alpha"
   },
   "features/fix-all-in-unit.md": {
-    "hash": "892eb9eb64d8bbacdd01cff1cbf9376b8e52be52e49ca81800244b2d3b1ddf8f",
+    "hash": "7f15c75299bd7b1951dc21766c973353d662c53103e2d0f10fc9b791b2d479bd",
     "version": "1.51.1-alpha"
   },
   "features/fix-all-reliability.md": {
@@ -428,7 +428,7 @@
     "version": "1.51.1-alpha"
   },
   "features/fix-it.md": {
-    "hash": "b337ff53dc737adce6be8bc045b5f4c885e33a2be65b99f9d1dfa3e3ef45ac83",
+    "hash": "ebe0d1f595c98549cac607f2b4c1d30d912f17a864957d1275f8342b4c72091e",
     "version": "1.51.1-alpha"
   },
   "features/flow-out-arg-rules.md": {
@@ -584,7 +584,7 @@
     "version": "1.51.1-alpha"
   },
   "features/lint-rules.md": {
-    "hash": "a8c52646a0aae8686217e03a063dfd223af47a9b867084ec1717f8a636adbe26",
+    "hash": "4394ce4fe5a7497f22fc65f96b7ab07c2671af8fa4c4c73eae4206533332c1c4",
     "version": "1.51.1-alpha"
   },
   "features/lint-tree.md": {
@@ -800,7 +800,7 @@
     "version": "1.51.1-alpha"
   },
   "features/run-lint-all-full-report.md": {
-    "hash": "7e1770c29f2485bec2e5334c7b7b5e85883d6ee18a11d7d7df6e2d9f07c9fb79",
+    "hash": "d7e834d88889eb72144a4aa4b77f60328eb2961ac2ef08dfaa933fccb8a7da88",
     "version": "1.51.1-alpha"
   },
   "features/safe-delete.md": {
@@ -1031,8 +1031,12 @@
     "hash": "8d83f0b6b4cf91a6f2976f642040bdb92e38e85db0f671376b35c698bc751b48",
     "version": "1.51.1-alpha"
   },
+  "features/v152-extract-constant.md": {
+    "hash": "89471df65ddfcb78e9400d5d4039c133f834ceee58aedd5bb02de0850cbf8b33",
+    "version": "1.51.1-alpha"
+  },
   "features/v152-fixer-compile-gate.md": {
-    "hash": "03f5fc2ddd50827b453bd6e97ef3e2e64f5a9d5c6e069fd480871f601b86926c",
+    "hash": "c5dda5f8d086f4970d145896ba1ba7cf7186a9b29d82ac05d2dc9562f53fb4c1",
     "version": "1.51.1-alpha"
   },
   "features/v152-index-possibly-out-of-range.md": {
@@ -1040,7 +1044,7 @@
     "version": "1.51.1-alpha"
   },
   "features/v152-vsfix.md": {
-    "hash": "590e3b6577ac3504ce12b66ce92b2ccbb2fcbbe9203212d13d6abd34ab5c929c",
+    "hash": "dd833a8be547cfd91c4466e1e28725266f8fb82f740cae3b1dc91052319f16ce",
     "version": "1.51.1-alpha"
   },
   "features/vscode-extension.md": {

@@ -1198,7 +1198,7 @@ Described in [link-orm](features/link-orm.md).
 
 ### lint
 
-lint --fix repairs findings of the 126 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
+lint --fix repairs findings of the 130 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
 
 ```text
 drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]
@@ -1230,6 +1230,8 @@ drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--j
 | `--rsvars` | `<bat>` |  |  |
 | `--build-timeout` | `<s>` |  |  |
 | `--no-compile` |  |  |  |
+| `--col` | `<c>` |  |  |
+| `--name` | `<ident>` |  |  |
 
 Described in:
 
@@ -1262,6 +1264,7 @@ Described in:
 * [Typing and ownership lint rules (casts, Self as interface, destructors)](features/v151-typ-rules.md)
 * [Wider built-in rules (1.51)](features/v151-wid-ast-rules.md)
 * [Wider scm rules and three new fixers](features/v151-wid-scm-rules.md)
+* [Extract constant (manual fix for magic literals)](features/v152-extract-constant.md)
 * [Array index possibly out of range lint rule (index-possibly-out-of-range)](features/v152-index-possibly-out-of-range.md)
 
 ### lint-all

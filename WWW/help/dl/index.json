@@ -638,7 +638,7 @@
   {
     "id": "autofix-wave",
     "title": "Autofix for fixable rules",
-    "summary": "lint --fix repairs findings of the 126 fixable rules; --json reports per finding whether it was applied; lint accepts a folder",
+    "summary": "lint --fix repairs findings of the 130 fixable rules; --json reports per finding whether it was applied; lint accepts a folder",
     "group": "linting",
     "order": 30002,
     "since": "1.37.0-alpha",
@@ -1812,11 +1812,23 @@
     "verb": ""
   },
   {
+    "id": "v152-extract-constant",
+    "title": "Extract constant (manual fix for magic literals)",
+    "summary": "Turns one number or string literal into a named constant and replaces every occurrence in the unit; manual fix of the magic-literal rules",
+    "group": "refactoring",
+    "order": 50022,
+    "since": "1.52.0-alpha",
+    "file": "features/v152-extract-constant.md",
+    "menus": ["drag-lint > Extract Constant (literal at cursor)..."],
+    "context": ["Editor > drag-lint > Extract Constant (literal at cursor)..."],
+    "verb": "lint"
+  },
+  {
     "id": "v152-fixer-compile-gate",
     "title": "extract-method and create-enum-helper through the compile gate by default",
     "summary": "extract-method / create-enum-helper --apply build the project before and after the write; no project found = REFUSED, --no-compile-gate writes unbuilt",
     "group": "refactoring",
-    "order": 50022,
+    "order": 50023,
     "since": "1.52.0-alpha",
     "file": "features/v152-fixer-compile-gate.md",
     "menus": [],
@@ -1828,7 +1840,7 @@
     "title": "Fix with drag-lint (VS Code and RAD Studio)",
     "summary": "Fix the finding at the cursor, all of one rule, or every fixable finding in a file: VS Code code actions and menus, plus a RAD Studio menu entry",
     "group": "refactoring",
-    "order": 50023,
+    "order": 50024,
     "since": "1.52.0-alpha",
     "file": "features/v152-vsfix.md",
     "menus": [],

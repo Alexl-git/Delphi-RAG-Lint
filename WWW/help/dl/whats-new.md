@@ -13,6 +13,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 * [explain](features/explain.md) -- Explains one lint rule in plain words: what it means, why it matters, a bad and a good example, its default, whether it can be fixed, and how to suppress it.
 * [Field repository](features/field-repository.md) -- Keeps the TableTools field registry in one SQLite file per database, filled from Firebird (read-only), with a diffable text backup.
+* [Extract constant (manual fix for magic literals)](features/v152-extract-constant.md) -- Turns one number or string literal into a named constant and replaces every occurrence in the unit; manual fix of the magic-literal rules.
 * [extract-method and create-enum-helper through the compile gate by default](features/v152-fixer-compile-gate.md) -- extract-method / create-enum-helper --apply build the project before and after the write; no project found = REFUSED, --no-compile-gate writes unbuilt.
 * [Array index possibly out of range lint rule (index-possibly-out-of-range)](features/v152-index-possibly-out-of-range.md) -- Warns (OFF in 1.52) on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only.
 * [Fix with drag-lint (VS Code and RAD Studio)](features/v152-vsfix.md) -- Fix the finding at the cursor, all of one rule, or every fixable finding in a file: VS Code code actions and menus, plus a RAD Studio menu entry.
@@ -120,7 +121,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 1.37.0-alpha
 
-* [Autofix for fixable rules](features/autofix-wave.md) -- lint --fix repairs findings of the 126 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
+* [Autofix for fixable rules](features/autofix-wave.md) -- lint --fix repairs findings of the 130 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
 * [Compliance labels (CWE, CERT, MISRA)](features/compliance-labels.md) -- Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field.
 * [Gap-wave lint rules](features/gap-wave-rules.md) -- About 50 new lint rules (bug patterns, dead code, data flow, platform, structure) added in the 1.37.0 gap wave.
 * [Include-file indexing and IF evaluation](features/inc-indexing.md) -- Include files are indexed under the active build, value defines and IF expressions are evaluated, and an undecidable IF is reported as a pp-unresolved-if hint.

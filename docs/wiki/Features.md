@@ -139,11 +139,11 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**425 rules. 126 have an auto-fix. 342 are on by default.** 312 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**426 rules. 130 have an auto-fix. 342 are on by default.** 313 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
-| bug-patterns | 154 | 38 |
+| bug-patterns | 154 | 40 |
 | complexity | 15 | 2 |
 | data-flow | 12 | 3 |
 | dead-code | 21 | 15 |
@@ -156,12 +156,12 @@ Rules, autofix, suppression markers and project-wide checks.
 | platform | 16 | 4 |
 | policy | 6 | - |
 | project-wide | 51 | 8 |
-| refactoring | 26 | 9 |
+| refactoring | 27 | 11 |
 | resource-lifetime | 22 | 9 |
 | review-markers | 6 | 2 |
 | security | 27 | 2 |
 | structure | 17 | 9 |
-| **Total** | **425** | **126** |
+| **Total** | **426** | **130** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -202,7 +202,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Interfaced object set to nil (lint rule)](interfaced-object-nil-leak) | `lint-all` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
 | [Lint rules on the static type of a reference](ref-type-rules) | `lint-all` |  |
-| [Lint rules](rules) | 425 rules, 126 fixable; `rules` |  |
+| [Lint rules](rules) | 426 rules, 130 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
 | [Memory and string-pointer lint rules (PChar, raw memory, leaks, byte counts)](memory-string-pointer-rules) | `lint-all` |  |
@@ -263,6 +263,7 @@ Rename, extract, safe delete, uses cleanup and code stubs.
 | [Create helper class](Create-helper-class) | Structure form: Create helper class; `create-enum-helper` |  |
 | [create-enum-helper](create-enum-helper) | `create-enum-helper`; drag-lint > Generate & Export > Enum Record Helper (symbol)... |  |
 | [Extract an interface from the members used (scratch + compile gate)](extract-interface) | `extract-interface` |  |
+| [Extract constant (manual fix for magic literals)](v152-extract-constant) | `lint`; drag-lint > Extract Constant (literal at cursor)...; Editor: drag-lint > Extract Constant (literal at cursor)... |  |
 | [extract-method and create-enum-helper through the compile gate by default](fixer-compile-gate) | `extract-method`; `create-enum-helper` |  |
 | [extract-method](extract-method) | `extract-method`; drag-lint > Extract Method (selection)... (Ctrl+Alt+M) |  |
 | [Fix with drag-lint (VS Code and RAD Studio)](v152-vsfix) | `lsp textDocument/codeAction`; Editor: drag-lint > Fix with drag-lint (finding at cursor) |  |
