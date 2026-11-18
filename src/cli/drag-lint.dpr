@@ -255,6 +255,7 @@ uses
   DRagLint.FieldRepo.FbTypes in '..\sql\DRagLint.FieldRepo.FbTypes.pas',
   DRagLint.FieldRepo.CsvMemTable in '..\sql\DRagLint.FieldRepo.CsvMemTable.pas',
   DRagLint.FieldRepo.ParamArray in '..\sql\DRagLint.FieldRepo.ParamArray.pas',
+  DRagLint.FieldRepo.ParamArray.Prepare in '..\sql\DRagLint.FieldRepo.ParamArray.Prepare.pas',
   DRagLint.FieldRepo.OrmGen in '..\sql\DRagLint.FieldRepo.OrmGen.pas',
   DRagLint.FieldRepo.DataServiceGen in '..\sql\DRagLint.FieldRepo.DataServiceGen.pas',
   DRagLint.Lint.ClassMetrics in '..\lint\DRagLint.Lint.ClassMetrics.pas',

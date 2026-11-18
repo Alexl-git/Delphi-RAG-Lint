@@ -1672,6 +1672,7 @@ begin
       Result.RepoPath:= ParamStr(i);
     end
     else if A = '--replace' then Result.Replace:= True
+    else if A = '--prepare-queries' then // repo gen-param-array: DRagLint.CLI.RepoParamArray reads it from ParamStr
     else if ((A = '--dfm') or (A = '--table') or (A = '--step-size') or (A = '--progress-form')) and (i < ParamCount) then Inc(i) // repo gen-param-array: DRagLint.CLI.RepoParamArray reads the value from ParamStr
     else if (A = '--scope') and (i < ParamCount) then
     begin

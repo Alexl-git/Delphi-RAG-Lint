@@ -16,10 +16,15 @@ interface
 /// <returns>0 = every processed unit planned / applied; 1 = a unit refused, no block in single
 /// mode, or the gate rolled back; 2 = bad flags, write failure, or a baseline that does not build.</returns>
 /// <remarks>The other flags are read from the command line here (the dispatch signature is FRAME's):
-/// --dfm, --query, --table, --step-size, --progress-form, --plan, --apply, --all, --only,
-/// --no-backup, --platform, --rsvars, --build-timeout. No flag: the block is printed to stdout.
+/// --dfm, --query, --table, --step-size, --progress-form, --prepare-queries, --plan, --apply, --all,
+/// --only, --no-backup, --platform, --rsvars, --build-timeout. No flag: the block is printed to stdout.
 /// --plan prints the unified diff and writes nothing; --apply writes through the compile gate
 /// (ApplyGated, once for the whole run, one retry without the units dcc names). Never needs --repo.
+/// --prepare-queries first does the IDE assistant's query preparation (PAPrepareQueries: each SELECT
+/// TFDQuery, or only --query, gets its update object's INSERT SQL, ParamData and ObjectView False; the
+/// update object / schema adapter are renamed ZZZ*, persistent fields removed, the unit's component
+/// declarations edited to match). --plan then shows the .dfm and .pas diffs and --apply writes both
+/// files through the same gate; without --plan / --apply nothing is written.
 /// Not thread-safe; main thread only (it opens the gate's control channel).</remarks>
 function RunGenParamArray(const pProject, pInFile: string; pJson: Boolean): Integer;
 
@@ -33,6 +38,7 @@ uses
   System.Generics.Collections,
   System.JSON,
   DRagLint.FieldRepo.ParamArray,
+  DRagLint.FieldRepo.ParamArray.Prepare,
   DRagLint.Refactor.TextEdit,
   DRagLint.Refactor.CompileGate,
   DRagLint.Lint.ProjectChecks.Parse;
@@ -69,6 +75,7 @@ type
     Emit: TPAOptions;
     Plan: Boolean;
     Apply: Boolean;
+    Prepare: Boolean;
     All: Boolean;
     NoBackup: Boolean;
     Json: Boolean;
@@ -88,6 +95,8 @@ type
     Plan: string;
     Error: string;
     NewBytes: TBytes;
+    NewDfmBytes: TBytes;
+    Prep: TPAPrepareResult;
     Matched: Integer;
     Mismatch: Integer;
     MissParams: Integer;
@@ -139,6 +148,7 @@ begin
   pO.BuildTimeout:= CommandLineValue('--build-timeout');
   pO.Plan:= CommandLineFlag('--plan');
   pO.Apply:= CommandLineFlag('--apply');
+  pO.Prepare:= CommandLineFlag('--prepare-queries');
   pO.All:= CommandLineFlag('--all');
   pO.NoBackup:= CommandLineFlag('--no-backup');
   pO.Emit:= PADefaultOptions;
@@ -254,9 +264,9 @@ end;
 procedure AnalyseUnit(var pU: TGpaUnit; const pO: TGpaOptions);
 var
   Bytes: TBytes;
-  Dfm, Source, NewSource, Candidate, Block: string;
+  Dfm, Source, NewSource, Candidate, Block, OrigDfm, OrigSource: string;
   Src, Dst: TPAColumns;
-  Fmt: TTextFileFormat;
+  Fmt, DfmFmt: TTextFileFormat;
   Gate: TPAGate;
   Status: TPAStatus;
 begin
@@ -274,12 +284,22 @@ begin
     pU.Error:= 'binary DFM (save it as text): ' + pU.DfmPath;
     Exit;
   end;
-  TTextFileFormat.Decode(Bytes, Dfm);
+  DfmFmt:= TTextFileFormat.ReadFile(pU.DfmPath, Dfm);
   if not TFile.Exists(pU.PasPath) then
   begin
     pU.Status:= ST_NO_BLOCK;
     pU.Error:= 'source file missing: ' + pU.PasPath;
     Exit;
+  end;
+  Fmt:= TTextFileFormat.ReadFile(pU.PasPath, Source);
+  OrigDfm:= Dfm;
+  OrigSource:= Source;
+  if pO.Prepare then
+  begin
+    // the IDE assistant prepared the queries BEFORE it read the params: discovery and the block see the result
+    pU.Prep:= PAPrepareQueries(Dfm, Source, pO.Query);
+    Dfm:= pU.Prep.Dfm;
+    Source:= pU.Prep.Pas;
   end;
   if not PADiscoverNamed(Dfm, pO.Query, pO.Table, pU.Query, pU.Table, Src, Dst) then
   begin
@@ -295,7 +315,6 @@ begin
   end;
   pU.Block:= Block;
   CountBlock(pU);
-  Fmt:= TTextFileFormat.ReadFile(pU.PasPath, Source);
   pU.Plan:= PABuildPlan(pU.Name, Source, Block);
   Candidate:= '';
   // collecting gate: a block holding a closing brace would end the comment early; otherwise the candidate
@@ -311,6 +330,13 @@ begin
       begin
         pU.Status:= ST_PLANNED;
         pU.NewBytes:= Fmt.Encode(Candidate);
+        if pO.Prepare then
+        begin
+          // one diff per file against the bytes on disk (the block diff alone would number lines of the prepared text)
+          pU.Plan:= PAUnifiedDiff(ExtractFileName(pU.DfmPath), OrigDfm, Dfm) +
+            PAUnifiedDiff(ExtractFileName(pU.PasPath), OrigSource, Candidate);
+          if Dfm <> OrigDfm then pU.NewDfmBytes:= DfmFmt.Encode(Dfm);
+        end;
       end;
     pasRefusedByGate:
       begin
@@ -337,6 +363,12 @@ begin
     GF.Path:= pUnits[I].PasPath;
     GF.Bytes:= pUnits[I].NewBytes;
     Req.Files:= Req.Files + [GF];
+    if pUnits[I].NewDfmBytes <> nil then
+    begin
+      GF.Path:= pUnits[I].DfmPath;
+      GF.Bytes:= pUnits[I].NewDfmBytes;
+      Req.Files:= Req.Files + [GF];
+    end;
   end;
   if pO.RsVars <> '' then Req.RsVars:= ExpandFileName(pO.RsVars);
   Secs:= StrToIntDef(pO.BuildTimeout, 0);
@@ -377,7 +409,8 @@ begin
   begin
     if not ParseDccLine(Line, Dcc) then Continue;
     for I:= 0 to High(pUnits) do
-      if (pUnits[I].Status = ST_PLANNED) and SameText(ExtractFileName(Dcc.FileName), ExtractFileName(pUnits[I].PasPath)) then
+      if (pUnits[I].Status = ST_PLANNED) and (SameText(ExtractFileName(Dcc.FileName), ExtractFileName(pUnits[I].PasPath))
+        or ((pUnits[I].NewDfmBytes <> nil) and SameText(ExtractFileName(Dcc.FileName), ExtractFileName(pUnits[I].DfmPath)))) then
       begin
         pUnits[I].Status:= ST_REFUSED;
         pUnits[I].Error:= 'dcc: ' + Line;
@@ -449,6 +482,27 @@ begin
   if pU.Error <> '' then Result:= Result + ' -- ' + pU.Error;
 end;
 
+{ --prepare-queries: what the preparation did to one unit, one line each ('' list when nothing). }
+function PrepareLines(const pU: TGpaUnit): TArray<string>;
+var
+  W: string;
+begin
+  Result:= nil;
+  if pU.Prep.Queries <> nil then
+    Result:= Result + [Format('%s: prepare-queries: %s; renamed %s; %d persistent field(s) removed',
+      [pU.Name, string.Join(', ', pU.Prep.Queries), if pU.Prep.Renamed = nil then 'nothing' else string.Join(', ', pU.Prep.Renamed),
+       Length(pU.Prep.RemovedFields)])];
+  for W in pU.Prep.Warnings do Result:= Result + [pU.Name + ': prepare-queries warning: ' + W];
+end;
+
+function JsonStrings(const pItems: TArray<string>): TJSONArray;
+var
+  S: string;
+begin
+  Result:= TJSONArray.Create;
+  for S in pItems do Result.Add(S);
+end;
+
 function ModeName(const pO: TGpaOptions): string;
 begin
   Result:= if pO.Apply then 'apply' else if pO.Plan then 'plan' else 'print';
@@ -482,6 +536,15 @@ begin
         Item.AddPair('block', U.Block);
       end;
       if U.Error <> '' then Item.AddPair('error', U.Error);
+      if pO.Prepare then
+      begin
+        G:= TJSONObject.Create;
+        G.AddPair('queries', JsonStrings(U.Prep.Queries));
+        G.AddPair('renamed', JsonStrings(U.Prep.Renamed));
+        G.AddPair('removed_fields', JsonStrings(U.Prep.RemovedFields));
+        G.AddPair('warnings', JsonStrings(U.Prep.Warnings));
+        Item.AddPair('prepare', G);
+      end;
       Arr.Add(Item);
     end;
     if pGate.Ran then
@@ -518,6 +581,8 @@ begin
     end;
     Inc(Shown);
     if pO.Apply then Writeln(StatusLine(U)) else Writeln(ErrOutput, StatusLine(U));
+    for Line in PrepareLines(U) do
+      if pO.Apply then Writeln(Line) else Writeln(ErrOutput, Line);
     if U.Status <> ST_PLANNED then Continue;
     if pO.Plan then Write(U.Plan)
     else if not pO.Apply then

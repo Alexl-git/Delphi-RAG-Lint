@@ -424,6 +424,7 @@
         <DCCReference Include="..\sql\DRagLint.FieldRepo.FbTypes.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.CsvMemTable.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.ParamArray.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.ParamArray.Prepare.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.OrmGen.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.DataServiceGen.pas"/>
         <DCCReference Include="DRagLint.CLI.CheckInit.pas"/>
