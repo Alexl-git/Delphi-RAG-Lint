@@ -27,8 +27,8 @@
 [CmdletBinding()]
 param(
   [string]$BaseRef = '67823450c',
-  [string[]]$EnabledIds = @(),
-  [int]$ExactCount = 6,
+  [string[]]$EnabledIds = @('field-repository', 'field-repository-02-refresh', 'field-repository-05-memtable'),   # TTIDE (INT 1.52)
+  [int]$ExactCount = 8,   # headless rows: check-init + idx-range + 6 field-repository; ToolsAPI units left out (H5)
   [string]$WorkDir = "$env:TEMP\drag-lint-v152-plugframe-$PID"
 )
 $ErrorActionPreference = 'Stop'
@@ -79,7 +79,14 @@ if ($fail) { Write-Host "FAIL ($fail)" -ForegroundColor Red; exit 1 }
 $rs = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 if (-not (Test-Path $rs)) { Write-Host "FATAL: rsvars not found: $rs" -ForegroundColor Red; exit 2 }
 New-Item -ItemType Directory -Force (Join-Path $WorkDir 'dcu') | Out-Null
-$usesList = ($units | ForEach-Object { "  $_ in '$plug\$_.pas'" }) -join ",`r`n"
+# H5 (INT): a unit whose uses clause names ToolsAPI outside a CONSOLE conditional cannot build headless (dcc64 has no designide);
+# it stays in the package checks above and is left out of the console program. Its rows are then
+# checked only by literal presence in its source.
+$ideOnly  = @($units | Where-Object { $s = [IO.File]::ReadAllText((Join-Path $plug "$_.pas")); ($s -match '(?m)^\s*ToolsAPI\s*[,;]') -and ($s -notmatch '\{\$IFN?DEF CONSOLE\}') })
+$headless = @($units | Where-Object { $ideOnly -notcontains $_ })
+if ($headless -notcontains 'DragLint.Plugin.Cmd152') { Bad 'Cmd152 itself must build headless (no ToolsAPI)' }
+if ($ideOnly.Count) { Ok "headless build leaves out ToolsAPI units: $($ideOnly -join ', ')" }
+$usesList = ($headless | ForEach-Object { "  $_ in '$plug\$_.pas'" }) -join ",`r`n"
 $dpr = @"
 program Cmd152Check;
 {`$APPTYPE CONSOLE}
@@ -204,7 +211,11 @@ $rows | ForEach-Object { Write-Host ("  {0,-17} {1,-9} {2,-28} visible={3}  {4}"
 if ($ExactCount -gt 0 -and $rows.Count -ne $ExactCount) { Bad "table has $($rows.Count) rows, expected $ExactCount" }
 foreach ($k in $required.Keys) {
   $r = $rows | Where-Object Id -eq $k
-  if (-not $r) { Bad "table lacks $k"; continue }
+  if (-not $r) {
+    $src = @($ideOnly | Where-Object { [IO.File]::ReadAllText((Join-Path $plug "$_.pas")) -match ("'" + [regex]::Escape($k) + "'") })
+    if ($src.Count) { Ok "$k registered by IDE-only unit $($src -join ', ') (not in the headless table)" } else { Bad "table lacks $k" }
+    continue
+  }
   if ($r.Owner -ne $required[$k]) { Bad "$k owner '$($r.Owner)', expected $($required[$k])" }
 }
 $visible = @($rows | Where-Object { $_.Visible -and ($EnabledIds -notcontains $_.Id) })
