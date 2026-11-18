@@ -131,6 +131,7 @@ contains
   DRagLint.Charts.DocInsight in '..\charts\DRagLint.Charts.DocInsight.pas',
   DragLint.Plugin.ReportText in 'DragLint.Plugin.ReportText.pas',
   DragLint.Plugin.Reports in 'DragLint.Plugin.Reports.pas',
+  DragLint.Plugin.ReportProgress in 'DragLint.Plugin.ReportProgress.pas',
   DragLint.Plugin.Cmd152 in 'DragLint.Plugin.Cmd152.pas',
   DragLint.Plugin.Cmd.CheckInit in 'DragLint.Plugin.Cmd.CheckInit.pas',
   DragLint.Plugin.Cmd.DisableRule in 'DragLint.Plugin.Cmd.DisableRule.pas',

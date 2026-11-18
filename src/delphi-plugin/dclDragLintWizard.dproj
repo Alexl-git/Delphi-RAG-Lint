@@ -176,6 +176,7 @@
         <DCCReference Include="..\charts\DRagLint.Charts.DocInsight.pas"/>
         <DCCReference Include="DragLint.Plugin.ReportText.pas"/>
         <DCCReference Include="DragLint.Plugin.Reports.pas"/>
+        <DCCReference Include="DragLint.Plugin.ReportProgress.pas"/>
         <DCCReference Include="DragLint.Plugin.Cmd152.pas"/>
         <DCCReference Include="DragLint.Plugin.Cmd.CheckInit.pas"/>
         <DCCReference Include="DragLint.Plugin.Cmd.DisableRule.pas"/>
