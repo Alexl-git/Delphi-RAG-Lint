@@ -102,6 +102,8 @@ begin
     var s: string:= FieldRepoCommandLine('C:\x y\drag-lint.exe', 'refresh-schema', 'C:\p q\a.dproj', '--dry-run');
     Check(s = '"C:\x y\drag-lint.exe" repo refresh-schema --project "C:\p q\a.dproj" --dry-run', 'command line: ' + s);
     Check(FieldRepoCommandLine('e.exe', 'info', 'a.dproj', '') = '"e.exe" repo info --project "a.dproj"', 'command line without extra');
+    { masked input: the VCL InputQuery masks the edit when the prompt starts with #31 }
+    Check(MaskedPrompt('Pw:') = #31 + 'Pw:', 'MaskedPrompt prefixes #31');
   except
     on E: Exception do begin Inc(GFail); Writeln('EXCEPTION: ', E.ClassName, ': ', E.Message); end;
   end;
