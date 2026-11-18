@@ -1864,7 +1864,7 @@ Described in [Rename Symbol](features/rename-symbol.md).
 Keeps the TableTools field registry in one SQLite file per database, filled from Firebird (read-only), with a diffable text backup.
 
 ```text
-drag-lint repo <init|info|import-fb|seed-fb|refresh-schema|backup|restore|gen-memtable|gen-param-array> (--repo <file> | --project <project file>) [--connection "<Firebird connection string>"] [--in <file>] [--output <file>] [--name <Name>] [--replace] [--dry-run] [--json]   (the field repository: one SQLite file per database; Firebird is only read; gen-param-array needs no repository)
+drag-lint repo <init|info|import-fb|seed-fb|refresh-schema|backup|restore|gen-memtable|gen-param-array|gen-orm|update-orm|gen-dataservice> (--repo <file> | --project <project file>) [--connection "<Firebird connection string>"] [--in <file>] [--output <file>] [--name <Name>] [--replace] [--dry-run] [--json]   (the field repository: one SQLite file per database; Firebird is only read; gen-param-array needs no repository)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1891,6 +1891,11 @@ drag-lint repo <init|info|import-fb|seed-fb|refresh-schema|backup|restore|gen-me
 | `--project` | `<project file>` |  |  |
 | `--replace` |  |  |  |
 | `--repo` | `<file>` |  |  |
+| `--prepare-queries` |  |  |  |
+| `--code-dir` | `<folder>` |  |  |
+| `--server-dir` | `<folder>` |  |  |
+| `--client-dir` | `<folder>` |  |  |
+| `--save-form` | `<legacy\|current>` |  |  |
 
 Described in [Field repository](features/field-repository.md).
 

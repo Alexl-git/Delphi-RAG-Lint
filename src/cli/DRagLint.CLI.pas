@@ -1672,6 +1672,7 @@ begin
       Result.RepoPath:= ParamStr(i);
     end
     else if A = '--replace' then Result.Replace:= True
+    else if A = '--prepare-queries' then // repo gen-param-array: DRagLint.CLI.RepoParamArray reads it from ParamStr
     else if ((A = '--dfm') or (A = '--table') or (A = '--step-size') or (A = '--progress-form')) and (i < ParamCount) then Inc(i) // repo gen-param-array: DRagLint.CLI.RepoParamArray reads the value from ParamStr
     else if (A = '--scope') and (i < ParamCount) then
     begin
@@ -1787,7 +1788,8 @@ begin
       Result.PathFromConfig:= False;
     end
     { 1.52 TTGEN: repo gen-orm / update-orm / gen-dataservice read these values with ParamStr (CLI.Repo) }
-    else if (Result.Command = 'repo') and MatchText(A, ['--code-dir', '--server-dir', '--client-dir', '--table']) and (i < ParamCount) then Inc(i)
+    else if (Result.Command = 'repo') and ((A = '--code-dir') or (A = '--server-dir') or (A = '--client-dir')) and (i < ParamCount) then Inc(i)
+    else if (Result.Command = 'repo') and ((A = '--table') or (A = '--save-form')) and (i < ParamCount) then Inc(i)
     else raise Exception.Create(UNKNOWN_ARG_PREFIX + A);
     Inc(i);
   end; // while

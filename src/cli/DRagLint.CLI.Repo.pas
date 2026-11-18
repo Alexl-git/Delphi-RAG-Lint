@@ -49,6 +49,7 @@ uses
   DRagLint.FieldRepo.FbImport,
   DRagLint.FieldRepo.SchemaSeed,
   DRagLint.FieldRepo.CsvMemTable,
+  DRagLint.FieldRepo.OrmGen,
   DRagLint.FieldRepo.DataServiceGen,
   DRagLint.CLI.RepoParamArray
   ;
@@ -67,6 +68,9 @@ const
   FB_IMPORT     = 0;
   FB_SEED       = 1;
   FB_REFRESH    = 2;
+  { positions in the --save-form value list of RepoOrmVerb }
+  SAVE_FORM_LEGACY  = 0;
+  SAVE_FORM_CURRENT = 1;
   SUB_VERBS   = 'init, info, import-fb, seed-fb, refresh-schema, backup, restore, gen-memtable, gen-param-array, gen-orm, update-orm, gen-dataservice';
 
 function CommandLineFlag(const pFlag: string): Boolean;
@@ -417,6 +421,14 @@ begin
   Opt.Tables:= CommandLineValue('--table', '');
   Opt.Apply:= CommandLineFlag('--apply');
   Opt.Backup:= not CommandLineFlag('--no-backup');
+  { B33 (1.52): region 9 binding form; legacy = the form the ORM3 units carry }
+  case IndexText(CommandLineValue('--save-form', 'legacy'), ['legacy', 'current']) of
+    SAVE_FORM_LEGACY: Opt.SaveForm:= osfLegacy;
+    SAVE_FORM_CURRENT: Opt.SaveForm:= osfCurrent;
+  else
+    Writeln(ErrOutput, 'repo ', pSub, ': --save-form takes legacy or current');
+    Exit(EXIT_FAIL);
+  end;
   Lines:= TStringList.Create;
   try
     Result:= RunOrmGenVerb(Opt, Lines);

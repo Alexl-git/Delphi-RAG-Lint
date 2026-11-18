@@ -41,7 +41,10 @@ The drag-lint menu tree in the RAD Studio IDE. Each item links to the feature it
   * [Extract Method (selection)... (Ctrl+Alt+M)](features/extract-method.md)
   * Field Repository
     * [FDMemTable from CSV...](features/field-repository.md)
+    * [Generate / Update ORM Source...](features/field-repository.md)
+    * [Generate DataService Units...](features/field-repository.md)
     * [Open Field Repository Editor...](features/field-repository.md)
+    * [Param Array Assistant...](features/field-repository.md)
     * [Refresh Schema from Database...](features/field-repository.md)
   * Find Usages
     * [Everywhere](features/find-usages.md)

@@ -13,11 +13,16 @@
   plus OUTSIDE-CHANGED when a byte outside the DB-RAD regions moved (always a FAIL).
   The repository comes from -RepoFile, or is imported with -Connection / $env:DL_TEST_FB_CONNECTION
   (Firebird is only READ). Without either, part 2 prints SKIP.
-  Byte parity below 100 percent is reported (the 1.52 cut line); -RequireParity makes it a FAIL.
+  Byte parity below 100 percent is reported; -RequireParity makes it a FAIL. Byte parity is not
+  reachable on ORM3: its units were re-formatted (aligned, re-cased) after TableTools wrote them.
+  -RequireForm (B33, 1.52) is the release gate instead: every unit must be the same ignoring
+  blanks and case, except the units listed in tests\fieldrepo\ormgen-golden-known-drift.txt
+  (repository rows that differ from the unit, or a hand-edited region); a listed unit that is no
+  longer DIFFERENT is reported as STALE and also fails, so the list cannot rot.
 
   Run: pwsh -File tests\autotest\run_fieldrepo_ormgen_golden.ps1 [-RepoFile <x.dlrepo>]
          [-Connection "Database=..;User_Name=..;Password=.."] [-Orm3 C:\Projects\DB\ORM3]
-         [-SkipBuild] [-RequireParity] [-Work <dir>]
+         [-SkipBuild] [-RequireParity] [-RequireForm] [-Work <dir>]
 #>
 [CmdletBinding()]
 param([string]$Repo = (Resolve-Path "$PSScriptRoot\..\..").Path,
@@ -26,7 +31,8 @@ param([string]$Repo = (Resolve-Path "$PSScriptRoot\..\..").Path,
       [string]$Orm3 = 'C:\Projects\DB\ORM3',
       [string]$Work = '',
       [switch]$SkipBuild,
-      [switch]$RequireParity)
+      [switch]$RequireParity,
+      [switch]$RequireForm)
 $ErrorActionPreference = 'Stop'
 Write-Host '== field repository ORM / DataService generator tests ==' -ForegroundColor Cyan
 $bat = Join-Path $Repo 'build\_build_fieldrepo_ormgen_tests_local.bat'
@@ -97,6 +103,20 @@ if ($RepoFile -eq '' -and [string]::IsNullOrWhiteSpace($Connection)) {
     $pct = if ($units -gt 0) { [math]::Floor(100 * $same / $units) } else { 0 }
     Write-Host "ORMGEN GOLDEN PARITY: $same / $units byte-identical ($pct percent); outside the regions: unchanged"
     if ($RequireParity -and $same -ne $units) { Write-Host 'ORMGEN GOLDEN: FAIL -- -RequireParity' -ForegroundColor Red; $failed = $true }
+    if ($RequireForm) {
+      $known = @(Get-Content -LiteralPath (Join-Path $Repo 'tests\fieldrepo\ormgen-golden-known-drift.txt') |
+        Where-Object { $_ -match '^\S' -and $_ -notmatch '^#' } | ForEach-Object { ($_ -split '\s+')[0].ToUpper() })
+      $diff = @($lines | Where-Object { $_ -match '^UNIT (\S+) DIFFERENT' } | ForEach-Object { ([regex]::Match($_, '^UNIT (\S+)')).Groups[1].Value.ToUpper() })
+      $new = @($diff | Where-Object { $known -notcontains $_ })
+      $stale = @($known | Where-Object { $diff -notcontains $_ })
+      $new | ForEach-Object { Write-Host "  NEW-DIFFERENT $_" -ForegroundColor Red }
+      $stale | ForEach-Object { Write-Host "  STALE known-drift entry $_" -ForegroundColor Red }
+      if ($new.Count -gt 0 -or $stale.Count -gt 0) {
+        Write-Host "ORMGEN GOLDEN FORM: FAIL -- $($new.Count) unlisted DIFFERENT, $($stale.Count) stale" -ForegroundColor Red; $failed = $true
+      } else {
+        Write-Host "ORMGEN GOLDEN FORM: PASS -- $($units - $diff.Count) / $units same ignoring blanks and case; $($diff.Count) known drift"
+      }
+    }
   }
 }
 if ($failed) { exit 1 }

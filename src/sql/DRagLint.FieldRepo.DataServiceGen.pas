@@ -24,10 +24,11 @@ uses
 /// <param name="pServerDir">Folder of the server units.</param>
 /// <param name="pClientDir">Folder of the client units.</param>
 /// <param name="pTables">Tables to generate; empty = every repository table.</param>
+/// <param name="pSaveForm">Region 9 parameter binding form of the _SERVER units (TOrmSaveForm).</param>
 /// <returns>Two entries per table (server, client) in table order, then the two DI units.</returns>
 /// <exception cref="EOrmGenError">A named table is not in the repository.</exception>
 function PlanGenDataService(pRepo: TFDConnection; const pServerDir, pClientDir: string;  // dl:ok unused-public-symbol@0574 -- REVIEWED 2026-11-17 v152 TTGEN: public API used by tests\fieldrepo\OrmGenTests.dpr and by CLI.Repo after the TTGEN handover
-  const pTables: TArray<string>): TArray<TOrmFileChange>;
+  const pTables: TArray<string>; pSaveForm: TOrmSaveForm = osfLegacy): TArray<TOrmFileChange>;
 
 type
   /// <summary>Options of the three generator verbs (repo gen-orm / update-orm / gen-dataservice).</summary>
@@ -48,6 +49,9 @@ type
     Apply: Boolean;
     /// <summary>True copies an existing file to &lt;file&gt;.BCK&lt;n&gt; before it is written.</summary>
     Backup: Boolean;
+    /// <summary>Region 9 parameter binding form (--save-form legacy|current); update-orm and
+    /// gen-dataservice. Default osfLegacy.</summary>
+    SaveForm: TOrmSaveForm;
   end;
 
 /// <summary>Runs one generator verb: plans, then prints the dry-run diff (default) or writes
@@ -189,7 +193,7 @@ begin
 end;
 
 function PlanGenDataService(pRepo: TFDConnection; const pServerDir, pClientDir: string;
-  const pTables: TArray<string>): TArray<TOrmFileChange>;
+  const pTables: TArray<string>; pSaveForm: TOrmSaveForm): TArray<TOrmFileChange>;
 var
   Gen: TOrmGenerator;
   L: TList<TOrmFileChange>;
@@ -199,6 +203,7 @@ var
 begin
   L:= TList<TOrmFileChange>.Create;
   Gen:= TOrmGenerator.Create(pRepo);
+  Gen.SaveForm:= pSaveForm;
   PasText:= TStringList.Create;
   DIText:= TStringList.Create;
   DIText2:= TStringList.Create;
@@ -260,14 +265,14 @@ begin
       begin
         if not RequireDir(pOptions.CodeDir, '--code-dir', pOptions.Sub, pOut) then
           Exit;
-        pPlan:= PlanUpdateOrm(pConn, pOptions.CodeDir, pOptions.ServerDir, pOptions.ClientDir, pTables, pSkipped);
+        pPlan:= PlanUpdateOrm(pConn, pOptions.CodeDir, pOptions.ServerDir, pOptions.ClientDir, pTables, pSkipped, pOptions.SaveForm);
       end;
     SUB_GEN_DATASERVICE:
       begin
         if not (RequireDir(pOptions.ServerDir, '--server-dir', pOptions.Sub, pOut) and
           RequireDir(pOptions.ClientDir, '--client-dir', pOptions.Sub, pOut)) then
           Exit;
-        pPlan:= PlanGenDataService(pConn, pOptions.ServerDir, pOptions.ClientDir, pTables);
+        pPlan:= PlanGenDataService(pConn, pOptions.ServerDir, pOptions.ClientDir, pTables, pOptions.SaveForm);
       end;
   else
     pOut.Add(Format('repo %s: unknown generator sub-verb', [pOptions.Sub]));
