@@ -19309,7 +19309,7 @@ begin
                 [FScopeTypesBefore.Count, FScopeTypesAfter.Count]));
 end;
 
-procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);  // dl:ok method-too-long@da57, cyclomatic-complexity@4368, cognitive-complexity@ae53 -- REVIEWED 2026-11-16 (1.51.1 INC2 added the ref_host_bindings deletes and one write call): one transaction over one resolver with shared maps; a split is its own change with its own re-resolve measurement, and lane facts (1.44) added only two calls, three counters and two log lines here
+procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);  // dl:ok method-too-long@a1a9, cyclomatic-complexity@b54e, cognitive-complexity@fbce -- (1.51.1 INC2 added the ref_host_bindings deletes and one write call): one transaction over one resolver with shared maps; a split is its own change with its own re-resolve measurement, and lane facts (1.44) added only two calls, three counters and two log lines here (REVIEWED 2026-11-18 INT13: +1.52 EXTGAPS2 exports ref kind / var-out global writes -> 816 lines, cc 71, cog 117; still the one-transaction resolver; the split is backlog, not a sweep fix)
 { v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
   (wipe the table, resolve in memory, batch-write in one transaction). Builds one
   TCallResolver (its name/scope maps cost O(symbols) to build ONCE), then streams

@@ -828,7 +828,7 @@ var
   // (and its freshness checked) the FIRST time a unit reaches that step, then
   // reused: a single --unit run keeps its old order, a batch pays for both and
   // for every class's members once. Returns the unit's exit code (0 / 1 / 2).
-  function RunUnit(const AUnitPas: string): Integer;  // dl:ok too-many-exit-points@ab98, cyclomatic-complexity@4c61, method-too-long@9bf6, cognitive-complexity@fa3c -- (lint sweep b0bad3cf..HEAD): the branch count and length are that same early-outcome chain; splitting it is a convert-apply refactor, not a sweep fix. Each Exit is a distinct per-unit outcome (refusal incl. an unindexed unit (1.33.0), rule errors, freshness, an unexecutable castlib (1.27.0), plan failure, write failure, dry run) moved from DoConvertApply, which carried the same shape; one result per early outcome is the convert-apply contract
+  function RunUnit(const AUnitPas: string): Integer;  // dl:ok too-many-exit-points@ab98, cyclomatic-complexity@eae5, method-too-long@9bf6, cognitive-complexity@4135 -- (lint sweep b0bad3cf..HEAD): the branch count and length are that same early-outcome chain; splitting it is a convert-apply refactor, not a sweep fix. Each Exit is a distinct per-unit outcome (refusal incl. an unindexed unit (1.33.0), rule errors, freshness, an unexecutable castlib (1.27.0), plan failure, write failure, dry run) moved from DoConvertApply, which carried the same shape; one result per early outcome is the convert-apply contract (REVIEWED 2026-11-18 INT13: re-measured after 1.52 GA-1 counts if-expressions; shape and reason unchanged)
   var
     UnitStart: Integer; { Trees.ClassesBuilt when this unit started }
     ValHere  : Integer; { classes this unit's call to the book validation built (0 after the first) }

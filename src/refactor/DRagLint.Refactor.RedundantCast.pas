@@ -799,7 +799,7 @@ begin
   Result:= One <> '';
 end;
 
-procedure TCastPlanner.Decide(pFileId: Int64; const pPath: string; pLine, pCol: Integer; const pName: string;  // dl:ok cyclomatic-complexity@4f22, too-many-exit-points@6420 -- one branch per named refusal, documented on the public function
+procedure TCastPlanner.Decide(pFileId: Int64; const pPath: string; pLine, pCol: Integer; const pName: string;  // dl:ok cyclomatic-complexity@50cc, too-many-exit-points@6420 -- one branch per named refusal, documented on the public function (REVIEWED 2026-11-18 INT13: re-measured after 1.52 GA-1 counts if-expressions; shape and reason unchanged)
   pTypeId, pEnclosing: Int64);
 const
   CTypeKinds: array[0..4] of string = ('class', 'record', 'interface', 'enum', 'type');

@@ -9228,7 +9228,7 @@ end;
 // cast, selector chain, unit-qualified type, local/field/Result, function result, ordinary name, ...) answers
 // and leaves; the body is the old TypeReceiver unchanged, renamed so TypeReceiver can apply the implicit
 // dereference once. One exit would thread a found flag through a dozen rungs whose order IS the contract.
-function TCallResolver.TypeReceiverCore(const ACallRef: TReference; const AReceiverExpr: string;  // dl:ok too-many-exit-points@ac4c, cyclomatic-complexity@3d5e, method-too-long@193e, cognitive-complexity@55ae -- the receiver-kind LADDER: one exit per rung, the rung order IS the contract (review history in the comment above)
+function TCallResolver.TypeReceiverCore(const ACallRef: TReference; const AReceiverExpr: string;  // dl:ok too-many-exit-points@fb32, cyclomatic-complexity@eec6, method-too-long@c0e2, cognitive-complexity@5ac6 -- the receiver-kind LADDER: one exit per rung, the rung order IS the contract (review history in the comment above; REVIEWED 2026-11-18 INT13: +1.52 TAILS-ENG2 own-default-indexer rung and GA-1 if-expression counting, still one rung per receiver kind)
   out AText: TRcvTypeText): Int64;
 var
   Encl    : TSymbol;

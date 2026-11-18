@@ -725,7 +725,7 @@ begin
   FRefused.Add(S);
 end;
 
-procedure TNarrowPlanner.Decide(const pR: TRoutineRow; const pParam: TParamRow);  // dl:ok cyclomatic-complexity@1034, too-many-exit-points@0beb -- one branch per named refusal, documented on the public function
+procedure TNarrowPlanner.Decide(const pR: TRoutineRow; const pParam: TParamRow);  // dl:ok cyclomatic-complexity@211a, too-many-exit-points@0beb -- one branch per named refusal, documented on the public function (REVIEWED 2026-11-18 INT13: re-measured after 1.52 GA-1 counts if-expressions; shape and reason unchanged)
 var
   V: TVerdict;
 begin

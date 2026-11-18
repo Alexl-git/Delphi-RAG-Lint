@@ -1860,7 +1860,7 @@ begin
 end;
 
 { spec 4.3: caption evaluation. Never raises; what it cannot see is dynamic. }
-function TWalkCore.CaptionOf(const pNode: TTSNode; const pFrame: TWalkFrame): TMValue;  // dl:ok too-many-exit-points@5a76 -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch
+function TWalkCore.CaptionOf(const pNode: TTSNode; const pFrame: TWalkFrame): TMValue;  // dl:ok too-many-exit-points@e0bb -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch (REVIEWED 2026-11-18 INT13: +1.52 Cmd152 command-table shapes)
 var
   K       : string;
   A, B    : TMValue;
@@ -1989,7 +1989,7 @@ begin
   end;
 end;
 
-function TWalkCore.Eval(const pNode: TTSNode; const pFrame: TWalkFrame): TMValue;  // dl:ok too-many-exit-points@baa6 -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch
+function TWalkCore.Eval(const pNode: TTSNode; const pFrame: TWalkFrame): TMValue;  // dl:ok too-many-exit-points@8ee1 -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch (REVIEWED 2026-11-18 INT13: +1.52 Cmd152 command-table shapes)
 var
   K   : string;
   L   : TTSNode;
@@ -2988,7 +2988,7 @@ begin
   end;
 end;
 
-procedure TWalkCore.WalkStmt(const pNode: TTSNode; const pFrame: TWalkFrame);  // dl:ok too-many-exit-points@cbf0, cyclomatic-complexity@33cb -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch
+procedure TWalkCore.WalkStmt(const pNode: TTSNode; const pFrame: TWalkFrame);  // dl:ok too-many-exit-points@a688, cyclomatic-complexity@d341 -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch (REVIEWED 2026-11-18 INT13: +1.52 Cmd152 command-table walk)
 var
   K       : string;
   I       : Integer;

@@ -326,7 +326,7 @@ begin
   if Result then FState:= dsStart;
 end;
 
-procedure TPPDeclScanner.HandleDecl(const AText, L: string; AIsIdent, AEscaped: Boolean); // dl:ok cognitive-complexity@56ea, cyclomatic-complexity@b95e -- REVIEWED 2026-11-05 cognitive 72: the declaration state machine, one case arm per state (EXT-E4 added the typed-const flag)
+procedure TPPDeclScanner.HandleDecl(const AText, L: string; AIsIdent, AEscaped: Boolean); // dl:ok cognitive-complexity@5e1e, cyclomatic-complexity@b66e -- cognitive 75 (72 before GA-1): the declaration state machine, one case arm per state (EXT-E4 added the typed-const flag) (REVIEWED 2026-11-18 INT13: re-measured after 1.52 GA-1 counts if-expressions; shape and reason unchanged)
 var
   Kw: Boolean;
 begin
@@ -464,7 +464,7 @@ begin
   end;
 end;
 
-procedure TPPDeclScanner.Token(const AText: string; AIsIdent, AEscaped: Boolean); // dl:ok cyclomatic-complexity@80cd -- REVIEWED 2026-10-28 token dispatch in precedence order (const value, parens, blocks, sections)
+procedure TPPDeclScanner.Token(const AText: string; AIsIdent, AEscaped: Boolean); // dl:ok cyclomatic-complexity@ca2d -- token dispatch in precedence order (const value, parens, blocks, sections) (REVIEWED 2026-11-18 INT13: re-measured after 1.52 GA-1 counts if-expressions; shape and reason unchanged)
 var
   L: string;
 begin

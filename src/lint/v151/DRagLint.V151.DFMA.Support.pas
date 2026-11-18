@@ -739,7 +739,7 @@ const
   { First byte of a resource-wrapped binary form file. }
   RES_HEADER_FIRST_BYTE = $FF;
 
-function LoadDfm(const APath: string): TDfmDoc;  // dl:ok deep-nesting@90b5, cyclomatic-complexity@ced4, cognitive-complexity@6926 -- REVIEWED 2026-11-14 v151 DFM-A: single-pass scanner / node-kind walker; a split would thread its state through every helper
+function LoadDfm(const APath: string): TDfmDoc;  // dl:ok cyclomatic-complexity@1844, cognitive-complexity@8174 -- v151 DFM-A: single-pass scanner / node-kind walker; a split would thread its state through every helper (REVIEWED 2026-11-18 INT13: re-measured after 1.52 GA-1 counts if-expressions; shape and reason unchanged)
 var
   Raw    : TBytes;
   Lines  : TArray<string>;

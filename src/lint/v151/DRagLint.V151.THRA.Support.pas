@@ -1111,7 +1111,7 @@ end;
 
 { Rule: thread-loop-without-terminated ------------------------------------- }
 
-procedure ThrCheckLoopWithoutTerminated(const AScan: TThrScan; const APath: string; const AOut: TList<TLintFinding>);  // dl:ok deep-nesting@a746, cognitive-complexity@eb8b -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
+procedure ThrCheckLoopWithoutTerminated(const AScan: TThrScan; const APath: string; const AOut: TList<TLintFinding>);  // dl:ok deep-nesting@5172, cognitive-complexity@eb8b -- v151 THR-A: single-pass token scanner; the branches are the grammar of the construct (REVIEWED 2026-11-18 INT13: nesting re-measured 6, same scanner shape)
 
   function StmtEnd(AFrom, ALimit: Integer): Integer;
   var
