@@ -1,25 +1,25 @@
 ---
 id: v152-index-possibly-out-of-range
 title: Array index possibly out of range lint rule (index-possibly-out-of-range)
-summary: Warns (OFF in 1.52) on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only
+summary: Warns on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only
 product: DL
 group: linting
 order: 30069
 since: 1.52.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Array index possibly out of range lint rule (index-possibly-out-of-range)
 
-Warns (OFF in 1.52) on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only.
+Warns on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only.
 
 Read this to see when index-possibly-out-of-range warns, how it treats another collection's bound and index parameters, and how its manual-only autofix inserts an InRange check.
 
 ## How to run it
 
 ```text
-drag-lint lint <file.pas> [--rule index-possibly-out-of-range] [--fix --fix-rule index-possibly-out-of-range [--apply]] (default OFF in 1.52, category bug-patterns, warning; hint on an unguarded parameter or a lookup-derived index; param exception_class; the autofix is manual only: a batch --fix withholds it, --fix-rule applies it; rules --json carries fix_manual_only: true)
+drag-lint lint <file.pas> [--rule index-possibly-out-of-range] [--fix --fix-rule index-possibly-out-of-range [--apply]] (default ON, category bug-patterns, warning; hint on an unguarded parameter or a lookup-derived index; param exception_class; the autofix is manual only: a batch --fix withholds it, --fix-rule applies it; rules --json carries fix_manual_only: true)
 ```
 
 Full flag list: [lint in the CLI reference](../cli.md#lint).
@@ -45,7 +45,7 @@ subrange-typed index does not help either -- it only moves the range error to th
 This rule warns where an array index can leave the array's bounds BEFORE the runtime check
 fires, and points at the line that made it so: the write of the index, not the access.
 
-Default **OFF** in 1.52 (the owner ruled ON; the false-positive gate measured 6 FP in 12 samples, so it ships OFF until the follow-up fixes those classes -- enable it with `--rule index-possibly-out-of-range` or `"enabled": ["index-possibly-out-of-range"]` in the config), category `bug-patterns`, severity `warning` (`hint` for an unguarded
+Default **ON** (owner ruling C3; the false-positive gate measured 6 FP in 12 samples and lane BK-RULEFP fixed those six classes before 1.52 shipped), category `bug-patterns`, severity `warning` (`hint` for an unguarded
 parameter). Disable it with `"disabled": ["index-possibly-out-of-range"]` in the lint config; run only it with
 `drag-lint lint <file> --rule index-possibly-out-of-range`.
 

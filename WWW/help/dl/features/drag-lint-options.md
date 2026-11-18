@@ -7,7 +7,7 @@ group: editor-integration
 order: 110004
 since: 0.95.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # drag-lint Options
@@ -40,7 +40,7 @@ The equivalent standalone command, with the same catalog:
 drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]
 ```
 As loaded by this dialog, the catalog has 435 rules, 131 of them fixable,
-354 on by default, across 18 categories.
+355 on by default, across 18 categories.
 
 ### What it needs
 Not documented as needing an index -- the feature map marks this row's

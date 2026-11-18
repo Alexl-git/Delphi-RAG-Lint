@@ -23,7 +23,8 @@ resolver 1.28.0 -> 1.29.0-alpha.
   `form-object-without-field` (hint), `doc-placeholder` (hint), `parameter-type-too-wide` (warning, fixable),
   `unconnected-control` (warning), `hanging-handler` (warning), `unit-used-by-no-unit` (warning),
   `reserved-word-identifier` (warning), `review-marker-remeasured` (hint). OFF by default: `doc-malformed-summary`,
-  `member-could-be-private` (new; OFF until a shared-unit FP is fixed), `index-possibly-out-of-range` (FP gate 6/12).
+  `member-could-be-private` (new; OFF until a shared-unit FP is fixed). ON as well:
+  `index-possibly-out-of-range` (warning; BK-RULEFP fixed the FP classes of the 6/12 gate, sample 27 -> 16).
   `missing-doc` now also reports DFM-bound handlers that have code (reverses the 1.51.1 skip; CLIENT +934). A shipped
   exempt-class list `rules\form-object-without-field.exempt.txt` plus `form_object_without_field.exempt_classes` /
   `use_default_list` in the lint config.
@@ -107,7 +108,7 @@ resolver 1.28.0 -> 1.29.0-alpha.
   `symbols.inc_variant` / `refs.inc_variant`); filled by the 1.52 re-parse.
 
 ### New rules
-- `index-possibly-out-of-range` (bug-patterns, default OFF in 1.52 -- the FP gate measured 6/12 -- lanes IDXRANGE + IDXRANGE2): an array index that
+- `index-possibly-out-of-range` (bug-patterns, default ON -- the six false-positive classes of the 6/12 FP gate fixed in lane BK-RULEFP: a guard kept across Inc, a parameter bound every local caller proves, `in` set clamps, a Length raise guard with a loop limit from an if-expression or another unit's const array, a dominating SetLength, for-in / non-constant-start count invariants -- lanes IDXRANGE + IDXRANGE2 + BK-RULEFP): an array index that
   no dominating guard (for over the bounds, if / while condition, `InRange`, an earlier
   Exit / raise guard) bounds on BOTH sides before `A[idx]` -- reported on the write of the index
   (warning; an unguarded parameter is a hint on the access). A subrange type is not a guard.
@@ -127,7 +128,7 @@ resolver 1.28.0 -> 1.29.0-alpha.
   `--project`; `review-marker-remeasured` (MARK, hint); `parameter-type-too-wide` is ON and fixable (PTW);
   `rtti-unavailable` sub-kind `anonymous-field-type` (RTTI5, OFF); `doc-placeholder` ON and `doc-malformed-summary`
   OFF (DOCPOL).
-- 435 rules, 354 enabled by default, 131 with an auto-fix.
+- 435 rules, 355 enabled by default, 131 with an auto-fix.
 
 ### Added
 - `check-init` (HBSKEL, HBEVENTS, HBINTRA, HBROOTS, HBSOLVER, HBFIELDS, HBTAIL, HBRECV, HBEVORD, HBDOCS, HBMCP, HBIDE,

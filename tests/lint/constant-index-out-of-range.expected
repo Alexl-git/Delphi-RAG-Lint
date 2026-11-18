@@ -25,4 +25,5 @@ constant-index-out-of-range 99
 !constant-index-out-of-range 100
 constant-index-out-of-range 101
 !constant-index-out-of-range 102
-!constant-index-out-of-range 109
+# 1.52 BK-RULEFP: a routine-local const shadows the file-level one (local WideLast = 9 vs array[0..3] -- dcc E1012), so 109 is a true hit
+constant-index-out-of-range 109

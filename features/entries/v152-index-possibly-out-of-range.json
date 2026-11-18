@@ -5,14 +5,14 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.52.0-alpha",
-  "summary": "Warns (OFF in 1.52) on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only",
+  "summary": "Warns on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only",
   "intro": "Read this to see when index-possibly-out-of-range warns, how it treats another collection's bound and index parameters, and how its manual-only autofix inserts an InRange check.",
   "wikiPage": "index-possibly-out-of-range",
   "surfaces": [
     {
       "type": "cli",
       "verb": "lint",
-      "usage": "drag-lint lint <file.pas> [--rule index-possibly-out-of-range] [--fix --fix-rule index-possibly-out-of-range [--apply]] (default OFF in 1.52, category bug-patterns, warning; hint on an unguarded parameter or a lookup-derived index; param exception_class; the autofix is manual only: a batch --fix withholds it, --fix-rule applies it; rules --json carries fix_manual_only: true)",
+      "usage": "drag-lint lint <file.pas> [--rule index-possibly-out-of-range] [--fix --fix-rule index-possibly-out-of-range [--apply]] (default ON, category bug-patterns, warning; hint on an unguarded parameter or a lookup-derived index; param exception_class; the autofix is manual only: a batch --fix withholds it, --fix-rule applies it; rules --json carries fix_manual_only: true)",
       "flags": [
         {
           "name": "--rule",

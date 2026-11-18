@@ -1241,4 +1241,6 @@
 #   Superseded: 1.41.0-alpha|26ea9f66463511be4f6e6c1dccad12f9a8d108b838918499c5cdf656792ed361
 #   2026-11-18 v152 BUDGET hash-only re-pin (rides the one 1.52 bump 464d590a8): Core.Indexer gains one Writeln (near-parse-limit WARN) and one uses entry; extraction unchanged.
 #   Superseded: 1.41.0-alpha|7bc94a5d4f7222070abe38416c41f74acc22f98fd2490bd2d96bb6c5dad96ab1
-1.41.0-alpha|08d85198df87a40e6e16fcf8e656f18f17586813d7ea363b5058b502b323ce33
+#   2026-11-18 v152 INT9 hash-only re-pin after BK-RULEFP (rides the one 1.52 bump 464d590a8): B02 Analysis.Flow.Lattices fix used by the lint flow analysis; extraction unchanged.
+#   Superseded: 1.41.0-alpha|08d85198df87a40e6e16fcf8e656f18f17586813d7ea363b5058b502b323ce33
+1.41.0-alpha|75c670954f474a21a2ab886ee9d0f7b5d0082598d02be0a04a7b724eee165d4f
