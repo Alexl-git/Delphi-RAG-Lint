@@ -1743,6 +1743,10 @@ const
   /// <summary>dst_kind: a field of the owning class or an ancestor (dst_name = field name as written); position = the write site.</summary>
   DF_DST_FIELD    = 'field';
   /// <summary>dst_kind: a unit-level variable (dst_name = its name as written); position = the write site.</summary>
+  /// <remarks>1.52 EXTGAPS2 (HB3): the calls pass also writes one for a unit variable passed as the whole
+  /// argument of a var / out parameter of a resolved project routine: src_kind DF_SRC_ARGOUT (src_index =
+  /// the argument, src_line / src_col = the call ref, src_name = the callee), position = the argument's read
+  /// ref, dst_index = the argument position (the extractor's own 'global' rows keep -1).</remarks>
   DF_DST_GLOBAL   = 'global';
   /// <summary>dst_kind: a var/out parameter of THIS routine, dst_index = its 0-based declared position (Self excluded).</summary>
   DF_DST_OUTPARAM = 'outparam';
@@ -1794,7 +1798,8 @@ type
     DstLine    : Integer;
     /// <summary>Column companion of DstLine (same base as refs.start_col).</summary>
     DstCol     : Integer;
-    /// <summary>'arg': 0-based argument position; 'outparam': 0-based declared parameter position; else -1.</summary>
+    /// <summary>'arg': 0-based argument position; 'outparam': 0-based declared parameter position; a 'global'
+    /// row the calls pass derived from a var / out argument: that argument's position; else -1.</summary>
     DstIndex   : Integer;
     /// <summary>Callee / member / field / global leaf name as written; '' for 'result' and 'outparam' (the
     /// parameter name for 'outparam').</summary>
@@ -3034,6 +3039,17 @@ const
   /// <remarks>Binds refs.symbol_id or refs.external_target only, like REF_KIND_PROP_SPEC.
   /// Emitted only by a deep (usage-ref) parse.</remarks>
   REF_KIND_REC_FIELD = 'record-field';
+  /// <summary>1.52 EXTGAPS2 (HB6): one entry of an `exports` clause (`exports Foo, U.Bar name 'b';`): the
+  /// routine is named, not called. name_text = the routine's last name segment, receiver_text = its
+  /// qualifier ('' when bare).</summary>
+  /// <remarks>The resolver binds refs.symbol_id like a bare call (ValueOnly): NO call_edges row, so
+  /// find-callers --resolved, the call graph and call-path do not list an exports entry as a caller, and
+  /// the unresolved-call complement (CallSiteRefKindSql) never counts one. Kind-blind readers (usages,
+  /// rename, the unused-symbol rules, find-deadcode) still see the bound ref, so an exported routine is
+  /// never dead; check-init roots read it as the 'exported' escape class. Was REF_KIND_CALL with a
+  /// certain call edge (150 X1) until 1.52. Emitted only by a deep (usage-ref) parse. Pinned by
+  /// tests\autotest\run_exports_clause_refs.ps1 and run_extgaps2_extraction.ps1.</remarks>
+  REF_KIND_EXPORT = 'export';
   /// <summary>E-RENAME-RESIDUE (1.52, lane RENFACT): one subscript `X[...]`, name_text REF_NAME_INDEX_ACCESS,
   /// receiver_text = the subscripted expression (`Bag`, `Shelf.Bag`, `Rack[0]`), span = the bracket group.</summary>
   /// <remarks>The resolver binds it to the DEFAULT array property the subscript reaches -- `Bag[0]` is

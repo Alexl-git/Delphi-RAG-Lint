@@ -622,6 +622,7 @@ implementation
 
 uses
   FireDAC.Comp.Client    { TFDQuery -- the store oracle reads ref_types }
+  , DRagLint.Core.Encoding { 1.52 EXTGAPS2: Utf8ByteColToCharCol -- the oracle is keyed by index CHARACTER columns }
   , DRagLint.Storage.SQLite { TSQLiteSymbolStore -- the connection behind ISymbolStore }
   , DRagLint.Lint.RefTypeRules { TExprTypeReader -- ancestry for the class oracle }
   , System.Diagnostics       { TStopwatch -- the per-rule .scm timing below }
@@ -1704,7 +1705,7 @@ begin
   Id:= ARecv;
   if Id.NodeType = 'exprDot' then Id:= Id.ChildByField('rhs');
   if Id.IsNull or (Id.NodeType <> 'identifier') then Exit;
-  if not AOracle.TypeAt(Integer(Id.StartPoint.Row) + 1, Integer(Id.StartPoint.Column) + 1, NodeText(Id, ASource), Leaf, Via) then Exit;
+  if not AOracle.TypeAt(Integer(Id.StartPoint.Row) + 1, Utf8ByteColToCharCol(ASource, Id.StartByte, Id.StartPoint.Column) + 1, NodeText(Id, ASource), Leaf, Via) then Exit;
   P:= Pos('<', Leaf);
   if P > 0 then Leaf:= Copy(Leaf, 1, P - 1);
   for Root in ARoots do
@@ -1959,7 +1960,7 @@ begin
   { O2: nothing typed in the declared scopes (a field, a global of another unit, an inline var):
     ask the oracle by the capture's position. No oracle = False, as before. }
   if ACache.Oracle = nil then Exit;
-  if not ACache.Oracle.TypeAt(Integer(ANode.StartPoint.Row) + 1, Integer(ANode.StartPoint.Column) + 1, Name, Ty, Via) then Exit;
+  if not ACache.Oracle.TypeAt(Integer(ANode.StartPoint.Row) + 1, Utf8ByteColToCharCol(ASource, ANode.StartByte, ANode.StartPoint.Column) + 1, Name, Ty, Via) then Exit;
   try
     Result:= TRegEx.IsMatch(Ty, ATypeRx, [roIgnoreCase]);
   except  { same as above: a malformed rule regex answers no match }
@@ -2038,7 +2039,7 @@ begin
   Node:= ResolveCaptureNode(AMatch, AArgs[CAP_ARG].CaptureIndex);
   if (ACache.Oracle <> nil) and (not Node.IsNull) and (Node.NodeType = 'identifier') then
   try
-    Hit:= ACache.Oracle.TypeAt(Integer(Node.StartPoint.Row) + 1, Integer(Node.StartPoint.Column) + 1,
+    Hit:= ACache.Oracle.TypeAt(Integer(Node.StartPoint.Row) + 1, Utf8ByteColToCharCol(ASource, Node.StartByte, Node.StartPoint.Column) + 1,
       NodeText(Node, ASource), Leaf, Via) and TRegEx.IsMatch(Via, AArgs[RX_ARG].StringValue);
   except { a malformed rule regex answers no match, never aborts the scan }
     on ERegularExpressionError do Hit:= False;
@@ -2111,7 +2112,7 @@ begin
     Cur:= Cur.Parent;
   end;
   if (Ty = '') and (ACache.Oracle <> nil)
-     and not ACache.Oracle.TypeAt(Integer(Node.StartPoint.Row) + 1, Integer(Node.StartPoint.Column) + 1, Name, Ty, Via) then Ty:= '';
+     and not ACache.Oracle.TypeAt(Integer(Node.StartPoint.Row) + 1, Utf8ByteColToCharCol(ASource, Node.StartByte, Node.StartPoint.Column) + 1, Name, Ty, Via) then Ty:= '';
   if Ty = '' then Exit;
   if ContainsText(Ty, 'class of') then Exit(False);
   var Leaf: string:= Ty.Substring(Ty.LastIndexOf('.') + 1);

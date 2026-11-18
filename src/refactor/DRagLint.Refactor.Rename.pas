@@ -613,8 +613,9 @@ begin
   Result:= Length(TEncoding.UTF8.GetString(Bytes, 0, AByteCol - 1)) + 1;
 end;
 
-// Every edit of AList carries an index (byte) column: rewrite
-// it as a character column of its decoded line (W5-D).
+// Every edit of AList carries an index column: rewrite a .dfm one (the DFM parser stores UTF-8 BYTE columns)
+// as a character column of its decoded line (W5-D). A .pas edit is left alone: since 1.52 EXTGAPS2 the
+// Delphi extractor stores CHARACTER columns, and converting one again would move it left.
 procedure IndexColsToCharCols(AList: TList<TRenameEdit>; ACache: TObjectDictionary<string, TStringList>);
 var
   Lines: TStringList;
@@ -623,6 +624,7 @@ begin
   for var I: Integer:= 0 to AList.Count - 1 do
   begin
     Edit:= AList[I];
+    if not SameText(ExtractFileExt(Edit.FilePath), '.dfm') then Continue;
     Lines:= DecodedLines(ACache, Edit.FilePath);
     if (Edit.Line < 1) or (Edit.Line > Lines.Count) then Continue;
     Edit.Col:= ByteColToCharCol(Lines[Edit.Line - 1], Edit.Col);
@@ -879,7 +881,7 @@ begin
       Edit.NewName:= ANewName;
       List.Add(Edit);
     end;
-    // Index columns are UTF-8 byte columns; every edit leaves Build with a
+    // .dfm index columns are UTF-8 byte columns (.pas ones are characters); every edit leaves Build with a
     // CHARACTER column of the decoded file (W5-D). The impl-header edit below
     // is computed on the decoded text, so it is added after this pass.
     IndexColsToCharCols(List, Cache);

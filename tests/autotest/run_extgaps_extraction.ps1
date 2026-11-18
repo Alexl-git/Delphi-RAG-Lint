@@ -53,8 +53,10 @@ Check 'G1 control: the unqualified write inside TEvgCfg.Init stays bound' ($c -m
 # G2 -- .dpr main block data_flows
 $d = Sql $a "select d.dst_kind, d.dst_name, d.src_name, s.kind from data_flows d join files f on f.id=d.file_id join symbols s on s.id=d.symbol_id where f.path like '%evArgs.dpr'"
 Check 'G2 evArgs.dpr main block has an arg row Fill <- GDpr under the program symbol' ($d -match 'arg\s+Fill\s+GDpr\s+program') $d
-$n = Sql $a "select count(*) from data_flows d join files f on f.id=d.file_id where f.path like '%evaData.pas'"
-Check 'G2 control: evaData.pas routine rows unchanged (7)' ($n -match '(?m)^\s*7\s*$') $n
+# 1.52 EXTGAPS2: the calls pass adds 'global' <- 'argout' rows (dst_index >= 0) for globals passed to var / out
+# parameters (4 in evaData.pas, pinned by run_extgaps2_extraction.ps1); the extractor's own rows stay 7.
+$n = Sql $a "select count(*) from data_flows d join files f on f.id=d.file_id where f.path like '%evaData.pas' and not (d.dst_kind='global' and d.src_kind='argout' and d.dst_index >= 0)"
+Check 'G2 control: evaData.pas extractor rows unchanged (7)' ($n -match '(?m)^\s*7\s*$') $n
 
 # G4 -- every DFM binding of a shared handler
 $e = Sql $g "select sf.dfm_event from symbol_facts sf join symbols s on s.id=sf.symbol_id where s.name='btnGoClick' and s.kind='method' and sf.dfm_event is not null and sf.dfm_event <> ''"

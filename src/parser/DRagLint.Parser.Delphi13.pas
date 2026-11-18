@@ -133,6 +133,21 @@ function ScanScopedEnumSwitches(const ASource: TBytes): TArray<TScopedEnumSwitch
 
 implementation
 
+uses
+  DRagLint.Core.Encoding; { 1.52 EXTGAPS2: Utf8ByteColToCharCol -- index columns are character columns }
+
+{ 1.52 EXTGAPS2: the 1-based CHARACTER column of ANode's start / end. tree-sitter reports byte columns, so
+  every non-ASCII character earlier on the line moved each column the index stored. }
+function NodeStartCharCol(const ANode: TTSNode; const ASource: TBytes): Integer;
+begin
+  Result:= Utf8ByteColToCharCol(ASource, ANode.StartByte, ANode.StartPoint.column) + 1;
+end;
+
+function NodeEndCharCol(const ANode: TTSNode; const ASource: TBytes): Integer;
+begin
+  Result:= Utf8ByteColToCharCol(ASource, ANode.EndByte, ANode.EndPoint.column) + 1;
+end;
+
 function NodeText(const ANode: TTSNode; const ASource: TBytes): string;
 var
   StartIdx: Integer;
@@ -439,9 +454,9 @@ begin
   U.Section := ASection;
   U.InPath  := AInPath;
   U.StartLine:= Integer(ARangeNode.StartPoint.row   ) + 1;
-  U.StartCol := Integer(ARangeNode.StartPoint.column) + 1;
+  U.StartCol := NodeStartCharCol(ARangeNode, Source);
   U.EndLine  := Integer(ARangeNode.EndPoint  .row   ) + 1;
-  U.EndCol   := Integer(ARangeNode.EndPoint  .column) + 1;
+  U.EndCol   := NodeEndCharCol(ARangeNode, Source);
   UsesEntries.Add(U);
   { Suppress hint: Stem reserved for a future normalize-here path. }
   Stem:= AUnitName;
@@ -460,9 +475,9 @@ begin
   Ref.ReceiverText:= AReceiver;
   Ref.SymbolId:= 0; // unresolved at parse time
   Ref.StartLine:= Integer(ARangeNode.StartPoint.row   ) + 1;
-  Ref.StartCol := Integer(ARangeNode.StartPoint.column) + 1;
+  Ref.StartCol := NodeStartCharCol(ARangeNode, Source);
   Ref.EndLine  := Integer(ARangeNode.EndPoint  .row   ) + 1;
-  Ref.EndCol   := Integer(ARangeNode.EndPoint  .column) + 1;
+  Ref.EndCol   := NodeEndCharCol(ARangeNode, Source);
   References.Add(Ref);
 end;
 
@@ -491,9 +506,9 @@ begin
   if not ARangeNode.IsNull then
   begin
     Sym.StartLine:= Integer(ARangeNode.StartPoint.row   ) + 1;
-    Sym.StartCol := Integer(ARangeNode.StartPoint.column) + 1;
+    Sym.StartCol := NodeStartCharCol(ARangeNode, Source);
     Sym.EndLine  := Integer(ARangeNode.EndPoint  .row   ) + 1;
-    Sym.EndCol   := Integer(ARangeNode.EndPoint  .column) + 1;
+    Sym.EndCol   := NodeEndCharCol(ARangeNode, Source);
   end;
   Symbols.Add(Sym);
   Result:= Symbols.Count - 1;
@@ -787,7 +802,7 @@ begin
   AState.EmitRef(REF_KIND_INDEX_ACCESS, REF_NAME_INDEX_ACCESS, ASub, Rcv);
   var R: TReference:= AState.References.Last;
   R.StartLine:= Integer(Args.StartPoint.row   ) + 1;
-  R.StartCol := Integer(Args.StartPoint.column) + 1;
+  R.StartCol := NodeStartCharCol(Args, AState.Source);
   AState.References[AState.References.Count - 1]:= R;
 end;
 
@@ -884,7 +899,7 @@ var
   procedure Retag(const AIdent: TTSNode; const AKind, AReceiver: string);
   begin
     var Line:= Integer(AIdent.StartPoint.row) + 1;
-    var Col := Integer(AIdent.StartPoint.column) + 1;
+    var Col := NodeStartCharCol(AIdent, AState.Source);
     for var i:= AMark to AState.References.Count - 1 do
     begin
       var R:= AState.References[i];
@@ -3540,9 +3555,9 @@ begin
       row.ImplName     := Binding.ImplName;
       row.Lifetime     := Binding.Lifetime;
       row.StartLine:= Integer(AExpr.StartPoint.row   ) + 1;
-      row.StartCol := Integer(AExpr.StartPoint.column) + 1;
+      row.StartCol := NodeStartCharCol(AExpr, AState.Source);
       row.EndLine  := Integer(AExpr.EndPoint  .row   ) + 1;
-      row.EndCol   := Integer(AExpr.EndPoint  .column) + 1;
+      row.EndCol   := NodeEndCharCol(AExpr, AState.Source);
       AState.DiBindings.Add(row);
     end;
     dioResolve   : AState.EmitRef('di-resolve', ResIntf, AExpr)       ;
@@ -3628,20 +3643,21 @@ begin
 
   // 150 X1: each entry of an `exports` clause (`exports Foo, Bar name 'x', U.Baz index 2;`,
   // legal in a library .dpr and in a unit) is a reference to the exported routine: emit it
-  // as a 'call' ref so the resolver binds it, find-callers lists it and the unused rules stop
-  // calling an exported routine dead. Before, the clause emitted NO ref at all (T2 FOUND).
+  // so the resolver binds it and the unused rules stop calling an exported routine dead. Before,
+  // the clause emitted NO ref at all (T2 FOUND). 1.52 EXTGAPS2 (HB6): kind REF_KIND_EXPORT, not
+  // 'call' -- an export names the routine, it does not call it, so it gets no call edge.
   // A dotted entry names the routine by its LAST segment, receiver = the qualifier (the same
   // shape as a qualified call). Recursion below still walks the name/index expressions.
   if NodeType = 'declExport' then
   begin
     var ExpName:= ANode.NamedChild(0);
     if (not ExpName.IsNull) and (ExpName.NodeType = 'identifier') then
-      AState.EmitRef(REF_KIND_CALL, NodeText(ExpName, AState.Source), ExpName)
+      AState.EmitRef(REF_KIND_EXPORT, NodeText(ExpName, AState.Source), ExpName)
     else if (not ExpName.IsNull) and (ExpName.NodeType = 'genericDot') and (ExpName.NamedChildCount >= 2) then
     begin
       var ExpLeaf:= ExpName.NamedChild(ExpName.NamedChildCount - 1);
       if ExpLeaf.NodeType = 'identifier' then
-        AState.EmitRef(REF_KIND_CALL, NodeText(ExpLeaf, AState.Source), ExpLeaf,
+        AState.EmitRef(REF_KIND_EXPORT, NodeText(ExpLeaf, AState.Source), ExpLeaf,
           NodeText(ExpName.NamedChild(0), AState.Source));
     end;
   end;
@@ -3701,7 +3717,7 @@ begin
     begin
       var OwnerSym:= AState.Symbols[OrphanOwner];
       OwnerSym.EndLine:= Integer(ANode.EndPoint.row   ) + 1;
-      OwnerSym.EndCol := Integer(ANode.EndPoint.column) + 1;
+      OwnerSym.EndCol := NodeEndCharCol(ANode, AState.Source);
       AState.Symbols[OrphanOwner]:= OwnerSym;
       var OrphanOldVis:= AState.CurrentVisibility;
       var OrphanOldVisExp:= AState.CurrentVisExplicit;
@@ -3823,7 +3839,7 @@ begin
       begin
         var FSym:= AState.Symbols[FIdx];
         FSym.StartLine:= Integer(FNameNode.StartPoint.row   ) + 1;
-        FSym.StartCol := Integer(FNameNode.StartPoint.column) + 1;
+        FSym.StartCol := NodeStartCharCol(FNameNode, AState.Source);
         AState.Symbols[FIdx]:= FSym;
       end;
       FFirst:= False;
@@ -4716,8 +4732,8 @@ var
         Lit.Id       := 0;
         Lit.FileId   := 0;
         Lit.SymbolId := 0;
-        P:= N.StartPoint; Lit.StartLine:= Integer(P.Row)+1; Lit.StartCol:= Integer(P.Column)+1;
-        P:= N.EndPoint;   Lit.EndLine  := Integer(P.Row)+1; Lit.EndCol  := Integer(P.Column)+1;
+        P:= N.StartPoint; Lit.StartLine:= Integer(P.Row)+1; Lit.StartCol:= NodeStartCharCol(N, ASource);
+        P:= N.EndPoint;   Lit.EndLine  := Integer(P.Row)+1; Lit.EndCol  := NodeEndCharCol(N, ASource);
         Acc.Add(Lit);
       end;
       { A comment is a leaf (ChildCount=0 for all four forms, probed), so there
@@ -4734,8 +4750,8 @@ var
         Lit.Source:= 'pas';
         Lit.Kind  := ClassifyKind(N, Dec);
         Lit.Text  := Dec;
-        P:= N.StartPoint; Lit.StartLine:= Integer(P.Row)+1; Lit.StartCol:= Integer(P.Column)+1;
-        P:= N.EndPoint;   Lit.EndLine  := Integer(P.Row)+1; Lit.EndCol  := Integer(P.Column)+1;
+        P:= N.StartPoint; Lit.StartLine:= Integer(P.Row)+1; Lit.StartCol:= NodeStartCharCol(N, ASource);
+        P:= N.EndPoint;   Lit.EndLine  := Integer(P.Row)+1; Lit.EndCol  := NodeEndCharCol(N, ASource);
         Acc.Add(Lit);
       end;
     end;

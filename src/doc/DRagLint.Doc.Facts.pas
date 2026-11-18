@@ -1115,6 +1115,7 @@ function SourceFilesRead: TArray<string>;
 implementation
 
 uses
+  DRagLint.Core.Encoding, // 1.52 EXTGAPS2: Utf8ByteColToCharCol -- handler spans meet refs' CHARACTER columns
   System.Diagnostics, // TStopwatch -- DocFactsBuildProfile's per-section counters
   // StripPasCommentsKeepLayout only, for ReadDeclLine -- see its header. A pure
   // leaf despite the unit name (its interface pulls in nothing but System.*), so
@@ -4123,9 +4124,9 @@ var
     if not (SawExcept and HasBody) then Exit;
     if not HandlerSeen then Span.CatchAll:= True; { `except end` swallows everything }
     Span.FromLine:= Integer(Body.StartPoint.Row) + 1;
-    Span.FromCol := Integer(Body.StartPoint.Column) + 1;
+    Span.FromCol := Utf8ByteColToCharCol(Src, Body.StartByte, Body.StartPoint.Column) + 1;
     Span.ToLine  := Integer(Body.EndPoint.Row) + 1;
-    Span.ToCol   := Integer(Body.EndPoint.Column) + 1;
+    Span.ToCol   := Utf8ByteColToCharCol(Src, Body.EndByte, Body.EndPoint.Column) + 1;
     Acc:= Acc + [Span];
   end;
 

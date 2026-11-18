@@ -60,8 +60,30 @@ function EnsureUtf8Bytes(const ABytes: TBytes): TBytes;
 /// </remarks>
 function IsValidUtf8(const ABytes: TBytes): Boolean;
 
-implementation
+/// <summary>The 0-based CHARACTER column of a position in a UTF-8 buffer: the number of UTF-16 code units
+/// (the unit a Delphi string indexes) from the start of the line up to the position.</summary>
+/// <param name="ASource">The UTF-8 bytes the parser parsed (EnsureUtf8Bytes' result).</param>
+/// <param name="AByteOffset">The position's byte offset in ASource (a tree-sitter node's StartByte / EndByte).</param>
+/// <param name="AByteColumn">The position's byte column in its line (the node's StartPoint / EndPoint column).</param>
+/// <returns>AByteColumn when the line prefix is pure ASCII; fewer when it holds a multi-byte character
+/// (two for a character outside the BMP, which is a surrogate pair in a string); AByteColumn when the
+/// two arguments disagree with ASource (no line start inside the buffer).</returns>
+/// <remarks>1.52 EXTGAPS2: tree-sitter reports BYTE columns, every index column (refs, symbols, uses,
+/// literals, data_flows, with scopes) is a CHARACTER column -- the column a reader of the source line
+/// counts. Pure; thread-safe. Pinned by tests\autotest\run_extgaps2_extraction.ps1.</remarks>
+function Utf8ByteColToCharCol(const ASource: TBytes; AByteOffset, AByteColumn: Cardinal): Integer;
 
+/// <summary>The inverse of Utf8ByteColToCharCol for code that keeps byte offsets: the 1-based BYTE column of
+/// the 1-based CHARACTER column ACharCol on the line that starts at byte ALineStart.</summary>
+/// <param name="ASource">UTF-8 bytes.</param>
+/// <param name="ALineStart">Byte offset of the line's first byte in ASource.</param>
+/// <param name="ACharCol">1-based character (UTF-16 unit) column, an index column.</param>
+/// <returns>ACharCol on a pure-ASCII prefix; larger past a multi-byte character. Past the line end (LF) or the
+/// buffer the remaining columns count one byte each.</returns>
+/// <remarks>1.52 EXTGAPS2. Pure; thread-safe.</remarks>
+function Utf8CharColToByteCol(const ASource: TBytes; ALineStart, ACharCol: Integer): Integer;
+
+implementation
 const
   CP_ANSI_LATIN = 1252; { Windows-1252, the ANSI fallback for bytes that are not valid UTF-8 }
 
@@ -189,6 +211,44 @@ begin
     Enc.Free;  { GetEncoding returns an encoding the caller must free }
   end;
   Result:= TEncoding.UTF8.GetBytes(S);
+end;
+
+function Utf8ByteColToCharCol(const ASource: TBytes; AByteOffset, AByteColumn: Cardinal): Integer;
+const
+  UTF8_CONT_FIRST = $80; { 10xxxxxx: a continuation byte, no character of its own }
+  UTF8_LEAD2_FIRST = $C0; { 110xxxxx / 1110xxxx: a BMP character, one UTF-16 unit }
+  UTF8_LEAD4_FIRST = $F0; { 11110xxx: outside the BMP, a surrogate pair }
+begin
+  Result:= Integer(AByteColumn);
+  if (AByteColumn = 0) or (AByteColumn > AByteOffset) or (AByteOffset > Cardinal(Length(ASource))) then Exit;
+  Result:= 0;
+  for var I: Integer:= Integer(AByteOffset - AByteColumn) to Integer(AByteOffset) - 1 do
+  begin
+    var B: Byte:= ASource[I];
+    if B < UTF8_CONT_FIRST then Inc(Result)
+    else if B >= UTF8_LEAD4_FIRST then Inc(Result, 2)
+    else if B >= UTF8_LEAD2_FIRST then Inc(Result);
+  end;
+end;
+
+function Utf8CharColToByteCol(const ASource: TBytes; ALineStart, ACharCol: Integer): Integer;
+const
+  LF = 10;
+  UTF8_CONT_FIRST = $80;
+  UTF8_LEAD2_FIRST = $C0;
+  UTF8_LEAD4_FIRST = $F0;
+begin
+  if ALineStart < 0 then Exit(ACharCol);
+  var Units: Integer:= 0;
+  var I: Integer:= ALineStart;
+  while (Units < ACharCol - 1) and (I < Length(ASource)) and (ASource[I] <> LF) do
+  begin
+    var B: Byte:= ASource[I];
+    if B >= UTF8_LEAD4_FIRST then Inc(Units, 2) else Inc(Units);
+    Inc(I);
+    while (I < Length(ASource)) and (ASource[I] >= UTF8_CONT_FIRST) and (ASource[I] < UTF8_LEAD2_FIRST) do Inc(I);
+  end;
+  Result:= I - ALineStart + 1 + (ACharCol - 1 - Units);
 end;
 
 end.
