@@ -4,7 +4,12 @@ unit DRagLint.V152.PTW;
   Scaffold created EMPTY by lane FRAME; lane PTW owns this unit, its
   DRagLint.V152.PTW.Support helpers and DRagLint.Fix.V152.PTW. Called only by
   DRagLint.V151.Dispatch (the ONE provider mechanism; v152 lanes reuse the
-  DRagLint.V151.Api types). How-to: C:\TEMP\claude\lanes\v152\FRAME\HOWTO-RULE-LANE.md. }
+  DRagLint.V151.Api types). How-to: C:\TEMP\claude\lanes\v152\FRAME\HOWTO-RULE-LANE.md.
+  Lane PTW result: the rule needs no hook here. It stays the 1.46 project rule (DRagLint.Lint.ParamTooWide, run by
+  TProjectLintRules over DRagLint.Refactor.NarrowParam's plan, declared in DRagLint.Lint.RuleCatalog); 1.52 flips
+  it ON, anchors the plan to the index's own project (library code skipped) and adds the autofix in
+  DRagLint.Fix.V152.PTW (DRagLint.Refactor.NarrowParam.BuildNarrowEdits). These hooks stay empty on purpose: a
+  second emitter here would report every finding twice. }
 
 interface
 
