@@ -21,6 +21,7 @@ const NOISE = [
   /^sending (request|notification) \S+ failed/i,
   /^shutting down server/i,
   /server process exited with code \d+/i,
+  /stopping server timed out/i,
   /\(code -32099\)/
 ];
 
@@ -55,6 +56,8 @@ function wrapChannel(real, gate) {
   const emit = (line) => {
     if (gate.planned) sawPlanned = true;
     if (gate.planned && isTeardownNoise(line)) { suppressed++; return; }
+    // A clean exit (code 0) is information, never an error, planned or not.
+    if (/server process exited with code 0\b/i.test(String(line))) { real.appendLine('[info] ' + String(line).trim()); return; }
     real.appendLine(line);
   };
   const ch = {
