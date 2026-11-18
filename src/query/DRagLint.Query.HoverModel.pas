@@ -148,10 +148,8 @@ uses
   System.Math                  ,
   System.StrUtils              ,
   System.JSON                  ,
-  System.Rtti                  ,
   System.IOUtils               ,
   System.Generics.Collections  ,
-  FireDAC.Comp.Client          ,
   DRagLint.Query.HappensBefore        ,
   DRagLint.Query.HappensBefore.Types  ,
   DRagLint.Query.HappensBefore.Render ,
@@ -236,21 +234,6 @@ const
   /// <summary>Entries kept before the cache is emptied (a hover session touches far fewer).</summary>
   SETBY_CACHE_CAP = 512;
 
-{ The index file behind a SQLite store. ISymbolStore has no path accessor and the hover callers do
-  not pass one, so it is read from the store's private FireDAC connection (field FConn) through
-  RTTI -- fields carry RTTI at every visibility by default. Any other store (the LSP's in-memory
-  buffer store) answers '', which simply means "no set-by section". }
-function StoreDbPath(const AStore: ISymbolStore): string;
-begin
-  Result:= '';
-  var Obj: TObject:= AStore as TObject;
-  var Ctx: TRttiContext;
-  var Fld: TRttiField:= Ctx.GetType(Obj.ClassType).GetField('FConn');
-  if Fld = nil then Exit;
-  var Conn: TObject:= Fld.GetValue(Obj).AsObject;
-  if Conn is TFDConnection then Result:= TFDConnection(Conn).Params.Values['Database'];
-end;
-
 function SetByMaxRoutines: Integer;
 begin
   Result:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_HOVER_SETBY_MAX_ROUTINES'), 0);
@@ -327,7 +310,7 @@ end;
 procedure AttachHoverSetBy(const AStore: ISymbolStore; const ASym: TSymbol; var AAsm: THoverAssembly);
 begin
   if (AStore = nil) or (ASym.Kind not in [skVarDecl, skField]) then Exit;
-  var DbPath: string:= StoreDbPath(AStore);
+  var DbPath: string:= AStore.DbPath; { v152 BK-VSHOVER (B51): was an RTTI read of FConn }
   if (DbPath = '') or not TFile.Exists(DbPath) then Exit;
   var MaxR: Integer:= SetByMaxRoutines;
   var Key: string:= Format('%s|%s|%s|%d', [LowerCase(DbPath),

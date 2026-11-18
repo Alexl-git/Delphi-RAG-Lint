@@ -2929,6 +2929,9 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetFilePath(AFileId: Int64): string                                           ;
+      /// <summary>The index file behind this store (FConn's Database parameter); see ISymbolStore.DbPath.</summary>
+      /// <returns>The path as opened, or '' when there is no connection.</returns>
+      function DbPath: string;
       /// <returns><!-- drag-lint:auto -->TArray&lt;Int64&gt; -- Observed: L.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -13339,6 +13342,11 @@ begin
     Sql.Free;
     Q.Free;
   end;
+end;
+
+function TSQLiteSymbolStore.DbPath: string;
+begin
+  Result:= if FConn = nil then '' else FConn.Params.Values['Database'];
 end;
 
 function TSQLiteSymbolStore.GetFilePath(AFileId: Int64): string;

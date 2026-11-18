@@ -92,6 +92,10 @@ Settings `dragLint.project`, `dragLint.platform`, `dragLint.config` choose which
 
 Code lenses: above each routine the server shows `N callers` and, when the routine raises or handles exceptions, `raises N types, handles M types`. Clicking the exception lens lists its raise and handler sites in a quick pick (`workspace/executeCommand draglint.exceptionFacts`, engine 1.49 or later); picking one jumps to it. `lsp --no-exception-facts` turns the exception lens and the hover `Raises:` line off.
 
+Hover, fast then complete (engine 1.52 or later): the declaration, doc and signature show at once; the slow lines (analysis facts, `Raises:`, a variable's `Init:` / `Set by:` writers) appear below them a moment later. Moving the pointer away cancels the slow part in the engine. An older engine answers in one piece, as before.
+
+Disable a rule for this unit or this project: on a drag-lint finding, the quick fix (light bulb) lists `drag-lint: disable <rule> in this unit...` and `... in this project...` after the fixes. Type a reason; the extension runs `drag-lint rules disable` (the override goes into the project's `drag-lint-lint.json` with the reason and today's date) and re-lints the files with findings. `drag-lint rules enable` undoes it.
+
 ## Packaging
 
 From this directory:

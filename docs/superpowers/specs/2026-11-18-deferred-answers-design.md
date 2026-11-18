@@ -52,7 +52,8 @@ with hundreds of implementors costs seconds. Deferring it needs an `AssembleHove
 3. The client asks the same position again: the WHOLE bundle. It is cancellable: the server
    yields between sections (and in the slow ones) and answers `-32800 RequestCancelled` -- no
    result -- once the client announced another position or sent `$/cancelRequest` for its id.
-4. Anything unannounced is answered whole, as before: the menu hover, `textDocument/hover`
+4. `textDocument/hover` follows the same two steps after an announcement (BK-VSHOVER): the fast markdown carries the placeholder as a fact line, the second ask is the whole markdown, cancellable the same way.
+5. Anything unannounced is answered whole, as before: the menu hover, `textDocument/hover`
    (VS Code), MCP, CLI. An engine before 1.52 ignores the notification and answers step 2 whole,
    so an old engine and a new plugin (or the reverse) still work.
 
@@ -64,7 +65,7 @@ Why two requests rather than a server push: the request and its reply parser liv
 * **D2 single-threaded.** No worker thread: FireDAC connections are per thread and the library DB
   is 3 GB. Cancellation is cooperative at section checkpoints (`YieldToPendingRequests`), so its
   latency is one section; the runner measures it under 300 ms.
-* **D3 VS Code and MCP stay synchronous in 1.52** (PLAN D13). An agent is a batch caller.
+* **D3 MCP stays synchronous** (PLAN D13): an agent is a batch caller. VS Code was synchronous too until lane BK-VSHOVER (B32, owner rule "close all" -> in 1.52): see "VS Code" below.
 * **D4 `$/cancelRequest`** was a server no-op; it now abandons only a deferred second step.
 * **D5 (new, proved by reasoning on the client code).** Only an announcement or `$/cancelRequest`
   abandons a running second step -- an UNANNOUNCED hover elsewhere does not. The plugin cancels
@@ -90,3 +91,22 @@ Why two requests rather than a server push: the request and its reply parser liv
   deferred nothing later is served early), so that step runs to its end. Hovering without edits
   sends no `didChange`.
 * The injected slow section (`DRAGLINT_TEST_HOVER_SLOW_MS`) is a test switch, sliced at 20 ms.
+
+## VS Code (lane BK-VSHOVER, B32)
+
+VS Code cannot change a hover that is already on screen, but it renders each hover PROVIDER's part
+as soon as that provider resolves. ditors\vscode\drag-lint:
+
+* The language client's provideHover middleware announces the position (draglint/deferHover),
+  asks, and shows the fast markdown without the placeholder line (and without a heading the
+  placeholder was alone under).
+* A companion hover provider, registered before the client, waits for that first step at the same
+  position (one slot, lib\deferredhover.js), asks again -- the engine's cancellable whole answer --
+  and shows only the lines the fast part does not (line LCS), e.g. the facts, Raises: and Set by:
+  lines. Leaving the token cancels its request ($/cancelRequest -> -32800, no late reply).
+* An engine before 1.52 answers the first ask whole (no placeholder): the companion adds nothing.
+* The markdown hover now also carries the check-init writer list (B51) in the slow part.
+
+Runner: 	ests\autotest\run_v152_BK-VSHOVER.ps1 (server steps, real-reply split, node tests).
+Not verified in a live VS Code window: the part order (fast part above the companion's) follows
+VS Code's newest-provider-first rule.
