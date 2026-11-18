@@ -1018,7 +1018,7 @@ begin
   end;
 end;
 
-function TSolver.JudgeUse(const pProg: TProgramView; const pUse: THbSite): TUseInProgram;  // dl:ok cyclomatic-complexity@125b, cognitive-complexity@900b -- REVIEWED 2026-11-17 v152 HBSOLVER: one walk of spec 5.4 per use (root, hop, budget, closure cases); split pieces would share every local, so kept whole and covered by 18 verdict fixtures
+function TSolver.JudgeUse(const pProg: TProgramView; const pUse: THbSite): TUseInProgram;  // dl:ok cyclomatic-complexity@4965, cognitive-complexity@7d35 -- REVIEWED 2026-11-18 INT11 (re-stamped after HBFIX added the receiver / wall-clock cases, 60 / 78): one walk of spec 5.4 per use (root, hop, budget, closure cases); split pieces would share every local, so kept whole and covered by the verdict + HBFIX fixtures
 var
   Entry: Boolean;
   Note: string;

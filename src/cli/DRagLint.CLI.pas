@@ -2682,7 +2682,7 @@ begin
       var MdDir: string:= TPath.GetDirectoryName(ProjAbs);
       if TDirectory.Exists(MdDir) then
       begin
-        var MdFiles: TArray<string>:= TDirectory.GetFiles(MdDir, '*.md', TSearchOption.soTopDirectoryOnly);  // dl:ok taint-path-traversal@db48 -- CLI file I/O on a path the user passed or the drag-lint manifest names; the env var is the user's own config, no privilege boundary (147 INT sweep)
+        var MdFiles: TArray<string>:= TDirectory.GetFiles(MdDir, '*.md', TSearchOption.soTopDirectoryOnly);
         TArray.Sort<string>(MdFiles);
         for var MdFile in MdFiles do
           if SameText(ExtractFileExt(MdFile), '.md') then AddOnce(MdFile); { the mask also matches *.mdx }
