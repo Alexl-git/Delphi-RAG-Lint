@@ -10,6 +10,9 @@
     I3  re-run with --replace    -> exit 0, a <repo>.before-import-*.txt exists and restores
         (`repo restore`) into a third repository with the same counts
 
+  SET UP (live run): copy a Firebird 4 database to a private folder, start/keep a local FB4 server, then
+    $env:DL_TEST_FB_CONNECTION = 'Database=localhost:<path-to-copy>.fdb;User_Name=<user>;Password=<pw>;DriverID=FB'
+  and put the folder holding fbclient.dll (64-bit) on PATH. Never point it at a production database.
   Run: pwsh -File tests\autotest\run_repo_cli_import_fb_live.ps1 -Exe <drag-lint.exe>
 #>
 [CmdletBinding()]
