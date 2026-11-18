@@ -1214,6 +1214,7 @@ begin
     end
     else if (A = '--enable') and (i < ParamCount) then begin Inc(i); Result.Enable:= ParamStr(i); end
     else if (A = '--profile') and (i < ParamCount) then begin Inc(i); Result.Profile:= ParamStr(i); end
+    else if A = '--no-stand-down' then Result.NoStandDown:= True
     else if (A = '--target-compiler') and (i < ParamCount) then
     begin
       Inc(i);
@@ -20489,8 +20490,9 @@ begin
   if not AArgs.NoPreprocess then InstallLintIncludeContexts(Store, FilePaths, AArgs.ProjectPath);
   { PF E-LINTALL-SLOWER: which OFF flow passes this run keeps, read once for the per-file loop. }
   var FlowKeep: TFunc<string, Boolean>:= RuleKeptByRun(AArgs, Cfg, MarkedRuleIds(FilePaths));
-  { DEC-13: lint-all listens for a maintenance stand-down; the scan stops between files. }
-  BatchChannelOpen('lint-all', TArray<string>.Create(ExpandFileName(ProjectDb)), DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION, IsMachineReadableOutput(AArgs));
+  { DEC-13: lint-all listens for a maintenance stand-down; the scan stops between files.
+    1.52 B17: --no-stand-down keeps a measurement run whole -- no channel, so BatchStandDownTaken stays False. }
+  if not AArgs.NoStandDown then BatchChannelOpen('lint-all', TArray<string>.Create(ExpandFileName(ProjectDb)), DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION, IsMachineReadableOutput(AArgs));
   var LintStoodAt: Integer:= -1;
   var LintDelayMs: Integer:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_LINT_FILE_DELAY_MS'), 0);
   Prof.Phase(Format('per-file scan (%d files)', [Length(FilePaths)]));

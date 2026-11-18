@@ -17,7 +17,7 @@
     {
       "type": "cli",
       "verb": "lint-all",
-      "usage": "drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output|--report <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]",
+      "usage": "drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output|--report <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget] [--no-stand-down]",
       "flags": [
         {
           "name": "--db",
@@ -54,6 +54,10 @@
         },
         {
           "name": "--no-preprocess"
+        },
+        {
+          "name": "--no-stand-down",
+          "summary": "measurement runs: open no stand-down channel, so a maintenance stand-down from another process cannot cut the run to PARTIAL (exit 4)"
         },
         {
           "name": "--shared-db",
