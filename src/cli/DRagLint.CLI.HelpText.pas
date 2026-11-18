@@ -324,7 +324,7 @@ begin
   Writeln('  drag-lint deps-report --db <file.sqlite> [--db ...] [--depth N] [--edges] [--all-sources] [--name <pat>] [--format text|json|csv] [--output <file>]   (third-party dependency rollup)');
   Writeln('  drag-lint schema --db <file.sqlite> [--format text|json] [--json] [--output <file>]   (self-documenting LIVE index schema: schema_version + tables + columns + row counts, read-only)');
   Writeln('  drag-lint query --name-like <substring> [--kind class,interface,...] [--limit N] [--json] --db <file.sqlite>   (SUBSTRING search over symbol NAMES -- the discovery query, for when you do not know the identifier yet; ordered shortest-name-first. Distinct from --name, which is exact with an edit-distance fallback)');
-  Writeln('  drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force]   (ask running engines to stand down: close every store, exit 0; `index` and `lint-all` runs exit 4)');
+  Writeln('  drag-lint stop-now [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force]   (ask running engines to stand down: close every store, exit 0; `index` and `lint-all` runs exit 4)');
   Writeln('                               transport: a Windows NAMED PIPE, never a TCP port -- \\.\pipe\drag-lint-ctl-<sid>-s<session>-p<pid>, created with an');
   Writeln('                               explicit DACL for the creating user only, so another user or session cannot signal your engines. Engines in');
   Writeln('                               `lsp`, `cycles --fix`, `index` (incl. --all), `lint-all` and `warm-rule-cache` mode listen (`serve` and other one-shot verbs do not): an index run stops between files, database consistent, same command resumes; lint-all prints PARTIAL findings; a warm stops at once (exit 4). --all (the default) asks every');
@@ -578,6 +578,8 @@ begin
   Writeln('       ^ lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all.');
   Writeln('       ^ A vendored folder INSIDE the project folder is linted as your own code until `excludeRoots` names it in `<project>\_D-RAG\drag-lint-project.json`.');
   Writeln('       see wiki page: Run-Lint-All-Full-Report');
+  Writeln('  drag-lint lint-all --db <db> [--rule member-could-be-private] (default OFF in 1.52, category project-wide, hint)');
+  Writeln('       see wiki page: v152-atlb-rules');
   Writeln('  drag-lint lsp --db <file.sqlite> [--no-exception-facts]');
   Writeln('       see wiki page: editor-exception-facts');
   Writeln('  drag-lint lsp --db <file.sqlite> --full-rules [--no-preprocess]');
@@ -1089,9 +1091,9 @@ begin
     Writeln('  drag-lint query --name-like <substring> [--kind class,interface,...] [--limit N] [--json] --db <file.sqlite>   (SUBSTRING search over symbol NAMES -- the discovery query, for when you do not know the identifier yet; ordered shortest-name-first. Distinct from --name, which is exact with an edit-distance fallback)');
     Exit;
   end;
-  if pVerb = 'shutdown' then
+  if pVerb = 'stop-now' then
   begin
-    Writeln('  drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force]   (ask running engines to stand down: close every store, exit 0; `index` and `lint-all` runs exit 4)');
+    Writeln('  drag-lint stop-now [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force]   (ask running engines to stand down: close every store, exit 0; `index` and `lint-all` runs exit 4)');
     Writeln('                               transport: a Windows NAMED PIPE, never a TCP port -- \\.\pipe\drag-lint-ctl-<sid>-s<session>-p<pid>, created with an');
     Writeln('                               explicit DACL for the creating user only, so another user or session cannot signal your engines. Engines in');
     Writeln('                               `lsp`, `cycles --fix`, `index` (incl. --all), `lint-all` and `warm-rule-cache` mode listen (`serve` and other one-shot verbs do not): an index run stops between files, database consistent, same command resumes; lint-all prints PARTIAL findings; a warm stops at once (exit 4). --all (the default) asks every');

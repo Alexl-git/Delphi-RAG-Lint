@@ -54,5 +54,5 @@ The compile gate: `DRagLint.Refactor.CompileGate`, shared with [`cycles --fix`](
 
 ## Cancel
 
-An `--apply` run listens on the maintenance control channel: `drag-lint shutdown --db <db>` (or the IDE's Cancel) kills the
+An `--apply` run listens on the maintenance control channel: `drag-lint stop-now --db <db>` (or the IDE's Cancel) kills the
 build the gate waits on, restores every written file and ends the run with exit 1 and the refusal `cancelled`.

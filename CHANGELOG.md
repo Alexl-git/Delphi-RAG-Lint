@@ -8,6 +8,8 @@ breaking changes** until v2.0.
 In integration (lane/v152-int). One re-parse for the whole 1.52 bundle: extractor 1.40.0 -> 1.41.0-alpha,
 resolver 1.28.0 -> 1.29.0-alpha.
 
+- Engine verb shutdown renamed **stop-now** (lane Q15REN, owner Q15): the old name tripped the autonomy guard. shutdown stays as a hidden alias (accepted, not in --help). Callers (stage-engine.ps1, pack-lint-release.ps1), docs and the feature entry follow.
+
 ### Breaking
 
 - `cycles`: the hub-surface recipe (R3) is now the DEFAULT for `--fix`, `--plan --apply` and `--causes --format json`

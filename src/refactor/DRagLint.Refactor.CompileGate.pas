@@ -37,7 +37,7 @@ const
 
 type
   /// <summary>Raised inside a gated run once a stand-down request (the maintenance control
-  /// channel: `drag-lint shutdown`, or the IDE's Cancel) is taken while the run waits on a child.</summary>
+  /// channel: `drag-lint stop-now`, or the IDE's Cancel) is taken while the run waits on a child.</summary>
   /// <remarks>The child's process tree is already gone when it is raised. The caller turns it into a
   /// rollback and the refusal `cancelled`, or, raised before any file was written, into
   /// "cancelled -- nothing written". Either way the run exits 1.</remarks>
@@ -199,7 +199,7 @@ var
   GStandDown : TControlChannel; // the run's control channel (RunCycleFix); nil = not listening
   GCancelTaken: Boolean; // a stand-down request was taken: every later child wait raises at once
   GScratchCited: Boolean; // a message of this run names a file in its scratch: DeleteDefaultScratch keeps it
-  GProgressDb : string; // the run's --db, expanded: the progress lines name the `shutdown --db` that cancels it
+  GProgressDb : string; // the run's --db, expanded: the progress lines name the `stop-now --db` that cancels it
   /// <summary>The verb the progress lines name.</summary>
   GGateVerb: string = 'cycles --fix';
 
@@ -373,10 +373,10 @@ function RollBack(const pTx: TApplyTransaction): string;
 /// prove the rollback on a rewrite that is itself sound.</remarks>
 function ApplyGated(const pReq: TGateRequest): TGateOutcome;
 
-/// <summary>Opens the control channel of a gated `--apply` run, so `drag-lint shutdown` and the IDE's Cancel
+/// <summary>Opens the control channel of a gated `--apply` run, so `drag-lint stop-now` and the IDE's Cancel
 /// reach it while it waits on a build (E-NARROW-CHANNEL).</summary>
 /// <param name="pVerb">The verb hosting the run; must be one ControlChannelEnabledFor accepts.</param>
-/// <param name="pDb">The run's --db; the channel answers `shutdown --db` for it.</param>
+/// <param name="pDb">The run's --db; the channel answers `stop-now --db` for it.</param>
 /// <returns>True when the channel listens (GStandDown is set). False when the verb does not listen or the
 /// pipe could not start (said on stderr: a cancel then kills the run instead of rolling it back).</returns>
 /// <remarks>Main thread only. Pair with CloseGateStandDown in a finally. A request taken while ApplyGated
@@ -567,7 +567,7 @@ begin
   var Secs:= pElapsedMs div CMsPerSec;
   BeatStep(Format('%s %d s', [pWhat, Secs]));
   if pLine then
-    Writeln(ErrOutput, Format(GGateVerb + ': %s -- %d s (no time limit; Cancel, or drag-lint shutdown --db "%s", stops it)',
+    Writeln(ErrOutput, Format(GGateVerb + ': %s -- %d s (no time limit; Cancel, or drag-lint stop-now --db "%s", stops it)',
       [pWhat, Secs, GProgressDb]));
 end;
 
@@ -1264,7 +1264,7 @@ begin
   begin
     GStandDown  := Ctl;
     GCancelTaken:= False;
-    GProgressDb := ExpandFileName(pDb); { the progress lines name the shutdown --db that cancels the run }
+    GProgressDb := ExpandFileName(pDb); { the progress lines name the stop-now --db that cancels the run }
     Exit(True);
   end;
   Writeln(ErrOutput, pVerb, ': control channel NOT started (', Err, '); a cancel will kill this run instead of rolling it back');

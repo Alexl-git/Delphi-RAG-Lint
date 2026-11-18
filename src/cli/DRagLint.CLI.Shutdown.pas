@@ -1,7 +1,7 @@
 unit DRagLint.CLI.Shutdown;
 
 // ---------------------------------------------------------------------------
-// The `ide-release` and `shutdown` verbs (lane v1511 SPLIT T07): hold the IDE plugin's respawn, stand
+// The `ide-release` and `stop-now` verbs (lane v1511 SPLIT T07): hold the IDE plugin's respawn, stand
 // running engines down over their control channel. Moved verbatim out of DRagLint.CLI.
 // ---------------------------------------------------------------------------
 
@@ -23,7 +23,7 @@ uses
 /// user.</remarks>
 function DoIdeRelease(const AArgs: TArgs): Integer;
 
-/// <summary>drag-lint shutdown: asks every reachable engine of THIS user and
+/// <summary>drag-lint stop-now: asks every reachable engine of THIS user and
 /// session that exposes a maintenance control channel (lsp, index, lint-all,
 /// cycles --fix, warm-rule-cache) to stand down -- close every store and exit --
 /// and reports which did. Each engine is listed with its role (`status role`,

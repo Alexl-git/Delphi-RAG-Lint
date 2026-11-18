@@ -17827,7 +17827,7 @@ const
   STREAM_BEAT_EVERY = 1024;
 
 { Opens a resolve stream's query with its step and exact row count in the status record, so the stage
-  heartbeat and `shutdown --dry-run` can say N of M. The count is one more run of the stream's own scan:
+  heartbeat and `stop-now --dry-run` can say N of M. The count is one more run of the stream's own scan:
   seconds against the minutes its rows take. }
 procedure BeatStreamOpen(AConn: TFDConnection; AQ: TFDQuery; const AStep: string);
 var
