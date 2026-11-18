@@ -1,0 +1,49 @@
+{
+  "id": "v152-per-rule-budget",
+  "title": "Per-rule time budget in the rule frame (rule-skipped-budget)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.52.0-alpha",
+  "summary": "A v151/v152 rule slower than rule_time_budget_ms (2000 ms) on a file is skipped there with one rule-skipped-budget note; index warns near the parse limit",
+  "intro": "Read this when a lint run shows a rule-skipped-budget note, when you want to change or turn off the per-rule time budget, or when index warns that a unit is near the parse limit.",
+  "wikiPage": "rule-time-budget",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint",
+      "usage": "drag-lint lint <file.pas> [--config <lint.json>] [--no-budget] (lint config key rule_time_budget_ms, default 2000 ms per rule per file, 0 = off; --no-budget or DRAGLINT_NO_BUDGET=1 = off; an overrunning rule is skipped for the file with one rule-skipped-budget note: category other, info, on)",
+      "flags": [
+        {
+          "name": "--config",
+          "arg": "<file>"
+        },
+        {
+          "name": "--no-budget"
+        }
+      ]
+    },
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "usage": "drag-lint lint-all --db <file.sqlite> [--no-budget] (same budget; one \"rule budget:\" note line lists the skipped rules of the run)",
+      "flags": [
+        {
+          "name": "--no-budget"
+        }
+      ]
+    },
+    {
+      "type": "cli",
+      "verb": "index",
+      "usage": "drag-lint index --project <X.dproj> --db <file.sqlite> (prints a WARN line for a unit within 10% below settings.maxParseFileKB, default 2048 KB)"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-17",
+    "by": "ENGINE",
+    "build": "1.51.1-alpha",
+    "surfaceHash": "64ada12f82122fda3d58a94be503c63f416b6084b863cc9b213ca279b3c6c49b"
+  }
+}
