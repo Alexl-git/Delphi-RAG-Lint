@@ -630,7 +630,7 @@
 #   refs up for that project in minutes. Do that for the plugin DB to close the
 #   filed case; the global re-parse is what is being postponed.
 #
-#   THE DATE IS A 1.41.0-alpha|1dc37a0440723caf0306aa43b5444286ac0ddc709a5ac84a8e751463839cf957, and deliberately a near one: 2026-09-17 so the
+#   THE DATE IS A PLACEHOLDER, and deliberately a near one: 2026-09-17 so the
 #   debt cannot be forgotten. The owner should move it to whenever the next
 #   library rebuild is actually planned, or discharge it with a real bump.
 #
