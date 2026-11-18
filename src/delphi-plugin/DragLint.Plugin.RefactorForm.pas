@@ -36,6 +36,10 @@ const
   /// working is never cut short -- its answer is always delivered.</summary>
   REFACTOR_STALL_MS = 60000;
 
+  /// <summary>STALL budget of an APPLY run (Rename, Extract Method): the write goes through the compile gate, which
+  /// builds the project before and after; a large project can sit idle for minutes on a link or a lock.</summary>
+  REFACTOR_APPLY_STALL_MS = 300000;
+
 /// <summary>Runs one drag-lint refactor command line on a worker thread and hands
 /// the result to ADone on the main thread (IDE-HANG, 1.40; CliAsync since 1.42).</summary>
 /// <param name="ACmdLine">Full command line, as CreateProcessW takes it.</param>
@@ -194,7 +198,7 @@ type
       FBusy    : Boolean;
       { Starts ACmdLine off the main thread; shows ABusyText and disables Apply
         and Close until ADone has run. False (nothing started) while busy. }
-      function RunAsync(const ACmdLine, ABusyText: string; const ADone: TRefactorRunDone): Boolean;
+      function RunAsync(const ACmdLine, ABusyText: string; const ADone: TRefactorRunDone; AStallMs: Integer = REFACTOR_STALL_MS): Boolean;
     public
       constructor Create(AOwner: TComponent); override;
       destructor Destroy; override;
@@ -215,7 +219,7 @@ begin
   inherited Destroy;
 end;
 
-function TCliDialogHandler.RunAsync(const ACmdLine, ABusyText: string; const ADone: TRefactorRunDone): Boolean;
+function TCliDialogHandler.RunAsync(const ACmdLine, ABusyText: string; const ADone: TRefactorRunDone; AStallMs: Integer): Boolean;
 var
   Me: TObject;
 begin
@@ -235,10 +239,10 @@ begin
       FBusy:= False;
       FBtnClose.Enabled:= True;
       FMemo.Lines.Text:= if AExitCode = PROCRUN_TIMED_OUT_EXIT_CODE then
-                           AOutput + sLineBreak + Format('(drag-lint made no progress for %d s and was stopped)', [REFACTOR_STALL_MS div MSEC_PER_SEC])
+                           AOutput + sLineBreak + Format('(drag-lint made no progress for %d s and was stopped)', [AStallMs div MSEC_PER_SEC])
                          else AOutput;
       ADone(AExitCode, AOutput);
-    end);
+    end, AStallMs);
 end;
 
 procedure TCliDialogHandler.DoCloseQuery(Sender: TObject; var CanClose: Boolean);
@@ -361,7 +365,7 @@ begin
         FBtnApply.Enabled:= True;
         ShowMessage('drag-lint: Rename apply failed. See output for details.');
       end;
-    end);
+    end, REFACTOR_APPLY_STALL_MS);
 end; // procedure
 
 procedure TRefactorHandler.DoClose(Sender: TObject);
@@ -624,7 +628,7 @@ begin
         FBtnApply.Enabled:= True;
         ShowMessage('drag-lint: Extract Method apply failed. See output for details.');
       end;
-    end);
+    end, REFACTOR_APPLY_STALL_MS);
 end; // procedure
 
 procedure TExtractMethodHandler.DoClose(Sender: TObject);
