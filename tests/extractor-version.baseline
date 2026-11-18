@@ -1245,4 +1245,6 @@
 #   Superseded: 1.41.0-alpha|08d85198df87a40e6e16fcf8e656f18f17586813d7ea363b5058b502b323ce33
 #   2026-11-18 v152 BK-COLS2 hash-only re-pin (rides the one 1.52 bump 464d590a8; owner 2026-11-17: no second re-parse): B41 the DFM parser stores CHARACTER (UTF-16) columns (symbols, refs, dfm_objects, dfm_properties, string_literals) instead of UTF-8 byte columns; Index unchanged otherwise. A DB parsed before 1.52 re-parses on the 1.52 bump anyway.
 #   Superseded: 1.41.0-alpha|75c670954f474a21a2ab886ee9d0f7b5d0082598d02be0a04a7b724eee165d4f
-1.41.0-alpha|1dc37a0440723caf0306aa43b5444286ac0ddc709a5ac84a8e751463839cf957
+#   2026-11-18 v152 BK-TAILS-ENG hash-only re-pin (rides the one 1.52 bump 464d590a8): Parser.DFM CollectParseErrors prints the CHARACTER column in its parse-error diagnostic (BK-COLS2 tail); the message text only, no stored row changes.
+#   Superseded: 1.41.0-alpha|1dc37a0440723caf0306aa43b5444286ac0ddc709a5ac84a8e751463839cf957
+1.41.0-alpha|f2692a1010f977f7d45a99b9ac03c4f475e3a4ab615c8da91f4d3297fe90c243

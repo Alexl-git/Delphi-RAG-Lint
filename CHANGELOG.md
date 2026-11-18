@@ -126,6 +126,17 @@ resolver 1.28.0 -> 1.29.0-alpha.
   B19); other rules stay scoped to the roots.
 - `member-could-be-private` is judged across projects through the shared scope (BK-XPROJ, FPM finding): a member used
   only by a sibling project (ORM3 CLIENT `WriteChunk`) is no longer reported. CLIENT 103 -> 102.
+- A `.groupproj` peer that lists a unit but has NO index makes the cross-project verdict undecidable (BK-TAILS-ENG,
+  BK-XPROJ follow-up): `unused-global`, `unused-public` and `member-could-be-private` withhold their findings on the
+  units the peer's `.dproj` / `.dpr` lists, and `lint-all` writes one stderr line per such peer naming it and the
+  `index --project` command that fixes it. Before, the peer was silently skipped and the findings fired.
+- Character columns, three BK-COLS2 tails (BK-TAILS-ENG): the `.dfm` parse-error diagnostic of `index` prints the
+  character column; `invisible-char` / `bidi-control` / `control-char` count a character outside the BMP as two
+  UTF-16 units; `.scm` query rules, `field-by-name-in-loop` and the `raise-bare-exception` site count columns on
+  the source BEFORE an inactive `{$IFDEF}` branch was blanked (a blanked non-ASCII character was one column per byte).
+- Resolver (BK-TAILS-ENG, rides resolver 1.29.0-alpha, hash-only re-pin): `var B:= Br[K]` on a library
+  `TDictionary` / `TObjectDictionary` / `IDictionary` types `B` as the dictionary's VALUE type, so `B.Member`
+  binds (HBFIX index gap: `Charts.Trace.Walk` `B.Side`).
 
 ### New rules
 - `index-possibly-out-of-range` (bug-patterns, default ON -- the six false-positive classes of the 6/12 FP gate fixed in lane BK-RULEFP: a guard kept across Inc, a parameter bound every local caller proves, `in` set clamps, a Length raise guard with a loop limit from an if-expression or another unit's const array, a dominating SetLength, for-in / non-constant-start count invariants -- lanes IDXRANGE + IDXRANGE2 + BK-RULEFP): an array index that
