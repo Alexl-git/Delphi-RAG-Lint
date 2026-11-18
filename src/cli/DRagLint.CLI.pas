@@ -17450,16 +17450,41 @@ begin
   Writeln(ErrOutput, Format('doc: WARN -- %d file(s) (%s) look unchanged by timestamp and size, but the facts stored for them ' +
     'disagree with the source text. Rescanning %d file(s) (the documented file and the files its facts were read from), then running.',
     [Length(Bad), Named, Length(Files)]));
-  for var F: string in Files do
+  { 1.52 FINDOC: the in-process DoIndex reports stage: / Done. / rule-cache:
+    lines on stdout, which broke the single-JSON-document --json contract
+    (DOCAPPLY FOUND: 60 such lines on a TableTools copy). Under a
+    machine-readable format stdout goes to NUL for the rescan, as
+    reconcile-project does; the WARN above and any failure stay on stderr. }
+  var Mute: Boolean:= IsMachineReadableOutput(AArgs);
+  var SavedOut: TTextRec;
+  if Mute then
   begin
-    if not TFile.Exists(F) then Continue;
-    var IndexArgs: TArgs:= AArgs;
-    IndexArgs.IndexAll     := False;
-    IndexArgs.ForceReparse := True;
-    IndexArgs.Path         := ExpandFileName(F);
-    if DoIndex(IndexArgs) <> 0 then
-      Writeln(ErrOutput, 'doc: WARN -- the rescan of ' + F + ' FAILED; the facts for it may still be stale.');
+    Flush(Output);
+    Move(TTextRec(Output), SavedOut, SizeOf(TTextRec));
   end;
+  try
+    if Mute then
+    begin
+      AssignFile(Output, 'NUL');
+      Rewrite(Output);
+    end;
+    for var F: string in Files do
+    begin
+      if not TFile.Exists(F) then Continue;
+      var IndexArgs: TArgs:= AArgs;
+      IndexArgs.IndexAll     := False;
+      IndexArgs.ForceReparse := True;
+      IndexArgs.Path         := ExpandFileName(F);
+      if DoIndex(IndexArgs) <> 0 then
+        Writeln(ErrOutput, 'doc: WARN -- the rescan of ' + F + ' FAILED; the facts for it may still be stale.');
+    end;
+  finally
+    if Mute then
+    begin
+      CloseFile(Output);
+      Move(SavedOut, TTextRec(Output), SizeOf(TTextRec)); // restore stdout
+    end;
+  end; // try
   var Ok: Boolean;
   var Fresh: ISymbolStore:= OpenReadOnlyStore(AArgs.DbPath, Ok);
   if Ok then AStore:= Fresh;
@@ -17582,6 +17607,8 @@ begin
   Opts:= Default(TDocBatchOptions);
   { exclude_paths, the OTHER half of ownership -- see TDocBatchOptions.IsExcluded. }
   Opts.IsExcluded:= DocExcludePredicate(AArgs);
+  Opts.DocumentThirdParty:= AArgs.DocumentThirdParty; { 1.52 FINDOC: ownRoots for --unit }
+  Opts.OwnAnchorDir:= AnchorDirForDb(AArgs.DbPath);
   // --stubs flips the facts-only default: on = keep pure all-TODO creates too.
   Opts.Stubs:= AArgs.DocStubs;
   Opts.IncludeSeeAlso:= AArgs.DocSeeAlso; // ADF T4: --seealso opts in <seealso> crefs.
@@ -17858,6 +17885,8 @@ begin
   Opts:= Default(TDocBatchOptions);
   { exclude_paths, the OTHER half of ownership -- see TDocBatchOptions.IsExcluded. }
   Opts.IsExcluded:= DocExcludePredicate(AArgs);
+  Opts.DocumentThirdParty:= AArgs.DocumentThirdParty; { 1.52 FINDOC: ownRoots for document-all }
+  Opts.OwnAnchorDir:= AnchorDirForDb(AArgs.DbPath);
   Opts.Stubs:= AArgs.DocStubs;
   Opts.Strip:= AArgs.DocStrip; // v(ADP3 T2): --strip removes engine output instead.
   Opts.IncludeSeeAlso:= AArgs.DocSeeAlso; // ADF T4: --seealso opts in <seealso> crefs.
