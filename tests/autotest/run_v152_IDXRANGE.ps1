@@ -20,8 +20,8 @@
 #   1c. ORM3 batch 3 (2026-11-17): SetLength size expression with slack, wrong-order while one-past read,
 #      the uINSPRSLT:5575 TP (second array after the loop), an Exit-capped Inc with local callers, an index
 #      from a map lookup (hint), the one-Inc-per-for-trip count invariant;
-#   3. default OFF in 1.52 (lane FPM2 re-measure after BK-RULEFP: 21 FP / 36 samples, gate 0/12):
-#      without any config the rule is silent (positive control: the explicit config gives the set);
+#   3. default ON (owner C3; ON again in 1.52 lane BK-RULEFP once the I4 FP classes were fixed):
+#      without any config the rule gives the same set as the explicit config;
 #   4. rules --json: default_enabled false, fixable true, fix_manual_only true, param exception_class;
 #   4b. the fix is manual only (C3): a batch --fix --apply without --fix-rule leaves the file alone;
 #   5. autofix on a temp copy: the guard line lands before the access with the statement's
@@ -73,16 +73,16 @@ Assert "parameter case is a hint" ((@($f | Where-Object { $_.start_line -eq 66 }
 Assert "write case is a warning" ((@($f | Where-Object { $_.start_line -eq 26 })[0].severity) -eq 'warning')
 Assert "message names the access line" ((@($f | Where-Object { $_.start_line -eq 26 })[0].message) -match 'reaches A\[i\] at line 27')
 
-# 3: default OFF in 1.52 (no --rule, no config -> silent). Positive control: the explicit config enables it.
+# 3: default ON (no --rule, no config -> the same set as the explicit config).
 $dflt = Lint $fixture '' -NoNarrow
 $onFull = Lint $fixture $cfgOn -NoNarrow
 Assert "positive control: config enables it without --rule (got $($onFull.Count))" ($onFull.Count -eq $nExpected)
-Assert "default OFF: no findings without any config (got $($dflt.Count))" ($dflt.Count -eq 0)
+Assert "default ON: the same findings without any config (got $($dflt.Count))" ($dflt.Count -eq $nExpected)
 
 # 4: catalogue
 $cat = (& $exe rules --json 2>$null | ConvertFrom-Json).rules | Where-Object { $_.id -eq $rule }
 Assert "rules --json lists the rule" ($null -ne $cat)
-Assert "default_enabled false (1.52: OFF after the FPM2 re-measure)" ($cat.default_enabled -eq $false)
+Assert "default_enabled true (owner C3; BK-RULEFP)" ($cat.default_enabled -eq $true)
 Assert "fixable true" ($cat.fixable -eq $true)
 Assert "fix_manual_only true" ($cat.fix_manual_only -eq $true)
 Assert "param exception_class default EArgumentOutOfRangeException" ((@($cat.params | Where-Object { $_.name -eq 'exception_class' })[0].default) -eq 'EArgumentOutOfRangeException')

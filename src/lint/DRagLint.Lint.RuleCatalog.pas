@@ -129,11 +129,10 @@ const
     { 1.47 wave 148 lane PQ }
     'quit-from-thread',
     { 152b lane RTTI }
-    'rtti-unavailable',
-    { 1.52 lane FPM2: BK-RULEFP fixed the six IDXRANGE2 FP classes, but the re-measure after it
-      (FPM2, 12-sample on YADF) still found 7 FP / 12 (while-loop bound, short-circuit bound, Length
-      equality Exit, SetLength(A, N) then 0..N-1, k <= i compaction, callee-sized array) -> OFF in 1.52 }
-    'index-possibly-out-of-range'];
+    'rtti-unavailable'];
+    { 1.52 IDXRANGE3: index-possibly-out-of-range is ON again (owner C3) -- BK-RULEFP fixed the six FP
+      classes of the IDXRANGE2 gate, IDXRANGE3 the seven of the FPM2 re-measure (21 FP / 36); re-measured
+      0 FP / 12 on YADF and ORM3 CLIENT, 0 / 5 on SERVER (run_v152_IDXRANGE3.ps1) }
 
   { THE WHOLE-ROUTINE METRIC RULES, in one place because the CHECKER and the
     `allow` WRITER must agree on the list or a marker is written under one hash
@@ -950,7 +949,7 @@ begin
     B('address-of-local-returned', 'bug-patterns', 'warning', 'Address of a local variable or by-value parameter is returned -- it dangles once the routine exits');
     B('constant-index-out-of-range', 'bug-patterns', 'warning', 'Literal index outside the declared array bounds (or S[0] on a 1-based string) -- range error or memory overrun');
     B('copy-paste-assignment', 'bug-patterns', 'hint', 'Run of similar assignments where one right-hand side repeats another -- likely a copy-paste typo', False);
-    B('index-possibly-out-of-range', 'bug-patterns', 'warning', 'Array index written with no guard bounding it to the array''s range before the access -- ERangeError is only the last resort', False,
+    B('index-possibly-out-of-range', 'bug-patterns', 'warning', 'Array index written with no guard bounding it to the array''s range before the access -- ERangeError is only the last resort', True,
       [MkParam('exception_class', 'string', 'EArgumentOutOfRangeException')]);
     B('exception-escapes-thread', 'bug-patterns', 'warning', 'Thread body has no top-level try..except -- an unhandled exception silently ends the thread');
     B('raise-in-destructor', 'bug-patterns', 'warning', 'raise inside a destructor -- an exception during cleanup aborts the rest of the teardown and leaks');
