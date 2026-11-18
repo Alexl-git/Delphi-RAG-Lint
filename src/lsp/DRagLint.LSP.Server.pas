@@ -38,6 +38,7 @@ uses
   , DRagLint.Project .ContextFile { LSP-1 CORE: .dlcontext.json + central context defaults }
   , DRagLint.Lint    .TargetCompiler { 1.38: the target-compiler gate of each file's diagnostics }
   , DRagLint.Charts  .Index     { 151 CF: FExcIndex -- the Raises: line's open index }
+  , DRagLint.LSP     .Deferred  { v152 ASYNC: the deferred-hover slot (fast part now, slow part on the second ask) }
   ;
 
 type
@@ -401,6 +402,11 @@ type
       FDeferred       : TQueue<TJSONObject>              ;
       FInputEnded     : Boolean                          ;
       FYielding       : Boolean                          ;
+      { v152 ASYNC: the session's deferred-hover slot (created on first use, see
+        DeferredHover) and the switch that makes ComputeHoverAt render the fast
+        sections only, with DEFERRED_PLACEHOLDER where the facts go. }
+      FDeferredHover  : IDeferredHoverSlot               ;
+      FHoverFastOnly  : Boolean                          ;
       { 1.38: resolves APath's target compiler (startup > lint config > context),
         publishes it (SetActiveTargetCompiler) and returns its gate; AError <> ''
         when the winning token is invalid -- the gate is then the default's. }
@@ -1468,6 +1474,31 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleHoverBundle    (const AId: TJSONValue; const AParams: TJSONObject);
+      /// <summary>v152 ASYNC: the session's deferred-hover slot, created on first use.</summary>
+      /// <returns>The slot; owned by the server (reference-counted field).</returns>
+      function  DeferredHover: IDeferredHoverSlot;
+      /// <summary>v152 ASYNC: a checkpoint of a deferred second step. Serves what
+      /// arrived meanwhile (YieldToPendingRequests), then answers AId with
+      /// RequestCancelled when the run was abandoned.</summary>
+      /// <param name="AId">The request being answered.</param>
+      /// <param name="ARunSerial">The run's serial; 0 = not a deferred second step (always True, no yield).</param>
+      /// <returns>False when the run was abandoned and AId already answered.</returns>
+      function  HoverStillWanted(const AId: TJSONValue; ARunSerial: Integer): Boolean;
+      /// <summary>v152 ASYNC: the test switch's artificial slow section
+      /// (DRAGLINT_TEST_HOVER_SLOW_MS), in SLOW_SLICE_MS slices with a
+      /// HoverStillWanted checkpoint after each.</summary>
+      /// <param name="AId">The request being answered.</param>
+      /// <param name="ARunSerial">As for HoverStillWanted.</param>
+      /// <returns>False when the run was abandoned and AId already answered.</returns>
+      function  HoverSlowWork(const AId: TJSONValue; ARunSerial: Integer): Boolean;
+      /// <summary>v152 ASYNC: `draglint/deferHover` -- the client will complete
+      /// the next hoverBundle at this position in two steps.</summary>
+      /// <param name="AParams">A TextDocumentPositionParams.</param>
+      procedure HandleDeferHover(const AParams: TJSONObject);
+      /// <summary>v152 ASYNC: `$/cancelRequest` -- abandons a deferred hover's
+      /// running second step; other requests are not cancellable.</summary>
+      /// <param name="AParams">`{id}` of the cancelled request.</param>
+      procedure HandleHoverCancel(const AParams: TJSONObject);
       /// <summary>Answers `draglint/callerCounts`: the caller count for EVERY
       /// routine in one file, in a single round trip.</summary>
       /// <param name="AId"><!-- drag-lint:auto type -->const TJSONValue</param>
@@ -2370,6 +2401,7 @@ implementation
 
 uses
   System.StrUtils, { LSP-1 CORE: MatchText }
+  System.Diagnostics, { v152 ASYNC: TStopwatch -- the per-section hover timing }
   DRagLint.Storage.Schema, { 150 SC: IsSchemaReadable, the read gate of the store opener }  // dl:unit DRagLint.Storage.Schema accepted -- 150 SC: SCHEMA_READ_MIN (and SCHEMA_VERSION) are the read-compat bounds every read gate compares; they travel with the schema
   System.RegularExpressions, { 1.44 lspctx: a project file's units and declared platform }
   DRagLint.Query.Implementors, { 1.40 ifrpt: the implementors counts of draglint/callerCounts }
@@ -5114,11 +5146,15 @@ begin
     first store that has the NAME -- from handing back a library symbol
     belonging to a different program. Built after the intrinsic check, so
     hovering `Length` never triggers a parse. }
+  { v152 ASYNC: per-section timing (DRAGLINT_HOVER_TIMING=1) -- the measurement
+    that decides which sections a deferred hover answers later. }
+  var HT: TStopwatch:= TStopwatch.StartNew;
   Stores:= StoresForFile(Path);
   if not SelectSymbolAt(Stores, Path, Ident, Line, Col, Selection) then
   begin
     Exit;
   end;
+  LapHoverTiming(HT, 'select');
   Symbols       := Selection.Symbols       ;
   var HitStore: ISymbolStore:= Selection.HitStore;
   var Sel     : TSymbol     := Selection.Sel     ;
@@ -5150,6 +5186,7 @@ begin
       end;
     end;
   end;
+  LapHoverTiming(HT, 'returns');
 
   // Honest owner-type floor: the resolver found the LHS type but the member is
   // not on it or any base (incl. cross-DB generic bases). Show "Type.Member --
@@ -5162,6 +5199,7 @@ begin
   // GetSymbolDoc returns a zeroed TParsedDoc with HasContent=False when
   // no row exists; in that case fall back to the legacy signature listing.
   Doc:= HitStore.GetSymbolDoc(Sel.Id);
+  LapHoverTiming(HT, 'doc');
   if Doc.HasContent then
   begin
     // v(ADP2 T9): thread the SAME Phase-2 analysis facts `document` and
@@ -5174,16 +5212,24 @@ begin
     // docs.complexity_min threshold `document` uses. AIncludeSeeAlso/
     // AIncludeSince stay False (no --seealso/--since opt-in here),
     // mirroring a default `document` run.
-    var HovFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Sel, LoadDocHandlesOptions, False, False, '', HoverExtraStores(APath, HitStore)); { gap 3: the SAME 'Catches:' knob document writes with; 149 LX: + the file's other project stores }
-    var HovFactLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(HovFacts, LoadDocComplexityMin);
-    { E-USE-EDGES-PHASE2: the property/field 'Used in:' line, same formatter as the doc block. }
-    HovFactLines:= TDocRegions.FormatUsedInLines(HovFacts) + HovFactLines;
-    { 150 LX2: the callers, first as in the doc block; '' when the /// block already shows them. }
-    var HovCalledFrom: string:= FormatHoverCalledFromLine(HovFacts, Doc.RawBlock + Doc.Remarks);
-    if HovCalledFrom <> '' then HovFactLines:= [HovCalledFrom] + HovFactLines;
-    HovFactLines:= HovFactLines + ExceptionFactLines(HitStore, Sel); { D1: Raises:, after the doc-block facts }
+    var HovFactLines: TArray<string>;
+    if FHoverFastOnly then HovFactLines:= [DEFERRED_PLACEHOLDER] { v152 ASYNC: the facts come with the second step }
+    else
+    begin
+      var HovFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Sel, LoadDocHandlesOptions, False, False, '', HoverExtraStores(APath, HitStore)); { gap 3: the SAME 'Catches:' knob document writes with; 149 LX: + the file's other project stores }
+      HovFactLines:= TDocRegions.FormatPhase2FactLines(HovFacts, LoadDocComplexityMin);
+      { E-USE-EDGES-PHASE2: the property/field 'Used in:' line, same formatter as the doc block. }
+      HovFactLines:= TDocRegions.FormatUsedInLines(HovFacts) + HovFactLines;
+      { 150 LX2: the callers, first as in the doc block; '' when the /// block already shows them. }
+      var HovCalledFrom: string:= FormatHoverCalledFromLine(HovFacts, Doc.RawBlock + Doc.Remarks);
+      if HovCalledFrom <> '' then HovFactLines:= [HovCalledFrom] + HovFactLines;
+      LapHoverTiming(HT, 'facts');
+      HovFactLines:= HovFactLines + ExceptionFactLines(HitStore, Sel); { D1: Raises:, after the doc-block facts }
+      LapHoverTiming(HT, 'exceptions');
+    end;
     MdValue:= DRagLint.Hover.Renderer.RenderHoverMarkdown(Sel, Doc, HovRhs, HovFactLines,
       FormatDeclaredType(DescribeDeclaredType(Sel, HitStore)));
+    LapHoverTiming(HT, 'render');
   end
   else
   begin
@@ -5302,14 +5348,22 @@ begin
       { C3: an undocumented symbol still has index facts (Directives:, Complexity:,
         ...). Append the SAME Phase-2 fact lines the doc branch renders, only when
         the popup describes exactly ONE symbol (several overloads would misattribute). }
+      LapHoverTiming(HT, 'candidates');
       if Length(Filtered) = 1 then
       begin
-        var NdFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Filtered[0], LoadDocHandlesOptions, False, False, '', HoverExtraStores(APath, HitStore)); { 149 LX: cross-DB uses }
-        var NdLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(NdFacts, LoadDocComplexityMin);
-        NdLines:= TDocRegions.FormatUsedInLines(NdFacts) + NdLines; { E-USE-EDGES-PHASE2 }
-        var NdCalledFrom: string:= FormatHoverCalledFromLine(NdFacts, ''); { 150 LX2: no /// block here }
-        if NdCalledFrom <> '' then NdLines:= [NdCalledFrom] + NdLines;
-        NdLines:= NdLines + ExceptionFactLines(HitStore, Filtered[0]); { D1: Raises: }
+        var NdLines: TArray<string>;
+        if FHoverFastOnly then NdLines:= [DEFERRED_PLACEHOLDER] { v152 ASYNC: the facts come with the second step }
+        else
+        begin
+          var NdFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Filtered[0], LoadDocHandlesOptions, False, False, '', HoverExtraStores(APath, HitStore)); { 149 LX: cross-DB uses }
+          NdLines:= TDocRegions.FormatPhase2FactLines(NdFacts, LoadDocComplexityMin);
+          NdLines:= TDocRegions.FormatUsedInLines(NdFacts) + NdLines; { E-USE-EDGES-PHASE2 }
+          var NdCalledFrom: string:= FormatHoverCalledFromLine(NdFacts, ''); { 150 LX2: no /// block here }
+          if NdCalledFrom <> '' then NdLines:= [NdCalledFrom] + NdLines;
+          LapHoverTiming(HT, 'facts');
+          NdLines:= NdLines + ExceptionFactLines(HitStore, Filtered[0]); { D1: Raises: }
+          LapHoverTiming(HT, 'exceptions');
+        end;
         if Length(NdLines) > 0 then
         begin
           Sb.AppendLine('');
@@ -5794,7 +5848,8 @@ begin
       end;
       Method:= if Msg.GetValue('method') <> nil then Msg.GetValue('method').Value else '';
       if (Method = 'textDocument/hover') or (Method = 'draglint/hoverBundle') or
-         (Method = 'textDocument/definition') or (Method = '$/cancelRequest') then
+         (Method = 'textDocument/definition') or (Method = '$/cancelRequest') or
+         (Method = DEFER_HOVER_METHOD) then { v152 ASYNC: an announcement abandons a running deferred hover }
       begin
         try
           try
@@ -6027,26 +6082,58 @@ procedure TLSPServer.HandleHoverBundle(const AId: TJSONValue; const AParams: TJS
 
   Every store consulted here is already open on FStores. Nothing in this handler
   opens a database, which is the whole point -- the spawns it replaces each
-  cold-opened the ~1.4 GB library index to answer one tooltip. }
+  cold-opened the ~1.4 GB library index to answer one tooltip.
+
+  v152 ASYNC (ruling B9c): a client that announced this position
+  (draglint/deferHover) gets TWO answers -- the fast sections at once with the
+  DEFERRED_PLACEHOLDER line, then the whole bundle when it asks the same
+  position again. That second computation yields between sections and stops,
+  answering RequestCancelled, as soon as the user moved on. Unannounced
+  requests (the menu hover, batch callers) are answered whole, as before. }
 var
   Reply    : TJSONObject     ;
   Res      : TJSONObject     ;
   Comp     : THoverComputation;
   FactLines: TArray<string>  ;
+  Decision : TDeferredHoverDecision;
+  RunSerial: Integer         ;
+  HT       : TStopwatch      ;
+  Computed : Boolean         ;
 begin
+  Decision := dhdFull;
+  RunSerial:= 0;
+  HT       := TStopwatch.StartNew;
+  var KeyPath: string;
+  var KeyLine, KeyCol: Integer;
+  if PositionParams(AParams, KeyPath, KeyLine, KeyCol) then
+  begin
+    var Key: string:= HoverKey(KeyPath, KeyLine, KeyCol);
+    Decision:= DeferredHover.Decide(Key);
+    if (Decision = dhdComplete) and (AId <> nil) then RunSerial:= DeferredHover.BeginComplete(AId.ToJSON, Key);
+  end;
   Reply:= TJSONObject.Create;
   try
     Reply.AddPair('jsonrpc', '2.0');
     if AId <> nil then Reply.AddPair('id', AId.Clone as TJSONValue);
 
-    if not ComputeHover(AParams, Comp) then
+    FHoverFastOnly:= Decision = dhdFast;
+    try
+      Computed:= ComputeHover(AParams, Comp);
+    finally
+      FHoverFastOnly:= False;
+    end;
+    LapHoverTiming(HT, 'bundle-markdown');
+    if not Computed then
     begin
       Reply.AddPair('result', TJSONNull.Create);
       SendMessage(Reply);
       Exit;
     end;
+    if not HoverStillWanted(AId, RunSerial) then Exit;
 
+    { Owned by Reply from here on, so an abandoned run below frees it with Reply. }
     Res:= TJSONObject.Create;
+    Reply.AddPair('result', Res);
     Res.AddPair('markdown', WithContextFooter(AParams, Comp.MdValue));
 
     if not Comp.HasSymbol then
@@ -6104,7 +6191,6 @@ begin
         Res.AddPair('model', TJSONNull.Create);
       Res.AddPair('nameCallers'    , TJSONArray.Create );
       Res.AddPair('resolvedCallers', TJSONArray.Create );
-      Reply.AddPair('result', Res);
       SendMessage(Reply);
       Exit;
     end;
@@ -6114,8 +6200,18 @@ begin
     { The model, assembled by the same shared code `hover --format json` calls,
       then re-parsed into the reply. Re-parsing costs a few microseconds and
       buys the guarantee that the two surfaces cannot format differently. }
-    var Asm_     : THoverAssembly:= AssembleHover(Comp.Store, Comp.Sel, True, HoverExtraStores(Comp.Path, Comp.Store)); { 149 LX: cross-DB uses }
-    FactLines:= Asm_.FactLines + ExceptionFactLines(Comp.Store, Comp.Sel); { D1: the popup's Raises: line }
+    { v152 ASYNC: the first step skips the Phase-2 facts (AWithFacts False) and
+      says where they will go. }
+    var Fast     : Boolean       := Decision = dhdFast;
+    var Asm_     : THoverAssembly:= AssembleHover(Comp.Store, Comp.Sel, not Fast, HoverExtraStores(Comp.Path, Comp.Store)); { 149 LX: cross-DB uses }
+    LapHoverTiming(HT, 'bundle-assemble');
+    if Fast then FactLines:= Asm_.FactLines + [DEFERRED_PLACEHOLDER]
+    else
+    begin
+      if not HoverStillWanted(AId, RunSerial) then Exit;
+      FactLines:= Asm_.FactLines + ExceptionFactLines(Comp.Store, Comp.Sel); { D1: the popup's Raises: line }
+      LapHoverTiming(HT, 'bundle-exceptions');
+    end;
     var ModelJson: string:= DRagLint.Hover.Renderer.RenderHoverJson(Asm_.Model, FactLines);
     var ModelVal : TJSONValue := nil;
     try
@@ -6134,6 +6230,27 @@ begin
     end;
     if ModelVal <> nil then Res.AddPair('model', ModelVal)
     else                    Res.AddPair('model', TJSONNull.Create);
+
+    if Fast then
+    begin
+      { The first step ends here: no caller rows yet, and the list of what the
+        second ask at this position will add. Empty arrays, not missing keys --
+        the same contract the intrinsic branch keeps. }
+      Res.AddPair('nameCallers'    , TJSONArray.Create);
+      Res.AddPair('resolvedCallers', TJSONArray.Create);
+      var Pending: TJSONArray:= TJSONArray.Create;
+      Pending.Add('facts').Add('exceptions').Add('callers');
+      var Deferred: TJSONObject:= TJSONObject.Create;
+      Deferred.AddPair('placeholder', DEFERRED_PLACEHOLDER);
+      Deferred.AddPair('pending'    , Pending);
+      Res.AddPair('deferred', Deferred);
+      SendMessage(Reply);
+      Exit;
+    end;
+
+    { The test switch's artificial slow section sits where the real slow one
+      does: before the caller queries, sliced, and cancellable like them. }
+    if not HoverSlowWork(AId, RunSerial) then Exit;
 
     { CALLER SCOPING. Library stores are dropped from the caller search: callers
       of project code live in the project, and scanning the library index by
@@ -6233,6 +6350,8 @@ begin
     finally
       SrcCache.Free;
     end; // try
+    LapHoverTiming(HT, 'bundle-resolved-callers');
+    if not HoverStillWanted(AId, RunSerial) then Exit;
 
     var JName: TJSONArray:= TJSONArray.Create;
     for var i:= 0 to High(Search) do
@@ -6249,13 +6368,69 @@ begin
         JName.AddElement(O);
       end;
     Res.AddPair('nameCallers', JName);
+    LapHoverTiming(HT, 'bundle-name-callers');
+    { The last chance to notice the user moved on: a whole answer about where
+      the pointer WAS is the late reply the deferral exists to prevent. }
+    if not HoverStillWanted(AId, RunSerial) then Exit;
 
-    Reply.AddPair('result', Res);
     SendMessage(Reply);
   finally
     Reply.Free;
+    if RunSerial <> 0 then DeferredHover.EndComplete(RunSerial);
   end; // try
 end; // procedure
+
+function TLSPServer.DeferredHover: IDeferredHoverSlot;
+begin
+  if FDeferredHover = nil then FDeferredHover:= NewDeferredHoverSlot;
+  Result:= FDeferredHover;
+end;
+
+function TLSPServer.HoverStillWanted(const AId: TJSONValue; ARunSerial: Integer): Boolean;
+begin
+  Result:= True;
+  if ARunSerial = 0 then Exit; { not a deferred second step: never abandoned }
+  { Serve what arrived meanwhile -- a hover elsewhere, a $/cancelRequest, an
+    announcement -- so it can abandon this run. Single-threaded by design (see
+    YieldToPendingRequests); nothing here is concurrent. }
+  YieldToPendingRequests;
+  Result:= not DeferredHover.Abandoned(ARunSerial);
+  if not Result then SendError(AId, LSP_ERR_REQUEST_CANCELLED, 'hover abandoned: the pointer moved on');
+end;
+
+function TLSPServer.HoverSlowWork(const AId: TJSONValue; ARunSerial: Integer): Boolean;
+var
+  Remaining: Integer;
+begin
+  Result   := True;
+  Remaining:= InjectedHoverSlowMs;
+  while Remaining > 0 do
+  begin
+    Sleep(if Remaining < SLOW_SLICE_MS then Remaining else SLOW_SLICE_MS);
+    Dec(Remaining, SLOW_SLICE_MS);
+    if not HoverStillWanted(AId, ARunSerial) then Exit(False);
+  end;
+end;
+
+procedure TLSPServer.HandleDeferHover(const AParams: TJSONObject);
+var
+  Path: string ;
+  Line: Integer;
+  Col : Integer;
+begin
+  if PositionParams(AParams, Path, Line, Col) then DeferredHover.Announce(HoverKey(Path, Line, Col));
+end;
+
+procedure TLSPServer.HandleHoverCancel(const AParams: TJSONObject);
+var
+  IdVal: TJSONValue;
+begin
+  { $/cancelRequest was a no-op here before 1.52: only the deferred second step
+    of a hover is cancellable; every other request runs to its answer. }
+  if AParams = nil then Exit;
+  IdVal:= AParams.GetValue('id');
+  if IdVal <> nil then DeferredHover.CancelRequest(IdVal.ToJSON);
+end;
 
 procedure TLSPServer.HandleCompletion(const AId: TJSONValue; const AParams: TJSONObject);
 var
@@ -7130,6 +7305,9 @@ begin
     answers -32601 through the catch-all below, immediately, so a client can
     detect absence in one round trip instead of waiting for a timeout. }
   else if Method = 'draglint/hoverBundle' then HandleHoverBundle(Id, Params)
+  { v152 ASYNC: the deferred hover's announcement and its cancellation. }
+  else if Method = DEFER_HOVER_METHOD then HandleDeferHover(Params)
+  else if Method = '$/cancelRequest' then HandleHoverCancel(Params)
   else if Method = 'draglint/callerCounts' then HandleCallerCounts(Id, Params)
   else if Method = 'draglint/usages' then HandleUsages(Id, Params)
   else if Method = 'textDocument/completion' then HandleCompletion(Id, Params)
