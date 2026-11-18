@@ -416,7 +416,7 @@ begin
       R.TypeQName:= Q.FieldByName('type_qname').AsString;
       R.Via:= Q.FieldByName('via').AsString;
       var Ln: Integer:= Q.FieldByName('start_line').AsInteger;
-      var Key:= PosKey(Ln, if (Ln >= 1) and (Ln <= Length(LineStarts)) then
+      var Key:= PosKey(Ln, if InRange(Ln, 1, Length(LineStarts)) then
         Utf8CharColToByteCol(pBytes, LineStarts[Ln - 1], Q.FieldByName('start_col').AsInteger) else Q.FieldByName('start_col').AsInteger);
       var Old: TRow;
       if (not pRows.TryGetValue(Key, Old)) or RowIsBetter(R, Old) then pRows.AddOrSetValue(Key, R);

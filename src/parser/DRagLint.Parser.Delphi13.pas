@@ -4700,7 +4700,7 @@ var
   end;
 
   procedure Visit(const N: TTSNode);
-  var I: Integer; Lit: TStringLiteral; Raw, Dec: string; P: TTSPoint;
+  var I: Integer; Lit: TStringLiteral; Raw, Dec: string;
   begin
     if N.IsNull then Exit;
     { M1b: body-inline comment prose, so `query --text` can find an error
@@ -4732,8 +4732,10 @@ var
         Lit.Id       := 0;
         Lit.FileId   := 0;
         Lit.SymbolId := 0;
-        P:= N.StartPoint; Lit.StartLine:= Integer(P.Row)+1; Lit.StartCol:= NodeStartCharCol(N, ASource);
-        P:= N.EndPoint;   Lit.EndLine  := Integer(P.Row)+1; Lit.EndCol  := NodeEndCharCol(N, ASource);
+        Lit.StartLine:= Integer(N.StartPoint.Row) + 1;
+        Lit.StartCol := NodeStartCharCol(N, ASource);
+        Lit.EndLine  := Integer(N.EndPoint.Row) + 1;
+        Lit.EndCol   := NodeEndCharCol(N, ASource);
         Acc.Add(Lit);
       end;
       { A comment is a leaf (ChildCount=0 for all four forms, probed), so there
@@ -4750,8 +4752,10 @@ var
         Lit.Source:= 'pas';
         Lit.Kind  := ClassifyKind(N, Dec);
         Lit.Text  := Dec;
-        P:= N.StartPoint; Lit.StartLine:= Integer(P.Row)+1; Lit.StartCol:= NodeStartCharCol(N, ASource);
-        P:= N.EndPoint;   Lit.EndLine  := Integer(P.Row)+1; Lit.EndCol  := NodeEndCharCol(N, ASource);
+        Lit.StartLine:= Integer(N.StartPoint.Row) + 1;
+        Lit.StartCol := NodeStartCharCol(N, ASource);
+        Lit.EndLine  := Integer(N.EndPoint.Row) + 1;
+        Lit.EndCol   := NodeEndCharCol(N, ASource);
         Acc.Add(Lit);
       end;
     end;

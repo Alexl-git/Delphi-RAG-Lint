@@ -756,7 +756,7 @@
 #   superseded: 1.29.0-alpha|2e38a453d582cad0160480fbb7c1b8ead48ef4f2c85b54191922ba16c277b809
 #   2026-11-17 v152 EXTGAPS2 hash-only re-pin (rides the one 1.52 resolver bump 464d590a8): an 'export' ref binds by the call ladder, ValueOnly (no call edge); with-scope columns are characters; PersistGlobalArgWrites (data_flows global <- argout).
 #   superseded: 1.29.0-alpha|fea99f061d9ecda2f3b9e3478037f088d481b213a0e8e1af7e08e0fd39d0fed4
-1.29.0-alpha|3205ce3039e24f83248c18f631a53c1f2a68577d0f73f4583797061881bf9a2a
+1.29.0-alpha|a411f7238439abd486879c6425b67f18a3a385d1a122181757c27d684f117dfa
 #   2026-11-06 int2: hash moved WITHOUT a bump from 631322c4: the dl:ok comment on ResolveCallTargets re-stamped by the lint sweep, no code change.
 # superseded: 1.19.0-alpha|e4c14c16d87b21940e6ce6017456b8446a5cc516e342b72b816e3e161612ecba
 #   2026-11-06 1.19.0 -> 1.20.0-alpha (lanes facts + rename): ref_types (static type of a reference), ref_receivers (receiver link of a ref), references in initialization / finalization attributed to the section symbol. Additive, no SCHEMA_VERSION move. Remedy: index --all --resolve-only.
