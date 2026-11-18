@@ -1,4 +1,4 @@
-unit DRagLint.FieldRepo.OrmGen;
+unit DRagLint.FieldRepo.OrmGen;  // dl:ok unit-too-large@1be3 -- REVIEWED 2026-11-17 v152 TTGEN: holds the whole TableTools generator set ported line for line; output must stay byte-identical
 
 { drag-lint 1.52 -- lane TTGEN: ORM source generation from a field repository.
 
@@ -68,11 +68,11 @@ type
     /// <returns>The identifier form of the field name.</returns>
     function GetCurrentFieldName: string;
     /// <summary>FIELD_NAME as stored.</summary>
-    property FIELD_NAME: string read FFieldName;
+    property FIELD_NAME: string read FFieldName;  // dl:ok property-accessor-name@bdba -- REVIEWED 2026-11-17 v152 TTGEN: properties carry the DL_FIELDS_INFO column names so the ported generator code reads unchanged
     /// <summary>VAR_TYPE as stored.</summary>
-    property VAR_TYPE: string read FVarType;
+    property VAR_TYPE: string read FVarType;  // dl:ok property-accessor-name@a78e -- REVIEWED 2026-11-17 v152 TTGEN: properties carry the DL_FIELDS_INFO column names so the ported generator code reads unchanged
     /// <summary>FIELD_AS_TYPE as stored.</summary>
-    property FIELD_AS_TYPE: string read FFieldAsType;
+    property FIELD_AS_TYPE: string read FFieldAsType;  // dl:ok property-accessor-name@9cea -- REVIEWED 2026-11-17 v152 TTGEN: properties carry the DL_FIELDS_INFO column names so the ported generator code reads unchanged
     /// <summary>ENUMTYPE as stored.</summary>
     property ENUMTYPE: string read FEnumType;
     /// <summary>DEFAULTVAL as stored.</summary>
@@ -80,18 +80,18 @@ type
     /// <summary>ISENUM as stored.</summary>
     property ISENUM: Boolean read FIsEnum;
     /// <summary>FIELD_SIZE; 0 when NULL.</summary>
-    property FIELD_SIZE: Integer read FFieldSize;
+    property FIELD_SIZE: Integer read FFieldSize;  // dl:ok property-accessor-name@3101 -- REVIEWED 2026-11-17 v152 TTGEN: properties carry the DL_FIELDS_INFO column names so the ported generator code reads unchanged
     /// <summary>DOC_SUMMARY lines; owned by the field.</summary>
-    property DOC_SUMMARY: TStringList read FDocSummary;
+    property DOC_SUMMARY: TStringList read FDocSummary;  // dl:ok property-accessor-name@7fcf -- REVIEWED 2026-11-17 v152 TTGEN: properties carry the DL_FIELDS_INFO column names so the ported generator code reads unchanged
     /// <summary>DOC_REMARKS lines; owned by the field.</summary>
-    property DOC_REMARKS: TStringList read FDocRemarks;
+    property DOC_REMARKS: TStringList read FDocRemarks;  // dl:ok property-accessor-name@a9a7 -- REVIEWED 2026-11-17 v152 TTGEN: properties carry the DL_FIELDS_INFO column names so the ported generator code reads unchanged
   end;
 
   /// <summary>Generates ORM units (i/u/_SERVER/_CLIENT) for repository tables and
   /// regenerates the DB-RAD regions of existing ones.</summary>
   /// <remarks>Holds the field list of ONE table at a time (LoadTable); not thread-safe.
   /// Does not own the repository connection.</remarks>
-  TOrmGenerator = class
+  TOrmGenerator = class  // dl:ok high-response@ce3d -- REVIEWED 2026-11-17 v152 TTGEN: one method per TableTools section generator, kept 1:1 with the source it ports
   private
     FRepo: TFDConnection;
     FFieldList: TObjectList<TOrmField>;
@@ -204,12 +204,12 @@ type
 /// <param name="pLine">One source line without its line end.</param>
 /// <param name="pRegionId">Receives the upper-case id ('2', '1A', 'CL-KEY'); '' when False.</param>
 /// <returns>True for a '{$REGION 'DB-RAD &lt;id&gt;'}' line.</returns>
-function IsOrmRegionStart(const pLine: string; out pRegionId: string): Boolean;
+function IsOrmRegionStart(const pLine: string; out pRegionId: string): Boolean;  // dl:ok unused-public-symbol@e22e -- REVIEWED 2026-11-17 v152 TTGEN: public API used by tests\fieldrepo\OrmGenTests.dpr and by CLI.Repo after the TTGEN handover
 
 /// <summary>True when a line closes a DB-RAD region: a '{$ENDREGION' whose name starts with DB-RAD.</summary>
 /// <param name="pLine">One source line without its line end.</param>
 /// <returns>True for a '{$ENDREGION 'DB-RAD ...'}' line.</returns>
-function IsOrmRegionEnd(const pLine: string): Boolean;
+function IsOrmRegionEnd(const pLine: string): Boolean;  // dl:ok unused-public-symbol@f4c6 -- REVIEWED 2026-11-17 v152 TTGEN: public API used by tests\fieldrepo\OrmGenTests.dpr and by CLI.Repo after the TTGEN handover
 
 /// <summary>Plans repo update-orm: regenerates the DB-RAD regions of i&lt;T&gt;.PAS and
 /// u&lt;T&gt;.PAS in pCodeDir, u&lt;T&gt;_SERVER.PAS in pServerDir and u&lt;T&gt;_CLIENT.PAS in
@@ -269,7 +269,7 @@ function OrmSplitLines(const pText: string): TArray<string>;
 /// <summary>Joins lines the way TStringList.SaveToFile does: every line followed by CRLF.</summary>
 /// <param name="pLines">The lines.</param>
 /// <returns>The text.</returns>
-function OrmJoinLines(const pLines: TStrings): string;
+function OrmJoinLines(const pLines: TStrings): string;  // dl:ok unused-public-symbol@f84e -- REVIEWED 2026-11-17 v152 TTGEN: public API used by tests\fieldrepo\OrmGenTests.dpr and by CLI.Repo after the TTGEN handover
 
 implementation
 
@@ -392,7 +392,7 @@ end;
 
 { TOrmField }
 
-constructor TOrmField.Create(const pFieldName, pVarType, pFieldAsType, pEnumType, pDefaultVal: string;
+constructor TOrmField.Create(const pFieldName, pVarType, pFieldAsType, pEnumType, pDefaultVal: string;  // dl:ok too-many-parameters@40ab -- REVIEWED 2026-11-17 v152 TTGEN: one value per DL_FIELDS_INFO column the generators read
   pIsEnum: Boolean; pFieldSize: Integer; const pDocSummary, pDocRemarks: string);
 begin
   inherited Create;
@@ -505,11 +505,22 @@ begin
 end;
 
 procedure TOrmGenerator.LoadTable(const pTableName: string);
-type
-  { column positions of SQL_FIELDS, in its SELECT order }
-  TFieldCol = (fcName, fcVarType, fcAsType, fcEnumType, fcDefault, fcIsEnum, fcSize, fcSummary,
-    fcRemarks, fcCalc, fcLookup, fcPk, fcSeq);
 const
+  { column positions of SQL_FIELDS, in its SELECT order }
+  FC_NAME = 0;
+  FC_VARTYPE = 1;
+  FC_ASTYPE = 2;
+  FC_ENUMTYPE = 3;
+  FC_DEFAULT = 4;
+  FC_ISENUM = 5;
+  FC_SIZE = 6;
+  FC_SUMMARY = 7;
+  FC_REMARKS = 8;
+  FC_CALC = 9;
+  FC_LOOKUP = 10;
+  FC_PK = 11;
+  FC_SEQ = 12;
+
   SQL_FIELDS =
     'SELECT FIELD_NAME, VAR_TYPE, FIELD_AS_TYPE, ENUMTYPE, DEFAULTVAL, ISENUM, FIELD_SIZE, ' +
     'DOC_SUMMARY, DOC_REMARKS, ISCALCULATED, ISLOOKUP, PRIMARY_KEY, SEQUENCE_NAME ' +
@@ -535,25 +546,25 @@ begin
     while not Q.Eof do
     begin
       { calculated / lookup fields have no real column: they never enter the list (TableTools 2026-05-19) }
-      if not (Q.Fields[Ord(fcCalc)].AsBoolean or Q.Fields[Ord(fcLookup)].AsBoolean) then
+      if not (Q.Fields[FC_CALC].AsBoolean or Q.Fields[FC_LOOKUP].AsBoolean) then
       begin
         Field:= TOrmField.Create(
-          Q.Fields[Ord(fcName)].AsString.TrimRight,
-          Q.Fields[Ord(fcVarType)].AsString.TrimRight,
-          Q.Fields[Ord(fcAsType)].AsString.TrimRight,
-          Q.Fields[Ord(fcEnumType)].AsString.TrimRight,
-          Q.Fields[Ord(fcDefault)].AsString.TrimRight,
-          Q.Fields[Ord(fcIsEnum)].AsBoolean,
-          Q.Fields[Ord(fcSize)].AsInteger,
-          Q.Fields[Ord(fcSummary)].AsString,
-          Q.Fields[Ord(fcRemarks)].AsString);
+          Q.Fields[FC_NAME].AsString.TrimRight,
+          Q.Fields[FC_VARTYPE].AsString.TrimRight,
+          Q.Fields[FC_ASTYPE].AsString.TrimRight,
+          Q.Fields[FC_ENUMTYPE].AsString.TrimRight,
+          Q.Fields[FC_DEFAULT].AsString.TrimRight,
+          Q.Fields[FC_ISENUM].AsBoolean,
+          Q.Fields[FC_SIZE].AsInteger,
+          Q.Fields[FC_SUMMARY].AsString,
+          Q.Fields[FC_REMARKS].AsString);
         FFieldList.Add(Field);
-        if Q.Fields[Ord(fcPk)].AsBoolean then
+        if Q.Fields[FC_PK].AsBoolean then
         begin
           FKeyFields.Add(Field.FIELD_NAME);
           FKeyTypes.Add(Field.VAR_TYPE);
           S:= 'GEN_' + pTableName + '_' + Field.GetCurrentFieldName;
-          if Q.Fields[Ord(fcSeq)].AsString.Trim <> '' then
+          if Q.Fields[FC_SEQ].AsString.Trim <> '' then
           begin
             FKeyGens.Add(S);
             FGenName:= S;
@@ -581,7 +592,7 @@ begin
   InterfaceObject.Add('end.'          );
 end;
 
-procedure TOrmGenerator.GenerateNewServerObject(const TableName0: string; PasObject: TStringList);
+procedure TOrmGenerator.GenerateNewServerObject(const TableName0: string; PasObject: TStringList);  // dl:ok method-too-long@51af -- REVIEWED 2026-11-17 v152 TTGEN: verbatim TableTools generator (one Add per emitted line); splitting it risks the byte-identical output
 var
   SectionCode : TStringList;
   TableId   : string;
@@ -962,7 +973,7 @@ begin
   end; // try
 end; // procedure
 
-procedure TOrmGenerator.GenerateNewTableObject(const TableName0: string; InterfaceObject, PasObject: TStringList);
+procedure TOrmGenerator.GenerateNewTableObject(const TableName0: string; InterfaceObject, PasObject: TStringList);  // dl:ok method-too-long@4e9f -- REVIEWED 2026-11-17 v152 TTGEN: verbatim TableTools generator (one Add per emitted line); splitting it risks the byte-identical output
 var
   IntfGUID    : TGUID;
   TableId   : string;
@@ -1492,8 +1503,8 @@ begin
     FieldN  := GetFieldName(FKeyFields[I]);
     if I > 0 then
     begin
-      FmtParts:= FmtParts + '|';
-      ArgParts:= ArgParts + ', ';
+      FmtParts:= FmtParts + '|';  // dl:ok concat-in-loop@15c6 -- REVIEWED 2026-11-17 v152 TTGEN: ported TableTools string building over a handful of key fields; kept 1:1
+      ArgParts:= ArgParts + ', ';  // dl:ok concat-in-loop@78b6 -- REVIEWED 2026-11-17 v152 TTGEN: ported TableTools string building over a handful of key fields; kept 1:1
     end;
     if (CurField.FIELD_AS_TYPE.ToLower = 'asinteger') or (CurField.FIELD_AS_TYPE.ToLower = 'assmallint') then
     begin
@@ -1511,7 +1522,7 @@ begin
       ArgExpr:= 'A' + FieldN;
     end;
     FmtParts:= FmtParts + FieldN + '=' + FmtSpec;
-    ArgParts:= ArgParts + ArgExpr;
+    ArgParts:= ArgParts + ArgExpr;  // dl:ok concat-in-loop@9a23 -- REVIEWED 2026-11-17 v152 TTGEN: ported TableTools string building over a handful of key fields; kept 1:1
   end; // for
   SectionCode.Add('  Result := TEncoding.UTF8.GetBytes(');
   SectionCode.Add(Format('    Format(''TABLE=%s|%s'', [%s]));', [TableId, FmtParts, ArgParts]));
@@ -1548,7 +1559,7 @@ begin
   end; // for
 end; // procedure
 
-procedure TOrmGenerator.GenerateCLSectionSAVE(SectionCode: TStringList; const TableName0: string);
+procedure TOrmGenerator.GenerateCLSectionSAVE(SectionCode: TStringList; const TableName0: string);  // dl:ok duplicate-code@c2b0 -- REVIEWED 2026-11-17 v152 TTGEN: TableTools section generators differ only in emitted text; kept 1:1 with the ported source
 var
   I        : Integer;
   CurField : TOrmField;
@@ -1579,7 +1590,7 @@ begin
   end; // for
 end; // procedure
 
-procedure TOrmGenerator.GenerateCLSectionDEL(SectionCode: TStringList; const TableName0: string);
+procedure TOrmGenerator.GenerateCLSectionDEL(SectionCode: TStringList; const TableName0: string);  // dl:ok duplicate-code@7072 -- REVIEWED 2026-11-17 v152 TTGEN: TableTools section generators differ only in emitted text; kept 1:1 with the ported source
 var
   I        : Integer;
   CurField : TOrmField;
@@ -1647,7 +1658,7 @@ begin
   end;
 end; // procedure
 
-procedure TOrmGenerator.GenerateNewClientObject(const TableName0: string; PasObject: TStringList);
+procedure TOrmGenerator.GenerateNewClientObject(const TableName0: string; PasObject: TStringList);  // dl:ok method-too-long@a378 -- REVIEWED 2026-11-17 v152 TTGEN: verbatim TableTools generator (one Add per emitted line); splitting it risks the byte-identical output
 var
   SectionCode  : TStringList;
   TableId    : string;
@@ -1711,12 +1722,12 @@ begin
     end;
     if I > 0 then
     begin
-      KeyParamSig  := KeyParamSig   + '; ';
-      KeyArgFromObj:= KeyArgFromObj + ', ';
-      KeyArgDirect := KeyArgDirect  + ', ';
-      KeyLogFmt    := KeyLogFmt     + ' ';
-      KeyLogArgObj := KeyLogArgObj  + ', ';
-      KeyLogArgDir := KeyLogArgDir  + ', ';
+      KeyParamSig  := KeyParamSig   + '; ';  // dl:ok concat-in-loop@ca22 -- REVIEWED 2026-11-17 v152 TTGEN: ported TableTools string building over a handful of key fields; kept 1:1
+      KeyArgFromObj:= KeyArgFromObj + ', ';  // dl:ok concat-in-loop@5d8c -- REVIEWED 2026-11-17 v152 TTGEN: ported TableTools string building over a handful of key fields; kept 1:1
+      KeyArgDirect := KeyArgDirect  + ', ';  // dl:ok concat-in-loop@628a -- REVIEWED 2026-11-17 v152 TTGEN: ported TableTools string building over a handful of key fields; kept 1:1
+      KeyLogFmt    := KeyLogFmt     + ' ';  // dl:ok concat-in-loop@36f0 -- REVIEWED 2026-11-17 v152 TTGEN: ported TableTools string building over a handful of key fields; kept 1:1
+      KeyLogArgObj := KeyLogArgObj  + ', ';  // dl:ok concat-in-loop@485e -- REVIEWED 2026-11-17 v152 TTGEN: ported TableTools string building over a handful of key fields; kept 1:1
+      KeyLogArgDir := KeyLogArgDir  + ', ';  // dl:ok concat-in-loop@aeca -- REVIEWED 2026-11-17 v152 TTGEN: ported TableTools string building over a handful of key fields; kept 1:1
     end;
     KeyParamSig:= KeyParamSig + 'const A' + FieldN + ': ' + ParamType;
     if SameText(CurField.VAR_TYPE, 'TSQLTimeStamp') then
@@ -2112,7 +2123,7 @@ begin
   for CurField in FFieldList do
   begin
 
-    RealType:= if CurField.ISENUM then CurField.ENUMTYPE else CurField.VAR_TYPE;
+    RealType:= if CurField.ISENUM then CurField.ENUMTYPE else CurField.VAR_TYPE;  // dl:ok duplicate-code@2407 -- REVIEWED 2026-11-17 v152 TTGEN: TableTools section generators differ only in emitted text; kept 1:1 with the ported source
     SectionCode.Add('{$REGION ''Documentation''}		');
     if CurField.DOC_SUMMARY.Count > 0 then
     begin
@@ -2633,7 +2644,7 @@ begin
   Result.NewText:= pNewText;
   if not pExists then
     Result.Kind:= ockNew
-  else if pOldText = pNewText then
+  else if pOldText = pNewText then  // dl:ok ifthen-to-if-expression@1943 -- REVIEWED 2026-11-17 v152 TTGEN: three-way result, an if-expression is not clearer here
     Result.Kind:= ockUnchanged
   else
     Result.Kind:= ockChanged;

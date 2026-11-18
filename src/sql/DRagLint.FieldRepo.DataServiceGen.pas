@@ -26,7 +26,7 @@ uses
 /// <param name="pTables">Tables to generate; empty = every repository table.</param>
 /// <returns>Two entries per table (server, client) in table order, then the two DI units.</returns>
 /// <exception cref="EOrmGenError">A named table is not in the repository.</exception>
-function PlanGenDataService(pRepo: TFDConnection; const pServerDir, pClientDir: string;
+function PlanGenDataService(pRepo: TFDConnection; const pServerDir, pClientDir: string;  // dl:ok unused-public-symbol@0574 -- REVIEWED 2026-11-17 v152 TTGEN: public API used by tests\fieldrepo\OrmGenTests.dpr and by CLI.Repo after the TTGEN handover
   const pTables: TArray<string>): TArray<TOrmFileChange>;
 
 type
@@ -60,7 +60,7 @@ type
 /// <param name="pOut">Receives the output lines; not cleared.</param>
 /// <returns>0 done; 1 bad arguments (a folder the verb needs is missing), unknown sub-verb,
 /// unknown table or a repository / generator error (the message is in pOut).</returns>
-function RunOrmGenVerb(const pOptions: TOrmVerbOptions; pOut: TStrings): Integer;
+function RunOrmGenVerb(const pOptions: TOrmVerbOptions; pOut: TStrings): Integer;  // dl:ok unused-public-symbol@bfa6 -- REVIEWED 2026-11-17 v152 TTGEN: public API used by tests\fieldrepo\OrmGenTests.dpr and by CLI.Repo after the TTGEN handover
 implementation
 
 uses
