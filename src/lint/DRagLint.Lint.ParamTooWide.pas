@@ -1,6 +1,6 @@
 unit DRagLint.Lint.ParamTooWide;
 
-{ The `parameter-type-too-wide` project rule (1.46 lane t4, E-PARAM-TOO-WIDE). OFF by default.
+{ The `parameter-type-too-wide` project rule (1.46 lane t4, E-PARAM-TOO-WIDE). ON since 1.52 (lane PTW, ruling B7), a warning; the autofix is DRagLint.Fix.V152.PTW.
 
   A class-typed parameter whose routine only ever uses members that an ancestor of the declared
   type already declares could take that ancestor: the signature promises more than the body needs
@@ -26,13 +26,13 @@ const
 /// <param name="AStore">The project index (a SQLite store); nil yields no findings.</param>
 /// <param name="ALibraryStore">The platform library index, or nil. Without it an ancestor or
 /// member the project does not declare is unproved, so the rule stays silent there.</param>
-/// <returns>One 'parameter-type-too-wide' hint per parameter `narrow-param` can prove narrowable,
+/// <returns>One 'parameter-type-too-wide' warning per parameter `narrow-param` can prove narrowable,
 /// anchored at the routine's declaration line; the message names the parameter, its type and the
 /// narrower type (and the unit that would join the uses clause).</returns>
 /// <remarks>
 /// Not thread-safe. Reads the source files of the routines it examines (the planner masks
 /// comments and strings); writes nothing. Cost is the planner's: a full routine scan plus one
-/// file read per examined routine, so it is OptedIn-gated and ships OFF.
+/// file read per examined routine, so it is OptedIn-gated (lint-all / lint-project opt it in by default since 1.52; `lint <file>` only with --rule).
 /// </remarks>
 function CollectParamTooWide(const AStore, ALibraryStore: ISymbolStore): TArray<TLintFinding>;
 
@@ -58,7 +58,7 @@ begin
     var S:= Plan.Fixes[I];
     var F:= Default(TLintFinding);
     F.RuleId   := PARAM_TOO_WIDE_RULE;
-    F.Severity := 'hint';
+    F.Severity := 'warning';
     F.FilePath := S.FilePath;
     F.StartLine:= S.Line;
     F.EndLine  := S.Line;

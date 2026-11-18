@@ -142,6 +142,7 @@ uses
   , DRagLint.Index.LibraryOracle { TLibraryOracle -- find-callees binds a value receiver typed by name to a library routine (item 4) }
   , DRagLint.Fix.V151.Legacy { SetFixWithLibrary (152 FIXLIB) }
   , DRagLint.Lint.Autofix   { IsFixableRule & co. + BuildAutofixEdits -- the autofix registry (lane A0) }
+  , DRagLint.Fix.V152.PTW   { SetPtwFixLibrary (v152 PTW) }
   , DRagLint.Refactor.RedundantCast { lane 144 item 1: the gated redundant-cast fix }
   , DRagLint.Refactor.NarrowParam   { lane 144 item 2: narrow-param }
   , DRagLint.Refactor.ExtractInterface   { lane 146 g3: extract-interface }
@@ -12805,12 +12806,16 @@ begin
     { 152 FIXLIB (B9h): the with fixer resolves a class target through the platform library, as unwith does }
     var FixLibs: TArray<ISymbolStore>:= RefactorLibraries(AArgs);
     if Length(FixLibs) > 0 then SetFixWithLibrary(FixLibs[0]);
+    { v152 PTW: the parameter-type-too-wide fix re-proves each finding; VCL / RTL ancestors need the platform library }
+    var PtwLibs: TArray<ISymbolStore>:= RefactorLibraries(AArgs);
+    SetPtwFixLibrary(if Length(PtwLibs) > 0 then PtwLibs[0] else nil);
     var Edits: TArray<TTextEdit>:= BuildAutofixEdits(Targeted, FixCount);
     if AutofixTargetSkipped > 0 then
       Writeln(ErrOutput, Format('drag-lint: %d fix(es) skipped (target-compiler) -- the fix emits syntax newer than %s; the finding stays.',
         [AutofixTargetSkipped, CompilerDisplayName(ActiveTargetCompiler)]));
     SetAutofixStore(nil);
     SetFixWithLibrary(nil);
+    SetPtwFixLibrary(nil);
     { Naming edits dropped by BuildNamingFixEdits' stale-position guard (the
       recorded site no longer holds the identifier being renamed). Declared out
       here so the autofix summary below can report it -- an invisible skip is
@@ -20845,7 +20850,7 @@ begin
       OptIn:= OptIn + ['datamodule-form-global'];
     if Cfg.ShouldKeep('rtti-unavailable', {ADefaultDisabled=}True) then   { 152b lane RTTI }
       OptIn:= OptIn + ['rtti-unavailable'];
-    if Cfg.ShouldKeep('parameter-type-too-wide', {ADefaultDisabled=}True) then   { 1.46 lane t4 }
+    if Cfg.ShouldKeep('parameter-type-too-wide', {ADefaultDisabled=}False) then   { 1.46 lane t4; ON since 1.52 lane PTW (B7) }
       OptIn:= OptIn + ['parameter-type-too-wide'];
     for var Rt in REF_TYPE_RULES do   { 1.44 lane rulesf1 }
       if Cfg.ShouldKeep(Rt, RefTypeRuleDefaultOff(Rt)) then OptIn:= OptIn + [Rt];
@@ -21388,7 +21393,7 @@ begin
       OptIn2:= OptIn2 + ['datamodule-form-global'];
     if LoadLintConfig(AArgs).ShouldKeep('rtti-unavailable', {ADefaultDisabled=}True) then   { 152b lane RTTI }
       OptIn2:= OptIn2 + ['rtti-unavailable'];
-    if LoadLintConfig(AArgs).ShouldKeep('parameter-type-too-wide', {ADefaultDisabled=}True) then   { 1.46 lane t4 }
+    if LoadLintConfig(AArgs).ShouldKeep('parameter-type-too-wide', {ADefaultDisabled=}False) then   { 1.46 lane t4; ON since 1.52 lane PTW (B7) }
       OptIn2:= OptIn2 + ['parameter-type-too-wide'];
     for var Rt2 in REF_TYPE_RULES do   { 1.44 lane rulesf1 }
       if LoadLintConfig(AArgs).ShouldKeep(Rt2, RefTypeRuleDefaultOff(Rt2)) then OptIn2:= OptIn2 + [Rt2];

@@ -4882,7 +4882,7 @@ begin
     if WantRule(DATAMODULE_FORM_GLOBAL_RULE) and OptedIn(DATAMODULE_FORM_GLOBAL_RULE) then
       for var Dm in CollectDataModuleFormGlobal(AStore, ALibraryStore) do Findings.Add(Dm);
     Lap('datamodule-form-global');
-    { parameter-type-too-wide (1.46 lane t4): OFF; the narrow-param plan's fixes -- a routine scan plus a file read per routine, which a post-hoc filter would hide while still charging for it. }
+    { parameter-type-too-wide (1.46 lane t4; ON since 1.52 lane PTW): the narrow-param plan's fixes -- a routine scan plus a file read per routine, which a post-hoc filter would hide while still charging for it. }
     if WantRule(PARAM_TOO_WIDE_RULE) and OptedIn(PARAM_TOO_WIDE_RULE) then
       for var Pw in CollectParamTooWide(AStore, ALibraryStore) do Findings.Add(Pw);
     Lap('parameter-type-too-wide');

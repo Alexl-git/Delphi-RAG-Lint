@@ -4,7 +4,7 @@
   The rule reports exactly the FIXES of `narrow-param --all --plan`, so the fixture is the narrow-param one
   (tests\fixtures\refactor\narrowparam): NpUse.pas marks each routine NARROW <type> / REFUSE <kind> / NONE.
   RUN 1 asks for the rule: exactly the NARROW lines fire, none of the REFUSE / NONE lines (the negative controls).
-  RUN 2 is a plain lint-all: the rule ships OFF, so nothing. RUN 3 changes one routine's body so it needs the
+  RUN 2 is a plain lint-all: the rule ships ON since 1.52, so the same lines. RUN 3 changes one routine's body so it needs the
   declared type: its finding disappears while the others stay (the finding follows the proof, not the signature).
 
   Usage: pwsh -File tests\lint-project\parameter-type-too-wide\run_parameter_type_too_wide.ps1 [-Exe <drag-lint.exe>]
@@ -58,8 +58,8 @@ try {
   $msg = @((Parse-Findings $raw) | Where-Object { $_.rule -eq $Rule } | Select-Object -First 1)
   Check 'RUN 1 the message names parameter and narrower type' (($msg.Count -eq 1) -and ($msg[0].message -match 'pP') -and ($msg[0].message -match '\bT(Base|Mid|Root)\b')) "$($msg[0].message)"
 
-  $off = @(RuleLines $db @())
-  Check 'RUN 2 plain lint-all: the rule ships OFF' ($off.Count -eq 0) "$($off.Count) finding(s)"
+  $on = @(RuleLines $db @())
+  Check 'RUN 2 plain lint-all: the rule ships ON (1.52, ruling B7) -- exactly the NARROW lines' (($on -join ',') -eq ($want -join ',')) "got [$($on -join ',')]"
 
   # RUN 3: ViaBase then also calls a TLeaf-only member -> the proof fails -> its finding goes, the rest stay.
   $t = [IO.File]::ReadAllText($use)

@@ -18,8 +18,8 @@ param(
   [string]$Exe = "third_party\dll-win64\drag-lint.exe",
   [string]$Repo = "",
   [int]$ExpectTotal = 435,   # INT: +2 unconnected-control, hanging-handler (UNCONN, ON), +1 unit-used-by-no-unit (PROJ2, ON), +2 doc-placeholder (ON) + doc-malformed-summary (OFF) (DOCPOL), +1 extract-constant (XCONST, OFF, fixable; magic-literal family +3 fixable), +1 rule-skipped-budget (BUDGET, ON), +2 ATLA rules (ON), +1 member-could-be-private (ATLB, OFF), +1 index-possibly-out-of-range (IDXRANGE2), +1 review-marker-remeasured (MARK)
-  [int]$ExpectFixable = 130,
-  [int]$ExpectOn = 353   # 1.52: +2 UNCONN ON; +1 unit-used-by-no-unit ON; +1 doc-placeholder ON; +1 rule-skipped-budget ON; +2 ATLA ON; index-possibly-out-of-range OFF (FP gate), review-marker-remeasured ON; +4 DEFAULTS (3 lint + datamodule-form-global)
+  [int]$ExpectFixable = 131,   # +1 parameter-type-too-wide (PTW)
+  [int]$ExpectOn = 354   # 1.52: +1 parameter-type-too-wide ON (PTW); +2 UNCONN ON; +1 unit-used-by-no-unit ON; +1 doc-placeholder ON; +1 rule-skipped-budget ON; +2 ATLA ON; index-possibly-out-of-range OFF (FP gate), review-marker-remeasured ON; +4 DEFAULTS (3 lint + datamodule-form-global)
 )
 $ErrorActionPreference = "Stop"
 $repo = if ($Repo -ne "") { (Resolve-Path $Repo).Path } else { (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path }

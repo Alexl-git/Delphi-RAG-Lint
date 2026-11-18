@@ -5,7 +5,7 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.46.0-alpha",
-  "summary": "Project lint rule, OFF by default: a class-typed parameter that an ancestor type could carry, proved by the narrow-param plan",
+  "summary": "Project lint rule, ON by default since 1.52 (warning, with an autofix): a class-typed parameter that an ancestor type could carry, proved by the narrow-param plan",
   "intro": "Read this to see what parameter-type-too-wide reports and how it relates to narrow-param. It runs in lint-all and lint-project over a project index.",
   "wikiPage": "parameter-type-too-wide",
   "surfaces": [
