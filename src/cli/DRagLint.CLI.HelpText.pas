@@ -123,7 +123,7 @@ begin
   Writeln('       ^ --no-docs is a FILTER (UNDOCUMENTED symbols only), not "hide the docs" -- to list them all use query --kind <k> --all');
   Writeln('       ^ --decl-contains searches the DECLARING SOURCE LINE (`stored X`, `default V`, `read F write S`)');
   Writeln('         -- clauses the index does not model. Needs --kind, --name or --unit; it re-reads source per candidate.');
-  Writeln('  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file> [--no-create]] [--library-db <lib.sqlite>]');
+  Writeln('  drag-lint usages             --name <X> | --in <file> --line <L> [--col <C>] [--scope symbol|project|group|everywhere] [--group <x.groupproj>] [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file> [--no-create]] [--library-db <lib.sqlite>]');
   Writeln('                               grouped usage report; backs the IDE Symbol Search dialog''s Usages view.');
   Writeln('                               --limit N keeps the first N rows of each JSON group (declarations included) and adds');
   Writeln('                               "limit" and "totals" (the full counts); without it nothing is capped.');
@@ -603,7 +603,7 @@ begin
   Writeln('       see wiki page: Reverse-Call-Tree-who-calls-this-N-deep');
   Writeln('  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)');
   Writeln('       see wiki page: rules');
-  Writeln('  drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]');
+  Writeln('  drag-lint usages --name <X> | --in <file> --line <L> [--col <C>] [--scope symbol|project|group|everywhere] [--group <x.groupproj>] [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]');
   Writeln('       see wiki page: Find-Usages-context');
 end;
 
@@ -754,8 +754,9 @@ begin
   end;
   if pVerb = 'usages' then
   begin
-    Writeln('  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file> [--no-create]] [--library-db <lib.sqlite>]');
+    Writeln('  drag-lint usages             --name <X> | --in <file> --line <L> [--col <C>] [--scope symbol|project|group|everywhere] [--group <x.groupproj>] [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file> [--no-create]] [--library-db <lib.sqlite>]');
     Writeln('                               grouped usage report; backs the IDE Symbol Search dialog''s Usages view.');
+    Writeln('                               --scope (1.52): symbol (default) = the declaration --in/--line/--col or a qualified --name is BOUND to, in this project; project = every object of the name in this project; group = the name in every project of --group <x.groupproj>; everywhere = the name in every index the manifest knows. A bare --name with no position binds nothing and is answered as scope project (the JSON says scope, scope_note, databases).');
     Writeln('                               --limit N keeps the first N rows of each JSON group (declarations included) and adds');
     Writeln('                               "limit" and "totals" (the full counts); without it nothing is capped.');
     Writeln('                               --rw: the users of a member split into readers and writers, one block per declaration: a property with its backing field and accessor methods, a field with its properties, a getter (reads) or setter (writes). Rows name the route (property, field, getter, setter, direct).');

@@ -34,6 +34,7 @@ uses
   , DRagLint.Index   .Manifest  { v(ADP2 T9): LoadDocComplexityMin -- same threshold `document` uses }
   , DRagLint.Query   .Callers   { v(hover bundle): the shared caller queries the CLI also renders from }
   , DRagLint.Query   .HoverModel{ v(hover bundle): the shared model assembly `hover --format json` uses }
+  , DRagLint.Query   .UsageScope{ 1.52 FUSCOPE: the Find Usages scope references honour }
   , DRagLint.LSP     .Context   { S0: ILspServerContext + the feature registry }
   , DRagLint.Project .ContextFile { LSP-1 CORE: .dlcontext.json + central context defaults }
   , DRagLint.Lint    .TargetCompiler { 1.38: the target-compiler gate of each file's diagnostics }
@@ -228,6 +229,11 @@ type
       /// ISymbolStore does not expose its own path, and widening that interface
       /// for one caller-scoping rule would be the larger change.</remarks>
       FStorePaths  : TArray<string>      ;
+      { 1.52 FUSCOPE: the Find Usages scope of textDocument/references (client setting
+        dragLint.usagesScope, default symbol) and the project group file scope group reads
+        (dragLint.usagesGroup). }
+      FUsagesScope : TUsageScope         ;
+      FUsagesGroup : string              ;
       { INBOX-lsp-hover-unindexed-file-resolves-library-symbol (2026-08-27).
       An EPHEMERAL, single-unit index for a hovered file that NO configured
       store owns -- a loose unit, another repo, anything open after Close All.
@@ -2158,6 +2164,23 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ComputeReferences(const APath: string; ALine0, ACol0: Integer; AIncludeDecl: Boolean): TJSONArray;
+      /// <summary>1.52 FUSCOPE: the references of the symbol the position is BOUND to
+      /// (scope symbol), added to AArr.</summary>
+      /// <param name="AArr">Receives the locations.</param>
+      /// <param name="AStores">The file's stores.</param>
+      /// <param name="APath">The file.</param>
+      /// <param name="AIdent">The identifier at the position.</param>
+      /// <param name="ALine0">0-based line.</param>
+      /// <param name="ACol0">0-based column.</param>
+      /// <param name="AIncludeDecl">Add the bound declaration too.</param>
+      /// <returns>False when no store owning the file binds the position: the caller
+      /// answers by name (scope project).</returns>
+      function AddBoundReferences(AArr: TJSONArray; const AStores: TArray<ISymbolStore>; const APath, AIdent: string;
+        ALine0, ACol0: Integer; AIncludeDecl: Boolean): Boolean;
+      /// <summary>1.52 FUSCOPE: reads dragLint.usagesScope / usagesGroup from a
+      /// settings object (initializationOptions or the didChangeConfiguration section).</summary>
+      /// <param name="ASettings">The object; nil or keys absent leave the settings as they are.</param>
+      procedure ApplyUsageSettings(const ASettings: TJSONObject);
       /// <summary>What a registered LSP feature answers for a request, without
       /// writing it anywhere: the merge proxy's way to serve a feature (stdout is
       /// the relay's, never this server's, in that mode).</summary>
@@ -3068,6 +3091,7 @@ begin
     if AParams <> nil then
     begin
       var InitOpt: TJSONValue:= AParams.GetValue('initializationOptions');
+      if InitOpt is TJSONObject then ApplyUsageSettings(TJSONObject(InitOpt));
       if (InitOpt is TJSONObject) and HasContextKeys(TJSONObject(InitOpt)) then ApplyClientContext(TJSONObject(InitOpt))
       else if (InitOpt is TJSONObject) and (JsonStrOf(TJSONObject(InitOpt), 'settingsFile') <> '') then
         ApplyClientSettingsFile(FileFromUri(JsonStrOf(TJSONObject(InitOpt), 'settingsFile')));
@@ -3452,6 +3476,25 @@ begin
       { v0.40.3: iterate every store for both callers and declarations.
         Through StoresForFile for the same reason HandleDefinition does. }
       var RefStores: TArray<ISymbolStore>:= StoresForFile(Path);
+      { 1.52 FUSCOPE: scope symbol (the default) answers the symbol the position is
+        BOUND to; nothing bound falls through to the name answer below (scope project). }
+      if (FUsagesScope = usSymbol) and AddBoundReferences(Arr, RefStores, Path, Ident, ALine0, ACol0, IncludeDecl) then Exit(Arr);
+      if FUsagesScope in [usGroup, usEverywhere] then
+      begin
+        var Own: TArray<string>:= nil;
+        for var St: ISymbolStore in RefStores do Own:= Own + [StorePathOf(St)];
+        var Note: string;
+        for var D: string in UsageScopeDbs(FUsagesScope, Own, FUsagesGroup, '', Note) do
+        begin
+          var Known: Boolean:= False;
+          for var P: string in Own do
+            if SameText(ExpandFileName(P), D) then Known:= True;
+          if Known then Continue;
+          var Extra: ISymbolStore:= OpenReaderStore(D);
+          if Extra <> nil then RefStores:= RefStores + [Extra];
+        end;
+        if Note <> '' then Writeln(ErrOutput, 'drag-lint LSP: references: ', Note);
+      end;
       for var StIdx:= 0 to High(RefStores) do
       begin
         Refs:= RefStores[StIdx].FindCallersByName(Ident);
@@ -3478,6 +3521,46 @@ begin
   end; // try
   Result:= Arr;
 end; // function
+
+function TLSPServer.AddBoundReferences(AArr: TJSONArray; const AStores: TArray<ISymbolStore>; const APath, AIdent: string;
+  ALine0, ACol0: Integer; AIncludeDecl: Boolean): Boolean;
+begin
+  Result:= False;
+  for var Home: ISymbolStore in AStores do
+  begin
+    if Home.FindFileIdByPath(APath) <= 0 then Continue;
+    var B: TUsageBinding:= BindUsageAt(Home, APath, AIdent, ALine0 + 1, ACol0 + 1);
+    if not B.Bound then Exit(False);
+    if B.HasDecl then
+    begin
+      { symbol ids are per store: a declaration's users are in its own store }
+      var Decls: TArray<TSymbol>;
+      for var R: TReference in BoundUsageRefs(Home, B, Decls) do AArr.AddElement(LocationFromRef(R, Home));
+      if AIncludeDecl then
+        for var D: TSymbol in Decls do AArr.AddElement(LocationFromSymbol(D, Home));
+    end
+    else
+      { a library target: every store's rows bound to that qualified name }
+      for var St: ISymbolStore in AStores do
+      begin
+        var Decls: TArray<TSymbol>:= St.FindSymbolsByExactName(B.QName);
+        for var R: TReference in UsageRefsForName(St, B.QName, Decls) do AArr.AddElement(LocationFromRef(R, St));
+        if AIncludeDecl then
+          for var D: TSymbol in Decls do AArr.AddElement(LocationFromSymbol(D, St));
+      end;
+    Exit(True);
+  end;
+end;
+
+procedure TLSPServer.ApplyUsageSettings(const ASettings: TJSONObject);
+begin
+  if ASettings = nil then Exit;
+  var Scope: TUsageScope;
+  var Word: string:= JsonStrOf(ASettings, 'usagesScope');
+  if (Word <> '') and TryParseUsageScope(Word, Scope) then FUsagesScope:= Scope
+  else if Word <> '' then Writeln(ErrOutput, 'drag-lint LSP: unknown usagesScope "', Word, '"; use ', UsageScopeChoices);
+  if ASettings.GetValue('usagesGroup') <> nil then FUsagesGroup:= JsonStrOf(ASettings, 'usagesGroup');
+end;
 
 // v0.42: render a symbol as a Code-Insight-style declaration line, e.g.
 //   function TShape.Area: Double          (proc-likes: sig has params+return)
@@ -4847,6 +4930,7 @@ begin
   Settings:= AParams.GetValue('settings');
   if not (Settings is TJSONObject) then Exit;
   Section:= TJSONObject(Settings).GetValue(LSP_CONFIG_SECTION);
+  if Section is TJSONObject then ApplyUsageSettings(TJSONObject(Section));
   if (Section is TJSONObject) and HasContextKeys(TJSONObject(Section)) then ApplyClientContext(TJSONObject(Section))
   else if JsonStrOf(TJSONObject(Settings), 'settingsFile') <> '' then
     ApplyClientSettingsFile(FileFromUri(JsonStrOf(TJSONObject(Settings), 'settingsFile')));
@@ -5905,6 +5989,31 @@ begin
     if DepthNum <> nil then Depth:= DepthNum.AsInt;
   end;
 
+  { 1.52 FUSCOPE: "scope" (symbol|project|group|everywhere, default symbol), and the
+    position that binds scope symbol: "file" + 1-based "line" / "col". Same rules as
+    `usages --scope`: a bare name with no position is answered as scope project. }
+  var ScopeWord: string:= '';
+  var PosFile: string:= '';
+  var PosLine: Integer:= 0;
+  var PosCol: Integer:= 0;
+  var GroupFile: string:= FUsagesGroup;
+  if AParams <> nil then
+  begin
+    AParams.TryGetValue<string>('scope', ScopeWord);
+    AParams.TryGetValue<string>('file', PosFile);
+    AParams.TryGetValue<string>('group', GroupFile);
+    var LineNum: TJSONNumber:= AParams.GetValue('line') as TJSONNumber;
+    if LineNum <> nil then PosLine:= LineNum.AsInt;
+    var ColNum: TJSONNumber:= AParams.GetValue('col') as TJSONNumber;
+    if ColNum <> nil then PosCol:= ColNum.AsInt;
+  end;
+  var Requested: TUsageScope:= USAGE_SCOPE_DEFAULT;
+  if (ScopeWord <> '') and not TryParseUsageScope(ScopeWord, Requested) then
+  begin
+    SendError(AId, -32602, 'draglint/usages: unknown "scope" ' + ScopeWord + '; use ' + UsageScopeChoices);
+    Exit;
+  end;
+
   if Nm = '' then
   begin
     { A missing name is a CLIENT error, not an empty result. Returning an empty
@@ -5937,10 +6046,62 @@ begin
     JHandles:= TJSONArray.Create;
     JImpact:= TJSONArray.Create;
 
-    for St in FStores do
+    { 1.52 FUSCOPE: bind, settle the scope answered, and widen the store list. }
+    var Scope: TUsageScope:= Requested;
+    var ScopeNote: string:= '';
+    var Binding: TUsageBinding:= Default(TUsageBinding);
+    var BindStore: ISymbolStore:= nil;
+    if Scope = usSymbol then
+    begin
+      if (PosFile <> '') and (PosLine > 0) then
+      begin
+        for var Home: ISymbolStore in FStores do
+          if (Home <> nil) and (BindStore = nil) and (Home.FindFileIdByPath(PosFile) > 0) then BindStore:= Home;
+        if BindStore <> nil then Binding:= BindUsageAt(BindStore, PosFile, Copy(Nm, LastDelimiter('.', Nm) + 1, MaxInt), PosLine, PosCol);
+        if Binding.Bound and not Binding.HasDecl then Nm:= Binding.QName
+        else if not Binding.Bound then
+        begin
+          Scope:= usProject;
+          ScopeNote:= Format('nothing is bound at %s:%d; answered scope project', [PosFile, PosLine]);
+        end;
+      end
+      else if Pos('.', Nm) = 0 then
+      begin
+        Scope:= usProject;
+        ScopeNote:= USAGE_NOTE_BARE_NAME;
+      end;
+    end;
+    if Scope <> usSymbol then Nm:= Copy(Nm, LastDelimiter('.', Nm) + 1, MaxInt);
+    var ScanStores: TArray<ISymbolStore>:= FStores;
+    var JDbs: TJSONArray:= TJSONArray.Create;
+    if Scope in [usGroup, usEverywhere] then
+    begin
+      var WideNote: string;
+      for var D: string in UsageScopeDbs(Scope, FStorePaths, GroupFile, '', WideNote) do
+      begin
+        var Known: Boolean:= False;
+        for var P: string in FStorePaths do
+          if SameText(ExpandFileName(P), D) then Known:= True;
+        if Known then Continue;
+        var Extra: ISymbolStore:= OpenReaderStore(D);
+        if Extra <> nil then ScanStores:= ScanStores + [Extra];
+      end;
+      if WideNote <> '' then ScopeNote:= WideNote;
+    end;
+
+    for St in ScanStores do
     begin
       if St = nil then Continue;
-      var Decls: TArray<TSymbol>:= St.FindSymbolsByExactName(Nm);
+      if (Scope = usSymbol) and Binding.HasDecl and (St <> BindStore) then Continue; { symbol ids are per store }
+      JDbs.Add(StorePathOf(St));
+      var Decls: TArray<TSymbol>;
+      var Refs : TArray<TReference>;
+      if (Scope = usSymbol) and Binding.HasDecl then Refs:= BoundUsageRefs(St, Binding, Decls)
+      else
+      begin
+        Decls:= St.FindSymbolsByExactName(Nm);
+        Refs := UsageRefsForName(St, Nm, Decls);
+      end;
       for S in Decls do
       begin
         DeclO:= TJSONObject.Create;
@@ -5951,7 +6112,7 @@ begin
         DeclO.AddPair('signature', S.Signature);
         JDecls.AddElement(DeclO);
       end;
-      for R in UsageRefsForName(St, Nm, Decls) do
+      for R in Refs do
         AddRefRow(GroupFor(R, Decls), St.GetFilePath(R.FileId), R.StartLine, R.StartCol, R.Resolution);
       if Width = 'very-wide' then
         for L in St.FindTransitiveCallers(Nm, Depth) do
@@ -5967,6 +6128,10 @@ begin
     Res:= TJSONObject.Create;
     Res.AddPair('name'        , Nm     );
     Res.AddPair('width'       , Width  );
+    Res.AddPair('scope'       , USAGE_SCOPE_NAMES[Scope]); { 1.52 FUSCOPE: keys as the CLI's }
+    if Scope <> Requested then Res.AddPair('scope_requested', USAGE_SCOPE_NAMES[Requested]);
+    if ScopeNote <> '' then Res.AddPair('scope_note', ScopeNote);
+    if Binding.Bound then Res.AddPair('bound', Binding.QName);
     Res.AddPair('declarations', JDecls );
     Res.AddPair('reads'       , JReads );
     Res.AddPair('writes'      , JWrites);
@@ -5977,6 +6142,7 @@ begin
     Res.AddPair('raises'      , JRaises);
     Res.AddPair('handles'     , JHandles);
     Res.AddPair('impact'      , JImpact);
+    Res.AddPair('databases'   , JDbs   );
     Reply.AddPair('result', Res);
     SendMessage(Reply);
   finally
