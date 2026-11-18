@@ -1046,7 +1046,8 @@ type
     /// <param name="AIterating">See ValueDeclaredText.</param>
     /// <returns>See CollectionElementOfText; '' when AName is not such a value. For a subscript (not
     /// AIterating) of a library TDictionary / TObjectDictionary / IDictionary, the VALUE type
-    /// (LibraryIndexedElementText; 1.52 BK-TAILS-ENG).</returns>
+    /// (LibraryIndexedElementText; 1.52 BK-TAILS-ENG); of a project type that declares a default indexed
+    /// property, that property's type with generic arguments put in (OwnIndexedElementText; 1.52 TAILS-ENG2).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.DecideInlineInitType (DRagLint.Index.CallResolver.pas)</para>
@@ -1102,6 +1103,19 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function LibraryIndexedElementText(const AText: string; AFileId: Int64): string;
+    /// <summary>1.52 TAILS-ENG2: the type `X[K]` yields when X's type AText is a project class / record /
+    /// interface that itself declares an `indexed default` property.</summary>
+    /// <param name="AText">The declared type text: `TName` or `TName&lt;Arg, ...&gt;`.</param>
+    /// <param name="ADeclFile">The file AText is written in (its names resolve there).</param>
+    /// <param name="ADeclScope">The scope AText is written in.</param>
+    /// <param name="AFile">Out: the file the returned text is written in.</param>
+    /// <param name="AScope">Out: the scope the returned text is written in.</param>
+    /// <returns>The property's type text; for a generic class whose property type is exactly one of its type
+    /// parameters, the matching type ARGUMENT of AText (then AFile / AScope are ADeclFile / ADeclScope).
+    /// '' when the type does not resolve to one project type, the generic arity differs, the property type
+    /// names a type parameter in any other shape (`TList&lt;V&gt;`), or the type declares no default
+    /// indexed property itself (ancestors are not walked).</returns>
+    function OwnIndexedElementText(const AText: string; ADeclFile, ADeclScope: Int64; out AFile, AScope: Int64): string;
     /// <summary>1.43 (recv2): the element type of a collection type written AText.</summary>
     /// <param name="AText">The type text.</param>
     /// <param name="ADeclFile">The file AText is written in.</param>
@@ -10885,6 +10899,83 @@ begin
     if (Element <> '') and TypeTextSameAt(Element, Decl.FileId, Decl.ParentId, ASite.FileId, ASite.EnclosingSymbolId) then
       Result:= Element;
   end;
+  { 1.52 TAILS-ENG2: the project's OWN class with a default indexer (generic or not). }
+  if (Result = '') and not AIterating then
+  begin
+    var ElemFile, ElemScope: Int64;
+    var Element: string:= OwnIndexedElementText(Declared, Decl.FileId, Decl.ParentId, ElemFile, ElemScope);
+    if (Element <> '') and TypeTextSameAt(Element, ElemFile, ElemScope, ASite.FileId, ASite.EnclosingSymbolId) then
+      Result:= Element;
+  end;
+end;
+
+function TCallResolver.OwnIndexedElementText(const AText: string; ADeclFile, ADeclScope: Int64; out AFile, AScope: Int64): string;
+var
+  Depth: Integer;
+begin
+  Result:= '';
+  AFile := 0;
+  AScope:= 0;
+  var Text: string:= Trim(AText);
+  var Open: Integer:= Text.IndexOf('<');
+  var Head: string:= if Open > 0 then Trim(Text.Substring(0, Open)) else Text;
+  var BadShape: Boolean:= (Open = 0) or ((Open > 0) and not Text.EndsWith('>'));
+  if BadShape or not IsPlainTypeRef(Head) or Head.Contains('<') or ScopeNamesGeneric(ADeclScope, LowerCase(Head)) then Exit;
+  { the type arguments, split at depth-0 commas }
+  var Args: TArray<string>:= nil;
+  if Open > 0 then
+  begin
+    var Inner: string:= Text.Substring(Open + 1, Length(Text) - Open - 2);
+    var From: Integer:= 0;
+    Depth:= 0;
+    for var I: Integer:= 0 to Length(Inner) - 1 do
+      if Inner.Chars[I] = '<' then Inc(Depth)
+      else if Inner.Chars[I] = '>' then Dec(Depth)
+      else if (Inner.Chars[I] = ',') and (Depth = 0) then
+      begin
+        Args:= Args + [Trim(Inner.Substring(From, I - From))];
+        From:= I + 1;
+      end;
+    Args:= Args + [Trim(Inner.Substring(From))];
+  end;
+  var Owner: TSymbol:= SymbolById(ResolveTypeNameToSymbol(Head, ADeclFile));
+  { the generic parameter names, in order (constraints after a depth-0 ':' dropped) }
+  var Params: TArray<string>:= nil;
+  var PText: string:= Trim(Owner.GenericParams);
+  if PText.StartsWith('<') and PText.EndsWith('>') then PText:= Copy(PText, 2, Length(PText) - 2);
+  for var Group: string in PText.Split([';'], TStringSplitOptions.ExcludeEmpty) do
+  begin
+    var Colon: Integer:= Group.IndexOf(':');
+    var Names: string:= if Colon >= 0 then Group.Substring(0, Colon) else Group;
+    for var N: string in Names.Split([',', ' '], TStringSplitOptions.ExcludeEmpty) do
+      Params:= Params + [N];
+  end;
+  { one project type of the same generic arity that itself declares the default indexed property }
+  var Kids: TList<TSymbol>:= if (Owner.Id > 0) and (Owner.Kind in TYPE_KINDS) and (Length(Params) = Length(Args)) then ChildrenOf(Owner.Id) else nil;
+  var Prop: TSymbol:= Default(TSymbol);
+  if Kids <> nil then
+    for var P: TSymbol in Kids do
+      if (P.Kind = skProperty) and SameText(P.Directives, PROPERTY_INDEXED_DIRECTIVE + ' ' + PROPERTY_DEFAULT_DIRECTIVE) then
+      begin
+        Prop:= P;
+        Break;
+      end;
+  if Prop.Id <= 0 then Exit;
+  var PropType: string:= Trim(Prop.Signature);
+  for var I: Integer:= 0 to High(Params) do
+    if SameText(PropType, Params[I]) then
+    begin
+      AFile := ADeclFile;
+      AScope:= ADeclScope;
+      Exit(Args[I]);
+    end;
+  { a property type that wraps a parameter (TList<V>) is not substituted }
+  for var Part: string in PropType.Split(['<', '>', ',', ' ', '.'], TStringSplitOptions.ExcludeEmpty) do
+    for var Prm: string in Params do
+      if SameText(Part, Prm) then Exit;
+  AFile := Prop.FileId;
+  AScope:= Prop.ParentId;
+  Result:= PropType;
 end;
 
 function TCallResolver.LibraryListElementText(const AText: string; AFileId: Int64): string;

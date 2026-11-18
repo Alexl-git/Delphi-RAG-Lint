@@ -137,6 +137,16 @@ resolver 1.28.0 -> 1.29.0-alpha.
 - Resolver (BK-TAILS-ENG, rides resolver 1.29.0-alpha, hash-only re-pin): `var B:= Br[K]` on a library
   `TDictionary` / `TObjectDictionary` / `IDictionary` types `B` as the dictionary's VALUE type, so `B.Member`
   binds (HBFIX index gap: `Charts.Trace.Walk` `B.Side`).
+- Resolver (TAILS-ENG2, rides resolver 1.29.0-alpha, hash-only re-pin): `var B:= M[K]` through the project's OWN
+  class / record / interface that declares an `indexed default` property types `B` as that property's type; for a
+  generic class (`TMyMap<K, V>` with `Items[K]: V; default`) the type argument is put in for the parameter, so
+  `B.Member` binds. Ancestors' default properties are not walked; a property type that wraps a parameter
+  (`TList<V>`) stays unresolved.
+- `member-could-be-private` treats a name another indexed unit spells inside an inactive conditional branch (the
+  index never parsed it, e.g. `{$IFDEF TRACE_CODESITE}`) as a use and stays silent (TAILS-ENG2, FPM2 `MsgToString`).
+- Shared scope (TAILS-ENG2): an unindexed `.groupproj` peer also makes every unit in a folder it SEARCHES (its own
+  folder and its `.dproj` `DCC_UnitSearchPath`) undecidable, not only the units it lists. Not covered: units
+  reached through the IDE library path or an environment macro the `.dproj` parse does not expand.
 
 ### New rules
 - `index-possibly-out-of-range` (bug-patterns, default ON -- the six false-positive classes of the 6/12 FP gate fixed in lane BK-RULEFP: a guard kept across Inc, a parameter bound every local caller proves, `in` set clamps, a Length raise guard with a loop limit from an if-expression or another unit's const array, a dominating SetLength, for-in / non-constant-start count invariants -- lanes IDXRANGE + IDXRANGE2 + BK-RULEFP): an array index that

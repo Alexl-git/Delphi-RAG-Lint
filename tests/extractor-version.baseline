@@ -1247,4 +1247,6 @@
 #   Superseded: 1.41.0-alpha|75c670954f474a21a2ab886ee9d0f7b5d0082598d02be0a04a7b724eee165d4f
 #   2026-11-18 v152 BK-TAILS-ENG hash-only re-pin (rides the one 1.52 bump 464d590a8): Parser.DFM CollectParseErrors prints the CHARACTER column in its parse-error diagnostic (BK-COLS2 tail); the message text only, no stored row changes.
 #   Superseded: 1.41.0-alpha|1dc37a0440723caf0306aa43b5444286ac0ddc709a5ac84a8e751463839cf957
-1.41.0-alpha|f2692a1010f977f7d45a99b9ac03c4f475e3a4ab615c8da91f4d3297fe90c243
+#   2026-11-18 v152 TAILS-ENG2 hash-only re-pin (rides the one 1.52 bump 464d590a8): CallResolver.OwnIndexedElementText -- the hashed resolver unit types `var B:= M[K]` through a project class's own default indexer; no parse, symbol or ref-row shape change.
+#   Superseded: 1.41.0-alpha|f2692a1010f977f7d45a99b9ac03c4f475e3a4ab615c8da91f4d3297fe90c243
+1.41.0-alpha|6592bae0fd934a01ff98bc72cfe1229febdd8f7eeb7c3e204e4c679829c8a69d

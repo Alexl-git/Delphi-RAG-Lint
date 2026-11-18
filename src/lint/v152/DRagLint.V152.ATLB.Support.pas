@@ -16,7 +16,9 @@ unit DRagLint.V152.ATLB.Support;
   carrying an attribute (RTTI may read them); members with no reference at all
   (dead-code rules own that); a name referenced from a second file (another unit,
   or a form file); members of a unit that lists more than one project in its
-  `dl:shared` header (a sibling project's index is not open here). }
+  `dl:shared` header (a sibling project's index is not open here); a name another
+  indexed file spells on a line the preprocessor blanks -- an inactive conditional
+  branch the index never parsed (1.52 TAILS-ENG2). }
 
 interface
 
@@ -37,7 +39,9 @@ type
     /// <param name="ALibStore">Library index used to resolve interface ancestors; may be nil.</param>
     /// <param name="ARuleId">Rule id to stamp on each finding.</param>
     /// <returns>One hint per candidate member; nil when none.</returns>
-    /// <remarks>Cost: one GetReferencesFromFile per indexed file. Meant for lint-all only.</remarks>
+    /// <remarks>Cost: one GetReferencesFromFile per indexed file, plus a raw read of each indexed file
+    /// when there is a candidate (preprocessed only when it spells a candidate's name): a candidate
+    /// another file names inside an inactive conditional branch is dropped. Meant for lint-all only.</remarks>
     class function Find(const AStore, ALibStore: ISymbolStore; const ARuleId: string): TArray<TLintFinding>; static;
   end;
 
@@ -46,6 +50,10 @@ implementation
 uses
   System.Classes
   , System.IOUtils
+  , System.RegularExpressions
+  , System.StrUtils                  { MatchText }
+  , DRagLint.Core.Encoding          { EnsureUtf8Bytes }
+  , DRagLint.Diagnostics.ParseCache  { TAstParseCache.ApplyPreprocess -- the transform the rules read }
   , DRagLint.Lint.SharedUnit
   ;
 
@@ -166,6 +174,41 @@ begin
       if W = D then Exit(True);
 end;
 
+{ 1.52 TAILS-ENG2 (FPM2 MsgToString / TRACE_CODESITE): the lowercased names of ANames that another
+  indexed file of AStore spells on a line the preprocessor BLANKS (an inactive conditional branch the
+  index never parsed). Such a reference is a caller in another build configuration: the member is
+  treated as used elsewhere. ANames maps a name to the file id that declares it (its own file is
+  skipped). A file is read and preprocessed only when its raw text holds one of the names. }
+function NamesInInactiveBranches(const AStore: ISymbolStore; const ANames: TDictionary<string, Int64>): TDictionary<string, Boolean>;
+begin
+  Result:= TDictionary<string, Boolean>.Create;
+  if ANames.Count = 0 then Exit;
+  for var FileId: Int64 in AStore.GetAllFileIds do
+  begin
+    var Path: string:= AStore.GetFilePath(FileId);
+    if not MatchText(ExtractFileExt(Path), ['.pas', '.dpr', '.dpk', '.inc']) then Continue;
+    var Raw: TBytes;
+    try
+      Raw:= EnsureUtf8Bytes(TFile.ReadAllBytes(Path));
+    except  // dl:ok try-except-swallowed@59fd -- an unreadable file names nothing; the finding stands as before
+      on Exception do Continue;
+    end;
+    var RawText: string:= TEncoding.UTF8.GetString(Raw);
+    var Lower: string:= LowerCase(RawText);
+    var Want: TArray<string>:= nil;
+    for var N: string in ANames.Keys do
+      if (ANames[N] <> FileId) and not Result.ContainsKey(N) and Lower.Contains(N) then Want:= Want + [N];
+    if Want = nil then Continue;
+    var PpLines : TArray<string>:= TEncoding.UTF8.GetString(TAstParseCache.ApplyPreprocess(Raw, Path)).Split([#10]);
+    var RawLines: TArray<string>:= RawText.Split([#10]);
+    if Length(PpLines) <> Length(RawLines) then Continue;
+    for var I: Integer:= 0 to High(RawLines) do
+      if (Trim(PpLines[I]) = '') and (Trim(RawLines[I]) <> '') then
+        for var N: string in Want do
+          if TRegEx.IsMatch(RawLines[I], '\b' + N + '\b', [roIgnoreCase]) then Result.AddOrSetValue(N, True);
+  end;
+end;
+
 class function TMemberPrivacy.Find(const AStore, ALibStore: ISymbolStore; const ARuleId: string): TArray<TLintFinding>;
 var
   RefFile  : TDictionary<string, Int64>;
@@ -246,6 +289,25 @@ begin
         F.Message   := Format('Public member %s.%s is only referenced inside its own unit -- it could be private', [Cls.Name, Sym.Name]);
         Result:= Result + [F];
       end;
+    end;
+    // 1.52 TAILS-ENG2: a name another file spells inside an inactive $IFDEF branch is used there.
+    var Cands: TDictionary<string, Int64>:= TDictionary<string, Int64>.Create;
+    try
+      for var F: TLintFinding in Result do Cands.AddOrSetValue(LowerCase(F.SymbolName), F.FileId);
+      var Inactive: TDictionary<string, Boolean>:= NamesInInactiveBranches(AStore, Cands);
+      try
+        if Inactive.Count > 0 then
+        begin
+          var Kept: TArray<TLintFinding>:= nil;
+          for var F: TLintFinding in Result do
+            if not Inactive.ContainsKey(LowerCase(F.SymbolName)) then Kept:= Kept + [F];
+          Result:= Kept;
+        end;
+      finally
+        Inactive.Free;
+      end;
+    finally
+      Cands.Free;
     end;
   finally
     for var D: TDictionary<string, Boolean> in IfaceOf.Values do D.Free;
