@@ -47,17 +47,42 @@ type
 
 implementation
 
-{ The lane's helpers live in DRagLint.V152.ATLA.Support; name it in an
-  implementation uses clause here once it declares something. }
+uses
+  System.IOUtils
+  , DRagLint.V151.APP.Support  // RULE_CONTRACT_CLASS
+  , DRagLint.V152.ATLA.Support
+  ;
 
-class procedure TV152ATLARules.Catalog(const ADecls: TList<TV151RuleDecl>);  // dl:ok unused-parameter@34f1 -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)
+{ Rule set A of the gap matrix (C:\TEMP\claude\lanes\1501\ATLAS\GAP-MATRIX.md):
+    row 75 architecture-contract-content -> an in-place expansion of lane APP's
+           contract-unit-declares-class (same purpose; a second id would report
+           every class twice): units named by drag-lint.json "contractUnits".
+    row 70 implicit-package-import -> new rule.
+    row 57 noreturn-returns -> NOT in 1.52: needs an extractor fact
+           (docs\INBOX-noreturn-returns-needs-extractor-fact.md).
+    backlog B27 reserved-word-identifier -> new rule. }
+
+class procedure TV152ATLARules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
-  { no rules yet }
+  ADecls.Add(V151Rule(RULE_RESERVED_IDENT, 'bug-patterns', 'warning',
+    'Reserved word used as a variable, field, parameter, constant or type name (dcc E2029)'));
+  ADecls.Add(V151Rule(RULE_IMPLICIT_IMPORT, 'structure', 'warning',
+    'Package unit uses a project unit that is not in contains or a required package (W1033)'));
+  ADecls.Add(V151Host(RULE_CONTRACT_CLASS));
 end;
 
-class function TV152ATLARules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@6323 -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)
+class function TV152ATLARules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
 begin
-  Result:= nil;
+  var Acc:= TList<TLintFinding>.Create;
+  try
+    if ACtx.Wants(RULE_RESERVED_IDENT) then TAtlaChecks.ReservedIdentifiers(ACtx.Path, Acc);
+    if ACtx.Wants(RULE_CONTRACT_CLASS) then
+      TAtlaChecks.ContractClasses(ACtx.Path, TAtlaChecks.LoadContractGlobs(ExtractFilePath(ParamStr(0))), Acc);
+    if ACtx.Wants(RULE_IMPLICIT_IMPORT) then TAtlaChecks.ImplicitImports(ACtx.Path, '', Acc);
+    Result:= if Acc.Count = 0 then nil else Acc.ToArray;
+  finally
+    Acc.Free;
+  end;
 end;
 
 class function TV152ATLARules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@6314 -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)
@@ -70,9 +95,24 @@ begin
   Result:= nil;
 end;
 
-class function TV152ATLARules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@23e4 -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)
+{ A package's units whose .dpk the per-file search (unit folder and its parent)
+  cannot see are checked here, once, from the --project package; the rest were
+  already checked per file, so nothing is reported twice. }
+class function TV152ATLARules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
 begin
   Result:= nil;
+  if not ACtx.Wants(RULE_IMPLICIT_IMPORT) or (ACtx.ProjectPath = '') then Exit;
+  var Dpk: string:= ChangeFileExt(ACtx.ProjectPath, '.dpk');
+  if not FileExists(Dpk) then Exit;
+  var Acc:= TList<TLintFinding>.Create;
+  try
+    for var F: string in TAtlaChecks.ContainedFiles(Dpk) do
+      if FileExists(F) and not TAtlaChecks.DpkVisibleFrom(F, Dpk) then
+        TAtlaChecks.ImplicitImports(F, Dpk, Acc);
+    Result:= if Acc.Count = 0 then nil else Acc.ToArray;
+  finally
+    Acc.Free;
+  end;
 end;
 
 end.
