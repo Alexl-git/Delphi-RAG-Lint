@@ -160,10 +160,12 @@ try {
     $applied = Apply-Action $disk $src[0]
     Check 'P1 the edit removes uDead and keeps uOther' ((-not $applied.Contains('uDead')) -and $applied.Contains('uOther;')) ($applied -replace "`r`n", '\n')
     # parity: the same fixture through `lint --fix --apply` in its own directory
+# (--no-compile-gate: no .dproj here, and since 1.52 B23 a gated --apply on a unit no project builds is
+# REFUSED (no-project); the LSP edit itself is never gated, so parity compares the fixer bytes only)
     $a2 = New-Case 'a2'
     Emit $a2 'uDead.pas' $deadUnit; Emit $a2 'uOther.pas' $otherUnit; Emit $a2 'uHost.pas' $hostUnit
     $dbA2 = Index-Case $a2
-    & $Exe lint (Join-Path $a2 'uHost.pas') --db $dbA2 --fix --apply --no-backup --rule unused-unit-in-uses 2>&1 | Out-Null
+    & $Exe lint (Join-Path $a2 'uHost.pas') --db $dbA2 --fix --apply --no-backup --no-compile-gate --rule unused-unit-in-uses 2>&1 | Out-Null
     $fixed = [IO.File]::ReadAllText((Join-Path $a2 'uHost.pas'))
     Check 'P1 POSITIVE CONTROL: lint --fix changed the file' ($fixed -ne $disk) ''
     Check 'P1 applied edit equals lint --fix output byte for byte' ($applied -ceq $fixed) ($fixed -replace "`r`n", '\n')
