@@ -176,6 +176,11 @@ type
     EffectFree   : Integer            ;
     EffectSummary: string             ;
     EffectWitness: string             ;
+    /// <summary>v152 HBHOVER (ruling HB2): the check-init writer list of a variable / field as one
+    /// JSON object (state, verdict, proven, summary, writers, shown, budget), emitted verbatim as
+    /// `"set_by"`; '' = not computed (any other kind, plain format, fast step), and then the key is
+    /// absent. Filled by DRagLint.Query.HoverModel.AttachHoverSetBy, never by BuildHoverModel.</summary>
+    SetByJson    : string             ;
   end;
 
 /// <summary>Parses a routine signature's parameter list -- e.g.
@@ -224,7 +229,8 @@ function BuildHoverModel(const ASym: TSymbol; const ADoc: TParsedDoc; const AUni
 /// <summary>Serializes a structured THoverModel to the hover JSON shape:
 /// qname/unit/def_line/return_type/params (modifier/name/type each)/returns
 /// (mined RHS expressions)/returns_more (overflow count beyond the 10-entry
-/// cap)/summary. Used by `drag-lint hover --format json`.</summary>
+/// cap)/summary, plus `set_by` (v152 HBHOVER) when AModel.SetByJson is non-empty.
+/// Used by `drag-lint hover --format json`.</summary>
 /// <param name="AModel">The hover model built by BuildHoverModel.</param>
 /// <param name="AFactLines">v(hover facts fix): the Phase-2 analysis fact lines
 /// (as FormatPhase2FactLines produced them) emitted as a `"facts":[...]` array
@@ -829,6 +835,9 @@ begin
       SB.Append(Format('"%s"', [JsonEscape(AFactLines[i])]));
     end;
     SB.Append('],');
+    { v152 HBHOVER: the writer list, already JSON (built from check-init's own renderer, so its
+      writers are byte-equal to `check-init --json`). Absent when not computed. }
+    if AModel.SetByJson <> '' then SB.Append('"set_by":' + AModel.SetByJson + ',');
     // v(ADP3 T1): strip the ownership marker before it reaches a human --
     // see StripForDisplay's own comment; AModel.Doc.Summary itself must keep
     // carrying it for the read path (MergeComment/drift). This is the JSON
