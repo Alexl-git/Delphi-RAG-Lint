@@ -87,6 +87,7 @@ uses
   System.SysUtils
   , System.Classes
   , System.Generics.Collections
+  , System.Generics.Defaults
   , System.RegularExpressions
   , TreeSitter
   , DRagLint.Diagnostics.ParseCache
@@ -200,6 +201,13 @@ type
     FStore   : ISymbolStore;                      { optional index: bounds of another unit's const / var array (1.52 BK-RULEFP) }
     FStoreArr: TDictionary<string, TDeclInfo>;    { name -> that array's shape from the index (dkOther: none / ambiguous) }
     FAccess  : TTSNode;                           { the access under analysis: dominance of a Length guard }
+    FStableFrom: Cardinal;                        { 1.52 IDXRANGE3: window [From, To] in which a name / field / Length nobody changes reads as one value (0: none) }
+    FStableTo  : Cardinal;
+    FBoundVisit: TDictionary<string, Integer>;    { BoundAt: name -> path offset when it was entered (cycle check) }
+    FBoundOff  : Integer;                         { BoundAt: sum of the +/- k offsets along the current path }
+    FBoundMemo : TDictionary<string, string>;     { BoundAt: per top-level query, results that hit no chain back ('' unknown) }
+    FBoundCycles: Integer;                        { BoundAt: chains back taken so far (a result after one is not memoised) }
+    FCalleeLen : TDictionary<string, string>;     { routine name -> 'index:cnt|len' of the param its Result is sized by ('' none) }
     function Txt(const N: TTSNode): string;
     function IsTrivia(const N: TTSNode): Boolean;
     procedure EmitAt(const ANode: TTSNode; const ARuleId, AMessage, ASeverity: string);
@@ -246,6 +254,8 @@ type
     function WriteKeeps(const ACtx: TIdxCtx; const W: TTSNode; ALower: Boolean): Boolean;
     function CaseOn(const ACase: TTSNode; const AIdx: string): Boolean;
     function HoldsSince(const ACtx: TIdxCtx; AFrom: Cardinal): Boolean;
+    function LeavesBefore(const W, AAccess: TTSNode; AFrom: Cardinal; ALoopLeave: Boolean): Boolean;
+    function ExclusiveBranches(const W, AAccess: TTSNode): Boolean;
     function FixAnchorLine(const AAccess: TTSNode): Integer;
     procedure ProvenanceSides(var ACtx: TIdxCtx);
     procedure ApplyBranch(var ACtx: TIdxCtx; const C, P: TTSNode);
@@ -275,6 +285,7 @@ type
     procedure ApplyKeptGuard(var ACtx: TIdxCtx; const ACond: TTSNode; AFrom: Cardinal);
     function IsClampOf(const AThen: TTSNode; const ACtx: TIdxCtx): Boolean;
     procedure SetFacts(var ACtx: TIdxCtx; const E: TTSNode);
+    function SetRange(const S: TTSNode; out AMin, AMax: Integer): Boolean;
     function IsUnwrittenParam(const E: TTSNode): Boolean;
     function RoutineConst(const AName: string; out AValue: Integer): Boolean;
     function StoreArray(const AName: string; out AInfo: TDeclInfo): Boolean;
@@ -288,6 +299,33 @@ type
     function IsStepUp(const W: TTSNode; const AX: string): Boolean;
     function LocalLeast(const AX: string; ADepth: Integer; out AValue: Integer): Boolean;
     function IsLookupWrite(const W: TTSNode; out AText: string): Boolean;
+    function StmtDominates(const W, AAt: TTSNode): Boolean;
+    function LoopsAround(const N: TTSNode; AList: TList<TTSNode>): Integer;
+    function ForOfCounter(const AX: string; const AAt: TTSNode): TTSNode;
+    function IsOwnLocal(const AX: string): Boolean;
+    function TouchedIn(const AX: string; AFrom, ATo: Cardinal; AWhole: Boolean = False): Boolean;
+    function CondBound(const C: TTSNode; const AX: string; ANegate, AUpper: Boolean; out AV: Integer): Boolean;
+    function LoopTrips(const ALoop: TTSNode; ADepth: Integer; out AT: Integer): Boolean;
+    function FloatBound(const ACall, AAt: TTSNode; AUpper: Boolean; out AV: Integer): Boolean;
+    function EvalBound(const E, AAt: TTSNode; AUpper: Boolean; ADepth: Integer; out AV: Integer): Boolean;
+    function BoundAt(const AX: string; const AAt: TTSNode; AUpper: Boolean; ADepth: Integer; out AV: Integer): Boolean;
+    function EqualLenGuard(const A, B: string): Boolean;
+    function TryBodySetLength(const ATry: TTSNode; const AArr: string): TTSNode;
+    function DeclaresLocal(const AProc: TTSNode; const AX: string): Boolean;
+    function DottedPath(const N: TTSNode): string;
+    function CallName(const ACall: TTSNode): string;
+    function NameEscapes(const N: TTSNode; const AX: string; AWithCalls: Boolean): Boolean;
+    function PassesByRef(const ACall: TTSNode; const AX: string): Boolean;
+    function TouchedPath(const APath: string; AFrom, ATo: Cardinal): Boolean;
+    function UpperAtSite(const ASite, AE: TTSNode; const AArr: string; AOff: Integer): Boolean;
+    function LocalBoundedBy(const E: TTSNode; AStrict: Boolean; const ACtx: TIdxCtx): Boolean;
+    procedure LeaveGuardsBefore(const AAt: TTSNode; AList: TList<TTSNode>);
+    function ForCounterOverwritten(const AFor: TTSNode; AEvents: TList<TTSNode>): Boolean;
+    function CalleeSizes(const ACall: TTSNode): string;
+    function CalleeArgLen(const ACall: TTSNode; ATarget: string): TSym;
+    function OuterLenOf(const AArr: string): TSym;
+    function CalleeResultLen(const ACall: TTSNode): TSym;
+    function SelfBoundedFor(const ACtx: TIdxCtx; const F: TTSNode; C0, SLo: Integer): Boolean;
     procedure BuildCallIndex;
     function ParamNames(const AProc: TTSNode): TArray<string>;
     function LocalCalls(const AProc: TTSNode; out ASites: TList<TTSNode>): Boolean;
@@ -328,10 +366,16 @@ begin
   FConstBad:= TDictionary<string, Boolean>.Create;
   FAliases := TDictionary<string, TDeclInfo>.Create;
   FAliasBad:= TDictionary<string, Boolean>.Create;
+  FBoundVisit:= TDictionary<string, Integer>.Create;
+  FBoundMemo := TDictionary<string, string>.Create;
+  FCalleeLen := TDictionary<string, string>.Create;
 end;
 
 destructor TBnRun.Destroy;
 begin
+  FCalleeLen.Free;
+  FBoundMemo.Free;
+  FBoundVisit.Free;
   FStoreArr.Free;
   FCallOk.Free;
   FCallSites.Free;
@@ -1070,6 +1114,451 @@ end;
 
 { ---- index-possibly-out-of-range (1.52 IDXRANGE) ------------------------- }
 
+{ N lies within ARoutine's text. }
+function NodeWithin(const N, ARoutine: TTSNode): Boolean;
+begin
+  Result:= (not N.IsNull) and (not ARoutine.IsNull) and (N.StartByte >= ARoutine.StartByte) and (N.EndByte <= ARoutine.EndByte);
+end;
+
+function MkSym(const ABase: string; AOff: Integer): TSym;
+begin
+  Result.Base:= ABase;
+  Result.Off := AOff;
+  Result.Ok  := True;
+end;
+
+const
+  LEN_BASE        = 'len:';     { TSym base of Length(A) }
+  MAX_BOUND_DEPTH = 30;
+  MAX_CALLER_DEPTH = 4;         { OuterLenOf: how many nested routines deep a call chain is followed }         { BoundAt / EvalBound: how far a chain of locals is followed }
+  BOUND_NONE_HI   = -MaxInt;    { upper mode: no value reaches yet (the neutral element of max) }
+  BOUND_NONE_LO   = MaxInt;     { lower mode: the neutral element of min }
+  { calls that take an integer argument by value: passing the index to one is no write }
+  BY_VALUE_FNS: array[0..33] of string = ('length', 'high', 'low', 'ord', 'chr', 'inttostr', 'format',
+    'abs', 'min', 'max', 'succ', 'pred', 'odd', 'sqr', 'trunc', 'round', 'assigned', 'sizeof', 'inttohex', 'inrange',
+    'sametext', 'samestr', 'comparetext', 'comparestr', 'uppercase', 'lowercase', 'trim', 'trimleft', 'trimright',
+    'quotedstr', 'strtoint', 'strtointdef', 'containstext', 'containsstr');
+  FLOAT_ROUNDERS: array[0..3] of string = ('floor', 'trunc', 'round', 'ceil');
+  CONTROL_NODES: array[0..11] of string = ('if', 'ifElse', 'while', 'for', 'foreach', 'repeat', 'case',
+    'caseCase', 'exceptionHandler', 'exprIf', 'exprBinary', 'lambda');
+
+{ AFn takes its argument number APos (0-based) by value: a by-value RTL routine, or a by-value
+  position of an RTL routine with a by-reference parameter. Anything else may write a bare variable. }
+function ArgByValue(const AFn: string; APos: Integer): Boolean;
+const
+  BY_VALUE_AT: array[0..9] of string = ('readbuffer:1', 'writebuffer:1', 'move:2', 'fillchar:1,2', 'setlength:1',
+    'getstring:1,2', 'delete:1,2', 'insert:0,2', 'copy:0,1,2', 'pos:0,1,2');
+var
+  S: string;
+begin
+  if IndexStr(AFn, BY_VALUE_FNS) >= 0 then Exit(True);
+  for S in BY_VALUE_AT do
+    if StartsText(AFn + ':', S) then Exit(ContainsStr(',' + Copy(S, Length(AFn) + 2, MaxInt) + ',', ',' + IntToStr(APos) + ','));
+  Result:= False;
+end;
+
+function NeutralBound(AUpper: Boolean): Integer;
+begin
+  Result:= if AUpper then BOUND_NONE_HI else BOUND_NONE_LO;
+end;
+
+function IsNeutralBound(AV: Integer): Boolean;
+begin
+  Result:= (AV = BOUND_NONE_HI) or (AV = BOUND_NONE_LO);
+end;
+
+{ The join of two bounds of one value: the larger for an upper bound, the smaller for a lower one. }
+function JoinBound(A, B: Integer; AUpper: Boolean): Integer;
+begin
+  Result:= if AUpper = (A > B) then A else B;
+end;
+
+{ The tighter of two bounds: the smaller upper bound, the larger lower one. }
+function TightBound(A, B: Integer; AUpper: Boolean): Integer;
+begin
+  Result:= JoinBound(A, B, not AUpper);
+end;
+
+function ShiftBound(AV, AK: Integer): Integer;
+begin
+  Result:= if IsNeutralBound(AV) then AV else AV + AK;
+end;
+
+function IsLoopNode(const N: TTSNode): Boolean;
+begin
+  Result:= (N.NodeType = 'while') or (N.NodeType = 'repeat') or (N.NodeType = 'for') or (N.NodeType = 'foreach');
+end;
+
+function FloorOf(const AX: Double): Integer;
+begin
+  Result:= Trunc(AX);
+  if Frac(AX) < 0 then Dec(Result);
+end;
+
+function CeilOf(const AX: Double): Integer;
+begin
+  Result:= -FloorOf(-AX);
+end;
+
+{ N with its parentheses peeled. }
+function Peeled(const N: TTSNode): TTSNode;
+begin
+  Result:= N;
+  while (not Result.IsNull) and (Result.NodeType = 'exprParens') and (Result.NamedChildCount = 1) do Result:= Result.NamedChild(0);
+end;
+
+{ The leftmost identifier of a designator (`a`, `a.b.c`, `a[i].b`), lower-cased; '' for anything else. }
+function RootName(const ATxt: string): string;
+var
+  M: TMatch;
+begin
+  M:= TRegEx.Match(ATxt, '^\s*\(*\s*@?\s*([A-Za-z_]\w*)');
+  Result:= if M.Success then LowerCase(M.Groups[1].Value) else '';
+end;
+
+{ The lower-cased text of N when it is a name or a dotted path of names (`a`, `Owner.List`), else ''. }
+function TBnRun.DottedPath(const N: TTSNode): string;
+var
+  P: TTSNode;
+begin
+  Result:= '';
+  P:= Peeled(N);
+  if P.IsNull or ((P.NodeType <> 'identifier') and (P.NodeType <> 'exprDot')) then Exit;
+  if TRegEx.IsMatch(Txt(P), '^\s*[A-Za-z_]\w*(\s*\.\s*[A-Za-z_]\w*)*\s*$') then
+    Result:= LowerCase(StringReplace(Trim(Txt(P)), ' ', '', [rfReplaceAll]));
+end;
+
+{ The for loop AFor sits in a loop L, and an assignment of its counter (one of AEvents) that is a statement of L's own
+  body comes after it with no Continue of L in between: the counter left undefined by AFor never
+  reaches the next trip of L. }
+function TBnRun.ForCounterOverwritten(const AFor: TTSNode; AEvents: TList<TTSNode>): Boolean;
+var
+  L, LBody, W, P, Q: TTSNode;
+  Stack: TList<TTSNode>;
+  I: Integer;
+begin
+  Result:= False;
+  L:= AFor.Parent;
+  while (not L.IsNull) and not IsLoopNode(L) and (L.NodeType <> 'defProc') do L:= L.Parent;
+  if L.IsNull or (L.NodeType = 'defProc') then Exit;
+  LBody:= L.ChildByField('body');
+  if LBody.IsNull then Exit;
+  for W in AEvents do
+  begin
+    if (W.NodeType <> 'assignment') or (W.StartByte < AFor.EndByte) or (W.EndByte > LBody.EndByte) then Continue;
+    P:= W.Parent;
+    while (not P.IsNull) and (P.NodeType <> 'block') and (P.NodeType <> 'statements') and (IndexStr(P.NodeType, CONTROL_NODES) < 0) do P:= P.Parent;
+    if not (P = LBody) then Continue;  // dl:ok nonminimal-bool@4dfa -- REVIEWED 2026-11-18 IDXRANGE3: TTSNode declares Equal but no NotEqual; <> does not compile
+    { no Continue of L between the for loop and W }
+    Stack:= TList<TTSNode>.Create;
+    try
+      Stack.Add(LBody);
+      while Stack.Count > 0 do
+      begin
+        Q:= Stack.Last;
+        Stack.Delete(Stack.Count - 1);
+        if Q.IsNull or (Q.EndByte <= AFor.EndByte) or (Q.StartByte >= W.StartByte) or (IsLoopNode(Q) and not (Q = L)) then Continue;  // dl:ok nonminimal-bool@c1b4 -- REVIEWED 2026-11-18 IDXRANGE3: TTSNode declares Equal but no NotEqual; <> does not compile
+        if TRegEx.IsMatch(LowerCase(Trim(Txt(Q))), '^continue\b') and (Q.NamedChildCount = 0) then Exit(False);
+        for I:= 0 to Q.ChildCount - 1 do Stack.Add(Q.Child(I));
+      end;
+    finally
+      Stack.Free;
+    end;
+    Exit(True);
+  end;
+end;
+
+{ YADF.Groups:238, YADF.Layout:4579: an array of an enclosing routine, indexed in a nested one -- its
+  length as that routine gives it, when none of its nested routines resizes it, the nested routine
+  holding the access is named in its body only after the array is first sized there (and nowhere
+  else), and the names the length is expressed in mean the same in the nested routine. }
+function TBnRun.OuterLenOf(const AArr: string): TSym;  // dl:ok too-many-exit-points@e885 -- REVIEWED 2026-11-18 IDXRANGE3: guard clauses per syntax shape; each early exit is a classification
+var
+  Chain, Stack: TList<TTSNode>;
+  P, Outer, Child, OBody, N: TTSNode;
+  K, I: Integer;
+  First: Cardinal;
+  Nm, BaseName: string;
+  Saved: TBnSaved;
+  Visiting: TList<string>;
+
+  { every use of the nested routine AName in Outer is in Outer's body after First, a recursive call,
+    or in another nested routine of which the same holds }
+  function OnlyAfter(const AName: string; ADepth: Integer): Boolean;
+  var
+    Todo: TList<TTSNode>;
+    M, R: TTSNode;
+    J: Integer;
+    RName: string;
+  begin
+    Result:= False;
+    if ADepth > MAX_CALLER_DEPTH then Exit;
+    if Visiting.IndexOf(AName) >= 0 then Exit(True);
+    Visiting.Add(AName);
+    Todo:= TList<TTSNode>.Create;
+    try
+      Todo.Add(Outer);
+      while Todo.Count > 0 do
+      begin
+        M:= Todo.Last;
+        Todo.Delete(Todo.Count - 1);
+        if M.IsNull then Continue;
+        if (M.NodeType = 'identifier') and SameText(Txt(M), AName) then
+        begin
+          R:= EnclosingProc(M);
+          if R.IsNull then Exit;
+          RName:= LowerCase(Trim(Txt(R.ChildByField('header').ChildByField('name'))));
+          if R = Outer then
+          begin
+            if (not NodeWithin(M, OBody)) or (M.StartByte < First) then Exit;
+          end
+          else if (RName <> AName) and not OnlyAfter(RName, ADepth + 1) then
+            Exit;
+        end;
+        for J:= 0 to M.ChildCount - 1 do Todo.Add(M.Child(J));
+      end;
+      Result:= True;
+    finally
+      Todo.Free;
+    end;
+  end;
+
+begin
+  Result:= Default(TSym);
+  if (FTraceDepth > 0) or FCurProc.IsNull or (FScopes.Count < 2) then Exit;
+  K:= -1;
+  for I:= FScopes.Count - 2 downto 0 do
+    if FScopes[I].ContainsKey(AArr) then
+    begin
+      K:= I;
+      Break;
+    end;
+  if K < 0 then Exit;
+  Chain:= TList<TTSNode>.Create;
+  Stack:= TList<TTSNode>.Create;
+  Visiting:= TList<string>.Create;
+  try
+    P:= FCurProc;
+    while not P.IsNull do
+    begin
+      if P.NodeType = 'defProc' then Chain.Insert(0, P);
+      P:= P.Parent;
+    end;
+    if Chain.Count <> FScopes.Count then Exit;
+    Outer:= Chain[K];
+    Child:= Chain[K + 1];
+    OBody:= Outer.ChildByField('body');
+    Nm:= LowerCase(Trim(Txt(Child.ChildByField('header').ChildByField('name'))));
+    { the first size change in Outer's own body; none in a nested routine or a lambda }
+    First:= High(Cardinal);
+    Stack.Add(Outer);
+    while Stack.Count > 0 do
+    begin
+      N:= Stack.Last;
+      Stack.Delete(Stack.Count - 1);
+      if N.IsNull then Continue;
+      if IsSizeChangeOf(N, AArr) then
+      begin
+        if (not NodeWithin(N, OBody)) or not (EnclosingProc(N) = Outer) then Exit;  // dl:ok nonminimal-bool@3fbb -- REVIEWED 2026-11-18 IDXRANGE3: TTSNode declares Equal but no NotEqual; <> does not compile
+        if N.StartByte < First then First:= N.StartByte;
+      end;
+      for I:= 0 to N.ChildCount - 1 do Stack.Add(N.Child(I));
+    end;
+    if First = High(Cardinal) then Exit;
+    { the nested routine is named only in Outer's body after First, or in nested routines that are }
+    if not OnlyAfter(Nm, 0) then Exit;
+    EnterRoutine(Outer, Saved);
+    try
+      Result:= LenSymOf(AArr);
+    finally
+      LeaveRoutine(Saved);
+    end;
+    if Result.Ok and (Result.Base <> '') then
+    begin
+      BaseName:= Copy(Result.Base, Pos(':', Result.Base) + 1, MaxInt);
+      for I:= K + 1 to FScopes.Count - 1 do
+        if FScopes[I].ContainsKey(BaseName) then Exit(Default(TSym));
+    end;
+  finally
+    Visiting.Free;
+    Stack.Free;
+    Chain.Free;
+  end;
+end;
+
+{ At the call ASite in its caller (the current routine) AE + AOff stays within AArr, read in the window
+  from the SetLength of AArr that dominates the call to the call itself. }
+function TBnRun.UpperAtSite(const ASite, AE: TTSNode; const AArr: string; AOff: Integer): Boolean;
+var
+  OldAccess, Dom: TTSNode;
+  OldFrom, OldTo: Cardinal;
+  U: TSym;
+  Info: TDeclInfo;
+begin
+  OldAccess:= FAccess;
+  OldFrom:= FStableFrom;
+  OldTo:= FStableTo;
+  FAccess:= ASite;
+  try
+    Dom:= DomSetLength(AArr);
+    if not Dom.IsNull then
+    begin
+      FStableFrom:= Dom.StartByte;
+      FStableTo:= ASite.EndByte;
+    end;
+    U:= SymOf(AE);
+    if not Lookup(AArr, Info) then Info:= Default(TDeclInfo);
+    Result:= U.Ok and UpperWithin(MkSym(U.Base, U.Off + AOff), AArr, Info);
+  finally
+    FAccess:= OldAccess;
+    FStableFrom:= OldFrom;
+    FStableTo:= OldTo;
+  end;
+end;
+
+{ YADF.Layout:8067: `idx < Y` (AStrict) / `idx <= Y` with Y a local of the routine whose every write
+  leaves it within the array (+ 1 when strict): `Y := -1`, `Y := k` inside `for k := 0 to High(A)`.
+  Y is no for counter, never passed to a call by reference and never has its address taken. }
+function TBnRun.LocalBoundedBy(const E: TTSNode; AStrict: Boolean; const ACtx: TIdxCtx): Boolean;  // dl:ok too-many-exit-points@99e9 -- REVIEWED 2026-11-18 IDXRANGE3: guard clauses per syntax shape; each early exit is a classification
+var
+  N, W: TTSNode;
+  Y: string;
+  L: TList<TTSNode>;
+  U: TSym;
+  Info: TDeclInfo;
+
+begin
+  Result:= False;
+  N:= Peeled(E);
+  if N.IsNull or (N.NodeType <> 'identifier') then Exit;
+  Y:= LowerCase(Txt(N));
+  if (not IsOwnLocal(Y)) or FScopes[FScopes.Count - 1][Y].IsParam or (Y = ACtx.Idx) then Exit;
+  if NameEscapes(FCurProc, Y, True) then Exit;
+  L:= TList<TTSNode>.Create;
+  try
+    CollectIdxWrites(FCurProc.ChildByField('body'), Y, L);
+    if L.Count = 0 then Exit;
+    Info:= ACtx.Info;
+    for W in L do
+    begin
+      if (W.NodeType <> 'assignment') or not WriteUpper(W, U) then Exit;
+      if AStrict then Dec(U.Off);
+      if not UpperWithin(U, ACtx.Arr, Info) then Exit;
+    end;
+    Result:= True;
+  finally
+    L.Free;
+  end;
+end;
+{ Something in the routine between AFrom and ATo may change the value at the dotted path APath
+  (`rec.list`): an assignment to it or to a prefix of it, a method of it or of a prefix, a pass of it
+  or of a prefix to a call that may take it by reference, its (or a prefix's) address, or a pointer
+  set from the root's address. A write to a sibling field or an element is no change. }
+function TBnRun.TouchedPath(const APath: string; AFrom, ATo: Cardinal): Boolean;  // dl:ok too-many-exit-points@d140, deep-nesting@5639 -- REVIEWED 2026-11-18 IDXRANGE3: guard clauses per syntax shape; the scan nests one level per node kind it checks
+var
+  Stack: TList<TTSNode>;
+  N, Args, Ent: TTSNode;
+  I: Integer;
+  Fn, P, Root: string;
+
+  function PrefixOf(const A: string): Boolean;
+  begin
+    Result:= (A <> '') and ((A = APath) or StartsStr(A + '.', APath));
+  end;
+
+begin
+  Root:= RootName(APath);
+  if TouchedIn(Root, AFrom, ATo, True) then Exit(True);  { the root itself, a pointer to it }
+  Result:= True;
+  Stack:= TList<TTSNode>.Create;
+  try
+    Stack.Add(FCurProc.ChildByField('body'));
+    while Stack.Count > 0 do
+    begin
+      N:= Stack.Last;
+      Stack.Delete(Stack.Count - 1);
+      if N.IsNull or (N.EndByte <= AFrom) or (N.StartByte >= ATo) then Continue;
+      if N.StartByte >= AFrom then
+      begin
+        if (N.NodeType = 'assignment') and PrefixOf(DottedPath(N.ChildByField('lhs'))) then Exit;
+        if (N.NodeType = 'exprUnary') and (OperatorType(N) = 'kAt') and PrefixOf(DottedPath(N.ChildByField('operand'))) then Exit;
+        if (N.NodeType = 'exprCall') and not (N = FAccess) then  // dl:ok nonminimal-bool@da26 -- REVIEWED 2026-11-18 IDXRANGE3: TTSNode declares Equal but no NotEqual; <> does not compile
+        begin
+          Ent:= N.ChildByField('entity');
+          if (Ent.NodeType = 'exprDot') and PrefixOf(DottedPath(Ent.ChildByField('lhs'))) then Exit;
+          Fn:= CallName(N);
+          Args:= N.ChildByField('args');
+          if not Args.IsNull then
+            for I:= 0 to Args.NamedChildCount - 1 do
+            begin
+              P:= DottedPath(Args.NamedChild(I));
+              if PrefixOf(P) and not ArgByValue(Fn, I) then Exit;
+            end;
+        end;
+        if (N.NodeType = 'exprDot') and (not N.Parent.IsNull) and ((N.Parent.NodeType = 'block') or (N.Parent.NodeType = 'statements'))
+          and PrefixOf(DottedPath(N.ChildByField('lhs'))) then Exit;
+      end;
+      for I:= 0 to N.ChildCount - 1 do Stack.Add(N.Child(I));
+    end;
+    Result:= False;
+  finally
+    Stack.Free;
+  end;
+end;
+{ AX may change behind the routine's own writes: a lambda or a nested routine names it (one that
+  declares its own AX does not), its address is taken -- and, with AWithCalls, it is a for counter or
+  is passed bare to a call that may take it by reference. }
+function TBnRun.NameEscapes(const N: TTSNode; const AX: string; AWithCalls: Boolean): Boolean;  // dl:ok too-many-exit-points@6c3b -- REVIEWED 2026-11-18 IDXRANGE3: guard clauses per syntax shape; each early exit is a classification
+var
+  J: Integer;
+begin
+  Result:= False;
+  if N.IsNull then Exit;
+  if N.NodeType = 'lambda' then Exit(Mentions(N, AX));
+  if (N.NodeType = 'defProc') and not (N = FCurProc) then Exit(Mentions(N, AX) and not DeclaresLocal(N, AX));  // dl:ok nonminimal-bool@a164 -- REVIEWED 2026-11-18 IDXRANGE3: TTSNode declares Equal but no NotEqual; <> does not compile
+  if (N.NodeType = 'exprUnary') and (OperatorType(N) = 'kAt') and (RootName(Txt(N.ChildByField('operand'))) = AX) then Exit(True);
+  if AWithCalls and (N.NodeType = 'for') and (AssignTarget(N.ChildByField('start')) = AX) then Exit(True);
+  if AWithCalls and (N.NodeType = 'exprCall') and PassesByRef(N, AX) then Exit(True);
+  for J:= 0 to N.ChildCount - 1 do
+    if NameEscapes(N.Child(J), AX, AWithCalls) then Exit(True);
+end;
+
+{ The routine name a call names: its last dotted part, lower-cased (`FS.ReadBuffer` -> readbuffer). }
+function TBnRun.CallName(const ACall: TTSNode): string;
+begin
+  Result:= LowerCase(Trim(Txt(ACall.ChildByField('entity'))));
+  if ContainsStr(Result, '.') then Result:= Copy(Result, LastDelimiter('.', Result) + 1, MaxInt);
+end;
+
+{ The call ACall (no Inc / Dec) passes the bare name AX where the callee may take it by reference. }
+function TBnRun.PassesByRef(const ACall: TTSNode; const AX: string): Boolean;
+var
+  Fn: string;
+  A: TTSNode;
+  J: Integer;
+begin
+  Result:= False;
+  Fn:= CallName(ACall);
+  A:= ACall.ChildByField('args');
+  if (Fn = 'inc') or (Fn = 'dec') or A.IsNull then Exit;
+  for J:= 0 to A.NamedChildCount - 1 do
+    if (BareIdent(A.NamedChild(J)) = AX) and not ArgByValue(Fn, J) then Exit(True);
+end;
+
+{ The end of the loops around the access under analysis that start after AFrom (else the access). }
+function AccessReach(const AAccess: TTSNode; AFrom: Cardinal): Cardinal;
+var
+  P: TTSNode;
+begin
+  Result:= AAccess.EndByte;
+  P:= AAccess.Parent;
+  while (not P.IsNull) and (P.StartByte > AFrom) and (P.NodeType <> 'defProc') do
+  begin
+    if IsLoopNode(P) and (P.EndByte > Result) then Result:= P.EndByte;
+    P:= P.Parent;
+  end;
+end;
+
 const
   CMP_OPS    : array[0..3] of string = ('kLt', 'kGt', 'kLte', 'kGte');
   CMP_MIRROR : array[0..3] of string = ('kGt', 'kLt', 'kGte', 'kLte');  { idx < X  ==  X > idx }
@@ -1201,7 +1690,7 @@ begin
   else if Op = 'kGt' then ACtx.Lo:= ACtx.Lo or ProvesLower(Other, True, ACtx.Arr, ACtx.Info)
   else if (Op = 'kLte') or (Op = 'kLt') then
   begin
-    if ProvesUpper(Other, Op = 'kLt', ACtx.Arr, ACtx.Info) then ACtx.Hi:= True
+    if ProvesUpper(Other, Op = 'kLt', ACtx.Arr, ACtx.Info) or LocalBoundedBy(Other, Op = 'kLt', ACtx) then ACtx.Hi:= True
     else if (ACtx.FgnText = '') and (ACtx.Writes.Count > 0) and IsUnwrittenParam(Other) then
     begin
       { 1.52 BK-RULEFP (YADF.Tokens:208): bounded by a parameter -- proven when every local caller
@@ -1379,14 +1868,84 @@ begin
     if not IsTrivia(ACase.NamedChild(I)) then Exit(BareIdent(ACase.NamedChild(I)) = AIdx);
 end;
 
-{ True when no write of ACtx.Idx starts strictly between AFrom and the access (a guard still holds). }
+{ True when no write of ACtx.Idx starts strictly between AFrom and the access (a guard still holds).
+  1.52 IDXRANGE3 (YADF.Layout:457): a write whose block then leaves -- Exit / raise, or Continue /
+  Break of a loop around the access when the guard is inside that loop -- does not count, nor does one in
+  the other branch of an if / else the access sits in (YADF.Guard:500). }
 function TBnRun.HoldsSince(const ACtx: TIdxCtx; AFrom: Cardinal): Boolean;
 var
   W: TTSNode;
 begin
   Result:= True;
   for W in ACtx.Writes do
-    if (W.StartByte > AFrom) and (W.StartByte < ACtx.Access.StartByte) then Exit(False);
+    if (W.StartByte > AFrom) and (W.StartByte < ACtx.Access.StartByte) and not LeavesBefore(W, ACtx.Access, AFrom, True)
+      and not ExclusiveBranches(W, ACtx.Access) then Exit(False);
+end;
+
+{ W and AAccess sit in the two branches of one if / else (or two arms of one case): within one pass
+  neither runs after the other. }
+function TBnRun.ExclusiveBranches(const W, AAccess: TTSNode): Boolean;
+var
+  P, BW, BA: TTSNode;
+begin
+  Result:= False;
+  P:= W.Parent;
+  while (not P.IsNull) and (P.NodeType <> 'defProc') and not NodeWithin(AAccess, P) do P:= P.Parent;
+  if P.IsNull or (P.NodeType = 'defProc') then Exit;
+  if P.NodeType = 'ifElse' then
+  begin
+    BW:= P.ChildByField('then');
+    BA:= P.ChildByField('else');
+    Exit((NodeWithin(W, BW) and NodeWithin(AAccess, BA)) or (NodeWithin(W, BA) and NodeWithin(AAccess, BW)));
+  end;
+  if P.NodeType = 'case' then
+  begin
+    BW:= W;
+    while (not BW.IsNull) and not (BW.Parent = P) do BW:= BW.Parent;  // dl:ok nonminimal-bool@8ec4 -- REVIEWED 2026-11-18 IDXRANGE3: TTSNode declares Equal but no NotEqual; <> does not compile
+    BA:= AAccess;
+    while (not BA.IsNull) and not (BA.Parent = P) do BA:= BA.Parent;  // dl:ok nonminimal-bool@173d -- REVIEWED 2026-11-18 IDXRANGE3: TTSNode declares Equal but no NotEqual; <> does not compile
+    Result:= (not BW.IsNull) and (not BA.IsNull) and (BW.NodeType = 'caseCase') and (BA.NodeType = 'caseCase') and not (BW = BA);  // dl:ok nonminimal-bool@0607 -- REVIEWED 2026-11-18 IDXRANGE3: TTSNode declares Equal but no NotEqual; <> does not compile
+  end;
+end;
+
+{ After W control surely leaves before it can reach AAccess: a statement list holding W (but not
+  AAccess) ends in Exit / raise -- or, with ALoopLeave, in Continue / Break of the innermost loop
+  around that list when the loop holds AAccess and (Continue) AFrom lies inside the loop. Never
+  across a try (an exception skips the leave). }
+function TBnRun.LeavesBefore(const W, AAccess: TTSNode; AFrom: Cardinal; ALoopLeave: Boolean): Boolean;  // dl:ok too-many-exit-points@06fc -- REVIEWED 2026-11-18 IDXRANGE3: guard clauses per syntax shape; each early exit is a classification
+var
+  P, S, T: TTSNode;
+  I: Integer;
+  Word: string;
+begin
+  Result:= False;
+  P:= W.Parent;
+  while (not P.IsNull) and (P.NodeType <> 'defProc') and (P.NodeType <> 'lambda') do
+  begin
+    if NodeWithin(AAccess, P) or (P.NodeType = 'try') then Exit;
+    if (P.NodeType = 'block') or (P.NodeType = 'statements') then
+    begin
+      S:= Default(TTSNode);
+      for I:= P.NamedChildCount - 1 downto 0 do
+        if not IsTrivia(P.NamedChild(I)) then
+        begin
+          S:= P.NamedChild(I);
+          Break;
+        end;
+      if (not S.IsNull) and (S.StartByte >= W.EndByte) and IsLeaveStmt(S) then
+      begin
+        Word:= LowerCase(TrimLeft(Txt(S)));
+        if StartsText('exit', Word) or StartsText('raise', Word) then Exit(True);
+        if not ALoopLeave then Exit;
+        T:= P.Parent;
+        while (not T.IsNull) and not IsLoopNode(T) and (T.NodeType <> 'defProc') do T:= T.Parent;
+        if T.IsNull or (T.NodeType = 'defProc') or not NodeWithin(AAccess, T) then Exit;
+        if StartsText('break', Word) then Exit(True);
+        Exit(AFrom > T.StartByte);
+      end;
+    end;
+    P:= P.Parent;
+  end;
 end;
 
 { The line the autofix inserts its guard before: the access's own statement when that statement
@@ -1632,26 +2191,60 @@ end;
 
 { One access A[idx]: proves both sides or reports the write that made it unsafe. }
 procedure TBnRun.CheckIndexAccess(const AProc: TTSNode; var ACtx: TIdxCtx; AReported: TDictionary<string, Boolean>);
+var
+  Dom: TTSNode;
+  V: Integer;
+  U: TSym;
 begin
   FAccess:= ACtx.Access;
-  ProvenanceSides(ACtx);
-  ACtx.Silent:= False;
-  ACtx.Loop:= Default(TTSNode);
-  ACtx.FgnText:= '';
-  ACtx.FgnSym:= Default(TSym);
-  ACtx.FgnNode:= Default(TTSNode);
-  ClimbGuards(ACtx);
-  if ACtx.Silent or (ACtx.Lo and ACtx.Hi) then Exit;
-  if (not ACtx.Hi) and (OnePastWhile(ACtx) or CountInvariant(ACtx)) then ACtx.Hi:= True;
-  if ACtx.Lo and ACtx.Hi then Exit;
+  { 1.52 IDXRANGE3: the window in which names nobody changes read as one value (SymOf) }
+  FStableFrom:= 0;
+  FStableTo:= 0;
   if FTraceDepth = 0 then
   begin
-    { C1: the other collection's bound proven within this array's by every local caller }
-    if ACtx.Lo and (not ACtx.Hi) and ACtx.FgnSym.Ok and CallersProveUpper(AProc, ACtx) then Exit;
-    { C2: an unchecked index parameter every local caller passes in range }
-    if ACtx.IdxInfo.IsParam and (ACtx.Writes.Count = 0) and (ACtx.FgnText = '') and CallersProveIndex(AProc, ACtx) then Exit;
+    Dom:= DomSetLength(ACtx.Arr);
+    if not Dom.IsNull then
+    begin
+      FStableFrom:= Dom.StartByte;
+      FStableTo:= AccessReach(ACtx.Access, Dom.StartByte);
+    end;
   end;
-  EmitIndexFinding(AProc, ACtx, AReported);
+  try
+    ProvenanceSides(ACtx);
+    ACtx.Silent:= False;
+    ACtx.Loop:= Default(TTSNode);
+    ACtx.FgnText:= '';
+    ACtx.FgnSym:= Default(TSym);
+    ACtx.FgnNode:= Default(TTSNode);
+    ClimbGuards(ACtx);
+    if ACtx.Silent or (ACtx.Lo and ACtx.Hi) then Exit;
+    if (not ACtx.Hi) and (OnePastWhile(ACtx) or CountInvariant(ACtx)) then ACtx.Hi:= True;
+    if ACtx.Lo and ACtx.Hi then Exit;
+    { 1.52 IDXRANGE3: the bounds the index's writes and guards give (index chains, a constant cap,
+      a for counter copied out of its loop, a rounded float behind a range guard) }
+    if (not ACtx.Lo) and BoundAt(ACtx.Idx, ACtx.Access, False, 0, V) and (not IsNeutralBound(V))
+      and (V >= (if ACtx.Info.Kind = dkArray then ACtx.Info.Lo else 0)) then ACtx.Lo:= True;
+    if (not ACtx.Hi) and BoundAt(ACtx.Idx, ACtx.Access, True, 0, V) and (not IsNeutralBound(V))
+      and UpperWithin(MkSym('', V), ACtx.Arr, ACtx.Info) then ACtx.Hi:= True;
+    { 1.52 IDXRANGE3 (uPipeSessionBuilder:4522): `SetLength(A, n + 1); A[n]` -- the index names the size }
+    if not ACtx.Hi then
+    begin
+      U:= SymOf(ACtx.Access.ChildByField('args').NamedChild(0));
+      if U.Ok and (U.Base <> '') and UpperWithin(U, ACtx.Arr, ACtx.Info) then ACtx.Hi:= True;
+    end;
+    if ACtx.Lo and ACtx.Hi then Exit;
+    if FTraceDepth = 0 then
+    begin
+      { C1: the other collection's bound proven within this array's by every local caller }
+      if ACtx.Lo and (not ACtx.Hi) and ACtx.FgnSym.Ok and CallersProveUpper(AProc, ACtx) then Exit;
+      { C2: an unchecked index parameter every local caller passes in range }
+      if ACtx.IdxInfo.IsParam and (ACtx.Writes.Count = 0) and (ACtx.FgnText = '') and CallersProveIndex(AProc, ACtx) then Exit;
+    end;
+    EmitIndexFinding(AProc, ACtx, AReported);
+  finally
+    FStableFrom:= 0;
+    FStableTo:= 0;
+  end;
 end;
 
 { Locals of the body written exactly once, as `n := Length(A)` / `High(A)` / `Low(A)`: a bound on n
@@ -1726,13 +2319,6 @@ end;
 
 { ---- index-possibly-out-of-range: symbolic bounds and local callers (1.52 IDXRANGE2) ---- }
 
-function MkSym(const ABase: string; AOff: Integer): TSym;
-begin
-  Result.Base:= ABase;
-  Result.Off := AOff;
-  Result.Ok  := True;
-end;
-
 { N sits inside a loop of its routine (while / repeat / for / for-in). }
 function IsInLoop(const N: TTSNode): Boolean;
 var
@@ -1747,11 +2333,6 @@ begin
   end;
 end;
 
-{ N lies within ARoutine's text. }
-function NodeWithin(const N, ARoutine: TTSNode): Boolean;
-begin
-  Result:= (not N.IsNull) and (not ARoutine.IsNull) and (N.StartByte >= ARoutine.StartByte) and (N.EndByte <= ARoutine.EndByte);
-end;
 
 function IsCountBase(const ABase: string): Boolean;
 begin
@@ -1825,22 +2406,44 @@ var
   V: Integer;
   X, Al, Op: string;
   A, B: TSym;
+  Stable, IsLenFn: Boolean;
 begin
   Result:= Default(TSym);
   N:= E;
   while (not N.IsNull) and (N.NodeType = 'exprParens') and (N.NamedChildCount = 1) do N:= N.NamedChild(0);
   if N.IsNull then Exit;
   if EvalIndex(N, V) then Exit(MkSym('', V));
+  { 1.52 IDXRANGE3: inside the window of the access under analysis (from the dominating SetLength to
+    the end of the loops around the access) a name, a field path or a Length nobody there changes
+    reads as one value (BASICSF:3578, Pipes.Framing:557, Blueprint4.ViewModel:3004) }
+  Stable:= (FStableFrom > 0) and (N.StartByte >= FStableFrom) and (N.EndByte <= FStableTo) and NodeWithin(N, FCurProc);
   if N.NodeType = 'exprCall' then
   begin
     Args:= N.ChildByField('args');
-    if (not Args.IsNull) and (Args.NamedChildCount = 1) and (BareIdent(Args.NamedChild(0)) <> '') then
-      Result:= ArrFn(BareIdent(N.ChildByField('entity')), BareIdent(Args.NamedChild(0)));
+    Op:= BareIdent(N.ChildByField('entity'));
+    IsLenFn:= (Op = 'length') or (Op = 'high');
+    X:= if (not Args.IsNull) and (Args.NamedChildCount = 1) then DottedPath(Args.NamedChild(0)) else '';
+    { 1.52 IDXRANGE3 (YADF.Layout:9888): Length / High of a field path nobody changes in the window }
+    IsLenFn:= IsLenFn and Stable and ContainsStr(X, '.');
+    if IsLenFn and IsOwnLocal(RootName(X)) and not TouchedPath(X, FStableFrom, FStableTo) then
+      Result:= MkSym('len:' + X, if Op = 'high' then -1 else 0)
+    else if (not Args.IsNull) and (Args.NamedChildCount = 1) and (BareIdent(Args.NamedChild(0)) <> '') then
+    begin
+      X:= BareIdent(Args.NamedChild(0));
+      Op:= BareIdent(N.ChildByField('entity'));
+      Result:= ArrFn(Op, X);
+      IsLenFn:= (Op = 'length') or (Op = 'high');
+      if (not Result.Ok) and Stable and IsLenFn and IsOwnLocal(X) and not TouchedIn(X, FStableFrom, FStableTo, True) then
+        Result:= MkSym('len:' + X, if Op = 'high' then -1 else 0);
+    end;
   end
   else if N.NodeType = 'exprDot' then
   begin
-    if (BareIdent(N.ChildByField('lhs')) <> '') and SameText(Trim(Txt(N.ChildByField('rhs'))), 'count') then
-      Result:= MkSym('cnt:' + BareIdent(N.ChildByField('lhs')), 0);
+    if (DottedPath(N.ChildByField('lhs')) <> '') and SameText(Trim(Txt(N.ChildByField('rhs'))), 'count') then
+      Result:= MkSym('cnt:' + DottedPath(N.ChildByField('lhs')), 0)  { 1.52 IDXRANGE3: also Owner.List.Count (uBroadcastServer:686) }
+    else if Stable and TRegEx.IsMatch(Txt(N), '^\s*[A-Za-z_]\w*(\s*\.\s*[A-Za-z_]\w*)+\s*$')
+      and IsOwnLocal(RootName(Txt(N))) and not TouchedPath(DottedPath(N), FStableFrom, FStableTo) then
+      Result:= MkSym('fld:' + LowerCase(StringReplace(Txt(N), ' ', '', [rfReplaceAll])), 0);
   end
   else if N.NodeType = 'identifier' then
   begin
@@ -1848,6 +2451,8 @@ begin
     if FLenAlias.TryGetValue(X, Al) then
       Result:= ArrFn(Copy(Al, 1, Pos(':', Al) - 1), Copy(Al, Pos(':', Al) + 1, MaxInt))
     else if WritesOf(X) = 0 then
+      Result:= MkSym('id:' + X, 0)
+    else if Stable and IsOwnLocal(X) and not TouchedIn(X, FStableFrom, FStableTo) then
       Result:= MkSym('id:' + X, 0);
   end
   else if N.NodeType = 'exprBinary' then
@@ -1877,10 +2482,11 @@ var
   Bad  : Boolean;
   Found: TSym;
   Assigns: Integer;
+  SavedFrom: Cardinal;
 
   procedure Walk(const N: TTSNode);
   var
-    I: Integer;
+    I, J: Integer;
     Fn: string;
     Args: TTSNode;
     S: TSym;
@@ -1890,8 +2496,19 @@ var
     if (N.NodeType = 'assignment') and (AssignTarget(N) = AArr) then
     begin
       { 1.52 BK-RULEFP (Pipes.Protocol:1069, Blueprint4:1722): `A := nil` before any SetLength is no
-        size the rule relies on; ONE whole assignment outside a loop (and no SetLength) fixes Length(A) }
-      if IsInLoop(N) then Bad:= True
+        size the rule relies on; ONE whole assignment outside a loop (and no SetLength) fixes Length(A).
+        1.52 IDXRANGE3: `A := F(P)` whose routine sizes Result by P counts as SetLength(A, P.Count) }
+      S:= CalleeResultLen(Peeled(N.ChildByField('rhs')));
+      if S.Ok then
+      begin
+        if Have and ((S.Base <> Found.Base) or (S.Off <> Found.Off)) then Bad:= True
+        else
+        begin
+          Found:= S;
+          Have:= True;
+        end;
+      end
+      else if IsInLoop(N) then Bad:= True
       else if Have or not MatchText(Trim(Txt(N.ChildByField('rhs'))), ['nil', '[]']) then Inc(Assigns);
     end
     else if N.NodeType = 'exprCall' then
@@ -1913,7 +2530,22 @@ var
         end
         else if ((Fn = 'delete') and (BareIdent(Args.NamedChild(0)) = AArr))
           or ((Fn = 'insert') and (BareIdent(Args.NamedChild(1)) = AArr)) then
-          Bad:= True;
+          Bad:= True
+        else
+          { 1.52 IDXRANGE3 (YADF.Layout:2638): a call whose routine sizes this out / var argument by
+            another argument's Count / Length first (CalleeSizes) counts as that SetLength }
+          for J:= 0 to Args.NamedChildCount - 1 do
+            if BareIdent(Args.NamedChild(J)) = AArr then
+            begin
+              S:= CalleeArgLen(N, IntToStr(J));
+              if not S.Ok then Continue;
+              if Have and ((S.Base <> Found.Base) or (S.Off <> Found.Off)) then Bad:= True
+              else
+              begin
+                Found:= S;
+                Have:= True;
+              end;
+            end;
       end;
     end;
     for I:= 0 to N.ChildCount - 1 do Walk(N.Child(I));
@@ -1930,10 +2562,21 @@ begin
     Bad  := False;
     Assigns:= 0;
     Found:= Default(TSym);
-    if not FCurProc.IsNull then Walk(FCurProc.ChildByField('body'));
+    SavedFrom:= FStableFrom;
+    FStableFrom:= 0;  { cached per routine: no window-dependent symbol }
+    try
+      if not FCurProc.IsNull then Walk(FCurProc.ChildByField('body'));
+    finally
+      FStableFrom:= SavedFrom;
+    end;
     if (Assigns > 1) or ((Assigns = 1) and Have) then Bad:= True;
     if Bad then Result:= Default(TSym)
     else if Have then Result:= Found
+    else if InScopes(AArr) and not FScopes[FScopes.Count - 1].ContainsKey(AArr) then
+    begin
+      Result:= OuterLenOf(AArr);  { 1.52 IDXRANGE3: an array of an enclosing routine }
+      if not Result.Ok then Result:= MkSym('len:' + AArr, 0);
+    end
     else if InScopes(AArr) or (AArr = 'result') then Result:= MkSym('len:' + AArr, 0)
     else Result:= FileLenOf(AArr);
   end;
@@ -2063,6 +2706,7 @@ function TBnRun.UpperWithin(const U: TSym; const AArr: string; const AInfo: TDec
 var
   H, D: TSym;
   MinC, G: Integer;
+  OtherLen: Boolean;
 begin
   H:= HighSym(AArr, AInfo);
   MinC:= 0;
@@ -2080,6 +2724,12 @@ begin
     if D.Ok then Dec(D.Off);
     Result:= SymLE(U, D, 0);
   end;
+  { 1.52 IDXRANGE3 (ShapesMatch): another array's length that a dominating guard made equal }
+  { 1.52 IDXRANGE3 (ShapesMatch, uPdfScanRescan:523): another array's length made equal to this one's by a
+    dominating guard or by the same SetLength size: High(AArr) is that length - 1 }
+  OtherLen:= U.Ok and StartsText(LEN_BASE, U.Base) and (AInfo.Kind <> dkArray);
+  if (not Result) and OtherLen and EqualLenGuard(Copy(U.Base, Length(LEN_BASE) + 1, MaxInt), AArr) then
+    Result:= U.Off <= -1;
 end;
 
 { E (or E -/+ k) names ANOTHER collection's bound: Length / High of another array or string,
@@ -2200,9 +2850,25 @@ end;
 
 { The largest value an assignment `idx := e` leaves, e as a symbolic integer. }
 function TBnRun.WriteUpper(const W: TTSNode; out AU: TSym): Boolean;
+var
+  F: TTSNode;
+  I: Integer;
+  IsDown: Boolean;
 begin
   AU:= Default(TSym);
-  if W.NodeType = 'assignment' then AU:= SymOf(W.ChildByField('rhs'));
+  if W.NodeType <> 'assignment' then Exit(False);
+  { 1.52 IDXRANGE3 (YADF.Layout:8066): `x := i` inside `for i := s to e`: at most e }
+  begin
+    F:= ForOfCounter(BareIdent(W.ChildByField('rhs')), W);
+    if not F.IsNull then
+    begin
+      IsDown:= False;
+      for I:= 0 to F.ChildCount - 1 do
+        if F.Child(I).NodeType = 'kDownto' then IsDown:= True;
+      AU:= SymOf(if IsDown then F.ChildByField('start').ChildByField('rhs') else F.ChildByField('end'));
+    end
+    else AU:= SymOf(W.ChildByField('rhs'));
+  end;
   Result:= AU.Ok;
 end;
 
@@ -2342,34 +3008,40 @@ end;
   side, the greatest the upper side. }
 procedure TBnRun.SetFacts(var ACtx: TIdxCtx; const E: TTSNode);
 var
-  S, El: TTSNode;
-  I, V, V2, MinV, MaxV, Cnt: Integer;
+  MinV, MaxV: Integer;
 begin
-  if BareIdent(E.ChildByField('lhs')) <> ACtx.Idx then Exit;
-  S:= E.ChildByField('rhs');
+  if (BareIdent(E.ChildByField('lhs')) <> ACtx.Idx) or not SetRange(E.ChildByField('rhs'), MinV, MaxV) then Exit;
+  if MinV >= (if ACtx.Info.Kind = dkArray then ACtx.Info.Lo else 0) then ACtx.Lo:= True;
+  if UpperWithin(MkSym('', MaxV), ACtx.Arr, ACtx.Info) then ACtx.Hi:= True;
+end;
+
+{ `[a, b, c..d]` with constant elements: its least and greatest element (False for anything else or
+  an empty set). }
+function TBnRun.SetRange(const S: TTSNode; out AMin, AMax: Integer): Boolean;
+var
+  El: TTSNode;
+  I, V, V2: Integer;
+begin
+  Result:= False;
+  AMin:= MaxInt;
+  AMax:= -MaxInt;
   if S.IsNull or (S.NodeType <> 'exprBrackets') then Exit;
-  MinV:= MaxInt;
-  MaxV:= -MaxInt;
-  Cnt:= 0;
   for I:= 0 to S.NamedChildCount - 1 do
   begin
     El:= S.NamedChild(I);
     if IsTrivia(El) then Continue;
     if El.NodeType = 'range' then
     begin
-      if (El.NamedChildCount < 2) or not (EvalIndex(El.NamedChild(0), V) and EvalIndex(El.NamedChild(1), V2)) then Exit;
+      if (El.NamedChildCount < 2) or not (EvalIndex(El.NamedChild(0), V) and EvalIndex(El.NamedChild(1), V2)) then Exit(False);
     end
     else if EvalIndex(El, V) then
       V2:= V
     else
-      Exit;
-    if V < MinV then MinV:= V;
-    if V2 > MaxV then MaxV:= V2;
-    Inc(Cnt);
+      Exit(False);
+    if V < AMin then AMin:= V;
+    if V2 > AMax then AMax:= V2;
+    Result:= True;
   end;
-  if Cnt = 0 then Exit;
-  if MinV >= (if ACtx.Info.Kind = dkArray then ACtx.Info.Lo else 0) then ACtx.Lo:= True;
-  if UpperWithin(MkSym('', MaxV), ACtx.Arr, ACtx.Info) then ACtx.Hi:= True;
 end;
 
 { E (parentheses peeled) is a parameter of the current routine that the routine never writes. }
@@ -2572,7 +3244,7 @@ end;
   0 when there is none. }
 function TBnRun.GuardMinLen(const AArr: string): Integer;
 var
-  C, P, S, E: TTSNode;
+  S, E: TTSNode;
   Todo: TList<TTSNode>;
   K, M: Integer;
   Op: string;
@@ -2581,21 +3253,11 @@ begin
   if not NodeWithin(FAccess, FCurProc) then Exit;
   Todo:= TList<TTSNode>.Create;
   try
-    C:= FAccess;
-    P:= C.Parent;
-    while (not P.IsNull) and (P.NodeType <> 'defProc') and (P.NodeType <> 'lambda') do
+    LeaveGuardsBefore(FAccess, Todo);
+    for K:= 0 to Todo.Count - 1 do
     begin
-      if (P.NodeType = 'block') or (P.NodeType = 'statements') then
-      begin
-        S:= C.PrevSibling;
-        while not S.IsNull do
-        begin
-          if (S.NodeType = 'if') and IsLeaveStmt(S.ChildByField('then')) then Todo.Add(S.ChildByField('condition'));
-          S:= S.PrevSibling;
-        end;
-      end;
-      C:= P;
-      P:= C.Parent;
+      S:= Todo[K];
+      Todo[K]:= S.ChildByField('condition');
     end;
     while Todo.Count > 0 do
     begin
@@ -2666,12 +3328,52 @@ begin
         N:= S;
         { a statement wrapper node may sit between the list and the call (see IsGrowOf) }
         while (not N.IsNull) and (N.NodeType <> 'exprCall') and (N.NamedChildCount = 1) do N:= N.NamedChild(0);
-        if (not N.IsNull) and (N.NodeType = 'exprCall') and (BareIdent(N.ChildByField('entity')) = 'setlength') and IsSizeChangeOf(N, AArr) then Result:= N;
+        if (not N.IsNull) and (N.NodeType = 'exprCall') and (BareIdent(N.ChildByField('entity')) = 'setlength') and IsSizeChangeOf(N, AArr) then Result:= N
+        else if S.NodeType = 'try' then Result:= TryBodySetLength(S, AArr);  { 1.52 IDXRANGE3 (Blueprint4.ViewModel:2490) }
         S:= S.PrevSibling;
       end;
     end;
     C:= P;
     P:= C.Parent;
+  end;
+end;
+
+{ ATry is a try..finally (no except: an exception never falls through past it) whose body holds
+  `SetLength(AArr, ..)` as a statement of its own: the last such call (null when there is none). }
+function TBnRun.TryBodySetLength(const ATry: TTSNode; const AArr: string): TTSNode;
+var
+  I, J: Integer;
+  HasFinally: Boolean;
+  Body, N: TTSNode;
+begin
+  Result:= Default(TTSNode);
+  HasFinally:= False;
+  Body:= Default(TTSNode);
+  for I:= 0 to ATry.ChildCount - 1 do
+  begin
+    if ATry.Child(I).NodeType = 'kExcept' then Exit;
+    if ATry.Child(I).NodeType = 'kFinally' then HasFinally:= True;
+    if Body.IsNull and ((ATry.Child(I).NodeType = 'statements') or (ATry.Child(I).NodeType = 'block')) then Body:= ATry.Child(I);
+  end;
+  if (not HasFinally) or Body.IsNull then Exit;
+  for J:= Body.NamedChildCount - 1 downto 0 do
+  begin
+    N:= Body.NamedChild(J);
+    while (not N.IsNull) and (N.NodeType <> 'exprCall') and (N.NamedChildCount = 1) do N:= N.NamedChild(0);
+    if (not N.IsNull) and (N.NodeType = 'exprCall') and (BareIdent(N.ChildByField('entity')) = 'setlength') and IsSizeChangeOf(N, AArr) then Exit(N);
+  end;
+end;
+
+{ AProc (a nested routine) declares its own AX: a use of AX inside it is no capture. }
+function TBnRun.DeclaresLocal(const AProc: TTSNode; const AX: string): Boolean;
+var
+  Scope: TDictionary<string, TDeclInfo>;
+begin
+  Scope:= BuildScope(AProc);
+  try
+    Result:= Scope.ContainsKey(AX);
+  finally
+    Scope.Free;
   end;
 end;
 
@@ -2691,7 +3393,9 @@ begin
       N:= Stack.Last;
       Stack.Delete(Stack.Count - 1);
       if N.IsNull or (N.EndByte <= AFrom) or (N.StartByte >= ATo) or (N.NodeType = 'lambda') then Continue;
-      Result:= (N.StartByte >= AFrom) and IsSizeChangeOf(N, AArr);
+      { 1.52 IDXRANGE3 (Pipes.Framing:557): `A := nil; Exit` never reaches the access }
+      Result:= (N.StartByte >= AFrom) and IsSizeChangeOf(N, AArr)
+        and not ((not FAccess.IsNull) and NodeWithin(FAccess, FCurProc) and LeavesBefore(N, FAccess, 0, False));
       for I:= 0 to N.ChildCount - 1 do Stack.Add(N.Child(I));
     end;
   finally
@@ -2726,8 +3430,9 @@ end;
   step write, after the access, in no nested loop): at most start + trips - 1 at the access. }
 function TBnRun.CountInvariant(const ACtx: TIdxCtx): Boolean;
 var
-  F, P, W, Step, It, StartE: TTSNode;
-  I, C0, SLo: Integer;
+  F, P, W, Step, It, StartE, Init, L: TTSNode;
+  AroundF: TList<TTSNode>;
+  I, C0, SLo, V: Integer;
   IsDown, HaveInit: Boolean;
   S, E, U, Trips: TSym;
   Info: TDeclInfo;
@@ -2763,19 +3468,38 @@ begin
   if F.IsNull or ((F.NodeType = 'for') and (AssignTarget(F.ChildByField('start')) = ACtx.Idx)) then Exit;
   Step:= Default(TTSNode);
   C0:= 0;
+  SLo:= 0;
   HaveInit:= False;
+  { 1.52 IDXRANGE3 (uBroadcastServer:481/515): the last write before F that dominates it hides the
+    earlier ones; a write after F reaches it only through a loop around F }
+  Init:= Default(TTSNode);
   for W in ACtx.Writes do
-    if (W.StartByte >= F.StartByte) and (W.EndByte <= F.EndByte) then
-    begin
-      if (not Step.IsNull) or (not StepWrite(W, ACtx.Idx)) or (W.StartByte < ACtx.Access.StartByte) or InNestedLoop(W) then Exit;
-      Step:= W;
-    end
-    else
-    begin
-      if (W.StartByte > F.StartByte) or (not WriteUpper(W, U)) or (U.Base <> '') or (U.Off < 0) then Exit;
-      HaveInit:= True;
-      if U.Off > C0 then C0:= U.Off;
-    end;
+    if (W.EndByte <= F.StartByte) and StmtDominates(W, F) and (Init.IsNull or (W.StartByte > Init.StartByte)) then Init:= W;
+  AroundF:= TList<TTSNode>.Create;
+  try
+    LoopsAround(F, AroundF);
+    for W in ACtx.Writes do
+      if (W.StartByte >= F.StartByte) and (W.EndByte <= F.EndByte) then
+      begin
+        if (not Step.IsNull) or (not StepWrite(W, ACtx.Idx)) or (W.StartByte < ACtx.Access.StartByte) or InNestedLoop(W) then Exit;
+        Step:= W;
+      end
+      else if (not Init.IsNull) and (W.StartByte < Init.StartByte) then
+        Continue
+      else if W.StartByte > F.StartByte then
+      begin
+        for L in AroundF do
+          if NodeWithin(W, L) then Exit;
+      end
+      else
+      begin
+        if (not WriteUpper(W, U)) or (U.Base <> '') or (U.Off < 0) then Exit;
+        HaveInit:= True;
+        if U.Off > C0 then C0:= U.Off;
+      end;
+  finally
+    AroundF.Free;
+  end;
   if Step.IsNull or not HaveInit then Exit;
   if F.NodeType = 'foreach' then
   begin
@@ -2784,9 +3508,9 @@ begin
     It:= F.ChildByField('iterable');
     while (not It.IsNull) and (It.NodeType = 'exprParens') and (It.NamedChildCount = 1) do It:= It.NamedChild(0);
     if It.IsNull then Exit;
-    if (It.NodeType = 'exprDot') and (BareIdent(It.ChildByField('lhs')) <> '')
+    if (It.NodeType = 'exprDot') and (DottedPath(It.ChildByField('lhs')) <> '')
       and MatchText(Trim(Txt(It.ChildByField('rhs'))), ['keys', 'values']) then
-      Trips:= MkSym('cnt:' + BareIdent(It.ChildByField('lhs')), 0)
+      Trips:= MkSym('cnt:' + DottedPath(It.ChildByField('lhs')), 0)
     else if (It.NodeType = 'identifier') and IsBoundedArray(BareIdent(It), Info) then
     begin
       Trips:= HighSym(BareIdent(It), Info);
@@ -2805,6 +3529,16 @@ begin
   StartE:= F.ChildByField('start').ChildByField('rhs');
   S:= SymOf(StartE);
   E:= SymOf(F.ChildByField('end'));
+  if not IsDown then
+  begin
+    { 1.52 BK-RULEFP (Blueprint4:2009): a start that is not a constant counts by its least value;
+      1.52 IDXRANGE3: or by the bound its writes and guards give }
+    if S.Ok and (S.Base = '') then SLo:= S.Off
+    else if not (LowerConstOf(StartE, 0, SLo) or (EvalBound(StartE, F, False, 0, SLo) and not IsNeutralBound(SLo))) then Exit;
+    if SelfBoundedFor(ACtx, F, C0, SLo) then Exit(True);  { 1.52 IDXRANGE3: compaction over A itself }
+    { 1.52 IDXRANGE3 (FlexDateTime:420): an end that is no symbol counts by its greatest value }
+    if (not E.Ok) and EvalBound(F.ChildByField('end'), F, True, 0, V) and not IsNeutralBound(V) then E:= MkSym('', V);
+  end;
   if not E.Ok then Exit;
   { start + trips - 1: the steps taken before the access in the last trip }
   if IsDown then
@@ -2813,12 +3547,7 @@ begin
     U:= MkSym(S.Base, S.Off - E.Off + C0);
   end
   else
-  begin
-    { 1.52 BK-RULEFP (Blueprint4:2009): a start that is not a constant counts by its least value }
-    if S.Ok and (S.Base = '') then SLo:= S.Off
-    else if not LowerConstOf(StartE, 0, SLo) then Exit;
     U:= MkSym(E.Base, E.Off - SLo + C0);
-  end;
   Result:= UpperWithin(U, ACtx.Arr, ACtx.Info);
 end;
 
@@ -2846,6 +3575,1078 @@ begin
   else if R.NodeType = 'exprSubscript' then
     Result:= not IsBoundedArray(BareIdent(R.ChildByField('entity')), Info);
   if Result then AText:= Trim(Txt(R));
+end;
+
+{ ---- index-possibly-out-of-range: value bounds along the writes (1.52 IDXRANGE3) ---------- }
+
+
+{ W runs on every path that reaches AAt: W sits, through no control statement, in a statement list
+  that holds AAt, and ends before it. }
+function TBnRun.StmtDominates(const W, AAt: TTSNode): Boolean;
+var
+  P: TTSNode;
+begin
+  Result:= False;
+  if W.IsNull or AAt.IsNull or (W.EndByte > AAt.StartByte) then Exit;
+  P:= W.Parent;
+  while (not P.IsNull) and (P.NodeType <> 'block') and (P.NodeType <> 'statements') do
+  begin
+    if (IndexStr(P.NodeType, CONTROL_NODES) >= 0) or (P.NodeType = 'defProc') then Exit;
+    P:= P.Parent;
+  end;
+  Result:= NodeWithin(AAt, P);
+end;
+
+{ The loops around N inside its routine, innermost first, into AList (cleared); returns their count. }
+function TBnRun.LoopsAround(const N: TTSNode; AList: TList<TTSNode>): Integer;
+var
+  Q: TTSNode;
+begin
+  AList.Clear;
+  Q:= N.Parent;
+  while (not Q.IsNull) and (Q.NodeType <> 'defProc') and (Q.NodeType <> 'lambda') do
+  begin
+    if IsLoopNode(Q) then AList.Add(Q);
+    Q:= Q.Parent;
+  end;
+  Result:= AList.Count;
+end;
+
+{ The `for AX := ...` loop whose body holds AAt (null when there is none). }
+function TBnRun.ForOfCounter(const AX: string; const AAt: TTSNode): TTSNode;
+var
+  P: TTSNode;
+begin
+  Result:= Default(TTSNode);
+  P:= AAt.Parent;
+  while (not P.IsNull) and (P.NodeType <> 'defProc') and (P.NodeType <> 'lambda') do
+  begin
+    if (P.NodeType = 'for') and (AssignTarget(P.ChildByField('start')) = AX) and NodeWithin(AAt, P.ChildByField('body')) then Exit(P);
+    P:= P.Parent;
+  end;
+end;
+
+{ AX is a local or a parameter of the routine under analysis. }
+function TBnRun.IsOwnLocal(const AX: string): Boolean;
+begin
+  Result:= (AX <> '') and (FScopes.Count > 0) and FScopes[FScopes.Count - 1].ContainsKey(AX);
+end;
+
+
+{ Something in the routine may change AX (a local / parameter, or the record a field path starts at)
+  between the bytes AFrom and ATo: an assignment to it or into it, Inc / Dec, a size change, its
+  address taken, a bare pass to a call that may take it by reference, or a use of a pointer that
+  was set from its address anywhere in the routine. }
+function TBnRun.TouchedIn(const AX: string; AFrom, ATo: Cardinal; AWhole: Boolean): Boolean;  // dl:ok cyclomatic-complexity@52f4, too-many-exit-points@ed2b -- REVIEWED 2026-11-18 IDXRANGE3: one flow pass over the writes in text order; the branches share its per-event state, a split scatters it
+var
+  Stack, All: TList<TTSNode>;
+  Aliases: TList<string>;
+  N, Args, Op, Asg: TTSNode;
+  I: Integer;
+  T, Fn, Al: string;
+  IsStmt: Boolean;
+begin
+  Result:= True;
+  if FCurProc.IsNull then Exit;
+  Stack:= TList<TTSNode>.Create;
+  All:= TList<TTSNode>.Create;
+  Aliases:= TList<string>.Create;
+  try
+    { the pointers set from @AX anywhere in the routine }
+    Stack.Add(FCurProc.ChildByField('body'));
+    while Stack.Count > 0 do
+    begin
+      N:= Stack.Last;
+      Stack.Delete(Stack.Count - 1);
+      if N.IsNull then Continue;
+      All.Add(N);
+      if (N.NodeType = 'exprUnary') and (OperatorType(N) = 'kAt') and (RootName(Txt(N.ChildByField('operand'))) = AX) then
+      begin
+        Asg:= N.Parent;
+        while (not Asg.IsNull) and (Asg.NodeType <> 'assignment') and (Asg.NodeType <> 'block') and (Asg.NodeType <> 'defProc') do Asg:= Asg.Parent;
+        if (not Asg.IsNull) and (Asg.NodeType = 'assignment') and (AssignTarget(Asg) <> '') then Aliases.Add(AssignTarget(Asg));
+      end;
+      for I:= 0 to N.ChildCount - 1 do Stack.Add(N.Child(I));
+    end;
+    for N in All do
+    begin
+      if (N.StartByte < AFrom) or (N.StartByte >= ATo) then Continue;
+      T:= N.NodeType;
+      if (T = 'assignment') and (RootName(Txt(N.ChildByField('lhs'))) = AX) and ((not AWhole) or (BareIdent(N.ChildByField('lhs')) = AX)) then Exit;
+      if (T = 'identifier') and (Aliases.IndexOf(LowerCase(Txt(N))) >= 0) then Exit;
+      if (T = 'exprUnary') and (OperatorType(N) = 'kAt') and (RootName(Txt(N.ChildByField('operand'))) = AX)
+        and ((not AWhole) or (BareIdent(N.ChildByField('operand')) = AX)) then Exit;
+      if (T = 'exprCall') and not (N = FAccess) then  { the call under analysis reads its arguments first }  // dl:ok nonminimal-bool@8aba -- REVIEWED 2026-11-18 IDXRANGE3: TTSNode declares Equal but no NotEqual; <> does not compile
+      begin
+        { a method of AX may change it }
+        if (N.ChildByField('entity').NodeType = 'exprDot') and (RootName(Txt(N.ChildByField('entity'))) = AX)
+          and ((not AWhole) or (BareIdent(N.ChildByField('entity').ChildByField('lhs')) = AX)) then Exit;
+        Fn:= CallName(N);
+        Args:= N.ChildByField('args');
+        if Args.IsNull then Continue;
+        for I:= 0 to Args.NamedChildCount - 1 do
+        begin
+          Op:= Peeled(Args.NamedChild(I));
+          if Op.IsNull or IsTrivia(Op) or ArgByValue(Fn, I) then Continue;
+          Al:= Op.NodeType;
+          if ((Al = 'identifier') or ((not AWhole) and ((Al = 'exprDot') or (Al = 'exprSubscript')))) and (RootName(Txt(Op)) = AX) then Exit;
+        end;
+      end;
+      { a parameterless method call statement `AX.Clear;` }
+      IsStmt:= (not N.Parent.IsNull) and ((N.Parent.NodeType = 'block') or (N.Parent.NodeType = 'statements'));
+      if (T = 'exprDot') and IsStmt
+        and (RootName(Txt(N)) = AX) and ((not AWhole) or (BareIdent(N.ChildByField('lhs')) = AX)) then Exit;
+    end;
+    Result:= False;
+  finally
+    Aliases.Free;
+    All.Free;
+    Stack.Free;
+  end;
+end;
+
+{ The bound condition C (ANegate: `not C`) puts on the local AX: an upper (AUpper) or lower bound
+  against a constant, through not / and / or and `AX in [..]`. }
+function TBnRun.CondBound(const C: TTSNode; const AX: string; ANegate, AUpper: Boolean; out AV: Integer): Boolean;  // dl:ok too-many-exit-points@2a53, cyclomatic-complexity@f73a -- REVIEWED 2026-11-18 IDXRANGE3: one flow pass over the writes in text order; the branches share its per-event state, a split scatters it
+var
+  E, Other: TTSNode;
+  Op: string;
+  A, B, K, V, V2: Integer;
+  HaveA, HaveB: Boolean;
+  Sy: TSym;
+begin
+  Result:= False;
+  AV:= 0;
+  E:= Peeled(C);
+  if E.IsNull then Exit;
+  if (E.NodeType = 'exprUnary') and (OperatorType(E) = 'kNot') then
+    Exit(CondBound(E.ChildByField('operand'), AX, not ANegate, AUpper, AV));
+  if E.NodeType <> 'exprBinary' then Exit;
+  Op:= OperatorType(E);
+  if ((Op = 'kAnd') and not ANegate) or ((Op = 'kOr') and ANegate) then
+  begin
+    { both hold: either side's bound holds, the tighter wins }
+    HaveA:= CondBound(E.ChildByField('lhs'), AX, ANegate, AUpper, A);
+    HaveB:= CondBound(E.ChildByField('rhs'), AX, ANegate, AUpper, B);
+    if HaveA and HaveB then AV:= TightBound(A, B, AUpper)
+    else if HaveA then AV:= A
+    else if HaveB then AV:= B
+    else Exit;
+    Exit(True);
+  end;
+  if (Op = 'kAnd') or (Op = 'kOr') then
+  begin
+    { one of them holds: only a bound both sides give }
+    if not (CondBound(E.ChildByField('lhs'), AX, ANegate, AUpper, A) and CondBound(E.ChildByField('rhs'), AX, ANegate, AUpper, B)) then Exit;
+    AV:= JoinBound(A, B, AUpper);
+    Exit(True);
+  end;
+  if Op = 'kIn' then
+  begin
+    if ANegate or (BareIdent(E.ChildByField('lhs')) <> AX) or not SetRange(E.ChildByField('rhs'), V, V2) then Exit;
+    AV:= if AUpper then V2 else V;
+    Exit(True);
+  end;
+  if BareIdent(E.ChildByField('lhs')) = AX then
+    Other:= E.ChildByField('rhs')
+  else if BareIdent(E.ChildByField('rhs')) = AX then
+  begin
+    Other:= E.ChildByField('lhs');
+    Op:= MirrorOp(Op);
+  end
+  else
+    Exit;
+  if ANegate then Op:= NegateOp(Op);
+  if not EvalIndex(Other, K) then
+  begin
+    Sy:= SymOf(Other);
+    if not (Sy.Ok and (Sy.Base = '')) then Exit;
+    K:= Sy.Off;
+  end;
+  if AUpper and (Op = 'kLt') then AV:= K - 1
+  else if AUpper and (Op = 'kLte') then AV:= K
+  else if (not AUpper) and (Op = 'kGt') then AV:= K + 1
+  else if (not AUpper) and (Op = 'kGte') then AV:= K
+  else Exit;
+  Result:= True;
+end;
+
+{ The most trips the for loop ALoop makes, from the bounds of its start and end (0 at least). }
+function TBnRun.LoopTrips(const ALoop: TTSNode; ADepth: Integer; out AT: Integer): Boolean;
+var
+  I, Hi, Lo: Integer;
+  IsDown: Boolean;
+  S, E: TTSNode;
+begin
+  Result:= False;
+  AT:= 0;
+  if ALoop.NodeType <> 'for' then Exit;
+  IsDown:= False;
+  for I:= 0 to ALoop.ChildCount - 1 do
+    if ALoop.Child(I).NodeType = 'kDownto' then IsDown:= True;
+  S:= ALoop.ChildByField('start').ChildByField('rhs');
+  E:= ALoop.ChildByField('end');
+  if not (EvalBound(if IsDown then S else E, ALoop, True, ADepth + 1, Hi) and EvalBound(if IsDown then E else S, ALoop, False, ADepth + 1, Lo)) then Exit;
+  if IsNeutralBound(Hi) or IsNeutralBound(Lo) then Exit;
+  AT:= if Hi - Lo + 1 > 0 then Hi - Lo + 1 else 0;
+  Result:= True;
+end;
+
+{ STATS:1779: `Floor(Abs(x) * c + d)` (also Trunc / Round / Ceil, c >= 0) under a dominating guard
+  `Abs(x) <= k` (an if branch, or `if Abs(x) > k then Exit`), x never written: the integer range of
+  the result -- Abs(x) lies in 0..k. }
+function TBnRun.FloatBound(const ACall, AAt: TTSNode; AUpper: Boolean; out AV: Integer): Boolean;  // dl:ok cyclomatic-complexity@edbb -- REVIEWED 2026-11-18 IDXRANGE3: one flow pass over the writes in text order; the branches share its per-event state, a split scatters it
+var
+  AbsN: TTSNode;
+  Cm, Dd, Hi, Val: Double;
+  HaveHi: Boolean;
+  AbsTxt, Fn: string;
+
+  function Lit(const N: TTSNode; out AF: Double): Boolean;
+  var
+    P: TTSNode;
+  begin
+    P:= Peeled(N);
+    Result:= (not P.IsNull) and StartsText('literal', P.NodeType) and TryStrToFloat(Trim(Txt(P)), AF, TFormatSettings.Invariant);
+  end;
+
+  function OpText(const N: TTSNode): string;
+  begin
+    Result:= Trim(Txt(N.ChildByField('operator')));
+  end;
+
+  { N = AbsN * C + D }
+  function Linear(const N0: TTSNode; out AC, AD: Double): Boolean;  // dl:ok too-many-exit-points@4930 -- REVIEWED 2026-11-18 IDXRANGE3: guard clauses per syntax shape; each early exit is a classification
+  var
+    N: TTSNode;
+    F, C1, D1: Double;
+    Op: string;
+  begin
+    Result:= False;
+    N:= Peeled(N0);
+    AC:= 1;
+    AD:= 0;
+    if N.IsNull then Exit;
+    if (N.NodeType = 'exprCall') and (BareIdent(N.ChildByField('entity')) = 'abs') then
+    begin
+      if not AbsN.IsNull then Exit;
+      AbsN:= N;
+      Exit(True);
+    end;
+    if N.NodeType <> 'exprBinary' then Exit;
+    Op:= OpText(N);
+    if (Op = '+') or (Op = '-') then
+    begin
+      if Lit(N.ChildByField('rhs'), F) and Linear(N.ChildByField('lhs'), C1, D1) then
+      begin
+        AC:= C1;
+        AD:= if Op = '+' then D1 + F else D1 - F;
+        Exit(True);
+      end;
+      if (Op = '+') and Lit(N.ChildByField('lhs'), F) and Linear(N.ChildByField('rhs'), C1, D1) then
+      begin
+        AC:= C1;
+        AD:= D1 + F;
+        Exit(True);
+      end;
+    end
+    else if Op = '*' then
+    begin
+      if (Lit(N.ChildByField('rhs'), F) and Linear(N.ChildByField('lhs'), C1, D1))
+        or (Lit(N.ChildByField('lhs'), F) and Linear(N.ChildByField('rhs'), C1, D1)) then
+      begin
+        AC:= C1 * F;
+        AD:= D1 * F;
+        Exit(True);
+      end;
+    end;
+  end;
+
+  { a comparison of AbsTxt with a literal in C gives Abs(x) <= AHi (ANegate: `not C`) }
+  function AbsHi(const C0: TTSNode; ANegate: Boolean; out AHi: Double): Boolean;  // dl:ok too-many-exit-points@dc5e -- REVIEWED 2026-11-18 IDXRANGE3: guard clauses per syntax shape; each early exit is a classification
+  var
+    E: TTSNode;
+    Op: string;
+    F, A, B: Double;
+    HA, HB, OnLeft: Boolean;
+  begin
+    Result:= False;
+    AHi:= 0;
+    E:= Peeled(C0);
+    if E.IsNull then Exit;
+    if (E.NodeType = 'exprUnary') and (OperatorType(E) = 'kNot') then Exit(AbsHi(E.ChildByField('operand'), not ANegate, AHi));
+    if E.NodeType <> 'exprBinary' then Exit;
+    Op:= OperatorType(E);
+    if ((Op = 'kAnd') and not ANegate) or ((Op = 'kOr') and ANegate) then
+    begin
+      HA:= AbsHi(E.ChildByField('lhs'), ANegate, A);
+      HB:= AbsHi(E.ChildByField('rhs'), ANegate, B);
+      if HA and HB then AHi:= if A < B then A else B
+      else if HA then AHi:= A
+      else if HB then AHi:= B
+      else Exit;
+      Exit(True);
+    end;
+    OnLeft:= SameText(StringReplace(Txt(E.ChildByField('lhs')), ' ', '', [rfReplaceAll]), AbsTxt) and Lit(E.ChildByField('rhs'), F);
+    if not OnLeft then
+    begin
+      if not (SameText(StringReplace(Txt(E.ChildByField('rhs')), ' ', '', [rfReplaceAll]), AbsTxt) and Lit(E.ChildByField('lhs'), F)) then Exit;
+      Op:= MirrorOp(Op);
+    end;
+    if ANegate then Op:= NegateOp(Op);
+    if (Op <> 'kLt') and (Op <> 'kLte') then Exit;
+    AHi:= F;
+    Result:= True;
+  end;
+
+  { the identifiers inside Abs(..) are never written in the routine }
+  function AbsArgFixed(const N: TTSNode): Boolean;
+  var
+    I: Integer;
+  begin
+    if N.NodeType = 'identifier' then Exit(WritesOf(LowerCase(Txt(N))) = 0);
+    for I:= 0 to N.ChildCount - 1 do
+      if not AbsArgFixed(N.Child(I)) then Exit(False);
+    Result:= True;
+  end;
+
+var
+  Args, C, P, S, ThenN: TTSNode;
+  G: Double;
+begin
+  Result:= False;
+  AV:= 0;
+  Fn:= BareIdent(ACall.ChildByField('entity'));
+  Args:= ACall.ChildByField('args');
+  if (IndexStr(Fn, FLOAT_ROUNDERS) < 0) or Args.IsNull or (Args.NamedChildCount <> 1) then Exit;
+  AbsN:= Default(TTSNode);
+  if (not Linear(Args.NamedChild(0), Cm, Dd)) or AbsN.IsNull or (Cm < 0) then Exit;
+  if not AbsArgFixed(AbsN.ChildByField('args')) then Exit;
+  if not AUpper then
+  begin
+    Val:= Dd;  { Abs(x) >= 0 }
+    AV:= if Fn = 'ceil' then CeilOf(Val) else FloorOf(Val);
+    Exit(True);
+  end;
+  AbsTxt:= StringReplace(Txt(AbsN), ' ', '', [rfReplaceAll]);
+  HaveHi:= False;
+  Hi:= 0;
+  C:= AAt;
+  P:= C.Parent;
+  while (not P.IsNull) and (P.NodeType <> 'defProc') and (P.NodeType <> 'lambda') do
+  begin
+    if ((P.NodeType = 'if') or (P.NodeType = 'ifElse')) and ((P.ChildByField('then') = C) or (P.ChildByField('else') = C)) then
+    begin
+      if AbsHi(P.ChildByField('condition'), P.ChildByField('else') = C, G) and ((not HaveHi) or (G < Hi)) then
+      begin
+        Hi:= G;
+        HaveHi:= True;
+      end;
+    end
+    else if (P.NodeType = 'block') or (P.NodeType = 'statements') then
+    begin
+      S:= C.PrevSibling;
+      while not S.IsNull do
+      begin
+        ThenN:= S.ChildByField('then');
+        if (S.NodeType = 'if') and IsLeaveStmt(ThenN) and AbsHi(S.ChildByField('condition'), True, G) and ((not HaveHi) or (G < Hi)) then
+        begin
+          Hi:= G;
+          HaveHi:= True;
+        end;
+        S:= S.PrevSibling;
+      end;
+    end;
+    C:= P;
+    P:= C.Parent;
+  end;
+  if not HaveHi then Exit;
+  Val:= Cm * Hi + Dd;
+  AV:= if (Fn = 'floor') or (Fn = 'trunc') then FloorOf(Val) else CeilOf(Val);
+  Result:= True;
+end;
+
+{ A bound of the integer expression E as it is evaluated at AAt: a constant, a local or parameter
+  (BoundAt), a for counter whose loop holds AAt (its start / end), x + k / x - k, an if-expression,
+  a rounded float (FloatBound); Length / Count / Abs are at least 0. }
+function TBnRun.EvalBound(const E, AAt: TTSNode; AUpper: Boolean; ADepth: Integer; out AV: Integer): Boolean;  // dl:ok cyclomatic-complexity@970c, too-many-exit-points@6f81 -- REVIEWED 2026-11-18 IDXRANGE3: one flow pass over the writes in text order; the branches share its per-event state, a split scatters it
+var
+  N, F, L, R, Other: TTSNode;
+  K, A, B, I: Integer;
+  S: TSym;
+  Op, Fn, X: string;
+  IsDown, Have: Boolean;
+
+  function NonNeg(const M0: TTSNode): Boolean;
+  var
+    M: TTSNode;
+    V: Integer;
+  begin
+    M:= Peeled(M0);
+    if M.IsNull then Exit(False);
+    if EvalIndex(M, V) then Exit(V >= 0);
+    if M.NodeType = 'exprCall' then Exit(MatchText(BareIdent(M.ChildByField('entity')), ['length', 'abs']));
+    Result:= (M.NodeType = 'exprDot') and SameText(Trim(Txt(M.ChildByField('rhs'))), 'count');
+  end;
+
+begin
+  Result:= False;
+  AV:= 0;
+  N:= Peeled(E);
+  if N.IsNull or (ADepth > MAX_BOUND_DEPTH) then Exit;
+  if EvalIndex(N, AV) then Exit(True);
+  S:= SymOf(N);
+  if S.Ok and (S.Base = '') then
+  begin
+    AV:= S.Off;
+    Exit(True);
+  end;
+  if N.NodeType = 'identifier' then
+  begin
+    X:= LowerCase(Txt(N));
+    F:= ForOfCounter(X, AAt);
+    if not F.IsNull then
+    begin
+      IsDown:= False;
+      for I:= 0 to F.ChildCount - 1 do
+        if F.Child(I).NodeType = 'kDownto' then IsDown:= True;
+      { ascending: start .. end; downto: end .. start }
+      if AUpper <> IsDown then Exit(EvalBound(F.ChildByField('end'), F, AUpper, ADepth + 1, AV));
+      Exit(EvalBound(F.ChildByField('start').ChildByField('rhs'), F, AUpper, ADepth + 1, AV));
+    end;
+    if IsOwnLocal(X) then Result:= BoundAt(X, AAt, AUpper, ADepth + 1, AV);
+    Exit;
+  end;
+  if N.NodeType = 'exprBinary' then
+  begin
+    Op:= OperatorType(N);
+    if (Op <> 'kAdd') and (Op <> 'kSub') then Exit;
+    L:= N.ChildByField('lhs');
+    R:= N.ChildByField('rhs');
+    Have:= EvalIndex(R, K);
+    Other:= L;
+    if Have and (Op = 'kSub') then K:= -K;
+    if (not Have) and (Op = 'kAdd') and EvalIndex(L, K) then
+    begin
+      Have:= True;
+      Other:= R;
+    end;
+    if Have then
+    begin
+      Inc(FBoundOff, K);
+      try
+        Result:= EvalBound(Other, AAt, AUpper, ADepth + 1, A);
+      finally
+        Dec(FBoundOff, K);
+      end;
+      if Result then AV:= ShiftBound(A, K);
+      Exit;
+    end;
+    { a lower bound only: x + (something never negative) }
+    if (not AUpper) and (Op = 'kAdd') then
+    begin
+      if NonNeg(R) then Exit(EvalBound(L, AAt, False, ADepth + 1, AV));
+      if NonNeg(L) then Exit(EvalBound(R, AAt, False, ADepth + 1, AV));
+    end;
+    Exit;
+  end;
+  if N.NodeType = 'exprIf' then
+  begin
+    if EvalBound(N.ChildByField('then'), AAt, AUpper, ADepth + 1, A) and EvalBound(N.ChildByField('else'), AAt, AUpper, ADepth + 1, B) then
+    begin
+      AV:= JoinBound(A, B, AUpper);
+      Result:= True;
+    end;
+    Exit;
+  end;
+  if N.NodeType = 'exprCall' then
+  begin
+    Fn:= BareIdent(N.ChildByField('entity'));
+    if IndexStr(Fn, FLOAT_ROUNDERS) >= 0 then Exit(FloatBound(N, AAt, AUpper, AV));
+    if (not AUpper) and NonNeg(N) then Exit(True);
+    if (not AUpper) and (Fn = 'high') then
+    begin
+      AV:= -1;
+      Exit(True);
+    end;
+    Exit;
+  end;
+  if (not AUpper) and NonNeg(N) then Result:= True;
+end;
+
+{ The bound (AUpper: upper, else lower) of the local / parameter AX at AAt, from its writes in text
+  order (a dominating write resets it, a conditional one joins, Inc / Dec move it -- in a for loop
+  that does not hold AAt by the loop's trips), the writes in the loops around AAt (they flow back),
+  a guard right after a write (`x := f; if x < 0 then Exit`) and the guards that dominate AAt after
+  the last write. A parameter starts unknown; a pass to a call that may take it by reference, an
+  address taken or a capture make it unknown. A chain of locals that comes back to AX is followed
+  once: it adds nothing when its offsets do not grow the bound (ORM3 / YADF index chains). }
+function TBnRun.BoundAt(const AX: string; const AAt: TTSNode; AUpper: Boolean; ADepth: Integer; out AV: Integer): Boolean;  // dl:ok cognitive-complexity@4f9f, cyclomatic-complexity@4cbf, too-many-locals@8053 -- REVIEWED 2026-11-18 IDXRANGE3: one flow pass over the writes in text order; the branches share its per-event state, a split scatters it
+var
+  Events, AtLoops, ELoops: TList<TTSNode>;
+  E, Body, Gd, Nx, Inner, ThenN, C, P, S, Args, EvalAt: TTSNode;
+  Entered, Net, V, Val, K, T, G, Own, I: Integer;
+  LastByte: Cardinal;
+  Known, ValOk, InAtLoop, IsInc, Dom, InBranch: Boolean;
+  Fn, Key, MemoKey, Memo: string;
+  Keys: TDictionary<Cardinal, Cardinal>;
+  CyclesAt: Integer;
+
+  procedure Gather(const N: TTSNode);
+  var
+    J: Integer;
+  begin
+    if N.IsNull then Exit;
+    if ((N.NodeType = 'for') and (AssignTarget(N.ChildByField('start')) = AX))
+      or ((N.NodeType = 'exprCall') and PassesByRef(N, AX)) then Events.Add(N);
+    for J:= 0 to N.ChildCount - 1 do Gather(N.Child(J));
+  end;
+
+  function InList(const N: TTSNode; AList: TList<TTSNode>): Boolean;
+  var
+    Q: TTSNode;
+  begin
+    for Q in AList do
+      if Q = N then Exit(True);
+    Result:= False;
+  end;
+
+  procedure Tighten(AG: Integer);
+  begin
+    if Known and not IsNeutralBound(V) then V:= TightBound(V, AG, AUpper)
+    else
+    begin
+      V:= AG;
+      Known:= True;
+    end;
+  end;
+
+begin
+  Result:= False;
+  AV:= 0;
+  if (ADepth > MAX_BOUND_DEPTH) or FCurProc.IsNull or (not IsOwnLocal(AX)) or (not NodeWithin(AAt, FCurProc)) then Exit;
+  Key:= AX + '@' + IntToStr(AAt.StartByte);  { one name at one point: a chain through a loop comes back to it }
+  if FBoundVisit.Count = 0 then FBoundMemo.Clear;
+  MemoKey:= Key + (if AUpper then '^' else 'v');
+  if FBoundMemo.TryGetValue(MemoKey, Memo) then
+  begin
+    Result:= Memo <> '';
+    if Result then AV:= StrToInt(Memo);
+    Exit;
+  end;
+  if FBoundVisit.TryGetValue(Key, Entered) then
+  begin
+    Inc(FBoundCycles);
+    { a chain back to AX: neutral when the way round does not grow the bound }
+    Net:= FBoundOff - Entered;
+    if (AUpper and (Net <= 0)) or ((not AUpper) and (Net >= 0)) then
+    begin
+      AV:= NeutralBound(AUpper);
+      Result:= True;
+    end;
+    Exit;
+  end;
+  Body:= FCurProc.ChildByField('body');
+  if NameEscapes(FCurProc, AX, False) then Exit;
+  FBoundVisit.Add(Key, FBoundOff);
+  CyclesAt:= FBoundCycles;
+  Events:= TList<TTSNode>.Create;
+  AtLoops:= TList<TTSNode>.Create;
+  ELoops:= TList<TTSNode>.Create;
+  try
+    CollectIdxWrites(Body, AX, Events);
+    Gather(Body);
+    LoopsAround(AAt, AtLoops);
+    { text order, except that a write after AAt in a loop around it flows in at that loop's head:
+      it comes before the writes of the loop body that precede AAt (YADF.Layout:2665) }
+    Keys:= TDictionary<Cardinal, Cardinal>.Create;
+    try
+      for E in Events do
+      begin
+        Keys.AddOrSetValue(E.StartByte, E.StartByte);
+        if E.StartByte >= AAt.StartByte then
+          for Gd in AtLoops do
+            if NodeWithin(E, Gd) then
+            begin
+              Keys.AddOrSetValue(E.StartByte, Gd.StartByte);
+              Break;
+            end;
+      end;
+      Events.Sort(TComparer<TTSNode>.Construct(
+        function(const A, B: TTSNode): Integer
+        begin
+          Result:= Integer(Keys[A.StartByte]) - Integer(Keys[B.StartByte]);
+          if Result = 0 then Result:= Integer(A.StartByte) - Integer(B.StartByte);
+        end));
+    finally
+      Keys.Free;
+    end;
+    Known:= not FScopes[FScopes.Count - 1][AX].IsParam;  { a parameter's incoming value is unknown }
+    V:= NeutralBound(AUpper);
+    LastByte:= 0;
+    for E in Events do
+    begin
+      LoopsAround(E, ELoops);
+      InAtLoop:= False;
+      Own:= 0;
+      Inner:= Default(TTSNode);
+      for Gd in ELoops do
+        if InList(Gd, AtLoops) then InAtLoop:= True
+        else if not (Gd = E) then  // dl:ok nonminimal-bool@1204 -- REVIEWED 2026-11-18 IDXRANGE3: TTSNode declares Equal but no NotEqual; <> does not compile
+        begin
+          Inc(Own);
+          if Inner.IsNull then Inner:= Gd;
+        end;
+      { only the writes before AAt, and those in a loop around AAt, reach it }
+      if (E.StartByte >= AAt.StartByte) and not InAtLoop then Continue;
+      if E.StartByte > LastByte then LastByte:= E.StartByte;
+      { a write that dominates AAt resets it -- in a loop around AAt too: every way round passes it }
+      Dom:= (Own = 0) and (E.StartByte < AAt.StartByte) and StmtDominates(E, AAt);
+      if E.NodeType = 'for' then
+      begin
+        { a for loop over AX in a loop around AAt, after AAt, whose undefined counter a later
+          statement of that loop's body overwrites before the loop goes round (YADF.Layout:2801) }
+        if InAtLoop and (E.StartByte > AAt.StartByte) and ForCounterOverwritten(E, Events) then Continue;
+        { AX is that loop's counter: inside the body its range is the loop's bounds (the header runs
+          on every way in), after the loop it is undefined }
+        Known:= False;
+        if NodeWithin(AAt, E.ChildByField('body')) then
+        begin
+          IsInc:= False;  { reused: True for a downto loop }
+          for I:= 0 to E.ChildCount - 1 do
+            if E.Child(I).NodeType = 'kDownto' then IsInc:= True;
+          Known:= EvalBound(if AUpper <> IsInc then E.ChildByField('end') else E.ChildByField('start').ChildByField('rhs'),
+            E, AUpper, ADepth + 1, V);
+        end;
+        Continue;
+      end;
+      if E.NodeType = 'foreach' then
+      begin
+        Known:= False;
+        Continue;
+      end;
+      if E.NodeType = 'exprCall' then
+      begin
+        Fn:= BareIdent(E.ChildByField('entity'));
+        if (Fn <> 'inc') and (Fn <> 'dec') then
+        begin
+          Known:= False;  { a pass to a call that may take AX by reference }
+          Continue;
+        end;
+        IsInc:= Fn = 'inc';
+        Args:= E.ChildByField('args');
+        K:= 1;
+        if (not Args.IsNull) and (Args.NamedChildCount >= 2) and not (EvalIndex(Args.NamedChild(1), K) and (K >= 0)) then
+        begin
+          if (AUpper and IsInc) or ((not AUpper) and not IsInc) then Known:= False;
+          Continue;
+        end;
+        if AUpper <> IsInc then Continue;  { an Inc keeps a lower bound, a Dec an upper one }
+        if (not Known) or IsNeutralBound(V) or InAtLoop then
+        begin
+          Known:= False;
+          Continue;
+        end;
+        if Own = 0 then V:= if AUpper then V + K else V - K
+        else if (Own = 1) and LoopTrips(Inner, ADepth, T) then V:= if AUpper then V + K * T else V - K * T
+        else Known:= False;
+        Continue;
+      end;
+      { an assignment / an initialised `var x := ..`; one in a loop around AAt that does not dominate
+        it is read at the head of the innermost such loop -- every write of that loop reaches there,
+        so the bound covers its value, and chains through the loop come back to one point }
+      EvalAt:= E;
+      if InAtLoop and not Dom then
+        for Gd in ELoops do
+          if InList(Gd, AtLoops) then
+          begin
+            EvalAt:= Gd.ChildByField('body');
+            if EvalAt.IsNull then EvalAt:= Gd.NamedChild(0);
+            Break;
+          end;
+      ValOk:= EvalBound(E.ChildByField('rhs'), EvalAt, AUpper, ADepth + 1, Val);
+      { a guard right after it: `x := f(..); if x < 0 then Exit` }
+      Nx:= E;
+      while (not Nx.Parent.IsNull) and (Nx.Parent.NodeType <> 'block') and (Nx.Parent.NodeType <> 'statements')
+        and (IndexStr(Nx.Parent.NodeType, CONTROL_NODES) < 0) and (Nx.Parent.NodeType <> 'defProc') do Nx:= Nx.Parent;
+      if (not Nx.Parent.IsNull) and ((Nx.Parent.NodeType = 'block') or (Nx.Parent.NodeType = 'statements')) then
+      begin
+        Nx:= Nx.NextNamedSibling;
+        while (not Nx.IsNull) and IsTrivia(Nx) do Nx:= Nx.NextNamedSibling;
+        if (not Nx.IsNull) and (Nx.NodeType = 'if') and IsLeaveStmt(Nx.ChildByField('then'))
+          and (Nx.EndByte <= AAt.StartByte) and CondBound(Nx.ChildByField('condition'), AX, True, AUpper, G) then
+        begin
+          Val:= if ValOk and not IsNeutralBound(Val) then TightBound(Val, G, AUpper) else G;
+          ValOk:= True;
+        end;
+      end;
+      if Dom then
+      begin
+        Known:= ValOk;
+        V:= Val;
+      end
+      else if ValOk then V:= JoinBound(V, Val, AUpper)
+      else Known:= False;
+    end;
+    { the guards that dominate AAt after the last write that reaches it }
+    C:= AAt;
+    P:= C.Parent;
+    while (not P.IsNull) and (P.NodeType <> 'defProc') and (P.NodeType <> 'lambda') do
+    begin
+      InBranch:= ((P.NodeType = 'if') or (P.NodeType = 'ifElse')) and ((P.ChildByField('then') = C) or (P.ChildByField('else') = C));
+      if InBranch and (P.ChildByField('condition').StartByte > LastByte)
+        and CondBound(P.ChildByField('condition'), AX, P.ChildByField('else') = C, AUpper, G) then
+        Tighten(G)
+      else if (P.NodeType = 'while') and (P.ChildByField('body') = C) and (P.ChildByField('condition').StartByte > LastByte)
+        and CondBound(P.ChildByField('condition'), AX, False, AUpper, G) then
+        Tighten(G)
+      else if (P.NodeType = 'block') or (P.NodeType = 'statements') then
+      begin
+        S:= C.PrevSibling;
+        while (not S.IsNull) and (S.StartByte > LastByte) do
+        begin
+          ThenN:= S.ChildByField('then');
+          if (S.NodeType = 'if') and IsLeaveStmt(ThenN) and CondBound(S.ChildByField('condition'), AX, True, AUpper, G) then Tighten(G);
+          S:= S.PrevSibling;
+        end;
+      end;
+      C:= P;
+      P:= C.Parent;
+    end;
+    Result:= Known;
+    AV:= V;
+    if FBoundCycles = CyclesAt then FBoundMemo.AddOrSetValue(MemoKey, if Known then IntToStr(V) else '');
+  finally
+    ELoops.Free;
+    AtLoops.Free;
+    Events.Free;
+    FBoundVisit.Remove(Key);
+  end;
+end;
+
+
+{ YADF ShapesMatch: a dominating `if Length(A) <> Length(B) then <leave>` (also High, either order,
+  either side of an `or`) with neither array resized from there to the access: same length. }
+function TBnRun.EqualLenGuard(const A, B: string): Boolean;  // dl:ok too-many-exit-points@d669 -- REVIEWED 2026-11-18 IDXRANGE3: guard clauses per syntax shape; each early exit is a classification
+var
+  S, E: TTSNode;
+  Guards, Todo: TList<TTSNode>;
+  Hi: Cardinal;
+  DA, DB, First, Last: TTSNode;
+  SA: string;
+  Id: TMatch;
+
+  { `Fn(A) <> Fn(B)` (either order) for Length or High }
+  function SameFnPair(const ANeq: TTSNode; const AFn: string): Boolean;
+  var
+    L, R: TTSNode;
+  begin
+    L:= ANeq.ChildByField('lhs');
+    R:= ANeq.ChildByField('rhs');
+    Result:= (IsArrayFn(L, AFn, A) and IsArrayFn(R, AFn, B)) or (IsArrayFn(L, AFn, B) and IsArrayFn(R, AFn, A));
+  end;
+
+begin
+  Result:= False;
+  if (A = B) or FAccess.IsNull or not NodeWithin(FAccess, FCurProc) then Exit;
+  Guards:= TList<TTSNode>.Create;
+  Todo:= TList<TTSNode>.Create;
+  try
+    LeaveGuardsBefore(FAccess, Guards);
+    for S in Guards do
+    begin
+      Hi:= AccessReach(FAccess, S.EndByte);
+      if SizeChangedIn(A, S.EndByte, Hi) or SizeChangedIn(B, S.EndByte, Hi) then Continue;
+      Todo.Clear;
+      Todo.Add(S.ChildByField('condition'));
+      while Todo.Count > 0 do
+      begin
+        E:= Peeled(Todo.Last);
+        Todo.Delete(Todo.Count - 1);
+        if E.IsNull or (E.NodeType <> 'exprBinary') then Continue;
+        if OperatorType(E) = 'kOr' then
+        begin
+          Todo.Add(E.ChildByField('lhs'));
+          Todo.Add(E.ChildByField('rhs'));
+        end
+        else if (OperatorType(E) = 'kNeq') and (SameFnPair(E, 'length') or SameFnPair(E, 'high')) then
+          Exit(True);
+      end;
+    end;
+  finally
+    Todo.Free;
+    Guards.Free;
+  end;
+  { 1.52 IDXRANGE3 (uPdfScanRescan:523): both sized by the same expression, nothing it reads changed
+    between the two SetLengths, neither resized up to the access }
+  DA:= DomSetLength(A);
+  DB:= DomSetLength(B);
+  if DA.IsNull or DB.IsNull then Exit;
+  SA:= StringReplace(LowerCase(Txt(DA.ChildByField('args').NamedChild(1))), ' ', '', [rfReplaceAll]);
+  if SA <> StringReplace(LowerCase(Txt(DB.ChildByField('args').NamedChild(1))), ' ', '', [rfReplaceAll]) then Exit;
+  First:= if DA.StartByte < DB.StartByte then DA else DB;
+  Last:= if DA.StartByte < DB.StartByte then DB else DA;
+  if SizeChangedIn(A, First.EndByte, Last.StartByte) or SizeChangedIn(B, First.EndByte, Last.StartByte) then Exit;
+  for Id in TRegEx.Matches(SA, '[a-z_]\w*(\.[a-z_]\w*)*') do
+    if TouchedPath(Id.Value, First.EndByte, Last.StartByte) then Exit;
+  Hi:= AccessReach(FAccess, Last.StartByte);
+  Result:= not (SizeChangedIn(A, DA.EndByte, Hi) or SizeChangedIn(B, DB.EndByte, Hi));
+end;
+
+{ The `if <c> then <leave>` statements that dominate AAt: earlier statements of every statement
+  list around it, nearest first, into AList. }
+procedure TBnRun.LeaveGuardsBefore(const AAt: TTSNode; AList: TList<TTSNode>);
+var
+  C, P, S: TTSNode;
+begin
+  C:= AAt;
+  P:= C.Parent;
+  while (not P.IsNull) and (P.NodeType <> 'defProc') and (P.NodeType <> 'lambda') do
+  begin
+    if (P.NodeType = 'block') or (P.NodeType = 'statements') then
+    begin
+      S:= C.PrevSibling;
+      while not S.IsNull do
+      begin
+        if (S.NodeType = 'if') and IsLeaveStmt(S.ChildByField('then')) then AList.Add(S);
+        S:= S.PrevSibling;
+      end;
+    end;
+    C:= P;
+    P:= C.Parent;
+  end;
+end;
+
+{ YADF.Layout:5813/6319, :2638: the routine a call names starts with `SetLength(X, P.Count)` (or
+  Length(P)) statements, X its Result or one of its parameters, P another parameter, and changes X's
+  size nowhere else -- in this unit, or in another unit of the index (lint --db). The spec, cached
+  per name: 'target=param:cnt|len' entries joined by ';', target 'r' for Result or a param index. }
+function TBnRun.CalleeSizes(const ACall: TTSNode): string;
+var
+  Nm: string;
+  Ent: TTSNode;
+
+  function TxtIn(const N: TTSNode; const ASrc: TBytes): string;
+  begin
+    Result:= '';
+    if N.IsNull or (Integer(N.EndByte) > Length(ASrc)) or (N.EndByte <= N.StartByte) then Exit;
+    Result:= TEncoding.UTF8.GetString(ASrc, Integer(N.StartByte), Integer(N.EndByte - N.StartByte));
+  end;
+
+  function SizerSpec(const AProc: TTSNode; const ASrc: TBytes): string;
+  var
+    Params, Entries: TList<string>;
+    Body, St, N, Arg: TTSNode;
+    Stack: TList<TTSNode>;
+    I, Sizes: Integer;
+    T, Fn, Tgt, Src, Kind, PName: string;
+    M: TMatch;
+    Done: Boolean;
+
+    procedure CollectParams(const H: TTSNode);
+    var
+      J: Integer;
+      Ty, Dv: TTSNode;
+    begin
+      if H.IsNull then Exit;
+      if H.NodeType = 'declArg' then
+      begin
+        Ty:= H.ChildByField('type');
+        Dv:= H.ChildByField('defaultValue');
+        for J:= 0 to H.NamedChildCount - 1 do
+          if (H.NamedChild(J).NodeType = 'identifier') and not (H.NamedChild(J) = Ty) and not (H.NamedChild(J) = Dv) then  // dl:ok nonminimal-bool@db1d -- REVIEWED 2026-11-18 IDXRANGE3: TTSNode declares Equal but no NotEqual; <> does not compile
+            Params.Add(LowerCase(TxtIn(H.NamedChild(J), ASrc)));
+        Exit;
+      end;
+      for J:= 0 to H.ChildCount - 1 do CollectParams(H.Child(J));
+    end;
+
+    { X's size and P change nowhere but in the one leading SetLength }
+    function OnlySizer(const AX, AP: string): Boolean;
+    var
+      J: Integer;
+    begin
+      Result:= False;
+      Sizes:= 0;
+      Stack.Clear;
+      Stack.Add(Body);
+      while Stack.Count > 0 do
+      begin
+        N:= Stack.Last;
+        Stack.Delete(Stack.Count - 1);
+        if N.IsNull or (N.NodeType = 'lambda') or (N.NodeType = 'defProc') then Continue;
+        T:= N.NodeType;
+        if (T = 'assignment') and MatchText(Trim(TxtIn(N.ChildByField('lhs'), ASrc)), [AX, AP]) then Exit;
+        if (T = 'assignment') and (AX = 'result') and SameText(Trim(TxtIn(N.ChildByField('lhs'), ASrc)), PName) then Exit;
+        if T = 'exprCall' then
+        begin
+          Fn:= LowerCase(Trim(TxtIn(N.ChildByField('entity'), ASrc)));
+          Arg:= N.ChildByField('args');
+          if MatchText(Fn, ['setlength', 'delete', 'insert']) and (not Arg.IsNull)
+            and TRegEx.IsMatch(TxtIn(Arg, ASrc), '\b' + TRegEx.Escape(AX) + '\b', [roIgnoreCase]) then Inc(Sizes);
+        end;
+        for J:= 0 to N.ChildCount - 1 do Stack.Add(N.Child(J));
+      end;
+      Result:= Sizes = 1;
+    end;
+
+  begin
+    Result:= '';
+    Body:= AProc.ChildByField('body');
+    if Body.IsNull then Exit;
+    PName:= LowerCase(Trim(TxtIn(AProc.ChildByField('header').ChildByField('name'), ASrc)));
+    Params:= TList<string>.Create;
+    Stack:= TList<TTSNode>.Create;
+    Entries:= TList<string>.Create;
+    try
+      CollectParams(AProc.ChildByField('header'));
+      Done:= False;
+      for I:= 0 to Body.NamedChildCount - 1 do
+      begin
+        if Done then Break;
+        St:= Body.NamedChild(I);
+        if IsTrivia(St) then Continue;
+        while (not St.IsNull) and (St.NodeType <> 'exprCall') and (St.NamedChildCount = 1) do St:= St.NamedChild(0);
+        M:= TRegEx.Match(TxtIn(St, ASrc), '^\s*setlength\s*\(\s*(\w+)\s*,\s*(?:(\w+)\s*\.\s*count|length\s*\(\s*(\w+)\s*\))\s*\)\s*$', [roIgnoreCase]);
+        if St.IsNull or (St.NodeType <> 'exprCall') or not M.Success then
+        begin
+          Done:= True;
+          Continue;
+        end;
+        Tgt:= LowerCase(M.Groups[1].Value);
+        Kind:= if M.Groups[2].Success and (M.Groups[2].Value <> '') then 'cnt' else 'len';
+        Src:= LowerCase(if Kind = 'cnt' then M.Groups[2].Value else M.Groups[3].Value);
+        if (Params.IndexOf(Src) < 0) or ((Tgt <> 'result') and (Params.IndexOf(Tgt) < 0)) or not OnlySizer(Tgt, Src) then Continue;
+        Entries.Add((if Tgt = 'result' then 'r' else IntToStr(Params.IndexOf(Tgt))) + '=' + IntToStr(Params.IndexOf(Src)) + ':' + Kind);
+      end;
+      Result:= string.Join(';', Entries.ToArray);
+    finally
+      Entries.Free;
+      Stack.Free;
+      Params.Free;
+    end;
+  end;
+
+  function FindProc(const ARoot: TTSNode; const ASrc: TBytes; out AProc: TTSNode): Integer;
+  var
+    Stack: TList<TTSNode>;
+    N: TTSNode;
+    I: Integer;
+  begin
+    Result:= 0;
+    AProc:= Default(TTSNode);
+    Stack:= TList<TTSNode>.Create;
+    try
+      Stack.Add(ARoot);
+      while Stack.Count > 0 do
+      begin
+        N:= Stack.Last;
+        Stack.Delete(Stack.Count - 1);
+        if N.IsNull then Continue;
+        if N.NodeType = 'defProc' then
+        begin
+          if SameText(Trim(TxtIn(N.ChildByField('header').ChildByField('name'), ASrc)), Nm) then
+          begin
+            Inc(Result);
+            AProc:= N;
+          end;
+          Continue;
+        end;
+        for I:= 0 to N.ChildCount - 1 do Stack.Add(N.Child(I));
+      end;
+    finally
+      Stack.Free;
+    end;
+  end;
+
+  function StoreSpec: string;  // dl:ok too-many-exit-points@560e -- REVIEWED 2026-11-18 IDXRANGE3: guard clauses per syntax shape; each early exit is a classification
+  var
+    S: TSymbol;
+    FileId: Int64;
+    Path: string;
+    PF: TParsedFile;
+    Proc: TTSNode;
+  begin
+    Result:= '';
+    if FStore = nil then Exit;
+    FileId:= -1;
+    for S in FStore.FindSymbolsByExactName(Nm) do
+    begin
+      if not (S.Kind in [skFunction, skProcedure]) then Exit;  // dl:ok nonminimal-bool@63b1 -- REVIEWED 2026-11-18 IDXRANGE3: TTSNode declares Equal but no NotEqual; <> does not compile
+      if (FileId >= 0) and (S.FileId <> FileId) then Exit;
+      FileId:= S.FileId;
+    end;
+    if FileId < 0 then Exit;
+    Path:= FStore.GetFilePath(FileId);
+    if (Path = '') or SameText(Path, FFile) then Exit;
+    PF:= TAstParseCache.Get(Path);
+    if (PF.Tree = nil) or (FindProc(PF.Tree.RootNode, PF.Src, Proc) <> 1) then Exit;
+    Result:= SizerSpec(Proc, PF.Src);
+  end;
+
+var
+  Proc: TTSNode;
+  Found: Integer;
+begin
+  Result:= '';
+  if ACall.IsNull or (ACall.NodeType <> 'exprCall') then Exit;
+  Ent:= ACall.ChildByField('entity');
+  if Ent.IsNull or (Ent.NodeType <> 'identifier') then Exit;
+  Nm:= LowerCase(Txt(Ent));
+  if FCalleeLen.TryGetValue(Nm, Result) then Exit;
+  Found:= FindProc(FRoot, FSrc, Proc);
+  if Found = 1 then Result:= SizerSpec(Proc, FSrc)
+  else if Found = 0 then Result:= StoreSpec;
+  FCalleeLen.Add(Nm, Result);
+end;
+
+{ The length the call ACall gives its Result (ATarget 'r') or its argument number ATarget: the
+  Count / Length of the argument its sizer names (CalleeSizes); unknown otherwise. }
+function TBnRun.CalleeArgLen(const ACall: TTSNode; ATarget: string): TSym;
+var
+  Entry, Src, Kind: string;
+  Args: TTSNode;
+  P: Integer;
+begin
+  Result:= Default(TSym);
+  for Entry in CalleeSizes(ACall).Split([';']) do
+  begin
+    if not StartsStr(ATarget + '=', Entry) then Continue;
+    Src:= Copy(Entry, Length(ATarget) + 2, MaxInt);
+    P:= StrToIntDef(Copy(Src, 1, Pos(':', Src) - 1), -1);
+    Kind:= Copy(Src, Pos(':', Src) + 1, MaxInt);
+    Args:= ACall.ChildByField('args');
+    if (P < 0) or Args.IsNull or (P >= Args.NamedChildCount) or (BareIdent(Args.NamedChild(P)) = '') then Exit;
+    Exit(MkSym(Kind + ':' + BareIdent(Args.NamedChild(P)), 0));
+  end;
+end;
+
+{ `A := F(.., P, ..)`: Length(A) from F's leading `SetLength(Result, P.Count)` (CalleeSizes). }
+function TBnRun.CalleeResultLen(const ACall: TTSNode): TSym;
+begin
+  Result:= CalleeArgLen(ACall, 'r');
+end;
+{ YADF.Layout:11227 (compaction): `k := c0` then `for i := s to High(A)` (or Length(A) - k) with ONE
+  `Inc(k)` per trip after the access A[k], A not resized in the loop: k stays at most High(A) when
+  c0 <= s (+ k - 1). }
+function TBnRun.SelfBoundedFor(const ACtx: TIdxCtx; const F: TTSNode; C0, SLo: Integer): Boolean;
+var
+  EndE, N: TTSNode;
+  K, Off: Integer;
+begin
+  Result:= False;
+  if F.NodeType <> 'for' then Exit;
+  EndE:= F.ChildByField('end');
+  N:= Peeled(EndE);
+  if IsArrayFn(N, 'high', ACtx.Arr) then Off:= -1
+  else if (not N.IsNull) and (N.NodeType = 'exprBinary') and (OperatorType(N) = 'kSub')
+    and IsArrayFn(N.ChildByField('lhs'), 'length', ACtx.Arr) and EvalIndex(N.ChildByField('rhs'), K) then Off:= -K
+  else if (not N.IsNull) and (N.NodeType = 'exprBinary') and (OperatorType(N) = 'kSub')
+    and IsArrayFn(N.ChildByField('lhs'), 'high', ACtx.Arr) and EvalIndex(N.ChildByField('rhs'), K) then Off:= -1 - K
+  else Exit;
+  if SizeChangedIn(ACtx.Arr, F.StartByte, F.EndByte) then Exit;
+  { k <= c0 + (trips - 1) = c0 + (len + Off) - SLo; within High = len - 1 }
+  Result:= C0 + Off - SLo <= -1;
 end;
 
 { Once per file: every call `Name(...)` by bare name, and which names are used ONLY as such calls --
@@ -3185,7 +4986,10 @@ begin
       begin
         { 1.52 BK-RULEFP: idx <= P + Off (Off <= 0) with P a parameter: the argument is a valid index }
         PB:= IndexStr(Copy(ACtx.FgnSym.Base, Length('id:') + 1, MaxInt), ParamNames(AProc));
-        if (ACtx.FgnSym.Off > 0) or (PB < 0) or (PB >= Args.NamedChildCount) or not ProveIndexAt(Site, Args.NamedChild(PB), ArrAt) then Exit;
+        if (ACtx.FgnSym.Off > 0) or (PB < 0) or (PB >= Args.NamedChildCount) then Exit;
+        { 1.52 IDXRANGE3 (Blueprint4.ViewModel:2474): `idx < L` with the caller passing SetLength(B, N); f(B, N) }
+        if (ACtx.FgnSym.Off < 0) and UpperAtSite(Site, Args.NamedChild(PB), ArrAt, ACtx.FgnSym.Off) then Continue;
+        if not ProveIndexAt(Site, Args.NamedChild(PB), ArrAt) then Exit;
         Continue;
       end;
       U:= TranslateSym(ACtx.FgnSym, AProc, Args);
