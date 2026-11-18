@@ -15,6 +15,14 @@ unit DRagLint.Fix.V151.Legacy;
 
 interface
 
+uses
+  DRagLint.Core.Interfaces;
+
+/// <summary>Hands the platform library store to the with-statement fixer (FixWith), for ancestors the project index does not hold (TObject).</summary>
+/// <param name="pLib">The library store; nil = a class target whose ancestor is outside the project is declined (unresolved-ancestor).</param>
+/// <remarks>Set by the fix-all run (lint --fix without --fix-rule) around BuildAutofixEdits and cleared after. Not thread-safe; call from the run thread only. The caller keeps ownership of the store.</remarks>
+procedure SetFixWithLibrary(const pLib: ISymbolStore);
+
 implementation
 
 uses
@@ -23,7 +31,6 @@ uses
   , System.RegularExpressions
   , TreeSitter
   , DRagLint.Core.Model
-  , DRagLint.Core.Interfaces
   , DRagLint.Refactor.TextEdit
   , DRagLint.Refactor.Rename
   , DRagLint.Refactor.RenameProof
@@ -31,6 +38,15 @@ uses
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Lint.Autofix
   ;
+
+var
+  { the library store of the current fix-all run (SetFixWithLibrary); nil = none }
+  GFixWithLib: ISymbolStore = nil;
+
+procedure SetFixWithLibrary(const pLib: ISymbolStore);
+begin
+  GFixWithLib:= pLib;
+end;
 
 const
   { the last 7-bit character: the diff below works on 7-bit text only }
@@ -157,7 +173,7 @@ begin
   if (Store = nil) or (ALines = nil) then Exit;
   L:= WithLineOf(AFinding);
   if L = 0 then Exit;
-  Plan:= UnwithPlanFile(Store, nil, AFinding.FilePath, L);
+  Plan:= UnwithPlanFile(Store, GFixWithLib, AFinding.FilePath, L);
   if (Length(Plan.Sites) <> 1) or (Plan.Sites[0].Refusal <> '') or (Length(Plan.NewBytes) = 0) then Exit;
   Result:= DiffEdit(AFinding.FilePath, ALines, Plan.NewBytes);
 end;
