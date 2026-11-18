@@ -6248,8 +6248,8 @@ begin
     else
     begin
       if not HoverStillWanted(AId, RunSerial) then Exit;
-      if Reuse then FactLines:= Asm_.FactLines + Comp.ExceptionLines
-      else FactLines:= Asm_.FactLines + ExceptionFactLines(Comp.Store, Comp.Sel); { D1: the popup's Raises: line }
+      FactLines:= Asm_.FactLines + (if Reuse then Comp.ExceptionLines
+                                    else ExceptionFactLines(Comp.Store, Comp.Sel)); { D1: the popup's Raises: line }
       LapHoverTiming(HT, 'bundle-exceptions');
     end;
     var ModelJson: string:= DRagLint.Hover.Renderer.RenderHoverJson(Asm_.Model, FactLines);

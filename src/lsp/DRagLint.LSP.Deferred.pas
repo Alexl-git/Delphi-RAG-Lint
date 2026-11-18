@@ -123,18 +123,10 @@ function HoverKey(const APath: string; ALine0, ACol0: Integer): string;
 /// <returns>The injected delay in ms.</returns>
 function InjectedHoverSlowMs: Integer;
 
-/// <summary>True when ENV_HOVER_TIMING is '1'.</summary>
-/// <returns>Whether hover sections report their timing.</returns>
-function HoverTimingEnabled: Boolean;
-
-/// <summary>Writes one 'hover-timing &lt;section&gt; &lt;ms&gt;' line to stderr
-/// when HoverTimingEnabled; stdout is the protocol channel and is never used.</summary>
-/// <param name="ASection">Section name (no spaces).</param>
-/// <param name="AMs">Elapsed milliseconds.</param>
-procedure ReportHoverTiming(const ASection: string; AMs: Int64);
-
-/// <summary>Reports the time since ASw started as ASection (ReportHoverTiming)
-/// and restarts ASw, so consecutive calls time consecutive sections.</summary>
+/// <summary>When ENV_HOVER_TIMING is '1', writes the time since ASw started as
+/// one 'hover-timing &lt;section&gt; &lt;ms&gt;' line to stderr (stdout is the
+/// protocol channel and is never used), then restarts ASw, so consecutive calls
+/// time consecutive sections.</summary>
 /// <param name="ASw">The section stopwatch; restarted on return.</param>
 /// <param name="ASection">Section name (no spaces).</param>
 procedure LapHoverTiming(var ASw: TStopwatch; const ASection: string);
