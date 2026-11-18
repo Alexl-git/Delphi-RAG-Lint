@@ -110,13 +110,34 @@ function BoundUsageRefs(const AStore: ISymbolStore; const ABinding: TUsageBindin
 /// <param name="APlatform">The platform for usEverywhere ('' = the manifest default).</param>
 /// <param name="ANote">Receives a one-line note when the set is narrower than
 /// asked (no group file, manifest unreadable); '' otherwise.</param>
-/// <returns>usSymbol / usProject: AProjectDbs. usGroup: AProjectDbs plus the
+/// <returns>usSymbol / usProject: AProjectDbs WithoutLibraryDbs (1.52 INT8: a
+/// library-*.sqlite is not this project's index). usGroup: AProjectDbs plus the
 /// database of every project the group file lists (manifest owner first, else
 /// &lt;project folder&gt;\_D-RAG\&lt;base&gt;.sqlite) that exists. usEverywhere:
 /// AProjectDbs plus every existing database the manifest selects for the
 /// platform. Case-insensitive duplicates are dropped.</returns>
 function UsageScopeDbs(AScope: TUsageScope; const AProjectDbs: TArray<string>;
   const AGroupFile, APlatform: string; out ANote: string): TArray<string>;
+
+/// <summary>Is APath a platform LIBRARY index (file name library-&lt;platform&gt;.sqlite,
+/// the convention the LSP's caller scoping has always used)?</summary>
+/// <param name="APath">A database path; only its file name is read.</param>
+/// <returns>True when the file name starts with 'library-' (case-insensitive).</returns>
+function IsLibraryDbPath(const APath: string): Boolean;
+
+/// <summary>Does AScope answer from this project's own index only? symbol and project do
+/// (a library database's rows are not "in this project", INT8 1.52); group and everywhere
+/// read every database they name.</summary>
+/// <param name="AScope">The scope answered.</param>
+/// <returns>True for usSymbol and usProject.</returns>
+function UsageScopeExcludesLibraries(AScope: TUsageScope): Boolean;
+
+/// <summary>APaths without the library databases (IsLibraryDbPath), for a scope that
+/// UsageScopeExcludesLibraries.</summary>
+/// <param name="APaths">The databases a question was given, in order.</param>
+/// <returns>The non-library paths in order; APaths unchanged when every one is a library
+/// (a library asked alone is still answered) or none is.</returns>
+function WithoutLibraryDbs(const APaths: TArray<string>): TArray<string>;
 
 
 implementation
@@ -125,6 +146,7 @@ uses
   System.Classes,
   System.IOUtils,
   System.RegularExpressions,
+  System.StrUtils,
   DRagLint.Query.Callers,
   DRagLint.Resolver.TypeAt,
   DRagLint.Index.Manifest,
@@ -273,7 +295,7 @@ begin
   ANote:= '';
   Result:= nil;
   for var Db: string in AProjectDbs do AddUnique(Result, Db);
-  if AScope in [usSymbol, usProject] then Exit;
+  if UsageScopeExcludesLibraries(AScope) then Exit(WithoutLibraryDbs(Result));
 
   var Manifest: TIndexManifest:= Default(TIndexManifest);
   var HaveManifest: Boolean:= False;
@@ -309,6 +331,24 @@ begin
   finally
     Resolver.Free;
   end;
+end;
+
+function IsLibraryDbPath(const APath: string): Boolean;
+begin
+  Result:= StartsText('library-', ExtractFileName(APath));
+end;
+
+function UsageScopeExcludesLibraries(AScope: TUsageScope): Boolean;
+begin
+  Result:= AScope in [usSymbol, usProject];
+end;
+
+function WithoutLibraryDbs(const APaths: TArray<string>): TArray<string>;
+begin
+  Result:= nil;
+  for var P: string in APaths do
+    if not IsLibraryDbPath(P) then Result:= Result + [P];
+  if Result = nil then Result:= APaths;
 end;
 
 end.

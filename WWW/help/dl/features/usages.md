@@ -7,7 +7,7 @@ group: search-navigation
 order: 20036
 since: 0.33.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # usages
@@ -75,7 +75,7 @@ MCP `find_usages` tool):
 * `symbol` (the default) -- the declaration a position (`--in <file> --line <L> [--col <C>]`)
   or a qualified `--name uJob.TJob.Run` is BOUND to, in this project. Same-named fields,
   properties and routines elsewhere are left out.
-* `project` -- every object of that name in this project (the answer before 1.52).
+* `project` -- every object of that name in this project (the answer before 1.52). A platform library index (`library-*.sqlite`) is not part of the project: `symbol` and `project` skip it -- in the CLI, the LSP references and the IDE panel alike -- unless it is the only database given.
 * `group` -- the name in every project of `--group <x.groupproj>` (each project's index:
   the manifest's, else `<project folder>\_D-RAG\<name>.sqlite`).
 * `everywhere` -- the name in every index the manifest knows for the platform.
