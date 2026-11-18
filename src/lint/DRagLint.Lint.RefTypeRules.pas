@@ -727,9 +727,9 @@ begin
   F.FileId   := FFileId;
   F.FilePath := FPath;
   F.StartLine:= Integer(ANode.StartPoint.Row) + 1;
-  F.StartCol := Integer(ANode.StartPoint.Column) + 1;
+  F.StartCol := TAstParseCache.CharCol(F.FilePath, ANode.StartPoint); { 1.52 BK-COLS2: character column }
   F.EndLine  := Integer(ANode.EndPoint.Row) + 1;
-  F.EndCol   := Integer(ANode.EndPoint.Column) + 1;
+  F.EndCol   := TAstParseCache.CharCol(F.FilePath, ANode.EndPoint); { 1.52 BK-COLS2: character column }
   FFindings.Add(F);
 end;
 
@@ -1353,9 +1353,9 @@ begin
   var T: TThreadTouch:= Default(TThreadTouch);
   T.IsCall   := AIsCall;
   T.StartLine:= Integer(ANode.StartPoint.Row) + 1;
-  T.StartCol := Integer(ANode.StartPoint.Column) + 1;
+  T.StartCol := Utf8ByteColToCharCol(FSrc, ANode.StartByte, ANode.StartPoint.Column) + 1; { 1.52 BK-COLS2: character column }
   T.EndLine  := Integer(ANode.EndPoint.Row) + 1;
-  T.EndCol   := Integer(ANode.EndPoint.Column) + 1;
+  T.EndCol   := Utf8ByteColToCharCol(FSrc, ANode.EndByte, ANode.EndPoint.Column) + 1;
   T.Text     := AText;
   T.Target   := ATarget;
   FTouches.Add(T);
@@ -1713,9 +1713,9 @@ begin
   begin
     var T: TThreadTouch:= Default(TThreadTouch);
     T.StartLine:= Integer(ANode.StartPoint.Row) + 1;
-    T.StartCol := Integer(ANode.StartPoint.Column) + 1;
+    T.StartCol := Utf8ByteColToCharCol(FSrc, ANode.StartByte, ANode.StartPoint.Column) + 1; { 1.52 BK-COLS2: character column }
     T.EndLine  := Integer(ANode.EndPoint.Row) + 1;
-    T.EndCol   := Integer(ANode.EndPoint.Column) + 1;
+    T.EndCol   := Utf8ByteColToCharCol(FSrc, ANode.EndByte, ANode.EndPoint.Column) + 1;
     EmitThreadFinding(T, Format('%s runs on a worker thread and calls %s -- that ends the whole process (or posts WM_QUIT to this ' +
       'thread''s queue) from the wrong thread; signal the main thread through Synchronize or Queue instead', [AEntry, Hit]), QUIT_FROM_THREAD_RULE);
     Exit;
@@ -1808,9 +1808,9 @@ begin
       var T: TThreadTouch:= Default(TThreadTouch);
       T.IsCall   := True;
       T.StartLine:= Integer(Arg.StartPoint.Row) + 1;
-      T.StartCol := Integer(Arg.StartPoint.Column) + 1;
+      T.StartCol := Utf8ByteColToCharCol(FSrc, Arg.StartByte, Arg.StartPoint.Column) + 1; { 1.52 BK-COLS2: character column }
       T.EndLine  := Integer(Arg.EndPoint.Row) + 1;
-      T.EndCol   := Integer(Arg.EndPoint.Column) + 1;
+      T.EndCol   := Utf8ByteColToCharCol(FSrc, Arg.EndByte, Arg.EndPoint.Column) + 1;
       T.Target   := Fact.MemberSym;
       EmitReach(T, Entry);
     end;

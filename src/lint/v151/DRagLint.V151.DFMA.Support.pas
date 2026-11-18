@@ -475,7 +475,8 @@ function LoadDfmHead(const APath: string): TDfmHead;
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function NodeLine(const N: TTSNode): Integer;
-/// <summary>Column (1-based) of a node.</summary>
+/// <summary>Column (1-based CHARACTER column, 1.52 BK-COLS2) of a node of APath's tree.</summary>
+/// <param name="APath">The file N's tree was parsed from (TAstParseCache key).</param>
 /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
 /// <returns><!-- drag-lint:auto -->Integer -- Observed: Integer(N.StartPoint.column) + 1.</returns>
 /// <remarks>
@@ -485,7 +486,7 @@ function NodeLine(const N: TTSNode): Integer;
 /// <seealso cref="TreeSitter.TTSNodeHelper.StartPoint"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function NodeCol(const N: TTSNode): Integer;
+function NodeCol(const APath: string; const N: TTSNode): Integer;
 
 /// <summary>The source file of unit AUnitName: the project index first, then
 /// `&lt;dir of AFromPath&gt;\&lt;AUnitName&gt;.pas`.</summary>
@@ -648,9 +649,9 @@ begin
   Result:= Integer(N.StartPoint.row) + 1;
 end;
 
-function NodeCol(const N: TTSNode): Integer;
+function NodeCol(const APath: string; const N: TTSNode): Integer;
 begin
-  Result:= Integer(N.StartPoint.column) + 1;
+  Result:= TAstParseCache.CharCol(APath, N.StartPoint); { 1.52 BK-COLS2: character column }
 end;
 
 function MakeFinding(const ARule, APath: string; ALine, ACol: Integer; const ASeverity, AMessage: string): TLintFinding;
@@ -966,7 +967,7 @@ var
           F.TypeName:= TN;
           F.IsPublished:= APublished;
           F.Line:= NodeLine(M.NamedChild(I));
-          F.Col:= NodeCol(M.NamedChild(I));
+          F.Col:= TAstParseCache.CharCol(U.Path, M.NamedChild(I).StartPoint); { 1.52 BK-COLS2: character column }
           Fields.Add(F);
         end;
     end
@@ -981,7 +982,7 @@ begin
   C:= Default(TPasClass);
   C.Name:= LastSegment(U.Text(ATypeDecl.ChildByField('name')));
   C.Line:= NodeLine(ATypeDecl);
-  C.Col:= NodeCol(ATypeDecl);
+  C.Col:= TAstParseCache.CharCol(U.Path, ATypeDecl.StartPoint); { 1.52 BK-COLS2: character column }
   { The first typeref child is the parent class: the 'parent' field can name the '(' token. }
   for var I:= 0 to AClassNode.NamedChildCount - 1 do
     if AClassNode.NamedChild(I).NodeType = 'typeref' then
@@ -1056,7 +1057,7 @@ begin
   for var I:= 0 to Hdr.ChildCount - 1 do
     if Hdr.Child(I).NodeType = 'kConstructor' then R.IsCtor:= True;
   R.Line:= NodeLine(ADefProc);
-  R.Col:= NodeCol(ADefProc);
+  R.Col:= TAstParseCache.CharCol(U.Path, ADefProc.StartPoint); { 1.52 BK-COLS2: character column }
   R.Body:= ADefProc.ChildByField('body');
   Locals:= TList<string>.Create;
   try

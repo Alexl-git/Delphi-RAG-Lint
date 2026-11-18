@@ -633,7 +633,7 @@ begin
         Fd.FileId    := FileId;
         Fd.StartLine := C.CallSiteLine;
         Fd.EndLine   := C.CallSiteLine;
-        Fd.StartCol  := Integer(Idents[0].StartPoint.Column) + 1;
+        Fd.StartCol  := TAstParseCache.CharCol(Fd.FilePath, Idents[0].StartPoint); { 1.52 BK-COLS2: character column }
         Fd.EndCol    := Fd.StartCol + Length(Sym.Name);
         Fd.Severity  := CSeverityInfo;
         Fd.SymbolName:= Sym.Name;
@@ -852,7 +852,7 @@ begin
         Fd.FileId    := Pair.Key;
         Fd.StartLine := Integer(P.StartPoint.Row) + 1;
         Fd.EndLine   := Fd.StartLine;
-        Fd.StartCol  := Integer(P.StartPoint.Column) + 1;
+        Fd.StartCol  := TAstParseCache.CharCol(Fd.FilePath, P.StartPoint); { 1.52 BK-COLS2: character column }
         Fd.EndCol    := Fd.StartCol + Length(PName);
         Fd.Severity  := CSeverityInfo;
         Fd.SymbolName:= PName;
@@ -1382,7 +1382,7 @@ begin
           Fd.FileId    := FileId;
           Fd.StartLine := C.CallSiteLine;
           Fd.EndLine   := C.CallSiteLine;
-          Fd.StartCol  := Integer(Id.StartPoint.Column) + 1;
+          Fd.StartCol  := TAstParseCache.CharCol(Fd.FilePath, Id.StartPoint); { 1.52 BK-COLS2: character column }
           Fd.EndCol    := Fd.StartCol + Length(Sym.Name);
           Fd.Severity  := CSeverityInfo;
           Fd.SymbolName:= Sym.Name;

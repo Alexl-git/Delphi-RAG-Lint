@@ -1461,15 +1461,14 @@ end;
 { The token each symbol's declaration and implementation header sits on, per file: key 'line:charcol'. }
 procedure TProver.AddDeclTokens(const pSyms: TArray<TSymRow>; pFileId: Int64; pLines: TStringList; pMap: TDeclMap);
 begin
-  { 1.52 EXTGAPS2: a .pas index column is a CHARACTER column; only the DFM parser still stores bytes. }
-  var IsDfm: Boolean:= SameText(ExtractFileExt(FStore.GetFilePath(pFileId)), '.dfm');
+  { 1.52 EXTGAPS2 / BK-COLS2: every index column (.pas and .dfm) is a CHARACTER column. }
   for var S in pSyms do
   begin
     if S.FileId <> pFileId then Continue;
     if InRange(S.Line, 1, pLines.Count) then
     begin
       var L:= pLines[S.Line - 1];
-      var C:= if IsDfm then ByteColToCharCol(L, S.Col) else S.Col;
+      var C:= S.Col;
       if not IsIdentAt(L, S.Name, C) then C:= NameAfterDeclKeywords(L, S.Name, C);
       if C > 0 then pMap.AddOrSetValue(Format('%d:%d', [S.Line, C]), S);
     end;
@@ -2055,7 +2054,7 @@ begin
       try
         Lines.Text:= Text;
         if (R.Line < 1) or (R.Line > Lines.Count) then Continue;
-        AddEdit(Path, R.Line, ByteColToCharCol(Lines[R.Line - 1], R.Col));
+        AddEdit(Path, R.Line, R.Col); { 1.52 BK-COLS2: .dfm ref columns are characters }
         Inc(FBound);
       finally
         Lines.Free;

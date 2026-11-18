@@ -365,7 +365,7 @@ uses
   System.Generics.Collections,
   System.RegularExpressions,
   TreeSitter,
-  DRagLint.Core.Encoding, { 1.52 COLS: finding byte columns -> index character columns }
+  DRagLint.Core.Encoding, { 1.52 COLS: EnsureUtf8Bytes -- FindingLine decodes as the parser does }
   DRagLint.Diagnostics.ParseCache,
   DRagLint.Refactor.Rename,
   DRagLint.Refactor.RenameProof;
@@ -467,17 +467,17 @@ begin
 end;
 
 { 1.52 COLS: line ALine (1-based) of AFile as the parser saw it (EnsureUtf8Bytes, decoded), and the 1-based
-  CHARACTER column of the 1-based tree-sitter BYTE column AByteCol on it -- a naming finding carries the
-  checker's byte column, the index (since 1.52 EXTGAPS2) character columns. False when the file or line is
-  not there. }
-function FindingLine(const AFile: string; ALine, AByteCol: Integer; out AText: string; out ACharCol: Integer): Boolean;
+  CHARACTER column of the finding column ACol on it. 1.52 BK-COLS2: a naming finding now carries the character
+  column itself (TAstParseCache.CharCol), so ACharCol = ACol; the index columns are characters too (EXTGAPS2).
+  False when the file or line is not there. }
+function FindingLine(const AFile: string; ALine, ACol: Integer; out AText: string; out ACharCol: Integer): Boolean;
 const
   LF = 10;
   CR = 13;
 begin
   AText:= '';
-  ACharCol:= AByteCol;
-  if (ALine < 1) or (AByteCol < 1) or not TFile.Exists(AFile) then Exit(False);
+  ACharCol:= ACol;
+  if (ALine < 1) or (ACol < 1) or not TFile.Exists(AFile) then Exit(False);
   var Src: TBytes:= EnsureUtf8Bytes(TFile.ReadAllBytes(AFile));  // dl:ok taint-path-traversal@7233 -- reads the source file a lint finding names (an indexed unit the caller already linted); the env var only locates the user's own manifest
   var Start: Integer:= 0;
   var Ln: Integer:= 1;
@@ -491,8 +491,6 @@ begin
   while (Stop < Length(Src)) and (Src[Stop] <> LF) do Inc(Stop);
   if (Stop > Start) and (Src[Stop - 1] = CR) then Dec(Stop);
   AText:= TEncoding.UTF8.GetString(Src, Start, Stop - Start);
-  if Start + AByteCol - 1 <= Stop then
-    ACharCol:= Utf8ByteColToCharCol(Src, Cardinal(Start + AByteCol - 1), Cardinal(AByteCol - 1)) + 1;
   Result:= True;
 end;
 

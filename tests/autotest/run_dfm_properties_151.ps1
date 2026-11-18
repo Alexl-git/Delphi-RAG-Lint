@@ -10,7 +10,7 @@
      over two lines, a blob, an action ref) equal the hand-written
      expected-uP151Main.tsv. Generated non-ASCII forms (a BOM-less Windows-1252 and
      a UTF-8-BOM .dfm, written here so the repo stays ASCII) decode to the right
-     Unicode text with UTF-8 byte columns; a #nnn above $FFFF becomes a surrogate
+     Unicode text with CHARACTER columns (1.52 BK-COLS2; UTF-8 byte columns before); a #nnn above $FFFF becomes a surrogate
      pair; every row's object_ordinal names a dfm_objects row of its file.
   B  identity: forms-csv (and menu-tree --with-dfm --format paths where a project
      has .dfm menus) byte-identical between ON (the table, default) and OFF
@@ -167,8 +167,8 @@ for ($i = 0; $i -lt [Math]::Max($got.Count, $expected.Count); $i++) {
 Check 'A2 uP151Main.dfm rows equal expected-uP151Main.tsv' (($got.Count -gt 0) -and ($firstDiff -eq '')) $firstDiff
 $ansi = @(PropRows $pdb 'uGenAnsi.dfm')
 $bom  = @(PropRows $pdb 'uGenBom.dfm')
-Check 'A3 Windows-1252 caption decoded, UTF-8 byte columns' (($ansi.Count -eq 2) -and ($ansi[0].value_text -ceq ($UUml + 'bernehmen')) -and ($ansi[0].end_col -eq 26)) "rows=$($ansi.Count) [$(if ($ansi.Count) { (Esc $ansi[0].value_text) + ' ' + $ansi[0].end_col })]"
-Check 'A4 UTF-8-BOM caption decoded, UTF-8 byte columns' (($bom.Count -eq 2) -and ($bom[0].value_text -ceq ($OUml + 'ffnen ' + $De + 'a')) -and ($bom[0].end_col -eq 26) -and ($bom[0].start_line -eq 2)) "rows=$($bom.Count) [$(if ($bom.Count) { (Esc $bom[0].value_text) + ' ' + $bom[0].start_line + ':' + $bom[0].end_col })]"
+Check 'A3 Windows-1252 caption decoded, character columns (1.52 BK-COLS2: was UTF-8 byte 26)' (($ansi.Count -eq 2) -and ($ansi[0].value_text -ceq ($UUml + 'bernehmen')) -and ($ansi[0].end_col -eq 25)) "rows=$($ansi.Count) [$(if ($ansi.Count) { (Esc $ansi[0].value_text) + ' ' + $ansi[0].end_col })]"
+Check 'A4 UTF-8-BOM caption decoded, character columns (1.52 BK-COLS2: was UTF-8 byte 26)' (($bom.Count -eq 2) -and ($bom[0].value_text -ceq ($OUml + 'ffnen ' + $De + 'a')) -and ($bom[0].end_col -eq 24) -and ($bom[0].start_line -eq 2)) "rows=$($bom.Count) [$(if ($bom.Count) { (Esc $bom[0].value_text) + ' ' + $bom[0].start_line + ':' + $bom[0].end_col })]"
 Check 'A5 #nnn above $FFFF is a surrogate pair' (($bom.Count -eq 2) -and ($bom[1].value_text -ceq ('x' + [char]::ConvertFromUtf32(128512)))) "[$(if ($bom.Count -ge 2) { Esc $bom[1].value_text })]"
 $orph = @(Sql $pdb ("SELECT COUNT(*) AS n FROM dfm_properties p WHERE p.object_ordinal >= 0 AND NOT EXISTS " +
                     "(SELECT 1 FROM dfm_objects o WHERE o.file_id = p.file_id AND o.ordinal = p.object_ordinal)"))

@@ -524,7 +524,7 @@ begin
         begin
           Result:= True;
           if IsSelfFreeStatement(AUnit, N, OwnVar) then
-            Hits.Add(MakeFinding(RULE_SELF_FREE_IN_HANDLER, ACtx.Path, NodeLine(N), NodeCol(N), SEV_WARNING,
+            Hits.Add(MakeFinding(RULE_SELF_FREE_IN_HANDLER, ACtx.Path, NodeLine(N), NodeCol(ACtx.Path, N), SEV_WARNING,
               Format('%s.%s frees the form inside its own event handler -- the VCL still touches the object after '
                 + 'the handler returns (access violation). Call Release instead, or set Action := caFree in OnClose.',
                 [Cls.Name, RName])));
@@ -709,7 +709,7 @@ begin
           if (Cls = '') or not SameText(Cls, ADpr.Creates[Ci].ClassName) then Exit;
           if Rt.HasLocal(VarName) or OwnClassHasField(AUnit, Rt, VarName) then Exit;
           if RoutineGuards(AUnit, Rt, VarName, N.StartByte) then Exit;
-          Hits.Add(MakeFinding(RULE_AUTOCREATE_AND_MANUAL, ACtx.Path, NodeLine(N), NodeCol(N), SEV_WARNING,
+          Hits.Add(MakeFinding(RULE_AUTOCREATE_AND_MANUAL, ACtx.Path, NodeLine(N), NodeCol(ACtx.Path, N), SEV_WARNING,
             Format('%s := %s.Create(...) creates a second instance: %s already creates %s with Application.CreateForm. '
               + 'The first instance stays alive and invisible. Drop the CreateForm line from the .dpr, or test '
               + 'Assigned(%s) first.', [VarName, Cls, TPath.GetFileName(ADpr.Path), VarName, VarName])));
@@ -774,7 +774,7 @@ begin
                 end);
               if Assigned_ then Exit;
               Reported.Add(LowerCase(Name));
-              Hits.Add(MakeFinding(RULE_ACCESS_BEFORE_CREATE, ACtx.Path, NodeLine(N), NodeCol(N), SEV_WARNING,
+              Hits.Add(MakeFinding(RULE_ACCESS_BEFORE_CREATE, ACtx.Path, NodeLine(N), NodeCol(ACtx.Path, N), SEV_WARNING,
                 Format('%s.%s runs while %s creates %s (CreateForm #%d) and reads %s, which the .dpr creates later '
                   + '(CreateForm #%d) -- it is still nil here. Move %s earlier in the .dpr or the access to OnShow.',
                   [Cls, Rt.Name, TPath.GetFileName(ADpr.Path), Cls, Ci + 1, Name, Later + 1, Name])));
@@ -897,7 +897,7 @@ begin
                 var Key: string:= LowerCase(VName + '.' + Member);
                 if Seen.Contains(Key) then Exit;
                 Seen.Add(Key);
-                Hits.Add(MakeFinding(RULE_FOREIGN_FORM_ACCESS, ACtx.Path, NodeLine(N), NodeCol(N), SEV_HINT,
+                Hits.Add(MakeFinding(RULE_FOREIGN_FORM_ACCESS, ACtx.Path, NodeLine(N), NodeCol(ACtx.Path, N), SEV_HINT,
                   Format('%s.%s reaches the control %s of form %s (unit %s) through its global variable -- this unit now '
                     + 'depends on that form''s layout. Give %s a method or property for what is needed.',
                     [VName, Member, Member, FF.ClassName, FF.UnitName, FF.ClassName])));

@@ -434,7 +434,7 @@ begin
   F.Message  := AMsg;
   F.FilePath := FPath;
   F.StartLine:= Integer(P.Row) + 1;
-  F.StartCol := Integer(P.Column) + 1;
+  F.StartCol := TAstParseCache.CharCol(F.FilePath, P); { 1.52 BK-COLS2: character column }
   F.EndLine  := F.StartLine;
   F.EndCol   := F.StartCol;
   FFindings.Add(F);

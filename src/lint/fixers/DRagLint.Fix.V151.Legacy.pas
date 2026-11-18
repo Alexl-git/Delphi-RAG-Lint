@@ -103,7 +103,7 @@ begin
   Result:= 0;
   PF:= TAstParseCache.Get(AFinding.FilePath);
   if PF.Tree = nil then Exit;
-  N:= NodeAtPoint(PF.Tree.RootNode, AFinding.StartLine - 1, AFinding.StartCol - 1);
+  N:= NodeAtPoint(PF.Tree.RootNode, AFinding.StartLine - 1, TAstParseCache.ByteCol(AFinding.FilePath, AFinding.StartLine, AFinding.StartCol) - 1); { 1.52 BK-COLS2: the finding column counts characters, the tree bytes }
   while (not N.IsNull) and (N.NodeType <> 'with') do N:= N.Parent;
   if not N.IsNull then Result:= Integer(N.StartPoint.Row) + 1;
 end;
