@@ -34,7 +34,7 @@ uses
   Vcl.StdCtrls, Vcl.ComCtrls, Vcl.ExtCtrls, Winapi.Windows,
   DragLint.Plugin.CliAsync, DragLint.Plugin.SearchParse,
   DragLint.Plugin.HoverForm, DragLint.Plugin.DbResolver, DragLint.Plugin.Settings,
-  DragLint.Plugin.ExeResolver;
+  DragLint.Plugin.ExeResolver, DragLint.Plugin.UsagesForm;
 
 const
   USAGES_STALL_MS = 30000;
@@ -54,6 +54,7 @@ type
     FTextMode  : TComboBox ;
     FTextSource: TComboBox ;
     FWidth     : TComboBox ;
+    FScope     : TComboBox ; { 1.52 BK-SCOPEUI: the Usages kind's scope, as in the Find Usages panel }  // dl:ok public-field@7f6c -- same as every sibling field of this handler: the factory below wires them
     FList      : TListView ;
     FStatus    : TLabel    ;
     FDebounce  : TTimer    ;
@@ -121,6 +122,7 @@ begin
   FTextMode  .Visible:= (K = 'Text');
   FTextSource.Visible:= (K = 'Text');
   FWidth     .Visible:= (K = 'Usages');
+  FScope     .Visible:= (K = 'Usages');
 end;
 
 procedure TSearchHandler.RebuildColumns;
@@ -130,7 +132,9 @@ procedure TSearchHandler.RebuildColumns;
     FList.Columns.Clear;
     col:= FList.Columns.Add; col.Caption:= A; col.Width:= 90;
     col:= FList.Columns.Add; col.Caption:= B; col.Width:= 280;
-    col:= FList.Columns.Add; col.Caption:= C; col.Width:= 260;
+    col:= FList.Columns.Add;
+    col.Caption:= C;
+    col.Width:= 480; { Location is a full path }
   end;
 begin
   if CurrentKind = 'Symbol' then Cols('Kind', 'Name', 'Location')
@@ -156,8 +160,7 @@ begin
       if CurrentKind = 'Symbol' then begin it.Caption:= ARows[i].ColB; it.SubItems.Add(ARows[i].ColA); end
       else if CurrentKind = 'Text' then begin it.Caption:= ARows[i].ColB; it.SubItems.Add(ARows[i].ColA); end
       else begin it.Caption:= ARows[i].Category; it.SubItems.Add(ARows[i].ColA); end;
-      if ARows[i].Line > 0 then it.SubItems.Add(Format('%s:%d', [ExtractFileName(ARows[i].FilePath), ARows[i].Line]))
-      else it.SubItems.Add('');
+      it.SubItems.Add(SearchLocationText(ARows[i].FilePath, ARows[i].Line)); { the FULL path, not the bare file name }
       it.Data:= Pointer(i);
     end;
   finally
@@ -199,8 +202,8 @@ begin
   end
   else
   begin
-    Cmd:= Format('"%s" usages --name "%s" --width %s%s --format json',
-      [Exe, Q, LowerCase(StringReplace(FWidth.Text, ' ', '-', [rfReplaceAll])), Args]);
+    Cmd:= Format('"%s" usages --name "%s" --width %s%s%s --format json',
+      [Exe, Q, LowerCase(StringReplace(FWidth.Text, ' ', '-', [rfReplaceAll])), SearchUsagesScopeArgs(FScope.ItemIndex, ActiveGroupFile), Args]);
   end;
 
   { IDE-MAINTHREAD-CLI: this ran on the main thread off a 300 ms debounce, so every
@@ -258,6 +261,7 @@ begin
     else if (K = 'Text') and (FTextMode.ItemIndex = 1) and (Length(Q) < 3) then SetEmpty('--substring needs >= 3 characters; try Any-word.')
     else SetEmpty(Format('No matches for "%s"', [Q]));
   end
+  else if (K = 'Usages') and (ParseUsagesScopeNote(Outp) <> '') then SetEmpty(Format('%d result(s)  -  %s', [Length(Rows), ParseUsagesScopeNote(Outp)]))
   else SetEmpty(Format('%d result(s)', [Length(Rows)]));
 end;
 
@@ -326,6 +330,14 @@ begin
   for var s in ['Phrase','Substring','Any-word'] do H.FTextMode.Items.Add(s); H.FTextMode.ItemIndex:= 0; H.FTextMode.OnChange:= H.AdvControlChange;
   H.FTextSource:= TComboBox.Create(AOwner); H.FTextSource.Parent:= H.FAdvPanel; H.FTextSource.Align:= alLeft; H.FTextSource.Width:= 90; H.FTextSource.Style:= csDropDownList;
   for var s in ['All','pas','dfm','sql'] do H.FTextSource.Items.Add(s); H.FTextSource.ItemIndex:= 0; H.FTextSource.OnChange:= H.AdvControlChange;
+  H.FScope:= TComboBox.Create(AOwner);
+  H.FScope.Parent:= H.FAdvPanel;
+  H.FScope.Align:= alLeft;
+  H.FScope.Width:= 100;
+  H.FScope.Style:= csDropDownList;
+  for var s in ['This symbol','Project','Group','Everywhere'] do H.FScope.Items.Add(s);
+  H.FScope.ItemIndex:= SEARCH_SCOPE_DEFAULT;
+  H.FScope.OnChange:= H.AdvControlChange;
   H.FWidth:= TComboBox.Create(AOwner); H.FWidth.Parent:= H.FAdvPanel; H.FWidth.Align:= alLeft; H.FWidth.Width:= 100; H.FWidth.Style:= csDropDownList;
   for var s in ['Narrow','Wide','Very wide'] do H.FWidth.Items.Add(s); H.FWidth.ItemIndex:= 0; H.FWidth.OnChange:= H.AdvControlChange;
 

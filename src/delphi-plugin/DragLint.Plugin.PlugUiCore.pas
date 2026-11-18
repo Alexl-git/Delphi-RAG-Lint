@@ -12,6 +12,7 @@ interface
 
 uses
   Vcl.Graphics
+  , DRagLint.Lint.Config
   ;
 
 const
@@ -41,6 +42,16 @@ function SearchRefillNeeded(const AAppliedTrim, ANewText: string; AHasData: Bool
 /// against ABack on both light and dark themes.</param>
 procedure UsageRowColors(ASelected: Boolean; const AMap: TColorMapper; out ABack, AText, AMatch: TColor);
 
+/// <summary>One line of the Lint Options "Overrides" list for a rule_overrides entry.</summary>
+/// <param name="AOverride">The entry (project-wide disable and/or excluded units).</param>
+/// <returns>'rule - off for the project (reason, date)' and/or 'rule - off in unit a, b'.</returns>
+function RuleOverrideCaption(const AOverride: TRuleOverride): string;
+
+/// <summary>Caption of the Lint Options button that opens the overrides list.</summary>
+/// <param name="ACount">How many rule_overrides entries the active config holds.</param>
+/// <returns>'Overrides...' for none, else 'Overrides (N)...'.</returns>
+function OverridesButtonCaption(ACount: Integer): string;
+
 implementation
 
 uses
@@ -52,7 +63,25 @@ const
   AMBER_BGR       = TColor($004080FF); { the highlight hue the panel always used }
   MATCH_MIN_RATIO = 3.0;               { large bold text: WCAG 3:1 }
 
-function SearchRefillNeeded(const AAppliedTrim, ANewText: string; AHasData: Boolean): Boolean;
+function RuleOverrideCaption(const AOverride: TRuleOverride): string;
+var
+  Why: string;
+begin
+  Result:= AOverride.RuleId;
+  if AOverride.HasEnabled and not AOverride.Enabled then
+  begin
+    Why:= Trim(AOverride.Reason);
+    if AOverride.Date <> '' then Why:= Trim(Why + ', ' + AOverride.Date).TrimLeft([',', ' ']);
+    Result:= Result + ' - off for the project' + (if Why <> '' then ' (' + Why + ')' else '');
+  end;
+  if Length(AOverride.ExcludeUnits) > 0 then
+    Result:= Result + ' - off in unit ' + string.Join(', ', AOverride.ExcludeUnits);
+end;
+
+function OverridesButtonCaption(ACount: Integer): string;
+begin
+  Result:= if ACount > 0 then Format('Overrides (%d)...', [ACount]) else 'Overrides...';
+end;function SearchRefillNeeded(const AAppliedTrim, ANewText: string; AHasData: Boolean): Boolean;
 begin
   Result:= AHasData and (Trim(ANewText) <> AAppliedTrim);
 end;

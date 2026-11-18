@@ -151,6 +151,8 @@ type
   strict private
     FDisabled    : TArray<string> ;
     FEnabled     : TArray<string> ;
+    FOvDisabled  : TArray<string> ; { ids disabled ONLY by a rule_overrides entry: effective, never written to the top-level "disabled" (B44) }
+    FOvEnabled   : TArray<string> ; { ids enabled ONLY by a rule_overrides entry }
     FAutoFix     : TArray<string> ;
     FAutoFixOff  : TArray<string> ;
     FSevNames    : TArray<string> ; // parallel arrays: rule id -> severity
@@ -1125,7 +1127,7 @@ begin
       begin
         R.HasEnabled:= True;
         R.Enabled   := (O.GetValue('enabled') as TJSONBool).AsBoolean;
-        if R.Enabled then FEnabled:= FEnabled + [R.RuleId] else FDisabled:= FDisabled + [R.RuleId];
+        if R.Enabled then FOvEnabled:= FOvEnabled + [R.RuleId] else FOvDisabled:= FOvDisabled + [R.RuleId];
       end;
       if O.GetValue('reason') <> nil then R.Reason:= O.GetValue('reason').Value;
       if O.GetValue('date') <> nil then R.Date:= O.GetValue('date').Value;
@@ -1226,8 +1228,8 @@ end;
 
 function TLintConfig.ShouldKeep(const ARuleId: string; ADefaultDisabled: Boolean): Boolean;
 begin
-  if Contains(FDisabled, ARuleId) then Exit(False);
-  if ADefaultDisabled and (not Contains(FEnabled, ARuleId)) then Exit(False);
+  if Contains(FDisabled, ARuleId) or Contains(FOvDisabled, ARuleId) then Exit(False);
+  if ADefaultDisabled and (not Contains(FEnabled, ARuleId)) and (not Contains(FOvEnabled, ARuleId)) then Exit(False);
   Result:= True;
 end;
 

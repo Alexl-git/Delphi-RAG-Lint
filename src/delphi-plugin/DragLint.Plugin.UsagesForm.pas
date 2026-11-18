@@ -66,6 +66,11 @@ procedure ShowFindUsages(const ASymbolName, AExePath: string; const ADbPaths: TA
 /// Main thread only.</remarks>
 procedure ShowFindUsagesScoped(const ASymbolName, AExePath: string; const ADbPaths: TArray<string>; const AScope: string);
 
+/// <summary>The open project group file.</summary>
+/// <returns>Its full path, or '' when no group is open.</returns>
+/// <remarks>Main thread only (ToolsAPI). Shared with the Search page's scope combo.</remarks>
+function ActiveGroupFile: string;
+
 procedure HideFindUsages;
 
 { v0.42: build the Find-Usages UI in a dock-panel tab: a symbol search box on
@@ -160,7 +165,6 @@ begin
     if SameText(SCOPE_WORDS[i], AScope) then Exit(i);
 end;
 
-{ The open project group file, '' when there is none. }
 function ActiveGroupFile: string;
 var
   MS: IOTAModuleServices;

@@ -248,6 +248,9 @@ type
     /// </remarks>
     class procedure SaveToFile(const APath: string; const ACfg: TLintConfig); static;
 
+    /// <summary>Removes one rule's entry from the file's "rule_overrides" block.</summary>
+    class function RevertRuleOverride(const APath, ARuleId: string): Boolean; static;
+
     /// <summary>Returns the names of all profiles defined under the "profiles"
     /// key in APath. Returns nil when the file is absent, unparseable, or has
     /// no "profiles" object.</summary>
@@ -567,6 +570,34 @@ begin
   end;
 
   WriteAnsiCrlf(APath, Json);
+end;
+
+class function TLintConfigWriter.RevertRuleOverride(const APath, ARuleId: string): Boolean;
+const
+  KEY_OVERRIDES = 'rule_overrides';
+var
+  Root     : TJSONObject;
+  Overrides: TJSONObject;
+  Removed  : TJSONPair;
+begin
+  Result:= False;
+  if not TFile.Exists(APath) then Exit;
+  Root:= TJSONObject.ParseJSONValue(TFile.ReadAllText(APath)) as TJSONObject;
+  if Root = nil then Exit;
+  try
+    if Root.GetValue(KEY_OVERRIDES) is not TJSONObject then Exit;
+    Overrides:= Root.GetValue(KEY_OVERRIDES) as TJSONObject;
+    Removed:= nil;
+    for var Pair: TJSONPair in Overrides do
+      if SameText(Pair.JsonString.Value, ARuleId) then Removed:= Pair;
+    if Removed = nil then Exit;
+    Overrides.RemovePair(Removed.JsonString.Value).Free;
+    if Overrides.Count = 0 then Root.RemovePair(KEY_OVERRIDES).Free;
+    WriteAnsiCrlf(APath, Root.Format(2));
+    Result:= True;
+  finally
+    Root.Free;
+  end;
 end;
 
 class function TLintConfigWriter.ListProfileNames(

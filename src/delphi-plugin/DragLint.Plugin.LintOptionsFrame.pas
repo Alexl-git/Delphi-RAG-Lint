@@ -94,6 +94,8 @@ type
     { top bar }
     FPanelTop  : TPanel   ;
     FLblCounts : TLabel   ;
+    FBtnOverrides: TButton ; { B44: opens the rule_overrides list }
+    FPending   : TDictionary<string, Boolean>; { B36: rule id -> checked, for every toggle not yet saved; survives a search refill }
     FDirty     : Boolean  ;   { True after a rule toggle until Save (B-OWN2) }
     FBtnReload : TButton  ;
     FBtnSave   : TButton  ;
@@ -246,6 +248,9 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure SearchChanged   (Sender: TObject);
+    procedure OverridesClick  (Sender: TObject);
+    procedure UpdateOverridesButton;
+    procedure ShowOverridesDialog;
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalog (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ShowCatalog (DragLint.Plugin.LintOptionsFrame.pas)</para>
@@ -1135,6 +1140,132 @@ begin
   FSearchTimer.Enabled:= True;  { restart: every keystroke / clear pushes the refill back }
 end;
 
+procedure TLintOptionsFrame.UpdateOverridesButton;
+begin
+  FBtnOverrides.Caption:= OverridesButtonCaption(Length(FCfg.RuleOverrides));
+end;
+
+procedure TLintOptionsFrame.OverridesClick(Sender: TObject);
+begin
+  ShowOverridesDialog;
+end;
+
+{ B44: the modal list of the active config's rule_overrides entries (Disable Rule... in
+  the editor writes them) with a Revert button. Revert removes the entry from the file,
+  reloads the config and redraws the rules list; unsaved toggles are kept. }
+const
+  ODG_GAP     = 8 ;   { overrides dialog: outer margin }
+  ODG_BTN_W   = 80;   { button width }
+  ODG_BTN_H   = 24;   { button height }
+  ODG_BTN_Y   = 32;   { button row: distance of its top from the bottom }
+  ODG_BTN_X2  = 88;   { Close: distance of its left from the right edge }
+  ODG_BTN_X1  = 176;  { Revert: distance of its left from the right edge }
+  ODG_LIST_B  = 48;   { list: height taken by the button row }
+
+type
+  TOverridesDialog = class(TComponent)
+  private
+    FFrame : TLintOptionsFrame;
+    FLst   : TListBox;
+    FBtnRev: TButton;
+    FIds   : TList<string>;
+    procedure Fill;
+    procedure RevertClick(Sender: TObject);
+  public
+    constructor Create(AFrame: TLintOptionsFrame; ADlg: TForm); reintroduce;
+    destructor Destroy; override;
+  end;
+
+constructor TOverridesDialog.Create(AFrame: TLintOptionsFrame; ADlg: TForm);
+var
+  BtnShut: TButton;
+begin
+  inherited Create(ADlg);
+  FFrame:= AFrame;
+  FIds  := TList<string>.Create;
+
+  BtnShut:= TButton.Create(ADlg);  // dl:ok object-leak@95c1 -- owned by the dialog form (Create(ADlg)); the form frees it
+  BtnShut.Parent     := ADlg;
+  BtnShut.Caption    := 'Close';
+  BtnShut.ModalResult:= mrCancel;
+  BtnShut.Cancel     := True;
+  BtnShut.SetBounds(ADlg.ClientWidth - ODG_BTN_X2, ADlg.ClientHeight - ODG_BTN_Y, ODG_BTN_W, ODG_BTN_H);
+  BtnShut.Anchors    := [akRight, akBottom];
+
+  FBtnRev:= TButton.Create(ADlg);
+  FBtnRev.Parent  := ADlg;
+  FBtnRev.Caption := 'Revert';
+  FBtnRev.Hint    := 'Remove the selected override from the config: the rule runs again';
+  FBtnRev.ShowHint:= True;
+  FBtnRev.SetBounds(ADlg.ClientWidth - ODG_BTN_X1, ADlg.ClientHeight - ODG_BTN_Y, ODG_BTN_W, ODG_BTN_H);
+  FBtnRev.Anchors := [akRight, akBottom];
+  FBtnRev.OnClick := RevertClick;
+
+  FLst:= TListBox.Create(ADlg);
+  FLst.Parent := ADlg;
+  FLst.SetBounds(ODG_GAP, ODG_GAP, ADlg.ClientWidth - ODG_GAP * 2, ADlg.ClientHeight - ODG_LIST_B);
+  FLst.Anchors:= [akLeft, akTop, akRight, akBottom];
+  Fill;
+end;
+
+destructor TOverridesDialog.Destroy;
+begin
+  FIds.Free;
+  inherited Destroy;
+end;
+
+procedure TOverridesDialog.Fill;
+begin
+  FLst.Items.BeginUpdate;
+  try
+    FLst.Items.Clear;
+    FIds.Clear;
+    for var Ov: TRuleOverride in FFrame.FCfg.RuleOverrides do
+    begin
+      FLst.Items.Add(RuleOverrideCaption(Ov));
+      FIds.Add(Ov.RuleId);
+    end;
+  finally
+    FLst.Items.EndUpdate;
+  end;
+  FBtnRev.Enabled:= FLst.Count > 0;
+  if FLst.Count > 0 then FLst.ItemIndex:= 0;
+end;
+
+procedure TOverridesDialog.RevertClick(Sender: TObject);
+begin
+  if (FLst.ItemIndex < 0) or (FLst.ItemIndex >= FIds.Count) then Exit;
+  if TLintConfigWriter.RevertRuleOverride(FFrame.CfgPath, FIds[FLst.ItemIndex]) then
+  begin
+    FFrame.FCfg:= TLintConfig.Load(FFrame.CfgPath, FFrame.FProfile);
+    FFrame.RenderCatalog(FFrame.FCatalogJSON);
+    FFrame.UpdateOverridesButton;
+  end;
+  Fill;
+end;
+
+procedure TLintOptionsFrame.ShowOverridesDialog;
+var
+  Dlg: TForm;
+begin
+  if CfgPath = '' then
+  begin
+    ShowMessage('drag-lint: no active project, so there is no config to list.');
+    Exit;
+  end;
+  Dlg:= TForm.CreateNew(Self);
+  try
+    Dlg.Caption     := 'drag-lint rule overrides';
+    Dlg.Position    := poScreenCenter;
+    Dlg.BorderStyle := bsSizeable;
+    Dlg.ClientWidth := 560;
+    Dlg.ClientHeight:= 280;
+    TOverridesDialog.Create(Self, Dlg);
+    Dlg.ShowModal;
+  finally
+    Dlg.Free;
+  end;
+end;
 procedure TLintOptionsFrame.SearchTimerTick(Sender: TObject);
 begin
   FSearchTimer.Enabled:= False;
@@ -1166,6 +1297,7 @@ begin
   FProfile    := '';
   FCfg        := TLintConfig.Load('', '');  { default no-op config }
   FAutoFixCBs := TDictionary<string, TCheckBox>.Create;
+  FPending    := TDictionary<string, Boolean>.Create;
   FNamingEditors := TDictionary<string, TEdit>.Create;
   FApplyingPreset:= False;
   BuildControls;
@@ -1187,6 +1319,7 @@ begin
   FRun.Free;  { abandons the run in flight: its answer never reaches a dead frame }
   FAutoFixCBs.Free;
   FNamingEditors.Free;
+  FPending.Free;
   inherited;
 end;
 
@@ -1195,6 +1328,10 @@ const
   PH = 34;   { top panel height }
   CBS = 24;   { search (x) button size }
   CBG = 2;    { gap between the search box and the (x) button }
+  OVW = 108;  { width of the Overrides button }
+  OVG = 4;    { gap right of the Overrides button }
+  OVH = 24;   { height of the Overrides button }
+  OVT = 3;    { its top }
   GLYPH_CANCEL = $E711;  { Segoe MDL2 Assets 'Cancel' }
 begin
   Width := 500;
@@ -1283,12 +1420,24 @@ begin
   FLblSearch.AutoSize:= True;
   FLblSearch.Caption := 'Search';
 
+  FBtnOverrides:= TButton.Create(Self);
+  FBtnOverrides.Parent  := FPanelSearch;
+  FBtnOverrides.Width   := OVW;
+  FBtnOverrides.Height  := OVH;
+  FBtnOverrides.Top     := OVT;
+  FBtnOverrides.Anchors := [akTop, akRight];
+  FBtnOverrides.Left    := FPanelSearch.Width - OVW - OVG;
+  FBtnOverrides.Caption := OverridesButtonCaption(0);
+  FBtnOverrides.Hint    := 'Rules switched off by Disable Rule... in the project config; revert one to run it again';
+  FBtnOverrides.ShowHint:= True;
+  FBtnOverrides.OnClick := OverridesClick;
+
   FEdtSearch:= TEdit.Create(Self);
   FEdtSearch.Parent   := FPanelSearch;
   FEdtSearch.Left     := FLblSearch.Left + 50;
   FEdtSearch.Top      := 3;
   FEdtSearch.Height   := 24;
-  FEdtSearch.Width    := FPanelSearch.Width - FEdtSearch.Left - 8 - CBS - CBG;
+  FEdtSearch.Width    := FPanelSearch.Width - FEdtSearch.Left - OVG * 2 - CBS - CBG - OVW - OVG;
   FEdtSearch.Anchors  := [akLeft, akTop, akRight];
   FEdtSearch.TextHint := 'Search rules...';
   FEdtSearch.OnChange := SearchChanged;
@@ -1365,6 +1514,8 @@ begin
   RuleCB:= TCheckBox(Sender);
   if FHasData then
   begin
+    if (RuleCB.Tag <> 0) and (TObject(RuleCB.Tag) is TRuleTag) then
+      FPending.AddOrSetValue(TRuleTag(TObject(RuleCB.Tag)).Rule.Id, RuleCB.Checked);  { B36: a refill rebuilds from the saved config; this is what it must re-apply }
     FDirty:= True;          { B-OWN2: live count + unsaved marker on every toggle }
     UpdateCountsLabel;
   end;
@@ -1655,6 +1806,8 @@ begin
 
       { Enabled overlay: ShouldKeep(id, not default_enabled) }
       Checked:= FCfg.ShouldKeep(Rule.Id, not Rule.DefaultEnabled);
+      var PendingChecked: Boolean;
+      if FPending.TryGetValue(Rule.Id, PendingChecked) then Checked:= PendingChecked;  { B36: an unsaved toggle wins over the saved config }
 
       RuleCB:= TCheckBox.Create(Self);
       RuleCB.Parent  := Grp;
@@ -1784,7 +1937,7 @@ begin
     UpdatePresetButtons;
 
     FHasData:= True;
-    FDirty  := False;
+    FDirty  := FPending.Count > 0;  { B36: a refill keeps the unsaved marker }
     UpdateCountsLabel;
 
   finally
@@ -1896,7 +2049,9 @@ begin
     RenderCatalog can reference it directly: again, as the profile can have changed
     while the catalog was on its way. }
   FCfg:= TLintConfig.Load(CfgPath, FProfile);
+  FPending.Clear;  { B36: a fresh load from disk discards unsaved toggles, as Reload always did }
   RenderCatalog(AOutput);
+  UpdateOverridesButton;
   ReloadProfileList;  { refresh combo after successful load }
 end;
 
@@ -1929,6 +2084,17 @@ begin
     FCfg holds the base-or-profile-merged config set in ReloadCatalogAndConfig.
     Rendered rules will override their values below; unrendered rules keep FCfg. }
   Cfg:= FCfg;
+
+  { B36: unsaved toggles of rules a search filter hides (their checkboxes do not exist
+    right now). The rendered rules are written by the walk below. }
+  if FCatalogJSON <> '' then
+    for var PRule: TCatalogRule in ParseCatalog(FCatalogJSON) do
+    begin
+      var PChecked: Boolean;
+      if not FPending.TryGetValue(PRule.Id, PChecked) then Continue;
+      if PRule.DefaultEnabled then TLintConfigWriter.SetRuleDisabled(Cfg, PRule.Id, not PChecked)
+      else TLintConfigWriter.SetRuleEnabled(Cfg, PRule.Id, PChecked);
+    end;
 
   { Walk group boxes then their child checkboxes }
   for i:= 0 to FScroll.ControlCount - 1 do
@@ -2004,6 +2170,17 @@ begin
     ReloadProfileList;                                  { include a newly-typed name }
     FCboProfile.ItemIndex:= FCboProfile.Items.IndexOf(Target);
   end;
+  { B44: re-enabling a rule that a project override switches off must also drop that
+    override, or the rule stays off behind a checked box. }
+  for var Pair: TPair<string, Boolean> in FPending do
+  begin
+    var Ov: TRuleOverride;
+    if Pair.Value and FCfg.FindRuleOverride(Pair.Key, Ov) and Ov.HasEnabled and not Ov.Enabled then
+      TLintConfigWriter.RevertRuleOverride(CP, Pair.Key);
+  end;
+  FPending.Clear;
+  FCfg:= TLintConfig.Load(CP, FProfile);  { the saved file is the new baseline for the next Save }
+  UpdateOverridesButton;
   FDirty:= False;
   UpdateCountsLabel;
 end;
@@ -2330,7 +2507,9 @@ begin
   if FHasData and (FCatalogJSON <> '') then
   begin
     FCfg:= TLintConfig.Load(CfgPath, FProfile);
+    FPending.Clear;
     RenderCatalog(FCatalogJSON);
+    UpdateOverridesButton;
   end
   else
     ReloadCatalogAndConfig;

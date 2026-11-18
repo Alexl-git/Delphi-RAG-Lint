@@ -51,6 +51,23 @@ begin
   Check('kind: Any matches anything', KindMatchesFilter('method', 'Any'));
   Check('kind: empty matches anything', KindMatchesFilter('const', ''));
 
+  { BK-SCOPEUI B31: the Search page's 4-way scope and full-path Location column }
+  Check('scope: index 0 = symbol', SearchScopeWord(0) = 'symbol');
+  Check('scope: index 1 = project', SearchScopeWord(1) = 'project');
+  Check('scope: index 2 = group', SearchScopeWord(2) = 'group');
+  Check('scope: index 3 = everywhere', SearchScopeWord(3) = 'everywhere');
+  Check('scope: -1 falls back to project', SearchScopeWord(-1) = 'project');
+  Check('scope: 9 falls back to project', SearchScopeWord(9) = 'project');
+  Check('scope args: project', SearchUsagesScopeArgs(1, 'C:\g.groupproj') = ' --scope project');
+  Check('scope args: symbol', SearchUsagesScopeArgs(0, '') = ' --scope symbol');
+  Check('scope args: everywhere', SearchUsagesScopeArgs(3, '') = ' --scope everywhere');
+  Check('scope args: group names the group file', SearchUsagesScopeArgs(2, 'C:\g.groupproj') = ' --scope group --group "C:\g.groupproj"');
+  Check('scope args: group without a file has no --group', SearchUsagesScopeArgs(2, '') = ' --scope group');
+  Check('location: full path and line', SearchLocationText('C:\p\CLI.pas', 2023) = 'C:\p\CLI.pas:2023');
+  Check('location: not navigable is empty', SearchLocationText('C:\p\CLI.pas', 0) = '');
+  Check('scope note: read from the answer', ParseUsagesScopeNote('{"scope":"project","scope_note":"no position binds a symbol"}') = 'no position binds a symbol');
+  Check('scope note: absent is empty', ParseUsagesScopeNote(USAGES_JSON) = '');
+  Check('scope note: not JSON is empty', ParseUsagesScopeNote('ERROR x') = '');
   if GFail > 0 then begin Writeln(GFail, ' FAILED'); Halt(1); end
   else Writeln('searchparse: all pass');
 end.
