@@ -1,0 +1,35 @@
+{
+  "id": "v152-proj2",
+  "title": "unit-used-by-no-unit rule; unit-not-in-dpr outside the project roots",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.52.0-alpha",
+  "summary": "Warns (ON) on a unit only the .dpr lists that nothing reaches; a form counts only when opened. unit-not-in-dpr also reports shared-folder units",
+  "intro": "Read this to see when unit-used-by-no-unit warns, which self-registering units it leaves alone, why a form with an initialization section still fires, and how lint-all --project now reports shared-folder units missing from the project files.",
+  "wikiPage": "v152-proj2",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "usage": "drag-lint lint-all --db <file.sqlite> [--project <file.dproj>] [--rule unit-used-by-no-unit|unit-not-in-dpr] (unit-used-by-no-unit: default ON, category project-wide, warning, lint-all only; exempt: initialization section or container registration, a form only when the program code or a FindClass('TName') string opens it; unit-not-in-dpr: closure units outside the project roots reported on the .dpr, with --project)",
+      "flags": [
+        {
+          "name": "--rule",
+          "arg": "<id>"
+        },
+        {
+          "name": "--project",
+          "arg": "<file.dproj>"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-17",
+    "by": "ENGINE",
+    "build": "1.51.1-alpha",
+    "surfaceHash": "2d0c23565c009383cfcd928a0869cb75532a87f1d17ce233d0603d793354b85c"
+  }
+}
