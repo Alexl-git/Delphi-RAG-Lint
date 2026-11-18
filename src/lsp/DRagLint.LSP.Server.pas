@@ -5251,7 +5251,7 @@ begin
   Result:= Asm_.FactLines;
 end;
 
-function TLSPServer.ComputeHoverAt(const APath: string; ALine, ACol: Integer; out AOut: THoverComputation): Boolean;  // dl:ok cyclomatic-complexity@22a3, cognitive-complexity@e6bb, method-too-long@ebc3, deep-nesting@5f57 -- REVIEWED S0: the hover RENDERING half of the former ComputeHover (54 before); the selection half moved to SelectSymbolAt, further splitting is out of S0 scope (re-reviewed A5 fix: now 35; still one rendering pass, a split stays out of scope here; 151 INT re-review: 37 / 270 lines after CF's one-TypeAt-per-hover reuse, same single pass)
+function TLSPServer.ComputeHoverAt(const APath: string; ALine, ACol: Integer; out AOut: THoverComputation): Boolean;  // dl:ok cyclomatic-complexity@df30, cognitive-complexity@b7e0, method-too-long@43f0 -- REVIEWED S0: the hover RENDERING half of the former ComputeHover (54 before); the selection half moved to SelectSymbolAt, further splitting is out of S0 scope (re-reviewed A5 fix: now 35; still one rendering pass, a split stays out of scope here; 151 INT re-review: 37 / 270 lines after CF's one-TypeAt-per-hover reuse, same single pass; 1.52 BK-VSHOVER re-review: 41 / 310 lines after ASYNC fast-step, HBHOVER and the Set by: lines, still one rendering pass; deep-nesting no longer fires)
 var
   Path    : string         ;
   Ident   : string         ;
