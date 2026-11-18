@@ -251,6 +251,7 @@
   "v1511-cli-fixes": "v1511-cli-fixes",
   "v152-atla-rules": "v152-atla-rules",
   "v152-atlb-rules": "v152-atlb-rules",
+  "v152-attrrules": "v152-attrrules",
   "v152-disable-rule": "v152-disable-rule",
   "v152-docpol": "v152-docpol",
   "v152-extract-constant": "v152-extract-constant",

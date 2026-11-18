@@ -3210,6 +3210,10 @@ type
       /// <summary>1.52 BK-EXTRA (B09): True when this database has the attributes table; probed once.</summary>
       /// <returns>False on an older index opened read-only; PutFileFacts then skips the table.</returns>
       function HasAttributes: Boolean;
+      /// <summary>1.52 BK-ATTRRULES (B48): implements ISymbolStore.GetAttributes.</summary>
+      /// <param name="AFileId">files.id of the file.</param>
+      /// <returns>The file's rows in ordinal order; empty when none or the table is absent.</returns>
+      function GetAttributes(AFileId: Int64): TArray<TAttributeRow>;
       /// <summary>151 ST: implements ISymbolStore.HasDfmProperties.</summary>
       /// <returns>True when the dfm_properties table exists (probed once).</returns>
       /// <remarks>
@@ -5912,6 +5916,46 @@ begin
       R.AnchorKind     := FAk .AsString;
       R.AnchorSymbolIdx:= -1;
       R.AnchorSymbolId := FAid.AsLargeInt;
+      L.Add(R);
+      Q.Next;
+    end;
+    Result:= L.ToArray;
+  finally
+    Q.Free;
+    L.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetAttributes(AFileId: Int64): TArray<TAttributeRow>;  // dl:ok duplicate-code@c430 -- REVIEWED 2026-11-18 BK-ATTRRULES: one reader per optional fact table (dfm_properties, comment_facts, attributes), same probe + query + loop shape over different columns and row records; a generic reader would hide the column mapping
+var
+  Q: TFDQuery;
+  L: TList<TAttributeRow>;
+  R: TAttributeRow;
+begin
+  Result:= nil;
+  if not HasAttributes then Exit;
+  L:= TList<TAttributeRow>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT COALESCE(symbol_id, 0) AS sid, attr_name, arg_text, line, col ' +
+                   'FROM attributes WHERE file_id = :fid ORDER BY ordinal';
+    Q.ParamByName('fid').AsLargeInt:= AFileId;
+    Q.Open;
+    var FSid := Q.FieldByName('sid'      );
+    var FNm  := Q.FieldByName('attr_name');
+    var FArg := Q.FieldByName('arg_text' );
+    var FLn  := Q.FieldByName('line'     );
+    var FCol := Q.FieldByName('col'      );
+    while not Q.Eof do
+    begin
+      R:= Default(TAttributeRow);
+      R.SymbolIdx:= -1;
+      R.SymbolId := FSid.AsLargeInt;
+      R.Name     := FNm .AsString;
+      R.ArgText  := FArg.AsString;
+      R.Line     := FLn .AsInteger;
+      R.Col      := FCol.AsInteger;
       L.Add(R);
       Q.Next;
     end;

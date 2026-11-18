@@ -9,7 +9,7 @@
 #     UShared.pas carries a dl:shared header naming a second project (its index is not
 #     open here) and is silent, while a copy WITHOUT the header is reported; a unit
 #     referenced from a second file (UsedElsewhere) stays silent, its caller removed it fires.
-# debug-display-placeholder is NOT implemented: docs\INBOX-debug-display-placeholder-needs-index-fact.md.
+# debug-display-placeholder landed in 1.52 BK-ATTRRULES (B48): tests\autotest\run_v152_BK-ATTRRULES.ps1.
 param([string]$Exe = "third_party\dll-win64\drag-lint.exe")
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
@@ -49,7 +49,7 @@ $off = Lines-Of (Get-Findings @('lint', $ctor, '--rule', 'hides-ancestor-virtual
 Assert "component ctor: positive control -- rule disabled, no finding" ($off.Count -eq 0)
 $cat = & $exe rules --json 2>$null | Out-String
 Assert "component-create-without-override is NOT a catalog id (refused duplicate)" ($cat -notmatch 'component-create-without-override')
-Assert "debug-display-placeholder is NOT a catalog id (needs an index fact first)" ($cat -notmatch 'debug-display-placeholder')
+Assert "debug-display-placeholder is a catalog id (1.52 BK-ATTRRULES, on the attributes fact; run_v152_BK-ATTRRULES.ps1)" ($cat -match 'debug-display-placeholder')
 
 # ---- 2. member-could-be-private ----
 $rule = 'member-could-be-private'

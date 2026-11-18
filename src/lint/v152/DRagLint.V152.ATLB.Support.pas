@@ -13,7 +13,8 @@ unit DRagLint.V152.ATLB.Support;
   reintroduce / external routines; constructors and destructors; members of
   helpers; members whose name an interface of the class declares, or any class
   whose interface list holds an ancestor that does not resolve (unsure); members
-  carrying an attribute (RTTI may read them); members with no reference at all
+  carrying an attribute (RTTI may read them; read from the attributes index fact,
+  the source line above the member only on an index without it); members with no reference at all
   (dead-code rules own that); a name referenced from a second file (another unit,
   or a form file); members of a unit that lists more than one project in its
   `dl:shared` header (a sibling project's index is not open here). }
@@ -41,6 +42,27 @@ type
     class function Find(const AStore, ALibStore: ISymbolStore; const ARuleId: string): TArray<TLintFinding>; static;
   end;
 
+  /// <summary>1.52 BK-ATTRRULES (B48): evaluates debug-display-placeholder on one indexed file --
+  /// a `[DebuggerDisplay('...{Name}...')]` attribute on a class or record whose template names
+  /// a member the type (with its ancestors) does not have.</summary>
+  /// <remarks>Stateless; class methods only. Reads the attributes index fact (BK-EXTRA, B09) and
+  /// the symbol tables, never the source text. Silent whenever it cannot prove the member absent:
+  /// no attributes table, a first argument that is not one string literal, a placeholder that
+  /// does not start with an identifier, an ancestor no index places. Self is always accepted;
+  /// a placeholder is judged by its leading identifier only ({Owner.Name}, {Count,nq}).</remarks>
+  TDebugDisplayCheck = class
+  public
+    /// <summary>Finds the debugger-display placeholders of one file that name no member.</summary>
+    /// <param name="AStore">Project index; nil returns nil.</param>
+    /// <param name="ALibStore">Library index used to place RTL / VCL ancestors; may be nil (TObject
+    /// is then judged by a built-in member list, any other outside ancestor is unknown).</param>
+    /// <param name="AFileId">files.id of the file in AStore; 0 returns nil.</param>
+    /// <param name="APath">The file path stamped on each finding.</param>
+    /// <param name="ARuleId">Rule id to stamp on each finding.</param>
+    /// <returns>One warning per unknown placeholder, at the attribute name; nil when none.</returns>
+    class function Check(const AStore, ALibStore: ISymbolStore; AFileId: Int64;
+      const APath, ARuleId: string): TArray<TLintFinding>; static;
+  end;
 implementation
 
 uses
@@ -173,9 +195,15 @@ var
   Shared   : TDictionary<Int64, Boolean>;
   Parents  : TDictionary<Int64, TSymbol>;
   IfaceOf  : TDictionary<Int64, TDictionary<string, Boolean>>;
+  AttrFiles: TDictionary<Int64, Boolean>;
+  AttrSyms : TDictionary<Int64, Boolean>;
   Prev     : Int64;
 begin
   Result:= nil;
+  { an index built before the attributes table falls back to the one-line source peek }
+  var UseFact: Boolean:= AStore.HasAttributes;
+  AttrFiles:= TDictionary<Int64, Boolean>.Create;
+  AttrSyms := TDictionary<Int64, Boolean>.Create;
   RefFile  := TDictionary<string, Int64>.Create;
   FileLines:= TDictionary<Int64, TArray<string>>.Create;
   Shared   := TDictionary<Int64, Boolean>.Create;
@@ -221,18 +249,34 @@ begin
           Shared.Add(FileId, IsShared);
         end;
         if IsShared then Continue;
-        var Lines: TArray<string>;
-        if not FileLines.TryGetValue(FileId, Lines) then
+        if UseFact then
         begin
-          try
-            Lines:= TFile.ReadAllLines(Path);
-          except
-            on Exception do
-            Lines:= nil;
+          { 1.52 BK-ATTRRULES (B48): the attributes index fact names the decorated symbol --
+            no source read, and an attribute list split from its member by a comment or
+            spread over several lines is still seen. }
+          if not AttrFiles.ContainsKey(FileId) then
+          begin
+            AttrFiles.Add(FileId, True);
+            for var A: TAttributeRow in AStore.GetAttributes(FileId) do
+              if A.SymbolId > 0 then AttrSyms.AddOrSetValue(A.SymbolId, True);
           end;
-          FileLines.Add(FileId, Lines);
+          if AttrSyms.ContainsKey(Sym.Id) then Continue;
+        end
+        else
+        begin
+          var Lines: TArray<string>;
+          if not FileLines.TryGetValue(FileId, Lines) then
+          begin
+            try
+              Lines:= TFile.ReadAllLines(Path);
+            except
+              on Exception do
+              Lines:= nil;
+            end;
+            FileLines.Add(FileId, Lines);
+          end;
+          if (Lines = nil) or HasAttributeAbove(Lines, Sym.StartLine) then Continue;
         end;
-        if (Lines = nil) or HasAttributeAbove(Lines, Sym.StartLine) then Continue;
         var F: TLintFinding:= Default(TLintFinding);
         F.RuleId    := ARuleId;
         F.Severity  := 'hint';
@@ -250,10 +294,179 @@ begin
   finally
     for var D: TDictionary<string, Boolean> in IfaceOf.Values do D.Free;
     IfaceOf.Free;
+    AttrSyms.Free;
+    AttrFiles.Free;
     Parents.Free;
     Shared.Free;
     FileLines.Free;
     RefFile.Free;
+  end;
+end;
+
+{ ---- debug-display-placeholder (1.52 BK-ATTRRULES, B48) ---- }
+
+const
+  DEBUG_DISPLAY_NAMES: array[0..1] of string = ('debuggerdisplay', 'debuggerdisplayattribute');
+  MAX_ANCESTOR_DEPTH = 32;
+  { System.TObject's public surface, used only when no library index places TObject. }
+  TOBJECT_MEMBERS: array[0..32] of string = (
+    'create', 'free', 'disposeof', 'initinstance', 'cleanupinstance', 'classtype', 'classname',
+    'classnameis', 'classparent', 'classinfo', 'instancesize', 'inheritsfrom', 'methodaddress',
+    'methodname', 'qualifiedclassname', 'fieldaddress', 'getinterface', 'getinterfaceentry',
+    'getinterfacetable', 'unitname', 'unitscope', 'safecallexception', 'afterconstruction',
+    'beforedestruction', 'dispatch', 'defaulthandler', 'newinstance', 'freeinstance', 'destroy',
+    'tostring', 'equals', 'gethashcode', 'disposed');
+
+function IsDebugDisplayName(const AName: string): Boolean;
+begin
+  var N: string:= LowerCase(Trim(AName));
+  var P: Integer:= N.LastDelimiter('.');
+  if P >= 0 then N:= N.Substring(P + 1);
+  for var D: string in DEBUG_DISPLAY_NAMES do
+    if N = D then Exit(True);
+  Result:= False;
+end;
+
+{ True when AArgs starts with exactly one Pascal string literal that is the whole first
+  argument; AText is its value with '' unescaped. }
+function FirstStringLiteral(const AArgs: string; out AText: string): Boolean;
+begin
+  AText:= '';
+  Result:= False;
+  var S: string:= Trim(AArgs);
+  if (S = '') or (S[1] <> '''') then Exit;
+  { the closing quote is the first single quote that is not doubled }
+  var I: Integer:= 2;
+  while (I <= Length(S)) and not ((S[I] = '''') and ((I = Length(S)) or (S[I + 1] <> ''''))) do
+    Inc(I, if S[I] = '''' then 2 else 1);
+  if I > Length(S) then Exit;
+  AText:= StringReplace(Copy(S, 2, I - 2), '''''', '''', [rfReplaceAll]);
+  var Rest: string:= Trim(S.Substring(I));
+  Result:= (Rest = '') or (Rest[1] = ',');
+end;
+// The leading identifier of every brace placeholder of ATemplate; a doubled opening brace is a
+// literal brace. A placeholder that does not start with an identifier is not returned.
+function PlaceholderNames(const ATemplate: string): TArray<string>;
+begin
+  Result:= nil;
+  var I: Integer:= 1;
+  while I <= Length(ATemplate) do
+  begin
+    if ATemplate[I] <> '{' then
+    begin
+      Inc(I);
+      Continue;
+    end;
+    if (I < Length(ATemplate)) and (ATemplate[I + 1] = '{') then
+    begin
+      Inc(I, 2);
+      Continue;
+    end;
+    var Close: Integer:= Pos('}', ATemplate, I + 1);
+    if Close = 0 then Exit;
+    var Body: string:= Trim(Copy(ATemplate, I + 1, Close - I - 1));
+    var J: Integer:= 1;
+    while (J <= Length(Body)) and CharInSet(Body[J], ['A'..'Z', 'a'..'z', '_', '0'..'9']) do Inc(J);
+    var Ident: string:= Copy(Body, 1, J - 1);
+    if (Ident <> '') and CharInSet(Ident[1], ['A'..'Z', 'a'..'z', '_']) then Result:= Result + [Ident];
+    I:= Close + 1;
+  end;
+end;
+
+function FindClassType(const AStore, ALibStore: ISymbolStore; const AName: string; out ASym: TSymbol;
+  out AOwner: ISymbolStore): Boolean;
+begin
+  Result:= FindType(AStore, ALibStore, AName, ASym, AOwner) and (ASym.Kind = skClass);
+end;
+
+{ The class ancestor of AClass: the first heritage entry when it is a class, else TObject.
+  '' = the first entry is a name no index places and not an I-prefixed interface name
+  (an unknown class ancestor -- the caller is unsure). }
+function AncestorName(const AStore, ALibStore: ISymbolStore; const AClass: TSymbol): string;
+var
+  Anc  : TSymbol;
+  AncSt: ISymbolStore;
+begin
+  Result:= 'TObject';
+  var Heads: TArray<string>:= HeritageNames(AClass.Heritage);
+  if (Length(Heads) = 0) or (Heads[0] = '') or SameText(Heads[0], 'TObject') then Exit;
+  if FindType(AStore, ALibStore, Heads[0], Anc, AncSt) then
+  begin
+    if Anc.Kind = skClass then Result:= Heads[0]
+    else if Anc.Kind <> skInterface then Result:= '';
+  end
+  else if not LooksLikeInterface(Heads[0]) then Result:= '';
+end;
+
+{ Fills ANames with the lower-case member names of AType and its class ancestors.
+  False = some ancestor could not be placed: the caller stays silent. }
+function MemberNamesOf(const AStore, ALibStore: ISymbolStore; const AOwnerStore: ISymbolStore;
+  const AType: TSymbol; const ANames: TDictionary<string, Boolean>): Boolean;
+var
+  Cur  : TSymbol;
+  Owner: ISymbolStore;
+  Anc  : TSymbol;
+  AncSt: ISymbolStore;
+begin
+  Cur  := AType;
+  Owner:= AOwnerStore;
+  for var Depth: Integer:= 0 to MAX_ANCESTOR_DEPTH do
+  begin
+    for var C: TSymbol in Owner.FindAllChildSymbols(Cur.Id) do
+      ANames.AddOrSetValue(LowerCase(C.Name), True);
+    if Cur.Kind <> skClass then Exit(True);
+    if SameText(Cur.Name, 'TObject') then Exit(True);
+    var AncName: string:= AncestorName(AStore, ALibStore, Cur);
+    if AncName = '' then Exit(False);
+    if not FindClassType(AStore, ALibStore, AncName, Anc, AncSt) then
+    begin
+      if not SameText(AncName, 'TObject') then Exit(False);
+      for var M: string in TOBJECT_MEMBERS do ANames.AddOrSetValue(M, True);
+      Exit(True);
+    end;
+    Cur  := Anc;
+    Owner:= AncSt;
+  end;
+  Result:= False;
+end;
+
+class function TDebugDisplayCheck.Check(const AStore, ALibStore: ISymbolStore; AFileId: Int64;
+  const APath, ARuleId: string): TArray<TLintFinding>;
+begin
+  Result:= nil;
+  if (AStore = nil) or (AFileId <= 0) or not AStore.HasAttributes then Exit;
+  for var A: TAttributeRow in AStore.GetAttributes(AFileId) do
+  begin
+    if (A.SymbolId <= 0) or not IsDebugDisplayName(A.Name) then Continue;
+    var Template: string;
+    if not FirstStringLiteral(A.ArgText, Template) then Continue;
+    var Wanted: TArray<string>:= PlaceholderNames(Template);
+    if Wanted = nil then Continue;
+    var T: TSymbol:= AStore.GetSymbolById(A.SymbolId);
+    if (T.Id <> A.SymbolId) or (T.Kind not in [skClass, skRecord]) then Continue;
+    var Names: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+    try
+      if not MemberNamesOf(AStore, ALibStore, AStore, T, Names) then Continue;
+      for var W: string in Wanted do
+      begin
+        if SameText(W, 'Self') or Names.ContainsKey(LowerCase(W)) then Continue;
+        var F: TLintFinding:= Default(TLintFinding);
+        F.RuleId    := ARuleId;
+        F.Severity  := 'warning';
+        F.FileId    := AFileId;
+        F.FilePath  := APath;
+        F.StartLine := A.Line;
+        F.StartCol  := A.Col;
+        F.EndLine   := A.Line;
+        F.EndCol    := A.Col + Length(A.Name);
+        F.SymbolName:= T.Name;
+        F.Message   := Format('Debugger display placeholder {%s} names no member of %s or its ancestors -- ' +
+          'the debugger shows the placeholder, not a value', [W, T.Name]);
+        Result:= Result + [F];
+      end;
+    finally
+      Names.Free;
+    end;
   end;
 end;
 

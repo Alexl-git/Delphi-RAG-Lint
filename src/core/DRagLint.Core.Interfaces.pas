@@ -2995,6 +2995,16 @@ type
     /// not write the table, or HasCommentFacts is False. Each row has
     /// AnchorSymbolIdx -1 and AnchorSymbolId the stored id (0 = NULL).</returns>
     function GetCommentFacts(AFileId: Int64): TArray<TCommentFactRow>;
+    /// <summary>1.52 BK-ATTRRULES (B48): True when this database has the attributes
+    /// table (BK-EXTRA, B09); probed once.</summary>
+    /// <returns>False on an index built before 1.52 and opened read-only: readers
+    /// then fall back to reading the source text.</returns>
+    function HasAttributes: Boolean;
+    /// <summary>1.52 BK-ATTRRULES (B48): the attributes rows of one file, in source order.</summary>
+    /// <param name="AFileId">files.id of the file.</param>
+    /// <returns>Empty when the file has no attribute, or HasAttributes is False. Each
+    /// row has SymbolIdx -1 and SymbolId the decorated symbol's id (0 = no symbol).</returns>
+    function GetAttributes(AFileId: Int64): TArray<TAttributeRow>;
     /// <summary>150 PP: True when this database has the pp_directives table;
     /// probed once.</summary>
     /// <returns>False on a schema-23 DB (or a 149-built v24 DB) opened

@@ -7,7 +7,7 @@ group: linting
 order: 30069
 since: 1.52.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Disable rule (this line, this unit, this project)

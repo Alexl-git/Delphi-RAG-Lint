@@ -7,7 +7,7 @@ group: linting
 order: 30068
 since: 1.52.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Default-on form, dataset and data-module rules

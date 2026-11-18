@@ -574,6 +574,8 @@ begin
   Writeln('       see wiki page: redundant-cast-fix');
   Writeln('  drag-lint lint --fix --fix-rule with-statement --db <db> [--in <f.pas> [--fix-line <L>]] [--apply --project <X.dproj>] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <db>|none] [--no-backup] [--json]');
   Writeln('       see wiki page: unwith');
+  Writeln('  drag-lint lint <file> --rule debug-display-placeholder --db <db> (default OFF in 1.52; a [DebuggerDisplay(''..{Name}..'')] placeholder naming no member of the type, read from the attributes index fact; category bug-patterns, warning)');
+  Writeln('       see wiki page: v152-attrrules');
   Writeln('  drag-lint lint --in <F> [--db <db>] --enable <rule> --fix --fix-rule <rule> --fix-line <n> [--col <c>] [--name <ident>] [--apply] [--project <X.dproj>] - extract the literal at line n (column c) into a named constant and replace every occurrence in the unit; <rule> = extract-constant (any number or string literal, OFF by default, reports only when its fix is asked for), magic-literal, large-magic-number or case-magic-numbers; risky, manual only (a batch --fix withholds it); report on stderr');
   Writeln('       see wiki page: v152-extract-constant');
   Writeln('  drag-lint lint <file.pas> [--rule index-possibly-out-of-range] [--fix --fix-rule index-possibly-out-of-range [--apply]] (default ON, category bug-patterns, warning; hint on an unguarded parameter or a lookup-derived index; param exception_class; the autofix is manual only: a batch --fix withholds it, --fix-rule applies it; rules --json carries fix_manual_only: true)');

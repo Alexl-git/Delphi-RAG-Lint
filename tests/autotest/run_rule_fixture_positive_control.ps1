@@ -125,6 +125,7 @@ $OwnRunner = @{
     'doc-malformed-summary'     = 'tests\autotest\run_v152_DOCPOL.ps1'
     'rule-skipped-budget'       = 'tests\autotest\run_v152_BUDGET.ps1'
     'member-could-be-private'   = 'tests\autotest\run_v152_ATLB.ps1'
+    'debug-display-placeholder' = 'tests\autotest\run_v152_BK-ATTRRULES.ps1'
     'unit-used-by-no-unit'      = 'tests\autotest\run_v152_PROJ2.ps1'
     'extract-constant'          = 'tests\autotest\run_v152_XCONST_fix.ps1'
     'review-marker-remeasured'  = 'tests\autotest\run_v152_MARK_remeasured.ps1'

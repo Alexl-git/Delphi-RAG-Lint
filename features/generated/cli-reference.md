@@ -1283,6 +1283,7 @@ Described in:
 * [Wider built-in rules (1.51)](../../docs/wiki/v151-wid-ast-rules.md)
 * [Wider scm rules and three new fixers](../../docs/wiki/v151-wid-scm-rules.md)
 * [Reserved words as names, implicit package imports, contract-unit globs](../../docs/wiki/v152-atla-rules.md)
+* [debug-display-placeholder + attribute-aware member-could-be-private](../../docs/wiki/v152-attrrules.md)
 * [Default-on form, dataset and data-module rules](../../docs/wiki/rule-defaults-152.md)
 * [Extract constant (manual fix for magic literals)](../../docs/wiki/v152-extract-constant.md)
 * [Array index possibly out of range lint rule (index-possibly-out-of-range)](../../docs/wiki/index-possibly-out-of-range.md)

@@ -1452,6 +1452,18 @@
     "verb": "lint-all"
   },
   {
+    "id": "v152-attrrules",
+    "title": "debug-display-placeholder + attribute-aware member-could-be-private",
+    "summary": "Warning (OFF in 1.52) on a DebuggerDisplay placeholder naming no member; member-could-be-private reads attributes from the index",
+    "group": "linting",
+    "order": 30067,
+    "since": "1.52.0-alpha",
+    "file": "features/v152-attrrules.md",
+    "menus": [],
+    "context": [],
+    "verb": "lint"
+  },
+  {
     "id": "v152-defaults",
     "title": "Default-on form, dataset and data-module rules",
     "summary": "Four lint rules on by default since 1.52 (form object/field, foreign form access, edit without post, data module form global); a shipped exempt-class list",

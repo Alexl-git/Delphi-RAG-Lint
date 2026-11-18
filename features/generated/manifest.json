@@ -3689,6 +3689,38 @@
       }
     },
     {
+      "id": "v152-attrrules",
+      "title": "debug-display-placeholder + attribute-aware member-could-be-private",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "Warning (OFF in 1.52) on a DebuggerDisplay placeholder naming no member; member-could-be-private reads attributes from the index",
+      "intro": "Read this to see what debug-display-placeholder reports, when it stays silent, and how member-could-be-private now uses the attributes index fact instead of the source line.",
+      "wikiPage": "v152-attrrules",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "drag-lint lint <file> --rule debug-display-placeholder --db <db>",
+          "usage": "drag-lint lint <file> --rule debug-display-placeholder --db <db> (default OFF in 1.52; a [DebuggerDisplay('..{Name}..')] placeholder naming no member of the type, read from the attributes index fact; category bug-patterns, warning)",
+          "flags": [
+            {
+              "name": "--rule",
+              "arg": "<id>"
+            }
+          ]
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-18",
+        "by": "ENGINE",
+        "build": "1.52.0-alpha",
+        "surfaceHash": "193c42e17a1b3087f2dfef535b008235f2f191fd65c20200d6f0b7ebabb7957c"
+      }
+    },
+    {
       "id": "v152-defaults",
       "title": "Default-on form, dataset and data-module rules",
       "group": "linting",
@@ -17301,6 +17333,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "dead-store-before-out-arg"
+      },
+      {
+        "id": "rule.debug-display-placeholder",
+        "title": "debug-display-placeholder",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "DebuggerDisplay attribute placeholder names no member of the decorated type (bug-patterns, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule debug-display-placeholder"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "debug-display-placeholder"
       },
       {
         "id": "rule.deep-inheritance",
