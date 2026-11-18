@@ -48,13 +48,16 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$RepoRoot = "$PSScriptRoot\..\..",
+  [string]$RepoRoot = '',
 
   # The runner used as the "slow" subject. It must (a) be enumerated by the
   # driver and (b) reliably outlive -TimeoutSec 3. Parameterised so that a
   # future retirement of this runner is a one-line fix rather than a mystery.
   [string]$SlowRunner = 'run_sleeper'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $RepoRoot) { $RepoRoot = "$PSScriptRoot\..\.." }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {

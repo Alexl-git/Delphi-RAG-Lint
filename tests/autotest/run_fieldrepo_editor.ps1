@@ -14,8 +14,11 @@
     -SkipBuild  run the exes already on disk
 #>
 [CmdletBinding()]
-param([string]$Repo = (Resolve-Path "$PSScriptRoot\..\..").Path,
+param([string]$Repo = '',
       [switch]$SkipBuild)
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Repo) { $Repo = (Resolve-Path "$PSScriptRoot\..\..").Path }
 $ErrorActionPreference = 'Stop'
 Write-Host '== field repository editor (--selftest, both builds) ==' -ForegroundColor Cyan
 $fail = 0

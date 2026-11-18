@@ -14,9 +14,12 @@
     -SkipBuild  run the exe already in -OutDir
 #>
 [CmdletBinding()]
-param([string]$Repo = (Resolve-Path "$PSScriptRoot\..\..").Path,
+param([string]$Repo = '',
       [string]$OutDir = (Join-Path $env:TEMP "drag-lint-paramarray-tests-$PID"),
       [switch]$SkipBuild)
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Repo) { $Repo = (Resolve-Path "$PSScriptRoot\..\..").Path }
 $ErrorActionPreference = 'Stop'
 Write-Host '== fieldrepo param-array tests ==' -ForegroundColor Cyan
 $bat = Join-Path $Repo 'build\_build_fieldrepo_paramarray_tests_local.bat'

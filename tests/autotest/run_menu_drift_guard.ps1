@@ -24,10 +24,13 @@
 param(
     [string] $Exe        = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
     [string] $FixtureDir = "$PSScriptRoot\..\fixtures\menutree",
-    [string] $Repo       = "$PSScriptRoot\..\..",
+    [string] $Repo       = '',
     [string] $PluginDb   = '',
     [string] $WorkDir    = "$env:TEMP\drag-lint-menu-drift-guard-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Repo) { $Repo = "$PSScriptRoot\..\.." }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
