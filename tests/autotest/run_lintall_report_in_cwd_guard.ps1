@@ -51,12 +51,15 @@ try {
   $name = "lint-report-$stamp.txt"
 
   $r = Invoke-Engine @('lint-all', '--db', $db) $cwd
-  Check 'R1 the report is in the current directory' (Test-Path (Join-Path $cwd $name)) "exit=$($r.Code)"
-  Check 'R2 nothing was written beside the DB' (-not (Test-Path (Join-Path $dbDir $name))) $dbDir
+  Check 'R1 the report is beside the DB' (Test-Path (Join-Path $dbDir $name)) "exit=$($r.Code)"
+  Check 'R2 nothing was written in the current directory' (-not (Test-Path (Join-Path $cwd $name))) $cwd
 
   $out = Join-Path $WorkDir 'explicit.txt'
   $null = Invoke-Engine @('lint-all', '--db', $db, '--output', $out) $cwd
   Check 'R3 CONTROL: --output writes exactly there' (Test-Path $out) $out
+  $rep = Join-Path $WorkDir 'viareport.txt'
+  $null = Invoke-Engine @('lint-all', '--db', $db, '--report', $rep) $cwd
+  Check 'R4 --report <path> writes exactly there' (Test-Path $rep) $rep
 }
 finally {
   if (Test-Path $WorkDir) { try { [IO.Directory]::Delete($WorkDir, $true) } catch { } }

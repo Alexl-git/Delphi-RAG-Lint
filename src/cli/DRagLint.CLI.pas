@@ -1204,7 +1204,7 @@ begin
       Inc(i);
       Result.TargetCompiler:= ParamStr(i);
     end
-    else if ((A = '--output') or (A = '--out')) and (i < ParamCount) then begin Inc(i); Result.Output:= ParamStr(i); end
+    else if ((A = '--output') or (A = '--out') or (A = '--report')) and (i < ParamCount) then begin Inc(i); Result.Output:= ParamStr(i); end
     else if (A = '--output-dir') and (i < ParamCount) then begin Inc(i); Result.OutputDir:= ParamStr(i); end
     else if A = '--include-external' then Result.IncludeExternal:= True
     else if A = '--all-sources'      then Result.AllSources     := True
@@ -21014,15 +21014,15 @@ begin
     FreeAndNil(ScopeSet);
   end;
 
-  { Resolve output path: --output, or lint-report-YYYYMMDD.txt beside --project, else in the current
-    directory. 148 IX (144 qsmall): the old "beside the DB" default wrote into a shared _D-RAG folder,
-    where every caller's run of the day overwrote the last. Guard: run_output_encoding_written_files.ps1. }
+  { Resolve output path: --output / --report, or lint-report-YYYYMMDD.txt beside --project, else beside
+    the DB. 1.52 SMALLS: the 148 IX "current directory" default littered whatever folder the caller
+    stood in (VS Code workspaces, repo roots); --report <path> is the escape hatch for a shared _D-RAG.
+    Guards: run_lintall_report_in_cwd_guard.ps1, run_output_encoding_written_files.ps1. }
   OutPath:= AArgs.Output;
   if OutPath = '' then
   begin
-    var BaseDir: string;
-    if AArgs.ProjectPath <> '' then BaseDir:= ExtractFilePath(AArgs.ProjectPath)
-    else BaseDir:= GetCurrentDir;
+    var BaseDir:= if AArgs.ProjectPath <> '' then ExtractFilePath(AArgs.ProjectPath)
+      else ExtractFilePath(ExpandFileName(ProjectDb));
     OutPath:= TPath.Combine(BaseDir, 'lint-report-' + FormatDateTime('YYYYMMDD', NowLocal) + '.txt');
   end;
 

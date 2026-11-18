@@ -1266,7 +1266,7 @@ Described in:
 Project-wide lint rule (error): a form, frame or data module whose ancestor class is declared in no project unit and not in the platform library.
 
 ```text
-drag-lint lint-all [--profile <name>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]
+drag-lint lint-all [--profile <name>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output|--report <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1323,6 +1323,7 @@ Described in:
 * [Text rules: bidi, invisible, control chars, TODO, header, strings](../../docs/wiki/text-rules.md)
 * [Typing and ownership lint rules (casts, Self as interface, destructors)](../../docs/wiki/typing-and-ownership-rules.md)
 * [CLI fixes in 1.51.1](../../docs/wiki/v1511-cli-fixes.md)
+* [member-could-be-private lint rule (lane ATLB)](../../docs/wiki/v152-atlb-rules.md)
 
 ### lint-project
 

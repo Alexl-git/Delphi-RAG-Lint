@@ -27,6 +27,12 @@ interface
 /// the project's fieldRepository key.</remarks>
 function FieldRepoCommandLine(const pExe, pVerb, pProject, pExtra: string): string;  // dl:ok unused-public-symbol@9ebf -- test seam: run_v152_TTIDE_menu.ps1 checks the command line in a console build outside the plugin index
 
+/// <summary>Prompt text that makes the VCL InputQuery mask its edit (password character).</summary>
+/// <param name="pText">The visible prompt, e.g. a label.</param>
+/// <returns>#31 followed by pText; Vcl.Dialogs.InputQuery treats a leading #31 as "mask the input" and drops it from the label.</returns>
+/// <remarks>Pure. Used for the Refresh Schema connection string, which can carry a password; the value is never echoed or logged.</remarks>
+function MaskedPrompt(const pText: string): string;  // dl:ok unused-public-symbol@9ebf -- test seam: run_v152_TTIDE_menu.ps1 checks it in a console build outside the plugin index
+
 implementation
 
 uses
@@ -49,6 +55,11 @@ const
   INFO_TIMEOUT_MS = 20000;
   REPO_STALL_MS = 300000;
   NO_PROJECT_MSG = 'drag-lint: open a project first; the field repository belongs to the active project.';
+
+function MaskedPrompt(const pText: string): string;
+begin
+  Result:= #31 + pText;
+end;
 
 function FieldRepoCommandLine(const pExe, pVerb, pProject, pExtra: string): string;
 begin
@@ -143,7 +154,7 @@ var
 begin
   if not ResolveContext(Exe, Project) then Exit;
   Connection:= '';
-  if not InputQuery('Refresh schema from database', 'Firebird connection string (read-only):', Connection) then Exit;
+  if not InputQuery('Refresh schema from database', MaskedPrompt('Firebird connection string (read-only, hidden):'), Connection) then Exit;
   Connection:= Trim(Connection);
   if (Connection = '') or Connection.Contains('"') then
   begin

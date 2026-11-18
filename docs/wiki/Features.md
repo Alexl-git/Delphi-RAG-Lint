@@ -139,7 +139,7 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**425 rules. 126 have an auto-fix. 346 are on by default.** 312 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**426 rules. 126 have an auto-fix. 346 are on by default.** 313 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
@@ -155,13 +155,13 @@ Rules, autofix, suppression markers and project-wide checks.
 | other | 16 | 4 |
 | platform | 16 | 4 |
 | policy | 6 | - |
-| project-wide | 51 | 8 |
+| project-wide | 52 | 8 |
 | refactoring | 26 | 9 |
 | resource-lifetime | 22 | 9 |
 | review-markers | 6 | 2 |
 | security | 27 | 2 |
 | structure | 17 | 9 |
-| **Total** | **425** | **126** |
+| **Total** | **426** | **126** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -203,9 +203,10 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Interfaced object set to nil (lint rule)](interfaced-object-nil-leak) | `lint-all` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
 | [Lint rules on the static type of a reference](ref-type-rules) | `lint-all` |  |
-| [Lint rules](rules) | 425 rules, 126 fixable; `rules` |  |
+| [Lint rules](rules) | 426 rules, 126 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
+| [member-could-be-private lint rule (lane ATLB)](v152-atlb-rules) | `lint-all` |  |
 | [Memory and string-pointer lint rules (PChar, raw memory, leaks, byte counts)](memory-string-pointer-rules) | `lint-all` |  |
 | [Object-model lint rules (Equals/hash, events, GUIDs, exports)](object-model-rules) | `lint-all` |  |
 | [Opaque to analysis (lint rule)](opaque-to-analysis) | `lint-all` |  |
@@ -444,7 +445,7 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [dump-refs](dump-refs) | `dump-refs` |  |
 | [Feature registry](Feature-Registry) | `tools\publish-release.ps1 -Version -DryRun`; procedure: `docs\wiki\Feature-Registry.md` |  |
 | [featuregen](featuregen) | `featuregen.exe`; `build\_build_featuregen_local.bat builds featuregen.exe from this checkout`; `tools\featuregen-gate.ps1 -Repo -Full`; procedure: `docs\wiki\featuregen.md` | internal |
-| [Field repository](field-repository) | `repo` |  |
+| [Field repository](field-repository) | drag-lint > Field Repository > Open Field Repository Editor...; drag-lint > Field Repository > Refresh Schema from Database...; drag-lint > Field Repository > Generate / Update ORM Source...; drag-lint > Field Repository > Generate DataService Units...; drag-lint > Field Repository > FDMemTable from CSV...; drag-lint > Field Repository > Param Array Assistant...; `repo` |  |
 | [info](info) | `info` |  |
 | [Library Drift Check](Library-Drift-Check) | drag-lint > Index & Maintenance > Library Drift Check...; `library-drift` |  |
 | [Maintenance](Maintenance) | procedure: `docs\wiki\Maintenance.md` |  |
