@@ -138,12 +138,12 @@ type
 /// HB_UNORDERED_EVENT_PREFIXES prefix), or is empty / unknown ('?').</summary>
 /// <param name="pEvent">The property name as the form file writes it, e.g. 'OnClick'.</param>
 /// <returns>True = a handler bound to it is never ordered.</returns>
-function HbIsUnorderedEvent(const pEvent: string): Boolean;
+function HbIsUnorderedEvent(const pEvent: string): Boolean;  // dl:ok unused-public-symbol@6826 -- REVIEWED 2026-11-17 v152 HBEVORD: HB5 contract; called by HandlersHarness.dpr (fixture, not in the project index) and by OrderOf
 
 /// <summary>True when a handler method name is one of HB_UNORDERED_HANDLER_NAMES.</summary>
 /// <param name="pName">The bare method name, e.g. 'FormCreate'.</param>
 /// <returns>True = the handler is never ordered, whatever it is bound to.</returns>
-function HbIsUnorderedHandlerName(const pName: string): Boolean;
+function HbIsUnorderedHandlerName(const pName: string): Boolean;  // dl:ok unused-public-symbol@51a2 -- REVIEWED 2026-11-17 v152 HBEVORD: HB5 contract; called by HandlersHarness.dpr (fixture, not in the project index) and by OrderOf
 
 /// <summary>The text an answer shows when a use relied on the order of pOrder: it names the handler,
 /// its bindings and the program-block statements the order hangs on, and says it is a name heuristic.</summary>
@@ -151,20 +151,21 @@ function HbIsUnorderedHandlerName(const pName: string): Boolean;
 /// <returns>One line, e.g. 'relies on handler order: hoMain.TMainForm.btnGoClick (fired by
 /// MainForm.btnGo.OnClick) runs only after the program-block prefix of HandlersOrder (Application.Run at
 /// HandlersOrder.dpr:17) -- name heuristic, OnCreate family excluded'.</returns>
-function HbReliedText(const pOrder: THbHandlerOrder): string;
+function HbReliedText(const pOrder: THbHandlerOrder): string;  // dl:ok unused-public-symbol@8e3c -- REVIEWED 2026-11-17 v152 HBEVORD: consumer is the solver hook (INT handover H-EVORD in DRagLint.Query.HappensBefore) and the harness
 
 /// <summary>The "why not SET" text of a use whose root is an ordered handler entered with the bit
 /// False: the prefix of the program does not write the target on every path.</summary>
 /// <param name="pOrder">An Ordered handler order.</param>
 /// <param name="pTarget">The target's display name (e.g. 'GLate').</param>
 /// <returns>One line naming the handler, its bindings, the program and the Application.Run statement.</returns>
-function HbPrefixMissText(const pOrder: THbHandlerOrder; const pTarget: string): string;
+function HbPrefixMissText(const pOrder: THbHandlerOrder; const pTarget: string): string;  // dl:ok unused-public-symbol@ffa6 -- REVIEWED 2026-11-17 v152 HBEVORD: consumer is the solver hook (INT handover H-EVORD in DRagLint.Query.HappensBefore)
 
 implementation
 
 uses
   System.SysUtils
 , System.Classes
+, System.Math
 , System.IOUtils
 , System.RegularExpressions
 , TreeSitter
@@ -357,7 +358,7 @@ begin
     end;
     FLines.Add(pPath, L);
   end;
-  Result:= if (pLine >= 1) and (pLine <= Length(L)) then L[pLine - 1] else '';
+  Result:= if InRange(pLine, 1, Length(L)) then L[pLine - 1] else '';
 end;
 
 function THbHandlerOrderer.ProgramFacts(pProgramBlockId: Int64): TProgramFacts;
@@ -449,7 +450,7 @@ end;
 function THbHandlerOrderer.CodeRefCount(pRoutineId: Int64; const pMethod: string): Integer;
 begin
   var Id:= IntToStr(pRoutineId);
-  var R:= FIndex.Query('SELECT (SELECT COUNT(*) FROM refs WHERE kind <> ''event-binding'' AND (symbol_id = ' + Id +
+  var R:= FIndex.Query('SELECT (SELECT COUNT(*) FROM refs WHERE kind <> ''event-binding'' AND (symbol_id = ' + Id +  // dl:ok sql-injection-concat@128b -- REVIEWED 2026-11-17 v152 HBEVORD: read-only index query; Id is an Int64 and the name goes through QuotedStr (Sq)
     ' OR (symbol_id IS NULL AND name_text = ' + Sq(pMethod) + ' COLLATE NOCASE))) + ' +
     '(SELECT COUNT(*) FROM call_edges WHERE target_symbol_id = ' + Id + ') AS n');
   try
@@ -465,7 +466,7 @@ begin
   Result:= pSite.Line > 0;
 end;
 
-function THbHandlerOrderer.OrderOf(pProgramBlockId, pRoutineId: Int64): THbHandlerOrder;
+function THbHandlerOrderer.OrderOf(pProgramBlockId, pRoutineId: Int64): THbHandlerOrder;  // dl:ok too-many-exit-points@f9e8 -- REVIEWED 2026-11-17 v152 HBEVORD: one guard clause per refusal rule of the unit header, in the documented order; the first refusal is the WhyNot
 begin
   Result:= Default(THbHandlerOrder);
   Result.RoutineId:= pRoutineId;

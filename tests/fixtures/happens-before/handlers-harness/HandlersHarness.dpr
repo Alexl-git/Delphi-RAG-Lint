@@ -23,6 +23,13 @@ uses
 , DRagLint.Query.HappensBefore.Handlers
   ;
 
+const
+  ARGS_ONE = 2;  { --event X / --name X }
+  ARGS_DB = 4;   { --db D --handler H }
+  ARG_VALUE = 2;
+  ARG_HANDLER_FLAG = 3;
+  ARG_HANDLER = 4;
+
 procedure Usage;
 begin
   Writeln(ErrOutput, 'usage: HandlersHarness --db <db> --handler <QName> | --event <Name> | --name <Name>');
@@ -62,12 +69,12 @@ end;
 function Run: Integer;
 begin
   Result:= 0;
-  if (ParamCount = 2) and SameText(ParamStr(1), '--event') then
-    Writeln(Format('event=%s unordered=%d', [ParamStr(2), Ord(HbIsUnorderedEvent(ParamStr(2)))]))
-  else if (ParamCount = 2) and SameText(ParamStr(1), '--name') then
-    Writeln(Format('name=%s unordered=%d', [ParamStr(2), Ord(HbIsUnorderedHandlerName(ParamStr(2)))]))
-  else if (ParamCount = 4) and SameText(ParamStr(1), '--db') and SameText(ParamStr(3), '--handler') then
-    PrintOrders(ParamStr(2), ParamStr(4))
+  if (ParamCount = ARGS_ONE) and SameText(ParamStr(1), '--event') then
+    Writeln(Format('event=%s unordered=%d', [ParamStr(ARG_VALUE), Ord(HbIsUnorderedEvent(ParamStr(ARG_VALUE)))]))
+  else if (ParamCount = ARGS_ONE) and SameText(ParamStr(1), '--name') then
+    Writeln(Format('name=%s unordered=%d', [ParamStr(ARG_VALUE), Ord(HbIsUnorderedHandlerName(ParamStr(ARG_VALUE)))]))
+  else if (ParamCount = ARGS_DB) and SameText(ParamStr(1), '--db') and SameText(ParamStr(ARG_HANDLER_FLAG), '--handler') then
+    PrintOrders(ParamStr(ARG_VALUE), ParamStr(ARG_HANDLER))
   else
   begin
     Usage;
