@@ -10,6 +10,7 @@ interface
 
 uses
   System.SysUtils
+  , System.IOUtils
   , System.Generics.Collections
   , DRagLint.Core.Model
   , DRagLint.V151.Api
@@ -47,19 +48,47 @@ type
 
 implementation
 
-{ The lane's helpers live in DRagLint.V152.RTTI5.Support; name it in an
-  implementation uses clause here once it declares something. }
+uses
+  DRagLint.Lint.RttiRules
+  , DRagLint.V152.RTTI5.Support
+  ;
 
-class procedure TV152RTTI5Rules.Catalog(const ADecls: TList<TV151RuleDecl>);  // dl:ok unused-parameter@93b2 -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)
+class procedure TV152RTTI5Rules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
-  { no rules yet }
+  ADecls.Add(V151Host(RTTI_UNAVAILABLE_RULE));
 end;
 
-class function TV152RTTI5Rules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@3590 -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)
+class function TV152RTTI5Rules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
 begin
   Result:= nil;
+  { rtti-unavailable is OFF by default: an explicit --rule or a config that enables it opts in. }
+  if not (SameText(ACtx.NarrowRule, RTTI_UNAVAILABLE_RULE) or ACtx.Cfg.ShouldKeep(RTTI_UNAVAILABLE_RULE, True)) then Exit;
+  if not SameText(ExtractFileExt(ACtx.Path), '.pas') or not TFile.Exists(ACtx.Path) then Exit;
+  var Text: string;
+  try
+    Text:= TFile.ReadAllText(ACtx.Path);
+  except  // dl:ok try-except-swallowed@0290 -- REVIEWED 2026-11-17 v152 RTTI5: an unreadable file is skipped, as in CollectRttiUnavailable
+    on EInOutError do Exit;
+    on EEncodingError do Exit;
+  end;
+  var Found: TArray<TAnonField>:= FindAnonymousFieldTypes(Text);
+  SetLength(Result, Length(Found));
+  for var I: Integer:= 0 to High(Found) do
+  begin
+    var F: TLintFinding:= Default(TLintFinding);
+    F.RuleId    := RTTI_UNAVAILABLE_RULE;
+    F.FileId    := ACtx.FileId;
+    F.FilePath  := ACtx.Path;
+    F.StartLine := Found[I].Line;
+    F.StartCol  := Found[I].Col;
+    F.EndLine   := Found[I].Line;
+    F.EndCol    := Found[I].Col;
+    F.Severity  := 'warning';
+    F.SymbolName:= Found[I].ClassName + '.' + Found[I].Names;
+    F.Message   := AnonymousFieldMessage(Found[I]);
+    Result[I]:= F;
+  end;
 end;
-
 class function TV152RTTI5Rules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@c90d -- REVIEWED 2026-11-17 v152 FRAME: fixed TV151 frame hook signature; the lane stub has no rule yet (the owning lane drops this marker once it reads the parameter)
 begin
   Result:= nil;
