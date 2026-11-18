@@ -354,6 +354,7 @@ type
       /// <param name="ASource"><!-- drag-lint:auto type -->const TBytes</param>
       /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AOracle">Optional (O2): static facts for #declared-type?, #oracle-via? and #enclosing-class-descends?. nil asks TQueryTypeOracleScope.Current; none = the rule decides as before.</param>
+      /// <param name="AColSource">Optional (1.52 BK-TAILS-ENG): the UTF-8 bytes BEFORE the preprocessor blanked inactive branches, same length as ASource; finding columns are counted on it, because a blanked non-ASCII character is one space per BYTE. nil = ASource.</param>
       /// <returns><!-- drag-lint:auto -->TArray&lt;TLintFinding&gt; -- Observed:
       /// FoundList.ToArray.</returns>
       /// <remarks>
@@ -370,7 +371,7 @@ type
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.AttachFix"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      function Run(const ARootNode: TTSNode; const ASource: TBytes; const AFilePath: string; const AOracle: ITypeOracle = nil): TArray<TLintFinding>;
+      function Run(const ARootNode: TTSNode; const ASource: TBytes; const AFilePath: string; const AOracle: ITypeOracle = nil; const AColSource: TBytes = nil): TArray<TLintFinding>;
       /// <summary>A literal the FILE TEXT must contain for this rule's query to
       /// be capable of matching -- a cheap pre-filter the caller may use to skip
       /// running the query at all. '' when no such literal could be proven.</summary>
@@ -2305,7 +2306,7 @@ begin
   end; // try
 end; // function
 
-function TQueryRule.Run(const ARootNode: TTSNode; const ASource: TBytes; const AFilePath: string; const AOracle: ITypeOracle): TArray<TLintFinding>;
+function TQueryRule.Run(const ARootNode: TTSNode; const ASource: TBytes; const AFilePath: string; const AOracle: ITypeOracle; const AColSource: TBytes): TArray<TLintFinding>;
 var
   Cursor     : TTSQueryCursor      ;
   Match      : TTSQueryMatch       ;
@@ -2322,7 +2323,9 @@ var
   ProfT0     : Int64               ;
   Profiled   : Boolean             ;
   DeclCache  : TDeclScopeCache     ; { X-23: #declared-type? scope tables, this tree only }
+  ColSrc     : TBytes              ; { 1.52 BK-TAILS-ENG: the bytes finding columns are counted on }
 begin
+  ColSrc:= if Length(AColSource) = Length(ASource) then AColSource else ASource;
   { P3 MEASUREMENT. Off unless DRAGLINT_PROFILE is set -- see QueryRuleTimings.
     try/finally rather than a tail call: several Exit paths below would otherwise
     drop the sample, and a per-rule table that silently omits its cheapest-
@@ -2382,9 +2385,9 @@ begin
         Finding.FilePath:= AFilePath;
         Finding.Message := FMessage;
         Finding.StartLine:= Integer(Picked.StartPoint.row   ) + 1;
-        Finding.StartCol := Utf8ByteColToCharCol(ASource, Picked.StartByte, Picked.StartPoint.column) + 1; { 1.52 BK-COLS2: character column }
+        Finding.StartCol := Utf8ByteColToCharCol(ColSrc, Picked.StartByte, Picked.StartPoint.column) + 1; { 1.52 BK-COLS2: character column }
         Finding.EndLine  := Integer(Picked.EndPoint  .row   ) + 1;
-        Finding.EndCol   := Utf8ByteColToCharCol(ASource, Picked.EndByte, Picked.EndPoint.column) + 1;
+        Finding.EndCol   := Utf8ByteColToCharCol(ColSrc, Picked.EndByte, Picked.EndPoint.column) + 1;
         if (Length(FFixes) > 0) and not AttachFix(Finding, Captures, ASource) then Continue;
         FoundList.Add(Finding);
       end; // while

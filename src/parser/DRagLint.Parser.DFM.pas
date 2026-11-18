@@ -846,8 +846,10 @@ begin
 end; // function
 
 /// <summary>Walks the parse tree collecting ERROR/MISSING node positions into ADiags (max AMaxErrors).</summary>
-/// <remarks>Only recurses into subtrees where HasError is set; exits early once the cap is reached.</remarks>
-procedure CollectParseErrors(const ARoot: TTSNode; const AFilePath: string; var ADiags: TArray<string>; AMaxErrors, ADepth: Integer);
+/// <remarks>Only recurses into subtrees where HasError is set; exits early once the cap is reached.
+/// The column is a CHARACTER (UTF-16) column, like every other .dfm column since 1.52 BK-COLS2
+/// (BK-TAILS-ENG: this message still printed the tree-sitter byte column).</remarks>
+procedure CollectParseErrors(const ARoot: TTSNode; const ASource: TBytes; const AFilePath: string; var ADiags: TArray<string>; AMaxErrors, ADepth: Integer);
 var
   ChildIdx: Integer;
   Child   : TTSNode;
@@ -859,7 +861,7 @@ begin
   if ARoot.IsError or ARoot.IsMissing then
   begin
     Pt:= ARoot.StartPoint;
-    ADiags:= ADiags + [Format('%s(%d,%d): parse error [%s]', [AFilePath, Integer(Pt.row) + 1, Integer(Pt.column) + 1, ARoot.NodeType])];
+    ADiags:= ADiags + [Format('%s(%d,%d): parse error [%s]', [AFilePath, Integer(Pt.row) + 1, Utf8ByteColToCharCol(ASource, ARoot.StartByte, Pt.column) + 1, ARoot.NodeType])];
     Exit; { don't descend into ERROR node's children - they are noise }
   end;
   if ARoot.HasError then
@@ -867,7 +869,7 @@ begin
     begin
       if Length(ADiags) >= AMaxErrors then Break;
       Child:= ARoot.Child(ChildIdx);
-      CollectParseErrors(Child, AFilePath, ADiags, AMaxErrors, ADepth + 1);
+      CollectParseErrors(Child, ASource, AFilePath, ADiags, AMaxErrors, ADepth + 1);
     end;
 end;
 
@@ -915,7 +917,7 @@ begin
     Tree:= ParseDfmSource(Parser, Source);
     State:= TDfmState.Create(Source);
     Root:= Tree.RootNode;
-    if Root.HasError then CollectParseErrors(Root, AFilePath, Result.Diagnostics, MaxParseDiagnostics, 0);
+    if Root.HasError then CollectParseErrors(Root, Source, AFilePath, Result.Diagnostics, MaxParseDiagnostics, 0);
     // source_file -> [object ...]. Top-level objects are forms.
     for i:= 0 to Root.NamedChildCount - 1 do
     begin
