@@ -120,7 +120,9 @@ type
   /// does today.</remarks>
   TDescent = (
     /// <summary>Not decidable: no such type, a homonym that disagrees, an unresolved or generic
-    /// ancestor with no library index, or not a class or interface.</summary>
+    /// ancestor with no library index, or not a class or interface. Also an ancestor that is
+    /// absent only because the ancestry passes through a library homonym (two TFrame classes):
+    /// one of them may still descend from it.</summary>
     tdUnknown,
     /// <summary>The whole ancestry was followed and the ancestor is not in it.</summary>
     tdNo,
@@ -135,7 +137,9 @@ type
 /// <param name="AAncestorLeaf">The ancestor's name, leaf only. Case-insensitive. The type itself counts.</param>
 /// <returns>tdYes, tdNo or tdUnknown; see TDescent. Needs no ref_types table, only type_ancestors.</returns>
 /// <remarks>Homonyms are intersected as in the unit comment: they can turn tdYes into tdUnknown,
-/// never create one. One call builds its own caches; use TExprTypeReader.Descends in a loop.</remarks>
+/// never create one. A homonym anywhere in the ancestry (the type itself or a library base it
+/// passes through) answers tdYes only when EVERY candidate declaration descends from the ancestor,
+/// and never tdNo. One call builds its own caches; use TExprTypeReader.Descends in a loop.</remarks>
 function TypeDescendsFrom(const AStore, ALibStore: ISymbolStore; const ATypeLeaf, AAncestorLeaf: string): TDescent;
 
 type
@@ -365,6 +369,10 @@ type
     SymbolId  : Int64;
     /// <summary>The name stands for several types, so it identifies none of them.</summary>
     Homonym   : Boolean;
+    /// <summary>Some ancestor was followed through a library homonym, so Closure is the
+    /// intersection of several ancestries: an ancestor missing from it may still be an ancestor
+    /// of the declaration the compiler picks. Proves presence, never absence (v152 FPS).</summary>
+    HomonymBase: Boolean;
     /// <summary>Declared `class sealed`; of a homonym, every one of them.</summary>
     Sealed    : Boolean;
     function HasAncestor(const ALeaf: string): Boolean;
@@ -760,6 +768,7 @@ begin
         Continue;
       end;
       if not Lib.Complete then Result:= False;
+      if Lib.Homonym or Lib.HomonymBase then AFacts.HomonymBase:= True;
       for var N: string in Lib.Closure do
         if not Names.Contains(N) then Names.Add(N);
     end;
@@ -807,6 +816,7 @@ begin
     Result.IsIntf  := Result.IsIntf and One.IsIntf;
     Result.Sealed  := Result.Sealed and One.Sealed;
     Result.Complete:= Result.Complete and One.Complete;
+    Result.HomonymBase:= Result.HomonymBase or One.HomonymBase;
     var Keep: TArray<string>:= nil;
     for var N: string in Result.Closure do
       if One.HasAncestor(N) then Keep:= Keep + [N];
@@ -1978,7 +1988,9 @@ begin
   var F: TTypeFacts:= FactsOfName(ATypeLeaf);
   if (not F.Known) or not (F.IsClass or F.IsIntf) then Exit;
   if F.HasAncestor(LeafOf(AAncestorLeaf).ToLower) then Exit(tdYes);
-  if F.Complete and not F.Homonym then Result:= tdNo;
+  { v152 FPS: an intersected closure (a homonym here or below) proves presence only; absence of the
+    ancestor from it says nothing about the declaration the compiler picks. }
+  if F.Complete and not F.Homonym and not F.HomonymBase then Result:= tdNo;
 end;
 
 constructor TExprTypeReader.Create(const AStore, ALibStore: ISymbolStore; AFileId: Int64; const ASrc: TBytes);

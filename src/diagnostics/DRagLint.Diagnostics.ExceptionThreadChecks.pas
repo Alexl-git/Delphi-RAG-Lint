@@ -341,9 +341,9 @@ var
     assigned to a variable the same routine later observes -- the exception then surfaces in the caller. }
   function TaskObserved(const ACall: TTSNode): Boolean;
   var
-    Par: TTSNode;
+    Par, Lhs, Kid: TTSNode;
     CallTxt, ParTxt, Target: string;
-    K: Integer;
+    I, K: Integer;
   begin
     Result:= False;
     Par:= ACall.Parent;
@@ -354,7 +354,17 @@ var
       Result:= StartsText(CallTxt + '.wait', ParTxt) or StartsText(CallTxt + '.result', ParTxt)
     else if Par.NodeType = 'assignment' then
     begin
-      Target:= Canon(NodeStr(Par.ChildByField('lhs')));
+      Lhs:= Par.ChildByField('lhs');
+      { v152 FPS: an inline `var T[: ITask] := TTask.Run(..)` parses as varAssignDef(kVar, identifier[, type]);
+        the task variable is its first identifier, not the whole "var t" text. }
+      if (not Lhs.IsNull) and (Lhs.NodeType = 'varAssignDef') then
+      begin
+        Kid:= Lhs.ChildByField('name');
+        for I:= 0 to Lhs.NamedChildCount - 1 do
+          if Kid.IsNull and (Lhs.NamedChild(I).NodeType = 'identifier') then Kid:= Lhs.NamedChild(I);
+        Lhs:= Kid;
+      end;
+      Target:= if Lhs.IsNull then '' else Canon(NodeStr(Lhs));
       K:= Target.IndexOf('[');
       if K >= 0 then Target:= Copy(Target, 1, K);
       Result:= (Target <> '') and TargetObserved(Par, Target);
