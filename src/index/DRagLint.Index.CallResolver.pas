@@ -1044,7 +1044,9 @@ type
     /// <param name="ASite">FileId, EnclosingSymbolId, StartLine and StartCol are consulted.</param>
     /// <param name="AName">A bare identifier.</param>
     /// <param name="AIterating">See ValueDeclaredText.</param>
-    /// <returns>See CollectionElementOfText; '' when AName is not such a value.</returns>
+    /// <returns>See CollectionElementOfText; '' when AName is not such a value. For a subscript (not
+    /// AIterating) of a library TDictionary / TObjectDictionary / IDictionary, the VALUE type
+    /// (LibraryIndexedElementText; 1.52 BK-TAILS-ENG).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.DecideInlineInitType (DRagLint.Index.CallResolver.pas)</para>
@@ -10872,8 +10874,17 @@ var
   Decl: TSymbol;
 begin
   Result:= ValueDeclaredText(ASite, AName, AIterating, Decl);
-  if Result <> '' then
-    Result:= CollectionElementOfText(Result, Decl.FileId, Decl.ParentId, ASite.FileId, ASite.EnclosingSymbolId);
+  if Result = '' then Exit;
+  var Declared: string:= Result;
+  Result:= CollectionElementOfText(Declared, Decl.FileId, Decl.ParentId, ASite.FileId, ASite.EnclosingSymbolId);
+  { 1.52 BK-TAILS-ENG (HBFIX gap): `X[K]` on a TDictionary / TObjectDictionary / Spring IDictionary
+    subscripts to its VALUE type -- iterating one yields pairs, so only the subscript path asks. }
+  if (Result = '') and not AIterating then
+  begin
+    var Element: string:= LibraryIndexedElementText(Declared, Decl.FileId);
+    if (Element <> '') and TypeTextSameAt(Element, Decl.FileId, Decl.ParentId, ASite.FileId, ASite.EnclosingSymbolId) then
+      Result:= Element;
+  end;
 end;
 
 function TCallResolver.LibraryListElementText(const AText: string; AFileId: Int64): string;

@@ -64,7 +64,8 @@ type
   /// `.dproj` compile closure). The run's own store is excluded. A header-named project
   /// whose index is missing, will not open or is not fresh makes every verdict on P
   /// svUndecided; a manifest section that will not open is ignored (nothing says it lists
-  /// P). LAZY: nothing is opened until the first Judge; the listing set, the self test and
+  /// P). A `.groupproj` peer with no index whose project file lists P (AddDiscoveredPeers) makes
+  /// every verdict on P svUndecided too (1.52 BK-TAILS-ENG). LAZY: nothing is opened until the first Judge; the listing set, the self test and
   /// the freshness probe are cached per path / per project for the object's life.
   /// Not thread-safe; one per lint run.
   /// <!-- drag-lint:auto BEGIN -->
@@ -254,6 +255,9 @@ function IsUndecidedSite(const AFile: string; ALine: Integer; const ARule: strin
 /// candidate is only a candidate: TSharedScope still keeps a peer only when its index holds
 /// the unit's file, and judges only a fresh one. Reads directory listings and `.groupproj`
 /// text; opens no store. Exceptions from the file system are swallowed per entry.
+/// 1.52 BK-TAILS-ENG: a `.groupproj` peer whose index file does NOT exist is recorded as unindexed
+/// (its `.dproj` DCCReference entries and `.dpr` / `.dpk` `in '...'` paths are read); TSharedScope.Judge
+/// then answers svUndecided for every unit it lists and writes one stderr line per such peer.
 /// </remarks>
 procedure AddDiscoveredPeers(const APrimaryDb, AProjectPath: string; AIsCopy: Boolean;
   const ANameToDb: TDictionary<string, string>);
@@ -264,10 +268,16 @@ uses
   System.IOUtils,
   System.RegularExpressions,
   DRagLint.Lint.SharedUnit,  { TSharedUnit.ProjectsOf -- the header-declared projects }
+  DRagLint.Lint.ProjectChecks.Parse,  { ReadDCCReferences / FindSiblingProgramFile -- what an unindexed peer lists }
   DRagLint.Index.Freshness;  { ProbeIndexFreshness -- a stale sibling proves nothing }
 
 var
   GUndecided: TDictionary<string, Boolean>;
+  { 1.52 BK-TAILS-ENG: lowercased full unit path -> the .dproj of a .groupproj peer that LISTS the unit
+    but has no index; rebuilt by every AddDiscoveredPeers. }
+  GUnindexedPeerOf: TDictionary<string, string>;
+  { lowercased .dproj -> its info line was written (once per process) }
+  GPeerAnnounced: TDictionary<string, Boolean>;
 
 function SiteKey(const AFile: string; ALine: Integer; const ARule: string): string;
 var
@@ -313,6 +323,70 @@ begin
   ANameToDb.AddOrSetValue(LowerCase(AName), ADb);
 end;
 
+{ 1.52 BK-TAILS-ENG: records every unit the unindexed peer ADproj LISTS -- its .dproj DCCReference entries
+  and its .dpr / .dpk `in '...'` paths -- so TSharedScope reads a verdict on such a unit as undecidable.
+  A unit the peer reaches only through its search path is not seen (no index, no closure). }
+procedure NoteUnindexedPeer(const ADproj: string);
+var
+  Dir : string;
+  Refs: TArray<string>;
+  Prog: string;
+begin
+  Dir:= ExtractFilePath(ADproj);
+  Prog:= '';
+  try
+    Refs:= ReadDCCReferences(ADproj);
+    var ProgFile: string:= FindSiblingProgramFile(ADproj);
+    if ProgFile <> '' then Prog:= StripPasCommentsKeepLayout(TFile.ReadAllText(ProgFile));
+  except  // dl:ok try-except-swallowed@2bb3 -- an unreadable peer project lists nothing; the run judges as before
+    on E: Exception do Exit;
+  end;
+  for var M: TMatch in TRegEx.Matches(Prog, '\bin\s+''([^'']+)''', [roIgnoreCase]) do
+    Refs:= Refs + [M.Groups[1].Value];
+  TMonitor.Enter(GUnindexedPeerOf);
+  try
+    for var Ref: string in Refs do
+    begin
+      var Full: string:= LowerCase(ExpandFileName(TPath.Combine(Dir, Ref)));
+      if not GUnindexedPeerOf.ContainsKey(Full) then GUnindexedPeerOf.Add(Full, ADproj);
+    end;
+  finally
+    TMonitor.Exit(GUnindexedPeerOf);
+  end;
+end;
+
+{ The .dproj of an unindexed peer that lists APath; '' when none does. }
+function UnindexedPeerListing(const APath: string): string;
+begin
+  TMonitor.Enter(GUnindexedPeerOf);
+  try
+    if not GUnindexedPeerOf.TryGetValue(LowerCase(ExpandFileName(StringReplace(APath, '/', '\', [rfReplaceAll]))), Result) then Result:= '';
+  finally
+    TMonitor.Exit(GUnindexedPeerOf);
+  end;
+end;
+
+{ One stderr line per unindexed peer per process: which project could not be asked and how to fix it.
+  Console processes only -- a GUI host has no ErrOutput to write to. }
+procedure AnnounceUnindexedPeer(const ADproj: string);
+begin
+  TMonitor.Enter(GPeerAnnounced);
+  try
+    if GPeerAnnounced.ContainsKey(LowerCase(ADproj)) then Exit;
+    GPeerAnnounced.Add(LowerCase(ADproj), True);
+  finally
+    TMonitor.Exit(GPeerAnnounced);
+  end;
+  if not IsConsole then Exit;
+  try
+    Writeln(ErrOutput, Format('drag-lint: cross-project: project %s (%s) lists units of this run but has no index -- ' +
+      'unused-global / unused-public / member-could-be-private findings on those units are withheld as undecidable. ' +
+      'Index it: drag-lint index --project "%s"', [ChangeFileExt(ExtractFileName(ADproj), ''), ADproj, ADproj]));
+  except  // dl:ok try-except-swallowed@2bb3 -- an info line that cannot be written must not fail the lint run
+    on E: Exception do Exit;
+  end;
+end;
+
 procedure AddGroupPeers(const AGroupProj, AOwnBase, APrimary: string;
   const ANameToDb: TDictionary<string, string>);
 var
@@ -330,7 +404,12 @@ begin
     var Base: string:= ChangeFileExt(ExtractFileName(Peer), '');
     if SameText(Base, AOwnBase) then Continue;
     var Db: string:= TPath.Combine(TPath.Combine(ExtractFilePath(Peer), DRAG_DIR), Base + '.sqlite');
-    if SameText(Db, APrimary) or not TFile.Exists(Db) then Continue;
+    if SameText(Db, APrimary) then Continue;
+    if not TFile.Exists(Db) then
+    begin
+      NoteUnindexedPeer(Peer);  { 1.52 BK-TAILS-ENG: no index to ask -- its units are undecidable }
+      Continue;
+    end;
     AddPeer(ANameToDb, Base, Db);
   end;
 end;
@@ -351,6 +430,12 @@ var
   Primary, DbDir, Dir, OwnBase: string;
   InDRag: Boolean;
 begin
+  TMonitor.Enter(GUnindexedPeerOf);  { 1.52 BK-TAILS-ENG: this run's unindexed peers only }
+  try
+    GUnindexedPeerOf.Clear;
+  finally
+    TMonitor.Exit(GUnindexedPeerOf);
+  end;
   Primary:= if APrimaryDb = '' then '' else ExpandFileName(APrimaryDb);
   DbDir  := if Primary = '' then '' else ExcludeTrailingPathDelimiter(ExtractFilePath(Primary));
   InDRag := (DbDir <> '') and SameText(ExtractFileName(DbDir), DRAG_DIR);
@@ -487,6 +572,17 @@ begin
       if (FStore <> nil) and SameText(St.GetMetaValue(META_PROJECT_TAG), FStore.GetMetaValue(META_PROJECT_TAG)) then Continue;
       Names.Add(Trim(N));
     end;
+    { 3. 1.52 BK-TAILS-ENG: a .groupproj peer that lists the unit but has no index cannot be asked -- as
+      undecidable as a header-named project whose index is missing (AddDiscoveredPeers records them). }
+    if Why = '' then
+    begin
+      var Peer: string:= UnindexedPeerListing(APath);
+      if Peer <> '' then
+      begin
+        Why:= Format('project %s lists the unit but has no index (%s)', [ChangeFileExt(ExtractFileName(Peer), ''), Peer]);
+        AnnounceUnindexedPeer(Peer);
+      end;
+    end;
     FListing.AddOrSetValue(LowerCase(APath), Names.ToArray);
     FWhyNot.AddOrSetValue(LowerCase(APath), Why);
   finally
@@ -528,8 +624,12 @@ end;
 
 initialization
   GUndecided:= TDictionary<string, Boolean>.Create;
+  GUnindexedPeerOf:= TDictionary<string, string>.Create;
+  GPeerAnnounced:= TDictionary<string, Boolean>.Create;
 
 finalization
+  GPeerAnnounced.Free;
+  GUnindexedPeerOf.Free;
   GUndecided.Free;
 
 end.

@@ -156,6 +156,9 @@ end;
 
 procedure TxtScanChars(const AUtf8: TBytes; AHadUtf8Bom: Boolean; const AFilePath: string;
   const AWants: TTXTCharWants; AOut: TList<TLintFinding>);
+const
+  MAX_BMP_CODE_POINT   = $FFFF; { above it a code point is a surrogate pair in a string }
+  SURROGATE_PAIR_UNITS = 2;
 var
   I, Len, Cp, Line, Col, NCtl, NBidi, NInv: Integer;
 begin
@@ -205,8 +208,9 @@ begin
         Inc(NInv);
       end;
     end;
-    { column counts code points: a continuation byte never starts one }
-    Inc(Col);
+    { column counts UTF-16 units (the character column every finding reports; 1.52 BK-TAILS-ENG):
+      a code point outside the BMP is a surrogate pair, two units; a continuation byte starts none }
+    Inc(Col, if Cp > MAX_BMP_CODE_POINT then SURROGATE_PAIR_UNITS else 1);
     Inc(I, Len);
   end;
 end;

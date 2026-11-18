@@ -119,6 +119,7 @@ type
       /// <param name="ANode"><!-- drag-lint:auto type -->const TTSNode</param>
       /// <param name="ASource"><!-- drag-lint:auto type -->const TBytes</param>
       /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AColSource">1.52 BK-TAILS-ENG: the bytes before preprocessing (same length as ASource); the site column is counted on them, so it matches the raise-bare-exception finding's column.</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.HarvestExceptions (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.HarvestFile (DRagLint.Lint.Linter.pas)</para>
@@ -133,7 +134,7 @@ type
       /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      procedure HarvestExceptions(const ANode: TTSNode; const ASource: TBytes; const AFilePath: string);
+      procedure HarvestExceptions(const ANode: TTSNode; const ASource, AColSource: TBytes; const AFilePath: string);
       /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto type -->TArray&lt;TLintFinding&gt;</returns>
       /// <remarks>
@@ -484,8 +485,9 @@ begin
   for I:= 0 to ANode.NamedChildCount - 1 do CollectFieldByNameCalls(ANode.NamedChild(I), ASource, ACalls);
 end; // procedure
 
-{ One finding for the whole loop, naming the fields to hoist. }
-procedure EmitFieldByNameLoopFinding(const ALoop: TTSNode; const ASource: TBytes; const AFilePath: string; AFindings: TList<TLintFinding>);
+{ One finding for the whole loop, naming the fields to hoist. Its columns are counted on AColSource, the
+  bytes before the preprocessor blanked inactive branches (1.52 BK-TAILS-ENG). }
+procedure EmitFieldByNameLoopFinding(const ALoop: TTSNode; const ASource, AColSource: TBytes; const AFilePath: string; AFindings: TList<TLintFinding>);
 const
   MAX_NAMES_LISTED = 6;
 var
@@ -537,9 +539,9 @@ begin
     Finding.Message := Format('FieldByName() called %d time(s) inside this loop%s -- cache the TField reference(s) ' + 'in locals before the loop and reuse them', [Calls.Count, Detail]);
     Finding.FilePath := AFilePath;
     Finding.StartLine:= Integer(Anchor.StartPoint.row   ) + 1;
-    Finding.StartCol := Utf8ByteColToCharCol(ASource, Anchor.StartByte, Anchor.StartPoint.column) + 1; { 1.52 BK-COLS2: character column }
+    Finding.StartCol := Utf8ByteColToCharCol(AColSource, Anchor.StartByte, Anchor.StartPoint.column) + 1; { 1.52 BK-COLS2: character column }
     Finding.EndLine  := Integer(Anchor.EndPoint  .row   ) + 1;
-    Finding.EndCol   := Utf8ByteColToCharCol(ASource, Anchor.EndByte, Anchor.EndPoint.column) + 1;
+    Finding.EndCol   := Utf8ByteColToCharCol(AColSource, Anchor.EndByte, Anchor.EndPoint.column) + 1;
     AFindings.Add(Finding);
   finally
     Names.Free;
@@ -639,7 +641,7 @@ begin
   Result:= StringReplace(Result, '''''', '''', [rfReplaceAll]);
 end;
 
-procedure WalkForFieldByNameInLoop(const ANode: TTSNode; const ASource: TBytes; const AFilePath: string; AFindings: TList<TLintFinding>);
+procedure WalkForFieldByNameInLoop(const ANode: TTSNode; const ASource, AColSource: TBytes; const AFilePath: string; AFindings: TList<TLintFinding>);
 var
   NT: string ;
   I : Integer;
@@ -648,10 +650,10 @@ begin
   NT:= ANode.NodeType;
   if (NT = 'while') or (NT = 'for') or (NT = 'repeat') then
   begin
-    EmitFieldByNameLoopFinding(ANode, ASource, AFilePath, AFindings);
+    EmitFieldByNameLoopFinding(ANode, ASource, AColSource, AFilePath, AFindings);
     Exit;
   end;
-  for I:= 0 to ANode.NamedChildCount - 1 do WalkForFieldByNameInLoop(ANode.NamedChild(I), ASource, AFilePath, AFindings);
+  for I:= 0 to ANode.NamedChildCount - 1 do WalkForFieldByNameInLoop(ANode.NamedChild(I), ASource, AColSource, AFilePath, AFindings);
 end; // procedure
 
 // v0.57: DFM files are parsed with the dedicated tree-sitter DFM grammar
@@ -919,6 +921,10 @@ begin
       Exit(Findings.ToArray);
     end;
     Source:= EnsureUtf8Bytes(RawBytes);
+    { 1.52 BK-TAILS-ENG: the preprocess below blanks an inactive branch to one space per BYTE, so a
+      non-ASCII character in it would count as two or three columns. Finding columns are counted on
+      these bytes instead (same length -- the offsets agree). }
+    var ColSource: TBytes:= Source;
     { Same preprocessing the AST checks now get, through the SAME call, so the
       two lint entry points cannot drift into disagreeing about which branches
       are live. TLinter builds its own parser (see the note below), which is
@@ -975,11 +981,11 @@ begin
     end
     else
     begin
-      if Wants('field-by-name-in-loop') then WalkForFieldByNameInLoop(Tree.RootNode, Source, AFilePath, Findings);
+      if Wants('field-by-name-in-loop') then WalkForFieldByNameInLoop(Tree.RootNode, Source, ColSource, AFilePath, Findings);
       { Rides the parse above rather than adding one. Returns immediately when
         the project has not opted in; its only consumer is the
         raise-bare-exception enrichment. }
-      if (FExcUnit <> '') and Wants('raise-bare-exception') then HarvestExceptions(Tree.RootNode, Source, AFilePath);
+      if (FExcUnit <> '') and Wants('raise-bare-exception') then HarvestExceptions(Tree.RootNode, Source, ColSource, AFilePath);
       // External *.scm rules
       var R: TQueryRule;
       { LITERAL PRE-FILTER -- see TQueryRule.RequiredText.
@@ -1021,7 +1027,7 @@ begin
             if LowerSrc.Contains(Needle) then begin InScope:= True; Break; end;
           if not InScope then Continue;
         end;
-        var QFindings:= R.Run(Tree.RootNode, Source, AFilePath);
+        var QFindings:= R.Run(Tree.RootNode, Source, AFilePath, nil, ColSource);
         var F: TLintFinding;
         for F in QFindings do
         begin
@@ -1085,6 +1091,7 @@ begin
   try
     try
       Source:= EnsureUtf8Bytes(TFile.ReadAllBytes(AFilePath));
+      var ColSource: TBytes:= Source; { 1.52 BK-TAILS-ENG: columns are counted before blanking }
       Source:= TAstParseCache.ApplyPreprocess(Source, AFilePath);
       Parser:= TTSParser.Create;
       Parser.Language:= FLanguage;
@@ -1098,7 +1105,7 @@ begin
           Move(Source[AByteIndex], Result[0], Remaining);
           ABytesRead:= Remaining;
         end, TTSInputEncoding.TSInputEncodingUTF8);
-      if Tree <> nil then HarvestExceptions(Tree.RootNode, Source, AFilePath);
+      if Tree <> nil then HarvestExceptions(Tree.RootNode, Source, ColSource, AFilePath);
     except
       { see the remark above -- best-effort, never fatal }
     end;
@@ -1108,7 +1115,7 @@ begin
   end;
 end;
 
-procedure TLinter.HarvestExceptions(const ANode: TTSNode; const ASource: TBytes; const AFilePath: string);
+procedure TLinter.HarvestExceptions(const ANode: TTSNode; const ASource, AColSource: TBytes; const AFilePath: string);
 
   function FirstLiteralString(const N: TTSNode): string;
   var
@@ -1153,7 +1160,7 @@ begin
               `raise` node, so this is that node's own start. }
             Site.FilePath:= AFilePath;
             Site.Line    := Integer(ANode.StartPoint.row   ) + 1;
-            Site.Col     := Utf8ByteColToCharCol(ASource, ANode.StartByte, ANode.StartPoint.column) + 1; { 1.52 BK-COLS2: character column }
+            Site.Col     := Utf8ByteColToCharCol(AColSource, ANode.StartByte, ANode.StartPoint.column) + 1; { 1.52 BK-COLS2: character column, counted before blanking (BK-TAILS-ENG) }
             Site.Msg     := Msg;
             Site.Raw     := UnquotePascalString(FirstLiteralString(Args));
             FExcSites:= FExcSites + [Site];
@@ -1169,7 +1176,7 @@ begin
     end;
   end;
   for I:= 0 to ANode.NamedChildCount - 1 do
-    HarvestExceptions(ANode.NamedChild(I), ASource, AFilePath);
+    HarvestExceptions(ANode.NamedChild(I), ASource, AColSource, AFilePath);
 end;
 
 procedure TLinter.EnrichExceptionFindings(var AFindings: TArray<TLintFinding>);
