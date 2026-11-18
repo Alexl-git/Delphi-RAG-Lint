@@ -3,7 +3,8 @@ unit DRagLint.Query.HappensBefore.Events;
 { drag-lint 1.52 -- lane HBEVENTS: the events of check-init (spec 5.1, rulings HB2 + HB4).
 
   For one target (unit variable, class var or instance field) this unit collects
-    * WRITERS: every site that writes it, with `how` (assign, assign-nil, var-arg, out-arg,
+    * WRITERS: every site that writes it (a `write` ref, or a member access in write mode:
+      `Other.F := x`, `TC.ClassVar := x`, `UnitName.GVar := x` -- INT H-F1), with `how` (assign, assign-nil, var-arg, out-arg,
       create-into, dfm-stream) and the soft writers (unresolved, with-opaque, address-of);
       each row carries its enclosing routine and, for a DFM-bound handler, `fired_by`
       (Form.Control.Event), else the routine's callers (count + top 3);
@@ -58,12 +59,13 @@ type
 /// file:line); a target that is not a unit variable, class var or instance field (local, parameter,
 /// record field, property, constant: one-line reason); --at naming no variable, several, or a
 /// different one than pTarget.</exception>
-/// <remarks>Read-only. `:= nil` and `FreeAndNil(T)` are how = assign-nil and never count (HB4: nil
+/// <remarks>Read-only. A member access in write mode (`Other.F := x`, `TC.ClassVar := x`,
+/// `UnitName.GVar := x`) is a writer, never a use. `:= nil` and `FreeAndNil(T)` are how = assign-nil and never count (HB4: nil
 /// is the zero value of every type that accepts it). A var / out argument counts (as dcc's W1036
 /// does); the parameter mode comes from the callee's signature through the data_flows `arg` row,
 /// or from a list of RTL intrinsics for an unresolved callee; any other unresolved callee is a
 /// soft writer. A DFM-bound handler gets FiredBy (all bindings, ', '-joined) and CallerCount 0.</remarks>
-function CollectEvents(const pIndex: TChartsIndex; const pTarget: string; const pAt: THbSite): THbEvents;  // dl:ok unused-public-symbol@b4a7 -- REVIEWED 2026-11-17 v152 HBEVENTS: check-init events API; callers land with HBSOLVER / HBFIELDS (today only the events harness, outside the project)
+function CollectEvents(const pIndex: TChartsIndex; const pTarget: string; const pAt: THbSite): THbEvents;
 
 /// <summary>Whether the events allow the verdict NEVER-SET (spec 6.2, the parts the events decide).</summary>
 /// <param name="pEvents">CollectEvents' result.</param>
@@ -72,7 +74,7 @@ function CollectEvents(const pIndex: TChartsIndex; const pTarget: string; const 
 /// when the answer is True or a counting writer exists.</param>
 /// <returns>True when no writer of any kind exists and the target is neither published nor an
 /// overlay. Index completeness is the solver's check, not this one.</returns>
-function HbIsNeverSet(const pEvents: THbEvents; out pBlockers: TArray<THbReason>): Boolean;  // dl:ok unused-public-symbol@44db -- REVIEWED 2026-11-17 v152 HBEVENTS: check-init events API; callers land with HBSOLVER / HBFIELDS (today only the events harness, outside the project)
+function HbIsNeverSet(const pEvents: THbEvents; out pBlockers: TArray<THbReason>): Boolean;
 
 implementation
 
@@ -150,6 +152,10 @@ type
   end;
 
 const
+  { INT H-F1: ref `r` is a member access that WRITES its member (`Other.F := x`, `TC.ClassVar := x`,
+    `UnitName.GVar := x`): a writer row, never a use. }
+  MEMBER_WRITE_SQL = 'EXISTS (SELECT 1 FROM member_accesses m WHERE m.ref_id = r.id ' +
+    'AND m.member_symbol_id = r.symbol_id AND m.mode = ''write'')';
   { Parameter positions an RTL intrinsic or VCL routine WRITES (var / out), for an unresolved callee;
     CreateForm:1 is TApplication.CreateForm(InstanceClass, var Reference). An unresolved callee with a
     position not listed here is a soft writer unless it is in VALUE_ONLY. }
@@ -613,7 +619,7 @@ begin
     'r.end_col AS ecol, COALESCE(r.enclosing_symbol_id, 0) AS enc, COALESCE(e.qualified_name, '''') AS encq ' +
     'FROM refs r JOIN files f ON f.id = r.file_id LEFT JOIN symbols e ON e.id = r.enclosing_symbol_id ' +
     'WHERE r.symbol_id = ' + IntToStr(FTargetId) + ' AND r.kind IN (''read'', ''member-access'') ' +
-    'ORDER BY f.path, r.start_line, r.start_col, r.id');
+    'AND NOT ' + MEMBER_WRITE_SQL + ' ORDER BY f.path, r.start_line, r.start_col, r.id');
   try
     for var Row in R do
     begin
@@ -643,7 +649,7 @@ begin
     'r.end_line AS eln, r.end_col AS ecol, COALESCE(r.enclosing_symbol_id, 0) AS enc, ' +
     'COALESCE(e.qualified_name, '''') AS encq FROM refs r JOIN files f ON f.id = r.file_id ' +
     'LEFT JOIN symbols e ON e.id = r.enclosing_symbol_id WHERE r.symbol_id = ' + IntToStr(pSymbolId) +
-    ' AND r.kind = ''write''');
+    ' AND (r.kind = ''write'' OR ' + MEMBER_WRITE_SQL + ')');
   try
     for var Row in R do
     begin
