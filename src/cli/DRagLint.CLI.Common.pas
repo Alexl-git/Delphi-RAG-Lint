@@ -444,6 +444,8 @@ type
     LintThirdParty: Boolean;
     // 1.52 BUDGET (D9): lint / lint-all --no-budget -- no rule is skipped for exceeding rule_time_budget_ms.
     NoBudget: Boolean;
+    // 1.52 BK-CLISMALL (B50): lint-all --no-stand-down -- do not open the maintenance control channel, so a `shutdown` from another engine cannot truncate this run to PARTIAL (exit 4).
+    NoStandDown: Boolean;
     // lint-all --shared-db <db> (repeatable): other project indexes whose findings
     // count as evidence for a closure-dependent review marker on a shared unit.
     SharedDbs: TArray<string>;

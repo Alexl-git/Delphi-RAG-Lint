@@ -1,0 +1,29 @@
+{
+  "id": "v152-no-stand-down",
+  "title": "lint-all --no-stand-down (measurement runs)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.52.0-alpha",
+  "summary": "lint-all --no-stand-down stays off the maintenance channel, so a peer's stand-down cannot cut a measurement run to PARTIAL",
+  "intro": "Read this when you time or compare lint-all runs on a machine where other sessions may ask engines to stand down: --no-stand-down makes lint-all ignore the maintenance channel for that run, so it always completes (or fails on its own). The cost: the stand-down verb no longer lists or stops that run.",
+  "wikiPage": "ide-release",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "usage": "drag-lint lint-all --db <file.sqlite> --no-stand-down (do not open the maintenance control channel: a stand-down request cannot cut the run to PARTIAL, exit 4; it is not listed by the stand-down verb either)",
+      "flags": [
+        {
+          "name": "--no-stand-down"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-18",
+    "by": "alexanderl",
+    "build": "1.51.1-alpha"
+  }
+}

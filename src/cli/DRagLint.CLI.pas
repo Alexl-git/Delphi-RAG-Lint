@@ -1166,6 +1166,7 @@ begin
       Inc(i) { every verb: applied by Run, before ParseArgs (ApplyManifestSwitch) }
     else if A = '--no-locals' then Result.NoLocals:= True
     else if A = '--lint-third-party' then Result.LintThirdParty:= True
+    else if A = '--no-stand-down' then Result.NoStandDown:= True
     else if A = '--no-budget' then Result.NoBudget:= True  { 1.52 BUDGET (D9): lint / lint-all without the per-rule time budget }
     else if (A = '--shared-db') and (i < ParamCount) then
     begin
@@ -8390,6 +8391,8 @@ begin
 end;
 
 function DoQueryText(const AArgs: TArgs): Integer;
+const
+  TRIGRAM_MIN_CHARS = 3; // --substring floor: the trigram tokenizer cannot match a shorter needle
 var
   PathsToScan: TArray<string>         ;
   DbPath     : string                 ;
@@ -8446,8 +8449,12 @@ begin
     end;
   end;
   FetchLim:= if NearOn then NearFetchLimit else Lim + 1; { cap + 1: one extra row proves the cap hid something (XERJ item 2) }
-  if (Mode = 'substring') and (Length(Trim(AArgs.TextQuery)) < 3) then
-    Writeln('NOTE: --substring needs a query of at least 3 characters (trigram tokenizer); "' + AArgs.TextQuery + '" is too short - try --any-order for shorter terms.');
+  { B29: the floor applies to the text AFTER the enclosing Pascal quotes are stripped ('ok' is 2 characters, not 4). }
+  var ShortNeedle: string:= Trim(AArgs.TextQuery);
+  if (Length(ShortNeedle) >= 2) and ShortNeedle.StartsWith('''') and ShortNeedle.EndsWith('''') then
+    ShortNeedle:= Copy(ShortNeedle, 2, Length(ShortNeedle) - 2);
+  if (Mode = 'substring') and (Length(ShortNeedle) < TRIGRAM_MIN_CHARS) then
+    Writeln('NOTE: --substring needs a query of at least 3 characters (trigram tokenizer); "' + AArgs.TextQuery + '" is too short, so it is matched as a whole word instead.');
 
   PathsToScan:= ResolveConsumerDbs(AArgs);
   for DbPath in PathsToScan do
@@ -20391,7 +20398,9 @@ begin
   { PF E-LINTALL-SLOWER: which OFF flow passes this run keeps, read once for the per-file loop. }
   var FlowKeep: TFunc<string, Boolean>:= RuleKeptByRun(AArgs, Cfg, MarkedRuleIds(FilePaths));
   { DEC-13: lint-all listens for a maintenance stand-down; the scan stops between files. }
-  BatchChannelOpen('lint-all', TArray<string>.Create(ExpandFileName(ProjectDb)), DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION, IsMachineReadableOutput(AArgs));
+  { B50: --no-stand-down keeps a measurement run off the channel, so a peer's shutdown cannot truncate it. }
+  if not AArgs.NoStandDown then
+    BatchChannelOpen('lint-all', TArray<string>.Create(ExpandFileName(ProjectDb)), DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION, IsMachineReadableOutput(AArgs));
   var LintStoodAt: Integer:= -1;
   var LintDelayMs: Integer:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_LINT_FILE_DELAY_MS'), 0);
   Prof.Phase(Format('per-file scan (%d files)', [Length(FilePaths)]));

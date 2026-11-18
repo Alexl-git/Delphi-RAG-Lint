@@ -696,6 +696,18 @@ begin
   Visit(ARoot);
 end; // procedure
 
+// B30: True for a binary form file -- the FF 0A 00 resource header, or a bare 'TPF0' stream (same test as
+// DRagLint.Parser.DFM.IsBinaryDfmBytes, which is implementation-private there).
+function IsBinaryFormBytes(const ABytes: TBytes): Boolean;
+const
+  RES_HEADER_FIRST = $FF;
+  TPF0_SIGNATURE: array[0..3] of Byte = ($54, $50, $46, $30); // 'TPF0'
+begin
+  if Length(ABytes) = 0 then Exit(False);
+  if ABytes[0] = RES_HEADER_FIRST then Exit(True);
+  Result:= (Length(ABytes) >= Length(TPF0_SIGNATURE)) and CompareMem(@ABytes[0], @TPF0_SIGNATURE[0], Length(TPF0_SIGNATURE));
+end; // function
+
 // v0.76 (#10 security): scan a parsed DFM tree for a credential-named property
 // (Password/Pwd/Secret/ApiKey/...) assigned a non-empty string LITERAL. A secret
 // checked into a form resource is an anti-pattern (it ships in the exe and lands
@@ -886,7 +898,27 @@ begin
     // v0.86 (Task 3): transcode ANSI/UTF-16 sources to valid UTF-8 before the
     // parse/slice pipeline (both assume UTF-8). This is the direct lint/lint-all
     // path; without it a valid CP1252 file (SOFTWID class) errored here.
-    Source:= EnsureUtf8Bytes(TFile.ReadAllBytes(AFilePath));
+    var RawBytes: TBytes:= TFile.ReadAllBytes(AFilePath);
+    { B30: a binary .dfm (resource header FF 0A 00, or a bare TPF0 stream) holds no text for the DFM grammar;
+      say so instead of a bogus 1:1 parse error (same signature test as DRagLint.Parser.DFM.IsBinaryDfmBytes). }
+    if SameText(ExtractFileExt(AFilePath), '.dfm') and IsBinaryFormBytes(RawBytes) then
+    begin
+      if Wants('parser-error') then
+      begin
+        var BinF: TLintFinding:= Default(TLintFinding);
+        BinF.RuleId  := 'parser-error';
+        BinF.Severity:= 'warning';
+        BinF.Message := 'Binary DFM (TPF0) -- not linted; save as Text DFM in the IDE to lint this file';
+        BinF.FilePath:= AFilePath;
+        BinF.StartLine:= 1;
+        BinF.StartCol := 1;
+        BinF.EndLine  := 1;
+        BinF.EndCol   := 2;
+        Findings.Add(BinF);
+      end;
+      Exit(Findings.ToArray);
+    end;
+    Source:= EnsureUtf8Bytes(RawBytes);
     { Same preprocessing the AST checks now get, through the SAME call, so the
       two lint entry points cannot drift into disagreeing about which branches
       are live. TLinter builds its own parser (see the note below), which is
