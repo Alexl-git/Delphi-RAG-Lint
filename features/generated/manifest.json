@@ -236,6 +236,31 @@
       }
     },
     {
+      "id": "v152-attributes-fact",
+      "title": "Custom attributes in the index",
+      "group": "indexing",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.51.1-alpha",
+      "summary": "Every custom attribute is stored with its argument text and the symbol it decorates (table attributes), library indexes too",
+      "intro": "Read this when a rule or a query needs to know which declarations carry an RTTI attribute and with which arguments. Each [..] item is one row: attr_name, arg_text, line / col and symbol_id of the decorated class, field, routine, param or property; query it with drag-lint sql.",
+      "wikiPage": "Index-DB-Schema",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "sql",
+          "example": "drag-lint sql --db <file.sqlite> --query \"SELECT a.attr_name, a.arg_text, s.qualified_name FROM attributes a JOIN symbols s ON s.id = a.symbol_id\""
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-18",
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "b5f80ced846660c364a5479dac4f078746b2addadc27f3fe64fdfc3338ac9bd4"
+      }
+    },
+    {
       "id": "inc-indexing",
       "title": "Include-file indexing and IF evaluation",
       "group": "indexing",
@@ -4951,6 +4976,31 @@
         "build": "1.33.0-alpha",
         "surfaceHash": "8669b8cdce32045d3abe557243097a7bc4dd21a96f8c0bd8adc538419d4f755e"
       }
+    },
+    {
+      "id": "v152-atlb-rules",
+      "title": "member-could-be-private lint rule (lane ATLB)",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "Hints (OFF in 1.52) on a public class member referenced only inside its own unit; published, virtual, interface-implementing, attributed and shared-unit members stay silent",
+      "intro": "Read this to see when member-could-be-private reports a public member, which members it never touches, and why component-create-without-override was refused in favour of hides-ancestor-virtual.",
+      "wikiPage": "v152-atlb-rules",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "usage": "drag-lint lint-all --db <db> [--rule member-could-be-private] (default OFF in 1.52, category project-wide, hint)",
+          "flags": [
+            {
+              "name": "--rule",
+              "arg": "<id>"
+            }
+          ]
+        }
+      ],
+      "audience": "both"
     },
     {
       "id": "v151-mem-rules",
@@ -20089,6 +20139,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "manual-inrange"
+      },
+      {
+        "id": "rule.member-could-be-private",
+        "title": "member-could-be-private",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Public member is only referenced inside its own unit; it could be private (project-wide, hint)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule member-could-be-private"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "member-could-be-private"
       },
       {
         "id": "rule.message-chain",

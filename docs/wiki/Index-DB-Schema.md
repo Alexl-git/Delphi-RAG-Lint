@@ -42,7 +42,7 @@ Never open a real DB with a writer to "look": copy it first, or use the read-onl
     `type_ancestors`, `type_helpers`
   * usage and calls: `refs`, `call_edges`, `member_accesses`, `dispatch_edges`,
     `classref_args`, `data_flows`
-  * structure: `unit_uses`, `di_bindings`, `file_includes`, `dfm_objects`, `pp_regions` (1.35), `pp_directives` (150), `dfm_nav_nodes` / `dfm_nav_props` (150 Y2: the .dfm navigation tree of forms-csv / menu-tree -- blocks and collection items, parent by ordinal, and the Caption / Action / Item / ItemName / ToolbarName / BeginGroup / IsMainMenu / OldName / On* properties as `DRagLint.Parser.DfmNav.ScanDfmNav` reads them), `dfm_properties` / `comment_facts` (151, additive)
+  * structure: `unit_uses`, `di_bindings`, `file_includes`, `dfm_objects`, `pp_regions` (1.35), `pp_directives` (150), `dfm_nav_nodes` / `dfm_nav_props` (150 Y2: the .dfm navigation tree of forms-csv / menu-tree -- blocks and collection items, parent by ordinal, and the Caption / Action / Item / ItemName / ToolbarName / BeginGroup / IsMainMenu / OldName / On* properties as `DRagLint.Parser.DfmNav.ScanDfmNav` reads them), `dfm_properties` / `comment_facts` (151, additive), `attributes` (1.52, additive)
   * text: `string_literals` (+ FTS5)
   * external feeds: `compiler_findings`, `fb_relations`, `fb_columns`, `fb_field_info`,
     `fb_datasets`, `fb_enum_values`, `orm_links`
@@ -67,6 +67,8 @@ erDiagram
   files ||--o{ comment_facts : "file_id (cascade)"
   symbols ||--o{ dfm_objects : "symbol_id (set null)"
   symbols ||--o{ comment_facts : "anchor_symbol_id (set null)"
+  files ||--o{ attributes : "file_id (cascade)"
+  symbols ||--o{ attributes : "symbol_id (set null)"
   files ||--o{ compiler_findings : "file_id (set null)"
   symbols ||--o{ symbols : "parent_id (cascade)"
   symbols ||--o{ refs : "symbol_id (set null)"
@@ -95,7 +97,7 @@ erDiagram
 
 | Pass | Verb / stage | Writes |
 |---|---|---|
-| **index** (per file, one transaction) | `index`, `index --project` | `files` (incl. `indexed_at_fingerprint`, stamped in the same tx), `symbols`, `refs` (raw: `symbol_id` NULL for most), `unit_uses`, `string_literals` (+FTS via triggers), `di_bindings`, `data_flows`, `file_includes`, `dfm_objects`, `pp_regions` (1.35), `project_settings` (150, for a `.dpr` / `.dpk`), `pp_directives` (150), `dfm_nav_nodes` / `dfm_nav_props` (150, for a `.dfm`), `dfm_properties` (151, for a `.dfm`), `comment_facts` (151), `symbol_trigrams` |
+| **index** (per file, one transaction) | `index`, `index --project` | `files` (incl. `indexed_at_fingerprint`, stamped in the same tx), `symbols`, `refs` (raw: `symbol_id` NULL for most), `unit_uses`, `string_literals` (+FTS via triggers), `di_bindings`, `data_flows`, `file_includes`, `dfm_objects`, `pp_regions` (1.35), `project_settings` (150, for a `.dpr` / `.dpk`), `pp_directives` (150), `dfm_nav_nodes` / `dfm_nav_props` (150, for a `.dfm`), `dfm_properties` (151, for a `.dfm`), `comment_facts` (151), `attributes` (1.52), `symbol_trigrams` |
 | **resolve** (whole DB, after files) | end of `index` | `refs.symbol_id`, `refs.receiver_text`, `refs.receiver_type_text`, `refs.external_target`, `call_edges`, `member_accesses`, `type_ancestors` (rebuilt each run), `type_helpers`, `dispatch_edges` (wiped and rebuilt), `classref_args`, `unit_uses.target_file_id` |
 | **doc / facts** | index-time doc extraction and ADP analysis | `symbol_docs`, `symbol_facts` (`effect_*` columns come from the purity stage) |
 | **external feeds** | `import-log`, `fb-snapshot`, ORM link pass | `compiler_findings`, `fb_*`, `orm_links` |
@@ -382,6 +384,23 @@ a schema 23 / 24 DB without the table is read by scanning the text. Indexes
 | text | TEXT | the comment as written, delimiters included |
 | anchor_kind | TEXT | `end-of-line` / `statement` / `block` / `next-declaration`; '' = not decided |
 | anchor_symbol_id | INTEGER FK symbols (set null) | the declaration a `next-declaration` / `end-of-line` comment documents; NULL = none |
+
+### attributes (1.52, additive)
+One row per custom attribute (`[Weak]`, `[Deprecated('x')]`, `[A1, A2(1)]`) applied to a declaration,
+written inside the file transaction and replaced on its every parse; produced by the Delphi parser
+(`HarvestAttributes`, column image of `TAttributeRow`) on deep AND shallow scans, so library indexes
+carry it. A declaration naming several symbols (`[Weak] A, B: TObject`) gives one row per symbol.
+Additive and probed (`HasAttributes`), no schema bump; filled by a re-parse. Indexes
+`(file_id, ordinal)`, `symbol_id`, `attr_name COLLATE NOCASE`.
+
+| column | type | meaning |
+|---|---|---|
+| file_id | INTEGER FK files (cascade) | |
+| ordinal | INTEGER | 0-based source order |
+| symbol_id | INTEGER FK symbols (set null) | the decorated class / record / field / routine / param / property / const / type; NULL = none (a local variable) |
+| attr_name | TEXT | the attribute as written (`Weak`, `System.Weak`) |
+| arg_text | TEXT | the text between its parentheses as written; '' for a bare attribute |
+| line, col | INTEGER | 1-based position of the attribute name |
 
 ### symbol_trigrams
 `trigram TEXT`, `symbol_id INTEGER FK symbols (cascade)`; PK `(trigram, symbol_id)`,

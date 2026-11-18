@@ -13,6 +13,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 * [explain](features/explain.md) -- Explains one lint rule in plain words: what it means, why it matters, a bad and a good example, its default, whether it can be fixed, and how to suppress it.
 * [Field repository](features/field-repository.md) -- Keeps the TableTools field registry in one SQLite file per database, filled from Firebird (read-only), with a diffable text backup.
+* [member-could-be-private lint rule (lane ATLB)](features/v152-atlb-rules.md) -- Hints (OFF in 1.52) on a public class member referenced only inside its own unit; published, virtual, interface-implementing, attributed and shared-unit members stay silent.
 * [Default-on form, dataset and data-module rules](features/v152-defaults.md) -- Four lint rules on by default since 1.52 (form object/field, foreign form access, edit without post, data module form global); a shipped exempt-class list.
 * [extract-method and create-enum-helper through the compile gate by default](features/v152-fixer-compile-gate.md) -- extract-method / create-enum-helper --apply build the project before and after the write; no project found = REFUSED, --no-compile-gate writes unbuilt.
 * [Array index possibly out of range lint rule (index-possibly-out-of-range)](features/v152-index-possibly-out-of-range.md) -- Warns (OFF in 1.52) on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only.
@@ -27,6 +28,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 * [References for declaration positions](features/v1511-ext-fixes.md) -- The index keeps a reference for pointer base types, generic constraints, generic method headers, dotted property specifiers and message constants.
 * [Per-host bindings for refs in a shared include](features/v1511-inc2-fixes.md) -- A ref inside an include that several units include keeps one binding per host (table ref_host_bindings, schema 26); find-callers and usages read it.
 * [Library bindings for bare reads, paren-less calls and function-result receivers](features/v1511-res-fixes.md) -- Bare reads of library vars (Application), paren-less library calls and members on a library function result bind to refs.external_target.
+* [Custom attributes in the index](features/v152-attributes-fact.md) -- Every custom attribute is stored with its argument text and the symbol it decorates (table attributes), library indexes too.
 * [Resolver fixes in 1.52](features/v152-extr-resolve.md) -- Generic receivers (`TObjectList<T>.Create`) typed; index --resolve-only without a library keeps the last library bindings.
 
 ## 1.51.0-alpha

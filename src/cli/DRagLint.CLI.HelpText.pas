@@ -576,6 +576,8 @@ begin
   Writeln('       ^ lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all.');
   Writeln('       ^ A vendored folder INSIDE the project folder is linted as your own code until `excludeRoots` names it in `<project>\_D-RAG\drag-lint-project.json`.');
   Writeln('       see wiki page: Run-Lint-All-Full-Report');
+  Writeln('  drag-lint lint-all --db <db> [--rule member-could-be-private] (default OFF in 1.52, category project-wide, hint)');
+  Writeln('       see wiki page: v152-atlb-rules');
   Writeln('  drag-lint lsp --db <file.sqlite> [--no-exception-facts]');
   Writeln('       see wiki page: editor-exception-facts');
   Writeln('  drag-lint lsp --db <file.sqlite> --full-rules [--no-preprocess]');

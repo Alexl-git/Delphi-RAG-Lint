@@ -1323,6 +1323,7 @@ Described in:
 * [Text rules: bidi, invisible, control chars, TODO, header, strings](../../docs/wiki/text-rules.md)
 * [Typing and ownership lint rules (casts, Self as interface, destructors)](../../docs/wiki/typing-and-ownership-rules.md)
 * [CLI fixes in 1.51.1](../../docs/wiki/v1511-cli-fixes.md)
+* [member-could-be-private lint rule (lane ATLB)](../../docs/wiki/v152-atlb-rules.md)
 
 ### lint-project
 
@@ -2026,6 +2027,7 @@ Described in:
 
 * [Output encoding (--output-encoding)](../../docs/wiki/output-encoding.md)
 * [sql](../../docs/wiki/sql.md)
+* [Custom attributes in the index](../../docs/wiki/Index-DB-Schema.md)
 
 ### surface
 

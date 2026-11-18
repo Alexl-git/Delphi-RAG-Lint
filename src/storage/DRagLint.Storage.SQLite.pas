@@ -235,7 +235,8 @@ type
       FHasIncVariants        : Integer      ; { 1.52 EXTINC: -1 unprobed, 0 absent, 1 present -- see HasIncVariants }
       FHasDfmProps           : Integer      ; { 151 ST: -1 unprobed, 0 absent, 1 present -- see HasDfmProperties }
       FHasCommentFacts       : Integer      ; { 151 ST: -1 unprobed, 0 absent, 1 present -- see HasCommentFacts }
-      FQFileFacts            : array[0..11] of TFDQuery; { 149 EX2: 3 deletes + 3 inserts (150 PP: + pp_directives delete / insert; 151 ST: + dfm_properties, comment_facts), prepared on first use (FF_* in PutFileFacts) }  // dl:ok referenced-never-set@9274 -- FP: the array ELEMENTS are assigned in PutFileFacts.Prepared (FQFileFacts[AIdx]:= Result)
+      FHasAttributes         : Integer      ; { 1.52 BK-EXTRA (B09): -1 unprobed, 0 absent, 1 present -- see HasAttributes }
+      FQFileFacts            : array[0..13] of TFDQuery; { 149 EX2: 3 deletes + 3 inserts (150 PP: + pp_directives delete / insert; 151 ST: + dfm_properties, comment_facts; 1.52 BK-EXTRA: + attributes), prepared on first use (FF_* in PutFileFacts) }  // dl:ok referenced-never-set@592a -- FP: the array ELEMENTS are assigned in PutFileFacts.Prepared (FQFileFacts[AIdx]:= Result)
       FQDeleteFileSymbols    : TFDQuery     ;
       FQDeleteFileRefs       : TFDQuery     ;
       FQUpsertDiBinding          : TFDQuery     ;
@@ -3201,7 +3202,11 @@ type
       procedure PutFileFacts(const AToken: TFileTxToken; const AIncludes: TArray<TFileIncludeRow>;
         const ADfmObjects: TArray<TDfmObjectRow>; const APpRegions: TArray<TPpRegionRow>;
         const APpDirectives: TArray<TPpDirectiveRow>; const ADfmProperties: TArray<TDfmPropertyRow>;
-        const AComments: TArray<TCommentFactRow>; const ASymbolIds: TDictionary<Integer, Int64>);
+        const AComments: TArray<TCommentFactRow>; const ASymbolIds: TDictionary<Integer, Int64>;
+        const AAttributes: TArray<TAttributeRow>);
+      /// <summary>1.52 BK-EXTRA (B09): True when this database has the attributes table; probed once.</summary>
+      /// <returns>False on an older index opened read-only; PutFileFacts then skips the table.</returns>
+      function HasAttributes: Boolean;
       /// <summary>151 ST: implements ISymbolStore.HasDfmProperties.</summary>
       /// <returns>True when the dfm_properties table exists (probed once).</returns>
       /// <remarks>
@@ -5377,6 +5382,7 @@ begin
   FHasIncVariants:= -1; { 1.52 EXTINC: probed lazily -- see HasIncVariants }
   FHasDfmProps      := -1; { 151 ST: probed lazily -- see HasDfmProperties }
   FHasCommentFacts  := -1; { 151 ST: probed lazily -- see HasCommentFacts }
+  FHasAttributes    := -1; { 1.52 BK-EXTRA (B09): probed lazily -- see HasAttributes }
   FLateAncCache  := TDictionary<string, TSymbol>.Create;
   FAnchorCache   := TDictionary<Int64, string>.Create; // Task 3c; see FrameworkAnchorForFile
   FQBySql        := TObjectDictionary<string, TFDQuery>.Create([doOwnsValues]); // 152b O6F; see CachedQuery
@@ -5529,7 +5535,9 @@ const
   FF_INS_DFP   = 9;
   FF_DEL_CMT   = 10; { 151 ST: comment_facts, only when HasCommentFacts }
   FF_INS_CMT   = 11;
-  FF_SQL: array[0..11] of string = (
+  FF_DEL_ATR   = 12; { 1.52 BK-EXTRA (B09): attributes, only when HasAttributes }
+  FF_INS_ATR   = 13;
+  FF_SQL: array[0..13] of string = (
     'DELETE FROM file_includes WHERE file_id = :fid',
     'DELETE FROM dfm_objects WHERE file_id = :fid',
     'DELETE FROM pp_regions WHERE file_id = :fid',
@@ -5547,7 +5555,10 @@ const
       'start_line, start_col, end_line, end_col) VALUES (:fid, :ord, :oord, :prn, :dep, :nm, :val, :vk, :sl, :sc, :el, :ec)',
     'DELETE FROM comment_facts WHERE file_id = :fid',
     'INSERT INTO comment_facts(file_id, ordinal, start_offset, end_offset, line, col, end_line, kind, text, ' +
-      'anchor_kind, anchor_symbol_id) VALUES (:fid, :ord, :so, :eo, :ln, :col, :el, :knd, :txt, :ak, :sid)');
+      'anchor_kind, anchor_symbol_id) VALUES (:fid, :ord, :so, :eo, :ln, :col, :el, :knd, :txt, :ak, :sid)',
+    'DELETE FROM attributes WHERE file_id = :fid',
+    'INSERT INTO attributes(file_id, ordinal, symbol_id, attr_name, arg_text, line, col) ' +
+      'VALUES (:fid, :ord, :sid, :nm, :args, :ln, :col)');
   { Parameters bound as text; every other FF_SQL parameter is an integer. }
   FF_TEXT_PARAMS: array[0..13] of string = ('path', 'sec', 'nm', 'cls', 'par', 'knd', 'dir', 'cond', 'args', 'sym',
     'val', 'vk', 'txt', 'ak');
@@ -5566,10 +5577,18 @@ begin
   Result:= FHasPpDirectives = 1;
 end;
 
+function TSQLiteSymbolStore.HasAttributes: Boolean;
+begin
+  if FHasAttributes < 0 then
+    FHasAttributes:= if TableExists('attributes') then 1 else 0;
+  Result:= FHasAttributes = 1;
+end;
+
 procedure TSQLiteSymbolStore.PutFileFacts(const AToken: TFileTxToken; const AIncludes: TArray<TFileIncludeRow>;
   const ADfmObjects: TArray<TDfmObjectRow>; const APpRegions: TArray<TPpRegionRow>;
   const APpDirectives: TArray<TPpDirectiveRow>; const ADfmProperties: TArray<TDfmPropertyRow>;
-  const AComments: TArray<TCommentFactRow>; const ASymbolIds: TDictionary<Integer, Int64>);
+  const AComments: TArray<TCommentFactRow>; const ASymbolIds: TDictionary<Integer, Int64>;
+  const AAttributes: TArray<TAttributeRow>);
 
   function Prepared(AIdx: Integer): TFDQuery;
   var
@@ -5703,6 +5722,28 @@ begin
         Q.ParamByName('sid').AsLargeInt:= Sid
       else
         Q.ParamByName('sid').Clear;
+      Q.ExecSQL;
+    end;
+  end;
+  // 1.52 BK-EXTRA (B09): attributes is its own probe (a 1.51 / early-1.52 DB opened read-only lacks it).
+  if HasAttributes then
+  begin
+    Q:= Prepared(FF_DEL_ATR);
+    Q.ParamByName('fid').AsLargeInt:= AToken.FileId;
+    Q.ExecSQL;  // dl:ok duplicate-code@6087 -- each optional fact table (comment_facts, attributes) has its own probe + delete + insert block over the shared FF_* prepared statements; columns differ, a generic writer would hide them
+    Q:= Prepared(FF_INS_ATR);
+    for I:= 0 to High(AAttributes) do
+    begin
+      Q.ParamByName('fid' ).AsLargeInt  := AToken.FileId;
+      Q.ParamByName('ord' ).AsLargeInt  := I;
+      if (ASymbolIds <> nil) and ASymbolIds.TryGetValue(AAttributes[I].SymbolIdx, Sid) then
+        Q.ParamByName('sid').AsLargeInt:= Sid
+      else
+        Q.ParamByName('sid').Clear;
+      Q.ParamByName('nm'  ).AsWideString:= AAttributes[I].Name;
+      Q.ParamByName('args').AsWideString:= AAttributes[I].ArgText;
+      Q.ParamByName('ln'  ).AsLargeInt  := AAttributes[I].Line;
+      Q.ParamByName('col' ).AsLargeInt  := AAttributes[I].Col;
       Q.ExecSQL;
     end;
   end;
@@ -7806,6 +7847,22 @@ begin
           '  anchor_symbol_id INTEGER REFERENCES symbols(id) ON DELETE SET NULL)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_comment_facts_file   ON comment_facts(file_id, ordinal)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_comment_facts_anchor ON comment_facts(anchor_symbol_id)');
+  { 1.52 BK-EXTRA (B09, owner ruling 2026-11-18): one row per custom attribute applied to a declaration
+    -- its name as written, the text between its parentheses ('' when bare) and the symbol it decorates
+    (NULL when none: a local variable). Written by the indexer per file (PutFileFacts) from the Delphi
+    parser, deep scan or not, so library indexes carry it too. ADDITIVE and probed (HasAttributes), the
+    data_flows precedent: NO SCHEMA_VERSION bump; filled by the re-parse of the 1.52 extractor bump. }
+  TryExec('CREATE TABLE IF NOT EXISTS attributes (' +
+          '  file_id   INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,' +
+          '  ordinal   INTEGER NOT NULL,' +
+          '  symbol_id INTEGER REFERENCES symbols(id) ON DELETE SET NULL,' +
+          '  attr_name TEXT    NOT NULL,' +
+          '  arg_text  TEXT    NOT NULL,' +
+          '  line      INTEGER NOT NULL,' +
+          '  col       INTEGER NOT NULL)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_attributes_file   ON attributes(file_id, ordinal)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_attributes_symbol ON attributes(symbol_id)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_attributes_name   ON attributes(attr_name COLLATE NOCASE)');
   { v0.85 PERF -- the three FK child columns that had no index.
 
     `PRAGMA foreign_keys = ON` is set on the write connection, so deleting a
@@ -18654,6 +18711,7 @@ const
   RR_UNIVERSE = 'refs.kind IN (''read'', ''write'', ''member-access'', ''call'')';
   RR_HAS_TEXT = ' AND refs.receiver_text IS NOT NULL AND refs.receiver_text <> ''''';
   POS_KEY     = '%d:%d';
+  NAME_KEY    = '%d:%s';
 type
   TRcvCand = record
     Id   : Int64;
@@ -18666,6 +18724,7 @@ var
   Ins    : TFDQuery;
   EndAt  : TDictionary<string, TRcvCand>;
   StartAt: TDictionary<string, TRcvCand>;
+  OnLine : TDictionary<string, TRcvCand>; { B12: line:lowercase name -> the one call ref so far (Id 0 = two or more) }
 
   { The typed ref wins a position two rows share (a bare call and its member-access). }
   procedure Offer(pMap: TDictionary<string, TRcvCand>; const pKey: string; const pCand: TRcvCand);
@@ -18688,6 +18747,7 @@ begin
   Ins    := TFDQuery.Create(nil);
   EndAt  := TDictionary<string, TRcvCand>.Create;
   StartAt:= TDictionary<string, TRcvCand>.Create;
+  OnLine := TDictionary<string, TRcvCand>.Create;
   try
     Ins.Connection:= FConn;
     Ins.SQL.Text  := 'INSERT OR REPLACE INTO ref_receivers(ref_id, receiver_ref_id) VALUES (:rid, :rcv)';
@@ -18695,12 +18755,13 @@ begin
     Ins.ParamByName('rcv').DataType:= ftLargeint;
     Ins.Prepare;
     Q.Connection:= FConn;
-    Q.SQL.Text  := 'SELECT refs.id, refs.file_id, refs.name_text, refs.start_line, refs.start_col, refs.end_line, refs.end_col, ' +
+    Q.SQL.Text  := 'SELECT refs.id, refs.file_id, refs.kind, refs.name_text, refs.start_line, refs.start_col, refs.end_line, refs.end_col, ' +
                    '  refs.receiver_text, t.ref_id AS typed FROM refs LEFT JOIN ref_types t ON t.ref_id = refs.id WHERE ' +
                    RR_UNIVERSE + Suffix + ' ORDER BY refs.file_id, refs.start_line, refs.start_col';
     BeatStreamOpen(FConn, Q, 'resolve ref receivers');
     var FId   : TField:= Q.FieldByName('id');
     var FFile : TField:= Q.FieldByName('file_id');
+    var FKind : TField:= Q.FieldByName('kind');
     var FName : TField:= Q.FieldByName('name_text');
     var FLine : TField:= Q.FieldByName('start_line');
     var FCol  : TField:= Q.FieldByName('start_col');
@@ -18716,10 +18777,16 @@ begin
         CurFile:= FFile.AsLargeInt;
         EndAt.Clear;
         StartAt.Clear;
+        OnLine.Clear;
       end;
       var Line: Integer:= FLine.AsInteger;
       var Col : Integer:= FCol.AsInteger;
       var Text: string := if FText.IsNull then '' else FText.AsString;
+      { 1.52 BK-EXTRA (B12): a postfix dereference ends the receiver (`F()^.M`, `P^.M`); the ref it
+        links to is the one before the carets. FullLen keeps the position arithmetic on the text as
+        written. }
+      var FullLen: Integer:= Length(Text);
+      Text:= Text.TrimRight(['^']);
       if Text <> '' then
       begin
         Inc(ACandidates);
@@ -18744,10 +18811,16 @@ begin
           end;
           var Head: string := Copy(Text, 1, Open - 1);
           var Dot : Integer:= Head.LastIndexOf('.');
-          if (Open > 1) and StartAt.TryGetValue(Format(POS_KEY, [Line, Col - 1 - Length(Text) + Dot + 1]), Cand) then
+          if (Open > 1) and StartAt.TryGetValue(Format(POS_KEY, [Line, Col - 1 - FullLen + Dot + 1]), Cand) then
             Found:= SameText(Cand.Name, Head.Substring(Dot + 1));
+          { B12: receiver_text is stored without blanks (`G(1,2)^` for `G(1, 2)^`), so the position
+            above misses a call with spaced arguments. Fall back to the call head by NAME on the line,
+            only when exactly one ref of that name precedes it there (never a guess between two). }
+          if (not Found) and (Open > 1) and OnLine.TryGetValue(Format(NAME_KEY, [Line, LowerCase(Head.Substring(Dot + 1))]), Cand)
+            and (Cand.Id > 0) then
+            Found:= True;
         end
-        else if EndAt.TryGetValue(Format(POS_KEY, [Line, Col - 1]), Cand) then
+        else if EndAt.TryGetValue(Format(POS_KEY, [Line, Col - 1 - (FullLen - Length(Text))]), Cand) then
           Found:= SameText(Cand.Name, Text.Substring(Text.LastIndexOf('.') + 1));
         if Found then
         begin
@@ -18763,10 +18836,17 @@ begin
       Me.Typed:= not FTyped.IsNull;
       Offer(StartAt, Format(POS_KEY, [Line, Col]), Me);
       if FEndL.AsInteger = Line then Offer(EndAt, Format(POS_KEY, [Line, FEndC.AsInteger]), Me);
+      if FKind.AsString = 'call' then
+      begin
+        var NameKey: string:= Format(NAME_KEY, [Line, LowerCase(Me.Name)]);
+        if OnLine.ContainsKey(NameKey) then Me.Id:= 0; { a second call of that name: ambiguous }
+        OnLine.AddOrSetValue(NameKey, Me);
+      end;
       Q.Next;
     end;
     Q.Close;
   finally
+    OnLine.Free;
     StartAt.Free;
     EndAt.Free;
     Q.Free;

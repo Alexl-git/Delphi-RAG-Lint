@@ -29,6 +29,7 @@ Build and maintain the per-project and library indexes.
 | [References for declaration positions](features/v1511-ext-fixes.md) | The index keeps a reference for pointer base types, generic constraints, generic method headers, dotted property specifiers and message constants | 1.51.1-alpha |
 | [Per-host bindings for refs in a shared include](features/v1511-inc2-fixes.md) | A ref inside an include that several units include keeps one binding per host (table ref_host_bindings, schema 26); find-callers and usages read it | 1.51.1-alpha |
 | [Library bindings for bare reads, paren-less calls and function-result receivers](features/v1511-res-fixes.md) | Bare reads of library vars (Application), paren-less library calls and members on a library function result bind to refs.external_target | 1.51.1-alpha |
+| [Custom attributes in the index](features/v152-attributes-fact.md) | Every custom attribute is stored with its argument text and the symbol it decorates (table attributes), library indexes too | 1.51.1-alpha |
 | [Resolver fixes in 1.52](features/v152-extr-resolve.md) | Generic receivers (`TObjectList<T>.Create`) typed; index --resolve-only without a library keeps the last library bindings | 1.51.1-alpha |
 
 ## Search and navigation
@@ -145,6 +146,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Wider built-in rules (1.51)](features/v151-wid-ast-rules.md) | Six built-in rules read more constructs: code-page and label exemptions, named zero constants, implied else-if, thread dialogs, Supports aliases | 1.51.0-alpha |
 | [Wider scm rules and three new fixers](features/v151-wid-scm-rules.md) | Seven built-in rules read more constructs; empty-finally, format-string-not-formatted and shared-marker-legacy-shape gain autofixes | 1.51.0-alpha |
 | [CLI fixes in 1.51.1](features/v1511-cli-fixes.md) | lint-all --rule a,b runs only those rules, a DB copy stays on the copy; rules --rule; info versions; index parse-errors; resolve-only warning | 1.51.1-alpha |
+| [member-could-be-private lint rule (lane ATLB)](features/v152-atlb-rules.md) | Hints (OFF in 1.52) on a public class member referenced only inside its own unit; published, virtual, interface-implementing, attributed and shared-unit members stay silent | 1.52.0-alpha |
 | [Default-on form, dataset and data-module rules](features/v152-defaults.md) | Four lint rules on by default since 1.52 (form object/field, foreign form access, edit without post, data module form global); a shipped exempt-class list | 1.52.0-alpha |
 | [Array index possibly out of range lint rule (index-possibly-out-of-range)](features/v152-index-possibly-out-of-range.md) | Warns (OFF in 1.52) on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only | 1.52.0-alpha |
 | [warm-rule-cache](features/warm-rule-cache.md) | Fills the lint rule cache for a project index; index runs warm it, or start it in the background (--rule-cache-warm) | 1.39.0-alpha |
