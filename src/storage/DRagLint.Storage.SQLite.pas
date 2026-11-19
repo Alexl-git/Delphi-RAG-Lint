@@ -17101,8 +17101,12 @@ begin
         down. Unlike the sibling rule this one is ON by default, so a silent
         empty result is NOT read by someone who deliberately asked -- which is
         why every column it touches (kind, section, parent_id, signature,
-        start_col) was verified present in current DBs before it shipped. }
-      Exit;
+        start_col) was verified present in current DBs before it shipped.
+        ONLY the missing-column error means "too old"; a locked database or an
+        I/O error must surface, or a failed run would look like a clean one. }
+      on E: Exception do
+        if Pos('no such column', LowerCase(E.Message)) > 0 then Exit
+        else raise;
     end;
     try
       while not Q.Eof do
@@ -19913,8 +19917,6 @@ begin
   QIsRoutine:= TFDQuery.Create(nil);
   QTwin     := TFDQuery.Create(nil);
   QStale    := TFDQuery.Create(nil);
-  StaleFileCount:= 0;
-  StaleWhere:= '';
   try
     try { item 12: the rollback frame starts here, so it also covers the prescan above the DELETE }
     Q.Connection:= FConn;

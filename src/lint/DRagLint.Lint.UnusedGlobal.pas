@@ -85,7 +85,6 @@ uses
   System.SysUtils
   , System.IOUtils
   , System.Generics.Collections
-  , System.Generics.Defaults
   , DRagLint.Lint.SharedUnit
   ;
 

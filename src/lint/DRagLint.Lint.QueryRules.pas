@@ -2171,7 +2171,7 @@ begin
 end;
 
 // Evaluate one predicate. Returns True if it passes.
-function EvalPredicate(const AQuery: TTSQuery; const AMatch: TTSQueryMatch; const ASource: TBytes; const AArgs: TArray<TPredicateArg>;
+function EvalPredicate(const AMatch: TTSQueryMatch; const ASource: TBytes; const AArgs: TArray<TPredicateArg>;
   ACache: TDeclScopeCache): Boolean;
 const
   { #in? / #not-in? argument positions: (#in? @cap "nodeType" ["nameRegex"]) }
@@ -2329,7 +2329,7 @@ begin
         begin
           // End of one predicate. Evaluate; if false, the whole match
           // fails. Then reset Current for the next predicate (if any).
-          if not EvalPredicate(AQuery, AMatch, ASource, Current.ToArray, ACache) then Exit(False);
+          if not EvalPredicate(AMatch, ASource, Current.ToArray, ACache) then Exit(False);
           Current.Clear;
         end;
       end; // case

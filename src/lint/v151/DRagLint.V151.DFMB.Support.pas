@@ -10,7 +10,6 @@ uses
   System.SysUtils
   , System.Classes
   , System.Generics.Collections
-  , System.Generics.Defaults
   , DRagLint.Core.Model
   , DRagLint.Lint.Config
   , DRagLint.V151.Dfm.Common

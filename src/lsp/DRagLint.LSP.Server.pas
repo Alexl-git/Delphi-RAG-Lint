@@ -12,7 +12,6 @@ uses
   , System.NetEncoding
   , Winapi.Windows
   , TreeSitter
-  , TreeSitterLib
   , DRagLint.Core    .Model
   , DRagLint.Core    .Versions // dl:unit DRagLint.Core.Versions accepted -- INDEXER_FINGERPRINT_META_KEY: the stamp each --db is reported with at startup; LIBRARY_RESOLVE_STATE_META_KEY: the lf-marker key
   , DRagLint.Core    .ControlChannel { W3: the maintenance control channel the lsp host cooperates with in Run }
@@ -7554,7 +7553,7 @@ begin
     try
       TFile.Delete(TmpPath);
     except
-      on Exception do TmpPath:= ''; { a leftover temp file is harmless; raising out of didSave is not }
+      on Exception do ; { a leftover temp file is harmless; raising out of didSave is not }
     end;
   end;
 end; // function

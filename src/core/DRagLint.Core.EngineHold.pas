@@ -217,7 +217,8 @@ begin
   try
     { "Nothing to release" is the desired end state, so it is a success. A
       caller scripting this should not have to special-case the common case. }
-    if TFile.Exists(EngineHoldFilePath) then TFile.Delete(EngineHoldFilePath);
+    if (not System.SysUtils.DeleteFile(EngineHoldFilePath))
+       and (GetLastError <> ERROR_FILE_NOT_FOUND) and (GetLastError <> ERROR_PATH_NOT_FOUND) then RaiseLastOSError;
     Result:= True;
   except
     on E: Exception do

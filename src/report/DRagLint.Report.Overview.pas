@@ -54,7 +54,6 @@ implementation
 uses
   System.SysUtils, System.Classes, System.Generics.Collections, System.IOUtils,
   System.DateUtils, System.Math, System.JSON,
-  Data.DB,
   FireDAC.Comp.Client, FireDAC.Stan.Param,
   DRagLint.Storage.FileMembership;
 

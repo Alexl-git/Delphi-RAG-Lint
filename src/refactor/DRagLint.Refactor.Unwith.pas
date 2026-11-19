@@ -1645,8 +1645,7 @@ begin
   try
     if TDirectory.Exists(pDir) then TDirectory.Delete(pDir, True);  // dl:ok taint-path-traversal@b8f1 -- a fresh scratch dir; only its PID part can come from the environment, a test seam
   except  // dl:ok try-except-swallowed@a59f -- leftovers in the scratch root are harmless; see the remarks
-    on E: EInOutError do ;  // dl:ok empty-on-handler@8192 -- the log folder is left behind, harmless; see the remarks
-    on E: EDirectoryNotFoundException do ;  // dl:ok empty-on-handler@431d -- the log folder is left behind, harmless; see the remarks
+    on E: EInOutError do ;  // dl:ok empty-on-handler@8192 -- the log folder is left behind, harmless; see the remarks (EInOutError includes EDirectoryNotFoundException)
   end;
 end;
 

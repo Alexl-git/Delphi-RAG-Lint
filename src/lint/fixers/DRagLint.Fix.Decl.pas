@@ -314,7 +314,7 @@ end;
 { ------------------------------------------------------------------ inherited-bare }
 
 { True when a class declaration line in the file declares procedure AMeth with the override directive. }
-function DcDeclaredOverride(ALines: TStringList; const AMeth: string): Boolean;
+function DcDeclaredOverride(ALines: TStrings; const AMeth: string): Boolean;
 begin
   Result:= TRegEx.IsMatch(ALines.Text, '^\s*procedure\s+' + TRegEx.Escape(AMeth) + '\b[^\r\n]*\boverride\s*;', [roIgnoreCase, roMultiLine]);
 end;
@@ -585,7 +585,7 @@ end;
 
 { True when the file passes AName (bare or as the last segment of a dotted path) to a routine declared in the SAME
   file at a position where that routine's parameter is var/out -- a property cannot be passed there. }
-function DcFieldPassedAsVarArg(ALines: TStringList; const AName: string): Boolean;
+function DcFieldPassedAsVarArg(ALines: TStrings; const AName: string): Boolean;
 var
   Masks    : TDictionary<string, string>;
   Spans    : TList<TPair<Integer, Integer>>;
@@ -617,7 +617,7 @@ begin
 end;
 { True when the file uses AName (bare or as the last segment of a dotted path) where a variable is required:
   the first argument of Inc / Dec / Include / Exclude, or the operand of @ -- a property cannot stand there. }
-function DcFieldUsedAsVariable(ALines: TStringList; const AName: string): Boolean;
+function DcFieldUsedAsVariable(ALines: TStrings; const AName: string): Boolean;
 var
   Esc: string;
 begin

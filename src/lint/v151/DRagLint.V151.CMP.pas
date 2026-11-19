@@ -883,7 +883,6 @@ begin
         AddDirectives(TFile.ReadAllText(Dpk), Dir, ChangeFileExt(ExtractFileName(Dpk), ''), True);
     except  // dl:ok try-except-swallowed@9320 -- REVIEWED 2026-11-14 v151 CMP: a folder that cannot be listed has no .dpk to read; the remaining resource files still count
       on EInOutError do ;  // dl:ok empty-on-handler@59cd -- REVIEWED 2026-11-14 v151 CMP: a folder that cannot be listed has no .dpk to read; the remaining resource files still count
-      on EDirectoryNotFoundException do ;  // dl:ok empty-on-handler@eda5 -- REVIEWED 2026-11-14 v151 CMP: a folder that cannot be listed has no .dpk to read; the remaining resource files still count
     end;
     for var F: string in Files do
     begin

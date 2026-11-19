@@ -269,7 +269,7 @@ uses
   System.Math,        { Min -- the stale-callee note }
   { DRagLint.Doc.Facts is in the INTERFACE uses -- TDocFactsRenderOptions appears
     in the signatures below, and it also supplies DocFactsBuildProfile here. }
-  System.Classes, System.StrUtils, System.IOUtils,
+  System.Classes, System.IOUtils,
   DRagLint.Doc.Drift, DRagLint.Doc.Document,
   DRagLint.Index.Freshness, { ChangedFilePaths -- see StaleCalleeReads }
   DRagLint.V152.DOCPOL.Support; { MethodImplHasCode -- v1.52 B2 bound-handler policy }
