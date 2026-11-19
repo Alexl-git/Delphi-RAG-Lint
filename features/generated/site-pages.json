@@ -664,8 +664,8 @@
     "version": "1.51.1-alpha"
   },
   "features/output-encoding.md": {
-    "hash": "3cfed7c5046e2e1795a74a72a4c3278dfbb41da504532e06c75af0b06dd1493e",
-    "version": "1.51.1-alpha"
+    "hash": "794b1d1b687c13d136190bf9c280be02c9a07c01f4124775c1c6b1f5506b7ece",
+    "version": "1.52.0-alpha"
   },
   "features/parameter-type-too-wide.md": {
     "hash": "b9c98b0f8301677366cdc67a6fe6d4c8bfd9bd6604c0921749451fe0275c359d",
@@ -1044,7 +1044,7 @@
     "version": "1.52.0-alpha"
   },
   "features/v152-attributes-fact.md": {
-    "hash": "8188d011a641ddaabc395229e4c9eada00504201e4ee55d75e590dc87fb97fe8",
+    "hash": "859b0a0f146e22fa22498714c0e53d7bbaf3792e28d8ae60051a986ad67904dc",
     "version": "1.52.0-alpha"
   },
   "features/v152-attrrules.md": {
