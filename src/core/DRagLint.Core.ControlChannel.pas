@@ -780,7 +780,6 @@ implementation
 
 uses
   System.IOUtils
-  , System.DateUtils
   , System.StrUtils { MatchText: BeatChannelEnabledFor }
   , System.Generics.Collections { TDictionary: GWriterDbs }
   , DRagLint.Core.OutputEncoding { EncodeForOutput: these lines bypass ErrOutput }

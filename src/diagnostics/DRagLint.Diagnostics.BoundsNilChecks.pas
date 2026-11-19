@@ -128,6 +128,7 @@ type
     ByRef  : Boolean;  { var / const / out / constref parameter }
     IsParam: Boolean;
     Ambig  : Boolean;  { the file declares the name with different shapes }
+    Unsigned: Boolean; { 1.52.1 SLZ-RULE2: declared Cardinal / Word / Byte / UInt64 ... (never negative) }
   end;
 
   { One assignment row of a copy-paste run. }
@@ -173,6 +174,7 @@ type
     FgnText: string;            { another collection's bound guarding the upper side, unproven }
     FgnSym : TSym;              { that guard as idx <= FgnSym }
     FgnNode: TTSNode;           { the for loop ending at that bound (report site with no write) }
+    Sentinel: Boolean;          { 1.52.1 SLZ-RULE2: a dominating guard excludes the not-found sentinel (`<> -1`, `>= 0`) }
   end;
 
   { One walk over one parsed file. Private to this unit. }
@@ -208,6 +210,9 @@ type
     FBoundMemo : TDictionary<string, string>;     { BoundAt: per top-level query, results that hit no chain back ('' unknown) }
     FBoundCycles: Integer;                        { BoundAt: chains back taken so far (a result after one is not memoised) }
     FCalleeLen : TDictionary<string, string>;     { routine name -> 'index:cnt|len' of the param its Result is sized by ('' none) }
+    FArgModes  : TDictionary<string, string>;     { 1.52.1 SLZ-RULE2: routine name declared in this file -> 'v'/'r' per parameter ('?' overloads disagree) }
+    procedure BuildArgModes;
+    function LocalArgByValue(const ACall: TTSNode; APos: Integer): Boolean;
     function Txt(const N: TTSNode): string;
     function IsTrivia(const N: TTSNode): Boolean;
     procedure EmitAt(const ANode: TTSNode; const ARuleId, AMessage, ASeverity: string);
@@ -277,6 +282,9 @@ type
     function StepWrite(const W: TTSNode; const AIdx: string): Boolean;
     function ExitCap(const ACtx: TIdxCtx; const W: TTSNode; out AU: TSym; out AInThen: Boolean): Boolean;
     function WriteUpper(const W: TTSNode; out AU: TSym): Boolean;
+    function ModOfLen(const E: TTSNode; const AArr: string; ALower: Boolean): Boolean;
+    function CallDerived(const ACtx: TIdxCtx): Boolean;
+    function IsSentinel(const E: TTSNode): Boolean;
     function UpperSides(const ACtx: TIdxCtx; const AReach: TList<TTSNode>): Boolean;
     function OnePastWhile(const ACtx: TIdxCtx): Boolean;
     function CountInvariant(const ACtx: TIdxCtx): Boolean;
@@ -373,6 +381,7 @@ end;
 
 destructor TBnRun.Destroy;
 begin
+  FArgModes.Free;
   FCalleeLen.Free;
   FBoundMemo.Free;
   FBoundVisit.Free;
@@ -649,7 +658,12 @@ begin
   TypeN:= ADecl.ChildByField('type');
   Info:= Default(TDeclInfo);
   Info.Kind:= dkOther;
-  if not TypeN.IsNull then Info.Kind:= ClassifyType(Txt(TypeN), Info.Lo, Info.Hi);
+  if not TypeN.IsNull then
+  begin
+    Info.Kind:= ClassifyType(Txt(TypeN), Info.Lo, Info.Hi);
+    Info.Unsigned:= MatchText(Trim(Txt(TypeN)), ['Cardinal', 'LongWord', 'DWORD', 'UInt32', 'UInt64', 'NativeUInt',
+      'Word', 'UInt16', 'Byte', 'UInt8']);
+  end;
   if ADecl.NodeType = 'declArg' then
   begin
     Info.IsParam:= True;
@@ -1542,7 +1556,88 @@ begin
   A:= ACall.ChildByField('args');
   if (Fn = 'inc') or (Fn = 'dec') or A.IsNull then Exit;
   for J:= 0 to A.NamedChildCount - 1 do
-    if (BareIdent(A.NamedChild(J)) = AX) and not ArgByValue(Fn, J) then Exit(True);
+    if (BareIdent(A.NamedChild(J)) = AX) and not ArgByValue(Fn, J) and not LocalArgByValue(ACall, J) then Exit(True);
+end;
+
+{ 1.52.1 SLZ-RULE2 (self-LoopZero, ProjectRules.pas:1805): every routine header in this file
+  (bodies, forwards, class members), by its last name part -> one letter per parameter, 'r' for
+  var / out (the callee may write the argument), 'v' otherwise. Two headers of one name that
+  disagree (overloads, homonyms) store '?', which answers nothing. }
+procedure TBnRun.BuildArgModes;
+
+  function ModesOf(const AHeader: TTSNode): string;
+  var
+    I, J: Integer;
+    Arg, C, Ty, Dv: TTSNode;
+    ByRef: Boolean;
+    Args: TTSNode;
+    SB: TStringBuilder;
+  begin
+    Result:= '';
+    Args:= Default(TTSNode);
+    for I:= 0 to AHeader.NamedChildCount - 1 do
+      if AHeader.NamedChild(I).NodeType = 'declArgs' then Args:= AHeader.NamedChild(I);
+    if Args.IsNull then Exit;
+    SB:= TStringBuilder.Create;
+    try
+      for I:= 0 to Args.NamedChildCount - 1 do
+      begin
+        Arg:= Args.NamedChild(I);
+        if Arg.NodeType <> 'declArg' then Continue;
+        Ty:= Arg.ChildByField('type');
+        Dv:= Arg.ChildByField('defaultValue');
+        ByRef:= False;
+        for J:= 0 to Arg.ChildCount - 1 do
+          if (Arg.Child(J).NodeType = 'kVar') or (Arg.Child(J).NodeType = 'kOut') then ByRef:= True;
+        for J:= 0 to Arg.NamedChildCount - 1 do
+        begin
+          C:= Arg.NamedChild(J);
+          if (C.NodeType <> 'identifier') or (C = Ty) or (C = Dv) then Continue;
+          SB.Append(if ByRef then 'r' else 'v');
+        end;
+      end;
+      Result:= SB.ToString;
+    finally
+      SB.Free;
+    end;
+  end;
+
+  procedure Walk(const N: TTSNode);
+  var
+    I: Integer;
+    Nm, M, Old: string;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'declProc' then
+    begin
+      Nm:= LowerCase(Trim(Txt(N.ChildByField('name'))));
+      if ContainsStr(Nm, '.') then Nm:= Copy(Nm, LastDelimiter('.', Nm) + 1, MaxInt);
+      M:= ModesOf(N);
+      if Nm <> '' then
+        if not FArgModes.TryGetValue(Nm, Old) then FArgModes.Add(Nm, M)
+        else if Old <> M then FArgModes[Nm]:= '?';
+    end;
+    for I:= 0 to N.ChildCount - 1 do Walk(N.Child(I));
+  end;
+
+begin
+  FArgModes:= TDictionary<string, string>.Create;
+  Walk(FRoot);
+end;
+
+{ True when ACall names a routine declared in this file (a bare name, not `X.Foo`) whose
+  parameter at APos is a value / const parameter, so the call cannot change the argument. }
+function TBnRun.LocalArgByValue(const ACall: TTSNode; APos: Integer): Boolean;
+var
+  Ent: TTSNode;
+  M: string;
+begin
+  Result:= False;
+  Ent:= ACall.ChildByField('entity');
+  if Ent.IsNull or (Ent.NodeType <> 'identifier') then Exit;
+  if FArgModes = nil then BuildArgModes;
+  if not FArgModes.TryGetValue(LowerCase(Trim(Txt(Ent))), M) then Exit;
+  Result:= (APos >= 0) and (APos < Length(M)) and (M[APos + 1] = 'v');
 end;
 
 { The end of the loops around the access under analysis that start after AFrom (else the access). }
@@ -1674,8 +1769,20 @@ procedure TBnRun.CompareFacts(var ACtx: TIdxCtx; const E: TTSNode; ANegate: Bool
 var
   Other: TTSNode;
   Op: string;
+  V: Integer;
 begin
   Op:= OperatorType(E);
+  { 1.52.1 SLZ-RULE2 (D): `idx <> NOT_FOUND` (or the else / after-Exit side of `idx = NOT_FOUND`) with a
+    negative sentinel. It proves no side by itself; CheckIndexAccess accepts it for a call-derived index
+    (the IndexOf contract: the callee returns the sentinel or a valid index). }
+  if (Op = 'kEq') or (Op = 'kNeq') then
+  begin
+    if BareIdent(E.ChildByField('lhs')) = ACtx.Idx then Other:= E.ChildByField('rhs')
+    else if BareIdent(E.ChildByField('rhs')) = ACtx.Idx then Other:= E.ChildByField('lhs')
+    else Exit;
+    if ((Op = 'kNeq') <> ANegate) and IsSentinel(Other) then ACtx.Sentinel:= True;
+    Exit;
+  end;
   if BareIdent(E.ChildByField('lhs')) = ACtx.Idx then
     Other:= E.ChildByField('rhs')
   else if BareIdent(E.ChildByField('rhs')) = ACtx.Idx then
@@ -1686,6 +1793,9 @@ begin
   else
     Exit;
   if ANegate then Op:= NegateOp(Op);
+  { 1.52.1 SLZ-RULE2 (D): `idx >= 0` / `idx > -1` (or `if idx < 0 then Continue`) is the same sentinel test }
+  if ((Op = 'kGte') or (Op = 'kGt')) and EvalIndex(Other, V) then
+    ACtx.Sentinel:= ACtx.Sentinel or (V = (if Op = 'kGte' then 0 else -1));
   if Op = 'kGte' then ACtx.Lo:= ACtx.Lo or ProvesLower(Other, False, ACtx.Arr, ACtx.Info)
   else if Op = 'kGt' then ACtx.Lo:= ACtx.Lo or ProvesLower(Other, True, ACtx.Arr, ACtx.Info)
   else if (Op = 'kLte') or (Op = 'kLt') then
@@ -1852,6 +1962,7 @@ begin
   if W.NodeType <> 'assignment' then Exit;
   Rhs:= W.ChildByField('rhs');
   Result:= if ALower then ProvesLower(Rhs, False, ACtx.Arr, ACtx.Info) else ProvesUpper(Rhs, False, ACtx.Arr, ACtx.Info);
+  if not Result then Result:= ModOfLen(Rhs, ACtx.Arr, ALower);  { 1.52.1 SLZ-RULE2 (E) }
   { idx := idx + k keeps the lower side, idx := idx - k the upper side (k >= 0) }
   if (not Result) and (Rhs.NodeType = 'exprBinary') and (BareIdent(Rhs.ChildByField('lhs')) = ACtx.Idx)
     and EvalIndex(Rhs.ChildByField('rhs'), K) and (K >= 0) then
@@ -2216,8 +2327,11 @@ begin
     ACtx.FgnText:= '';
     ACtx.FgnSym:= Default(TSym);
     ACtx.FgnNode:= Default(TTSNode);
+    ACtx.Sentinel:= False;
     ClimbGuards(ACtx);
     if ACtx.Silent or (ACtx.Lo and ACtx.Hi) then Exit;
+    { 1.52.1 SLZ-RULE2 (D): a call-derived index behind a sentinel guard (CyclePlan.pas:2680) }
+    if ACtx.Sentinel and CallDerived(ACtx) then Exit;
     if (not ACtx.Hi) and (OnePastWhile(ACtx) or CountInvariant(ACtx)) then ACtx.Hi:= True;
     if ACtx.Lo and ACtx.Hi then Exit;
     { 1.52 IDXRANGE3: the bounds the index's writes and guards give (index chains, a constant cap,
@@ -2870,6 +2984,80 @@ begin
     else AU:= SymOf(W.ChildByField('rhs'));
   end;
   Result:= AU.Ok;
+end;
+
+{ 1.52.1 SLZ-RULE2 (E, Q.ExceptionPaths.pas:417): E is `X mod Length(AArr)` under integer casts. Its
+  magnitude is below Length(AArr), so the upper side holds; the lower side (ALower) holds only when the
+  dividend cannot be negative -- an unsigned cast (`Cardinal(H)`, `UInt64(H)`) or a name declared
+  unsigned. `AKey mod Length(A)` with a signed AKey stays unproven (Delphi's mod keeps the sign). }
+function TBnRun.ModOfLen(const E: TTSNode; const AArr: string; ALower: Boolean): Boolean;
+const
+  CASTS   : array[0..11] of string = ('integer', 'longint', 'int32', 'int64', 'nativeint', 'cardinal',
+    'longword', 'dword', 'uint32', 'uint64', 'nativeuint', 'word');
+  UNSIGNED: array[0..6] of string = ('cardinal', 'longword', 'dword', 'uint32', 'uint64', 'nativeuint', 'word');
+
+  function Strip(const N: TTSNode; out ACast: string): TTSNode;
+  var
+    A: TTSNode;
+  begin
+    Result:= N;
+    ACast:= '';
+    while not Result.IsNull do
+      if (Result.NodeType = 'exprParens') and (Result.NamedChildCount = 1) then Result:= Result.NamedChild(0)
+      else if (Result.NodeType = 'exprCall') and (IndexStr(BareIdent(Result.ChildByField('entity')), CASTS) >= 0) then
+      begin
+        A:= Result.ChildByField('args');
+        if A.IsNull or (A.NamedChildCount <> 1) then Exit;
+        ACast:= BareIdent(Result.ChildByField('entity'));
+        Result:= A.NamedChild(0);
+      end
+      else Exit;
+  end;
+
+var
+  N, L: TTSNode;
+  Cast: string;
+  Info: TDeclInfo;
+begin
+  Result:= False;
+  N:= Strip(E, Cast);
+  if N.IsNull or (N.NodeType <> 'exprBinary') or not SameText(Trim(Txt(N.ChildByField('operator'))), 'mod')
+    or not IsArrayFn(Strip(N.ChildByField('rhs'), Cast), 'length', AArr) then Exit;
+  if not ALower then Exit(True);
+  L:= Strip(N.ChildByField('lhs'), Cast);
+  if not L.IsNull then
+    Result:= (IndexStr(Cast, UNSIGNED) >= 0)
+      or ((L.NodeType = 'identifier') and Lookup(LowerCase(Txt(L)), Info) and Info.Unsigned);
+end;
+
+{ 1.52.1 SLZ-RULE2 (D): a not-found sentinel -- a negative constant (`-1`, a file const = -1) or a
+  name that says so (`NOT_FOUND`, `CNotFound`) when its value lives in another unit. }
+function TBnRun.IsSentinel(const E: TTSNode): Boolean;
+var
+  V: Integer;
+begin
+  if EvalIndex(E, V) then Exit(V < 0);
+  Result:= (E.NodeType = 'identifier') and ContainsText(StringReplace(Txt(E), '_', '', [rfReplaceAll]), 'notfound');
+end;
+
+{ 1.52.1 SLZ-RULE2 (D): every write of the index is `idx := F(..)` -- a routine result, not arithmetic
+  or an intrinsic -- so a sentinel test leaves the callee's "valid index or sentinel" contract. }
+function TBnRun.CallDerived(const ACtx: TIdxCtx): Boolean;
+const
+  NOT_LOOKUPS: array[0..13] of string = ('length', 'high', 'low', 'pred', 'succ', 'ord', 'abs', 'trunc', 'round',
+    'random', 'min', 'max', 'integer', 'sizeof');
+var
+  W, R: TTSNode;
+begin
+  Result:= (ACtx.Writes.Count > 0) and not ACtx.IdxInfo.IsParam;
+  if not Result then Exit;
+  for W in ACtx.Writes do
+  begin
+    if W.NodeType <> 'assignment' then Exit(False);
+    R:= W.ChildByField('rhs');
+    while (not R.IsNull) and (R.NodeType = 'exprParens') and (R.NamedChildCount = 1) do R:= R.NamedChild(0);
+    if R.IsNull or (R.NodeType <> 'exprCall') or (IndexStr(CallName(R), NOT_LOOKUPS) >= 0) then Exit(False);
+  end;
 end;
 
 { The upper side from the reaching writes: each keeps it (WriteKeeps), leaves a value within the

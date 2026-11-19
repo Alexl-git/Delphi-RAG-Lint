@@ -1266,7 +1266,7 @@ var
     see spec D2). Consulted only when a standalone launcher dead-ends. }
   HandlerToHook: TDictionary<string, string>    ;
 
-  function FileLines(AFileId: Int64; const APath: string): TArray<string>;
+  function FileLines(const APath: string): TArray<string>;
   begin
     if not PasLines.TryGetValue(APath, Result) then
     begin
@@ -1373,7 +1373,7 @@ var
       // one of the project's form classes).
       for PIdx:= 0 to Paths.Count - 1 do
       begin
-        Lines:= FileLines(Int64(NativeInt(Paths.Objects[PIdx])), Paths[PIdx]);
+        Lines:= FileLines(Paths[PIdx]);
         for LIdx:= 0 to Length(Lines) - 1 do
         begin
           Launches:= False;
@@ -1389,7 +1389,7 @@ var
       // Pass B: record H := R registrations whose RHS R is a known launcher.
       for PIdx:= 0 to Paths.Count - 1 do
       begin
-        Lines:= FileLines(Int64(NativeInt(Paths.Objects[PIdx])), Paths[PIdx]);
+        Lines:= FileLines(Paths[PIdx]);
         for LIdx:= 0 to Length(Lines) - 1 do
         begin
           T:= Lines[LIdx];
@@ -1441,7 +1441,7 @@ var
     Opener  : string        ;
     Launch  : TFormEdge     ;
   begin
-    Arr:= FileLines(APasFileId, APath);
+    Arr:= FileLines(APath);
     if (ALaunchLine < 1) or (ALaunchLine > Length(Arr)) then Exit;
     if AIsShowSite then
     begin

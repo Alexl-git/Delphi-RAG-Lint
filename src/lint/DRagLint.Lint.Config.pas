@@ -4,8 +4,7 @@ interface
 
 uses
   System.SysUtils, System.JSON, System.IOUtils, System.Generics.Collections,
-  System.Masks, { IsPathExcluded's glob match }
-  DRagLint.Core.Model;
+  System.Masks; { IsPathExcluded's glob match }
 
 const
   /// <summary>The exceptions unit assumed when an "exceptions" block is present

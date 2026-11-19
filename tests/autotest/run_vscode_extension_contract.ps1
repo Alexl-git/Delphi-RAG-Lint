@@ -98,12 +98,12 @@ Check "dragLint.fullRules defaults to true (the old default was none)" ($null -n
 $sa = Join-Path $Dir 'lib/serverargs.js'
 Check "lib/serverargs.js exists and extension.js uses it" ((Test-Path $sa) -and ($ext -match "serverargs")) ""
 if (Test-Path $sa) {
-  $js = 'const a=require(process.argv[1]);const o=[a.buildArgs([],undefined),a.buildArgs([],true),a.buildArgs([],false),a.buildArgs(["X.sqlite"],true)];console.log(JSON.stringify({r:o}))'
+  $js = 'const a=require(process.argv[1]);const o=[a.buildArgs([],undefined),a.buildArgs([],true),a.buildArgs([],false),a.buildArgs([process.argv[2]],true)];console.log(JSON.stringify({r:o}))'
   # One row per buildArgs call. A bare outer array would be enumerated by pwsh 7 and a following
   # `ForEach-Object { $_ }` would flatten every inner argv into ONE list (out[0] = 'lsp').
   $out = [System.Collections.ArrayList]::new()
   # wrapped in an object so the pipe yields ONE value on PS 5.1 and 7 alike (run_v152_PS5STDERR G2)
-  $doc = (& node -e $js (Resolve-Path $sa).Path) | ConvertFrom-Json | ForEach-Object { $_ }
+  $doc = (& node -e $js (Resolve-Path $sa).Path X.sqlite) | ConvertFrom-Json | ForEach-Object { $_ }
   foreach ($row in $doc.r) { [void]$out.Add(@($row)) }
   Check "unset setting (nothing saved) runs the server WITH --full-rules" ($out[0] -contains "--full-rules") ($out[0] -join " ")
   Check "true runs the server with --full-rules" ($out[1] -contains "--full-rules") ""
@@ -116,9 +116,11 @@ Write-Host 'package-lock.json agrees with package.json' -ForegroundColor Cyan
 $lockPath = Join-Path $Dir 'package-lock.json'
 Check 'package-lock.json exists' (Test-Path $lockPath) ''
 if (Test-Path $lockPath) {
-  $lock = Get-Content $lockPath -Raw | ConvertFrom-Json -AsHashtable | ForEach-Object { $_ }
-  Check 'lock top-level version == package.json version (regen: npm install --package-lock-only)' ($lock["version"] -eq $pkg.version) ("lock=" + $lock["version"] + " package=" + $pkg.version)
-  Check 'lock root package version == package.json version' ($lock.packages.''.version -eq $pkg.version) ("lock=" + $lock.packages.''.version)
+  # node reads the lock: PS 5.1 ConvertFrom-Json has no -AsHashtable and rejects the empty "" package key.
+  $ljs = "const l=require(process.argv[1]);console.log(l.version+'|'+l.packages[''].version)"
+  $lv = (& node -e $ljs (Resolve-Path $lockPath).Path) -split '\|'
+  Check 'lock top-level version == package.json version (regen: npm install --package-lock-only)' ($lv[0] -eq $pkg.version) ("lock=" + $lv[0] + " package=" + $pkg.version)
+  Check 'lock root package version == package.json version' ($lv[1] -eq $pkg.version) ("lock=" + $lv[1])
 }
 
 Write-Host ''

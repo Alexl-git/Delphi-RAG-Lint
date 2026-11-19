@@ -213,37 +213,37 @@ function Of($rows, [string]$target) { @($rows | Where-Object { $_.target_qname -
 
 Write-Host ''
 Write-Host '== control: the routine still resolves exactly as before ==' -ForegroundColor Cyan
-$dw = Of (@(Resolved 'DoWork')) 'uProv.TProvider.DoWork'
+$dw = Of (Resolved 'DoWork') 'uProv.TProvider.DoWork'
 Check 'DoWork: 2 resolved callers (ReadIt, ReadCnt)' ($dw.Count -eq 2) "n=$($dw.Count)"
 Check 'DoWork: both certain' (@($dw | Where-Object { $_.confidence -eq 'certain' }).Count -eq 2) ''
 
 Write-Host ''
 Write-Host '== U1/E4: a PROPERTY has resolved callers, with a mode ==' -ForegroundColor Cyan
-$fl = Of (@(Resolved 'Flag')) 'uProv.TProvider.Flag'
+$fl = Of (Resolved 'Flag') 'uProv.TProvider.Flag'
 Check 'Flag: 2 resolved accesses (ReadIt, WriteIt)' ($fl.Count -eq 2) "n=$($fl.Count) raw=$($fl | ConvertTo-Json -Compress)"
 Check 'Flag: ReadIt is a READ'   (@($fl | Where-Object { $_.caller_qname -match 'ReadIt$'  -and $_.mode -eq 'read'  }).Count -eq 1) ''
 Check 'Flag: WriteIt is a WRITE' (@($fl | Where-Object { $_.caller_qname -match 'WriteIt$' -and $_.mode -eq 'write' }).Count -eq 1) ''
 Check 'Flag: both certain' (@($fl | Where-Object { $_.confidence -eq 'certain' }).Count -eq 2) ''
-$ct = Of (@(Resolved 'Count')) 'uProv.TProvider.Count'
+$ct = Of (Resolved 'Count') 'uProv.TProvider.Count'
 Check 'Count: 3 resolved accesses (CountIt write + read, ReadCnt read)' ($ct.Count -eq 3) "n=$($ct.Count)"
 Check 'Count: exactly one WRITE, two READs' ((@($ct | Where-Object { $_.mode -eq 'write' }).Count -eq 1) -and (@($ct | Where-Object { $_.mode -eq 'read' }).Count -eq 2)) ($ct | ConvertTo-Json -Compress)
-$it = Of (@(Resolved 'Items')) 'uProv.TProvider.Items'
+$it = Of (Resolved 'Items') 'uProv.TProvider.Items'
 Check 'Items: 1 resolved access, a WRITE past the [0] indexer (E3)' ($it.Count -eq 1 -and $it[0].mode -eq 'write') ($it | ConvertTo-Json -Compress)
 
 Write-Host ''
 Write-Host '== E1: a METHOD accessor is called by the access ==' -ForegroundColor Cyan
-$gf = Of (@(Resolved 'GetFlag')) 'uProv.TProvider.GetFlag'
+$gf = Of (Resolved 'GetFlag') 'uProv.TProvider.GetFlag'
 Check 'GetFlag: called by ReadIt (the Flag READ)' ($gf.Count -eq 1 -and $gf[0].caller_qname -match 'ReadIt$') ($gf | ConvertTo-Json -Compress)
-$sc = Of (@(Resolved 'SetCount')) 'uProv.TProvider.SetCount'
+$sc = Of (Resolved 'SetCount') 'uProv.TProvider.SetCount'
 Check 'SetCount: called by CountIt (the Count WRITE), once' ($sc.Count -eq 1 -and $sc[0].caller_qname -match 'CountIt$') ($sc | ConvertTo-Json -Compress)
-$si = Of (@(Resolved 'SetItem')) 'uProv.TProvider.SetItem'
+$si = Of (Resolved 'SetItem') 'uProv.TProvider.SetItem'
 Check 'SetItem: called by IndexIt (the Items WRITE)' ($si.Count -eq 1 -and $si[0].caller_qname -match 'IndexIt$') ($si | ConvertTo-Json -Compress)
-$gi = Of (@(Resolved 'GetItem')) 'uProv.TProvider.GetItem'
+$gi = Of (Resolved 'GetItem') 'uProv.TProvider.GetItem'
 Check 'GetItem: NOT called (Items is only ever written)' ($gi.Count -eq 0) ($gi | ConvertTo-Json -Compress)
 
 Write-Host ''
 Write-Host '== E2: a FIELD accessor is USED by the access, with no call edge ==' -ForegroundColor Cyan
-$ff = Of (@(Resolved 'FFlag')) 'uProv.TProvider.FFlag'
+$ff = Of (Resolved 'FFlag') 'uProv.TProvider.FFlag'
 # DEC-19 (resolver 1.12.0-alpha, 2026-10-06): GetFlag's bare `Result := FFlag`
 # is an own-class FIELD read and now binds. Until 1.12.0 it declined by design
 # and this check pinned exactly 1 row; it now pins each row by caller and mode.
@@ -252,7 +252,7 @@ $ffR = @($ff | Where-Object { $_.mode -eq 'read' }  | ForEach-Object { ($_.calle
 Check 'FFlag: used by WriteIt (the Flag WRITE), as a write' (($ffW -join ',') -eq 'WriteIt') ($ff | ConvertTo-Json -Compress)
 Check 'FFlag: read bare by GetFlag (DEC-19), as a read' (($ffR -join ',') -eq 'GetFlag') ($ff | ConvertTo-Json -Compress)
 Check 'FFlag: nothing else (2 rows = 1 write + 1 read)' ($ff.Count -eq 2) ($ff | ConvertTo-Json -Compress)
-$fc = Of (@(Resolved 'FCount')) 'uProv.TProvider.FCount'
+$fc = Of (Resolved 'FCount') 'uProv.TProvider.FCount'
 # D31 (2026-09-24): FCount is ALSO written bare inside uProv -- `FCount :=
 # AValue` in SetCount and `FCount := 0` in DoWork. Resolver 1.8.0 (D13) binds
 # those writes identity-only, and FindResolvedCallers now reports them with
@@ -286,13 +286,13 @@ $acc = Sql "SELECT m.name AS member, ma.mode, a.name AS accessor, a.signature FR
 Check 'R1 both TOverloaded reads recorded as member accesses' ($acc.Count -eq 2 -and (@($acc | Where-Object { $_.mode -eq 'read' }).Count -eq 2)) ($acc | ConvertTo-Json -Compress)
 $accItems = @($acc | Where-Object { $_.member -eq 'Items' })
 Check 'R1 Items[I: Integer] read GetItem binds the 1-param overload (narrowed by arity), not the first-declared 2-param one' ($accItems.Count -eq 1 -and $accItems[0].accessor -eq 'GetItem' -and $accItems[0].signature -eq '(I: Integer): Integer') ($accItems | ConvertTo-Json -Compress)
-$gio = @(Of (@(Resolved 'GetItem')) 'uProv.TOverloaded.GetItem')
+$gio = @(Of (Resolved 'GetItem') 'uProv.TOverloaded.GetItem')
 Check 'R1 TOverloaded.GetItem: exactly one resolved caller (OverIt), certain' ($gio.Count -eq 1 -and $gio[0].caller_qname -match 'OverIt$' -and $gio[0].confidence -eq 'certain') ($gio | ConvertTo-Json -Compress)
 $gioSig = Sql "SELECT s.signature FROM call_edges ce JOIN symbols s ON s.id = ce.target_symbol_id WHERE s.qualified_name = 'uProv.TOverloaded.GetItem'"
 Check 'R1 the GetItem call edge targets the (I: Integer) overload' ($gioSig.Count -eq 1 -and $gioSig[0].signature -eq '(I: Integer): Integer') ($gioSig | ConvertTo-Json -Compress)
 $accPairs = @($acc | Where-Object { $_.member -eq 'Pairs' })
 Check 'R1 control: Pairs[A: Integer] read GetPair (two 1-param overloads, types only) records NO accessor' ($accPairs.Count -eq 1 -and [string]::IsNullOrEmpty($accPairs[0].accessor)) ($accPairs | ConvertTo-Json -Compress)
-$gpo = @(Of (@(Resolved 'GetPair')) 'uProv.TOverloaded.GetPair')
+$gpo = @(Of (Resolved 'GetPair') 'uProv.TOverloaded.GetPair')
 Check 'R1 control: TOverloaded.GetPair has NO resolved caller (declined, no wrong edge)' ($gpo.Count -eq 0) ($gpo | ConvertTo-Json -Compress)
 
 Write-Host ''

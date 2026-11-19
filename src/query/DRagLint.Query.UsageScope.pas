@@ -235,7 +235,6 @@ function WithoutLibraryDbs(const APaths: TArray<string>): TArray<string>;
 implementation
 
 uses
-  System.Classes,
   System.IOUtils,
   System.RegularExpressions,
   System.StrUtils,

@@ -12,7 +12,6 @@ interface
 uses
   System.SysUtils
   , System.IOUtils
-  , System.DateUtils
   , DRagLint.Core.Interfaces
   , DRagLint.Project.Members
   ;

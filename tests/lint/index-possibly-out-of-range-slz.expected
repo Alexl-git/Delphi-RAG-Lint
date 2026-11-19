@@ -1,0 +1,30 @@
+# 1.52.1 SLZ-RULE2 (self-LoopZero). Reported on the WRITE of the index (or the access for a parameter).
+# silent: index passed by value to a routine of this file (PairScanCall, ProjectRules.pas:1805),
+#         sentinel exit / ternary else / `< 0 then Continue` on a call-derived index (CyclePlan.pas:2680,
+#         ReportHeader.pas:423, CMP.pas:1280), unsigned `mod Length(A)` (Q.ExceptionPaths.pas:417),
+#         plus the already-silent PairScan / OrChainGuard shapes
+!index-possibly-out-of-range 26
+!index-possibly-out-of-range 29
+!index-possibly-out-of-range 30
+!index-possibly-out-of-range 41
+!index-possibly-out-of-range 44
+!index-possibly-out-of-range 65
+!index-possibly-out-of-range 68
+!index-possibly-out-of-range 69
+!index-possibly-out-of-range 79
+!index-possibly-out-of-range 81
+!index-possibly-out-of-range 87
+!index-possibly-out-of-range 88
+!index-possibly-out-of-range 99
+!index-possibly-out-of-range 101
+!index-possibly-out-of-range 111
+!index-possibly-out-of-range 112
+# controls: other value tested (121), sentinel not left (131), signed mod (141), parallel arrays (149, TP-keep),
+#           unvalidated parameter hint (155, TP-keep), index passed to a VAR parameter (162 165)
+index-possibly-out-of-range 121
+index-possibly-out-of-range 131
+index-possibly-out-of-range 141
+index-possibly-out-of-range 149
+index-possibly-out-of-range 155
+index-possibly-out-of-range 162
+index-possibly-out-of-range 165

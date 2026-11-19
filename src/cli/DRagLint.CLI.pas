@@ -3102,12 +3102,12 @@ end;
 /// pass cannot leave a thread beating over the error message.</remarks>
 procedure Stage(const AIndent, ALabel: string; AProc: TProc);
 var
-  T0  : TDateTime;
+  T0  : TStopwatch;
   Beat: TStageHeartbeat;
 begin
   Writeln(Format('%sstage: %s -- started %s', [AIndent, ALabel, FormatDateTime('hh:nn:ss', NowLocal)]));
   Flush(Output);
-  T0  := Now;
+  T0  := TStopwatch.StartNew;
   BeatStep(ALabel); { a stage without counters must not show the previous stage's step and N }
   Beat:= TStageHeartbeat.Create(AIndent, ALabel);
   try
@@ -3116,7 +3116,7 @@ begin
     Beat.StopAndWait;
     Beat.Free;
   end;
-  Writeln(Format('%sstage: %s -- done in %.1fs', [AIndent, ALabel, (Now - T0) * SecsPerDay]));
+  Writeln(Format('%sstage: %s -- done in %.1fs', [AIndent, ALabel, T0.Elapsed.TotalSeconds]));
   Flush(Output);
 end;
 
@@ -3804,7 +3804,7 @@ var
   F              : string                                    ;
   W              : string                                    ;
   ExDir          : string                                    ;
-  T0             : TDateTime                                 ;
+  T0             : TStopwatch                                ;
   Elapsed        : Double                                    ;
   ProjectFile    : string                                    ;
   ExcludePatterns: TArray<string>                            ;
@@ -3830,7 +3830,7 @@ begin
   var DbDir:= ExtractFilePath(AItem.DbPath);
   if (DbDir <> '') and (not TDirectory.Exists(DbDir)) then TDirectory.CreateDirectory(DbDir);
 
-  T0:= Now;
+  T0:= TStopwatch.StartNew;
   try
     if not AcquireIndexLock(AItem.DbPath) then Exit(False); { #17: another run owns this database }
     Store:= TSQLiteSymbolStore.Create(AItem.DbPath);
@@ -4241,7 +4241,7 @@ begin
       index, so it is announced too: it is the last thing between the operator
       and the section summary, and an unannounced pause there reads exactly like
       the hang this instrumentation exists to rule out. }
-    Elapsed:= (Now - T0) * 86400;
+    Elapsed:= T0.Elapsed.TotalSeconds;
 
     var PlatSuffix:= '';
     if AItem.Platform <> '' then PlatSuffix:= ' [' + AItem.Platform + ']';
@@ -5938,7 +5938,7 @@ var
   Store    : ISymbolStore                              ;
   Indexer  : IIndexer                                  ;
   Parser   : IParser                                   ;
-  StartTime: TDateTime                                 ;
+  StartTime: TStopwatch                                ;
   Elapsed  : Double                                    ;
   Resolver : DRagLint.Project.Resolver.TProjectResolver;
   Folders  : TArray<string>                            ;
@@ -6552,7 +6552,7 @@ begin
       if WatchIdle(Interval) then Break;
       Continue;
     end;
-    StartTime:= Now;
+    StartTime:= TStopwatch.StartNew;
     { Indexer.ParsedFiles is CUMULATIVE over the indexer's life, and --watch keeps
       one indexer: measured against 0, every idle tick after the first "parsed"
       files and ran the whole-database calls pass (run_watch_scope_reset W4). }
@@ -6934,7 +6934,7 @@ begin
       break, so without this the connection stays open indefinitely and a copy
       of the .sqlite alone is empty of everything this run just did. }
     Store.Checkpoint;
-    Elapsed:= (Now - StartTime) * 86400;
+    Elapsed:= StartTime.Elapsed.TotalSeconds;
     { F1 (deep review 2026-10-25): a file whose store phase raised was rolled
       back and keeps its OLD rows. It used to be one stdout line among the
       progress and an exit 0; now the Done line counts it and the run exits 1
@@ -6983,11 +6983,11 @@ var
   DParser: TDelphi13Parser;
   F      : string         ;
   Ex     : string         ;
-  T0     : TDateTime      ;
+  T0     : TStopwatch     ;
 begin
   Writeln('');
   Writeln('=== Dictionary: ', ADbPath, '  (deep=', BoolToStr(ADeep, True), ') ===');
-  T0:= Now;
+  T0:= TStopwatch.StartNew;
   Store:= TSQLiteSymbolStore.Create(ADbPath);
   Store.Migrate;
   { Each library/project ROOT is walked RECURSIVELY (soAllDirectories), so a
@@ -7039,7 +7039,7 @@ begin
     Writeln('  stage: purity -- skipped, calls did not run and every routine already carries a verdict.');
   { xj-5: concept-search table; incremental, backfills from existing rows (no re-parse). }
   Stage('  ', 'search', procedure begin Store.BuildSymbolSearch; end);
-  AElapsedSec:= (Now - T0) * 86400;
+  AElapsedSec:= T0.Elapsed.TotalSeconds;
   Writeln(Format('  Done. Files: %d, Symbols: %d, Refs: %d  [%.1fs]', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, AElapsedSec]));
   Result:= True;
 end; // function
@@ -9596,7 +9596,6 @@ begin
     yields a list, and answering from the first entry would print an empty
     outline that looks exactly like a file with no symbols. }
   var RoOk : Boolean;
-  var UsedDb: string:= '';
   Store:= nil;
   SetLength(Syms, 0);
   for var Db in Dbs do
@@ -9610,7 +9609,7 @@ begin
       Continue;
     end;
     Syms:= Store.FindSymbolsByFile(AArgs.InFile);
-    if Length(Syms) > 0 then begin UsedDb:= Db; Break; end;
+    if Length(Syms) > 0 then Break;
     Store:= nil;
   end;
 
@@ -9620,7 +9619,6 @@ begin
     ReportNotFoundFor((AArgs.AsJson or SameText(AArgs.Format, 'json')), System.SysUtils.Format('       Tried %d database(s). Index the file, or pass --db <file.sqlite>.', [Length(Dbs)]));
     Exit(2);
   end;
-  if UsedDb = '' then UsedDb:= Dbs[0];
 
   { C2.5: a forward stub (`TFoo = class;`) STAYS in the outline -- this is the
     file-structure view and the stub is a line in the file -- but it is tagged
@@ -22619,7 +22617,10 @@ begin
     'mtime=' + FloatToStrF(Double(E.OrigMtime), ffGeneral, 17, 0, TFormatSettings.Invariant) + sLineBreak;
     if E.HaveFT then JournalText:= JournalText + 'ft=' + IntToStr(FileTimeToI64(E.OrigFT)) + sLineBreak;
     TFile.WriteAllText(E.Journal, JournalText);
-  except end;
+  except
+    on Ex: Exception do
+      Writeln(ErrOutput, 'ghost-check: WARNING: could not write the recovery journal ', E.Journal, ' (', Ex.Message, '); ghost-recover cannot undo this overlay after a crash.');
+  end;
   TFile.WriteAllBytes(E.RealPath, E.BufBytes);
   try TFile.SetLastWriteTime(E.RealPath, Now); except end;
   { Capture the timestamp our write actually left behind, and record it in the
@@ -22858,7 +22859,12 @@ begin
             plugin already filters these, but ghost-check is a public verb and
             another caller may not. }
           if BytesSame(E.BufBytes, E.OrigBytes) then Continue;
-          try TFile.WriteAllBytes(TPath.Combine(ShadowDir, ExtractFileName(E.RealPath)), E.BufBytes); except end;
+          try
+            TFile.WriteAllBytes(TPath.Combine(ShadowDir, ExtractFileName(E.RealPath)), E.BufBytes);
+          except
+            on Ex: Exception do
+              Writeln(ErrOutput, 'ghost-check: WARNING: could not write the shadow copy of ', E.RealPath, ' (', Ex.Message, '); the compile may run on a stale file.');
+          end;
         end;
         for i:= 0 to Entries.Count - 1 do
         begin
@@ -23013,7 +23019,15 @@ begin
       try
         { keep the crash-time content so nothing is ever lost }
         CrashBuf:= TPath.Combine(DragDir, ExtractFileName(UnitPath) + '.crash-buffer');
-        try TFile.Copy(UnitPath, CrashBuf, True); except end;
+        try
+          TFile.Copy(UnitPath, CrashBuf, True);
+        except
+          on Ex: Exception do
+          begin
+            Writeln(ErrOutput, 'ghost-recover: WARNING: could not keep the crash-time content of ', UnitPath, ' at ', CrashBuf, ' (', Ex.Message, '); NOT restoring the original so nothing is lost.');
+            Continue;
+          end;
+        end;
         { restore the saved original + mtime (prefer the exact FILETIME) }
         TFile.Copy(OrigBak, UnitPath, True);
         if (FtStr <> '') and TryStrToInt64(FtStr, FtVal) then

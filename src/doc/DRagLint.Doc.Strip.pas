@@ -561,7 +561,7 @@ end;
 // the same file for the actual write (also via TStringList.Text) -- the two
 // must agree, or a computed Line/EndLine would delete the wrong physical
 // lines. Returns False (ALines untouched) when the file does not exist.
-function TryLoadLines(const AFilePath: string; ALines: TStringList): Boolean;
+function TryLoadLines(const AFilePath: string; ALines: TStrings): Boolean;
 var
   Content: string;
 begin
