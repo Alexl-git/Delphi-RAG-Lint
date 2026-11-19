@@ -26,8 +26,13 @@
     U1 DRAGLINT_PROFILE=1 hover --format md of a field with a 'Used in:' line prints the facts breakdown with
        the 'used-in directions' line and a call count >= 1 (it printed only under lint doc-drift before).
 
+    H1 (v152 HOVERCACHE) the whole in-process hover (DRAGLINT_PROFILE 'total') under the default hover cap
+       (-HoverCap 5 s) is <= cap + -HoverSlackMs (200 ms); median of -Runs (3) runs per cap target.
+    C1-C3 (v152 HOVERCACHE) in one `serve` process the second check_init takes the init orders and the
+       interface answers from the per-index-version cache, and answers byte-identically to a fresh CLI run.
+
   Parameters: -Exe (default src\cli\Win64\Debug\drag-lint.exe), -BaseExe, -Repo, -DbPath (source DB to copy),
-  -WorkDir, -Cap (seconds, default 2), -Margin (seconds, default 1).
+  -WorkDir, -Cap (seconds, default 2), -Margin (seconds, default 1), -HoverCap, -HoverSlackMs, -Runs.
 #>
 [CmdletBinding()]
 param(
@@ -37,7 +42,10 @@ param(
   [string]$DbPath  = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-v152-hovercap-$PID",
   [double]$Cap     = 2,
-  [double]$Margin  = 1
+  [double]$Margin  = 1,
+  [double]$HoverCap = 5,
+  [int]$HoverSlackMs = 200,
+  [int]$Runs = 3
 )
 if (-not $Repo) { $Repo = (Resolve-Path "$PSScriptRoot\..\..").Path }
 $ErrorActionPreference = 'Stop'
@@ -167,6 +175,57 @@ try {
 $prof = if (Test-Path -LiteralPath $err) { [IO.File]::ReadAllText($err) } else { '' }
 $m = [regex]::Match($prof, 'used-in directions\s+([0-9.]+) s \((\d+) call\(s\)')
 Check 'U1 DRAGLINT_PROFILE hover prints the used-in directions line with >= 1 call' ($m.Success -and ([int]$m.Groups[2].Value -ge 1)) $(if ($m.Success) { $m.Value } else { 'no line' })
+
+# ---- v152 HOVERCACHE (#113)
+# H1 the WHOLE hover (in-process: assembly incl. the facts build, the check-init solve and the render) finishes
+#    within the hover cap + HoverSlackMs. Before the lane the cap covered only the solve, so the facts build
+#    (0.3-1.3 s on FConn: the 'Used in' directions) came on top of it. Median of -Runs runs per target (the
+#    machine is shared). The number is the profile's 'total' (base engines print only 'assemble').
+function Median($xs) { $s = @($xs | Sort-Object); if ($s.Count -eq 0) { return [double]::NaN }; return [double]$s[[int][math]::Floor(($s.Count - 1) / 2)] }
+$hoverCapText = $HoverCap.ToString([Globalization.CultureInfo]::InvariantCulture)
+$hoverLimitMs = $HoverCap * 1000 + $HoverSlackMs
+foreach ($q in $capTargets) {
+  $totals = @()
+  for ($k = 0; $k -lt $Runs; $k++) {
+    $herr = Join-Path $WorkDir "h1-$k.err"
+    $env:DRAGLINT_PROFILE = '1'
+    $env:DRAGLINT_HOVER_SETBY_MAX_SECONDS = $hoverCapText
+    try { $null = & $Exe hover --qname $q --db $copy --format json 2>$herr }
+    finally { $env:DRAGLINT_PROFILE = $null; $env:DRAGLINT_HOVER_SETBY_MAX_SECONDS = $null }
+    $ptxt = if (Test-Path -LiteralPath $herr) { [IO.File]::ReadAllText($herr) } else { '' }
+    $mt = [regex]::Match($ptxt, 'HOVER PROFILE .*?total (\d+) ms')
+    if (-not $mt.Success) { $mt = [regex]::Match($ptxt, 'HOVER PROFILE assemble (\d+) ms') }
+    if ($mt.Success) { $totals += [double]$mt.Groups[1].Value }
+  }
+  $med = Median $totals
+  Check ("H1 hover {0}: total (median of {1}) <= {2} s + {3} ms" -f $q, $Runs, $HoverCap, $HoverSlackMs) (($totals.Count -eq $Runs) -and ($med -le $hoverLimitMs)) ("runs [{0}] ms, median {1}" -f ($totals -join ', '), $med)
+}
+
+# C1-C3 the whole-index loads are cached per index version in a long-running engine (serve = MCP; the LSP
+#    shares the code): the SECOND check_init (another target) takes ProgramInitOrders and the escape
+#    classifier's interface answers from the cache (DRAGLINT_PROFILE 'CHECK-INIT PROFILE' line on stderr),
+#    and its answer is byte-identical (minus ms) to a fresh CLI process's (positive control: a stale or
+#    partial cache would change it).
+$first = 'DRagLint.Query.HappensBefore.Types.GHbTimedOut'
+$second = 'DRagLint.Core.LintBudget.GClock'
+function QJ($o) { ($o | ConvertTo-Json -Compress -Depth 6) }
+$mreq = @(
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}',
+  (QJ @{ jsonrpc='2.0'; id=2; method='tools/call'; params=@{ name='check_init'; arguments=@{ target=$first; max_seconds=600 } } }),
+  (QJ @{ jsonrpc='2.0'; id=3; method='tools/call'; params=@{ name='check_init'; arguments=@{ target=$second; max_seconds=600 } } })
+) -join "`n"
+$merr = Join-Path $WorkDir 'serve.err'
+$env:DRAGLINT_PROFILE = '1'
+try { $mout = $mreq | & $Exe serve --db $copy 2>$merr | Out-String } finally { $env:DRAGLINT_PROFILE = $null }
+$mrep = @{}
+foreach ($ln in ($mout -split "`n")) { try { $o = $ln.Trim() | ConvertFrom-Json; if ($o.id) { $mrep[[int]$o.id] = $o } } catch { } }
+$profLines = @(([IO.File]::ReadAllText($merr) -split "`r?`n") | Where-Object { $_ -match 'CHECK-INIT PROFILE' })
+Check 'C1 serve prints one CHECK-INIT PROFILE line per check_init' ($profLines.Count -eq 2) ("{0} line(s)" -f $profLines.Count)
+$p2 = if ($profLines.Count -ge 2) { $profLines[1] } else { '' }
+Check 'C2 second check_init: init-orders and interface-answers come from the cache' (($p2 -match 'init-orders \d+ ms \(cached\)') -and ($p2 -match 'interface-answers \d+ ms \(cached\)')) $p2
+$mtxt = if ($mrep[3] -and $mrep[3].result -and $mrep[3].result.content) { ([string]@($mrep[3].result.content)[0].text).Trim() } else { '' }
+$ctxt = (CheckInitRaw $Exe $second 600).Trim()
+Check 'C3 the cached answer == a fresh process answer (minus ms)' (($mtxt -ne '') -and ((WithoutMs $mtxt) -ceq (WithoutMs $ctxt))) ("mcp {0} chars, cli {1} chars" -f $mtxt.Length, $ctxt.Length)
 
 if (-not $env:HB_KEEP_WORK) { try { [IO.Directory]::Delete($WorkDir, $true) } catch { } }
 Write-Host ("v152 HOVERCAP: {0} pass, {1} fail" -f $script:Pass, $script:Fail)
