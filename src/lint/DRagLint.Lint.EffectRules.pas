@@ -186,7 +186,7 @@ function CollectEffectFreeInLoopInvariant(const AStore: ISymbolStore;
 implementation
 
 uses
-  System.Classes
+  DRagLint.Core.Encoding, System.Classes
   , System.IOUtils
   , System.StrUtils
   , System.Generics.Defaults
@@ -214,7 +214,7 @@ begin
   if not ACache.TryGetValue(APath, Result) then
   begin
     try
-      Result:= TFile.ReadAllLines(APath, TEncoding.ANSI);
+      Result:= ReadSourceFileLines(APath);
     except  // dl:ok bare-except@8ac3 -- one unreadable file must cost its own findings, never abort the lint run
       Result:= nil;
     end;

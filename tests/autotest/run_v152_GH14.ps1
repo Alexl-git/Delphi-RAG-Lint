@@ -7,6 +7,7 @@
   2. impact TSquare.Draw depth 1 = 1 caller in 1 unit.
   3. --json levels agree (callers 2, units 2).
   4. a qname that resolves to no symbol exits 1 and says so (was "3 callers", exit 0).
+  6. usages --width wide bound at a TCircle.Draw call site reports the same 2 depth-1 callers.
   5. positive control: depth 2 still walks (Painter.PaintCircle has a caller in Client).
   Run from a NEUTRAL CWD, pwsh 7.
 #>
@@ -101,6 +102,12 @@ try {
 
   $o = (& { $ErrorActionPreference = 'Continue'; & $exe impact --qname NoSuchUnit.TNothing.Draw --depth 1 --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String); $rc = $LASTEXITCODE
   Check 'unknown qname: exit 1, no caller count' ($rc -eq 1 -and $o -notmatch 'callers in' -and $o -match 'NoSuchUnit\.TNothing\.Draw') "exit $rc / $($o.Trim())"
+
+  # 1.52 follow-up: usages --width wide bound at a call site walks the same resolved callers
+  $u = (& { $ErrorActionPreference = 'Continue'; & $exe usages --name Draw --in (Join-Path $fx 'Painter.pas') --line 6 --col 46 --width wide --depth 1 --format json --db $db 2>$null } | Out-String)
+  $ok = $false
+  try { $pu = $u | ConvertFrom-Json; $ok = ($pu.bound -match 'TCircle\.Draw' -and @($pu.impact)[0].callers -eq 2) } catch { }
+  Check 'usages --width wide at TCircle.Draw: impact depth 1 = 2 callers' $ok ($u.Trim())
 
   $o = (& { $ErrorActionPreference = 'Continue'; & $exe impact --qname Shapes.TCircle.Draw --depth 2 --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String); $rc = $LASTEXITCODE
   Check 'positive control: depth 2 reaches Client.Go (1 caller)' ($o -match 'Depth 2:\s+1 callers? in 1 units?') "exit $rc / $($o.Trim())"

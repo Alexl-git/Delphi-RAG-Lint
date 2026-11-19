@@ -161,7 +161,7 @@ function BuildNarrowEdits(const pStore: ISymbolStore; const pLibraries: TArray<I
 implementation
 
 uses
-  System.Classes, System.IOUtils, System.JSON, System.StrUtils, System.RegularExpressions,
+  DRagLint.Core.Encoding, System.Classes, System.IOUtils, System.JSON, System.StrUtils, System.RegularExpressions,
   System.Generics.Collections, System.Generics.Defaults, System.Math, Winapi.Windows,
   FireDAC.Comp.Client,
   DRagLint.Project.OwnRoots, DRagLint.Report.CyclePlan, DRagLint.Refactor.CompileGate,
@@ -651,7 +651,7 @@ begin
       begin
         var Path:= Q.FieldByName('path').AsString;  // dl:ok field-by-name-in-loop@9da5 -- a few thousand rows at most; column names beat positions (magic-literal) here
         if TFile.Exists(Path) then
-          for var M in TRegEx.Matches(TFile.ReadAllText(Path, TEncoding.ANSI), '\b(?:read|write)\s+([A-Za-z_][A-Za-z0-9_]*)', [roIgnoreCase]) do
+          for var M in TRegEx.Matches(ReadSourceFileText(Path), '\b(?:read|write)\s+([A-Za-z_][A-Za-z0-9_]*)', [roIgnoreCase]) do
             FAccessors.AddOrSetValue(LowerCase(M.Groups[1].Value), True);
         Q.Next;
       end;

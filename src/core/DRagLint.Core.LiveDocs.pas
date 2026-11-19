@@ -228,6 +228,9 @@ type
 
 implementation
 
+uses
+  DRagLint.Core.Encoding;
+
 class constructor TLiveDocuments.Create;
 begin
   FTexts:= TDictionary<string, string>.Create;
@@ -297,7 +300,7 @@ begin
     Exit;
   end;
   if TFile.Exists(APath) then
-    Result:= TFile.ReadAllLines(APath, TEncoding.ANSI);
+    Result:= ReadSourceFileLines(APath);
 end;
 
 class function TLiveDocuments.ReadBytes(const APath: string; out AFromOverlay: Boolean): TBytes;

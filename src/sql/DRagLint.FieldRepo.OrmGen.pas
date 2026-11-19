@@ -285,7 +285,7 @@ function OrmJoinLines(const pLines: TStrings): string;  // dl:ok unused-public-s
 implementation
 
 uses
-  System.IOUtils,
+  DRagLint.Core.Encoding, System.IOUtils,
   Data.DB,
   FireDAC.Stan.Param;
 
@@ -2673,7 +2673,7 @@ end;
 function ReadUnitText(const pFileName: string): string;
 begin
   { TableTools TStringList.LoadFromFile: no BOM = the ANSI code page }
-  Result:= TFile.ReadAllText(pFileName, TEncoding.ANSI);
+  Result:= ReadSourceFileText(pFileName);
 end;
 
 function CheckedTables(pGen: TOrmGenerator; const pTables: TArray<string>): TArray<string>;

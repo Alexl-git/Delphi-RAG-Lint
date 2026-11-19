@@ -3150,7 +3150,7 @@ begin
     This is not that, and the cast says so.) }
   if (GSrcCachePath = AFilePath) and (PInt64(@GSrcCacheStamp)^ = PInt64(@Stamp)^) then Exit(GSrcCacheLines);
   try
-    GSrcCacheLines:= System.IOUtils.TFile.ReadAllLines(AFilePath, TEncoding.ANSI);
+    GSrcCacheLines:= ReadSourceFileLines(AFilePath);
   except
     GSrcCachePath:= '';
     Exit;

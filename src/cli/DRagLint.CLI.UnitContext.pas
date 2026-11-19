@@ -58,7 +58,7 @@ function UnitsUsedBy(const AFile: string): TArray<string>;
 implementation
 
 uses
-  System.SysUtils,
+  DRagLint.Core.Encoding, System.SysUtils,
   System.IOUtils,
   System.Generics.Collections,
   System.RegularExpressions;
@@ -67,7 +67,7 @@ function ReadTextOrEmpty(const AFile: string): string;
 begin
   Result:= '';
   try
-    if TFile.Exists(AFile) then Result:= TFile.ReadAllText(AFile, TEncoding.ANSI);
+    if TFile.Exists(AFile) then Result:= ReadSourceFileText(AFile);
   except
     on E: EInOutError do Result:= '';
   end;

@@ -21,8 +21,9 @@ uses
 /// (default 10000); Format='json' or AsJson selects JSON; Output redirects to
 /// a file.</param>
 /// <returns>0 on success; 2 for a usage error (no query, both sources, more
-/// than one statement, missing or absent --db); 1 when the guard refuses the
-/// query, the time cap fires, or SQLite rejects it.</returns>
+/// than one statement, missing or absent --db) and when the time cap stops the query (no
+/// answer was produced -- GitHub #17, 1.52); 1 when the guard refuses the query or SQLite
+/// rejects it.</returns>
 /// <remarks>Strictly read-only. The row cap is REPORTED when it truncates --
 /// a silent cap reads as "that is all the data there is" (151 RB-B diffed 200 of
 /// 1226 rows). The JSON carries `truncated`, `row_limit` (0 = no cap; `row_cap`
@@ -328,6 +329,10 @@ begin
         Writeln(ErrOutput, System.SysUtils.Format(
           'Run "drag-lint schema --db %s --format json" for the real tables, columns and their allowed values.', [DbPath]));
       end;
+      { GitHub #17 (owner ruling 1.52): a query stopped by the time cap produced NO answer --
+        exit 2, the convention's "nothing was answered" code (docs\AI-USAGE.md, exit-code table),
+        never 1, which a script reads as "nothing matched". }
+      if TimedOut then Exit(2);
       Exit(1);
     end;
 

@@ -270,7 +270,7 @@ Check 'no cap banner when the result exactly fits' `
 
 $r = Run @('sql','--query','SELECT COUNT(*) FROM refs a, refs b, refs c','--db',$DbFile,'--timeout-ms','600')
 Check 'a cartesian join is interrupted by the time cap' `
-  (($r.Code -eq 1) -and ($r.Err -match 'time cap')) "exit $($r.Code) / $($r.Err.Trim())"
+  (($r.Code -eq 2) -and ($r.Err -match 'time cap'))  # GitHub #17 (1.52): no answer produced = exit 2, not 1 "exit $($r.Code) / $($r.Err.Trim())"
 # A timeout is not a read-only refusal, and telling the user it is sends them
 # hunting for a write they never wrote.
 Check 'the time cap does NOT report itself as a read-only refusal' `

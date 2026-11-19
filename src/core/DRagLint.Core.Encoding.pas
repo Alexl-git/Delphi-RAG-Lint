@@ -95,6 +95,15 @@ function Utf8CharColToByteCol(const ASource: TBytes; ALineStart, ACharCol: Integ
 /// mojibake for a unit saved as UTF-8. Thread-safe. Pinned by tests\autotest\run_v152_GH16.ps1.</remarks>
 function ReadSourceFileLines(const APath: string): TArray<string>;
 
+/// <summary>The whole text of a source file decoded as ReadSourceFileLines decodes it (BOM honoured
+/// and dropped, BOM-less valid UTF-8 as UTF-8, else Windows-1252); line breaks are kept as in the file.</summary>
+/// <param name="APath">The source file; it must exist.</param>
+/// <returns>The decoded text, without a BOM.</returns>
+/// <exception cref="EInOutError">Raised (as TFile.ReadAllBytes raises) when the file cannot be read.</exception>
+/// <remarks>GitHub #16 follow-up (1.52): replaces TFile.ReadAllText(APath, TEncoding.ANSI) in the
+/// read-only source readers. Thread-safe. The decoder it shares with ReadSourceFileLines is pinned by tests\autotest\run_v152_GH16.ps1.</remarks>
+function ReadSourceFileText(const APath: string): string;
+
 implementation
 
 uses
@@ -277,6 +286,11 @@ begin
   finally
     Lines.Free;
   end; // try
+end; // function
+
+function ReadSourceFileText(const APath: string): string;
+begin
+  Result:= TEncoding.UTF8.GetString(EnsureUtf8Bytes(TFile.ReadAllBytes(APath)));
 end; // function
 
 end.

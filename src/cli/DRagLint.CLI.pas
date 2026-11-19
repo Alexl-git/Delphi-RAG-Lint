@@ -10339,8 +10339,13 @@ begin
 
       for R in Refs do AddRefRow(GroupFor(R, Decls), Store.GetFilePath(R.FileId), R.StartLine, R.StartCol, R.Resolution);
 
+      { GitHub #14 follow-up (1.52): a routine walks its RESOLVED callers, as impact does; a type or
+        variable keeps the by-name walk. }
+      var WideLevels: TArray<TImpactLevel>:= nil;
+      if ((Width = 'wide') or (Width = 'very-wide'))
+        and not ResolvedImpactLevels(Store, Decls, Depth, WideLevels) then WideLevels:= Store.FindTransitiveCallers(QueryName, Depth);
       if (Width = 'wide') or (Width = 'very-wide') then
-        for L in Store.FindTransitiveCallers(QueryName, Depth) do
+        for L in WideLevels do
         begin
           { TImpactLevel is an aggregate per transitive depth: how many distinct
             callers / units reference the symbol at that level. }
@@ -11766,7 +11771,7 @@ begin
     for var FP: string in AFilePaths do
     begin
       if not FileExists(FP) then Continue;
-      var Text: string:= TFile.ReadAllText(FP, TEncoding.ANSI);
+      var Text: string:= ReadSourceFileText(FP);
       if not Text.Contains('dl:ok') then Continue;
       var Listed: TArray<string>:= TSharedUnit.ProjectsOfText(Text);
       if Length(Listed) < 2 then Continue;
@@ -11997,7 +12002,7 @@ begin
       'Run `drag-lint exceptions-sync --db <db> --apply` first, reindex, then re-run this fix.', [Cfg.ExceptionsUnit])];
     Exit;
   end;
-  Entries:= ParseExceptionBlock(TFile.ReadAllText(UnitPath, TEncoding.ANSI));
+  Entries:= ParseExceptionBlock(ReadSourceFileText(UnitPath));
   if Length(Entries) = 0 then
   begin
     ANotes:= ANotes + [Format('raise-bare-exception: %s declares no generated classes yet -- run `exceptions-sync --apply` first.', [UnitPath])];
@@ -16385,7 +16390,7 @@ begin
       if not FileCache.TryGetValue(FilePath, FileSource) then
       begin
         try
-          FileSource:= TFile.ReadAllText(FilePath, TEncoding.ANSI);
+          FileSource:= ReadSourceFileText(FilePath);
         except
           FileSource:= '';
         end;
@@ -16876,7 +16881,7 @@ begin
   try
     for F in Files do
     begin
-      Txt:= TFile.ReadAllText(F, TEncoding.ANSI);
+      Txt:= ReadSourceFileText(F);
       Hits:= if AArgs.Name <> '' then TBookmarks.Find(Txt, AArgs.Name) else TBookmarks.Scan(Txt);
       for B in Hits do
       begin
@@ -19790,7 +19795,7 @@ begin
 
     Created := False;
     UnitText:= '';
-    if UnitPath <> '' then UnitText:= TFile.ReadAllText(UnitPath, TEncoding.ANSI)
+    if UnitPath <> '' then UnitText:= ReadSourceFileText(UnitPath)
     else
     begin
       { No such unit in the index. Create it at the project's own root, so it

@@ -54,7 +54,7 @@ type
 implementation
 
 uses
-  System.IOUtils
+  DRagLint.Core.Encoding, System.IOUtils
   , DRagLint.V151.Dfm.Common
   , DRagLint.V151.DFMA.Support
   , DRagLint.V152.UNCONN.Support
@@ -104,7 +104,7 @@ var
   Names: TList<string>;
 begin
   Result:= nil;
-  Lines:= TFile.ReadAllLines(ACtx.DfmPath, TEncoding.ANSI);  // LoadDfm just read it; a failure is logged by the dispatcher
+  Lines:= ReadSourceFileLines(ACtx.DfmPath);  // LoadDfm just read it; a failure is logged by the dispatcher
   Cand := TList<Integer>.Create;
   Names:= TList<string>.Create;
   try
