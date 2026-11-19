@@ -10339,8 +10339,13 @@ begin
 
       for R in Refs do AddRefRow(GroupFor(R, Decls), Store.GetFilePath(R.FileId), R.StartLine, R.StartCol, R.Resolution);
 
+      { GitHub #14 follow-up (1.52): a routine walks its RESOLVED callers, as impact does; a type or
+        variable keeps the by-name walk. }
+      var WideLevels: TArray<TImpactLevel>:= nil;
+      if ((Width = 'wide') or (Width = 'very-wide'))
+        and not ResolvedImpactLevels(Store, Decls, Depth, WideLevels) then WideLevels:= Store.FindTransitiveCallers(QueryName, Depth);
       if (Width = 'wide') or (Width = 'very-wide') then
-        for L in Store.FindTransitiveCallers(QueryName, Depth) do
+        for L in WideLevels do
         begin
           { TImpactLevel is an aggregate per transitive depth: how many distinct
             callers / units reference the symbol at that level. }

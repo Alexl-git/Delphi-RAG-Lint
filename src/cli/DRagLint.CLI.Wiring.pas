@@ -8,7 +8,7 @@ unit DRagLint.CLI.Wiring;
 interface
 
 uses
-  DRagLint.CLI.Common;
+  DRagLint.CLI.Common, DRagLint.Core.Model, DRagLint.Core.Interfaces;
 
 /// <summary>drag-lint wiring --qname Interface | --coverage [--db path] [--format text|json]: the Spring4D DI wiring of an interface (implementations with lifetime, resolve sites), or the registrations not resolved into an interface-to-type edge.</summary>
 /// <param name="AArgs">--qname or --coverage, --db, --format.</param>
@@ -43,6 +43,20 @@ function DoImpactAllProjects(const AArgs: TArgs): Integer;
 /// non-routine target (a type, a variable) keeps the by-name walk. Pinned by tests\autotest\run_v152_GH14.ps1.</remarks>
 function DoImpact(const AArgs: TArgs): Integer;
 
+/// <summary>The transitive callers of ASyms over the RESOLVED caller rows (ISymbolStore.FindResolvedCallers:
+/// call edges, bound member accesses, bound usages -- the rows `query find-callers --resolved` prints), one
+/// TImpactLevel per depth.</summary>
+/// <param name="AStore">The open store; borrowed.</param>
+/// <param name="ASyms">The target symbols (every declaration of the asked name or qname).</param>
+/// <param name="ADepth">How many caller levels to walk (1 = direct callers).</param>
+/// <param name="ALevels">Out: the levels, nil when nothing calls a routine of ASyms.</param>
+/// <returns>False when ASyms holds no routine -- the caller keeps the by-name walk
+/// (ISymbolStore.FindTransitiveCallers) for a type or variable target; True otherwise.</returns>
+/// <remarks>GitHub #14 (impact) and its 1.52 follow-up (usages --width wide). Breadth first; each caller counts
+/// once, at the first level that reaches it; a site with no enclosing routine counts once per file and is not
+/// walked on. Read-only. Pinned by tests\autotest\run_v152_GH14.ps1.</remarks>
+function ResolvedImpactLevels(const AStore: ISymbolStore; const ASyms: TArray<TSymbol>; ADepth: Integer;
+  out ALevels: TArray<TImpactLevel>): Boolean;
 /// <summary>drag-lint surface --qname Foo.TBar [--db path] [--include-impl] [--all-visibility] [--format text|json]: the interface-section declaration of a class, read from its source lines.</summary>
 /// <param name="AArgs">--qname (required), --db, --include-impl, --all-visibility, --format.</param>
 /// <returns>0 on success; 1 when the symbol is not found or not a class; 2 on a usage error or a missing / stale db.</returns>
@@ -51,10 +65,10 @@ function DoSurface(const AArgs: TArgs): Integer;
 implementation
 
 uses
-  DRagLint.Core.Model, DRagLint.CLI.ConsumerDbs, Winapi.Windows, DRagLint.Query.Implementors,
+  DRagLint.CLI.ConsumerDbs, Winapi.Windows, DRagLint.Query.Implementors,
   DRagLint.Query.CrossImpact, DRagLint.Core.OutputEncoding, System.SysUtils, System.IOUtils,
   System.NetEncoding, System.JSON, System.StrUtils, System.DateUtils, System.Generics.Collections,
-  System.SyncObjs, Data.DB, FireDAC.Stan.Async, FireDAC.Stan.Param, FireDAC.DApt, DRagLint.Core.Interfaces,
+  System.SyncObjs, Data.DB, FireDAC.Stan.Async, FireDAC.Stan.Param, FireDAC.DApt,
   DRagLint.Project.Resolver, DRagLint.Index.Manifest, DRagLint.Index.Plan, DRagLint.Wiring,
   DRagLint.Query.Callers;
 

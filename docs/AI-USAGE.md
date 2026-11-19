@@ -105,12 +105,11 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 > | code | meaning |
 > |---|---|
 > | `0` | answered, with results |
-> | `1` | answered, and the answer is EMPTY or NOT FOUND -- `query --name/--qname/--text/find`, `query find-callers`, `ancestors`, `descendants`, `context`, `call-path`, `reverse-calltree`. A valid result, not an error: a shell tool that reports a non-zero exit as a failure is wrong here |
-> | `2` | usage error (including an unknown `callgraph --format`), or a `--db` that is missing or at an OLD SCHEMA -- nothing was answered. Also a manifest-resolved list whose EVERY database is stale, and an index that does not cover the asked path (`lint-tree` on an empty index answers "does not cover", exit 2 -- not 0) |
+> | `1` | answered, and the answer is EMPTY or NOT FOUND -- `query --name/--qname/--text/find`, `query find-callers`, `find-callees` (a routine that calls nothing, since 1.52 -- GitHub #17), `ancestors`, `descendants`, `context`, `call-path`, `reverse-calltree`. A valid result, not an error: a shell tool that reports a non-zero exit as a failure is wrong here |
+> | `2` | usage error (including an unknown `callgraph --format`), or a `--db` that is missing or at an OLD SCHEMA -- nothing was answered. Also `sql` stopped by its `--timeout-ms` cap (1.52, GitHub #17; was 1), a manifest-resolved list whose EVERY database is stale, and an index that does not cover the asked path (`lint-tree` on an empty index answers "does not cover", exit 2 -- not 0) |
 > | `3` | FATAL: an unrecognised flag or an unexpected exception (message on stderr); also a stdout pipe the reader closed early (`| head`) -- a truncated run never exits 0, so pipefail / CI cannot read it as clean |
 >
-> These answer `0` even when empty: `find-callees` (once `--qname` resolves),
-> `usages`, `outline`, `ambiguous-calls`, `query name-like|type-usage|unit-usage`.
+> These answer `0` even when empty: `usages`, `outline`, `ambiguous-calls`, `query name-like|type-usage|unit-usage`.
 > `lint` / `lint-all` use the opposite polarity: `1` = findings survived (see `--fail-on`).
 
 
@@ -358,7 +357,7 @@ A routine with a body also carries `[impl A-B]` in the text row (`impl_start_lin
 >   return two columns with the same name and an object would lose one -- and
 >   cell types are preserved, so an integer column is a JSON number. The
 >   document is alone on stdout; diagnostics go to stderr.
->   Exit codes: `0` ok, `2` usage error, `1` refused / timed out / SQL error.
+>   Exit codes: `0` ok (also zero rows), `2` usage error or stopped by the time cap (no answer; 1.52, was 1), `1` refused / SQL error.
 > - **Introspect the engine itself:** `drag-lint info [--json]` -- engine
 >   self-info: version, build date, tree-sitter versions, capabilities (FTS5,
 >   CLI verb count, `apply_unit_rules` -- JSON `true` since 1.20.6: convert-apply

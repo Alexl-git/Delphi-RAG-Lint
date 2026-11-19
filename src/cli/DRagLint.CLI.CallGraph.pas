@@ -42,9 +42,9 @@ function FindCalleesLibraryDb(const AArgs: TArgs; var AProjectDb: string): strin
 /// library open the text ends "M external (library not open)" for the sites a
 /// library could bind.</summary>
 /// <param name="AArgs">Parsed CLI args; QName is the calling routine, DbPath the index.</param>
-/// <returns>0 when the store opened OK and --qname resolved to at least one symbol
-/// (even with zero callees); 1 if --qname does not resolve to any symbol; 2 on
-/// usage error / missing or stale db.</returns>
+/// <returns>0 when --qname resolved and at least one callee (resolved or external) was found;
+/// 1 if --qname does not resolve to any symbol OR it calls nothing (GitHub #17, 1.52 -- an empty
+/// answer, as query find-callers); 2 on usage error / missing or stale db.</returns>
 function DoFindCallees(const AArgs: TArgs): Integer;
 
 /// <summary>v14 (D5 T9): drag-lint ambiguous-calls [--qname X|--file F] [--json]
@@ -344,7 +344,9 @@ begin
     JOut.Free;
     Oracle.Free;
   end; // try
-  Result:= 0;
+  { GitHub #17 (owner ruling 1.52): no callee at all is an EMPTY answer -- exit 1, as
+    query find-callers. An external callee whose library is not open still counts. }
+  Result:= if (Total = 0) and (Ext.Listed = 0) and (Ext.NotOpen = 0) then 1 else 0;
 end; // function
 
 function DoAmbiguousCalls(const AArgs: TArgs): Integer;

@@ -8,10 +8,12 @@ breaking changes** until v2.0.
 In integration (lane/v152-int). One re-parse for the whole 1.52 bundle: extractor 1.40.0 -> 1.41.0-alpha,
 resolver 1.28.0 -> 1.29.0-alpha.
 
+- GitHub fixes (lane GHTRIAGE): `impact --qname` walks the RESOLVED callers (`find-callers --resolved`) and exits 1 for a qname that names no symbol (#14); `context` no longer lists another form's `OnShow = FormShow` DFM binding as a caller unless its root class descends from the handler's class (#15); source text from a unit saved as UTF-8 with a BOM is no longer double-encoded in `context` / `find-callers --context` and 32 other read-only source readers (#16); `usages --width wide` / `impact` no longer count parameters and locals as callers, which made the walk quadratic (#19).
 - Engine verb shutdown renamed **stop-now** (lane Q15REN, owner Q15): the old name tripped the autonomy guard. shutdown stays as a hidden alias (accepted, not in --help). Callers (stage-engine.ps1, pack-lint-release.ps1), docs and the feature entry follow.
 
 ### Breaking
 
+- Exit codes (GitHub #17, owner ruling): `find-callees` on a routine that calls nothing now exits **1** (empty answer, as `query find-callers`; was 0), and `sql` stopped by its `--timeout-ms` cap exits **2** (no answer produced; was 1, the empty-result code). An empty `sql` SELECT still exits 0.
 - `cycles`: the hub-surface recipe (R3) is now the DEFAULT for `--fix`, `--plan --apply` and `--causes --format json`
   wherever R3 breaks the group (B9b); `--no-hub-surface` restores the 1.51 planner default. `--fix` / `--plan --apply`
   without `--cycle` take the first group R3 breaks. R3 refuses a hub field passed to a var / out parameter at plan time.
