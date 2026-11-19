@@ -116,7 +116,7 @@ function Session([array]$Reqs) {
     -RedirectStandardOutput $outF -RedirectStandardError (Join-Path $WorkDir 'err.txt') -NoNewWindow -Wait | Out-Null
   $r = @{ res = @{}; err = @{} }
   foreach ($mm in [regex]::Matches([IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -gt 10) {
       if ($null -ne $o.error) { $r.err[[int]$o.id] = $o.error }
       elseif ($o.PSObject.Properties.Name -contains 'result') { $r.res[[int]$o.id] = ,$o.result }
@@ -235,7 +235,7 @@ end.
   & { $ErrorActionPreference = 'Continue'; & $Exe index $srcU --db $dbU 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $oU = & { $ErrorActionPreference = 'Continue'; & $Exe unwith --db $dbU --library-db $LibraryDb --in $fileU --plan --json 2>&1 | ForEach-Object { "$_" } }
   $jU = ($oU | Where-Object { $_ -like '{*' } | Select-Object -Last 1)
-  $pU = $null; try { $pU = $jU | ConvertFrom-Json } catch { }
+  $pU = $null; try { $pU = $jU | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   $bU = @(if ($pU) { $pU.sites | ForEach-Object { $_.bindings } })
   Check 'U1: the with-site is a candidate (nothing refused)' ($null -ne $pU -and $pU.candidates -eq 1 -and $pU.refused -eq 0) "plan: $jU"
   Check 'U2: Alpha (after the non-ASCII comment) and Beta are both bound and prefixed' (

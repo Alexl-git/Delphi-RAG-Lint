@@ -199,7 +199,7 @@ function Session([string[]]$Dbs, [string]$Tag) {
     -RedirectStandardError (Join-Path $WorkDir "err-$Tag.txt") -NoNewWindow -Wait | Out-Null
   $r = @{}
   foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($null -ne $o.id) { $r[[int]$o.id] = $o }
   }
   return $r

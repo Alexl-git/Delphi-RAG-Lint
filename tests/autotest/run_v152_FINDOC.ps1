@@ -135,12 +135,12 @@ try {
   (Get-Item $fx.Own).LastWriteTimeUtc = $stamp
   $errFile = Join-Path $WorkDir 'json-stderr.txt'
   Push-Location $fx.App
-  try { $out = & { $ErrorActionPreference = 'Continue'; & $Exe document --project $fx.Proj --db $fx.Db --json 2>$errFile } | Out-String }
+  try { $out = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe document --project $fx.Proj --db $fx.Db --json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String }
   finally { Pop-Location }
   $err = [IO.File]::ReadAllText($errFile)
   Check 'JSON-CTRL the tamper rescan fired (WARN on stderr)' ($err -match 'disagree with the source text') ''
   $parsed = $null
-  try { $parsed = $out | ConvertFrom-Json -ErrorAction Stop } catch { $parsed = $null }
+  try { $parsed = $out | ConvertFrom-Json -ErrorAction Stop | ForEach-Object { $_ } } catch { $parsed = $null }
   $junk = ($out -split "`r?`n" | Where-Object { $_ -match '^(stage:|Done\.|rule-cache:|Indexing|resolve:)' } | Measure-Object).Count
   Check 'JSON-PURE stdout parses as ONE JSON document' ($null -ne $parsed) "non-JSON index lines on stdout: $junk"
 
@@ -154,7 +154,7 @@ try {
   $fx = New-Fixture (Join-Path $WorkDir 'qname')
   $qc = "select s.name, sf.cyclomatic from symbol_facts sf join symbols s on s.id = sf.symbol_id join files f on f.id = s.file_id where f.path like '%uApp.pas' and s.name in ('CheckN','AppDo') order by s.name"
   function Cyclo($F) {
-    $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --query $qc --db $F.Db --json 2>$null } | Out-String | ConvertFrom-Json
+    $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --query $qc --db $F.Db --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }
     ($j.rows | ForEach-Object { '{0}={1}' -f $_[0], $_[1] }) -join ','
   }
   $c0 = Cyclo $fx

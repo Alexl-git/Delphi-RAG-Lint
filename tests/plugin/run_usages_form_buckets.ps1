@@ -44,7 +44,7 @@ if (-not $IndexDb) {
   if ($Name -eq 'Exception') { $Name = 'EFix' }
 }
 $raw = & { $ErrorActionPreference = 'Continue'; & $Exe usages --name $Name --json --db $IndexDb 2>$null } | Out-String
-$doc = $raw | ConvertFrom-Json
+$doc = $raw | ConvertFrom-Json | ForEach-Object { $_ }
 $buckets = @($doc.PSObject.Properties | Where-Object { $_.Value -is [System.Array] } | ForEach-Object { $_.Name })
 Check 'the engine answered with array buckets' ($buckets.Count -ge 5) ("buckets: " + ($buckets -join ','))
 

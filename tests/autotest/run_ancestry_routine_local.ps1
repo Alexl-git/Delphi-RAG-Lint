@@ -51,7 +51,7 @@ try {
     $q = "SELECT COALESCE(ta.ancestor_symbol_id, 0), COALESCE(a.qualified_name, '') FROM type_ancestors ta " +
          "JOIN symbols s ON s.id = ta.symbol_id LEFT JOIN symbols a ON a.id = ta.ancestor_symbol_id " +
          "WHERE s.name = '$cls' AND ta.ordinal = 0"
-    $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null } | Out-String) | ConvertFrom-Json
+    $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null } | Out-String) | ConvertFrom-Json | ForEach-Object { $_ }
     if ($null -eq $j -or $null -eq $j.rows -or $j.rows.Count -eq 0) { return $null }
     return ,@($j.rows[0])
   }

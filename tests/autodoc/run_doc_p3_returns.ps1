@@ -206,7 +206,7 @@ function Get-DocBlockAtLine([string[]]$lines, [int]$declLine1) {
 # engine's own query verb (index-first: no second parser, no python).
 function Get-DeclLine([string]$db, [string]$name) {
   $j = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --db $db --json 2>$null }) -join "`n"
-  $o = $null; try { $o = ($j | ConvertFrom-Json) } catch { return 0 }
+  $o = $null; try { $o = ($j | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return 0 }
   if ($null -eq $o) { return 0 }
   foreach ($r in @($o)) { if ($r.section -eq 'interface') { return [int]$r.start_line } }
   return 0
@@ -217,7 +217,7 @@ function Get-DeclLine([string]$db, [string]$name) {
 # @(0,0) when the symbol is absent, which the callers assert on.
 function Get-ImplSpan([string]$db, [string]$name) {
   $j = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --db $db --json 2>$null }) -join "`n"
-  $o = $null; try { $o = ($j | ConvertFrom-Json) } catch { return @(0,0) }
+  $o = $null; try { $o = ($j | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return @(0,0) }
   if ($null -eq $o) { return @(0,0) }
   foreach ($r in @($o)) {
     if ([int]$r.impl_start_line -gt 0) { return @([int]$r.impl_start_line, [int]$r.impl_end_line) }
@@ -233,7 +233,7 @@ function Get-ImplSpan([string]$db, [string]$name) {
 function Get-DeclLineQ([string]$db, [string]$qname) {
   $simple = $qname.Substring($qname.LastIndexOf('.') + 1)
   $j = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name $simple --db $db --json 2>$null }) -join "`n"
-  $o = $null; try { $o = ($j | ConvertFrom-Json) } catch { return 0 }
+  $o = $null; try { $o = ($j | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return 0 }
   if ($null -eq $o) { return 0 }
   foreach ($r in @($o)) {
     if (($r.qualified_name -eq $qname) -and ($r.section -eq 'interface')) { return [int]$r.start_line }
@@ -244,7 +244,7 @@ function Get-DeclLineQ([string]$db, [string]$qname) {
 function Get-ImplSpanQ([string]$db, [string]$qname) {
   $simple = $qname.Substring($qname.LastIndexOf('.') + 1)
   $j = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name $simple --db $db --json 2>$null }) -join "`n"
-  $o = $null; try { $o = ($j | ConvertFrom-Json) } catch { return @(0,0) }
+  $o = $null; try { $o = ($j | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return @(0,0) }
   if ($null -eq $o) { return @(0,0) }
   foreach ($r in @($o)) {
     if (($r.qualified_name -eq $qname) -and ([int]$r.impl_start_line -gt 0)) {
@@ -266,7 +266,7 @@ function Find-Lines([string[]]$src, [string]$rx) {
 function Get-HoverReturns([string]$db, [string]$qname) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath hover --qname $qname --db $db --format json 2>$null }) -join ''
   $o = $null
-  try { $o = ($raw -replace '\s*FTS5 probe:.*$','') | ConvertFrom-Json } catch { return @() }
+  try { $o = ($raw -replace '\s*FTS5 probe:.*$','') | ConvertFrom-Json | ForEach-Object { $_ } } catch { return @() }
   if ($null -eq $o) { return @() }
   return @($o.returns)
 }
@@ -427,7 +427,7 @@ foreach ($p in @(
 # the two routines really do SHARE a simple name in the index and really are
 # adjacent with a blank line above the first. Both properties are the fixture's,
 # not the output's, and neither is visible in a rendered <returns>.
-$snRows = @(((& { $ErrorActionPreference = 'Continue'; & $exePath query --name Same --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json) | ForEach-Object { $_ })
+$snRows = @(((& { $ErrorActionPreference = 'Continue'; & $exePath query --name Same --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 $snQ    = @($snRows | ForEach-Object { $_.qualified_name } | Sort-Object -Unique)
 Check 'PRECONDITION (same-name): the index holds TWO DISTINCT qualified names whose SIMPLE name is both `Same`' `
   (($snQ.Count -eq 2) -and ($snQ -contains 'returns.TAlpha.Same') -and ($snQ -contains 'returns.TBeta.Same')) `
@@ -700,8 +700,8 @@ foreach ($f in @('Alpha','Beta','Gamma','Delta','Sigma','Omega')) {
 $hvA = (& { $ErrorActionPreference = 'Continue'; & $exePath hover --qname returns.AnonHost --db $db --format json 2>$null }) -join ''
 $hvP = (& { $ErrorActionPreference = 'Continue'; & $exePath hover --qname returns.PrevIdx  --db $db --format json 2>$null }) -join ''
 $jA = $null; $jP = $null
-try { $jA = ($hvA -replace '\s*FTS5 probe:.*$','') | ConvertFrom-Json } catch {}
-try { $jP = ($hvP -replace '\s*FTS5 probe:.*$','') | ConvertFrom-Json } catch {}
+try { $jA = ($hvA -replace '\s*FTS5 probe:.*$','') | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
+try { $jP = ($hvP -replace '\s*FTS5 probe:.*$','') | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'HOVER: AnonHost''s hover returns the SAME single expression autodoc rendered' `
   (($null -ne $jA) -and (@($jA.returns).Count -eq 1) -and (@($jA.returns)[0] -eq 'F(ACfg) + 1')) $hvA
 Check 'HOVER: PrevIdx''s hover returns NOTHING, exactly as its <returns> was suppressed' `

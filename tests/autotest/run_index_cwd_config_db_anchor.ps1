@@ -40,7 +40,7 @@ function Stamp($p) {
 function Invoke-Engine([string]$Cwd, [string[]]$Argv) {
   $o = Join-Path $WorkDir 'out.txt'; $e = Join-Path $WorkDir 'err.txt'
   $q = @($Argv | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } })
-  $p = Start-Process $exePath -ArgumentList $q -WorkingDirectory $Cwd -PassThru -NoNewWindow -RedirectStandardOutput $o -RedirectStandardError $e
+  $p = Start-Process $exePath -ArgumentList $q -WorkingDirectory $Cwd -PassThru -NoNewWindow -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   if (-not $p.WaitForExit(180000)) { try { $p.Kill() } catch { }; return 'TIMEOUT' }
   return ([string](Get-Content $o -Raw -ErrorAction SilentlyContinue)) + "`n" + ([string](Get-Content $e -Raw -ErrorAction SilentlyContinue))
 }

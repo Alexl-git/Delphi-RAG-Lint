@@ -134,7 +134,7 @@ function CacheFiles { @(Get-ChildItem $cache -Filter 'rules-*.json' -ErrorAction
 function CacheState {
   $errF = Join-Path $WorkDir 'lint.err'
   $env:DRAGLINT_PROFILE = '1'
-  $null = & { $ErrorActionPreference = 'Continue'; & $exePath lint (Join-Path $proj 'uCycA.pas') --db $db --library-db $lib --rules-dir $rules --json 2>$errF } | Out-String
+  $null = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errF); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath lint (Join-Path $proj 'uCycA.pas') --db $db --library-db $lib --rules-dir $rules --json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String
   $env:DRAGLINT_PROFILE = $null
   $prof = Get-Content $errF -Raw
   if ($prof -match 'rule-cache: (hit|miss|skipped)') { $Matches[1] } else { '(none)' }
@@ -187,7 +187,7 @@ Check 'B8 warm-rule-cache without --db: exit 2' ($LASTEXITCODE -eq 2) $out8
 # (`index --watch` loops). Its pid goes in the marker a warm leaves beside the DB.
 $marker  = "$db.rule-cache-warm.pid"
 $watchDb = Join-Path $WorkDir 'watch.sqlite'
-$stale   = Start-Process -FilePath $exePath -ArgumentList @('index', "`"$libDir`"", '--db', "`"$watchDb`"", '--watch', '--interval', '60') -WindowStyle Hidden -PassThru
+$stale   = Start-Process -FilePath $exePath -ArgumentList @('index', "`"$libDir`"", '--db', "`"$watchDb`"", '--watch', '--interval', '60') -WindowStyle Hidden -PassThru; $null = $stale.Handle
 Start-Sleep -Seconds 2
 [IO.File]::WriteAllText($marker, "$($stale.Id)")
 $null = & { $ErrorActionPreference = 'Continue'; & $exePath warm-rule-cache --detached --db $db --library-db $lib 2>&1 | ForEach-Object { "$_" } } | Out-String
@@ -196,7 +196,7 @@ Check 'B9 the previous warm of the same database (same engine image) is stopped'
 Check 'B9 ... and the marker is gone once the warm finished' (-not (Test-Path $marker)) ''
 if (-not $stale.HasExited) { Stop-Process -Id $stale.Id -Force -ErrorAction SilentlyContinue }
 
-$foreign = Start-Process -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-Command', 'Start-Sleep -Seconds 60') -WindowStyle Hidden -PassThru
+$foreign = Start-Process -FilePath 'pwsh' -ArgumentList @('-NoProfile', '-Command', 'Start-Sleep -Seconds 60') -WindowStyle Hidden -PassThru; $null = $foreign.Handle
 Start-Sleep -Seconds 1
 [IO.File]::WriteAllText($marker, "$($foreign.Id)")
 $null = & { $ErrorActionPreference = 'Continue'; & $exePath warm-rule-cache --detached --db $db --library-db $lib 2>&1 | ForEach-Object { "$_" } } | Out-String
@@ -255,7 +255,7 @@ $shortExe = (New-Object -ComObject Scripting.FileSystemObject).GetFile($exePath)
 if ($shortExe -ieq $exePath) {
   Write-Host '[SKIP] B14 no 8.3 short name for the engine path on this volume' -ForegroundColor Yellow
 } else {
-  $stale14 = Start-Process -FilePath $exePath -ArgumentList @('index', "`"$libDir`"", '--db', "`"$watchDb`"", '--watch', '--interval', '60') -WindowStyle Hidden -PassThru
+  $stale14 = Start-Process -FilePath $exePath -ArgumentList @('index', "`"$libDir`"", '--db', "`"$watchDb`"", '--watch', '--interval', '60') -WindowStyle Hidden -PassThru; $null = $stale14.Handle
   Start-Sleep -Seconds 2
   [IO.File]::WriteAllText($marker, "$($stale14.Id)")
   $null = & { $ErrorActionPreference = 'Continue'; & $shortExe warm-rule-cache --detached --db $db --library-db $lib 2>&1 | ForEach-Object { "$_" } } | Out-String

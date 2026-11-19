@@ -63,7 +63,7 @@ function Apply([string]$Rules, [string[]]$Extra = @()) {
   $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @(@('convert-apply', '--unit', $unit, '--rules', (Join-Path $WorkDir $Rules), '--db', $db) + $Extra) 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $code = $LASTEXITCODE
   $j = $null
-  if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {} }
+  if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {} }
   return [pscustomobject]@{ Code = $code; Out = $o; J = $j }
 }
 function Kinds($j, [string]$k) { if ($null -eq $j) { return @() }; return @($j.items | Where-Object { $_.kind -eq $k }) }
@@ -126,7 +126,7 @@ $r = Apply 'enum.rules' @('--old-platform-db', (Join-Path $WorkDir 'nosuch.sqlit
 Check 'R1 a missing old-platform index: exit 2, it says so' (($r.Code -eq 2) -and ($r.Out -match '--old-platform-db')) $r.Out
 Check 'R2 ... and nothing was written' ([IO.File]::ReadAllText($unit, [Text.Encoding]::ASCII).Contains('C:= pcrSQLWait;'))
 $info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
-$ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json } catch {}
+$ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'G1 info capability old_platform_enum_map' ($ij.capabilities.old_platform_enum_map -eq $true) $info.Substring(0,[Math]::Min(300,$info.Length))
 
 if ($script:fail) { Write-Host 'FAILED' -ForegroundColor Red; exit 1 }

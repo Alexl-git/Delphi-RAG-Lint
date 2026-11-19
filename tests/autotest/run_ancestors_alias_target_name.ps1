@@ -164,13 +164,13 @@ function Descends([string]$Name, [string]$Of) {
   $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query ancestors --name $Name --of $Of --json --db $db 2>$null }) | ForEach-Object { "$_" }
   $json = JsonFrom $raw
   if (-not $json) { return $null }
-  return [bool](($json | ConvertFrom-Json).is_descendant)
+  return [bool](($json | ConvertFrom-Json | ForEach-Object { $_ }).is_descendant)
 }
 function AncestorRows([string]$Name) {
   $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query ancestors --name $Name --json --db $db 2>$null }) | ForEach-Object { "$_" }
   $json = JsonFrom $raw
   if (-not $json) { return @() }
-  return @(($json | ConvertFrom-Json).ancestors)
+  return @(($json | ConvertFrom-Json | ForEach-Object { $_ }).ancestors)
 }
 
 # --- precondition: the alias edge IS indexed, so this is a query-side gap -------

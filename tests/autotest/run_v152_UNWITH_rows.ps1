@@ -29,7 +29,7 @@ if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -Foreground
 $Exe = (Resolve-Path $Exe).Path
 $Repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $Fixture = Join-Path $Repo 'tests\fixtures\refactor\unwith'
-function Last-Json($o) { return ($o | Where-Object { $_ -like '{*' } | Select-Object -Last 1) | ConvertFrom-Json }
+function Last-Json($o) { return ($o | Where-Object { $_ -like '{*' } | Select-Object -Last 1) | ConvertFrom-Json | ForEach-Object { $_ } }
 
 [IO.Directory]::CreateDirectory("$WorkDir\gen") | Out-Null
 Copy-Item "$Fixture\*" $WorkDir -Recurse -Force

@@ -105,7 +105,7 @@ Check 'V index built' (Test-Path $db) $db
 $raw = & $exePath sql --db $db --json --limit 200 --query "SELECT r.start_line, coalesce(r.receiver_text,''), coalesce(e.confidence,''), coalesce(s.qualified_name,''), CASE WHEN r.symbol_id = e.target_symbol_id THEN 1 ELSE 0 END, coalesce(p.kind,'') FROM refs r LEFT JOIN call_edges e ON e.ref_id = r.id LEFT JOIN symbols s ON s.id = e.target_symbol_id LEFT JOIN symbols p ON p.id = s.parent_id WHERE r.kind = 'call' AND r.name_text = 'TransferFile' ORDER BY r.start_line" | Out-String
 $disp = & $exePath sql --db $db --json --limit 50 --query "SELECT i.qualified_name, d.kind FROM dispatch_edges d JOIN symbols b ON b.id = d.base_symbol_id JOIN symbols i ON i.id = d.impl_symbol_id WHERE b.qualified_name = 'uRB5.ICopy.TransferFile' ORDER BY 1" | Out-String
 Pop-Location
-$rows = foreach ($r in ($raw | ConvertFrom-Json).rows) { [pscustomobject]@{ Line=[int]$r[0]; Rcv=[string]$r[1]; Conf=[string]$r[2]; Target=[string]$r[3]; Sid=[int]$r[4]; ParentKind=[string]$r[5] } }
+$rows = foreach ($r in ($raw | ConvertFrom-Json | ForEach-Object { $_ }).rows) { [pscustomobject]@{ Line=[int]$r[0]; Rcv=[string]$r[1]; Conf=[string]$r[2]; Target=[string]$r[3]; Sid=[int]$r[4]; ParentKind=[string]$r[5] } }
 Check "V the seven sites were read ($(@($rows).Count))" (@($rows).Count -eq 7) $raw
 $cls = @($rows | Where-Object { $_.Rcv -eq 'A' })
 $intf = @($rows | Where-Object { $_.Rcv -ne 'A' })
@@ -117,7 +117,7 @@ foreach ($s in $intf) {
   Check "A2 $tag derived dispatch = interface (got '$kind')" ($kind -eq 'interface')
 }
 Check "A1 no interface-shaped site has an edge to an implementor" (@($intf | Where-Object { $_.Target -match 'TAlpha|TBeta' }).Count -eq 0)
-$impl = @(($disp | ConvertFrom-Json).rows | ForEach-Object { "$([string]$_[0])/$([string]$_[1])" })
+$impl = @(($disp | ConvertFrom-Json | ForEach-Object { $_ }).rows | ForEach-Object { "$([string]$_[0])/$([string]$_[1])" })
 Check "A3 implementors are a dispatch_edges query: TAlpha + TBeta, implements (got '$($impl -join ', ')')" (($impl -join ',') -ceq 'uRB5.TAlpha.TransferFile/implements,uRB5.TBeta.TransferFile/implements') $disp
 $c = $cls | Select-Object -First 1
 $ckind = if ($c -and $c.ParentKind -eq 'interface') { 'interface' } else { 'class' }

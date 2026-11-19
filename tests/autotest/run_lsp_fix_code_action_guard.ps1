@@ -89,7 +89,7 @@ function Session([string[]]$frames, [string[]]$extra = @('--full-rules')) {
     -RedirectStandardError (Join-Path $WorkDir 'err.txt') -NoNewWindow -Wait | Out-Null
   $res = @{ diags = @(); byId = @{} }
   foreach ($mm in [regex]::Matches([IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json -AsHashtable } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json -AsHashtable | ForEach-Object { $_ } } catch { continue }
     if ($o['method'] -eq 'textDocument/publishDiagnostics' -and "$($o['params']['uri'])" -match 'uFx\.pas$') { $res.diags = @($o['params']['diagnostics']) }
     elseif ($o.ContainsKey('id') -and $o['id'] -gt 10) { $res.byId[[int]$o['id']] = $o }
   }
@@ -146,7 +146,7 @@ foreach ($c in $cases) {
   Check "$($c.rule): byte-identical to lint --fix --apply" ($cliText -ceq $applied) ("cli=[$(($cliText -split "`r`n")[$line])] lsp=[$(($applied -split "`r`n")[$line])]")
   # Fixed means gone ($copy holds the fixed bytes: the check above).
   $ea = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-  $relint = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $copy --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json
+  $relint = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $copy --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   $ErrorActionPreference = $ea
   Check "$($c.rule): re-lint sees it gone, and still sees the others" ((@($relint | Where-Object { $_.rule -eq $c.rule }).Count -eq 0) -and (@($relint).Count -ge 1)) ("rules=$(@($relint | ForEach-Object { $_.rule }) -join ',')")
 }

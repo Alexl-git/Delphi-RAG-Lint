@@ -169,7 +169,7 @@ function Run-Rename($fx, [string[]]$RenameArgs) {
   # stdout and stderr apart: a stderr NOTE (e.g. 'no --library-db given') must
   # not reach ConvertFrom-Json; refusal checks read Out (both streams).
   $errFile = [IO.Path]::GetTempFileName()
-  try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe rename @RenameArgs --db $fx.Db 2>$errFile }; $ec = $LASTEXITCODE } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe rename @RenameArgs --db $fx.Db 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }; $ec = $LASTEXITCODE } finally { Pop-Location }
   $e = [IO.File]::ReadAllText($errFile); [IO.File]::Delete($errFile)
   $std = ($o -join "`n")
   [pscustomobject]@{ Exit = $ec; Std = $std; Out = (($std, $e.TrimEnd()) -join "`n") }
@@ -178,7 +178,7 @@ function Run-Rename($fx, [string[]]$RenameArgs) {
 # Every edit's (line, col, len(old)) slice of its file must BE old.
 function Check-Ranges([string]$Label, $Out) {
   $edits = $null
-  try { $edits = @(($Out | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { }
+  try { $edits = @(($Out | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { }
   Check "$Label --json parses to edits" ($null -ne $edits -and $edits.Count -gt 0) "count=$(@($edits).Count)"
   if ($null -eq $edits) { return @() }
   foreach ($e in $edits) {

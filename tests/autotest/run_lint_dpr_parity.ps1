@@ -72,7 +72,7 @@ end.
 '@
 
 function Sets($json) {
-  $a = @(($json | ConvertFrom-Json) | ForEach-Object { $_ })
+  $a = @(($json | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   @($a | ForEach-Object { '{0}@{1}' -f $_.rule, $_.start_line } | Sort-Object)
 }
 function Run($name, $mark) {

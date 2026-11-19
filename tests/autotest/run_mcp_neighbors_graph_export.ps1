@@ -50,10 +50,10 @@ try {
   Start-Process $Exe -ArgumentList 'serve','--db',$Db -RedirectStandardInput $req -RedirectStandardOutput $so `
     -RedirectStandardError (Join-Path $Work 'se.txt') -NoNewWindow -Wait | Out-Null
   $r = @{}
-  foreach ($l in (Get-Content $so)) { try { $o = $l | ConvertFrom-Json; if ($o.id) { $r[[string]$o.id] = $o } } catch {} }
+  foreach ($l in (Get-Content $so)) { try { $o = $l | ConvertFrom-Json | ForEach-Object { $_ }; if ($o.id) { $r[[string]$o.id] = $o } } catch {} }
   $ins = [string]$r['1'].result.instructions
   Check '1 initialize carries instructions saying drag-lint first' ($ins -match 'drag-lint first') "got='$ins'"
-  function Nb($id) { $c = $r[$id].result.content; if ($c) { $t = $c[0].text; $t | ConvertFrom-Json } else { $null } }
+  function Nb($id) { $c = $r[$id].result.content; if ($c) { $t = $c[0].text; $t | ConvertFrom-Json | ForEach-Object { $_ } } else { $null } }
   $n1 = Nb '2'; $n2 = Nb '3'; $n0 = Nb '4'
   $q1 = @($n1.neighbors | ForEach-Object { $_.qname })
   $q2 = @($n2.neighbors | ForEach-Object { $_.qname })
@@ -64,7 +64,7 @@ try {
   Check '2e hops 2 is a superset of hops 1' ($q2.Count -ge $q1.Count)
 
   $j = (& { $ErrorActionPreference = 'Continue'; & $Exe graph --db $Db --format json 2>$null } | Out-String)
-  $jo = $null; try { $jo = $j | ConvertFrom-Json } catch {}
+  $jo = $null; try { $jo = $j | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
   Check '3a graph --format json parses with edges' (($null -ne $jo) -and (@($jo.edges).Count -ge 2)) "raw=$($j.Substring(0, [Math]::Min(120,$j.Length)))"
   Check '3b json edge has from/to/weight' ($null -ne $jo -and $jo.edges[0].from -and $jo.edges[0].to -and $jo.edges[0].weight -gt 0)
   $h = (& { $ErrorActionPreference = 'Continue'; & $Exe graph --db $Db --format html 2>$null } | Out-String)

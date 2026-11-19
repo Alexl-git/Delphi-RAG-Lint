@@ -137,14 +137,14 @@ $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>$n
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 function SigOf([string]$qn) {
-  $r = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --query "select signature from symbols where qualified_name = '$qn'" 2>$null }) -join "`n" | ConvertFrom-Json
+  $r = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --query "select signature from symbols where qualified_name = '$qn'" 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   if ($null -eq $r.rows -or @($r.rows).Count -eq 0) { return '<no row>' }
   $v = @($r.rows)[0][0]
   if ($null -eq $v) { return '' } else { return [string]$v }
 }
 function HoverJson([string]$qn, [string[]]$extra = @()) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname $qn --db $db --format json @extra 2>$null }) -join "`n"
-  try { return ($raw | ConvertFrom-Json) } catch { return $null }
+  try { return ($raw | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 
 Write-Host ''
@@ -217,7 +217,7 @@ function Invoke-Lsp([int]$Line0, [int]$Char0, [string]$file = $file) {
   $raw = [System.IO.File]::ReadAllText($outF)
   $res = @{ md = '<NO REPLY>'; model = $null }
   foreach ($m in [regex]::Matches($raw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $m.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $m.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 2) { $res.md = if ($null -eq $o.result) { '' } else { [string]$o.result.contents.value } }
     if ($o.id -eq 3 -and $null -ne $o.result) { $res.model = $o.result.model }
   }

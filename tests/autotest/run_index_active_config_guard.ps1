@@ -87,12 +87,12 @@ function IndexProj([string[]]$Extra = @()) {
 }
 function Fp([string]$Database) {
   $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --query "SELECT value FROM schema_meta WHERE key='indexer_fingerprint'" --db $Database --json 2>$null } | Out-String
-  try { return [string](($j | ConvertFrom-Json).rows[0][0]) } catch { return "<unparsed: $j>" }
+  try { return [string](($j | ConvertFrom-Json | ForEach-Object { $_ }).rows[0][0]) } catch { return "<unparsed: $j>" }
 }
 function Cnt([string]$Name) {
   $o = & { $ErrorActionPreference = 'Continue'; & $Exe query --name $Name --db $Db --exact --json 2>$null } | Out-String
   try {
-    $x = $o | ConvertFrom-Json
+    $x = $o | ConvertFrom-Json | ForEach-Object { $_ }
     if ($null -eq $x) { return 0 } else { return @($x).Count }
   } catch { return -1 }
 }

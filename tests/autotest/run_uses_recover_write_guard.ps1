@@ -48,7 +48,7 @@ function Run([string[]]$a) {
   $out = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null } | Out-String
   [pscustomobject]@{ Code = $LASTEXITCODE; Out = $out }
 }
-function Json($r) { try { $r.Out | ConvertFrom-Json } catch { $null } }
+function Json($r) { try { $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null } }
 # sql --json rows are POSITIONAL arrays: map them onto columns[].name. Returns the rows UNROLLED:
 # wrap a call in @() before .Count / indexing.
 function Sql([string]$db, [string]$q) {

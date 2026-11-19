@@ -35,7 +35,7 @@ try {
   function Q([string]$Db,[string]$Query) {
     $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $Db --json --limit 5000 --query $Query 2>$null }) -join "`n"
     $b = $raw.IndexOf('{'); if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
-    $o = $raw.Substring($b) | ConvertFrom-Json
+    $o = $raw.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }
     $names = @($o.columns | ForEach-Object { $_.name }); $out = @()
     foreach ($r in @($o.rows)) { $h = @{}; for ($i=0; $i -lt $names.Count; $i++) { $h[$names[$i]] = $r[$i] }; $out += $h }
     return ,@($out)

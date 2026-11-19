@@ -57,7 +57,7 @@ $Fx  = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures\v152-EXTR')).Path
 function Invoke-Sql([string]$Db, [string]$Query) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query $Query --json --limit 0 2>$null }
   if ($LASTEXITCODE -ne 0) { throw "sql failed on $Db" }
-  $j = ($raw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n" | ConvertFrom-Json
+  $j = ($raw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   # A List, never a bare array: an empty or one-row result must not be unrolled or nested by @().
   $list = [System.Collections.Generic.List[object]]::new()
   foreach ($r in $j.rows) { $list.Add($r) }

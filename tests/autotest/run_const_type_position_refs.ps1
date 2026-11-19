@@ -158,7 +158,7 @@ out['TElemDeclType_call'] = n('TElemDeclType', 'call')
 print(json.dumps(out))
 c.close()
 '@ | Set-Content $py -Encoding ascii
-$r = (& python $py $db) -join "`n" | ConvertFrom-Json
+$r = (& python $py $db) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 
 Write-Host 'B1 -- a const in a TYPE POSITION emits a read' -ForegroundColor Cyan
 Check 'HAZARD: array bound in a type decl'        ($r.CBoundType       -ge 1) "refs=$($r.CBoundType)"

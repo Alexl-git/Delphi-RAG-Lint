@@ -80,7 +80,7 @@ function Sql([string]$Query) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --limit 1000 --query $Query 2>$null }) -join "`n"
   $b = $raw.IndexOf('{')
   if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
-  $o = $raw.Substring($b) | ConvertFrom-Json
+  $o = $raw.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }
   $names = @($o.columns | ForEach-Object { $_.name })
   $out = @()
   foreach ($r in @($o.rows)) {
@@ -194,7 +194,7 @@ try {
     $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name $nm --resolved --json --db $db 2>$null }) -join "`n"
     Write-Host "   raw find-callers --name $nm --resolved --json: $(($raw -replace '\s+', ' '))"
     $fc  = @()
-    try { $fc = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $fc = @() }
+    try { $fc = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $fc = @() }
     foreach ($x in @($modes | Where-Object { ($_.M -eq 'MARK-CONST') -eq ($nm -eq 'CMax') })) {
       $ln  = LineOf $x.M
       $hit = @($fc | Where-Object { [int]$_.line -eq $ln })

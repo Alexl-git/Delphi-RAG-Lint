@@ -42,7 +42,7 @@ function RunLint([string]$CfgJson) {
   try { $Out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $Pas --config $Cfg --json 2>$null } } finally { Pop-Location }
   $Txt = ($Out -join "`n")
   if ($Txt.Trim() -eq '') { return ,@() }
-  $J = $Txt | ConvertFrom-Json
+  $J = $Txt | ConvertFrom-Json | ForEach-Object { $_ }
   if ($J -is [array]) { return ,@($J) }
   if ($null -ne $J.findings) { return ,@($J.findings) }
   return ,@($J)

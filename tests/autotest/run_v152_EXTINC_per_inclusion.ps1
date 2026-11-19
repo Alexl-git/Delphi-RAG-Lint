@@ -44,7 +44,7 @@ function Invoke-Json([string[]]$CliArgs) {
   $a = $raw.IndexOf('['); $o = $raw.IndexOf('{')
   $i = if ($a -ge 0 -and ($o -lt 0 -or $a -lt $o)) { $a } else { $o }
   if ($i -lt 0) { return ,@() }
-  try { return ,@(($raw.Substring($i) | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { return ,@() }
+  try { return ,@(($raw.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { return ,@() }
 }
 # Symbols named $Name declared in the include $IncLeaf: their signatures, sorted.
 function IncSigs([string]$Db, [string]$Name, [string]$IncLeaf) {

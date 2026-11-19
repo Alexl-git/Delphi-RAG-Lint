@@ -216,7 +216,7 @@ try {
       $code = $LASTEXITCODE
       $text = (@($raw) -join "`n").Trim()
       if ($null -eq $first) { Write-Host '  -- raw answer (first case) --'; Write-Host "    $text" }
-      $json = $null; try { $json = $text | ConvertFrom-Json } catch { $json = $null }
+      $json = $null; try { $json = $text | ConvertFrom-Json | ForEach-Object { $_ } } catch { $json = $null }
       if ($null -eq $first) { $first = @{ Case = $c; Json = $json } }
       $mis = Compare-Case $c $json $dirsOf[$c.Fix]
       foreach ($m in $mis) { Check "$($c.Name)" $false $m }

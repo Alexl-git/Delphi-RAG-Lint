@@ -21,7 +21,7 @@ function Get-Findings([string[]]$ArgList) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $exe @ArgList 2>$null }
   $text = ($raw -join "`n").Trim()
   if ($text -eq '') { return @() }
-  try { $j = $text | ConvertFrom-Json } catch { return @() }
+  try { $j = $text | ConvertFrom-Json | ForEach-Object { $_ } } catch { return @() }
   if ($null -eq $j) { return @() }
   return @($j)
 }
@@ -50,7 +50,7 @@ try {
   # ---- 1. debug-display-placeholder ----
   $rule = 'debug-display-placeholder'
   $cat = (& { $ErrorActionPreference = 'Continue'; & $exe rules --json 2>$null }) -join "`n"
-  $row = @(($cat | ConvertFrom-Json).rules | Where-Object { $_.id -eq $rule })
+  $row = @(($cat | ConvertFrom-Json | ForEach-Object { $_ }).rules | Where-Object { $_.id -eq $rule })
   Assert "$rule is a catalog row" ($row.Count -eq 1)
   Assert "$rule is OFF by default" (($row.Count -eq 1) -and (-not $row[0].default_enabled))
   $disp = Join-Path $tmp 'UDisplay.pas'

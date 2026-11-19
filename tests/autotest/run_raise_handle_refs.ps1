@@ -55,7 +55,7 @@ $NewKinds = "'raise','raise-expr','reraise','handle','handle-all'"
 
 function Invoke-Sql([string]$EngineExe, [string]$Db, [string]$Query) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $EngineExe sql --query $Query --db $Db --json 2>$null }) -join "`n"
-  $env = $raw | ConvertFrom-Json
+  $env = $raw | ConvertFrom-Json | ForEach-Object { $_ }
   $names = @($env.columns | ForEach-Object { $_.name })
   $out = foreach ($r in $env.rows) {
     $o = [ordered]@{}
@@ -119,7 +119,7 @@ Check 'C. try..finally emits no handle-all' ($fin.Count -eq 0)
 # E. usages buckets (spec 5.2): raise rows -> 'raises', handle rows -> 'handles', never 'calls'
 $uRaw = (& { $ErrorActionPreference = 'Continue'; & $Exe usages --name EFoo --db $db --json 2>$null }) -join "`n"
 $u = $null
-try { $u = $uRaw | ConvertFrom-Json } catch { }
+try { $u = $uRaw | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'E. usages --json parses' ($null -ne $u) $uRaw.Substring(0, [Math]::Min(200, $uRaw.Length))
 if ($null -ne $u) {
   # @($null).Count is 1 -- a MISSING key must not read as one row.
@@ -146,7 +146,7 @@ function Get-ChartFields([string]$EngineExe, [string]$Db, [string]$Target, [stri
   $meta = Get-ChildItem $root -Recurse -Filter meta.json -ErrorAction SilentlyContinue |
     Where-Object { $_.DirectoryName -like ('*' + ($Target -replace '\.', '_')) } | Select-Object -First 1
   if ($null -eq $meta) { Write-Host "    (no meta.json for $Target; ask said: $(($o | Select-Object -First 3) -join ' | '))"; return $null }
-  return (Get-Content $meta.FullName -Raw | ConvertFrom-Json).emitter
+  return (Get-Content $meta.FullName -Raw | ConvertFrom-Json | ForEach-Object { $_ }).emitter
 }
 $fx = @{}
 foreach ($t in 'SimpleRaise', 'QualifiedRaise', 'HandlerShapes', 'ReraiseAt') {

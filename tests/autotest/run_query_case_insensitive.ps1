@@ -108,14 +108,14 @@ function QName([string]$Name, [switch]$CaseSensitive) {
   $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" } | Where-Object { $_ -notmatch 'loaded defaults' }
   $txt = ($raw -join "`n").Trim()
   if (-not $txt.StartsWith('[')) { return @() }
-  return @(($txt | ConvertFrom-Json) | ForEach-Object { $_ })
+  return @(($txt | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 function QQName([string]$Q) {
   $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query --qname $Q --db $db --json 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" } |
            Where-Object { $_ -notmatch 'loaded defaults' }
   $txt = ($raw -join "`n").Trim()
   if (-not $txt.StartsWith('[')) { return @() }
-  return @(($txt | ConvertFrom-Json) | ForEach-Object { $_ })
+  return @(($txt | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 
 # --- DE-VACUATOR: the name is stored in exactly ONE spelling ------------------
@@ -207,7 +207,7 @@ Check 'precondition: the DB holds BOTH spellings as distinct rows' ($stored -eq 
 $sibRaw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query --name 'TSibling' --db $sibDb --json 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" } |
             Where-Object { $_ -notmatch 'loaded defaults' }
 $sibTxt = ($sibRaw -join "`n").Trim()
-$sib = @(if ($sibTxt.StartsWith('[')) { @(($sibTxt | ConvertFrom-Json) | ForEach-Object { $_ }) } else { @() })
+$sib = @(if ($sibTxt.StartsWith('[')) { @(($sibTxt | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } else { @() })
 Check 'asking for TSibling returns ONLY TSibling, not its lowercase sibling' `
   (($sib.Count -eq 1) -and ($sib[0].name -ceq 'TSibling')) `
   "rows=$($sib.Count) names=$(($sib | ForEach-Object { $_.name }) -join ',')"

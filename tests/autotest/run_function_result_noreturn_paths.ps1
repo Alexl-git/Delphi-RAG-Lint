@@ -214,7 +214,7 @@ end.
   $all = @()
   foreach ($r in @('function-result-not-set', 'out-param-not-set')) {
     $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture --rule $r --json 2>$null }) -join "`n"
-    if ($raw.Trim()) { $all += @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) }
+    if ($raw.Trim()) { $all += @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   }
   $hits = @($all | Where-Object { $_.rule -eq 'function-result-not-set' -or $_.rule -eq 'out-param-not-set' })
   Write-Host ("  findings: {0}" -f (($hits | ForEach-Object { '{0}@{1}' -f $_.rule, $_.start_line }) -join ', ')) -ForegroundColor DarkGray
@@ -459,7 +459,7 @@ end.
   $all2 = @()
   foreach ($r in @('function-result-not-set', 'object-leak', 'write-only-local')) {
     $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture2 --rule $r --json 2>$null }) -join "`n"
-    if ($raw.Trim()) { $all2 += @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) }
+    if ($raw.Trim()) { $all2 += @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   }
   Write-Host ("  edge findings: {0}" -f (($all2 | ForEach-Object { '{0}@{1}' -f $_.rule, $_.start_line }) -join ', ')) -ForegroundColor DarkGray
   function CountIn2([string]$Routine, [string]$Rule) {

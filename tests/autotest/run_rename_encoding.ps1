@@ -89,7 +89,7 @@ function Check-Ranges([string]$Label, $fx, [Text.Encoding]$Enc) {
   $r = Run-Rename $fx @('--to', 'Compute2', '--json')
   Check "$Label --json exits 0" ($r.Exit -eq 0) "exit=$($r.Exit) $($r.Out)"
   $edits = $null
-  try { $edits = @(($r.Out | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { }
+  try { $edits = @(($r.Out | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { }
   Check "$Label --json has 3 edits" (@($edits).Count -eq 3) "count=$(@($edits).Count)"
   if ($null -eq $edits) { return }
   $bytes = [IO.File]::ReadAllBytes($fx.Pas)

@@ -90,7 +90,7 @@ Check 'SETUP project index built' ($files -ge 2) "files=$files"
 
 function LintRule([string]$File, [string]$Rule, [string[]]$Extra = @()) {
   $out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $File --json --db $Db @Extra 2>$null } | Out-String
-  $j = @(($out | ConvertFrom-Json) | ForEach-Object { $_ })
+  $j = @(($out | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   return @($j | Where-Object { $_.rule -eq $Rule } | ForEach-Object { [int]$_.start_line })
 }
 

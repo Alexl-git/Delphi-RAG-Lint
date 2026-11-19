@@ -164,7 +164,7 @@ $projDb = Join-Path $WorkDir 'proj.sqlite'
 Check 'index built' (Test-Path $projDb)
 
 $json = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $projDb --rule used-before-assignment --json 2>$null }) -join "`n"
-$arr  = @(($json | ConvertFrom-Json) | ForEach-Object { $_ })
+$arr  = @(($json | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 $uba  = @{}
 foreach ($f in $arr) {
   if ($f.rule -eq 'used-before-assignment') { $uba[[int]$f.start_line] = "$($f.severity)" }

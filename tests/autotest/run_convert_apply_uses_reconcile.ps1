@@ -627,7 +627,7 @@ function Run([string]$Unit, [string]$Rules, [string[]]$Extra = @()) {
   $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }) -join "`n"
   $code = $LASTEXITCODE
   $j = $null
-  if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {} }
+  if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {} }
   return [pscustomobject]@{ Code = $code; Out = $o; J = $j }
 }
 function J([string]$Unit, [string]$Rules, [string[]]$Extra = @()) { return Run $Unit $Rules (@('--format', 'json') + $Extra) }
@@ -876,7 +876,7 @@ Check 'R3 --no-reindex: uses_reindex off' (($r.Code -eq 0) -and ($r.J.uses_reind
 $singles = @{}
 foreach ($u in @('W2Form', 'W6Form')) { $singles[$u] = (J "$u.pas" (@{W2Form='old.rules'; W6Form='al.rules'}[$u])).J }
 $b = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'W2Form.pas') --unit (P 'W3Form.pas') --rules (P 'old.rules') --db $db --format json 2>$null }) -join "`n"
-$bj = $null; try { $bj = $b.Substring($b.IndexOf('{')) | ConvertFrom-Json } catch {}
+$bj = $null; try { $bj = $b.Substring($b.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 $s2 = (J 'W3Form.pas' 'old.rules').J
 Check 'B1 batch W2+W3: each units[] uses[] equals its single run' `
   (($null -ne $bj) -and (($bj.units[0].uses | ConvertTo-Json -Depth 6) -eq ($singles['W2Form'].uses | ConvertTo-Json -Depth 6)) -and
@@ -894,11 +894,11 @@ function ApplyJ([string]$Dir, [string[]]$Units, [string[]]$Extra = @()) {
   foreach ($u in $Units) { $a += @('--unit', (Join-Path $Dir "$u.pas")) }
   $a += @('--rules', (Join-Path $Dir 'old.rules'), '--db', (Join-Path $Dir 'fx.sqlite'), '--apply', '--no-backup', '--format', 'json') + $Extra
   $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }) -join "`n"
-  try { return ($o.Substring($o.IndexOf('{')) | ConvertFrom-Json) } catch { return $null }
+  try { return ($o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function Norm($Entry, [string]$Dir) {
   if ($null -eq $Entry) { return '<null>' }
-  $c = $Entry | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+  $c = $Entry | ConvertTo-Json -Depth 10 | ConvertFrom-Json | ForEach-Object { $_ }
   $c.PSObject.Properties.Remove('uses_reindex')
   $c.PSObject.Properties.Remove('classes_built')
   return (($c | ConvertTo-Json -Depth 10 -Compress).Replace(($Dir -replace '\\', '\\'), '<D>'))
@@ -999,7 +999,7 @@ foreach ($x in @(@('CastForm','cast.rules'), @('CastEForm','caste.rules'), @('D2
 
 # ---- capability -------------------------------------------------------------
 $info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n"
-$ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json } catch {}
+$ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'K info --json: capabilities.uses_reconcile is true' (($null -ne $ij) -and ($ij.capabilities.uses_reconcile -eq $true)) ''
 
 Write-Host ''

@@ -54,7 +54,7 @@ function Reindex { & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDi
 function Apply([string[]]$Extra) {
   $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @(@('convert-apply', '--unit', (P 'CvChild.pas'), '--rules', (P 'child.rules'), '--db', $db) + $Extra) 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $j = $null
-  if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {} }
+  if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {} }
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o; J = $j }
 }
 Reindex

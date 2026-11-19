@@ -121,7 +121,7 @@ function Split-Frames([byte[]]$b) {
 function Publishes([byte[]]$b) {
   $res = @()
   foreach ($f in (Split-Frames $b)) {
-    try { $j = $f.Body | ConvertFrom-Json -AsHashtable } catch { continue }
+    try { $j = $f.Body | ConvertFrom-Json -AsHashtable | ForEach-Object { $_ } } catch { continue }
     if ($j -and ($j['method'] -eq 'textDocument/publishDiagnostics')) {
       $res += [pscustomobject]@{ Frame = $f; Json = $j; Sources = @($j['params']['diagnostics'] | ForEach-Object { $_['source'] }) }
     }
@@ -155,8 +155,8 @@ $dirty = Join-Path $WorkDir 'Dirty.pas'
 $clean = Join-Path $WorkDir 'Clean.pas'
 [IO.File]::WriteAllText($dirty, "unit Dirty;`r`n`r`ninterface`r`n`r`nprocedure Foo;`r`n`r`nimplementation`r`n`r`nprocedure Foo;`r`nbegin`r`n  try`r`n    Foo;`r`n  except`r`n  end;`r`nend;`r`n`r`nend.`r`n", [Text.Encoding]::ASCII)
 [IO.File]::WriteAllText($clean, "unit Clean;`r`n`r`ninterface`r`n`r`nimplementation`r`n`r`nend.`r`n", [Text.Encoding]::ASCII)
-$dirtyLint = @((& { $ErrorActionPreference = 'Continue'; & $Exe lint $dirty --json 2>$null } | Out-String | ConvertFrom-Json) | ForEach-Object { $_ })
-$cleanLint = @((& { $ErrorActionPreference = 'Continue'; & $Exe lint $clean --json 2>$null } | Out-String | ConvertFrom-Json) | ForEach-Object { $_ })
+$dirtyLint = @((& { $ErrorActionPreference = 'Continue'; & $Exe lint $dirty --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
+$cleanLint = @((& { $ErrorActionPreference = 'Continue'; & $Exe lint $clean --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 Check 'positive control: the dirty fixture trips >= 1 lint finding' (@($dirtyLint | Where-Object { $_.start_line -gt 0 }).Count -ge 1) ("findings=$(@($dirtyLint | Where-Object { $_.start_line -gt 0 }).Count)")
 Check 'control: the clean fixture trips none' (@($cleanLint | Where-Object { $_.start_line -gt 0 }).Count -eq 0) ("findings=$(@($cleanLint | Where-Object { $_.start_line -gt 0 }).Count)")
 $dirtyUri = Uri $dirty

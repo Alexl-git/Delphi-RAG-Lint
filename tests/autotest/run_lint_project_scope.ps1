@@ -138,7 +138,7 @@ $db = Join-Path $WorkDir 'scope.sqlite'
 function Get-Leaves([string[]]$JsonLines) {
   $raw = ($JsonLines -join "`n")
   $obj = $null
-  try { $obj = $raw | ConvertFrom-Json } catch { return $null }
+  try { $obj = $raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { return $null }
   return @($obj | ForEach-Object { Split-Path $_.file_path -Leaf } | Sort-Object -Unique)
 }
 
@@ -167,8 +167,8 @@ Check 'scoped run KEEPS the transitive dependency' ($scoped -contains 'SharedU.p
 Check 'scoped run DROPS the other project''s unit' (-not ($scoped -contains 'UnitB.pas'))
 Check 'scoped run DROPS the unreferenced stray'    (-not ($scoped -contains 'Stray.pas'))
 
-$bareCount  = @((($bareOut  -join "`n") | ConvertFrom-Json) | ForEach-Object { $_ }).Count
-$scopeCount = @((($scopeOut -join "`n") | ConvertFrom-Json) | ForEach-Object { $_ }).Count
+$bareCount  = @((($bareOut  -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }).Count
+$scopeCount = @((($scopeOut -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }).Count
 Check 'scoping actually reduces the finding count' ($scopeCount -lt $bareCount) "$scopeCount < $bareCount"
 
 # The scope summary is human text. Since LINTJSON-STDERR (1.40) a JSON run writes

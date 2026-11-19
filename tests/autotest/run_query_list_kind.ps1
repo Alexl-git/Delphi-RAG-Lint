@@ -65,7 +65,7 @@ Check 'the DOCUMENTED unit LU001 is listed (not the --no-docs filter)' ($found -
 
 $json = (& { $ErrorActionPreference = 'Continue'; & $Exe query --kind unit --all --json --db $db 2>$null }) | Out-String
 $rows = @()
-try { $rows = @(($json | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { }
+try { $rows = @(($json | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { }
 $jNames = @($rows | ForEach-Object { $_.name } | Where-Object { $_ -match '^LU\d{3}$' } | Sort-Object -Unique)
 Check "--json parses and lists all $N units" ($jNames.Count -eq $N) "rows=$($rows.Count) unit names=$($jNames.Count)"
 

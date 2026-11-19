@@ -113,7 +113,7 @@ Push-Location C:\TEMP
 Check 'V index built' (Test-Path $db) $db
 $raw = & $exePath sql --db $db --json --limit 500 --query "SELECT f.path, r.start_line, coalesce(s.qualified_name,'') FROM refs r JOIN files f ON f.id = r.file_id LEFT JOIN symbols s ON s.id = r.symbol_id WHERE r.kind = 'type_use' AND r.name_text = 'TPair' ORDER BY f.path, r.start_line" | Out-String
 Pop-Location
-$rows = foreach ($r in ($raw | ConvertFrom-Json).rows) { [pscustomobject]@{ File=[IO.Path]::GetFileNameWithoutExtension([string]$r[0]); Line=[int]$r[1]; Target=[string]$r[2] } }
+$rows = foreach ($r in ($raw | ConvertFrom-Json | ForEach-Object { $_ }).rows) { [pscustomobject]@{ File=[IO.Path]::GetFileNameWithoutExtension([string]$r[0]); Line=[int]$r[1]; Target=[string]$r[2] } }
 Check "V the TPair mentions were read ($(@($rows).Count))" (@($rows).Count -ge 9) $raw
 function Mentions($file){ @($rows | Where-Object { $_.File -eq $file } | Sort-Object Line) }
 function Impl($file){ (Mentions $file | Select-Object -Last 1) }

@@ -189,7 +189,7 @@ function Get-HoverValue([string[]]$Dbs, [int]$Line0, [int]$Char0) {
 
   $raw = [System.IO.File]::ReadAllText($outF)
   foreach ($m in [regex]::Matches($raw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $m.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $m.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 2) {
       if ($null -eq $o.result) { return '' }
       return [string]$o.result.contents.value

@@ -67,7 +67,7 @@ try {
     $o = "$WorkDir\o.txt"; $e = "$WorkDir\e.txt"
     $engine = "$EngineDir\drag-lint.exe"  # exe-freshness: absent
     $p = Start-Process -FilePath $engine -ArgumentList $A -NoNewWindow -Wait -PassThru -WorkingDirectory $cwd `
-           -RedirectStandardOutput $o -RedirectStandardError $e
+           -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
     [pscustomobject]@{ Exit = $p.ExitCode; Out = [IO.File]::ReadAllText($o); Err = [IO.File]::ReadAllText($e) }
   }
   function Db([string]$Proj) { "$Proj\_D-RAG\App.sqlite" }
@@ -140,7 +140,7 @@ try {
     $o = "$WorkDir\so.txt"; $e = "$WorkDir\se.txt"
     $engine = "$deployed\drag-lint.exe"  # exe-freshness: absent
     $sp = Start-Process -FilePath $engine -ArgumentList @($verb[1], '--project', "$ps\App.dpr") -NoNewWindow -PassThru -WorkingDirectory $cwd `
-            -RedirectStandardInput "$WorkDir\empty.txt" -RedirectStandardOutput $o -RedirectStandardError $e
+            -RedirectStandardInput "$WorkDir\empty.txt" -RedirectStandardOutput $o -RedirectStandardError $e; $null = $sp.Handle
     if (-not $sp.WaitForExit(60000)) { $sp.Kill($true) }
     Check ($verb[0] + ': ' + $verb[1] + ' --project on a deployed engine -- nothing built') (-not (Test-Path (Db $ps))) ("stderr=" + [IO.File]::ReadAllText($e).Trim())
   }

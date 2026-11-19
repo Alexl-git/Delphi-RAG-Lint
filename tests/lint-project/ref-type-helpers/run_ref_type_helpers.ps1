@@ -76,7 +76,7 @@ try {
   function CountRefs([string]$Where) {
     $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "SELECT COUNT(*) FROM refs WHERE $Where" --json 2>$null }) -join "`n"
     $start = $j.IndexOf('{')
-    return [int](($j.Substring($start) | ConvertFrom-Json).rows[0][0])
+    return [int](($j.Substring($start) | ConvertFrom-Json | ForEach-Object { $_ }).rows[0][0])
   }
   $srcLines = [IO.File]::ReadAllLines((Join-Path $src 'uRhTypes.pas'))
   function LineOf([string]$Text) { return [array]::FindIndex($srcLines, [Predicate[string]] { param($l) $l.Contains($Text) }) + 1 }

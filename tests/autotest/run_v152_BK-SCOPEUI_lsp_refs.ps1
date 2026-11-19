@@ -67,7 +67,7 @@ Start-Process $exePath -ArgumentList @('lsp', '--db', $db) -WorkingDirectory $sc
 
 $res = @{}
 foreach ($mm in [regex]::Matches([IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-  try { $r = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+  try { $r = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
   if ($null -ne $r.id) { $res[[int]$r.id] = $r }
 }
 function RowLines($id) { return @(@($res[$id].result) | ForEach-Object { $_.range.start.line + 1 }) }

@@ -65,7 +65,7 @@ $DbFile = (Resolve-Path $DbFile).Path
 $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe schema --db $DbFile --format json 2>$null }) -join "`n"
 $i   = $raw.IndexOf('{')
 $obj = $null
-if ($i -ge 0) { try { $obj = ($raw.Substring($i) | ConvertFrom-Json) } catch { } }
+if ($i -ge 0) { try { $obj = ($raw.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { } }
 Check 'schema --format json is ONE valid object' ($null -ne $obj) ''
 if ($null -eq $obj) { Write-Host 'FATAL: no JSON'; exit 1 }
 
@@ -161,10 +161,10 @@ foreach ($v in $vocab) {
   # SQLite as `unrecognized token: "\"`. The identifier-shape test above is what
   # makes bare names safe here.
   $q   = "SELECT DISTINCT $($v.Column) AS v FROM $($v.Table)"
-  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --query $q --db $DbFile --json --limit 500 2>$sqlErrFile }) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($sqlErrFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe sql --query $q --db $DbFile --json --limit 500 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }) -join "`n"
   $rc  = $LASTEXITCODE
   $doc = $null
-  if ($rc -eq 0) { try { $doc = $raw | ConvertFrom-Json } catch { } }
+  if ($rc -eq 0) { try { $doc = $raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { } }
   if ($null -eq $doc) {
     $why = if (Test-Path -LiteralPath $sqlErrFile) { (Get-Content -LiteralPath $sqlErrFile -Raw).Trim() } else { '' }
     Check "$($v.Table).$($v.Column): SELECT DISTINCT ran" $false "exit $rc / $why"

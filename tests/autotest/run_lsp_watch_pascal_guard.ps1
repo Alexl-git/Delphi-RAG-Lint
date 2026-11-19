@@ -92,7 +92,7 @@ function Pump([int]$Ms) {
     if (-not $m.Success) { break }
     $start = $script:Scan + $m.Index + $m.Length; $len = [int]$m.Groups[1].Value
     if ($start + $len -gt $all.Length) { break }
-    $msg = $all.Substring($start, $len) | ConvertFrom-Json
+    $msg = $all.Substring($start, $len) | ConvertFrom-Json | ForEach-Object { $_ }
     if ($msg.method -eq 'textDocument/publishDiagnostics') { $script:Pubs.Add($msg.params) }
     $script:Scan = $start + $len
   }

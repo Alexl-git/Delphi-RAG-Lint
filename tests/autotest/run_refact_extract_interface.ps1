@@ -30,7 +30,7 @@ function Tree-Hash([string]$Dir) {
 function Build-Project([string]$Proj, [string]$Tmp) {
   $bat = Join-Path $Tmp ([guid]::NewGuid().ToString('N') + '.bat')
   [IO.File]::WriteAllText($bat, "@echo off`r`ncall `"$Rsvars`"`r`ncd /d `"$(Split-Path $Proj)`"`r`nmsbuild /t:Build /p:Config=Debug /p:Platform=Win64 /v:minimal `"$(Split-Path $Proj -Leaf)`"`r`nexit /b %ERRORLEVEL%`r`n", [Text.Encoding]::ASCII)
-  $p = Start-Process -Wait -PassThru -NoNewWindow cmd.exe -ArgumentList "/c `"$bat`"" -RedirectStandardOutput "$bat.log" -RedirectStandardError "$bat.err"
+  $p = Start-Process -Wait -PassThru -NoNewWindow cmd.exe -ArgumentList "/c `"$bat`"" -RedirectStandardOutput "$bat.log" -RedirectStandardError "$bat.err"; $null = $p.Handle
   return $p.ExitCode
 }
 function Bare-Lf([string]$Path) {
@@ -51,9 +51,9 @@ function New-Project([string]$Name) {
   return @{ Dir = $d; Db = $db; Proj = (Join-Path $d 'EiProj.dproj'); Unit = (Join-Path $d 'EiWidget.pas'); Prog = (Join-Path $d 'Win64\Debug\EiProj.exe') }
 }
 function Run-Json($P, [string[]]$More) {
-  $o = & { $ErrorActionPreference = 'Continue'; & $Exe extract-interface --db $P.Db --project $P.Proj --library-db none --format json @More 2> (Join-Path $Tmp 'run.err') }
+  $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath((Join-Path $Tmp 'run.err')); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe extract-interface --db $P.Db --project $P.Proj --library-db none --format json @More 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   $script:LastExit = $LASTEXITCODE
-  return (($o -join "`n") | ConvertFrom-Json)
+  return (($o -join "`n") | ConvertFrom-Json | ForEach-Object { $_ })
 }
 function Read-Markers([string]$Path) {
   $map = @{}; $inClass = $false
@@ -171,7 +171,7 @@ try {
     [IO.File]::WriteAllText($proof, "program EiProof;`r`n{`$APPTYPE CONSOLE}`r`nuses EiWidget;`r`nvar I: IEiWidget;`r`nbegin`r`n  I:= TEiDesc.Create;`r`n  I.Count:= 11;`r`n  I.Over('abc');`r`n  Writeln(I.Virt, ' ', I.Count, ' ', I.Sum(1, 2), ' ', I.Value);`r`nend.`r`n", [Text.Encoding]::ASCII)
     $bat = Join-Path $Tmp 'proof.bat'
     [IO.File]::WriteAllText($bat, "@echo off`r`ncall `"$Rsvars`"`r`ncd /d `"$($B.Dir)`"`r`ndcc64 -B -Q EiProof.dpr`r`nexit /b %ERRORLEVEL%`r`n", [Text.Encoding]::ASCII)
-    $p = Start-Process -Wait -PassThru -NoNewWindow cmd.exe -ArgumentList "/c `"$bat`"" -RedirectStandardOutput "$bat.log" -RedirectStandardError "$bat.err"
+    $p = Start-Process -Wait -PassThru -NoNewWindow cmd.exe -ArgumentList "/c `"$bat`"" -RedirectStandardOutput "$bat.log" -RedirectStandardError "$bat.err"; $null = $p.Handle
     Check 'A8 a NEW program compiles against the interface' ($p.ExitCode -eq 0) "exit $($p.ExitCode)"
     $po = (& (Join-Path $B.Dir 'EiProof.exe')) -join ''
     Check 'A9 a call through the interface reaches the override and the class' ($po -eq 'desc 3 3 42') "[$po]"

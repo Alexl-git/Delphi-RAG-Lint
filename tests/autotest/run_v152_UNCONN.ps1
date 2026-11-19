@@ -34,13 +34,13 @@ function Findings($file, $rule, [string]$db = "") {
   if ($db -ne "") { $cmd += @('--db', $db) }
   $raw = & { $ErrorActionPreference = 'Continue'; & $exe @cmd 2>$null }
   $arr = @()
-  try { $arr = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $arr = @() }
+  try { $arr = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $arr = @() }
   return @($arr | Where-Object { $_ -ne $null -and $_.rule -eq $rule })
 }
 function HasLine($f, $line) { return @($f | Where-Object { $_.start_line -eq $line }).Count -gt 0 }
 
 # --- 1. catalog ---
-$rules = & { $ErrorActionPreference = 'Continue'; & $exe rules --json 2>$null } | ConvertFrom-Json
+$rules = & { $ErrorActionPreference = 'Continue'; & $exe rules --json 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
 $all = if ($rules.rules) { $rules.rules } else { $rules }
 foreach ($id in 'unconnected-control', 'hanging-handler') {
   $r = @($all | Where-Object { $_.id -eq $id })

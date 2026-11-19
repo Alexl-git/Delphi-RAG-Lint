@@ -77,7 +77,7 @@ function Lint-One([string]$File, [string]$Db, [string[]]$Extra = @()) {
   $a = @('lint', $File, '--db', $Db, '--rule', 'circular-uses', '--format', 'json', '--library-db', 'none') + $Extra
   $out = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null } | Out-String)
   $rows = @()
-  try { $rows = @(($out | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $rows = $null }
+  try { $rows = @(($out | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $rows = $null }
   return @{ Out = $out; Rows = $rows }
 }
 
@@ -93,7 +93,7 @@ try {
   Write-Host '== (d) lint-all: one finding per SCC at the first unit, on ITS intra-cycle uses entry (read first, the oracle for (a))' -ForegroundColor Cyan
   $allOut = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule circular-uses --json --library-db none 2>$null } | Out-String)
   $all = @()
-  try { $all = @(($allOut | ConvertFrom-Json) | Where-Object { $_.rule -eq 'circular-uses' }) } catch { $all = @() }
+  try { $all = @(($allOut | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $_.rule -eq 'circular-uses' }) } catch { $all = @() }
   Check 'd: lint-all prints 3 circular-uses findings' ($all.Count -eq 3) $allOut
   # H2 (2026-10-25): lint-all used to anchor at the unit header :1:1 while `lint <anchor unit>` anchored
   # on the uses entry, so no single dl:ok could review the cycle in both scopes. Same line now.
@@ -155,7 +155,7 @@ try {
   Check 'c: DemoBlueprint.Interfaces.pas -> 0 findings' ($null -ne $r.Rows -and $r.Rows.Count -eq 0) $r.Out
 
   Write-Host '== (e) rules --json: circular-uses stays fixable:false' -ForegroundColor Cyan
-  $rules = (& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null } | Out-String) | ConvertFrom-Json
+  $rules = (& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null } | Out-String) | ConvertFrom-Json | ForEach-Object { $_ }
   $cu = @(@($rules) + @($rules.rules) | Where-Object { $_ -and $_.id -eq 'circular-uses' }) | Select-Object -First 1
   Check 'e: circular-uses listed, fixable = false' ($cu -and $cu.fixable -eq $false) "got: $($cu | ConvertTo-Json -Compress)"
 
@@ -167,7 +167,7 @@ try {
   $al  = & { $ErrorActionPreference = 'Continue'; & $Exe allow $gp --fix-line 56 --fix-rule circular-uses --apply --db $rdb --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'h: SANITY allow wrote the marker on DemoGagePort.pas:56' (([IO.File]::ReadAllLines($gp))[55] -match 'dl:ok circular-uses@[0-9a-f]{4}') $al
   $ra = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $rdb --json --library-db none 2>$null } | Out-String)
-  $rows = @(); try { $rows = @(($ra | ConvertFrom-Json) | Where-Object { $_.rule -eq 'circular-uses' -or ($_.rule -like 'review-marker-*' -and $_.file_path -like '*DemoGagePort.pas') }) } catch { $rows = @() }
+  $rows = @(); try { $rows = @(($ra | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $_.rule -eq 'circular-uses' -or ($_.rule -like 'review-marker-*' -and $_.file_path -like '*DemoGagePort.pas') }) } catch { $rows = @() }
   Check 'h: lint-all: the reviewed 2-unit cycle is gone' (@($rows | Where-Object { $_.rule -eq 'circular-uses' -and $_.file_path -like '*DemoGagePort.pas' }).Count -eq 0) $ra
   Check 'h: lint-all: POSITIVE CONTROL the two unreviewed cycles still report' (@($rows | Where-Object { $_.rule -eq 'circular-uses' }).Count -eq 2) $ra
   Check 'h: lint-all: the marker is neither unused nor stale' (@($rows | Where-Object { $_.rule -like 'review-marker-*' }).Count -eq 0) $ra

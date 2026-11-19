@@ -37,13 +37,13 @@ $Pending = @()
 
 $rulesJson = & { $ErrorActionPreference = 'Continue'; & $exe rules --json --rules-dir $rulesDir 2>$null }
 Assert "rules --json exits 0" ($LASTEXITCODE -eq 0)
-$cat = ($rulesJson -join "`n") | ConvertFrom-Json
+$cat = ($rulesJson -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }
 $ids = @($cat.rules | ForEach-Object { $_.id })
 
 # ---- item 1: completeness, both directions ------------------------------------------------
 Assert "compliance.json exists" (Test-Path $labelFile)
 $labels = $null
-if (Test-Path $labelFile) { $labels = Get-Content $labelFile -Raw | ConvertFrom-Json }
+if (Test-Path $labelFile) { $labels = Get-Content $labelFile -Raw | ConvertFrom-Json | ForEach-Object { $_ } }
 $keys = @(); if ($labels) { $keys = @($labels.PSObject.Properties.Name) }
 $missing = @($ids | Where-Object { ($keys -notcontains $_) -and ($Pending -notcontains $_) })
 $extra   = @($keys | Where-Object { ($ids -notcontains $_) -and ($Pending -notcontains $_) })
@@ -100,17 +100,17 @@ try {
 
 # ---- item 5: lint --json carries the labels -------------------------------------------------
 $f1 = & { $ErrorActionPreference = 'Continue'; & $exe lint --json --rules-dir $rulesDir (Join-Path $repo 'tests\lint\hardcoded-credential.pas') 2>$null }
-$a1 = @(($f1 -join "`n") | ConvertFrom-Json | Where-Object { $_.rule -eq 'hardcoded-credential' })
+$a1 = @(($f1 -join "`n") | ConvertFrom-Json | ForEach-Object { $_ } | Where-Object { $_.rule -eq 'hardcoded-credential' })
 Assert "lint --json: hardcoded-credential finding exists" ($a1.Count -ge 1)
 Assert "lint --json: hardcoded-credential finding has compliance.cwe containing CWE-798" ($a1.Count -ge 1 -and @($a1[0].compliance.cwe) -contains 'CWE-798')
 $f2 = & { $ErrorActionPreference = 'Continue'; & $exe lint --json --rules-dir $rulesDir (Join-Path $repo 'tests\lint\type-name-prefix.pas') 2>$null }
-$a2 = @(($f2 -join "`n") | ConvertFrom-Json | Where-Object { $_.rule -eq 'type-name-prefix' })
+$a2 = @(($f2 -join "`n") | ConvertFrom-Json | ForEach-Object { $_ } | Where-Object { $_.rule -eq 'type-name-prefix' })
 Assert "lint --json: type-name-prefix finding exists" ($a2.Count -ge 1)
 Assert "lint --json: type-name-prefix finding has no compliance key" ($a2.Count -ge 1 -and $null -eq $a2[0].PSObject.Properties['compliance'])
 
 # ---- item 6: --format sarif carries the taxonomies -----------------------------------------
 $sarifTxt = (& { $ErrorActionPreference = 'Continue'; & $exe lint --format sarif --rules-dir $rulesDir (Join-Path $repo 'tests\lint\hardcoded-credential.pas') 2>$null }) -join "`n"
-$sj = $null; try { $sj = $sarifTxt | ConvertFrom-Json } catch {}
+$sj = $null; try { $sj = $sarifTxt | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Assert "sarif: parses" ($null -ne $sj)
 Assert "sarif: tags contain external/cwe/cwe-798" ($sarifTxt -match '"external/cwe/cwe-798"')
 $tax = $null; if ($sj) { $tax = @($sj.runs[0].taxonomies) }
@@ -120,10 +120,10 @@ Assert "sarif: hardcoded-credential has a relationship targeting 798" ($null -ne
 
 # ---- item 7: built-in profile `cwe` ----------------------------------------------------------
 $p1 = & { $ErrorActionPreference = 'Continue'; & $exe lint --json --profile cwe --rules-dir $rulesDir (Join-Path $repo 'tests\lint\type-name-prefix.pas') 2>$null }
-$n1 = @((($p1 -join "`n") | ConvertFrom-Json) | ForEach-Object { $_ }).Count
+$n1 = @((($p1 -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }).Count
 Assert "--profile cwe on type-name-prefix.pas: 0 findings (got $n1)" ($n1 -eq 0)
 $p2 = & { $ErrorActionPreference = 'Continue'; & $exe lint --json --profile cwe --rules-dir $rulesDir (Join-Path $repo 'tests\lint\hardcoded-credential.pas') 2>$null }
-$h2 = @(($p2 -join "`n") | ConvertFrom-Json | Where-Object { $_.rule -eq 'hardcoded-credential' -and $_.severity -in @('warning','error') })
+$h2 = @(($p2 -join "`n") | ConvertFrom-Json | ForEach-Object { $_ } | Where-Object { $_.rule -eq 'hardcoded-credential' -and $_.severity -in @('warning','error') })
 Assert "--profile cwe on hardcoded-credential.pas: >= 1 finding at >= warning (got $($h2.Count))" ($h2.Count -ge 1)
 
 Write-Host ""

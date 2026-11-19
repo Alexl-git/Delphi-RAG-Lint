@@ -103,7 +103,7 @@ function Run-Case([string]$Tag, [string[]]$Select, [string]$LibArg) {
   $out = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --build-timeout 1800 --project (Join-Path $proj 'CircularDemo.dproj') --db $db @Select `
     --no-compile --library-db $LibArg --shadow-out $shadow --format json 2>$null } | Out-String)
   $code = $LASTEXITCODE
-  $j = try { $out | ConvertFrom-Json } catch { $null }
+  $j = try { $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
   Check "${Tag}: dry run exit 0, mechanical" ($code -eq 0 -and $j -and $j.cycles[0].verdict -eq 'mechanical') "exit=$code $out"
   Check "${Tag}: the project copy is byte-identical after the dry run" ((Get-TreeHash $proj) -eq $hashBefore) ''
   Check "${Tag}: shadow dir exists" (Test-Path $shadow) $shadow
@@ -211,13 +211,13 @@ try {
     $env:DRAGLINT_TEST_SCRATCH_PID = $fk
     foreach ($k in $Env.Keys) { [Environment]::SetEnvironmentVariable($k, $Env[$k]) }
     try {
-      $o = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --build-timeout 1800 --project (Join-Path $Dir 'CircularDemo.dproj') --db $Db --cycle 1 --library-db none --format json 2>$errf } | Out-String)
+      $o = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errf); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe cycles --fix --build-timeout 1800 --project (Join-Path $Dir 'CircularDemo.dproj') --db $Db --cycle 1 --library-db none --format json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
       $code = $LASTEXITCODE
     } finally {
       $env:DRAGLINT_TEST_SCRATCH_PID = $null
       foreach ($k in $Env.Keys) { [Environment]::SetEnvironmentVariable($k, $null) }
     }
-    $j = try { $o | ConvertFrom-Json } catch { $null }
+    $j = try { $o | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
     return @{ Exit = $code; Json = $j; Out = $o; Err = [IO.File]::ReadAllText($errf)
               Build = (Join-Path $ProductRoot "draglint_cyclefix_${fk}_build"); Shadow = (Join-Path $ProductRoot "draglint_cyclefix_$fk") }
   }
@@ -273,12 +273,12 @@ try {
     $errf = Join-Path $WorkDir "$Tag-stderr.txt"
     foreach ($k in $Env.Keys) { Set-Item "Env:$k" $Env[$k] }
     try {
-      $out = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --build-timeout 1800 --project (Join-Path $proj 'CircularDemo.dproj') --db $db --cycle 1 `
-        --no-compile --library-db none --shadow-out $shadow --format json @Extra 2>$errf } | Out-String)
+      $out = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errf); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe cycles --fix --build-timeout 1800 --project (Join-Path $proj 'CircularDemo.dproj') --db $db --cycle 1 `
+        --no-compile --library-db none --shadow-out $shadow --format json @Extra 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
       $code = $LASTEXITCODE
       $err = [IO.File]::ReadAllText($errf)
     } finally { foreach ($k in $Env.Keys) { Remove-Item "Env:$k" -ErrorAction SilentlyContinue } }
-    $j = try { $out | ConvertFrom-Json } catch { $null }
+    $j = try { $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
     $n = if (Test-Path $shadow) { @(Get-ChildItem $shadow -Recurse -File).Count } else { 0 }
     return @{ Exit = $code; Json = $j; Out = $out; Err = $err; Shadow = $shadow; ShadowFiles = $n; Proj = $proj }
   }

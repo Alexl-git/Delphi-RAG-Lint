@@ -200,7 +200,7 @@ function Invoke-Lsp([string]$Method, [int]$Line0, [int]$Char0, [string]$Sync) {
 
   $raw = [System.IO.File]::ReadAllText($outF)
   foreach ($m in [regex]::Matches($raw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $m.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $m.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 2) { return $o }
   }
   return $null
@@ -264,7 +264,7 @@ Start-Process $Exe -ArgumentList @('lsp', '--db', $db) -WorkingDirectory $WorkDi
 $capRaw = [System.IO.File]::ReadAllText($outF)
 $syncVal = $null
 foreach ($m in [regex]::Matches($capRaw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-  try { $o = $m.Value.Trim() | ConvertFrom-Json } catch { continue }
+  try { $o = $m.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
   if ($o.id -eq 1 -and $o.result) { $syncVal = $o.result.capabilities.textDocumentSync }
 }
 Check 'capabilities carry textDocumentSync' ($null -ne $syncVal) "got: [$syncVal]"

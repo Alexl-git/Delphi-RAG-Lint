@@ -93,7 +93,7 @@ function Rows([string[]]$ExtraArgs) {
   $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }) | ForEach-Object { "$_" }
   $txt = ($raw -join "`n").Trim()
   if (-not $txt.StartsWith('[')) { return @() }
-  return @(($txt | ConvertFrom-Json) | ForEach-Object { $_ })
+  return @(($txt | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 
 # --- 2.4a --exact -------------------------------------------------------------
@@ -139,7 +139,7 @@ $enumTxt = ($rawEnum -join "`n").Trim()
 Check 'surface accepts an ENUM (no longer refuses)' ($enumTxt.StartsWith('{')) `
   $(if ($enumTxt.Length -gt 60) { $enumTxt.Substring(0, 60) } else { $enumTxt })
 if ($enumTxt.StartsWith('{')) {
-  $enum = $enumTxt | ConvertFrom-Json
+  $enum = $enumTxt | ConvertFrom-Json | ForEach-Object { $_ }
   $names = @($enum.members | ForEach-Object { $_.name })
   Check 'all three members are returned' ($names.Count -eq 3) "members=$($names -join ',')"
   Check 'in DECLARATION order, with ordinals' `
@@ -195,7 +195,7 @@ Check 'with --json --quiet the banner is GONE' (-not ($quiet.Err -match 'loaded 
 # never the only thing keeping stdout parseable.
 foreach ($m in @(@{n='without --quiet'; v=$loud}, @{n='with --quiet'; v=$quiet})) {
   $ok = $false
-  try { $null = $m.v.Out | ConvertFrom-Json; $ok = $true } catch { $ok = $false }
+  try { $null = $m.v.Out | ConvertFrom-Json | ForEach-Object { $_ }; $ok = $true } catch { $ok = $false }
   Check "stdout alone is valid JSON $($m.n)" $ok
 }
 

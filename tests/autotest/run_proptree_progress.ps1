@@ -87,7 +87,7 @@ function P([string]$n) { return (Join-Path $WorkDir $n) }
 function Json([string]$s) {
   $a = $s.IndexOf('{'); $b = $s.LastIndexOf('}')
   if ($a -lt 0 -or $b -le $a) { return $null }
-  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json) } catch { return $null }
+  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function Run([string[]]$A) {
   $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @A 2>&1 | ForEach-Object { "$_" } }) -join "`n"
@@ -98,7 +98,7 @@ function Run([string[]]$A) {
 function RunSplit([string]$Tag, [string[]]$A) {
   $so = P "$Tag.out"; $se = P "$Tag.err"
   $p = Start-Process -FilePath $Exe -ArgumentList $A -NoNewWindow -PassThru `
-    -RedirectStandardOutput $so -RedirectStandardError $se
+    -RedirectStandardOutput $so -RedirectStandardError $se; $null = $p.Handle
   $p.WaitForExit()
   return [pscustomobject]@{ Code = $p.ExitCode; OutFile = $so; ErrFile = $se }
 }
@@ -258,7 +258,7 @@ if (($LibDb -eq '') -or -not (Test-Path $LibDb)) {
   $parsed = @()
   $shapeOk = $true; $bad = ''
   foreach ($l in $errLines) {
-    try { $o = $l | ConvertFrom-Json } catch { $o = $null }
+    try { $o = $l | ConvertFrom-Json | ForEach-Object { $_ } } catch { $o = $null }
     if (($null -eq $o) -or (@($o.PSObject.Properties.Name) -join ',') -ne 'progress' -or
         ((@($o.progress.PSObject.Properties.Name) -join ',') -ne $KEYS)) { $shapeOk = $false; $bad = $l; break }
     $parsed += $o.progress
@@ -290,7 +290,7 @@ if (($LibDb -eq '') -or -not (Test-Path $LibDb)) {
   Copy-Item -LiteralPath $LibDb -Destination $copy
   $kso = P 'f.out'; $kse = P 'f.err'
   $ka = @('proptree', '--qname', $Q, '--depth', '5', '--refs-as-leaves', '--json', '--progress-interval', '1', '--db', $copy)
-  $kp = Start-Process -FilePath $Exe -ArgumentList $ka -NoNewWindow -PassThru -RedirectStandardOutput $kso -RedirectStandardError $kse
+  $kp = Start-Process -FilePath $Exe -ArgumentList $ka -NoNewWindow -PassThru -RedirectStandardOutput $kso -RedirectStandardError $kse; $null = $kp.Handle
   $sawLine = $false
   $deadline = (Get-Date).AddSeconds(180)
   while (-not $kp.HasExited -and (Get-Date) -lt $deadline) {

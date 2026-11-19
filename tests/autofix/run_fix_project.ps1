@@ -119,7 +119,7 @@ try {
   $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --json --disable missing-doc,doc-drift,unused-global --output $report 2>$null } | Out-String
   $arr = $null
   $b = $raw.IndexOf('[')
-  if ($b -ge 0) { try { $arr = ($raw.Substring($b) | ConvertFrom-Json) } catch { $arr = $null } }
+  if ($b -ge 0) { try { $arr = ($raw.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $arr = $null } }
   if ($null -ne $arr -and $arr -isnot [System.Array]) { $arr = @($arr) }
   Check 'json: parses as a 2-element array' ($null -ne $arr -and $arr.Count -eq 2)
   $ja = if ($null -ne $arr) { $arr | Where-Object { $_.file -match 'unita\.pas' } | Select-Object -First 1 } else { $null }

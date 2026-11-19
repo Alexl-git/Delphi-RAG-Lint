@@ -48,7 +48,7 @@ $db = "$WorkDir\t.sqlite"
 Push-Location $WorkDir
 try {
   function Note([string[]]$Extra = @()) { (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --output "$WorkDir\rep.txt" @Extra 2>&1 | ForEach-Object { "$_" } } | Out-String) }
-  function Edges { $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query 'select count(*) as n from call_edges' --json 2>$null } | Out-String | ConvertFrom-Json; [int]$j.rows[0][0] }
+  function Edges { $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query 'select count(*) as n from call_edges' --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }; [int]$j.rows[0][0] }
   $phrase = 'have no call edges (stale index)'
   & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $e0 = Edges
@@ -71,7 +71,7 @@ try {
   Check 'C2 the note says what to do' ($o -match 'reindex before trusting effect / caller rules') $o
 
   $errF = "$WorkDir\err.txt"
-  $out = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --json --output "$WorkDir\rep.json" 2>$errF } | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errF); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe lint-all --db $db --json --output "$WorkDir\rep.json" 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String
   Check 'E1 --json: the note is on stderr' ((Get-Content $errF -Raw).Contains($phrase)) ''
   Check 'E2 --json: stdout carries no note' (-not $out.Contains($phrase)) $out
 

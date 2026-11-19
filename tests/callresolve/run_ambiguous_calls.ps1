@@ -49,7 +49,7 @@ try {
   # --- ambiguous-calls --file: whole-file coverage view. ---
   $jsonOut = & { $ErrorActionPreference = 'Continue'; & $exePath ambiguous-calls --file $target --json --db $db 2>$null } | Out-String
   Check '--file --json: parses as JSON array' ($null -ne $jsonOut -and $jsonOut.Trim().StartsWith('['))
-  $rows = $jsonOut | ConvertFrom-Json
+  $rows = $jsonOut | ConvertFrom-Json | ForEach-Object { $_ }
   Check '--file: at least 1 ambiguous/unverified site (CallsUnknown)' (@($rows).Count -ge 1)
 
   $encl = @($rows | ForEach-Object { $_.enclosing_qname })
@@ -70,7 +70,7 @@ try {
   # --- ambiguous-calls --qname on a FULLY-resolved scope: empty, exit 0. ---
   $emptyJson = & { $ErrorActionPreference = 'Continue'; & $exePath ambiguous-calls --qname calledfrom.TDispatcher.CallsAlpha --json --db $db 2>$null } | Out-String
   $emptyExit = $LASTEXITCODE
-  $emptyRows = $emptyJson | ConvertFrom-Json
+  $emptyRows = $emptyJson | ConvertFrom-Json | ForEach-Object { $_ }
   Check 'fully-resolved scope --json: empty array' (@($emptyRows).Count -eq 0)
   Check 'fully-resolved scope: exit code 0 (empty is a valid answer)' ($emptyExit -eq 0)
 } finally { Pop-Location }

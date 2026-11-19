@@ -89,7 +89,7 @@ Check 'plan: nothing written (hash check)' ((Hash $w) -eq $before)
 # json (project mode, plan): the excluded unit is reported
 $r = Run @('repo', 'gen-param-array', '--project', "$w\PaDemo.dproj", '--all', '--plan', '--json')
 $j = $null
-try { $j = $r.Out | ConvertFrom-Json } catch { }
+try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'json: parses, mode plan' (($null -ne $j) -and $j.mode -eq 'plan') $r.Out
 $uf = @($j.units | Where-Object { $_.unit -eq 'uFolders' })
 $ut = @($j.units | Where-Object { $_.unit -eq 'uTestHelper' })

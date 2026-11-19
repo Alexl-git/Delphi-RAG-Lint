@@ -67,7 +67,7 @@ function LineOf([string]$path, [string]$anchor) {
 # sql --json rows are POSITIONAL arrays: map them onto columns[].name.
 function Sql([string]$db, [string]$q) {
   $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n"
-  try { $o = $j | ConvertFrom-Json } catch { return ,@() }
+  try { $o = $j | ConvertFrom-Json | ForEach-Object { $_ } } catch { return ,@() }
   $cols = @($o.columns | ForEach-Object { $_.name }); $out = @()
   foreach ($r in @($o.rows)) { $h = [ordered]@{}; for ($i = 0; $i -lt $cols.Count; $i++) { $h[$cols[$i]] = @($r)[$i] }; $out += [pscustomobject]$h }
   return ,$out
@@ -84,7 +84,7 @@ function UsagesRw([string]$db, [string]$name) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath usages --name $name --rw --db $db --json 2>$null }) -join "`n"
   $s = $raw.IndexOf('{'); $e = $raw.LastIndexOf('}')
   if ($s -lt 0 -or $e -lt $s) { return $null }
-  try { return ($raw.Substring($s, $e - $s + 1) | ConvertFrom-Json) } catch { return $null }
+  try { return ($raw.Substring($s, $e - $s + 1) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function CountAt($arr, [string]$file, [int]$line) {
   return @(@($arr) | Where-Object { $_ -and ([string]$_.path).EndsWith('\' + $file) -and [int]$_.line -eq $line }).Count

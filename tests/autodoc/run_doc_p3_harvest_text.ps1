@@ -57,7 +57,7 @@ function Get-FileMd5([string]$p) { (Get-FileHash -Algorithm MD5 -Path $p).Hash }
 # engine's own query verb (index-first: no second parser).
 function Get-DeclLine([string]$db, [string]$name) {
   $j = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --db $db --json 2>$null }) -join "`n"
-  $o = $null; try { $o = ($j | ConvertFrom-Json) } catch { return 0 }
+  $o = $null; try { $o = ($j | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return 0 }
   if ($null -eq $o) { return 0 }
   foreach ($r in @($o)) { if ($r.section -eq 'interface') { return [int]$r.start_line } }
   return 0

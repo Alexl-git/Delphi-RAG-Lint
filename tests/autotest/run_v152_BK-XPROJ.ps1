@@ -56,7 +56,7 @@ $P2 = Join-Path $Work 'App2\App2.dproj'
 function Lint([string]$db, [string[]]$extra) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --project $P1 --json --no-stand-down @extra 2>$null }) -join "`n"
   $arr = @()
-  try { $arr = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { Write-Host ('  unparsed: ' + $raw.Substring(0, [Math]::Min(200, $raw.Length))) }
+  try { $arr = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { Write-Host ('  unparsed: ' + $raw.Substring(0, [Math]::Min(200, $raw.Length))) }
   return ,$arr
 }
 function Hits($findings, [string]$rule, [string]$word) {

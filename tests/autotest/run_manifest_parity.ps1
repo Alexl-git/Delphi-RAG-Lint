@@ -138,7 +138,7 @@ foreach ($k in $paths.Keys) {
   $doc = $null
   $err = ''
   try {
-    $doc = Get-Content -LiteralPath $paths[$k] -Raw -Encoding UTF8 | ConvertFrom-Json
+    $doc = Get-Content -LiteralPath $paths[$k] -Raw -Encoding UTF8 | ConvertFrom-Json | ForEach-Object { $_ }
   } catch {
     $err = $_.Exception.Message
   }

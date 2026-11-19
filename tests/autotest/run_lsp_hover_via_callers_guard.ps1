@@ -129,7 +129,7 @@ $IFACE = 'uViaWork.IWorker.DoWork'
 $DIRECT = 'uViaWork.TWorker.Direct'
 
 $jraw = (& { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name DoWork --resolved --json --db $db 2>$null }) -join "`n"
-$fc = @(($jraw.Substring($jraw.IndexOf('[')) | ConvertFrom-Json) | ForEach-Object { $_ })
+$fc = @(($jraw.Substring($jraw.IndexOf('[')) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 $fcImpl = @($fc | Where-Object { $_.target_qname -eq $IMPL })
 $N = $fcImpl.Count
 Check 'FC find-callers --resolved: TWorker.DoWork has >= 1 caller, all via IWorker' `
@@ -163,7 +163,7 @@ Start-Process $Exe -ArgumentList @('lsp', '--db', $db) -WorkingDirectory $WorkDi
   -RedirectStandardError (Join-Path $WorkDir 'err.txt') -NoNewWindow -Wait | Out-Null
 $byId = @{}
 foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-  try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+  try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
   if ($null -ne $o.id) { $byId[[int]$o.id] = $o }
 }
 

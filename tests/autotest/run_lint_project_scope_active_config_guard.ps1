@@ -94,7 +94,7 @@ function ScopedUnits([string[]]$Extra = @()) {
   $o = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --project $Dproj @Extra --enable magic-literal --json 2>$null } | Out-String
   $start = $o.IndexOf('[')
   if ($start -lt 0) { return @("<no json: $o>") }
-  try { $arr = @(($o.Substring($start) | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { return @("<unparsed: $o>") }
+  try { $arr = @(($o.Substring($start) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { return @("<unparsed: $o>") }
   return @($arr | Where-Object { $_.rule -eq 'magic-literal' } |
     ForEach-Object { [IO.Path]::GetFileNameWithoutExtension([string]$_.file_path) } | Sort-Object -Unique)
 }

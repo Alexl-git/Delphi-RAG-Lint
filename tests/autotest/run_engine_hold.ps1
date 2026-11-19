@@ -75,14 +75,14 @@ $Repo = (Resolve-Path $Repo).Path
 $errFile = Join-Path ([IO.Path]::GetTempPath()) ("draglint-hold-" + [Guid]::NewGuid().ToString('N') + ".txt")
 
 function Run([string[]]$A) {
-  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @A 2>$errFile }
+  $out = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe @A 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   $rc  = $LASTEXITCODE
   [pscustomobject]@{ Out = ($out -join "`n"); Code = $rc }
 }
 function Status {
   $r = Run @('ide-release','--status','--json')
   if ($r.Code -ne 0) { return $null }
-  try { return $r.Out | ConvertFrom-Json } catch { return $null }
+  try { return $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { return $null }
 }
 
 # Whatever state a previous run or a real build left behind.

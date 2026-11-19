@@ -30,7 +30,7 @@ try {
   $env:DRAGLINT_PROFILE = '1'
   $sw = [Diagnostics.Stopwatch]::StartNew()
   $proc = Start-Process -FilePath $Exe -PassThru -NoNewWindow -RedirectStandardOutput "$work\o.txt" -RedirectStandardError "$work\e.txt" `
-    -ArgumentList @('lint', $srcCopy, '--db', $dbCopy, '--enable', 'multiple-statements-per-line,magic-literal,commented-out-code,review-marker-stale,review-marker-unused')
+    -ArgumentList @('lint', $srcCopy, '--db', $dbCopy, '--enable', 'multiple-statements-per-line,magic-literal,commented-out-code,review-marker-stale,review-marker-unused'); $null = $proc.Handle
   $done = $proc.WaitForExit(600000)
   $sw.Stop()
   if (-not $done) { $proc.Kill(); $proc.WaitForExit(10000) | Out-Null }

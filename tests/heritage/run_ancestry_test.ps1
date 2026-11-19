@@ -20,7 +20,7 @@ function Ancestors($symName) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $exe query ancestors --name $symName --db $db --json 2>$null } | Out-String)
   $idx = $raw.IndexOf('{')
   if ($idx -lt 0) { return $null }
-  return ($raw.Substring($idx) | ConvertFrom-Json)
+  return ($raw.Substring($idx) | ConvertFrom-Json | ForEach-Object { $_ })
 }
 
 function AncestorNames($symName) {
@@ -49,7 +49,7 @@ Check 'TGrand has no ancestors' ($tgrand.Count -eq 0)
 function OfCheck($name, $of) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $exe query ancestors --name $name --of $of --db $db --json 2>$null } | Out-String)
   $idx = $raw.IndexOf('{'); if ($idx -lt 0) { return $null }
-  return ($raw.Substring($idx) | ConvertFrom-Json)
+  return ($raw.Substring($idx) | ConvertFrom-Json | ForEach-Object { $_ })
 }
 $o1 = OfCheck 'TChild' 'TGrand'
 Check 'TChild descends TGrand (class chain)' ($o1.is_descendant -and -not $o1.implements)

@@ -472,7 +472,7 @@ function Get-Tree([string]$Database, [string]$QName) {
   # treat a missing tree as a failed check. Mirrors the same guard in
   # run_proptree_prop_type_scope.ps1.
   if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
-  return ($raw | ConvertFrom-Json)
+  return ($raw | ConvertFrom-Json | ForEach-Object { $_ })
 }
 
 # Assert one case: the Marker property must be class-typed and expand into the

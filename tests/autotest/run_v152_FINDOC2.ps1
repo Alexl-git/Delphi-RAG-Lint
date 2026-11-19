@@ -85,12 +85,12 @@ function New-Fixture([string]$Root) {
 function Run($Fx, [string[]]$A) {
   $errFile = Join-Path $WorkDir ("err-{0}.txt" -f [guid]::NewGuid().ToString('N'))
   Push-Location $Fx.Root
-  try { $out = & { $ErrorActionPreference = 'Continue'; & $Exe @A --db $Fx.Db 2>$errFile } | Out-String; $code = $LASTEXITCODE }
+  try { $out = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe @A --db $Fx.Db 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String; $code = $LASTEXITCODE }
   finally { Pop-Location }
   [pscustomobject]@{ Out = $out; Err = [IO.File]::ReadAllText($errFile); Code = $code }
 }
 function Parse-One([string]$Text) {
-  try { return ($Text | ConvertFrom-Json -ErrorAction Stop) } catch { return $null }
+  try { return ($Text | ConvertFrom-Json -ErrorAction Stop | ForEach-Object { $_ }) } catch { return $null }
 }
 # Shift every line of a unit down: N comment lines right after 'implementation'.
 function Shift-Impl([string]$Path, [int]$N) {

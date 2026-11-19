@@ -191,13 +191,13 @@ function Invoke-Serve([string[]]$ServeArgs, [string[]]$Requests, [string]$Tag) {
   $env:DRAGLINT_MANIFEST = $manifest
   try {
     $p = Start-Process $Exe -ArgumentList (@('serve') + $ServeArgs) -WorkingDirectory $WorkDir `
-           -RedirectStandardInput $in -RedirectStandardOutput $out -RedirectStandardError $err -NoNewWindow -PassThru
+           -RedirectStandardInput $in -RedirectStandardOutput $out -RedirectStandardError $err -NoNewWindow -PassThru; $null = $p.Handle
     if (-not $p.WaitForExit(60000)) { $p.Kill($true) }
   } finally { $env:DRAGLINT_MANIFEST = $null }
   $replies = @{}
   foreach ($line in (Get-Content $out -ErrorAction SilentlyContinue)) {
     if ($line.Trim() -eq '') { continue }
-    try { $j = $line | ConvertFrom-Json } catch { continue }
+    try { $j = $line | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($null -ne $j.id) { $replies[[string]$j.id] = $j }
   }
   return @{ replies = $replies; err = [string](Get-Content $err -Raw -ErrorAction SilentlyContinue) }

@@ -49,7 +49,7 @@ function Ifr([string[]]$a) {
 function IfrJson([string[]]$a) {
   $r = Ifr (@($a) + '--json')
   $j = $null
-  try { $j = $r.Text | ConvertFrom-Json } catch { }
+  try { $j = $r.Text | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   return [pscustomobject]@{ Exit = $r.Exit; J = $j; Text = $r.Text }
 }
 function Names($rows, $field) { @($rows | ForEach-Object { ($_.$field -split '\.')[-1] }) | Sort-Object }
@@ -144,7 +144,7 @@ Start-Process $exePath -ArgumentList @('lsp', '--db', $db) -WorkingDirectory $Wo
   -RedirectStandardOutput $outF -RedirectStandardError (Join-Path $WorkDir 'lsp_err.txt') -NoNewWindow -Wait | Out-Null
 $got = @()
 foreach ($mm in [regex]::Matches([IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-  try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+  try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
   if ($o.id -eq 11) { $got = @($o.result | ForEach-Object { $_.range.start.line }) | Sort-Object }
   if ($o.id -eq 12) { $lens = @($o.result) }
   if ($o.id -eq 13) { $cc = $o.result }
@@ -175,9 +175,9 @@ $init = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
 $list = '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
 $call = '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_implementors","arguments":{"qname":"IJob.Execute"}}}'
 $bad  = '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"get_implementors","arguments":{"qname":"INoSuchThing"}}}'
-$mcp  = "$init`n$list`n$call`n$bad" | & { $ErrorActionPreference = 'Continue'; & $exePath serve --db $db 2>$null } | Out-String
+$mcp  = "$init`n$list`n$call`n$bad" | & { $ErrorActionPreference = 'Continue'; $input | & $exePath serve --db $db 2>$null } | Out-String
 $rep  = @{}
-foreach ($ln in ($mcp -split "`n")) { try { $o = $ln.Trim() | ConvertFrom-Json; if ($o.id) { $rep[[int]$o.id] = $o } } catch { } }
+foreach ($ln in ($mcp -split "`n")) { try { $o = $ln.Trim() | ConvertFrom-Json | ForEach-Object { $_ }; if ($o.id) { $rep[[int]$o.id] = $o } } catch { } }
 $tools = @($rep[2].result.tools)
 $gi = @($tools | Where-Object { $_.name -eq 'get_implementors' })
 $gw = @($tools | Where-Object { $_.name -eq 'get_wiring' })
@@ -190,7 +190,7 @@ Check 'M2 control: unknown target is an error, not an empty answer' ($null -ne $
 # ---- T8: the real CLI index, read-only (skipped when absent) ----
 if (Test-Path $RealDb) {
   $out = & { $ErrorActionPreference = 'Continue'; & $exePath implementors --target DRagLint.Core.Interfaces.IParser.Parse --db $RealDb --json 2>$null } | Out-String
-  $j = $null; try { $j = $out | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   $n = (Names $j.implementors 'class') -join ','
   Check 'T8 src\cli: IParser.Parse -> the four parsers (TMarkdownParser since 1.47, Markdown text nodes)' ($n -eq 'TDelphi13Parser,TDFMParser,TFirebirdSqlParser,TMarkdownParser') $n
 } else { Write-Host '[SKIP] T8 (no src\cli index)' }

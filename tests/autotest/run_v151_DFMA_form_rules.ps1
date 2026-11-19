@@ -35,7 +35,7 @@ function Get-Findings([string[]]$ArgList) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $exe @ArgList 2>$null }
   $text = ($raw -join "`n").Trim()
   if ($text -eq '') { return @() }
-  try { $j = $text | ConvertFrom-Json } catch { return @() }
+  try { $j = $text | ConvertFrom-Json | ForEach-Object { $_ } } catch { return @() }
   if ($null -eq $j) { return @() }
   return @($j)
 }

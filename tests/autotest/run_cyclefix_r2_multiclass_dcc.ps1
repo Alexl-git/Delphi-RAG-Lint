@@ -126,7 +126,7 @@ function Get-Plan([string]$Db, [string]$Tag) {
   $o = Join-Path $WorkDir "plan-$Tag.out"
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
     -ArgumentList @('cycles', '--db', ('"' + $Db + '"'), '--plan', '--library-db', ('"' + $Lib + '"')) `
-    -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "plan-$Tag.err")
+    -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "plan-$Tag.err"); $null = $p.Handle
   return @{ Exit = $p.ExitCode; File = $o; Text = [IO.File]::ReadAllText($o) }
 }
 function Get-PlanFile([string]$Dproj, [string]$Tag) {
@@ -146,7 +146,7 @@ function Invoke-Fix([string]$Dproj, [string]$Db, [string[]]$Extra, [string]$Brea
   $env:DRAGLINT_CYCLEFIX_BREAK = $Break
   try {
     $a = @('cycles', '--fix', '--project', ('"' + $Dproj + '"'), '--db', ('"' + $Db + '"'), '--library-db', ('"' + $Lib + '"'), '--format', 'json') + $Extra
-    $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru -ArgumentList $a -RedirectStandardOutput $o -RedirectStandardError $e
+    $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru -ArgumentList $a -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   } finally { $env:DRAGLINT_CYCLEFIX_BREAK = '' }
   return @{ Exit = $p.ExitCode; Out = [IO.File]::ReadAllText($o); Err = [IO.File]::ReadAllText($e) }
 }
@@ -329,7 +329,7 @@ try {
   $pC = Get-PlanFile (Join-Path $folC 'MemberWrite.dproj') 'fix-compare'
   $null = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $Follow -PlanFile $pC.File -Cycle 1 -Root $folC 2>&1 | ForEach-Object { "$_" } } | Out-String
   $r = Invoke-Fix (Join-Path $fxA 'MemberWrite.dproj') $dbA @('--apply', '--no-backup') ''
-  $cy = $null; try { $cy = @(($r.Out | ConvertFrom-Json).cycles)[0] } catch { }
+  $cy = $null; try { $cy = @(($r.Out | ConvertFrom-Json | ForEach-Object { $_ }).cycles)[0] } catch { }
   Check 'f1 --fix --apply exits 0' ($r.Exit -eq 0) "exit=$($r.Exit)"
   if ($r.Exit -ne 0) { Write-Host (($r.Out + $r.Err) -replace '(.{1500}).*', '$1') }
   Check 'f2 compile ok and verified' (($null -ne $cy) -and ($cy.compile.status -eq 'ok') -and ($cy.verified -eq $true)) ''
@@ -344,7 +344,7 @@ try {
   $dbB = Join-Path $WorkDir 'fix-break.sqlite'
   & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $fxB 'MemberWrite.dproj') --db $dbB *> (Join-Path $WorkDir 'index-fix-break.log') }
   $r2 = Invoke-Fix (Join-Path $fxB 'MemberWrite.dproj') $dbB @('--apply', '--no-backup', '--no-reindex') '1'
-  $cy2 = $null; try { $cy2 = @(($r2.Out | ConvertFrom-Json).cycles)[0] } catch { }
+  $cy2 = $null; try { $cy2 = @(($r2.Out | ConvertFrom-Json | ForEach-Object { $_ }).cycles)[0] } catch { }
   Check 'g1 the seam is active and the run exits 0' (($r2.Exit -eq 0) -and $r2.Err.Contains('TEST BREAK active')) "exit=$($r2.Exit)"
   Check 'g2 one E2015 repair, compile ok' (($null -ne $cy2) -and ($cy2.compile.status -eq 'ok') -and (@($cy2.repairs).Count -ge 1) -and (@($cy2.repairs)[0].code -eq 'E2015')) ''
   $gu = [IO.File]::ReadAllText((Join-Path $fxB 'DemoUIConnect.pas'))

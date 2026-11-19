@@ -103,7 +103,7 @@ function Sql-Rows([string]$Db, [string]$Q) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --query $Q --db $Db --json 2>$null }) -join "`n"
   $s = $raw.IndexOf('{')
   if ($s -lt 0) { return $null }
-  $o = $raw.Substring($s) | ConvertFrom-Json
+  $o = $raw.Substring($s) | ConvertFrom-Json | ForEach-Object { $_ }
   return ,@($o.rows)
 }
 function Lint-All([string]$Db, [string]$Rule, [hashtable]$Env = @{}) {
@@ -120,7 +120,7 @@ function Lint-All([string]$Db, [string]$Rule, [hashtable]$Env = @{}) {
     foreach ($k in $Env.Keys) { [Environment]::SetEnvironmentVariable($k, $null) }
   }
   $start = $raw.IndexOf('[')
-  $arr = @(if ($start -ge 0) { @(($raw.Substring($start) | ConvertFrom-Json) | ForEach-Object { $_ }) } else { @() })
+  $arr = @(if ($start -ge 0) { @(($raw.Substring($start) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } else { @() })
   $f = @($arr | Where-Object { $_.rule -eq $Rule } | ForEach-Object {
     '{0}:{1}:{2} {3}' -f (Split-Path $_.file_path -Leaf), $_.start_line, $_.start_col, $_.message })
   return [pscustomobject]@{ Findings = $f; Text = ($f -join "`n"); Trace = $trace }

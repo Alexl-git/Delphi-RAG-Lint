@@ -45,7 +45,7 @@ foreach ($n in $names) { Copy-Item (Join-Path $src "$n.pas") $WorkDir -Force }
 
 function Tuples([string]$path, [string[]]$extra) {
   $out = & { $ErrorActionPreference = 'Continue'; & $exePath lint $path --json @extra 2>$null }
-  $j = @(($out | ConvertFrom-Json) | ForEach-Object { $_ })
+  $j = @(($out | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   return @($j | ForEach-Object { '{0}|{1}|{2}' -f (Split-Path $_.file_path -Leaf), $_.rule, $_.start_line } | Sort-Object)
 }
 

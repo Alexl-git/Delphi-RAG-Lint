@@ -95,7 +95,7 @@ function Invoke-Protocol([string[]]$ArgList, [string]$Root = $TestRoot) {
   if ($env:DRAGLINT_PROTOCOL_TEST_ROOT -ne $Root) { throw 'test root not set -- refusing to run the verb' }
   $o = Join-Path $Work 'out.txt'; $e = Join-Path $Work 'err.txt'
   $p = Start-Process -FilePath $Exe -ArgumentList (@('protocol') + $ArgList | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) `
-         -NoNewWindow -Wait -PassThru -RedirectStandardOutput $o -RedirectStandardError $e
+         -NoNewWindow -Wait -PassThru -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   [pscustomobject]@{ Code = $p.ExitCode; Out = [IO.File]::ReadAllText($o); Err = [IO.File]::ReadAllText($e) }
 }
 function Get-Cmd { (Get-ItemProperty -LiteralPath $CmdKey -ErrorAction SilentlyContinue).'(default)' }
@@ -171,7 +171,7 @@ try {
   $r = Invoke-Protocol @('status')
   Check 'PV-REG (status ours)'  ($r.Code -eq 0 -and $r.Out -match 'draglint://: ours' -and $r.Out.Contains($expectCmd)) "exit $($r.Code)"
   $r = Invoke-Protocol @('status', '--json')
-  $j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   Check 'PV-REG (status --json)' ($r.Code -eq 0 -and $j -and $j.schema -eq 'protocol/1' -and $j.registered -eq $true -and
                                   $j.class -eq 'ours' -and $j.command -eq $expectCmd -and $j.handler -eq $good) $r.Out.Trim()
 

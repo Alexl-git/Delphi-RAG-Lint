@@ -830,7 +830,7 @@ foreach ($r in $kept) {
             -ArgumentList (@('-NoProfile', '-NonInteractive', '-File', $r.FullName) + $(if ((Get-Content -LiteralPath $r.FullName -Raw) -match '\[Parameter\(Mandatory\)\]\[string\]\$Exe\b') { @('-Exe', (Join-Path $repoRoot 'src\cli\Win64\Debug\drag-lint.exe')) } else { @() })) `
             -WorkingDirectory $repoRoot -PassThru `
             -RedirectStandardOutput $logFile -RedirectStandardError ($logFile + '.err') `
-            -WindowStyle Hidden
+            -WindowStyle Hidden; $null = $proc.Handle
 
   $state = ''
   # POLLED wait, not a single blocking WaitForExit($TimeoutSec * 1000).

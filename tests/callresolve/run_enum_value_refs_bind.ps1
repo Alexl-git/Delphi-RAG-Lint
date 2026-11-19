@@ -322,7 +322,7 @@ function W([string]$dir, [string]$name, [string]$body) {
 function Sql([string]$db, [string]$q) {
   $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n"
   if ([string]::IsNullOrWhiteSpace($j)) { return ,@() }
-  try { $o = $j | ConvertFrom-Json } catch { return ,@() }
+  try { $o = $j | ConvertFrom-Json | ForEach-Object { $_ } } catch { return ,@() }
   $cols = @($o.columns | ForEach-Object { $_.name })
   $out = @()
   foreach ($r in @($o.rows)) {
@@ -367,7 +367,7 @@ function IsNull($rows) {
 function Resolved([string]$db, [string]$name) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name $name --resolved --json --db $db 2>$null } | Out-String
   if ($raw.Trim() -eq '') { return @() }
-  try { return @(($raw | ConvertFrom-Json)) } catch { return @() }
+  try { return @(($raw | ConvertFrom-Json | ForEach-Object { $_ })) } catch { return @() }
 }
 
 # ===========================================================================
@@ -567,7 +567,7 @@ $acExit = $LASTEXITCODE
 # non-JSON error text).
 CheckN 8 'ambiguous-calls actually ran (exit 0) -- an empty result must not pass by default' ($acExit -eq 0) "exit=$acExit raw=$acRaw"
 $acParsed = $false
-try { $null = $acRaw | ConvertFrom-Json; $acParsed = $true } catch { $acParsed = $false }
+try { $null = $acRaw | ConvertFrom-Json | ForEach-Object { $_ }; $acParsed = $true } catch { $acParsed = $false }
 CheckN 8 'ambiguous-calls returned parseable JSON' $acParsed "raw=$acRaw"
 $acHit = @($enumNames | Where-Object { $acRaw -match ("\b" + [regex]::Escape($_) + "\b") })
 CheckN 8 'ambiguous-calls names NO fixture enum value' ($acHit.Count -eq 0) ("hits=" + ($acHit -join ',') + " raw=" + $acRaw)
@@ -575,7 +575,7 @@ $uniPath = Join-Path $PSScriptRoot 'run_callsite_kind_universe.ps1'
 $uniOut  = Join-Path $scratch 'universe.out.log'
 $uniErr  = Join-Path $scratch 'universe.err.log'
 $uniProc = Start-Process pwsh -ArgumentList '-NoProfile', '-File', $uniPath, '-Exe', $exePath `
-             -Wait -PassThru -NoNewWindow -RedirectStandardOutput $uniOut -RedirectStandardError $uniErr
+             -Wait -PassThru -NoNewWindow -RedirectStandardOutput $uniOut -RedirectStandardError $uniErr; $null = $uniProc.Handle
 CheckN 8 'run_callsite_kind_universe.ps1 PASS when invoked from this guard' ($uniProc.ExitCode -eq 0) "exit=$($uniProc.ExitCode) log=$uniOut"
 
 Write-Host ''
@@ -758,7 +758,7 @@ $srcDecl = [IO.File]::ReadAllText($fDecl)
 [IO.File]::WriteAllText($buf, ($srcDecl -replace 'cmdLoad, ', ''), [Text.Encoding]::ASCII)
 CheckN 11 'buffer really dropped cmdLoad from TCmd' ([IO.File]::ReadAllText($buf) -match '(?m)^\s*TCmd = \(cmdDelta, cmdShadow, cmdClash\);') (([IO.File]::ReadAllText($buf) -split "`r`n" | Where-Object { $_ -match 'TCmd' }) -join ' ')
 $lt = & { $ErrorActionPreference = 'Continue'; & $exePath lint-tree --unit $fDecl --db $dbA --buffer $buf --baseline $base --format json 2>$null } | Out-String
-$lj = $null; try { $lj = $lt | ConvertFrom-Json } catch { }
+$lj = $null; try { $lj = $lt | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 CheckN 11 'lint-tree returned JSON' ($null -ne $lj) $lt
 if ($null -ne $lj) {
   # TWO finding CLASSES arrive the moment the gate admits enum_value, and they

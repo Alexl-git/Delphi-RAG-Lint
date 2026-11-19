@@ -265,7 +265,7 @@ function IdsIn([string]$RelPath, [string]$Rx, [string]$SpanRx = '') {
   if ($SpanRx) { $t = [regex]::Match($t, $SpanRx).Value }
   return @([regex]::Matches($t, $Rx) | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
 }
-$catalog = @((& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null } | Out-String | ConvertFrom-Json).rules | ForEach-Object { $_.id })
+$catalog = @((& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }).rules | ForEach-Object { $_.id })
 Check 'D0 CONTROL: the rule catalogue parsed' ($catalog.Count -gt 100) "($($catalog.Count) rule(s))"
 
 $typeSpan = '(?s)class function TAstChecker\.CheckTypeAware\(.*?(?=\r?\nclass function TAstChecker\.)'

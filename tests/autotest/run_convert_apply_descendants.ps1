@@ -591,7 +591,7 @@ Check 'V the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db
 $q = "select f.path, r.symbol_id, s.qualified_name from refs r join files f on f.id = r.file_id " +
      "left join symbols s on s.id = r.symbol_id where r.name_text = 'btnX' and f.path like '%.pas'"
 $sq = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query $q --json 2>$null }) -join "`n"
-$sj = try { $sq | ConvertFrom-Json } catch { $null }
+$sj = try { $sq | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
 function BoundOf([string]$Unit) {
   if ($null -eq $sj) { return '<no sql>' }
   foreach ($row in @($sj.rows)) { if ((Split-Path $row[0] -Leaf) -eq "$Unit.pas") { return "$($row[1])|$($row[2])" } }
@@ -613,7 +613,7 @@ function Run([string[]]$Units, [string[]]$Extra = @()) {
 function Json([string]$s) {
   $a = $s.IndexOf('{'); $b = $s.LastIndexOf('}')
   if ($a -lt 0 -or $b -le $a) { return $null }
-  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json) } catch { return $null }
+  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function LineOf([string]$File, [string]$Needle) {
   $ls = [IO.File]::ReadAllLines((P $File))

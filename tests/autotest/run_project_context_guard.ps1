@@ -31,7 +31,7 @@ function Run([string[]]$a) {
   $out = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } } | Out-String
   [pscustomobject]@{ Code = $LASTEXITCODE; Out = $out }
 }
-function Defines([string]$file) { (Get-Content $file -Raw | ConvertFrom-Json).defines }
+function Defines([string]$file) { (Get-Content $file -Raw | ConvertFrom-Json | ForEach-Object { $_ }).defines }
 try {
   $dproj = Join-Path $tmp 'App.dproj'
   Copy-Item $fixture $dproj
@@ -42,7 +42,7 @@ try {
   Check 'context file exists' (Test-Path $ctx)
   $bytes = [IO.File]::ReadAllBytes($ctx)
   Check 'no BOM' ($bytes[0] -eq [byte][char]'{')
-  Check 'schema 1' ((Get-Content $ctx -Raw | ConvertFrom-Json).schema -eq 1)
+  Check 'schema 1' ((Get-Content $ctx -Raw | ConvertFrom-Json | ForEach-Object { $_ }).schema -eq 1)
   Check 'Debug has DEBUG (positive control)' ((Defines $ctx) -contains 'debug')
   Check 'Win64 has WIN64' ((Defines $ctx) -contains 'win64')
 

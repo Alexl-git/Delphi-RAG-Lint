@@ -51,7 +51,7 @@ function Index([string]$proj, [string]$db) {
 function Ask([string[]]$a) {
   $errFile = Join-Path $scratch 'stderr.txt'
   Push-Location $scratch
-  $script:out = (& { $ErrorActionPreference = 'Continue'; & $exePath usages @a 2>$errFile }) -join "`n"
+  $script:out = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath usages @a 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }) -join "`n"
   $script:code = $LASTEXITCODE
   Pop-Location
   $script:err = [IO.File]::ReadAllText($errFile)

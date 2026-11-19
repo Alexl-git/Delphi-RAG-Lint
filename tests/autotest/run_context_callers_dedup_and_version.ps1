@@ -132,7 +132,7 @@ function CallerLines([string]$Text) {
 
 # The fixture must reproduce the SHAPE: two refs at one position. Without it the
 # single-site assertion below passes on the broken engine and proves nothing.
-$shape = & { $ErrorActionPreference = 'Continue'; & $exePath sql --db $dbA --json --query "SELECT COUNT(*) AS n FROM refs r JOIN files f ON f.id = r.file_id WHERE r.name_text = 'Save' AND f.path LIKE '%uUse.pas'" 2>$null } | ConvertFrom-Json
+$shape = & { $ErrorActionPreference = 'Continue'; & $exePath sql --db $dbA --json --query "SELECT COUNT(*) AS n FROM refs r JOIN files f ON f.id = r.file_id WHERE r.name_text = 'Save' AND f.path LIKE '%uUse.pas'" 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
 $nRefs = [int]$shape.rows[0][0]
 Check "V the fixture holds more than one ref at the single call site (got $nRefs)" ($nRefs -ge 2) `
       'the extractor no longer emits call + member-access at one span; T1 would be vacuous -- rebuild the fixture'

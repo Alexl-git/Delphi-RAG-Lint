@@ -102,14 +102,14 @@ function IndexedFiles {
   $dump = Join-Path $scratch 'files.json'
   $q = RunEngine @('sql','--db',$db,'--query','SELECT path FROM files ORDER BY path','--json','--output',$dump)
   if ($q.Code -ne 0) { throw "sql failed: $($q.Text)" }
-  $j = Get-Content $dump -Raw | ConvertFrom-Json
+  $j = Get-Content $dump -Raw | ConvertFrom-Json | ForEach-Object { $_ }
   return @($j.rows | ForEach-Object { [IO.Path]::GetFileName([string]$_[0]) })
 }
 function ScanType {
   $dump = Join-Path $scratch 'meta.json'
   $q = RunEngine @('sql','--db',$db,'--query',"SELECT value FROM schema_meta WHERE key = 'scan_type'",'--json','--output',$dump)
   if ($q.Code -ne 0) { throw "sql failed: $($q.Text)" }
-  $j = Get-Content $dump -Raw | ConvertFrom-Json
+  $j = Get-Content $dump -Raw | ConvertFrom-Json | ForEach-Object { $_ }
   return [string]$j.rows[0][0]
 }
 

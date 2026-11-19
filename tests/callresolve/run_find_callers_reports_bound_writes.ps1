@@ -72,7 +72,7 @@ function W([string]$name, [string]$body) {
 function Sql([string]$db, [string]$q) {
   $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n"
   if ([string]::IsNullOrWhiteSpace($j)) { return ,@() }
-  try { $o = $j | ConvertFrom-Json } catch { return ,@() }
+  try { $o = $j | ConvertFrom-Json | ForEach-Object { $_ } } catch { return ,@() }
   $cols = @($o.columns | ForEach-Object { $_.name })
   $out = @()
   foreach ($r in @($o.rows)) {
@@ -95,7 +95,7 @@ function LineOf([string]$path, [string]$anchor) {
 function Resolved([string]$db, [string]$name) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name $name --resolved --json --db $db 2>$null } | Out-String
   if ($raw.Trim() -eq '') { return @() }
-  try { return @(($raw | ConvertFrom-Json)) } catch { return @() }
+  try { return @(($raw | ConvertFrom-Json | ForEach-Object { $_ })) } catch { return @() }
 }
 function RowsAt($rows, [string]$file, [int]$line) {
   return @($rows | Where-Object { $_.file -eq $file -and [int]$_.line -eq $line })

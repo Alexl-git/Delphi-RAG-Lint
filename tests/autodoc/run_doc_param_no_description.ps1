@@ -110,7 +110,7 @@ Check 'AUntyped (no comment, no type) is the one left with an EMPTY body' `
 
 $raw  = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --json 2>$null }
 $find = @()
-try { $find = ($raw -join "`n" | ConvertFrom-Json) } catch { $find = @() }
+try { $find = ($raw -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $find = @() }
 if ($null -eq $find) { $find = @() }
 $nd = @($find | Where-Object { $_.rule -eq 'doc-param-no-description' })
 

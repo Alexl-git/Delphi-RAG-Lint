@@ -151,7 +151,7 @@ Push-Location C:\TEMP
 try {
   $p = Start-Process -FilePath $exePath `
         -ArgumentList @('lint-all','--db',$db,'--rules-dir',$rules) `
-        -NoNewWindow -Wait -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
+        -NoNewWindow -Wait -PassThru -RedirectStandardOutput $out -RedirectStandardError $err; $null = $p.Handle
   $stderrText = (Get-Content -LiteralPath $err -Raw -ErrorAction SilentlyContinue)
   $stdoutText = (Get-Content -LiteralPath $out -Raw -ErrorAction SilentlyContinue)
 
@@ -186,7 +186,7 @@ try {
 
   $p2 = Start-Process -FilePath $exePath `
         -ArgumentList @('lint-all','--db',$db,'--rules-dir',$rules) `
-        -NoNewWindow -Wait -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
+        -NoNewWindow -Wait -PassThru -RedirectStandardOutput $out -RedirectStandardError $err; $null = $p2.Handle
   $err2 = (Get-Content -LiteralPath $err -Raw -ErrorAction SilentlyContinue)
   $noteLines = @(($err2 -split "`r?`n") | Where-Object { $_ -match 'indexed file\(s\) changed' })
 

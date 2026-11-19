@@ -55,7 +55,7 @@ $RuleQuery   = 'query-name-with-effect'
 
 function Parse-Findings([string[]]$Raw) {
   $txt = ($Raw -join "`n"); $b = $txt.IndexOf('[')
-  $out = @(); if ($b -ge 0) { try { $out = @(($txt.Substring($b) | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $out = @() } }
+  $out = @(); if ($b -ge 0) { try { $out = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $out = @() } }
   if ($null -eq $out) { $out = @() }
   return ,@($out)
 }
@@ -67,7 +67,7 @@ function MsgOf([object[]]$Findings, [string]$Needle) {
 
 # '<effect_summary> ~ <effect_witness>' of one routine, from the index. sql --json rows are positional.
 function StoredFact([string]$Name) {
-  $sqlDoc = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --query "select f.effect_summary, f.effect_witness from symbol_facts f join symbols s on s.id = f.symbol_id where s.name = '$Name'" 2>$null }) -join "`n" | ConvertFrom-Json
+  $sqlDoc = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --query "select f.effect_summary, f.effect_witness from symbol_facts f join symbols s on s.id = f.symbol_id where s.name = '$Name'" 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   if (@($sqlDoc.rows).Count -ne 1) { return '' }
   return ('{0} ~ {1}' -f $sqlDoc.rows[0][0], $sqlDoc.rows[0][1])
 }

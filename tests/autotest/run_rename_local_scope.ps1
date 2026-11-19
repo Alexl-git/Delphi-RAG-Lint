@@ -214,8 +214,8 @@ function Reset-Fx {
   [IO.File]::WriteAllText((Join-Path $Src 'LsEA.pas'), (Crlf ($Bytes -replace 'NAME', 'LsEA' -replace '~', $Umlaut)), $Ansi)
 }
 function Param-Plan([string]$Unit, [int]$Line, [int]$Col, [string]$To) {
-  $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe rename --kind param --in (Join-Path $Src $Unit) --line $Line --col $Col --to $To --db $Db --plan --json 2>$null } | Out-String)
-  $j = $null; try { $j = $o | ConvertFrom-Json } catch { }
+  $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe rename --kind param --in (Join-Path $Src $Unit) --line $Line --col $Col --to $To --db $Db --plan --json 2>$null } | Out-String)
+  $j = $null; try { $j = $o | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   return @{ Raw = $o; Json = $j; Lines = @($j.edits | ForEach-Object { [int]$_.line }) }
 }
 function Line-Of([string]$Unit, [string]$Exact, [int]$Nth = 1) {
@@ -225,17 +225,17 @@ function Line-Of([string]$Unit, [string]$Exact, [int]$Nth = 1) {
 }
 function Text-Of([string]$Name) { return [IO.File]::ReadAllText((Join-Path $Src $Name), $Ascii) }
 function Run-Engine([string[]]$A) {
-  $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe @A 2>&1 | ForEach-Object { "$_" } } | Out-String); return @{ Exit = $LASTEXITCODE; Out = $o }
+  $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @A 2>&1 | ForEach-Object { "$_" } } | Out-String); return @{ Exit = $LASTEXITCODE; Out = $o }
 }
 function Plan-Symbol([string]$Q, [string]$To) {
-  $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe rename --kind symbol --name $Q --to $To --db $Db --library-db none --plan --json 2>$null } | Out-String)
-  $j = $null; try { $j = $o | ConvertFrom-Json } catch { }
+  $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe rename --kind symbol --name $Q --to $To --db $Db --library-db none --plan --json 2>$null } | Out-String)
+  $j = $null; try { $j = $o | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   return @{ Raw = $o; Json = $j; Kinds = @($j.refusals | ForEach-Object { $_.kind }) }
 }
 Reset-Fx
 Push-Location $WorkDir
 try {
-  $null | & { $ErrorActionPreference = 'Continue'; & $Exe index $Src --db $Db --library-db none *> "$Db.log" }
+  $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index $Src --db $Db --library-db none *> "$Db.log" }
   $A = Join-Path $Src 'LsA.pas'
   $LineR = 0; $i = 0; foreach ($l in ((Text-Of 'LsA.pas') -split "`r`n")) { $i++; if (($LineR -eq 0) -and ($l -match '^  R: Integer;')) { $LineR = $i } }
 
@@ -246,7 +246,7 @@ try {
   Check 'l2 --qname --dry-run: exit 0, 4 edits' ($r.Exit -eq 0 -and $r.Out -match 'Dry run: 4 edit') $r.Out
   Check 'l2 --qname --dry-run: no refusal notes' ($r.Out -notmatch 'note:') $r.Out
   $r = Run-Engine @('rename', '--kind', 'param', '--in', $A, '--line', "$LineR", '--col', '3', '--to', 'ARect', '--db', $Db, '--plan', '--json')
-  $j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   Check 'l3 --kind param: 4 edits, 0 undecided' ($j -and @($j.edits).Count -eq 4 -and @($j.refusals).Count -eq 0) $r.Out
   $r = Run-Engine @('rename', '--qname', 'LsA.TA.Go.R', '--to', 'ARect', '--db', $Db, '--library-db', 'none')
   Check 'l3b --qname applies, exit 0' ($r.Exit -eq 0) $r.Out

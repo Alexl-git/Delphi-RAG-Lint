@@ -111,7 +111,7 @@ Write-Host '== cycles --fix parked in its baseline build' -ForegroundColor Cyan
 $a = @('cycles', '--fix', '--project', $Dproj, '--db', $Db, '--library-db', $Lib, '--unit', 'demogageport', '--format', 'json', '--rsvars', $Fake)
 $q = ($a | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
 $Out = Join-Path $WorkDir 'run.out'; $Err = Join-Path $WorkDir 'run.err'
-$run = Start-Process -FilePath $Exe -ArgumentList $q -RedirectStandardOutput $Out -RedirectStandardError $Err -NoNewWindow -PassThru
+$run = Start-Process -FilePath $Exe -ArgumentList $q -RedirectStandardOutput $Out -RedirectStandardError $Err -NoNewWindow -PassThru; $null = $run.Handle
 $parked = Wait-For { ((@(Parked)).Count -gt 0) -or $run.HasExited } 120
 Check 'setup: the baseline build parked' ($parked -and -not $run.HasExited) ("exited=" + $run.HasExited + ' ' + (Read-Text $Out) + (Read-Text $Err))
 
@@ -131,7 +131,7 @@ $exited = Wait-For { $run.HasExited } 60
 if (-not $exited) { try { $run.Kill($true) } catch { }; $run.WaitForExit(10000) | Out-Null }
 $text = Read-Text $Out
 Check 'P3 shutdown cancels: exit 1, cancelled, the parked build tree is gone' ($exited -and ($run.ExitCode -eq 1) -and ($text -match 'cancelled') -and ((@(Parked)).Count -eq 0)) ("exit=" + $run.ExitCode + " parked=" + (@(Parked)).Count + " shutdown: $sd out: $text")
-$doc = $null; try { $doc = $text | ConvertFrom-Json } catch { }
+$doc = $null; try { $doc = $text | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'P4 stdout is one cycle-fix/1 document (no progress on stdout)' (($null -ne $doc) -and ($doc.schema -eq 'cycle-fix/1') -and ($text -notmatch 'cycles --fix: baseline build --')) $text
 Stop-Parked
 

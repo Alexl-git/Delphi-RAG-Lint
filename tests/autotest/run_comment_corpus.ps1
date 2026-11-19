@@ -123,7 +123,7 @@ function Find-Text([string]$Phrase, [string]$Kind = '') {
   if ($Kind -ne '') { $a += @('--kind', $Kind) }
   $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath @a 2>$null }) -join "`n"
   if (-not $raw.Trim()) { return @() }
-  try { $d = $raw | ConvertFrom-Json } catch { return @() }
+  try { $d = $raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { return @() }
   return @($d | Where-Object { $null -ne $_ })
 }
 
@@ -179,7 +179,7 @@ Write-Host ''
 Write-Host 'Substring and any-order reach comment text too' -ForegroundColor Cyan
 $sub = @()
 $rawSub = (& { $ErrorActionPreference = 'Continue'; & $exePath query --text 'pangolin brace' --substring --db $db --json 2>$null }) -join "`n"
-if ($rawSub.Trim()) { try { $sub = @(($rawSub | ConvertFrom-Json) | Where-Object { $null -ne $_ }) } catch { $sub = @() } }
+if ($rawSub.Trim()) { try { $sub = @(($rawSub | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $null -ne $_ }) } catch { $sub = @() } }
 Check '--substring finds a fragment of a comment' ($sub.Count -ge 1) "hits=$($sub.Count)"
 
 try { Remove-Item -LiteralPath $WorkDir -Recurse -Force -ErrorAction SilentlyContinue } catch { }

@@ -77,9 +77,9 @@ foreach ($p in @($grammarPath, $themePath, $libPath, $pkgPath)) {
 }
 
 $grammarRaw = Get-Content $grammarPath -Raw
-$grammar    = $grammarRaw | ConvertFrom-Json
-$theme      = Get-Content $themePath -Raw | ConvertFrom-Json
-$pkg        = Get-Content $pkgPath -Raw | ConvertFrom-Json
+$grammar    = $grammarRaw | ConvertFrom-Json | ForEach-Object { $_ }
+$theme      = Get-Content $themePath -Raw | ConvertFrom-Json | ForEach-Object { $_ }
+$pkg        = Get-Content $pkgPath -Raw | ConvertFrom-Json | ForEach-Object { $_ }
 
 # ---------------------------------------------------------------------------
 Write-Host 'CHECK 1 -- TColor conversion is BGR, and the traps are honoured' -ForegroundColor Cyan
@@ -112,7 +112,7 @@ Set-Content -LiteralPath $probe -Value $probeSrc -Encoding ASCII
 try {
   $json = & { $ErrorActionPreference = 'Continue'; & node $probe $libPath 2>&1 | ForEach-Object { "$_" } }
   if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: node probe failed: $json" -ForegroundColor Red; exit 2 }
-  $r = $json | ConvertFrom-Json
+  $r = $json | ConvertFrom-Json | ForEach-Object { $_ }
 } finally {
   Remove-Item -LiteralPath $probe -ErrorAction SilentlyContinue
 }

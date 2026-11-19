@@ -182,7 +182,7 @@ function Session([string]$uri, [string]$openText = $null) {
     -RedirectStandardError (Join-Path $WorkDir 'err.txt') -NoNewWindow -Wait | Out-Null
   $r = @{ init = $null; sym = $null; err = $null; raw = [System.IO.File]::ReadAllText($outF) }
   foreach ($mm in [regex]::Matches($r.raw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 1) { $r.init = $o.result }
     if ($o.id -eq 2) {
       if ($null -ne $o.error) { $r.err = $o.error }

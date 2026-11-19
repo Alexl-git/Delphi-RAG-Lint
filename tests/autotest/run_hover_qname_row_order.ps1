@@ -143,12 +143,12 @@ print(json.dumps(rows))
 function Get-Rows([string]$qname) {
     $j = (& python $rowPy $db $qname) -join ''
     if ([string]::IsNullOrWhiteSpace($j)) { return @() }
-    return @(($j | ConvertFrom-Json) | ForEach-Object { $_ })
+    return @(($j | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 function Get-HoverDefLine([string]$qname) {
     $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath hover --qname $qname --db $db --format json 2>$null }) -join ''
     $o = $null
-    try { $o = ($raw -replace '\s*FTS5 probe:.*$','') | ConvertFrom-Json } catch { return -1 }
+    try { $o = ($raw -replace '\s*FTS5 probe:.*$','') | ConvertFrom-Json | ForEach-Object { $_ } } catch { return -1 }
     if ($null -eq $o) { return -1 }
     return [int]$o.def_line
 }
@@ -226,7 +226,7 @@ Check 'K29: hover --qname on an overload pair answers the row that HAS a body' `
 # "the right row" from "a row".
 $dRaw = (& { $ErrorActionPreference = 'Continue'; & $exePath hover --qname 'qrowfix.TThing.Doubled' --db $db --format json 2>$null }) -join ''
 $dObj = $null
-try { $dObj = ($dRaw -replace '\s*FTS5 probe:.*$','') | ConvertFrom-Json } catch {}
+try { $dObj = ($dRaw -replace '\s*FTS5 probe:.*$','') | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'K29: that row brings its body''s facts with it -- the mined return is "FValue * 2"' `
   (($null -ne $dObj) -and (@($dObj.returns).Count -eq 1) -and (@($dObj.returns)[0] -eq 'FValue * 2')) $dRaw
 

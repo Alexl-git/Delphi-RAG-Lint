@@ -14,7 +14,7 @@ $fail = 0
 function Check($c,$m){ if(-not $c){Write-Host "FAIL: $m";$script:fail++}else{Write-Host "PASS: $m"} }
 
 $json = & $exe info --json
-$o = $json | ConvertFrom-Json
+$o = $json | ConvertFrom-Json | ForEach-Object { $_ }
 Check ($o.schema -eq 'info/1') 'schema is info/1'
 Check ($o.name -eq 'drag-lint') 'name is drag-lint'
 Check ($o.version -and $o.version.Length -ge 3) 'version present'
@@ -85,7 +85,7 @@ try {
       $a = @('info', '--json'); foreach ($d in $dbs) { $a += @('--db', $d) }
       $j = (& { $ErrorActionPreference = 'Continue'; & $exe @a 2>$null }) -join "`n"
       $i = $j.IndexOf('{'); if ($i -lt 0) { return @() }
-      return @(($j.Substring($i) | ConvertFrom-Json).indexes)
+      return @(($j.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }).indexes)
     }
     function TextOut([string[]]$dbs) {
       $a = @('info'); foreach ($d in $dbs) { $a += @('--db', $d) }

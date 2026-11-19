@@ -52,7 +52,7 @@ function Get-GaFindings([string[]]$LintArgs) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $exePath @LintArgs 2>$null }
   $txt = ($raw -join "`n").Trim()
   if ($txt -eq '') { return ,@() }
-  return ,@(($txt | ConvertFrom-Json) | ForEach-Object { $_ })
+  return ,@(($txt | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 function Test-GaHit($Findings, [string]$Rule, [int]$Line) {
   return [bool](@($Findings | Where-Object { $_.rule -eq $Rule -and $_.start_line -eq $Line }).Count -gt 0)

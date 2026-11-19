@@ -35,8 +35,8 @@ $Tmp = Join-Path $env:TEMP ("redcast_dpr_" + [guid]::NewGuid().ToString('N').Sub
 [IO.Directory]::CreateDirectory($Tmp) | Out-Null
 
 function Sql-Rows([string]$Db, [string]$Query) {
-  $o = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query $Query --json 2> (Join-Path $Tmp 'sql.err') }
-  $j = ($o -join "`n") | ConvertFrom-Json
+  $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath((Join-Path $Tmp 'sql.err')); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe sql --db $Db --query $Query --json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
+  $j = ($o -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }
   $names = @($j.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
   $rows = @()
   foreach ($r in $j.rows) {
@@ -67,9 +67,9 @@ try {
   Check 'I1 index of the fixture exits 0' ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
   $ov = Sql-Rows $db "SELECT s.name, p.kind AS pkind FROM symbols s JOIN symbols p ON p.id = s.parent_id JOIN files f ON f.id = s.file_id WHERE f.path LIKE '%Gx.dpr' AND s.name = 'GxOv' AND s.kind = 'function'"
   Check 'S1 the .dpr GxOv bodies are two symbols, both parented to the program' (($ov.Count -eq 2) -and (@($ov | Where-Object { $_.pkind -eq 'program' }).Count -eq 2)) "got $($ov.Count): $(($ov | ForEach-Object { $_.pkind }) -join ',')"
-  $o = & { $ErrorActionPreference = 'Continue'; & $Exe lint --fix --fix-rule redundant-cast --library-db none --db $db --project (Join-Path $d 'Gx.dproj') --format json 2> (Join-Path $Tmp 'plan.err') }
+  $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath((Join-Path $Tmp 'plan.err')); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe lint --fix --fix-rule redundant-cast --library-db none --db $db --project (Join-Path $d 'Gx.dproj') --format json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   Check 'D0 the dry run exits 0' ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
-  $plan = ($o -join "`n") | ConvertFrom-Json
+  $plan = ($o -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }
   $want = Read-Markers (Join-Path $d 'Gx.dpr')
   $flat = @($want.Values | ForEach-Object { $_ })
   Check 'C1 control: the markers hold FIX and REFUSE overloaded-operand' (($flat -contains 'FIX') -and ($flat -contains 'REFUSE overloaded-operand')) ($flat -join ' ')

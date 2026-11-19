@@ -49,7 +49,7 @@ function Compare-Exact([string[]]$Exp, [string[]]$Act) {
 }
 function Get-Facts([string]$EngineExe, [string]$Db, [string[]]$Sel) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $EngineExe exception-facts @Sel --db $Db --json 2>$null }) -join "`n"
-  return ($raw | ConvertFrom-Json)
+  return ($raw | ConvertFrom-Json | ForEach-Object { $_ })
 }
 function Show($F) {
   return @($F.facts | ForEach-Object { '{0}|{1}|{2}|{3}|{4}|{5}' -f $_.action, $_.type, $_.type_qname, $_.via, $_.line, $_.col })

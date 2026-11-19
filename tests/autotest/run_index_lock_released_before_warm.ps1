@@ -85,7 +85,7 @@ $env:DRAGLINT_TEST_WARM_DELAY_MS = '20000'
 try {
   $a = Start-Process -FilePath $Exe -ArgumentList @('index', '--project', "`"$dpr`"", '--db', "`"$db`"", '--rule-cache-warm', 'wait') `
     -WorkingDirectory $work -RedirectStandardOutput (Join-Path $work 'a.out') -RedirectStandardError (Join-Path $work 'a.err') `
-    -NoNewWindow -PassThru
+    -NoNewWindow -PassThru; $null = $a.Handle
 } finally { Remove-Item Env:\DRAGLINT_TEST_WARM_DELAY_MS -ErrorAction SilentlyContinue }
 
 # The lock appears when A starts writing; with the fix it goes when the writes end.

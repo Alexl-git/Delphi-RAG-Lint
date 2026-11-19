@@ -95,7 +95,7 @@ function Get-Plan([string]$Db, [string]$Tag) {
   try {
     $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
       -ArgumentList @('cycles', '--db', ('"' + $Db + '"'), '--edges', '--causes', '--plan', '--format', 'text', '--library-db', 'none') `
-      -RedirectStandardOutput $out -RedirectStandardError (Join-Path $WorkDir ($Tag + '-stderr.txt'))
+      -RedirectStandardOutput $out -RedirectStandardError (Join-Path $WorkDir ($Tag + '-stderr.txt')); $null = $p.Handle
   } finally {
     $env:DRAGLINT_TEST_DUMP_PLAN = $null
   }

@@ -41,11 +41,11 @@ $db   = Join-Path $WorkDir 'l.sqlite'
 
 function RunJson([string[]]$argv, [string]$tag) {
   Push-Location $WorkDir
-  try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe @argv 2> (Join-Path $WorkDir "$tag.err") } | Out-String } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath((Join-Path $WorkDir "$tag.err")); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe @argv 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String } finally { Pop-Location }
   [IO.File]::WriteAllText((Join-Path $WorkDir "$tag.json"), $o)
   # lint / lint-all --json: a bare ARRAY of findings with start_line (see
   # feedback_lint_json_is_an_array_with_start_line).
-  try { return ,@(($o | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { return ,@() }
+  try { return ,@(($o | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { return ,@() }
 }
 function BodyHits($findings, [string]$rule) {
   return ,@($findings | Where-Object { ($_.rule -eq $rule) -and ([IO.Path]::GetFileName([string]$_.file_path) -ieq 'Body.inc') })

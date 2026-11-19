@@ -97,7 +97,7 @@ $infoRaw = (& { $ErrorActionPreference = 'Continue'; & $exePath info --json 2>$n
 $engineVersion = '(unknown)'
 try {
   $line = ($infoRaw -split "`n" | Where-Object { $_.Trim().StartsWith('{') } | Select-Object -First 1)
-  if ($line) { $j = $line | ConvertFrom-Json; $engineVersion = "$($j.version) / extractor $($j.extractor_version) / built $($j.build_date)" }
+  if ($line) { $j = $line | ConvertFrom-Json | ForEach-Object { $_ }; $engineVersion = "$($j.version) / extractor $($j.extractor_version) / built $($j.build_date)" }
 } catch { }
 Write-Host ''
 Write-Host ("engine : {0}" -f $exePath) -ForegroundColor Cyan

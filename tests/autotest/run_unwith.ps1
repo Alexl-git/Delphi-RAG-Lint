@@ -69,13 +69,13 @@ function Invoke-Index([string]$Dir) {
 }
 function Invoke-Plan([string]$Dir, [string]$File, [string[]]$Extra = @('--library-db', $LibraryDb)) {
   $o = & { $ErrorActionPreference = 'Continue'; & $Exe unwith --db "$Dir\uw.sqlite" --in "$Dir\$File" --plan --json @Extra 2>$null }
-  return ($o | Where-Object { $_ -like '{*' } | Select-Object -Last 1) | ConvertFrom-Json
+  return ($o | Where-Object { $_ -like '{*' } | Select-Object -Last 1) | ConvertFrom-Json | ForEach-Object { $_ }
 }
 function Invoke-Apply([string]$Dir, [string]$File, [int]$Line = 0) {
   $LineArgs = @(if ($Line -gt 0) { @('--line', "$Line") } else { @() })
   $o = & { $ErrorActionPreference = 'Continue'; & $Exe unwith --db "$Dir\uw.sqlite" --library-db $LibraryDb --in "$Dir\$File" @LineArgs --apply --project "$Dir\UwDemo.dproj" --json 2>$null }
   $script:ApplyCode = $LASTEXITCODE
-  return ($o | Where-Object { $_ -like '{*' } | Select-Object -Last 1) | ConvertFrom-Json
+  return ($o | Where-Object { $_ -like '{*' } | Select-Object -Last 1) | ConvertFrom-Json | ForEach-Object { $_ }
 }
 function Build-And-Run([string]$Dir) {
   $bat = Join-Path $Dir '_b.bat'

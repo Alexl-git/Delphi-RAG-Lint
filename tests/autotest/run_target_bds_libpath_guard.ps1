@@ -172,7 +172,7 @@ $cfg = Join-Path $Scratch 'all.json'
 $secs = @(@{ name = 'P103'; include = @("$p103\P.dproj") }, @{ name = 'P13'; include = @("$p13\P.dproj") })
 [IO.File]::WriteAllText($cfg, (@{ settings = @{ defaultPlatform = 'Win32'; maxJobs = 2 }; indexes = @{ sections = $secs } } | ConvertTo-Json -Depth 8), [Text.Encoding]::ASCII)
 $planText = Dl @('index', '--all', '--config', $cfg, '--dry-run', '--json') $reg
-$plan = ($planText.Substring($planText.IndexOf('{'))) | ConvertFrom-Json
+$plan = ($planText.Substring($planText.IndexOf('{'))) | ConvertFrom-Json | ForEach-Object { $_ }
 $sec103 = @($plan.sections | Where-Object { $_.name -like 'P103*' })[0]
 $sec13 = @($plan.sections | Where-Object { $_.name -like 'P13*' })[0]
 Check 'the dry-run JSON names 20.0 for the 10.3 section' ($sec103.used_bds -eq '20.0') $planText

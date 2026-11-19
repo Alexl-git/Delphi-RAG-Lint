@@ -52,7 +52,7 @@ function New-Proj([string]$Tag, [scriptblock]$Patch, [string]$IndexExe) {
   if ($Patch) { & $Patch $root }
   $db = "$root.sqlite"
   Push-Location $WorkDir
-  try { $null | & { $ErrorActionPreference = 'Continue'; & $IndexExe index --project (Join-Path $root 'GuardedUses.dproj') --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
+  try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $IndexExe index --project (Join-Path $root 'GuardedUses.dproj') --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
   return @{ Root = $root; Dproj = (Join-Path $root 'GuardedUses.dproj'); Db = $db }
 }
 # stdout bytes (base64) and stderr text of `cycles --plan`, DRAGLINT_CYCLES_PP = $Mode ('' = unset)
@@ -63,7 +63,7 @@ function Get-Plan($P, [string]$Mode, [string]$With = $Exe) {
     if ($Mode) { $env:DRAGLINT_CYCLES_PP = $Mode } else { Remove-Item Env:\DRAGLINT_CYCLES_PP -ErrorAction SilentlyContinue }
     $null = Start-Process -FilePath $With -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
       -ArgumentList @('cycles', '--plan', '--project', ('"' + $P.Dproj + '"'), '--db', ('"' + $P.Db + '"'), '--library-db', 'none') `
-      -RedirectStandardOutput $o -RedirectStandardError $e
+      -RedirectStandardOutput $o -RedirectStandardError $e; $null = $null.Handle
   } finally { if ($null -ne $old) { $env:DRAGLINT_CYCLES_PP = $old } else { Remove-Item Env:\DRAGLINT_CYCLES_PP -ErrorAction SilentlyContinue } }
   return @{ Out = [Convert]::ToBase64String([IO.File]::ReadAllBytes($o)); Text = [IO.File]::ReadAllText($o); Err = [IO.File]::ReadAllText($e) }
 }

@@ -8,7 +8,7 @@ function Check($n,$ok){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),
 Push-Location C:\TEMP
 try {
   $json = & { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null } | Out-String
-  $obj  = $json | ConvertFrom-Json
+  $obj  = $json | ConvertFrom-Json | ForEach-Object { $_ }
   $byId = @{}; foreach($r in $obj.rules){ $byId[$r.id] = $r }
   Check 'self-assignment fixable=true'        ($byId['self-assignment'].fixable -eq $true)
   Check 'redundant-parentheses fixable=true'  ($byId['redundant-parentheses'].fixable -eq $true)

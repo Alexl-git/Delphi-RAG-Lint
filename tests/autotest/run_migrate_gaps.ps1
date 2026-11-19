@@ -51,7 +51,7 @@ Check 'V the fixture index was built' (Test-Path $db)
 function DryRun([string]$Unit, [string]$Rules) {
   $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P $Unit) --rules (P $Rules) --db $db --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $j = $null
-  try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {}
+  try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o; J = $j }
 }
 $MigKinds = @('migrate-applied', 'deliberate-break', 'migrate-check')

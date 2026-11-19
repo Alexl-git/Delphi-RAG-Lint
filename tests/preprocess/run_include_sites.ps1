@@ -36,7 +36,7 @@ function Q([string]$s) { return '"' + $s + '"' }
 function Run-Bytes([string[]]$verbArgs) {
   $tmp = [System.IO.Path]::GetTempFileName()
   $line = ((@((Q $exePath), 'preprocess-file') + $verbArgs) -join ' ') + ' > ' + (Q $tmp) + ' 2>NUL'
-  $null = Start-Process cmd.exe -ArgumentList '/c', ('"' + $line + '"') -NoNewWindow -Wait -PassThru
+  $null = Start-Process cmd.exe -ArgumentList '/c', ('"' + $line + '"') -NoNewWindow -Wait -PassThru; $null = $null.Handle
   $b = [System.IO.File]::ReadAllBytes($tmp)
   [System.IO.File]::Delete($tmp)
   return ,$b

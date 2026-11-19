@@ -77,7 +77,7 @@ function CliUsages([string]$Name) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath usages --name $Name --db $db --format json 2>$null } | Out-String)
   $j = $raw.Substring($raw.IndexOf('{'))
   $j = $j.Substring(0, $j.LastIndexOf('}') + 1)
-  return ($j | ConvertFrom-Json)
+  return ($j | ConvertFrom-Json | ForEach-Object { $_ })
 }
 function Pos($r) { "$($r.file):$($r.line):$($r.col)" }
 
@@ -105,7 +105,7 @@ try {
 
   $lspE = $null; $lspB = $null
   foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 2 -and $o.result) { $lspE = $o.result }
     if ($o.id -eq 3 -and $o.result) { $lspB = $o.result }
   }

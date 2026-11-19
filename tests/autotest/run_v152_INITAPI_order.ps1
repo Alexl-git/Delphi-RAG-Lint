@@ -86,7 +86,7 @@ try {
   # c2: second engine call -- the order init-order-hazard walks
   $lj = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rule init-order-hazard --json 2>$null }) -join "`n"
   Write-Host "  lint raw: $($lj.Substring(0, [Math]::Min(400, $lj.Length)))"
-  $lint = @(($lj | ConvertFrom-Json) | ForEach-Object { $_ })
+  $lint = @(($lj | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   $hz = @($lint | Where-Object { ([IO.Path]::GetFileName([string]$_.file_path) -eq 'C.pas') -and ($_.message -match 'A\.GVal') })
   $m = if ($hz.Count -ge 1) { [regex]::Match($hz[0].message, 'but (\w+) initializes after (\w+) in (\S+):') } else { $null }
   $lintSaysAAfterC = ($null -ne $m) -and $m.Success -and ($m.Groups[1].Value -eq 'A') -and ($m.Groups[2].Value -eq 'C') -and ($m.Groups[3].Value -eq 'P1.dpr')

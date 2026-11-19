@@ -76,7 +76,7 @@ function New-Proj([string[]]$Order, [scriptblock]$Patch = $null, [switch]$NoInde
   $db = "$root.sqlite"
   if (-not $NoIndex) {
     Push-Location $WorkDir
-    try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root 'InitP3.dproj') --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
+    try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project (Join-Path $root 'InitP3.dproj') --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
   }
   return @{ Root = $root; Dproj = (Join-Path $root 'InitP3.dproj'); Db = $db; Name = 'InitP3' }
 }
@@ -140,18 +140,18 @@ function Get-Plan($P, [switch]$NoProject) {
   $a = @('cycles', '--plan', '--db', $P.Db, '--library-db', 'none')
   if (-not $NoProject) { $a += @('--project', $P.Dproj) }
   Push-Location $WorkDir
-  try { return ($null | & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null } | Out-String) } finally { Pop-Location }
+  try { return ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @a 2>$null } | Out-String) } finally { Pop-Location }
 }
 function Get-CausesJson($P) {
   Push-Location $WorkDir
-  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --causes --format json --project $P.Dproj --db $P.Db --library-db none 2>$null } | Out-String) } finally { Pop-Location }
-  try { return ($o | ConvertFrom-Json) } catch { return $null }
+  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe cycles --causes --format json --project $P.Dproj --db $P.Db --library-db none 2>$null } | Out-String) } finally { Pop-Location }
+  try { return ($o | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function Run-Fix($P, [string[]]$Extra) {
   $a = @('cycles', '--fix', '--build-timeout', '1800', '--project', $P.Dproj, '--db', $P.Db, '--library-db', 'none', '--format', 'json') + $Extra
   Push-Location $WorkDir
-  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
-  $j = $null; try { $j = $out | ConvertFrom-Json } catch { }
+  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @a 2>$null } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
+  $j = $null; try { $j = $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   $k = @(); $r = @()
   foreach ($c in @($j.cycles)) { foreach ($x in @($c.refusals)) { if ($x) { $k += $x.kind; $r += "$($x.kind): $($x.reason)" } } }
   foreach ($x in @($j.refusals)) { if ($x) { $k += $x.kind; $r += "$($x.kind): $($x.reason)" } }
@@ -161,10 +161,10 @@ function Run-Fix($P, [string[]]$Extra) {
 function Get-Hazard($P) {
   Push-Location $WorkDir
   try {
-    $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project $P.Dproj --db $P.Db --library-db none *> "$($P.Db).hzlog" }
-    $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $P.Db --rule init-order-hazard --json 2>$null } | Out-String)
+    $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project $P.Dproj --db $P.Db --library-db none *> "$($P.Db).hzlog" }
+    $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe lint-all --db $P.Db --rule init-order-hazard --json 2>$null } | Out-String)
   } finally { Pop-Location }
-  $j = @(); try { $j = @(($o | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { }
+  $j = @(); try { $j = @(($o | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { }
   return @($j | Where-Object { $_ -and $_.rule -eq 'init-order-hazard' })
 }
 
@@ -265,7 +265,7 @@ try {
     Check "d.1 refused: the order depends on a conditional uses entry (IP3C.pas:$ifLine)" ($m.Success -and $m.Groups[1].Value.Contains("conditional uses entry (``IP3C.pas:$ifLine``)")) $plan
     $P = New-Proj $null { param($r) [IO.File]::Delete((Join-Path $r 'InitP3.dpr')); [IO.File]::Delete((Join-Path $r 'InitP3.dproj')) } -NoIndex
     Push-Location $WorkDir
-    try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index $P.Root --db $P.Db --library-db none *> "$($P.Db).log" } } finally { Pop-Location }
+    try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index $P.Root --db $P.Db --library-db none *> "$($P.Db).log" } } finally { Pop-Location }
     $plan = Get-Plan $P -NoProject
     $m = [regex]::Match($plan, $RefusedRx)
     Check 'd.2 no .dpr in the index: refused "no program"' ($m.Success -and $m.Groups[1].Value.Contains('no program in this index')) $plan
@@ -284,7 +284,7 @@ try {
     $a = Run-Fix $P @('--part', 'a', '--apply')
     Check 'e.2 Part A applied (exit 0)' ($a.Exit -eq 0) "exit=$($a.Exit) $($a.Reasons)"
     Push-Location $WorkDir
-    try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project $P.Dproj --db $P.Db --library-db none *> "$($P.Db).relog" } } finally { Pop-Location }
+    try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project $P.Dproj --db $P.Db --library-db none *> "$($P.Db).relog" } } finally { Pop-Location }
     $plan = Get-Plan $P
     Check 'e.3 after Part A + reindex the same edge is planned with the proof line' (($plan -match '(?m)^- `ip3a -> ip3b`: recipe: routine-call inversion -- \*\*cut by this plan\*\*') -and $plan.Contains('- init order: `IP3B` initializes before `IP3A` in `InitP3.dpr`')) $plan
   }

@@ -87,7 +87,7 @@ $err = Join-Path $WorkDir 'e.txt'
 function RunDescendants([string]$Ancestor) {
   $p = Start-Process -FilePath $exePath `
         -ArgumentList @('query','descendants','--of',$Ancestor,'--db',$db) `
-        -NoNewWindow -Wait -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
+        -NoNewWindow -Wait -PassThru -RedirectStandardOutput $out -RedirectStandardError $err; $null = $p.Handle
   $lines = @(Get-Content -LiteralPath $out -ErrorAction SilentlyContinue |
              Where-Object { $_.Trim() -ne '' -and $_ -notmatch '^\(loaded defaults' })
   return @{ Code = $p.ExitCode; Lines = $lines }

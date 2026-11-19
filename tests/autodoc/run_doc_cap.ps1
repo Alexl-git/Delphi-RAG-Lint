@@ -65,7 +65,7 @@ try {
 
   # Also confirm the JSON dry-run classifies it as created (facts non-empty).
   $j = & { $ErrorActionPreference = 'Continue'; & $exePath document --qname cap_target.Target --db $db --json 2>$null } | Out-String
-  $o = $null; try { $o = ($j | ConvertFrom-Json) } catch { $o = $null }
+  $o = $null; try { $o = ($j | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $o = $null }
   Check 'json: action = created' ($null -ne $o -and $o.action -eq 'created')
 } finally { Pop-Location }
 

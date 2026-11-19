@@ -55,7 +55,7 @@ function Invoke-Rows([string]$Db, [string]$Query) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $Db --json --query $Query 2>$null }) -join "`n"
   $i = $raw.IndexOf('{')
   if ($i -lt 0) { return ,@() }
-  try { $j = $raw.Substring($i) | ConvertFrom-Json } catch { return ,@() }
+  try { $j = $raw.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ } } catch { return ,@() }
   if ($null -eq $j.columns) { return ,@() }
   $cols = @($j.columns | ForEach-Object { $_.name })
   $out = @()
@@ -71,7 +71,7 @@ function Invoke-Json([string[]]$CliArgs) {
   $a = $raw.IndexOf('['); $o = $raw.IndexOf('{')
   $i = if ($a -ge 0 -and ($o -lt 0 -or $a -lt $o)) { $a } else { $o }
   if ($i -lt 0) { return $null }
-  try { return ($raw.Substring($i) | ConvertFrom-Json) } catch { return $null }
+  try { return ($raw.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 # One row per (ref, host) of the include refs: host leaf, target leaf + line ('' = unbound for that host).
 $qHost = "SELECT r.name_text AS name, r.kind AS kind, r.start_line AS line, hf.path AS host, " +

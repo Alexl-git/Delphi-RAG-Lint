@@ -82,7 +82,7 @@ function Run([string[]]$ArgList) {
     -RedirectStandardOutput $o -RedirectStandardError $e | Out-Null
   return @{ Out = [IO.File]::ReadAllText($o); Err = [IO.File]::ReadAllText($e) }
 }
-function Parses([string]$T) { try { $null = ConvertFrom-Json $T -Depth 100; $true } catch { $false } }
+function Parses([string]$T) { try { $null = ConvertFrom-Json $T -Depth 100 | ForEach-Object { $_ }; $true } catch { $false } }
 
 $runs = @(
   @{ n = 'lint-all --db --json';        a = @('lint-all', '--db', $db, '--json');                                 progress = $true },
@@ -96,7 +96,7 @@ foreach ($r in $runs) {
   Check "$($r.n): stdout non-empty" ($t.Length -gt 0)
   Check "$($r.n): stdout starts with [ and ends with ]" ($t.StartsWith('[') -and $t.EndsWith(']'))
   Check "$($r.n): stdout parses as JSON" (Parses $t)
-  if ($r.progress) { Check "$($r.n): stdout has findings (control)" ((ConvertFrom-Json $t -Depth 100).Count -gt 0) }
+  if ($r.progress) { Check "$($r.n): stdout has findings (control)" ((ConvertFrom-Json $t -Depth 100 | ForEach-Object { $_ }).Count -gt 0) }
   Check "$($r.n): no 'lint-all:' text on stdout" ($x.Out -notmatch 'lint-all:')
   if ($r.progress) {
     # LINTJSON-STDERR (1.40): under a JSON format the success path writes NOTHING to stderr, so a consumer that

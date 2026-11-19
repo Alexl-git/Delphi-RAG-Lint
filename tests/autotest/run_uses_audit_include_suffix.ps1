@@ -34,7 +34,7 @@ $db = Join-Path $WorkDir 'mv.sqlite'
 Check 'V the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db)) "exit=$LASTEXITCODE"
 
 $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule uses-movable-to-implementation --json 2>$null }) -join "`n"
-$f = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ })
+$f = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 $h = @($f | Where-Object { $_.file_path -like '*\MvHost.pas' })
 $n = @($f | Where-Object { $_.file_path -like '*\MvInline.pas' })
 Check 'include entry: one finding in MvHost.pas' ($h.Count -eq 1) "count=$($h.Count)"

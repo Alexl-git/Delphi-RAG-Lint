@@ -101,7 +101,7 @@ foreach ($cap in @('Verify All Callers Pass an In-Range Index...', 'Param Array 
 
 # ---- one submenu per caption: rows find the existing submenu, they never duplicate it ----
 $json = & { $ErrorActionPreference = 'Continue'; & $Exe menu-tree --project $dproj --db $db --format json 2>$null } | Out-String
-$doc = $json | ConvertFrom-Json
+$doc = $json | ConvertFrom-Json | ForEach-Object { $_ }
 $root = @($doc.roots) | Where-Object { $_.caption -eq 'drag-lint' } | Select-Object -First 1
 Check 'json: drag-lint root parsed' ($null -ne $root)
 foreach ($sub in @('Code Quality', 'Find Usages', 'Field Repository', 'Analyze')) {

@@ -129,7 +129,7 @@ function Probe-Run([string]$Label, [string[]]$ExtraArgs) {
     $argv = @('index','--all','--only',$ONLY) + $ExtraArgs
     $out  = Join-Path $WorkDir "$Label.out"
     $proc = Start-Process $Exe -ArgumentList $argv -NoNewWindow -PassThru `
-              -RedirectStandardOutput $out -RedirectStandardError "$out.err"
+              -RedirectStandardOutput $out -RedirectStandardError "$out.err"; $null = $proc.Handle
     $max = 0
     while (-not $proc.HasExited) {
       $n = @(Get-CimInstance Win32_Process -Filter "Name='drag-lint.exe'" |

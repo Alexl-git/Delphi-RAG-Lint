@@ -34,7 +34,7 @@ try {
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule duplicate-unit-on-search-path --format json 2>$null }
   $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
-  $f = @(); if ($b -ge 0) { try { $f = @(($txt.Substring($b) | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $f = @() } }
+  $f = @(); if ($b -ge 0) { try { $f = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $f = @() } }
   $f | ForEach-Object { Write-Host ("  {0}:{1} {2}" -f $_.file_path, $_.start_line, $_.message) -ForegroundColor DarkGray }
   $a  = @($f | Where-Object { $_.rule -eq 'duplicate-unit-on-search-path' -and $_.file_path -match '\\a\\uDup\.pas$' })
   $bb = @($f | Where-Object { $_.rule -eq 'duplicate-unit-on-search-path' -and $_.file_path -match '\\b\\uDup\.pas$' })

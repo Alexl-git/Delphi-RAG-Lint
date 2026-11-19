@@ -25,7 +25,7 @@ foreach ($pas in Get-ChildItem (Join-Path $fx '*.pas')) {
   if (-not (Test-Path $expFile)) { continue }
   $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint $pas.FullName --config $cfg --json 2>$null }
   $findings = @()
-  try { $findings = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $findings = @() }
+  try { $findings = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $findings = @() }
   $pairs = @{}
   foreach ($f in $findings) { if ($null -ne $f) { $pairs["$($f.rule):$($f.start_line)"] = $true } }
   foreach ($d in Get-Content $expFile) {

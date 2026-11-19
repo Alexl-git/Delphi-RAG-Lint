@@ -66,8 +66,8 @@ $body.AddRange([string[]]@('', 'end.'))
 & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db *> $null }
 Check 'fixture indexed' ($LASTEXITCODE -eq 0) ''
 
-function LintAll { ((& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db 2>$err } | Out-String) -replace "`r`n", "`n") }
-function LintFile([string]$P) { ((& { $ErrorActionPreference = 'Continue'; & $Exe lint $P --db $db 2>$err } | Out-String) -replace "`r`n", "`n") }
+function LintAll { ((& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($err); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String) -replace "`r`n", "`n") }
+function LintFile([string]$P) { ((& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($err); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe lint $P --db $db 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String) -replace "`r`n", "`n") }
 
 Write-Host ''
 Write-Host '-- 1. per-file run, index present: no OptedIn-gated marker is called unused' -ForegroundColor Cyan

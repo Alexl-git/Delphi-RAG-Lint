@@ -105,7 +105,7 @@ Check 'butterfly --format json exits 0' ($jsonExit -eq 0) "exit=$jsonExit"
 
 $bf = $null
 try {
-  $bf = $jsonRaw | ConvertFrom-Json
+  $bf = $jsonRaw | ConvertFrom-Json | ForEach-Object { $_ }
 } catch {
   Check 'butterfly --format json parses as JSON' $false "parse error: $($_.Exception.Message); raw=$jsonRaw"
 }

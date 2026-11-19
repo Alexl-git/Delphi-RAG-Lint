@@ -164,7 +164,7 @@ $cfgPath = Join-Path $dirCap '.drag-lint.json'
 '{ "settings": { "sizeGuardMB": 1500 }, "docs": { "max_return_cases": 2 } }' |
   Set-Content $cfgPath -Encoding ascii
 Check 'fixture .drag-lint.json is valid JSON' `
-  ((Get-Content $cfgPath -Raw | ConvertFrom-Json) -ne $null)
+  ((Get-Content $cfgPath -Raw | ConvertFrom-Json | ForEach-Object { $_ }) -ne $null)
 
 & { $ErrorActionPreference = 'Continue'; & $Exe index $dirCap --db $dbCap 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Push-Location $dirCap

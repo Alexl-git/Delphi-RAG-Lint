@@ -49,7 +49,7 @@ $extPath = Join-Path $Dir 'extension.js'
 if (-not (Test-Path $pkgPath)) { Write-Host "FATAL: not found: $pkgPath" -ForegroundColor Red; exit 2 }
 if (-not (Test-Path $extPath)) { Write-Host "FATAL: not found: $extPath" -ForegroundColor Red; exit 2 }
 
-$pkg = Get-Content $pkgPath -Raw | ConvertFrom-Json
+$pkg = Get-Content $pkgPath -Raw | ConvertFrom-Json | ForEach-Object { $_ }
 $ext = Get-Content $extPath -Raw
 
 Write-Host 'Manifest and code agree on the contributed commands' -ForegroundColor Cyan
@@ -83,7 +83,7 @@ $dep = $pkg.dependencies.'vscode-languageclient'
 Check 'vscode-languageclient is a declared dependency' ($null -ne $dep) "range=$dep"
 $installed = Join-Path $Dir 'node_modules\vscode-languageclient\package.json'
 if (Test-Path $installed) {
-  $iv = (Get-Content $installed -Raw | ConvertFrom-Json).version
+  $iv = (Get-Content $installed -Raw | ConvertFrom-Json | ForEach-Object { $_ }).version
   Check 'the installed major version is 9 or later (CloseAction lives in /node from 9)' `
     ([int]($iv -split '\.')[0] -ge 9) "installed=$iv"
 } else {
@@ -99,7 +99,7 @@ $sa = Join-Path $Dir 'lib/serverargs.js'
 Check "lib/serverargs.js exists and extension.js uses it" ((Test-Path $sa) -and ($ext -match "serverargs")) ""
 if (Test-Path $sa) {
   $js = 'const a=require(process.argv[1]);const o=[a.buildArgs([],undefined),a.buildArgs([],true),a.buildArgs([],false),a.buildArgs(["X.sqlite"],true)];console.log(JSON.stringify(o))'
-  $out = (& node -e $js (Resolve-Path $sa).Path) | ConvertFrom-Json
+  $out = (& node -e $js (Resolve-Path $sa).Path) | ConvertFrom-Json | ForEach-Object { $_ }
   Check "unset setting (nothing saved) runs the server WITH --full-rules" ($out[0] -contains "--full-rules") ($out[0] -join " ")
   Check "true runs the server with --full-rules" ($out[1] -contains "--full-rules") ""
   Check "false (user switched it off) runs the plain lsp with NO --full-rules" (($out[2] -join " ") -eq "lsp") ($out[2] -join " ")
@@ -111,7 +111,7 @@ Write-Host 'package-lock.json agrees with package.json' -ForegroundColor Cyan
 $lockPath = Join-Path $Dir 'package-lock.json'
 Check 'package-lock.json exists' (Test-Path $lockPath) ''
 if (Test-Path $lockPath) {
-  $lock = Get-Content $lockPath -Raw | ConvertFrom-Json -AsHashtable
+  $lock = Get-Content $lockPath -Raw | ConvertFrom-Json -AsHashtable | ForEach-Object { $_ }
   Check 'lock top-level version == package.json version (regen: npm install --package-lock-only)' ($lock["version"] -eq $pkg.version) ("lock=" + $lock["version"] + " package=" + $pkg.version)
   Check 'lock root package version == package.json version' ($lock.packages.''.version -eq $pkg.version) ("lock=" + $lock.packages.''.version)
 }

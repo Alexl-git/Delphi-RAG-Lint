@@ -199,7 +199,7 @@ try {
     $code = $LASTEXITCODE
     $text = (@($raw) -join "`n").Trim()
     $json = $null
-    try { $json = $text | ConvertFrom-Json } catch { $json = $null }
+    try { $json = $text | ConvertFrom-Json | ForEach-Object { $_ } } catch { $json = $null }
     return @{ Text = $text; Json = $json; Code = $code }
   }
 

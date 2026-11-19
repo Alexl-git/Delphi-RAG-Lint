@@ -34,7 +34,7 @@ function Check($n, $ok, $d) {
 function Write-Ascii($p, $t) { [IO.File]::WriteAllText($p, (($t -replace "`r`n", "`n") -replace "`n", "`r`n"), [Text.Encoding]::ASCII) }
 function Findings([string]$Json) {
   $i = $Json.IndexOf('['); if ($i -lt 0) { return ,@() }
-  $a = @(($Json.Substring($i) | ConvertFrom-Json) | ForEach-Object { $_ })
+  $a = @(($Json.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   $o = @()
   foreach ($f in $a) {
     $m = [regex]::Match([string]$f.message, '"([^"]+)"')

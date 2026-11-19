@@ -47,7 +47,7 @@ function RunLint([string]$CfgJson, [string]$Sleep, [string]$NoBudget) {
   $txt = ($out -join "`n").Trim()
   if ($txt -eq '') { return @() }
   # lint --json is a bare array; rule id is "rule", line is "start_line"
-  return @(($txt | ConvertFrom-Json) | ForEach-Object { $_ })
+  return @(($txt | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 function Rules($F) { return @($F | ForEach-Object { $_.rule }) }
 
@@ -89,7 +89,7 @@ try {
   $cfg7 = Join-Path $work 'cfg7.json'
   [IO.File]::WriteAllText($cfg7, '{ "rule_time_budget_ms": 300 }', [Text.Encoding]::ASCII)
   $env:DRAGLINT_TEST_RULE_SLEEP_MS = 'writeln-in-gui-app=900'
-  try { $b7 = @((((& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture --config $cfg7 --no-budget --json 2>$null }) -join "`n") | ConvertFrom-Json) | ForEach-Object { $_ }) }
+  try { $b7 = @((((& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture --config $cfg7 --no-budget --json 2>$null }) -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   finally { Remove-Item Env:\DRAGLINT_TEST_RULE_SLEEP_MS -ErrorAction SilentlyContinue }
   Check ((@(Rules $b7)) -contains 'writeln-in-gui-app') 'B7 --no-budget: writeln-in-gui-app reported'
   Check (-not ((@(Rules $b7)) -contains 'rule-skipped-budget')) 'B7 --no-budget: no note'
@@ -109,7 +109,7 @@ try {
   Check (@($b8err | Where-Object { $_ -match '\[rule-skipped-budget\]|rule-skipped-budget' -and $_ -match 'BudgetFixture' }).Count -ge 1) 'B8 lint-all also reports the per-file note'
 
   # B6
-  $cat = (& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null }) | ConvertFrom-Json
+  $cat = (& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null }) | ConvertFrom-Json | ForEach-Object { $_ }
   $row = @($cat.rules | Where-Object { $_.id -eq 'rule-skipped-budget' })
   Check ($row.Count -eq 1) 'B6 rules --json lists rule-skipped-budget'
   Check (($row.Count -eq 1) -and $row[0].default_severity -eq 'info' -and $row[0].category -eq 'other' -and $row[0].default_enabled) 'B6 rule-skipped-budget is info / other / on'
@@ -121,7 +121,7 @@ try {
   $cfg0 = Join-Path $work 'cfg0.json'
   [IO.File]::WriteAllText($cfg0, '{}', [Text.Encoding]::ASCII)
   $tout = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $tfx --config $cfg0 --json 2>$null }) -join "`n"
-  $got = @(($tout | ConvertFrom-Json) | Where-Object { $_.rule -match '^(stringlist-|dictionary-get)' } | ForEach-Object { "$($_.rule)@$($_.start_line)" })
+  $got = @(($tout | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $_.rule -match '^(stringlist-|dictionary-get)' } | ForEach-Object { "$($_.rule)@$($_.start_line)" })
   Write-Host ('raw T1: ' + ($got -join ', '))
   Check (($got -join ',') -eq 'stringlist-objects-leak@40,stringlist-unsorted@41,stringlist-unsorted@53,stringlist-unsorted@54') 'T1 TScan fixture findings unchanged (4, pinned from the pre-change engine)'
 

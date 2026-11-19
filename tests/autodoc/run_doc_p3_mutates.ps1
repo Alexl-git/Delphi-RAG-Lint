@@ -48,7 +48,7 @@ function Get-FileMd5([string]$p) { (Get-FileHash -Algorithm MD5 -Path $p).Hash }
 
 function Get-DeclLine([string]$db, [string]$name) {
   $j = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --db $db --json 2>$null }) -join "`n"
-  $o = $null; try { $o = ($j | ConvertFrom-Json) } catch { return 0 }
+  $o = $null; try { $o = ($j | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return 0 }
   if ($null -eq $o) { return 0 }
   foreach ($r in @($o)) { if ($r.section -eq 'interface') { return [int]$r.start_line } }
   return 0
@@ -91,7 +91,7 @@ r = c.execute('''SELECT f.mutates_params FROM symbols s
 if not r: print('<norow>')
 else: print('<null>' if r[0][0] is None else r[0][0])
 "@
-  return ((& { $ErrorActionPreference = 'Continue'; python -c $py 2>&1 | ForEach-Object { "$_" } }) -join ' ').Trim()
+  return ((& { $ErrorActionPreference = 'Continue'; python -c $(if ($PSVersionTable.PSVersion.Major -lt 7) { $py.Replace('"', '\"') } else { $py }) 2>&1 | ForEach-Object { "$_" } }) -join ' ').Trim()
 }
 
 Push-Location C:\TEMP

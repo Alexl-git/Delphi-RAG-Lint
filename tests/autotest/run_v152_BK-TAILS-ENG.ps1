@@ -61,8 +61,8 @@ try {
 
   function LintX([string]$rule) {
     $errFile = Join-Path $Work ('err-' + [guid]::NewGuid().ToString('N') + '.txt')
-    $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Real1 --project $P1 --json --no-stand-down --rule $rule 2>$errFile }) -join "`n"
-    $arr = @(); try { $arr = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { Write-Host ('  unparsed: ' + $raw.Substring(0, [Math]::Min(200, $raw.Length))) }
+    $raw = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe lint-all --db $Real1 --project $P1 --json --no-stand-down --rule $rule 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }) -join "`n"
+    $arr = @(); try { $arr = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { Write-Host ('  unparsed: ' + $raw.Substring(0, [Math]::Min(200, $raw.Length))) }
     $err = if (Test-Path $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
     return [pscustomobject]@{ F = $arr; Err = $err }
   }
@@ -136,7 +136,7 @@ end.
 
   function LintC([string]$file) {
     $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $C $file) --db $CDb --json 2>$null }) -join "`n"
-    $arr = @(); try { $arr = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { }
+    $arr = @(); try { $arr = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { }
     return ,$arr
   }
   $t = LintC 'uTxt.pas'
@@ -201,7 +201,7 @@ end.
   $rawR = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $RDb --query $q --json 2>$null }) -join "`n"
   $bound = @{}
   try {
-    $j = $rawR | ConvertFrom-Json
+    $j = $rawR | ConvertFrom-Json | ForEach-Object { $_ }
     $ci = @($j.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
     foreach ($row in @($j.rows)) {
       $rcv = '' + $row[[array]::IndexOf($ci, 'rcv')]; $tg = '' + $row[[array]::IndexOf($ci, 'target')]

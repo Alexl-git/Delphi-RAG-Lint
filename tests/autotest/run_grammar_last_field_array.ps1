@@ -58,7 +58,7 @@ function Get-ParseFindings([string]$Dir, [string]$Db) {
   try {
     foreach ($r in 'parser-error', 'syntax-error') {
       $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $Dir --db $Db --rule $r --json 2>$null } | Out-String
-      try { $all += @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) } catch {}
+      try { $all += @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch {}
     }
   } finally { Pop-Location }
   return @($all | Where-Object { $_.rule -in 'parser-error', 'syntax-error' })
@@ -94,7 +94,7 @@ try {
     $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $gdb --query "SELECT f.path, s.name FROM symbols s JOIN files f ON f.id = s.file_id" --json 2>$null } | Out-String
   } finally { Pop-Location }
   $rows = @()
-  try { $rows = @(($j | ConvertFrom-Json).rows) } catch {}
+  try { $rows = @(($j | ConvertFrom-Json | ForEach-Object { $_ }).rows) } catch {}
   foreach ($k in $cases.Keys) {
     $mine = @($rows | Where-Object { [IO.Path]::GetFileNameWithoutExtension([string]$_[0]) -eq $k } | ForEach-Object { [string]$_[1] })
     $missing = @($cases[$k][1] | Where-Object { $n = $_; -not ($mine | Where-Object { $_ -ceq $n }) })

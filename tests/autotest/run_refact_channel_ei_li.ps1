@@ -59,7 +59,7 @@ function Cancel-Run([string]$Tag, $P, [string[]]$Args_) {
   $lines = @('@echo off', "call `"$Rsvars`"", "if not exist `"$($P.Dir)\*.BCK*`" goto :eof", "echo.> `"$flag`"", "ping -n 300 $PingHost > nul")
   [IO.File]::WriteAllText($bat, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
   $q = ($Args_ + @('--rsvars', $bat, '--build-timeout', '600') | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
-  $run = Start-Process -FilePath $Exe -ArgumentList $q -RedirectStandardOutput (Join-Path $Tmp "$Tag.out") -RedirectStandardError (Join-Path $Tmp "$Tag.err") -NoNewWindow -PassThru
+  $run = Start-Process -FilePath $Exe -ArgumentList $q -RedirectStandardOutput (Join-Path $Tmp "$Tag.out") -RedirectStandardError (Join-Path $Tmp "$Tag.err") -NoNewWindow -PassThru; $null = $run.Handle
   $parked = Wait-For { (Test-Path $flag) -or $run.HasExited } 400
   if (-not ($parked -and (Test-Path $flag) -and -not $run.HasExited)) { try { $run.Kill() } catch { }; Stop-Parked; return @{ Parked = $false; Exit = $null; Left = 0 } }
   $null = & { $ErrorActionPreference = 'Continue'; & $Exe shutdown --db $P.Db --wait 60 2>&1 | ForEach-Object { "$_" } }

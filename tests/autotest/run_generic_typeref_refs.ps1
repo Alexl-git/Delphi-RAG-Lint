@@ -130,7 +130,7 @@ c.close()
 
 function Get-Refs([string]$Name, [string]$Kind) {
   $raw = (python $py $db $Name $Kind) -join "`n"
-  return @(($raw | ConvertFrom-Json) | ForEach-Object { $_ })
+  return @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 
 # 1-based line number of the fixture line matching $Pattern. Assertions below
@@ -218,7 +218,7 @@ Check 'query type-usage exits 0' ($tuExit -eq 0) "exit=$tuExit"
 # back with "referenced": false, so `-match 'TList'` is satisfied by the broken
 # build's own negative answer. Assert the FLAG.
 $tu = $null
-try { $tu = $tuRaw | ConvertFrom-Json } catch { }
+try { $tu = $tuRaw | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'query type-usage --json parses' ($null -ne $tu) "raw=$tuRaw"
 if ($null -ne $tu) {
   foreach ($n in @('TStringList', 'TList', 'TDictionary')) {

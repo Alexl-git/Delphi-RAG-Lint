@@ -67,13 +67,13 @@ Check 'V the fixture index was built' (Test-Path $db)
 function Apply([string]$Unit, [string]$Rules, [string[]]$Extra = @()) {
   $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @(@('convert-apply', '--unit', (P $Unit), '--rules', (P $Rules), '--db', $db) + $Extra) 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $j = $null
-  if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {} }
+  if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {} }
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o; J = $j }
 }
 function Kinds($j, [string]$k) { if ($null -eq $j) { return @() }; return @($j.items | Where-Object { $_.kind -eq $k }) }
 
 # ---- capability ------------------------------------------------------------
-$info = $null; try { $info = ((& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n") | ConvertFrom-Json } catch {}
+$info = $null; try { $info = ((& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n") | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'K1 info --json capabilities.migrate_members is the JSON literal true' (($null -ne $info) -and ($info.capabilities.migrate_members -is [bool]) -and $info.capabilities.migrate_members)
 
 # ---- rename: dry run JSON -----------------------------------------------------

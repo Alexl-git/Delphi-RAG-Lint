@@ -72,7 +72,7 @@ foreach ($pas in $fixtures) {
     $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint $pas.FullName --json 2>$null }
   }
   $findings = @()
-  try { $findings = ($raw | ConvertFrom-Json) } catch { $findings = @() }
+  try { $findings = ($raw | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $findings = @() }
   if ($null -eq $findings) { $findings = @() }
 
   # actual set of "rule:line" and the set of rule ids present

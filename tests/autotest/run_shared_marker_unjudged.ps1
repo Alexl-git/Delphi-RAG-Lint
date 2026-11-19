@@ -211,13 +211,13 @@ try {
 
   $note = 'left unjudged: their rule depends'
   $errA = Join-Path $scratch 'errA.txt'
-  $oA = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbA 2>$errA } | Out-String)
+  $oA = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errA); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath lint-all --db $dbA 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
   $eA = Get-Content $errA -Raw
   Check '1. FIX: lint-all --db A says the marker is left unjudged and names --shared-db' (($eA -match $note) -and ($eA -match '--shared-db'))
   Check '7. CONTROL: exactly the one shared closure-dependent marker is counted' ($eA -match "lint-all: 1 dl:ok marker\(s\) on dl:shared units $note")
   Check '2. sanity: the marker is still not called unused' (-not (UnusedAt $oA 'thing\.pas'))
   $j = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbA --json 2>$null } | Out-String)
-  $parsed = $true; try { $null = $j | ConvertFrom-Json } catch { $parsed = $false }
+  $parsed = $true; try { $null = $j | ConvertFrom-Json | ForEach-Object { $_ } } catch { $parsed = $false }
   Check '3. CONTROL: --json stdout stays parseable' ($parsed -and ($j -notmatch [regex]::Escape($note)))
   $u = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbA --shared-db $dbB 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check '4a. CONTROL: --shared-db run has no single-index note' ($u -notmatch $note)

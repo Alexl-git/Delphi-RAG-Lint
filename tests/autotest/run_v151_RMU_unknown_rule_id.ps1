@@ -69,7 +69,7 @@ $LA = LineOf '{A}'; $LB = LineOf '{B}'; $LC = LineOf '{C}'; $LD = LineOf '{D}'
 function LintJson([string[]]$Extra) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $Unit --json @Extra 2>$null }) -join "`n"
   Write-Host ('raw[0..200]: ' + $raw.Substring(0, [Math]::Min(200, $raw.Length)).Replace("`n", ' '))
-  try { return @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { Check 'lint --json parses' $false; return @() }
+  try { return @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { Check 'lint --json parses' $false; return @() }
 }
 function Msg($all, $line) {
   @($all | Where-Object { $_.rule -eq 'review-marker-malformed' -and $_.start_line -eq $line } | ForEach-Object { $_.message })

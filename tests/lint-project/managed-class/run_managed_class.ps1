@@ -17,7 +17,7 @@ if (Test-Path $db) { Remove-Item $db -Force }
 function UsedBefore($raw) {
   $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
   if ($b -lt 0) { return @() }
-  try { return @(($txt.Substring($b) | ConvertFrom-Json) | Where-Object { $_.rule -eq 'used-before-assignment' }) }
+  try { return @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $_.rule -eq 'used-before-assignment' }) }
   catch { return @() }
 }
 

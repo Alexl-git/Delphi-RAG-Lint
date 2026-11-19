@@ -40,7 +40,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 function Parse-Findings($Raw) {
   $txt = ($Raw -join "`n"); $b = $txt.IndexOf('[')
-  $all = @(); if ($b -ge 0) { try { $all = @(($txt.Substring($b) | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $all = @() } }
+  $all = @(); if ($b -ge 0) { try { $all = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $all = @() } }
   return ,@($all)
 }
 function Lines($Findings, [string]$Rule) {

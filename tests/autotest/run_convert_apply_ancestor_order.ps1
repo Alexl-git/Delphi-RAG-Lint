@@ -189,14 +189,14 @@ $UArgs = @(); foreach ($u in $CmdUnits) { $UArgs += @('--unit', $u) }
 
 Write-Host '== dry run (descendants first): report order'
 $dry = & { $ErrorActionPreference = 'Continue'; & $Exe convert-apply @UArgs --rules "$R\book.rules" --db "$WorkDir\run.sqlite" --format json 2>$null } | Out-String
-$jd = $null; try { $jd = $dry | ConvertFrom-Json } catch {}
+$jd = $null; try { $jd = $dry | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'report.dry.json' ($null -ne $jd) $dry.Substring(0, [Math]::Min(300, $dry.Length))
 $paths = @($jd.units | ForEach-Object { [IO.Path]::GetFileName($_.unit) })
 Check 'report.units.in.cmd.order' (($paths -join ',') -eq 'CvChild.pas,CvForm.pas,CvBase.pas,CvFrame.pas') ($paths -join ',')
 
 Write-Host '== --apply (descendants first)'
 $app = & { $ErrorActionPreference = 'Continue'; & $Exe convert-apply @UArgs --rules "$R\book.rules" --db "$WorkDir\run.sqlite" --apply --no-backup --format json 2>$null } | Out-String
-$ja = $null; try { $ja = $app | ConvertFrom-Json } catch {}
+$ja = $null; try { $ja = $app | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'apply.json' ($null -ne $ja)
 $paths = @($ja.units | ForEach-Object { [IO.Path]::GetFileName($_.unit) })
 Check 'report.apply.units.in.cmd.order' (($paths -join ',') -eq 'CvChild.pas,CvForm.pas,CvBase.pas,CvFrame.pas') ($paths -join ',')

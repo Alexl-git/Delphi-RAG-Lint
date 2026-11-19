@@ -62,7 +62,7 @@ function Schema-Of([string]$Db) {
   $o = (Run-Exe @('schema', '--db', $Db, '--format', 'json')).Out
   $i = $o.IndexOf('{')
   if ($i -lt 0) { return $null }
-  try { return ($o.Substring($i) | ConvertFrom-Json) } catch { return $null }
+  try { return ($o.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function Table-Names($Schema) {
   if ($null -eq $Schema -or $null -eq $Schema.tables) { return @() }

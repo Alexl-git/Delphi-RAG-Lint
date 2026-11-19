@@ -76,7 +76,7 @@ function New-Proj([string[]]$Order, [scriptblock]$Patch = $null, [switch]$NoInde
   $db = "$root.sqlite"
   if (-not $NoIndex) {
     Push-Location $WorkDir
-    try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root 'FinP3.dproj') --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
+    try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project (Join-Path $root 'FinP3.dproj') --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
   }
   return @{ Root = $root; Dproj = (Join-Path $root 'FinP3.dproj'); Db = $db; Name = 'FinP3' }
 }
@@ -110,17 +110,17 @@ function Get-UsesOf([string]$Path) {
 function Get-Lines([string]$Out, [string]$Word) { return @([regex]::Matches($Out, "(?m)^$Word (\w+)") | ForEach-Object { $_.Groups[1].Value }) }
 function Get-Plan($P) {
   Push-Location $WorkDir
-  try { return ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --plan --project $P.Dproj --db $P.Db --library-db none 2>$null } | Out-String) } finally { Pop-Location }
+  try { return ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe cycles --plan --project $P.Dproj --db $P.Db --library-db none 2>$null } | Out-String) } finally { Pop-Location }
 }
 function Get-CausesJson($P) {
   Push-Location $WorkDir
-  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --causes --format json --project $P.Dproj --db $P.Db --library-db none 2>$null } | Out-String) } finally { Pop-Location }
-  try { return ($o | ConvertFrom-Json) } catch { return $null }
+  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe cycles --causes --format json --project $P.Dproj --db $P.Db --library-db none 2>$null } | Out-String) } finally { Pop-Location }
+  try { return ($o | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function Run-Fix($P) {
   Push-Location $WorkDir
-  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --apply --build-timeout 1800 --project $P.Dproj --db $P.Db --library-db none --format json 2>$null } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
-  $j = $null; try { $j = $out | ConvertFrom-Json } catch { }
+  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe cycles --fix --apply --build-timeout 1800 --project $P.Dproj --db $P.Db --library-db none --format json 2>$null } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
+  $j = $null; try { $j = $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   $k = @(); $r = @()
   foreach ($c in @($j.cycles)) { foreach ($x in @($c.refusals)) { if ($x) { $k += $x.kind; $r += "$($x.kind): $($x.reason)" } } }
   foreach ($x in @($j.refusals)) { if ($x) { $k += $x.kind; $r += "$($x.kind): $($x.reason)" } }

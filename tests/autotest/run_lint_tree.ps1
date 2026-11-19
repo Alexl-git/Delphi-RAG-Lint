@@ -99,7 +99,7 @@ function Run-Tree([string[]]$xs){
   $o = & { $ErrorActionPreference = 'Continue'; & $Exe lint-tree @xs --format json 2>$null }
   $code = $LASTEXITCODE
   $json = $null
-  try { $json = ($o | Out-String) | ConvertFrom-Json } catch { }
+  try { $json = ($o | Out-String) | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   [pscustomobject]@{ Exit=$code; Json=$json; Raw=($o | Out-String) }
 }
 
@@ -125,7 +125,7 @@ $bytes = [System.IO.File]::ReadAllBytes($base)
 Check 'baseline has NO UTF-8 BOM' `
       (-not ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)) `
       'a Delphi reader strips it silently while every strict JSON parser fails on byte 0'
-$bj = [System.IO.File]::ReadAllText($base) | ConvertFrom-Json
+$bj = [System.IO.File]::ReadAllText($base) | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'baseline carries both version stamps' `
       ($bj.extractor_version -and $bj.schema_version -gt 0) `
       'without them a v21 baseline diffs against a v22 parse and marks every routine changed'
@@ -184,7 +184,7 @@ Check 'GATE routine findings are UNAFFECTED by a name collision' `
 
 # --- case 7: a baseline from another extraction is REFUSED -------------------
 $stale = Join-Path $work 'uB.stale.json'
-$sj = [System.IO.File]::ReadAllText($base2) | ConvertFrom-Json
+$sj = [System.IO.File]::ReadAllText($base2) | ConvertFrom-Json | ForEach-Object { $_ }
 $sj.extractor_version = '0.0.0-not-this-one'
 [System.IO.File]::WriteAllText($stale, ($sj | ConvertTo-Json -Depth 8), [System.Text.UTF8Encoding]::new($false))
 $r3 = Run-Tree @('--unit', $unit, '--db', $db, '--baseline', $stale)
@@ -197,7 +197,7 @@ Check 'STAMP a refused run reports no findings' ($r3.Json.findings.Count -eq 0) 
 $err = Join-Path $work 'err.txt'
 $out = Join-Path $work 'out.txt'
 $p = Start-Process -FilePath $Exe -ArgumentList 'lint-tree' -Wait -NoNewWindow -PassThru `
-      -RedirectStandardError $err -RedirectStandardOutput $out
+      -RedirectStandardError $err -RedirectStandardOutput $out; $null = $p.Handle
 $errText = Get-Content $err -Raw
 Check 'ARGS a missing --unit exits 2' ($p.ExitCode -eq 2) "exit=$($p.ExitCode)"
 Check 'ARGS the message goes to STDERR' ($errText -match 'needs --unit') `

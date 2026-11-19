@@ -209,7 +209,7 @@ try {
     $code = $LASTEXITCODE
     $text = (@($raw) -join "`n").Trim()
     $json = $null
-    try { $json = $text | ConvertFrom-Json } catch { $json = $null }
+    try { $json = $text | ConvertFrom-Json | ForEach-Object { $_ } } catch { $json = $null }
     return @{ Text = $text; Json = $json; Code = $code }
   }
 
@@ -248,7 +248,7 @@ try {
   $pcAns = Invoke-Answer $pcCase $src0
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $dbs['solve-initorder'] --rule init-order-hazard --format json 2>$null }
   $txt = (@($raw) -join "`n"); $bi = $txt.IndexOf('[')
-  $finds = @(); if ($bi -ge 0) { try { $finds = @(($txt.Substring($bi) | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $finds = @() } }
+  $finds = @(); if ($bi -ge 0) { try { $finds = @(($txt.Substring($bi) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $finds = @() } }
   $finds = @($finds | Where-Object { $_.rule -eq 'init-order-hazard' })
   Write-Host "  -- init-order-hazard findings: $(@($finds | ForEach-Object { '{0}:{1}' -f (Split-Path $_.file_path -Leaf), $_.start_line }) -join ', ')"
   Check 'positive control: init-order-hazard fires on solve-initorder' ($finds.Count -ge 1) "findings=$($finds.Count)"
@@ -262,7 +262,7 @@ try {
   }
   $raw2 = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $dbs['solve-initorder-swapped'] --rule init-order-hazard --format json 2>$null }
   $txt2 = (@($raw2) -join "`n"); $bi2 = $txt2.IndexOf('[')
-  $f2 = @(); if ($bi2 -ge 0) { try { $f2 = @(($txt2.Substring($bi2) | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $f2 = @() } }
+  $f2 = @(); if ($bi2 -ge 0) { try { $f2 = @(($txt2.Substring($bi2) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $f2 = @() } }
   Check 'twin: init-order-hazard is silent on solve-initorder-swapped' (@($f2 | Where-Object { $_.rule -eq 'init-order-hazard' }).Count -eq 0) ''
 
   # Comparator control: a flipped expectation must be reported.

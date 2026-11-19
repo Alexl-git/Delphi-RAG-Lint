@@ -115,12 +115,12 @@ Check '0. index exits 0' ($code -eq 0) "exit=$code"
 function Get-HoverFacts([string]$QName) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname $QName --db $db --format json 2>$null }) -join "`n"
   if ([string]::IsNullOrWhiteSpace($raw)) { return @() }
-  return @(($raw | ConvertFrom-Json).facts)
+  return @(($raw | ConvertFrom-Json | ForEach-Object { $_ }).facts)
 }
 function Get-HoverJson([string]$QName) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname $QName --db $db --format json 2>$null }) -join "`n"
   if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
-  return ($raw | ConvertFrom-Json)
+  return ($raw | ConvertFrom-Json | ForEach-Object { $_ })
 }
 function Count-Exact([string[]]$Facts, [string]$Text) {
   return @($Facts | Where-Object { $_.Trim() -eq $Text }).Count
@@ -187,7 +187,7 @@ if (-not $py) {
   # engine's back. This is what separates "reads the column" from "recomputes
   # the old five-fact guess and happens to agree".
   $clear = "import sqlite3; c = sqlite3.connect(r'$db'); n = c.execute('UPDATE symbol_facts SET effect_free=NULL, effect_summary=NULL, effect_witness=NULL').rowcount; c.commit(); c.close(); print(n)"
-  $rows  = (& { $ErrorActionPreference = 'Continue'; & python -c $clear 2>&1 | ForEach-Object { "$_" } }) -join "`n"
+  $rows  = (& { $ErrorActionPreference = 'Continue'; & python -c $(if ($PSVersionTable.PSVersion.Major -lt 7) { $clear.Replace('"', '\"') } else { $clear }) 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check '27a. the verdict was cleared on every facts row' ($rows.Trim() -match '^[1-9]\d*$') "rows=[$($rows.Trim())]"
   $fn = @(Get-HoverFacts 'uEmit.AddUp')
   Check '27b. a NULL verdict prints no effect line (and no Pure)' `

@@ -36,7 +36,7 @@ function Get-Sites([string]$Db) {
        "from refs r join symbols e on e.id = r.enclosing_symbol_id left join call_edges ce on ce.ref_id = r.id " +
        "where e.name like 'Site%' and r.kind in ('call','read','write') order by r.start_line, r.start_col"
   $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $Db --json --limit 500 --query $q 2>$null }) -join "`n"
-  $j = $raw.Substring($raw.IndexOf('{')) | ConvertFrom-Json
+  $j = $raw.Substring($raw.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }
   $map = @{}
   foreach ($row in $j.rows) { $map[("{0}/{1}" -f $row[0], $row[1])] = [string]$row[3] }
   return $map

@@ -123,7 +123,7 @@ $pas = Join-Path $WorkDir 'uNamedArgOwn.pas'
 Push-Location $WorkDir
 try {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $pas --json 2>$null }) -join "`n"
-  $rows = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ })
+  $rows = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Check 'lint --json answered (non-empty array)' ($rows.Count -gt 0) "rows=$($rows.Count)"
   $leak  = @($rows | Where-Object { $_.rule -eq 'object-leak' } | ForEach-Object { [regex]::Match($_.message, 'Object "(\w+)"').Groups[1].Value.ToLower() })
   $field = @($rows | Where-Object { $_.rule -eq 'field-created-not-freed' } | ForEach-Object { [regex]::Match($_.message, 'Field (\w+) ').Groups[1].Value.ToLower() })

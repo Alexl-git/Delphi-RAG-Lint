@@ -139,7 +139,7 @@ function Split-Frames([byte[]]$b) {
 function RepliesOf([byte[]]$b, $id) {
   $out = @()
   foreach ($f in (Split-Frames $b)) {
-    try { $j = $f.Body | ConvertFrom-Json -AsHashtable } catch { continue }
+    try { $j = $f.Body | ConvertFrom-Json -AsHashtable | ForEach-Object { $_ } } catch { continue }
     if ($j -and $j.ContainsKey('id') -and ($j['id'] -eq $id) -and -not $j.ContainsKey('method')) {
       $out += [pscustomobject]@{ Frame = $f; Json = $j; Result = (ConvertTo-Json -InputObject $j['result'] -Compress -Depth 20) }
     }

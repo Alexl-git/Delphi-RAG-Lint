@@ -80,7 +80,7 @@ try {
     [IO.File]::WriteAllText($bat, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
     $a = @('extract-method', '--file', $P.Basic, '--from-line', "$($P.From)", '--to-line', "$($P.From + 1)", '--name', 'Extracted', '--apply', '--db', $P.Db, '--rsvars', $bat, '--build-timeout', '600')
     $q = ($a | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
-    $run = Start-Process -FilePath $Exe -ArgumentList $q -RedirectStandardOutput (Join-Path $Tmp 'b21.out') -RedirectStandardError (Join-Path $Tmp 'b21.err') -WorkingDirectory $Tmp -NoNewWindow -PassThru
+    $run = Start-Process -FilePath $Exe -ArgumentList $q -RedirectStandardOutput (Join-Path $Tmp 'b21.out') -RedirectStandardError (Join-Path $Tmp 'b21.err') -WorkingDirectory $Tmp -NoNewWindow -PassThru; $null = $run.Handle
     $parked = Wait-For { (Test-Path $flag) -or $run.HasExited } 300
     $isParked = $parked -and (Test-Path $flag) -and -not $run.HasExited
     Check 'S0 setup: the after-build parked' $isParked

@@ -140,7 +140,7 @@ end.
   # The engine's range.
   $sj = (Src-Run @('schema', '--db', $lib, '--format', 'json')).Out
   $sj = $sj.Substring($sj.IndexOf('{'))
-  $schema = $sj | ConvertFrom-Json
+  $schema = $sj | ConvertFrom-Json | ForEach-Object { $_ }
   $engine = if ($null -ne $schema.engine_schema_version) { [int]$schema.engine_schema_version } else { [int]$schema.schema_version }
   $hasKeys = $null -ne $schema.engine_schema_read_min
   $srcMin = [regex]::Match([IO.File]::ReadAllText((Join-Path $Repo 'src\storage\DRagLint.Storage.Schema.pas')), 'SCHEMA_READ_MIN\s*=\s*(\d+)\s*;')
@@ -176,7 +176,7 @@ c.close()
   if ($script:Failed) { ($r.Out -split "`n" | Select-Object -Last 6) | ForEach-Object { Write-Host "  | $_" } }
   $q = Src-Run @('sql', '--query', "SELECT COUNT(*) AS n FROM refs WHERE external_target LIKE '%TLibThing.Run%'", '--db', $r1db, '--json')
   $n = -1
-  try { $qj = $q.Out.Substring($q.Out.IndexOf('{')) | ConvertFrom-Json; $n = [int]$qj.rows[0][0] } catch { $n = -1 }
+  try { $qj = $q.Out.Substring($q.Out.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }; $n = [int]$qj.rows[0][0] } catch { $n = -1 }
   Src-Check 'R2' ($n -gt 0) "the call T.Run binds into the library (external_target rows=$n)"
 
   # --output: lint-all otherwise drops lint-report-<date>.txt into the caller's cwd (run_guard_cwd_hygiene).
@@ -194,7 +194,7 @@ c.close()
 
   if ($hasKeys) {
     $sr = (Src-Run @('schema', '--db', $libR, '--format', 'json')).Out
-    $srj = $sr.Substring($sr.IndexOf('{')) | ConvertFrom-Json
+    $srj = $sr.Substring($sr.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }
     Src-Check 'R7' ($srj.schema_readable -eq $true) "schema reports v$readMin readable"
   } else { Write-Host 'SKIP R7 schema_readable key absent (pre-150 exe)' }
 
@@ -216,7 +216,7 @@ c.close()
 
   if ($hasKeys) {
     $su = (Src-Run @('schema', '--db', $libU, '--format', 'json')).Out
-    $suj = $su.Substring($su.IndexOf('{')) | ConvertFrom-Json
+    $suj = $su.Substring($su.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }
     Src-Check 'U5' ($suj.schema_readable -eq $false) "schema reports v$old unreadable"
   } else { Write-Host 'SKIP U5 schema_readable key absent (pre-150 exe)' }
 }

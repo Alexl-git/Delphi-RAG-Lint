@@ -71,7 +71,7 @@ Check 'fixture indexed' ((Test-Path $db) -and $LASTEXITCODE -eq 0) "exit=$LASTEX
 
 # sql --json rows are POSITIONAL arrays: map them onto columns[].name.
 $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --query "SELECT name, start_line, start_col FROM symbols WHERE kind = 'sql_column' ORDER BY start_line, start_col" 2>$null } | Out-String
-$doc = $raw | ConvertFrom-Json
+$doc = $raw | ConvertFrom-Json | ForEach-Object { $_ }
 $names = @($doc.columns | ForEach-Object { $_.name })
 $got = @{}
 foreach ($r in @($doc.rows)) {

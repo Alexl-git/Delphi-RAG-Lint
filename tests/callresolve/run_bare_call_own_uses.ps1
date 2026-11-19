@@ -184,11 +184,11 @@ Check 'V library index built' (Test-Path $libDb) $libDb
 Check 'V app index built' (Test-Path $appDb) $appDb
 $raw = & $exePath sql --db $appDb --json --limit 2000 --query "SELECT f.path, r.name_text, coalesce(r.external_target,'') FROM refs r JOIN files f ON f.id = r.file_id WHERE r.kind = 'call' AND coalesce(r.receiver_text,'') = ''" | Out-String
 Pop-Location
-$j = $raw | ConvertFrom-Json
+$j = $raw | ConvertFrom-Json | ForEach-Object { $_ }
 $rows = foreach ($r in $j.rows) { [pscustomobject]@{ File=[IO.Path]::GetFileNameWithoutExtension([string]$r[0]); Name=[string]$r[1]; Ext=[string]$r[2] } }
 Check "V the sites were read ($(@($rows).Count))" (@($rows).Count -ge 6) $raw
 $rawT = & $exePath sql --db $appDb --json --limit 50 --query "SELECT coalesce(r.external_target,'') FROM refs r JOIN files f ON f.id = r.file_id WHERE r.kind = 'call' AND r.receiver_text = 'B' AND r.name_text = 'Go'" | Out-String
-$extT = [string](@(($rawT | ConvertFrom-Json).rows) | Select-Object -First 1 | ForEach-Object { $_[0] })
+$extT = [string](@(($rawT | ConvertFrom-Json | ForEach-Object { $_ }).rows) | Select-Object -First 1 | ForEach-Object { $_[0] })
 function Site($file,$name){ @($rows | Where-Object { $_.File -eq $file -and $_.Name -eq $name }) | Select-Object -First 1 }
 
 foreach ($n in 'IntToStr','UpperCase','FreeAndNil') {

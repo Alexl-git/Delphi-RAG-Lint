@@ -99,7 +99,7 @@ end.
 '@
 
 function Sql([string]$Db, [string]$Q) {
-  $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --json --limit 1000 --query $Q 2>$null } | ConvertFrom-Json
+  $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --json --limit 1000 --query $Q 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
   if ($null -eq $j) { return ,@() }
   $cols = @($j.columns | ForEach-Object { $_.name })
   $out = @()

@@ -74,7 +74,7 @@ function Session([string[]]$frames) {
     -RedirectStandardError (Join-Path $WorkDir 'err.txt') -NoNewWindow -Wait | Out-Null
   $res = @{ diags = @(); byId = @{} }
   foreach ($mm in [regex]::Matches([IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json -AsHashtable } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json -AsHashtable | ForEach-Object { $_ } } catch { continue }
     if ($o['method'] -eq 'textDocument/publishDiagnostics' -and "$($o['params']['uri'])" -match 'uFx\.pas$') { $res.diags = @($o['params']['diagnostics']) }
     elseif ($o.ContainsKey('id')) { $res.byId[[int]$o['id']] = $o }
   }
@@ -131,7 +131,7 @@ if ($all) {
   $copy = Join-Path $WorkDir 'applied.pas'
   [IO.File]::WriteAllText($copy, $applied, [Text.ASCIIEncoding]::new())
   $ea = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-  $relint = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $copy --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json
+  $relint = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $copy --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   $ErrorActionPreference = $ea
   $gone = @($relint | Where-Object { $_.rule -in 'mixed-case-hex', 'length-zero-compare' }).Count
   Check 're-lint: the three findings are gone' ($gone -eq 0) "left=$gone"
@@ -148,7 +148,7 @@ Check 'only=source.fixAll: kind source.fixAll.drag-lint' ($srcAct -and $srcAct['
 
 Write-Host ''
 Write-Host '(extension) package.json contributes.menus' -ForegroundColor Cyan
-$pkg = Get-Content (Join-Path $PSScriptRoot '..\..\editors\vscode\drag-lint\package.json') -Raw | ConvertFrom-Json
+$pkg = Get-Content (Join-Path $PSScriptRoot '..\..\editors\vscode\drag-lint\package.json') -Raw | ConvertFrom-Json | ForEach-Object { $_ }
 $declared = @($pkg.contributes.commands | ForEach-Object { $_.command })
 foreach ($menu in 'editor/context', 'problems/context') {
   $items = @($pkg.contributes.menus.$menu)

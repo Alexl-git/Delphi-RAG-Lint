@@ -45,7 +45,7 @@ $Work = Join-Path ([IO.Path]::GetTempPath()) ('dl-repo-cli-' + [guid]::NewGuid()
 # Runs the engine; returns exit code, stdout, stderr.
 function Run([string[]]$a) {
   $errFile = Join-Path $Work ('err-' + [guid]::NewGuid().ToString('N') + '.txt')
-  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2> $errFile }) -join "`n"
+  $out = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe @a 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }) -join "`n"
   $code = $LASTEXITCODE
   $err = if (Test-Path $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
   [pscustomobject]@{ Code = $code; Out = $out; Err = $err }
@@ -53,7 +53,7 @@ function Run([string[]]$a) {
 function Counts($repo) {
   $r = Run @('repo', 'info', '--json', '--repo', $repo)
   if ($r.Code -ne 0) { return $null }
-  $j = $r.Out | ConvertFrom-Json
+  $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ }
   ('{0}/{1}/{2}/{3}' -f $j.tables.DL_FIELDS_INFO, $j.tables.DL_DATASETS_INFO, $j.tables.DL_ENUMVALUES, $j.tables.DL_ERROR_MESSAGES)
 }
 
@@ -68,7 +68,7 @@ Check 'R1 restore golden into a missing repo' (($r.Code -eq 0) -and (Test-Path $
 # R2 (raw shape printed once, so the JSON field names are seen before they are asserted)
 $r = Run @('repo', 'info', '--json', '--repo', $repo)
 Write-Host "  raw info --json: $($r.Out)"
-$j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
+$j = $null; try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'R2 info --json counts 6/2/3/1 + schema_version 1' (($r.Code -eq 0) -and ($j -ne $null) -and ((Counts $repo) -eq '6/2/3/1') -and ($j.schema_version -eq 1)) "exit=$($r.Code)"
 $rt = Run @('repo', 'info', '--repo', $repo)
 Check 'R2b info text lists the table counts' (($rt.Code -eq 0) -and ($rt.Out -match 'DL_FIELDS_INFO: 6 rows')) "exit=$($rt.Code)"

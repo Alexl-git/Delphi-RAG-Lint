@@ -49,7 +49,7 @@ function Invoke-Plan([string]$Dproj, [string]$Db, [string[]]$Extra) {
   $out = Join-Path $WorkDir ('out-' + [guid]::NewGuid().ToString('N') + '.txt')
   $a = @('cycles', '--db', $Db, '--project', $Dproj) + $Extra
   $p = Start-Process -FilePath $EngExe -ArgumentList $a -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
-    -RedirectStandardOutput $out -RedirectStandardError $err
+    -RedirectStandardOutput $out -RedirectStandardError $err; $null = $p.Handle
   return @{ Exit = $p.ExitCode; Err = [IO.File]::ReadAllText($err); Out = [IO.File]::ReadAllText($out) }
 }
 

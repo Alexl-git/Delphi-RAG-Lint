@@ -189,7 +189,7 @@ try {
 
   function Get-Rows([string]$name) {
     $j = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --db $db --json 2>$null }) -join "`n"
-    try { return @(($j | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { return @() }
+    try { return @(($j | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { return @() }
   }
 
   # --- 1. the nested routine is a symbol at all ------------------------------
@@ -221,7 +221,7 @@ try {
   # interface decls -- so a nested routine leaking into the public surface shows
   # up here as 4, 5 or 6 and nowhere else.
   $docJson = (& { $ErrorActionPreference = 'Continue'; & $exePath document --unit (Join-Path $scratch 'nestsyms.pas') --db $db --json 2>$null }) -join "`n"
-  $dc = -1; try { $dc = ([int](($docJson | ConvertFrom-Json).declCount)) } catch { }
+  $dc = -1; try { $dc = ([int](($docJson | ConvertFrom-Json | ForEach-Object { $_ }).declCount)) } catch { }
   Check 'document --unit public surface is still exactly the 3 interface decls' ($dc -eq 3) `
     "declCount=$dc -- a nested routine leaking into the public surface raises this"
 
@@ -232,7 +232,7 @@ try {
   function Sql([string]$q) {
     $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n"
     if ([string]::IsNullOrWhiteSpace($j)) { return ,@() }
-    try { $o = $j | ConvertFrom-Json } catch { return ,@() }
+    try { $o = $j | ConvertFrom-Json | ForEach-Object { $_ } } catch { return ,@() }
     $cols = @($o.columns | ForEach-Object { $_.name })
     $out = @()
     foreach ($r in @($o.rows)) {

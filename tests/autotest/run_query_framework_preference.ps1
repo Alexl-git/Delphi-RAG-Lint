@@ -261,7 +261,7 @@ function QNames([string[]]$Dbs) {
   $script:LastExit = $LASTEXITCODE
   $json = ($raw | Where-Object { -not $_.TrimStart().StartsWith('(') }) -join "`n"
   if (-not $json.Trim()) { return @() }
-  return @(($json | ConvertFrom-Json) | ForEach-Object { $_.qualified_name })
+  return @(($json | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_.qualified_name })
 }
 
 # --- POSITIVE CONTROL: no project context, so the tie is reported as it always was. --
@@ -332,7 +332,7 @@ Write-Host 'controls' -ForegroundColor Cyan
 $one = @(& { $ErrorActionPreference = 'Continue'; & $Exe query --name TVclThing --db $libDb --db $vclDb --json --quiet 2>&1 | ForEach-Object { "$_" } }) |
          ForEach-Object { "$_" } | Where-Object { -not $_.TrimStart().StartsWith('(') }
 $oneExit = $LASTEXITCODE
-$oneRows = @(($one -join "`n" | ConvertFrom-Json))
+$oneRows = @(($one -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }))
 Check 'control: a single-match name is unaffected and still exits 0' `
   (($oneExit -eq 0) -and ($oneRows.Count -eq 1) -and ($oneRows[0].qualified_name -eq 'VclApp.TVclThing')) `
   "exit=$oneExit rows=$($oneRows.Count)"

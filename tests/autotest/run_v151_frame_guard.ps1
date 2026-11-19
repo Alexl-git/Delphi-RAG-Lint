@@ -29,7 +29,7 @@ function Assert($name, $cond) {
 
 # 1. counts
 $raw = & { $ErrorActionPreference = 'Continue'; & $exe rules --json --rules-dir rules 2>$null }
-$json = ($raw -join "`n") | ConvertFrom-Json
+$json = ($raw -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }
 $total = [int]$json.summary.total
 $fixable = @($json.rules | Where-Object { $_.fixable }).Count
 $on = @($json.rules | Where-Object { $_.default_enabled }).Count

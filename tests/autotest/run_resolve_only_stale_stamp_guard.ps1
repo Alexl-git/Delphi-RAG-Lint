@@ -70,7 +70,7 @@ function Index-AndKill([string]$Db, [string]$Pattern, [int]$Times, [hashtable]$E
   foreach ($k in $EnvVars.Keys) { [Environment]::SetEnvironmentVariable($k, [string]$EnvVars[$k]) }
   try {
     $p = Start-Process -FilePath $Exe -ArgumentList (@('index', "`"$Src`"", '--db', "`"$Db`"") + $Extra) -WorkingDirectory $WorkDir `
-           -RedirectStandardOutput $log -RedirectStandardError "$log.err" -PassThru -WindowStyle Hidden
+           -RedirectStandardOutput $log -RedirectStandardError "$log.err" -PassThru -WindowStyle Hidden; $null = $p.Handle
   } finally {
     foreach ($k in $EnvVars.Keys) { [Environment]::SetEnvironmentVariable($k, $null) }
   }
@@ -91,7 +91,7 @@ function Index-AndKill([string]$Db, [string]$Pattern, [int]$Times, [hashtable]$E
 }
 function Sql-Rows([string]$Db, [string]$Query) {
   $out = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --json --limit 1000000 --query $Query 2>$null } | Out-String
-  $j = $out | ConvertFrom-Json
+  $j = $out | ConvertFrom-Json | ForEach-Object { $_ }
   return , @($j.rows | ForEach-Object { , @($_) })
 }
 function Scalar([string]$Db, [string]$Query) { return [string](Sql-Rows $Db $Query)[0][0] }

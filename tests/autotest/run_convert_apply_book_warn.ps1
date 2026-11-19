@@ -52,7 +52,7 @@ function Write-Ascii([string]$Path, [string]$Body) {
   [System.IO.File]::WriteAllText($Path, $norm, [System.Text.Encoding]::ASCII)
 }
 function P([string]$n) { return (Join-Path $WorkDir $n) }
-function Json([string]$Out) { try { return ($Out.Substring($Out.IndexOf('{')) | ConvertFrom-Json) } catch { return $null } }
+function Json([string]$Out) { try { return ($Out.Substring($Out.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null } }
 
 $LibS = @'
 unit LibS;

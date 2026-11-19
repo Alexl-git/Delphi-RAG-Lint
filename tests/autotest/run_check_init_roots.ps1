@@ -111,7 +111,7 @@ try {
   # c2: second engine call -- the order init-order-hazard walks
   $lj = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rule init-order-hazard --json 2>$null }) -join "`n"
   Write-Host "  lint raw: $($lj.Substring(0, [Math]::Min(600, $lj.Length)))"
-  $lint = @(($lj | ConvertFrom-Json) | ForEach-Object { $_ })
+  $lint = @(($lj | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   function Hazard([string]$File, [string]$Later, [string]$Earlier) {
     foreach ($f in @($lint | Where-Object { [IO.Path]::GetFileName([string]$_.file_path) -eq $File })) {
       $m = [regex]::Match([string]$f.message, 'but (\w+) initializes after (\w+) in (\S+):')

@@ -109,7 +109,7 @@ $errFile = Join-Path $scratch 'stderr.txt'
 # Out-String renders with decoration, which has already corrupted one JSON
 # slice in this repo by adding a stray brace.
 function Run([string[]]$SqlArgs) {
-  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @SqlArgs 2>$errFile }
+  $out = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe @SqlArgs 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   $rc  = $LASTEXITCODE
   $err = if (Test-Path -LiteralPath $errFile) { (Get-Content -LiteralPath $errFile -Raw) } else { '' }
   if ($null -eq $err) { $err = '' }
@@ -284,7 +284,7 @@ Write-Host '-- check 5: --json' -ForegroundColor Cyan
 
 $r = Run @('sql','--query','SELECT 1 AS one','--db',$DbFile,'--json')
 $obj = $null
-try { $obj = $r.Out | ConvertFrom-Json } catch { }
+try { $obj = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'stdout is ONE valid JSON document (the banner is on stderr)' ($null -ne $obj) $r.Out
 if ($null -ne $obj) {
   Check 'it declares the stable schema sql/1' ($obj.schema -eq 'sql/1') "got $($obj.schema)"
@@ -299,7 +299,7 @@ if ($null -ne $obj) {
 
 $r = Run @('sql','--query','SELECT NULL AS n','--db',$DbFile,'--json')
 $obj = $null
-try { $obj = $r.Out | ConvertFrom-Json } catch { }
+try { $obj = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'a NULL cell is JSON null, not the string "NULL"' `
   (($null -ne $obj) -and ($null -eq $obj.rows[0][0])) ''
 

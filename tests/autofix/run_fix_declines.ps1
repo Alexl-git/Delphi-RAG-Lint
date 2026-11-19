@@ -40,7 +40,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 function RuleRows([string]$ExePath, [string]$File, [string]$Id, [string[]]$Extra) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $ExePath lint --file $File --rule $Id --json @Extra 2>$null } | Out-String
-  try { return @(@(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) | Where-Object { $_.rule -eq $Id }).Count } catch { return -1 }
+  try { return @(@(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) | Where-Object { $_.rule -eq $Id }).Count } catch { return -1 }
 }
 
 $exePath = (Resolve-Path $Exe).Path

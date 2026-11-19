@@ -145,7 +145,7 @@ out['LLocal_refs'] = c.execute(
 print(json.dumps(out))
 c.close()
 '@ | Set-Content $py -Encoding ascii
-$refs = (& python $py $db) -join "`n" | ConvertFrom-Json
+$refs = (& python $py $db) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 
 Write-Host 'Reference index' -ForegroundColor Cyan
 Check 'exprUnary operand  (if not X then)' ($refs.LoopsBackIntoScan -ge 1) "refs=$($refs.LoopsBackIntoScan)"

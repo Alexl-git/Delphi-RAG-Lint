@@ -81,7 +81,7 @@ function Book([string]$Name, [string]$Body) { Write-Ascii (P $Name) $Body; retur
 function Json([string]$s) {
   $a = $s.IndexOf('{'); $b = $s.LastIndexOf('}')
   if ($a -lt 0 -or $b -le $a) { return $null }
-  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json) } catch { return $null }
+  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function Segs([string]$p) { return ($p.Split('.')).Count }
 function MaxSegs($paths) { $m = 0; foreach ($p in $paths) { $k = Segs $p; if ($k -gt $m) { $m = $k } }; return $m }

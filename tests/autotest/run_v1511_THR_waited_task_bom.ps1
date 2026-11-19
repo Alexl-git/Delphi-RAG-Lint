@@ -23,7 +23,7 @@ $Fix = Join-Path $PSScriptRoot 'fixtures\v1511-THR'
 function Lines([string]$File, [string]$Rule, [string[]]$Extra) {
     $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $File --rule $Rule @DbArgs --json @Extra 2>$null }) -join "`n"
     $arr = @()
-    if ($raw.Trim().StartsWith("[")) { try { $arr = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { } }
+    if ($raw.Trim().StartsWith("[")) { try { $arr = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { } }
     return @($arr | ForEach-Object { [int]$_.start_line })
 }
 # waited.pas: NotWaitedAssigned (line 57), NotWaitedBare (line 67) and WaitsOtherTask T (line 78) are the only hits

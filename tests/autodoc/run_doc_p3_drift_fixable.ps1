@@ -86,7 +86,7 @@ function Get-Drift($qname) {
   $out = & { $ErrorActionPreference = 'Continue'; & $exePath doc-drift --qname $qname --db $db --json 2>$null }
   Check "doc-drift --qname $qname exits 0" ($LASTEXITCODE -eq 0)
   $rows = @()
-  foreach ($ln in $out) { $t = "$ln".Trim(); if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json) } }
+  foreach ($ln in $out) { $t = "$ln".Trim(); if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json | ForEach-Object { $_ }) } }
   return ,$rows
 }
 # True when a row of kind $k exists whose fixable flag equals $fx.
@@ -137,7 +137,7 @@ function Get-Findings($raw) {
   $arrStart = $raw.IndexOf('[')
   $arrEnd   = $raw.LastIndexOf(']')
   if ($arrStart -ge 0 -and $arrEnd -gt $arrStart) {
-    return @((ConvertFrom-Json ($raw.Substring($arrStart, $arrEnd - $arrStart + 1))) | ForEach-Object { $_ })
+    return @((ConvertFrom-Json ($raw.Substring($arrStart, $arrEnd - $arrStart + 1)) | ForEach-Object { $_ }) | ForEach-Object { $_ })
   }
   return @()
 }

@@ -111,7 +111,7 @@ $infoRaw = (& { $ErrorActionPreference = 'Continue'; & $exePath info --json 2>$n
 $extractorVersion = '(unknown)'
 try {
   $line = ($infoRaw -split "`n" | Where-Object { $_.Trim().StartsWith('{') } | Select-Object -First 1)
-  if ($line) { $extractorVersion = ([string]($line | ConvertFrom-Json).extractor_version) }
+  if ($line) { $extractorVersion = ([string]($line | ConvertFrom-Json | ForEach-Object { $_ }).extractor_version) }
 } catch { }
 Write-Host ''
 Write-Host ("engine : {0}" -f $exePath) -ForegroundColor Cyan
@@ -198,7 +198,7 @@ Check 'no SKIP of any kind for uCtl.pas' ($skipCtl -eq 0) "found $skipCtl"
 function Find-Sym([string]$Name) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name $Name --exact --db $db --json 2>$null }) -join "`n"
   if (-not $raw.Trim()) { return @() }
-  try { $d = $raw | ConvertFrom-Json } catch { return @() }
+  try { $d = $raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { return @() }
   return @($d | Where-Object { $null -ne $_ })
 }
 

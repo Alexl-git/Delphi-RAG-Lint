@@ -44,7 +44,7 @@ function Get-Findings($rawOut) {
   $arrEnd   = $raw.LastIndexOf(']')
   if ($arrStart -ge 0 -and $arrEnd -gt $arrStart) {
     $jsonText = $raw.Substring($arrStart, $arrEnd - $arrStart + 1)
-    return @((ConvertFrom-Json $jsonText) | ForEach-Object { $_ })
+    return @((ConvertFrom-Json $jsonText | ForEach-Object { $_ }) | ForEach-Object { $_ })
   }
   return @()
 }
@@ -139,7 +139,7 @@ try {
   # ===================================================================
   $rulesOut = & { $ErrorActionPreference = 'Continue'; & $exePath rules --json 2>$null }
   $rulesRaw = ($rulesOut -join "`n")
-  $rulesJson = $rulesRaw | ConvertFrom-Json
+  $rulesJson = $rulesRaw | ConvertFrom-Json | ForEach-Object { $_ }
   $ruleEntry = $rulesJson.rules | Where-Object { $_.id -eq 'enum-helper-separate-units' }
   Check 'catalog: enum-helper-separate-units is registered' ($null -ne $ruleEntry)
   if ($null -ne $ruleEntry) {

@@ -227,7 +227,7 @@ function Get-FilePaths([string]$Db) {
   # `sql --json` rows are POSITIONAL arrays -- map them onto columns[].name.
   $r = Invoke-Engine $exe1 $root @('sql', '--query', 'select path from files order by path', '--db', $Db, '--json')
   $j = $null
-  try { $j = ($r.Out | ConvertFrom-Json) } catch { return ,@() }
+  try { $j = ($r.Out | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return ,@() }
   $ix = [array]::IndexOf(@($j.columns | ForEach-Object { $_.name }), 'path')
   if ($ix -lt 0) { return ,@() }
   return ,@($j.rows | ForEach-Object { [string]$_[$ix] })
@@ -480,7 +480,7 @@ Check 'compile-check left Hello.sqlite alone' ($helloStamp -eq (Get-Stamp $hello
 function Get-FindingFiles([string]$Out) {
   $line = ($Out -split "`r?`n") | Where-Object { $_ -match '^\s*\[' } | Select-Object -First 1
   if (-not $line) { return ,@() }
-  return ,@((ConvertFrom-Json $line) | ForEach-Object { [string]$_.file })
+  return ,@((ConvertFrom-Json $line | ForEach-Object { $_ }) | ForEach-Object { [string]$_.file })
 }
 $files = Get-FindingFiles $cu.Out
 $bad = @($files | Where-Object { ($_ -match '(?i)\\proj\\proj\\') -or (-not (Test-Path -LiteralPath $_)) })

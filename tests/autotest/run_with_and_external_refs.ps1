@@ -155,7 +155,7 @@ out['SlotTwoOnly_call'] = n('SlotTwoOnly', 'call')
 print(json.dumps(out))
 c.close()
 '@ | Set-Content $py -Encoding ascii
-$r = (& python $py $db) -join "`n" | ConvertFrom-Json
+$r = (& python $py $db) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 
 Write-Host 'A1 -- with entity slots' -ForegroundColor Cyan
 Check 'HAZARD: bare identifier in entity slot 2 is recorded' ($r.SlotTwoOnly -ge 1) "refs=$($r.SlotTwoOnly)  -- SlotTwoOnly appears ONLY in the entity-2 slot"

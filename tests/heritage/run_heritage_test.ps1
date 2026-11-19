@@ -22,7 +22,7 @@ function Heritage($symName) {
   $json = (& { $ErrorActionPreference = 'Continue'; & $exe query --name $symName --db $db --json 2>$null } | Out-String)
   $idx = $json.IndexOf('[')
   if ($idx -lt 0) { return '<no-json>' }
-  $obj = $json.Substring($idx) | ConvertFrom-Json
+  $obj = $json.Substring($idx) | ConvertFrom-Json | ForEach-Object { $_ }
   $row = if ($obj -is [array]) { $obj | Where-Object { $_.name -eq $symName } | Select-Object -First 1 } else { $obj }
   if ($null -eq $row) { return '<no-row>' }
   if ($row.PSObject.Properties.Name -contains 'heritage') { return [string]$row.heritage }

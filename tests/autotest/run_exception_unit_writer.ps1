@@ -596,15 +596,15 @@ $jErr = Join-Path $WorkDir 'json.err'
 $oOut = Join-Path $WorkDir 'jsonoff.out'
 $null = Start-Process -FilePath $Exe -ArgumentList 'exceptions-sync','--db',$dbA,'--config',$cfgOn,'--json' `
          -WorkingDirectory 'C:\TEMP' -Wait -NoNewWindow -PassThru `
-         -RedirectStandardOutput $jOut -RedirectStandardError $jErr
+         -RedirectStandardOutput $jOut -RedirectStandardError $jErr; $null = $null.Handle
 $null = Start-Process -FilePath $Exe -ArgumentList 'exceptions-sync','--db',$dbA,'--config',$cfgOff,'--json' `
          -WorkingDirectory 'C:\TEMP' -Wait -NoNewWindow -PassThru `
-         -RedirectStandardOutput $oOut -RedirectStandardError (Join-Path $WorkDir 'jsonoff.err')
+         -RedirectStandardOutput $oOut -RedirectStandardError (Join-Path $WorkDir 'jsonoff.err'); $null = $null.Handle
 $jsonOut = [System.IO.File]::ReadAllText($jOut)
 $jsonErr = [System.IO.File]::ReadAllText($jErr)
 $offJson = [System.IO.File]::ReadAllText($oOut)
 $parsed = $null
-try { $parsed = $jsonOut | ConvertFrom-Json } catch { $parsed = $null }
+try { $parsed = $jsonOut | ConvertFrom-Json | ForEach-Object { $_ } } catch { $parsed = $null }
 Check 'JSON: stdout parses as one document' ($null -ne $parsed) `
   ("stdout began: " + ($jsonOut -split "`n" | Select-Object -First 1))
 Check 'JSON: no prose leaked onto stdout' `
@@ -626,7 +626,7 @@ if ($null -ne $parsed) {
     ($parsed.applied -eq $false) 'without --apply nothing was written, and the document must say so'
 }
 $offParsed = $null
-try { $offParsed = $offJson | ConvertFrom-Json } catch { $offParsed = $null }
+try { $offParsed = $offJson | ConvertFrom-Json | ForEach-Object { $_ } } catch { $offParsed = $null }
 Check 'JSON: UNCONFIGURED still emits a DOCUMENT, not prose' `
   (($null -ne $offParsed) -and ($offParsed.configured -eq $false)) `
   'an early exit that prints prose in json mode breaks the caller at the one case it most needs to detect'

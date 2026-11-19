@@ -76,7 +76,7 @@ try {
   Check 'g2 local renamed' ($t2 -cnotmatch 'my_count' -and $t2 -match 'Inc\(\w+\)') $t2
   $bat = Join-Path $Tmp 'b.bat'
   [IO.File]::WriteAllText($bat, "@echo off`r`ncall `"$Rsvars`"`r`ncd /D `"$($G2.Dir)`"`r`nmsbuild /t:Build /p:Config=Debug /p:Platform=Win64 /v:minimal GfDemo.dproj`r`n", $Ascii)
-  $p = Start-Process -Wait -PassThru -NoNewWindow -FilePath cmd.exe -ArgumentList '/c', $bat -RedirectStandardOutput (Join-Path $Tmp 'b.out')
+  $p = Start-Process -Wait -PassThru -NoNewWindow -FilePath cmd.exe -ArgumentList '/c', $bat -RedirectStandardOutput (Join-Path $Tmp 'b.out'); $null = $p.Handle
   Check 'g2 written project builds' ($p.ExitCode -eq 0) "msbuild exit $($p.ExitCode)"
 
   $C1 = New-Case 'c1' $true

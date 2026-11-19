@@ -162,7 +162,7 @@ try {
   function Facts([string]$dproj, [string]$platform, [string]$config) {
     $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath project-facts --dproj $dproj --platform $platform --config $config --json 2>$null }) -join "`n"
     $i = $raw.IndexOf('{'); if ($i -lt 0) { return $null }
-    return ($raw.Substring($i) | ConvertFrom-Json)
+    return ($raw.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ })
   }
   function FactNames($f) { return @($f.defines | ForEach-Object { $_.name.ToLower() }) }
   $fr = Facts $repl 'Win64' 'Debug'

@@ -43,7 +43,7 @@ function Get-Findings([string]$Db, [string[]]$Extra) {
   $out = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --json @Extra 2>$null }) -join "`n"
   Write-Host ("  raw[{0}]: {1}" -f (Split-Path $Db -Leaf), $out.Substring(0, [Math]::Min(300, $out.Length)))
   if ($out.Trim() -eq '') { return @() }
-  return @($out | ConvertFrom-Json | Where-Object { $_.rule -eq $Rule })
+  return @($out | ConvertFrom-Json | ForEach-Object { $_ } | Where-Object { $_.rule -eq $Rule })
 }
 
 [void](New-Item -ItemType Directory -Force -Path $WorkDir)
@@ -61,7 +61,7 @@ try {
   $c0 = Join-Path $WorkDir 'Direct.pas'
   [IO.File]::WriteAllText($c0, "program Direct;`r`n`r`n{`$APPTYPE CONSOLE}`r`n`r`nuses Vcl.Dialogs;`r`n`r`nbegin`r`n  ShowMessage('x');`r`nend.`r`n")
   $d = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $c0 --json 2>$null }) -join "`n"
-  $d0 = @(if ($d.Trim() -eq '') { @() } else { @($d | ConvertFrom-Json | Where-Object { $_.rule -eq $Rule }) })
+  $d0 = @(if ($d.Trim() -eq '') { @() } else { @($d | ConvertFrom-Json | ForEach-Object { $_ } | Where-Object { $_.rule -eq $Rule }) })
   Check 'c0 positive control: per-file rule fires on a direct dialog call' ($d0.Count -ge 1) "raw: $d"
 
   $fc = @(Get-Findings $DbC @())

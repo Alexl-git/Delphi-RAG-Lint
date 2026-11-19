@@ -63,7 +63,7 @@ $db = Join-Path $scratch 't.sqlite'
 $errFile = Join-Path $scratch 'stderr.txt'
 $outFile = Join-Path $scratch 'stdout.txt'
 $p = Start-Process -FilePath $exePath -ArgumentList @('index',"`"$src`"",'--db',"`"$db`"") `
-  -RedirectStandardOutput $outFile -RedirectStandardError $errFile -NoNewWindow -Wait -PassThru
+  -RedirectStandardOutput $outFile -RedirectStandardError $errFile -NoNewWindow -Wait -PassThru; $null = $p.Handle
 $so = Get-Content -Raw $outFile; $se = Get-Content -Raw $errFile
 if (-not $so) { $so = '' }; if (-not $se) { $se = '' }
 $all = $so + "`n" + $se

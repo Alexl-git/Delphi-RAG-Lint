@@ -128,7 +128,7 @@ function Invoke-Apply([string]$Dproj, [string]$Tag) {
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
     -ArgumentList @('cycles', '--fix', '--apply', '--no-backup', '--build-timeout', '600', '--cycle', '1', '--project', ('"' + $Dproj + '"'),
       '--db', ('"' + $db + '"'), '--library-db', ('"' + $Lib + '"')) `
-    -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "apply-$Tag.err")
+    -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "apply-$Tag.err"); $null = $p.Handle
   return @{ Exit = $p.ExitCode; Out = [IO.File]::ReadAllText($o); Err = [IO.File]::ReadAllText((Join-Path $WorkDir "apply-$Tag.err")) }
 }
 function Test-Xml([string]$Text) { try { $null = [xml]$Text; return $true } catch { return $false } }

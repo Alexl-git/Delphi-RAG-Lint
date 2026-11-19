@@ -99,7 +99,7 @@ Write-Host 'find-callers --resolved (Q-RESOLVED-PATH, owner ruling D1 2026-11-03
 # `resolution`, which stays the LAST key (XERJ item 3, run_query_callers_shared_guard.ps1);
 # `file` stays the bare name the diffs key on; the text row names the full path.
 $j = (& { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name Target --resolved --json --db $db 2>$null }) -join "`n"
-$rows = @((ConvertFrom-Json -InputObject $j) | ForEach-Object { $_ })
+$rows = @((ConvertFrom-Json -InputObject $j | ForEach-Object { $_ }) | ForEach-Object { $_ })
 Check 'one resolved caller' ($rows.Count -eq 1) "json: $j"
 if ($rows.Count -eq 1) {
   Check 'CONTROL: `file` is still the file NAME (the contract consumers diff on)' ($rows[0].file -eq 'uWhere.pas') "file=$($rows[0].file)"
@@ -114,9 +114,9 @@ Write-Host ''
 Write-Host 'MCP find_symbol' -ForegroundColor Cyan
 $req = Join-Path $WorkDir 'mcp.json'
 Write-Ascii $req ('{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"find_symbol","arguments":{"name":"Target"}}}' + "`n")
-$mcp = (Get-Content -Raw $req | & { $ErrorActionPreference = 'Continue'; & $Exe serve --db $db 2>$null }) -join "`n"
+$mcp = (Get-Content -Raw $req | & { $ErrorActionPreference = 'Continue'; $input | & $Exe serve --db $db 2>$null }) -join "`n"
 $text = ''
-try { $text = ((ConvertFrom-Json -InputObject (@($mcp -split "`n" | Where-Object { $_ -match '"id":1' })[0])).result.content[0].text) } catch {}
+try { $text = ((ConvertFrom-Json -InputObject (@($mcp -split "`n" | Where-Object { $_ -match '"id":1' })[0]) | ForEach-Object { $_ }).result.content[0].text) } catch {}
 Check 'find_symbol answered' ($text -match 'uWhere\.Target') "raw: $mcp"
 Check 'ASSERT: find_symbol returns path:line:col, as its description promises' `
   ($text -match ($esc + ':' + $targetDecl + ':\d+')) "text: $text"

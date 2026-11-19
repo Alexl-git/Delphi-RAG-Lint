@@ -40,7 +40,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 function Invoke-Rows([string]$Db, [string]$Query) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $Db --json --query $Query 2>$null }) -join "`n"
-  $j = $raw | ConvertFrom-Json
+  $j = $raw | ConvertFrom-Json | ForEach-Object { $_ }
   $cols = @($j.columns | ForEach-Object { $_.name })
   $out = @()
   foreach ($r in @($j.rows)) {

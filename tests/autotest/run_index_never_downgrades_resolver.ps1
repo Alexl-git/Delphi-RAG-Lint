@@ -91,7 +91,7 @@ function SidecarBytes([string]$Db) { $w = "$Db-wal"; if (Test-Path $w) { return 
 
 $info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>&1 | ForEach-Object { "$_" } } | Where-Object { "$_" -like '{*' } | Select-Object -First 1)
 $engineVer = ''
-try { $engineVer = [string](($info | ConvertFrom-Json).resolver_version) } catch { $engineVer = '' }
+try { $engineVer = [string](($info | ConvertFrom-Json | ForEach-Object { $_ }).resolver_version) } catch { $engineVer = '' }
 Check 'V0 info --json reports the resolver version' ($engineVer -match '^\d+\.\d+\.\d+') "resolver_version=$engineVer"
 if ($engineVer -notmatch '^\d+\.\d+\.\d+') { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 

@@ -187,7 +187,7 @@ Write-Fixture $file1b
 & { $ErrorActionPreference = 'Continue'; & $Exe index $dir1b --db $db1b 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $rj1b = & { $ErrorActionPreference = 'Continue'; & $Exe document --unit $file1b --db $db1b --json 2>$null } | Out-String
 $ecj1b = $LASTEXITCODE
-$oj1b = $null; try { $oj1b = ($rj1b | ConvertFrom-Json) } catch { $oj1b = $null }
+$oj1b = $null; try { $oj1b = ($rj1b | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $oj1b = $null }
 Check 'json: exit 0' ($ecj1b -eq 0)
 Check 'json: declCount = 3 (TThing + GetB + DoWork; GetA/SetA excluded pre-count)' `
   ($null -ne $oj1b -and [int]$oj1b.declCount -eq 3) "declCount=$($oj1b.declCount)"
@@ -238,7 +238,7 @@ Write-Fixture $file3b
 & { $ErrorActionPreference = 'Continue'; & $Exe index $dir3b --db $db3b 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $rj3b = & { $ErrorActionPreference = 'Continue'; & $Exe document --unit $file3b --db $db3b --include-accessors --json 2>$null } | Out-String
 $ecj3b = $LASTEXITCODE
-$oj3b = $null; try { $oj3b = ($rj3b | ConvertFrom-Json) } catch { $oj3b = $null }
+$oj3b = $null; try { $oj3b = ($rj3b | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $oj3b = $null }
 Check 'json: exit 0' ($ecj3b -eq 0)
 Check 'json: declCount = 5 (TThing + GetA + SetA + GetB + DoWork)' `
   ($null -ne $oj3b -and [int]$oj3b.declCount -eq 5) "declCount=$($oj3b.declCount)"

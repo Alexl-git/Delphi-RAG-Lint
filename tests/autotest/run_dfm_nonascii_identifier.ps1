@@ -69,7 +69,7 @@ function Show([string]$s) { return ($s -replace [char]0x00DC,'<U>' -replace [cha
 function SqlRows([string]$Db, [string]$Query) {
   $o = (RunEngine @('sql', '--query', $Query, '--db', $Db, '--json', '--output-encoding', 'utf8')).Out
   $a = $o.IndexOf('{'); if ($a -lt 0) { return ,@() }
-  $j = $o.Substring($a) | ConvertFrom-Json
+  $j = $o.Substring($a) | ConvertFrom-Json | ForEach-Object { $_ }
   $names = @($j.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
   $out = @()
   foreach ($r in @($j.rows)) {
@@ -83,7 +83,7 @@ function SqlRows([string]$Db, [string]$Query) {
 # ---- D1: the fixture index ----------------------------------------------------------------
 $fx = (Resolve-Path "$PSScriptRoot\..\fixtures\dfm-nonascii").Path
 $db = "$WorkDir\fx.sqlite"
-$null | & { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+$null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index $fx --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'D1 fixture index built' (Test-Path $db)
 
 $rows = SqlRows $db "select s.name, s.qualified_name, s.kind, f.path from symbols s join files f on f.id=s.file_id where f.path like '%.dfm' and s.kind in ('component','form') order by f.path, s.start_line"
@@ -125,14 +125,14 @@ function NewCase([string]$Name, [Text.Encoding]$Enc) {
   [IO.File]::WriteAllBytes("$d\Form1.pas", $Enc.GetPreamble() + $Enc.GetBytes($pasText))
   [IO.File]::WriteAllBytes("$d\Form1.dfm", $Enc.GetPreamble() + $Enc.GetBytes($dfmText))
   [IO.File]::WriteAllText("$d\book.rules", "#convert TSrcBtn -> TNewBtn`r`n#link Caption <- Caption`r`n", [Text.Encoding]::ASCII)
-  $null | & { $ErrorActionPreference = 'Continue'; & $Exe index $d --db "$d\fx.sqlite" 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index $d --db "$d\fx.sqlite" 2>&1 | ForEach-Object { "$_" } } | Out-Null
   return $d
 }
 function Apply([string]$Dir, [string]$Only) {
   $e = RunEngine @('convert-apply', '--unit', "$Dir\Form1.pas", '--rules', "$Dir\book.rules", '--db', "$Dir\fx.sqlite", '--format', 'json', '--only', $Only, '--output-encoding', 'utf8')
   $o = $e.Out + "`n" + $e.Err
   $a = $o.IndexOf('{'); $b = $o.LastIndexOf('}')
-  $j = $null; if ($a -ge 0 -and $b -gt $a) { try { $j = $o.Substring($a, $b - $a + 1) | ConvertFrom-Json } catch { $j = $null } }
+  $j = $null; if ($a -ge 0 -and $b -gt $a) { try { $j = $o.Substring($a, $b - $a + 1) | ConvertFrom-Json | ForEach-Object { $_ } } catch { $j = $null } }
   return [pscustomobject]@{ Code = $e.Code; Out = $o; Json = $j }
 }
 function Located($r, [string]$Name) {

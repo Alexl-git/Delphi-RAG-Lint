@@ -269,7 +269,7 @@ foreach ($name in ($Fixtures + $RootDrivers)) {
   }
   $lg = Join-Path $env:TEMP ("drag-lint-legacy-{0}-{1}.log" -f $name, $PID)
   $p  = Start-Process cmd.exe -ArgumentList '/c', $bat -WorkingDirectory $repoRoot `
-                      -PassThru -NoNewWindow -RedirectStandardOutput $lg -RedirectStandardError "$lg.err"
+                      -PassThru -NoNewWindow -RedirectStandardOutput $lg -RedirectStandardError "$lg.err"; $null = $p.Handle
   if (-not $p.WaitForExit($PerFixtureTimeoutSec * 1000)) {
     try { $p.Kill() } catch { }
     Check $name $false ("TIMEOUT after {0}s" -f $PerFixtureTimeoutSec)

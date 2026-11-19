@@ -50,7 +50,7 @@ $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint $use --db $db --
 $txt = ($raw -join "`n")
 Write-Host ("raw: " + $txt.Substring(0, [Math]::Min(200, $txt.Length)))
 $found = @()
-try { $found = @(($txt | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { Check 'lint output is JSON' $false $txt }
+try { $found = @(($txt | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { Check 'lint output is JSON' $false $txt }
 $got = @($found | Where-Object { $_.rule_id -eq $rule -or $_.rule -eq $rule } | ForEach-Object { [int]$_.start_line })
 foreach ($l in $hit) { Check "fires at $l" ($got -contains $l) "got: $($got -join ',')" }
 foreach ($l in $ok)  { Check "silent at $l" (-not ($got -contains $l)) "got: $($got -join ',')" }
@@ -58,7 +58,7 @@ foreach ($l in $ok)  { Check "silent at $l" (-not ($got -contains $l)) "got: $($
 # positive control: the rule disabled must lose the must-fire lines
 $raw2 = & { $ErrorActionPreference = 'Continue'; & $exePath lint $use --db $db --rule $rule --disable $rule --json 2>$null }
 $f2 = @()
-try { $f2 = @((($raw2 -join "`n") | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $f2 = @() }
+try { $f2 = @((($raw2 -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $f2 = @() }
 $got2 = @($f2 | Where-Object { $_.rule_id -eq $rule -or $_.rule -eq $rule } | ForEach-Object { [int]$_.start_line })
 Check 'positive control: --disable removes the findings' ($got2.Count -eq 0) "got: $($got2 -join ',')"
 

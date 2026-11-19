@@ -101,14 +101,14 @@ $L.Add('end.')
 [IO.File]::WriteAllText($pas, (($L -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 
 function LintJson {
-  $o = & { $ErrorActionPreference = 'Continue'; & $Exe lint $pas '--json' 2>$errFile }
+  $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe lint $pas '--json' 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   $t = ($o | Out-String).Trim()
   if ($t -eq '') { return ,@() }
-  return ,@(($t | ConvertFrom-Json) | ForEach-Object { $_ })
+  return ,@(($t | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 function Has($Fs, [string]$Rule, [int]$Line) { @($Fs | Where-Object { $_.rule -eq $Rule -and $_.start_line -eq $Line }).Count -gt 0 }
 function Allow([int]$Line, [string]$Rule) {
-  $o = & { $ErrorActionPreference = 'Continue'; & $Exe allow $pas '--fix-line' $Line '--fix-rule' $Rule '--apply' 2>$errFile }
+  $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe allow $pas '--fix-line' $Line '--fix-rule' $Rule '--apply' 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   [pscustomobject]@{ Out = (($o | Out-String) -replace "`r`n", "`n").Trim(); Code = $LASTEXITCODE }
 }
 

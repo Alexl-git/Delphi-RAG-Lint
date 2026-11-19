@@ -204,7 +204,7 @@ function Run-Verb([string[]]$VerbArgs, [bool]$Off, [string]$Tag, [string]$UseExe
   if ($Off) { $env:DRAGLINT_NO_FILE_FACTS = '1' } else { $env:DRAGLINT_NO_FILE_FACTS = $null }
   try {
     $p = Start-Process -FilePath $UseExe -ArgumentList $VerbArgs -NoNewWindow -Wait -PassThru `
-      -RedirectStandardOutput $o -RedirectStandardError $e
+      -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   } finally {
     $env:DRAGLINT_DEBUG = $null
     $env:DRAGLINT_NO_FILE_FACTS = $null

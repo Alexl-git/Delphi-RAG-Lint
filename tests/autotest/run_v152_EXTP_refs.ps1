@@ -65,7 +65,7 @@ function Get-Col([string]$File, [string]$Text, [string]$Token) {
 }
 function Invoke-Sql([string]$Db, [string]$Query) {
   $txt = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $Db --query $Query --json --limit 0 2>$null }) -join "`n"
-  $doc = $txt | ConvertFrom-Json
+  $doc = $txt | ConvertFrom-Json | ForEach-Object { $_ }
   $cols = @($doc.columns | ForEach-Object { $_.name })
   $out = foreach ($r in @($doc.rows)) {
     $o = [ordered]@{}
@@ -103,7 +103,7 @@ function Lint([string]$Rule) {
   $txt = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --enable $Rule --rule $Rule --json 2>$null }) -join "`n"
   $start = $txt.IndexOf('[')
   if ($start -lt 0) { return , @() }
-  return , @(($txt.Substring($start) | ConvertFrom-Json) | Where-Object { $_.rule -eq $Rule })
+  return , @(($txt.Substring($start) | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $_.rule -eq $Rule })
 }
 
 # ---- W: writes through a member chain ----

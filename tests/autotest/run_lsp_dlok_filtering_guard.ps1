@@ -107,7 +107,7 @@ function Read-Frames([string]$Out) {
     $start = $i + $m.Index + $m.Length
     $len = [int]$m.Groups[1].Value
     if ($start + $len -gt $Out.Length) { break }
-    $res += ($Out.Substring($start, $len) | ConvertFrom-Json)
+    $res += ($Out.Substring($start, $len) | ConvertFrom-Json | ForEach-Object { $_ })
     $i = $start + $len
   }
   return $res
@@ -143,7 +143,7 @@ function LspLines([string]$PasFile) {
 function CliLines([string]$PasFile) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $PasFile --json 2>$null }) -join "`n"
   $arr = @()
-  if ($raw.Trim()) { $arr = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) }
+  if ($raw.Trim()) { $arr = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   return ,@($arr | Where-Object { $_.rule -eq $Rule } | ForEach-Object { [int]$_.start_line })
 }
 function Verify([string]$Name, [string]$PasFile, [int]$Expect) {

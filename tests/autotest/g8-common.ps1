@@ -32,7 +32,7 @@ function Get-G8Findings([string]$Exe, [string]$Db, [string]$Rule, [string[]]$Ext
   $ruleArgs = @(if ($AllRules) { @() } else { @('--rule', $Rule) })
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db @ruleArgs --format json @Extra 2>$null }
   $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
-  $f = @(); if ($b -ge 0) { try { $f = @(($txt.Substring($b) | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $f = @() } }
+  $f = @(); if ($b -ge 0) { try { $f = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $f = @() } }
   return ,@($f | Where-Object { $_.rule -eq $Rule })
 }
 function Test-G8BytesEqual([string]$A, [string]$B) {

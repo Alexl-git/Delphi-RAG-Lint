@@ -64,7 +64,7 @@ function DupCount([string]$Dir, [string]$Unit) {
   try { $Out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $Pas --json 2>$null } } finally { Pop-Location }
   $Txt = ($Out -join "`n")
   if ($Txt.Trim() -eq '') { return 0 }
-  $J = $Txt | ConvertFrom-Json
+  $J = $Txt | ConvertFrom-Json | ForEach-Object { $_ }
   $All = @(if ($J -is [array]) { @($J) } elseif ($null -ne $J.findings) { @($J.findings) } else { @($J) })
   return @($All | Where-Object { ([string]$_.rule_id + [string]$_.rule) -eq 'dfm-duplicate-binding' }).Count
 }

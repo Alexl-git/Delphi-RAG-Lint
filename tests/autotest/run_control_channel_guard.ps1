@@ -187,7 +187,7 @@ function Invoke-Verb([string[]]$ArgList, [string]$Tag) {
   $o = Join-Path $script:WorkDir "$Tag-verb-out.txt"; $er = Join-Path $script:WorkDir "$Tag-verb-err.txt"
   $inF = Join-Path $script:WorkDir 'empty-stdin.txt'; if (-not (Test-Path $inF)) { [System.IO.File]::WriteAllText($inF, '') }
   $p = Start-Process -FilePath $script:Exe -ArgumentList $ArgList -WorkingDirectory $script:WorkDir -PassThru -NoNewWindow `
-         -RedirectStandardInput $inF -RedirectStandardOutput $o -RedirectStandardError $er
+         -RedirectStandardInput $inF -RedirectStandardOutput $o -RedirectStandardError $er; $null = $p.Handle
   $pid0 = $p.Id
   if (-not $p.WaitForExit(120000)) { try { $p.Kill($true) } catch { }; $p.WaitForExit() }
   return @{ Pid = $pid0; Exit = $p.ExitCode; Out = [System.IO.File]::ReadAllText($o); Err = [System.IO.File]::ReadAllText($er) }

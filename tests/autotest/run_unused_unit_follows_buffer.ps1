@@ -75,7 +75,7 @@ function UnusedIn([string]$Buffer) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $Buffer --stand-in-for $main --db $db --rule unused-unit-in-uses --json 2>$null } | Out-String
   $i = $raw.IndexOf('[')
   if ($i -lt 0) { return @() }
-  @(($raw.Substring($i) | ConvertFrom-Json) | Where-Object { $_.rule -eq 'unused-unit-in-uses' } |
+  @(($raw.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $_.rule -eq 'unused-unit-in-uses' } |
     ForEach-Object { [pscustomobject]@{ Unit = ($_.message -replace "^Unit '([^']+)'.*", '$1'); Line = [int]$_.start_line } })
 }
 

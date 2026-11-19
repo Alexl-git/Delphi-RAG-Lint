@@ -207,7 +207,7 @@ $j = New-Fixture 'J'
 $r = Run-Rename $j ($RenArgs + '--json')
 Check 'json exits 0' ($r.Exit -eq 0) "exit=$($r.Exit)"
 $edits = @()
-try { $edits = @(($r.Out | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { }
+try { $edits = @(($r.Out | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { }
 $got = @($edits | ForEach-Object { '{0}:{1}' -f (Split-Path -Leaf $_.file), $_.line } | Sort-Object)
 Check 'json edit set is exact' (($got -join ',') -ceq ($Expected -join ',')) "got=$($got -join ',')"
 Check 'json has no Unit2 edit' (-not ($got -match '^Unit2\.'))

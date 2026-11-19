@@ -43,7 +43,7 @@ function Get-SrcHash([string]$Dir) {
 function Build-Lab([string]$Root) {
   $bat = "$Root.bld.bat"
   [IO.File]::WriteAllText($bat, "@echo off`r`ncall `"$RsVars`"`r`ncd /D `"$Root`"`r`nmsbuild /t:Build /p:Config=Debug /p:Platform=Win64 /v:minimal PrecRen.dproj`r`nexit /b %ERRORLEVEL%`r`n", $Ascii)
-  $p = Start-Process cmd.exe -ArgumentList "/c `"$bat`"" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$Root.bld.log" -RedirectStandardError "$Root.bld.err"
+  $p = Start-Process cmd.exe -ArgumentList "/c `"$bat`"" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$Root.bld.log" -RedirectStandardError "$Root.bld.err"; $null = $p.Handle
   return ($p.ExitCode -eq 0)
 }
 function Stdout-Of([string]$Root) {
@@ -59,18 +59,18 @@ function New-Lab {
   Copy-Item "$Fx\*.pas", "$Fx\*.dpr", "$Fx\*.dproj" $root
   $db = "$root.sqlite"
   Push-Location $WorkDir
-  try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root 'PrecRen.dproj') --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
+  try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project (Join-Path $root 'PrecRen.dproj') --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
   return @{ Root = $root; Dproj = (Join-Path $root 'PrecRen.dproj'); Db = $db; Use = (Join-Path $root 'RnUse.pas'); Types = (Join-Path $root 'RnTypes.pas') }
 }
 function Plan($P, [string]$Q, [string]$To, [string]$Lib = $script:Lib) {
   Push-Location $WorkDir
-  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe rename --kind symbol --name $Q --to $To --db $P.Db --library-db $Lib --plan --json 2>$null } | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
-  $j = $null; try { $j = $o | ConvertFrom-Json } catch { }
+  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe rename --kind symbol --name $Q --to $To --db $P.Db --library-db $Lib --plan --json 2>$null } | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
+  $j = $null; try { $j = $o | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   return @{ Exit = $c; Json = $j; Out = $o; Kinds = @($j.refusals | ForEach-Object { $_.kind }) }
 }
 function Apply($P, [string]$Q, [string]$To, [string[]]$Extra = @(), [string]$Lib = $script:Lib) {
   Push-Location $WorkDir
-  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe rename --kind symbol --name $Q --to $To --db $P.Db --library-db $Lib --project $P.Dproj --build-timeout 600 --apply --no-backup @Extra 2>&1 | ForEach-Object { "$_" } } | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
+  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe rename --kind symbol --name $Q --to $To --db $P.Db --library-db $Lib --project $P.Dproj --build-timeout 600 --apply --no-backup @Extra 2>&1 | ForEach-Object { "$_" } } | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
   return @{ Exit = $c; Out = $o }
 }
 function Sound($Name, [string]$Q, [string]$To, [scriptblock]$Text) {
@@ -99,7 +99,7 @@ function Line-Of([string]$Path, [string]$Pattern) {
 }
 function Local-Rename($P, [int]$Line, [string]$To, [string[]]$Extra) {
   Push-Location $WorkDir
-  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe rename --kind param --in $P.Use --line $Line --col 3 --to $To --project $P.Dproj --build-timeout 600 --apply --no-backup @Extra 2>&1 | ForEach-Object { "$_" } } | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
+  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe rename --kind param --in $P.Use --line $Line --col 3 --to $To --project $P.Dproj --build-timeout 600 --apply --no-backup @Extra 2>&1 | ForEach-Object { "$_" } } | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
   return @{ Exit = $c; Out = $o }
 }
 
@@ -107,19 +107,19 @@ function Local-Rename($P, [int]$Line, [string]$To, [string[]]$Extra) {
 $libDir = Join-Path $WorkDir 'lib'; New-Item -ItemType Directory -Force $libDir | Out-Null
 Copy-Item "$Fx\libstub\LibStub.pas" $libDir
 $script:Lib = Join-Path $WorkDir 'lib.sqlite'
-Push-Location $WorkDir; try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index $libDir --db $script:Lib --library-db none *> "$script:Lib.log" } } finally { Pop-Location }
+Push-Location $WorkDir; try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index $libDir --db $script:Lib --library-db none *> "$script:Lib.log" } } finally { Pop-Location }
 $base = New-Lab
 if (-not (Build-Lab $base.Root)) { Write-Host "FATAL: the untouched fixture does not build ($($base.Root).bld.log)" -ForegroundColor Red; exit 2 }
 $script:Expected = Stdout-Of $base.Root
 Check 'fixture runs and prints' ($script:Expected -match 'TKid\.Run' -and $script:Expected -match '300')
 
 Write-Host 'ref_receivers: a whole pass and an incremental one agree' -ForegroundColor Cyan
-function Rcv-Count($P) { $j = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $P.Db --query 'select count(*) from ref_receivers' --json 2>$null } | Out-String | ConvertFrom-Json); return [int]$j.rows[0][0] }
+function Rcv-Count($P) { $j = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $P.Db --query 'select count(*) from ref_receivers' --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }); return [int]$j.rows[0][0] }
 $rp = New-Lab
 $before = Rcv-Count $rp
 Check 'rcv the join writes rows' ($before -gt 0) "rows=$before"
 [IO.File]::AppendAllText($rp.Use, "`r`n", $Ascii)
-Push-Location $WorkDir; try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project $rp.Dproj --db $rp.Db --library-db none *> "$($rp.Db).log2" } } finally { Pop-Location }
+Push-Location $WorkDir; try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project $rp.Dproj --db $rp.Db --library-db none *> "$($rp.Db).log2" } } finally { Pop-Location }
 Check 'rcv an incremental re-emit of one file keeps the count' ((Rcv-Count $rp) -eq $before) "before=$before after=$(Rcv-Count $rp)"
 Write-Host 'Same-named members: only the target edited, per token on one line' -ForegroundColor Cyan
 Sound 'c1' 'RnTypes.TTwoA.Count' 'Tally' {
@@ -195,12 +195,12 @@ Refused 'r9' 'RnTypes.TTwoA.Count' 'Tally' 'no-library' 'none'
 Write-Host 'The gate' -ForegroundColor Cyan
 $p = New-Lab; $h = Get-SrcHash $p.Root
 Push-Location $WorkDir
-try { $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe rename --kind symbol --name RnTypes.TTwoA.Count --to Tally --db $p.Db --library-db $script:Lib --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
+try { $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe rename --kind symbol --name RnTypes.TTwoA.Count --to Tally --db $p.Db --library-db $script:Lib --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
 Check 'g1 no --project: [no-project], exit 2, bytes same' ($c -eq 2 -and $o -match 'refused \[no-project\]' -and (Get-SrcHash $p.Root) -eq $h) $o
 $dr = Join-Path $p.Root '_D-RAG'; New-Item -ItemType Directory -Force $dr | Out-Null
 $sibDb = Join-Path $dr 'PrecRen.sqlite'
 Push-Location $WorkDir
-try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project $p.Dproj --db $sibDb --library-db none *> "$sibDb.log" }; $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe rename --qname RnTypes.TTwoA.Count --to Tally --db $sibDb --library-db $script:Lib --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
+try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project $p.Dproj --db $sibDb --library-db none *> "$sibDb.log" }; $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe rename --qname RnTypes.TTwoA.Count --to Tally --db $sibDb --library-db $script:Lib --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
 Check 'g4 the IDE''s form (--qname --db, no --project): the DB''s own project, through the gate' ($c -eq 0 -and $o -match 'compile gate' -and (Stdout-Of $p.Root) -ceq $script:Expected) $o
 $p = New-Lab; $h = Get-SrcHash $p.Root
 $a = Apply $p 'RnTypes.TTwoA.Count' 'Tally' @('--no-compile')

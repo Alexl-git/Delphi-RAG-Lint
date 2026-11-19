@@ -73,8 +73,8 @@ try {
   $noneLine = (Select-String -Path $use -Pattern 'string\(N\)').LineNumber
   function Plan($extra) {
     $e = Join-Path $WorkDir 'plan.err'
-    $po = & { $ErrorActionPreference = 'Continue'; & $exe lint --fix --fix-rule redundant-cast --db $db --project $proj --platform win32 --format json @extra 2> $e }
-    $pl = $null; try { $pl = ($po -join "`n") | ConvertFrom-Json } catch { }
+    $po = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($e); [IO.File]::WriteAllText($dlErrFile, ''); & $exe lint --fix --fix-rule redundant-cast --db $db --project $proj --platform win32 --format json @extra 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
+    $pl = $null; try { $pl = ($po -join "`n") | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
     $lines = @(if ($pl) { @($pl.fixes | ForEach-Object { [int]$_.line } | Sort-Object) } else { $null })
     [pscustomobject]@{ Plan = $pl; Lines = $lines; Err = [string](Get-Content $e -Raw -ErrorAction SilentlyContinue) }
   }

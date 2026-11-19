@@ -31,7 +31,7 @@ try {
     function Lines([string[]]$LintArgs) {
         $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint @LintArgs --json 2>$null }) -join "`n"
         $arr = @()
-        if ($raw.Trim().StartsWith('[')) { try { $arr = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { } }
+        if ($raw.Trim().StartsWith('[')) { try { $arr = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { } }
         return @($arr | ForEach-Object { [int]$_.start_line })
     }
 

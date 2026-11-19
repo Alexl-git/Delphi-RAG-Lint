@@ -30,7 +30,7 @@ function SyntaxFindings([string]$file) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file --json 2>$null }
   $txt = ($raw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n"
   if ($txt.Trim() -eq '') { return $null }
-  return ,@(@(($txt | ConvertFrom-Json) | ForEach-Object { $_ }) | Where-Object { $_.rule -in @('parser-error', 'syntax-error') })
+  return ,@(@(($txt | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) | Where-Object { $_.rule -in @('parser-error', 'syntax-error') })
 }
 Write-Host "== EX3 lint parse of a uses-list include host ($Exe)"
 $host_ = Join-Path $Fx 'file-facts-149\facts\FfIncA.pas'

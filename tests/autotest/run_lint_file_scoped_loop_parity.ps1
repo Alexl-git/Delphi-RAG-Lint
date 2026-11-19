@@ -161,7 +161,7 @@ Check 'SANITY: fixture indexed with no errors' `
 $LOOP = @('unused-unit-in-uses','god-class','unused-public-symbol','unused-private-member')
 
 function LoopTuples($json, $fileAbs) {
-  $rows = @(if ($json.Trim()) { $json | ConvertFrom-Json } else { @() })
+  $rows = @(if ($json.Trim()) { $json | ConvertFrom-Json | ForEach-Object { $_ } } else { @() })
   @($rows | Where-Object { $LOOP -contains $_.rule -and
                            $_.file_path.ToLowerInvariant() -eq $fileAbs.ToLowerInvariant() } |
            ForEach-Object { '{0}|{1}|{2}|{3}|{4}' -f $_.rule, $_.severity, $_.start_line, $_.start_col, $_.message } |
@@ -170,10 +170,10 @@ function LoopTuples($json, $fileAbs) {
 
 $env:DRAGLINT_PROFILE = '1'
 $allErr  = Join-Path $WorkDir 'all.err'
-$allJson = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rules-dir $rules --json 2>$allErr } | Out-String
+$allJson = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($allErr); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath lint-all --db $db --rules-dir $rules --json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String
 $allProf = Get-Content $allErr -Raw
 
-$allRules = @(($allJson | ConvertFrom-Json) | Where-Object { $LOOP -contains $_.rule } | ForEach-Object { $_.rule } | Sort-Object -Unique)
+$allRules = @(($allJson | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $LOOP -contains $_.rule } | ForEach-Object { $_.rule } | Sort-Object -Unique)
 foreach ($r in $LOOP) {
   Check "P2  CONTROL: lint-all reports $r on the fixture" ($allRules -contains $r) `
         "if lint-all does not report it, P1 compares empty sets for it and proves nothing"
@@ -193,7 +193,7 @@ foreach ($leaf in @('uLib.pas','uGod.pas','uMain.pas','uUser.pas','Proj.dpr')) {
 
 $mainAbs  = Join-Path $proj 'uMain.pas'
 $oneErr   = Join-Path $WorkDir 'one.err'
-& { $ErrorActionPreference = 'Continue'; & $exePath lint $mainAbs --db $db --rules-dir $rules --json 2>$oneErr } | Out-Null
+& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($oneErr); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath lint $mainAbs --db $db --rules-dir $rules --json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-Null
 $oneProf  = Get-Content $oneErr -Raw
 $oneN = if ($oneProf -match 'per-file loop\s+(\d+) file\(s\)') { [int]$Matches[1] } else { -1 }
 $allN = if ($allProf -match 'per-file loop\s+(\d+) file\(s\)') { [int]$Matches[1] } else { -1 }

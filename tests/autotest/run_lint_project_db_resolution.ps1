@@ -176,7 +176,7 @@ if (-not ((Test-Path $dbA) -and (Test-Path $dbB))) {
 
 function Get-Findings([string[]]$JsonLines) {
   $raw = ($JsonLines -join "`n")
-  try { return @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { return $null }
+  try { return @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { return $null }
 }
 
 # Everything below runs from a NEUTRAL cwd: no fixture project underfoot, so the

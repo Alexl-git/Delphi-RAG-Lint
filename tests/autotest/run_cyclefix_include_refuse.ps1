@@ -53,7 +53,7 @@ function Get-Plan([string]$Db, [string]$Tag, [string]$Format = 'text') {
   try {
     $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
       -ArgumentList @('cycles', '--db', ('"' + $Db + '"'), '--edges', '--causes', '--plan', '--format', $Format, '--library-db', 'none') `
-      -RedirectStandardOutput $out -RedirectStandardError "$out.err"
+      -RedirectStandardOutput $out -RedirectStandardError "$out.err"; $null = $p.Handle
   } finally { $env:DRAGLINT_TEST_DUMP_PLAN = $null }
   $d = if (Test-Path $dump) { [IO.File]::ReadAllText($dump) } else { '' }
   return @{ Text = [IO.File]::ReadAllText($out); Dump = $d; Exit = $p.ExitCode }
@@ -72,7 +72,7 @@ $dproj = Join-Path $i.Root 'IncludeClause.dproj'
 Push-Location $WorkDir
 try { $dry = & { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --project $dproj --db $i.Db --unit cfalpha --no-compile --format json --library-db none 2>$null } | Out-String; $dryRc = $LASTEXITCODE } finally { Pop-Location }
 Check 'b: --fix dry run exits 1 (refused)' ($dryRc -eq 1) "rc=$dryRc"
-$ref = @(); try { $ref = @(($dry | ConvertFrom-Json).cycles | ForEach-Object { $_.refusals } | Where-Object { $_.kind -eq 'uses-in-include' }) } catch { }
+$ref = @(); try { $ref = @(($dry | ConvertFrom-Json | ForEach-Object { $_ }).cycles | ForEach-Object { $_.refusals } | Where-Object { $_.kind -eq 'uses-in-include' }) } catch { }
 Check 'b: the cycle-fix/1 JSON has a uses-in-include refusal at CfAlpha.pas line 13' (($ref.Count -eq 1) -and ($ref[0].line -eq 13) -and ($ref[0].file -like '*CfAlpha.pas')) "n=$($ref.Count)"
 
 $before = Hashes $i.Root

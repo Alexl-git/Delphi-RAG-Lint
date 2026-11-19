@@ -110,7 +110,7 @@ function Get-Findings([string[]]$LintArgs) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe @LintArgs --json 2>$null }) -join "`n"
   $start = $raw.IndexOf('[')
   if ($start -lt 0) { return ,@() }
-  $arr = $raw.Substring($start) | ConvertFrom-Json
+  $arr = $raw.Substring($start) | ConvertFrom-Json | ForEach-Object { $_ }
   return ,@($arr | Where-Object { $_.rule -eq $rule })
 }
 function Lint-Case([string]$Dir, [switch]$NoRule, [switch]$NoProject) {

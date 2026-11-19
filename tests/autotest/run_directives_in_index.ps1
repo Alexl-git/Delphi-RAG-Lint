@@ -125,7 +125,7 @@ New-Item -ItemType Directory $WorkDir | Out-Null
 
 # Name the engine under test FIRST, so a RED log cannot be mistaken for a reading
 # of a different build.
-$info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n" | ConvertFrom-Json
+$info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 Write-Host ("engine: extractor={0} resolver={1} exe={2}" -f $info.extractor_version, $info.resolver_version, $Exe) -ForegroundColor Cyan
 
 function Write-Ascii([string]$Path, [string]$Body) {
@@ -192,7 +192,7 @@ Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 function Get-Sym([string]$Name) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe query --name $Name --exact --json --db $db 2>$null }) -join "`n"
   if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
-  $rows = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ })
+  $rows = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   return $rows | Where-Object { $_.kind -in @('method','procedure','function') } | Select-Object -First 1
 }
 

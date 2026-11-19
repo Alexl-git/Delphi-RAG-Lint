@@ -123,7 +123,7 @@ function RunLint([string[]]$ExtraArgs, [string]$Tag) {
   $o = Join-Path $WorkDir "$Tag.out"
   $e = Join-Path $WorkDir "$Tag.err"
   $null = Start-Process -FilePath $Exe -ArgumentList $ExtraArgs -WorkingDirectory 'C:\TEMP' `
-            -Wait -NoNewWindow -PassThru -RedirectStandardOutput $o -RedirectStandardError $e
+            -Wait -NoNewWindow -PassThru -RedirectStandardOutput $o -RedirectStandardError $e; $null = $null.Handle
   return [pscustomobject]@{
     Out = [System.IO.File]::ReadAllText($o)
     Err = [System.IO.File]::ReadAllText($e)

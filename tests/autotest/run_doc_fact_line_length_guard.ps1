@@ -120,7 +120,7 @@ function EntryCount([string]$Logical) {
   return @($Matches[1] -split ', ' | Where-Object { $_.Trim() -ne '' }).Count
 }
 function DriftFindings([string]$Json) {
-  try { return ,@(ConvertFrom-Json $Json | Where-Object { $_.rule -eq 'doc-drift' }) } catch { return $null }
+  try { return ,@(ConvertFrom-Json $Json | ForEach-Object { $_ } | Where-Object { $_.rule -eq 'doc-drift' }) } catch { return $null }
 }
 
 # --- fixture ------------------------------------------------------------------

@@ -81,7 +81,7 @@ function Run-Fix([string]$Dir, [string]$Db, [string[]]$Extra, [bool]$Json = $tru
   $out = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null } | Out-String)
   $code = $LASTEXITCODE
   $j = $null
-  if ($Json) { try { $j = $out | ConvertFrom-Json } catch { $j = $null } }
+  if ($Json) { try { $j = $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $j = $null } }
   return @{ Exit = $code; Out = $out; Json = $j }
 }
 

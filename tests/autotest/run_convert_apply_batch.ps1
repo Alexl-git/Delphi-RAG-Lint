@@ -68,12 +68,12 @@ function Run([string[]]$Units, [string]$Rules, [string[]]$Extra = @()) {
 function Json([string]$s) {
   $a = $s.IndexOf('{'); $b = $s.LastIndexOf('}')
   if ($a -lt 0 -or $b -le $a) { return $null }
-  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json) } catch { return $null }
+  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 # an apply/1 object as comparable text -- every key, classes_built included
 function Shape($o) {
   if ($null -eq $o) { return '<null>' }
-  $c = $o | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+  $c = $o | ConvertTo-Json -Depth 8 | ConvertFrom-Json | ForEach-Object { $_ }
   return ($c | ConvertTo-Json -Depth 8 -Compress)
 }
 

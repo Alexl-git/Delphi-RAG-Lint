@@ -17,7 +17,7 @@ Assert "dry-run shows decl rename Foo->Bar" ($dry -match 'Foo -> Bar')
 Assert "dry-run shows the caller site"      (([regex]::Matches($dry,'Foo -> Bar')).Count -ge 2)
 
 # --json edit set
-$json = & { $ErrorActionPreference = 'Continue'; & $exe rename --kind symbol --name Subject.TSubject.Foo --to Bar --json --db $db 2>$null } | ConvertFrom-Json
+$json = & { $ErrorActionPreference = 'Continue'; & $exe rename --kind symbol --name Subject.TSubject.Foo --to Bar --json --db $db 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
 Assert "json edit set non-empty" ($json.Count -ge 2)
 Assert "json edit has line/col/old/new" ($null -ne $json[0].line -and $json[0].old -eq 'Foo' -and $json[0].new -eq 'Bar')
 

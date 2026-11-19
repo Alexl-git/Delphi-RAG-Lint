@@ -67,7 +67,7 @@ function Sql([string]$Query) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --limit 1000 --query $Query 2>$null }) -join "`n"
   $b = $raw.IndexOf('{')
   if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
-  $o = $raw.Substring($b) | ConvertFrom-Json
+  $o = $raw.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }
   $names = @($o.columns | ForEach-Object { $_.name })
   $out = @()
   foreach ($r in @($o.rows)) {
@@ -214,7 +214,7 @@ try {
   # procedural var, procedural parameter -- still listed (positive control).
   $fc = (& { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name NextId --resolved --db $db --json 2>$null }) -join "`n"
   $fb = $fc.IndexOf('[')
-  $fr = @(); if ($fb -ge 0) { $fr = @(($fc.Substring($fb) | ConvertFrom-Json) | ForEach-Object { $_ }) }
+  $fr = @(); if ($fb -ge 0) { $fr = @(($fc.Substring($fb) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   $certDriver = @($fr | Where-Object { $_.confidence -eq 'certain' -and $_.caller_qname -eq 'uParenlessUse.Driver' })
   $cbLines = @($fr | Where-Object { $_.confidence -eq 'callback' } | ForEach-Object { [int]$_.line })
   $dbl  = @(@((LineOf 'POS-ASSERT'), (LineOf 'POS-ASSIGN'), (LineOf 'POS-ARG')) | Where-Object { $cbLines -contains $_ })

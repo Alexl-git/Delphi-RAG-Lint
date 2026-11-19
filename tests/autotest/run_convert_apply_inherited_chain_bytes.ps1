@@ -539,7 +539,7 @@ Check 'RD CONTROL a descendant with no redeclaration: no field edit, no field wa
 $d = NewCase 'cn'
 $before = Text $d 'ChLeaf.dfm'
 $r = Apply $d @('ChLeaf.pas') @('--format', 'json')
-$j = $null; try { $j = $r.Out.Substring($r.Out.IndexOf('{')) | ConvertFrom-Json } catch {}
+$j = $null; try { $j = $r.Out.Substring($r.Out.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 $q = @($j.inherited | Where-Object { $_.name -eq 'Q1' })
 Check 'CN CONTROL ancestor unconverted: Q1 skipped, state unconverted' (($q.Count -eq 1) -and ($q[0].action -eq 'skipped') -and ($q[0].ancestor_state -eq 'unconverted')) $r.Out
 $r = Apply $d @('ChLeaf.pas') @('--apply', '--no-backup')

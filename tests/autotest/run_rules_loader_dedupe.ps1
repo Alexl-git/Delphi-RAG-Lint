@@ -48,9 +48,9 @@ function New-Engine($name) {
 }
 function Run-Lint($e) {
   $err = Join-Path $Work 'err.txt'
-  $out = & { $ErrorActionPreference = 'Continue'; & (Join-Path $e (Split-Path $Exe -Leaf)) lint $Fix --json 2>$err }
+  $out = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($err); [IO.File]::WriteAllText($dlErrFile, ''); & (Join-Path $e (Split-Path $Exe -Leaf)) lint $Fix --json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   $json = ($out | Where-Object { $_ -notmatch '^\(loaded defaults' }) -join "`n"
-  $f = @(); if ($json.Trim()) { $f = @(($json | ConvertFrom-Json) | ForEach-Object { $_ }) }
+  $f = @(); if ($json.Trim()) { $f = @(($json | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   [pscustomobject]@{ Findings = $f; Err = @((@(Get-Content $err -ErrorAction SilentlyContinue) -join ' ') -split '(?=RULE-DUPLICATE-ID)' | Where-Object { $_.Trim() }) }
 }
 function Dups($r) { @($r.Err | Where-Object { $_ -match 'RULE-DUPLICATE-ID' }) }

@@ -127,7 +127,7 @@ function Edit-Child([string]$Dir) {
 function Writes([string]$Db, [string]$QName) {
   $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $Db --query "SELECT f.writes_fields FROM symbol_facts f JOIN symbols s ON s.id=f.symbol_id WHERE s.qualified_name='$QName'" --json 2>$null }) -join "`n"
   if ([string]::IsNullOrWhiteSpace($j)) { return '<no-output>' }
-  try { $o = $j | ConvertFrom-Json } catch { return '<bad-json>' }
+  try { $o = $j | ConvertFrom-Json | ForEach-Object { $_ } } catch { return '<bad-json>' }
   $rows = @($o.rows)
   if ($rows.Count -ne 1) { return "<rows=$($rows.Count)>" }
   return [string](@($rows[0])[0])

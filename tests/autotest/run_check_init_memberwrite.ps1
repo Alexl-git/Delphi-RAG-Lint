@@ -31,7 +31,7 @@ Check 'fixture indexed' (Test-Path $db)
 
 function Answer([string]$Target) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $exePath check-init $Target --db $db --json 2>$null }
-  return (($raw | Out-String) | ConvertFrom-Json)
+  return (($raw | Out-String) | ConvertFrom-Json | ForEach-Object { $_ })
 }
 function HasSiteLine($Rows, [int]$Line) { return @($Rows | Where-Object { $_.file -like '*mwData.pas' -and $_.line -eq $Line }).Count -gt 0 }
 

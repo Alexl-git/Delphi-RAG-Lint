@@ -34,7 +34,7 @@ $pas = Join-Path $fx 'UBars.pas'; $dfm = Join-Path $fx 'UBars.dfm'
 $r = 'form-object-without-field'
 
 # 1. defaults
-$rules = (& { $ErrorActionPreference = 'Continue'; & $exe rules --json 2>$null }) -join "`n" | ConvertFrom-Json
+$rules = (& { $ErrorActionPreference = 'Continue'; & $exe rules --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 $rl = if ($rules -is [array]) { $rules } else { $rules.rules }
 foreach ($id in 'dataset-edit-without-post', 'foreign-form-control-access', 'form-object-without-field') {
   $x = $rl | Where-Object { $_.id -eq $id }
@@ -50,7 +50,7 @@ function Lines([string]$cfg) {
   if ($cfg) { $a += @('--config', $cfg) }
   $raw = (& { $ErrorActionPreference = 'Continue'; & $exe @a 2>$null }) -join "`n"
   if ($raw.Trim() -eq '') { return @() }
-  @($raw | ConvertFrom-Json | Where-Object { $_.rule -eq $r } | ForEach-Object { "$($_.start_line)" })
+  @($raw | ConvertFrom-Json | ForEach-Object { $_ } | Where-Object { $_.rule -eq $r } | ForEach-Object { "$($_.start_line)" })
 }
 function LineOf($pat) { $l = [IO.File]::ReadAllLines($dfm); for ($i = 0; $i -lt $l.Count; $i++) { if ($l[$i] -match $pat) { return $i + 1 } }; -1 }
 function Cfg($json) { $p = Join-Path $box ("c" + [guid]::NewGuid().ToString('N').Substring(0, 6) + '.json'); [IO.File]::WriteAllText($p, $json); $p }

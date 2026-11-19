@@ -101,8 +101,8 @@ if ($line -match $rx) {
 # Equivalence: the incremental DB's verdicts equal a fresh rebuild of the same tree.
 & { $ErrorActionPreference = 'Continue'; & $exePath index --project $dpr --db $ref --rebuild 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $q = "SELECT s.qualified_name, f.effect_free, f.effect_summary, f.effect_witness FROM symbols s JOIN symbol_facts f ON f.symbol_id = s.id WHERE ifnull(f.body_loc,0) > 0 ORDER BY s.qualified_name"
-$a = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db  --json --limit 100000 --query $q 2>$null } | ConvertFrom-Json).rows | ForEach-Object { $_ -join '|' }
-$b = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $ref --json --limit 100000 --query $q 2>$null } | ConvertFrom-Json).rows | ForEach-Object { $_ -join '|' }
+$a = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db  --json --limit 100000 --query $q 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }).rows | ForEach-Object { $_ -join '|' }
+$b = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $ref --json --limit 100000 --query $q 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }).rows | ForEach-Object { $_ -join '|' }
 Check "E1 POSITIVE CONTROL both databases hold the fixture's routines ($(@($a).Count) / $(@($b).Count))" ((@($a).Count -ge ($UnitCount * $RoutineCount)) -and (@($b).Count -ge ($UnitCount * $RoutineCount))) ''
 $diff = Compare-Object @($a) @($b)
 Check "E1 incremental purity verdicts equal a --rebuild ($(@($diff).Count) differing row(s))" (@($diff).Count -eq 0) (($diff | Select-Object -First 3 | ForEach-Object { "$($_.SideIndicator) $($_.InputObject)" }) -join ' || ')

@@ -228,7 +228,7 @@ function ApplyJson([string]$Rules) {
   finally { Pop-Location }
   $line = ($raw -split "`n" | Where-Object { $_.TrimStart().StartsWith('{') } | Select-Object -First 1)
   if (-not $line) { return @{ Raw = $raw; J = $null } }
-  try { return @{ Raw = $raw; J = ($line | ConvertFrom-Json) } } catch { return @{ Raw = $raw; J = $null } }
+  try { return @{ Raw = $raw; J = ($line | ConvertFrom-Json | ForEach-Object { $_ }) } } catch { return @{ Raw = $raw; J = $null } }
 }
 function KindsOf($r) { if ($r.J -and $r.J.items) { return @($r.J.items | ForEach-Object { $_.kind }) } else { return @() } }
 function TextOfKind($r,[string]$k) {
@@ -359,7 +359,7 @@ function ApplyTwo([string]$Rules) {
   finally { Pop-Location }
   $line = ($raw -split "`n" | Where-Object { $_.TrimStart().StartsWith('{') } | Select-Object -First 1)
   if (-not $line) { return @{ Raw = $raw; J = $null } }
-  try { return @{ Raw = $raw; J = ($line | ConvertFrom-Json) } } catch { return @{ Raw = $raw; J = $null } }
+  try { return @{ Raw = $raw; J = ($line | ConvertFrom-Json | ForEach-Object { $_ }) } } catch { return @{ Raw = $raw; J = $null } }
 }
 $two = ApplyTwo $rulesGood
 $notes2 = (($two.J.reemit_notes + $two.J.warnings + $two.J.todos) -join ' || ')
@@ -510,7 +510,7 @@ Check 'W6b ... while the .dfm half of the cast still converted (positive control
 
 # ---- K the editor's gate ----------------------------------------------------
 $info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n"
-$ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json } catch {}
+$ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'K info --json: capabilities.cast_site_refusal is true' (($null -ne $ij) -and ($ij.capabilities.cast_site_refusal -eq $true)) ''
 
 Write-Host ''

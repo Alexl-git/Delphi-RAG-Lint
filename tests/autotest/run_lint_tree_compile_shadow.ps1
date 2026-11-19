@@ -95,7 +95,7 @@ function Run-Compile([string]$buffer){
          '--platform','win32','--compile','--format','json')
   if($buffer){ $a += @('--buffer',$buffer) }
   $o = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }
-  try { ($o | Out-String) | ConvertFrom-Json } catch { $null }
+  try { ($o | Out-String) | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
 }
 
 # --- case 2: the shadow must beat the stale .dcu ------------------------------

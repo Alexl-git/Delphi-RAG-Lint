@@ -137,7 +137,7 @@ function Session([array]$reqs) {
     -RedirectStandardError (Join-Path $WorkDir 'err.txt') -NoNewWindow -Wait | Out-Null
   $r = @{ init = $null; res = @{}; err = @{} }
   foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 1) { $r.init = $o.result }
     if ($o.id -gt 10) {
       if ($null -ne $o.error) { $r.err[[int]$o.id] = $o.error }
@@ -195,7 +195,7 @@ function EditsOf($we) {
   return @{ uris = $names; edits = @(foreach ($n in $names) { $we.changes.$n }) }
 }
 $cliJson = (& { $ErrorActionPreference = 'Continue'; & $Exe rename --kind symbol --name Calls.TWidget.Compute --to Calc --db $db --json 2>$null } | Where-Object { $_.StartsWith('[') }) -join ''
-$cliCount = @(($cliJson | ConvertFrom-Json) | ForEach-Object { $_ }).Count
+$cliCount = @(($cliJson | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }).Count
 
 foreach ($case in @(@{ id=13; nn='Calc' }, @{ id=14; nn='COMPUTE' }, @{ id=15; nn='calc' })) {
   $e = EditsOf $r.res[$case.id][0]

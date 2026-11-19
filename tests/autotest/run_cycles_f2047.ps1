@@ -32,7 +32,7 @@ $Exe = (Resolve-Path $Exe).Path
 function Invoke-Engine([string[]]$Arguments, [string]$Tag) {
   $o = Join-Path $WorkDir "$Tag.out"; $e = Join-Path $WorkDir "$Tag.err"
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
-    -ArgumentList $Arguments -RedirectStandardOutput $o -RedirectStandardError $e
+    -ArgumentList $Arguments -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   return @{ Exit = $p.ExitCode; Out = [IO.File]::ReadAllText($o); Err = [IO.File]::ReadAllText($e) }
 }
 function Write-Unit([string]$Name, [string]$Text) {
@@ -55,7 +55,7 @@ try {
 
   Write-Host '== positive controls' -ForegroundColor Cyan
   $all = Invoke-Engine @('cycles', '--db', $qdb, '--library-db', 'none', '--format', 'json') 'all'
-  $allG = @(); try { $allG = @(($all.Out | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { }
+  $allG = @(); try { $allG = @(($all.Out | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { }
   Check 'plain cycles reports both groups (FA/FB and IC/ID)' ($allG.Count -eq 2) "groups=$($allG.Count)"
   $cau = Invoke-Engine @('cycles', '--db', $qdb, '--library-db', 'none', '--causes') 'causes'
   Check '--causes text still names the forcing symbol' ($cau.Out -match "fa's INTERFACE needs fb via:" -and $cau.Out -match 'line \d+: TB\s+\[') ''
@@ -63,7 +63,7 @@ try {
   Write-Host '== --f2047' -ForegroundColor Cyan
   $j = Invoke-Engine @('cycles', '--db', $qdb, '--library-db', 'none', '--f2047', '--format', 'json') 'fj'
   Check '--f2047 json exits 0' ($j.Exit -eq 0) "exit=$($j.Exit) err=$($j.Err)"
-  $g = @(); try { $g = @($j.Out | ConvertFrom-Json | Where-Object { $_ }) } catch { Check '--f2047 json parses' $false $j.Out }
+  $g = @(); try { $g = @($j.Out | ConvertFrom-Json | ForEach-Object { $_ } | Where-Object { $_ }) } catch { Check '--f2047 json parses' $false $j.Out }
   Check 'exactly the interface-only group' ($g.Count -eq 1 -and ((@($g[0].units) | Sort-Object) -join ',') -eq 'fa,fb') ($j.Out)
   if ($g.Count -eq 1) {
     $e = @($g[0].edges)

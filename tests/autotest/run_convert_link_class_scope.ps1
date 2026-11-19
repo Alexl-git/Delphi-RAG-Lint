@@ -187,7 +187,7 @@ function Apply([string]$Unit, [string]$Rules) {
 }
 function ApplyJ([string]$Unit, [string]$Rules) {
   $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P "app\$Unit.pas") --rules (P $Rules) --db (P 'app.sqlite') --db (P 'lib.sqlite') --format json 2>$null }) -join "`n"
-  $r = [pscustomobject]@{ Code = $LASTEXITCODE; J = $null; Out = $o }; try { $r.J = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {}
+  $r = [pscustomobject]@{ Code = $LASTEXITCODE; J = $null; Out = $o }; try { $r.J = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
   return $r
 }
 function Validate([string]$Rules, [string]$From, [string]$To) {
@@ -259,7 +259,7 @@ Check 'G2b ... JSON qualify_fixes[] is EXACTLY one refused fix with both suggest
 
 # ---- I: INFERENCE before refusing (owner ruling 2026-10-11) ------------------
 $r = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'app2\W.pas') --rules (P 'bare_vcl.rules') --db (P 'app2.sqlite') --db (P 'lib.sqlite') --format json 2>$null }) -join "`n"
-$ij = $null; try { $ij = $r.Substring($r.IndexOf('{')) | ConvertFrom-Json } catch {}
+$ij = $null; try { $ij = $r.Substring($r.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 $fx = @(if ($null -ne $ij) { @($ij.qualify_fixes) } else { @() })
 Check 'I1 (a) project framework: Q.dproj says VCL -- the bare TLabel converts as Vcl.StdCtrls.TLabel (WordWrap validates), exit 0' `
   (($null -ne $ij) -and $ij.ok -and ($fx.Count -eq 1) -and ($fx[0].outcome -eq 'inferred') -and ($fx[0].chosen -eq 'Vcl.StdCtrls.TLabel') -and
@@ -282,7 +282,7 @@ $j = ApplyJ 'UVcl' 'bare_vcl.rules'
 Check 'I5 POSITIVE CONTROL: a bare #convert the unit''s uses settle -- no inference, qualify_fixes []' `
   (($j.Code -eq 0) -and ($null -ne $j.J) -and (@($j.J.qualify_fixes).Count -eq 0)) $j.Out
 $info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n"
-$inj = $null; try { $inj = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json } catch {}
+$inj = $null; try { $inj = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'K info --json: capabilities.convert_qualify_fix is true' (($null -ne $inj) -and ($inj.capabilities.convert_qualify_fix -eq $true)) ''
 $r = Validate 'bare_vcl.rules' 'TLabel' 'TSolo'
 Check 'G3 convert-validate --from TLabel (no unit, bare book): refuses, exit 1, both candidates named, asks to qualify; never OK' `

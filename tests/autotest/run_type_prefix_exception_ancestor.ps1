@@ -87,7 +87,7 @@ $src = @(
 $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $pas --rule type-name-prefix --json 2>$null }
 $json = ($raw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n"
 $found = @()
-if ($json.Trim().StartsWith('[')) { $found = @(($json | ConvertFrom-Json) | ForEach-Object { $_ }) }
+if ($json.Trim().StartsWith('[')) { $found = @(($json | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
 $lines = @($found | Where-Object { $_.rule -eq 'type-name-prefix' } | ForEach-Object { [int]$_.start_line })
 Write-Host "type-name-prefix lines: $($lines -join ',')"
 
@@ -125,7 +125,7 @@ $sdb = Join-Path $work 'store.sqlite'
 $sraw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $spas --db $sdb --library-db (Join-Path $work 'no-such-library.sqlite') --rule type-name-prefix --json 2>$null }
 $sjson = ($sraw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n"
 $sfound = @()
-if ($sjson.Trim().StartsWith('[')) { $sfound = @(($sjson | ConvertFrom-Json) | ForEach-Object { $_ }) }
+if ($sjson.Trim().StartsWith('[')) { $sfound = @(($sjson | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
 $sf = @($sfound | Where-Object { $_.rule -eq 'type-name-prefix' })
 $slines = @($sf | ForEach-Object { [int]$_.start_line })
 Write-Host "store-backed type-name-prefix lines: $($slines -join ',')"
@@ -160,7 +160,7 @@ function ReadFindings($rawLines) {
   $j = ($rawLines | Where-Object { $_ -notmatch '^\(loaded' -and $_ -notmatch '^lint-all:' }) -join "`n"
   $b = $j.IndexOf('[')
   if ($b -lt 0) { return @() }
-  try { return @(($j.Substring($b) | ConvertFrom-Json) | Where-Object { $_.rule -eq 'type-name-prefix' }) } catch { return @() }
+  try { return @(($j.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $_.rule -eq 'type-name-prefix' }) } catch { return @() }
 }
 $asrc = [IO.File]::ReadAllLines($apas)
 function LineOfDecl([string]$name) {

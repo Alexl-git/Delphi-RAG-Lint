@@ -64,7 +64,7 @@ function Run([string[]]$CmdArgs) {
 }
 function Json([string[]]$CmdArgs) {
   $raw = Run ($CmdArgs + @('--format', 'json'))
-  try { $raw | ConvertFrom-Json } catch { $script:LastRaw = $raw; $null }
+  try { $raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { $script:LastRaw = $raw; $null }
 }
 function Sec($Doc, [string]$Name) { if ($Doc) { @($Doc.sections | Where-Object { $_.name -eq $Name })[0] } else { $null } }
 function ImplNames($Row) { if ($Row -and $Row.implementors) { @($Row.implementors | ForEach-Object { $_.qname }) -join ',' } else { '' } }

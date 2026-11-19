@@ -78,7 +78,7 @@ function Invoke-Runner([string]$Tag, [string]$FailPlat = '', [string[]]$Extra = 
   $shell = (Get-Process -Id $PID).Path
   $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$runner`"", '-Engine', "`"$stub`"", '-OutDir', "`"$out`"",
     '-WorkDir', "`"$Scratch`"", '-ProjectsCsv', 'P1,P2', '-PollSec', '1') + $Extra
-  $p = Start-Process $shell -ArgumentList $argList -PassThru -WindowStyle Hidden
+  $p = Start-Process $shell -ArgumentList $argList -PassThru -WindowStyle Hidden; $null = $p.Handle
   [void]$p.Handle
   $seen = @{}
   $sum = Join-Path $out 'SUMMARY.txt'
@@ -138,7 +138,7 @@ $fakeDir = Join-Path $Scratch 'busy'
 [void][IO.Directory]::CreateDirectory($fakeDir)
 $fake = Join-Path $fakeDir 'drag-lint.exe'
 [IO.File]::Copy((Join-Path $env:SystemRoot 'System32\cmd.exe'), $fake, $true)
-$busy = Start-Process $fake -ArgumentList 'index', '/c', 'ping -n 60 127.0.0.1' -PassThru -WindowStyle Hidden
+$busy = Start-Process $fake -ArgumentList 'index', '/c', 'ping -n 60 127.0.0.1' -PassThru -WindowStyle Hidden; $null = $busy.Handle
 try {
   $r = Invoke-Runner 'busy' '' @()
   Check 'C1 refuses with exit 3' ($r.Exit -eq 3) "exit=$($r.Exit)"

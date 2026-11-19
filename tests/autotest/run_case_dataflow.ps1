@@ -84,7 +84,7 @@ function New-Fixture([string]$Name, [string]$Body) {
 function Get-Findings([string]$Path, [string]$Rule) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $Path --rule $Rule --json 2>$null }) -join "`n"
   if (-not $raw.Trim()) { return ,@() }
-  try { return ,@(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { return $null }
+  try { return ,@(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { return $null }
 }
 
 # ---------------------------------------------------------------------------

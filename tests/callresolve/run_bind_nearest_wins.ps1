@@ -189,7 +189,7 @@ try {
        "FROM call_edges ce JOIN refs r ON r.id = ce.ref_id JOIN symbols enc ON enc.id = r.enclosing_symbol_id " +
        "JOIN symbols t ON t.id = ce.target_symbol_id LEFT JOIN symbols b ON b.id = r.symbol_id"
   $raw = & $exePath sql --db $db --query $q --json | Out-String
-  $j = $raw | ConvertFrom-Json
+  $j = $raw | ConvertFrom-Json | ForEach-Object { $_ }
   $cols = @($j.columns | ForEach-Object { $_.name })
   $edges = @{}
   foreach ($row in $j.rows) {

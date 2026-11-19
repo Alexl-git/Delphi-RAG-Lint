@@ -156,7 +156,7 @@ if ($LibraryDb -ne '' -and $LibraryUnit -ne '') {
     $out = Join-Path $WorkDir 'a3.out'; $err = Join-Path $WorkDir 'a3.err'
     $p = Start-Process -FilePath $exePath -PassThru -NoNewWindow -WorkingDirectory $WorkDir `
            -RedirectStandardOutput $out -RedirectStandardError $err `
-           -ArgumentList @('lint', ('"' + $LibraryUnit + '"'), '--db', ('"' + $LibraryDb + '"'), '--json', '--rules-dir', ('"' + $rules + '"'))
+           -ArgumentList @('lint', ('"' + $LibraryUnit + '"'), '--db', ('"' + $LibraryDb + '"'), '--json', '--rules-dir', ('"' + $rules + '"')); $null = $p.Handle
     $done = $p.WaitForExit(($CpuBudgetSec * 10) * 1000)
     $p.Refresh(); $cpu = $p.TotalProcessorTime.TotalSeconds
     if (-not $done) { $p.Kill() }

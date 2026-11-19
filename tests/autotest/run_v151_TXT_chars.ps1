@@ -21,7 +21,7 @@ function Put([string]$name, [byte[]]$bytes) { $p = Join-Path $work $name; [IO.Fi
 function Lint([string]$file, [string[]]$extra = @()) {
   $out = & { $ErrorActionPreference = 'Continue'; & $exePath lint $file --json @extra 2>$null } | Out-String
   $t = $out.Trim()
-  if ($t.StartsWith('[')) { return @(($t | ConvertFrom-Json) | ForEach-Object { $_ }) }
+  if ($t.StartsWith('[')) { return @(($t | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   return @()
 }
 function Has($f, [string]$id, [int]$line, [int]$col = 0) {

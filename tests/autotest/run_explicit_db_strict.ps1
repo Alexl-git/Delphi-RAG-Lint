@@ -191,7 +191,7 @@ function Reset-Ghosts {
 function Run-Verb([string[]]$VerbArgs, [int]$TimeoutSec = 90, [string]$Label = '') {
   Reset-Ghosts
   $p = Start-Process -FilePath $exePath -ArgumentList $VerbArgs -NoNewWindow -PassThru `
-        -RedirectStandardOutput $out -RedirectStandardError $err -WorkingDirectory 'C:\TEMP'
+        -RedirectStandardOutput $out -RedirectStandardError $err -WorkingDirectory 'C:\TEMP'; $null = $p.Handle
   if (-not $p.WaitForExit($TimeoutSec * 1000)) { try { $p.Kill($true) } catch {}; return @{ Code = -1; Out=''; Err='(timed out)' } }
   $made = @(@($ghost, $ghos2) | Where-Object { Test-Path $_ } | ForEach-Object { Split-Path $_ -Leaf })
   if ($made.Count -gt 0 -and $Label -ne '') { $script:creators += ("{0} -> {1}" -f $Label, ($made -join '+')) }
@@ -539,7 +539,7 @@ if ($havePython) {
   function Run-Stale([string[]]$VerbArgs) {
     Reset-StaleDb
     $p = Start-Process -FilePath $exePath -ArgumentList $VerbArgs -NoNewWindow -PassThru `
-          -RedirectStandardOutput $out -RedirectStandardError $err -WorkingDirectory 'C:\TEMP'
+          -RedirectStandardOutput $out -RedirectStandardError $err -WorkingDirectory 'C:\TEMP'; $null = $p.Handle
     if (-not $p.WaitForExit(90000)) { try { $p.Kill($true) } catch {}; return @{ Code=-1; Out=''; Err='(timed out)'; Ver='?' } }
     return @{
       Code = $p.ExitCode
@@ -595,7 +595,7 @@ if ($havePython) {
   $t8Exe = Join-Path $t8Engine (Split-Path $exePath -Leaf)
   function Run-InDir([string]$Dir, [string[]]$VerbArgs) {
     $p = Start-Process -FilePath $t8Exe -ArgumentList $VerbArgs -NoNewWindow -PassThru `
-          -RedirectStandardOutput $out -RedirectStandardError $err -WorkingDirectory $Dir
+          -RedirectStandardOutput $out -RedirectStandardError $err -WorkingDirectory $Dir; $null = $p.Handle
     if (-not $p.WaitForExit(90000)) { try { $p.Kill($true) } catch {}; return @{ Code=-1; Out=''; Err='(timed out)' } }
     return @{ Code = $p.ExitCode
               Out  = ((Get-Content -LiteralPath $out -Raw -ErrorAction SilentlyContinue) + '')

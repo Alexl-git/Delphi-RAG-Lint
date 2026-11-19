@@ -139,7 +139,7 @@ function BalancedJson([string]$s) {
 }
 $obj = $null
 $slice = BalancedJson $j
-if ($slice -ne '') { try { $obj = ($slice | ConvertFrom-Json) } catch { } }
+if ($slice -ne '') { try { $obj = ($slice | ConvertFrom-Json | ForEach-Object { $_ }) } catch { } }
 Check 'json stdout is ONE valid object' ($null -ne $obj) ''
 Check 'json keeps `incoherent` (existing consumers)' `
   (($null -ne $obj) -and ($null -ne $obj.coherence) -and ($null -ne $obj.coherence.incoherent)) ''

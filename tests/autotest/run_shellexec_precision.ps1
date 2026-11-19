@@ -63,7 +63,7 @@ $Exe     = (Resolve-Path $Exe).Path
 $Fixture = (Resolve-Path "$PSScriptRoot\fixtures\shellexec\uShellExec.pas").Path
 
 $errFile = Join-Path ([IO.Path]::GetTempPath()) ("draglint-shellexec-" + [Guid]::NewGuid().ToString('N') + ".txt")
-$out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $Fixture --rule unsafe-shellexecute 2>$errFile }
+$out = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe lint $Fixture --rule unsafe-shellexecute 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
 $rc  = $LASTEXITCODE
 $text = ($out -join "`n")
 Remove-Item -LiteralPath $errFile -Force -ErrorAction SilentlyContinue

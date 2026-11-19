@@ -53,7 +53,7 @@ function Run-Fix($Case, [string[]]$Extra, [hashtable]$Env = @{}) {
       --library-db none --format json @Extra 2>$null } | Out-String)
     $code = $LASTEXITCODE
   } finally { foreach ($k in $Env.Keys) { Remove-Item "Env:$k" -ErrorAction SilentlyContinue } }
-  $j = try { $out | ConvertFrom-Json } catch { $null }
+  $j = try { $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
   return @{ Exit = $code; Out = $out; Json = $j }
 }
 function Get-Kinds($R) { if ($R.Json -and $R.Json.cycles) { return @($R.Json.cycles[0].refusals | ForEach-Object { $_.kind }) } else { return @() } }

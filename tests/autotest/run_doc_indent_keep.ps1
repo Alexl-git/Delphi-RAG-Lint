@@ -63,7 +63,7 @@ function MaxLineLen([string]$Path) {
 }
 function Get-Indent([string]$s) { return $s.Substring(0, $s.Length - $s.TrimStart().Length) }
 function DriftCount([string]$Json) {
-  try { return @(ConvertFrom-Json $Json | Where-Object { $_.rule -eq 'doc-drift' }).Count } catch { return -1 }
+  try { return @(ConvertFrom-Json $Json | ForEach-Object { $_ } | Where-Object { $_.rule -eq 'doc-drift' }).Count } catch { return -1 }
 }
 # The contiguous /// run directly above the first line matching $declPattern, RAW.
 function Get-Block([string[]]$lines, [string]$declPattern) {

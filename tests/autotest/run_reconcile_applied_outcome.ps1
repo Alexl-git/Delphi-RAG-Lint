@@ -92,7 +92,7 @@ function FreshCopy {
 # corrupted document fails the check that wanted a field rather than throwing
 # somewhere unrelated.
 function AsJson([string]$Text) {
-  try { return ($Text | ConvertFrom-Json) } catch { return $null }
+  try { return ($Text | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 
 # Key presence, not value truthiness. `$o.nosuch` is $null and so is a key

@@ -87,7 +87,7 @@ function Get-PlanText([string]$Db, [string]$RunDir) {
   try {
     $p = Start-Process -FilePath $Exe -WorkingDirectory $RunDir -NoNewWindow -Wait -PassThru `
       -ArgumentList (@('cycles', '--db', ('"' + $Db + '"'), '--edges', '--causes', '--plan', '--format', 'text') + $LibArgs) `
-      -RedirectStandardOutput $outFile -RedirectStandardError (Join-Path $WorkDir 'plan-stderr.txt')
+      -RedirectStandardOutput $outFile -RedirectStandardError (Join-Path $WorkDir 'plan-stderr.txt'); $null = $p.Handle
   } finally {
     $env:DRAGLINT_TEST_DUMP_PLAN = $null
   }

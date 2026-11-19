@@ -55,7 +55,7 @@ function Get-Findings {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --json 2>$null }) -join "`n"
   $a = $raw.IndexOf('['); $b = $raw.LastIndexOf(']')
   if ($a -lt 0 -or $b -le $a) { return ,@() }
-  return ,@((ConvertFrom-Json $raw.Substring($a, $b - $a + 1)) | ForEach-Object { $_ })
+  return ,@((ConvertFrom-Json $raw.Substring($a, $b - $a + 1) | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 # Every line that is not a /// doc line, in order -- the invariant under test.
 function CodeLines { @([IO.File]::ReadAllLines($Pas) | Where-Object { -not $_.TrimStart().StartsWith('///') }) }

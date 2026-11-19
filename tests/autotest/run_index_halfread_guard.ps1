@@ -83,7 +83,7 @@ try {
     '    time.sleep(0.2)',
     "open(out, 'w').write(' '.join(str(n) for n in counts))"
   ) -join "`r`n"), [Text.Encoding]::ASCII)
-  $rp = Start-Process python -ArgumentList @('-I', $reader, $db, ([string](($DelayMs + 2000) / 1000)), $readerOut) -PassThru -NoNewWindow
+  $rp = Start-Process python -ArgumentList @('-I', $reader, $db, ([string](($DelayMs + 2000) / 1000)), $readerOut) -PassThru -NoNewWindow; $null = $rp.Handle
   $v = Run-Exe @('index', $src, '--db', $db, '--resolve-only') @{ DRAGLINT_TEST_RESOLVE_DELAY_MS = $DelayMs }
   if (-not $rp.WaitForExit(30000)) { try { $rp.Kill() } catch { } }
   $samples = @((Get-Content $readerOut -Raw).Trim() -split ' ' | ForEach-Object { [int]$_ })

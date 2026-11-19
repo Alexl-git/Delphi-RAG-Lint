@@ -215,7 +215,7 @@ function Get-Drift([string]$QName) {
   $rows = @()
   foreach ($ln in @(& { $ErrorActionPreference = 'Continue'; & $Exe doc-drift --qname $QName --db $db --json 2>$null })) {
     $t = "$ln".Trim()
-    if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json) }
+    if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json | ForEach-Object { $_ }) }
   }
   return ,$rows
 }

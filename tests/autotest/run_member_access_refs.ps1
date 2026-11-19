@@ -180,7 +180,7 @@ c.close()
 
 function Get-Refs([string]$Name, [string]$Kind) {
   $raw = (python $py $db $Name $Kind) -join "`n"
-  return ($raw | ConvertFrom-Json)
+  return ($raw | ConvertFrom-Json | ForEach-Object { $_ })
 }
 
 Write-Host ''
@@ -253,7 +253,7 @@ c.close()
 '@ | Set-Content $pyKind -Encoding ascii
 
   $kindCountsRaw = (python $pyKind $floodDb) -join "`n"
-  $kindCounts = $kindCountsRaw | ConvertFrom-Json
+  $kindCounts = $kindCountsRaw | ConvertFrom-Json | ForEach-Object { $_ }
   $kindMap = @{}
   foreach ($row in $kindCounts) { $kindMap[$row.kind] = $row.count }
 
@@ -292,7 +292,7 @@ print(json.dumps(rows))
 c.close()
 '@ | Set-Content $pySample -Encoding ascii
   $maSampleRaw = (python $pySample $floodDb) -join "`n"
-  $maSample = $maSampleRaw | ConvertFrom-Json
+  $maSample = $maSampleRaw | ConvertFrom-Json | ForEach-Object { $_ }
   Write-Host ("  member-access sample (first 10, for manual spot-check against ap.pas source): " + ($maSample | ConvertTo-Json -Compress)) -ForegroundColor Cyan
   Check 'flood-check: member-access sample rows carry a non-empty member name_text' `
     (@($maSample | Where-Object { [string]::IsNullOrEmpty($_.name_text) }).Count -eq 0) `

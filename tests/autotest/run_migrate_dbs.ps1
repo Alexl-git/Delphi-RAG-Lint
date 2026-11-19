@@ -53,7 +53,7 @@ try {
     # that only changes "db" -- this is the very first code path that ever
     # calls TManifestIO.Save, and Task 3 is about to point it at the real,
     # hand-maintained manifest.
-    $savedJson = Get-Content -LiteralPath $cfg -Raw | ConvertFrom-Json
+    $savedJson = Get-Content -LiteralPath $cfg -Raw | ConvertFrom-Json | ForEach-Object { $_ }
     $savedSec  = $savedJson.indexes.sections | Where-Object { $_.name -eq 'Old-App' }
     Check 'Save round-trip: db cleared (now derivable)' ([string]::IsNullOrEmpty($savedSec.db))
     Check 'Save round-trip: exclude survives'        ((@($savedSec.exclude)      -join ',') -eq '*.bak')
@@ -158,14 +158,14 @@ try {
         Check 'batch: second section did NOT move'        (Test-Path $bdb)
 
         # The manifest ON DISK, not just in memory, must already reflect A.
-        $savedAfterBatch = Get-Content -LiteralPath $cfg3 -Raw | ConvertFrom-Json
+        $savedAfterBatch = Get-Content -LiteralPath $cfg3 -Raw | ConvertFrom-Json | ForEach-Object { $_ }
         $savedA = $savedAfterBatch.indexes.sections | Where-Object { $_.name -eq 'A' }
         $savedB = $savedAfterBatch.indexes.sections | Where-Object { $_.name -eq 'B' }
         Check 'batch: A on-disk manifest entry has no stale db' ([string]::IsNullOrEmpty($savedA.db))
         Check 'batch: B on-disk manifest entry unchanged (still explicit)' ($savedB.db -eq 'B.sqlite')
 
         $planAfterBatch = & { $ErrorActionPreference = 'Continue'; & $Exe index --all --dry-run --json --config $cfg3 2>$null } | Out-String
-        $planObj  = $planAfterBatch | ConvertFrom-Json
+        $planObj  = $planAfterBatch | ConvertFrom-Json | ForEach-Object { $_ }
         $aSection = $planObj.sections | Where-Object { $_.name -eq 'A' }
         Check 'batch: index --all resolves A at its new home' ($aSection.db -eq $adst)
 
@@ -182,7 +182,7 @@ try {
         Check 'retry: reconciles B, not "never built"'  (($retry -match 'RECONCIL') -and ($retry -notmatch 'never built'))
 
         $planAfterRetry = & { $ErrorActionPreference = 'Continue'; & $Exe index --all --dry-run --json --config $cfg3 2>$null } | Out-String
-        $planObj2 = $planAfterRetry | ConvertFrom-Json
+        $planObj2 = $planAfterRetry | ConvertFrom-Json | ForEach-Object { $_ }
         $bSection = $planObj2.sections | Where-Object { $_.name -eq 'B' }
         Check 'retry: index --all resolves B at its new home' ($bSection.db -eq $bdst)
     } finally {
@@ -220,7 +220,7 @@ try {
         Check 'unhealthy reconcile: reports the integrity failure' ($badRecon -match 'integrity check')
 
         # Refusing to reconcile means not touching the manifest AT ALL.
-        $savedC = (Get-Content -LiteralPath $cfgC -Raw | ConvertFrom-Json).indexes.sections | Where-Object { $_.name -eq 'C' }
+        $savedC = (Get-Content -LiteralPath $cfgC -Raw | ConvertFrom-Json | ForEach-Object { $_ }).indexes.sections | Where-Object { $_.name -eq 'C' }
         Check 'unhealthy reconcile: manifest entry left alone' ($savedC.db -match 'gone-C\.sqlite')
 
         # A GENUINELY healthy database at the same path must still reconcile.
@@ -274,7 +274,7 @@ try {
         Check 'post-move failure: message names the destination' ($postMove -match [regex]::Escape($ddst))
         Check 'post-move failure: message says it already moved' ($postMove -match 'ALREADY MOVED')
 
-        $savedD = (Get-Content -LiteralPath $cfgD -Raw | ConvertFrom-Json).indexes.sections | Where-Object { $_.name -eq 'D' }
+        $savedD = (Get-Content -LiteralPath $cfgD -Raw | ConvertFrom-Json | ForEach-Object { $_ }).indexes.sections | Where-Object { $_.name -eq 'D' }
         Check 'post-move failure: manifest already names the destination, not the vanished source' ([string]::IsNullOrEmpty($savedD.db))
 
         # A retry must not silently declare the section healthy: the entry is
@@ -334,7 +334,7 @@ try {
         Set-Content -LiteralPath (Join-Path $projF 'F.pas')   -Value "unit F;`r`ninterface`r`nimplementation`r`nend."
         & $Exe index $projF --db (Join-Path $outE 'F.sqlite') | Out-Null
 
-        $doc64 = Get-Content -LiteralPath $cfg64 -Raw | ConvertFrom-Json
+        $doc64 = Get-Content -LiteralPath $cfg64 -Raw | ConvertFrom-Json | ForEach-Object { $_ }
         $doc64.indexes.sections = @($doc64.indexes.sections) + @(
             @{ name = 'F'; db = 'F.sqlite'; include = @((Join-Path $projF 'F.dproj')) })
         Set-Content -LiteralPath $cfg64 -Value ($doc64 | ConvertTo-Json -Depth 10)

@@ -37,7 +37,7 @@ try {
   Write-Ascii "$WorkDir\App.dpr" "program App;`r`n`r`nuses`r`n  uA in 'uA.pas';`r`n`r`nbegin`r`nend.`r`n"
   $o = "$WorkDir\o.txt"; $e = "$WorkDir\e.txt"
   $p = Start-Process -FilePath $exePath -ArgumentList @('lint', '--project', "$WorkDir\App.dpr", '--rule', 'unit-not-in-dpr') -NoNewWindow -Wait -PassThru `
-         -WorkingDirectory $WorkDir -RedirectStandardOutput $o -RedirectStandardError $e
+         -WorkingDirectory $WorkDir -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   $out = [IO.File]::ReadAllText($o); $err = [IO.File]::ReadAllText($e)
   Check 'V2 POSITIVE CONTROL the rule ran and reported a unit-not-in-dpr finding' ($out -match 'unit-not-in-dpr:') ("stdout=" + $out.Trim())
   Check 'no false "no index covers this file" claim' ($err -notmatch 'no index covers this file') ("stderr=" + $err.Trim())

@@ -76,7 +76,7 @@ $db = Join-Path $scratch 'ur.sqlite'
 function Invoke-UsesReport([string[]]$extra) {
   $out = Join-Path $scratch 'stdout.txt'; $err = Join-Path $scratch 'stderr.txt'
   $p = Start-Process -FilePath $exePath -ArgumentList (@('uses-report') + $extra) -NoNewWindow -Wait -PassThru `
-         -RedirectStandardOutput $out -RedirectStandardError $err
+         -RedirectStandardOutput $out -RedirectStandardError $err; $null = $p.Handle
   return [pscustomobject]@{
     Code = $p.ExitCode
     # [string] so an EMPTY stream is '' and `-match` yields a Boolean; $null -match

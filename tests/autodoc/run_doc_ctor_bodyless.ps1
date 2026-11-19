@@ -129,7 +129,7 @@ end.
 function Get-Drift($qname) {
   $out = & { $ErrorActionPreference = 'Continue'; & $exePath doc-drift --qname $qname --db $db --json 2>$null }
   $rows = @()
-  foreach ($ln in $out) { $t = "$ln".Trim(); if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json) } }
+  foreach ($ln in $out) { $t = "$ln".Trim(); if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json | ForEach-Object { $_ }) } }
   return ,$rows
 }
 function Messages($rows) { return @($rows | ForEach-Object { $_.detail }) }

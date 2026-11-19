@@ -52,7 +52,7 @@ function Count-Findings([string]$Db, [string]$Unit, [string]$Rule, [string[]]$Ex
   else { $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint --in $Unit --db $Db --rule $Rule --json @Extra 2>$null } | Out-String }
   $t = $raw.Trim()
   if (-not $t.StartsWith('[')) { return -1 }
-  $rows = @(($t | ConvertFrom-Json) | ForEach-Object { $_ })
+  $rows = @(($t | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   return @($rows | Where-Object { $_.rule -eq $Rule -or $_.rule_id -eq $Rule -or $_.id -eq $Rule }).Count
 }
 function Build-Project([string]$Dir) {

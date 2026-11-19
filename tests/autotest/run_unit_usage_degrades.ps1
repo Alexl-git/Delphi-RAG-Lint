@@ -59,7 +59,7 @@ Copy-Item (Join-Path $srcDir '*.pas') $fixDir
 $db      = Join-Path $WorkDir 'unitusage.sqlite'
 $errFile = Join-Path $WorkDir 'stderr.txt'
 
-& { $ErrorActionPreference = 'Continue'; & $Exe index $fixDir --db $db 2>$errFile } | Out-Null
+& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe index $fixDir --db $db 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-Null
 if ($LASTEXITCODE -ne 0) {
   $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }
   Write-Host "FATAL: indexing the fixture failed ($LASTEXITCODE)" -ForegroundColor Red
@@ -68,7 +68,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 function Ask([string[]]$A) {
-  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @A 2>$errFile }
+  $out = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe @A 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   [pscustomobject]@{ Out = (($out | Out-String) -replace "`r`n", "`n"); Code = $LASTEXITCODE }
 }
 
@@ -96,7 +96,7 @@ Check 'CONTROL: it never says DEAD IMPORT (that would be an artefact, not a fact
 
 $degJson = Ask @('query', 'unit-usage', '--unit', 'ZzAbsentLibUnit', '--db', $db, '--json')
 $parsed = $null
-try { $parsed = $degJson.Out | ConvertFrom-Json } catch { }
+try { $parsed = $degJson.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'the JSON form parses' ($null -ne $parsed) $degJson.Out
 if ($null -ne $parsed) {
   $rowsJ = @($parsed)

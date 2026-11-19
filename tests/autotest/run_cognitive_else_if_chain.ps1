@@ -95,7 +95,7 @@ end.
   [System.IO.File]::WriteAllText($fx, $norm, [System.Text.Encoding]::ASCII)
 
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fx --rule cognitive-complexity --json 2>$null }) -join "`n"
-  $f = if ([string]::IsNullOrWhiteSpace($raw)) { @() } else { @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) }
+  $f = if ([string]::IsNullOrWhiteSpace($raw)) { @() } else { @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   $lines = [System.IO.File]::ReadAllLines($fx)
   function ScoreAt($name) {
     $ln = -1

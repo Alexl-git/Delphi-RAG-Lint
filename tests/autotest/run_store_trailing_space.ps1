@@ -46,7 +46,7 @@ $db   = Join-Path $WorkDir 'ts152.sqlite'
 function SqlRows([string]$Query) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query $Query --json 2>$null }
   if ($LASTEXITCODE -ne 0) { return ,@() }
-  $j = ($raw -join "`n") | ConvertFrom-Json
+  $j = ($raw -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }
   return ,@($j.rows)
 }
 function StoredLen([string]$Query) {

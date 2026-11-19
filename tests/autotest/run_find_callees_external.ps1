@@ -28,7 +28,7 @@ $want = @('xt_lib.TLibStream.Read','xt_lib.TLibDefs.Add','xt_lib.TLibBase.Base')
 function Callees([string[]]$CliArgs) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath find-callees --qname xt_app.Go @CliArgs --json 2>$null }) -join "`n"
   $b = $raw.IndexOf('['); if ($b -lt 0) { return ,@() }
-  return ,@(($raw.Substring($b) | ConvertFrom-Json) | ForEach-Object { $_ })
+  return ,@(($raw.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 function ExtRows($rows) { @($rows | Where-Object { $_.external -eq $true }) }
 try {

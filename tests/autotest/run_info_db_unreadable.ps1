@@ -50,7 +50,7 @@ function InfoJson([string[]]$Dbs) {
 function Verdicts($r) {
   $i = $r.Out.IndexOf('{"schema"')
   if ($i -lt 0) { return @() }
-  try { return @(($r.Out.Substring($i) | ConvertFrom-Json).indexes) } catch { return @() }
+  try { return @(($r.Out.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }).indexes) } catch { return @() }
 }
 
 Write-Host 'B. CONTROL: a missing --db alone' -ForegroundColor Cyan

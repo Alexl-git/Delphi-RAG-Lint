@@ -37,13 +37,13 @@ try {
   if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: no fixture DB" -ForegroundColor Red; exit 2 }
   # sql --json rows are POSITIONAL arrays
   $q = "select count(distinct r.symbol_id) from refs r join symbols s on s.id=r.symbol_id where r.symbol_id>0"
-  $distinct = [int](& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query $q --json 2>&1 | ForEach-Object { "$_" } } | Out-String | ConvertFrom-Json).rows[0][0]
+  $distinct = [int](& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query $q --json 2>&1 | ForEach-Object { "$_" } } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }).rows[0][0]
   Check 'PRECONDITION: the fixture binds refs' ($distinct -gt 100) "distinct bound symbols=$distinct"
 
   $env:DRAGLINT_PROFILE = '1'
   try {
     $errFile = Join-Path $WorkDir 'lint-all.err'
-    $json = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule unit-missing-from-uses --json 2> $errFile } | Out-String
+    $json = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe lint-all --db $db --rule unit-missing-from-uses --json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String
     $raw = [IO.File]::ReadAllText($errFile)
   } finally { $env:DRAGLINT_PROFILE = $null }
   $memo = [regex]::Match($raw, 'missing-uses memo\s+(\d+) bound-ref lookup\(s\), (\d+) store read\(s\)')
@@ -56,7 +56,7 @@ try {
     Check 'store reads <= distinct bound symbols (one per symbol per run)' ($reads -le $distinct) "reads=$reads distinct=$distinct"
   }
 
-  $f = @($json | ConvertFrom-Json | Where-Object { $_.rule -eq 'unit-missing-from-uses' })
+  $f = @($json | ConvertFrom-Json | ForEach-Object { $_ } | Where-Object { $_.rule -eq 'unit-missing-from-uses' })
   $want = 10 * ($Fns + 4)
   Check "findings: 10 blanked units x $($Fns + 4) names" ($f.Count -eq $want) "got=$($f.Count) want=$want"
   $files = @($f | ForEach-Object { [IO.Path]::GetFileName($_.file_path) } | Sort-Object -Unique)

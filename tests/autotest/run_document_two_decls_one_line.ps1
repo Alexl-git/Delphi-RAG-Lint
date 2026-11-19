@@ -96,7 +96,7 @@ Check 'T2a document does not refuse with overlapping delete ranges' `
 Check 'T2b document leaves the stacked block alone' ([IO.File]::ReadAllText($b.Unit) -eq $before) 'the block was rewritten'
 
 # ---- T4: doc-drift does not report a block no command can clear ----------------
-$drift = @((& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $b.Db --json 2>$null } | ConvertFrom-Json) | Where-Object { $_.rule -eq 'doc-drift' })
+$drift = @((& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $b.Db --json 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $_.rule -eq 'doc-drift' })
 Check 'T4 lint-all reports no doc-drift on the shared-line block' ($drift.Count -eq 0) `
       "doc-drift fired $($drift.Count)x at line(s) $(($drift | ForEach-Object start_line) -join ',') -- unclearable, document skips it"
 

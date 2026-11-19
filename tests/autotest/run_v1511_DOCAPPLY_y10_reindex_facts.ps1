@@ -102,7 +102,7 @@ try {
   $lib  = Join-Path $app 'uLib.pas'
   $q    = "select s.name, sf.cyclomatic from symbol_facts sf join symbols s on s.id = sf.symbol_id join files f on f.id = s.file_id where f.path like '%uLib.pas' and s.name in ('Classify','SumTo') order by s.name"
   function Cyclo() {
-    $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --query $q --db $db --json 2>$null } | Out-String | ConvertFrom-Json
+    $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --query $q --db $db --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }
     ($j.rows | ForEach-Object { '{0}={1}' -f $_[0], $_[1] }) -join ','
   }
 

@@ -116,7 +116,7 @@ Write-Host '== reconcile-project: project unit or library unit (T-22) ==' -Foreg
 # 1 -- the JSON judges each MISSING unit
 # ---------------------------------------------------------------------------
 $raw = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project $dproj --json --config $cfg 2>$null } | Out-String
-$doc = $null; try { $doc = $raw | ConvertFrom-Json } catch { $doc = $null }
+$doc = $null; try { $doc = $raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { $doc = $null }
 Check '1a --json parses' ($null -ne $doc) "got:`n$raw"
 $own = Missing $doc 'uOwn'
 $ven = Missing $doc 'VendorUnit'
@@ -134,7 +134,7 @@ Check '1e LibUnit is NOT reported (its folder is a manifest library include)' `
 
 # 1f -- POSITIVE CONTROL for 1e.
 $rawNo = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project $dproj --json --config $cfgNoLib 2>$null } | Out-String
-$docNo = $null; try { $docNo = $rawNo | ConvertFrom-Json } catch { $docNo = $null }
+$docNo = $null; try { $docNo = $rawNo | ConvertFrom-Json | ForEach-Object { $_ } } catch { $docNo = $null }
 $libNo = Missing $docNo 'LibUnit'
 Check '1f control: WITHOUT the include, LibUnit IS reported as third-party' `
   (($libNo.Count -eq 1) -and ($libNo[0].suggestedFix -eq 'library')) `
@@ -166,9 +166,9 @@ $dprBefore   = (Get-FileHash $dpr).Hash
 $dprojBefore = (Get-FileHash $dproj).Hash
 $rawLib = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project $dproj --only VendorUnit --apply --to library --json --config $cfg 2>$null } | Out-String
 $exitLib = $LASTEXITCODE
-$docLib = $null; try { $docLib = $rawLib | ConvertFrom-Json } catch { $docLib = $null }
+$docLib = $null; try { $docLib = $rawLib | ConvertFrom-Json | ForEach-Object { $_ } } catch { $docLib = $null }
 Check '4a exit 0 and applied=true' (($exitLib -eq 0) -and ($docLib.applied -eq $true)) "exit=$exitLib; got:`n$rawLib"
-$cfgDoc = Get-Content $cfg -Raw | ConvertFrom-Json
+$cfgDoc = Get-Content $cfg -Raw | ConvertFrom-Json | ForEach-Object { $_ }
 $incl = @($cfgDoc.indexes.sections | Where-Object { $_.name -eq 'Library' } | ForEach-Object { $_.include })
 Check '4b the vendor folder is now in the Library section include' `
   (@($incl | Where-Object { "$_".TrimEnd('\') -ieq $vendor }).Count -eq 1) "include: $($incl -join ' | ')"
@@ -181,7 +181,7 @@ Check '4f the project files were NOT touched' `
   (((Get-FileHash $dpr).Hash -eq $dprBefore) -and ((Get-FileHash $dproj).Hash -eq $dprojBefore)) 'dpr/dproj changed'
 
 $raw2 = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project $dproj --json --config $cfg 2>$null } | Out-String
-$doc2 = $null; try { $doc2 = $raw2 | ConvertFrom-Json } catch { $doc2 = $null }
+$doc2 = $null; try { $doc2 = $raw2 | ConvertFrom-Json | ForEach-Object { $_ } } catch { $doc2 = $null }
 Check '4g rescan: VendorUnit is no longer reported, uOwn still is' `
   (((Missing $doc2 'VendorUnit').Count -eq 0) -and ((Missing $doc2 'uOwn').Count -eq 1)) `
   "missing: $(($doc2.missing | ForEach-Object unit) -join ', ')"
@@ -225,8 +225,8 @@ $outJson = ($work -replace '\\', '\\')
 W $planInc "{ `"indexes`": { `"outDir`": `"$outJson`", `"sections`": [ { `"name`": `"Library`", `"source`": `"registry-libraries`", `"platforms`": [`"Win64`"], `"include`": [`"$libJson`"] } ] } }"
 W $planNo  "{ `"indexes`": { `"outDir`": `"$outJson`", `"sections`": [ { `"name`": `"Library`", `"source`": `"registry-libraries`", `"platforms`": [`"Win64`"] } ] } }"
 $rcInc = $null; $rcNo = $null
-try { $rcInc = (& { $ErrorActionPreference = 'Continue'; & $Exe index --all --dry-run --json --config $planInc 2>$null } | Out-String | ConvertFrom-Json).sections[0].rootsCount } catch { }
-try { $rcNo  = (& { $ErrorActionPreference = 'Continue'; & $Exe index --all --dry-run --json --config $planNo  2>$null } | Out-String | ConvertFrom-Json).sections[0].rootsCount } catch { }
+try { $rcInc = (& { $ErrorActionPreference = 'Continue'; & $Exe index --all --dry-run --json --config $planInc 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }).sections[0].rootsCount } catch { }
+try { $rcNo  = (& { $ErrorActionPreference = 'Continue'; & $Exe index --all --dry-run --json --config $planNo  2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }).sections[0].rootsCount } catch { }
 Check '7 a library include adds exactly one library root to the plan' `
   (($null -ne $rcInc) -and ($null -ne $rcNo) -and ($rcInc -eq $rcNo + 1)) "with include=$rcInc without=$rcNo"
 

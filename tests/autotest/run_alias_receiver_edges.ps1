@@ -217,7 +217,7 @@ out['der_anc_rows'] = c.execute("""
 print(json.dumps(out))
 c.close()
 '@ | Set-Content $py -Encoding ascii
-$r = (& python $py $db) -join "`n" | ConvertFrom-Json
+$r = (& python $py $db) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 
 Write-Host 'call_edges' -ForegroundColor Cyan
 Check 'HAZARD: alias-typed receiver resolves to the base method' ($r.alias_to_base -ge 1) "edges=$($r.alias_to_base)"

@@ -92,7 +92,7 @@ function Relevant([string]$Out) { (($Out -split "`n" | Where-Object { $_ -match 
 function LintAs([string]$PathSpelling) {
   Push-Location $WorkDir
   try {
-    $o = & { $ErrorActionPreference = 'Continue'; & $Exe lint $PathSpelling --db $db 2>$err }
+    $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($err); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe lint $PathSpelling --db $db 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
     return (($o | Out-String) -replace "`r`n", "`n")
   } finally { Pop-Location }
 }
@@ -108,9 +108,9 @@ Check 'the store-backed finding is printed with an ABSOLUTE path (the two spelli
 
 Write-Host ''
 Write-Host '-- 2. allow both, then lint by three spellings: no finding, no unused hint' -ForegroundColor Cyan
-& { $ErrorActionPreference = 'Continue'; & $Exe allow $pas --fix-line $DEEP_LINE --fix-rule deep-inheritance --apply 2>$err } | Out-Null
+& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($err); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe allow $pas --fix-line $DEEP_LINE --fix-rule deep-inheritance --apply 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-Null
 Check 'allow deep-inheritance --apply exits 0' ($LASTEXITCODE -eq 0) ''
-& { $ErrorActionPreference = 'Continue'; & $Exe allow $pas --fix-line $SELF_LINE --fix-rule self-assignment --apply 2>$err } | Out-Null
+& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($err); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe allow $pas --fix-line $SELF_LINE --fix-rule self-assignment --apply 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-Null
 Check 'allow self-assignment --apply exits 0' ($LASTEXITCODE -eq 0) ''
 $markers = @(Get-Content -LiteralPath $pas | Where-Object { $_ -match 'dl:ok' })
 Check 'two markers written' ($markers.Count -eq 2) ($markers -join ' | ')

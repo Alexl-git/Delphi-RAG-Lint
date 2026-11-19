@@ -148,7 +148,7 @@ Start-Process $Exe -ArgumentList @('lsp', '--db', $db) -WorkingDirectory $WorkDi
   -RedirectStandardError (Join-Path $WorkDir 'err.txt') -NoNewWindow -Wait | Out-Null
 $r = @{}
 foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-  try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+  try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
   if ($null -ne $o.id) { $r[[int]$o.id] = $o }
 }
 function HoverMd($resp) { if ($null -eq $resp -or $null -eq $resp.result) { return '' } return [string]$resp.result.contents.value }

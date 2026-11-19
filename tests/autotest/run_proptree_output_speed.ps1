@@ -167,7 +167,7 @@ function Ascii([byte[]]$B) { return [System.Text.Encoding]::ASCII.GetString($B) 
 function SliceJson([string]$S) {
   $a = $S.IndexOf('{'); $b = $S.LastIndexOf('}')
   if ($a -lt 0 -or $b -le $a) { return $null }
-  try { return ($S.Substring($a, $b - $a + 1) | ConvertFrom-Json) } catch { return $null }
+  try { return ($S.Substring($a, $b - $a + 1) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 
 # The editor's pipe drain, ConvRules.Engine.pas TEngineAdapter.RunCaptureTimed:
@@ -503,7 +503,7 @@ Write-Host ''
 Write-Host 'k: stdout on a console' -ForegroundColor Cyan
 $kArgs = @(if ($LibDb) { @('proptree', '--qname', 'Bde.DBTables.TQuery', '--depth', '3', '--refs-as-leaves', '--no-write-back', '--json', '--db', $LibDb) }
          else { @('proptree', '--qname', 'OutFix.TSrcComp', '--json', '--no-write-back', '--db', $db) })
-$pk = Start-Process -FilePath $Exe -ArgumentList $kArgs -WindowStyle Hidden -PassThru
+$pk = Start-Process -FilePath $Exe -ArgumentList $kArgs -WindowStyle Hidden -PassThru; $null = $pk.Handle
 $finK = $pk.WaitForExit(300000)
 if (-not $finK) { try { $pk.Kill() } catch {} }
 Check ("k: proptree --json to a console exits 0 ({0})" -f $(if ($LibDb) { 'TQuery depth 3, ~180 KB' } else { 'fixture' })) ($finK -and $pk.ExitCode -eq 0) "exit=$(if ($finK) { $pk.ExitCode } else { 'TIMEOUT' })"

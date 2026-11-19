@@ -945,7 +945,7 @@ Check 'json: exits 0' ($jsonExit -eq 0) "exit=$jsonExit"
 # Parses AT ALL. This is the assertion that RenderDryRun and every summary
 # Writeln are suppressed under --format json -- one stray line and this throws.
 $doc = $null
-try { $doc = $jsonRaw | ConvertFrom-Json } catch { $doc = $null }
+try { $doc = $jsonRaw | ConvertFrom-Json | ForEach-Object { $_ } } catch { $doc = $null }
 Check 'json: output parses as JSON (no stray text on stdout)' ($null -ne $doc) `
   "raw=$($jsonRaw.Substring(0, [Math]::Min(300, $jsonRaw.Length)))"
 
@@ -1025,7 +1025,7 @@ try {
   $castJsonRaw = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'MyForm.pas' --rules $castRulesPath --db $db --format json 2>$null }) -join "`n"
 } finally { Pop-Location }
 $castDoc = $null
-try { $castDoc = $castJsonRaw | ConvertFrom-Json } catch { $castDoc = $null }
+try { $castDoc = $castJsonRaw | ConvertFrom-Json | ForEach-Object { $_ } } catch { $castDoc = $null }
 Check 'json: cast run parses as JSON' ($null -ne $castDoc) `
   "raw=$($castJsonRaw.Substring(0, [Math]::Min(300, $castJsonRaw.Length)))"
 if ($null -ne $castDoc) {
@@ -1071,7 +1071,7 @@ Check 'mapping: Warnings block names the mapping (CapMap)' ($mapWarn -match 'Cap
 
 # TYPED surface.
 $mapDoc = $null
-try { $mapDoc = $mapJson | ConvertFrom-Json } catch { $mapDoc = $null }
+try { $mapDoc = $mapJson | ConvertFrom-Json | ForEach-Object { $_ } } catch { $mapDoc = $null }
 Check 'mapping: json parses' ($null -ne $mapDoc) `
   "raw=$($mapJson.Substring(0, [Math]::Min(200, $mapJson.Length)))"
 if ($null -ne $mapDoc) {
@@ -1133,7 +1133,7 @@ Check 'default: Warnings block reports the ignored #default' `
   ($defWarn -match 'did not fire') "block=$defWarn"
 
 $defDoc = $null
-try { $defDoc = $defJson | ConvertFrom-Json } catch { $defDoc = $null }
+try { $defDoc = $defJson | ConvertFrom-Json | ForEach-Object { $_ } } catch { $defDoc = $null }
 Check 'default: json parses' ($null -ne $defDoc) `
   "raw=$($defJson.Substring(0, [Math]::Min(200, $defJson.Length)))"
 if ($null -ne $defDoc) {
@@ -1220,7 +1220,7 @@ Write-Host $resRaw -ForegroundColor DarkGray
 Check 'resolved: dry-run exits 0' ($resExit -eq 0) "exit=$resExit"
 
 $resDoc = $null
-try { $resDoc = $resJson | ConvertFrom-Json } catch { $resDoc = $null }
+try { $resDoc = $resJson | ConvertFrom-Json | ForEach-Object { $_ } } catch { $resDoc = $null }
 Check 'resolved: json parses' ($null -ne $resDoc) `
   "raw=$($resJson.Substring(0, [Math]::Min(200, $resJson.Length)))"
 if ($null -ne $resDoc) {
@@ -1378,7 +1378,7 @@ Write-Host $partRaw -ForegroundColor DarkGray
 Check 'part: dry-run exits 0' ($partExit -eq 0) "exit=$partExit"
 
 $partDoc = $null
-try { $partDoc = $partJson | ConvertFrom-Json } catch { $partDoc = $null }
+try { $partDoc = $partJson | ConvertFrom-Json | ForEach-Object { $_ } } catch { $partDoc = $null }
 Check 'part: json parses' ($null -ne $partDoc) `
   "raw=$($partJson.Substring(0, [Math]::Min(300, $partJson.Length)))"
 

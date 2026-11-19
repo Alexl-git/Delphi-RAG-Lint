@@ -160,7 +160,7 @@ function Get-Tree([string]$Database, [string]$QName, [string]$MinVis = '') {
     $exit = $LASTEXITCODE
   } finally { Pop-Location }
   $tree = $null
-  try { $tree = $raw | ConvertFrom-Json } catch { }
+  try { $tree = $raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   return @{ Tree = $tree; Exit = $exit; Raw = $raw }
 }
 

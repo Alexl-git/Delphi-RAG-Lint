@@ -44,7 +44,7 @@ function RunAll([string]$Cfg) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }) -join "`n"
   $s = $raw.IndexOf('['); $e = $raw.LastIndexOf(']')
   if ($s -lt 0 -or $e -le $s) { return @() }
-  return @((ConvertFrom-Json $raw.Substring($s, $e - $s + 1)) | ForEach-Object { $_ })
+  return @((ConvertFrom-Json $raw.Substring($s, $e - $s + 1) | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 function Has($fs, $rule, $file, $line) { @($fs | Where-Object { $_.rule -eq $rule -and $_.file_path -like "*$file" -and $_.start_line -eq $line }).Count -gt 0 }
 

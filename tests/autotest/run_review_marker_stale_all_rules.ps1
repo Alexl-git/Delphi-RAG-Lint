@@ -40,7 +40,7 @@ $u = "unit uM;`r`n`r`ninterface`r`n`r`nfunction Deep(A: Integer): Integer;`r`n`r
 $db = Join-Path $WorkDir 'fx.sqlite'
 & { $ErrorActionPreference = 'Continue'; & $exePath index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
-$all   = @((& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --json 2>$null } | ConvertFrom-Json) | ForEach-Object { $_ })
+$all   = @((& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --json 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 $stale = @($all | Where-Object { $_.rule -eq 'review-marker-stale' -and $_.start_line -eq 9 })
 
 # ---- P1/P2 POSITIVE CONTROLS -----------------------------------------------------

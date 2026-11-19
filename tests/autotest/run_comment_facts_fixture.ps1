@@ -50,7 +50,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 function Lane-Sql([string]$Db, [string]$Query) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --query $Query --db $Db --json 2>$null }
   if ($LASTEXITCODE -ne 0 -or -not $raw) { return }
-  try { $j = ($raw -join "`n") | ConvertFrom-Json } catch { return }
+  try { $j = ($raw -join "`n") | ConvertFrom-Json | ForEach-Object { $_ } } catch { return }
   $cols = @($j.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
   $out = New-Object System.Collections.Generic.List[object]
   foreach ($r in @($j.rows)) {

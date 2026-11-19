@@ -43,7 +43,7 @@ try {
 { "rules": [ { "id": "naming-method-case", "enabled": true } ], "profiles": { "strict": { "rules": [] } } }
 '@ | Set-Content -Encoding ascii $tmp
 
-    $seeded = Get-Content -Raw $tmp | ConvertFrom-Json
+    $seeded = Get-Content -Raw $tmp | ConvertFrom-Json | ForEach-Object { $_ }
     Check ($seeded.rules.Count -eq 1) 'fixture seeded: rules present'
     Check ($null -ne $seeded.profiles.strict) 'fixture seeded: profiles present'
 
@@ -53,7 +53,7 @@ try {
     # Mirrors the Pascal RMW: parse existing JSON, reuse/create the
     # top-level "naming" object, rebuild "presets" minus any same-name
     # entry (SameText), append the new preset, re-serialize the WHOLE root.
-    $j = Get-Content -Raw $tmp | ConvertFrom-Json
+    $j = Get-Content -Raw $tmp | ConvertFrom-Json | ForEach-Object { $_ }
     if (-not (Get-Member -InputObject $j -Name 'naming' -MemberType NoteProperty)) {
         # PSCustomObject (not a hashtable) so a further Add-Member on $j.naming
         # attaches a NoteProperty, matching how ConvertFrom-Json itself
@@ -79,7 +79,7 @@ try {
     Write-Host ''
     Write-Host 'Read back and assert the contract' -ForegroundColor Cyan
 
-    $r = Get-Content -Raw $tmp | ConvertFrom-Json
+    $r = Get-Content -Raw $tmp | ConvertFrom-Json | ForEach-Object { $_ }
     Check ($r.naming.presets.Count -eq 1) 'exactly one saved preset'
     Check ($r.naming.presets[0].name -eq 'My') 'preset name survives ("My")'
     Check ($r.naming.presets[0].values.param_prefix -eq 'p') 'values.param_prefix survives ("p")'
@@ -96,7 +96,7 @@ try {
     Write-Host ''
     Write-Host 'Simulate overwrite-by-name: WriteNamingPreset("My", [A,...]) replaces, does not duplicate' -ForegroundColor Cyan
 
-    $j2 = Get-Content -Raw $tmp | ConvertFrom-Json
+    $j2 = Get-Content -Raw $tmp | ConvertFrom-Json | ForEach-Object { $_ }
     $newPreset = [ordered]@{
         name   = 'My'
         values = [ordered]@{
@@ -110,7 +110,7 @@ try {
     $j2.naming.presets = $kept + @($newPreset)
     ($j2 | ConvertTo-Json -Depth 8) | Set-Content -Encoding ascii $tmp
 
-    $r2 = Get-Content -Raw $tmp | ConvertFrom-Json
+    $r2 = Get-Content -Raw $tmp | ConvertFrom-Json | ForEach-Object { $_ }
     Check ($r2.naming.presets.Count -eq 1) 'overwrite-by-name: still exactly one preset (no duplicate)'
     Check ($r2.naming.presets[0].values.param_prefix -eq 'A') 'overwrite-by-name: values updated ("A")'
     Check ($r2.rules.Count -eq 1) 'overwrite: sibling "rules" key still preserved'
@@ -118,11 +118,11 @@ try {
     Write-Host ''
     Write-Host 'Simulate DeleteNamingPreset("My"): rebuild presets minus the named entry' -ForegroundColor Cyan
 
-    $j3 = Get-Content -Raw $tmp | ConvertFrom-Json
+    $j3 = Get-Content -Raw $tmp | ConvertFrom-Json | ForEach-Object { $_ }
     $j3.naming.presets = @($j3.naming.presets | Where-Object { $_.name.ToUpperInvariant() -ne 'MY' })
     ($j3 | ConvertTo-Json -Depth 8) | Set-Content -Encoding ascii $tmp
 
-    $r3 = Get-Content -Raw $tmp | ConvertFrom-Json
+    $r3 = Get-Content -Raw $tmp | ConvertFrom-Json | ForEach-Object { $_ }
     $remaining = @($r3.naming.presets)
     Check ($remaining.Count -eq 0) 'delete: no presets remain'
     Check ($r3.rules.Count -eq 1) 'delete: sibling "rules" key still preserved'

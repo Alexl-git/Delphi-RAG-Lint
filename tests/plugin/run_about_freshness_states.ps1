@@ -120,7 +120,7 @@ function IndexRow {
   $j = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json --db $db 2>$null }) -join "`n"
   $i = $j.IndexOf('{')
   if ($i -lt 0) { return $null }
-  try { return ($j.Substring($i) | ConvertFrom-Json).indexes[0] } catch { return $null }
+  try { return ($j.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }).indexes[0] } catch { return $null }
 }
 
 Reindex

@@ -94,7 +94,7 @@ function Publishes([byte[]]$b) {
     $avail = [Math]::Min([int]$m.Groups[1].Value, $b.Length - $start)
     $body  = [System.Text.Encoding]::UTF8.GetString($b, $start, $avail)
     $pos   = $start + $avail
-    try { $j = $body | ConvertFrom-Json -AsHashtable } catch { continue }
+    try { $j = $body | ConvertFrom-Json -AsHashtable | ForEach-Object { $_ } } catch { continue }
     if ($j -and ($j['method'] -eq 'textDocument/publishDiagnostics')) { $res += ,$j }
   }
   return ,$res
@@ -138,7 +138,7 @@ $live = New-Fixture 'live' $Garbage $Good
 function CliLines([string]$PasFile, [string[]]$Extra = @()) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $PasFile --json @Extra 2>$null }) -join "`n"
   $arr = @()
-  if ($raw.Trim()) { $arr = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) }
+  if ($raw.Trim()) { $arr = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   return ,@($arr | Where-Object { $_.rule -eq 'parser-error' } | ForEach-Object { [int]$_.start_line })
 }
 # drag-lint parser-error lines in the merged publish for the fixture; 'NO-PUBLISH' /

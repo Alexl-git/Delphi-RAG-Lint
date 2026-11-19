@@ -189,7 +189,7 @@ end.
     while ($lsp.Now -lt $deadline) {
       $m = $lsp.Next([Math]::Max(1, [int]($deadline - $lsp.Now)))
       if ($null -eq $m) { continue }
-      $o = $m.Json | ConvertFrom-Json
+      $o = $m.Json | ConvertFrom-Json | ForEach-Object { $_ }
       $script:Seen.Add([pscustomobject]@{ o = $o; ms = $m.Ms })
     }
   }
@@ -200,7 +200,7 @@ end.
       if ($hit.Count -gt 0) { return $hit[0] }
       $m = $lsp.Next(50)
       if ($null -eq $m) { continue }
-      $script:Seen.Add([pscustomobject]@{ o = ($m.Json | ConvertFrom-Json); ms = $m.Ms })
+      $script:Seen.Add([pscustomobject]@{ o = ($m.Json | ConvertFrom-Json | ForEach-Object { $_ }); ms = $m.Ms })
     }
     return $null
   }

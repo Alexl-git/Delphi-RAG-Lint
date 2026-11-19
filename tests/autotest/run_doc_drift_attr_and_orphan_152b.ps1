@@ -69,7 +69,7 @@ $lines = @(
 [IO.File]::WriteAllText($src, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 
 function DriftAt($rows, [int]$line) { @($rows | Where-Object { $_.rule -eq 'doc-drift' -and $_.start_line -eq $line }) }
-function RowsOf([string]$o) { $r = @(); try { $r = @(($o | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $r = @() }; return ,$r }
+function RowsOf([string]$o) { $r = @(); try { $r = @(($o | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $r = @() }; return ,$r }
 function TagLines([string]$path, [string[]]$names) {
   @([IO.File]::ReadAllLines($path) | Where-Object { $l = $_; @($names | Where-Object { $l.Contains('<param name="' + $_ + '"') }).Count -gt 0 })
 }

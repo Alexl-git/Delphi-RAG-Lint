@@ -27,7 +27,7 @@ function WriteAscii([string]$Path, [string]$Text) {
 }
 function ExtCount([string]$Db) {
   $o = & { $ErrorActionPreference = 'Continue'; & $exePath sql --query "SELECT COUNT(*) AS n FROM refs WHERE external_target IS NOT NULL" --db $Db --json 2>$null } | Out-String
-  try { $j = $o | ConvertFrom-Json; return [int]$j.rows[0][0] } catch { return -1 }
+  try { $j = $o | ConvertFrom-Json | ForEach-Object { $_ }; return [int]$j.rows[0][0] } catch { return -1 }
 }
 try {
   foreach ($d in 'lib', 'p') { New-Item -ItemType Directory -Path (Join-Path $scratch $d) -Force | Out-Null }

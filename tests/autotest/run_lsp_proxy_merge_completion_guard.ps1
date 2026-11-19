@@ -149,7 +149,7 @@ function Split-Frames([byte[]]$b) {
 # order; $null when the result is null), IsNull.
 function Reply7([byte[]]$b) {
   foreach ($f in (Split-Frames $b)) {
-    try { $j = $f.Body | ConvertFrom-Json -AsHashtable } catch { continue }
+    try { $j = $f.Body | ConvertFrom-Json -AsHashtable | ForEach-Object { $_ } } catch { continue }
     if ($j -and $j.ContainsKey('id') -and ($j['id'] -eq 7) -and $j.ContainsKey('result')) {
       $r = $j['result']
       $items = @(if ($null -eq $r) { $null } elseif ($r -is [System.Collections.IDictionary]) { @($r['items']) } else { @($r) })
@@ -299,7 +299,7 @@ $m8   = Reply7 $r8.Out
 $e8   = @((Utf8 $r8.Err) -split "\r?\n" | Where-Object { $_ -match 'could not record' })
 Check 'two position-less requests: no stderr line about them' ($e8.Count -eq 0) ("lines=$($e8.Count) err=$(Utf8 $r8.Err)")
 Check 'positive control: the later request 7 in the same session still merges' ($m8 -and ((@(Pairs $m8.Items)) -contains 'FIeld2|5')) ''
-$n8 = @(Split-Frames $r8.Out | ForEach-Object { try { $_.Body | ConvertFrom-Json -AsHashtable } catch { $null } } |
+$n8 = @(Split-Frames $r8.Out | ForEach-Object { try { $_.Body | ConvertFrom-Json -AsHashtable | ForEach-Object { $_ } } catch { $null } } |
         Where-Object { $_ -and $_.ContainsKey('id') -and ($_['id'] -in 5, 6) -and $_.ContainsKey('result') } |
         ForEach-Object { @($_['result']['items']).Count })
 Check 'replies 5 and 6 relayed with theirs only (3 items each)' ($n8.Count -eq 2 -and ($n8 | Where-Object { $_ -ne 3 }).Count -eq 0) ("counts=$($n8 -join ',')")

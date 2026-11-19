@@ -59,7 +59,7 @@ Assert "fixture folder indexed into a temp DB (exit $LASTEXITCODE)" (($LASTEXITC
 function Lint-Lines([string]$unit, [string]$rule, [string[]]$extra) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $exe lint (Join-Path $tmp $unit) --db $db --rule $rule --json @extra 2>$null }
   $arr = @()
-  try { $arr = @((($raw -join "`n") | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $arr = @() }
+  try { $arr = @((($raw -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $arr = @() }
   return @($arr | Where-Object { $_.rule -eq $rule } | ForEach-Object { [int]$_.start_line })
 }
 

@@ -154,7 +154,7 @@ foreach ($f in Get-ChildItem (Join-Path $Repo 'tests\lint') -Filter '*.expected'
 }
 function HasFixture([string]$Id) { return ((([int]$hits[$Id]) -ge 1) -and (([int]$negs[$Id]) -ge 1)) -or (HasOwnRunner $Id) }
 
-$ids = @((& { $ErrorActionPreference = 'Continue'; & $exePath rules --json --rules-dir (Join-Path $Repo 'rules') 2>$null } | Out-String | ConvertFrom-Json).rules | ForEach-Object { $_.id })
+$ids = @((& { $ErrorActionPreference = 'Continue'; & $exePath rules --json --rules-dir (Join-Path $Repo 'rules') 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }).rules | ForEach-Object { $_.id })
 Check 'P0 CONTROL: rule catalogue parsed' ($ids.Count -gt 100) "($($ids.Count) id(s))"
 Check 'P0 CONTROL: fixtures parsed' ($hits.Count -gt 50) "($($hits.Count) id(s) with hits)"
 

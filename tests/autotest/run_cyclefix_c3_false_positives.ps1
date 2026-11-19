@@ -57,14 +57,14 @@ function Get-Plan([string]$Fixture, [string]$Dproj, [string]$Tag, [scriptblock]$
   Copy-Tree (Join-Path $Fx $Fixture) $root
   if ($Edit) { & $Edit $root }
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root $Dproj) --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
+  $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project (Join-Path $root $Dproj) --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
   $o = Join-Path $WorkDir "plan-$Tag.out"
   $dump = Join-Path $WorkDir "dump-$Tag.txt"
   $env:DRAGLINT_TEST_DUMP_PLAN = $dump
   try {
     $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
       -ArgumentList @('cycles', '--db', ('"' + $db + '"'), '--plan', '--library-db', 'none') `
-      -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "plan-$Tag.err")
+      -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "plan-$Tag.err"); $null = $p.Handle
   } finally { $env:DRAGLINT_TEST_DUMP_PLAN = $null }
   $verdict = ''; $refusals = ''
   if (Test-Path $dump) {

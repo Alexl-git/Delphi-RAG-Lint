@@ -89,9 +89,9 @@ $req = @(
   (Q @{ jsonrpc='2.0'; id=8; method='tools/call'; params=@{ name='check_init'; arguments=@{ target='HbCfg.GCount'; max_seconds=0.000001 } } }),
   (Q @{ jsonrpc='2.0'; id=9; method='tools/call'; params=@{ name='check_init'; arguments=@{ target='HbCfg.GCount'; max_seconds=-1 } } })
 ) -join "`n"
-$mcp = $req | & { $ErrorActionPreference = 'Continue'; & $Exe serve --db $db 2>$null } | Out-String
+$mcp = $req | & { $ErrorActionPreference = 'Continue'; $input | & $Exe serve --db $db 2>$null } | Out-String
 $rep = @{}
-foreach ($ln in ($mcp -split "`n")) { try { $o = $ln.Trim() | ConvertFrom-Json; if ($o.id) { $rep[[int]$o.id] = $o } } catch { } }
+foreach ($ln in ($mcp -split "`n")) { try { $o = $ln.Trim() | ConvertFrom-Json | ForEach-Object { $_ }; if ($o.id) { $rep[[int]$o.id] = $o } } catch { } }
 $tools = @($rep[2].result.tools)
 $t = @($tools | Where-Object { $_.name -eq 'check_init' })
 Check 'C1 tools/list carries check_init' ($t.Count -eq 1)
@@ -106,13 +106,13 @@ function NoMs([string]$s) { $s -replace '"ms":\d+', '"ms":0' }
 Check 'C2 {target} == check-init <target> --json' ($txtT -ne '' -and (NoMs $txtT) -ceq (NoMs $cliT)) "mcp=$txtT"
 Check 'C3 {at} == check-init --at --json' ($txtA -ne '' -and (NoMs $txtA) -ceq (NoMs $cliA)) "mcp=$txtA"
 Check 'C2 second target == its CLI text' ($txtO -ne '' -and (NoMs $txtO) -ceq (NoMs $cliO))
-$doc = $null; try { $doc = $txtT | ConvertFrom-Json } catch { }
+$doc = $null; try { $doc = $txtT | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'C4 answer parses and verdict is one of the three literals' ($null -ne $doc -and @('SET','NEVER-SET','MAY-BE-UNSET') -contains $doc.verdict) "verdict=$($doc.verdict)"
 Check 'C5 control: GCount text differs from GOther text, so the compare can fail' (-not ($txtT -ceq $txtO))
 Check 'C5 no target and no at is an error (not unknown-tool -32601)' (($null -ne $rep[5].error -and $rep[5].error.code -ne -32601) -or [bool]$rep[5].result.isError) (Q $rep[5])
 Check 'C5 malformed at is an error (not unknown-tool -32601)' (($null -ne $rep[6].error -and $rep[6].error.code -ne -32601) -or [bool]$rep[6].result.isError) (Q $rep[6])
 Check 'C6 schema names max_seconds' ($props -contains 'max_seconds') "props=$($props -join ',')"
-$docS = $null; try { $docS = (ToolText $rep[8]) | ConvertFrom-Json } catch { }
+$docS = $null; try { $docS = (ToolText $rep[8]) | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'C6 {max_seconds: 0.000001} -> budget.timed_out' ($null -ne $docS -and $docS.budget.timed_out -eq $true) (ToolText $rep[8])
 Check 'C6 control: plain {target} is not timed out' ($null -ne $doc -and $doc.budget.timed_out -ne $true)
 Check 'C6 negative max_seconds is an error (not unknown-tool -32601)' (($null -ne $rep[9].error -and $rep[9].error.code -ne -32601) -or [bool]$rep[9].result.isError) (Q $rep[9])

@@ -44,18 +44,18 @@ function WriteAscii([string]$Path, [string]$Text) {
 # Runs the exe; returns @{ Out; Err; Code }.
 function Run([string[]]$ArgList) {
   $errFile = Join-Path $WorkDir '_stderr.txt'
-  $out = & { $ErrorActionPreference = 'Continue'; & $exePath @ArgList 2> $errFile } | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath @ArgList 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String
   $code = $LASTEXITCODE
   $err = if (Test-Path $errFile) { Get-Content $errFile -Raw } else { '' }
   return @{ Out = $out; Err = "$err"; Code = $code }
 }
 function RulesJson([string[]]$Extra) {
   $r = Run (@('rules', '--json') + $Extra)
-  try { return ($r.Out | ConvertFrom-Json) } catch { return $null }
+  try { return ($r.Out | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function LintPairs([string]$File, [string[]]$Extra) {
   $r = Run (@('lint', $File, '--json') + $Extra)
-  $rows = @(); try { $rows = @(($r.Out | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $rows = @() }
+  $rows = @(); try { $rows = @(($r.Out | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $rows = @() }
   return @{ Pairs = @($rows | ForEach-Object { "$($_.rule):$($_.start_line)" }); Err = $r.Err; Code = $r.Code }
 }
 
@@ -209,7 +209,7 @@ end.
     Check 'T7 lint --json on every tests\lint fixture is byte-identical to the base exe' ($diffs.Count -eq 0) ($diffs -join ', ')
     $strip = {
       param($js)
-      $o = $js | ConvertFrom-Json
+      $o = $js | ConvertFrom-Json | ForEach-Object { $_ }
       foreach ($r in $o.rules) { foreach ($k in 'needs_compiler', 'compat_since', 'target_active') { $r.PSObject.Properties.Remove($k) } }
       $o.PSObject.Properties.Remove('target_compiler')
       $o | ConvertTo-Json -Depth 8 -Compress

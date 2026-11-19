@@ -65,7 +65,7 @@ function Wait-For([scriptblock]$Cond, [int]$Seconds) {
 function Cancel-Run([string]$Tag, $P, [string[]]$Args_) {
   $fake = New-FakeRsvars $Tag $P.Dir
   $q = ($Args_ + @('--rsvars', $fake.Bat, '--build-timeout', '600') | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
-  $run = Start-Process -FilePath $Exe -ArgumentList $q -RedirectStandardOutput (Join-Path $Tmp "$Tag.out") -RedirectStandardError (Join-Path $Tmp "$Tag.err") -NoNewWindow -PassThru
+  $run = Start-Process -FilePath $Exe -ArgumentList $q -RedirectStandardOutput (Join-Path $Tmp "$Tag.out") -RedirectStandardError (Join-Path $Tmp "$Tag.err") -NoNewWindow -PassThru; $null = $run.Handle
   $parked = Wait-For { (Test-Path $fake.Flag) -or $run.HasExited } 300
   if (-not ($parked -and (Test-Path $fake.Flag) -and -not $run.HasExited)) { try { $run.Kill() } catch { }; Stop-Parked; return @{ Parked = $false; Exit = $null } }
   $null = & { $ErrorActionPreference = 'Continue'; & $Exe shutdown --db $P.Db --wait 60 2>&1 | ForEach-Object { "$_" } }

@@ -56,7 +56,7 @@ $fixture = @'
 }
 '@
 [System.IO.File]::WriteAllText($mcp, $fixture, (New-Object System.Text.UTF8Encoding($false)))
-$orig = $fixture | ConvertFrom-Json
+$orig = $fixture | ConvertFrom-Json | ForEach-Object { $_ }
 
 function Run-Switch([string[]]$SwitchArgs) {
   $out = & { $ErrorActionPreference = 'Continue'; & $Exe @SwitchArgs 2>&1 | ForEach-Object { "$_" } } | Out-String
@@ -76,7 +76,7 @@ Write-Host ''
 Write-Host 'CASE 2: --off backs up whole file, removes only delphi-lsp' -ForegroundColor Cyan
 $r = Run-Switch @('--vscode','--off','--workspace',$ws,'--assume-host-stopped')
 Check '--off exit 0' ($r.Code -eq 0) "exit=$($r.Code) $($r.Out.Trim())"
-$now = Get-Content $mcp -Raw | ConvertFrom-Json
+$now = Get-Content $mcp -Raw | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'delphi-lsp gone' (-not ($now.servers.PSObject.Properties.Name -contains 'delphi-lsp'))
 Check 'other server JSON-equal' (Json-Eq $now.servers.other $orig.servers.other)
 Check 'inputs survived' (Json-Eq $now.inputs $orig.inputs)
@@ -110,7 +110,7 @@ Write-Host ''
 Write-Host 'CASE 5: --on restores from the newest backup, JSON-equal' -ForegroundColor Cyan
 $r = Run-Switch @('--vscode','--on','--workspace',$ws,'--assume-host-stopped')
 Check '--on exit 0' ($r.Code -eq 0) "exit=$($r.Code) $($r.Out.Trim())"
-$now = Get-Content $mcp -Raw | ConvertFrom-Json
+$now = Get-Content $mcp -Raw | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'delphi-lsp restored JSON-equal' (Json-Eq $now.servers.'delphi-lsp' $orig.servers.'delphi-lsp')
 Check 'other still JSON-equal' (Json-Eq $now.servers.other $orig.servers.other)
 $r = Run-Switch @('--vscode','--on','--workspace',$ws,'--assume-host-stopped')
@@ -128,7 +128,7 @@ $tpl = Join-Path $WorkDir 'tpl.json'
 [System.IO.File]::WriteAllText($tpl, '{"type":"stdio","command":"C:\\y\\srv.exe","args":["q"]}', (New-Object System.Text.UTF8Encoding($false)))
 $r = Run-Switch @('--vscode','--on','--workspace',$ws2,'--template',$tpl,'--assume-host-stopped')
 Check '--on --template exit 0' ($r.Code -eq 0) "exit=$($r.Code) $($r.Out.Trim())"
-$n2 = Get-Content $mcp2 -Raw | ConvertFrom-Json
+$n2 = Get-Content $mcp2 -Raw | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'entry from template' ($n2.servers.'delphi-lsp'.command -eq 'C:\y\srv.exe')
 Check 'other kept' ($n2.servers.other.url -eq 'http://x')
 

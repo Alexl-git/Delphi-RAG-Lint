@@ -81,7 +81,7 @@ function New-Proj([string[]]$Order, [scriptblock]$Patch = $null, [switch]$NoInde
   $db = "$root.sqlite"
   if (-not $NoIndex) {
     Push-Location $WorkDir
-    try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root 'FinP3.dproj') --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
+    try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project (Join-Path $root 'FinP3.dproj') --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
   }
   return @{ Root = $root; Dproj = (Join-Path $root 'FinP3.dproj'); Db = $db; Name = 'FinP3' }
 }
@@ -171,18 +171,18 @@ function Get-Plan($P, [switch]$NoProject) {
   $a = @('cycles', '--plan', '--db', $P.Db, '--library-db', 'none')
   if (-not $NoProject) { $a += @('--project', $P.Dproj) }
   Push-Location $WorkDir
-  try { return ($null | & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null } | Out-String) } finally { Pop-Location }
+  try { return ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @a 2>$null } | Out-String) } finally { Pop-Location }
 }
 function Get-CausesJson($P) {
   Push-Location $WorkDir
-  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --causes --format json --project $P.Dproj --db $P.Db --library-db none 2>$null } | Out-String) } finally { Pop-Location }
-  try { return ($o | ConvertFrom-Json) } catch { return $null }
+  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe cycles --causes --format json --project $P.Dproj --db $P.Db --library-db none 2>$null } | Out-String) } finally { Pop-Location }
+  try { return ($o | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function Run-Fix($P, [string[]]$Extra) {
   $a = @('cycles', '--fix', '--build-timeout', '1800', '--project', $P.Dproj, '--db', $P.Db, '--library-db', 'none', '--format', 'json') + $Extra
   Push-Location $WorkDir
-  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
-  $j = $null; try { $j = $out | ConvertFrom-Json } catch { }
+  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @a 2>$null } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
+  $j = $null; try { $j = $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   $k = @(); $r = @()
   foreach ($c in @($j.cycles)) { foreach ($x in @($c.refusals)) { if ($x) { $k += $x.kind; $r += "$($x.kind): $($x.reason)" } } }
   foreach ($x in @($j.refusals)) { if ($x) { $k += $x.kind; $r += "$($x.kind): $($x.reason)" } }
@@ -282,7 +282,7 @@ try {
     Check "d.1 refused: the order depends on a conditional uses entry (FP3C.pas:$ifLine)" ($m.Success -and $m.Groups[1].Value.Contains("conditional uses entry (``FP3C.pas:$ifLine``)")) $plan
     $P = New-Proj $null { param($r) [IO.File]::Delete((Join-Path $r 'FinP3.dpr')); [IO.File]::Delete((Join-Path $r 'FinP3.dproj')) } -NoIndex
     Push-Location $WorkDir
-    try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index $P.Root --db $P.Db --library-db none *> "$($P.Db).log" } } finally { Pop-Location }
+    try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index $P.Root --db $P.Db --library-db none *> "$($P.Db).log" } } finally { Pop-Location }
     $plan = Get-Plan $P -NoProject
     $m = [regex]::Match($plan, $RefusedRx)
     Check 'd.2 no .dpr in the index: refused "no program"' ($m.Success -and $m.Groups[1].Value.Contains('no program in this index')) $plan

@@ -31,8 +31,8 @@ $copy = Join-Path $WorkDir 'corpus'
 [IO.Directory]::CreateDirectory($copy) | Out-Null
 foreach ($pat in '*.pas', '*.dfm', '*.dproj', '*.dpr') { Copy-Item (Join-Path $Corpus $pat) $copy -Force }
 
-$out = & { $ErrorActionPreference = 'Continue'; & $Exe repo gen-param-array --project "$copy\Loader2019.dproj" --all --plan --json --progress-form $ProgressForm 2>"$WorkDir\err.txt" }
-$j = ($out | Where-Object { $_ -like '{*' } | Select-Object -Last 1) | ConvertFrom-Json
+$out = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath("$WorkDir\err.txt"); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe repo gen-param-array --project "$copy\Loader2019.dproj" --all --plan --json --progress-form $ProgressForm 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
+$j = ($out | Where-Object { $_ -like '{*' } | Select-Object -Last 1) | ConvertFrom-Json | ForEach-Object { $_ }
 if ($null -eq $j) { Write-Host 'FATAL: no JSON from the verb' -ForegroundColor Red; exit 1 }
 
 $tripleRx = [regex]'\.Params\[\s*(par\w+)\s*\]\.(As\w+)\[I\]\s*:=\s*(.*)$'

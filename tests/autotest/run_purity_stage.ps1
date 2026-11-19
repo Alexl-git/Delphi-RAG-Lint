@@ -143,7 +143,7 @@ if ($null -eq $py) {
   Check '21. gate control: python (sqlite3) available to drop the local_var rows' $false 'python not on PATH'
 } else {
   $del = "import sqlite3; c = sqlite3.connect(r'$db'); n = c.execute(""DELETE FROM symbols WHERE kind='local_var' AND parent_id=(SELECT id FROM symbols WHERE qualified_name='uEffects.TThing.Nested.Inner')"").rowcount; c.commit(); c.close(); print(n)"
-  $pyOut = (& { $ErrorActionPreference = 'Continue'; & python -c $del 2>&1 | ForEach-Object { "$_" } }) -join "`n"
+  $pyOut = (& { $ErrorActionPreference = 'Continue'; & python -c $(if ($PSVersionTable.PSVersion.Major -lt 7) { $del.Replace('"', '\"') } else { $del }) 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check '21. gate control precondition: exactly one local_var row was dropped' ($pyOut.Trim() -eq '1') $pyOut
   $ro = @(Run-Index @('--resolve-only'))
   Check '21. --resolve-only runs the stage' (($ro -join "`n") -match 'stage: purity -- done in') ''

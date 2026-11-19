@@ -51,7 +51,7 @@ function Q([string]$s) { return '"' + $s + '"' }
 function Run-Redirected([string[]]$tokens) {
   $tmp = [System.IO.Path]::GetTempFileName()
   $line = ($tokens -join ' ') + ' > ' + (Q $tmp)
-  $p = Start-Process cmd.exe -ArgumentList '/c', ('"' + $line + '"') -NoNewWindow -Wait -PassThru
+  $p = Start-Process cmd.exe -ArgumentList '/c', ('"' + $line + '"') -NoNewWindow -Wait -PassThru; $null = $p.Handle
   $bytes = [System.IO.File]::ReadAllBytes($tmp)
   Remove-Item $tmp -Force
   return ,$bytes

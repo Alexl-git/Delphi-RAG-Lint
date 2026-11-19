@@ -69,9 +69,9 @@ function Hb([string]$Fx, [string]$Target, [string]$At = '') {
   $a = @($dbs[$Fx], $(if ($Target) { $Target } else { '-' }))
   if ($At) { $a += $At }
   $errFile = Join-Path $work 'err.txt'
-  $o = & { $ErrorActionPreference = 'Continue'; & $harness @a 2>$errFile }
+  $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $harness @a 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   $r = [pscustomobject]@{ Exit = $LASTEXITCODE; Json = $null; Err = (Get-Content $errFile -Raw) }
-  if ($r.Exit -eq 0) { $r.Json = (($o -join "`n") | ConvertFrom-Json) }
+  if ($r.Exit -eq 0) { $r.Json = (($o -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }) }
   return $r
 }
 function WriterRows($J) {
@@ -204,7 +204,7 @@ try {
   $ruleSet = @(); $hbSet = @()
   foreach ($fx in @('events-global', 'events-args', 'events-softwriters')) {
     $vars = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $dbs[$fx] --query "SELECT s.qualified_name AS q FROM symbols s JOIN symbols p ON p.id = s.parent_id WHERE s.kind = 'var' AND p.kind = 'unit' ORDER BY 1" --json 2>$null }) -join "`n"
-    $vj = $vars.Substring($vars.IndexOf('{')) | ConvertFrom-Json
+    $vj = $vars.Substring($vars.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }
     foreach ($row in $vj.rows) {
       $q = [string]$row[0]
       $r = Hb $fx $q
@@ -212,7 +212,7 @@ try {
     }
     foreach ($pas in (Get-ChildItem (Join-Path $src $fx) -Filter *.pas)) {
       $lj = (& { $ErrorActionPreference = 'Continue'; & $exePath lint $pas.FullName --db $dbs[$fx] --rule read-never-assigned --json 2>$null }) -join "`n"
-      foreach ($f in @(($lj | ConvertFrom-Json) | ForEach-Object { $_ })) {
+      foreach ($f in @(($lj | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })) {
         if ($f.message -match 'Global variable (\w+) is read') { $ruleSet += ('{0}.{1}' -f $pas.BaseName, $Matches[1]) }
       }
     }

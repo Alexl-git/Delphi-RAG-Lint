@@ -26,7 +26,7 @@ function Assert($name, $cond) {
 }
 function Run([string]$file, [string[]]$extra) {
   $out = & { $ErrorActionPreference = 'Continue'; & $exe lint --json --rules-dir $rulesDir @extra (Join-Path $repo "tests\lint\$file") 2>$null }
-  return @((($out -join "`n") | ConvertFrom-Json) | ForEach-Object { $_ })
+  return @((($out -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 
 $base = @(Run 'type-name-prefix.pas' @())

@@ -113,7 +113,7 @@ function Start-Fix([hashtable]$D, [string[]]$Extra, [string]$Tag) {
   $a = @('cycles', '--fix', '--project', $D.Dproj, '--db', $D.Db, '--library-db', $Lib, '--format', 'json') + $Extra
   $q = ($a | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
   $out = Join-Path $WorkDir "$Tag.out"; $err = Join-Path $WorkDir "$Tag.err"
-  $p = Start-Process -FilePath $Exe -ArgumentList $q -RedirectStandardOutput $out -RedirectStandardError $err -NoNewWindow -PassThru
+  $p = Start-Process -FilePath $Exe -ArgumentList $q -RedirectStandardOutput $out -RedirectStandardError $err -NoNewWindow -PassThru; $null = $p.Handle
   return @{ P = $p; Out = $out; Err = $err }
 }
 function Wait-For([scriptblock]$Cond, [int]$Seconds) {
@@ -188,7 +188,7 @@ $fakeT = New-FakeRsvars 't' $T.Proj 'always'
 $runT = Start-Fix $T @('--unit', 'demogageport', '--apply', '--build-timeout', '3', '--rsvars', $fakeT.Bat) 't'
 $exitedT = Wait-For { $runT.P.HasExited } 60
 if (-not $exitedT) { try { $runT.P.Kill($true) } catch { } ; $runT.P.WaitForExit(10000) | Out-Null }
-$jT = $null; try { $jT = (Read-Text $runT.Out) | ConvertFrom-Json } catch { }
+$jT = $null; try { $jT = (Read-Text $runT.Out) | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 # a baseline refusal is the run's own (top-level refusals[]), not a cycle's
 $kindT = if ($jT) { "$(@($jT.refusals)[0].kind)" } else { '' }
 Check 't1 exit 1 with refusal build-timeout within 60 s' ($exitedT -and ($runT.P.ExitCode -eq 1) -and ($kindT -eq 'build-timeout')) ("exited=$exitedT exit=" + $runT.P.ExitCode + " kind=$kindT " + (Read-Text $runT.Out) + (Read-Text $runT.Err))
@@ -198,7 +198,7 @@ Stop-Parked
 # ---------------------------------------------------------------- (v) a bad value
 Write-Host '== (v) --build-timeout with a bad value' -ForegroundColor Cyan
 $errV = Join-Path $WorkDir 'v.err'
-$outV = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --project $T.Dproj --db $T.Db --library-db $Lib --build-timeout 2m 2>$errV } | Out-String)
+$outV = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errV); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe cycles --fix --project $T.Dproj --db $T.Db --library-db $Lib --build-timeout 2m 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
 $codeV = $LASTEXITCODE
 $allV = $outV + (Read-Text $errV)
 Check 'v1 exit 2 and the message names --build-timeout' (($codeV -eq 2) -and ($allV -match '--build-timeout')) "exit=$codeV $allV"

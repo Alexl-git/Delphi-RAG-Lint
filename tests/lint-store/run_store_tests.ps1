@@ -68,7 +68,7 @@ function Parse-Findings($raw) {
   $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
   if ($b -lt 0) { return @() }
   try {
-    $r = ($txt.Substring($b) | ConvertFrom-Json)
+    $r = ($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ })
     if ($null -eq $r) { return @() }
     return @($r)
   } catch { return @() }
@@ -86,7 +86,7 @@ foreach ($case in $cases) {
   $mode = "check-ast"; $subject = $null
   if (Test-Path $caseFile) {
     try {
-      $cj = Get-Content $caseFile -Raw | ConvertFrom-Json
+      $cj = Get-Content $caseFile -Raw | ConvertFrom-Json | ForEach-Object { $_ }
       if ($cj.mode)    { $mode = $cj.mode }
       if ($cj.subject) { $subject = $cj.subject }
     } catch {}

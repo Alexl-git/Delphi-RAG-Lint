@@ -88,7 +88,7 @@ function Esc([string]$S) {
 # sql --json rows are POSITIONAL arrays: map them onto columns[].name.
 function Sql([string]$Db, [string]$Query) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query $Query --json 2>$null }
-  try { $doc = ($raw -join "`n") | ConvertFrom-Json } catch { return }  # no table (base engine): no rows
+  try { $doc = ($raw -join "`n") | ConvertFrom-Json | ForEach-Object { $_ } } catch { return }  # no table (base engine): no rows
   if ($null -eq $doc -or $null -eq $doc.rows -or $null -eq $doc.columns) { return }
   $cols = @($doc.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
   $out = @()
@@ -111,7 +111,7 @@ function Run-Verb([string[]]$VerbArgs, [bool]$Off, [string]$Tag, [string]$UseExe
   if ($Off) { $env:DRAGLINT_NO_FILE_FACTS = '1' } else { $env:DRAGLINT_NO_FILE_FACTS = $null }
   try {
     $p = Start-Process -FilePath $UseExe -ArgumentList $VerbArgs -NoNewWindow -Wait -PassThru `
-      -RedirectStandardOutput $o -RedirectStandardError $e
+      -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   } finally {
     $env:DRAGLINT_DEBUG = $null
     $env:DRAGLINT_NO_FILE_FACTS = $null

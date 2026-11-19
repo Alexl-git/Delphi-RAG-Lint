@@ -27,7 +27,7 @@ function Hits([string]$File, [string]$Rule, [string[]]$Extra = @()) {
   try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe lint $File --json --rule $Rule @Extra 2>$null } } finally { Pop-Location }
   $t = ($o -join "`n").Trim()
   if ($t -eq '') { return @() }
-  $j = $t | ConvertFrom-Json
+  $j = $t | ConvertFrom-Json | ForEach-Object { $_ }
   @(@($j) | Where-Object { $_.rule -eq $Rule } | ForEach-Object { [int]$_.start_line })
 }
 try {

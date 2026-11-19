@@ -310,7 +310,7 @@ Check 'G3 limit, pinned: ''FieldDefs.Items.Attributes = []'' PARSES (caught by D
 
 # ---- resolved defaults --------------------------------------------------------
 $r = ApplyTo 'AbsentDM.pas' @('--format', 'json')
-$jd = $null; try { $jd = $r.Out.Substring($r.Out.IndexOf('{')) | ConvertFrom-Json } catch {}
+$jd = $null; try { $jd = $r.Out.Substring($r.Out.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'D2b a default NOT written for a non-published path is REPORTED: one reemit note, count and paths' `
   (($null -ne $jd) -and (@($jd.reemit_notes | Where-Object { $_ -match '^v: 2 resolved default\(s\) not written -- Defs\.Items\.Size, Sub\.Level: the path runs through a non-published member' }).Count -eq 1)) ($jd.reemit_notes -join ' | ')
 $r = ApplyTo 'AbsentDM.pas' @('--apply', '--no-backup')

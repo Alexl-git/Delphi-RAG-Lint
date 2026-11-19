@@ -279,7 +279,7 @@ try {
 
   function NeverRaisedIn([string]$LibArg) {
     $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $projDb --rule doc-drift --library-db $LibArg --json 2>$null } | Out-String)
-    $rows = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ })
+    $rows = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
     $src = [IO.File]::ReadAllLines((Join-Path $scratch 'proj\App.pas'))
     $names = @{}
     foreach ($r in $rows) {

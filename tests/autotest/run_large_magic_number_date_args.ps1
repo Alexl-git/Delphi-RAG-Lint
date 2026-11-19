@@ -101,7 +101,7 @@ $i = $json.IndexOf('[')
 if ($i -lt 0) { $i = $json.IndexOf('{') }
 if ($i -lt 0) { Write-Host 'FATAL: no JSON from lint' -ForegroundColor Red; exit 2 }
 $parsed = $null
-try { $parsed = $json.Substring($i) | ConvertFrom-Json } catch { }
+try { $parsed = $json.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 if ($null -eq $parsed) { Write-Host 'FATAL: lint JSON did not parse' -ForegroundColor Red; exit 2 }
 
 $findings = @()

@@ -81,7 +81,7 @@ end.
 [IO.File]::WriteAllText($fix, (($src -replace "`r`n", "`n") -replace "`n", "`r`n"), [Text.Encoding]::ASCII)
 
 $errFile = Join-Path $WorkDir 'stderr.txt'
-$out = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fix --rule public-field --rules-dir $RulesDir 2>$errFile } | Out-String) -replace "`r`n", "`n"
+$out = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe lint $fix --rule public-field --rules-dir $RulesDir 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String) -replace "`r`n", "`n"
 $hits = @($out -split "`n" | Where-Object { $_ -match 'public-field:' })
 Write-Host ("  findings:`n    " + ($hits -join "`n    ")) -ForegroundColor DarkGray
 

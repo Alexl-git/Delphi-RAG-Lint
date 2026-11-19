@@ -165,7 +165,7 @@ function Run([string]$Dir, [string[]]$Extra = @(), [string]$Castlib = $ShippedCa
   $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $code = $LASTEXITCODE
   $j = $null
-  if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {} }
+  if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {} }
   return [pscustomobject]@{ Code = $code; Out = $o; J = $j }
 }
 function Items($r, [string]$Kind) { if ($null -eq $r.J) { return @() }; return @($r.J.items | Where-Object { $_.kind -eq $Kind }) }
@@ -310,7 +310,7 @@ W $edge 's.rules' "#convert TOldTable -> TNewTable`n#link TableName <- TableName
 & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $edge 'P.dpr') --db (Join-Path $edge 'fx.sqlite') 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $eo = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (Join-Path $edge 'EForm.pas') --rules (Join-Path $edge 's.rules') --db (Join-Path $edge 'fx.sqlite') --castlib $ShippedCastlib --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 $er = [pscustomobject]@{ Code = $LASTEXITCODE; Out = $eo; J = $null }
-try { $er.J = $eo.Substring($eo.IndexOf('{')) | ConvertFrom-Json } catch {}
+try { $er.J = $eo.Substring($eo.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 $ePas = @(Items $er 'value-cast-applied' | Where-Object { $_.file -like '*.pas' })
 $eChk = @(Items $er 'value-cast-check' | Where-Object { $_.file -like '*.pas' })
 function LineSet($xs) { return ((@($xs | ForEach-Object { $_.line }) | Sort-Object) -join ',') }
@@ -361,7 +361,7 @@ Check 'B1 identical .dfm bytes and identical .pas bytes (apart from the extra li
 
 # ---- capability -------------------------------------------------------------
 $info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n"
-$ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json } catch {}
+$ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'K info --json: capabilities.value_cast_strip_db is true' (($null -ne $ij) -and ($ij.capabilities.value_cast_strip_db -eq $true)) ''
 
 Write-Host ''

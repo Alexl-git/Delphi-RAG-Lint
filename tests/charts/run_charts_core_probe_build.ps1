@@ -45,7 +45,7 @@ $lines = @(
 [IO.File]::WriteAllText($bat, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 
 $log = Join-Path $OutDir 'build.log'
-$null = Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $log -RedirectStandardError "$log.err" -NoNewWindow -Wait -PassThru
+$null = Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $log -RedirectStandardError "$log.err" -NoNewWindow -Wait -PassThru; $null = $null.Handle
 $out = Get-Content -LiteralPath $log -Raw
 if ($out -notmatch 'BUILD_EXITCODE=0') { Write-Host 'FATAL: probe compile failed' -ForegroundColor Red; Write-Host $out; exit 2 }
 

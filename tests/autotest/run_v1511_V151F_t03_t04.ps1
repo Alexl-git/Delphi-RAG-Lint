@@ -25,7 +25,7 @@ function Lines($file, $rule, [string[]]$extra) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint $file --json @ra 2>$null }
   $t = ($raw -join "`n").Trim()
   if ($t -eq '') { return @() }
-  try { $j = @(($t | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { return @() }
+  try { $j = @(($t | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { return @() }
   return @($j | Where-Object { $_.rule -eq $rule } | ForEach-Object { "$([IO.Path]::GetFileName($_.file_path)):$($_.start_line)" })
 }
 function LineOf($file, $pat) {

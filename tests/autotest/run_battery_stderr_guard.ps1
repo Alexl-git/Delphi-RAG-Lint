@@ -122,7 +122,7 @@ $pOut = Join-Path $WorkDir 'list.out'
 $pErr = Join-Path $WorkDir 'list.err'
 $proc = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', "`$ErrorView = 'NormalView'; & '$battery' -List; exit `$LASTEXITCODE" `
           -WorkingDirectory $RepoRoot -RedirectStandardOutput $pOut `
-          -RedirectStandardError $pErr -NoNewWindow -Wait -PassThru
+          -RedirectStandardError $pErr -NoNewWindow -Wait -PassThru; $null = $proc.Handle
 
 $errBytes = (Get-Item $pErr).Length
 $errText  = if ($errBytes -gt 0) { [IO.File]::ReadAllText($pErr) } else { '' }
@@ -162,7 +162,7 @@ $cOut = Join-Path $WorkDir 'corrupt.out'
 $cErr = Join-Path $WorkDir 'corrupt.err'
 $cProc = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', "`$ErrorView = 'NormalView'; & '$corrupt'; exit `$LASTEXITCODE" `
            -WorkingDirectory $WorkDir -RedirectStandardOutput $cOut `
-           -RedirectStandardError $cErr -NoNewWindow -Wait -PassThru
+           -RedirectStandardError $cErr -NoNewWindow -Wait -PassThru; $null = $cProc.Handle
 $cErrText = [IO.File]::ReadAllText($cErr)
 $cOutText = [IO.File]::ReadAllText($cOut)
 

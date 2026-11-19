@@ -41,7 +41,7 @@ function Get-ParseFindings([string]$Dir, [string]$File, [string]$Db) {
     $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $File --db $Db --json 2>$null } | Out-String
   } finally { Pop-Location }
   $rows = @()
-  try { $rows = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) } catch {}
+  try { $rows = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch {}
   return @($rows | Where-Object { $_.rule -in 'parser-error', 'syntax-error' })
 }
 
@@ -101,7 +101,7 @@ end.
     $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $gdb --query "SELECT name, kind, start_line FROM symbols WHERE kind IN ('record','field')" --json 2>$null } | Out-String
   } finally { Pop-Location }
   $rows = @()
-  try { $rows = @(($j | ConvertFrom-Json).rows) } catch {}
+  try { $rows = @(($j | ConvertFrom-Json | ForEach-Object { $_ }).rows) } catch {}
   function HasSym([string]$n, [string]$k, [int]$line = 0) {
     return [bool]($rows | Where-Object { ([string]$_[0] -ceq $n) -and ([string]$_[1] -eq $k) -and (($line -eq 0) -or ([int]$_[2] -eq $line)) })
   }

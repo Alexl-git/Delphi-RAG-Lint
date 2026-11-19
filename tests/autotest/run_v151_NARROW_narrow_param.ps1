@@ -35,9 +35,9 @@ try {
   Copy-Item $Db $Loose
 
   function Run-Json([string]$DbPath, [string[]]$More) {
-    $o = & { $ErrorActionPreference = 'Continue'; & $Exe narrow-param --db $DbPath --library-db none --all --plan --format json @More 2> (Join-Path $Tmp 'run.err') }
+    $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath((Join-Path $Tmp 'run.err')); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe narrow-param --db $DbPath --library-db none --all --plan --format json @More 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
     $script:LastExit = $LASTEXITCODE
-    return (($o -join "`n") | ConvertFrom-Json)
+    return (($o -join "`n") | ConvertFrom-Json | ForEach-Object { $_ })
   }
   function Has([object[]]$Rows, [string]$Routine) { return @($Rows | Where-Object { $_.routine -like "*$Routine" }).Count -gt 0 }
 

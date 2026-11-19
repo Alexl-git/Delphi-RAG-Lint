@@ -52,7 +52,7 @@ Push-Location $WorkDir
 try {
   # ---- S1 ----
   $r = Run @('syntax-count','--in',$fx,'--json')
-  $j = $null; try { $j = ($r.Out | Where-Object { $_ -like '{*' } | Select-Object -First 1) | ConvertFrom-Json } catch {}
+  $j = $null; try { $j = ($r.Out | Where-Object { $_ -like '{*' } | Select-Object -First 1) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
   Check 'S1 --in --json exits 0' ($r.Code -eq 0) ("exit $($r.Code): " + ($r.Out -join ' | '))
   $bad = @(); if ($j) { foreach ($k in $want.Keys) { if ($j.totals.$k -ne $want[$k]) { $bad += "$k=$($j.totals.$k) want $($want[$k])" } } } else { $bad += 'no JSON' }
   Check 'S1 totals per feature (decoys excluded)' ($bad.Count -eq 0) ($bad -join '; ')
@@ -60,7 +60,7 @@ try {
 
   # ---- S2 ----
   $r = Run @('syntax-count','--in',$fx,'--feature','is-not,not-in','--hits','--json')
-  $j2 = $null; try { $j2 = ($r.Out | Where-Object { $_ -like '{*' } | Select-Object -First 1) | ConvertFrom-Json } catch {}
+  $j2 = $null; try { $j2 = ($r.Out | Where-Object { $_ -like '{*' } | Select-Object -First 1) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
   Check 'S2 --feature keeps only the named totals' ($j2 -and @($j2.totals.PSObject.Properties).Count -eq 2 -and $j2.totals.'is-not' -eq 1) ($r.Out -join ' | ')
   $isnot = @($j2.hits | Where-Object { $_.feature -eq 'is-not' })
   Check 'S2 --hits: is-not at line 9' ($isnot.Count -eq 1 -and $isnot[0].line -eq 9) (($j2.hits | ConvertTo-Json -Compress))
@@ -69,7 +69,7 @@ try {
   $db = Join-Path $WorkDir 'fx.sqlite'
   $null = & { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $WorkDir 'src') --db $db 2>&1 | ForEach-Object { "$_" } }
   $r = Run @('syntax-count','--db',$db,'--json')
-  $j3 = $null; try { $j3 = ($r.Out | Where-Object { $_ -like '{*' } | Select-Object -First 1) | ConvertFrom-Json } catch {}
+  $j3 = $null; try { $j3 = ($r.Out | Where-Object { $_ -like '{*' } | Select-Object -First 1) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
   Check 'S3 --db reads the index file list (same totals)' ($r.Code -eq 0 -and $j3 -and $j3.files_scanned -eq 1 -and $j3.totals.'inline-var' -eq 3 -and $j3.totals.'if-expr' -eq 1) ("exit $($r.Code): " + ($r.Out -join ' | '))
 
   # ---- S4 ----
