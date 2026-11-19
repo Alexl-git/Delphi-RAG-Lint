@@ -24,6 +24,9 @@ param(
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'; $script:fail = $false
@@ -94,3 +97,4 @@ Check 'A3 config db in a folder above the target is still honoured' (Test-Path $
 } finally { }
 if ($script:fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green; exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

@@ -3,7 +3,7 @@
 
   A unit that declares a TDataModule descendant reads or writes another unit's global form
   variable. RUN 1 asks for the rule: exactly the TRIGGER-* lines, one finding per (unit, variable),
-  anchored at the first reference. RUN 2 is a plain lint-all: the rule ships OFF, so nothing.
+  anchored at the first reference. RUN 2 is a plain lint-all: the rule ships ON since 1.52 (DEFAULTS, 5b0d7fad8), so the same findings.
   RUN 3 is a scratch copy where the class stops descending from TDataModule: the same reads are now
   silent, so the triggers fire because of the module and not by accident. RUN 4 adds a one-unit
   library index: TViaLibForm's base class is only there, so TRIGGER-LIB fires ONLY with it (a form on
@@ -56,8 +56,9 @@ try {
   Check 'RUN 1 nothing fires outside the data module (CONTROL-NOTMODULE)' ($hits.Count -eq $inModule.Count) "$($hits.Count) total"
   Check 'RUN 1 the message counts both references of MainForm' (@($inModule | Where-Object { $_.message -match 'MainForm' -and $_.message -match '\b2 time' }).Count -eq 1) ''
 
-  $off = @(RuleFindings $db @())
-  Check 'RUN 2 plain lint-all: the rule ships OFF' ($off.Count -eq 0) "$($off.Count) finding(s)"
+  $on = @(RuleFindings $db @())
+  $onLines = @($on | Where-Object { $_.file_path -like '*uDmfModule.pas' } | ForEach-Object { [int]$_.start_line } | Sort-Object)
+  Check 'RUN 2 plain lint-all: the rule ships ON (1.52) and fires the RUN 1 lines' (($on.Count -eq $hits.Count) -and (($onLines -join ',') -eq ($lines -join ','))) "$($on.Count) finding(s) [$($onLines -join ',')]"
 
   $libSrc = Join-Path $scratch 'libsrc'
   [void](New-Item -ItemType Directory -Force -Path $libSrc)

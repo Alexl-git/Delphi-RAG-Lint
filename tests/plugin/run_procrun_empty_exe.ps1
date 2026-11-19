@@ -97,7 +97,9 @@ if (-not $okLsp) { $rc = 1 }
 if ($lsp.Length -lt 2000) { Write-Host '  [FAIL] EnsureLspClient body not found (the anchor would pass vacuously)'; $rc = 1 }
 # Every CreateProcess in the plugin is on this list, so a new direct spawn has to be looked at here.
 # ConvertLaunch starts ConvRulesEditor, whose path was proven by FileExists first (FindEditor).
-$known = 'ConvertLaunch=1 Editor=2 GraphWindow=1 LiveDiagnostics=1 LspClient=1 ProcRun=1 ProjectNotifier=2 StructureCache=1'
+# Cmd.FieldRepo (1.52 Table Tools) LaunchEditor starts the field-repo editor: InvokeOpenEditor requires the
+# engine (ResolveContext -> RequireEngine/ReportEngineMissing) and proves the editor exe by FileExists first.
+$known = 'Cmd.FieldRepo=1 ConvertLaunch=1 Editor=2 GraphWindow=1 LiveDiagnostics=1 LspClient=1 ProcRun=1 ProjectNotifier=2 StructureCache=1'
 $seen = @()
 foreach ($f in (Get-ChildItem $SrcDir -Filter 'DragLint.Plugin.*.pas' | Sort-Object Name)) {
   $n = ([regex]::Matches([IO.File]::ReadAllText($f.FullName), '(?m)^(?!\s*(///|\{)).*\bCreateProcess[W]?\(')).Count

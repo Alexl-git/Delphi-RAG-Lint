@@ -26,6 +26,9 @@ param(
   [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_v152_app2_$PID"
 )
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 $ErrorActionPreference = 'Stop'
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 if ($Exe -eq '') { $Exe = Join-Path $Root 'src\cli\Win64\Debug\drag-lint.exe' }
@@ -85,3 +88,4 @@ finally { Pop-Location }
 Write-Host ("run_v152_APP2: {0} failure(s)" -f $script:Fail)
 if ($script:Fail -gt 0) { exit 1 }
 exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

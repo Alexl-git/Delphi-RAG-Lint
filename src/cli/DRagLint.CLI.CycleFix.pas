@@ -2838,8 +2838,10 @@ begin
   GProgressDb := ExpandFileName(Opts.Db);
   try
     try
-      if RerunAfterReindex(Opts, pStore, Result) then Exit;
       try
+        { v152 DDFIX5: inside the finally -- the A1 re-index writes reindex-before.log / rerun.out into the
+          gate's _build scratch, and an Exit before DeleteDefaultScratch left that dir behind on every run }
+        if RerunAfterReindex(Opts, pStore, Result) then Exit;
         Result:= if Opts.HubSurface then RunHubSurfaceFix(Opts, pStore, pSccs, pGraph, pLibStore)
                  else if SameText(Opts.Part, CPartAll) then RunAllSelected(Opts, pSccs, pGraph)
                  else RunCycleFixGroups(Opts, pStore, pSccs, pGraph, pLibStore);

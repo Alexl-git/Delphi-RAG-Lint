@@ -21,6 +21,9 @@ param(
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 if (-not $FixtureDir) { $FixtureDir = "$PSScriptRoot\..\fixtures\menutree" }
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
@@ -109,3 +112,4 @@ exit 1
     Write-Host "FAIL run_menu_tree_tests: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 }
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

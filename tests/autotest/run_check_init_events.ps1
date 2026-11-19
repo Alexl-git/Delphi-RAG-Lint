@@ -22,6 +22,9 @@
   Exit 0 = PASS, 1 = FAIL, 2 = could not run (harness did not compile).
 #>
 param([string]$Exe = "third_party\dll-win64\drag-lint.exe")
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 Set-Location $repo
@@ -232,3 +235,4 @@ finally {
 }
 if ($script:fail -gt 0) { exit 1 }
 exit 0
+} finally { Remove-WorkDir $work -Keep:($env:DL_KEEP_WORKDIR -eq '1') }
