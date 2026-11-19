@@ -8,7 +8,7 @@ $pass = 0; $fail = 0
 function Ok($n,$c){ if($c){$script:pass++; Write-Host "PASS  $n"} else {$script:fail++; Write-Host "FAIL  $n"} }
 
 # 1. SARIF: --format sarif emits parseable SARIF with our rule.
-$sarif = & $exe lint $fx --format sarif 2>$null | Out-String
+$sarif = & { $ErrorActionPreference = 'Continue'; & $exe lint $fx --format sarif 2>$null } | Out-String
 $j = $null; try { $j = $sarif | ConvertFrom-Json } catch {}
 Ok "sarif parses"            ($j -ne $null)
 Ok "sarif version 2.1.0"     ($j.version -eq '2.1.0')
@@ -16,9 +16,9 @@ Ok "sarif has used-before-assignment" ($sarif -match 'used-before-assignment')
 Ok "sarif carries a CERT taxonomy and a relationship for used-before-assignment (EXP33-C)" ((@($j.runs[0].taxonomies | Where-Object { $_.name -eq 'CERT' }).Count -eq 1) -and (@($j.runs[0].tool.driver.rules | Where-Object { $_.id -eq 'used-before-assignment' -and @($_.relationships).Count -ge 1 }).Count -eq 1))
 
 # 2. --fail-on: warning-level finding.
-& $exe lint $fx --fail-on error  2>$null | Out-Null; $ecErr  = $LASTEXITCODE
-& $exe lint $fx --fail-on warning 2>$null | Out-Null; $ecWarn = $LASTEXITCODE
-& $exe lint $fx --fail-on none    2>$null | Out-Null; $ecNone = $LASTEXITCODE
+& { $ErrorActionPreference = 'Continue'; & $exe lint $fx --fail-on error  2>$null } | Out-Null; $ecErr  = $LASTEXITCODE
+& { $ErrorActionPreference = 'Continue'; & $exe lint $fx --fail-on warning 2>$null } | Out-Null; $ecWarn = $LASTEXITCODE
+& { $ErrorActionPreference = 'Continue'; & $exe lint $fx --fail-on none    2>$null } | Out-Null; $ecNone = $LASTEXITCODE
 Ok "fail-on error => 0 (only warning)" ($ecErr  -eq 0)
 Ok "fail-on warning => 1"              ($ecWarn -eq 1)
 Ok "fail-on none => 0"                 ($ecNone -eq 0)
@@ -26,7 +26,7 @@ Ok "fail-on none => 0"                 ($ecNone -eq 0)
 # 3. severity override via --config: bump the rule to error, fail-on error now trips.
 $cfg = Join-Path $PSScriptRoot 'pipeline_sev.json'
 '{ "severity": { "used-before-assignment": "error" } }' | Set-Content -Encoding ASCII $cfg
-& $exe lint $fx --config $cfg --fail-on error 2>$null | Out-Null; $ecSev = $LASTEXITCODE
+& { $ErrorActionPreference = 'Continue'; & $exe lint $fx --config $cfg --fail-on error 2>$null } | Out-Null; $ecSev = $LASTEXITCODE
 Ok "severity bump => fail-on error trips" ($ecSev -eq 1)
 
 # 4. disable via --config drops THAT rule's finding.
@@ -38,8 +38,8 @@ Ok "severity bump => fail-on error trips" ($ecSev -eq 1)
 # run" -- both stay true no matter how many unrelated rules land later.
 $cfgD = Join-Path $PSScriptRoot 'pipeline_dis.json'
 '{ "disabled": ["used-before-assignment"] }' | Set-Content -Encoding ASCII $cfgD
-$all = & $exe lint $fx 2>$null | Out-String
-$dis = & $exe lint $fx --config $cfgD 2>$null | Out-String
+$all = & { $ErrorActionPreference = 'Continue'; & $exe lint $fx 2>$null } | Out-String
+$dis = & { $ErrorActionPreference = 'Continue'; & $exe lint $fx --config $cfgD 2>$null } | Out-String
 function FindingCount([string]$text) {
   # ANCHORED to the summary line -- a whole line that is nothing but
   # "<N> finding(s)". The first version matched '(\d+)\s+finding' ANYWHERE, so
@@ -64,8 +64,8 @@ Ok "disable removes exactly one finding" `
 
 # 5. baseline round-trip: write, then re-run reports nothing new.
 $base = Join-Path $PSScriptRoot 'pipeline.baseline.json'
-& $exe lint $fx --write-baseline $base 2>$null | Out-Null
-$new = & $exe lint $fx --baseline $base 2>$null | Out-String
+& { $ErrorActionPreference = 'Continue'; & $exe lint $fx --write-baseline $base 2>$null } | Out-Null
+$new = & { $ErrorActionPreference = 'Continue'; & $exe lint $fx --baseline $base 2>$null } | Out-String
 # v(ADP3 T3d2): was ($new -match '0 finding') -- the same unanchored-substring
 # fragility the :49-51 FindingCount fix already removed two checks above:
 # "10 finding(s)" contains the literal substring "0 finding" and would have
@@ -86,8 +86,8 @@ if (Test-Path $scratch6) { Remove-Item $scratch6 -Recurse -Force }
 New-Item -ItemType Directory -Path $scratch6 | Out-Null
 Copy-Item $fx (Join-Path $scratch6 'pipeline_fixture.pas') -Force
 $db6 = Join-Path $scratch6 'pipeline.sqlite'
-& $exe index $scratch6 --db $db6 2>$null | Out-Null
-$rawJson = & $exe lint-all --db $db6 --json 2>$null | Out-String
+& { $ErrorActionPreference = 'Continue'; & $exe index $scratch6 --db $db6 2>$null } | Out-Null
+$rawJson = & { $ErrorActionPreference = 'Continue'; & $exe lint-all --db $db6 --json 2>$null } | Out-String
 $j6 = $null; try { $j6 = $rawJson | ConvertFrom-Json } catch {}
 Ok "lint-all --json stdout parses with no preamble" ($j6 -ne $null)
 Ok "lint-all --json stdout starts at the array"     ($rawJson.TrimStart().StartsWith('['))
@@ -103,7 +103,7 @@ Ok "lint-all --json stdout has no scanning banner"  (-not ($rawJson -match 'lint
 # (EmitNoteLine: a text run prints the banner on stdout; a JSON run drops it.)
 # --output: a text run otherwise drops lint-report-<date>.txt into the caller's cwd -- under the
 # battery that is the repo root, where it failed shared_via_property S1 (150 INT, 05:38:17).
-$err6 = ((& $exe lint-all --db $db6 --output (Join-Path $scratch6 'lint-report.txt') 2>&1) -join "`n")
+$err6 = ((& { $ErrorActionPreference = 'Continue'; & $exe lint-all --db $db6 --output (Join-Path $scratch6 'lint-report.txt') 2>&1 | ForEach-Object { "$_" } }) -join "`n")
 Ok "lint-all banner is still printed (text mode)" ($err6 -match 'lint-all: scanning')
 Remove-Item $scratch6 -Recurse -Force -ErrorAction SilentlyContinue
 

@@ -156,7 +156,7 @@ $db = Join-Path $scratch 'if.sqlite'
 Push-Location C:\TEMP
 try {
   # F8: --rebuild is the ordering under test.
-  $out = & $exePath index $scratch --db $db --rebuild 2>&1
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db --rebuild 2>&1 | ForEach-Object { "$_" } }
   Check 'index --rebuild exits 0' ($LASTEXITCODE -eq 0)
   Check 'F2 the facts-inherited stage ran after ancestry' ((($out -join "`n") -match 'stage: ancestry') -and (($out -join "`n") -match 'stage: facts-inherited')) "stages seen: $(@($out | Select-String 'stage:.*started') -join ' | ')"
 
@@ -164,7 +164,7 @@ try {
   # column names so the assertions can say $row.writes_fields / $row.n.
   # A failed query (stderr dropped, empty stdout) is an EMPTY array, not @($null).
   function Sql([string]$q) {
-    $j = (& $exePath sql --db $db --query $q --json 2>$null) -join "`n"
+    $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n"
     if ([string]::IsNullOrWhiteSpace($j)) { return ,@() }
     try { $o = $j | ConvertFrom-Json } catch { return ,@() }
     $cols = @($o.columns | ForEach-Object { $_.name })
@@ -216,7 +216,7 @@ try {
   $allFactsSql = "SELECT s.qualified_name AS q, f.reads_fields AS r, f.writes_fields AS w FROM symbol_facts f JOIN symbols s ON s.id=f.symbol_id ORDER BY s.qualified_name"
   $rowsBefore = Sql $allFactsSql
   $factsBefore = @($rowsBefore | ForEach-Object { "$($_.q)|$($_.r)|$($_.w)" })
-  $out2 = & $exePath index $scratch --db $db 2>&1
+  $out2 = & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>&1 | ForEach-Object { "$_" } }
   Check 'F7 no-op incremental run exits 0' ($LASTEXITCODE -eq 0)
   Check 'F7 no-op incremental run still reports stage: facts-inherited' (($out2 -join "`n") -match 'stage: facts-inherited') "stages seen: $(@($out2 | Select-String 'stage:') -join ' | ')"
   $rowsAfter = Sql $allFactsSql

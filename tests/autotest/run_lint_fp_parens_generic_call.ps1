@@ -59,7 +59,7 @@ end.
 $unit = Join-Path $WorkDir 'fpparen.pas'
 [System.IO.File]::WriteAllText($unit, $src, [System.Text.Encoding]::ASCII)
 
-$out = (& $Exe lint $unit --rule redundant-parentheses 2>$null | Out-String)
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $unit --rule redundant-parentheses 2>$null } | Out-String)
 $generic = @([regex]::Matches($out, 'fpparen\.pas:1[1-6]:')).Count
 
 Write-Host 'False positives that must be GONE' -ForegroundColor Cyan

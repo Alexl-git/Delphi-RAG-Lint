@@ -136,7 +136,7 @@ foreach ($ex in $Examples) {
 
   Push-Location $runDir
   try {
-    & $Exe @($ex.IndexArgs) *> $null
+    & { $ErrorActionPreference = 'Continue'; & $Exe @($ex.IndexArgs) *> $null }
     Check "$($ex.Name): indexed the documented way" ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
     $text  = [IO.File]::ReadAllText($docPath)
@@ -162,7 +162,7 @@ foreach ($ex in $Examples) {
         $close = $open + 1
         while ($close -lt $lines.Count -and $lines[$close] -ne $fence) { $close++ }
         $cycArgs = @('cycles', '--db', $ex.Db) + (Split-Args $argText) + $LibArgs
-        $raw = & $Exe @cycArgs 2>$null
+        $raw = & { $ErrorActionPreference = 'Continue'; & $Exe @cycArgs 2>$null }
         $freshSet = New-Object 'System.Collections.Generic.HashSet[string]'
         foreach ($f in @($raw | ForEach-Object { ("$_").Replace($runDir + '\', '').Replace($WorkDir + '\', '').TrimEnd() })) { [void]$freshSet.Add($f) }
         $quoted = 0
@@ -198,7 +198,7 @@ foreach ($ex in $Examples) {
         for ($k = $open + 1; $k -lt $close; $k++) { $current += $lines[$k] }
 
         $cycArgs = @('cycles', '--db', $ex.Db) + (Split-Args $argText) + $LibArgs
-        $raw = & $Exe @cycArgs 2>$null
+        $raw = & { $ErrorActionPreference = 'Continue'; & $Exe @cycArgs 2>$null }
         $exit = $LASTEXITCODE
         # Paths relative to the directory the doc's commands run FROM (so the
         # re-index line and the file paths agree with "Indexed with: ..."),

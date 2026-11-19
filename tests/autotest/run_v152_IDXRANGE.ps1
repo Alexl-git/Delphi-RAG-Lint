@@ -45,7 +45,7 @@ function Assert($name, $cond) {
 function Lint([string]$path, [string]$cfg, [switch]$NoNarrow) {
   $a = if ($NoNarrow) { @('lint', $path, '--json') } else { @('lint', $path, '--rule', $rule, '--json') }
   if ($cfg) { $a += @('--config', $cfg) }
-  $raw = & $exe @a 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exe @a 2>$null }
   $r = @()
   try { $r = @($raw | ConvertFrom-Json) } catch { $r = @() }
   return ,@($r | Where-Object { $_ -and $_.rule -eq $rule })
@@ -80,7 +80,7 @@ Assert "positive control: config enables it without --rule (got $($onFull.Count)
 Assert "default ON: the same findings without any config (got $($dflt.Count))" ($dflt.Count -eq $nExpected)
 
 # 4: catalogue
-$cat = (& $exe rules --json 2>$null | ConvertFrom-Json).rules | Where-Object { $_.id -eq $rule }
+$cat = (& { $ErrorActionPreference = 'Continue'; & $exe rules --json 2>$null } | ConvertFrom-Json).rules | Where-Object { $_.id -eq $rule }
 Assert "rules --json lists the rule" ($null -ne $cat)
 Assert "default_enabled true (owner C3; BK-RULEFP)" ($cat.default_enabled -eq $true)
 Assert "fixable true" ($cat.fixable -eq $true)
@@ -105,10 +105,10 @@ try {
   $before = Lint $pas $cfg
   Assert "fix fixture: 2 findings before the fix (got $($before.Count))" ($before.Count -eq 2)
   # 4b: a batch fix (no --fix-rule) never applies the manual-only guard; it says why on stderr
-  $batchErr = (& $exe lint --in $pas --fix --config $cfg --apply --no-backup 2>&1) -join "`n"
+  $batchErr = (& { $ErrorActionPreference = 'Continue'; & $exe lint --in $pas --fix --config $cfg --apply --no-backup 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Assert "batch --fix leaves the manual-only guard out" (-not (([IO.File]::ReadAllText($pas)) -match 'InRange'))
   Assert "batch --fix names the manual-only rule" ($batchErr -match "manual only.*$rule")
-  & $exe lint --in $pas --fix --config $cfg --fix-rule $rule --apply --no-backup 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exe lint --in $pas --fix --config $cfg --fix-rule $rule --apply --no-backup 2>$null } | Out-Null
   $out = [IO.File]::ReadAllLines($pas)
   $guard = '  if not InRange(i, Low(A), High(A)) then raise EMyIndexError.CreateFmt(''A index %d outside %d..%d in PlainCalc'', [i, Low(A), High(A)]);'
   $gi = [Array]::IndexOf($out, $guard)
@@ -119,7 +119,7 @@ try {
   Assert "unanchorable access untouched" (($out -contains '  if X then D[i]:= 1;') -and (($out -match 'D index').Count -eq 0))
   $after = Lint $pas $cfg
   Assert "after the fix only the unanchorable finding is left (got $($after.Count))" (($after.Count -eq 1) -and ($after[0].message -match 'no autofix'))
-  $again = (& $exe lint --in $pas --fix --config $cfg --fix-rule $rule 2>$null) -join "`n"
+  $again = (& { $ErrorActionPreference = 'Continue'; & $exe lint --in $pas --fix --config $cfg --fix-rule $rule 2>$null }) -join "`n"
   Assert "second --fix has nothing to fix" ($again -match 'no fixable findings')
   # 1b: an index parameter of a routine exported from the interface keeps its hint, local callers or not
   $exp = @(
@@ -143,7 +143,7 @@ try {
   Assert "exported routine keeps the parameter hint (got $($ef.Count))" (($ef.Count -eq 1) -and ($ef[0].start_line -eq 11) -and ($ef[0].severity -eq 'hint'))
   $bad = Join-Path $tmp 'bad.json'
   [IO.File]::WriteAllText($bad, '{ "enabled": ["' + $rule + '"], "params": { "' + $rule + '": { "exception_class": "E Bad; x" } } }', [Text.Encoding]::ASCII)
-  $errText = (& $exe lint $pas --config $bad --json 2>&1) -join "`n"
+  $errText = (& { $ErrorActionPreference = 'Continue'; & $exe lint $pas --config $bad --json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Assert "invalid exception_class is a config error" ($errText -match 'exception_class must be a Pascal class name')
 }
 finally {

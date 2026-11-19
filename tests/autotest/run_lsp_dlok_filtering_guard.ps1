@@ -141,7 +141,7 @@ function LspLines([string]$PasFile) {
 }
 # `lint --json` is a bare array; the line field is start_line, the id is rule.
 function CliLines([string]$PasFile) {
-  $raw = (& $Exe lint $PasFile --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $PasFile --json 2>$null }) -join "`n"
   $arr = @()
   if ($raw.Trim()) { $arr = @($raw | ConvertFrom-Json) }
   return ,@($arr | Where-Object { $_.rule -eq $Rule } | ForEach-Object { [int]$_.start_line })
@@ -157,7 +157,7 @@ function Verify([string]$Name, [string]$PasFile, [int]$Expect) {
 
 # ---------- the hash, computed by the CLI's own `allow` ----------
 $hashedFile = New-Fixture 'hashed' @{}
-& $Exe allow $hashedFile --fix-line 11 --fix-rule $Rule --apply 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe allow $hashedFile --fix-line 11 --fix-rule $Rule --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $hashedLine = ([System.IO.File]::ReadAllLines($hashedFile))[10]
 $hm = [regex]::Match($hashedLine, 'dl:ok with-statement@([0-9a-f]{4})')
 Check 'SETUP: allow --apply wrote a hashed marker on line 11' $hm.Success $hashedLine
@@ -276,16 +276,16 @@ if ($cli0.Count -eq 1) {
   $anchor = [int]$cli0[0]
   Verify 'dup none (POSITIVE CONTROL)' $dupNone 1 | Out-Null
   $dupA = New-DupFixture 'dupanchor'
-  & $Exe allow $dupA --fix-line $anchor --fix-rule $Rule --apply 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe allow $dupA --fix-line $anchor --fix-rule $Rule --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'SETUP: allow wrote the anchor marker' ((([IO.File]::ReadAllLines($dupA))[$anchor - 1]) -match 'dl:ok duplicate-code@[0-9a-f]{4}')
   Verify 'dup marker on the ANCHOR end' $dupA 0 | Out-Null
   $partner = 0
-  $m = [regex]::Match(((& $Exe lint $dupNone --json 2>$null) -join "`n"), 'also at [^"]*?:(\d+)')
+  $m = [regex]::Match(((& { $ErrorActionPreference = 'Continue'; & $Exe lint $dupNone --json 2>$null }) -join "`n"), 'also at [^"]*?:(\d+)')
   if ($m.Success) { $partner = [int]$m.Groups[1].Value }
   Check 'SETUP: the partner line is known' ($partner -gt 0) "partner=$partner"
   if ($partner -gt 0) {
     $dupB = New-DupFixture 'duppartner'
-    & $Exe allow $dupB --fix-line $partner --fix-rule $Rule --apply 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $Exe allow $dupB --fix-line $partner --fix-rule $Rule --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
     Check 'SETUP: allow wrote the partner marker' ((([IO.File]::ReadAllLines($dupB))[$partner - 1]) -match 'dl:ok duplicate-code@[0-9a-f]{4}')
     Verify 'dup marker on the PARTNER end' $dupB 0 | Out-Null
     $dupS = New-DupFixture 'dupstale'

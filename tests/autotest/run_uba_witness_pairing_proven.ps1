@@ -264,7 +264,7 @@ end.
 $file = Join-Path $WorkDir 'uProven.pas'
 [System.IO.File]::WriteAllText($file, (($Fixture -replace "`r`n","`n") -replace "`n","`r`n"), [System.Text.Encoding]::ASCII)
 
-$out  = & $Exe lint $file --rules-dir $RulesDir 2>&1 | Out-String
+$out  = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file --rules-dir $RulesDir 2>&1 | ForEach-Object { "$_" } } | Out-String
 $rows = @([regex]::Matches($out, '\[(?<sev>\w+)\]\s+used-before-assignment:\s+(?<msg>[^\r\n]+)') |
           ForEach-Object { [pscustomobject]@{ Sev = $_.Groups['sev'].Value; Msg = $_.Groups['msg'].Value } })
 

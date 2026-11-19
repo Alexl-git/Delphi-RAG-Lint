@@ -53,7 +53,7 @@ $Dproj = Join-Path $Work 'app\App.dproj'
 $Db = Join-Path $Work 'app.sqlite'
 
 function LintAll([string[]]$extra) {
-  $raw = (& $Exe lint-all --db $Db --project $Dproj --json @extra 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --project $Dproj --json @extra 2>$null }) -join "`n"
   Write-Host ('  raw[0..160]: ' + $raw.Substring(0, [Math]::Min(160, $raw.Length)))
   $arr = @()
   try { $arr = @($raw | ConvertFrom-Json) } catch { }
@@ -65,10 +65,10 @@ function UnitsOf($findings, [string]$rule) {
 
 try {
   $cat = $null
-  try { $cat = (& $Exe rules --json 2>$null | ConvertFrom-Json).rules | Where-Object { $_.id -eq $RuleId } } catch { }
+  try { $cat = (& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null } | ConvertFrom-Json).rules | Where-Object { $_.id -eq $RuleId } } catch { }
   Check 'C1 catalog row: project-wide, warning, default ON' ($null -ne $cat -and $cat.category -eq 'project-wide' -and $cat.default_severity -eq 'warning' -and $cat.default_enabled -eq $true) ("row=" + ($cat | Select-Object id,category,default_severity,default_enabled | ConvertTo-Json -Compress))
 
-  $idx = (& $Exe index --project $Dproj --db $Db 2>&1) -join "`n"
+  $idx = (& { $ErrorActionPreference = 'Continue'; & $Exe index --project $Dproj --db $Db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   if ($LASTEXITCODE -ne 0) { Write-Host $idx; Check 'index exit 0' $false; throw 'index failed' }
 
   $f = LintAll @('--rule', $RuleId)

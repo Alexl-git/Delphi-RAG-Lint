@@ -121,7 +121,7 @@ WriteAnsi (Join-Path $src 'uDerived.pas') $derivedText
 $db = Join-Path $WorkDir 'fill.sqlite'
 
 function SigOf([string]$qn, [string]$d = $db) {
-  $r = (& $Exe sql --db $d --json --query "select signature from symbols where qualified_name = '$qn'" 2>$null) -join "`n" | ConvertFrom-Json
+  $r = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $d --json --query "select signature from symbols where qualified_name = '$qn'" 2>$null }) -join "`n" | ConvertFrom-Json
   if ($null -eq $r.rows -or @($r.rows).Count -eq 0) { return '<no row>' }
   $v = @($r.rows)[0][0]
   if ($null -eq $v) { return '' } else { return [string]$v }
@@ -129,7 +129,7 @@ function SigOf([string]$qn, [string]$d = $db) {
 
 Write-Host ''
 Write-Host '(1) a full index fills the re-publications' -ForegroundColor Cyan
-$out = (& $Exe index $src --db $db 2>&1) -join "`n"
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 Check 'index announces the prop-types stage' ($out -match 'stage: prop-types') "got: [$($out.Length) chars]"
 Check 'TDerived.Text = : string' ((SigOf 'uDerived.TDerived.Text') -eq ': string') "got: [$(SigOf 'uDerived.TDerived.Text')]"
@@ -144,10 +144,10 @@ Check 'TOrphan.Caption stays empty' ((SigOf 'uDerived.TOrphan.Caption') -eq '') 
 
 Write-Host ''
 Write-Host '(3) query and a read-only hover see the stored type' -ForegroundColor Cyan
-$q = @((& $Exe query --name Text --db $db --json 2>$null) -join "`n" | ConvertFrom-Json) |
+$q = @((& { $ErrorActionPreference = 'Continue'; & $Exe query --name Text --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json) |
   Where-Object { $_.qualified_name -eq 'uDerived.TDerived.Text' }
 Check 'query --name Text --json carries : string for TDerived.Text' (@($q).Count -eq 1 -and $q[0].signature -eq ': string') "got: [$(@($q).Count) row(s), sig=$($q.signature)]"
-$h = (& $Exe hover --qname uDerived.TDerived.Text --db $db --format json 2>$null) -join "`n" | ConvertFrom-Json
+$h = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname uDerived.TDerived.Text --db $db --format json 2>$null }) -join "`n" | ConvertFrom-Json
 Check 'hover json type = string' ($h.type -eq 'string') "got: [$($h.type)]"
 Check 'hover json declared_in = uBase.TBase' ($h.declared_in -eq 'uBase.TBase') "got: [$($h.declared_in)]"
 
@@ -159,17 +159,17 @@ Write-Host '(4) incremental: the ancestor changes type, the unchanged unit follo
 # scope assertion below sees only uBase's change.
 Start-Sleep -Seconds 1
 WriteAnsi (Join-Path $src 'uOther.pas') "unit uOther;`r`n`r`ninterface`r`n`r`nimplementation`r`n`r`nend.`r`n"
-$null = & $Exe index $src --db $db 2>$null
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>$null }
 Start-Sleep -Seconds 1
 WriteAnsi $baseFile (($baseText -replace 'FText: string', 'FText: Integer') -replace 'Text: string read', 'Text: Integer read')
-$out = (& $Exe index $src --db $db 2>&1) -join "`n"
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'incremental index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 # Scoped: the 4 same-named rows of what uBase declares; TOrphan.Caption is out of scope.
 Check 'incremental re-checks only the affected rows (4 of 5)' ($out -match 'prop-types: 4 bare re-publication\(s\), 2 filled, 0 unresolved') "got: [$(($out -split "`n" | Where-Object { $_ -match 'prop-types:' }) -join ' | ')]"
 Check 'premise: TBase.Text is Integer now' ((SigOf 'uBase.TBase.Text') -eq 'Integer') "got: [$(SigOf 'uBase.TBase.Text')]"
 Check 'TDerived.Text = : Integer' ((SigOf 'uDerived.TDerived.Text') -eq ': Integer') "got: [$(SigOf 'uDerived.TDerived.Text')]"
 Check 'TMid.Text = : Integer' ((SigOf 'uDerived.TMid.Text') -eq ': Integer') "got: [$(SigOf 'uDerived.TMid.Text')]"
-$out = (& $Exe index $src --db $db 2>&1) -join "`n"
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'no-change re-index keeps : Integer' ((SigOf 'uDerived.TDerived.Text') -eq ': Integer') "got: [$(SigOf 'uDerived.TDerived.Text')]"
 Check 'no-change re-index skips the pass (marker)' ($out -match 'stage: prop-types -- skipped') "got: [$(($out -split "`n" | Where-Object { $_ -match 'prop-types' }) -join ' | ')]"
 
@@ -182,7 +182,7 @@ $py = Get-Command python -ErrorAction SilentlyContinue
 if ($null -ne $py) {
   $null = & $py.Source -I -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute(""update symbols set signature='' where kind='property' and qualified_name in ('uDerived.TDerived.Text','uDerived.TMid.Text')""); c.execute(""delete from schema_meta where key='prop_types_filled'""); c.commit(); c.close()" $db
   Check 'premise: rows blanked like a pass-less index' ((SigOf 'uDerived.TDerived.Text') -eq '') "got: [$(SigOf 'uDerived.TDerived.Text')]"
-  $out = (& $Exe index $src --db $db 2>&1) -join "`n"
+  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'prop-types stage ran on a run that parsed nothing' ($out -match 'prop-types: 5 bare re-publication\(s\), 2 filled, 1 unresolved') "got: [$(($out -split "`n" | Where-Object { $_ -match 'prop-types' }) -join ' | ')]"
   Check 'TDerived.Text re-filled = : Integer' ((SigOf 'uDerived.TDerived.Text') -eq ': Integer') "got: [$(SigOf 'uDerived.TDerived.Text')]"
   Check 'TMid.Text re-filled = : Integer' ((SigOf 'uDerived.TMid.Text') -eq ': Integer') "got: [$(SigOf 'uDerived.TMid.Text')]"
@@ -191,7 +191,7 @@ if ($null -ne $py) {
 }
 Write-Host ''
 Write-Host '(6) hover --write-back is removed' -ForegroundColor Cyan
-$null = & $Exe hover --qname uDerived.TDerived.Text --db $db --write-back 2>$null
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe hover --qname uDerived.TDerived.Text --db $db --write-back 2>$null }
 Check 'hover --write-back is rejected (non-zero exit)' ($LASTEXITCODE -ne 0) "exit=$LASTEXITCODE"
 
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }

@@ -52,12 +52,12 @@ function New-Case([string]$Tag, [bool]$Broken) {
     [IO.File]::WriteAllText($dpr, ([IO.File]::ReadAllText($dpr).Replace("GfUnit in 'GfUnit.pas';", "GfUnit in 'GfUnit.pas',`r`n  GfBroken in 'GfBroken.pas';")), $Ascii)
   }
   $db = Join-Path $d 'p.sqlite'
-  & $Exe index --project (Join-Path $d 'GfDemo.dproj') --db $db --library-db none *> (Join-Path $Tmp "$Tag.index.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $d 'GfDemo.dproj') --db $db --library-db none *> (Join-Path $Tmp "$Tag.index.log") }
   return @{ Dir = $d; Db = $db; Proj = (Join-Path $d 'GfDemo.dproj'); Unit = $u }
 }
 function Fix($C, [string]$Rule, [string[]]$More) {
   $a = @('lint', '--in', $C.Unit, '--db', $C.Db, '--enable', $Rule, '--fix', '--fix-rule', $Rule, '--apply', '--no-backup', '--rsvars', $Rsvars) + $More
-  $out = & $Exe @a 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } } | Out-String
   return @{ Code = $LASTEXITCODE; Out = $out }
 }
 function Hash($p) { return (Get-FileHash $p -Algorithm SHA1).Hash }

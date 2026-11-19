@@ -46,7 +46,7 @@ Copy-Item $fixture $target -Force
 
 # Count symbols of kind $k named $name in a `query --name` JSON result.
 function KindCount([string]$name, [string]$k) {
-  $j = & $exePath query --name $name --json --db $db 2>$null | Out-String
+  $j = & { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --json --db $db 2>$null } | Out-String
   if ([string]::IsNullOrWhiteSpace($j)) { return 0 }
   $rows = $j | ConvertFrom-Json
   return @($rows | Where-Object { $_.kind -eq $k }).Count
@@ -54,22 +54,22 @@ function KindCount([string]$name, [string]$k) {
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # --- BEFORE purge: locals/params present, call graph captured. ---
   Check 'BEFORE: AAlpha present as skParam'    ((KindCount 'AAlpha' 'param')     -eq 1)
   Check 'BEFORE: B present as skLocalVar'      ((KindCount 'B'      'local_var') -eq 1)
 
-  $edgesBefore    = (& $exePath dump-call-edges --db $db 2>$null | Out-String).Trim()
-  $callersBefore  = (& $exePath query find-callers --name Run --resolved --json --db $db 2>$null | Out-String).Trim()
-  $calleesBefore  = (& $exePath find-callees --qname receivers.TCaller.ViaLocal --json --db $db 2>$null | Out-String).Trim()
+  $edgesBefore    = (& { $ErrorActionPreference = 'Continue'; & $exePath dump-call-edges --db $db 2>$null } | Out-String).Trim()
+  $callersBefore  = (& { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name Run --resolved --json --db $db 2>$null } | Out-String).Trim()
+  $calleesBefore  = (& { $ErrorActionPreference = 'Continue'; & $exePath find-callees --qname receivers.TCaller.ViaLocal --json --db $db 2>$null } | Out-String).Trim()
   $edgeCountBefore = @($edgesBefore -split "`r?`n" | Where-Object { $_ -match '^\d+\|[A-Za-z_][\w.]*\|(certain|ambiguous)$' }).Count
   Check 'BEFORE: call_edges populated (>= 5)'  ($edgeCountBefore -ge 5)
 
   $sizeBefore = (Get-Item $db).Length
 
   # --- Run purge-locals. ---
-  $purgeTxt = & $exePath purge-locals --db $db 2>$null | Out-String
+  $purgeTxt = & { $ErrorActionPreference = 'Continue'; & $exePath purge-locals --db $db 2>$null } | Out-String
   Check 'purge-locals exit 0'                  ($LASTEXITCODE -eq 0)
   # It must report a nonzero rows-removed count (receivers.pas has 1 param + 1 local).
   # D5 fast-follow (T12/T13): this probe PARSES the verb's plain-text success
@@ -89,9 +89,9 @@ try {
   Check 'AFTER: AAlpha (param) gone'           ((KindCount 'AAlpha' 'param')     -eq 0)
   Check 'AFTER: B (local_var) gone'            ((KindCount 'B'      'local_var') -eq 0)
 
-  $edgesAfter   = (& $exePath dump-call-edges --db $db 2>$null | Out-String).Trim()
-  $callersAfter = (& $exePath query find-callers --name Run --resolved --json --db $db 2>$null | Out-String).Trim()
-  $calleesAfter = (& $exePath find-callees --qname receivers.TCaller.ViaLocal --json --db $db 2>$null | Out-String).Trim()
+  $edgesAfter   = (& { $ErrorActionPreference = 'Continue'; & $exePath dump-call-edges --db $db 2>$null } | Out-String).Trim()
+  $callersAfter = (& { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name Run --resolved --json --db $db 2>$null } | Out-String).Trim()
+  $calleesAfter = (& { $ErrorActionPreference = 'Continue'; & $exePath find-callees --qname receivers.TCaller.ViaLocal --json --db $db 2>$null } | Out-String).Trim()
 
   # THE critical assertion: the resolved call graph is byte-identical.
   Check 'CRITICAL: dump-call-edges IDENTICAL before==after' ($edgesBefore -eq $edgesAfter)
@@ -125,7 +125,7 @@ try {
   $mSize = (Get-Item $mdb).Length
   Check ("MUTATION: purged DB + 2 pages must FAIL the slack check (sizeAfter {0}, mutant {1}, sizeBefore {2})" -f $sizeAfter, $mSize, $sizeBefore) (-not (SizeWithinSlack $sizeBefore $mSize))
   # --- Idempotent second run: nothing left to delete. ---
-  $purge2Txt = & $exePath purge-locals --db $db 2>$null | Out-String
+  $purge2Txt = & { $ErrorActionPreference = 'Continue'; & $exePath purge-locals --db $db 2>$null } | Out-String
   Check 'second purge exit 0 (idempotent)'     ($LASTEXITCODE -eq 0)
   $removed2 = -1
   if ($purge2Txt -match '(?:removed|purged)\D*(\d+)') { $removed2 = [int]$Matches[1] }
@@ -139,8 +139,8 @@ try {
   # rows to remove.
   $jdb = Join-Path $scratch 'json_probe.sqlite'
   if (Test-Path $jdb) { Remove-Item $jdb -Force }
-  & $exePath index $scratch --db $jdb 2>$null | Out-Null
-  $jsonOut = & $exePath purge-locals --db $jdb --json 2>$null | Out-String
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $jdb 2>$null } | Out-Null
+  $jsonOut = & { $ErrorActionPreference = 'Continue'; & $exePath purge-locals --db $jdb --json 2>$null } | Out-String
   Check '--json: parses as an object'          ($jsonOut.Trim().StartsWith('{'))
   $jo = $jsonOut | ConvertFrom-Json
   Check '--json: removed >= 2'                 ([int]$jo.removed -ge 2)

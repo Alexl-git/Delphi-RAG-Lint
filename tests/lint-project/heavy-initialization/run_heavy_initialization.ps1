@@ -34,7 +34,7 @@ function LineOf([string]$File, [string]$Marker) {
   return [int]$m[0].LineNumber
 }
 function RuleFindings([string]$Db, [string[]]$Extra) {
-  $raw = & $exePath lint-all --db $Db --format json @Extra 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $Db --format json @Extra 2>$null }
   return @((Parse-Findings $raw) | Where-Object { $_.rule -eq $Rule })
 }
 function Fresh([string]$Name) {
@@ -46,11 +46,11 @@ function Fresh([string]$Name) {
 try {
   $src = Fresh 'a'
   $db = Join-Path $scratch 'a.sqlite'
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $libSrc = Join-Path $scratch 'lib'; [void](New-Item -ItemType Directory -Force -Path $libSrc)
   Copy-Item (Join-Path $PSScriptRoot 'lib\*.pas') $libSrc
   $libDb = Join-Path $scratch 'lib.sqlite'
-  & $exePath index $libSrc --db $libDb 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $libSrc --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
   # no library slot: a call into a library routine is not followed (the old walk)
   $noLib = RuleFindings $db @('--rule', $Rule)
@@ -76,7 +76,7 @@ try {
   # member of a heavy library type called on a parameter, both fire. RUN 1 above is the control:
   # the same units in an index without the binding stay silent.
   $dbX = Join-Path $scratch 'x.sqlite'
-  & $exePath index $src --db $dbX --library-db $libDb 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $dbX --library-db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $bound = RuleFindings $dbX @('--rule', $Rule, '--library-db', $libDb)
   $libVar = LineOf (Join-Path $src 'uHiLibVar.pas') 'TRIGGER-LIBVAR'
   $owner  = LineOf (Join-Path $src 'uHiLibOwner.pas') 'TRIGGER-OWNER'
@@ -94,7 +94,7 @@ try {
   $f = Join-Path $src 'uHiChain.pas'
   $t = [IO.File]::ReadAllText($f).Replace("  Boot; // TRIGGER-CHAIN", "  // no call")
   [IO.File]::WriteAllText($f, $t, [Text.Encoding]::ASCII)
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $gone = RuleFindings $db @('--rule', $Rule, '--library-db', $libDb)
   Check 'RUN 3 the section stops calling: the chain finding goes' (@($gone | Where-Object { $_.file_path -like '*uHiChain.pas' }).Count -eq 0) "$($gone.Count) total"
 } finally {

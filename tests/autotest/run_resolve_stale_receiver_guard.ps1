@@ -100,14 +100,14 @@ end.
 Push-Location C:\TEMP
 try {
   # --- step 1: fresh index. Nothing may be considered stale. ---
-  $r1 = & $exePath index $scratch --db $db 2>&1 | Out-String
+  $r1 = & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'SANITY: both units indexed with no errors' `
         (($r1 -match 'a\.pas\s*->\s*\d+ symbols, \d+ refs, 0 errors') -and
          ($r1 -match 'b\.pas\s*->\s*\d+ symbols, \d+ refs, 0 errors')) $r1
   Check 'POSITIVE CONTROL: a FRESH index withholds NOTHING (hash basis matches the indexer)' `
         ($r1 -notmatch 'WITHHELD') $r1
 
-  $res1 = & $exePath query find-callers --name Make --resolved --db $db 2>&1 | Out-String
+  $res1 = & { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name Make --resolved --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'SANITY: Build resolves as a caller before the stale run' `
         ($res1 -match 'b\.Build\b') $res1
 
@@ -146,7 +146,7 @@ end.
   try {
     # ONLY c.pas -- indexing the whole folder would re-index the edited b.pas,
     # making it fresh again and leaving nothing stale to guard.
-    $r2 = & $exePath index (Join-Path $scratch 'c.pas') --db $db 2>&1 | Out-String
+    $r2 = & { $ErrorActionPreference = 'Continue'; & $exePath index (Join-Path $scratch 'c.pas') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   } finally { Remove-Item Env:\DRAGLINT_NO_SCOPED_RESOLVE -ErrorAction SilentlyContinue }
 
   Check 'SANITY: the resolve pass actually ran (else the next assert is vacuous)' `
@@ -155,7 +155,7 @@ end.
         ($r2 -match 'WITHHELD') $r2
 
   # --- step 3: the stored data survived the stale run. ---
-  $res2 = & $exePath query find-callers --name Make --resolved --db $db 2>&1 | Out-String
+  $res2 = & { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name Make --resolved --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'DATA SURVIVED: Build is STILL a resolved caller after the stale run' `
         ($res2 -match 'b\.Build\b') $res2
 } finally { Pop-Location }

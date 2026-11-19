@@ -82,7 +82,7 @@ python $py $db
 Check 'pre-prop_access fixture DB created' (($LASTEXITCODE -eq 0) -and (Test-Path $db))
 
 # --- 1. index onto the old DB must migrate + succeed (self-heal path) ---
-$idxOut = & $Exe index $FixtureDir --db $db 2>&1
+$idxOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $FixtureDir --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index onto pre-prop_access db exits 0' ($LASTEXITCODE -eq 0) (($idxOut | Select-Object -Last 1))
 
 # --- 2. column must now exist (exactly once); pre-existing row reads NULL ---
@@ -108,7 +108,7 @@ Check 'existing row prop_access IS NULL'         ($state[2] -eq 'True')
 Check 'schema_version bumped past 16'             ([int]$state[3] -gt 16) "(got $($state[3]))"
 
 # --- 3. re-open (already-migrated DB) must be idempotent: no error, no dup column ---
-$idxOut2 = & $Exe index $FixtureDir --db $db 2>&1
+$idxOut2 = & { $ErrorActionPreference = 'Continue'; & $Exe index $FixtureDir --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'second index (idempotent re-migrate) exits 0' ($LASTEXITCODE -eq 0) (($idxOut2 | Select-Object -Last 1))
 $state2 = (python $chk $db) -split '\s+'
 Check 'prop_access still appears exactly once after re-migrate' ($state2[1] -eq '1')

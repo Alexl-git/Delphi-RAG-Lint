@@ -76,13 +76,13 @@ $families = [ordered]@{
 $enable = 'ui-access-in-thread-typed,default-encoding-io,interface-object-mixing'
 Push-Location $tmp
 try {
-  & $exePath index $libSrc --db $lib 2>&1 | Out-Null
-  & $exePath index $prjSrc --db $db --library-db $lib 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $libSrc --db $lib 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $prjSrc --db $db --library-db $lib 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'both indexes built' ((Test-Path $lib) -and (Test-Path $db))
 
   $common = @('--db', $db, '--json', '--quiet', '--config', $cfg, '--enable', $enable)
-  $with = Parse-Findings (& $exePath lint-all @common --library-db $lib 2>$null)
-  $none = Parse-Findings (& $exePath lint-all @common --library-db none 2>$null)
+  $with = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all @common --library-db $lib 2>$null })
+  $none = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all @common --library-db none 2>$null })
   Check 'lint-all with the library answered' ($with.Count -gt 0) 'no findings at all'
   Check 'lint-all with none answered' ($none.Count -gt 0) 'no findings at all'
 
@@ -95,14 +95,14 @@ try {
     Check "[$fam] $rule lint-all with library" ($gotWith -eq $wantWith) "want [$wantWith] got [$gotWith]"
     Check "[$fam] $rule lint-all --library-db none (control)" ($gotNone -eq $wantNone) "want [$wantNone] got [$gotNone]"
     Check "[$fam] the two runs differ" ($wantWith -ne $wantNone) 'fixture proves nothing'
-    $one = Parse-Findings (& $exePath lint $unit --db $db --json --quiet --config $cfg --library-db $lib --rule $rule --enable $enable 2>$null)
+    $one = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $unit --db $db --json --quiet --config $cfg --library-db $lib --rule $rule --enable $enable 2>$null })
     $gotOne = Lines $one $rule
     Check "[$fam] $rule lint <file> --rule with library" ($gotOne -eq $wantWith) "want [$wantWith] got [$gotOne]"
   }
 
   # The flag: a named library that is missing refuses.
   $missing = Join-Path $tmp 'no-such-library.sqlite'
-  $err = & $exePath lint-all --db $db --library-db $missing --json --quiet --config $cfg 2>&1
+  $err = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --library-db $missing --json --quiet --config $cfg 2>&1 | ForEach-Object { "$_" } }
   $code = $LASTEXITCODE
   Check 'a named library that does not exist refuses (exit 2)' ($code -eq 2) "exit $code"
   Check 'the refusal names the path' ((($err | Out-String)).Contains('no-such-library')) ($err | Out-String)

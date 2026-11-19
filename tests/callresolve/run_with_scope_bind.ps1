@@ -63,7 +63,7 @@ $use = Join-Path $scratch 'uWsUse.pas'
 $db  = Join-Path $scratch 'withscope.sqlite'
 
 function Sql([string]$Query) {
-  $raw = (& $exePath sql --db $db --json --limit 1000 --query $Query 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --limit 1000 --query $Query 2>$null }) -join "`n"
   $b = $raw.IndexOf('{')
   if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
   $o = $raw.Substring($b) | ConvertFrom-Json
@@ -101,7 +101,7 @@ function Show($rows) { return (@($rows | ForEach-Object { "$($_.kind):sid=$($_.s
 
 Push-Location C:\TEMP
 try {
-  $log = (& $exePath index $scratch --db $db *>&1) -join "`n"
+  $log = (& { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db *>&1 | ForEach-Object { "$_" } }) -join "`n"
 
   Write-Host '--- controls: the same names OUTSIDE any with keep their ordinary binding'
   $r = RefsAt 'CTRL-OUTSIDE' 'Execute'

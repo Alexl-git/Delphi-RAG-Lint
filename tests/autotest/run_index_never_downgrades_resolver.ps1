@@ -89,7 +89,7 @@ function PlantResolver([string]$Db, [string]$Version) {
 }
 function SidecarBytes([string]$Db) { $w = "$Db-wal"; if (Test-Path $w) { return (Get-Item $w).Length } else { return 0 } }
 
-$info = (& $Exe info --json 2>&1 | Where-Object { "$_" -like '{*' } | Select-Object -First 1)
+$info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>&1 | ForEach-Object { "$_" } } | Where-Object { "$_" -like '{*' } | Select-Object -First 1)
 $engineVer = ''
 try { $engineVer = [string](($info | ConvertFrom-Json).resolver_version) } catch { $engineVer = '' }
 Check 'V0 info --json reports the resolver version' ($engineVer -match '^\d+\.\d+\.\d+') "resolver_version=$engineVer"
@@ -125,7 +125,7 @@ end.
 '@
 
 $pristine = Join-Path $WorkDir 'pristine.sqlite'
-$o0 = (& $Exe index $src --db $pristine 2>&1 | Out-String)
+$o0 = (& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $pristine 2>&1 | ForEach-Object { "$_" } } | Out-String)
 Check 'V1 fixture index exits 0' ($LASTEXITCODE -eq 0) ($o0 -split "`r?`n" | Select-Object -Last 1)
 Check 'V2 fixture has NO pending -wal' ((SidecarBytes $pristine) -eq 0) "wal bytes=$(SidecarBytes $pristine)"
 $rfp0 = MetaGet $pristine 'resolver_fingerprint'
@@ -138,7 +138,7 @@ function Fresh() {
 }
 function RunIndex([string[]]$ExtraArgs) {
   $argv = @('index', $src, '--db', $db) + $ExtraArgs
-  $script:LastOut = (& $Exe @argv 2>&1 | Out-String)
+  $script:LastOut = (& { $ErrorActionPreference = 'Continue'; & $Exe @argv 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $script:LastExit = $LASTEXITCODE
 }
 $rederive = 'Resolver changed since this DB was resolved'
@@ -237,14 +237,14 @@ Write-Host ''
 Write-Host 'N1: the read-side note states the DIRECTION' -ForegroundColor Cyan
 Fresh
 PlantResolver $db $newer
-$n1 = (& $Exe lint-project --db $db --rule god-class 2>&1 | Out-String)
+$n1 = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-project --db $db --rule god-class 2>&1 | ForEach-Object { "$_" } } | Out-String)
 $n1Line = ($n1 -split "`r?`n" | Where-Object { $_ -match 'resolver:' } | Select-Object -First 1)
 Check 'N1 a note about the resolver is printed' ([bool]$n1Line) $n1Line
 Check 'N1 it calls the index NEWER' ($n1Line -match 'NEWER') ''
 Check 'N1 it does NOT advise re-deriving with --resolve-only' ($n1Line -notmatch 'resolve-only') 'that advice is exactly the downgrade'
 Fresh
 PlantResolver $db '0.1.0-alpha'
-$n2 = (& $Exe lint-project --db $db --rule god-class 2>&1 | Out-String)
+$n2 = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-project --db $db --rule god-class 2>&1 | ForEach-Object { "$_" } } | Out-String)
 $n2Line = ($n2 -split "`r?`n" | Where-Object { $_ -match 'resolver:' } | Select-Object -First 1)
 Check 'N1 CONTROL: an OLDER stamp still gets the re-derive advice' ($n2Line -match 'resolve-only') $n2Line
 
@@ -259,12 +259,12 @@ $mtext = '{' + [char]10 +
 $allDb = Join-Path $WorkDir 'out\ndr.sqlite'
 Push-Location C:\TEMP
 try {
-  $null = (& $Exe index --all --config $manifest --only SecNDR --jobs 1 2>&1 | Out-String)
+  $null = (& { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $manifest --only SecNDR --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check 'R5 precondition: the manifest section built' ((Test-Path $allDb) -and ($LASTEXITCODE -eq 0)) "exit=$LASTEXITCODE"
   if (Test-Path $allDb) {
     PlantResolver $allDb $newer
     $md5 = Md5 $allDb
-    $b1 = (& $Exe index --all --config $manifest --only SecNDR --jobs 1 --resolve-only 2>&1 | Out-String)
+    $b1 = (& { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $manifest --only SecNDR --jobs 1 --resolve-only 2>&1 | ForEach-Object { "$_" } } | Out-String)
     $e1 = $LASTEXITCODE
     Check 'R5 exits non-zero' ($e1 -ne 0) "exit=$e1"
     Check 'R5 names both versions' (($b1 -match [regex]::Escape($newer)) -and ($b1 -match [regex]::Escape($engineVer))) ''

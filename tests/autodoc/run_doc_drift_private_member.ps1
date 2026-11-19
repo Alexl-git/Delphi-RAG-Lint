@@ -60,7 +60,7 @@ function Write-Ascii([string]$Path, [string]$Text) {
 }
 # lint-all --json prints progress text around ONE array; lint JSON uses start_line.
 function Get-Findings {
-  $raw = (& $Exe lint-all --db $Db --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --json 2>$null }) -join "`n"
   $a = $raw.IndexOf('['); $b = $raw.LastIndexOf(']')
   if ($a -lt 0 -or $b -le $a) { return ,@() }
   return ,@(ConvertFrom-Json $raw.Substring($a, $b - $a + 1))
@@ -125,10 +125,10 @@ end.
 
 Push-Location $W
 try {
-  & $Exe index $W --db $Db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $W --db $Db 2>$null } | Out-Null
 
   # ---- Part A: the batch writer covers the private method ------------------
-  & $Exe document --unit $Pas --db $Db --apply --no-backup 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe document --unit $Pas --db $Db --apply --no-backup 2>$null } | Out-Null
   $src = [IO.File]::ReadAllText($Pas)
   $declLine = LineOf '^\s*procedure RefreshList;'
   $lines = [IO.File]::ReadAllLines($Pas)
@@ -142,7 +142,7 @@ try {
   $src = [IO.File]::ReadAllText($Pas)
   $src = $src.Replace('if Helper > 0 then ImplOnly(1);', 'if Other > 0 then ImplOnly(1);')
   Write-Ascii $Pas $src
-  & $Exe index $W --db $Db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $W --db $Db 2>$null } | Out-Null
   # doc-drift anchors at the FIRST LINE OF THE DOC COMMENT, not the declaration.
   $declLine = LineOf '^\s*procedure RefreshList;'
   $docLine  = DocStartAbove $declLine
@@ -162,8 +162,8 @@ try {
   Check 'C: non-vacuity: lint-all produced findings at all' ($f.Count -gt 0)
 
   # ---- Part D: the fixer shares the population ------------------------------
-  & $Exe lint-all --db $Db --fix --apply --no-backup 2>$null | Out-Null
-  & $Exe index $W --db $Db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --fix --apply --no-backup 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $W --db $Db 2>$null } | Out-Null
   $declLine = LineOf '^\s*procedure RefreshList;'
   $lines = [IO.File]::ReadAllLines($Pas)
   $above = ($lines[0..($declLine - 2)] -join "`n")

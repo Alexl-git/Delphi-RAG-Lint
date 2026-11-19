@@ -145,13 +145,13 @@ if (@($rowInBlock, $rowInDocTag, $rowReal, $rowStranded | Sort-Object -Unique).C
 Write-Host ("  anchors: block={0} doctag={1} real={2} stranded={3}" -f $rowInBlock, $rowInDocTag, $rowReal, $rowStranded) -ForegroundColor DarkGray
 
 $db = Join-Path $WorkDir 'fx.sqlite'
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 # lint-all, NOT `lint <file>`: review-marker-unused is a whole-run rule and
 # `lint <file>` reports 0 findings for it on the very file lint-all warns about.
 # The first version of this test used `lint` and both prose assertions passed
 # for the wrong reason. See docs\INBOX-lint-single-file-silently-omits-lint-all-rules.md.
 Push-Location $WorkDir
-try { $out = & $Exe lint-all --db $db 2>&1 | Out-String } finally { Pop-Location }
+try { $out = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String } finally { Pop-Location }
 
 function Has-Finding([int]$Row, [string]$Rule) {
   [bool]([regex]::Match($out, ("uProse\.pas:{0}:\d+\s+\[\w+\]\s+{1}\b" -f $Row, [regex]::Escape($Rule))).Success)

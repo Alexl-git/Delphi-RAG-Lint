@@ -50,18 +50,18 @@ $db = Join-Path $WorkDir 'defr.sqlite'
 
 Push-Location $env:TEMP
 try {
-  & $exePath index $WorkDir --db $db *> $null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $WorkDir --db $db *> $null }
   $stmtLine = (Select-String -LiteralPath $fixture -Pattern '^\s*Twice\(3\);' | Select-Object -First 1).LineNumber
 
-  $f1 = Parse-Findings (& $exePath lint $fixture --db $db --json 2>$null)
+  $f1 = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $fixture --db $db --json 2>$null })
   $d1 = @($f1 | Where-Object { $_.rule -eq $rule })
   Check (($d1.Count -eq 1) -and ($d1[0].start_line -eq $stmtLine)) "c1 lint <file> --db reports $rule once at line $stmtLine (got $($d1.Count): $(($d1 | ForEach-Object start_line) -join ','))"
 
-  $f2 = Parse-Findings (& $exePath lint-all --db $db --format json 2>$null)
+  $f2 = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json 2>$null })
   $d2 = @($f2 | Where-Object { $_.rule -eq $rule })
   Check ($d2.Count -eq 1) "c2 control: lint-all reports $rule once (got $($d2.Count))"
 
-  $f3 = Parse-Findings (& $exePath lint $fixture --db $db --json --disable $rule 2>$null)
+  $f3 = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $fixture --db $db --json --disable $rule 2>$null })
   $d3 = @($f3 | Where-Object { $_.rule -eq $rule })
   Check (($d3.Count -eq 0) -and ($f3.Count -gt 0)) "c3 --disable $rule silences it (got $($d3.Count), other findings $($f3.Count))"
 } finally {

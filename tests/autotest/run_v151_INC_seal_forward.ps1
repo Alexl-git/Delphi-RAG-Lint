@@ -31,7 +31,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 function Lines([string]$File, [string]$Db, [string[]]$Extra) {
   $sel = if ($Extra.Count -gt 0) { $Extra } else { @('--rule', 'is-never-true') }
-  $raw = (& $exePath lint $File --db $Db --json @sel 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath lint $File --db $Db --json @sel 2>$null }) -join "`n"
   $j = @($raw | ConvertFrom-Json)
   return ,@($j | Where-Object { $_.rule -eq 'is-never-true' } | ForEach-Object { [int]$_.start_line })
 }
@@ -42,7 +42,7 @@ try {
   Copy-Item (Join-Path $PSScriptRoot 'fixtures\v151-EXT\uSealShapes.pas') $fx
   Copy-Item (Join-Path $PSScriptRoot 'fixtures\v151-INC\uSealFwd.pas') $fx
   $db = Join-Path $scratch 'seal.sqlite'
-  & $exePath index $fx --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $fx --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $a = Lines (Join-Path $fx 'uSealShapes.pas') $db @()
   Check 'uSealShapes: line 45 (F is TShFwd, forward of a sealed class) fires' ($a -contains 45) ($a -join ',')
   Check 'uSealShapes: lines 41-44 still fire' ((@(41, 42, 43, 44) | Where-Object { $a -notcontains $_ }).Count -eq 0) ($a -join ',')

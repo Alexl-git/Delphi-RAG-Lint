@@ -57,7 +57,7 @@ function Hover($qname) {
   # that kept only lines starting with '{' then silently dropped the
   # continuations and handed ConvertFrom-Json a truncated object. That failed as
   # "no model returned", which reads like an engine defect and is not one.
-  $raw = (& $Exe hover --qname $qname --db $Database --format json 2>&1 | Out-String -Width 100000)
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname $qname --db $Database --format json 2>&1 | ForEach-Object { "$_" } } | Out-String -Width 100000)
   $a = $raw.IndexOf('{'); $b = $raw.LastIndexOf('}')
   if (($a -lt 0) -or ($b -le $a)) { return $null }
   try { return $raw.Substring($a, $b - $a + 1) | ConvertFrom-Json } catch { return $null }

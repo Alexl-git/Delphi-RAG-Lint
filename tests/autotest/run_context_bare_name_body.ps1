@@ -116,7 +116,7 @@ end.
 "@
 
 $db = Join-Path $WorkDir 'fx.sqlite'
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the fixture index was built' (Test-Path $db) $db
 
 # The call operator, NOT Start-Process -ArgumentList. Start-Process does not
@@ -126,7 +126,7 @@ Check 'V the fixture index was built' (Test-Path $db) $db
 # bundle this guard is hunting. That false reading cost a diagnosis; do not
 # "simplify" this back.
 function Bundle([string]$Task) {
-  return ((& $exePath context --task $Task --db $db --format markdown 2>$null) -join "`r`n")
+  return ((& { $ErrorActionPreference = 'Continue'; & $exePath context --task $Task --db $db --format markdown 2>$null }) -join "`r`n")
 }
 
 $qual = Bundle 'modify uOne.TWorker.UniqueOnlyRoutine'

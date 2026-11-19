@@ -173,13 +173,13 @@ Check 'all three fixture statements located' (
 # --- index both, as two separate databases -----------------------------------
 $libDb  = Join-Path $WorkDir 'library-Test.sqlite'
 $projDb = Join-Path $WorkDir 'proj.sqlite'
-& $Exe index $libSrc  --db $libDb  2>&1 | Out-Null
-& $Exe index $projSrc --db $projDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $libSrc  --db $libDb  2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $projSrc --db $projDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'both indexes built' ((Test-Path $libDb) -and (Test-Path $projDb))
 
 # lint-all takes the FIRST --db as the project index and the `library-*` one as
 # the library slot, which is exactly the pairing the fix depends on.
-$raw = & $Exe lint-all --db $projDb --db $libDb 2>&1
+$raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $projDb --db $libDb 2>&1 | ForEach-Object { "$_" } }
 $fired = @{}
 foreach ($line in $raw) {
   if ("$line" -match ':(\d+):\d+\s+\[\w+\]\s+([a-z0-9-]+):') {

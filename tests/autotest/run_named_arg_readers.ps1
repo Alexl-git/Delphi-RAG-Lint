@@ -65,7 +65,7 @@ $pas = Join-Path $WorkDir 'uNamedArgReaders.pas'
 
 Push-Location $WorkDir
 try {
-  $raw = (& $Exe lint $pas --enable magic-literal --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $pas --enable magic-literal --json 2>$null }) -join "`n"
   $rows = @($raw | ConvertFrom-Json)
   Check 'lint --json answered (non-empty array)' ($rows.Count -gt 0) "rows=$($rows.Count)"
   $rec = @($rows | Where-Object { $_.rule -eq 'unconditional-recursion' } | ForEach-Object { $_.start_line })

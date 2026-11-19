@@ -253,7 +253,7 @@ $dbA  = Join-Path $projA 'out\a.sqlite'
 # nothing -- the append would never be seen and the control would pass green.
 function Reindex([string]$Manifest, [string]$Section) {
   Push-Location C:\TEMP
-  try { & $Exe index --all --config $Manifest --only $Section --jobs 1 2>&1 | Out-Null }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $Manifest --only $Section --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null }
   finally { Pop-Location }
 }
 # THE VERB MUST BE PROVEN TO HAVE RUN. When `exceptions-sync` does not exist
@@ -265,8 +265,8 @@ function Reindex([string]$Manifest, [string]$Section) {
 function Sync([string]$Db, [string]$Cfg, [switch]$Apply) {
   Push-Location C:\TEMP
   try {
-    if ($Apply) { $o = & $Exe exceptions-sync --db $Db --config $Cfg --apply 2>&1 | Out-String }
-    else        { $o = & $Exe exceptions-sync --db $Db --config $Cfg         2>&1 | Out-String }
+    if ($Apply) { $o = & { $ErrorActionPreference = 'Continue'; & $Exe exceptions-sync --db $Db --config $Cfg --apply 2>&1 | ForEach-Object { "$_" } } | Out-String }
+    else        { $o = & { $ErrorActionPreference = 'Continue'; & $Exe exceptions-sync --db $Db --config $Cfg         2>&1 | ForEach-Object { "$_" } } | Out-String }
     $code = $LASTEXITCODE
   } finally { Pop-Location }
   if ($o -match '(?m)^Usage:' -or $o -match 'drag-lint index <path>') {
@@ -438,8 +438,8 @@ $raisesPathA = Join-Path $projA 'src\uRaises.pas'
 # rewrite under test, and run_v152_BK-GATE.ps1 owns the refusal itself (same fix as LSPCA #95).
 Push-Location C:\TEMP
 try {
-  $fixOut = & $Exe lint $raisesPathA --db $dbA --config $cfgOn `
-                   --fix --fix-rule raise-bare-exception --apply --no-compile-gate 2>&1 | Out-String
+  $fixOut = & { $ErrorActionPreference = 'Continue'; & $Exe lint $raisesPathA --db $dbA --config $cfgOn `
+                   --fix --fix-rule raise-bare-exception --apply --no-compile-gate 2>&1 | ForEach-Object { "$_" } } | Out-String
 } finally { Pop-Location }
 $src6 = [System.IO.File]::ReadAllText($raisesPathA)
 Check 'REWRITE: lint --fix --apply was not refused by the compile gate' `
@@ -469,7 +469,7 @@ $declCount = @([regex]::Matches($block4, '(?m)^\s*E[A-Za-z0-9]+\s*=\s*class\('))
 Check 'SKIP: the unit holds exactly 7 classes -- one per distinct literal' `
   ($declCount -eq 7) ("declared: " + $declCount + " (the no-literal raise must contribute none)")
 Push-Location C:\TEMP
-try { $lintOut = & $Exe lint-all --db $dbA --config $cfgOn --quiet 2>&1 | Out-String }
+try { $lintOut = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $dbA --config $cfgOn --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String }
 finally { Pop-Location }
 Check 'SKIP: it still produces a raise-bare-exception finding' `
   ($lintOut -match 'uRaises\.pas:\d+:.*raise-bare-exception') `
@@ -518,7 +518,7 @@ Write-Host 'CONTROL 11 -- the GENERATED unit is itself lint-clean' -ForegroundCo
 Reindex $manB 'SecB'
 Push-Location C:\TEMP
 try {
-  $genLint = & $Exe lint $madeB[0].FullName --db $dbB 2>&1 | Out-String
+  $genLint = & { $ErrorActionPreference = 'Continue'; & $Exe lint $madeB[0].FullName --db $dbB 2>&1 | ForEach-Object { "$_" } } | Out-String
 } finally { Pop-Location }
 Check 'GENERATED: the unit parses -- no parser-error, no syntax-error' `
   (-not ($genLint -match 'parser-error|syntax-error')) `

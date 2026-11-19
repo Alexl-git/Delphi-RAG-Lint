@@ -71,7 +71,7 @@ if (-not (Test-Path $exe)) { Write-Host "FATAL: exe not produced: $exe" -Foregro
 
 # the formatter cases read charts\fixtures\docinsight (the pairs the deleted PowerShell port was also held to)
 $env:DRAGLINT_REPO_ROOT = (Resolve-Path "$PSScriptRoot\..\..").Path
-$out = & $exe 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $exe 2>&1 | ForEach-Object { "$_" } } | Out-String
 $rc  = $LASTEXITCODE
 Write-Host $out.TrimEnd()
 if ($rc -ne 0) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }

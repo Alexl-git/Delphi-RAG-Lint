@@ -96,7 +96,7 @@ $db = Join-Path $WorkDir 'resume.sqlite'
 
 # --- Step 1: a normal, complete index. Both files stamped with the pp=1 engine. ---
 Write-Host 'step 1 -- full index (preprocess ON)' -ForegroundColor Cyan
-$o1 = @(& $Exe index $src --db $db --quiet 2>&1) | ForEach-Object { "$_" }
+$o1 = @(& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db --quiet 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" }
 Check 'step 1 exits 0' ($LASTEXITCODE -eq 0) "$($o1 -join ' | ')"
 
 # --- Probe. -----------------------------------------------------------------------
@@ -121,7 +121,7 @@ Check 'precondition: both files carry a per-file fingerprint stamp' ($stamped -e
 # parsed by the pp=0 engine, BetaUnit has not.
 Write-Host ''
 Write-Host 'step 2 -- one file re-indexed with --no-preprocess (the completed prefix)' -ForegroundColor Cyan
-$o2 = @(& $Exe index (Join-Path $src 'AlphaUnit.pas') --db $db --no-preprocess --quiet 2>&1) | ForEach-Object { "$_" }
+$o2 = @(& { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $src 'AlphaUnit.pas') --db $db --no-preprocess --quiet 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" }
 Check 'step 2 exits 0' ($LASTEXITCODE -eq 0) "$($o2 -join ' | ')"
 
 $distinct = Sql "SELECT COUNT(DISTINCT indexed_at_fingerprint) FROM files"
@@ -139,7 +139,7 @@ Check 'precondition: the DB-level fingerprint now reads stale' ($fp -like 'v=0.0
 # --- Step 4: the resuming run. ----------------------------------------------------
 Write-Host ''
 Write-Host 'step 4 -- re-index the folder with --no-preprocess: it must RESUME' -ForegroundColor Cyan
-$o4 = (@(& $Exe index $src --db $db --no-preprocess --quiet 2>&1) | ForEach-Object { "$_" }) -join "`n"
+$o4 = (@(& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db --no-preprocess --quiet 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" }) -join "`n"
 Check 'step 4 exits 0' ($LASTEXITCODE -eq 0) $o4
 
 # POSITIVE CONTROL: this must genuinely be a forced, fingerprint-changed run.
@@ -166,7 +166,7 @@ Check 'ASSERT: the already-current file was NOT re-parsed' `
 # and this is the arm the written plan did not distinguish at all.
 Write-Host ''
 Write-Host 'step 5 -- --force-reparse must ignore the stamps entirely' -ForegroundColor Cyan
-$o5 = (@(& $Exe index $src --db $db --no-preprocess --force-reparse --quiet 2>&1) | ForEach-Object { "$_" }) -join "`n"
+$o5 = (@(& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db --no-preprocess --force-reparse --quiet 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" }) -join "`n"
 Check 'ASSERT: --force-reparse skips NOTHING' `
   (($o5 -match 'skipped 0 up-to-date') -or ($o5 -notmatch 'skipped [1-9]')) `
   "$o5 -- a stamp must never override an explicit --force-reparse"

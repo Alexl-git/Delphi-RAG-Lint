@@ -151,7 +151,7 @@ $localVarLine    = 23
 $isOperandLine   = 26
 
 Write-Host 'PHASE 1: index the fixture, assert the 3 missing shapes are NOT indexed as refs' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db --deep 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db --deep 2>&1 | ForEach-Object { "$_" } }
 $indexExit = $LASTEXITCODE
 Check 'index exits 0' ($indexExit -eq 0) "exit=$indexExit; $($indexOut -join ' | ')"
 
@@ -189,7 +189,7 @@ Write-Host 'PHASE 2: type-name-prefix --fix --apply (Widget -> TWidget), reindex
 # test exists to measure. The exact number is deliberately NOT pinned: the
 # per-site assertions below are what guard coverage, and pinning it here would
 # make every ref-index improvement look like a failure.
-$fixOut = & $Exe lint-all --db $db --config $cfg --rule type-name-prefix --fix --apply --quiet 2>&1
+$fixOut = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --config $cfg --rule type-name-prefix --fix --apply --quiet 2>&1 | ForEach-Object { "$_" } }
 $fixExit = $LASTEXITCODE
 Write-Host ("  autofix output: {0}" -f ($fixOut -join ' | '))
 Check 'type-name-prefix --fix --apply exits 0 and reports an applied fix' `
@@ -233,7 +233,7 @@ Check "local-var line $localVarLine has NO stale 'Widget' after autofix (round-t
 Check "is-operand line $isOperandLine has NO stale 'Widget' after autofix (round-trip clean)" `
   (-not $staleIs) "line: $($afterLines[$isOperandLine - 1])"
 
-$reindexOut = & $Exe index $work --db $db --deep 2>&1
+$reindexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db --deep 2>&1 | ForEach-Object { "$_" } }
 $reindexExit = $LASTEXITCODE
 Check 'reindex after autofix exits 0' ($reindexExit -eq 0) "exit=$reindexExit; $($reindexOut -join ' | ')"
 

@@ -105,10 +105,10 @@ end.
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db --quiet 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db --quiet 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
-  & $exePath document --unit $src --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $src --db $db --apply 2>$null } | Out-Null
   Check 'document --apply exits 0' ($LASTEXITCODE -eq 0)
   $md5First = Get-FileMd5 $src
   $text = [IO.File]::ReadAllText($src)
@@ -154,8 +154,8 @@ try {
     (-not ($quietBlock -match '<exception')) $quietBlock
 
   # --- idempotency ----------------------------------------------------------
-  & $exePath index $scratch --db $db --quiet 2>$null | Out-Null
-  & $exePath document --unit $src --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db --quiet 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $src --db $db --apply 2>$null } | Out-Null
   Check 'IDEMPOTENT: reindex + a second --apply is byte-identical' `
     ((Get-FileMd5 $src) -eq $md5First) ("first=$md5First second=" + (Get-FileMd5 $src))
 
@@ -173,8 +173,8 @@ try {
   Check 'PHASE 2 SETUP: the raise really is gone from the body' `
     (-not ((Get-Content $src -Raw) -match 'EFreshError\.Create')) ''
 
-  & $exePath index $scratch --db $db --quiet 2>$null | Out-Null
-  & $exePath document --unit $src --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db --quiet 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $src --db $db --apply 2>$null } | Out-Null
   $text2 = [IO.File]::ReadAllText($src)
 
   Check 'the engine-generated <exception cref="EFreshError"> is REMOVED' `

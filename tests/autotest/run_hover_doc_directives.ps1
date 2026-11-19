@@ -72,7 +72,7 @@ $Exe = (Resolve-Path $Exe).Path
 if (Test-Path $WorkDir) { Remove-Item -Recurse -Force $WorkDir }
 New-Item -ItemType Directory $WorkDir | Out-Null
 
-$info = (& $Exe info --json 2>$null) -join "`n" | ConvertFrom-Json
+$info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n" | ConvertFrom-Json
 Write-Host ("engine: extractor={0} exe={1}" -f $info.extractor_version, $Exe) -ForegroundColor Cyan
 
 function Write-Ascii([string]$Path, [string]$Body) {
@@ -115,11 +115,11 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'hov.sqlite'
-$null = & $Exe index $work --db $db 2>$null
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>$null }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 function Get-HoverFacts([string]$QName) {
-  $raw = (& $Exe hover --qname $QName --db $db --format json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname $QName --db $db --format json 2>$null }) -join "`n"
   if ([string]::IsNullOrWhiteSpace($raw)) { return @() }
   return @(($raw | ConvertFrom-Json).facts)
 }
@@ -145,7 +145,7 @@ Check "hover MPlain has NO Directives fact" ($null -eq $hovPlain) "got: $hovPlai
 Write-Host ''
 Write-Host 'SURFACE 2: the managed doc block (document --apply)' -ForegroundColor Cyan
 foreach ($q in @('uHov.THovKit.MVirtual','uHov.THovKit.MCombo','uHov.THovKit.MPlain')) {
-  $null = & $Exe document --qname $q --db $db --apply --no-backup 2>$null
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe document --qname $q --db $db --apply --no-backup 2>$null }
 }
 $src = [System.IO.File]::ReadAllText($unit)
 

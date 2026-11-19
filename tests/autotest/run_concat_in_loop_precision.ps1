@@ -148,7 +148,7 @@ Check 'all seven fixture statements located' (
 
 # `lint --rule` cannot be used: its validator rejects external .scm ids.
 $fired = @()
-foreach ($line in (& $Exe lint $fixture 2>$null)) {
+foreach ($line in (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture 2>$null })) {
   if ("$line" -match ':(\d+):\d+\s+\[\w+\]\s+concat-in-loop:') { $fired += [int]$Matches[1] }
 }
 $fired = @($fired | Sort-Object -Unique)

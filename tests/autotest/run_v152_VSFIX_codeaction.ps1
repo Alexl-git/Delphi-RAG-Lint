@@ -51,7 +51,7 @@ end.
 WriteAnsi $file $text
 $db = Join-Path $WorkDir 'fx.sqlite'
 $ea = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-& $Exe index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $ErrorActionPreference = $ea
 Check 'fixture indexed' (Test-Path $db)
 $uri = 'file:///' + ($file -replace '\\', '/')
@@ -131,7 +131,7 @@ if ($all) {
   $copy = Join-Path $WorkDir 'applied.pas'
   [IO.File]::WriteAllText($copy, $applied, [Text.ASCIIEncoding]::new())
   $ea = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-  $relint = (& $Exe lint $copy --db $db --json 2>$null) -join "`n" | ConvertFrom-Json
+  $relint = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $copy --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json
   $ErrorActionPreference = $ea
   $gone = @($relint | Where-Object { $_.rule -in 'mixed-case-hex', 'length-zero-compare' }).Count
   Check 're-lint: the three findings are gone' ($gone -eq 0) "left=$gone"

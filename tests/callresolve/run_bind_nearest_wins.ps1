@@ -184,7 +184,7 @@ end.
 Push-Location C:\TEMP
 try {
   $db = Join-Path $scratch 'n.sqlite'
-  & $exePath index $scratch --db $db *> (Join-Path $scratch 'i.log')
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db *> (Join-Path $scratch 'i.log') }
   $q = "SELECT enc.name AS site, ce.confidence AS conf, t.qualified_name AS target, b.qualified_name AS bound " +
        "FROM call_edges ce JOIN refs r ON r.id = ce.ref_id JOIN symbols enc ON enc.id = r.enclosing_symbol_id " +
        "JOIN symbols t ON t.id = ce.target_symbol_id LEFT JOIN symbols b ON b.id = r.symbol_id"

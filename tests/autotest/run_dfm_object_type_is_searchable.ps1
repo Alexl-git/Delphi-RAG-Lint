@@ -96,12 +96,12 @@ end
 "@
 
 $db = Join-Path $scratch 't.sqlite'
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 function TextHits([string]$Needle, [string]$ExtraArg) {
   $a = @('query','--text',$Needle,'--db',$db,'--source','dfm')
   if ($ExtraArg) { $a += $ExtraArg }
-  $out = & $exePath @a 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath @a 2>&1 | ForEach-Object { "$_" } } | Out-String
   return $out
 }
 

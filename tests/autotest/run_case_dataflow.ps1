@@ -82,7 +82,7 @@ function New-Fixture([string]$Name, [string]$Body) {
 # into $null, and "no findings" is the EXPECTED answer for three of the five
 # cases here -- without it, a correct silent run looks like a broken one.
 function Get-Findings([string]$Path, [string]$Rule) {
-  $raw = (& $Exe lint $Path --rule $Rule --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $Path --rule $Rule --json 2>$null }) -join "`n"
   if (-not $raw.Trim()) { return ,@() }
   try { return ,@($raw | ConvertFrom-Json) } catch { return $null }
 }

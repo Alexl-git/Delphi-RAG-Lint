@@ -92,11 +92,11 @@ $db   = Join-Path $work 'fx.sqlite'
 $unit = Join-Path $src  'uB.pas'
 $base = Join-Path $work 'uB.base.json'
 
-& $Exe index $src --db $db --rebuild *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db --rebuild *> $null }
 Check 'fixture indexed' (Test-Path $db) $db
 
 function Run-Tree([string[]]$xs){
-  $o = & $Exe lint-tree @xs --format json 2>$null
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe lint-tree @xs --format json 2>$null }
   $code = $LASTEXITCODE
   $json = $null
   try { $json = ($o | Out-String) | ConvertFrom-Json } catch { }
@@ -110,13 +110,13 @@ function Run-Tree([string[]]$xs){
 $reduced = Join-Path $src 'uB.pas'
 $saved   = Get-Content $reduced -Raw
 [System.IO.File]::WriteAllText($reduced, [System.IO.File]::ReadAllText((Join-Path $buf 'uB.reduced.pas')))
-& $Exe index $src --db $db *> $null
-$la = (& $Exe lint-all --db $db --quiet 2>$null | Out-String)
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db *> $null }
+$la = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --quiet 2>$null } | Out-String)
 $staleRows = ([regex]::Matches($la, 'stale-interface-reference|no longer declares')).Count
 Check 'PREMISE: lint-all reports nothing about the broken references' ($staleRows -eq 0) `
       "if this fails, a rule now covers this and lint-tree's justification changed"
 [System.IO.File]::WriteAllText($reduced, $saved)
-& $Exe index $src --db $db *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db *> $null }
 
 # --- baseline ----------------------------------------------------------------
 $r = Run-Tree @('--unit', $unit, '--db', $db, '--write-baseline', $base)
@@ -168,7 +168,7 @@ Check 'the delta arrays do NOT collide with the changed boolean' `
 
 # --- case 6: the ambiguity gate ----------------------------------------------
 Write-Pas (Join-Path $src 'uC.pas') @('unit uC;','','interface','','const','  BConst = 99;','','implementation','','end.')
-& $Exe index $src --db $db --rebuild *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db --rebuild *> $null }
 $base2 = Join-Path $work 'uB.base2.json'
 Run-Tree @('--unit', $unit, '--db', $db, '--write-baseline', $base2) | Out-Null
 $r2 = Run-Tree @('--unit', $unit, '--db', $db, '--buffer', (Join-Path $buf 'uB.reduced.pas'), '--baseline', $base2)

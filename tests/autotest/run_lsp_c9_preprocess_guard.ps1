@@ -108,7 +108,7 @@ New-Item -ItemType Directory -Force $src | Out-Null
 $file = Join-Path $src 'uPpC9.pas'
 [System.IO.File]::WriteAllText($file, (($lines -join "`r`n") + "`r`n"), [System.Text.Encoding]::ASCII)
 $db = Join-Path $WorkDir 'c9.sqlite'
-& $Exe index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host 'FATAL: fixture not indexed' -ForegroundColor Red; exit 2 }
 
 # ---------- LSP plumbing ----------

@@ -94,7 +94,7 @@ $dpr  = Join-Path $scratch 'Fx.dpr'
 $app  = Join-Path $scratch 'App.pas'
 
 function RunEngine([string[]]$EngineArgs) {
-  $out = & $exePath @EngineArgs 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath @EngineArgs 2>&1 | ForEach-Object { "$_" } } | Out-String
   return [pscustomobject]@{ Code = $LASTEXITCODE; Text = $out }
 }
 # Indexed file paths, from an --output dump (sql --json rows are positional and capped).

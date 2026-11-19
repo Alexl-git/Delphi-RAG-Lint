@@ -79,7 +79,7 @@ function Get-FileMd5([string]$p) { (Get-FileHash -Algorithm MD5 -Path $p).Hash }
 # INTERFACE-section start line for $name, read back from the index via the
 # engine's own query verb (index-first: no second parser).
 function Get-DeclLine([string]$db, [string]$name) {
-  $j = (& $exePath query --name $name --db $db --json 2>$null) -join "`n"
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --db $db --json 2>$null }) -join "`n"
   $o = $null; try { $o = ($j | ConvertFrom-Json) } catch { return 0 }
   if ($null -eq $o) { return 0 }
   foreach ($r in @($o)) { if ($r.section -eq 'interface') { return [int]$r.start_line } }
@@ -89,7 +89,7 @@ function Get-DeclLine([string]$db, [string]$name) {
 # The file (leaf name) $name's interface declaration lives in, per the index.
 # This is what "foreign" means, so the runner reads it rather than assuming it.
 function Get-DeclFile([string]$db, [string]$name) {
-  $j = (& $exePath query --name $name --db $db --json 2>$null) -join "`n"
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --db $db --json 2>$null }) -join "`n"
   $o = $null; try { $o = ($j | ConvertFrom-Json) } catch { return '' }
   if ($null -eq $o) { return '' }
   foreach ($r in @($o)) { if ($r.section -eq 'interface') { return (Split-Path -Leaf $r.file) } }
@@ -140,7 +140,7 @@ $db  = Join-Path $sc 'h.sqlite'
 Copy-Item $fx      $tgt -Force
 Copy-Item $fxOther (Join-Path $sc 'harvest_boundary_other.pas') -Force
 
-& $exePath index $sc --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc --db $db 2>$null } | Out-Null
 
 # --- PRECONDITIONS, from the pre-apply source. ------------------------------
 $pre = [IO.File]::ReadAllLines($tgt)
@@ -175,9 +175,9 @@ Check 'CONTROL: Backup -- the single-cased word -- really does resolve, in the o
 # ===========================================================================
 # APPLY (cycle 1)
 # ===========================================================================
-& $exePath document --unit $tgt --db $db --apply 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $tgt --db $db --apply 2>$null } | Out-Null
 $md5Cycle1 = Get-FileMd5 $tgt
-& $exePath index $sc --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc --db $db 2>$null } | Out-Null
 
 $lines = [IO.File]::ReadAllLines($tgt)
 
@@ -231,7 +231,7 @@ foreach ($orig in @(
 # ===========================================================================
 # APPLY (cycle 2) -- byte-identical, no human edit in between.
 # ===========================================================================
-& $exePath document --unit $tgt --db $db --apply 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $tgt --db $db --apply 2>$null } | Out-Null
 $md5Cycle2 = Get-FileMd5 $tgt
 Check 'IDEMPOTENT: a second --apply is byte-identical' ($md5Cycle1 -eq $md5Cycle2) `
   "md5_1=$md5Cycle1 md5_2=$md5Cycle2"
@@ -253,9 +253,9 @@ $sw = New-Object System.IO.StreamWriter($tgt, $false, [Text.Encoding]::ASCII)
 foreach ($l in $edited) { $sw.Write($l); $sw.Write("`r`n") }
 $sw.Close()
 
-& $exePath index $sc --db $db 2>$null | Out-Null
-& $exePath document --unit $tgt --db $db --apply 2>$null | Out-Null
-& $exePath index $sc --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc --db $db 2>$null } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $tgt --db $db --apply 2>$null } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc --db $db 2>$null } | Out-Null
 
 $lines3 = [IO.File]::ReadAllLines($tgt)
 $ln3    = Get-DeclLine $db 'OwnershipHandover'

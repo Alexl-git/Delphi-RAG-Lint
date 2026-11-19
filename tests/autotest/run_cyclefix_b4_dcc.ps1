@@ -103,7 +103,7 @@ function Invoke-Program([string]$Dproj) {
 
 function Invoke-Cycles([string]$Dproj, [string]$Tag, [string[]]$Extra) {
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project $Dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $Dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
   $o = Join-Path $WorkDir "cycles-$Tag.out"
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
     -ArgumentList (@('cycles', '--db', ('"' + $db + '"'), '--library-db', 'none') + $Extra) `
@@ -120,7 +120,7 @@ function Test-Tree([string]$Tag, [scriptblock]$Edit, [scriptblock]$OrdersEdit) {
   $out0 = Invoke-Program (Join-Path $base 'F5Demo.dproj')
   $plan = Invoke-Cycles (Join-Path $work 'F5Demo.dproj') "$Tag-plan" @('--plan')
   Check "$Tag 1 planned (exit 0), no base-class refusal" (($plan.Exit -eq 0) -and ($plan.Text -notmatch 'refused: base-class')) "exit=$($plan.Exit)"
-  $fo = & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $plan.File -Cycle 1 -Root $work 2>&1 | Out-String
+  $fo = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $plan.File -Cycle 1 -Root $work 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check "$Tag 2 the follower applies cycle 1 (exit 0)" ($LASTEXITCODE -eq 0) ($fo.Trim() -replace "`r?`n", ' | ')
   $cu = [IO.File]::ReadAllText((Join-Path $work 'Customers.pas'))
   Check "$Tag 3 Customers.pas no longer names TOrder as a type" ($cu -notmatch ':\s*TOrder\b') ''

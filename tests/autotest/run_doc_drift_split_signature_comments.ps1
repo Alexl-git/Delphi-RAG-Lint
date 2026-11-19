@@ -176,11 +176,11 @@ end.
   $norm = $body -replace "`r`n", "`n" -replace "`n", "`r`n"
   [System.IO.File]::WriteAllText((Join-Path $srcDir 'SplitSig.pas'), $norm, [System.Text.Encoding]::ASCII)
 
-  & $Exe index $srcDir --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $srcDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
   function Get-Findings([string]$QName) {
-    $lines = & $Exe doc-drift --qname $QName --db $db --json 2>$null
+    $lines = & { $ErrorActionPreference = 'Continue'; & $Exe doc-drift --qname $QName --db $db --json 2>$null }
     $objs = @()
     foreach ($line in $lines) {
       $t = "$line".Trim()
@@ -214,10 +214,10 @@ end.
 
   Write-Host ''
   Write-Host 'Writer agrees with the checker' -ForegroundColor Cyan
-  $w = (& $Exe document --qname SplitSig.P1 --db $db 2>$null) -join "`n"
+  $w = (& { $ErrorActionPreference = 'Continue'; & $Exe document --qname SplitSig.P1 --db $db 2>$null }) -join "`n"
   Check 'W1 document proposes <param name="ACodeUses">' ($w -match '<param name="ACodeUses">')
   Check 'W1 document proposes no comment-text param' (-not ($w -match '<param name="(b|a|note)\b'))
-  $w2 = (& $Exe document --qname SplitSig.P3 --db $db 2>$null) -join "`n"
+  $w2 = (& { $ErrorActionPreference = 'Continue'; & $Exe document --qname SplitSig.P3 --db $db 2>$null }) -join "`n"
   Check 'W2 document proposes <param name="B"> for S6''s shape' ($w2 -match '<param name="B">')
   Check 'W2 document proposes no comment-text param' (-not ($w2 -match '<param name="(x|note|leading)\b'))
 }

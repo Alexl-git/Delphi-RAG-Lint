@@ -211,18 +211,18 @@ function UnusedAt([string]$Out, [string]$File) { $Out -match "(?im)$File[:\w\\/.
 
 Push-Location C:\TEMP
 try {
-  & $exePath index --all --config $cfg --only SecA --jobs 1 2>&1 | Out-Null
-  & $exePath index --all --config $cfg --only SecB --jobs 1 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only SecA --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only SecB --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check '0. sanity: both DBs exist' ((Test-Path $dbA) -and (Test-Path $dbB))
 
-  $pre = (& $exePath lint-all --db $dbB --rule duplicate-code 2>&1 | Out-String)
+  $pre = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbB --rule duplicate-code 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $m = [regex]::Match($pre, '(?im)thing\.pas:(\d+):\d+\s+\[\w+\]\s+duplicate-code')
   Check '0b. sanity: duplicate-code fires on thing.pas under B (no marker yet)' $m.Success
-  if ($m.Success) { & $exePath allow (Join-Path $scratch 'shared\thing.pas') --fix-line $m.Groups[1].Value --fix-rule duplicate-code --apply 2>&1 | Out-Null }
+  if ($m.Success) { & { $ErrorActionPreference = 'Continue'; & $exePath allow (Join-Path $scratch 'shared\thing.pas') --fix-line $m.Groups[1].Value --fix-rule duplicate-code --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null }
   Check '0c. sanity: a dl:ok duplicate-code marker was written' ((Get-Content (Join-Path $scratch 'shared\thing.pas') -Raw) -match 'dl:ok duplicate-code@')
 
-  $oB = (& $exePath lint-all --db $dbB 2>&1 | Out-String)
-  $oA = (& $exePath lint-all --db $dbA 2>&1 | Out-String)
+  $oB = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbB 2>&1 | ForEach-Object { "$_" } } | Out-String)
+  $oA = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbA 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Write-Host (($oA -split "`n" | Where-Object { $_ -match 'review-marker' }) -join "`n") -ForegroundColor DarkGray
   Check '1. sanity: under B the duplicate-code finding is suppressed (marker live, not reported unused)' (-not (UnusedAt $oB 'thing\.pas'))
   Check '2. FIX: under A the shared-unit marker is NOT reported unused' (-not (UnusedAt $oA 'thing\.pas'))

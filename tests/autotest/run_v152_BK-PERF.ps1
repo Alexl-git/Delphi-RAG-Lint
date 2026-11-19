@@ -43,11 +43,11 @@ for ($i = 1; $i -le 40; $i++) {
   WriteAscii (Join-Path $src "PerfUnit$i.pas") ("unit PerfUnit$i;`r`n`r`ninterface`r`n`r`nprocedure P$i;`r`n`r`nimplementation`r`n`r`nprocedure P$i;`r`nbegin`r`nend;`r`n`r`nend.`r`n")
 }
 $db = Join-Path $WorkDir 'perf.sqlite'
-& $Exe index $src --db $db *> (Join-Path $WorkDir 'index.log')
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db *> (Join-Path $WorkDir 'index.log') }
 Check 'F0 fixture indexed' ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
 
 Write-Host 'B17: lint-all --no-stand-down is not truncated by a stand-down' -ForegroundColor Cyan
-$refOut = & $Exe lint-all --db $db 2>$null | Out-String
+$refOut = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db 2>$null } | Out-String
 $refCode = $LASTEXITCODE
 Check 'B17r reference run (undisturbed, no flag) finished, not stood down' ($refCode -ne 4) "exit $refCode"
 foreach ($case in @(@{ Tag = 'ctl'; Flag = $false }, @{ Tag = 'nsd'; Flag = $true })) {
@@ -56,7 +56,7 @@ foreach ($case in @(@{ Tag = 'ctl'; Flag = $false }, @{ Tag = 'nsd'; Flag = $tru
   $r = Start-Lint $la $case.Tag
   $null = WaitUntil { $r.P.HasExited -or ((Get-Process -Id $r.P.Id -EA SilentlyContinue) -and $r.P.TotalProcessorTime.TotalMilliseconds -gt 0) } 5000
   Start-Sleep -Milliseconds 2500   # well inside the scan (40 files x 300 ms)
-  $sd = & $Exe shutdown --db $db --wait 5 2>&1 | Out-String
+  $sd = & { $ErrorActionPreference = 'Continue'; & $Exe shutdown --db $db --wait 5 2>&1 | ForEach-Object { "$_" } } | Out-String
   $done = WaitUntil { $r.P.HasExited } 60000
   $code = if ($done) { $r.P.ExitCode } else { 'running' }
   $errT = $r.Err.Result

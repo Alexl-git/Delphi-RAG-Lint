@@ -62,10 +62,10 @@ function DocXmlWellFormed([string]$path) {
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # --- run 1: apply ---
-  & $exePath document --unit $target --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply 2>$null } | Out-Null
   Check 'apply #1: exit 0' ($LASTEXITCODE -eq 0)
 
   $src = [IO.File]::ReadAllText($target)
@@ -88,10 +88,10 @@ try {
   $bytes1 = [IO.File]::ReadAllBytes($target)
 
   # --- CRITICAL re-index so the store sees post-insert line numbers ---
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # --- run 2: apply again; must be a byte-identical no-op ---
-  & $exePath document --unit $target --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply 2>$null } | Out-Null
   $bytes2 = [IO.File]::ReadAllBytes($target)
 
   Check 'IDEMPOTENT: file bytes identical after run 2 vs run 1' `

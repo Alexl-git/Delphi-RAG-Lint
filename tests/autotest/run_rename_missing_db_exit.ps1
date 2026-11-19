@@ -35,13 +35,13 @@ if (Test-Path $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 New-Item -ItemType Directory -Path $WorkDir | Out-Null
 $missing = Join-Path $WorkDir 'no-such.sqlite'
 
-$o = ((& $exePath rename --qname U.TFoo.Bar --to Baz --db $missing 2>&1 | ForEach-Object { "$_" }) -join "`n")
+$o = ((& { $ErrorActionPreference = 'Continue'; & $exePath rename --qname U.TFoo.Bar --to Baz --db $missing 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n")
 $rc = $LASTEXITCODE
 Check "T1 legacy --qname path: a missing DB exits 2 (got $rc)" ($rc -eq 2) $o
 Check 'T1b and says Database not found' ($o -match 'Database not found') $o
 Check 'V the missing DB was not created' (-not (Test-Path $missing)) $missing
 
-$o = ((& $exePath rename --kind symbol --name U.TFoo.Bar --to Baz --db $missing 2>&1 | ForEach-Object { "$_" }) -join "`n")
+$o = ((& { $ErrorActionPreference = 'Continue'; & $exePath rename --kind symbol --name U.TFoo.Bar --to Baz --db $missing 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n")
 $rc = $LASTEXITCODE
 Check "C1 CONTROL --kind symbol path: a missing DB exits 2 (got $rc)" ($rc -eq 2) $o
 

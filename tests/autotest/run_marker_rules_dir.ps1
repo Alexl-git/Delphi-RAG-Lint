@@ -25,7 +25,7 @@ try {
   $good = Join-Path $Tmp 'u1.pas'; $bogus = Join-Path $Tmp 'u2.pas'
   [IO.File]::WriteAllText($good, ($body -f 'sql-injection-concat'), [Text.Encoding]::ASCII)
   [IO.File]::WriteAllText($bogus, (($body -f 'bogus-rule-x').Replace('U1', 'U2')), [Text.Encoding]::ASCII)
-  function Run([string]$F, [string[]]$Extra) { @(& $x lint $F @Extra --enable review-marker-malformed 2>&1 | ForEach-Object { "$_" }) }
+  function Run([string]$F, [string[]]$Extra) { @(& { $ErrorActionPreference = 'Continue'; & $x lint $F @Extra --enable review-marker-malformed 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) }
   $a = Run $good @('--rules-dir', $Rules)
   $nm = Join-Path $Tmp 'u4.pas'; [IO.File]::WriteAllText($nm, (($body -f 'x').Replace(' // dl:ok x -- reviewed', '').Replace('U1', 'U4')), [Text.Encoding]::ASCII)
   $n = Run $nm @('--rules-dir', $Rules)

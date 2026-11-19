@@ -67,7 +67,7 @@ function Copy-Tree([string]$From, [string]$To) {
 }
 function Index-Copy([string]$Dir, [string]$Tag) {
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  $idx = & $Exe index --project (Join-Path $Dir 'CircularDemo.dproj') --db $db --library-db none 2>&1 | Out-String
+  $idx = & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $Dir 'CircularDemo.dproj') --db $db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check "${Tag}: SANITY the 10 units indexed with 0 errors" `
     (([regex]::Matches($idx, 'Demo[\w.]+\.pas\s*->\s*\d+ symbols, \d+ refs, 0 errors')).Count -eq 10) $idx
   return $db
@@ -75,7 +75,7 @@ function Index-Copy([string]$Dir, [string]$Tag) {
 # `lint <file> --rule circular-uses --format json`; the JSON is a bare array (field start_line).
 function Lint-One([string]$File, [string]$Db, [string[]]$Extra = @()) {
   $a = @('lint', $File, '--db', $Db, '--rule', 'circular-uses', '--format', 'json', '--library-db', 'none') + $Extra
-  $out = (& $Exe @a 2>$null | Out-String)
+  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null } | Out-String)
   $rows = @()
   try { $rows = @($out | ConvertFrom-Json) } catch { $rows = $null }
   return @{ Out = $out; Rows = $rows }
@@ -91,7 +91,7 @@ try {
   $dproj = Join-Path $demo 'CircularDemo.dproj'
 
   Write-Host '== (d) lint-all: one finding per SCC at the first unit, on ITS intra-cycle uses entry (read first, the oracle for (a))' -ForegroundColor Cyan
-  $allOut = (& $Exe lint-all --db $db --rule circular-uses --json --library-db none 2>$null | Out-String)
+  $allOut = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule circular-uses --json --library-db none 2>$null } | Out-String)
   $all = @()
   try { $all = @(($allOut | ConvertFrom-Json) | Where-Object { $_.rule -eq 'circular-uses' }) } catch { $all = @() }
   Check 'd: lint-all prints 3 circular-uses findings' ($all.Count -eq 3) $allOut
@@ -113,10 +113,10 @@ try {
   $sfx = ' fix: drag-lint cycles --fix --project {0} --unit {1}'
   Check 'd: lint-all message ends with the fix pointer (placeholder project, anchor stem)' `
     ("$gageMsg".EndsWith(($sfx -f '<X.dproj>', 'demogageport'))) "got: $gageMsg"
-  $allTxt = (& $Exe lint-all --db $db --rule circular-uses --library-db none 2>$null | Out-String)
+  $allTxt = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule circular-uses --library-db none 2>$null } | Out-String)
   Check 'd: lint-all TEXT output carries the fix pointer' `
     ($allTxt -match [regex]::Escape(($sfx -f '<X.dproj>', 'demogageport'))) $allTxt
-  $allTxtP = (& $Exe lint-all --db $db --project $dproj --rule circular-uses --library-db none 2>$null | Out-String)
+  $allTxtP = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --project $dproj --rule circular-uses --library-db none 2>$null } | Out-String)
   Check 'd: lint-all --project: the fix pointer names that project' `
     ($allTxtP -match [regex]::Escape(($sfx -f $dproj, 'demogageport'))) $allTxtP
   $gageBase = "$gageMsg" -replace ' fix: drag-lint cycles --fix .*$', ''
@@ -139,7 +139,7 @@ try {
     ($f -and "$($f.fix_hint)" -eq ('cycles --fix --project "{0}" --db "{1}" --unit demouiconnect' -f $dproj, $db)) "got: $($f.fix_hint) out: $($r.Out)"
   Check 'a: with --project the message fix pointer names it and the unit' `
     ($f -and "$($f.message)".EndsWith(($sfx -f $dproj, 'demouiconnect'))) "got: $($f.message)"
-  $r = & $Exe lint (Join-Path $demo 'DemoUIConnect.pas') --db $db --rule circular-uses --library-db none 2>$null | Out-String
+  $r = & { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $demo 'DemoUIConnect.pas') --db $db --rule circular-uses --library-db none 2>$null } | Out-String
   Check 'a: text output has the one-line finding at :43:1' ($r -match 'DemoUIConnect\.pas:43:1  \[warning\] circular-uses: Circular unit dependency among 2 units') $r
   Check 'a: lint <file> TEXT output carries the fix pointer for this unit' `
     ($r -match ('(?m)DemoUIConnect\.pas:43:1 .*' + [regex]::Escape(($sfx -f '<X.dproj>', 'demouiconnect')) + '\r?$')) $r
@@ -155,7 +155,7 @@ try {
   Check 'c: DemoBlueprint.Interfaces.pas -> 0 findings' ($null -ne $r.Rows -and $r.Rows.Count -eq 0) $r.Out
 
   Write-Host '== (e) rules --json: circular-uses stays fixable:false' -ForegroundColor Cyan
-  $rules = (& $Exe rules --json 2>$null | Out-String) | ConvertFrom-Json
+  $rules = (& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null } | Out-String) | ConvertFrom-Json
   $cu = @(@($rules) + @($rules.rules) | Where-Object { $_ -and $_.id -eq 'circular-uses' }) | Select-Object -First 1
   Check 'e: circular-uses listed, fixable = false' ($cu -and $cu.fixable -eq $false) "got: $($cu | ConvertTo-Json -Compress)"
 
@@ -164,9 +164,9 @@ try {
   Copy-Tree (Join-Path $Repo 'circular-demo') $rev
   $rdb = Index-Copy $rev 'rev'
   $gp  = Join-Path $rev 'DemoGagePort.pas'
-  $al  = & $Exe allow $gp --fix-line 56 --fix-rule circular-uses --apply --db $rdb --library-db none 2>&1 | Out-String
+  $al  = & { $ErrorActionPreference = 'Continue'; & $Exe allow $gp --fix-line 56 --fix-rule circular-uses --apply --db $rdb --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'h: SANITY allow wrote the marker on DemoGagePort.pas:56' (([IO.File]::ReadAllLines($gp))[55] -match 'dl:ok circular-uses@[0-9a-f]{4}') $al
-  $ra = (& $Exe lint-all --db $rdb --json --library-db none 2>$null | Out-String)
+  $ra = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $rdb --json --library-db none 2>$null } | Out-String)
   $rows = @(); try { $rows = @(($ra | ConvertFrom-Json) | Where-Object { $_.rule -eq 'circular-uses' -or ($_.rule -like 'review-marker-*' -and $_.file_path -like '*DemoGagePort.pas') }) } catch { $rows = @() }
   Check 'h: lint-all: the reviewed 2-unit cycle is gone' (@($rows | Where-Object { $_.rule -eq 'circular-uses' -and $_.file_path -like '*DemoGagePort.pas' }).Count -eq 0) $ra
   Check 'h: lint-all: POSITIVE CONTROL the two unreviewed cycles still report' (@($rows | Where-Object { $_.rule -eq 'circular-uses' }).Count -eq 2) $ra
@@ -197,7 +197,7 @@ try {
   New-Item -ItemType Directory -Force $inc | Out-Null
   Copy-Item (Join-Path $Repo 'tests\fixtures\cyclefix\incuses\*') $inc -Force
   $idb = Join-Path $WorkDir 'incuses.sqlite'
-  $iout = & $Exe index --project (Join-Path $inc 'IncUses.dproj') --db $idb --library-db none 2>&1 | Out-String
+  $iout = & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $inc 'IncUses.dproj') --db $idb --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'g: SANITY incuses indexed with 0 errors' ($iout -match 'DefB\.pas\s*->.*0 errors' -and $iout -notmatch '[1-9]\d* errors') $iout
   foreach ($u in @(@('DefA.pas', 15, 'defa'), @('DefB.pas', 16, 'defb'))) {
     $r = Lint-One (Join-Path $inc $u[0]) $idb
@@ -208,7 +208,7 @@ try {
   # {$I}: the index records NO unit_uses row for a uses clause inside an include, so the IncA <-> IncB
   # cycle does not exist for lint-all, cycles or lint <file> alike (an extractor gap, reported, not
   # pinned here: a check would fail the day the gap is fixed).
-  $cyc = & $Exe cycles --db $idb 2>$null | Out-String
+  $cyc = & { $ErrorActionPreference = 'Continue'; & $Exe cycles --db $idb 2>$null } | Out-String
   $r = Lint-One (Join-Path $inc 'IncB.pas') $idb
   Write-Host ("  NOTE include cycle: cycles groups=" + ([regex]::Matches($cyc, '\[\d+ units\]')).Count + ", lint IncB.pas findings=" + @($r.Rows).Count) -ForegroundColor DarkGray
 } finally {

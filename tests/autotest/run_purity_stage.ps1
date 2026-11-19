@@ -52,13 +52,13 @@ $db = Join-Path $WorkDir 's.sqlite'
 
 function Run-Index([string[]]$extra) {
   Push-Location C:\TEMP
-  try { return @(& $Exe index $src --db $db @extra 2>&1 | ForEach-Object { "$_" }) } finally { Pop-Location }
+  try { return @(& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db @extra 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) } finally { Pop-Location }
 }
 function Verdict([string]$qname) {
   # Bracket the two text columns in SQL so an EMPTY summary cannot shift the
   # witness into its slot when the text table is split, and match the data row
   # by shape so the trailing 'N row(s) in M ms' line can never be mistaken for it.
-  $t = (& $Exe sql --db $db --format text --query "SELECT ifnull(f.effect_free,-1), '[' || ifnull(f.effect_summary,'') || ']', '[' || ifnull(f.effect_witness,'') || ']' FROM symbols s JOIN symbol_facts f ON f.symbol_id=s.id WHERE s.qualified_name='$qname'" 2>&1) -join "`n"
+  $t = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --format text --query "SELECT ifnull(f.effect_free,-1), '[' || ifnull(f.effect_summary,'') || ']', '[' || ifnull(f.effect_witness,'') || ']' FROM symbols s JOIN symbol_facts f ON f.symbol_id=s.id WHERE s.qualified_name='$qname'" 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $m = [regex]::Match($t, '(?m)^\s*(-?\d+)\s+\[(.*?)\]\s+\[(.*)\]\s*$')
   if (-not $m.Success) { return [pscustomobject]@{ ef = -2; es = '<norow>'; ew = '<norow>' } }
   return [pscustomobject]@{ ef = [int]$m.Groups[1].Value; es = $m.Groups[2].Value; ew = $m.Groups[3].Value }
@@ -143,7 +143,7 @@ if ($null -eq $py) {
   Check '21. gate control: python (sqlite3) available to drop the local_var rows' $false 'python not on PATH'
 } else {
   $del = "import sqlite3; c = sqlite3.connect(r'$db'); n = c.execute(""DELETE FROM symbols WHERE kind='local_var' AND parent_id=(SELECT id FROM symbols WHERE qualified_name='uEffects.TThing.Nested.Inner')"").rowcount; c.commit(); c.close(); print(n)"
-  $pyOut = (& python -c $del 2>&1) -join "`n"
+  $pyOut = (& { $ErrorActionPreference = 'Continue'; & python -c $del 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check '21. gate control precondition: exactly one local_var row was dropped' ($pyOut.Trim() -eq '1') $pyOut
   $ro = Run-Index @('--resolve-only')
   Check '21. --resolve-only runs the stage' (($ro -join "`n") -match 'stage: purity -- done in') ''
@@ -161,7 +161,7 @@ $f = Join-Path $src 'uEffects.pas'
 [System.IO.File]::AppendAllText($f, "// acceptance 28: content changed`r`n", [Text.Encoding]::ASCII)
 [System.IO.File]::SetLastWriteTimeUtc($f, (Get-Date).ToUniversalTime().AddSeconds(5))
 $out2 = Run-Index @()
-$nulls = (& $Exe sql --db $db --format text --query "SELECT count(*) FROM symbol_facts WHERE ifnull(body_loc,0) > 0 AND effect_free IS NULL" 2>&1) -join "`n"
+$nulls = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --format text --query "SELECT count(*) FROM symbol_facts WHERE ifnull(body_loc,0) > 0 AND effect_free IS NULL" 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check '28. after an incremental run every routine has a verdict again' ($nulls -match '(?m)^\s*0\s*$') $nulls
 Check '28. the stage ran on that run' (($out2 -join "`n") -match 'stage: purity -- done in') ''
 $v = Verdict 'uEffects.TThing.Nested.Inner'

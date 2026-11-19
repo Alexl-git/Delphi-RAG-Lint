@@ -87,7 +87,7 @@ $srcFile = Join-Path $src 'uQ.pas'
 $db = Join-Path $WorkDir 'q.sqlite'
 $code = Invoke-G8Index $Exe $src $db
 Check 'fixture index built' (($code -eq 0) -and (Test-Path $db)) "exit=$code"
-function Run($a) { $o = (& $Exe @a 2>&1 | ForEach-Object { "$_" }) -join "`n"; return @{ Out = $o; Code = $LASTEXITCODE } }
+function Run($a) { $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n"; return @{ Out = $o; Code = $LASTEXITCODE } }
 function LineOf($needle) { return ((Get-Content $srcFile) | Select-String -SimpleMatch $needle | Select-Object -First 1).LineNumber }
 
 # 1 FC-QUALIFIED-HINT
@@ -121,10 +121,10 @@ $cwd = Join-Path $WorkDir 'cwd'
 New-Item -ItemType Directory -Force $cwd | Out-Null
 Push-Location $cwd
 try {
-  $o = (& $bareExe usages --name Feed 2>&1 | ForEach-Object { "$_" }) -join "`n"; $c = $LASTEXITCODE
+  $o = (& { $ErrorActionPreference = 'Continue'; & $bareExe usages --name Feed 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n"; $c = $LASTEXITCODE
   Check '3 usages with a manifest beside the exe and no --db exits 2' ($c -eq 2) "exit=$c"
   Check '3 the message says usages does not read the manifest and asks for --db' (($o -match 'does not read the manifest') -and ($o -match '--db')) ($o -replace "`n", ' | ')
-  $o = (& $bareExe query find-callers --name Feed 2>&1 | ForEach-Object { "$_" }) -join "`n"; $c = $LASTEXITCODE
+  $o = (& { $ErrorActionPreference = 'Continue'; & $bareExe query find-callers --name Feed 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n"; $c = $LASTEXITCODE
   Check '3 CONTROL find-callers with the same manifest answers without --db' (($c -eq 0) -and ($o -match '[1-9]\d* caller\(s\)')) "exit=$c $($o -replace "`n", ' | ')"
 } finally { Pop-Location }
 

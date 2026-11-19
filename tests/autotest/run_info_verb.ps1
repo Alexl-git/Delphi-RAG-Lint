@@ -78,18 +78,18 @@ try {
   $missing = Join-Path $wd 'NoSuch.sqlite'
   Push-Location $wd
   try {
-    & $exe index --project (Join-Path $wd 'App.dpr') --db $db 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exe index --project (Join-Path $wd 'App.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
     Check (Test-Path -LiteralPath $db) 'FIXTURE: scratch index built with explicit --db'
 
     function JsonIdx([string[]]$dbs) {
       $a = @('info', '--json'); foreach ($d in $dbs) { $a += @('--db', $d) }
-      $j = (& $exe @a 2>$null) -join "`n"
+      $j = (& { $ErrorActionPreference = 'Continue'; & $exe @a 2>$null }) -join "`n"
       $i = $j.IndexOf('{'); if ($i -lt 0) { return @() }
       return @(($j.Substring($i) | ConvertFrom-Json).indexes)
     }
     function TextOut([string[]]$dbs) {
       $a = @('info'); foreach ($d in $dbs) { $a += @('--db', $d) }
-      return ((& $exe @a 2>$null) -join "`n")
+      return ((& { $ErrorActionPreference = 'Continue'; & $exe @a 2>$null }) -join "`n")
     }
 
     # current + missing in ONE call: --db is repeatable in text mode as in JSON.

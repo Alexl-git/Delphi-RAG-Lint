@@ -96,7 +96,7 @@ end.
     }
   }
   Check 'all routine headers located' ($start.Count -eq $names.Count)
-  $raw = (& $Exe lint $fx --rule manual-inrange --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fx --rule manual-inrange --json 2>$null }) -join "`n"
   $f = if ([string]::IsNullOrWhiteSpace($raw)) { @() } else { @($raw | ConvertFrom-Json) }
   function CountIn($name) {
     $lo = $start[$name]

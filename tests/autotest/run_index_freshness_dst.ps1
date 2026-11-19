@@ -145,7 +145,7 @@ $db  = Join-Path $WorkDir 'fresh.sqlite'
 $out = Join-Path $WorkDir 'o.txt'
 $err = Join-Path $WorkDir 'e.txt'
 
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 Push-Location C:\TEMP
 try {

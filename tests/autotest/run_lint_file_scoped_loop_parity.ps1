@@ -154,7 +154,7 @@ end.
 '@
 
 $db  = Join-Path $WorkDir 'loop.sqlite'
-$idx = & $exePath index $proj --db $db 2>&1 | Out-String
+$idx = & { $ErrorActionPreference = 'Continue'; & $exePath index $proj --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'SANITY: fixture indexed with no errors' `
       ($LASTEXITCODE -eq 0 -and $idx -notmatch '\b[1-9]\d* errors\b') $idx
 
@@ -170,7 +170,7 @@ function LoopTuples($json, $fileAbs) {
 
 $env:DRAGLINT_PROFILE = '1'
 $allErr  = Join-Path $WorkDir 'all.err'
-$allJson = & $exePath lint-all --db $db --rules-dir $rules --json 2>$allErr | Out-String
+$allJson = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rules-dir $rules --json 2>$allErr } | Out-String
 $allProf = Get-Content $allErr -Raw
 
 $allRules = @(($allJson | ConvertFrom-Json) | Where-Object { $LOOP -contains $_.rule } | ForEach-Object { $_.rule } | Sort-Object -Unique)
@@ -181,7 +181,7 @@ foreach ($r in $LOOP) {
 
 foreach ($leaf in @('uLib.pas','uGod.pas','uMain.pas','uUser.pas','Proj.dpr')) {
   $abs      = Join-Path $proj $leaf
-  $fileJson = & $exePath lint $abs --db $db --rules-dir $rules --json 2>$null | Out-String
+  $fileJson = & { $ErrorActionPreference = 'Continue'; & $exePath lint $abs --db $db --rules-dir $rules --json 2>$null } | Out-String
   $want     = @(LoopTuples $allJson  $abs)
   $got      = @(LoopTuples $fileJson $abs)
   $diff     = @(Compare-Object $want $got)
@@ -193,7 +193,7 @@ foreach ($leaf in @('uLib.pas','uGod.pas','uMain.pas','uUser.pas','Proj.dpr')) {
 
 $mainAbs  = Join-Path $proj 'uMain.pas'
 $oneErr   = Join-Path $WorkDir 'one.err'
-& $exePath lint $mainAbs --db $db --rules-dir $rules --json 2>$oneErr | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath lint $mainAbs --db $db --rules-dir $rules --json 2>$oneErr } | Out-Null
 $oneProf  = Get-Content $oneErr -Raw
 $oneN = if ($oneProf -match 'per-file loop\s+(\d+) file\(s\)') { [int]$Matches[1] } else { -1 }
 $allN = if ($allProf -match 'per-file loop\s+(\d+) file\(s\)') { [int]$Matches[1] } else { -1 }
@@ -201,7 +201,7 @@ Check 'P3  single-file lint visits exactly 1 file in the per-file loop' ($oneN -
 Check 'P3b CONTROL: lint-all still visits every file' ($allN -ge 5) "visited: $allN (fixture has 5 files)"
 Remove-Item Env:\DRAGLINT_PROFILE
 
-$ruleJson = & $exePath lint $mainAbs --db $db --rules-dir $rules --rule unused-unit-in-uses --json 2>$null | Out-String
+$ruleJson = & { $ErrorActionPreference = 'Continue'; & $exePath lint $mainAbs --db $db --rules-dir $rules --rule unused-unit-in-uses --json 2>$null } | Out-String
 $ruleGot  = @(LoopTuples $ruleJson $mainAbs)
 $ruleWant = @(LoopTuples $allJson $mainAbs | Where-Object { $_ -like 'unused-unit-in-uses|*' })
 Check 'P4  --rule unused-unit-in-uses composes with the scoping (uGod only, not uLib)' `

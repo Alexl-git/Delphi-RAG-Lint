@@ -33,7 +33,7 @@ function WriteAnsi($path, $text) {
   [System.IO.File]::WriteAllText($path, $t, (New-Object System.Text.ASCIIEncoding))
 }
 function JsonOf([string[]]$CliArgs) {
-  $raw = (& $script:Exe @CliArgs 2>$null | Out-String)
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $script:Exe @CliArgs 2>$null } | Out-String)
   $b1 = $raw.IndexOf('['); $b2 = $raw.IndexOf('{')
   $b = if ($b1 -lt 0) { $b2 } elseif ($b2 -lt 0) { $b1 } else { [Math]::Min($b1, $b2) }
   if ($b -lt 0) { return $null }
@@ -124,7 +124,7 @@ end.
 '@
   $Db = Join-Path $WorkDir 'fix.sqlite'
   . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
-  & $Exe index $SrcDir --db $Db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $SrcDir --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $idxCode = $LASTEXITCODE
   if (-not (Test-Path $Db)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host 'FATAL: index produced no DB' -ForegroundColor Red; exit 2 }
 
@@ -141,7 +141,7 @@ end.
   Check 'resolved Pick: literal-argument overload calls are exact, an unreadable-shape call stays ambiguous' ($pkk -ceq 'ambiguous,exact,exact') "got=$pkk"
   $cb = @((JsonOf @('query','find-callers','--name','A_Predicate','--resolved','--json','--db',$Db)) | ConvertFrom-Json)
   Check 'resolved A_Predicate: a callback reach is name-only' ((@($cb | Where-Object { $_.confidence -ceq 'callback' -and $_.resolution -ceq 'name-only' })).Count -ge 1) "got=$((Kinds $cb) -join ',')"
-  $tx = (& $Exe query find-callers --name Pick --resolved --db $Db 2>$null | Out-String)
+  $tx = (& { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name Pick --resolved --db $Db 2>$null } | Out-String)
   Check 'resolved text: totals line names the kinds' ($tx -match '\d+ callers? \(.*\d+ ambiguous') $tx.Trim()
 
   # ---- find-callers (name path): POSITIVE CONTROL exact + name-only in ONE answer ----
@@ -150,7 +150,7 @@ end.
   Check 'CONTROL name path Solo: an exact row AND a name-only row in one answer' (((Kinds $nm) -contains 'exact') -and ((Kinds $nm) -contains 'name-only')) "got=$((Kinds $nm) -join ',')"
   $ms = @((JsonOf @('query','find-callers','--name','Missing','--json','--db',$Db)) | ConvertFrom-Json)
   Check 'name path Missing: an undeclared callee is name-only' (($ms.Count -ge 1) -and (@($ms | Where-Object { $_.resolution -cne 'name-only' }).Count -eq 0)) "got=$((Kinds $ms) -join ',')"
-  $nt = (& $Exe query find-callers --name Solo --db $Db 2>$null | Out-String)
+  $nt = (& { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name Solo --db $Db 2>$null } | Out-String)
   Check 'name path text: totals line names the kinds' (($nt -match '\d+ caller\(s\) \(') -and ($nt -match 'exact') -and ($nt -match 'name-only')) $nt.Trim()
 
   # ---- find-callees -----------------------------------------------------------
@@ -165,7 +165,7 @@ end.
   # ---- context ------------------------------------------------------------------
   $cj = (JsonOf @('context','--task','modify uResKind.TWorker.Solo','--format','json','--db',$Db)) | ConvertFrom-Json
   Check 'context json: caller_resolution counts exact >= 1 and name-only >= 1' (($null -ne $cj.caller_resolution) -and ($cj.caller_resolution.exact -ge 1) -and ($cj.caller_resolution.'name-only' -ge 1)) "got=$($cj.caller_resolution | ConvertTo-Json -Compress)"
-  $cm = (& $Exe context --task 'modify uResKind.TWorker.Solo' --db $Db --format markdown 2>$null | Out-String)
+  $cm = (& { $ErrorActionPreference = 'Continue'; & $Exe context --task 'modify uResKind.TWorker.Solo' --db $Db --format markdown 2>$null } | Out-String)
   Check 'context markdown: a name-only caller is suffixed [name-only]' ($cm -match '\[name-only\]') ''
 
   # ---- external (library DB) ------------------------------------------------------
@@ -174,9 +174,9 @@ end.
   Copy-Item (Join-Path $FixRoot 'xt_lib.pas') $lib
   Copy-Item (Join-Path $FixRoot 'xt_app.pas'), (Join-Path $FixRoot 'xt_app2.pas') $app
   $libDb = Join-Path $WorkDir 'lib.sqlite'; $appxDb = Join-Path $WorkDir 'appx.sqlite'; $appDb = Join-Path $WorkDir 'app.sqlite'
-  & $Exe index $lib --db $libDb 2>&1 | Out-Null
-  & $Exe index $app --db $appxDb --library-db $libDb 2>&1 | Out-Null
-  & $Exe index $app --db $appDb 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $lib --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $app --db $appxDb --library-db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $app --db $appDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $ex = @((JsonOf @('query','find-callers','--name','Read','--json','--db',$appxDb)) | ConvertFrom-Json)
   Check 'external: a library-bound call is resolution=external' ((Kinds $ex) -contains 'external') "got=$((Kinds $ex) -join ',')"
   $ne = @((JsonOf @('query','find-callers','--name','Read','--json','--db',$appDb)) | ConvertFrom-Json)

@@ -130,7 +130,7 @@ Write-Ascii (Join-Path $drag 'drag-lint-project.json') '{ "ownRoots": ["."] }'
 $db    = Join-Path $drag 'app.sqlite'
 $src   = Join-Path $app 'uFlow.pas'
 $proj  = Join-Path $app 'App.dpr'
-& $Exe index $app --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $app --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 function Flow-Lines([string]$Text) {
   @($Text -split "`r?`n" | Where-Object { $_ -match 'used-before-assignment' -and $_ -match 'uFlow\.pas' })
@@ -144,8 +144,8 @@ function Sev-Of([string[]]$Lines, [string]$VarName) {
 
 Push-Location $app
 try {
-  $lintOut    = & $Exe lint $src --db $db 2>&1 | Out-String
-  $lintAllOut = & $Exe lint-all --project $proj --db $db 2>&1 | Out-String
+  $lintOut    = & { $ErrorActionPreference = 'Continue'; & $Exe lint $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
+  $lintAllOut = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --project $proj --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 } finally { Pop-Location }
 
 $lintLines    = Flow-Lines $lintOut

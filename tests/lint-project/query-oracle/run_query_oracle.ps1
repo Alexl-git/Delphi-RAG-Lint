@@ -60,26 +60,26 @@ try {
   Copy-Item (Join-Path $PSScriptRoot '*.pas') $src
   $use = Join-Path $src 'uQoUse.pas'
   $db = Join-Path $scratch 'qo.sqlite'
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $old = Join-Path $scratch 'old.sqlite'
   Copy-Item $db $old
   $py = Join-Path $scratch 'drop.py'
   [IO.File]::WriteAllText($py, "import sqlite3, sys`nc = sqlite3.connect(sys.argv[1])`nc.execute('DROP TABLE ref_types')`nc.commit()`nc.close()`n")
   python -I $py $old
-  $rows = @(& $exePath sql --db $db --query "SELECT count(*) FROM ref_types" 2>&1) -join ' '
-  $gone = @(& $exePath sql --db $old --query "SELECT name FROM sqlite_master WHERE name = 'ref_types'" 2>&1) -join ' '
+  $rows = @(& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "SELECT count(*) FROM ref_types" 2>&1 | ForEach-Object { "$_" } }) -join ' '
+  $gone = @(& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $old --query "SELECT name FROM sqlite_master WHERE name = 'ref_types'" 2>&1 | ForEach-Object { "$_" } }) -join ' '
   Check 'the fixture DB has ref_types rows' ($rows -notmatch '\b0\b\s*$') $rows
   Check 'the control DB really has no ref_types' ($gone -match '\b0 row') $gone
 
-  $withFacts = Parse-Findings (& $exePath lint-all --db $db --format json 2>$null)
+  $withFacts = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json 2>$null })
   $oldAnc = Join-Path $scratch 'oldanc.sqlite'
   Copy-Item $old $oldAnc
   [IO.File]::WriteAllText($py, "import sqlite3, sys`nc = sqlite3.connect(sys.argv[1])`nc.execute('DELETE FROM type_ancestors')`nc.commit()`nc.close()`n")
   python -I $py $oldAnc
-  $noAnc     = Parse-Findings (& $exePath lint-all --db $oldAnc --format json 2>$null)
-  $noTable   = Parse-Findings (& $exePath lint-all --db $old --format json 2>$null)
-  $noIndex   = Parse-Findings (& $exePath lint $use --format json 2>$null)
-  $oneFile   = Parse-Findings (& $exePath lint $use --db $db --format json 2>$null)
+  $noAnc     = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $oldAnc --format json 2>$null })
+  $noTable   = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $old --format json 2>$null })
+  $noIndex   = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $use --format json 2>$null })
+  $oneFile   = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $use --db $db --format json 2>$null })
 
   foreach ($r in $rules) {
     $rule = $r.Rule; $tag = $r.Tag

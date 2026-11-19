@@ -180,7 +180,7 @@ foreach ($t in 'run', 'ok') {
   $d = Join-Path $WorkDir $t
   [void][IO.Directory]::CreateDirectory($d)
   foreach ($k in $Files.Keys) { Write-Ascii (Join-Path $d $k) $Files[$k] }
-  & $Exe index $d --db (Join-Path $WorkDir "$t.sqlite") *> (Join-Path $WorkDir "$t-index.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $d --db (Join-Path $WorkDir "$t.sqlite") *> (Join-Path $WorkDir "$t-index.log") }
 }
 $R = Join-Path $WorkDir 'run'
 $O = Join-Path $WorkDir 'ok'
@@ -188,14 +188,14 @@ $CmdUnits = @("$R\CvChild.pas", "$R\CvForm.pas", "$R\CvBase.pas", "$R\CvFrame.pa
 $UArgs = @(); foreach ($u in $CmdUnits) { $UArgs += @('--unit', $u) }
 
 Write-Host '== dry run (descendants first): report order'
-$dry = & $Exe convert-apply @UArgs --rules "$R\book.rules" --db "$WorkDir\run.sqlite" --format json 2>$null | Out-String
+$dry = & { $ErrorActionPreference = 'Continue'; & $Exe convert-apply @UArgs --rules "$R\book.rules" --db "$WorkDir\run.sqlite" --format json 2>$null } | Out-String
 $jd = $null; try { $jd = $dry | ConvertFrom-Json } catch {}
 Check 'report.dry.json' ($null -ne $jd) $dry.Substring(0, [Math]::Min(300, $dry.Length))
 $paths = @($jd.units | ForEach-Object { [IO.Path]::GetFileName($_.unit) })
 Check 'report.units.in.cmd.order' (($paths -join ',') -eq 'CvChild.pas,CvForm.pas,CvBase.pas,CvFrame.pas') ($paths -join ',')
 
 Write-Host '== --apply (descendants first)'
-$app = & $Exe convert-apply @UArgs --rules "$R\book.rules" --db "$WorkDir\run.sqlite" --apply --no-backup --format json 2>$null | Out-String
+$app = & { $ErrorActionPreference = 'Continue'; & $Exe convert-apply @UArgs --rules "$R\book.rules" --db "$WorkDir\run.sqlite" --apply --no-backup --format json 2>$null } | Out-String
 $ja = $null; try { $ja = $app | ConvertFrom-Json } catch {}
 Check 'apply.json' ($null -ne $ja)
 $paths = @($ja.units | ForEach-Object { [IO.Path]::GetFileName($_.unit) })
@@ -216,10 +216,10 @@ Check 'order.ancestors.converted' (([IO.File]::ReadAllText("$R\CvBase.dfm") -mat
 
 Write-Host '== text mode: order note'
 $OkUnits = @('--unit', "$O\CvBase.pas", '--unit', "$O\CvFrame.pas", '--unit', "$O\CvChild.pas", '--unit', "$O\CvForm.pas")
-$txtOk = & $Exe convert-apply @OkUnits --rules "$O\book.rules" --db "$WorkDir\ok.sqlite" 2>$null | Out-String
+$txtOk = & { $ErrorActionPreference = 'Continue'; & $Exe convert-apply @OkUnits --rules "$O\book.rules" --db "$WorkDir\ok.sqlite" 2>$null } | Out-String
 Check 'text.ordered.list.no.note' (($txtOk -notmatch 'units run ancestor-first') -and ($txtOk -match 'batch: 4 unit')) ($txtOk.Substring(0, [Math]::Min(300, $txtOk.Length)))
 $Rev = @('--unit', "$O\CvChild.pas", '--unit', "$O\CvBase.pas")
-$txtRev = & $Exe convert-apply @Rev --rules "$O\book.rules" --db "$WorkDir\ok.sqlite" 2>$null | Out-String
+$txtRev = & { $ErrorActionPreference = 'Continue'; & $Exe convert-apply @Rev --rules "$O\book.rules" --db "$WorkDir\ok.sqlite" 2>$null } | Out-String
 Check 'text.reordered.note' ($txtRev -match 'convert-apply: units run ancestor-first: CvBase\.pas, CvChild\.pas') ($txtRev.Substring(0, [Math]::Min(300, $txtRev.Length)))
 
 if (-not $script:Failed) { try { [IO.Directory]::Delete($WorkDir, $true) } catch {} }

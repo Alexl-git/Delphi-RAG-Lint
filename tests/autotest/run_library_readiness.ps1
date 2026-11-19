@@ -70,7 +70,7 @@ c.commit(); c.close()
   $projDb = Join-Path $out 'projon.sqlite'
   $extCount = 'select count(*) from refs where external_target is not null and external_target <> ''''  '
   function Q([string]$Db,[string]$Query) {
-    $raw = (& $exe sql --db $Db --json --limit 5000 --query $Query 2>$null) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $exe sql --db $Db --json --limit 5000 --query $Query 2>$null }) -join "`n"
     $b = $raw.IndexOf('{'); if ($b -lt 0) { return ,@() }
     return ,@(($raw.Substring($b) | ConvertFrom-Json).rows)
   }
@@ -81,12 +81,12 @@ c.commit(); c.close()
   }
   Push-Location C:\TEMP
   try {
-    & $exe index $lib --db $good --platform Win64 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exe index $lib --db $good --platform Win64 2>&1 | ForEach-Object { "$_" } } | Out-Null
     Check 'library fixture indexed' ((Test-Path $good) -and ($LASTEXITCODE -eq 0))
 
     # ---- ready: the positive control
     Fresh 'ready'
-    $txt = (& $exe index --project (Join-Path $app 'App.dpr') 2>&1 | Out-String)
+    $txt = (& { $ErrorActionPreference = 'Continue'; & $exe index --project (Join-Path $app 'App.dpr') 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'ready: exit 0 and project DB written' (($LASTEXITCODE -eq 0) -and (Test-Path $projDb)) $txt
     Check 'ready: "library: ... READY" printed before the walk' ($txt -match 'library: .*library-Win64\.sqlite \(Win64\) READY') $txt
     Check 'ready: the library is opened' ($txt -match '\+ library-db .*library-Win64\.sqlite') $txt
@@ -103,7 +103,7 @@ c.commit(); c.close()
     )
     foreach ($c in $cases) {
       Fresh $c.mode
-      $txt = (& $exe index --project (Join-Path $app 'App.dpr') 2>&1 | Out-String)
+      $txt = (& { $ErrorActionPreference = 'Continue'; & $exe index --project (Join-Path $app 'App.dpr') 2>&1 | ForEach-Object { "$_" } } | Out-String)
       $m = $c.mode
       Check "$m`: run continues (exit 0, project DB written)" (($LASTEXITCODE -eq 0) -and (Test-Path $projDb)) $txt
       Check "$m`: NOT READY with the reason" ($txt -match ('NOT READY -- ' + [regex]::Escape($c.why))) $txt
@@ -114,12 +114,12 @@ c.commit(); c.close()
 
     # ---- --require-library
     Fresh 'rebuilding'
-    $txt = (& $exe index --project (Join-Path $app 'App.dpr') --require-library 2>&1 | Out-String)
+    $txt = (& { $ErrorActionPreference = 'Continue'; & $exe index --project (Join-Path $app 'App.dpr') --require-library 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check '--require-library, not ready: exit 2' ($LASTEXITCODE -eq 2) $txt
     Check '--require-library, not ready: ERROR names the reason' ($txt -match 'ERROR: library: .*NOT READY -- rebuild in progress') $txt
     Check '--require-library, not ready: nothing walked (no files indexed)' ((-not (Test-Path $projDb)) -or ((Q $projDb 'select count(*) from files')[0][0] -eq 0))
     Fresh 'ready'
-    $txt = (& $exe index --project (Join-Path $app 'App.dpr') --require-library 2>&1 | Out-String)
+    $txt = (& { $ErrorActionPreference = 'Continue'; & $exe index --project (Join-Path $app 'App.dpr') --require-library 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check '--require-library, ready: exit 0' ($LASTEXITCODE -eq 0) $txt
 
     # ---- --wait-library: poll, the library becomes ready mid-wait, the run binds

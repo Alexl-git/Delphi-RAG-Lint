@@ -65,7 +65,7 @@ function RunCase([string]$dirName, [string]$style) {
   WriteAnsi $file $text
   $db = Join-Path $WorkDir "$style-$($dirName -replace '[ #]', '_').sqlite"
   $ea = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-  & $Exe index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $ErrorActionPreference = $ea
   $uri = ClientUri $file $style
   $m  = Frame @{ jsonrpc='2.0'; id=1; method='initialize'; params=@{ processId=$null; rootUri=$null; capabilities=@{} } }
@@ -88,8 +88,8 @@ function RunUsesCase([string]$dirName, [string]$style) {
   WriteAnsi $file $mainText
   $db = Join-Path $WorkDir "uses-$style-$($dirName -replace '[ #]', '_').sqlite"
   $ea = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-  & $Exe index $src --db $db 2>&1 | Out-Null
-  $j = & $Exe lint $file --db $db --json --rule unused-unit-in-uses 2>$null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $j = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file --db $db --json --rule unused-unit-in-uses 2>$null }
   $ErrorActionPreference = $ea
   $diags = @(@(($j -join "`n") | ConvertFrom-Json) | Where-Object { $_.rule -eq 'unused-unit-in-uses' } | ForEach-Object {
     @{ range = @{ start = @{ line = $_.start_line - 1; character = $_.start_col - 1 }; end = @{ line = $_.end_line - 1; character = $_.end_col - 1 } }

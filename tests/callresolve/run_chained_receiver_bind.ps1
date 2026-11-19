@@ -54,7 +54,7 @@ $db = Join-Path $scratch 'chainrecv.sqlite'
 
 # sql --json rows are POSITIONAL arrays: map them onto columns[].name.
 function Sql([string]$Query) {
-  $raw = (& $exePath sql --db $db --json --limit 1000 --query $Query 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --limit 1000 --query $Query 2>$null }) -join "`n"
   $b = $raw.IndexOf('{')
   if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
   $o = $raw.Substring($b) | ConvertFrom-Json
@@ -74,7 +74,7 @@ function LineOf([string]$Needle) {
   return -1
 }
 
-$idxOut = & $exePath index $scratch --db $db 2>&1 | Out-String
+$idxOut = & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
 # Target of the member-access ref NAME on LINE (receiver text RCV), or '' when unbound.

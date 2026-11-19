@@ -44,7 +44,7 @@ function New-Project([string]$Fixture, [string]$Dproj, [string]$Tag) {
   $d = Join-Path $Tmp $Tag
   Copy-Item (Join-Path $Fx $Fixture) $d -Recurse
   $db = Join-Path $d 'p.sqlite'
-  & $Exe index --project (Join-Path $d $Dproj) --db $db --library-db none *> (Join-Path $Tmp "$Tag.index.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $d $Dproj) --db $db --library-db none *> (Join-Path $Tmp "$Tag.index.log") }
   if ($LASTEXITCODE -ne 0) { throw "index $Tag exit $LASTEXITCODE" }
   return @{ Dir = $d; Db = $db; Proj = (Join-Path $d $Dproj) }
 }
@@ -62,7 +62,7 @@ function Cancel-Run([string]$Tag, $P, [string[]]$Args_) {
   $run = Start-Process -FilePath $Exe -ArgumentList $q -RedirectStandardOutput (Join-Path $Tmp "$Tag.out") -RedirectStandardError (Join-Path $Tmp "$Tag.err") -NoNewWindow -PassThru
   $parked = Wait-For { (Test-Path $flag) -or $run.HasExited } 400
   if (-not ($parked -and (Test-Path $flag) -and -not $run.HasExited)) { try { $run.Kill() } catch { }; Stop-Parked; return @{ Parked = $false; Exit = $null; Left = 0 } }
-  $null = & $Exe shutdown --db $P.Db --wait 60 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe shutdown --db $P.Db --wait 60 2>&1 | ForEach-Object { "$_" } }
   $ended = Wait-For { $run.HasExited } 60
   $code = if ($ended) { $run.ExitCode } else { try { $run.Kill() } catch { }; $null }
   Start-Sleep -Milliseconds 500
@@ -88,7 +88,7 @@ try {
     $Q = New-Project $c.Fixture $c.Dproj ($t.ToLower() + 'c')
     $qBefore = Tree-Hash $Q.Dir
     $a = $c.Verb + @('--apply', '--project', $Q.Proj, '--db', $Q.Db, '--library-db', 'none', '--rsvars', $Rsvars)
-    $null = & $Exe @a *> (Join-Path $Tmp "$t-control.log")
+    $null = & { $ErrorActionPreference = 'Continue'; & $Exe @a *> (Join-Path $Tmp "$t-control.log") }
     Check "${t}-C POSITIVE CONTROL: the same --apply without shutdown writes (exit 0, tree changed)" (($LASTEXITCODE -eq 0) -and ((Tree-Hash $Q.Dir) -cne $qBefore)) "exit $LASTEXITCODE"
   }
 }

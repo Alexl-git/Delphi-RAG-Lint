@@ -41,9 +41,9 @@ $lines = @(
   'begin', '  Result:= 0;', 'end;', 'end.')
 [IO.File]::WriteAllText($u, (($lines -join "`r`n") + "`r`n"), (New-Object System.Text.ASCIIEncoding))
 $db = Join-Path $root 'wp.sqlite'
-& $Exe index $root --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $root --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'setup: index built' ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
-$o = & $Exe document --unit $u --db $db --apply 2>&1 | Out-String
+$o = & { $ErrorActionPreference = 'Continue'; & $Exe document --unit $u --db $db --apply 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'setup: document --apply ran' ($LASTEXITCODE -eq 0) $o.Trim()
 $t = [IO.File]::ReadAllText($u)
 Check 'MULTI tag keeps its bytes' ($t.Contains('/// <param name="S, WordDelims"> (string) </param>')) $t
@@ -55,7 +55,7 @@ Check 'PREFIX no auto tag for Pos' ($t -notmatch '<param name="Pos"') ''
 Check 'ORPHAN true orphan IS marked (positive control)' ($t -match 'name="Gone">[^\r\n]*no longer exists') $t
 Check 'ORPHAN keeps its inner blanks' ($t -match 'name="Gone"> \(old\) </param>') ''
 $h0 = (Get-FileHash $u -Algorithm MD5).Hash
-$null = & $Exe document --unit $u --db $db --apply 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe document --unit $u --db $db --apply 2>&1 | ForEach-Object { "$_" } }
 Check 'FIXED second apply is byte-identical' ($h0 -eq (Get-FileHash $u -Algorithm MD5).Hash) ''
 [IO.Directory]::Delete($root, $true)
 if ($fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

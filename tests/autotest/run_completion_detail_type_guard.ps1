@@ -111,7 +111,7 @@ end.
 '@
 
 $Db = Join-Path $WorkDir 'detail.sqlite'
-& $Exe index $Src --db $Db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $Src --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'built the fixture index' (Test-Path $Db)
 
 $lines = [System.IO.File]::ReadAllLines($File)

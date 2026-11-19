@@ -64,13 +64,13 @@ $fx = "$WorkDir\fx"
 Copy-Item -LiteralPath (Resolve-Path $FixtureDir).Path -Destination $fx -Recurse
 $proj = "$fx\MenuTreeFixture.dproj"
 $db   = "$WorkDir\fixture.sqlite"
-& $Exe index --project $proj --db $db *> "$WorkDir\index.log"
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project $proj --db $db *> "$WorkDir\index.log" }
 if ($LASTEXITCODE -ne 0) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: fixture index failed (exit $LASTEXITCODE)" -ForegroundColor Red; exit 2 }
 $want = Get-Rows (Get-Content "$fx\expected-paths.txt" -Raw) $false
 Check 'golden has rows' ($want.Count -ge 10) "($($want.Count))"
 
 # --- paths, cell by cell ---
-$paths = (& $Exe menu-tree --project $proj --db $db --format paths 2> "$WorkDir\paths.err" | Out-String)
+$paths = (& { $ErrorActionPreference = 'Continue'; & $Exe menu-tree --project $proj --db $db --format paths 2> "$WorkDir\paths.err" } | Out-String)
 Check 'menu-tree --format paths exits 0' ($LASTEXITCODE -eq 0) "(exit $LASTEXITCODE)"
 $got = Get-Rows $paths $true
 $bad = Compare-Rows $want $got
@@ -83,7 +83,7 @@ $ctl = Compare-Rows $seeded $got
 Check 'positive control: a one-cell golden edit is reported' ($ctl.Count -eq 1) "($($ctl.Count) mismatch(es))"
 
 # --- json ---
-$jsonText = (& $Exe menu-tree --project $proj --db $db --format json 2> "$WorkDir\json.err" | Out-String)
+$jsonText = (& { $ErrorActionPreference = 'Continue'; & $Exe menu-tree --project $proj --db $db --format json 2> "$WorkDir\json.err" } | Out-String)
 $jsonExit = $LASTEXITCODE
 $j = $null
 try { $j = $jsonText | ConvertFrom-Json } catch { $j = $null }
@@ -93,13 +93,13 @@ Check 'json schema = menu-tree/1' ($null -ne $j -and $j.schema -eq 'menu-tree/1'
 Check 'json: two roots, five external roots' ($null -ne $j -and @($j.roots).Count -eq 2 -and @($j.external).Count -eq 5) ''
 
 # --- usage: no --db ---
-$err = (& $Exe menu-tree --project $proj 2>&1 | Out-String)
+$err = (& { $ErrorActionPreference = 'Continue'; & $Exe menu-tree --project $proj 2>&1 | ForEach-Object { "$_" } } | Out-String)
 Check 'no --db -> exit 2' ($LASTEXITCODE -eq 2) "(exit $LASTEXITCODE)"
 Check 'no --db -> "menu-tree: need --db"' ($err -match 'menu-tree: need --db') ''
 
 # --- stale: touch a fixture unit after indexing ---
 Add-Content -LiteralPath "$fx\MT.Builder.pas" -Value "`r`n{ touched by run_menu_tree_guard }" -Encoding ascii
-& $Exe menu-tree --project $proj --db $db --format paths *> "$WorkDir\stale.out"
+& { $ErrorActionPreference = 'Continue'; & $Exe menu-tree --project $proj --db $db --format paths *> "$WorkDir\stale.out" }
 Check 'touched unit -> exit 3 (stale index refused)' ($LASTEXITCODE -eq 3) "(exit $LASTEXITCODE)"
 
 Write-Host ''

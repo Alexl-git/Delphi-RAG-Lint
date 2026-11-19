@@ -45,7 +45,7 @@ $body = @(
 # Ask drag-lint for the hash of the marked line rather than computing it here --
 # one source of truth, and it proves the CLI and the formatter agree.
 [IO.File]::WriteAllText($src, ((($body -replace '        EXCEPT', '        EXCEPT // dl:ok try-except-swallowed')) -join "`r`n") + "`r`n", (New-Object Text.UTF8Encoding $false))
-$msg  = (& $exe lint $src 2>&1 | Out-String)
+$msg  = (& { $ErrorActionPreference = 'Continue'; & $exe lint $src 2>&1 | ForEach-Object { "$_" } } | Out-String)
 $hash = ([regex]::Match($msg, 'try-except-swallowed@([0-9a-f]{4})')).Groups[1].Value
 Check 'drag-lint supplied a hash' ($hash -match '^[0-9a-f]{4}$')
 
@@ -53,17 +53,17 @@ $marker = "// dl:ok try-except-swallowed@$hash -- rethrown by the caller"
 [IO.File]::WriteAllText($src, ((($body -replace '        EXCEPT', "        EXCEPT $marker")) -join "`r`n") + "`r`n", (New-Object Text.UTF8Encoding $false))
 
 # Clean BEFORE the reformat, or the test proves nothing about YADF.
-$before = & $exe lint $src 2>&1 | Out-String
+$before = & { $ErrorActionPreference = 'Continue'; & $exe lint $src 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'clean before reformat' ($before -notmatch 'try-except-swallowed:')
 
-& $yadf $src 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $yadf $src 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $after = [IO.File]::ReadAllText($src)
 
 Check '1 marker text survives YADF verbatim' ($after -match [regex]::Escape($marker))
 Check '1b YADF actually reformatted the line' ($after -notmatch '        EXCEPT ')
 
 # The real assertion: still suppressed, and no stale hint.
-$out = & $exe lint $src 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $exe lint $src 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check '2 hash still matches after YADF'   ($out -notmatch 'try-except-swallowed:')
 Check '2b no stale hint after YADF'       ($out -notmatch 'review-marker-stale')
 

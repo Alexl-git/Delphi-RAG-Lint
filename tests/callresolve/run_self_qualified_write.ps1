@@ -121,12 +121,12 @@ $ln = [ordered]@{
 }
 Check 'fixture statements located' (@($ln.Values) -notcontains -1) (($ln.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ' ')
 
-& $Exe index --project $dprPath --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project $dprPath --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' ((Test-Path $db) -and $LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 # sql --json rows are POSITIONAL arrays: map them onto columns[].name.
 function SqlRows([string]$Query) {
-  $raw = & $Exe sql --db $db --json --query $Query 2>$null | Out-String
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --query $Query 2>$null } | Out-String
   $doc = $raw | ConvertFrom-Json
   $names = @($doc.columns | ForEach-Object { $_.name })
   $out = @()
@@ -186,7 +186,7 @@ Check 'Self.FItems[0] := 1 has the same ref kinds as FItems[0] := 1' ($is -eq $i
 
 Write-Host ''
 Write-Host 'find-callers --resolved reports the Self write as a write' -ForegroundColor Cyan
-$fc = & $Exe query find-callers --name FFlag --resolved --json --db $db 2>$null | Out-String | ConvertFrom-Json
+$fc = & { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name FFlag --resolved --json --db $db 2>$null } | Out-String | ConvertFrom-Json
 $fcSelf = @($fc | Where-Object { [int]$_.line -eq $ln.SelfWrite })
 Check 'TThing.SetViaSelf appears with mode write' (@($fcSelf | Where-Object { $_.mode -eq 'write' }).Count -ge 1) "rows on that line: $((@($fcSelf) | ForEach-Object { "$($_.caller_qname)/$($_.mode)" }) -join '; ')"
 $fcRead = @($fc | Where-Object { [int]$_.line -eq $ln.SelfRead })

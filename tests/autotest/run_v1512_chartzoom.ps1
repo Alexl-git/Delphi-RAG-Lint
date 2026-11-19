@@ -58,7 +58,7 @@ try {
     $m = [regex]::Matches($h, '(?s)<script>(.*?)</script>')
     $js = ($m | ForEach-Object { $_.Groups[1].Value }) -join "`n"
     $f = "$work\page.js"; [IO.File]::WriteAllText($f, $js)
-    $o = & node --check $f 2>&1
+    $o = & { $ErrorActionPreference = 'Continue'; & node --check $f 2>&1 | ForEach-Object { "$_" } }
     Check 'page script parses (node --check)' ($LASTEXITCODE -eq 0) "$o"
   } else { Write-Host '  [SKIP] node not on PATH: script syntax check' -ForegroundColor Yellow }
 } finally { if (Test-Path $work) { [IO.Directory]::Delete($work, $true) } }

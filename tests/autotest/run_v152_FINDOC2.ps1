@@ -77,7 +77,7 @@ function New-Fixture([string]$Root) {
     'program App;', 'uses', "  uCore in 'uCore.pas',", "  uApp in 'uApp.pas';",
     'begin', '  Writeln(AppDo(1));', 'end.')
   $db = Join-Path $Root '_D-RAG\App.sqlite'
-  $null = & $Exe index --project (Join-Path $Root 'App.dpr') --db $db 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $Root 'App.dpr') --db $db 2>&1 | ForEach-Object { "$_" } }
   [pscustomobject]@{ Root = $Root; Db = $db; Proj = (Join-Path $Root 'App.dpr')
     Core = (Join-Path $Root 'uCore.pas'); App = (Join-Path $Root 'uApp.pas') }
 }
@@ -85,7 +85,7 @@ function New-Fixture([string]$Root) {
 function Run($Fx, [string[]]$A) {
   $errFile = Join-Path $WorkDir ("err-{0}.txt" -f [guid]::NewGuid().ToString('N'))
   Push-Location $Fx.Root
-  try { $out = & $Exe @A --db $Fx.Db 2>$errFile | Out-String; $code = $LASTEXITCODE }
+  try { $out = & { $ErrorActionPreference = 'Continue'; & $Exe @A --db $Fx.Db 2>$errFile } | Out-String; $code = $LASTEXITCODE }
   finally { Pop-Location }
   [pscustomobject]@{ Out = $out; Err = [IO.File]::ReadAllText($errFile); Code = $code }
 }

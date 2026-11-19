@@ -145,7 +145,7 @@ if (($badRow -ge $goodRow) -or ($goodRow -ge $unsafeRow)) {
   exit 2
 }
 
-$out = & $Exe lint $file 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file 2>&1 | ForEach-Object { "$_" } } | Out-String
 $hits = @([regex]::Matches($out, 'uDangle\.pas:(\d+):(\d+)\s+\[(\w+)\]\s+used-before-assignment') | ForEach-Object {
   [pscustomobject]@{ Row = [int]$_.Groups[1].Value; Sev = $_.Groups[3].Value }
 })

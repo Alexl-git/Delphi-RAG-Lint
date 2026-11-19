@@ -34,7 +34,7 @@ $pas = Join-Path $fx 'UBars.pas'; $dfm = Join-Path $fx 'UBars.dfm'
 $r = 'form-object-without-field'
 
 # 1. defaults
-$rules = (& $exe rules --json 2>$null) -join "`n" | ConvertFrom-Json
+$rules = (& { $ErrorActionPreference = 'Continue'; & $exe rules --json 2>$null }) -join "`n" | ConvertFrom-Json
 $rl = if ($rules -is [array]) { $rules } else { $rules.rules }
 foreach ($id in 'dataset-edit-without-post', 'foreign-form-control-access', 'form-object-without-field') {
   $x = $rl | Where-Object { $_.id -eq $id }
@@ -48,7 +48,7 @@ else { Write-Host ("[{0}] datamodule-form-global default_enabled={1} (handover t
 function Lines([string]$cfg) {
   $a = @('lint', $pas, '--json', '--rule', $r)
   if ($cfg) { $a += @('--config', $cfg) }
-  $raw = (& $exe @a 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exe @a 2>$null }) -join "`n"
   if ($raw.Trim() -eq '') { return @() }
   @($raw | ConvertFrom-Json | Where-Object { $_.rule -eq $r } | ForEach-Object { "$($_.start_line)" })
 }

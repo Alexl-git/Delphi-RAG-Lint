@@ -100,7 +100,7 @@ PasUnit "$WorkDir\many\s\uShared.pas"
 foreach ($n in 'First', 'Second') {
   Dproj "$WorkDir\many\$n\$n.dproj" @(($Marker32 -replace 'Win32', 'Win64'), '  </PropertyGroup>')
   New-Item -ItemType Directory -Force "$WorkDir\many\$n\_D-RAG" | Out-Null
-  & $Exe index "$WorkDir\many\s" --db "$WorkDir\many\$n\_D-RAG\$n.sqlite" 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\many\s" --db "$WorkDir\many\$n\_D-RAG\$n.sqlite" 2>&1 | ForEach-Object { "$_" } } | Out-Null
 }
 New-Item -ItemType Directory -Force "$R\app\_D-RAG" | Out-Null
 $dbApp = "$R\app\_D-RAG\App.sqlite"
@@ -108,8 +108,8 @@ $dbLib = "$WorkDir\library-Win64.sqlite"
 New-Item -ItemType Directory -Force "$WorkDir\lib" | Out-Null
 PasUnit "$WorkDir\lib\uLib.pas"
 $held = "$R\heldroot"; PasUnit "$held\uHeld.pas"
-& $Exe index $held --db $dbApp 2>&1 | Out-Null
-& $Exe index "$WorkDir\lib" --db $dbLib 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $held --db $dbApp 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\lib" --db $dbLib 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'SETUP: fixture indexes built' ((Test-Path $dbApp) -and (Test-Path $dbLib) -and (Test-Path "$WorkDir\many\First\_D-RAG\First.sqlite"))
 
 function Uri($p) { 'file:///' + ($p -replace '\\', '/') }
@@ -197,7 +197,7 @@ $mk = {
       source = @{ file = "$dir\$name.dpr"; sha1 = '' } } | ConvertTo-Json -Depth 5))
   }
   New-Item -ItemType Directory -Force "$dir\_D-RAG" | Out-Null
-  & $Exe index "$dir\u$name.pas" --db "$dir\_D-RAG\$name.sqlite" 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index "$dir\u$name.pas" --db "$dir\_D-RAG\$name.sqlite" 2>&1 | ForEach-Object { "$_" } } | Out-Null
 }
 & $mk 'WithDproj' $true $false
 & $mk 'WithCtx' $false $true

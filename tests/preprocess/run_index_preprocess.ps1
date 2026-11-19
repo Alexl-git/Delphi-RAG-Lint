@@ -66,7 +66,7 @@ $rawDb = Join-Path $scratchRoot 'raw.sqlite'
 # with DIFFERENT names -- none of which equal $name -- so counting exact-name
 # matches is fuzzy-proof. Returns an integer; 0 means genuinely absent.
 function Get-ExactCount([string]$db, [string]$name) {
-  $out = & $exePath query --name $name --db $db --json 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --db $db --json 2>$null }
   $joined = ($out -join "`n").Trim()
   if ($joined -eq '' -or $joined -eq '[]') { return 0 }
   try { $arr = $joined | ConvertFrom-Json } catch { return 0 }
@@ -81,7 +81,7 @@ try {
   # ============================================================
   # (a) DEFAULT: preprocess ON, Win64 built-in profile. Per-config narrowing.
   # ============================================================
-  & $exePath index $ppDir --db $ppDb 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $ppDir --db $ppDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'DEFAULT: index run exited 0 (preprocess wired into the pipeline)' ($LASTEXITCODE -eq 0)
 
   $ppWin   = Get-ExactCount $ppDb 'WinOnlyProc'
@@ -93,7 +93,7 @@ try {
   # ============================================================
   # (b) NO-PREPROC: --no-preprocess reverts to the OLD all-branch behaviour.
   # ============================================================
-  & $exePath index $rawDir --db $rawDb --no-preprocess 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $rawDir --db $rawDb --no-preprocess 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'NO-PREPROC: index run exited 0' ($LASTEXITCODE -eq 0)
 
   $rawWin   = Get-ExactCount $rawDb 'WinOnlyProc'

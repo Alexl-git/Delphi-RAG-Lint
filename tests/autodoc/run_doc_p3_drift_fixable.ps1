@@ -83,7 +83,7 @@ function Get-DocBlockAbove([string[]]$lines, [string]$declPattern) {
 
 # doc-drift --qname rows (one JSON object per line): .kind/.detail/.fixable/.line
 function Get-Drift($qname) {
-  $out = & $exePath doc-drift --qname $qname --db $db --json 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath doc-drift --qname $qname --db $db --json 2>$null }
   Check "doc-drift --qname $qname exits 0" ($LASTEXITCODE -eq 0)
   $rows = @()
   foreach ($ln in $out) { $t = "$ln".Trim(); if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json) } }
@@ -149,7 +149,7 @@ $patMarked  = '^function MarkedReturns\(Key: Integer\): string;'
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
   # --- FIXTURE DISCRIMINATION -----------------------------------------------
@@ -192,7 +192,7 @@ try {
   # --- D4: the widened doc-drift population ---------------------------------
   $remarksOnlyDocLine = Get-DocStartLine ([IO.File]::ReadAllLines($target)) '^procedure RemarksOnlyStaleFacts;'
   Check 'D4 FIXTURE: the remarks-only doc block was located' ($remarksOnlyDocLine -gt 0) "line=$remarksOnlyDocLine"
-  $rawBefore = (& $exePath lint-all --db $db --json 2>$null) -join "`n"
+  $rawBefore = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --json 2>$null }) -join "`n"
   # v(ADP3 T3d2): NOT "exits 0" -- bare `lint-all` (no --fix, no --fail-on)
   # returns ExitCodeFor(Survivors, '', IfThen(Survivors.Count>0, 1, 0))
   # (DRagLint.Output.ExitCode.pas), i.e. 1 whenever findings survive, which
@@ -217,7 +217,7 @@ try {
   Check 'pre-apply: all three protected doc blocks were located' `
     ($null -ne $noMinBefore -and $null -ne $blankBefore -and $null -ne $markedBefore)
 
-  & $exePath lint-all --db $db --fix --apply --no-backup 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --apply --no-backup 2>$null } | Out-Null
   Check 'lint-all --fix --apply (fixable subset) exits 0' ($LASTEXITCODE -eq 0)
   $after = [IO.File]::ReadAllLines($target)
 
@@ -246,7 +246,7 @@ try {
 
   # --- Re-analyse: the promise is measurably discharged, and the honest
   # --- report-only finding measurably survives -------------------------------
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   Check 're-index after --fix exits 0' ($LASTEXITCODE -eq 0)
   $minable2 = Get-Drift 'driftfixable.MinableReturn'
   Check 'D2 after --fix: MinableReturn has NO ddValueButNoReturns left (the fix discharged it)' `
@@ -261,7 +261,7 @@ try {
 
   # --- Idempotency ----------------------------------------------------------
   $bytes1 = [IO.File]::ReadAllBytes($target)
-  & $exePath lint-all --db $db --fix --apply --no-backup 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --apply --no-backup 2>$null } | Out-Null
   Check 'idempotency: 2nd lint-all --fix --apply exits 0' ($LASTEXITCODE -eq 0)
   $bytes2 = [IO.File]::ReadAllBytes($target)
   Check 'idempotent: a 2nd lint-all --fix --apply is byte-identical' `

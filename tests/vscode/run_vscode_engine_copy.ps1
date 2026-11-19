@@ -67,7 +67,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $extDir 'node_modules'))) {
   exit 0
 }
 
-$out = & $node.Source $Harness 2>&1
+$out = & { $ErrorActionPreference = 'Continue'; & $node.Source $Harness 2>&1 | ForEach-Object { "$_" } }
 $rc  = $LASTEXITCODE
 
 foreach ($line in $out) {

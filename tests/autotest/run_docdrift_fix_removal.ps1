@@ -155,18 +155,18 @@ $pairDb  = Join-Path $scratch 'pair.sqlite'
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $loneDir --db $loneDb 2>&1 | Out-Null
-  & $exePath index $pairDir --db $pairDb 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $loneDir --db $loneDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $pairDir --db $pairDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
   # SANITY: each block is genuinely reported as drifted before any fix. Without
   # this, everything below is satisfied by an engine that reports nothing.
-  $repL = (& $exePath lint-all --db $loneDb --quiet 2>&1 | Out-String)
-  $repP = (& $exePath lint-all --db $pairDb --quiet 2>&1 | Out-String)
+  $repL = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $loneDb --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String)
+  $repP = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $pairDb --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check 'SANITY: the removal-case block is reported as doc-drift' ($repL -match 'doc-drift') $repL
   Check 'SANITY: the rewrite-case block is reported as doc-drift' ($repP -match 'doc-drift') $repP
 
   # === THE DEFECT: a run whose ONLY repair is a DELETION ===================
-  $outL = (& $exePath lint-all --db $loneDb --fix --apply 2>&1 | Out-String)
+  $outL = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $loneDb --fix --apply 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check 'REMOVAL run does NOT report "no fixable findings"' `
         ($outL -notmatch 'no fixable findings') `
         (($outL -split "`r?`n" | Where-Object { $_ -match 'autofix' }) -join ' / ')
@@ -180,7 +180,7 @@ try {
   # === REGRESSION GUARD on the fix itself: the ordinary rewrite still works =
   # The new count is (inserts + unpaired deletes). A bug there would either stop
   # counting rewrites or double-count them, and this is what would notice.
-  $outP = (& $exePath lint-all --db $pairDb --fix --apply 2>&1 | Out-String)
+  $outP = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $pairDb --fix --apply 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check 'REWRITE run still applies its repair' `
         ($outP -match 'autofix: applied \d+ edit') `
         (($outP -split "`r?`n" | Where-Object { $_ -match 'autofix' }) -join ' / ')
@@ -194,10 +194,10 @@ try {
   # the INDEX, and the source has just changed under it. A repair that merely
   # swapped one stale block for another would surface here as drift that never
   # clears.
-  & $exePath index $loneDir --db $loneDb 2>&1 | Out-Null
-  & $exePath index $pairDir --db $pairDb 2>&1 | Out-Null
-  $afterL = (& $exePath lint-all --db $loneDb --quiet 2>&1 | Out-String)
-  $afterP = (& $exePath lint-all --db $pairDb --quiet 2>&1 | Out-String)
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $loneDir --db $loneDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $pairDir --db $pairDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $afterL = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $loneDb --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String)
+  $afterP = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $pairDb --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check 'CONVERGENCE: no doc-drift remains in either file after reindex' `
         (($afterL -notmatch 'doc-drift') -and ($afterP -notmatch 'doc-drift')) `
         ((($afterL + $afterP) -split "`r?`n" | Where-Object { $_ -match 'doc-drift' }) -join ' / ')

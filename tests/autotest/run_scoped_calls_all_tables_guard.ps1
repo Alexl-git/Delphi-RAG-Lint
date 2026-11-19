@@ -209,7 +209,7 @@ end.
 }
 
 function Sql([string]$Db, [string]$Q) {
-  $j = & $exePath sql --query $Q --db $Db --json --limit 1000000 2>$null | Out-String
+  $j = & { $ErrorActionPreference = 'Continue'; & $exePath sql --query $Q --db $Db --json --limit 1000000 2>$null } | Out-String
   if ($j.IndexOf('{') -lt 0) { return $null }
   return ($j.Substring($j.IndexOf('{')) | ConvertFrom-Json)
 }
@@ -241,8 +241,8 @@ function Compare-All([string]$Tag, $A, $B, [string]$AName, [string]$BName) {
 function Lane-Index([string]$Db, [bool]$WithLib, [bool]$Whole) {
   [Environment]::SetEnvironmentVariable('DRAGLINT_NO_SCOPED_RESOLVE', $(if ($Whole) { '1' } else { $null }))
   try {
-    if ($WithLib) { return (& $exePath index $src --db $Db --library-db $libDb 2>&1 | Out-String) }
-    return (& $exePath index $src --db $Db 2>&1 | Out-String)
+    if ($WithLib) { return (& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $Db --library-db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-String) }
+    return (& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-String)
   } finally { [Environment]::SetEnvironmentVariable('DRAGLINT_NO_SCOPED_RESOLVE', $null) }
 }
 function CallsLines([string]$O) { return (($O -split "`n" | Select-String 'calls +(starting|\.\.\. whole)') -join ' / ') }
@@ -250,7 +250,7 @@ function CallsLines([string]$O) { return (($O -split "`n" | Select-String 'calls
 $libDb = Join-Path $scratch 'lib.sqlite'
 Push-Location C:\TEMP
 try {
-  & $exePath index $lib --db $libDb 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $lib --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
   # ---- (5) no-write run with the library ----
   $nb = Join-Path $scratch 'n-base.sqlite'

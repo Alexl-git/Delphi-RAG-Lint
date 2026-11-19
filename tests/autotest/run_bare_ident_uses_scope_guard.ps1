@@ -140,8 +140,8 @@ end.
 
 $libDb = Join-Path $WorkDir 'lib.sqlite'
 $appDb = Join-Path $WorkDir 'app.sqlite'
-& $Exe index $libDir --db $libDb 2>&1 | Out-Null
-& $Exe index $appDir --db $appDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $libDir --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $appDir --db $appDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'both indexes built' ((Test-Path $libDb) -and (Test-Path $appDb))
 
 $probe = Join-Path $appDir 'uProbeForm.pas'
@@ -152,7 +152,7 @@ function LineNoOf([string]$needle) {
 }
 
 function TypeAt([int]$line1, [int]$col1) {
-  $out = & $Exe typeat "${probe}:${line1}:${col1}" --db $appDb --db $libDb 2>$null | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe typeat "${probe}:${line1}:${col1}" --db $appDb --db $libDb 2>$null } | Out-String
   $r = ''
   foreach ($l in ($out -split "`r?`n")) {
     if ($l -match '^\s*Resolved:\s*(.+?)\s*$') { $r = $matches[1] }
@@ -198,12 +198,12 @@ end;
 
 end.
 '@
-& $Exe index $appDir --db $appDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $appDir --db $appDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $lLines = [System.IO.File]::ReadAllLines($localProbe)
 $lLn = -1
 for ($i = 0; $i -lt $lLines.Count; $i++) { if ($lLines[$i].Contains('WindowStateZZ := 1;')) { $lLn = $i + 1; break } }
 $lCol = $lLines[$lLn - 1].IndexOf('WindowStateZZ') + 4
-$lOut = & $Exe typeat "${localProbe}:${lLn}:${lCol}" --db $appDb --db $libDb 2>$null | Out-String
+$lOut = & { $ErrorActionPreference = 'Continue'; & $Exe typeat "${localProbe}:${lLn}:${lCol}" --db $appDb --db $libDb 2>$null } | Out-String
 $got2 = ''
 foreach ($l in ($lOut -split "`r?`n")) { if ($l -match '^\s*Resolved:\s*(.+?)\s*$') { $got2 = $matches[1] } }
 Check 'CONTROL: a bare LOCAL of the same name still beats both units' ($got2 -match 'WithLocal') "resolved='$got2'"
@@ -231,12 +231,12 @@ end;
 
 end.
 '@
-& $Exe index $appDir --db $appDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $appDir --db $appDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $sLines = [System.IO.File]::ReadAllLines($soloProbe)
 $sLn = -1
 for ($i = 0; $i -lt $sLines.Count; $i++) { if ($sLines[$i].Contains('Writeln(TDecoyStyle)')) { $sLn = $i + 1; break } }
 $sCol = $sLines[$sLn - 1].IndexOf('TDecoyStyle') + 4
-$sOut = & $Exe typeat "${soloProbe}:${sLn}:${sCol}" --db $appDb --db $libDb 2>$null | Out-String
+$sOut = & { $ErrorActionPreference = 'Continue'; & $Exe typeat "${soloProbe}:${sLn}:${sCol}" --db $appDb --db $libDb 2>$null } | Out-String
 $sGot = ''
 foreach ($l in ($sOut -split "`r?`n")) { if ($l -match '^\s*Resolved:\s*(.+?)\s*$') { $sGot = $matches[1] } }
 Check 'CONTROL: an UNCONTESTED symbol from an unused unit still resolves' ($sGot -match 'TDecoyStyle') `

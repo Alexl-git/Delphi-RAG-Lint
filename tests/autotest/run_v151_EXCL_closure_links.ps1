@@ -53,7 +53,7 @@ $Dproj = Join-Path $Work 'App.dproj'
 $Db = Join-Path $Work 'app.sqlite'
 
 function LinkFindings([string[]]$extra) {
-  $raw = (& $Exe lint-all --db $Db --project $Dproj --rule unit-not-in-dpr --json @extra 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --project $Dproj --rule unit-not-in-dpr --json @extra 2>$null }) -join "`n"
   Write-Host ('  raw[0..200]: ' + $raw.Substring(0, [Math]::Min(200, $raw.Length)))
   $arr = @()
   try { $arr = @($raw | ConvertFrom-Json) } catch { }
@@ -61,9 +61,9 @@ function LinkFindings([string[]]$extra) {
 }
 
 try {
-  $idxOut = (& $Exe index --project $Dproj --db $Db --exclude-under (Join-Path $Work 'ext') 2>&1) -join "`n"
+  $idxOut = (& { $ErrorActionPreference = 'Continue'; & $Exe index --project $Dproj --db $Db --exclude-under (Join-Path $Work 'ext') 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $code = $LASTEXITCODE
-  $raw = (& $Exe sql --db $Db --query 'SELECT path FROM files' --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query 'SELECT path FROM files' --json 2>$null }) -join "`n"
   $paths = @()
   try { $paths = @(($raw | ConvertFrom-Json).rows | ForEach-Object { $_[0] }) } catch { }
   Check 'E1 index exit 0 and ExtU.pas kept in the project index' ($code -eq 0 -and @($paths | Where-Object { $_ -match '\\ext\\ExtU\.pas$' }).Count -eq 1) ("exit=$code files=" + ($paths -join ', '))

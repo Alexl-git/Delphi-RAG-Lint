@@ -278,7 +278,7 @@ $dbB = Join-Path $WorkDir 'PB.sqlite'
 #   PA holds AlphaOnly + Shared;  PB holds BetaOnly + Shared;  neither holds Stranger.
 foreach ($pair in @(@($dbA, 'AlphaOnly.pas'), @($dbA, 'Shared.pas'),
                     @($dbB, 'BetaOnly.pas'),  @($dbB, 'Shared.pas'))) {
-  & $Exe index (Join-Path $memDir $pair[1]) --db $pair[0] *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $memDir $pair[1]) --db $pair[0] *> $null }
 }
 Check 'membership fixture: both project DBs were built' `
   ((Test-Path -LiteralPath $dbA) -and (Test-Path -LiteralPath $dbB)) ''
@@ -408,10 +408,10 @@ c = sqlite3.connect(sys.argv[1])
 print(c.execute("PRAGMA journal_mode").fetchone()[0])
 c.close()
 '@
-  function Get-JournalMode([string]$Db) { return ([string](python $jmPy $Db 2>&1 | Select-Object -Last 1)).Trim().ToLowerInvariant() }
+  function Get-JournalMode([string]$Db) { return ([string](& { $ErrorActionPreference = 'Continue'; python $jmPy $Db 2>&1 | ForEach-Object { "$_" } } | Select-Object -Last 1)).Trim().ToLowerInvariant() }
 
   foreach ($s in @($dbD, "$dbD-wal", "$dbD-shm")) { if (Test-Path -LiteralPath $s) { Remove-Item -LiteralPath $s -Force } }
-  python $mkPy $dbD (Join-Path $memDir 'AlphaOnly.pas') 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; python $mkPy $dbD (Join-Path $memDir 'AlphaOnly.pas') 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Set-Content -LiteralPath (Join-Path $memDir 'PD.dproj') -Value '<Project/>' -Encoding Ascii
   $memCfgD = New-MemManifest 'd' 'PD' 'PB'   # folder match -> PD; PB is the ACTIVE project
 

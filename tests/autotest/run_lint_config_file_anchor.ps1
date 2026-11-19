@@ -86,7 +86,7 @@ function RuleHits($text, $id) {
 
 Push-Location $neutral
 try {
-  $withCfg = & $exePath lint $file --rules-dir $rules 2>&1 | Out-String
+  $withCfg = & { $ErrorActionPreference = 'Continue'; & $exePath lint $file --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String
 
   Check 'C1  a config beside the FILE is honoured from an unrelated cwd' `
         ((RuleHits $withCfg 'empty-except') -eq 0) `
@@ -99,7 +99,7 @@ try {
   # POSITIVE CONTROL: take the config away and the rule must come back. Without
   # this, C1 is satisfied by a build in which empty-except simply never fires.
   Remove-Item $cfg -Force
-  $noCfg = & $exePath lint $file --rules-dir $rules 2>&1 | Out-String
+  $noCfg = & { $ErrorActionPreference = 'Continue'; & $exePath lint $file --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String
 
   Check 'C2  CONTROL: with the config REMOVED, the same run reports the rule again' `
         ((RuleHits $noCfg 'empty-except') -ge 1) `

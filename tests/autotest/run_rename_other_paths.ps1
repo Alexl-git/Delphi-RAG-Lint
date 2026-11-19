@@ -43,7 +43,7 @@ Copy-Item (Join-Path $Repo 'rules') "$eng\rules" -Recurse
 $Exe = Join-Path $eng 'drag-lint.exe'
 function Run([string[]]$EngArgs) {
   Push-Location $work
-  try { $o = ($null | & $Exe @EngArgs 2>&1 | Out-String) } finally { Pop-Location }
+  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe @EngArgs 2>&1 | ForEach-Object { "$_" } } | Out-String) } finally { Pop-Location }
   return $o
 }
 

@@ -58,7 +58,7 @@ function Missing($src, $rows) { ,@($src | Where-Object { $rows -notcontains $_ }
 $src = SourceNames @(Join-Path $Repo 'src')
 Check 'E1 source scan finds the variables (non-empty answer)' ($src.Count -ge 40) "names=$($src.Count)"
 
-$help = @(& $Exe --help 2>$null)
+$help = @(& { $ErrorActionPreference = 'Continue'; & $Exe --help 2>$null })
 $at = -1
 for ($i = 0; $i -lt $help.Count; $i++) { if ($help[$i] -like 'Environment variables*') { $at = $i; break } }
 $rows = @()

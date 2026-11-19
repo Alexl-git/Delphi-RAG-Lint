@@ -244,7 +244,7 @@ function Run-Eviction([string]$Tag, [string]$Victim, [string]$NoScoped, [string]
   $dir = Join-Path $scratch $Tag
   Build-Corpus $dir
   $db = Join-Path $scratch "$Tag.sqlite"
-  & $exePath index $dir --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
   Remove-Item (Join-Path $dir $Victim) -Force
   # One touched file, so the run records a write -- without it the run declines
@@ -257,7 +257,7 @@ function Run-Eviction([string]$Tag, [string]$Victim, [string]$NoScoped, [string]
   if ($Removals) { $env:DRAGLINT_SCOPED_RESOLVE_REMOVALS = $Removals }
   Remove-Item Env:\DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE -ErrorAction SilentlyContinue
   if ($NoClosure) { $env:DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE = $NoClosure }
-  try   { $out = & $exePath index $dir --db $db 2>&1 | Out-String }
+  try   { $out = & { $ErrorActionPreference = 'Continue'; & $exePath index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String }
   finally {
     Remove-Item Env:\DRAGLINT_NO_SCOPED_RESOLVE      -ErrorAction SilentlyContinue
     Remove-Item Env:\DRAGLINT_SCOPED_RESOLVE_REMOVALS -ErrorAction SilentlyContinue

@@ -85,12 +85,12 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'contract.sqlite'
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 function Rows([string[]]$ExtraArgs) {
   $a = @('query') + $ExtraArgs + @('--db', $db, '--json')
-  $raw = @(& $Exe @a 2>$null) | ForEach-Object { "$_" }
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }) | ForEach-Object { "$_" }
   $txt = ($raw -join "`n").Trim()
   if (-not $txt.StartsWith('[')) { return @() }
   return @($txt | ConvertFrom-Json)
@@ -134,7 +134,7 @@ Check 'a BARE name still resolves as before' ($bare.Count -eq 1) "rows=$($bare.C
 # --- 2.6 enum members are reachable -------------------------------------------
 Write-Host ''
 Write-Host '2.6 -- enum members are reachable without reading source' -ForegroundColor Cyan
-$rawEnum = @(& $Exe surface --qname 'ContractKit.TAlignKind' --db $db --format json 2>$null) | ForEach-Object { "$_" }
+$rawEnum = @(& { $ErrorActionPreference = 'Continue'; & $Exe surface --qname 'ContractKit.TAlignKind' --db $db --format json 2>$null }) | ForEach-Object { "$_" }
 $enumTxt = ($rawEnum -join "`n").Trim()
 Check 'surface accepts an ENUM (no longer refuses)' ($enumTxt.StartsWith('{')) `
   $(if ($enumTxt.Length -gt 60) { $enumTxt.Substring(0, 60) } else { $enumTxt })

@@ -36,12 +36,12 @@ Copy-Item $src $fx -Recurse
 
 function Index([string]$exe, [string]$db) {
   Push-Location $WorkDir
-  try { & $exe index --project "$fx\IncUses.dproj" --db $db *> "$db.log" } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $exe index --project "$fx\IncUses.dproj" --db $db *> "$db.log" } } finally { Pop-Location }
   return $LASTEXITCODE
 }
 function Sql([string]$db, [string]$q) {
   Push-Location $WorkDir
-  try { $j = & $Exe sql --db $db --query $q --json 2>$null | Out-String } finally { Pop-Location }
+  try { $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query $q --json 2>$null } | Out-String } finally { Pop-Location }
   try { $o = $j | ConvertFrom-Json } catch { $o = $null }
   if ($null -eq $o -or $null -eq $o.columns) { return ,@() }
   $names = @($o.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
@@ -51,7 +51,7 @@ function Sql([string]$db, [string]$q) {
 }
 function HasColumns([string]$db) {
   Push-Location $WorkDir
-  try { $j = & $Exe schema --db $db --format json 2>$null | Out-String } finally { Pop-Location }
+  try { $j = & { $ErrorActionPreference = 'Continue'; & $Exe schema --db $db --format json 2>$null } | Out-String } finally { Pop-Location }
   $t = ($j | ConvertFrom-Json).tables | Where-Object { $_.name -eq 'unit_uses' }
   return @($t.columns | Where-Object { $_.name -in @('origin_path', 'include_line') }).Count
 }
@@ -74,7 +74,7 @@ if ($OldExe -ne '') {
   # A READ-ONLY verb never runs Migrate: the new engine must still read the
   # old shape (FindUsersOfUnit names no column the DB lacks).
   Push-Location $WorkDir
-  try { $uu = & $Exe query unit-usage --unit IncB --db $old 2>&1 | Out-String; $uuRc = $LASTEXITCODE } finally { Pop-Location }
+  try { $uu = & { $ErrorActionPreference = 'Continue'; & $Exe query unit-usage --unit IncB --db $old 2>&1 | ForEach-Object { "$_" } } | Out-String; $uuRc = $LASTEXITCODE } finally { Pop-Location }
   Check 'new engine reads the OLD DB read-only (unit-usage exits 0, names IncA)' (($uuRc -eq 0) -and ($uu -match 'IncA')) "rc=$uuRc"
   $rc2 = Index $Exe $old
   Check 'new engine reindexes the old DB (exit 0)' ($rc2 -eq 0) "rc=$rc2"

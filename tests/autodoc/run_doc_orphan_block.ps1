@@ -57,7 +57,7 @@ function Write-Ascii([string]$Path, [string]$Text) {
   [System.IO.File]::WriteAllText($Path, $n, [System.Text.Encoding]::ASCII)
 }
 function OrphanFindings([string]$File) {
-  @(& $Exe lint $File 2>$null | Select-String '\] doc-orphan-block:')
+  @(& { $ErrorActionPreference = 'Continue'; & $Exe lint $File 2>$null } | Select-String '\] doc-orphan-block:')
 }
 
 # --- THE DEFECT: two blocks, two blank lines, one declaration -----------------

@@ -46,30 +46,30 @@ end.
   [IO.File]::WriteAllBytes((Join-Path $dir 'Bin.dfm'), [byte[]](0x54,0x50,0x46,0x30,0x05,0x54,0x46,0x6F,0x72,0x6D,0x00,0x00))
   [IO.File]::WriteAllBytes((Join-Path $dir 'Res.dfm'), [byte[]](0xFF,0x0A,0x00,0x0A,0x54,0x46,0x4F,0x52,0x4D,0x00,0x00))
   $db = Join-Path $dir 'fx.sqlite'
-  & $Exe index $dir --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
   Write-Host 'B29: Pascal-quoted short --substring' -ForegroundColor Cyan
-  $r = @(& $Exe query --text "'ok'" --substring --db $db --source pas 2>$null | Where-Object { $_ -match '\[pas/literal\]' })
+  $r = @(& { $ErrorActionPreference = 'Continue'; & $Exe query --text "'ok'" --substring --db $db --source pas 2>$null } | Where-Object { $_ -match '\[pas/literal\]' })
   Check "--substring 'ok' finds the literal" ($r.Count -eq 1) ($r -join ' | ')
-  $r = @(& $Exe query --text "ok" --substring --db $db --source pas 2>$null | Where-Object { $_ -match '\[pas/literal\]' })
+  $r = @(& { $ErrorActionPreference = 'Continue'; & $Exe query --text "ok" --substring --db $db --source pas 2>$null } | Where-Object { $_ -match '\[pas/literal\]' })
   Check '--substring ok (unquoted) finds it too' ($r.Count -eq 1) ($r -join ' | ')
-  $r = @(& $Exe query --text "'zzq'" --substring --db $db --source pas 2>$null | Where-Object { $_ -match '\[pas/literal\]' })
+  $r = @(& { $ErrorActionPreference = 'Continue'; & $Exe query --text "'zzq'" --substring --db $db --source pas 2>$null } | Where-Object { $_ -match '\[pas/literal\]' })
   Check 'positive control: an absent 3-char quoted needle finds nothing' ($r.Count -eq 0) ($r -join ' | ')
 
   Write-Host 'B30: binary DFM lint' -ForegroundColor Cyan
   foreach ($f in 'Bin.dfm', 'Res.dfm') {
-    $o = (& $Exe lint (Join-Path $dir $f) --db $db 2>&1) -join "`n"
+    $o = (& { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $dir $f) --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
     Check "$f says Binary DFM" ($o -match 'Binary DFM') $o
     Check "$f has no 'parser failed to recognize'" ($o -notmatch 'failed to recognize') ''
   }
   $txt = Join-Path $dir 'Bad.dfm'
   Write-Ascii $txt "object Form1: TForm`n  Caption = `nend"
-  $o = (& $Exe lint $txt --db $db 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $txt --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'positive control: a malformed TEXT dfm still reports parser-error' ($o -match 'parser-error') $o
 
   Write-Host 'B50: lint-all --no-stand-down' -ForegroundColor Cyan
   foreach ($i in 1..30) { Write-Ascii (Join-Path $dir "L$i.pas") "unit L$i;`ninterface`nimplementation`nend." }
-  & $Exe index $dir --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   function Probe([string[]]$Extra) {
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $Exe
@@ -80,7 +80,7 @@ end.
     $null = $p.StandardOutput.ReadToEndAsync(); $null = $p.StandardError.ReadToEndAsync()
     Start-Sleep -Seconds 3
     $alive = -not $p.HasExited
-    $d = (& $Exe $StopVerb --dry-run --db $db 2>&1) -join "`n"
+    $d = (& { $ErrorActionPreference = 'Continue'; & $Exe $StopVerb --dry-run --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
     if (-not $p.WaitForExit(2000)) { $p.Kill() }
     return @{ Listed = ($d -match ('pid\s+' + $p.Id + '\b')); Alive = $alive }
   }

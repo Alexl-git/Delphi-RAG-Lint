@@ -123,10 +123,10 @@ $file = Join-Path $dir 'uNoSelfCaller.pas'
 $db   = Join-Path $dir 'fx.sqlite'
 Write-Fixture $file
 
-& $Exe index $dir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Push-Location $dir
 try {
-  & $Exe document --qname uNoSelfCaller.TThing --db $db --apply --no-backup 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe document --qname uNoSelfCaller.TThing --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $ec = $LASTEXITCODE
 } finally {
   Pop-Location

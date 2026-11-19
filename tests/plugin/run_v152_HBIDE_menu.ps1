@@ -227,7 +227,7 @@ if ($buildOut -notmatch 'BUILD_EXITCODE=0') {
   ($buildOut -split "`r?`n") | Where-Object { $_ -match 'Error|Fatal' } | Select-Object -First 10 | ForEach-Object { Write-Host "  $_" }
   exit 1
 }
-$out = & (Join-Path $WorkDir 'CheckInitMenuCheck.exe') 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & (Join-Path $WorkDir 'CheckInitMenuCheck.exe') 2>&1 | ForEach-Object { "$_" } } | Out-String
 $rc = $LASTEXITCODE
 Write-Host $out.TrimEnd()
 if ($rc -ne 0) { Bad "headless check exit $rc" }
@@ -249,7 +249,7 @@ if ($Engine) {
   [IO.File]::WriteAllText((Join-Path $fx 'HbCfg.pas'), $unitSrc, [Text.Encoding]::ASCII)
   [IO.File]::WriteAllText((Join-Path $fx 'HbLive.dpr'), $progSrc, [Text.Encoding]::ASCII)
   $liveDb = Join-Path $WorkDir 'live.sqlite'
-  $null = & $Engine index $fx --db $liveDb 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Engine index $fx --db $liveDb 2>&1 | ForEach-Object { "$_" } }
   $unitPath = Join-Path $fx 'HbCfg.pas'
   $checker = Join-Path $WorkDir 'CheckInitMenuCheck.exe'
   $cmd = (& $checker cmdline $Engine $unitPath $liveDb 14 12 | Out-String).Trim()

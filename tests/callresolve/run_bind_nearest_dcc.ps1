@@ -38,7 +38,7 @@ try {
            "procedure TBase.M(A: Integer); begin end;`r`nprocedure TBase.M(const S: string); begin end;`r`n$($c.Impl)`r`n" +
            "var K: TKid;`r`nbegin`r`n  K:= TKid.Create;`r`n  $($c.C);`r`n  K.Free;`r`nend.`r`n"
     [IO.File]::WriteAllText($dpr, $src, [Text.Encoding]::ASCII)
-    $out = & $Dcc -Q -CC "-E$Work" "-NU$Work" -NSSystem $dpr 2>&1 | Out-String
+    $out = & { $ErrorActionPreference = 'Continue'; & $Dcc -Q -CC "-E$Work" "-NU$Work" -NSSystem $dpr 2>&1 | ForEach-Object { "$_" } } | Out-String
     $compiled = ($LASTEXITCODE -eq 0)
     $ok = ($compiled -eq $c.Must)
     $tag = if ($ok) { 'PASS' } else { 'FAIL' }
@@ -56,7 +56,7 @@ try {
           "procedure TBase.M(A: Integer); begin Write('BASE'); end;`r`nprocedure TKid.M(B: Integer); begin Write('KID'); end;`r`n" +
           "var B: TBase;`r`nbegin`r`n  B:= TKid.Create;`r`n  B.M(1);`r`n  B.Free;`r`nend.`r`n"
   [IO.File]::WriteAllText($rdpr, $rsrc, [Text.Encoding]::ASCII)
-  $null = & $Dcc -Q -CC "-E$Work" "-NU$Work" -NSSystem $rdpr 2>&1 | Out-String
+  $null = & { $ErrorActionPreference = 'Continue'; & $Dcc -Q -CC "-E$Work" "-NU$Work" -NSSystem $rdpr 2>&1 | ForEach-Object { "$_" } } | Out-String
   $rexe = Join-Path $Work 'pR.exe'
   $rout = if (Test-Path $rexe) { (& $rexe | Out-String).Trim() } else { '<no exe>' }
   $rok = ($rout -ceq 'KID')

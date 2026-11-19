@@ -132,7 +132,7 @@ function LspLines([string]$PasFile, [string]$Rule) {
 }
 # `lint --json` is a bare array; the line field is start_line, the id is rule.
 function CliLines([string]$PasFile, [string]$Rule, [string[]]$Extra = @()) {
-  $raw = (& $Exe lint $PasFile --json @Extra 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $PasFile --json @Extra 2>$null }) -join "`n"
   $arr = @()
   if ($raw.Trim()) { $arr = @($raw | ConvertFrom-Json) }
   return ,@($arr | Where-Object { $_.rule -eq $Rule } | ForEach-Object { [int]$_.start_line })

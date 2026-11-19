@@ -38,9 +38,9 @@ $u = "unit uM;`r`n`r`ninterface`r`n`r`nfunction Deep(A: Integer): Integer;`r`n`r
      "$ifs`r`n  Result:= R;`r`nend;`r`n`r`nend.`r`n"
 [IO.File]::WriteAllText((Join-Path $WorkDir 'uM.pas'), $u, [Text.Encoding]::ASCII)
 $db = Join-Path $WorkDir 'fx.sqlite'
-& $exePath index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
-$all   = @(& $exePath lint-all --db $db --json 2>$null | ConvertFrom-Json)
+$all   = @(& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --json 2>$null } | ConvertFrom-Json)
 $stale = @($all | Where-Object { $_.rule -eq 'review-marker-stale' -and $_.start_line -eq 9 })
 
 # ---- P1/P2 POSITIVE CONTROLS -----------------------------------------------------

@@ -87,7 +87,7 @@ end.
 [System.IO.File]::WriteAllText((Join-Path $WorkDir 'nestedrefs.pas'), $src, [System.Text.Encoding]::ASCII)
 
 $db = Join-Path $WorkDir 'nested.sqlite'
-& $Exe index $WorkDir --db $db --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 $py = Join-Path $WorkDir 'refs.py'
 @'
@@ -109,7 +109,7 @@ Check 'an export nobody calls has no refs' ($refs.NeverCalledAtAll -eq 0) "refs=
 
 Write-Host ''
 Write-Host 'find-callers' -ForegroundColor Cyan
-$fc = (& $Exe query find-callers --name CalledOnlyFromNested --db $db 2>$null | Out-String)
+$fc = (& { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name CalledOnlyFromNested --db $db 2>$null } | Out-String)
 Check 'find-callers resolves the nested call site' ($fc -match 'nestedrefs\.pas')
 
 Write-Host ''
@@ -117,7 +117,7 @@ Write-Host 'unused-public-symbol' -ForegroundColor Cyan
 # Run from the DB's temp dir: lint-all drops lint-report-<date>.txt into the caller's cwd (a stray
 # C:\Projects\Delphi-RAG-lint\lint-report-20261109.txt, 150 INT2); stdout is still the findings.
 Push-Location (Split-Path $db)
-try { $lint = (& $Exe lint-all --db $db 2>$null | Out-String) } finally { Pop-Location }
+try { $lint = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db 2>$null } | Out-String) } finally { Pop-Location }
 # Match the DEAD tier's message only: since L11 (a3084012) the own-unit hint shares this rule id
 # and correctly names a routine that IS called, but only from its own unit.
 Check 'the nested-called export is NOT called dead' `

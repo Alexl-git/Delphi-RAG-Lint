@@ -68,11 +68,11 @@ $pas = Join-Path $dir 'objleakowned.pas'
 $db  = Join-Path $env:TEMP "objleak_owned_$PID.sqlite"
 if (Test-Path $db) { Remove-Item $db -Force }
 
-& $Exe index $dir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'index exits 0' ($LASTEXITCODE -eq 0)
 Check 'db built' (Test-Path $db)
 
-$raw = & $Exe check-ast $pas --db $db --format json 2>$null
+$raw = & { $ErrorActionPreference = 'Continue'; & $Exe check-ast $pas --db $db --format json 2>$null }
 # the CLI prints a few preamble lines before the JSON array -- slice from the
 # first '[' so ConvertFrom-Json sees only JSON (mirrors run_objleak_interproc.ps1).
 $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')

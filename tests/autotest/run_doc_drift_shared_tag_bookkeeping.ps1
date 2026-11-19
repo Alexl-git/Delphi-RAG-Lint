@@ -126,11 +126,11 @@ $dbA = Join-Path $scratch 'out\a.sqlite'; $dbB = Join-Path $scratch 'out\b.sqlit
 $thing = Join-Path $scratch 'shared\thing.pas'
 
 function Reindex {
-  & $exePath index --all --config $cfg --only SecA --jobs 1 2>&1 | Out-Null
-  & $exePath index --all --config $cfg --only SecB --jobs 1 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only SecA --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only SecB --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
 }
 function Drift([string]$Db) {
-  (& $exePath lint $thing --db $Db --project-rules --rule doc-drift 2>&1 | Out-String)
+  (& { $ErrorActionPreference = 'Continue'; & $exePath lint $thing --db $Db --project-rules --rule doc-drift 2>&1 | ForEach-Object { "$_" } } | Out-String)
 }
 # The message does not name the symbol; thing.pas holds exactly one documented symbol (DoIt).
 function Reports([string]$Out, [string]$Sym) { $Out -match '(?m)thing\.pas:\d+:\d+\s+\[\w+\]\s+doc-drift\b' }
@@ -139,8 +139,8 @@ Push-Location C:\TEMP
 try {
   Reindex
   Check '0. sanity: both DBs exist' ((Test-Path $dbA) -and (Test-Path $dbB))
-  & $exePath document --qname thing.TThing.DoIt --db $dbA --apply 2>&1 | Out-Null
-  & $exePath document --qname thing.TThing.DoIt --db $dbB --apply 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --qname thing.TThing.DoIt --db $dbA --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --qname thing.TThing.DoIt --db $dbB --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Reindex
   $blk = (Get-Content $thing -Raw)
   Check '1. sanity: the block is in the TAGGED regime (carries a [b] entry)' ($blk -match '(?i)\[b\]')
@@ -167,7 +167,7 @@ try {
   Check '4b. ... and under B' (Reports (Drift $dbB) 'DoIt')
 
   # 5 convergence
-  & $exePath document --qname thing.TThing.DoIt --db $dbB --apply 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --qname thing.TThing.DoIt --db $dbB --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Reindex
   Check '5a. after document --apply --db B: B silent' (-not (Reports (Drift $dbB) 'DoIt'))
   Check '5b. after document --apply --db B: A silent' (-not (Reports (Drift $dbA) 'DoIt'))

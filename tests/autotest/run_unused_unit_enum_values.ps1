@@ -124,7 +124,7 @@ end.
 
 $db      = Join-Path $WorkDir 'uuenum.sqlite'
 $errFile = Join-Path $WorkDir 'stderr.txt'
-& $Exe index $fixDir --db $db 2>$errFile | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $fixDir --db $db 2>$errFile } | Out-Null
 if ($LASTEXITCODE -ne 0) {
   $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }
   Write-Host "FATAL: indexing the fixture failed ($LASTEXITCODE)" -ForegroundColor Red
@@ -134,21 +134,21 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host ''
 Write-Host '-- premise: the EXTRACTOR records the enum-value refs (so the gap is the rule''s)' -ForegroundColor Cyan
-$p1 = (& $Exe sql --db $db --query "select count(*) as n from refs where name_text in ('ueTop','ubNone')" 2>$errFile | Out-String)
+$p1 = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query "select count(*) as n from refs where name_text in ('ueTop','ubNone')" 2>$errFile } | Out-String)
 Check 'P1 refs hold ueTop and ubNone from uUeConsumer' ($p1 -match '(?m)^\s*2\s*$') (($p1 -split "`r?`n" | Where-Object { $_ -match '\S' }) -join ' / ')
-$p2 = (& $Exe sql --db $db --query "select count(*) as n from symbols where kind = 'enum_value' and name in ('ueTop','ubNone')" 2>$errFile | Out-String)
+$p2 = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query "select count(*) as n from symbols where kind = 'enum_value' and name in ('ueTop','ubNone')" 2>$errFile } | Out-String)
 Check 'P2 the symbols table holds them as enum_value children' ($p2 -match '(?m)^\s*2\s*$') (($p2 -split "`r?`n" | Where-Object { $_ -match '\S' }) -join ' / ')
 
 Write-Host ''
 Write-Host '-- the false positive: a unit used only through enum values' -ForegroundColor Cyan
-$out = (& $Exe lint-project --db $db --rule unused-unit-in-uses 2>$errFile | Out-String) -replace "`r`n", "`n"
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-project --db $db --rule unused-unit-in-uses 2>$errFile } | Out-String) -replace "`r`n", "`n"
 Write-Host ("  findings:`n    " + (($out -split "`n" | Where-Object { $_ -match 'unused-unit-in-uses' }) -join "`n    ")) -ForegroundColor DarkGray
 Check 'E1 a unit used only through ENUM VALUES is not flagged' ($out -notmatch "Unit 'uUeEnums'") ''
 Check 'E2 CONTROL: a unit used through a TYPE is not flagged' ($out -notmatch "Unit 'uUeTypes'") ''
 Check 'E3 CONTROL: a genuinely unused import IS still flagged (its own enum values do not keep it alive)' `
   ($out -match "Unit 'uUeDead'") ''
 
-$out2 = (& $Exe lint (Join-Path $fixDir 'uUeConsumer.pas') --db $db 2>$errFile | Out-String) -replace "`r`n", "`n"
+$out2 = (& { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $fixDir 'uUeConsumer.pas') --db $db 2>$errFile } | Out-String) -replace "`r`n", "`n"
 Check 'E4 the per-file lint agrees (it runs the same project rule narrowed to the file)' `
   (($out2 -notmatch "Unit 'uUeEnums'") -and ($out2 -match "Unit 'uUeDead'")) ''
 

@@ -125,7 +125,7 @@ exit /b 0
 # against a build where `format` simply always fails.
 # ---------------------------------------------------------------------------
 $f1 = NewFixture 'ok.pas'; $h1 = Sha $f1
-$o1 = (& $Exe format $f1 --yadf-path $stubOk 2>&1) -join "`n"; $e1 = $LASTEXITCODE
+$o1 = (& { $ErrorActionPreference = 'Continue'; & $Exe format $f1 --yadf-path $stubOk 2>&1 | ForEach-Object { "$_" } }) -join "`n"; $e1 = $LASTEXITCODE
 Check 'A1 POSITIVE CONTROL an above-board formatter run exits 0' ($e1 -eq 0) "exit=$e1`n$o1"
 Check 'A1b POSITIVE CONTROL and the file really was rewritten' ((Sha $f1) -ne $h1) `
       'the file is byte-identical, so every "unchanged" assertion below proves nothing'
@@ -136,7 +136,7 @@ Check 'A1b POSITIVE CONTROL and the file really was rewritten' ((Sha $f1) -ne $h
 # instead of as a bug report.
 # ---------------------------------------------------------------------------
 $f2 = NewFixture 'corrupt.pas'; $h2 = Sha $f2
-$o2 = (& $Exe format $f2 --yadf-path $stubBad 2>&1) -join "`n"; $e2 = $LASTEXITCODE
+$o2 = (& { $ErrorActionPreference = 'Continue'; & $Exe format $f2 --yadf-path $stubBad 2>&1 | ForEach-Object { "$_" } }) -join "`n"; $e2 = $LASTEXITCODE
 Check 'A2 a formatter that corrupts the file exits NON-ZERO' ($e2 -ne 0) "exit=$e2`n$o2"
 Check 'A2b and the original file is RESTORED byte-for-byte' ((Sha $f2) -eq $h2) `
       "the corrupted text was left on disk -- this is the data-loss case:`n$o2"
@@ -147,7 +147,7 @@ Check 'A2c and the message says what diverged' ($o2 -match '(?i)verif|restor|sym
 # A3 -- --dry-run resolves and reports, and writes NOTHING.
 # ---------------------------------------------------------------------------
 $f3 = NewFixture 'dry.pas'; $h3 = Sha $f3
-$o3 = (& $Exe format $f3 --yadf-path $stubOk --dry-run 2>&1) -join "`n"; $e3 = $LASTEXITCODE
+$o3 = (& { $ErrorActionPreference = 'Continue'; & $Exe format $f3 --yadf-path $stubOk --dry-run 2>&1 | ForEach-Object { "$_" } }) -join "`n"; $e3 = $LASTEXITCODE
 Check 'A3 --dry-run exits 0' ($e3 -eq 0) "exit=$e3`n$o3"
 Check 'A3b --dry-run writes NOTHING' ((Sha $f3) -eq $h3) "the file changed under --dry-run:`n$o3"
 Check 'A3c --dry-run names the binary it WOULD run' ($o3 -match [regex]::Escape('yadf_ok.bat')) `
@@ -157,7 +157,7 @@ Check 'A3c --dry-run names the binary it WOULD run' ($o3 -match [regex]::Escape(
 # A4 -- --diff shows the change and writes NOTHING.
 # ---------------------------------------------------------------------------
 $f4 = NewFixture 'diff.pas'; $h4 = Sha $f4
-$o4 = (& $Exe format $f4 --yadf-path $stubOk --diff 2>&1) -join "`n"; $e4 = $LASTEXITCODE
+$o4 = (& { $ErrorActionPreference = 'Continue'; & $Exe format $f4 --yadf-path $stubOk --diff 2>&1 | ForEach-Object { "$_" } }) -join "`n"; $e4 = $LASTEXITCODE
 Check 'A4 --diff exits 0' ($e4 -eq 0) "exit=$e4`n$o4"
 Check 'A4b --diff writes NOTHING' ((Sha $f4) -eq $h4) "the file changed under --diff:`n$o4"
 Check 'A4c --diff emits a unified-diff body' ($o4 -match '(?m)^[-+@]') `
@@ -172,7 +172,7 @@ Check 'A4c --diff emits a unified-diff body' ($o4 -match '(?m)^[-+@]') `
 # ---------------------------------------------------------------------------
 $f5 = NewFixture 'missing.pas'; $h5 = Sha $f5
 $ghost = Join-Path $WorkDir 'no_such_yadf.exe'
-$o5 = (& $Exe format $f5 --yadf-path $ghost 2>&1) -join "`n"; $e5 = $LASTEXITCODE
+$o5 = (& { $ErrorActionPreference = 'Continue'; & $Exe format $f5 --yadf-path $ghost 2>&1 | ForEach-Object { "$_" } }) -join "`n"; $e5 = $LASTEXITCODE
 Check 'A5 ABSENCE CONTROL an unresolvable YADF exits non-zero' ($e5 -ne 0) "exit=$e5`n$o5"
 Check 'A5b ABSENCE CONTROL and writes nothing' ((Sha $f5) -eq $h5) "the file changed despite no formatter:`n$o5"
 Check 'A5c ABSENCE CONTROL the message names the two real routes (--yadf-path / registry)' `
@@ -202,7 +202,7 @@ if ($vDbg -and $vRel -and -not $dbgBelowFloor) {
 }
 if ($dbgBelowFloor -and $vRel) {
   $f6 = NewFixture 'floor.pas'; $h6 = Sha $f6
-  $o6 = (& $Exe format $f6 --yadf-path $yDbg 2>&1) -join "`n"; $e6 = $LASTEXITCODE
+  $o6 = (& { $ErrorActionPreference = 'Continue'; & $Exe format $f6 --yadf-path $yDbg 2>&1 | ForEach-Object { "$_" } }) -join "`n"; $e6 = $LASTEXITCODE
   Check "A6 a BELOW-FLOOR YADF ($vDbg) is refused" ($e6 -ne 0) "exit=$e6`n$o6"
   Check 'A6b and nothing is written' ((Sha $f6) -eq $h6) "a below-floor formatter rewrote the file:`n$o6"
   Check 'A6c the refusal names the found version, the floor, and the path' `
@@ -213,7 +213,7 @@ if ($vDbg -and $vRel) {
   # POSITIVE CONTROL 2, the plan's own: the refusal must key on the VERSION,
   # not on "it was a real YADF" or "it was a Debug build".
   $f7 = NewFixture 'abovefloor.pas'; $h7 = Sha $f7
-  $o7 = (& $Exe format $f7 --yadf-path $yRel 2>&1) -join "`n"; $e7 = $LASTEXITCODE
+  $o7 = (& { $ErrorActionPreference = 'Continue'; & $Exe format $f7 --yadf-path $yRel 2>&1 | ForEach-Object { "$_" } }) -join "`n"; $e7 = $LASTEXITCODE
   Check "A7 POSITIVE CONTROL an ABOVE-floor YADF ($vRel) is accepted" ($e7 -eq 0) "exit=$e7`n$o7"
   Check 'A7b POSITIVE CONTROL the accepted run is not refused for version' `
         (-not ($o7 -match '(?i)below the required')) "$o7"
@@ -243,16 +243,16 @@ echo stub-fail could not format %1
 exit /b 1
 '@
 $f8 = NewFixture 'declined.pas'; $h8 = Sha $f8
-$o8 = (& $Exe format $f8 --yadf-path $stubDecline 2>&1) -join "`n"; $e8 = $LASTEXITCODE
+$o8 = (& { $ErrorActionPreference = 'Continue'; & $Exe format $f8 --yadf-path $stubDecline 2>&1 | ForEach-Object { "$_" } }) -join "`n"; $e8 = $LASTEXITCODE
 Check 'A8 a YADF decline (exit 3) exits 0' ($e8 -eq 0) "exit=$e8`n$o8"
 Check 'A8b and the file is unchanged' ((Sha $f8) -eq $h8) "a declined file changed:`n$o8"
 Check 'A8c and the output says it was declined' ($o8 -match '(?i)declined') "$o8"
 Check 'A8d and it is not reported as a failure' (-not ($o8 -match '(?i)format failed')) "$o8"
 $f8e = NewFixture 'declined_diff.pas'
-$o8e = (& $Exe format $f8e --yadf-path $stubDecline --diff 2>&1) -join "`n"; $e8e = $LASTEXITCODE
+$o8e = (& { $ErrorActionPreference = 'Continue'; & $Exe format $f8e --yadf-path $stubDecline --diff 2>&1 | ForEach-Object { "$_" } }) -join "`n"; $e8e = $LASTEXITCODE
 Check 'A8e a decline under --diff exits 0' ($e8e -eq 0) "exit=$e8e`n$o8e"
 $f9 = NewFixture 'failed.pas'; $h9 = Sha $f9
-$o9 = (& $Exe format $f9 --yadf-path $stubFail 2>&1) -join "`n"; $e9 = $LASTEXITCODE
+$o9 = (& { $ErrorActionPreference = 'Continue'; & $Exe format $f9 --yadf-path $stubFail 2>&1 | ForEach-Object { "$_" } }) -join "`n"; $e9 = $LASTEXITCODE
 Check 'A9 CONTROL a YADF failure (exit 1) still exits non-zero' ($e9 -ne 0) "exit=$e9`n$o9"
 Check 'A9b CONTROL and the original is restored' ((Sha $f9) -eq $h9) "a failed format left the file changed:`n$o9"
 

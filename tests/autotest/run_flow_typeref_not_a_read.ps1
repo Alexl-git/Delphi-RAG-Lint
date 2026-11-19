@@ -145,7 +145,7 @@ Check 'located the probe lines' `
   (($k1Read -gt 0) -and ($typeLines.Count -eq 2) -and ($k2RealRead -gt 0) -and ($k4Read -gt 0)) `
   "k1=$k1Read types=$($typeLines -join ',') k2read=$k2RealRead k4=$k4Read"
 
-$raw = & $Exe lint $file --json 2>$null
+$raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file --json 2>$null }
 $all = @($raw | ConvertFrom-Json)
 $uba = @($all | Where-Object { $_.rule -eq 'used-before-assignment' })
 $hit = @($uba | ForEach-Object { $_.start_line })

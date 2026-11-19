@@ -40,6 +40,6 @@ function Test-DfmLoadsChecker { return ($null -ne (Get-DfmLoadChecker)) }
 function Test-DfmLoads([string[]]$Paths) {
   $exe = Get-DfmLoadChecker
   if ($null -eq $exe) { return @('FAIL <checker>: DfmLoadCheck.exe could not be built (rsvars.bat / dcc64)') }
-  $out = & $exe @Paths 2>&1
+  $out = & { $ErrorActionPreference = 'Continue'; & $exe @Paths 2>&1 | ForEach-Object { "$_" } }
   return @($out | Where-Object { $_ -match '^FAIL ' })
 }

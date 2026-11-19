@@ -55,8 +55,8 @@ function Write-Ascii([string]$Path, [string]$Text) {
   $norm = $Text -replace "`r`n", "`n" -replace "`n", "`r`n"
   [System.IO.File]::WriteAllText($Path, $norm, [System.Text.Encoding]::ASCII)
 }
-function Run([string[]]$xs) { $o = & $Exe @xs 2>&1 | Out-String; [pscustomobject]@{ Out = $o; Code = $LASTEXITCODE } }
-function RunJson([string[]]$xs) { (& $Exe @xs 2>$null | Out-String) }
+function Run([string[]]$xs) { $o = & { $ErrorActionPreference = 'Continue'; & $Exe @xs 2>&1 | ForEach-Object { "$_" } } | Out-String; [pscustomobject]@{ Out = $o; Code = $LASTEXITCODE } }
+function RunJson([string[]]$xs) { (& { $ErrorActionPreference = 'Continue'; & $Exe @xs 2>$null } | Out-String) }
 function LastLine([string]$s) { ($s.Trim() -split "`n" | Select-Object -Last 1) }
 function MaxLineLen([string]$Path) {
   $m = 0; foreach ($l in [IO.File]::ReadAllLines($Path)) { if ($l.Length -gt $m) { $m = $l.Length } }; return $m

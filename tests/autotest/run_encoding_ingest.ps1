@@ -79,7 +79,7 @@ Check 'Utf16.pas starts FF FE (UTF-16LE BOM)' (($u16Bytes[0] -eq 0xFF) -and ($u1
 
 # --- index the fixtures ---
 $db     = "$WorkDir\enc.sqlite"
-$idxOut = & $Exe index $WorkDir --db $db 2>&1
+$idxOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } }
 $idxTxt = ($idxOut | Out-String)
 Check 'index exits 0' ($LASTEXITCODE -eq 0) (($idxOut | Select-Object -Last 1))
 
@@ -101,7 +101,7 @@ Check 'Utf16.pas NOT skipped'               (-not $u16Skipped)
 Check 'Utf16.pas produced symbols (> 0)'    ($u16Syms -gt 0) ("(got $u16Syms)")
 
 # --- text search: the transcoded literal must be findable ---
-$qOut = & $Exe query --text "Micronite" --substring --db $db 2>&1
+$qOut = & { $ErrorActionPreference = 'Continue'; & $Exe query --text "Micronite" --substring --db $db 2>&1 | ForEach-Object { "$_" } }
 $qTxt = ($qOut | Out-String)
 Check 'query --text Micronite exits 0' ($LASTEXITCODE -eq 0)
 Check 'query --text finds the transcoded literal' ($qTxt -match 'Micronite')

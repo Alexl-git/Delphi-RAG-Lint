@@ -53,7 +53,7 @@ Copy-Item $bad (Join-Path $eng 'library-Win64.sqlite') -Force
 
 function Run-Cmd([string]$Cmd, [string[]]$A) {
   Push-Location $WorkDir   # cwd under TEMP: the manifest walk-up must not find C:\Projects\.drag-lint.json
-  try { $o = & $Cmd @A 2>&1 | ForEach-Object { "$_" }; $code = $LASTEXITCODE } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; & $Cmd @A 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }; $code = $LASTEXITCODE } finally { Pop-Location }
   return @{ Out = ($o -join "`n"); Code = $code }
 }
 function Count-Findings([string]$Out) {

@@ -63,11 +63,11 @@ foreach ($id in $ids) { $body.Add("// dl:ok $id -- REVIEWED 2026-10-25: fixture,
 $body.AddRange([string[]]@('', 'end.'))
 [IO.File]::WriteAllText($pas, (($body -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 
-& $Exe index $WorkDir --db $db *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db *> $null }
 Check 'fixture indexed' ($LASTEXITCODE -eq 0) ''
 
-function LintAll { ((& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db 2>$err | Out-String) -replace "`r`n", "`n") }
-function LintFile([string]$P) { ((& $Exe lint $P --db $db 2>$err | Out-String) -replace "`r`n", "`n") }
+function LintAll { ((& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db 2>$err } | Out-String) -replace "`r`n", "`n") }
+function LintFile([string]$P) { ((& { $ErrorActionPreference = 'Continue'; & $Exe lint $P --db $db 2>$err } | Out-String) -replace "`r`n", "`n") }
 
 Write-Host ''
 Write-Host '-- 1. per-file run, index present: no OptedIn-gated marker is called unused' -ForegroundColor Cyan

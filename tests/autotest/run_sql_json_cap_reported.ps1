@@ -44,7 +44,7 @@ $dpr  = @('program SqlCap;', '', 'uses', '  SqlCapU in ''SqlCapU.pas'';', '', 'b
 function Cte($n) { "WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM n WHERE x < $n) SELECT x FROM n" }
 function RunSql([string[]]$extra) {
   $errFile = Join-Path $Work ('err-' + [guid]::NewGuid().ToString('N') + '.txt')
-  $out = (& $Exe sql --db $script:Db @extra 2> $errFile) -join "`n"
+  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $script:Db @extra 2> $errFile }) -join "`n"
   $err = if (Test-Path $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
   [pscustomobject]@{ Out = $out; Err = $err; Exit = $LASTEXITCODE }
 }
@@ -53,7 +53,7 @@ function J($r) { try { $r.Out | ConvertFrom-Json } catch { $null } }
 Push-Location $Work
 try {
   $script:Db = Join-Path $Work 'sqlcap.sqlite'
-  $null = & $Exe index --project (Join-Path $Work 'SqlCap.dpr') --db $script:Db 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $Work 'SqlCap.dpr') --db $script:Db 2>&1 | ForEach-Object { "$_" } }
   Check 'index exit 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
   $r1 = RunSql @('--query', (Cte 1226), '--json'); $j1 = J $r1

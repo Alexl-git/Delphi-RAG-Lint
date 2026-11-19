@@ -41,7 +41,7 @@ $dbs = @{}
 foreach ($fx in @('events-global', 'events-args', 'events-softwriters')) {
   Copy-Item (Join-Path $fixRoot $fx) $src -Recurse -Force
   $db = Join-Path $work "$fx.sqlite"
-  & $exePath index (Join-Path $src $fx) --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index (Join-Path $src $fx) --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $dbs[$fx] = $db
 }
 
@@ -69,7 +69,7 @@ function Hb([string]$Fx, [string]$Target, [string]$At = '') {
   $a = @($dbs[$Fx], $(if ($Target) { $Target } else { '-' }))
   if ($At) { $a += $At }
   $errFile = Join-Path $work 'err.txt'
-  $o = & $harness @a 2>$errFile
+  $o = & { $ErrorActionPreference = 'Continue'; & $harness @a 2>$errFile }
   $r = [pscustomobject]@{ Exit = $LASTEXITCODE; Json = $null; Err = (Get-Content $errFile -Raw) }
   if ($r.Exit -eq 0) { $r.Json = (($o -join "`n") | ConvertFrom-Json) }
   return $r
@@ -86,7 +86,7 @@ function Same([string[]]$Got, [string[]]$Want) { return (($Got -join "`n") -ceq 
 function GotText([string[]]$Got) { return ('got: ' + ($Got -join ' ;; ')) }
 
 # raw output once, before any filtering
-$raw = & $harness $dbs['events-global'] 'evgData.GCache' 2>&1
+$raw = & { $ErrorActionPreference = 'Continue'; & $harness $dbs['events-global'] 'evgData.GCache' 2>&1 | ForEach-Object { "$_" } }
 Write-Host '  raw (evgData.GCache):'
 Write-Host "  $raw"
 
@@ -203,7 +203,7 @@ try {
   # ---- cross-check with read-never-assigned (spec 9: the NEVER-SET list must agree with the rule) ----
   $ruleSet = @(); $hbSet = @()
   foreach ($fx in @('events-global', 'events-args', 'events-softwriters')) {
-    $vars = (& $exePath sql --db $dbs[$fx] --query "SELECT s.qualified_name AS q FROM symbols s JOIN symbols p ON p.id = s.parent_id WHERE s.kind = 'var' AND p.kind = 'unit' ORDER BY 1" --json 2>$null) -join "`n"
+    $vars = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $dbs[$fx] --query "SELECT s.qualified_name AS q FROM symbols s JOIN symbols p ON p.id = s.parent_id WHERE s.kind = 'var' AND p.kind = 'unit' ORDER BY 1" --json 2>$null }) -join "`n"
     $vj = $vars.Substring($vars.IndexOf('{')) | ConvertFrom-Json
     foreach ($row in $vj.rows) {
       $q = [string]$row[0]
@@ -211,7 +211,7 @@ try {
       if ($r.Exit -eq 0 -and $r.Json.verdict -eq 'NEVER-SET') { $hbSet += $q }
     }
     foreach ($pas in (Get-ChildItem (Join-Path $src $fx) -Filter *.pas)) {
-      $lj = (& $exePath lint $pas.FullName --db $dbs[$fx] --rule read-never-assigned --json 2>$null) -join "`n"
+      $lj = (& { $ErrorActionPreference = 'Continue'; & $exePath lint $pas.FullName --db $dbs[$fx] --rule read-never-assigned --json 2>$null }) -join "`n"
       foreach ($f in @($lj | ConvertFrom-Json)) {
         if ($f.message -match 'Global variable (\w+) is read') { $ruleSet += ('{0}.{1}' -f $pas.BaseName, $Matches[1]) }
       }

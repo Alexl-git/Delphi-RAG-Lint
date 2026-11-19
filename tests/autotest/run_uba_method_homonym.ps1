@@ -97,7 +97,7 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'uba.sqlite'
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 function Reported([string]$Text) {
   ,@([regex]::Matches($Text, 'used-before-assignment: Local "(\w+)"') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
@@ -105,7 +105,7 @@ function Reported([string]$Text) {
 
 Push-Location C:\TEMP
 try {
-  $all = Reported ((& $exePath lint-all --db $db --rules-dir $rules --quiet 2>&1 | Out-String))
+  $all = Reported ((& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rules-dir $rules --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String))
   Write-Host ("  lint-all reported: {0}" -f $(if($all){$all -join ','}else{'(none)'})) -ForegroundColor DarkGray
   Check 'H1 an out-arg to a homonym METHOD is NOT reported (the free routine must not answer)' `
         (-not ($all -contains 'hinfo')) ($all -join ',')

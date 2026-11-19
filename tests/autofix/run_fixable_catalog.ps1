@@ -7,7 +7,7 @@ $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
 Push-Location C:\TEMP
 try {
-  $json = & $Exe rules --json 2>$null | Out-String
+  $json = & { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null } | Out-String
   $obj  = $json | ConvertFrom-Json
   $byId = @{}; foreach($r in $obj.rules){ $byId[$r.id] = $r }
   Check 'self-assignment fixable=true'        ($byId['self-assignment'].fixable -eq $true)

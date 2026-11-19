@@ -95,11 +95,11 @@ $fgExe = $null
 try { $fgExe = Get-FeatureGenExe -Repo $Repo } catch { Check 'featuregen.exe is available and current' $false $_.Exception.Message }
 if ($fgExe -and -not (Test-Path -LiteralPath $engine)) { Check 'engine available for the parity run' $false $engine; $fgExe = $null }
 if ($fgExe) {
-  $dump = @(& $fgExe dump-live --repo $Repo --engine $engine 2>&1)
+  $dump = @(& { $ErrorActionPreference = 'Continue'; & $fgExe dump-live --repo $Repo --engine $engine 2>&1 | ForEach-Object { "$_" } })
   Check 'featuregen dump-live succeeds' ($LASTEXITCODE -eq 0) (($dump | Select-Object -First 3) -join ' / ')
   $portVerbs = @($dump | Where-Object { "$_" -like "verb`t*" } | ForEach-Object { ("$_" -split "`t", 2)[1] })
   $portCaps = @($dump | Where-Object { "$_" -like "caption`t*" } | ForEach-Object { ("$_" -split "`t", 2)[1] })
-  $help = (& $engine --help 2>&1 | Out-String)
+  $help = (& { $ErrorActionPreference = 'Continue'; & $engine --help 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $psVerbs = @(Get-HelpVerbList -HelpText $help)
   $psCaps = @((Get-LiveMenuCaptions -Repo $Repo -ExcludeDialogButtons))
   Check 'both harvests are non-trivial (verbs >= 20, captions >= 40)' (($psVerbs.Count -ge 20) -and ($portVerbs.Count -ge 20) -and ($psCaps.Count -ge 40) -and ($portCaps.Count -ge 40)) "(verbs ps=$($psVerbs.Count) port=$($portVerbs.Count); captions ps=$($psCaps.Count) port=$($portCaps.Count))"

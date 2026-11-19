@@ -75,13 +75,13 @@ try {
   [void](New-Item -ItemType Directory -Path $src -Force)
   Write-Ascii (Join-Path $src 'uGateOut.pas') $Unit
   $db = Join-Path $WorkDir 'gate.sqlite'
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'index built' (Test-Path $db) $db
 
   $env:DRAGLINT_PROFILE = '1'
   try {
-    $dflt = (& $exePath lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --rules-dir $rules --library-db none 2>&1 | Out-String)
-    $on   = (& $exePath lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --rules-dir $rules --library-db none --enable 'local-only-out-arg,dead-store-before-out-arg' 2>&1 | Out-String)
+    $dflt = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --rules-dir $rules --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String)
+    $on   = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --rules-dir $rules --library-db none --enable 'local-only-out-arg,dead-store-before-out-arg' 2>&1 | ForEach-Object { "$_" } } | Out-String)
   } finally { $env:DRAGLINT_PROFILE = $null }
 
   Check 'profile printed the flow breakdown (default run)' ($dflt -match 'FlowChecker\.Check breakdown') ''

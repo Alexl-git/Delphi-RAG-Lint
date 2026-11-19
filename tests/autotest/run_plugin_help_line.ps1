@@ -56,7 +56,7 @@ try {
 
   $scratch = "$WorkDir\scratch"
   New-Item -ItemType Directory $scratch | Out-Null
-  $out = & $exe $harnessDir $scratch 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $exe $harnessDir $scratch 2>&1 | ForEach-Object { "$_" } } | Out-String
   $kv = @{}
   foreach ($line in ($out -split "`r?`n")) { if ($line -match '^([A-Za-z0-9_.]+)=(.*)$') { $kv[$matches[1]] = $matches[2] } }
   Check 'harness ran to completion' ($out -match '(?m)^DONE') $out

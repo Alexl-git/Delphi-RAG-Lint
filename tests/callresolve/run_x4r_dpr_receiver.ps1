@@ -39,7 +39,7 @@ $Fx  = (Resolve-Path (Join-Path $PSScriptRoot '..\fixtures\x4r-dpr-receiver')).P
 New-Item -ItemType Directory -Force $WorkDir | Out-Null
 $Db = Join-Path $WorkDir 'x4r.sqlite'
 if (Test-Path $Db) { [IO.File]::Delete($Db) }
-$null = & $Exe index $Fx --db $Db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $Fx --db $Db 2>&1 | ForEach-Object { "$_" } }
 if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: index exit $LASTEXITCODE" -ForegroundColor Red; exit 2 }
 
 # Returns 'receiver|target' for the one call ref <name> at <file>:<line> ('-' = NULL), or '<n refs>'.
@@ -48,7 +48,7 @@ function Edge([string]$file, [int]$line, [string]$name) {
        "COALESCE((SELECT qualified_name FROM symbols WHERE id=ce.target_symbol_id),'-') " +
        "FROM refs r JOIN files f ON f.id=r.file_id LEFT JOIN call_edges ce ON ce.ref_id=r.id " +
        "WHERE f.path LIKE '%\$file' AND r.start_line=$line AND r.name_text='$name' AND r.kind='call'"
-  $raw = & $Exe sql --db $Db --query $q --json --limit 50 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query $q --json --limit 50 2>$null }
   if ($LASTEXITCODE -ne 0) { return '<sql failed>' }
   $j = ($raw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n" | ConvertFrom-Json
   $rows = @($j.rows)

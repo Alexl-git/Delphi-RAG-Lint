@@ -56,7 +56,7 @@ try {
   Write-Ascii (Join-Path $eng 'drag-lint.json') $manifest
 
   function Q([string]$Db,[string]$Query) {
-    $raw = (& $exe sql --db $Db --json --limit 5000 --query $Query 2>$null) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $exe sql --db $Db --json --limit 5000 --query $Query 2>$null }) -join "`n"
     $b = $raw.IndexOf('{'); if ($b -lt 0) { return ,@() }
     return ,@(($raw.Substring($b) | ConvertFrom-Json).rows)
   }
@@ -70,7 +70,7 @@ try {
   Push-Location C:\TEMP
   try {
     # a. library missing -> pending
-    $txt = (& $exe index --project (Join-Path $app 'App.dpr') 2>&1 | Out-String)
+    $txt = (& { $ErrorActionPreference = 'Continue'; & $exe index --project (Join-Path $app 'App.dpr') 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'a: project DB built' (Test-Path $projOn) $txt
     Check 'a: the user is told the result is incomplete (library: PENDING)' ($txt -match 'library: PENDING') $txt
     $m1 = Meta $projOn 'library_resolve_state'
@@ -78,11 +78,11 @@ try {
     Check 'a: marker state=pending' ($j1 -and $j1.state -eq 'pending') $m1
     Check 'a: marker names a reason' ($j1 -and $j1.reason -match 'missing') $m1
     Check 'a: external_target = 0 (edges are project-local)' ((Q $projOn $extCount)[0][0] -eq 0)
-    Check 'g: no key -> no marker (ProjOff control)' ($(& $exe index --project (Join-Path $app 'Plain.dpr') 2>&1 | Out-Null; (Meta (Join-Path $out 'projoff.sqlite') 'library_resolve_state') -eq ''))
+    Check 'g: no key -> no marker (ProjOff control)' ($(& { $ErrorActionPreference = 'Continue'; & $exe index --project (Join-Path $app 'Plain.dpr') 2>&1 | ForEach-Object { "$_" } } | Out-Null; (Meta (Join-Path $out 'projoff.sqlite') 'library_resolve_state') -eq ''))
     Start-Sleep -Seconds 2
 
     # b. still missing, nothing changed -> pending kept, last_check moves, since stays
-    $txt = (& $exe index --project (Join-Path $app 'App.dpr') 2>&1 | Out-String)
+    $txt = (& { $ErrorActionPreference = 'Continue'; & $exe index --project (Join-Path $app 'App.dpr') 2>&1 | ForEach-Object { "$_" } } | Out-String)
     $j2 = (Meta $projOn 'library_resolve_state') | ConvertFrom-Json
     Check 'b: still pending after a no-change run' ($j2.state -eq 'pending')
     Check 'b: since_unix unchanged' ($j2.since_unix -eq $j1.since_unix) "$($j1.since_unix) vs $($j2.since_unix)"
@@ -91,22 +91,22 @@ try {
 
     # c. readers: notice, JSON field, and NO write
     $before = Stamp $projOn
-    $info = (& $exe info --json --db $projOn 2>&1) -join "`n"
+    $info = (& { $ErrorActionPreference = 'Continue'; & $exe info --json --db $projOn 2>&1 | ForEach-Object { "$_" } }) -join "`n"
     $ij = ($info.Substring($info.IndexOf('{')) | ConvertFrom-Json).indexes[0]
     Check 'c: info verdict = library-resolve-owed' ($ij.verdict -eq 'library-resolve-owed') $ij.verdict
     Check 'c: info remedy names --resolve-only' ($ij.remedy -match '--resolve-only') $ij.remedy
     Check 'c: info carries library_resolve.state = pending' ($ij.library_resolve.state -eq 'pending')
-    $fc = (& $exe query find-callers --name Go --db $projOn 2>&1 | Out-String)
+    $fc = (& { $ErrorActionPreference = 'Continue'; & $exe query find-callers --name Go --db $projOn 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'c: find-callers prints the library-pending NOTE (INCOMPLETE)' (($fc -match 'library-bound edges pending') -and ($fc -match 'INCOMPLETE')) $fc
-    $sq = (& $exe sql --db $projOn --json --query 'select 1' 2>$null) -join "`n"
+    $sq = (& { $ErrorActionPreference = 'Continue'; & $exe sql --db $projOn --json --query 'select 1' 2>$null }) -join "`n"
     $sj = $sq.Substring($sq.IndexOf('{')) | ConvertFrom-Json
     Check 'c: sql --json carries index_notes[0].kind = library-pending' (@($sj.index_notes).Count -ge 1 -and $sj.index_notes[0].kind -eq 'library-pending') $sq
     Check 'c: readers wrote nothing (size + mtime unchanged)' ((Stamp $projOn) -eq $before)
 
     # d. library becomes ready; a plain writer run re-resolves with no file changed
-    & $exe index $lib --db $libDb --platform Win64 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exe index $lib --db $libDb --platform Win64 2>&1 | ForEach-Object { "$_" } } | Out-Null
     Check 'd: library index built' (Test-Path $libDb)
-    $txt = (& $exe index --project (Join-Path $app 'App.dpr') 2>&1 | Out-String)
+    $txt = (& { $ErrorActionPreference = 'Continue'; & $exe index --project (Join-Path $app 'App.dpr') 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'd: the calls pass RAN although no file changed' ($txt -notmatch 'stage: calls -- skipped') $txt
     Check 'd: "library: bound" reported' ($txt -match 'library: bound') $txt
     $j3 = (Meta $projOn 'library_resolve_state') | ConvertFrom-Json
@@ -115,17 +115,17 @@ try {
     Check 'd: POSITIVE CONTROL external_target > 0' ((Q $projOn $extCount)[0][0] -gt 0)
 
     # e. bound -> readers quiet
-    $info = (& $exe info --json --db $projOn 2>&1) -join "`n"
+    $info = (& { $ErrorActionPreference = 'Continue'; & $exe info --json --db $projOn 2>&1 | ForEach-Object { "$_" } }) -join "`n"
     $ij = ($info.Substring($info.IndexOf('{')) | ConvertFrom-Json).indexes[0]
     Check 'e: info verdict = current' ($ij.verdict -eq 'current') $ij.verdict
-    $fc = (& $exe query find-callers --name Go --db $projOn 2>&1 | Out-String)
+    $fc = (& { $ErrorActionPreference = 'Continue'; & $exe query find-callers --name Go --db $projOn 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'e: find-callers prints no pending NOTE' ($fc -notmatch 'library-bound edges pending') $fc
-    $sq = (& $exe sql --db $projOn --json --query 'select 1' 2>$null) -join "`n"
+    $sq = (& { $ErrorActionPreference = 'Continue'; & $exe sql --db $projOn --json --query 'select 1' 2>$null }) -join "`n"
     $sj = $sq.Substring($sq.IndexOf('{')) | ConvertFrom-Json
     Check 'e: sql --json has no index_notes' ($null -eq $sj.PSObject.Properties['index_notes'])
 
     # f. a second plain run is a no-op for the pass and keeps since_unix
-    $txt = (& $exe index --project (Join-Path $app 'App.dpr') 2>&1 | Out-String)
+    $txt = (& { $ErrorActionPreference = 'Continue'; & $exe index --project (Join-Path $app 'App.dpr') 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'f: second run skips the calls pass' ($txt -match 'stage: calls -- skipped') $txt
     $j4 = (Meta $projOn 'library_resolve_state') | ConvertFrom-Json
     Check 'f: marker still bound, since_unix kept' (($j4.state -eq 'bound') -and ($j4.since_unix -eq $j3.since_unix))

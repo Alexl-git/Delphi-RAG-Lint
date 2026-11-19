@@ -44,7 +44,7 @@ function Write-Ascii([string]$Path, [string]$Body) {
   [System.IO.File]::WriteAllText($Path, $norm, [System.Text.Encoding]::ASCII)
 }
 function Q([string[]]$QArgs) {
-  $out = & $Exe query @QArgs --db $db --source pas 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe query @QArgs --db $db --source pas 2>$null }
   return @($out | Where-Object { $_ -match '\[pas/' })
 }
 
@@ -81,7 +81,7 @@ end;
 end.
 '@
 $db = Join-Path $dir 'fx.sqlite'
-& $Exe index $dir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 Write-Host 'B-27a: a short literal is not ranked out of a small --limit' -ForegroundColor Cyan
 $r = Q @('--text', 'null', '--limit', '3')

@@ -68,11 +68,11 @@ $main = Join-Path $src 'uUbMain.pas'
 W $main $mainText
 W (Join-Path $src 'App.dpr') "program App;`nuses`n  uUbMain in 'uUbMain.pas',`n  uUbDeadA in 'uUbDeadA.pas',`n  uUbDeadB in 'uUbDeadB.pas';`nbegin`nend.`n"
 $db = Join-Path $WorkDir 'ub.sqlite'
-& $Exe index --project (Join-Path $src 'App.dpr') --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $src 'App.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' (Test-Path $db) ''
 
 function UnusedIn([string]$Buffer) {
-  $raw = & $Exe lint $Buffer --stand-in-for $main --db $db --rule unused-unit-in-uses --json 2>$null | Out-String
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $Buffer --stand-in-for $main --db $db --rule unused-unit-in-uses --json 2>$null } | Out-String
   $i = $raw.IndexOf('[')
   if ($i -lt 0) { return @() }
   @(($raw.Substring($i) | ConvertFrom-Json) | Where-Object { $_.rule -eq 'unused-unit-in-uses' } |

@@ -45,13 +45,13 @@ function UnitText([string]$name, [string]$uses = '') {
 }
 function DprText([string]$name, [string]$units) { "program $name;`nuses $units;`nbegin`nend.`n" }
 function Index([string]$proj, [string]$db) {
-  $o = & $exePath index --project $proj --db $db 2>&1
+  $o = & { $ErrorActionPreference = 'Continue'; & $exePath index --project $proj --db $db 2>&1 | ForEach-Object { "$_" } }
   if ($LASTEXITCODE -ne 0 -or -not (Test-Path $db)) { Write-Host "FATAL: fixture $proj did not index: $($o | Select-Object -Last 2)" -ForegroundColor Red; Get-ExeStartFailureHint $LASTEXITCODE | Write-Host; exit 2 }
 }
 function Ask([string[]]$a) {
   $errFile = Join-Path $scratch 'stderr.txt'
   Push-Location $scratch
-  $script:out = (& $exePath usages @a 2>$errFile) -join "`n"
+  $script:out = (& { $ErrorActionPreference = 'Continue'; & $exePath usages @a 2>$errFile }) -join "`n"
   $script:code = $LASTEXITCODE
   Pop-Location
   $script:err = [IO.File]::ReadAllText($errFile)

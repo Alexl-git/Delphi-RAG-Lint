@@ -53,7 +53,7 @@ function Parse-Findings([string[]]$Raw) {
   return ,@($out)
 }
 function RuleHits([string]$Verb, [string]$Db, [string[]]$Extra) {
-  $raw = & $exePath $Verb --db $Db --library-db none --format json @Extra 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath $Verb --db $Db --library-db none --format json @Extra 2>$null }
   return ,@((Parse-Findings $raw) | Where-Object { $_.rule -eq $Rule } |
     ForEach-Object { '{0}:{1}' -f [IO.Path]::GetFileName($_.file_path), [int]$_.start_line } | Sort-Object)
 }
@@ -78,9 +78,9 @@ function Build([string]$Dir, [string]$Tag) {
 function Fix([string]$Unit, [string[]]$Extra) {
   $a = @('lint', $Unit, '--db', $db, '--library-db', 'none', '--rule', $Rule, '--fix', '--fix-rule', $Rule, '--apply',
          '--project', $proj, '--no-backup', '--rsvars', $RsVars) + $Extra
-  return (& $exePath @a 2>&1 | Out-String)
+  return (& { $ErrorActionPreference = 'Continue'; & $exePath @a 2>&1 | ForEach-Object { "$_" } } | Out-String)
 }
-function Reindex { & $exePath index --project $proj --db $db --library-db none 2>&1 | Out-Null }
+function Reindex { & { $ErrorActionPreference = 'Continue'; & $exePath index --project $proj --db $db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-Null }
 
 try {
   [void](New-Item -ItemType Directory -Force -Path $scratch)
@@ -121,7 +121,7 @@ try {
   Check 'A5 plain lint-project: ON by default' (($onp -join ',') -eq ($want -join ',')) "got [$($onp -join ',')]"
 
   # A6: catalog row
-  $rj = (& $exePath rules --json 2>$null | Out-String)
+  $rj = (& { $ErrorActionPreference = 'Continue'; & $exePath rules --json 2>$null } | Out-String)
   $row = $null
   try { $row = @(($rj | ConvertFrom-Json).rules | Where-Object { $_.id -eq $Rule }) | Select-Object -First 1 } catch { $row = $null }
   if ($null -eq $row) { try { $row = @(($rj | ConvertFrom-Json) | Where-Object { $_.id -eq $Rule }) | Select-Object -First 1 } catch { $row = $null } }
@@ -132,7 +132,7 @@ try {
     Check 'A6 severity warning' ($row.default_severity -eq 'warning') "$($row.default_severity)"
     Check 'A6 fixable' ($row.fixable -eq $true) ''
   }
-  $sev = @((Parse-Findings (& $exePath lint-all --db $db --library-db none --format json --rule $Rule 2>$null)) | Where-Object { $_.rule -eq $Rule } | ForEach-Object severity | Sort-Object -Unique)
+  $sev = @((Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --library-db none --format json --rule $Rule 2>$null })) | Where-Object { $_.rule -eq $Rule } | ForEach-Object severity | Sort-Object -Unique)
   Check 'A7 findings are warnings' (($sev -join ',') -eq 'warning') "[$($sev -join ',')]"
 
   # B: the fix

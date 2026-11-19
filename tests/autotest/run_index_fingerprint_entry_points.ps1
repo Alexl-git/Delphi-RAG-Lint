@@ -90,8 +90,8 @@ $EXPECTED_FILES = 3
 
 Push-Location C:\TEMP
 try {
-  function Manifest() { return (& $exePath index --all --config $cfg --only FpEntrySection --jobs 1 2>&1 | Out-String) }
-  function AdHoc([string[]]$extra) { return (& $exePath index (Join-Path $scratch 'src') --db $db @extra 2>&1 | Out-String) }
+  function Manifest() { return (& { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only FpEntrySection --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-String) }
+  function AdHoc([string[]]$extra) { return (& { $ErrorActionPreference = 'Continue'; & $exePath index (Join-Path $scratch 'src') --db $db @extra 2>&1 | ForEach-Object { "$_" } } | Out-String) }
 
   $r1 = Manifest
   Check 'SANITY: the manifest run indexed the fixture' ($r1 -match '(?i)alpha\.pas')

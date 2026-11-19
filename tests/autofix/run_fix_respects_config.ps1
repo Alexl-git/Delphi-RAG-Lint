@@ -21,7 +21,7 @@ Copy-Item $fixture $target -Force
 
 Push-Location $scratch
 try {
-  $raw = & $exePath lint --file $target --fix --json --apply 2>$null | Out-String
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $target --fix --json --apply 2>$null } | Out-String
   $arr = $null; try { $arr = ($raw | ConvertFrom-Json) } catch { $arr = $null }
   if ($null -ne $arr -and $arr -isnot [System.Array]) { $arr = @($arr) }
 

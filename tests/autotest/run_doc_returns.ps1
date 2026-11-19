@@ -121,8 +121,8 @@ New-Item -ItemType Directory $dirA | Out-Null
 $fileA = Join-Path $dirA 'uRet.pas'
 $dbA   = Join-Path $dirA 'a.sqlite'
 Write-Fixture $fileA
-& $Exe index $dirA --db $dbA 2>&1 | Out-Null
-& $Exe document --qname uRet.Grab --db $dbA --apply --no-backup 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dirA --db $dbA 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe document --qname uRet.Grab --db $dbA --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
 # v(ADP3 T3) fix: REINDEX before documenting the SECOND symbol in the SAME
 # file -- same requirement this suite documents extensively elsewhere (see
 # Scenario C below, run_doc_idempotent.ps1, run_doc_no_todo.ps1 Scenario B):
@@ -136,8 +136,8 @@ Write-Fixture $fileA
 # inside that window and exposed the missing reindex. Fixing the test, not
 # the engine: every OTHER back-to-back apply in this suite already reindexes
 # for exactly this reason.
-& $Exe index $dirA --db $dbA 2>&1 | Out-Null
-& $Exe document --qname uRet.DoNothing --db $dbA --apply --no-backup 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dirA --db $dbA 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe document --qname uRet.DoNothing --db $dbA --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $textA = Get-Content $fileA -Raw
 
 # Isolate the actual <returns>...</returns> line(s) -- the implementation body
@@ -167,10 +167,10 @@ Write-Fixture $fileB
 # slot, undotted). Placing it in $dirB and running `document` with CWD=$dirB
 # (Push-Location) is what makes Load's local-walk pick it up.
 '{ "docs": { "max_return_cases": 1 } }' | Set-Content (Join-Path $dirB '.drag-lint.json') -Encoding ascii
-& $Exe index $dirB --db $dbB 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dirB --db $dbB 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Push-Location $dirB
 try {
-  & $Exe document --qname uRet.Grab --db $dbB --apply --no-backup 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe document --qname uRet.Grab --db $dbB --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
 } finally {
   Pop-Location
 }
@@ -195,15 +195,15 @@ New-Item -ItemType Directory $dirC | Out-Null
 $fileC = Join-Path $dirC 'uRet.pas'
 $dbC   = Join-Path $dirC 'c.sqlite'
 Write-Fixture $fileC
-& $Exe index $dirC --db $dbC 2>&1 | Out-Null
-& $Exe document --qname uRet.Grab --db $dbC --apply --no-backup 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dirC --db $dbC 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe document --qname uRet.Grab --db $dbC --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $bytes1 = [IO.File]::ReadAllBytes($fileC)
 # CRITICAL: re-index so the store sees the post-insert line numbers (mirrors
 # tests\autodoc\run_doc_idempotent.ps1's documented requirement) -- otherwise
 # the stale index hands back the pre-insert line and the second apply inserts a
 # SECOND comment block instead of recognizing the symbol is already documented.
-& $Exe index $dirC --db $dbC 2>&1 | Out-Null
-$r2 = (& $Exe document --qname uRet.Grab --db $dbC --apply --no-backup --json 2>&1) -join "`n"
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dirC --db $dbC 2>&1 | ForEach-Object { "$_" } } | Out-Null
+$r2 = (& { $ErrorActionPreference = 'Continue'; & $Exe document --qname uRet.Grab --db $dbC --apply --no-backup --json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 $bytes2 = [IO.File]::ReadAllBytes($fileC)
 
 Check 'run2: action=unchanged' ($r2 -match '"action":"unchanged"') $r2
@@ -235,10 +235,10 @@ Copy-Item $Exe $exeCopy -Force
 $fileD = Join-Path $projD 'uRet.pas'
 $dbD   = Join-Path $projD 'd.sqlite'
 Write-Fixture $fileD
-& $exeCopy index $projD --db $dbD 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exeCopy index $projD --db $dbD 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Push-Location $projD
 try {
-  & $exeCopy document --qname uRet.Grab --db $dbD --apply --no-backup 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exeCopy document --qname uRet.Grab --db $dbD --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
 } finally {
   Pop-Location
 }

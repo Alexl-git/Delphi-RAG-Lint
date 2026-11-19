@@ -38,14 +38,14 @@ $Fx  = (Resolve-Path (Join-Path $PSScriptRoot '..\fixtures\rba-generic-constrain
 New-Item -ItemType Directory -Force $WorkDir | Out-Null
 $Db = Join-Path $WorkDir 'gencons.sqlite'
 if (Test-Path $Db) { [IO.File]::Delete($Db) }
-$null = & $Exe index $Fx --db $Db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $Fx --db $Db 2>&1 | ForEach-Object { "$_" } }
 if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: index exit $LASTEXITCODE" -ForegroundColor Red; exit 2 }
 
 # symbol id ('-' = NULL) of the one type_use <name> at uMicXBase.pas:<line>, or '<n refs>'.
 function Bound([int]$line, [string]$name, [int]$minCol = 0) {
   $q = "SELECT COALESCE(r.symbol_id,'-') FROM refs r JOIN files f ON f.id=r.file_id " +
        "WHERE f.path LIKE '%\uMicXBase.pas' AND r.start_line=$line AND r.name_text='$name' AND r.kind='type_use' AND r.start_col>=$minCol"
-  $raw = & $Exe sql --db $Db --query $q --json --limit 50 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query $q --json --limit 50 2>$null }
   if ($LASTEXITCODE -ne 0) { return '<sql failed>' }
   $j = ($raw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n" | ConvertFrom-Json
   $rows = @($j.rows)

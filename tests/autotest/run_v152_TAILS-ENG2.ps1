@@ -123,9 +123,9 @@ end.
 '@
   [IO.File]::WriteAllText((Join-Path $G 'uOwn.pas'), (Crlf $Own))
   $GDb = Join-Path $Work 'g.sqlite'
-  & $Exe index $G --db $GDb 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $G --db $GDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $q = "SELECT r.receiver_text AS rcv, s.qualified_name AS target FROM refs r LEFT JOIN symbols s ON s.id = r.symbol_id WHERE r.name_text = 'Side' AND r.receiver_text IS NOT NULL AND r.receiver_text <> ''"
-  $rawG = (& $Exe sql --db $GDb --query $q --json 2>$null) -join "`n"
+  $rawG = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $GDb --query $q --json 2>$null }) -join "`n"
   $bound = @{}
   try {
     $j = $rawG | ConvertFrom-Json
@@ -239,9 +239,9 @@ end.
   $PProj = Join-Path $P 'PApp.dproj'
   $PDb = Join-Path $P '_D-RAG\PApp.sqlite'
   [IO.Directory]::CreateDirectory((Split-Path $PDb)) | Out-Null
-  $o = (& $Exe index --project $PProj --db $PDb 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe index --project $PProj --db $PDb 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   if ($LASTEXITCODE -ne 0) { Write-Host $o; throw 'index PApp failed' }
-  $rawP = (& $Exe lint-all --db $PDb --project $PProj --json --no-stand-down --rule member-could-be-private 2>$null) -join "`n"
+  $rawP = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $PDb --project $PProj --json --no-stand-down --rule member-could-be-private 2>$null }) -join "`n"
   $pf = @(); try { $pf = @($rawP | ConvertFrom-Json) } catch { Write-Host ('  unparsed: ' + $rawP.Substring(0, [Math]::Min(200, $rawP.Length))) }
   $mp = { param($w) @($pf | Where-Object { $_.rule -eq 'member-could-be-private' -and ('' + $_.message) -match "\.$w\b" }).Count }
   Check 'P1 MsgToString called only under an inactive {$IFDEF} in UCaller -> silent' ((& $mp 'MsgToString') -eq 0) ("hits=$(& $mp 'MsgToString')")
@@ -255,7 +255,7 @@ end.
   $P1 = Join-Path $X 'App1\App1.dproj'
   $Real1 = Join-Path $X 'App1\_D-RAG\App1.sqlite'
   [IO.Directory]::CreateDirectory((Split-Path $Real1)) | Out-Null
-  $o = (& $Exe index --project $P1 --db $Real1 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe index --project $P1 --db $Real1 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   if ($LASTEXITCODE -ne 0) { Write-Host $o; throw 'index App1 failed' }
   # App2 stays unindexed; it no longer LISTS UShared (dproj + dpr), it reaches it via its search path.
   $d2 = Join-Path $X 'App2\App2.dproj'; $p2 = Join-Path $X 'App2\App2.dpr'
@@ -265,7 +265,7 @@ end.
   [IO.File]::WriteAllText($d2, $withPath); [IO.File]::WriteAllText($p2, $sp)
   function LintS {
     $errFile = Join-Path $Work ('err-' + [guid]::NewGuid().ToString('N') + '.txt')
-    $raw = (& $Exe lint-all --db $Real1 --project $P1 --json --no-stand-down --rule unused-global 2>$errFile) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Real1 --project $P1 --json --no-stand-down --rule unused-global 2>$errFile }) -join "`n"
     $arr = @(); try { $arr = @($raw | ConvertFrom-Json) } catch { Write-Host ('  unparsed: ' + $raw.Substring(0, [Math]::Min(200, $raw.Length))) }
     $err = if (Test-Path $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
     return [pscustomobject]@{ F = $arr; Err = $err }

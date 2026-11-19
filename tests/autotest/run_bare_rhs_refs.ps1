@@ -119,7 +119,7 @@ Write-Ascii (Join-Path $work 'u.pas') $UBody
 $db = Join-Path $WorkDir 'bareRhs.sqlite'
 
 Write-Host 'Indexing fixture (deep usage refs on by default for a project index)' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 $indexExit = $LASTEXITCODE
 Check 'index exits 0' ($indexExit -eq 0) "exit=$indexExit; $($indexOut -join ' | ')"
 

@@ -42,10 +42,10 @@ Copy-Item $fixture $target -Force
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # --- find-callees --json: CallsAlpha's resolved outgoing calls. ---
-  $jsonOut = & $exePath find-callees --qname calledfrom.TDispatcher.CallsAlpha --json --db $db 2>$null | Out-String
+  $jsonOut = & { $ErrorActionPreference = 'Continue'; & $exePath find-callees --qname calledfrom.TDispatcher.CallsAlpha --json --db $db 2>$null } | Out-String
   Check '--json: parses as JSON array' ($null -ne $jsonOut -and $jsonOut.Trim().StartsWith('['))
   $rows = $jsonOut | ConvertFrom-Json
   Check 'CallsAlpha has exactly 1 resolved callee' (@($rows).Count -eq 1)
@@ -57,15 +57,15 @@ try {
   Check 'callee tagged certain' (@($rows | Where-Object { $_.target_qname -eq 'calledfrom.TAlpha.Run' -and $_.confidence -eq 'certain' }).Count -eq 1)
 
   # --- find-callees text mode: non-empty, no crash. ---
-  $txtOut = & $exePath find-callees --qname calledfrom.TDispatcher.CallsAlpha --db $db 2>$null | Out-String
+  $txtOut = & { $ErrorActionPreference = 'Continue'; & $exePath find-callees --qname calledfrom.TDispatcher.CallsAlpha --db $db 2>$null } | Out-String
   Check 'text mode: mentions the resolved callee' ($txtOut -match 'calledfrom\.TAlpha\.Run')
 
   # --- find-callees on a routine with NO outgoing calls (empty body). ---
-  $emptyJson = & $exePath find-callees --qname calledfrom.TAlpha.Run --json --db $db 2>$null | Out-String
+  $emptyJson = & { $ErrorActionPreference = 'Continue'; & $exePath find-callees --qname calledfrom.TAlpha.Run --json --db $db 2>$null } | Out-String
   $emptyRows = $emptyJson | ConvertFrom-Json
   Check 'no-callees --json: empty array' (@($emptyRows).Count -eq 0)
 
-  $emptyTxt = & $exePath find-callees --qname calledfrom.TAlpha.Run --db $db 2>$null | Out-String
+  $emptyTxt = & { $ErrorActionPreference = 'Continue'; & $exePath find-callees --qname calledfrom.TAlpha.Run --db $db 2>$null } | Out-String
   Check 'no-callees text: "0 callee(s)"' ($emptyTxt -match '0 callee\(s\)')
 } finally { Pop-Location }
 

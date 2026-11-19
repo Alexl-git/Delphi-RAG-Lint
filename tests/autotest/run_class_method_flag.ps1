@@ -124,12 +124,12 @@ $src = @(
 [System.IO.File]::WriteAllText($unit, $src + "`r`n", [System.Text.Encoding]::ASCII)
 
 $db = Join-Path $WorkDir 'clsctor.sqlite'
-& $Exe index $unit --db $db *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $unit --db $db *> $null }
 Check 'fixture indexed' (Test-Path $db) $db
 if (-not (Test-Path $db)) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 
 function RowOf([string]$name) {
-  $j = & $Exe query --name $name --db $db --json 2>$null | Out-String
+  $j = & { $ErrorActionPreference = 'Continue'; & $Exe query --name $name --db $db --json 2>$null } | Out-String
   $o = $null; try { $o = $j | ConvertFrom-Json } catch { }
   if ($null -eq $o) { return $null }
   return @($o | Where-Object { $_.name -eq $name })[0]
@@ -172,12 +172,12 @@ Check 'procedure Plain is_class_method=False' ((Flag $rP) -eq 'False') "got: $(F
 Write-Host ''
 Write-Host 'CASE D: outline --json / text' -ForegroundColor Cyan
 $oj = @()
-try { $oj = @((& $Exe outline --file $unit --db $db --format json 2>$null | Out-String) | ConvertFrom-Json) } catch { }
+try { $oj = @((& { $ErrorActionPreference = 'Continue'; & $Exe outline --file $unit --db $db --format json 2>$null } | Out-String) | ConvertFrom-Json) } catch { }
 $oC  = @($oj | Where-Object { $_.qname -eq 'ClsCtor.TReg.Create' })[0]
 $oCI = @($oj | Where-Object { $_.qname -eq 'ClsCtor.TReg.CreateInst' })[0]
 Check 'outline json: class ctor is_class_method=True' ((Flag $oC) -eq 'True') "got: $(Flag $oC)"
 Check 'outline json: instance ctor is_class_method=False' ((Flag $oCI) -eq 'False') "got: $(Flag $oCI)"
-$ot = @(& $Exe outline --file $unit --db $db 2>$null)
+$ot = @(& { $ErrorActionPreference = 'Continue'; & $Exe outline --file $unit --db $db 2>$null })
 $tC  = @($ot | Where-Object { $_ -match '\sClsCtor\.TReg\.Create\s' })[0]
 $tCI = @($ot | Where-Object { $_ -match '\sClsCtor\.TReg\.CreateInst\s' })[0]
 Check 'outline text: class ctor row tagged [class]' ($tC -match '\[class\]') "row: $tC"
@@ -186,8 +186,8 @@ Check 'outline text: instance ctor row NOT tagged [class]' (($null -ne $tCI) -an
 # ---- CASE E: hover names a class constructor -------------------------------
 Write-Host ''
 Write-Host 'CASE E: hover --format json kind' -ForegroundColor Cyan
-$h = $null; try { $h = (& $Exe hover --qname ClsCtor.TReg.Create --db $db --format json 2>$null | Out-String) | ConvertFrom-Json } catch { }
-$hi = $null; try { $hi = (& $Exe hover --qname ClsCtor.TReg.CreateInst --db $db --format json 2>$null | Out-String) | ConvertFrom-Json } catch { }
+$h = $null; try { $h = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname ClsCtor.TReg.Create --db $db --format json 2>$null } | Out-String) | ConvertFrom-Json } catch { }
+$hi = $null; try { $hi = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname ClsCtor.TReg.CreateInst --db $db --format json 2>$null } | Out-String) | ConvertFrom-Json } catch { }
 Check 'hover: class ctor kind is "class constructor"' ($h.kind -eq 'class constructor') "got: $($h.kind)"
 Check 'hover: instance ctor kind is "constructor"' ($hi.kind -eq 'constructor') "got: $($hi.kind)"
 

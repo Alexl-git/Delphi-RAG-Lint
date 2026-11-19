@@ -199,12 +199,12 @@ foreach ($k in $units.Keys) {
 
 Push-Location $env:TEMP
 try {
-  & $exePath index $work --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $work --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
   # sql --json rows are POSITIONAL arrays: [0]=file, [1]=name, [2]=kind, [3]=line, [4]=receiver.
   $q = "select f.path, r.name_text, r.kind, r.start_line, coalesce(r.receiver_text, '') from refs r join files f on f.id = r.file_id"
-  $j = (& $exePath sql --db $db --query $q --json 2>$null) -join "`n" | ConvertFrom-Json
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n" | ConvertFrom-Json
   $rows = @(foreach ($row in $j.rows) {
     [pscustomobject]@{ File = [IO.Path]::GetFileNameWithoutExtension([string]$row[0]); Name = [string]$row[1]
                        Kind = [string]$row[2]; Line = [int]$row[3]; Rcv = [string]$row[4] } })
@@ -232,7 +232,7 @@ try {
   Check 'A[I].IdxSub.IdxLeaf: IdxLeaf has ONE member-access ref' ((Sel 'uIdxIndexed' 'IdxLeaf' 'member-access' 52).Count -eq 1)
 
   Write-Host 'unused-unit-in-uses:' -ForegroundColor Cyan
-  $out = (& $exePath lint-project --db $db --rule unused-unit-in-uses 2>$null | Out-String) -replace "`r`n", "`n"
+  $out = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-project --db $db --rule unused-unit-in-uses 2>$null } | Out-String) -replace "`r`n", "`n"
   $hits = @($out -split "`n" | Where-Object { $_ -match 'unused-unit-in-uses' })
   Write-Host ("  findings:`n    " + ($hits -join "`n    ")) -ForegroundColor DarkGray
   Check 'CONTROL: uIdxDead (imports uIdxHelp, names nothing) IS flagged' (@($hits | Where-Object { $_ -match 'uIdxDead' -and $_ -match "'uIdxHelp'" }).Count -eq 1)

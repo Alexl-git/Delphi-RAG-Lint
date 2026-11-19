@@ -91,7 +91,7 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'sem.sqlite'
-& $Exe index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $idxCode = $LASTEXITCODE
 Check 'fixture indexed' (Test-Path $db)
 if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red; exit 2 } }
@@ -196,7 +196,7 @@ for ($i = 0; $i -lt 10000; $i++) { [void]$sb.Append("  X := X + $i; // step`r`n"
 [void]$sb.Append("end;`r`n`r`nend.`r`n")
 [System.IO.File]::WriteAllText($bigFile, $sb.ToString(), (New-Object System.Text.ASCIIEncoding))
 $bigDb = Join-Path $WorkDir 'big.sqlite'
-$idxOut = & $Exe index $bigSrc --db $bigDb 2>&1
+$idxOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $bigSrc --db $bigDb 2>&1 | ForEach-Object { "$_" } }
 $idxExit = $LASTEXITCODE
 if ($idxExit -ne 0 -or -not (Test-Path $bigDb) -or (Get-Item $bigDb).Length -le 0) {
   $hint = Get-ExeStartFailureHint $idxExit; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }

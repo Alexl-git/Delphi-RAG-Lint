@@ -102,7 +102,7 @@ function Invoke-Engine([string]$Copy, [string]$Roam, [string[]]$EngineArgs, [has
   Push-Location -LiteralPath $cwd
   try {
     $errFile = Join-Path $WorkDir 'stderr.txt'
-    $o = ((& $Copy @EngineArgs 2>$errFile | ForEach-Object { "$_" }) -join "`n")
+    $o = ((& { $ErrorActionPreference = 'Continue'; & $Copy @EngineArgs 2>$errFile } | ForEach-Object { "$_" }) -join "`n")
     $rc = $LASTEXITCODE
     $e = if (Test-Path -LiteralPath $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
     return [pscustomobject]@{ Rc = $rc; Out = $o; Err = $e }

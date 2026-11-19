@@ -132,9 +132,9 @@ $LA = LineOf '{A}'; $LB = (LineOf "Writeln('b')") + 2; $LC = LineOf '{C}'; $LD =
 Push-Location $Work
 try {
   $db = Join-Path $Work 'rm.sqlite'
-  $null = & $Exe index --project (Join-Path $Work 'RmProj.dpr') --db $db 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $Work 'RmProj.dpr') --db $db 2>&1 | ForEach-Object { "$_" } }
   Check 'index exit 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
-  $raw = (& $Exe lint (Join-Path $Work 'RmUnit.pas') --db $db --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $Work 'RmUnit.pas') --db $db --json 2>$null }) -join "`n"
   $all = @()
   try { $all = @($raw | ConvertFrom-Json) } catch { Check 'lint --json parses' $false $raw.Substring(0, [Math]::Min(300, $raw.Length)) }
   Check 'lint returned findings (non-empty answer)' ($all.Count -gt 0) "count=$($all.Count)"

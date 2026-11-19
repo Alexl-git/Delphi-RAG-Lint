@@ -85,7 +85,7 @@ end.
 
 $db = Join-Path $WorkDir 'case.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($indexOut -join ' | ')"
 
 # --- probes ------------------------------------------------------------------
@@ -105,13 +105,13 @@ function Sql2([string]$Db, [string]$Q) { return ((python $script:PySql $Db $Q) -
 function QName([string]$Name, [switch]$CaseSensitive) {
   $a = @('query', '--name', $Name, '--db', $db, '--json')
   if ($CaseSensitive) { $a += '--case-sensitive' }
-  $raw = @(& $Exe @a 2>&1) | ForEach-Object { "$_" } | Where-Object { $_ -notmatch 'loaded defaults' }
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" } | Where-Object { $_ -notmatch 'loaded defaults' }
   $txt = ($raw -join "`n").Trim()
   if (-not $txt.StartsWith('[')) { return @() }
   return @($txt | ConvertFrom-Json)
 }
 function QQName([string]$Q) {
-  $raw = @(& $Exe query --qname $Q --db $db --json 2>&1) | ForEach-Object { "$_" } |
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query --qname $Q --db $db --json 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" } |
            Where-Object { $_ -notmatch 'loaded defaults' }
   $txt = ($raw -join "`n").Trim()
   if (-not $txt.StartsWith('[')) { return @() }
@@ -201,10 +201,10 @@ implementation
 end.
 '@
 $sibDb = Join-Path $WorkDir 'sib.sqlite'
-& $Exe index $sibWork --db $sibDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $sibWork --db $sibDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $stored = Sql2 $sibDb "SELECT COUNT(DISTINCT name) FROM symbols WHERE name LIKE 'TSibling'"
 Check 'precondition: the DB holds BOTH spellings as distinct rows' ($stored -eq '2') "distinct spellings=$stored"
-$sibRaw = @(& $Exe query --name 'TSibling' --db $sibDb --json 2>&1) | ForEach-Object { "$_" } |
+$sibRaw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query --name 'TSibling' --db $sibDb --json 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" } |
             Where-Object { $_ -notmatch 'loaded defaults' }
 $sibTxt = ($sibRaw -join "`n").Trim()
 $sib = if ($sibTxt.StartsWith('[')) { @($sibTxt | ConvertFrom-Json) } else { @() }

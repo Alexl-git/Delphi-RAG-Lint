@@ -52,7 +52,7 @@ function Write-Ascii([string]$Path, [string]$Text) {
   [System.IO.File]::WriteAllText($Path, $n, [System.Text.Encoding]::ASCII)
 }
 function Get-Findings {
-  $raw = (& $Exe lint-all --db $Db --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --json 2>$null }) -join "`n"
   $a = $raw.IndexOf('['); $b = $raw.LastIndexOf(']')
   if ($a -lt 0 -or $b -le $a) { return ,@() }
   return ,@(ConvertFrom-Json $raw.Substring($a, $b - $a + 1))
@@ -124,10 +124,10 @@ end.
 
 Push-Location $W
 try {
-  & $Exe index $W --db $Db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $W --db $Db 2>$null } | Out-Null
 
   # ---- Part A: one managed block per overload --------------------------------
-  & $Exe document --unit $Pas --db $Db --apply --no-backup 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe document --unit $Pas --db $Db --apply --no-backup 2>$null } | Out-Null
   $d = DeclLines
   Check 'A: two Query declarations after document' ($d.Count -eq 2) "decls=$($d -join ',')"
   Check 'A: overload 1 has its own managed block' ((DocAbove $d[0]) -match 'Overload 1 of 2')
@@ -138,14 +138,14 @@ try {
   $src = $src.Replace('Result := Length(AName) + Alpha;', 'Result := Length(AName) + Gamma;')
   $src = $src.Replace('ACode := Beta;', 'ACode := Delta;')
   Write-Ascii $Pas $src
-  & $Exe index $W --db $Db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $W --db $Db 2>$null } | Out-Null
   $codeBefore = CodeLines
   $f = Get-Findings
   $drift = @($f | Where-Object { $_.rule -eq 'doc-drift' })
   Check 'B: doc-drift reports stale blocks' ($drift.Count -ge 2) ("lines=" + (($drift | ForEach-Object { $_.start_line }) -join ','))
 
   # ---- Part C: the invariant -------------------------------------------------
-  & $Exe lint-all --db $Db --fix --apply --no-backup 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --fix --apply --no-backup 2>$null } | Out-Null
   $codeAfter = CodeLines
   $same = ($codeBefore.Count -eq $codeAfter.Count) -and (@(Compare-Object $codeBefore $codeAfter -SyncWindow 0).Count -eq 0)
   Check 'C: --fix left every non-/// line intact and in order' $same `
@@ -164,7 +164,7 @@ try {
   }
 
   # ---- Part E: repaired, not reshuffled --------------------------------------
-  & $Exe index $W --db $Db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $W --db $Db 2>$null } | Out-Null
   $f2 = Get-Findings
   $drift2 = @($f2 | Where-Object { $_.rule -eq 'doc-drift' })
   Check 'E: a second lint-all reports no doc-drift' ($drift2.Count -eq 0) ("left: " + (($drift2 | ForEach-Object { "$($_.start_line): $($_.message)" }) -join ' | '))

@@ -88,7 +88,7 @@ function Invoke-UsesReport([string[]]$extra) {
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db --quiet 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db --quiet 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
   # --- (1) positive control: --name that MATCHES still works ------------------

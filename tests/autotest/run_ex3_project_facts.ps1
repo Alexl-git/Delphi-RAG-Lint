@@ -42,13 +42,13 @@ New-Item -ItemType Directory -Force $WorkDir | Out-Null
 $Db = Join-Path $WorkDir 'ex3.sqlite'
 if (Test-Path $Db) { [IO.File]::Delete($Db) }
 
-$null = & $Exe index $Fx --db $Db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $Fx --db $Db 2>&1 | ForEach-Object { "$_" } }
 if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: index exit $LASTEXITCODE" -ForegroundColor Red; exit 2 }
 
 # One SELECT -> array of row arrays (sql --json rows are positional). A failing query (e.g. a table
 # the base build does not create) returns an empty array, so the dependent checks FAIL, never pass.
 function Rows([string]$q) {
-  $raw = & $Exe sql --db $Db --query $q --json --limit 500 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query $q --json --limit 500 2>$null }
   if ($LASTEXITCODE -ne 0) { return ,@() }
   $j = ($raw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n" | ConvertFrom-Json
   return ,@($j.rows)
@@ -105,7 +105,7 @@ Check 'E7c control: bare `is TEx3Base` keeps its bare name_text' (($b.Count -eq 
 # section 4); the readers that count calls must count it ONCE. Pinned so a de-dup or a double count both show.
 $tw = Rows ("SELECT r.kind FROM refs r JOIN files f ON f.id=r.file_id WHERE " + (FileLike 'Ex3App.dpr') + " AND r.start_line=18 AND r.start_col=8 ORDER BY r.kind")
 Check 'E5a GRun.Go span holds one call + one member-access row (the documented twin)' ((($tw | ForEach-Object { $_[0] }) -join ',') -eq 'call,member-access') "rows=$($tw | ConvertTo-Json -Compress)"
-$us = (& $Exe usages --name Go --db $Db 2>$null) -join "`n"
+$us = (& { $ErrorActionPreference = 'Continue'; & $Exe usages --name Go --db $Db 2>$null }) -join "`n"
 Check 'E5b usages counts the twinned calls once (calls: 2 for 2 call sites)' ($us -match 'calls:\s*2\b') "out=$us"
 Write-Host ("== {0} passed, {1} failed" -f $script:Passed, $script:Failed)
 try { [IO.Directory]::Delete($WorkDir, $true) } catch { Write-Host "  (left $WorkDir)" }

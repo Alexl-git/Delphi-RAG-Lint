@@ -78,18 +78,18 @@ function RulesIn([string]$Out) {
 }
 function LintAll([string[]]$Extra, [string]$Tag) {
   $argv = @('lint-all', '--db', $db, '--output', (Join-Path $WorkDir "report-$Tag.txt"), '--quiet') + $Extra
-  return (& $Exe @argv 2>&1 | Out-String)
+  return (& { $ErrorActionPreference = 'Continue'; & $Exe @argv 2>&1 | ForEach-Object { "$_" } } | Out-String)
 }
 
 Push-Location C:\TEMP
 try {
-  & $Exe index --all --config $manifest --only SecLaRule --jobs 1 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $manifest --only SecLaRule --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
   if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
 
   $bare   = LintAll @() 'bare'
   $offOne = LintAll @('--rule', 'magic-literal') 'off'
   $onOne  = LintAll @('--rule', 'float-equality-comparison') 'on'
-  $single = & $Exe lint $pas --db $db --library-db $nolib --rule magic-literal --quiet 2>&1 | Out-String
+  $single = & { $ErrorActionPreference = 'Continue'; & $Exe lint $pas --db $db --library-db $nolib --rule magic-literal --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String
 } finally { Pop-Location }
 
 Write-Host ''

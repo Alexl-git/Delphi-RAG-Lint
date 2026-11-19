@@ -196,7 +196,7 @@ try {
     Copy-Item -Path (Join-Path $FixRoot "$fx\*") -Destination $d -Recurse -Force
     # A fixture with a _D-RAG folder (project config) keeps its DB there: the engine finds the anchor by it.
     $db = if (Test-Path -LiteralPath (Join-Path $d '_D-RAG')) { Join-Path $d "_D-RAG\$fx.sqlite" } else { Join-Path $WorkDir "$fx.sqlite" }
-    $null = & $Exe index $d --db $db 2>&1
+    $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $d --db $db 2>&1 | ForEach-Object { "$_" } }
     Check "index $fx (exit 0)" ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
     $dbs[$fx] = $db; $dirsOf[$fx] = $d
   }
@@ -204,8 +204,8 @@ try {
   function Invoke-Answer($Case, [string]$Source) {
     $db = $dbs[$Case.Fix]
     $max = if ($Case.Max) { @('--max-routines', "$($Case.Max)") } else { @() }
-    if ($Source -eq 'cli') { $raw = & $Exe check-init $Case.Target --db $db --json @max 2>$null }
-    else { $raw = & $driverExe --db $db --target $Case.Target @max --stable 2>$null }
+    if ($Source -eq 'cli') { $raw = & { $ErrorActionPreference = 'Continue'; & $Exe check-init $Case.Target --db $db --json @max 2>$null } }
+    else { $raw = & { $ErrorActionPreference = 'Continue'; & $driverExe --db $db --target $Case.Target @max --stable 2>$null } }
     $code = $LASTEXITCODE
     $text = (@($raw) -join "`n").Trim()
     $json = $null
@@ -246,7 +246,7 @@ try {
   # Positive control: init-order-hazard findings on solve-initorder are MAY + writer-later-unit at that read.
   $pcCase = $Cases | Where-Object { $_.Name -eq 'initorder MAY' }
   $pcAns = Invoke-Answer $pcCase $src0
-  $raw = & $Exe lint-all --db $dbs['solve-initorder'] --rule init-order-hazard --format json 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $dbs['solve-initorder'] --rule init-order-hazard --format json 2>$null }
   $txt = (@($raw) -join "`n"); $bi = $txt.IndexOf('[')
   $finds = @(); if ($bi -ge 0) { try { $finds = @($txt.Substring($bi) | ConvertFrom-Json) } catch { $finds = @() } }
   $finds = @($finds | Where-Object { $_.rule -eq 'init-order-hazard' })
@@ -260,7 +260,7 @@ try {
         (@($_.witness | Where-Object { ((Split-Path $_.file -Leaf) -ieq $leaf) -and ([int]$_.line -eq $ln) }).Count -gt 0)) }).Count -gt 0
     Check "positive control: $leaf`:$ln is MAY-BE-UNSET with writer-later-unit" $ok ''
   }
-  $raw2 = & $Exe lint-all --db $dbs['solve-initorder-swapped'] --rule init-order-hazard --format json 2>$null
+  $raw2 = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $dbs['solve-initorder-swapped'] --rule init-order-hazard --format json 2>$null }
   $txt2 = (@($raw2) -join "`n"); $bi2 = $txt2.IndexOf('[')
   $f2 = @(); if ($bi2 -ge 0) { try { $f2 = @($txt2.Substring($bi2) | ConvertFrom-Json) } catch { $f2 = @() } }
   Check 'twin: init-order-hazard is silent on solve-initorder-swapped' (@($f2 | Where-Object { $_.rule -eq 'init-order-hazard' }).Count -eq 0) ''

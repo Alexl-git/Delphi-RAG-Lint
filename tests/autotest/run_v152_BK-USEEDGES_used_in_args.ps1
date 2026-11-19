@@ -62,7 +62,7 @@ function LineOf([string]$path, [string]$anchor) {
 }
 # sql --json rows are POSITIONAL arrays: map them onto columns[].name.
 function Sql([string]$db, [string]$q) {
-  $j = (& $exePath sql --db $db --query $q --json 2>$null) -join "`n"
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n"
   try { $o = $j | ConvertFrom-Json } catch { return ,@() }
   $cols = @($o.columns | ForEach-Object { $_.name }); $out = @()
   foreach ($r in @($o.rows)) { $h = [ordered]@{}; for ($i = 0; $i -lt $cols.Count; $i++) { $h[$cols[$i]] = @($r)[$i] }; $out += [pscustomobject]$h }
@@ -78,7 +78,7 @@ function Site([string]$db, [int]$line, [string]$name) {
 }
 # The 'Used in:' line of the md hover of $qname ('' when none).
 function UsedIn([string]$db, [string]$qname) {
-  $md = (& $exePath hover --qname $qname --db $db --format md 2>$null) -join "`n"
+  $md = (& { $ErrorActionPreference = 'Continue'; & $exePath hover --qname $qname --db $db --format md 2>$null }) -join "`n"
   $m = [regex]::Match($md, '(?m)^.*Used in: .*$')
   return $(if ($m.Success) { $m.Value } else { '' })
 }
@@ -220,7 +220,7 @@ end.
   $I1 = LineOf $fC '{ I1 '; $P1 = LineOf $fC '{ P1 '; $P2 = LineOf $fC '{ P2 '; $P3 = LineOf $fC '{ P3 '
   $P4 = LineOf $fC '{ P4 '; $P5 = LineOf $fC '{ P5 '; $P6 = LineOf $fC '{ P6 '
   $db = Join-Path $scratch 'p.sqlite'
-  & $exePath index $scratch --db $db *> (Join-Path $scratch 'index.log')
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db *> (Join-Path $scratch 'index.log') }
   if ($LASTEXITCODE -ne 0) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index exit $LASTEXITCODE" -ForegroundColor Red; exit 2 }
 
   Write-Host '== check 1: POSITIVE CONTROL ==' -ForegroundColor Cyan
@@ -235,7 +235,7 @@ end.
   Check '3 Bump(FA.Cnt) var: VarIt [rw]' ((Entry $used 'VarIt') -eq 'rw') $used
   Check '4 Take(FA.Cnt) out: OutIt [w]' ((Entry $used 'OutIt') -eq 'w') $used
   Check '5 NEGATIVE Show(FA.Cnt) const: ConstIt [r]' ((Entry $used 'ConstIt') -eq 'r') $used
-  $rw = (& $exePath usages --name Cnt --rw --db $db --json 2>$null) -join "`n"
+  $rw = (& { $ErrorActionPreference = 'Continue'; & $exePath usages --name Cnt --rw --db $db --json 2>$null }) -join "`n"
   $s0 = $rw.IndexOf('{'); $e0 = $rw.LastIndexOf('}'); $doc = $null
   if ($s0 -ge 0 -and $e0 -gt $s0) { try { $doc = $rw.Substring($s0, $e0 - $s0 + 1) | ConvertFrom-Json } catch { $doc = $null } }
   $writers = @(@($doc.targets) | ForEach-Object { @($_.writers) } | ForEach-Object { ([string]$_.caller -split '\.')[-1] } | Sort-Object -Unique)
@@ -249,7 +249,7 @@ end.
   Check '8 T6 RO write / WO read: moded, no accessor' ((@($r3).Count -eq 1) -and ($r3[0].qn -eq 'uP.TAlpha.RO') -and ($r3[0].mode -eq 'write') -and (-not $r3[0].acc) -and (@($r4).Count -eq 1) -and ($r4[0].qn -eq 'uP.TAlpha.WO') -and ($r4[0].mode -eq 'read') -and (-not $r4[0].acc)) (($r3 + $r4) | ConvertTo-Json -Compress)
   $r5 = Site $db $P5 'Flag'; $r6 = Site $db $P6 'Flag'
   $beta = Sql $db "SELECT COUNT(*) AS n FROM member_accesses ma JOIN symbols s ON s.id = ma.member_symbol_id WHERE s.qualified_name = 'uP.TBeta.Flag'"
-  $pj = $null; try { $pj = ((& $exePath usages --name Flag --db $db --json 2>$null) -join "`n") | ConvertFrom-Json } catch { $pj = $null }
+  $pj = $null; try { $pj = ((& { $ErrorActionPreference = 'Continue'; & $exePath usages --name Flag --db $db --json 2>$null }) -join "`n") | ConvertFrom-Json } catch { $pj = $null }
   $byName = @(@($pj.reads) + @($pj.writes) + @($pj.calls) | Where-Object { $_ -and ([string]$_.file).EndsWith('\uC.pas') -and [int]$_.line -eq $P6 -and $_.resolution -eq 'name-only' }).Count -eq 1
   Check '9 T4 A.Flag binds TAlpha only; TBeta.Flag unused; FU.Flag unbound but name-listed' ((@($r5).Count -eq 1) -and ($r5[0].qn -eq 'uP.TAlpha.Flag') -and ($r5[0].mode -eq 'read') -and ([int]$beta[0].n -eq 0) -and (@($r6).Count -eq 1) -and (-not $r6[0].qn) -and (-not $r6[0].mode) -and $byName) ("r5=" + ($r5 | ConvertTo-Json -Compress) + " beta=" + $beta[0].n + " r6=" + ($r6 | ConvertTo-Json -Compress) + " byName=$byName")
 }

@@ -31,7 +31,7 @@ try {
   if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: no fixture DB" -ForegroundColor Red; exit 2 }
   $errFile = Join-Path $WorkDir 'lint-all.err'
   $env:DRAGLINT_PROFILE = '1'
-  try { & $Exe lint-all --db $db --json 2> $errFile | Out-Null } finally { $env:DRAGLINT_PROFILE = $null }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --json 2> $errFile } | Out-Null } finally { $env:DRAGLINT_PROFILE = $null }
   $err = [IO.File]::ReadAllText($errFile)
   $m = [regex]::Match($err, 'PER-FILE SCAN BREAKDOWN \((\d+) file')
   Check 'the profile prints the per-file breakdown' $m.Success

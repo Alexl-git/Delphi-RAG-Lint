@@ -67,7 +67,7 @@ end.
 Push-Location C:\TEMP
 try {
   function RunIndex([string[]]$extra) {
-    return (& $exePath index $scratch --db $db @extra 2>&1 | Out-String)
+    return (& { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db @extra 2>&1 | ForEach-Object { "$_" } } | Out-String)
   }
 
   $r1 = RunIndex @()

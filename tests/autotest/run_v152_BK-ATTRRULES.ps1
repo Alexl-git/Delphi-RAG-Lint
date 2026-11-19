@@ -18,7 +18,7 @@ function Assert($name, $cond) {
   if ($cond) { Write-Host "PASS  $name" } else { Write-Host "FAIL  $name" -ForegroundColor Red; $script:fail++ }
 }
 function Get-Findings([string[]]$ArgList) {
-  $raw = & $exe @ArgList 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exe @ArgList 2>$null }
   $text = ($raw -join "`n").Trim()
   if ($text -eq '') { return @() }
   try { $j = $text | ConvertFrom-Json } catch { return @() }
@@ -44,12 +44,12 @@ Push-Location $tmp
 try {
   Copy-Item (Join-Path $src '*.pas') $tmp
   $db = Join-Path $tmp 'a.sqlite'
-  & $exe index $tmp --db $db *> (Join-Path $tmp 'index.log')
+  & { $ErrorActionPreference = 'Continue'; & $exe index $tmp --db $db *> (Join-Path $tmp 'index.log') }
   Assert "fixture folder indexed (exit $LASTEXITCODE)" (($LASTEXITCODE -eq 0) -and (Test-Path $db))
 
   # ---- 1. debug-display-placeholder ----
   $rule = 'debug-display-placeholder'
-  $cat = (& $exe rules --json 2>$null) -join "`n"
+  $cat = (& { $ErrorActionPreference = 'Continue'; & $exe rules --json 2>$null }) -join "`n"
   $row = @(($cat | ConvertFrom-Json).rules | Where-Object { $_.id -eq $rule })
   Assert "$rule is a catalog row" ($row.Count -eq 1)
   Assert "$rule is OFF by default" (($row.Count -eq 1) -and (-not $row[0].default_enabled))

@@ -74,7 +74,7 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'e2e.sqlite'
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 # ---- LSP plumbing ----------------------------------------------------------
 $psi = [System.Diagnostics.ProcessStartInfo]::new()

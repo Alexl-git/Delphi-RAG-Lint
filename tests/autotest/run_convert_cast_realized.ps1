@@ -214,9 +214,9 @@ $rulesNoCast  = WriteRules 'r-nocast.rules'  ''
 $dbA   = Join-Path $WorkDir 'dbA.sqlite'
 $dbB   = Join-Path $WorkDir 'dbB.sqlite'
 $dbApp = Join-Path $WorkDir 'dbApp.sqlite'
-& $Exe index $libA --db $dbA   2>&1 | Out-Null
-& $Exe index $libB --db $dbB   2>&1 | Out-Null
-& $Exe index $app  --db $dbApp 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $libA --db $dbA   2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $libB --db $dbB   2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $app  --db $dbApp 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the three fixture indexes were built' ((Test-Path $dbA) -and (Test-Path $dbB) -and (Test-Path $dbApp))
 
 # convert-apply prints the JSON document on the FIRST line and may follow it
@@ -224,7 +224,7 @@ Check 'V the three fixture indexes were built' ((Test-Path $dbA) -and (Test-Path
 # than by parsing the whole stream.
 function ApplyJson([string]$Rules) {
   Push-Location $app
-  try { $raw = (& $Exe convert-apply --unit 'MyForm.pas' --rules $Rules --castlib $castlib --db $dbApp --db $dbA --db $dbB --format json 2>&1) -join "`n" }
+  try { $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'MyForm.pas' --rules $Rules --castlib $castlib --db $dbApp --db $dbA --db $dbB --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n" }
   finally { Pop-Location }
   $line = ($raw -split "`n" | Where-Object { $_.TrimStart().StartsWith('{') } | Select-Object -First 1)
   if (-not $line) { return @{ Raw = $raw; J = $null } }
@@ -351,11 +351,11 @@ object TwoForm: TTwoForm
 end
 '@
 
-& $Exe index $app --db $dbApp 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $app --db $dbApp 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 function ApplyTwo([string]$Rules) {
   Push-Location $app
-  try { $raw = (& $Exe convert-apply --unit 'TwoPic.pas' --rules $Rules --castlib $castlib --db $dbApp --db $dbA --db $dbB --format json 2>&1) -join "`n" }
+  try { $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'TwoPic.pas' --rules $Rules --castlib $castlib --db $dbApp --db $dbA --db $dbB --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n" }
   finally { Pop-Location }
   $line = ($raw -split "`n" | Where-Object { $_.TrimStart().StartsWith('{') } | Select-Object -First 1)
   if (-not $line) { return @{ Raw = $raw; J = $null } }
@@ -429,12 +429,12 @@ foreach ($f in 'MyForm.pas','MyForm.dfm','TwoPic.pas','TwoPic.dfm') {
 }
 $srcDfmText = [IO.File]::ReadAllText((Join-Path $appW 'TwoPic.dfm'))
 $dbW = Join-Path $WorkDir 'dbW.sqlite'
-& $Exe index $appW --db $dbW 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $appW --db $dbW 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 Push-Location $appW
 try {
-  $wRaw = (& $Exe convert-apply --unit 'TwoPic.pas' --rules $rulesGood --castlib $castlib `
-             --db $dbW --db $dbA --db $dbB --apply 2>&1) -join "`n"
+  $wRaw = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'TwoPic.pas' --rules $rulesGood --castlib $castlib `
+             --db $dbW --db $dbA --db $dbB --apply 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $wExit = $LASTEXITCODE
 } finally { Pop-Location }
 
@@ -496,8 +496,8 @@ $myPas = Join-Path $appW 'MyForm.pas'
 $myBefore = [IO.File]::ReadAllText($myPas)
 Push-Location $appW
 try {
-  $mRaw = (& $Exe convert-apply --unit 'MyForm.pas' --rules $rulesGood --castlib $castlib `
-             --db $dbW --db $dbA --db $dbB --apply --no-backup 2>&1) -join "`n"
+  $mRaw = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'MyForm.pas' --rules $rulesGood --castlib $castlib `
+             --db $dbW --db $dbA --db $dbB --apply --no-backup 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $mExit = $LASTEXITCODE
 } finally { Pop-Location }
 $myAfter = [IO.File]::ReadAllText($myPas)
@@ -509,7 +509,7 @@ Check 'W6b ... while the .dfm half of the cast still converted (positive control
       ("the unit did not convert at all, so W6 proves nothing:`n$mRaw")
 
 # ---- K the editor's gate ----------------------------------------------------
-$info = (& $Exe info --json 2>$null) -join "`n"
+$info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n"
 $ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json } catch {}
 Check 'K info --json: capabilities.cast_site_refusal is true' (($null -ne $ij) -and ($ij.capabilities.cast_site_refusal -eq $true)) ''
 

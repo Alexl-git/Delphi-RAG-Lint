@@ -83,7 +83,7 @@ $db = Join-Path $WorkDir 'cap.sqlite'
 $pathLine = '^\s\s([A-Za-z]:\\|\\\\)(?!.* -> )'
 
 Write-Host 'dry run -- the list IS the answer, so it stays complete' -ForegroundColor Cyan
-$dry = @((& $Exe index --project $dpr --db $db --platform win32 --dry-run 2>&1) | ForEach-Object { "$_" })
+$dry = @((& { $ErrorActionPreference = 'Continue'; & $Exe index --project $dpr --db $db --platform win32 --dry-run 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" })
 Check 'dry run exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 $dryPaths = @($dry | Where-Object { $_ -match $pathLine })
 Check 'precondition: the closure is larger than the cap' ($dryPaths.Count -gt 20) `
@@ -93,7 +93,7 @@ Check 'ASSERT: --dry-run lists EVERY scope entry' ($dryPaths.Count -eq ($UnitCou
 
 Write-Host ''
 Write-Host 'real run -- the list is capped' -ForegroundColor Cyan
-$run = @((& $Exe index --project $dpr --db $db --platform win32 2>&1) | ForEach-Object { "$_" })
+$run = @((& { $ErrorActionPreference = 'Continue'; & $Exe index --project $dpr --db $db --platform win32 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" })
 Check 'real run exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 $text = $run -join "`n"
 Check 'the headline still carries the full count' ($text -match ('Compile closure: {0} file\(s\):' -f ($UnitCount + 1))) ''

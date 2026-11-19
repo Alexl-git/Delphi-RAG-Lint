@@ -48,8 +48,8 @@ $Tmp  = Join-Path $env:TEMP ('v151_fixold_' + [guid]::NewGuid().ToString('N').Su
 [IO.Directory]::CreateDirectory($Tmp) | Out-Null
 
 function Count-Findings([string]$Db, [string]$Unit, [string]$Rule, [string[]]$Extra = @()) {
-  if ($Extra -contains 'lint-all') { $raw = & $Exe lint-all --db $Db --rule $Rule --json 2>$null | Out-String }
-  else { $raw = & $Exe lint --in $Unit --db $Db --rule $Rule --json @Extra 2>$null | Out-String }
+  if ($Extra -contains 'lint-all') { $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --rule $Rule --json 2>$null } | Out-String }
+  else { $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint --in $Unit --db $Db --rule $Rule --json @Extra 2>$null } | Out-String }
   $t = $raw.Trim()
   if (-not $t.StartsWith('[')) { return -1 }
   $rows = @($t | ConvertFrom-Json)
@@ -80,11 +80,11 @@ foreach ($c in $cases) {
   Copy-Item (Join-Path $Tpl '*') $d
   Copy-Item (Join-Path $c.FullName 'FoUnit.pas') $d
   $unit = Join-Path $d 'FoUnit.pas'; $proj = Join-Path $d 'FoDemo.dproj'; $db = Join-Path $d 'p.sqlite'
-  & $Exe index --project $proj --db $db --library-db none *> (Join-Path $d 'index.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $proj --db $db --library-db none *> (Join-Path $d 'index.log') }
   $before = Count-Findings $db $unit $rule $extra
   Check "$($c.Name): rule fires before the fix ($before > $leave)" ($before -gt $leave)
-  if ($extra -contains 'lint-all') { $out = & $Exe lint-all --db $db --enable $rule --fix --fix-rule $rule --apply --no-backup --rsvars $Rsvars --project $proj --compile-gate 2>&1 | Out-String }
-  else { $out = & $Exe lint --in $unit --db $db --enable $rule --fix --fix-rule $rule --apply --no-backup --rsvars $Rsvars --project $proj --compile-gate @extra 2>&1 | Out-String }
+  if ($extra -contains 'lint-all') { $out = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --enable $rule --fix --fix-rule $rule --apply --no-backup --rsvars $Rsvars --project $proj --compile-gate 2>&1 | ForEach-Object { "$_" } } | Out-String }
+  else { $out = & { $ErrorActionPreference = 'Continue'; & $Exe lint --in $unit --db $db --enable $rule --fix --fix-rule $rule --apply --no-backup --rsvars $Rsvars --project $proj --compile-gate @extra 2>&1 | ForEach-Object { "$_" } } | Out-String }
   $code = $LASTEXITCODE
   [IO.File]::WriteAllText((Join-Path $d 'fix.log'), $out)
   Check "$($c.Name): --fix --compile-gate exit 0" ($code -eq 0) "exit=$code; see $d\fix.log"
@@ -93,7 +93,7 @@ foreach ($c in $cases) {
   $same = ($exp.Length -eq $got.Length) -and (-not (Compare-Object $exp $got -SyncWindow 0))
   Check "$($c.Name): written bytes = FoUnit.expected.pas" $same "see $unit"
   Check "$($c.Name): the written project builds" (Build-Project $d) "see $d\build.log"
-  & $Exe index --project $proj --db $db --library-db none *> (Join-Path $d 'reindex.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $proj --db $db --library-db none *> (Join-Path $d 'reindex.log') }
   $after = Count-Findings $db $unit $rule $extra
   Check "$($c.Name): $after finding(s) left (expected $leave)" ($after -eq $leave)
 }

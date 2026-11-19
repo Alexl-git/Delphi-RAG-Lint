@@ -35,11 +35,11 @@ try {
   }
   $db  = Join-Path $WorkDir 'fx.sqlite'
   $lib = Join-Path $WorkDir 'lib.sqlite'
-  & $Exe index (Join-Path $WorkDir 'lib') --db $lib 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $WorkDir 'lib') --db $lib 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'library index exits 0' ($LASTEXITCODE -eq 0)
-  & $Exe index (Join-Path $WorkDir 'proj') --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $WorkDir 'proj') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'project index exits 0' ($LASTEXITCODE -eq 0)
-  $raw = & $Exe lint-all --db $db --db $lib --rule ancestor-not-in-project --format json 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --db $lib --rule ancestor-not-in-project --format json 2>$null }
   $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
   $f = @(); if ($b -ge 0) { try { $f = @($txt.Substring($b) | ConvertFrom-Json) } catch { $f = @() } }
   $f = @($f | Where-Object { $_.rule -eq 'ancestor-not-in-project' })

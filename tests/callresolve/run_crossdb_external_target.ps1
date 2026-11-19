@@ -60,18 +60,18 @@ print('' if (r is None or r[0] is None) else r[0])
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $libDir --db $libDb 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $libDir --db $libDb 2>$null } | Out-Null
   Check 'library index built' ($LASTEXITCODE -eq 0)
 
   # --- CONTROL: no --library-db -> nothing external is recorded --------------
-  & $exePath index $appDir --db $appDb 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $appDir --db $appDb 2>$null } | Out-Null
   Check 'app index built (control run)' ($LASTEXITCODE -eq 0)
   $ctl = Get-Ext $appDb 'Create'
   Check 'CONTROL: without --library-db, external_target is EMPTY' ($ctl -eq '') "got='$ctl'"
 
   # --- with the library consulted -------------------------------------------
   Remove-Item $appDb -Force
-  $out = & $exePath index $appDir --db $appDb --library-db $libDb 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath index $appDir --db $appDb --library-db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'app index built (cross-DB run)' ($LASTEXITCODE -eq 0)
   Check 'the library db is reported as opened' ($out -match 'library-db') $out
 

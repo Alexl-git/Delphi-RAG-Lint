@@ -169,7 +169,7 @@ $projDb = Join-Path $WorkDir 'proj.sqlite'
 
 Write-Host 'Indexing fixtures' -ForegroundColor Cyan
 foreach ($pair in @(@($libSrc, $libDb), @($projSrc, $projDb))) {
-  $out = & $Exe index $pair[0] --db $pair[1] --quiet 2>&1
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe index $pair[0] --db $pair[1] --quiet 2>&1 | ForEach-Object { "$_" } }
   Check ("index {0}" -f (Split-Path $pair[1] -Leaf)) ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($out -join ' | ')"
 }
 
@@ -179,7 +179,7 @@ $bareFile = Join-Path $projSrc 'ProjBare.pas'
 function FindUnit([string]$Name, [string]$InFile, [string[]]$Dbs) {
   $dbArgs = @()
   foreach ($d in $Dbs) { $dbArgs += '--db'; $dbArgs += $d }
-  $out = @(& $Exe find-unit --name $Name --in $InFile @dbArgs --quiet 2>&1) | ForEach-Object { "$_" }
+  $out = @(& { $ErrorActionPreference = 'Continue'; & $Exe find-unit --name $Name --in $InFile @dbArgs --quiet 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" }
   $script:LastExit = $LASTEXITCODE
   return ($out -join "`n")
 }

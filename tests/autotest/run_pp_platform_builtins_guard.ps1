@@ -24,7 +24,7 @@ function Check($n, $ok, $d = '') {
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 $Exe = (Resolve-Path $Exe).Path
 function Get-Set($plat) {
-  $out = & $Exe pp-profile --platform $plat 2>&1 | ForEach-Object { "$_".Trim().ToLowerInvariant() }
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe pp-profile --platform $plat 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_".Trim().ToLowerInvariant() }
   ,@($out | Where-Object { $_ -match '^[a-z_][a-z0-9_]*$' })
 }
 $common = 'unicode','conditionalexpressions','ver370','nativecode','dcc','weakref'

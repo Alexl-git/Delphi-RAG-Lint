@@ -44,12 +44,12 @@ if (Test-Path $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 Copy-Item "$Fx\*.pas" "$WorkDir\src"
 $Db = "$WorkDir\t3.sqlite"
 try {
-  & $Exe index "$WorkDir\src" --db $Db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\src" --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: index exit $LASTEXITCODE" -ForegroundColor Red; exit 2 }
   $q = "select r.kind, r.name_text, r.start_line, r.start_col, s.qualified_name from refs r " +
        "join files f on f.id = r.file_id left join symbols s on s.id = r.symbol_id " +
        "where f.path like '%uT3Use.pas' and r.kind in ('type_use','member-access')"
-  $raw = (& $Exe sql --query $q --db $Db --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --query $q --db $Db --json 2>$null }) -join "`n"
   $js  = $raw | ConvertFrom-Json
   $cols = @($js.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
   $rows = @(foreach ($r in $js.rows) { $o = [ordered]@{}; for ($i = 0; $i -lt $cols.Count; $i++) { $o[$cols[$i]] = $r[$i] }; [pscustomobject]$o })

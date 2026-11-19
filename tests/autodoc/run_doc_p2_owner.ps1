@@ -134,10 +134,10 @@ function Get-OwnsLine([string]$block) {
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
-  & $exePath document --unit $target --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply 2>$null } | Out-Null
   Check 'document --apply #1 exits 0' ($LASTEXITCODE -eq 0)
 
   $lines = [IO.File]::ReadAllLines($target)
@@ -233,8 +233,8 @@ try {
     GetRec         = Get-OwnsLine $getRecBlock
     GetBounds      = Get-OwnsLine $getBoundsBlock
   }
-  & $exePath index $scratch --db $db 2>$null | Out-Null
-  & $exePath document --unit $target --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply 2>$null } | Out-Null
   $lines2 = [IO.File]::ReadAllLines($target)
   $after = @{
     MakeIt         = Get-OwnsLine (Get-DocBlockAbove $lines2 '^\s*function MakeIt: TFoo;\s*$')

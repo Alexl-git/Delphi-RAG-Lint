@@ -130,7 +130,7 @@ Check 'the two manifest copies start identical' ((Sha $M64) -eq (Sha $M32))
 # ---- DRY RUN BY DEFAULT ----------------------------------------------------
 Write-Host ''
 Write-Host 'DRY RUN: reports, and changes nothing' -ForegroundColor Cyan
-$dry = & $ScratchExe register-project $ProjFile 2>&1 | Out-String
+$dry = & { $ErrorActionPreference = 'Continue'; & $ScratchExe register-project $ProjFile 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'dry run names the section it would add' ($dry -match 'WOULD register section "Thing"') $($dry.Trim() -split "`n" | Select-Object -First 1)
 Check 'dry run names BOTH manifest copies' (($dry -match 'dll-win64') -and ($dry -match 'dll-win32'))
 Check 'dry run wrote NOTHING' (((Sha $M64) -eq $before64) -and ((Sha $M32) -eq $before64)) 'both copies unchanged'
@@ -138,7 +138,7 @@ Check 'dry run wrote NOTHING' (((Sha $M64) -eq $before64) -and ((Sha $M32) -eq $
 # ---- REFUSAL ---------------------------------------------------------------
 Write-Host ''
 Write-Host 'REFUSAL: an already-owned project is not registered twice' -ForegroundColor Cyan
-$own = & $ScratchExe register-project $OwnedFile --apply 2>&1 | Out-String
+$own = & { $ErrorActionPreference = 'Continue'; & $ScratchExe register-project $OwnedFile --apply 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'an owned project is reported as already registered' ($own -match 'already registered')
 Check 'and it names the owning section' ($own -match 'AlreadyOwned')
 Check 'and it wrote NOTHING even with --apply' (((Sha $M64) -eq $before64) -and ((Sha $M32) -eq $before64))
@@ -146,7 +146,7 @@ Check 'and it wrote NOTHING even with --apply' (((Sha $M64) -eq $before64) -and 
 # ---- APPLY -----------------------------------------------------------------
 Write-Host ''
 Write-Host 'APPLY: every copy, or none' -ForegroundColor Cyan
-$app = & $ScratchExe register-project $ProjFile --apply 2>&1 | Out-String
+$app = & { $ErrorActionPreference = 'Continue'; & $ScratchExe register-project $ProjFile --apply 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'apply reports the section as registered' ($app -match 'registered section "Thing"')
 Check 'BOTH copies changed' (((Sha $M64) -ne $before64) -and ((Sha $M32) -ne $before64))
 Check 'and they are still byte-identical to each other' ((Sha $M64) -eq (Sha $M32)) 'a split manifest is the defect this guards'
@@ -163,11 +163,11 @@ Check 'settings survived the write' ($j.settings.defaultPlatform -eq 'Win64')
 # ---- AND THEN IT ACTUALLY INDEXES ------------------------------------------
 Write-Host ''
 Write-Host 'THE POINT: the registered project can now be indexed' -ForegroundColor Cyan
-& $ScratchExe index --all --only Thing 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $ScratchExe index --all --only Thing 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $db = Join-Path $Proj '_D-RAG\Thing.sqlite'
 Check 'index --all --only <Section> built the database' (Test-Path $db) "db=$db"
 if (Test-Path $db) {
-  $q = & $ScratchExe query --name Answer --db $db --json 2>&1 | Out-String
+  $q = & { $ErrorActionPreference = 'Continue'; & $ScratchExe query --name Answer --db $db --json 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'and the index answers a symbol from that project' ($q -match '"name"\s*:\s*"Answer"') 'const Answer'
 }
 

@@ -111,7 +111,7 @@ end.
 $file = Join-Path $WorkDir 'uRNSRec.pas'
 [System.IO.File]::WriteAllText($file, (($Fixture -replace "`r`n","`n") -replace "`n","`r`n"), [System.Text.Encoding]::ASCII)
 
-$out = & $Exe lint $file --rules-dir $RulesDir 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file --rules-dir $RulesDir 2>&1 | ForEach-Object { "$_" } } | Out-String
 $hits = @([regex]::Matches($out, 'referenced-never-set: Field "(\w+)"') | ForEach-Object { $_.Groups[1].Value })
 Write-Host ("  reported: {0}" -f ($(if ($hits) { $hits -join ',' } else { '(none)' }))) -ForegroundColor DarkGray
 

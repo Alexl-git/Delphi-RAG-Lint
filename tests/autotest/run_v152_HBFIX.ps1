@@ -139,14 +139,14 @@ try {
     New-Item -ItemType Directory -Path $d -Force | Out-Null
     Copy-Item -Path (Join-Path $FixRoot "$fx\*") -Destination $d -Force
     $db = Join-Path $WorkDir "$fx.sqlite"
-    $null = & $Exe index $d --db $db 2>&1
+    $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $d --db $db 2>&1 | ForEach-Object { "$_" } }
     Check "index $fx (exit 0)" ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
     $dbs[$fx] = $db; $dirsOf[$fx] = $d
   }
   $first = $null
   foreach ($c in $Cases) {
     $extra = if ($c.Args) { $c.Args } else { @() }
-    $raw = & $Exe check-init $c.Target --db $dbs[$c.Fix] --json @extra 2>$null
+    $raw = & { $ErrorActionPreference = 'Continue'; & $Exe check-init $c.Target --db $dbs[$c.Fix] --json @extra 2>$null }
     $code = $LASTEXITCODE
     $json = $null
     try { $json = ((@($raw) -join "`n").Trim()) | ConvertFrom-Json } catch { $json = $null }
@@ -158,11 +158,11 @@ try {
   }
   # --max-seconds usage errors: exit 2, nothing on stdout
   foreach ($bad in 'abc', '-1') {
-    $out = & $Exe check-init fpProps.TSelfSet.FName --db $dbs['fields-property'] --json --max-seconds $bad 2>$null
+    $out = & { $ErrorActionPreference = 'Continue'; & $Exe check-init fpProps.TSelfSet.FName --db $dbs['fields-property'] --json --max-seconds $bad 2>$null }
     Check "H3 --max-seconds $bad is a usage error" (($LASTEXITCODE -eq 2) -and ([string]::IsNullOrWhiteSpace((@($out) -join '')))) "exit=$LASTEXITCODE"
   }
   # --help names the flag on the check-init line
-  $help = (& $Exe --help 2>&1) -join "`n"
+  $help = (& { $ErrorActionPreference = 'Continue'; & $Exe --help 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $ciLine = @($help -split "`n" | Where-Object { $_ -match 'check-init' -and $_ -match '--max-routines' })
   Check 'H3 --help lists --max-seconds on the check-init line' (@($ciLine | Where-Object { $_ -match '--max-seconds' }).Count -ge 1) "lines=$($ciLine.Count)"
   # Comparator control: a flipped verdict is reported.

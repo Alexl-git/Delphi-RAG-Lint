@@ -146,14 +146,14 @@ Write-Ascii $manifest (@'
 '@ -replace 'OUTDIR', ($WorkDir -replace '\\', '\\') -replace 'ONEDIR', ($p1 -replace '\\', '\\') -replace 'TWODIR', ($p2 -replace '\\', '\\'))
 
 foreach ($pair in @(@("$p1\P1.dproj", $db1), @("$p2\P2.dproj", $db2))) {
-  $out = & $Exe index --project $pair[0] --db $pair[1] --quiet 2>&1
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe index --project $pair[0] --db $pair[1] --quiet 2>&1 | ForEach-Object { "$_" } }
   Check ("index {0}" -f (Split-Path $pair[1] -Leaf)) ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 }
-$both = (& $Exe sql --query "SELECT COUNT(*) FROM files WHERE path LIKE '%Shared.Ctl.pas'" --db $db2 2>&1) -join ' '
+$both = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --query "SELECT COUNT(*) FROM files WHERE path LIKE '%Shared.Ctl.pas'" --db $db2 2>&1 | ForEach-Object { "$_" } }) -join ' '
 Check 'precondition: P2 lists the shared unit (one files row, same path)' ($both -match '\b1\b') $both
 
 function Lint-P1 {
-  $o = (@(& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db1 --config $manifest --rules-dir $Rules --enable unused-global --quiet 2>&1) | ForEach-Object { "$_" })
+  $o = (@(& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db1 --config $manifest --rules-dir $Rules --enable unused-global --quiet 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" })
   return ($o | Where-Object { $_ -match 'unused-public-symbol|unused-global' }) -join "`n"
 }
 
@@ -180,8 +180,8 @@ $src = $src.Replace('  GDead: Integer;', '  GDead: Integer; // dl:ok unused-glob
 $src = [regex]::new('procedure DeadBeat;').Replace($src, 'procedure DeadBeat; // dl:ok unused-public-symbol -- test: sibling index stale', 1)
 $src = [regex]::new('procedure Beat;').Replace($src, 'procedure Beat; // dl:ok bare-except -- CONTROL: no such finding, must stay unused', 1)
 Write-Ascii $ctl $src
-& $Exe index --project "$p1\P1.dproj" --db $db1 --quiet 2>&1 | Out-Null
-$o = (@(& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db1 --config $manifest --rules-dir $Rules --enable unused-global,review-marker-unused --quiet 2>&1) | ForEach-Object { "$_" }) -join "`n"
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project "$p1\P1.dproj" --db $db1 --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
+$o = (@(& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db1 --config $manifest --rules-dir $Rules --enable unused-global,review-marker-unused --quiet 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" }) -join "`n"
 Check 'POSITIVE CONTROL: a marker on a decided/no-finding line IS review-marker-unused' ($o -match 'review-marker-unused[^\n]*bare-except|bare-except[^\n]*review-marker-unused') $o
 Check 'undecided unused-public-symbol marker NOT reported unused' ($o -notmatch 'unused-public-symbol" no longer') $o
 Check 'undecided unused-global marker NOT reported unused' ($o -notmatch 'unused-global" no longer') $o

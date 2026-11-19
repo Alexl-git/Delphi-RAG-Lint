@@ -48,7 +48,7 @@ function Parse-Findings([string[]]$Raw) {
 # sql --json rows are POSITIONAL arrays: map rows[i][k] onto columns[k].name.
 function Get-Summaries([string]$Db) {
   $q = 'select s.qualified_name, f.effect_summary from symbols s join symbol_facts f on f.symbol_id = s.id'
-  $j = (& $exePath sql --query $q --db $Db --json 2>$null) -join "`n" | ConvertFrom-Json
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --query $q --db $Db --json 2>$null }) -join "`n" | ConvertFrom-Json
   $map = @{}
   foreach ($r in $j.rows) { $map[[string]$r[0]] = [string]$r[1] }
   return $map
@@ -72,18 +72,18 @@ $line  = (Select-String -LiteralPath $use -Pattern 'AFlag and Wrap\(\)' | Select
 $savedSwitch = $env:DRAGLINT_LIBRARY_EFFECTS
 Push-Location $env:TEMP
 try {
-  & $exePath index (Join-Path $WorkDir 'lib') --db $lib *> $null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index (Join-Path $WorkDir 'lib') --db $lib *> $null }
 
   $env:DRAGLINT_LIBRARY_EFFECTS = '0'
-  & $exePath index (Join-Path $WorkDir 'proj') --db $dbOff --library-db $lib *> $null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index (Join-Path $WorkDir 'proj') --db $dbOff --library-db $lib *> $null }
   $env:DRAGLINT_LIBRARY_EFFECTS = $null
-  $logOn = (& $exePath index (Join-Path $WorkDir 'proj') --db $dbOn --library-db $lib 2>&1) -join "`n"
+  $logOn = (& { $ErrorActionPreference = 'Continue'; & $exePath index (Join-Path $WorkDir 'proj') --db $dbOn --library-db $lib 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $env:DRAGLINT_LIBRARY_EFFECTS = $null
 
   $off = Get-Summaries $dbOff
   $on  = Get-Summaries $dbOn
-  $fOff = @(Parse-Findings (& $exePath lint-all --db $dbOff --library-db $lib --rule $rule --json 2>$null) | Where-Object { $_.rule -eq $rule })
-  $fOn  = @(Parse-Findings (& $exePath lint-all --db $dbOn  --library-db $lib --rule $rule --json 2>$null) | Where-Object { $_.rule -eq $rule })
+  $fOff = @(Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbOff --library-db $lib --rule $rule --json 2>$null }) | Where-Object { $_.rule -eq $rule })
+  $fOn  = @(Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbOn  --library-db $lib --rule $rule --json 2>$null }) | Where-Object { $_.rule -eq $rule })
 
   Check (($off['LibFxUse.Wrap'] -eq '?') -and ($fOff.Count -eq 0)) "c1 OFF: Wrap is '?' (got '$($off['LibFxUse.Wrap'])') and $rule is silent (got $($fOff.Count))"
   Check ((Has-Flag $on['LibFxUse.Wrap'] 'g') -and ($fOn.Count -eq 1) -and ($fOn[0].start_line -eq $line)) "c2 ON: Wrap carries g (got '$($on['LibFxUse.Wrap'])'), $rule fires once at line $line (got $($fOn.Count): $(($fOn | ForEach-Object start_line) -join ','))"

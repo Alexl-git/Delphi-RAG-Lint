@@ -153,7 +153,7 @@ end.
 $db = Join-Path $scratch 'f.sqlite'
 
 function Get-CalledFrom([string]$qname) {
-  $out = (& $exePath document --qname $qname --db $db 2>$null) -join "`n"
+  $out = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname $qname --db $db 2>$null }) -join "`n"
   $l = ($out -split "`r?`n" | Where-Object { $_ -match '^\s*///' -and $_ -match 'Called from:' } | Select-Object -First 1)
   if ($null -eq $l) { return '' }
   return $l.Trim()
@@ -161,11 +161,11 @@ function Get-CalledFrom([string]$qname) {
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db --quiet 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db --quiet 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
   # --- FIX 1: the type-name receiver rung ----------------------------------
-  $edges = (& $exePath dump-call-edges --db $db 2>$null) -join "`n"
+  $edges = (& { $ErrorActionPreference = 'Continue'; & $exePath dump-call-edges --db $db 2>$null }) -join "`n"
   Write-Host "  edges:`n$edges" -ForegroundColor DarkGray
   Check 'RESOLVED: TMaker.Create has a real call edge (type-name receiver)' `
     ($edges -match 'fab\.TMaker\.Create') $edges

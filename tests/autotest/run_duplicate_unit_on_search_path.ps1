@@ -30,9 +30,9 @@ New-Item -ItemType Directory -Force $WorkDir | Out-Null
 try {
   $fx = Join-Path $PSScriptRoot '..\lint-project\dup-unit'
   $db = Join-Path $WorkDir 'fx.sqlite'
-  & $Exe index $fx --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
-  $raw = & $Exe lint-all --db $db --rule duplicate-unit-on-search-path --format json 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule duplicate-unit-on-search-path --format json 2>$null }
   $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
   $f = @(); if ($b -ge 0) { try { $f = @($txt.Substring($b) | ConvertFrom-Json) } catch { $f = @() } }
   $f | ForEach-Object { Write-Host ("  {0}:{1} {2}" -f $_.file_path, $_.start_line, $_.message) -ForegroundColor DarkGray }

@@ -157,7 +157,7 @@ Write-Ascii (Join-Path $WorkDir 'drag-lint-lint.json') @'
 
 $rule = 'ifdef-undefined-symbol'
 function Get-Findings([string[]]$LintArgs) {
-  $raw = (& $Exe @LintArgs --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe @LintArgs --json 2>$null }) -join "`n"
   $start = $raw.IndexOf('[')
   if ($start -lt 0) { return ,@() }
   $arr = $raw.Substring($start) | ConvertFrom-Json
@@ -212,7 +212,7 @@ Check 'NO PROJECT: 0 findings (EUREKALGO would fire if the gate were missing)' (
 Write-Host ''
 Write-Host 'lint-all -- the project run finds the same 4, and the .dpr EUREKALOG is silent' -ForegroundColor Cyan
 $db = Join-Path $WorkDir 'p.sqlite'
-& $Exe index --project $proj --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project $proj --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 # --enable as well as --rule: the rule ships OFF, and on lint-all only --enable
 # (or the config's "enabled") lifts a default-off id.
 $la = Get-Findings @('lint-all', '--db', $db, '--project', $proj, '--rule', $rule, '--enable', $rule)

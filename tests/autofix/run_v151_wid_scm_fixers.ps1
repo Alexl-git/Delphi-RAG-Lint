@@ -20,7 +20,7 @@ try {
     $dir = Join-Path $PSScriptRoot "v151-WID-SCM-$id"
     $tgt = Join-Path $scratch "$id.pas"
     Copy-Item (Join-Path $dir "$id.pas") $tgt -Force
-    & $Exe lint $tgt --fix --fix-rule $id --apply --no-backup 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $Exe lint $tgt --fix --fix-rule $id --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
     $got = [IO.File]::ReadAllText($tgt)
     $want = [IO.File]::ReadAllText((Join-Path $dir "$id.expected"))
     if ($got -ceq $want) { Write-Host "PASS  $id" } else { Write-Host "FAIL  ${id}: output differs from $id.expected"; $fail = $true }

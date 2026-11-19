@@ -114,8 +114,8 @@ Write-Host '=== staleanchor.pas: two --qname applies with no reindex between ===
 # CONTROL -- one --unit pass, the path that was never affected.
 # ===========================================================================
 $ctl = New-Case "C:\TEMP\draglint_docp3_staleanchor_ctl_$PID"
-& $exePath index $ctl.Dir --db $ctl.Db 2>$null | Out-Null
-& $exePath document --unit $ctl.Pas --db $ctl.Db --apply --no-backup 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $ctl.Dir --db $ctl.Db 2>$null } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $ctl.Pas --db $ctl.Db --apply --no-backup 2>$null } | Out-Null
 $ctlLines = [IO.File]::ReadAllLines($ctl.Pas)
 $ctlCreate = Get-DocBlockAbove $ctlLines '^\s*constructor Create\('
 $ctlPing   = Get-DocBlockAbove $ctlLines '^\s*procedure Ping\('
@@ -129,11 +129,11 @@ Check 'CONTROL: ... and neither block is nested' `
 # THE CASE -- two --qname applies, no reindex between them.
 # ===========================================================================
 $c = New-Case "C:\TEMP\draglint_docp3_staleanchor_$PID"
-& $exePath index $c.Dir --db $c.Db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $c.Dir --db $c.Db 2>$null } | Out-Null
 
-$out1 = & $exePath document --qname staleanchor.TZeiss.Create --db $c.Db --apply --no-backup 2>&1
+$out1 = & { $ErrorActionPreference = 'Continue'; & $exePath document --qname staleanchor.TZeiss.Create --db $c.Db --apply --no-backup 2>&1 | ForEach-Object { "$_" } }
 $rc1  = $LASTEXITCODE
-$out2 = & $exePath document --qname staleanchor.TZeiss.Ping   --db $c.Db --apply --no-backup 2>&1
+$out2 = & { $ErrorActionPreference = 'Continue'; & $exePath document --qname staleanchor.TZeiss.Ping   --db $c.Db --apply --no-backup 2>&1 | ForEach-Object { "$_" } }
 $rc2  = $LASTEXITCODE
 
 Check 'the first apply succeeded (de-vacuator: the pair must actually run)' ($rc1 -eq 0) `

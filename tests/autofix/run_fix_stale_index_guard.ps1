@@ -68,7 +68,7 @@ Copy-Item $fixture $target -Force
 Push-Location $scratch
 try {
   # ---- 1. index the PRISTINE file --------------------------------------------
-  & $exePath index $srcDir --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $srcDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'stale-guard: index exits 0' ($LASTEXITCODE -eq 0)
   Check 'stale-guard: db built' (Test-Path $db)
 
@@ -87,7 +87,7 @@ try {
   Check 'stale-guard: shifted file has `  else` at the stale reference line 25' (([IO.File]::ReadAllLines($target))[24] -eq '  else')
 
   # ---- 3. run the naming autofix against the STALE store ---------------------
-  $out  = & $exePath lint-all --db $db --config $cfg --rule const-casing --fix --apply --quiet 2>&1
+  $out  = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --config $cfg --rule const-casing --fix --apply --quiet 2>&1 | ForEach-Object { "$_" } }
   $code = $LASTEXITCODE
   Write-Host ($out -join "`n")
   $after = [IO.File]::ReadAllText($target)

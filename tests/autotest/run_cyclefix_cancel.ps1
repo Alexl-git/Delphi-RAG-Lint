@@ -95,7 +95,7 @@ function New-Demo([string]$Tag) {
   $proj = Join-Path $WorkDir "$Tag-proj"
   Copy-Tree $Demo $proj
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project (Join-Path $proj 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "$Tag-index.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $proj 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "$Tag-index.log") }
   return @{ Proj = $proj; Dproj = (Join-Path $proj 'CircularDemo.dproj'); Db = $db }
 }
 # The fake build environment. pWhen = 'after': park only once a .BCK backup exists; 'always': park at once.
@@ -147,7 +147,7 @@ $bckSha = @{}
 foreach ($b in $bck) { $bckSha[($b.Name -replace '\.BCK\d+$', '')] = Get-FileSha $b.FullName }
 $bad = @($bckSha.Keys | Where-Object { $bckSha[$_] -ne $srcBefore[$_] })
 Check 'c2 every backup holds the pre-run bytes of its source' (($bckSha.Count -gt 0) -and ($bad.Count -eq 0)) ("mismatch: " + ($bad -join ','))
-$sdOut = (& $Exe shutdown --db $C.Db --wait 60 2>&1 | Out-String)
+$sdOut = (& { $ErrorActionPreference = 'Continue'; & $Exe shutdown --db $C.Db --wait 60 2>&1 | ForEach-Object { "$_" } } | Out-String)
 $sw = [Diagnostics.Stopwatch]::StartNew()
 $exited = Wait-For { $run.P.HasExited } 60
 $secs = [math]::Round($sw.Elapsed.TotalSeconds, 1)
@@ -171,7 +171,7 @@ $fakeCT = New-FakeRsvars 'ct' $CT.Proj 'after'
 $runCT = Start-Fix $CT @('--unit', 'demogageport', '--apply', '--build-timeout', '600', '--rsvars', $fakeCT.Bat, '--format', 'text') 'ct'
 $parkedCT = Wait-For { (Test-Path $fakeCT.Flag) -or $runCT.P.HasExited } 240
 Check 'setup: the text run reached the after-build' ($parkedCT -and (Test-Path $fakeCT.Flag)) ''
-$null = & $Exe shutdown --db $CT.Db --wait 60 2>&1 | Out-String
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe shutdown --db $CT.Db --wait 60 2>&1 | ForEach-Object { "$_" } } | Out-String
 $exitedCT = Wait-For { $runCT.P.HasExited } 60
 if (-not $exitedCT) { try { $runCT.P.Kill($true) } catch { } ; $runCT.P.WaitForExit(10000) | Out-Null }
 $textCT = Read-Text $runCT.Out
@@ -198,7 +198,7 @@ Stop-Parked
 # ---------------------------------------------------------------- (v) a bad value
 Write-Host '== (v) --build-timeout with a bad value' -ForegroundColor Cyan
 $errV = Join-Path $WorkDir 'v.err'
-$outV = (& $Exe cycles --fix --project $T.Dproj --db $T.Db --library-db $Lib --build-timeout 2m 2>$errV | Out-String)
+$outV = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --project $T.Dproj --db $T.Db --library-db $Lib --build-timeout 2m 2>$errV } | Out-String)
 $codeV = $LASTEXITCODE
 $allV = $outV + (Read-Text $errV)
 Check 'v1 exit 2 and the message names --build-timeout' (($codeV -eq 2) -and ($allV -match '--build-timeout')) "exit=$codeV $allV"

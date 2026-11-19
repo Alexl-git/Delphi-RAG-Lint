@@ -19,7 +19,7 @@ function Asc([string]$s) { [Text.Encoding]::ASCII.GetBytes($s) }
 function JoinB([byte[][]]$parts) { $m = New-Object IO.MemoryStream; foreach ($p in $parts) { $m.Write($p, 0, $p.Length) }; $m.ToArray() }
 function Put([string]$name, [byte[]]$bytes) { $p = Join-Path $work $name; [IO.File]::WriteAllBytes($p, $bytes); $p }
 function Lint([string]$file, [string[]]$extra = @()) {
-  $out = & $exePath lint $file --json @extra 2>$null | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath lint $file --json @extra 2>$null } | Out-String
   $t = $out.Trim()
   if ($t.StartsWith('[')) { return @($t | ConvertFrom-Json) }
   return @()
@@ -33,7 +33,7 @@ $tail = "end.`r`n"
 try {
   # raw JSON field names: print once so a wrong name cannot make every check vacuous
   $p0 = Put 'probe.pas' (JoinB @((Asc $head), (Asc "// TODO: x`r`n"), (Asc $tail)))
-  $raw = (& $exePath lint $p0 --json --enable todo-comment 2>$null | Out-String)
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath lint $p0 --json --enable todo-comment 2>$null } | Out-String)
   Write-Host ("probe raw[0..120]: " + $raw.Substring(0, [Math]::Min(120, $raw.Length)).Replace("`r", ' ').Replace("`n", ' '))
   Check 'probe: json carries rule/start_line' ((Has (Lint $p0 @('--enable','todo-comment')) 'todo-comment' 4))
 

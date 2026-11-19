@@ -78,13 +78,13 @@ $dproj = Join-Path $work 'TreeP.dproj'
 $unit  = Join-Path $work 'TreeB.pas'
 $base  = Join-Path $work 'b.json'
 
-& $Exe index $work --db $db --rebuild *> $null
-& $Exe lint-tree --unit $unit --db $db --write-baseline $base *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db --rebuild *> $null }
+& { $ErrorActionPreference = 'Continue'; & $Exe lint-tree --unit $unit --db $db --write-baseline $base *> $null }
 Check 'baseline captured' (Test-Path $base) $base
 
 # --- case 1: BUILD A STALE .DCU FIRST ----------------------------------------
 Push-Location $work
-& $dcc -Q -B TreeP.dpr *> $null
+& { $ErrorActionPreference = 'Continue'; & $dcc -Q -B TreeP.dpr *> $null }
 Pop-Location
 $dcuB = Join-Path $work 'TreeB.dcu'
 Check 'a STALE TreeB.dcu exists before tier 3 runs' (Test-Path $dcuB) `
@@ -94,7 +94,7 @@ function Run-Compile([string]$buffer){
   $a = @('lint-tree','--unit',$unit,'--db',$db,'--baseline',$base,'--project',$dproj,
          '--platform','win32','--compile','--format','json')
   if($buffer){ $a += @('--buffer',$buffer) }
-  $o = & $Exe @a 2>$null
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }
   try { ($o | Out-String) | ConvertFrom-Json } catch { $null }
 }
 

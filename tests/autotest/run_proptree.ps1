@@ -139,7 +139,7 @@ Write-Ascii (Join-Path $work 'PropFix.pas') $PropBody
 $db = Join-Path $WorkDir 'propfix.sqlite'
 
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 $indexExit = $LASTEXITCODE
 Check 'index exits 0' ($indexExit -eq 0) "exit=$indexExit; $($indexOut -join ' | ')"
 
@@ -355,10 +355,10 @@ implementation
 end.
 '@
 Write-Ascii (Join-Path $work 'DefFix.pas') $DefBody
-$idx2 = & $Exe index $work --db $db 2>&1
+$idx2 = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'default-clause: reindex exits 0' ($LASTEXITCODE -eq 0) "$($idx2 -join ' | ')"
 
-$defJson = (& $Exe proptree --qname 'DefFix.TDefChild' --format json --db $db 2>$null) -join "`n"
+$defJson = (& { $ErrorActionPreference = 'Continue'; & $Exe proptree --qname 'DefFix.TDefChild' --format json --db $db 2>$null }) -join "`n"
 $defDoc = $null
 try { $defDoc = $defJson | ConvertFrom-Json } catch { $defDoc = $null }
 Check 'default-clause: proptree parses' ($null -ne $defDoc) "raw=$defJson"
@@ -391,7 +391,7 @@ if ($null -ne $defDoc) {
 }
 
 # The base class read directly: its own declarations, no walking involved.
-$baseJson = (& $Exe proptree --qname 'DefFix.TDefBase' --format json --db $db 2>$null) -join "`n"
+$baseJson = (& { $ErrorActionPreference = 'Continue'; & $Exe proptree --qname 'DefFix.TDefBase' --format json --db $db 2>$null }) -join "`n"
 $baseDoc = $null
 try { $baseDoc = $baseJson | ConvertFrom-Json } catch { $baseDoc = $null }
 if ($null -ne $baseDoc) {
@@ -408,7 +408,7 @@ if ($null -ne $baseDoc) {
 # cut. They matter because convert-reemit EMITS default_value into a .dfm: a
 # truncated set is a malformed form file, and a conditionally-stored property
 # read as "at its default" writes a value the form never had.
-$edgeJson = (& $Exe proptree --qname 'DefFix.TDefEdge' --format json --db $db 2>$null) -join "`n"
+$edgeJson = (& { $ErrorActionPreference = 'Continue'; & $Exe proptree --qname 'DefFix.TDefEdge' --format json --db $db 2>$null }) -join "`n"
 $edgeDoc = $null
 try { $edgeDoc = $edgeJson | ConvertFrom-Json } catch { $edgeDoc = $null }
 if ($null -ne $edgeDoc) {

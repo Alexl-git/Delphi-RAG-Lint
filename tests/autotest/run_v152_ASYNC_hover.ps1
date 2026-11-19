@@ -166,7 +166,7 @@ end;
 end.
 '@
   $db = Join-Path $WorkDir 'async.sqlite'
-  & $Exe index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'fixture indexed' (Test-Path $db)
 
   $lines = [IO.File]::ReadAllLines($file)

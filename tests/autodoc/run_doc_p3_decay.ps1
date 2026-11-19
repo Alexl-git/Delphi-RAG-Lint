@@ -102,10 +102,10 @@ Push-Location C:\TEMP
 try {
   $before = [IO.File]::ReadAllBytes($target)
 
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
-  $applyJson = (& $exePath document --unit $target --db $db --apply --json 2>$null) -join "`n"
+  $applyJson = (& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply --json 2>$null }) -join "`n"
   Check 'document --unit --apply exits 0' ($LASTEXITCODE -eq 0)
   Check 'apply: exactly one edit (Noop2''s delete-only span; Kept is unchanged)' `
     ($applyJson -match '"edits":1') $applyJson
@@ -129,8 +129,8 @@ try {
 
   # --- 4. Idempotency: reindex (Noop2 is now undocumented; Kept unchanged) ---
   $afterApplyBytes = [IO.File]::ReadAllBytes($target)
-  & $exePath index $scratch --db $db 2>$null | Out-Null
-  $reApplyJson = (& $exePath document --unit $target --db $db --apply --json 2>$null) -join "`n"
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+  $reApplyJson = (& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply --json 2>$null }) -join "`n"
   Check '4. second apply reports edits=0' ($reApplyJson -match '"edits":0') $reApplyJson
   Check '4. second apply reports applied=false' ($reApplyJson -match '"applied":false') $reApplyJson
   $afterSecondBytes = [IO.File]::ReadAllBytes($target)

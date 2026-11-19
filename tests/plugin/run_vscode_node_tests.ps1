@@ -33,7 +33,7 @@ if ($files.Count -eq 0) {
 }
 $failed = 0
 foreach ($f in $files) {
-  $out = & $node.Source $f.FullName 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $node.Source $f.FullName 2>&1 | ForEach-Object { "$_" } } | Out-String
   if ($LASTEXITCODE -eq 0) {
     Write-Host ("  [PASS] {0}" -f $f.Name) -ForegroundColor Green
   } else {

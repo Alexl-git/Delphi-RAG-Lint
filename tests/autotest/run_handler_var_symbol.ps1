@@ -41,12 +41,12 @@ $work = Join-Path $WorkDir 'fixture'
 New-Item -ItemType Directory -Force $work | Out-Null
 Copy-Item "$PSScriptRoot\fixtures\handlervar\uHandlerVar.pas" $work -Force
 $db = Join-Path $WorkDir 'hv.sqlite'
-$null = & $Exe index $work --db $db --library-db none 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db --library-db none 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 # sql --json rows are POSITIONAL arrays: map them onto columns[].name.
 function Q([string]$Sql) {
-  $raw = & $Exe sql --db $db --json --query $Sql 2>$null | Out-String
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --query $Sql 2>$null } | Out-String
   $j = $raw | ConvertFrom-Json
   $names = @($j.columns | ForEach-Object { $_.name })
   $out = @()

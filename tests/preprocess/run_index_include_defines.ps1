@@ -58,7 +58,7 @@ $db = Join-Path $scratch 'inc.sqlite'
 
 Push-Location C:\TEMP
 try {
-  $out = & $exePath index $scratch --db $db 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 
   # Per-file result lines look like:  <path> -> N symbols, M refs, K errors
   function Stat($file) {

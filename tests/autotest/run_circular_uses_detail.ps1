@@ -76,11 +76,11 @@ W (Join-Path $work 'uDel.pas') @(
   'var','  G: TGamThing;','begin','  G:= TGamThing.Create;','  G.GamRun;','end;','','end.')
 
 $db = Join-Path $work 'fx.sqlite'
-& $Exe index $work --db $db --rebuild *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db --rebuild *> $null }
 Check '0. fixture indexed' (Test-Path $db) $db
 
 Push-Location $work
-try { & $Exe lint-all --db $db --quiet *> $null } finally { Pop-Location }
+try { & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --quiet *> $null } } finally { Pop-Location }
 
 $rep = Get-ChildItem (Join-Path $work '_D-RAG') -Filter 'lint-report-*.txt' -ErrorAction SilentlyContinue |
        Sort-Object LastWriteTime -Descending | Select-Object -First 1

@@ -64,7 +64,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail='') {
   Write-Host ("  [{0}] {1}" -f $(if ($Ok) {'PASS'} else {'FAIL'}), $Name) -ForegroundColor $(if ($Ok) {'Green'} else {'Red'})
   if (-not $Ok) { $script:Failed = $true; if ($Detail) { Write-Host "      $Detail" -ForegroundColor DarkGray } }
 }
-$raw = & $Exe reconcile-project "$proj\App.dproj" --json --config $cfg 2>$null | Out-String
+$raw = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$proj\App.dproj" --json --config $cfg 2>$null } | Out-String
 $doc = $null; try { $doc = $raw | ConvertFrom-Json } catch { }
 Check '0 --json parses' ($null -ne $doc) $raw
 $inc = @($doc.missing | Where-Object { $_.file -like '*Defs.inc' })

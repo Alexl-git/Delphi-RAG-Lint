@@ -67,7 +67,7 @@ $script:AllOut = ''
 
 function Run([string[]]$EngArgs) {
   Push-Location $work
-  try { $o = (& $Exe @EngArgs 2>&1 | Out-String) } finally { Pop-Location }
+  try { $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @EngArgs 2>&1 | ForEach-Object { "$_" } } | Out-String) } finally { Pop-Location }
   $script:AllOut += $o
   return $o
 }
@@ -75,7 +75,7 @@ function Run([string[]]$EngArgs) {
 # stdout ONLY (stderr dropped): for --json, whose rename- lines go to stderr
 function RunStdout([string[]]$EngArgs) {
   Push-Location $work
-  try { $o = (& $Exe @EngArgs 2>$null | Out-String) } finally { Pop-Location }
+  try { $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @EngArgs 2>$null } | Out-String) } finally { Pop-Location }
   $script:AllOut += $o
   return $o
 }

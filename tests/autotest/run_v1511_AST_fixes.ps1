@@ -23,7 +23,7 @@ $pass = 0; $fail = 0
 foreach ($pas in Get-ChildItem (Join-Path $fx '*.pas')) {
   $expFile = [IO.Path]::ChangeExtension($pas.FullName, '.expected')
   if (-not (Test-Path $expFile)) { continue }
-  $raw = & $exePath lint $pas.FullName --config $cfg --json 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint $pas.FullName --config $cfg --json 2>$null }
   $findings = @()
   try { $findings = @($raw | ConvertFrom-Json) } catch { $findings = @() }
   $pairs = @{}

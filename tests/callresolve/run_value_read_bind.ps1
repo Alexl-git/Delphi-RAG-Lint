@@ -59,7 +59,7 @@ $use = Join-Path $scratch 'uValUse.pas'
 $db  = Join-Path $scratch 'valuereads.sqlite'
 
 function Sql([string]$Query) {
-  $raw = (& $exePath sql --db $db --json --limit 1000 --query $Query 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --limit 1000 --query $Query 2>$null }) -join "`n"
   $b = $raw.IndexOf('{')
   if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
   $o = $raw.Substring($b) | ConvertFrom-Json
@@ -86,7 +86,7 @@ function ReadAt([string]$Marker, [string]$Name) {
                 "AND r.start_line = $line AND r.name_text = '$Name'") | Where-Object { $_ })
 }
 
-$log = & $exePath index $scratch --db $db 2>&1
+$log = & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 # check 1 -- positive bindings

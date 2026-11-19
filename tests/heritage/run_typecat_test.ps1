@@ -16,7 +16,7 @@ if (Test-Path $db) { Remove-Item $db -Force }
 & $exe index (Join-Path $dir 'typecat.pas') --db $db | Out-Null
 
 function Categ($typeName) {
-  $raw = (& $exe query typecat --name $typeName --db $db --json 2>$null | Out-String)
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exe query typecat --name $typeName --db $db --json 2>$null } | Out-String)
   $idx = $raw.IndexOf('{')
   if ($idx -lt 0) { return '<no-json>' }
   $o = $raw.Substring($idx) | ConvertFrom-Json

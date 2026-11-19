@@ -87,9 +87,9 @@ end.
 '@
 
 # doc-drift reads the doc from the INDEX, so every source edit needs a reindex.
-function Reindex { & $exePath index $work --db $db 2>&1 | Out-Null }
+function Reindex { & { $ErrorActionPreference = 'Continue'; & $exePath index $work --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null }
 function IsStale {
-  $out = & $exePath doc-drift --qname 'ordfix.TThing' --db $db --json 2>$null | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath doc-drift --qname 'ordfix.TThing' --db $db --json 2>$null } | Out-String
   return ($out -match 'ddFactsBlockStale')
 }
 function UsedByLine { return (Get-Content $src | Where-Object { $_ -match 'Used by:' } | Select-Object -First 1) }
@@ -102,7 +102,7 @@ function ReplaceLine([string]$Old, [string]$New) {
 Push-Location C:\TEMP
 try {
   Reindex
-  & $exePath document --unit $src --db $db --apply --no-backup 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $src --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Reindex
 
   $orig = UsedByLine

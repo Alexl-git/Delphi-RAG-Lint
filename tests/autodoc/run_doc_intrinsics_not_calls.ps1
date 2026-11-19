@@ -113,7 +113,7 @@ end.
 $db = Join-Path $scratch 'i.sqlite'
 
 function Get-CallsLine([string]$qname) {
-  $out = (& $exePath document --qname $qname --db $db 2>$null) -join "`n"
+  $out = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname $qname --db $db 2>$null }) -join "`n"
   $l = ($out -split "`r?`n" | Where-Object { $_ -match 'Calls:' } | Select-Object -First 1)
   if ($null -eq $l) { return '' }
   return $l.Trim()
@@ -121,7 +121,7 @@ function Get-CallsLine([string]$qname) {
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db --quiet 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db --quiet 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
   $tally = Get-CallsLine 'intr.Tally'

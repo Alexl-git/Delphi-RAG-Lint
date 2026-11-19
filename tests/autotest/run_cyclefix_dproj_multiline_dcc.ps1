@@ -123,7 +123,7 @@ function Invoke-Program([string]$Dproj) {
 }
 function Invoke-Apply([string]$Dproj, [string]$Tag) {
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project $Dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $Dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
   $o = Join-Path $WorkDir "apply-$Tag.out"
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
     -ArgumentList @('cycles', '--fix', '--apply', '--no-backup', '--build-timeout', '600', '--cycle', '1', '--project', ('"' + $Dproj + '"'),

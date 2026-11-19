@@ -31,7 +31,7 @@ function Check([bool]$ok, [string]$what) {
   if ($ok) { $script:pass++; Write-Host "PASS  $what" } else { $script:fail++; Write-Host "FAIL  $what" }
 }
 function Lint([string]$file, [string]$cfg) {
-  $raw = & $exePath lint $file --config $cfg --json 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint $file --config $cfg --json 2>$null }
   $txt = ($raw -join "`n").Trim()
   if ($txt -eq '') { return }
   # lint --json is a bare array: return its ITEMS so callers' Where-Object sees findings, not one array
@@ -50,7 +50,7 @@ function Manifest([string[]]$globs) {
 }
 
 # 1. catalog
-$rules = & $exePath rules --json 2>$null | ConvertFrom-Json
+$rules = & { $ErrorActionPreference = 'Continue'; & $exePath rules --json 2>$null } | ConvertFrom-Json
 if ($rules.rules) { $rules = $rules.rules }
 $byId = @{}; foreach ($r in $rules) { $byId[$r.id] = $r }
 Check ($byId.ContainsKey('reserved-word-identifier') -and $byId['reserved-word-identifier'].default_enabled) 'catalog: reserved-word-identifier is ON'

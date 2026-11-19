@@ -43,17 +43,17 @@ function Lane-IndexMode([string]$mode) {
   Copy-Item (Join-Path $fixtures '*.pas') $src
   $db = Join-Path $WorkDir "$mode.sqlite"
   Push-Location C:\TEMP
-  try { $o = @(& $Exe index $src --db $db "--$mode" 2>&1 | ForEach-Object { "$_" }) } finally { Pop-Location }
+  try { $o = @(& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db "--$mode" 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) } finally { Pop-Location }
   return [pscustomobject]@{ Db = $db; Out = $o }
 }
 function Lane-Verdict([string]$db, [string]$qname) {
-  $t = (& $Exe sql --db $db --format text --query "SELECT ifnull(f.effect_free,-1), '[' || ifnull(f.effect_summary,'') || ']', '[' || ifnull(f.effect_witness,'') || ']' FROM symbols s JOIN symbol_facts f ON f.symbol_id=s.id WHERE s.qualified_name='$qname'" 2>&1) -join "`n"
+  $t = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --format text --query "SELECT ifnull(f.effect_free,-1), '[' || ifnull(f.effect_summary,'') || ']', '[' || ifnull(f.effect_witness,'') || ']' FROM symbols s JOIN symbol_facts f ON f.symbol_id=s.id WHERE s.qualified_name='$qname'" 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $m = [regex]::Match($t, '(?m)^\s*(-?\d+)\s+\[(.*?)\]\s+\[(.*)\]\s*$')
   if (-not $m.Success) { return [pscustomobject]@{ ef = -2; es = '<norow>'; ew = '<norow>' } }
   return [pscustomobject]@{ ef = [int]$m.Groups[1].Value; es = $m.Groups[2].Value; ew = $m.Groups[3].Value }
 }
 function Lane-UsageRefs([string]$db) {
-  $t = (& $Exe sql --db $db --format text --query "SELECT 'n=' || COUNT(*) FROM refs WHERE kind IN ('read','write','member-access')" 2>&1) -join "`n"
+  $t = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --format text --query "SELECT 'n=' || COUNT(*) FROM refs WHERE kind IN ('read','write','member-access')" 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $m = [regex]::Match($t, 'n=(\d+)')
   if ($m.Success) { return [int]$m.Groups[1].Value } else { return -1 }
 }

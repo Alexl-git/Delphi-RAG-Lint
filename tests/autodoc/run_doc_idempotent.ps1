@@ -39,20 +39,20 @@ Copy-Item $fixture $target -Force
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # --- run 1: apply, capture bytes ---
-  $r1 = & $exePath document --qname doc_generate.Add --db $db --apply --json 2>$null | Out-String
+  $r1 = & { $ErrorActionPreference = 'Continue'; & $exePath document --qname doc_generate.Add --db $db --apply --json 2>$null } | Out-String
   $o1 = $null; try { $o1 = ($r1 | ConvertFrom-Json) } catch { $o1 = $null }
   Check 'run1: action = created'  ($null -ne $o1 -and $o1.action -eq 'created')
   Check 'run1: applied = true'    ($null -ne $o1 -and $o1.applied -eq $true)
   $bytes1 = [IO.File]::ReadAllBytes($target)
 
   # --- CRITICAL: re-index so the store sees the post-insert line numbers ---
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # --- run 2: apply again; must be a no-op ---
-  $r2 = & $exePath document --qname doc_generate.Add --db $db --apply --json 2>$null | Out-String
+  $r2 = & { $ErrorActionPreference = 'Continue'; & $exePath document --qname doc_generate.Add --db $db --apply --json 2>$null } | Out-String
   $o2 = $null; try { $o2 = ($r2 | ConvertFrom-Json) } catch { $o2 = $null }
   Check 'run2: action = unchanged' ($null -ne $o2 -and $o2.action -eq 'unchanged')
   Check 'run2: edits = 0'          ($null -ne $o2 -and [int]$o2.edits -eq 0)

@@ -67,7 +67,7 @@ function New-Raise([string]$Tag, [scriptblock]$Patch = $null) {
   if ($Patch) { & $Patch $root }
   $db = "$root.sqlite"
   Push-Location $WorkDir
-  try { $null | & $Exe index --project (Join-Path $root 'MemberWrite.dproj') --db $db --library-db $Lib *> "$db.log" } finally { Pop-Location }
+  try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root 'MemberWrite.dproj') --db $db --library-db $Lib *> "$db.log" } } finally { Pop-Location }
   return @{ Root = $root; Dproj = (Join-Path $root 'MemberWrite.dproj'); Db = $db; Name = 'MemberWrite' }
 }
 function Invoke-Build($P) {
@@ -91,7 +91,7 @@ function Invoke-Program($P) {
 function Run-Fix($P, [string[]]$Extra) {
   $a = @('cycles', '--fix', '--build-timeout', '1800', '--project', $P.Dproj, '--db', $P.Db, '--library-db', $Lib, '--format', 'json') + $Extra
   Push-Location $WorkDir
-  try { $out = ($null | & $Exe @a 2>$null | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
+  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
   $j = $null; try { $j = $out | ConvertFrom-Json } catch { }
   $k = @(); foreach ($c in @($j.cycles)) { foreach ($x in @($c.refusals)) { if ($x) { $k += "$($x.kind): $($x.reason)" } } }
   return @{ Exit = $code; Out = $out; Kinds = $k }
@@ -109,7 +109,7 @@ try {
   Check 'r0.2 its stdout shows the EInvalidCast path ran' ($out0.Contains('[ui] EInvalidCast: ')) "[$out0]"
   $P = New-Raise 'edit'
   Push-Location $WorkDir
-  try { $plan = ($null | & $Exe cycles --plan --project $P.Dproj --db $P.Db --library-db $Lib 2>$null | Out-String) } finally { Pop-Location }
+  try { $plan = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --plan --project $P.Dproj --db $P.Db --library-db $Lib 2>$null } | Out-String) } finally { Pop-Location }
   Check 'r1.1 the plan is mechanical, no exception-semantics refusal' (($plan -notmatch 'refused: exception-semantics') -and ($plan -match 'member hand-over through an extracted interface')) $plan
   Check 'r1.2 the cast goes through AsDemoGagePortSurface(Owner)' ($plan.Contains('with AsDemoGagePortSurface(Owner) do')) ''
   Check 'r1.3 the Exceptions line names the helper and EInvalidCast' ($plan -match 'through `AsDemoGagePortSurface\(X\)`.*EInvalidCast\.CreateRes\(@SInvalidCast\)') ''
@@ -121,8 +121,8 @@ try {
   Check 'r2.3 stdout (and stderr) byte-identical to the untouched build' (($out0 -ne '<no exe>') -and ($out1 -ceq $out0)) "before=[$out0] after=[$out1]"
   $ui = [IO.File]::ReadAllText((Join-Path $P.Root 'DemoUIConnect.pas'), $Ascii)
   Check 'r2.4 the consumer holds the helper, before Attach' ($ui -match '(?s)function AsDemoGagePortSurface\(const pX: TObject\): IDemoGagePortSurface;.*raise EInvalidCast\.CreateRes\(@SInvalidCast\);.*procedure TDemoUIConnect\.Attach;') ''
-  $null | & $Exe index --project $P.Dproj --db $P.Db --library-db $Lib *> "$($P.Db).relog"
-  $left = ($null | & $Exe cycles --db $P.Db --library-db none 2>$null | Out-String)
+  $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project $P.Dproj --db $P.Db --library-db $Lib *> "$($P.Db).relog" }
+  $left = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --db $P.Db --library-db none 2>$null } | Out-String)
   Check 'r2.5 no cycle after a re-index' ($left -match 'No circular unit dependencies found\.') $left
 
   Write-Host '== pc1: the compare has teeth' -ForegroundColor Cyan
@@ -141,7 +141,7 @@ try {
     $uout0 = Invoke-Program $UB
     $UP = New-Raise "$($case.Tag)-edit" $Prep
     Push-Location $WorkDir
-    try { $uplan = ($null | & $Exe cycles --plan --project $UP.Dproj --db $UP.Db --library-db $Lib 2>$null | Out-String) } finally { Pop-Location }
+    try { $uplan = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --plan --project $UP.Dproj --db $UP.Db --library-db $Lib 2>$null } | Out-String) } finally { Pop-Location }
     $why = if ($case.Raise) { 'handles EInvalidCast and casts with `as TDemoGagePort` unguarded' } else { 'casts with `as TDemoGagePort` on a receiver whose static type is not known' }
     Check "$($case.Tag).1 planned through AsDemoGagePortSurface(GetOwner), no receiver-unknown; the Exceptions line says why   (RED on 1.48.0: receiver-unknown)" (($uplan -notmatch 'receiver-unknown') -and $uplan.Contains('with AsDemoGagePortSurface(GetOwner) do') -and $uplan.Contains($why)) $uplan
     $ua = Run-Fix $UP @('--apply')
@@ -151,11 +151,11 @@ try {
   }
   $K = New-Raise 'u3' { param($root) Edit-Text (Join-Path $root 'DemoUIConnect.pas') $AttachNew $AttachOld }
   Push-Location $WorkDir
-  try { $kplan = ($null | & $Exe cycles --plan --project $K.Dproj --db $K.Db --library-db $Lib 2>$null | Out-String) } finally { Pop-Location }
+  try { $kplan = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --plan --project $K.Dproj --db $K.Db --library-db $Lib 2>$null } | Out-String) } finally { Pop-Location }
   Check 'u3 control: a known, guarded receiver and no handler keep `as IDemoGagePortSurface`, no helper' ($kplan.Contains('with Owner as IDemoGagePortSurface do') -and -not $kplan.Contains('AsDemoGagePortSurface(')) $kplan
   $H = New-Raise 'h1' { param($root) Edit-Text (Join-Path $root 'DemoUIConnect.pas') "    with Owner as TDemoGagePort do`n      Log.Add(Format('ui connected (last gage %d)', [LastGage]));`n  except" "    if Owner is TDemoGagePort then`n      TDemoGagePort(Owner).Log.Add('ui connected');`n  except" }
   Push-Location $WorkDir
-  try { $hplan = ($null | & $Exe cycles --plan --project $H.Dproj --db $H.Db --library-db $Lib 2>$null | Out-String) } finally { Pop-Location }
+  try { $hplan = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --plan --project $H.Dproj --db $H.Db --library-db $Lib 2>$null } | Out-String) } finally { Pop-Location }
   Check 'h1 a hard cast under the EInvalidCast handler: the plan states the behaviour change   (RED on 1.48.0: no such line)' ($hplan.Contains('- Behaviour change: `DemoUIConnect.pas` handles EInvalidCast and reads through a hard cast `TDemoGagePort(X).M`, which becomes `(X as IDemoGagePortSurface).M`')) $hplan
 } finally {
   if (-not $KeepWorkDir) {

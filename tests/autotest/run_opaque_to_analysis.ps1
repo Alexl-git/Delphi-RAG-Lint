@@ -27,7 +27,7 @@ function Check([string]$Name, [bool]$Ok) {
   if ($Ok) { Write-Host "  [PASS] $Name" -ForegroundColor Green } else { Write-Host "  [FAIL] $Name" -ForegroundColor Red; $script:Failed = $true }
 }
 function Lint([string[]]$LintArgs) {
-  $raw = & $Exe lint-all @LintArgs --format json 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all @LintArgs --format json 2>$null }
   $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
   $f = @(); if ($b -ge 0) { try { $f = @($txt.Substring($b) | ConvertFrom-Json) } catch { $f = @() } }
   return ,@($f | Where-Object { $_.rule -eq $Rule })
@@ -42,9 +42,9 @@ try {
   }
   $db  = Join-Path $WorkDir 'fx.sqlite'
   $lib = Join-Path $WorkDir 'lib.sqlite'
-  & $Exe index (Join-Path $WorkDir 'lib') --db $lib 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $WorkDir 'lib') --db $lib 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'library index exits 0' ($LASTEXITCODE -eq 0)
-  & $Exe index (Join-Path $WorkDir 'proj') --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $WorkDir 'proj') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'project index exits 0' ($LASTEXITCODE -eq 0)
   $pas = Get-Content (Join-Path $WorkDir 'proj\uOpaque.pas')
   $line = 0
@@ -71,13 +71,13 @@ try {
   $nolib = Lint @('--db', $db, '--library-db', 'none', '--rule', $Rule)
   Check 'negative: no library index -> silent' ($nolib.Count -eq 0)
 
-  $one = & $Exe lint (Join-Path $WorkDir 'proj\uOpaque.pas') --db $db --library-db $lib --rule $Rule --json 2>$null
+  $one = & { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $WorkDir 'proj\uOpaque.pas') --db $db --library-db $lib --rule $Rule --json 2>$null }
   $oneF = @(($one -join "`n") | ConvertFrom-Json) | Where-Object { $_.rule -eq $Rule }
   Check 'lint <file> --library-db: the same two findings' (@($oneF).Count -eq 2)
 
   $dbx = Join-Path $WorkDir 'fxlib.sqlite'
-  & $Exe index (Join-Path $WorkDir 'proj') --db $dbx --library-db $lib 2>&1 | Out-Null
-  $ext = & $Exe sql --query "select count(*) from refs where external_target is not null" --db $dbx 2>$null | Select-Object -Skip 2 -First 1
+  & { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $WorkDir 'proj') --db $dbx --library-db $lib 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $ext = & { $ErrorActionPreference = 'Continue'; & $Exe sql --query "select count(*) from refs where external_target is not null" --db $dbx 2>$null } | Select-Object -Skip 2 -First 1
   Check 'control: the --library-db index stored external_target rows' ([int]$ext -gt 0)
   $st = Lint @('--db', $dbx, '--db', $lib, '--rule', $Rule)
   Check 'stored external_target: the same two findings' ($st.Count -eq 2)

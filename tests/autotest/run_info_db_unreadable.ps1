@@ -43,7 +43,7 @@ function InfoJson([string[]]$Dbs) {
   Push-Location $WorkDir
   try {
     $a = @('info', '--json'); foreach ($d in $Dbs) { $a += @('--db', $d) }
-    $out = & $Exe @a 2>&1 | Out-String
+    $out = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } } | Out-String
     return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $out }
   } finally { Pop-Location }
 }

@@ -115,13 +115,13 @@ function Frame($obj) {
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $WorkDir --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check '1. SANITY: the index exists' (Test-Path $db)
 
   # --- the CLI's own answer -------------------------------------------------
   # NOT 2>&1: stderr carries the banner and the FTS5 probe, and merging it
   # INTERLEAVES those lines into the middle of the pretty-printed JSON.
-  $cliRaw = (& $exePath usages --name Compute --db $db --format json 2>$null | Out-String)
+  $cliRaw = (& { $ErrorActionPreference = 'Continue'; & $exePath usages --name Compute --db $db --format json 2>$null } | Out-String)
   # The verb prints a banner line and a trailing FTS5 probe around the JSON, so
   # take the object's own span rather than "everything from the first brace".
   $cliJson = $cliRaw.Substring($cliRaw.IndexOf('{'))

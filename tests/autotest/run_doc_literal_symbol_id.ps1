@@ -111,7 +111,7 @@ $src = @(
 [IO.File]::WriteAllText((Join-Path $WorkDir 'DocLit.pas'), $src + "`r`n", [Text.Encoding]::ASCII)
 
 # Fresh scratch DB, directory scan: not a project DB, so no widening concern.
-$idxOut = & $exePath index $WorkDir --db $db 2>&1
+$idxOut = & { $ErrorActionPreference = 'Continue'; & $exePath index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } }
 $idxExit = $LASTEXITCODE
 Check 'the fixture indexed' ($idxExit -eq 0 -and (Test-Path $db)) "exit=$idxExit"
 if (-not (Test-Path $db)) {
@@ -124,7 +124,7 @@ if (-not (Test-Path $db)) {
 function OwnerOf([string]$Word) {
   $q = "SELECT COALESCE(s.qualified_name, '') AS q FROM string_literals sl " +
        "LEFT JOIN symbols s ON s.id = sl.symbol_id WHERE sl.text LIKE '%$Word%'"
-  $raw = (& $exePath sql --query $q --db $db --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --query $q --db $db --json 2>$null }) -join "`n"
   if (-not $raw.Trim()) { return '<no output>' }
   $d = $raw | ConvertFrom-Json
   $rows = @($d.rows)

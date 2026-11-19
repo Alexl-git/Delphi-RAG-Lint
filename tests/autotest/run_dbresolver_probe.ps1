@@ -81,7 +81,7 @@ $templateFile = "$projDir\drag-lint.sqlite"
 $byNameFile   = "$projDir\MyProj.sqlite"
 
 function RunHarness([string]$ProjPath, [string]$Template) {
-    (& $exe $ProjPath $Template 2>&1 | Out-String).Trim()
+    (& { $ErrorActionPreference = 'Continue'; & $exe $ProjPath $Template 2>&1 | ForEach-Object { "$_" } } | Out-String).Trim()
 }
 
 # CASE A: only <projname>.sqlite present, non-empty -> chosen over absent template file

@@ -147,7 +147,7 @@ try {
   $r = Invoke-Runner 'busyok' '' @('-AllowBusy')
   Check 'C4 -AllowBusy runs and records it' ($r.Exit -eq 0 -and (($r.Summary -join "`n") -match 'NOT ALONE')) ($r.Summary -join ' | ')
 } finally {
-  if (-not $busy.HasExited) { & taskkill /PID $busy.Id /T /F 2>&1 | Out-Null }
+  if (-not $busy.HasExited) { & { $ErrorActionPreference = 'Continue'; & taskkill /PID $busy.Id /T /F 2>&1 | ForEach-Object { "$_" } } | Out-Null }
 }
 
 Remove-WorkDir $Scratch -Keep:$KeepWorkDir

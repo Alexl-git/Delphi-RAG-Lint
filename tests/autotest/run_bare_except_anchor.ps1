@@ -133,7 +133,7 @@ foreach ($p in @(@('bare',$rowBare), @('linecmt',$rowLineCmt), @('bracecmt',$row
   if (-not $p[1]) { Write-Host "FATAL: fixture anchor '$($p[0])' not found" -ForegroundColor Red; exit 2 }
 }
 
-$out = & $Exe lint $file --rules-dir $RulesDir 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file --rules-dir $RulesDir 2>&1 | ForEach-Object { "$_" } } | Out-String
 $bareRows = [regex]::Matches($out, 'uBareExceptAnchor\.pas:(\d+):\d+\s+\[info\]\s+bare-except') |
             ForEach-Object { [int]$_.Groups[1].Value } | Sort-Object
 

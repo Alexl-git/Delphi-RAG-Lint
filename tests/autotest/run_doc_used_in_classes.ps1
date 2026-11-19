@@ -50,7 +50,7 @@ function WriteAscii($path, $lines) {
   [System.IO.File]::WriteAllText($path, (($lines -join $crlf) + $crlf), (New-Object System.Text.ASCIIEncoding))
 }
 function Run([string[]]$xs) {
-  $o = & $Exe @xs 2>&1 | Out-String
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe @xs 2>&1 | ForEach-Object { "$_" } } | Out-String
   [pscustomobject]@{ Out = $o; Code = $LASTEXITCODE }
 }
 function BlockAbove([string]$path, [string]$declPat) {

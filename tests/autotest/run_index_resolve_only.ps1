@@ -79,18 +79,18 @@ Write-Host 'run_index_resolve_only -- re-derive without walking' -ForegroundColo
 
 Push-Location C:\TEMP
 try {
-  $first = & $Exe index $src --db $db 2>&1 | Out-String
+  $first = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'the fixture indexed' (Test-Path $db) $db
   if (-not (Test-Path $db)) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 
   # Wipe the derived edges behind the engine's back. This is what a stale
   # resolver leaves in practice -- parses intact, edges wrong or missing -- and
   # it is the state --resolve-only exists to repair.
-  $before = & $Exe sql --db $db --query 'SELECT COUNT(*) AS n FROM call_edges' 2>$null | Out-String
+  $before = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query 'SELECT COUNT(*) AS n FROM call_edges' 2>$null } | Out-String
   Check 'the first index produced call edges' ($before -match '\b[1-9]\d*\b') `
     (($before -split "`r?`n" | Where-Object { $_ -match '\d' }) -join ' ')
 
-  $ro = & $Exe index $src --db $db --resolve-only 2>&1 | Out-String
+  $ro = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db --resolve-only 2>&1 | ForEach-Object { "$_" } } | Out-String
 } finally { Pop-Location }
 
 Write-Host ''
@@ -119,7 +119,7 @@ Check 'it was a WHOLE-DB pass, not a scoped one' `
 
 Push-Location C:\TEMP
 try {
-  $after = & $Exe sql --db $db --query 'SELECT COUNT(*) AS n FROM call_edges' 2>$null | Out-String
+  $after = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query 'SELECT COUNT(*) AS n FROM call_edges' 2>$null } | Out-String
 } finally { Pop-Location }
 Check 'call edges exist after the resolve-only run' ($after -match '\b[1-9]\d*\b') `
   (($after -split "`r?`n" | Where-Object { $_ -match '\d' }) -join ' ')

@@ -78,7 +78,7 @@ function Set-Text([string]$Path, [string]$Text) {
 }
 
 function Invoke-Index([string]$Dproj, [string]$Db, [string]$Tag) {
-  & $Exe index --project $Dproj --db $Db *> (Join-Path $WorkDir "index-$Tag.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $Dproj --db $Db *> (Join-Path $WorkDir "index-$Tag.log") }
   return $LASTEXITCODE
 }
 
@@ -177,7 +177,7 @@ function Get-Predicted([string[]]$Blk) {
 }
 
 function Invoke-Follow([string]$PlanFile, [int]$Cycle, [string]$Root) {
-  $fo = & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $PlanFile -Cycle $Cycle -Root $Root 2>&1 | Out-String
+  $fo = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $PlanFile -Cycle $Cycle -Root $Root 2>&1 | ForEach-Object { "$_" } } | Out-String
   return @{ Exit = $LASTEXITCODE; Text = ($fo.Trim() -replace "`r?`n", ' | ') }
 }
 

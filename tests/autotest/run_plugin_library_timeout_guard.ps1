@@ -55,7 +55,7 @@ try {
   Check 'H   LintBudgetHarness.dpr builds (Win64)' $buildOk ((($log -split "`r?`n") | Where-Object { $_ -match 'Error|Fatal' } | Select-Object -First 4) -join ' | ')
   $exeH = "$WorkDir\LintBudgetHarness.exe"
   if ($buildOk -and (Test-Path $exeH)) {
-    $lines = @(& $exeH 2>&1 | ForEach-Object { "$_" })
+    $lines = @(& { $ErrorActionPreference = 'Continue'; & $exeH 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
     $code  = $LASTEXITCODE
     $pass  = @($lines | Where-Object { $_ -like 'PASS *' })
     foreach ($l in $lines) {

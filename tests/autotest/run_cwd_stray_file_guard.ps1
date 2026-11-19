@@ -29,7 +29,7 @@ function Get-Strays([string]$Script, [string[]]$ScriptArgs, [string]$Tag) {
   $cwd = Join-Path $base $Tag
   [IO.Directory]::CreateDirectory($cwd) | Out-Null
   Push-Location $cwd
-  try { $null = & pwsh -NoProfile -NonInteractive -File $Script @ScriptArgs 2>&1 } finally { Pop-Location }
+  try { $null = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -NonInteractive -File $Script @ScriptArgs 2>&1 | ForEach-Object { "$_" } } } finally { Pop-Location }
   return @(Get-ChildItem -LiteralPath $cwd -Force | ForEach-Object { $_.Name })
 }
 

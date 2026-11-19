@@ -109,7 +109,7 @@ $errFile = Join-Path $scratch 'stderr.txt'
 # Out-String renders with decoration, which has already corrupted one JSON
 # slice in this repo by adding a stray brace.
 function Run([string[]]$SqlArgs) {
-  $out = & $Exe @SqlArgs 2>$errFile
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @SqlArgs 2>$errFile }
   $rc  = $LASTEXITCODE
   $err = if (Test-Path -LiteralPath $errFile) { (Get-Content -LiteralPath $errFile -Raw) } else { '' }
   if ($null -eq $err) { $err = '' }

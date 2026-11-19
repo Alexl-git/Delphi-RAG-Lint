@@ -46,13 +46,13 @@ New-Item -ItemType Directory -Path $srcDir | Out-Null
 $db = Join-Path $scratch 'w.sqlite'
 try {
   Copy-Item (Resolve-Path $Fixture).Path (Join-Path $srcDir 'transitive_caught.pas') -Force
-  & $exePath index $srcDir --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $srcDir --db $db 2>$null } | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "index failed ($LASTEXITCODE)" }
 
   # `document --qname` renders the edit for an undocumented declaration; the
   # emitter may wrap a tag, so flatten continuation lines before matching.
   function DocFor([string]$Name) {
-    $raw = (& $exePath document --qname "transitive_caught.$Name" --db $db 2>$null | Out-String)
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname "transitive_caught.$Name" --db $db 2>$null } | Out-String)
     return (($raw -replace "`r?`n\s*///\s?", ' ') -replace '\s+', ' ')
   }
   $viaTag = 'cref="EBoom"><!-- drag-lint:auto exc -->via transitive_caught.Raiser'

@@ -52,7 +52,7 @@ $manifest = Join-Path $WorkDir 'drag-lint.json'
 function Invoke-Engine([string[]]$EngineArgs){
   Push-Location -LiteralPath $WorkDir
   try {
-    $o = ((& $copy @EngineArgs 2>&1 | ForEach-Object { "$_" }) -join "`n")
+    $o = ((& { $ErrorActionPreference = 'Continue'; & $copy @EngineArgs 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n")
     return [pscustomobject]@{ Rc = $LASTEXITCODE; Out = $o }
   } finally { Pop-Location }
 }

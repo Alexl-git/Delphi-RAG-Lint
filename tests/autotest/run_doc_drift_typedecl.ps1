@@ -112,12 +112,12 @@ function Write-Fixture([string]$Path) {
 }
 Write-Fixture $fixtureFile
 
-& $Exe index $srcDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $srcDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'index exits 0' ($LASTEXITCODE -eq 0)
 Check 'db built' (Test-Path $db)
 
 function Get-Findings([string]$QName) {
-  $lines = & $Exe doc-drift --qname $QName --db $db --json 2>&1
+  $lines = & { $ErrorActionPreference = 'Continue'; & $Exe doc-drift --qname $QName --db $db --json 2>&1 | ForEach-Object { "$_" } }
   $ec = $LASTEXITCODE
   $objs = @()
   foreach ($line in $lines) {

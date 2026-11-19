@@ -203,7 +203,7 @@ $ignorePath = Join-Path $WorkDir 'rules-ignore.txt'; Write-Ascii $ignorePath $Ru
 
 $db = Join-Path $WorkDir 'unlinked.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $fix --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $fix --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) ($indexOut -join ' | ')
 
 function Invoke-Apply([string[]]$extra, [string]$rules) {
@@ -211,7 +211,7 @@ function Invoke-Apply([string[]]$extra, [string]$rules) {
   try {
     # stdout only: the engine's stale-index note is stderr and would interleave
     # INTO a json document (RESUME-ENGINE-2026-09-16-session98 gotcha).
-    $raw = (& $Exe convert-apply --unit 'UForm.pas' --rules $rules --db $db @extra 2>$null) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'UForm.pas' --rules $rules --db $db @extra 2>$null }) -join "`n"
     return @{ Raw = $raw; Exit = $LASTEXITCODE }
   } finally { Pop-Location }
 }

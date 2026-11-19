@@ -151,7 +151,7 @@ end.
 
 $db = Join-Path $WorkDir 'alias.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($indexOut -join ' | ')"
 
 # --- Probes. ----------------------------------------------------------------------
@@ -176,7 +176,7 @@ function JsonFrom([string[]]$Lines) {
   return ''
 }
 function Descendants([string]$Of) {
-  $raw = @(& $Exe query descendants --of $Of --json --db $db 2>$null) | ForEach-Object { "$_" }
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query descendants --of $Of --json --db $db 2>$null }) | ForEach-Object { "$_" }
   $code = $LASTEXITCODE
   $json = JsonFrom $raw
   $names = @()
@@ -184,7 +184,7 @@ function Descendants([string]$Of) {
   return @{ Code = $code; Names = $names }
 }
 function Descends([string]$Name, [string]$Of) {
-  $raw = @(& $Exe query ancestors --name $Name --of $Of --json --db $db 2>$null) | ForEach-Object { "$_" }
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query ancestors --name $Name --of $Of --json --db $db 2>$null }) | ForEach-Object { "$_" }
   $json = JsonFrom $raw
   if (-not $json) { return $null }
   return [bool](($json | ConvertFrom-Json).is_descendant)

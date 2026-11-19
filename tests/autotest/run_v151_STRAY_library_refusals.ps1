@@ -74,7 +74,7 @@ function Run-Engine([string[]]$EngineArgs) {
   $env:DRAGLINT_MANIFEST = $mf
   Push-Location $WorkDir
   try {
-    $o = (& $Exe @EngineArgs 2>&1 | Out-String)
+    $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @EngineArgs 2>&1 | ForEach-Object { "$_" } } | Out-String)
     return @{ Out = $o; Code = $LASTEXITCODE }
   } finally { Pop-Location; $env:DRAGLINT_MANIFEST = $null }
 }

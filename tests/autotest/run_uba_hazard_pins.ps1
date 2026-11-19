@@ -160,11 +160,11 @@ Write-Ascii $file $fixture
 # S5d is what exposed it: a const-parameter free routine MUST be reported, and
 # store-free it was not.
 $db  = Join-Path $WorkDir 'hazards.sqlite'
-$idx = & $exePath index $WorkDir --db $db 2>&1 | Out-String
+$idx = & { $ErrorActionPreference = 'Continue'; & $exePath index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'SANITY: fixture indexed with no errors' `
       ($LASTEXITCODE -eq 0 -and $idx -notmatch '\b[1-9]\d* errors\b') $idx
 
-$out = & $exePath lint $file --db $db --rules-dir $rules 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $exePath lint $file --db $db --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String
 
 function Reported($text, $local) {
   @($text -split "`r?`n" |

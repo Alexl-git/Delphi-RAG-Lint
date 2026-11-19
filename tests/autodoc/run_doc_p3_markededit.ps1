@@ -125,13 +125,13 @@ Copy-Item $fixture $target -Force
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
   # --stubs is required so Bar (a fresh create whose only content is a
   # <returns> tag, with no facts fence) is kept -- the facts-only default
   # would otherwise skip it, same as run_doc_p3_strip.ps1's Plain.
-  & $exePath document --unit $target --db $db --stubs --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --stubs --apply 2>$null } | Out-Null
   Check 'document --unit --apply #1 exits 0' ($LASTEXITCODE -eq 0)
 
   $lines = [IO.File]::ReadAllLines($target)
@@ -166,11 +166,11 @@ try {
 
   # --- 5. Idempotency: reindex + 2nd apply -> byte-identical; Bar's marker survives ---
   $before = [IO.File]::ReadAllBytes($target)
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   # --stubs is required so Bar (a fresh create whose only content is a
   # <returns> tag, with no facts fence) is kept -- the facts-only default
   # would otherwise skip it, same as run_doc_p3_strip.ps1's Plain.
-  & $exePath document --unit $target --db $db --stubs --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --stubs --apply 2>$null } | Out-Null
   $after = [IO.File]::ReadAllBytes($target)
   Check '5. idempotent: file byte-identical after reindex + 2nd apply' `
     ([System.Linq.Enumerable]::SequenceEqual([byte[]]$before,[byte[]]$after))

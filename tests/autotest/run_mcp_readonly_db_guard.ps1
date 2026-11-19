@@ -52,7 +52,7 @@ $work = Join-Path $WorkDir 'fixture'
 New-Item -ItemType Directory $work | Out-Null
 Copy-Item (Join-Path $FixtureDir '*.pas'), (Join-Path $FixtureDir '*.dpr') $work
 $db = Join-Path $WorkDir 'ro.sqlite'
-$null = & $Exe index $work --db $db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 Start-Sleep -Milliseconds 1200   # make an accidental mtime bump distinguishable on coarse clocks
 
@@ -62,7 +62,7 @@ $before = Get-Snap $db
 $listReq = Join-Path $WorkDir 'list.jsonl'
 [IO.File]::WriteAllText($listReq, ('{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' + "`n" +
   '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' + "`n"), [Text.Encoding]::ASCII)
-$out = (Get-Content $listReq | & $Exe serve --db $db 2>$null | Out-String)
+$out = (Get-Content $listReq | & { $ErrorActionPreference = 'Continue'; & $Exe serve --db $db 2>$null } | Out-String)
 $tools = @()
 foreach ($ln in ($out -split "`n")) { try { $o = $ln.Trim() | ConvertFrom-Json; if ($o.id -eq 2) { $tools = @($o.result.tools) } } catch { } }
 Check 'tools/list answers' ($tools.Count -gt 0) "count=$($tools.Count)"
@@ -98,7 +98,7 @@ foreach ($t in $tools) {
 Check 'R1 coverage: >= 10 tools called' ($called -ge 10) "called=$called"
 $callReq = Join-Path $WorkDir 'calls.jsonl'
 [IO.File]::WriteAllText($callReq, ($lines -join "`n") + "`n", [Text.Encoding]::ASCII)
-$out2 = (Get-Content $callReq | & $Exe serve --db $db 2>$null | Out-String)
+$out2 = (Get-Content $callReq | & { $ErrorActionPreference = 'Continue'; & $Exe serve --db $db 2>$null } | Out-String)
 $answered = 0; $ok = 0
 foreach ($ln in ($out2 -split "`n")) {
   try { $o = $ln.Trim() | ConvertFrom-Json } catch { continue }

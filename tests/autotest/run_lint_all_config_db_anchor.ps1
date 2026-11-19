@@ -82,11 +82,11 @@ Write-Ascii (Join-Path $proj 'drag-lint-lint.json') '{ "enabled": ["magic-litera
 # relies on it, so the fixture must reproduce it rather than putting the DB
 # somewhere convenient.
 $db = Join-Path (Join-Path $proj '_D-RAG') 'p.sqlite'
-& $exePath index $proj --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $proj --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 function LintFrom([string]$Cwd) {
   Push-Location $Cwd
-  try   { return (& $exePath lint-all --db $db --rules-dir $rules 2>$null | Out-String) }
+  try   { return (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rules-dir $rules 2>$null } | Out-String) }
   finally { Pop-Location }
 }
 function FindingsOnly([string]$T) {
@@ -121,7 +121,7 @@ Check 'A1 the finding SET is identical from both directories' `
 $otherCfg = Join-Path $WorkDir 'other-lint.json'
 Write-Ascii $otherCfg '{ "disabled": ["magic-literal"] }'
 Push-Location 'C:\TEMP'
-try   { $withCfg = & $exePath lint-all --db $db --rules-dir $rules --config $otherCfg 2>$null | Out-String }
+try   { $withCfg = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rules-dir $rules --config $otherCfg 2>$null } | Out-String }
 finally { Pop-Location }
 Check 'A2 an explicit --config still overrides the --db anchor' `
       (-not ($withCfg -match 'magic-literal')) `

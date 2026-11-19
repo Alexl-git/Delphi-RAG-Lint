@@ -139,8 +139,8 @@ Write-Host 'run_test_project_rule_scoping -- checks whose remedy the caller coul
 
 Push-Location C:\TEMP
 try {
-  $naming = & $Exe lint (Join-Path $WorkDir 'uTestsFixture.pas') 2>&1 | Out-String
-  $procAll = & $Exe lint (Join-Path $WorkDir 'uProcLaunch.pas')  2>&1 | Out-String
+  $naming = & { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $WorkDir 'uTestsFixture.pas') 2>&1 | ForEach-Object { "$_" } } | Out-String
+  $procAll = & { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $WorkDir 'uProcLaunch.pas')  2>&1 | ForEach-Object { "$_" } } | Out-String
 } finally { Pop-Location }
 
 # SECTION 2 ASSERTS ON unsafe-shellexecute ONLY, and must be filtered to it.

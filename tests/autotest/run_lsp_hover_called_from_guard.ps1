@@ -115,7 +115,7 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'cf.sqlite'
-& $Exe index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' (Test-Path $db)
 
 $lines = [System.IO.File]::ReadAllLines($file)
@@ -170,10 +170,10 @@ Check 'L5 hoverBundle answered with a model' ($null -ne $b -and $null -ne $b.mod
 Check 'L5 hoverBundle model facts carry NO Called from: (the popup has its resolvedCallers grid)' (@($bf | Where-Object { $_ -match 'Called from:' }).Count -eq 0) ("facts=" + ($bf -join ' | '))
 Check 'L5 hoverBundle resolvedCallers still lists both callers' (@($b.resolvedCallers).Count -ge 2)
 
-$cli = (& $Exe hover --qname uCf.TWorker.Target --db $db --format md 2>$null) -join "`n"
+$cli = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname uCf.TWorker.Target --db $db --format md 2>$null }) -join "`n"
 $cc = @(CfLines $cli)
 Check 'C1 CLI hover --format md Target: one Called from: naming CallerA and CallerB' ($cc.Count -eq 1 -and $cc[0] -match 'CallerA' -and $cc[0] -match 'CallerB') ("md=" + (Flat $cli))
-$cliL = (& $Exe hover --qname uCf.TWorker.Lonely --db $db --format md 2>$null) -join "`n"
+$cliL = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname uCf.TWorker.Lonely --db $db --format md 2>$null }) -join "`n"
 Check 'C2 CLI hover Lonely: answered, no Called from:' ($cliL -match 'Lonely' -and (CfLines $cliL).Count -eq 0) ("md=" + (Flat $cliL))
 
 if ($script:Failed) { Write-Host 'run_lsp_hover_called_from_guard: FAIL' -ForegroundColor Red; exit 1 }

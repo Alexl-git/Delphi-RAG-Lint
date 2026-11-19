@@ -32,7 +32,7 @@ function Assert($name, $cond) {
 }
 
 function Get-Findings([string[]]$ArgList) {
-  $raw = & $exe @ArgList 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exe @ArgList 2>$null }
   $text = ($raw -join "`n").Trim()
   if ($text -eq '') { return @() }
   try { $j = $text | ConvertFrom-Json } catch { return @() }
@@ -90,7 +90,7 @@ New-Item -ItemType Directory -Path $tmp | Out-Null
 try {
   foreach ($sub in 'inherit', 'proj') {
     $db = Join-Path $tmp "$sub.sqlite"
-    & $exe index (Join-Path $fx $sub) --db $db *> (Join-Path $tmp "$sub-index.log")
+    & { $ErrorActionPreference = 'Continue'; & $exe index (Join-Path $fx $sub) --db $db *> (Join-Path $tmp "$sub-index.log") }
     Assert "index $sub exit 0" ($LASTEXITCODE -eq 0)
   }
   $f = Get-Findings @('lint-all', '--db', (Join-Path $tmp 'inherit.sqlite'), '--json')

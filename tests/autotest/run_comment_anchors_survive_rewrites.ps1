@@ -30,7 +30,7 @@ function New-Fixture([string]$Name,[string]$Unit){
   New-Item -ItemType Directory -Path $d -Force | Out-Null
   Write-Ascii (Join-Path $d 'Fx.pas') $Unit
   Write-Ascii (Join-Path $d 'P.dpr') "program P;`nuses`n  Fx in 'Fx.pas';`nbegin`nend.`n"
-  & $exePath index $d --db (Join-Path $d 'x.sqlite') *> $null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $d --db (Join-Path $d 'x.sqlite') *> $null }
   return $d
 }
 
@@ -53,7 +53,7 @@ end;
 end.
 '@
 $dA = New-Fixture 'a' $unitA
-& $exePath lint-all --db (Join-Path $dA 'x.sqlite') --fix --apply *> $null
+& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db (Join-Path $dA 'x.sqlite') --fix --apply *> $null }
 $outA = [IO.File]::ReadAllText((Join-Path $dA 'Fx.pas'))
 Check 'A positive control: the fix ran (unused local gone)' ($outA -notmatch 'Unused: Integer')
 Check 'A bookmark dl:bk7 survives the unused-local fix' ($outA -match 'dl:bk7')
@@ -77,7 +77,7 @@ end;
 end.
 '@
 $dB = New-Fixture 'b' $unitB
-& $exePath document --unit (Join-Path $dB 'Fx.pas') --apply --no-backup --db (Join-Path $dB 'x.sqlite') *> $null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit (Join-Path $dB 'Fx.pas') --apply --no-backup --db (Join-Path $dB 'x.sqlite') *> $null }
 $outB = [IO.File]::ReadAllText((Join-Path $dB 'Fx.pas'))
 $n = ([regex]::Matches($outB,'marker before')).Count
 Check 'B positive control: a doc block was generated' ($outB -match '///\s*<param')

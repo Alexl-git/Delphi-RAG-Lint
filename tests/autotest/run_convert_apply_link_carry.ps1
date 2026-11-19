@@ -200,13 +200,13 @@ $rulesPath = Join-Path $WorkDir 'rules.txt'; Write-Ascii $rulesPath $Rules
 
 $db = Join-Path $WorkDir 'carry.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $fix --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $fix --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) ($indexOut -join ' | ')
 
 function Invoke-Apply([string[]]$extra) {
   Push-Location $fix
   try {
-    $raw = (& $Exe convert-apply --unit 'UForm.pas' --rules $rulesPath --db $db @extra 2>$null) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'UForm.pas' --rules $rulesPath --db $db @extra 2>$null }) -join "`n"
     return @{ Raw = $raw; Exit = $LASTEXITCODE }
   } finally { Pop-Location }
 }
@@ -269,7 +269,7 @@ end
 '@
 # convert-reemit takes QUALIFIED type names (a bare name resolves to an EMPTY tree,
 # and the identity gate then correctly carries nothing -- TreesDescribeThisBlock).
-$rr = (& $Exe convert-reemit --from OldUnit.TOldBtn --to NewUnit.TNewBtn --rules $rulesPath --from-block $blockPath --db $db 2>$null) -join "`n"
+$rr = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-reemit --from OldUnit.TOldBtn --to NewUnit.TNewBtn --rules $rulesPath --from-block $blockPath --db $db 2>$null }) -join "`n"
 $rdoc = $null
 try { $rdoc = $rr | ConvertFrom-Json } catch { }
 Check 'convert-reemit json parses' ($null -ne $rdoc) "raw=$rr"

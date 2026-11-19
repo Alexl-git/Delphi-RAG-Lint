@@ -304,7 +304,7 @@ end
 "@ $utf8bom
 
 $db = P 'fx.sqlite'
-$idx = & $Exe index $WorkDir --db $db 2>&1
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'V the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db)) "exit=$LASTEXITCODE; $($idx[-1])"
 
 # One convert-apply --format json run; raw stdout bytes + stderr text.

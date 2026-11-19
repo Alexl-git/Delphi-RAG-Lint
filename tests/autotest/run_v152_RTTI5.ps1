@@ -60,29 +60,29 @@ try {
   $want = @($want | Sort-Object)
   Check 'CONTROL the fixture names expectations' ($want.Count -eq 6) "$($want.Count) EXPECT"
 
-  $r1 = RuleFindings (& $exePath lint $fixture --config $cfgFile --json 2>$null)
+  $r1 = RuleFindings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $fixture --config $cfgFile --json 2>$null })
   $r1 | ForEach-Object { Write-Host ("    {0} [{1}] {2}" -f $_.start_line, $_.severity, $_.message) -ForegroundColor DarkGray }
   $got = Keys $r1
   Check 'RUN 1 exactly the EXPECT lines fire, with sub-kind and severity' (($got -join ' | ') -eq ($want -join ' | ')) "got [$($got -join ' | ')] want [$($want -join ' | ')]"
   Check 'RUN 1 the message names the field and the named-type fix' (@($r1 | Where-Object { $_.message -match 'FBad' -and $_.message -match 'named type' }).Count -eq 1)
 
-  $r2 = RuleFindings (& $exePath lint $fixture --json 2>$null)
+  $r2 = RuleFindings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $fixture --json 2>$null })
   Check 'RUN 2 no config: the rule ships OFF' ($r2.Count -eq 0) "$($r2.Count) finding(s)"
 
-  $r3 = RuleFindings (& $exePath lint $fixture --rule $Rule --json 2>$null)
+  $r3 = RuleFindings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $fixture --rule $Rule --json 2>$null })
   Check 'RUN 3 --rule: the same lines' ((($(Keys $r3)) -join ' | ') -eq ($want -join ' | ')) "got $($r3.Count)"
 
   $src = Join-Path $scratch 'src'; [void](New-Item -ItemType Directory -Force -Path $src)
   $text = [IO.File]::ReadAllText($fixture).Replace('unit rtti-unavailable;', 'unit uRttiAnon;')
   [IO.File]::WriteAllText((Join-Path $src 'uRttiAnon.pas'), $text, [Text.Encoding]::ASCII)
   $db = Join-Path $scratch 'rtti5.sqlite'
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'RUN 4 index exits 0' ($LASTEXITCODE -eq 0)
-  $r4 = RuleFindings (& $exePath lint-all --db $db --library-db none --rule $Rule --format json 2>$null)
+  $r4 = RuleFindings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --library-db none --rule $Rule --format json 2>$null })
   Check 'RUN 4 lint-all --rule: the same lines' ((($(Keys $r4)) -join ' | ') -eq ($want -join ' | ')) "got $($r4.Count)"
-  $r5 = RuleFindings (& $exePath lint-all --db $db --library-db none --enable $Rule --format json 2>$null)
+  $r5 = RuleFindings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --library-db none --enable $Rule --format json 2>$null })
   Check 'RUN 4 lint-all --enable: the same lines' ((($(Keys $r5)) -join ' | ') -eq ($want -join ' | ')) "got $($r5.Count)"
-  $r6 = RuleFindings (& $exePath lint-all --db $db --library-db none --format json 2>$null)
+  $r6 = RuleFindings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --library-db none --format json 2>$null })
   Check 'RUN 4 plain lint-all: OFF' ($r6.Count -eq 0) "$($r6.Count) finding(s)"
 } finally {
   if (Test-Path $scratch) { [IO.Directory]::Delete($scratch, $true) }

@@ -115,7 +115,7 @@ Check 'all four fixture lines located' (
   "wrap $lnWrapStart-$lnWrapEnd, single $lnSingle, unmarked $lnUnmarked"
 
 $concat = @()
-foreach ($line in (& $Exe lint $fixture 2>$null)) {
+foreach ($line in (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture 2>$null })) {
   if ("$line" -match ':(\d+):\d+\s+\[\w+\]\s+concat-in-loop:')        { $concat += [int]$Matches[1] }
 }
 $concat = @($concat | Sort-Object -Unique)
@@ -149,11 +149,11 @@ Check "exactly one finding survives" ($concat.Count -eq 1) "got: $($concat -join
 Write-Host ''
 Write-Host 'THE OTHER HALF -- the span marker must not be reported UNUSED' -ForegroundColor Cyan
 $db = Join-Path $WorkDir 'MarkerSpan.sqlite'
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' (Test-Path $db)
 
 $unused = @()
-foreach ($line in (& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db 2>&1)) {
+foreach ($line in (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db 2>&1 | ForEach-Object { "$_" } })) {
   if ("$line" -match ':(\d+):\d+\s+\[\w+\]\s+review-marker-unused:') { $unused += [int]$Matches[1] }
 }
 $unused = @($unused | Sort-Object -Unique)
@@ -241,11 +241,11 @@ end.
 '@ -replace "`r`n", "`n") -replace "`n", "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
 
 $rtDb = Join-Path $rtDir '_D-RAG\App.sqlite'
-& $Exe index --project (Join-Path $rtDir 'App.dpr') --db $rtDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $rtDir 'App.dpr') --db $rtDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 function RtLines($pattern) {
   $out = @()
-  foreach ($line in (& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $rtDb 2>&1)) {
+  foreach ($line in (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $rtDb 2>&1 | ForEach-Object { "$_" } })) {
     if ("$line" -match (':(\d+):\d+\s+\[\w+\]\s+' + $pattern + ':')) { $out += [int]$Matches[1] }
   }
   return @($out | Sort-Object -Unique)
@@ -265,8 +265,8 @@ Check 'the fixture really is a WRAPPED statement (anchor line has no ";")' `
   "line $rtLine = '$($rtSrc[$rtLine - 1])' -- if this ends the statement the round trip is trivial"
 
 # 3. Round-trip it with the line the report named.
-& $Exe allow $rtPas --fix-line $rtLine --fix-rule concat-in-loop --apply 2>&1 | Out-Null
-& $Exe index --project (Join-Path $rtDir 'App.dpr') --db $rtDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe allow $rtPas --fix-line $rtLine --fix-rule concat-in-loop --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $rtDir 'App.dpr') --db $rtDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 Check 'after allow --fix-line <reported line>, the finding is SUPPRESSED' `
   ((RtLines 'concat-in-loop').Count -eq 0) `

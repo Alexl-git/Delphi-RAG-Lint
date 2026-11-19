@@ -37,10 +37,10 @@ try {
   $pas = Join-Path $fx 'uV.pas'
   $want = Join-Path $PSScriptRoot "..\lint-project\$rule\expected\uV.fixed.pas"
   $fixArgs = @('--config', $cfg, '--fix', '--fix-rule', $rule, '--apply', '--no-backup')
-  & $Exe lint-all --db $db --rule $rule @fixArgs 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule $rule @fixArgs 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'fix: result is byte-identical to expected\uV.fixed.pas' (Test-G8BytesEqual $pas $want)
   $before = [IO.File]::ReadAllBytes($pas)
-  & $Exe lint-all --db $db --rule $rule @fixArgs 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule $rule @fixArgs 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'fix: second run leaves the bytes unchanged' ([Linq.Enumerable]::SequenceEqual([byte[]]$before, [byte[]][IO.File]::ReadAllBytes($pas)))
   Check 'fix: reindexed fixed file no longer fires' ((Invoke-G8Index $Exe $fx $db) -eq 0 -and (Get-G8Findings $Exe $db $rule @('--config', $cfg)).Count -eq 0)
   # OFF by default is only meaningful beside the positive control above.

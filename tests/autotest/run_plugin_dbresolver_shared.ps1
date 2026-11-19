@@ -53,7 +53,7 @@ try {
   $exe = "$WorkDir\LiveDbChoiceHarness.exe"
   if (-not $buildOk -or -not (Test-Path $exe)) { throw 'harness did not build' }
 
-  $lines = @(& $exe 2>&1 | ForEach-Object { "$_" })
+  $lines = @(& { $ErrorActionPreference = 'Continue'; & $exe 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
   $code  = $LASTEXITCODE
   $pass  = @($lines | Where-Object { $_ -like 'PASS *' })
   foreach ($l in $lines) {

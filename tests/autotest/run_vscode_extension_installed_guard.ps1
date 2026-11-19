@@ -80,7 +80,7 @@ function Test-InstalledTree([string]$pUserDir, [string]$pExtRoot, [string]$pDist
 
 # O15: the "drag-lint <version>" line of an engine exe, or '' when it cannot be run.
 function Get-EngineVersion([string]$pExe) {
-  try { return ((& $pExe --version 2>&1 | Select-Object -First 1) -as [string]).Trim() } catch { return '' }
+  try { return ((& { $ErrorActionPreference = 'Continue'; & $pExe --version 2>&1 | ForEach-Object { "$_" } } | Select-Object -First 1) -as [string]).Trim() } catch { return '' }
 }
 
 # O15: Fails/Notes for the private engine copies of one VS Code user dir. A copy dir is

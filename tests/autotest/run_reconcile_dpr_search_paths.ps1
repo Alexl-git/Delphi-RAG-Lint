@@ -101,7 +101,7 @@ Write-Ascii (Join-Path $WorkDir 'P.dproj') @'
 </Project>
 '@
 
-$out = (& $Exe reconcile-project (Join-Path $WorkDir 'P.dpr') 2>&1) -join "`n"
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project (Join-Path $WorkDir 'P.dpr') 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 
 Check 'a unit reachable only via the .dproj search path is NOT called EXTRA' `
   (-not ($out -match 'EXTRA[\s\S]{0,300}?Far\.Away')) "out=$out"

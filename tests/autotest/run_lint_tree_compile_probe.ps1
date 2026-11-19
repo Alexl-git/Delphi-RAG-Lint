@@ -66,14 +66,14 @@ W "$Work\buf.pas" @(
   'procedure KeepProc; begin end;','end.')
 
 $db = "$Work\probe.sqlite"
-& $Exe index $Work --db $db --rebuild *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $Work --db $db --rebuild *> $null }
 Check 'fixture indexed' (Test-Path $db)
 
 $base = "$Work\base.json"
-& $Exe lint-tree --unit "$Work\ProbeB.pas" --db $db --write-baseline $base --project "$Work\ProbeProj.dpr" --platform Win64 --format json *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe lint-tree --unit "$Work\ProbeB.pas" --db $db --write-baseline $base --project "$Work\ProbeProj.dpr" --platform Win64 --format json *> $null }
 Check 'baseline captured' (Test-Path $base)
 
-$raw = & $Exe lint-tree --unit "$Work\ProbeB.pas" --db $db --buffer "$Work\buf.pas" --baseline $base --project "$Work\ProbeProj.dpr" --platform Win64 --compile --format json 2>$null
+$raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-tree --unit "$Work\ProbeB.pas" --db $db --buffer "$Work\buf.pas" --baseline $base --project "$Work\ProbeProj.dpr" --platform Win64 --compile --format json 2>$null }
 $r = try { ($raw | Out-String) | ConvertFrom-Json } catch { $null }
 Check 'lint-tree returned JSON' ($null -ne $r)
 $cc = @($r.findings | Where-Object { $_.ref_kind -eq 'compile' })
@@ -109,7 +109,7 @@ Check 'the generated probe unit never appears as a finding' `
       (@($cc | Where-Object { $_.file -match 'draglint_probe' }).Count -eq 0)
 
 # NEG: an unchanged buffer must not compile anything at all.
-$raw2 = & $Exe lint-tree --unit "$Work\ProbeB.pas" --db $db --buffer "$Work\ProbeB.pas" --baseline $base --project "$Work\ProbeProj.dpr" --platform Win64 --compile --format json 2>$null
+$raw2 = & { $ErrorActionPreference = 'Continue'; & $Exe lint-tree --unit "$Work\ProbeB.pas" --db $db --buffer "$Work\ProbeB.pas" --baseline $base --project "$Work\ProbeProj.dpr" --platform Win64 --compile --format json 2>$null }
 $r2 = try { ($raw2 | Out-String) | ConvertFrom-Json } catch { $null }
 Check 'NEG unchanged buffer -> tier 3 does not run' ($r2.compiled -ne $true) `
       'compiling a closure on an unchanged interface burns a core per keystroke'

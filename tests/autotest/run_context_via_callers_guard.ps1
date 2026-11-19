@@ -111,28 +111,28 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'via.sqlite'
-& $Exe index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' (Test-Path $db)
 
 $IMPL  = 'uViaWork.TWorker.DoWork'
 $IFACE = 'uViaWork.IWorker.DoWork'
 
-$jraw = (& $Exe query find-callers --name DoWork --resolved --json --db $db 2>$null) -join "`n"
+$jraw = (& { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name DoWork --resolved --json --db $db 2>$null }) -join "`n"
 $fc = @($jraw.Substring($jraw.IndexOf('[')) | ConvertFrom-Json)
 $N = @($fc | Where-Object { $_.target_qname -eq $IMPL -and $_.via -eq $IFACE }).Count
 Check 'FC find-callers --resolved: N >= 1 via rows on TWorker.DoWork' ($N -ge 1) "N=$N"
 
-$md = (& $Exe context --task "modify TWorker.DoWork" --db $db --format markdown 2>$null | Out-String)
+$md = (& { $ErrorActionPreference = 'Continue'; & $Exe context --task "modify TWorker.DoWork" --db $db --format markdown 2>$null } | Out-String)
 Check 'CX1 markdown via header = N' ($md -like "*## Callers via interface dispatch (${IFACE}): $N site(s)*")
 
-$js = (& $Exe context --task "modify TWorker.DoWork" --db $db --format json 2>$null | Out-String)
+$js = (& { $ErrorActionPreference = 'Continue'; & $Exe context --task "modify TWorker.DoWork" --db $db --format json 2>$null } | Out-String)
 $o = $js.Substring($js.IndexOf('{')) | ConvertFrom-Json
 $vd = @($o.via_dispatch)
 Check 'CX2 json via_dispatch names IWorker.DoWork, kind interface, sites = N' `
   (($o.PSObject.Properties.Name -contains 'via_dispatch') -and ($vd.Count -eq 1) -and
    ($vd[0].via -eq $IFACE) -and ($vd[0].kind -eq 'interface') -and ([int]$vd[0].sites -eq $N)) $js.Trim()
 
-$jd = (& $Exe context --task "modify TWorker.Direct" --db $db --format json 2>$null | Out-String)
+$jd = (& { $ErrorActionPreference = 'Continue'; & $Exe context --task "modify TWorker.Direct" --db $db --format json 2>$null } | Out-String)
 $od = $jd.Substring($jd.IndexOf('{')) | ConvertFrom-Json
 Check 'CX3 control: no via_dispatch key on a directly-called method' `
   (($od.resolved -eq $true) -and -not ($od.PSObject.Properties.Name -contains 'via_dispatch')) $jd.Trim()

@@ -141,7 +141,7 @@ end.
 '@
 
 $Db = Join-Path $WorkDir 'const.sqlite'
-& $Exe index $Src --db $Db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $Src --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'built the fixture index' (Test-Path $Db)
 
 # ---- THE EXTRACTOR CONTRACT ------------------------------------------------
@@ -149,7 +149,7 @@ Check 'built the fixture index' (Test-Path $Db)
 # still blank the fault is downstream; if this fails the popup cannot be right
 # whatever the renderer does.
 function SigOf([string]$name) {
-  $raw = & $Exe query --name $name --db $Db --json 2>&1
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe query --name $name --db $Db --json 2>&1 | ForEach-Object { "$_" } }
   $txt = ($raw | Where-Object { $_ -notmatch '^\(loaded defaults' }) -join "`n"
   try { $o = $txt | ConvertFrom-Json } catch { return '<unparseable>' }
   if ($null -eq $o) { return '<absent>' }

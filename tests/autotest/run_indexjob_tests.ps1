@@ -60,7 +60,7 @@ if (($log -notmatch 'BUILD_EXITCODE=0') -or ($log -match 'Error:') -or -not (Tes
 }
 
 # --- run ---
-$out = @(& $testExe 2>&1 | ForEach-Object { "$_" })
+$out = @(& { $ErrorActionPreference = 'Continue'; & $testExe 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
 $code = $LASTEXITCODE
 $out | Where-Object { $_ -match '^FAIL|passed' } | ForEach-Object { Write-Host $_ }
 $last = ($out | Where-Object { $_ -match '^\d+ passed, \d+ failed$' } | Select-Object -Last 1)

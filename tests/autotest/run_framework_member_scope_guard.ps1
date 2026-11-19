@@ -92,7 +92,7 @@ W (Join-Path $lib 'FMX.Types.pas') @(
   'implementation', '', 'procedure TTimer.Restart;', 'begin', 'end;', '', 'end.')
 
 $libDb = Join-Path $WorkDir 'lib.sqlite'
-& $Exe index $lib --db $libDb *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $lib --db $libDb *> $null }
 Check 'library fixture indexed (both TTimer declarations)' (Test-Path $libDb) $libDb
 
 # --- CASE A: the consumer names the unit in its own uses --------------------
@@ -114,11 +114,11 @@ W (Join-Path $vclDir 'VclIndirect.pas') @(
   '  T.Enabled := False;', 'end;', '', 'end.')
 
 $vclDb = Join-Path $WorkDir 'vclapp.sqlite'
-& $Exe index $vclDir --db $vclDb *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $vclDir --db $vclDb *> $null }
 Check 'VCL project fixture indexed' (Test-Path $vclDb) $vclDb
 
 function ResolvedAt([string]$file, [int]$line, [int]$col, [string]$projDb) {
-  $out = & $Exe typeat "${file}:${line}:${col}" --db $projDb --db $libDb 2>$null | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe typeat "${file}:${line}:${col}" --db $projDb --db $libDb 2>$null } | Out-String
   $m = [regex]::Match($out, 'Resolved:\s*(\S+)')
   if ($m.Success) { return $m.Groups[1].Value }
   return "<unresolved> $($out.Trim())"
@@ -145,7 +145,7 @@ W (Join-Path $fmxDir 'FmxOther.pas') @(
   'unit FmxOther;', '', 'interface', '', 'uses', '  FMX.Types', '  ;', '',
   'implementation', '', 'end.')
 $fmxDb = Join-Path $WorkDir 'fmxapp.sqlite'
-& $Exe index $fmxDir --db $fmxDb *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $fmxDir --db $fmxDb *> $null }
 
 Write-Host ''
 Write-Host 'CASE C: MIRROR IMAGE -- an FMX project must get FMX' -ForegroundColor Cyan

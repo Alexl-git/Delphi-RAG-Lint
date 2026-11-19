@@ -34,7 +34,7 @@ try {
   $sec = [math]::Round($sw.Elapsed.TotalSeconds, 1)
   if ($done -and $sec -lt $MaxSeconds) { Write-Host "PASS timing: ${sec} s < $MaxSeconds s" }
   else { Write-Host "FAIL timing: $(if ($done) { "${sec} s" } else { "not finished after ${sec} s" }) >= $MaxSeconds s"; $fail++ }
-  $out = & (Join-Path $repo 'tests\lint\run_lint_tests.ps1') -Exe $Exe -Filter 'tls-verification-disabled*' 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & (Join-Path $repo 'tests\lint\run_lint_tests.ps1') -Exe $Exe -Filter 'tls-verification-disabled*' 2>&1 | ForEach-Object { "$_" } } | Out-String
   if ($LASTEXITCODE -eq 0 -and $out -notmatch 'FAIL') { Write-Host 'PASS behaviour: tls-verification-disabled fixtures' }
   else { Write-Host "FAIL behaviour: $($out.Trim() -replace '\s+', ' ')"; $fail++ }
 } finally {

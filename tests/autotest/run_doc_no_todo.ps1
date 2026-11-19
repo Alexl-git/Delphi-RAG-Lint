@@ -111,8 +111,8 @@ New-Item -ItemType Directory $dirA | Out-Null
 $fileA = Join-Path $dirA 'uNoTodo.pas'
 $dbA   = Join-Path $dirA 'a.sqlite'
 Write-Fixture $fileA
-& $Exe index $dirA --db $dbA 2>&1 | Out-Null
-& $Exe document --qname uNoTodo.Grab --db $dbA --apply --no-backup 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dirA --db $dbA 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe document --qname uNoTodo.Grab --db $dbA --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $textA = Get-Content $fileA -Raw
 
 Check 'ZERO "TODO" occurrences anywhere in the file' `
@@ -154,15 +154,15 @@ New-Item -ItemType Directory $dirB | Out-Null
 $fileB = Join-Path $dirB 'uNoTodo.pas'
 $dbB   = Join-Path $dirB 'b.sqlite'
 Write-Fixture $fileB
-& $Exe index $dirB --db $dbB 2>&1 | Out-Null
-& $Exe document --qname uNoTodo.Grab --db $dbB --apply --no-backup 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dirB --db $dbB 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe document --qname uNoTodo.Grab --db $dbB --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $bytes1 = [IO.File]::ReadAllBytes($fileB)
 # CRITICAL: re-index so the store sees the post-insert line numbers (see
 # run_doc_returns.ps1 Scenario C / run_doc_idempotent.ps1) -- otherwise the
 # stale index hands back pre-insert line numbers and the second apply would
 # insert a SECOND comment block instead of recognizing daUnchanged.
-& $Exe index $dirB --db $dbB 2>&1 | Out-Null
-$r2 = (& $Exe document --qname uNoTodo.Grab --db $dbB --apply --no-backup --json 2>&1) -join "`n"
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dirB --db $dbB 2>&1 | ForEach-Object { "$_" } } | Out-Null
+$r2 = (& { $ErrorActionPreference = 'Continue'; & $Exe document --qname uNoTodo.Grab --db $dbB --apply --no-backup --json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 $bytes2 = [IO.File]::ReadAllBytes($fileB)
 
 Check 'run2: action=unchanged' ($r2 -match '"action":"unchanged"') $r2
@@ -211,8 +211,8 @@ end.
 $normC = $LegacyBody -replace "`r`n", "`n" -replace "`n", "`r`n"
 [System.IO.File]::WriteAllText($fileC, $normC, [System.Text.Encoding]::ASCII)
 
-& $Exe index $dirC --db $dbC 2>&1 | Out-Null
-& $Exe document --qname uNoTodo.Grab --db $dbC --apply --no-backup 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dirC --db $dbC 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe document --qname uNoTodo.Grab --db $dbC --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $textC = Get-Content $fileC -Raw
 
 Check 'legacy cleanup: ZERO "TODO" occurrences after re-run' `

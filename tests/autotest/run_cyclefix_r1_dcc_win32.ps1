@@ -98,7 +98,7 @@ try {
 
   Write-Host '== platform echo' -ForegroundColor Cyan
   $db = Join-Path $WorkDir 'edit.sqlite'
-  & $Exe index --project $ed --db $db *> (Join-Path $WorkDir 'index.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $ed --db $db *> (Join-Path $WorkDir 'index.log') }
   foreach ($pl in 'win32', 'win64') {
     $o = Join-Path $WorkDir "dry-$pl.json"
     $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `

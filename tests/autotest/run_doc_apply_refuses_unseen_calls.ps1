@@ -29,7 +29,7 @@ $root = Join-Path ([System.IO.Path]::GetTempPath()) ("dl-refuse-" + [Guid]::NewG
 $a = Join-Path $root 'a'; $b = Join-Path $root 'b'
 New-Item -ItemType Directory -Force -Path $a, $b | Out-Null
 function WriteAscii($path, $lines) { [IO.File]::WriteAllText($path, (($lines -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding)) }
-function Run([string[]]$xs) { $o = & $Exe @xs 2>&1 | Out-String; [pscustomobject]@{ Out = $o; Code = $LASTEXITCODE } }
+function Run([string[]]$xs) { $o = & { $ErrorActionPreference = 'Continue'; & $Exe @xs 2>&1 | ForEach-Object { "$_" } } | Out-String; [pscustomobject]@{ Out = $o; Code = $LASTEXITCODE } }
 WriteAscii (Join-Path $b 'uB.pas') @('unit uB;','interface','procedure Q;','implementation','procedure Q; begin end;','end.')
 $ua = Join-Path $a 'uA.pas'
 $srcLines = @('unit uA;','interface','uses uB;','procedure P;','implementation','procedure P; begin Q; end;','procedure R; begin P; end;','end.')

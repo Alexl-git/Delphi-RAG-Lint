@@ -35,7 +35,7 @@ function LineOf([string]$File, [string]$Marker) {
   return [int]$m[0].LineNumber
 }
 function RuleFindings([string]$Db, [string[]]$Extra) {
-  $raw = & $exePath lint-all --db $Db --format json @Extra 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $Db --format json @Extra 2>$null }
   return @((Parse-Findings $raw) | Where-Object { $_.rule -eq $Rule })
 }
 function Fresh([string]$Name) {
@@ -48,7 +48,7 @@ function Fresh([string]$Name) {
 try {
   $src = Fresh 'a'
   $db = Join-Path $scratch 'a.sqlite'
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $second = Join-Path $src 'uIohSecond.pas'
 
   # positive-control: init-order-hazard
@@ -68,7 +68,7 @@ try {
   $t = $t.Replace("  uIohFirst in 'uIohFirst.pas',`r`n  uIohSecond in 'uIohSecond.pas',", "  uIohSecond in 'uIohSecond.pas',`r`n  uIohFirst in 'uIohFirst.pas',")
   [IO.File]::WriteAllText($dpr, $t, [Text.Encoding]::ASCII)
   $db3 = Join-Path $scratch 'b.sqlite'
-  & $exePath index $src3 --db $db3 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src3 --db $db3 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $flip = RuleFindings $db3 @('--rule', $Rule)
   Check 'RUN 3 the other .dpr order: uIohSecond is silent' (@($flip | Where-Object { $_.file_path -like '*uIohSecond.pas' }).Count -eq 0) "$($flip.Count) total"
   Check 'RUN 3 the other .dpr order: uIohFirst now fires on GSecond' (@($flip | Where-Object { $_.file_path -like '*uIohFirst.pas' -and $_.message -match 'GSecond' }).Count -eq 1) ''
@@ -76,7 +76,7 @@ try {
   $src4 = Fresh 'c'
   [IO.File]::Delete((Join-Path $src4 'fxIoh.dpr'))
   $db4 = Join-Path $scratch 'c.sqlite'
-  & $exePath index $src4 --db $db4 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src4 --db $db4 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $none = RuleFindings $db4 @('--rule', $Rule)
   Check 'RUN 4 no .dpr: no order, no finding' ($none.Count -eq 0) "$($none.Count) finding(s)"
 } finally {

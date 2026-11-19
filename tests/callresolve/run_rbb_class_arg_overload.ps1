@@ -126,7 +126,7 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'rbbclassarg.sqlite'
-& $Exe index $WorkDir --db $db --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 if (-not (Test-Path $db)) { Write-Host "FATAL: index wrote no DB" -ForegroundColor Red; exit 2 }
 
 $q = @"
@@ -138,7 +138,7 @@ JOIN symbols enc ON enc.id = r.enclosing_symbol_id
 JOIN symbols tgt ON tgt.id = ce.target_symbol_id
 WHERE r.kind = 'call' AND r.name_text IN ('FindInfo', 'Show')
 "@
-$raw = & $Exe sql --db $db --json --query $q 2>$null
+$raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --query $q 2>$null }
 $doc = ($raw | Where-Object { $_ -notmatch '^\(loaded defaults' }) -join "`n" | ConvertFrom-Json
 # sql --json rows are POSITIONAL arrays: map them onto the column names.
 $cols = @($doc.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })

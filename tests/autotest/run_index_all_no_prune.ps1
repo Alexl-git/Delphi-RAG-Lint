@@ -203,7 +203,7 @@ try {
   # 1. --no-prune SUPPRESSES eviction on `index --all` AND reports the dry look.
   # ==========================================================================
   Write-ProjA $true
-  $o = @(& $exePath index --all --config $cfg --only NoPruneSection --jobs 1 2>&1)
+  $o = @(& { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only NoPruneSection --jobs 1 2>&1 | ForEach-Object { "$_" } })
   $rc = $LASTEXITCODE
   Check '1a. initial index --all exits 0' ($rc -eq 0) "exit=$rc"
   Check '1a. both members indexed' `
@@ -213,7 +213,7 @@ try {
   Check '1a. Member2 has symbols' ([int]$m2Syms -gt 0) "symbols=$m2Syms -- a zero makes 1c vacuous"
 
   Write-ProjA $false   # drop Member2 from the project; the FILE STAYS ON DISK
-  $o = @(& $exePath index --all --config $cfg --only NoPruneSection --jobs 1 --recompile --no-prune 2>&1)
+  $o = @(& { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only NoPruneSection --jobs 1 --recompile --no-prune 2>&1 | ForEach-Object { "$_" } })
   $rc = $LASTEXITCODE
   Check '1b. index --all --no-prune exits 0' ($rc -eq 0) "exit=$rc"
   Check '1c. --no-prune KEPT the out-of-scope file' ((Rows $sectionDb 'files' 'member2.pas') -eq '1') `
@@ -228,7 +228,7 @@ try {
   # ==========================================================================
   # 2. WITHOUT the flag the same run deletes it -- group 1 is not vacuous.
   # ==========================================================================
-  $o = @(& $exePath index --all --config $cfg --only NoPruneSection --jobs 1 --recompile 2>&1)
+  $o = @(& { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only NoPruneSection --jobs 1 --recompile 2>&1 | ForEach-Object { "$_" } })
   $rc = $LASTEXITCODE
   Check '2a. index --all --recompile exits 0' ($rc -eq 0) "exit=$rc"
   Check '2b. without --no-prune the out-of-scope file IS evicted' ((Rows $sectionDb 'files' 'member2.pas') -eq '0') `
@@ -242,11 +242,11 @@ try {
   #    which builds its child command line by hand.
   # ==========================================================================
   Write-ProjA $true
-  & $exePath index --all --config $cfg --only NoPruneSection --jobs 1 --recompile 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only NoPruneSection --jobs 1 --recompile 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check '3a. Member2 is back in the section' ((Rows $sectionDb 'files' 'member2.pas') -eq '1') `
     "files rows=$(Rows $sectionDb 'files' 'member2.pas')"
   Write-ProjA $false
-  $o = @(& $exePath index --all --config $cfg --only NoPruneSection --jobs 2 --recompile --no-prune 2>&1)
+  $o = @(& { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only NoPruneSection --jobs 2 --recompile --no-prune 2>&1 | ForEach-Object { "$_" } })
   $rc = $LASTEXITCODE
   Check '3b. parallel index --all --no-prune exits 0' ($rc -eq 0) "exit=$rc"
   Check '3c. the child honoured --no-prune' ((Rows $sectionDb 'files' 'member2.pas') -eq '1') `

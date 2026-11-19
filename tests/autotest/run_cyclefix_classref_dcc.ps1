@@ -95,7 +95,7 @@ function Invoke-Program([string]$Dproj) {
 }
 function Invoke-Index([string]$Dproj, [string]$Tag) {
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project $Dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $Dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
   return $db
 }
 function Get-Plan([string]$Dproj, [string]$Tag) {
@@ -137,7 +137,7 @@ try {
   $out1 = Invoke-Program (Join-Path $edit 'ClsLab.dproj')
   Check 'c4 stdout byte-identical to the untouched build''s' (($out0 -ne '<no exe>') -and ($out1 -ceq $out0) -and ($out0 -match 'widget runs')) "before=[$out0] after=[$out1]"
   $db2 = Invoke-Index (Join-Path $edit 'ClsLab.dproj') 'c-after'
-  $left = (& $Exe cycles --db $db2 --library-db none 2>$null | Out-String)
+  $left = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --db $db2 --library-db none 2>$null } | Out-String)
   Check 'c5 no cycle after a re-index' ($left -match 'No circular unit dependencies') $left
 
   Write-Host '== control k1: the class cannot move (its body uses the registry)' -ForegroundColor Cyan

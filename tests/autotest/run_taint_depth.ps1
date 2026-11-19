@@ -60,8 +60,8 @@ function At($List, [string]$Unit, [int]$Line) {
 
 Push-Location $env:TEMP
 try {
-  & $exePath index $fx    --db $db  2>&1 | Out-Null
-  & $exePath index $libFx --db $lib 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $fx    --db $db  2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $libFx --db $lib 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
   $r = LintAll 'default' $empty
   Check "default config: lint-all finishes within $TimeoutSec s" $r.Done

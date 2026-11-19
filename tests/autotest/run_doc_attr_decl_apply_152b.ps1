@@ -38,8 +38,8 @@ $lines = @('unit attrapply;', '', 'interface', '', 'type', '  TFx = class', '  p
 [IO.File]::WriteAllText($src, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 Push-Location $WorkDir
 try {
-  & $Exe index $WorkDir --db $db --library-db none 2>&1 | Out-Null
-  $o = (& $Exe document --unit $src --apply --db $db --library-db none 2>&1 | Out-String)
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe document --unit $src --apply --db $db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $t = [IO.File]::ReadAllText($src)
   Check 'SANITY: document ran' ($o -match 'doc:') $o
   Check 'CONTROL: Plain (no attribute) got a returns tag' ($t -match '(?s)<returns>.*function TFx\.Plain|(?s)<returns>[^\r\n]*\r\n\s*function Plain') $t

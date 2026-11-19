@@ -59,7 +59,7 @@ Write-Ascii "$WorkDir\L\L.dlcontext.json" ((@{ schema = 1; project = "$WorkDir\L
   targetCompiler = '10.3'; source = @{ file = "$WorkDir\L\L.dpr"; sha1 = '' } } | ConvertTo-Json -Depth 5))
 
 $db = "$WorkDir\fixture.sqlite"
-& $Exe index "$WorkDir\loose" --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\loose" --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'SETUP: fixture index built' (Test-Path $db)
 
 function Uri($p) { 'file:///' + ($p -replace '\\', '/') }

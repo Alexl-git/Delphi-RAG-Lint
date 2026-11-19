@@ -66,7 +66,7 @@ $dbA     = Join-Path $scratchA 'a.sqlite'
 Copy-Item $fixture $targetA -Force
 $pristineBytes = [IO.File]::ReadAllBytes($targetA)
 
-& $exePath index $scratchA --db $dbA 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $scratchA --db $dbA 2>$null } | Out-Null
 Check 'A: index exits 0' ($LASTEXITCODE -eq 0)
 
 # v(ADP3 T3d2 D8 review round 2, minor 3): the collision this runner exists to
@@ -75,7 +75,7 @@ Check 'A: index exits 0' ($LASTEXITCODE -eq 0)
 # check below would still pass while no longer testing the collision at all
 # -- assert the premise the same way PART B already asserts its own
 # ("dup.Widget resolves across exactly TWO files").
-$combineRowsOut = (& $exePath query --name Combine --db $dbA --json 2>$null) -join "`n"
+$combineRowsOut = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name Combine --db $dbA --json 2>$null }) -join "`n"
 Check 'A: query --name Combine exits 0' ($LASTEXITCODE -eq 0)
 Check 'A FIXTURE: strip_collision.Combine resolves to exactly TWO rows' `
   ((([regex]::Matches($combineRowsOut, '"qualified_name"\s*:\s*"strip_collision\.Combine"')).Count) -eq 2) $combineRowsOut
@@ -86,7 +86,7 @@ Check 'A FIXTURE: strip_collision.Combine resolves to exactly TWO rows' `
 # overload (N-12), so the second overload's block is removed again here and
 # the unit reindexed -- the shape stays reachable from older engines and hand
 # edits, which is what this guard protects strip against.
-& $exePath document --qname strip_collision.Combine --db $dbA --apply --json 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --qname strip_collision.Combine --db $dbA --apply --json 2>$null } | Out-Null
 Check 'A: document --qname --apply exits 0' ($LASTEXITCODE -eq 0)
 $tmpLines = [IO.File]::ReadAllLines($targetA)
 $ia = -1; $ib = -1
@@ -97,7 +97,7 @@ for ($i = 0; $i -lt $tmpLines.Count; $i++) {
 if ($ia -ge 0 -and $ib -gt $ia + 1) {
   $keep = @($tmpLines[0..$ia]) + @($tmpLines[$ib..($tmpLines.Count - 1)])
   [IO.File]::WriteAllText($targetA, (($keep -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
-  & $exePath index $scratchA --db $dbA 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratchA --db $dbA 2>$null } | Out-Null
 }
 
 $afterApplyLines = [IO.File]::ReadAllLines($targetA)
@@ -126,10 +126,10 @@ foreach ($l in $afterApplyLines) {
 }
 
 # --- The fix under test: --qname --strip --apply must not corrupt either decl ---
-& $exePath index $scratchA --db $dbA 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $scratchA --db $dbA 2>$null } | Out-Null
 Check 'A: re-index before strip exits 0' ($LASTEXITCODE -eq 0)
 
-$stripOut = (& $exePath document --qname strip_collision.Combine --db $dbA --strip --apply --json 2>$null) -join ' '
+$stripOut = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname strip_collision.Combine --db $dbA --strip --apply --json 2>$null }) -join ' '
 Check 'A: document --qname --strip --apply exits 0' ($LASTEXITCODE -eq 0)
 
 # CRITICAL: the exact counts must be 1/1/1 -- NOT doubled. A regression back
@@ -176,9 +176,9 @@ Check 'A ROUND-TRIP: file is BYTE-IDENTICAL to the pre-apply pristine fixture' `
 # "byte-identical" check right below would pass regardless -- a crash and a
 # genuine no-op look identical to a check that only compares file bytes. The
 # exact pattern this same task's item 5 removed from four other runners.
-& $exePath index $scratchA --db $dbA 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $scratchA --db $dbA 2>$null } | Out-Null
 Check 'A IDEMPOTENT: re-index before the second strip exits 0' ($LASTEXITCODE -eq 0)
-& $exePath document --qname strip_collision.Combine --db $dbA --strip --apply --json 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --qname strip_collision.Combine --db $dbA --strip --apply --json 2>$null } | Out-Null
 Check 'A IDEMPOTENT: the second strip --apply itself exits 0' ($LASTEXITCODE -eq 0)
 $afterStrip2Bytes = [IO.File]::ReadAllBytes($targetA)
 Check 'A IDEMPOTENT: a second strip --apply is byte-identical (no further change)' `
@@ -236,18 +236,18 @@ $pristineX = [IO.File]::ReadAllBytes((Join-Path $dirX 'dup.pas'))
 $pristineY = [IO.File]::ReadAllBytes((Join-Path $dirY 'dup.pas'))
 
 $dbB = Join-Path $scratchB 'b.sqlite'
-& $exePath index $scratchB --db $dbB 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $scratchB --db $dbB 2>$null } | Out-Null
 Check 'B: index exits 0' ($LASTEXITCODE -eq 0)
 
-$queryOut = (& $exePath query --name Widget --db $dbB --json 2>$null) -join "`n"
+$queryOut = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name Widget --db $dbB --json 2>$null }) -join "`n"
 Check 'B FIXTURE: dup.Widget resolves across exactly TWO files' `
   ((([regex]::Matches($queryOut, '"qualified_name"\s*:\s*"dup\.Widget"')).Count) -eq 2) $queryOut
 
 # Write an engine comment on EACH file's copy independently (--unit is scoped
 # to one file, so this cannot itself cross files).
-& $exePath document --unit (Join-Path $dirX 'dup.pas') --db $dbB --stubs --apply --json 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit (Join-Path $dirX 'dup.pas') --db $dbB --stubs --apply --json 2>$null } | Out-Null
 Check 'B: document --unit (X) --apply exits 0' ($LASTEXITCODE -eq 0)
-& $exePath document --unit (Join-Path $dirY 'dup.pas') --db $dbB --stubs --apply --json 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit (Join-Path $dirY 'dup.pas') --db $dbB --stubs --apply --json 2>$null } | Out-Null
 Check 'B: document --unit (Y) --apply exits 0' ($LASTEXITCODE -eq 0)
 
 $xAfterApply = [IO.File]::ReadAllText((Join-Path $dirX 'dup.pas'))
@@ -255,7 +255,7 @@ $yAfterApply = [IO.File]::ReadAllText((Join-Path $dirY 'dup.pas'))
 Check 'B FIXTURE: BOTH files independently gained an engine marker' `
   ($xAfterApply.Contains('drag-lint:auto') -and $yAfterApply.Contains('drag-lint:auto'))
 
-& $exePath index $scratchB --db $dbB 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $scratchB --db $dbB 2>$null } | Out-Null
 Check 'B: re-index before strip exits 0' ($LASTEXITCODE -eq 0)
 
 # v(ADP3 T3d2 D8 review round 3, FOLDED A): this query decides which branch
@@ -268,7 +268,7 @@ Check 'B: re-index before strip exits 0' ($LASTEXITCODE -eq 0)
 # same diff that added this comment inserted ten lines above it, so the citation
 # was already off by ten when it was written. Cite the assertion by its own text
 # instead -- it cannot rot.)
-$whichFirstOut = (& $exePath query --name Widget --db $dbB --json 2>$null) -join "`n"
+$whichFirstOut = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name Widget --db $dbB --json 2>$null }) -join "`n"
 Check 'B: query --name Widget (pre-strip ordering probe) exits 0' ($LASTEXITCODE -eq 0)
 $whichFirst = @($whichFirstOut | ConvertFrom-Json)
 Check 'B FIXTURE: the ordering probe returned at least one row with a non-empty file property' `
@@ -290,7 +290,7 @@ $strippedIsX = $firstFile -like '*projX*'
 # too. The extra JSON-mode call below (after the pristine-state checks)
 # proves --json also carries skippedCount/skippedFiles for this same
 # cross-file case.
-$stripOutB = (& $exePath document --qname dup.Widget --db $dbB --strip --apply 2>$null) -join "`n"
+$stripOutB = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname dup.Widget --db $dbB --strip --apply 2>$null }) -join "`n"
 Check 'B: document --qname --strip --apply exits 0' ($LASTEXITCODE -eq 0)
 Check 'B: the summary line names exactly ONE file path (Syms[0]''s own)' `
   ((([regex]::Matches($stripOutB, [regex]::Escape('dup.pas')))).Count -eq 1) $stripOutB
@@ -325,7 +325,7 @@ if ($strippedIsX) {
 # the $xAfterStrip/$yAfterStrip byte snapshots already checked above; the
 # cross-file skip is independent of whether Syms[0] itself had anything left
 # to strip, so SkippedCount/SkippedFiles are computed the same either way.
-$stripOutBJson = (& $exePath document --qname dup.Widget --db $dbB --strip --apply --json 2>$null) -join "`n"
+$stripOutBJson = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname dup.Widget --db $dbB --strip --apply --json 2>$null }) -join "`n"
 Check 'B: the JSON-mode re-check of the same strip exits 0' ($LASTEXITCODE -eq 0)
 $stripJsonB = $stripOutBJson | ConvertFrom-Json
 Check 'B IMPORTANT: --json also reports skippedCount:1' ($stripJsonB.skippedCount -eq 1) $stripOutBJson

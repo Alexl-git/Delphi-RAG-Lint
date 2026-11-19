@@ -131,10 +131,10 @@ $dproj = Join-Path $WorkDir 'Q.dproj'
 $dpr   = Join-Path $WorkDir 'Q.dpr'
 
 # Dry run FIRST -- the report must still SHOW the include (kept in the report).
-$report = (& $Exe reconcile-project $dproj --json 2>&1) -join "`n"
+$report = (& { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project $dproj --json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 
 # Then the write.
-$applyOut = (& $Exe reconcile-project $dproj --apply --json 2>&1) -join "`n"
+$applyOut = (& { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project $dproj --apply --json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 $dprAfter = [System.IO.File]::ReadAllText($dpr)
 
 Write-Host ''
@@ -168,7 +168,7 @@ Check '4. the dry-run report still lists QDefs under missing' `
 # The .dpr must remain parseable enough that a re-run is stable: reconciling
 # again must not re-offer App.Helper (it is now listed) and must not have
 # corrupted the clause.
-$report2 = (& $Exe reconcile-project $dproj --json 2>&1) -join "`n"
+$report2 = (& { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project $dproj --json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check '5. re-running no longer reports App.Helper as missing' `
     (-not ($report2 -match '"unit"\s*:\s*"App\.Helper"')) "report2=$report2"
 

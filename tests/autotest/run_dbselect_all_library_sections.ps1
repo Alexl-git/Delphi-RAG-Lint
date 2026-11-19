@@ -148,10 +148,10 @@ $projDb = Join-Path $WorkDir 'OUT\Proj.sqlite'
 $lib1Db = Join-Path $WorkDir 'OUT\library-Win64.sqlite'
 $lib2Db = Join-Path $WorkDir 'OUT\libextra-Win64.sqlite'
 $lib3Db = Join-Path $WorkDir 'OUT\libw32-Win32.sqlite'
-& $Exe index "$WorkDir\projsrc" --db $projDb 2>&1 | Out-Null
-& $Exe index "$WorkDir\lib1src" --db $lib1Db 2>&1 | Out-Null
-& $Exe index "$WorkDir\lib2src" --db $lib2Db 2>&1 | Out-Null
-& $Exe index "$WorkDir\lib3src" --db $lib3Db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\projsrc" --db $projDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\lib1src" --db $lib1Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\lib2src" --db $lib2Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\lib3src" --db $lib3Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'built fixture indexes' ((Test-Path $projDb) -and (Test-Path $lib1Db) -and (Test-Path $lib2Db) -and (Test-Path $lib3Db))
 
 function Section-Lib([string]$Name, [string]$Db, [string[]]$Platforms) {
@@ -175,7 +175,7 @@ Write-Manifest $oneOnly @($projSec, (Section-Lib 'Library' 'library-{platform}.s
 function Run-Engine([string]$Manifest, [string[]]$EngineArgs) {
   $env:DRAGLINT_MANIFEST = $Manifest
   Push-Location $WorkDir
-  try { return (& $Exe @EngineArgs 2>&1 | Out-String) } finally { Pop-Location; $env:DRAGLINT_MANIFEST = $null }
+  try { return (& { $ErrorActionPreference = 'Continue'; & $Exe @EngineArgs 2>&1 | ForEach-Object { "$_" } } | Out-String) } finally { Pop-Location; $env:DRAGLINT_MANIFEST = $null }
 }
 
 Write-Host 'P1/R1/R2: query + resolve-dbs through a two-library manifest' -ForegroundColor Cyan

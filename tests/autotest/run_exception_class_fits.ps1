@@ -176,11 +176,11 @@ function BareRaiseLines([string]$Out) {
 
 Push-Location C:\TEMP
 try {
-  & $exePath index --all --config $cfg --only SecApp --jobs 1 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only SecApp --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check '0. SANITY: the section DB exists' (Test-Path $db)
 
   # --- WITH the exceptions unit configured ---------------------------------
-  $withCfg = (& $exePath lint-all --db $db --config $lintCfg --quiet 2>&1 | Out-String)
+  $withCfg = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --config $lintCfg --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $lines   = @(BareRaiseLines $withCfg)
 
   # -match against a COLLECTION returns the matching ELEMENTS, not a boolean, and
@@ -219,7 +219,7 @@ try {
   # fails it, which is the load-bearing property named at the top of this file.
   $noExcCfg = Join-Path $scratch 'no-exceptions-lint.json'
   '{ "_comment": "deliberately carries no exceptions key" }' | Set-Content $noExcCfg -Encoding ascii
-  $noCfg     = (& $exePath lint-all --db $db --config $noExcCfg --quiet 2>&1 | Out-String)
+  $noCfg     = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --config $noExcCfg --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $noCfgLine = [string](@(BareRaiseLines $noCfg) | Select-Object -First 1)
   Check '3. POSITIVE CONTROL: with no exceptions KEY the message is the plain rule text' `
         (($noCfgLine -match 'raise a specific subclass') -and ($noCfgLine -notmatch 'EInvoiceNotFound') -and ($noCfgLine -notmatch '(?i)no existing exception class')) `

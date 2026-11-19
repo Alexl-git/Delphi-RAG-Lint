@@ -46,26 +46,26 @@ foreach ($d in 'README.md', 'docs\AI-USAGE.md', 'docs\wiki\field-repository.md')
 Check 'CHANGELOG no longer calls the generators internal' (-not ([IO.File]::ReadAllText((Join-Path $repo 'CHANGELOG.md')) -match 'update-orm`? are\s+internal'))
 
 # ---- 2. IDE ----
-pwsh -NoProfile -File (Join-Path $repo 'tests\plugin\run_v152_TTIDE_menu.ps1') -WorkDir (Join-Path $WorkDir 'menu') *> (Join-Path $WorkDir 'menu.log')
+& { $ErrorActionPreference = 'Continue'; pwsh -NoProfile -File (Join-Path $repo 'tests\plugin\run_v152_TTIDE_menu.ps1') -WorkDir (Join-Path $WorkDir 'menu') *> (Join-Path $WorkDir 'menu.log') }
 Check 'IDE: TTIDE menu runner (six rows visible)' ($LASTEXITCODE -eq 0) "(log $WorkDir\menu.log)"
 
 # ---- 3. engine ----
 if (-not (Test-Path -LiteralPath $Exe)) { Check "engine exe present ($Exe)" $false }
 else {
   $tmpRepo = Join-Path $WorkDir 'empty.dlrepo'
-  & $Exe repo update-orm --repo $tmpRepo --code-dir $WorkDir --save-form bogus *> (Join-Path $WorkDir 'saveform.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe repo update-orm --repo $tmpRepo --code-dir $WorkDir --save-form bogus *> (Join-Path $WorkDir 'saveform.log') }
   Check '--save-form bogus -> exit 1' ($LASTEXITCODE -eq 1)
   Check '--save-form bogus names the values' ((Get-Content (Join-Path $WorkDir 'saveform.log') -Raw) -match 'legacy or current')
-  $rh = (& $Exe repo --help 2>&1 | Out-String)
+  $rh = (& { $ErrorActionPreference = 'Continue'; & $Exe repo --help 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check 'repo --help lists update-orm' ($rh -match 'repo update-orm ')
-  pwsh -NoProfile -File (Join-Path $repo 'tests\autotest\run_v152_TTFINISH_prepare_queries.ps1') -Exe $Exe -WorkDir (Join-Path $WorkDir 'prep') *> (Join-Path $WorkDir 'prep.log')
+  & { $ErrorActionPreference = 'Continue'; pwsh -NoProfile -File (Join-Path $repo 'tests\autotest\run_v152_TTFINISH_prepare_queries.ps1') -Exe $Exe -WorkDir (Join-Path $WorkDir 'prep') *> (Join-Path $WorkDir 'prep.log') }
   Check 'U6: --prepare-queries battery' ($LASTEXITCODE -eq 0) "(log $WorkDir\prep.log)"
 }
 
 # ---- 4. golden ----
 if ([string]::IsNullOrWhiteSpace($RepoFile)) { Write-Host '  SKIP golden (no -RepoFile / DL_TEST_ORM_REPO)' }
 else {
-  pwsh -NoProfile -File (Join-Path $repo 'tests\autotest\run_fieldrepo_ormgen_golden.ps1') -RequireForm -RepoFile $RepoFile -Work (Join-Path $WorkDir 'golden') *> (Join-Path $WorkDir 'golden.log')
+  & { $ErrorActionPreference = 'Continue'; pwsh -NoProfile -File (Join-Path $repo 'tests\autotest\run_fieldrepo_ormgen_golden.ps1') -RequireForm -RepoFile $RepoFile -Work (Join-Path $WorkDir 'golden') *> (Join-Path $WorkDir 'golden.log') }
   Check 'golden -RequireForm' ($LASTEXITCODE -eq 0) "(log $WorkDir\golden.log)"
 }
 

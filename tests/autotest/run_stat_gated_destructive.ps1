@@ -171,7 +171,7 @@ Write-Ascii $file $fixture
 
 Push-Location C:\TEMP
 try {
-  $out = (& $exePath lint $file --rules-dir $rules 2>&1 | Out-String)
+  $out = (& { $ErrorActionPreference = 'Continue'; & $exePath lint $file --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $srcLines = [System.IO.File]::ReadAllLines($file)
   $hits = @()
   foreach ($l in ($out -split "`r?`n")) {
@@ -195,7 +195,7 @@ try {
 
   # The rule must be in the catalog AND enabled, or lint-all silently skips it
   # while `lint` still fires -- two surfaces disagreeing about one input.
-  $cat = (& $exePath rules --json 2>$null | Out-String | ConvertFrom-Json)
+  $cat = (& { $ErrorActionPreference = 'Continue'; & $exePath rules --json 2>$null } | Out-String | ConvertFrom-Json)
   $rs  = if ($cat.rules) { $cat.rules } else { $cat }
   $me  = $rs | Where-Object { $_.id -eq 'stat-gated-destructive' }
   Check 'CAT the rule is in the catalog'        ([bool]$me) 'rules --json does not list it'

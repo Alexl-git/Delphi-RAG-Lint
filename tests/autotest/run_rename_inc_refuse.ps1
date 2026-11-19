@@ -94,7 +94,7 @@ function New-Fixture([string]$Name, [string]$IncBody) {
   Write-Ascii (Join-Path $src 'body.inc')  $IncBody
   $db = Join-Path $dir 'idx.sqlite'
   Push-Location $dir
-  try { & $Exe index $src --db $db 2>&1 | Out-Null } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null } finally { Pop-Location }
   Check "$Name index exits 0" ($LASTEXITCODE -eq 0)
   [pscustomobject]@{ Dir = $dir; Src = $src; Db = $db }
 }
@@ -105,7 +105,7 @@ function Snapshot($fx) {
 
 function Run-Rename($fx, [string[]]$RenameArgs) {
   Push-Location $fx.Dir
-  try { $o = & $Exe rename @RenameArgs --db $fx.Db 2>&1 } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe rename @RenameArgs --db $fx.Db 2>&1 | ForEach-Object { "$_" } } } finally { Pop-Location }
   [pscustomobject]@{ Exit = $LASTEXITCODE; Out = ($o -join "`n") }
 }
 
@@ -147,11 +147,11 @@ New-Item -ItemType Directory (Join-Path $cDir 'shared') | Out-Null
 Move-Item (Join-Path $cDir 'IncB.Uses.inc') (Join-Path $cDir 'shared\IncB.Uses.inc')
 $cDb = Join-Path $WorkDir 'C.sqlite'
 Push-Location $WorkDir
-try { & $Exe index --project (Join-Path $cDir 'IncUses.dproj') --db $cDb --library-db none 2>&1 | Out-Null } finally { Pop-Location }
+try { & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $cDir 'IncUses.dproj') --db $cDb --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-Null } finally { Pop-Location }
 Check 'C index exits 0' ($LASTEXITCODE -eq 0)
 $cSnap = (Get-ChildItem $cDir -Recurse -File -Include *.pas, *.inc, *.dpr | Sort-Object FullName | ForEach-Object { $_.Name + '=' + (Get-Content -Raw $_.FullName) }) -join '|'
 Push-Location $WorkDir
-try { $o = & $Exe rename --kind symbol --name IncA --to IncZ --apply --db $cDb 2>&1; $cRc = $LASTEXITCODE } finally { Pop-Location }
+try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe rename --kind symbol --name IncA --to IncZ --apply --db $cDb 2>&1 | ForEach-Object { "$_" } }; $cRc = $LASTEXITCODE } finally { Pop-Location }
 $cOut = $o -join "`n"
 Check 'C rename of unit IncA exits 2' ($cRc -eq 2) "exit=$cRc"
 Check 'C names shared\IncB.Uses.inc' ($cOut -match 'shared\\IncB\.Uses\.inc') ($cOut -split "`n" | Select-Object -Last 1)

@@ -189,7 +189,7 @@ end.
 
 $db = Join-Path $WorkDir 'shadow.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($indexOut -join ' | ')"
 
 # --- Probes. ----------------------------------------------------------------------
@@ -215,7 +215,7 @@ function JsonFrom([string[]]$Lines) {
   return ''
 }
 function Ancestors([string]$Name) {
-  $raw = @(& $Exe query ancestors --name $Name --json --db $db 2>$null) | ForEach-Object { "$_" }
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query ancestors --name $Name --json --db $db 2>$null }) | ForEach-Object { "$_" }
   $code = $LASTEXITCODE
   $json = JsonFrom $raw
   $names = @()
@@ -226,11 +226,11 @@ function Ancestors([string]$Name) {
   return @{ Code = $code; Names = $names; Raw = ($raw -join ' | ') }
 }
 function AncestorsText([string]$Name) {
-  $raw = @(& $Exe query ancestors --name $Name --db $db 2>$null) | ForEach-Object { "$_" }
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query ancestors --name $Name --db $db 2>$null }) | ForEach-Object { "$_" }
   return @{ Code = $LASTEXITCODE; Text = ($raw -join "`n") }
 }
 function Descends([string]$Name, [string]$Of) {
-  $raw = @(& $Exe query ancestors --name $Name --of $Of --json --db $db 2>$null) | ForEach-Object { "$_" }
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query ancestors --name $Name --of $Of --json --db $db 2>$null }) | ForEach-Object { "$_" }
   $json = JsonFrom $raw
   if (-not $json) { return $null }
   return [bool](($json | ConvertFrom-Json).is_descendant)

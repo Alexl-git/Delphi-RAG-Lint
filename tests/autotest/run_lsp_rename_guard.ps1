@@ -101,7 +101,7 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'calls.sqlite'
-& $Exe index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' (Test-Path $db)
 $before = [System.IO.File]::ReadAllBytes($file)
 
@@ -194,7 +194,7 @@ function EditsOf($we) {
   $names = @($we.changes.PSObject.Properties.Name)
   return @{ uris = $names; edits = @(foreach ($n in $names) { $we.changes.$n }) }
 }
-$cliJson = (& $Exe rename --kind symbol --name Calls.TWidget.Compute --to Calc --db $db --json 2>$null | Where-Object { $_.StartsWith('[') }) -join ''
+$cliJson = (& { $ErrorActionPreference = 'Continue'; & $Exe rename --kind symbol --name Calls.TWidget.Compute --to Calc --db $db --json 2>$null } | Where-Object { $_.StartsWith('[') }) -join ''
 $cliCount = @($cliJson | ConvertFrom-Json).Count
 
 foreach ($case in @(@{ id=13; nn='Calc' }, @{ id=14; nn='COMPUTE' }, @{ id=15; nn='calc' })) {
@@ -266,7 +266,7 @@ $file2 = Join-Path $src2 'uNon.pas'
 $nonText = "unit uNon;`r`n`r`ninterface`r`n`r`nprocedure Foo(AValue: Integer);`r`n`r`nimplementation`r`n`r`nprocedure Foo(AValue: Integer);`r`nbegin`r`nend;`r`n`r`nprocedure Driver;`r`nbegin`r`n  { caf" + [char]0xE9 + " } Foo(1);`r`n  { caf" + [char]0xE9 + [char]0xE9 + [char]0xE9 + [char]0xE9 + " } Foo(2);`r`nend;`r`n`r`nend.`r`n"
 [System.IO.File]::WriteAllBytes($file2, [System.Text.Encoding]::GetEncoding(1252).GetBytes($nonText))
 $db = Join-Path $WorkDir 'non.sqlite'
-& $Exe index $src2 --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src2 --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $uri = 'file:///' + ($file2 -replace '\\', '/')
 $lines = [System.Text.Encoding]::GetEncoding(1252).GetString([System.IO.File]::ReadAllBytes($file2)) -split "`r`n"
 $lNonCall = LineOf '\} Foo\(1\);'

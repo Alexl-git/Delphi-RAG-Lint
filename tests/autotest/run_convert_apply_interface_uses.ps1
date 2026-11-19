@@ -49,13 +49,13 @@ New-Item -ItemType Directory $WorkDir -Force | Out-Null
 Copy-Item (Join-Path $PSScriptRoot 'fixtures\intfuses\*') $WorkDir
 
 $db = Join-Path $WorkDir 'fx.sqlite'
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the fixture index was built' (Test-Path $db)
 
 function P([string]$n) { return (Join-Path $WorkDir $n) }
 function Text([string]$n) { return [IO.File]::ReadAllText((P $n)) }
 function Apply([string]$Unit, [string]$Rules, [string[]]$Extra = @()) {
-  $o = (& $Exe @(@('convert-apply', '--unit', (P $Unit), '--rules', (P $Rules), '--db', $db) + $Extra) 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @(@('convert-apply', '--unit', (P $Unit), '--rules', (P $Rules), '--db', $db) + $Extra) 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 $CRLF = "`r`n"

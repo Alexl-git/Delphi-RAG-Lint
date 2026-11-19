@@ -50,12 +50,12 @@ $t1 = LineOf 'TRIGGER-1'; $t2 = LineOf 'TRIGGER-2'; $t3 = LineOf 'TRIGGER-3'; $t
 $controls = @(1..9 | ForEach-Object { LineOf "CONTROL-$_" })
 
 Write-Host "RUN 1: bare lint-all (the rule must be OFF by default)..."
-$f0 = Parse-Findings (& $exePath lint-all --db $db --format json 2>$null)
+$f0 = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json 2>$null })
 $off = @($f0 | Where-Object { $_.rule -eq $Rule }).Count
 Write-Host ("  run 1: {0} finding(s) total; {1}={2}" -f $f0.Count, $Rule, $off)
 
 Write-Host "RUN 2: lint-all --enable $Rule ..."
-$f = Parse-Findings (& $exePath lint-all --db $db --format json --enable $Rule 2>$null)
+$f = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json --enable $Rule 2>$null })
 $a = @($f | Where-Object { $_.rule -eq $Rule })
 $a | ForEach-Object { Write-Host ("    {0}:{1} {2}" -f (Split-Path $_.file_path -Leaf), $_.start_line, $_.message) }
 $lines = @($a | ForEach-Object { [int]$_.start_line })

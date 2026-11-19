@@ -88,7 +88,7 @@ function Reset-Fixture {
   if (Test-Path $bakA) { Remove-Item $bakA -Force }
   if (Test-Path $bakB) { Remove-Item $bakB -Force }
   if (Test-Path $db)   { Remove-Item $db   -Force }
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 }
 
 Push-Location C:\TEMP
@@ -97,7 +97,7 @@ try {
   Reset-Fixture
   $beforeA = [IO.File]::ReadAllBytes($targetA)
   $beforeB = [IO.File]::ReadAllBytes($targetB)
-  $pv = & $exePath lint-all --db $db --fix --disable missing-doc,doc-drift,unused-global --output $report 2>$null | Out-String
+  $pv = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --disable missing-doc,doc-drift,unused-global --output $report 2>$null } | Out-String
 
   Check 'preview: summary reports 2 fixable finding(s)' ($pv -match 'autofix: 2 fixable finding\(s\) -- pass --apply to write')
   Check 'preview: dry-run names unita.pas'              ($pv -match 'unita\.pas')
@@ -116,7 +116,7 @@ try {
   # lint-all prints a "scanning N .pas file(s)" preamble line to stdout before the
   # JSON (same contract run_store_tests.ps1 relies on), so slice from the first '['.
   Reset-Fixture
-  $raw = & $exePath lint-all --db $db --fix --json --disable missing-doc,doc-drift,unused-global --output $report 2>$null | Out-String
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --json --disable missing-doc,doc-drift,unused-global --output $report 2>$null } | Out-String
   $arr = $null
   $b = $raw.IndexOf('[')
   if ($b -ge 0) { try { $arr = ($raw.Substring($b) | ConvertFrom-Json) } catch { $arr = $null } }
@@ -137,7 +137,7 @@ try {
 
   # --- 3) APPLY (--fix --apply): BOTH units fixed, N=2 across 2 files, .baks written ---
   Reset-Fixture
-  $ap = & $exePath lint-all --db $db --fix --apply --disable missing-doc,doc-drift,unused-global --output $report 2>$null | Out-String
+  $ap = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --apply --disable missing-doc,doc-drift,unused-global --output $report 2>$null } | Out-String
 
   Check 'apply: summary reports applied 2 edit(s) across 2 file(s)' ($ap -match 'autofix: applied 2 edit\(s\) across 2 file\(s\) \(\.bak written\)')
 

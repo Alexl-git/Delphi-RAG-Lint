@@ -86,13 +86,13 @@ $fx     = Join-Path $src 'uTypeFx.pas'
 $libDb  = Join-Path $WorkDir 'library-Fixture.sqlite'
 $projDb = Join-Path $WorkDir 'Fixture.sqlite'
 foreach ($d in $libDb, $projDb) {
-  $idx = & $exePath index $src --db $d 2>&1 | Out-String
+  $idx = & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $d 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check "SANITY: fixture indexed into $(Split-Path $d -Leaf)" ($LASTEXITCODE -eq 0) $idx
 }
 
 function LintDbg($db) {
   $env:DRAGLINT_DEBUG = '1'
-  try { & $exePath lint $fx --db $db --rules-dir $rules 2>&1 | Out-String }
+  try { & { $ErrorActionPreference = 'Continue'; & $exePath lint $fx --db $db --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String }
   finally { Remove-Item Env:\DRAGLINT_DEBUG }
 }
 $lib  = LintDbg $libDb
@@ -106,12 +106,12 @@ Check 'B2b CONTROL: a project-named store reports float-equality-comparison' ($p
 # ---- B3/B4: the LSP child budget, through the test-only substitute child ----
 $csc = @('Framework64', 'Framework') | ForEach-Object { Join-Path $env:WINDIR "Microsoft.NET\$_\v4.0.30319\csc.exe" } | Where-Object { Test-Path $_ } | Select-Object -First 1
 $stubExe = Join-Path $WorkDir 'FullRulesChildStub.exe'
-if ($csc) { $null = & $csc /nologo /out:$stubExe (Join-Path $PSScriptRoot 'fixtures\lsp\FullRulesChildStub.cs') 2>&1 }
+if ($csc) { $null = & { $ErrorActionPreference = 'Continue'; & $csc /nologo /out:$stubExe (Join-Path $PSScriptRoot 'fixtures\lsp\FullRulesChildStub.cs') 2>&1 | ForEach-Object { "$_" } } }
 Check 'SANITY: the stub child compiled (csc + FullRulesChildStub.cs)' (Test-Path $stubExe) ('csc=' + $csc)
 $emitF = Join-Path $WorkDir 'emit.json'
 # The stub's answer is a REAL lint array (project store) with the rule id made synthetic,
 # so a published zz-stub-rule can only come from the substituted child.
-$arr = (& $exePath lint $fx --db $projDb --rules-dir $rules --json 2>$null) -join "`n"
+$arr = (& { $ErrorActionPreference = 'Continue'; & $exePath lint $fx --db $projDb --rules-dir $rules --json 2>$null }) -join "`n"
 Write-Ascii $emitF ($arr -replace 'float-equality-comparison', 'zz-stub-rule')
 
 function Frame($obj) { $j = $obj | ConvertTo-Json -Depth 20 -Compress; "Content-Length: $([Text.Encoding]::UTF8.GetByteCount($j))`r`n`r`n$j" }

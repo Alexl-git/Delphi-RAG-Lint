@@ -151,7 +151,7 @@ Check 'all five fixture cases located' (
   ("lines {0}" -f (@($lnDocumented,$lnBare,$lnMarker,$lnCode,$lnBrace) -join ', '))
 
 $fired = @()
-foreach ($line in (& $Exe lint $fixture 2>$null)) {
+foreach ($line in (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture 2>$null })) {
   if ("$line" -match ':(\d+):\d+\s+\[\w+\]\s+try-except-swallowed:') { $fired += [int]$Matches[1] }
 }
 $fired = @($fired | Sort-Object -Unique)

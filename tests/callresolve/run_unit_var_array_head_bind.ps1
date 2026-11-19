@@ -30,7 +30,7 @@ try {
   Copy-Item $fix $src -Force
   $db = Join-Path $scratch 'u.sqlite'
   function Q([string]$Query) {
-    $raw = (& $exePath sql --db $db --json --limit 5000 --query $Query 2>$null) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --limit 5000 --query $Query 2>$null }) -join "`n"
     $b = $raw.IndexOf('{'); if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
     $o = $raw.Substring($b) | ConvertFrom-Json
     $names = @($o.columns | ForEach-Object { $_.name }); $out = @()
@@ -39,7 +39,7 @@ try {
   }
   Push-Location C:\TEMP
   try {
-    & $exePath index $src --db $db 2>$null | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>$null } | Out-Null
     Check 'index built' ($LASTEXITCODE -eq 0)
     $rows = Q ("select r.receiver_text as rcv, s.qualified_name as target from refs r " +
                "left join call_edges e on e.ref_id = r.id left join symbols s on s.id = e.target_symbol_id " +

@@ -80,7 +80,7 @@ $src = @(
 [System.IO.File]::WriteAllText($unit, $src + "`r`n", [System.Text.Encoding]::ASCII)
 
 $db = Join-Path $WorkDir 'impllines.sqlite'
-& $Exe index $unit --db $db *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $unit --db $db *> $null }
 Check 'fixture indexed' (Test-Path $db) $db
 if (-not (Test-Path $db)) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 
@@ -94,7 +94,7 @@ function Num($row, [string]$f) {
 Write-Host ''
 Write-Host 'CASE A: outline --json impl_start_line / impl_end_line / end_line' -ForegroundColor Cyan
 $oj = @()
-try { $oj = @((& $Exe outline --file $unit --db $db --format json 2>$null | Out-String) | ConvertFrom-Json) } catch { }
+try { $oj = @((& { $ErrorActionPreference = 'Continue'; & $Exe outline --file $unit --db $db --format json 2>$null } | Out-String) | ConvertFrom-Json) } catch { }
 $oB = @($oj | Where-Object { $_.qname -eq 'ImplLines.TBox.Bump' })[0]
 $oT = @($oj | Where-Object { $_.qname -eq 'ImplLines.TBox.Total' })[0]
 $oF = @($oj | Where-Object { $_.qname -eq 'ImplLines.TBox.FCount' })[0]
@@ -109,7 +109,7 @@ Check 'positive control: field FCount impl_start_line=0' ((Num $oF 'impl_start_l
 # ---- CASE B: outline text appends [impl A-B] -------------------------------
 Write-Host ''
 Write-Host 'CASE B: outline text' -ForegroundColor Cyan
-$ot = @(& $Exe outline --file $unit --db $db 2>$null)
+$ot = @(& { $ErrorActionPreference = 'Continue'; & $Exe outline --file $unit --db $db 2>$null })
 $tB = @($ot | Where-Object { $_ -match '\sImplLines\.TBox\.Bump\s' })[0]
 $tF = @($ot | Where-Object { $_ -match '\sImplLines\.TBox\.FCount\s' })[0]
 Check 'outline text: Bump row reads "8  [impl 14-17]"' ($tB -match '\s8\s+\[impl 14-17\]') "row: $tB"
@@ -118,9 +118,9 @@ Check 'positive control: field row has no [impl tag' (($null -ne $tF) -and ($tF 
 # ---- CASE C: query text appends [impl A-B] ---------------------------------
 Write-Host ''
 Write-Host 'CASE C: query text' -ForegroundColor Cyan
-$qt = (& $Exe query --name Total --db $db 2>$null | Out-String)
+$qt = (& { $ErrorActionPreference = 'Continue'; & $Exe query --name Total --db $db 2>$null } | Out-String)
 Check 'query text: Total row carries [impl 19-23]' ($qt -match '\[impl 19-23\]') ($qt.Trim() -replace "`r?`n", ' | ')
-$qf = (& $Exe query --name FCount --db $db 2>$null | Out-String)
+$qf = (& { $ErrorActionPreference = 'Continue'; & $Exe query --name FCount --db $db 2>$null } | Out-String)
 Check 'positive control: query text for a field has no [impl tag' (($qf -match 'FCount') -and ($qf -notmatch '\[impl')) ''
 
 Write-Host ''

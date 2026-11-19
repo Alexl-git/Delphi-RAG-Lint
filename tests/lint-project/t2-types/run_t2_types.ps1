@@ -46,13 +46,13 @@ try {
   Copy-Item (Join-Path $PSScriptRoot '*.pas') $src
   $use = Join-Path $src 'uT2Use.pas'
   $db = Join-Path $scratch 't2.sqlite'
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $old = Join-Path $scratch 'old.sqlite'
   Copy-Item $db $old
   $py = Join-Path $scratch 'drop.py'
   [IO.File]::WriteAllText($py, "import sqlite3, sys`nc = sqlite3.connect(sys.argv[1])`nc.execute('DROP TABLE ref_types')`nc.commit()`nc.close()`n")
   python $py $old
-  $gone = @(& $exePath sql --db $old --query "SELECT name FROM sqlite_master WHERE name = 'ref_types'" 2>&1) -join ' '
+  $gone = @(& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $old --query "SELECT name FROM sqlite_master WHERE name = 'ref_types'" 2>&1 | ForEach-Object { "$_" } }) -join ' '
   Check 'the control DB really has no ref_types' ($gone -match '\b0 row') $gone
 
   # Today = the markers whose line the OLD logic reports (no fact): controls, and triggers that need no fact.
@@ -63,12 +63,12 @@ try {
     $r = $c.Rule
     $want = @(Markers $use @("TRIGGER-T2-$($c.Tag)"))
     Check "$r has a trigger and a control in the fixture" (($want.Count -gt 0) -and (@(Markers $use @("CONTROL-T2-$($c.Tag)")).Count -gt 0))
-    $full = @(ToLines (Parse-Findings (& $exePath lint-all --db $db --format json --rule $r 2>$null)) $r)
+    $full = @(ToLines (Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json --rule $r 2>$null })) $r)
     Check "$r with the index fires exactly on the TRIGGER lines" (($full -join ',') -eq ($want -join ',')) "got [$($full -join ',')] want [$($want -join ',')]"
     $wantToday = @(Markers $use $c.Today)
-    $noTbl = @(ToLines (Parse-Findings (& $exePath lint-all --db $old --format json --rule $r 2>$null)) $r)
+    $noTbl = @(ToLines (Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $old --format json --rule $r 2>$null })) $r)
     Check "$r with ref_types dropped answers as today" (($noTbl -join ',') -eq ($wantToday -join ',')) "got [$($noTbl -join ',')] want [$($wantToday -join ',')]"
-    $noIdx = @(ToLines (Parse-Findings (& $exePath lint $use --format json --rule $r 2>$null)) $r)
+    $noIdx = @(ToLines (Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $use --format json --rule $r 2>$null })) $r)
     Check "$r with no index answers as today" (($noIdx -join ',') -eq ($wantToday -join ',')) "got [$($noIdx -join ',')] want [$($wantToday -join ',')]"
   }
 } finally {

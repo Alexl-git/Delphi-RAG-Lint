@@ -44,10 +44,10 @@ Copy-Item $fixture $target -Force
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # --- ambiguous-calls --file: whole-file coverage view. ---
-  $jsonOut = & $exePath ambiguous-calls --file $target --json --db $db 2>$null | Out-String
+  $jsonOut = & { $ErrorActionPreference = 'Continue'; & $exePath ambiguous-calls --file $target --json --db $db 2>$null } | Out-String
   Check '--file --json: parses as JSON array' ($null -ne $jsonOut -and $jsonOut.Trim().StartsWith('['))
   $rows = $jsonOut | ConvertFrom-Json
   Check '--file: at least 1 ambiguous/unverified site (CallsUnknown)' (@($rows).Count -ge 1)
@@ -63,12 +63,12 @@ try {
   Check 'CallsUnknown row carries file' ($null -ne $unknownRow.file -and $unknownRow.file -ne '')
 
   # --- ambiguous-calls --file text mode. ---
-  $txtOut = & $exePath ambiguous-calls --file $target --db $db 2>$null | Out-String
+  $txtOut = & { $ErrorActionPreference = 'Continue'; & $exePath ambiguous-calls --file $target --db $db 2>$null } | Out-String
   Check 'text mode: mentions CallsUnknown' ($txtOut -match 'CallsUnknown')
   Check 'text mode: does not mention CallsAlpha' (-not ($txtOut -match 'CallsAlpha'))
 
   # --- ambiguous-calls --qname on a FULLY-resolved scope: empty, exit 0. ---
-  $emptyJson = & $exePath ambiguous-calls --qname calledfrom.TDispatcher.CallsAlpha --json --db $db 2>$null | Out-String
+  $emptyJson = & { $ErrorActionPreference = 'Continue'; & $exePath ambiguous-calls --qname calledfrom.TDispatcher.CallsAlpha --json --db $db 2>$null } | Out-String
   $emptyExit = $LASTEXITCODE
   $emptyRows = $emptyJson | ConvertFrom-Json
   Check 'fully-resolved scope --json: empty array' (@($emptyRows).Count -eq 0)

@@ -64,10 +64,10 @@ Copy-Item $fixture $target -Force
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
-  $dryRunOut = (& $exePath document --unit $target --db $db --strip 2>&1) -join "`n"
+  $dryRunOut = (& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --strip 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'dry-run --strip exits 0' ($LASTEXITCODE -eq 0)
   # v(SESSION 74): ONE tag, not two -- <returns> alone. The <summary> joined
   # <param> on the preserved side (see assertion 1), and the count moving is
@@ -75,7 +75,7 @@ try {
   Check '4. dry-run reports the exact counts (1 tag, 0 blocks)' `
     ($dryRunOut -match 'stripped:\s*1\s*tags?,\s*0\s*blocks') $dryRunOut
 
-  & $exePath document --unit $target --db $db --strip --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --strip --apply 2>$null } | Out-Null
   Check 'strip --apply exits 0' ($LASTEXITCODE -eq 0)
 
   $lines = [IO.File]::ReadAllLines($target)
@@ -91,7 +91,7 @@ try {
 
   # --- 5. Idempotency: a second strip --apply is a no-op ---
   $afterFirstStrip = [IO.File]::ReadAllBytes($target)
-  & $exePath document --unit $target --db $db --strip --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --strip --apply 2>$null } | Out-Null
   $afterSecondStrip = [IO.File]::ReadAllBytes($target)
   Check '5. second strip --apply is a no-op (byte-identical)' `
     ([System.Linq.Enumerable]::SequenceEqual([byte[]]$afterFirstStrip,[byte[]]$afterSecondStrip))

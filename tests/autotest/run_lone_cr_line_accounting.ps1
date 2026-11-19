@@ -113,7 +113,7 @@ Check 'lonecr is exactly one byte longer than clean' `
   "lonecr=$((Get-Item $fLoneCr).Length) clean=$((Get-Item $fClean).Length)"
 
 function Get-EmptyBodyLines([string]$Path) {
-  $out = & $exePath lint $Path 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath lint $Path 2>$null }
   return @($out |
     Select-String 'empty-procedure-body' |
     ForEach-Object { if ($_.Line -match ':(\d+):\d+\s') { [int]$Matches[1] } })

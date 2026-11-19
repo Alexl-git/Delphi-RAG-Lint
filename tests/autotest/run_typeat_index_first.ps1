@@ -96,20 +96,20 @@ end.
 '@ | Set-Content $dpr -Encoding ascii
 
 $db = "$WorkDir\idx.sqlite"
-$idxOut = & $Exe index $srcDir --db $db 2>&1
+$idxOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $srcDir --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index fixture exits 0' ($LASTEXITCODE -eq 0) (($idxOut | Select-Object -Last 1))
 
 # The resolver's binding (the fact typeat must agree with).
-$refOut = (& $Exe sql --db $db --query "select s.qualified_name from refs r join files f on f.id=r.file_id join symbols s on s.id=r.symbol_id where f.path like '%IdxFirst.dpr' and r.name_text='Application'" 2>&1) -join "`n"
+$refOut = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query "select s.qualified_name from refs r join files f on f.id=r.file_id join symbols s on s.id=r.symbol_id where f.path like '%IdxFirst.dpr' and r.name_text='Application'" 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'resolver binds the program ref to ZzGlob.Application' ($refOut -match 'ZzGlob\.Application') $refOut
 
 # typeat on `Application` (line 8, col 3, 1-based).
-$out = (& $Exe typeat "${dpr}:8:3" --db $db 2>&1) -join "`n"
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe typeat "${dpr}:8:3" --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'typeat names ZzGlob.Application' ($out -match 'Resolved:\s+ZzGlob\.Application\s*(\r|\n|$)') $out
 Check 'typeat does NOT name the class property AaTool.TTool.Application' (-not ($out -match 'AaTool\.TTool\.Application')) $out
 
 # Positive control: the property is still indexed and still answers where it IS visible.
-$q = (& $Exe query --qname AaTool.TTool.Application --db $db 2>&1) -join "`n"
+$q = (& { $ErrorActionPreference = 'Continue'; & $Exe query --qname AaTool.TTool.Application --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'AaTool.TTool.Application still indexed' ($q -match 'AaTool\.TTool\.Application') $q
 
 # External binding (library): a program that uses Vcl.Forms. SKIP without a library DB.
@@ -131,14 +131,14 @@ end.
 $db2 = "$WorkDir\idx2.sqlite"
 $lib = if ($env:DL_LIBRARY_DB) { $env:DL_LIBRARY_DB } else { 'C:\Projects\.drag-lint\library-Win64.sqlite' }
 $libArgs = if (Test-Path $lib) { @('--library-db', $lib) } else { @() }
-& $Exe index $src2 --db $db2 @libArgs 2>&1 | Out-Null
-$ext = (& $Exe sql --db $db2 --query "select r.external_target from refs r join files f on f.id=r.file_id where f.path like '%IdxVcl.dpr' and r.name_text='Application' and r.external_target is not null" 2>&1) -join "`n"
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src2 --db $db2 @libArgs 2>&1 | ForEach-Object { "$_" } } | Out-Null
+$ext = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db2 --query "select r.external_target from refs r join files f on f.id=r.file_id where f.path like '%IdxVcl.dpr' and r.name_text='Application' and r.external_target is not null" 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 if ($ext -match 'Vcl\.Forms\.Application') {
-    $out2 = (& $Exe typeat "${dpr2}:8:3" --db $db2 2>&1) -join "`n"
+    $out2 = (& { $ErrorActionPreference = 'Continue'; & $Exe typeat "${dpr2}:8:3" --db $db2 2>&1 | ForEach-Object { "$_" } }) -join "`n"
     Check 'typeat on a library-bound ref names Vcl.Forms.Application' ($out2 -match 'Resolved:\s+Vcl\.Forms\.Application') $out2
     Check 'typeat on a library-bound ref does NOT name AaTool.TTool.Application' (-not ($out2 -match 'AaTool\.TTool\.Application')) $out2
     # usages --name <library qname>: the project index declares nothing, the ref carries the binding.
-    $u = (& $Exe usages --name Vcl.Forms.Application --db $db2 2>&1) -join "`n"
+    $u = (& { $ErrorActionPreference = 'Continue'; & $Exe usages --name Vcl.Forms.Application --db $db2 2>&1 | ForEach-Object { "$_" } }) -join "`n"
     Check 'usages --name Vcl.Forms.Application counts the library-bound read' ($u -match 'reads: 1\b') $u
 } else {
     Write-Host '  [SKIP] library-bound ref: no external_target Vcl.Forms.Application (library DB $lib missing)' -ForegroundColor Yellow

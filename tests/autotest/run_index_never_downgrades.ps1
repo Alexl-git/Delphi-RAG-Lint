@@ -98,7 +98,7 @@ function SidecarBytes([string]$Db) {
 }
 
 # ---- the engine's own extractor version, from the BUILT exe -----------------
-$info = (& $Exe info --json 2>&1 | Where-Object { "$_" -like '{*' } | Select-Object -First 1)
+$info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>&1 | ForEach-Object { "$_" } } | Where-Object { "$_" -like '{*' } | Select-Object -First 1)
 $engineVer = ''
 try { $engineVer = [string](($info | ConvertFrom-Json).extractor_version) } catch { $engineVer = '' }
 Check 'V0 info --json reports the extractor version' ($engineVer -match '^\d+\.\d+\.\d+') "extractor_version=$engineVer"
@@ -135,7 +135,7 @@ end.
 '@
 
 $pristine = Join-Path $WorkDir 'pristine.sqlite'
-$o0 = (& $Exe index $src --db $pristine 2>&1 | Out-String)
+$o0 = (& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $pristine 2>&1 | ForEach-Object { "$_" } } | Out-String)
 Check 'V1 fixture index exits 0' ($LASTEXITCODE -eq 0) ($o0 -split "`r?`n" | Select-Object -Last 1)
 Check 'V2 fixture has NO pending -wal (checkpointed by the run)' ((SidecarBytes $pristine) -eq 0) "wal bytes=$(SidecarBytes $pristine)"
 $fp0 = MetaGet $pristine 'indexer_fingerprint'
@@ -152,7 +152,7 @@ function Fresh() {
 }
 function RunIndex([string[]]$ExtraArgs) {
   $argv = @('index', $src, '--db', $db) + $ExtraArgs
-  $script:LastOut = (& $Exe @argv 2>&1 | Out-String)
+  $script:LastOut = (& { $ErrorActionPreference = 'Continue'; & $Exe @argv 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $script:LastExit = $LASTEXITCODE
 }
 $reparseLine = 'Indexer changed since this DB was built'
@@ -248,12 +248,12 @@ $mtext = '{' + [char]10 +
 $allDb = Join-Path $WorkDir 'out\nd.sqlite'
 Push-Location C:\TEMP
 try {
-  $b0 = (& $Exe index --all --config $manifest --only SecND --jobs 1 2>&1 | Out-String)
+  $b0 = (& { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $manifest --only SecND --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check 'R5 precondition: the manifest section built' ((Test-Path $allDb) -and ($LASTEXITCODE -eq 0)) "exit=$LASTEXITCODE"
   if (Test-Path $allDb) {
     PlantExtractor $allDb $newer
     $md5 = Md5 $allDb
-    $b1 = (& $Exe index --all --config $manifest --only SecND --jobs 1 2>&1 | Out-String)
+    $b1 = (& { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $manifest --only SecND --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-String)
     $e1 = $LASTEXITCODE
     Check 'R5 exits non-zero' ($e1 -ne 0) "exit=$e1"
     Check 'R5 names both versions' (($b1 -match [regex]::Escape($newer)) -and ($b1 -match [regex]::Escape($engineVer))) ''

@@ -79,7 +79,7 @@ function New-Variant([string]$Tag, [object[]]$Edits) {
 function Get-VariantPlan([hashtable]$V, [string]$Tag) {
   $dproj = Join-Path $V.Dir 'MemberWrite.dproj'
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project $dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
   $okIdx = $LASTEXITCODE -eq 0
   $o = Join-Path $WorkDir "plan-$Tag.out"
   $dump = Join-Path $WorkDir "dump-$Tag.txt"
@@ -133,10 +133,10 @@ try {
     ($t.Contains("    procedure SetLastGage(const pValue: Integer);`n") -and
      $t.Contains("procedure TDemoGagePort.SetLastGage(const pValue: Integer);`nbegin`n  LastGage := pValue;`nend;")) ''
   Check 'a1d the prose names the setter' ($t -match 'writes are read/write properties instead, each with a one-line setter .*\(SetLastGage\)') ''
-  $fo = & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $a1.File -Cycle 1 -Root $a1.Dir 2>&1 | Out-String
+  $fo = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $a1.File -Cycle 1 -Root $a1.Dir 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'a1e the follower applies it (exit 0)' ($LASTEXITCODE -eq 0) ($fo.Trim() -replace "`r?`n", ' | ')
-  & $Exe index --project $a1.Dproj --db $a1.Db *> (Join-Path $WorkDir 'index-a1-after.log')
-  $after = & $Exe cycles --db $a1.Db --library-db $Lib 2>&1 | Out-String
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $a1.Dproj --db $a1.Db *> (Join-Path $WorkDir 'index-a1-after.log') }
+  $after = & { $ErrorActionPreference = 'Continue'; & $Exe cycles --db $a1.Db --library-db $Lib 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'a1f re-indexed, no cycle remains' ($after -match 'No circular unit dependencies found\.') ($after.Trim() -replace "`r?`n", ' | ')
 
   $a2 = Test-Accepted 'a2' 'a write of a public field (`Count := 3`)' @(

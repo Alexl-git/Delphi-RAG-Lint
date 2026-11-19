@@ -88,7 +88,7 @@ if (-not $buildOk -or -not (Test-Path $exe)) {
 }
 
 function Invoke-Harness([string]$Path, [string[]]$More = @()) {
-    $out = (& $exe $Path @More 2>&1 | Out-String)
+    $out = (& { $ErrorActionPreference = 'Continue'; & $exe $Path @More 2>&1 | ForEach-Object { "$_" } } | Out-String)
     $h = @{ RAW = $out.Trim() -replace "`r?`n", ' | ' }
     foreach ($line in ($out -split "`r?`n")) {
         if ($line -match '^(TARGET|LOADERR|SECTIONS|SAVED|REASON)=(.*)$') { $h[$Matches[1]] = $Matches[2] }

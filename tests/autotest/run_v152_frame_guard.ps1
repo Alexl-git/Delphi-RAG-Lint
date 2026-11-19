@@ -33,7 +33,7 @@ function Assert($name, $cond) {
 function Src($rel) { [IO.File]::ReadAllText((Join-Path $repo $rel)) }
 
 # 1. counts
-$raw = & $exe rules --json --rules-dir rules 2>$null
+$raw = & { $ErrorActionPreference = 'Continue'; & $exe rules --json --rules-dir rules 2>$null }
 $json = ($raw -join "`n") | ConvertFrom-Json
 $total = [int]$json.summary.total
 $fixable = @($json.rules | Where-Object { $_.fixable }).Count

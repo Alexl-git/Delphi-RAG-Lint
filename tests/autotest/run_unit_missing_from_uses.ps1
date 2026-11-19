@@ -191,20 +191,20 @@ $manifest = Join-Path $WorkDir 'manifest.drag-lint.json'
 $db = Join-Path $WorkDir 'out\mu.sqlite'
 $libDb = Join-Path $WorkDir 'out\mulib.sqlite'
 function LintOf([string]$unit) {
-  @(& $Exe lint (Join-Path $srcDir $unit) --db $db --db $libDb --rule unit-missing-from-uses --quiet 2>&1 | Out-String) -split "`r?`n" |
+  @(& { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $srcDir $unit) --db $db --db $libDb --rule unit-missing-from-uses --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String) -split "`r?`n" |
     Where-Object { $_ -match 'unit-missing-from-uses' }
 }
 Push-Location C:\TEMP
 try {
-  & $Exe index --all --config $manifest --only SecMu --jobs 1 2>&1 | Out-Null
-  & $Exe index --all --config $manifest --only SecMuLib --jobs 1 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $manifest --only SecMu --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $manifest --only SecMuLib --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
   if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
   $impl = @(LintOf 'uImplUse.pas'); $intf = @(LintOf 'uIntfUse.pas'); $already = @(LintOf 'uAlready.pas')
   $local = @(LintOf 'uLocal.pas'); $unknown = @(LintOf 'uUnknown.pas'); $cyc = @(LintOf 'uCycA.pas')
-  $all = & $Exe lint-all --db $db --db $libDb --rule unit-missing-from-uses --quiet 2>&1 | Out-String
+  $all = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --db $libDb --rule unit-missing-from-uses --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String
   $allLines = $all -split "`r?`n" | Where-Object { $_ -match 'unit-missing-from-uses' }
   $wsDot = @($allLines | Where-Object { $_ -match 'uWsDot\.pas' }); $wsMiss = @($allLines | Where-Object { $_ -match 'uWsMiss\.pas' })
-  $rules = & $Exe rules --json 2>&1 | Out-String
+  $rules = & { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>&1 | ForEach-Object { "$_" } } | Out-String
   Write-Host 'FINDINGS' -ForegroundColor Cyan
   # positive-control: unit-missing-from-uses
   Check 'impl-only use -> one finding, implementation clause' (($impl.Count -eq 1) -and ($impl[0] -match "uImplUse\.pas:7:3") -and ($impl[0] -match "'CsSite' is declared in unit uCsLog -- add it to the implementation uses clause")) ($impl -join ' | ')
@@ -219,8 +219,8 @@ try {
   Check 'lint-all reports the same rule (impl + intf + cycle + wsMiss = 4)' (([regex]::Matches($all, 'unit-missing-from-uses')).Count -eq 4) ''
   Check 'rules --json lists the rule as fixable' ($rules -match '"id"\s*:\s*"unit-missing-from-uses"[^}]*"fixable"\s*:\s*true') ''
   Write-Host 'FIX' -ForegroundColor Cyan
-  & $Exe lint (Join-Path $srcDir 'uImplUse.pas') --db $db --rule unit-missing-from-uses --fix --apply --quiet 2>&1 | Out-Null
-  & $Exe lint (Join-Path $srcDir 'uIntfUse.pas') --db $db --rule unit-missing-from-uses --fix --apply --quiet 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $srcDir 'uImplUse.pas') --db $db --rule unit-missing-from-uses --fix --apply --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $srcDir 'uIntfUse.pas') --db $db --rule unit-missing-from-uses --fix --apply --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $implTxt = [IO.File]::ReadAllText((Join-Path $srcDir 'uImplUse.pas'))
   $intfTxt = [IO.File]::ReadAllText((Join-Path $srcDir 'uIntfUse.pas'))
   Check '--fix creates the implementation clause' ($implTxt.Contains("implementation`r`n`r`nuses`r`n  uCsLog;`r`nprocedure DoIt;")) ($implTxt -replace "`r`n", '\n')

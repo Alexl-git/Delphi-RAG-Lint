@@ -124,13 +124,13 @@ $fileA  = Join-Path $src 'uCycA.pas'
 $libDb  = Join-Path $WorkDir 'library-Fixture.sqlite'
 $projDb = Join-Path $WorkDir 'Fixture.sqlite'
 foreach ($d in $libDb, $projDb) {
-  $idx = & $exePath index $src --db $d 2>&1 | Out-String
+  $idx = & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $d 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check "SANITY: fixture indexed into $(Split-Path $d -Leaf)" ($LASTEXITCODE -eq 0) $idx
 }
 
 function LintDbg($db) {
   $env:DRAGLINT_DEBUG = '1'
-  try { & $exePath lint $fileA --db $db --rules-dir $rules 2>&1 | Out-String }
+  try { & { $ErrorActionPreference = 'Continue'; & $exePath lint $fileA --db $db --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String }
   finally { Remove-Item Env:\DRAGLINT_DEBUG }
 }
 

@@ -51,7 +51,7 @@ New-Item -ItemType Directory $WorkDir -Force | Out-Null
 Copy-Item (Join-Path $PSScriptRoot 'fixtures\unitrules\*') $WorkDir
 
 $db = Join-Path $WorkDir 'fx.sqlite'
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the fixture index was built' (Test-Path $db)
 
 function P([string]$n) { return (Join-Path $WorkDir $n) }
@@ -69,7 +69,7 @@ function Run([string[]]$Units, [string[]]$Extra = @()) {
   $a = @('convert-apply')
   foreach ($u in $Units) { $a += @('--unit', (P $u)) }
   $a += @('--rules', (P 'mixed.rules'), '--db', $db, '--format', 'json') + $Extra
-  $o = (& $Exe @a 2> $errFile) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2> $errFile }) -join "`n"
   $code = $LASTEXITCODE
   $e = if (Test-Path $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
   $j = $null
@@ -83,7 +83,7 @@ $PRECOND = 'not covered by any supplied --db'
 
 # ---- capability -------------------------------------------------------------
 $ij = $null
-try { $ij = ((& $Exe info --json 2>$null) -join "`n") | ConvertFrom-Json } catch { $ij = $null }
+try { $ij = ((& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n") | ConvertFrom-Json } catch { $ij = $null }
 Check 'C1 info --json: capabilities.batch_progress is JSON true' `
   (($null -ne $ij) -and ($ij.capabilities.batch_progress -is [bool]) -and ($ij.capabilities.batch_progress -eq $true)) `
   "capabilities = $(if ($ij) { $ij.capabilities | ConvertTo-Json -Compress } else { '<no json>' })"

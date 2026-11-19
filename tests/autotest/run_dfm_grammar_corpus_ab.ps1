@@ -159,7 +159,7 @@ $side = @{}
 foreach ($s in @(@('A', $BaseDll), @('B', $LaneDll))) {
   $out = Join-Path $OutDir "corpus-$($s[0]).tsv"
   $t0 = Get-Date
-  & pwsh -NoProfile -File $PSCommandPath -WorkDll $s[1] -WorkList $list -WorkOut $out -CoreDll $CoreDll 2>&1 | Out-Host
+  & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $PSCommandPath -WorkDll $s[1] -WorkList $list -WorkOut $out -CoreDll $CoreDll 2>&1 | ForEach-Object { "$_" } } | Out-Host
   if ($LASTEXITCODE -ne 0 -or -not (Test-Path $out)) { Write-Host "FATAL: worker $($s[0]) failed (exit $LASTEXITCODE)" -ForegroundColor Red; exit 2 }
   $map = @{}
   foreach ($ln in [IO.File]::ReadAllLines($out)) { $f = $ln.Split("`t", 2); $map[$f[1]] = $f[0] }

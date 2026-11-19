@@ -34,7 +34,7 @@ New-Item -ItemType Directory $WorkDir -Force | Out-Null
 function P([string]$n) { return (Join-Path $WorkDir $n) }
 function W([string]$n, [string]$t) { [IO.File]::WriteAllText((P $n), (($t -replace "`r`n","`n") -replace "`n","`r`n"), [Text.Encoding]::ASCII) }
 function Val([string]$Rules) {
-  $o = (& $Exe convert-validate --rules (P $Rules) 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules (P $Rules) 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 

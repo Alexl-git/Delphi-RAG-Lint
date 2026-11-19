@@ -111,13 +111,13 @@ WritePas $proj @'
 </Project>
 '@
 
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' (Test-Path $db) $db
 
 function RunJson([string[]]$ExtraArgs) {
   $a = @('uses-fix', $unit, '--project', $proj, '--db', $db, '--library-db', $LibDb, '--platform', 'win64',
          '--remove-unused', '--format', 'json') + $ExtraArgs
-  $raw = (& $exePath @a 2>$null | Out-String)
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath @a 2>$null } | Out-String)
   $i = $raw.IndexOf('{')
   if ($i -lt 0) { return $null }
   try { return ($raw.Substring($i) | ConvertFrom-Json) } catch { return $null }

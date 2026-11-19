@@ -147,12 +147,12 @@ Check 'all five fixture lines located' (
   @($lnBare,$lnDash,$lnColon,$lnBogus,$lnUnmarked) -notcontains -1) `
   "bare $lnBare, dash $lnDash, colon $lnColon, bogus $lnBogus, unmarked $lnUnmarked"
 
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' (Test-Path $db)
 
 function Lint-Fixture {
   $concat = @(); $stale = @{}; $malformed = @{}
-  foreach ($line in (& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db 2>&1)) {
+  foreach ($line in (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db 2>&1 | ForEach-Object { "$_" } })) {
     $t = "$line"
     if ($t -match ':(\d+):\d+\s+\[\w+\]\s+concat-in-loop:')           { $concat += [int]$Matches[1] }
     elseif ($t -match ':(\d+):\d+\s+\[\w+\]\s+review-marker-stale:')  { $stale[[int]$Matches[1]] = $t }
@@ -200,7 +200,7 @@ if ($want -ne '') {
   Write-Ascii $fixture ($body.Replace(
     'S := S + IntToStr(I); // dl:ok concat-in-loop',
     "S := S + IntToStr(I); // dl:ok concat-in-loop@$want"))
-  & $Exe index $WorkDir --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $r2 = Lint-Fixture
   Check "the @hash form (line $lnBare, @$want) is suppressed" (-not ($r2.Concat -contains $lnBare))
   Check "and is VERIFIED -- no review-marker-stale on line $lnBare" (-not $r2.Stale.ContainsKey($lnBare))

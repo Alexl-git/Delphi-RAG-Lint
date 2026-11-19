@@ -84,14 +84,14 @@ New-Unit 'uDebugOnly'   48622
 New-Unit 'uReleaseOnly' 48633
 
 # FOLDER index: every unit is in the DB, whatever the config.
-& $Exe index "$WorkDir\proj" --db $Db *> "$WorkDir\index.log"
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\proj" --db $Db *> "$WorkDir\index.log" }
 $idxCode = $LASTEXITCODE
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (CLIFIX C2)
 if (-not (Test-Path $Db)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index produced no DB; see $WorkDir\index.log" -ForegroundColor Red; exit 2 }
 
 # The units a --project lint-all run reports magic-literal findings for.
 function ScopedUnits([string[]]$Extra = @()) {
-  $o = & $Exe lint-all --db $Db --project $Dproj @Extra --enable magic-literal --json 2>$null | Out-String
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --project $Dproj @Extra --enable magic-literal --json 2>$null } | Out-String
   $start = $o.IndexOf('[')
   if ($start -lt 0) { return @("<no json: $o>") }
   try { $arr = @($o.Substring($start) | ConvertFrom-Json) } catch { return @("<unparsed: $o>") }

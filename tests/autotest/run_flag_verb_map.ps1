@@ -369,7 +369,7 @@ Write-Host ''
 Write-Host '-- per-verb gap vs --help' -ForegroundColor Cyan
 
 $FlagRx = '--[A-Za-z][A-Za-z0-9-]*'
-$helpText = (& $Exe --help 2>&1 | Out-String)
+$helpText = (& { $ErrorActionPreference = 'Continue'; & $Exe --help 2>&1 | ForEach-Object { "$_" } } | Out-String)
 
 # A verb's BLOCK is its `  drag-lint <verb> ...` line plus the continuation
 # lines under it, up to the next verb line or the next section header. The

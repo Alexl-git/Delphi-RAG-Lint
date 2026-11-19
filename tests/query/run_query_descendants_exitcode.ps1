@@ -82,7 +82,7 @@ $db  = Join-Path $WorkDir 'desc.sqlite'
 $out = Join-Path $WorkDir 'o.txt'
 $err = Join-Path $WorkDir 'e.txt'
 
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 function RunDescendants([string]$Ancestor) {
   $p = Start-Process -FilePath $exePath `

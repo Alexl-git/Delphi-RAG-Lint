@@ -91,7 +91,7 @@ Write-Ascii (Join-Path $work 'forward.pas') $ForwardBody
 $db = Join-Path $WorkDir 'forward.sqlite'
 
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 $indexExit = $LASTEXITCODE
 Check 'index exits 0' ($indexExit -eq 0) "exit=$indexExit; $($indexOut -join ' | ')"
 

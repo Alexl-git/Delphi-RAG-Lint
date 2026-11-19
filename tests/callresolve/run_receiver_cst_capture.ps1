@@ -66,7 +66,7 @@ $pas = Join-Path $scratch 'uRecvCst.pas'
 
 # sql --json rows are POSITIONAL arrays: map them onto columns[].name.
 function Sql([string]$Query) {
-  $raw = (& $exePath sql --db $db --json --limit 5000 --query $Query 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --limit 5000 --query $Query 2>$null }) -join "`n"
   $b = $raw.IndexOf('{')
   if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
   $o = $raw.Substring($b) | ConvertFrom-Json
@@ -110,7 +110,7 @@ function Snapshot([switch]$NoEdges) {
   return ((@($r | ForEach-Object { "$($_.k)" })) -join "`n")
 }
 
-$idxOut = & $exePath index $scratch --db $db 2>&1 | Out-String
+$idxOut = & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
 $p1 = LineOf ".Mk('b').Leaf.K;";  $p2 = LineOf "Mk('c');"
@@ -171,14 +171,14 @@ Check 'no receiver starts with . or spans a line break' ($bad.Count -eq 0) ((@($
 
 $snap1 = Snapshot
 $text1 = Snapshot -NoEdges
-$null = & $exePath index $scratch --db $db --resolve-only 2>&1 | Out-String
+$null = & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db --resolve-only 2>&1 | ForEach-Object { "$_" } } | Out-String
 $snap2 = Snapshot
 Check 'idempotency: a second resolve changes no receiver or edge' ($snap1 -eq $snap2)
 
 # stale control: shift every line by one AFTER indexing, then re-resolve only.
 $src = [System.IO.File]::ReadAllText($pas)
 [System.IO.File]::WriteAllText($pas, "{ shifted }`r`n" + $src, [System.Text.Encoding]::ASCII)
-$null = & $exePath index $scratch --db $db --resolve-only 2>&1 | Out-String
+$null = & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db --resolve-only 2>&1 | ForEach-Object { "$_" } } | Out-String
 # Edges in a stale file are the existing decline-not-guess policy (1.35.1 drops them too); the TEXT is the fact.
 $snap3 = Snapshot -NoEdges
 Check 'stale control: every receiver keeps its text in a shifted source' ($text1 -eq $snap3)

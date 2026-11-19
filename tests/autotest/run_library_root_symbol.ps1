@@ -32,11 +32,11 @@ New-Item -ItemType Directory -Force $WorkDir | Out-Null
 $Db = Join-Path $WorkDir 'libroot.sqlite'
 if (Test-Path $Db) { [IO.File]::Delete($Db) }
 
-$null = & $Exe index $Fx --db $Db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $Fx --db $Db 2>&1 | ForEach-Object { "$_" } }
 if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: index exit $LASTEXITCODE" -ForegroundColor Red; exit 2 }
 
 function Rows([string]$q) {
-  $raw = & $Exe sql --db $Db --query $q --json --limit 500 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query $q --json --limit 500 2>$null }
   if ($LASTEXITCODE -ne 0) { return ,@() }
   $j = ($raw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n" | ConvertFrom-Json
   return ,@($j.rows)

@@ -34,7 +34,7 @@ function LineOf([string]$File, [string]$Marker) {
   return [int]$m[0].LineNumber
 }
 function RuleFindings([string]$Db, [string[]]$Extra) {
-  $raw = & $exePath lint-all --db $Db --format json @Extra 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $Db --format json @Extra 2>$null }
   return @((Parse-Findings $raw) | Where-Object { $_.rule -eq $Rule })
 }
 function Fresh([string]$Name) {
@@ -46,7 +46,7 @@ function Fresh([string]$Name) {
 try {
   $src = Fresh 'a'
   $db = Join-Path $scratch 'a.sqlite'
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $leak = Join-Path $src 'uGfLeak.pas'
 
   # positive-control: global-set-in-initialization-never-freed
@@ -61,7 +61,7 @@ try {
 
   $t = [IO.File]::ReadAllText($leak).Replace("  GFreed.Free;", "  GFreed.Free;`r`n  GLeaked.Free;")
   [IO.File]::WriteAllText($leak, $t, [Text.Encoding]::ASCII)
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $after = RuleFindings $db @('--rule', $Rule)
   Check 'RUN 3 freed in a finalization: GLeaked goes' (@($after | Where-Object { $_.message -match 'GLeaked' }).Count -eq 0) "$($after.Count) total"
   Check 'RUN 3 the other three stay' ($after.Count -eq 3) "$($after.Count) total"

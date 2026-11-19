@@ -33,38 +33,38 @@ try {
   }
   WriteTsv "$scratch\A.tsv" $A
   WriteTsv "$scratch\B.tsv" (MakeB 0 0)
-  $null = & pwsh -NoProfile -File $cmp -A "$scratch\A.tsv" -B "$scratch\B.tsv" 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $cmp -A "$scratch\A.tsv" -B "$scratch\B.tsv" 2>&1 | ForEach-Object { "$_" } }
   Check 'B13 clean pair (B fixes b + both fixtures) passes' ($LASTEXITCODE -eq 0)
   WriteTsv "$scratch\Breg.tsv" (MakeB 4 0)
-  $null = & pwsh -NoProfile -File $cmp -A "$scratch\A.tsv" -B "$scratch\Breg.tsv" 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $cmp -A "$scratch\A.tsv" -B "$scratch\Breg.tsv" 2>&1 | ForEach-Object { "$_" } }
   Check 'B13 CONTROL a regression in B is rejected' ($LASTEXITCODE -ne 0)
   WriteTsv "$scratch\Bfx.tsv" (MakeB 0 1)
-  $null = & pwsh -NoProfile -File $cmp -A "$scratch\A.tsv" -B "$scratch\Bfx.tsv" 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $cmp -A "$scratch\A.tsv" -B "$scratch\Bfx.tsv" 2>&1 | ForEach-Object { "$_" } }
   Check 'B13 CONTROL a fixture that still fails in B is rejected' ($LASTEXITCODE -ne 0)
   WriteTsv "$scratch\Bshort.tsv" ((MakeB 0 0) | Select-Object -First 3)
-  $null = & pwsh -NoProfile -File $cmp -A "$scratch\A.tsv" -B "$scratch\Bshort.tsv" 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $cmp -A "$scratch\A.tsv" -B "$scratch\Bshort.tsv" 2>&1 | ForEach-Object { "$_" } }
   Check 'B13 CONTROL a short run (different file set) is rejected' ($LASTEXITCODE -ne 0)
 
   # ---- B27 ----------------------------------------------------------------------------------------
   Write-Host '== B27 hermetic engine guard ==' -ForegroundColor Cyan
-  $null = & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'run_hermetic_engine_guard.ps1') 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'run_hermetic_engine_guard.ps1') 2>&1 | ForEach-Object { "$_" } }
   Check 'B27 run_hermetic_engine_guard passes' ($LASTEXITCODE -eq 0)
 
   # ---- B37 ----------------------------------------------------------------------------------------
   Write-Host '== B37 encoding guard speed + control ==' -ForegroundColor Cyan
   $sw = [Diagnostics.Stopwatch]::StartNew()
-  $null = & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'run_encoding_guard.ps1') 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'run_encoding_guard.ps1') 2>&1 | ForEach-Object { "$_" } }
   $sw.Stop()
   Check 'B37 default run from this tree passes' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
   Check 'B37 default run finishes in under 90 s' ($sw.Elapsed.TotalSeconds -lt 90) ("{0:N0} s" -f $sw.Elapsed.TotalSeconds)
   $mini = Join-Path $scratch 'mini'; [IO.Directory]::CreateDirectory("$mini\src") | Out-Null
   [IO.File]::WriteAllBytes("$mini\src\lf.pas", [Text.Encoding]::ASCII.GetBytes("unit lf;`nend.`n"))
-  $o2 = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'run_encoding_guard.ps1') -Repo $mini 2>&1) -join "`n"
+  $o2 = (& { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'run_encoding_guard.ps1') -Repo $mini 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'B37 CONTROL a lone-LF .pas is reported' ($o2 -match '\[FAIL\] no file has a lone LF')
 
   # ---- B46 ----------------------------------------------------------------------------------------
   Write-Host '== B46 -Exe parameters ==' -ForegroundColor Cyan
-  $o3 = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'run_resolver_version_guard.ps1') -Exe 'C:\does\not\matter.exe' 2>&1) -join "`n"
+  $o3 = (& { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'run_resolver_version_guard.ps1') -Exe 'C:\does\not\matter.exe' 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'B46 run_resolver_version_guard accepts -Exe' (($o3 -notmatch 'parameter cannot be found|positional parameter') -and ($LASTEXITCODE -eq 0))
   $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'run_check_init_handlers.ps1'), [ref]$null, [ref]$null)
   $pe  = $ast.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'Exe' }
@@ -89,8 +89,8 @@ try {
   $eOff = NewEngine 'eng-off' '{"settings":{"defaultPlatform":"Win32"}}'
   Push-Location $proj
   try {
-    $rOn  = (& $eOn  --version 2>&1 | Out-String)
-    $rOff = (& $eOff --version 2>&1 | Out-String)
+    $rOn  = (& { $ErrorActionPreference = 'Continue'; & $eOn  --version 2>&1 | ForEach-Object { "$_" } } | Out-String)
+    $rOff = (& { $ErrorActionPreference = 'Continue'; & $eOff --version 2>&1 | ForEach-Object { "$_" } } | Out-String)
   } finally { Pop-Location }
   Check 'B28 CONTROL engine without the key loads the local defaults file' ($rOff -match 'loaded defaults from')
   $seen = if ($rOn -match 'loaded defaults from[^\r\n]*') { $Matches[0] } else { '' }

@@ -32,13 +32,13 @@ $inc = Join-Path $WorkDir 'incuses'; Copy-Item (Resolve-Path "$PSScriptRoot\..\f
 $proj = Join-Path $inc 'IncUses.dproj'; $db = Join-Path $WorkDir 'i.sqlite'
 function Index([string]$tag) {
   Push-Location $WorkDir
-  try { $o = & $Exe index --project $proj --db $db --library-db none 2>&1 | Out-String } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe index --project $proj --db $db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String } finally { Pop-Location }
   [IO.File]::WriteAllText((Join-Path $WorkDir "$tag.log"), $o)
   return $o
 }
 function IncRows() {
   Push-Location $WorkDir
-  try { $j = & $Exe sql --db $db --query "SELECT u.unit_name FROM unit_uses u JOIN files f ON f.id = u.file_id WHERE f.path LIKE '%IncB.pas' AND u.origin_path IS NOT NULL" --json 2>$null | Out-String } finally { Pop-Location }
+  try { $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query "SELECT u.unit_name FROM unit_uses u JOIN files f ON f.id = u.file_id WHERE f.path LIKE '%IncB.pas' AND u.origin_path IS NOT NULL" --json 2>$null } | Out-String } finally { Pop-Location }
   try { return ,@((($j | ConvertFrom-Json).rows) | ForEach-Object { $_[0] }) } catch { return ,@() }
 }
 

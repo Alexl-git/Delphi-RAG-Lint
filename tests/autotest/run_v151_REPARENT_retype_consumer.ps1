@@ -48,7 +48,7 @@ $Tmp = Join-Path $env:TEMP ("v151_reparent_" + [guid]::NewGuid().ToString('N').S
 [IO.Directory]::CreateDirectory($Tmp) | Out-Null
 
 function Reindex($P) {
-  & $Exe index --project $P.Proj --db $P.Db --library-db none *> (Join-Path $Tmp "index.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $P.Proj --db $P.Db --library-db none *> (Join-Path $Tmp "index.log") }
   if ($LASTEXITCODE -ne 0) { throw "index exit $LASTEXITCODE" }
 }
 function New-Project([string]$Name) {
@@ -59,7 +59,7 @@ function New-Project([string]$Name) {
   return $P
 }
 function Run-Json($P, [string[]]$More) {
-  $o = & $Exe extract-interface --db $P.Db --project $P.Proj --library-db none --format json @More 2> (Join-Path $Tmp 'run.err')
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe extract-interface --db $P.Db --project $P.Proj --library-db none --format json @More 2> (Join-Path $Tmp 'run.err') }
   $script:LastExit = $LASTEXITCODE
   $script:LastErr = [IO.File]::ReadAllText((Join-Path $Tmp 'run.err'))
   try { return (($o -join "`n") | ConvertFrom-Json) } catch { return $null }

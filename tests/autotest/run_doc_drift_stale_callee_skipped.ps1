@@ -141,13 +141,13 @@ $core = Join-Path $scratch 'Core.pas'
 $app  = Join-Path $scratch 'App.pas'
 
 function RunEngine([string[]]$EngineArgs) {
-  $out = & $exePath @EngineArgs 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath @EngineArgs 2>&1 | ForEach-Object { "$_" } } | Out-String
   return [pscustomobject]@{ Code = $LASTEXITCODE; Text = $out }
 }
 # lint --json is a bare array (rule, file_path, start_line, message ...); stderr kept apart.
 function LintApp {
   $errFile = Join-Path $scratch 'lint.err'
-  $json = & $exePath lint $app --db $db --project-rules --json 2> $errFile | Out-String
+  $json = & { $ErrorActionPreference = 'Continue'; & $exePath lint $app --db $db --project-rules --json 2> $errFile } | Out-String
   $arr = @()
   $s = $json.IndexOf('[')
   if ($s -ge 0) { $arr = @($json.Substring($s) | ConvertFrom-Json) }

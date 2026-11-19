@@ -78,7 +78,7 @@ end.
 $unit = Join-Path $WorkDir 'fpsized.pas'
 [System.IO.File]::WriteAllText($unit, $src, [System.Text.Encoding]::ASCII)
 
-$out = (& $Exe lint $unit --rule off-by-one-count 2>$null | Out-String)
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $unit --rule off-by-one-count 2>$null } | Out-String)
 
 Write-Host 'False positive that must be GONE' -ForegroundColor Cyan
 Check 'a loop to Length(pA) over a table sized Length(pA) + 1 is in bounds' `

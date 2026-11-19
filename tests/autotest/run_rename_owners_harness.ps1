@@ -97,18 +97,18 @@ WriteAscii "$WorkDir\N\uN.pas" @('unit uN;', '', 'interface', '', 'uses', '  uTr
 # --- fixture DBs, each with an explicit --db, cwd inside the work folder ---
 Push-Location $WorkDir
 try {
-  $null = & $Exe index --project "$WorkDir\A\A.dpr" --db "$WorkDir\A.sqlite" 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index --project "$WorkDir\A\A.dpr" --db "$WorkDir\A.sqlite" 2>&1 | ForEach-Object { "$_" } }
   Check 'F1 indexed A.dpr' ($LASTEXITCODE -eq 0 -and (Test-Path "$WorkDir\A.sqlite")) "exit=$LASTEXITCODE"
-  $null = & $Exe index --project "$WorkDir\T\T.dpr" --db "$WorkDir\T.sqlite" 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index --project "$WorkDir\T\T.dpr" --db "$WorkDir\T.sqlite" 2>&1 | ForEach-Object { "$_" } }
   Check 'F2 indexed T.dpr' ($LASTEXITCODE -eq 0 -and (Test-Path "$WorkDir\T.sqlite")) "exit=$LASTEXITCODE"
   # a LIBRARY-type DB: a folder target is valid for a library DB (never for a project DB)
-  $null = & $Exe index "$WorkDir\shared" --db "$WorkDir\LIB.sqlite" 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\shared" --db "$WorkDir\LIB.sqlite" 2>&1 | ForEach-Object { "$_" } }
   Check 'F3 indexed shared\ as a library DB' ($LASTEXITCODE -eq 0 -and (Test-Path "$WorkDir\LIB.sqlite")) "exit=$LASTEXITCODE"
-  $null = & $Exe index "$WorkDir\many" --db "$WorkDir\many.sqlite" 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\many" --db "$WorkDir\many.sqlite" 2>&1 | ForEach-Object { "$_" } }
   Check 'F4 indexed many\ (5 units) as a library DB' ($LASTEXITCODE -eq 0 -and (Test-Path "$WorkDir\many.sqlite")) "exit=$LASTEXITCODE"
-  $null = & $Exe index --project "$WorkDir\M\M.dproj" --db "$WorkDir\M.sqlite" 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index --project "$WorkDir\M\M.dproj" --db "$WorkDir\M.sqlite" 2>&1 | ForEach-Object { "$_" } }
   Check 'F5 indexed M.dproj' ($LASTEXITCODE -eq 0 -and (Test-Path "$WorkDir\M.sqlite")) "exit=$LASTEXITCODE"
-  $null = & $Exe index --project "$WorkDir\N\N.dpr" --db "$WorkDir\N.sqlite" 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index --project "$WorkDir\N\N.dpr" --db "$WorkDir\N.sqlite" 2>&1 | ForEach-Object { "$_" } }
   Check 'F6 indexed N.dpr (uTrans absent)' ($LASTEXITCODE -eq 0 -and (Test-Path "$WorkDir\N.sqlite")) "exit=$LASTEXITCODE"
 } finally { Pop-Location }
 # fresh copies of A for the callback-double cases (RefreshOwner never sees the original)
@@ -167,7 +167,7 @@ Copy-TreeSitterDlls -Dest $outDir | Out-Null
 $hx = "$outDir\RenameOwnersHarness.exe"
 if (-not $buildOk -or -not (Test-Path $hx)) { [System.IO.Directory]::Delete($WorkDir, $true); Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 
-$out = & $hx $WorkDir $Exe 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $hx $WorkDir $Exe 2>&1 | ForEach-Object { "$_" } } | Out-String
 $kv = @{}
 foreach ($line in ($out -split "`r?`n")) { if ($line -match '^([A-Za-z0-9_.]+)=(.*)$') { $kv[$matches[1]] = $matches[2] } }
 Check 'H1 harness ran to completion' ($out -match '(?m)^DONE') ($kv['EXCEPTION'])

@@ -90,7 +90,7 @@ function Json([string]$s) {
   try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json) } catch { return $null }
 }
 function Run([string[]]$A) {
-  $o = (& $Exe @A 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @A 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 # Separate raw streams, as bytes on disk (a 10 MB stdout is not pushed through
@@ -176,7 +176,7 @@ object ProgForm: TProgForm
 end
 '@
 $db = P 'fx.sqlite'
-$idx = & $Exe index $fx --db $db 2>&1
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'fx the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db)) "exit=$LASTEXITCODE; $($idx -join ' | ')"
 $book = P 'b.rules'
 Write-Ascii $book "#convert ProgFix.TProgA -> ProgFix.TProgB, ProgFix`n#link Mid.W <- Mid.W`n"
@@ -310,7 +310,7 @@ if (($LibDb -eq '') -or -not (Test-Path $LibDb)) {
   if ($null -eq $py) {
     Check 'f2 python is available for PRAGMA integrity_check' $false 'python not found'
   } else {
-    $ic = (& $py.Source -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); print(c.execute('PRAGMA integrity_check').fetchone()[0])" $copy 2>&1) -join ' '
+    $ic = (& { $ErrorActionPreference = 'Continue'; & $py.Source -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); print(c.execute('PRAGMA integrity_check').fetchone()[0])" $copy 2>&1 | ForEach-Object { "$_" } }) -join ' '
     Check 'f2 PRAGMA integrity_check on the killed copy = ok' ($ic.Trim() -eq 'ok') $ic
   }
   # stdout alone: this library copy prints a stale-resolver note on stderr, and

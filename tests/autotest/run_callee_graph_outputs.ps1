@@ -151,7 +151,7 @@ Write-Host '=== #9: find-callees is per call SITE, and the docs say so ===' -For
 $fc = Run @('find-callees', '--qname', 'UG.TRoot.Drive', '--db', $db)
 Check '7. CONTROL: find-callees lists both callees' (($fc.Out -match 'StepA') -and ($fc.Out -match 'StepB')) ''
 $root = Join-Path $PSScriptRoot '..\..'
-$help = (& $Exe --help 2>$null) -join "`n"
+$help = (& { $ErrorActionPreference = 'Continue'; & $Exe --help 2>$null }) -join "`n"
 $helpLine = @($help -split "`n" | Where-Object { $_ -match '^\s*drag-lint find-callees ' })
 Check '8. --help: find-callees says per call site and names callgraph --depth 1' `
   (($helpLine.Count -eq 1) -and ($helpLine[0] -match 'call SITE') -and ($helpLine[0] -match 'callgraph .*--depth 1')) "line=$($helpLine -join ' | ')"

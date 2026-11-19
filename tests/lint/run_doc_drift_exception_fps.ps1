@@ -208,12 +208,12 @@ $norm = $body -replace "`r`n", "`n" -replace "`n", "`r`n"
 [System.IO.File]::WriteAllText((Join-Path $work 'xfp.pas'), $norm, [System.Text.Encoding]::ASCII)
 $db = Join-Path $WorkDir 'xfp.sqlite'
 if (Test-Path $db) { [IO.File]::Delete($db) }
-$null = & $Exe index $work --db $db --library-db none 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db --library-db none 2>&1 | ForEach-Object { "$_" } }
 Check 'SANITY index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 function Get-Drift([string]$QName) {
   $rows = @()
-  foreach ($ln in @(& $Exe doc-drift --qname $QName --db $db --json 2>$null)) {
+  foreach ($ln in @(& { $ErrorActionPreference = 'Continue'; & $Exe doc-drift --qname $QName --db $db --json 2>$null })) {
     $t = "$ln".Trim()
     if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json) }
   }

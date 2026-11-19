@@ -54,7 +54,7 @@ foreach ($dcc in 'dcc32', 'dcc64') {
   Check "ReportProgressTests builds ($dcc)" $ok ((($text -split "`r?`n") | Select-String 'Error|Fatal' | Select-Object -First 4) -join ' | ')
   $exe = "$out\ReportProgressTests.exe"
   if (-not $ok -or -not (Test-Path $exe)) { continue }
-  $run = & $exe 2>&1 | Out-String
+  $run = & { $ErrorActionPreference = 'Continue'; & $exe 2>&1 | ForEach-Object { "$_" } } | Out-String
   $summary = [regex]::Match($run, '(\d+) passed, (\d+) failed')
   foreach ($line in ($run -split "`r?`n" | Where-Object { $_ -match '^FAIL' })) { Write-Host "      $line" -ForegroundColor DarkGray }
   Check "ReportProgressTests ($dcc): $($summary.Value)" ($summary.Success -and $summary.Groups[2].Value -eq '0' -and $LASTEXITCODE -eq 0)

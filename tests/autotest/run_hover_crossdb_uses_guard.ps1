@@ -150,8 +150,8 @@ $cfg = Join-Path $WorkDir 'manifest.drag-lint.json'
   }
 }
 "@ | Set-Content $cfg -Encoding ascii
-& $Exe index --all --config $cfg --only SecA --jobs 1 2>&1 | Out-Null
-& $Exe index --all --config $cfg --only SecB --jobs 1 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $cfg --only SecA --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $cfg --only SecB --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $dbA = Join-Path $WorkDir 'out\a.sqlite'
 $dbB = Join-Path $WorkDir 'out\b.sqlite'
 Check 'fixture: both DBs indexed' ((Test-Path $dbA) -and (Test-Path $dbB))
@@ -159,7 +159,7 @@ Check 'fixture: both DBs indexed' ((Test-Path $dbA) -and (Test-Path $dbB))
 function Hover([string]$QName, [string]$Fmt, [string[]]$Dbs) {
   $a = @('hover', '--qname', $QName, '--format', $Fmt)
   foreach ($d in $Dbs) { $a += @('--db', $d) }
-  return ((& $Exe @a 2>$null) -join "`n")
+  return ((& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }) -join "`n")
 }
 function UsedInLine([string]$md) { return (($md -split "`n") | Where-Object { $_ -match 'Used in:' }) -join ' / ' }
 function ViaLine([string]$md) { return (($md -split "`n") | Where-Object { $_ -match 'Used in \(via property' }) -join ' / ' }

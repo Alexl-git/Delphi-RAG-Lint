@@ -77,7 +77,7 @@ function New-Variant([string]$Tag, [object[]]$Edits) {
 function Get-VariantPlan([hashtable]$V, [string]$Tag) {
   $dproj = Join-Path $V.Dir 'MemberWrite.dproj'
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project $dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
   $okIdx = ($LASTEXITCODE -eq 0)
   $o = Join-Path $WorkDir "plan-$Tag.out"
   $dump = Join-Path $WorkDir "dump-$Tag.txt"

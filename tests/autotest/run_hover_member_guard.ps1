@@ -202,7 +202,7 @@ function Get-HoverValue([string[]]$Dbs, [int]$Line0, [int]$Char0) {
 Write-Host ''
 Write-Host 'CASE 1: member hover through a variable, one index' -ForegroundColor Cyan
 $db1 = Join-Path $WorkDir 'both.sqlite'
-& $Exe index $WorkDir --db $db1 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db1 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'built the combined index' (Test-Path $db1)
 
 $h1 = Get-HoverValue @($db1) $assignLine $assignCol
@@ -230,8 +230,8 @@ Write-Host 'CASE 2: declaring type in a SEPARATE index' -ForegroundColor Cyan
 $env:DRAGLINT_CONTEXT_DEFAULTS = Join-Path $WorkDir 'no-defaults.json'
 $dbL = Join-Path $WorkDir 'library-Win64.sqlite'
 $dbA = Join-Path $WorkDir 'app.sqlite'
-& $Exe index $libDir --db $dbL 2>&1 | Out-Null
-& $Exe index $appDir --db $dbA 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $libDir --db $dbL 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $appDir --db $dbA 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'built both split indexes' ((Test-Path $dbL) -and (Test-Path $dbA))
 # app db FIRST -- the plugin orders project-then-library.
 $h2 = Get-HoverValue @($dbA, $dbL) $assignLine $assignCol

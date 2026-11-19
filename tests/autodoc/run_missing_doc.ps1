@@ -42,9 +42,9 @@ $cfg = Join-Path $scratch 'docmiss.config.json'
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
-  $out = & $exePath lint-all --db $db --config $cfg --json 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --config $cfg --json 2>$null }
   $raw = ($out -join "`n")
   # lint-all --json prints one pretty-printed JSON array preceded/followed by
   # plain progress/summary text on other lines -- extract just the array.
@@ -83,7 +83,7 @@ try {
   # missing-doc to its default-disabled set (the catalog default_enabled=false does
   # NOT suppress runtime output on its own; it is driven by DefDisabled/ShouldKeep).
   # Before the fix this fired the full 1302-style wave on every bare run.
-  $bareOut = & $exePath lint-all --db $db --json 2>$null
+  $bareOut = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --json 2>$null }
   $bareRaw = ($bareOut -join "`n")
   $bS = $bareRaw.IndexOf('['); $bE = $bareRaw.LastIndexOf(']')
   $bareFindings = @()

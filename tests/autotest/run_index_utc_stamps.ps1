@@ -48,7 +48,7 @@ $code = Invoke-G8Index $Exe $src $db
 $after = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 Check 'fixture index built' (($code -eq 0) -and (Test-Path $db)) "exit=$code"
 
-$raw = (& $Exe sql --db $db --json --query 'SELECT path, mtime_unix, parsed_at FROM files ORDER BY path' 2>$null) -join "`n"
+$raw = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --query 'SELECT path, mtime_unix, parsed_at FROM files ORDER BY path' 2>$null }) -join "`n"
 $j = $raw.Substring($raw.IndexOf('{')) | ConvertFrom-Json
 $cols = @($j.columns | ForEach-Object { $_.name })
 $rows = @($j.rows | ForEach-Object { $r = $_; $o = @{}; for ($i = 0; $i -lt $cols.Count; $i++) { $o[$cols[$i]] = $r[$i] }; $o })

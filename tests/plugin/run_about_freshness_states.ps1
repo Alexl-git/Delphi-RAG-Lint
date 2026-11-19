@@ -115,9 +115,9 @@ $py = Join-Path $WorkDir 'exec.py'
   "import sqlite3,sys`nc=sqlite3.connect(sys.argv[1])`nc.execute(sys.argv[2])`nc.commit();c.close()`n",
   [System.Text.Encoding]::ASCII)
 
-function Reindex { & $Exe index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | Out-Null }
+function Reindex { & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null }
 function IndexRow {
-  $j = (& $Exe info --json --db $db 2>$null) -join "`n"
+  $j = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json --db $db 2>$null }) -join "`n"
   $i = $j.IndexOf('{')
   if ($i -lt 0) { return $null }
   try { return ($j.Substring($i) | ConvertFrom-Json).indexes[0] } catch { return $null }
@@ -170,7 +170,7 @@ Check 'CONTROL: the four states are four DISTINCT verdicts' ($verdicts.Count -eq
 
 # And the fixture must genuinely have been aged, or the two cases above are
 # measuring an unmodified database.
-$fp = (& $Exe sql --query "SELECT value FROM schema_meta WHERE key='indexer_fingerprint'" --db $db --json 2>$null) -join "`n"
+$fp = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --query "SELECT value FROM schema_meta WHERE key='indexer_fingerprint'" --db $db --json 2>$null }) -join "`n"
 Check 'FIXTURE INTEGRITY: the ageing write actually took' ($fp -match '0\.0\.1-ancient') `
   'the UPDATE did not land, so "reparse-owed" above was not produced by an aged index'
 

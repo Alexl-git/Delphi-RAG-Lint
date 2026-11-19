@@ -23,7 +23,7 @@ Copy-Item $fixture $target -Force
 
 Push-Location C:\TEMP
 try {
-  & $exePath 'lint' '--file' $target '--fix' '--fix-rule' 'unused-local' '--apply' 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath 'lint' '--file' $target '--fix' '--fix-rule' 'unused-local' '--apply' 2>$null } | Out-Null
 
   $got  = [IO.File]::ReadAllText($target)   -replace "`r`n", "`n"
   $want = [IO.File]::ReadAllText($expected) -replace "`r`n", "`n"

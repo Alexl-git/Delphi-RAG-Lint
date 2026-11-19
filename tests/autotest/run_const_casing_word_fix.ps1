@@ -75,12 +75,12 @@ end.
   $db = Join-Path $work 'cc.sqlite'
 
   function FixOne([int]$Line) {
-    & $Exe index --project $dpr --db $db 2>&1 | Out-Null
-    (& $Exe lint --file $u --db $db --fix --fix-line $Line --fix-rule const-casing --apply 2>&1 | Out-String)
+    & { $ErrorActionPreference = 'Continue'; & $Exe index --project $dpr --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+    (& { $ErrorActionPreference = 'Continue'; & $Exe lint --file $u --db $db --fix --fix-line $Line --fix-rule const-casing --apply 2>&1 | ForEach-Object { "$_" } } | Out-String)
   }
 
-  & $Exe index --project $dpr --db $db 2>&1 | Out-Null
-  $found = @(& $Exe lint $u --db $db --rule const-casing --json 2>$null | ConvertFrom-Json | ForEach-Object { $_.start_line })
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $dpr --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $found = @(& { $ErrorActionPreference = 'Continue'; & $Exe lint $u --db $db --rule const-casing --json 2>$null } | ConvertFrom-Json | ForEach-Object { $_.start_line })
   Check 'P1 premise: the three bad names are findings (lines 6, 7, 8), StationName is not' `
     ((($found -contains 6) -and ($found -contains 7) -and ($found -contains 8)) -and ($found -notcontains 9)) "lines: $($found -join ',')"
 

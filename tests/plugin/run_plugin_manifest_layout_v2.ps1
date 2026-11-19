@@ -54,7 +54,7 @@ function Invoke-Test([string]$Tag, [string]$UnitDir) {
           -RedirectStandardError "$log.err" -NoNewWindow -Wait -PassThru)
   $b = Get-Content $log -Raw
   if ($b -notmatch 'BUILD_EXITCODE=0') { Write-Host $b; Write-Host "FATAL: $Tag compile failed" -ForegroundColor Red; exit 2 }
-  $r = & (Join-Path $out 'ManifestPathsTests.exe') 2>&1 | Out-String
+  $r = & { $ErrorActionPreference = 'Continue'; & (Join-Path $out 'ManifestPathsTests.exe') 2>&1 | ForEach-Object { "$_" } } | Out-String
   $rc = $LASTEXITCODE
   Write-Host $r.TrimEnd()
   return $rc

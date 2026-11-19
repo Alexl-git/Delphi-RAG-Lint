@@ -77,7 +77,7 @@ foreach ($d in 'src/cli', 'src/delphi-plugin', 'tests', 'tools/corpusscan') {
 Write-Host ''
 Write-Host 'B. the tracked src\cli declaration covers every drag-lint.dpr member' -ForegroundColor Cyan
 $dpr  = Join-Path $Repo 'src\cli\drag-lint.dpr'
-$decl = (git -C $Repo show 'HEAD:src/cli/_D-RAG/drag-lint-project.json' 2>$null) -join "`n"
+$decl = (& { $ErrorActionPreference = 'Continue'; git -C $Repo show 'HEAD:src/cli/_D-RAG/drag-lint-project.json' 2>$null }) -join "`n"
 $members = @(Get-Members $dpr)
 Check 'B0 CONTROL: the .dpr parses to members' ($members.Count -gt 100) "members=$($members.Count)"
 $ctl = Get-Uncovered $dpr @('.')
@@ -144,11 +144,11 @@ end;
 end.
 '@
 $db = Join-Path $cli '_D-RAG\App.sqlite'
-& $Exe index --project (Join-Path $cli 'App.dpr') --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $cli 'App.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: no index" -ForegroundColor Red; exit 2 }
 function LintAll {
   Push-Location $WorkDir
-  try { return (& $Exe lint-all --db $db --output (Join-Path $WorkDir 'rep.txt') 2>&1 | Out-String) }
+  try { return (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --output (Join-Path $WorkDir 'rep.txt') 2>&1 | ForEach-Object { "$_" } } | Out-String) }
   finally { Pop-Location }
 }
 $u2 = 'U2\.pas:\d+:\d+\s+\[\w+\]\s+unused-local'

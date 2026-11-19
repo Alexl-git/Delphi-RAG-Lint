@@ -89,7 +89,7 @@ function Get-Findings($raw) {
 
 # Re-analyse one symbol through the engine verb; returns rows with .kind/.fixable.
 function Get-Drift($qname) {
-  $out = & $exePath doc-drift --qname $qname --db $db --json 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath doc-drift --qname $qname --db $db --json 2>$null }
   $rows = @()
   foreach ($ln in $out) { $t = $ln.Trim(); if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json) } }
   return ,$rows
@@ -97,10 +97,10 @@ function Get-Drift($qname) {
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # ---- Part A: report-all --------------------------------------------------
-  $rawA = (& $exePath lint-all --db $db --json 2>$null) -join "`n"
+  $rawA = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --json 2>$null }) -join "`n"
   $findings = Get-Findings $rawA
   $drift = @($findings | Where-Object { $_.rule -eq 'doc-drift' })
   Check 'lint-all emits at least one doc-drift finding' ($drift.Count -ge 1)
@@ -138,7 +138,7 @@ try {
   $beforeFSpan  = GetSpanThroughF $beforeFLines
 
   # ---- Part B: fix the safe subset -----------------------------------------
-  & $exePath lint-all --db $db --fix --apply --no-backup 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --apply --no-backup 2>$null } | Out-Null
   $afterFix = Get-Content -Raw $target
   $afterFLines = [IO.File]::ReadAllLines($target)
   $afterFSpan  = GetSpanThroughF $afterFLines
@@ -163,12 +163,12 @@ try {
 
   # ---- Part C: idempotency -------------------------------------------------
   $before2 = Get-Content -Raw $target
-  & $exePath lint-all --db $db --fix --apply --no-backup 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --apply --no-backup 2>$null } | Out-Null
   $after2 = Get-Content -Raw $target
   Check '2nd --fix is byte-identical (idempotent)' ($before2 -eq $after2)
 
   # Re-index the now-repaired file, then re-analyse.
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   $fReanalyse = Get-Drift 'drift.F'
   $lReanalyse = Get-Drift 'drift.Lookup'
 

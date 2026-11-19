@@ -84,7 +84,7 @@ if (-not $buildOk -or -not (Test-Path $exe)) {
 Copy-TreeSitterDlls -Dest $outDir | Out-Null
 
 function RunHarness([string]$OldName, [string]$ConfigCase) {
-    (& $exe $OldName $ConfigCase 2>&1 | Out-String).Trim()
+    (& { $ErrorActionPreference = 'Continue'; & $exe $OldName $ConfigCase 2>&1 | ForEach-Object { "$_" } } | Out-String).Trim()
 }
 
 # Test-case table (from the Task 5 brief, Step 1)

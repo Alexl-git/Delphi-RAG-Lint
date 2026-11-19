@@ -66,7 +66,7 @@ function New-Copy([string]$Tag, [string]$NewBody = '') {
     [IO.File]::WriteAllText($p, $t.Replace($Body, $NewBody), $Ascii)
   }
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project (Join-Path $to 'WithSelf.dproj') --db $db *> (Join-Path $WorkDir "index-$Tag.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $to 'WithSelf.dproj') --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
   return @{ Dir = $to; Dproj = (Join-Path $to 'WithSelf.dproj'); Db = $db; IndexExit = $LASTEXITCODE }
 }
 
@@ -87,7 +87,7 @@ try {
   Set-Text (Join-Path $stubDir 'System.Classes.pas') ("unit System.Classes;`n`ninterface`n`ntype`n  TPersistent = class(TObject)`n  end;`n`n" +
     "  TComponent = class(TPersistent, IInterface)`n  private`n    FName: string;`n  public`n    procedure Ping;`n    property Name: string read FName;`n  end;`n`n  TStrings = class(TPersistent)`n  end;`n`nimplementation`n`nend.`n")
   $Stub = Join-Path $WorkDir 'stub-library.sqlite'
-  & $Exe index $stubDir --db $Stub *> (Join-Path $WorkDir 'index-stub.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $stubDir --db $Stub *> (Join-Path $WorkDir 'index-stub.log') }
   Check 's0 the stub library was indexed' (($LASTEXITCODE -eq 0) -and (Test-Path $Stub)) "exit=$LASTEXITCODE"
 
   Write-Host '== (a) Self.InBuf inside the with: R2 proceeds' -ForegroundColor Cyan
@@ -116,13 +116,13 @@ try {
     $c = New-Copy 'c'
     Check 'c0 indexed' ($c.IndexExit -eq 0) "exit=$($c.IndexExit)"
     $fo = Join-Path $WorkDir 'fix-c.out'
-    & $Exe cycles --fix --build-timeout 1800 --project $c.Dproj --db $c.Db --library-db $Stub --cycle 1 --apply --no-backup `
-      --shadow-out (Join-Path $WorkDir 'c-shadow') *> $fo
+    & { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --build-timeout 1800 --project $c.Dproj --db $c.Db --library-db $Stub --cycle 1 --apply --no-backup `
+      --shadow-out (Join-Path $WorkDir 'c-shadow') *> $fo }
     $fx = $LASTEXITCODE
     $ft = [IO.File]::ReadAllText($fo)
     Check 'c1 --fix --apply exit 0 (compile gate passed)' ($fx -eq 0) ("exit=$fx " + (($ft -split "`r?`n" | Select-Object -Last 4) -join ' | '))
-    & $Exe index --project $c.Dproj --db $c.Db *> (Join-Path $WorkDir 'index-c2.log')
-    $after = (& $Exe cycles --db $c.Db 2>$null | Out-String)
+    & { $ErrorActionPreference = 'Continue'; & $Exe index --project $c.Dproj --db $c.Db *> (Join-Path $WorkDir 'index-c2.log') }
+    $after = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --db $c.Db 2>$null } | Out-String)
     Check 'c2 re-indexed: No circular unit dependencies found.' $after.Contains('No circular unit dependencies found.') ($after.Trim() -replace "`r?`n", ' | ')
     $exeP = Join-Path $c.Dir 'Win64\Debug\WithSelf.exe'
     if (Test-Path $exeP) {

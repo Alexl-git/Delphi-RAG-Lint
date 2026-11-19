@@ -76,11 +76,11 @@ end.
 function IndexWith([string]$Bds, [string]$Name, [string[]]$Extra = @()) {
   $env:BDS = $Bds
   $db = Join-Path $WorkDir "$Name.sqlite"
-  & $Exe index (Join-Path $WorkDir 'src') --db $db --quiet @Extra 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $WorkDir 'src') --db $db --quiet @Extra 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $code = $LASTEXITCODE
   $has = @{}
   foreach ($n in @('ModernApi', 'AncientApi', 'RioOnly', 'FlorenceOnly')) {
-    & $Exe query --name $n --db $db --exact 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $Exe query --name $n --db $db --exact 2>&1 | ForEach-Object { "$_" } } | Out-Null
     $has[$n] = ($LASTEXITCODE -eq 0)
   }
   return @{ Code = $code; Has = $has; Db = $db }

@@ -89,7 +89,7 @@ $errFile = Join-Path $WorkDir 'stderr.txt'
 # so $ErrorActionPreference = 'Stop' cannot turn that banner into an
 # ErrorRecord and corrupt a JSON slice.
 function Run([string[]]$A) {
-  $out = & $Exe @A 2>$errFile
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @A 2>$errFile }
   $rc  = $LASTEXITCODE
   $err = if (Test-Path -LiteralPath $errFile) { (Get-Content -LiteralPath $errFile -Raw) } else { '' }
   if ($null -eq $err) { $err = '' }

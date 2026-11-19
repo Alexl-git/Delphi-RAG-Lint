@@ -56,21 +56,21 @@ try {
   $projDb = Join-Path $out 'projon.sqlite'
   Push-Location C:\TEMP
   try {
-    & $exe index $lib --db (Join-Path $out 'library-Win64.sqlite') --platform win64 2>&1 | Out-Null   # ruling a3: no --platform = Win32
-    & $exe index $lib --db (Join-Path $out 'library-Win32.sqlite') --platform win32 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exe index $lib --db (Join-Path $out 'library-Win64.sqlite') --platform win64 2>&1 | ForEach-Object { "$_" } } | Out-Null   # ruling a3: no --platform = Win32
+    & { $ErrorActionPreference = 'Continue'; & $exe index $lib --db (Join-Path $out 'library-Win32.sqlite') --platform win32 2>&1 | ForEach-Object { "$_" } } | Out-Null
     Check 'both library fixtures indexed' ((Test-Path (Join-Path $out 'library-Win64.sqlite')) -and (Test-Path (Join-Path $out 'library-Win32.sqlite')))
 
-    $txt = (& $exe index --project (Join-Path $app 'App.dproj') 2>&1 | Out-String)
+    $txt = (& { $ErrorActionPreference = 'Continue'; & $exe index --project (Join-Path $app 'App.dproj') 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check '1. dproj says Win64 -> library-Win64 is opened' ($txt -match '\+ library-db .*library-Win64\.sqlite') $txt
     Check '1. the CWD/manifest-default library-Win32 is NOT opened' ($txt -notmatch '\+ library-db .*library-Win32\.sqlite') $txt
 
-    $txt = (& $exe index --project (Join-Path $app 'App.dproj') --resolve-only 2>&1 | Out-String)
+    $txt = (& { $ErrorActionPreference = 'Continue'; & $exe index --project (Join-Path $app 'App.dproj') --resolve-only 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check '2. second run (DB stamp plat=win64) -> library-Win64' ($txt -match '\+ library-db .*library-Win64\.sqlite') $txt
 
-    $txt = (& $exe index --all --dry-run --only ProjOn 2>&1 | Out-String)
+    $txt = (& { $ErrorActionPreference = 'Continue'; & $exe index --all --dry-run --only ProjOn 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check '2b. --all --dry-run prints the library line with platform and state' ($txt -match 'library: .*library-Win64\.sqlite \(Win64, \w[\w-]*\)') $txt
 
-    $txt = (& $exe index --project (Join-Path $app 'App.dproj') --platform Win32 --resolve-only 2>&1 | Out-String)
+    $txt = (& { $ErrorActionPreference = 'Continue'; & $exe index --project (Join-Path $app 'App.dproj') --platform Win32 --resolve-only 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check '3. explicit --platform Win32 wins -> library-Win32' ($txt -match 'library: .*library-Win32\.sqlite \(Win32\)') $txt
 
   } finally { Pop-Location }

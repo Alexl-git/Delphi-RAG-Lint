@@ -104,10 +104,10 @@ $DefLib = Join-Path $WorkDir 'dctx-win64.sqlite'
 $Lib32  = Join-Path $WorkDir 'dctx-win32.sqlite'
 $Listed = Join-Path $WorkDir 'listed\library-Win64.sqlite'
 $projDb = Join-Path $WorkDir 'proj.sqlite'
-& $Exe index "$WorkDir\libsrc"  --db $DefLib  2>&1 | Out-Null
-& $Exe index "$WorkDir\libsrc"  --db $Lib32   2>&1 | Out-Null
-& $Exe index "$WorkDir\libsrc"  --db $Listed  2>&1 | Out-Null
-& $Exe index "$WorkDir\projsrc" --db $projDb  2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\libsrc"  --db $DefLib  2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\libsrc"  --db $Lib32   2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\libsrc"  --db $Listed  2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\projsrc" --db $projDb  2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'built fixture indexes' ((Test-Path $DefLib) -and (Test-Path $Lib32) -and (Test-Path $Listed) -and (Test-Path $projDb))
 
 $lines = $looseText -split "`r?`n"

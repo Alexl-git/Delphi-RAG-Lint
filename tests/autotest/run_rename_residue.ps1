@@ -54,7 +54,7 @@ function Build-Lab([string]$Root) {
 function Stdout-Of([string]$Root) {
   $x = Get-ChildItem $Root -Recurse -Filter ResRen.exe | Sort-Object LastWriteTime -Descending | Select-Object -First 1
   if (-not $x) { return '<no exe>' }
-  return (& $x.FullName 2>&1 | Out-String)
+  return (& { $ErrorActionPreference = 'Continue'; & $x.FullName 2>&1 | ForEach-Object { "$_" } } | Out-String)
 }
 function New-Lab {
   $script:N++
@@ -63,24 +63,24 @@ function New-Lab {
   Copy-Item "$Fx\*.pas", "$Fx\*.dpr", "$Fx\*.dproj" $root
   $db = "$root.sqlite"
   Push-Location $WorkDir
-  try { $null | & $Exe index --project (Join-Path $root 'ResRen.dproj') --db $db --library-db none *> "$db.log" } finally { Pop-Location }
+  try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root 'ResRen.dproj') --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
   return @{ Root = $root; Dproj = (Join-Path $root 'ResRen.dproj'); Db = $db; Use = (Join-Path $root 'ResUse.pas'); Types = (Join-Path $root 'ResTypes.pas'); Local = (Join-Path $root 'ResLocal.pas'); Split = (Join-Path $root 'ResSplit.pas') }
 }
 function Plan($P, [string]$Q, [string]$To) {
   Push-Location $WorkDir
-  try { $o = ($null | & $Exe rename --kind symbol --name $Q --to $To --db $P.Db --library-db $script:Lib --plan --json 2>$null | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
+  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe rename --kind symbol --name $Q --to $To --db $P.Db --library-db $script:Lib --plan --json 2>$null } | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
   $j = $null; try { $j = $o | ConvertFrom-Json } catch { }
   return @{ Exit = $c; Json = $j; Out = $o; Kinds = @($j.refusals | ForEach-Object { $_.kind }); Edits = @($j.edits) }
 }
 function Apply($P, [string]$Q, [string]$To) {
   Push-Location $WorkDir
-  try { $o = ($null | & $Exe rename --kind symbol --name $Q --to $To --db $P.Db --library-db $script:Lib --project $P.Dproj --build-timeout 600 --apply --no-backup 2>&1 | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
+  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe rename --kind symbol --name $Q --to $To --db $P.Db --library-db $script:Lib --project $P.Dproj --build-timeout 600 --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
   return @{ Exit = $c; Out = $o }
 }
 # sql --json rows are positional: map them onto the column names.
 function Sql($P, [string]$Query) {
   Push-Location $WorkDir
-  try { $o = ($null | & $Exe sql --db $P.Db --query $Query --json 2>$null | Out-String) } finally { Pop-Location }
+  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $P.Db --query $Query --json 2>$null } | Out-String) } finally { Pop-Location }
   $j = $null; try { $j = $o | ConvertFrom-Json } catch { }
   if (-not $j) { return , @() }
   $names = @($j.columns | ForEach-Object { $_.name })
@@ -127,7 +127,7 @@ $libDir = Join-Path $WorkDir 'libsrc'
 New-Item -ItemType Directory -Force $libDir | Out-Null
 Copy-Item "$Stub\LibStub.pas" $libDir
 $script:Lib = Join-Path $WorkDir 'lib.sqlite'
-Push-Location $WorkDir; try { $null | & $Exe index $libDir --db $script:Lib --library-db none *> "$script:Lib.log" } finally { Pop-Location }
+Push-Location $WorkDir; try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index $libDir --db $script:Lib --library-db none *> "$script:Lib.log" } } finally { Pop-Location }
 $base = New-Lab
 Check 'fixture compiles untouched' (Build-Lab $base.Root) (Get-Content "$($base.Root).bld.log" -Tail 8 | Out-String)
 $script:Expected = Stdout-Of $base.Root

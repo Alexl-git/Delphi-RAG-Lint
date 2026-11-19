@@ -110,7 +110,7 @@ process.stdout.write(JSON.stringify(out));
 '@
 Set-Content -LiteralPath $probe -Value $probeSrc -Encoding ASCII
 try {
-  $json = & node $probe $libPath 2>&1
+  $json = & { $ErrorActionPreference = 'Continue'; & node $probe $libPath 2>&1 | ForEach-Object { "$_" } }
   if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: node probe failed: $json" -ForegroundColor Red; exit 2 }
   $r = $json | ConvertFrom-Json
 } finally {

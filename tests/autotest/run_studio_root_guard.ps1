@@ -120,7 +120,7 @@ function Get-PascalStringLiterals([string]$Path) {
 # ---------------------------------------------------------------------------
 # 1. BEHAVIOUR -- precedence, normalisation, composition.
 # ---------------------------------------------------------------------------
-$out = (& $Exe selftest studio-root 2>&1 | Out-String).Trim()
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe selftest studio-root 2>&1 | ForEach-Object { "$_" } } | Out-String).Trim()
 $rc = $LASTEXITCODE
 Check 'selftest studio-root passes' (($rc -eq 0) -and ($out -match 'STUDIOROOT-OK')) "exit=$rc, output: $out"
 

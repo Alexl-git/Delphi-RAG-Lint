@@ -81,13 +81,13 @@ end.
 "@
 
 $db = Join-Path $WorkDir 'fx.sqlite'
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the fixture index was built' (Test-Path $db) $db
 
 function Bundle([string]$Task, [switch]$Full) {
   $extra = @()
   if ($Full) { $extra = @('--full-surface') }
-  return ((& $exePath context --task $Task --db $db --format markdown @extra 2>$null) -join "`n")
+  return ((& { $ErrorActionPreference = 'Continue'; & $exePath context --task $Task --db $db --format markdown @extra 2>$null }) -join "`n")
 }
 function Section([string]$Text, [string]$Head) {
   if ($Text -match ('(?s)## ' + $Head + '\n(.*?)(\n## |\z)')) { return $Matches[1] }

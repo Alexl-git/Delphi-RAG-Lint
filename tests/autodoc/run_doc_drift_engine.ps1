@@ -48,7 +48,7 @@ Copy-Item $fixture $target -Force
 # Parse the JSON-per-line output of `doc-drift --qname X --json` into an array of
 # PSCustomObjects (each with .kind, .detail, .fixable, .line).
 function Get-Drift($qname) {
-  $out = & $exePath doc-drift --qname $qname --db $db --json 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath doc-drift --qname $qname --db $db --json 2>$null }
   $rows = @()
   foreach ($ln in $out) {
     $t = $ln.Trim()
@@ -69,7 +69,7 @@ function LacksKind($rows,$k) {
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # --- F: renamed param (report-only) + missing param (fixable), returns OK ---
   $f = Get-Drift 'drift.F'

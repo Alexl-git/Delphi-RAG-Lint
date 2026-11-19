@@ -74,7 +74,7 @@ function Lint([string]$Bump = '') {
   $old = $env:DRAGLINT_TEST_METRIC_ALGO_BUMP
   try {
     if ($Bump -ne '') { $env:DRAGLINT_TEST_METRIC_ALGO_BUMP = $Bump } else { [Environment]::SetEnvironmentVariable('DRAGLINT_TEST_METRIC_ALGO_BUMP', $null) }
-    $out = & $Exe lint $pas --db $db --rule deep-nesting 2>$null | Out-String
+    $out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $pas --db $db --rule deep-nesting 2>$null } | Out-String
   } finally {
     if ($null -ne $old) { $env:DRAGLINT_TEST_METRIC_ALGO_BUMP = $old } else { [Environment]::SetEnvironmentVariable('DRAGLINT_TEST_METRIC_ALGO_BUMP', $null) }
   }
@@ -97,7 +97,7 @@ function LegacyHash([int]$Metric) {
 }
 
 Probe '' $false $false
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 $r = Lint
 Check '1 deep-nesting fires on the unmarked probe' $r.Finding

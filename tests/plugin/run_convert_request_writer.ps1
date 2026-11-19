@@ -38,7 +38,7 @@ try {
   $built = (Get-Content $log -Raw) -match 'BUILD_EXITCODE=0'
   Check 'ConvertRequestWriterTests compiles' $built
   if ($built) {
-    $out = & (Join-Path $work 'ConvertRequestWriterTests.exe') 2>&1 | Out-String
+    $out = & { $ErrorActionPreference = 'Continue'; & (Join-Path $work 'ConvertRequestWriterTests.exe') 2>&1 | ForEach-Object { "$_" } } | Out-String
     Write-Host $out.TrimEnd()
     Check 'the writer tests pass' (($LASTEXITCODE -eq 0) -and ($out -match '\d+ passed, 0 failed'))
   }

@@ -44,7 +44,7 @@ function New-Demo([string]$Tag) {
 }
 function Index-Demo([string]$Root, [string]$Tag) {
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project (Join-Path $Root 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "index-$Tag.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $Root 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
   Check "$Tag indexed" ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
   return $db
 }

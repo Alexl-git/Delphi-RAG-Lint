@@ -200,12 +200,12 @@ end.
 '@
 
 $db = Join-Path $scratch 'pr.sqlite'
-$idxOut = & $exePath index $scratch --db $db 2>&1 | Out-String
+$idxOut = & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'index exits 0' ($LASTEXITCODE -eq 0) ''
 Check 'index reported no parse errors' ($idxOut -match '0 errors') ''
 
 function Resolved([string]$name) {
-  $raw = & $exePath query find-callers --name $name --resolved --json --db $db 2>$null | Out-String
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name $name --resolved --json --db $db 2>$null } | Out-String
   if ($raw.Trim() -eq '') { return @() }
   try { return @(($raw | ConvertFrom-Json)) } catch { return @() }
 }
@@ -270,7 +270,7 @@ Write-Host '== R1: an OVERLOADED accessor narrows by arity or declines ==' -Fore
 # `sql --json` returns columns[] + POSITIONAL rows[][]; map each row onto its
 # column names. A failed query (empty stdout) is an EMPTY array.
 function Sql([string]$q) {
-  $j = (& $exePath sql --db $db --query $q --json 2>$null) -join "`n"
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n"
   if ([string]::IsNullOrWhiteSpace($j)) { return ,@() }
   try { $o = $j | ConvertFrom-Json } catch { return ,@() }
   $cols = @($o.columns | ForEach-Object { $_.name })
@@ -298,12 +298,12 @@ Check 'R1 control: TOverloaded.GetPair has NO resolved caller (declined, no wron
 Write-Host ''
 Write-Host '== E5: lint-tree sees a removed PROPERTY ==' -ForegroundColor Cyan
 $base = Join-Path $scratch 'base.json'
-& $exePath lint-tree --unit (Join-Path $scratch 'uProv.pas') --db $db --write-baseline $base --format json *> $null
+& { $ErrorActionPreference = 'Continue'; & $exePath lint-tree --unit (Join-Path $scratch 'uProv.pas') --db $db --write-baseline $base --format json *> $null }
 Check 'baseline written' (Test-Path $base) ''
 $buf = Join-Path $scratch 'uProv.buf.pas'
 $src = [IO.File]::ReadAllText((Join-Path $scratch 'uProv.pas'))
 [IO.File]::WriteAllText($buf, ($src -replace '(?m)^\s*property Flag: Boolean read GetFlag write FFlag;\r?\n', ''), [Text.Encoding]::ASCII)
-$lt = & $exePath lint-tree --unit (Join-Path $scratch 'uProv.pas') --db $db --buffer $buf --baseline $base --format json 2>$null | Out-String
+$lt = & { $ErrorActionPreference = 'Continue'; & $exePath lint-tree --unit (Join-Path $scratch 'uProv.pas') --db $db --buffer $buf --baseline $base --format json 2>$null } | Out-String
 $lj = $null; try { $lj = $lt | ConvertFrom-Json } catch { }
 Check 'lint-tree returned JSON' ($null -ne $lj) $lt
 if ($null -ne $lj) {

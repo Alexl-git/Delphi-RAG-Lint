@@ -96,7 +96,7 @@ r = c.execute('''SELECT f.touches FROM symbols s
 if not r: print('<norow>')
 else: print('<null>' if r[0][0] is None else '[' + r[0][0] + ']')
 "@
-  return ((python -c $py 2>&1) -join ' ').Trim()
+  return ((& { $ErrorActionPreference = 'Continue'; python -c $py 2>&1 | ForEach-Object { "$_" } }) -join ' ').Trim()
 }
 
 Push-Location C:\TEMP
@@ -112,13 +112,13 @@ $tgt = Join-Path $sc 'touches.pas'
 $db  = Join-Path $sc 't.sqlite'
 Copy-Item $fx $tgt -Force
 
-& $exePath index $sc --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc --db $db 2>$null } | Out-Null
 Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
-& $exePath document --unit $tgt --db $db --apply 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $tgt --db $db --apply 2>$null } | Out-Null
 Check 'apply exits 0' ($LASTEXITCODE -eq 0)
 $md5Cycle1 = Get-FileMd5 $tgt
-& $exePath index $sc --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc --db $db 2>$null } | Out-Null
 
 $lines   = [IO.File]::ReadAllLines($tgt)
 $blkRead = Get-BlockAbove $lines '^function ReadConfig\(const APath: string\): string;'
@@ -164,7 +164,7 @@ Check '5. symbol_facts.touches for AddUp is empty or NULL' `
   (($storedAdd -eq '[]') -or ($storedAdd -eq '<null>') -or ($storedAdd -eq '<norow>')) "got=$storedAdd"
 
 # --- (6) idempotency. -------------------------------------------------------
-& $exePath document --unit $tgt --db $db --apply 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $tgt --db $db --apply 2>$null } | Out-Null
 Check '6. a second apply after a reindex is byte-identical' `
   ((Get-FileMd5 $tgt) -eq $md5Cycle1) ("c1=$md5Cycle1 c2=" + (Get-FileMd5 $tgt))
 

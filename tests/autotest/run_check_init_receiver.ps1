@@ -187,15 +187,15 @@ try {
     New-Item -ItemType Directory -Path $d -Force | Out-Null
     Copy-Item -Path (Join-Path $FixRoot "$fx\*") -Destination $d -Force
     $db = Join-Path $WorkDir "$fx.sqlite"
-    $null = & $Exe index $d --db $db 2>&1
+    $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $d --db $db 2>&1 | ForEach-Object { "$_" } }
     Check "index $fx (exit 0)" ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
     $dbs[$fx] = $db; $dirsOf[$fx] = $d
   }
 
   function Invoke-Answer($Case, [string]$Source) {
     $db = $dbs[$Case.Fix]
-    if ($Source -eq 'cli') { $raw = & $Exe check-init $Case.Target --db $db --json 2>$null }
-    else { $raw = & $driverExe --db $db --target $Case.Target --stable 2>$null }
+    if ($Source -eq 'cli') { $raw = & { $ErrorActionPreference = 'Continue'; & $Exe check-init $Case.Target --db $db --json 2>$null } }
+    else { $raw = & { $ErrorActionPreference = 'Continue'; & $driverExe --db $db --target $Case.Target --stable 2>$null } }
     $code = $LASTEXITCODE
     $text = (@($raw) -join "`n").Trim()
     $json = $null

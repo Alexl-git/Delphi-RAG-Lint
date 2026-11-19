@@ -157,7 +157,7 @@ Write-Ascii (Join-Path $work 'u.pas') $UBody
 $db = Join-Path $WorkDir 'memberAccess.sqlite'
 
 Write-Host 'Indexing fixture (deep usage refs on by default for a project index)' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 $indexExit = $LASTEXITCODE
 Check 'index exits 0' ($indexExit -eq 0) "exit=$indexExit; $($indexOut -join ' | ')"
 
@@ -238,7 +238,7 @@ if (-not (Test-Path $floodSrc)) {
 
   $floodDb = Join-Path $floodWork 'apflood.sqlite'
   Write-Host '  Indexing ap.pas standalone (deep usage refs on by default for a project index)' -ForegroundColor Cyan
-  $floodIndexOut = & $Exe index $floodFixture --db $floodDb 2>&1
+  $floodIndexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $floodFixture --db $floodDb 2>&1 | ForEach-Object { "$_" } }
   $floodIndexExit = $LASTEXITCODE
   Check 'flood-check index exits 0' ($floodIndexExit -eq 0) "exit=$floodIndexExit; $($floodIndexOut -join ' | ')"
 

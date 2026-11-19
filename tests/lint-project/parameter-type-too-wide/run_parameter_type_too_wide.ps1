@@ -30,7 +30,7 @@ function Parse-Findings([string[]]$Raw) {
   return ,@($out)
 }
 function RuleLines([string]$Db, [string[]]$Extra) {
-  $raw = & $exePath lint-all --db $Db --library-db none --format json @Extra 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $Db --library-db none --format json @Extra 2>$null }
   return @((Parse-Findings $raw) | Where-Object { $_.rule -eq $Rule -and $_.file_path -like '*NpUse.pas' } |
     ForEach-Object { [int]$_.start_line } | Sort-Object)
 }
@@ -45,7 +45,7 @@ try {
   Copy-Item $fx $dir -Recurse
   $use = Join-Path $dir 'NpUse.pas'
   $db  = Join-Path $scratch 'ptw.sqlite'
-  & $exePath index --project (Join-Path $dir 'NarrowParam.dproj') --db $db --library-db none 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --project (Join-Path $dir 'NarrowParam.dproj') --db $db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
   # positive-control: parameter-type-too-wide
   $want = @(MarkerLines $use '//\s*NARROW \w+\s*$')
@@ -54,7 +54,7 @@ try {
   $got = @(RuleLines $db @('--rule', $Rule))
   Check 'RUN 1 exactly the NARROW lines fire' (($got -join ',') -eq ($want -join ',')) "got [$($got -join ',')] want [$($want -join ',')]"
   Check 'RUN 1 no REFUSE / NONE line fires' (@($got | Where-Object { $other -contains $_ }).Count -eq 0) ''
-  $raw = & $exePath lint-all --db $db --library-db none --format json --rule $Rule 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --library-db none --format json --rule $Rule 2>$null }
   $msg = @((Parse-Findings $raw) | Where-Object { $_.rule -eq $Rule } | Select-Object -First 1)
   Check 'RUN 1 the message names parameter and narrower type' (($msg.Count -eq 1) -and ($msg[0].message -match 'pP') -and ($msg[0].message -match '\bT(Base|Mid|Root)\b')) "$($msg[0].message)"
 
@@ -71,7 +71,7 @@ try {
   if ($body.Success) {
     $t2 = $t.Remove($body.Groups[1].Index, $body.Groups[1].Length).Insert($body.Groups[1].Index, "`r`n  pP.LeafOnly;`r`n")
     [IO.File]::WriteAllText($use, $t2, [Text.Encoding]::ASCII)
-    & $exePath index --project (Join-Path $dir 'NarrowParam.dproj') --db $db --library-db none 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index --project (Join-Path $dir 'NarrowParam.dproj') --db $db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-Null
     $after = @(RuleLines $db @('--rule', $Rule))
     $expect = @($want | Where-Object { $_ -ne $victim })
     Check 'RUN 3 a body that needs TLeaf: only its finding goes' (($after -join ',') -eq ($expect -join ',')) "got [$($after -join ',')] want [$($expect -join ',')]"

@@ -60,7 +60,7 @@ function New-Case([string]$Name) {
 function Index-Case([string]$Dir) {
   $db = Join-Path $Dir 'app.sqlite'
   . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
-  & $Exe index $Dir --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $Dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $idxCode = $LASTEXITCODE
   if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
   return $db
@@ -68,7 +68,7 @@ function Index-Case([string]$Dir) {
 # The LSP diagnostics the client would hold: lint --json, mapped the way
 # TLspCompletion.DiagnosticsFromLintJson maps it.
 function Get-LintDiags([string]$Dir, [string]$Db, [string]$Unit) {
-  $j = & $Exe lint (Join-Path $Dir $Unit) --db $Db --json --rule unused-unit-in-uses 2>$null
+  $j = & { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $Dir $Unit) --db $Db --json --rule unused-unit-in-uses 2>$null }
   $arr = @(($j -join "`n") | ConvertFrom-Json)
   return ,@($arr | Where-Object { $_.rule -eq 'unused-unit-in-uses' } | ForEach-Object {
     [ordered]@{
@@ -168,7 +168,7 @@ try {
     $a2 = New-Case 'a2'
     Emit $a2 'uDead.pas' $deadUnit; Emit $a2 'uOther.pas' $otherUnit; Emit $a2 'uHost.pas' $hostUnit
     $dbA2 = Index-Case $a2
-    & $Exe lint (Join-Path $a2 'uHost.pas') --db $dbA2 --fix --apply --no-backup --no-compile-gate --rule unused-unit-in-uses 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $a2 'uHost.pas') --db $dbA2 --fix --apply --no-backup --no-compile-gate --rule unused-unit-in-uses 2>&1 | ForEach-Object { "$_" } } | Out-Null
     $fixed = [IO.File]::ReadAllText((Join-Path $a2 'uHost.pas'))
     Check 'P1 POSITIVE CONTROL: lint --fix changed the file' ($fixed -ne $disk) ''
     Check 'P1 applied edit equals lint --fix output byte for byte' ($applied -ceq $fixed) ($fixed -replace "`r`n", '\n')

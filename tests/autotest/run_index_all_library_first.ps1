@@ -63,34 +63,34 @@ try {
   try {
     # --platform per DB: since 749165a8 the readiness probe checks the library's plat= stamp, and an
     # unstamped-platform build of library-Win32 reads as "this is the win64 library, not Win32" (missing).
-    foreach ($p in 'Win32','Win64') { & $exe index $lib --db (Join-Path $out "library-$p.sqlite") --platform $p 2>&1 | Out-Null }
+    foreach ($p in 'Win32','Win64') { & { $ErrorActionPreference = 'Continue'; & $exe index $lib --db (Join-Path $out "library-$p.sqlite") --platform $p 2>&1 | ForEach-Object { "$_" } } | Out-Null }
     Check 'fixture libraries built' ((Test-Path (Join-Path $out 'library-Win32.sqlite')) -and (Test-Path (Join-Path $out 'library-Win64.sqlite')))
 
     # 1. ORDER
-    $txt = (& $exe index --all --dry-run 2>&1 | Out-String)
+    $txt = (& { $ErrorActionPreference = 'Continue'; & $exe index --all --dry-run 2>&1 | ForEach-Object { "$_" } } | Out-String)
     $iLib = $txt.IndexOf('[Library['); $iP64 = $txt.IndexOf('[Proj64]'); $iPNo = $txt.IndexOf('[ProjNo]')
     Check 'dry-run: all three sections planned' (($iLib -ge 0) -and ($iP64 -ge 0) -and ($iPNo -ge 0)) $txt
     Check 'dry-run (text): library listed before both project sections' (($iLib -ge 0) -and ($iLib -lt $iP64) -and ($iLib -lt $iPNo)) $txt
-    $j = ((& $exe index --all --dry-run --json 2>&1) -join "`n"); $j = $j.Substring($j.IndexOf('{')) | ConvertFrom-Json
+    $j = ((& { $ErrorActionPreference = 'Continue'; & $exe index --all --dry-run --json 2>&1 | ForEach-Object { "$_" } }) -join "`n"); $j = $j.Substring($j.IndexOf('{')) | ConvertFrom-Json
     $names = @($j.sections | ForEach-Object { $_.name })
     Check 'dry-run (json): first section is the library' ($names.Count -ge 3 -and $names[0] -eq 'Library') ($names -join ',')
-    $txt = (& $exe index --all --dry-run --only Proj64 2>&1 | Out-String)
+    $txt = (& { $ErrorActionPreference = 'Continue'; & $exe index --all --dry-run --only Proj64 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check '--only <project>: not delayed, planned alone' (($txt -match '\[Proj64\]') -and ($txt -notmatch '\[Library\['))
 
     # 2. PLATFORM from the .dproj (manifest default is Win32)
-    $txt = (& $exe index --all --only Proj64 2>&1 | Out-String)
+    $txt = (& { $ErrorActionPreference = 'Continue'; & $exe index --all --only Proj64 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'Win64 .dproj: library-Win64 is opened' ($txt -match '\+ library-db .*library-Win64\.sqlite') $txt
     Check 'Win64 .dproj: library-Win32 is NOT opened' ($txt -notmatch 'library-Win32\.sqlite')
 
     # 3. explicit --platform wins
-    $txt = (& $exe index --all --only Proj64 --platform Win32 --force-reparse 2>&1 | Out-String)
+    $txt = (& { $ErrorActionPreference = 'Continue'; & $exe index --all --only Proj64 --platform Win32 --force-reparse 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'explicit --platform Win32 wins over the .dproj' ($txt -match '\+ library-db .*library-Win32\.sqlite') $txt
     Check 'explicit --platform Win32: the pre-walk library: line names library-Win32 too' (($txt -match '(?m)^library: .*library-Win32\.sqlite') -and ($txt -notmatch '(?m)^library: .*library-Win64\.sqlite')) (($txt -split '\r?\n' | Where-Object { $_ -match '^library: ' }) -join ' | ')
 
     # 4. unknown platform -> visible NOTE
-    $txt = (& $exe index --all --only ProjNo 2>&1 | Out-String)
+    $txt = (& { $ErrorActionPreference = 'Continue'; & $exe index --all --only ProjNo 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'unknown platform: a visible NOTE names the section' ($txt -match 'NOTE: platform of section "ProjNo" is unknown') $txt
-    Check 'known platform: no such NOTE' ((& $exe index --all --only Proj64 --force-reparse 2>&1 | Out-String) -notmatch 'is unknown')
+    Check 'known platform: no such NOTE' ((& { $ErrorActionPreference = 'Continue'; & $exe index --all --only Proj64 --force-reparse 2>&1 | ForEach-Object { "$_" } } | Out-String) -notmatch 'is unknown')
   } finally { Pop-Location }
 } finally {
   if (Test-Path -LiteralPath $root) { [IO.Directory]::Delete($root, $true) }

@@ -128,7 +128,7 @@ if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -Foreground
 $body = "interface`r`n// caf$e9 $zh`r`nimplementation`r`nend.`r`n"
 $p = Join-Path $WorkDir 'uA1.pas'
 [IO.File]::WriteAllBytes($p, (Bom "unit uA1;`r`n$body"))
-$o = (& $Exe allow $p --fix-line 1 --fix-rule magic-literal --apply 2>&1) -join ' | '
+$o = (& { $ErrorActionPreference = 'Continue'; & $Exe allow $p --fix-line 1 --fix-rule magic-literal --apply 2>&1 | ForEach-Object { "$_" } }) -join ' | '
 $code = $LASTEXITCODE
 $b = [IO.File]::ReadAllBytes($p)
 $hasBom = ($b.Length -ge 3) -and ($b[0] -eq 0xEF) -and ($b[1] -eq 0xBB) -and ($b[2] -eq 0xBF)
@@ -140,7 +140,7 @@ Check 'A1 allow --apply line 1 of UTF-8+BOM: exit 0, BOM kept, only line 1 chang
 $p = Join-Path $WorkDir 'uA2.pas'
 $orig = "unit uA2;`r`ninterface`r`n// caf$e9`r`nimplementation`r`nend.`r`n"
 [IO.File]::WriteAllBytes($p, $latin1.GetBytes($orig))
-$o = (& $Exe allow $p --fix-line 1 --fix-rule magic-literal --apply 2>&1) -join ' | '
+$o = (& { $ErrorActionPreference = 'Continue'; & $Exe allow $p --fix-line 1 --fix-rule magic-literal --apply 2>&1 | ForEach-Object { "$_" } }) -join ' | '
 $code = $LASTEXITCODE
 $t = $latin1.GetString([IO.File]::ReadAllBytes($p))
 $nl = $t.IndexOf("`r`n")

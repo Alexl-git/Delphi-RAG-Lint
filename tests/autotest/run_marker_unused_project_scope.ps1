@@ -85,14 +85,14 @@ $SRC = @(
 $DEEP_LINE = 13   # TA7
 $SELF_LINE = 21   # B:= B;
 
-& $Exe index $WorkDir --db $db *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db *> $null }
 Check 'fixture indexed' ($LASTEXITCODE -eq 0) ''
 
 function Relevant([string]$Out) { (($Out -split "`n" | Where-Object { $_ -match 'review-marker|deep-inheritance:|self-assignment:' }) -join ' || ') }
 function LintAs([string]$PathSpelling) {
   Push-Location $WorkDir
   try {
-    $o = & $Exe lint $PathSpelling --db $db 2>$err
+    $o = & { $ErrorActionPreference = 'Continue'; & $Exe lint $PathSpelling --db $db 2>$err }
     return (($o | Out-String) -replace "`r`n", "`n")
   } finally { Pop-Location }
 }
@@ -108,9 +108,9 @@ Check 'the store-backed finding is printed with an ABSOLUTE path (the two spelli
 
 Write-Host ''
 Write-Host '-- 2. allow both, then lint by three spellings: no finding, no unused hint' -ForegroundColor Cyan
-& $Exe allow $pas --fix-line $DEEP_LINE --fix-rule deep-inheritance --apply 2>$err | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe allow $pas --fix-line $DEEP_LINE --fix-rule deep-inheritance --apply 2>$err } | Out-Null
 Check 'allow deep-inheritance --apply exits 0' ($LASTEXITCODE -eq 0) ''
-& $Exe allow $pas --fix-line $SELF_LINE --fix-rule self-assignment --apply 2>$err | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe allow $pas --fix-line $SELF_LINE --fix-rule self-assignment --apply 2>$err } | Out-Null
 Check 'allow self-assignment --apply exits 0' ($LASTEXITCODE -eq 0) ''
 $markers = @(Get-Content -LiteralPath $pas | Where-Object { $_ -match 'dl:ok' })
 Check 'two markers written' ($markers.Count -eq 2) ($markers -join ' | ')

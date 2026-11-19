@@ -46,7 +46,7 @@ function LineOf([string]$Exact) {
 }
 Push-Location $WorkDir
 try {
-  $null | & $Exe index $Src --db $Db --library-db none *> "$Db.log"
+  $null | & { $ErrorActionPreference = 'Continue'; & $Exe index $Src --db $Db --library-db none *> "$Db.log" }
   $DeclLine = LineOf '  R: Integer;'
   $Outer = @((LineOf '    R:= R + 1;'), (LineOf '  R:= 1;'), (LineOf '  OwnArg(R);'), $DeclLine)
   $OwnVar = @((LineOf '    R: Integer;'), (LineOf '    R:= 5;'), (LineOf '    Inc(R);'))
@@ -54,9 +54,9 @@ try {
   foreach ($form in @('param', 'symbol')) {
     Write-Host "rename --kind $form on the outer local R" -ForegroundColor Cyan
     if ($form -eq 'param') {
-      $o = ($null | & $Exe rename --kind param --in $Path --line $DeclLine --col 3 --to RCount --db $Db --plan --json 2>$null | Out-String)
+      $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe rename --kind param --in $Path --line $DeclLine --col 3 --to RCount --db $Db --plan --json 2>$null } | Out-String)
     } else {
-      $o = ($null | & $Exe rename --kind symbol --name 'NlA.Outer.R' --to RCount --db $Db --library-db none --plan --json 2>$null | Out-String)
+      $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe rename --kind symbol --name 'NlA.Outer.R' --to RCount --db $Db --library-db none --plan --json 2>$null } | Out-String)
     }
     $j = $null; try { $j = $o | ConvertFrom-Json } catch { }
     $Got = @($j.edits | ForEach-Object { [int]$_.line })
@@ -70,7 +70,7 @@ try {
     Check "$form p2 header-arg shadowing holds (OwnArg R:= 9 untouched)" ($Got -notcontains (LineOf '    R:= 9;'))
   }
   Write-Host 'apply --kind param and read the bytes' -ForegroundColor Cyan
-  $null | & $Exe rename --kind param --in $Path --line $DeclLine --col 3 --to RCount --db $Db --apply *> "$WorkDir\apply.log"
+  $null | & { $ErrorActionPreference = 'Continue'; & $Exe rename --kind param --in $Path --line $DeclLine --col 3 --to RCount --db $Db --apply *> "$WorkDir\apply.log" }
   $T = [IO.File]::ReadAllText($Path)
   Check 'a1 outer renamed' ($T -match 'RCount:= RCount \+ 1;' -and $T -match '  RCount:= 1;') (Get-Content "$WorkDir\apply.log" -Raw)
   Check 'a2 nested own R kept' ($T -match '    R:= 5;\s+Inc\(R\);' -and $T -match '    R = 7;') $T

@@ -107,7 +107,7 @@ $db = Join-Path $WorkDir 'enumovf.sqlite'
 
 # WHICH ENGINE WAS MEASURED. A RED reading that reports the POST-fix extractor
 # version is not a RED reading -- it is the new engine run by mistake.
-$infoRaw = (& $exePath info --json 2>$null) -join "`n"
+$infoRaw = (& { $ErrorActionPreference = 'Continue'; & $exePath info --json 2>$null }) -join "`n"
 $extractorVersion = '(unknown)'
 try {
   $line = ($infoRaw -split "`n" | Where-Object { $_.Trim().StartsWith('{') } | Select-Object -First 1)
@@ -173,7 +173,7 @@ Check 'uCtl.pas carries NONE of the three forms' `
 
 # --- 3-5. The index run ------------------------------------------------------
 
-$idxOut  = & $exePath index $WorkDir --db $db 2>&1
+$idxOut  = & { $ErrorActionPreference = 'Continue'; & $exePath index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } }
 $idxExit = $LASTEXITCODE
 $idxText = ($idxOut | Out-String)
 
@@ -196,7 +196,7 @@ Check 'no SKIP of any kind for uCtl.pas' ($skipCtl -eq 0) "found $skipCtl"
 # --- Query helper ------------------------------------------------------------
 
 function Find-Sym([string]$Name) {
-  $raw = (& $exePath query --name $Name --exact --db $db --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name $Name --exact --db $db --json 2>$null }) -join "`n"
   if (-not $raw.Trim()) { return @() }
   try { $d = $raw | ConvertFrom-Json } catch { return @() }
   return @($d | Where-Object { $null -ne $_ })

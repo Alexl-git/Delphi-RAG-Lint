@@ -69,7 +69,7 @@ Check 'CycleFixHarness.dpr builds (Win64)' $buildOk (($log -split "`r?`n" | Sele
 $exe = "$WorkDir\CycleFixHarness.exe"
 if (-not $buildOk -or -not (Test-Path $exe)) { Remove-Scratch; Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 
-$out = & $exe $FixtureDir 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $exe $FixtureDir 2>&1 | ForEach-Object { "$_" } } | Out-String
 $kv = @{}
 foreach ($line in ($out -split "`r?`n")) { if ($line -match '^([A-Za-z0-9_.]+)=(.*)$') { $kv[$matches[1]] = $matches[2] } }
 Check 'harness ran to completion' ($out -match '(?m)^DONE') $out

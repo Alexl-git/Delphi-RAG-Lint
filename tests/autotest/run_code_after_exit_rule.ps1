@@ -69,7 +69,7 @@ $lnLive = LineOf "Writeln('live');"
 Check 'fixture statements located' (($lnDead -gt 0) -and ($lnLive -gt 0)) "dead=$lnDead live=$lnLive"
 
 $fired = @()
-foreach ($line in (& $Exe lint $pas 2>$null)) {
+foreach ($line in (& { $ErrorActionPreference = 'Continue'; & $Exe lint $pas 2>$null })) {
   if ("$line" -match ':(\d+):\d+\s+\[\w+\]\s+code-after-exit:') { $fired += [int]$Matches[1] }
 }
 $fired = @($fired | Sort-Object -Unique)

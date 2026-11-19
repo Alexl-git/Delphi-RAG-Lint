@@ -170,7 +170,7 @@ $fixtureDir = "$PSScriptRoot\fixtures\lspproxy"
 $outDir     = Join-Path $WorkDir 'stub'
 New-Item -ItemType Directory $outDir | Out-Null
 $rs = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
-$null = cmd /c "call `"$rs`" && cd /d `"$fixtureDir`" && dcc64 -CC -E`"$outDir`" -N0`"$outDir`" LspStubServer.dpr" 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; cmd /c "call `"$rs`" && cd /d `"$fixtureDir`" && dcc64 -CC -E`"$outDir`" -N0`"$outDir`" LspStubServer.dpr" 2>&1 | ForEach-Object { "$_" } }
 $stub = "$outDir\LspStubServer.exe"
 Check 'LspStubServer.exe built' (Test-Path $stub) $stub
 if (-not (Test-Path $stub)) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
@@ -189,9 +189,9 @@ $diskText = (($head + @('  Use;')          + $tail) -join "`r`n")
 $bufText  = (($head + @('  Foo.FI := 1;')  + $tail) -join "`r`n")
 [IO.File]::WriteAllText($unit, $diskText, [Text.Encoding]::ASCII)
 $db = Join-Path $WorkDir 'fx.sqlite'
-& $Exe index $srcDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $srcDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'built the fixture index' (Test-Path $db)
-$q = (& $Exe query --name FIx --db $db 2>$null | Out-String)
+$q = (& { $ErrorActionPreference = 'Continue'; & $Exe query --name FIx --db $db 2>$null } | Out-String)
 Check 'positive control: the index holds the decoy FIx' ($q -match 'FIx') ''
 $uri = Uri $unit
 $jsonText = ($bufText | ConvertTo-Json)

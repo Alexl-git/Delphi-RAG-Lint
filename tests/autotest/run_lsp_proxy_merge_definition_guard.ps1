@@ -203,7 +203,7 @@ $fixtureDir = "$PSScriptRoot\fixtures\lspproxy"
 $outDir     = Join-Path $WorkDir 'stub'
 New-Item -ItemType Directory $outDir | Out-Null
 $rs = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
-$null = cmd /c "call `"$rs`" && cd /d `"$fixtureDir`" && dcc64 -CC -E`"$outDir`" -N0`"$outDir`" LspStubServer.dpr" 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; cmd /c "call `"$rs`" && cd /d `"$fixtureDir`" && dcc64 -CC -E`"$outDir`" -N0`"$outDir`" LspStubServer.dpr" 2>&1 | ForEach-Object { "$_" } }
 $stub = "$outDir\LspStubServer.exe"
 Check 'LspStubServer.exe built' (Test-Path $stub) $stub
 if (-not (Test-Path $stub)) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
@@ -217,7 +217,7 @@ $text = (@('unit Hx;', '', 'interface', '', 'type', '  TFoo = class', '  public'
            '', 'implementation', '', 'procedure Use; var Foo: TFoo; begin', '  Foo.FIrst:= 1;', 'end;', '', 'end.', '') -join "`r`n")
 [IO.File]::WriteAllText($unit, $text, [Text.Encoding]::ASCII)
 $db = Join-Path $WorkDir 'hx.sqlite'
-& $Exe index $srcDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $srcDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'built the fixture index' (Test-Path $db)
 $uri = Uri $unit
 $didOpen = Frame ('{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"' + $uri + '","languageId":"pascal","version":1,"text":' + ($text | ConvertTo-Json) + '}}}')

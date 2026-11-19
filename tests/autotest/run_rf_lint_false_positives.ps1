@@ -49,7 +49,7 @@ function Put($name, $text) {
 }
 # Lines of `lint` output for a rule, as 'line' numbers.
 function Hits($file, $rule, [string[]]$extra = @()) {
-  $out = & $Exe lint $file --enable $rule @extra 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file --enable $rule @extra 2>&1 | ForEach-Object { "$_" } } | Out-String
   $rx = [regex]::Matches($out, '(?m)^.*?:(\d+):\d+\s+\[\w+\]\s+' + [regex]::Escape($rule) + ':')
   return @($rx | ForEach-Object { [int]$_.Groups[1].Value }), $out
 }
@@ -261,10 +261,10 @@ end.
 '@
     [IO.File]::WriteAllText((Join-Path $proj 'uu.pas'), ($src -replace "`r?`n", "`r`n"), [Text.Encoding]::ASCII)
     $db = Join-Path $Work 'uu.sqlite'
-    & $Exe index $proj --db $db 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $Exe index $proj --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
     Push-Location $Work
     try {
-      $out = & $Exe lint-all --db $db --library-db $LibraryDb --enable unused-unit-in-uses 2>&1 | Out-String
+      $out = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --library-db $LibraryDb --enable unused-unit-in-uses 2>&1 | ForEach-Object { "$_" } } | Out-String
     } finally { Pop-Location }
     Check '3a FireDAC.Stan.Param (inline AsInteger setter) is NOT reported' ($out -notmatch "Unit 'FireDAC.Stan.Param'") ''
     Check '3b POSITIVE CONTROL: unused System.IniFiles IS reported' ($out -match "Unit 'System.IniFiles'") ''

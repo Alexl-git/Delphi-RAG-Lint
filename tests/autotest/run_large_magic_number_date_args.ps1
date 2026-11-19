@@ -96,7 +96,7 @@ end.
 
 Write-Host '== large-magic-number: date-constructor arguments ==' -ForegroundColor Cyan
 
-$json = (& $Exe lint $src --rule large-magic-number --json 2>$null) -join "`n"
+$json = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $src --rule large-magic-number --json 2>$null }) -join "`n"
 $i = $json.IndexOf('[')
 if ($i -lt 0) { $i = $json.IndexOf('{') }
 if ($i -lt 0) { Write-Host 'FATAL: no JSON from lint' -ForegroundColor Red; exit 2 }

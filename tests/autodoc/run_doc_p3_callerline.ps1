@@ -154,7 +154,7 @@ function Get-DocBlockAtLine([string[]]$lines, [int]$declLine1) {
 # INTERFACE-section start line for $name, read back from the index via the
 # engine's own query verb (index-first: no second parser, no python).
 function Get-DeclLine([string]$db, [string]$name) {
-  $j = (& $exePath query --name $name --db $db --json 2>$null) -join "`n"
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --db $db --json 2>$null }) -join "`n"
   $o = $null; try { $o = ($j | ConvertFrom-Json) } catch { return 0 }
   if ($null -eq $o) { return 0 }
   foreach ($r in @($o)) { if ($r.section -eq 'interface') { return [int]$r.start_line } }
@@ -237,7 +237,7 @@ $tgtA = Join-Path $sa 'callerline.pas'
 $dbA  = Join-Path $sa 'a.sqlite'
 Copy-Item $fxA $tgtA -Force
 
-& $exePath index $sa --db $dbA 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sa --db $dbA 2>$null } | Out-Null
 
 # --- Preconditions, re-derived from the INDEX, not from the rendered line. ---
 # A exists to hold BOTH arms of the marker rule in one file: TPoint2's
@@ -252,7 +252,7 @@ Copy-Item $fxA $tgtA -Force
 # asserting how anything renders -- that the certain arm IS certain and the
 # uncertain arm IS uncertain. Neither arm's kind is observable in the output
 # these checks read, so neither may be inherited from fixture prose.
-$edgesA = (& $exePath dump-call-edges --db $dbA 2>$null) -join "`n"
+$edgesA = (& { $ErrorActionPreference = 'Continue'; & $exePath dump-call-edges --db $dbA 2>$null }) -join "`n"
 $parsedA = Parse-CallEdges $edgesA
 Check-EdgeDumpLayout 'A' $parsedA $edgesA
 foreach ($nm in @('MakePoint','SumPoint')) {
@@ -260,7 +260,7 @@ foreach ($nm in @('MakePoint','SumPoint')) {
   Check "A PRECONDITION: the index holds exactly ONE certain call edge into $nm" ($eA.Count -eq 1) `
     ("edges=" + ($edgesA -replace "`n",' / '))
 }
-$ambA = (& $exePath ambiguous-calls --db $dbA 2>$null) -join "`n"
+$ambA = (& { $ErrorActionPreference = 'Continue'; & $exePath ambiguous-calls --db $dbA 2>$null }) -join "`n"
 Check 'A PRECONDITION: A''s index holds NO unresolved call site (the control lists are uniformly CERTAIN, not merely unmarked)' `
   (($ambA -match '(?m)^0 ambiguous call\(s\)') -and (-not ($ambA -match '\[unverified\]'))) `
   ($ambA -replace "`n",' / ')
@@ -275,10 +275,10 @@ $tpEdgesA = @($parsedA | Where-Object { $_.QName -eq 'callerline.TPoint2' })
 Check 'A PRECONDITION: the index holds NO call edge into TPoint2 (its list is uniformly UNCERTAIN, not merely unmarked)' `
   ($tpEdgesA.Count -eq 0) ("edges=" + ($edgesA -replace "`n",' / '))
 
-& $exePath document --unit $tgtA --db $dbA --apply 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $tgtA --db $dbA --apply 2>$null } | Out-Null
 $md5Cycle1 = Get-FileMd5 $tgtA
 # Reindex so the start lines below describe the file the apply just wrote.
-& $exePath index $sa --db $dbA 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sa --db $dbA 2>$null } | Out-Null
 
 $textA  = [IO.File]::ReadAllText($tgtA)
 $linesA = [IO.File]::ReadAllLines($tgtA)
@@ -354,7 +354,7 @@ foreach ($nm in @('MakePoint','SumPoint')) {
 }
 
 # --- Idempotency: reindex + a second --apply is byte-identical. --------------
-& $exePath document --unit $tgtA --db $dbA --apply --json 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $tgtA --db $dbA --apply --json 2>$null } | Out-Null
 $md5Cycle2 = Get-FileMd5 $tgtA
 Check 'A IDEMPOTENT: a second --apply after a reindex is byte-identical' ($md5Cycle1 -eq $md5Cycle2) `
   "c1=$md5Cycle1 c2=$md5Cycle2"
@@ -376,17 +376,17 @@ New-Item -ItemType Directory -Path $sb | Out-Null
 Copy-Item $fxB1 (Join-Path $sb 'callerline_mixed.pas') -Force
 Copy-Item $fxB2 (Join-Path $sb 'callerline_mixedcross.pas') -Force
 $dbB = Join-Path $sb 'b.sqlite'
-& $exePath index $sb --db $dbB 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sb --db $dbB 2>$null } | Out-Null
 
 # --- Preconditions, re-derived from the INDEX, not from the rendered line. ---
-$edges = (& $exePath dump-call-edges --db $dbB 2>$null) -join "`n"
+$edges = (& { $ErrorActionPreference = 'Continue'; & $exePath dump-call-edges --db $dbB 2>$null }) -join "`n"
 $parsedB = Parse-CallEdges $edges
 Check-EdgeDumpLayout 'B' $parsedB $edges
 $pingEdges = Edges-Into $parsedB 'callerline_mixed.Ping' 'certain'
 Check 'B PRECONDITION: the index holds exactly ONE certain call edge into Ping' ($pingEdges.Count -eq 1) `
   ("edges=" + ($edges -replace "`n",' / '))
 
-$amb = (& $exePath ambiguous-calls --db $dbB 2>$null) -join "`n"
+$amb = (& { $ErrorActionPreference = 'Continue'; & $exePath ambiguous-calls --db $dbB 2>$null }) -join "`n"
 Check 'B PRECONDITION: the cross-unit site FarCaller is UNRESOLVED in the index' `
   ($amb -match 'callerline_mixedcross\.FarCaller\s+\(callerline_mixedcross\.pas\)\s+\[unverified\]') `
   ($amb -replace "`n",' / ')
@@ -394,7 +394,7 @@ Check 'B PRECONDITION: NearCaller is NOT in the unresolved set (so the two halve
   (-not ($amb -match 'callerline_mixed\.NearCaller')) ($amb -replace "`n",' / ')
 
 # --- The rendered line. -----------------------------------------------------
-$outB  = (& $exePath document --qname callerline_mixed.Ping --db $dbB 2>$null) -join "`n"
+$outB  = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname callerline_mixed.Ping --db $dbB 2>$null }) -join "`n"
 $lineB = ($outB -split "`r?`n" | Where-Object { $_ -match '(Called from:|Used by:)' } | Select-Object -First 1)
 Check 'B: a reference line was rendered for Ping' ($null -ne $lineB -and $lineB -ne '') $outB
 Check 'B LABEL: Ping (a PROCEDURE) renders "Called from:"' ($lineB -match 'Called from:') $lineB

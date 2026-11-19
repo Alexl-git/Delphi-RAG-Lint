@@ -85,7 +85,7 @@ Check 'fixture index built' (($code -eq 0) -and (Test-Path $db)) "exit=$code"
 # `lint --json` is a bare array and its line field is start_line. The rule id
 # field `rule` is pinned by the positive controls: a wrong name fails checks 4 and 5.
 function UnusedLines([string[]]$CmdArgs) {
-  $raw = (& $Exe @CmdArgs 2>$null | ForEach-Object { "$_" }) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe @CmdArgs 2>$null } | ForEach-Object { "$_" }) -join "`n"
   $start = $raw.IndexOf('[')
   if ($start -lt 0) { return ,@() }
   $rows = @($raw.Substring($start) | ConvertFrom-Json)

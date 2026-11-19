@@ -62,7 +62,7 @@ $Exe = (Resolve-Path $Exe).Path
 if (-not (Test-Path $DbFile)) { Write-Host "SKIP: no self-index at $DbFile" -ForegroundColor Yellow; exit 0 }
 $DbFile = (Resolve-Path $DbFile).Path
 
-$raw = (& $Exe schema --db $DbFile --format json 2>$null) -join "`n"
+$raw = (& { $ErrorActionPreference = 'Continue'; & $Exe schema --db $DbFile --format json 2>$null }) -join "`n"
 $i   = $raw.IndexOf('{')
 $obj = $null
 if ($i -ge 0) { try { $obj = ($raw.Substring($i) | ConvertFrom-Json) } catch { } }
@@ -161,7 +161,7 @@ foreach ($v in $vocab) {
   # SQLite as `unrecognized token: "\"`. The identifier-shape test above is what
   # makes bare names safe here.
   $q   = "SELECT DISTINCT $($v.Column) AS v FROM $($v.Table)"
-  $raw = (& $Exe sql --query $q --db $DbFile --json --limit 500 2>$sqlErrFile) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --query $q --db $DbFile --json --limit 500 2>$sqlErrFile }) -join "`n"
   $rc  = $LASTEXITCODE
   $doc = $null
   if ($rc -eq 0) { try { $doc = $raw | ConvertFrom-Json } catch { } }

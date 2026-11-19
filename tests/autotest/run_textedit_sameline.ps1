@@ -72,7 +72,7 @@ if (-not $buildOk -or -not (Test-Path $exe)) {
     exit 1
 }
 
-$got = (& $exe 2>&1 | Out-String).Trim()
+$got = (& { $ErrorActionPreference = 'Continue'; & $exe 2>&1 | ForEach-Object { "$_" } } | Out-String).Trim()
 $expect = 'FIRST := X;'
 Check 'Same-line edits apply back-to-front (right edit first)' ($got -eq $expect) "got='$got' expect='$expect'"
 

@@ -160,8 +160,8 @@ function New-Work([string]$name) {
   Copy-Item (Join-Path $fixture '*') $w -Force
   return $w
 }
-function Idx($w)   { & $exePath index --project (Join-Path $w 'factterm.dpr') --db (Join-Path $w 'f.sqlite') 2>&1 | Out-Null }
-function Doc($w, $unit) { & $exePath document --unit (Join-Path $w $unit) --db (Join-Path $w 'f.sqlite') --apply 2>$null }
+function Idx($w)   { & { $ErrorActionPreference = 'Continue'; & $exePath index --project (Join-Path $w 'factterm.dpr') --db (Join-Path $w 'f.sqlite') 2>&1 | ForEach-Object { "$_" } } | Out-Null }
+function Doc($w, $unit) { & { $ErrorActionPreference = 'Continue'; & $exePath document --unit (Join-Path $w $unit) --db (Join-Path $w 'f.sqlite') --apply 2>$null } }
 
 Push-Location C:\TEMP
 try {
@@ -183,7 +183,7 @@ Check 'apply 1 exits 0 (Zed.Types.pas)' ($LASTEXITCODE -eq 0)
 # written) and name Zed.Types.pas. Until 152b this runner applied both units with
 # no reindex between them; the reindex below is the documented contract.
 $echPre = [IO.File]::ReadAllBytes($ech)
-$r1 = & $exePath document --unit $ech --db (Join-Path $w1 'f.sqlite') --apply 2>&1
+$r1 = & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $ech --db (Join-Path $w1 'f.sqlite') --apply 2>&1 | ForEach-Object { "$_" } }
 $r1Exit = $LASTEXITCODE
 Check 'R1 Echo.Client.pas without a reindex is REFUSED (exit 1)' ($r1Exit -eq 1) "exit=$r1Exit"
 Check 'R1 the refusal names the changed callee file Zed.Types.pas' `
@@ -312,17 +312,17 @@ Idx $w2
 # The decay must actually have happened, or every assertion below is vacuous.
 $refsLeft = 0
 foreach ($n in 'TInner', 'TRep', 'TMode') {
-  $r = (& $exePath sql --db (Join-Path $w2 'f.sqlite') --query "SELECT count(*) AS n FROM refs WHERE name='$n'" 2>$null) -join ' '
+  $r = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db (Join-Path $w2 'f.sqlite') --query "SELECT count(*) AS n FROM refs WHERE name='$n'" 2>$null }) -join ' '
   if ($r -match '(\d+)') { $refsLeft += [int]$Matches[1] }
 }
 Check 'DECAY SANITY: no ref anywhere still names TInner, TRep or TMode' ($refsLeft -eq 0) "refs=$refsLeft"
 
 function DocAction($w, $q) {
-  $j = & $exePath document --qname $q --db (Join-Path $w 'f.sqlite') --json 2>$null
+  $j = & { $ErrorActionPreference = 'Continue'; & $exePath document --qname $q --db (Join-Path $w 'f.sqlite') --json 2>$null }
   $m = ($j | Select-String -Pattern '"action":"([a-z]+)"' | Select-Object -First 1)
   if ($m) { return $m.Matches[0].Groups[1].Value } else { return '(none)' }
 }
-function DriftOf($w, $q) { ((& $exePath doc-drift --qname $q --db (Join-Path $w 'f.sqlite') --json 2>$null) -join ' ').Trim() }
+function DriftOf($w, $q) { ((& { $ErrorActionPreference = 'Continue'; & $exePath doc-drift --qname $q --db (Join-Path $w 'f.sqlite') --json 2>$null }) -join ' ').Trim() }
 
 $aIn   = DocAction $w2 'Zed.Types.TOuter.TInner'
 $aRep  = DocAction $w2 'Zed.Types.TRep'
@@ -339,7 +339,7 @@ Check 'B7 doc-drift REPORTS the phantom block on the nested type' `
 Check 'B7 doc-drift calls the nested phantom block fixable' ($dIn -match '"fixable":true') $dIn
 Check 'B7 doc-drift calls the record phantom block fixable' ($dRep -match '"fixable":true') $dRep
 
-& $exePath document --unit $dz --db (Join-Path $w2 'f.sqlite') --apply 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $dz --db (Join-Path $w2 'f.sqlite') --apply 2>$null } | Out-Null
 Check 'B5 after the apply, TInner''s block is GONE'  ((Get-Block $dz '^\s*TInner = record') -notmatch 'drag-lint:auto BEGIN')
 Check 'B5 after the apply, TRep''s block is GONE'    ((Get-Block $dz '^\s*TRep = record')   -notmatch 'drag-lint:auto BEGIN')
 Check 'B6 CONTROL: after the apply, TMode''s block is GONE' ((Get-Block $dz '^\s*TMode = \(') -notmatch 'drag-lint:auto BEGIN')
@@ -375,7 +375,7 @@ Check 'A4 doc-drift calls a corrupted block FIXABLE' `
   ($dHeal -match '"fixable":true') `
   ('RED today: fixable:false "names facts in unit(s) this index does not hold; not auto-fixed". got: ' + $dHeal)
 
-& $exePath document --unit $hz --db (Join-Path $w3 'f.sqlite') --apply 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $hz --db (Join-Path $w3 'f.sqlite') --apply 2>$null } | Out-Null
 $bHeal = Get-Block $hz '^\s*TInner = record'
 Check 'A4 the apply REPAIRS the corrupted block' ((Get-SwallowCount $bHeal) -eq 0) `
   ('RED today: it GROWS to 12. got swallowed=' + (Get-SwallowCount $bHeal))
@@ -396,7 +396,7 @@ $fz = Join-Path $w4 'Zed.Types.pas'
 Check 'SEED SANITY: the foreign entry really is in the file' `
   ((Get-Block $fz '^\s*TRep = record') -match 'Foreign\.Unit\.Bar')
 Idx $w4
-& $exePath document --unit $fz --db (Join-Path $w4 'f.sqlite') --apply 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $fz --db (Join-Path $w4 'f.sqlite') --apply 2>$null } | Out-Null
 Check 'B8 CONTROL: a PLAUSIBLE foreign entry is still preserved' `
   ((Get-Block $fz '^\s*TRep = record') -match 'Foreign\.Unit\.Bar \(Foreign\.Unit\.pas\)') `
   'green today; this is the assertion the junk-entry filter must not break'
@@ -413,7 +413,7 @@ $fz2 = Join-Path $w4b 'Zed.Types.pas'
 [void](Edit-BlockLine $fz2 '^\s*TRep = record' '<para>Used by:' {
   param($l) $l -replace '</para>\s*$', ', Far.Unit.Baz/4 (Far.Unit.pas), Gen.Unit.Qux&lt;T&gt; (Gen.Unit.pas)</para>' })
 Idx $w4b
-& $exePath document --unit $fz2 --db (Join-Path $w4b 'f.sqlite') --apply 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $fz2 --db (Join-Path $w4b 'f.sqlite') --apply 2>$null } | Out-Null
 $b4b = Get-Block $fz2 '^\s*TRep = record'
 Check 'B8b CONTROL: an OVERLOAD-disambiguated foreign entry survives' `
   ($b4b -match 'Far\.Unit\.Baz/4 \(Far\.Unit\.pas\)') `
@@ -440,14 +440,14 @@ $seeded = Get-Block $jz '^\s*TRep = record'
 Check 'SEED SANITY: the junk line really is inside the fence' `
   ((Get-Fence $seeded) -match $BT)
 Idx $w5
-& $exePath document --unit $jz --db (Join-Path $w5 'f.sqlite') --apply 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $jz --db (Join-Path $w5 'f.sqlite') --apply 2>$null } | Out-Null
 $bJunk = Get-Block $jz '^\s*TRep = record'
 Check 'D12 the junk entry is DROPPED, not preserved as a foreign entry' `
   ((Get-Fence $bJunk) -notmatch $BT) `
   'a non-name cannot be a caller in any project, so dropping it destroys nothing'
 $beforeJ = [IO.File]::ReadAllBytes($jz)
 Idx $w5
-& $exePath document --unit $jz --db (Join-Path $w5 'f.sqlite') --apply 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $jz --db (Join-Path $w5 'f.sqlite') --apply 2>$null } | Out-Null
 Check 'D12 and the file is at a fixed point on the next apply' `
   ([Linq.Enumerable]::SequenceEqual([byte[]]$beforeJ, [byte[]][IO.File]::ReadAllBytes($jz)))
 

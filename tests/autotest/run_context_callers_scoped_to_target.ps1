@@ -129,11 +129,11 @@ end.
 "@
 
 $db = Join-Path $WorkDir 'fx.sqlite'
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the fixture index was built' (Test-Path $db) $db
 
 function Bundle([string]$Task) {
-  return ((& $exePath context --task $Task --db $db --format markdown --context 0 2>$null) -join "`r`n")
+  return ((& { $ErrorActionPreference = 'Continue'; & $exePath context --task $Task --db $db --format markdown --context 0 2>$null }) -join "`r`n")
 }
 function CallersOf([string]$b) {
   $i = $b.IndexOf('## Callers')

@@ -52,7 +52,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
   if ($Ok) { $script:pass++ } else { $script:fail++ }
 }
 function Invoke-Rows([string]$Db, [string]$Query) {
-  $raw = (& $exePath sql --db $Db --json --query $Query 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $Db --json --query $Query 2>$null }) -join "`n"
   $i = $raw.IndexOf('{')
   if ($i -lt 0) { return ,@() }
   try { $j = $raw.Substring($i) | ConvertFrom-Json } catch { return ,@() }
@@ -67,7 +67,7 @@ function Invoke-Rows([string]$Db, [string]$Query) {
   return ,@($out)
 }
 function Invoke-Json([string[]]$CliArgs) {
-  $raw = (& $exePath @CliArgs 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath @CliArgs 2>$null }) -join "`n"
   $a = $raw.IndexOf('['); $o = $raw.IndexOf('{')
   $i = if ($a -ge 0 -and ($o -lt 0 -or $a -lt $o)) { $a } else { $o }
   if ($i -lt 0) { return $null }
@@ -136,7 +136,7 @@ try {
   [void](New-Item -ItemType Directory -Force -Path $fx)
   Copy-Item (Join-Path $repo 'tests\autotest\fixtures\v1511-INC2\*') $fx
   $db = Join-Path $scratch 'ph.sqlite'
-  & $exePath index $fx --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $fx --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'index exit 0' ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
   Check 'S the index has ref_host_bindings' (HasTable $db)
   Check 'S schema_version is 26 or newer' ((SchemaVersion $db) -ge 26) "$(SchemaVersion $db)"
@@ -147,7 +147,7 @@ try {
   $site = @($fc | Where-Object { $_ -and (Split-Path ([string]$_.file_path) -Leaf) -eq 'PhShared.inc' -and $_.start_line -eq 3 })
   Check 'R find-callers --name Emit lists the include site once' ($site.Count -eq 1) "$($site.Count)"
   Check 'R ... as exact (bound per host), not name-only' ($site.Count -eq 1 -and $site[0].resolution -eq 'exact') "$(if ($site.Count -eq 1) { $site[0].resolution })"
-  $rawRes = (& $exePath query find-callers --name Emit --db $db --resolved 2>$null) -join "`n"
+  $rawRes = (& { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name Emit --db $db --resolved 2>$null }) -join "`n"
   $resSites = ([regex]::Matches($rawRes, 'PhShared\.inc:3\b')).Count
   Check 'R find-callers --resolved lists the include site for BOTH Emit declarations' ($resSites -eq 2) "$resSites site line(s)"
   foreach ($t in @(@('PhA.Emit', 3), @('PhB.Emit', 3), @('PhA.Clash', 5), @('PhU.Clash', 5))) {
@@ -168,15 +168,15 @@ try {
     "c.execute(""UPDATE schema_meta SET value = '25' WHERE key = 'schema_version' AND CAST(value AS INTEGER) > 25"")`nc.commit()`nc.close()`n", [Text.Encoding]::ASCII)
   & $py -I $pyFile $v25
   Check 'M the copy was made (no table, stamp <= 25)' ((-not (HasTable $v25)) -and ((SchemaVersion $v25) -le 25)) "v$(SchemaVersion $v25)"
-  $o = (& $exePath query find-callers --name Emit --db $v25 --json 2>&1 | Out-String); $c1 = $LASTEXITCODE
+  $o = (& { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name Emit --db $v25 --json 2>&1 | ForEach-Object { "$_" } } | Out-String); $c1 = $LASTEXITCODE
   Check 'M read-only find-callers on the v25 copy answers (no AV, no refusal)' ($c1 -eq 0 -and $o -notmatch 'Access violation|no such table|index schema v') "exit $c1"
-  $o = (& $exePath query find-callers --name Emit --db $v25 --resolved 2>&1 | Out-String); $c1 = $LASTEXITCODE
+  $o = (& { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name Emit --db $v25 --resolved 2>&1 | ForEach-Object { "$_" } } | Out-String); $c1 = $LASTEXITCODE
   # exit 1 = "0 caller(s)": without the table the differing site has no resolved caller row
   Check 'M read-only find-callers --resolved on the v25 copy answers' ($c1 -in @(0, 1) -and $o -match 'caller\(s\)' -and $o -notmatch 'Access violation|no such table') "exit $c1"
-  $o = (& $exePath usages --name PhA.Emit --db $v25 --json 2>&1 | Out-String); $c1 = $LASTEXITCODE
+  $o = (& { $ErrorActionPreference = 'Continue'; & $exePath usages --name PhA.Emit --db $v25 --json 2>&1 | ForEach-Object { "$_" } } | Out-String); $c1 = $LASTEXITCODE
   Check 'M read-only usages on the v25 copy answers' ($c1 -eq 0 -and $o -notmatch 'Access violation|no such table') "exit $c1"
   Check 'M the read-only verbs did not migrate the copy' (-not (HasTable $v25))
-  & $exePath index $fx --db $v25 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $fx --db $v25 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'M index into the v25 copy: exit 0' ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
   Check 'M ... the table is present, schema_version 26 or newer' ((HasTable $v25) -and ((SchemaVersion $v25) -ge 26)) "v$(SchemaVersion $v25)"
   $kept = Invoke-Rows $v25 "SELECT (SELECT COUNT(*) FROM refs) AS refs, (SELECT COUNT(*) FROM call_edges) AS edges, (SELECT COUNT(*) FROM symbols) AS syms"
@@ -184,7 +184,7 @@ try {
   Check 'M ... the migration kept refs / call_edges / symbols' ($kept.Count -eq 1 -and $kept[0].refs -eq $orig[0].refs -and $kept[0].edges -eq $orig[0].edges -and $kept[0].syms -eq $orig[0].syms) "$($kept[0].refs)/$($kept[0].edges)/$($kept[0].syms)"
   # The rows are the calls pass's: an unchanged index is not re-resolved by the migration itself
   # (the release's resolver-version bump is what re-resolves every DB); --resolve-only does it here.
-  & $exePath index $fx --db $v25 --resolve-only 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $fx --db $v25 --resolve-only 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'M re-resolve of the migrated copy: exit 0' ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
   Check-PerHost 'migrated' $v25 'PhU.pas:6'
 
@@ -195,7 +195,7 @@ try {
   $b = $b.Replace("{`$I PhShared.inc}", "procedure Clash;`r`nbegin`r`nend;`r`n`r`n{`$I PhShared.inc}")
   [IO.File]::WriteAllText($bPath, $b, [Text.Encoding]::ASCII)
   (Get-Item $bPath).LastWriteTime = (Get-Date).AddSeconds(5)
-  & $exePath index $fx --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $fx --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'I incremental index exit 0' ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
   Check-PerHost 'incremental' $db 'PhB.pas:18'
 } finally {

@@ -55,7 +55,7 @@ function WriteDproj([string]$Dir, [string]$Search, [string[]]$Refs) {
 # The closure as printed: the 2-space-indented lines after "Compile closure: N file(s):".
 function Closure([string]$Dir, [string]$File = 'P.dproj') {
   $db = Join-Path $Scratch ("dry-" + [Guid]::NewGuid().ToString('N') + '.sqlite')
-  $raw = & $Exe index --project "$Dir\$File" --db $db --library-db "$Scratch\no-library.sqlite" --dry-run 2>&1 | Out-String
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe index --project "$Dir\$File" --db $db --library-db "$Scratch\no-library.sqlite" --dry-run 2>&1 | ForEach-Object { "$_" } } | Out-String
   $lines = @($raw -split "`r?`n")
   $start = -1
   for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match '^Compile closure: (\d+) file') { $start = $i; break } }
@@ -206,7 +206,7 @@ WriteUnit "$d\Other\Lib.pas" 'Lib'
 WriteUnit "$d\Other\B.pas" 'B' 'Lib'
 WriteUnit "$d\Listed\NeverUsed.pas" 'NeverUsed'
 WriteDproj $d 'Other' @('Listed\Lib.pas', 'Listed\NeverUsed.pas', 'Other\B.pas')
-$raw = & $Exe selftest closure --project "$d\P.dpr" 2>&1 | Out-String
+$raw = & { $ErrorActionPreference = 'Continue'; & $Exe selftest closure --project "$d\P.dpr" 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'the used unit binds to the listed file' (($raw -match [regex]::Escape("$d\Listed\Lib.pas")) -and -not ($raw -match [regex]::Escape("$d\Other\Lib.pas"))) $raw
 Check 'the listed but unused unit is not seeded (reconcile''s EXTRA stays honest)' (-not ($raw -match 'NeverUsed')) $raw
 

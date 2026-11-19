@@ -102,7 +102,7 @@ end;
 
 end.
 '@
-$out = (& $Exe lint $unit --rule redundant-cast 2>$null) -join "`n"
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $unit --rule redundant-cast 2>$null }) -join "`n"
 Write-Host $out -ForegroundColor DarkGray
 $hits = @($out -split "`n" | Where-Object { $_ -match 'redundant-cast' })
 function At([int]$line) { return ,@($hits | Where-Object { $_ -match ":${line}:" }) }

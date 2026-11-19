@@ -29,7 +29,7 @@ $null = New-Item -ItemType Directory -Force $Work
 Push-Location $Work
 try {
     function Lines([string[]]$LintArgs) {
-        $raw = (& $Exe lint @LintArgs --json 2>$null) -join "`n"
+        $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint @LintArgs --json 2>$null }) -join "`n"
         $arr = @()
         if ($raw.Trim().StartsWith('[')) { try { $arr = @($raw | ConvertFrom-Json) } catch { } }
         return @($arr | ForEach-Object { [int]$_.start_line })
@@ -59,8 +59,8 @@ try {
     $lib = Join-Path $Work 'fps-lib.sqlite'
     $prj = Join-Path $Work 'fps-proj.sqlite'
     foreach ($d in @($lib, $prj)) { if (Test-Path $d) { [IO.File]::Delete($d) } }
-    $null = & $Exe index (Join-Path $Fix 'lib') --db $lib 2>&1
-    $null = & $Exe index (Join-Path $Fix 'proj') --db $prj --library-db $lib 2>&1
+    $null = & { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $Fix 'lib') --db $lib 2>&1 | ForEach-Object { "$_" } }
+    $null = & { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $Fix 'proj') --db $prj --library-db $lib 2>&1 | ForEach-Object { "$_" } }
     $f3 = Join-Path $Fix 'proj\uFpsFrames.pas'
     $g3 = @(Lines @($f3, '--db', $prj, '--library-db', $lib, '--rule', 'blocking-call-in-main-thread'))
     Write-Host "  lines: $($g3 -join ',')"

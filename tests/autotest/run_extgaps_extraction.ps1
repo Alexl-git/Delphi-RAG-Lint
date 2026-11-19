@@ -30,7 +30,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail='') {
     if ($Ok) { $script:Pass++; Write-Host "  [PASS] $Name" -ForegroundColor Green }
     else     { $script:Fail++; Write-Host "  [FAIL] $Name  $Detail" -ForegroundColor Red }
 }
-function Sql([string]$Db, [string]$Q) { ((& $Exe sql --db $Db --query $Q 2>&1) | Select-Object -Skip 1) -join "`n" }
+function Sql([string]$Db, [string]$Q) { ((& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query $Q 2>&1 | ForEach-Object { "$_" } }) | Select-Object -Skip 1) -join "`n" }
 
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 if (Test-Path $WorkDir) { Remove-Item -Recurse -Force $WorkDir }
@@ -41,7 +41,7 @@ foreach ($n in 'events-global', 'events-args') {
     New-Item -ItemType Directory -Force $dir | Out-Null
     Copy-Item (Join-Path $Fx "$n\*") $dir -Force
     $db = Join-Path $WorkDir "$n.sqlite"
-    & $Exe index $dir --db $db 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
     Check "index $n exits 0" ($LASTEXITCODE -eq 0)
     $Dbs[$n] = $db
 }
@@ -112,7 +112,7 @@ end;
 end.
 "@ | Set-Content (Join-Path $ev 'EvAssign.pas') -Encoding ascii
 $edb = Join-Path $WorkDir 'events-assign.sqlite'
-& $Exe index $ev --db $edb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $ev --db $edb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'index events-assign exits 0' ($LASTEXITCODE -eq 0)
 function EdgeAt([int]$Line) { Sql $edb "select s.qualified_name, coalesce((select ce.confidence from call_edges ce where ce.ref_id=r.id), 'no-edge') from refs r join symbols s on s.id=r.symbol_id where r.start_line=$Line and r.name_text in ('Handler','GetVal') and r.kind in ('member-access','call') order by r.kind" }
 $a1 = EdgeAt 33

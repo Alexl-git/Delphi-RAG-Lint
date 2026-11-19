@@ -182,7 +182,7 @@ if (@($rows.Values | Sort-Object -Unique).Count -ne $rows.Count) {
 }
 Write-Host ("  anchors: " + (($rows.Keys | ForEach-Object { "$_=$($rows[$_])" }) -join ' ')) -ForegroundColor DarkGray
 
-$out = & $Exe lint $file 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file 2>&1 | ForEach-Object { "$_" } } | Out-String
 $hits = @([regex]::Matches($out, 'uUnusedParamAddr\.pas:(\d+):\d+\s+\[\w+\]\s+unused-parameter: Parameter "(\w+)"') |
           ForEach-Object { [pscustomobject]@{ Row = [int]$_.Groups[1].Value; Param = $_.Groups[2].Value } })
 function Proc-Of([int]$Row) {

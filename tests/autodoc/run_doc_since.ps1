@@ -66,15 +66,15 @@ try {
   # scratch git repo with a deterministic committed fixture.
   Push-Location $scratch
   try {
-    & git init -q 2>$null | Out-Null
-    & git add since.pas 2>$null | Out-Null
-    & git -c user.name='drag-lint test' -c user.email='test@drag-lint.local' `
+    & { $ErrorActionPreference = 'Continue'; & git init -q 2>$null } | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & git add since.pas 2>$null } | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & git -c user.name='drag-lint test' -c user.email='test@drag-lint.local' `
         -c commit.gpgsign=false commit -q -m 'fixture' `
-        --date='2020-01-15T12:00:00' 2>$null | Out-Null
+        --date='2020-01-15T12:00:00' 2>$null } | Out-Null
   } finally { Pop-Location }
 
-  & $exePath index $scratch --db $db 2>$null | Out-Null
-  & $exePath document --unit $target --db $db --apply --since --base-dir $scratch 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply --since --base-dir $scratch 2>$null } | Out-Null
   $ec1 = $LASTEXITCODE
   Check 'apply #1 (--since, git present): exit 0' ($ec1 -eq 0)
 
@@ -85,8 +85,8 @@ try {
 
   # --- idempotency: second --apply --since leaves file byte-identical ---
   $before = [IO.File]::ReadAllBytes($target)
-  & $exePath index $scratch --db $db 2>$null | Out-Null
-  & $exePath document --unit $target --db $db --apply --since --base-dir $scratch 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply --since --base-dir $scratch 2>$null } | Out-Null
   $after = [IO.File]::ReadAllBytes($target)
   Check 'idempotent: file byte-identical on 2nd --since run' ([System.Linq.Enumerable]::SequenceEqual([byte[]]$before,[byte[]]$after))
 
@@ -99,14 +99,14 @@ try {
   Copy-Item $fixture $targetOff -Force
   Push-Location $scratchOff
   try {
-    & git init -q 2>$null | Out-Null
-    & git add since.pas 2>$null | Out-Null
-    & git -c user.name='drag-lint test' -c user.email='test@drag-lint.local' `
-        -c commit.gpgsign=false commit -q -m 'fixture' 2>$null | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & git init -q 2>$null } | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & git add since.pas 2>$null } | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & git -c user.name='drag-lint test' -c user.email='test@drag-lint.local' `
+        -c commit.gpgsign=false commit -q -m 'fixture' 2>$null } | Out-Null
   } finally { Pop-Location }
 
-  & $exePath index $scratchOff --db $dbOff 2>$null | Out-Null
-  & $exePath document --unit $targetOff --db $dbOff --apply --base-dir $scratchOff 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratchOff --db $dbOff 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $targetOff --db $dbOff --apply --base-dir $scratchOff 2>$null } | Out-Null
   $ecOff = $LASTEXITCODE
   Check 'apply (no --since): exit 0' ($ecOff -eq 0)
   $blkOff = Get-DoItBlock $targetOff
@@ -122,8 +122,8 @@ try {
   Copy-Item $fixture $target2 -Force
   # NO git init: this is a plain non-repo folder.
 
-  & $exePath index $scratch2 --db $db2 2>$null | Out-Null
-  & $exePath document --unit $target2 --db $db2 --apply --since --base-dir $scratch2 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch2 --db $db2 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target2 --db $db2 --apply --since --base-dir $scratch2 2>$null } | Out-Null
   $ec2 = $LASTEXITCODE
   Check 'apply (--since, git ABSENT): exit 0 (no crash)' ($ec2 -eq 0)
 

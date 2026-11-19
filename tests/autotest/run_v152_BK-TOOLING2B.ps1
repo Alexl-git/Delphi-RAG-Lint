@@ -49,7 +49,7 @@ function Invoke-Engine([string]$Copy, [string[]]$EngineArgs, [hashtable]$Vars = 
   foreach ($k in $Vars.Keys) { [Environment]::SetEnvironmentVariable($k, $Vars[$k]) }
   Push-Location -LiteralPath $cwd
   try {
-    $o = (& $Copy @EngineArgs 2>&1 | ForEach-Object { "$_" }) -join "`n"
+    $o = (& { $ErrorActionPreference = 'Continue'; & $Copy @EngineArgs 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n"
     return [pscustomobject]@{ Rc = $LASTEXITCODE; Out = $o }
   } finally {
     Pop-Location
@@ -135,14 +135,14 @@ try {
   [IO.File]::WriteAllText("$pdir\old.ps1", "[CmdletBinding()]`r`nparam([string]`$Repo = (Resolve-Path `"`$PSScriptRoot\..\..`" -ErrorAction SilentlyContinue).Path)`r`n`"REPO=[`$Repo]`"`r`n", [Text.Encoding]::ASCII)
   [IO.File]::WriteAllText("$pdir\new.ps1", "[CmdletBinding()]`r`nparam([string]`$Repo = '')`r`nif (-not `$Repo) { `$Repo = (Resolve-Path `"`$PSScriptRoot\..\..`").Path }`r`n`"REPO=[`$Repo]`"`r`n", [Text.Encoding]::ASCII)
   $want = (Resolve-Path (Join-Path $pdir '..\..')).Path
-  $old = (& powershell.exe -NoProfile -File "$pdir\old.ps1" 2>&1 | Out-String)
-  $new = (& powershell.exe -NoProfile -File "$pdir\new.ps1" 2>&1 | Out-String)
+  $old = (& { $ErrorActionPreference = 'Continue'; & powershell.exe -NoProfile -File "$pdir\old.ps1" 2>&1 | ForEach-Object { "$_" } } | Out-String)
+  $new = (& { $ErrorActionPreference = 'Continue'; & powershell.exe -NoProfile -File "$pdir\new.ps1" 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check 'P2 CONTROL the old shape under powershell -File does NOT get the repo (the bug is real here)' ($old -notmatch [regex]::Escape("REPO=[$want]")) $old.Trim()
   Check 'P2 the new shape under powershell -File gets the repo' ($new -match [regex]::Escape("REPO=[$want]")) $new.Trim()
 
   # ---- X: exception unit writer -------------------------------------------------------------------
   Write-Host '== X run_exception_unit_writer ==' -ForegroundColor Cyan
-  $xo = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'run_exception_unit_writer.ps1') -Exe $exePath -WorkDir (Join-Path $WorkDir 'excw') 2>&1 | Out-String)
+  $xo = (& { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'run_exception_unit_writer.ps1') -Exe $exePath -WorkDir (Join-Path $WorkDir 'excw') 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $xrc = $LASTEXITCODE
   $xf = @(($xo -split "`r?`n") | Where-Object { $_ -match '\[FAIL\]' })
   Check 'X1 run_exception_unit_writer.ps1 passes on this engine' ($xrc -eq 0) ("exit=$xrc " + ($xf -join ' | '))

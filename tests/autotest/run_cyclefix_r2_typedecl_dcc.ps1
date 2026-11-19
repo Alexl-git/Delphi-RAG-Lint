@@ -98,7 +98,7 @@ function Invoke-Program([string]$Dproj) {
 
 function Get-PlanFile([string]$Dproj, [string]$Tag) {
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project $Dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $Dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
   $o = Join-Path $WorkDir "plan-$Tag.out"
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
     -ArgumentList @('cycles', '--db', ('"' + $db + '"'), '--plan', '--library-db', ('"' + $Lib + '"')) `
@@ -139,7 +139,7 @@ try {
   $pt = [IO.File]::ReadAllText($plan.File)
   Check 'a1 planned (exit 0), cut by member hand-over' (($plan.Exit -eq 0) -and $pt.Contains('by **member hand-over through an extracted interface**')) "exit=$($plan.Exit)"
   Check 'a2 the plan retypes the local to the interface' ($pt -match 'Port: IDemoGagePortSurface; // retyped to the interface') ''
-  $fo = & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $plan.File -Cycle 1 -Root $edit 2>&1 | Out-String
+  $fo = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $plan.File -Cycle 1 -Root $edit 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'a3 the follower applies cycle 1 (exit 0)' ($LASTEXITCODE -eq 0) ($fo.Trim() -replace "`r?`n", ' | ')
   $ut = (([IO.File]::ReadAllText((Join-Path $edit 'DemoUIConnect.pas')) -split "`r?`n") | ForEach-Object { $_ -replace '//.*$', '' }) -join "`n"
   Check 'a4 the followed consumer code (comments aside) no longer names TDemoGagePort' (-not ($ut -match '\bTDemoGagePort\b')) ''

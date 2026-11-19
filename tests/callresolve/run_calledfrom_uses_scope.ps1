@@ -147,12 +147,12 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'uses.sqlite'
-& $Exe index $WorkDir --db $db --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 # ONE --unit pass, not two --qname passes: a second --qname apply anchors on the
 # DB's now-stale StartLine (the first apply pushed every later decl down) and
 # nests its block inside the first one.
-& $Exe document --unit (Join-Path $WorkDir 'ctorunit.pas') --db $db --apply --no-backup 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe document --unit (Join-Path $WorkDir 'ctorunit.pas') --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $txt = [IO.File]::ReadAllText((Join-Path $WorkDir 'ctorunit.pas'))
 
 $lines  = $txt -split "`r?`n"

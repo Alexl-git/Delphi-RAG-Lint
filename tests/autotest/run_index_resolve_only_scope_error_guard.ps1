@@ -29,8 +29,8 @@ $db = Join-Path $WorkDir 'never.sqlite'
 Write-Host ''
 Write-Host 'run_index_resolve_only_scope_error_guard -- index --resolve-only names its scope' -ForegroundColor Cyan
 $ea = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-$a = (& $Exe index --resolve-only --db $db 2>&1 | Out-String); $aCode = $LASTEXITCODE
-$b = (& $Exe index --db $db 2>&1 | Out-String); $bCode = $LASTEXITCODE
+$a = (& { $ErrorActionPreference = 'Continue'; & $Exe index --resolve-only --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String); $aCode = $LASTEXITCODE
+$b = (& { $ErrorActionPreference = 'Continue'; & $Exe index --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String); $bCode = $LASTEXITCODE
 $ErrorActionPreference = $ea
 Check 'A: exit 2' ($aCode -eq 2) "exit=$aCode"
 Check 'A: names --resolve-only and the scope it needs' (($a -match 'index --resolve-only parses nothing') -and ($a -match '--project <file\.dproj>') -and ($a -match '<path>')) $a.Trim()

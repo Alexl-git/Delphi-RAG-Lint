@@ -60,13 +60,13 @@ W "$WorkDir\Empty.dpr" "program Empty;`nbegin`nend.`n"
 
 $db  = "$WorkDir\app.sqlite"
 $dbE = "$WorkDir\empty.sqlite"
-& $exePath index --project "$WorkDir\App.dpr" --db $db 2>&1 | Out-Null
-& $exePath index --project "$WorkDir\Empty.dpr" --db $dbE 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index --project "$WorkDir\App.dpr" --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index --project "$WorkDir\Empty.dpr" --db $dbE 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V both fixture indexes were built' ((Test-Path $db) -and (Test-Path $dbE)) ''
 
 $sections = 'freshness','counts','layers','fanin','entrypoints','forms'
 function Run([string[]]$A) {
-  $o = & $exePath overview @A 2>&1 | ForEach-Object { "$_" }
+  $o = & { $ErrorActionPreference = 'Continue'; & $exePath overview @A 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }
   return [pscustomobject]@{ Exit = $LASTEXITCODE; Text = ($o -join "`n") }
 }
 

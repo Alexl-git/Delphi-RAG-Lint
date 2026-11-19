@@ -133,18 +133,18 @@ Write-Ascii (Join-Path $WorkDir '.drag-lint.json') @"
 "@
 
 $db = Join-Path $WorkDir '_D-RAG\P.sqlite'
-& $Exe index --project $dproj --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project $dproj --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index not created at $db" -ForegroundColor Red; exit 2 }
 
 Push-Location $WorkDir
 try {
-    $inferred = (& $Exe lint-all --db $db --rule unit-not-in-dpr 2>&1) -join "`n"
-    $explicit = (& $Exe lint-all --db $db --project $dproj --rule unit-not-in-dpr 2>&1) -join "`n"
+    $inferred = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule unit-not-in-dpr 2>&1 | ForEach-Object { "$_" } }) -join "`n"
+    $explicit = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --project $dproj --rule unit-not-in-dpr 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 
     # A DB no manifest section claims. Inference must decline, not invent one.
     $strayDb = Join-Path $WorkDir 'stray.sqlite'
     Copy-Item $db $strayDb
-    $stray = (& $Exe lint-all --db $strayDb --rule unit-not-in-dpr 2>&1) -join "`n"
+    $stray = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $strayDb --rule unit-not-in-dpr 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 } finally { Pop-Location }
 
 # MATCH THE FINDING, NOT THE FILENAME. lint-all prints a per-file PROGRESS line

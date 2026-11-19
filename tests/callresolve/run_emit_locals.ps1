@@ -49,7 +49,7 @@ Copy-Item $fixture $target -Force
 # exactly ($null when none). Matching on qname disambiguates leaf-name
 # collisions across routines. --json prints a JSON array of matched symbols.
 function LocalByQName([string]$name, [string]$qname) {
-  $j = & $exePath query --name $name --db $db --json 2>$null | Out-String
+  $j = & { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --db $db --json 2>$null } | Out-String
   $arr = $null; try { $arr = ($j | ConvertFrom-Json) } catch { $arr = $null }
   if ($null -eq $arr) { return $null }
   foreach ($s in @($arr)) { if ($s.kind -eq 'local_var' -and $s.qualified_name -eq $qname) { return $s } }
@@ -61,7 +61,7 @@ function LocalByQName([string]$name, [string]$qname) {
 # rather than the first -- the overload-attribution proof is that TWO distinct
 # rows exist, each carrying its own overload's Signature.
 function LocalsByQName([string]$name, [string]$qname) {
-  $j = & $exePath query --name $name --db $db --json 2>$null | Out-String
+  $j = & { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --db $db --json 2>$null } | Out-String
   $arr = $null; try { $arr = ($j | ConvertFrom-Json) } catch { $arr = $null }
   if ($null -eq $arr) { return @() }
   return @($arr | Where-Object { $_.kind -eq 'local_var' -and $_.qualified_name -eq $qname })
@@ -69,7 +69,7 @@ function LocalsByQName([string]$name, [string]$qname) {
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # --- L: plainly-typed CLASS local -> Signature = TWorker ---
   $l = LocalByQName 'L' 'locals.TWorker.Go.L'

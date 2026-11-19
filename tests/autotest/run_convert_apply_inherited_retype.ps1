@@ -750,14 +750,14 @@ Write-Ascii (P 'retype.rules') @'
 '@
 
 $db = P 'fx.sqlite'
-$idx = & $Exe index $WorkDir --db $db 2>&1
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'V the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db)) "exit=$LASTEXITCODE; $($idx -join ' | ')"
 
 function ApplyTo([string[]]$Units, [string]$Rules, [string[]]$Extra = @()) {
   $a = @('convert-apply')
   foreach ($u in $Units) { $a += @('--unit', (P $u)) }
   $a += @('--rules', (P $Rules), '--db', $db) + $Extra
-  $o = (& $Exe @a 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 function Json([string]$s) {
@@ -895,7 +895,7 @@ inherited RChild2: TRChild2
   end
 end
 '@
-$idx = & $Exe index $WorkDir --db $db 2>&1
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } }
 $r = ApplyTo @('RChild2.pas') 'retype.rules' @('--only', 'rbtn', '--format', 'json')
 $j = Json $r.Out
 Check 'D1 --only rbtn: only rbtn in inherited[] (retyped), nothing else converted, only_matched [rbtn]' `
@@ -957,20 +957,20 @@ if (-not (Test-Path $py)) {
   Copy-Item $db $old -Force
   & $py -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute(""UPDATE schema_meta SET value='r=1.11.0-alpha;schema=23' WHERE key='resolver_fingerprint'""); c.commit(); c.close()" $old
   $hp = (Get-FileHash (P 'RScope.pas')).Hash
-  $o = (& $Exe convert-apply --unit (P 'RScope.pas') --rules (P 'retype.rules') --db $old --format json 2>&1) -join "`n"; $kc = $LASTEXITCODE
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'RScope.pas') --rules (P 'retype.rules') --db $old --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"; $kc = $LASTEXITCODE
   $kj = Json $o
   $want = "$old`: edges were derived by resolver 1.11.0-alpha; convert-apply needs 1.12.0-alpha or newer (bound field reads) -- re-derive first: drag-lint index <dir> --db `"$old`" --resolve-only"
   Check 'K1 dry run on an r=1.11 DB: REFUSED, exit 1, ok=false, the reason names the DB and the exact --resolve-only fix' `
     (($kc -eq 1) -and ($null -ne $kj) -and ($kj.ok -eq $false) -and ($kj.refused -eq $true) -and ($kj.reason -eq $want)) ($o + "`nwant: $want")
-  $o = (& $Exe convert-apply --unit (P 'RScope.pas') --rules (P 'retype.rules') --db $old --apply --no-backup 2>&1) -join "`n"; $kc = $LASTEXITCODE
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'RScope.pas') --rules (P 'retype.rules') --db $old --apply --no-backup 2>&1 | ForEach-Object { "$_" } }) -join "`n"; $kc = $LASTEXITCODE
   Check 'K2 --apply on it: REFUSED (exit 1, one REFUSED: line), the unit byte-identical' `
     (($kc -eq 1) -and ($o -match '(?m)^REFUSED: .*edges were derived by resolver 1\.11\.0-alpha') -and ((Get-FileHash (P 'RScope.pas')).Hash -eq $hp)) $o
   & $py -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute(""DELETE FROM schema_meta WHERE key='resolver_fingerprint'""); c.commit(); c.close()" $old
-  $o = (& $Exe convert-apply --unit (P 'RScope.pas') --rules (P 'retype.rules') --db $old --format json 2>&1) -join "`n"; $kc = $LASTEXITCODE
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'RScope.pas') --rules (P 'retype.rules') --db $old --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"; $kc = $LASTEXITCODE
   $kj = Json $o
   Check 'K3 a DB with NO resolver stamp is refused the same way ("resolver (none)")' `
     (($kc -eq 1) -and ($null -ne $kj) -and ($kj.refused -eq $true) -and ($kj.reason -match 'edges were derived by resolver \(none\)')) $o
-  $o = (& $Exe convert-apply --unit (P 'RScope.pas') --rules (P 'retype.rules') --db $db --format json 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'RScope.pas') --rules (P 'retype.rules') --db $db --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $kj = Json $o
   Check 'K4 positive control: the current DB is not refused' (($null -ne $kj) -and ($kj.refused -eq $false)) $o
 }
@@ -1023,13 +1023,13 @@ $r = ApplyTo @('RUnconv2.pas') 'retype.rules' @('--format', 'json')
 $j = Json $r.Out
 Check 'U3 positive control: a .dfm re-opened ubtn is listed ONCE (the .dfm entry, line 2), not again as a code use' `
   (($r.Code -eq 0) -and ($null -ne $j) -and (@($j.inherited | Where-Object { $_.name -eq 'ubtn' }).Count -eq 1) -and (@($j.inherited | Where-Object { $_.name -eq 'ubtn' })[0].line -eq 2)) ($r.Out)
-$o = (& $Exe info --json 2>$null) -join "`n"
+$o = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n"
 $ij = Json $o
 Check 'U4 info --json: capabilities.inherited_code_unconverted is the JSON literal true' `
   (($null -ne $ij) -and ($ij.capabilities.inherited_code_unconverted -is [bool]) -and ($ij.capabilities.inherited_code_unconverted -eq $true)) $o
 
 # ---- the capability ----------------------------------------------------------------
-$o = (& $Exe info --json 2>$null) -join "`n"
+$o = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n"
 $ij = Json $o
 Check 'F1 info --json: capabilities.inherited_retype is the JSON literal true' `
   (($null -ne $ij) -and ($ij.capabilities.inherited_retype -is [bool]) -and ($ij.capabilities.inherited_retype -eq $true)) $o

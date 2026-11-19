@@ -136,7 +136,7 @@ try {
   Write-Ascii $cfg '{ "thresholds": { "cyclomatic-complexity": 0, "cognitive-complexity": 0 } }'
   $gaLines = [IO.File]::ReadAllLines($gaPas)
   Push-Location $ga
-  try { $gf = Findings (& $exePath lint $gaPas --config $cfg --rules-dir $rules --rule 'cyclomatic-complexity,cognitive-complexity' --json 2>$null | Out-String) }
+  try { $gf = Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $gaPas --config $cfg --rules-dir $rules --rule 'cyclomatic-complexity,cognitive-complexity' --json 2>$null } | Out-String) }
   finally { Pop-Location }
   function Score([string]$Rule, [string]$Routine) {
     foreach ($f in $gf) {
@@ -168,16 +168,16 @@ try {
   $use = Join-Path $ex 'uBvUse.pas'
   Write-Ascii $use $ExUse
   $db = Join-Path $WorkDir 'bv.sqlite'
-  & $exePath index $ex --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $ex --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'EX index built' (Test-Path $db) $db
   $UBA = 'used-before-assignment'; $OLD = 'by-value-arg-before-assignment'
   Push-Location $WorkDir
   try {
-    $dflt = Findings (& $exePath lint $use --db $db --rules-dir $rules --json 2>$null | Out-String)
-    $only = Findings (& $exePath lint $use --db $db --rules-dir $rules --rule $UBA --json 2>$null | Out-String)
-    $allT = (& $exePath lint-all --db $db --rules-dir $rules --library-db none --output (Join-Path $WorkDir 'la.txt') 2>&1 | Out-String)
+    $dflt = Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $use --db $db --rules-dir $rules --json 2>$null } | Out-String)
+    $only = Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $use --db $db --rules-dir $rules --rule $UBA --json 2>$null } | Out-String)
+    $allT = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rules-dir $rules --library-db none --output (Join-Path $WorkDir 'la.txt') 2>&1 | ForEach-Object { "$_" } } | Out-String)
     $allR = if (Test-Path (Join-Path $WorkDir 'la.txt')) { [IO.File]::ReadAllText((Join-Path $WorkDir 'la.txt')) } else { '' }
-    $cat  = (& $exePath rules --json --rules-dir $rules 2>$null | Out-String)
+    $cat  = (& { $ErrorActionPreference = 'Continue'; & $exePath rules --json --rules-dir $rules 2>$null } | Out-String)
   }
   finally { Pop-Location }
   function Has($F, [string]$Rule, [string]$Name, [string]$Sev = '') {

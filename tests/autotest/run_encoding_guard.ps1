@@ -323,7 +323,7 @@ $scanned = 0
 # new unadded .pas is still visible, but it does not turn the battery red. No git / not a repo => scan all.
 function Get-GitKnownFiles([string]$Root) {
   $set = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
-  $raw = & git -C $Root ls-files -z 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & git -C $Root ls-files -z 2>$null }
   if ($LASTEXITCODE -ne 0 -or $null -eq $raw) { return $null }
   foreach ($e in (($raw -join '') -split "`0")) { if ($e -ne '') { [void]$set.Add($e.Replace('\', '/')) } }
   return $set

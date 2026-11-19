@@ -157,10 +157,10 @@ try {
   Copy-Item -LiteralPath (Join-Path $Repo 'tests\fixtures\happens-before\intra-shapes\IntraShapes.pas') -Destination $fix -Force
   $unit = Join-Path $fix 'IntraShapes.pas'
   $db = Join-Path $WorkDir 'intra.sqlite'
-  $null = & $Exe index $fix --db $db 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $fix --db $db 2>&1 | ForEach-Object { "$_" } }
   Check 'fixture indexes (exit 0)' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
-  $raw = @(& $driverExe --db $db --file $unit 2>&1 | ForEach-Object { "$_" })
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $driverExe --db $db --file $unit 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
   $code = $LASTEXITCODE
   Write-Host '  -- raw driver output --'
   $raw | ForEach-Object { Write-Host "    $_" }
@@ -178,7 +178,7 @@ try {
   Check 'vacuity control: every query located' (($p.Located.Count -gt 0) -and ($unloc.Count -eq 0)) ($unloc -join ',')
 
   # Positive control: the entry state reaches the query.
-  $pc = @(& $driverExe --db $db --file $unit --only StraightNoDom --entry-done 2>&1 | ForEach-Object { "$_" })
+  $pc = @(& { $ErrorActionPreference = 'Continue'; & $driverExe --db $db --file $unit --only StraightNoDom --entry-done 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
   $pcq = $pc | Where-Object { $_ -match '^QUERY StraightNoDom 1 ' }
   Check 'positive control: --entry-done makes StraightNoDom q=T' ($pcq -match 'done=T') "$pcq"
 

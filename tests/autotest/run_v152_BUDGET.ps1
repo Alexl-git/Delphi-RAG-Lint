@@ -39,7 +39,7 @@ function RunLint([string]$CfgJson, [string]$Sleep, [string]$NoBudget) {
   [IO.File]::WriteAllText($cfg, $CfgJson, [Text.Encoding]::ASCII)
   $env:DRAGLINT_TEST_RULE_SLEEP_MS = $Sleep
   $env:DRAGLINT_NO_BUDGET = $NoBudget
-  try { $out = & $Exe lint $fixture --config $cfg --json 2>$null }
+  try { $out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture --config $cfg --json 2>$null } }
   finally {
     Remove-Item Env:\DRAGLINT_TEST_RULE_SLEEP_MS -ErrorAction SilentlyContinue
     Remove-Item Env:\DRAGLINT_NO_BUDGET -ErrorAction SilentlyContinue
@@ -89,7 +89,7 @@ try {
   $cfg7 = Join-Path $work 'cfg7.json'
   [IO.File]::WriteAllText($cfg7, '{ "rule_time_budget_ms": 300 }', [Text.Encoding]::ASCII)
   $env:DRAGLINT_TEST_RULE_SLEEP_MS = 'writeln-in-gui-app=900'
-  try { $b7 = @(((& $Exe lint $fixture --config $cfg7 --no-budget --json 2>$null) -join "`n") | ConvertFrom-Json) }
+  try { $b7 = @(((& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture --config $cfg7 --no-budget --json 2>$null }) -join "`n") | ConvertFrom-Json) }
   finally { Remove-Item Env:\DRAGLINT_TEST_RULE_SLEEP_MS -ErrorAction SilentlyContinue }
   Check ((Rules $b7) -contains 'writeln-in-gui-app') 'B7 --no-budget: writeln-in-gui-app reported'
   Check (-not ((Rules $b7) -contains 'rule-skipped-budget')) 'B7 --no-budget: no note'
@@ -99,9 +99,9 @@ try {
   [void][IO.Directory]::CreateDirectory($fdir)
   Copy-Item -LiteralPath $fixture -Destination $fdir
   $fdb = Join-Path $work 'fx.sqlite'
-  & $Exe index $fdir --db $fdb *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $fdir --db $fdb *> $null }
   $env:DRAGLINT_TEST_RULE_SLEEP_MS = 'writeln-in-gui-app=2600'
-  try { $b8err = @(& $Exe lint-all --db $fdb 2>&1 | ForEach-Object { "$_" }) }
+  try { $b8err = @(& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $fdb 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) }
   finally { Remove-Item Env:\DRAGLINT_TEST_RULE_SLEEP_MS -ErrorAction SilentlyContinue }
   $sum = @($b8err | Where-Object { $_ -match 'rule budget:' })
   Write-Host ('raw B8 summary: ' + ($sum -join ' | '))
@@ -109,7 +109,7 @@ try {
   Check (@($b8err | Where-Object { $_ -match '\[rule-skipped-budget\]|rule-skipped-budget' -and $_ -match 'BudgetFixture' }).Count -ge 1) 'B8 lint-all also reports the per-file note'
 
   # B6
-  $cat = (& $Exe rules --json 2>$null) | ConvertFrom-Json
+  $cat = (& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null }) | ConvertFrom-Json
   $row = @($cat.rules | Where-Object { $_.id -eq 'rule-skipped-budget' })
   Check ($row.Count -eq 1) 'B6 rules --json lists rule-skipped-budget'
   Check (($row.Count -eq 1) -and $row[0].default_severity -eq 'info' -and $row[0].category -eq 'other' -and $row[0].default_enabled) 'B6 rule-skipped-budget is info / other / on'
@@ -120,7 +120,7 @@ try {
   $tfx = Join-Path $PSScriptRoot 'fixtures\v152budget\TScanFixture.pas'
   $cfg0 = Join-Path $work 'cfg0.json'
   [IO.File]::WriteAllText($cfg0, '{}', [Text.Encoding]::ASCII)
-  $tout = (& $Exe lint $tfx --config $cfg0 --json 2>$null) -join "`n"
+  $tout = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $tfx --config $cfg0 --json 2>$null }) -join "`n"
   $got = @(($tout | ConvertFrom-Json) | Where-Object { $_.rule -match '^(stringlist-|dictionary-get)' } | ForEach-Object { "$($_.rule)@$($_.start_line)" })
   Write-Host ('raw T1: ' + ($got -join ', '))
   Check (($got -join ',') -eq 'stringlist-objects-leak@40,stringlist-unsorted@41,stringlist-unsorted@53,stringlist-unsorted@54') 'T1 TScan fixture findings unchanged (4, pinned from the pre-change engine)'
@@ -140,7 +140,7 @@ try {
   MakeUnit 'FarBelow' 1000
   MakeUnit 'OverLimit' 2100
   $db = Join-Path $work 'idx.sqlite'
-  $log = @(& $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" })
+  $log = @(& { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
   $warn = @($log | Where-Object { $_ -match 'WARN' -and $_ -match 'parse limit' })
   Write-Host ('raw index WARN/SKIP lines: ' + (($log | Where-Object { $_ -match 'WARN|SKIP' }) -join ' | '))
   Check (@($warn | Where-Object { $_ -match 'NearLimit\.pas' -and $_ -match '2048 KB' }).Count -eq 1) 'P1 1900 KB unit gets one near-limit WARN line'

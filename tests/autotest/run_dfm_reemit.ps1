@@ -235,7 +235,7 @@ end.
 '@
 Write-Ascii (Join-Path $src 'ReemitFix.pas') $fx
 $db = Join-Path $WorkDir 'reemit.sqlite'
-$idx = & $Exe index $src --db $db 2>&1
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "$($idx -join ' | ')"
 
 function Reemit($blockBody, $rulesBody, $from, $to) {
@@ -813,7 +813,7 @@ Check 'enum-cast-unknown: and reports nothing unmapped' `
   (@($j34.report.enumUnmapped | Where-Object { $null -ne $_ }).Count -eq 0) "out=$o34"
 
 # --- Bad args ---
-$noOut = ((& $Exe convert-reemit 2>&1) -join "`n"); $noExit = $LASTEXITCODE
+$noOut = ((& { $ErrorActionPreference = 'Continue'; & $Exe convert-reemit 2>&1 | ForEach-Object { "$_" } }) -join "`n"); $noExit = $LASTEXITCODE
 Check 'no args exit 2' ($noExit -eq 2) "exit=$noExit"
 
 Write-Host ''

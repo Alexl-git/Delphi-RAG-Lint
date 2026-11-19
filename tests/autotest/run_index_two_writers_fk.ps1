@@ -88,7 +88,7 @@ Write-Ascii (Join-Path $scratch 'Fix.dproj') @'
 $proj = Join-Path $scratch 'Fix.dproj'
 
 function Invoke-Victim { # returns @{Code; Out}
-  $o = & $exePath index --project $proj --db $db --resolve-only 2>&1 | Out-String
+  $o = & { $ErrorActionPreference = 'Continue'; & $exePath index --project $proj --db $db --resolve-only 2>&1 | ForEach-Object { "$_" } } | Out-String
   @{ Code = $LASTEXITCODE; Out = $o }
 }
 function Db-Facts { # call_edges count, orphan edges, fk_check rows, integrity
@@ -101,20 +101,20 @@ print(c.execute('select count(*) from call_edges').fetchone()[0],
       c.execute('PRAGMA integrity_check').fetchone()[0])
 '@
   $f = Join-Path $scratch '_facts.py'; Write-Ascii $f $py
-  $r = (& python -I $f $db 2>&1 | Out-String).Trim() -split '\s+'
+  $r = (& { $ErrorActionPreference = 'Continue'; & python -I $f $db 2>&1 | ForEach-Object { "$_" } } | Out-String).Trim() -split '\s+'
   @{ Edges = [int]$r[0]; Orphans = [int]$r[1]; FkRows = [int]$r[2]; Integrity = $r[3] }
 }
 
 # --- first index ------------------------------------------------------------
-$first = & $exePath index --project $proj --db $db 2>&1 | Out-String
+$first = & { $ErrorActionPreference = 'Continue'; & $exePath index --project $proj --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 $firstCode = $LASTEXITCODE
 $edges0 = (Db-Facts).Edges
 Check 'setup: first index exit 0 and call_edges present' (($firstCode -eq 0) -and ($edges0 -gt 600)) "edges=$edges0"
 
 # --- C0 positive control ----------------------------------------------------
-$id0 = [int](& python -I $perp $db 'UnitX.pas' --min-id 2>&1 | Out-String).Trim()
-$null = & python -I $perp $db 'UnitX.pas' --hold-ms 1 2>&1
-$id1 = [int](& python -I $perp $db 'UnitX.pas' --min-id 2>&1 | Out-String).Trim()
+$id0 = [int](& { $ErrorActionPreference = 'Continue'; & python -I $perp $db 'UnitX.pas' --min-id 2>&1 | ForEach-Object { "$_" } } | Out-String).Trim()
+$null = & { $ErrorActionPreference = 'Continue'; & python -I $perp $db 'UnitX.pas' --hold-ms 1 2>&1 | ForEach-Object { "$_" } }
+$id1 = [int](& { $ErrorActionPreference = 'Continue'; & python -I $perp $db 'UnitX.pas' --min-id 2>&1 | ForEach-Object { "$_" } } | Out-String).Trim()
 Check 'C0 positive control: a perpetrator commit re-issues UnitX symbol ids' ($id1 -ne $id0) "min id $id0 -> $id1"
 
 # --- C1 deterministic race --------------------------------------------------

@@ -108,7 +108,7 @@ $cfgPath = Join-Path $WorkDir '.drag-lint.json'
 
 function Remove-Dbs { foreach ($s in $SECTIONS) { $p = Join-Path $WorkDir "$s.sqlite"; if (Test-Path $p) { [System.IO.File]::Delete($p) } } }
 function Table-Counts([string]$Section) {
-  $t = (& $Exe schema --db (Join-Path $WorkDir "$Section.sqlite") 2>&1 | Out-String)
+  $t = (& { $ErrorActionPreference = 'Continue'; & $Exe schema --db (Join-Path $WorkDir "$Section.sqlite") 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $o = @()
   foreach ($k in 'files','symbols','refs') {
     if ($t -match "(?m)^\s*$k \((\d+) rows\)") { $o += "$k=$($Matches[1])" } else { $o += "$k=?" }
@@ -116,7 +116,7 @@ function Table-Counts([string]$Section) {
   return ($o -join ' ')
 }
 function File-Count([string]$Section) {
-  $t = (& $Exe schema --db (Join-Path $WorkDir "$Section.sqlite") 2>&1 | Out-String)
+  $t = (& { $ErrorActionPreference = 'Continue'; & $Exe schema --db (Join-Path $WorkDir "$Section.sqlite") 2>&1 | ForEach-Object { "$_" } } | Out-String)
   if ($t -match "(?m)^\s*files \((\d+) rows\)") { return [int]$Matches[1] }
   return -1
 }
@@ -148,7 +148,7 @@ function Probe-Run([string]$Label, [string[]]$ExtraArgs) {
 Write-Host ''
 Write-Host 'SAFETY -- the plan must be exactly the three probe sections' -ForegroundColor Cyan
 Push-Location $WorkDir
-$dry = (& $Exe index --all --only $ONLY --dry-run 2>&1 | Out-String)
+$dry = (& { $ErrorActionPreference = 'Continue'; & $Exe index --all --only $ONLY --dry-run 2>&1 | ForEach-Object { "$_" } } | Out-String)
 Pop-Location
 $planned = @([regex]::Matches($dry, '(?m)^\s{4}\[([^\]]+)\]')) | ForEach-Object { $_.Groups[1].Value }
 Check 'dry-run plans exactly 3 sections' ($planned.Count -eq 3) "planned: $($planned -join ', ')"

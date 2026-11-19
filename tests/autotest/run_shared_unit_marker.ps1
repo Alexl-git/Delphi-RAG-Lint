@@ -89,7 +89,7 @@ function Invoke-SharedUnit {
   # merging the two streams interleaves that banner into the JSON -- which is a
   # test-harness bug that looks exactly like an engine bug (measured: every read
   # assertion failed while the engine was answering correctly).
-  $raw = & $Exe @a 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }
   $txt = ($raw | ForEach-Object { $_.ToString() }) -join "`n"
   try { return $txt | ConvertFrom-Json }
   catch { Write-Host "  (unparseable output) $txt" -ForegroundColor DarkYellow; return $null }
@@ -407,11 +407,11 @@ Check 'D26: a second project lands before the note and parses back' `
   "got '$($r.projects -join ',')'; first line is now: $first"
 
 # ------------------------------------------------------------------- errors --
-$out = & $Exe shared-unit --in (Join-Path $WorkDir 'NoSuchUnit.pas') --json 2>&1
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe shared-unit --in (Join-Path $WorkDir 'NoSuchUnit.pas') --json 2>&1 | ForEach-Object { "$_" } }
 Check 'a missing file is a non-zero exit, not a crash' ($LASTEXITCODE -ne 0) `
   "exit=$LASTEXITCODE"
 
-$out = & $Exe shared-unit --json 2>&1
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe shared-unit --json 2>&1 | ForEach-Object { "$_" } }
 Check 'a missing --in prints usage and exits non-zero' ($LASTEXITCODE -ne 0) `
   "exit=$LASTEXITCODE"
 

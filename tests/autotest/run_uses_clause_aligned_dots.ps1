@@ -124,7 +124,7 @@ Write-Ascii (Join-Path $WorkDir 'App.dproj') @'
 '@
 
 Push-Location $WorkDir
-try { $out = & $Exe reconcile-project (Join-Path $WorkDir 'App.dproj') 2>&1 | Out-String }
+try { $out = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project (Join-Path $WorkDir 'App.dproj') 2>&1 | ForEach-Object { "$_" } } | Out-String }
 finally { Pop-Location }
 
 # The EXTRA section runs from its header to the next section header.
@@ -147,7 +147,7 @@ Check 'App.Truly.Orphan IS reported as EXTRA' `
 
 Write-Host ''
 Write-Host 'The closure agrees: the aligned unit is in the compile closure' -ForegroundColor Cyan
-$clo = & $Exe selftest closure --project (Join-Path $WorkDir 'App.dproj') 2>&1 | Out-String
+$clo = & { $ErrorActionPreference = 'Continue'; & $Exe selftest closure --project (Join-Path $WorkDir 'App.dproj') 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'closure contains App.Aligned.Used' ($clo -match 'App\.Aligned\.Used\.pas')
 
 Write-Host ''

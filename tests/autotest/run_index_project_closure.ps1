@@ -297,7 +297,7 @@ try {
   $dproj = Join-Path $proj 'App.dproj'
   $db    = Join-Path $scratch 'closure.sqlite'
 
-  $out = & $exePath index --project $dproj --db $db --platform Win64 --quiet 2>&1
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath index --project $dproj --db $db --platform Win64 --quiet 2>&1 | ForEach-Object { "$_" } }
   $rc  = $LASTEXITCODE
   Check 'index --project exits 0' ($rc -eq 0) "exit=$rc; $(($out | Select-Object -Last 2) -join ' | ')"
 
@@ -325,7 +325,7 @@ try {
   $edproj = Join-Path $empty 'Empty.dproj'
   $edb    = Join-Path $scratch 'guard.sqlite'
 
-  $gout = & $exePath index --project $edproj --db $edb --platform Win64 --quiet 2>&1
+  $gout = & { $ErrorActionPreference = 'Continue'; & $exePath index --project $edproj --db $edb --platform Win64 --quiet 2>&1 | ForEach-Object { "$_" } }
   $grc  = $LASTEXITCODE
   Check 'a .dproj with an empty closure exits 2' ($grc -eq 2) `
     "exit=$grc; $(($gout | Select-Object -Last 2) -join ' | ')"
@@ -360,7 +360,7 @@ try {
 }
 "@ | Set-Content $cfg -Encoding ascii
 
-  $mout = & $exePath index --all --config $cfg --only ProjClosure 2>&1
+  $mout = & { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only ProjClosure 2>&1 | ForEach-Object { "$_" } }
   $mrc  = $LASTEXITCODE
   Check 'index --all (smClosure section) exits 0' ($mrc -eq 0) `
     "exit=$mrc; $(($mout | Select-Object -Last 2) -join ' | ')"
@@ -403,7 +403,7 @@ try {
 }
 "@ | Set-Content $cfg2 -Encoding ascii
 
-  $2out = @((& $exePath index --all --config $cfg2 --jobs 1 2>&1) | ForEach-Object { $_.ToString() })
+  $2out = @((& { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg2 --jobs 1 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { $_.ToString() })
   $2rc  = $LASTEXITCODE
 
   # (b) the run as a whole must not report success
@@ -450,7 +450,7 @@ try {
   $sdpr = Join-Path $solo 'Solo.dpr'
   $sdb  = Join-Path $scratch 'solo.sqlite'
 
-  $sout = & $exePath index --project $sdpr --db $sdb --platform Win64 --quiet 2>&1
+  $sout = & { $ErrorActionPreference = 'Continue'; & $exePath index --project $sdpr --db $sdb --platform Win64 --quiet 2>&1 | ForEach-Object { "$_" } }
   $src  = $LASTEXITCODE
   Check 'a single-file program (library uses only) exits 0' ($src -eq 0) `
     "exit=$src; $(($sout | Select-Object -Last 2) -join ' | ')"
@@ -466,7 +466,7 @@ try {
   $sdproj = Join-Path $solo 'Solo.dproj'
   $sdb2   = Join-Path $scratch 'solo_dproj.sqlite'
 
-  $s2out = & $exePath index --project $sdproj --db $sdb2 --platform Win64 --quiet 2>&1
+  $s2out = & { $ErrorActionPreference = 'Continue'; & $exePath index --project $sdproj --db $sdb2 --platform Win64 --quiet 2>&1 | ForEach-Object { "$_" } }
   $s2rc  = $LASTEXITCODE
   Check 'the .dproj shape of a single-file program exits 0' ($s2rc -eq 0) `
     "exit=$s2rc; $(($s2out | Select-Object -Last 2) -join ' | ')"
@@ -491,7 +491,7 @@ try {
 }
 "@ | Set-Content $cfg3 -Encoding ascii
 
-  $3out = @((& $exePath index --all --config $cfg3 --only SoloSection 2>&1) | ForEach-Object { $_.ToString() })
+  $3out = @((& { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg3 --only SoloSection 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { $_.ToString() })
   $3rc  = $LASTEXITCODE
   Check 'a manifest section over a single-file program exits 0' ($3rc -eq 0) `
     "exit=$3rc; $(($3out | Select-Object -Last 2) -join ' | ')"

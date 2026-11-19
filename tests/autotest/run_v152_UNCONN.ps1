@@ -32,7 +32,7 @@ function LineOf($path, $regex) {
 function Findings($file, $rule, [string]$db = "") {
   $cmd = @('lint', $file, '--rule', $rule, '--json')
   if ($db -ne "") { $cmd += @('--db', $db) }
-  $raw = & $exe @cmd 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exe @cmd 2>$null }
   $arr = @()
   try { $arr = @($raw | ConvertFrom-Json) } catch { $arr = @() }
   return @($arr | Where-Object { $_ -ne $null -and $_.rule -eq $rule })
@@ -40,7 +40,7 @@ function Findings($file, $rule, [string]$db = "") {
 function HasLine($f, $line) { return @($f | Where-Object { $_.start_line -eq $line }).Count -gt 0 }
 
 # --- 1. catalog ---
-$rules = & $exe rules --json 2>$null | ConvertFrom-Json
+$rules = & { $ErrorActionPreference = 'Continue'; & $exe rules --json 2>$null } | ConvertFrom-Json
 $all = if ($rules.rules) { $rules.rules } else { $rules }
 foreach ($id in 'unconnected-control', 'hanging-handler') {
   $r = @($all | Where-Object { $_.id -eq $id })
@@ -76,7 +76,7 @@ $work = Join-Path ([IO.Path]::GetTempPath()) ("dl-v152-unconn-" + [Guid]::NewGui
 New-Item -ItemType Directory -Path $work | Out-Null
 Copy-Item (Join-Path $repo 'tests\lint\unconnected-control.xunit\*') $work
 $db = Join-Path $work 'xu.sqlite'
-& $exe index $work --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exe index $work --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Assert "cross-unit index built" (Test-Path $db)
 $base = Join-Path $work 'XuBase.pas'
 $child = Join-Path $work 'XuChild.pas'

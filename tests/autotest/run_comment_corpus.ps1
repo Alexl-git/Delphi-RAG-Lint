@@ -97,7 +97,7 @@ $src = @(
 # A DIRECTORY target against a fresh scratch DB is the LIBRARY-shaped scan and is
 # correct here. The rule this repo enforces -- never `index <dir> --db <projectDb>`
 # -- is about widening an existing PROJECT database, which this is not.
-$idxOut = & $exePath index $WorkDir --db $db 2>&1
+$idxOut = & { $ErrorActionPreference = 'Continue'; & $exePath index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } }
 $idxExit = $LASTEXITCODE
 Check 'the fixture indexed' ($idxExit -eq 0 -and (Test-Path $db)) "exit=$idxExit"
 if (-not (Test-Path $db)) {
@@ -121,7 +121,7 @@ function KindOf($Hits) {
 function Find-Text([string]$Phrase, [string]$Kind = '') {
   $a = @('query', '--text', $Phrase, '--db', $db, '--json')
   if ($Kind -ne '') { $a += @('--kind', $Kind) }
-  $raw = (& $exePath @a 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath @a 2>$null }) -join "`n"
   if (-not $raw.Trim()) { return @() }
   try { $d = $raw | ConvertFrom-Json } catch { return @() }
   return @($d | Where-Object { $null -ne $_ })
@@ -178,7 +178,7 @@ Check '{$R ...} is NOT indexed as comment text' `
 Write-Host ''
 Write-Host 'Substring and any-order reach comment text too' -ForegroundColor Cyan
 $sub = @()
-$rawSub = (& $exePath query --text 'pangolin brace' --substring --db $db --json 2>$null) -join "`n"
+$rawSub = (& { $ErrorActionPreference = 'Continue'; & $exePath query --text 'pangolin brace' --substring --db $db --json 2>$null }) -join "`n"
 if ($rawSub.Trim()) { try { $sub = @(($rawSub | ConvertFrom-Json) | Where-Object { $null -ne $_ }) } catch { $sub = @() } }
 Check '--substring finds a fragment of a comment' ($sub.Count -ge 1) "hits=$($sub.Count)"
 

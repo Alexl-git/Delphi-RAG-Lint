@@ -148,10 +148,10 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'OutParams.sqlite'
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' (Test-Path $db)
 
-$uba = @(& $Exe lint (Join-Path $WorkDir 'uOutCaller.pas') --db $db 2>&1 |
+$uba = @(& { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $WorkDir 'uOutCaller.pas') --db $db 2>&1 | ForEach-Object { "$_" } } |
          ForEach-Object { "$_" } | Where-Object { $_ -match 'used-before-assignment' })
 $uba | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
 

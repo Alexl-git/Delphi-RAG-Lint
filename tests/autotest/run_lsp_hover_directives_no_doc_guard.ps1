@@ -91,12 +91,12 @@ end.
 $file = Join-Path $src 'uHovNoDoc.pas'
 WriteAnsi $file $text
 $db = Join-Path $WorkDir 'hov.sqlite'
-$null = & $Exe index $src --db $db 2>$null
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>$null }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 Write-Host ''
 Write-Host 'PREMISE: the index holds the facts (CLI hover)' -ForegroundColor Cyan
-$cli = (& $Exe hover --qname uHovNoDoc.TKit.VirtStd --db $db --format md 2>$null) -join "`n"
+$cli = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname uHovNoDoc.TKit.VirtStd --db $db --format md 2>$null }) -join "`n"
 Check 'CLI hover on V prints Directives: virtual; stdcall' ($cli -match 'Directives: virtual; stdcall') "got: [$cli]"
 
 $lines = $text -split "`r?`n"

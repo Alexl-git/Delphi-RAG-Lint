@@ -83,10 +83,10 @@ end;
 end.
 "@
 $db = Join-Path $WorkDir 'cap.sqlite'
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V fixture index was built' (Test-Path $db) $db
 
-function Run-Ctx([string[]]$Extra) { (& $exePath context --task 'modify uW.TW.Save' --db $db @Extra 2>$null) -join "`n" }
+function Run-Ctx([string[]]$Extra) { (& { $ErrorActionPreference = 'Continue'; & $exePath context --task 'modify uW.TW.Save' --db $db @Extra 2>$null }) -join "`n" }
 
 # ---- T1: context, cap below the caller count ---------------------------------
 $m = Run-Ctx @('--max-callers', '3', '--format', 'markdown')
@@ -103,28 +103,28 @@ $j2 = (Run-Ctx @('--max-callers', '50', '--format', 'json')) | ConvertFrom-Json
 Check 'P1b POSITIVE CONTROL: JSON omitted = 0, cap = 50'     (($j2.omitted -eq 0) -and ($j2.cap -eq 50)) "omitted=$($j2.omitted) cap=$($j2.cap)"
 
 # ---- T2: query --text --limit 2 -----------------------------------------------
-$full = @(& $exePath query --text zzcapphrase --db $db --limit 50 2>$null)
+$full = @(& { $ErrorActionPreference = 'Continue'; & $exePath query --text zzcapphrase --db $db --limit 50 2>$null })
 $nFull = @($full | Where-Object { $_ -match 'zzcapphrase' }).Count
 Check "V the phrase has more than 2 hits (got $nFull)" ($nFull -ge 3) ($full -join ' | ')
-$t = @(& $exePath query --text zzcapphrase --db $db --limit 2 2>$null)
+$t = @(& { $ErrorActionPreference = 'Continue'; & $exePath query --text zzcapphrase --db $db --limit 2 2>$null })
 $tExit = $LASTEXITCODE
-$fullExit = $null; & $exePath query --text zzcapphrase --db $db --limit 50 2>&1 | Out-Null; $fullExit = $LASTEXITCODE
+$fullExit = $null; & { $ErrorActionPreference = 'Continue'; & $exePath query --text zzcapphrase --db $db --limit 50 2>&1 | ForEach-Object { "$_" } } | Out-Null; $fullExit = $LASTEXITCODE
 Check 'T2 query --text --limit 2 prints an omitted note' (($t -join "`n") -match '-- at least \d+ omitted by cap 2; rerun with --limit 4') ($t -join ' | ')
 Check 'T2b exit code is unchanged by the cap'            ($tExit -eq $fullExit) "capped=$tExit uncapped=$fullExit"
 Check 'T2c POSITIVE CONTROL: --limit 50 prints no omitted line' (-not (($full -join "`n") -match 'omitted')) ''
 
 # ---- T3: query --text --json keeps stdout a bare array ------------------------
-$jj = (& $exePath query --text zzcapphrase --db $db --limit 2 --json 2>$null) -join "`n"
+$jj = (& { $ErrorActionPreference = 'Continue'; & $exePath query --text zzcapphrase --db $db --limit 2 --json 2>$null }) -join "`n"
 $arr = $jj | ConvertFrom-Json
 Check 'T3 query --text --json stdout stays a parseable array of 2' (@($arr).Count -eq 2) $jj.Substring(0, [Math]::Min(120, $jj.Length))
-$errF = Join-Path $WorkDir "err.txt"; & $exePath query --text zzcapphrase --db $db --limit 2 --json 2>$errF | Out-Null; $err = (Get-Content $errF) -join "`n"
+$errF = Join-Path $WorkDir "err.txt"; & { $ErrorActionPreference = 'Continue'; & $exePath query --text zzcapphrase --db $db --limit 2 --json 2>$errF } | Out-Null; $err = (Get-Content $errF) -join "`n"
 Check 'T3b the note goes to stderr under --json'            ($err -match 'omitted by cap 2') $err
 
 # ---- T4: top --limit 1 ---------------------------------------------------------
-$tp = @(& $exePath top --db $db --limit 1 2>$null)
+$tp = @(& { $ErrorActionPreference = 'Continue'; & $exePath top --db $db --limit 1 2>$null })
 Check 'T4 top --limit 1 prints an omitted note'             (($tp -join "`n") -match '-- at least 1 omitted by cap 1; rerun with --limit 2') ($tp -join ' | ')
 Check 'T4b top --limit 1 prints exactly one data row'       (@($tp | Where-Object { $_ -match '^\s+\d+\s' }).Count -eq 1) ($tp -join ' | ')
-$tp2 = @(& $exePath top --db $db --limit 500 2>$null)
+$tp2 = @(& { $ErrorActionPreference = 'Continue'; & $exePath top --db $db --limit 500 2>$null })
 Check 'T4c POSITIVE CONTROL: top --limit 500 prints no omitted line' (-not (($tp2 -join "`n") -match 'omitted')) ''
 
 Write-Host ''

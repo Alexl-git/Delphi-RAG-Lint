@@ -188,7 +188,7 @@ function CaptureOrderOk([string]$text) {
 
 $capOld = 0; $capNew = 0
 for ($r = 1; $r -le 5; $r++) {
-  $tOld = (& pwsh -NoProfile -File $emitter 2>&1 | Out-String)
+  $tOld = (& { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $emitter 2>&1 | ForEach-Object { "$_" } } | Out-String)
   if (CaptureOrderOk $tOld) { $capOld++ }
 
   # `> log` truncates, so the log needs no prior cleanup.

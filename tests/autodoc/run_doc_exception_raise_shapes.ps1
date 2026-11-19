@@ -170,10 +170,10 @@ $md5Orig = Get-FileMd5 $src
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db --quiet 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db --quiet 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
-  & $exePath document --unit $src --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $src --db $db --apply 2>$null } | Out-Null
   Check 'document --apply exits 0' ($LASTEXITCODE -eq 0)
   $md5First = Get-FileMd5 $src
   $text = [IO.File]::ReadAllText($src)
@@ -220,15 +220,15 @@ try {
     ($b -match '<exception cref="EPlainThing"><!-- drag-lint:auto exc -->plain message</exception>') $b
 
   # === idempotency + encoding + strip inverse ================================
-  & $exePath index $scratch --db $db --quiet 2>$null | Out-Null
-  & $exePath document --unit $src --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db --quiet 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $src --db $db --apply 2>$null } | Out-Null
   Check '9. IDEMPOTENT: reindex + a second --apply is byte-identical' `
     ((Get-FileMd5 $src) -eq $md5First) ("first=$md5First second=" + (Get-FileMd5 $src))
 
   Check '10. every emitted /// line is 7-bit ASCII' `
     (@([IO.File]::ReadAllLines($src) | Where-Object { $_ -match '^\s*///' -and ($_.ToCharArray() | Where-Object { [int]$_ -gt 126 }) }).Count -eq 0)
 
-  & $exePath document --unit $src --db $db --strip --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $src --db $db --strip --apply 2>$null } | Out-Null
   Check '11. INVERSE: strip(apply(original)) is byte-identical to the original' `
     ((Get-FileMd5 $src) -eq $md5Orig) ("orig=$md5Orig strip=" + (Get-FileMd5 $src))
 } finally { Pop-Location }

@@ -100,7 +100,7 @@ $proj = Join-Path $d 'P.dproj'
 $upas = Join-Path $d 'U.pas'
 
 function Sql-Rows([string]$Db, [string]$Q) {
-  $raw = (& $Exe sql --query $Q --db $Db --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --query $Q --db $Db --json 2>$null }) -join "`n"
   $s = $raw.IndexOf('{')
   if ($s -lt 0) { return $null }
   $o = $raw.Substring($s) | ConvertFrom-Json
@@ -114,7 +114,7 @@ function Lint-All([string]$Db, [string]$Rule, [hashtable]$Env = @{}) {
     if (Test-Path $errFile) { [IO.File]::Delete($errFile) }
     if ($Env.ContainsKey('DRAGLINT_PP_TRACE')) { [Environment]::SetEnvironmentVariable('DRAGLINT_PP_TRACE', $errFile) }
     Push-Location $WorkDir
-    try { $raw = (& $Exe lint-all --db $Db --project $proj --rule $Rule --json 2>$null) -join "`n" } finally { Pop-Location }
+    try { $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --project $proj --rule $Rule --json 2>$null }) -join "`n" } finally { Pop-Location }
     $trace = if (Test-Path $errFile) { (Get-Content $errFile) -join "`n" } else { '' }
   } finally {
     foreach ($k in $Env.Keys) { [Environment]::SetEnvironmentVariable($k, $null) }
@@ -128,7 +128,7 @@ function Lint-All([string]$Db, [string]$Rule, [hashtable]$Env = @{}) {
 
 Write-Host '(a) extractor: pp_directives rows of U.pas' -ForegroundColor Cyan
 $db = Join-Path $WorkDir 'p.sqlite'
-& $Exe index --project $proj --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project $proj --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $rows = Sql-Rows $db ("SELECT d.ordinal, d.directive, d.symbol, d.line, d.col, d.region, d.branch FROM pp_directives d " +
   "JOIN files f ON f.id = d.file_id WHERE f.path LIKE '%U.pas' ORDER BY d.ordinal")
 Check 'table exists and U.pas has rows' ($null -ne $rows -and $rows.Count -gt 0) ("rows=" + $(if ($rows) { $rows.Count } else { 'none' }))
@@ -171,7 +171,7 @@ Check 'stale U.pas -> scan fallback, same findings' ($st.Trace -match 'pp-direct
 if ($BaseExe -and (Test-Path $BaseExe)) {
   Write-Host '(c) a DB without pp_directives (indexed by -BaseExe): scan, same findings' -ForegroundColor Cyan
   $db0 = Join-Path $WorkDir 'p0.sqlite'
-  & $BaseExe index --project $proj --db $db0 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $BaseExe index --project $proj --db $db0 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $b = Lint-All $db0 'ifdef-undefined-symbol' @{ DRAGLINT_PP_TRACE = '1' }
   Check 'no table -> scan' ($b.Trace -match 'pp-directives: scan \S*U\.pas' -and $b.Trace -notmatch 'pp-directives: table') ''
   Check 'no table -> same findings' ($b.Text -eq $ifdefTable.Text) ''

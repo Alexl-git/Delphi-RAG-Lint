@@ -100,7 +100,7 @@ $db = Join-Path $WorkDir 'app.sqlite'
 # TClosureResolver, which is what calls ParseDprUses. The positive control below
 # is what caught this -- the negative assertions all "passed" against an index
 # containing nothing at all.
-$idx = & $Exe index --project (Join-Path $WorkDir 'App.dpr') --db $db --platform Win64 --quiet 2>&1 | Out-String
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $WorkDir 'App.dpr') --db $db --platform Win64 --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String
 if ($LASTEXITCODE -ne 0) {
   $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }
   Write-Host "FATAL: index --project failed (exit $LASTEXITCODE): $(($idx -split "`r?`n" | Where-Object { $_ } | Select-Object -Last 2) -join ' | ')" -ForegroundColor Red
@@ -108,7 +108,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # selftest files lists what the closure actually put in the index.
-$files = & $Exe selftest files --db $db 2>&1 | Out-String
+$files = & { $ErrorActionPreference = 'Continue'; & $Exe selftest files --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 function InIndex([string]$Unit) { [bool]($files -match [regex]::Escape("$Unit.pas")) }
 
 Write-Host 'PRECONDITION: the commented-out units EXIST on disk' -ForegroundColor Cyan

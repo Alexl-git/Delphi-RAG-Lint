@@ -82,7 +82,7 @@ Write-Fixture (Join-Path $WorkDir 'uSchemaA.pas') $UnitA
 Write-Fixture (Join-Path $WorkDir 'uSchemaB.pas') $UnitB
 $db = Join-Path $WorkDir 'schema.sqlite'
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $idxCode = $LASTEXITCODE
 if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index did not produce a db at $db" -ForegroundColor Red; exit 2 }
 

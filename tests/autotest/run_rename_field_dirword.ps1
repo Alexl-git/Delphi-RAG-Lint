@@ -38,7 +38,7 @@ $Exe = (Resolve-Path $Exe).Path
 function Get-ParseFindings([string]$Dir, [string]$File, [string]$Db) {
   Push-Location $Dir
   try {
-    $raw = & $Exe lint $File --db $Db --json 2>$null | Out-String
+    $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $File --db $Db --json 2>$null } | Out-String
   } finally { Pop-Location }
   $rows = @()
   try { $rows = @($raw | ConvertFrom-Json) } catch {}
@@ -84,7 +84,7 @@ end.
   $gdb = Join-Path $good 'g.sqlite'; $bdb = Join-Path $bad 'b.sqlite'
   foreach ($p in @(@($good, $gdb), @($bad, $bdb))) {
     Push-Location $p[0]
-    try { $null = & $Exe index $p[0] --db $p[1] --library-db none --rule-cache-warm off 2>&1 } finally { Pop-Location }
+    try { $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $p[0] --db $p[1] --library-db none --rule-cache-warm off 2>&1 | ForEach-Object { "$_" } } } finally { Pop-Location }
     Check "index exits 0 ($([IO.Path]::GetFileName($p[0])))" ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
   }
 
@@ -98,7 +98,7 @@ end.
 
   Push-Location $good
   try {
-    $j = & $Exe sql --db $gdb --query "SELECT name, kind, start_line FROM symbols WHERE kind IN ('record','field')" --json 2>$null | Out-String
+    $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $gdb --query "SELECT name, kind, start_line FROM symbols WHERE kind IN ('record','field')" --json 2>$null } | Out-String
   } finally { Pop-Location }
   $rows = @()
   try { $rows = @(($j | ConvertFrom-Json).rows) } catch {}
@@ -114,7 +114,7 @@ end.
 
   Push-Location $good
   try {
-    $plan = & $Exe rename --kind symbol --name FieldDirWord.TLibraryDefault.Platform --to PlatformName --db $gdb 2>&1 | Out-String
+    $plan = & { $ErrorActionPreference = 'Continue'; & $Exe rename --kind symbol --name FieldDirWord.TLibraryDefault.Platform --to PlatformName --db $gdb 2>&1 | ForEach-Object { "$_" } } | Out-String
   } finally { Pop-Location }
   Check 'ASSERT rename plans the declaration edit (L13)' ($plan -match 'L13:C5\s+Platform -> PlatformName') ($plan.Trim() -replace "`r?`n", ' | ')
   Check 'ASSERT rename plans the use site (L22)' ($plan -match 'L22:C\d+\s+Platform -> PlatformName')

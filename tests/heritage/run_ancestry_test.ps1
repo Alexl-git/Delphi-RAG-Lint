@@ -17,7 +17,7 @@ if (Test-Path $db) { Remove-Item $db -Force }
 
 # Returns the transitive ancestor objects for $symName (name + kind + resolved).
 function Ancestors($symName) {
-  $raw = (& $exe query ancestors --name $symName --db $db --json 2>$null | Out-String)
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exe query ancestors --name $symName --db $db --json 2>$null } | Out-String)
   $idx = $raw.IndexOf('{')
   if ($idx -lt 0) { return $null }
   return ($raw.Substring($idx) | ConvertFrom-Json)
@@ -47,7 +47,7 @@ Check 'TGrand has no ancestors' ($tgrand.Count -eq 0)
 
 # IsDescendantOf / ImplementsInterface via `--of`.
 function OfCheck($name, $of) {
-  $raw = (& $exe query ancestors --name $name --of $of --db $db --json 2>$null | Out-String)
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exe query ancestors --name $name --of $of --db $db --json 2>$null } | Out-String)
   $idx = $raw.IndexOf('{'); if ($idx -lt 0) { return $null }
   return ($raw.Substring($idx) | ConvertFrom-Json)
 }

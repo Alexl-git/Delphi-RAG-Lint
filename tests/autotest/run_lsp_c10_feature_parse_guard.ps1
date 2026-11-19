@@ -96,7 +96,7 @@ $Loose = "$WorkDir\other\uLoose.pas"
 Write-Ascii $Unit  (New-Body 'uUnit')
 Write-Ascii $Loose (New-Body 'uLoose')
 $Db = "$WorkDir\proj\_D-RAG\App.sqlite"
-& $Exe index --project "$WorkDir\proj\App.dproj" --db $Db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project "$WorkDir\proj\App.dproj" --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'SETUP project index built' (Test-Path $Db)
 
 function Frame($o) {

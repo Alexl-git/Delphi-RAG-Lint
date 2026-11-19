@@ -227,7 +227,7 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'ovlshape.sqlite'
-& $Exe index $WorkDir --db $db --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 $py = Join-Path $WorkDir 'edges.py'
 @'

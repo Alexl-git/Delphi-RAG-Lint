@@ -30,10 +30,10 @@ function Check($n, $ok, $d = '') {
 }
 New-Item -ItemType Directory -Force $WorkDir | Out-Null
 $db = Join-Path $WorkDir 'mv.sqlite'
-& $Exe index $fx --db $db *> (Join-Path $WorkDir 'index.log')
+& { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db *> (Join-Path $WorkDir 'index.log') }
 Check 'V the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db)) "exit=$LASTEXITCODE"
 
-$raw = (& $Exe lint-all --db $db --rule uses-movable-to-implementation --json 2>$null) -join "`n"
+$raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule uses-movable-to-implementation --json 2>$null }) -join "`n"
 $f = @($raw | ConvertFrom-Json)
 $h = @($f | Where-Object { $_.file_path -like '*\MvHost.pas' })
 $n = @($f | Where-Object { $_.file_path -like '*\MvInline.pas' })

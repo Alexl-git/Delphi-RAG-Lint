@@ -32,7 +32,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
   if (-not $Ok) { $script:fail = $true }
 }
 function Invoke-Rows([string]$Db, [string]$Query) {
-  $raw = (& $exePath sql --db $Db --json --query $Query 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $Db --json --query $Query 2>$null }) -join "`n"
   $j = $raw | ConvertFrom-Json
   $cols = @($j.columns | ForEach-Object { $_.name })
   $out = @()
@@ -49,7 +49,7 @@ try {
   [void](New-Item -ItemType Directory -Force -Path $fx)
   Copy-Item (Join-Path $PSScriptRoot 'fixtures\include_decl_bind\*') $fx
   $db = Join-Path $scratch 'incdecl.sqlite'
-  & $exePath index $fx --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $fx --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $q = "SELECT f.path AS src, r.name_text AS name, r.kind AS kind, r.start_line AS line, " +
        "COALESCE(tf.path, '') AS target, (SELECT COUNT(*) FROM call_edges c WHERE c.ref_id = r.id AND c.target_symbol_id = r.symbol_id) AS edges " +
        "FROM refs r JOIN files f ON f.id = r.file_id LEFT JOIN symbols s ON s.id = r.symbol_id LEFT JOIN files tf ON tf.id = s.file_id " +

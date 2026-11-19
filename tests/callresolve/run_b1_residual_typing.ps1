@@ -102,7 +102,7 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'App.sqlite'
-$idxOut = & $Exe index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | Out-String
+$idxOut = & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'V the fixture index was built' (Test-Path $db) $db
 # found-in-150 (RS2): COne's typed-const initializer `(Alpha: 1)` binds a record-field ref through rung 3c
 # (ValueOnly). The store counted it as an enum value (Shape B) the resolver never counted -> a false
@@ -111,7 +111,7 @@ $ev = @($idxOut -split "`r?`n" | Where-Object { $_ -match 'enum-values' })
 Check 'W1  the enum-values reconciliation agrees (a record-field initializer is not an enum value)' ((@($ev | Where-Object { $_ -match 'WARNING' }).Count -eq 0) -and (@($ev | Where-Object { $_ -match 'resolver and store agree' }).Count -eq 1)) ($ev -join ' | ')
 
 function Sql([string]$Q) {
-  $j = & $Exe sql --db $db --json --limit 1000 --query $Q 2>$null | ConvertFrom-Json
+  $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --limit 1000 --query $Q 2>$null } | ConvertFrom-Json
   if ($null -eq $j) { return ,@() }
   $cols = @($j.columns | ForEach-Object { $_.name })
   $out = @()

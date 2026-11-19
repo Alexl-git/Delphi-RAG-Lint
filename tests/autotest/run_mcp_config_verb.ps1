@@ -142,7 +142,7 @@ function Invoke-McpConfig([string[]]$A) {
     throw "GUARD BUG: CLAUDE_CONFIG_DIR points outside the scratch folder"
   }
   $errFile = Join-Path $Work 'stderr.txt'
-  $out = & $Exe mcp-config @A 2> $errFile
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe mcp-config @A 2> $errFile }
   $code = $LASTEXITCODE
   [pscustomobject]@{ Code = $code; Out = (@($out) -join "`n"); Err = [IO.File]::ReadAllText($errFile) }
 }

@@ -66,7 +66,7 @@ function Get-ParseFindings([string]$Dir, [string]$Db) {
   Push-Location $Dir
   try {
     foreach ($r in 'parser-error', 'syntax-error') {
-      $raw = & $Exe lint $Dir --db $Db --rule $r --json 2>$null | Out-String
+      $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $Dir --db $Db --rule $r --json 2>$null } | Out-String
       try { $all += @($raw | ConvertFrom-Json) } catch {}
     }
   } finally { Pop-Location }
@@ -75,7 +75,7 @@ function Get-ParseFindings([string]$Dir, [string]$Db) {
 
 function Build-Db([string]$Dir, [string]$Db) {
   Push-Location $Dir
-  try { $null = & $Exe index $Dir --db $Db --library-db none --rule-cache-warm off 2>&1 } finally { Pop-Location }
+  try { $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $Dir --db $Db --library-db none --rule-cache-warm off 2>&1 | ForEach-Object { "$_" } } } finally { Pop-Location }
   return $LASTEXITCODE
 }
 
@@ -100,7 +100,7 @@ try {
 
   Push-Location $good
   try {
-    $j = & $Exe sql --db $gdb --query "SELECT f.path, s.name FROM symbols s JOIN files f ON f.id = s.file_id" --json 2>$null | Out-String
+    $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $gdb --query "SELECT f.path, s.name FROM symbols s JOIN files f ON f.id = s.file_id" --json 2>$null } | Out-String
   } finally { Pop-Location }
   $rows = @()
   try { $rows = @(($j | ConvertFrom-Json).rows) } catch {}

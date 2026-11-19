@@ -68,7 +68,7 @@ New-Item -ItemType Directory $WorkDir | Out-Null
 $other = Join-Path $WorkDir 'other'; New-Item -ItemType Directory $other | Out-Null
 [IO.File]::WriteAllText((Join-Path $other 'uOther.pas'), "unit uOther;`r`n`r`ninterface`r`n`r`nimplementation`r`n`r`nend.`r`n", [Text.ASCIIEncoding]::new())
 $db = Join-Path $WorkDir 'other.sqlite'
-& $Exe index $other --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $other --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host 'FATAL: could not build the unrelated index' -ForegroundColor Red; exit 2 }
 
 function Measure-LooseOpen([int]$Lines) {

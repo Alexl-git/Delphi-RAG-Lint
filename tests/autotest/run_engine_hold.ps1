@@ -75,7 +75,7 @@ $Repo = (Resolve-Path $Repo).Path
 $errFile = Join-Path ([IO.Path]::GetTempPath()) ("draglint-hold-" + [Guid]::NewGuid().ToString('N') + ".txt")
 
 function Run([string[]]$A) {
-  $out = & $Exe @A 2>$errFile
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @A 2>$errFile }
   $rc  = $LASTEXITCODE
   [pscustomobject]@{ Out = ($out -join "`n"); Code = $rc }
 }
@@ -289,7 +289,7 @@ if (Test-Path -LiteralPath $stager) {
   $stream = [IO.File]::Open($target, 'Open', 'ReadWrite', 'None')
   $job = Start-Job -ScriptBlock {
     param($p, $s)
-    pwsh -NoProfile -File $p -FreshExe $s.fresh -Target $s.target -TimeoutSec 20 2>&1
+    & { $ErrorActionPreference = 'Continue'; pwsh -NoProfile -File $p -FreshExe $s.fresh -Target $s.target -TimeoutSec 20 2>&1 | ForEach-Object { "$_" } }
     $LASTEXITCODE
   } -ArgumentList $stager, @{ fresh = $fresh; target = $target }
 

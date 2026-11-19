@@ -42,7 +42,7 @@ function Run([string[]]$a) {
   # is judged as before.
   for ($try = 1; $try -le 3; $try++) {
     Push-Location $WorkDir
-    try { $o = & $Exe @a 2>&1 | ForEach-Object { "$_" } | Out-String; $rc = $LASTEXITCODE } finally { Pop-Location }
+    try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" } | Out-String; $rc = $LASTEXITCODE } finally { Pop-Location }
     if (($rc -eq 0) -or ($o.Trim().Length -gt 0)) { break }
     Write-Host "  [NOTE] silent non-zero engine exit on attempt $try ($($a[0])); retrying" -ForegroundColor Yellow
     Start-Sleep -Milliseconds 500

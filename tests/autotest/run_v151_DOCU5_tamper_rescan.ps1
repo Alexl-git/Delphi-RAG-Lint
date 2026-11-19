@@ -90,7 +90,7 @@ end.
 $db = Join-Path $scratch 'fx.sqlite'; $dpr = Join-Path $scratch 'Fx.dpr'
 $core = Join-Path $scratch 'Core.pas'; $app = Join-Path $scratch 'App.pas'
 function RunEngine([string[]]$EngineArgs) {
-  $out = & $exePath @EngineArgs 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath @EngineArgs 2>&1 | ForEach-Object { "$_" } } | Out-String
   return [pscustomobject]@{ Code = $LASTEXITCODE; Text = $out }
 }
 $ix = RunEngine @('index','--project',$dpr,'--db',$db)

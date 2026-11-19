@@ -56,7 +56,7 @@ New-Item -ItemType Directory $work -Force | Out-Null
 function Ubas([string]$name, [string]$body) {
   $p = Join-Path $work "$name.pas"
   Write-Ascii $p $body
-  $out = (& $Exe lint $p --enable used-before-assignment 2>$null) -join "`n"
+  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $p --enable used-before-assignment 2>$null }) -join "`n"
   return @{ Out = $out; Hits = @($out -split "`n" | Where-Object { $_ -match 'used-before-assignment' }) }
 }
 

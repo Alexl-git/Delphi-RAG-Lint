@@ -109,7 +109,7 @@ if ($SourceDb -ne '') {
     Copy-Item $SourceDb $db
     if (Test-Path "$SourceDb-wal") { Copy-Item "$SourceDb-wal" "$db-wal" }
 } else {
-    $idxOut = & $Exe index $srcDir --db $db 2>&1
+    $idxOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $srcDir --db $db 2>&1 | ForEach-Object { "$_" } }
     Check 'index fixture exits 0' ($LASTEXITCODE -eq 0) (($idxOut | Select-Object -Last 1))
 }
 # A pristine copy: every write check below starts from it, so one verb that
@@ -125,7 +125,7 @@ function Reset-Db {
 $hdrBase = HeaderBytes $db
 Check 'positive control: the DB under test is WAL (header 2,2)' ($hdrBase -eq '2,2') "header=$hdrBase"
 $countSql = 'SELECT COUNT(*) AS n FROM files'
-$expected = (& $Exe sql --db $db --query $countSql --format json 2>$null) -join "`n"
+$expected = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query $countSql --format json 2>$null }) -join "`n"
 Check 'positive control: sql answers with a row' (($LASTEXITCODE -eq 0) -and ($expected -match '\d')) $expected
 $md5Base = Md5 $db
 $walBase = WalState $db
@@ -173,7 +173,7 @@ $raw = @(
 )
 foreach ($a in $raw) {
     Reset-Db
-    & $Exe @a *> $null
+    & { $ErrorActionPreference = 'Continue'; & $Exe @a *> $null }
     $label = ($a | Select-Object -First 2) -join ' '
     Check "$label keeps the WAL header" ((HeaderBytes $db) -eq $hdrBase) "was=$hdrBase now=$(HeaderBytes $db)"
     Check "$label leaves the DB bytes unchanged" ((Md5 $db) -eq $md5Base) ''
@@ -186,7 +186,7 @@ $jobs = 1..$Procs | ForEach-Object {
     Start-Job -ArgumentList $Exe, $db, $Calls, $countSql -ScriptBlock {
         param($Exe, $Db, $Calls, $Sql)
         for ($i = 0; $i -lt $Calls; $i++) {
-            $o = & $Exe sql --db $Db --query $Sql --format json 2>&1
+            $o = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query $Sql --format json 2>&1 | ForEach-Object { "$_" } }
             [pscustomobject]@{ Exit = $LASTEXITCODE; Out = ($o | Out-String) }
         }
     }
@@ -225,12 +225,12 @@ $v12 = "$WorkDir\v12.sqlite"
 python $py $v12
 Check 'v12 fixture DB created' (($LASTEXITCODE -eq 0) -and (Test-Path $v12))
 $v12Md5 = Md5 $v12
-$v12Out = (& $Exe query --name TFoo --db $v12 2>&1) -join "`n"
+$v12Out = (& { $ErrorActionPreference = 'Continue'; & $Exe query --name TFoo --db $v12 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 $v12Ec  = $LASTEXITCODE
 Check 'query on a pre-migration DB exits nonzero' ($v12Ec -ne 0) "exit=$v12Ec"
 Check 'query on a pre-migration DB names the schema gap' ($v12Out -match 'schema v12 < v\d+') $v12Out
 Check 'query on a pre-migration DB does NOT migrate it' ((Md5 $v12) -eq $v12Md5) ''
-& $Exe sql --db $v12 --query 'SELECT COUNT(*) FROM files' *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $v12 --query 'SELECT COUNT(*) FROM files' *> $null }
 Check 'sql on a pre-migration DB does NOT migrate it' ((Md5 $v12) -eq $v12Md5) ''
 Check 'sql on a pre-migration DB keeps its header' ((HeaderBytes $v12) -eq '2,2') "header=$(HeaderBytes $v12)"
 

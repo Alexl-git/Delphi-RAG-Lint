@@ -75,7 +75,7 @@ $null = Copy-TreeSitterDlls -Dest $WorkDir
 
 $runArgs = @()
 if ($Filter) { $runArgs = @('--filter', $Filter) }
-$out = & $exe @runArgs 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $exe @runArgs 2>&1 | ForEach-Object { "$_" } } | Out-String
 $rc  = $LASTEXITCODE
 Write-Host $out.TrimEnd()
 if ($rc -ne 0) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }

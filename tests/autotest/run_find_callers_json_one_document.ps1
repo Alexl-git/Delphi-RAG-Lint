@@ -68,14 +68,14 @@ end;
 
 end.
 "@
-  & $Exe index $dir --db (Join-Path $WorkDir "$t.sqlite") --quiet 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db (Join-Path $WorkDir "$t.sqlite") --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check "precondition: index $t exits 0" ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 }
 $dbA = Join-Path $WorkDir 'A.sqlite'
 $dbB = Join-Path $WorkDir 'B.sqlite'
 
 function Run([string[]]$VerbArgs) {
-  $o = @(& $Exe @VerbArgs 2>$null) -join "`n"
+  $o = @(& { $ErrorActionPreference = 'Continue'; & $Exe @VerbArgs 2>$null }) -join "`n"
   return @{ Code = $LASTEXITCODE; Out = $o }
 }
 function Parse([string]$Text) {

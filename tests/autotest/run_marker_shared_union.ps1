@@ -215,19 +215,19 @@ function UnusedAt([string]$Out, [string]$File) { HintAt $Out $File 'review-marke
 
 Push-Location C:\TEMP
 try {
-  & $exePath index --all --config $cfg --only SecA --jobs 1 2>&1 | Out-Null
-  & $exePath index --all --config $cfg --only SecB --jobs 1 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only SecA --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only SecB --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check '0. sanity: both DBs exist' ((Test-Path $dbA) -and (Test-Path $dbB))
 
   { # record the two real markers against B's report
-    $pre = (& $exePath lint-all --db $dbB --rule duplicate-code 2>&1 | Out-String)
+    $pre = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbB --rule duplicate-code 2>&1 | ForEach-Object { "$_" } } | Out-String)
     foreach ($u in 'thing','drift') {
       $m = [regex]::Match($pre, "(?im)$u\.pas:(\d+):\d+\s+\[\w+\]\s+duplicate-code")
       Check "0b. sanity: duplicate-code fires on $u.pas under B" $m.Success
-      if ($m.Success) { & $exePath allow (Join-Path $scratch "shared\$u.pas") --fix-line $m.Groups[1].Value --fix-rule duplicate-code --apply 2>&1 | Out-Null }
+      if ($m.Success) { & { $ErrorActionPreference = 'Continue'; & $exePath allow (Join-Path $scratch "shared\$u.pas") --fix-line $m.Groups[1].Value --fix-rule duplicate-code --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null }
       Check "0c. sanity: a dl:ok duplicate-code marker was written on $u.pas" ((Get-Content (Join-Path $scratch "shared\$u.pas") -Raw) -match 'dl:ok duplicate-code@')
     }
-    $preA = (& $exePath lint-all --db $dbA --rule duplicate-code 2>&1 | Out-String)
+    $preA = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbA --rule duplicate-code 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check '0d. sanity: duplicate-code does NOT fire on thing/drift under A' (-not ($preA -match '(?im)(thing|drift)\.pas:\d+:\d+\s+\[\w+\]\s+duplicate-code')) ($preA -split "`n" | Where-Object { $_ -match 'duplicate-code' } | Select-Object -First 3 | Out-String)
     # corrupt drift's hash: its finding exists only under B, so only B can call it stale
     $dp = Join-Path $scratch 'shared\drift.pas'
@@ -237,15 +237,15 @@ try {
     [IO.File]::WriteAllText($dp, $dt.Replace("duplicate-code@$h", "duplicate-code@$bad"), (New-Object System.Text.ASCIIEncoding))
   }.Invoke()
 
-  $solo = (& $exePath lint-all --db $dbA 2>&1 | Out-String)
-  $two  = (& $exePath lint-all --db $dbA --db $dbB 2>&1 | Out-String)
+  $solo = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbA 2>&1 | ForEach-Object { "$_" } } | Out-String)
+  $two  = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbA --db $dbB 2>&1 | ForEach-Object { "$_" } } | Out-String)
   foreach ($u in 'thing','drift','gone','triple','aonly') {
     Check "1. one DB keeps the skip: $u.pas not reported unused" (-not (UnusedAt $solo "$u\.pas"))
   }
   Check '1b. --db A --db B is NOT a union (second slot = library): gone.pas stays skipped' (-not (UnusedAt $two 'gone\.pas'))
   Check '1c. one DB: drift.pas is not called stale (A has no finding)' (-not (HintAt $solo 'drift\.pas' 'review-marker-stale'))
 
-  $u = (& $exePath lint-all --db $dbA --shared-db $dbB 2>&1 | Out-String)
+  $u = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbA --shared-db $dbB 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Write-Host (($u -split "`n" | Where-Object { $_ -match 'review-marker|shared-db' }) -join "`n") -ForegroundColor DarkGray
   Check '2. POSITIVE CONTROL: a marker no DB produces a finding for IS reported unused' (UnusedAt $u 'gone\.pas')
   Check '3. a marker live only under the peer is NOT reported unused' (-not (UnusedAt $u 'thing\.pas'))
@@ -257,34 +257,34 @@ try {
   Check '7b. CONTROL: AST-rule marker on a shared unit still reported unused' (UnusedAt $u 'other\.pas')
   Check '7c. the run names what it judged and left' ($u -match '(?im)^lint-all: --shared-db: \d+ marker\(s\) judged across 2 DB\(s\), \d+ left unjudged')
 
-  $rev = (& $exePath lint-all --db $dbB --shared-db $dbA 2>&1 | Out-String)
+  $rev = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbB --shared-db $dbA 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check '8. from the other side: gone.pas reported unused' (UnusedAt $rev 'gone\.pas')
   Check '8b. from the other side: thing.pas live here, not unused' (-not (UnusedAt $rev 'thing\.pas'))
   Check '8c. from the other side: the finding itself stays suppressed' (-not (HintAt $rev 'thing\.pas' '\bduplicate-code\b(?!.*review)'))
 
-  $self = (& $exePath lint-all --db $dbA --shared-db $dbA 2>&1 | Out-String)
+  $self = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbA --shared-db $dbA 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check '9. the primary as its own peer is not a second witness: gone.pas stays skipped' (-not (UnusedAt $self 'gone\.pas'))
 
   $missing = Join-Path $scratch 'nosuch.sqlite'
-  $mo = (& $exePath lint-all --db $dbA --shared-db $missing 2>&1 | Out-String); $mx = $LASTEXITCODE
+  $mo = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbA --shared-db $missing 2>&1 | ForEach-Object { "$_" } } | Out-String); $mx = $LASTEXITCODE
   Check '10. a --shared-db that does not exist refuses (exit 2, named)' (($mx -eq 2) -and ($mo -match 'nosuch\.sqlite')) "exit=$mx"
 
   $junk = Join-Path $scratch 'junk.sqlite'
   [IO.File]::WriteAllText($junk, 'this is not a database')
-  $jo = (& $exePath lint-all --db $dbA --shared-db $junk 2>&1 | Out-String)
+  $jo = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbA --shared-db $junk 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check '10b. a peer that cannot run is no evidence: gone.pas stays skipped' (-not (UnusedAt $jo 'gone\.pas'))
   Check '10c. ...and the run says so' ($jo -match '(?im)--shared-db.*junk\.sqlite')
 
-  $jsonOut = & $exePath lint-all --db $dbA --shared-db $dbB --json 2>$null
+  $jsonOut = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbA --shared-db $dbB --json 2>$null }
   $doc = ($jsonOut | Out-String) | ConvertFrom-Json
   $goneRows = @($doc | Where-Object { $_.rule -eq 'review-marker-unused' -and $_.file_path -match 'gone\.pas' })
   Check '11. --json: stdout stays one document and carries the verdict' ($goneRows.Count -ge 1) "rows=$($doc.Count)"
 
-  $lp = (& $exePath lint (Join-Path $scratch 'shared\gone.pas') --db $dbA --shared-db $dbB 2>&1 | Out-String); $lx = $LASTEXITCODE
+  $lp = (& { $ErrorActionPreference = 'Continue'; & $exePath lint (Join-Path $scratch 'shared\gone.pas') --db $dbA --shared-db $dbB 2>&1 | ForEach-Object { "$_" } } | Out-String); $lx = $LASTEXITCODE
   Check '12. --shared-db on another verb refuses instead of being ignored' (($lx -eq 3) -and ($lp -match 'shared-db.*lint-all only')) "exit=$lx"
 
   # 14. (149 RT item 6) no --shared-db: the owning DBs come from the manifest the run reads
-  $au = (& $exePath lint-all --db $dbA --config $cfg 2>&1 | Out-String)
+  $au = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbA --config $cfg 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check '14. manifest-resolved peers: gone.pas reported unused with no --shared-db' (UnusedAt $au 'gone\.pas')
   Check '14b. manifest-resolved peers: thing.pas live under SecB, not unused' (-not (UnusedAt $au 'thing\.pas'))
   Check '14c. manifest-resolved peers: drift.pas stale under SecB' (HintAt $au 'drift\.pas' 'review-marker-stale')

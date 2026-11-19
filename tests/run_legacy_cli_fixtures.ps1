@@ -196,13 +196,13 @@ $liveBefore = Get-RegSnapshot $LiveRegKey
 function Export-RegKeyBackup([string]$RegPath, [string]$File) {
   if (Test-Path -LiteralPath $File) { [IO.File]::Delete($File) }
   $existed = Test-Path -LiteralPath ($RegPath -replace '^HKCU\\', 'HKCU:\')
-  if ($existed) { & reg.exe export $RegPath $File /y *> $null }
+  if ($existed) { & { $ErrorActionPreference = 'Continue'; & reg.exe export $RegPath $File /y *> $null } }
   return $existed -and (Test-Path -LiteralPath $File)
 }
 function Restore-RegKeyBackup([string]$RegPath, [string]$File, [bool]$Existed) {
   $sub = $RegPath -replace '^HKCU\\', ''
   [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($sub, $false)
-  if ($Existed) { & reg.exe import $File *> $null }
+  if ($Existed) { & { $ErrorActionPreference = 'Continue'; & reg.exe import $File *> $null } }
 }
 # SELF-TEST on a scratch key (never the live one): export, change one value and
 # add another, restore, and the snapshot must equal the original; a key absent

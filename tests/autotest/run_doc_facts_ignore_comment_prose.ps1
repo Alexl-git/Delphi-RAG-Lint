@@ -110,9 +110,9 @@ $norm = ($FixtureBody -replace "`r`n", "`n") -replace "`n", "`r`n"
 [System.IO.File]::WriteAllText($file, $norm, [System.Text.Encoding]::ASCII)
 
 $db = Join-Path $WorkDir 'fx.sqlite'
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Push-Location $WorkDir
-try { & $Exe document --qname uProse2.Worker --db $db --apply --no-backup 2>&1 | Out-Null }
+try { & { $ErrorActionPreference = 'Continue'; & $Exe document --qname uProse2.Worker --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null }
 finally { Pop-Location }
 
 $text = ((Get-Content $file -Raw) -replace '</?para>','')

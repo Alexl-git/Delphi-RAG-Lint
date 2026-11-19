@@ -46,12 +46,12 @@ function New-Project([string]$Name) {
   $d = Join-Path $Tmp $Name
   Copy-Item $Fx $d -Recurse
   $db = Join-Path $d 'p.sqlite'
-  & $Exe index --project (Join-Path $d 'EiProj.dproj') --db $db --library-db none *> (Join-Path $Tmp "$Name.index.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $d 'EiProj.dproj') --db $db --library-db none *> (Join-Path $Tmp "$Name.index.log") }
   if ($LASTEXITCODE -ne 0) { throw "index $Name exit $LASTEXITCODE" }
   return @{ Dir = $d; Db = $db; Proj = (Join-Path $d 'EiProj.dproj'); Unit = (Join-Path $d 'EiWidget.pas'); Prog = (Join-Path $d 'Win64\Debug\EiProj.exe') }
 }
 function Run-Json($P, [string[]]$More) {
-  $o = & $Exe extract-interface --db $P.Db --project $P.Proj --library-db none --format json @More 2> (Join-Path $Tmp 'run.err')
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe extract-interface --db $P.Db --project $P.Proj --library-db none --format json @More 2> (Join-Path $Tmp 'run.err') }
   $script:LastExit = $LASTEXITCODE
   return (($o -join "`n") | ConvertFrom-Json)
 }
@@ -127,7 +127,7 @@ try {
   $N = New-Project 'norefcount'
   $nt = [IO.File]::ReadAllText($N.Unit)
   [IO.File]::WriteAllText($N.Unit, ($nt -replace '(?m)^implementation\s*$', "implementation`r`n`r`nuses System.Generics.Defaults;"), [Text.Encoding]::ASCII)
-  & $Exe index --project $N.Proj --db $N.Db --library-db none *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $N.Proj --db $N.Db --library-db none *> $null }
   $r = Run-Json $N @('--class', 'TEiPlain', '--plan', '--reparent-interfaced=norefcount')
   Check 'D17 norefcount: the parent is TSingletonImplementation' ($r.heritage_after -eq 'TEiPlain = class(TSingletonImplementation, IEiPlain)') "$($r.heritage_after) $($r.refusal.kind)"
   $r = Run-Json $N @('--class', 'TEiPlain', '--plan', '--reparent-interfaced')
@@ -135,9 +135,9 @@ try {
   Check 'D14 the plans wrote nothing' ((Tree-Hash $A.Dir) -ceq $before)
 
   Write-Host 'surface'
-  & $Exe extract-interface --db $A.Db --library-db none *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe extract-interface --db $A.Db --library-db none *> $null }
   Check 'S1 no --class exits 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
-  & $Exe extract-interface --db $A.Db --library-db none --class TEiWidget --apply *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe extract-interface --db $A.Db --library-db none --class TEiWidget --apply *> $null }
   Check 'S2 --apply without --project exits 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
   $null = Run-Json $A @('--class', 'TEiWidget', '--apply', '--no-compile')
   Check 'S3 --apply --no-compile exits 2' ($script:LastExit -eq 2) "exit $script:LastExit"
@@ -175,7 +175,7 @@ try {
     Check 'A8 a NEW program compiles against the interface' ($p.ExitCode -eq 0) "exit $($p.ExitCode)"
     $po = (& (Join-Path $B.Dir 'EiProof.exe')) -join ''
     Check 'A9 a call through the interface reaches the override and the class' ($po -eq 'desc 3 3 42') "[$po]"
-    & $Exe index --project $B.Proj --db $B.Db --library-db none *> $null
+    & { $ErrorActionPreference = 'Continue'; & $Exe index --project $B.Proj --db $B.Db --library-db none *> $null }
     $fp = Run-Json $B @('--class', 'TEiWidget', '--plan')
     Check 'A10 fixed point: a second run after a re-index is name-taken' ($fp.refusal.kind -eq 'name-taken') "$($fp.refusal.kind)"
 

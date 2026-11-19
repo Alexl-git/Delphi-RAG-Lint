@@ -169,8 +169,8 @@ foreach ($s in 'A','B','C') { WritePas (Join-Path $three "uCaller$s.pas") (Calle
 
 $dbOne   = Join-Path $WorkDir 'one.sqlite'
 $dbThree = Join-Path $WorkDir 'three.sqlite'
-& $Exe index $one   --db $dbOne   2>&1 | Out-Null
-& $Exe index $three --db $dbThree 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $one   --db $dbOne   2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $three --db $dbThree 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'both fixture indexes built' ((Test-Path $dbOne) -and (Test-Path $dbThree))
 
 # ---------------------------------------------------------------------------
@@ -181,7 +181,7 @@ function RunLint([string]$Db, [string]$VerifyMode, [bool]$Profile) {
   if ($VerifyMode) { $env:DRAGLINT_VERIFY_ORACLE = $VerifyMode }
   if ($Profile)    { $env:DRAGLINT_PROFILE       = '1' }
   try {
-    $out  = & $Exe lint-all --db $Db --rules-dir $rules 2>&1 | Out-String
+    $out  = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String
     $code = $LASTEXITCODE
     return [pscustomobject]@{ Text = $out; Exit = $code }
   } finally {

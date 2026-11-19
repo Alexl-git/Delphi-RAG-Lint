@@ -199,7 +199,7 @@ if ($LibArgs.Count -eq 0) {
     Where-Object { $_.Extension -in '.pas', '.dpr', '.dproj', '.inc', '.dfm' } |
     ForEach-Object { Copy-Item $_.FullName (Join-Path $root $_.Name) }
   $db = Join-Path $WorkDir 'demo.sqlite'
-  & $Exe index --project (Join-Path $root 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir 'index-demo.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir 'index-demo.log') }
   Check 'demo indexed' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
   $run = Get-PlanText $db $WorkDir
   Check 'demo cycles --plan ran' ($run.Exit -eq 0 -or $run.Exit -eq 1) "exit=$($run.Exit)"

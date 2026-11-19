@@ -42,5 +42,5 @@ function Test-GlyphDecodeChecker { return ($null -ne (Get-GlyphDecodeChecker)) }
 function Invoke-GlyphDecode([string[]]$Paths) {
   $exe = Get-GlyphDecodeChecker
   if ($null -eq $exe) { return @('FATAL <checker>: GlyphDecodeCheck.exe could not be built (rsvars.bat / dcc64 / DevExpress dcus)') }
-  return @(& $exe @Paths 2>&1 | ForEach-Object { "$_" })
+  return @(& { $ErrorActionPreference = 'Continue'; & $exe @Paths 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
 }

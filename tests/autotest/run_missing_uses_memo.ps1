@@ -37,13 +37,13 @@ try {
   if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: no fixture DB" -ForegroundColor Red; exit 2 }
   # sql --json rows are POSITIONAL arrays
   $q = "select count(distinct r.symbol_id) from refs r join symbols s on s.id=r.symbol_id where r.symbol_id>0"
-  $distinct = [int](& $Exe sql --db $db --query $q --json 2>&1 | Out-String | ConvertFrom-Json).rows[0][0]
+  $distinct = [int](& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query $q --json 2>&1 | ForEach-Object { "$_" } } | Out-String | ConvertFrom-Json).rows[0][0]
   Check 'PRECONDITION: the fixture binds refs' ($distinct -gt 100) "distinct bound symbols=$distinct"
 
   $env:DRAGLINT_PROFILE = '1'
   try {
     $errFile = Join-Path $WorkDir 'lint-all.err'
-    $json = & $Exe lint-all --db $db --rule unit-missing-from-uses --json 2> $errFile | Out-String
+    $json = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule unit-missing-from-uses --json 2> $errFile } | Out-String
     $raw = [IO.File]::ReadAllText($errFile)
   } finally { $env:DRAGLINT_PROFILE = $null }
   $memo = [regex]::Match($raw, 'missing-uses memo\s+(\d+) bound-ref lookup\(s\), (\d+) store read\(s\)')

@@ -115,7 +115,7 @@ Check 'all fixture lines located' (@($lnNone,$lnRecent,$lnOld,$lnFuture,$lnHex) 
 
 function Lint-It([string[]]$Extra) {
   $r = @{}; $concat = @(); $stale = @{}
-  foreach ($line in (& $Exe lint $fixture @Extra 2>&1)) {
+  foreach ($line in (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture @Extra 2>&1 | ForEach-Object { "$_" } })) {
     $t = "$line"
     if     ($t -match ':(\d+):\d+\s+\[\w+\]\s+review-marker-reason-unreviewed:') { $r[[int]$Matches[1]] = $t }
     elseif ($t -match ':(\d+):\d+\s+\[\w+\]\s+concat-in-loop:')                  { $concat += [int]$Matches[1] }
@@ -146,7 +146,7 @@ Check 'limit 500: the missing stamp is still reported' ($c.R.ContainsKey($lnNone
 Write-Host 'A STAMP EDIT DOES NOT MAKE THE MARKER STALE' -ForegroundColor Cyan
 # Replace the hashless marker on $lnHex's statement with a real one written by
 # `allow`, confirm it suppresses cleanly, then add a stamp by hand.
-& $Exe allow $fixture --fix-line $lnHex --fix-rule concat-in-loop --apply 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe allow $fixture --fix-line $lnHex --fix-rule concat-in-loop --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $lines = [System.IO.File]::ReadAllLines($fixture)
 Check '`allow` wrote a hashed marker' ($lines[$lnHex - 1] -match 'dl:ok concat-in-loop@[0-9a-f]{4}') $lines[$lnHex - 1]
 $a = Lint-It @()

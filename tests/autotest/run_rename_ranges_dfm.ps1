@@ -154,7 +154,7 @@ function New-Fixture([string]$Name) {
   [IO.File]::WriteAllBytes((Join-Path $src 'Unit2.dfm'), $ms.ToArray())
   $db = Join-Path $dir 'idx.sqlite'
   Push-Location $dir
-  try { & $Exe index $src --db $db 2>&1 | Out-Null } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null } finally { Pop-Location }
   Check "$Name index exits 0" ($LASTEXITCODE -eq 0)
   [pscustomobject]@{ Dir = $dir; Src = $src; Db = $db }
 }
@@ -169,7 +169,7 @@ function Run-Rename($fx, [string[]]$RenameArgs) {
   # stdout and stderr apart: a stderr NOTE (e.g. 'no --library-db given') must
   # not reach ConvertFrom-Json; refusal checks read Out (both streams).
   $errFile = [IO.Path]::GetTempFileName()
-  try { $o = & $Exe rename @RenameArgs --db $fx.Db 2>$errFile; $ec = $LASTEXITCODE } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe rename @RenameArgs --db $fx.Db 2>$errFile }; $ec = $LASTEXITCODE } finally { Pop-Location }
   $e = [IO.File]::ReadAllText($errFile); [IO.File]::Delete($errFile)
   $std = ($o -join "`n")
   [pscustomobject]@{ Exit = $ec; Std = $std; Out = (($std, $e.TrimEnd()) -join "`n") }

@@ -60,7 +60,7 @@ Copy-Item (Join-Path $fix 'order') $WorkDir -Recurse -Force
 $db = Join-Path $WorkDir 'initapi.sqlite'
 Push-Location $WorkDir
 try {
-  & $exePath index $src --db $db *> (Join-Path $WorkDir 'index.log')
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db *> (Join-Path $WorkDir 'index.log') }
 
   . (Join-Path $repo 'tests\autotest\lib\CliBuildPaths.ps1')
   $cli = Get-CliDcc64Args
@@ -68,7 +68,7 @@ try {
   [void](Copy-TreeSitterDlls -Dest $out)
   $h = Join-Path $out 'InitApiHarness.exe'
   $pairs = @('P1:C:A', 'P1:A:C', 'P1:A:A', 'P2:W:Y', 'P2:Y:V', 'P1:NoSuch:A', 'P1:W:A', 'P9:C:A', ':C:A', ':W:Y')
-  $raw = @(& $h $db @pairs 2>&1 | ForEach-Object { "$_" })
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $h $db @pairs 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
   $raw | ForEach-Object { Write-Host "  raw: $_" }
   function Order([string]$Prog) { return ,@($raw | Where-Object { $_ -like "ORDER|$Prog|*" }) }
   function Pair([string]$Key) {
@@ -84,7 +84,7 @@ try {
   Check (($o1.Count -eq 1) -and ($f1[5] -eq 'C,B,A,D') -and ($f1[2] -eq '0') -and ($f1[4] -eq 'yes')) "c1 P1 order C,B,A,D, reliable, program block (got '$($o1 -join ' / ')')"
 
   # c2: second engine call -- the order init-order-hazard walks
-  $lj = (& $exePath lint-all --db $db --rule init-order-hazard --json 2>$null) -join "`n"
+  $lj = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rule init-order-hazard --json 2>$null }) -join "`n"
   Write-Host "  lint raw: $($lj.Substring(0, [Math]::Min(400, $lj.Length)))"
   $lint = @($lj | ConvertFrom-Json)
   $hz = @($lint | Where-Object { ([IO.Path]::GetFileName([string]$_.file_path) -eq 'C.pas') -and ($_.message -match 'A\.GVal') })

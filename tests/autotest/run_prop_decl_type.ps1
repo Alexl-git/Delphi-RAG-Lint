@@ -67,7 +67,7 @@ Copy-TreeSitterDlls -Dest $WorkDir | Out-Null
 
 # Run from the WorkDir: the test writes its scratch DB to a relative path.
 Push-Location $WorkDir
-try   { $out = & $exe 2>&1 | Out-String; $rc = $LASTEXITCODE }
+try   { $out = & { $ErrorActionPreference = 'Continue'; & $exe 2>&1 | ForEach-Object { "$_" } } | Out-String; $rc = $LASTEXITCODE }
 finally { Pop-Location }
 Write-Host $out.TrimEnd()
 

@@ -87,7 +87,7 @@ New-Item -ItemType Directory $WorkDir | Out-Null
 
 # ---- index the fixture into a scratch DB ----------------------------------
 $db = "$WorkDir\teststub.sqlite"
-$idx = & $Exe index $fixtureDir --db $db 2>&1 | Out-String
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $fixtureDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 $idxCode = $LASTEXITCODE
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (CLIFIX C2)
 Check 'fixture indexed into a scratch DB' (Test-Path $db) `
@@ -105,7 +105,7 @@ function Generate([string]$qname) {
   # ("loaded defaults from ...", "FTS5 probe") INTO the unit at an unpredictable
   # point -- which showed up as a compile error on a line the generator never
   # emitted, i.e. as a fault in the code under test rather than in the harness.
-  $raw = & $Exe generate-test --qname $qname --framework dunitx --db $db 2>$null | Out-String
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe generate-test --qname $qname --framework dunitx --db $db 2>$null } | Out-String
   # Keep from the `unit` line to `end.` so the file written is only source.
   #
   # When there is NO unit header the whole output is returned instead of

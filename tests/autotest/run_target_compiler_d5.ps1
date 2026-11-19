@@ -52,7 +52,7 @@ function Exec([string[]]$ArgList) {
   Push-Location $cwd
   try {
     $errFile = Join-Path $WorkDir 'stderr.txt'
-    $o = & $Exe @ArgList 2>$errFile | ForEach-Object { "$_" }
+    $o = & { $ErrorActionPreference = 'Continue'; & $Exe @ArgList 2>$errFile } | ForEach-Object { "$_" }
     $code = $LASTEXITCODE
     $e = if (Test-Path $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
   } finally { Pop-Location }

@@ -193,7 +193,7 @@ if (@($rows.Values | Sort-Object -Unique).Count -ne 5) {
 Write-Host ("  anchors: " + (($rows.Keys | ForEach-Object { "$_=$($rows[$_])" }) -join ' ')) -ForegroundColor DarkGray
 
 # FlowChecks runs on the bare per-file path, so `lint <file>` is sufficient here.
-$out  = & $Exe lint $file 2>&1 | Out-String
+$out  = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file 2>&1 | ForEach-Object { "$_" } } | Out-String
 $hits = @([regex]::Matches($out, 'uObrShapeF\.pas:(\d+):\d+\s+\[\w+\]\s+overwrite-before-read') |
           ForEach-Object { [int]$_.Groups[1].Value })
 function Proc-Of([int]$Row) {

@@ -27,7 +27,7 @@ $Fx  = (Resolve-Path (Join-Path $PSScriptRoot '..\fixtures')).Path
 
 # lint --json is a bare ARRAY of findings with a `rule` field (inspected raw); 0 findings prints [].
 function SyntaxFindings([string]$file) {
-  $raw = & $Exe lint $file --json 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file --json 2>$null }
   $txt = ($raw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n"
   if ($txt.Trim() -eq '') { return $null }
   return ,@(@($txt | ConvertFrom-Json) | Where-Object { $_.rule -in @('parser-error', 'syntax-error') })

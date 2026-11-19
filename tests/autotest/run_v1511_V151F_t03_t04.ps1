@@ -22,7 +22,7 @@ $exePath = (Resolve-Path $Exe).Path
 $fx = Join-Path $PSScriptRoot 'fixtures\v1511-V151F'
 function Lines($file, $rule, [string[]]$extra) {
   $ra = if ($extra.Count -gt 0) { @("--rule", $rule) + $extra } else { @() }
-  $raw = & $exePath lint $file --json @ra 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint $file --json @ra 2>$null }
   $t = ($raw -join "`n").Trim()
   if ($t -eq '') { return @() }
   try { $j = @($t | ConvertFrom-Json) } catch { return @() }

@@ -52,7 +52,7 @@ function RunUsages([string[]]$ExtraArgs) {
   # note INTO the JSON document -- measured: "...index --all --only <Section>)"
   # landed inside the `attributes` array and ConvertFrom-Json failed at line 42.
   # The note is a stderr diagnostic; the document is stdout. Do not merge them.
-  $raw = (& $Exe usages --name $Sym --db $DbPath @ExtraArgs 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe usages --name $Sym --db $DbPath @ExtraArgs 2>$null }) -join "`n"
   $ex  = $LASTEXITCODE
   # convert-apply-style: the document is the first line that opens an object, so
   # a trailing "(loaded defaults from ...)" note cannot break the parse.

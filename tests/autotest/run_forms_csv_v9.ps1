@@ -45,10 +45,10 @@ Copy-Item -LiteralPath (Resolve-Path $FixtureDir).Path -Destination $fx -Recurse
 New-Item -ItemType Directory "$fx\_D-RAG" | Out-Null
 [IO.File]::WriteAllText("$fx\_D-RAG\drag-lint-project.json", '{ "ownRoots": ["."] }')
 
-& $Exe index $fx --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'index fixture exits 0' ($LASTEXITCODE -eq 0)
 
-& $Exe forms-csv --project "$fx\Demo9.dproj" --db $db --output $out 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe forms-csv --project "$fx\Demo9.dproj" --db $db --output $out 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'forms-csv exits 0' ($LASTEXITCODE -eq 0)
 $raw = [IO.File]::ReadAllText($out)
 $lines = @($raw -split "`r`n" | Where-Object { $_ -ne '' })

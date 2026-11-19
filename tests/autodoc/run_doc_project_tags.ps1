@@ -65,7 +65,7 @@ $uShared = Join-Path $shr 'uShared.pas'
 function Write-Ascii([string]$Path, [string]$Body) {
   [IO.File]::WriteAllText($Path, ($Body -replace "`r`n", "`n" -replace "`n", "`r`n"), [Text.Encoding]::ASCII)
 }
-function Run([string[]]$xs) { $o = & $exePath @xs 2>&1 | Out-String; [pscustomobject]@{ Out = $o; Code = $LASTEXITCODE } }
+function Run([string[]]$xs) { $o = & { $ErrorActionPreference = 'Continue'; & $exePath @xs 2>&1 | ForEach-Object { "$_" } } | Out-String; [pscustomobject]@{ Out = $o; Code = $LASTEXITCODE } }
 function BlockAbove([string]$path, [string]$declPat) {
   $ls = [IO.File]::ReadAllLines($path); $d = -1
   for ($i = 0; $i -lt $ls.Count; $i++) { if ($ls[$i] -match $declPat) { $d = $i; break } }

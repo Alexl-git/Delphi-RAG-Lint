@@ -138,11 +138,11 @@ end.
 Write-Ascii $c1File $Case1Fixture
 '{ "autofix": ["method-pascalcase"] }' | Out-File -FilePath $c1Cfg -Encoding ascii
 
-& $Exe index $c1Src --db $c1Db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $c1Src --db $c1Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'CASE1: index exits 0' ($LASTEXITCODE -eq 0)
 Check 'CASE1: db built' (Test-Path $c1Db)
 
-$out = & $Exe lint-all --db $c1Db --config $c1Cfg --rule method-pascalcase --fix --apply --quiet 2>&1
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $c1Db --config $c1Cfg --rule method-pascalcase --fix --apply --quiet 2>&1 | ForEach-Object { "$_" } }
 Write-Host ($out -join "`n")
 
 $after = Get-Content -Raw $c1File
@@ -199,10 +199,10 @@ end.
 Write-Ascii $c2File $Case2Fixture
 '{ "autofix": ["local-var-casing"] }' | Out-File -FilePath $c2Cfg -Encoding ascii
 
-& $Exe index $c2Src --db $c2Db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $c2Src --db $c2Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'CASE2: index exits 0' ($LASTEXITCODE -eq 0)
 
-$out2 = & $Exe lint-all --db $c2Db --config $c2Cfg --rule local-var-casing --fix --apply --quiet 2>&1
+$out2 = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $c2Db --config $c2Cfg --rule local-var-casing --fix --apply --quiet 2>&1 | ForEach-Object { "$_" } }
 Write-Host ($out2 -join "`n")
 
 $after2 = Get-Content -Raw $c2File
@@ -276,10 +276,10 @@ end.
 Write-Ascii $c3File $Case3Fixture
 '{ "autofix": ["const-casing"], "naming": { "const_case": ["UPPER_CASE"] } }' | Out-File -FilePath $c3Cfg -Encoding ascii
 
-& $Exe index $c3Src --db $c3Db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $c3Src --db $c3Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'CASE3: index exits 0' ($LASTEXITCODE -eq 0)
 
-$out3 = & $Exe lint-all --db $c3Db --config $c3Cfg --rule const-casing --fix --apply --quiet 2>&1
+$out3 = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $c3Db --config $c3Cfg --rule const-casing --fix --apply --quiet 2>&1 | ForEach-Object { "$_" } }
 Write-Host ($out3 -join "`n")
 
 $after3 = Get-Content -Raw $c3File
@@ -314,10 +314,10 @@ $gateBefore = Get-Content -Raw $gateFile
 # so a stray legacy opt-in could not make this pass vacuously).
 '{ "autofix": ["const-casing"], "autofix_off": ["const-casing"], "naming": { "const_case": ["UPPER_CASE"] } }' | Out-File -FilePath $gateCfg -Encoding ascii
 
-& $Exe index $gateSrc --db $gateDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $gateSrc --db $gateDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'GATE: index exits 0' ($LASTEXITCODE -eq 0)
 
-$gateOut = & $Exe lint-all --db $gateDb --config $gateCfg --rule const-casing --fix --apply --quiet 2>&1
+$gateOut = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $gateDb --config $gateCfg --rule const-casing --fix --apply --quiet 2>&1 | ForEach-Object { "$_" } }
 $gateExit = $LASTEXITCODE
 Write-Host ($gateOut -join "`n")
 
@@ -373,10 +373,10 @@ end.
 Write-Ascii $confFile $ConflictFixture
 '{ "autofix": ["method-pascalcase"] }' | Out-File -FilePath $confCfg -Encoding ascii
 
-& $Exe index $confSrc --db $confDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $confSrc --db $confDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'CONFLICT: index exits 0' ($LASTEXITCODE -eq 0)
 
-$confOut = & $Exe lint-all --db $confDb --config $confCfg --rule method-pascalcase --fix --apply --quiet 2>&1
+$confOut = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $confDb --config $confCfg --rule method-pascalcase --fix --apply --quiet 2>&1 | ForEach-Object { "$_" } }
 $confExit = $LASTEXITCODE
 Write-Host ($confOut -join "`n")
 
@@ -405,11 +405,11 @@ $dryCfg  = Join-Path $dryDir 'drag-lint-lint.json'
 Write-Ascii $dryFile $Case1Fixture
 '{ "autofix": ["method-pascalcase"] }' | Out-File -FilePath $dryCfg -Encoding ascii
 
-& $Exe index $drySrc --db $dryDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $drySrc --db $dryDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'DRYRUN: index exits 0' ($LASTEXITCODE -eq 0)
 
 $beforeDry = Get-Content -Raw $dryFile
-$dryOut = & $Exe lint-all --db $dryDb --config $dryCfg --rule method-pascalcase --fix --quiet 2>&1
+$dryOut = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $dryDb --config $dryCfg --rule method-pascalcase --fix --quiet 2>&1 | ForEach-Object { "$_" } }
 $dryExit = $LASTEXITCODE
 Write-Host ($dryOut -join "`n")
 $afterDry = Get-Content -Raw $dryFile
@@ -444,10 +444,10 @@ Write-Ascii $detBFile $Case1Fixture
 '{ "autofix": ["method-pascalcase"] }' | Out-File -FilePath $detACfg -Encoding ascii
 '{ "autofix": ["method-pascalcase"] }' | Out-File -FilePath $detBCfg -Encoding ascii
 
-& $Exe index (Join-Path $detA 'src') --db $detADb 2>&1 | Out-Null
-& $Exe index (Join-Path $detB 'src') --db $detBDb 2>&1 | Out-Null
-& $Exe lint-all --db $detADb --config $detACfg --rule method-pascalcase --fix --apply --quiet 2>&1 | Out-Null
-& $Exe lint-all --db $detBDb --config $detBCfg --rule method-pascalcase --fix --apply --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $detA 'src') --db $detADb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $detB 'src') --db $detBDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $detADb --config $detACfg --rule method-pascalcase --fix --apply --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $detBDb --config $detBCfg --rule method-pascalcase --fix --apply --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 $detAAfter = Get-Content -Raw $detAFile
 $detBAfter = Get-Content -Raw $detBFile
@@ -499,10 +499,10 @@ end.
 Write-Ascii $slFile $SameLineFixture
 '{ "autofix": ["local-var-casing"] }' | Out-File -FilePath $slCfg -Encoding ascii
 
-& $Exe index $slSrc --db $slDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $slSrc --db $slDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'SAMELINE: index exits 0' ($LASTEXITCODE -eq 0)
 
-$slOut = & $Exe lint-all --db $slDb --config $slCfg --rule local-var-casing --fix --apply --quiet 2>&1
+$slOut = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $slDb --config $slCfg --rule local-var-casing --fix --apply --quiet 2>&1 | ForEach-Object { "$_" } }
 $slExit = $LASTEXITCODE
 Write-Host ($slOut -join "`n")
 

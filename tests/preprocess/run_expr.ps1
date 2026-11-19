@@ -46,7 +46,7 @@ function EvalExpr([string]$expr, [string[]]$defines, [string[]]$numeric) {
   $cliArgs = @('dump-pp-eval', '--expr', $expr)
   foreach ($d in $defines) { $cliArgs += @('--define', $d) }
   foreach ($n in $numeric) { $cliArgs += @('--numeric', $n) }
-  $out = & $exePath @cliArgs 2>$null | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath @cliArgs 2>$null } | Out-String
   return $out.Trim().ToLower()
 }
 

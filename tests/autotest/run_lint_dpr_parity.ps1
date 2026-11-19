@@ -81,10 +81,10 @@ function Run($name, $mark) {
   $f = Join-Path $d 'PDprParity.dpr'
   Write-Ascii $f ($template -replace '@@MARK@@', $mark)
   $db = Join-Path $d 'x.sqlite'
-  $null = & $exePath index $d --db $db 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $exePath index $d --db $db 2>&1 | ForEach-Object { "$_" } }
   $en = 'review-marker-unused,review-marker-stale'
-  $pf  = (& $exePath lint $f --db $db --rules-dir $rules --enable $en --json 2>$null | Out-String)
-  $all = (& $exePath lint-all --db $db --rules-dir $rules --enable $en --json 2>$null | Out-String)
+  $pf  = (& { $ErrorActionPreference = 'Continue'; & $exePath lint $f --db $db --rules-dir $rules --enable $en --json 2>$null } | Out-String)
+  $all = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rules-dir $rules --enable $en --json 2>$null } | Out-String)
   [pscustomobject]@{ PerFile = (Sets $pf); All = (Sets $all) }
 }
 
@@ -110,7 +110,7 @@ Check 'A3b PARITY with the marker present' `
 # A4: .dpk per-file stays as it was (no AST checks); lint-all never scans .dpk.
 $dk = Join-Path $WorkDir 'dpk'; New-Item -ItemType Directory -Path $dk -Force | Out-Null
 Write-Ascii (Join-Path $dk 'PDpk.dpk') (($template -replace '@@MARK@@','') -replace '^program PDprParity;','package PDpk;')
-$o = (& $exePath lint (Join-Path $dk 'PDpk.dpk') --rules-dir $rules --json 2>$null | Out-String)
+$o = (& { $ErrorActionPreference = 'Continue'; & $exePath lint (Join-Path $dk 'PDpk.dpk') --rules-dir $rules --json 2>$null } | Out-String)
 $ids = if ($o.Trim()) { Sets $o } else { @() }
 Check 'A4  .dpk per-file: no AST findings (unchanged; lint-all does not scan .dpk)' `
       (($ids -match '^(try-except-swallowed|write-only-local)@').Count -eq 0) ($ids -join ', ')

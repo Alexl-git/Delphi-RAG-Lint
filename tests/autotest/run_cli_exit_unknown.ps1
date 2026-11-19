@@ -24,11 +24,11 @@ function Check($n, $ok, $d = '') {
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 $Exe = (Resolve-Path $Exe).Path
 
-$null = & $Exe --version 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe --version 2>&1 | ForEach-Object { "$_" } }
 Check 'control: --version exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
-$v = (& $Exe nosuchverb-w5 2>&1 | Out-String)
+$v = (& { $ErrorActionPreference = 'Continue'; & $Exe nosuchverb-w5 2>&1 | ForEach-Object { "$_" } } | Out-String)
 Check 'unknown verb exits 2 with "unknown command"' (($LASTEXITCODE -eq 2) -and ($v -match 'unknown command: nosuchverb-w5')) "exit=$LASTEXITCODE"
-$f = (& $Exe cycles --no-such-flag-w5 2>&1 | Out-String)
+$f = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --no-such-flag-w5 2>&1 | ForEach-Object { "$_" } } | Out-String)
 Check 'unknown flag exits 3 with FATAL on stderr' (($LASTEXITCODE -eq 3) -and ($f -match 'FATAL: .*Unknown argument: --no-such-flag-w5')) "exit=$LASTEXITCODE"
 
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

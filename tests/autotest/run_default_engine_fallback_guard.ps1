@@ -60,9 +60,9 @@ try {
       $onlyBuilt = & $sb $psr
       $childFile = Join-Path $tmp 'fresh-probe.ps1'; [IO.File]::WriteAllText($childFile, 'param($r) & { param($PSScriptRoot) ' + $expr + ' } $r')
       Set-Stub $built $false
-      $nb = & pwsh -NoProfile -File $childFile $psr 2>&1 | Out-String; $nbCode = $LASTEXITCODE
+      $nb = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $childFile $psr 2>&1 | ForEach-Object { "$_" } } | Out-String; $nbCode = $LASTEXITCODE
       Set-Stub $deployed $true
-      $dp = & pwsh -NoProfile -File $childFile $psr 2>&1 | Out-String; $dpCode = $LASTEXITCODE
+      $dp = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $childFile $psr 2>&1 | ForEach-Object { "$_" } } | Out-String; $dpCode = $LASTEXITCODE
       $okFresh = ($onlyBuilt -like '*src\cli\Win64\Debug\drag-lint.exe') -and ($nbCode -eq 2) -and ($dpCode -eq 2) -and $nb.Contains('no build of this tree') -and $dp.Contains('no build of this tree')
       if (-not $okFresh) { $bad += $s.Name }
       continue
@@ -87,13 +87,13 @@ try {
     $probe = '$Repo = $args[0]; $Engine = ""; ' + $m.Value + ' Write-Host "ENGINE=$engine"'
     $pf = Join-Path $tmp 'probe.ps1'; [IO.File]::WriteAllText($pf, $probe)
     Set-Stub $deployed $false; Set-Stub $built $false
-    $o0 = (& pwsh -NoProfile -File $pf $tmp 2>&1 | Out-String); $c0 = $LASTEXITCODE
+    $o0 = (& { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $pf $tmp 2>&1 | ForEach-Object { "$_" } } | Out-String); $c0 = $LASTEXITCODE
     Check 'B neither engine: GUARD BROKEN naming both paths, exit 1' (($c0 -eq 1) -and $o0.Contains('GUARD BROKEN') -and $o0.Contains($deployed) -and $o0.Contains($built))
     Set-Stub $built $true
-    $o1 = (& pwsh -NoProfile -File $pf $tmp 2>&1 | Out-String)
+    $o1 = (& { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $pf $tmp 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'B only Debug build: it is chosen' ($o1.Contains("ENGINE=$built"))
     Set-Stub $deployed $true
-    $o2 = (& pwsh -NoProfile -File $pf $tmp 2>&1 | Out-String)
+    $o2 = (& { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $pf $tmp 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'B both present: deployed wins' ($o2.Contains("ENGINE=$deployed"))
   }
 } finally {

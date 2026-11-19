@@ -66,11 +66,11 @@ $expect = [ordered]@{
   'AMOUNT'    = PosOf 'AMOUNT'
 }
 
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' ((Test-Path $db) -and $LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 # sql --json rows are POSITIONAL arrays: map them onto columns[].name.
-$raw = & $Exe sql --db $db --json --query "SELECT name, start_line, start_col FROM symbols WHERE kind = 'sql_column' ORDER BY start_line, start_col" 2>$null | Out-String
+$raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --query "SELECT name, start_line, start_col FROM symbols WHERE kind = 'sql_column' ORDER BY start_line, start_col" 2>$null } | Out-String
 $doc = $raw | ConvertFrom-Json
 $names = @($doc.columns | ForEach-Object { $_.name })
 $got = @{}

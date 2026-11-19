@@ -44,7 +44,7 @@ function WriteAscii([string]$Path, [string]$Text) {
 # Runs the exe; returns @{ Out; Err; Code }.
 function Run([string[]]$ArgList) {
   $errFile = Join-Path $WorkDir '_stderr.txt'
-  $out = & $exePath @ArgList 2> $errFile | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath @ArgList 2> $errFile } | Out-String
   $code = $LASTEXITCODE
   $err = if (Test-Path $errFile) { Get-Content $errFile -Raw } else { '' }
   return @{ Out = $out; Err = "$err"; Code = $code }
@@ -202,8 +202,8 @@ end.
     foreach ($f in @(Get-ChildItem (Join-Path $repo 'tests\lint') -Filter '*.pas' | Sort-Object Name)) {
       $cfgF = [IO.Path]::ChangeExtension($f.FullName, '.config.json')
       $xa = @('lint', $f.FullName, '--json'); if (Test-Path $cfgF) { $xa += @('--config', $cfgF) }
-      $a = & $exePath @xa 2>$null | Out-String
-      $b = & $basePath @xa 2>$null | Out-String
+      $a = & { $ErrorActionPreference = 'Continue'; & $exePath @xa 2>$null } | Out-String
+      $b = & { $ErrorActionPreference = 'Continue'; & $basePath @xa 2>$null } | Out-String
       if ($a -cne $b) { $diffs += $f.Name }
     }
     Check 'T7 lint --json on every tests\lint fixture is byte-identical to the base exe' ($diffs.Count -eq 0) ($diffs -join ', ')
@@ -214,8 +214,8 @@ end.
       $o.PSObject.Properties.Remove('target_compiler')
       $o | ConvertTo-Json -Depth 8 -Compress
     }
-    $na = & $strip ((& $exePath rules --json 2>$null) | Out-String)
-    $nb = & $strip ((& $basePath rules --json 2>$null) | Out-String)
+    $na = & $strip ((& { $ErrorActionPreference = 'Continue'; & $exePath rules --json 2>$null }) | Out-String)
+    $nb = & $strip ((& { $ErrorActionPreference = 'Continue'; & $basePath rules --json 2>$null }) | Out-String)
     Check 'T7 rules --json minus the new keys is identical to the base exe' ($na -ceq $nb) ''
   } else { Write-Host 'SKIP T7: no -BaseExe' -ForegroundColor Yellow }
 } finally {

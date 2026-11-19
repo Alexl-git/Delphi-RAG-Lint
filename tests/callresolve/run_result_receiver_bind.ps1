@@ -52,7 +52,7 @@ $src = Join-Path $scratch 'uResRecv.pas'
 $db  = Join-Path $scratch 'resultrecv.sqlite'
 
 function Sql([string]$Query) {
-  $raw = (& $exePath sql --db $db --json --limit 1000 --query $Query 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --limit 1000 --query $Query 2>$null }) -join "`n"
   $b = $raw.IndexOf('{')
   if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
   $o = $raw.Substring($b) | ConvertFrom-Json
@@ -79,7 +79,7 @@ function At([string]$Marker, [string]$Kind, [string]$Name) {
 }
 function Show($r) { ($r | ForEach-Object { "sq=$($_.sq) mode=$($_.mode) tq=$($_.tq)" }) -join '; ' }
 
-$null = & $exePath index $scratch --db $db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 $r = At 'POS-WRITE' 'member-access' 'Streaming'

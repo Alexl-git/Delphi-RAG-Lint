@@ -80,7 +80,7 @@ function New-Demo([string]$Tag, [string]$Root = $WorkDir, [scriptblock]$Patch = 
   Copy-Tree $Demo $proj
   if ($Patch) { & $Patch $proj }
   $db = Join-Path $Root "$Tag.sqlite"
-  & $Exe index --project (Join-Path $proj 'CircularDemo.dproj') --db $db *> (Join-Path $Root "$Tag-index.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $proj 'CircularDemo.dproj') --db $db *> (Join-Path $Root "$Tag-index.log") }
   return @{ Proj = $proj; Dproj = (Join-Path $proj 'CircularDemo.dproj'); Db = $db }
 }
 # `cycles --fix` with env vars set for the call only; returns Exit/Out/Err/Json
@@ -90,7 +90,7 @@ function Run-Fix([hashtable]$D, [string[]]$Extra, [hashtable]$Env = @{}, [bool]$
   if ($Json) { $a += @('--format', 'json') }
   foreach ($k in $Env.Keys) { Set-Item "Env:$k" $Env[$k] }
   try {
-    $out = (& $Exe @a 2>$errf | Out-String)
+    $out = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$errf } | Out-String)
     $code = $LASTEXITCODE
   } finally { foreach ($k in $Env.Keys) { Remove-Item "Env:$k" -ErrorAction SilentlyContinue } }
   $err = if (Test-Path $errf) { [IO.File]::ReadAllText($errf) } else { '' }

@@ -49,7 +49,7 @@ try {
     $sections ] } }
 "@
   function Q([string]$Db,[string]$Query) {
-    $raw = (& $exe sql --db $Db --json --limit 5000 --query $Query 2>$null) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $exe sql --db $Db --json --limit 5000 --query $Query 2>$null }) -join "`n"
     $b = $raw.IndexOf('{'); if ($b -lt 0) { return ,@() }
     return ,@(($raw.Substring($b) | ConvertFrom-Json).rows)
   }
@@ -57,16 +57,16 @@ try {
   $projOn = Join-Path $out 'projon.sqlite'; $libDb = Join-Path $out 'library-Win64.sqlite'
   Push-Location C:\TEMP
   try {
-    & $exe index $lib --db $libDb --platform Win64 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exe index $lib --db $libDb --platform Win64 2>&1 | ForEach-Object { "$_" } } | Out-Null
     Check 'library index built' (Test-Path $libDb)
-    $txt = (& $exe index --all --config $cfg --only ProjOn 2>&1 | Out-String)
+    $txt = (& { $ErrorActionPreference = 'Continue'; & $exe index --all --config $cfg --only ProjOn 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'project DB built' (Test-Path $projOn) $txt
     Check 'a: no "library: PENDING" with --config' ($txt -notmatch 'library: PENDING') $txt
-    $m = (& $exe sql --db $projOn --json --query "select value from schema_meta where key = 'library_resolve_state'" 2>$null) -join "`n"
+    $m = (& { $ErrorActionPreference = 'Continue'; & $exe sql --db $projOn --json --query "select value from schema_meta where key = 'library_resolve_state'" 2>$null }) -join "`n"
     Check 'a: marker state=bound' ($m -match 'bound') $m
     Check 'a: external_target > 0' ((Q $projOn $extCount)[0][0] -gt 0)
     [IO.File]::Delete($projOn)
-    $txt2 = (& $exe index --all --only ProjOn 2>&1 | Out-String)
+    $txt2 = (& { $ErrorActionPreference = 'Continue'; & $exe index --all --only ProjOn 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'b control: without --config the stub engine json cannot see the library (pending)' ($txt2 -match 'library: PENDING|NOT READY') $txt2
     Check 'b control: external_target = 0' ((Q $projOn $extCount)[0][0] -eq 0)
   } finally { Pop-Location }

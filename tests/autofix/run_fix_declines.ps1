@@ -39,7 +39,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
   }
 }
 function RuleRows([string]$ExePath, [string]$File, [string]$Id, [string[]]$Extra) {
-  $raw = & $ExePath lint --file $File --rule $Id --json @Extra 2>$null | Out-String
+  $raw = & { $ErrorActionPreference = 'Continue'; & $ExePath lint --file $File --rule $Id --json @Extra 2>$null } | Out-String
   try { return @(@($raw | ConvertFrom-Json) | Where-Object { $_.rule -eq $Id }).Count } catch { return -1 }
 }
 
@@ -68,7 +68,7 @@ try {
         $n = RuleRows $exePath $copy $id $extra
         Check "${tag}: '$id' fires (positive control, got $n)" ($n -ge 1)
         $before = [IO.File]::ReadAllBytes($copy)
-        $txt = & $exePath lint --file $copy --fix --fix-rule $id --apply --no-backup @extra 2>&1 | Out-String
+        $txt = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $copy --fix --fix-rule $id --apply --no-backup @extra 2>&1 | ForEach-Object { "$_" } } | Out-String
         $after = [IO.File]::ReadAllBytes($copy)
         $same = ($before.Length -eq $after.Length) -and (-not (Compare-Object $before $after -SyncWindow 0))
         Check "${tag}: --fix --apply left the file unchanged (declined)" $same $txt.Trim()

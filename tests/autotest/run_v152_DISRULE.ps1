@@ -61,14 +61,14 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 # lint --json is a bare ARRAY; the rule field is "rule", the line "start_line".
 function Lines([string]$File, [string]$Cfg, [string]$Rule) {
   Push-Location $Work
-  try { $Out = & $Exe lint $File --config $Cfg --json 2>$null } finally { Pop-Location }
+  try { $Out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $File --config $Cfg --json 2>$null } } finally { Pop-Location }
   $Txt = ($Out -join "`n")
   if ($Txt.Trim() -eq '') { return ,@() }
   return ,@(@($Txt | ConvertFrom-Json) | Where-Object { [string]$_.rule -eq $Rule } | ForEach-Object { [int]$_.start_line })
 }
 function Dl([string[]]$A) {
   Push-Location $Work
-  try { $Out = & $Exe @A 2>&1; $Code = $LASTEXITCODE } finally { Pop-Location }
+  try { $Out = & { $ErrorActionPreference = 'Continue'; & $Exe @A 2>&1 | ForEach-Object { "$_" } }; $Code = $LASTEXITCODE } finally { Pop-Location }
   $script:LastOut = ($Out | ForEach-Object { "$_" }) -join "`n"
   return $Code
 }

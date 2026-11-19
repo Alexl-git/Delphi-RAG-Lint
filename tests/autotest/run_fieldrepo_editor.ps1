@@ -53,7 +53,7 @@ try {
     }
     if (-not (Test-Path -LiteralPath $bin)) { Write-Host "$tag`: FAIL -- exe not found: $bin" -ForegroundColor Red; $fail++; continue }
     $log = Join-Path $work "run-$($b.Name).log"
-    & $bin --selftest *> $log
+    & { $ErrorActionPreference = 'Continue'; & $bin --selftest *> $log }
     $code = $LASTEXITCODE
     $text = Get-Content -LiteralPath $log -Raw
     $sum = Select-String -LiteralPath $log -Pattern '^SUMMARY ' | Select-Object -Last 1

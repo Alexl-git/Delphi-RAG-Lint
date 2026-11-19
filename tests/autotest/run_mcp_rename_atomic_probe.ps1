@@ -37,7 +37,7 @@ function New-Fixture([string]$Name) {
   Write-Ascii (Join-Path $src 'P.dpr') "program P;`r`n`r`nuses uLib, uUse;`r`n`r`nbegin`r`n  Go;`r`nend.`r`n"
   $db = Join-Path $WorkDir "$Name\p.sqlite"
   $env:DRAGLINT_RULE_CACHE = '0'
-  & $Exe index --project (Join-Path $src 'P.dpr') --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $src 'P.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $env:DRAGLINT_RULE_CACHE = $null
   [pscustomobject]@{ Src = $src; Db = $db }
 }

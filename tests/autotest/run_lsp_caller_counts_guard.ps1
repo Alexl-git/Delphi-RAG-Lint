@@ -111,7 +111,7 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'lens.sqlite'
-& $Exe index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' (Test-Path $db)
 
 function CountsFor([string]$path, [string[]]$dbs = @($db)) {
@@ -198,7 +198,7 @@ Write-Host 'S1: a routine in TWO stores is counted once per distinct call site' 
 # both stores. The codeLens number must equal the rows showCallers answers
 # (3 for Thrice), not the per-store sum (6).
 $db2 = Join-Path $WorkDir 'lens2.sqlite'
-& $Exe index $src --db $db2 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db2 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $counts2 = CountsFor $file @($db, $db2)
 $thriceLine = -1
 for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match '^\s*procedure Thrice;') { $thriceLine = $i; break } }
@@ -212,7 +212,7 @@ $many = Join-Path $src 'uMany.pas'
 $decl = (1..16 | ForEach-Object { "    procedure R$_;" }) -join "`n"
 $impl = (1..16 | ForEach-Object { "procedure TMany.R$_;`nbegin`nend;`n" }) -join "`n"
 WriteAnsi $many "unit uMany;`n`ninterface`n`ntype`n  TMany = class`n  public`n$decl`n  end;`n`nimplementation`n`n$impl`nend.`n"
-& $Exe index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $cm = CountsFor $many
 $ln = @($cm | ForEach-Object { [int]$_.line })
 Check 'S2: 16 routines reported' ($ln.Count -eq 16) "got=$($ln.Count)"

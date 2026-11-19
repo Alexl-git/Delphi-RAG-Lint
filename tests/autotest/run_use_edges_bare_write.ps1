@@ -66,7 +66,7 @@ function LineOf([string]$path, [string]$anchor) {
 }
 # sql --json rows are POSITIONAL arrays: map them onto columns[].name.
 function Sql([string]$db, [string]$q) {
-  $j = (& $exePath sql --db $db --query $q --json 2>$null) -join "`n"
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n"
   try { $o = $j | ConvertFrom-Json } catch { return ,@() }
   $cols = @($o.columns | ForEach-Object { $_.name }); $out = @()
   foreach ($r in @($o.rows)) { $h = [ordered]@{}; for ($i = 0; $i -lt $cols.Count; $i++) { $h[$cols[$i]] = @($r)[$i] }; $out += [pscustomobject]$h }
@@ -81,7 +81,7 @@ function Site([string]$db, [string]$file, [int]$line, [string]$kind, [string]$na
                   "WHERE f.path LIKE '%\{0}' AND r.start_line = {1} AND r.kind = '{2}' AND r.name_text = '{3}'" -f $file, $line, $kind, $name)
 }
 function UsagesRw([string]$db, [string]$name) {
-  $raw = (& $exePath usages --name $name --rw --db $db --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath usages --name $name --rw --db $db --json 2>$null }) -join "`n"
   $s = $raw.IndexOf('{'); $e = $raw.LastIndexOf('}')
   if ($s -lt 0 -or $e -lt $s) { return $null }
   try { return ($raw.Substring($s, $e - $s + 1) | ConvertFrom-Json) } catch { return $null }
@@ -174,7 +174,7 @@ end.
   $B6 = LineOf $fP '{ B6 '; $B8 = LineOf $fP '{ B8 '; $B9 = LineOf $fP '{ B9 '
   $C2 = LineOf $fC '{ C2 '; $C4 = LineOf $fC '{ C4 '
   $db = Join-Path $scratch 'p.sqlite'
-  & $exePath index $scratch --db $db *> (Join-Path $scratch 'index.log')
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db *> (Join-Path $scratch 'index.log') }
   if ($LASTEXITCODE -ne 0) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index exit $LASTEXITCODE" -ForegroundColor Red; exit 2 }
 
   Write-Host '== check 1: POSITIVE CONTROL -- the bare read owns its row ==' -ForegroundColor Cyan
@@ -204,10 +204,10 @@ end.
   Check '8b every write ref keeps its binding' ([int]$u[0].n -eq 0) ($u | ConvertTo-Json -Compress)
 
   Write-Host '== checks 9-10: find-callers ==' -ForegroundColor Cyan
-  $t = (& $exePath query find-callers --name SetValue --resolved --db $db 2>$null) -join "`n"
+  $t = (& { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name SetValue --resolved --db $db 2>$null }) -join "`n"
   Check '9a SetValue: dotted write C2 (control)' ($t.Contains("uCons.pas:$C2)")) $t
   Check '9b SetValue: bare write B3' ($t.Contains("uProv.pas:$B3)")) $t
-  $t = (& $exePath query find-callers --name Work --resolved --db $db 2>$null) -join "`n"
+  $t = (& { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name Work --resolved --db $db 2>$null }) -join "`n"
   Check '10 Work: exactly one caller' ($t -match '(?m)^1 callers') $t
 
   Write-Host '== check 11: usages --rw lists each site once ==' -ForegroundColor Cyan

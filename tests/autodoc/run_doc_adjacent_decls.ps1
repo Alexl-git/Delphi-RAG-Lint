@@ -93,10 +93,10 @@ function Get-DocBlockAbove([string[]]$lines, [int]$declIdx) {
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
-  & $exePath document --unit $target --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply 2>$null } | Out-Null
   Check 'document --apply #1 exits 0' ($LASTEXITCODE -eq 0)
 
   $lines = [IO.File]::ReadAllLines($target)
@@ -140,8 +140,8 @@ try {
 
   # --- Idempotency: reindex (facts are index-time) + re-apply -> no change ---
   $before = [IO.File]::ReadAllBytes($target)
-  & $exePath index $scratch --db $db 2>$null | Out-Null
-  & $exePath document --unit $target --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply 2>$null } | Out-Null
   $after = [IO.File]::ReadAllBytes($target)
   Check 'idempotent: file byte-identical after reindex + 2nd apply' ([System.Linq.Enumerable]::SequenceEqual([byte[]]$before,[byte[]]$after))
 } finally { Pop-Location }

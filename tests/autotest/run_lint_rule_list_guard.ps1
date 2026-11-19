@@ -40,8 +40,8 @@ end.
 '@
   [IO.File]::WriteAllText($pas, (($text -replace "`r`n", "`n") -replace "`n", "`r`n"), [Text.Encoding]::ASCII)
   $db = Join-Path $WorkDir 'g.sqlite'
-  & $exe index $src --db $db --rules-dir $rules 2>&1 | Out-Null
-  function L($more) { & $exe lint-all --db $db --rules-dir $rules --json @more 2>$null }
+  & { $ErrorActionPreference = 'Continue'; & $exe index $src --db $db --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  function L($more) { & { $ErrorActionPreference = 'Continue'; & $exe lint-all --db $db --rules-dir $rules --json @more 2>$null } }
   Check 'control: OFF rules silent by default' ((Ids (L @())) -notmatch 'magic-literal|nil-comparison')
   Check 'control: --enable finds both' ((Ids (L @('--enable', 'magic-literal,nil-comparison'))) -match 'magic-literal' )
   Check 'item1: --rule on OFF rule returns it' ((Ids (L @('--rule', 'magic-literal'))) -eq 'magic-literal')

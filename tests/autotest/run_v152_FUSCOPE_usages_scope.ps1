@@ -43,13 +43,13 @@ function ClassUnit([string]$unit, [string]$cls) {
   return "unit $unit;`ninterface`ntype`n  $cls = class`n  public`n    procedure Run;`n  end;`nimplementation`nprocedure $cls.Run;`nbegin`nend;`nend.`n"
 }
 function Index([string]$proj, [string]$db) {
-  $o = & $exePath index --project $proj --db $db 2>&1
+  $o = & { $ErrorActionPreference = 'Continue'; & $exePath index --project $proj --db $db 2>&1 | ForEach-Object { "$_" } }
   if ($LASTEXITCODE -ne 0 -or -not (Test-Path $db)) { Write-Host "FATAL: fixture $proj did not index: $($o | Select-Object -Last 2)" -ForegroundColor Red; exit 2 }
 }
 function Ask([string[]]$a) {
   $errFile = Join-Path $scratch 'stderr.txt'
   Push-Location $scratch
-  $raw = (& $exePath usages @a --json 2>$errFile) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath usages @a --json 2>$errFile }) -join "`n"
   $script:code = $LASTEXITCODE
   Pop-Location
   $script:err = [IO.File]::ReadAllText($errFile)

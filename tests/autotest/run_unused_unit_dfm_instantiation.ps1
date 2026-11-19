@@ -148,8 +148,8 @@ end
 
 $db  = Join-Path $WorkDir 'p.sqlite'
 $rep = Join-Path $WorkDir 'rep.txt'
-& $Exe index $prj --db $db --quiet 2>&1 | Out-Null
-& $Exe lint-all --db $db --output $rep 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $prj --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --output $rep 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $out  = if (Test-Path $rep) { Get-Content $rep -Raw } else { '' }
 $uuiu = @(($out -split "`n") | Where-Object { $_ -match 'unused-unit-in-uses' })
 
@@ -162,8 +162,8 @@ Check 'control: the rule ran and reported something' ($uuiu.Count -gt 0) `
 # component symbol's `signature`. If the DFM stopped being indexed, or stopped
 # carrying the signature, arm 1 would go green for the wrong reason.
 $symJson = Join-Path $WorkDir 'dfmsyms.json'
-& $Exe sql --db $db --format json --output $symJson `
-  --query "SELECT s.kind, s.signature FROM symbols s JOIN files f ON f.id = s.file_id WHERE f.path LIKE '%.dfm'" 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --format json --output $symJson `
+  --query "SELECT s.kind, s.signature FROM symbols s JOIN files f ON f.id = s.file_id WHERE f.path LIKE '%.dfm'" 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $sigs = @()
 if (Test-Path $symJson) { $sigs = @((Get-Content $symJson -Raw | ConvertFrom-Json).rows | ForEach-Object { $_[1] }) }
 Check 'control: the .dfm component symbol carries TMyWidget in `signature`' `

@@ -131,7 +131,7 @@ function Get-Plan([string]$Db, [string]$Tag) {
 }
 function Get-PlanFile([string]$Dproj, [string]$Tag) {
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project $Dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $Dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
   $r = Get-Plan $db $Tag
   $r.Db = $db
   return $r
@@ -248,10 +248,10 @@ function Test-Accepted([string]$Tag, $Prep, [string[]]$Ifaces, [string]$NoClassR
   $again = Get-Plan $plan.Db "$Tag-again"
   Check "$Tag-a3 a re-plan from the same DB is byte-identical" ($again.Text -ceq $pt) ''
   $db2 = Join-Path $WorkDir "$Tag-fresh.sqlite"
-  & $Exe index --project $dpE --db $db2 *> (Join-Path $WorkDir "index-$Tag-fresh.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $dpE --db $db2 *> (Join-Path $WorkDir "index-$Tag-fresh.log") }
   $fresh = Get-Plan $db2 "$Tag-fresh"
   Check "$Tag-a4 a plan from a fresh index is byte-identical (DB name aside)" ($fresh.Text.Replace("$Tag-fresh", $Tag) -ceq $pt) ''
-  $fo = & pwsh -NoProfile -File $Follow -PlanFile $plan.File -Cycle 1 -Root $edit 2>&1 | Out-String
+  $fo = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $Follow -PlanFile $plan.File -Cycle 1 -Root $edit 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check "$Tag-a5 the follower applies cycle 1 (exit 0)" ($LASTEXITCODE -eq 0) ($fo.Trim() -replace "`r?`n", ' | ')
   $ut = (([IO.File]::ReadAllText((Join-Path $edit 'DemoUIConnect.pas')) -split "`r?`n") | ForEach-Object { $_ -replace '//.*$', '' }) -join "`n"
   Check "$Tag-a6 the followed consumer code names no class of the edge" (-not ($ut -match $NoClassRegex)) ''
@@ -315,7 +315,7 @@ try {
   Edit-File (Join-Path $lb 'MemberWrite.dproj') '        <DCCReference Include="DemoGagePort.pas"/>' "        <DCCReference Include=`"DemoGagePort.Untangle.pas`"/>`n        <DCCReference Include=`"DemoGagePort.pas`"/>"
   $pl = Get-PlanFile (Join-Path $lb 'MemberWrite.dproj') 'leaf'
   Check 'l1 planned; IDemoGagePortSurface2 and IDemoGageAuxSurface' ($pl.Text.Contains($Handover) -and ($pl.Text -match '(?m)^\s*IDemoGagePortSurface2 = interface') -and ($pl.Text -match '(?m)^\s*IDemoGageAuxSurface = interface')) ''
-  $fo = & pwsh -NoProfile -File $Follow -PlanFile $pl.File -Cycle 1 -Root $lb 2>&1 | Out-String
+  $fo = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $Follow -PlanFile $pl.File -Cycle 1 -Root $lb 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'l2 the follower applies it' ($LASTEXITCODE -eq 0) ($fo.Trim() -replace "`r?`n", ' | ')
   $bl = Invoke-Build (Join-Path $lb 'MemberWrite.dproj')
   Check 'l3 it builds' $bl.Ok $bl.Errors
@@ -325,9 +325,9 @@ try {
   $fxA = Join-Path $WorkDir 'fix-apply'; Copy-Tree $Fx $fxA; & $twoClass $fxA
   $folC = Join-Path $WorkDir 'fix-compare'; Copy-Tree $Fx $folC; & $twoClass $folC
   $dbA = Join-Path $WorkDir 'fix-apply.sqlite'
-  & $Exe index --project (Join-Path $fxA 'MemberWrite.dproj') --db $dbA *> (Join-Path $WorkDir 'index-fix-apply.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $fxA 'MemberWrite.dproj') --db $dbA *> (Join-Path $WorkDir 'index-fix-apply.log') }
   $pC = Get-PlanFile (Join-Path $folC 'MemberWrite.dproj') 'fix-compare'
-  $null = & pwsh -NoProfile -File $Follow -PlanFile $pC.File -Cycle 1 -Root $folC 2>&1 | Out-String
+  $null = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $Follow -PlanFile $pC.File -Cycle 1 -Root $folC 2>&1 | ForEach-Object { "$_" } } | Out-String
   $r = Invoke-Fix (Join-Path $fxA 'MemberWrite.dproj') $dbA @('--apply', '--no-backup') ''
   $cy = $null; try { $cy = @(($r.Out | ConvertFrom-Json).cycles)[0] } catch { }
   Check 'f1 --fix --apply exits 0' ($r.Exit -eq 0) "exit=$($r.Exit)"
@@ -342,7 +342,7 @@ try {
   Write-Host '== cycles --fix: the E2015 repair reaches the interface that is not the first of the edge' -ForegroundColor Cyan
   $fxB = Join-Path $WorkDir 'fix-break'; Copy-Tree $Fx $fxB; & $twoClass $fxB
   $dbB = Join-Path $WorkDir 'fix-break.sqlite'
-  & $Exe index --project (Join-Path $fxB 'MemberWrite.dproj') --db $dbB *> (Join-Path $WorkDir 'index-fix-break.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $fxB 'MemberWrite.dproj') --db $dbB *> (Join-Path $WorkDir 'index-fix-break.log') }
   $r2 = Invoke-Fix (Join-Path $fxB 'MemberWrite.dproj') $dbB @('--apply', '--no-backup', '--no-reindex') '1'
   $cy2 = $null; try { $cy2 = @(($r2.Out | ConvertFrom-Json).cycles)[0] } catch { }
   Check 'g1 the seam is active and the run exits 0' (($r2.Exit -eq 0) -and $r2.Err.Contains('TEST BREAK active')) "exit=$($r2.Exit)"
@@ -384,7 +384,7 @@ try {
     Check "$($z.Tag)3 the refusal names $($z.Names)" ($t -match ('(?s)refused: ' + [regex]::Escape($z.Kind) + '.*' + $z.Names)) ''
     Check "$($z.Tag)4 no partial plan: no interface of the edge in it" (-not ($t -match 'IDemoGage(Port|Zed)Surface')) ''
     $h0 = Get-TreeHash $d
-    $null = & pwsh -NoProfile -File $Follow -PlanFile $p.File -Cycle 1 -Root $d 2>&1 | Out-String
+    $null = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $Follow -PlanFile $p.File -Cycle 1 -Root $d 2>&1 | ForEach-Object { "$_" } } | Out-String
     $fx0 = $LASTEXITCODE
     Check "$($z.Tag)5 the follower writes nothing (exit $fx0)" ((Get-TreeHash $d) -ceq $h0) ''
   }

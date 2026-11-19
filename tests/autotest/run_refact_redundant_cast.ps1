@@ -32,12 +32,12 @@ function New-Project([string]$Name) {
   $d = Join-Path $Tmp $Name
   Copy-Item $Fx $d -Recurse
   $db = Join-Path $d 'p.sqlite'
-  & $Exe index --project (Join-Path $d 'RedCast.dproj') --db $db --library-db none *> (Join-Path $Tmp "$Name.index.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $d 'RedCast.dproj') --db $db --library-db none *> (Join-Path $Tmp "$Name.index.log") }
   if ($LASTEXITCODE -ne 0) { throw "index $Name exit $LASTEXITCODE" }
   return @{ Dir = $d; Db = $db; Proj = (Join-Path $d 'RedCast.dproj'); Use = (Join-Path $d 'RcUse.pas') }
 }
 function Plan-Json($P, [string[]]$More = @()) {
-  $o = & $Exe lint @RuleArgs --db $P.Db --project $P.Proj --format json @More 2> (Join-Path $Tmp 'plan.err')
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe lint @RuleArgs --db $P.Db --project $P.Proj --format json @More 2> (Join-Path $Tmp 'plan.err') }
   $script:LastExit = $LASTEXITCODE
   return (($o -join "`n") | ConvertFrom-Json)
 }
@@ -101,20 +101,20 @@ try {
   $reasonless = @($plan.refused | Where-Object { [string]::IsNullOrWhiteSpace($_.reason) -or [string]::IsNullOrWhiteSpace($_.kind) })
   Check 'D5 every refusal has a name and a reason' ($reasonless.Count -eq 0)
   Check 'D6 the dry run wrote nothing' ((Tree-Hash $A.Dir) -ceq $before)
-  $txt = (& $Exe lint @RuleArgs --db $A.Db --project $A.Proj 2>&1) -join "`n"
+  $txt = (& { $ErrorActionPreference = 'Continue'; & $Exe lint @RuleArgs --db $A.Db --project $A.Proj 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'D7 the text form names the counts and each refusal' (($txt -match 'identity cast\(s\) to remove') -and ($txt -match 'refused\s+\S*RcUse\.pas:\d+:\d+.*with-body --'))
-  & $Exe lint @RuleArgs --db $A.Db --project $A.Proj --format json --fix-line 2 *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint @RuleArgs --db $A.Db --project $A.Proj --format json --fix-line 2 *> $null }
   $one = Plan-Json $A @('--fix-line', [string]$firstFix)
   Check 'D8 --fix-line narrows to the line' ((@($one.fixes).Count -eq 1) -and (@($one.refused).Count -eq 0)) "fixes=$(@($one.fixes).Count) refused=$(@($one.refused).Count)"
 
   # ---- surface -----------------------------------------------------------------------------------
   Write-Host 'surface'
-  & $Exe lint @RuleArgs --db $A.Db --apply *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint @RuleArgs --db $A.Db --apply *> $null }
   Check 'S1 --apply without --project exits 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
-  & $Exe lint @RuleArgs --db $A.Db --project $A.Proj --apply --no-compile *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint @RuleArgs --db $A.Db --project $A.Proj --apply --no-compile *> $null }
   Check 'S2 --apply --no-compile exits 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
   Check 'S3 neither wrote anything' ((Tree-Hash $A.Dir) -ceq $before)
-  $batch = (& $Exe lint $A.Use --db $A.Db --library-db none --fix --apply --no-backup 2>&1) -join "`n"
+  $batch = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $A.Use --db $A.Db --library-db none --fix --apply --no-backup 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'S4 a batch lint --fix leaves the casts to the gated path, and says so' (([IO.File]::ReadAllText($A.Use) -match 'B:= TBase\(B\); // FIX') -and ($batch -match 'compile gate')) ($batch.Substring(0, [Math]::Min(300, $batch.Length)))
 
   $rsvars = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
@@ -139,12 +139,12 @@ try {
     $bytes = [IO.File]::ReadAllBytes($B.Use)
     $lf = 0; for ($i = 0; $i -lt $bytes.Length; $i++) { if ($bytes[$i] -eq 10 -and ($i -eq 0 -or $bytes[$i - 1] -ne 13)) { $lf++ } }
     Check 'A8 CRLF kept' ($lf -eq 0) "$lf bare LF"
-    & $Exe index --project $B.Proj --db $B.Db --library-db none *> $null
+    & { $ErrorActionPreference = 'Continue'; & $Exe index --project $B.Proj --db $B.Db --library-db none *> $null }
     $second = Plan-Json $B
     $outer = @($second.fixes | Where-Object { $_.cast -eq 'TBase(B)' })
     Check 'A9 after a re-index the nested outer half is a fix' ($outer.Count -ge 1) (@($second.fixes | ForEach-Object cast) -join ' ')
     $r2 = Plan-Json $B @('--apply')
-    & $Exe index --project $B.Proj --db $B.Db --library-db none *> $null
+    & { $ErrorActionPreference = 'Continue'; & $Exe index --project $B.Proj --db $B.Db --library-db none *> $null }
     $third = Plan-Json $B
     Check 'A10 the third pass finds nothing left to fix (fixed point)' (($r2.applied -eq $true) -and (@($third.fixes).Count -eq 0)) (@($third.fixes | ForEach-Object cast) -join ' ')
 
@@ -154,9 +154,9 @@ try {
     $iSrc = [IO.File]::ReadAllLines($I.Use)
     $iLine = [Array]::IndexOf($iSrc, '  B:= TBase(B); // FIX') + 1
     $iBase = @('--file', $I.Use, '--fix', '--fix-line', $iLine, '--fix-rule', 'redundant-cast', '--library-db', 'none', '--db', $I.Db, '--apply')
-    & $Exe lint @iBase *> $null
+    & { $ErrorActionPreference = 'Continue'; & $Exe lint @iBase *> $null }
     Check 'I1 control: the old command, no --project, exits 2 and writes nothing' (($LASTEXITCODE -eq 2) -and ([IO.File]::ReadAllLines($I.Use)[$iLine - 1] -ceq $iSrc[$iLine - 1])) "exit $LASTEXITCODE"
-    & $Exe lint @iBase --project $I.Proj --platform win64 *> $null
+    & { $ErrorActionPreference = 'Continue'; & $Exe lint @iBase --project $I.Proj --platform win64 *> $null }
     Check 'I2 with --project it exits 0 and removes that cast' (($LASTEXITCODE -eq 0) -and ([IO.File]::ReadAllLines($I.Use)[$iLine - 1] -ceq '  B:= B; // FIX')) "exit $LASTEXITCODE"
     $iForm = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\..\src\delphi-plugin\DragLint.Plugin.StructureForm.pas'))
     Check 'I3 the plugin sends --project for this rule' ($iForm -match 'CRedundantCastRule\) then' -and $iForm.Contains('--fix-rule "%s" --project "%s" --db "%s" --platform %s --apply'))
@@ -173,7 +173,7 @@ try {
     $D = New-Project 'dirty'
     $o = Join-Path $D.Dir 'RcOther.pas'
     [IO.File]::WriteAllText($o, [IO.File]::ReadAllText($o).Replace('Result:= pValue;', 'Result:= pValueX;'))
-    & $Exe index --project $D.Proj --db $D.Db --library-db none *> $null
+    & { $ErrorActionPreference = 'Continue'; & $Exe index --project $D.Proj --db $D.Db --library-db none *> $null }
     $dBefore = Tree-Hash $D.Dir
     $r = Plan-Json $D @('--apply')
     Check 'B1 a project that does not build refuses: exit 1, dirty-baseline' (($script:LastExit -eq 1) -and ($r.gate.refusal -eq 'dirty-baseline')) "exit $script:LastExit; $($r.gate.refusal)"

@@ -96,7 +96,7 @@ end.
   $db = Join-Path $WorkDir 'app.sqlite'
   Push-Location C:\TEMP
   try {
-    & $exePath index $WorkDir --db $db 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
     Check 'N3W-0 SANITY: the fixture index exists' (Test-Path $db)
 
     # One LSP session, three requests (ids 10/11/12 = narrow/wide/very-wide).
@@ -121,7 +121,7 @@ end.
 
     for ($i = 0; $i -lt $widths.Count; $i++) {
       $w = $widths[$i]
-      $cliRaw  = (& $exePath usages --name Compute --width $w --db $db --format json 2>$null | Out-String)
+      $cliRaw  = (& { $ErrorActionPreference = 'Continue'; & $exePath usages --name Compute --width $w --db $db --format json 2>$null } | Out-String)
       $cliJson = $cliRaw.Substring($cliRaw.IndexOf('{'))
       $cliJson = $cliJson.Substring(0, $cliJson.LastIndexOf('}') + 1)
       $cli = $cliJson | ConvertFrom-Json

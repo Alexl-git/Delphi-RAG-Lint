@@ -72,7 +72,7 @@ Copy-Item (Join-Path $srcDir '*.pas') $fixDir
 $db      = Join-Path $WorkDir 'unusedunit.sqlite'
 $errFile = Join-Path $WorkDir 'stderr.txt'
 
-& $Exe index $fixDir --db $db 2>$errFile | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $fixDir --db $db 2>$errFile } | Out-Null
 if ($LASTEXITCODE -ne 0) {
   $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }
   Write-Host "FATAL: indexing the fixture failed ($LASTEXITCODE)" -ForegroundColor Red
@@ -86,14 +86,14 @@ if ($LASTEXITCODE -ne 0) {
 # nothing about the fix.
 Write-Host ''
 Write-Host '-- fixture premise' -ForegroundColor Cyan
-$helperRows = (& $Exe sql --db $db --query "select count(*) as n from type_helpers" 2>$errFile | Out-String)
+$helperRows = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query "select count(*) as n from type_helpers" 2>$errFile } | Out-String)
 Check 'the fixture index recorded a type_helpers row' ($helperRows -match '\b1\b') `
   (($helperRows -split "`r?`n" | Where-Object { $_ -match '\S' }) -join ' / ')
 
 # ---------------------------------------------------------------------------
 Write-Host ''
 Write-Host '-- the false positive: helper-only references' -ForegroundColor Cyan
-$out = (& $Exe lint-project --db $db --rule unused-unit-in-uses 2>$errFile | Out-String) -replace "`r`n", "`n"
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-project --db $db --rule unused-unit-in-uses 2>$errFile } | Out-String) -replace "`r`n", "`n"
 Write-Host ("  findings:`n    " + (($out -split "`n" | Where-Object { $_ -match 'unused-unit-in-uses' }) -join "`n    ")) -ForegroundColor DarkGray
 
 # The project-local half: ZzShout is a member of a helper declared in
@@ -135,7 +135,7 @@ Check 'the warning finding does NOT repeat the old helper confession' `
 # back to info, `drag-lint rules` understates what the rule can emit.
 Write-Host ''
 Write-Host '-- DOCS-IN-SYNC: the catalogue advertises the higher severity' -ForegroundColor Cyan
-$cat = (& $Exe rules --json 2>$null | Out-String) | ConvertFrom-Json
+$cat = (& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null } | Out-String) | ConvertFrom-Json
 $rows = if ($cat.rules) { $cat.rules } else { $cat }
 $row  = @($rows | Where-Object { $_.id -eq 'unused-unit-in-uses' }) | Select-Object -First 1
 Check 'the rule is in the catalogue (scan is not vacuous)' ($null -ne $row) ''

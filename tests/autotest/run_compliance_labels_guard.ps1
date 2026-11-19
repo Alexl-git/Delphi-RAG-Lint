@@ -35,7 +35,7 @@ function Assert($name, $cond) {
 # INT removes an id from this list in the same change that adds its row.
 $Pending = @()
 
-$rulesJson = & $exe rules --json --rules-dir $rulesDir 2>$null
+$rulesJson = & { $ErrorActionPreference = 'Continue'; & $exe rules --json --rules-dir $rulesDir 2>$null }
 Assert "rules --json exits 0" ($LASTEXITCODE -eq 0)
 $cat = ($rulesJson -join "`n") | ConvertFrom-Json
 $ids = @($cat.rules | ForEach-Object { $_.id })
@@ -90,26 +90,26 @@ try {
   $bad = $orig -replace '"hardcoded-credential": \{"cwe": \[', '"hardcoded-credential": {"cwe": ["NOT-AN-ID", '
   Assert "negative control mutation changed the file" ($bad -ne $orig)
   [IO.File]::WriteAllText((Join-Path $tmp 'compliance.json'), $bad)
-  & $exe rules --json --rules-dir $tmp 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exe rules --json --rules-dir $tmp 2>$null } | Out-Null
   Assert "bogus id in compliance.json makes rules --json exit non-zero" ($LASTEXITCODE -ne 0)
-  & $exe rules --json --rules-dir $rulesDir 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exe rules --json --rules-dir $rulesDir 2>$null } | Out-Null
   Assert "same exe, real compliance.json: exit 0 (control is not vacuous)" ($LASTEXITCODE -eq 0)
 } finally {
   [IO.Directory]::Delete($tmp, $true)
 }
 
 # ---- item 5: lint --json carries the labels -------------------------------------------------
-$f1 = & $exe lint --json --rules-dir $rulesDir (Join-Path $repo 'tests\lint\hardcoded-credential.pas') 2>$null
+$f1 = & { $ErrorActionPreference = 'Continue'; & $exe lint --json --rules-dir $rulesDir (Join-Path $repo 'tests\lint\hardcoded-credential.pas') 2>$null }
 $a1 = @(($f1 -join "`n") | ConvertFrom-Json | Where-Object { $_.rule -eq 'hardcoded-credential' })
 Assert "lint --json: hardcoded-credential finding exists" ($a1.Count -ge 1)
 Assert "lint --json: hardcoded-credential finding has compliance.cwe containing CWE-798" ($a1.Count -ge 1 -and @($a1[0].compliance.cwe) -contains 'CWE-798')
-$f2 = & $exe lint --json --rules-dir $rulesDir (Join-Path $repo 'tests\lint\type-name-prefix.pas') 2>$null
+$f2 = & { $ErrorActionPreference = 'Continue'; & $exe lint --json --rules-dir $rulesDir (Join-Path $repo 'tests\lint\type-name-prefix.pas') 2>$null }
 $a2 = @(($f2 -join "`n") | ConvertFrom-Json | Where-Object { $_.rule -eq 'type-name-prefix' })
 Assert "lint --json: type-name-prefix finding exists" ($a2.Count -ge 1)
 Assert "lint --json: type-name-prefix finding has no compliance key" ($a2.Count -ge 1 -and $null -eq $a2[0].PSObject.Properties['compliance'])
 
 # ---- item 6: --format sarif carries the taxonomies -----------------------------------------
-$sarifTxt = (& $exe lint --format sarif --rules-dir $rulesDir (Join-Path $repo 'tests\lint\hardcoded-credential.pas') 2>$null) -join "`n"
+$sarifTxt = (& { $ErrorActionPreference = 'Continue'; & $exe lint --format sarif --rules-dir $rulesDir (Join-Path $repo 'tests\lint\hardcoded-credential.pas') 2>$null }) -join "`n"
 $sj = $null; try { $sj = $sarifTxt | ConvertFrom-Json } catch {}
 Assert "sarif: parses" ($null -ne $sj)
 Assert "sarif: tags contain external/cwe/cwe-798" ($sarifTxt -match '"external/cwe/cwe-798"')
@@ -119,10 +119,10 @@ $hcRule = $null; if ($sj) { $hcRule = @($sj.runs[0].tool.driver.rules | Where-Ob
 Assert "sarif: hardcoded-credential has a relationship targeting 798" ($null -ne $hcRule -and @($hcRule.relationships | Where-Object { $_.target.id -eq '798' -and $_.target.toolComponent.name -eq 'CWE' }).Count -ge 1)
 
 # ---- item 7: built-in profile `cwe` ----------------------------------------------------------
-$p1 = & $exe lint --json --profile cwe --rules-dir $rulesDir (Join-Path $repo 'tests\lint\type-name-prefix.pas') 2>$null
+$p1 = & { $ErrorActionPreference = 'Continue'; & $exe lint --json --profile cwe --rules-dir $rulesDir (Join-Path $repo 'tests\lint\type-name-prefix.pas') 2>$null }
 $n1 = @(($p1 -join "`n") | ConvertFrom-Json).Count
 Assert "--profile cwe on type-name-prefix.pas: 0 findings (got $n1)" ($n1 -eq 0)
-$p2 = & $exe lint --json --profile cwe --rules-dir $rulesDir (Join-Path $repo 'tests\lint\hardcoded-credential.pas') 2>$null
+$p2 = & { $ErrorActionPreference = 'Continue'; & $exe lint --json --profile cwe --rules-dir $rulesDir (Join-Path $repo 'tests\lint\hardcoded-credential.pas') 2>$null }
 $h2 = @(($p2 -join "`n") | ConvertFrom-Json | Where-Object { $_.rule -eq 'hardcoded-credential' -and $_.severity -in @('warning','error') })
 Assert "--profile cwe on hardcoded-credential.pas: >= 1 finding at >= warning (got $($h2.Count))" ($h2.Count -ge 1)
 

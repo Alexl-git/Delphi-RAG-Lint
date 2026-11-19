@@ -74,17 +74,17 @@ Check 'V-A no "parse error" for the binary dfm' (-not ($all -match 'parse error'
 Check 'V-A2 bare TPF0 dfm: binary diagnostic names uTpfForm.dfm' ([bool]($all -match 'uTpfForm\.dfm: binary DFM \(TPF0\) -- save as Text DFM')) $all
 Check 'V-A2 bare TPF0 dfm: no parse error' (-not ($all -match 'uTpfForm\.dfm[^\r\n]*parse error')) $all
 Check 'P2 binary dfm yields no object rows' `
-  (-not ((& $exePath query --text 'HTTPServer1' --db $db --source dfm 2>&1 | Out-String) -match 'uBinForm\.dfm')) ''
+  (-not ((& { $ErrorActionPreference = 'Continue'; & $exePath query --text 'HTTPServer1' --db $db --source dfm 2>&1 | ForEach-Object { "$_" } } | Out-String) -match 'uBinForm\.dfm')) ''
 
 Write-Host "`n--- positive control ---" -ForegroundColor Cyan
 Check 'P1 text dfm indexed' `
-  ((& $exePath query --text 'text form' --db $db --source dfm 2>&1 | Out-String) -match 'uTxtForm\.dfm') $all
+  ((& { $ErrorActionPreference = 'Continue'; & $exePath query --text 'text form' --db $db --source dfm 2>&1 | ForEach-Object { "$_" } } | Out-String) -match 'uTxtForm\.dfm') $all
 Check 'P1b diagnostic names only the binary file' (-not ($all -match 'uTxtForm\.dfm[^\r\n]*(binary|parse error)')) $all
 
 Write-Host "`n--- lint / lint-all must not crash on the binary dfm ---" -ForegroundColor Cyan
-$lo = & $exePath lint (Join-Path $src 'uBinForm.dfm') --db $db 2>&1 | Out-String
+$lo = & { $ErrorActionPreference = 'Continue'; & $exePath lint (Join-Path $src 'uBinForm.dfm') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'lint <binary.dfm> does not raise' (($LASTEXITCODE -lt 2) -and -not ($lo -match 'EEncodingError|Exception')) $lo
-$la = & $exePath lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db 2>&1 | Out-String
+$la = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'lint-all over the fixture DB does not raise' (($LASTEXITCODE -lt 2) -and -not ($la -match 'EEncodingError|Exception')) $la
 Check 'lint-all control: still reports/finishes on the text dfm + pas (non-empty output)' ($la.Trim().Length -gt 0) $la
 Write-Host "`n--- V-B: FTS5 probe not on stderr ---" -ForegroundColor Cyan

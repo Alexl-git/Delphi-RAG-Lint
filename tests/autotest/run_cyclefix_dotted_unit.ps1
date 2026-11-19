@@ -52,12 +52,12 @@ try {
 
   $db = Join-Path $WorkDir 'dotted.sqlite'
   Push-Location $WorkDir
-  try { & $Exe index --project $dproj --db $db --library-db none *> "$db.log" } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe index --project $dproj --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
   Check 'fixture indexed' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
   function Invoke-Unit([string]$Unit) {
     Push-Location $WorkDir
-    try { $o = & $Exe cycles --fix --project $dproj --db $db --unit $Unit --no-compile --format json --library-db none 2>&1 | Out-String; $rc = $LASTEXITCODE } finally { Pop-Location }
+    try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --project $dproj --db $db --unit $Unit --no-compile --format json --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String; $rc = $LASTEXITCODE } finally { Pop-Location }
     return @{ Out = $o; Rc = $rc }
   }
   $NoGroup = 'is in no circular group'
