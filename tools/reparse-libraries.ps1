@@ -33,7 +33,21 @@
   Usage (from any folder; run it in the background, it waits for all phases):
     pwsh -File tools\reparse-libraries.ps1 -OutDir C:\TEMP\claude\lanes\143\reparse
     pwsh -File tools\reparse-libraries.ps1 -OutDir <dir> -Status
+    pwsh -File tools\reparse-libraries.ps1 -OutDir <dir> -Fresh
     pwsh -File tools\reparse-libraries.ps1 -DryRun
+
+  -Fresh (IDXPERF P1, 1.52.1): build each library into an EMPTY file. Before phase 1 the old
+  <db>, <db>-wal and <db>-shm of every library platform are moved to <db>.before-fresh*; the
+  engine then builds the library from scratch, which skips the per-file delete of old rows
+  (measured 2x to 4x a first parse of the same files, in place). The old files are the way
+  back: on a failed library the run stops and the summary names them, and the part-built new
+  file stays so a re-run with the same -OutDir resumes it (an existing .before-fresh file is
+  never overwritten and never moved again). Roll back by hand: delete the new <db>, move the
+  .before-fresh files back. The old files are NOT deleted on success -- do that once the new
+  library is accepted. Library answers (find-unit, resolve of every project) are absent while
+  the library builds. D5 is not touched (its root is a share, not a manifest section).
+  Refuses (exit 4) when an engine or the IDE plugin still holds a library file open; run
+  `drag-lint ide-release --seconds 900` then `drag-lint shutdown --all --wait 30` first.
 
   -Platforms takes a comma list (win32,win64,d5). Both forms work: from a pwsh prompt
     & tools\reparse-libraries.ps1 -Platforms win32,win64 -OutDir <dir>
@@ -55,6 +69,7 @@ param(
   [double]$ProjectsMin = 75,
   [double]$CatchUpMin = 3,
   [switch]$AllowBusy,
+  [switch]$Fresh,
   [switch]$DryRun,
   [switch]$Status
 )
@@ -180,6 +195,34 @@ if ($busy.Count -gt 0) {
 Set-Location $WorkDir   # the engine reads <WorkDir>\.drag-lint.json, as the phases below do
 foreach ($s in $Steps) {
   if ($s.Phase -eq 'libraries') { $s.Total = Get-LibraryFileCount $s.Platform }
+}
+
+if ($Fresh) {
+  foreach ($plat in @($Platforms | Where-Object { $_ -ne 'd5' })) {
+    $paths = (& $Engine resolve-dbs --platform $plat --json 2>$null) -join '' | ConvertFrom-Json
+    $db = @($paths | Where-Object { $_ -match '\\library-[^\\]+\.sqlite$' }) | Select-Object -Last 1
+    if (-not $db) { throw "-Fresh: no library DB path for $plat" }
+    $aside = "$db.before-fresh"
+    if (Test-Path -LiteralPath $aside) {
+      $Notes.Add("FRESH $plat`: resuming; the old library stays in $aside")
+      continue
+    }
+    if (-not (Test-Path -LiteralPath $db)) { $Notes.Add("FRESH $plat`: no old library at $db (nothing to move)"); continue }
+    try {
+      foreach ($suffix in @('', '-wal', '-shm')) {
+        if (Test-Path -LiteralPath "$db$suffix") { [IO.File]::Move("$db$suffix", "$aside$suffix") }
+      }
+    } catch {
+      foreach ($suffix in @('', '-wal', '-shm')) {   # undo a half move, then say who holds it
+        if ((Test-Path -LiteralPath "$aside$suffix") -and -not (Test-Path -LiteralPath "$db$suffix")) { [IO.File]::Move("$aside$suffix", "$db$suffix") }
+      }
+      $text = "REPARSE REFUSED -Fresh: $db is held open ($($_.Exception.Message)). Run: drag-lint ide-release --seconds 900 ; drag-lint shutdown --all --wait 30"
+      [IO.File]::WriteAllLines($Summary, [string[]]@($text))
+      Write-Host $text
+      exit 4
+    }
+    $Notes.Add("FRESH $plat`: old library moved to $aside (kept; delete it once the new one is accepted)")
+  }
 }
 
 $T0 = Get-Date
