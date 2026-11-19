@@ -1262,4 +1262,6 @@
 #   2026-11-19 v1521 INCR18 merge of lane/v1521-int c8118a66d: hash-only re-pin of the merged tree (both sides were hash-only re-pins, no bump).
 # superseded: 1.41.0-alpha|5d7a9e014d9a6744a0836c80345dd6126840b0c7862e3e5b8549cc33194a4202
 #   2026-11-19 v1521 INT bump 1.41.0 -> 1.42.0 (ONE bump for 1.52.1): INITDEP init_deps facts, SRC deferred extractor surface patch, grammar v1.4.14.
-1.42.0-alpha|c2b21956626c0cec74d9255867740e7e6bf1395a60d55a2bbc4e0b05b9b2592a
+# superseded (hash-only): 1.42.0-alpha|c2b21956626c0cec74d9255867740e7e6bf1395a60d55a2bbc4e0b05b9b2592a
+#   2026-11-19 v1521 INT: merges of lane/v1521-slz-rule1 and lane/v1521-idxperf (Storage.SQLite deferred trigrams: search-index write order, no parse/extraction change) -- hash-only re-pin, no second bump.
+1.42.0-alpha|76ca0b2ebfefc0daac112136561b0e44ced14ec13966d72d09fcb1b2f656da1c
