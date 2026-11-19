@@ -315,7 +315,7 @@ const
   /// tests\autotest\run_help_env_table.ps1: every quoted 'DRAGLINT_*' literal
   /// under src\ must be a Name here and --help must print every Name. A new
   /// variable is added HERE in the same change, or that guard fails.</remarks>
-  ENV_VARS_HELP: array[0..81] of TEnvVarHelp = (
+  ENV_VARS_HELP: array[0..87] of TEnvVarHelp = (
     (Name: 'DRAGLINT_BUSY_TIMEOUT_MS';                Purpose: 'writer busy timeout in ms (overrides the built-in default; a non-negative integer)'),
     (Name: 'DRAGLINT_CHARTS_ALLOW_LIVE_DB';           Purpose: 'charts: lets CloneDb accept a non-clone (live) database'),
     (Name: 'DRAGLINT_CHARTS_DIR';                     Purpose: 'charts: folder of the charts scripts'),
@@ -337,6 +337,9 @@ const
     (Name: 'DRAGLINT_FIXDOC_TRACE';                   Purpose: 'traces doc-drift fix edits on stderr'),
     (Name: 'DRAGLINT_FULLRULES_CHILD_EXE';            Purpose: 'test hook: the LSP full-rules child exe'),
     (Name: 'DRAGLINT_GATE_TEST_BREAK';                Purpose: 'test hook: breaks the compile gate'),
+    (Name: 'DRAGLINT_HOVER_SETBY_MAX_ROUTINES';        Purpose: 'hover Set by: routine (CFG) budget, a whole number >= 1 (overrides the built-in HOVER_SETBY_MAX_ROUTINES)'),
+    (Name: 'DRAGLINT_HOVER_SETBY_MAX_SECONDS';         Purpose: 'hover Set by: wall-clock cap in seconds, a number > 0 (overrides the built-in HOVER_SETBY_MAX_SECONDS)'),
+    (Name: 'DRAGLINT_HOVER_TIMING';                    Purpose: 'LSP: 1 writes one ''hover-timing <section> <ms>'' line per hover section to stderr'),
     (Name: 'DRAGLINT_INDEX_TEST_FAIL_FILE';           Purpose: 'test hook: index fails on the named file'),
     (Name: 'DRAGLINT_LAYOUT';                         Purpose: 'installed-layout switch (unset = the default layout)'),
     (Name: 'DRAGLINT_LIBRARY_EFFECTS';                Purpose: 'purity stage: 0 = no library effect summaries for the run; a path = that library DB (measurements); unset = the first opening external_stores library'),
@@ -352,6 +355,7 @@ const
     (Name: 'DRAGLINT_MERGE_TEST_EMPTY_REPLACEMENT';   Purpose: 'test hook: merge gets an empty replacement'),
     (Name: 'DRAGLINT_MERGE_TEST_FASTPATH';            Purpose: 'test hook: merge fast path'),
     (Name: 'DRAGLINT_NO_AUTOCREATE';                  Purpose: '1 = a query verb never builds a missing project index on first use'),
+    (Name: 'DRAGLINT_NO_BUDGET';                       Purpose: 'lint: any value other than 0 turns the per-rule time budget off for the process (as --no-budget)'),
     (Name: 'DRAGLINT_NO_FILE_FACTS';                  Purpose: 'forces the text read of a .dfm instead of the stored file facts'),
     (Name: 'DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE';     Purpose: '1|on|yes|true switches off the scoped receiver closure of the resolve pass (A/B)'),
     (Name: 'DRAGLINT_NO_SCOPED_RESOLVE';              Purpose: 'any value switches the scoped resolve pass off (whole-database A/B)'),
@@ -380,11 +384,13 @@ const
     (Name: 'DRAGLINT_TEST_FAIL_ROLLBACK';             Purpose: 'test hook: fails the rollback'),
     (Name: 'DRAGLINT_TEST_FAIL_WRITE_AT';             Purpose: 'test hook: fails a write at the named step'),
     (Name: 'DRAGLINT_TEST_HANG_STORE_CLOSE_MS';       Purpose: 'test hook: hangs the store close'),
+    (Name: 'DRAGLINT_TEST_HOVER_SLOW_MS';              Purpose: 'test hook: ms of cancellable artificial work in the slow section of a full LSP hover'),
     (Name: 'DRAGLINT_TEST_INDEX_FILE_DELAY_MS';       Purpose: 'test hook: delay per indexed file'),
     (Name: 'DRAGLINT_TEST_LINT_FILE_DELAY_MS';        Purpose: 'test hook: delay per linted file'),
     (Name: 'DRAGLINT_TEST_METRIC_ALGO_BUMP';          Purpose: 'test hook: bumps the routine-metric marker hash version'),
     (Name: 'DRAGLINT_TEST_REINDEX_TIMEOUT_MS';       Purpose: 'test hook: reindex timeout'),
     (Name: 'DRAGLINT_TEST_RESOLVE_DELAY_MS';          Purpose: 'test hook: delay in the resolve pass'),
+    (Name: 'DRAGLINT_TEST_RULE_SLEEP_MS';              Purpose: 'test hook: ''<rule-id>=<ms>'' sleeps that long the first time a lane asks for the rule in a file'),
     (Name: 'DRAGLINT_TEST_SCRATCH_PID';               Purpose: 'test hook: scratch-folder owner pid'),
     (Name: 'DRAGLINT_TEST_STORE_CLOSE_GRACE_MS';      Purpose: 'test hook: store-close grace period'),
     (Name: 'DRAGLINT_TEST_STREAM_COUNT_DELAY_MS';     Purpose: 'test hook: delay in the stream count'),
