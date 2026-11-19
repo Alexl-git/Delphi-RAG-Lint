@@ -27,7 +27,9 @@ function mk() {
 {
   const m = mk();
   FLOOD.forEach((l) => m.ch.appendLine(l));
-  assert.deepStrictEqual(m.out, FLOOD, 'unplanned lines pass through');
+  // 1.52 VSTOAST: a clean exit (code 0) is logged at info, everything else untouched.
+  const expected = FLOOD.map((l) => (/exited with code 0./.test(l) ? '[info] ' + l : l));
+  assert.deepStrictEqual(m.out, expected, 'unplanned lines pass through (exit 0 at info)');
 }
 // planned: the flood is dropped, ONE summary line, exit-code line becomes "stopped for restart"
 {

@@ -12,13 +12,14 @@
 // signatureHelp.
 
 const { workspace, window, commands, languages, ConfigurationTarget, StatusBarAlignment, ThemeColor, Uri, Position, Range, Hover, MarkdownString } = require('vscode');
-const { LanguageClient, TransportKind, CloseAction, ErrorAction } = require('vscode-languageclient/node');
+const { LanguageClient, TransportKind, CloseAction, ErrorAction, RevealOutputChannelOn } = require('vscode-languageclient/node');
 const { execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const radcolors = require('./lib/radcolors');
 const dlctx = require('./lib/context');
 const plannedstop = require('./lib/plannedstop');
+const restartguard = require('./lib/restartguard');
 const serverargs = require('./lib/serverargs');
 const enginestale = require('./lib/enginestale');
 const exceptionfacts = require('./lib/exceptionfacts');
@@ -36,7 +37,10 @@ let client;
 // old connection's teardown errors are not logged as faults. See lib/plannedstop.js.
 const stopGate = plannedstop.createGate();
 let clientChannel;
-const PLANNED_STOP_GRACE_MS = 3000;
+const STOP_TIMEOUT_MS = 2000;
+const PLANNED_STOP_GRACE_MS = restartguard.graceMs(STOP_TIMEOUT_MS);
+const restartState = restartguard.createRestartState(stopGate);
+const graceGate = restartguard.createGraceGate(stopGate, setTimeout, clearTimeout);
 // Held so a restart can dispose the previous one. The LanguageClient does NOT
 // take ownership of a watcher handed to it via synchronize.fileEvents, so
 // building a fresh client per restart -- which is what the restart command does
@@ -75,9 +79,12 @@ async function stopClientPlanned() {
   if (!client) return;
   const old = client;
   client = undefined;
-  stopGate.begin();
-  try { await old.stop(); } catch (e) { /* already gone */ }
-  setTimeout(() => stopGate.end(), PLANNED_STOP_GRACE_MS);
+  graceGate.open();
+  try { await old.stop(STOP_TIMEOUT_MS); } catch (e) { /* already gone, or the stop timed out: the client ends the old server itself */ }
+  // Dispose so the old client's server-registered commands (draglint.showCallers ...) are gone
+  // before the new client registers them again.
+  try { old.dispose(); } catch (e) { /* already disposed */ }
+  graceGate.closeLater(PLANNED_STOP_GRACE_MS);
 }
 
 function makeBudgetErrorHandler() {
@@ -365,7 +372,8 @@ function resolveExe() {
   return res.exe;
 }
 
-async function updateEngineNow() {
+const updateEngineNow = restartguard.coalesce(updateEngineNowImpl, 10000);
+async function updateEngineNowImpl() {
   if (!extContext) return;
   // The running server holds the copy, so it has to stop before the file can be
   // replaced. Same lock this whole mechanism is about, one level in.
@@ -438,10 +446,13 @@ function makeClient(exe) {
   const clientOptions = {
     documentSelector: [{ scheme: 'file', language: 'pascal' }],
     outputChannel: sharedClientChannel(),
+    revealOutputChannelOn: RevealOutputChannelOn.Never,
     errorHandler: makeErrorHandler(),
     initializationOptions: dlctx.initOptions((k) => workspace.getConfiguration('dragLint').get(k)),
     synchronize: { configurationSection: 'dragLint', fileEvents: [manifestWatcher, sourceWatcher] },
     middleware: {
+      didOpen: restartState.wrap((document, next) => next(document)),
+      didClose: restartState.wrap((document, next) => next(document)),
       // Wave 149 LX (spec P1): the exception lens runs draglint.exceptionFacts; the server
       // answers the routine's raise / handler sites and this shows them in a quick pick.
       executeCommand: async (command, args, next) => {
@@ -535,8 +546,13 @@ async function restartServer() {
   // command exists for; stopClientPlanned swallows that.
   await stopClientPlanned();
   restartTimes = [];
-  client = makeClient(exe);
-  await client.start();
+  restartState.starting = true;
+  try {
+    client = makeClient(exe);
+    await client.start();
+  } finally {
+    restartState.starting = false;
+  }
   window.setStatusBarMessage('drag-lint: language server restarted', 3000);
 }
 

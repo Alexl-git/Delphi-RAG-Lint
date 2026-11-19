@@ -9,6 +9,7 @@ In integration (lane/v152-int). One re-parse for the whole 1.52 bundle: extracto
 resolver 1.28.0 -> 1.29.0-alpha.
 
 - Engine verb shutdown renamed **stop-now** (lane Q15REN, owner Q15): the old name tripped the autonomy guard. shutdown stays as a hidden alias (accepted, not in --help). Callers (stage-engine.ps1, pack-lint-release.ps1), docs and the feature entry follow.
+- VS Code extension 1.6.7 (VSTOAST, U9): restart race and toasts. didOpen/didClose are dropped while a planned stop or the new server's start is in progress (the new client replays open documents); the post-stop grace now covers the stop timeout and a second restart cancels the first grace timer; "Stopping server timed out" is teardown noise during a planned stop; the engine-copy update is coalesced (one publish = one restart); the old client is disposed before the new one starts (no "command draglint.showCallers already exists"); "Server process exited with code 0" is logged at info; the Output channel no longer pops up on errors.
 
 ### Breaking
 
