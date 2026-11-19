@@ -15,6 +15,7 @@ param(
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
+$script:DdfixStart = (Get-Date).AddSeconds(-2)
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -228,5 +229,11 @@ try {
 }
 finally {
   try { [IO.Directory]::Delete($Tmp, $true) } catch { Write-Host "note: scratch left: $Tmp" }
+  # v152 DDFIX5: a gate refusal that cites its build log (dirty-baseline, compile-error) KEEPS the engine's gate
+  # scratch on purpose (C:\TEMP\draglint_cyclefix_<pid>[_<hex>]_build, E18 F5); remove the ones this run caused
+  # (made since it started, holding this runner's EiProj mirror).
+  Get-ChildItem 'C:\TEMP' -Directory -Filter 'draglint_cyclefix_*' -ErrorAction SilentlyContinue |
+    Where-Object { $_.CreationTime -ge $script:DdfixStart -and (Test-Path -LiteralPath (Join-Path $_.FullName 'mirror\EiProj.dproj')) } |
+    ForEach-Object { $kd = $_.FullName; try { [IO.Directory]::Delete($kd, $true) } catch { Write-Host "note: kept gate scratch left: $kd" } }
 }
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

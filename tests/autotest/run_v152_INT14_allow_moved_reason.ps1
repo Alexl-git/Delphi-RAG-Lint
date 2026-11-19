@@ -25,6 +25,9 @@ param(
   [Parameter(Mandatory)][string]$Exe,
   [string]$WorkDir = ''
 )
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 if (-not $WorkDir) { $WorkDir = Join-Path $env:TEMP "drag-lint-allow-moved-reason-$PID" }
 $ErrorActionPreference = 'Continue'
 $script:fail = 0; $script:pass = 0
@@ -115,3 +118,4 @@ Check 'R3 re-running the same --reason leaves the file byte-identical' ([IO.File
 Write-Host "run_v152_INT14_allow_moved_reason: $script:pass pass, $script:fail fail"
 if ($script:fail -gt 0) { Write-Host 'RESULT: FAIL'; exit 1 }
 Write-Host 'RESULT: PASS'; exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

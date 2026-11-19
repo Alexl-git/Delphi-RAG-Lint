@@ -31,6 +31,9 @@ param(
   [int]$ExactCount = 8,   # headless rows: check-init + idx-range + 6 field-repository; ToolsAPI units left out (H5)
   [string]$WorkDir = "$env:TEMP\drag-lint-v152-plugframe-$PID"
 )
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot '..\autotest\lib\WorkDirCleanup.ps1')
+try {
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path "$PSScriptRoot\..\..").Path
 $plug = Join-Path $repo 'src\delphi-plugin'
@@ -238,3 +241,4 @@ if ($out -notmatch '(\d+) passed, 0 failed') { Bad 'no pass/fail summary from th
 if ($fail) { Write-Host "FAIL ($fail)" -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green
 exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

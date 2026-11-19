@@ -82,6 +82,16 @@ try {
   $c4 = New-Stale 'c4' $false
   $r = Run-Fix $c4 @('--apply')
   Check 'control 4 untouched copy: no reindex_before' ($r.Json -and -not $r.Json.reindex_before) "exit $($r.Exit) $($r.Out)"
+
+  # v152 DDFIX5: the A1 re-index writes reindex-before.log + rerun.out into the gate's _build scratch
+  # (C:\TEMP\draglint_cyclefix_<enginepid>_build); RunCycleFix exited before DeleteDefaultScratch, so every
+  # re-indexing --apply left that dir behind (battery TEMP GROWTH GUARD). Matched on this run's work-dir name,
+  # so a parallel runner's scratch is never counted.
+  $leaf = Split-Path $WorkDir -Leaf
+  $left = @(Get-ChildItem 'C:\TEMP' -Directory -Filter 'draglint_cyclefix_*' -ErrorAction SilentlyContinue | Where-Object {
+      $f = Join-Path $_.FullName 'reindex-before.log'; (Test-Path -LiteralPath $f) -and ([IO.File]::ReadAllText($f) -like "*$leaf*") })
+  Check 'scratch: the A1 re-index scratch (reindex-before.log, rerun.out) is deleted when the run ends' ($left.Count -eq 0) ($left.FullName -join ', ')
+  foreach ($d in $left) { [IO.Directory]::Delete($d.FullName, $true) }
 } finally {
   if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 }

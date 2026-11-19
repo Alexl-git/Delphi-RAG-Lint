@@ -16,6 +16,9 @@
 #>
 [CmdletBinding()]
 param([string]$WorkDir = "$env:TEMP\drag-lint-v152-ttide-$PID")
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot '..\autotest\lib\WorkDirCleanup.ps1')
+try {
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path "$PSScriptRoot\..\..").Path
 $plug = Join-Path $repo 'src\delphi-plugin'
@@ -149,3 +152,4 @@ if ($paths.Count -ge 6) { Ok "entry registers $($paths.Count) ide-menu paths" }
 if ($fail) { Write-Host "FAIL ($fail)" -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green
 exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

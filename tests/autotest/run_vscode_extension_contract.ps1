@@ -99,7 +99,11 @@ $sa = Join-Path $Dir 'lib/serverargs.js'
 Check "lib/serverargs.js exists and extension.js uses it" ((Test-Path $sa) -and ($ext -match "serverargs")) ""
 if (Test-Path $sa) {
   $js = 'const a=require(process.argv[1]);const o=[a.buildArgs([],undefined),a.buildArgs([],true),a.buildArgs([],false),a.buildArgs(["X.sqlite"],true)];console.log(JSON.stringify(o))'
-  $out = (& node -e $js (Resolve-Path $sa).Path) | ConvertFrom-Json | ForEach-Object { $_ }
+  # One row per buildArgs call. pwsh 7 ConvertFrom-Json already enumerates the outer array and a
+  # `ForEach-Object { $_ }` then re-enumerates each inner argv into ONE flat list (out[0] = 'lsp');
+  # PS 5.1 emits the outer array as a single object. foreach over the result is right on both.
+  $out = [System.Collections.ArrayList]::new()
+  foreach ($row in ((& node -e $js (Resolve-Path $sa).Path) | ConvertFrom-Json)) { [void]$out.Add(@($row)) }
   Check "unset setting (nothing saved) runs the server WITH --full-rules" ($out[0] -contains "--full-rules") ($out[0] -join " ")
   Check "true runs the server with --full-rules" ($out[1] -contains "--full-rules") ""
   Check "false (user switched it off) runs the plain lsp with NO --full-rules" (($out[2] -join " ") -eq "lsp") ($out[2] -join " ")

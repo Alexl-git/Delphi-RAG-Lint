@@ -14,5 +14,9 @@
 param(
   [string]$WorkDir = "$env:TEMP\drag-lint-codelens-exc-$PID"
 )
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot '..\autotest\lib\WorkDirCleanup.ps1')
+try {
 & "$PSScriptRoot\run_codelens_cache_lru.ps1" -Dpr "$PSScriptRoot\..\CodeLensExceptionsTests.dpr" -WorkDir $WorkDir
 exit $LASTEXITCODE
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

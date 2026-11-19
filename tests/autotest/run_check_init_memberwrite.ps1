@@ -11,6 +11,9 @@
   Exit 0 = PASS, 1 = FAIL.
 #>
 param([string]$Exe = "third_party\dll-win64\drag-lint.exe")
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 Set-Location $repo
@@ -51,3 +54,4 @@ Check 'control: GNever has its use' (@($n.uses).Count -ge 1)
 
 Write-Host ("RESULT: {0} passed, {1} failed" -f $script:pass, $script:fail)
 exit ([int]($script:fail -gt 0))
+} finally { Remove-WorkDir $work -Keep:($env:DL_KEEP_WORKDIR -eq '1') }
