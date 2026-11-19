@@ -15,9 +15,23 @@ interface
 /// <param name="pApply">--apply: write the sidecar, then the sources; False = dry run, writes nothing.</param>
 /// <param name="pJson">--json: one JSON object on stdout.</param>
 /// <returns>0 anchors found, 3 none, 1 usage (or the sidecar exists), 2 path not found.</returns>
-/// <remarks>Files are read and written as raw bytes (code page 28591 maps every byte to one
+/// <remarks>
+/// Files are read and written as raw bytes (code page 28591 maps every byte to one
 /// character), so line endings, a BOM and non-ASCII bytes are kept. The sidecar is written
-/// BEFORE any source, so an interrupted run can lose no anchor.</remarks>
+/// BEFORE any source, so an interrupted run can lose no anchor.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Bookmarks.EditToJson, DRagLint.CLI.Bookmarks.Fail, DRagLint.CLI.Bookmarks.ReadRaw, DRagLint.CLI.Bookmarks.Sha256Of, DRagLint.CLI.Bookmarks.WriteRaw, DRagLint.Lint.Bookmarks.TBookmarks.Strip, FileExists, Format, FormatDateTime, Writeln</para>
+/// <para>Returns: EXIT_USAGE; EXIT_NOT_FOUND; if Count &gt; 0 then 0</para>
+/// <para>Complexity: 19 (cyclomatic, outer body), 109 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Bookmarks.EditToJson"/>
+/// <seealso cref="DRagLint.CLI.Bookmarks.Fail"/>
+/// <seealso cref="DRagLint.CLI.Bookmarks.ReadRaw"/>
+/// <seealso cref="DRagLint.CLI.Bookmarks.Sha256Of"/>
+/// <seealso cref="DRagLint.CLI.Bookmarks.WriteRaw"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunBookmarksStrip(const pIn, pOut, pName: string; pApply, pJson: Boolean): Integer;
 
 /// <summary>Runs `drag-lint bookmarks-restore --from S [--apply] [--json]`.</summary>
@@ -26,9 +40,23 @@ function RunBookmarksStrip(const pIn, pOut, pName: string; pApply, pJson: Boolea
 /// <param name="pJson">--json: one JSON object on stdout.</param>
 /// <returns>0 every anchor restored / already there, 4 one or more unplaced or a file missing,
 /// 1 usage, 2 sidecar not found or unreadable.</returns>
-/// <remarks>A file already equal to its original bytes is 'already'. A file with one anchor
+/// <remarks>
+/// A file already equal to its original bytes is 'already'. A file with one anchor
 /// that cannot be placed is not written at all: that anchor is 'unplaced', its siblings 'held'.
-/// The sidecar is never deleted.</remarks>
+/// The sidecar is never deleted.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Bookmarks.EditFromJson, DRagLint.CLI.Bookmarks.Fail, DRagLint.CLI.Bookmarks.ReadRaw, DRagLint.CLI.Bookmarks.Sha256Of, DRagLint.CLI.Bookmarks.WriteRaw, DRagLint.Lint.Bookmarks.TBookmarks.Restore, FileExists, Format, TJSONObject, Writeln</para>
+/// <para>Returns: EXIT_USAGE; EXIT_NOT_FOUND; if NUnplaced &gt; 0 then EXIT_UNPLACED</para>
+/// <para>Complexity: 27 (cyclomatic, outer body), 106 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Bookmarks.EditFromJson"/>
+/// <seealso cref="DRagLint.CLI.Bookmarks.Fail"/>
+/// <seealso cref="DRagLint.CLI.Bookmarks.ReadRaw"/>
+/// <seealso cref="DRagLint.CLI.Bookmarks.Sha256Of"/>
+/// <seealso cref="DRagLint.CLI.Bookmarks.WriteRaw"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunBookmarksRestore(const pFrom: string; pApply, pJson: Boolean): Integer;
 
 implementation

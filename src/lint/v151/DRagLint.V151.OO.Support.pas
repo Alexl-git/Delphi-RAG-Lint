@@ -39,7 +39,18 @@ const
 /// <param name="APath">The .pas file; unreadable or unparsable files give no finding.</param>
 /// <param name="AWants">Tells whether a rule id is wanted by the run (honours --rule).</param>
 /// <returns>All findings of the wanted rules; nil when none.</returns>
-/// <remarks>Not thread-safe (shared parse cache). Findings are 1-based line / column.</remarks>
+/// <remarks>
+/// Not thread-safe (shared parse cache). Findings are 1-based line / column.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.OO.TV151OORules.CheckFile (DRagLint.V151.OO.pas)</para>
+/// <para>Calls: DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.V151.OO.Support.TOOScan.Create, DRagLint.V151.OO.Support.TOOScan.Run, TreeSitter.TTSTree.RootNode</para>
+/// <para>Returns: nil; Scan.Run(PF.Tree.RootNode, AWants)</para>
+/// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+/// <seealso cref="DRagLint.V151.OO.Support.TOOScan.Create"/>
+/// <seealso cref="DRagLint.V151.OO.Support.TOOScan.Run"/>
+/// <seealso cref="TreeSitter.TTSTree.RootNode"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function OOCheckFile(const APath: string; const AWants: TFunc<string, Boolean>): TArray<TLintFinding>;
 
 implementation

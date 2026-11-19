@@ -105,7 +105,7 @@ type
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Charts.Compare.DiffSides (DRagLint.Charts.Compare.pas)</para>
 /// <para>Calls: Copy, DRagLint.Charts.Diff.MakeEdit, DRagLint.Charts.Diff.StepsDown</para>
-/// <para>Complexity: 17 (cyclomatic, outer body), 88 lines (full implementation)</para>
+/// <para>Complexity: 19 (cyclomatic, outer body), 88 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Charts.Diff.MakeEdit"/>
 /// <seealso cref="DRagLint.Charts.Diff.StepsDown"/>
 /// <!-- drag-lint:auto END -->
@@ -125,7 +125,7 @@ function MyersDiff(const pOld, pNew: TArray<TDiffItem>): TArray<TDiffEdit>;
 /// <para>Called from: DRagLint.Charts.Compare.DiffSides (DRagLint.Charts.Compare.pas)</para>
 /// <para>Calls: Copy, DRagLint.Charts.Diff.NextChange, Max, Min</para>
 /// <para>Returns: Hunks.ToArray</para>
-/// <para>Complexity: 10 (cyclomatic, outer body), 57 lines (full implementation)</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 57 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Charts.Diff.NextChange"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

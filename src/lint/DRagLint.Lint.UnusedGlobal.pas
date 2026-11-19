@@ -66,15 +66,15 @@ const
 /// branch is invisible to the refs but visible to the text fallback.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
-/// <para>Calls: CharInSet, Copy, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByKind, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Model.TLintFinding.SortByLocation, DRagLint.Lint.SharedScope.NoteUndecidedSite, DRagLint.Lint.SharedScope.TSharedScope.Judge, DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOf, DRagLint.Lint.UnusedGlobal.CollectUnusedGlobal.AddCandidates (+8 more)</para>
+/// <para>Calls: CharInSet, Copy, DRagLint.Core.Interfaces.ISymbolStore.FindRefsNamingInFiles, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByKind, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Model.TLintFinding.SortByLocation, DRagLint.Lint.SharedScope.NoteUndecidedSite, DRagLint.Lint.SharedScope.TSharedScope.Judge, DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOf (+11 more)</para>
 /// <para>Returns: nil; Findings.ToArray</para>
-/// <para>Complexity: 15 (cyclomatic, outer body), 187 lines (full implementation)</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 218 lines (full implementation)</para>
 /// <para>Catches: Exception (swallowed)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindRefsNamingInFiles"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByKind"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
 /// <seealso cref="DRagLint.Core.Model.TLintFinding.SortByLocation"/>
-/// <seealso cref="DRagLint.Lint.SharedScope.NoteUndecidedSite"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function CollectUnusedGlobal(const AStore: ISymbolStore; const AShared: TSharedScope = nil): TArray<TLintFinding>;

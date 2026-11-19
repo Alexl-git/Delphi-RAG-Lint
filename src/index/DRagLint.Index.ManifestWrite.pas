@@ -97,7 +97,6 @@ type
 /// nothing.</param>
 /// <returns>A result whose Outcome says what happened; Written lists every
 /// manifest path affected.</returns>
-/// <exception cref="EManifestError"><!-- drag-lint:auto exc -->via DRagLint.Index.Manifest.TInstalledLayout.Enabled: (root): expected object, got</exception>
 /// <remarks>
 /// Refuses when a section already claims the project -- registering a
 /// second owner would create the ambiguity the reindex command exists to
@@ -108,7 +107,7 @@ type
 /// <para>Called from: DRagLint.CLI.DoRegisterProject (DRagLint.CLI.pas)</para>
 /// <para>Calls: Default, DRagLint.Index.Manifest.ResolveProjectDb, DRagLint.Index.Manifest.TInstalledLayout.AppDataManifestFor, DRagLint.Index.Manifest.TInstalledLayout.Enabled, DRagLint.Index.Manifest.TInstalledLayout.WriteTarget, DRagLint.Index.Manifest.TManifestIO.Load, DRagLint.Index.ManifestWrite.AppendSectionToText, DRagLint.Index.ManifestWrite.BuildSectionJson, DRagLint.Index.ManifestWrite.FindManifestCopies, ExtractFileDir, GetEnvironmentVariable, SameText</para>
 /// <para>Returns: Default(TRegisterResult)</para>
-/// <para>Complexity: 16 (cyclomatic, outer body), 116 lines (full implementation)</para>
+/// <para>Complexity: 19 (cyclomatic, outer body), 116 lines (full implementation)</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Index.Manifest.ResolveProjectDb"/>
@@ -177,7 +176,6 @@ type
 /// <param name="AApply">False plans and touches nothing; allowed with the layout OFF.</param>
 /// <param name="ADate">Date stamped into the renamed file's name.</param>
 /// <returns>Outcome plus every path involved.</returns>
-/// <exception cref="EManifestError"><!-- drag-lint:auto exc -->via DRagLint.Index.Manifest.TInstalledLayout.Enabled: (root): expected object, got</exception>
 /// <remarks>
 /// Paths are rebased so that every DB stays where it was: `outDir` becomes
 /// absolute (the exe dir when it was absent, which also stops the roaming default of

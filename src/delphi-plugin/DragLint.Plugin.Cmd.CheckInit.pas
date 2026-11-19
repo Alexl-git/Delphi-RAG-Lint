@@ -19,11 +19,22 @@ interface
 
 type
   /// <summary>How one check-init message line is posted.</summary>
-  /// <remarks>cmTitle = IOTAMessageServices.AddTitleMessage (no location);
-  /// cmTool = AddToolMessage, clickable when FileName is not ''.</remarks>
+  /// <remarks>
+  /// cmTitle = IOTAMessageServices.AddTitleMessage (no location);
+  /// cmTool = AddToolMessage, clickable when FileName is not ''.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.Cmd.CheckInit.pas), DragLint.Plugin.Cmd.CheckInit.Msg (DragLint.Plugin.Cmd.CheckInit.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCheckInitMsgKind = (cmTitle, cmTool);
 
   /// <summary>One line for the IDE Messages window.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.Cmd.CheckInit.pas), DragLint.Plugin.Cmd.CheckInit.AddUse (DragLint.Plugin.Cmd.CheckInit.pas), DragLint.Plugin.Cmd.CheckInit.FailedMsg (DragLint.Plugin.Cmd.CheckInit.pas), DragLint.Plugin.Cmd.CheckInit.Msg (DragLint.Plugin.Cmd.CheckInit.pas), DragLint.Plugin.Cmd.CheckInit.SiteMsg (DragLint.Plugin.Cmd.CheckInit.pas) (+4 more)</para>
+  /// <para>Used in units: DragLint.Plugin.Cmd.CheckInit</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCheckInitMsg = record
     /// <summary>Title or tool line.</summary>
     Kind: TCheckInitMsgKind;
@@ -44,8 +55,15 @@ type
 /// <param name="pLine">1-based caret line.</param>
 /// <param name="pCol">1-based caret column.</param>
 /// <returns>'"exe" check-init --at "file:line:col" --db "db" --json'.</returns>
-/// <remarks>Pure. No QName is passed: check-init resolves the identifier at
-/// --at itself and judges that use at its real column.</remarks>
+/// <remarks>
+/// Pure. No QName is passed: check-init resolves the identifier at
+/// --at itself and judges that use at its real column.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Cmd.CheckInit.InvokeCheckInit (DragLint.Plugin.Cmd.CheckInit.pas)</para>
+/// <para>Calls: Format</para>
+/// <para>Returns: Format('"%s" check-init --at "%s:%d:%d" --db "%s" --json', [pExe, pFileName, pLine, pCol, pDb])</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CheckInitCommandLine(const pExe, pFileName, pDb: string; pLine, pCol: Integer): string;  // dl:ok unused-public-symbol@067d -- test seam: run_v152_HBIDE_menu.ps1 calls it from a console build outside the plugin index
 
 /// <summary>Turns the engine's check-init answer into Messages lines.</summary>
@@ -63,8 +81,17 @@ function CheckInitCommandLine(const pExe, pFileName, pDb: string; pLine, pCol: I
 /// ('limit: text'). A verdict the plugin does not know is shown verbatim.
 /// When the exit code is not 0 or 1, or the output holds no JSON object, the
 /// single title 'check-init failed (exit N): first line of output'.</returns>
-/// <remarks>Pure; tolerant of missing keys (a missing string is '', a missing
-/// number 0).</remarks>
+/// <remarks>
+/// Pure; tolerant of missing keys (a missing string is '', a missing
+/// number 0).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Cmd.CheckInit.InvokeCheckInit (DragLint.Plugin.Cmd.CheckInit.pas)</para>
+/// <para>Calls: DragLint.Plugin.Cmd.CheckInit.AnswerMsgs, DragLint.Plugin.Cmd.CheckInit.FailedMsg, TJSONObject</para>
+/// <para>Returns: [FailedMsg(pExitCode, pOutput)]; AnswerMsgs(TJSONObject(Doc))</para>
+/// <seealso cref="DragLint.Plugin.Cmd.CheckInit.AnswerMsgs"/>
+/// <seealso cref="DragLint.Plugin.Cmd.CheckInit.FailedMsg"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CheckInitMessages(const pOutput: string; pExitCode: Integer): TArray<TCheckInitMsg>;  // dl:ok unused-public-symbol@4c77 -- test seam: run_v152_HBIDE_menu.ps1 calls it from a console build outside the plugin index
 
 implementation

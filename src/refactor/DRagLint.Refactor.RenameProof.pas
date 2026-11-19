@@ -100,6 +100,12 @@ const
 
 type
   /// <summary>One occurrence, or one fact about the target, that stops the rewrite.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.RenameProof.pas) ?, DRagLint.Refactor.MultiProjectRename.RenameAcrossOwners (DRagLint.Refactor.MultiProjectRename.pas) ?, DRagLint.Refactor.MultiProjectRename.RenameAcrossOwners.Refuse (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.RenameProof.ProofOf (DRagLint.Refactor.RenameProof.pas) ?, DRagLint.Refactor.RenameProof.TProver.Create (DRagLint.Refactor.RenameProof.pas) ? (+4 more)</para>
+  /// <para>Used in units: DRagLint.Refactor.MultiProjectRename, DRagLint.Refactor.RenameProof</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRenameRefusal = record
     /// <summary>One of the CRefuse* kinds.</summary>
     Kind: string;
@@ -114,6 +120,12 @@ type
   end;
 
   /// <summary>What the proof decided about every occurrence.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.RenameReach (DRagLint.CLI.pas) ?, DRagLint.Refactor.RenameProof.ProofOf (DRagLint.Refactor.RenameProof.pas), DRagLint.Refactor.RenameProof.ProveLocalRename (DRagLint.Refactor.RenameProof.pas), DRagLint.Refactor.RenameProof.ProveRename (DRagLint.Refactor.RenameProof.pas), DRagLint.Refactor.RenameProof.TProver.Run (DRagLint.Refactor.RenameProof.pas) (+10 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Fix.V151.Legacy, DRagLint.LSP.Feature.Rename, DRagLint.Refactor.MultiProjectRename, DRagLint.Refactor.NamingFix, DRagLint.Refactor.RenameProof</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRenameProof = record
     /// <summary>The proved edits, character columns, sorted back to front per file.</summary>
     Edits: TArray<TRenameEdit>;
@@ -132,6 +144,12 @@ type
   end;
 
   /// <summary>How `rename --apply` builds.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.RenameProof.pas) ?, DRagLint.CLI.FinishRename (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.RenameProof.ApplyRenameGated (DRagLint.Refactor.RenameProof.pas) ?</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.MCP.Server, DRagLint.Refactor.RenameProof</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRenameGateOptions = record
     /// <summary>The .dproj; required.</summary>
     Project: string;
@@ -154,7 +172,8 @@ type
 /// <param name="pQName">The target's qualified name. Its overloads, overrides and implementers rename with it.</param>
 /// <param name="pNewName">The new name.</param>
 /// <returns>The proof; Found = False when the target is not in the index.</returns>
-/// <remarks>Reads every source file the index lists that holds either name. Writes nothing. Identity needs a
+/// <remarks>
+/// Reads every source file the index lists that holds either name. Writes nothing. Identity needs a
 /// `type_symbol_id`: a NULL, a missing row or an unresolved ancestor is a refusal, never a guess. A chain that reaches a
 /// library type ends there: a library class cannot descend from a project class (refused when the target's qualified
 /// name is in the library too). A symbol declared inside a routine (a local, a parameter, a local constant or type, a
@@ -166,7 +185,15 @@ type
 /// (1.52). What cannot be told apart (under an `inline`, an `Owner.Name` list item, a form whose root class is not
 /// indexed, an enum value of the same name) refuses as CRefuseDfmNameUnbound. A string literal
 /// in any indexed source file that is the component's name, or ends in `.Name`, refuses as CRefuseNameInString
-/// (`FindComponent('Name')` compiles either way and finds nothing after the rename); a comment never refuses.</remarks>
+/// (`FindComponent('Name')` compiles either way and finds nothing after the rename); a comment never refuses.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.MultiProjectRename.RenameAcrossOwners.TakeOwner (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.NamingFix.BuildTargetEdits (DRagLint.Refactor.NamingFix.pas)</para>
+/// <para>Calls: Default, DRagLint.Refactor.RenameProof.TProver.Create, DRagLint.Refactor.RenameProof.TProver.Run</para>
+/// <para>Returns: Default(TRenameProof); Prover.Run</para>
+/// <seealso cref="DRagLint.Refactor.RenameProof.TProver.Create"/>
+/// <seealso cref="DRagLint.Refactor.RenameProof.TProver.Run"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ProveRename(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;
   const pQName, pNewName: string): TRenameProof;
 
@@ -179,12 +206,31 @@ function ProveRename(const pStore: ISymbolStore; const pLibraries: TArray<ISymbo
 /// <param name="pNewName">The new name.</param>
 /// <returns>The proof; Found = False when no local is declared there. When pCol read as bytes and read as characters
 /// names two different locals, Found = True, no edit and one CRefuseColumnAmbiguous refusal.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.Fix.V151.Legacy.FixLocalShadowsField (DRagLint.Fix.V151.Legacy.pas), DRagLint.Refactor.NamingFix.BuildTargetEdits (DRagLint.Refactor.NamingFix.pas)</para>
+/// <para>Calls: AddRefusal, Default, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan, DRagLint.Refactor.RenameProof.ProofOf, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection, ExpandFileName, Format</para>
+/// <para>Returns: Default(TRenameProof); ProofOf(Edits, Refusals)</para>
+/// <para>Complexity: 17 (cyclomatic, outer body), 126 lines (full implementation)</para>
+/// <para>SQL: reads FILES, REFS, SYMBOLS</para>
+/// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan"/>
+/// <seealso cref="DRagLint.Refactor.RenameProof.ProofOf"/>
+/// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ProveLocalRename(const pStore: ISymbolStore; const pFile: string; pLine, pCol: Integer;
   const pNewName: string): TRenameProof;
 
 /// <summary>One refusal as a line: `file:line:col: refused [kind]: why`.</summary>
 /// <param name="pRefusal">The refusal.</param>
 /// <returns>The line; the place is left out when there is none.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.FinishRename (DRagLint.CLI.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.NamingFix.BuildTargetEdits (DRagLint.Refactor.NamingFix.pas), DRagLint.Refactor.RenameProof.RenderRenamePlan (DRagLint.Refactor.RenameProof.pas)</para>
+/// <para>Calls: Format</para>
+/// <para>Returns: Format('%srefused [%s]: %s', [Place, pRefusal.Kind, pRefusal.Why])</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RefusalLine(const pRefusal: TRenameRefusal): string;
 
 /// <summary>The proof as text: the decided counts, then every refusal.</summary>
@@ -192,6 +238,14 @@ function RefusalLine(const pRefusal: TRenameRefusal): string;
 /// <param name="pQName">The target.</param>
 /// <param name="pNewName">The new name.</param>
 /// <returns>The plan, several lines.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.FinishRename (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Refactor.RenameProof.RefusalLine, Format</para>
+/// <para>Returns: SB.ToString</para>
+/// <seealso cref="DRagLint.Refactor.RenameProof.RefusalLine"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RenderRenamePlan(const pProof: TRenameProof; const pQName, pNewName: string): string;
 
 /// <summary>The proof as a JSON object: target, to, edits, bound, typed, other, group, refusals.</summary>
@@ -199,18 +253,47 @@ function RenderRenamePlan(const pProof: TRenameProof; const pQName, pNewName: st
 /// <param name="pQName">The target.</param>
 /// <param name="pNewName">The new name.</param>
 /// <returns>The document.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.FinishRename (DRagLint.CLI.pas)</para>
+/// <para>Returns: O.ToJSON</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RenamePlanJson(const pProof: TRenameProof; const pQName, pNewName: string): string;
 
 /// <summary>Writes proved edits through the compile gate: baseline build, all-or-nothing write, after build, rollback.</summary>
 /// <param name="pEdits">The proved edits.</param>
 /// <param name="pOpts">The project and how to build it.</param>
 /// <returns>The gate's outcome; Applied, or a CGate* refusal with its detail. Never raises.</returns>
+/// <exception cref="EInOutError"><!-- drag-lint:auto exc -->via DRagLint.Refactor.CompileGate.ApplyGated: nothing staged for %s</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.FinishRename (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+/// <para>Calls: Cardinal, Default, DRagLint.Refactor.CompileGate.ApplyGated, DRagLint.Refactor.CompileGate.FreshScratchName, DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyToText, DRagLint.Refactor.TextEdit.TTextFileFormat.Encode, DRagLint.Refactor.TextEdit.TTextFileFormat.ReadFile, ExpandFileName, Format, FormatDateTime, Writeln</para>
+/// <para>Returns: Default(TGateOutcome); ApplyGated(Req)</para>
+/// <para>Catches: EInOutError (swallowed); Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Refactor.CompileGate.ApplyGated"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.FreshScratchName"/>
+/// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyToText"/>
+/// <seealso cref="DRagLint.Refactor.TextEdit.TTextFileFormat.Encode"/>
+/// <seealso cref="DRagLint.Refactor.TextEdit.TTextFileFormat.ReadFile"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ApplyRenameGated(const pEdits: TArray<TRenameEdit>; const pOpts: TRenameGateOptions): TGateOutcome;
 
 /// <summary>The test seam of the rename guards older than the gate, whose fixtures do not compile:
 /// DRAGLINT_RENAME_TEST_UNGATED=1 with every edit under %TEMP% / C:\TEMP.</summary>
 /// <param name="pEdits">The edits about to be written.</param>
 /// <returns>True when the caller may write without the gate.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.FinishRename (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+/// <para>Calls: DRagLint.Refactor.CompileGate.IsUnderTemp, GetEnvironmentVariable</para>
+/// <para>Returns: GetEnvironmentVariable(CSeamVar) = '1'</para>
+/// <seealso cref="DRagLint.Refactor.CompileGate.IsUnderTemp"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RenameUngatedSeam(const pEdits: TArray<TRenameEdit>): Boolean;
 
 implementation

@@ -149,6 +149,7 @@ function FindQuotedColumn(pCatalog: TSqlCatalog; pTable: TSqlTable; const pCol: 
 /// <para>Called from: DRagLint.Charts.Chain.TBindingBuild.Outcome (DRagLint.Charts.Chain.pas), DRagLint.Charts.Columns.ColumnsNotHeld (DRagLint.Charts.Columns.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.RecheckColumn (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.ResolveTable (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.FeedsFrom.TFeedsFromChart.AddTableHop (DRagLint.Charts.Q.FeedsFrom.pas) (+6 more)</para>
 /// <para>Calls: Default, DRagLint.Charts.Columns.ApplyOlder, DRagLint.Charts.Columns.ColumnLine, DRagLint.Charts.Columns.FindQuotedColumn, DRagLint.Charts.Sql.TSqlTable.HasColumn, DRagLint.Charts.Sql.TSqlTableSet.Table, DRagLint.Charts.Text.FileNameOf, Format</para>
 /// <para>Returns: Default(TSqlColumnState)</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 74 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Charts.Columns.ApplyOlder"/>
 /// <seealso cref="DRagLint.Charts.Columns.ColumnLine"/>
 /// <seealso cref="DRagLint.Charts.Columns.FindQuotedColumn"/>

@@ -27,55 +27,139 @@ const
 
 type
   /// <summary>Tree-sitter checks of lane ATLA; stateless, class methods only.</summary>
-  /// <remarks>Every check reads TAstParseCache, so trees are shared with the other
+  /// <remarks>
+  /// Every check reads TAstParseCache, so trees are shared with the other
   /// AST rules of the run and freed by the caller's TAstParseCache.Clear. A file
-  /// that does not parse yields no finding. Not thread-safe (the parse cache is not).</remarks>
+  /// that does not parse yields no finding. Not thread-safe (the parse cache is not).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.V152.ATLA.TV152ATLARules.CheckFile (DRagLint.V152.ATLA.pas), DRagLint.V152.ATLA.TV152ATLARules.CheckProject (DRagLint.V152.ATLA.pas)</para>
+  /// <para>Used in units: DRagLint.V152.ATLA</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TAtlaChecks = class
   public
     /// <summary>Reports every declared name that is a Delphi reserved word.</summary>
     /// <param name="APath">The .pas file.</param>
     /// <param name="AOut">Receives the findings; owned by the caller.</param>
-    /// <remarks>Names checked: var / threadvar, field, parameter, const and type
+    /// <remarks>
+    /// Names checked: var / threadvar, field, parameter, const and type
     /// names. A name written with the escape prefix (`&amp;Inline`) is legal and never
     /// reported. Directives (`at`, `on`, `name`, `message` ...) are not reserved
-    /// words and are never reported.</remarks>
+    /// words and are never reported.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V152.ATLA.TV152ATLARules.CheckFile (DRagLint.V152.ATLA.pas)</para>
+    /// <para>Calls: DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.V152.ATLA.Support.CheckDeclNames, DRagLint.V152.ATLA.Support.Gather, TreeSitter.TTSTree.RootNode</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+    /// <seealso cref="DRagLint.V152.ATLA.Support.CheckDeclNames"/>
+    /// <seealso cref="DRagLint.V152.ATLA.Support.Gather"/>
+    /// <seealso cref="TreeSitter.TTSTree.RootNode"/>
+    /// <seealso cref="DRagLint.V152.ATLA.Support.TAtlaChecks.ContainedFiles"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure ReservedIdentifiers(const APath: string; AOut: TList<TLintFinding>); static;
     /// <summary>Reports each class declared in the interface section of a unit
     /// that the `contractUnits` glob list names.</summary>
     /// <param name="APath">The .pas file.</param>
     /// <param name="AGlobs">Unit-name masks (`*` and `?`, case-insensitive) from drag-lint.json.</param>
     /// <param name="AOut">Receives the findings; owned by the caller.</param>
-    /// <remarks>A unit whose last name segment lane APP already treats as a contract
+    /// <remarks>
+    /// A unit whose last name segment lane APP already treats as a contract
     /// (Intf, Interface(s), Contract(s), Abstraction(s)) is skipped: APP reports it,
     /// so the two lanes never report the same class twice. Exempt, like APP:
-    /// `class of`, forward declarations, classes derived from Exception or E*.</remarks>
+    /// `class of`, forward declarations, classes derived from Exception or E*.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V152.ATLA.TV152ATLARules.CheckFile (DRagLint.V152.ATLA.pas)</para>
+    /// <para>Calls: DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.V152.ATLA.Support.ExemptClass, DRagLint.V152.ATLA.Support.FirstNamed, DRagLint.V152.ATLA.Support.Gather, DRagLint.V152.ATLA.Support.GlobOnlyContract, DRagLint.V152.ATLA.Support.MakeFinding, DRagLint.V152.ATLA.Support.NodeText, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSTree.RootNode</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 27 lines (full implementation)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+    /// <seealso cref="DRagLint.V152.ATLA.Support.ExemptClass"/>
+    /// <seealso cref="DRagLint.V152.ATLA.Support.FirstNamed"/>
+    /// <seealso cref="DRagLint.V152.ATLA.Support.Gather"/>
+    /// <seealso cref="DRagLint.V152.ATLA.Support.GlobOnlyContract"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure ContractClasses(const APath: string; const AGlobs: TArray<string>; AOut: TList<TLintFinding>); static;
     /// <summary>The `contractUnits` list of the drag-lint.json this engine resolves.</summary>
     /// <param name="AEngineDir">The folder of the running exe.</param>
     /// <returns>The masks; empty when the file, the key or a string item is missing.</returns>
-    /// <remarks>Read on every call (no cache) so an edited manifest applies to the
-    /// next lint; a malformed manifest yields an empty list, never an exception.</remarks>
+    /// <remarks>
+    /// Read on every call (no cache) so an edited manifest applies to the
+    /// next lint; a malformed manifest yields an empty list, never an exception.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V152.ATLA.TV152ATLARules.CheckFile (DRagLint.V152.ATLA.pas)</para>
+    /// <para>Calls: DRagLint.Index.Manifest.TInstalledLayout.ManifestLocation, FileExists, TJSONArray, TJSONObject</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.ManifestLocation"/>
+    /// <seealso cref="DRagLint.V152.ATLA.Support.TAtlaChecks.ContainedFiles"/>
+    /// <seealso cref="DRagLint.V152.ATLA.Support.TAtlaChecks.ContractClasses"/>
+    /// <seealso cref="DRagLint.V152.ATLA.Support.TAtlaChecks.DpkVisibleFrom"/>
+    /// <seealso cref="DRagLint.V152.ATLA.Support.TAtlaChecks.ImplicitImports"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function LoadContractGlobs(const AEngineDir: string): TArray<string>; static;
     /// <summary>Reports the uses entries of APath that a package imports implicitly.</summary>
     /// <param name="APath">A .pas file listed in the contains clause of a .dpk.</param>
     /// <param name="ADpkPath">The package; '' = search the unit's folder and its parent.</param>
     /// <param name="AOut">Receives the findings (on APath); owned by the caller.</param>
-    /// <remarks>A used unit is reported when a source file `&lt;Unit&gt;.pas` exists in
+    /// <remarks>
+    /// A used unit is reported when a source file `&lt;Unit&gt;.pas` exists in
     /// the package folder or in the folder of a contained unit, and the unit is
     /// neither in contains nor in the contains clause of a required package whose
     /// .dpk is found beside the package (same folder, parent, or a sibling folder).
     /// Units with no source there (RTL, VCL, third-party .dcp) are assumed to come
-    /// from a required package and are never reported.</remarks>
+    /// from a required package and are never reported.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V152.ATLA.TV152ATLARules.CheckFile (DRagLint.V152.ATLA.pas), DRagLint.V152.ATLA.TV152ATLARules.CheckProject (DRagLint.V152.ATLA.pas)</para>
+    /// <para>Calls: DRagLint.V152.ATLA.Support.CheckUnitAgainst, DRagLint.V152.ATLA.Support.DpkContainsFile, DRagLint.V152.ATLA.Support.ReadDpk, ExtractFileDir</para>
+    /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V152.ATLA.Support.CheckUnitAgainst"/>
+    /// <seealso cref="DRagLint.V152.ATLA.Support.DpkContainsFile"/>
+    /// <seealso cref="DRagLint.V152.ATLA.Support.ReadDpk"/>
+    /// <seealso cref="DRagLint.V152.ATLA.Support.TAtlaChecks.ContainedFiles"/>
+    /// <seealso cref="DRagLint.V152.ATLA.Support.TAtlaChecks.ContractClasses"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure ImplicitImports(const APath, ADpkPath: string; AOut: TList<TLintFinding>); static;
     /// <summary>True when the per-file search of ImplicitImports (unit folder and its
     /// parent) would find ADpkPath for the unit APath.</summary>
     /// <param name="APath">A contained unit.</param>
     /// <param name="ADpkPath">The package.</param>
     /// <returns>True when lint already covers the pair per file.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V152.ATLA.TV152ATLARules.CheckProject (DRagLint.V152.ATLA.pas)</para>
+    /// <para>Calls: ExtractFileDir, SameText</para>
+    /// <para>Returns: SameText(UnitDir, DpkDir) or SameText(ExtractFileDir(UnitDir), DpkDir)</para>
+    /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V152.ATLA.Support.TAtlaChecks.ContainedFiles"/>
+    /// <seealso cref="DRagLint.V152.ATLA.Support.TAtlaChecks.ContractClasses"/>
+    /// <seealso cref="DRagLint.V152.ATLA.Support.TAtlaChecks.ImplicitImports"/>
+    /// <seealso cref="DRagLint.V152.ATLA.Support.TAtlaChecks.LoadContractGlobs"/>
+    /// <seealso cref="DRagLint.V152.ATLA.Support.TAtlaChecks.ReservedIdentifiers"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function DpkVisibleFrom(const APath, ADpkPath: string): Boolean; static;
     /// <summary>The source files a package's contains clause names (with an `in` path).</summary>
     /// <param name="ADpkPath">The package.</param>
     /// <returns>Full paths; units without an `in` path are resolved in the package folder.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V152.ATLA.TV152ATLARules.CheckProject (DRagLint.V152.ATLA.pas)</para>
+    /// <para>Calls: DRagLint.V152.ATLA.Support.ReadDpk</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V152.ATLA.Support.ReadDpk"/>
+    /// <seealso cref="DRagLint.V152.ATLA.Support.TAtlaChecks.ContractClasses"/>
+    /// <seealso cref="DRagLint.V152.ATLA.Support.TAtlaChecks.DpkVisibleFrom"/>
+    /// <seealso cref="DRagLint.V152.ATLA.Support.TAtlaChecks.ImplicitImports"/>
+    /// <seealso cref="DRagLint.V152.ATLA.Support.TAtlaChecks.LoadContractGlobs"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function ContainedFiles(const ADpkPath: string): TArray<string>; static;
   end;
 

@@ -19,8 +19,8 @@ type
   /// <summary>Parsed marker. State = '' means no marker.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.LibraryMarker.pas) ?, DRagLint.CLI.FinishLibraryResolve (DRagLint.CLI.pas), DRagLint.CLI.LibraryMarker.LibraryMarkerFromJson (DRagLint.CLI.LibraryMarker.pas), DRagLint.CLI.LibraryMarker.LibraryMarkerToJson (DRagLint.CLI.LibraryMarker.pas) ?, DRagLint.CLI.LibraryMarker.LibraryPendingNote (DRagLint.CLI.LibraryMarker.pas) ? (+3 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.LibraryMarker</para>
+  /// <para>Used by: declaration (DRagLint.CLI.LibraryMarker.pas) ?, DRagLint.CLI.Common.AddLibraryPendingNotes (DRagLint.CLI.Common.pas) ?, DRagLint.CLI.Common.NoteIndexFreshnessOnce (DRagLint.CLI.Common.pas) ?, DRagLint.CLI.FinishLibraryResolve (DRagLint.CLI.pas), DRagLint.CLI.LibraryMarker.LibraryMarkerFromJson (DRagLint.CLI.LibraryMarker.pas) (+3 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.Common, DRagLint.CLI.LibraryMarker</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TLibraryMarker = record
@@ -64,7 +64,7 @@ function LibraryMarkerToJson(const AMarker: TLibraryMarker): string;
 /// <returns>The marker; State = '' when absent or unparseable.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.AddLibraryPendingNotes (DRagLint.CLI.pas), DRagLint.CLI.ComputeInfoIndexVerdict (DRagLint.CLI.pas), DRagLint.CLI.NoteIndexFreshnessOnce (DRagLint.CLI.pas), DRagLint.CLI.PlanLibraryResolve (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.Common.AddLibraryPendingNotes (DRagLint.CLI.Common.pas), DRagLint.CLI.Common.NoteIndexFreshnessOnce (DRagLint.CLI.Common.pas), DRagLint.CLI.ComputeInfoIndexVerdict (DRagLint.CLI.pas), DRagLint.CLI.PlanLibraryResolve (DRagLint.CLI.pas)</para>
 /// <para>Calls: Default, TJSONObject</para>
 /// <para>Returns: Default(TLibraryMarker)</para>
 /// <para>Catches: Exception (swallowed)</para>
@@ -95,7 +95,7 @@ function DecideLibraryResolve(AWanted: Boolean; const AOldState: string; AHasBou
 /// <returns>A NOTE line saying the result is incomplete and how to repair it.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.NoteIndexFreshnessOnce (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.Common.NoteIndexFreshnessOnce (DRagLint.CLI.Common.pas)</para>
 /// <para>Calls: Format, FormatDateTime, UnixToDateTime</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

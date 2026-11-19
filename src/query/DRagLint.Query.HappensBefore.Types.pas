@@ -39,19 +39,29 @@ const
 type
   /// <summary>The verdicts of check-init (ruling HB2, plus the owner's UNKNOWN-CALLEE of 2026-11-17
   /// 13:56). Literals: VerdictCode.</summary>
-  /// <remarks>hvSet = proven: every write-before-use path holds. hvNeverSet = proven absence of any
+  /// <remarks>
+  /// hvSet = proven: every write-before-use path holds. hvNeverSet = proven absence of any
   /// writer (spec 6.2). hvMayBeUnset = everything else, "not proven safe", never a proof of a bad run.
   /// hvUnknownCallee = a MAY-BE-UNSET whose doubt includes the target passed to a callee with no
   /// source / no resolved signature (does it set it?); only the answer headline carries it, a judged
   /// use stays MAY-BE-UNSET. Exit 1 like every verdict but SET.
   /// Ordinal order is the badness order used by HbWorseVerdict: hvSet best, hvUnknownCallee worst.
-  /// Append only: renderers and tools index arrays by this type.</remarks>
+  /// Append only: renderers and tools index arrays by this type.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.HappensBefore.Types.pas) ?, DRagLint.Query.HappensBefore.AnswerEveryUse (DRagLint.Query.HappensBefore.pas) ?, DRagLint.Query.HappensBefore.Render.HbAnswerText (DRagLint.Query.HappensBefore.Render.pas), DRagLint.Query.HappensBefore.Types.HbWorseVerdict (DRagLint.Query.HappensBefore.Types.pas) ?, DRagLint.Query.HappensBefore.Types.VerdictCode (DRagLint.Query.HappensBefore.Types.pas) ?</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THbVerdict = (hvSet, hvNeverSet, hvMayBeUnset, hvUnknownCallee);
 
   /// <summary>Closed list of reason codes (spec 6.4, plus HB3 receiver-unproven, HB5
   /// relied-on-handler-order, the spec 5.1 guarded-test tag and the owner's unknown-callee: the answer
   /// holds the target passed to a callee with no source). Literals: ReasonCode.</summary>
-  /// <remarks>Append only; tools and the surface runner branch on the literals.</remarks>
+  /// <remarks>
+  /// Append only; tools and the surface runner branch on the literals.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.HappensBefore.Events.pas) ?, declaration (DRagLint.Query.HappensBefore.Fields.pas) ?, DRagLint.Query.HappensBefore.Events.HbIsNeverSet (DRagLint.Query.HappensBefore.Events.pas) ?, DRagLint.Query.HappensBefore.Fields.AddReason (DRagLint.Query.HappensBefore.Fields.pas) ?, DRagLint.Query.HappensBefore.SortedReasons (DRagLint.Query.HappensBefore.pas) (+18 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THbReason = (
     hrUnorderedRoot, hrEscapedRoutine, hrWriterConditional, hrWriterLaterUnit, hrWriterAfterUseSameRoutine,  // dl:ok unused-enum-value@75ab -- REVIEWED 2026-11-17 v152 HBSKEL: frozen check-init contract; the engine lanes (EVENTS, SOLVER, FIELDS, RECV, EVORD) name these values
     hrCalleeNotMust, hrIndirectCall, hrVirtualFanout, hrInterfaceCall, hrSoftWriter, hrNilWriteOnly,  // dl:ok unused-enum-value@c81b -- REVIEWED 2026-11-17 v152 HBSKEL: frozen check-init contract; the engine lanes (EVENTS, SOLVER, FIELDS, RECV, EVORD) name these values
@@ -60,23 +70,44 @@ type
     hrReliedOnHandlerOrder, hrReceiverUnproven, hrGuardedTest, hrUnknownCallee);  // dl:ok unused-enum-value@ac06 -- REVIEWED 2026-11-17 v152 HBSKEL: frozen check-init contract; the engine lanes (EVENTS, SOLVER, FIELDS, RECV, EVORD) name these values
 
   /// <summary>How a writer writes the target (spec 5.1, plan D5). Literals: HowCode.</summary>
-  /// <remarks>hwAssign .. hwDfmStream are resolved writes; hwAssignNil never counts as initialization
+  /// <remarks>
+  /// hwAssign .. hwDfmStream are resolved writes; hwAssignNil never counts as initialization
   /// for class / interface / pointer / procedural targets (HB4). hwUnresolved, hwWithOpaque and
-  /// hwAddressOf are SOFT writers: they never help prove SET and forbid NEVER-SET.</remarks>
+  /// hwAddressOf are SOFT writers: they never help prove SET and forbid NEVER-SET.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.HappensBefore.Events.pas), declaration (DRagLint.Query.HappensBefore.Types.pas), DRagLint.Query.HappensBefore.Events.TCollector.AddWriter (DRagLint.Query.HappensBefore.Events.pas), DRagLint.Query.HappensBefore.Events.TCollector.AssignHow (DRagLint.Query.HappensBefore.Events.pas), DRagLint.Query.HappensBefore.Types.HowCode (DRagLint.Query.HappensBefore.Types.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THbWriterHow = (hwAssign, hwAssignNil, hwVarArg, hwOutArg, hwCreateInto, hwDfmStream,
     hwUnresolved, hwWithOpaque, hwAddressOf);
 
   /// <summary>What the target is. Literals: TargetKindCode.</summary>
-  /// <remarks>htkUnresolved only appears in a scaffold answer or before target resolution ran.</remarks>
+  /// <remarks>
+  /// htkUnresolved only appears in a scaffold answer or before target resolution ran.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.HappensBefore.Types.pas), DRagLint.Query.HappensBefore.Types.TargetKindCode (DRagLint.Query.HappensBefore.Types.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THbTargetKind = (htkUnresolved, htkUnitVar, htkClassVar, htkInstanceField);  // dl:ok unused-enum-value@99d3 -- REVIEWED 2026-11-17 v152 HBSKEL: frozen check-init contract; the engine lanes (EVENTS, SOLVER, FIELDS, RECV, EVORD) name these values
 
   /// <summary>Proof scope: program order (unit / class vars, spec 5.4) or per instance (fields, 5.5).
   /// Literals: ScopeCode.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.HappensBefore.Types.pas), DRagLint.Query.HappensBefore.Types.ScopeCode (DRagLint.Query.HappensBefore.Types.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THbScope = (hsProgram, hsInstance);  // dl:ok unused-enum-value@923f -- REVIEWED 2026-11-17 v152 HBSKEL: frozen check-init contract; the engine lanes (EVENTS, SOLVER, FIELDS, RECV, EVORD) name these values
 
   /// <summary>One source position, optionally inside a routine.</summary>
-  /// <remarks>Line and Col are 1-based; Col = 0 means "the whole line" (an `--at file:line` without
-  /// a column). RoutineId = 0 when the site is not inside an indexed routine.</remarks>
+  /// <remarks>
+  /// Line and Col are 1-based; Col = 0 means "the whole line" (an `--at file:line` without
+  /// a column). RoutineId = 0 when the site is not inside an indexed routine.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.CheckInit.RunCheckInit (DRagLint.CLI.CheckInit.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.Query.HappensBefore.CheckInit (DRagLint.Query.HappensBefore.pas), DRagLint.Query.HappensBefore.Events.TCollector.MakeSite (DRagLint.Query.HappensBefore.Events.pas), DRagLint.Query.HappensBefore.Fields.SiteOf (DRagLint.Query.HappensBefore.Fields.pas) (+50 more)</para>
+  /// <para>Used in units: DRagLint.CLI.CheckInit, DRagLint.MCP.Server, DRagLint.Query.HappensBefore, DRagLint.Query.HappensBefore.Events, DRagLint.Query.HappensBefore.Fields, DRagLint.Query.HappensBefore.Handlers, DRagLint.Query.HappensBefore.Intra, DRagLint.Query.HappensBefore.Receiver, DRagLint.Query.HappensBefore.Render, DRagLint.Query.HappensBefore.Types</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THbSite = record
     FileName: string;
     Line: Integer;
@@ -88,6 +119,12 @@ type
   end;
 
   /// <summary>The variable / field asked about (JSON `target`).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.HappensBefore.Events.pas), declaration (DRagLint.Query.HappensBefore.Types.pas), DRagLint.Query.HappensBefore.Render.TargetJson (DRagLint.Query.HappensBefore.Render.pas)</para>
+  /// <para>Used in units: DRagLint.Query.HappensBefore.Events, DRagLint.Query.HappensBefore.Render, DRagLint.Query.HappensBefore.Types</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THbTarget = record
     QName: string;
     Kind: THbTargetKind;
@@ -103,6 +140,12 @@ type
   end;
 
   /// <summary>One writer row (JSON `writers[]`, plan D5 / ruling HB2).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.HappensBefore.Events.pas) ?, DRagLint.Query.HappensBefore.Events.TCollector.AddWriter (DRagLint.Query.HappensBefore.Events.pas), DRagLint.Query.HappensBefore.Events.TCollector.CallersOf (DRagLint.Query.HappensBefore.Events.pas) ?, DRagLint.Query.HappensBefore.Events.TCollector.Create (DRagLint.Query.HappensBefore.Events.pas) ?, DRagLint.Query.HappensBefore.Fields.TFieldSolver.LoadWrites (DRagLint.Query.HappensBefore.Fields.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.Query.HappensBefore, DRagLint.Query.HappensBefore.Events, DRagLint.Query.HappensBefore.Fields, DRagLint.Query.HappensBefore.Render, DRagLint.Query.HappensBefore.Types</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THbWriter = record
     Site: THbSite;
     How: THbWriterHow;
@@ -120,7 +163,13 @@ type
   end;
 
   /// <summary>One witness hop, printed root-first (JSON `witness[]`).</summary>
-  /// <remarks>Step is 1-based; the text renderer indents hop N by N-1 levels.</remarks>
+  /// <remarks>
+  /// Step is 1-based; the text renderer indents hop N by N-1 levels.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.HappensBefore.Fields.pas) ?, DRagLint.Query.HappensBefore.Fields.TFieldSolver.ClassBlockers (DRagLint.Query.HappensBefore.Fields.pas), DRagLint.Query.HappensBefore.Fields.TFieldSolver.MethodHop (DRagLint.Query.HappensBefore.Fields.pas), DRagLint.Query.HappensBefore.Fields.TFieldSolver.Run (DRagLint.Query.HappensBefore.Fields.pas), DRagLint.Query.HappensBefore.TSolver.JudgeUse (DRagLint.Query.HappensBefore.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.Query.HappensBefore, DRagLint.Query.HappensBefore.Fields, DRagLint.Query.HappensBefore.Types</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THbHop = record
     Step: Integer;
     Routine: string;
@@ -132,6 +181,12 @@ type
   end;
 
   /// <summary>The verdict for one judged use (JSON `uses[]`).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.HappensBefore.Receiver.pas) ?, DRagLint.Query.HappensBefore.AnswerEveryUse (DRagLint.Query.HappensBefore.pas), DRagLint.Query.HappensBefore.Fields.NoteReason (DRagLint.Query.HappensBefore.Fields.pas) ?, DRagLint.Query.HappensBefore.Fields.TFieldSolver.Run (DRagLint.Query.HappensBefore.Fields.pas), DRagLint.Query.HappensBefore.TSolver.Run (DRagLint.Query.HappensBefore.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.Query.HappensBefore, DRagLint.Query.HappensBefore.Fields, DRagLint.Query.HappensBefore.Receiver, DRagLint.Query.HappensBefore.Render, DRagLint.Query.HappensBefore.Types</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THbUseAnswer = record
     Site: THbSite;
     Verdict: THbVerdict;
@@ -144,6 +199,12 @@ type
   end;
 
   /// <summary>Root summary of the answer (JSON `roots`).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.HappensBefore.Types.pas)</para>
+  /// <para>Used in units: DRagLint.Query.HappensBefore.Types</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THbRootSummary = record
     /// <summary>Ordered root chain, display names in run order ("initialization of Boot", ...).</summary>
     Ordered: TArray<string>;
@@ -152,6 +213,12 @@ type
   end;
 
   /// <summary>Work spent on the answer (JSON `budget`).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.HappensBefore.Types.pas)</para>
+  /// <para>Used in units: DRagLint.Query.HappensBefore.Types</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THbBudget = record
     /// <summary>CFGs built.</summary>
     Routines: Integer;
@@ -166,9 +233,15 @@ type
   end;
 
   /// <summary>The whole check-init answer; Render turns it into JSON / text and an exit code.</summary>
-  /// <remarks>Verdict is the headline: the worst verdict over JudgedUses (HbWorseVerdict), or the target's
+  /// <remarks>
+  /// Verdict is the headline: the worst verdict over JudgedUses (HbWorseVerdict), or the target's
   /// verdict when no use is judged. Proven is True only for SET / NEVER-SET backed by a proof.
-  /// Reasons are answer-level codes (e.g. budget, multi-program) that belong to no single use.</remarks>
+  /// Reasons are answer-level codes (e.g. budget, multi-program) that belong to no single use.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.HappensBefore.Fields.pas) ?, DRagLint.CLI.CheckInit.RunCheckInit (DRagLint.CLI.CheckInit.pas) ?, DRagLint.Query.HappensBefore.CheckInit (DRagLint.Query.HappensBefore.pas), DRagLint.Query.HappensBefore.Fields.CheckInstanceField (DRagLint.Query.HappensBefore.Fields.pas), DRagLint.Query.HappensBefore.Fields.TFieldSolver.LoadWrites (DRagLint.Query.HappensBefore.Fields.pas) ? (+16 more)</para>
+  /// <para>Used in units: DRagLint.CLI.CheckInit, DRagLint.Query.HappensBefore, DRagLint.Query.HappensBefore.Fields, DRagLint.Query.HappensBefore.Receiver, DRagLint.Query.HappensBefore.Render, DRagLint.Query.HoverModel</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THbAnswer = record
     Target: THbTarget;
     Scope: THbScope;
@@ -187,6 +260,12 @@ type
   end;
 
   /// <summary>Query options from the CLI / MCP.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.HappensBefore.pas) ?, DRagLint.CLI.CheckInit.RunCheckInit (DRagLint.CLI.CheckInit.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.Query.HappensBefore.CheckInit (DRagLint.Query.HappensBefore.pas) ?, DRagLint.Query.HoverModel.AttachHoverSetBy (DRagLint.Query.HoverModel.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.CheckInit, DRagLint.MCP.Server, DRagLint.Query.HappensBefore, DRagLint.Query.HoverModel</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THbOptions = record
     /// <summary>Most CFGs per query; 0 = HB_DEFAULT_MAX_ROUTINES.</summary>
     MaxRoutines: Integer;
@@ -198,6 +277,12 @@ type
 
   /// <summary>A usage error found while answering (unknown / ambiguous target, a --at that names a
   /// different variable than the QName). The verb prints Message and Candidates and exits 2.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.CheckInit.RunCheckInit (DRagLint.CLI.CheckInit.pas) ?, DRagLint.Query.HappensBefore.CheckInit (DRagLint.Query.HappensBefore.pas), DRagLint.Query.HappensBefore.Events.TCollector.ResolveAt (DRagLint.Query.HappensBefore.Events.pas), DRagLint.Query.HappensBefore.Events.TCollector.ResolveName (DRagLint.Query.HappensBefore.Events.pas), DRagLint.Query.HappensBefore.Events.TCollector.ResolveTarget (DRagLint.Query.HappensBefore.Events.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.CLI.CheckInit, DRagLint.MCP.Server, DRagLint.Query.HappensBefore, DRagLint.Query.HappensBefore.Events, DRagLint.Query.HoverModel</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   EHbUsage = class(Exception)
   private
     FCandidates: TArray<string>;
@@ -205,6 +290,14 @@ type
     /// <summary>Creates the error with the candidate QNames to show the user.</summary>
     /// <param name="pMsg">One-line message.</param>
     /// <param name="pCandidates">Candidate QNames (empty for an unknown target).</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Query.HappensBefore.CheckInit (DRagLint.Query.HappensBefore.pas), DRagLint.Query.HappensBefore.Events.TCollector.ResolveAt (DRagLint.Query.HappensBefore.Events.pas), DRagLint.Query.HappensBefore.Events.TCollector.ResolveName (DRagLint.Query.HappensBefore.Events.pas), DRagLint.Query.HappensBefore.Events.TCollector.ResolveTarget (DRagLint.Query.HappensBefore.Events.pas)</para>
+    /// <para>Calls: Create</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FCandidates</para>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor CreateCandidates(const pMsg: string; const pCandidates: TArray<string>);
     /// <summary>Candidate QNames for an ambiguous target; empty otherwise.</summary>
     property Candidates: TArray<string> read FCandidates;
@@ -214,33 +307,75 @@ type
 /// UNKNOWN-CALLEE (owner ruling 2026-11-17 13:56).</summary>
 /// <param name="pVerdict">The verdict.</param>
 /// <returns>The literal used in JSON and text.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.HappensBefore.Render.HbAnswerJson (DRagLint.Query.HappensBefore.Render.pas), DRagLint.Query.HappensBefore.Render.HbAnswerText (DRagLint.Query.HappensBefore.Render.pas), DRagLint.Query.HappensBefore.Render.UseJson (DRagLint.Query.HappensBefore.Render.pas), DRagLint.Query.HoverModel.BuildSetBy (DRagLint.Query.HoverModel.pas)</para>
+/// <para>Returns: VERDICT_CODES[pVerdict]</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function VerdictCode(pVerdict: THbVerdict): string;
 
 /// <summary>The kebab-case literal of a reason (spec 6.4).</summary>
 /// <param name="pReason">The reason.</param>
 /// <returns>e.g. 'writer-later-unit'.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.HappensBefore.Render.ReasonsJson (DRagLint.Query.HappensBefore.Render.pas), DRagLint.Query.HappensBefore.Render.ReasonsText (DRagLint.Query.HappensBefore.Render.pas)</para>
+/// <para>Returns: REASON_CODES[pReason]</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReasonCode(pReason: THbReason): string;
 
 /// <summary>The literal of a writer's `how`: assign, assign-nil, var-arg, out-arg, create-into,
 /// dfm-stream, unresolved, with-opaque, address-of.</summary>
 /// <param name="pHow">The writer kind.</param>
 /// <returns>The literal.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.HappensBefore.Render.WriterJson (DRagLint.Query.HappensBefore.Render.pas), DRagLint.Query.HappensBefore.Render.WriterText (DRagLint.Query.HappensBefore.Render.pas)</para>
+/// <para>Returns: HOW_CODES[pHow]</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HowCode(pHow: THbWriterHow): string;
 
 /// <summary>The literal of a target kind: unresolved, unit-variable, class-var, instance-field.</summary>
 /// <param name="pKind">The kind.</param>
 /// <returns>The literal.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.HappensBefore.Render.HbAnswerText (DRagLint.Query.HappensBefore.Render.pas), DRagLint.Query.HappensBefore.Render.TargetJson (DRagLint.Query.HappensBefore.Render.pas)</para>
+/// <para>Returns: KIND_CODES[pKind]</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TargetKindCode(pKind: THbTargetKind): string;
 
 /// <summary>The literal of a scope: program or instance.</summary>
 /// <param name="pScope">The scope.</param>
 /// <returns>The literal.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.HappensBefore.Render.HbAnswerJson (DRagLint.Query.HappensBefore.Render.pas)</para>
+/// <para>Returns: SCOPE_CODES[pScope]</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ScopeCode(pScope: THbScope): string;
 
 /// <summary>The worse of two verdicts (hvSet &lt; hvNeverSet &lt; hvMayBeUnset &lt; hvUnknownCallee).</summary>
 /// <param name="pA">First verdict.</param>
 /// <param name="pB">Second verdict.</param>
 /// <returns>The worse one.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.HappensBefore.Fields.TFieldSolver.Run (DRagLint.Query.HappensBefore.Fields.pas), DRagLint.Query.HappensBefore.Receiver.ApplyReceiverProof (DRagLint.Query.HappensBefore.Receiver.pas), DRagLint.Query.HappensBefore.TSolver.Run (DRagLint.Query.HappensBefore.pas)</para>
+/// <para>Returns: if Ord(pA) &gt;= Ord(pB) then pA</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HbWorseVerdict(pA, pB: THbVerdict): THbVerdict;
 
 /// <summary>Parses `--at file:line[:col]`. A drive letter colon is part of the file name.</summary>
@@ -248,29 +383,72 @@ function HbWorseVerdict(pA, pB: THbVerdict): THbVerdict;
 /// <param name="pSite">The parsed site (FileName, Line, Col; Col = 0 when absent; Routine empty).</param>
 /// <returns>False when the file part is empty, the line is not a number &gt;= 1 or the column is
 /// not a number &gt;= 1.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CheckInit.RunCheckInit (DRagLint.CLI.CheckInit.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.Query.HappensBefore.CheckInit (DRagLint.Query.HappensBefore.pas)</para>
+/// <para>Calls: Default, DRagLint.Query.HappensBefore.Types.SplitLastColon, Trim, TryStrToInt</para>
+/// <para>Returns: False; (pSite.FileName &lt;&gt; '') and (pSite.Line &gt;= 1)</para>
+/// <para>Mutates: pSite (out)</para>
+/// <seealso cref="DRagLint.Query.HappensBefore.Types.SplitLastColon"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HbParseAt(const pAt: string; out pSite: THbSite): Boolean;
 
 /// <summary>Starts the wall-clock cap of the query on this thread (v152 HBFIX H3).</summary>
 /// <param name="pMaxSeconds">The cap in seconds; &lt;= 0 = no cap.</param>
-/// <remarks>Per thread (threadvar): one query at a time per thread. Every solver of check-init asks
-/// HbTimeUp before it builds a CFG and treats True like a spent --max-routines budget.</remarks>
+/// <remarks>
+/// Per thread (threadvar): one query at a time per thread. Every solver of check-init asks
+/// HbTimeUp before it builds a CFG and treats True like a spent --max-routines budget.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.HappensBefore.CheckInit (DRagLint.Query.HappensBefore.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure HbStartClock(pMaxSeconds: Double);
 
 /// <summary>True once the cap started by HbStartClock has run out; latches HbTimedOut.</summary>
 /// <returns>False when no cap is in force.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.HappensBefore.Fields.TFieldSolver.Solve (DRagLint.Query.HappensBefore.Fields.pas), DRagLint.Query.HappensBefore.Receiver.TRecvSolver.Solve (DRagLint.Query.HappensBefore.Receiver.pas), DRagLint.Query.HappensBefore.TSolver.RawSolve (DRagLint.Query.HappensBefore.pas), DRagLint.Query.HappensBefore.TSolver.Run (DRagLint.Query.HappensBefore.pas)</para>
+/// <para>Returns: (GHbDeadline &lt;&gt; 0) and (TStopwatch.GetTimeStamp &gt;= GHbDeadline)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HbTimeUp: Boolean;
 
 /// <summary>True when HbTimeUp answered True since the last HbStartClock.</summary>
 /// <returns>Whether the cap stopped the current query.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.HappensBefore.FinishLimits (DRagLint.Query.HappensBefore.pas)</para>
+/// <para>Returns: GHbTimedOut</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HbTimedOut: Boolean;
 
 /// <summary>The why text of a use the budget left unproven: 'stopped after N s (--max-seconds)' when the
 /// wall-clock cap ran out, else 'the --max-routines budget ran out'.</summary>
 /// <returns>The text, without the 'why not SET: ' prefix.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.HappensBefore.Fields.TFieldSolver.Run (DRagLint.Query.HappensBefore.Fields.pas), DRagLint.Query.HappensBefore.Receiver.TRecvSolver.FailNotSolved (DRagLint.Query.HappensBefore.Receiver.pas), DRagLint.Query.HappensBefore.TSolver.Run (DRagLint.Query.HappensBefore.pas)</para>
+/// <para>Calls: DRagLint.Query.HappensBefore.Types.HbCapText</para>
+/// <para>Returns: if GHbTimedOut then 'stopped after ' + HbCapText + ' s (--max-seconds)'</para>
+/// <para>Effect-free (proven)</para>
+/// <seealso cref="DRagLint.Query.HappensBefore.Types.HbCapText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HbBudgetWhy: string;
 
 /// <summary>`N` of 'stopped after N s': the cap in force, formatted with up to three decimals.</summary>
 /// <returns>e.g. '60' or '0.001'; '0' when no cap is in force.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.HappensBefore.FinishLimits (DRagLint.Query.HappensBefore.pas), DRagLint.Query.HappensBefore.Types.HbBudgetWhy (DRagLint.Query.HappensBefore.Types.pas)</para>
+/// <para>Calls: FormatFloat</para>
+/// <para>Returns: FormatFloat('0.###', GHbCapSeconds, TFormatSettings.Invariant)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HbCapText: string;
 
 implementation

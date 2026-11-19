@@ -60,7 +60,7 @@ type
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Charts.Producer.Delphi.TDelphiProducer.Produce (DRagLint.Charts.Producer.Delphi.pas)</para>
 /// <para>Calls: DRagLint.Charts.Ask.AnswerIndexLines, DRagLint.Charts.Ask.BundleSlug, DRagLint.Charts.Ask.DotAnswerRows, DRagLint.Charts.Ask.IsEmptyDir, DRagLint.Charts.Ask.LastSegments, DRagLint.Charts.Ask.MetaJson, DRagLint.Charts.Ask.MoveOver, DRagLint.Charts.Ask.RegenerateText, DRagLint.Charts.Ask.ReportCommandText, DRagLint.Charts.Ask.RunEmitter (+12 more)</para>
-/// <para>Complexity: 13 (cyclomatic, outer body), 71 lines (full implementation)</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 71 lines (full implementation)</para>
 /// <para>Catches: Exception (re-raise)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Charts.Ask.AnswerIndexLines"/>
@@ -142,7 +142,7 @@ function AnswerIndexLines(const pArgs: TQuestionArgs): TArray<string>;
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Charts.Ask.AskChartQuestion (DRagLint.Charts.Ask.pas)</para>
 /// <para>Calls: Copy, DRagLint.Charts.Ask.CapHow, DRagLint.Charts.Ask.HtmlDecode, DRagLint.Charts.Ask.Scrub, DRagLint.Charts.Ask.TrimWs, DRagLint.Charts.Ask.UnescapeDataString, DRagLint.Charts.Text.FileNameOf, Format, StrToIntDef</para>
-/// <para>Complexity: 16 (cyclomatic, outer body), 71 lines (full implementation)</para>
+/// <para>Complexity: 19 (cyclomatic, outer body), 71 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Charts.Ask.CapHow"/>
 /// <seealso cref="DRagLint.Charts.Ask.HtmlDecode"/>
 /// <seealso cref="DRagLint.Charts.Ask.Scrub"/>
@@ -165,7 +165,7 @@ function DotAnswerRows(const pDotLines: TArray<string>; const pRegenerate: strin
 /// <para>Called from: DRagLint.Charts.Ask.DotAnswerRows (DRagLint.Charts.Ask.pas)</para>
 /// <para>Calls: CharInSet, Copy, PosEx, StrToIntDef</para>
 /// <para>Returns: pText; SB.ToString</para>
-/// <para>Complexity: 19 (cyclomatic, outer body), 41 lines (full implementation)</para>
+/// <para>Complexity: 20 (cyclomatic, outer body), 41 lines (full implementation)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function HtmlDecode(const pText: string): string;

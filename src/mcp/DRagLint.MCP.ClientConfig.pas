@@ -133,7 +133,7 @@ function McpEntryText(pClient: TMcpClient; const pEngine, pDbPath: string): stri
 /// Prints one block per target (Target, Path, Action, Backup, Before, After) or, with --json, one JSON
 /// array of those objects (plus Error and ExitCode). A refusal's reason also goes to stderr.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
 /// <para>Calls: Default, DRagLint.MCP.ClientConfig.ApplyMcpConfig, DRagLint.MCP.ClientConfig.ParseFlags, DRagLint.MCP.ClientConfig.ResultJson, DRagLint.MCP.ClientConfig.UsageError, DRagLint.MCP.ClientConfig.WriteResultText, Writeln</para>
 /// <para>Returns: EXIT_OK; Res.ExitCode</para>
 /// <seealso cref="DRagLint.MCP.ClientConfig.ApplyMcpConfig"/>
@@ -157,9 +157,9 @@ function RunMcpConfigVerbFromCommandLine: Integer;
 /// NOTHING, so nothing is written. --home-dir / --appdata-dir are passed on to mcp-config (they move where the client
 /// files are looked for). Each step's output is echoed under a "step n/4" heading.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
 /// <para>Calls: Default, DRagLint.Charts.Process.QuoteArg, DRagLint.MCP.ClientConfig.EngineCommand, DRagLint.MCP.ClientConfig.IndexPathFrom, DRagLint.MCP.ClientConfig.InitUsage, DRagLint.MCP.ClientConfig.ParseInitFlags, DRagLint.MCP.ClientConfig.RunStep, ExpandFileName, Format, Writeln</para>
-/// <para>Returns: EXIT_SETUP; EXIT_OK; RunStep(STEP_REGISTER, 'register the project in the manifest', RegArgs, Out1); RunStep(STEP_INDEX, 'index the project', IdxArgs, Out1); RunStep(STEP_RESOLVE, 'find the project''s index', ResArgs, Out1); EXIT_REFUSED</para>
+/// <para>Returns: EXIT_SETUP; EXIT_OK; RunStep(STEP_REGISTER, 'register the project in the manifest', RegArgs, Out1); RunStep(STEP_INDEX, 'index the project', IdxArgs, Out1); RunStep(STEP_RESOLVE, 'find the project''s index', ResArgs, Out1); EXIT_REFUSED; RunStep(STEP_WIRE, 'wire Claude Code, VS Code and Cursor', 'mcp-config --all --db ' + QuoteArg(Db) + Homes, Out1)</para>
 /// <para>Complexity: 10 (cyclomatic, outer body), 43 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Charts.Process.QuoteArg"/>
 /// <seealso cref="DRagLint.MCP.ClientConfig.EngineCommand"/>

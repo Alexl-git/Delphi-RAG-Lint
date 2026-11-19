@@ -139,8 +139,9 @@ procedure CmpCollect(const ANode: TTSNode; const AType: string; AList: TList<TTS
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.V151.CMP.TCmpRun.Emit (DRagLint.V151.CMP.pas)</para>
-/// <para>Calls: Default, Integer, TreeSitter.TTSNodeHelper.EndPoint, TreeSitter.TTSNodeHelper.StartPoint</para>
+/// <para>Calls: Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol, Integer, TreeSitter.TTSNodeHelper.EndPoint, TreeSitter.TTSNodeHelper.StartPoint</para>
 /// <para>Returns: Default(TLintFinding)</para>
+/// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol"/>
 /// <seealso cref="TreeSitter.TTSNodeHelper.EndPoint"/>
 /// <seealso cref="TreeSitter.TTSNodeHelper.StartPoint"/>
 /// <!-- drag-lint:auto END -->

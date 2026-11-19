@@ -73,7 +73,7 @@ type
   /// for a human reader: fmDryRun is the one a script can branch on without
   /// parsing a diff.</para>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Format.Yadf.pas), DRagLint.CLI.DoFormat (DRagLint.CLI.pas), DRagLint.Format.Yadf.TYadfFormatter.Format (DRagLint.Format.Yadf.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Format.Yadf.pas), DRagLint.CLI.Format.DoFormat (DRagLint.CLI.Format.pas), DRagLint.Format.Yadf.TYadfFormatter.Format (DRagLint.Format.Yadf.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TFormatMode = (fmApply, fmDryRun, fmDiff);
@@ -94,8 +94,8 @@ type
   /// to see WHICH binary was rejected, which was exactly what the old
   /// single-line failure could not tell them.</para>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Format.Yadf.pas), DRagLint.CLI.DoFormat (DRagLint.CLI.pas), DRagLint.Format.Yadf.TYadfFormatter.Format (DRagLint.Format.Yadf.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Format.Yadf</para>
+  /// <para>Used by: declaration (DRagLint.Format.Yadf.pas), DRagLint.CLI.Format.DoFormat (DRagLint.CLI.Format.pas), DRagLint.Format.Yadf.TYadfFormatter.Format (DRagLint.Format.Yadf.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.Format, DRagLint.Format.Yadf</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TFormatResult = record
@@ -114,8 +114,8 @@ type
   /// Every entry point is a class function; the type holds no state.
   /// Not thread-safe with respect to the file it is rewriting.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoFormat (DRagLint.CLI.pas)</para>
-  /// <para>Used in units: DRagLint.CLI</para>
+  /// <para>Used by: DRagLint.CLI.Format.DoFormat (DRagLint.CLI.Format.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.Format</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TYadfFormatter = class  // dl:ok high-response@30e2 -- RFC 70 is dominated by SpawnAndCapture's WinAPI call list (CreatePipe/CreateProcessW/ReadFile/WaitForSingleObject); one cohesive operation that splitting would only obscure
@@ -138,9 +138,9 @@ type
       /// what the unit DECLARES.</para>
       /// <para>Touches the file system and the registry.</para>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.ApplyPositionalProjectPrecedence (DRagLint.CLI.pas) ?, DRagLint.CLI.CheckConvertIgnoredDefaults (DRagLint.CLI.pas) ?, DRagLint.CLI.DoFormat (DRagLint.CLI.pas), DRagLint.CLI.LoadConfigDefaults (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferenceLines (DRagLint.CLI.pas) ? (+213 more)</para>
+      /// <para>Called from: DRagLint.CLI.ApplyPositionalProjectPrecedence (DRagLint.CLI.pas) ?, DRagLint.CLI.CheckConvertIgnoredDefaults (DRagLint.CLI.pas) ?, DRagLint.CLI.Format.DoFormat (DRagLint.CLI.Format.pas), DRagLint.CLI.Format.DoPurgeLocals (DRagLint.CLI.Format.pas) ?, DRagLint.CLI.LoadConfigDefaults (DRagLint.CLI.pas) ? (+137 more)</para>
       /// <para>Calls: DRagLint.Format.Yadf.TYadfFormatter.CompareVersionStr, DRagLint.Format.Yadf.TYadfFormatter.FindYadfPath, DRagLint.Format.Yadf.TYadfFormatter.FirstDivergence, DRagLint.Format.Yadf.TYadfFormatter.ReadFileVersion, DRagLint.Format.Yadf.TYadfFormatter.SimpleDiff, DRagLint.Format.Yadf.TYadfFormatter.SpawnAndCapture, DRagLint.Format.Yadf.TYadfFormatter.SymbolFingerprint</para>
-      /// <para>Complexity: 20 (cyclomatic, outer body), 227 lines (full implementation)</para>
+      /// <para>Complexity: 23 (cyclomatic, outer body), 227 lines (full implementation)</para>
       /// <para>Catches: Exception (empty); Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.CompareVersionStr"/>

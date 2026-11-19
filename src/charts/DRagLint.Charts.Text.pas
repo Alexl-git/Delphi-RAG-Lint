@@ -49,6 +49,7 @@ type
     /// array of a class type can likewise carry nil, so nil rows are dropped before counting.
     /// Rows are not copied; Shown shares the caller's references.
     /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.MemberAccess.CollectMemberAccess (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.AddCluster (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.CrossesBoundary.Emit (DRagLint.Charts.Q.CrossesBoundary.pas) (+9 more)</para>
     /// <para>Calls: Copy, Default, GetTypeKind, PPointer, pSites</para>
     /// <para>Returns: Default(TRanked&lt;T&gt;)</para>
     /// <para>Directives: static</para>

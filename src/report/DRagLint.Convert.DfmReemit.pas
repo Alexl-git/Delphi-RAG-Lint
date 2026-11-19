@@ -377,8 +377,8 @@ type
   /// block, or no #convert header in the rules. Error carries the reason when Ok
   /// is False.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas) ?, DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.Apply.BuildApplyPlan.SpliceIntoParent (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.DfmReemit.ReemitBlock (DRagLint.Convert.DfmReemit.pas) (+2 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit</para>
+  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas) ?, DRagLint.CLI.Convert.DoConvertReemit (DRagLint.CLI.Convert.pas) ?, DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.Apply.BuildApplyPlan.SpliceIntoParent (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.DfmReemit.ReemitBlock (DRagLint.Convert.DfmReemit.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.CLI.Convert, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReemitResult = record
@@ -456,7 +456,7 @@ function ParseDfmBlock(const ABlockText: string; out ARoot: TReemitDfmNode): Boo
 /// Report.DefaultsResolved, no divergence note), no #default is written, and a
 /// #mapping whose source it does not stream is skipped silently.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitBlock.HandleNested (DRagLint.Convert.DfmReemit.pas)</para>
+/// <para>Called from: DRagLint.CLI.Convert.DoConvertReemit (DRagLint.CLI.Convert.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitBlock.HandleNested (DRagLint.Convert.DfmReemit.pas)</para>
 /// <para>Calls: DRagLint.Convert.DfmReemit.ConvertBlockFor, DRagLint.Convert.DfmReemit.ParseDfmBlock, DRagLint.Convert.DfmReemit.ReemitBlock, DRagLint.Convert.DfmReemit.RulesOfBlock, DRagLint.Convert.Rules.WithoutUnreachableRules</para>
 /// <seealso cref="DRagLint.Convert.DfmReemit.ConvertBlockFor"/>
 /// <seealso cref="DRagLint.Convert.DfmReemit.ParseDfmBlock"/>

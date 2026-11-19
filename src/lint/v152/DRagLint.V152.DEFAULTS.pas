@@ -18,31 +18,96 @@ uses
 
 type
   /// <summary>Checker entry points of v152 lane DEFAULTS; every method is called by TV151Dispatch.</summary>
-  /// <remarks>Stateless; class methods only. A method that has nothing to check returns nil.
-  /// Findings for ids not declared in Catalog are a lane bug: --rule would never reach them.</remarks>
+  /// <remarks>
+  /// Stateless; class methods only. A method that has nothing to check returns nil.
+  /// Findings for ids not declared in Catalog are a lane bug: --rule would never reach them.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.V151.Dispatch.BuildLanes (DRagLint.V151.Dispatch.pas)</para>
+  /// <para>Used in units: DRagLint.V151.Dispatch</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TV152DEFAULTSRules = class
   public
     /// <summary>Declares every rule id this lane may emit: new ids (V151Rule) and host ids of in-place expansions (V151Host).</summary>
     /// <param name="ADecls">List to append to; owned by the caller.</param>
-    /// <remarks>Called ONCE at start-up (unit initialization of DRagLint.V151.Dispatch); must not touch files or stores.</remarks>
+    /// <remarks>
+    /// Called ONCE at start-up (unit initialization of DRagLint.V151.Dispatch); must not touch files or stores.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.Dispatch.BuildLanes (DRagLint.V151.Dispatch.pas)</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V152.DEFAULTS.TV152DEFAULTSRules.CheckDfm"/>
+    /// <seealso cref="DRagLint.V152.DEFAULTS.TV152DEFAULTSRules.CheckFile"/>
+    /// <seealso cref="DRagLint.V152.DEFAULTS.TV152DEFAULTSRules.CheckProject"/>
+    /// <seealso cref="DRagLint.V152.DEFAULTS.TV152DEFAULTSRules.CheckRawBytes"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure Catalog(const ADecls: TList<TV151RuleDecl>); static;
     /// <summary>Per-file check of one .pas (parse tree, index, library).</summary>
     /// <param name="ACtx">The file being linted; Store / LibStore may be nil.</param>
     /// <returns>Findings; nil when none.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.Dispatch.BuildLanes (DRagLint.V151.Dispatch.pas)</para>
+    /// <para>Returns: nil</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V152.DEFAULTS.TV152DEFAULTSRules.Catalog"/>
+    /// <seealso cref="DRagLint.V152.DEFAULTS.TV152DEFAULTSRules.CheckDfm"/>
+    /// <seealso cref="DRagLint.V152.DEFAULTS.TV152DEFAULTSRules.CheckProject"/>
+    /// <seealso cref="DRagLint.V152.DEFAULTS.TV152DEFAULTSRules.CheckRawBytes"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>; static;
     /// <summary>Per-file check of the .pas unit's sibling form file.</summary>
     /// <param name="ACtx">The file being linted; ACtx.DfmPath is not empty when this is called.</param>
     /// <returns>Findings (FilePath may be the .dfm); nil when none.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.Dispatch.BuildLanes (DRagLint.V151.Dispatch.pas)</para>
+    /// <para>Returns: nil</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V152.DEFAULTS.TV152DEFAULTSRules.Catalog"/>
+    /// <seealso cref="DRagLint.V152.DEFAULTS.TV152DEFAULTSRules.CheckFile"/>
+    /// <seealso cref="DRagLint.V152.DEFAULTS.TV152DEFAULTSRules.CheckProject"/>
+    /// <seealso cref="DRagLint.V152.DEFAULTS.TV152DEFAULTSRules.CheckRawBytes"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>; static;
     /// <summary>Per-file check of the raw bytes of the .pas and of its sibling .dfm, before any decoding.</summary>
     /// <param name="ACtx">The file being linted.</param>
     /// <param name="AFilePath">The file the bytes come from (ACtx.Path or ACtx.DfmPath).</param>
     /// <param name="ABytes">The file content exactly as on disk.</param>
     /// <returns>Findings; nil when none.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.Dispatch.BuildLanes (DRagLint.V151.Dispatch.pas)</para>
+    /// <para>Returns: nil</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V152.DEFAULTS.TV152DEFAULTSRules.Catalog"/>
+    /// <seealso cref="DRagLint.V152.DEFAULTS.TV152DEFAULTSRules.CheckDfm"/>
+    /// <seealso cref="DRagLint.V152.DEFAULTS.TV152DEFAULTSRules.CheckFile"/>
+    /// <seealso cref="DRagLint.V152.DEFAULTS.TV152DEFAULTSRules.CheckProject"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>; static;
     /// <summary>Project-wide check, lint-all only, run once after the per-file loop.</summary>
     /// <param name="ACtx">The project; Store is not nil.</param>
     /// <returns>Findings; nil when none.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.Dispatch.BuildLanes (DRagLint.V151.Dispatch.pas)</para>
+    /// <para>Returns: nil</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V152.DEFAULTS.TV152DEFAULTSRules.Catalog"/>
+    /// <seealso cref="DRagLint.V152.DEFAULTS.TV152DEFAULTSRules.CheckDfm"/>
+    /// <seealso cref="DRagLint.V152.DEFAULTS.TV152DEFAULTSRules.CheckFile"/>
+    /// <seealso cref="DRagLint.V152.DEFAULTS.TV152DEFAULTSRules.CheckRawBytes"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>; static;
   end;
 
@@ -53,19 +118,41 @@ const
 /// <summary>Parses the text of an exempt-class list (PLAN 1.52 D3).</summary>
 /// <param name="AText">One class name per line; a line starting with # (after trimming) is a comment; blank lines are skipped.</param>
 /// <returns>The class names, trimmed, in file order.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V152.DEFAULTS.V152FormObjectExemptList (DRagLint.V152.DEFAULTS.pas)</para>
+/// <para>Calls: Trim</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function V152ParseExemptList(const AText: string): TArray<string>;
 
 /// <summary>The classes form-object-without-field never reports for one run.</summary>
 /// <param name="ACfg">The run configuration: its "exempt_classes" always count; the shipped list
 /// rules\form-object-without-field.exempt.txt beside the exe counts unless "use_default_list" is false.</param>
 /// <returns>Class names, possibly with a trailing * wildcard; empty when nothing is exempt.</returns>
-/// <remarks>A missing shipped file is an empty list, never an error. Reads one small file per call.</remarks>
+/// <remarks>
+/// A missing shipped file is an empty list, never an error. Reads one small file per call.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.DFMA.CheckObjectsWithoutField (DRagLint.V151.DFMA.pas)</para>
+/// <para>Calls: DRagLint.Lint.Config.TLintConfig.FormObjectUseDefaultList, DRagLint.V152.DEFAULTS.V152ParseExemptList, ParamStr</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Lint.Config.TLintConfig.FormObjectUseDefaultList"/>
+/// <seealso cref="DRagLint.V152.DEFAULTS.V152ParseExemptList"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function V152FormObjectExemptList(const ACfg: TLintConfig): TArray<string>;
 
 /// <summary>Whether a form object class is on an exempt list.</summary>
 /// <param name="AList">Entries from V152FormObjectExemptList.</param>
 /// <param name="AClass">Class name of the form object; a unit-qualified name is reduced to its last segment.</param>
 /// <returns>True when an entry equals the class (case-insensitive) or, with a trailing *, is its prefix.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.DFMA.CheckObjectsWithoutField (DRagLint.V151.DFMA.pas)</para>
+/// <para>Calls: Copy, EndsStr, LastDelimiter, SameText, StartsText</para>
+/// <para>Returns: False</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function V152IsExemptClass(const AList: TArray<string>; const AClass: string): Boolean;
 
 implementation

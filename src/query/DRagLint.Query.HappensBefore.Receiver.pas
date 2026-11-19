@@ -64,10 +64,22 @@ const
 /// <param name="pMaxRoutines">Most routines solved (CFGs built) by the proof; &lt;= 0 means
 /// HB_DEFAULT_MAX_ROUTINES. Running out answers receiver-unproven (budget), never SET.</param>
 /// <returns>The number of uses turned SET.</returns>
-/// <remarks>Read-only. Not thread-safe (the shared parse cache). Deterministic. Idempotent: a second call
+/// <remarks>
+/// Read-only. Not thread-safe (the shared parse cache). Deterministic. Idempotent: a second call
 /// changes nothing (proven uses are SET, unproven ones carry receiver-unproven and are no longer
 /// eligible). SET is a proof under spec 6.1; use-after-free (`F := nil`, Free) stays out of scope as in
-/// the constructor model.</remarks>
+/// the constructor model.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.HappensBefore.CheckInit (DRagLint.Query.HappensBefore.pas)</para>
+/// <para>Calls: DRagLint.Query.HappensBefore.Receiver.AddReason, DRagLint.Query.HappensBefore.Receiver.Eligible, DRagLint.Query.HappensBefore.Receiver.SortedReasons, DRagLint.Query.HappensBefore.Receiver.TRecvSolver.Create, DRagLint.Query.HappensBefore.Receiver.TRecvSolver.Prepare, DRagLint.Query.HappensBefore.Receiver.TRecvSolver.ProveUse, DRagLint.Query.HappensBefore.Receiver.TRecvSolver.SolvedCount, DRagLint.Query.HappensBefore.Types.HbWorseVerdict</para>
+/// <para>Complexity: 18 (cyclomatic, outer body), 59 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Query.HappensBefore.Receiver.AddReason"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.Receiver.Eligible"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.Receiver.SortedReasons"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.Receiver.TRecvSolver.Create"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.Receiver.TRecvSolver.Prepare"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ApplyReceiverProof(const pIndex: TChartsIndex; const pStore: ISymbolStore; var pAnswer: THbAnswer;
   pMaxRoutines: Integer): Integer;
 

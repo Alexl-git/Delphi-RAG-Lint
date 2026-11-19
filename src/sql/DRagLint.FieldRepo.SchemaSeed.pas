@@ -18,16 +18,27 @@ uses
 type
   /// <summary>Seed = first fill of an EMPTY repository (repo seed-fb); refresh = the old
   /// TableTools "Update Fields Info" on a filled one (repo refresh-schema).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.FieldRepo.SchemaSeed.pas), DRagLint.CLI.Repo.RepoSeed (DRagLint.CLI.Repo.pas), DRagLint.FieldRepo.SchemaSeed.RunSchemaSeed (DRagLint.FieldRepo.SchemaSeed.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSchemaSeedMode = (ssmSeed, ssmRefresh);
 
   /// <summary>The Firebird schema facts the seed reads. The caller owns the datasets.</summary>
-  /// <remarks>Required columns (names case-insensitive; trailing blanks are trimmed):
+  /// <remarks>
+  /// Required columns (names case-insensitive; trailing blanks are trimmed):
   /// Fields: TABLE_NAME, FIELD_NAME, DEFAULT_SOURCE, FIELD_LENGTH, FIELD_TYPE,
   /// FIELD_SUB_TYPE, NULL_FLAG, CHARACTER_LEN, FIELD_SCALE -- one row per column of a
   /// user table (no views, no system tables), ordered by table then field position
   /// (the TableTools qryFields). RelationFields: RELATION_NAME, FIELD_NAME of EVERY
   /// relation (the orphan check). PrimaryKeys: TABLE_NAME, FIELD_NAME, FIELD_POSITION, one
-  /// row per primary-key segment. Generators: GENERATOR_NAME. A NULL integer reads as 0.</remarks>
+  /// row per primary-key segment. Generators: GENERATOR_NAME. A NULL integer reads as 0.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.FieldRepo.SchemaSeed.pas) ?, DRagLint.CLI.Repo.RepoSeed (DRagLint.CLI.Repo.pas) ?, DRagLint.FieldRepo.SchemaSeed.OpenSchemaSources (DRagLint.FieldRepo.SchemaSeed.pas), DRagLint.FieldRepo.SchemaSeed.RunSchemaSeed (DRagLint.FieldRepo.SchemaSeed.pas) ?, DRagLint.FieldRepo.SchemaSeed.TSeedRun.Create (DRagLint.FieldRepo.SchemaSeed.pas) ? (+1 more)</para>
+  /// <para>Used in units: DRagLint.CLI.Repo, DRagLint.FieldRepo.SchemaSeed</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSchemaSources = record
     Fields: TDataSet;
     RelationFields: TDataSet;
@@ -36,10 +47,16 @@ type
   end;
 
   /// <summary>What one seed / refresh run did (or, in a dry run, would do).</summary>
-  /// <remarks>Diff lines: "+ FIELD T.F", "~ FIELD T.F COL: old -> new",
+  /// <remarks>
+  /// Diff lines: "+ FIELD T.F", "~ FIELD T.F COL: old -> new",
   /// "! FIELD T.F ISCALCULATED (column vanished)", "+ DATASET T DS_ID=n",
   /// "~ DATASET T DS_ID=n". Warnings: a (type, sub_type) without a dictionary entry,
-  /// a value cut to its column length, a dataset skipped for an over-long KEY_FIELD.</remarks>
+  /// a value cut to its column length, a dataset skipped for an over-long KEY_FIELD.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.FieldRepo.SchemaSeed.pas) ?, DRagLint.CLI.Repo.PrintSeedResult (DRagLint.CLI.Repo.pas) ?, DRagLint.CLI.Repo.RepoSeed (DRagLint.CLI.Repo.pas) ?, DRagLint.FieldRepo.SchemaSeed.TSeedRun.Execute (DRagLint.FieldRepo.SchemaSeed.pas), DRagLint.FieldRepo.SchemaSeed.TSeedRun.UpdateFields (DRagLint.FieldRepo.SchemaSeed.pas) ? (+3 more)</para>
+  /// <para>Used in units: DRagLint.CLI.Repo, DRagLint.FieldRepo.SchemaSeed</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSchemaSeedResult = record
     Added: Integer;
     Changed: Integer;
@@ -63,7 +80,8 @@ type
 /// <exception cref="ERepoError">ssmSeed on a non-empty repository, or a source dataset
 /// is nil or lacks a required column (the message names it). Any other error rolls the
 /// whole run back and is re-raised.</exception>
-/// <remarks>Per column of Fields (UpdateFieldsInfo): a new row gets the TableTools
+/// <remarks>
+/// Per column of Fields (UpdateFieldsInfo): a new row gets the TableTools
 /// new-row values (DISPLAY_LABEL '', VISIBLE False, ALIGNMENT -2, ...); every row gets the
 /// schema-derived columns FIELD_AS_TYPE, VAR_TYPE (ENUMTYPE when CUSTOM_TYPE or ISENUM),
 /// FIELD_SIZE, STRING_SIZE, NULL_FLAG, FIELD_KIND = 1, FIELD_TYPE, FIELD_SUBTYPE,
@@ -76,7 +94,18 @@ type
 /// table of DL_FIELDS_INFO (not RDB$/MON$/SEC$/FIB$) that has a primary key; the SQL lists
 /// the non-calculated, non-lookup fields in FIELD_NAME order; an existing row (matched by
 /// UPDATE_TABLE_NAME) keeps its DS_ID, UPDATE_ONLY_MODIFIED_FIELDS and CONDITIONS and is
-/// rewritten only when its generated text changed; a new row gets MAX(DS_ID) + 1.</remarks>
+/// rewritten only when its generated text changed; a new row gets MAX(DS_ID) + 1.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Repo.RepoSeed (DRagLint.CLI.Repo.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.Schema.RepoIsEmpty, DRagLint.FieldRepo.SchemaSeed.TSeedRun.Create, DRagLint.FieldRepo.SchemaSeed.TSeedRun.Execute</para>
+/// <para>Returns: Run.Execute</para>
+/// <para>Catches: Exception (re-raise)</para>
+/// <para>Transaction: starts, commits, rolls back</para>
+/// <seealso cref="DRagLint.FieldRepo.Schema.RepoIsEmpty"/>
+/// <seealso cref="DRagLint.FieldRepo.SchemaSeed.TSeedRun.Create"/>
+/// <seealso cref="DRagLint.FieldRepo.SchemaSeed.TSeedRun.Execute"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunSchemaSeed(pTarget: TFDConnection; const pSources: TSchemaSources;  // dl:ok unused-public-symbol@d7b0 -- consumed by lane TTE (CLI.Repo) and SchemaSeedTests
   pMode: TSchemaSeedMode; pDryRun: Boolean; pStampUtc: TDateTime): TSchemaSeedResult;
 
@@ -85,10 +114,26 @@ function RunSchemaSeed(pTarget: TFDConnection; const pSources: TSchemaSources;  
 /// <returns>Open datasets owned by the caller; release them with FreeSchemaSources.</returns>
 /// <exception cref="EFDDBEngineException">Raised by FireDAC when a query fails; the
 /// datasets opened so far are freed first.</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Repo.RepoSeed (DRagLint.CLI.Repo.pas)</para>
+/// <para>Calls: Default, DRagLint.FieldRepo.SchemaSeed.FreeSchemaSources, DRagLint.FieldRepo.SchemaSeed.OpenSchemaSources.OpenQuery</para>
+/// <para>Returns: Default(TSchemaSources)</para>
+/// <para>Catches: Exception (re-raise)</para>
+/// <seealso cref="DRagLint.FieldRepo.SchemaSeed.FreeSchemaSources"/>
+/// <seealso cref="DRagLint.FieldRepo.SchemaSeed.OpenSchemaSources.OpenQuery"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function OpenSchemaSources(pFb: TFDConnection): TSchemaSources;  // dl:ok unused-public-symbol@0b64 -- consumed by lane TTE (CLI.Repo)
 
 /// <summary>Frees the datasets of pSources and sets them to nil.</summary>
 /// <param name="pSources">Sources from OpenSchemaSources; nil members are skipped.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Repo.RepoSeed (DRagLint.CLI.Repo.pas), DRagLint.FieldRepo.SchemaSeed.OpenSchemaSources (DRagLint.FieldRepo.SchemaSeed.pas)</para>
+/// <para>Calls: FreeAndNil</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure FreeSchemaSources(var pSources: TSchemaSources);  // dl:ok unused-public-symbol@9833 -- consumed by lane TTE (CLI.Repo)
 
 implementation

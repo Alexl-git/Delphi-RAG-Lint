@@ -72,20 +72,13 @@ const
 /// would exit 0 exits 3 (FATAL EInOutError on stderr) when its stdout pipe was
 /// closed by the reader before the end, even if no write reported the failure;
 /// lsp and serve excepted (stdout is their transport).</summary>
-/// <returns><!-- drag-lint:auto -->Integer -- Observed: 0; 2; DoIndexAll(Args);
-/// DoIndex(Args); DoWarmRuleCache(Args); DoQuery (Args).</returns>
+/// <returns><!-- drag-lint:auto -->Integer -- Observed: RunCommand(Command); EXIT_FATAL.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas) ?, main block (drag-lint.dpr)</para>
-/// <para>Calls: AssignFile, Default, DRagLint.Charts.AskVerb.RunAskVerbFromCommandLine, DRagLint.CLI.ApplyManifestSwitch, DRagLint.CLI.ApplyPreprocessCompilerVersion, DRagLint.CLI.Bookmarks.RunBookmarksRestore, DRagLint.CLI.Bookmarks.RunBookmarksStrip, DRagLint.CLI.ConfigureLspLint, DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls (+162 more)</para>
-/// <para>Complexity: 170 (cyclomatic, outer body), 509 lines (full implementation)</para>
-/// <para>Catches: Exception (empty); Exception (swallowed)</para>
-/// <para>Touches: file system</para>
-/// <seealso cref="DRagLint.Charts.AskVerb.RunAskVerbFromCommandLine"/>
-/// <seealso cref="DRagLint.CLI.ApplyManifestSwitch"/>
-/// <seealso cref="DRagLint.CLI.ApplyPreprocessCompilerVersion"/>
-/// <seealso cref="DRagLint.CLI.Bookmarks.RunBookmarksRestore"/>
-/// <seealso cref="DRagLint.CLI.Bookmarks.RunBookmarksStrip"/>
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas) ?, main block (drag-lint.dpr)</para>
+/// <para>Calls: DRagLint.CLI.RunCommand, DRagLint.CLI.StdoutReaderGone, MatchText, Writeln</para>
+/// <seealso cref="DRagLint.CLI.RunCommand"/>
+/// <seealso cref="DRagLint.CLI.StdoutReaderGone"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function Run: Integer;

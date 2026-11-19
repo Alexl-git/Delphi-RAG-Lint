@@ -25,8 +25,14 @@ interface
 /// (--project); quoted in the result.</param>
 /// <param name="pExtra">Further arguments, already quoted; '' for none.</param>
 /// <returns>'"exe" repo verb --project "proj"' plus ' ' + pExtra when given.</returns>
-/// <remarks>Pure; no side effects. The engine resolves the repository file from
-/// the project's fieldRepository key.</remarks>
+/// <remarks>
+/// Pure; no side effects. The engine resolves the repository file from
+/// the project's fieldRepository key.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Cmd.FieldRepo.InvokeDataService (DragLint.Plugin.Cmd.FieldRepo.pas), DragLint.Plugin.Cmd.FieldRepo.InvokeOpenEditor (DragLint.Plugin.Cmd.FieldRepo.pas), DragLint.Plugin.Cmd.FieldRepo.InvokeOrmSource (DragLint.Plugin.Cmd.FieldRepo.pas), DragLint.Plugin.Cmd.FieldRepo.InvokeRefreshSchema (DragLint.Plugin.Cmd.FieldRepo.pas)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FieldRepoCommandLine(const pExe, pVerb, pProject, pExtra: string): string;  // dl:ok unused-public-symbol@9ebf -- test seam: run_v152_TTIDE_menu.ps1 checks the command line in a console build outside the plugin index
 
 /// <summary>Prompt text that makes the VCL InputQuery mask its edit (password character).</summary>
@@ -40,7 +46,14 @@ function FieldRepoCommandLine(const pExe, pVerb, pProject, pExtra: string): stri
 /// <param name="pTables">--table value (comma-separated); '' leaves the flag out.</param>
 /// <param name="pApply">True appends --apply (write); False = dry run.</param>
 /// <returns>The arguments, each value double-quoted, separated by one blank; '' when none.</returns>
-/// <remarks>Pure; no side effects.</remarks>
+/// <remarks>
+/// Pure; no side effects.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Cmd.FieldRepo.InvokeDataService (DragLint.Plugin.Cmd.FieldRepo.pas), DragLint.Plugin.Cmd.FieldRepo.InvokeOrmSource (DragLint.Plugin.Cmd.FieldRepo.pas)</para>
+/// <para>Calls: DragLint.Plugin.Cmd.FieldRepo.FieldRepoGenArgs.Add, Trim</para>
+/// <seealso cref="DragLint.Plugin.Cmd.FieldRepo.FieldRepoGenArgs.Add"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FieldRepoGenArgs(const pCodeDir, pServerDir, pClientDir, pTables: string; pApply: Boolean): string;  // dl:ok unused-public-symbol@30ea -- REVIEWED 2026-11-18 v152 BK-TTFINISH: test seam: run_v152_TTIDE_menu.ps1 checks it in a console build outside the plugin index
 
 /// <summary>The lines of a generator dry run worth a message box: the diff lines
@@ -48,9 +61,24 @@ function FieldRepoGenArgs(const pCodeDir, pServerDir, pClientDir, pTables: strin
 /// <param name="pOutput">The verb's stdout.</param>
 /// <param name="pMaxLines">Most lines kept; the rest is counted in a final '... n more lines' line.</param>
 /// <returns>The kept lines joined with CRLF.</returns>
-/// <remarks>Pure; no side effects.</remarks>
+/// <remarks>
+/// Pure; no side effects.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Cmd.FieldRepo.RunDryThenApply (DragLint.Plugin.Cmd.FieldRepo.pas)</para>
+/// <para>Calls: Format</para>
+/// <para>Returns: String.Join(sLineBreak, Kept.ToStringArray)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FieldRepoRunSummary(const pOutput: string; pMaxLines: Integer): string;  // dl:ok unused-public-symbol@3193 -- REVIEWED 2026-11-18 v152 BK-TTFINISH: test seam: run_v152_TTIDE_menu.ps1 checks it in a console build outside the plugin index
 
+/// <param name="pText"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: #31 + pText.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Cmd.FieldRepo.InvokeRefreshSchema (DragLint.Plugin.Cmd.FieldRepo.pas)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MaskedPrompt(const pText: string): string;  // dl:ok unused-public-symbol@9ebf -- test seam: run_v152_TTIDE_menu.ps1 checks it in a console build outside the plugin index
 
 implementation

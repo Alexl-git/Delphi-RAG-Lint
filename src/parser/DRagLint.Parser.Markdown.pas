@@ -33,17 +33,39 @@ type
   /// Line-based, not a CommonMark implementation: indented code blocks, HTML
   /// blocks and nested list structure are read as plain text. Stateless and
   /// thread-safe: every Parse call owns its own state.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TMarkdownParser = class(TInterfacedObject, IParser)
     public
       /// <summary>The files.language value of a Markdown file.</summary>
       /// <returns>'markdown'.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Returns: 'markdown'</para>
+      /// <para>Implements: DRagLint.Core.Interfaces.IParser.LanguageName</para>
+      /// <para>Effect-free (proven)</para>
+      /// <seealso cref="DRagLint.Parser.Markdown.TMarkdownParser.FileExtensions"/>
+      /// <seealso cref="DRagLint.Parser.Markdown.TMarkdownParser.Parse"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function LanguageName: string                                               ;
       /// <summary>The extensions this parser claims.</summary>
       /// <returns>['.md'].</returns>
-      /// <remarks>A directory walk does NOT admit .md even so (see
+      /// <remarks>
+      /// A directory walk does NOT admit .md even so (see
       /// TIndexer.WalkAndIndex); a project index admits the .md files beside
-      /// its project file (ExpandProjectScope).</remarks>
+      /// its project file (ExpandProjectScope).
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Returns: ['.md']</para>
+      /// <para>Implements: DRagLint.Core.Interfaces.IParser.FileExtensions</para>
+      /// <para>Effect-free (proven)</para>
+      /// <seealso cref="DRagLint.Parser.Markdown.TMarkdownParser.LanguageName"/>
+      /// <seealso cref="DRagLint.Parser.Markdown.TMarkdownParser.Parse"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function FileExtensions: TArray<string>                                     ;
       /// <summary>Splits a Markdown document into text nodes.</summary>
       /// <param name="ASource">The file bytes, UTF-8 (a BOM is skipped). Must not be
@@ -52,6 +74,19 @@ type
       /// <returns>A result whose Literals hold the nodes in document order
       /// (source 'md', 1-based lines and columns); Symbols and References are
       /// empty.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: Copy, Default, Delete, DRagLint.Parser.Markdown.IndentOf, DRagLint.Parser.Markdown.IsListItem, DRagLint.Parser.Markdown.TMdState.Append, DRagLint.Parser.Markdown.TMdState.Create, DRagLint.Parser.Markdown.TMdState.Flush, DRagLint.Parser.Markdown.TMdState.SkipLine, DRagLint.Parser.Markdown.TMdState.TryHeading, EndsStr, StartsStr, Trim, TrimLeft</para>
+      /// <para>Returns: Default(TParseResult)</para>
+      /// <para>Implements: DRagLint.Core.Interfaces.IParser.Parse</para>
+      /// <para>Complexity: 12 (cyclomatic, outer body), 40 lines (full implementation)</para>
+      /// <seealso cref="DRagLint.Parser.Markdown.IndentOf"/>
+      /// <seealso cref="DRagLint.Parser.Markdown.IsListItem"/>
+      /// <seealso cref="DRagLint.Parser.Markdown.TMdState.Append"/>
+      /// <seealso cref="DRagLint.Parser.Markdown.TMdState.Create"/>
+      /// <seealso cref="DRagLint.Parser.Markdown.TMdState.Flush"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function Parse(const ASource: TBytes; const AFilePath: string): TParseResult;
   end;
 

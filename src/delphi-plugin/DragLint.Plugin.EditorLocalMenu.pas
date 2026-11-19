@@ -31,17 +31,34 @@ interface
 
 /// <summary>Registers the drag-lint submenu of the code editor's right-click
 /// menu, built from the csEditorContext rows of the 1.52 command table.</summary>
-/// <remarks>Idempotent: a second call while registered does nothing. Call
+/// <remarks>
+/// Idempotent: a second call while registered does nothing. Call
 /// after every DragLint.Plugin.Cmd.X unit has registered its row (i.e. from
 /// the wizard's Register, not from an initialization section). Main thread
 /// only. Silently does nothing when the IDE offers no
-/// INTAEditorLocalMenu.</remarks>
+/// INTAEditorLocalMenu.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.Cmd152.Cmd152OnSurface, DragLint.Plugin.Cmd152.Cmd152Table, DragLint.Plugin.EditorLocalMenu.TEditorMenuHandler.Create, StringReplace, Supports, TAction</para>
+/// <seealso cref="DragLint.Plugin.Cmd152.Cmd152OnSurface"/>
+/// <seealso cref="DragLint.Plugin.Cmd152.Cmd152Table"/>
+/// <seealso cref="DragLint.Plugin.EditorLocalMenu.TEditorMenuHandler.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RegisterDragLintEditorLocalMenu;
 
 /// <summary>Unregisters the submenu and frees its actions.</summary>
-/// <remarks>Idempotent, never raises. Must run before the package unloads:
+/// <remarks>
+/// Idempotent, never raises. Must run before the package unloads:
 /// the IDE keeps the registered TActionList and would otherwise build the
-/// next right-click menu from freed code.</remarks>
+/// next right-click menu from freed code.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.UnregisterDragLintMenu (DragLint.Plugin.Editor.pas), DragLint.Plugin.EditorLocalMenu.finalization (DragLint.Plugin.EditorLocalMenu.pas), DragLint.Plugin.Wizard.TDragLintWizard.Destroyed (DragLint.Plugin.Wizard.pas)</para>
+/// <para>Calls: DragLint.Plugin.LspClient.DebugLog, FreeAndNil, Supports</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <seealso cref="DragLint.Plugin.LspClient.DebugLog"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure UnregisterDragLintEditorLocalMenu;
 
 implementation

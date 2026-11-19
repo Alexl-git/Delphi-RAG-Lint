@@ -92,6 +92,7 @@ function SynthesizePrefixedName(const AOldName, APrefix: string): string;
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Refactor.NamingFix.NamingCandidates (DRagLint.Refactor.NamingFix.pas)</para>
 /// <para>Calls: Copy, DRagLint.Refactor.NamingFix.IdentWords, DRagLint.Refactor.NamingFix.PascalWord, DRagLint.Refactor.NamingFix.StyleFromConfigText, IndexStr, LowerCase, UpperCase</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 30 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Refactor.NamingFix.IdentWords"/>
 /// <seealso cref="DRagLint.Refactor.NamingFix.PascalWord"/>
 /// <seealso cref="DRagLint.Refactor.NamingFix.StyleFromConfigText"/>
@@ -175,7 +176,7 @@ type
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Refactor.MultiProjectRename.OpenOwners (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)</para>
 /// <para>Calls: Default, DRagLint.Refactor.NamingFix.DeclaredInFile, DRagLint.Refactor.NamingFix.NamingCandidates, DRagLint.Refactor.NamingFix.ReadIdentifierAt, DRagLint.Refactor.NamingFix.ResolveAccessor, DRagLint.Refactor.NamingFix.ResolveSymbolAt, IntToStr, LowerCase, SameText</para>
-/// <para>Complexity: 15 (cyclomatic, outer body), 70 lines (full implementation)</para>
+/// <para>Complexity: 18 (cyclomatic, outer body), 70 lines (full implementation)</para>
 /// <para>Catches: Exception (empty)</para>
 /// <seealso cref="DRagLint.Refactor.NamingFix.DeclaredInFile"/>
 /// <seealso cref="DRagLint.Refactor.NamingFix.NamingCandidates"/>
@@ -237,15 +238,15 @@ function FreeCandidates(const AStore: ISymbolStore; const ATarget: TNamingTarget
 /// by run_autofix_apply_accounting.ps1 and the naming autofix suites.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Refactor.MultiProjectRename.CandidateWhy (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.PlanLocal (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)</para>
-/// <para>Calls: Copy, Default, DRagLint.Refactor.NamingFix.BuildTargetEdits.EmitRenameEdits, DRagLint.Refactor.NamingFix.BuildTargetEdits.LinesFor, DRagLint.Refactor.Rename.TRenameRefactoring.Build, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal, DRagLint.Refactor.RenameProof.ProveLocalRename, DRagLint.Refactor.RenameProof.ProveRename, DRagLint.Refactor.RenameProof.RefusalLine, Format, SameText, SpanHoldsIdent</para>
+/// <para>Calls: Copy, Default, DRagLint.Refactor.NamingFix.BuildTargetEdits.EmitRenameEdits, DRagLint.Refactor.NamingFix.BuildTargetEdits.LinesFor, DRagLint.Refactor.NamingFix.FindingLine, DRagLint.Refactor.Rename.TRenameRefactoring.Build, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal, DRagLint.Refactor.RenameProof.ProveLocalRename, DRagLint.Refactor.RenameProof.ProveRename, DRagLint.Refactor.RenameProof.RefusalLine, Format, SameText, SpanHoldsIdent</para>
 /// <para>Returns: nil; Edits.ToArray</para>
-/// <para>Complexity: 19 (cyclomatic, outer body), 185 lines (full implementation)</para>
+/// <para>Complexity: 21 (cyclomatic, outer body), 199 lines (full implementation)</para>
 /// <para>Mutates: ASkipped (out), ARefusal (out)</para>
 /// <seealso cref="DRagLint.Refactor.NamingFix.BuildTargetEdits.EmitRenameEdits"/>
 /// <seealso cref="DRagLint.Refactor.NamingFix.BuildTargetEdits.LinesFor"/>
+/// <seealso cref="DRagLint.Refactor.NamingFix.FindingLine"/>
 /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.Build"/>
 /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal"/>
-/// <seealso cref="DRagLint.Refactor.RenameProof.ProveLocalRename"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function BuildTargetEdits(const AStore: ISymbolStore; const ALibraries: TArray<ISymbolStore>; const ATarget: TNamingTarget;
@@ -339,17 +340,11 @@ function BuildNamingFixEdits(const AStore: ISymbolStore; const ALibraries: TArra
 /// <param name="AEndCol">Exclusive end column.</param>
 /// <returns>The text of the span, or '' when the file or span is not there.</returns>
 /// <remarks>
-/// <!-- drag-lint:auto -->Reads AFile's ALine (1-based) and returns the substring at 1-based
-/// columns [AStartCol, AEndCol) (exclusive end), matching TLintFinding.StartCol/EndCol's convention
-/// (see DRagLint.Diagnostics.NamingChecks.EmitAt). Empty string on any out-of-range condition.
-/// 1.52 COLS: AStartCol is the checker's tree-sitter UTF-8 BYTE column and AEndCol - AStartCol the name's
-/// length in characters; the line is decoded as the parser saw it (EnsureUtf8Bytes), so a non-ASCII
-/// character earlier on the line of a Windows-1252 or UTF-8 file no longer shifts the span.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.NamingFixIdentifier (DRagLint.CLI.pas), DRagLint.Refactor.NamingFix.BuildNamingTargets (DRagLint.Refactor.NamingFix.pas)</para>
-/// <para>Calls: Copy</para>
-/// <para>Returns: ''; Copy(LnText, AStartCol, Len)</para>
-/// <para>Touches: file system</para>
+/// <para>Calls: Copy, DRagLint.Refactor.NamingFix.FindingLine, Min</para>
+/// <para>Returns: ''; Copy(LnText, CharCol, Len)</para>
+/// <seealso cref="DRagLint.Refactor.NamingFix.FindingLine"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ReadIdentifierAt(const AFile: string; ALine, AStartCol, AEndCol: Integer): string;

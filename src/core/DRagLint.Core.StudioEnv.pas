@@ -71,8 +71,8 @@ type
   /// cache is kept -- a cached root would go stale across an install without
   /// any way to notice.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: [drag-lint]DRagLint.CLI.ApplySectionCompilerVersion (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestStudioRoot (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Run (DRagLint.CLI.pas), [drag-lint]DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath (DRagLint.Diagnostics.CompileCheck.pas), [drag-lint]DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas), [drag-lint]DRagLint.LSP.Proxy.ResolveDelphiLspPath (DRagLint.LSP.Proxy.pas), [dclDragLintWizard,drag-lint]DRagLint.Project.Resolver.TProjectResolver.Create (DRagLint.Project.Resolver.pas), [dclDragLintWizard,drag-lint]DRagLint.Project.Resolver.TProjectResolver.StudioCommonDir (DRagLint.Project.Resolver.pas), [drag-lint]DRagLint.Refactor.CompileGate.BuildEnvBat (DRagLint.Refactor.CompileGate.pas)</para>
-  /// <para>Used in units: [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.Diagnostics.CompileCheck, [drag-lint]DRagLint.LSP.Proxy, [drag-lint]DRagLint.Project.Resolver, [drag-lint]DRagLint.Refactor.CompileGate</para>
+  /// <para>Used by: [drag-lint]DRagLint.CLI.ApplySectionCompilerVersion (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestStudioRoot (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.RunCommand (DRagLint.CLI.pas), [drag-lint]DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath (DRagLint.Diagnostics.CompileCheck.pas), [drag-lint]DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas), [drag-lint]DRagLint.LSP.Proxy.ResolveDelphiLspPath (DRagLint.LSP.Proxy.pas), [dclDragLintWizard,drag-lint]DRagLint.Project.Resolver.TProjectResolver.Create (DRagLint.Project.Resolver.pas), [dclDragLintWizard,drag-lint]DRagLint.Project.Resolver.TProjectResolver.StudioCommonDir (DRagLint.Project.Resolver.pas), [drag-lint]DRagLint.Refactor.CompileGate.BuildEnvBat (DRagLint.Refactor.CompileGate.pas)</para>
+  /// <para>Used in units: [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.Diagnostics.CompileCheck, [drag-lint]DRagLint.LSP.Proxy, [dclDragLintWizard,drag-lint]DRagLint.Project.Resolver, [drag-lint]DRagLint.Refactor.CompileGate</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TStudioEnv = class
@@ -142,7 +142,7 @@ type
     /// <see cref="DRagLint.Core.StudioEnv.TStudioEnv.Root"/> so the failure
     /// names Studio.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: [drag-lint]DRagLint.CLI.ApplySectionCompilerVersion (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Run (DRagLint.CLI.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.StudioEnv.TStudioEnv.SelfTest (DRagLint.Core.StudioEnv.pas), [drag-lint]DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath (DRagLint.Diagnostics.CompileCheck.pas), [dclDragLintWizard,drag-lint]DRagLint.Project.Resolver.TProjectResolver.Create (DRagLint.Project.Resolver.pas), [drag-lint]DRagLint.Refactor.CompileGate.BuildEnvBat (DRagLint.Refactor.CompileGate.pas)</para>
+    /// <para>Called from: [drag-lint]DRagLint.CLI.ApplySectionCompilerVersion (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.RunCommand (DRagLint.CLI.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.StudioEnv.TStudioEnv.SelfTest (DRagLint.Core.StudioEnv.pas), [drag-lint]DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath (DRagLint.Diagnostics.CompileCheck.pas), [dclDragLintWizard,drag-lint]DRagLint.Project.Resolver.TProjectResolver.Create (DRagLint.Project.Resolver.pas), [drag-lint]DRagLint.Refactor.CompileGate.BuildEnvBat (DRagLint.Refactor.CompileGate.pas)</para>
     /// <para>Calls: DRagLint.Core.StudioEnv.TStudioEnv.TryRoot</para>
     /// <para>Returns: ''</para>
     /// <para>Pure</para>

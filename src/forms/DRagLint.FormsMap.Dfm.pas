@@ -612,7 +612,7 @@ type
     /// <para>Called from: DRagLint.FormsMap.TNavBuilder.TreeFor (DRagLint.FormsMap.pas), DRagLint.MenuTree.Dfm.TDfmRootBuilder.Graft (DRagLint.MenuTree.Dfm.pas)</para>
     /// <para>Calls: DRagLint.FormsMap.Dfm.TFormDfmNode.Prop, DRagLint.FormsMap.Dfm.TFormDfmTree.IsBar, DRagLint.FormsMap.Dfm.TFormDfmTree.ItemByName, SameText, StrToInt</para>
     /// <para>Returns: nil; N; ItemByName(Key)</para>
-    /// <para>Complexity: 21 (cyclomatic, outer body), 50 lines (full implementation)</para>
+    /// <para>Complexity: 22 (cyclomatic, outer body), 50 lines (full implementation)</para>
     /// <para>Reads: FNodes, FRoot</para>
     /// <para>Mutates: ADerived (out)</para>
     /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmNode.Prop"/>

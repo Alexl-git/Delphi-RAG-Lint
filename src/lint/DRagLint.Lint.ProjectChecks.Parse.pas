@@ -87,7 +87,7 @@ function NormUnitQualified(const AName: string): string;
 /// <returns><!-- drag-lint:auto -->string -- Observed: ASrc.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Doc.Drift.ReadDeclLine (DRagLint.Doc.Drift.pas), DRagLint.Doc.Facts.ReadDeclLine (DRagLint.Doc.Facts.pas), DRagLint.FormsMap.ReadPasLinesScrubbed (DRagLint.FormsMap.pas), DRagLint.Index.Closure.TClosureResolver.ParseDprUses (DRagLint.Index.Closure.pas), DRagLint.Lint.ProjectChecks.Parse.ParseUsesFromContent (DRagLint.Lint.ProjectChecks.Parse.pas)</para>
+/// <para>Called from: DRagLint.Doc.Drift.ReadDeclLine (DRagLint.Doc.Drift.pas), DRagLint.Doc.Facts.ReadDeclLine (DRagLint.Doc.Facts.pas), DRagLint.FormsMap.ReadPasLinesScrubbed (DRagLint.FormsMap.pas), DRagLint.Index.Closure.TClosureResolver.ParseDprUses (DRagLint.Index.Closure.pas), DRagLint.Lint.ProjectChecks.Parse.ParseUsesFromContent (DRagLint.Lint.ProjectChecks.Parse.pas) (+4 more)</para>
 /// <para>Calls: DRagLint.Lint.ProjectChecks.Parse.StripPasCommentsKeepLayout.Blank</para>
 /// <para>Complexity: 23 (cyclomatic, outer body), 53 lines (full implementation)</para>
 /// <para>Effect-free (proven)</para>
@@ -133,7 +133,7 @@ function ExtractUsesNames(const AProgramPath: string; out AUsesStartLine: Intege
 /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: List.ToArray.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr (DRagLint.Lint.ProjectChecks.pas)</para>
+/// <para>Called from: DRagLint.CLI.RepoParamArray.CollectUnits (DRagLint.CLI.RepoParamArray.pas), DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr (DRagLint.Lint.ProjectChecks.pas), DRagLint.Lint.SharedScope.NoteUnindexedPeer (DRagLint.Lint.SharedScope.pas)</para>
 /// <para>Calls: ExtractFileExt, SameText</para>
 /// <para>Touches: file system</para>
 /// <!-- drag-lint:auto END -->
@@ -145,7 +145,7 @@ function ReadDCCReferences(const ADprojPath: string): TArray<string>;
 /// <returns><!-- drag-lint:auto -->string -- Observed: ''.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr (DRagLint.Lint.ProjectChecks.pas)</para>
+/// <para>Called from: DRagLint.Lint.ProjectChecks.TProjectChecks.CheckNonUsesLinks (DRagLint.Lint.ProjectChecks.pas), DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr (DRagLint.Lint.ProjectChecks.pas), DRagLint.Lint.SharedScope.NoteUnindexedPeer (DRagLint.Lint.SharedScope.pas)</para>
 /// <para>Calls: ChangeFileExt, ExtractFileName, ExtractFilePath</para>
 /// <para>Touches: file system</para>
 /// <!-- drag-lint:auto END -->

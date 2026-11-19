@@ -13,7 +13,7 @@ type
   /// JSON shape that TLintConfig.Load reads.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ReloadProfileList (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.Save (DragLint.Plugin.LintOptionsFrame.pas)</para>
+  /// <para>Used by: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ReloadProfileList (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.Save (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TOverridesDialog.RevertClick (DragLint.Plugin.LintOptionsFrame.pas)</para>
   /// <para>Used in units: DragLint.Plugin.LintOptionsFrame</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -92,7 +92,7 @@ type
     /// <param name="AJson"><!-- drag-lint:auto type -->const string</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Lint.ConfigWriter.TLintConfigWriter.SaveToFile (DRagLint.Lint.ConfigWriter.pas), DRagLint.Lint.ConfigWriter.TLintConfigWriter.SaveToProfile (DRagLint.Lint.ConfigWriter.pas)</para>
+    /// <para>Called from: DRagLint.Lint.ConfigWriter.TLintConfigWriter.RevertRuleOverride (DRagLint.Lint.ConfigWriter.pas), DRagLint.Lint.ConfigWriter.TLintConfigWriter.SaveToFile (DRagLint.Lint.ConfigWriter.pas), DRagLint.Lint.ConfigWriter.TLintConfigWriter.SaveToProfile (DRagLint.Lint.ConfigWriter.pas)</para>
     /// <para>Calls: IntToHex, StringReplace</para>
     /// <para>Touches: file system</para>
     /// <para>Directives: static</para>
@@ -249,6 +249,22 @@ type
     class procedure SaveToFile(const APath: string; const ACfg: TLintConfig); static;
 
     /// <summary>Removes one rule's entry from the file's "rule_overrides" block.</summary>
+    /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ARuleId"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.Save (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TOverridesDialog.RevertClick (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Calls: DRagLint.Lint.ConfigWriter.TLintConfigWriter.WriteAnsiCrlf, SameText</para>
+    /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.WriteAnsiCrlf"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ArrayToJsonArr"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.BuildOwnedObject"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ContainsId"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ListProfileNames"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function RevertRuleOverride(const APath, ARuleId: string): Boolean; static;
 
     /// <summary>Returns the names of all profiles defined under the "profiles"

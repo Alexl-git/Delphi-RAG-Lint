@@ -28,21 +28,59 @@ uses
 type
   /// <summary>Answers `textDocument/typeDefinition` and advertises
   /// typeDefinitionProvider.</summary>
-  /// <remarks>Stateless; registered from this unit's initialization. Lines and
-  /// characters in the reply are 0-based.</remarks>
+  /// <remarks>
+  /// Stateless; registered from this unit's initialization. Lines and
+  /// characters in the reply are 0-based.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.LSP.Feature.TypeDefinition.initialization (DRagLint.LSP.Feature.TypeDefinition.pas)</para>
+  /// <para>Used in units: DRagLint.LSP.Feature.TypeDefinition</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLspTypeDefinitionFeature = class(TLspFeature)
   public
     /// <summary>The method this feature answers.</summary>
     /// <returns>['textDocument/typeDefinition'].</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Returns: [TYPEDEF_METHOD]</para>
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Methods</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.TypeDefinition.TLspTypeDefinitionFeature.AddCapabilities"/>
+    /// <seealso cref="DRagLint.LSP.Feature.TypeDefinition.TLspTypeDefinitionFeature.Handle"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Methods: TArray<string>; override;
     /// <summary>Adds `typeDefinitionProvider: true`.</summary>
     /// <param name="ACaps">initialize.result.capabilities under construction.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.AddCapabilities</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.TypeDefinition.TLspTypeDefinitionFeature.Handle"/>
+    /// <seealso cref="DRagLint.LSP.Feature.TypeDefinition.TLspTypeDefinitionFeature.Methods"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure AddCapabilities(ACaps: TJSONObject); override;
     /// <summary>Replies a Location[]: the declaration of the type, or [].</summary>
     /// <param name="ACtx">The server surface.</param>
     /// <param name="AMethod">textDocument/typeDefinition.</param>
     /// <param name="AId">The request id; a notification gets no reply.</param>
     /// <param name="AParams">textDocument + position; a missing field answers [].</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Lint.RefTypeRules.RefStaticTypeAt, DRagLint.LSP.Context.ILspServerContext.FileFromUri, DRagLint.LSP.Context.ILspServerContext.Reply, DRagLint.LSP.Context.ILspServerContext.ResolveSymbolAt, DRagLint.LSP.Context.ILspServerContext.StoresForFile, DRagLint.LSP.Feature.TypeDefinition.DeclaredTypeLeaf, DRagLint.LSP.Feature.TypeDefinition.IdentStartCol1, DRagLint.LSP.Feature.TypeDefinition.LocationOf, DRagLint.LSP.Feature.TypeDefinition.UniqueType, DRagLint.LSP.HierarchyUtil.HierIntField</para>
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Handle</para>
+    /// <para>Complexity: 18 (cyclomatic, outer body), 56 lines (full implementation)</para>
+    /// <para>Catches: Exception (re-raise)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
+    /// <seealso cref="DRagLint.Lint.RefTypeRules.RefStaticTypeAt"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Reply"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ResolveSymbolAt"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Handle(const ACtx: ILspServerContext; const AMethod: string; const AId: TJSONValue; const AParams: TJSONObject); override;
   end;
 

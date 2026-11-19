@@ -15,6 +15,12 @@ interface
 
 /// <summary>The process arguments after the program name.</summary>
 /// <returns>ParamStr(1)..ParamStr(ParamCount), in order; empty when there are none.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: main block (drag-lint-open.dpr)</para>
+/// <para>Calls: ParamStr</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CommandLineArgs: TArray<string>;
 
 /// <summary>Handles one draglint:// click: validates the URI, sends the
@@ -37,6 +43,15 @@ function CommandLineArgs: TArray<string>;
 /// only ever on a path the gate accepted -- and CreateProcess of
 /// System32\notepad.exe "file", never ShellExecute.</para>
 /// <para>Never raises: an exception is logged as failed: and returns 1.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: main block (drag-lint-open.dpr)</para>
+/// <para>Calls: DragLint.Open.Main.HandleUri, DragLint.Open.Main.Refuse, DragLint.Open.Main.WriteHandlerLog, Format, GetEnvironmentVariable, Trim</para>
+/// <para>Returns: Refuse('no uri given', WhatIf); HandleUri(pArgs[0], WhatIf); EXIT_FAILED</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <seealso cref="DragLint.Open.Main.HandleUri"/>
+/// <seealso cref="DragLint.Open.Main.Refuse"/>
+/// <seealso cref="DragLint.Open.Main.WriteHandlerLog"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function RunHandler(const pArgs: TArray<string>): Integer;
 
@@ -44,12 +59,20 @@ function RunHandler(const pArgs: TArray<string>): Integer;
 /// <param name="pText">The event text; may be attacker text (the URI). It is
 /// capped at 512 chars plus ...(+N chars), and every control character becomes
 /// '?', so one click is one bounded line.</param>
-/// <remarks>The line is the local time as yyyy-MM-ddTHH:mm:ss, two spaces, the
+/// <remarks>
+/// The line is the local time as yyyy-MM-ddTHH:mm:ss, two spaces, the
 /// text, CRLF, UTF-8 without BOM. The file is DRAGLINT_URI_TEST_LOG when set (its
 /// folder is NOT created), else %LOCALAPPDATA%\drag-lint\logs\uri-handler.log,
 /// whose folder is the only one this program ever creates; with neither there is
 /// no log. A log that cannot be written is ignored: logging never stops a
-/// click.</remarks>
+/// click.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Open.Main.HandleUri (DragLint.Open.Main.pas), DragLint.Open.Main.LogWhatIf (DragLint.Open.Main.pas), DragLint.Open.Main.Refuse (DragLint.Open.Main.pas), DragLint.Open.Main.RunHandler (DragLint.Open.Main.pas)</para>
+/// <para>Calls: DirectoryExists, DragLint.Open.Main.FormatLogLine, FileExists, ForceDirectories, GetEnvironmentVariable, IncludeTrailingPathDelimiter, OutputDebugString, PChar</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <seealso cref="DragLint.Open.Main.FormatLogLine"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure WriteHandlerLog(const pText: string);
 
 implementation

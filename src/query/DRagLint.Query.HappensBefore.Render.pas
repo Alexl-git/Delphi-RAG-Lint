@@ -15,8 +15,20 @@ uses
 /// writers, roots, limits, budget {routines, ms, exhausted, max_s, timed_out}}.</summary>
 /// <param name="pAnswer">The answer to render.</param>
 /// <returns>Compact JSON text (no trailing newline).</returns>
-/// <remarks>Every key is always present (empty arrays, 0, '' and false included) so tools never
-/// test for absence. Literals come from the Types code functions.</remarks>
+/// <remarks>
+/// Every key is always present (empty arrays, 0, '' and false included) so tools never
+/// test for absence. Literals come from the Types code functions.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CheckInit.RunCheckInit (DRagLint.CLI.CheckInit.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.Query.HoverModel.BuildSetBy (DRagLint.Query.HoverModel.pas)</para>
+/// <para>Calls: DRagLint.Query.HappensBefore.Render.ReasonsJson, DRagLint.Query.HappensBefore.Render.StringsJson, DRagLint.Query.HappensBefore.Render.TargetJson, DRagLint.Query.HappensBefore.Render.UseJson, DRagLint.Query.HappensBefore.Render.WriterJson, DRagLint.Query.HappensBefore.Types.ScopeCode, DRagLint.Query.HappensBefore.Types.VerdictCode</para>
+/// <para>Returns: Root.ToJSON</para>
+/// <seealso cref="DRagLint.Query.HappensBefore.Render.ReasonsJson"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.Render.StringsJson"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.Render.TargetJson"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.Render.UseJson"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.Render.WriterJson"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HbAnswerJson(const pAnswer: THbAnswer): string;
 
 /// <summary>The answer as the text layout of spec 2.1: target line, the use line (one use),
@@ -24,16 +36,43 @@ function HbAnswerJson(const pAnswer: THbAnswer): string;
 /// <param name="pAnswer">The answer to render.</param>
 /// <param name="pExplain">True adds the `roots:` line and per-use reasons.</param>
 /// <returns>CRLF-separated lines, ending in a line break.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.HappensBefore.Render.WriteHbAnswer (DRagLint.Query.HappensBefore.Render.pas)</para>
+/// <para>Calls: DRagLint.Query.HappensBefore.Render.ReasonsText, DRagLint.Query.HappensBefore.Render.SiteText, DRagLint.Query.HappensBefore.Render.WriterText, DRagLint.Query.HappensBefore.Types.TargetKindCode, DRagLint.Query.HappensBefore.Types.VerdictCode, ExtractFileName, Format, IntToStr, StringOfChar</para>
+/// <para>Returns: SB.ToString</para>
+/// <para>Complexity: 22 (cyclomatic, outer body), 62 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Query.HappensBefore.Render.ReasonsText"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.Render.SiteText"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.Render.WriterText"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.Types.TargetKindCode"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.Types.VerdictCode"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HbAnswerText(const pAnswer: THbAnswer; pExplain: Boolean): string;  // dl:ok unused-public-symbol@bcad -- REVIEWED 2026-11-17 v152 HBSKEL: frozen contract; the pure text form for HBHOVER / HBIDE, WriteHbAnswer is its stdout wrapper
 
 /// <summary>Writes HbAnswerText to stdout.</summary>
 /// <param name="pAnswer">The answer to render.</param>
 /// <param name="pExplain">True adds the `roots:` line and per-use reasons.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CheckInit.RunCheckInit (DRagLint.CLI.CheckInit.pas)</para>
+/// <para>Calls: DRagLint.Query.HappensBefore.Render.HbAnswerText, Write</para>
+/// <seealso cref="DRagLint.Query.HappensBefore.Render.HbAnswerText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure WriteHbAnswer(const pAnswer: THbAnswer; pExplain: Boolean);
 
 /// <summary>The process exit code of an answer (ruling HB7).</summary>
 /// <param name="pAnswer">The answer.</param>
 /// <returns>0 when the headline verdict is SET, else 1. Errors (exit 2) never reach an answer.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CheckInit.RunCheckInit (DRagLint.CLI.CheckInit.pas)</para>
+/// <para>Returns: if pAnswer.Verdict = hvSet then 0</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HbExitCode(const pAnswer: THbAnswer): Integer;
 
 implementation

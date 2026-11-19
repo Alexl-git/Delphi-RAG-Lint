@@ -125,8 +125,8 @@ type
   /// <summary>Everything one .castlib file declares.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas) ?, DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.LinkPasStatus (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.CastLib.ParseCastLib (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.ParseCastLibText (DRagLint.Convert.CastLib.pas) (+7 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.CastLib, DRagLint.Convert.DfmReemit</para>
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas) ?, DRagLint.CLI.ConvertApply.DoConvertApply (DRagLint.CLI.ConvertApply.pas) ?, DRagLint.Convert.Apply.LinkPasStatus (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.CastLib.ParseCastLib (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.ParseCastLibText (DRagLint.Convert.CastLib.pas) (+7 more)</para>
+  /// <para>Used in units: DRagLint.CLI.ConvertApply, DRagLint.Convert.Apply, DRagLint.Convert.CastLib, DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCastLib = record
@@ -202,7 +202,7 @@ function LoadCastLib(const APath: string): TArray<TCastDef>;
 /// ParseCastLibText(TFile.ReadAllText(APath)).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.CastLib.LoadCastLib (DRagLint.Convert.CastLib.pas)</para>
+/// <para>Called from: DRagLint.CLI.Convert.DoConvertReemit (DRagLint.CLI.Convert.pas), DRagLint.CLI.ConvertApply.DoConvertApply (DRagLint.CLI.ConvertApply.pas), DRagLint.Convert.CastLib.LoadCastLib (DRagLint.Convert.CastLib.pas)</para>
 /// <para>Calls: Default, DRagLint.Convert.CastLib.ParseCastLibText</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Convert.CastLib.ParseCastLibText"/>

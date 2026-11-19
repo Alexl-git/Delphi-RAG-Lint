@@ -470,6 +470,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Charts.Trace.Calc.TCalcFactsReader.Facts (DRagLint.Charts.Trace.Calc.pas)</para>
     /// <para>Calls: Default, DRagLint.Charts.Sql.SortUniqueNames, DRagLint.Charts.Trace.Anchor.FieldVarPairs, DRagLint.Charts.Trace.Anchor.FieldVarSiteGrade, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.FieldVarWriteRows, Format, SameText</para>
+    /// <para>Complexity: 10 (cyclomatic, outer body), 51 lines (full implementation)</para>
     /// <para>Reads: FResolver</para>
     /// <seealso cref="DRagLint.Charts.Sql.SortUniqueNames"/>
     /// <seealso cref="DRagLint.Charts.Trace.Anchor.FieldVarPairs"/>
@@ -498,9 +499,6 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure ReadWirings(const pDs: TTraceDataSet; pFacts: TCalcFacts);
-    /// <summary><!-- drag-lint:auto sum -->The line that CREATES the field: its name as a
-    /// literal beside the dataset on a line that writes no variable; its first call, and
-    /// the FieldKind that call's body sets.</summary>
     /// <param name="pDs"><!-- drag-lint:auto type -->const TTraceDataSet</param>
     /// <param name="pCol"><!-- drag-lint:auto type -->const string</param>
     /// <param name="pFacts"><!-- drag-lint:auto type -->TCalcFacts</param>
@@ -627,7 +625,7 @@ function ResolveCalcField(pFacts: TCalcFacts): TCalcInfo;
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.BuildAnchor (DRagLint.Charts.Q.RoundTrip.pas)</para>
 /// <para>Calls: DRagLint.Charts.Trace.FormA.NewTraceCond, DRagLint.Charts.Trace.FormA.NewTraceFacet, DRagLint.Charts.Trace.FormA.NewTraceStep, DRagLint.Charts.Trace.Shim.TraceAnchorText, DRagLint.Charts.Trace.Shim.TraceNoteText, DRagLint.Charts.Trace.Shim.TraceStopText, Format, IntToStr, pCmdFor, SameText</para>
-/// <para>Complexity: 18 (cyclomatic, outer body), 74 lines (full implementation)</para>
+/// <para>Complexity: 28 (cyclomatic, outer body), 74 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Charts.Trace.FormA.NewTraceCond"/>
 /// <seealso cref="DRagLint.Charts.Trace.FormA.NewTraceFacet"/>
 /// <seealso cref="DRagLint.Charts.Trace.FormA.NewTraceStep"/>

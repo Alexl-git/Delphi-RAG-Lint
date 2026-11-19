@@ -19,6 +19,22 @@ uses
 /// introspect (first --db wins when several are given), Format='json' or
 /// AsJson selects JSON, Output redirects to a file (else stdout).</param>
 /// <returns>0 on success; 2 (with a usage line on stderr) when --db is missing.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: CharInSet, DRagLint.CLI.Common.AddStalenessPairs, DRagLint.CLI.Schema.DoSchema.ColumnSemantics, DRagLint.CLI.Schema.DoSchema.IsSafeIdent, DRagLint.Core.OutputEncoding.WriteOutputFile, DRagLint.Storage.Schema.IsSchemaReadable, DRagLint.Storage.Schema.SchemaCompatLine, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection, Format, LowerCase, SameText, StrToIntDef, Writeln</para>
+/// <para>Returns: 0; 2</para>
+/// <para>Complexity: 17 (cyclomatic, outer body), 328 lines (full implementation)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>SQL: reads SCHEMA_META, SQLITE_MASTER</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.AddStalenessPairs"/>
+/// <seealso cref="DRagLint.CLI.Schema.DoSchema.ColumnSemantics"/>
+/// <seealso cref="DRagLint.CLI.Schema.DoSchema.IsSafeIdent"/>
+/// <seealso cref="DRagLint.Core.OutputEncoding.WriteOutputFile"/>
+/// <seealso cref="DRagLint.Storage.Schema.IsSchemaReadable"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoSchema(const AArgs: TArgs): Integer;
 
 implementation

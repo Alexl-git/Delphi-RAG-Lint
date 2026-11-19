@@ -28,8 +28,8 @@ type
   /// line.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas) ?, DRagLint.CLI.ApplyLineMarkers.SiteMarker (DRagLint.CLI.pas), DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas) ?, DRagLint.CLI.MarkedRuleIds (DRagLint.CLI.pas) ?, DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse (DRagLint.Lint.ReviewMarker.pas) (+9 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.ReviewMarker, DRagLint.LSP.Completion</para>
+  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas) ?, DRagLint.CLI.ApplyLineMarkers.SiteMarker (DRagLint.CLI.pas), DRagLint.CLI.MarkedRuleIds (DRagLint.CLI.pas) ?, DRagLint.CLI.RuleScope.MarkedLine (DRagLint.CLI.RuleScope.pas) ?, DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse (DRagLint.Lint.ReviewMarker.pas) (+11 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.RuleScope, DRagLint.Lint.ReviewMarker, DRagLint.LSP.Completion</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReviewMarker = record
@@ -66,8 +66,8 @@ type
   /// <remarks>
   /// Thread-safe: no shared state.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.ApplyLineMarkers.SiteMarker (DRagLint.CLI.pas), DRagLint.CLI.CircularUsesForFile.CycleReviewedAt (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas) (+8 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Fix.Hygiene, DRagLint.Lint.ProjectRules, DRagLint.Lint.ReviewMarker, DRagLint.Lint.RuleCatalog, DRagLint.LSP.Completion</para>
+  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.ApplyLineMarkers.SiteMarker (DRagLint.CLI.pas), DRagLint.CLI.CircularUsesForFile.CycleReviewedAt (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas) (+13 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.RuleScope, DRagLint.Fix.Hygiene, DRagLint.Lint.MarkerHash, DRagLint.Lint.ProjectRules, DRagLint.Lint.ReviewMarker, DRagLint.LSP.Completion</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReviewMarkers = class
@@ -239,7 +239,7 @@ type
     /// <returns>The normalized token string; '' for a blank or comment-only line.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas), DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine (DRagLint.Lint.ReviewMarker.pas), DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow (DRagLint.Lint.ReviewMarker.pas)</para>
+    /// <para>Called from: DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas), DRagLint.CLI.RuleScope.MarkedLine (DRagLint.CLI.RuleScope.pas), DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine (DRagLint.Lint.ReviewMarker.pas), DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow (DRagLint.Lint.ReviewMarker.pas)</para>
     /// <para>Calls: CharInSet, LowerCase</para>
     /// <para>Returns: SB.ToString</para>
     /// <para>Complexity: 34 (cyclomatic, outer body), 115 lines (full implementation)</para>
@@ -301,7 +301,7 @@ type
     /// block state here would mean a second implementation of what
     /// MarkerBearingLines already does; do that only if the noise is observed.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.ApplyLineMarkers.SiteMarker (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas), DRagLint.LSP.Completion.MarkerReviews (DRagLint.LSP.Completion.pas) (+3 more)</para>
+    /// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.ApplyLineMarkers.SiteMarker (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas), DRagLint.LSP.Completion.MarkerReviews (DRagLint.LSP.Completion.pas) (+5 more)</para>
     /// <para>Calls: Copy, DRagLint.Lint.ReviewMarker.NormalizedIsLoneKeyword, DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine, DRagLint.Lint.ReviewMarker.TReviewMarkers.NormalizeLine, LowerCase</para>
     /// <para>Returns: HashLine(ALines[AStartIdx]); LowerCase(Copy(THashSHA2.GetHashString(SB.ToString), 1, 4))</para>
     /// <para>Complexity: 10 (cyclomatic, outer body), 60 lines (full implementation)</para>
@@ -325,7 +325,7 @@ type
     /// each one is a marker with its own reason, entries in written order. A
     /// `dl:ok` inside a reason that is NOT led by its own `//` stays prose.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.ApplyLineMarkers.SiteMarker (DRagLint.CLI.pas), DRagLint.CLI.CircularUsesForFile.CycleReviewedAt (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas) (+9 more)</para>
+    /// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.ApplyLineMarkers.SiteMarker (DRagLint.CLI.pas), DRagLint.CLI.CircularUsesForFile.CycleReviewedAt (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas) (+11 more)</para>
     /// <para>Calls: Copy, Default, DRagLint.Lint.ReviewMarker.NextLineCommentTag, DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart, DRagLint.Lint.ReviewMarker.TReviewMarkers.SplitReason, LowerCase, Pos, Trim</para>
     /// <para>Pure</para>
     /// <para>Directives: static</para>
@@ -488,7 +488,7 @@ type
     /// last entry goes the `dl:ok` comment goes too, and the `//` with it if that
     /// comment held nothing else. Pure.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas)</para>
+    /// <para>Called from: DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas), DRagLint.CLI.RuleScope.RunLineScope (DRagLint.CLI.RuleScope.pas)</para>
     /// <para>Calls: Copy, DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart, DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse, DRagLint.Lint.ReviewMarker.TReviewMarkers.RuleToken, LowerCase, Pos, SameText, Trim, TrimRight</para>
     /// <para>Returns: ALineText; TrimRight(Copy(ALineText, 1, CStart - 3)); TrimRight(Prefix); TrimRight(Prefix + Body)</para>
     /// <para>Complexity: 10 (cyclomatic, outer body), 70 lines (full implementation)</para>
@@ -526,7 +526,7 @@ type
     /// is a comment, so the hash it stores is unaffected by its own
     /// insertion.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.Lint.ReviewMarker.InsertIntoSegmented (DRagLint.Lint.ReviewMarker.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions (DRagLint.LSP.Completion.pas)</para>
+    /// <para>Called from: DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.RuleScope.MarkedLine (DRagLint.CLI.RuleScope.pas), DRagLint.Lint.ReviewMarker.InsertIntoSegmented (DRagLint.Lint.ReviewMarker.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions (DRagLint.LSP.Completion.pas)</para>
     /// <para>Calls: Copy, DRagLint.Lint.ReviewMarker.InsertIntoSegmented, DRagLint.Lint.ReviewMarker.StripReviewStamp, DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine, DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart, DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse, DRagLint.Lint.ReviewMarker.TReviewMarkers.RuleToken, IndexStr, LowerCase, Pos, SameText, Trim, TrimRight</para>
     /// <para>Returns: TrimRight(Result); TrimRight(Prefix + Body)</para>
     /// <para>Complexity: 18 (cyclomatic, outer body), 95 lines (full implementation)</para>

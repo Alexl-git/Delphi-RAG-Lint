@@ -95,11 +95,11 @@ procedure BuildReportsMenu(pParent: TMenuItem; const pAddItem: TReportsAddItem;
 /// with Cancel shows meanwhile and the answer arrives later on the main thread.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
-/// <para>Calls: DragLint.Plugin.Reports.ChooseTargetThen, DragLint.Plugin.Reports.StartReport, DragLint.Plugin.Reports.PromptSecondRoutine, DragLint.Plugin.Reports.ResolveRunTools, DragLint.Plugin.ReportText.BuildAskCmdLine, DragLint.Plugin.ReportText.QuestionTakesSecondRoutine, TMenuItem</para>
+/// <para>Calls: DragLint.Plugin.Reports.ChooseTargetThen, DragLint.Plugin.Reports.PromptSecondRoutine, DragLint.Plugin.Reports.ResolveRunTools, DragLint.Plugin.Reports.StartReport, DragLint.Plugin.ReportText.BuildAskCmdLine, DragLint.Plugin.ReportText.QuestionTakesSecondRoutine, TMenuItem</para>
 /// <seealso cref="DragLint.Plugin.Reports.ChooseTargetThen"/>
-/// <seealso cref="DragLint.Plugin.Reports.StartReport"/>
 /// <seealso cref="DragLint.Plugin.Reports.PromptSecondRoutine"/>
 /// <seealso cref="DragLint.Plugin.Reports.ResolveRunTools"/>
+/// <seealso cref="DragLint.Plugin.Reports.StartReport"/>
 /// <seealso cref="DragLint.Plugin.ReportText.BuildAskCmdLine"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

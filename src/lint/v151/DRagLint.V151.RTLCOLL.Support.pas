@@ -63,7 +63,7 @@ type
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.V151.RTLCOLL.TV151RTLCOLLRules.CheckFile (DRagLint.V151.RTLCOLL.pas), DRagLint.V151.RTLCOLL.TV151RTLCOLLRules.CheckProject (DRagLint.V151.RTLCOLL.pas)</para>
 /// <para>Calls: PChar, SetString</para>
-/// <para>Complexity: 30 (cyclomatic, outer body), 85 lines (full implementation)</para>
+/// <para>Complexity: 32 (cyclomatic, outer body), 85 lines (full implementation)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function MaskSource(const ASrc: string): string;
@@ -104,14 +104,14 @@ function ReadSourceText(const APath: string): string;
 /// before the read, or handles EKeyNotFoundException / EListError. A write target (Dict[Key] := ...) is not a read.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.V151.RTLCOLL.TV151RTLCOLLRules.CheckFile (DRagLint.V151.RTLCOLL.pas)</para>
-/// <para>Calls: CharInSet, ContainsText, Copy, DRagLint.V151.RTLCOLL.Support.BaseTypeName, DRagLint.V151.RTLCOLL.Support.Esc, DRagLint.V151.RTLCOLL.Support.Hit, DRagLint.V151.RTLCOLL.Support.MatchClose, DRagLint.V151.RTLCOLL.Support.TScan.Body, DRagLint.V151.RTLCOLL.Support.TScan.Create, DRagLint.V151.RTLCOLL.Support.TScan.Qualifies, DRagLint.V151.RTLCOLL.Support.TScan.RangeIndex, IntToStr, LowerCase, Trim</para>
+/// <para>Calls: CharInSet, ContainsText, Copy, DRagLint.V151.RTLCOLL.Support.BaseTypeName, DRagLint.V151.RTLCOLL.Support.Esc, DRagLint.V151.RTLCOLL.Support.Hit, DRagLint.V151.RTLCOLL.Support.MatchClose, DRagLint.V151.RTLCOLL.Support.NameMatches, DRagLint.V151.RTLCOLL.Support.TScan.Body, DRagLint.V151.RTLCOLL.Support.TScan.Create, DRagLint.V151.RTLCOLL.Support.TScan.Qualifies, DRagLint.V151.RTLCOLL.Support.TScan.RangeIndex, IntToStr, LowerCase, Trim</para>
 /// <para>Returns: nil</para>
 /// <para>Complexity: 20 (cyclomatic, outer body), 60 lines (full implementation)</para>
 /// <seealso cref="DRagLint.V151.RTLCOLL.Support.BaseTypeName"/>
 /// <seealso cref="DRagLint.V151.RTLCOLL.Support.Esc"/>
 /// <seealso cref="DRagLint.V151.RTLCOLL.Support.Hit"/>
 /// <seealso cref="DRagLint.V151.RTLCOLL.Support.MatchClose"/>
-/// <seealso cref="DRagLint.V151.RTLCOLL.Support.TScan.Body"/>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.NameMatches"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function FindDictionaryGetWithoutCheck(const AMasked: string): TArray<TRtlCollHit>;
@@ -128,7 +128,7 @@ function FindDictionaryGetWithoutCheck(const AMasked: string): TArray<TRtlCollHi
 /// <para>Called from: DRagLint.V151.RTLCOLL.TV151RTLCOLLRules.CheckFile (DRagLint.V151.RTLCOLL.pas)</para>
 /// <para>Calls: ContainsText, DRagLint.V151.RTLCOLL.Support.Esc, DRagLint.V151.RTLCOLL.Support.Hit, DRagLint.V151.RTLCOLL.Support.IsFreshCreateExpr, DRagLint.V151.RTLCOLL.Support.IsUnownedList, DRagLint.V151.RTLCOLL.Support.SplitArgs, DRagLint.V151.RTLCOLL.Support.TScan.Body, DRagLint.V151.RTLCOLL.Support.TScan.Create, DRagLint.V151.RTLCOLL.Support.TScan.RangeIndex, SameText</para>
 /// <para>Returns: nil</para>
-/// <para>Complexity: 11 (cyclomatic, outer body), 45 lines (full implementation)</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 45 lines (full implementation)</para>
 /// <seealso cref="DRagLint.V151.RTLCOLL.Support.Esc"/>
 /// <seealso cref="DRagLint.V151.RTLCOLL.Support.Hit"/>
 /// <seealso cref="DRagLint.V151.RTLCOLL.Support.IsFreshCreateExpr"/>
@@ -148,6 +148,7 @@ function FindStringListObjectsLeak(const AMasked: string): TArray<TRtlCollHit>;
 /// <para>Called from: DRagLint.V151.RTLCOLL.TV151RTLCOLLRules.CheckFile (DRagLint.V151.RTLCOLL.pas)</para>
 /// <para>Calls: ContainsText, DRagLint.V151.RTLCOLL.Support.Esc, DRagLint.V151.RTLCOLL.Support.Hit, DRagLint.V151.RTLCOLL.Support.TScan.Create, DRagLint.V151.RTLCOLL.Support.TScan.CreatedIn, DRagLint.V151.RTLCOLL.Support.TScan.Qualifies, DRagLint.V151.RTLCOLL.Support.TScan.RangeIndex, DRagLint.V151.RTLCOLL.Support.TScan.ScopeText, StartsText</para>
 /// <para>Returns: nil</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 28 lines (full implementation)</para>
 /// <seealso cref="DRagLint.V151.RTLCOLL.Support.Esc"/>
 /// <seealso cref="DRagLint.V151.RTLCOLL.Support.Hit"/>
 /// <seealso cref="DRagLint.V151.RTLCOLL.Support.TScan.Create"/>

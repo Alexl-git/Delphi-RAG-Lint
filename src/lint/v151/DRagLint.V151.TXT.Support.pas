@@ -21,6 +21,12 @@ const
 
 type
   /// <summary>Which character-level rules a scan should report.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.TXT.Support.pas), DRagLint.V151.TXT.Support.TxtScanChars (DRagLint.V151.TXT.Support.pas), DRagLint.V151.TXT.TV151TXTRules.CheckRawBytes (DRagLint.V151.TXT.pas)</para>
+  /// <para>Used in units: DRagLint.V151.TXT, DRagLint.V151.TXT.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTXTCharWants = record
     Control: Boolean;
     Bidi   : Boolean;
@@ -30,6 +36,13 @@ type
 /// <summary>True when ABytes is a binary form file (stream signature TPF0), which holds no text to scan.</summary>
 /// <param name="ABytes">File content as on disk.</param>
 /// <returns>True for a binary DFM.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.TXT.TV151TXTRules.CheckRawBytes (DRagLint.V151.TXT.pas)</para>
+/// <para>Returns: (Length(ABytes) &gt;= 4) and (ABytes[0] = $54) and (ABytes[1] = $50)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TxtIsBinaryDfm(const ABytes: TBytes): Boolean;
 
 /// <summary>Scans decoded UTF-8 bytes for bidi, invisible and control characters, and (UTF-8 BOM files) invalid bytes.</summary>
@@ -38,12 +51,32 @@ function TxtIsBinaryDfm(const ABytes: TBytes): Boolean;
 /// <param name="AFilePath">Path put into each finding.</param>
 /// <param name="AWants">Which of the three rules to report.</param>
 /// <param name="AOut">Findings are appended; capped at TXT_MAX_PER_RULE per rule.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.TXT.TV151TXTRules.CheckRawBytes (DRagLint.V151.TXT.pas)</para>
+/// <para>Calls: DRagLint.V151.TXT.Support.DecodeAt, DRagLint.V151.TXT.Support.IsBidi, DRagLint.V151.TXT.Support.IsControl, DRagLint.V151.TXT.Support.IsInvisible, DRagLint.V151.TXT.Support.MakeFinding, Format</para>
+/// <para>Complexity: 19 (cyclomatic, outer body), 59 lines (full implementation)</para>
+/// <seealso cref="DRagLint.V151.TXT.Support.DecodeAt"/>
+/// <seealso cref="DRagLint.V151.TXT.Support.IsBidi"/>
+/// <seealso cref="DRagLint.V151.TXT.Support.IsControl"/>
+/// <seealso cref="DRagLint.V151.TXT.Support.IsInvisible"/>
+/// <seealso cref="DRagLint.V151.TXT.Support.MakeFinding"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure TxtScanChars(const AUtf8: TBytes; AHadUtf8Bom: Boolean; const AFilePath: string;
   const AWants: TTXTCharWants; AOut: TList<TLintFinding>);
 
 /// <summary>Copy of AUtf8 with every invalid byte replaced by '?', so the result always decodes as UTF-8 (TEncoding.UTF8 raises on bad bytes).</summary>
 /// <param name="AUtf8">Bytes that may hold invalid sequences (a BOM file).</param>
 /// <returns>Same length, valid UTF-8 where the input was.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.TXT.TV151TXTRules.CheckRawBytes (DRagLint.V151.TXT.pas)</para>
+/// <para>Calls: Copy, DRagLint.V151.TXT.Support.DecodeAt</para>
+/// <para>Returns: Copy(AUtf8)</para>
+/// <seealso cref="DRagLint.V151.TXT.Support.DecodeAt"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TxtSanitizeUtf8(const AUtf8: TBytes): TBytes;
 
 /// <summary>Lexes Pascal source for open-work comments and human-text string literals.</summary>
@@ -52,12 +85,35 @@ function TxtSanitizeUtf8(const AUtf8: TBytes): TBytes;
 /// <param name="AWantTodo">Report todo-comment.</param>
 /// <param name="AWantHard">Report hardcoded-string.</param>
 /// <param name="AOut">Findings are appended; capped at TXT_MAX_PER_RULE per rule.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.TXT.TV151TXTRules.CheckRawBytes (DRagLint.V151.TXT.pas)</para>
+/// <para>Calls: CharInSet, Copy, DRagLint.V151.TXT.Support.ExcludedCallee, DRagLint.V151.TXT.Support.IsHumanText, DRagLint.V151.TXT.Support.IsIdChar, DRagLint.V151.TXT.Support.IsIdStart, DRagLint.V151.TXT.Support.MakeFinding, DRagLint.V151.TXT.Support.TodoMarker, LowerCase</para>
+/// <para>Complexity: 98 (cyclomatic, outer body), 206 lines (full implementation)</para>
+/// <seealso cref="DRagLint.V151.TXT.Support.ExcludedCallee"/>
+/// <seealso cref="DRagLint.V151.TXT.Support.IsHumanText"/>
+/// <seealso cref="DRagLint.V151.TXT.Support.IsIdChar"/>
+/// <seealso cref="DRagLint.V151.TXT.Support.IsIdStart"/>
+/// <seealso cref="DRagLint.V151.TXT.Support.MakeFinding"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure TxtScanText(const ASource, AFilePath: string; AWantTodo, AWantHard: Boolean; AOut: TList<TLintFinding>);
 
 /// <summary>Compares the start of ASource with the header template found for AFilePath.</summary>
 /// <param name="ASource">Decoded source text.</param>
 /// <param name="AFilePath">The unit; the template file is searched from its directory upwards.</param>
 /// <param name="AOut">One finding appended when the header is missing or different. Nothing when no template file exists.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.TXT.TV151TXTRules.CheckRawBytes (DRagLint.V151.TXT.pas)</para>
+/// <para>Calls: DRagLint.V151.TXT.Support.FindTemplate, DRagLint.V151.TXT.Support.MakeFinding, DRagLint.V151.TXT.Support.SplitTrimmedLines, Format</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 28 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.V151.TXT.Support.FindTemplate"/>
+/// <seealso cref="DRagLint.V151.TXT.Support.MakeFinding"/>
+/// <seealso cref="DRagLint.V151.TXT.Support.SplitTrimmedLines"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure TxtCheckHeader(const ASource, AFilePath: string; AOut: TList<TLintFinding>);
 
 implementation

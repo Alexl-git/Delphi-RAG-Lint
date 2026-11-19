@@ -23,12 +23,24 @@ interface
 /// <param name="pJson">--json (or --format json); honoured by `repo info`.</param>
 /// <returns>0 = success; 1 = failure or usage error; 2 = schema drift (import-fb) or a
 /// malformed input file (restore, gen-memtable).</returns>
-/// <remarks>The repository path: --repo wins; else the project's `fieldRepository` key
+/// <remarks>
+/// The repository path: --repo wins; else the project's `fieldRepository` key
 /// (`_D-RAG\drag-lint-project.json`, relative to the project folder) -- one repository per
 /// DATABASE, several projects may point at the same file (ruling A2); else
 /// DefaultRepoPath(project). Neither --repo nor --project: usage error, 1. The flags
 /// --dry-run and --name are read from the command line here (the dispatch signature is the
-/// FRAME contract). Never prints a connection string or password. Not thread-safe.</remarks>
+/// FRAME contract). Never prints a connection string or password. Not thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Repo.DispatchRepo, DRagLint.CLI.Repo.IsImplementedSub, DRagLint.CLI.Repo.PrintError, DRagLint.CLI.RepoParamArray.RunGenParamArray, SameText, Writeln</para>
+/// <para>Returns: EXIT_FAIL; DispatchRepo(pSub, pRepo, pProject, pConnection, pInFile, pOutFile, pReplace, pJson); EXIT_FORMAT; if (E is ERepoError) and E.Message.Contains('does not match') then EXIT_FORMAT</para>
+/// <para>Catches: ERepoBackupFormatError (swallowed); Exception (swallowed)</para>
+/// <seealso cref="DRagLint.CLI.Repo.DispatchRepo"/>
+/// <seealso cref="DRagLint.CLI.Repo.IsImplementedSub"/>
+/// <seealso cref="DRagLint.CLI.Repo.PrintError"/>
+/// <seealso cref="DRagLint.CLI.RepoParamArray.RunGenParamArray"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunRepoVerb(const pSub, pRepo, pProject, pConnection, pInFile, pOutFile: string;
   pReplace, pJson: Boolean): Integer;
 

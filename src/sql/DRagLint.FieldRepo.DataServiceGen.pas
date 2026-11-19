@@ -27,11 +27,30 @@ uses
 /// <param name="pSaveForm">Region 9 parameter binding form of the _SERVER units (TOrmSaveForm).</param>
 /// <returns>Two entries per table (server, client) in table order, then the two DI units.</returns>
 /// <exception cref="EOrmGenError">A named table is not in the repository.</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.FieldRepo.DataServiceGen.PlanVerb (DRagLint.FieldRepo.DataServiceGen.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.DataServiceGen.AddServerRegistration, DRagLint.FieldRepo.DataServiceGen.FinishClientDI, DRagLint.FieldRepo.DataServiceGen.FinishServerDI, DRagLint.FieldRepo.DataServiceGen.GenerateDIClientObjectStart, DRagLint.FieldRepo.DataServiceGen.GenerateDIServerObjectStart, DRagLint.FieldRepo.OrmGen.OrmPlanFile, DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateNewClientObject, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateNewServerObject, DRagLint.FieldRepo.OrmGen.TOrmGenerator.TableNames, Format</para>
+/// <para>Returns: L.ToArray</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.FieldRepo.DataServiceGen.AddServerRegistration"/>
+/// <seealso cref="DRagLint.FieldRepo.DataServiceGen.FinishClientDI"/>
+/// <seealso cref="DRagLint.FieldRepo.DataServiceGen.FinishServerDI"/>
+/// <seealso cref="DRagLint.FieldRepo.DataServiceGen.GenerateDIClientObjectStart"/>
+/// <seealso cref="DRagLint.FieldRepo.DataServiceGen.GenerateDIServerObjectStart"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PlanGenDataService(pRepo: TFDConnection; const pServerDir, pClientDir: string;  // dl:ok unused-public-symbol@0574 -- REVIEWED 2026-11-17 v152 TTGEN: public API used by tests\fieldrepo\OrmGenTests.dpr and by CLI.Repo after the TTGEN handover
   const pTables: TArray<string>; pSaveForm: TOrmSaveForm = osfLegacy): TArray<TOrmFileChange>;
 
 type
   /// <summary>Options of the three generator verbs (repo gen-orm / update-orm / gen-dataservice).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.FieldRepo.DataServiceGen.pas) ?, DRagLint.CLI.Repo.RepoOrmVerb (DRagLint.CLI.Repo.pas), DRagLint.FieldRepo.DataServiceGen.PlanVerb (DRagLint.FieldRepo.DataServiceGen.pas) ?, DRagLint.FieldRepo.DataServiceGen.ReportPlan (DRagLint.FieldRepo.DataServiceGen.pas) ?, DRagLint.FieldRepo.DataServiceGen.RunOrmGenVerb (DRagLint.FieldRepo.DataServiceGen.pas) ?</para>
+  /// <para>Used in units: DRagLint.CLI.Repo, DRagLint.FieldRepo.DataServiceGen</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TOrmVerbOptions = record
     /// <summary>Sub-verb: 'gen-orm', 'update-orm' or 'gen-dataservice'.</summary>
     Sub: string;
@@ -64,6 +83,17 @@ type
 /// <param name="pOut">Receives the output lines; not cleared.</param>
 /// <returns>0 done; 1 bad arguments (a folder the verb needs is missing), unknown sub-verb,
 /// unknown table or a repository / generator error (the message is in pOut).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Repo.RepoOrmVerb (DRagLint.CLI.Repo.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.DataServiceGen.PlanVerb, DRagLint.FieldRepo.DataServiceGen.ReportPlan, DRagLint.FieldRepo.Schema.OpenRepository, Format</para>
+/// <para>Returns: 1; 0</para>
+/// <para>Catches: EOrmGenError (swallowed); ERepoError (swallowed)</para>
+/// <seealso cref="DRagLint.FieldRepo.DataServiceGen.PlanVerb"/>
+/// <seealso cref="DRagLint.FieldRepo.DataServiceGen.ReportPlan"/>
+/// <seealso cref="DRagLint.FieldRepo.Schema.OpenRepository"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunOrmGenVerb(const pOptions: TOrmVerbOptions; pOut: TStrings): Integer;  // dl:ok unused-public-symbol@bfa6 -- REVIEWED 2026-11-17 v152 TTGEN: public API used by tests\fieldrepo\OrmGenTests.dpr and by CLI.Repo after the TTGEN handover
 implementation
 

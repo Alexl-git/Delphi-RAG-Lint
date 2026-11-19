@@ -32,7 +32,13 @@ uses
 
 type
   /// <summary>Evaluates the member-could-be-private rule over one project index.</summary>
-  /// <remarks>Stateless; class methods only. Reads the store, never writes it.</remarks>
+  /// <remarks>
+  /// Stateless; class methods only. Reads the store, never writes it.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.V152.ATLB.TV152ATLBRules.CheckProject (DRagLint.V152.ATLB.pas)</para>
+  /// <para>Used in units: DRagLint.V152.ATLB</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMemberPrivacy = class
   public
     /// <summary>Finds public members that no file but their own declaring file references.</summary>
@@ -40,20 +46,41 @@ type
     /// <param name="ALibStore">Library index used to resolve interface ancestors; may be nil.</param>
     /// <param name="ARuleId">Rule id to stamp on each finding.</param>
     /// <returns>One hint per candidate member; nil when none.</returns>
-    /// <remarks>Cost: one GetReferencesFromFile per indexed file, plus a raw read of each indexed file
+    /// <remarks>
+    /// Cost: one GetReferencesFromFile per indexed file, plus a raw read of each indexed file
     /// when there is a candidate (preprocessed only when it spells a candidate's name): a candidate
-    /// another file names inside an inactive conditional branch is dropped. Meant for lint-all only.</remarks>
+    /// another file names inside an inactive conditional branch is dropped. Meant for lint-all only.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V152.ATLB.TV152ATLBRules.CheckProject (DRagLint.V152.ATLB.pas)</para>
+    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetAttributes, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Core.Interfaces.ISymbolStore.HasAttributes, DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOf, DRagLint.V152.ATLB.Support.HasAttributeAbove (+8 more)</para>
+    /// <para>Complexity: 30 (cyclomatic, outer body), 132 lines (full implementation)</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAttributes"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Find(const AStore, ALibStore: ISymbolStore; const ARuleId: string): TArray<TLintFinding>; static;
   end;
 
   /// <summary>1.52 BK-ATTRRULES (B48): evaluates debug-display-placeholder on one indexed file --
   /// a `[DebuggerDisplay('...{Name}...')]` attribute on a class or record whose template names
   /// a member the type (with its ancestors) does not have.</summary>
-  /// <remarks>Stateless; class methods only. Reads the attributes index fact (BK-EXTRA, B09) and
+  /// <remarks>
+  /// Stateless; class methods only. Reads the attributes index fact (BK-EXTRA, B09) and
   /// the symbol tables, never the source text. Silent whenever it cannot prove the member absent:
   /// no attributes table, a first argument that is not one string literal, a placeholder that
   /// does not start with an identifier, an ancestor no index places. Self is always accepted;
-  /// a placeholder is judged by its leading identifier only ({Owner.Name}, {Count,nq}).</remarks>
+  /// a placeholder is judged by its leading identifier only ({Owner.Name}, {Count,nq}).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.V152.ATLB.TV152ATLBRules.CheckFile (DRagLint.V152.ATLB.pas)</para>
+  /// <para>Used in units: DRagLint.V152.ATLB</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDebugDisplayCheck = class
   public
     /// <summary>Finds the debugger-display placeholders of one file that name no member.</summary>
@@ -64,6 +91,19 @@ type
     /// <param name="APath">The file path stamped on each finding.</param>
     /// <param name="ARuleId">Rule id to stamp on each finding.</param>
     /// <returns>One warning per unknown placeholder, at the attribute name; nil when none.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V152.ATLB.TV152ATLBRules.CheckFile (DRagLint.V152.ATLB.pas)</para>
+    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetAttributes, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Core.Interfaces.ISymbolStore.HasAttributes, DRagLint.V152.ATLB.Support.FirstStringLiteral, DRagLint.V152.ATLB.Support.IsDebugDisplayName, DRagLint.V152.ATLB.Support.MemberNamesOf, DRagLint.V152.ATLB.Support.PlaceholderNames, Format, LowerCase, SameText</para>
+    /// <para>Complexity: 13 (cyclomatic, outer body), 38 lines (full implementation)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAttributes"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.HasAttributes"/>
+    /// <seealso cref="DRagLint.V152.ATLB.Support.FirstStringLiteral"/>
+    /// <seealso cref="DRagLint.V152.ATLB.Support.IsDebugDisplayName"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Check(const AStore, ALibStore: ISymbolStore; AFileId: Int64;
       const APath, ARuleId: string): TArray<TLintFinding>; static;
   end;

@@ -39,6 +39,13 @@ type
   /// (outline, ClassMetrics) answer from the rows they already hold via
   /// HasChildInSet. nil means "no children known" and the row is treated as
   /// childless.</summary>
+  /// <param name="ASym"><!-- drag-lint:auto type -->const TSymbol</param>
+  /// <returns><!-- drag-lint:auto type -->Boolean</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.ForwardStub.pas), DRagLint.Core.ForwardStub.FoldForwardStubs (DRagLint.Core.ForwardStub.pas), DRagLint.Core.ForwardStub.HasChildInSet (DRagLint.Core.ForwardStub.pas), DRagLint.Core.ForwardStub.PairForwardStubs (DRagLint.Core.ForwardStub.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THasChildrenFn = reference to function(const ASym: TSymbol): Boolean;
 
 /// <summary>For every row of ARows, the index into ARows of the real
@@ -54,7 +61,14 @@ type
 /// <param name="AHasChildren">The children test; asked LAST, only for rows that
 /// passed every other test, so a database-backed callback runs rarely.</param>
 /// <returns>An array of the same length as ARows.</returns>
-/// <remarks>Pure; O(n^2) over the rows of one lookup, which are few.</remarks>
+/// <remarks>
+/// Pure; O(n^2) over the rows of one lookup, which are few.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoOutline (DRagLint.CLI.pas), DRagLint.Core.ForwardStub.FoldForwardStubs (DRagLint.Core.ForwardStub.pas), DRagLint.Lint.ClassMetrics.TClassMetrics.Run.BuildInventory (DRagLint.Lint.ClassMetrics.pas)</para>
+/// <para>Calls: AHasChildren, SameText</para>
+/// <para>Complexity: 17 (cyclomatic, outer body), 26 lines (full implementation)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PairForwardStubs(const ARows: TArray<TSymbol>; const AHasChildren: THasChildrenFn): TArray<Integer>;
 
 /// <summary>Drops every row PairForwardStubs pairs and stamps each target's
@@ -64,6 +78,13 @@ function PairForwardStubs(const ARows: TArray<TSymbol>; const AHasChildren: THas
 /// <param name="ARows">The result set of a by-name lookup or a whole-file listing.</param>
 /// <param name="AHasChildren">See PairForwardStubs.</param>
 /// <returns>A new array; Length(Result) = Length(ARows) - number of folded stubs.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.FoldStubs (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Calls: Copy, DRagLint.Core.ForwardStub.PairForwardStubs</para>
+/// <seealso cref="DRagLint.Core.ForwardStub.PairForwardStubs"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FoldForwardStubs(const ARows: TArray<TSymbol>; const AHasChildren: THasChildrenFn): TArray<TSymbol>;
 
 /// <summary>A THasChildrenFn that answers from ARows itself: True when some row
@@ -72,6 +93,12 @@ function FoldForwardStubs(const ARows: TArray<TSymbol>; const AHasChildren: THas
 /// <param name="ARows">A whole-file row set.</param>
 /// <returns>The closure; ARows is captured by reference (a dynamic array), so
 /// callers must not mutate it while the closure is live.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoOutline (DRagLint.CLI.pas)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HasChildInSet(const ARows: TArray<TSymbol>): THasChildrenFn;
 
 implementation

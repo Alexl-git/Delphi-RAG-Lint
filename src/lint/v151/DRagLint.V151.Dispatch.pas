@@ -19,44 +19,155 @@ uses
 
 type
   /// <summary>Calls every v151 lane unit in a fixed order and merges their findings.</summary>
-  /// <remarks>Stateless after unit initialization (the declaration list is built
+  /// <remarks>
+  /// Stateless after unit initialization (the declaration list is built
   /// once there), so every method is safe to call from any thread the caller
   /// already lints on. With no lane declaring a rule, Wants is always False and
-  /// the CLI hooks cost one boolean test per file.</remarks>
+  /// the CLI hooks cost one boolean test per file.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.V151.Dispatch.initialization (DRagLint.V151.Dispatch.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.V151.Dispatch</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TV151Dispatch = class
   public
     /// <summary>Every declaration of every lane (new rules and host expansions), lane order.</summary>
     /// <returns>A copy of the start-up list.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Copy</para>
+    /// <para>Returns: Copy(GDecls)</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.CatalogRows"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.CheckDfm"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.CheckFile"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.CheckProject"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.CheckRawBytes"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Decls: TArray<TV151RuleDecl>; static;
     /// <summary>The catalog rows of the NEW v151 rules (host expansions excluded).</summary>
     /// <returns>One TRuleInfo per vdkNewRule declaration, Source = 'builtin'.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.Dispatch.initialization (DRagLint.V151.Dispatch.pas)</para>
+    /// <para>Calls: Default</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.CheckDfm"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.CheckFile"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.CheckProject"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.CheckRawBytes"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.Decls"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function CatalogRows: TArray<TRuleInfo>; static;
     /// <summary>Every rule id a lane may emit (new ids and host ids), lowercase.</summary>
     /// <returns>Distinct ids; empty while every lane is a stub.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>Calls: Copy</para>
+    /// <para>Returns: Copy(GIds)</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.CatalogRows"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.CheckDfm"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.CheckFile"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.CheckProject"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.CheckRawBytes"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function RuleIds: TArray<string>; static;
     /// <summary>Does this run need the v151 lanes at all?</summary>
     /// <param name="ANarrowRule">The run's --rule, '' for all.</param>
     /// <returns>False when no lane declares anything, or when --rule names an id no lane declares.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas)</para>
+    /// <para>Calls: SameText</para>
+    /// <para>Returns: False</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.CatalogRows"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.CheckDfm"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.CheckFile"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.CheckProject"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.CheckRawBytes"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Wants(const ANarrowRule: string): Boolean; static;
     /// <summary>Per-file pass: every lane's CheckFile, then CheckRawBytes on the .pas, then
     /// (sibling form present) CheckDfm and CheckRawBytes on the .dfm.</summary>
     /// <param name="ACtx">The file being linted.</param>
     /// <returns>All findings, narrowed to ACtx.NarrowRule.</returns>
-    /// <remarks>An exception in one lane is reported on stderr and that lane's
-    /// findings for this file are dropped; the other lanes still run.</remarks>
+    /// <remarks>
+    /// An exception in one lane is reported on stderr and that lane's
+    /// findings for this file are dropped; the other lanes still run.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Core.LintBudget.RuleBudgetBeginFile, DRagLint.Core.LintBudget.RuleBudgetEffectiveMs, DRagLint.Lint.Config.TLintConfig.RuleTimeBudgetMs, DRagLint.V151.Api.V151Narrow, DRagLint.V151.Dispatch.Budgeted, DRagLint.V151.Dispatch.CloseBudget, DRagLint.V151.Dispatch.LaneFailed, DRagLint.V151.Dispatch.TV151Dispatch.CheckDfm, DRagLint.V151.Dispatch.TV151Dispatch.CheckRawBytes</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Core.LintBudget.RuleBudgetBeginFile"/>
+    /// <seealso cref="DRagLint.Core.LintBudget.RuleBudgetEffectiveMs"/>
+    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.RuleTimeBudgetMs"/>
+    /// <seealso cref="DRagLint.V151.Api.V151Narrow"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.Budgeted"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>; static;
     /// <summary>Every lane's CheckDfm for ACtx.DfmPath (nil when there is no sibling form).</summary>
     /// <param name="ACtx">The file being linted.</param>
     /// <returns>Findings, narrowed.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.Dispatch.TV151Dispatch.CheckFile (DRagLint.V151.Dispatch.pas)</para>
+    /// <para>Calls: DRagLint.V151.Api.V151Narrow, DRagLint.V151.Dispatch.Budgeted, DRagLint.V151.Dispatch.LaneFailed</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.Api.V151Narrow"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.Budgeted"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.LaneFailed"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.CatalogRows"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.CheckFile"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>; static;
     /// <summary>Every lane's CheckRawBytes for one file's bytes.</summary>
     /// <param name="ACtx">The file being linted.</param>
     /// <param name="AFilePath">ACtx.Path or ACtx.DfmPath; read from disk here.</param>
     /// <returns>Findings, narrowed; nil when the file cannot be read.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.Dispatch.TV151Dispatch.CheckFile (DRagLint.V151.Dispatch.pas)</para>
+    /// <para>Calls: DRagLint.V151.Api.V151Narrow, DRagLint.V151.Dispatch.Budgeted, DRagLint.V151.Dispatch.LaneFailed</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.Api.V151Narrow"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.Budgeted"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.LaneFailed"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.CatalogRows"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.CheckDfm"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string): TArray<TLintFinding>; static;
     /// <summary>Project-wide pass (lint-all): every lane's CheckProject.</summary>
     /// <param name="ACtx">The project.</param>
     /// <returns>Findings, narrowed.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.V151.Api.V151Narrow, DRagLint.V151.Dispatch.LaneFailed</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.Api.V151Narrow"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.LaneFailed"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.CatalogRows"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.CheckDfm"/>
+    /// <seealso cref="DRagLint.V151.Dispatch.TV151Dispatch.CheckFile"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>; static;
   end;
 

@@ -285,7 +285,7 @@ type
       /// One AST walk per routine. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.RoutineMetricFindings (DRagLint.CLI.pas)</para>
-      /// <para>Calls: CheckProc, CountNames, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Emit, Format, Integer, MaxNest, NodeStr, TreeSitter.TTSTree.RootNode</para>
+      /// <para>Calls: CheckProc, CountNames, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Emit, Format, Integer, MatchStr, MaxNest, NodeStr, TreeSitter.TTSTree.RootNode</para>
       /// <para>Returns: nil; Findings.ToArray</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics.Visit"/>
@@ -605,8 +605,9 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-      /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars.CheckGlobalVarDecls, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, InInitialization, Integer, Move, NodeStr, SameText, TreeSitter.TTSTree.RootNode, WrittenOnlyInInitialization</para>
+      /// <para>Calls: ChangeFileExt, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars.CheckGlobalVarDecls, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, FileExists, Format, InInitialization, Integer, IsDfmFormVariable (+9 more)</para>
       /// <para>Pure</para>
+      /// <para>Catches: EStreamError (swallowed)</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars.CheckGlobalVarDecls"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="TreeSitter.TTSTree.RootNode"/>
@@ -1017,7 +1018,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.RoutineMetricFindings (DRagLint.CLI.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity/1 (DRagLint.Diagnostics.AstChecks.pas)</para>
-      /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, Score, TreeSitter.TTSTree.RootNode</para>
+      /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, MatchStr, Score, TreeSitter.TTSTree.RootNode</para>
       /// <para>Overload 2 of 2</para>
       /// <para>Pure</para>
       /// <para>Directives: overload</para>

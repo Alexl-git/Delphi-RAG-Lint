@@ -81,7 +81,7 @@ type
 /// <para>Called from: DragLint.Plugin.StructureForm.EnqueueRenamePreviewJob (DragLint.Plugin.StructureForm.pas)</para>
 /// <para>Calls: Default, DragLint.Plugin.DiagList.ParseRenamePreview.AddTarget, DragLint.Plugin.DiagList.ParseRenamePreview.ProjectIndex, DragLint.Plugin.DiagList.TagRest, Format, IndexText, SameText, StartsText, StrToIntDef</para>
 /// <para>Returns: Default(TRenamePreview)</para>
-/// <para>Complexity: 15 (cyclomatic, outer body), 96 lines (full implementation)</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 96 lines (full implementation)</para>
 /// <seealso cref="DragLint.Plugin.DiagList.ParseRenamePreview.AddTarget"/>
 /// <seealso cref="DragLint.Plugin.DiagList.ParseRenamePreview.ProjectIndex"/>
 /// <seealso cref="DragLint.Plugin.DiagList.TagRest"/>
@@ -149,7 +149,7 @@ function RenameApplyTimeoutMs(const APreview: TRenamePreview; ABaseMs: Integer):
 /// <para>Called from: DragLint.Plugin.StructureForm.EnqueueRenamePreviewJob (DragLint.Plugin.StructureForm.pas)</para>
 /// <para>Calls: Copy, DragLint.Plugin.DiagList.RenameConfirmText.AppendCapped, Pos</para>
 /// <para>Returns: SB.ToString</para>
-/// <para>Complexity: 15 (cyclomatic, outer body), 91 lines (full implementation)</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 91 lines (full implementation)</para>
 /// <seealso cref="DragLint.Plugin.DiagList.RenameConfirmText.AppendCapped"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -358,7 +358,7 @@ function AutofixApplied(const ASummary: string): Boolean;
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.StructureForm.CycleFixNote (DragLint.Plugin.StructureForm.pas)</para>
 /// <para>Calls: DragLint.Plugin.DiagList.AppliedText, DragLint.Plugin.DiagList.DryRunText, DragLint.Plugin.DiagList.FirstRefusal, DragLint.Plugin.DiagList.GroupRolledBackText, DragLint.Plugin.DiagList.LastCycle, DragLint.Plugin.DiagList.ParseCycleFix, DragLint.Plugin.DiagList.RefusalText, DragLint.Plugin.DiagList.RolledBackText, SameText, StartsText</para>
-/// <para>Returns: RolledBackText(Err); 'failed: ' + Err; RefusalText(Root, Ref); 'cycle fix: no circular group to fix'; GroupRolledBackText(Cyc); AppliedText(Cyc)</para>
+/// <para>Returns: RolledBackText(Err); 'failed: ' + Err; RefusalText(Root, Ref); 'cycle fix: no circular group to fix'; GroupRolledBackText(Cyc); AppliedText(Cyc); DryRunText(Root, Cyc)</para>
 /// <para>Complexity: 10 (cyclomatic, outer body), 25 lines (full implementation)</para>
 /// <seealso cref="DragLint.Plugin.DiagList.AppliedText"/>
 /// <seealso cref="DragLint.Plugin.DiagList.DryRunText"/>

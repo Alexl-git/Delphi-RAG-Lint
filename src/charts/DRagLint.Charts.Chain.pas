@@ -574,7 +574,7 @@ type
     /// <para>Called from: DRagLint.Charts.Chain.TChainWalker.ResolveRePointTable (DRagLint.Charts.Chain.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl (DRagLint.Charts.Trace.Anchor.pas)</para>
     /// <para>Calls: Default, DRagLint.Charts.Source.TSourceReader.SourceFresh, DRagLint.Charts.Sql.SortUniqueNames, DRagLint.Charts.Text.FileNameOf, Format, SameText</para>
     /// <para>Returns: Default(TRePointPick)</para>
-    /// <para>Complexity: 11 (cyclomatic, outer body), 42 lines (full implementation)</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 42 lines (full implementation)</para>
     /// <para>Reads: FReader</para>
     /// <seealso cref="DRagLint.Charts.Source.TSourceReader.SourceFresh"/>
     /// <seealso cref="DRagLint.Charts.Sql.SortUniqueNames"/>

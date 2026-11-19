@@ -13,10 +13,33 @@ uses
 /// <summary>drag-lint hover --qname Foo.Bar [--db path] [--format md|plain|json]: the hover card of one symbol.</summary>
 /// <param name="AArgs">--qname (required), --db, --format.</param>
 /// <returns>0 when rendered; 2 on a usage error or a missing --db.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Common.ExplicitDbsExist, DRagLint.CLI.Common.OpenReadOnlyStore, DRagLint.CLI.Common.ReportNotFoundFor, DRagLint.CLI.Common.StaleDbRefusesRun, DRagLint.CLI.ConsumerDbs.ResolveConsumerDbs, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc, DRagLint.Hover.Renderer.RenderHoverJson/2, DRagLint.Hover.Renderer.RenderHoverMarkdown, DRagLint.Hover.Renderer.RenderHoverPlain (+6 more)</para>
+/// <para>Returns: 2; 1; 0</para>
+/// <para>Complexity: 23 (cyclomatic, outer body), 113 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.ExplicitDbsExist"/>
+/// <seealso cref="DRagLint.CLI.Common.OpenReadOnlyStore"/>
+/// <seealso cref="DRagLint.CLI.Common.ReportNotFoundFor"/>
+/// <seealso cref="DRagLint.CLI.Common.StaleDbRefusesRun"/>
+/// <seealso cref="DRagLint.CLI.ConsumerDbs.ResolveConsumerDbs"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoHover(const AArgs: TArgs): Integer;
 
 /// <summary>Hidden self-test verb of the WCAG contrast unit: prints known-answer ratios (BLACK_ON_WHITE, SAME, DARKFAIL, FIXED) for the test script to assert; no --db, no fixture.</summary>
 /// <returns>Always 0 (the script judges the printed values).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Hover.Contrast.ContrastRatio, DRagLint.Hover.Contrast.EnsureReadable, Format, Writeln</para>
+/// <para>Returns: 0</para>
+/// <seealso cref="DRagLint.Hover.Contrast.ContrastRatio"/>
+/// <seealso cref="DRagLint.Hover.Contrast.EnsureReadable"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoContrastSelfTest: Integer;
 
 implementation

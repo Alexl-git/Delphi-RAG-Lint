@@ -147,8 +147,22 @@ function FindKnownPackagePath(const ANameFragment: string): string;
 type
   /// <summary>File-exists probe; injected so the resolver is testable without
   /// the machine's folder layout.</summary>
+  /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+  /// <returns><!-- drag-lint:auto type -->Boolean</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.Updates.pas), DragLint.Plugin.Updates.ResolveYadfTool (DragLint.Plugin.Updates.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPathExists = reference to function(const APath: string): Boolean;
   /// <summary>PATH probe: full path of AFileName on the search path, or ''.</summary>
+  /// <param name="AFileName"><!-- drag-lint:auto type -->const string</param>
+  /// <returns><!-- drag-lint:auto type -->string</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.Updates.pas), DragLint.Plugin.Updates.ResolveYadfTool (DragLint.Plugin.Updates.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPathSearch = reference to function(const AFileName: string): string;
 
 /// <summary>Finds a YADF tool exe (YADF.exe, YADFSetup.exe) for the registered
@@ -161,7 +175,14 @@ type
 /// <param name="AExists">File-exists probe.</param>
 /// <param name="ASearch">PATH probe.</param>
 /// <returns>Full path of the exe, or '' when none was found.</returns>
-/// <remarks>Pure apart from the two probes; no registry, no disk access of its own.</remarks>
+/// <remarks>
+/// Pure apart from the two probes; no registry, no disk access of its own.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Updates.FindYadfTool (DragLint.Plugin.Updates.pas)</para>
+/// <para>Calls: AExists, ASearch, ExcludeTrailingPathDelimiter, ExtractFileDir, ExtractFileName, ExtractFilePath, IncludeTrailingPathDelimiter, SameText</para>
+/// <para>Returns: ''; ASearch(AExeName)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolveYadfTool(const ABplPath, AExeName: string;
   const AExists: TPathExists; const ASearch: TPathSearch): string;
 
@@ -169,6 +190,14 @@ function ResolveYadfTool(const ABplPath, AExeName: string;
 /// <param name="ABplPath">See ResolveYadfTool.</param>
 /// <param name="AExeName">See ResolveYadfTool.</param>
 /// <returns>Full path of the exe, or '' when none was found.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.DoCheckUpdates (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.Diagnose.DiagRelatedTools (DragLint.Plugin.Diagnose.pas)</para>
+/// <para>Calls: DragLint.Plugin.Updates.ResolveYadfTool, FileExists, PChar, SearchPath</para>
+/// <para>Returns: if SearchPath(nil, PChar(F), nil, Length(Buf), Buf, Fp) &gt; 0 then string(PChar(@Buf))</para>
+/// <seealso cref="DragLint.Plugin.Updates.ResolveYadfTool"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindYadfTool(const ABplPath, AExeName: string): string;
 
 /// <summary>Latest release tag of ARepo from the GitHub API.</summary>

@@ -56,9 +56,8 @@ function RemoveUsesEntry(const AFinding: TLintFinding; ALines: TStringList; AEdi
 /// the span moves (CLIFIX C3: such a file used to be declined by the uses fixers).
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Fix.ProjectWide.FixUsesMovable (DRagLint.Fix.ProjectWide.pas), DRagLint.Fix.Store.FixClassNameCompare (DRagLint.Fix.Store.pas), DRagLint.Fix.Store.FixUnusedUnits (DRagLint.Fix.Store.pas), DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedEntries (DRagLint.LSP.UsesOnSave.pas)</para>
-/// <para>Calls: DRagLint.Convert.UsesReconcile.CharColumn</para>
 /// <para>Returns: AFinding</para>
-/// <seealso cref="DRagLint.Convert.UsesReconcile.CharColumn"/>
+/// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function WithCharColumns(const AFinding: TLintFinding; ALines: TStrings): TLintFinding;

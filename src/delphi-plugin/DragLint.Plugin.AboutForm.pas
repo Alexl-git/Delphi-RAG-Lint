@@ -160,13 +160,13 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildButtons (DragLint.Plugin.AboutForm.pas)</para>
-      /// <para>Calls: DragLint.Plugin.AboutForm.ShowTextReport, DragLint.Plugin.Updates.FetchLatestReleaseTag, DragLint.Plugin.Updates.FileVersionOf, DragLint.Plugin.Updates.FindKnownPackagePath, DragLint.Plugin.Updates.IsUpdateAvailable, ExtractFilePath, Format, SameText</para>
+      /// <para>Calls: DragLint.Plugin.AboutForm.ShowTextReport, DragLint.Plugin.Updates.FetchLatestReleaseTag, DragLint.Plugin.Updates.FileVersionOf, DragLint.Plugin.Updates.FindKnownPackagePath, DragLint.Plugin.Updates.FindYadfTool, DragLint.Plugin.Updates.IsUpdateAvailable, Format, SameText</para>
       /// <para>UI thread only -- touches Screen</para>
       /// <seealso cref="DragLint.Plugin.AboutForm.ShowTextReport"/>
       /// <seealso cref="DragLint.Plugin.Updates.FetchLatestReleaseTag"/>
       /// <seealso cref="DragLint.Plugin.Updates.FileVersionOf"/>
       /// <seealso cref="DragLint.Plugin.Updates.FindKnownPackagePath"/>
-      /// <seealso cref="DragLint.Plugin.Updates.IsUpdateAvailable"/>
+      /// <seealso cref="DragLint.Plugin.Updates.FindYadfTool"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DoCheckUpdates(Sender: TObject);

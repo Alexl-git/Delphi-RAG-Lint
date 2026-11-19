@@ -12,6 +12,12 @@ uses
 
 type
   /// <summary>What the `unwith` command line asks for.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.Unwith.pas) ?, DRagLint.CLI.DoUnwith (DRagLint.CLI.pas), DRagLint.CLI.Unwith.RunUnwith (DRagLint.CLI.Unwith.pas) ?</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.Unwith</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUnwithRunOptions = record
     /// <summary>--in: one file; '' = every .pas / .dpr of the project index.</summary>
     InFile: string;
@@ -40,6 +46,20 @@ type
 /// <param name="pLib">The platform library; nil = ancestors outside the project refuse.</param>
 /// <returns>0 = plan printed, or applied and proved. 1 = the with on --line refused, nothing to apply, or the gate or the
 /// after-proof refused and rolled back. 2 = a rollback failed: the project may be PARTLY changed.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoUnwith (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.CLI.Unwith.RunUnwith.IsExcluded, DRagLint.CLI.Unwith.RunUnwith.JsonOf, DRagLint.CLI.Unwith.RunUnwith.PrintSite, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear, DRagLint.Refactor.Unwith.UnwithApply, DRagLint.Refactor.Unwith.UnwithPlanFile, ExpandFileName (+7 more)</para>
+/// <para>Returns: 0; if Applied.RollbackFailed then 2; 1</para>
+/// <para>Complexity: 19 (cyclomatic, outer body), 168 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Unwith.RunUnwith.IsExcluded"/>
+/// <seealso cref="DRagLint.CLI.Unwith.RunUnwith.JsonOf"/>
+/// <seealso cref="DRagLint.CLI.Unwith.RunUnwith.PrintSite"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunUnwith(const pOpts: TUnwithRunOptions; const pStore, pLib: ISymbolStore): Integer;
 
 implementation

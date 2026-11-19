@@ -39,8 +39,8 @@ type
   /// parameter names and -eq are case-insensitive, so '-target' and '-Target' are one
   /// argument here too. Args never holds two entries with the same name.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Charts.AskVerb.AskCommandOf (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Compare.ChooseCommand (DRagLint.Charts.Compare.pas), DRagLint.Charts.Compare.ProduceNewSide (DRagLint.Charts.Compare.pas), DRagLint.Charts.ReportHeader.ParseCommandLine (DRagLint.Charts.ReportHeader.pas), DRagLint.CLI.CompareBuildCommand (DRagLint.CLI.pas) (+26 more)</para>
-  /// <para>Used in units: DRagLint.Charts.Ask, DRagLint.Charts.AskVerb, DRagLint.Charts.Compare, DRagLint.Charts.Producer, DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Question, DRagLint.Charts.Render, DRagLint.Charts.ReportHeader, DRagLint.CLI</para>
+  /// <para>Used by: DRagLint.Charts.AskVerb.AskCommandOf (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Compare.ChooseCommand (DRagLint.Charts.Compare.pas), DRagLint.Charts.Compare.ProduceNewSide (DRagLint.Charts.Compare.pas), DRagLint.Charts.ReportHeader.ParseCommandLine (DRagLint.Charts.ReportHeader.pas), DRagLint.CLI.Compare.CompareBuildCommand (DRagLint.CLI.Compare.pas) (+26 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Ask, DRagLint.Charts.AskVerb, DRagLint.Charts.Compare, DRagLint.Charts.Producer, DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Question, DRagLint.Charts.Render, DRagLint.Charts.ReportHeader, DRagLint.CLI.Compare</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReportCommand = record
@@ -53,7 +53,7 @@ type
     /// <returns>True when present (even with an empty value).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.Ask.ReportCommandText (DRagLint.Charts.Ask.pas), DRagLint.Charts.Compare.TargetWithTo (DRagLint.Charts.Compare.pas), DRagLint.Charts.Producer.Delphi.NumArg (DRagLint.Charts.Producer.Delphi.pas), DRagLint.Charts.ReportHeader.BuildCommandLine (DRagLint.Charts.ReportHeader.pas), DRagLint.CLI.CompareTargetOf (DRagLint.CLI.pas)</para>
+    /// <para>Called from: DRagLint.Charts.Ask.ReportCommandText (DRagLint.Charts.Ask.pas), DRagLint.Charts.Compare.TargetWithTo (DRagLint.Charts.Compare.pas), DRagLint.Charts.Producer.Delphi.NumArg (DRagLint.Charts.Producer.Delphi.pas), DRagLint.Charts.ReportHeader.BuildCommandLine (DRagLint.Charts.ReportHeader.pas), DRagLint.CLI.Compare.CompareTargetOf (DRagLint.CLI.Compare.pas)</para>
     /// <para>Calls: DRagLint.Charts.ReportHeader.ArgIndex</para>
     /// <para>Returns: ArgIndex(Args, pName) &lt;&gt; NOT_FOUND</para>
     /// <para>Reads: Args</para>
@@ -68,7 +68,7 @@ type
     /// <returns>The value, or '' when the argument is absent.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.Ask.AskChartQuestion (DRagLint.Charts.Ask.pas), DRagLint.Charts.Ask.MetaJson (DRagLint.Charts.Ask.pas), DRagLint.Charts.Ask.RegenerateText (DRagLint.Charts.Ask.pas), DRagLint.CLI.CompareIsSnapshotOnly (DRagLint.CLI.pas), DRagLint.CLI.CompareTargetOf (DRagLint.CLI.pas) (+14 more)</para>
+    /// <para>Called from: DRagLint.Charts.Ask.AskChartQuestion (DRagLint.Charts.Ask.pas), DRagLint.Charts.Ask.MetaJson (DRagLint.Charts.Ask.pas), DRagLint.Charts.Ask.RegenerateText (DRagLint.Charts.Ask.pas), DRagLint.CLI.Compare.CompareIsSnapshotOnly (DRagLint.CLI.Compare.pas), DRagLint.CLI.Compare.CompareTargetOf (DRagLint.CLI.Compare.pas) (+14 more)</para>
     /// <para>Calls: DRagLint.Charts.ReportHeader.ArgIndex</para>
     /// <para>Returns: if I = NOT_FOUND then ''</para>
     /// <para>Reads: Args</para>
@@ -82,7 +82,7 @@ type
     /// <returns>True when Question is ''.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.Compare.ChooseCommand (DRagLint.Charts.Compare.pas), DRagLint.Charts.Compare.LoadAutoSnapshotSide (DRagLint.Charts.Compare.pas), DRagLint.Charts.Compare.TakeGivenCommand (DRagLint.Charts.Compare.pas), DRagLint.CLI.CompareIsSnapshotOnly (DRagLint.CLI.pas), DRagLint.CLI.CompareUsageProblem (DRagLint.CLI.pas) (+2 more)</para>
+    /// <para>Called from: DRagLint.Charts.Compare.ChooseCommand (DRagLint.Charts.Compare.pas), DRagLint.Charts.Compare.LoadAutoSnapshotSide (DRagLint.Charts.Compare.pas), DRagLint.Charts.Compare.TakeGivenCommand (DRagLint.Charts.Compare.pas), DRagLint.CLI.Compare.CompareIsSnapshotOnly (DRagLint.CLI.Compare.pas), DRagLint.CLI.Compare.CompareUsageProblem (DRagLint.CLI.Compare.pas) (+2 more)</para>
     /// <para>Returns: Question = ''</para>
     /// <para>Reads: Question</para>
     /// <para>Effect-free (proven)</para>
@@ -151,7 +151,7 @@ type
 /// <para>Called from: DRagLint.Charts.Adapter.Text.HeaderRange (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.Compare.HeaderOf (DRagLint.Charts.Compare.pas), DRagLint.Charts.Remarks.RemarksBlockIsReport (DRagLint.Charts.Remarks.pas)</para>
 /// <para>Calls: Default, DRagLint.Charts.ReportHeader.BodyAt, DRagLint.Charts.ReportHeader.IsContinuation, DRagLint.Charts.ReportHeader.LeadingSpaces, DRagLint.Charts.ReportHeader.ParseCommandLine, DRagLint.Charts.ReportHeader.StripDocPrefix, DRagLint.Charts.ReportHeader.XmlUnescape</para>
 /// <para>Returns: False; True</para>
-/// <para>Complexity: 19 (cyclomatic, outer body), 55 lines (full implementation)</para>
+/// <para>Complexity: 21 (cyclomatic, outer body), 55 lines (full implementation)</para>
 /// <para>Mutates: pHeader (out)</para>
 /// <seealso cref="DRagLint.Charts.ReportHeader.BodyAt"/>
 /// <seealso cref="DRagLint.Charts.ReportHeader.IsContinuation"/>
@@ -173,7 +173,7 @@ function ParseReportHeader(const pLines: TArray<string>; out pHeader: TReportHea
 /// '-3' is a value. A repeated name keeps its first position and takes the last value; a
 /// value with no name before it is ignored.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.ReportHeader.ParseReportHeader (DRagLint.Charts.ReportHeader.pas), DRagLint.CLI.CompareBuildCommand (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.Charts.ReportHeader.ParseReportHeader (DRagLint.Charts.ReportHeader.pas), DRagLint.CLI.Compare.CompareBuildCommand (DRagLint.CLI.Compare.pas)</para>
 /// <para>Calls: Default, DRagLint.Charts.ReportHeader.ArgIndex, DRagLint.Charts.ReportHeader.IsName, DRagLint.Charts.ReportHeader.Tokenise</para>
 /// <para>Returns: False; True</para>
 /// <para>Complexity: 11 (cyclomatic, outer body), 43 lines (full implementation)</para>

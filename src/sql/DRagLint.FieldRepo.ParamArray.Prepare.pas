@@ -34,6 +34,12 @@ interface
 
 type
   /// <summary>Outcome of PAPrepareQueries.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.RepoParamArray.pas) ?, declaration (DRagLint.FieldRepo.ParamArray.Prepare.pas) ?, DRagLint.FieldRepo.ParamArray.Prepare.EditPas (DRagLint.FieldRepo.ParamArray.Prepare.pas) ?, DRagLint.FieldRepo.ParamArray.Prepare.PAPrepareQueries (DRagLint.FieldRepo.ParamArray.Prepare.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.RepoParamArray, DRagLint.FieldRepo.ParamArray.Prepare</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPAPrepareResult = record
     /// <summary>The rewritten DFM text (the input when nothing changed).</summary>
     Dfm: string;
@@ -59,8 +65,23 @@ type
 /// '' = every top-level TFDQuery whose SQL starts with SELECT.</param>
 /// <returns>The rewritten texts and what was done. A DFM the scanner does not understand gives
 /// the input back unchanged with a warning.</returns>
-/// <remarks>Pure text function: no file access, no database. Line breaks follow the input
-/// (CRLF when the input has any). Idempotent: a prepared query holds INSERT SQL, not SELECT.</remarks>
+/// <exception cref="EPAPrepare"><!-- drag-lint:auto exc -->no object line</exception>
+/// <remarks>
+/// Pure text function: no file access, no database. Line breaks follow the input
+/// (CRLF when the input has any). Idempotent: a prepared query holds INSERT SQL, not SELECT.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RepoParamArray.AnalyseUnit (DRagLint.CLI.RepoParamArray.pas)</para>
+/// <para>Calls: ContainsStr, Copy, Default, DRagLint.FieldRepo.ParamArray.Prepare.DecodeStringList, DRagLint.FieldRepo.ParamArray.Prepare.EditPas, DRagLint.FieldRepo.ParamArray.Prepare.FindProp, DRagLint.FieldRepo.ParamArray.Prepare.IsObjectLine, DRagLint.FieldRepo.ParamArray.Prepare.ScanObject, DRagLint.FieldRepo.ParamArray.Prepare.SplitText, DRagLint.FieldRepo.ParamArray.Prepare.TLineEdits.Init (+7 more)</para>
+/// <para>Returns: Default(TPAPrepareResult); LRun.Res</para>
+/// <para>Complexity: 18 (cyclomatic, outer body), 67 lines (full implementation)</para>
+/// <para>Catches: EPAPrepare (swallowed)</para>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.Prepare.DecodeStringList"/>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.Prepare.EditPas"/>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.Prepare.FindProp"/>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.Prepare.IsObjectLine"/>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.Prepare.ScanObject"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PAPrepareQueries(const pDfm, pPas, pOnlyQuery: string): TPAPrepareResult;
 
 /// <summary>Unified diff with zero context lines (Myers line diff).</summary>
@@ -68,6 +89,16 @@ function PAPrepareQueries(const pDfm, pPas, pOnlyQuery: string): TPAPrepareResul
 /// <param name="pOld">Old text.</param>
 /// <param name="pNew">New text.</param>
 /// <returns>The diff (CRLF lines), or '' when the texts have the same lines.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RepoParamArray.AnalyseUnit (DRagLint.CLI.RepoParamArray.pas)</para>
+/// <para>Calls: ContainsStr, DRagLint.FieldRepo.ParamArray.Prepare.DiffLines, DRagLint.FieldRepo.ParamArray.Prepare.EditScript, Format</para>
+/// <para>Returns: ''; LSb.ToString</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 58 lines (full implementation)</para>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.Prepare.DiffLines"/>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.Prepare.EditScript"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PAUnifiedDiff(const pFileName, pOld, pNew: string): string;
 
 implementation

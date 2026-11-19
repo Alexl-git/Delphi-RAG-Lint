@@ -17,11 +17,24 @@ uses
 /// <param name="pSchema">The verb's schema id, e.g. 'lazy-init/1'.</param>
 /// <param name="pMessage">The error text.</param>
 /// <returns>The error exit code, 2.</returns>
-/// <remarks>Writes to stdout (the verbs' existing contract); not thread-safe.</remarks>
+/// <remarks>
+/// Writes to stdout (the verbs' existing contract); not thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Refactor.ExtractInterface.RunExtractInterface.Fail (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.LazyInit.RunLazyInit.Fail (DRagLint.Refactor.LazyInit.pas)</para>
+/// <para>Calls: Writeln</para>
+/// <para>Returns: CExitError</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReportVerbError(pJson: Boolean; const pSchema, pMessage: string): Integer;
 
 type
   /// <summary>The arguments of ApplyOneFileThroughScratch that come from the verb's options.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.VerbShape.pas) ?, DRagLint.Refactor.ExtractInterface.RunExtractInterface (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.LazyInit.RunLazyInit (DRagLint.Refactor.LazyInit.pas), DRagLint.Refactor.VerbShape.ApplyOneFileThroughScratch (DRagLint.Refactor.VerbShape.pas) ?</para>
+  /// <para>Used in units: DRagLint.Refactor.ExtractInterface, DRagLint.Refactor.LazyInit, DRagLint.Refactor.VerbShape</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TOneFileApplyArgs = record
     /// <summary>The verb's name, shown in the progress lines and the recovery.txt header.</summary>
     Verb: string;
@@ -46,7 +59,18 @@ type
 /// <param name="pArgs">The verb's options (see TOneFileApplyArgs).</param>
 /// <param name="pBytes">Its full new content, already encoded.</param>
 /// <returns>The gate's outcome; the caller maps it to its exit code.</returns>
-/// <remarks>Sets the process-wide CompileGate build-timeout global; a locked scratch log is reported to stderr, never fatal.</remarks>
+/// <remarks>
+/// Sets the process-wide CompileGate build-timeout global; a locked scratch log is reported to stderr, never fatal.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Refactor.ExtractInterface.RunExtractInterface (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.LazyInit.RunLazyInit (DRagLint.Refactor.LazyInit.pas)</para>
+/// <para>Calls: Cardinal, Default, DRagLint.Refactor.CompileGate.FreshScratchName, DRagLint.Refactor.ScratchGate.ApplyThroughScratch, ExpandFileName, Format, FormatDateTime, StrToIntDef, Writeln</para>
+/// <para>Returns: ApplyThroughScratch(pConn, Req)</para>
+/// <para>Catches: EInOutError (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Refactor.CompileGate.FreshScratchName"/>
+/// <seealso cref="DRagLint.Refactor.ScratchGate.ApplyThroughScratch"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ApplyOneFileThroughScratch(pConn: TFDConnection; const pArgs: TOneFileApplyArgs; const pBytes: TBytes): TGateOutcome;
 
 implementation

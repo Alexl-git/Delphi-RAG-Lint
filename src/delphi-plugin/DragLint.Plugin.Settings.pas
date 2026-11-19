@@ -87,7 +87,7 @@ procedure MigrateGhostTextDefault;
 /// <returns><!-- drag-lint:auto -->TDragLintSettings -- Observed: DefaultSettings.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.AutoComplete.TAutoCompleter.OnTick (DragLint.Plugin.AutoComplete.pas), DragLint.Plugin.DbResolver.PublishLibraryDefaults (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.Diagnose.ApplyDiagFix (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.DescribeDiagFix (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.DiagConfiguration (DragLint.Plugin.Diagnose.pas) (+41 more)</para>
+/// <para>Called from: DragLint.Plugin.AutoComplete.TAutoCompleter.OnTick (DragLint.Plugin.AutoComplete.pas), DragLint.Plugin.Cmd.FindUsagesScope.FindUsagesIn (DragLint.Plugin.Cmd.FindUsagesScope.pas), DragLint.Plugin.ConvertLaunch.HandOff (DragLint.Plugin.ConvertLaunch.pas), DragLint.Plugin.ConvertLaunch.InvokeOpenConversionEditor (DragLint.Plugin.ConvertLaunch.pas), DragLint.Plugin.DbResolver.PublishLibraryDefaults (DragLint.Plugin.DbResolver.pas) (+44 more)</para>
 /// <para>Calls: DragLint.Plugin.HelpIndex.DLNormaliseHelpRoot, DragLint.Plugin.Settings.DefaultSettings, ExcludeTrailingPathDelimiter, ExtractFilePath, FileExists, GetModuleName, SameText</para>
 /// <para>Complexity: 41 (cyclomatic, outer body), 122 lines (full implementation)</para>
 /// <para>Touches: registry</para>

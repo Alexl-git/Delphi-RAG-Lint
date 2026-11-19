@@ -41,7 +41,7 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.FetchHoverCallers (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.FetchHoverCallers.AlreadyHave (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.ParseHoverBundleReply (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.RequestHoverBundleAsync (DragLint.Plugin.Editor.pas) (+12 more)</para>
+  /// <para>Used by: declaration (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.FetchHoverCallers (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.FetchHoverCallers.AlreadyHave (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.ParseHoverBundleReply (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.RequestHoverBundleAsync (DragLint.Plugin.Editor.pas) (+13 more)</para>
   /// <para>Used in units: DragLint.Plugin.Editor, DragLint.Plugin.HoverForm, DragLint.Plugin.HoverTracker</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -74,7 +74,7 @@ type
   /// (Task 8); the form never re-parses a flat string.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DragLint.Plugin.Editor.FetchHoverModel (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.ParseHoverBundleReply (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.ParseHoverModelJson (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.RequestHoverBundleAsync (DragLint.Plugin.Editor.pas), DragLint.Plugin.HoverTracker.TDragLintHoverHelper.OnHoverTextAnswer (DragLint.Plugin.HoverTracker.pas) (+12 more)</para>
+  /// <para>Used by: DragLint.Plugin.Editor.FetchHoverModel (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.ParseHoverBundleReply (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.ParseHoverModelJson (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.RequestHoverBundleAsync (DragLint.Plugin.Editor.pas), DragLint.Plugin.HoverTracker.TDragLintHoverHelper.OnHoverTextAnswer (DragLint.Plugin.HoverTracker.pas) (+14 more)</para>
   /// <para>Used in units: DragLint.Plugin.Editor, DragLint.Plugin.HoverForm, DragLint.Plugin.HoverTracker</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -690,7 +690,7 @@ procedure CloseDragLintHover;
 /// GCurrentHover.Visible.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.HoverTracker.TDragLintHoverHelper.OnTick (DragLint.Plugin.HoverTracker.pas)</para>
+/// <para>Called from: DragLint.Plugin.HoverTracker.TDragLintHoverHelper.DropAbandonedSecondStep (DragLint.Plugin.HoverTracker.pas), DragLint.Plugin.HoverTracker.TDragLintHoverHelper.OnHoverBundleAnswer (DragLint.Plugin.HoverTracker.pas), DragLint.Plugin.HoverTracker.TDragLintHoverHelper.OnTick (DragLint.Plugin.HoverTracker.pas)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function IsDragLintHoverVisible  : Boolean;

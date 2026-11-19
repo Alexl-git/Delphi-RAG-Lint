@@ -13,6 +13,14 @@ uses
 /// <summary>The platform sibling of a manifest that sits directly in a dll-win32 / dll-win64 folder, so a write to one is mirrored to the other.</summary>
 /// <param name="ACfgPath">The manifest written.</param>
 /// <returns>The sibling manifest path, or '' when ACfgPath is not in such a folder.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ApplyReconcileToLibrary (DRagLint.CLI.pas), DRagLint.CLI.MigrateDbs.MirrorPairedManifest (DRagLint.CLI.MigrateDbs.pas)</para>
+/// <para>Calls: ExcludeTrailingPathDelimiter, ExpandFileName, ExtractFileDir, ExtractFileName, ExtractFilePath, SameText</para>
+/// <para>Returns: ''; TPath.Combine(TPath.Combine(ParentDir, Sibling), ExtractFileName(ACfgPath))</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PairedManifestPath(const ACfgPath: string): string;
 
 /// <summary>Moves every project section's index into that project's _D-RAG home
@@ -20,7 +28,8 @@ function PairedManifestPath(const ACfgPath: string): string;
 /// <param name="AArgs">Parsed args; ConfigPath and the --apply switch are read.</param>
 /// <returns>0 = success or nothing to do, 1 = a move failed, 2 = a DB is locked
 /// or the manifest could not be read.</returns>
-/// <remarks>Dry-run by default: prints every planned move and touches nothing,
+/// <remarks>
+/// Dry-run by default: prints every planned move and touches nothing,
 /// so the exclusive-open lock probe is skipped entirely for a dry run -- it
 /// must always be safe to run even while RAD Studio holds every index open.
 /// The manifest entry for a section is corrected and SAVED the INSTANT
@@ -35,7 +44,22 @@ function PairedManifestPath(const ACfgPath: string): string;
 /// uses (PRAGMA quick_check + a non-zero files count), so a database that
 /// already failed verification once can never be laundered back to "healthy"
 /// by a retry. No reindex is needed -- no table stores the database's own
-/// path.</remarks>
+/// path.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.MigrateDbs.DbIsLocked, DRagLint.CLI.MigrateDbs.DbLooksHealthy, DRagLint.CLI.MigrateDbs.FindHgRoot, DRagLint.CLI.MigrateDbs.MirrorPairedManifest, DRagLint.CLI.MigrateDbs.MoveDbSet, DRagLint.Index.Manifest.ExpandSectionDb, DRagLint.Index.Manifest.SectionProjectFile, DRagLint.Index.Manifest.TInstalledLayout.ManifestLocation, DRagLint.Index.Manifest.TManifestIO.ParseText, DRagLint.Index.Manifest.TManifestIO.SaveEdits (+8 more)</para>
+/// <para>Returns: 0; 2; 1</para>
+/// <para>Complexity: 22 (cyclomatic, outer body), 208 lines (full implementation)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>SQL: reads FILES</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.MigrateDbs.DbIsLocked"/>
+/// <seealso cref="DRagLint.CLI.MigrateDbs.DbLooksHealthy"/>
+/// <seealso cref="DRagLint.CLI.MigrateDbs.FindHgRoot"/>
+/// <seealso cref="DRagLint.CLI.MigrateDbs.MirrorPairedManifest"/>
+/// <seealso cref="DRagLint.CLI.MigrateDbs.MoveDbSet"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoMigrateDbs(const AArgs: TArgs): Integer;
 
 implementation

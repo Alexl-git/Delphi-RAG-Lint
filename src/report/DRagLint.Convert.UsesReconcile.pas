@@ -61,8 +61,8 @@ type
   /// <summary>One unit that declares a name, and the --db it was found in.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintApplyReport (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.BuildApplyPlan.PickTieCandidate (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.Apply.ReconcileUnitUses (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.UsesReconcile.TUsesUnitIndex.DeclaringUnits (DRagLint.Convert.UsesReconcile.pas) (+10 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.UsesReconcile</para>
+  /// <para>Used by: DRagLint.CLI.ConvertApplyJson.EmitApplyJson (DRagLint.CLI.ConvertApplyJson.pas) ?, DRagLint.CLI.ConvertApplyJson.PrintApplyReport (DRagLint.CLI.ConvertApplyJson.pas) ?, DRagLint.Convert.Apply.BuildApplyPlan.PickTieCandidate (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.Apply.ReconcileUnitUses (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.UsesReconcile.TUsesUnitIndex.DeclaringUnits (DRagLint.Convert.UsesReconcile.pas) (+10 more)</para>
+  /// <para>Used in units: DRagLint.CLI.ConvertApplyJson, DRagLint.Convert.Apply, DRagLint.Convert.UsesReconcile</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TUsesCandidate = record
@@ -74,8 +74,8 @@ type
   /// (apply/1 uses_unresolved[]).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas) ?, DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintApplyReport (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.BuildApplyPlan.ReportTie (DRagLint.Convert.Apply.pas), DRagLint.Convert.UsesReconcile.TReconciler.PlanNewNames (DRagLint.Convert.UsesReconcile.pas) (+2 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.UsesReconcile</para>
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas) ?, DRagLint.CLI.ConvertApplyJson.EmitApplyJson (DRagLint.CLI.ConvertApplyJson.pas) ?, DRagLint.CLI.ConvertApplyJson.PrintApplyReport (DRagLint.CLI.ConvertApplyJson.pas) ?, DRagLint.Convert.Apply.BuildApplyPlan.ReportTie (DRagLint.Convert.Apply.pas), DRagLint.Convert.UsesReconcile.TReconciler.PlanNewNames (DRagLint.Convert.UsesReconcile.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.CLI.ConvertApplyJson, DRagLint.Convert.Apply, DRagLint.Convert.UsesReconcile</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TUsesUnresolved = record
@@ -257,7 +257,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Convert.Apply.BuildApplyPlan.PlanUsesAdditions (DRagLint.Convert.Apply.pas), DRagLint.Convert.UsesReconcile.TReconciler.ComponentUnits (DRagLint.Convert.UsesReconcile.pas), DRagLint.Convert.UsesReconcile.TReconciler.PlanDangling (DRagLint.Convert.UsesReconcile.pas), DRagLint.Convert.UsesReconcile.TReconciler.PlanNewNames (DRagLint.Convert.UsesReconcile.pas)</para>
     /// <para>Calls: BoolToStr, Default, DRagLint.Convert.UsesReconcile.TUsesUnitIndex.AtUnitLevel, DRagLint.Convert.UsesReconcile.TUsesUnitIndex.StemOf, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, ExtractFileExt, LowerCase, SameText</para>
-    /// <para>Complexity: 12 (cyclomatic, outer body), 33 lines (full implementation)</para>
+    /// <para>Complexity: 13 (cyclomatic, outer body), 33 lines (full implementation)</para>
     /// <para>Reads: FDeclMemo, FStores, FDbs</para>
     /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.AtUnitLevel"/>
     /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.StemOf"/>
@@ -422,9 +422,9 @@ function ReindexText(const APath, AText: string): TParseResult;
 /// access-site rewrites (C9 lesson: a CP1252 character in a string before a
 /// reference shifted every splice on its line).
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ClassifyValueCastSite (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindMemberAccessSites (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.PlanMigrateSites.PlanSite (DRagLint.Convert.Apply.pas), DRagLint.Convert.UsesReconcile.TReconciler.CollectNames (DRagLint.Convert.UsesReconcile.pas) (+1 more)</para>
+/// <para>Called from: DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ClassifyValueCastSite (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindMemberAccessSites (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.PlanMigrateSites.PlanSite (DRagLint.Convert.Apply.pas), DRagLint.Convert.UsesReconcile.TReconciler.CollectNames (DRagLint.Convert.UsesReconcile.pas)</para>
 /// <para>Calls: EnsureRange</para>
-/// <para>Returns: TEncoding.UTF8.GetCharCount(Bytes, 0, EnsureRange(AByteCol - 1, 0, Length(Bytes))) + 1</para>
+/// <para>Returns: EnsureRange(AByteCol, 1, Length(ALine) + 1)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function CharColumn(const ALine: string; AByteCol: Integer): Integer;

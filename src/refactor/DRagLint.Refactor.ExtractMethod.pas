@@ -250,6 +250,11 @@ type
   /// <summary>How a gated fixer (extract-method, create-enum-helper) writes on --apply: fgvGated through the
   /// compile gate of a project, fgvUnbuilt without a build (the explicit --no-compile-gate opt-out), fgvRefused
   /// not at all (no project builds the edited unit).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.ResolveFixerGate (DRagLint.Refactor.ExtractMethod.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFixerGateVerdict = (fgvGated, fgvUnbuilt, fgvRefused);
 
   /// <summary>Picks the project the compile gate of a gated fixer builds (E-COMPILEGATE-ADOPT-FIXERS, 1.52 GATE2):
@@ -267,10 +272,20 @@ type
   /// (a DB at &lt;dir&gt;\_D-RAG\&lt;base&gt;.sqlite belongs to an existing &lt;dir&gt;\&lt;base&gt;.dproj); the
   /// nearest project of the unit (walking up from its folder, the one .dproj whose text, or whose .dpr / .dpk, names
   /// the unit's file). fgvRefused when none is found, or when the nearest folder with a match holds two or more.</returns>
-  /// <remarks>Never builds or writes; reads only project files. The unit is matched by FILE NAME in the project text
+  /// <remarks>
+  /// Never builds or writes; reads only project files. The unit is matched by FILE NAME in the project text
   /// (DCCReference / "in '...'"), so a same-named unit of another folder can match: the gate then builds a project the
   /// edit does not reach, which still refuses a project that does not build. Runner:
-  /// tests\autotest\run_v152_GATE2_fixers.ps1.</remarks>
+  /// tests\autotest\run_v152_GATE2_fixers.ps1.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Called from: DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), DRagLint.CLI.DoExtractMethod (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+  /// <para>Calls: DRagLint.Refactor.ExtractMethod.DbOwnProject, DRagLint.Refactor.ExtractMethod.NearestProjectOf, ExtractFileName, Format</para>
+  /// <para>Returns: fgvUnbuilt; fgvRefused; fgvGated</para>
+  /// <para>Mutates: pGateProject (out), pMessage (out)</para>
+  /// <seealso cref="DRagLint.Refactor.ExtractMethod.DbOwnProject"/>
+  /// <seealso cref="DRagLint.Refactor.ExtractMethod.NearestProjectOf"/>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   function ResolveFixerGate(const pVerb, pProject, pDbPath, pFile: string; pNoCompileGate: Boolean;
     out pGateProject, pMessage: string): TFixerGateVerdict;
 

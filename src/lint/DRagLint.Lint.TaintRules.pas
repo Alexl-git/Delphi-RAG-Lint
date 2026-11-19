@@ -310,7 +310,7 @@ type
       /// <para>Called from: DRagLint.CLI.RunTaintRules (DRagLint.CLI.pas)</para>
       /// <para>Calls: DRagLint.Lint.TaintRules.AppendEntries, DRagLint.Lint.TaintRules.ApplyScalars, DRagLint.Lint.TaintRules.InStrs, DRagLint.Lint.TaintRules.ParseObject, DRagLint.Lint.TaintRules.TTaintConfig.Defaults, IfThen, ParamStr, Writeln</para>
       /// <para>Returns: TTaintConfig.Defaults</para>
-      /// <para>Complexity: 10 (cyclomatic, outer body), 67 lines (full implementation)</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 67 lines (full implementation)</para>
       /// <para>Touches: file system</para>
       /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Lint.TaintRules.AppendEntries"/>

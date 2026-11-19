@@ -35,10 +35,21 @@ uses
 type
   /// <summary>Typed pointer to TIndexManifest, used by BindManifest so the frame
   /// and main form share a single working instance without copying.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: Config.IndexesFrame.TIndexesFrame.BindManifest (Config.IndexesFrame.pas), Config.MainForm.TMainForm.PopulateFrame (Config.MainForm.pas), Config.SettingsFrame.TSettingsFrame.BindManifest (Config.SettingsFrame.pas), declaration (Config.IndexesFrame.pas), declaration (Config.SettingsFrame.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   PIndexManifest = ^TIndexManifest;
 
   /// <summary>Editor frame for the Indexes tab. Binds to a TIndexManifest pointer
   /// so the main form and this frame share a single working manifest.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: Config.MainForm.TMainForm.FormShow (Config.MainForm.pas), declaration (Config.MainForm.pas) ?</para>
+  /// <para>Used in units: Config.MainForm</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TIndexesFrame = class(TFrame)
     splMain: TSplitter;
     pnlLeft: TPanel;
@@ -90,33 +101,369 @@ type
     btnBuildSelected: TButton;
     btnDrift: TButton;
     mLog: TMemo;
+    /// <summary><!-- drag-lint:auto sum -->event handlers</summary>
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.LoadSectionToControls</para>
+    /// <para>Reads: lbSections</para>
+    /// <para>Handles: lbSections.OnClick</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.LoadSectionToControls"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddFolderClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure lbSectionsClick(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.RefreshCoverage, Config.IndexesFrame.TIndexesFrame.RefreshPlanPreview</para>
+    /// <para>Reads: pcBottom, tsPlanPreview, tsCoverage, edCovRoot</para>
+    /// <para>Handles: pcBottom.OnChange</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.RefreshCoverage"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.RefreshPlanPreview"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure pcBottomChange(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.RefreshPlanPreview</para>
+    /// <para>Handles: btnRefreshPlan.OnClick</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.RefreshPlanPreview"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddFolderClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure btnRefreshPlanClick(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.LoadSectionToControls, Default</para>
+    /// <para>Reads: FManifest, lbSections</para>
+    /// <para>Handles: btnAddSection.OnClick</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.LoadSectionToControls"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddFolderClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure btnAddSectionClick(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.LoadSectionToControls, Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex, Config.IndexesFrame.TIndexesFrame.SetEditorEnabled</para>
+    /// <para>Reads: FManifest, lbSections</para>
+    /// <para>Handles: btnDelSection.OnClick</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.LoadSectionToControls"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SetEditorEnabled"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure btnDelSectionClick(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.SaveControlsToSection, Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex</para>
+    /// <para>Handles: edName.OnChange</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SaveControlsToSection"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure edNameChange(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.SaveControlsToSection, Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex</para>
+    /// <para>Handles: edDb.OnChange</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SaveControlsToSection"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure edDbChange(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.SaveControlsToSection, Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex</para>
+    /// <para>Handles: rgSource.OnClick</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SaveControlsToSection"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure rgSourceClick(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.SaveControlsToSection, Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex</para>
+    /// <para>Handles: edPlatforms.OnChange</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SaveControlsToSection"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure edPlatformsChange(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Handles: lbInclude.OnClick</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddFolderClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddSectionClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure lbIncludeClick(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.SaveControlsToSection, Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex, SelectDirectory</para>
+    /// <para>Reads: lbInclude</para>
+    /// <para>Handles: btnAddFolder.OnClick</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SaveControlsToSection"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure btnAddFolderClick(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.SaveControlsToSection, Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex</para>
+    /// <para>Reads: FOpenDialog, lbInclude   Writes: FOpenDialog</para>
+    /// <para>Handles: btnAddDproj.OnClick</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SaveControlsToSection"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddFolderClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure btnAddDprojClick(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.SaveControlsToSection, Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex</para>
+    /// <para>Reads: lbInclude</para>
+    /// <para>Handles: btnRemoveInclude.OnClick</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SaveControlsToSection"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure btnRemoveIncludeClick(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.SaveControlsToSection, Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex</para>
+    /// <para>Handles: edExclude.OnChange</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SaveControlsToSection"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure edExcludeChange(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.SaveControlsToSection, Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex</para>
+    /// <para>Handles: edIncludeOnly.OnChange</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SaveControlsToSection"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure edIncludeOnlyChange(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.SaveControlsToSection, Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex</para>
+    /// <para>Handles: edDedup.OnChange</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SaveControlsToSection"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure edDedupChange(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.SaveControlsToSection, Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex</para>
+    /// <para>Handles: cbUseIgnore.OnClick</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SaveControlsToSection"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure cbUseIgnoreClick(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.SaveControlsToSection, Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex</para>
+    /// <para>Handles: cbSqlOnlyMS.OnClick</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SaveControlsToSection"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure cbSqlOnlyMSClick(Sender: TObject);
+    /// <summary><!-- drag-lint:auto sum -->Build log button handlers</summary>
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.RunEngine</para>
+    /// <para>Reads: pcBottom, tsBuildLog, FConfigPath</para>
+    /// <para>Handles: btnBuildAll.OnClick</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.RunEngine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddFolderClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure btnBuildAllClick(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.RunEngine</para>
+    /// <para>Reads: pcBottom, tsBuildLog, lbSections, mLog, FConfigPath</para>
+    /// <para>Handles: btnBuildSelected.OnClick</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.RunEngine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddFolderClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure btnBuildSelectedClick(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.RunEngine</para>
+    /// <para>Reads: pcBottom, tsBuildLog, FConfigPath</para>
+    /// <para>Handles: btnDrift.OnClick</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.RunEngine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddFolderClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure btnDriftClick(Sender: TObject);
+    /// <summary><!-- drag-lint:auto sum -->Coverage event handlers</summary>
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: SelectDirectory</para>
+    /// <para>Reads: edCovRoot</para>
+    /// <para>Handles: btnCovBrowse.OnClick</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddFolderClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddSectionClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure btnCovBrowseClick(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.RefreshCoverage</para>
+    /// <para>Handles: btnCovRefresh.OnClick</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.RefreshCoverage"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddFolderClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure btnCovRefreshClick(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TCustomTreeView</param>
+    /// <param name="Node"><!-- drag-lint:auto type -->TTreeNode</param>
+    /// <param name="State"><!-- drag-lint:auto type -->TCustomDrawState</param>
+    /// <param name="DefaultDraw"><!-- drag-lint:auto type -->var Boolean</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.CovKindColor, Config.IndexesFrame.TIndexesFrame.NodeCovIdx</para>
+    /// <para>Reads: FCoverageItems</para>
+    /// <para>Handles: tvCoverage.OnCustomDrawItem</para>
+    /// <para>Mutates: DefaultDraw (var)</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.CovKindColor"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.NodeCovIdx"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure tvCoverageCustomDrawItem(Sender: TCustomTreeView;
       Node: TTreeNode; State: TCustomDrawState; var DefaultDraw: Boolean);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <param name="Node"><!-- drag-lint:auto type -->TTreeNode</param>
+    /// <param name="AllowExpansion"><!-- drag-lint:auto type -->var Boolean</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.NodeCovIdx, Config.IndexesFrame.TIndexesFrame.PopulateCoverageChildren</para>
+    /// <para>Reads: FCoverageItems, tvCoverage</para>
+    /// <para>Handles: tvCoverage.OnExpanding</para>
+    /// <para>Mutates: AllowExpansion (var)</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.NodeCovIdx"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.PopulateCoverageChildren"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure tvCoverageExpanding(Sender: TObject; Node: TTreeNode;
       var AllowExpansion: Boolean);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.NodeCovIdx</para>
+    /// <para>Reads: pmCoverage, tvCoverage, FManifest, FCoverageItems</para>
+    /// <para>Handles: pmCoverage.OnPopup</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.NodeCovIdx"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddFolderClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure pmCoveragePopup(Sender: TObject);
   private
     FManifest:      PIndexManifest;
@@ -133,15 +480,49 @@ type
     /// trimming each element and ignoring empty entries.</summary>
     /// <param name="S">Semicolon-joined input string.</param>
     /// <returns>Array of trimmed non-empty parts.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.IndexesFrame.TIndexesFrame.SaveControlsToSection (Config.IndexesFrame.pas)</para>
+    /// <para>Calls: Trim</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddFolderClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddSectionClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function SplitSemicolon(const S: string): TArray<string>;
     /// <summary>Join a TArray of strings with '; ' as the delimiter.</summary>
     /// <param name="A">Array of strings to join.</param>
     /// <returns>Joined string.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.IndexesFrame.TIndexesFrame.LoadSectionToControls (Config.IndexesFrame.pas)</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddFolderClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddSectionClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function JoinSemicolon(const A: TArray<string>): string;
     /// <summary>Return the coverage item index stored in a tree node, or -1
     /// if the node is a root or dummy child sentinel.</summary>
     /// <param name="ANode">The tree node to query.</param>
     /// <returns>Zero-based index into FCoverageItems, or -1.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.IndexesFrame.TIndexesFrame.CovAssignToSectionClick (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.CovNewDbFromFolderClick (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.pmCoveragePopup (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.tvCoverageCustomDrawItem (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.tvCoverageExpanding (Config.IndexesFrame.pas)</para>
+    /// <para>Calls: Integer</para>
+    /// <para>Returns: -1; Integer(ANode.Data) - 1</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddFolderClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddSectionClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function NodeCovIdx(ANode: TTreeNode): Integer;
     /// <summary>Populate child nodes of AParent from ComputeCoverage for
     /// AFolderPath. Each child gets a dummy grandchild so it shows [+].
@@ -150,80 +531,297 @@ type
     /// this method.</summary>
     /// <param name="AParent">Tree node to add children to.</param>
     /// <param name="AFolderPath">Absolute folder to classify children of.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.IndexesFrame.TIndexesFrame.RefreshCoverage (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.tvCoverageExpanding (Config.IndexesFrame.pas)</para>
+    /// <para>Calls: DRagLint.Index.Coverage.ComputeCoverage, DRagLint.Index.Coverage.CoverageKindStr, DRagLint.Project.Resolver.TProjectResolver.Create, Pointer</para>
+    /// <para>Reads: FManifest, tvCoverage, FCoverageItems</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="DRagLint.Index.Coverage.ComputeCoverage"/>
+    /// <seealso cref="DRagLint.Index.Coverage.CoverageKindStr"/>
+    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure PopulateCoverageChildren(AParent: TTreeNode;
       const AFolderPath: string);
     /// <summary>Rebuild the tvCoverage tree for edCovRoot.Text.
     /// Clears FCoverageItems; calls ComputeCoverage for the root; each
     /// child folder gets a single dummy grandchild so [+] is shown.
     /// No-op when edCovRoot.Text is empty or FManifest is nil.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.IndexesFrame.TIndexesFrame.btnCovRefreshClick (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.CovAssignToSectionClick (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.CovNewDbFromFolderClick (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.pcBottomChange (Config.IndexesFrame.pas)</para>
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.PopulateCoverageChildren, Trim</para>
+    /// <para>Reads: FManifest, edCovRoot, tvCoverage, FCoverageItems   Writes: FCoverageItems</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.PopulateCoverageChildren"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddFolderClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure RefreshCoverage;
     /// <summary>Return the font colour for a given coverage kind.</summary>
     /// <param name="AKind">Coverage classification of the folder.</param>
     /// <returns>TColor constant matching the kind.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.IndexesFrame.TIndexesFrame.tvCoverageCustomDrawItem (Config.IndexesFrame.pas)</para>
+    /// <para>Returns: clGreen; clOlive; clGray; clNavy; clRed</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddFolderClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddSectionClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function CovKindColor(AKind: TCoverageKind): TColor;
     /// <summary>Popup menu handler: assign the selected coverage node's folder
     /// to the section whose index is stored in Sender.Tag. Appends to Include
     /// (duplicate-guarded), refreshes the section list and coverage tree.</summary>
     /// <param name="Sender">TMenuItem whose Tag is the section index.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.IndexesFrame.TIndexesFrame.pmCoveragePopup (Config.IndexesFrame.pas)</para>
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.NodeCovIdx, Config.IndexesFrame.TIndexesFrame.RefreshCoverage, Config.IndexesFrame.TIndexesFrame.RefreshSectionList, SameText, TMenuItem</para>
+    /// <para>Complexity: 11 (cyclomatic, outer body), 39 lines (full implementation)</para>
+    /// <para>Reads: tvCoverage, FManifest, FCoverageItems</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.NodeCovIdx"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.RefreshCoverage"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.RefreshSectionList"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CovAssignToSectionClick(Sender: TObject);
     /// <summary>Popup menu handler: create a new TIndexSection whose Include
     /// contains the selected coverage node's folder. Prompts for the section
     /// name (default = sanitized leaf), appends to FManifest^.Sections, and
     /// refreshes the section list and coverage tree.</summary>
     /// <param name="Sender">TMenuItem (unused beyond dispatch).</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.IndexesFrame.TIndexesFrame.pmCoveragePopup (Config.IndexesFrame.pas)</para>
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.NodeCovIdx, Config.IndexesFrame.TIndexesFrame.RefreshCoverage, Config.IndexesFrame.TIndexesFrame.RefreshSectionList, Default, InputQuery, StringReplace, Trim</para>
+    /// <para>Reads: tvCoverage, FManifest, FCoverageItems</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.NodeCovIdx"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.RefreshCoverage"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.RefreshSectionList"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CovNewDbFromFolderClick(Sender: TObject);
     /// <summary>Return the index of the currently selected section, or -1 if
     /// nothing is selected or FManifest is nil.</summary>
     /// <returns>Zero-based section index, or -1.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.IndexesFrame.TIndexesFrame.btnAddDprojClick (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.btnAddFolderClick (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.btnDelSectionClick (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.FlushToManifest (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.RefreshPlanPreview (Config.IndexesFrame.pas) (+10 more)</para>
+    /// <para>Returns: -1; lbSections.ItemIndex</para>
+    /// <para>Reads: FManifest, lbSections</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddFolderClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddSectionClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function SelectedSectionIndex: Integer;
     /// <summary>Load the fields of the section at index AIdx into the editor
     /// controls. Sets FLoading to suppress change events during load.</summary>
     /// <param name="AIdx">Zero-based section index.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.IndexesFrame.TIndexesFrame.btnAddSectionClick (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.btnDelSectionClick (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.lbSectionsClick (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.RefreshSectionList (Config.IndexesFrame.pas)</para>
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.JoinSemicolon, Config.IndexesFrame.TIndexesFrame.SetEditorEnabled</para>
+    /// <para>Reads: FManifest, edName, edDb, rgSource, edPlatforms, lbInclude, edExclude, edIncludeOnly (+3 more)   Writes: FLoading</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.JoinSemicolon"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SetEditorEnabled"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure LoadSectionToControls(AIdx: Integer);
     /// <summary>Write the current editor control values back into the section
     /// at index AIdx in FManifest^. No-op if FLoading is True.</summary>
     /// <param name="AIdx">Zero-based section index.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.IndexesFrame.TIndexesFrame.btnAddDprojClick (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.btnAddFolderClick (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.btnRemoveIncludeClick (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.FlushToManifest (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.RefreshPlanPreview (Config.IndexesFrame.pas) (+9 more)</para>
+    /// <para>Calls: SplitSemicolon</para>
+    /// <para>Reads: FLoading, FManifest, edName, edDb, rgSource, edPlatforms, edExclude, edIncludeOnly (+5 more)</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddFolderClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddSectionClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure SaveControlsToSection(AIdx: Integer);
     /// <summary>Rebuild the lbSections listbox from FManifest^.Sections,
     /// preserving the current selection if possible.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.IndexesFrame.TIndexesFrame.BindManifest (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.CovAssignToSectionClick (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.CovNewDbFromFolderClick (Config.IndexesFrame.pas)</para>
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.LoadSectionToControls</para>
+    /// <para>Reads: lbSections, FManifest</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.LoadSectionToControls"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddFolderClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure RefreshSectionList;
     /// <summary>Enable or disable the right-hand editor controls based on
     /// whether a section is currently selected.</summary>
     /// <param name="AEnabled">True to enable; False to disable.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.IndexesFrame.TIndexesFrame.btnDelSectionClick (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.LoadSectionToControls (Config.IndexesFrame.pas)</para>
+    /// <para>Reads: edName, edDb, rgSource, edPlatforms, lbInclude, btnAddFolder, btnAddDproj, btnRemoveInclude (+5 more)</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddFolderClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddSectionClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure SetEditorEnabled(AEnabled: Boolean);
     /// <summary>Populate lvPlan from the current FManifest by calling ResolvePlan.
     /// One row per TPlanSection: Name, Mode, DbPath, Platform, Roots count,
     /// DedupExcludeRoots count. Silently clears lvPlan on error.</summary>
-    /// <remarks>Not thread-safe; call from the main (UI) thread only.</remarks>
+    /// <remarks>
+    /// Not thread-safe; call from the main (UI) thread only.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.IndexesFrame.TIndexesFrame.btnRefreshPlanClick (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.pcBottomChange (Config.IndexesFrame.pas)</para>
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.PlanModeDisplayStr, Config.IndexesFrame.TIndexesFrame.SaveControlsToSection, Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex, DRagLint.Index.Plan.ResolvePlan, DRagLint.Project.Resolver.TProjectResolver.Create, IntToStr</para>
+    /// <para>Reads: lvPlan, FManifest</para>
+    /// <para>Catches: Exception (empty)</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.PlanModeDisplayStr"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SaveControlsToSection"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex"/>
+    /// <seealso cref="DRagLint.Index.Plan.ResolvePlan"/>
+    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure RefreshPlanPreview;
     /// <summary>Convert a TPlanSectionMode to a short display string.</summary>
     /// <param name="AMode">The mode to convert.</param>
     /// <returns>'folderTree', 'closure', or 'library'.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.IndexesFrame.TIndexesFrame.RefreshPlanPreview (Config.IndexesFrame.pas)</para>
+    /// <para>Returns: 'folderTree'; 'closure'; 'library'</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddFolderClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddSectionClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function PlanModeDisplayStr(const AMode: TPlanSectionMode): string;
     /// <summary>Enable or disable the three build/drift buttons together.</summary>
     /// <param name="AEnabled">True to enable; False to disable.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.IndexesFrame.TIndexesFrame.RunEngine (Config.IndexesFrame.pas)</para>
+    /// <para>Reads: btnBuildAll, btnBuildSelected, btnDrift</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddFolderClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddSectionClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure SetBuildButtonsEnabled(AEnabled: Boolean);
     /// <summary>Append ALine to mLog (scrolls to end). Called on the main thread
     /// by TEngineRunner.TRunnerThread via TThread.Queue.</summary>
     /// <param name="ALine">Line of output from the engine process.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.IndexesFrame.TIndexesFrame.RunEngine (Config.IndexesFrame.pas)</para>
+    /// <para>Calls: SendMessage</para>
+    /// <para>Reads: mLog</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddFolderClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddSectionClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnBuildAllClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure AppendLogLine(const ALine: string);
     /// <summary>Launch the engine with AArgs. Saves first via FOnSaveNeeded;
     /// if the engine path cannot be resolved, logs an error. Disables build
     /// buttons while running; re-enables + logs exit code when done.</summary>
     /// <param name="AArgs">Argument string for drag-lint.exe.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.IndexesFrame.TIndexesFrame.btnBuildAllClick (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.btnBuildSelectedClick (Config.IndexesFrame.pas), Config.IndexesFrame.TIndexesFrame.btnDriftClick (Config.IndexesFrame.pas)</para>
+    /// <para>Calls: Config.EngineRunner.TEngineRunner.ResolveEngineExe, Config.EngineRunner.TEngineRunner.Run, Config.IndexesFrame.TIndexesFrame.AppendLogLine, Config.IndexesFrame.TIndexesFrame.SetBuildButtonsEnabled, FOnSaveNeeded, IntToStr</para>
+    /// <para>Reads: FRunning, FOnSaveNeeded, FManifest, mLog   Writes: FRunning</para>
+    /// <seealso cref="Config.EngineRunner.TEngineRunner.ResolveEngineExe"/>
+    /// <seealso cref="Config.EngineRunner.TEngineRunner.Run"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SetBuildButtonsEnabled"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure RunEngine(const AArgs: string);
   public
     /// <summary>Free the coverage item list and all owned objects.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FCoverageItems</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddFolderClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddSectionClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>Bind the frame to a manifest pointer. The pointer must remain
     /// valid for the lifetime of the frame (owned by TMainForm). Rebuilds the
     /// section list and clears the editor.</summary>
     /// <param name="AManifest">Pointer to the main form's working TIndexManifest.</param>
-    /// <remarks>Not thread-safe; call from the main (UI) thread only.</remarks>
+    /// <remarks>
+    /// Not thread-safe; call from the main (UI) thread only.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.MainForm.TMainForm.PopulateFrame (Config.MainForm.pas)</para>
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.RefreshSectionList, ExcludeTrailingPathDelimiter</para>
+    /// <para>Reads: edCovRoot   Writes: FManifest</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.RefreshSectionList"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddFolderClick"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddSectionClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure BindManifest(AManifest: PIndexManifest);
     /// <summary>Flush any pending edits from the currently selected section's
     /// controls back into FManifest^. Called by TMainForm before Save.</summary>
-    /// <remarks>Not thread-safe; call from the main (UI) thread only.</remarks>
+    /// <remarks>
+    /// Not thread-safe; call from the main (UI) thread only.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.MainForm.TMainForm.btnSaveClick (Config.MainForm.pas), Config.MainForm.TMainForm.FormShow (Config.MainForm.pas)</para>
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.SaveControlsToSection, Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SaveControlsToSection"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.SelectedSectionIndex"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.AppendLogLine"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.btnAddDprojClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure FlushToManifest;
     /// <summary>Absolute path of the config file currently open in the main form.
     /// Set by TMainForm after load/save. Used by build/drift button handlers

@@ -19,6 +19,12 @@ uses
 
 type
   /// <summary>One side of a hub: the uses edges that enter (in) or leave (out) it inside the group.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Report.CycleHub.pas) ?, DRagLint.Report.CycleHub.SideText (DRagLint.Report.CycleHub.pas) ?, DRagLint.Report.CycleHub.SideToJson (DRagLint.Report.CycleHub.pas) ?, DRagLint.Report.CycleHub.TGroupFacts.SideOf (DRagLint.Report.CycleHub.pas)</para>
+  /// <para>Used in units: DRagLint.Report.CycleHub</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCycleHubSide = record
     /// <summary>Uses edges on this side, inside the group.</summary>
     Edges: Integer;
@@ -31,6 +37,12 @@ type
   end;
 
   /// <summary>A member name read through a hub global from the spokes, with its weight.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Report.CycleHub.pas), DRagLint.Report.CycleHub.TGroupFacts.MembersThrough (DRagLint.Report.CycleHub.pas)</para>
+  /// <para>Used in units: DRagLint.Report.CycleHub</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCycleHubMember = record
     Name: string;
     Refs: Integer;
@@ -38,6 +50,12 @@ type
   end;
 
   /// <summary>One hub symbol the spokes reference: kind, name, weight and (for a global) the member names read through it.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Report.CycleHub.pas), DRagLint.Report.CycleHub.SymbolText (DRagLint.Report.CycleHub.pas), DRagLint.Report.CycleHub.SymbolToJson (DRagLint.Report.CycleHub.pas), DRagLint.Report.CycleHub.TGroupFacts.SpokeToHub (DRagLint.Report.CycleHub.pas), DRagLint.Report.CycleHubSurface.THubSurfacePlanner.PlanGroup (DRagLint.Report.CycleHubSurface.pas)</para>
+  /// <para>Used in units: DRagLint.Report.CycleHub, DRagLint.Report.CycleHubSurface</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCycleHubSymbol = record
     Kind: string;
     Name: string;
@@ -47,6 +65,12 @@ type
   end;
 
   /// <summary>What the hub takes from its spokes, by shape.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Report.CycleHub.pas) ?, DRagLint.Report.CycleHub.TGroupFacts.HubToSpoke (DRagLint.Report.CycleHub.pas)</para>
+  /// <para>Used in units: DRagLint.Report.CycleHub</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCycleHubOut = record
     Construction: Integer;
     VarWrite: Integer;
@@ -56,6 +80,12 @@ type
   end;
 
   /// <summary>One hub of a group.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Report.CycleHub.pas) ?, DRagLint.Report.CycleHub.HubToJson (DRagLint.Report.CycleHub.pas) ?, DRagLint.Report.CycleHub.SurfaceText (DRagLint.Report.CycleHub.pas) ?, DRagLint.Report.CycleHub.TGroupFacts.Analyse (DRagLint.Report.CycleHub.pas)</para>
+  /// <para>Used in units: DRagLint.Report.CycleHub</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCycleHub = record
     /// <summary>Lower-case unit stem, as `cycles` prints it.</summary>
     UnitStem: string;
@@ -69,6 +99,12 @@ type
   end;
 
   /// <summary>The hub report of one group.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Report.CycleHub.pas) ?, DRagLint.Report.CycleHub.AddCycleHubJson (DRagLint.Report.CycleHub.pas) ?, DRagLint.Report.CycleHub.AnalyseCycleHubs (DRagLint.Report.CycleHub.pas) ?, DRagLint.Report.CycleHub.CycleHubLines (DRagLint.Report.CycleHub.pas) ?, DRagLint.Report.CycleHub.TGroupFacts.Analyse (DRagLint.Report.CycleHub.pas)</para>
+  /// <para>Used in units: DRagLint.Report.CycleHub</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCycleHubReport = record
     Hubs: TArray<TCycleHub>;
     /// <summary>Uses edges inside the group that no reference crosses (dead uses).</summary>
@@ -82,19 +118,44 @@ type
 /// <param name="pGroup">The group's lower-case unit stems (one entry of ComputeSccs).</param>
 /// <param name="pGraph">The graph DoCycles built (BuildCycleGraph); read only.</param>
 /// <returns>Hubs in group order; none when no single unit's removal leaves the rest acyclic.</returns>
-/// <remarks>Cost: one FindSymbolsByFile and one GetReferencesFromFile per unit of the group, plus
-/// O(n * (n + m)) acyclicity tests over the group's n units and m edges.</remarks>
+/// <remarks>
+/// Cost: one FindSymbolsByFile and one GetReferencesFromFile per unit of the group, plus
+/// O(n * (n + m)) acyclicity tests over the group's n units and m edges.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.Report.CycleHubSurface.HubSurfaceGroupLines (DRagLint.Report.CycleHubSurface.pas), DRagLint.Report.CycleHubSurface.THubSurfacePlanner.PlanGroup (DRagLint.Report.CycleHubSurface.pas)</para>
+/// <para>Calls: DRagLint.Report.CycleHub.TGroupFacts.Analyse, DRagLint.Report.CycleHub.TGroupFacts.Create</para>
+/// <para>Returns: Facts.Analyse</para>
+/// <seealso cref="DRagLint.Report.CycleHub.TGroupFacts.Analyse"/>
+/// <seealso cref="DRagLint.Report.CycleHub.TGroupFacts.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AnalyseCycleHubs(const pStore: ISymbolStore; const pGroup: TArray<string>;
   const pGraph: TCycleGraph): TCycleHubReport;
 
 /// <summary>The text block `cycles --hub` prints under a group line.</summary>
 /// <param name="pReport">From AnalyseCycleHubs.</param>
 /// <returns>Lines indented to sit under the group line; "hubs: none ..." when there is no hub.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.Report.CycleHubSurface.HubSurfaceGroupLines (DRagLint.Report.CycleHubSurface.pas)</para>
+/// <para>Calls: DRagLint.Report.CycleHub.SideText, DRagLint.Report.CycleHub.SurfaceText, Format</para>
+/// <para>Returns: L.ToArray</para>
+/// <seealso cref="DRagLint.Report.CycleHub.SideText"/>
+/// <seealso cref="DRagLint.Report.CycleHub.SurfaceText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CycleHubLines(const pReport: TCycleHubReport): TArray<string>;
 
 /// <summary>Adds the `hubs` array and `zero_ref_edges` to a group object of `cycles --format json`.</summary>
 /// <param name="pReport">From AnalyseCycleHubs.</param>
 /// <param name="pGroup">The group's JSON object; gains the two pairs.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Report.CycleHub.HubToJson</para>
+/// <seealso cref="DRagLint.Report.CycleHub.HubToJson"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure AddCycleHubJson(const pReport: TCycleHubReport; const pGroup: TJSONObject);
 
 implementation

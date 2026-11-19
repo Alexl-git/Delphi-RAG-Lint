@@ -111,7 +111,7 @@ type
     /// <summary><!-- drag-lint:auto sum -->---- TDragLintJob ----</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DragLint.Plugin.Editor.DLRunMaintenanceJob (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.EnqueueRefreshFindings (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeAutoDocumentProject (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeFormatProjectYadf (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeGenerateFormsCsv (DragLint.Plugin.Editor.pas) (+11 more)</para>
+    /// <para>Called from: DragLint.Plugin.Editor.DLRunMaintenanceJob (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.EnqueueRefreshFindings (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeAutoDocumentProject (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeFormatProjectYadf (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeGenerateFormsCsv (DragLint.Plugin.Editor.pas) (+10 more)</para>
     /// <para>constructor</para>
     /// <para>Writes: Kind, TimeoutMs, Streaming</para>
     /// <!-- drag-lint:auto END -->
@@ -146,19 +146,34 @@ type
       (HoldDb). Under FLock. }
     FHeldDbs: TList<string>;
     { Index in FPending of the first job not held by HoldDb, or -1. Under FLock. }
+    /// <summary><!-- drag-lint:auto sum -->Index in FPending of the first job not held by
+    /// HoldDb, or -1. Under FLock.</summary>
+    /// <returns><!-- drag-lint:auto -->Integer -- Observed: -1.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.JobQueue.TDragLintJobQueue.WorkerLoop (DragLint.Plugin.JobQueue.pas)</para>
+    /// <para>Calls: DragLint.Plugin.JobQueue.JobDbArg, DragLint.Plugin.JobQueue.NormalisedDb</para>
+    /// <para>Reads: FPending, FHeldDbs</para>
+    /// <seealso cref="DragLint.Plugin.JobQueue.JobDbArg"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.NormalisedDb"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.CancelRunning"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.ClearPending"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function FirstRunnableLocked: Integer;
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DragLint.Plugin.JobQueue.TQueueWorker.Execute (DragLint.Plugin.JobQueue.pas)</para>
-    /// <para>Calls: DragLint.Plugin.JobQueue.AdjustBusy, DragLint.Plugin.JobQueue.TDragLintJobQueue.RunOne, DragLint.Plugin.JobQueue.TDragLintJobQueue.SyncPendingLocked, DragLint.Plugin.JobQueue.TDragLintJobQueue.WaitWhileEngineHeld</para>
-    /// <para>Complexity: 10 (cyclomatic, outer body), 74 lines (full implementation)</para>
+    /// <para>Calls: DragLint.Plugin.JobQueue.AdjustBusy, DragLint.Plugin.JobQueue.TDragLintJobQueue.FirstRunnableLocked, DragLint.Plugin.JobQueue.TDragLintJobQueue.RunOne, DragLint.Plugin.JobQueue.TDragLintJobQueue.SyncPendingLocked, DragLint.Plugin.JobQueue.TDragLintJobQueue.WaitWhileEngineHeld</para>
+    /// <para>Complexity: 10 (cyclomatic, outer body), 79 lines (full implementation)</para>
     /// <para>Reads: FShutdown, FWake, FLock, FPending, FState</para>
     /// <para>Catches: Exception (empty)</para>
     /// <seealso cref="DragLint.Plugin.JobQueue.AdjustBusy"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.FirstRunnableLocked"/>
     /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.RunOne"/>
     /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.SyncPendingLocked"/>
     /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.WaitWhileEngineHeld"/>
-    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.CancelRunning"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure WorkerLoop;
@@ -266,7 +281,7 @@ type
     /// <para>Called from: DragLint.Plugin.JobQueue.JobQueue (DragLint.Plugin.JobQueue.pas)</para>
     /// <para>Calls: DragLint.Plugin.JobQueue.TDragLintJobQueue.SyncPendingLocked, DragLint.Plugin.JobQueue.TQueueWorker.Create</para>
     /// <para>constructor</para>
-    /// <para>Reads: FState   Writes: FLock, FPending, FWake, FCancel, FRunCancel, FShutdown, FDeferredLogged, FWorker</para>
+    /// <para>Reads: FState   Writes: FLock, FPending, FWake, FCancel, FRunCancel, FShutdown, FDeferredLogged, FHeldDbs (+1 more)</para>
     /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.SyncPendingLocked"/>
     /// <seealso cref="DragLint.Plugin.JobQueue.TQueueWorker.Create"/>
     /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.CancelRunning"/>
@@ -281,13 +296,13 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Calls: Format, OutputDebugString, PChar, WaitForSingleObject</para>
-    /// <para>Reads: FCancel, FRunCancel, FWake, FWorker, FPending, FLock   Writes: FShutdown</para>
+    /// <para>Reads: FCancel, FRunCancel, FWake, FWorker, FPending, FHeldDbs, FLock   Writes: FShutdown</para>
     /// <para>Directives: override</para>
     /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.CancelRunning"/>
     /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.ClearPending"/>
     /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Create"/>
     /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Enqueue"/>
-    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.GetState"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.FirstRunnableLocked"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     destructor Destroy; override;
@@ -296,7 +311,7 @@ type
     /// <param name="AJob"><!-- drag-lint:auto type -->TDragLintJob</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DragLint.Plugin.Editor.DLRunMaintenanceJob (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.EnqueueRefreshFindings (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeAutoDocumentProject (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeFormatProjectYadf (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeGenerateFormsCsv (DragLint.Plugin.Editor.pas) (+12 more)</para>
+    /// <para>Called from: DragLint.Plugin.Editor.DLRunMaintenanceJob (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.EnqueueRefreshFindings (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeAutoDocumentProject (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeFormatProjectYadf (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeGenerateFormsCsv (DragLint.Plugin.Editor.pas) (+11 more)</para>
     /// <para>Calls: DragLint.Plugin.JobQueue.AdjustBusy, DragLint.Plugin.JobQueue.TDragLintJobQueue.SyncPendingLocked, SameText</para>
     /// <para>Reads: FLock, FPending, FWake</para>
     /// <seealso cref="DragLint.Plugin.JobQueue.AdjustBusy"/>
@@ -361,23 +376,54 @@ type
     /// as usual, in FIFO order past the held ones (C12 ask N6).</summary>
     /// <param name="ADb">The DB to hold; compared case-insensitively after
     /// ExpandFileName. '' does nothing.</param>
-    /// <remarks>Any thread. A queue-side predicate, NOT the engine hold: the LSP child,
+    /// <remarks>
+    /// Any thread. A queue-side predicate, NOT the engine hold: the LSP child,
     /// hover and completion keep running. A held job stays pending (still coalesced by
     /// a later Enqueue, still dropped by ClearPending); a running job is not stopped.
-    /// Holding a held DB again is a no-op; one ReleaseDb lifts it.</remarks>
+    /// Holding a held DB again is a no-op; one ReleaseDb lifts it.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.ConvertLaunch.StartChild (DragLint.Plugin.ConvertLaunch.pas), DragLint.Plugin.Editor.RunGraphStage (DragLint.Plugin.Editor.pas), DragLint.Plugin.Reports.StartReport (DragLint.Plugin.Reports.pas)</para>
+    /// <para>Calls: DragLint.Plugin.JobQueue.NormalisedDb</para>
+    /// <para>Reads: FLock, FHeldDbs</para>
+    /// <seealso cref="DragLint.Plugin.JobQueue.NormalisedDb"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.CancelRunning"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.ClearPending"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Create"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure HoldDb(const ADb: string);
     /// <summary>Lifts HoldDb(ADb); the held jobs then run in their queued order.</summary>
     /// <param name="ADb">The DB HoldDb was given (same normalisation). A DB that is not
     /// held is ignored.</param>
-    /// <remarks>Any thread. Wakes the worker.</remarks>
+    /// <remarks>
+    /// Any thread. Wakes the worker.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.ConvertLaunch.ReleaseChildDb (DragLint.Plugin.ConvertLaunch.pas), DragLint.Plugin.Editor.RunGraphStage (DragLint.Plugin.Editor.pas), DragLint.Plugin.Reports.StartReport (DragLint.Plugin.Reports.pas)</para>
+    /// <para>Calls: DragLint.Plugin.JobQueue.NormalisedDb</para>
+    /// <para>Reads: FLock, FHeldDbs, FWake</para>
+    /// <seealso cref="DragLint.Plugin.JobQueue.NormalisedDb"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.CancelRunning"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.ClearPending"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Create"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure ReleaseDb(const ADb: string);
   end;
 
 /// <summary>The value of the FIRST --db argument of an engine command line.</summary>
 /// <param name="ACmdLine">A job's CmdLine; the value may be double-quoted or bare.</param>
 /// <returns>The path without quotes; '' when there is no --db.</returns>
-/// <remarks>Pure. lint-all passes the project DB first and the library DB second, so
-/// the first one is the project's.</remarks>
+/// <remarks>
+/// Pure. lint-all passes the project DB first and the library DB second, so
+/// the first one is the project's.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.JobQueue.TDragLintJobQueue.FirstRunnableLocked (DragLint.Plugin.JobQueue.pas)</para>
+/// <para>Calls: Copy, Pos</para>
+/// <para>Returns: ''; Copy(ACmdLine, P, Q - P)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function JobDbArg(const ACmdLine: string): string;  // dl:ok unused-public-symbol@a0df -- public as the test seam: tests\JobQueueDbHoldTests.dpr (outside the plugin project) pins the parse
 
 { Called ONCE per deferral episode, with a line like
@@ -421,7 +467,7 @@ var
 /// <remarks>
 /// Main thread only.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.StructureForm.RefusedWhileFixRuns (DragLint.Plugin.StructureForm.pas), DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.RunFix (DragLint.Plugin.UsesDepsFrame.pas), DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.StartRefresh (DragLint.Plugin.UsesDepsFrame.pas), initialization/finalization (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Called from: DragLint.Plugin.StructureForm.finalization (DragLint.Plugin.StructureForm.pas), DragLint.Plugin.StructureForm.RefusedWhileFixRuns (DragLint.Plugin.StructureForm.pas), DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.RunFix (DragLint.Plugin.UsesDepsFrame.pas), DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.StartRefresh (DragLint.Plugin.UsesDepsFrame.pas)</para>
 /// <para>Returns: GBusyJobs &gt; 0</para>
 /// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
@@ -452,7 +498,7 @@ function ReindexResultText(AExitCode: Integer; const AOutput: string): string;  
 /// <returns><!-- drag-lint:auto -->TDragLintJobQueue -- Observed: GQueue.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.Editor.DLRunMaintenanceJob (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.EnqueueRefreshFindings (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeAutoDocumentProject (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeFormatProjectYadf (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeGenerateFormsCsv (DragLint.Plugin.Editor.pas) (+15 more)</para>
+/// <para>Called from: DragLint.Plugin.ConvertLaunch.ReleaseChildDb (DragLint.Plugin.ConvertLaunch.pas), DragLint.Plugin.ConvertLaunch.StartChild (DragLint.Plugin.ConvertLaunch.pas), DragLint.Plugin.Editor.DLRunMaintenanceJob (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.EnqueueRefreshFindings (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeAutoDocumentProject (DragLint.Plugin.Editor.pas) (+18 more)</para>
 /// <para>Calls: DragLint.Plugin.JobQueue.TDragLintJobQueue.Create</para>
 /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Create"/>
 /// <!-- drag-lint:auto END -->
@@ -460,7 +506,7 @@ function ReindexResultText(AExitCode: Integer; const AOutput: string): string;  
 function JobQueue: TDragLintJobQueue;
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: initialization/finalization (DragLint.Plugin.JobQueue.pas)</para>
+/// <para>Called from: DragLint.Plugin.JobQueue.finalization (DragLint.Plugin.JobQueue.pas)</para>
 /// <para>Calls: FreeAndNil</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

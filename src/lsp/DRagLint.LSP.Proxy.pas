@@ -61,7 +61,7 @@ type
   /// stdio.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.LSP.Proxy.Merge.pas), declaration (DRagLint.LSP.Proxy.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Create (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.RunLspProxy (DRagLint.LSP.Proxy.pas)</para>
+  /// <para>Used by: declaration (DRagLint.LSP.Proxy.Merge.pas), declaration (DRagLint.LSP.Proxy.pas), DRagLint.CLI.RunCommand (DRagLint.CLI.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Create (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.RunLspProxy (DRagLint.LSP.Proxy.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Proxy, DRagLint.LSP.Proxy.Merge</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -189,7 +189,7 @@ function ResolveDelphiLspPath(const AOverride: string; ABits: Integer = LSP_BITS
 /// except bytes received from the child -- anything else would land inside the
 /// JSON-RPC stream and desynchronise the client.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
 /// <para>Calls: CloseHandle, CreatePipe, CreateProcess, DRagLint.Core.JobObject.AssignToDragLintJob, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Create, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Intercept, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.WaitForAnswers, DRagLint.LSP.Proxy.PumpFramed, DRagLint.LSP.Proxy.ResolveDelphiLspPath (+13 more)</para>
 /// <para>Returns: EXIT_SPAWN_FAILED; Integer(Code)</para>
 /// <para>Complexity: 20 (cyclomatic, outer body), 185 lines (full implementation)</para>

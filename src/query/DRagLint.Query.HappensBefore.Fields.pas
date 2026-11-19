@@ -59,10 +59,20 @@ const
 /// constructor proof when no use exists), Summary (for MAY: every writer routine and whether every
 /// constructor calls it), Reasons (budget), Limits, Budget.Routines / Exhausted. Budget.Ms is the
 /// caller's.</returns>
-/// <remarks>Read-only. Not thread-safe (the shared parse cache). Deterministic: ids, sites and callers
+/// <remarks>
+/// Read-only. Not thread-safe (the shared parse cache). Deterministic: ids, sites and callers
 /// are walked in sorted order. SET is a proof under spec 6.1; every unproven link answers
 /// MAY-BE-UNSET with a reason code of spec 6.4 and a witness (blocking constructor or class first,
-/// then the use).</remarks>
+/// then the use).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.HappensBefore.CheckInit (DRagLint.Query.HappensBefore.pas)</para>
+/// <para>Calls: Default, DRagLint.Query.HappensBefore.Fields.SortedReasons, DRagLint.Query.HappensBefore.Fields.TFieldSolver.Create, DRagLint.Query.HappensBefore.Fields.TFieldSolver.Run, ExtractFileName, Format</para>
+/// <para>Returns: Default(THbAnswer)</para>
+/// <seealso cref="DRagLint.Query.HappensBefore.Fields.SortedReasons"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.Fields.TFieldSolver.Create"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.Fields.TFieldSolver.Run"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CheckInstanceField(const pIndex: TChartsIndex; const pStore: ISymbolStore; const pEvents: THbEvents;
   pMaxRoutines: Integer): THbAnswer;
 

@@ -28,8 +28,8 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
-  /// <para>Used in units: DRagLint.CLI</para>
+  /// <para>Used by: DRagLint.CLI.DoIndex (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLint (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintProject (DRagLint.CLI.pas) ?, DRagLint.V152.PROJ2.Support.FindUnlistedClosureOutsideRoots (DRagLint.V152.PROJ2.Support.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.V152.PROJ2.Support</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TProjectChecks = class
@@ -51,7 +51,7 @@ type
       /// NormUnitQualified(Orig)) = 0).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.V152.PROJ2.Support.FindUnlistedClosureOutsideRoots (DRagLint.V152.PROJ2.Support.pas)</para>
       /// <para>Calls: Default, DRagLint.Lint.ProjectChecks.Parse.ExtractUsesNames, DRagLint.Lint.ProjectChecks.Parse.FindSiblingProgramFile, DRagLint.Lint.ProjectChecks.Parse.NormUnit, DRagLint.Lint.ProjectChecks.Parse.NormUnitQualified, DRagLint.Lint.ProjectChecks.Parse.ReadDCCReferences, DRagLint.Lint.ProjectChecks.RealCasedFileName, DRagLint.Lint.ProjectChecks.TProjectChecks.CheckNonUsesLinks, ExtractFileExt, ExtractFileName (+6 more)</para>
       /// <para>Complexity: 37 (cyclomatic, outer body), 201 lines (full implementation)</para>
       /// <para>Touches: file system</para>
@@ -79,14 +79,27 @@ type
       /// only place such code still compiles); anchored on the source line.
       /// (3) a closure source looks a class up by name, `GetClass|FindClass('TName')`, and TName is
       /// declared only in a candidate unit; anchored on the source line.</returns>
-      /// <remarks>Candidates are the .pas files directly in the folders of the closure units and
+      /// <remarks>
+      /// Candidates are the .pas files directly in the folders of the closure units and
       /// of the .dproj (no recursion) that are not themselves closure members and do not share a
       /// closure unit's name. A unit with no link at all is NOT reported: by OQ13 it is not part
       /// of the project. Look-alike guarded: a qualified name whose first part is also declared
       /// as an identifier in the using file (`Cfg: TRec; Cfg.Value`) is that identifier, not the
       /// unit. Text scan with comments blanked (string literals too for link 2, kept for link 3); all
       /// conditional branches are read on purpose. Binary .dfm files are skipped. Touches the
-      /// file system; no DB access; thread-safe.</remarks>
+      /// file system; no DB access; thread-safe.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr (DRagLint.Lint.ProjectChecks.pas)</para>
+      /// <para>Calls: AddAdvice, Copy, Default, DRagLint.Lint.ProjectChecks.AddMatches, DRagLint.Lint.ProjectChecks.Parse.FindSiblingProgramFile, DRagLint.Lint.ProjectChecks.Parse.StripPasCommentsKeepLayout, DRagLint.Lint.ProjectChecks.ReadTextOrEmpty, DRagLint.Lint.ProjectChecks.TProjectChecks.CheckNonUsesLinks.CollectCandidates, DRagLint.Lint.ProjectChecks.TProjectChecks.CheckNonUsesLinks.ScanDfm, DRagLint.Lint.ProjectChecks.TProjectChecks.CheckNonUsesLinks.ScanSource (+11 more)</para>
+      /// <para>Returns: nil; Findings.ToArray</para>
+      /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Lint.ProjectChecks.AddMatches"/>
+      /// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.FindSiblingProgramFile"/>
+      /// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.StripPasCommentsKeepLayout"/>
+      /// <seealso cref="DRagLint.Lint.ProjectChecks.ReadTextOrEmpty"/>
+      /// <seealso cref="DRagLint.Lint.ProjectChecks.TProjectChecks.CheckNonUsesLinks.CollectCandidates"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function CheckNonUsesLinks(const ADprojPath: string;
                                        const AClosureFiles: TArray<string>): TArray<TLintFinding>;
       /// <summary>Flags every `uses X` whose unit X resolves to no known unit
@@ -102,7 +115,7 @@ type
       /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
       /// <para>Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Core.Model.TUnitUse.FromInclude, DRagLint.Core.Model.TUnitUse.HostCol, DRagLint.Core.Model.TUnitUse.HostLine, DRagLint.Core.Model.TUnitUse.IncludeSuffix (+9 more)</para>
       /// <para>Returns: nil; Findings.ToArray</para>
-      /// <para>Complexity: 10 (cyclomatic, outer body), 162 lines (full implementation)</para>
+      /// <para>Complexity: 12 (cyclomatic, outer body), 162 lines (full implementation)</para>
       /// <para>Catches: Exception (empty)</para>
       /// <para>SQL: reads FILES</para>
       /// <para>Touches: file system</para>

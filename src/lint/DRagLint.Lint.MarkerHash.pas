@@ -33,13 +33,18 @@ interface
 
 type
   /// <summary>The outcome of checking one `dl:ok` hash against a finding.</summary>
-  /// <remarks>mvRemeasured suppresses like mvVerified: the routine is unchanged
+  /// <remarks>
+  /// mvRemeasured suppresses like mvVerified: the routine is unchanged
   /// since the review and only the engine's measure-algorithm version moved.
   /// mvLegacy (v152 MARK, ruling B3) also suppresses: a routine-metric marker
   /// stamped under the 1.51.0 "v1" header|metric hash that still matches. Callers
   /// that only ask "is it stale" compare against mvStale and need no change;
   /// callers that report (the CLI lint hint) treat mvRemeasured and mvLegacy
-  /// alike via NeedsRestampHint.</remarks>
+  /// alike via NeedsRestampHint.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.MarkerHash.pas), DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.Lint.MarkerHash.MarkerVerdict (DRagLint.Lint.MarkerHash.pas), DRagLint.Lint.MarkerHash.NeedsRestampHint (DRagLint.Lint.MarkerHash.pas), DRagLint.Lint.MarkerHash.RemeasuredHintText (DRagLint.Lint.MarkerHash.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMarkerVerdict = (mvVerified, mvRemeasured, mvLegacy, mvStale);
 
 const
@@ -53,6 +58,13 @@ const
 /// <returns>True for mvRemeasured and mvLegacy: the marker still answers for the
 /// code but was not stamped under the current hash. False for mvVerified and
 /// mvStale (stale has its own review-marker-stale hint).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas)</para>
+/// <para>Returns: AVerdict in [mvRemeasured, mvLegacy]</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function NeedsRestampHint(AVerdict: TMarkerVerdict): Boolean;
 
 /// <summary>The message of the `review-marker-remeasured` hint.</summary>
@@ -62,7 +74,13 @@ function NeedsRestampHint(AVerdict: TMarkerVerdict): Boolean;
 /// re-stamp command.</param>
 /// <returns>One ASCII line naming the rule, why it was re-measured and the
 /// command that re-stamps it (`allow --fix-line N --fix-rule R`).</returns>
-/// <remarks>Pure.</remarks>
+/// <remarks>
+/// Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas)</para>
+/// <para>Calls: Format</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RemeasuredHintText(const ARuleId: string; AVerdict: TMarkerVerdict;
   AFindingLine: Integer): string;
 
@@ -76,9 +94,21 @@ function RemeasuredHintText(const ARuleId: string; AVerdict: TMarkerVerdict;
 /// <returns>Four lowercase hex digits: the versioned hash for a routine-metric
 /// rule, the 1.51.0 hash (RuleCatalog.MarkerExpectedHash as it was) for every
 /// other rule.</returns>
-/// <remarks>RuleCatalog.MarkerExpectedHash is to delegate here (HANDOVER INT);
+/// <remarks>
+/// RuleCatalog.MarkerExpectedHash is to delegate here (HANDOVER INT);
 /// this unit never calls it back. Pure apart from the
-/// DRAGLINT_TEST_METRIC_ALGO_BUMP test hook (environment read).</remarks>
+/// DRAGLINT_TEST_METRIC_ALGO_BUMP test hook (environment read).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.RuleScope.MarkedLine (DRagLint.CLI.RuleScope.pas), DRagLint.Lint.RuleCatalog.MarkerExpectedHash (DRagLint.Lint.RuleCatalog.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions (DRagLint.LSP.Completion.pas)</para>
+/// <para>Calls: DRagLint.Lint.MarkerHash.BodyPart, DRagLint.Lint.MarkerHash.CurrentMetric, DRagLint.Lint.MarkerHash.LegacyExpectedHash, DRagLint.Lint.MarkerHash.MetricAlgoVersion, DRagLint.Lint.MarkerHash.MetricPart, DRagLint.Lint.MarkerHash.RoutineBodyHash, DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow, DRagLint.Lint.RuleCatalog.DocCommentMarkerLine, DRagLint.Lint.RuleCatalog.IsRoutineMetricRule</para>
+/// <para>Returns: LegacyExpectedHash(ALines, ARuleId, AStartLine, AMetric)</para>
+/// <seealso cref="DRagLint.Lint.MarkerHash.BodyPart"/>
+/// <seealso cref="DRagLint.Lint.MarkerHash.CurrentMetric"/>
+/// <seealso cref="DRagLint.Lint.MarkerHash.LegacyExpectedHash"/>
+/// <seealso cref="DRagLint.Lint.MarkerHash.MetricAlgoVersion"/>
+/// <seealso cref="DRagLint.Lint.MarkerHash.MetricPart"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ExpectedHash(const ALines: TArray<string>; const ARuleId: string;
   AStartLine, AMetric: Integer): string;
 
@@ -90,9 +120,22 @@ function ExpectedHash(const ALines: TArray<string>; const ARuleId: string;
 /// <param name="AMetric">The finding's measured value (TLintFinding.Metric).</param>
 /// <returns>mvVerified, mvRemeasured or mvStale -- the order of checks is in the
 /// unit comment.</returns>
-/// <remarks>The ONE verification every marker checker must use once
+/// <remarks>
+/// The ONE verification every marker checker must use once
 /// MarkerExpectedHash delegates to ExpectedHash: comparing a hash for equality with
-/// ExpectedHash would reject every legacy marker. Pure apart from the test hook.</remarks>
+/// ExpectedHash would reject every legacy marker. Pure apart from the test hook.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.LSP.Completion.VerifiedMarkerHash (DRagLint.LSP.Completion.pas)</para>
+/// <para>Calls: Copy, DRagLint.Lint.MarkerHash.BodyPart, DRagLint.Lint.MarkerHash.CurrentMetric, DRagLint.Lint.MarkerHash.LegacyExpectedHash, DRagLint.Lint.MarkerHash.MetricAlgoVersion, DRagLint.Lint.MarkerHash.MetricPart, DRagLint.Lint.MarkerHash.RoutineBodyHash, DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow, DRagLint.Lint.RuleCatalog.DocCommentMarkerLine, DRagLint.Lint.RuleCatalog.IsRoutineMetricRule, LowerCase</para>
+/// <para>Returns: if IsRoutineMetricRule(ARuleId) then mvLegacy else mvVerified; mvStale</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 23 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Lint.MarkerHash.BodyPart"/>
+/// <seealso cref="DRagLint.Lint.MarkerHash.CurrentMetric"/>
+/// <seealso cref="DRagLint.Lint.MarkerHash.LegacyExpectedHash"/>
+/// <seealso cref="DRagLint.Lint.MarkerHash.MetricAlgoVersion"/>
+/// <seealso cref="DRagLint.Lint.MarkerHash.MetricPart"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MarkerVerdict(const ALines: TArray<string>; const ARuleId, AMarkerHash: string;
   AStartLine, AMetric: Integer): TMarkerVerdict;
 

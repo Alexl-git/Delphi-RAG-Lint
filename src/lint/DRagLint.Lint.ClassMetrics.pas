@@ -62,10 +62,10 @@ type
     /// Project-wide relations; `lint-all` passes AOnlyFileId = 0, `lint &lt;file&gt;` passes
     /// the file. Never raises.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas) ?</para>
+    /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.RunCommand (DRagLint.CLI.pas) ?</para>
     /// <para>Calls: ARuleKept, CollectDefProcNodes, CollectIdentifiers, CompareText, Connected, Copy, Default, DelegateBaseField, DelegationField, DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear (+35 more)</para>
     /// <para>Returns: Roots.Count; Default(TMiddleManResult); nil; Findings.ToArray</para>
-    /// <para>Complexity: 30 (cyclomatic, outer body), 1137 lines (full implementation)</para>
+    /// <para>Complexity: 32 (cyclomatic, outer body), 1137 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear"/>
     /// <seealso cref="DRagLint.Lint.ClassMetrics.TClassMetrics.Run.BuildInventory"/>

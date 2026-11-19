@@ -34,7 +34,13 @@ uses
 
 type
   /// <summary>One declaration the scanner recorded.</summary>
-  /// <remarks>Value is meaningful only when IsTrueConst and HasValue.</remarks>
+  /// <remarks>
+  /// Value is meaningful only when IsTrueConst and HasValue.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Index.PPUnitSource.pas) ?, DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.Create (DRagLint.Index.PPUnitSource.pas) ?, DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.LookupInUnit (DRagLint.Index.PPUnitSource.pas) ?, DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.Scan (DRagLint.Index.PPUnitSource.pas) ?, DRagLint.Preprocess.Decls.TPPDeclScanner.AddDecl (DRagLint.Preprocess.Decls.pas) (+7 more)</para>
+  /// <para>Used in units: DRagLint.Index.PPUnitSource, DRagLint.Preprocess, DRagLint.Preprocess.Decls</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPPDecl = record
     Name       : string;
     IsTrueConst: Boolean;
@@ -46,12 +52,27 @@ type
   end;
 
   /// <summary>Computes a constant declaration's value from its expression text.</summary>
+  /// <param name="AExpr"><!-- drag-lint:auto type -->const string</param>
+  /// <param name="AValue"><!-- drag-lint:auto type -->out TPPValue</param>
+  /// <returns><!-- drag-lint:auto type -->Boolean</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Preprocess.Decls.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPPConstEvaluator = reference to function(const AExpr: string; out AValue: TPPValue): Boolean;
 
   /// <summary>Answers whether a used unit declares a name, and its value when
   /// it is a true constant.</summary>
-  /// <remarks>Implementations must be thread-safe: index and lint runs may
-  /// preprocess several files at once.</remarks>
+  /// <remarks>
+  /// Implementations must be thread-safe: index and lint runs may
+  /// preprocess several files at once.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Index.PPUnitSource.pas), declaration (DRagLint.Preprocess.Decls.pas), DRagLint.Preprocess.Decls.PPSetUnitSource (DRagLint.Preprocess.Decls.pas), DRagLint.Preprocess.Decls.PPUnitSource (DRagLint.Preprocess.Decls.pas), DRagLint.Preprocess.LibraryMissKind (DRagLint.Preprocess.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.Index.PPUnitSource, DRagLint.Preprocess, DRagLint.Preprocess.Decls</para>
+  /// <para>Implemented by: TPPUnitSourceResolver</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   IPPUnitSource = interface
     ['{6B0E3C5D-2F41-4C8A-9E7B-31D5A8C0F214}']
     /// <summary>Looks AName up among the symbols AUnit exports.</summary>
@@ -60,20 +81,58 @@ type
     /// <param name="AName">The bare symbol name.</param>
     /// <param name="AValue">The value when pnkConst is returned.</param>
     /// <returns>pnkUnknown, pnkDeclared or pnkConst (see TPPNameKind).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Preprocess.PreprocessWithSites (DRagLint.Preprocess.pas)</para>
+    /// <seealso cref="DRagLint.Preprocess.Decls.IPPUnitSource.HasLibraryEvidence"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function LookupInUnit(const AUnit, AName: string; out AValue: TPPValue): TPPNameKind;
     /// <summary>YADF6: whether a miss in LookupInUnit proves anything about the
     /// platform library.</summary>
     /// <returns>True when at least one library DB could be opened; False when the
     /// run has no library at all, so a miss only means nobody could be asked.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Preprocess.LibraryMissKind (DRagLint.Preprocess.pas)</para>
+    /// <seealso cref="DRagLint.Preprocess.Decls.IPPUnitSource.LookupInUnit"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function HasLibraryEvidence: Boolean;
   end;
 
   /// <summary>The declaration scanner (see the unit header).</summary>
-  /// <remarks>Not thread-safe; one instance per preprocess run, shared by
-  /// reference with that run's include recursion.</remarks>
+  /// <remarks>
+  /// Not thread-safe; one instance per preprocess run, shared by
+  /// reference with that run's include recursion.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Preprocess.pas) ?, DRagLint.Preprocess.PreprocessWithSites (DRagLint.Preprocess.pas)</para>
+  /// <para>Used in units: DRagLint.Preprocess</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPPDeclScanner = class
   private type
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Used by: declaration (DRagLint.Preprocess.Decls.pas)</para>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.AddDecl"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Create"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Destroy"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.ExportedDecls"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Feed"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     TSection = (secNone, secUses, secConst, secRes, secType, secVar, secSkip);
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Used by: declaration (DRagLint.Preprocess.Decls.pas)</para>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.AddDecl"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Create"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Destroy"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.ExportedDecls"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Feed"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     TDeclState = (dsStart, dsAfterName, dsGeneric, dsConstExpr, dsTypeBody, dsTypeClassHead, dsSkipToSemi);
   private
     FDecls       : TDictionary<string, TPPDecl>;
@@ -98,35 +157,211 @@ type
     FNestedHead  : Boolean;
     FVarMore     : Boolean;
     FOnEvalConst : TPPConstEvaluator;
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AIsTrueConst"><!-- drag-lint:auto type -->Boolean</param>
+    /// <param name="AHasValue"><!-- drag-lint:auto type -->Boolean</param>
+    /// <param name="AValue"><!-- drag-lint:auto type -->const TPPValue</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Preprocess.Decls.TPPDeclScanner.FinishConst (DRagLint.Preprocess.Decls.pas), DRagLint.Preprocess.Decls.TPPDeclScanner.HandleDecl (DRagLint.Preprocess.Decls.pas), DRagLint.Preprocess.Decls.TPPDeclScanner.Token (DRagLint.Preprocess.Decls.pas)</para>
+    /// <para>Calls: Default, LowerCase</para>
+    /// <para>Reads: FInInterface, FDecls</para>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Create"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Destroy"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.ExportedDecls"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Feed"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.FinishConst"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure AddDecl(const AName: string; AIsTrueConst, AHasValue: Boolean; const AValue: TPPValue);
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Preprocess.Decls.TPPDeclScanner.Token (DRagLint.Preprocess.Decls.pas)</para>
+    /// <para>Reads: FUsesCur, FUses   Writes: FUsesCur, FUsesAfterIn</para>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.AddDecl"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Create"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Destroy"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.ExportedDecls"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Feed"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure FlushUses;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Preprocess.Decls.TPPDeclScanner.Token (DRagLint.Preprocess.Decls.pas)</para>
+    /// <para>Calls: Default, DRagLint.Preprocess.Decls.TPPDeclScanner.AddDecl, FOnEvalConst, Trim</para>
+    /// <para>Reads: FOnEvalConst, FExpr, FName   Writes: FState</para>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.AddDecl"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Create"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Destroy"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.ExportedDecls"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Feed"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure FinishConst;
+    /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AIsIdent"><!-- drag-lint:auto type -->Boolean</param>
+    /// <param name="AEscaped"><!-- drag-lint:auto type -->Boolean</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Preprocess.Decls.TPPDeclScanner.Feed (DRagLint.Preprocess.Decls.pas)</para>
+    /// <para>Calls: Default, DRagLint.Preprocess.Decls.InList, DRagLint.Preprocess.Decls.TPPDeclScanner.AddDecl, DRagLint.Preprocess.Decls.TPPDeclScanner.FinishConst, DRagLint.Preprocess.Decls.TPPDeclScanner.FlushUses, DRagLint.Preprocess.Decls.TPPDeclScanner.HandleBlock, DRagLint.Preprocess.Decls.TPPDeclScanner.HandleDecl, DRagLint.Preprocess.Decls.TPPDeclScanner.HandleSectionKeyword, LowerCase</para>
+    /// <para>Complexity: 39 (cyclomatic, outer body), 69 lines (full implementation)</para>
+    /// <para>Reads: FState, FParen, FHintSeen, FExpr, FRoutineName, FBlocks, FSection, FUsesAfterIn (+1 more)   Writes: FParen, FPrevTok, FHintSeen, FExpr, FRoutineName, FSection, FUsesAfterIn, FUsesCur</para>
+    /// <seealso cref="DRagLint.Preprocess.Decls.InList"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.AddDecl"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.FinishConst"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.FlushUses"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.HandleBlock"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Token(const AText: string; AIsIdent, AEscaped: Boolean);
+    /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="L"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AIsIdent"><!-- drag-lint:auto type -->Boolean</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: True.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Preprocess.Decls.TPPDeclScanner.Token (DRagLint.Preprocess.Decls.pas)</para>
+    /// <para>Complexity: 25 (cyclomatic, outer body), 33 lines (full implementation)</para>
+    /// <para>Reads: FBlocks, FNestedHead, FSkipIdent, FPrevTok   Writes: FSkipIdent, FNestedHead</para>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.AddDecl"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Create"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Destroy"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.ExportedDecls"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Feed"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function HandleBlock(const AText, L: string; AIsIdent: Boolean): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->Section keywords at block depth 0. True when
+    /// the token was one.</summary>
+    /// <param name="L"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: True; False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Preprocess.Decls.TPPDeclScanner.Token (DRagLint.Preprocess.Decls.pas)</para>
+    /// <para>Complexity: 22 (cyclomatic, outer body), 37 lines (full implementation)</para>
+    /// <para>Reads: FBlocks   Writes: FInInterface, FSawInterface, FSection, FUsesCur, FUsesAfterIn, FRoutineNext, FState</para>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.AddDecl"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Create"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Destroy"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.ExportedDecls"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Feed"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function HandleSectionKeyword(const L: string): Boolean;
+    /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="L"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AIsIdent"><!-- drag-lint:auto type -->Boolean</param>
+    /// <param name="AEscaped"><!-- drag-lint:auto type -->Boolean</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Preprocess.Decls.TPPDeclScanner.HandleDecl (DRagLint.Preprocess.Decls.pas), DRagLint.Preprocess.Decls.TPPDeclScanner.Token (DRagLint.Preprocess.Decls.pas)</para>
+    /// <para>Calls: Default, DRagLint.Preprocess.Decls.InList, DRagLint.Preprocess.Decls.TPPDeclScanner.AddDecl, DRagLint.Preprocess.Decls.TPPDeclScanner.HandleDecl, LowerCase</para>
+    /// <para>Complexity: 59 (cyclomatic, outer body), 136 lines (full implementation)</para>
+    /// <para>Reads: FState, FSection, FName, FVarNames, FDecls, FGenericDepth, FBlocks, FSkipIdent (+2 more)   Writes: FState, FExpr, FHintSeen, FVarMore, FGenericDepth, FSkipIdent, FRoutineNext, FRoutineName (+1 more)</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="DRagLint.Preprocess.Decls.InList"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.AddDecl"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Create"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Destroy"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.ExportedDecls"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure HandleDecl(const AText, L: string; AIsIdent, AEscaped: Boolean);
   public
     /// <summary>Constructor: an empty scanner positioned before the first token.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Preprocess.PreprocessWithSites (DRagLint.Preprocess.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FDecls, FUses, FBlocks, FVarNames</para>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.AddDecl"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Destroy"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.ExportedDecls"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Feed"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.FinishConst"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
     /// <summary>Frees the tables.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FVarNames, FBlocks, FUses, FDecls</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.AddDecl"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Create"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.ExportedDecls"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Feed"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.FinishConst"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>Scans the next ACTIVE text chunk. Chunks must arrive in source
     /// order; state (an open const section, a half-read declaration) carries
     /// over from one chunk to the next.</summary>
     /// <param name="AText">The chunk text (directives already removed).</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Preprocess.PreprocessInto (DRagLint.Preprocess.pas)</para>
+    /// <para>Calls: CharInSet, Copy, DRagLint.Preprocess.Decls.TPPDeclScanner.Token, MatchStr</para>
+    /// <para>Complexity: 50 (cyclomatic, outer body), 104 lines (full implementation)</para>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Token"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.AddDecl"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Create"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Destroy"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.ExportedDecls"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Feed(const AText: string);
     /// <summary>Finds a declaration recorded so far (case-insensitive).</summary>
     /// <param name="AName">The bare name.</param>
     /// <param name="ADecl">The declaration when found.</param>
     /// <returns>True when AName was declared before this point.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Preprocess.PreprocessWithSites (DRagLint.Preprocess.pas)</para>
+    /// <para>Calls: LowerCase</para>
+    /// <para>Returns: FDecls.TryGetValue(LowerCase(AName), ADecl)</para>
+    /// <para>Reads: FDecls</para>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.AddDecl"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Create"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Destroy"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.ExportedDecls"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Feed"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function TryGet(const AName: string; out ADecl: TPPDecl): Boolean;
     /// <summary>The uses-clause units seen so far, in source order.</summary>
     /// <returns>Unit names as spelled (dotted names kept).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Preprocess.PreprocessWithSites (DRagLint.Preprocess.pas)</para>
+    /// <para>Returns: FUses.ToArray</para>
+    /// <para>Reads: FUses</para>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.AddDecl"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Create"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Destroy"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.ExportedDecls"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Feed"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function UsedUnits: TArray<string>;
     /// <summary>The declarations another unit sees: the interface section's,
     /// or every one when the file has no interface section (a program, an
     /// include).</summary>
     /// <returns>The exported declarations, in no particular order.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Preprocess.PreprocessWithSites (DRagLint.Preprocess.pas)</para>
+    /// <para>Reads: FDecls, FSawInterface</para>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.AddDecl"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Create"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Destroy"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.Feed"/>
+    /// <seealso cref="DRagLint.Preprocess.Decls.TPPDeclScanner.FinishConst"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ExportedDecls: TArray<TPPDecl>;
     /// <summary>Computes a true constant's value at its ';'; nil = values are
     /// never computed (every constant is then declared-only).</summary>
@@ -136,12 +371,24 @@ type
 /// <summary>Installs the process-wide used-unit symbol source every later
 /// preprocess run consults; nil uninstalls it.</summary>
 /// <param name="ASource">The source, or nil.</param>
-/// <remarks>Install before the run starts and uninstall after it ends; the
-/// variable itself is not guarded against a concurrent swap.</remarks>
+/// <remarks>
+/// Install before the run starts and uninstall after it ends; the
+/// variable itself is not guarded against a concurrent swap.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Index.PPUnitSource.InstallPPUnitSource (DRagLint.Index.PPUnitSource.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure PPSetUnitSource(const ASource: IPPUnitSource);
 
 /// <summary>The installed used-unit symbol source, or nil.</summary>
 /// <returns>The source set by PPSetUnitSource.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Preprocess.PreprocessWithSites (DRagLint.Preprocess.pas)</para>
+/// <para>Returns: GUnitSource</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PPUnitSource: IPPUnitSource;
 
 implementation

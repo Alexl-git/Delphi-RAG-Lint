@@ -162,7 +162,7 @@ type
   /// <remarks>
   /// Value type; owns nothing.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.pas) ?, DRagLint.CLI.EmitRenamePlan (DRagLint.CLI.pas) ?, DRagLint.Refactor.MultiProjectRename.PlanGlobal (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.PlanLocal (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.UnplannedTarget (DRagLint.Refactor.MultiProjectRename.pas) (+5 more)</para>
+  /// <para>Used by: declaration (DRagLint.CLI.pas) ?, DRagLint.CLI.EmitRenamePlan (DRagLint.CLI.pas) ?, DRagLint.Refactor.MultiProjectRename.PlanGlobal (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.PlanLocal (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.UnplannedTarget (DRagLint.Refactor.MultiProjectRename.pas) (+6 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Refactor.MultiProjectRename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -334,7 +334,7 @@ function FindRenameOwners(const AManifest: TIndexManifest; const APlatform, AFil
 /// <para>Called from: DRagLint.Refactor.MultiProjectRename.OpenOwners (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.RenameAcrossOwners.TakeOwner (DRagLint.Refactor.MultiProjectRename.pas)</para>
 /// <para>Calls: AReindex, DRagLint.Refactor.MultiProjectRename.PreviewStaleText, DRagLint.Refactor.MultiProjectRename.StaleEvidence, DRagLint.Refactor.MultiProjectRename.TagMismatch, Format</para>
 /// <para>Returns: ofUnverified; ofStale; if Evidence = '' then ofReindexed</para>
-/// <para>Complexity: 11 (cyclomatic, outer body), 46 lines (full implementation)</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 46 lines (full implementation)</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <para>Mutates: AReason (out)</para>
 /// <seealso cref="DRagLint.Refactor.MultiProjectRename.PreviewStaleText"/>
@@ -433,8 +433,16 @@ function RenameAcrossOwners(const AOwners: TRenameOwnersRequest; const AProof: T
 /// beside it -- for the caller to print.</param>
 /// <returns>The .dproj files to build besides APrimaryProject, each once, in plan order. An owner the manifest names
 /// by its .dpr is built through the .dproj beside it.</returns>
-/// <remarks>Pure but for FileExists on a .dpr owner's .dproj. A library owner never reaches an applied plan (it drops
-/// the target), so none is listed. Pinned by tests\autotest\run_v1511_RENAME_t09_gate.ps1.</remarks>
+/// <remarks>
+/// Pure but for FileExists on a .dpr owner's .dproj. A library owner never reaches an applied plan (it drops
+/// the target), so none is listed. Pinned by tests\autotest\run_v1511_RENAME_t09_gate.ps1.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+/// <para>Calls: ChangeFileExt, DRagLint.Refactor.MultiProjectRename.ProjectReason, ExpandFileName, ExtractFileName, FileExists, LowerCase, MatchText</para>
+/// <para>Mutates: ANotes (out)</para>
+/// <seealso cref="DRagLint.Refactor.MultiProjectRename.ProjectReason"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function NamingGateAlsoProjects(const APlans: TArray<TTargetPlan>; const APrimaryProject: string;
   out ANotes: TArray<string>): TArray<string>;
 
@@ -442,7 +450,15 @@ function NamingGateAlsoProjects(const APlans: TArray<TTargetPlan>; const APrimar
 /// is &lt;folder&gt;\&lt;base&gt;.dproj's -- for a caller given only --db, as the IDE passes it.</summary>
 /// <param name="ADbPath">The index file.</param>
 /// <returns>The .dproj when it exists; '' when the DB sits anywhere else or no such project exists.</returns>
-/// <remarks>Reads only the file system. The same rule `rename --apply` uses (DRagLint.CLI.RenameGateProject).</remarks>
+/// <remarks>
+/// Reads only the file system. The same rule `rename --apply` uses (DRagLint.CLI.RenameGateProject).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.NamingFixGateProject (DRagLint.CLI.pas)</para>
+/// <para>Calls: ChangeFileExt, ExcludeTrailingPathDelimiter, ExpandFileName, ExtractFileName, ExtractFilePath, FileExists, SameText</para>
+/// <para>Returns: ''; Candidate</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ProjectOfDb(const ADbPath: string): string;
 
 /// <summary>The text a `rename-project:` line prints for AFreshness.</summary>

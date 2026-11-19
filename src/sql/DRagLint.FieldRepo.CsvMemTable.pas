@@ -12,6 +12,12 @@ uses
 
 type
   /// <summary>Raised for malformed CSV input or an invalid generated-routine name.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.Repo.GenMemTable (DRagLint.CLI.Repo.pas) ?, DRagLint.FieldRepo.CsvMemTable.GenMemTableFromCsv (DRagLint.FieldRepo.CsvMemTable.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.Repo, DRagLint.FieldRepo.CsvMemTable</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   ECsvMemTableError = class(Exception);
 
 /// <summary>Turns a field-definition CSV into the Pascal source of a procedure that builds the fields of a TFDMemTable.</summary>
@@ -19,7 +25,16 @@ type
 /// <param name="pName">Identifier used for the generated routine, <c>Create&lt;pName&gt;Fields</c>. Default is FDMemTable.</param>
 /// <returns>Pascal source text, CRLF line ends, 7-bit ASCII.</returns>
 /// <exception cref="ECsvMemTableError">Raised when pName is not an identifier or a FieldType is not a TFieldType member (ft prefix omitted).</exception>
-/// <remarks>Pure function, no I/O, thread-safe. Same rules as the wizard: columns split on comma and trimmed; Size 0 or non-numeric means no Size line; FieldKind Calculated or Lookup else Data.</remarks>
+/// <remarks>
+/// Pure function, no I/O, thread-safe. Same rules as the wizard: columns split on comma and trimmed; Size 0 or non-numeric means no Size line; FieldKind Calculated or Lookup else Data.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.FieldRepo.CsvMemTable.GenMemTableFromCsvFile (DRagLint.FieldRepo.CsvMemTable.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.CsvMemTable.IsIdent, DRagLint.FieldRepo.CsvMemTable.Q, Format, GetEnumValue, IntToStr, SameText, StrToIntDef</para>
+/// <para>Returns: OutText.Text</para>
+/// <seealso cref="DRagLint.FieldRepo.CsvMemTable.IsIdent"/>
+/// <seealso cref="DRagLint.FieldRepo.CsvMemTable.Q"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function GenMemTableFromCsv(const pCsvText: string; const pName: string = 'FDMemTable'): string;
 
 /// <summary>Reads a CSV file and calls GenMemTableFromCsv.</summary>
@@ -27,6 +42,14 @@ function GenMemTableFromCsv(const pCsvText: string; const pName: string = 'FDMem
 /// <param name="pName">Routine identifier, see GenMemTableFromCsv.</param>
 /// <returns>Pascal source text.</returns>
 /// <exception cref="ECsvMemTableError">As GenMemTableFromCsv; a missing file raises EFOpenError.</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Repo.GenMemTable (DRagLint.CLI.Repo.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.CsvMemTable.GenMemTableFromCsv</para>
+/// <para>Returns: GenMemTableFromCsv(List.Text, pName)</para>
+/// <seealso cref="DRagLint.FieldRepo.CsvMemTable.GenMemTableFromCsv"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function GenMemTableFromCsvFile(const pCsvFile: string; const pName: string = 'FDMemTable'): string;
 
 implementation

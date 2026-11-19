@@ -31,8 +31,14 @@ const
 
 type
   /// <summary>One uses cycle (strongly-connected group of 2+ units) as circular-uses reports it.</summary>
-  /// <remarks>Paths and Names are parallel arrays; Names are the unit names sorted the way
-  /// circular-uses prints them.</remarks>
+  /// <remarks>
+  /// Paths and Names are parallel arrays; Names are the unit names sorted the way
+  /// circular-uses prints them.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.IncludeCycleRules.pas), DRagLint.Lint.IncludeCycleRules.TIncludeCycleScan.GroupText (DRagLint.Lint.IncludeCycleRules.pas), DRagLint.Lint.IncludeCycleRules.TIncludeCycleScan.MembersOf (DRagLint.Lint.IncludeCycleRules.pas), DRagLint.Lint.IncludeCycleRules.TIncludeCycleScan.ScanDecls (DRagLint.Lint.IncludeCycleRules.pas), DRagLint.Lint.IncludeCycleRules.TIncludeCycleScan.ScanUses (DRagLint.Lint.IncludeCycleRules.pas) (+3 more)</para>
+  /// <para>Used in units: DRagLint.Lint.IncludeCycleRules, DRagLint.Lint.ProjectRules</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TIncludeCycleGroup = record
     Paths: TArray<string>;
     Names: TArray<string>;
@@ -43,8 +49,18 @@ type
 /// <param name="AGroups">The uses cycles of the index (circular-uses groups).</param>
 /// <returns>One hint per (host unit, target, include) for a uses entry, and one per (symbol, host
 /// unit) for a declaration, anchored at the {$I} directive in the host's .pas.</returns>
-/// <remarks>Silent for an empty group list and for an index without the file-fact tables.
-/// Not thread-safe; reads the store only.</remarks>
+/// <remarks>
+/// Silent for an empty group list and for an index without the file-fact tables.
+/// Not thread-safe; reads the store only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ProjectRules.CollectCycleEdgeInIncludeRule (DRagLint.Lint.ProjectRules.pas)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.HasFileFacts, DRagLint.Lint.IncludeCycleRules.TIncludeCycleScan.Create, DRagLint.Lint.IncludeCycleRules.TIncludeCycleScan.Run</para>
+/// <para>Returns: nil; Scan.Run(AGroups)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.HasFileFacts"/>
+/// <seealso cref="DRagLint.Lint.IncludeCycleRules.TIncludeCycleScan.Create"/>
+/// <seealso cref="DRagLint.Lint.IncludeCycleRules.TIncludeCycleScan.Run"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CollectCycleEdgeInInclude(const AStore: ISymbolStore;
   const AGroups: TArray<TIncludeCycleGroup>): TArray<TLintFinding>;
 

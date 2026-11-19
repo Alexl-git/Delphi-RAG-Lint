@@ -79,14 +79,27 @@ const
 /// uses carries the limit no-judged-use and a summary that says so (it is vacuous).</returns>
 /// <exception cref="EHbUsage">Malformed pAt; unknown / ambiguous target; --at naming another variable
 /// (raised by the events lane, candidates attached).</exception>
-/// <remarks>Read-only. Not thread-safe (the shared parse cache). Deterministic: every set is walked in
+/// <remarks>
+/// Read-only. Not thread-safe (the shared parse cache). Deterministic: every set is walked in
 /// sorted order, so two runs give the same answer except Budget.Ms. Instance fields are answered
 /// by the constructor model (DRagLint.Query.HappensBefore.Fields.CheckInstanceField, spec 5.5).
 /// An unresolved callee that receives the target adds the limit unknown-callee; unless other writers
 /// prove SET, the headline is UNKNOWN-CALLEE with reason unknown-callee and Summary = the warnings
 /// joined by '; '. The answer a user recorded (line marker, else the project's checkInit.callees in
 /// &lt;anchor&gt;\_D-RAG\drag-lint-project.json next to pDbPath) replaces the warning; a DB outside a
-/// _D-RAG folder or a missing / malformed file records nothing.</remarks>
+/// _D-RAG folder or a missing / malformed file records nothing.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CheckInit.RunCheckInit (DRagLint.CLI.CheckInit.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.Query.HoverModel.AttachHoverSetBy (DRagLint.Query.HoverModel.pas)</para>
+/// <para>Calls: Default, DRagLint.Charts.Index.TChartsIndex.Create, DRagLint.Query.HappensBefore.AddReason, DRagLint.Query.HappensBefore.AddWriterReasons, DRagLint.Query.HappensBefore.AnswerEveryUse, DRagLint.Query.HappensBefore.ApplyCalleeMarkers, DRagLint.Query.HappensBefore.Events.CollectEvents, DRagLint.Query.HappensBefore.Events.HbIsNeverSet, DRagLint.Query.HappensBefore.Fields.CheckInstanceField, DRagLint.Query.HappensBefore.FinishLimits (+12 more)</para>
+/// <para>Returns: Default(THbAnswer); CheckInstanceField(Index, Store, Events, MaxR)</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 78 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Create"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.AddReason"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.AddWriterReasons"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.AnswerEveryUse"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.ApplyCalleeMarkers"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CheckInit(const pDbPath, pTarget, pAt: string; const pOptions: THbOptions): THbAnswer;
 
 implementation

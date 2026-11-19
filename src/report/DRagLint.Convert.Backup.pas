@@ -66,7 +66,7 @@ function NextBackupName(const APath: string): string;
 /// does not exist or the copy fails (TFile.Copy); callers should backup BEFORE
 /// any conversion write so a failed backup aborts before anything is touched.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoConvertApply.PerformApplyWrites (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.ConvertApply.DoConvertApply.PerformApplyWrites (DRagLint.CLI.ConvertApply.pas)</para>
 /// <para>Calls: DRagLint.Convert.Backup.NextBackupName, Format</para>
 /// <para>Mutates: AMappings (out)</para>
 /// <para>Touches: file system</para>
@@ -97,7 +97,7 @@ procedure BackupFiles(const APaths: TArray<string>; out AMappings: TArray<string
 /// a crash between this call and the actual write still leaves a complete
 /// recovery map pointing at the (untouched) .BCK backups.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoConvertApply.PerformApplyWrites (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.ConvertApply.DoConvertApply.PerformApplyWrites (DRagLint.CLI.ConvertApply.pas)</para>
 /// <para>Calls: DRagLint.Convert.Backup.AppendRecoveryBlock, Format</para>
 /// <seealso cref="DRagLint.Convert.Backup.AppendRecoveryBlock"/>
 /// <!-- drag-lint:auto END -->
@@ -142,7 +142,7 @@ procedure AppendRecoveryBlock(const AFolder, AHeader: string; const AMappings: T
 /// the file's line break; a BOM-less CRLF file is ANSI/CRLF as before -- this
 /// must run AFTER the conversion write (it stamps the already-converted file).
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoConvertApply.PerformApplyWrites (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.ConvertApply.DoConvertApply.PerformApplyWrites (DRagLint.CLI.ConvertApply.pas)</para>
 /// <para>Calls: DRagLint.Refactor.TextEdit.TTextFileFormat.Decode, DRagLint.Refactor.TextEdit.TTextFileFormat.Encode, ExtractFileExt, Format, SameText</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Refactor.TextEdit.TTextFileFormat.Decode"/>

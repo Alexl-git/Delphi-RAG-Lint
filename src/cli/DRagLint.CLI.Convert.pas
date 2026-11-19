@@ -52,6 +52,20 @@ uses
 /// <returns>0 ok; 1 qname not resolved to a class in any DB; 2 usage error / no
 /// readable db / invalid --min-visibility value / invalid --depth or --rules
 /// book depth / invalid --progress-interval.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: Copy, Default, DRagLint.CLI.Common.ExplicitDbsExist, DRagLint.CLI.Common.OpenReadOnlyStore, DRagLint.CLI.Common.OpenWritableStore, DRagLint.CLI.Common.ReportNotFoundFor, DRagLint.CLI.Common.StaleDbRefusesRun, DRagLint.CLI.Common.WriteStdoutDocument, DRagLint.CLI.ConsumerDbs.ResolveConsumerDbs, DRagLint.CLI.Convert.DoPropTree.KindLabel (+13 more)</para>
+/// <para>Returns: 2; 1; 0</para>
+/// <para>Complexity: 27 (cyclomatic, outer body), 182 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.ExplicitDbsExist"/>
+/// <seealso cref="DRagLint.CLI.Common.OpenReadOnlyStore"/>
+/// <seealso cref="DRagLint.CLI.Common.OpenWritableStore"/>
+/// <seealso cref="DRagLint.CLI.Common.ReportNotFoundFor"/>
+/// <seealso cref="DRagLint.CLI.Common.StaleDbRefusesRun"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoPropTree(const AArgs: TArgs): Integer;
 
 /// <summary>drag-lint convert-validate --rules FILE [--from FromType] [--to ToType]
@@ -79,6 +93,21 @@ function DoPropTree(const AArgs: TArgs): Integer;
 /// DbPath/DbPaths=index(es) the from/to classes are resolved in.</param>
 /// <returns>0 valid / parse-ok; 1 errors found (parse or validation); 2 bad args
 /// (no --rules) or unreadable rules file.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: ConvertClassIn, Default, DRagLint.CLI.Common.ExplicitDbsExist, DRagLint.CLI.ConsumerDbs.ResolveConsumerDbs, DRagLint.CLI.Convert.AmbiguousArgMessage, DRagLint.CLI.Convert.DoConvertValidate.ClassFor, DRagLint.CLI.Convert.DoConvertValidate.RuleSummary, DRagLint.CLI.Convert.QualifyConvertArg, DRagLint.Convert.Apply.MigrateRuleRefusal, DRagLint.Convert.Rules.ConversionRuleWarnings (+10 more)</para>
+/// <para>Returns: 2; 1; 0</para>
+/// <para>Complexity: 23 (cyclomatic, outer body), 222 lines (full implementation)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.ExplicitDbsExist"/>
+/// <seealso cref="DRagLint.CLI.ConsumerDbs.ResolveConsumerDbs"/>
+/// <seealso cref="DRagLint.CLI.Convert.AmbiguousArgMessage"/>
+/// <seealso cref="DRagLint.CLI.Convert.DoConvertValidate.ClassFor"/>
+/// <seealso cref="DRagLint.CLI.Convert.DoConvertValidate.RuleSummary"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoConvertValidate(const AArgs: TArgs): Integer;
 
 /// <summary>drag-lint convert-reemit --from-block FILE --rules FILE --from FromType
@@ -89,10 +118,25 @@ function DoConvertValidate(const AArgs: TArgs): Integer;
 /// RulesFile=--rules; CallFrom=--from (FromType qname), RenameTo=--to (ToType
 /// qname); DbPath/DbPaths=index(es) the from/to classes are resolved in.</param>
 /// <returns>0 when Ok; 1 on a hard re-emit failure; 2 on bad args.</returns>
-/// <remarks>Resolves the F/T classes from the index (like convert-validate,
+/// <remarks>
+/// Resolves the F/T classes from the index (like convert-validate,
 /// same first-DB-that-resolves-wins loop, ConvertClassIn -- 1.20.6: no property
 /// tree is built, each dotted path is resolved lazily), parses the rules DSL, calls
-/// ReemitComponent, and serializes the result. Read-only against the store.</remarks>
+/// ReemitComponent, and serializes the result. Read-only against the store.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.CLI.Common.ExplicitDbsExist, DRagLint.CLI.Common.WriteStdoutDocument, DRagLint.CLI.ConsumerDbs.ResolveConsumerDbs, DRagLint.CLI.Convert.AmbiguousArgMessage, DRagLint.CLI.Convert.ConvertClassIn, DRagLint.CLI.Convert.DoConvertReemit.ArrJson, DRagLint.CLI.Convert.QualifyConvertArg, DRagLint.CLI.Convert.UnreachableJson, DRagLint.Convert.CastLib.ParseCastLib (+7 more)</para>
+/// <para>Returns: 2; 1</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 175 lines (full implementation)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.ExplicitDbsExist"/>
+/// <seealso cref="DRagLint.CLI.Common.WriteStdoutDocument"/>
+/// <seealso cref="DRagLint.CLI.ConsumerDbs.ResolveConsumerDbs"/>
+/// <seealso cref="DRagLint.CLI.Convert.AmbiguousArgMessage"/>
+/// <seealso cref="DRagLint.CLI.Convert.ConvertClassIn"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoConvertReemit(const AArgs: TArgs): Integer;
 
 /// <summary>drag-lint convert-scaffold --from FromType --to ToType [--output FILE]
@@ -144,7 +188,8 @@ function DoConvertReemit(const AArgs: TArgs): Integer;
 /// <returns>0 success; 1 either type unresolved in every db; 2 bad args (missing
 /// --from/--to, invalid --surface value, invalid --depth or book #depth, invalid
 /// --progress-interval) or no readable db (an explicit --db that is missing or stale is exit 2).</returns>
-/// <remarks>Output is DETERMINISTIC (paths sorted case-insensitively) so the
+/// <remarks>
+/// Output is DETERMINISTIC (paths sorted case-insensitively) so the
 /// emitted text is stable across runs. Emission order: (1) a '#convert From -&gt;
 /// To' header with a best-guess ', unit' uses-add taken from the qname unit
 /// prefix(es) of From/To when discoverable (never fabricated); (2) for each
@@ -160,22 +205,60 @@ function DoConvertReemit(const AArgs: TArgs): Integer;
 /// more than one From path is correctly flagged ambiguous. Every concrete path
 /// emitted is guaranteed to exist in the real trees and every '???' is tolerated
 /// by the validator, so the emitted file round-trips clean through
-/// convert-validate. Read-only.</remarks>
+/// convert-validate. Read-only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: Copy, Default, DRagLint.CLI.Common.ExplicitDbsExist, DRagLint.CLI.Common.OpenReadOnlyStore, DRagLint.CLI.Common.StaleDbRefusesRun, DRagLint.CLI.Common.WriteStdoutDocument, DRagLint.CLI.ConsumerDbs.ResolveConsumerDbs, DRagLint.CLI.Convert.DoConvertScaffold.FromCandidates, DRagLint.CLI.Convert.DoConvertScaffold.IsValidTarget, DRagLint.CLI.Convert.DoConvertScaffold.LeafLower (+17 more)</para>
+/// <para>Returns: 2; 0</para>
+/// <para>Complexity: 30 (cyclomatic, outer body), 289 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.ExplicitDbsExist"/>
+/// <seealso cref="DRagLint.CLI.Common.OpenReadOnlyStore"/>
+/// <seealso cref="DRagLint.CLI.Common.StaleDbRefusesRun"/>
+/// <seealso cref="DRagLint.CLI.Common.WriteStdoutDocument"/>
+/// <seealso cref="DRagLint.CLI.ConsumerDbs.ResolveConsumerDbs"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoConvertScaffold(const AArgs: TArgs): Integer;
 
 /// <summary>`drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db PATH ...]`: extracts and decodes every streamed graphic of the .dfm/.fmx under the roots into --output.</summary>
 /// <param name="AArgs">--root (one or more), --output, --append, --db (only qualifies, never guesses).</param>
 /// <returns>0 on a completed walk (0 graphics is an answer); 2 on bad args or a missing root.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.CLI.Common.ExplicitDbsExist, DRagLint.CLI.Common.OpenReadOnlyStore, DRagLint.CLI.Common.StaleDbRefusesRun, DRagLint.Convert.GlyphVacuum.RunGlyphVacuum, Format, Writeln</para>
+/// <para>Returns: 2; 0</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.ExplicitDbsExist"/>
+/// <seealso cref="DRagLint.CLI.Common.OpenReadOnlyStore"/>
+/// <seealso cref="DRagLint.CLI.Common.StaleDbRefusesRun"/>
+/// <seealso cref="DRagLint.Convert.GlyphVacuum.RunGlyphVacuum"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoGlyphVacuum(const AArgs: TArgs): Integer;
 
 /// <summary>apply/1 unreachable[] and convert-reemit's: one object per UNREACHABLE rule path (line, path, member, visibility, class, reason, message).</summary>
 /// <param name="AItems">The unreachable paths.</param>
 /// <returns>A new array; the caller owns it.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Convert.DoConvertReemit (DRagLint.CLI.Convert.pas), DRagLint.CLI.ConvertApplyJson.EmitApplyJson (DRagLint.CLI.ConvertApplyJson.pas)</para>
+/// <para>Returns: TJSONArray.Create</para>
+/// <para>Owns returned: new (caller owns)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UnreachableJson(const AItems: TArray<TUnreachablePath>): TJSONArray;
 
 /// <summary>S as a quoted JSON string, escaped, non-ASCII as \u -- for the hand-built progress line.</summary>
 /// <param name="S">The text.</param>
 /// <returns>The JSON string literal, quotes included.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Convert.MakeProgressWriter (DRagLint.CLI.Convert.pas), DRagLint.CLI.ConvertApply.DoConvertApply.ReportUnitProgress (DRagLint.CLI.ConvertApply.pas)</para>
+/// <para>Returns: J.ToJSON</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ProgressJsonStr(const S: string): string;
 
 implementation

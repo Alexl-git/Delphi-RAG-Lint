@@ -184,7 +184,7 @@ function DiagVersions: TDiagLines;
 /// network. Main thread only.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.RenderContent (DragLint.Plugin.AboutForm.pas)</para>
-/// <para>Calls: DragLint.Plugin.Diagnose.Add, DragLint.Plugin.Diagnose.DiagRelatedTools.AddTool, DragLint.Plugin.Diagnose.Line, DragLint.Plugin.Updates.FileVersionOf, DragLint.Plugin.Updates.FindKnownPackagePath, ExtractFilePath, FileExists</para>
+/// <para>Calls: DragLint.Plugin.Diagnose.Add, DragLint.Plugin.Diagnose.DiagRelatedTools.AddTool, DragLint.Plugin.Diagnose.Line, DragLint.Plugin.Updates.FileVersionOf, DragLint.Plugin.Updates.FindKnownPackagePath, DragLint.Plugin.Updates.FindYadfTool, FileExists</para>
 /// <para>Returns: nil</para>
 /// <seealso cref="DragLint.Plugin.Diagnose.Add"/>
 /// <seealso cref="DragLint.Plugin.Diagnose.DiagRelatedTools.AddTool"/>
@@ -267,7 +267,7 @@ function DiagIndexes: TDiagLines;
 /// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.RenderContent (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.Diagnose.BuildDiagnoseReport (DragLint.Plugin.Diagnose.pas)</para>
 /// <para>Calls: DragLint.Plugin.DbResolver.ManifestPathBesideEngine, DragLint.Plugin.Diagnose.Add, DragLint.Plugin.Diagnose.BoolLabel, DragLint.Plugin.Diagnose.Line, DragLint.Plugin.Diagnose.SevOf, DragLint.Plugin.Settings.LoadSettings, ExtractFilePath, FileExists, Format, Pos</para>
 /// <para>Returns: nil</para>
-/// <para>Complexity: 11 (cyclomatic, outer body), 88 lines (full implementation)</para>
+/// <para>Complexity: 13 (cyclomatic, outer body), 88 lines (full implementation)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DragLint.Plugin.DbResolver.ManifestPathBesideEngine"/>
 /// <seealso cref="DragLint.Plugin.Diagnose.Add"/>

@@ -61,6 +61,12 @@ const
 
 type
   /// <summary>One rule (or lane key) that overran the budget on one file.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: [dclDragLintWizard]declaration (DRagLint.Core.LintBudget.pas), [dclDragLintWizard]DRagLint.Core.LintBudget.RuleBudgetEndFile (DRagLint.Core.LintBudget.pas), [dclDragLintWizard]DRagLint.Core.LintBudget.RuleBudgetNoteMessage (DRagLint.Core.LintBudget.pas), [dclDragLintWizard]DRagLint.Core.LintBudget.TRuleBudgetClock.CloseSlice (DRagLint.Core.LintBudget.pas), [dclDragLintWizard]DRagLint.Core.LintBudget.TRuleBudgetClock.Create (DRagLint.Core.LintBudget.pas), [dclDragLintWizard]DRagLint.Core.LintBudget.TRuleBudgetClock.Skips (DRagLint.Core.LintBudget.pas)</para>
+  /// <para>Used in units: DRagLint.Core.LintBudget, DRagLint.V151.Dispatch</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRuleBudgetSkip = record
     /// <summary>Rule id, or RULE_BUDGET_LANE_PREFIX + lane name.</summary>
     RuleId   : string;
@@ -100,63 +106,144 @@ function LintChildTimeoutMs(const pOwningDbPath: string): Cardinal;
 
 /// <summary>Turns the per-rule budget off (or back on) for the whole process.</summary>
 /// <param name="pDisabled">True = no rule is ever skipped (the CLI's --no-budget).</param>
-/// <remarks>Set once before linting starts; not meant to change while files are linted.</remarks>
+/// <remarks>
+/// Set once before linting starts; not meant to change while files are linted.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure SetRuleBudgetDisabled(pDisabled: Boolean);
 
 /// <summary>The budget that applies to a file, after the process-wide switches.</summary>
 /// <param name="pConfigMs">The lint config's rule_time_budget_ms (0 = off).</param>
 /// <returns>0 when SetRuleBudgetDisabled(True) was called, when ENV_RULE_BUDGET_OFF is set
 /// to anything but '' or '0', or when pConfigMs &lt;= 0; else pConfigMs.</returns>
-/// <remarks>Reads the environment on every call; thread-safe.</remarks>
+/// <remarks>
+/// Reads the environment on every call; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.Dispatch.TV151Dispatch.CheckFile (DRagLint.V151.Dispatch.pas)</para>
+/// <para>Calls: GetEnvironmentVariable, Trim</para>
+/// <para>Returns: pConfigMs</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RuleBudgetEffectiveMs(pConfigMs: Integer): Integer;
 
 /// <summary>Opens the budget of one file on the calling thread.</summary>
 /// <param name="pBudgetMs">Per-rule budget in ms; 0 or less = off (no rule is skipped).</param>
-/// <remarks>Discards a budget the thread left open. With the budget off and no test seam
+/// <remarks>
+/// Discards a budget the thread left open. With the budget off and no test seam
 /// in the environment no state is created, so every other call is a no-op that costs a
-/// threadvar read. Pair with RuleBudgetEndFile in a try-finally.</remarks>
+/// threadvar read. Pair with RuleBudgetEndFile in a try-finally.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.Dispatch.TV151Dispatch.CheckFile (DRagLint.V151.Dispatch.pas)</para>
+/// <para>Calls: DRagLint.Core.LintBudget.TestSleepSeam, DRagLint.Core.LintBudget.TRuleBudgetClock.Create, FreeAndNil</para>
+/// <seealso cref="DRagLint.Core.LintBudget.TestSleepSeam"/>
+/// <seealso cref="DRagLint.Core.LintBudget.TRuleBudgetClock.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RuleBudgetBeginFile(pBudgetMs: Integer);
 
 /// <summary>Starts one lane call of the frame (charges time to 'lane:' + pLane until
 /// the lane asks for a rule).</summary>
 /// <param name="pLane">Lane name as the frame lists it.</param>
 /// <returns>False when the lane key already overran on this file: the frame skips the call.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.Dispatch.Budgeted (DRagLint.V151.Dispatch.pas)</para>
+/// <para>Calls: DRagLint.Core.LintBudget.TRuleBudgetClock.IsSkipped, DRagLint.Core.LintBudget.TRuleBudgetClock.Switch</para>
+/// <para>Returns: True</para>
+/// <seealso cref="DRagLint.Core.LintBudget.TRuleBudgetClock.IsSkipped"/>
+/// <seealso cref="DRagLint.Core.LintBudget.TRuleBudgetClock.Switch"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RuleBudgetBeginCall(const pLane: string): Boolean;
 
 /// <summary>Records that the running lane is about to compute pRuleId.</summary>
 /// <param name="pRuleId">Rule id the lane asks for (TV151FileCtx.Wants).</param>
 /// <returns>False when pRuleId already overran its budget on this file (the lane must not
 /// compute it); True otherwise, and always True with no budget open.</returns>
-/// <remarks>Closes the time slice of the rule entered before; applies the test seam.</remarks>
+/// <remarks>
+/// Closes the time slice of the rule entered before; applies the test seam.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.Api.TV151FileCtx.Wants (DRagLint.V151.Api.pas)</para>
+/// <para>Calls: DRagLint.Core.LintBudget.TRuleBudgetClock.IsSkipped, DRagLint.Core.LintBudget.TRuleBudgetClock.SleepFor, DRagLint.Core.LintBudget.TRuleBudgetClock.Switch</para>
+/// <para>Returns: not GClock.IsSkipped(pRuleId)</para>
+/// <seealso cref="DRagLint.Core.LintBudget.TRuleBudgetClock.IsSkipped"/>
+/// <seealso cref="DRagLint.Core.LintBudget.TRuleBudgetClock.SleepFor"/>
+/// <seealso cref="DRagLint.Core.LintBudget.TRuleBudgetClock.Switch"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RuleBudgetEnter(const pRuleId: string): Boolean;
 
 /// <summary>Ends the lane call opened by RuleBudgetBeginCall and charges its last slice.</summary>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.Dispatch.Budgeted (DRagLint.V151.Dispatch.pas)</para>
+/// <para>Calls: DRagLint.Core.LintBudget.TRuleBudgetClock.EndCall</para>
+/// <seealso cref="DRagLint.Core.LintBudget.TRuleBudgetClock.EndCall"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RuleBudgetEndCall;
 
 /// <summary>Has this rule (or lane key) overrun its budget on the current file?</summary>
 /// <param name="pRuleId">Rule id, or RULE_BUDGET_LANE_PREFIX + lane name.</param>
 /// <returns>True when skipped; False with no budget open.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.Dispatch.Budgeted (DRagLint.V151.Dispatch.pas)</para>
+/// <para>Calls: DRagLint.Core.LintBudget.TRuleBudgetClock.IsSkipped</para>
+/// <para>Returns: (GClock &lt;&gt; nil) and GClock.IsSkipped(pRuleId)</para>
+/// <seealso cref="DRagLint.Core.LintBudget.TRuleBudgetClock.IsSkipped"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RuleBudgetIsSkipped(const pRuleId: string): Boolean;
 
 /// <summary>Closes the file's budget, adds its skips to the run-wide summary and frees the state.</summary>
 /// <returns>Every rule / lane key that overran on the file, in the order the overruns were seen;
 /// nil when none did or no budget was open.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.Dispatch.CloseBudget (DRagLint.V151.Dispatch.pas)</para>
+/// <para>Calls: DRagLint.Core.LintBudget.TRuleBudgetClock.EndCall, DRagLint.Core.LintBudget.TRuleBudgetClock.Skips, FreeAndNil</para>
+/// <para>Returns: nil; GClock.Skips</para>
+/// <seealso cref="DRagLint.Core.LintBudget.TRuleBudgetClock.EndCall"/>
+/// <seealso cref="DRagLint.Core.LintBudget.TRuleBudgetClock.Skips"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RuleBudgetEndFile: TArray<TRuleBudgetSkip>;
 
 /// <summary>Text of the one rule-skipped-budget note of a file.</summary>
 /// <param name="pSkips">The file's skips (RuleBudgetEndFile); must not be empty.</param>
 /// <param name="pBudgetMs">The budget that applied, in ms.</param>
 /// <returns>One line naming every skipped rule with its time, the budget, and the way to change it.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.Dispatch.CloseBudget (DRagLint.V151.Dispatch.pas)</para>
+/// <para>Calls: Format</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RuleBudgetNoteMessage(const pSkips: TArray<TRuleBudgetSkip>; pBudgetMs: Integer): string;
 
 /// <summary>The run-wide summary of skipped rules (for lint-all's summary).</summary>
 /// <returns>'' when no rule was skipped in this process since the last reset; else one line
 /// 'rule budget: N skip(s) on M file(s): rule-a (k files), ...', rules sorted by id.</returns>
-/// <remarks>Thread-safe.</remarks>
+/// <remarks>
+/// Thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+/// <para>Calls: Format</para>
+/// <para>Returns: Format('rule budget: %d skip(s) on %d file(s): %s', [GSummarySkips, GSummaryFiles, string.Join(', ', Parts)])</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RuleBudgetSummaryLine: string;
 
 /// <summary>Clears the run-wide summary (a long-lived process between runs).</summary>
-/// <remarks>Thread-safe.</remarks>
+/// <remarks>
+/// Thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RuleBudgetResetSummary;
 
 /// <summary>Is a unit of this size within PARSE_LIMIT_WARN_PERCENT below the parse limit?</summary>
@@ -164,7 +251,15 @@ procedure RuleBudgetResetSummary;
 /// <param name="pLimitKB">The index walker's parse limit in KB; 0 or less = unlimited.</param>
 /// <returns>True when pLimitKB &gt; 0 and pSizeBytes is above 90 percent of the limit and
 /// not above the limit itself (the walker skips those with its own line).</returns>
-/// <remarks>Pure; thread-safe.</remarks>
+/// <remarks>
+/// Pure; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas)</para>
+/// <para>Calls: Int64</para>
+/// <para>Returns: (pSizeBytes &lt;= Limit) and (pSizeBytes * PERCENT_WHOLE &gt; Limit * (PERCENT_WHOLE - PARSE_LIMIT_WARN_PERCENT))</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsNearParseLimit(pSizeBytes: Int64; pLimitKB: Integer): Boolean;
 
 /// <summary>The index walker's warning line for a unit near the parse limit.</summary>
@@ -172,7 +267,13 @@ function IsNearParseLimit(pSizeBytes: Int64; pLimitKB: Integer): Boolean;
 /// <param name="pSizeBytes">Its size in bytes.</param>
 /// <param name="pLimitKB">The parse limit in KB.</param>
 /// <returns>'  WARN &lt;path&gt;: &lt;n&gt; KB is within 10% of the parse limit (&lt;limit&gt; KB) ...'.</returns>
-/// <remarks>Pure; thread-safe.</remarks>
+/// <remarks>
+/// Pure; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas)</para>
+/// <para>Calls: Format</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseLimitWarning(const pPath: string; pSizeBytes: Int64; pLimitKB: Integer): string;
 
 implementation

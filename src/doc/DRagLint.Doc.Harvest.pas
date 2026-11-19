@@ -186,11 +186,11 @@ procedure HarvestText(const AResult: THarvestResult; out ASummary, ARemarks: str
 /// cannot drift apart.</summary>
 /// <param name="AReason"><!-- drag-lint:auto type -->const THarvestReason</param>
 /// <returns><!-- drag-lint:auto -->string -- Observed: 'ACCEPTED'; 'NONE'; 'BANNER';
-/// 'COMMENTEDCODE'; 'TRAILER'; 'EMPTY'.</returns>
+/// 'COMMENTEDCODE'; 'TRAILER'; 'EMPTY'; 'NONASCII'; 'NESTEDBRACE'; 'UNKNOWN'.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoSelfTestHarvest (DRagLint.CLI.pas)</para>
-/// <para>Pure</para>
+/// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function HarvestReasonToString(const AReason: THarvestReason): string;

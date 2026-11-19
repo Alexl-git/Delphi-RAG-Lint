@@ -19,6 +19,11 @@ uses
 
 type
   /// <summary>Kind of anonymous-method context a lambda literal is passed to.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.THRB.pas), declaration (DRagLint.V151.THRB.Support.pas), DRagLint.V151.THRB.Support.ThrbLambdaKind (DRagLint.V151.THRB.Support.pas), DRagLint.V151.THRB.TThrbRun.CheckParallelBody (DRagLint.V151.THRB.pas), DRagLint.V151.THRB.TThrbRun.Execute (DRagLint.V151.THRB.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TThrbLambdaKind = (
     /// <summary>Not an argument of a known threading call.</summary>
     tlkNone,
@@ -32,10 +37,16 @@ type
     tlkMainThread);
 
   /// <summary>One parsed unit as the THRB rules see it.</summary>
-  /// <remarks>Owns its node list, dictionaries, index reader and findings; the parse tree itself
+  /// <remarks>
+  /// Owns its node list, dictionaries, index reader and findings; the parse tree itself
   /// belongs to TAstParseCache. Not thread-safe (the lint pipeline is single-threaded).
   /// Every index question degrades to "unknown" without a store, so a run with no index answers
-  /// by spelling alone.</remarks>
+  /// by spelling alone.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.THRB.Support.pas) ?, DRagLint.V151.THRB.Support.CallName (DRagLint.V151.THRB.Support.pas) ?, DRagLint.V151.THRB.Support.ThrbLambdaKind (DRagLint.V151.THRB.Support.pas) ?, DRagLint.V151.THRB.Support.ThrbTakesLock (DRagLint.V151.THRB.Support.pas) ?, DRagLint.V151.THRB.TThrbRun.Create (DRagLint.V151.THRB.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.V151.THRB, DRagLint.V151.THRB.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TThrbFile = class
   strict private
     FPath     : string;
@@ -52,10 +63,80 @@ type
     FFieldsOf : TDictionary<string, TList<string>>;
     FGlobals  : TDictionary<string, Boolean>;
     FFindings : TList<TLintFinding>;
+    /// <param name="ANode"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRB.Support.TThrbFile.Create (DRagLint.V151.THRB.Support.pas), DRagLint.V151.THRB.Support.TThrbFile.Flatten (DRagLint.V151.THRB.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.THRB.Support.TThrbFile.Flatten, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount</para>
+    /// <para>Reads: FNodes</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.AddFieldNames"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.Canon"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Flatten(const ANode: TTSNode);
+    /// <param name="ADeclField"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AFields"><!-- drag-lint:auto type -->const TList&lt;string&gt;</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRB.Support.TThrbFile.CollectClass (DRagLint.V151.THRB.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.THRB.Support.TThrbFile.Canon, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.Canon"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.CollectClass"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure AddFieldNames(const ADeclField: TTSNode; const AFields: TList<string>);
+    /// <param name="ADeclType"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRB.Support.TThrbFile.Create (DRagLint.V151.THRB.Support.pas)</para>
+    /// <para>Calls: Default, DRagLint.V151.THRB.Support.ThrbLeaf, DRagLint.V151.THRB.Support.TThrbFile.AddFieldNames, DRagLint.V151.THRB.Support.TThrbFile.Canon, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <para>Complexity: 14 (cyclomatic, outer body), 29 lines (full implementation)</para>
+    /// <para>Reads: FParentOf, FFieldsOf</para>
+    /// <seealso cref="DRagLint.V151.THRB.Support.ThrbLeaf"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.AddFieldNames"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.Canon"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CollectClass(const ADeclType: TTSNode);
+    /// <param name="ADeclVars"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRB.Support.TThrbFile.Create (DRagLint.V151.THRB.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.THRB.Support.TThrbFile.Canon, TreeSitter.TTSNodeHelper.Child, TreeSitter.TTSNodeHelper.ChildCount, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.Parent</para>
+    /// <para>Complexity: 15 (cyclomatic, outer body), 26 lines (full implementation)</para>
+    /// <para>Reads: FGlobals</para>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.Canon"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildCount"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CollectGlobals(const ADeclVars: TTSNode);
+    /// <param name="AClass"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ASuffixes"><!-- drag-lint:auto type -->const array of string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRB.Support.TThrbFile.IsFormClass (DRagLint.V151.THRB.Support.pas), DRagLint.V151.THRB.Support.TThrbFile.IsThreadClass (DRagLint.V151.THRB.Support.pas)</para>
+    /// <para>Calls: EndsText, StartsText</para>
+    /// <para>Reads: FParentOf</para>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.AddFieldNames"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.Canon"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.CollectClass"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.CollectGlobals"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function SpelledAncestorEndsWith(const AClass: string; const ASuffixes: array of string): Boolean;
   public
     /// <summary>Parses APath through the shared parse cache and collects the file-level facts.</summary>
@@ -63,7 +144,31 @@ type
     /// <param name="AStore">Project index or nil.</param>
     /// <param name="AFileId">APath's id in AStore, or 0.</param>
     /// <param name="ALibStore">Library index or nil.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRB.TThrbRun.Create (DRagLint.V151.THRB.pas)</para>
+    /// <para>Calls: DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.V151.THRB.Support.TThrbFile.CollectClass, DRagLint.V151.THRB.Support.TThrbFile.CollectGlobals, DRagLint.V151.THRB.Support.TThrbFile.Flatten, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSTree.RootNode</para>
+    /// <para>constructor</para>
+    /// <para>Reads: FOk, FRawSrc, FSrc, FRoot, FNodes   Writes: FPath, FStore, FLibStore, FFileId, FNodes, FParentOf, FFieldsOf, FGlobals (+5 more)</para>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.CollectClass"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.CollectGlobals"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.Flatten"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(const APath: string; const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore);
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FReader, FFindings, FGlobals, FFieldsOf, FParentOf, FNodes</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.AddFieldNames"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.Canon"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.CollectClass"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.CollectGlobals"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>False when the file could not be parsed; every rule then reports nothing.</summary>
     property Ok: Boolean read FOk;
@@ -72,44 +177,156 @@ type
     /// <summary>The source text of a node, '' for a null node.</summary>
     /// <param name="ANode">Any node of this file.</param>
     /// <returns>The node's text as written.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRB.Support.TThrbFile.Canon (DRagLint.V151.THRB.Support.pas), DRagLint.V151.THRB.TThrbRun.CheckTask (DRagLint.V151.THRB.pas), DRagLint.V151.THRB.TThrbRun.WalkBlocking (DRagLint.V151.THRB.pas), DRagLint.V151.THRB.TThrbRun.WalkIncrements (DRagLint.V151.THRB.pas), DRagLint.V151.THRB.TThrbRun.WalkWrites (DRagLint.V151.THRB.pas)</para>
+    /// <para>Calls: Integer, TreeSitter.TTSNodeHelper.EndByte, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.StartByte</para>
+    /// <para>Returns: ''; TEncoding.UTF8.GetString(FSrc, S, E - S)</para>
+    /// <para>Reads: FSrc</para>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.EndByte"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.StartByte"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.AddFieldNames"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.Canon"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Text(const ANode: TTSNode): string;
     /// <summary>The node's text lower-cased, blanks and line breaks removed, a leading `self.`,
     /// any `&amp;` escape and a generic argument list `&lt;...&gt;` dropped.</summary>
     /// <param name="ANode">Any node of this file.</param>
     /// <returns>The canonical spelling used for every name comparison of the lane.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRB.Support.AddIdentChildren (DRagLint.V151.THRB.Support.pas), DRagLint.V151.THRB.Support.CallName (DRagLint.V151.THRB.Support.pas), DRagLint.V151.THRB.Support.TThrbFile.AddFieldNames (DRagLint.V151.THRB.Support.pas), DRagLint.V151.THRB.Support.TThrbFile.CollectClass (DRagLint.V151.THRB.Support.pas), DRagLint.V151.THRB.Support.TThrbFile.CollectGlobals (DRagLint.V151.THRB.Support.pas) (+12 more)</para>
+    /// <para>Calls: Delete, DRagLint.V151.THRB.Support.TThrbFile.Text, LowerCase, StartsText</para>
+    /// <para>Returns: SB.ToString</para>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.Text"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.AddFieldNames"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.CollectClass"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.CollectGlobals"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Canon(const ANode: TTSNode): string;
     /// <summary>True when the file's raw text contains ASub, case-insensitively.</summary>
     /// <param name="ASub">Lower-case text to look for.</param>
     /// <returns>Whether it occurs.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRB.TThrbRun.Execute (DRagLint.V151.THRB.pas)</para>
+    /// <para>Calls: ContainsText</para>
+    /// <para>Returns: ContainsText(TEncoding.UTF8.GetString(FRawSrc), ASub)</para>
+    /// <para>Reads: FRawSrc</para>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.AddFieldNames"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.Canon"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.CollectClass"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.CollectGlobals"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function SourceContains(const ASub: string): Boolean;
     /// <summary>Whether AClass is a thread class: a spelled ancestor in this file named T*Thread,
     /// overruled by the index when it proves the opposite, or added when the index proves descent.</summary>
     /// <param name="AClass">Canonical class name.</param>
     /// <returns>True for a thread class.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRB.TThrbRun.Execute (DRagLint.V151.THRB.pas)</para>
+    /// <para>Calls: DRagLint.Lint.RefTypeRules.TExprTypeReader.Create, DRagLint.Lint.RefTypeRules.TExprTypeReader.Descends, DRagLint.V151.THRB.Support.TThrbFile.SpelledAncestorEndsWith</para>
+    /// <para>Returns: if SpelledAncestorEndsWith(AClass, ['thread']) then D &lt;&gt; tdNo</para>
+    /// <para>Reads: FStore, FReader, FLibStore, FFileId, FSrc, FParentOf   Writes: FReader</para>
+    /// <seealso cref="DRagLint.Lint.RefTypeRules.TExprTypeReader.Create"/>
+    /// <seealso cref="DRagLint.Lint.RefTypeRules.TExprTypeReader.Descends"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.SpelledAncestorEndsWith"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.AddFieldNames"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.Canon"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsThreadClass(const AClass: string): Boolean;
     /// <summary>Whether AClass is a form or frame: a spelled ancestor ending in `form` or `frame`,
     /// or the index proves descent from TCustomForm / TCustomFrame. A data module does not count:
     /// server code creates them per worker thread.</summary>
     /// <param name="AClass">Canonical class name.</param>
     /// <returns>True for a form or frame class.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRB.TThrbRun.Execute (DRagLint.V151.THRB.pas)</para>
+    /// <para>Calls: DRagLint.Lint.RefTypeRules.TExprTypeReader.Create, DRagLint.Lint.RefTypeRules.TExprTypeReader.Descends, DRagLint.V151.THRB.Support.TThrbFile.SpelledAncestorEndsWith</para>
+    /// <para>Returns: if SpelledAncestorEndsWith(AClass, ['form', 'frame']) then (DForm &lt;&gt; tdNo) or (DFrame &lt;&gt; tdNo)</para>
+    /// <para>Reads: FStore, FReader, FLibStore, FFileId, FSrc, FParentOf   Writes: FReader</para>
+    /// <seealso cref="DRagLint.Lint.RefTypeRules.TExprTypeReader.Create"/>
+    /// <seealso cref="DRagLint.Lint.RefTypeRules.TExprTypeReader.Descends"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.SpelledAncestorEndsWith"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.AddFieldNames"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.Canon"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsFormClass(const AClass: string): Boolean;
     /// <summary>Whether AName is a unit-level variable of this file (not a threadvar) or a class var
     /// of a class declared in it.</summary>
     /// <param name="AName">Canonical identifier.</param>
     /// <returns>True for shared, process-wide storage.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRB.TThrbRun.WalkIncrements (DRagLint.V151.THRB.pas)</para>
+    /// <para>Returns: FGlobals.ContainsKey(AName)</para>
+    /// <para>Reads: FGlobals</para>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.AddFieldNames"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.Canon"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.CollectClass"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.CollectGlobals"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsGlobal(const AName: string): Boolean;
     /// <summary>Whether AName is a field declared by AClass in this file.</summary>
     /// <param name="AClass">Canonical class name.</param>
     /// <param name="AName">Canonical identifier.</param>
     /// <returns>True when the class declares a field of that name.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRB.TThrbRun.WalkIncrements (DRagLint.V151.THRB.pas)</para>
+    /// <para>Returns: FFieldsOf.TryGetValue(AClass, Fields) and (Fields.IndexOf(AName) &gt;= 0)</para>
+    /// <para>Reads: FFieldsOf</para>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.AddFieldNames"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.Canon"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.CollectClass"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.CollectGlobals"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsFieldOf(const AClass, AName: string): Boolean;
     /// <summary>Adds one finding at ANode's start.</summary>
     /// <param name="ANode">Where the finding points.</param>
     /// <param name="ARule">Rule id.</param>
     /// <param name="AMsg">Message.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRB.TThrbRun.CheckTask (DRagLint.V151.THRB.pas), DRagLint.V151.THRB.TThrbRun.WalkBlocking (DRagLint.V151.THRB.pas), DRagLint.V151.THRB.TThrbRun.WalkIncrements (DRagLint.V151.THRB.pas), DRagLint.V151.THRB.TThrbRun.WalkWrites (DRagLint.V151.THRB.pas)</para>
+    /// <para>Calls: Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol, Integer, TreeSitter.TTSNodeHelper.StartPoint</para>
+    /// <para>Reads: FPath, FFindings</para>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.StartPoint"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.AddFieldNames"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.Canon"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.CollectClass"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Emit(const ANode: TTSNode; const ARule, AMsg: string);
     /// <summary>The findings collected so far.</summary>
     /// <returns>A copy of the list; nil when empty.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRB.TV151THRBRules.CheckFile (DRagLint.V151.THRB.pas)</para>
+    /// <para>Returns: if FFindings.Count = 0 then nil</para>
+    /// <para>Reads: FFindings</para>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.AddFieldNames"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.Canon"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.CollectClass"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.CollectGlobals"/>
+    /// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Findings: TArray<TLintFinding>;
   end;
 
@@ -117,16 +334,41 @@ type
 /// <param name="A">First node.</param>
 /// <param name="B">Second node.</param>
 /// <returns>True when both denote the same syntax node.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.THRB.TThrbRun.InsideWith (DRagLint.V151.THRB.pas), DRagLint.V151.THRB.TThrbRun.LocalUsedAgain (DRagLint.V151.THRB.pas), DRagLint.V151.THRB.TThrbRun.TaskObserved (DRagLint.V151.THRB.pas)</para>
+/// <para>Calls: TreeSitter.TTSNodeHelper.EndByte, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.StartByte</para>
+/// <para>Returns: (not A.IsNull) and (not B.IsNull) and (A.StartByte = B.StartByte) and (A.EndByte = B.EndByte)</para>
+/// <seealso cref="TreeSitter.TTSNodeHelper.EndByte"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.StartByte"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ThrbSameNode(const A, B: TTSNode): Boolean;
 
 /// <summary>The part after the last dot of a canonical name (`ttask.run` -> `run`).</summary>
 /// <param name="AName">Canonical name.</param>
 /// <returns>The leaf; AName itself when it has no dot.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.THRB.Support.ThrbTakesLock (DRagLint.V151.THRB.Support.pas), DRagLint.V151.THRB.Support.TThrbFile.CollectClass (DRagLint.V151.THRB.Support.pas), DRagLint.V151.THRB.TThrbRun.CheckTask (DRagLint.V151.THRB.pas), DRagLint.V151.THRB.TThrbRun.RoutineBodyByName (DRagLint.V151.THRB.pas), DRagLint.V151.THRB.TThrbRun.TornDownInRoutine (DRagLint.V151.THRB.pas) (+1 more)</para>
+/// <para>Calls: Copy, LastDelimiter</para>
+/// <para>Returns: Copy(AName, LastDelimiter('.', AName) + 1, MaxInt)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ThrbLeaf(const AName: string): string;
 
 /// <summary>The part before the last dot of a canonical name (`fthread.waitfor` -> `fthread`).</summary>
 /// <param name="AName">Canonical name.</param>
 /// <returns>The receiver; '' when AName has no dot.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.THRB.TThrbRun.TornDownInRoutine (DRagLint.V151.THRB.pas), DRagLint.V151.THRB.TThrbRun.WalkBlocking (DRagLint.V151.THRB.pas)</para>
+/// <para>Calls: Copy, LastDelimiter</para>
+/// <para>Returns: if K &gt; 0 then Copy(AName, 1, K - 1)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ThrbReceiver(const AName: string): string;
 
 /// <summary>What a lambda literal is passed to, and whether that call sits inside a loop.</summary>
@@ -135,6 +377,20 @@ function ThrbReceiver(const AName: string): string;
 /// <param name="ACall">Out: the exprCall the lambda is an argument of (null node for tlkNone).</param>
 /// <returns>The context kind; a task started from inside a for / while / repeat loop of the same
 /// routine or lambda is tlkTaskInLoop.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.THRB.TThrbRun.Execute (DRagLint.V151.THRB.pas)</para>
+/// <para>Calls: Default, DRagLint.V151.THRB.Support.InList, DRagLint.V151.THRB.Support.IsLoop, DRagLint.V151.THRB.Support.TThrbFile.Canon, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.Parent</para>
+/// <para>Returns: tlkNone; tlkTask</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 22 lines (full implementation)</para>
+/// <para>Mutates: ACall (out)</para>
+/// <seealso cref="DRagLint.V151.THRB.Support.InList"/>
+/// <seealso cref="DRagLint.V151.THRB.Support.IsLoop"/>
+/// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.Canon"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ThrbLambdaKind(const AFile: TThrbFile; const ALambda: TTSNode; out ACall: TTSNode): TThrbLambdaKind;
 
 /// <summary>True when ANode holds a call that takes a lock (Enter, Acquire, BeginWrite, Lock,
@@ -142,12 +398,38 @@ function ThrbLambdaKind(const AFile: TThrbFile; const ALambda: TTSNode; out ACal
 /// <param name="AFile">The file.</param>
 /// <param name="ANode">A routine or lambda body.</param>
 /// <returns>Whether any lock is taken in it.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.THRB.Support.ThrbTakesLock (DRagLint.V151.THRB.Support.pas), DRagLint.V151.THRB.TThrbRun.CheckIncrements (DRagLint.V151.THRB.pas), DRagLint.V151.THRB.TThrbRun.CheckParallelBody (DRagLint.V151.THRB.pas)</para>
+/// <para>Calls: DRagLint.V151.THRB.Support.CallName, DRagLint.V151.THRB.Support.InList, DRagLint.V151.THRB.Support.ThrbLeaf, DRagLint.V151.THRB.Support.ThrbTakesLock, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+/// <para>Returns: False</para>
+/// <para>Recursive</para>
+/// <seealso cref="DRagLint.V151.THRB.Support.CallName"/>
+/// <seealso cref="DRagLint.V151.THRB.Support.InList"/>
+/// <seealso cref="DRagLint.V151.THRB.Support.ThrbLeaf"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ThrbTakesLock(const AFile: TThrbFile; const ANode: TTSNode): Boolean;
 
 /// <summary>True when a routine / lambda body has a try..except as a top-level statement (possibly
 /// inside a nested begin..end, or inside a top-level loop), i.e. its exceptions are handled.</summary>
 /// <param name="ABody">A `block` node; a null node is not guarded.</param>
 /// <returns>Whether the body handles its own exceptions.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.THRB.Support.ThrbGuarded (DRagLint.V151.THRB.Support.pas), DRagLint.V151.THRB.TThrbRun.CheckTask (DRagLint.V151.THRB.pas), DRagLint.V151.THRB.TThrbRun.RoutineBodyByName (DRagLint.V151.THRB.pas)</para>
+/// <para>Calls: DRagLint.V151.THRB.Support.ContainsTryExcept, DRagLint.V151.THRB.Support.HasExcept, DRagLint.V151.THRB.Support.IsLoop, DRagLint.V151.THRB.Support.ThrbGuarded, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+/// <para>Returns: False; True</para>
+/// <para>Recursive</para>
+/// <seealso cref="DRagLint.V151.THRB.Support.ContainsTryExcept"/>
+/// <seealso cref="DRagLint.V151.THRB.Support.HasExcept"/>
+/// <seealso cref="DRagLint.V151.THRB.Support.IsLoop"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ThrbGuarded(const ABody: TTSNode): Boolean;
 
 /// <summary>Canonical names a routine or lambda declares: parameters, its var sections and inline
@@ -155,6 +437,13 @@ function ThrbGuarded(const ABody: TTSNode): Boolean;
 /// <param name="AFile">The file.</param>
 /// <param name="AScope">A `defProc` or `lambda` node.</param>
 /// <param name="ANames">List to append to; owned by the caller.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.THRB.TThrbRun.CheckParallelBody (DRagLint.V151.THRB.pas), DRagLint.V151.THRB.TThrbRun.LocalUsedAgain (DRagLint.V151.THRB.pas), DRagLint.V151.THRB.TThrbRun.ShadowedLocally (DRagLint.V151.THRB.pas)</para>
+/// <para>Calls: DRagLint.V151.THRB.Support.CollectDecls</para>
+/// <seealso cref="DRagLint.V151.THRB.Support.CollectDecls"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ThrbDeclaredNames(const AFile: TThrbFile; const AScope: TTSNode; const ANames: TList<string>);
 
 /// <summary>The variable a statement writes in a read-modify-write or plain store: the plain
@@ -164,6 +453,20 @@ procedure ThrbDeclaredNames(const AFile: TThrbFile; const AScope: TTSNode; const
 /// <param name="ANode">An `assignment` or `exprCall` node.</param>
 /// <param name="AIsIncrement">Out: True for Inc / Dec and for `X := X + e`, `X := X - e`, `X := e + X`.</param>
 /// <returns>The written identifier node, or a null node when ANode writes no plain identifier.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.THRB.TThrbRun.WalkIncrements (DRagLint.V151.THRB.pas), DRagLint.V151.THRB.TThrbRun.WalkWrites (DRagLint.V151.THRB.pas)</para>
+/// <para>Calls: Default, DRagLint.V151.THRB.Support.InList, DRagLint.V151.THRB.Support.TThrbFile.Canon, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+/// <para>Returns: Default(TTSNode); Lhs; First</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 31 lines (full implementation)</para>
+/// <para>Mutates: AIsIncrement (out)</para>
+/// <seealso cref="DRagLint.V151.THRB.Support.InList"/>
+/// <seealso cref="DRagLint.V151.THRB.Support.TThrbFile.Canon"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ThrbWrittenName(const AFile: TThrbFile; const ANode: TTSNode; out AIsIncrement: Boolean): TTSNode;
 
 implementation

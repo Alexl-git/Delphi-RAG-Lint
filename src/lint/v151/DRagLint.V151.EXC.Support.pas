@@ -21,6 +21,12 @@ uses
 
 type
   /// <summary>Directive and position facts of one method declared in a class body of the file.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.EXC.Support.pas) ?, DRagLint.V151.EXC.Support.TExcClassInfo.Create (DRagLint.V151.EXC.Support.pas) ?, DRagLint.V151.EXC.Support.TExcRun.AncestorMember (DRagLint.V151.EXC.Support.pas) ?, DRagLint.V151.EXC.Support.TExcRun.CollectClass (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.ProcInfo (DRagLint.V151.EXC.Support.pas) (+7 more)</para>
+  /// <para>Used in units: DRagLint.V151.EXC.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TExcMethodInfo = record
     Name       : string;          // lower case, no generics
     IsOverride : Boolean;
@@ -37,16 +43,44 @@ type
   end;
 
   /// <summary>Per-class facts of the file: heritage list and declared methods.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.EXC.Support.pas) ?, DRagLint.V151.EXC.Support.TExcRun.CollectClass (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.Create (DRagLint.V151.EXC.Support.pas) ?, DRagLint.V151.EXC.Support.TExcRun.ExcIsA (DRagLint.V151.EXC.Support.pas) ?, DRagLint.V151.EXC.Support.TExcRun.ProcInfo (DRagLint.V151.EXC.Support.pas) ? (+2 more)</para>
+  /// <para>Used in units: DRagLint.V151.EXC.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TExcClassInfo = class
   public
     Parents: TArray<string>;      // lower case, last segment, no generics  // dl:ok public-field@2d0d -- REVIEWED 2026-11-14 v151 INT: plain data holder owned by one scan
     Methods: TDictionary<string, TExcMethodInfo>;  // dl:ok public-field@955a -- REVIEWED 2026-11-14 v151 INT: plain data holder owned by one scan
+    /// <summary><!-- drag-lint:auto sum -->TExcClassInfo</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CollectClass (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: Methods</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcClassInfo.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: Methods</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcClassInfo.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
   end;
 
   /// <summary>One run of the lane over one parsed file.</summary>
-  /// <remarks>Create, Run once, Free. Not thread-safe; the owner is the checker in DRagLint.V151.EXC.</remarks>
+  /// <remarks>
+  /// Create, Run once, Free. Not thread-safe; the owner is the checker in DRagLint.V151.EXC.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.V151.EXC.TV151EXCRules.CheckFile (DRagLint.V151.EXC.pas)</para>
+  /// <para>Used in units: DRagLint.V151.EXC</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TExcRun = class  // dl:ok high-response@f6cf -- REVIEWED 2026-11-14 v151 INT: one scanner class holding the per-rule checks of one lane; a split is beyond 1.51
   strict private
     FFile    : string;
@@ -57,46 +91,660 @@ type
     FFindings: TList<TLintFinding>;
     FClasses : TObjectDictionary<string, TExcClassInfo>;
     FWants   : TFunc<string, Boolean>;
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: '';
+    /// TEncoding.UTF8.GetString(FSrc, S, L).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CheckDestroyDirect (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.CheckTry (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.ContainsFreeOfMember (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.ContainsIdent (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.LowerText (DRagLint.V151.EXC.Support.pas) (+2 more)</para>
+    /// <para>Calls: Integer, TreeSitter.TTSNodeHelper.EndByte, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.StartByte</para>
+    /// <para>Reads: FSrc</para>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.EndByte"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.StartByte"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.AncestorMember"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.BodyStatements"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function NodeStr(const N: TTSNode): string;
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed:
+    /// LowerCase(StringReplace(Trim(NodeStr(N)), ' ', '', [rfReplaceAll])).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CheckOnlyInherited (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.CollectClass (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.CollectClasses (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.ContainsResultAssign (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.InheritedTarget (DRagLint.V151.EXC.Support.pas) (+5 more)</para>
+    /// <para>Calls: DRagLint.V151.EXC.Support.TExcRun.NodeStr, LowerCase, StringReplace, Trim</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.NodeStr"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.AncestorMember"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.BodyStatements"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckDestroyDirect"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckDtorOrder"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function LowerText(const N: TTSNode): string;
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="ARule"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AMsg"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ASev"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CheckDestroyDirect (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.CheckDtorOrder (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.CheckMessageHandler (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.CheckMissingInherited (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.CheckNoAncestor (DRagLint.V151.EXC.Support.pas) (+4 more)</para>
+    /// <para>Calls: Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol, FWants, Integer, TreeSitter.TTSNodeHelper.EndPoint, TreeSitter.TTSNodeHelper.StartPoint</para>
+    /// <para>Reads: FWants, FFile, FFindings</para>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.EndPoint"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.StartPoint"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.AncestorMember"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.BodyStatements"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure EmitAt(const N: TTSNode; const ARule, AMsg, ASev: string);
+    /// <param name="S"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->string</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CheckTry (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.CollectClass (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.CollectClasses (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.ProcOwner (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.AncestorMember"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.BodyStatements"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckDestroyDirect"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckDtorOrder"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckMessageHandler"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function StripGeneric(const S: string): string; static;
+    /// <param name="S"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: if P &gt; 0 then Copy(S, P +
+    /// 1, MaxInt).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CollectClass (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.CollectClasses (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.ProcOwner (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: Copy, LastDelimiter</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.AncestorMember"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.BodyStatements"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckDestroyDirect"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckDtorOrder"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckMessageHandler"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function LastSegment(const S: string): string; static;
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AKinds"><!-- drag-lint:auto type -->const array of string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CollectClass (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.IsDtorProc (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: MatchStr, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.AncestorMember"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.BodyStatements"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function HasKeyword(const N: TTSNode; const AKinds: array of string): Boolean; static;
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AList"><!-- drag-lint:auto type -->TList&lt;TPair&lt;TTSNode, string&gt;&gt;</param>
+    /// <param name="AVis"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CollectClass (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.GatherMembers (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.EXC.Support.TExcRun.GatherMembers, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.AncestorMember"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.BodyStatements"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure GatherMembers(const N: TTSNode; AList: TList<TPair<TTSNode, string>>; const AVis: string);
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CollectClasses (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.Run (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: Default, DRagLint.V151.EXC.Support.TExcRun.CollectClass, DRagLint.V151.EXC.Support.TExcRun.CollectClasses, DRagLint.V151.EXC.Support.TExcRun.LastSegment, DRagLint.V151.EXC.Support.TExcRun.LowerText, DRagLint.V151.EXC.Support.TExcRun.StripGeneric, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 24 lines (full implementation)</para>
+    /// <para>Reads: FClasses</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CollectClass"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.LastSegment"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.LowerText"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.StripGeneric"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CollectClasses(const N: TTSNode);
+    /// <param name="ACls"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CollectClasses (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: Default, DRagLint.V151.EXC.Support.TExcClassInfo.Create, DRagLint.V151.EXC.Support.TExcRun.GatherMembers, DRagLint.V151.EXC.Support.TExcRun.HasKeyword, DRagLint.V151.EXC.Support.TExcRun.LastSegment, DRagLint.V151.EXC.Support.TExcRun.LowerText, DRagLint.V151.EXC.Support.TExcRun.MethodArgs, DRagLint.V151.EXC.Support.TExcRun.StripGeneric, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <para>Complexity: 10 (cyclomatic, outer body), 54 lines (full implementation)</para>
+    /// <para>Reads: FClasses</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcClassInfo.Create"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.GatherMembers"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.HasKeyword"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.LastSegment"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.LowerText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CollectClass(const ACls: TTSNode; const AName: string);
+    /// <param name="AHdr"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CollectClass (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.EXC.Support.TExcRun.LowerText, Integer, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.StartByte</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.LowerText"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function MethodArgs(const AHdr: TTSNode): TArray<string>;
+    /// <summary><!-- drag-lint:auto sum -->Class and method of an implementation header
+    /// `TFoo.Bar`; False for a plain routine.</summary>
+    /// <param name="ADef"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AClass"><!-- drag-lint:auto type -->out string</param>
+    /// <param name="AMethod"><!-- drag-lint:auto type -->out string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: (AClass &lt;&gt; '') and
+    /// (AMethod &lt;&gt; '').</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.ProcInfo (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: Copy, DRagLint.V151.EXC.Support.TExcRun.LastSegment, DRagLint.V151.EXC.Support.TExcRun.LowerText, DRagLint.V151.EXC.Support.TExcRun.StripGeneric, LastDelimiter, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull</para>
+    /// <para>Mutates: AClass (out), AMethod (out)</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.LastSegment"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.LowerText"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.StripGeneric"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ProcOwner(const ADef: TTSNode; out AClass, AMethod: string): Boolean;
+    /// <param name="ADef"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AInfo"><!-- drag-lint:auto type -->out TExcMethodInfo</param>
+    /// <param name="AClass"><!-- drag-lint:auto type -->out string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; not AInfo.Ambiguous.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CheckProc (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: Default, DRagLint.V151.EXC.Support.TExcRun.ProcOwner</para>
+    /// <para>Reads: FClasses</para>
+    /// <para>Mutates: AInfo (out)</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.ProcOwner"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.AncestorMember"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.BodyStatements"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckDestroyDirect"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckDtorOrder"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ProcInfo(const ADef: TTSNode; out AInfo: TExcMethodInfo; out AClass: string): Boolean;
+    /// <param name="ADef"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: (not Hdr.IsNull) and
+    /// HasKeyword(Hdr, ['kDestructor']).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CheckProc (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.EXC.Support.TExcRun.HasKeyword, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.HasKeyword"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.AncestorMember"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.BodyStatements"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsDtorProc(const ADef: TTSNode): Boolean;
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AType"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CheckMessageHandler (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.CheckMissingInherited (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.ContainsNode (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.EXC.Support.TExcRun.ContainsNode, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.AncestorMember"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ContainsNode(const N: TTSNode; const AType: string): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->True when an identifier (case-insensitive, not
+    /// a member after a dot) named one of ANames occurs.</summary>
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="ANames"><!-- drag-lint:auto type -->const array of string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CheckMessageHandler (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.ContainsIdent (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.Visit (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.EXC.Support.TExcRun.ContainsIdent, DRagLint.V151.EXC.Support.TExcRun.NodeStr, MatchText, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, Trim</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.NodeStr"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ContainsIdent(const N: TTSNode; const ANames: array of string): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->A member (F... field or Self.X) freed in the
+    /// subtree: .Free / .Destroy / .DisposeOf / FreeAndNil.</summary>
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CheckDtorOrder (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.ContainsFreeOfMember (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.EXC.Support.TExcRun.ContainsFreeOfMember, DRagLint.V151.EXC.Support.TExcRun.ContainsFreeOfMember.IsMemberText, DRagLint.V151.EXC.Support.TExcRun.NodeStr, MatchText, SameText, StartsText, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, Trim</para>
+    /// <para>Complexity: 17 (cyclomatic, outer body), 30 lines (full implementation)</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.ContainsFreeOfMember.IsMemberText"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.NodeStr"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ContainsFreeOfMember(const N: TTSNode): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->An assignment to `&lt;x&gt;.Result` in the
+    /// subtree: a message handler that answers the message itself.</summary>
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CheckMessageHandler (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.ContainsResultAssign (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.EXC.Support.TExcRun.ContainsResultAssign, DRagLint.V151.EXC.Support.TExcRun.LowerText, EndsText, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.LowerText"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ContainsResultAssign(const N: TTSNode): Boolean;
+    /// <param name="AStmt"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: (AStmt.NodeType =
+    /// 'statement') and (AStmt.NamedChildCount = 1).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CheckDtorOrder (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.CheckNoAncestor (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.AncestorMember"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.BodyStatements"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsBareInherited(const AStmt: TTSNode): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->Lower-case method name an `inherited`
+    /// statement names ('' for the bare form); AArgs = call args or null.</summary>
+    /// <param name="AStmt"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AArgs"><!-- drag-lint:auto type -->out TTSNode</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: '';
+    /// LowerText(Inh.NamedChild(1)).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CheckDtorOrder (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.CheckOnlyInherited (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: Default, DRagLint.V151.EXC.Support.TExcRun.LowerText, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <para>Mutates: AArgs (out)</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.LowerText"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function InheritedTarget(const AStmt: TTSNode; out AArgs: TTSNode): string;
+    /// <param name="ABody"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <returns><!-- drag-lint:auto -->TList&lt;TTSNode&gt; -- Observed:
+    /// TList&lt;TTSNode&gt;.Create.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CheckDtorOrder (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.CheckMessageHandler (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.CheckNoAncestor (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.CheckOnlyInherited (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <para>Owns returned: new (caller owns)</para>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.AncestorMember"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckDestroyDirect"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function BodyStatements(const ABody: TTSNode): TList<TTSNode>;
+    /// <summary><!-- drag-lint:auto sum -->True when exception class AClass is, or
+    /// descends from, AAncestor (lower-case names plus the original-case spellings the
+    /// store needs). False also means "not proven".</summary>
+    /// <param name="AClass"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AAncestor"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AClassOrig"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AAncOrig"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CheckTry (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: Copy, DRagLint.V151.EXC.Support.TExcRun.StoreDescends, LowerCase, Pos, SameText</para>
+    /// <para>Reads: FClasses</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.StoreDescends"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.AncestorMember"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.BodyStatements"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckDestroyDirect"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckDtorOrder"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ExcIsA(const AClass, AAncestor: string; const AClassOrig, AAncOrig: string): Boolean;
+    /// <param name="AClassOrig"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AAncOrig"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.ExcIsA (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.IsDescendantOf, DRagLint.Core.Interfaces.ISymbolStore.UnresolvedAncestorNames, SameText</para>
+    /// <para>Reads: FStore, FFileId, FLib</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.IsDescendantOf"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.UnresolvedAncestorNames"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.AncestorMember"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.BodyStatements"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckDestroyDirect"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function StoreDescends(const AClassOrig, AAncOrig: string): Boolean;
+    /// <param name="AClass"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AMethod"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AVis"><!-- drag-lint:auto type -->out string</param>
+    /// <returns><!-- drag-lint:auto -->Integer -- Observed: 1; 0;
+    /// StoreMember(UpperCase(Copy(Par, 1, 1)) + Copy(Par, 2, MaxInt), AMethod, AVis);
+    /// StoreMember(Par, AMethod, AVis); -1.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CheckNoAncestor (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.CheckOnlyInherited (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: Copy, DRagLint.V151.EXC.Support.TExcRun.StoreMember, MatchText, UpperCase</para>
+    /// <para>Complexity: 10 (cyclomatic, outer body), 42 lines (full implementation)</para>
+    /// <para>Reads: FClasses</para>
+    /// <para>Mutates: AVis (out)</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.StoreMember"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.BodyStatements"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckDestroyDirect"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckDtorOrder"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckMessageHandler"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function AncestorMember(const AClass, AMethod: string; out AVis: string): Integer;
+    /// <summary><!-- drag-lint:auto sum -->1 = a (transitive) store ancestor declares
+    /// AMethod (AVis = its visibility text), 0 = the chain is complete and none does, -1
+    /// = unknown (an ancestor is missing from both stores).</summary>
+    /// <param name="AClassOrig"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AMethod"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AVis"><!-- drag-lint:auto type -->out string</param>
+    /// <returns><!-- drag-lint:auto -->Integer -- Observed: -1; 0; 1.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.AncestorMember (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors, DRagLint.V151.EXC.Support.TExcRun.StoreMember.Scan, LowerCase, MatchText, SameText</para>
+    /// <para>Complexity: 19 (cyclomatic, outer body), 87 lines (full implementation)</para>
+    /// <para>Reads: FStore, FLib</para>
+    /// <para>Mutates: AVis (out)</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.StoreMember.Scan"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.AncestorMember"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.BodyStatements"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function StoreMember(const AClassOrig, AMethod: string; out AVis: string): Integer;
+    /// <summary><!-- drag-lint:auto sum -->except-handler-order: a later `on E: C` whose
+    /// class an earlier handler already catches.</summary>
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.Visit (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: Copy, DRagLint.V151.EXC.Support.TExcRun.EmitAt, DRagLint.V151.EXC.Support.TExcRun.ExcIsA, DRagLint.V151.EXC.Support.TExcRun.NodeStr, DRagLint.V151.EXC.Support.TExcRun.StripGeneric, Format, LastDelimiter, LowerCase, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, Trim</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.EmitAt"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.ExcIsA"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.NodeStr"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.StripGeneric"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CheckTry(const N: TTSNode);
+    /// <summary><!-- drag-lint:auto sum -->exception-freed: the handler variable freed by
+    /// hand (E.Free, E.Destroy, E.DisposeOf, FreeAndNil(E)).</summary>
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AVar"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.ScanHandlerFree (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.Visit (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.EXC.Support.TExcRun.EmitAt, DRagLint.V151.EXC.Support.TExcRun.LowerText, DRagLint.V151.EXC.Support.TExcRun.NodeStr, DRagLint.V151.EXC.Support.TExcRun.ScanHandlerFree, Format, MatchText, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, Trim</para>
+    /// <para>Complexity: 16 (cyclomatic, outer body), 38 lines (full implementation)</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.EmitAt"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.LowerText"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.NodeStr"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure ScanHandlerFree(const N: TTSNode; const AVar: string);
+    /// <summary><!-- drag-lint:auto sum -->destroy-called-directly: `X.Destroy;` as a
+    /// statement on anything but Self / inherited.</summary>
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.Visit (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.EXC.Support.TExcRun.EmitAt, DRagLint.V151.EXC.Support.TExcRun.NodeStr, Format, MatchText, SameText, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, Trim</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 20 lines (full implementation)</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.EmitAt"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.NodeStr"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CheckDestroyDirect(const N: TTSNode);
+    /// <param name="ADef"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.Visit (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.EXC.Support.TExcRun.CheckDtorOrder, DRagLint.V151.EXC.Support.TExcRun.CheckMessageHandler, DRagLint.V151.EXC.Support.TExcRun.CheckMissingInherited, DRagLint.V151.EXC.Support.TExcRun.CheckNoAncestor, DRagLint.V151.EXC.Support.TExcRun.CheckOnlyInherited, DRagLint.V151.EXC.Support.TExcRun.CheckWrongMethod, DRagLint.V151.EXC.Support.TExcRun.IsDtorProc, DRagLint.V151.EXC.Support.TExcRun.ProcInfo, FWants</para>
+    /// <para>Reads: FWants</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckDtorOrder"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckMessageHandler"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckMissingInherited"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckNoAncestor"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckOnlyInherited"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CheckProc(const ADef: TTSNode);
+    /// <summary><!-- drag-lint:auto sum -->inherited-order: a destructor whose bare
+    /// inherited precedes a statement that frees a member.</summary>
+    /// <param name="ADef"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CheckProc (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.EXC.Support.TExcRun.BodyStatements, DRagLint.V151.EXC.Support.TExcRun.ContainsFreeOfMember, DRagLint.V151.EXC.Support.TExcRun.EmitAt, DRagLint.V151.EXC.Support.TExcRun.InheritedTarget, DRagLint.V151.EXC.Support.TExcRun.IsBareInherited, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.BodyStatements"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.ContainsFreeOfMember"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.EmitAt"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.InheritedTarget"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.IsBareInherited"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CheckDtorOrder(const ADef: TTSNode);
+    /// <param name="ADef"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AInfo"><!-- drag-lint:auto type -->const TExcMethodInfo</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CheckProc (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.EXC.Support.TExcRun.ScanWrongMethod, TreeSitter.TTSNodeHelper.ChildByField/1</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.ScanWrongMethod"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.AncestorMember"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.BodyStatements"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckDestroyDirect"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CheckWrongMethod(const ADef: TTSNode; const AInfo: TExcMethodInfo);
+    /// <summary><!-- drag-lint:auto sum -->inherited-wrong-method: an override whose
+    /// `inherited` names another method.</summary>
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AInfo"><!-- drag-lint:auto type -->const TExcMethodInfo</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CheckWrongMethod (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.ScanWrongMethod (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.EXC.Support.TExcRun.EmitAt, DRagLint.V151.EXC.Support.TExcRun.LowerText, DRagLint.V151.EXC.Support.TExcRun.NodeStr, DRagLint.V151.EXC.Support.TExcRun.ScanWrongMethod, Format, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, Trim</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.EmitAt"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.LowerText"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.NodeStr"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure ScanWrongMethod(const N: TTSNode; const AInfo: TExcMethodInfo);
+    /// <summary><!-- drag-lint:auto sum -->message-handler-without-inherited.</summary>
+    /// <param name="ADef"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AInfo"><!-- drag-lint:auto type -->const TExcMethodInfo</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CheckProc (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.EXC.Support.TExcRun.BodyStatements, DRagLint.V151.EXC.Support.TExcRun.ContainsIdent, DRagLint.V151.EXC.Support.TExcRun.ContainsNode, DRagLint.V151.EXC.Support.TExcRun.ContainsResultAssign, DRagLint.V151.EXC.Support.TExcRun.EmitAt, Format, StartsText, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType, UpperCase</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 26 lines (full implementation)</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.BodyStatements"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.ContainsIdent"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.ContainsNode"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.ContainsResultAssign"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.EmitAt"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CheckMessageHandler(const ADef: TTSNode; const AInfo: TExcMethodInfo);
+    /// <summary><!-- drag-lint:auto sum -->inherited-without-ancestor: bare inherited in
+    /// a plain new method no ancestor declares.</summary>
+    /// <param name="ADef"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AInfo"><!-- drag-lint:auto type -->const TExcMethodInfo</param>
+    /// <param name="AClass"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CheckProc (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: Default, DRagLint.V151.EXC.Support.TExcRun.AncestorMember, DRagLint.V151.EXC.Support.TExcRun.BodyStatements, DRagLint.V151.EXC.Support.TExcRun.EmitAt, DRagLint.V151.EXC.Support.TExcRun.IsBareInherited, Format, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 31 lines (full implementation)</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.AncestorMember"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.BodyStatements"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.EmitAt"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.IsBareInherited"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CheckNoAncestor(const ADef: TTSNode; const AInfo: TExcMethodInfo; const AClass: string);
+    /// <summary><!-- drag-lint:auto sum -->override-only-inherited: an override whose
+    /// whole body forwards to the ancestor.</summary>
+    /// <param name="ADef"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AInfo"><!-- drag-lint:auto type -->const TExcMethodInfo</param>
+    /// <param name="AClass"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CheckProc (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: ContainsText, DRagLint.V151.EXC.Support.TExcRun.AncestorMember, DRagLint.V151.EXC.Support.TExcRun.BodyStatements, DRagLint.V151.EXC.Support.TExcRun.EmitAt, DRagLint.V151.EXC.Support.TExcRun.InheritedTarget, DRagLint.V151.EXC.Support.TExcRun.LowerText, Format, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <para>Complexity: 23 (cyclomatic, outer body), 43 lines (full implementation)</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.AncestorMember"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.BodyStatements"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.EmitAt"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.InheritedTarget"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.LowerText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CheckOnlyInherited(const ADef: TTSNode; const AInfo: TExcMethodInfo; const AClass: string);
+    /// <summary><!-- drag-lint:auto sum -->missing-inherited-call: an override of a
+    /// component method that must chain to the ancestor.</summary>
+    /// <param name="ADef"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AInfo"><!-- drag-lint:auto type -->const TExcMethodInfo</param>
+    /// <param name="AClass"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.CheckProc (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.EXC.Support.TExcRun.ContainsNode, DRagLint.V151.EXC.Support.TExcRun.EmitAt, Format, MatchText, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 16 lines (full implementation)</para>
+    /// <para>Reads: FClasses</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.ContainsNode"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.EmitAt"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CheckMissingInherited(const ADef: TTSNode; const AInfo: TExcMethodInfo; const AClass: string);
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.Support.TExcRun.Run (DRagLint.V151.EXC.Support.pas), DRagLint.V151.EXC.Support.TExcRun.Visit (DRagLint.V151.EXC.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.EXC.Support.TExcRun.CheckDestroyDirect, DRagLint.V151.EXC.Support.TExcRun.CheckProc, DRagLint.V151.EXC.Support.TExcRun.CheckTry, DRagLint.V151.EXC.Support.TExcRun.ContainsIdent, DRagLint.V151.EXC.Support.TExcRun.LowerText, DRagLint.V151.EXC.Support.TExcRun.ScanHandlerFree, DRagLint.V151.EXC.Support.TExcRun.Visit, FWants, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.StartByte</para>
+    /// <para>Complexity: 17 (cyclomatic, outer body), 37 lines (full implementation)</para>
+    /// <para>Reads: FWants</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckDestroyDirect"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckProc"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckTry"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.ContainsIdent"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.LowerText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Visit(const N: TTSNode);
   public
+    /// <summary><!-- drag-lint:auto sum -->TExcRun: plumbing</summary>
+    /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ASrc"><!-- drag-lint:auto type -->const TBytes</param>
+    /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
+    /// <param name="ALib"><!-- drag-lint:auto type -->const ISymbolStore</param>
+    /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
+    /// <param name="AWants"><!-- drag-lint:auto type -->const TFunc&lt;string, Boolean&gt;</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.EXC.TV151EXCRules.CheckFile (DRagLint.V151.EXC.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FFile, FSrc, FStore, FLib, FFileId, FWants, FFindings, FClasses</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.AncestorMember"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.BodyStatements"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckDestroyDirect"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckDtorOrder"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckMessageHandler"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(const AFile: string; const ASrc: TBytes; const AStore, ALib: ISymbolStore;
       AFileId: Int64; const AWants: TFunc<string, Boolean>);
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FClasses, FFindings</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.AncestorMember"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.BodyStatements"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckDestroyDirect"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckDtorOrder"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckMessageHandler"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
+    /// <param name="ARoot"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <returns><!-- drag-lint:auto -->TArray&lt;TLintFinding&gt; -- Observed:
+    /// FFindings.ToArray.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas) ?, DRagLint.V151.EXC.TV151EXCRules.CheckFile (DRagLint.V151.EXC.pas)</para>
+    /// <para>Calls: DRagLint.V151.EXC.Support.TExcRun.CollectClasses, DRagLint.V151.EXC.Support.TExcRun.Visit</para>
+    /// <para>Reads: FFindings</para>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CollectClasses"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.Visit"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.AncestorMember"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.BodyStatements"/>
+    /// <seealso cref="DRagLint.V151.EXC.Support.TExcRun.CheckDestroyDirect"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Run(const ARoot: TTSNode): TArray<TLintFinding>;
   end;
 

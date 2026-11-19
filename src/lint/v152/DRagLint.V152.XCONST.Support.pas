@@ -33,15 +33,26 @@ uses
 
 type
   /// <summary>Kind of one token of the extract-constant scanner.</summary>
-  /// <remarks>xtCharCode is a `#13` / `#$0D` character code; xtSymbol is any
-  /// operator or punctuation (`:=`, `<=`, `..` are one token).</remarks>
+  /// <remarks>
+  /// xtCharCode is a `#13` / `#$0D` character code; xtSymbol is any
+  /// operator or punctuation (`:=`, `<=`, `..` are one token).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V152.XCONST.Support.pas), DRagLint.V152.XCONST.Support.XcTokenize.Add (DRagLint.V152.XCONST.Support.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TXcTokenKind = (xtIdent, xtNumber, xtString, xtCharCode, xtSymbol);
 
   /// <summary>One token of a Delphi unit, comments and directives removed.</summary>
-  /// <remarks>Line and Col are 1-based; EndCol is exclusive (TTextEdit's
+  /// <remarks>
+  /// Line and Col are 1-based; EndCol is exclusive (TTextEdit's
   /// convention). Glued is True for a string token written directly against
   /// another string or character code ('a'#13'b'), which cannot be replaced by a
-  /// name on its own.</remarks>
+  /// name on its own.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V152.XCONST.Support.pas) ?, DRagLint.V152.XCONST.Support.IsWord (DRagLint.V152.XCONST.Support.pas) ?, DRagLint.V152.XCONST.Support.XcLiteralAt (DRagLint.V152.XCONST.Support.pas) ?, DRagLint.V152.XCONST.Support.XcTokenize (DRagLint.V152.XCONST.Support.pas) ?, DRagLint.V152.XCONST.Support.XcTokenize.Add (DRagLint.V152.XCONST.Support.pas) (+11 more)</para>
+  /// <para>Used in units: DRagLint.V152.XCONST, DRagLint.V152.XCONST.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TXcToken = record
     Kind  : TXcTokenKind;
     Text  : string;
@@ -52,9 +63,15 @@ type
   end;
 
   /// <summary>One occurrence of the planned literal.</summary>
-  /// <remarks>Reason = '' for an occurrence the plan replaces, else the
+  /// <remarks>
+  /// Reason = '' for an occurrence the plan replaces, else the
   /// human-readable reason it is left. ContextType is the declared type of its
-  /// context identifier, '' when unknown.</remarks>
+  /// context identifier, '' when unknown.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V152.XCONST.Support.pas) ?, DRagLint.V152.XCONST.Support.XcPlan (DRagLint.V152.XCONST.Support.pas) ?, DRagLint.V152.XCONST.Support.XcPlan.OccOf (DRagLint.V152.XCONST.Support.pas), DRagLint.V152.XCONST.Support.XcPlanEdits (DRagLint.V152.XCONST.Support.pas) ?, DRagLint.V152.XCONST.Support.XcPlanReport (DRagLint.V152.XCONST.Support.pas) ?</para>
+  /// <para>Used in units: DRagLint.V152.XCONST.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TXcOccurrence = record
     Line       : Integer;
     Col        : Integer;
@@ -65,9 +82,15 @@ type
   end;
 
   /// <summary>The whole extract-constant plan for one literal of one unit.</summary>
-  /// <remarks>Ok = False carries Refusal (why nothing may be written) and no
+  /// <remarks>
+  /// Ok = False carries Refusal (why nothing may be written) and no
   /// edits. InsertAfterLine is 1-based: the const block goes after that line.
-  /// Replaced always holds the target occurrence first.</remarks>
+  /// Replaced always holds the target occurrence first.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V152.XCONST.Support.pas) ?, DRagLint.Fix.V152.XCONST.FixExtractConst (DRagLint.Fix.V152.XCONST.pas) ?, DRagLint.V152.XCONST.Support.XcPlan (DRagLint.V152.XCONST.Support.pas), DRagLint.V152.XCONST.Support.XcPlanEdits (DRagLint.V152.XCONST.Support.pas) ?, DRagLint.V152.XCONST.Support.XcPlanReport (DRagLint.V152.XCONST.Support.pas) ?</para>
+  /// <para>Used in units: DRagLint.Fix.V152.XCONST, DRagLint.V152.XCONST.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TXcPlan = record
     Ok             : Boolean;
     Refusal        : string;
@@ -84,8 +107,21 @@ type
 /// blanks are dropped.</summary>
 /// <param name="ALines">The unit, one string per line (no line breaks).</param>
 /// <returns>The tokens in source order.</returns>
-/// <remarks>Pure; never raises. An unterminated string ends at the end of its
-/// line. Multi-line (''') strings are not recognised.</remarks>
+/// <remarks>
+/// Pure; never raises. An unterminated string ends at the end of its
+/// line. Multi-line (''') strings are not recognised.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V152.XCONST.Support.XcPlan (DRagLint.V152.XCONST.Support.pas), DRagLint.V152.XCONST.TV152XCONSTRules.CheckFile (DRagLint.V152.XCONST.pas)</para>
+/// <para>Calls: CharInSet, Copy, Default, DRagLint.V152.XCONST.Support.IsDigitCh, DRagLint.V152.XCONST.Support.IsHexCh, DRagLint.V152.XCONST.Support.IsIdentChar, DRagLint.V152.XCONST.Support.IsIdentStart, DRagLint.V152.XCONST.Support.XcTokenize.Add, MatchStr, Min, PosEx</para>
+/// <para>Returns: Toks.ToArray</para>
+/// <para>Complexity: 71 (cyclomatic, outer body), 179 lines (full implementation)</para>
+/// <seealso cref="DRagLint.V152.XCONST.Support.IsDigitCh"/>
+/// <seealso cref="DRagLint.V152.XCONST.Support.IsHexCh"/>
+/// <seealso cref="DRagLint.V152.XCONST.Support.IsIdentChar"/>
+/// <seealso cref="DRagLint.V152.XCONST.Support.IsIdentStart"/>
+/// <seealso cref="DRagLint.V152.XCONST.Support.XcTokenize.Add"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function XcTokenize(ALines: TStrings): TArray<TXcToken>;
 
 /// <summary>The index of the number or string literal token at ALine:ACol.</summary>
@@ -94,6 +130,13 @@ function XcTokenize(ALines: TStrings): TArray<TXcToken>;
 /// <param name="ACol">1-based column inside the literal (or right after it);
 /// 0 = the first literal on the line.</param>
 /// <returns>The token index; -1 when no literal is there.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V152.XCONST.Support.XcPlan (DRagLint.V152.XCONST.Support.pas), DRagLint.V152.XCONST.TV152XCONSTRules.CheckFile (DRagLint.V152.XCONST.pas)</para>
+/// <para>Calls: InRange</para>
+/// <para>Returns: -1</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function XcLiteralAt(const ATokens: TArray<TXcToken>; ALine, ACol: Integer): Integer;
 
 /// <summary>Plans the extraction of the literal at ALine:ACol.</summary>
@@ -104,7 +147,20 @@ function XcLiteralAt(const ATokens: TArray<TXcToken>; ALine, ACol: Integer): Int
 /// <returns>The plan; Ok = False with Refusal when there is no literal at the
 /// position, the literal itself is in an excluded context, AName is not a valid
 /// identifier, or AName already names an identifier of the unit.</returns>
-/// <remarks>Pure; reads nothing but ALines.</remarks>
+/// <remarks>
+/// Pure; reads nothing but ALines.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Fix.V152.XCONST.FixExtractConst (DRagLint.Fix.V152.XCONST.pas)</para>
+/// <para>Calls: DeclTypeOfName, Default, DRagLint.V152.XCONST.Support.BuildTypeMap, DRagLint.V152.XCONST.Support.Classify, DRagLint.V152.XCONST.Support.ContextIdent, DRagLint.V152.XCONST.Support.InsertLineAfter, DRagLint.V152.XCONST.Support.IsValidIdent, DRagLint.V152.XCONST.Support.NameInUse, DRagLint.V152.XCONST.Support.ProposeName, DRagLint.V152.XCONST.Support.SameLiteral (+8 more)</para>
+/// <para>Returns: Default(TXcPlan)</para>
+/// <para>Complexity: 19 (cyclomatic, outer body), 90 lines (full implementation)</para>
+/// <seealso cref="DRagLint.V152.XCONST.Support.BuildTypeMap"/>
+/// <seealso cref="DRagLint.V152.XCONST.Support.Classify"/>
+/// <seealso cref="DRagLint.V152.XCONST.Support.ContextIdent"/>
+/// <seealso cref="DRagLint.V152.XCONST.Support.InsertLineAfter"/>
+/// <seealso cref="DRagLint.V152.XCONST.Support.IsValidIdent"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function XcPlan(ALines: TStrings; ALine, ACol: Integer; const AName: string): TXcPlan;
 
 /// <summary>The text edits that carry out an Ok plan.</summary>
@@ -112,6 +168,12 @@ function XcPlan(ALines: TStrings; ALine, ACol: Integer; const AName: string): TX
 /// <param name="APlan">An Ok plan from XcPlan.</param>
 /// <returns>One tekInsertLines (the const block) plus one guarded
 /// tekReplaceInLine per replaced occurrence; nil for a plan that is not Ok.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Fix.V152.XCONST.FixExtractConst (DRagLint.Fix.V152.XCONST.pas)</para>
+/// <para>Calls: Default</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function XcPlanEdits(const APath: string; const APlan: TXcPlan): TArray<TTextEdit>;
 
 /// <summary>The lines the fixer prints (stderr) for a plan: the name, the
@@ -120,15 +182,28 @@ function XcPlanEdits(const APath: string; const APlan: TXcPlan): TArray<TTextEdi
 /// <param name="APlan">A plan from XcPlan.</param>
 /// <returns>`extract-constant: name ...` + `extract-constant:   left ...` lines,
 /// or the single `extract-constant: REFUSED ...` line for a refused plan.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Fix.V152.XCONST.FixExtractConst (DRagLint.Fix.V152.XCONST.pas)</para>
+/// <para>Calls: Format, IfThen</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function XcPlanReport(const APath: string; const APlan: TXcPlan): TArray<string>;
 
 /// <summary>The value after AFlag on this process's command line.</summary>
 /// <param name="AFlag">The flag, e.g. '--name'; compared case-insensitively.</param>
 /// <returns>'' when the flag is absent or last.</returns>
-/// <remarks>The fixer contract (TFindingFixer) carries no request options, and
+/// <remarks>
+/// The fixer contract (TFindingFixer) carries no request options, and
 /// the CLI's TArgs is not visible to a fixer unit, so the manual fix reads
 /// --name / --col / --fix-rule / --fix-line here. Every one of them is a flag
-/// `lint` already accepts.</remarks>
+/// `lint` already accepts.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Fix.V152.XCONST.FixExtractConst (DRagLint.Fix.V152.XCONST.pas), DRagLint.V152.XCONST.TV152XCONSTRules.CheckFile (DRagLint.V152.XCONST.pas)</para>
+/// <para>Calls: ParamStr, SameText</para>
+/// <para>Returns: ''</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function XcCmdLineValue(const AFlag: string): string;
 
 implementation

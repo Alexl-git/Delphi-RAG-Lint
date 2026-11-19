@@ -45,7 +45,7 @@ const
 /// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
 /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByKind, DRagLint.Core.Interfaces.ISymbolStore.GetCallEdgesFromSymbol, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnresolvedCallsFromSymbol, DRagLint.Lint.OpaqueToAnalysis.TOpaqueScan.Create, DRagLint.Lint.OpaqueToAnalysis.TOpaqueScan.Judge, Format, MatchText</para>
 /// <para>Returns: nil; Findings.ToArray</para>
-/// <para>Complexity: 11 (cyclomatic, outer body), 50 lines (full implementation)</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 50 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByKind"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetCallEdgesFromSymbol"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>

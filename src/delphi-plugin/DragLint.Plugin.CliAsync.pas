@@ -43,7 +43,7 @@ type
   /// <param name="AOutput">stdout and stderr, interleaved.</param>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DragLint.Plugin.CliAsync.pas), DragLint.Plugin.CliAsync.StartRun (DragLint.Plugin.CliAsync.pas), DragLint.Plugin.CliAsync.TCliRun.Create (DragLint.Plugin.CliAsync.pas), DragLint.Plugin.CliAsync.TCliRun.Deliver (DragLint.Plugin.CliAsync.pas), DragLint.Plugin.CliAsync.TCliRunSlot.Start (DragLint.Plugin.CliAsync.pas) (+1 more)</para>
+  /// <para>Used by: declaration (DragLint.Plugin.CliAsync.pas), DragLint.Plugin.CliAsync.StartRun (DragLint.Plugin.CliAsync.pas), DragLint.Plugin.CliAsync.TCliRun.Create (DragLint.Plugin.CliAsync.pas), DragLint.Plugin.CliAsync.TCliRun.Deliver (DragLint.Plugin.CliAsync.pas), DragLint.Plugin.CliAsync.TCliRunSlot.Start (DragLint.Plugin.CliAsync.pas) (+7 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCliRunDone = reference to procedure(AExitCode: Integer; const AOutput: string);
@@ -57,8 +57,8 @@ type
   /// never called, even when its answer was already on its way to the main
   /// thread.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DragLint.Plugin.Editor.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.Create (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.Create (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.Reports.CaretTargetThen (DragLint.Plugin.Reports.pas), DragLint.Plugin.SearchForm.TSearchHandler.Create (DragLint.Plugin.SearchForm.pas) (+19 more)</para>
-  /// <para>Used in units: DragLint.Plugin.AboutForm, DragLint.Plugin.CliAsync, DragLint.Plugin.Diagnose, DragLint.Plugin.Editor, DragLint.Plugin.LintOptionsFrame, DragLint.Plugin.Reports, DragLint.Plugin.SearchForm, DragLint.Plugin.StructureForm, DragLint.Plugin.SymbolSearchForm, DragLint.Plugin.UsagesForm, DragLint.Plugin.UsesDepsFrame</para>
+  /// <para>Used by: DragLint.Plugin.AboutForm.TDragLintAboutForm.Create (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.Editor.initialization (DragLint.Plugin.Editor.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.Create (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.ReportProgress.TReportProgressRun.Create (DragLint.Plugin.ReportProgress.pas), DragLint.Plugin.Reports.CaretTargetThen (DragLint.Plugin.Reports.pas) (+22 more)</para>
+  /// <para>Used in units: DragLint.Plugin.AboutForm, DragLint.Plugin.CliAsync, DragLint.Plugin.Diagnose, DragLint.Plugin.Editor, DragLint.Plugin.LintOptionsFrame, DragLint.Plugin.ReportProgress, DragLint.Plugin.Reports, DragLint.Plugin.SearchForm, DragLint.Plugin.StructureForm, DragLint.Plugin.SymbolSearchForm, DragLint.Plugin.UsagesForm, DragLint.Plugin.UsesDepsFrame</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCliRunSlot = class
@@ -67,6 +67,8 @@ type
     /// <returns><!-- drag-lint:auto -->Boolean -- Observed: FCurrent &lt;&gt; nil.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.ReportProgress.TReportProgressRun.GetRunning (DragLint.Plugin.ReportProgress.pas)</para>
+    /// <para>Used in (via property Running): DragLint.Plugin.ReportProgress.TReportProgressRun.GetRunning (DragLint.Plugin.ReportProgress.pas) [r]</para>
     /// <para>Reads: FCurrent</para>
     /// <para>Effect-free (proven)</para>
     /// <seealso cref="DragLint.Plugin.CliAsync.TCliRunSlot.Cancel"/>
@@ -96,7 +98,7 @@ type
     /// <remarks>
     /// Never waits: returns before the child is spawned.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DragLint.Plugin.Diagnose.FetchEngineInfoStep (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Editor.DLCursorUndeclaredUnitThen (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.DLResolveQnameFileThen (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeRename (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeSuggestUses (DragLint.Plugin.Editor.pas) (+16 more)</para>
+    /// <para>Called from: DragLint.Plugin.Diagnose.FetchEngineInfoStep (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Editor.DLCursorUndeclaredUnitThen (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.DLResolveQnameFileThen (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeRename (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeSuggestUses (DragLint.Plugin.Editor.pas) (+17 more)</para>
     /// <para>Calls: DragLint.Plugin.CliAsync.StartRun, DragLint.Plugin.CliAsync.TCliRunSlot.Cancel</para>
     /// <para>Writes: FCurrent</para>
     /// <seealso cref="DragLint.Plugin.CliAsync.StartRun"/>
@@ -109,7 +111,7 @@ type
     /// <summary>Abandons the current run, if any; a no-op otherwise.</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DragLint.Plugin.CliAsync.TCliRunSlot.Destroy (DragLint.Plugin.CliAsync.pas), DragLint.Plugin.CliAsync.TCliRunSlot.Start (DragLint.Plugin.CliAsync.pas), DragLint.Plugin.Diagnose.RefreshEngineInfo (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.SearchForm.TSearchHandler.KindChange (DragLint.Plugin.SearchForm.pas), DragLint.Plugin.SearchForm.TSearchHandler.RunSearch (DragLint.Plugin.SearchForm.pas) (+7 more)</para>
+    /// <para>Called from: DragLint.Plugin.CliAsync.TCliRunSlot.Destroy (DragLint.Plugin.CliAsync.pas), DragLint.Plugin.CliAsync.TCliRunSlot.Start (DragLint.Plugin.CliAsync.pas), DragLint.Plugin.Diagnose.RefreshEngineInfo (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.ReportProgress.TReportProgressRun.Cancel (DragLint.Plugin.ReportProgress.pas), DragLint.Plugin.SearchForm.TSearchHandler.KindChange (DragLint.Plugin.SearchForm.pas) (+8 more)</para>
     /// <para>Calls: DragLint.Plugin.CliAsync.TCliRun.Abandon, TCliRun</para>
     /// <para>Reads: FCurrent</para>
     /// <seealso cref="DragLint.Plugin.CliAsync.TCliRun.Abandon"/>
@@ -134,7 +136,7 @@ type
 /// <remarks>
 /// Main thread only. Never waits.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.Editor.InvokeCopyDiagnostics (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeExportObsidian (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeFormatYadf (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeImportLog (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeRunAstChecks (DragLint.Plugin.Editor.pas) (+2 more)</para>
+/// <para>Called from: DragLint.Plugin.Bookmarks.InvokeBookmarksRestore (DragLint.Plugin.Bookmarks.pas), DragLint.Plugin.Bookmarks.InvokeBookmarksStrip (DragLint.Plugin.Bookmarks.pas), DragLint.Plugin.Bookmarks.ListThen (DragLint.Plugin.Bookmarks.pas), DragLint.Plugin.Cmd.FieldRepo.InvokeMemTableFromCsv (DragLint.Plugin.Cmd.FieldRepo.pas), DragLint.Plugin.Cmd.FieldRepo.InvokeRefreshSchema (DragLint.Plugin.Cmd.FieldRepo.pas) (+9 more)</para>
 /// <para>Calls: DragLint.Plugin.CliAsync.StartRun</para>
 /// <seealso cref="DragLint.Plugin.CliAsync.StartRun"/>
 /// <!-- drag-lint:auto END -->
@@ -151,7 +153,7 @@ procedure RunCliAsync(const ACmdLine: string; const ADone: TCliRunDone; AStallMs
 /// only from a test. A worker that misses the budget leaks its run rather than risk
 /// freeing what it still uses.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: initialization/finalization (DragLint.Plugin.CliAsync.pas)</para>
+/// <para>Called from: DragLint.Plugin.CliAsync.finalization (DragLint.Plugin.CliAsync.pas)</para>
 /// <para>Calls: DragLint.Plugin.CliAsync.TCliRun.Abandon, DragLint.Plugin.CliAsync.TCliRun.Deliver, DragLint.Plugin.Telemetry.DLT, Format, Sleep</para>
 /// <para>Returns: GCliWorkers = 0</para>
 /// <seealso cref="DragLint.Plugin.CliAsync.TCliRun.Abandon"/>

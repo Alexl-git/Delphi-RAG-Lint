@@ -31,7 +31,7 @@ type
   /// surrounding angle brackets already stripped, or '' when the link has no
   /// type argument (e.g. '.AsSingleton').
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Parser.SpringDI.pas) ?, DRagLint.Parser.Delphi13.TryEmitSpringDI (DRagLint.Parser.Delphi13.pas) ?, DRagLint.Parser.Delphi13.TryEmitSpringDI.AddLink (DRagLint.Parser.Delphi13.pas) ?, DRagLint.Parser.SpringDI.FindLink (DRagLint.Parser.SpringDI.pas), DRagLint.Parser.SpringDI.HasLink (DRagLint.Parser.SpringDI.pas) ? (+2 more)</para>
+  /// <para>Used by: declaration (DRagLint.Parser.SpringDI.pas) ?, DRagLint.Parser.Delphi13.TryEmitSpringDI (DRagLint.Parser.Delphi13.pas) ?, DRagLint.Parser.Delphi13.TryEmitSpringDI.AddLink (DRagLint.Parser.Delphi13.pas) ?, DRagLint.Parser.SpringDI.FindLink (DRagLint.Parser.SpringDI.pas), DRagLint.Parser.SpringDI.HasLink (DRagLint.Parser.SpringDI.pas) ? (+3 more)</para>
   /// <para>Used in units: DRagLint.Parser.Delphi13, DRagLint.Parser.SpringDI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -99,12 +99,13 @@ const
 /// `Cache.Register(K, V)` is dioNone.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Parser.Delphi13.TryEmitSpringDI (DRagLint.Parser.Delphi13.pas)</para>
-/// <para>Calls: Default, DRagLint.Parser.SpringDI.FindLink, DRagLint.Parser.SpringDI.FirstDiRegistrationVerb, DRagLint.Parser.SpringDI.HasLink</para>
+/// <para>Calls: Default, DRagLint.Parser.SpringDI.FindLink, DRagLint.Parser.SpringDI.FirstDiRegistrationVerb, DRagLint.Parser.SpringDI.HasDiEvidence, DRagLint.Parser.SpringDI.HasLink</para>
 /// <para>Returns: dioNone; dioRegister; dioResolve; dioUnresolved</para>
-/// <para>Complexity: 13 (cyclomatic, outer body), 52 lines (full implementation)</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 52 lines (full implementation)</para>
 /// <para>Mutates: ABinding (out), AResolveInterface (out), AUnresolvedMethod (out)</para>
 /// <seealso cref="DRagLint.Parser.SpringDI.FindLink"/>
 /// <seealso cref="DRagLint.Parser.SpringDI.FirstDiRegistrationVerb"/>
+/// <seealso cref="DRagLint.Parser.SpringDI.HasDiEvidence"/>
 /// <seealso cref="DRagLint.Parser.SpringDI.HasLink"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

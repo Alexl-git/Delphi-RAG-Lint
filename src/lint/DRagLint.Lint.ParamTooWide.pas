@@ -33,6 +33,11 @@ const
 /// Not thread-safe. Reads the source files of the routines it examines (the planner masks
 /// comments and strings); writes nothing. Cost is the planner's: a full routine scan plus one
 /// file read per examined routine, so it is OptedIn-gated (lint-all / lint-project opt it in by default since 1.52; `lint <file>` only with --rule).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
+/// <para>Calls: Default, DRagLint.Refactor.NarrowParam.PlanNarrowParams, Format</para>
+/// <seealso cref="DRagLint.Refactor.NarrowParam.PlanNarrowParams"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function CollectParamTooWide(const AStore, ALibraryStore: ISymbolStore): TArray<TLintFinding>;
 
