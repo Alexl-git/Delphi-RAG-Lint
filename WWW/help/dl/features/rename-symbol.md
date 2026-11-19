@@ -7,7 +7,7 @@ group: refactoring
 order: 50015
 since: 0.24.0-alpha
 status: shipped
-updated: 1.51.0-alpha
+updated: 1.52.0-alpha
 ---
 
 # Rename Symbol
@@ -34,6 +34,10 @@ Full flag list: [rename in the CLI reference](../cli.md#rename).
 | `--library-db` | `<lib>` |  |  |
 | `--no-backup` |  |  |  |
 | `--db` | `<db>` |  |  |
+| `--platform` | `<p>` |  |  |
+| `--rsvars` | `<bat>` |  |  |
+| `--build-timeout` | `<s>` |  |  |
+| `--no-compile` |  |  |  |
 
 ## Where to click
 

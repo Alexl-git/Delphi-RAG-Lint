@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70004
 since: 0.91.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.52.0-alpha
 ---
 
 # callgraph
@@ -29,6 +29,7 @@ Full flag list: [callgraph in the CLI reference](../cli.md#callgraph).
 | `--depth` | `N` |  |  |
 | `--db` | `PATH` |  |  |
 | `--json` |  |  |  |
+| `--format` |  |  |  |
 
 ## Where to click
 

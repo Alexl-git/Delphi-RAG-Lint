@@ -279,10 +279,10 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-09",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.50.0-alpha",
-        "surfaceHash": "f2a0478a796ade4e9cce69218410755d7d887176fd05d65248876316fc7401bd"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "ef7035a4a4af9b1f2e8b73f5c2b7d6fd883fabb9660dd0fdf8621cf18cfd0b2e"
       }
     },
     {
@@ -392,10 +392,10 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-04",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.42.0-alpha",
-        "surfaceHash": "bf81943980c21446f70bbe6321118d84bdaa26ff7af38c331925d650baaa9ea0"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "4e8ca8f787dd1aeb7226136e582ceddf8385d4aeabccde89f819efbf12bbc563"
       }
     },
     {
@@ -448,9 +448,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "b943b9ca28fd5ea4f705191a583b6381d139bbbac048916d79e87219465d5130"
       }
     },
@@ -667,10 +667,10 @@
         }
       ],
       "verified": {
-        "date": "2026-11-04",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.42.0-alpha",
-        "surfaceHash": "79de4a889871bdf79d85cf50190c3c8326d0e4b7d78b5843bf65d046e68dcd73"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "36d4bcbc1cc6119c5dcbf85a64444a625b188ae1cb162d36857118dc1c548daf"
       }
     },
     {
@@ -832,9 +832,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "ee9b2e4e42ceba0d3e0fe8bf2e7b33bc1924e9c9de75afa5204c65b93fd6d95f"
       }
     },
@@ -1235,9 +1235,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-11-07",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.46.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "a9b3674f6f8ea21550bbfdac27a045d2cba3fc23effdfe3cefc995f768599fb4"
       }
     },
@@ -1291,9 +1291,9 @@
       ],
       "notes": "wave 146 lane b5; spec docs\\superpowers\\specs\\2026-11-06-raise-handle-type-facts.md; guard tests\\autotest\\run_exception_facts.ps1",
       "verified": {
-        "date": "2026-11-07",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.46.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "78e7a3f80bd7e0aeb56cbb985eba75505379ac97d74f75c1c06923e64af4b955"
       }
     },
@@ -2860,9 +2860,9 @@
       ],
       "access": "cli-only",
       "verified": {
-        "date": "2026-11-04",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.42.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "66d84b977cc5c8dedcfb026fccbabcd900af7e32450585a580a2c548a3a4d35c"
       }
     },
@@ -2907,9 +2907,9 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "42a2985a0cd3b716fb4b342d41394fbbe74319a5abb1f22a04c9ce5d700f2cba"
       }
     },
@@ -3145,9 +3145,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "2face26acb4b8666d6a782bbebdc06a025638f796b3b19b8e66532efcf73179a"
       }
     },
@@ -3365,10 +3365,10 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-10-27",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.36.0-alpha",
-        "surfaceHash": "a45da9f0fa1d879de55ffde5444d4d175d142844beb778c034f3d19e4281e009"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "e8a83e98a20dedd5041cd6bd01b9fea38214b19d168d0b39fd7d81f1f8e5aa4c"
       }
     },
     {
@@ -3994,6 +3994,14 @@
             {
               "name": "--rules-dir",
               "arg": "<dir>"
+            },
+            {
+              "name": "--project",
+              "arg": "<X.dproj>"
+            },
+            {
+              "name": "--target-compiler",
+              "arg": "<ver|auto>"
             }
           ],
           "helpOrder": 14,
@@ -4012,10 +4020,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-28",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.36.0-alpha",
-        "surfaceHash": "b8b47d5c06426ec7495d792343905a86aa5149fc5385ac6de617d47ef742ac2f"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "5efca92b9b4b603661cdf4bb84cdb3ee43edd50747d1726e07527bd4d605d0f9"
       }
     },
     {
@@ -4713,10 +4721,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
-        "surfaceHash": "0ad2c2bda34030bc8dd66ef06706d631d871617d3e0308ceeb28ff100f32c280"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "6c51d4e1b261538df4fe390fba9ba2391418498f7f1f6c66e4399161d62f3b0b"
       }
     },
     {
@@ -4765,10 +4773,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
-        "surfaceHash": "3dd753659ed7f83d128677ae6575fa52915c2d61bd6b5d2195c71be4fd490970"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "ab9975943aacd02824debac75e63121fdbe67dec1faed4360a0eae9722e08623"
       }
     },
     {
@@ -4790,10 +4798,10 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-10-27",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.36.0-alpha",
-        "surfaceHash": "8ea04f384d04eaf3edaec969f1dfad83730fe418e900b4b5ddb76124c85923c3"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "60804e6714e32635768d09b27014567bb22ee6302f5794f4d63812b9437b04dd"
       }
     },
     {
@@ -5077,6 +5085,18 @@
             {
               "name": "--rules-dir",
               "arg": "<dir>"
+            },
+            {
+              "name": "--project",
+              "arg": "<X.dproj>"
+            },
+            {
+              "name": "--rule",
+              "arg": "<id>"
+            },
+            {
+              "name": "--target-compiler",
+              "arg": "<ver|auto>"
             }
           ],
           "help": ["  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rule <id>[,<id>]] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]]   - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance` and needs_compiler / compat_since / target_active; --standard lists only rules labelled under it; --rule <id>[,<id>] lists only those rules, an unknown id is exit 2)"]
@@ -5101,10 +5121,10 @@
       },
       "family": "lint-rules",
       "verified": {
-        "date": "2026-11-08",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.50.0-alpha",
-        "surfaceHash": "705db8e60b73cfa9130304fc465e5d099d54877dbc5b0294285efffb6c50d9f0"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "60804e6714e32635768d09b27014567bb22ee6302f5794f4d63812b9437b04dd"
       }
     },
     {
@@ -5241,9 +5261,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "8669b8cdce32045d3abe557243097a7bc4dd21a96f8c0bd8adc538419d4f755e"
       }
     },
@@ -5656,10 +5676,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
-        "surfaceHash": "1d22ae2d34cfdb987bfc0783ee41fc8d462df481401d98ae849e6d00856ae193"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "a20f810bbac78e63f0cab47d56e6cce5ffb7468a86ec6fe2a282ca4cf93a97f7"
       }
     },
     {
@@ -6103,10 +6123,10 @@
       "audience": "both",
       "related": ["autofix-wave", "compat-downgrade-fixes"],
       "verified": {
-        "date": "2026-11-05",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.43.0-alpha",
-        "surfaceHash": "f7554479d437ae3944643487291327f5b17d22fff01963fb1b29494b4655802e"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "7be37aec9068efc99cc8a8069bb0b2a6cbe0b2af295f0c6a99e9014a3876feb7"
       }
     },
     {
@@ -6753,9 +6773,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "30e073867914380c13da25a124d8cc0edd5676e67b1eae4c1595f69c5ce00fcc"
       }
     },
@@ -7313,9 +7333,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "3c98eb50173c538cfb8819db70eb6da69c01c88d21d7c7bbdd53e3223b0aab69"
       }
     },
@@ -7932,10 +7952,10 @@
       ],
       "notes": "issued by the plugin from InvokeExtractMethod (DragLint.Plugin.Keyboard.pas)",
       "verified": {
-        "date": "2026-11-07",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.46.0-alpha",
-        "surfaceHash": "d99567feb498e6f2a0adc2759a647f525cfc667d7d776caabe0b882c938e0f80"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "bbb22fa0a9ca1359963ff2c3f9886abdc7b3f918e0d47fe2d8dd16ec4e58a76a"
       }
     },
     {
@@ -8149,9 +8169,9 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-14",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.51.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "784b27b33ecdaddb5f47a51ff08ffe78033e768a302cc2829a6add2553f145c8"
       }
     },
@@ -8232,9 +8252,9 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-08",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.50.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "6aa57b8d947b01bf7871f6b3bbc8c7f9f9029f29b76e86d178c3e89f4a9aaac2"
       }
     },
@@ -8559,6 +8579,21 @@
             {
               "name": "--db",
               "arg": "<db>"
+            },
+            {
+              "name": "--platform",
+              "arg": "<p>"
+            },
+            {
+              "name": "--rsvars",
+              "arg": "<bat>"
+            },
+            {
+              "name": "--build-timeout",
+              "arg": "<s>"
+            },
+            {
+              "name": "--no-compile"
             }
           ],
           "helpOrder": 52,
@@ -8582,9 +8617,9 @@
         }
       ],
       "verified": {
-        "date": "2026-11-14",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.51.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "2ad7b9ef33864a962ae7322cd83bce57a429f1a62803c79ae4b6101492e32595"
       }
     },
@@ -8764,6 +8799,17 @@
             },
             {
               "name": "--json"
+            },
+            {
+              "name": "--build-config",
+              "arg": "<c>"
+            },
+            {
+              "name": "--no-preprocess"
+            },
+            {
+              "name": "--format",
+              "arg": "json"
             }
           ],
           "helpOrder": 62,
@@ -8818,10 +8864,10 @@
       ],
       "notes": "lane 144 unwith; guard tests\\autotest\\run_unwith.ps1",
       "verified": {
-        "date": "2026-11-07",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.46.0-alpha",
-        "surfaceHash": "8eeb31410c1a6836b0a27b0d5307d75f602d2273dbd552597b20b1ec2d97bb16"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "8433300beda108050279e7ee108a80c70294d2a5b1d82fa7b1fa165f9551b425"
       }
     },
     {
@@ -8902,9 +8948,9 @@
         }
       ],
       "verified": {
-        "date": "2026-10-23",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "f091b0c4b210d9e5851f2dfeb1358127a0936511c8984ffd1035e480a56611ec"
       }
     },
@@ -9204,10 +9250,10 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-11-07",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.46.0-alpha",
-        "surfaceHash": "272fa0bc2d9c261e2abc694194028b54e240f4cb190755c47d1697f33eaf5f47"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "27e7c52529d2050bbe3288dc119c6c0708385bdf651a46a89ebafd2dd4be59f2"
       }
     },
     {
@@ -10320,9 +10366,9 @@
         }
       ],
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "646ea26eaf11f813317fa3e265f230d630c170a55a2a452b8ef96473d1969fe4"
       }
     },
@@ -10425,6 +10471,9 @@
             },
             {
               "name": "--json"
+            },
+            {
+              "name": "--format"
             }
           ],
           "helpOrder": 80,
@@ -10449,9 +10498,9 @@
         }
       ],
       "verified": {
-        "date": "2026-10-30",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.38.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "51333b0ebe764effa6e717fc9627eab58a49dd2e2a2794753ee6f78d3512f747"
       }
     },
@@ -10718,9 +10767,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "f3e477594f45a1b0b8a984ec283c9750740c8a7672874f7b4621055e280ddd33"
       }
     },
@@ -11041,9 +11090,9 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "07c5a2c4989a469c90014ef9916e39440617f381b5bf65d62fe4ae1357aea1fa"
       }
     },
@@ -11105,9 +11154,9 @@
         }
       ],
       "verified": {
-        "date": "2026-11-08",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.50.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "cfa73ef402d259c06d66a408e41bc3e536fb01f52d4e68cd46eaaa3cc36117c1"
       }
     },
@@ -11162,9 +11211,9 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "214ecc8e5001112a07d688b87aad8de55dd7cbe638cf97c8d217620df157ebb8"
       }
     },
@@ -11497,9 +11546,9 @@
         }
       ],
       "verified": {
-        "date": "2026-10-28",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.36.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "f89089fdb7a9a41f3d54b3ef060dec23d32dba5056926258d4d034809748c5a5"
       }
     },
@@ -11793,9 +11842,9 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "2ef1be7d0b519e9023b5a153a4822e903ba0daf6cc6e5ba3420a7e91ba92f82d"
       }
     },
@@ -11913,9 +11962,9 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "afc13cbba541c0ce9d159b0010daef7018426e2b740bbf5f4b3061f1693cb50f"
       }
     },
@@ -12625,10 +12674,10 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
-        "surfaceHash": "69e250155e50c9e6cbc027dd98ea1b024fd84da3242bda8153f4cae1be3bfd61"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "4871e93c110e9610c26bcf0e8109d5fa817b9c51d324d34150413ca55b027378"
       }
     },
     {
@@ -13097,9 +13146,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "6a00e72aeca666ab9c2031528f6606e8ad8fa6aaf6a9f5ce18175d21d2292e14"
       }
     },
@@ -14208,10 +14257,10 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.0-alpha",
-        "surfaceHash": "d48ae5855997dc0da8292789e6a1e14677cb26a5846f1e19f92eef874072d394"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "b5f80ced846660c364a5479dac4f078746b2addadc27f3fe64fdfc3338ac9bd4"
       }
     },
     {
@@ -14565,9 +14614,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "ca1f0d0eefb6b148bfabefee60f927bdf5daf68fe3ab07c7e26aeb08a07f7a81"
       }
     },
@@ -14611,9 +14660,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "db4afd0474ece949eb777c51d0aab98f32d10c14e86170c52addee3e779ae69d"
       }
     },
@@ -14656,9 +14705,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "914757e99e0decf7ce7bc9436a79c93311547616431328c67f81998aa295eb99"
       }
     },
@@ -14967,9 +15016,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "5cccca9c2dd1c3abe3265486df5df48fa0a5edee9295f2bbc6894cd11d4dae72"
       }
     },
@@ -15782,10 +15831,10 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-11-08",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.50.0-alpha",
-        "surfaceHash": "756076580f926aa5c715f8148b5efd8b83a46b7e11f44991632223fe91231cbe"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "3650cf0d02c62e5c196acc209d2116ebde6208868aeb64c96aa7c29a6e29e381"
       }
     },
     {
@@ -15979,10 +16028,10 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
-        "surfaceHash": "d48ae5855997dc0da8292789e6a1e14677cb26a5846f1e19f92eef874072d394"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "b5f80ced846660c364a5479dac4f078746b2addadc27f3fe64fdfc3338ac9bd4"
       }
     },
     {
