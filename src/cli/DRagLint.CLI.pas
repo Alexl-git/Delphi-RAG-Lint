@@ -24508,11 +24508,22 @@ var
         Work:= Saved;
       end;
 
-      ShadowDir:= TPath.Combine(TPath.GetTempPath, 'draglint_usesfix');
+      { 1.52.1 SMALLS: a per-process, per-edit shadow dir (pid + guid), removed after the compile --
+        the old fixed %TEMP%\draglint_usesfix made two concurrent uses-fix runs overwrite each other's
+        copy of the unit (EFCreateError / a verdict on the other run's text). }
+      ShadowDir:= TPath.Combine(TPath.GetTempPath, Format('draglint_usesfix_%d_%s', [GetCurrentProcessId, TGUID.NewGuid.ToString.Substring(1, 8)]));
       TDirectory.CreateDirectory(ShadowDir);
-      Trial.SaveToFile(TPath.Combine(ShadowDir, ExtractFileName(SrcPath)));
-
-      Res:= CompileUnitInContext(SrcPath, Proj, Plat, ShadowDir);
+      try
+        Trial.SaveToFile(TPath.Combine(ShadowDir, ExtractFileName(SrcPath)));
+        Res:= CompileUnitInContext(SrcPath, Proj, Plat, ShadowDir);
+      finally
+        try
+          TDirectory.Delete(ShadowDir, True);
+        except
+          on EInOutError do ; { best-effort scratch cleanup: a locked file must not change the verdict }
+          on EDirectoryNotFoundException do ;
+        end;
+      end;
 
       { SAFETY GUARD: a Fatal (F-code) means the compile ABORTED -- usually on a
         dependency it couldn't resolve in this single-unit context -- BEFORE it
