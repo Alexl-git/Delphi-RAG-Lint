@@ -417,6 +417,56 @@ begin
   end; // try
 end; // function
 
+{ GitHub #15 (1.52): an UNBOUND DFM event binding (`OnShow = FormShow`) names the
+  handler only; the method it reaches belongs to the DFM's ROOT object class. Keep
+  the binding when that root class is AOwnerClass or descends from it, or when the
+  index cannot tell (no root row, root class not indexed); drop it when the root
+  class is a known class that is NOT AOwnerClass's descendant. Before this every
+  form's `OnShow = FormShow` was listed as a [name-only] caller of every FormShow.
+  Pinned by tests\autotest\run_v152_GH15.ps1. }
+function DropForeignFormBindings(const AStore: ISymbolStore; const ARefs: TArray<TReference>;
+  const AOwnerClass: string): TArray<TReference>;
+var
+  KeepByFile: TDictionary<Int64, Boolean>;
+  Keep      : Boolean;
+begin
+  if AOwnerClass = '' then Exit(ARefs);
+  Result:= [];
+  KeepByFile:= TDictionary<Int64, Boolean>.Create;
+  try
+    for var R in ARefs do
+    begin
+      if (R.SymbolId <> 0) or not SameText(R.Kind, 'event-binding') then
+      begin
+        Result:= Result + [R];
+        Continue;
+      end;
+      if not KeepByFile.TryGetValue(R.FileId, Keep) then
+      begin
+        Keep:= True;
+        var Root:= '';
+        for var O in AStore.GetDfmObjects(R.FileId) do
+          if O.Depth = 0 then
+          begin
+            Root:= O.ClassName;
+            Break;
+          end;
+        if (Root <> '') and not SameText(Root, AOwnerClass) then
+        begin
+          var Known:= False;
+          for var S in AStore.FindSymbolsByExactName(Root) do
+            if S.Kind = skClass then Known:= True;
+          if Known then Keep:= AStore.IsDescendantOf(Root, AOwnerClass, 0);
+        end;
+        KeepByFile.Add(R.FileId, Keep);
+      end;
+      if Keep then Result:= Result + [R];
+    end;
+  finally
+    KeepByFile.Free;
+  end; // try
+end; // function
+
 { The library routine the oracle binds for one unresolved call that has no stored
   external_target, or '' (no oracle, no receiver type text, or a decline). Same
   binding find-callees uses (EmitExternalCallees): the receiver type text is
@@ -1025,8 +1075,10 @@ begin
   for var OS: TSymbol in AStore.FindSymbolsByQualifiedName(OwnerLeaf) do
     if OS.Kind = skUnit then UnitOwner:= OwnerLeaf;
   if LastDelimiter('.', OwnerLeaf) > 0 then OwnerLeaf:= Copy(OwnerLeaf, LastDelimiter('.', OwnerLeaf) + 1, MaxInt);
-  RawCallers:= DistinctCallSites(CallersOfTarget(AStore.FindCallersByNameWithContext(CallerName, ACallerContext),
-                                                 TargetIds, Sym.Kind = skConstructor, OwnerLeaf, UnitOwner));
+  RawCallers:= DistinctCallSites(DropForeignFormBindings(AStore,
+    CallersOfTarget(AStore.FindCallersByNameWithContext(CallerName, ACallerContext),
+                    TargetIds, Sym.Kind = skConstructor, OwnerLeaf, UnitOwner),
+    if UnitOwner = '' then OwnerLeaf else ''));
   Result.TotalCallers:= Length(RawCallers); { XERJ item 2: the count BEFORE the cut }
   Result.CallerCap   := AMaxCallers;
   if Length(RawCallers) > AMaxCallers then SetLength(RawCallers, AMaxCallers);

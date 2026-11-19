@@ -112,7 +112,7 @@ type
 implementation
 
 uses
-  System.SysUtils, System.IOUtils;
+  System.SysUtils, System.IOUtils, DRagLint.Core.Encoding;
 
 constructor TDeclTextReader.Create(const AStore: ISymbolStore);
 begin
@@ -138,7 +138,7 @@ begin
     Path:= FStore.GetFilePath(AFileId);
     if (Path <> '') and TFile.Exists(Path) then
       try
-        Result:= TFile.ReadAllLines(Path, TEncoding.ANSI);
+        Result:= ReadSourceFileLines(Path); { GitHub #16: BOM-aware }
       except // a pure query with no report channel; '' already means "unknown" to every caller
         on E: Exception do
           { A source file that exists but cannot be READ -- locked by the IDE,

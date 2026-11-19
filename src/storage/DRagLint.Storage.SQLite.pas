@@ -5243,6 +5243,7 @@ implementation
 
 uses
   DRagLint.Core.FileTime,
+  DRagLint.Core.Encoding,
   System.Generics.Defaults
   , Winapi.Windows            { GetLongPathName / GetShortPathName: FindFileIdByPath's 8.3 fallback (#26) }
   , System.StrUtils
@@ -15508,12 +15509,21 @@ end;
 
 function TSQLiteSymbolStore.FindTransitiveCallers(const ASymbolName: string; ADepth: Integer): TArray<TImpactLevel>;
 const
-  CTE_SQL = 'WITH RECURSIVE caller_walk(level, caller_id, caller_name, file_id) AS (' + '  SELECT 1, s2.id, s2.name, s2.file_id ' +
+  { GitHub #19 (1.52): only a symbol that can CONTAIN a use is a caller. A param or
+    local var spans its own declaration line, so `A: TThing` made the parameter A a
+    "caller" of TThing -- and the next level then joined EVERY ref named A in the
+    database to every such row: 1000 x 2000 + 1000 x 5000 rows at 100 units, four
+    times that at 200 (usages --width wide 31 s -> 128 s). The list is the routine
+    and type containers; pinned by tests\autotest\run_v152_GH19.ps1. }
+  CALLER_KINDS = 'IN (''unit'', ''program'', ''package'', ''class'', ''record'', ''interface'', ' +
+    '''procedure'', ''function'', ''method'', ''constructor'', ''destructor'') ';
+  CALLER_KINDS_S2 = '      AND s2.kind ' + CALLER_KINDS;
+  CALLER_KINDS_S3 = '      AND s3.kind ' + CALLER_KINDS;  CTE_SQL = 'WITH RECURSIVE caller_walk(level, caller_id, caller_name, file_id) AS (' + '  SELECT 1, s2.id, s2.name, s2.file_id ' +
   { COLLATE NOCASE on both hops -- Delphi identifiers are case-insensitive, so a
     caller that spells the callee differently must still walk the chain. }
-  '    FROM refs r INNER JOIN symbols s2 ON s2.file_id = r.file_id ' + '      AND r.start_line BETWEEN s2.start_line AND s2.end_line ' + '    WHERE r.name_text = :targetName COLLATE NOCASE ' +
+  '    FROM refs r INNER JOIN symbols s2 ON s2.file_id = r.file_id ' + '      AND r.start_line BETWEEN s2.start_line AND s2.end_line ' + CALLER_KINDS_S2 + '    WHERE r.name_text = :targetName COLLATE NOCASE ' +
   '  UNION ' + '  SELECT cw.level + 1, s3.id, s3.name, s3.file_id ' + '    FROM caller_walk cw ' + '    INNER JOIN refs r2 ON r2.name_text = cw.caller_name COLLATE NOCASE ' +
-  '    INNER JOIN symbols s3 ON s3.file_id = r2.file_id ' + '      AND r2.start_line BETWEEN s3.start_line AND s3.end_line ' + '    WHERE cw.level < :maxDepth' + ') ' +
+  '    INNER JOIN symbols s3 ON s3.file_id = r2.file_id ' + '      AND r2.start_line BETWEEN s3.start_line AND s3.end_line ' + CALLER_KINDS_S3 + '    WHERE cw.level < :maxDepth' + ') ' +
   'SELECT level, COUNT(DISTINCT caller_id) AS callers, ' + '       COUNT(DISTINCT file_id) AS units ' + '  FROM caller_walk GROUP BY level ORDER BY level';
 var
   Q     : TFDQuery           ;
@@ -15574,7 +15584,7 @@ begin
   if not TFile.Exists(FilePath) then Exit;
 
   // Source files are ANSI-encoded (strict project convention).
-  AllLines:= TFile.ReadAllLines(FilePath, TEncoding.ANSI);
+  AllLines:= ReadSourceFileLines(FilePath) { GitHub #16: BOM-aware, the indexer's decoding };
   Acc:= TList<TSurfaceLine>.Create;
   try
     InPrivate:= False;
@@ -15974,7 +15984,7 @@ begin
   FilePath:= GetFilePath(ClassSym.FileId);
   if not TFile.Exists(FilePath) then Exit;
 
-  AllLines:= TFile.ReadAllLines(FilePath, TEncoding.ANSI);
+  AllLines:= ReadSourceFileLines(FilePath) { GitHub #16: BOM-aware, the indexer's decoding };
   LineCount:= Length(AllLines);
   if LineCount = 0 then Exit;
 
@@ -16138,7 +16148,7 @@ begin
       if FilePath <> CachedPath then
       begin
         CachedPath:= FilePath;
-        if TFile.Exists(FilePath) then CachedLines:= TFile.ReadAllLines(FilePath, TEncoding.ANSI)
+        if TFile.Exists(FilePath) then CachedLines:= ReadSourceFileLines(FilePath) { GitHub #16: BOM-aware, the indexer's decoding }
         else SetLength(CachedLines, 0);
       end;
 

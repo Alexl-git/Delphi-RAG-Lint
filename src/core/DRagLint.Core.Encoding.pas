@@ -83,7 +83,22 @@ function Utf8ByteColToCharCol(const ASource: TBytes; AByteOffset, AByteColumn: C
 /// <remarks>1.52 EXTGAPS2. Pure; thread-safe.</remarks>
 function Utf8CharColToByteCol(const ASource: TBytes; ALineStart, ACharCol: Integer): Integer;
 
+/// <summary>The lines of a source file decoded the way the indexer decodes it (EnsureUtf8Bytes): a
+/// UTF-8 / UTF-16 BOM is honoured and dropped, BOM-less valid UTF-8 is UTF-8, anything else is
+/// Windows-1252.</summary>
+/// <param name="APath">The source file; it must exist.</param>
+/// <returns>One string per line, CR / LF / CRLF breaks removed, no trailing empty line for a final
+/// line break (the TFile.ReadAllLines shape).</returns>
+/// <exception cref="EInOutError">Raised (as TFile.ReadAllBytes raises) when the file cannot be read.</exception>
+/// <remarks>GitHub #16 (1.52): TFile.ReadAllLines(APath, TEncoding.ANSI) kept a UTF-8 BOM as the
+/// text (three ANSI characters) and decoded every UTF-8 character as two ANSI ones, so context printed
+/// mojibake for a unit saved as UTF-8. Thread-safe. Pinned by tests\autotest\run_v152_GH16.ps1.</remarks>
+function ReadSourceFileLines(const APath: string): TArray<string>;
+
 implementation
+
+uses
+  System.IOUtils;
 const
   CP_ANSI_LATIN = 1252; { Windows-1252, the ANSI fallback for bytes that are not valid UTF-8 }
 
@@ -250,5 +265,18 @@ begin
   end;
   Result:= I - ALineStart + 1 + (ACharCol - 1 - Units);
 end;
+
+function ReadSourceFileLines(const APath: string): TArray<string>;
+var
+  Lines: TStringList;
+begin
+  Lines:= TStringList.Create;
+  try
+    Lines.Text:= TEncoding.UTF8.GetString(EnsureUtf8Bytes(TFile.ReadAllBytes(APath)));
+    Result:= Lines.ToStringArray;
+  finally
+    Lines.Free;
+  end; // try
+end; // function
 
 end.
