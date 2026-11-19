@@ -3,7 +3,7 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
-## v1.52.0-alpha -- date TBD
+## v1.52.0-alpha -- 2026-11-19
 
 In integration (lane/v152-int). One re-parse for the whole 1.52 bundle: extractor 1.40.0 -> 1.41.0-alpha,
 resolver 1.28.0 -> 1.29.0-alpha.
