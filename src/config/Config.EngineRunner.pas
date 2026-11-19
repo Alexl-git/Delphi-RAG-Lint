@@ -243,8 +243,8 @@ const
   PIPE_BUF = 4096;
 var
   SA:          TSecurityAttributes;
-  hReadPipe,
-  hWritePipe:  THandle;
+  HReadPipe,
+  HWritePipe:  THandle;
   SI:          TStartupInfo;
   PI:          TProcessInformation;
   CmdLine:     string;
@@ -257,8 +257,8 @@ var
   P:           Integer;
   Line:        string;
 begin
-  hReadPipe   := 0;
-  hWritePipe  := 0;
+  HReadPipe   := 0;
+  HWritePipe  := 0;
   PI.hProcess := 0;
   PI.hThread  := 0;
 
@@ -267,7 +267,7 @@ begin
   SA.nLength        := SizeOf(SA);
   SA.bInheritHandle := True;
 
-  if not CreatePipe(hReadPipe, hWritePipe, @SA, 0) then
+  if not CreatePipe(HReadPipe, HWritePipe, @SA, 0) then
   begin
     QueueDone(-1);
     Exit;
@@ -275,14 +275,14 @@ begin
 
   try
     { Make the read end non-inheritable so the child cannot inherit it }
-    SetHandleInformation(hReadPipe, HANDLE_FLAG_INHERIT, 0);
+    SetHandleInformation(HReadPipe, HANDLE_FLAG_INHERIT, 0);
 
     FillChar(SI, SizeOf(SI), 0);
     SI.cb          := SizeOf(SI);
     SI.dwFlags     := STARTF_USESTDHANDLES or STARTF_USESHOWWINDOW;
     SI.wShowWindow := SW_HIDE;
-    SI.hStdOutput  := hWritePipe;
-    SI.hStdError   := hWritePipe;   { stderr merged into same pipe }
+    SI.hStdOutput  := HWritePipe;
+    SI.hStdError   := HWritePipe;   { stderr merged into same pipe }
     SI.hStdInput   := GetStdHandle(STD_INPUT_HANDLE);
 
     CmdLine := '"' + FExe + '" ' + FArgs;
@@ -296,14 +296,14 @@ begin
     end;
 
     { Close the write end in the parent so EOF is signalled when child exits }
-    CloseHandle(hWritePipe);
-    hWritePipe := 0;
+    CloseHandle(HWritePipe);
+    HWritePipe := 0;
 
     { Read pipe line-by-line, accumulating partial lines across reads }
     LineAccum := '';
     repeat
       FillChar(Buf, SizeOf(Buf), 0);
-      if not ReadFile(hReadPipe, Buf[0], PIPE_BUF, BytesRead, nil) then
+      if not ReadFile(HReadPipe, Buf[0], PIPE_BUF, BytesRead, nil) then
         Break;
       if BytesRead = 0 then
         Break;
@@ -322,7 +322,7 @@ begin
         if P = 0 then Break;
         Line := Copy(LineAccum, 1, P - 1);
         { Strip CR if present (CRLF output) }
-        if (Length(Line) > 0) and (Line[Length(Line)] = #13) then
+        if (Line <> '') and (Line[Length(Line)] = #13) then
           SetLength(Line, Length(Line) - 1);
         LineAccum := Copy(LineAccum, P + 1, MaxInt);
         QueueLine(Line);
@@ -339,8 +339,8 @@ begin
 
     QueueDone(Integer(ExitCode));
   finally
-    if hWritePipe <> 0 then CloseHandle(hWritePipe);
-    if hReadPipe  <> 0 then CloseHandle(hReadPipe);
+    if HWritePipe <> 0 then CloseHandle(HWritePipe);
+    if HReadPipe  <> 0 then CloseHandle(HReadPipe);
     if PI.hProcess <> 0 then CloseHandle(PI.hProcess);
     if PI.hThread  <> 0 then CloseHandle(PI.hThread);
   end;

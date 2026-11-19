@@ -875,10 +875,7 @@ end;
 
 function TIndexesFrame.SelectedSectionIndex: Integer;
 begin
-  if (FManifest = nil) or (lbSections.ItemIndex < 0) then
-    Result := -1
-  else
-    Result := lbSections.ItemIndex;
+  Result := if (FManifest = nil) or (lbSections.ItemIndex < 0) then -1 else lbSections.ItemIndex;
 end;
 
 procedure TIndexesFrame.LoadSectionToControls(AIdx: Integer);
@@ -899,10 +896,7 @@ begin
     edName.Text := Sec.Name;
     edDb.Text   := Sec.Db;
 
-    if Sec.Source = 'registry-libraries' then
-      rgSource.ItemIndex := 1
-    else
-      rgSource.ItemIndex := 0;
+    rgSource.ItemIndex := if Sec.Source = 'registry-libraries' then 1 else 0;
 
     edPlatforms.Text := JoinSemicolon(Sec.Platforms);
 
@@ -936,10 +930,7 @@ begin
     Name := edName.Text;
     Db   := edDb.Text;
 
-    if rgSource.ItemIndex = 1 then
-      Source := 'registry-libraries'
-    else
-      Source := '';
+    Source := if rgSource.ItemIndex = 1 then 'registry-libraries' else '';
 
     Platforms    := SplitSemicolon(edPlatforms.Text);
     Exclude      := SplitSemicolon(edExclude.Text);
@@ -1133,10 +1124,7 @@ begin
 
   if lbSections.Count > 0 then
   begin
-    if Idx >= lbSections.Count then
-      lbSections.ItemIndex := lbSections.Count - 1
-    else
-      lbSections.ItemIndex := Idx;
+    lbSections.ItemIndex := if Idx >= lbSections.Count then lbSections.Count - 1 else Idx;
     LoadSectionToControls(lbSections.ItemIndex);
   end
   else
@@ -1389,10 +1377,7 @@ end;
 
 function TIndexesFrame.NodeCovIdx(ANode: TTreeNode): Integer;
 begin
-  if ANode = nil then
-    Result := -1
-  else
-    Result := Integer(ANode.Data) - 1;
+  Result := if ANode = nil then -1 else Integer(ANode.Data) - 1;
 end;
 
 procedure TIndexesFrame.PopulateCoverageChildren(AParent: TTreeNode;
@@ -1420,10 +1405,7 @@ begin
     for Item in Items do
     begin
       Leaf := TPath.GetFileName(Item.Folder);
-      if Item.Detail <> '' then
-        Caption := Leaf + '  [' + CoverageKindStr(Item.Kind) + ']  ' + Item.Detail
-      else
-        Caption := Leaf + '  [' + CoverageKindStr(Item.Kind) + ']';
+      Caption := if Item.Detail <> '' then Leaf + '  [' + CoverageKindStr(Item.Kind) + ']  ' + Item.Detail else Leaf + '  [' + CoverageKindStr(Item.Kind) + ']';
 
       { Append item to FCoverageItems; store 1-based index in Node.Data }
       Idx := FCoverageItems.Add(Item);
@@ -1491,10 +1473,7 @@ var
 begin
   DefaultDraw := True;
   Idx := NodeCovIdx(Node);
-  if (Idx >= 0) and (FCoverageItems <> nil) and (Idx < FCoverageItems.Count) then
-    Sender.Canvas.Font.Color := CovKindColor(FCoverageItems[Idx].Kind)
-  else
-    Sender.Canvas.Font.Color := clWindowText;
+  Sender.Canvas.Font.Color := if (Idx >= 0) and (FCoverageItems <> nil) and (Idx < FCoverageItems.Count) then CovKindColor(FCoverageItems[Idx].Kind) else clWindowText;
 end;
 
 procedure TIndexesFrame.tvCoverageExpanding(Sender: TObject; Node: TTreeNode;

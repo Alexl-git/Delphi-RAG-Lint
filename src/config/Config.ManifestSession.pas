@@ -127,10 +127,7 @@ end;
 
 function ConfigTargetPath(const AExplicitPath, AExeDir: string): string;
 begin
-  if AExplicitPath <> '' then
-    Result := TPath.GetFullPath(AExplicitPath)
-  else
-    Result := TInstalledLayout.ManifestLocation(AExeDir).Path;
+  Result := if AExplicitPath <> '' then TPath.GetFullPath(AExplicitPath) else TInstalledLayout.ManifestLocation(AExeDir).Path;
 end;
 
 function LoadConfigManifest(const AConfigPath: string;

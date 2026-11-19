@@ -20,7 +20,6 @@ uses
   Vcl.ExtCtrls,
   Vcl.Dialogs,
   DRagLint.Index.Manifest,
-  DRagLint.Project.Resolver,
   Config.IndexesFrame;
 
 type
@@ -151,6 +150,9 @@ type
 
 implementation
 
+uses
+  DRagLint.Project.Resolver;
+
 {$R *.dfm}
 
 { helpers }
@@ -223,10 +225,7 @@ begin
       edMaxJobs.Text        := IntToStr(AManifest^.Settings.MaxJobs);
       edMaxParseFileKB.Text := IntToStr(AManifest^.Settings.MaxParseFileKB);
 
-      if AManifest^.Settings.EnginePath <> '' then
-        edEnginePath.Text := AManifest^.Settings.EnginePath
-      else
-        edEnginePath.Text := 'auto';
+      edEnginePath.Text := if AManifest^.Settings.EnginePath <> '' then AManifest^.Settings.EnginePath else 'auto';
     end
     else
     begin

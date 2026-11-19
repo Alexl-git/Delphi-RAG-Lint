@@ -19,7 +19,6 @@ uses
   Vcl.StdCtrls,
   Vcl.Dialogs,
   DRagLint.Index.Manifest,
-  Config.ManifestSession,
   Config.IndexesFrame,
   Config.SettingsFrame;
 
@@ -172,6 +171,9 @@ var
   MainForm: TMainForm;
 
 implementation
+
+uses
+  Config.ManifestSession;
 
 {$R *.dfm}
 
