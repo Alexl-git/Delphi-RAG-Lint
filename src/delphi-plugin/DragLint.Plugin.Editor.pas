@@ -845,12 +845,17 @@ end;
 
 type
   TMenuProc = procedure(Sender: TObject);
+  { a click that needs a value bound at menu-build time (1.51.2 RPT: Reports) }
+  TMenuIndexProc = procedure(Sender: TObject; pIndex: Integer);
 
   TMenuActionWrapper = class
     private
-      FProc: TMenuProc;
+      FProc     : TMenuProc;
+      FIndexProc: TMenuIndexProc;
+      FIndex    : Integer;
     public
       constructor Create(AProc: TMenuProc);
+      constructor CreateIndexed(AProc: TMenuIndexProc; AIndex: Integer);
       procedure HandleClick(Sender: TObject);
   end;
 
@@ -860,9 +865,17 @@ begin
   FProc:= AProc;
 end;
 
+constructor TMenuActionWrapper.CreateIndexed(AProc: TMenuIndexProc; AIndex: Integer);
+begin
+  inherited Create;
+  FIndexProc:= AProc;
+  FIndex    := AIndex;
+end;
+
 procedure TMenuActionWrapper.HandleClick(Sender: TObject);
 begin
-  if Assigned(FProc) then FProc(Sender);
+  if Assigned(FProc) then FProc(Sender)
+  else if Assigned(FIndexProc) then FIndexProc(Sender, FIndex);
 end;
 
 { ---- notification handler ---- }
@@ -4563,6 +4576,21 @@ begin
   AParent.Add(Result);
 end;
 
+{ As AddWrappedItem, but the click hands AProc the index bound here, so the
+  handler never depends on the click's Sender or the item's Tag. }
+function AddIndexedItem(AParent: TMenuItem; const ACaption: string; AProc: TMenuIndexProc;
+  AIndex: Integer): TMenuItem;
+var
+  W: TMenuActionWrapper;
+begin
+  Result:= TMenuItem.Create(AParent);
+  Result.Caption:= ACaption;
+  W:= TMenuActionWrapper.CreateIndexed(AProc, AIndex);
+  GWrappers.Add(W);
+  Result.OnClick:= W.HandleClick;
+  AParent.Add(Result);
+end;
+
 { v0.42: menu separator line. }
 function AddSeparator(AParent: TMenuItem): TMenuItem;
 begin
@@ -7606,9 +7634,9 @@ begin
   SubReports.Caption:= 'Reports';
   RootMenu.Add(SubReports);
   BuildReportsMenu(SubReports,
-    function(AParent: TMenuItem; const ACaption: string): TMenuItem
+    function(AParent: TMenuItem; const ACaption: string; AIndex: Integer): TMenuItem
     begin
-      Result:= AddWrappedItem(AParent, ACaption, InvokeReportQuestion);
+      Result:= AddIndexedItem(AParent, ACaption, InvokeReportQuestionAt, AIndex);
     end,
     procedure(AParent: TMenuItem)
     begin

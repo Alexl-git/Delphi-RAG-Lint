@@ -36,16 +36,19 @@ uses
   Vcl.Menus;
 
 type
-  /// <summary>Adds one clickable menu item wired to InvokeReportQuestion.</summary>
+  /// <summary>Adds one clickable menu item wired to InvokeReportQuestionAt.</summary>
   /// <param name="pParent">The submenu to add to.</param>
   /// <param name="pCaption">The item caption.</param>
-  /// <returns>The new item; BuildReportsMenu stores the question index in its Tag.</returns>
+  /// <param name="pQuestionIndex">The REPORT_QUESTIONS index the click must ask;
+  /// the host binds it to the click handler (InvokeReportQuestionAt).</param>
+  /// <returns>The new item. Its Tag also carries the index, for diagnostics only.</returns>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DragLint.Plugin.Reports.pas), DragLint.Plugin.Reports.BuildReportsMenu (DragLint.Plugin.Reports.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TReportsAddItem = reference to function(pParent: TMenuItem; const pCaption: string): TMenuItem;
+  TReportsAddItem = reference to function(pParent: TMenuItem; const pCaption: string;
+    pQuestionIndex: Integer): TMenuItem;
 
   /// <summary>Adds a separator line to a submenu.</summary>
   /// <param name="pParent">The submenu to add to.</param>
@@ -69,8 +72,8 @@ type
 /// <summary>Fills the Reports submenu: one section header per selection kind,
 /// then that kind's questions, in catalog order.</summary>
 /// <param name="pParent">The (empty) Reports submenu.</param>
-/// <param name="pAddItem">The host's item factory; it must wire the item's
-/// click to InvokeReportQuestion. Ownership of items and click wrappers stays
+/// <param name="pAddItem">The host's item factory; it must bind the item's
+/// click to InvokeReportQuestionAt with the index it is given. Ownership of items and click wrappers stays
 /// with the host's existing menu teardown.</param>
 /// <param name="pAddSeparator">The host's separator factory.</param>
 /// <param name="pAddHeader">The host's section-header factory.</param>
@@ -87,15 +90,20 @@ type
 procedure BuildReportsMenu(pParent: TMenuItem; const pAddItem: TReportsAddItem;
   const pAddSeparator: TReportsAddSeparator; const pAddHeader: TReportsAddHeader);
 
-/// <summary>Click handler for every Reports item: asks the question whose
-/// index is the item's Tag.</summary>
-/// <param name="Sender">The clicked TMenuItem.</param>
+/// <summary>Click handler for every Reports item: asks question pIndex of REPORT_QUESTIONS.</summary>
+/// <param name="Sender">Whatever the IDE passes as the click's sender; logged, never relied on.</param>
+/// <param name="pIndex">The question index bound to the item when the menu was built.</param>
 /// <remarks>
 /// Main thread only. Returns as soon as the run is started; a progress window
 /// with Cancel shows meanwhile and the answer arrives later on the main thread.
+/// Every click writes a 'Reports: click' line to the plugin log first, and every
+/// way it can stop before the run is started writes a 'Reports:' line too; where
+/// the user acted, it also shows why (1.51.2 RPT: it used to read the index from
+/// TMenuItem(Sender).Tag and return silently).
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
-/// <para>Calls: DragLint.Plugin.Reports.ChooseTargetThen, DragLint.Plugin.Reports.PromptSecondRoutine, DragLint.Plugin.Reports.ResolveRunTools, DragLint.Plugin.Reports.StartReport, DragLint.Plugin.ReportText.BuildAskCmdLine, DragLint.Plugin.ReportText.QuestionTakesSecondRoutine, TMenuItem</para>
+/// <para>Calls: DragLint.Plugin.LspClient.DebugLog, DragLint.Plugin.Reports.ChooseTargetThen, DragLint.Plugin.Reports.PromptSecondRoutine, DragLint.Plugin.Reports.ResolveRunTools, DragLint.Plugin.Reports.StartReport, DragLint.Plugin.ReportText.BuildAskCmdLine, DragLint.Plugin.ReportText.QuestionTakesSecondRoutine, DragLint.Plugin.ReportText.ReportClickQuestion, Format, ShowMessage</para>
+/// <seealso cref="DragLint.Plugin.LspClient.DebugLog"/>
 /// <seealso cref="DragLint.Plugin.Reports.ChooseTargetThen"/>
 /// <seealso cref="DragLint.Plugin.Reports.PromptSecondRoutine"/>
 /// <seealso cref="DragLint.Plugin.Reports.ResolveRunTools"/>
@@ -103,7 +111,7 @@ procedure BuildReportsMenu(pParent: TMenuItem; const pAddItem: TReportsAddItem;
 /// <seealso cref="DragLint.Plugin.ReportText.BuildAskCmdLine"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-procedure InvokeReportQuestion(Sender: TObject);
+procedure InvokeReportQuestionAt(Sender: TObject; pIndex: Integer);
 
 implementation
 
@@ -340,6 +348,7 @@ begin
   Db:= ResolvePrimaryIndexDb;
   if Db = '' then
   begin
+    DebugLog('Reports: no project index for typeat -- using the identifier at the caret: ' + Fallback);
     pNext(Fallback);
     Exit;
   end;
@@ -360,14 +369,18 @@ end;
 function PromptTarget(const pQuestion: TReportQuestion; var pTarget: string): Boolean;
 begin
   Result:= InputQuery('drag-lint Reports', pQuestion.Caption.TrimRight(['.']) + ' -- target:', pTarget);
-  if not Result then Exit;
-  pTarget:= Trim(pTarget);
-  if Pos('"', pTarget) > 0 then
+  if not Result then
   begin
-    ShowMessage(MSG_PREFIX + 'the target must not contain a double-quote (").');
-    Exit(False);
+    DebugLog('Reports: target prompt cancelled');
+    Exit;
   end;
+  pTarget:= Trim(pTarget);
   Result:= IsValidReportTarget(pTarget);
+  if not Result then
+  begin
+    DebugLog('Reports: target refused: [' + pTarget + ']');
+    ShowMessage(MSG_PREFIX + 'the target must not be empty or contain a double-quote (").');
+  end;
 end;
 
 { path: the caret gives routine A only, so routine B (-To) is typed. }
@@ -376,14 +389,18 @@ begin
   pTo:= '';
   Result:= InputQuery('drag-lint Reports', pQuestion.Caption.TrimRight(['.']) + ' -- from ' + pFrom +
                       sLineBreak + 'to routine (qualified name):', pTo);
-  if not Result then Exit;
-  pTo:= Trim(pTo);
-  if Pos('"', pTo) > 0 then
+  if not Result then
   begin
-    ShowMessage(MSG_PREFIX + 'the routine must not contain a double-quote (").');
-    Exit(False);
+    DebugLog('Reports: second-routine prompt cancelled');
+    Exit;
   end;
+  pTo:= Trim(pTo);
   Result:= IsValidReportTarget(pTo);
+  if not Result then
+  begin
+    DebugLog('Reports: second routine refused: [' + pTo + ']');
+    ShowMessage(MSG_PREFIX + 'the routine must not be empty or contain a double-quote (").');
+  end;
 end;
 
 { Works out the question's target and hands it to pNext: at once, or from the caret's
@@ -408,10 +425,15 @@ begin
         if PromptTarget(Q, Target) then pNext(Target);
       end;
   else
-    if not SaveAllIfModified then Exit;
+    if not SaveAllIfModified then
+    begin
+      DebugLog('Reports: save-first prompt cancelled');
+      Exit;
+    end;
     View:= ActiveEditView;
     if View = nil then
     begin
+      DebugLog('Reports: no active editor');
       ShowMessage(MSG_PREFIX + 'no active editor.');
       Exit;
     end;
@@ -550,7 +572,7 @@ begin
     First:= False;
     pAddHeader(pParent, ReportGroupCaption(Kind));
     for var I: Integer:= Low(REPORT_QUESTIONS) to High(REPORT_QUESTIONS) do
-      if REPORT_QUESTIONS[I].Kind = Kind then pAddItem(pParent, REPORT_QUESTIONS[I].Caption).Tag:= I;
+      if REPORT_QUESTIONS[I].Kind = Kind then pAddItem(pParent, REPORT_QUESTIONS[I].Caption, I).Tag:= I;
   end;
   { The 'Forms for testers (CSV)...' item follows these groups; RegisterDragLintMenu
     (DragLint.Plugin.Editor) adds it, because its handler lives there. }
@@ -572,18 +594,28 @@ begin
   else
     Problem:= '';
   Result:= Problem = '';
-  if not Result then ShowMessage(MSG_PREFIX + Problem);
+  if not Result then
+  begin
+    DebugLog('Reports: ' + Problem);
+    ShowMessage(MSG_PREFIX + Problem);
+  end;
 end;
 
-procedure InvokeReportQuestion(Sender: TObject);
+procedure InvokeReportQuestionAt(Sender: TObject; pIndex: Integer);
 var
-  Exe   : string;
-  InFile: string;
+  Exe    : string;
+  InFile : string;
+  Q      : TReportQuestion;
+  Problem: string;
 begin
-  if not (Sender is TMenuItem) then Exit;
-  var Idx: Integer:= TMenuItem(Sender).Tag;
-  if (Idx < Low(REPORT_QUESTIONS)) or (Idx > High(REPORT_QUESTIONS)) then Exit;
-  var Q: TReportQuestion:= REPORT_QUESTIONS[Idx];
+  DebugLog(Format('Reports: click question index %d (sender %s)',
+    [pIndex, if Sender = nil then 'nil' else Sender.ClassName]));
+  if not ReportClickQuestion(Sender, pIndex, Q, Problem) then
+  begin
+    DebugLog('Reports: ' + Problem);
+    ShowMessage(MSG_PREFIX + Problem);
+    Exit;
+  end;
   if not ResolveRunTools(Exe, InFile) then Exit;
   var ExeName: string:= Exe;
   var FromFile: string:= InFile;
