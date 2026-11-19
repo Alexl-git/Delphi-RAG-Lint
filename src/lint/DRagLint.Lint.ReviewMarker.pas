@@ -502,6 +502,14 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RemoveFrom(const ALineText, ARuleId: string): string; static;
+    /// <summary>AReason without its `REVIEWED &lt;yyyy-mm-dd&gt;` stamp and the one separator that
+    /// held it; a reason with no well-formed stamp comes back trimmed and otherwise unchanged.</summary>
+    /// <param name="AReason">A dl:ok marker reason, as Parse returns it.</param>
+    /// <returns>The reason, unstamped and trimmed.</returns>
+    /// <remarks>The same strip InsertInto applies when it re-hashes an entry (L3: a re-hash is not
+    /// a re-review); `allow` uses it when it MOVES a superseded marker's reason to the anchor line,
+    /// so the reviewer's text survives and only the vouching date goes. Pure.</remarks>
+    class function WithoutReviewStamp(const AReason: string): string; static;
     /// <summary>ALineText with a `dl:ok` entry for ARuleId recorded at the
     /// current hash: appended as a new marker, merged into the line's existing
     /// one, or -- when that entry's hash is stale -- re-hashed. A re-hash DROPS
@@ -1264,6 +1272,11 @@ begin
   Result:= TRegEx.Replace(AReason,
     STAMP_RX + AFTER_RX + '|' + BEFORE_RX + STAMP_RX + '(?!' + AFTER_RX + ')|' + STAMP_RX, ' ');
   Result:= Trim(TRegEx.Replace(Result, '\s{2,}', ' '));
+end;
+
+class function TReviewMarkers.WithoutReviewStamp(const AReason: string): string;
+begin
+  Result:= StripReviewStamp(AReason);
 end;
 
 { F2: a line carrying SEVERAL `// dl:ok` comments keeps each comment (and its reason) as written.

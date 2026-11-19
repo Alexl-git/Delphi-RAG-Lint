@@ -25980,7 +25980,22 @@ begin
   var SupNew : string := '';
   FindSupersededMarker(WinLines, MarkLine, AArgs.FixRule, OldLine, SupLine, SupNew);
 
-  NewLine:= TReviewMarkers.InsertInto(OldLine, AArgs.FixRule, '', WinHash);
+  { 1.52 INT14: the superseded marker's REASON moves with it. It used to be
+    written with an empty reason, so the reviewer's text vanished silently.
+    The stamp does not move: the entry is re-hashed, and a re-hash is not a
+    re-review (L3) -- the note below says so. }
+  var SupReason: string:= '';
+  var SupStamped: Boolean:= False;
+  if SupLine > 0 then
+    for M in TReviewMarkers.Parse(WinLines[SupLine - 1]) do
+      if SameText(M.RuleId, AArgs.FixRule) and (Trim(M.Reason) <> '') then
+      begin
+        SupReason := TReviewMarkers.WithoutReviewStamp(M.Reason);
+        SupStamped:= (Pos('REVIEWED', M.Reason) > 0) and (Pos('REVIEWED', SupReason) = 0);
+        Break;
+      end;
+
+  NewLine:= TReviewMarkers.InsertInto(OldLine, AArgs.FixRule, SupReason, WinHash);
   if (NewLine = OldLine) and (SupLine = 0) then
   begin
     { Already reviewed and the hash still matches -- nothing to write, and the
@@ -26028,7 +26043,7 @@ begin
   { L3: InsertInto drops a `REVIEWED <date>` stamp when it RE-HASHES a stale
     marker, because a re-hash is not a re-review. Say so, or the operator never
     learns the stamp has to be re-written after actually re-reading the code. }
-  if (Pos('REVIEWED', OldLine) > 0) and (Pos('REVIEWED', NewLine) = 0) then
+  if SupStamped or ((Pos('REVIEWED', OldLine) > 0) and (Pos('REVIEWED', NewLine) = 0)) then
     Writeln(Format('note: %s:%d -- the marker was re-hashed to changed code, so its REVIEWED stamp was dropped ' +
       '(a re-hash is not a re-review). Re-stamp the reason once you have re-read the code.',
       [AArgs.Target, AArgs.FixLine]));
