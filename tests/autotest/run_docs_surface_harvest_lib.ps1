@@ -94,6 +94,14 @@ $engine = $Exe
 $fgExe = $null
 try { $fgExe = Get-FeatureGenExe -Repo $Repo } catch { Check 'featuregen.exe is available and current' $false $_.Exception.Message }
 if ($fgExe -and -not (Test-Path -LiteralPath $engine)) { Check 'engine available for the parity run' $false $engine; $fgExe = $null }
+# dump-live's menu-tree reads THIS checkout's plugin index (gitignored): a fresh worktree lacks it (exit 2,
+# 'project not in db') and an existing one goes stale on any plugin edit (exit 3). Refresh it incrementally,
+# exactly as run_feature_registry_guard.ps1 does (PLUGIN-IDX-GUARD); this checkout's _D-RAG only.
+if ($fgExe) {
+  $plugDb = Join-Path $Repo 'src\delphi-plugin\_D-RAG\dclDragLintWizard.sqlite'
+  [void](New-Item -ItemType Directory -Force -Path (Split-Path -Parent $plugDb))
+  & { $ErrorActionPreference = 'Continue'; & $engine index --project (Join-Path $Repo 'src\delphi-plugin\dclDragLintWizard.dproj') --db $plugDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+}
 if ($fgExe) {
   $dump = @(& { $ErrorActionPreference = 'Continue'; & $fgExe dump-live --repo $Repo --engine $engine 2>&1 | ForEach-Object { "$_" } })
   Check 'featuregen dump-live succeeds' ($LASTEXITCODE -eq 0) (($dump | Select-Object -First 3) -join ' / ')
