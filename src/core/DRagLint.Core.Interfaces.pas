@@ -418,6 +418,18 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function GetMetaValue(const AKey: string): string                                                                     ;
+    /// <summary>INITDEP (1.52.1): the init-dependency facts of one unit -- the OTHER units its
+    /// initialization section reaches, directly or through a same-file routine it calls
+    /// (spec docs\superpowers\specs\2026-11-19-init-dependency-facts-design.md).</summary>
+    /// <param name="AUnitSymbolId">The unit's skUnit symbol id in THIS store.</param>
+    /// <param name="ATargets">Out: the distinct target unit names; '?' marks an unbound reached
+    /// ref (the facts are then incomplete).</param>
+    /// <returns>False when this store carries no init-dependency facts (no init_deps_format stamp:
+    /// an index built before 1.52.1); ATargets is then empty and means nothing.</returns>
+    /// <remarks>Read-only. A stamped store returns True with an empty ATargets for a unit whose
+    /// section reaches no other unit, or which has no initialization section. Written by the
+    /// calls pass, so the facts are as fresh as the last resolve.</remarks>
+    function GetInitDeps(const AUnitSymbolId: Int64; out ATargets: TArray<string>): Boolean;
     /// <param name="AKey"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AValue"><!-- drag-lint:auto type -->const string</param>
     /// <remarks>

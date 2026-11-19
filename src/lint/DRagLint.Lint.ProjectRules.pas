@@ -289,6 +289,16 @@ const
     'ememleaks', 'eresleaks', 'eappvcl', 'eexceptionmanager'
   );
 
+  { 1.52.1 INITDEP: unit scope prefixes tried when a bare uses name ('Classes') is not an indexed
+    unit -- the default unit scope names of a VCL/RTL project. }
+  KUnitScopePrefixes: array[0..7] of string = (
+    'System.', 'Winapi.', 'Vcl.', 'Data.', 'Xml.', 'Soap.', 'Web.', 'Datasnap.'
+  );
+  { InitDepVerdict's answers (unused-unit-in-uses). }
+  CInitDepNone   = 0;
+  CInitDepNeeded = 1;
+  CInitDepDead   = 2;
+
 const
   CCycleFixPointerHead = ' fix: drag-lint cycles --fix --project ';
 
@@ -4227,6 +4237,13 @@ var
   UnitHasInit   : TDictionary<string, Integer>      ;
   { unused-unit-in-uses (145 lane lf): unit name -> what InitSectionInfo said about its initialization section. }
   UnitInitInfo  : TDictionary<string, string>       ;
+  { unused-unit-in-uses (1.52.1 INITDEP): lowercase unit name -> InitDepVerdict's answer
+    ('0' none, '1' needed, '2' + target list = dead); written name -> canonical lowercase unit
+    name; canonical name -> canonical names it uses; the project files' (own name, uses) pairs. }
+  InitDepOf     : TDictionary<string, string>       ;
+  CanonOfName   : TDictionary<string, string>       ;
+  UsesOfCanon   : TDictionary<string, TArray<string>>;
+  ProjRoots     : TList<TPair<string, TArray<string>>>;
   { unused-unit-in-uses (1.40, UNUSEDUNIT-INLINE): resolved call target id ->
     lowercase unit stem when that routine is `inline`, '' otherwise. }
   InlineUnitOfSym: TDictionary<Int64, string>      ;
@@ -4667,6 +4684,168 @@ var
     UnitInitInfo.Add(AUnitName, Result);
   end;
 
+  { INITDEP (1.52.1): the canonical lowercase name of a unit as written in a uses clause -- the
+    indexed unit's own name (project store first, then the library), trying the common unit scope
+    prefixes for a bare name ('Classes' -> 'system.classes'). A unit in neither store keeps its
+    written name, lowercased. Cached. }
+  function CanonUnit(const AName: string): string;
+    function FindIn(const AN: string): string;
+    begin
+      Result:= '';
+      for var St: ISymbolStore in TArray<ISymbolStore>.Create(AStore, ALibraryStore) do
+        if St <> nil then
+          for var S: TSymbol in St.FindSymbolsByExactName(AN) do
+            if S.Kind = skUnit then Exit(LowerCase(S.Name));
+    end;
+  var
+    Low: string;
+  begin
+    Low:= LowerCase(AName);
+    if CanonOfName.TryGetValue(Low, Result) then Exit;
+    Result:= FindIn(AName);
+    if (Result = '') and not AName.Contains('.') then
+      for var Pfx: string in KUnitScopePrefixes do
+      begin
+        Result:= FindIn(Pfx + AName);
+        if Result <> '' then Break;
+      end;
+    if Result = '' then Result:= Low;
+    CanonOfName.Add(Low, Result);
+  end;
+
+  { INITDEP: the canonical names a unit (canonical name) uses, both sections, read from the store
+    that indexes it (project first). A unit in no store has none. Cached. }
+  function UsesOfUnit(const ACanon: string): TArray<string>;
+  begin
+    if UsesOfCanon.TryGetValue(ACanon, Result) then Exit;
+    Result:= nil;
+    for var St: ISymbolStore in TArray<ISymbolStore>.Create(AStore, ALibraryStore) do
+    begin
+      if St = nil then Continue;
+      var Fid: Int64:= 0;
+      for var S: TSymbol in St.FindSymbolsByExactName(ACanon) do
+        if S.Kind = skUnit then
+        begin
+          Fid:= S.FileId;
+          Break;
+        end;
+      if Fid = 0 then Continue;
+      for var UU: TUnitUse in St.GetUnitUsesForFile(Fid) do Result:= Result + [CanonUnit(UU.UnitName)];
+      Break;
+    end;
+    UsesOfCanon.Add(ACanon, Result);
+  end;
+
+  { INITDEP: the canonical units the project reaches WITHOUT passing through AExcludeCanon -- BFS over
+    the uses graph from every project file (.dpr included). The caller frees the result; the excluded
+    unit is in it as a never-expanded sentinel. }
+  function ReachWithout(const AExcludeCanon: string): TDictionary<string, Boolean>;
+  var
+    Queue: TQueue<string>;
+    N    : string;
+  begin
+    if ProjRoots = nil then
+    begin
+      ProjRoots:= TList<TPair<string, TArray<string>>>.Create;
+      for var RFid: Int64 in AStore.GetAllFileIds do
+      begin
+        var RUses: TArray<string>:= nil;
+        for var UU: TUnitUse in AStore.GetUnitUsesForFile(RFid) do RUses:= RUses + [CanonUnit(UU.UnitName)];
+        ProjRoots.Add(TPair<string, TArray<string>>.Create(
+          LowerCase(ChangeFileExt(ExtractFileName(AStore.GetFilePath(RFid)), '')), RUses));
+      end;
+    end;
+    Result:= TDictionary<string, Boolean>.Create;
+    Queue := TQueue<string>.Create;
+    try
+      Result.Add(AExcludeCanon, False);
+      for var Root: TPair<string, TArray<string>> in ProjRoots do
+      begin
+        if Root.Key = AExcludeCanon then Continue;
+        Result.AddOrSetValue(Root.Key, True);
+        for N in Root.Value do
+          if not Result.ContainsKey(N) then
+          begin
+            Result.Add(N, True);
+            Queue.Enqueue(N);
+          end;
+      end;
+      while Queue.Count > 0 do
+        for N in UsesOfUnit(Queue.Dequeue) do
+          if not Result.ContainsKey(N) then
+          begin
+            Result.Add(N, True);
+            Queue.Enqueue(N);
+          end;
+    finally
+      Queue.Free;
+    end;
+  end;
+
+  { INITDEP (1.52.1, spec 2026-11-19-init-dependency-facts-design): what the index's init-dependency
+    facts say about an otherwise unused import.
+      CInitDepNeeded -- a unit its initialization section reaches is System/SysInit, or is reachable
+                        from the project without this unit: the registration lands somewhere live.
+      CInitDepDead   -- the facts are complete and nothing they name is reachable; ATargets lists them.
+      CInitDepNone   -- no verdict (no stamped facts, no section, an empty target set -- the idle proof
+                        of InitSectionInfo decides that one --, a class constructor/destructor, or
+                        incomplete facts with nothing reachable): the caller falls back. }
+  function InitDepVerdict(const AUnitName: string; out ATargets: string): Integer;
+  var
+    Cached : string;
+    Canon  : string;
+    Targets: TArray<string>;
+    Known  : Boolean;
+  begin
+    ATargets:= '';
+    Canon   := CanonUnit(AUnitName);
+    if InitDepOf.TryGetValue(Canon, Cached) then
+    begin
+      ATargets:= Copy(Cached, 2, MaxInt);
+      Exit(StrToInt(Cached[1]));
+    end;
+    Result:= CInitDepNone;
+    Known := False;
+    var Found: Boolean:= False;
+    for var St: ISymbolStore in TArray<ISymbolStore>.Create(AStore, ALibraryStore) do
+    begin
+      if St = nil then Continue;
+      for var S: TSymbol in St.FindSymbolsByExactName(Canon) do
+        if S.Kind = skUnit then
+        begin
+          Found:= True; { the store that indexes the unit answers for it, stamped or not }
+          Known:= St.GetInitDeps(S.Id, Targets) and (Length(Targets) > 0) and not UnitDeclaresClassCtorDtor(St, S);
+          Break;
+        end;
+      if Found then Break;
+    end;
+    if Known then
+    begin
+      var Incomplete: Boolean:= False;
+      var Real: TArray<string>:= nil;
+      for var T: string in Targets do
+        if T = '?' then Incomplete:= True
+        else Real:= Real + [T];
+      if MatchText('System', Real) or MatchText('SysInit', Real) then Result:= CInitDepNeeded
+      else
+      begin
+        var Reach: TDictionary<string, Boolean>:= ReachWithout(Canon);
+        try
+          for var T: string in Real do
+            if Reach.ContainsKey(LowerCase(T)) and Reach[LowerCase(T)] then Result:= CInitDepNeeded;
+        finally
+          Reach.Free;
+        end;
+        if (Result <> CInitDepNeeded) and not Incomplete then
+        begin
+          Result  := CInitDepDead;
+          ATargets:= string.Join(', ', Real);
+        end;
+      end;
+    end;
+    InitDepOf.Add(Canon, IntToStr(Result) + ATargets);
+  end;
+
   { A referenced name, plus its GENERIC BASE.
 
     A reference to TComparer<TRuleInfo>.Construct arrives with the type
@@ -4722,6 +4901,10 @@ begin
   ExportsOfUnit:= TObjectDictionary<string, TDictionary<string, Boolean>>.Create([doOwnsValues]);
   UnitHasInit  := TDictionary<string, Integer>      .Create;
   UnitInitInfo := TDictionary<string, string>       .Create;
+  InitDepOf    := TDictionary<string, string>       .Create;
+  CanonOfName  := TDictionary<string, string>       .Create;
+  UsesOfCanon  := TDictionary<string, TArray<string>>.Create;
+  ProjRoots    := nil; { built on the first InitDepVerdict that needs a reach set }
   InlineUnitOfSym:= TDictionary<Int64, string>     .Create;
   RefdIds    := TDictionary<Int64 , Boolean>      .Create;
   RefdNames  := TDictionary<string, Boolean>      .Create;
@@ -5033,7 +5216,10 @@ begin
               { Skip self-reference. }
               if SameText(LowerCase(U.UnitName), LowerCase(ChangeFileExt(ExtractFileName(Path), ''))) then Continue;
               { Skip implicit/side-effect units. }
-              if IsSideEffectUnit(U.UnitName) then Continue;
+              { 1.52.1 INITDEP: the init-dependency facts win over this allow-list -- an allow-listed
+                unit whose facts prove its registration lands nowhere live is still checked below. }
+              var DepTargets: string;
+              if IsSideEffectUnit(U.UnitName) and (InitDepVerdict(U.UnitName, DepTargets) <> CInitDepDead) then Continue;
               { Skip known built-ins never in the index. }
               if SameText(U.UnitName, 'System') or SameText(U.UnitName, 'SysInit') then Continue;
               { WHAT THE UNIT EXPORTS is the only thing an import can keep alive.
@@ -5115,6 +5301,13 @@ begin
                       so by name. Removing it can break at RUNTIME after a
                       perfectly clean build, which is precisely the finding that
                       must not read as routine. }
+                { 1.52.1 INITDEP: the init-dependency facts decide first (spec
+                  2026-11-19-init-dependency-facts-design): a registration that lands in a unit the
+                  project reaches without this import keeps it; a complete fact set that lands
+                  nowhere live makes it a WARNING below; no verdict falls through to the allow-list /
+                  idle-proof handling. Guard: tests\autotest\run_init_dependency_facts.ps1. }
+                var DepVerdict: Integer:= InitDepVerdict(U.UnitName, DepTargets);
+                if DepVerdict = CInitDepNeeded then Continue;
                 var HasInit: Boolean;
                 { A finalization section or class constructor/destructor links the unit
                   as surely as an initialization one, but unlike it the finding is not
@@ -5128,6 +5321,11 @@ begin
                   UF.Message:= if HasInit then Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- possible dead import. It HAS an initialization section, so it may still be doing its work through that: removing it can build cleanly and fail at runtime. VERIFY BEFORE REMOVING.', [U.UnitName])
                     else Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- dead import. Type-helper members and classes instantiated by the sibling .dfm ARE counted, and this unit has no initialization section.', [U.UnitName]);
                 if (InitInfo <> '') and (InitInfo <> '#') then UF.Message:= UF.Message + ' Its initialization section references: ' + InitInfo + '.';
+                if DepVerdict = CInitDepDead then
+                begin
+                  UF.Severity:= 'warning';
+                  UF.Message := Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- dead import. Its initialization section registers only into %s, which nothing else in the project uses (init-dependency facts), so removing it changes nothing.', [U.UnitName, DepTargets]);
+                end;
                 UF.Message  := UF.Message + U.IncludeSuffix; { N-06 }
                 UF.FilePath := Path;
                 UF.StartLine:= U.HostLine;
@@ -5326,6 +5524,10 @@ begin
     ExportsOfUnit.Free;
     UnitHasInit.Free;
     UnitInitInfo.Free;
+    InitDepOf.Free;
+    CanonOfName.Free;
+    UsesOfCanon.Free;
+    ProjRoots.Free;
     InlineUnitOfSym.Free;
     PathOfFile .Free;
     StemsOfName.Free;
