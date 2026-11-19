@@ -14,7 +14,10 @@
 # DEPLOYED engine, so a branch build could only be seen green after a deploy --
 # and its RED could never be captured at all. PowerShell names are
 # case-insensitive, so every $exe below IS this parameter.
-param([string]$Exe = (Join-Path $PSScriptRoot '..\..\third_party\dll-win64\drag-lint.exe'))
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = (Join-Path $PSScriptRoot '..\..\third_party\dll-win64\drag-lint.exe') }
 
 $ErrorActionPreference = 'Stop'
 if (-not (Test-Path $exe)) { Write-Output "allow-command: FATAL -- no exe at $exe"; exit 1 }

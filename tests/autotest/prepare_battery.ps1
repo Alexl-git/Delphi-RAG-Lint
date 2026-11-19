@@ -30,13 +30,16 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe = '',
   [switch]$Force,
   [switch]$SkipSelfIndex,
   # -Only calls,stub : build just those prerequisites (a standalone guard runner needs two, not the
   # doctest/plugin/self-index set). Implies -SkipSelfIndex.
   [ValidateSet('calls','stub','switch')][string[]]$Only
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 if ($Only) { $SkipSelfIndex = $true }
 $ErrorActionPreference = 'Continue'
 $root  = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path

@@ -5,8 +5,11 @@
 # Positive control: --disable random-without-randomize must remove the finding.
 # Usage: pwsh -File tests/autotest/run_v151_RTL-COLL_random-without-randomize.ps1 [-Exe <path>]
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+param([string]$Exe = '',
       [string]$WorkDir = "$env:TEMP\drag-lint-rtlcoll-rnd-$PID")
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok) {

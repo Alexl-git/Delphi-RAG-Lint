@@ -30,7 +30,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$Filter  = '*',
   [switch]$Compile,
   [switch]$KeepScratch,
@@ -38,6 +38,9 @@ param(
   [string]$Rsvars  = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat',
   [string]$WorkDir = "$env:TEMP\drag-lint-fix-fixtures-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 # E-RENAME-OTHER-PATHS (146 r2): a naming fix runs the rename proof, and these fixtures have no library: the proof's own test seam,
 # as in run_const_casing_word_fix.ps1. The property-accessor-name case was refused (applied false) without it.

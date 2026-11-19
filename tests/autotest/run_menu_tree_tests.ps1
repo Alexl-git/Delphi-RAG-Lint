@@ -14,11 +14,15 @@
 # Usage: pwsh -File tests/autotest/run_menu_tree_tests.ps1 [-Exe <drag-lint.exe>]
 [CmdletBinding()]
 param(
-    [string] $Exe        = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-    [string] $FixtureDir = "$PSScriptRoot\..\fixtures\menutree",
+    [string] $Exe        = '',
+    [string] $FixtureDir = '',
     [string] $WorkDir    = "$env:TEMP\drag-lint-menu-tree-tests-$PID",
     [int]    $MinTests   = 182
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $FixtureDir) { $FixtureDir = "$PSScriptRoot\..\fixtures\menutree" }
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'

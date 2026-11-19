@@ -76,9 +76,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 
 # A drag-lint `query` with ZERO matches EXITS 1 (measured 2026-09-09). pwsh 7.4+

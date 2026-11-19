@@ -1,8 +1,11 @@
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-uurtl-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 # Bug V-D: used-unit-not-resolvable flagged unscoped names of RTL/VCL units
 # (ActiveX, ComObj, CommCtrl, ...) on a Delphi 5 index with no library DB, and its
 # message carried in-house advice (Orpheus/BDE). Positive control: NoSuchUnitXyz

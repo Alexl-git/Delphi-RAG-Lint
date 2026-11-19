@@ -19,9 +19,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1"),
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-mcp-check-init-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1") }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false

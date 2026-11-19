@@ -16,9 +16,12 @@
   Positive controls: Run it against the 1.44.1 engine and N1/N2/R1/R2/X1/X2/G2/G3/E2 fail (that is the RED).
 #>
 param(
-  [string]$Exe    = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe    = '',
   [string]$Rsvars = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {

@@ -31,10 +31,13 @@
 [CmdletBinding()]
 param(
   [string]$Repo    = '',
-  [string]$Exe     = $(. "$PSScriptRoot\lib\FreshEngineExe.ps1"; Get-FreshEngineExe),
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-check-init-handlers-$PID",
   [switch]$RequireHook
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(. "$PSScriptRoot\lib\FreshEngineExe.ps1"; Get-FreshEngineExe) }
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
 if (-not $Repo) { $Repo = (Resolve-Path "$PSScriptRoot\..\..").Path }

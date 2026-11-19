@@ -1,5 +1,8 @@
 [CmdletBinding()]
-param([string] $Exe = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1"))
+param([string] $Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1") }
 $ErrorActionPreference = 'Stop'; $script:Failed = $false
 function Check([string]$Name,[bool]$Ok,[string]$Detail=''){
   $s = if($Ok){'PASS'}else{'FAIL'}; $c = if($Ok){'Green'}else{'Red'}

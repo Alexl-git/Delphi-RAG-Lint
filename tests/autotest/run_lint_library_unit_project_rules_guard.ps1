@@ -42,13 +42,17 @@
 [CmdletBinding()]
 param(
   [switch]$KeepWorkDir,
-  [string]$Exe      = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
-  [string]$RulesDir = "$PSScriptRoot\..\..\rules",
+  [string]$Exe      = '',
+  [string]$RulesDir = '',
   [string]$WorkDir  = "C:\TEMP\draglint_lib_unit_projrules_$PID",
   [string]$LibraryDb   = '',
   [string]$LibraryUnit = '',
   [int]   $CpuBudgetSec = 30
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
+if (-not $RulesDir) { $RulesDir = "$PSScriptRoot\..\..\rules" }
 . "$PSScriptRoot\lib\WorkDirCleanup.ps1"
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 . "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG3: no machine drag-lint.json

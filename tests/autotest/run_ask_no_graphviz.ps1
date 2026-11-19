@@ -4,8 +4,11 @@
 # Contract pinned: exit 2 (setup), stderr names the step and the file, NO answer on stdout, NO
 # bundle folder written. POSITIVE CONTROL: DRAGLINT_DOT naming a real dot.exe answers, exit 0.
 # --open is NOT covered here: it shells out to the default browser (live proof owed, section C).
-param([string] $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+param([string] $Exe = '',
       [string] $Dot = 'C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail='') {

@@ -33,9 +33,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe = '',
   [string]$WorkDir = (Join-Path ([IO.Path]::GetTempPath()) ('dl-scaling-' + [Guid]::NewGuid().ToString('N')))
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$detail=''){ Write-Host ("[{0}] {1}{2}" -f (@('FAIL','PASS')[[int][bool]$ok]),$n,$(if($detail){" -- $detail"}else{''})) -ForegroundColor (@('Red','Green')[[int][bool]$ok]); if(-not $ok){$script:fail=$true} }

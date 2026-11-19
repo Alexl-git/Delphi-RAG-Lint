@@ -32,7 +32,10 @@
   failure. The detectors are self-tested against synthetic offending lines
   below, so this guard cannot pass by matching nothing.
 #>
-param([string]$Repo = "$PSScriptRoot\..\..")
+param([string]$Repo = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Repo) { $Repo = "$PSScriptRoot\..\.." }
 
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {

@@ -15,8 +15,11 @@
 # Positive control: an engine without the rule reports 0 findings and fails the "fires" checks.
 # Usage: pwsh -File tests/autotest/run_opaque_to_analysis.ps1 [-Exe <path>]
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+param([string]$Exe = '',
       [string]$WorkDir = "$env:TEMP\drag-lint-opaque-$PID")
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $Rule = 'opaque-to-analysis'
 $script:Failed = $false

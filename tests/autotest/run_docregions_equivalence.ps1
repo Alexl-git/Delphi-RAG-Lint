@@ -29,13 +29,16 @@ param(
   # 152 TESTS: -OldExe = an ARCHIVED engine built BEFORE the split (or env DL_DOCREGIONS_OLD_EXE). No default to the deployed engine (it tracks
   # the tree and turns this runner into a self-comparison): with neither given the runner SKIPs (exit 77). New = this tree's Debug build.
   [string]$OldExe = $env:DL_DOCREGIONS_OLD_EXE,
-  [string]$NewExe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$NewExe = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-docregions-eq-$PID",
   [string[]]$Projects = @(
     'C:\Projects\DataCopy\DataCopy.dproj|C:\Projects\DataCopy\_D-RAG\DataCopy.sqlite',
     'C:\Projects\YADF\YADF.dproj|C:\Projects\YADF\_D-RAG\YADF.sqlite',
     'C:\Projects\TableTools\TableTools370P.dproj|C:\Projects\TableTools\_D-RAG\TableTools370P.sqlite')
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $NewExe) { $NewExe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {

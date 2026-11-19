@@ -2,7 +2,10 @@
 # unit under <dir>. Owner ruling OQ4 (v151 EXCL) reversed it: a project member is every non-library unit
 # reached through uses, and folder location counts for platform libraries only. So the flag prunes
 # library (folder) walks only; under --project the unit stays indexed and the run names it in a NOTE.
-param([string] $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe")
+param([string] $Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $Exe = . "$PSScriptRoot\_manifest_common.ps1" -Exe $Exe
 $ErrorActionPreference = 'Continue'

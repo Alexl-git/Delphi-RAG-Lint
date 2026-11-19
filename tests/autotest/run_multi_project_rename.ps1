@@ -26,7 +26,10 @@
   Exit code: 0 on full pass, 1 on any failure.
 #>
 [CmdletBinding()]
-param([string]$EngineDir = "$PSScriptRoot\..\..\src\cli\Win64\Debug")
+param([string]$EngineDir = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $EngineDir) { $EngineDir = "$PSScriptRoot\..\..\src\cli\Win64\Debug" }
 $ErrorActionPreference = 'Stop'
 # E-RENAME-OTHER-PATHS: a naming fix now runs the rename proof, and these fixtures have no library: the proof's own test seam.
 $env:DRAGLINT_RENAME_TEST_UNGATED = '1'

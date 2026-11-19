@@ -38,7 +38,10 @@
        unit) show NO `Owns returned:` -- fails if only the index half lands
     7. the same block scan after the incremental reindex + re-document
 #>
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $exePath = (Resolve-Path $Exe).Path
 $fixture = Join-Path $PSScriptRoot 'fixtures\returns_owner_class_order'

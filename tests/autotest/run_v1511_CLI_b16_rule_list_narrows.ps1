@@ -14,11 +14,14 @@
   Usage: pwsh -File tests\autotest\run_v1511_CLI_b16_rule_list_narrows.ps1 [-Exe <exe>] [-Db <copy.sqlite>]
 #>
 param(
-  [string]$Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe'),
+  [string]$Exe = '',
   [string]$Db  = (Join-Path 'C:\' 'TEMP\claude\lanes\v1511\_dbs\YADF.sqlite'),
   [string]$RuleA = 'dictionary-get-without-check',
   [string]$RuleB = 'threadvar-managed'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe') }
 $ErrorActionPreference = 'Stop'
 $exePath = (Resolve-Path $Exe).Path
 if (-not (Test-Path -LiteralPath $Db)) { Write-Host "SKIP: no index copy at $Db (pass -Db)"; exit 0 }

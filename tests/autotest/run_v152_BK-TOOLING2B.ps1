@@ -2,11 +2,12 @@
   run_v152_BK-TOOLING2B.ps1 -- lane BK-TOOLING2B (1.52): manifest writer round-trip, runner param tails,
   exception-unit-writer battery blocker.
     M1-M6  settings.ignoreLocalConfig (B28) survives EVERY manifest write path of DRagLint.Index.ManifestWrite:
-           register-project --apply (AppendSectionToText) and manifest migrate --apply (RebasedManifestText).
+           register-project --apply (AppendSectionToText), manifest migrate --apply (RebasedManifestText) and
+           migrate-dbs --apply (TManifestIO.SaveEdits; M7/M8 text only -- migrate-dbs rewrites the file it was given).
            Each path is checked twice: the KEY is still in the written text, and its EFFECT still holds (the
            engine run from a folder with a .drag-lint.json loads no defaults). M0 is the positive control: the
            same engine without the key DOES load them, so "no banner" cannot pass vacuously.
-    P1     no ADVANCED runner (CmdletBinding / Parameter) under tests\autotest resolves a repo-root default from
+    P1     no ADVANCED runner (CmdletBinding / Parameter) under tests\autotest has ANY default (-Exe, -RulesDir, -Repo, ...) derived from
            $PSScriptRoot / $MyInvocation / $PSCommandPath inside param(): Windows PowerShell 5 run with -File
            leaves them empty there, so "$PSScriptRoot\..\.." became C:\ (HBRECV F3).
     P2     behavioural control for P1 under powershell.exe -File: the OLD shape yields C:\ (the bug is real on
@@ -91,24 +92,45 @@ try {
   Check 'M6 manifest migrate: the key still takes EFFECT from the roaming file (exe-side file renamed away)' (
     (-not (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $mig) 'drag-lint.json'))) -and (Test-NoDefaults $mig $V2))
 
+  # migrate-dbs --apply -> TManifestIO.SaveEdits (the Config / migrate-dbs save path)
+  $mdDir = Join-Path $WorkDir 'mdb'
+  [IO.Directory]::CreateDirectory((Join-Path $mdDir 'proj')) | Out-Null; [IO.Directory]::CreateDirectory((Join-Path $mdDir 'elsewhere')) | Out-Null
+  [IO.File]::WriteAllText((Join-Path $mdDir 'proj\App.dpr'), "program App;`r`nbegin`r`nend.`r`n", [Text.Encoding]::ASCII)
+  $oldDb = Join-Path $mdDir 'elsewhere\App.sqlite'; $newDb = Join-Path $mdDir 'proj\_D-RAG\App.sqlite'
+  $null = Invoke-Engine $exePath @('index', '--project', (Join-Path $mdDir 'proj\App.dpr'), '--db', $oldDb)
+  $esc = $mdDir -replace '\\', '\\'
+  $mdCfg = Join-Path $mdDir 'm.json'
+  [IO.File]::WriteAllText($mdCfg, ('{"settings":{"ignoreLocalConfig":true},"indexes":{"sections":[{"name":"App","include":["' + $esc +
+    '\\proj\\App.dpr"],"db":"' + $esc + '\\elsewhere\\App.sqlite"}]}}'), [Text.Encoding]::ASCII)
+  $r = Invoke-Engine $exePath @('migrate-dbs', '--config', $mdCfg, '--apply')
+  $mdText = [IO.File]::ReadAllText($mdCfg)
+  Check 'M7 migrate-dbs --apply took the SaveEdits path (DB moved, section "db" key gone)' (
+    ($r.Rc -eq 0) -and (Test-Path -LiteralPath $newDb) -and ($mdText -notmatch '"db"')) "rc=$($r.Rc) $($r.Out) $mdText"
+  Check 'M8 migrate-dbs --apply (SaveEdits) kept settings.ignoreLocalConfig=true in the text' ((Get-Ignore $mdCfg) -eq 'True') $mdText
   # ---- P: runner param defaults -------------------------------------------------------------------
   Write-Host '== P runner defaults under Windows PowerShell 5 -File ==' -ForegroundColor Cyan
-  $bad = @()
-  foreach ($f in Get-ChildItem -LiteralPath $PSScriptRoot -Recurse -Filter *.ps1) {
-    $ast = [Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$null)
-    if (-not $ast.ParamBlock) { continue }
-    $adv = (@($ast.ParamBlock.Attributes | Where-Object { $_.TypeName.Name -eq 'CmdletBinding' }).Count -gt 0) -or
-           (@($ast.ParamBlock.Parameters | Where-Object { $_.Attributes | Where-Object { $_.TypeName.Name -eq 'Parameter' } }).Count -gt 0)
-    if (-not $adv) { continue }
-    foreach ($p in $ast.ParamBlock.Parameters) {
-      $t = if ($p.DefaultValue) { $p.DefaultValue.Extent.Text } else { '' }
-      if ($t -match 'PSScriptRoot|MyInvocation|PSCommandPath' -and
-          ($t -match 'Resolve-Path|GetFullPath|Split-Path|Convert-Path' -or $p.Name.VariablePath.UserPath -match '^Repo')) {
-        $bad += "$($f.Name) -$($p.Name.VariablePath.UserPath)"
+  # Any param() default derived from the script path (-Exe, -RulesDir, -Repo, ...) is the bug, whatever its name.
+  function Get-PathDefaultsInParam($Files) {
+    $found = @()
+    foreach ($f in $Files) {
+      $ast = [Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$null)
+      if (-not $ast.ParamBlock) { continue }
+      $adv = (@($ast.ParamBlock.Attributes | Where-Object { $_.TypeName.Name -eq 'CmdletBinding' }).Count -gt 0) -or
+             (@($ast.ParamBlock.Parameters | Where-Object { $_.Attributes | Where-Object { $_.TypeName.Name -eq 'Parameter' } }).Count -gt 0)
+      if (-not $adv) { continue }
+      foreach ($p in $ast.ParamBlock.Parameters) {
+        $t = if ($p.DefaultValue) { $p.DefaultValue.Extent.Text } else { '' }
+        if ($t -match 'PSScriptRoot|MyInvocation|PSCommandPath') { $found += "$($f.Name) -$($p.Name.VariablePath.UserPath)" }
       }
     }
+    return $found
   }
-  Check 'P1 no advanced runner resolves a repo-root default from the script path inside param()' ($bad.Count -eq 0) ("$($bad.Count): " + (($bad | Select-Object -First 8) -join '; '))
+  $bad = @(Get-PathDefaultsInParam (Get-ChildItem -LiteralPath $PSScriptRoot -Recurse -Filter *.ps1))
+  $pcDir = Join-Path $WorkDir 'p1ctl'; [IO.Directory]::CreateDirectory($pcDir) | Out-Null
+  [IO.File]::WriteAllText("$pcDir\ctl.ps1", "[CmdletBinding()]`r`nparam([string]`$Exe = `"`$PSScriptRoot\..\x.exe`", [string]`$RulesDir = (Join-Path `$PSScriptRoot 'r'))`r`n", [Text.Encoding]::ASCII)
+  $ctlBad = @(Get-PathDefaultsInParam (Get-ChildItem -LiteralPath $pcDir -Filter *.ps1))
+  Check 'P1 CONTROL a fixture with $PSScriptRoot-derived -Exe and -RulesDir defaults inside param() is flagged' ($ctlBad.Count -eq 2) ($ctlBad -join '; ')  Check 'P1 no advanced runner has ANY default (-Exe, -RulesDir, -Repo, ...) derived from the script path inside param()' ($bad.Count -eq 0) ("$($bad.Count): " + (($bad | Select-Object -First 8) -join '; '))
+  Check 'P1 no advanced runner has a param() default derived from $PSScriptRoot / $MyInvocation / $PSCommandPath (-Exe, -RulesDir, -Repo, ...)' ($bad.Count -eq 0) ("$($bad.Count): " + (($bad | Select-Object -First 8) -join '; '))
   $pdir = Join-Path $WorkDir 'p\a\b'; [IO.Directory]::CreateDirectory($pdir) | Out-Null
   [IO.File]::WriteAllText("$pdir\old.ps1", "[CmdletBinding()]`r`nparam([string]`$Repo = (Resolve-Path `"`$PSScriptRoot\..\..`" -ErrorAction SilentlyContinue).Path)`r`n`"REPO=[`$Repo]`"`r`n", [Text.Encoding]::ASCII)
   [IO.File]::WriteAllText("$pdir\new.ps1", "[CmdletBinding()]`r`nparam([string]`$Repo = '')`r`nif (-not `$Repo) { `$Repo = (Resolve-Path `"`$PSScriptRoot\..\..`").Path }`r`n`"REPO=[`$Repo]`"`r`n", [Text.Encoding]::ASCII)

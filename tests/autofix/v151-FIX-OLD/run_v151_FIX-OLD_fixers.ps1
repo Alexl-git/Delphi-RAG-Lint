@@ -24,11 +24,14 @@
   Usage: run_v151_FIX-OLD_fixers.ps1 [-Exe <drag-lint.exe>] [-Filter <case-wildcard>]
 #>
 param(
-  [string]$Exe    = "$PSScriptRoot\..\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe    = '',
   [string]$Filter = '*',
   [string]$Rsvars = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat',
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Continue'
 $env:DRAGLINT_RENAME_TEST_UNGATED = '1'   # the rename proof's test seam: these fixtures have no library
 $script:pass = 0; $script:fail = 0

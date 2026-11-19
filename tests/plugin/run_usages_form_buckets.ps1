@@ -18,11 +18,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = $(& "$PSScriptRoot\..\autotest\lib\DefaultEngineExe.ps1"),
+  [string]$Exe     = '',
   [string]$IndexDb = '',   # empty (the battery): a one-unit fixture that raises and handles EFix is indexed into a temp DB
   [string]$Name   = 'Exception',
-  [string]$SrcDir = "$PSScriptRoot\..\..\src\delphi-plugin"
+  [string]$SrcDir = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(& "$PSScriptRoot\..\autotest\lib\DefaultEngineExe.ps1") }
+if (-not $SrcDir) { $SrcDir = "$PSScriptRoot\..\..\src\delphi-plugin" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {

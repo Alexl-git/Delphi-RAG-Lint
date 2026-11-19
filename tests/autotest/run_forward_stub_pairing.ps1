@@ -9,9 +9,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Dpr     = "$PSScriptRoot\..\ForwardStubTests.dpr",
+  [string]$Dpr     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-forward-stub-pairing-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Dpr) { $Dpr = "$PSScriptRoot\..\ForwardStubTests.dpr" }
 try {
 $ErrorActionPreference = 'Stop'
 if (-not (Test-Path $Dpr)) { Write-Host "FATAL: dpr not found: $Dpr" -ForegroundColor Red; exit 2 }

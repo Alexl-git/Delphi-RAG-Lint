@@ -48,9 +48,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Regions     = "$PSScriptRoot\..\..\src\doc\DRagLint.Doc.Regions.pas",
-  [string]$SharedFacts = "$PSScriptRoot\..\..\src\doc\DRagLint.Doc.SharedFacts.pas"
+  [string]$Regions     = '',
+  [string]$SharedFacts = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Regions) { $Regions = "$PSScriptRoot\..\..\src\doc\DRagLint.Doc.Regions.pas" }
+if (-not $SharedFacts) { $SharedFacts = "$PSScriptRoot\..\..\src\doc\DRagLint.Doc.SharedFacts.pas" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {

@@ -3,8 +3,11 @@
 # anywhere else. It used to resolve "third_party\..." against the CURRENT
 # directory and died in Resolve-Path unless launched from the repo root.
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe"
+  [string]$Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $exe = (Resolve-Path $Exe).Path
 $fx  = (Resolve-Path "$PSScriptRoot\threshold_fixture.pas").Path
 $cfg = (Resolve-Path "$PSScriptRoot\threshold_config.json").Path

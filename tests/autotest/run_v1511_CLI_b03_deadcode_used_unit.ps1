@@ -7,7 +7,10 @@
   P2 over the same unit, and an orphan unit nobody uses (positive control: still listed).
   Usage: pwsh -File tests\autotest\run_v1511_CLI_b03_deadcode_used_unit.ps1 [-Exe <drag-lint.exe>]
 #>
-param([string]$Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe'))
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe') }
 $ErrorActionPreference = 'Stop'
 $exePath = (Resolve-Path $Exe).Path
 $fx = Join-Path $PSScriptRoot '..\fixtures\t2-library-root-150'

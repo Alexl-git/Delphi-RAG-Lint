@@ -14,7 +14,10 @@
   the INCR head: DIAG printed, 1 error, lint <file> = 2); fragcode / fragboth keep both, as controls.
   Usage: pwsh -File tests\lint-project\cycle-edge-in-include\run_include_false_positives.ps1 [-Exe <drag-lint.exe>]
 #>
-param([string]$Exe = "$PSScriptRoot\..\..\..\src\cli\Win64\Debug\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }

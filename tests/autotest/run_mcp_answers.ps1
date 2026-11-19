@@ -25,9 +25,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_mcp_answers_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 $env:DRAGLINT_RENAME_TEST_UNGATED = '1' # lane 144: these fixtures do not compile; run_rename_precise.ps1 proves the gate

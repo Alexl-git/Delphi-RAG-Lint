@@ -57,9 +57,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe    = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$Fixtures = "$PSScriptRoot\..\fixtures\mcp-config"
+  [string]$Exe    = '',
+  [string]$Fixtures = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $Fixtures) { $Fixtures = "$PSScriptRoot\..\fixtures\mcp-config" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -181,7 +185,7 @@ function Test-SameTree($A, $B) {
   if ($B -is [System.Text.Json.Nodes.JsonObject] -or $B -is [System.Text.Json.Nodes.JsonArray]) { return $false }
   $va = $A.GetValueKind(); $vb = $B.GetValueKind()
   if ($va -ne $vb) { return $false }
-  if ($va -eq [System.Text.Json.JsonValueKind]::String) { return $A.GetValue[string]() -ceq $B.GetValue[string]() }
+  if ($va -eq [System.Text.Json.JsonValueKind]::String) { return $A.ToString() -ceq $B.ToString() }
   $A.ToJsonString() -ceq $B.ToJsonString()
 }
 # an expected-tree fixture with {{ENGINE}} / {{DB1}} / {{DB2}} filled in (JSON-escaped)
@@ -443,7 +447,7 @@ Check-Parity 'MC-ALL-SKIP' $r 'skipped,skipped,skipped' $null $null
   # ---- MC-ENGINE / MC-JSON -------------------------------------------------------------------
   $p = Set-Pair 'engine.json' $null
   $r = Invoke-McpConfig @('--vscode', '--config-path', $p.E)
-  $cmd = $(try { (Get-Tree $p.E)['servers']['drag-lint']['command'].GetValue[string]() } catch { '' })
+  $cmd = $(try { (Get-Tree $p.E)['servers']['drag-lint']['command'].ToString() } catch { '' })
   Check 'MC-ENGINE' (($r.Code -eq 0) -and ($cmd -ieq $Exe)) "command=$cmd"
   $p = Set-Pair 'json.json' (Get-Fixture 'empty-object.json')
   $r = Invoke-McpConfig @('--vscode', '--config-path', $p.E, '--engine', $Eng, '--json')

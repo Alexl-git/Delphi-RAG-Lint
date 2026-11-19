@@ -31,7 +31,10 @@
   Usage: pwsh -File tests\callresolve\run_dispatch_edges.ps1 [-Exe <drag-lint.exe>]
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false

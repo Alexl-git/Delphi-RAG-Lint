@@ -13,7 +13,10 @@
   Usage: pwsh -File tests\plugin\run_convert_selection_editor_wiring.ps1
 #>
 [CmdletBinding()]
-param([string]$Root = (Resolve-Path "$PSScriptRoot\..\..").Path)
+param([string]$Root = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Root) { $Root = (Resolve-Path "$PSScriptRoot\..\..").Path }
 $ErrorActionPreference = 'Stop'
 
 function Get-RegisterBody([string]$Text) {

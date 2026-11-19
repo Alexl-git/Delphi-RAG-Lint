@@ -16,9 +16,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Dpr     = "$PSScriptRoot\..\AncestryNameCollisionTests.dpr",
+  [string]$Dpr     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-ancestry-collision-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Dpr) { $Dpr = "$PSScriptRoot\..\AncestryNameCollisionTests.dpr" }
 try {
 $ErrorActionPreference = 'Stop'
 

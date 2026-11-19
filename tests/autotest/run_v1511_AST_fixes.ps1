@@ -10,8 +10,11 @@
   Usage: pwsh -File tests\autotest\run_v1511_AST_fixes.ps1 [-Exe <drag-lint.exe>]
 #>
 param(
-  [string]$Exe = (Join-Path $PSScriptRoot '..\..\third_party\dll-win64\drag-lint.exe')
+  [string]$Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = (Join-Path $PSScriptRoot '..\..\third_party\dll-win64\drag-lint.exe') }
 $ErrorActionPreference = 'Stop'
 $fx  = Join-Path $PSScriptRoot 'fixtures\v1511-AST'
 $cfg = Join-Path $fx 'config.json'

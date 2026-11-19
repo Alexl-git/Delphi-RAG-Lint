@@ -5,7 +5,10 @@
   RED on 1.48.0-alpha: the local refused and wrote 3 of 5 edits.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Continue'; $env:DRAGLINT_RENAME_TEST_UNGATED = '1'
 $work = Join-Path $env:TEMP ('draglint-rninact-' + [Guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Force $work | Out-Null
 Copy-Item (Join-Path $PSScriptRoot '..\fixtures\refactor\rename\inactive_local\RtA.pas') $work

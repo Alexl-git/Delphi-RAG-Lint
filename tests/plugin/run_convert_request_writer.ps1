@@ -14,7 +14,10 @@
   Usage: pwsh -File tests\plugin\run_convert_request_writer.ps1
 #>
 [CmdletBinding()]
-param([string]$SrcDir = "$PSScriptRoot\..\..\src\delphi-plugin")
+param([string]$SrcDir = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $SrcDir) { $SrcDir = "$PSScriptRoot\..\..\src\delphi-plugin" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {

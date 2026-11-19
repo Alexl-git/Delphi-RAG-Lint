@@ -31,7 +31,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   # NOT 'drag-lint-helper-edges' -- that is run_helper_edges.ps1's directory,
   # and this runner wipes its WorkDir recursively at startup (line ~47). Two
   # runners sharing one fixed scratch name means whichever starts second
@@ -41,6 +41,9 @@ param(
   # cleared the tree. run_battery_jobs_guard.ps1 now asserts uniqueness.
   [string]$WorkDir = "$env:TEMP\drag-lint-helper-method-edges-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false

@@ -41,17 +41,21 @@
 # Pass -Exe explicitly to smoke a Win32 build on purpose.
 [CmdletBinding()]
 param(
-    [string] $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+    [string] $Exe = '',
     # Empty = read the expected version from the single source of truth,
     # src\cli\DRagLint.CLI.pas's VERSION const. A hardcoded literal here went
     # stale twice over (it pinned 0.46.0-alpha while the CLI reached
     # 1.2.1-alpha), so the check reported a release bump as a smoke failure.
     [string] $ExpectedVersion = '',
-    [string] $FixtureDir = "$PSScriptRoot\fixtures",
+    [string] $FixtureDir = '',
     [string] $WorkDir = "$env:TEMP\drag-lint-autotest-$PID",
     [int]    $InitTimeoutMs = 3000,
     [int]    $ShutdownTimeoutMs = 2000
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $FixtureDir) { $FixtureDir = "$PSScriptRoot\fixtures" }
 try {
 
 $ErrorActionPreference = 'Stop'

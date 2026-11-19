@@ -12,10 +12,14 @@
 # Usage: pwsh -File tests/autotest/run_prop_access_migrate.ps1 [-Exe <path>]
 [CmdletBinding()]
 param(
-    [string] $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-    [string] $FixtureDir = "$PSScriptRoot\..\fixtures\formsmap",
+    [string] $Exe = '',
+    [string] $FixtureDir = '',
     [string] $WorkDir = "$env:TEMP\drag-lint-prop-access-migrate-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $FixtureDir) { $FixtureDir = "$PSScriptRoot\..\fixtures\formsmap" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false

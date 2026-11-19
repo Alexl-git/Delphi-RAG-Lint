@@ -13,10 +13,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Dpr     = "$PSScriptRoot\ChartsTests.dpr",
+  [string]$Dpr     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-charts-tests-$PID",
   [string]$Filter  = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Dpr) { $Dpr = "$PSScriptRoot\ChartsTests.dpr" }
 try {
 $ErrorActionPreference = 'Stop'
 $Pushed = $false
