@@ -10,6 +10,14 @@
   "wikiPage": "field-repository",
   "surfaces": [
     {
+      "type": "exe",
+      "name": "dl-field-repo.exe"
+    },
+    {
+      "type": "exe",
+      "name": "dl-field-repo-std.exe"
+    },
+    {
       "type": "cli",
       "verb": "repo",
       "sub": "init"

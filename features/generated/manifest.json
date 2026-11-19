@@ -1,7 +1,7 @@
 {
-  "product": "1.52.0-alpha",
-  "extractor": "1.41.0-alpha",
-  "resolver": "1.29.0-alpha",
+  "product": "1.52.1-alpha",
+  "extractor": "1.42.0-alpha",
+  "resolver": "1.30.0-alpha",
   "schema": 27,
   "groups": [
     {
@@ -15395,6 +15395,14 @@
       "intro": "Read this when you want the TableTools field repository without Firebird tables or the TableTools IDE package. Run drag-lint repo init, then repo import-fb (Micronite) or repo seed-fb (any Firebird database), keep the text backup in version control with repo backup, and point several projects at one repository with the fieldRepository key. Firebird is never modified.",
       "wikiPage": "field-repository",
       "surfaces": [
+        {
+          "type": "exe",
+          "name": "dl-field-repo.exe"
+        },
+        {
+          "type": "exe",
+          "name": "dl-field-repo-std.exe"
+        },
         {
           "type": "cli",
           "verb": "repo",
