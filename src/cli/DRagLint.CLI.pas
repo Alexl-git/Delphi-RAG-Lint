@@ -25993,7 +25993,12 @@ begin
         Break;
       end;
 
-  NewLine:= TReviewMarkers.InsertInto(OldLine, AArgs.FixRule, SupReason, WinHash);
+  { 1.52 INT14: `--reason "<text>"` REPLACES the entry's reason, stamp included:
+    the operator passing it is the re-review that L3 asks for. Without it the
+    L3 default stands (a re-hash drops the stamp, the note below says so). }
+  var Restamp: Boolean:= Trim(AArgs.Reason) <> '';
+  NewLine:= TReviewMarkers.InsertInto(OldLine, AArgs.FixRule,
+    (if Restamp then Trim(AArgs.Reason) else SupReason), WinHash, Restamp);
   if (NewLine = OldLine) and (SupLine = 0) then
   begin
     { Already reviewed and the hash still matches -- nothing to write, and the
@@ -26041,7 +26046,7 @@ begin
   { L3: InsertInto drops a `REVIEWED <date>` stamp when it RE-HASHES a stale
     marker, because a re-hash is not a re-review. Say so, or the operator never
     learns the stamp has to be re-written after actually re-reading the code. }
-  if SupStamped or ((Pos('REVIEWED', OldLine) > 0) and (Pos('REVIEWED', NewLine) = 0)) then
+  if (not Restamp) and (SupStamped or ((Pos('REVIEWED', OldLine) > 0) and (Pos('REVIEWED', NewLine) = 0))) then
     Writeln(Format('note: %s:%d -- the marker was re-hashed to changed code, so its REVIEWED stamp was dropped ' +
       '(a re-hash is not a re-review). Re-stamp the reason once you have re-read the code.',
       [AArgs.Target, AArgs.FixLine]));

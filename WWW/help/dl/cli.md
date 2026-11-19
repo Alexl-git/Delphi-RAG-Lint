@@ -16,7 +16,7 @@ Every drag-lint command, with its usage and the features that describe it.
 Records a dl:ok review of one finding, so it stops being reported without being fixed.
 
 ```text
-drag-lint allow <file> --fix-line <L> --fix-rule <id> [--apply] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>] (record a dl:ok review of ONE finding; dry-run without --apply; the lint options decide which findings the line has)
+drag-lint allow <file> --fix-line <L> --fix-rule <id> [--apply] [--reason "<text>"] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>] (record a dl:ok review of ONE finding; dry-run without --apply; --reason replaces the marker's reason, e.g. "REVIEWED <yyyy-mm-dd> <why>" -- without it a re-hash of a stale marker drops its REVIEWED stamp; the lint options decide which findings the line has)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -24,6 +24,7 @@ drag-lint allow <file> --fix-line <L> --fix-rule <id> [--apply] [--rules-dir <di
 | `--fix-line` | `<L>` |  |  |
 | `--fix-rule` | `<id>` |  |  |
 | `--apply` |  |  |  |
+| `--reason` | `<text>` |  |  |
 | `--rules-dir` | `<dir>` |  |  |
 | `--config` | `<file>` |  |  |
 | `--profile` | `<name>` |  |  |

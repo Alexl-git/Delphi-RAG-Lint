@@ -102,6 +102,10 @@ begin
      (AFinding.EndCol < 1) or (AFinding.EndCol > Length(Last) + 1) then Exit;
   NewText:= if AFinding.FixKind = lfkReplace then AFinding.FixText else '';
   NewText:= NewText.Replace(#13#10, #10).Replace(#10, sLineBreak);
+  // 1.52 INT14: a template that closes its statement with ';' after a capture that
+  // already ends in one (collapsible-if over a begin/end body: the block node holds
+  // `end;`) expanded to `end;;`. One terminator is meant; keep one.
+  if NewText.EndsWith(';;') then SetLength(NewText, Length(NewText) - 1);
   E:= Default(TTextEdit);
   E.FilePath:= AFinding.FilePath;
   if (AFinding.StartLine = AFinding.EndLine) and (not NewText.Contains(#10)) then

@@ -10,7 +10,7 @@ drag-lint > Code Quality > Allow a Finding on This Line... works from the caret:
 ## Running it from the CLI
 
 ```
-drag-lint allow <file> --fix-line <L> --fix-rule <id> [--apply]
+drag-lint allow <file> --fix-line <L> --fix-rule <id> [--apply] [--reason "<text>"]
 ```
 
 `--fix-line` and `--fix-rule` identify the exact finding to allow. Per the
@@ -24,6 +24,21 @@ Reachable in the IDE through the Structure form's right-click menu -- see
 (drag-lint > Show Structure, then right-click a finding and choose "Allow
 this message"). There is no main-menu item; the feature map's internal call
 site is `TDragLintStructureForm.ShowInButterflyClick (DragLint.Plugin.StructureForm.pas)`.
+
+## Re-stamping a review (`--reason`, 1.52)
+
+A marker's reason can carry a `REVIEWED <yyyy-mm-dd>` stamp (checked by
+`review-marker-reason-unreviewed`). When `allow` re-hashes a STALE marker it keeps
+the reason but drops that stamp and says so: a re-hash is not a re-review. After
+you have re-read the code, pass the new reason and its stamp:
+
+```
+drag-lint allow Unit1.pas --fix-line 42 --fix-rule unused-private-member --apply --reason "REVIEWED 2026-11-18 kept for the RTTI streamer"
+```
+
+`--reason` REPLACES the marker's reason (it also re-stamps a marker whose hash is
+still current); running it again with the same text changes nothing. A marker that `allow`
+moves off a wrapped statement's continuation line keeps its reason, minus the stamp.
 
 ## What it needs
 

@@ -521,6 +521,9 @@ type
     /// <param name="AReason">Optional free text. An existing reason is preserved,
     /// minus any REVIEWED stamp when the entry is re-hashed.</param>
     /// <param name="AHashOverride"><!-- drag-lint:auto type -->const string = ''</param>
+    /// <param name="AReplaceReason">True (`allow --reason`, 1.52): AReason REPLACES the marker's reason,
+    /// stamp included -- the human who passes it is the re-review -- and an entry whose hash still matches
+    /// is rewritten when its reason differs. False (default): the existing reason wins, as above.</param>
     /// <returns>The whole new line: 7-bit ASCII, no trailing whitespace, original
     /// indentation and code untouched.</returns>
     /// <remarks>
@@ -547,7 +550,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function InsertInto(const ALineText, ARuleId, AReason: string;
-      const AHashOverride: string = ''): string; static;
+      const AHashOverride: string = ''; AReplaceReason: Boolean = False): string; static;
     /// <summary>True when the legacy `// drag-lint:ignore [&lt;rule-id&gt; ...]`
     /// directive on the line covers ARuleId: bare, it covers every rule; with a
     /// list, only the rules named (space, comma or tab separated).</summary>
@@ -1285,7 +1288,7 @@ end;
   rewritten (the last comment when none does); the others are returned byte for byte.
   Returns False when the line has a single tag, so the caller takes its normal path. }
 function InsertIntoSegmented(const ALineText, ARuleId, AReason, AHash: string; ACStart: Integer;
-  out AResult: string): Boolean;
+  AReplaceReason: Boolean; out AResult: string): Boolean;
 var
   Starts: TArray<Integer>;
   CStart: Integer;
@@ -1343,7 +1346,7 @@ begin
     if I = K then
     begin
       Tail  := Copy(Piece, Length(TrimRight(Piece)) + 1, MaxInt);
-      Edited:= TReviewMarkers.InsertInto(Piece, ARuleId, AReason, AHash);
+      Edited:= TReviewMarkers.InsertInto(Piece, ARuleId, AReason, AHash, AReplaceReason);
       Piece := Edited + (if I < High(Starts) then Tail else '');
     end;
     Parts:= Parts + [Piece];
@@ -1352,7 +1355,7 @@ begin
 end; // function
 
 class function TReviewMarkers.InsertInto(const ALineText, ARuleId, AReason: string;
-  const AHashOverride: string): string;
+  const AHashOverride: string; AReplaceReason: Boolean): string;
 var
   Existing: TArray<TReviewMarker>;
   M       : TReviewMarker        ;
@@ -1384,9 +1387,10 @@ begin
     a silent no-op. A hashless hand-written marker takes the same path and
     acquires a hash. }
   for M in Existing do
-    if SameText(M.RuleId, ARuleId) and SameText(M.Hash, Hash) then Exit(ALineText);
+    if SameText(M.RuleId, ARuleId) and SameText(M.Hash, Hash) and
+       ((not AReplaceReason) or (Trim(M.Reason) = Trim(AReason))) then Exit(ALineText);
 
-  if (Length(Existing) > 1) and InsertIntoSegmented(ALineText, ARuleId, AReason, Hash, LineCommentStart(ALineText), Result) then Exit;
+  if (Length(Existing) > 1) and InsertIntoSegmented(ALineText, ARuleId, AReason, Hash, LineCommentStart(ALineText), AReplaceReason, Result) then Exit;
 
   if Length(Existing) = 0 then
   begin
@@ -1437,7 +1441,8 @@ begin
     human who did re-read the code writes one. Dropping rather than keeping is
     the loud direction. The stamp belongs to the whole marker, so a neighbour
     entry on the same line loses it too; that is also the loud direction. }
-  if Refreshed then Reason:= StripReviewStamp(Reason);
+  if AReplaceReason then Reason:= Trim(AReason)
+  else if Refreshed then Reason:= StripReviewStamp(Reason);
   if Trim(Reason) <> '' then Body:= Body + ' ' + REVIEW_REASON_SEP + ' ' + Trim(Reason);
 
   CStart := LineCommentStart(ALineText);

@@ -32,6 +32,12 @@ resolver 1.28.0 -> 1.29.0-alpha.
   restricts its transitive-caller CTE to container kinds (was quadratic on large indexes).
 - Hover: the 5 s cap covers the whole card, facts + `Set by` (lane HOVERCACHE): check-init init orders and interface
   answers are cached per index version in LSP / `serve`; on the drag-lint index the hover median is ~4.9 s (was 5.7 s).
+- `allow --reason "<text>"` (INT14, for SELF-LOOPZERO's re-stamps): the text REPLACES the marker's reason, so a
+  reviewer who re-read the code writes `--reason "REVIEWED <yyyy-mm-dd> <why>"` and the stamp survives the re-hash;
+  it also re-stamps a marker whose hash is still current. Without `--reason` a re-hash still drops the stamp (L3).
+- `lint --fix` for `collapsible-if` wrote `end;;` when the inner body was a `begin..end` block (seen on the plugin
+  source by SELF-LOOPZERO): a multi-line template fix ending in `;` now absorbs the source's own `;` after the span.
+  Autofix fixture `collapsible-if/begin_end_body`.
 - `allow --apply` on a wrapped statement whose `dl:ok` marker sat on a continuation line (a superseded marker) moved
   the marker to the anchor line with an EMPTY reason, so the reviewer's text vanished silently (INT14 tail). The
   reason now moves with it; its `REVIEWED <date>` stamp is dropped with the same note a stale re-hash prints (a

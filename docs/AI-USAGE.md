@@ -43,7 +43,7 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 | Which database covers this file? | `drag-lint resolve-dbs --in <U.pas>` |
 | What is wrong with this file? | `drag-lint lint <U.pas>` |
 | ...with the whole project? | `drag-lint lint-all --db <db>` (`--library-db <lib>|none` names the library; a missing file refuses) |
-| Record that a finding was reviewed | `drag-lint allow <U.pas> --fix-line <L> --fix-rule <id> --apply` |
+| Record that a finding was reviewed | `drag-lint allow <U.pas> --fix-line <L> --fix-rule <id> --apply` (re-stamp after re-reading: add `--reason "REVIEWED <yyyy-mm-dd> <why>"`) |
 | Repair what the linter can repair | `drag-lint lint-all --db <db> --fix` (preview), then `--fix --apply` |
 
 > **A git worktree is a different project, on purpose.** The manifest keys on the
