@@ -322,7 +322,7 @@ const
   /// tests\autotest\run_help_env_table.ps1: every quoted 'DRAGLINT_*' literal
   /// under src\ must be a Name here and --help must print every Name. A new
   /// variable is added HERE in the same change, or that guard fails.</remarks>
-  ENV_VARS_HELP: array[0..81] of TEnvVarHelp = (
+  ENV_VARS_HELP: array[0..83] of TEnvVarHelp = (
     (Name: 'DRAGLINT_BUSY_TIMEOUT_MS';                Purpose: 'writer busy timeout in ms (overrides the built-in default; a non-negative integer)'),
     (Name: 'DRAGLINT_CHARTS_ALLOW_LIVE_DB';           Purpose: 'charts: lets CloneDb accept a non-clone (live) database'),
     (Name: 'DRAGLINT_CHARTS_DIR';                     Purpose: 'charts: folder of the charts scripts'),
@@ -373,6 +373,7 @@ const
     (Name: 'DRAGLINT_RULE_CACHE';                     Purpose: '0 disables the lint rule cache'),
     (Name: 'DRAGLINT_RULE_CACHE_DIR';                 Purpose: 'folder of the lint rule cache'),
     (Name: 'DRAGLINT_RULE_CACHE_WARM';                Purpose: 'rule-cache warm mode when --rule-cache-warm is not given'),
+    (Name: 'DRAGLINT_SCOPED_LOCAL_NAMES';             Purpose: '1|on|yes|true keeps local / parameter names in the scoped resolve pass (the scope before 1.52.1; A/B)'),
     (Name: 'DRAGLINT_SCOPED_RESOLVE_ADDITIONS';       Purpose: 'scoped-resolve escape hatch (unset = widened; an unknown value = off)'),
     (Name: 'DRAGLINT_SCOPED_RESOLVE_REMOVALS';        Purpose: 'scoped-resolve escape hatch (unset = widened; an unknown value = off)'),
     (Name: 'DRAGLINT_STAGE_HEARTBEAT_MS';             Purpose: 'test hook: stage heartbeat period in ms'),
@@ -394,6 +395,7 @@ const
     (Name: 'DRAGLINT_TEST_RESOLVE_DELAY_MS';          Purpose: 'test hook: delay in the resolve pass'),
     (Name: 'DRAGLINT_TEST_SCRATCH_PID';               Purpose: 'test hook: scratch-folder owner pid'),
     (Name: 'DRAGLINT_TEST_STORE_CLOSE_GRACE_MS';      Purpose: 'test hook: store-close grace period'),
+    (Name: 'DRAGLINT_TEST_SCOPE_NO_NAMES';            Purpose: 'test hook: the scoped resolve pass re-resolves the changed files only (a wrong scope)'),
     (Name: 'DRAGLINT_TEST_STREAM_COUNT_DELAY_MS';     Purpose: 'test hook: delay in the stream count'),
     (Name: 'DRAGLINT_TEST_WARM_DELAY_MS';             Purpose: 'test hook: delay in the rule-cache warm'),
     (Name: 'DRAGLINT_TEST_WARM_HOLD_MS';              Purpose: 'test hook: hold in the rule-cache warm'),

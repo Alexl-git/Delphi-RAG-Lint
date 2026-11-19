@@ -363,6 +363,8 @@ type
                         every name whose candidate set may have changed. Removed
                         names are read out of the database in OpenFileTx before
                         the delete; added names are collected in UpsertSymbol.
+                        Locals and parameters go to FScopeLocalNames instead
+                        (1.52.1 INCR18).
         FScopeTypes  -- the same, restricted to TYPE-declaring kinds, kept as two
                         sets so the pass can prove no type's candidate set moved.
         FScopeWhole  -- latch: this instance did something that cannot be scoped
@@ -375,6 +377,20 @@ type
         and only the indexing path that wrote through THIS instance is scoped. }
       FScopeFiles            : TDictionary<Int64 , Boolean>;
       FScopeNames            : TDictionary<string, Boolean>;
+      { 1.52.1 INCR18 (GitHub #18): the names of the LOCALS and PARAMETERS this run removed or
+        added, kept apart from FScopeNames. A local_var / param is reached only through the
+        lexical chain of the ref's enclosing routine (TCallResolver.ChildrenOf), so its name can
+        change the answer of a ref only inside its own file -- which FScopeFiles already
+        re-resolves. MaterializeResolveScope leaves these names out of the name scope, unless a
+        changed file hosts or is an include (FScopeIncludeTouched): a routine body split over an
+        include is the one shape in which a local reaches a ref of another file. Before this
+        they were ordinary scope names, and `I`, `Result`-like names pulled the refs of a third
+        of the project into a one-file pass. }
+      FScopeLocalNames       : TDictionary<string, Boolean>;
+      { A file this run removed or rewrote hosted an include, or was one, BEFORE the write
+        (NoteScopeRemoval reads it while the rows still exist). The state AFTER the write is
+        read by MaterializeResolveScope. Either one keeps FScopeLocalNames in the name scope. }
+      FScopeIncludeTouched   : Boolean;
       FScopeTypesBefore      : TDictionary<string, Boolean>;
       { The ancestor NAMES of every type declared in a file this run removed or
         rewrote, captured BEFORE the delete because that is the only moment the
@@ -5400,6 +5416,7 @@ begin
     nothing", which ScopedResolveIsSound reads as "cannot scope". }
   FScopeFiles      := TDictionary<Int64 , Boolean>.Create;
   FScopeNames      := TDictionary<string, Boolean>.Create;
+  FScopeLocalNames := TDictionary<string, Boolean>.Create;
   FScopeTypesBefore:= TDictionary<string, Boolean>.Create;
   FScopeTypeAncestors:= TDictionary<string, TArray<string>>.Create;
   FScopeTypesAfter := TDictionary<string, Boolean>.Create;
@@ -6976,6 +6993,7 @@ destructor TSQLiteSymbolStore.Destroy;
 begin
   FScopeFiles.Free;
   FScopeNames.Free;
+  FScopeLocalNames.Free;
   FScopeTypesBefore.Free;
   FScopeTypeAncestors.Free;
   FScopeTypesAfter.Free;
@@ -9389,7 +9407,9 @@ begin
     var LcName: string:= LowerCase(ASymbol.Name);
     if LcName <> '' then
     begin
-      FScopeNames.AddOrSetValue(LcName, True);
+      { 1.52.1 INCR18: a local / parameter name goes to its own set -- see FScopeLocalNames. }
+      if ASymbol.Kind in [skLocalVar, skParam] then FScopeLocalNames.AddOrSetValue(LcName, True)
+      else FScopeNames.AddOrSetValue(LcName, True);
       if IsTypeDeclaringKind(ASymbol.Kind.ToText) then FScopeTypesAfter.AddOrSetValue(LcName, True);
     end;
   end;
@@ -9574,6 +9594,31 @@ begin
            SameText(AKindText, 'enum'     ) or SameText(AKindText, 'form'     );
 end;
 
+{ 1.52.1 INCR18 (GitHub #18): the stored kind text of a symbol only its own routine can see --
+  UpsertSymbol's [skLocalVar, skParam], spelled as the kind column. Two spellings of one rule:
+  a kind added there must be added here. See FScopeLocalNames. }
+function IsLocalScopedKind(const AKindText: string): Boolean;
+begin
+  Result:= SameText(AKindText, 'local_var') or SameText(AKindText, 'param');
+end;
+
+{ 1.52.1 INCR18: DRAGLINT_SCOPED_LOCAL_NAMES = 1 / on / yes / true puts the local / parameter
+  names back into the scoped pass's name scope (the scope before 1.52.1): a one-run answer to
+  "is leaving them out wrong?". Unset or anything else = they are left out. }
+function ScopedLocalNamesForced: Boolean;
+begin
+  Result:= MatchText(Trim(GetEnvironmentVariable('DRAGLINT_SCOPED_LOCAL_NAMES')), ['1', 'on', 'yes', 'true']);
+end;
+
+{ TEST SEAM (1.52.1 INCR18): DRAGLINT_TEST_SCOPE_NO_NAMES = 1 materialises NO names at all, so
+  the scoped pass re-resolves the changed files only -- a deliberately WRONG scope. It exists so
+  tests\autotest\run_v1521_INCR18.ps1 can prove index_db_diff sees a lost edge (its positive
+  control). Never a shipping value. }
+function TestScopeNoNames: Boolean;
+begin
+  Result:= GetEnvironmentVariable('DRAGLINT_TEST_SCOPE_NO_NAMES') = '1';
+end;
+
 { SOUNDNESS OF THE SCOPED CALL-TARGET PASS.
 
   A call edge is a function of three things: the ref's own row, the scope of the
@@ -9647,6 +9692,21 @@ end;
   5. ANYTHING THAT DELETES ROWS OUTSIDE OpenFileTx -- ClearAllFiles, a prune, an
      eviction -- sets FScopeWhole and ends the discussion. Those paths remove
      symbols without ever passing their names through here.
+
+  6. LOCAL AND PARAMETER NAMES ARE NOT SCOPE NAMES (1.52.1 INCR18, GitHub #18).
+     Points 2 and 3 speak of "a symbol the file declares"; for a local_var or a
+     param that set is wider than what any ref outside the file can reach. The
+     resolver admits those two kinds only through the lexical chain of the ref's
+     enclosing routine (ChildrenOf), and no name-keyed map it builds holds them,
+     so a local's name can move the answer of a ref only in its own file --
+     which point 1 already re-resolves. They are collected apart
+     (FScopeLocalNames) and left out of the name scope, EXCEPT when a changed
+     file hosts or is an include: a routine body split over an include puts a
+     local and a ref to it in two files. Measured motive: a leaf unit's 23
+     local / parameter names pulled 6,285 refs of 177 files into a one-file pass
+     (calls stage 48.7 s; 3.5 s without them). DRAGLINT_SCOPED_LOCAL_NAMES=1
+     restores the old scope for an A/B; tests\autotest\run_v1521_INCR18.ps1
+     holds the equality proof and its positive control.
 
   The default is the unscoped pass: an instance that recorded no writes cannot
   know what changed, so it must assume everything did. }
@@ -10030,11 +10090,15 @@ var
   QIns: TFDQuery;
   Fid : Int64   ;
   Nm  : string  ;
+  KeepLocals: Boolean;
 begin
+  KeepLocals:= False;
   FConn.ExecSQL('DROP TABLE IF EXISTS temp.dl_scope_files');
   FConn.ExecSQL('DROP TABLE IF EXISTS temp.dl_scope_names');
+  FConn.ExecSQL('DROP TABLE IF EXISTS temp.dl_scope_refs');
   FConn.ExecSQL('CREATE TEMP TABLE dl_scope_files (f INTEGER PRIMARY KEY)');
   FConn.ExecSQL('CREATE TEMP TABLE dl_scope_names (n TEXT COLLATE NOCASE PRIMARY KEY)');
+  FConn.ExecSQL('CREATE TEMP TABLE dl_scope_refs (r INTEGER PRIMARY KEY)');
   QIns:= TFDQuery.Create(nil);
   try
     QIns.Connection:= FConn;
@@ -10052,11 +10116,40 @@ begin
       QIns.SQL.Text:= 'INSERT OR IGNORE INTO temp.dl_scope_names(n) VALUES (:n)';
       QIns.ParamByName('n').DataType:= ftString;
       QIns.Prepare;
-      for Nm in FScopeNames.Keys do
+      { 1.52.1 INCR18 (GitHub #18): local / parameter names stay OUT of the name scope unless a
+        changed file hosts or is an include -- before the write (FScopeIncludeTouched) or now --
+        or the DRAGLINT_SCOPED_LOCAL_NAMES hatch asks for the old scope. The argument is on
+        FScopeLocalNames; the proof is tests\autotest\run_v1521_INCR18.ps1 (index_db_diff of the
+        scoped pass against the whole-database pass and a full reindex, 0 rows). }
+      KeepLocals:= ScopedLocalNamesForced or FScopeIncludeTouched or
+        (FConn.ExecSQLScalar(
+           'SELECT count(*) FROM (SELECT 1 FROM file_includes WHERE file_id IN (SELECT f FROM temp.dl_scope_files) ' +
+           'UNION ALL SELECT 1 FROM file_includes fi JOIN files h ON LOWER(h.path) = LOWER(fi.inc_path) ' +
+           'WHERE h.id IN (SELECT f FROM temp.dl_scope_files) LIMIT 1)') > 0);
+      if not TestScopeNoNames then
       begin
-        QIns.ParamByName('n').AsWideString:= Nm;
-        QIns.ExecSQL;
+        for Nm in FScopeNames.Keys do
+        begin
+          QIns.ParamByName('n').AsWideString:= Nm;
+          QIns.ExecSQL;
+        end;
+        if KeepLocals then
+          for Nm in FScopeLocalNames.Keys do
+          begin
+            QIns.ParamByName('n').AsWideString:= Nm;
+            QIns.ExecSQL;
+          end;
       end;
+      { 1.52.1 INCR18 (#18 cause 3): the scoped ref ids, selected ONCE. Every stream of the pass
+        used to re-evaluate the file-or-name predicate inside its own universe, and SQLite then
+        drove from the UNIVERSE (every ref named like any enum value, any routine, ...) and
+        filtered by scope -- whole-database work for a one-file scope. The set is the same: the
+        pass inserts and deletes no refs row and never writes file_id or name_text, so the ids
+        selected here are exactly the rows the predicate selects at every later use. }
+      FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_scope_refs(r) SELECT refs.id FROM refs ' +
+                    'WHERE refs.file_id IN (SELECT f FROM temp.dl_scope_files)');
+      FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_scope_refs(r) SELECT refs.id FROM refs ' +
+                    'WHERE refs.name_text COLLATE NOCASE IN (SELECT n FROM temp.dl_scope_names)');
       FConn.Commit;
     except
       FConn.Rollback;
@@ -10065,8 +10158,17 @@ begin
   finally
     QIns.Free;
   end;
-  Result:= 'refs.file_id IN (SELECT f FROM temp.dl_scope_files)' +
-           ' OR refs.name_text COLLATE NOCASE IN (SELECT n FROM temp.dl_scope_names)';
+  if TestScopeNoNames then
+    ResolveLog('calls      ... TEST SEAM DRAGLINT_TEST_SCOPE_NO_NAMES: no names in scope, changed files only (a WRONG scope)')
+  else if KeepLocals and (FScopeLocalNames.Count > 0) then
+    ResolveLog(Format('calls      ... %d local / parameter name(s) kept in the name scope (%s)',
+                      [FScopeLocalNames.Count,
+                       if ScopedLocalNamesForced then 'DRAGLINT_SCOPED_LOCAL_NAMES is set'
+                       else 'a changed file hosts or is an include']))
+  else if FScopeLocalNames.Count > 0 then
+    ResolveLog(Format('calls      ... %d local / parameter name(s) left out of the name scope (they bind inside their own file)',
+                      [FScopeLocalNames.Count]));
+  Result:= 'refs.id IN (SELECT r FROM temp.dl_scope_refs)';
 end;
 
 { Back to the constructor's state. -1 on the two size fields re-reads the corpus
@@ -10076,6 +10178,8 @@ procedure TSQLiteSymbolStore.ResetResolveScope;
 begin
   FScopeFiles        .Clear;
   FScopeNames        .Clear;
+  FScopeLocalNames   .Clear;
+  FScopeIncludeTouched:= False;
   FScopeTypesBefore  .Clear;
   FScopeTypeAncestors.Clear;
   FScopeTypesAfter   .Clear;
@@ -10139,6 +10243,7 @@ begin
                             [FScopeFiles.Count, FScopeMaxFiles]);
     FScopeFiles      .Clear;
     FScopeNames      .Clear;
+    FScopeLocalNames .Clear;
     FScopeTypesBefore.Clear;
     FScopeTypeAncestors.Clear;
     FScopeTypesAfter .Clear;
@@ -10157,12 +10262,26 @@ begin
       var Lc:= LowerCase(FName.AsString);
       if Lc <> '' then
       begin
-        FScopeNames.AddOrSetValue(Lc, True);
+        { 1.52.1 INCR18: a local / parameter name goes to its own set -- see FScopeLocalNames. }
+        if IsLocalScopedKind(FKind.AsString) then FScopeLocalNames.AddOrSetValue(Lc, True)
+        else FScopeNames.AddOrSetValue(Lc, True);
         if IsTypeDeclaringKind(FKind.AsString) then FScopeTypesBefore.AddOrSetValue(Lc, True);
       end;
       Q.Next;
     end;
     Q.Close;
+    { 1.52.1 INCR18: did this file host an include, or was it one, BEFORE this write? Read here
+      because a removed file takes its file_includes rows with it. }
+    if not FScopeIncludeTouched then
+    begin
+      Q.SQL.Text:= 'SELECT 1 FROM file_includes WHERE file_id = :f ' +
+                   'UNION ALL SELECT 1 FROM file_includes fi JOIN files h ON LOWER(h.path) = LOWER(fi.inc_path) ' +
+                   'WHERE h.id = :f LIMIT 1';
+      Q.ParamByName('f').AsLargeInt:= AFileId;
+      Q.Open;
+      FScopeIncludeTouched:= not Q.Eof;
+      Q.Close;
+    end;
     { 150-RS2 (6): the OTHER ON DELETE SET NULL channel. A row anywhere whose receiver type
       (call_edges, member_accesses) or accessor (member_accesses) is a symbol of this file loses
       that id when the file is re-emitted, and its ref's NAME need not be one this file declares

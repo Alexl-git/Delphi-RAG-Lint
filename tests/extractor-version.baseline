@@ -1251,4 +1251,6 @@
 #   Superseded: 1.41.0-alpha|f2692a1010f977f7d45a99b9ac03c4f475e3a4ab615c8da91f4d3297fe90c243
 #   2026-11-18 v152 INT13 hash-only re-pin (rides the one 1.52 bump 464d590a8): dl:ok marker COMMENT text re-stamped in hashed units (commit 12d7450b1: Storage.SQLite, Index.CallResolver, Preprocess.Decls and 7 non-hashed units); no code change, no parse/symbol/ref/edge change.
 #   Superseded: 1.41.0-alpha|6592bae0fd934a01ff98bc72cfe1229febdd8f7eeb7c3e204e4c679829c8a69d
-1.41.0-alpha|74f83e97094a724ce2c307a3813421135cdcfe8261f21ff52119e09f70f16231
+#   2026-11-18 v1521 INCR18 hash-only re-pin (no bump; GitHub #18): Storage.SQLite UpsertSymbol files a local / parameter NAME under FScopeLocalNames instead of FScopeNames -- bookkeeping of the scoped resolve pass only; the symbols row it inserts and every parse are unchanged (proof: tests\autotest\run_v1521_INCR18.ps1, scoped incremental = full reindex, 0 diff rows).
+#   Superseded: 1.41.0-alpha|74f83e97094a724ce2c307a3813421135cdcfe8261f21ff52119e09f70f16231
+1.41.0-alpha|ae36c9aeb00997421274432cac0fd418b4bfadaddb081dc94c90c2c7b704ec52
