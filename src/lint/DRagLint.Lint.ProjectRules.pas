@@ -5330,7 +5330,7 @@ begin
                 { A finalization section or class constructor/destructor links the unit
                   as surely as an initialization one, but unlike it the finding is not
                   even informational: the unit is excluded outright (D3). }
-                if IsRegistrationUnit(U.UnitName) then Continue; { registration unit: linked for its init section (SLZ-RULE1) }
+                if (DepVerdict <> CInitDepDead) and IsRegistrationUnit(U.UnitName) then Continue; { registration unit: linked for its init section (SLZ-RULE1); a complete init-dependency verdict (Dead) wins over the allow-list }
                 if UnitHasSideEffectSection(U.UnitName, HasInit) and not HasInit then Continue;
                 var InitInfo: string:= if HasInit then InitSectionInfo(U.UnitName) else '';
                 UF.Severity:= if HasInit and (InitInfo <> '#') then 'info' else 'warning';
