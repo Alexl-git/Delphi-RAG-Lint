@@ -115,7 +115,8 @@ $d = Run @('doc-drift','--qname','uThing.IThing','--db',$db)
 Check 'M1 the class name in Used in units makes the block stale' ($d.Out -match 'ddFactsBlockStale') $d.Out.Trim()
 Check 'M1 and the move is offered as FIXABLE' ($d.Out -match '\[FIXABLE\]') $d.Out.Trim()
 
-$r = Run @('lint',$uThing,'--db',$db,'--project-rules','--rule','doc-drift','--fix','--apply')
+# 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+$r = Run @('lint',$uThing,'--db',$db,'--project-rules','--rule','doc-drift','--fix','--apply','--no-compile-gate')
 $blk     = BlockAbove $uThing 'IThing = interface'
 $units   = FactLine $blk 'Used in units:'
 $classes = FactLine $blk 'Used in classes:'
@@ -132,7 +133,8 @@ $d = Run @('doc-drift','--qname','uThing.IThing','--db',$db)
 Check 'M3 checker: the moved block is current' ($d.Out -notmatch 'ddFactsBlockStale') $d.Out.Trim()
 $h0 = (Get-FileHash $uThing -Algorithm MD5).Hash
 $null = Run @('document','--unit',$uThing,'--db',$db,'--apply')
-$null = Run @('lint',$uThing,'--db',$db,'--project-rules','--rule','doc-drift','--fix','--apply')
+# 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+$null = Run @('lint',$uThing,'--db',$db,'--project-rules','--rule','doc-drift','--fix','--apply','--no-compile-gate')
 $h1 = (Get-FileHash $uThing -Algorithm MD5).Hash
 Check 'M3 fixer: document --apply and a second --fix are byte-identical' ($h0 -eq $h1) "$h0 vs $h1"
 
@@ -159,7 +161,8 @@ $src = $src.Replace("Used in units: $units0</para>", "Used in units: $units0, uT
 Reindex
 $d = Run @('doc-drift','--qname','uThing.IThing','--db',$db)
 Check 'K3 CONTROL the stale uThing entry makes the block stale' ($d.Out -match 'ddFactsBlockStale') $d.Out.Trim()
-$null = Run @('lint',$uThing,'--db',$db,'--project-rules','--rule','doc-drift','--fix','--apply')
+# 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+$null = Run @('lint',$uThing,'--db',$db,'--project-rules','--rule','doc-drift','--fix','--apply','--no-compile-gate')
 $blk = BlockAbove $uThing 'IThing = interface'
 Check 'K3 the fix RAN: uThing is reaped from Used in units' ((FactLine $blk 'Used in units:') -notmatch '\buThing\b') $blk
 Check 'K3 Used in classes: TForeign survives the regeneration' ((FactLine $blk 'Used in classes:') -eq 'TForeign') $blk

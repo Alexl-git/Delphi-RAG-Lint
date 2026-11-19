@@ -37,10 +37,12 @@ try {
   # --- fix
   $dfm = Join-Path $fx 'uLogin.dfm'
   $want = Join-Path $PSScriptRoot "..\lint-project\$rule\expected\uLogin.fixed.dfm"
-  & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule $rule --fix --fix-rule $rule --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule $rule --fix --fix-rule $rule --apply --no-compile-gate --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'fix: result is byte-identical to expected\uLogin.fixed.dfm' (Test-G8BytesEqual $dfm $want)
   $before = [IO.File]::ReadAllBytes($dfm)
-  $txt = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule $rule --fix --fix-rule $rule --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-String)
+  # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+  $txt = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule $rule --fix --fix-rule $rule --apply --no-compile-gate --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check 'fix: second run leaves the bytes unchanged' ([Linq.Enumerable]::SequenceEqual([byte[]]$before, [byte[]][IO.File]::ReadAllBytes($dfm)))
   Check 'fix: reindexed fixed file no longer fires' ((Invoke-G8Index $Exe $fx $db) -eq 0 -and (Get-G8Findings $Exe $db $rule).Count -eq 0)
 } finally { [IO.Directory]::Delete($WorkDir, $true) }

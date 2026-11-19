@@ -53,7 +53,8 @@ end;
 end.
 '@
 $dA = New-Fixture 'a' $unitA
-& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db (Join-Path $dA 'x.sqlite') --fix --apply *> $null }
+# 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db (Join-Path $dA 'x.sqlite') --fix --apply --no-compile-gate *> $null }
 $outA = [IO.File]::ReadAllText((Join-Path $dA 'Fx.pas'))
 Check 'A positive control: the fix ran (unused local gone)' ($outA -notmatch 'Unused: Integer')
 Check 'A bookmark dl:bk7 survives the unused-local fix' ($outA -match 'dl:bk7')

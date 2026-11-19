@@ -44,7 +44,8 @@ function Fire-Count($C) {
 }
 function Apply-Fix($C) {
   Push-Location $C.Dir
-  try { & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $C.Db --fix --fix-rule unused-unit-in-uses --apply --no-backup *> (Join-Path $C.Dir '_fix.log') } } finally { Pop-Location }
+  # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $C.Db --fix --fix-rule unused-unit-in-uses --apply --no-compile-gate --no-backup *> (Join-Path $C.Dir '_fix.log') } } finally { Pop-Location }
 }
 
 $ascii = New-Case 'ascii' 'ae' 'ue'

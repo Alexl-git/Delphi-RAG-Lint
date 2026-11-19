@@ -41,8 +41,17 @@ function Set-Stub([string]$Path, [bool]$On) {
 function Get-ExeDefault([string]$Script) {
   $ast = [Management.Automation.Language.Parser]::ParseFile($Script, [ref]$null, [ref]$null)
   $p = $ast.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'Exe' } | Select-Object -First 1
-  if (-not $p -or -not $p.DefaultValue) { return $null }
-  return $p.DefaultValue.Extent.Text
+  if (-not $p) { return $null }
+  if ($p.DefaultValue -and ($p.DefaultValue.Extent.Text -notin @("''", '""'))) { return $p.DefaultValue.Extent.Text }
+  # 1.52 PS5RUNNERS moved the default into the body (`if (-not $Exe) { $Exe = <expr> }`, PS5 -File
+  # leaves $PSScriptRoot empty inside param()): read that assignment's right-hand side instead.
+  $as = $ast.Find({ param($n) $n -is [Management.Automation.Language.IfStatementAst] -and
+      $n.Clauses.Count -ge 1 -and ($n.Clauses[0].Item1.Extent.Text -match '^-not\s+\$Exe$') }, $false)
+  if (-not $as) { return $null }
+  $asg = $as.Clauses[0].Item2.Find({ param($n) $n -is [Management.Automation.Language.AssignmentStatementAst] -and
+      $n.Left.Extent.Text -eq '$Exe' }, $true)
+  if (-not $asg) { return $null }
+  return $asg.Right.Extent.Text
 }
 try {
   # ---- A: every cyclefix guard's -Exe default
