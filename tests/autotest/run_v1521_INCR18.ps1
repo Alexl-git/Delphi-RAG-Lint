@@ -463,7 +463,7 @@ print(hit)
       local = @{ File = 'src\cli\DRagLint.CLI.Hover.pas'; Find = '\bFmt\b'; Repl = 'FmtRenamed' }
       param = @{ File = 'src\cli\DRagLint.CLI.Hover.pas'; Find = 'function DoContrastSelfTest: Integer;'; Repl = 'function DoContrastSelfTest(AUnused: Integer = 0): Integer;'; Literal = $true }
       decl  = @{ File = 'src\analysis\DRagLint.Analysis.Cfg.pas'; Find = 'function IsValuedExit\('; Repl = 'function IsValuedExit(const AExtra: Integer; ' }
-      enum  = @{ File = 'src\analysis\DRagLint.Analysis.Cfg.pas'; Find = '(?m)^(\s+T\w+\s*=\s*\()(\w+)'; Repl = '${1}incr18Added, ${2}'; First = $true }
+      enum  = @{ File = 'src\refactor\DRagLint.Refactor.TextEdit.pas'; Find = 'TTextEditKind = (tekInsertInLine,'; Repl = 'TTextEditKind = (tekIncr18Added, tekInsertInLine,'; Literal = $true }
     }
     foreach ($name in $DlScenarios) {
       $e = $dlEdits[$name]
