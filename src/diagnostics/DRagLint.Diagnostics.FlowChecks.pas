@@ -1571,6 +1571,221 @@ begin
   end;
 end;
 
+{ The operator node type of an exprBinary / exprUnary ('kAnd', 'kNot', ...), or ''. }
+function WitnessOpType(const N: TTSNode): string;
+var
+  O: TTSNode;
+begin
+  Result := '';
+  if N.IsNull then Exit;
+  O := N.ChildByField('operator');
+  if not O.IsNull then Result := O.NodeType;
+end;
+
+{ Adds '+flag' for every bare identifier that is KNOWN TRUE when ACond evaluates
+  to (not ANegate): the conjuncts of an `and`, the negated disjuncts of an `or`
+  taken false, through `not` and parentheses. Anything else adds nothing. }
+procedure TrueFlagsOf(const ACond: TTSNode; const ASrc: TBytes; ANegate: Boolean; AAcc: TList<string>);
+var
+  E : TTSNode;
+  Op: string ;
+begin
+  E := ACond;
+  while (not E.IsNull) and (E.NodeType = 'exprParens') and (E.NamedChildCount = 1) do E := E.NamedChild(0);
+  if E.IsNull then Exit;
+  if E.NodeType = 'identifier' then
+  begin
+    if not ANegate then AAcc.Add('+' + LowerCase(Trim(NodeStr(E, ASrc))));
+  end
+  else if (E.NodeType = 'exprUnary') and (WitnessOpType(E) = 'kNot') then
+    TrueFlagsOf(E.ChildByField('operand'), ASrc, not ANegate, AAcc)
+  else if E.NodeType = 'exprBinary' then
+  begin
+    Op := WitnessOpType(E);
+    if ((Op = 'kAnd') and not ANegate) or ((Op = 'kOr') and ANegate) then
+    begin
+      TrueFlagsOf(E.ChildByField('lhs'), ASrc, ANegate, AAcc);
+      TrueFlagsOf(E.ChildByField('rhs'), ASrc, ANegate, AAcc);
+    end;
+  end;
+end;
+
+{ True when AStmt never falls through: `Exit`, `Exit(V)`, `Continue`, `Break`,
+  `raise`, or a begin..end / statement list whose LAST statement is one of those. }
+function IsDivertStmt(const AStmt: TTSNode; const ASrc: TBytes): Boolean;
+var
+  C: TTSNode;
+  I: Integer;
+  K: string ;
+begin
+  Result := False;
+  if AStmt.IsNull then Exit;
+  K := AStmt.NodeType;
+  if K = 'raise' then Exit(True);
+  if (K = 'block') or (K = 'statements') then
+  begin
+    for I := AStmt.NamedChildCount - 1 downto 0 do
+    begin
+      C := AStmt.NamedChild(I);
+      if (C.NodeType = 'comment') or (C.NodeType = 'kEnd') or (C.NodeType = 'kBegin') then Continue;
+      Exit(IsDivertStmt(C, ASrc));
+    end;
+    Exit;
+  end;
+  C := AStmt;
+  if (K = 'statement') and (C.NamedChildCount > 0) then C := C.NamedChild(0);
+  if C.NodeType = 'exprCall' then C := C.ChildByField('entity');
+  if C.IsNull or (C.NodeType <> 'identifier') then Exit;
+  K := LowerCase(Trim(NodeStr(C, ASrc)));
+  Result := (K = 'exit') or (K = 'continue') or (K = 'break');
+end;
+
+{ The positional cond / then / else children of an if, ifElse or exprIf
+  (exprIf exposes no fields -- see GuardToken). False when AIf is not one. }
+function IfArms(const AIf: TTSNode; out ACond, AThen, AElse: TTSNode): Boolean;
+var
+  I, CondIx, ThenIx, ElseIx: Integer;
+  K                        : string ;
+begin
+  ACond := Default(TTSNode);
+  AThen := Default(TTSNode);
+  AElse := Default(TTSNode);
+  K := AIf.NodeType;
+  Result := (K = 'if') or (K = 'ifElse') or (K = 'exprIf');
+  if not Result then Exit;
+  CondIx := -1;
+  ThenIx := -1;
+  ElseIx := -1;
+  for I := 0 to AIf.ChildCount - 1 do
+  begin
+    K := AIf.Child(I).NodeType;
+    if      K = 'kIf'   then CondIx := I + 1
+    else if K = 'kThen' then ThenIx := I + 1
+    else if K = 'kElse' then ElseIx := I + 1;
+  end;
+  if (CondIx >= 0) and (CondIx < AIf.ChildCount) then ACond := AIf.Child(CondIx);
+  if (ThenIx >= 0) and (ThenIx < AIf.ChildCount) then AThen := AIf.Child(ThenIx);
+  if (ElseIx >= 0) and (ElseIx < AIf.ChildCount) then AElse := AIf.Child(ElseIx);
+end;
+
+function NodeWithin(const AInner, AOuter: TTSNode): Boolean;
+begin
+  Result := (not AOuter.IsNull) and (AInner.StartByte >= AOuter.StartByte) and (AInner.EndByte <= AOuter.EndByte);
+end;
+
+{ 1.52.1 SLZ-RULE2 (self-LoopZero: 16 of 23 used-before-assignment findings).
+  The '+flag' tokens of every boolean flag that DOMINATES the read ANode as True,
+  beyond the bare `if F then` form CollectGuardTokens sees:
+
+    * `F and (.. X ..)`       -- the rhs of `and` runs only when the lhs is True;
+    * `(not F) or (.. X ..)`  -- the rhs of `or` runs only when the lhs is False;
+    * `if A and F then X`     -- every conjunct of a then-arm's condition, and the
+                                 negated disjuncts of an else-arm's;
+    * `if not F then Exit; X` -- an earlier statement of the same block or
+                                 statement list whose then-arm never falls through
+                                 (Exit / Continue / Break / raise).
+
+  Each is domination by construction, which is what clause 6 of
+  WitnessPairingProven needs (its header names this widening). The two operator
+  forms assume short-circuit evaluation, the Delphi default (B- : complete boolean evaluation off).
+
+  This is a RECOGNISER only, like WitnessFlagForRead: the tokens feed it, and a
+  finding is dropped only when WitnessPairingProven also proves the pairing.
+
+  ANode is the CFG ITEM (a statement or an if-condition), not the identifier, so
+  a read INSIDE the item (`if HasBest and (Best > 3)`) is judged per occurrence of
+  AVar under ANode: a token counts only when EVERY occurrence is guarded by it. }
+
+{ One step of the climb: the guards AParent puts on its child ACur. }
+procedure WitnessGuardStep(const AParent, ACur: TTSNode; const ASrc: TBytes; AAcc: TList<string>);
+var
+  Rhs               : TTSNode;
+  Cond, ThenA, ElseA: TTSNode;
+  Op                : string ;
+begin
+  if AParent.NodeType = 'exprBinary' then
+  begin
+    Rhs := AParent.ChildByField('rhs');
+    if Rhs.IsNull or not NodeWithin(ACur, Rhs) then Exit;
+    Op := WitnessOpType(AParent);
+    if      Op = 'kAnd' then TrueFlagsOf(AParent.ChildByField('lhs'), ASrc, False, AAcc)
+    else if Op = 'kOr'  then TrueFlagsOf(AParent.ChildByField('lhs'), ASrc, True , AAcc);
+  end
+  else if IfArms(AParent, Cond, ThenA, ElseA) then
+  begin
+    if      NodeWithin(ACur, ThenA) then TrueFlagsOf(Cond, ASrc, False, AAcc)
+    else if NodeWithin(ACur, ElseA) then TrueFlagsOf(Cond, ASrc, True , AAcc);
+  end;
+end;
+
+procedure CollectWitnessGuards(const ANode, ARoutine: TTSNode; const ASrc: TBytes; const AVar: string;
+  AAcc: TList<string>);
+var
+  Cur, Par, S       : TTSNode;
+  Cond, ThenA, ElseA: TTSNode;
+  I                 : Integer;
+  K                 : string ;
+  Inner, Mine       : TList<string>;
+  First             : Boolean;
+
+  { Every AVar identifier under N: its guards up to ANode, intersected into Inner. }
+  procedure Occurrences(const N: TTSNode);
+  var
+    J: Integer;
+    C: TTSNode;
+  begin
+    if N.IsNull then Exit;
+    if (N.NodeType = 'identifier') and SameText(Trim(NodeStr(N, ASrc)), AVar) then
+    begin
+      Mine.Clear;
+      C := N;
+      while (C.StartByte <> ANode.StartByte) or (C.EndByte <> ANode.EndByte) do
+      begin
+        if C.Parent.IsNull then Break;
+        WitnessGuardStep(C.Parent, C, ASrc, Mine);
+        C := C.Parent;
+      end;
+      if First then Inner.AddRange(Mine)
+      else
+        for J := Inner.Count - 1 downto 0 do
+          if Mine.IndexOf(Inner[J]) < 0 then Inner.Delete(J);
+      First := False;
+      Exit;
+    end;
+    for J := 0 to N.NamedChildCount - 1 do Occurrences(N.NamedChild(J));
+  end;
+
+begin
+  Inner := TList<string>.Create;
+  Mine  := TList<string>.Create;
+  try
+    First := True;
+    Occurrences(ANode);
+    AAcc.AddRange(Inner);
+  finally
+    Mine.Free;
+    Inner.Free;
+  end;
+  Cur := ANode;
+  while True do
+  begin
+    Par := Cur.Parent;
+    if Par.IsNull then Break;
+    K := Par.NodeType;
+    WitnessGuardStep(Par, Cur, ASrc, AAcc);
+    if (K = 'block') or (K = 'statements') then
+      for I := 0 to Par.ChildCount - 1 do
+      begin
+        S := Par.Child(I);
+        if S.StartByte >= Cur.StartByte then Break;
+        if IfArms(S, Cond, ThenA, ElseA) and (S.NodeType <> 'exprIf') and IsDivertStmt(ThenA, ASrc) then
+          TrueFlagsOf(Cond, ASrc, True, AAcc);
+      end;
+    if Par.StartByte = ARoutine.StartByte then Break;
+    Cur := Par;
+  end;
+end;
+
 { True only when the pairing WitnessFlagForRead RECOGNISED can also be PROVEN,
   which is the one condition under which the finding may be dropped entirely --
   the top row of the owner's ladder (2026-08-30).
@@ -1620,17 +1835,24 @@ var
     Hop    := 0;
     while (not Cur.IsNull) and (Hop < 64) do
     begin
-      if Cur.NodeType = 'block' then Exit(Cur);
+      { 1.52.1 SLZ-RULE2: a try body / finally / repeat body is a `statements`
+        node, not a `block`; stopping there pairs a flag set inside `try` with the
+        assignment beside it (Index.Manifest.pas:1741). }
+      if (Cur.NodeType = 'block') or (Cur.NodeType = 'statements') then Exit(Cur);
       if Cur.StartByte = ARoutine.StartByte then Break;
       Cur := Cur.Parent;
       Inc(Hop);
     end;
   end;
 
-  { CLAUSE 5's test: does ABlock contain `AName := ..` as a DIRECT statement?
+  { CLAUSE 5's test: does ABlock contain `AName := ..` as a DIRECT statement
+    BEFORE ASiteStart (the flag's `:= True`)?
     Direct is the point -- an assignment buried inside a further `if` in the same
-    block is conditional, so it does not pair with an unconditional flag set. }
-  function BlockDirectlyAssigns(const ABlock: TTSNode; const AName: string): Boolean;
+    block is conditional, so it does not pair with an unconditional flag set.
+    Before is the 1.52.1 tightening that came with accepting `statements`: in
+    `HaveX := True; X := F()` an exception from F leaves the flag True and X
+    unassigned for an enclosing handler. }
+  function BlockDirectlyAssigns(const ABlock: TTSNode; const AName: string; ASiteStart: Cardinal): Boolean;
   var
     I  : Integer;
     C  : TTSNode;
@@ -1641,11 +1863,24 @@ var
     for I := 0 to ABlock.ChildCount - 1 do
     begin
       C := ABlock.Child(I);
+      if C.StartByte >= ASiteStart then Break;
       if C.NodeType <> 'assignment' then Continue;
       Lhs := C.ChildByField('lhs');
       if (not Lhs.IsNull) and (Lhs.NodeType = 'identifier')
          and SameText(Trim(NodeStr(Lhs, ASrc)), AName) then Exit(True);
     end;
+  end;
+
+  { 1.52.1 SLZ-RULE2: a node of a condition's boolean skeleton -- parentheses, `not`, `and`, `or`. }
+  function IsBoolSkeleton(const N: TTSNode): Boolean;
+  var
+    Op: string;
+  begin
+    Op := WitnessOpType(N);
+    if N.NodeType = 'exprParens' then Result := N.NamedChildCount = 1
+    else if N.NodeType = 'exprUnary' then Result := Op = 'kNot'
+    else if N.NodeType = 'exprBinary' then Result := (Op = 'kAnd') or (Op = 'kOr')
+    else Result := False;
   end;
 
   { Any mention of the flag at all, used for the nested-routine clause. }
@@ -1713,7 +1948,7 @@ var
               { CLAUSE 5: this site must sit beside an assignment of the
                 variable. ONE stray site breaks the pairing however many
                 well-formed ones surround it. }
-              if not BlockDirectlyAssigns(EnclosingBlock(Par), AVar) then Ok := False;
+              if not BlockDirectlyAssigns(EnclosingBlock(Par), AVar, Par.StartByte) then Ok := False;
             end
             else if not SameText(RhsT, 'False') then
               Ok := False;   { counter-example 2: `HaveX := HaveX or Retry` }
@@ -1731,7 +1966,21 @@ var
           place. Everything else -- a call argument (which could define it
           through a var parameter), a compound expression, a with, a case --
           is refused rather than analysed. Over-strict here costs a silence;
-          under-strict costs a hidden true positive. }
+          under-strict costs a hidden true positive.
+
+          1.52.1 SLZ-RULE2: "alone" widened to "inside the condition's boolean
+          skeleton" -- operands of and / or / not, in parentheses -- which is
+          where CollectWitnessGuards finds its conjunct, disjunct and early-exit
+          guards (`if HasBest and (..)`, `if not HaveX then Exit`). Every one of
+          those positions is a pure READ: none can write the flag. A call
+          argument, a comparison or an `@` still refuses. }
+        while (not Par.IsNull) and IsBoolSkeleton(Par) do
+          Par := Par.Parent;
+        if Par.IsNull then
+        begin
+          Ok := False;
+          Exit;
+        end;
         PT := Par.NodeType;
         if (PT <> 'if') and (PT <> 'exprIf') and (PT <> 'ifElse') then Ok := False;
       end;
@@ -2005,7 +2254,13 @@ end;
   TBinaryReader ...) takes its FIRST argument by `var Buffer` and FILLS it. True
   when the item contains such a call whose first argument is an element of
   AName (`AName[...]`). Closed member list, first argument only; kept out of the
-  extraction-hashed Lattices unit on purpose. (MStreams.pas:574.) }
+  extraction-hashed Lattices unit on purpose. (MStreams.pas:574.)
+
+  1.52.1 SLZ-RULE2: the same for a FREE call to a Win32 API whose untyped
+  `var Buffer` it fills -- ReadFile / ReadFileEx at argument 1
+  (`ReadFile(Pipe, Buf[0], SizeOf(Buf) - 1, Got, nil)`, GitSince.pas:134). The
+  library's parameter modes do not reach these external declarations, so the
+  list is closed and by name; WriteFile (`const Buffer`) is deliberately absent. }
 function ReadIsStreamFillArg(const AItem: TTSNode; const AName: string;
   const ASrc: TBytes): Boolean;
 var
@@ -2026,6 +2281,17 @@ var
         M := LowerCase(Trim(NodeStr(Ent.ChildByField('rhs'), ASrc)));
         A0 := TRegEx.Replace(LowerCase(NodeStr(Args.NamedChild(0), ASrc)), '\s+', '');
         if ((M = 'read') or (M = 'readbuffer')) and A0.StartsWith(LName + '[') then
+        begin
+          Found := True;
+          Exit;
+        end;
+      end
+      else if (not Ent.IsNull) and (Ent.NodeType = 'identifier') and (not Args.IsNull)
+              and (Args.NamedChildCount > 1) then
+      begin
+        M := LowerCase(Trim(NodeStr(Ent, ASrc)));
+        A0 := TRegEx.Replace(LowerCase(NodeStr(Args.NamedChild(1), ASrc)), '\s+', '');
+        if ((M = 'readfile') or (M = 'readfileex')) and ((A0 = LName) or A0.StartsWith(LName + '[')) then
         begin
           Found := True;
           Exit;
@@ -4074,11 +4340,16 @@ var
                     var Guards: TList<string> := TList<string>.Create;
                     try
                       CollectGuardTokens(It.Node, Cfg.RoutineNode, PF.Src, Guards);
+                      if (Guards.Count > 0)
+                         and AssignedUnderSameGuard(Cfg.RoutineNode, Cfg.RoutineNode,
+                               PF.Src, V.Name, Integer(It.Node.StartByte), Guards) then
+                        Continue;
+                      { 1.52.1 SLZ-RULE2: the witness path also sees conjunct,
+                        disjunct and early-exit guards. Added AFTER the same-guard
+                        test, which keeps its own (bare-if) token set unchanged. }
+                      CollectWitnessGuards(It.Node, Cfg.RoutineNode, PF.Src, V.Name, Guards);
                       if Guards.Count > 0 then
                       begin
-                        if AssignedUnderSameGuard(Cfg.RoutineNode, Cfg.RoutineNode,
-                             PF.Src, V.Name, Integer(It.Node.StartByte), Guards) then
-                          Continue;
                         { WITNESS-FLAG TIERING -- strictly weaker than the
                           suppression above, and it never suppresses. See
                           WitnessFlagForRead for the three counter-examples that
