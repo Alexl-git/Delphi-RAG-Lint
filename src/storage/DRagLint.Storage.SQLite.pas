@@ -1095,6 +1095,15 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveSectionEnclosing: Int64;
+      /// <summary>INITDEP (1.52.1): rebuilds init_deps whole -- one row per (unit, other unit its
+      /// initialization section reaches), following same-file routines the section calls; an
+      /// unbound reached ref that is not a System intrinsic writes the '?' row -- and stamps
+      /// INIT_DEPS_META_KEY.</summary>
+      /// <returns>The number of rows written.</returns>
+      /// <remarks>Runs inside the calls pass's transaction, after every binding stream
+      /// (it reads refs.symbol_id and enclosing_symbol_id). Spec
+      /// docs\superpowers\specs\2026-11-19-init-dependency-facts-design.md.</remarks>
+      function RebuildInitDeps: Int64;
       /// <summary>B9 F1 (resolver 1.20.0-alpha): the calls stage's LAST stream.
       /// Writes one ref_types row per read / write / member-access / call ref
       /// TCallResolver.RefStaticType can type.</summary>
@@ -1859,6 +1868,12 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetMetaValue(const AKey: string): string                                                                     ;
+      /// <summary>Implements <see cref="DRagLint.Core.Interfaces.ISymbolStore.GetInitDeps"/>:
+      /// the init_deps rows of one unit symbol.</summary>
+      /// <param name="AUnitSymbolId">The unit's skUnit symbol id in this store.</param>
+      /// <param name="ATargets">Out: distinct target unit names; '?' = an unbound reached ref.</param>
+      /// <returns>False when the store has no INIT_DEPS_META_KEY stamp (no facts).</returns>
+      function GetInitDeps(const AUnitSymbolId: Int64; out ATargets: TArray<string>): Boolean;
       /// <summary><!-- drag-lint:auto sum -->INBOX 2.3: generic schema_meta writer.
       /// schema_meta is created by the schema DDL, so an absent table here means a
       /// read-only or non-index DB -- swallowed for the same reason the reader swallows
@@ -8282,6 +8297,15 @@ begin
   TryExec('CREATE INDEX IF NOT EXISTS idx_attributes_file   ON attributes(file_id, ordinal)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_attributes_symbol ON attributes(symbol_id)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_attributes_name   ON attributes(attr_name COLLATE NOCASE)');
+  { 1.52.1 INITDEP: init-dependency facts -- one row per (unit, other unit its initialization section
+    reaches); target_unit '?' marks an unbound reached ref (facts incomplete). Rebuilt whole by the calls
+    pass (RebuildInitDeps), stamped INIT_DEPS_META_KEY. ADDITIVE, the attributes precedent: no
+    SCHEMA_VERSION bump; filled by the re-parse of the 1.52.1 extractor bump. }
+  TryExec('CREATE TABLE IF NOT EXISTS init_deps (' +
+          '  unit_symbol_id INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,' +
+          '  target_unit    TEXT    NOT NULL,' +
+          '  via_name       TEXT    NOT NULL,' +
+          '  PRIMARY KEY (unit_symbol_id, target_unit))');
   { v0.85 PERF -- the three FK child columns that had no index.
 
     `PRAGMA foreign_keys = ON` is set on the write connection, so deleting a
@@ -9300,6 +9324,45 @@ begin
     Q.Free;
   end;
 end; // function
+
+const
+  { INITDEP: schema_meta key + format of the init_deps facts; a store without it has NO facts. }
+  INIT_DEPS_META_KEY = 'init_deps_format';
+  INIT_DEPS_FORMAT   = '1';
+  { Names the index never binds (System intrinsics, basic types, literals): an unbound ref with one of
+    them is not "unknown activity" and does not make the facts incomplete. Lowercase. }
+  INIT_DEPS_INTRINSICS_SQL =
+    '(''true'',''false'',''nil'',''self'',''result'',''exit'',''break'',''continue'',''assigned'',' +
+    '''sizeof'',''length'',''setlength'',''high'',''low'',''inc'',''dec'',''ord'',''chr'',''succ'',''pred'',' +
+    '''typeinfo'',''default'',''assert'',''fillchar'',''move'',''copy'',''pos'',''getmem'',''freemem'',' +
+    '''new'',''dispose'',''include'',''exclude'',''randomize'',''halt'',''abs'',''round'',''trunc'',''odd'',' +
+    '''hi'',''lo'',''swap'',''paramstr'',''paramcount'',''integer'',''cardinal'',''boolean'',''byte'',''word'',' +
+    '''longint'',''longword'',''shortint'',''smallint'',''int64'',''uint64'',''nativeint'',''nativeuint'',' +
+    '''char'',''ansichar'',''widechar'',''string'',''ansistring'',''widestring'',''unicodestring'',' +
+    '''pointer'',''pchar'',''double'',''single'',''extended'',''currency'',''dword'')';
+
+function TSQLiteSymbolStore.GetInitDeps(const AUnitSymbolId: Int64; out ATargets: TArray<string>): Boolean;
+var
+  Q: TFDQuery;
+begin
+  ATargets:= nil;
+  Result  := GetMetaValue(INIT_DEPS_META_KEY) = INIT_DEPS_FORMAT;
+  if not Result then Exit;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT target_unit FROM init_deps WHERE unit_symbol_id = :u';
+    Q.ParamByName('u').AsLargeInt:= AUnitSymbolId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      ATargets:= ATargets + [Q.Fields[0].AsString];
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
 
 // INBOX 2.3: generic schema_meta writer. schema_meta is created by the schema
 // DDL, so an absent table here means a read-only or non-index DB -- swallowed
@@ -19554,6 +19617,33 @@ begin
   end;
 end;
 
+function TSQLiteSymbolStore.RebuildInitDeps: Int64;
+begin
+  FConn.ExecSQL('DELETE FROM init_deps');  // dl:ok sql-update-delete-without-where@ae00 -- REVIEWED 2026-11-19 INITDEP: the table is rebuilt WHOLE by this pass, in its transaction
+  { reach = the section, then every same-file routine a reached ref binds to (UNION dedupes, so a
+    recursive routine terminates); a reached ref bound to another file names that file's unit, an
+    unbound one that is not an intrinsic names '?'. }
+  Result:= FConn.ExecSQL(
+    'WITH RECURSIVE reach(unit_id, file_id, sym_id) AS (' +
+    '  SELECT u.id, u.file_id, s.id FROM symbols s JOIN symbols u ON u.id = s.parent_id' +
+    '   WHERE s.kind = ''initialization'' AND u.kind = ''unit''' +
+    '  UNION' +
+    '  SELECT reach.unit_id, reach.file_id, t.id FROM reach' +
+    '    JOIN refs r ON r.enclosing_symbol_id = reach.sym_id' +
+    '    JOIN symbols t ON t.id = r.symbol_id' +
+    '   WHERE t.file_id = reach.file_id' +
+    '     AND t.kind IN (''procedure'', ''function'', ''method'', ''constructor'', ''destructor''))' +
+    ' INSERT INTO init_deps (unit_symbol_id, target_unit, via_name)' +
+    ' SELECT reach.unit_id, COALESCE(tu.name, ''?''), MIN(r.name_text)' +
+    '   FROM reach JOIN refs r ON r.enclosing_symbol_id = reach.sym_id' +
+    '   LEFT JOIN symbols t  ON t.id = r.symbol_id' +
+    '   LEFT JOIN symbols tu ON tu.file_id = t.file_id AND tu.kind = ''unit''' +
+    '  WHERE (t.id IS NULL AND LOWER(r.name_text) NOT IN ' + INIT_DEPS_INTRINSICS_SQL + ')' +
+    '     OR (t.id IS NOT NULL AND t.file_id <> reach.file_id)' +
+    '  GROUP BY reach.unit_id, COALESCE(tu.name, ''?'')');
+  SetMetaValue(INIT_DEPS_META_KEY, INIT_DEPS_FORMAT);
+end;
+
 procedure TSQLiteSymbolStore.WidenDerivedScope(const AScopeWhere: string;
   out ATypesWhere, AReceiversWhere: string);
 const
@@ -20871,6 +20961,8 @@ begin
       var HostRows: Integer:= WriteRefHostBindings(Resolver.HostBindings);
       if HostRows > 0 then
         ResolveLog(Format('calls      include hosts: %d per-host binding row(s) written for refs in multi-host includes', [HostRows]));
+      { 1.52.1 INITDEP: after every binding stream -- it reads what they bound. }
+      ResolveLog(Format('calls      init-deps: %d (unit, reached unit) row(s) written', [RebuildInitDeps]));
       { INCR18 step 4: the last write of the pass is behind us -- read what moved, then stop watching. }
       if Scoped then
       begin
