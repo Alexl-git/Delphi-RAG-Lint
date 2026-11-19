@@ -31,6 +31,16 @@ $lib     = Join-Path $tmp 'lib.sqlite'
 $empty   = Join-Path $tmp 'empty.json'
 $noSrc   = Join-Path $tmp 'no-sources.json'
 [IO.File]::WriteAllText($empty, '{}')
+# SLZ-RULE1 2026-11-19: GetEnvironmentVariable is no longer a BUILT-IN source -- an env var
+# (and the manifest %VAR% expansion built on it) is set by the operator, not the attacker
+# (self-LoopZero: ~230 taint-path-traversal findings on drag-lint, all false). A project
+# whose environment IS attacker-controlled opts back in through its lint config; the main
+# run below does exactly that, so the walk's env-var coverage (uGlobal:25/28, uSelf:40,
+# trusted_args at uSelf:35) is unchanged, and the DEFAULT run proves the new contract.
+$envOpt  = Join-Path $tmp 'env-opt-in.json'
+$envRow  = @{ id = 'getenvironmentvariable'; name = 'GetEnvironmentVariable'; kind = 'call'; confidence = 'certain'
+              trusted_args = @("'APPDATA'", "'LOCALAPPDATA'", "'USERPROFILE'", "'TEMP'", "'TMP'") }
+[IO.File]::WriteAllText($envOpt, (@{ taint = @{ sources = @($envRow) } } | ConvertTo-Json -Depth 5))
 
 $fail = 0
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -103,7 +113,7 @@ try {
     Check 'mini-library rows inserted' ($n -eq '3') "fixture_rows.py said: $n"
   }
 
-  $f = TaintFindings (@('lint-all') + $common + @('--config', $empty))
+  $f = TaintFindings (@('lint-all') + $common + @('--config', $envOpt))
   $f | ForEach-Object { Write-Host ("  {0} {1}:{2} [{3}] {4}" -f $_.rule, (Split-Path $_.file_path -Leaf), $_.start_line, $_.severity, $_.message) }
 
   # ---- positives (rule, unit, line[, severity]) ----
@@ -161,6 +171,14 @@ try {
     $routines = @($d2[0].path | ForEach-Object { $_.routine })
     Check 'uDal2 path crosses ReadArg and RunArg' (($routines -contains 'uInput.ReadArg') -and ($routines -contains 'uDal.RunArg')) ($routines -join ' > ')
   }
+
+  # ---- SLZ-RULE1: DEFAULT config -- an env var is not a source ----
+  $d = TaintFindings (@('lint-all') + $common + @('--config', $empty))
+  Check 'default: no uSelf.pas:40 (GetEnvironmentVariable(''MY_CACHE'') is operator-set)' ((At $d 'taint-path-traversal' 'uSelf.pas' 40).Count -eq 0)
+  Check 'default: no uGlobal.pas:28 (TFileStream.Create(GetEnvironmentVariable(..)))' ((At $d 'taint-path-traversal' 'uGlobal.pas' 28).Count -eq 0)
+  Check 'default: no uGlobal.pas:25 (global written from an env var -> DeleteFile)' ((At $d 'taint-path-traversal' 'uGlobal.pas' 25).Count -eq 0)
+  Check 'default POSITIVE CONTROL: ParamStr -> CreateProcess still fires (uCmd.pas:18)' ((At $d 'taint-command-injection' 'uCmd.pas' 18).Count -eq 1)
+  Check 'default: total taint findings = 14 (17 minus the three env-var sinks)' ($d.Count -eq 14) "got $($d.Count)"
 
   # ---- lint <file> --db reports the same sink as lint-all ----
   $one = TaintFindings @('lint', (Join-Path $fx 'uDal2.pas'), '--db', $db, '--library-db', $lib, '--json', '--config', $empty)
