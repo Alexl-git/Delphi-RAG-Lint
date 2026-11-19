@@ -5,7 +5,7 @@ interface
 implementation
 
 uses
-  System.SysUtils;
+  System.SysUtils, System.Classes;
 
 procedure Basis(var S: string; const T: string);
 var
@@ -31,4 +31,16 @@ begin
   if S.IndexOf(',') = -1 then Exit;
 end;
 
+procedure ArrayShapes(const A: TArray<string>; var B: TBytes; const S: string;
+  L: TStringList);
+var
+  Units: TArray<string>;
+  R: TArray<string>;
+begin
+  R := Copy(A, 0, 2);
+  B := Copy(B, 0, Length(B));
+  Insert(S, Units, 0);
+  R := Copy(L.ToStringArray, 0, 3);
+  R := Copy(S.Split([',']), 0, 1);
+end;
 end.
