@@ -4541,6 +4541,24 @@ var
     ExportsOfUnit.Add(AUnitName, Result);
   end;
 
+  { SLZ-RULE1 2026-11-19: units that exist to REGISTER something (database drivers, DB
+    UI wait cursors) are linked for their initialization section, never for a symbol, so
+    "no symbol referenced" proves nothing. Self-LoopZero on drag-lint: all 13 FireDAC
+    findings were false. A fixed allow-list of unit-name prefixes, matched
+    case-insensitively on the dotted name (FireDAC.Stan.* / Phys.* driver links /
+    UI.* / VCLUI.* / DApt.*). It is the FALLBACK until the index carries the
+    initialization-section facts (lane INITDEP). An ordinary unit with an
+    initialization section is NOT on it and is still reported (INFO). }
+  function IsRegistrationUnit(const AUnitName: string): Boolean;
+  const
+    CPrefixes: array[0..7] of string = (
+      'FireDAC.Stan.', 'FireDAC.Phys.', 'FireDAC.UI.', 'FireDAC.VCLUI.', 'FireDAC.FMXUI.',
+      'FireDAC.DApt', 'FireDAC.Comp.UI', 'FireDAC.ConsoleUI.');
+  begin
+    Result:= False;
+    for var P in CPrefixes do
+      if StartsText(P, AUnitName) then Exit(True);
+  end;
   { Does the named unit have an `initialization` or `finalization` section, or a
     `class constructor` / `class destructor`? All three link the unit for a side
     effect, so a missing symbol reference proves nothing.
@@ -5120,17 +5138,16 @@ begin
                 { A finalization section or class constructor/destructor links the unit
                   as surely as an initialization one, but unlike it the finding is not
                   even informational: the unit is excluded outright (D3). }
+                if IsRegistrationUnit(U.UnitName) then Continue; { registration unit: linked for its init section (SLZ-RULE1) }
                 if UnitHasSideEffectSection(U.UnitName, HasInit) and not HasInit then Continue;
                 var InitInfo: string:= if HasInit then InitSectionInfo(U.UnitName) else '';
-                { SLZ-RULE1 2026-11-19: an initialization section that is not PROVEN idle
-                  ('#') links the unit for that section -- FireDAC.Stan.Def / Phys.* driver
-                  registration is the canonical case, 13 of 13 such self-LoopZero findings
-                  were false. It is no longer an INFO "VERIFY BEFORE REMOVING" finding: it
-                  is not a finding. Guard: tests\autotest\run_unused_unit_init_section.ps1. }
-                if HasInit and (InitInfo <> '#') then Continue;
-                UF.Severity:= 'warning';
-                UF.Message:= if InitInfo = '#' then Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- dead import. Its initialization section only assigns the unit''s own variables and constants (no registration, no call), so removing it changes nothing.', [U.UnitName])
-                  else Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- dead import. Type-helper members and classes instantiated by the sibling .dfm ARE counted, and this unit has no initialization section.', [U.UnitName]);
+                UF.Severity:= if HasInit and (InitInfo <> '#') then 'info' else 'warning';
+                if InitInfo = '#' then  // dl:ok ifthen-to-if-expression@5813 -- REVIEWED 2026-11-06: three outcomes, not two: the first arm is a guard, so one if-expression cannot replace the chain without nesting
+                  UF.Message:= Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- dead import. Its initialization section only assigns the unit''s own variables and constants (no registration, no call), so removing it changes nothing.', [U.UnitName])
+                else
+                  UF.Message:= if HasInit then Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- possible dead import. It HAS an initialization section, so it may still be doing its work through that: removing it can build cleanly and fail at runtime. VERIFY BEFORE REMOVING.', [U.UnitName])
+                    else Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- dead import. Type-helper members and classes instantiated by the sibling .dfm ARE counted, and this unit has no initialization section.', [U.UnitName]);
+                if (InitInfo <> '') and (InitInfo <> '#') then UF.Message:= UF.Message + ' Its initialization section references: ' + InitInfo + '.';
                 UF.Message  := UF.Message + U.IncludeSuffix; { N-06 }
                 UF.FilePath := Path;
                 UF.StartLine:= U.HostLine;

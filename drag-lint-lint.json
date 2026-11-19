@@ -15,8 +15,16 @@
     "2,765 findings, 95 of them method-pascalcase on C binding names such as",
     "ts_query_cursor_new, where renaming would diverge from upstream and turn",
     "every future sync into a conflict. tests\\autotest\\run_encoding_guard.ps1",
-    "already exempts this exact directory for this exact reason."
+    "already exempts this exact directory for this exact reason.",
+    "",
+    "taint.disable: GetEnvironmentVariable is a taint SOURCE by default (a service may read a",
+    "variable a lower-privileged user sets). drag-lint is a user-run tool whose environment is set",
+    "by the operator with their own rights, so the source is switched off HERE, per project",
+    "(SLZ-RULE1 2026-11-19: ~230 taint-path-traversal findings on this repo, all false)."
   ],
+  "taint": {
+    "disable": ["getenvironmentvariable"]
+  },
   "exclude_paths": [
     "*\\third_party\\*",
     "*\\src\\cli\\DRagLint.CLI.HelpText.pas"
