@@ -55,26 +55,6 @@ function CommandLineArgs: TArray<string>;
 /// </remarks>
 function RunHandler(const pArgs: TArray<string>): Integer;
 
-/// <summary>Appends one line to the handler log.</summary>
-/// <param name="pText">The event text; may be attacker text (the URI). It is
-/// capped at 512 chars plus ...(+N chars), and every control character becomes
-/// '?', so one click is one bounded line.</param>
-/// <remarks>
-/// The line is the local time as yyyy-MM-ddTHH:mm:ss, two spaces, the
-/// text, CRLF, UTF-8 without BOM. The file is DRAGLINT_URI_TEST_LOG when set (its
-/// folder is NOT created), else %LOCALAPPDATA%\drag-lint\logs\uri-handler.log,
-/// whose folder is the only one this program ever creates; with neither there is
-/// no log. A log that cannot be written is ignored: logging never stops a
-/// click.
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Open.Main.HandleUri (DragLint.Open.Main.pas), DragLint.Open.Main.LogWhatIf (DragLint.Open.Main.pas), DragLint.Open.Main.Refuse (DragLint.Open.Main.pas), DragLint.Open.Main.RunHandler (DragLint.Open.Main.pas)</para>
-/// <para>Calls: DirectoryExists, DragLint.Open.Main.FormatLogLine, FileExists, ForceDirectories, GetEnvironmentVariable, IncludeTrailingPathDelimiter, OutputDebugString, PChar</para>
-/// <para>Catches: Exception (swallowed)</para>
-/// <seealso cref="DragLint.Open.Main.FormatLogLine"/>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-procedure WriteHandlerLog(const pText: string);
-
 implementation
 
 uses
@@ -122,6 +102,14 @@ begin
   Result:= FormatDateTime('yyyy"-"mm"-"dd"T"hh":"nn":"ss', Now) + '  ' + Result;
 end;
 
+{ Appends one line to the handler log. pText may be attacker text (the URI):
+  it is capped at 512 chars plus ...(+N chars), and every control character
+  becomes '?', so one click is one bounded line. The line is the local time as
+  yyyy-MM-ddTHH:mm:ss, two spaces, the text, CRLF, UTF-8 without BOM. The file
+  is DRAGLINT_URI_TEST_LOG when set (its folder is NOT created), else
+  %LOCALAPPDATA%\drag-lint\logs\uri-handler.log, whose folder is the only one
+  this program ever creates; with neither there is no log. A log that cannot
+  be written is ignored: logging never stops a click. }
 procedure WriteHandlerLog(const pText: string);
 var
   LogPath: string;
