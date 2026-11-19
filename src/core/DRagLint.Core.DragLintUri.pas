@@ -300,7 +300,7 @@ begin
   Result:= MatchStr(AFolded, DEVICE_NAMES)
         or ((Length(AFolded) = NUMBERED_DEVICE_LEN)
             and MatchStr(Copy(AFolded, 1, NUMBERED_DEVICE_LEN - 1), NUMBERED_DEVICES)
-            and (Pos(AFolded[NUMBERED_DEVICE_LEN], DEVICE_DIGITS) > 0));
+            and DEVICE_DIGITS.Contains(AFolded[NUMBERED_DEVICE_LEN]));
 end;
 
 { The script's device-name rule: the part of each segment before its FIRST dot,

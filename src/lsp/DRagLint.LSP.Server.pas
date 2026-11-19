@@ -4640,7 +4640,10 @@ begin
         is the engine's own (busy timeout / two-writers rule), not ours. }
       Exe:= GetEnvironmentVariable('DRAGLINT_LSP_REINDEX_EXE');
       if Exe = '' then Exe:= ParamStr(0);
-      Cmd:= Format('"%s" index --project "%s" --db "%s"', [Exe, ADproj, ADb]);
+      { A double quote is never part of a Windows path; dropping it keeps each
+        argument inside its own quotes. }
+      Cmd:= Format('"%s" index --project "%s" --db "%s"',
+        [Exe, StringReplace(ADproj, '"', '', [rfReplaceAll]), StringReplace(ADb, '"', '', [rfReplaceAll])]);
       { A batch stub runs through cmd /s /c, which keeps the inner quoting. }
       if MatchText(ExtractFileExt(Exe), ['.cmd', '.bat']) then
       begin
@@ -4648,7 +4651,7 @@ begin
         Exe:= GetEnvironmentVariable('ComSpec');
       end;
       UniqueString(Cmd);
-      if CreateProcess(PChar(Exe), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, Si, Pi) then
+      if CreateProcess(PChar(Exe), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, Si, Pi) then  // dl:ok taint-command-injection@705f -- REVIEWED 2026-11-18: the exe is our own (ParamStr(0) or the test-only DRAGLINT_LSP_REINDEX_EXE / ComSpec, same trust as the process); project and DB paths are quoted with every double quote dropped
       begin
         CloseHandle(Pi.hThread);
         Run.Process:= Pi.hProcess;
@@ -7404,15 +7407,15 @@ begin
       (timeout, bad JSON) through this variable; it is never set in production. }
     ChildExe:= GetEnvironmentVariable('DRAGLINT_FULLRULES_CHILD_EXE');
     if ChildExe = '' then ChildExe:= ParamStr(0);
-    Cmd:= '"' + ChildExe + '" lint "' + AFile + '" --json --output-encoding utf8'; { the engine writes 7-bit ASCII by default; the read below is UTF-8 }
+    Cmd:= '"' + ChildExe + '" lint "' + StringReplace(AFile, '"', '', [rfReplaceAll]) + '" --json --output-encoding utf8'; { the engine writes 7-bit ASCII by default; the read below is UTF-8 }
     if ARule <> '' then Cmd:= Cmd + ' --rule "' + StringReplace(ARule, '"', '', [rfReplaceAll]) + '"';
     for var DbP in ChildDbs do
-      if DbP <> '' then Cmd:= Cmd + ' --db "' + DbP + '"';
+      if DbP <> '' then Cmd:= Cmd + ' --db "' + StringReplace(DbP, '"', '', [rfReplaceAll]) + '"';
     { C15: the in-process lint's profile, not a different one; values quoted, a double quote dropped. }
     if FStartProject <> '' then Cmd:= Cmd + ' --project "' + StringReplace(FStartProject, '"', '', [rfReplaceAll]) + '"';
     if FStartPlatform <> '' then Cmd:= Cmd + ' --platform "' + StringReplace(FStartPlatform, '"', '', [rfReplaceAll]) + '"';
     UniqueString(Cmd);
-    if not CreateProcess(PChar(ChildExe), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, Si, Pi) then Exit;
+    if not CreateProcess(PChar(ChildExe), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, Si, Pi) then Exit;  // dl:ok taint-command-injection@6e02 -- REVIEWED 2026-11-18: the exe is our own (ParamStr(0) or the test-only DRAGLINT_FULLRULES_CHILD_EXE, same trust as the process); every argument is quoted with every double quote dropped
     try
       if not WaitFullRulesChild(Pi.hProcess, HOut, Budget, AFile, ARule = '') then
       begin

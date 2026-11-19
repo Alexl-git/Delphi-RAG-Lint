@@ -117,12 +117,9 @@ begin
   end;
   Bytes:= TEncoding.UTF8.GetBytes(FormatLogLine(pText) + sLineBreak);
   try
-    if (LogDir <> '') and not DirectoryExists(LogDir) then
-      ForceDirectories(LogDir);
-    if FileExists(LogPath) then
-      Stream:= TFileStream.Create(LogPath, fmOpenWrite or fmShareDenyWrite)
-    else
-      Stream:= TFileStream.Create(LogPath, fmCreate or fmShareDenyWrite);
+    if (LogDir <> '') and not DirectoryExists(LogDir) and not ForceDirectories(LogDir) then
+      Exit;
+    Stream:= TFileStream.Create(LogPath, (if FileExists(LogPath) then fmOpenWrite else fmCreate) or fmShareDenyWrite);  // dl:ok taint-path-traversal@ae07 -- REVIEWED 2026-11-18: the path is the test override DRAGLINT_URI_TEST_LOG or %LOCALAPPDATA%, both set by the same user as the process (same trust level)
     try
       Stream.Seek(0, soEnd);
       Stream.WriteBuffer(Bytes, Length(Bytes));
