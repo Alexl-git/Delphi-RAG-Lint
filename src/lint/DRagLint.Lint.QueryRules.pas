@@ -1166,6 +1166,25 @@ begin
   end;
 end;
 
+{ (#parent? @cap "nodeType" ["field"]) / (#not-parent? ...) -- 2026-11-18.
+  True when the DIRECT parent of the captured node has type ANodeType and,
+  when AField is given, the node sits in that parent's AField field. #in?
+  walks every ancestor, which is too wide for "is this if/else the else arm
+  of another if/else": an if/else nested inside a begin..end branch of an
+  outer if/else also has an ifElse ancestor, and must keep firing. Born for
+  ifthen-to-if-expression (the tail of an else-if chain is not a two-way
+  choice). }
+function ParentIsField(const ANode: TTSNode; const ANodeType, AField: string): Boolean;
+var
+  P: TTSNode;
+begin
+  Result:= False;
+  if ANode.IsNull then Exit;
+  P:= ANode.Parent;
+  if P.IsNull or (P.NodeType <> ANodeType) then Exit;
+  Result:= (AField = '') or (P.ChildByField(AField) = ANode);
+end;
+
 { True when ANode's subtree contains an `identifier` whose text is AName
   (case-insensitive -- Delphi identifiers are). }
 function SubtreeHasIdentifier(const ANode: TTSNode; const ASource: TBytes; const AName: string): Boolean;
@@ -2238,6 +2257,21 @@ begin
     if Length(AArgs) = MaxArgs then Pattern:= AArgs[NameRxArg].StringValue;
     Result:= AncestorNamedLike(ResolveCaptureNode(AMatch, AArgs[CapArg].CaptureIndex), ASource, AArgs[TypeArg].StringValue, Pattern);
     if Op = 'not-in?' then Result:= not Result;
+    Exit;
+  end;
+
+  if (Op = 'parent?') or (Op = 'not-parent?') then
+  begin
+    { (#parent? @cap "nodeType" ["field"]) -- see ParentIsField. The third
+      argument is a FIELD name here, not a name regex. Malformed arguments
+      pass, as above. }
+    if (Length(AArgs) < MinArgs) or (Length(AArgs) > MaxArgs) then Exit(True);
+    if (not AArgs[CapArg].IsCapture) or AArgs[TypeArg].IsCapture then Exit(True);
+    if (Length(AArgs) = MaxArgs) and AArgs[NameRxArg].IsCapture then Exit(True);
+    Pattern:= '';
+    if Length(AArgs) = MaxArgs then Pattern:= AArgs[NameRxArg].StringValue;
+    Result:= ParentIsField(ResolveCaptureNode(AMatch, AArgs[CapArg].CaptureIndex), AArgs[TypeArg].StringValue, Pattern);
+    if Op = 'not-parent?' then Result:= not Result;
     Exit;
   end;
 

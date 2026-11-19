@@ -14,3 +14,9 @@ ifthen-to-if-expression 17
 !ifthen-to-if-expression 24
 !ifthen-to-if-expression 28
 !ifthen-to-if-expression 30
+# 2026-11-18 SELFLZ: line 40 is the TAIL of an else-if chain (A/B/else) -- three outcomes,
+# one if-expression cannot replace it without nesting, so it must NOT fire (was an FP);
+# line 50 is a two-armed if/else nested in the THEN branch of another if/else --
+# positive control: an ifElse ancestor that is not its direct else-parent keeps it firing.
+ifthen-to-if-expression 50
+!ifthen-to-if-expression 40
