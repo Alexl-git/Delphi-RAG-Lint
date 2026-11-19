@@ -397,8 +397,7 @@ begin
   Store:= OpenReadOnlyStore(ProjectDb, RoOk);
   if not RoOk then Exit(2); // stale schema: 2 like every bad --db -- 1 is reserved for an EMPTY answer
 
-  if ByName then Targets:= RoutinesOfBareName(Store, AArgs.Name)
-  else Targets:= Store.FindSymbolsByQualifiedName(AArgs.QName);
+  Targets:= if ByName then RoutinesOfBareName(Store, AArgs.Name) else Store.FindSymbolsByQualifiedName(AArgs.QName);
   if Length(Targets) = 0 then
   begin
     ReportNotFound(AArgs, Format('symbol not found: %s', [(if ByName then AArgs.Name else AArgs.QName)]));
