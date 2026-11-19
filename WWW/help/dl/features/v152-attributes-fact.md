@@ -19,7 +19,7 @@ Read this when a rule or a query needs to know which declarations carry an RTTI 
 ## How to run it
 
 ```text
-drag-lint sql --query "SELECT ..." | --in <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>] (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 (none with --output unless --limit is given; --limit 0 = every row; JSON says truncated + total_rows) and time cap 10000 ms (exit 2 when it stops the query); ask `schema --format json` for the columns)
+drag-lint sql --query "SELECT ..." | --in <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>] (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 (none with --output unless --limit is given; --limit 0 = every row; JSON says truncated + total_rows) and time cap 10000 ms; ask `schema --format json` for the columns)
 ```
 
 Example:
