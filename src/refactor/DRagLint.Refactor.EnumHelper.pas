@@ -327,6 +327,9 @@ type
 
 implementation
 
+uses
+  DRagLint.Core.Encoding;
+
 { Reads the 1-based AStartLine..AEndLine (inclusive) span of AFilePath, joined
   with a single space between lines, so a multi-line enum declaration (real
   MSCTYPES-shaped enums routinely wrap one member per line) is scanned as one
@@ -345,7 +348,7 @@ begin
   if (AFilePath = '') or (AStartLine < 1) or (AEndLine < AStartLine) then Exit;
   if not TFile.Exists(AFilePath) then Exit;
   try
-    Lines:= TFile.ReadAllLines(AFilePath, TEncoding.ANSI);
+    Lines:= ReadSourceFileLines(AFilePath);
   except
     Exit;
   end;

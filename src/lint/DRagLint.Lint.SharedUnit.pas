@@ -189,7 +189,7 @@ type
 implementation
 
 uses
-  System.SysUtils
+  DRagLint.Core.Encoding, System.SysUtils
   , System.IOUtils
   , System.Generics.Collections
   , DRagLint.Lint.ReviewMarker  // SHARED_MARK
@@ -392,7 +392,7 @@ function ReadUnitText(const AUnitPath: string): string;
 begin
   Result:= '';
   if (AUnitPath = '') or (not FileExists(AUnitPath)) then Exit;
-  Result:= TFile.ReadAllText(AUnitPath, TEncoding.ANSI);
+  Result:= ReadSourceFileText(AUnitPath);
 end;
 
 { ---------------------------------------------------------------------------

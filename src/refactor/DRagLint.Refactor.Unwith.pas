@@ -512,7 +512,7 @@ begin
   var Path:= FStore.GetFilePath(S.FileId);
   if (Path <> '') and TFile.Exists(Path) and (S.EndLine >= S.StartLine) then
   begin
-    var Lines:= TFile.ReadAllLines(Path, TEncoding.ANSI);
+    var Lines:= ReadSourceFileLines(Path);
     for var I: Integer:= S.StartLine - 1 to S.EndLine - 1 do
       if (I >= 0) and (I < Length(Lines)) then
         for var C: string in CConditionals do
@@ -805,7 +805,7 @@ begin
   pWhere:= '';
   var Path:= FStore.GetFilePath(pRef.FileId);
   if (Path = '') or not TFile.Exists(Path) then Exit;
-  Lines:= TFile.ReadAllLines(Path, TEncoding.ANSI);
+  Lines:= ReadSourceFileLines(Path);
   if (pRef.StartLine < 1) or (pRef.StartLine > Length(Lines)) then Exit;
   var Ln:= Lines[pRef.StartLine - 1];
   var Before:= TrimRight(Copy(Ln, 1, pRef.StartCol - 1));
@@ -893,7 +893,7 @@ procedure TAnalyzer.CheckTargetStable(const pLinks: TArray<TLink>; pCast: Boolea
     { The property's declaration text names its getter; the index keeps the accessor shape, not the name. }
     var Path:= FStore.GetFilePath(pProp.FileId);
     if (Path = '') or not TFile.Exists(Path) then Exit;
-    Src:= TFile.ReadAllLines(Path, TEncoding.ANSI);
+    Src:= ReadSourceFileLines(Path);
     var Decl:= '';
     for var I: Integer:= pProp.StartLine - 1 to pProp.EndLine - 1 do
       if (I >= 0) and (I < Length(Src)) then Decl:= Decl + ' ' + Src[I];

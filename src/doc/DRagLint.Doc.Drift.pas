@@ -226,7 +226,7 @@ type
 implementation
 
 uses
-  System.Diagnostics, { TStopwatch -- FactsBuildTicks, see TDocDrift }
+  DRagLint.Core.Encoding, System.Diagnostics, { TStopwatch -- FactsBuildTicks, see TDocDrift }
   System.IOUtils,
   System.JSON, { TJSONArray -- BodylessContractDeclares reads exceptions_json }
   { DRagLint.Doc.Facts moved to the INTERFACE uses -- TDocFactsRenderOptions is
@@ -354,7 +354,7 @@ begin
   Result:= '';
   if (AFilePath = '') or (ALine <= 0) or (not TFile.Exists(AFilePath)) then Exit;
   try
-    Lines:= TFile.ReadAllLines(AFilePath, TEncoding.ANSI);
+    Lines:= ReadSourceFileLines(AFilePath);
   except  // dl:ok bare-except@8f3b, try-except-swallowed@8f3b -- REVIEWED 2026-11-11 (152b INT2): tolerant probe by contract ('' on any error, see the header); an unreadable file means no declaration line to compare, never an error
     Exit;
   end;
@@ -419,7 +419,7 @@ begin
     Size := TFile.GetSize(AFilePath);
     if (GLines = nil) or (GLinesPath <> AFilePath) or (GLinesSize <> Size) or (GLinesStamp <> Stamp) then
     begin
-      GLines     := TFile.ReadAllLines(AFilePath, TEncoding.ANSI);
+      GLines     := ReadSourceFileLines(AFilePath);
       GLinesPath := AFilePath;
       GLinesSize := Size;
       GLinesStamp:= Stamp;

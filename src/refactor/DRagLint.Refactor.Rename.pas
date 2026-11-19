@@ -473,7 +473,7 @@ function DfmBindingBelongsTo(const AStore: ISymbolStore; const ADfmPath: string;
 implementation
 
 uses
-  System.StrUtils
+  DRagLint.Core.Encoding, System.StrUtils
   , DRagLint.Refactor.TextEdit
   ;
 
@@ -1549,7 +1549,7 @@ begin
   try
     for Stamp in AStore.GetAllFileStamps do
       if SameText(ExtractFileExt(Stamp.Path), '.inc') and FileExists(Stamp.Path)
-        and IdentOccursIn(TFile.ReadAllText(Stamp.Path, TEncoding.ANSI), ShortName) then
+        and IdentOccursIn(ReadSourceFileText(Stamp.Path), ShortName) then
         Hits.Add(Stamp.Path);
     // N-06: a uses entry inside an include is a unit_uses row of its HOST with
     // origin_path set -- authoritative even for an .inc the index keeps no files

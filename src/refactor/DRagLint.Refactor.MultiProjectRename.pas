@@ -560,7 +560,7 @@ function ProjectOwnedMembers(const ADeclared, ALibraryRoots: TArray<string>): TA
 implementation
 
 uses
-  System.Classes
+  DRagLint.Core.Encoding, System.Classes
   , System.Generics.Collections
   , System.Generics.Defaults
   , System.StrUtils
@@ -1286,7 +1286,7 @@ var
 begin
   Result:= '';
   try
-    Lines:= TFile.ReadAllLines(AFinding.FilePath, TEncoding.ANSI);
+    Lines:= ReadSourceFileLines(AFinding.FilePath);
     if (AFinding.StartLine >= 1) and (AFinding.StartLine <= Length(Lines)) and (AFinding.EndCol > AFinding.StartCol) then
       Result:= Copy(Lines[AFinding.StartLine - 1], AFinding.StartCol, AFinding.EndCol - AFinding.StartCol);
   except
@@ -1337,7 +1337,7 @@ begin
       if not Cache.TryGetValue(Key, Lines) then
       begin
         Lines:= nil;
-        if TFile.Exists(E.FilePath) then Lines:= TFile.ReadAllLines(E.FilePath, TEncoding.ANSI);
+        if TFile.Exists(E.FilePath) then Lines:= ReadSourceFileLines(E.FilePath);
         Cache.Add(Key, Lines);
       end;
       { TTextEditApplier's ReplaceEditIsValid rule: the span [Col, EndCol) on

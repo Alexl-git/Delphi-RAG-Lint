@@ -240,7 +240,7 @@ function WithCycleFixPointer(const pMessage, pProject, pStem: string): string;
 implementation
 
 uses
-  DRagLint.Core.FileTime,
+  DRagLint.Core.Encoding, DRagLint.Core.FileTime,
   DRagLint.Core.Versions, { CompareDottedVersions -- the resolver-version gate of InitSectionInfo (145 lane lf) }
   DRagLint.Report.CycleEdge, { BareUsesBinding / ProjectUnitScopes -- circular-uses binds a bare
                                uses name exactly as the cycles graph does (A3-b) }
@@ -3653,7 +3653,7 @@ var
     if not LineCache.TryGetValue(APath, Result) then
     begin
       try
-        Result:= TFile.ReadAllLines(APath, TEncoding.ANSI);
+        Result:= ReadSourceFileLines(APath);
       except  // dl:ok bare-except@4381 -- deliberately bare: naming a class would have to enumerate every way TFile.ReadAllLines can fail, and the one it missed would abort the whole lint run over one unreadable file
         { A source file that vanished or cannot be read since indexing costs
           this rule its finding for that file and nothing else. There is no
@@ -3998,7 +3998,7 @@ var
     if not LineCache.TryGetValue(APath, Result) then
     begin
       try
-        Result:= TFile.ReadAllLines(APath, TEncoding.ANSI);
+        Result:= ReadSourceFileLines(APath);
       except  // dl:ok bare-except@8ac3 -- deliberately bare, as in CollectDiscardedEffectFreeResult: one unreadable file must cost its own findings, never abort the lint run
         Result:= nil;
       end;

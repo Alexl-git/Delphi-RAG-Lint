@@ -112,7 +112,7 @@ function CollectEnumOrdinalPersisted(const AStore: ISymbolStore;
 implementation
 
 uses
-  DRagLint.Lint.UnusedEnumValue; { DeclaredTypeName -- shared with unused-enum-value (DUPCODE-LEGACY) }
+  DRagLint.Core.Encoding, DRagLint.Lint.UnusedEnumValue; { DeclaredTypeName -- shared with unused-enum-value (DUPCODE-LEGACY) }
 
 const
   { The built-in ordinal casts whose argument is an enum value on a cast-out line. }
@@ -142,7 +142,7 @@ begin
   if (pPath = '') or not TFile.Exists(pPath) then Exit(DefaultEnumPersistSinks);
   Acc:= TList<string>.Create;
   try
-    for var Line in TFile.ReadAllLines(pPath, TEncoding.ANSI) do
+    for var Line in ReadSourceFileLines(pPath) do
     begin
       var T: string:= Trim(Line);
       if (T <> '') and not T.StartsWith('#') then Acc.Add(T);
@@ -374,7 +374,7 @@ var
   begin
     Result:= '';
     try
-      Lines:= TFile.ReadAllLines(AStore.GetFilePath(AEnum.FileId), TEncoding.ANSI);
+      Lines:= ReadSourceFileLines(AStore.GetFilePath(AEnum.FileId));
     except  // dl:ok try-except-swallowed@57ce -- by design, as in CollectAssertWithSideEffect: an unreadable source file costs that enum's finding only, never the whole lint run
       on EInOutError do Exit;
       on EStreamError do Exit;

@@ -229,7 +229,7 @@ function FindNowForElapsedTime(const AMasked: string): TArray<TRtlCollHit>;
 implementation
 
 uses
-  System.IOUtils
+  DRagLint.Core.Encoding, System.IOUtils
   , System.StrUtils
   , System.RegularExpressions
   , System.Character
@@ -376,7 +376,7 @@ end;
 function ReadSourceText(const APath: string): string;
 begin
   try
-    Result:= TFile.ReadAllText(APath, TEncoding.ANSI);
+    Result:= ReadSourceFileText(APath);
   except
     on E: EInOutError do Result:= '';
     on E: EFOpenError do Result:= '';
