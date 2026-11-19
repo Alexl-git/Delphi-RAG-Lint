@@ -28,6 +28,13 @@
 ; to break (see DRagLint.CLI.pas), and it is why bare-except must NOT become a
 ; member of that list. Measured 2026-08-16: with the anchor the prose test's
 ; suppression arm fails; without it, it passes.
+;
+; SLZ-RULE1 2026-11-19: a handler whose LAST statement is a bare `raise`
+; swallows nothing -- `except FConn.Rollback; raise; end` is cleanup-then-
+; propagate, the idiom a bare except exists for (Storage.SQLite.pas:8464;
+; 15 of 86 self-LoopZero findings). The trailing `.` anchors @last to the last
+; named child of the handler's statements; it does not touch the kExcept side.
 ((try
   (kExcept) @warn
-  except: (statements)))
+  except: (statements (_) @last .))
+  (#not-match? @last "^(?i)raise\\s*;?$"))

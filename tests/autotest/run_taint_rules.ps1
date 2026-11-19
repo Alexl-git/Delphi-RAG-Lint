@@ -162,6 +162,19 @@ try {
     Check 'uDal2 path crosses ReadArg and RunArg' (($routines -contains 'uInput.ReadArg') -and ($routines -contains 'uDal.RunArg')) ($routines -join ' > ')
   }
 
+  # ---- SLZ-RULE1: per-project opt-out -- taint.disable [ "getenvironmentvariable" ] ----
+  # DEFAULT is ON (the run above, config {}, finds the env-var sinks); a project whose
+  # environment is operator-set (drag-lint itself) switches the source off in its lint config.
+  $envOff = Join-Path $tmp 'env-off.json'
+  [IO.File]::WriteAllText($envOff, (@{ taint = @{ disable = @('getenvironmentvariable') } } | ConvertTo-Json -Depth 4))
+  $o = TaintFindings (@('lint-all') + $common + @('--config', $envOff))
+  Check 'default POSITIVE CONTROL: uSelf.pas:40 fires with the default config' ((At $f 'taint-path-traversal' 'uSelf.pas' 40).Count -eq 1)
+  Check 'default POSITIVE CONTROL: uGlobal.pas:28 fires with the default config' ((At $f 'taint-path-traversal' 'uGlobal.pas' 28).Count -eq 1)
+  Check 'opt-out: no uSelf.pas:40 (GetEnvironmentVariable disabled for the project)' ((At $o 'taint-path-traversal' 'uSelf.pas' 40).Count -eq 0)
+  Check 'opt-out: no uGlobal.pas:28' ((At $o 'taint-path-traversal' 'uGlobal.pas' 28).Count -eq 0)
+  Check 'opt-out: no uGlobal.pas:25 (global written from an env var)' ((At $o 'taint-path-traversal' 'uGlobal.pas' 25).Count -eq 0)
+  Check 'opt-out: ParamStr -> CreateProcess still fires (uCmd.pas:18)' ((At $o 'taint-command-injection' 'uCmd.pas' 18).Count -eq 1)
+  Check 'opt-out: total taint findings = 14 (17 minus the three env-var sinks)' ($o.Count -eq 14) "got $($o.Count)"
   # ---- lint <file> --db reports the same sink as lint-all ----
   $one = TaintFindings @('lint', (Join-Path $fx 'uDal2.pas'), '--db', $db, '--library-db', $lib, '--json', '--config', $empty)
   Check 'lint uDal2.pas --db reports the lint-all sink (21)' ((At $one 'taint-sql-injection' 'uDal2.pas' 21).Count -eq 1) "got $($one.Count) taint findings"

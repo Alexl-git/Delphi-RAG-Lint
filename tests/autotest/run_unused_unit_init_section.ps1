@@ -104,13 +104,35 @@ finalization
 
 end.
 '@
+Write-Ascii (Join-Path $lib 'FireDAC.Stan.Def.pas') @'
+unit FireDAC.Stan.Def;
+
+interface
+
+procedure DefExport;
+
+implementation
+
+procedure RegisterDriver;
+begin
+end;
+
+procedure DefExport;
+begin
+end;
+
+initialization
+  RegisterDriver;
+
+end.
+'@
 Write-Ascii (Join-Path $prj 'uHost.pas') @'
 unit uHost;
 
 interface
 
 uses
-  uIdleInit, uRegInit, uFinInit;
+  uIdleInit, uRegInit, uFinInit, FireDAC.Stan.Def;
 
 implementation
 
@@ -130,12 +152,14 @@ $libDb = Join-Path $WorkDir 'lib.sqlite'; $prjDb = Join-Path $WorkDir 'prj.sqlit
 & { $ErrorActionPreference = 'Continue'; & $Exe index $lib --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 & { $ErrorActionPreference = 'Continue'; & $Exe index $prj --db $prjDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $new = @(Run-Lint $Exe $libDb $prjDb 'new')
-$idle = Line $new 'uIdleInit'; $reg = Line $new 'uRegInit'; $fin = Line $new 'uFinInit'
+$idle = Line $new 'uIdleInit'; $reg = Line $new 'uRegInit'; $fin = Line $new 'uFinInit'; $fdac = Line $new 'FireDAC.Stan.Def'
 Write-Host '== unused-unit-in-uses: initialization section refs ==' -ForegroundColor Cyan
 Check 'the rule fires for all three units (control: not vacuous)' (($idle -ne '') -and ($reg -ne '') -and ($fin -ne '')) "idle=$($idle.Length) reg=$($reg.Length) fin=$($fin.Length)"
 Check 'idle section (only GFlag := False) -> WARNING, dead import' (($idle -match 'warning') -and ($idle -notmatch 'VERIFY BEFORE REMOVING'))
 Check 'active section (calls RegisterThing) stays INFO and NAMES the callee' (($reg -match 'VERIFY BEFORE REMOVING') -and ($reg -match 'RegisterThing') -and ($reg -notmatch 'warning'))
 Check 'section + finalization stays plain INFO (control: not everything downgraded)' (($fin -match 'VERIFY BEFORE REMOVING') -and ($fin -notmatch 'references:'))
+Check 'SLZ-RULE1: allow-listed registration unit (FireDAC.Stan.*) is NOT reported even though unreferenced' ($fdac -eq '') "$fdac"
+Check 'SLZ-RULE1 POSITIVE CONTROL: an ordinary unused unit with an initialization section (uRegInit) IS still reported' (($reg -ne '') -and ($reg -match 'info'))
 
 # GATE: a library DB stamped by a resolver older than the section-ref backfill (1.20.0-alpha) has no
 # section refs, so its empty-looking sections must read as UNKNOWN. The stamp is lowered in a COPY

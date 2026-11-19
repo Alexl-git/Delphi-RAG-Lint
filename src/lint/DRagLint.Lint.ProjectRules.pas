@@ -4557,6 +4557,24 @@ var
     ExportsOfUnit.Add(AUnitName, Result);
   end;
 
+  { SLZ-RULE1 2026-11-19: units that exist to REGISTER something (database drivers, DB
+    UI wait cursors) are linked for their initialization section, never for a symbol, so
+    "no symbol referenced" proves nothing. Self-LoopZero on drag-lint: all 13 FireDAC
+    findings were false. A fixed allow-list of unit-name prefixes, matched
+    case-insensitively on the dotted name (FireDAC.Stan.* / Phys.* driver links /
+    UI.* / VCLUI.* / DApt.*). It is the FALLBACK until the index carries the
+    initialization-section facts (lane INITDEP). An ordinary unit with an
+    initialization section is NOT on it and is still reported (INFO). }
+  function IsRegistrationUnit(const AUnitName: string): Boolean;
+  const
+    CPrefixes: array[0..7] of string = (
+      'FireDAC.Stan.', 'FireDAC.Phys.', 'FireDAC.UI.', 'FireDAC.VCLUI.', 'FireDAC.FMXUI.',
+      'FireDAC.DApt', 'FireDAC.Comp.UI', 'FireDAC.ConsoleUI.');
+  begin
+    Result:= False;
+    for var P in CPrefixes do
+      if StartsText(P, AUnitName) then Exit(True);
+  end;
   { Does the named unit have an `initialization` or `finalization` section, or a
     `class constructor` / `class destructor`? All three link the unit for a side
     effect, so a missing symbol reference proves nothing.
@@ -5312,6 +5330,7 @@ begin
                 { A finalization section or class constructor/destructor links the unit
                   as surely as an initialization one, but unlike it the finding is not
                   even informational: the unit is excluded outright (D3). }
+                if IsRegistrationUnit(U.UnitName) then Continue; { registration unit: linked for its init section (SLZ-RULE1) }
                 if UnitHasSideEffectSection(U.UnitName, HasInit) and not HasInit then Continue;
                 var InitInfo: string:= if HasInit then InitSectionInfo(U.UnitName) else '';
                 UF.Severity:= if HasInit and (InitInfo <> '#') then 'info' else 'warning';
