@@ -160,6 +160,13 @@ const
 type
   TSymbolKinds = set of TSymbolKind;
 
+  /// <summary>One field-or-property member of a class, as the purity classifier needs it
+  /// (IDXPERF P2): the lower-cased name and whether it is a property.</summary>
+  TMemberName = record
+    Key   : string;
+    IsProp: Boolean;
+  end;
+
   /// <summary>One library routine as E-BIND-LIB-EFFECTS sees it: its joined verdict.</summary>
   TLibCallee = record
     Usable   : Boolean;
@@ -214,6 +221,7 @@ type
     FOwnFieldsOf : TDictionary<Int64, TNameSet>;
     FPropsOf     : TDictionary<Int64, TNameSet>;
     FAncestorsOf : TDictionary<Int64, TArray<TTypeAncestor>>;
+    FMemberNames : TDictionary<Int64, TArray<TMemberName>>;   // class id -> its field/property names, read ONCE per class (IDXPERF P2)
     FStamps      : TDictionary<string, Int64>;
     { The line cache is BOUNDED (PURITY_LINE_CACHE_CHARS). Holding every file's
       lines for the whole run cost ~800 MB of the 2.9 GB peak measured on the
@@ -248,6 +256,7 @@ type
     function  SymbolById(AId: Int64): TSymbol;
     function  ClassIdOf(const ASym: TSymbol): Int64;
     function  AncestorsOf(AClassId: Int64): TArray<TTypeAncestor>;
+    function  MemberNamesOf(AClassId: Int64): TArray<TMemberName>;
     function  OwnMembersOf(AClassId: Int64; const AKinds: TSymbolKinds): TNameSet;
     function  FieldsOfClass(AClassId: Int64): TNameSet;
     function  PropsOfClass(AClassId: Int64): TNameSet;
@@ -323,6 +332,7 @@ begin
   FOwnFieldsOf:= TDictionary<Int64, TNameSet>.Create;
   FPropsOf    := TDictionary<Int64, TNameSet>.Create;
   FAncestorsOf:= TDictionary<Int64, TArray<TTypeAncestor>>.Create;
+  FMemberNames:= TDictionary<Int64, TArray<TMemberName>>.Create;
   FStamps     := TDictionary<string, Int64>.Create(TIStringComparer.Ordinal);
   FLines      := TDictionary<Int64, TArray<string>>.Create;
   FLineOrder  := TQueue<Int64>.Create;
@@ -349,6 +359,7 @@ begin
   FLineOrder.Free;
   FLines.Free;
   FStamps.Free;
+  FMemberNames.Free;
   FAncestorsOf.Free;
   FPropsOf.Free;
   FOwnFieldsOf.Free;
@@ -412,11 +423,39 @@ begin
   end;
 end;
 
+{ A class's field and property names, from ONE FindAllChildSymbols per class for the
+  whole run. FieldsOfClass / PropsOfClass used to re-read every ancestor's children
+  for every class that inherits from it (TObject's, TComponent's, ... once per
+  descendant), the bulk of the 8 minutes the library's "purity load" stage sat at 0
+  (1.52 re-parse log). The names and kinds are the same rows, so the sets are identical. }
+function TPurityRun.MemberNamesOf(AClassId: Int64): TArray<TMemberName>;
+var
+  List: TList<TMemberName>;
+  M   : TMemberName;
+begin
+  if FMemberNames.TryGetValue(AClassId, Result) then Exit;
+  List:= TList<TMemberName>.Create;
+  try
+    for var C in FStore.FindAllChildSymbols(AClassId) do
+      if (C.Kind in FIELD_KINDS) or (C.Kind = skProperty) then
+      begin
+        M.Key   := LowerKey(C.Name);
+        M.IsProp:= C.Kind = skProperty;
+        List.Add(M);
+      end;
+    Result:= List.ToArray;
+  finally
+    List.Free;
+  end;
+  FMemberNames.Add(AClassId, Result);
+end;
+
 function TPurityRun.OwnMembersOf(AClassId: Int64; const AKinds: TSymbolKinds): TNameSet;
 begin
   Result:= NewSet;
-  for var C in FStore.FindAllChildSymbols(AClassId) do
-    if C.Kind in AKinds then Result.AddOrSetValue(LowerKey(C.Name), True);
+  for var M in MemberNamesOf(AClassId) do
+    if (M.IsProp and (skProperty in AKinds)) or ((not M.IsProp) and (AKinds * FIELD_KINDS <> [])) then
+      Result.AddOrSetValue(M.Key, True);
 end;
 
 { Own fields plus every resolved ancestor's, cached per class. }
@@ -432,8 +471,8 @@ begin
   for var K in Own.Keys do Result.AddOrSetValue(K, True);
   for var Anc in AncestorsOf(AClassId) do
     if Anc.Resolved then
-      for var C in FStore.FindAllChildSymbols(Anc.SymbolId) do
-        if C.Kind in FIELD_KINDS then Result.AddOrSetValue(LowerKey(C.Name), True);
+      for var M in MemberNamesOf(Anc.SymbolId) do
+        if not M.IsProp then Result.AddOrSetValue(M.Key, True);
   FFieldsOf.Add(AClassId, Result);
 end;
 
@@ -444,8 +483,8 @@ begin
   Result:= OwnMembersOf(AClassId, [skProperty]);
   for var Anc in AncestorsOf(AClassId) do
     if Anc.Resolved then
-      for var C in FStore.FindAllChildSymbols(Anc.SymbolId) do
-        if C.Kind = skProperty then Result.AddOrSetValue(LowerKey(C.Name), True);
+      for var M in MemberNamesOf(Anc.SymbolId) do
+        if M.IsProp then Result.AddOrSetValue(M.Key, True);
   FPropsOf.Add(AClassId, Result);
 end;
 

@@ -286,6 +286,8 @@ type
       FFtsDeferChecked       : Boolean     ; // the first OpenFileTx has decided whether this load defers the FTS5 indexes
       FFtsDeferred           : Boolean     ; // sync triggers dropped; FinishDeferredTextIndex owes a rebuild
       FFtsTargeted           : Boolean     ; // deferred, and temp.dl_fts_gone/dl_fts_files say exactly what changed
+      FTriDeferChecked       : Boolean     ; // the first OpenFileTx of a batch has decided whether this load defers symbol_trigrams (IDXPERF P3)
+      FTriDeferred           : Boolean     ; // UpsertSymbol writes no trigram rows; FinishDeferredTrigrams owes the bulk fill
       FBatchOpen             : Boolean     ; // BeginFileBatch's outer transaction is open
       FBatchFiles            : Integer     ; // files opened in the current group
       FBatchStamp            : Int64       ; // TStopwatch time stamp at which the current group began
@@ -1753,6 +1755,28 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure FinishDeferredTextIndex;
+      /// <summary>Starts a bulk load with symbol_trigrams empty and its two secondary
+      /// indexes dropped: UpsertSymbol then writes no trigram rows, and
+      /// FinishDeferredTrigrams fills the table once, in key order.</summary>
+      /// <remarks>
+      /// Only when symbol_trigrams holds no row (a new database, or after
+      /// ClearAllFiles); otherwise the rows stay live per symbol, as before.
+      /// The debt is recorded in schema_meta (TRIGRAM_FILL_PENDING_KEY) in the same
+      /// transaction as the index drops, so a run that dies mid-load is settled by
+      /// the next writer's Migrate. Best-effort: a failure leaves the load row by row.
+      /// Not thread-safe; the owning writer connection only.
+      /// </remarks>
+      procedure BeginDeferredTrigrams;
+      /// <summary>Settles a deferred symbol_trigrams load: derives every symbol's
+      /// trigrams once, inserts them in (trigram, symbol_id) order, recreates the two
+      /// secondary indexes and clears the debt, all in one transaction.</summary>
+      /// <remarks>
+      /// The resulting rows are exactly those UpsertSymbol would have written one by
+      /// one (INSERT OR IGNORE on the primary key). No-op when nothing is owed and on a
+      /// read-only handle.
+      /// </remarks>
+      /// <exception cref="Exception">Any database error; the transaction is rolled back and the debt stays recorded.</exception>
+      procedure FinishDeferredTrigrams;
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ASha"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: not Q.IsEmpty.</returns>
@@ -7324,6 +7348,8 @@ begin
       try EndFileBatch; except end;  // dl:ok empty-except@8ae8, try-except-swallowed@8ae8 -- REVIEWED 2026-10-30 (PR #10): a destructor must not raise; EndFileBatch has already rolled the batch back when it fails
     if FFtsDeferred and FConn.Connected then
       try FinishDeferredTextIndex; except end;  // dl:ok empty-except@d18e, try-except-swallowed@d18e -- REVIEWED 2026-10-30 (PR #10): a destructor must not raise; a rebuild left pending is redone by the next writer (FTS_REBUILD_PENDING_KEY)
+    if FTriDeferred and FConn.Connected then
+      try FinishDeferredTrigrams; except end;  // dl:ok empty-except@41ae, try-except-swallowed@41ae -- REVIEWED 2026-11-19 (IDXPERF P3): a destructor must not raise; the debt stays in schema_meta (TRIGRAM_FILL_PENDING_KEY) and the next writer's Migrate settles it
     if FConn.Connected then FConn.Close;
     FConn.Free;
   end;
@@ -7690,6 +7716,14 @@ begin
     except
       on E: Exception do
         Writeln(ErrOutput, 'WARNING: the text-search index owes a rebuild and it failed (',
+                E.ClassName, ': ', E.Message, '); the next writer retries.');
+    end;
+    { IDXPERF P3: same debt for a symbol_trigrams bulk load that died before its fill. }
+    try
+      FinishDeferredTrigrams;
+    except
+      on E: Exception do
+        Writeln(ErrOutput, 'WARNING: symbol_trigrams owes a bulk fill and it failed (',
                 E.ClassName, ': ', E.Message, '); the next writer retries.');
     end;
   end
@@ -9279,6 +9313,116 @@ begin
   FFtsDeferred:= True;
 end; // procedure
 
+const
+  TRIGRAM_FILL_PENDING_KEY = 'trigram_fill_pending';
+  TRIGRAM_FILL_CHUNK       = 4000; { rows per array-DML insert into the staging table }
+
+procedure TSQLiteSymbolStore.BeginDeferredTrigrams;
+begin
+  if FTriDeferred or FReadOnly then Exit;
+  if Integer(FConn.ExecSQLScalar('SELECT EXISTS (SELECT 1 FROM symbol_trigrams)')) <> 0 then Exit; { populated: stay live }
+  FConn.StartTransaction;
+  try
+    FConn.ExecSQL('INSERT OR REPLACE INTO schema_meta(key, value) VALUES (?, ''1'')', [TRIGRAM_FILL_PENDING_KEY]);
+    FConn.ExecSQL('DROP INDEX IF EXISTS idx_symbol_trigrams_trigram');
+    FConn.ExecSQL('DROP INDEX IF EXISTS idx_symbol_trigrams_symbol');
+    FConn.Commit;
+  except  // dl:ok bare-except@db75, try-except-swallowed@db75 -- REVIEWED 2026-11-19 (IDXPERF P3): a failed DROP keeps the live per-symbol rows: the load stays correct, only not deferred
+    FConn.Rollback;
+    Exit;
+  end;
+  FTriDeferred:= True;
+end; // procedure
+
+procedure TSQLiteSymbolStore.FinishDeferredTrigrams;
+var
+  NameQ  : TFDQuery;
+  IdFld  : TField;
+  NameFld: TField;
+  StageQ : TFDQuery;
+  Names  : TArray<string>;
+  Ids    : TArray<Int64>;
+  Fill   : Integer;
+  Rows   : Int64;
+  Started: Int64;
+
+  procedure Flush;
+  begin
+    if Fill = 0 then Exit;
+    StageQ.Params.ArraySize:= Fill;
+    for var K:= 0 to Fill - 1 do
+    begin
+      StageQ.Params[0].AsWideStrings[K]:= Names[K];
+      StageQ.Params[1].AsLargeInts[K]  := Ids[K];
+    end;
+    StageQ.Execute(Fill);
+    Inc(Rows, Fill);
+    Fill:= 0;
+  end;
+
+begin
+  if FReadOnly then Exit;
+  if (not FTriDeferred) and (GetMetaValue(TRIGRAM_FILL_PENDING_KEY) = '') then Exit;
+  Started:= TStopwatch.GetTimeStamp;
+  Rows:= 0;
+  Fill:= 0;
+  SetLength(Names, TRIGRAM_FILL_CHUNK);
+  SetLength(Ids  , TRIGRAM_FILL_CHUNK);
+  { The sort of ~24 M staged rows belongs on disk, not in the page cache (temp_store is MEMORY at connect). }
+  FConn.ExecSQL('PRAGMA temp_store = FILE');
+  NameQ := TFDQuery.Create(nil);
+  StageQ:= TFDQuery.Create(nil);
+  try
+    FConn.StartTransaction;
+    try
+      FConn.ExecSQL('DROP TABLE IF EXISTS temp.dl_tri_stage');
+      FConn.ExecSQL('CREATE TEMP TABLE dl_tri_stage (trigram TEXT NOT NULL, symbol_id INTEGER NOT NULL)');
+      StageQ.Connection:= FConn;
+      StageQ.SQL.Text  := 'INSERT INTO temp.dl_tri_stage(trigram, symbol_id) VALUES (:tg, :sid)';
+      StageQ.Params[0].DataType:= ftWideString;
+      StageQ.Params[1].DataType:= ftLargeint;
+      NameQ.Connection:= FConn;
+      NameQ.SQL.Text  := 'SELECT id, name FROM symbols';
+      NameQ.Open;
+      IdFld  := NameQ.FieldByName('id');
+      NameFld:= NameQ.FieldByName('name');
+      while not NameQ.Eof do
+      begin
+        var SymId:= IdFld.AsLargeInt;
+        for var G in DRagLint.Query.Fuzzy.Trigrams(NameFld.AsString) do
+        begin
+          Names[Fill]:= G;
+          Ids  [Fill]:= SymId;
+          Inc(Fill);
+          if Fill = TRIGRAM_FILL_CHUNK then Flush;
+        end;
+        NameQ.Next;
+      end;
+      NameQ.Close;
+      Flush;
+      FConn.ExecSQL('INSERT OR IGNORE INTO symbol_trigrams(trigram, symbol_id) ' +
+                    'SELECT trigram, symbol_id FROM temp.dl_tri_stage ORDER BY trigram, symbol_id');
+      FConn.ExecSQL('DROP TABLE temp.dl_tri_stage');
+      FConn.ExecSQL('CREATE INDEX IF NOT EXISTS idx_symbol_trigrams_trigram ON symbol_trigrams(trigram)');
+      FConn.ExecSQL('CREATE INDEX IF NOT EXISTS idx_symbol_trigrams_symbol ON symbol_trigrams(symbol_id)');
+      FConn.ExecSQL('DELETE FROM schema_meta WHERE key = ?', [TRIGRAM_FILL_PENDING_KEY]);
+      FConn.Commit;
+    except
+      on Exception do
+      begin
+        FConn.Rollback;
+        raise;
+      end;
+    end;
+  finally
+    StageQ.Free;
+    NameQ.Free;
+    FConn.ExecSQL('PRAGMA temp_store = MEMORY');
+  end;
+  FTriDeferred:= False;
+  ResolveLog(Format('trigrams   bulk-filled symbol_trigrams from %d staged row(s)  [%.1fs]', [Rows, ResolveSecs(Started)], TFormatSettings.Invariant));
+end; // procedure
+
 procedure TSQLiteSymbolStore.BeginTargetedTextIndex;
 begin
   BeginDeferredTextIndex;
@@ -9513,6 +9657,13 @@ begin
               E.ClassName, ': ', E.Message, '); the next writer retries.');
   end;
   try
+    FinishDeferredTrigrams;
+  except
+    on E: Exception do
+      Writeln(ErrOutput, 'WARNING: the symbol_trigrams bulk fill failed (',
+              E.ClassName, ': ', E.Message, '); the next writer retries.');
+  end;
+  try
     RunPragma('PRAGMA wal_checkpoint(FULL)');
   except
     { non-WAL or read-only DB -- best-effort }
@@ -9601,6 +9752,11 @@ begin
     if FFts5Available and (not FReadOnly) then
       if StringLiteralsEmpty(FConn) then BeginDeferredTextIndex
       else BeginTargetedTextIndex;
+  end;
+  if FBatchOpen and not FTriDeferChecked then
+  begin
+    FTriDeferChecked:= True;
+    if not FReadOnly then BeginDeferredTrigrams;
   end;
   if FBatchOpen then RollFileBatch(FConn, FBatchFiles, FBatchStamp); { see FILE BATCH above Checkpoint }
   { V-C: the corpus size BEFORE this run's first write -- read ahead of the
@@ -9733,6 +9889,9 @@ begin
   FQInsertSymbol.ParamByName('iscm' ).AsInteger:= Ord(ASymbol.IsClassMethod); { 1.40: always 0/1, NULL only on an older row }
   FQInsertSymbol.ExecSQL;
   Result:= FConn.GetLastAutoGenValue('');
+  { IDXPERF P3: a bulk load into an empty symbol_trigrams writes none here;
+    FinishDeferredTrigrams fills the table once, in key order, at the end. }
+  if FTriDeferred then Exit;
   // Populate trigram index alongside each symbol insert so fuzzy queries
   // are sub-second from the first call without any lazy build cost.
   var Grams:= DRagLint.Query.Fuzzy.Trigrams(ASymbol.Name);
