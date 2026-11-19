@@ -16,7 +16,7 @@
 param(
   [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-mcp-exc-$PID",
-  [int]$ExpectedTools = 19
+  [int]$ExpectedTools = 20   # 1.52: check_init is the 20th tool
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
@@ -55,7 +55,7 @@ $req = @(
   '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"get_exception_facts","arguments":{"target":"A","name":"B"}}}',
   '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"get_exception_facts","arguments":{"target":"NoSuchRoutine"}}}'
 ) -join "`n"
-$mcp = $req | & { $ErrorActionPreference = 'Continue'; & $Exe serve --db $db 2>$null } | Out-String
+$mcp = $req | & { $ErrorActionPreference = 'Continue'; $input | & $Exe serve --db $db 2>$null } | Out-String
 $rep = @{}
 foreach ($ln in ($mcp -split "`n")) { try { $o = $ln.Trim() | ConvertFrom-Json; if ($o.id) { $rep[[int]$o.id] = $o } } catch { } }
 $tools = @($rep[2].result.tools)

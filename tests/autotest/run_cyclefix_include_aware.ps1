@@ -68,23 +68,23 @@ function New-Proj($C, [switch]$Inline) {
   }
   $P = @{ Root = $root; Dproj = (Join-Path $root "$($C.Name).dproj"); Db = "$root.sqlite" }
   Push-Location $WorkDir
-  try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project $P.Dproj --db $P.Db --library-db none *> "$($P.Db).log" } } finally { Pop-Location }
+  try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project $P.Dproj --db $P.Db --library-db none *> "$($P.Db).log" } } finally { Pop-Location }
   return $P
 }
 function Get-Plan($P) {
   Push-Location $WorkDir
-  try { return ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --plan --project $P.Dproj --db $P.Db --library-db none 2>$null } | Out-String) } finally { Pop-Location }
+  try { return ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe cycles --plan --project $P.Dproj --db $P.Db --library-db none 2>$null } | Out-String) } finally { Pop-Location }
 }
 function Get-Fix($P) {
   Push-Location $WorkDir
-  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --causes --format json --project $P.Dproj --db $P.Db --library-db none 2>$null } | Out-String) } finally { Pop-Location }
+  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe cycles --causes --format json --project $P.Dproj --db $P.Db --library-db none 2>$null } | Out-String) } finally { Pop-Location }
   try { return @(($o | ConvertFrom-Json))[0].fix } catch { return $null }
 }
 function Run-Apply($P) {
   $a = @('cycles', '--fix', '--build-timeout', '1800', '--rsvars', $RsVars, '--project', $P.Dproj, '--db', $P.Db,
     '--library-db', 'none', '--format', 'json', '--cycle', '1', '--apply')
   Push-Location $WorkDir
-  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
+  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @a 2>$null } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
   $j = $null; try { $j = $out | ConvertFrom-Json } catch { }
   $k = @()
   foreach ($c in @($j.cycles)) { foreach ($x in @($c.refusals)) { if ($x) { $k += "$($x.kind): $($x.reason)" } } }

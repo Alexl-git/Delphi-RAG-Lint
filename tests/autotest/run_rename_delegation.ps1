@@ -65,18 +65,18 @@ function New-Lab([string]$Extra = '') {
   }
   $db = "$root.sqlite"
   Push-Location $WorkDir
-  try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root 'DelRen.dproj') --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
+  try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project (Join-Path $root 'DelRen.dproj') --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
   return @{ Root = $root; Dproj = (Join-Path $root 'DelRen.dproj'); Db = $db; Types = (Join-Path $root 'DelTypes.pas') }
 }
 function Plan($P, [string]$Q, [string]$To) {
   Push-Location $WorkDir
-  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe rename --kind symbol --name $Q --to $To --db $P.Db --library-db $script:Lib --plan --json 2>$null } | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
+  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe rename --kind symbol --name $Q --to $To --db $P.Db --library-db $script:Lib --plan --json 2>$null } | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
   $j = $null; try { $j = $o | ConvertFrom-Json } catch { }
   return @{ Exit = $c; Json = $j; Out = $o; Kinds = @($j.refusals | ForEach-Object { $_.kind }); Edits = @($j.edits) }
 }
 function Apply($P, [string]$Q, [string]$To) {
   Push-Location $WorkDir
-  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe rename --kind symbol --name $Q --to $To --db $P.Db --library-db $script:Lib --project $P.Dproj --build-timeout 600 --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
+  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe rename --kind symbol --name $Q --to $To --db $P.Db --library-db $script:Lib --project $P.Dproj --build-timeout 600 --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
   return @{ Exit = $c; Out = $o }
 }
 function Text-Of([string]$Path) { return [IO.File]::ReadAllText($Path, $Ascii) }
@@ -85,7 +85,7 @@ $libDir = Join-Path $WorkDir 'libsrc'
 New-Item -ItemType Directory -Force $libDir | Out-Null
 Copy-Item "$Stub\LibStub.pas" $libDir
 $script:Lib = Join-Path $WorkDir 'lib.sqlite'
-Push-Location $WorkDir; try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index $libDir --db $script:Lib --library-db none *> "$script:Lib.log" } } finally { Pop-Location }
+Push-Location $WorkDir; try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index $libDir --db $script:Lib --library-db none *> "$script:Lib.log" } } finally { Pop-Location }
 $base = New-Lab
 Check 'fixture compiles untouched' (Build-Lab $base.Root) (Get-Content "$($base.Root).bld.log" -Tail 8 | Out-String)
 $Expected = Stdout-Of $base.Root

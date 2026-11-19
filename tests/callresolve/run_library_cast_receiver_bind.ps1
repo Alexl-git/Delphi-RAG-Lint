@@ -129,7 +129,7 @@ Expect 'E2  case arm TEdit(FControls[i]).Text := S: Vcl.StdCtrls.TEdit.Text'    
 Expect 'E3  TCheckBox(FArr[i]).Checked := True: Vcl.StdCtrls.TCheckBox.Checked'  'E3' 'Checked' 'Vcl.StdCtrls.TCheckBox.Checked' 'TCheckBox'
 
 Push-Location $WorkDir
-try { $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe rename --kind symbol --name 'uC.TMine.Text' --to Caption2 --db $db --library-db $LibraryDb --plan 2>&1 | ForEach-Object { "$_" } } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
+try { $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe rename --kind symbol --name 'uC.TMine.Text' --to Caption2 --db $db --library-db $LibraryDb --plan 2>&1 | ForEach-Object { "$_" } } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
 Check 'P1  rename --plan uC.TMine.Text: proved, no receiver-untyped refusal' (($code -eq 0) -and ($o -notmatch 'receiver-untyped') -and ($o -match 'undecided: 0')) ("exit=$code " + (($o -split "`r?`n" | Where-Object { $_ -match 'decided|refused|proved' }) -join ' | '))
 
 # NEGATIVE CONTROL (the YADF mechanism): the same project INDEXED without a library, the proof run WITH one -> no
@@ -137,7 +137,7 @@ Check 'P1  rename --plan uC.TMine.Text: proved, no receiver-untyped refusal' (($
 $db0 = Join-Path $WorkDir 'NoLib.sqlite'
 & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $WorkDir 'App.dpr') --db $db0 --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Push-Location $WorkDir
-try { $o0 = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe rename --kind symbol --name 'uC.TMine.Text' --to Caption2 --db $db0 --library-db $LibraryDb --plan 2>&1 | ForEach-Object { "$_" } } | Out-String); $code0 = $LASTEXITCODE } finally { Pop-Location }
+try { $o0 = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe rename --kind symbol --name 'uC.TMine.Text' --to Caption2 --db $db0 --library-db $LibraryDb --plan 2>&1 | ForEach-Object { "$_" } } | Out-String); $code0 = $LASTEXITCODE } finally { Pop-Location }
 # v1511 RENAME B01 (e9245a7ea) changed the second half on purpose: the proof now decides an UNBOUND member on a
 # hard-cast receiver by the cast type, so the no-library DB no longer refuses. N1 pins both halves: the DB really
 # holds no external target for E1-E3 (the YADF mechanism is still reproduced), and the plan decides the two Text

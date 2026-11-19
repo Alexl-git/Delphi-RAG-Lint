@@ -89,7 +89,7 @@ $req = @(
   (Q @{ jsonrpc='2.0'; id=8; method='tools/call'; params=@{ name='check_init'; arguments=@{ target='HbCfg.GCount'; max_seconds=0.000001 } } }),
   (Q @{ jsonrpc='2.0'; id=9; method='tools/call'; params=@{ name='check_init'; arguments=@{ target='HbCfg.GCount'; max_seconds=-1 } } })
 ) -join "`n"
-$mcp = $req | & { $ErrorActionPreference = 'Continue'; & $Exe serve --db $db 2>$null } | Out-String
+$mcp = $req | & { $ErrorActionPreference = 'Continue'; $input | & $Exe serve --db $db 2>$null } | Out-String
 $rep = @{}
 foreach ($ln in ($mcp -split "`n")) { try { $o = $ln.Trim() | ConvertFrom-Json; if ($o.id) { $rep[[int]$o.id] = $o } } catch { } }
 $tools = @($rep[2].result.tools)

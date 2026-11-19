@@ -190,7 +190,7 @@ foreach ($q in $capTargets) {
     $herr = Join-Path $WorkDir "h1-$k.err"
     $env:DRAGLINT_PROFILE = '1'
     $env:DRAGLINT_HOVER_SETBY_MAX_SECONDS = $hoverCapText
-    try { $null = & $Exe hover --qname $q --db $copy --format json 2>$herr }
+    try { $null = & { $ErrorActionPreference = 'Continue'; & $Exe hover --qname $q --db $copy --format json 2>$herr } }
     finally { $env:DRAGLINT_PROFILE = $null; $env:DRAGLINT_HOVER_SETBY_MAX_SECONDS = $null }
     $ptxt = if (Test-Path -LiteralPath $herr) { [IO.File]::ReadAllText($herr) } else { '' }
     $mt = [regex]::Match($ptxt, 'HOVER PROFILE .*?total (\d+) ms')
@@ -216,7 +216,7 @@ $mreq = @(
 ) -join "`n"
 $merr = Join-Path $WorkDir 'serve.err'
 $env:DRAGLINT_PROFILE = '1'
-try { $mout = $mreq | & $Exe serve --db $copy 2>$merr | Out-String } finally { $env:DRAGLINT_PROFILE = $null }
+try { $mout = $mreq | & { $ErrorActionPreference = 'Continue'; $input | & $Exe serve --db $copy 2>$merr } | Out-String } finally { $env:DRAGLINT_PROFILE = $null }
 $mrep = @{}
 foreach ($ln in ($mout -split "`n")) { try { $o = $ln.Trim() | ConvertFrom-Json; if ($o.id) { $mrep[[int]$o.id] = $o } } catch { } }
 $profLines = @(([IO.File]::ReadAllText($merr) -split "`r?`n") | Where-Object { $_ -match 'CHECK-INIT PROFILE' })

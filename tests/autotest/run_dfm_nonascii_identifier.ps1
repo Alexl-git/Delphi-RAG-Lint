@@ -83,7 +83,7 @@ function SqlRows([string]$Db, [string]$Query) {
 # ---- D1: the fixture index ----------------------------------------------------------------
 $fx = (Resolve-Path "$PSScriptRoot\..\fixtures\dfm-nonascii").Path
 $db = "$WorkDir\fx.sqlite"
-$null | & { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+$null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index $fx --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'D1 fixture index built' (Test-Path $db)
 
 $rows = SqlRows $db "select s.name, s.qualified_name, s.kind, f.path from symbols s join files f on f.id=s.file_id where f.path like '%.dfm' and s.kind in ('component','form') order by f.path, s.start_line"
@@ -125,7 +125,7 @@ function NewCase([string]$Name, [Text.Encoding]$Enc) {
   [IO.File]::WriteAllBytes("$d\Form1.pas", $Enc.GetPreamble() + $Enc.GetBytes($pasText))
   [IO.File]::WriteAllBytes("$d\Form1.dfm", $Enc.GetPreamble() + $Enc.GetBytes($dfmText))
   [IO.File]::WriteAllText("$d\book.rules", "#convert TSrcBtn -> TNewBtn`r`n#link Caption <- Caption`r`n", [Text.Encoding]::ASCII)
-  $null | & { $ErrorActionPreference = 'Continue'; & $Exe index $d --db "$d\fx.sqlite" 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index $d --db "$d\fx.sqlite" 2>&1 | ForEach-Object { "$_" } } | Out-Null
   return $d
 }
 function Apply([string]$Dir, [string]$Only) {

@@ -59,7 +59,7 @@ function New-Proj([string]$Fix, [string]$Name, [scriptblock]$Patch = $null) {
   if ($Patch) { & $Patch $root }
   $db = "$root.sqlite"
   Push-Location $WorkDir
-  try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root "$Name.dproj") --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
+  try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project (Join-Path $root "$Name.dproj") --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
   return @{ Root = $root; Dproj = (Join-Path $root "$Name.dproj"); Db = $db; Name = $Name }
 }
 # One `cycles --fix` run; stdout and stderr apart (the build progress lines go to stderr).
@@ -68,7 +68,7 @@ function Invoke-Fix($P, [string[]]$Extra = @(), [hashtable]$EnvVars = @{}) {
   $errFile = "$($P.Root).fix$script:N.err"
   foreach ($k in $EnvVars.Keys) { [Environment]::SetEnvironmentVariable($k, $EnvVars[$k]) }
   Push-Location $WorkDir
-  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe @a 2> $errFile } | Out-String); $code = $LASTEXITCODE }
+  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @a 2> $errFile } | Out-String); $code = $LASTEXITCODE }
   finally {
     Pop-Location
     foreach ($k in $EnvVars.Keys) { [Environment]::SetEnvironmentVariable($k, $null) }
@@ -136,7 +136,7 @@ try {
   Check 'f7 control (O11 not flipped): --fix without the switch is the planner''s, not r3' (($null -ne $dc) -and ($dc.part -ne 'r3') -and ($dc.recipe -ne 'hub-surface')) "exit=$($d.Exit) $($d.Out)"
 
   Push-Location $WorkDir
-  try { $js = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --causes --format json --hub-surface --project $Ctl.Dproj --db $Ctl.Db --library-db none 2>$null } | Out-String); $jsCode = $LASTEXITCODE } finally { Pop-Location }
+  try { $js = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe cycles --causes --format json --hub-surface --project $Ctl.Dproj --db $Ctl.Db --library-db none 2>$null } | Out-String); $jsCode = $LASTEXITCODE } finally { Pop-Location }
   $fx = try { @($js | ConvertFrom-Json)[0].fix } catch { $null }
   Check 'f8 --causes json --hub-surface: the fix commands are the gated cycles --fix --hub-surface' (($jsCode -eq 0) -and ($null -ne $fx) -and
     ($fx.part -eq 'r3') -and ($fx.dry_run -match '^drag-lint cycles --fix --hub-surface --project ".*HubSurface\.dproj" --db ".*" --cycle 1$') -and

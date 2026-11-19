@@ -65,11 +65,11 @@ function NewCase([string]$Name, [Text.Encoding]$PasEnc, [Text.Encoding]$DfmEnc, 
   [IO.File]::WriteAllBytes("$d\DstLib.pas", $Utf8B.GetPreamble() + $Utf8B.GetBytes($dst))
   $book = "#convert TSrcBtn -> $NewClass`r`n#link Caption <- Caption`r`n$ExtraRule"
   [IO.File]::WriteAllBytes("$d\book.rules", $Utf8B.GetPreamble() + $Utf8B.GetBytes($book))
-  $null | & { $ErrorActionPreference = 'Continue'; & $Exe index $d --db "$d\fx.sqlite" 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index $d --db "$d\fx.sqlite" 2>&1 | ForEach-Object { "$_" } } | Out-Null
   return $d
 }
 function Apply([string]$Dir, [string[]]$Extra = @()) {
-  $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe @(@('convert-apply','--unit',"$Dir\Form1.pas",'--rules',"$Dir\book.rules",'--db',"$Dir\fx.sqlite",'--format','json') + $Extra) 2>&1 | ForEach-Object { "$_" } }) -join "`n"
+  $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @(@('convert-apply','--unit',"$Dir\Form1.pas",'--rules',"$Dir\book.rules",'--db',"$Dir\fx.sqlite",'--format','json') + $Extra) 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 function Json([string]$s) {
@@ -83,7 +83,7 @@ function HasBom([string]$p) { $b = Bytes $p; return ($b.Length -ge 3 -and $b[0] 
 function Bck([string]$Dir) { return @(Get-ChildItem $Dir -Filter '*.BCK*' -ErrorAction SilentlyContinue).Count }
 
 # ---- capability -----------------------------------------------------------------
-$j = Json (($null | & { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>&1 | ForEach-Object { "$_" } }) -join "`n")
+$j = Json (($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe info --json 2>&1 | ForEach-Object { "$_" } }) -join "`n")
 Check 'CAP info --json: capabilities.convert_encoding_guard is JSON true' `
   (($null -ne $j) -and ($j.capabilities.convert_encoding_guard -is [bool]) -and ($j.capabilities.convert_encoding_guard -eq $true))
 
@@ -108,7 +108,7 @@ $r = Apply $a
 $j = Json $r.Out
 Check 'E1f dry run (no --apply) reports the same refusal, exit 1, nothing written' `
   (($r.Code -eq 1) -and ($null -ne $j) -and ($j.refusal_kind -eq 'encoding_refused') -and ($j.encoding_refused.chars_total -eq 2) -and ((Snap $a) -eq $before)) $r.Out
-$r = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit "$a\Form1.pas" --rules "$a\book.rules" --db "$a\fx.sqlite" 2>&1 | ForEach-Object { "$_" } }) -join "`n"
+$r = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe convert-apply --unit "$a\Form1.pas" --rules "$a\book.rules" --db "$a\fx.sqlite" 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'E1g text mode prints REFUSED: encoding: ...' ($r -match '(?m)^REFUSED: encoding: 2 character\(s\)') $r
 
 # ---- negative controls: a character the ANSI page holds, and UTF-8 ---------------

@@ -66,7 +66,7 @@ function New-Proj([string]$Fix, [string]$Name, [scriptblock]$Patch = $null) {
   if ($Patch) { & $Patch $root }
   $db = "$root.sqlite"
   Push-Location $WorkDir
-  try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root "$Name.dproj") --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
+  try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project (Join-Path $root "$Name.dproj") --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
   return @{ Root = $root; Dproj = (Join-Path $root "$Name.dproj"); Db = $db; Name = $Name }
 }
 # One `cycles` run; stdout only (stderr apart). The project path is replaced by <P> so two twin copies compare.
@@ -74,7 +74,7 @@ function Invoke-Cycles($P, [string[]]$A) {
   $a = @('cycles', '--db', $P.Db, '--library-db', 'none') + $A
   $errFile = "$($P.Root).c$script:N.$([guid]::NewGuid().ToString('N').Substring(0,6)).err"
   Push-Location $WorkDir
-  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe @a 2> $errFile } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
+  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @a 2> $errFile } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
   $err = if (Test-Path $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
   $norm = $out.Replace($P.Root, '<P>').Replace(($P.Root -replace '\\', '\\'), '<P>').Replace($P.Db, '<DB>').Replace(($P.Db -replace '\\', '\\'), '<DB>') -replace 'draglint_cyclefix_\d+', 'draglint_cyclefix_N'
   $doc = $null

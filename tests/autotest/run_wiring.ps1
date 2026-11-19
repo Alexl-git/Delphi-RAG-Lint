@@ -75,7 +75,7 @@ Check 'DFM: TfrmWire.Button1Click event handler'   ($o -match '"handler"\s*:\s*"
 # --- MCP get_wiring (stdio JSON-RPC round-trip; same builder as the CLI) ---
 $init = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
 $call = '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_wiring","arguments":{"qname":"ImcSTATIONS"}}}'
-$mcp  = "$init`n$call" | & { $ErrorActionPreference = 'Continue'; & $Exe serve --db $db 2>$null } | Out-String
+$mcp  = "$init`n$call" | & { $ErrorActionPreference = 'Continue'; $input | & $Exe serve --db $db 2>$null } | Out-String
 Check 'MCP: get_wiring returns TmcSTATIONS'         ($mcp -match 'TmcSTATIONS')
 
 Write-Host ""

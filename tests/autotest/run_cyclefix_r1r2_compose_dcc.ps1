@@ -60,12 +60,12 @@ function New-Proj([scriptblock]$Patch = $null) {
   if ($Patch) { & $Patch $root }
   $db = "$root.sqlite"
   Push-Location $WorkDir
-  try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root "$Name.dproj") --db $db *> "$db.log" } } finally { Pop-Location }
+  try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project (Join-Path $root "$Name.dproj") --db $db *> "$db.log" } } finally { Pop-Location }
   return @{ Root = $root; Dproj = (Join-Path $root "$Name.dproj"); Db = $db }
 }
 function Invoke-Cli($P, [string[]]$CliArgs) {
   Push-Location $WorkDir
-  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe @CliArgs 2>$null } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
+  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @CliArgs 2>$null } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
   return @{ Out = $out; Exit = $code }
 }
 function Invoke-Build($P) {

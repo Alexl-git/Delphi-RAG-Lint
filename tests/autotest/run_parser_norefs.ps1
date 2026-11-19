@@ -42,7 +42,7 @@ $script:N = 0
 $libDir = Join-Path $WorkDir 'lib'; New-Item -ItemType Directory -Force $libDir | Out-Null
 Copy-Item "$Fx\libstub\*.pas" $libDir
 $script:Lib = Join-Path $WorkDir 'lib.sqlite'
-Push-Location $WorkDir; try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index $libDir --db $script:Lib --library-db none *> "$script:Lib.log" } } finally { Pop-Location }
+Push-Location $WorkDir; try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index $libDir --db $script:Lib --library-db none *> "$script:Lib.log" } } finally { Pop-Location }
 
 function New-Lab([string]$Lib = $script:Lib) {
   $script:N++
@@ -51,7 +51,7 @@ function New-Lab([string]$Lib = $script:Lib) {
   Copy-Item "$Fx\*.pas", "$Fx\*.dpr", "$Fx\*.dproj" $root
   $db = "$root.sqlite"
   Push-Location $WorkDir
-  try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root 'NrProg.dproj') --db $db --library-db $Lib *> "$db.log" } } finally { Pop-Location }
+  try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project (Join-Path $root 'NrProg.dproj') --db $db --library-db $Lib *> "$db.log" } } finally { Pop-Location }
   return @{ Root = $root; Dproj = (Join-Path $root 'NrProg.dproj'); Db = $db; Types = (Join-Path $root 'NrTypes.pas') }
 }
 # sql --json rows are POSITIONAL: map them onto columns[].name.
@@ -145,14 +145,14 @@ Check 'r12 a library record: external, not TOtherPt.X' ((($a -join ';') -match '
 Write-Host 'an incremental re-emit writes the same rows' -ForegroundColor Cyan
 $p = New-Lab; $b = (Rows $p | Where-Object { $_.bound -ne '' -or $_.ext -ne '' }).Count
 [IO.File]::AppendAllText($p.Types, "`r`n", $Ascii)
-Push-Location $WorkDir; try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project $p.Dproj --db $p.Db --library-db $script:Lib *> "$($p.Db).log2" } } finally { Pop-Location }
+Push-Location $WorkDir; try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project $p.Dproj --db $p.Db --library-db $script:Lib *> "$($p.Db).log2" } } finally { Pop-Location }
 $b2 = (Rows $p | Where-Object { $_.bound -ne '' -or $_.ext -ne '' }).Count
 Check 'inc bound rows unchanged' ($b -eq $b2) "before=$b after=$b2"
 
 Write-Host 'rename: the plan decides every site' -ForegroundColor Cyan
 function Plan($P, [string]$Q, [string]$To) {
   Push-Location $WorkDir
-  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe rename --kind symbol --name $Q --to $To --db $P.Db --library-db $script:Lib --plan --json 2>$null } | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
+  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe rename --kind symbol --name $Q --to $To --db $P.Db --library-db $script:Lib --plan --json 2>$null } | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
   $j = $null; try { $j = $o | ConvertFrom-Json } catch { }
   return @{ Exit = $c; Json = $j; Out = $o }
 }
@@ -184,7 +184,7 @@ else {
   }
   function Apply($P, [string]$Q, [string]$To) {
     Push-Location $WorkDir
-    try { $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe rename --kind symbol --name $Q --to $To --db $P.Db --library-db $script:Lib --project $P.Dproj --build-timeout 600 --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
+    try { $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe rename --kind symbol --name $Q --to $To --db $P.Db --library-db $script:Lib --project $P.Dproj --build-timeout 600 --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
     return @{ Exit = $c; Out = $o }
   }
   $base = New-Lab

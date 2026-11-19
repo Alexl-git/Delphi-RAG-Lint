@@ -48,7 +48,7 @@ $Tmp = Join-Path $env:TEMP ('v152_renres_' + [guid]::NewGuid().ToString('N').Sub
 $Utf8 = New-Object Text.UTF8Encoding($false)
 function Run([string[]]$EngArgs) {
   Push-Location $Tmp
-  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe @EngArgs 2>&1 | ForEach-Object { "$_" } } | Out-String); $script:LastExit = $LASTEXITCODE } finally { Pop-Location }
+  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @EngArgs 2>&1 | ForEach-Object { "$_" } } | Out-String); $script:LastExit = $LASTEXITCODE } finally { Pop-Location }
   return $o
 }
 function Lines([string[]]$L) { return (($L -join "`r`n") + "`r`n") }

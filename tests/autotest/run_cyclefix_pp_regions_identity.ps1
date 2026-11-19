@@ -52,7 +52,7 @@ function New-Proj([string]$Tag, [scriptblock]$Patch, [string]$IndexExe) {
   if ($Patch) { & $Patch $root }
   $db = "$root.sqlite"
   Push-Location $WorkDir
-  try { $null | & { $ErrorActionPreference = 'Continue'; & $IndexExe index --project (Join-Path $root 'GuardedUses.dproj') --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
+  try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $IndexExe index --project (Join-Path $root 'GuardedUses.dproj') --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
   return @{ Root = $root; Dproj = (Join-Path $root 'GuardedUses.dproj'); Db = $db }
 }
 # stdout bytes (base64) and stderr text of `cycles --plan`, DRAGLINT_CYCLES_PP = $Mode ('' = unset)

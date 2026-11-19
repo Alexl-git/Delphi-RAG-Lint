@@ -114,7 +114,7 @@ Write-Host ''
 Write-Host 'MCP find_symbol' -ForegroundColor Cyan
 $req = Join-Path $WorkDir 'mcp.json'
 Write-Ascii $req ('{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"find_symbol","arguments":{"name":"Target"}}}' + "`n")
-$mcp = (Get-Content -Raw $req | & { $ErrorActionPreference = 'Continue'; & $Exe serve --db $db 2>$null }) -join "`n"
+$mcp = (Get-Content -Raw $req | & { $ErrorActionPreference = 'Continue'; $input | & $Exe serve --db $db 2>$null }) -join "`n"
 $text = ''
 try { $text = ((ConvertFrom-Json -InputObject (@($mcp -split "`n" | Where-Object { $_ -match '"id":1' })[0])).result.content[0].text) } catch {}
 Check 'find_symbol answered' ($text -match 'uWhere\.Target') "raw: $mcp"

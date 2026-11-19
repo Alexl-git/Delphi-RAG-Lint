@@ -66,7 +66,7 @@ function Get-Plan([string]$Fixture, [string]$Dproj, [string]$Tag, [scriptblock]$
   Copy-Tree (Join-Path $Fx $Fixture) $root
   if ($Edit) { & $Edit $root }
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root $Dproj) --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
+  $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project (Join-Path $root $Dproj) --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
   $o = Join-Path $WorkDir "plan-$Tag.out"
   $dump = Join-Path $WorkDir "dump-$Tag.txt"
   $env:DRAGLINT_TEST_DUMP_PLAN = $dump
@@ -89,7 +89,7 @@ function Get-Plan([string]$Fixture, [string]$Dproj, [string]$Tag, [scriptblock]$
 function Invoke-FollowAndCycles($Pl, [string]$Tag) {
   $fo = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $Pl.Out -Cycle 1 2>&1 | ForEach-Object { "$_" } } | Out-String
   $db = Join-Path $WorkDir "after-$Tag.sqlite"
-  $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project $Pl.Dproj --db $db *> (Join-Path $WorkDir "index-after-$Tag.log") }
+  $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project $Pl.Dproj --db $db *> (Join-Path $WorkDir "index-after-$Tag.log") }
   $o = & $Exe cycles --db $db | Out-String
   return @{ Follow = $LASTEXITCODE; Text = $fo; Cycles = $o }
 }
@@ -262,7 +262,7 @@ try {
     $b = [IO.File]::ReadAllBytes($f); $s = [Text.Encoding]::GetEncoding(28591).GetString($b)
     [IO.File]::WriteAllBytes($f, [Text.Encoding]::GetEncoding(28591).GetBytes($s.Replace('<summary>Read', "<summary>Gr$([char]0xF6)$([char]0xDF)e: read"))) }
   $naDb = Join-Path $WorkDir 'na.sqlite'
-  $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $naRoot 'TieBreak.dproj') --db $naDb *> (Join-Path $WorkDir 'index-na.log') }
+  $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project (Join-Path $naRoot 'TieBreak.dproj') --db $naDb *> (Join-Path $WorkDir 'index-na.log') }
   $naOut = & { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --build-timeout 1800 --project (Join-Path $naRoot 'TieBreak.dproj') --db $naDb --library-db none --format json 2>&1 | ForEach-Object { "$_" } } | Out-String
   $naCode = $LASTEXITCODE
   Check 'na the dry run (it BUILDS the shadow tree) is exit 0 with no non-ascii-text refusal' (($naCode -eq 0) -and -not $naOut.Contains('non-ascii-text')) ("exit=$naCode " + ($naOut.Trim() -replace "`r?`n", ' '))
@@ -272,7 +272,7 @@ try {
   $rsRoot = Join-Path $WorkDir 'rsv-tie'
   Copy-Tree (Join-Path $Fx 'tiebreak') $rsRoot
   $rsDb = Join-Path $WorkDir 'rsv.sqlite'
-  $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $rsRoot 'TieBreak.dproj') --db $rsDb *> (Join-Path $WorkDir 'index-rsv.log') }
+  $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project (Join-Path $rsRoot 'TieBreak.dproj') --db $rsDb *> (Join-Path $WorkDir 'index-rsv.log') }
   $fixArgs = @('cycles', '--fix', '--build-timeout', '1800', '--project', (Join-Path $rsRoot 'TieBreak.dproj'), '--db', $rsDb, '--library-db', 'none', '--format', 'json')
   $savedBds = $env:BDS
   try {

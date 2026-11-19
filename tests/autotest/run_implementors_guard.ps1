@@ -175,7 +175,7 @@ $init = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
 $list = '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
 $call = '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_implementors","arguments":{"qname":"IJob.Execute"}}}'
 $bad  = '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"get_implementors","arguments":{"qname":"INoSuchThing"}}}'
-$mcp  = "$init`n$list`n$call`n$bad" | & { $ErrorActionPreference = 'Continue'; & $exePath serve --db $db 2>$null } | Out-String
+$mcp  = "$init`n$list`n$call`n$bad" | & { $ErrorActionPreference = 'Continue'; $input | & $exePath serve --db $db 2>$null } | Out-String
 $rep  = @{}
 foreach ($ln in ($mcp -split "`n")) { try { $o = $ln.Trim() | ConvertFrom-Json; if ($o.id) { $rep[[int]$o.id] = $o } } catch { } }
 $tools = @($rep[2].result.tools)

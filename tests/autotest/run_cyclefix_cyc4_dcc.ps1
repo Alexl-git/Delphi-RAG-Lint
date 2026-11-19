@@ -64,13 +64,13 @@ function New-Proj([string]$Fix, [string]$Name, [scriptblock]$Patch = $null) {
   if ($Patch) { & $Patch $root }
   $db = "$root.sqlite"
   Push-Location $WorkDir
-  try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root "$Name.dproj") --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
+  try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project (Join-Path $root "$Name.dproj") --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
   return @{ Root = $root; Dproj = (Join-Path $root "$Name.dproj"); Db = $db; Name = $Name }
 }
 function Run-Fix($P, [string[]]$Extra) {
   $a = @('cycles', '--fix', '--build-timeout', '1800', '--project', $P.Dproj, '--db', $P.Db, '--library-db', 'none', '--format', 'json') + $Extra
   Push-Location $WorkDir
-  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
+  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @a 2>$null } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
   $j = $null; try { $j = $out | ConvertFrom-Json } catch { }
   $k = @()
   foreach ($c in @($j.cycles)) { foreach ($x in @($c.refusals)) { if ($x) { $k += $x.kind } } }
@@ -82,13 +82,13 @@ function Run-Fix($P, [string[]]$Extra) {
 function Refused($P) { return Run-Fix $P @('--no-compile', '--shadow-out', "$($P.Root)-shadow") }
 function Get-Plan($P) {
   Push-Location $WorkDir
-  try { return ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --plan --project $P.Dproj --db $P.Db --library-db none 2>$null } | Out-String) } finally { Pop-Location }
+  try { return ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe cycles --plan --project $P.Dproj --db $P.Db --library-db none 2>$null } | Out-String) } finally { Pop-Location }
 }
 function Get-Cycles($P) {
   Push-Location $WorkDir
   try {
-    $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project $P.Dproj --db $P.Db --library-db none *> "$($P.Db).relog" }
-    return ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --db $P.Db --library-db none 2>$null } | Out-String)
+    $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project $P.Dproj --db $P.Db --library-db none *> "$($P.Db).relog" }
+    return ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe cycles --db $P.Db --library-db none 2>$null } | Out-String)
   } finally { Pop-Location }
 }
 function Invoke-Build($P) {

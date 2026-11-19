@@ -45,7 +45,7 @@ WriteAscii "$eng\drag-lint.json" @('{ "indexes": { "sections": [] } }')
 $Exe = Join-Path $eng 'drag-lint.exe'
 function Run([string[]]$EngArgs) {
   Push-Location $work
-  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe @EngArgs 2>&1 | ForEach-Object { "$_" } } | Out-String); $script:LastExit = $LASTEXITCODE } finally { Pop-Location }
+  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @EngArgs 2>&1 | ForEach-Object { "$_" } } | Out-String); $script:LastExit = $LASTEXITCODE } finally { Pop-Location }
   return $o
 }
 $x = Txt (Join-Path $Repo 'tests\fixtures\refactor\rename\PrecRen.dproj')
